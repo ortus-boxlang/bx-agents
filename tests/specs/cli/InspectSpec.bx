@@ -1,0 +1,56 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "cli.Inspect", function() {
+
+			beforeEach( function() {
+				variables.buildVerb = new bxagents.models.cli.Build();
+				variables.inspectVerb = new bxagents.models.cli.Inspect();
+				variables.fixtures = expandPath( "/fixtures" );
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function newTempProject( required string fixtureName ) {
+				var dir = createTempDirectory( prefix = "bxagents-cli-inspect-" );
+				directoryCopy( fixtures & "/" & arguments.fixtureName, dir, true );
+				tempDirs.append( dir );
+				return dir;
+			}
+
+			it( "errors cleanly if build hasn't run yet", function() {
+				var projectRoot = newTempProject( "full-project" );
+
+				expect( function() {
+					inspectVerb.run( { projectRoot : projectRoot } );
+				} ).toThrow( "BxAgents.NotBuilt" );
+			} );
+
+			it( "reads the existing manifest without rebuilding", function() {
+				var projectRoot = newTempProject( "full-project" );
+				buildVerb.run( { projectRoot : projectRoot } );
+
+				var appDirBeforeStat = getFileInfo( projectRoot & "/.build/app/Application.bx" ).lastModified;
+
+				var result = inspectVerb.run( { projectRoot : projectRoot } );
+
+				expect( result.exitCode ).toBe( 0 );
+				expect( result.manifest.agent.name ).toBe( "full-project-agent" );
+				expect( result.message ).toInclude( "full-project-agent" );
+				expect( result.message ).toInclude( "openai/gpt-5" );
+
+				var appDirAfterStat = getFileInfo( projectRoot & "/.build/app/Application.bx" ).lastModified;
+				expect( appDirAfterStat ).toBe( appDirBeforeStat );
+			} );
+
+		} );
+	}
+
+}

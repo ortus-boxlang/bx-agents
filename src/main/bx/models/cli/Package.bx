@@ -1,0 +1,48 @@
+/**
+ * `package` CLI verb - thin dispatcher over PackagerService (M12). Requires
+ * a prior `build` (reads its .build/manifest.json) - refuses to run (and
+ * produces no .bxa) if no build exists yet.
+ */
+class {
+
+	/**
+	 * @options { projectRoot (required, absolute path), version }
+	 */
+	struct function run( struct options = {} ) {
+		var projectRoot = trim( arguments.options.projectRoot ?: "" )
+		if ( !len( projectRoot ) ) {
+			throw( type = "BxAgents.MissingProjectRoot", message = "`package` requires a project root" )
+		}
+
+		var root = projectRoot.reReplace( "[\/]+$", "" )
+		var manifestPath = root & "/.build/manifest.json"
+
+		if ( !fileExists( manifestPath ) ) {
+			throw(
+				type    = "BxAgents.NotBuilt",
+				message = "No build found at [#root#/.build] - run `build` first"
+			)
+		}
+
+		var manifest = jsonDeserialize( fileRead( manifestPath ) )
+		var version = len( arguments.options.version ?: "" ) ? arguments.options.version : "1.0.0"
+		var agentName = len( manifest.agent.name ?: "" ) ? manifest.agent.name : "bx-agent"
+		var baseName = "#agentName#-#version#"
+
+		var packager = new bxagents.models.build.PackagerService()
+		var result = packager.package(
+			projectRoot = root,
+			appDir      = root & "/.build/app",
+			distDir     = root & "/dist",
+			manifest    = manifest,
+			baseName    = baseName
+		)
+
+		return {
+			exitCode : 0,
+			message  : "Packaged: #result.bxa#",
+			result   : result
+		}
+	}
+
+}

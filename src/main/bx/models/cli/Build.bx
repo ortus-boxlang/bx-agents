@@ -1,0 +1,30 @@
+/**
+ * `build` CLI verb - thin dispatcher over BuildPipeline (M12).
+ */
+class {
+
+	/**
+	 * @options { projectRoot (required, absolute path), environment, generatorVersion }
+	 */
+	struct function run( struct options = {} ) {
+		var projectRoot = trim( arguments.options.projectRoot ?: "" )
+		if ( !len( projectRoot ) ) {
+			throw( type = "BxAgents.MissingProjectRoot", message = "`build` requires a project root" )
+		}
+
+		var pipeline = new bxagents.models.build.BuildPipeline( arguments.options.generatorVersion ?: "dev" )
+		var result = pipeline.build( projectRoot, arguments.options.environment ?: "" )
+
+		var lines = [ "Build succeeded: #result.appDir#" ]
+		for ( var warning in result.warnings ) {
+			lines.append( "  ! #warning#" )
+		}
+
+		return {
+			exitCode : 0,
+			message  : lines.toList( char( 10 ) ),
+			result   : result
+		}
+	}
+
+}

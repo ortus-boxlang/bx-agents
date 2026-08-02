@@ -1,0 +1,51 @@
+/**
+ * `inspect` CLI verb - reads and pretty-prints an existing `.build/manifest.json`
+ * without rebuilding. Requires a prior `build`.
+ */
+class {
+
+	/**
+	 * @options { projectRoot (required, absolute path) }
+	 */
+	struct function run( struct options = {} ) {
+		var projectRoot = trim( arguments.options.projectRoot ?: "" )
+		if ( !len( projectRoot ) ) {
+			throw( type = "BxAgents.MissingProjectRoot", message = "`inspect` requires a project root" )
+		}
+
+		var root = projectRoot.reReplace( "[\/]+$", "" )
+		var manifestPath = root & "/.build/manifest.json"
+
+		if ( !fileExists( manifestPath ) ) {
+			throw(
+				type    = "BxAgents.NotBuilt",
+				message = "No build found at [#root#/.build] - run `build` first"
+			)
+		}
+
+		var manifest = jsonDeserialize( fileRead( manifestPath ) )
+
+		return {
+			exitCode : 0,
+			message  : formatManifest( manifest ),
+			manifest : manifest
+		}
+	}
+
+	private string function formatManifest( required struct manifest ) {
+		var agent = arguments.manifest.agent ?: {}
+		var generator = arguments.manifest.generator ?: {}
+		var files = arguments.manifest.files ?: []
+
+		var lines = [
+			"Agent:        #agent.name ?: ''#",
+			"Model:        #agent.model ?: ''#",
+			"Environment:  #agent.environment ?: ''#",
+			"Manifest ver: #arguments.manifest.manifestVersion ?: ''#",
+			"Generator:    #generator.name ?: ''# #generator.version ?: ''#",
+			"Files:        #files.len()#"
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+}

@@ -1,0 +1,52 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "cli.Package", function() {
+
+			beforeEach( function() {
+				variables.buildVerb = new bxagents.models.cli.Build();
+				variables.packageVerb = new bxagents.models.cli.Package();
+				variables.fixtures = expandPath( "/fixtures" );
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function newTempProject( required string fixtureName ) {
+				var dir = createTempDirectory( prefix = "bxagents-cli-package-" );
+				directoryCopy( fixtures & "/" & arguments.fixtureName, dir, true );
+				tempDirs.append( dir );
+				return dir;
+			}
+
+			it( "errors cleanly if build hasn't run yet", function() {
+				var projectRoot = newTempProject( "full-project" );
+
+				expect( function() {
+					packageVerb.run( { projectRoot : projectRoot } );
+				} ).toThrow( "BxAgents.NotBuilt" );
+
+				expect( directoryExists( projectRoot & "/dist" ) ).toBeFalse();
+			} );
+
+			it( "packages a built project into dist/", function() {
+				var projectRoot = newTempProject( "full-project" );
+				buildVerb.run( { projectRoot : projectRoot } );
+
+				var result = packageVerb.run( { projectRoot : projectRoot, version : "2.0.0" } );
+
+				expect( result.exitCode ).toBe( 0 );
+				expect( fileExists( result.result.bxa ) ).toBeTrue();
+				expect( result.result.bxa ).toInclude( "full-project-agent-2.0.0.bxa" );
+			} );
+
+		} );
+	}
+
+}
