@@ -1,0 +1,78 @@
+/**
+ * Scaffolds a new BX Agents project skeleton - the `new` CLI verb's real
+ * implementation (M12): a minimal `Agent.bx` + `instructions.md`, plus every
+ * empty convention folder (`tools/`, `skills/`, `subagents/`, `gateways/`,
+ * `schedules/`, `mcp/`, `interceptors/`, `models/`, `modules/`) so a user has
+ * a working starting point to edit immediately.
+ */
+class {
+
+	/**
+	 * @targetDir Absolute path to the new project directory (created if missing; refuses to run if it already contains an Agent.bx)
+	 * @name The agent's name
+	 * @model The agent's provider/model slug, e.g. "openai/gpt-5"
+	 * @description Optional agent description
+	 */
+	struct function scaffold( required string targetDir, required string name, required string model, string description = "" ) {
+		var dir = arguments.targetDir.reReplace( "[\/]+$", "" )
+
+		if ( fileExists( dir & "/Agent.bx" ) ) {
+			throw(
+				type    = "BxAgents.ProjectAlreadyExists",
+				message = "[#dir#] already contains an Agent.bx - refusing to overwrite an existing project"
+			)
+		}
+
+		directoryCreate( path = dir, createPath = true, ignoreExists = true )
+
+		var agentBxPath = dir & "/Agent.bx"
+		var instructionsPath = dir & "/instructions.md"
+
+		fileWrite( agentBxPath, renderAgentBx( arguments.name, arguments.model, arguments.description ) )
+		fileWrite( instructionsPath, renderInstructions( arguments.name ) )
+
+		var conventionFolders = [ "tools", "skills", "subagents", "gateways", "schedules", "mcp", "interceptors", "models", "modules" ]
+		for ( var folder in conventionFolders ) {
+			directoryCreate( path = dir & "/" & folder, createPath = true, ignoreExists = true )
+		}
+
+		return {
+			projectRoot  : dir,
+			agentBx      : agentBxPath,
+			instructions : instructionsPath
+		}
+	}
+
+	private string function renderAgentBx( required string name, required string model, required string description ) {
+		var lines = [
+			"class {",
+			"",
+			"	function configure() {",
+			"		return {",
+			'			name        : "#bxLiteral( arguments.name )#",',
+			'			model       : "#bxLiteral( arguments.model )#",',
+			'			description : "#bxLiteral( arguments.description )#"',
+			"		};",
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	private string function renderInstructions( required string name ) {
+		var lines = [
+			"## #arguments.name#",
+			"",
+			"You are #arguments.name#, a helpful AI agent.",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	private string function bxLiteral( required string value ) {
+		return arguments.value.replace( '"', '""', "all" ).replace( "##", "####", "all" )
+	}
+
+}

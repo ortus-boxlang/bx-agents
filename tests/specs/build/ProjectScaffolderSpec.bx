@@ -1,0 +1,72 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "ProjectScaffolder", function() {
+
+			beforeEach( function() {
+				variables.scaffolder = new bxagents.models.build.ProjectScaffolder();
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function newTargetDir() {
+				var parent = createTempDirectory( prefix = "bxagents-scaffold-" );
+				tempDirs.append( parent );
+				return parent & "/my-new-agent";
+			}
+
+			it( "scaffolds Agent.bx and instructions.md with the given name/model/description", function() {
+				var dir = newTargetDir();
+				var result = scaffolder.scaffold( dir, "my-agent", "openai/gpt-5", "A helpful test agent" );
+
+				expect( fileExists( result.agentBx ) ).toBeTrue();
+				expect( fileExists( result.instructions ) ).toBeTrue();
+
+				var content = fileRead( result.agentBx );
+				expect( content ).toInclude( 'name        : "my-agent"' );
+				expect( content ).toInclude( 'model       : "openai/gpt-5"' );
+				expect( content ).toInclude( 'description : "A helpful test agent"' );
+
+				expect( fileRead( result.instructions ) ).toInclude( "my-agent" );
+			} );
+
+			it( "creates every empty convention folder", function() {
+				var dir = newTargetDir();
+				scaffolder.scaffold( dir, "my-agent", "openai/gpt-5" );
+
+				for ( var folder in [ "tools", "skills", "subagents", "gateways", "schedules", "mcp", "interceptors", "models", "modules" ] ) {
+					expect( directoryExists( dir & "/" & folder ) ).toBeTrue();
+				}
+			} );
+
+			it( "refuses to scaffold over an existing Agent.bx", function() {
+				var dir = newTargetDir();
+				scaffolder.scaffold( dir, "my-agent", "openai/gpt-5" );
+
+				expect( function() {
+					scaffolder.scaffold( dir, "another-agent", "openai/gpt-5" );
+				} ).toThrow( "BxAgents.ProjectAlreadyExists" );
+			} );
+
+			it( "produces an Agent.bx that AgentConfigResolver can resolve", function() {
+				var dir = newTargetDir();
+				scaffolder.scaffold( dir, "my-agent", "openai/gpt-5", "A helpful test agent" );
+
+				var resolver = new bxagents.models.build.AgentConfigResolver();
+				var config = resolver.resolve( projectRoot = dir );
+
+				expect( config.name ).toBe( "my-agent" );
+				expect( config.model ).toBe( "openai/gpt-5" );
+			} );
+
+		} );
+	}
+
+}
