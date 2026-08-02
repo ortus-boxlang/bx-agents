@@ -72,6 +72,16 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).notToInclude( "Gateway.process" );
 			} );
 
+			it( "reports hasAgentExposure=true only when an agent-exposure entry exists", function() {
+				var withAgent = discoverer.discover( fixtures & "/full-project" );
+				var withAgentResult = generator.generate( withAgent, newAppDir() );
+				expect( withAgentResult.hasAgentExposure ).toBeTrue();
+
+				var withoutAgent = discoverer.discover( fixtures & "/valid-minimal" );
+				var withoutAgentResult = generator.generate( withoutAgent, newAppDir() );
+				expect( withoutAgentResult.hasAgentExposure ).toBeFalse();
+			} );
+
 			it( "writes a valid, empty-but-present router when there is nothing to expose", function() {
 				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
 				var result = generator.generate( discovery, newAppDir() );

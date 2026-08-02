@@ -1,0 +1,95 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "BuildPipeline", function() {
+
+			beforeEach( function() {
+				variables.pipeline = new bxagents.models.build.BuildPipeline( "1.2.3" );
+				variables.fixtures = expandPath( "/fixtures" );
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function newTempProject( required string fixtureName ) {
+				var dir = createTempDirectory( prefix = "bxagents-pipeline-" );
+				directoryCopy( fixtures & "/" & arguments.fixtureName, dir, true );
+				tempDirs.append( dir );
+				return dir;
+			}
+
+			it( "builds a full project end-to-end, producing .build/app and .build/manifest.json", function() {
+				var projectRoot = newTempProject( "full-project" );
+				var result = pipeline.build( projectRoot );
+
+				expect( directoryExists( result.appDir ) ).toBeTrue();
+				expect( fileExists( result.appDir & "/Application.bx" ) ).toBeTrue();
+				expect( fileExists( result.appDir & "/config/ColdBox.bx" ) ).toBeTrue();
+				expect( fileExists( result.appDir & "/config/WireBox.bx" ) ).toBeTrue();
+				expect( fileExists( result.appDir & "/config/Router.bx" ) ).toBeTrue();
+				expect( fileExists( result.appDir & "/agent/GeneratedAgentFactory.bx" ) ).toBeTrue();
+				expect( fileExists( result.appDir & "/tools/Weather.bx" ) ).toBeTrue();
+				expect( fileExists( result.appDir & "/skills/my-skill/SKILL.md" ) ).toBeTrue();
+
+				expect( fileExists( result.manifestPath ) ).toBeTrue();
+				expect( result.manifest.manifestVersion ).toBe( "1.0.0" );
+				expect( result.manifest.generator.version ).toBe( "1.2.3" );
+			} );
+
+			it( "exposes the root agent as a GeneratedAgentRunnable when a gateway declares agent exposure", function() {
+				var projectRoot = newTempProject( "full-project" );
+				var result = pipeline.build( projectRoot );
+
+				expect( fileExists( result.appDir & "/agent/GeneratedAgentRunnable.bx" ) ).toBeTrue();
+
+				var routerContent = fileRead( result.appDir & "/config/Router.bx" );
+				expect( routerContent ).toInclude( 'route( "/api/chat" ).toAi( "GeneratedAgent" )' );
+			} );
+
+			it( "does not expose the agent as a runnable when no gateway declares agent exposure", function() {
+				var projectRoot = newTempProject( "valid-minimal" );
+				var result = pipeline.build( projectRoot );
+
+				expect( fileExists( result.appDir & "/agent/GeneratedAgentRunnable.bx" ) ).toBeFalse();
+			} );
+
+			it( "throws BxAgents.BuildValidationFailed and produces no .build/app for an invalid project", function() {
+				var projectRoot = newTempProject( "validation/duplicate-tool-names" );
+
+				expect( function() {
+					pipeline.build( projectRoot );
+				} ).toThrow( "BxAgents.BuildValidationFailed" );
+
+				expect( directoryExists( projectRoot & "/.build/app" ) ).toBeFalse();
+			} );
+
+			it( "wipes stale .build/app content on rebuild rather than merging", function() {
+				var projectRoot = newTempProject( "full-project" );
+				var firstResult = pipeline.build( projectRoot );
+				fileWrite( firstResult.appDir & "/StaleLeftover.bx", "class {}" );
+
+				var secondResult = pipeline.build( projectRoot );
+
+				expect( fileExists( secondResult.appDir & "/StaleLeftover.bx" ) ).toBeFalse();
+			} );
+
+			it( "registers local mcp servers and gateway channel adapters into Application.bx", function() {
+				var projectRoot = newTempProject( "gateways-mixed" );
+				var result = pipeline.build( projectRoot );
+
+				var content = fileRead( result.appDir & "/Application.bx" );
+				expect( content ).toInclude( 'gatewayRegistry().register( aiGateway( "http"' );
+				expect( content ).toInclude( 'gatewayRegistry().register( aiGateway( "mock"' );
+				expect( content ).toInclude( "mcpServer(" );
+			} );
+
+		} );
+	}
+
+}
