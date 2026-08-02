@@ -1,11 +1,13 @@
 # Proposal: `toAiGateway()` — a native ColdBox routing DSL terminator for the bx-ai Gateway webhook surface
 
-Status: draft, written from BX Agents (`ortus-boxlang/bx-agents`). Not yet source-verified
-against `coldbox-platform` — this session couldn't attach that repo alongside the
-`ortus-boxlang` repos already in use (cross-owner limit). Everything under
-"What's already proven" is verified against real `bx-ai` source; everything under
-"Proposed core implementation" is a sketch to adapt once someone can see `Route.bx`
-directly.
+Status: draft, written from BX Agents (`ortus-boxlang/bx-agents`). Update since first
+draft: `coldbox-platform` (specifically ColdBox itself, `Router.cfc`) WAS attached and
+read directly later in this same session — the cross-owner limit turned out to be
+per-session-state, not permanent; once `ColdBox/coldbox-platform`'s zip was fetched from
+its real download URL and unpacked, its `system/web/routing/Router.cfc` source was read
+in full. That resolved the two "worth confirming" items below and, more importantly,
+corrected a real mistake this proposal's `toAi()`/`IAiRunnable` section had inherited from
+an earlier documentation-only pass (see the correction notes inline).
 
 ## Why
 
@@ -141,18 +143,32 @@ for one `route( ... ).toAiGateway()` call, and `GatewayGenerator` stops generati
 - Regression: confirm `event.noRender()` prevents ColdBox from double-writing a response
   after `processHttp()` already flushed one via `bx:content reset=true`.
 
-## Also worth confirming while in `coldbox-platform`
+## Confirmed later this session (update)
 
-Two things this session flagged as assumptions in BX Agents' own generator, worth a
-quick source check while someone's already in `Route.bx`/`WireBox` binder code for this
-PR:
+`ColdBox/coldbox-platform` (8.1.0) was fetched directly (`https://downloads.ortussolutions.com/ortussolutions/coldbox/8.1.0/coldbox-8.1.0.zip`)
+and `system/web/routing/Router.cfc` read in full. Both items originally listed here as
+"worth confirming" are now resolved, and one earlier assumption in this very proposal
+was wrong and has been corrected:
 
-1. Whether `route(path).toAi(target)`'s `target` can be a bare WireBox alias string
-   resolved via `getInstance(target)` (assumed yes, based on the published docs' example
-   `route("/api/chat").toAi("models.ChatAgent")`).
-2. Whether WireBox's binder DSL supports `.toProvider(closure)` for a lazily-built
-   singleton (assumed yes; BX Agents relies on it so the same agent instance backs both
-   its HTTP routes and its CLI `chat` REPL).
+1. **`toAi(target)`'s target resolution — confirmed as assumed.** Router.cfc:
+   `var runnableInstance = isSimpleValue( capturedRunnable ) ? getInstance( capturedRunnable ) : capturedRunnable`.
+   A string is resolved via WireBox `getInstance()`; a live object is used directly.
 
-Neither blocks this proposal, but confirming them would resolve two more "unverified,
-documented as an assumption" notes in BX Agents' generator code.
+2. **The real `IAiRunnable` contract — CORRECTED, not what this proposal originally said.**
+   The "What's already proven" section above (unchanged, still accurate for the Gateway
+   surface) was written from bx-ai source only. Separately, BX Agents' own M8 work relied
+   on a *published-docs* description of `toAi()`'s target contract that turned out to be
+   wrong: `invoke`/`stream`/`batch`/`info` are the **sub-route names**, not method names
+   `toAi()` calls on the target. Router.cfc's actual closures call
+   `runnableInstance.run( input, params, options )` and
+   `runnableInstance.stream( onChunk, input, params, options )` — i.e. bx-ai's own
+   `IAiRunnable` interface (`bxModules.bxai.models.runnables.IAiRunnable`), which
+   `AiAgent` already implements natively via `AiBaseRunnable`. **No adapter subclass is
+   needed at all** — the plain `aiAgent()` BIF's return value already satisfies `toAi()`.
+   BX Agents' generator has been corrected to match (no more
+   `GeneratedAgentRunnable.bx`/`exposeAgentAsRunnable`).
+
+3. **WireBox's `.toProvider(closure)`** — not re-checked this session (Router.cfc doesn't
+   touch WireBox binder syntax); still an assumption in BX Agents' `config/WireBox.bx`
+   generator. Low risk: `.toProvider()` is well-established, commonly-used WireBox DSL,
+   just not something this specific source pass happened to touch.
