@@ -1,0 +1,74 @@
+/**
+ * `chat` CLI verb - an interactive REPL against a built project's agent,
+ * using BoxLang's own `ortus.boxlang.runtime.cli.MiniConsole` for line
+ * reading (history, raw-mode input) rather than hand-rolling stdin reads.
+ *
+ * Requires a prior `build`. Reuses the SAME `GeneratedAgentFactory` a
+ * `serve`-launched app would use, so `chat` and HTTP routes never diverge -
+ * loads it directly (not through WireBox, since there's no ColdBox
+ * container running here) and calls `buildAgent()` once per session.
+ */
+class {
+
+	/**
+	 * @options { projectRoot (required, absolute path) }
+	 */
+	struct function run( struct options = {} ) {
+		var projectRoot = trim( arguments.options.projectRoot ?: "" )
+		if ( !len( projectRoot ) ) {
+			throw( type = "BxAgents.MissingProjectRoot", message = "`chat` requires a project root" )
+		}
+
+		var root = projectRoot.reReplace( "[\/]+$", "" )
+		var factoryPath = root & "/.build/app/agent/GeneratedAgentFactory.bx"
+
+		if ( !fileExists( factoryPath ) ) {
+			throw(
+				type    = "BxAgents.NotBuilt",
+				message = "No build found at [#root#/.build] - run `build` first"
+			)
+		}
+
+		var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
+		var factory = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" ).instantiate( factoryPath, context )
+		var agent = factory.buildAgent()
+
+		// MiniConsole shells out to `stty` to set up raw terminal mode, so it
+		// can only be constructed against a real interactive TTY - this is
+		// intentionally the last line before the loop, so every failure mode
+		// above (missing project root, no build) stays testable without one.
+		var console = createObject( "java", "ortus.boxlang.runtime.cli.MiniConsole" ).init( "you> " )
+
+		println( "Chatting with the agent - type 'exit' or 'quit' to leave." )
+
+		var running = true
+		while ( running ) {
+			var input = console.readLine()
+			if ( isNull( input ) ) {
+				running = false
+				continue
+			}
+
+			var trimmedInput = trim( input )
+			if ( trimmedInput == "exit" || trimmedInput == "quit" ) {
+				running = false
+				continue
+			}
+			if ( !len( trimmedInput ) ) {
+				continue
+			}
+
+			try {
+				println( "agent> " & agent.run( trimmedInput ) )
+			} catch ( any e ) {
+				println( "error> " & e.message )
+			}
+		}
+
+		return {
+			exitCode : 0,
+			message  : "Chat session ended"
+		}
+	}
+
+}

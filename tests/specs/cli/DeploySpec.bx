@@ -1,0 +1,68 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "cli.Deploy", function() {
+
+			beforeEach( function() {
+				variables.buildVerb = new bxagents.models.cli.Build();
+				variables.packageVerb = new bxagents.models.cli.Package();
+				variables.deployVerb = new bxagents.models.cli.Deploy();
+				variables.fixtures = expandPath( "/fixtures" );
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function newTempProject( required string fixtureName ) {
+				var dir = createTempDirectory( prefix = "bxagents-cli-deploy-" );
+				directoryCopy( fixtures & "/" & arguments.fixtureName, dir, true );
+				tempDirs.append( dir );
+				return dir;
+			}
+
+			it( "errors cleanly if package hasn't run yet", function() {
+				var projectRoot = newTempProject( "full-project" );
+
+				expect( function() {
+					deployVerb.run( { projectRoot : projectRoot, destination : projectRoot & "/deployed" } );
+				} ).toThrow( "BxAgents.NotPackaged" );
+			} );
+
+			it( "throws clearly when --destination is missing", function() {
+				var projectRoot = newTempProject( "full-project" );
+
+				expect( function() {
+					deployVerb.run( { projectRoot : projectRoot } );
+				} ).toThrow( "BxAgents.MissingDestination" );
+			} );
+
+			it( "rejects an unknown deployment target", function() {
+				var projectRoot = newTempProject( "full-project" );
+
+				expect( function() {
+					deployVerb.run( { projectRoot : projectRoot, target : "s3", destination : "whatever" } );
+				} ).toThrow( "BxAgents.UnknownDeploymentTarget" );
+			} );
+
+			it( "copies the newest .bxa to the destination directory", function() {
+				var projectRoot = newTempProject( "full-project" );
+				buildVerb.run( { projectRoot : projectRoot } );
+				packageVerb.run( { projectRoot : projectRoot, version : "1.0.0" } );
+
+				var destination = projectRoot & "/deployed";
+				var result = deployVerb.run( { projectRoot : projectRoot, destination : destination } );
+
+				expect( result.exitCode ).toBe( 0 );
+				expect( fileExists( destination & "/full-project-agent-1.0.0.bxa" ) ).toBeTrue();
+			} );
+
+		} );
+	}
+
+}
