@@ -1,0 +1,65 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "ModelSlugParser", function() {
+
+			beforeEach( function() {
+				variables.parser = new bxagents.models.build.ModelSlugParser();
+			} );
+
+			it( "parses a single-slash provider/model slug", function() {
+				var result = parser.parse( "openai/gpt-5" );
+
+				expect( result.provider ).toBe( "openai" );
+				expect( result.model ).toBe( "gpt-5" );
+			} );
+
+			it( "defaults the provider when the slug has no slash", function() {
+				var result = parser.parse( "gpt-5", "openai" );
+
+				expect( result.provider ).toBe( "openai" );
+				expect( result.model ).toBe( "gpt-5" );
+			} );
+
+			it( "splits only on the first slash for multi-segment model ids", function() {
+				var result = parser.parse( "openrouter/anthropic/claude-sonnet-4" );
+
+				expect( result.provider ).toBe( "openrouter" );
+				expect( result.model ).toBe( "anthropic/claude-sonnet-4" );
+			} );
+
+			it( "throws when there is no slash and no defaultProvider", function() {
+				expect( function() {
+					parser.parse( "gpt-5" );
+				} ).toThrow( "BxAgents.InvalidModelSlug" );
+			} );
+
+			it( "throws on an empty provider segment (leading slash)", function() {
+				expect( function() {
+					parser.parse( "/model" );
+				} ).toThrow( "BxAgents.InvalidModelSlug" );
+			} );
+
+			it( "throws on an empty model segment (trailing slash)", function() {
+				expect( function() {
+					parser.parse( "provider/" );
+				} ).toThrow( "BxAgents.InvalidModelSlug" );
+			} );
+
+			it( "throws on an empty slug", function() {
+				expect( function() {
+					parser.parse( "" );
+				} ).toThrow( "BxAgents.InvalidModelSlug" );
+			} );
+
+			it( "trims whitespace around the slug before parsing", function() {
+				var result = parser.parse( "  openai/gpt-5  " );
+
+				expect( result.provider ).toBe( "openai" );
+				expect( result.model ).toBe( "gpt-5" );
+			} );
+
+		} );
+	}
+
+}

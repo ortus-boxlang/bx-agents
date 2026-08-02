@@ -1,0 +1,64 @@
+/**
+ * Headless TestBox CLI runner for BX Agents. MUST be run from (and live at)
+ * the repo root - see notes below on why.
+ *
+ * TestBox 7.0's own testbox/system/runners/BoxLangRunner.bx auto-discovers
+ * Application.bx mappings by walking up from `{executionPath}/tests/specs`,
+ * which behaved unreliably in this project's CI/sandbox combination. This
+ * script sidesteps that discovery step entirely: mappings/classpaths are
+ * instead loaded explicitly via `--bx-config boxlang.json`, and this script
+ * drives TestBox's own public API (TestBox.cfc + reporters) directly.
+ *
+ * This script must itself run with the repo root as its `expandPath()` base -
+ * i.e. it must live AT the repo root and be invoked from there, not from
+ * inside tests/ - because BoxLang's own Application.bx auto-discovery would
+ * otherwise pick up tests/Application.bx and re-root `expandPath("/...")`
+ * one level too deep (tests/tests/specs), breaking bundle discovery.
+ *
+ * Uses TestBox's JSONReporter rather than JUnitReporter/ANTJUnitReporter:
+ * both of those call `encodeForXMLAttribute()`, which BoxLang 1.13.0 doesn't
+ * implement yet.
+ *
+ * Usage: java -cp <boxlang.jar>:<compiled classes> ortus.boxlang.runtime.BoxRunner \
+ *          --bx-config boxlang.json runTests.bxs
+ */
+
+reportsDir = expandPath( "/tests/results" );
+if ( !directoryExists( reportsDir ) ) {
+	directoryCreate( reportsDir, true );
+}
+
+testbox = new testbox.system.TestBox( directory = { mapping: "tests.specs", recurse: true } );
+results = testbox.runRaw();
+
+// JSON report for CI ingestion (JUnit/ANTJUnit reporters need encodeForXMLAttribute(),
+// not yet implemented in BoxLang - see notes above)
+jsonReporter = new testbox.system.reports.JSONReporter();
+jsonReport = jsonReporter.runReport( results, testbox, {}, true );
+fileWrite( reportsDir & "/testbox-results.json", jsonReport );
+
+totalFail = results.getTotalFail() + results.getTotalError();
+
+println( "" );
+println( "Bundles: " & results.getTotalBundles() & " | Suites: " & results.getTotalSuites() & " | Specs: " & results.getTotalSpecs() );
+println( "Pass: " & results.getTotalPass() & " | Fail: " & results.getTotalFail() & " | Error: " & results.getTotalError() & " | Skipped: " & results.getTotalSkipped() );
+
+if ( totalFail > 0 ) {
+	for ( bundleStat in results.getBundleStats() ) {
+		for ( suiteStat in ( bundleStat.suiteStats ?: [] ) ) {
+			for ( specStat in ( suiteStat.specStats ?: [] ) ) {
+				if ( specStat.status == "Failed" || specStat.status == "Error" ) {
+					failDetail = specStat.failMessage ?: ( specStat.error.message ?: "" )
+					println( "  [#specStat.status#] #bundleStat.name# > #suiteStat.name# > #specStat.name#: #failDetail#" )
+				}
+			}
+		}
+	}
+}
+
+if ( totalFail > 0 ) {
+	throw(
+		type    = "BxAgents.TestsFailed",
+		message = "#totalFail# TestBox spec(s) failed or errored"
+	);
+}

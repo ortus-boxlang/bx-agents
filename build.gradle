@@ -247,22 +247,31 @@ check.dependsOn checkTemplateTokens
 
 /**
  * TestBox BDD Suite
- * Runs the BoxLang/TestBox spec suite under `tests/specs` via CommandBox.
- * Requires the CommandBox CLI (`box`) on the PATH, and `box install` to have
- * been run at least once (installs `testbox/` at the project root).
+ * Runs the BoxLang/TestBox spec suite under `tests/specs` via `runTests.bxs`,
+ * a small custom CLI runner (see that file's docblock for why: TestBox's own
+ * testbox/system/runners/BoxLangRunner.bx has an Application.bx-mapping
+ * auto-discovery bug that breaks bundle discovery in this project's layout).
+ *
+ * Requires:
+ *  - `downloadBoxLang` to have fetched the BoxLang jar (compileJava/test already depend on it via classpath)
+ *  - `testbox/` present at the project root (fetch via `box install` locally, or let CI's
+ *    Setup CommandBox CLI + `box install` step provide it)
  */
-task testBx( type: Exec ) {
+task testBx( type: JavaExec ) {
 	group = "verification"
-	description = "Runs the TestBox BDD test suite (tests/specs) via CommandBox"
-	workingDir = projectDir
-	doFirst {
-		file( "build/test-results/testbox" ).mkdirs()
+	description = "Runs the TestBox BDD test suite (tests/specs) via runTests.bxs"
+	dependsOn compileJava
+	onlyIf {
+		if ( !file( "testbox" ).exists() ) {
+			println "! Skipping testBx: testbox/ not found - run `box install` first"
+			return false
+		}
+		return true
 	}
-	commandLine 'box', 'testbox', 'run',
-		'runner=tests/',
-		'reporter=JUnit',
-		'outputFile=build/test-results/testbox/testbox-results.xml',
-		'--verbose'
+	classpath = files( "build/classes/java/main" ) + fileTree( dir: 'src/test/resources/libs', include: '*.jar' )
+	mainClass = 'ortus.boxlang.runtime.BoxRunner'
+	args = [ '--bx-config', 'boxlang.json', 'runTests.bxs' ]
+	workingDir = projectDir
 }
 
 test {
