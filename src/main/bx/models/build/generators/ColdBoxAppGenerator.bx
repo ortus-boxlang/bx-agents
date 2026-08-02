@@ -1,0 +1,264 @@
+/**
+ * Generates the core ColdBox application skeleton for a project's assembled
+ * agent (Build Pipeline Phase 5): `Application.bx`, `config/ColdBox.bx`,
+ * `config/WireBox.bx`, and `agent/GeneratedAgentFactory.bx`.
+ *
+ * `GeneratedAgentFactory.bx` translates the resolved config's `provider/model`
+ * slug (BX Agents' own convention) into bx-ai's separate `aiModel(provider:, params:{model:})`
+ * arguments, and its declared `subAgents` names into nested `aiAgent()` calls,
+ * building leaf subagents before their parents so each parent can pass in the
+ * already-built child instances.
+ *
+ * ColdBox's own `Application.bx`/`config/ColdBox.bx`/`config/WireBox.bx` conventions
+ * here follow established ColdBox framework documentation; they are not
+ * source-verified against `coldbox-platform` this session (see the build plan's
+ * Open Items) and should be spot-checked once that repo is available.
+ */
+class {
+
+	property name="modelSlugParser";
+	property name="configResolver";
+
+	function init() {
+		variables.modelSlugParser = new bxagents.models.build.ModelSlugParser()
+		variables.configResolver = new bxagents.models.build.AgentConfigResolver()
+		return this
+	}
+
+	/**
+	 * @projectRoot Absolute path to the project root (containing Agent.bx/instructions.md)
+	 * @buildDir Absolute path to the build output directory, e.g. "<projectRoot>/.build/app"
+	 * @resolvedConfig The root project's resolved config, from AgentConfigResolver.resolve()
+	 */
+	struct function generate( required string projectRoot, required string buildDir, required struct resolvedConfig ) {
+		var root = normalizePath( arguments.projectRoot )
+		var appDir = normalizePath( arguments.buildDir )
+
+		directoryCreate( path = appDir, createPath = true, ignoreExists = true )
+		directoryCreate( path = appDir & "/config", createPath = true, ignoreExists = true )
+		directoryCreate( path = appDir & "/agent", createPath = true, ignoreExists = true )
+
+		var appName = len( arguments.resolvedConfig.name ?: "" ) ? arguments.resolvedConfig.name : "BxAi"
+
+		var applicationPath  = appDir & "/Application.bx"
+		var coldboxPath      = appDir & "/config/ColdBox.bx"
+		var wireboxPath      = appDir & "/config/WireBox.bx"
+		var agentFactoryPath = appDir & "/agent/GeneratedAgentFactory.bx"
+
+		fileWrite( applicationPath, renderApplication( appName ) )
+		fileWrite( coldboxPath, renderColdboxConfig( appName ) )
+		fileWrite( wireboxPath, renderWireBox() )
+		fileWrite( agentFactoryPath, renderAgentFactory( root, arguments.resolvedConfig ) )
+
+		return {
+			applicationBx : applicationPath,
+			coldboxConfig : coldboxPath,
+			wireboxConfig : wireboxPath,
+			agentFactory  : agentFactoryPath
+		}
+	}
+
+	// --------------------------------------------------------------------------
+	// Static file rendering
+	// --------------------------------------------------------------------------
+
+	private string function renderApplication( required string appName ) {
+		var lines = [
+			"class {",
+			"",
+			'	this.name              = "#bxLiteral( arguments.appName )#"',
+			"	this.sessionManagement = false",
+			"	this.setClientCookies  = false",
+			"",
+			"	COLDBOX_APP_ROOT_PATH  = expandPath( ""/"" )",
+			'	COLDBOX_APP_MAPPING    = ""',
+			'	COLDBOX_CONFIG_MAPPING = ""',
+			'	COLDBOX_APP_KEY        = ""',
+			"",
+			"	function onApplicationStart() {",
+			"		application.cbBootstrap = new coldbox.system.Bootstrap( COLDBOX_APP_ROOT_PATH, COLDBOX_APP_MAPPING, COLDBOX_CONFIG_MAPPING, COLDBOX_APP_KEY )",
+			"		application.cbBootstrap.loadColdbox()",
+			"		return true",
+			"	}",
+			"",
+			"	function onRequestStart( required string targetPage ) {",
+			"		if ( structKeyExists( url, ""fwreinit"" ) ) {",
+			"			application.cbBootstrap.processReinit()",
+			"		}",
+			"		application.cbBootstrap.onRequestStart( arguments.targetPage )",
+			"		return true",
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	private string function renderColdboxConfig( required string appName ) {
+		var lines = [
+			"class {",
+			"",
+			"	function configure() {",
+			"		coldbox = {",
+			'			appName : "#bxLiteral( arguments.appName )#"',
+			"		}",
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	private string function renderWireBox() {
+		var lines = [
+			"class {",
+			"",
+			"	function configure() {",
+			'		map( "GeneratedAgentFactory" ).to( "agent.GeneratedAgentFactory" ).asSingleton()',
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	// --------------------------------------------------------------------------
+	// GeneratedAgentFactory.bx - the agent/subagent build tree
+	// --------------------------------------------------------------------------
+
+	private string function renderAgentFactory( required string projectRoot, required struct resolvedConfig ) {
+		var built = buildAgentTree( arguments.projectRoot, arguments.projectRoot, arguments.resolvedConfig, "agent" )
+		var body = built.statements.toList( char( 10 ) & char( 10 ) )
+
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" */",
+			"class {",
+			"",
+			"	function buildAgent() {",
+			body,
+			"",
+			"		return agent",
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Recursively builds the leaf-first list of `var <name> = aiAgent(...)`
+	 * statements for a project and its declared `subAgents`.
+	 *
+	 * Per the M3-validated DAG model, subagents live in a single FLAT
+	 * namespace under the root project's own `subagents/` folder - a
+	 * subagent's declared `subAgents` names reference SIBLING entries in
+	 * that same root-level folder, not a folder nested under itself. So
+	 * `rootProjectRoot` (fixed) is threaded through separately from
+	 * `nodePath` (this node's own directory, used to locate its instructions.md).
+	 */
+	private struct function buildAgentTree( required string rootProjectRoot, required string nodePath, required struct resolvedConfig, required string varName ) {
+		var declaredSubAgents = arguments.resolvedConfig.subAgents ?: []
+		var subAgentVarNames = []
+		var statements = []
+
+		for ( var subName in declaredSubAgents ) {
+			var subPath = arguments.rootProjectRoot & "/subagents/" & subName
+			if ( !directoryExists( subPath ) ) {
+				throw(
+					type    = "BxAgents.MissingSubagent",
+					message = "Subagent [#subName#] referenced from [#arguments.nodePath#] was not found at [#subPath#]"
+				)
+			}
+
+			var subConfig = variables.configResolver.resolve( projectRoot = subPath )
+			var subVarName = "subagent_" & sanitizeIdentifier( subName )
+			var built = buildAgentTree( arguments.rootProjectRoot, subPath, subConfig, subVarName )
+
+			for ( var stmt in built.statements ) {
+				statements.append( stmt )
+			}
+			subAgentVarNames.append( subVarName )
+		}
+
+		statements.append( renderAgentStatement( arguments.varName, arguments.nodePath, arguments.resolvedConfig, subAgentVarNames ) )
+
+		return { statements : statements }
+	}
+
+	private string function renderAgentStatement(
+		required string varName,
+		required string nodePath,
+		required struct resolvedConfig,
+		required array subAgentVarNames
+	) {
+		var instructionsPath = arguments.nodePath & "/instructions.md"
+		if ( !fileExists( instructionsPath ) ) {
+			throw(
+				type    = "BxAgents.MissingInstructions",
+				message = "No instructions.md found at [#instructionsPath#]"
+			)
+		}
+
+		var modelSlug = arguments.resolvedConfig.model ?: ""
+		if ( !len( modelSlug ) ) {
+			throw(
+				type    = "BxAgents.MissingModel",
+				message = "Agent at [#arguments.nodePath#] has no model configured"
+			)
+		}
+
+		var parsedModel = variables.modelSlugParser.parse( modelSlug )
+		var name = len( arguments.resolvedConfig.name ?: "" ) ? arguments.resolvedConfig.name : "BxAi"
+		var description = arguments.resolvedConfig.description ?: ""
+
+		var lines = []
+		lines.append( "var #arguments.varName# = aiAgent(" )
+		lines.append( '	name : "#bxLiteral( name )#",' )
+		lines.append( '	description : "#bxLiteral( description )#",' )
+		lines.append( '	instructions : fileRead( "#bxLiteral( instructionsPath )#" ),' )
+		lines.append( '	model : aiModel( provider : "#bxLiteral( parsedModel.provider )#", params : { model : "#bxLiteral( parsedModel.model )#" } ),' )
+
+		if ( arguments.subAgentVarNames.len() ) {
+			lines.append( "	subAgents : [ #arguments.subAgentVarNames.toList( ", " )# ]" )
+		} else {
+			lines.append( "	subAgents : []" )
+		}
+
+		lines.append( ")" )
+
+		return lines.toList( char( 10 ) )
+	}
+
+	// --------------------------------------------------------------------------
+	// Helpers
+	// --------------------------------------------------------------------------
+
+	private string function normalizePath( required string path ) {
+		return arguments.path.reReplace( "[\/]+$", "" )
+	}
+
+	private string function sanitizeIdentifier( required string name ) {
+		var sanitized = arguments.name.reReplace( "[^A-Za-z0-9_]", "_", "all" )
+		return reFind( "^[0-9]", sanitized ) ? "_" & sanitized : sanitized
+	}
+
+	/**
+	 * Escapes a value for embedding as a BoxLang double-quoted string literal:
+	 * doubles `"` (quote escaping) and `#` (prevents accidental interpolation
+	 * if the generated source is later re-parsed/evaluated).
+	 */
+	private string function bxLiteral( required string value ) {
+		// Note: literal "#" is written as "##" in BoxLang source (its own
+		// escape convention), so the search/replace args below are doubled
+		// accordingly: one literal "#" is written "##", one literal "##" is "####".
+		return arguments.value.replace( '"', '""', "all" ).replace( "##", "####", "all" )
+	}
+
+}
