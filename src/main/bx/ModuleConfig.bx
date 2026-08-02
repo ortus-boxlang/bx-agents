@@ -140,4 +140,125 @@ class {
 	 function afterModuleActivations(){
 		// do something
 	 }
+
+	/**
+	 * --------------------------------------------------------------------------
+	 * CLI Entry Point
+	 * --------------------------------------------------------------------------
+	 * Every BoxLang module may declare `main( args )`; `boxlang module:bxAgents
+	 * <verb> ...` invokes it directly with the full raw argv, module name
+	 * included (args[1] = "bxAgents", args[2] = the verb, args[3..] = the
+	 * verb's own flags/positional args). Dispatch itself is CLI-agnostic:
+	 * raw argv is parsed once here into a plain options struct, then handed to
+	 * one thin dispatcher class per verb under models/cli/ - every one of
+	 * those is unit-tested directly against that struct shape, without going
+	 * through argv parsing at all (see the build plan's own guidance to skip
+	 * argv-parsing minutiae in tests).
+	 *
+	 * Not source-verified against a real `boxlang module:bxAgents <verb>`
+	 * invocation this session (would need the module actually installed);
+	 * the argv shape above follows the framework's own documented convention.
+	 *
+	 * @args The raw CLI argv, module name included
+	 *
+	 * @return The process exit code (0 success, 1 failure)
+	 */
+	function main( args = [] ) {
+		var verbs = {
+			"new"     : "bxagents.models.cli.New",
+			"build"   : "bxagents.models.cli.Build",
+			"serve"   : "bxagents.models.cli.Serve",
+			"package" : "bxagents.models.cli.Package",
+			"deploy"  : "bxagents.models.cli.Deploy",
+			"inspect" : "bxagents.models.cli.Inspect",
+			"chat"    : "bxagents.models.cli.Chat",
+			"clean"   : "bxagents.models.cli.Clean"
+		}
+
+		var verbName = arrayLen( arguments.args ) >= 2 ? arguments.args[ 2 ] : ""
+
+		if ( !len( verbName ) || !verbs.keyExists( verbName ) ) {
+			println( "Usage: boxlang module:bxAgents <#verbs.keyArray().sort( 'textnocase' ).toList( '|' )#> [options]" )
+			return 1
+		}
+
+		var rawVerbArgs = []
+		for ( var i = 3; i <= arrayLen( arguments.args ); i++ ) {
+			rawVerbArgs.append( arguments.args[ i ] )
+		}
+
+		var options = parseCliOptions( rawVerbArgs )
+		options.projectRoot = resolveProjectRoot( options )
+
+		try {
+			var verbClass = new "#verbs[ verbName ]#"()
+			var result = verbClass.run( options )
+			if ( len( result.message ?: "" ) ) {
+				println( result.message )
+			}
+			return result.exitCode ?: 0
+		} catch ( any e ) {
+			println( "Error: #e.message#" )
+			return 1
+		}
+	}
+
+	/**
+	 * Parses a verb's own argv (module name + verb already stripped) into a
+	 * plain options struct: `--key=value` and `--key value` both set `key`;
+	 * a bare `--flag` (no value, or followed by another `--flag`) sets it to
+	 * `true`; the first non-flag token becomes `_positional` (used as a
+	 * fallback project path by `resolveProjectRoot()`).
+	 */
+	private struct function parseCliOptions( required array rawArgs ) {
+		var options = {}
+		var i = 1
+
+		while ( i <= arrayLen( arguments.rawArgs ) ) {
+			var token = arguments.rawArgs[ i ]
+
+			if ( token.startsWith( "--" ) ) {
+				var body = token.right( len( token ) - 2 )
+				var eqPos = body.find( "=" )
+
+				if ( eqPos ) {
+					options[ body.left( eqPos - 1 ) ] = body.right( len( body ) - eqPos )
+				} else {
+					var hasValue = i < arrayLen( arguments.rawArgs ) && !arguments.rawArgs[ i + 1 ].startsWith( "--" )
+					if ( hasValue ) {
+						options[ body ] = arguments.rawArgs[ i + 1 ]
+						i++
+					} else {
+						options[ body ] = true
+					}
+				}
+			} else if ( !options.keyExists( "_positional" ) ) {
+				options[ "_positional" ] = token
+			}
+
+			i++
+		}
+
+		return options
+	}
+
+	/**
+	 * Precedence: --projectRoot flag > first positional arg > the shell's
+	 * current working directory. A relative value is resolved against the
+	 * CWD, never against this module's own file location.
+	 */
+	private string function resolveProjectRoot( required struct options ) {
+		var cwd = getSystemSetting( "user.dir", "" )
+		var candidate = len( arguments.options.projectRoot ?: "" )
+			? arguments.options.projectRoot
+			: ( len( arguments.options._positional ?: "" ) ? arguments.options._positional : "." )
+
+		if ( candidate == "." ) {
+			return cwd.reReplace( "[\/]+$", "" )
+		}
+
+		var isAbsolute = candidate.startsWith( "/" ) || reFind( "^[A-Za-z]:", candidate ) > 0
+		var resolved = isAbsolute ? candidate : ( cwd & "/" & candidate )
+		return resolved.reReplace( "[\/]+$", "" )
+	}
 }
