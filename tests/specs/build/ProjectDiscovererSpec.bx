@@ -1,0 +1,87 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "ProjectDiscoverer", function() {
+
+			beforeEach( function() {
+				variables.discoverer = new bxagents.models.build.ProjectDiscoverer();
+				variables.fixtures = expandPath( "/fixtures" );
+			} );
+
+			it( "discovers all convention folders present in a project", function() {
+				var result = discoverer.discover( fixtures & "/full-project" );
+
+				expect( result.models.len() ).toBe( 1 );
+				expect( result.tools.len() ).toBe( 2 );
+				expect( result.skills.len() ).toBe( 2 );
+				expect( result.subagents.len() ).toBe( 1 );
+				expect( result.gateways.len() ).toBe( 1 );
+				expect( result.schedules.len() ).toBe( 1 );
+				expect( result.mcp.len() ).toBe( 1 );
+				expect( result.interceptors.len() ).toBe( 1 );
+				expect( result.modules.len() ).toBe( 1 );
+			} );
+
+			it( "ignores non-convention files (README.md) and dotfiles", function() {
+				var result = discoverer.discover( fixtures & "/full-project" );
+
+				var modelNames = result.models.map( m => m.name );
+				expect( modelNames ).notToInclude( "README" );
+				expect( modelNames ).notToInclude( ".hidden" );
+				expect( result.models.len() ).toBe( 1 );
+
+				var subagentNames = result.subagents.map( s => s.name );
+				expect( subagentNames ).notToInclude( ".hidden" );
+
+				var moduleNames = result.modules.map( m => m.name );
+				expect( moduleNames ).notToInclude( ".hidden-module" );
+			} );
+
+			it( "returns empty arrays for absent optional folders without erroring", function() {
+				var result = discoverer.discover( fixtures & "/valid-minimal" );
+
+				expect( result.models ).toBeArray();
+				expect( result.models.len() ).toBe( 0 );
+				expect( result.tools.len() ).toBe( 0 );
+				expect( result.skills.len() ).toBe( 0 );
+				expect( result.subagents.len() ).toBe( 0 );
+				expect( result.gateways.len() ).toBe( 0 );
+				expect( result.schedules.len() ).toBe( 0 );
+				expect( result.mcp.len() ).toBe( 0 );
+				expect( result.interceptors.len() ).toBe( 0 );
+				expect( result.modules.len() ).toBe( 0 );
+			} );
+
+			it( "derives a skill's name from SKILL.md frontmatter when present", function() {
+				var result = discoverer.discover( fixtures & "/full-project" );
+				var skill = result.skills.filter( s => s.path.endsWith( "my-skill" ) )[ 1 ];
+
+				expect( skill.name ).toBe( "boxlang-conventions" );
+			} );
+
+			it( "falls back to the folder name when SKILL.md has no explicit name", function() {
+				var result = discoverer.discover( fixtures & "/full-project" );
+				var skill = result.skills.filter( s => s.path.endsWith( "named-skill" ) )[ 1 ];
+
+				expect( skill.name ).toBe( "named-skill" );
+			} );
+
+			it( "recurses into tools/ subdirectories", function() {
+				var result = discoverer.discover( fixtures & "/full-project" );
+				var toolNames = result.tools.map( t => t.name );
+
+				expect( toolNames ).toInclude( "Weather" );
+				expect( toolNames ).toInclude( "Search" );
+			} );
+
+			it( "is idempotent - running discovery twice yields identical results", function() {
+				var first = discoverer.discover( fixtures & "/full-project" );
+				var second = discoverer.discover( fixtures & "/full-project" );
+
+				expect( jsonSerialize( first ) ).toBe( jsonSerialize( second ) );
+			} );
+
+		} );
+	}
+
+}
