@@ -29,6 +29,20 @@ class extends="testbox.system.BaseSpec" {
 				return generator.generate( arguments.projectRoot, arguments.buildDir, config );
 			}
 
+			private function countOccurrences( required string haystack, required string needle ) {
+				var count = 0;
+				var pos = haystack.find( needle );
+				var searchFrom = 1;
+
+				while ( pos > 0 ) {
+					count++;
+					searchFrom = pos + len( needle );
+					pos = haystack.find( needle, searchFrom );
+				}
+
+				return count;
+			}
+
 			it( "writes a valid Application.bx", function() {
 				var buildDir = newBuildDir();
 				var result = generateFor( fixtures & "/full-project", buildDir );
@@ -50,6 +64,20 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( "function configure()" );
 				expect( content ).toInclude( "appName" );
 				expect( content ).toInclude( "full-project-agent" );
+			} );
+
+			it( "references every agent-scope interceptor exactly once in config/ColdBox.bx", function() {
+				var buildDir = newBuildDir();
+				var config = resolver.resolve( projectRoot = fixtures & "/full-project" );
+				var result = generator.generate( fixtures & "/full-project", buildDir, config, [ "AgentAudit", "OtherInterceptor" ] );
+
+				var content = fileRead( result.coldboxConfig );
+				expect( content ).toInclude( "interceptors = [" );
+
+				for ( var name in [ "AgentAudit", "OtherInterceptor" ] ) {
+					var needle = 'class : "interceptors.#name#"';
+					expect( countOccurrences( content, needle ) ).toBe( 1 );
+				}
 			} );
 
 			it( "writes a valid config/WireBox.bx", function() {

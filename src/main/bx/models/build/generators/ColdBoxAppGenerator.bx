@@ -29,8 +29,9 @@ class {
 	 * @projectRoot Absolute path to the project root (containing Agent.bx/instructions.md)
 	 * @buildDir Absolute path to the build output directory, e.g. "<projectRoot>/.build/app"
 	 * @resolvedConfig The root project's resolved config, from AgentConfigResolver.resolve()
+	 * @agentInterceptors Names of agent-scope interceptors already copied into "<buildDir>/interceptors" (see InterceptorSplitter), to reference from config/ColdBox.bx
 	 */
-	struct function generate( required string projectRoot, required string buildDir, required struct resolvedConfig ) {
+	struct function generate( required string projectRoot, required string buildDir, required struct resolvedConfig, array agentInterceptors = [] ) {
 		var root = normalizePath( arguments.projectRoot )
 		var appDir = normalizePath( arguments.buildDir )
 
@@ -46,7 +47,7 @@ class {
 		var agentFactoryPath = appDir & "/agent/GeneratedAgentFactory.bx"
 
 		fileWrite( applicationPath, renderApplication( appName ) )
-		fileWrite( coldboxPath, renderColdboxConfig( appName ) )
+		fileWrite( coldboxPath, renderColdboxConfig( appName, arguments.agentInterceptors ) )
 		fileWrite( wireboxPath, renderWireBox() )
 		fileWrite( agentFactoryPath, renderAgentFactory( root, arguments.resolvedConfig ) )
 
@@ -95,19 +96,31 @@ class {
 		return lines.toList( char( 10 ) )
 	}
 
-	private string function renderColdboxConfig( required string appName ) {
+	private string function renderColdboxConfig( required string appName, array agentInterceptors = [] ) {
 		var lines = [
 			"class {",
 			"",
 			"	function configure() {",
 			"		coldbox = {",
 			'			appName : "#bxLiteral( arguments.appName )#"',
-			"		}",
-			"	}",
-			"",
-			"}",
-			""
+			"		}"
 		]
+
+		if ( arguments.agentInterceptors.len() ) {
+			lines.append( "" )
+			lines.append( "		interceptors = [" )
+			for ( var i = 1; i <= arguments.agentInterceptors.len(); i++ ) {
+				var comma = i < arguments.agentInterceptors.len() ? "," : ""
+				lines.append( '			{ class : "interceptors.#bxLiteral( arguments.agentInterceptors[ i ] )#" }#comma#' )
+			}
+			lines.append( "		]" )
+		}
+
+		lines.append( "	}" )
+		lines.append( "" )
+		lines.append( "}" )
+		lines.append( "" )
+
 		return lines.toList( char( 10 ) )
 	}
 

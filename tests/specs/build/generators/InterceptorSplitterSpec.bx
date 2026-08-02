@@ -1,0 +1,80 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "InterceptorSplitter", function() {
+
+			beforeEach( function() {
+				variables.discoverer = new bxagents.models.build.ProjectDiscoverer();
+				variables.splitter = new bxagents.models.build.generators.InterceptorSplitter();
+				variables.fixtures = expandPath( "/fixtures" );
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function newDirs() {
+				var base = createTempDirectory( prefix = "bxagents-interceptors-" );
+				tempDirs.append( base );
+				return { appDir : base & "/app", runtimeDir : base & "/runtime-interceptors" };
+			}
+
+			it( 'routes @scope("runtime") interceptors to the runtime list and copies their file', function() {
+				var discovery = discoverer.discover( fixtures & "/interceptors-mixed" );
+				var dirs = newDirs();
+
+				var result = splitter.split( dirs.appDir, dirs.runtimeDir, discovery );
+
+				var runtimeNames = result.runtime.map( e => e.name );
+				expect( runtimeNames ).toInclude( "RuntimeLogger" );
+				expect( fileExists( dirs.runtimeDir & "/RuntimeLogger.bx" ) ).toBeTrue();
+			} );
+
+			it( 'routes @scope("agent") interceptors to the agent list and copies their file into <appDir>/interceptors', function() {
+				var discovery = discoverer.discover( fixtures & "/interceptors-mixed" );
+				var dirs = newDirs();
+
+				var result = splitter.split( dirs.appDir, dirs.runtimeDir, discovery );
+
+				var agentNames = result.agent.map( e => e.name );
+				expect( agentNames ).toInclude( "AgentAudit" );
+				expect( fileExists( dirs.appDir & "/interceptors/AgentAudit.bx" ) ).toBeTrue();
+			} );
+
+			it( "defaults to agent scope when no @scope annotation is present", function() {
+				var discovery = discoverer.discover( fixtures & "/interceptors-mixed" );
+				var dirs = newDirs();
+
+				var result = splitter.split( dirs.appDir, dirs.runtimeDir, discovery );
+
+				var agentNames = result.agent.map( e => e.name );
+				expect( agentNames ).toInclude( "DefaultScope" );
+			} );
+
+			it( "rejects an unrecognized @scope value", function() {
+				var discovery = discoverer.discover( fixtures & "/interceptors-bad-scope" );
+				var dirs = newDirs();
+
+				expect( function() {
+					splitter.split( dirs.appDir, dirs.runtimeDir, discovery );
+				} ).toThrow( "BxAgents.InvalidInterceptorScope" );
+			} );
+
+			it( "produces no runtime folder when a project has no runtime-scope interceptors", function() {
+				var discovery = discoverer.discover( fixtures & "/full-project" );
+				var dirs = newDirs();
+
+				splitter.split( dirs.appDir, dirs.runtimeDir, discovery );
+
+				expect( directoryExists( dirs.runtimeDir ) ).toBeFalse();
+			} );
+
+		} );
+	}
+
+}
