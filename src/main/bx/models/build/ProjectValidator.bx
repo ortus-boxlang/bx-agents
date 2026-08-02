@@ -1,0 +1,364 @@
+/**
+ * Validates a BX Agents project's discovered source (Build Pipeline Phase 3).
+ *
+ * Runs every validator (never fail-fast) and returns `{ errors: [], warnings: [] }`.
+ * Errors block the build; warnings do not. No network calls are ever made here
+ * (e.g. remote MCP server reachability is out of scope - bx-ai resolves that
+ * live, at runtime).
+ */
+class {
+
+	property name="modelSlugParser";
+
+	function init() {
+		// bx-ai's CORE_PROVIDERS (src/main/bx/bifs/aiService.bx) - kept in sync
+		// manually, there are only a handful of these and they change rarely.
+		variables.CORE_PROVIDERS = [
+			"bedrock", "claude", "cohere", "deepseek", "docker", "elevenlabs", "gemini",
+			"grok", "groq", "huggingface", "minimax", "mistral", "mock", "ollama",
+			"openai", "openai-compatible", "openrouter", "perplexity", "voyage"
+		]
+		variables.modelSlugParser = new ModelSlugParser()
+		return this
+	}
+
+	/**
+	 * Validate a project's discovered source against its resolved configuration.
+	 *
+	 * @projectRoot Absolute path to the project root
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover()
+	 * @resolvedConfig The resolved config struct from AgentConfigResolver.resolve()
+	 */
+	struct function validate( required string projectRoot, required struct discovery, required struct resolvedConfig ) {
+		var errors = []
+		var warnings = []
+
+		validateDuplicateNames( arguments.discovery, errors )
+		validateSubagents( arguments.projectRoot, arguments.discovery, errors )
+		validateModules( arguments.projectRoot, arguments.discovery, errors )
+		validateSchedules( arguments.discovery, errors )
+		validateGateways( arguments.discovery, errors )
+		validateMcpServers( arguments.resolvedConfig, errors )
+		validateModelProvider( arguments.resolvedConfig, arguments.discovery, errors )
+
+		return { errors : errors, warnings : warnings }
+	}
+
+	// --------------------------------------------------------------------------
+	// Duplicate names
+	// --------------------------------------------------------------------------
+
+	private void function validateDuplicateNames( required struct discovery, required array errors ) {
+		for ( var category in [ "tools", "skills", "models", "subagents" ] ) {
+			var entries = arguments.discovery[ category ] ?: []
+			for ( var dup in findDuplicateNames( entries ) ) {
+				arguments.errors.append( "Duplicate name [#dup#] found in #category#/" )
+			}
+		}
+	}
+
+	private array function findDuplicateNames( required array entries ) {
+		var seen = {}
+		var duplicates = []
+		for ( var entry in arguments.entries ) {
+			if ( structKeyExists( seen, entry.name ) ) {
+				if ( !duplicates.contains( entry.name ) ) {
+					duplicates.append( entry.name )
+				}
+			} else {
+				seen[ entry.name ] = true
+			}
+		}
+		return duplicates
+	}
+
+	// --------------------------------------------------------------------------
+	// Circular subagent detection
+	// --------------------------------------------------------------------------
+
+	private void function validateSubagents( required string projectRoot, required struct discovery, required array errors ) {
+		var subagents = arguments.discovery.subagents ?: []
+		var resolver = new AgentConfigResolver()
+		var graph = {}
+
+		for ( var subagent in subagents ) {
+			var agentBxPath = subagent.path & "/Agent.bx"
+			if ( !fileExists( agentBxPath ) ) {
+				arguments.errors.append( "Subagent [#subagent.name#] is missing its Agent.bx descriptor" )
+				graph[ subagent.name ] = []
+				continue
+			}
+
+			try {
+				var config = resolver.resolve( projectRoot = subagent.path )
+				graph[ subagent.name ] = config.subAgents ?: []
+			} catch ( any e ) {
+				arguments.errors.append( "Subagent [#subagent.name#] failed to load: #e.message#" )
+				graph[ subagent.name ] = []
+			}
+		}
+
+		// Root-level subAgents declared directly on the project's own Agent.bx
+		var rootProjectAgentBx = arguments.projectRoot & "/Agent.bx"
+		var rootSubAgents = []
+		if ( fileExists( rootProjectAgentBx ) ) {
+			try {
+				rootSubAgents = resolver.resolve( projectRoot = arguments.projectRoot ).subAgents ?: []
+			} catch ( any e ) {
+				// Already surfaced elsewhere (config resolution failures are not this validator's job)
+			}
+		}
+		graph[ "__root__" ] = rootSubAgents
+
+		for ( var nodeName in graph ) {
+			for ( var refName in graph[ nodeName ] ) {
+				if ( nodeName != "__root__" && !structKeyExists( graph, refName ) ) {
+					arguments.errors.append( "Subagent [#nodeName#] references unknown subagent [#refName#]" )
+				}
+			}
+		}
+
+		for ( var cyclePath in detectCycles( graph ) ) {
+			arguments.errors.append( "Circular subagent reference detected: #cyclePath#" )
+		}
+	}
+
+	// --------------------------------------------------------------------------
+	// Module dependency validation (same missing/cycle rules as subagents)
+	// --------------------------------------------------------------------------
+
+	private void function validateModules( required string projectRoot, required struct discovery, required array errors ) {
+		var modules = arguments.discovery.modules ?: []
+		var graph = {}
+
+		for ( var mod in modules ) {
+			var manifestPath = mod.path & "/module.json"
+			var dependsOn = []
+			if ( fileExists( manifestPath ) ) {
+				try {
+					var manifest = jsonDeserialize( fileRead( manifestPath ) )
+					dependsOn = manifest.dependsOn ?: []
+				} catch ( any e ) {
+					arguments.errors.append( "Module [#mod.name#]'s module.json is not valid JSON: #e.message#" )
+				}
+			}
+			graph[ mod.name ] = dependsOn
+		}
+
+		for ( var nodeName in graph ) {
+			for ( var refName in graph[ nodeName ] ) {
+				if ( !structKeyExists( graph, refName ) ) {
+					arguments.errors.append( "Module [#nodeName#] depends on unknown module [#refName#]" )
+				}
+			}
+		}
+
+		for ( var cyclePath in detectCycles( graph ) ) {
+			arguments.errors.append( "Circular module dependency detected: #cyclePath#" )
+		}
+	}
+
+	/**
+	 * Detects cycles in a directed graph using DFS + a recursion stack.
+	 *
+	 * @graph A struct of { nodeName: [ referencedNodeNames ] }
+	 *
+	 * @return An array of human-readable cycle path strings (e.g. "a -> b -> a"), one per cycle found
+	 */
+	private array function detectCycles( required struct graph ) {
+		var visited = {}
+		var cycles = []
+
+		for ( var startNode in arguments.graph ) {
+			if ( !structKeyExists( visited, startNode ) ) {
+				walkForCycles( startNode, arguments.graph, visited, {}, [], cycles )
+			}
+		}
+
+		return cycles
+	}
+
+	private void function walkForCycles(
+		required string node,
+		required struct graph,
+		required struct visited,
+		required struct onStack,
+		required array path,
+		required array cycles
+	) {
+		arguments.visited[ arguments.node ] = true
+		arguments.onStack[ arguments.node ] = true
+		var currentPath = duplicate( arguments.path )
+		currentPath.append( arguments.node )
+
+		for ( var refName in ( arguments.graph[ arguments.node ] ?: [] ) ) {
+			if ( !structKeyExists( arguments.graph, refName ) ) {
+				// Unknown reference already reported by the caller
+				continue
+			}
+			if ( structKeyExists( arguments.onStack, refName ) && arguments.onStack[ refName ] ) {
+				var cycleStart = currentPath.find( refName )
+				var cycleNodes = currentPath.slice( cycleStart )
+				cycleNodes.append( refName )
+				arguments.cycles.append( cycleNodes.toList( " -> " ) )
+			} else if ( !structKeyExists( arguments.visited, refName ) ) {
+				walkForCycles( refName, arguments.graph, arguments.visited, arguments.onStack, currentPath, arguments.cycles )
+			}
+		}
+
+		arguments.onStack[ arguments.node ] = false
+	}
+
+	// --------------------------------------------------------------------------
+	// Schedules
+	// --------------------------------------------------------------------------
+
+	private void function validateSchedules( required struct discovery, required array errors ) {
+		var CRON_FIELD = "(\*|\*\/\d+|\d+(-\d+)?(,\d+(-\d+)?)*)"
+		var cronPattern = "^#CRON_FIELD# #CRON_FIELD# #CRON_FIELD# #CRON_FIELD# #CRON_FIELD#$"
+
+		for ( var schedule in ( arguments.discovery.schedules ?: [] ) ) {
+			var config = readEntryConfig( schedule.path )
+			if ( isNull( config ) ) {
+				arguments.errors.append( "Schedule [#schedule.name#] could not be read" )
+				continue
+			}
+
+			var cron = config.cron ?: ""
+			if ( !len( cron ) ) {
+				arguments.errors.append( "Schedule [#schedule.name#] is missing a 'cron' expression" )
+			} else if ( !cron.trim().reFind( cronPattern ) ) {
+				arguments.errors.append( "Schedule [#schedule.name#] has an invalid cron expression [#cron#]" )
+			}
+		}
+	}
+
+	// --------------------------------------------------------------------------
+	// Gateways (two entry kinds - see M8 design notes)
+	// --------------------------------------------------------------------------
+
+	private void function validateGateways( required struct discovery, required array errors ) {
+		var seenPaths = {}
+		var seenNames = {}
+		var validGatewayTypes = [ "mock", "cli", "http" ]
+
+		for ( var gateway in ( arguments.discovery.gateways ?: [] ) ) {
+			var config = readEntryConfig( gateway.path )
+			if ( isNull( config ) ) {
+				arguments.errors.append( "Gateway [#gateway.name#] could not be read" )
+				continue
+			}
+
+			if ( structKeyExists( config, "exposes" ) ) {
+				// Exposure entry: exposes an agent or an MCP server over HTTP via toAi()/toMCP()
+				if ( ![ "agent", "mcp" ].contains( config.exposes ) ) {
+					arguments.errors.append( "Gateway [#gateway.name#] has an invalid 'exposes' value [#config.exposes#] - must be 'agent' or 'mcp'" )
+				}
+
+				var path = config.path ?: ""
+				if ( !len( path ) ) {
+					arguments.errors.append( "Gateway [#gateway.name#] is missing a 'path'" )
+				} else if ( structKeyExists( seenPaths, path ) ) {
+					arguments.errors.append( "Duplicate gateway exposure path [#path#]" )
+				} else {
+					seenPaths[ path ] = true
+				}
+			} else {
+				// Channel-adapter entry: a bx-ai IGateway (mock/cli/http) registered by name
+				if ( structKeyExists( seenNames, gateway.name ) ) {
+					arguments.errors.append( "Duplicate gateway name [#gateway.name#]" )
+				} else {
+					seenNames[ gateway.name ] = true
+				}
+
+				var type = config.type ?: ""
+				if ( !validGatewayTypes.contains( type ) ) {
+					arguments.errors.append( "Gateway [#gateway.name#] has an unknown type [#type#] - must be one of: #validGatewayTypes.toList()#" )
+				} else if ( type == "http" && !len( config.secret ?: "" ) ) {
+					arguments.errors.append( "Gateway [#gateway.name#] is of type 'http' and requires a 'secret'" )
+				}
+			}
+		}
+	}
+
+	// --------------------------------------------------------------------------
+	// Remote MCP servers (declared on Agent.bx itself, consumed - never dialed - at build time)
+	// --------------------------------------------------------------------------
+
+	private void function validateMcpServers( required struct resolvedConfig, required array errors ) {
+		var mcpServers = arguments.resolvedConfig.mcpServers ?: []
+
+		if ( !isArray( mcpServers ) ) {
+			arguments.errors.append( "Agent.bx's 'mcpServers' must be an array" )
+			return
+		}
+
+		for ( var entry in mcpServers ) {
+			if ( isStruct( entry ) ) {
+				if ( !len( entry.url ?: "" ) ) {
+					arguments.errors.append( "An mcpServers entry is missing a 'url'" )
+				}
+			} else if ( isSimpleValue( entry ) ) {
+				if ( !len( entry ) ) {
+					arguments.errors.append( "An mcpServers entry is an empty string" )
+				}
+			} else {
+				arguments.errors.append( "An mcpServers entry must be a URL string or a { url, name } struct" )
+			}
+		}
+	}
+
+	// --------------------------------------------------------------------------
+	// Model / provider validation
+	// --------------------------------------------------------------------------
+
+	private void function validateModelProvider( required struct resolvedConfig, required struct discovery, required array errors ) {
+		var modelValue = arguments.resolvedConfig.model ?: ""
+
+		if ( !len( modelValue ) ) {
+			arguments.errors.append( "Agent.bx's configure() must declare a 'model'" )
+			return
+		}
+
+		if ( modelValue.find( "/" ) ) {
+			var parsed = variables.modelSlugParser.parse( modelValue )
+			if ( !variables.CORE_PROVIDERS.contains( parsed.provider.lcase() ) ) {
+				arguments.errors.append( "Unknown model provider [#parsed.provider#] - must be one of: #variables.CORE_PROVIDERS.toList()#" )
+			}
+			return
+		}
+
+		// No slash: must either be a known provider's default model, or a named
+		// reference to a models/ entry.
+		var modelNames = ( arguments.discovery.models ?: [] ).map( m => m.name )
+		if ( !variables.CORE_PROVIDERS.contains( modelValue.lcase() ) && !modelNames.contains( modelValue ) ) {
+			arguments.errors.append( "model [#modelValue#] has no provider and does not match any models/ entry" )
+		}
+	}
+
+	// --------------------------------------------------------------------------
+	// Shared helpers
+	// --------------------------------------------------------------------------
+
+	/**
+	 * Reads a discovered entry's config: JSON files are deserialized directly,
+	 * `.bx` files are dynamically loaded and their configure() invoked.
+	 * Returns null (not throws) if the entry can't be read - callers report
+	 * their own contextual error message.
+	 */
+	private any function readEntryConfig( required string path ) {
+		try {
+			if ( arguments.path.endsWith( ".json" ) ) {
+				return jsonDeserialize( fileRead( arguments.path ) )
+			}
+
+			var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
+			var instance = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
+				.instantiate( arguments.path, context )
+			return instance.configure()
+		} catch ( any e ) {
+			return null
+		}
+	}
+
+}

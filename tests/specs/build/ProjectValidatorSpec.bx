@@ -1,0 +1,113 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "ProjectValidator", function() {
+
+			beforeEach( function() {
+				variables.discoverer = new bxagents.models.build.ProjectDiscoverer();
+				variables.resolver = new bxagents.models.build.AgentConfigResolver();
+				variables.validator = new bxagents.models.build.ProjectValidator();
+				variables.fixtures = expandPath( "/fixtures/validation" );
+			} );
+
+			private function validateFixture( required string name ) {
+				var projectRoot = fixtures & "/" & arguments.name;
+				var discovery = discoverer.discover( projectRoot );
+				var config = resolver.resolve( projectRoot = projectRoot );
+				return validator.validate( projectRoot, discovery, config );
+			}
+
+			it( "rejects duplicate tool names", function() {
+				var result = validateFixture( "duplicate-tool-names" );
+				expect( result.errors.filter( e => e.findNoCase( "Duplicate name" ) && e.findNoCase( "tools/" ) ).len() ).toBeGT( 0 );
+			} );
+
+			it( "rejects duplicate skill names", function() {
+				var result = validateFixture( "duplicate-skill-names" );
+				expect( result.errors.filter( e => e.findNoCase( "Duplicate name" ) && e.findNoCase( "skills/" ) ).len() ).toBeGT( 0 );
+			} );
+
+			it( "detects a 2-node circular subagent reference and reports the full cycle path", function() {
+				var result = validateFixture( "subagent-cycle-2" );
+				var cycleErrors = result.errors.filter( e => e.findNoCase( "Circular subagent" ) );
+				expect( cycleErrors.len() ).toBeGT( 0 );
+				expect( cycleErrors[ 1 ] ).toInclude( "a" );
+				expect( cycleErrors[ 1 ] ).toInclude( "b" );
+			} );
+
+			it( "detects a 3+ node circular subagent reference", function() {
+				var result = validateFixture( "subagent-cycle-3" );
+				var cycleErrors = result.errors.filter( e => e.findNoCase( "Circular subagent" ) );
+				expect( cycleErrors.len() ).toBeGT( 0 );
+			} );
+
+			it( "does not false-positive on a non-cyclic diamond subagent DAG", function() {
+				var result = validateFixture( "subagent-diamond-ok" );
+				var cycleErrors = result.errors.filter( e => e.findNoCase( "Circular subagent" ) );
+				expect( cycleErrors.len() ).toBe( 0 );
+			} );
+
+			it( "rejects an invalid cron expression", function() {
+				var result = validateFixture( "bad-cron" );
+				expect( result.errors.filter( e => e.findNoCase( "invalid cron expression" ) ).len() ).toBeGT( 0 );
+			} );
+
+			it( "rejects duplicate gateway exposure paths", function() {
+				var result = validateFixture( "duplicate-gateway-path" );
+				expect( result.errors.filter( e => e.findNoCase( "Duplicate gateway exposure path" ) ).len() ).toBeGT( 0 );
+			} );
+
+			it( "rejects an unknown gateway type", function() {
+				var result = validateFixture( "unknown-gateway-type" );
+				expect( result.errors.filter( e => e.findNoCase( "unknown type" ) ).len() ).toBeGT( 0 );
+			} );
+
+			it( "rejects an http gateway missing its required secret", function() {
+				var result = validateFixture( "http-gateway-missing-secret" );
+				expect( result.errors.filter( e => e.findNoCase( "requires a 'secret'" ) ).len() ).toBeGT( 0 );
+			} );
+
+			it( "rejects an unknown model provider", function() {
+				var result = validateFixture( "unknown-provider" );
+				expect( result.errors.filter( e => e.findNoCase( "Unknown model provider" ) ).len() ).toBeGT( 0 );
+			} );
+
+			it( "rejects mcpServers entries missing required fields", function() {
+				var result = validateFixture( "bad-mcp-server" );
+				expect( result.errors.filter( e => e.findNoCase( "mcpServers" ) ).len() ).toBeGT( 0 );
+			} );
+
+			it( "rejects a model reference that matches no models/ entry", function() {
+				var result = validateFixture( "missing-model-reference" );
+				expect( result.errors.filter( e => e.findNoCase( "does not match any models/ entry" ) ).len() ).toBeGT( 0 );
+			} );
+
+			it( "detects a circular module dependency", function() {
+				var result = validateFixture( "module-cycle" );
+				expect( result.errors.filter( e => e.findNoCase( "Circular module dependency" ) ).len() ).toBeGT( 0 );
+			} );
+
+			it( "rejects a module dependency referencing an unknown module", function() {
+				var result = validateFixture( "module-missing-ref" );
+				expect( result.errors.filter( e => e.findNoCase( "depends on unknown module" ) ).len() ).toBeGT( 0 );
+			} );
+
+			it( "collects multiple independent errors in a single validation pass", function() {
+				var result = validateFixture( "multiple-errors" );
+
+				expect( result.errors.filter( e => e.findNoCase( "Duplicate name" ) && e.findNoCase( "tools/" ) ).len() ).toBeGT( 0 );
+				expect( result.errors.filter( e => e.findNoCase( "invalid cron expression" ) ).len() ).toBeGT( 0 );
+				expect( result.errors.filter( e => e.findNoCase( "Unknown model provider" ) ).len() ).toBeGT( 0 );
+				expect( result.errors.len() ).toBeGTE( 3 );
+			} );
+
+			it( "returns no errors for a fully valid project", function() {
+				var result = validateFixture( "../full-project" );
+				expect( result.errors ).toBeArray();
+				expect( result.errors.len() ).toBe( 0 );
+			} );
+
+		} );
+	}
+
+}
