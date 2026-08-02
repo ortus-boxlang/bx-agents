@@ -12,7 +12,7 @@
  * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-package ortus.boxlang.moduleslug;
+package ortus.boxlang.bxagents;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -20,7 +20,7 @@ import java.nio.file.Paths;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 
-import ortus.boxlang.moduleslug.util.KeyDictionary;
+import ortus.boxlang.bxagents.util.KeyDictionary;
 import ortus.boxlang.runtime.BoxRuntime;
 import ortus.boxlang.runtime.context.IBoxContext;
 import ortus.boxlang.runtime.context.ScriptingRequestBoxContext;
@@ -31,8 +31,7 @@ import ortus.boxlang.runtime.scopes.VariablesScope;
 import ortus.boxlang.runtime.services.ModuleService;
 
 /**
- * Use this as a base integration test for your non web-support package
- * modules. If you want web based testing, use the BaseWebIntegrationTest
+ * Base integration test that loads the BX Agents module into a BoxRuntime.
  */
 public abstract class BaseIntegrationTest {
 

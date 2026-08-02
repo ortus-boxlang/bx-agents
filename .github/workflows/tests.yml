@@ -45,8 +45,11 @@ jobs:
       #     mysql -u${{ env.DB_USER }} -p${{ env.DB_PASSWORD }} -e 'CREATE DATABASE mementifier;'
       #     mysql -u${{ env.DB_USER }} -p${{ env.DB_PASSWORD }} < test-harness/tests/resources/coolblog.sql
 
-      #- name: Setup CommandBox CLI
-      #  uses: Ortus-Solutions/setup-commandbox@v2.0.1
+      - name: Setup CommandBox CLI
+        uses: Ortus-Solutions/setup-commandbox@v2.0.1
+
+      - name: Install TestBox
+        run: box install
 
       # Not Needed in this module
       #- name: Setup Environment For Testing Process
@@ -69,12 +72,16 @@ jobs:
           # this is done in order to build the module structure before testing
           ./gradlew shadowJar test --stacktrace --console=plain
 
+      - name: Run TestBox Suite
+        run: ./gradlew testBx --stacktrace --console=plain
+
       - name: Publish Test Reports
         uses: mikepenz/action-junit-report@v6.4.0
         if: always()
         with:
           report_paths: |
             **/build/test-results/test/*.xml
+            **/build/test-results/testbox/*.xml
             **/surefire-reports/*.xml
             **/failsafe-reports/*.xml
           check_name: "Tests Report ${{ matrix.os }}-${{ matrix.jdkVersion }}"

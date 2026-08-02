@@ -137,7 +137,7 @@ serviceLoader {
 jar {
     archiveVersion =  "${version}"
  	manifest {
-	   attributes 'Description': 'ExampleBoxLangModule'
+	   attributes 'Description': 'BX Agents'
     }
 }
 shadowJar {
@@ -214,6 +214,56 @@ task zipModuleStructure( type: Zip ) {
 }
 createModuleStructure.finalizedBy( zipModuleStructure )
 shadowJar.finalizedBy( createModuleStructure )
+
+/**
+ * Template Token Guard
+ * Fails the build if any leftover `@MODULE_*@` template placeholder tokens remain
+ * (i.e. the boxlang-module-template setup was never completed/finished).
+ */
+task checkTemplateTokens {
+	group = "verification"
+	description = "Fails if any @MODULE_*@ template placeholder tokens remain in the repo"
+	doLast {
+		def offenders = []
+		def textExtensions = [ "bx", "bxs", "bxm", "java", "json", "md", "gradle", "properties", "yml", "yaml", "xml", "txt" ]
+		fileTree( dir: projectDir, excludes: [ "**/.git/**", "**/build/**", "**/node_modules/**", "**/testbox/**", "**/src/test/resources/libs/**" ] ).each { f ->
+			if ( f.isFile() && f.name != "build.gradle" && textExtensions.contains( f.name.tokenize( '.' ).last().toLowerCase() ) ) {
+				try {
+					if ( f.text =~ /@MODULE_[A-Z_]+@/ ) {
+						offenders << f
+					}
+				} catch ( ignored ) {
+					// Skip unreadable/binary files
+				}
+			}
+		}
+		if ( !offenders.isEmpty() ) {
+			throw new GradleException( "Leftover @MODULE_*@ template tokens found in: " + offenders.join( ", " ) )
+		}
+		println "+ No leftover @MODULE_*@ template tokens found"
+	}
+}
+check.dependsOn checkTemplateTokens
+
+/**
+ * TestBox BDD Suite
+ * Runs the BoxLang/TestBox spec suite under `tests/specs` via CommandBox.
+ * Requires the CommandBox CLI (`box`) on the PATH, and `box install` to have
+ * been run at least once (installs `testbox/` at the project root).
+ */
+task testBx( type: Exec ) {
+	group = "verification"
+	description = "Runs the TestBox BDD test suite (tests/specs) via CommandBox"
+	workingDir = projectDir
+	doFirst {
+		file( "build/test-results/testbox" ).mkdirs()
+	}
+	commandLine 'box', 'testbox', 'run',
+		'runner=tests/',
+		'reporter=JUnit',
+		'outputFile=build/test-results/testbox/testbox-results.xml',
+		'--verbose'
+}
 
 test {
     useJUnitPlatform()

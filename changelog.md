@@ -9,4 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-* First iteration of this module
+* Renamed the module template scaffold to BX Agents (box.json, ModuleConfig.bx, Java package `ortus.boxlang.bxagents`)
+* Added the TestBox harness (`tests/Application.bx`, `tests/box.json`, `tests/specs/`) and wired a `testBx` Gradle task into CI
+* Added a `checkTemplateTokens` Gradle guard against leftover `@MODULE_*@` template placeholders
+* Reserved `src/test/resources/fixtures/` and `src/main/resources/scaffold/` for upcoming build-pipeline milestones

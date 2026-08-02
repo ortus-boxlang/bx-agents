@@ -1,4 +1,4 @@
-# ⚡︎ BoxLang Module: @MODULE_NAME@
+# ⚡︎ BoxLang Module: BX Agents
 
 ```
 |:------------------------------------------------------:|
@@ -16,13 +16,14 @@
 
 <p>&nbsp;</p>
 
-This template can be used to create Ortus based BoxLang Modules. To use, just click the `Use this Template` button in the github repository: https://github.com/ortus-boxlang/boxlang-module-template and run the setup task from where you cloned it.
+**BX Agents** is the conventions-based AI agent framework for BoxLang. It assembles a
+standard ColdBox application and a BX AI agent at build time from a file-convention project
+(`Agent.bx`, `instructions.md`, `models/`, `tools/`, `skills/`, `subagents/`, `gateways/`,
+`schedules/`, `mcp/`, `interceptors/`), producing a portable application that can be served
+locally or packaged as a `.bxa` artifact.
 
-```bash
-box task run taskFile=src/build/SetupTemplate
-```
-
-The `SetupTemplate` task will ask you for your module name, id and description and configure the template for you! Enjoy!
+> This module is under active development. See `changelog.md` for progress. A full quick
+> start and usage guide will land in the `docs/` folder as the build pipeline is completed.
 
 ## Install Skills
 
