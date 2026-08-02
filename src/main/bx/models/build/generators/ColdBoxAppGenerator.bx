@@ -31,6 +31,7 @@ class {
 	 * @resolvedConfig The root project's resolved config, from AgentConfigResolver.resolve()
 	 * @agentInterceptors Names of agent-scope interceptors already copied into "<buildDir>/interceptors" (see InterceptorSplitter), to reference from config/ColdBox.bx
 	 * @gatewayRegistrations Bare `gatewayRegistry().register( aiGateway( ... ) )` statement strings (see GatewayGenerator), inserted into Application.bx's onApplicationStart()
+	 * @mcpRegistrations Bare `mcpServer( ... ).registerTool( ... )` statement strings (see McpGenerator), inserted into Application.bx's onApplicationStart()
 	 * @exposeAgentAsRunnable When true, the root agent is built via a generated agent/GeneratedAgentRunnable.bx subclass (extends AiAgent, implements ColdBox's IAiRunnable) instead of the plain aiAgent() BIF, so route().toAi() can target it directly - see RouterGenerator
 	 */
 	struct function generate(
@@ -39,6 +40,7 @@ class {
 		required struct resolvedConfig,
 		array agentInterceptors = [],
 		array gatewayRegistrations = [],
+		array mcpRegistrations = [],
 		boolean exposeAgentAsRunnable = false
 	) {
 		var root = normalizePath( arguments.projectRoot )
@@ -55,7 +57,15 @@ class {
 		var wireboxPath      = appDir & "/config/WireBox.bx"
 		var agentFactoryPath = appDir & "/agent/GeneratedAgentFactory.bx"
 
-		fileWrite( applicationPath, renderApplication( appName, arguments.gatewayRegistrations ) )
+		var startupStatements = []
+		for ( var statement in arguments.mcpRegistrations ) {
+			startupStatements.append( statement )
+		}
+		for ( var statement in arguments.gatewayRegistrations ) {
+			startupStatements.append( statement )
+		}
+
+		fileWrite( applicationPath, renderApplication( appName, startupStatements ) )
 		fileWrite( coldboxPath, renderColdboxConfig( appName, arguments.agentInterceptors, arguments.resolvedConfig.security ?: {} ) )
 		fileWrite( wireboxPath, renderWireBox() )
 		fileWrite( agentFactoryPath, renderAgentFactory( root, arguments.resolvedConfig, arguments.exposeAgentAsRunnable ) )
@@ -80,7 +90,7 @@ class {
 	// Static file rendering
 	// --------------------------------------------------------------------------
 
-	private string function renderApplication( required string appName, array gatewayRegistrations = [] ) {
+	private string function renderApplication( required string appName, array startupStatements = [] ) {
 		var lines = [
 			"class {",
 			"",
@@ -98,7 +108,7 @@ class {
 			"		application.cbBootstrap.loadColdbox()"
 		]
 
-		for ( var statement in arguments.gatewayRegistrations ) {
+		for ( var statement in arguments.startupStatements ) {
 			lines.append( "		" & statement )
 		}
 
@@ -228,7 +238,8 @@ class {
 			"	}",
 			"",
 			"	function batch( event, rc, prc ) {",
-			'		var inputs = isArray( arguments.rc.messages ?: [] ) ? arguments.rc.messages : []',
+			"		var inputs = arguments.rc.messages ?: []",
+			"		inputs = isArray( inputs ) ? inputs : []",
 			"		var results = []",
 			"",
 			"		// A plain loop (not .map(closure)) - calling super.run() from inside a",
@@ -364,9 +375,19 @@ class {
 		lines.append( '	model : aiModel( provider : "#bxLiteral( parsedModel.provider )#", params : { model : "#bxLiteral( parsedModel.model )#" } ),' )
 
 		if ( arguments.subAgentVarNames.len() ) {
-			lines.append( "	subAgents : [ #arguments.subAgentVarNames.toList( ", " )# ]" )
+			lines.append( "	subAgents : [ #arguments.subAgentVarNames.toList( ", " )# ]," )
 		} else {
-			lines.append( "	subAgents : []" )
+			lines.append( "	subAgents : []," )
+		}
+
+		var mcpServerUrls = extractMcpServerUrls( arguments.resolvedConfig )
+		if ( mcpServerUrls.len() ) {
+			var quoted = mcpServerUrls.map( function( url ) {
+				return '"#bxLiteral( url )#"'
+			} )
+			lines.append( "	mcpServers : [ #quoted.toList( ", " )# ]" )
+		} else {
+			lines.append( "	mcpServers : []" )
 		}
 
 		lines.append( ")" )
@@ -377,6 +398,41 @@ class {
 	// --------------------------------------------------------------------------
 	// Helpers
 	// --------------------------------------------------------------------------
+
+	/**
+	 * Reduces a node's own `resolvedConfig.mcpServers` (a plain URL string, or
+	 * a `{ url, name }` struct - per M3's validated shape) into a bare array
+	 * of URL strings for `aiAgent(mcpServers: [...])`. No network connection
+	 * is ever attempted here - reachability is a runtime/warning concern.
+	 * Each subagent has its own resolvedConfig, so this runs per-node, not
+	 * just for the root.
+	 */
+	private array function extractMcpServerUrls( required struct resolvedConfig ) {
+		var entries = arguments.resolvedConfig.mcpServers ?: []
+		var urls = []
+
+		for ( var entry in entries ) {
+			if ( isStruct( entry ) ) {
+				var url = entry.url ?: ""
+				if ( !len( url ) ) {
+					throw(
+						type    = "BxAgents.InvalidMcpServer",
+						message = "An mcpServers entry is missing a 'url'"
+					)
+				}
+				urls.append( url )
+			} else if ( isSimpleValue( entry ) && len( entry ) ) {
+				urls.append( entry )
+			} else {
+				throw(
+					type    = "BxAgents.InvalidMcpServer",
+					message = "An mcpServers entry must be a URL string or a { url, name } struct"
+				)
+			}
+		}
+
+		return urls
+	}
 
 	private string function normalizePath( required string path ) {
 		return arguments.path.reReplace( "[\/]+$", "" )

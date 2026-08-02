@@ -1,0 +1,69 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "McpGenerator", function() {
+
+			beforeEach( function() {
+				variables.discoverer = new bxagents.models.build.ProjectDiscoverer();
+				variables.generator = new bxagents.models.build.generators.McpGenerator();
+				variables.fixtures = expandPath( "/fixtures" );
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function newAppDir() {
+				var dir = createTempDirectory( prefix = "bxagents-mcp-" );
+				tempDirs.append( dir );
+				return dir & "/app";
+			}
+
+			it( "copies each mcp/* entry verbatim into <appDir>/mcp", function() {
+				var discovery = discoverer.discover( fixtures & "/mcp-mixed" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				expect( fileExists( appDir & "/mcp/toolServer.bx" ) ).toBeTrue();
+				expect( fileExists( appDir & "/mcp/bareServer.bx" ) ).toBeTrue();
+				expect( fileRead( appDir & "/mcp/toolServer.bx" ) ).toBe( fileRead( fixtures & "/mcp-mixed/mcp/toolServer.bx" ) );
+			} );
+
+			it( "emits a mcpServer(...).registerTool(...) statement per local server, using the discovered filename as the server name", function() {
+				var discovery = discoverer.discover( fixtures & "/mcp-mixed" );
+				var result = generator.generate( discovery, newAppDir() );
+
+				expect( result.registrations.len() ).toBe( 2 );
+
+				var toolServerStatement = result.registrations.filter( s => s.findNoCase( '"toolServer"' ) )[ 1 ];
+				expect( toolServerStatement ).toInclude( 'mcpServer( "toolServer", "Tool Server", "2.0.0", "https://example.com" )' );
+				expect( toolServerStatement ).toInclude( '.registerTool( aiToolRegistry().get( "Weather" ) )' );
+			} );
+
+			it( "emits a registration with empty defaults and no .registerTool() calls when a local server declares no tools", function() {
+				var discovery = discoverer.discover( fixtures & "/mcp-mixed" );
+				var result = generator.generate( discovery, newAppDir() );
+
+				var bareStatement = result.registrations.filter( s => s.findNoCase( '"bareServer"' ) )[ 1 ];
+				expect( bareStatement ).toInclude( 'mcpServer( "bareServer", "", "1.0.0", "" )' );
+				expect( bareStatement ).notToInclude( ".registerTool(" );
+			} );
+
+			it( "emits no registrations and copies nothing when the project has no mcp/", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+				var appDir = newAppDir();
+				var result = generator.generate( discovery, appDir );
+
+				expect( result.registrations.len() ).toBe( 0 );
+				expect( directoryExists( appDir & "/mcp" ) ).toBeFalse();
+			} );
+
+		} );
+	}
+
+}

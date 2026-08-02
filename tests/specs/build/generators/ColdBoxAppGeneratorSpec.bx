@@ -122,12 +122,10 @@ class extends="testbox.system.BaseSpec" {
 				var buildDir = newBuildDir();
 				var config = resolver.resolve( projectRoot = fixtures & "/full-project" );
 				var result = generator.generate(
-					fixtures & "/full-project",
-					buildDir,
-					config,
-					[],
-					[],
-					true
+					projectRoot = fixtures & "/full-project",
+					buildDir = buildDir,
+					resolvedConfig = config,
+					exposeAgentAsRunnable = true
 				);
 
 				expect( result.keyExists( "agentRunnable" ) ).toBeTrue();
@@ -211,6 +209,22 @@ class extends="testbox.system.BaseSpec" {
 				expect( function() {
 					generateFor( fixtures & "/missing-instructions", buildDir );
 				} ).toThrow( "BxAgents.MissingInstructions" );
+			} );
+
+			it( "reduces resolvedConfig.mcpServers (URL strings or {url,name} structs) to a bare mcpServers: [...] URL array, with no network call", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/with-mcp-servers", buildDir );
+
+				var content = fileRead( result.agentFactory );
+				expect( content ).toInclude( 'mcpServers : [ "https://example.com/mcp", "https://other.com/mcp" ]' );
+			} );
+
+			it( "emits an empty mcpServers: [] when no mcpServers are declared", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/full-project", buildDir );
+
+				var content = fileRead( result.agentFactory );
+				expect( content ).toInclude( "mcpServers : []" );
 			} );
 
 			it( "builds subagents in dependency order (leaf before parent)", function() {
