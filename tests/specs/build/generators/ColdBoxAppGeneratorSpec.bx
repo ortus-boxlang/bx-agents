@@ -80,6 +80,25 @@ class extends="testbox.system.BaseSpec" {
 				}
 			} );
 
+			it( "forwards Agent.bx's resolved security block verbatim into config/ColdBox.bx's module settings", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/with-security", buildDir );
+
+				var content = fileRead( result.coldboxConfig );
+				expect( content ).toInclude( "moduleSettings = {" );
+				expect( content ).toInclude( "bxai = {" );
+				expect( content ).toInclude( '"inputSanitizer" : true' );
+				expect( content ).toInclude( '"blockPatterns" : [ "ssn", "creditCard" ]' );
+			} );
+
+			it( "omits moduleSettings entirely when Agent.bx declares no security block", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/full-project", buildDir );
+
+				var content = fileRead( result.coldboxConfig );
+				expect( content ).notToInclude( "moduleSettings" );
+			} );
+
 			it( "writes a valid config/WireBox.bx", function() {
 				var buildDir = newBuildDir();
 				var result = generateFor( fixtures & "/full-project", buildDir );

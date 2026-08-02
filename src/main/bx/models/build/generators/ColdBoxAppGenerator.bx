@@ -56,7 +56,7 @@ class {
 		var agentFactoryPath = appDir & "/agent/GeneratedAgentFactory.bx"
 
 		fileWrite( applicationPath, renderApplication( appName, arguments.gatewayRegistrations ) )
-		fileWrite( coldboxPath, renderColdboxConfig( appName, arguments.agentInterceptors ) )
+		fileWrite( coldboxPath, renderColdboxConfig( appName, arguments.agentInterceptors, arguments.resolvedConfig.security ?: {} ) )
 		fileWrite( wireboxPath, renderWireBox() )
 		fileWrite( agentFactoryPath, renderAgentFactory( root, arguments.resolvedConfig, arguments.exposeAgentAsRunnable ) )
 
@@ -119,7 +119,7 @@ class {
 		return lines.toList( char( 10 ) )
 	}
 
-	private string function renderColdboxConfig( required string appName, array agentInterceptors = [] ) {
+	private string function renderColdboxConfig( required string appName, array agentInterceptors = [], struct security = {} ) {
 		var lines = [
 			"class {",
 			"",
@@ -137,6 +137,18 @@ class {
 				lines.append( '			{ class : "interceptors.#bxLiteral( arguments.agentInterceptors[ i ] )#" }#comma#' )
 			}
 			lines.append( "		]" )
+		}
+
+		if ( arguments.security.count() ) {
+			// Forwarded verbatim - bx-ai's own SecurityDirector.buildGlobalMiddleware()
+			// turns this into middleware automatically (decision: passthrough only,
+			// no new guardrails/ convention folder for v1 - see the build plan's M8.5).
+			lines.append( "" )
+			lines.append( "		moduleSettings = {" )
+			lines.append( "			bxai = {" )
+			lines.append( "				security : #renderLiteral( arguments.security )#" )
+			lines.append( "			}" )
+			lines.append( "		}" )
 		}
 
 		lines.append( "	}" )
@@ -385,6 +397,50 @@ class {
 		// escape convention), so the search/replace args below are doubled
 		// accordingly: one literal "#" is written "##", one literal "##" is "####".
 		return arguments.value.replace( '"', '""', "all" ).replace( "##", "####", "all" )
+	}
+
+	/**
+	 * Renders a value as a BoxLang literal for embedding in generated source:
+	 * strings are quoted, booleans/numbers are bare, structs/arrays recurse.
+	 * Struct keys are sorted for deterministic output. Type is checked via the
+	 * value's actual Java class (not isNumeric()/isBoolean(), which test
+	 * CASTABILITY in BoxLang - a genuine string like "12345" would otherwise be
+	 * misrendered as a bare literal, silently changing its type).
+	 */
+	private string function renderLiteral( required any value ) {
+		var val = arguments.value
+
+		if ( isStruct( val ) ) {
+			var keys = val.keyArray().sort( "textnocase" )
+			var parts = keys.map( function( k ) {
+				return '"#bxLiteral( k )#" : #renderLiteral( val[ k ] )#'
+			} )
+			return "{ " & parts.toList( ", " ) & " }"
+		}
+
+		if ( isArray( val ) ) {
+			var parts = val.map( function( v ) {
+				return renderLiteral( v )
+			} )
+			return "[ " & parts.toList( ", " ) & " ]"
+		}
+
+		var className = val.getClass().getName()
+		var numericClasses = [
+			"java.lang.Integer", "java.lang.Long", "java.lang.Short",
+			"java.lang.Double", "java.lang.Float",
+			"java.math.BigDecimal", "java.math.BigInteger"
+		]
+
+		if ( className == "java.lang.Boolean" ) {
+			return val ? "true" : "false"
+		}
+
+		if ( numericClasses.contains( className ) ) {
+			return toString( val )
+		}
+
+		return '"#bxLiteral( toString( val ) )#"'
 	}
 
 }
