@@ -70,11 +70,15 @@ class {
 		fileWrite( wireboxPath, renderWireBox() )
 		fileWrite( agentFactoryPath, renderAgentFactory( root, arguments.resolvedConfig, arguments.exposeAgentAsRunnable ) )
 
+		var indexPath = appDir & "/index.bxm"
+		fileWrite( indexPath, renderIndex() )
+
 		var result = {
 			applicationBx : applicationPath,
 			coldboxConfig : coldboxPath,
 			wireboxConfig : wireboxPath,
-			agentFactory  : agentFactoryPath
+			agentFactory  : agentFactoryPath,
+			index         : indexPath
 		}
 
 		if ( arguments.exposeAgentAsRunnable ) {
@@ -127,6 +131,16 @@ class {
 		lines.append( "" )
 
 		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * ColdBox's own onRequestStart() (wired in Application.bx) intercepts and
+	 * fully handles every request before this file's own body would run - this
+	 * exists only as a physical rewrite target for the web server (MiniServer's
+	 * `rewriteFileName` convention defaults to "index.bxm").
+	 */
+	private string function renderIndex() {
+		return "<bx:script>" & char( 10 ) & "</bx:script>" & char( 10 )
 	}
 
 	private string function renderColdboxConfig( required string appName, array agentInterceptors = [], struct security = {} ) {
