@@ -64,16 +64,25 @@ class {
 		)
 		var gatewayResult = variables.gatewayGenerator.generate( discovery, appDir )
 		var mcpResult = variables.mcpGenerator.generate( discovery, appDir )
-		var routerResult = variables.routerGenerator.generate( discovery, appDir, gatewayResult.hasHttpGateway )
+		variables.routerGenerator.generate( discovery, appDir, gatewayResult.hasHttpGateway )
+
+		var toolScanStatements = []
+		if ( discovery.tools.len() ) {
+			// bx-ai has no built-in "scan this app's tools/ folder" convention
+			// (unlike skillsDirectory) - the app must call aiToolRegistry().scan()
+			// itself at startup so tool-by-name lookups (M10's local MCP server
+			// wiring, any future tool reference) resolve.
+			toolScanStatements.append( 'aiToolRegistry().scan( "tools" )' )
+		}
 
 		variables.coldboxAppGenerator.generate(
-			projectRoot            = root,
-			buildDir               = appDir,
-			resolvedConfig         = config,
-			agentInterceptors      = interceptorSplit.agent.map( function( e ) { return e.name } ),
-			gatewayRegistrations   = gatewayResult.registrationStatements,
-			mcpRegistrations       = mcpResult.registrations,
-			exposeAgentAsRunnable  = routerResult.hasAgentExposure
+			projectRoot           = root,
+			buildDir              = appDir,
+			resolvedConfig        = config,
+			agentInterceptors     = interceptorSplit.agent.map( function( e ) { return e.name } ),
+			gatewayRegistrations  = gatewayResult.registrationStatements,
+			mcpRegistrations      = mcpResult.registrations,
+			extraStartupStatements = toolScanStatements
 		)
 
 		variables.toolsSkillsCopier.copy( root, appDir )

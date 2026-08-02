@@ -93,17 +93,19 @@ class extends="testbox.system.BaseSpec" {
 
 				var content = fileRead( result.coldboxConfig );
 				expect( content ).toInclude( "moduleSettings = {" );
-				expect( content ).toInclude( "bxai = {" );
+				expect( content ).toInclude( "bxai :" );
 				expect( content ).toInclude( '"inputSanitizer" : true' );
 				expect( content ).toInclude( '"blockPatterns" : [ "ssn", "creditCard" ]' );
 			} );
 
-			it( "omits moduleSettings entirely when Agent.bx declares no security block", function() {
+			it( "always sets bxai's skillsDirectory to /skills, so bx-ai's own auto-discovery finds BX Agents' copied skills folder", function() {
 				var buildDir = newBuildDir();
 				var result = generateFor( fixtures & "/full-project", buildDir );
 
 				var content = fileRead( result.coldboxConfig );
-				expect( content ).notToInclude( "moduleSettings" );
+				expect( content ).toInclude( "moduleSettings = {" );
+				expect( content ).toInclude( '"skillsDirectory" : "/skills"' );
+				expect( content ).notToInclude( '"security"' );
 			} );
 
 			it( "writes a valid config/WireBox.bx", function() {
@@ -125,32 +127,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( 'getInstance( "GeneratedAgentFactory" ).buildAgent()' );
 			} );
 
-			it( "builds the root agent as a GeneratedAgentRunnable subclass when exposeAgentAsRunnable is true", function() {
-				var buildDir = newBuildDir();
-				var config = resolver.resolve( projectRoot = fixtures & "/full-project" );
-				var result = generator.generate(
-					projectRoot = fixtures & "/full-project",
-					buildDir = buildDir,
-					resolvedConfig = config,
-					exposeAgentAsRunnable = true
-				);
-
-				expect( result.keyExists( "agentRunnable" ) ).toBeTrue();
-				expect( fileExists( result.agentRunnable ) ).toBeTrue();
-
-				var runnableContent = fileRead( result.agentRunnable );
-				expect( runnableContent ).toInclude( 'extends="bxModules.bxai.models.runnables.AiAgent"' );
-				expect( runnableContent ).toInclude( 'implements="coldbox.system.web.routing.IAiRunnable"' );
-				expect( runnableContent ).toInclude( "function invoke( event, rc, prc )" );
-				expect( runnableContent ).toInclude( "function stream( event, rc, prc )" );
-				expect( runnableContent ).toInclude( "function batch( event, rc, prc )" );
-				expect( runnableContent ).toInclude( "function info( event, rc, prc )" );
-
-				var factoryContent = fileRead( result.agentFactory );
-				expect( factoryContent ).toInclude( "var agent = new agent.GeneratedAgentRunnable(" );
-			} );
-
-			it( "does not write GeneratedAgentRunnable.bx when exposeAgentAsRunnable is false", function() {
+			it( "always builds the root agent via the plain aiAgent() BIF - no adapter subclass is generated", function() {
 				var buildDir = newBuildDir();
 				var result = generateFor( fixtures & "/full-project", buildDir );
 

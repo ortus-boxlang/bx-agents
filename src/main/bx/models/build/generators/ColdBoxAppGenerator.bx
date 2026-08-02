@@ -10,9 +10,15 @@
  * already-built child instances.
  *
  * ColdBox's own `Application.bx`/`config/ColdBox.bx`/`config/WireBox.bx` conventions
- * here follow established ColdBox framework documentation; they are not
- * source-verified against `coldbox-platform` this session (see the build plan's
- * Open Items) and should be spot-checked once that repo is available.
+ * follow established ColdBox framework documentation.
+ *
+ * The plain `aiAgent()` BIF's return value is used directly for `route().toAi()`
+ * exposure - no adapter subclass needed. Confirmed by reading real
+ * `coldbox-platform` source (system/web/routing/Router.cfc): `toAi()`'s
+ * `IAiRunnable` contract is just `run(input,params,options)`/
+ * `stream(onChunk,input,params,options)`/`getName()` - exactly bx-ai's own
+ * `IAiRunnable` interface, which `AiAgent` (via `AiBaseRunnable`) already
+ * implements natively.
  */
 class {
 
@@ -32,7 +38,7 @@ class {
 	 * @agentInterceptors Names of agent-scope interceptors already copied into "<buildDir>/interceptors" (see InterceptorSplitter), to reference from config/ColdBox.bx
 	 * @gatewayRegistrations Bare `gatewayRegistry().register( aiGateway( ... ) )` statement strings (see GatewayGenerator), inserted into Application.bx's onApplicationStart()
 	 * @mcpRegistrations Bare `mcpServer( ... ).registerTool( ... )` statement strings (see McpGenerator), inserted into Application.bx's onApplicationStart()
-	 * @exposeAgentAsRunnable When true, the root agent is built via a generated agent/GeneratedAgentRunnable.bx subclass (extends AiAgent, implements ColdBox's IAiRunnable) instead of the plain aiAgent() BIF, so route().toAi() can target it directly - see RouterGenerator
+	 * @extraStartupStatements Any other bare statement strings to insert into Application.bx's onApplicationStart(), e.g. `aiToolRegistry().scan( "tools" )` (see BuildPipeline)
 	 */
 	struct function generate(
 		required string projectRoot,
@@ -41,7 +47,7 @@ class {
 		array agentInterceptors = [],
 		array gatewayRegistrations = [],
 		array mcpRegistrations = [],
-		boolean exposeAgentAsRunnable = false
+		array extraStartupStatements = []
 	) {
 		var root = normalizePath( arguments.projectRoot )
 		var appDir = normalizePath( arguments.buildDir )
@@ -58,6 +64,9 @@ class {
 		var agentFactoryPath = appDir & "/agent/GeneratedAgentFactory.bx"
 
 		var startupStatements = []
+		for ( var statement in arguments.extraStartupStatements ) {
+			startupStatements.append( statement )
+		}
 		for ( var statement in arguments.mcpRegistrations ) {
 			startupStatements.append( statement )
 		}
@@ -68,26 +77,18 @@ class {
 		fileWrite( applicationPath, renderApplication( appName, startupStatements ) )
 		fileWrite( coldboxPath, renderColdboxConfig( appName, arguments.agentInterceptors, arguments.resolvedConfig.security ?: {} ) )
 		fileWrite( wireboxPath, renderWireBox() )
-		fileWrite( agentFactoryPath, renderAgentFactory( root, arguments.resolvedConfig, arguments.exposeAgentAsRunnable ) )
+		fileWrite( agentFactoryPath, renderAgentFactory( root, arguments.resolvedConfig ) )
 
 		var indexPath = appDir & "/index.bxm"
 		fileWrite( indexPath, renderIndex() )
 
-		var result = {
+		return {
 			applicationBx : applicationPath,
 			coldboxConfig : coldboxPath,
 			wireboxConfig : wireboxPath,
 			agentFactory  : agentFactoryPath,
 			index         : indexPath
 		}
-
-		if ( arguments.exposeAgentAsRunnable ) {
-			var runnablePath = appDir & "/agent/GeneratedAgentRunnable.bx"
-			fileWrite( runnablePath, renderAgentRunnable() )
-			result[ "agentRunnable" ] = runnablePath
-		}
-
-		return result
 	}
 
 	// --------------------------------------------------------------------------
@@ -163,17 +164,21 @@ class {
 			lines.append( "		]" )
 		}
 
+		// bx-ai's own skillsDirectory setting defaults to "/.agents/skills" - a
+		// DIFFERENT path than BX Agents' own skills/ convention (copied verbatim
+		// by ToolsSkillsCopier, M6), so it must always be pointed at "/skills"
+		// or bx-ai would never find them. security (if any) is forwarded
+		// verbatim in the same block - bx-ai's own SecurityDirector.buildGlobalMiddleware()
+		// turns it into middleware automatically (decision: passthrough only,
+		// no new guardrails/ convention folder for v1 - see the build plan's M8.5).
+		var bxaiSettings = { skillsDirectory : "/skills" }
 		if ( arguments.security.count() ) {
-			// Forwarded verbatim - bx-ai's own SecurityDirector.buildGlobalMiddleware()
-			// turns this into middleware automatically (decision: passthrough only,
-			// no new guardrails/ convention folder for v1 - see the build plan's M8.5).
-			lines.append( "" )
-			lines.append( "		moduleSettings = {" )
-			lines.append( "			bxai = {" )
-			lines.append( "				security : #renderLiteral( arguments.security )#" )
-			lines.append( "			}" )
-			lines.append( "		}" )
+			bxaiSettings[ "security" ] = arguments.security
 		}
+		lines.append( "" )
+		lines.append( "		moduleSettings = {" )
+		lines.append( "			bxai : #renderLiteral( bxaiSettings )#" )
+		lines.append( "		}" )
 
 		lines.append( "	}" )
 		lines.append( "" )
@@ -203,86 +208,12 @@ class {
 		return lines.toList( char( 10 ) )
 	}
 
-	/**
-	 * GeneratedAgentRunnable.bx - a generated subclass of bx-ai's own AiAgent that
-	 * additionally implements ColdBox's `coldbox.system.web.routing.IAiRunnable`
-	 * (invoke/stream/batch/info(event,rc,prc)), so `route(path).toAi("GeneratedAgent")`
-	 * can target the SAME object that also serves the CLI `chat` REPL - one agent
-	 * instance, two access paths, not two separately-built agents.
-	 *
-	 * Content is static (identical for every project), so it's only ever written
-	 * when at least one `gateways/*` entry exposes the agent over HTTP.
-	 *
-	 * `invoke`/`batch`/`info` use the well-established ColdBox `event.renderData()`/
-	 * `rc` conventions. `stream()`'s exact SSE wiring (headers/flush timing) is a
-	 * best-effort implementation, not verified against `coldbox-platform` source
-	 * this session (see the build plan's Open Items) - re-check once available.
-	 */
-	private string function renderAgentRunnable() {
-		var lines = [
-			"/**",
-			" * GENERATED FILE - produced by BX Agents' build pipeline.",
-			" * Do not edit by hand; rebuilding your project overwrites this file.",
-			" *",
-			" * Extends bx-ai's own AiAgent (inheriting run()/stream()/tools/memory/etc.",
-			" * unchanged) and additionally satisfies ColdBox's IAiRunnable contract, so",
-			' * this ONE instance can be both `route(path).toAi("GeneratedAgent")`-routed',
-			" * and reused as-is by the CLI `chat` REPL (see config/WireBox.bx).",
-			" */",
-			'class extends="bxModules.bxai.models.runnables.AiAgent" implements="coldbox.system.web.routing.IAiRunnable" {',
-			"",
-			"	function invoke( event, rc, prc ) {",
-			'		var result = super.run( arguments.rc.message ?: "" )',
-			'		return arguments.event.renderData( data = { result : result }, type = "json" )',
-			"	}",
-			"",
-			"	function stream( event, rc, prc ) {",
-			'		var input = arguments.rc.message ?: ""',
-			"		var response = arguments.event.getResponse()",
-			'		response.setContentType( "text/event-stream" )',
-			"",
-			"		// Captured as a local var (not referenced via arguments.* inside the",
-			"		// closure) - BoxLang closures don't reliably re-resolve the enclosing",
-			"		// method's arguments scope from within a nested function literal.",
-			"		super.stream( function( chunk ) {",
-			'			response.getContent().append( "data: " & jsonSerialize( chunk ) & char( 10 ) & char( 10 ) )',
-			"		}, input )",
-			"",
-			"		return arguments.event.noRender()",
-			"	}",
-			"",
-			"	function batch( event, rc, prc ) {",
-			"		var inputs = arguments.rc.messages ?: []",
-			"		inputs = isArray( inputs ) ? inputs : []",
-			"		var results = []",
-			"",
-			"		// A plain loop (not .map(closure)) - calling super.run() from inside a",
-			"		// nested closure is a superclass-binding risk we'd rather not take.",
-			"		for ( var input in inputs ) {",
-			"			results.append( super.run( input ) )",
-			"		}",
-			'		return arguments.event.renderData( data = results, type = "json" )',
-			"	}",
-			"",
-			"	function info( event, rc, prc ) {",
-			"		return arguments.event.renderData( data = {",
-			"			name        : getAgentName(),",
-			"			description : getDescription()",
-			'		}, type = "json" )',
-			"	}",
-			"",
-			"}",
-			""
-		]
-		return lines.toList( char( 10 ) )
-	}
-
 	// --------------------------------------------------------------------------
 	// GeneratedAgentFactory.bx - the agent/subagent build tree
 	// --------------------------------------------------------------------------
 
-	private string function renderAgentFactory( required string projectRoot, required struct resolvedConfig, boolean exposeAgentAsRunnable = false ) {
-		var built = buildAgentTree( arguments.projectRoot, arguments.projectRoot, arguments.resolvedConfig, "agent", arguments.exposeAgentAsRunnable )
+	private string function renderAgentFactory( required string projectRoot, required struct resolvedConfig ) {
+		var built = buildAgentTree( arguments.projectRoot, arguments.projectRoot, arguments.resolvedConfig, "agent" )
 		var body = built.statements.toList( char( 10 ) & char( 10 ) )
 
 		var lines = [
@@ -319,8 +250,7 @@ class {
 		required string rootProjectRoot,
 		required string nodePath,
 		required struct resolvedConfig,
-		required string varName,
-		boolean asRunnable = false
+		required string varName
 	) {
 		var declaredSubAgents = arguments.resolvedConfig.subAgents ?: []
 		var subAgentVarNames = []
@@ -335,11 +265,9 @@ class {
 				)
 			}
 
-			// Subagents are never exposed as an IAiRunnable directly - only the
-			// root agent (this v1 design has exactly one HTTP-exposable target).
 			var subConfig = variables.configResolver.resolve( projectRoot = subPath )
 			var subVarName = "subagent_" & sanitizeIdentifier( subName )
-			var built = buildAgentTree( arguments.rootProjectRoot, subPath, subConfig, subVarName, false )
+			var built = buildAgentTree( arguments.rootProjectRoot, subPath, subConfig, subVarName )
 
 			for ( var stmt in built.statements ) {
 				statements.append( stmt )
@@ -347,7 +275,7 @@ class {
 			subAgentVarNames.append( subVarName )
 		}
 
-		statements.append( renderAgentStatement( arguments.varName, arguments.nodePath, arguments.resolvedConfig, subAgentVarNames, arguments.asRunnable ) )
+		statements.append( renderAgentStatement( arguments.varName, arguments.nodePath, arguments.resolvedConfig, subAgentVarNames ) )
 
 		return { statements : statements }
 	}
@@ -356,8 +284,7 @@ class {
 		required string varName,
 		required string nodePath,
 		required struct resolvedConfig,
-		required array subAgentVarNames,
-		boolean asRunnable = false
+		required array subAgentVarNames
 	) {
 		var instructionsPath = arguments.nodePath & "/instructions.md"
 		if ( !fileExists( instructionsPath ) ) {
@@ -379,10 +306,8 @@ class {
 		var name = len( arguments.resolvedConfig.name ?: "" ) ? arguments.resolvedConfig.name : "BxAi"
 		var description = arguments.resolvedConfig.description ?: ""
 
-		var callee = arguments.asRunnable ? "new agent.GeneratedAgentRunnable(" : "aiAgent("
-
 		var lines = []
-		lines.append( "var #arguments.varName# = #callee#" )
+		lines.append( "var #arguments.varName# = aiAgent(" )
 		lines.append( '	name : "#bxLiteral( name )#",' )
 		lines.append( '	description : "#bxLiteral( description )#",' )
 		lines.append( '	instructions : fileRead( "#bxLiteral( instructionsPath )#" ),' )

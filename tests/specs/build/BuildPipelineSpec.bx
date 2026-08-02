@@ -42,21 +42,24 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.manifest.generator.version ).toBe( "1.2.3" );
 			} );
 
-			it( "exposes the root agent as a GeneratedAgentRunnable when a gateway declares agent exposure", function() {
+			it( 'wires an agent-exposure gateway to route(path).toAi("GeneratedAgent") without any adapter subclass', function() {
 				var projectRoot = newTempProject( "full-project" );
 				var result = pipeline.build( projectRoot );
 
-				expect( fileExists( result.appDir & "/agent/GeneratedAgentRunnable.bx" ) ).toBeTrue();
+				expect( fileExists( result.appDir & "/agent/GeneratedAgentRunnable.bx" ) ).toBeFalse();
 
 				var routerContent = fileRead( result.appDir & "/config/Router.bx" );
 				expect( routerContent ).toInclude( 'route( "/api/chat" ).toAi( "GeneratedAgent" )' );
 			} );
 
-			it( "does not expose the agent as a runnable when no gateway declares agent exposure", function() {
-				var projectRoot = newTempProject( "valid-minimal" );
-				var result = pipeline.build( projectRoot );
+			it( 'calls aiToolRegistry().scan("tools") at startup only when the project declares tools', function() {
+				var withTools = newTempProject( "full-project" );
+				var withToolsResult = pipeline.build( withTools );
+				expect( fileRead( withToolsResult.appDir & "/Application.bx" ) ).toInclude( 'aiToolRegistry().scan( "tools" )' );
 
-				expect( fileExists( result.appDir & "/agent/GeneratedAgentRunnable.bx" ) ).toBeFalse();
+				var withoutTools = newTempProject( "valid-minimal" );
+				var withoutToolsResult = pipeline.build( withoutTools );
+				expect( fileRead( withoutToolsResult.appDir & "/Application.bx" ) ).notToInclude( "aiToolRegistry().scan(" );
 			} );
 
 			it( "throws BxAgents.BuildValidationFailed and produces no .build/app for an invalid project", function() {
