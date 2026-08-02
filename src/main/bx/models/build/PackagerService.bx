@@ -1,0 +1,111 @@
+/**
+ * Packages the build pipeline's final output into a portable `.bxa` artifact
+ * (Build Pipeline Phase 6, M11): a deterministic zip of `.build/app/`, a
+ * sibling `.sha256` checksum, and a redacted `manifest.json` copy in `dist/`.
+ *
+ * All JSON handling happens here in BoxLang (`jsonSerialize()`), not in the
+ * Java packager - `BxaPackager` only ever sees bytes/files, never manifest
+ * content, which keeps secret redaction in one place (this file) rather than
+ * split across two languages.
+ */
+class {
+
+	/**
+	 * @projectRoot Absolute path to the project root (only used to look for an optional .bxaignore)
+	 * @appDir Absolute path to the generated ColdBox app dir, e.g. "<projectRoot>/.build/app"
+	 * @distDir Absolute path to the output dist directory, e.g. "<projectRoot>/dist"
+	 * @manifest The internal manifest struct, from ManifestNormalizer.normalize()
+	 * @baseName The artifact's base file name (no extension), e.g. "my-agent-1.0.0"
+	 */
+	struct function package(
+		required string projectRoot,
+		required string appDir,
+		required string distDir,
+		required struct manifest,
+		required string baseName
+	) {
+		validateManifest( arguments.manifest )
+
+		var redacted = redact( arguments.manifest )
+
+		directoryCreate( path = arguments.distDir, createPath = true, ignoreExists = true )
+		var manifestJsonPath = arguments.distDir & "/manifest.json"
+		fileWrite( manifestJsonPath, jsonSerialize( redacted ) )
+
+		var ignorePatterns = readBxaIgnore( arguments.projectRoot )
+
+		var bxaPath = createObject( "java", "ortus.boxlang.bxagents.build.BxaPackager" )
+			.pack( arguments.appDir, arguments.distDir, arguments.baseName, ignorePatterns )
+
+		return {
+			bxa          : bxaPath.toString(),
+			sha256       : arguments.distDir & "/#arguments.baseName#.bxa.sha256",
+			manifestJson : manifestJsonPath
+		}
+	}
+
+	private void function validateManifest( required struct manifest ) {
+		var version = arguments.manifest.manifestVersion ?: ""
+		if ( !len( version ) || !reFind( "^[0-9]+\.[0-9]+\.[0-9]+$", version ) ) {
+			throw(
+				type    = "BxAgents.InvalidManifest",
+				message = "manifest.manifestVersion is unset or malformed: [#version#]"
+			)
+		}
+	}
+
+	/**
+	 * Recursively replaces any struct value whose KEY looks like a secret
+	 * (apiKey/api_key/token/secret/password, case-insensitive, any prefix)
+	 * with a fixed placeholder - defense-in-depth: ManifestNormalizer (M4)
+	 * already only puts safe, structural fields into the manifest, but this
+	 * guards against a future field (or a caller passing a richer struct,
+	 * e.g. for `inspect`) accidentally leaking one.
+	 */
+	private any function redact( required any value ) {
+		if ( isStruct( arguments.value ) ) {
+			var result = {}
+			for ( var key in arguments.value ) {
+				if ( isSecretKey( key ) ) {
+					result[ key ] = "[REDACTED]"
+				} else {
+					result[ key ] = redact( arguments.value[ key ] )
+				}
+			}
+			return result
+		}
+
+		if ( isArray( arguments.value ) ) {
+			return arguments.value.map( function( v ) {
+				return redact( v )
+			} )
+		}
+
+		return arguments.value
+	}
+
+	private boolean function isSecretKey( required string key ) {
+		return reFindNoCase( "(apikey|api_key|token|secret|password)$", arguments.key ) > 0
+	}
+
+	private array function readBxaIgnore( required string projectRoot ) {
+		var ignorePath = arguments.projectRoot & "/.bxaignore"
+		if ( !fileExists( ignorePath ) ) {
+			return []
+		}
+
+		var normalized = fileRead( ignorePath ).replace( char( 13 ) & char( 10 ), char( 10 ), "all" ).replace( char( 13 ), char( 10 ), "all" )
+		var lines = listToArray( normalized, char( 10 ) )
+		var patterns = []
+
+		for ( var line in lines ) {
+			var trimmed = trim( line )
+			if ( len( trimmed ) && !trimmed.startsWith( "##" ) ) {
+				patterns.append( trimmed )
+			}
+		}
+
+		return patterns
+	}
+
+}
