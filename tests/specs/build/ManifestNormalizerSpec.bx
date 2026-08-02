@@ -1,0 +1,105 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "ManifestNormalizer", function() {
+
+			beforeEach( function() {
+				variables.discoverer = new bxagents.models.build.ProjectDiscoverer();
+				variables.resolver = new bxagents.models.build.AgentConfigResolver();
+				variables.normalizer = new bxagents.models.build.ManifestNormalizer( "1.2.3" );
+				variables.fixtures = expandPath( "/fixtures" );
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function buildManifest( required string projectRoot ) {
+				var discovery = discoverer.discover( arguments.projectRoot );
+				var config = resolver.resolve( projectRoot = arguments.projectRoot );
+				return normalizer.normalize( arguments.projectRoot, discovery, config );
+			}
+
+			private function newTempProject() {
+				var dir = createTempDirectory( prefix = "bxagents-manifest-" );
+				directoryCopy( fixtures & "/full-project", dir, true );
+				tempDirs.append( dir );
+				return dir;
+			}
+
+			it( "produces identical manifest hashes across two builds of an unchanged project", function() {
+				var first = buildManifest( fixtures & "/full-project" );
+				var second = buildManifest( fixtures & "/full-project" );
+
+				expect( jsonSerialize( first ) ).toBe( jsonSerialize( second ) );
+			} );
+
+			it( "changes only the affected entry's hash when a single tool file's content changes", function() {
+				var projectRoot = newTempProject();
+				var before = buildManifest( projectRoot );
+
+				fileWrite( projectRoot & "/tools/Weather.bx", fileRead( projectRoot & "/tools/Weather.bx" ) & char( 32 ) );
+				var after = buildManifest( projectRoot );
+
+				for ( var i = 1; i <= before.files.len(); i++ ) {
+					var beforeEntry = before.files[ i ];
+					var afterEntry = after.files[ i ];
+
+					if ( beforeEntry.category == "tools" && beforeEntry.name == "Weather" ) {
+						expect( afterEntry.hash ).notToBe( beforeEntry.hash );
+					} else {
+						expect( afterEntry.hash ).toBe( beforeEntry.hash );
+					}
+				}
+			} );
+
+			it( "is insensitive to CRLF vs LF line-ending differences", function() {
+				var projectRoot = newTempProject();
+				var original = fileRead( projectRoot & "/tools/Weather.bx" );
+
+				var lfManifest = buildManifest( projectRoot );
+
+				var crlfContent = original.replace( char( 10 ), char( 13 ) & char( 10 ), "all" );
+				fileWrite( projectRoot & "/tools/Weather.bx", crlfContent );
+				var crlfManifest = buildManifest( projectRoot );
+
+				expect( jsonSerialize( lfManifest ) ).toBe( jsonSerialize( crlfManifest ) );
+			} );
+
+			it( "orders manifest entries canonically regardless of filesystem listing order", function() {
+				var manifest = buildManifest( fixtures & "/full-project" );
+				var paths = manifest.files.map( f => f.category & "/" & f.path );
+				var sortedPaths = duplicate( paths );
+				sortedPaths.sort( "textnocase" );
+
+				// files are ordered by category first (not a plain path sort), so
+				// compare against the manifest's own declared sort contract instead:
+				// every entry's category must be >= the previous entry's category,
+				// and within the same category paths must be non-decreasing.
+				for ( var i = 2; i <= manifest.files.len(); i++ ) {
+					var prev = manifest.files[ i - 1 ];
+					var curr = manifest.files[ i ];
+					expect( curr.category >= prev.category ).toBeTrue();
+					if ( curr.category == prev.category ) {
+						expect( curr.path >= prev.path ).toBeTrue();
+					}
+				}
+			} );
+
+			it( "stamps manifestVersion and generator metadata", function() {
+				var manifest = buildManifest( fixtures & "/full-project" );
+
+				expect( manifest.manifestVersion ).toBe( "1.0.0" );
+				expect( manifest.generator.name ).toBe( "bx-agents" );
+				expect( manifest.generator.version ).toBe( "1.2.3" );
+			} );
+
+		} );
+	}
+
+}
