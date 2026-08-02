@@ -1,0 +1,95 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "GatewayGenerator", function() {
+
+			beforeEach( function() {
+				variables.discoverer = new bxagents.models.build.ProjectDiscoverer();
+				variables.generator = new bxagents.models.build.generators.GatewayGenerator();
+				variables.fixtures = expandPath( "/fixtures" );
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function newAppDir() {
+				var dir = createTempDirectory( prefix = "bxagents-gateway-" );
+				tempDirs.append( dir );
+				return dir & "/app";
+			}
+
+			it( "emits one gatewayRegistry().register() call per channel-adapter entry, ordered by name", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
+				var result = generator.generate( discovery, newAppDir() );
+
+				expect( result.registrationStatements.len() ).toBe( 2 );
+
+				var httpPos = -1;
+				var mockPos = -1;
+				for ( var i = 1; i <= result.registrationStatements.len(); i++ ) {
+					if ( result.registrationStatements[ i ].findNoCase( '"http"' ) ) {
+						httpPos = i;
+					}
+					if ( result.registrationStatements[ i ].findNoCase( '"mock"' ) ) {
+						mockPos = i;
+					}
+				}
+				// "httpChannel" < "mockChannel" alphabetically
+				expect( httpPos ).toBeGT( 0 );
+				expect( mockPos ).toBeGT( 0 );
+				expect( httpPos < mockPos ).toBeTrue();
+			} );
+
+			it( "never registers agent/mcp exposure entries as channel adapters", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
+				var result = generator.generate( discovery, newAppDir() );
+
+				for ( var statement in result.registrationStatements ) {
+					expect( statement ).notToInclude( "toolServer" );
+					expect( statement ).notToInclude( "/api/chat" );
+				}
+			} );
+
+			it( "renders gateway options as correctly-typed BoxLang literals (strings stay quoted)", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
+				var result = generator.generate( discovery, newAppDir() );
+
+				var httpStatement = result.registrationStatements.filter( s => s.findNoCase( '"http"' ) )[ 1 ];
+				expect( httpStatement ).toInclude( '"secret" : "shared-secret-123"' );
+			} );
+
+			it( "writes handlers/Gateway.bx and reports hasHttpGateway=true when an http-type channel exists", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
+				var appDir = newAppDir();
+				var result = generator.generate( discovery, appDir );
+
+				expect( result.hasHttpGateway ).toBeTrue();
+				expect( result.keyExists( "handlerPath" ) ).toBeTrue();
+				expect( fileExists( result.handlerPath ) ).toBeTrue();
+
+				var content = fileRead( result.handlerPath );
+				expect( content ).toInclude( "function process( event, rc, prc )" );
+				expect( content ).toInclude( "GatewayRequestProcessor::processHttp()" );
+				expect( content ).toInclude( "noRender()" );
+			} );
+
+			it( "writes no handler and reports hasHttpGateway=false when there is no http-type channel", function() {
+				var discovery = discoverer.discover( fixtures & "/full-project" );
+				var appDir = newAppDir();
+				var result = generator.generate( discovery, appDir );
+
+				expect( result.hasHttpGateway ).toBeFalse();
+				expect( result.keyExists( "handlerPath" ) ).toBeFalse();
+				expect( fileExists( appDir & "/handlers/Gateway.bx" ) ).toBeFalse();
+			} );
+
+		} );
+	}
+
+}

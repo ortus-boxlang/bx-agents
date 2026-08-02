@@ -263,6 +263,19 @@ class {
 				} else {
 					seenPaths[ path ] = true
 				}
+
+				// "agent" exposure always targets the project's single root agent, so
+				// no "target" is needed. "mcp" exposure must name WHICH local mcp/*
+				// server to expose, since a project can declare more than one.
+				if ( config.exposes == "mcp" ) {
+					var target = config.target ?: ""
+					var mcpNames = ( arguments.discovery.mcp ?: [] ).map( m => m.name )
+					if ( !len( target ) ) {
+						arguments.errors.append( "Gateway [#gateway.name#] exposes 'mcp' but is missing a 'target'" )
+					} else if ( !mcpNames.contains( target ) ) {
+						arguments.errors.append( "Gateway [#gateway.name#] targets unknown mcp server [#target#]" )
+					}
+				}
 			} else {
 				// Channel-adapter entry: a bx-ai IGateway (mock/cli/http) registered by name
 				if ( structKeyExists( seenNames, gateway.name ) ) {

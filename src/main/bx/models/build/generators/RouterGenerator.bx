@@ -1,0 +1,133 @@
+/**
+ * Generates `config/Router.bx` for a project's HTTP exposure (Build Pipeline
+ * Phase 5): one `route(path).toAi("GeneratedAgent")` per `gateways/*` entry
+ * that exposes the agent, one `route(path).toMCP(target)` per entry that
+ * exposes a local `mcp/*` server - both native ColdBox 8.1 AI Routing DSL
+ * terminators (https://coldbox.ortusbooks.com/the-basics/routing/routing-dsl/ai-routing),
+ * confirmed via documentation to auto-register 4 sub-routes (toAi) or 1 route
+ * (toMCP) respectively.
+ *
+ * When at least one channel-adapter gateway of type "http" exists (see
+ * GatewayGenerator), also emits the 3 fixed bx-ai Gateway webhook routes.
+ * ColdBox has no `toAiGateway()` DSL terminator (confirmed absent from the
+ * routing-dsl docs) - so this is BX Agents' own wiring, following the same
+ * shape a future core terminator would produce (plain routes to a generated
+ * handler), not a reuse of toAi()/toMCP(). See the accompanying proposal to
+ * upstream a real `toAiGateway()` into coldbox-platform.
+ */
+class {
+
+	/**
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .gateways is used)
+	 * @appDir Absolute path to the generated ColdBox app dir, e.g. "<projectRoot>/.build/app"
+	 * @hasHttpGateway Whether an http-type channel-adapter gateway exists (see GatewayGenerator) - emits the 3 fixed gateway webhook routes when true
+	 */
+	struct function generate( required struct discovery, required string appDir, boolean hasHttpGateway = false ) {
+		var exposureEntries = collectExposureEntries( arguments.discovery )
+		var lines = []
+
+		for ( var entry in exposureEntries ) {
+			lines.append( renderExposureRoute( entry ) )
+		}
+
+		if ( arguments.hasHttpGateway ) {
+			if ( lines.len() ) {
+				lines.append( "" )
+			}
+			lines.append( "// bx-ai Gateway webhook surface - ColdBox has no toAiGateway() DSL" )
+			lines.append( "// terminator (yet), so this mirrors the same shape toAi()/toMCP() use:" )
+			lines.append( "// plain routes to a generated handler that proxies GatewayRequestProcessor." )
+			lines.append( 'post( "/gateways/:gatewayName/events" ).toHandler( "Gateway.process" )' )
+			lines.append( 'get( "/interactions/:requestID" ).toHandler( "Gateway.process" )' )
+			lines.append( 'post( "/interactions/:requestID/decisions" ).toHandler( "Gateway.process" )' )
+		}
+
+		var appDir = normalizePath( arguments.appDir )
+		directoryCreate( path = appDir & "/config", createPath = true, ignoreExists = true )
+		var routerPath = appDir & "/config/Router.bx"
+		fileWrite( routerPath, renderRouterFile( lines ) )
+
+		return {
+			router    : routerPath,
+			hasRoutes : lines.len() > 0
+		}
+	}
+
+	private array function collectExposureEntries( required struct discovery ) {
+		var entries = []
+
+		for ( var gw in ( arguments.discovery.gateways ?: [] ) ) {
+			var config = readEntryConfig( gw.path )
+			if ( !isNull( config ) && structKeyExists( config, "exposes" ) ) {
+				entries.append( { name : gw.name, config : config } )
+			}
+		}
+
+		// Deterministic ordering by path, independent of filesystem listing order.
+		entries.sort( function( a, b ) {
+			var pathA = a.config.path ?: ""
+			var pathB = b.config.path ?: ""
+			if ( pathA != pathB ) {
+				return pathA < pathB ? -1 : 1
+			}
+			return 0
+		} )
+
+		return entries
+	}
+
+	private string function renderExposureRoute( required struct entry ) {
+		var path = arguments.entry.config.path ?: ""
+
+		if ( arguments.entry.config.exposes == "agent" ) {
+			return 'route( "#bxLiteral( path )#" ).toAi( "GeneratedAgent" )'
+		}
+
+		var target = arguments.entry.config.target ?: ""
+		return 'route( "#bxLiteral( path )#" ).toMCP( "#bxLiteral( target )#" )'
+	}
+
+	private string function renderRouterFile( required array lines ) {
+		var body = arguments.lines.len() ? arguments.lines : [ "// No HTTP exposure declared under gateways/" ]
+		var indented = body.map( line => len( line ) ? "		" & line : "" )
+
+		var fileLines = [
+			"class {",
+			"",
+			"	function configure() {"
+		]
+		for ( var line in indented ) {
+			fileLines.append( line )
+		}
+		fileLines.append( "	}" )
+		fileLines.append( "" )
+		fileLines.append( "}" )
+		fileLines.append( "" )
+
+		return fileLines.toList( char( 10 ) )
+	}
+
+	private any function readEntryConfig( required string path ) {
+		try {
+			if ( arguments.path.endsWith( ".json" ) ) {
+				return jsonDeserialize( fileRead( arguments.path ) )
+			}
+
+			var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
+			var instance = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
+				.instantiate( arguments.path, context )
+			return instance.configure()
+		} catch ( any e ) {
+			return null
+		}
+	}
+
+	private string function normalizePath( required string path ) {
+		return arguments.path.reReplace( "[\/]+$", "" )
+	}
+
+	private string function bxLiteral( required string value ) {
+		return arguments.value.replace( '"', '""', "all" ).replace( "##", "####", "all" )
+	}
+
+}

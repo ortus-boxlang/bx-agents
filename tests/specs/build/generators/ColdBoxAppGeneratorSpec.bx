@@ -90,6 +90,74 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( "asSingleton()" );
 			} );
 
+			it( "always maps a singleton GeneratedAgent provider in config/WireBox.bx", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/full-project", buildDir );
+
+				var content = fileRead( result.wireboxConfig );
+				expect( content ).toInclude( 'map( "GeneratedAgent" ).toProvider(' );
+				expect( content ).toInclude( 'getInstance( "GeneratedAgentFactory" ).buildAgent()' );
+			} );
+
+			it( "builds the root agent as a GeneratedAgentRunnable subclass when exposeAgentAsRunnable is true", function() {
+				var buildDir = newBuildDir();
+				var config = resolver.resolve( projectRoot = fixtures & "/full-project" );
+				var result = generator.generate(
+					fixtures & "/full-project",
+					buildDir,
+					config,
+					[],
+					[],
+					true
+				);
+
+				expect( result.keyExists( "agentRunnable" ) ).toBeTrue();
+				expect( fileExists( result.agentRunnable ) ).toBeTrue();
+
+				var runnableContent = fileRead( result.agentRunnable );
+				expect( runnableContent ).toInclude( 'extends="bxModules.bxai.models.runnables.AiAgent"' );
+				expect( runnableContent ).toInclude( 'implements="coldbox.system.web.routing.IAiRunnable"' );
+				expect( runnableContent ).toInclude( "function invoke( event, rc, prc )" );
+				expect( runnableContent ).toInclude( "function stream( event, rc, prc )" );
+				expect( runnableContent ).toInclude( "function batch( event, rc, prc )" );
+				expect( runnableContent ).toInclude( "function info( event, rc, prc )" );
+
+				var factoryContent = fileRead( result.agentFactory );
+				expect( factoryContent ).toInclude( "var agent = new agent.GeneratedAgentRunnable(" );
+			} );
+
+			it( "does not write GeneratedAgentRunnable.bx when exposeAgentAsRunnable is false", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/full-project", buildDir );
+
+				expect( result.keyExists( "agentRunnable" ) ).toBeFalse();
+				expect( fileExists( buildDir & "/agent/GeneratedAgentRunnable.bx" ) ).toBeFalse();
+
+				var factoryContent = fileRead( result.agentFactory );
+				expect( factoryContent ).toInclude( "var agent = aiAgent(" );
+			} );
+
+			it( "inserts gateway registration statements into Application.bx's onApplicationStart()", function() {
+				var buildDir = newBuildDir();
+				var config = resolver.resolve( projectRoot = fixtures & "/full-project" );
+				var result = generator.generate(
+					fixtures & "/full-project",
+					buildDir,
+					config,
+					[],
+					[ 'gatewayRegistry().register( aiGateway( "mock", {} ) )' ]
+				);
+
+				var content = fileRead( result.applicationBx );
+				expect( content ).toInclude( 'gatewayRegistry().register( aiGateway( "mock", {} ) )' );
+
+				var startPos = content.find( "onApplicationStart" );
+				var registerPos = content.find( "gatewayRegistry().register" );
+				var loadColdboxPos = content.find( "loadColdbox()" );
+				expect( startPos < loadColdboxPos ).toBeTrue();
+				expect( loadColdboxPos < registerPos ).toBeTrue();
+			} );
+
 			it( "generates GeneratedAgentFactory.bx calling aiModel()+aiAgent() with resolved values", function() {
 				var buildDir = newBuildDir();
 				var result = generateFor( fixtures & "/full-project", buildDir );

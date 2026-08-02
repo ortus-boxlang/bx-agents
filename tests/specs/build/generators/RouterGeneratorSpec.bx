@@ -1,0 +1,87 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "RouterGenerator", function() {
+
+			beforeEach( function() {
+				variables.discoverer = new bxagents.models.build.ProjectDiscoverer();
+				variables.generator = new bxagents.models.build.generators.RouterGenerator();
+				variables.fixtures = expandPath( "/fixtures" );
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function newAppDir() {
+				var dir = createTempDirectory( prefix = "bxagents-router-" );
+				tempDirs.append( dir );
+				return dir & "/app";
+			}
+
+			it( 'emits one route(path).toAi("GeneratedAgent") per agent-exposure entry', function() {
+				var discovery = discoverer.discover( fixtures & "/full-project" );
+				var result = generator.generate( discovery, newAppDir() );
+
+				var content = fileRead( result.router );
+				expect( content ).toInclude( 'route( "/api/chat" ).toAi( "GeneratedAgent" )' );
+			} );
+
+			it( "emits one route(path).toMCP(target) per mcp-exposure entry", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
+				var result = generator.generate( discovery, newAppDir() );
+
+				var content = fileRead( result.router );
+				expect( content ).toInclude( 'route( "/mcp/tools" ).toMCP( "toolServer" )' );
+				expect( content ).toInclude( 'route( "/api/chat" ).toAi( "GeneratedAgent" )' );
+			} );
+
+			it( "orders exposure routes deterministically by path", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
+				var result = generator.generate( discovery, newAppDir() );
+
+				var content = fileRead( result.router );
+				var apiPos = content.find( "/api/chat" );
+				var mcpPos = content.find( "/mcp/tools" );
+
+				expect( apiPos > 0 ).toBeTrue();
+				expect( mcpPos > 0 ).toBeTrue();
+				expect( apiPos < mcpPos ).toBeTrue();
+			} );
+
+			it( "emits the 3 fixed gateway webhook routes when hasHttpGateway is true", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
+				var result = generator.generate( discovery, newAppDir(), true );
+
+				var content = fileRead( result.router );
+				expect( content ).toInclude( 'post( "/gateways/:gatewayName/events" ).toHandler( "Gateway.process" )' );
+				expect( content ).toInclude( 'get( "/interactions/:requestID" ).toHandler( "Gateway.process" )' );
+				expect( content ).toInclude( 'post( "/interactions/:requestID/decisions" ).toHandler( "Gateway.process" )' );
+			} );
+
+			it( "does not emit gateway webhook routes when hasHttpGateway is false", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
+				var result = generator.generate( discovery, newAppDir(), false );
+
+				var content = fileRead( result.router );
+				expect( content ).notToInclude( "Gateway.process" );
+			} );
+
+			it( "writes a valid, empty-but-present router when there is nothing to expose", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+				var result = generator.generate( discovery, newAppDir() );
+
+				expect( fileExists( result.router ) ).toBeTrue();
+				expect( result.hasRoutes ).toBeFalse();
+				expect( fileRead( result.router ) ).toInclude( "function configure()" );
+			} );
+
+		} );
+	}
+
+}

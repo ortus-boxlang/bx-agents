@@ -1,0 +1,180 @@
+/**
+ * Generates the bx-ai channel-adapter (`IGateway`/`gatewayRegistry()`) wiring
+ * for a project's `gateways/*` entries that are NOT HTTP/MCP exposure entries
+ * (Build Pipeline Phase 5) - i.e. the `{ type: "mock"|"cli"|"http", ... }`
+ * shape, distinct from the `{ exposes: "agent"|"mcp", ... }` shape RouterGenerator
+ * handles.
+ *
+ * Every channel-adapter entry needs a `gatewayRegistry().register(aiGateway(...))`
+ * call at app startup (returned here as bare statement strings for
+ * ColdBoxAppGenerator to insert into Application.bx's onApplicationStart() -
+ * this class never writes Application.bx itself).
+ *
+ * `http`-type entries additionally need a generated handler
+ * (`handlers/Gateway.bx`) so the fixed 3-route bx-ai Gateway webhook surface
+ * (`GatewayRequestProcessor::processHttp()`) is reachable over HTTP - see
+ * RouterGenerator for the routes pointing at it. Confirmed via bx-ai source
+ * (models/gateway/http/GatewayRequestProcessor.bx) that `processHttp()` is a
+ * static, zero-argument call that reads/writes the raw HTTP request/response
+ * itself (via cgi.PATH_INFO and its own HTTPTransport), so the handler action
+ * is a thin, identical passthrough for all 3 routes - no event/rc/prc
+ * translation needed, just `event.noRender()` afterward since processHttp()
+ * already wrote the real response.
+ */
+class {
+
+	/**
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .gateways is used)
+	 * @appDir Absolute path to the generated ColdBox app dir, e.g. "<projectRoot>/.build/app" - the handler (if needed) is written to "<appDir>/handlers/Gateway.bx"
+	 */
+	struct function generate( required struct discovery, required string appDir ) {
+		var channelEntries = collectChannelEntries( arguments.discovery )
+		var hasHttpGateway = false
+
+		for ( var entry in channelEntries ) {
+			if ( ( entry.config.type ?: "" ) == "http" ) {
+				hasHttpGateway = true
+			}
+		}
+
+		var result = {
+			registrationStatements : channelEntries.map( e => renderRegistration( e ) ),
+			hasHttpGateway         : hasHttpGateway
+		}
+
+		if ( hasHttpGateway ) {
+			var handlerDir = normalizePath( arguments.appDir ) & "/handlers"
+			directoryCreate( path = handlerDir, createPath = true, ignoreExists = true )
+			var handlerPath = handlerDir & "/Gateway.bx"
+			fileWrite( handlerPath, renderHandler() )
+			result[ "handlerPath" ] = handlerPath
+		}
+
+		return result
+	}
+
+	private array function collectChannelEntries( required struct discovery ) {
+		var entries = []
+
+		for ( var gw in ( arguments.discovery.gateways ?: [] ) ) {
+			var config = readEntryConfig( gw.path )
+			if ( !isNull( config ) && !structKeyExists( config, "exposes" ) ) {
+				entries.append( { name : gw.name, config : config } )
+			}
+		}
+
+		// Deterministic ordering by name, independent of filesystem listing order.
+		entries.sort( function( a, b ) {
+			if ( a.name != b.name ) {
+				return a.name < b.name ? -1 : 1
+			}
+			return 0
+		} )
+
+		return entries
+	}
+
+	private string function renderRegistration( required struct entry ) {
+		var type = arguments.entry.config.type ?: ""
+		var options = duplicate( arguments.entry.config )
+		options.delete( "type" )
+		return "gatewayRegistry().register( aiGateway( #renderLiteral( type )#, #renderLiteral( options )# ) )"
+	}
+
+	private string function renderHandler() {
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * Thin passthrough for the bx-ai Gateway webhook surface - all 3 routes",
+			" * (events/interactions/decisions) share this one action, since",
+			" * GatewayRequestProcessor::processHttp() dispatches internally off the",
+			" * raw request path/method and writes the response itself.",
+			" */",
+			"class {",
+			"",
+			"	function process( event, rc, prc ) {",
+			"		bxModules.bxai.models.gateway.http.GatewayRequestProcessor::processHttp()",
+			"		return arguments.event.noRender()",
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Renders a value as a BoxLang literal for embedding in generated source:
+	 * strings are quoted (with "/# doubled), booleans/numbers are bare, structs
+	 * and arrays recurse. Struct keys are sorted for deterministic output.
+	 *
+	 * Type is checked via the value's actual Java class (not isNumeric()/
+	 * isBoolean(), which test CASTABILITY in BoxLang - a genuine string like
+	 * "12345" or "true" would otherwise be misrendered as a bare literal,
+	 * silently changing its type in the generated source).
+	 */
+	private string function renderLiteral( required any value ) {
+		// Captured into locals before any closure below - BoxLang closures don't
+		// reliably re-resolve the enclosing method's `arguments` scope from
+		// within a nested function literal (a real engine quirk, not a style choice).
+		var val = arguments.value
+
+		if ( isStruct( val ) ) {
+			var keys = val.keyArray().sort( "textnocase" )
+			var parts = keys.map( function( k ) {
+				return '"#bxLiteral( k )#" : #renderLiteral( val[ k ] )#'
+			} )
+			return "{ " & parts.toList( ", " ) & " }"
+		}
+
+		if ( isArray( val ) ) {
+			var parts = val.map( function( v ) {
+				return renderLiteral( v )
+			} )
+			return "[ " & parts.toList( ", " ) & " ]"
+		}
+
+		var className = val.getClass().getName()
+		var numericClasses = [
+			"java.lang.Integer", "java.lang.Long", "java.lang.Short",
+			"java.lang.Double", "java.lang.Float",
+			"java.math.BigDecimal", "java.math.BigInteger"
+		]
+
+		if ( className == "java.lang.Boolean" ) {
+			return val ? "true" : "false"
+		}
+
+		if ( numericClasses.contains( className ) ) {
+			return toString( val )
+		}
+
+		return '"#bxLiteral( toString( val ) )#"'
+	}
+
+	private any function readEntryConfig( required string path ) {
+		try {
+			if ( arguments.path.endsWith( ".json" ) ) {
+				return jsonDeserialize( fileRead( arguments.path ) )
+			}
+
+			var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
+			var instance = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
+				.instantiate( arguments.path, context )
+			return instance.configure()
+		} catch ( any e ) {
+			return null
+		}
+	}
+
+	private string function normalizePath( required string path ) {
+		return arguments.path.reReplace( "[\/]+$", "" )
+	}
+
+	private string function bxLiteral( required string value ) {
+		return arguments.value.replace( '"', '""', "all" ).replace( "##", "####", "all" )
+	}
+
+}
