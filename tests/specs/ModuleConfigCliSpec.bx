@@ -30,17 +30,17 @@ class extends="testbox.system.BaseSpec" {
 			}
 
 			it( "returns exit code 1 and prints usage when no verb is given", function() {
-				expect( moduleConfig.main( [ "bxagents" ] ) ).toBe( 1 );
+				expect( moduleConfig.main( [] ) ).toBe( 1 );
 			} );
 
 			it( "returns exit code 1 for an unknown verb", function() {
-				expect( moduleConfig.main( [ "bxagents", "frobnicate" ] ) ).toBe( 1 );
+				expect( moduleConfig.main( [ "frobnicate" ] ) ).toBe( 1 );
 			} );
 
 			it( "dispatches `build` with an absolute --projectRoot flag and returns exit code 0", function() {
 				var projectRoot = newTempProject( "full-project" );
 
-				var exitCode = moduleConfig.main( [ "bxagents", "build", "--projectRoot=#projectRoot#" ] );
+				var exitCode = moduleConfig.main( [ "build", "--projectRoot=#projectRoot#" ] );
 
 				expect( exitCode ).toBe( 0 );
 				expect( directoryExists( projectRoot & "/.build/app" ) ).toBeTrue();
@@ -49,7 +49,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "dispatches `build` with the project root as a bare positional argument", function() {
 				var projectRoot = newTempProject( "full-project" );
 
-				var exitCode = moduleConfig.main( [ "bxagents", "build", projectRoot ] );
+				var exitCode = moduleConfig.main( [ "build", projectRoot ] );
 
 				expect( exitCode ).toBe( 0 );
 				expect( directoryExists( projectRoot & "/.build/app" ) ).toBeTrue();
@@ -57,9 +57,9 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "dispatches `clean` after `build` and removes .build", function() {
 				var projectRoot = newTempProject( "full-project" );
-				moduleConfig.main( [ "bxagents", "build", projectRoot ] );
+				moduleConfig.main( [ "build", projectRoot ] );
 
-				var exitCode = moduleConfig.main( [ "bxagents", "clean", projectRoot ] );
+				var exitCode = moduleConfig.main( [ "clean", projectRoot ] );
 
 				expect( exitCode ).toBe( 0 );
 				expect( directoryExists( projectRoot & "/.build" ) ).toBeFalse();
@@ -68,7 +68,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "returns exit code 1 and a message when a verb throws", function() {
 				var projectRoot = newTempProject( "full-project" );
 				// `package` requires a prior `build` - none has run here.
-				var exitCode = moduleConfig.main( [ "bxagents", "package", projectRoot ] );
+				var exitCode = moduleConfig.main( [ "package", projectRoot ] );
 
 				expect( exitCode ).toBe( 1 );
 			} );

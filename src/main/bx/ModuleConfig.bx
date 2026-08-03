@@ -146,20 +146,18 @@ class {
 	 * CLI Entry Point
 	 * --------------------------------------------------------------------------
 	 * Every BoxLang module may declare `main( args )`; `boxlang module:bxAgents
-	 * <verb> ...` invokes it directly with the full raw argv, module name
-	 * included (args[1] = "bxAgents", args[2] = the verb, args[3..] = the
-	 * verb's own flags/positional args). Dispatch itself is CLI-agnostic:
-	 * raw argv is parsed once here into a plain options struct, then handed to
-	 * one thin dispatcher class per verb under models/cli/ - every one of
-	 * those is unit-tested directly against that struct shape, without going
-	 * through argv parsing at all (see the build plan's own guidance to skip
+	 * <verb> ...` invokes it directly. Confirmed against the official
+	 * BoxLang_Docs MCP source (`askQuestion`): `args` contains ONLY the
+	 * arguments AFTER `module:{name}` - the module name itself is never
+	 * included. So args[1] = the verb, args[2..] = the verb's own
+	 * flags/positional args. Dispatch itself is CLI-agnostic: raw argv is
+	 * parsed once here into a plain options struct, then handed to one thin
+	 * dispatcher class per verb under models/cli/ - every one of those is
+	 * unit-tested directly against that struct shape, without going through
+	 * argv parsing at all (see the build plan's own guidance to skip
 	 * argv-parsing minutiae in tests).
 	 *
-	 * Not source-verified against a real `boxlang module:bxAgents <verb>`
-	 * invocation this session (would need the module actually installed);
-	 * the argv shape above follows the framework's own documented convention.
-	 *
-	 * @args The raw CLI argv, module name included
+	 * @args The raw CLI argv, module name and dispatch token excluded
 	 *
 	 * @return The process exit code (0 success, 1 failure)
 	 */
@@ -175,7 +173,7 @@ class {
 			"clean"   : "bxagents.models.cli.Clean"
 		}
 
-		var verbName = arrayLen( arguments.args ) >= 2 ? arguments.args[ 2 ] : ""
+		var verbName = arrayLen( arguments.args ) >= 1 ? arguments.args[ 1 ] : ""
 
 		if ( !len( verbName ) || !verbs.keyExists( verbName ) ) {
 			println( "Usage: boxlang module:bxAgents <#verbs.keyArray().sort( 'textnocase' ).toList( '|' )#> [options]" )
@@ -183,7 +181,7 @@ class {
 		}
 
 		var rawVerbArgs = []
-		for ( var i = 3; i <= arrayLen( arguments.args ); i++ ) {
+		for ( var i = 2; i <= arrayLen( arguments.args ); i++ ) {
 			rawVerbArgs.append( arguments.args[ i ] )
 		}
 
