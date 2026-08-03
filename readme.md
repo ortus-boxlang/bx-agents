@@ -44,7 +44,7 @@ Most agent frameworks wire tools, skills, routes, and schedules together **at re
 
 ## Contributing to BX Agents
 
-The rest of this readme covers developing BX Agents itself (this repo), not building an agent with it - see [docs/](docs/README.md) for that.
+The rest of this readme covers developing BX Agents itself (this repo), not building an agent with it - see [docs/](docs/README.md) for that. See [CONTRIBUTING.md](CONTRIBUTING.md#the-developer-flow---boxlang-is-dynamic) for the actual edit/test loop - BoxLang is a dynamic language, so it isn't the usual edit-compile-run cycle, and there's a real subtlety around how this module's own classes reference each other that's worth reading before you touch `src/main/bx`.
 
 ### Directory Structure
 

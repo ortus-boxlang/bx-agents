@@ -57,7 +57,35 @@ If you discover a security vulnerability, please send an email to the developmen
 
 ## Development Setup
 
-We have added all the necessary information for you to develop on BoxLang in our [readme collaboration area](../readme.md#collaboration).
+```bash
+./gradlew downloadBoxLang     # fetches the BoxLang jar into src/test/resources/libs
+./gradlew downloadModules     # fetches bx-ai (needed by the TestBox suite) into src/test/resources/modules
+./gradlew downloadMiniServer  # fetches boxlang-miniserver into src/test/resources/libs
+box install                   # TestBox, at the repo root
+cd tests && box install && cd ..  # ColdBox, into tests/coldbox (only needed for the ColdBox integration suite)
+```
+
+### The developer flow - BoxLang is dynamic
+
+BoxLang `.bx`/`.bxm`/`.bxs` files are **interpreted, not compiled** - there is no build step between editing a `.bx` file and it taking effect. This changes the inner loop compared to a typical Java project:
+
+-   **Editing anything under `src/main/bx`, `tests/specs`, or a fixture**: just save and re-run whatever exercises it. No `./gradlew build`, no `shadowJar`, nothing to regenerate. The fast loop is:
+    ```bash
+    ./gradlew testBx   # re-reads src/main/bx directly - seconds, not a rebuild
+    ```
+    This works because the dev/test `boxlang.json` at the repo root declares a plain mapping (`"/bxagents": "${user-dir}/src/main/bx"`) straight at the source tree - there's no packaged artifact in this loop at all.
+-   **Editing anything under `src/main/java`**: this DOES need compiling, but every Gradle task that runs BoxLang (`testBx`, `testColdBoxIntegration`, `verifyExamples`, `test`) already `dependsOn compileJava`, so a plain re-run of any of those picks up your Java change automatically. You never need to run `compileJava` by hand.
+-   **Testing the module as a REAL install** (not the dev/test convenience mapping above): this is a slower, separate loop, and matters whenever you touch how classes reference each other, or the CLI dispatch itself. Run `./gradlew shadowJar` first (regenerates `build/modules/bxagents`, a real installable module structure), then `./gradlew test --tests ModuleCliProcessTest` (or the full suite). See the next section for why this loop exists at all.
+
+### Two ways BoxLang resolves a class - know which one you're relying on
+
+This module ships as a BoxLang module, but its own dev/test harness ALSO uses a hand-declared mapping for a fast inner loop (above) - these are two genuinely different resolution mechanisms, and mixing them up causes bugs that only show up once someone actually installs the module for real (this happened once already - see `known-limitations.md`'s "Real OS-process CLI testing" entry, and `BuildPipeline.bx`'s own `init()` docblock for the full story):
+
+-   **`ModuleConfig.bx`** sits at the module root. BoxLang resolves a bare relative path (`"models.cli.New"`, no `bxagents.` prefix) from it correctly, in BOTH the dev/test harness and a real install - confirmed empirically. This is the only file that gets that treatment.
+-   **Every other class** (`BuildPipeline.bx`, the generators, the CLI verb classes, ...) referencing a SIBLING class in this module MUST use the `"path.to.Class@bxagents"` suffix form (a quoted string, not a bare dotted path) - this is the form that resolves correctly under BOTH the dev/test harness (once you've run `./gradlew shadowJar` at least once so `build/modules/bxagents` exists and `modulesDirectory` picks it up) AND a real production install. A bare `bxagents.models....` reference only works by accident, thanks to the dev-only plain mapping, and will fail the moment the module is genuinely installed.
+-   TestBox specs themselves (`tests/specs/**`) are NOT shipped, so they're free to keep using the bare `bxagents.models....` form for convenience - it's only internal cross-references INSIDE the shipped module source that need the `@bxagents` form.
+
+If you're unsure which form to use, write a quick real-install test the way `ModuleCliProcessTest.java` does (copy `build/modules/bxagents` into a throwaway `modulesDirectory`, spawn `java -jar <boxlang-jar> module:bxagents <verb> ...`) rather than trusting that `testBx` passing means it'll work for a real user - `testBx` alone will NOT catch a bare-path mistake, since it runs entirely through the dev/test convenience mapping.
 
 ## Language Compatiblity
 
