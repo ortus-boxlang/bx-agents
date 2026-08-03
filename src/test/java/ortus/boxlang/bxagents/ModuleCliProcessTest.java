@@ -62,8 +62,8 @@ public class ModuleCliProcessTest {
 
 	@BeforeAll
 	public static void findPrerequisites() throws IOException {
-		boxlangJar = findJar( Path.of( "src/test/resources/libs" ), "boxlang-*.jar", "boxlang-miniserver" );
-		moduleSourceDir = Path.of( "build/modules/bxagents" );
+		boxlangJar		= findJar( Path.of( "src/test/resources/libs" ), "boxlang-*.jar", "boxlang-miniserver" );
+		moduleSourceDir	= Path.of( "build/modules/bxagents" );
 	}
 
 	private static Path findJar( Path dir, String glob, String excludeContains ) throws IOException {
@@ -88,17 +88,17 @@ public class ModuleCliProcessTest {
 		assumeTrue( Files.isDirectory( moduleSourceDir ),
 		    "build/modules/bxagents not found - run `./gradlew shadowJar` first (it triggers createModuleStructure)" );
 
-		tempRoot = Files.createTempDirectory( "bxagents-cli-process-test-" );
-		modulesDir = tempRoot.resolve( "modules" );
+		tempRoot	= Files.createTempDirectory( "bxagents-cli-process-test-" );
+		modulesDir	= tempRoot.resolve( "modules" );
 		Files.createDirectories( modulesDir );
 		copyRecursively( moduleSourceDir, modulesDir.resolve( "bxagents" ) );
 
 		configPath = tempRoot.resolve( "boxlang.json" );
 		Files.writeString( configPath, """
-		                                {
-		                                  "modulesDirectory": [ "%s" ]
-		                                }
-		                                """.formatted( modulesDir.toString().replace( "\\", "\\\\" ) ) );
+		                               {
+		                                 "modulesDirectory": [ "%s" ]
+		                               }
+		                               """.formatted( modulesDir.toString().replace( "\\", "\\\\" ) ) );
 
 		projectDir = tempRoot.resolve( "myagent" );
 	}
@@ -133,12 +133,12 @@ public class ModuleCliProcessTest {
 		) );
 		command.addAll( List.of( verbArgs ) );
 
-		Process process = new ProcessBuilder( command )
+		Process	process		= new ProcessBuilder( command )
 		    .redirectErrorStream( true )
 		    .redirectOutput( ProcessBuilder.Redirect.INHERIT )
 		    .start();
 
-		boolean finished = process.waitFor( 60, TimeUnit.SECONDS );
+		boolean	finished	= process.waitFor( 60, TimeUnit.SECONDS );
 		if ( !finished ) {
 			process.destroyForcibly();
 			throw new AssertionError( "module:bxagents " + String.join( " ", verbArgs ) + " never exited within 60s" );
