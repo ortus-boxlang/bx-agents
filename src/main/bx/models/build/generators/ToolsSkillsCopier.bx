@@ -1,0 +1,74 @@
+/**
+ * Copies a project's `tools/` and `skills/` conventions into the generated
+ * app verbatim (Build Pipeline Phase 5, BX AI wiring), so bx-ai's own
+ * `aiToolRegistry().scan()` / `AiSkill::fromDirectory()` discover them
+ * unmodified at startup - BX Agents does not duplicate those scanners.
+ *
+ * Each destination folder is wiped before copying (not merged), so a
+ * previous build's stale files never survive into a fresh one. Dotfiles/
+ * dot-directories (including `.env`) are never descended into or copied,
+ * even if present inside `tools/`/`skills/`.
+ */
+class {
+
+	/**
+	 * @projectRoot Absolute path to the project root
+	 * @buildDir Absolute path to the build output directory, e.g. "<projectRoot>/.build/app"
+	 */
+	struct function copy( required string projectRoot, required string buildDir ) {
+		var root = normalizePath( arguments.projectRoot )
+		var appDir = normalizePath( arguments.buildDir )
+
+		var toolsDest = appDir & "/tools"
+		var skillsDest = appDir & "/skills"
+
+		wipeAndCopy( root & "/tools", toolsDest )
+		wipeAndCopy( root & "/skills", skillsDest )
+
+		return { tools : toolsDest, skills : skillsDest }
+	}
+
+	private void function wipeAndCopy( required string src, required string dest ) {
+		if ( directoryExists( arguments.dest ) ) {
+			directoryDelete( arguments.dest, true )
+		}
+
+		if ( !directoryExists( arguments.src ) ) {
+			return
+		}
+
+		directoryCreate( path = arguments.dest, createPath = true, ignoreExists = true )
+		copyTree( arguments.src, arguments.dest )
+	}
+
+	/**
+	 * Recursively copies `src`'s contents into `dest`, one directory level at
+	 * a time, skipping any entry (file or directory) whose own name starts
+	 * with "." - so a hidden directory's contents are never reached at all,
+	 * not merely filtered leaf-by-leaf.
+	 */
+	private void function copyTree( required string src, required string dest ) {
+		var entries = directoryList( path = arguments.src, recurse = false, listInfo = "name", sort = "asc", type = "all" )
+
+		for ( var entry in entries ) {
+			if ( entry.startsWith( "." ) ) {
+				continue
+			}
+
+			var srcPath = arguments.src & "/" & entry
+			var destPath = arguments.dest & "/" & entry
+
+			if ( directoryExists( srcPath ) ) {
+				directoryCreate( path = destPath, createPath = true, ignoreExists = true )
+				copyTree( srcPath, destPath )
+			} else {
+				fileCopy( srcPath, destPath )
+			}
+		}
+	}
+
+	private string function normalizePath( required string path ) {
+		return arguments.path.reReplace( "[\/]+$", "" )
+	}
+
+}

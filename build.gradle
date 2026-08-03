@@ -17,6 +17,20 @@ plugins {
 ext {
 	buildID = System.getenv( 'BUILD_ID' ) ?: '0'
 	branch = System.getenv( 'BRANCH' ) ?: 'development'
+
+	// Supporting BoxLang modules the test/dev harness needs installed locally
+	// (fetched by `downloadModules`, same way `downloadBoxLang` fetches BoxLang
+	// core itself). Add a module by appending { name, moduleName, version } -
+	// `name` is the ForgeBox/download slug, `moduleName` is the folder name
+	// BoxLang's own module service uses as the module's identity (its box.json's
+	// `boxlang.moduleName`), which is often different from the slug.
+	boxlangModules = [
+		// 3.4.0-snapshot (not yet a stable release) is required for its "mock"
+		// AI provider - bx-ai's stable 3.3.2 release doesn't have one yet, and
+		// BX Agents' own M13 end-to-end smoke test relies on it to exercise a
+		// real aiModel()/aiAgent() call with no network access.
+		[ name: "bx-ai", moduleName: "bxai", version: "3.4.0-snapshot" ]
+	]
 }
 
 if ( branch == 'development' ) {
@@ -137,7 +151,7 @@ serviceLoader {
 jar {
     archiveVersion =  "${version}"
  	manifest {
-	   attributes 'Description': 'ExampleBoxLangModule'
+	   attributes 'Description': 'BX Agents'
     }
 }
 shadowJar {
@@ -215,6 +229,100 @@ task zipModuleStructure( type: Zip ) {
 createModuleStructure.finalizedBy( zipModuleStructure )
 shadowJar.finalizedBy( createModuleStructure )
 
+/**
+ * Template Token Guard
+ * Fails the build if any leftover `@MODULE_*@` template placeholder tokens remain
+ * (i.e. the boxlang-module-template setup was never completed/finished).
+ */
+task checkTemplateTokens {
+	group = "verification"
+	description = "Fails if any @MODULE_*@ template placeholder tokens remain in the repo"
+	doLast {
+		def offenders = []
+		def textExtensions = [ "bx", "bxs", "bxm", "java", "json", "md", "gradle", "properties", "yml", "yaml", "xml", "txt" ]
+		fileTree( dir: projectDir, excludes: [ "**/.git/**", "**/build/**", "**/node_modules/**", "**/testbox/**", "**/src/test/resources/libs/**" ] ).each { f ->
+			if ( f.isFile() && f.name != "build.gradle" && textExtensions.contains( f.name.tokenize( '.' ).last().toLowerCase() ) ) {
+				try {
+					if ( f.text =~ /@MODULE_[A-Z_]+@/ ) {
+						offenders << f
+					}
+				} catch ( ignored ) {
+					// Skip unreadable/binary files
+				}
+			}
+		}
+		if ( !offenders.isEmpty() ) {
+			throw new GradleException( "Leftover @MODULE_*@ template tokens found in: " + offenders.join( ", " ) )
+		}
+		println "+ No leftover @MODULE_*@ template tokens found"
+	}
+}
+check.dependsOn checkTemplateTokens
+
+/**
+ * TestBox BDD Suite
+ * Runs the BoxLang/TestBox spec suite under `tests/specs` via `runTests.bxs`,
+ * a small custom CLI runner (see that file's docblock for why: TestBox's own
+ * testbox/system/runners/BoxLangRunner.bx has an Application.bx-mapping
+ * auto-discovery bug that breaks bundle discovery in this project's layout).
+ *
+ * Requires:
+ *  - `downloadBoxLang` to have fetched the BoxLang jar (compileJava/test already depend on it via classpath)
+ *  - `testbox/` present at the project root (fetch via `box install` locally, or let CI's
+ *    Setup CommandBox CLI + `box install` step provide it)
+ */
+task testBx( type: JavaExec ) {
+	group = "verification"
+	description = "Runs the TestBox BDD test suite (tests/specs) via runTests.bxs"
+	dependsOn compileJava
+	onlyIf {
+		if ( !file( "testbox" ).exists() ) {
+			println "! Skipping testBx: testbox/ not found - run `box install` first"
+			return false
+		}
+		return true
+	}
+	classpath = files( "build/classes/java/main" ) + fileTree( dir: 'src/test/resources/libs', include: '*.jar' )
+	mainClass = 'ortus.boxlang.runtime.BoxRunner'
+	args = [ '--bx-config', 'boxlang.json', 'runTests.bxs' ]
+	workingDir = projectDir
+}
+
+/**
+ * ColdBox Integration Suite
+ * Runs the ColdBox-dependent specs (tests/specs/integration/coldbox/**) via
+ * runColdBoxIntegrationTests.bxs, which boots a real boxlang-miniserver and
+ * hits tests/runner-coldbox.bxm over real HTTP - a genuine ColdBox boot
+ * needs a real `cgi` scope, which CLI mode (the plain `testBx` task) never
+ * has, confirmed this session. Kept as its own task/CI step rather than
+ * folded into `testBx` for that reason.
+ *
+ * Requires:
+ *  - `downloadMiniServer` to have fetched the boxlang-miniserver jar
+ *  - `tests/coldbox` present (fetch via `box install` in tests/, or let CI's
+ *    "Install ColdBox" step provide it)
+ */
+task testColdBoxIntegration( type: JavaExec ) {
+	group = "verification"
+	description = "Runs the ColdBox-dependent integration specs (tests/specs/integration/coldbox) over real HTTP via boxlang-miniserver"
+	dependsOn compileJava
+	onlyIf {
+		if ( !file( "tests/coldbox" ).exists() ) {
+			println "! Skipping testColdBoxIntegration: tests/coldbox/ not found - run `box install` in tests/ first"
+			return false
+		}
+		if ( fileTree( dir: 'src/test/resources/libs', include: 'boxlang-miniserver-*.jar' ).isEmpty() ) {
+			println "! Skipping testColdBoxIntegration: boxlang-miniserver jar not found - run `./gradlew downloadMiniServer` first"
+			return false
+		}
+		return true
+	}
+	classpath = files( "build/classes/java/main" ) + fileTree( dir: 'src/test/resources/libs', include: '*.jar' )
+	mainClass = 'ortus.boxlang.runtime.BoxRunner'
+	args = [ '--bx-config', 'boxlang.json', 'runColdBoxIntegrationTests.bxs' ]
+	workingDir = projectDir
+}
+
 test {
     useJUnitPlatform()
     testLogging {
@@ -242,6 +350,66 @@ task downloadBoxLang( type: Download ) {
     dest "src/test/resources/libs/boxlang-${boxlangVersion}.jar"
     overwrite true
     onlyIfModified false
+}
+
+/**
+ * boxlang-miniserver (a separate standalone runtime the `serve` CLI verb
+ * shells out to - see MiniServerLauncher.java) ships as a plain executable
+ * jar at a predictable, non-forgebox URL (same distribution pattern as
+ * BoxLang core itself). Downloading it here means integration tests can
+ * actually boot a real MiniServer (`java -jar boxlang-miniserver-*.jar
+ * config.json`) instead of skipping whenever the binary isn't on PATH.
+ */
+task downloadMiniServer( type: Download ) {
+	group = "boxlang"
+	description = "Downloads the boxlang-miniserver jar for integration testing"
+	doFirst {
+		file( "src/test/resources/libs" ).mkdirs()
+	}
+	src "https://s3.amazonaws.com/downloads.ortussolutions.com/ortussolutions/boxlang-runtimes/boxlang-miniserver/${boxlangMiniServerVersion}/boxlang-miniserver-${boxlangMiniServerVersion}.jar"
+	dest "src/test/resources/libs/boxlang-miniserver-${boxlangMiniServerVersion}.jar"
+	overwrite true
+	onlyIfModified false
+}
+
+/**
+ * Supporting BoxLang Modules
+ * Downloads + unpacks every module declared in `ext.boxlangModules` (bx-ai, etc.)
+ * from ForgeBox's stable download URL pattern, into
+ * `src/test/resources/modules/{moduleName}/` - ready to be referenced by a
+ * `boxlang.json`'s `modulesDirectory` setting, e.g.:
+ *   "modulesDirectory": [ "${user-dir}/src/test/resources/modules" ]
+ */
+def moduleZipDownloadTasks = boxlangModules.collect { mod ->
+	tasks.register( "downloadModuleZip_${mod.name.replaceAll( '[^a-zA-Z0-9]', '_' )}", Download ) {
+		doFirst {
+			file( "src/test/resources/modules" ).mkdirs()
+		}
+		src "https://downloads.ortussolutions.com/ortussolutions/boxlang-modules/${mod.name}/${mod.version}/${mod.name}-${mod.version}.zip"
+		dest "src/test/resources/modules/${mod.name}-${mod.version}.zip"
+		overwrite true
+		onlyIfModified false
+	}
+}
+
+task downloadModules {
+	group = "boxlang"
+	description = "Downloads and unpacks supporting BoxLang modules (bx-ai, etc.) declared in ext.boxlangModules"
+	dependsOn moduleZipDownloadTasks
+	doLast {
+		boxlangModules.each { mod ->
+			def zipFile = file( "src/test/resources/modules/${mod.name}-${mod.version}.zip" )
+			def destDir = file( "src/test/resources/modules/${mod.moduleName}" )
+			if ( destDir.exists() ) {
+				destDir.deleteDir()
+			}
+			copy {
+				from zipTree( zipFile )
+				into destDir
+			}
+			println "+ Installed module [${mod.name}@${mod.version}] into ${destDir}"
+		}
+	}
 }
 
 /**

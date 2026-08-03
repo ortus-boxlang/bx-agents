@@ -1,0 +1,62 @@
+/**
+ * Parses BX Agents' `provider/model` slug convention into the separate
+ * `provider` and `model` arguments that bx-ai's own `aiModel()`/`aiAgent()`
+ * BIFs actually expect (bx-ai has no combined-slug parser of its own).
+ *
+ * Only the FIRST "/" is treated as the provider/model separator, so
+ * multi-segment model ids (e.g. OpenRouter's "openrouter/anthropic/claude-x")
+ * keep everything after the first slash as the model id.
+ */
+class {
+
+	/**
+	 * Parse a model slug into `{ provider, model }`.
+	 *
+	 * @slug The model slug to parse, e.g. "gpt-5", "openai/gpt-5", "openrouter/anthropic/claude-sonnet-4"
+	 * @defaultProvider The provider to use when the slug has no "/". Required if the slug is provider-less.
+	 */
+	struct function parse( required string slug, string defaultProvider = "" ) {
+		var trimmedSlug = trim( arguments.slug )
+
+		if ( !len( trimmedSlug ) ) {
+			throw(
+				type    = "BxAgents.InvalidModelSlug",
+				message = "Model slug cannot be empty"
+			)
+		}
+
+		var slashPos = trimmedSlug.find( "/" )
+
+		if ( !slashPos ) {
+			if ( !len( arguments.defaultProvider ) ) {
+				throw(
+					type    = "BxAgents.InvalidModelSlug",
+					message = "Model slug [#trimmedSlug#] has no provider and no defaultProvider was supplied"
+				)
+			}
+			return { provider : arguments.defaultProvider, model : trimmedSlug }
+		}
+
+		var providerLen	= slashPos - 1
+		var modelLen	= len( trimmedSlug ) - slashPos
+		var provider	= providerLen > 0 ? trimmedSlug.left( providerLen ) : ""
+		var model		= modelLen > 0 ? trimmedSlug.right( modelLen ) : ""
+
+		if ( !len( provider ) ) {
+			throw(
+				type    = "BxAgents.InvalidModelSlug",
+				message = "Model slug [#trimmedSlug#] has an empty provider segment"
+			)
+		}
+
+		if ( !len( model ) ) {
+			throw(
+				type    = "BxAgents.InvalidModelSlug",
+				message = "Model slug [#trimmedSlug#] has an empty model segment"
+			)
+		}
+
+		return { provider : provider, model : model }
+	}
+
+}

@@ -1,0 +1,265 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "ColdBoxAppGenerator", function() {
+
+			beforeEach( function() {
+				variables.resolver = new bxagents.models.build.AgentConfigResolver();
+				variables.generator = new bxagents.models.build.generators.ColdBoxAppGenerator();
+				variables.fixtures = expandPath( "/fixtures" );
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function newBuildDir() {
+				var dir = createTempDirectory( prefix = "bxagents-coldbox-app-" );
+				tempDirs.append( dir );
+				return dir;
+			}
+
+			private function generateFor( required string projectRoot, required string buildDir ) {
+				var config = resolver.resolve( projectRoot = arguments.projectRoot );
+				return generator.generate( arguments.projectRoot, arguments.buildDir, config );
+			}
+
+			private function countOccurrences( required string haystack, required string needle ) {
+				var count = 0;
+				var pos = haystack.find( needle );
+				var searchFrom = 1;
+
+				while ( pos > 0 ) {
+					count++;
+					searchFrom = pos + len( needle );
+					pos = haystack.find( needle, searchFrom );
+				}
+
+				return count;
+			}
+
+			it( "writes an index.bxm as the physical web-server rewrite target", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/full-project", buildDir );
+
+				expect( fileExists( result.index ) ).toBeTrue();
+			} );
+
+			it( "writes a valid Application.bx", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/full-project", buildDir );
+
+				expect( fileExists( result.applicationBx ) ).toBeTrue();
+				var content = fileRead( result.applicationBx );
+				expect( content ).toInclude( "this.name" );
+				expect( content ).toInclude( "full-project-agent" );
+				expect( content ).toInclude( "onApplicationStart" );
+				expect( content ).toInclude( "coldbox.system.Bootstrap" );
+			} );
+
+			it( "writes a valid config/ColdBox.bx", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/full-project", buildDir );
+
+				expect( fileExists( result.coldboxConfig ) ).toBeTrue();
+				var content = fileRead( result.coldboxConfig );
+				expect( content ).toInclude( "function configure()" );
+				expect( content ).toInclude( "appName" );
+				expect( content ).toInclude( "full-project-agent" );
+			} );
+
+			it( "references every agent-scope interceptor exactly once in config/ColdBox.bx", function() {
+				var buildDir = newBuildDir();
+				var config = resolver.resolve( projectRoot = fixtures & "/full-project" );
+				var result = generator.generate( fixtures & "/full-project", buildDir, config, [ "AgentAudit", "OtherInterceptor" ] );
+
+				var content = fileRead( result.coldboxConfig );
+				expect( content ).toInclude( "interceptors = [" );
+
+				for ( var name in [ "AgentAudit", "OtherInterceptor" ] ) {
+					var needle = 'class : "interceptors.#name#"';
+					expect( countOccurrences( content, needle ) ).toBe( 1 );
+				}
+			} );
+
+			it( "forwards Agent.bx's resolved security block verbatim into config/ColdBox.bx's module settings", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/with-security", buildDir );
+
+				var content = fileRead( result.coldboxConfig );
+				expect( content ).toInclude( "moduleSettings = {" );
+				expect( content ).toInclude( "bxai :" );
+				expect( content ).toInclude( '"inputSanitizer" : true' );
+				expect( content ).toInclude( '"blockPatterns" : [ "ssn", "creditCard" ]' );
+			} );
+
+			it( "always sets bxai's skillsDirectory to /skills, so bx-ai's own auto-discovery finds BX Agents' copied skills folder", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/full-project", buildDir );
+
+				var content = fileRead( result.coldboxConfig );
+				expect( content ).toInclude( "moduleSettings = {" );
+				expect( content ).toInclude( '"skillsDirectory" : "/skills"' );
+				expect( content ).notToInclude( '"security"' );
+			} );
+
+			it( "writes a valid config/WireBox.bx", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/full-project", buildDir );
+
+				expect( fileExists( result.wireboxConfig ) ).toBeTrue();
+				var content = fileRead( result.wireboxConfig );
+				expect( content ).toInclude( "GeneratedAgentFactory" );
+				expect( content ).toInclude( "asSingleton()" );
+			} );
+
+			it( "extends coldbox.system.ioc.config.Binder in config/WireBox.bx - map() is inherited, not a global function", function() {
+				// Regression: a real ColdBox VirtualApp boot (see
+				// integration/ColdBoxRuntimeSpec.bx) caught this - without the
+				// extends clause, `map()` in configure() throws
+				// "Function [map] not found" the moment WireBox loads the
+				// generated binder.
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/full-project", buildDir );
+
+				var content = fileRead( result.wireboxConfig );
+				expect( content ).toInclude( 'extends="coldbox.system.ioc.config.Binder"' );
+			} );
+
+			it( "always maps a singleton GeneratedAgent provider in config/WireBox.bx", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/full-project", buildDir );
+
+				var content = fileRead( result.wireboxConfig );
+				expect( content ).toInclude( 'map( "GeneratedAgent" ).toProvider(' );
+				expect( content ).toInclude( 'injector.getInstance( "GeneratedAgentFactory" ).buildAgent()' );
+			} );
+
+			it( "uses injector.getInstance(), not a bare getInstance() call, in the provider closure - Binder has no such delegate", function() {
+				// Regression: coldbox.system.ioc.config.Binder has no
+				// getInstance() method or delegate at all (confirmed against
+				// real source this session, via a real ColdBox integration
+				// test - tests/specs/integration/coldbox/ColdBoxRuntimeSpec.bx).
+				// A bare `getInstance(...)` call inside the provider closure
+				// only fails once WireBox actually invokes it (lazily,
+				// building the singleton) - "Function [getInstance] not
+				// found" - not at configure() time, so this was easy to miss.
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/full-project", buildDir );
+
+				var content = fileRead( result.wireboxConfig );
+				expect( content ).notToInclude( "return getInstance(" );
+			} );
+
+			it( "always builds the root agent via the plain aiAgent() BIF - no adapter subclass is generated", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/full-project", buildDir );
+
+				expect( result.keyExists( "agentRunnable" ) ).toBeFalse();
+				expect( fileExists( buildDir & "/agent/GeneratedAgentRunnable.bx" ) ).toBeFalse();
+
+				var factoryContent = fileRead( result.agentFactory );
+				expect( factoryContent ).toInclude( "var agent = aiAgent(" );
+			} );
+
+			it( "inserts gateway registration statements into Application.bx's onApplicationStart()", function() {
+				var buildDir = newBuildDir();
+				var config = resolver.resolve( projectRoot = fixtures & "/full-project" );
+				var result = generator.generate(
+					fixtures & "/full-project",
+					buildDir,
+					config,
+					[],
+					[ 'gatewayRegistry().register( aiGateway( "mock", {} ) )' ]
+				);
+
+				var content = fileRead( result.applicationBx );
+				expect( content ).toInclude( 'gatewayRegistry().register( aiGateway( "mock", {} ) )' );
+
+				var startPos = content.find( "onApplicationStart" );
+				var registerPos = content.find( "gatewayRegistry().register" );
+				var loadColdboxPos = content.find( "loadColdbox()" );
+				expect( startPos < loadColdboxPos ).toBeTrue();
+				expect( loadColdboxPos < registerPos ).toBeTrue();
+			} );
+
+			it( "generates GeneratedAgentFactory.bx calling aiModel()+aiAgent() with resolved values", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/full-project", buildDir );
+
+				expect( fileExists( result.agentFactory ) ).toBeTrue();
+				var content = fileRead( result.agentFactory );
+
+				expect( content ).toInclude( "function buildAgent()" );
+				expect( content ).toInclude( "aiAgent(" );
+				expect( content ).toInclude( "aiModel(" );
+				expect( content ).toInclude( 'provider : "openai"' );
+				expect( content ).toInclude( 'model : "gpt-5"' );
+				expect( content ).toInclude( "full-project-agent" );
+				expect( content ).toInclude( "instructions.md" );
+				expect( content ).toInclude( "return agent" );
+			} );
+
+			it( "produces a byte-identical rebuild of an unchanged project", function() {
+				var buildDir = newBuildDir();
+				generateFor( fixtures & "/full-project", buildDir );
+				var first = fileRead( buildDir & "/agent/GeneratedAgentFactory.bx" );
+
+				generateFor( fixtures & "/full-project", buildDir );
+				var second = fileRead( buildDir & "/agent/GeneratedAgentFactory.bx" );
+
+				expect( first ).toBe( second );
+			} );
+
+			it( "fails clearly if instructions.md is missing", function() {
+				var buildDir = newBuildDir();
+
+				expect( function() {
+					generateFor( fixtures & "/missing-instructions", buildDir );
+				} ).toThrow( "BxAgents.MissingInstructions" );
+			} );
+
+			it( "reduces resolvedConfig.mcpServers (URL strings or {url,name} structs) to a bare mcpServers: [...] URL array, with no network call", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/with-mcp-servers", buildDir );
+
+				var content = fileRead( result.agentFactory );
+				expect( content ).toInclude( 'mcpServers : [ "https://example.com/mcp", "https://other.com/mcp" ]' );
+			} );
+
+			it( "emits an empty mcpServers: [] when no mcpServers are declared", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/full-project", buildDir );
+
+				var content = fileRead( result.agentFactory );
+				expect( content ).toInclude( "mcpServers : []" );
+			} );
+
+			it( "builds subagents in dependency order (leaf before parent)", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/subagents-chain", buildDir );
+				var content = fileRead( result.agentFactory );
+
+				var posB = content.find( "subagent_b" );
+				var posA = content.find( "subagent_a" );
+				var posAgent = content.find( "var agent = aiAgent(" );
+
+				expect( posB > 0 ).toBeTrue();
+				expect( posA > 0 ).toBeTrue();
+				expect( posAgent > 0 ).toBeTrue();
+				expect( posB < posA ).toBeTrue();
+				expect( posA < posAgent ).toBeTrue();
+
+				expect( content ).toInclude( "subAgents : [ subagent_a ]" );
+				expect( content ).toInclude( "subAgents : [ subagent_b ]" );
+			} );
+
+		} );
+	}
+
+}

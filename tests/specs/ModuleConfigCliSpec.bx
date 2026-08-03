@@ -1,0 +1,117 @@
+/**
+ * Exercises ModuleConfig.bx's main(args) CLI dispatch end-to-end - argv
+ * parsing, project-root resolution, and delegating to the real verb classes
+ * under models/cli/ (each of which has its own dedicated, more thorough spec).
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "ModuleConfig CLI dispatch", function() {
+
+			beforeEach( function() {
+				variables.moduleConfig = new bxagents.ModuleConfig();
+				variables.fixtures = expandPath( "/fixtures" );
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function newTempProject( required string fixtureName ) {
+				var dir = createTempDirectory( prefix = "bxagents-moduleconfig-cli-" );
+				directoryCopy( fixtures & "/" & arguments.fixtureName, dir, true );
+				tempDirs.append( dir );
+				return dir;
+			}
+
+			it( "returns exit code 1 and prints usage when no verb is given", function() {
+				expect( moduleConfig.main( [] ) ).toBe( 1 );
+			} );
+
+			it( "returns exit code 1 for an unknown verb", function() {
+				expect( moduleConfig.main( [ "frobnicate" ] ) ).toBe( 1 );
+			} );
+
+			it( "returns exit code 0 and prints usage for --help / -h / help", function() {
+				expect( moduleConfig.main( [ "--help" ] ) ).toBe( 0 );
+				expect( moduleConfig.main( [ "-h" ] ) ).toBe( 0 );
+				expect( moduleConfig.main( [ "help" ] ) ).toBe( 0 );
+			} );
+
+			it( "returns exit code 0 and prints the module version for --version / -v", function() {
+				expect( moduleConfig.main( [ "--version" ] ) ).toBe( 0 );
+				expect( moduleConfig.main( [ "-v" ] ) ).toBe( 0 );
+			} );
+
+			it( "dispatches `build` with an absolute --projectRoot flag and returns exit code 0", function() {
+				var projectRoot = newTempProject( "full-project" );
+
+				var exitCode = moduleConfig.main( [ "build", "--projectRoot=#projectRoot#" ] );
+
+				expect( exitCode ).toBe( 0 );
+				expect( directoryExists( projectRoot & "/.build/app" ) ).toBeTrue();
+			} );
+
+			it( "dispatches `build` with the project root as a bare positional argument", function() {
+				var projectRoot = newTempProject( "full-project" );
+
+				var exitCode = moduleConfig.main( [ "build", projectRoot ] );
+
+				expect( exitCode ).toBe( 0 );
+				expect( directoryExists( projectRoot & "/.build/app" ) ).toBeTrue();
+			} );
+
+			it( "dispatches `clean` after `build` and removes .build", function() {
+				var projectRoot = newTempProject( "full-project" );
+				moduleConfig.main( [ "build", projectRoot ] );
+
+				var exitCode = moduleConfig.main( [ "clean", projectRoot ] );
+
+				expect( exitCode ).toBe( 0 );
+				expect( directoryExists( projectRoot & "/.build" ) ).toBeFalse();
+			} );
+
+			it( "returns exit code 1 and a message when a verb throws", function() {
+				var projectRoot = newTempProject( "full-project" );
+				// `package` requires a prior `build` - none has run here.
+				var exitCode = moduleConfig.main( [ "package", projectRoot ] );
+
+				expect( exitCode ).toBe( 1 );
+			} );
+
+			it( "strips matching surrounding quotes from a --key=`value` assignment, per BoxLang's own CLI convention", function() {
+				var projectRoot = createTempDirectory( prefix = "bxagents-moduleconfig-cli-" );
+				tempDirs.append( projectRoot );
+
+				var exitCode = moduleConfig.main( [
+					"new",
+					"--projectRoot=#projectRoot#/myagent",
+					"--model=openai/gpt-5",
+					'--description="Hello World, quoted!"'
+				] );
+
+				expect( exitCode ).toBe( 0 );
+				var agentSource = fileRead( projectRoot & "/myagent/Agent.bx" );
+				expect( agentSource ).toInclude( 'description : "Hello World, quoted!"' );
+			} );
+
+			it( "parses --no-{opt} / --!opt negation and combined -abc shorthand without breaking dispatch", function() {
+				var projectRoot = newTempProject( "full-project" );
+
+				var exitCode = moduleConfig.main( [
+					"build", "--projectRoot=#projectRoot#", "--debug", "--!verbose", "--no-color", "-abc"
+				] );
+
+				expect( exitCode ).toBe( 0 );
+				expect( directoryExists( projectRoot & "/.build/app" ) ).toBeTrue();
+			} );
+
+		} );
+	}
+
+}

@@ -1,0 +1,134 @@
+/**
+ * Discovers a BX Agents project's convention-based source files (Build Pipeline Phase 2).
+ *
+ * Walks the project root and enumerates `models/`, `tools/`, `skills/`, `subagents/`,
+ * `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `modules/` into raw
+ * `{ name, path, type }` entries. This is discovery only - no validation or
+ * interpretation of contents happens here (that's ProjectValidator, Phase 3).
+ *
+ * Conventions:
+ *  - models/, gateways/, schedules/: one entry per top-level `.bx`/`.json` file
+ *  - tools/, mcp/, interceptors/: one entry per `.bx` file (tools/ recurses,
+ *    matching BX AI's own `aiToolRegistry().scan()` convention - actual tool
+ *    names are discovered by BX AI itself at runtime, not here)
+ *  - skills/: one entry per immediate subfolder containing a `SKILL.md`; the
+ *    entry name is the skill's YAML frontmatter `name:` if present, else the
+ *    folder name
+ *  - subagents/: one entry per immediate subfolder (each mirrors the project's
+ *    own `Agent.bx` + `instructions.md` convention); the entry name here is
+ *    always the folder name (a subagent's *declared* name/subAgents list is
+ *    only known once its own Agent.bx is loaded, in a later phase)
+ *  - modules/: one entry per immediate subfolder
+ *
+ * Dotfiles and files with no recognized extension (e.g. README.md) are ignored.
+ */
+class {
+
+	struct function discover( required string projectRoot ) {
+		var root = arguments.projectRoot.reReplace( "[\\/]+$", "" )
+
+		return {
+			models       : listFiles( root & "/models", [ "bx", "json" ], "model" ),
+			tools        : listFiles( root & "/tools", [ "bx" ], "tool", true ),
+			skills       : listSkills( root & "/skills" ),
+			subagents    : listSubfolders( root & "/subagents", "subagent" ),
+			gateways     : listFiles( root & "/gateways", [ "bx", "json" ], "gateway" ),
+			schedules    : listFiles( root & "/schedules", [ "bx", "json" ], "schedule" ),
+			mcp          : listFiles( root & "/mcp", [ "bx" ], "mcp" ),
+			interceptors : listFiles( root & "/interceptors", [ "bx" ], "interceptor" ),
+			modules      : listSubfolders( root & "/modules", "module" )
+		}
+	}
+
+	private array function listFiles(
+		required string dir,
+		required array extensions,
+		required string type,
+		boolean recurse = false
+	) {
+		if ( !directoryExists( arguments.dir ) ) {
+			return []
+		}
+
+		var extensions = arguments.extensions
+		var entryType = arguments.type
+
+		return directoryList( arguments.dir, arguments.recurse, "path", "*", "asc", "file" )
+			.filter( path => {
+				var fileName = getFileFromPath( path )
+				if ( fileName.left( 1 ) == "." ) {
+					return false
+				}
+				var ext = listLast( fileName, "." ).lcase()
+				return extensions.contains( ext )
+			} )
+			.map( path => {
+				return {
+					name : listFirst( getFileFromPath( path ), "." ),
+					path : path,
+					type : entryType
+				}
+			} )
+	}
+
+	private array function listSubfolders( required string dir, required string type ) {
+		if ( !directoryExists( arguments.dir ) ) {
+			return []
+		}
+
+		var entryType = arguments.type
+
+		return directoryList( arguments.dir, false, "path", "*", "asc", "dir" )
+			.filter( path => getFileFromPath( path ).left( 1 ) != "." )
+			.map( path => {
+				return {
+					name : getFileFromPath( path ),
+					path : path,
+					type : entryType
+				}
+			} )
+	}
+
+	private array function listSkills( required string dir ) {
+		if ( !directoryExists( arguments.dir ) ) {
+			return []
+		}
+
+		return directoryList( arguments.dir, false, "path", "*", "asc", "dir" )
+			.filter( path => getFileFromPath( path ).left( 1 ) != "." )
+			.filter( path => fileExists( path & "/SKILL.md" ) )
+			.map( path => {
+				var folderName = getFileFromPath( path )
+				return {
+					name : deriveSkillName( path & "/SKILL.md", folderName ),
+					path : path,
+					type : "skill"
+				}
+			} )
+	}
+
+	private string function deriveSkillName( required string skillMdPath, required string fallbackName ) {
+		var content = fileRead( arguments.skillMdPath )
+
+		if ( !content.startsWith( "---" ) ) {
+			return arguments.fallbackName
+		}
+
+		// Bound the search to the frontmatter block (between the opening and
+		// closing "---" markers) so a `name:`-looking line in the body can't
+		// be mistaken for the frontmatter's own name.
+		var closingPos = content.find( "---", 4 )
+		var frontmatter = closingPos ? content.mid( 4, closingPos - 4 ) : content
+
+		var matches = frontmatter.reMatch( "name\s*:\s*[^\r\n]+" )
+		if ( matches.len() ) {
+			var name = matches[ 1 ].listRest( ":" ).trim()
+			if ( len( name ) ) {
+				return name
+			}
+		}
+
+		return arguments.fallbackName
+	}
+
+}

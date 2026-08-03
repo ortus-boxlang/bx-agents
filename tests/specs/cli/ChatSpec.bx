@@ -1,0 +1,45 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "cli.Chat", function() {
+
+			beforeEach( function() {
+				variables.chatVerb = new bxagents.models.cli.Chat();
+				variables.fixtures = expandPath( "/fixtures" );
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			// Only the pre-flight checks are exercised here: MiniConsole (used
+			// once past them) sets up a raw-mode terminal via `stty`, which
+			// requires a real interactive TTY this test harness doesn't have -
+			// the interactive loop itself isn't something a headless spec can
+			// safely drive.
+
+			it( "throws clearly when projectRoot is missing", function() {
+				expect( function() {
+					chatVerb.run( {} );
+				} ).toThrow( "BxAgents.MissingProjectRoot" );
+			} );
+
+			it( "errors cleanly if build hasn't run yet", function() {
+				var dir = createTempDirectory( prefix = "bxagents-cli-chat-" );
+				directoryCopy( fixtures & "/full-project", dir, true );
+				tempDirs.append( dir );
+
+				expect( function() {
+					chatVerb.run( { projectRoot : dir } );
+				} ).toThrow( "BxAgents.NotBuilt" );
+			} );
+
+		} );
+	}
+
+}

@@ -1,0 +1,44 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "cli.Build", function() {
+
+			beforeEach( function() {
+				variables.verb = new bxagents.models.cli.Build();
+				variables.fixtures = expandPath( "/fixtures" );
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function newTempProject( required string fixtureName ) {
+				var dir = createTempDirectory( prefix = "bxagents-cli-build-" );
+				directoryCopy( fixtures & "/" & arguments.fixtureName, dir, true );
+				tempDirs.append( dir );
+				return dir;
+			}
+
+			it( "builds a project and returns exitCode 0", function() {
+				var projectRoot = newTempProject( "full-project" );
+				var result = verb.run( { projectRoot : projectRoot } );
+
+				expect( result.exitCode ).toBe( 0 );
+				expect( directoryExists( projectRoot & "/.build/app" ) ).toBeTrue();
+			} );
+
+			it( "throws clearly when projectRoot is missing", function() {
+				expect( function() {
+					verb.run( {} );
+				} ).toThrow( "BxAgents.MissingProjectRoot" );
+			} );
+
+		} );
+	}
+
+}

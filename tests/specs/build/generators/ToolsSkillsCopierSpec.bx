@@ -1,0 +1,76 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "ToolsSkillsCopier", function() {
+
+			beforeEach( function() {
+				variables.copier = new bxagents.models.build.generators.ToolsSkillsCopier();
+				variables.fixtures = expandPath( "/fixtures" );
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function newBuildDir() {
+				var dir = createTempDirectory( prefix = "bxagents-tools-skills-" );
+				tempDirs.append( dir );
+				return dir;
+			}
+
+			it( "copies tools/ byte-for-byte, including nested files", function() {
+				var buildDir = newBuildDir();
+				var result = copier.copy( fixtures & "/full-project", buildDir );
+
+				expect( fileExists( result.tools & "/Weather.bx" ) ).toBeTrue();
+				expect( fileExists( result.tools & "/nested/Search.bx" ) ).toBeTrue();
+
+				expect( fileRead( result.tools & "/Weather.bx" ) ).toBe( fileRead( fixtures & "/full-project/tools/Weather.bx" ) );
+				expect( fileRead( result.tools & "/nested/Search.bx" ) ).toBe( fileRead( fixtures & "/full-project/tools/nested/Search.bx" ) );
+			} );
+
+			it( "copies skills/ byte-for-byte, including SKILL.md files", function() {
+				var buildDir = newBuildDir();
+				var result = copier.copy( fixtures & "/full-project", buildDir );
+
+				expect( fileExists( result.skills & "/my-skill/SKILL.md" ) ).toBeTrue();
+				expect( fileExists( result.skills & "/named-skill/SKILL.md" ) ).toBeTrue();
+
+				expect( fileRead( result.skills & "/my-skill/SKILL.md" ) ).toBe( fileRead( fixtures & "/full-project/skills/my-skill/SKILL.md" ) );
+			} );
+
+			it( "never copies dotfiles such as .env", function() {
+				var buildDir = newBuildDir();
+				var result = copier.copy( fixtures & "/full-project", buildDir );
+
+				expect( fileExists( result.tools & "/.env" ) ).toBeFalse();
+			} );
+
+			it( "wipes stale files from a previous build instead of merging", function() {
+				var buildDir = newBuildDir();
+				directoryCreate( path = buildDir & "/tools", createPath = true, ignoreExists = true );
+				fileWrite( buildDir & "/tools/StaleLeftover.bx", "class {}" );
+
+				var result = copier.copy( fixtures & "/full-project", buildDir );
+
+				expect( fileExists( result.tools & "/StaleLeftover.bx" ) ).toBeFalse();
+				expect( fileExists( result.tools & "/Weather.bx" ) ).toBeTrue();
+			} );
+
+			it( "creates no tools/skills folders when the source project has none", function() {
+				var buildDir = newBuildDir();
+				var result = copier.copy( fixtures & "/valid-minimal", buildDir );
+
+				expect( directoryExists( result.tools ) ).toBeFalse();
+				expect( directoryExists( result.skills ) ).toBeFalse();
+			} );
+
+		} );
+	}
+
+}

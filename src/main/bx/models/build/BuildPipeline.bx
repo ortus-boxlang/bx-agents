@@ -1,0 +1,109 @@
+/**
+ * Orchestrates BX Agents' full build pipeline for a single project - the
+ * `build` CLI verb's real implementation (M12), wiring together every phase
+ * built in M1-M10:
+ *
+ *   resolve config -> discover -> validate (fail on any error) -> generate
+ *   the ColdBox app skeleton (interceptors, gateways/mcp registrations,
+ *   router, tools/skills copy, scheduler) -> normalize + write the internal
+ *   manifest.
+ *
+ * Deliberately produces ONLY `.build/app/` + `.build/manifest.json` -
+ * packaging (`.bxa`) is a separate step (see PackagerService / the
+ * `package` CLI verb), so a fast dev loop (`build` -> inspect -> `build`
+ * again) never pays the packaging cost it doesn't need.
+ */
+class {
+
+	function init( string generatorVersion = "dev" ) {
+		variables.configResolver = new bxagents.models.build.AgentConfigResolver()
+		variables.discoverer = new bxagents.models.build.ProjectDiscoverer()
+		variables.validator = new bxagents.models.build.ProjectValidator()
+		variables.manifestNormalizer = new bxagents.models.build.ManifestNormalizer( arguments.generatorVersion )
+		variables.coldboxAppGenerator = new bxagents.models.build.generators.ColdBoxAppGenerator()
+		variables.toolsSkillsCopier = new bxagents.models.build.generators.ToolsSkillsCopier()
+		variables.interceptorSplitter = new bxagents.models.build.generators.InterceptorSplitter()
+		variables.routerGenerator = new bxagents.models.build.generators.RouterGenerator()
+		variables.gatewayGenerator = new bxagents.models.build.generators.GatewayGenerator()
+		variables.schedulerGenerator = new bxagents.models.build.generators.SchedulerGenerator()
+		variables.mcpGenerator = new bxagents.models.build.generators.McpGenerator()
+		return this
+	}
+
+	/**
+	 * @projectRoot Absolute path to the project root (containing Agent.bx)
+	 * @cliEnvironment Optional environment name, e.g. from a CLI flag
+	 *
+	 * @return { projectRoot, buildDir, appDir, manifestPath, manifest, warnings }
+	 */
+	struct function build( required string projectRoot, string cliEnvironment = "" ) {
+		var root = normalizePath( arguments.projectRoot )
+		var buildDir = root & "/.build"
+		var appDir = buildDir & "/app"
+
+		var config = variables.configResolver.resolve( projectRoot = root, cliEnvironment = arguments.cliEnvironment )
+		var discovery = variables.discoverer.discover( root )
+		var validation = variables.validator.validate( root, discovery, config )
+
+		if ( validation.errors.len() ) {
+			throw(
+				type    = "BxAgents.BuildValidationFailed",
+				message = "Project failed validation with #validation.errors.len()# error(s): #validation.errors.toList( '; ' )#"
+			)
+		}
+
+		if ( directoryExists( appDir ) ) {
+			directoryDelete( appDir, true )
+		}
+		directoryCreate( path = appDir, createPath = true, ignoreExists = true )
+
+		var interceptorSplit = variables.interceptorSplitter.split(
+			appDir & "/interceptors",
+			buildDir & "/runtime-interceptors",
+			discovery
+		)
+		var gatewayResult = variables.gatewayGenerator.generate( discovery, appDir )
+		var mcpResult = variables.mcpGenerator.generate( discovery, appDir )
+		variables.routerGenerator.generate( discovery, appDir, gatewayResult.hasHttpGateway )
+
+		var toolScanStatements = []
+		if ( discovery.tools.len() ) {
+			// bx-ai has no built-in "scan this app's tools/ folder" convention
+			// (unlike skillsDirectory) - the app must call aiToolRegistry().scan()
+			// itself at startup so tool-by-name lookups (M10's local MCP server
+			// wiring, any future tool reference) resolve.
+			toolScanStatements.append( 'aiToolRegistry().scan( "tools" )' )
+		}
+
+		variables.coldboxAppGenerator.generate(
+			projectRoot           = root,
+			buildDir              = appDir,
+			resolvedConfig        = config,
+			agentInterceptors     = interceptorSplit.agent.map( function( e ) { return e.name } ),
+			gatewayRegistrations  = gatewayResult.registrationStatements,
+			mcpRegistrations      = mcpResult.registrations,
+			extraStartupStatements = toolScanStatements
+		)
+
+		variables.toolsSkillsCopier.copy( root, appDir )
+		variables.schedulerGenerator.generate( discovery, appDir )
+
+		var manifest = variables.manifestNormalizer.normalize( root, discovery, config )
+		var manifestPath = buildDir & "/manifest.json"
+		fileWrite( manifestPath, jsonSerialize( manifest ) )
+
+		return {
+			projectRoot  : root,
+			buildDir     : buildDir,
+			appDir       : appDir,
+			manifestPath : manifestPath,
+			manifest     : manifest,
+			warnings     : validation.warnings
+		}
+	}
+
+	private string function normalizePath( required string path ) {
+		return arguments.path.reReplace( "[\/]+$", "" )
+	}
+
+}

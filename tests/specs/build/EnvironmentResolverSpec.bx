@@ -1,0 +1,32 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "EnvironmentResolver", function() {
+
+			beforeEach( function() {
+				variables.resolver = new bxagents.models.build.EnvironmentResolver();
+			} );
+
+			it( "falls back to 'development' when nothing else is specified", function() {
+				expect( resolver.resolve() ).toBe( "development" );
+			} );
+
+			it( "prefers an explicit CLI flag over everything else", function() {
+				expect( resolver.resolve( "production" ) ).toBe( "production" );
+			} );
+
+			it( "trims whitespace from the CLI flag", function() {
+				expect( resolver.resolve( "  staging  " ) ).toBe( "staging" );
+			} );
+
+			it( "falls back to the BX_AGENTS_ENV system setting when no CLI flag is given", function() {
+				// Note: this asserts the *precedence order* via the default-fallback path;
+				// exercising the real OS/system-property value requires an external
+				// process-level env var, covered by the CLI smoke tests in M12.
+				expect( resolver.resolve( "" ) ).toBe( getSystemSetting( "BX_AGENTS_ENV", "development" ) );
+			} );
+
+		} );
+	}
+
+}

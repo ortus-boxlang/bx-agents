@@ -1,0 +1,100 @@
+/**
+ * Generates the LOCAL MCP server wiring for a project (Build Pipeline Phase
+ * 5, part (b) of M10 - part (a), remote-server URL reduction, lives in
+ * ColdBoxAppGenerator instead, since each agent/subagent node needs its OWN
+ * resolvedConfig's `mcpServers` reduced individually, and that recursive
+ * per-node data is already only available there - see renderAgentStatement).
+ *
+ * Each `mcp/*` entry is copied verbatim into `.build/app/mcp/`, and a
+ * `mcpServer(name, ...).registerTool(...)` bootstrap statement is emitted
+ * (for ColdBoxAppGenerator to insert into Application.bx's
+ * onApplicationStart(), the same way M8's gateway registrations are threaded
+ * through) so the named instance exists before any request can reach it.
+ *
+ * Confirmed via bx-ai source (bifs/MCPServer.bx): `mcpServer(name, ...)` is a
+ * GLOBAL, name-keyed singleton getter ("MCP servers are stored globally and
+ * can be accessed from anywhere by name") - registering it once at startup is
+ * all `route(path).toMCP(name)` needs; no WireBox mapping is required for
+ * this (unlike the agent-exposure `toAi()` case, which does rely on a WireBox
+ * singleton - see M8). Tools are attached via `.registerTool(aiToolRegistry().get(toolName))`,
+ * reusing the SAME tool instances BX AI's own scanner already builds from
+ * the copied tools/ folder (see M6) - this generator never builds tools itself.
+ *
+ * The local mcp/* entry name is the discovered FILENAME (ProjectDiscoverer's
+ * established convention, consistent with gateways/schedules), not a `name`
+ * field inside the file's own `configure()` struct - a project may still set
+ * one for documentation purposes, but it's ignored here.
+ */
+class {
+
+	/**
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .mcp is used)
+	 * @appDir Absolute path to the generated ColdBox app dir, e.g. "<projectRoot>/.build/app"
+	 */
+	struct function generate( required struct discovery, required string appDir ) {
+		return {
+			registrations : copyAndRegisterLocalServers( arguments.discovery, arguments.appDir )
+		}
+	}
+
+	private array function copyAndRegisterLocalServers( required struct discovery, required string appDir ) {
+		var localServers = arguments.discovery.mcp ?: []
+		if ( !localServers.len() ) {
+			return []
+		}
+
+		var mcpDir = normalizePath( arguments.appDir ) & "/mcp"
+		directoryCreate( path = mcpDir, createPath = true, ignoreExists = true )
+
+		var registrations = []
+		for ( var mcpEntry in localServers ) {
+			fileCopy( mcpEntry.path, mcpDir & "/" & getFileFromPath( mcpEntry.path ) )
+			registrations.append( renderRegistration( mcpEntry ) )
+		}
+
+		return registrations
+	}
+
+	private string function renderRegistration( required struct mcpEntry ) {
+		var config = readEntryConfig( arguments.mcpEntry.path )
+		if ( isNull( config ) ) {
+			throw(
+				type    = "BxAgents.InvalidMcpServer",
+				message = "Local MCP server [#arguments.mcpEntry.name#] could not be read"
+			)
+		}
+
+		var description = config.description ?: ""
+		var version = config.version ?: "1.0.0"
+		var cors = config.cors ?: ""
+		var tools = config.tools ?: []
+		tools = isArray( tools ) ? tools : []
+
+		var call = 'mcpServer( "#bxLiteral( arguments.mcpEntry.name )#", "#bxLiteral( description )#", "#bxLiteral( version )#", "#bxLiteral( cors )#" )'
+		for ( var toolName in tools ) {
+			call &= char( 10 ) & '			.registerTool( aiToolRegistry().get( "#bxLiteral( toolName )#" ) )'
+		}
+
+		return call
+	}
+
+	private any function readEntryConfig( required string path ) {
+		try {
+			var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
+			var instance = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
+				.instantiate( arguments.path, context )
+			return instance.configure()
+		} catch ( any e ) {
+			return null
+		}
+	}
+
+	private string function normalizePath( required string path ) {
+		return arguments.path.reReplace( "[\/]+$", "" )
+	}
+
+	private string function bxLiteral( required string value ) {
+		return arguments.value.replace( '"', '""', "all" ).replace( "##", "####", "all" )
+	}
+
+}

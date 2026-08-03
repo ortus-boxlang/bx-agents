@@ -1,0 +1,56 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "cli.Clean", function() {
+
+			beforeEach( function() {
+				variables.buildVerb = new bxagents.models.cli.Build();
+				variables.cleanVerb = new bxagents.models.cli.Clean();
+				variables.fixtures = expandPath( "/fixtures" );
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function newTempProject( required string fixtureName ) {
+				var dir = createTempDirectory( prefix = "bxagents-cli-clean-" );
+				directoryCopy( fixtures & "/" & arguments.fixtureName, dir, true );
+				tempDirs.append( dir );
+				return dir;
+			}
+
+			it( "removes .build and dist without touching source conventions", function() {
+				var projectRoot = newTempProject( "full-project" );
+				buildVerb.run( { projectRoot : projectRoot } );
+				directoryCreate( path = projectRoot & "/dist", createPath = true, ignoreExists = true );
+				fileWrite( projectRoot & "/dist/placeholder.txt", "x" );
+
+				expect( directoryExists( projectRoot & "/.build" ) ).toBeTrue();
+
+				var result = cleanVerb.run( { projectRoot : projectRoot } );
+
+				expect( result.exitCode ).toBe( 0 );
+				expect( directoryExists( projectRoot & "/.build" ) ).toBeFalse();
+				expect( directoryExists( projectRoot & "/dist" ) ).toBeFalse();
+				expect( fileExists( projectRoot & "/Agent.bx" ) ).toBeTrue();
+				expect( directoryExists( projectRoot & "/tools" ) ).toBeTrue();
+			} );
+
+			it( "reports nothing to clean when there is no .build or dist", function() {
+				var projectRoot = newTempProject( "valid-minimal" );
+				var result = cleanVerb.run( { projectRoot : projectRoot } );
+
+				expect( result.exitCode ).toBe( 0 );
+				expect( result.message ).toInclude( "Nothing to clean" );
+			} );
+
+		} );
+	}
+
+}

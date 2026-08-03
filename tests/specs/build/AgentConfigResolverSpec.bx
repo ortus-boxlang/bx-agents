@@ -1,0 +1,97 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "AgentConfigResolver", function() {
+
+			beforeEach( function() {
+				variables.resolver = new bxagents.models.build.AgentConfigResolver();
+				variables.fixtures = expandPath( "/fixtures" );
+			} );
+
+			it( "merges configure() with defaults and stamps the resolved environment", function() {
+				var config = resolver.resolve( projectRoot = fixtures & "/valid-minimal" );
+
+				expect( config.name ).toBe( "minimal-agent" );
+				expect( config.model ).toBe( "openai/gpt-5" );
+				expect( config.environment ).toBe( "development" );
+			} );
+
+			it( "carries Agent.bx's security {} block through unchanged, including under an environment override", function() {
+				var config = resolver.resolve( projectRoot = fixtures & "/with-security" );
+				expect( config.security.inputSanitizer ).toBeTrue();
+				expect( config.security.outputGuard.blockPatterns ).toBe( [ "ssn", "creditCard" ] );
+
+				var prodConfig = resolver.resolve( projectRoot = fixtures & "/with-security", cliEnvironment = "production" );
+				expect( prodConfig.model ).toBe( "openai/gpt-5-mini" );
+				expect( prodConfig.security.inputSanitizer ).toBeTrue();
+				expect( prodConfig.security.outputGuard.blockPatterns ).toBe( [ "ssn", "creditCard" ] );
+			} );
+
+			it( "throws a descriptive error when Agent.bx is missing", function() {
+				expect( function() {
+					resolver.resolve( projectRoot = "/tmp/bx-agents-does-not-exist" );
+				} ).toThrow( "BxAgents.MissingAgentDescriptor" );
+			} );
+
+			it( "throws when Agent.bx's configure() throws", function() {
+				expect( function() {
+					resolver.resolve( projectRoot = fixtures & "/malformed-agent" );
+				} ).toThrow( "BxAgents.InvalidAgentDescriptor" );
+			} );
+
+			it( "applies environment() overrides on top of configure() base", function() {
+				var base = resolver.resolve( projectRoot = fixtures & "/with-environment-override" );
+				expect( base.model ).toBe( "openai/gpt-5" );
+				expect( base.tags ).toBe( [ "base1", "base2" ] );
+				expect( base.environment ).toBe( "development" );
+
+				var prod = resolver.resolve(
+					projectRoot   = fixtures & "/with-environment-override",
+					cliEnvironment = "production"
+				);
+				expect( prod.model ).toBe( "openai/gpt-5-mini" );
+				expect( prod.environment ).toBe( "production" );
+			} );
+
+			it( "array-valued settings are replaced, not appended, by environment overrides", function() {
+				var prod = resolver.resolve(
+					projectRoot   = fixtures & "/with-environment-override",
+					cliEnvironment = "production"
+				);
+
+				// The override array [ "prod1" ] fully replaces [ "base1", "base2" ] - it is
+				// not merged/concatenated with the base array.
+				expect( prod.tags ).toBe( [ "prod1" ] );
+			} );
+
+			it( "merges boxlang.json over configure(), and boxlang-{env}.json over boxlang.json", function() {
+				var base = resolver.resolve( projectRoot = fixtures & "/with-boxlang-json" );
+				expect( base.modelDefaults.temperature ).toBe( 0.7 );
+				expect( base.modelDefaults.maxTokens ).toBe( 1000 );
+
+				var prod = resolver.resolve(
+					projectRoot   = fixtures & "/with-boxlang-json",
+					cliEnvironment = "production"
+				);
+				// production json only overrides temperature - maxTokens survives from the base json
+				expect( prod.modelDefaults.temperature ).toBe( 0.2 );
+				expect( prod.modelDefaults.maxTokens ).toBe( 1000 );
+			} );
+
+			it( "falls back to development when no environment is specified", function() {
+				var config = resolver.resolve( projectRoot = fixtures & "/valid-minimal" );
+				expect( config.environment ).toBe( "development" );
+			} );
+
+			it( "an explicit cliEnvironment takes precedence over the default", function() {
+				var config = resolver.resolve(
+					projectRoot   = fixtures & "/valid-minimal",
+					cliEnvironment = "staging"
+				);
+				expect( config.environment ).toBe( "staging" );
+			} );
+
+		} );
+	}
+
+}

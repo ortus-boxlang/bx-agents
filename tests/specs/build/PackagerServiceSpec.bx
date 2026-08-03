@@ -1,0 +1,142 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "PackagerService", function() {
+
+			beforeEach( function() {
+				variables.packager = new bxagents.models.build.PackagerService();
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function newTempDir( required string prefix ) {
+				var dir = createTempDirectory( prefix = arguments.prefix );
+				tempDirs.append( dir );
+				return dir;
+			}
+
+			private function validManifest() {
+				return {
+					manifestVersion : "1.0.0",
+					generator       : { name : "bx-agents", version : "dev" },
+					agent           : { name : "test-agent", description : "", model : "openai/gpt-5", environment : "development" },
+					files           : []
+				};
+			}
+
+			private function newAppDir() {
+				var dir = newTempDir( "bxagents-packager-app-" );
+				fileWrite( dir & "/Application.bx", 'class { this.name = "test" }' );
+				directoryCreate( path = dir & "/config", createPath = true, ignoreExists = true );
+				fileWrite( dir & "/config/ColdBox.bx", "class { function configure(){} }" );
+				return dir;
+			}
+
+			it( "writes a .bxa, a .sha256, and a manifest.json copy to dist/", function() {
+				var appDir = newAppDir();
+				var distDir = newTempDir( "bxagents-packager-dist-" ) & "/dist";
+				var projectRoot = newTempDir( "bxagents-packager-root-" );
+
+				var result = packager.package( projectRoot, appDir, distDir, validManifest(), "test-agent-1.0.0" );
+
+				expect( fileExists( result.bxa ) ).toBeTrue();
+				expect( fileExists( result.sha256 ) ).toBeTrue();
+				expect( fileExists( result.manifestJson ) ).toBeTrue();
+
+				var shaContent = fileRead( result.sha256 );
+				expect( reFind( "^[0-9a-f]{64}\s", shaContent ) > 0 ).toBeTrue();
+			} );
+
+			it( "produces a byte-identical .bxa across two packagings of the same app dir", function() {
+				var appDir = newAppDir();
+				var distDir = newTempDir( "bxagents-packager-dist-" ) & "/dist";
+				var projectRoot = newTempDir( "bxagents-packager-root-" );
+
+				var first = packager.package( projectRoot, appDir, distDir, validManifest(), "test-agent-1.0.0" );
+				var firstBytes = fileRead( first.bxa );
+
+				var second = packager.package( projectRoot, appDir, distDir, validManifest(), "test-agent-1.0.0" );
+				var secondBytes = fileRead( second.bxa );
+
+				expect( firstBytes ).toBe( secondBytes );
+			} );
+
+			it( "fails (no .bxa produced) when manifestVersion is unset", function() {
+				var appDir = newAppDir();
+				var distDir = newTempDir( "bxagents-packager-dist-" ) & "/dist";
+				var projectRoot = newTempDir( "bxagents-packager-root-" );
+
+				var badManifest = validManifest();
+				badManifest.delete( "manifestVersion" );
+
+				expect( function() {
+					packager.package( projectRoot, appDir, distDir, badManifest, "test-agent-1.0.0" );
+				} ).toThrow( "BxAgents.InvalidManifest" );
+
+				expect( fileExists( distDir & "/test-agent-1.0.0.bxa" ) ).toBeFalse();
+			} );
+
+			it( "fails (no .bxa produced) when manifestVersion is malformed", function() {
+				var appDir = newAppDir();
+				var distDir = newTempDir( "bxagents-packager-dist-" ) & "/dist";
+				var projectRoot = newTempDir( "bxagents-packager-root-" );
+
+				var badManifest = validManifest();
+				badManifest.manifestVersion = "not-a-version";
+
+				expect( function() {
+					packager.package( projectRoot, appDir, distDir, badManifest, "test-agent-1.0.0" );
+				} ).toThrow( "BxAgents.InvalidManifest" );
+
+				expect( fileExists( distDir & "/test-agent-1.0.0.bxa" ) ).toBeFalse();
+			} );
+
+			it( "never lets a secret-shaped config key reach the written manifest.json", function() {
+				var appDir = newAppDir();
+				var distDir = newTempDir( "bxagents-packager-dist-" ) & "/dist";
+				var projectRoot = newTempDir( "bxagents-packager-root-" );
+
+				var manifestWithSecret = validManifest();
+				manifestWithSecret.agent.apiKey = "sk-super-secret-value";
+				manifestWithSecret.agent.settings = { dbPassword : "hunter2" };
+
+				var result = packager.package( projectRoot, appDir, distDir, manifestWithSecret, "test-agent-1.0.0" );
+
+				var manifestContent = fileRead( result.manifestJson );
+				expect( manifestContent ).notToInclude( "sk-super-secret-value" );
+				expect( manifestContent ).notToInclude( "hunter2" );
+				expect( manifestContent ).toInclude( "[REDACTED]" );
+			} );
+
+			it( "respects a project's .bxaignore", function() {
+				var appDir = newAppDir();
+				fileWrite( appDir & "/README.md", "not shipped" );
+				var distDir = newTempDir( "bxagents-packager-dist-" ) & "/dist";
+				var projectRoot = newTempDir( "bxagents-packager-root-" );
+				fileWrite( projectRoot & "/.bxaignore", "*.md" );
+
+				var result = packager.package( projectRoot, appDir, distDir, validManifest(), "test-agent-1.0.0" );
+
+				var entries = createObject( "java", "java.util.zip.ZipFile" ).init( result.bxa );
+				var names = [];
+				var enumeration = entries.entries();
+				while ( enumeration.hasMoreElements() ) {
+					names.append( enumeration.nextElement().getName() );
+				}
+				entries.close();
+
+				expect( names ).notToInclude( "README.md" );
+				expect( names ).toInclude( "Application.bx" );
+			} );
+
+		} );
+	}
+
+}

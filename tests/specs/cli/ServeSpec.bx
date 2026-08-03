@@ -1,0 +1,51 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "cli.Serve", function() {
+
+			beforeEach( function() {
+				variables.buildVerb = new bxagents.models.cli.Build();
+				variables.serveVerb = new bxagents.models.cli.Serve();
+				variables.fixtures = expandPath( "/fixtures" );
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function newTempProject( required string fixtureName ) {
+				var dir = createTempDirectory( prefix = "bxagents-cli-serve-" );
+				directoryCopy( fixtures & "/" & arguments.fixtureName, dir, true );
+				tempDirs.append( dir );
+				return dir;
+			}
+
+			it( "errors cleanly if build hasn't run yet", function() {
+				var projectRoot = newTempProject( "full-project" );
+
+				expect( function() {
+					serveVerb.run( { projectRoot : projectRoot } );
+				} ).toThrow( "BxAgents.NotBuilt" );
+			} );
+
+			it( "errors clearly when boxlang-miniserver is not installed", function() {
+				var projectRoot = newTempProject( "full-project" );
+				buildVerb.run( { projectRoot : projectRoot } );
+
+				// This sandbox doesn't have boxlang-miniserver on PATH - a real
+				// deployment target would, so this specifically exercises the
+				// "not found" failure path rather than skipping it.
+				expect( function() {
+					serveVerb.run( { projectRoot : projectRoot } );
+				} ).toThrow( "BxAgents.MiniServerNotFound" );
+			} );
+
+		} );
+	}
+
+}

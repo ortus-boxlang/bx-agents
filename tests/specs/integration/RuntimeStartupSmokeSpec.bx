@@ -1,0 +1,204 @@
+/**
+ * M13 - Runtime Startup Smoke Test (End-to-End).
+ *
+ * No new production code here - this is the integration harness proving the
+ * generated app actually works: build -> load the generated
+ * GeneratedAgentFactory.bx directly (the same mechanism the `chat` CLI verb
+ * uses) -> aiModel()/aiAgent() construction -> a real agent.run() call
+ * against bx-ai's built-in "mock" provider (no network, no API key).
+ *
+ * Scope note: the full plan called for booting under a real ColdBox +
+ * MiniServer and hitting an HTTP route reaching the generated agent.
+ * `boxlang-miniserver` itself is now available for real (fetched as a
+ * plain jar by the `downloadMiniServer` Gradle task, same distribution
+ * pattern as BoxLang core - see build.gradle), so this file boots a real
+ * MiniServer process (via the same MiniServerLauncher class `serve` uses)
+ * and gets a real HTTP response back. What's still out of reach in this
+ * sandbox is a real ColdBox boot: the generated `Application.bx` calls
+ * `new coldbox.system.Bootstrap(...)`, and coldbox-platform isn't fetched
+ * as a dependency by this module's build (a separate, larger addition than
+ * the miniserver jar this session added) - so an actual HTTP round-trip
+ * into the generated agent, and live cron/WireBox-singleton assertions that
+ * also need a real ColdBox container, remain deferred. See the skipped
+ * specs below for exactly what's still open and why.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "Runtime startup smoke test (slow/e2e lane)", function() {
+
+			beforeEach( function() {
+				variables.pipeline = new bxagents.models.build.BuildPipeline( "e2e-test" );
+				variables.fixtures = expandPath( "/fixtures" );
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function newTempProject( required string fixtureName ) {
+				var dir = createTempDirectory( prefix = "bxagents-e2e-" );
+				directoryCopy( fixtures & "/" & arguments.fixtureName, dir, true );
+				tempDirs.append( dir );
+				return dir;
+			}
+
+			private function loadFactory( required string appDir ) {
+				var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext();
+				return createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
+					.instantiate( arguments.appDir & "/agent/GeneratedAgentFactory.bx", context );
+			}
+
+			it( "builds a real agent via the generated factory and gets a live (mock-provider) response - no network call", function() {
+				var projectRoot = newTempProject( "e2e-smoke" );
+				var result = pipeline.build( projectRoot );
+
+				// Loaded via DynamicClassLoader (same mechanism as the `chat` CLI
+				// verb) rather than through Application.bx - deliberately: the
+				// generated Application.bx unconditionally boots ColdBox on any
+				// template execution in its directory, which isn't available here.
+				var factory = loadFactory( result.appDir );
+				var agent = factory.buildAgent();
+
+				expect( len( agent.getName() ) ).toBeGT( 0 );
+
+				var response = agent.run( "Hello there!" );
+				expect( len( response ) ).toBeGT( 0 );
+			} );
+
+			it( "resolves a model provider's API key from an env var at runtime only - it never appears in the packaged .bxa", function() {
+				var projectRoot = newTempProject( "full-project" );
+				var envVarName = "OPENAI_API_KEY";
+				var secretValue = "sk-test-#createUUID()#";
+
+				// getSystemSetting() (used by bx-ai's own aiService.bx convention
+				// key lookup) checks Java system properties before OS env vars -
+				// a real OS env var can't be planted from inside a running JVM,
+				// but a system property is read the exact same way.
+				var javaSystem = createObject( "java", "java.lang.System" );
+				var previousValue = javaSystem.getProperty( envVarName );
+
+				try {
+					javaSystem.setProperty( envVarName, secretValue );
+
+					var result = pipeline.build( projectRoot );
+					var factory = loadFactory( result.appDir );
+					var agent = factory.buildAgent();
+
+					expect( len( agent.getName() ) ).toBeGT( 0 );
+
+					var packager = new bxagents.models.build.PackagerService();
+					var packageResult = packager.package(
+						projectRoot = projectRoot,
+						appDir      = result.appDir,
+						distDir     = projectRoot & "/dist",
+						manifest    = result.manifest,
+						baseName    = "e2e-secret-test-1.0.0"
+					);
+
+					var bxaBytes = fileRead( packageResult.bxa, "iso-8859-1" );
+					expect( bxaBytes ).notToInclude( secretValue );
+				} finally {
+					if ( isNull( previousValue ) ) {
+						javaSystem.clearProperty( envVarName );
+					} else {
+						javaSystem.setProperty( envVarName, previousValue );
+					}
+				}
+			} );
+
+			it( "launches a real boxlang-miniserver process via MiniServerLauncher, using the exact miniserver.json shape `serve` generates, and gets a real HTTP response back", function() {
+				var libsDir = expandPath( "/libs" );
+				var jarPath = "";
+				for ( var entry in directoryList( libsDir, false, "name", "boxlang-miniserver-*.jar" ) ) {
+					jarPath = libsDir & "/" & entry;
+				}
+				if ( !len( jarPath ) ) {
+					// `./gradlew downloadMiniServer` hasn't been run - skip
+					// rather than fail, same as the module-missing skips above.
+					return;
+				}
+
+				// A plain static webroot, not a built `.build/app` - a real
+				// ColdBox-booted app is exactly what's still out of reach here
+				// (see the xit() below and this file's docblock); this proves
+				// the OTHER half: that `serve`'s own config shape + the
+				// downloaded jar + MiniServerLauncher's Java interop actually
+				// boot a live server process from BoxLang, not just from Java
+				// (see MiniServerLauncherTest for the equivalent JUnit check).
+				var webRoot = newTempProject( "e2e-smoke" ) & "/webroot";
+				directoryCreate( webRoot );
+				fileWrite( webRoot & "/index.bxm", '<bx:script>writeOutput( "ok" );</bx:script>' );
+
+				var port = 39219;
+				var configPath = webRoot & "/../miniserver.json";
+				fileWrite( configPath, jsonSerialize( {
+					port            : port,
+					host            : "127.0.0.1",
+					webRoot         : webRoot,
+					rewrites        : true,
+					rewriteFileName : "index.bxm",
+					healthCheck     : true
+				} ) );
+
+				var process = createObject( "java", "ortus.boxlang.bxagents.build.MiniServerLauncher" )
+					.launch( jarPath, configPath, false );
+
+				try {
+					var response = pollUntilUp( "http://127.0.0.1:#port#/", 20 );
+					expect( response.status_code ).toBe( 200 );
+					expect( trim( response.fileContent ) ).toBe( "ok" );
+				} finally {
+					process.destroy();
+					process.waitFor( 5, createObject( "java", "java.util.concurrent.TimeUnit" ).SECONDS );
+					if ( process.isAlive() ) {
+						process.destroyForcibly();
+					}
+				}
+			} );
+
+			/**
+			 * Polls until a real 200 comes back - NOT just until any HTTP
+			 * response comes back. Confirmed empirically this session: while
+			 * the server process is still starting, a request against its
+			 * port can get a transient 502 ("Connection Failure") back
+			 * instead of a connection-refused exception (this sandbox's
+			 * outbound-HTTP proxy answers for a not-yet-listening localhost
+			 * port rather than letting the TCP-level refusal propagate) - so
+			 * treating "got any response, even 502" as "server is up" gives a
+			 * false negative on a real, working server that just hadn't
+			 * finished booting yet.
+			 */
+			private function pollUntilUp( required string url, required numeric timeoutSeconds ) {
+				var deadline = getTickCount() + ( arguments.timeoutSeconds * 1000 );
+				var lastError = "";
+				while ( getTickCount() < deadline ) {
+					try {
+						bx:http url=arguments.url method="GET" result="httpResult" timeout=2 {}
+						if ( httpResult.status_code == 200 ) {
+							return httpResult;
+						}
+						lastError = "HTTP #httpResult.status_code#"
+					} catch ( any e ) {
+						lastError = e.message;
+					}
+					sleep( 500 );
+				}
+				throw( type = "BxAgents.MiniServerNeverStarted", message = "boxlang-miniserver never came up at [#arguments.url#]: #lastError#" );
+			}
+
+			xit( "a real ColdBox-routed HTTP request reaches the generated agent end-to-end (not just MiniServer's own health check) - SKIPPED: needs coldbox-platform installed as a resolvable `coldbox` module/mapping for the generated Application.bx's `new coldbox.system.Bootstrap(...)` call, which this module's build doesn't fetch (a separate, larger dependency addition than the miniserver jar this session added)", function() {} );
+
+			xit( "a sub-minute test-cron schedule actually fires within a short poll window - SKIPPED: needs a live ColdBox Scheduler running under a real ColdBox boot, same coldbox-platform constraint as above", function() {} );
+
+			xit( "the CLI chat REPL and a serve-launched HTTP route reach the same underlying agent singleton via WireBox - SKIPPED: needs a live ColdBox+WireBox container, same constraint as above", function() {} );
+
+		} );
+	}
+
+}

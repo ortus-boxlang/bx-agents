@@ -1,0 +1,23 @@
+<bx:script>
+	/**
+	 * HTTP-servable TestBox runner for the ColdBox-dependent integration
+	 * specs (tests/specs/integration/coldbox/**). Must be hit via a real HTTP
+	 * request (through boxlang-miniserver) rather than the CLI runTests.bxs
+	 * script: booting a real ColdBox app requires a genuine `cgi` scope,
+	 * which only exists inside an actual web request - confirmed this
+	 * session (a bare CLI script has no `cgi` scope at all, which ColdBox's
+	 * RoutingService needs even just to load the router at startup).
+	 *
+	 * Outputs the same TestBox JSON report shape runTests.bxs writes to disk,
+	 * as the raw HTTP response body, for the calling orchestration script to
+	 * fetch and parse.
+	 */
+	testbox = new testbox.system.TestBox( directory = { mapping: "tests.specs.integration.coldbox", recurse: true } );
+	results = testbox.runRaw();
+
+	jsonReporter = new testbox.system.reports.JSONReporter();
+	jsonReport   = jsonReporter.runReport( results, testbox, {}, true );
+
+	bx:header name="Content-Type" value="application/json";
+	writeOutput( jsonReport );
+</bx:script>

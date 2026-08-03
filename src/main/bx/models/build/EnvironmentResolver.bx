@@ -1,0 +1,34 @@
+/**
+ * Determines the active build-time environment name for a BX Agents project.
+ *
+ * Precedence: explicit CLI flag > `BX_AGENTS_ENV` system property/env var > "development".
+ *
+ * This is distinct from ColdBox's own RUNTIME environment detection (the generated
+ * application reads `getSetting( "environment" )` on its own, per the ColdBox
+ * `environments` convention) — this resolver only decides which `environment()`
+ * override method on `Agent.bx`, and which `boxlang-{env}.json`/`miniserver-{env}.json`
+ * files, the BUILD pipeline should apply.
+ */
+class {
+
+	variables.DEFAULT_ENVIRONMENT = "development";
+
+	/**
+	 * Resolve the active environment name.
+	 *
+	 * @cliEnvironment Environment name passed explicitly (e.g. via a CLI flag). Takes precedence when non-empty.
+	 */
+	string function resolve( string cliEnvironment = "" ) {
+		if ( len( trim( arguments.cliEnvironment ) ) ) {
+			return trim( arguments.cliEnvironment )
+		}
+
+		var envVarValue = getSystemSetting( "BX_AGENTS_ENV", "" )
+		if ( len( trim( envVarValue ) ) ) {
+			return trim( envVarValue )
+		}
+
+		return variables.DEFAULT_ENVIRONMENT
+	}
+
+}

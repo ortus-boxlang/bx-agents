@@ -1,0 +1,68 @@
+/**
+ * `deploy` CLI verb - copies a packaged `.bxa` to a deployment target.
+ *
+ * Only a single "local" target (copy to an arbitrary destination directory -
+ * a shared drive, an artifact folder, etc.) ships in this version. `target`
+ * is deliberately a plain string switch rather than a real plugin interface:
+ * nothing has needed a second target yet, and inventing extension points
+ * nobody can use isn't worth the complexity - add a real `IDeploymentTarget`
+ * dispatch once a second target actually exists.
+ *
+ * Requires a prior `package` (reads the newest `.bxa` in `dist/`).
+ */
+class {
+
+	/**
+	 * @options { projectRoot (required), target (optional, defaults to "local"), destination (required for "local") }
+	 */
+	struct function run( struct options = {} ) {
+		var projectRoot = trim( arguments.options.projectRoot ?: "" )
+		if ( !len( projectRoot ) ) {
+			throw( type = "BxAgents.MissingProjectRoot", message = "`deploy` requires a project root" )
+		}
+
+		var target = len( arguments.options.target ?: "" ) ? arguments.options.target : "local"
+		if ( target != "local" ) {
+			throw(
+				type    = "BxAgents.UnknownDeploymentTarget",
+				message = "Unknown deployment target [#target#] - only 'local' is supported in this version"
+			)
+		}
+
+		var destination = trim( arguments.options.destination ?: "" )
+		if ( !len( destination ) ) {
+			throw( type = "BxAgents.MissingDestination", message = "`deploy --target=local` requires --destination" )
+		}
+
+		var root = projectRoot.reReplace( "[\/]+$", "" )
+		var distDir = root & "/dist"
+
+		if ( !directoryExists( distDir ) ) {
+			throw(
+				type    = "BxAgents.NotPackaged",
+				message = "No dist/ found at [#distDir#] - run `package` first"
+			)
+		}
+
+		var bxaFiles = directoryList( path = distDir, recurse = false, listInfo = "name", sort = "desc", type = "file" )
+			.filter( function( name ) { return name.endsWith( ".bxa" ) } )
+
+		if ( !bxaFiles.len() ) {
+			throw(
+				type    = "BxAgents.NotPackaged",
+				message = "No .bxa found in [#distDir#] - run `package` first"
+			)
+		}
+
+		var bxaName = bxaFiles[ 1 ]
+		var destinationDir = destination.reReplace( "[\/]+$", "" )
+		directoryCreate( path = destinationDir, createPath = true, ignoreExists = true )
+		fileCopy( distDir & "/" & bxaName, destinationDir & "/" & bxaName )
+
+		return {
+			exitCode : 0,
+			message  : "Deployed #bxaName# to #destinationDir#"
+		}
+	}
+
+}

@@ -1,0 +1,457 @@
+/**
+ * Generates the core ColdBox application skeleton for a project's assembled
+ * agent (Build Pipeline Phase 5): `Application.bx`, `config/ColdBox.bx`,
+ * `config/WireBox.bx`, and `agent/GeneratedAgentFactory.bx`.
+ *
+ * `GeneratedAgentFactory.bx` translates the resolved config's `provider/model`
+ * slug (BX Agents' own convention) into bx-ai's separate `aiModel(provider:, params:{model:})`
+ * arguments, and its declared `subAgents` names into nested `aiAgent()` calls,
+ * building leaf subagents before their parents so each parent can pass in the
+ * already-built child instances.
+ *
+ * ColdBox's own `Application.bx`/`config/ColdBox.bx`/`config/WireBox.bx` conventions
+ * follow established ColdBox framework documentation.
+ *
+ * The plain `aiAgent()` BIF's return value is used directly for `route().toAi()`
+ * exposure - no adapter subclass needed. Confirmed by reading real
+ * `coldbox-platform` source (system/web/routing/Router.cfc): `toAi()`'s
+ * `IAiRunnable` contract is just `run(input,params,options)`/
+ * `stream(onChunk,input,params,options)`/`getName()` - exactly bx-ai's own
+ * `IAiRunnable` interface, which `AiAgent` (via `AiBaseRunnable`) already
+ * implements natively.
+ */
+class {
+
+	property name="modelSlugParser";
+	property name="configResolver";
+
+	function init() {
+		variables.modelSlugParser = new bxagents.models.build.ModelSlugParser()
+		variables.configResolver = new bxagents.models.build.AgentConfigResolver()
+		return this
+	}
+
+	/**
+	 * @projectRoot Absolute path to the project root (containing Agent.bx/instructions.md)
+	 * @buildDir Absolute path to the build output directory, e.g. "<projectRoot>/.build/app"
+	 * @resolvedConfig The root project's resolved config, from AgentConfigResolver.resolve()
+	 * @agentInterceptors Names of agent-scope interceptors already copied into "<buildDir>/interceptors" (see InterceptorSplitter), to reference from config/ColdBox.bx
+	 * @gatewayRegistrations Bare `gatewayRegistry().register( aiGateway( ... ) )` statement strings (see GatewayGenerator), inserted into Application.bx's onApplicationStart()
+	 * @mcpRegistrations Bare `mcpServer( ... ).registerTool( ... )` statement strings (see McpGenerator), inserted into Application.bx's onApplicationStart()
+	 * @extraStartupStatements Any other bare statement strings to insert into Application.bx's onApplicationStart(), e.g. `aiToolRegistry().scan( "tools" )` (see BuildPipeline)
+	 */
+	struct function generate(
+		required string projectRoot,
+		required string buildDir,
+		required struct resolvedConfig,
+		array agentInterceptors = [],
+		array gatewayRegistrations = [],
+		array mcpRegistrations = [],
+		array extraStartupStatements = []
+	) {
+		var root = normalizePath( arguments.projectRoot )
+		var appDir = normalizePath( arguments.buildDir )
+
+		directoryCreate( path = appDir, createPath = true, ignoreExists = true )
+		directoryCreate( path = appDir & "/config", createPath = true, ignoreExists = true )
+		directoryCreate( path = appDir & "/agent", createPath = true, ignoreExists = true )
+
+		var appName = len( arguments.resolvedConfig.name ?: "" ) ? arguments.resolvedConfig.name : "BxAi"
+
+		var applicationPath  = appDir & "/Application.bx"
+		var coldboxPath      = appDir & "/config/ColdBox.bx"
+		var wireboxPath      = appDir & "/config/WireBox.bx"
+		var agentFactoryPath = appDir & "/agent/GeneratedAgentFactory.bx"
+
+		var startupStatements = []
+		for ( var statement in arguments.extraStartupStatements ) {
+			startupStatements.append( statement )
+		}
+		for ( var statement in arguments.mcpRegistrations ) {
+			startupStatements.append( statement )
+		}
+		for ( var statement in arguments.gatewayRegistrations ) {
+			startupStatements.append( statement )
+		}
+
+		fileWrite( applicationPath, renderApplication( appName, startupStatements ) )
+		fileWrite( coldboxPath, renderColdboxConfig( appName, arguments.agentInterceptors, arguments.resolvedConfig.security ?: {} ) )
+		fileWrite( wireboxPath, renderWireBox() )
+		fileWrite( agentFactoryPath, renderAgentFactory( root, arguments.resolvedConfig ) )
+
+		var indexPath = appDir & "/index.bxm"
+		fileWrite( indexPath, renderIndex() )
+
+		return {
+			applicationBx : applicationPath,
+			coldboxConfig : coldboxPath,
+			wireboxConfig : wireboxPath,
+			agentFactory  : agentFactoryPath,
+			index         : indexPath
+		}
+	}
+
+	// --------------------------------------------------------------------------
+	// Static file rendering
+	// --------------------------------------------------------------------------
+
+	private string function renderApplication( required string appName, array startupStatements = [] ) {
+		var lines = [
+			"class {",
+			"",
+			'	this.name              = "#bxLiteral( arguments.appName )#"',
+			"	this.sessionManagement = false",
+			"	this.setClientCookies  = false",
+			"",
+			"	COLDBOX_APP_ROOT_PATH  = expandPath( ""/"" )",
+			'	COLDBOX_APP_MAPPING    = ""',
+			'	COLDBOX_CONFIG_MAPPING = ""',
+			'	COLDBOX_APP_KEY        = ""',
+			"",
+			"	function onApplicationStart() {",
+			// Named args deliberately, not positional - coldbox.system.Bootstrap's
+			// real init() signature is
+			// (COLDBOX_CONFIG_FILE, COLDBOX_APP_ROOT_PATH, COLDBOX_APP_KEY, COLDBOX_APP_MAPPING, COLDBOX_FAIL_FAST, COLDBOX_WEB_MAPPING) -
+			// a prior positional call here passed COLDBOX_APP_ROOT_PATH as the
+			// FIRST arg (silently becoming COLDBOX_CONFIG_FILE), breaking config
+			// loading the moment a real ColdBox boot exercised it. Confirmed
+			// against real coldbox.system.Bootstrap source this session.
+			"		application.cbBootstrap = new coldbox.system.Bootstrap(",
+			"			COLDBOX_CONFIG_FILE   = COLDBOX_CONFIG_MAPPING,",
+			"			COLDBOX_APP_ROOT_PATH = COLDBOX_APP_ROOT_PATH,",
+			"			COLDBOX_APP_KEY       = COLDBOX_APP_KEY,",
+			"			COLDBOX_APP_MAPPING   = COLDBOX_APP_MAPPING",
+			"		)",
+			"		application.cbBootstrap.loadColdbox()"
+		]
+
+		for ( var statement in arguments.startupStatements ) {
+			lines.append( "		" & statement )
+		}
+
+		lines.append( "		return true" )
+		lines.append( "	}" )
+		lines.append( "" )
+		lines.append( "	function onRequestStart( required string targetPage ) {" )
+		lines.append( '		if ( structKeyExists( url, "fwreinit" ) ) {' )
+		lines.append( "			application.cbBootstrap.processReinit()" )
+		lines.append( "		}" )
+		lines.append( "		application.cbBootstrap.onRequestStart( arguments.targetPage )" )
+		lines.append( "		return true" )
+		lines.append( "	}" )
+		lines.append( "" )
+		lines.append( "}" )
+		lines.append( "" )
+
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * ColdBox's own onRequestStart() (wired in Application.bx) intercepts and
+	 * fully handles every request before this file's own body would run - this
+	 * exists only as a physical rewrite target for the web server (MiniServer's
+	 * `rewriteFileName` convention defaults to "index.bxm").
+	 */
+	private string function renderIndex() {
+		return "<bx:script>" & char( 10 ) & "</bx:script>" & char( 10 )
+	}
+
+	private string function renderColdboxConfig( required string appName, array agentInterceptors = [], struct security = {} ) {
+		var lines = [
+			"class {",
+			"",
+			"	function configure() {",
+			"		coldbox = {",
+			'			appName : "#bxLiteral( arguments.appName )#"',
+			"		}"
+		]
+
+		if ( arguments.agentInterceptors.len() ) {
+			lines.append( "" )
+			lines.append( "		interceptors = [" )
+			for ( var i = 1; i <= arguments.agentInterceptors.len(); i++ ) {
+				var comma = i < arguments.agentInterceptors.len() ? "," : ""
+				lines.append( '			{ class : "interceptors.#bxLiteral( arguments.agentInterceptors[ i ] )#" }#comma#' )
+			}
+			lines.append( "		]" )
+		}
+
+		// bx-ai's own skillsDirectory setting defaults to "/.agents/skills" - a
+		// DIFFERENT path than BX Agents' own skills/ convention (copied verbatim
+		// by ToolsSkillsCopier, M6), so it must always be pointed at "/skills"
+		// or bx-ai would never find them. security (if any) is forwarded
+		// verbatim in the same block - bx-ai's own SecurityDirector.buildGlobalMiddleware()
+		// turns it into middleware automatically (decision: passthrough only,
+		// no new guardrails/ convention folder for v1 - see the build plan's M8.5).
+		var bxaiSettings = { skillsDirectory : "/skills" }
+		if ( arguments.security.count() ) {
+			bxaiSettings[ "security" ] = arguments.security
+		}
+		lines.append( "" )
+		lines.append( "		moduleSettings = {" )
+		lines.append( "			bxai : #renderLiteral( bxaiSettings )#" )
+		lines.append( "		}" )
+
+		lines.append( "	}" )
+		lines.append( "" )
+		lines.append( "}" )
+		lines.append( "" )
+
+		return lines.toList( char( 10 ) )
+	}
+
+	private string function renderWireBox() {
+		var lines = [
+			'class extends="coldbox.system.ioc.config.Binder" {',
+			"",
+			"	function configure() {",
+			'		map( "GeneratedAgentFactory" ).to( "agent.GeneratedAgentFactory" ).asSingleton()',
+			"",
+			"		// Built once, shared by every consumer (HTTP routes via toAi(), the",
+			"		// CLI chat REPL, etc.) - never construct the agent tree more than once.",
+			"		// `injector`, not a bare getInstance() call - coldbox.system.ioc.config.Binder",
+			"		// has no such delegate/method at all (confirmed against real source this",
+			"		// session); `variables.injector` is the real WireBox Injector reference",
+			"		// Binder itself uses internally for the same purpose.",
+			'		map( "GeneratedAgent" ).toProvider( function() {',
+			'			return injector.getInstance( "GeneratedAgentFactory" ).buildAgent()',
+			"		} ).asSingleton()",
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	// --------------------------------------------------------------------------
+	// GeneratedAgentFactory.bx - the agent/subagent build tree
+	// --------------------------------------------------------------------------
+
+	private string function renderAgentFactory( required string projectRoot, required struct resolvedConfig ) {
+		var built = buildAgentTree( arguments.projectRoot, arguments.projectRoot, arguments.resolvedConfig, "agent" )
+		var body = built.statements.toList( char( 10 ) & char( 10 ) )
+
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" */",
+			"class {",
+			"",
+			"	function buildAgent() {",
+			body,
+			"",
+			"		return agent",
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Recursively builds the leaf-first list of `var <name> = aiAgent(...)`
+	 * statements for a project and its declared `subAgents`.
+	 *
+	 * Per the M3-validated DAG model, subagents live in a single FLAT
+	 * namespace under the root project's own `subagents/` folder - a
+	 * subagent's declared `subAgents` names reference SIBLING entries in
+	 * that same root-level folder, not a folder nested under itself. So
+	 * `rootProjectRoot` (fixed) is threaded through separately from
+	 * `nodePath` (this node's own directory, used to locate its instructions.md).
+	 */
+	private struct function buildAgentTree(
+		required string rootProjectRoot,
+		required string nodePath,
+		required struct resolvedConfig,
+		required string varName
+	) {
+		var declaredSubAgents = arguments.resolvedConfig.subAgents ?: []
+		var subAgentVarNames = []
+		var statements = []
+
+		for ( var subName in declaredSubAgents ) {
+			var subPath = arguments.rootProjectRoot & "/subagents/" & subName
+			if ( !directoryExists( subPath ) ) {
+				throw(
+					type    = "BxAgents.MissingSubagent",
+					message = "Subagent [#subName#] referenced from [#arguments.nodePath#] was not found at [#subPath#]"
+				)
+			}
+
+			var subConfig = variables.configResolver.resolve( projectRoot = subPath )
+			var subVarName = "subagent_" & sanitizeIdentifier( subName )
+			var built = buildAgentTree( arguments.rootProjectRoot, subPath, subConfig, subVarName )
+
+			for ( var stmt in built.statements ) {
+				statements.append( stmt )
+			}
+			subAgentVarNames.append( subVarName )
+		}
+
+		statements.append( renderAgentStatement( arguments.varName, arguments.nodePath, arguments.resolvedConfig, subAgentVarNames ) )
+
+		return { statements : statements }
+	}
+
+	private string function renderAgentStatement(
+		required string varName,
+		required string nodePath,
+		required struct resolvedConfig,
+		required array subAgentVarNames
+	) {
+		var instructionsPath = arguments.nodePath & "/instructions.md"
+		if ( !fileExists( instructionsPath ) ) {
+			throw(
+				type    = "BxAgents.MissingInstructions",
+				message = "No instructions.md found at [#instructionsPath#]"
+			)
+		}
+
+		var modelSlug = arguments.resolvedConfig.model ?: ""
+		if ( !len( modelSlug ) ) {
+			throw(
+				type    = "BxAgents.MissingModel",
+				message = "Agent at [#arguments.nodePath#] has no model configured"
+			)
+		}
+
+		var parsedModel = variables.modelSlugParser.parse( modelSlug )
+		var name = len( arguments.resolvedConfig.name ?: "" ) ? arguments.resolvedConfig.name : "BxAi"
+		var description = arguments.resolvedConfig.description ?: ""
+
+		var lines = []
+		lines.append( "var #arguments.varName# = aiAgent(" )
+		lines.append( '	name : "#bxLiteral( name )#",' )
+		lines.append( '	description : "#bxLiteral( description )#",' )
+		lines.append( '	instructions : fileRead( "#bxLiteral( instructionsPath )#" ),' )
+		lines.append( '	model : aiModel( provider : "#bxLiteral( parsedModel.provider )#", params : { model : "#bxLiteral( parsedModel.model )#" } ),' )
+
+		if ( arguments.subAgentVarNames.len() ) {
+			lines.append( "	subAgents : [ #arguments.subAgentVarNames.toList( ", " )# ]," )
+		} else {
+			lines.append( "	subAgents : []," )
+		}
+
+		var mcpServerUrls = extractMcpServerUrls( arguments.resolvedConfig )
+		if ( mcpServerUrls.len() ) {
+			var quoted = mcpServerUrls.map( function( url ) {
+				return '"#bxLiteral( url )#"'
+			} )
+			lines.append( "	mcpServers : [ #quoted.toList( ", " )# ]" )
+		} else {
+			lines.append( "	mcpServers : []" )
+		}
+
+		lines.append( ")" )
+
+		return lines.toList( char( 10 ) )
+	}
+
+	// --------------------------------------------------------------------------
+	// Helpers
+	// --------------------------------------------------------------------------
+
+	/**
+	 * Reduces a node's own `resolvedConfig.mcpServers` (a plain URL string, or
+	 * a `{ url, name }` struct - per M3's validated shape) into a bare array
+	 * of URL strings for `aiAgent(mcpServers: [...])`. No network connection
+	 * is ever attempted here - reachability is a runtime/warning concern.
+	 * Each subagent has its own resolvedConfig, so this runs per-node, not
+	 * just for the root.
+	 */
+	private array function extractMcpServerUrls( required struct resolvedConfig ) {
+		var entries = arguments.resolvedConfig.mcpServers ?: []
+		var urls = []
+
+		for ( var entry in entries ) {
+			if ( isStruct( entry ) ) {
+				var url = entry.url ?: ""
+				if ( !len( url ) ) {
+					throw(
+						type    = "BxAgents.InvalidMcpServer",
+						message = "An mcpServers entry is missing a 'url'"
+					)
+				}
+				urls.append( url )
+			} else if ( isSimpleValue( entry ) && len( entry ) ) {
+				urls.append( entry )
+			} else {
+				throw(
+					type    = "BxAgents.InvalidMcpServer",
+					message = "An mcpServers entry must be a URL string or a { url, name } struct"
+				)
+			}
+		}
+
+		return urls
+	}
+
+	private string function normalizePath( required string path ) {
+		return arguments.path.reReplace( "[\/]+$", "" )
+	}
+
+	private string function sanitizeIdentifier( required string name ) {
+		var sanitized = arguments.name.reReplace( "[^A-Za-z0-9_]", "_", "all" )
+		return reFind( "^[0-9]", sanitized ) ? "_" & sanitized : sanitized
+	}
+
+	/**
+	 * Escapes a value for embedding as a BoxLang double-quoted string literal:
+	 * doubles `"` (quote escaping) and `#` (prevents accidental interpolation
+	 * if the generated source is later re-parsed/evaluated).
+	 */
+	private string function bxLiteral( required string value ) {
+		// Note: literal "#" is written as "##" in BoxLang source (its own
+		// escape convention), so the search/replace args below are doubled
+		// accordingly: one literal "#" is written "##", one literal "##" is "####".
+		return arguments.value.replace( '"', '""', "all" ).replace( "##", "####", "all" )
+	}
+
+	/**
+	 * Renders a value as a BoxLang literal for embedding in generated source:
+	 * strings are quoted, booleans/numbers are bare, structs/arrays recurse.
+	 * Struct keys are sorted for deterministic output. Type is checked via the
+	 * value's actual Java class (not isNumeric()/isBoolean(), which test
+	 * CASTABILITY in BoxLang - a genuine string like "12345" would otherwise be
+	 * misrendered as a bare literal, silently changing its type).
+	 */
+	private string function renderLiteral( required any value ) {
+		var val = arguments.value
+
+		if ( isStruct( val ) ) {
+			var keys = val.keyArray().sort( "textnocase" )
+			var parts = keys.map( function( k ) {
+				return '"#bxLiteral( k )#" : #renderLiteral( val[ k ] )#'
+			} )
+			return "{ " & parts.toList( ", " ) & " }"
+		}
+
+		if ( isArray( val ) ) {
+			var parts = val.map( function( v ) {
+				return renderLiteral( v )
+			} )
+			return "[ " & parts.toList( ", " ) & " ]"
+		}
+
+		var className = val.getClass().getName()
+		var numericClasses = [
+			"java.lang.Integer", "java.lang.Long", "java.lang.Short",
+			"java.lang.Double", "java.lang.Float",
+			"java.math.BigDecimal", "java.math.BigInteger"
+		]
+
+		if ( className == "java.lang.Boolean" ) {
+			return val ? "true" : "false"
+		}
+
+		if ( numericClasses.contains( className ) ) {
+			return toString( val )
+		}
+
+		return '"#bxLiteral( toString( val ) )#"'
+	}
+
+}

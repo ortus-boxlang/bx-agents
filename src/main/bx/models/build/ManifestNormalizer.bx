@@ -1,0 +1,133 @@
+/**
+ * Normalizes a project's discovered source + resolved config into the
+ * engine-internal manifest (Build Pipeline Phase 4).
+ *
+ * The internal manifest is distinct from the on-disk `manifest.json` written
+ * in M11 - this is the engine's own working representation, with canonical
+ * field ordering, project-relative paths, and per-entry SHA-256 content
+ * hashes (line-ending normalized, so CRLF vs LF checkouts hash identically).
+ * Producing the same manifest (down to the hashes) for an unchanged project
+ * on every build is the core "expensive build, cheap start" guarantee.
+ */
+class {
+
+	property name="generatorVersion";
+
+	/**
+	 * @generatorVersion The BX Agents module version to stamp into generator.version. Defaults to "dev" for local/test use - the real CLI passes its own module version.
+	 */
+	function init( string generatorVersion = "dev" ) {
+		variables.generatorVersion = arguments.generatorVersion
+		return this
+	}
+
+	/**
+	 * @projectRoot Absolute path to the project root
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover()
+	 * @resolvedConfig The resolved config struct from AgentConfigResolver.resolve()
+	 */
+	struct function normalize( required string projectRoot, required struct discovery, required struct resolvedConfig ) {
+		var root = arguments.projectRoot.reReplace( "[\\/]+$", "" )
+		var files = []
+
+		// Sort categories themselves so field/array ordering never depends on
+		// the discovery struct's own (insertion-order) key iteration.
+		var categories = arguments.discovery.keyArray().sort( "textnocase" )
+
+		for ( var category in categories ) {
+			for ( var entry in arguments.discovery[ category ] ) {
+				files.append( {
+					category : category,
+					name     : entry.name,
+					path     : toRelativePath( root, entry.path ),
+					hash     : hashEntry( entry.path )
+				} )
+			}
+		}
+
+		files = sortFiles( files )
+
+		return {
+			manifestVersion : "1.0.0",
+			generator       : { name : "bx-agents", version : variables.generatorVersion },
+			agent           : buildAgentSummary( arguments.resolvedConfig ),
+			files           : files
+		}
+	}
+
+	private struct function buildAgentSummary( required struct config ) {
+		// Only safe, structural fields - never secrets. Secrets stay external
+		// and are resolved by bx-ai itself at runtime (see AgentConfigResolver).
+		return {
+			name        : arguments.config.name ?: "",
+			description : arguments.config.description ?: "",
+			model       : arguments.config.model ?: "",
+			environment : arguments.config.environment ?: ""
+		}
+	}
+
+	private array function sortFiles( required array files ) {
+		var sorted = duplicate( arguments.files )
+		sorted.sort( function( a, b ) {
+			if ( a.category != b.category ) {
+				return a.category < b.category ? -1 : 1
+			}
+			if ( a.path != b.path ) {
+				return a.path < b.path ? -1 : 1
+			}
+			return 0
+		} )
+		return sorted
+	}
+
+	private string function toRelativePath( required string root, required string absolutePath ) {
+		var normalizedRoot = arguments.root.replace( "\", "/", "all" )
+		var normalizedPath = arguments.absolutePath.replace( "\", "/", "all" )
+
+		if ( normalizedPath.startsWith( normalizedRoot ) ) {
+			return normalizedPath.right( len( normalizedPath ) - len( normalizedRoot ) ).reReplace( "^/+", "" )
+		}
+
+		return normalizedPath
+	}
+
+	private string function hashEntry( required string path ) {
+		if ( directoryExists( arguments.path ) ) {
+			return hashDirectory( arguments.path )
+		}
+		return hashFileContent( arguments.path )
+	}
+
+	private string function hashFileContent( required string path ) {
+		return hash( normalizeLineEndings( fileRead( arguments.path ) ), "SHA-256" )
+	}
+
+	/**
+	 * A directory's hash is the hash of "relativePath:contentHash" for every
+	 * file it contains (recursively, sorted for determinism) - so renaming or
+	 * changing any file inside a skill/subagent/module changes the folder's
+	 * own hash too.
+	 */
+	private string function hashDirectory( required string dirPath ) {
+		var normalizedDir = arguments.dirPath.replace( "\", "/", "all" )
+		var filePaths = directoryList( arguments.dirPath, true, "path", "*", "asc", "file" )
+			.map( p => p.replace( "\", "/", "all" ) )
+			.sort( "textnocase" )
+
+		var combined = filePaths
+			.map( p => {
+				var rel = p.right( len( p ) - len( normalizedDir ) ).reReplace( "^/+", "" )
+				return rel & ":" & hashFileContent( p )
+			} )
+			.toList( char( 10 ) )
+
+		return hash( combined, "SHA-256" )
+	}
+
+	private string function normalizeLineEndings( required string content ) {
+		return arguments.content
+			.replace( char( 13 ) & char( 10 ), char( 10 ), "all" )
+			.replace( char( 13 ), char( 10 ), "all" )
+	}
+
+}

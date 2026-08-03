@@ -1,0 +1,37 @@
+/**
+ * `new` CLI verb - thin dispatcher over ProjectScaffolder (M12). CLI-agnostic:
+ * takes an already-parsed options struct (see ModuleConfig.bx's main()),
+ * never touches raw argv or the current working directory itself.
+ */
+class {
+
+	/**
+	 * @options { projectRoot (required, absolute path), name, model (required), description }
+	 */
+	struct function run( struct options = {} ) {
+		var projectRoot = trim( arguments.options.projectRoot ?: "" )
+		if ( !len( projectRoot ) ) {
+			throw( type = "BxAgents.MissingProjectRoot", message = "`new` requires a target directory" )
+		}
+
+		var model = trim( arguments.options.model ?: "" )
+		if ( !len( model ) ) {
+			throw( type = "BxAgents.MissingModel", message = "`new` requires --model, e.g. --model=openai/gpt-5" )
+		}
+
+		var name = trim( arguments.options.name ?: "" )
+		if ( !len( name ) ) {
+			var segments = listToArray( projectRoot.reReplace( "[\/]+$", "" ), "/" )
+			name = segments.len() ? segments[ segments.len() ] : "bx-agent"
+		}
+
+		var scaffolder = new bxagents.models.build.ProjectScaffolder()
+		var result = scaffolder.scaffold( projectRoot, name, model, arguments.options.description ?: "" )
+
+		return {
+			exitCode : 0,
+			message  : "Created new BX Agents project [#name#] at #result.projectRoot#"
+		}
+	}
+
+}

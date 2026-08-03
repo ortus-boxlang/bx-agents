@@ -1,0 +1,63 @@
+/**
+ * `serve` CLI verb - launches `boxlang-miniserver` (a separate standalone
+ * binary, confirmed via ortus-boxlang/boxlang-miniserver source; this module
+ * never boots a server in-process) pointed at a built project's
+ * `.build/app`, via a generated `.build/miniserver.json`.
+ *
+ * Requires a prior `build`. If `boxlang-miniserver` isn't found on PATH,
+ * fails with a clear, actionable error rather than silently doing nothing.
+ */
+class {
+
+	/**
+	 * @options { projectRoot (required, absolute path), port, host }
+	 */
+	struct function run( struct options = {} ) {
+		var projectRoot = trim( arguments.options.projectRoot ?: "" )
+		if ( !len( projectRoot ) ) {
+			throw( type = "BxAgents.MissingProjectRoot", message = "`serve` requires a project root" )
+		}
+
+		var root = projectRoot.reReplace( "[\/]+$", "" )
+		var appDir = root & "/.build/app"
+
+		if ( !directoryExists( appDir ) ) {
+			throw(
+				type    = "BxAgents.NotBuilt",
+				message = "No build found at [#appDir#] - run `build` first"
+			)
+		}
+
+		var executable = createObject( "java", "ortus.boxlang.bxagents.build.MiniServerLauncher" ).findExecutable()
+		if ( isNull( executable ) ) {
+			throw(
+				type    = "BxAgents.MiniServerNotFound",
+				message = "boxlang-miniserver was not found on PATH. Install it (see https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver) and try again."
+			)
+		}
+
+		var port = arguments.options.port ?: 8080
+		var host = arguments.options.host ?: "0.0.0.0"
+		var configPath = root & "/.build/miniserver.json"
+
+		fileWrite( configPath, jsonSerialize( {
+			port            : port,
+			host            : host,
+			webRoot         : appDir,
+			rewrites        : true,
+			rewriteFileName : "index.bxm",
+			healthCheck     : true
+		} ) )
+
+		var process = createObject( "java", "ortus.boxlang.bxagents.build.MiniServerLauncher" ).launch( executable, configPath, true )
+
+		return {
+			exitCode   : 0,
+			message    : "Serving [#appDir#] on #host#:#port#",
+			process    : process,
+			configPath : configPath,
+			port       : port
+		}
+	}
+
+}

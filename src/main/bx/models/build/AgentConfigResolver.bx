@@ -1,0 +1,172 @@
+/**
+ * Resolves a BX Agents project's full build-time configuration (Build Pipeline Phase 1).
+ *
+ * Merges, in increasing precedence:
+ *   1. Agent.bx's configure()
+ *   2. Agent.bx's environment() override method (e.g. development(), production())
+ *   3. boxlang.json
+ *   4. boxlang-{environment}.json
+ *   5. miniserver.json
+ *   6. miniserver-{environment}.json
+ *
+ * Struct keys are merged recursively; arrays and scalars are REPLACED (not appended/merged)
+ * by a higher-precedence value. Secrets are never read/merged here - they stay external
+ * (OS env, .env, platform secret manager) and are resolved by bx-ai itself at runtime.
+ */
+class {
+
+	property name="environmentResolver";
+
+	function init() {
+		variables.environmentResolver = new EnvironmentResolver()
+		return this
+	}
+
+	/**
+	 * Resolve a project's full build-time configuration.
+	 *
+	 * @projectRoot Absolute path to the project root (containing Agent.bx)
+	 * @cliEnvironment Optional environment name passed explicitly (e.g. via a CLI flag)
+	 * @boxContext The current BoxLang execution context. Defaults to the shared runtime context; only override this if you have a more specific one (e.g. from a CLI's main()).
+	 */
+	struct function resolve( required string projectRoot, string cliEnvironment = "", any boxContext ) {
+		var normalizedRoot = arguments.projectRoot.reReplace( "[\\/]+$", "" )
+		var agentBxPath = normalizedRoot & "/Agent.bx"
+		var context = isNull( arguments.boxContext ) ? getDefaultContext() : arguments.boxContext
+
+		if ( !fileExists( agentBxPath ) ) {
+			throw(
+				type    = "BxAgents.MissingAgentDescriptor",
+				message = "No Agent.bx found at [#agentBxPath#]"
+			)
+		}
+
+		var environment			= variables.environmentResolver.resolve( arguments.cliEnvironment )
+		var agentDescriptor		= loadAgentDescriptor( agentBxPath, context )
+
+		var baseConfig			= invokeConfigure( agentDescriptor, agentBxPath )
+		var envOverrides		= invokeEnvironmentOverride( agentDescriptor, environment, agentBxPath )
+
+		var config = deepMerge( baseConfig, envOverrides )
+		config = deepMerge( config, readJsonConfig( normalizedRoot, "boxlang" ) )
+		config = deepMerge( config, readJsonConfig( normalizedRoot, "boxlang", environment ) )
+		config = deepMerge( config, readJsonConfig( normalizedRoot, "miniserver" ) )
+		config = deepMerge( config, readJsonConfig( normalizedRoot, "miniserver", environment ) )
+
+		config[ "environment" ] = environment
+
+		return config
+	}
+
+	private function getDefaultContext() {
+		return createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
+	}
+
+	private function loadAgentDescriptor( required string agentBxPath, required any boxContext ) {
+		try {
+			return createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
+				.instantiate( arguments.agentBxPath, arguments.boxContext )
+		} catch ( any e ) {
+			throw(
+				type    = "BxAgents.InvalidAgentDescriptor",
+				message = "Agent.bx at [#arguments.agentBxPath#] failed to load: #e.message#"
+			)
+		}
+	}
+
+	private function invokeConfigure( required any agentDescriptor, required string agentBxPath ) {
+		try {
+			var result = arguments.agentDescriptor.configure()
+		} catch ( any e ) {
+			throw(
+				type    = "BxAgents.InvalidAgentDescriptor",
+				message = "Agent.bx at [#arguments.agentBxPath#] threw from configure(): #e.message#"
+			)
+		}
+
+		if ( !isStruct( result ) ) {
+			throw(
+				type    = "BxAgents.InvalidAgentDescriptor",
+				message = "Agent.bx at [#arguments.agentBxPath#]'s configure() must return a struct"
+			)
+		}
+
+		return result
+	}
+
+	private function invokeEnvironmentOverride( required any agentDescriptor, required string environment, required string agentBxPath ) {
+		if ( !hasMethod( arguments.agentDescriptor, arguments.environment ) ) {
+			return {}
+		}
+
+		try {
+			var result = invoke( arguments.agentDescriptor, arguments.environment, {} )
+		} catch ( any e ) {
+			throw(
+				type    = "BxAgents.InvalidAgentDescriptor",
+				message = "Agent.bx at [#arguments.agentBxPath#] threw from environment override [#arguments.environment#()]: #e.message#"
+			)
+		}
+
+		if ( !isStruct( result ) ) {
+			throw(
+				type    = "BxAgents.InvalidAgentDescriptor",
+				message = "Agent.bx at [#arguments.agentBxPath#]'s [#arguments.environment#()] override must return a struct"
+			)
+		}
+
+		return result
+	}
+
+	private boolean function hasMethod( required any instance, required string methodName ) {
+		var meta = getMetaData( arguments.instance )
+		var functions = meta.functions ?: []
+		var targetName = arguments.methodName.lcase()
+		return functions.some( fn => fn.name.lcase() == targetName )
+	}
+
+	private struct function readJsonConfig( required string projectRoot, required string baseName, string environment = "" ) {
+		var fileName = len( arguments.environment ) ? "#arguments.baseName#-#arguments.environment#.json" : "#arguments.baseName#.json"
+		var filePath = arguments.projectRoot & "/" & fileName
+
+		if ( !fileExists( filePath ) ) {
+			return {}
+		}
+
+		try {
+			var parsed = jsonDeserialize( fileRead( filePath ) )
+		} catch ( any e ) {
+			throw(
+				type    = "BxAgents.InvalidJsonConfig",
+				message = "Failed to parse [#filePath#] as JSON: #e.message#"
+			)
+		}
+
+		if ( !isStruct( parsed ) ) {
+			throw(
+				type    = "BxAgents.InvalidJsonConfig",
+				message = "[#filePath#] must contain a JSON object at the top level"
+			)
+		}
+
+		return parsed
+	}
+
+	private struct function deepMerge( required struct base, required struct overrides ) {
+		var merged = duplicate( arguments.base )
+
+		for ( var key in arguments.overrides ) {
+			var overrideValue = arguments.overrides[ key ]
+
+			if ( isStruct( overrideValue ) && structKeyExists( merged, key ) && isStruct( merged[ key ] ) ) {
+				merged[ key ] = deepMerge( merged[ key ], overrideValue )
+			} else {
+				// Arrays (and all other scalar values) are REPLACED, not appended/merged
+				merged[ key ] = overrideValue
+			}
+		}
+
+		return merged
+	}
+
+}

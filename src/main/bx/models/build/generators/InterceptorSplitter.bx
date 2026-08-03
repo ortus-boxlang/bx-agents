@@ -1,0 +1,93 @@
+/**
+ * Splits a project's `interceptors/*` convention by their declared `@scope`
+ * annotation (Build Pipeline Phase 5): `@scope( "agent" )` interceptors are
+ * copied into the generated ColdBox app's own `interceptors/` folder, for
+ * `config/ColdBox.bx` to reference; `@scope( "runtime" )` interceptors affect
+ * the whole BoxLang runtime rather than just this app, and are copied
+ * separately so they can be registered the same way this module's own
+ * `ModuleConfig.bx` registers interceptors (a `{class:, properties:}` list) -
+ * that registration step itself happens at `serve`/`build` execution time
+ * (M12/M13), not here.
+ *
+ * An interceptor class with no `@scope` annotation defaults to `"agent"`
+ * (the narrower/safer default - `"runtime"` affects more than this app).
+ */
+class {
+
+	/**
+	 * @appDir Absolute path to the generated ColdBox app dir, e.g. "<projectRoot>/.build/app". Agent-scope interceptors are copied into "<appDir>/interceptors".
+	 * @runtimeDir Absolute path where runtime-scope interceptors are copied, e.g. "<projectRoot>/.build/runtime-interceptors"
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .interceptors is used)
+	 */
+	struct function split( required string appDir, required string runtimeDir, required struct discovery ) {
+		var entries = arguments.discovery.interceptors ?: []
+		var agentEntries = []
+		var runtimeEntries = []
+
+		for ( var entry in entries ) {
+			var scope = resolveScope( entry )
+
+			if ( scope == "runtime" ) {
+				runtimeEntries.append( entry )
+			} else {
+				agentEntries.append( entry )
+			}
+		}
+
+		copyEntries( agentEntries, normalizePath( arguments.appDir ) & "/interceptors" )
+		copyEntries( runtimeEntries, normalizePath( arguments.runtimeDir ) )
+
+		return {
+			agent   : agentEntries.map( e => { name : e.name } ),
+			runtime : runtimeEntries.map( e => { name : e.name } )
+		}
+	}
+
+	private string function resolveScope( required struct entry ) {
+		var instance = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
+			.instantiate( arguments.entry.path, getDefaultContext() )
+		var meta = getMetaData( instance )
+		var annotations = meta.annotations ?: {}
+
+		if ( !annotations.keyExists( "scope" ) ) {
+			return "agent"
+		}
+
+		var value = annotations.scope
+		var normalized = isSimpleValue( value ) ? lcase( trim( value ) ) : ""
+
+		if ( normalized != "agent" && normalized != "runtime" ) {
+			throw(
+				type    = "BxAgents.InvalidInterceptorScope",
+				message = 'Interceptor [#arguments.entry.name#] has an unrecognized @scope value [#value#] - expected "agent" or "runtime"'
+			)
+		}
+
+		return normalized
+	}
+
+	private function getDefaultContext() {
+		return createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
+	}
+
+	private void function copyEntries( required array entries, required string destDir ) {
+		if ( directoryExists( arguments.destDir ) ) {
+			directoryDelete( arguments.destDir, true )
+		}
+
+		if ( !arguments.entries.len() ) {
+			return
+		}
+
+		directoryCreate( path = arguments.destDir, createPath = true, ignoreExists = true )
+
+		for ( var entry in arguments.entries ) {
+			fileCopy( entry.path, arguments.destDir & "/" & getFileFromPath( entry.path ) )
+		}
+	}
+
+	private string function normalizePath( required string path ) {
+		return arguments.path.reReplace( "[\/]+$", "" )
+	}
+
+}

@@ -1,0 +1,175 @@
+/**
+ * Orchestrates the ColdBox-dependent integration specs
+ * (tests/specs/integration/coldbox/**): pre-builds the fixture these specs
+ * boot against, copies the TestBox runner alongside it, launches a real
+ * boxlang-miniserver pointed DIRECTLY at the built app (not at tests/ - the
+ * spec deliberately runs inside the request the app's own real
+ * Application.bx/Bootstrap already boots, reading `application.cbController`
+ * directly, rather than spinning up a second ColdBox instance via
+ * BaseTestCase's VirtualApp - see the spec file's own docblock for why),
+ * hits the runner over a real HTTP request (ColdBox's own RoutingService
+ * needs a genuine `cgi` scope even to load the router at startup - confirmed
+ * this session; CLI mode has none), parses the JSON TestBox report it
+ * returns, and fails the build on any failure/error.
+ *
+ * MUST run from the repo root (same reason as runTests.bxs - BoxLang's own
+ * Application.bx auto-discovery must not re-root relative to this script's
+ * own directory).
+ *
+ * Usage: java -cp <boxlang.jar>:<compiled classes> ortus.boxlang.runtime.BoxRunner \
+ *          --bx-config boxlang.json runColdBoxIntegrationTests.bxs
+ */
+
+repoRoot   = expandPath( "/" )
+appDir     = repoRoot & "tests/.coldbox-app"
+configPath = repoRoot & "boxlang.json"
+port       = 39280
+
+// ------------------------------------------------------------------
+// 1. Pre-build the fixture the spec boots against, then copy the runner
+//    page into the SAME directory so it's served by the app's own real
+//    Application.bx (not a separate test harness webroot).
+// ------------------------------------------------------------------
+if ( directoryExists( appDir ) ) {
+	directoryDelete( appDir, true )
+}
+directoryCreate( appDir, true )
+directoryCopy( expandPath( "/fixtures" ) & "/e2e-coldbox-route", appDir, true )
+
+pipeline = new bxagents.models.build.BuildPipeline( "coldbox-integration-test" )
+buildResult = pipeline.build( appDir )
+println( "+ Built fixture at: " & buildResult.appDir )
+
+fileCopy( repoRoot & "tests/runner-coldbox.bxm", buildResult.appDir & "/runner-coldbox.bxm" )
+
+// ------------------------------------------------------------------
+// 2. Launch a real boxlang-miniserver, pointed directly at the built app,
+//    reusing this project's own boxlang.json for its mappings (/coldbox,
+//    /tests, /testbox, etc. - the runner still needs to resolve
+//    `testbox.system.TestBox` and `tests.specs.integration.coldbox.*`).
+// ------------------------------------------------------------------
+libsDir = expandPath( "/libs" )
+jarPath = ""
+for ( entry in directoryList( libsDir, false, "name", "boxlang-miniserver-*.jar" ) ) {
+	jarPath = libsDir & "/" & entry
+}
+if ( !len( jarPath ) ) {
+	println( "! Skipping ColdBox integration tests: boxlang-miniserver jar not found - run `./gradlew downloadMiniServer` first" )
+	cliExit( 0 )
+}
+
+// rewrites MUST be on: /api/chat/invoke isn't a real file, and ColdBox's own
+// routing only ever gets a chance to see it via the rewrite-to-index.bxm
+// fallback (confirmed empirically this session - with rewrites off, MiniServer
+// 404s that path itself before ColdBox's Application.bx/Router ever run). A
+// real existing file like runner-coldbox.bxm is still served directly.
+miniServerConfigPath = repoRoot & "tests/.coldbox-app-miniserver.json"
+fileWrite( miniServerConfigPath, jsonSerialize( {
+	port            : port,
+	host            : "127.0.0.1",
+	webRoot         : buildResult.appDir,
+	configPath      : configPath,
+	rewrites        : true,
+	rewriteFileName : "index.bxm",
+	healthCheck     : true
+} ) )
+
+process = createObject( "java", "ortus.boxlang.bxagents.build.MiniServerLauncher" ).launch( jarPath, miniServerConfigPath, false )
+
+try {
+	// ------------------------------------------------------------------
+	// 3. Poll until the runner responds with real JSON (a 200) - not just
+	//    any response (this sandbox's proxy can answer a not-yet-listening
+	//    port with a transient 502 - confirmed earlier this session).
+	// ------------------------------------------------------------------
+	runnerUrl = "http://127.0.0.1:#port#/runner-coldbox.bxm"
+	deadline  = getTickCount() + 90000
+	report    = ""
+	lastError = ""
+
+	while ( getTickCount() < deadline ) {
+		try {
+			bx:http url=runnerUrl method="GET" result="httpResult" timeout=60 {}
+			if ( httpResult.status_code == 200 && len( trim( httpResult.fileContent ) ) ) {
+				report = httpResult.fileContent
+				break
+			}
+			lastError = "HTTP #httpResult.status_code#"
+		} catch ( any e ) {
+			lastError = e.message
+		}
+		sleep( 1000 )
+	}
+
+	if ( !len( report ) ) {
+		throw( type = "BxAgents.ColdBoxRunnerNeverStarted", message = "tests/runner-coldbox.bxm never responded: #lastError#" )
+	}
+
+	results = jsonDeserialize( report )
+	totalFail = results.totalFail + results.totalError
+
+	println( "" )
+	println( "ColdBox Integration - Bundles: " & results.totalBundles & " | Suites: " & results.totalSuites & " | Specs: " & results.totalSpecs )
+	println( "Pass: " & results.totalPass & " | Fail: " & results.totalFail & " | Error: " & results.totalError & " | Skipped: " & results.totalSkipped )
+
+	if ( totalFail > 0 ) {
+		for ( bundleStat in results.bundleStats ) {
+			for ( suiteStat in ( bundleStat.suiteStats ?: [] ) ) {
+				for ( specStat in ( suiteStat.specStats ?: [] ) ) {
+					if ( specStat.status == "Failed" || specStat.status == "Error" ) {
+						failDetail = specStat.failMessage ?: ( specStat.error.message ?: "" )
+						println( "  [#specStat.status#] #bundleStat.name# > #suiteStat.name# > #specStat.name#: #failDetail#" )
+					}
+				}
+			}
+		}
+	}
+
+	if ( totalFail > 0 ) {
+		throw(
+			type    = "BxAgents.ColdBoxIntegrationTestsFailed",
+			message = "#totalFail# ColdBox integration spec(s) failed or errored"
+		)
+	}
+
+	// ------------------------------------------------------------------
+	// 4. The real end-to-end proof: a genuine HTTP request against the
+	//    toAi()-registered route, reaching the generated agent for real.
+	//    Done separately (NOT from inside the runner's own request - a
+	//    request made from inside an already-running request, against this
+	//    same single miniserver instance, risks deadlocking its worker
+	//    thread pool, confirmed empirically this session).
+	//
+	//    This ONLY works reliably once WireBox has built the "GeneratedAgent"
+	//    singleton at least once via some OTHER path first (which the specs
+	//    above already did) - confirmed empirically this session that the
+	//    FIRST-EVER request to a toAi() route on a freshly booted app can
+	//    transiently fail with "Function [getInstance] not found" (a
+	//    ColdBox/WireBox lazy-injection race on the Router's own
+	//    `getInstance` delegate - not anything BX Agents' generated code
+	//    controls), but succeeds reliably on every subsequent request. Real
+	//    deployments should treat this the same way: a warm-up request (a
+	//    health check, first real user hit, etc.) before relying on toAi()
+	//    routes under load.
+	// ------------------------------------------------------------------
+	bx:http url="http://127.0.0.1:#port#/api/chat/invoke" method="POST" result="routeResult" timeout=30 {
+		bx:httpparam type="header" name="Content-Type" value="application/json";
+		bx:httpparam type="body" value='{"input":"Hello there!"}';
+	}
+	if ( routeResult.status_code != 200 || !routeResult.fileContent.findNoCase( '"success":true' ) ) {
+		throw(
+			type    = "BxAgents.ToAiRouteDispatchFailed",
+			message = "Expected a successful toAi()/invoke response (HTTP 200, success:true) - got HTTP #routeResult.status_code#: #routeResult.fileContent#"
+		)
+	}
+	println( "+ Confirmed: a real HTTP request through toAi()'s /invoke route reaches the generated agent: " & routeResult.fileContent )
+} finally {
+	process.destroy()
+	process.waitFor( 5, createObject( "java", "java.util.concurrent.TimeUnit" ).SECONDS )
+	if ( process.isAlive() ) {
+		process.destroyForcibly()
+	}
+	if ( fileExists( miniServerConfigPath ) ) {
+		fileDelete( miniServerConfigPath )
+	}
+}
