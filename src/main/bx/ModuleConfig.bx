@@ -147,15 +147,31 @@ class {
 	 * --------------------------------------------------------------------------
 	 * Every BoxLang module may declare `main( args )`; `boxlang module:bxAgents
 	 * <verb> ...` invokes it directly. Confirmed against the official
-	 * BoxLang_Docs MCP source (`askQuestion`): `args` contains ONLY the
-	 * arguments AFTER `module:{name}` - the module name itself is never
-	 * included. So args[1] = the verb, args[2..] = the verb's own
-	 * flags/positional args. Dispatch itself is CLI-agnostic: raw argv is
-	 * parsed once here into a plain options struct, then handed to one thin
-	 * dispatcher class per verb under models/cli/ - every one of those is
-	 * unit-tested directly against that struct shape, without going through
-	 * argv parsing at all (see the build plan's own guidance to skip
-	 * argv-parsing minutiae in tests).
+	 * BoxLang_Docs MCP source (`askQuestion`), and empirically against a real
+	 * `module:` dispatch in this session: `args` contains ONLY the arguments
+	 * AFTER `module:{name}` - the module name itself is never included. So
+	 * args[1] = the verb, args[2..] = the verb's own flags/positional args.
+	 * Dispatch itself is CLI-agnostic: raw argv is parsed once here into a
+	 * plain options struct, then handed to one thin dispatcher class per verb
+	 * under models/cli/ - every one of those is unit-tested directly against
+	 * that struct shape, without going through argv parsing at all (see the
+	 * build plan's own guidance to skip argv-parsing minutiae in tests).
+	 *
+	 * Deliberately hand-rolled rather than BoxLang's own `CLIGetArgs()`/
+	 * `server.cli.parsed` (confirmed this session, via a real module dispatch,
+	 * to already return exactly this same post-verb `args` array under a
+	 * `{positionals, options}` shape): that stock parser has no `--key value`
+	 * (space-separated) form, only `--key=value` - and `--projectRoot /path`
+	 * is the more natural spelling for this CLI's most common flag. None of
+	 * BX Agents' own verbs use boolean flags today, so the stock parser's
+	 * `--no-{opt}` / `--!opt` negation conventions and short-option combining
+	 * (`-abc`) aren't needed yet either; add them here to match BoxLang's own
+	 * conventions if/when a verb grows a real boolean flag.
+	 *
+	 * `--version`/`-v` and `--help`/`-h` (or no verb, or the `help` verb) are
+	 * handled before verb dispatch and never reach a verb class - only
+	 * meaningful as the FIRST token, so they can never collide with a verb's
+	 * own same-named flag (e.g. `package --version=1.0.0`).
 	 *
 	 * @args The raw CLI argv, module name and dispatch token excluded
 	 *
@@ -173,10 +189,40 @@ class {
 			"clean"   : "bxagents.models.cli.Clean"
 		}
 
-		var verbName = arrayLen( arguments.args ) >= 1 ? arguments.args[ 1 ] : ""
+		var verbDescriptions = {
+			"new"     : "Scaffold a new agent project           (--model, [--name], [--description])",
+			"build"   : "Build a project into a generated app    ([--environment])",
+			"serve"   : "Serve a built project via boxlang-miniserver ([--port], [--host])",
+			"chat"    : "Interactive REPL chat with a built agent",
+			"package" : "Package a built project into a .bxa    ([--version])",
+			"deploy"  : "Deploy a packaged .bxa to a target      ([--target], --destination)",
+			"inspect" : "Pretty-print a built project's manifest.json",
+			"clean"   : "Remove a project's .build/ and dist/ output"
+		}
 
-		if ( !len( verbName ) || !verbs.keyExists( verbName ) ) {
-			println( "Usage: boxlang module:bxAgents <#verbs.keyArray().sort( 'textnocase' ).toList( '|' )#> [options]" )
+		var firstToken = arrayLen( arguments.args ) >= 1 ? arguments.args[ 1 ] : ""
+
+		if ( firstToken == "--version" || firstToken == "-v" ) {
+			println( "bxAgents v#this.version#" )
+			return 0
+		}
+
+		if ( firstToken == "--help" || firstToken == "-h" || firstToken == "help" ) {
+			printUsage( verbs, verbDescriptions )
+			return 0
+		}
+
+		if ( !len( firstToken ) ) {
+			printUsage( verbs, verbDescriptions )
+			return 1
+		}
+
+		var verbName = firstToken
+
+		if ( !verbs.keyExists( verbName ) ) {
+			println( "Unknown verb [#verbName#]." )
+			println( "" )
+			printUsage( verbs, verbDescriptions )
 			return 1
 		}
 
@@ -199,6 +245,32 @@ class {
 			println( "Error: #e.message#" )
 			return 1
 		}
+	}
+
+	/**
+	 * Prints the `--help`/no-verb/unknown-verb usage text: module identity,
+	 * one line per verb (sorted alphabetically) with its description, and the
+	 * two global flags handled before verb dispatch. Prints line-by-line
+	 * (rather than building and returning one joined string) since BoxLang
+	 * has no `chr()` BIF available in this module-CLI execution context.
+	 */
+	private void function printUsage( required struct verbs, required struct verbDescriptions ) {
+		println( "bxAgents v#this.version# - #this.description#" )
+		println( "" )
+		println( "Usage: boxlang module:bxAgents <verb> [options]" )
+		println( "" )
+
+		for ( var verbName in arguments.verbs.keyArray().sort( "textnocase" ) ) {
+			println( "  #verbName.lJustify( 9 )# #arguments.verbDescriptions[ verbName ] ?: ''#" )
+		}
+
+		println( "" )
+		println( "Global options:" )
+		println( "  -h, --help     Show this help message and exit" )
+		println( "  -v, --version  Show the module version and exit" )
+		println( "" )
+		println( "Every verb also accepts --projectRoot=<path> (or a bare positional path) to" )
+		println( "target a project other than the current directory." )
 	}
 
 	/**

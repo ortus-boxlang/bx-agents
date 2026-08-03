@@ -8,17 +8,19 @@
  * against bx-ai's built-in "mock" provider (no network, no API key).
  *
  * Scope note: the full plan called for booting under a real ColdBox +
- * MiniServer and hitting an HTTP route. Neither is available in this
- * sandbox - `boxlang-miniserver` isn't on PATH and has no downloadable
- * artifact (confirmed this session; building it from source pulls in a
- * BoxLang 1.17.0 dependency chain this module doesn't otherwise need), and
- * a real ColdBox boot needs `coldbox.system.Bootstrap` on the classpath,
- * which this module's own build doesn't fetch. What IS verified here, live,
- * is everything up to that boundary: the generated code genuinely runs
- * against real bx-ai BIFs, not just structurally-correct-looking source
- * text. The "boots under MiniServer" / "same WireBox singleton serves both
- * chat and HTTP" / "scheduled task fires" assertions are deferred - see the
- * skipped specs below for exactly what's still open and why.
+ * MiniServer and hitting an HTTP route reaching the generated agent.
+ * `boxlang-miniserver` itself is now available for real (fetched as a
+ * plain jar by the `downloadMiniServer` Gradle task, same distribution
+ * pattern as BoxLang core - see build.gradle), so this file boots a real
+ * MiniServer process (via the same MiniServerLauncher class `serve` uses)
+ * and gets a real HTTP response back. What's still out of reach in this
+ * sandbox is a real ColdBox boot: the generated `Application.bx` calls
+ * `new coldbox.system.Bootstrap(...)`, and coldbox-platform isn't fetched
+ * as a dependency by this module's build (a separate, larger addition than
+ * the miniserver jar this session added) - so an actual HTTP round-trip
+ * into the generated agent, and live cron/WireBox-singleton assertions that
+ * also need a real ColdBox container, remain deferred. See the skipped
+ * specs below for exactly what's still open and why.
  */
 class extends="testbox.system.BaseSpec" {
 
@@ -110,9 +112,89 @@ class extends="testbox.system.BaseSpec" {
 				}
 			} );
 
-			xit( "boots the generated app under boxlang-miniserver and gets a 200 on a health/gateway route - SKIPPED: boxlang-miniserver isn't installed and has no downloadable artifact in this environment (confirmed this session against forgebox/ortussolutions downloads; building it from source needs a BoxLang 1.17.0 dependency chain this module doesn't otherwise pull in)", function() {} );
+			it( "launches a real boxlang-miniserver process via MiniServerLauncher, using the exact miniserver.json shape `serve` generates, and gets a real HTTP response back", function() {
+				var libsDir = expandPath( "/libs" );
+				var jarPath = "";
+				for ( var entry in directoryList( libsDir, false, "name", "boxlang-miniserver-*.jar" ) ) {
+					jarPath = libsDir & "/" & entry;
+				}
+				if ( !len( jarPath ) ) {
+					// `./gradlew downloadMiniServer` hasn't been run - skip
+					// rather than fail, same as the module-missing skips above.
+					return;
+				}
 
-			xit( "a sub-minute test-cron schedule actually fires within a short poll window - SKIPPED: needs a live ColdBox Scheduler running under a real ColdBox boot, which needs coldbox-platform on the classpath (not fetched by this module's build)", function() {} );
+				// A plain static webroot, not a built `.build/app` - a real
+				// ColdBox-booted app is exactly what's still out of reach here
+				// (see the xit() below and this file's docblock); this proves
+				// the OTHER half: that `serve`'s own config shape + the
+				// downloaded jar + MiniServerLauncher's Java interop actually
+				// boot a live server process from BoxLang, not just from Java
+				// (see MiniServerLauncherTest for the equivalent JUnit check).
+				var webRoot = newTempProject( "e2e-smoke" ) & "/webroot";
+				directoryCreate( webRoot );
+				fileWrite( webRoot & "/index.bxm", '<bx:script>writeOutput( "ok" );</bx:script>' );
+
+				var port = 39219;
+				var configPath = webRoot & "/../miniserver.json";
+				fileWrite( configPath, jsonSerialize( {
+					port            : port,
+					host            : "127.0.0.1",
+					webRoot         : webRoot,
+					rewrites        : true,
+					rewriteFileName : "index.bxm",
+					healthCheck     : true
+				} ) );
+
+				var process = createObject( "java", "ortus.boxlang.bxagents.build.MiniServerLauncher" )
+					.launch( jarPath, configPath, false );
+
+				try {
+					var response = pollUntilUp( "http://127.0.0.1:#port#/", 20 );
+					expect( response.status_code ).toBe( 200 );
+					expect( trim( response.fileContent ) ).toBe( "ok" );
+				} finally {
+					process.destroy();
+					process.waitFor( 5, createObject( "java", "java.util.concurrent.TimeUnit" ).SECONDS );
+					if ( process.isAlive() ) {
+						process.destroyForcibly();
+					}
+				}
+			} );
+
+			/**
+			 * Polls until a real 200 comes back - NOT just until any HTTP
+			 * response comes back. Confirmed empirically this session: while
+			 * the server process is still starting, a request against its
+			 * port can get a transient 502 ("Connection Failure") back
+			 * instead of a connection-refused exception (this sandbox's
+			 * outbound-HTTP proxy answers for a not-yet-listening localhost
+			 * port rather than letting the TCP-level refusal propagate) - so
+			 * treating "got any response, even 502" as "server is up" gives a
+			 * false negative on a real, working server that just hadn't
+			 * finished booting yet.
+			 */
+			private function pollUntilUp( required string url, required numeric timeoutSeconds ) {
+				var deadline = getTickCount() + ( arguments.timeoutSeconds * 1000 );
+				var lastError = "";
+				while ( getTickCount() < deadline ) {
+					try {
+						bx:http url=arguments.url method="GET" result="httpResult" timeout=2 {}
+						if ( httpResult.status_code == 200 ) {
+							return httpResult;
+						}
+						lastError = "HTTP #httpResult.status_code#"
+					} catch ( any e ) {
+						lastError = e.message;
+					}
+					sleep( 500 );
+				}
+				throw( type = "BxAgents.MiniServerNeverStarted", message = "boxlang-miniserver never came up at [#arguments.url#]: #lastError#" );
+			}
+
+			xit( "a real ColdBox-routed HTTP request reaches the generated agent end-to-end (not just MiniServer's own health check) - SKIPPED: needs coldbox-platform installed as a resolvable `coldbox` module/mapping for the generated Application.bx's `new coldbox.system.Bootstrap(...)` call, which this module's build doesn't fetch (a separate, larger dependency addition than the miniserver jar this session added)", function() {} );
+
+			xit( "a sub-minute test-cron schedule actually fires within a short poll window - SKIPPED: needs a live ColdBox Scheduler running under a real ColdBox boot, same coldbox-platform constraint as above", function() {} );
 
 			xit( "the CLI chat REPL and a serve-launched HTTP route reach the same underlying agent singleton via WireBox - SKIPPED: needs a live ColdBox+WireBox container, same constraint as above", function() {} );
 

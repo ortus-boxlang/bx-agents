@@ -18,6 +18,8 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Launches the `boxlang-miniserver` binary (a separate standalone runtime,
@@ -60,9 +62,15 @@ public class MiniServerLauncher {
 	}
 
 	/**
-	 * Starts `boxlang-miniserver` pointed at the given config file.
+	 * Starts `boxlang-miniserver` pointed at the given config file. If
+	 * {@code executablePath} ends in {@code .jar}, it's launched as
+	 * {@code java -jar <jar> <configPath>} instead of executed directly - the
+	 * same jar-distribution form BoxLang core itself ships in (see
+	 * {@code downloadMiniServer}/{@code downloadBoxLang} in build.gradle),
+	 * used by this module's own integration tests since no native
+	 * `boxlang-miniserver` binary is installed in CI/sandboxes.
 	 *
-	 * @param executablePath Absolute path to the `boxlang-miniserver` executable (see {@link #findExecutable()})
+	 * @param executablePath Absolute path to the `boxlang-miniserver` executable or jar (see {@link #findExecutable()})
 	 * @param configPath     Absolute path to a `miniserver.json` config file
 	 * @param inheritIO      When true, the child process shares this process's stdin/stdout/stderr (so server logs are visible directly)
 	 *
@@ -70,7 +78,15 @@ public class MiniServerLauncher {
 	 */
 	public static Process launch( String executablePath, String configPath, boolean inheritIO ) {
 		try {
-			ProcessBuilder builder = new ProcessBuilder( executablePath, configPath );
+			List<String> command = new ArrayList<>();
+			if ( executablePath.endsWith( ".jar" ) ) {
+				command.add( System.getProperty( "java.home" ) + File.separator + "bin" + File.separator + "java" );
+				command.add( "-jar" );
+			}
+			command.add( executablePath );
+			command.add( configPath );
+
+			ProcessBuilder builder = new ProcessBuilder( command );
 			if ( inheritIO ) {
 				builder.inheritIO();
 			}
