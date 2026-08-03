@@ -15,18 +15,30 @@
  */
 class {
 
+	/**
+	 * Every sibling reference below uses the "Class@bxagents" module-relative
+	 * suffix form, NOT a bare "bxagents.models...." dotted path - confirmed
+	 * empirically this session that the bare form only resolves in THIS
+	 * repo's own dev/test boxlang.json (a hand-declared plain "/bxagents"
+	 * mapping), and fails under a genuinely installed module (which only
+	 * gets BoxLang's own auto-registered "bxModules.bxagents.*"/"@bxagents"
+	 * resolution) - a real, previously-undiscovered bug that broke every CLI
+	 * verb under a real install. This file itself is a nested class (not the
+	 * module root ModuleConfig.bx sits at), so it can't rely on relative
+	 * resolution the way ModuleConfig.bx's own verb dispatch table does.
+	 */
 	function init( string generatorVersion = "dev" ) {
-		variables.configResolver = new bxagents.models.build.AgentConfigResolver()
-		variables.discoverer = new bxagents.models.build.ProjectDiscoverer()
-		variables.validator = new bxagents.models.build.ProjectValidator()
-		variables.manifestNormalizer = new bxagents.models.build.ManifestNormalizer( arguments.generatorVersion )
-		variables.coldboxAppGenerator = new bxagents.models.build.generators.ColdBoxAppGenerator()
-		variables.toolsSkillsCopier = new bxagents.models.build.generators.ToolsSkillsCopier()
-		variables.interceptorSplitter = new bxagents.models.build.generators.InterceptorSplitter()
-		variables.routerGenerator = new bxagents.models.build.generators.RouterGenerator()
-		variables.gatewayGenerator = new bxagents.models.build.generators.GatewayGenerator()
-		variables.schedulerGenerator = new bxagents.models.build.generators.SchedulerGenerator()
-		variables.mcpGenerator = new bxagents.models.build.generators.McpGenerator()
+		variables.configResolver = new "models.build.AgentConfigResolver@bxagents"()
+		variables.discoverer = new "models.build.ProjectDiscoverer@bxagents"()
+		variables.validator = new "models.build.ProjectValidator@bxagents"()
+		variables.manifestNormalizer = new "models.build.ManifestNormalizer@bxagents"( arguments.generatorVersion )
+		variables.coldboxAppGenerator = new "models.build.generators.ColdBoxAppGenerator@bxagents"()
+		variables.toolsSkillsCopier = new "models.build.generators.ToolsSkillsCopier@bxagents"()
+		variables.interceptorSplitter = new "models.build.generators.InterceptorSplitter@bxagents"()
+		variables.routerGenerator = new "models.build.generators.RouterGenerator@bxagents"()
+		variables.gatewayGenerator = new "models.build.generators.GatewayGenerator@bxagents"()
+		variables.schedulerGenerator = new "models.build.generators.SchedulerGenerator@bxagents"()
+		variables.mcpGenerator = new "models.build.generators.McpGenerator@bxagents"()
 		return this
 	}
 

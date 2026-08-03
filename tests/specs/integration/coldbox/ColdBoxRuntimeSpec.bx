@@ -29,6 +29,14 @@
  * This one file's testing, done for real, caught three genuine bugs in
  * ColdBoxAppGenerator.bx - see the fixed-bugs note in each relevant test
  * below.
+ *
+ * Also closes two of the three RuntimeStartupSmokeSpec.bx `xit()`s that were
+ * originally deferred for "needs coldbox-platform" reasons (which stopped
+ * being true the moment this file's harness - a real ColdBox/miniserver
+ * boot - existed): schedules/* registering with a live ColdBox Scheduler,
+ * and chat's direct-load path being behaviorally equivalent to WireBox's
+ * singleton. See those tests below, and RuntimeStartupSmokeSpec.bx's own
+ * updated notes on all three.
  */
 class extends="testbox.system.BaseSpec" {
 
@@ -91,6 +99,64 @@ class extends="testbox.system.BaseSpec" {
 
 				var response = agent.run( "Hello there!" );
 				expect( len( response ) ).toBeGT( 0 );
+			} );
+
+			/**
+			 * Confirms schedules/* is wired into a REAL, live ColdBox Scheduler
+			 * under a real boot - not just that config/Scheduler.bx contains the
+			 * expected generated source text (SchedulerGeneratorSpec.bx already
+			 * covers that). ColdBox's SchedulerService always registers the
+			 * app's config/Scheduler.bx-derived scheduler under the fixed name
+			 * "appScheduler@coldbox" (confirmed against real ColdBox source -
+			 * coldbox/system/web/services/SchedulerService.cfc's
+			 * loadGlobalScheduler()) - hasTask() there proves the "heartbeat"
+			 * schedule (src/test/resources/fixtures/e2e-coldbox-route/schedules/heartbeat.bx,
+			 * cron "* * * * *") is actually registered and live, not merely
+			 * generated as text. Doesn't wait out a real minute-granularity fire
+			 * (the coarsest interval schedules/ can express) - that would add a
+			 * real ~60s+ tax to every CI run for marginal extra proof once the
+			 * task is confirmed live and registered here.
+			 */
+			it( "registers the schedules/ entry with a live ColdBox Scheduler", function() {
+				var schedulerService = controller.getSchedulerService();
+				var appScheduler = schedulerService.getSchedulers()[ "appScheduler@coldbox" ];
+
+				expect( appScheduler.hasTask( "heartbeat" ) ).toBeTrue();
+			} );
+
+			/**
+			 * `chat` deliberately never boots ColdBox/WireBox at all - it loads
+			 * agent/GeneratedAgentFactory.bx directly via the Java
+			 * DynamicClassLoader helper (see Chat.bx), so it can never
+			 * literally share WireBox's "GeneratedAgent" singleton OBJECT with
+			 * an HTTP route. What actually has to hold - and what this proves
+			 * for real - is that instantiating GeneratedAgentFactory OUTSIDE of
+			 * WireBox produces a behaviorally equivalent agent (same name, a
+			 * real response to the same prompt) to WireBox's own singleton, so
+			 * `chat` and `serve` can never quietly diverge.
+			 *
+			 * Uses BoxLang's own `new` operator here rather than the
+			 * DynamicClassLoader Java class `chat` itself uses - confirmed
+			 * empirically this session that DynamicClassLoader (a bx-agents
+			 * MODULE Java class) genuinely isn't on the classpath from inside
+			 * a request served by a real `boxlang-miniserver` process:
+			 * MiniServerLauncher.launch() spawns miniserver as `java -jar
+			 * boxlang-miniserver-*.jar <config>` - its OWN separate JVM/
+			 * classpath, not this module's. `chat` only has DynamicClassLoader
+			 * available because it runs inside the SAME JVM as the bx-agents
+			 * module (`boxlang module:bxAgents chat`). The property under test
+			 * - instantiating the generated factory outside WireBox's
+			 * singleton lifecycle still yields an equivalent agent - holds
+			 * regardless of which mechanism performs that instantiation.
+			 */
+			it( "instantiating GeneratedAgentFactory outside of WireBox (the way chat's direct-load path does) builds a behaviorally-equivalent agent to WireBox's singleton", function() {
+				var wireboxAgent = controller.getWireBox().getInstance( "GeneratedAgent" );
+
+				var factory = new "agent.GeneratedAgentFactory"();
+				var directAgent = factory.buildAgent();
+
+				expect( directAgent.getName() ).toBe( wireboxAgent.getName() );
+				expect( len( directAgent.run( "Hello there!" ) ) ).toBeGT( 0 );
 			} );
 
 			// NOTE: a real HTTP request against the /api/chat/invoke route

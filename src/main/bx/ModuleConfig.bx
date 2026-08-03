@@ -188,15 +188,22 @@ class {
 	 * @return The process exit code (0 success, 1 failure)
 	 */
 	function main( args = [] ) {
+		// Relative to this file's OWN location (the module root) - confirmed
+		// empirically this session that BoxLang resolves a bare dotted path
+		// like "models.cli.New" relative to the module root ONLY from the
+		// file BoxRunner directly invokes as the module's main() (this one);
+		// nested classes (see e.g. New.bx's own reference to
+		// ProjectScaffolder) do NOT get the same relative treatment and must
+		// use the "Class@bxagents" suffix form instead - see BuildPipeline.bx.
 		var verbs = {
-			"new"     : "bxagents.models.cli.New",
-			"build"   : "bxagents.models.cli.Build",
-			"serve"   : "bxagents.models.cli.Serve",
-			"package" : "bxagents.models.cli.Package",
-			"deploy"  : "bxagents.models.cli.Deploy",
-			"inspect" : "bxagents.models.cli.Inspect",
-			"chat"    : "bxagents.models.cli.Chat",
-			"clean"   : "bxagents.models.cli.Clean"
+			"new"     : "models.cli.New",
+			"build"   : "models.cli.Build",
+			"serve"   : "models.cli.Serve",
+			"package" : "models.cli.Package",
+			"deploy"  : "models.cli.Deploy",
+			"inspect" : "models.cli.Inspect",
+			"chat"    : "models.cli.Chat",
+			"clean"   : "models.cli.Clean"
 		}
 
 		var verbDescriptions = {

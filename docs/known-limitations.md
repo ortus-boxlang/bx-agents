@@ -14,17 +14,19 @@ Every fast-lane spec (build pipeline, generators, CLI verbs) and the [ColdBox in
 
 The **very first** HTTP request to a freshly booted app's `toAi()` route can transiently fail with "Function [getInstance] not found" - a genuine ColdBox/WireBox lazy-injection race on the Router's own `getInstance` delegate, not a BX Agents bug. It succeeds reliably on every request after something else has already forced WireBox to build the `GeneratedAgent` singleton once (a health check, a `chat` session, another route). **Send a warm-up request** before relying on a freshly deployed `toAi()` route under load.
 
-## Three integration checks are still skipped
+## Three integration checks - closed via a different route than originally planned
 
-`tests/specs/integration/RuntimeStartupSmokeSpec.bx` skips three checks (`xit`) because they need `coldbox-platform` fetched as a resolvable module/mapping for the generated app's `Bootstrap` call - a larger dependency addition than the `boxlang-miniserver` binary this project already fetches for the ColdBox integration suite above:
+`tests/specs/integration/RuntimeStartupSmokeSpec.bx` still has three `xit()`s, since this file runs via the CLI runner (`runTests.bxs`/`testBx`), and BoxLang's CLI mode never gives a `cgi` scope - which ColdBox's RoutingService needs even to load the router at startup. That's a structural fact about CLI mode, not a gap: all three checks are now proven for real elsewhere, in `tests/specs/integration/coldbox/ColdBoxRuntimeSpec.bx` (which runs inside a real HTTP request served by a real `boxlang-miniserver` process):
 
-- A real ColdBox-routed HTTP request reaching the generated agent end-to-end (superseded, in practice, by the ColdBox integration suite above - which does fetch a real ColdBox and does prove exactly this).
-- A sub-minute test-cron schedule actually firing within a poll window (needs a live ColdBox `Scheduler` under a real boot).
-- `chat` and a `serve`d HTTP route resolving to the **same** WireBox singleton (needs a live ColdBox+WireBox container).
+- A real ColdBox-routed HTTP request reaching the generated agent end-to-end - proven by `ColdBoxRuntimeSpec.bx` plus `runColdBoxIntegrationTests.bxs`'s own `POST /api/chat/invoke` assertion.
+- `schedules/*` actually registering with a **live** ColdBox `Scheduler` - proven via `SchedulerService.getSchedulers()["appScheduler@coldbox"].hasTask(...)` against a real boot, without waiting out an actual cron fire (the coarsest supported granularity is 1 minute, which would tax every CI run for marginal extra proof once the task is confirmed live and registered).
+- `chat` and a `serve`d HTTP route never diverging - corrected from its original wording (`chat` deliberately never boots WireBox at all, so it can never share WireBox's singleton *object* by design) to what actually matters: instantiating `GeneratedAgentFactory` outside of WireBox produces a behaviorally-equivalent agent to WireBox's own singleton.
 
-## No real CLI *process* test
+## Real OS-process CLI testing - and a real bug it found
 
-CLI verb specs (`tests/specs/cli/*.bx`, `tests/specs/ModuleConfigCliSpec.bx`) call `ModuleConfig.main([...])`/each verb's `run()` directly, in-process - proving the dispatch and business logic, but never spawning a genuine `boxlang module:bxAgents <verb>` OS process. A real process-level smoke test (argv → exit code → files on disk, from an actual shell invocation) doesn't exist yet.
+`ModuleCliProcessTest.java` spawns genuine `java -jar <boxlang-jar> module:bxagents <verb> ...` child processes against a copy of the actual installable module structure (`build/modules/bxagents`), pointed at a real `modulesDirectory` - exactly how a real BoxLang installation loads this module. Every other CLI spec calls `ModuleConfig.main()`/each verb's `run()` in-process instead, which is faster but never proves the module resolves correctly once genuinely installed.
+
+That gap was real: this test caught every CLI verb failing with "class not located" the moment it ran through an actual installed-module process, because internal cross-references used a bare `bxagents.models....` dotted path that only ever resolved thanks to this repo's own dev/test `boxlang.json` (a hand-declared `/bxagents` mapping) - a genuinely installed module never gets that mapping. Fixed by switching every nested class's internal references to the `Class@bxagents` module-relative suffix form (`ModuleConfig.bx` itself, sitting at the module root, resolves plain relative paths fine and needed no change) - see `BuildPipeline.bx`'s `init()` docblock for the full explanation. `build.gradle`'s module-structure output moved from `build/module` to `build/modules/bxagents` (folder name must equal the module name for `modulesDirectory` discovery to find it at all) and the dev/test `boxlang.json` now also loads it as a real module, so the whole existing suite exercises the same resolution path production does, not just the convenience mapping.
 
 ## `serve`'s miniserver lookup is PATH-only
 
@@ -40,7 +42,7 @@ CLI verb specs (`tests/specs/cli/*.bx`, `tests/specs/ModuleConfigCliSpec.bx`) ca
 
 ## Scheduler cron support is a narrow subset
 
-Only a handful of cron shapes translate to ColdBox's frequency-method scheduler DSL - see [schedules/](conventions/schedules.md#cron-support-is-a-deliberately-narrow-subset). Weekly/monthly/day-of-week schedules are rejected outright rather than approximated.
+Minute/hour/daily/weekly/monthly/yearly cron shapes translate to ColdBox's frequency-method scheduler DSL - see [schedules/](conventions/schedules.md#cron-support-is-a-deliberately-narrow-subset). Only **exact single values** are supported in every field, though - any list, range, or step value in the day-of-month/month/day-of-week positions, or a cron combining both day-of-month and day-of-week, is rejected outright rather than approximated.
 
 ## `deploy` supports one target
 

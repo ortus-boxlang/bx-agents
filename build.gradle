@@ -175,9 +175,22 @@ spotless {
 }
 
 /**
- * Custom task that creates a build/module folders
- * - Copies the build/libs/BoxLangModuleTemplate-1.0.0.jar to build/module/libs/BoxLangModuleTemplate-1.0.0.jar
- * - Copies the src/main/bx/** to build/module/ folder.
+ * Custom task that creates a build/modules/bxagents folder - a real,
+ * installable module structure.
+ * - Copies the build/libs/bx-agents-{version}.jar to build/modules/bxagents/libs/
+ * - Copies the src/main/bx/** to build/modules/bxagents/ folder.
+ *
+ * Lives at build/modules/bxagents (NOT build/module) so its own folder name
+ * matches the module's registered name ("bxagents", per box.json's
+ * boxlang.moduleName / ModuleConfig.bx's this.mapping) - required for
+ * BoxLang's ModuleService to discover it via a `modulesDirectory` setting
+ * (confirmed empirically: ModuleService keys a module's identity off the
+ * folder name under modulesDirectory, not off any value inside box.json).
+ * boxlang.json's own modulesDirectory points at build/modules for exactly
+ * this reason - see the ModuleConfig.bx / BuildPipeline.bx module-path fix
+ * this same session, which found every CLI verb failed under a genuinely
+ * installed module because internal references only worked against the
+ * OLD build/module folder's ad hoc (non-discoverable) shape.
  */
 task createModuleStructure(type: Copy) {
 	mustRunAfter shadowJar, jar
@@ -214,7 +227,7 @@ task createModuleStructure(type: Copy) {
         into 'docs'
     }
 
-    destinationDir = file( 'build/module' )
+    destinationDir = file( 'build/modules/bxagents' )
 }
 task zipModuleStructure( type: Zip ) {
     group = "distribution"

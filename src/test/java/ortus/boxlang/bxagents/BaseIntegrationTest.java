@@ -61,7 +61,7 @@ public abstract class BaseIntegrationTest {
 	protected static void loadModule( IBoxContext context ) {
 		if ( !runtime.getModuleService().hasModule( moduleName ) ) {
 			System.out.println( "Loading module: " + moduleName );
-			String physicalPath = Paths.get( "./build/module" ).toAbsolutePath().toString();
+			String physicalPath = Paths.get( "./build/modules/bxagents" ).toAbsolutePath().toString();
 			moduleRecord = new ModuleRecord( physicalPath );
 
 			moduleService.getRegistry().put( moduleName, moduleRecord );
