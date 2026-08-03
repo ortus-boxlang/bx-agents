@@ -8,19 +8,29 @@
  * no "does this action exist" check, since any string is a valid prompt -
  * only that `action` is present at all.
  *
- * ColdBox's task scheduler has NO raw cron expression support (confirmed via
- * https://coldbox.ortusbooks.com/digging-deeper/scheduled-tasks - the DSL is
+ * ColdBox's task scheduler has NO raw cron expression support - the DSL is
  * named frequency methods: every()/everyMinute()/everyHour()/everyHourAt()/
- * everyDayAt()/everyWeekOn()/etc., not a cron string). `schedules/*`'s cron
- * convention (already 5-field-validated in M3) is translated to the closest
- * matching frequency method here. Only a deliberately narrow subset of cron
- * shapes is supported for now - every-N-minutes, every-N-hours, every-hour-
- * at-minute, every-minute, and daily-at-time - all built from methods whose
- * exact signature this session could confirm from documentation. Weekly/
- * monthly/day-of-week cron shapes, and any list/range field, are rejected
- * with a clear error rather than guessed at (everyWeekOn()/everyMonthOn()'s
- * `day` argument format - number vs weekday name - wasn't confirmed this
- * session; revisit once coldbox-platform source is available).
+ * everyDayAt()/everyWeekOn()/everyMonthOn()/everyYearOn()/etc., not a cron
+ * string. `schedules/*`'s cron convention (already 5-field-validated in M3)
+ * is translated to the closest matching frequency method here. Exact
+ * signatures confirmed directly against real ColdBox source
+ * (coldbox/system/async/tasks/ScheduledTask.cfc):
+ *   - `everyWeekOn( required numeric dayOfWeek, string time = "00:00" )` -
+ *     dayOfWeek 1 (Monday) -> 7 (Sunday), time as 24h "HH:mm".
+ *   - `everyMonthOn( required numeric day, string time = "00:00" )` - day of
+ *     the month, time as 24h "HH:mm".
+ *   - `everyYearOn( required numeric month, required numeric day, string
+ *     time = "00:00" )` - month 1-12, day of the month, time as "HH:mm".
+ *
+ * Only EXACT single-value fields are supported for minute/hour/day-of-month/
+ * month/day-of-week - lists, ranges, and step values in those positions are
+ * still rejected with a clear error rather than guessed at, matching the
+ * project's general "narrow supported subset, fail loud on anything else"
+ * approach for this generator.
+ *
+ * Cron's day-of-week (0-7, both 0 and 7 mean Sunday, 1=Monday...6=Saturday)
+ * is remapped to ColdBox's 1 (Monday) -> 7 (Sunday) convention - see
+ * mapCronDowToColdBox().
  */
 class {
 
@@ -87,8 +97,42 @@ class {
 		var month = fields[ 4 ]
 		var dow = fields[ 5 ]
 
-		// Only day-of-month/month/day-of-week == "*" shapes are supported for now.
-		if ( dom != "*" || month != "*" || dow != "*" ) {
+		var domIsStar = dom == "*"
+		var monthIsStar = month == "*"
+		var dowIsStar = dow == "*"
+
+		// Minute/hour must always be exact for anything beyond the plain
+		// minute/hour-granularity shapes below - every day-of-month/month/
+		// day-of-week shape fires at one specific time, never on a repeating
+		// sub-daily cadence.
+		if ( !domIsStar || !monthIsStar || !dowIsStar ) {
+			if ( !isExactNumber( minute ) || !isExactNumber( hour ) ) {
+				throwUnsupportedCron( arguments.cron, arguments.scheduleName )
+			}
+
+			var time = '"#padTime( hour )#:#padTime( minute )#"'
+
+			// M H * * D (exact day-of-week, dom/month "*") -> weekly
+			if ( domIsStar && monthIsStar && isExactNumber( dow ) ) {
+				return 'everyWeekOn( #mapCronDowToColdBox( dow, arguments.cron, arguments.scheduleName )#, #time# )'
+			}
+
+			// M H D * * (exact day-of-month, month/dow "*") -> monthly
+			if ( isExactNumber( dom ) && monthIsStar && dowIsStar ) {
+				validateFieldRange( dom, 1, 31, arguments.cron, arguments.scheduleName )
+				return 'everyMonthOn( #dom#, #time# )'
+			}
+
+			// M H D Mo * (exact day-of-month AND month, dow "*") -> yearly
+			if ( isExactNumber( dom ) && isExactNumber( month ) && dowIsStar ) {
+				validateFieldRange( dom, 1, 31, arguments.cron, arguments.scheduleName )
+				validateFieldRange( month, 1, 12, arguments.cron, arguments.scheduleName )
+				return 'everyYearOn( #month#, #dom#, #time# )'
+			}
+
+			// Anything else with a non-"*" dom/month/dow (lists, ranges, step
+			// values, or day-of-month + day-of-week combined) has no
+			// supported equivalent yet.
 			throwUnsupportedCron( arguments.cron, arguments.scheduleName )
 		}
 
@@ -121,10 +165,32 @@ class {
 		return "" // unreachable, keeps the compiler happy about a return on every path
 	}
 
+	/**
+	 * Cron's day-of-week is 0-7 (both 0 and 7 mean Sunday, 1=Monday...6=Saturday).
+	 * ColdBox's everyWeekOn() uses 1 (Monday) -> 7 (Sunday). Validates range
+	 * as part of the remap, since the 5-field cron regex (M3) only checks
+	 * shape, not that a day-of-week value is actually 0-7.
+	 */
+	private numeric function mapCronDowToColdBox( required string dow, required string cron, required string scheduleName ) {
+		validateFieldRange( arguments.dow, 0, 7, arguments.cron, arguments.scheduleName )
+		var numericDow = int( arguments.dow )
+		if ( numericDow == 0 ) {
+			return 7
+		}
+		return numericDow
+	}
+
+	private void function validateFieldRange( required string field, required numeric min, required numeric max, required string cron, required string scheduleName ) {
+		var numericField = int( arguments.field )
+		if ( numericField < arguments.min || numericField > arguments.max ) {
+			throwUnsupportedCron( arguments.cron, arguments.scheduleName )
+		}
+	}
+
 	private void function throwUnsupportedCron( required string cron, required string scheduleName ) {
 		throw(
 			type    = "BxAgents.UnsupportedCronExpression",
-			message = "Schedule [#arguments.scheduleName#] uses a cron expression [#arguments.cron#] that has no equivalent in ColdBox's frequency-method scheduler DSL yet - supported shapes: '*/N * * * *', 'M */N * * *', '* * * * *', 'M * * * *', 'M H * * *' (exact minute/hour only, no lists/ranges/day-of-week/day-of-month/month)"
+			message = "Schedule [#arguments.scheduleName#] uses a cron expression [#arguments.cron#] that has no equivalent in ColdBox's frequency-method scheduler DSL yet - supported shapes: '*/N * * * *', 'M */N * * *', '* * * * *', 'M * * * *', 'M H * * *', 'M H * * D' (weekly, D=0-7), 'M H D * *' (monthly, D=1-31), 'M H D Mo *' (yearly, Mo=1-12) - exact single values only, no lists/ranges/step values, and day-of-month + day-of-week may not both be non-'*'"
 		)
 	}
 

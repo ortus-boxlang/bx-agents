@@ -83,9 +83,43 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( 'everyDayAt( "14:09" )' );
 			} );
 
-			it( "errors clearly on an unsupported (day-of-week-specific) cron expression", function() {
+			it( "translates 'M H * * D' to everyWeekOn(D, ""HH:MM"") - remapping cron's Monday=1 into ColdBox's same convention", function() {
+				var result = generateFor( "schedules-mixed" );
+				var content = fileRead( result.scheduler );
+				expect( content ).toInclude( 'task( "weeklyOnMonday" )' );
+				expect( content ).toInclude( 'everyWeekOn( 1, "09:00" )' );
+			} );
+
+			it( "translates 'M H * * 0' (cron Sunday) to everyWeekOn(7, ...) - ColdBox's Sunday is 7, not 0", function() {
+				var result = generateFor( "schedules-mixed" );
+				var content = fileRead( result.scheduler );
+				expect( content ).toInclude( 'task( "weeklyOnSunday" )' );
+				expect( content ).toInclude( 'everyWeekOn( 7, "08:30" )' );
+			} );
+
+			it( "translates 'M H D * *' to everyMonthOn(D, ""HH:MM"")", function() {
+				var result = generateFor( "schedules-mixed" );
+				var content = fileRead( result.scheduler );
+				expect( content ).toInclude( 'task( "monthlyOnDay" )' );
+				expect( content ).toInclude( 'everyMonthOn( 1, "06:00" )' );
+			} );
+
+			it( "translates 'M H D Mo *' to everyYearOn(Mo, D, ""HH:MM"")", function() {
+				var result = generateFor( "schedules-mixed" );
+				var content = fileRead( result.scheduler );
+				expect( content ).toInclude( 'task( "yearlyOnDate" )' );
+				expect( content ).toInclude( 'everyYearOn( 12, 25, "00:00" )' );
+			} );
+
+			it( "errors clearly on a cron expression combining day-of-month AND day-of-week (no ColdBox equivalent)", function() {
 				expect( function() {
 					generateFor( "schedules-unsupported-cron" );
+				} ).toThrow( "BxAgents.UnsupportedCronExpression" );
+			} );
+
+			it( "errors clearly on a syntactically-valid but out-of-range day-of-week value", function() {
+				expect( function() {
+					generateFor( "schedules-cron-out-of-range" );
 				} ).toThrow( "BxAgents.UnsupportedCronExpression" );
 			} );
 
