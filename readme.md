@@ -1,4 +1,4 @@
-# ⚡︎ BoxLang Module: BX Agents
+# ⚡︎ BX Agents
 
 ```
 |:------------------------------------------------------:|
@@ -16,123 +16,93 @@
 
 <p>&nbsp;</p>
 
-**BX Agents** is the conventions-based AI agent framework for BoxLang. It assembles a
-standard ColdBox application and a BX AI agent at build time from a file-convention project
-(`Agent.bx`, `instructions.md`, `models/`, `tools/`, `skills/`, `subagents/`, `gateways/`,
-`schedules/`, `mcp/`, `interceptors/`), producing a portable application that can be served
-locally or packaged as a `.bxa` artifact.
+**BX Agents** is a conventions-based AI agent framework for [BoxLang](https://boxlang.io), built on top of [ColdBox](https://coldbox.ortusbooks.com) and [BX AI](https://boxlang.ortusbooks.com/boxlang-+-++/modules/bx-ai). Describe an agent with a handful of files and folders - `Agent.bx`, `instructions.md`, and whichever of `tools/`, `skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `models/`, `modules/` it actually needs - and BX Agents assembles a real, runnable ColdBox application from it **at build time**, ready to serve, chat with, or package as a portable `.bxa`.
 
-> This module is under active development. See `changelog.md` for progress. A full quick
-> start and usage guide will land in the `docs/` folder as the build pipeline is completed.
-
-## Install Skills
-
-If you are using the Copilot agent workflow with this template, restore the project skills from `skills-lock.json` when you first start working in the project:
+## Quick Start
 
 ```bash
-npx skills experimental_install
+install-bx-module bx-ai bx-agents      # see docs/getting-started/installation.md
+
+bxAgents new my-agent --model=openai/gpt-5
+cd my-agent
+# edit instructions.md, add tools/, skills/, etc.
+
+bxAgents build      # assembles a real ColdBox app under .build/app
+bxAgents chat       # or: bxAgents serve --port=8080
 ```
 
-Run the command from the project root so the workspace restores the pinned skills defined for this template.
+## Documentation & Examples
 
-## Directory Structure
+- **[docs/](docs/README.md)** - GitBook-style documentation: installation, quick start, one page per convention folder, the build pipeline, the manifest schema, the full CLI reference, deployment/secrets, and known limitations.
+- **[examples/](examples/README.md)** - five real, buildable sample projects (a minimal agent, an HTTP-exposed agent, a scheduled agent, an MCP agent, and a multi-agent team), each demonstrating one convention folder end-to-end.
 
-Here is a brief overview of the directory structure:
+## Why build-time assembly?
 
-- `.github/workflows` - These are the github actions to test and build the module via CI
-- `build` - This is a temporary non-sourced folder that contains the build assets for the module that gradle produces
-- `gradle` - The gradle wrapper and configuration
-- `src` - Where your module source code lives
-- `.cfformat.json` - A CFFormat using the Ortus Standards
-- `.editorconfig` - Smooth consistency between editors
-- `.gitattributes` - Git attributes
-- `.gitignore` - Basic ignores. Modify as needed.
-- `.markdownlint.json` - A linting file for markdown docs
-- `.ortus-java-style.xml` - Ortus Java Style for IntelliJ, VScode, Eclipse.
-- `box.json` - The box.json for your module used to publish to ForgeBox
-- `build.gradle` - The gradle build file for the module
-- `changelog.md` - A nice changelog tracking file
-- `CONTRIBUTING.md` - A contribution guideline
-- `gradlew` - The gradle wrapper
-- `gradlew.bat` - The gradle wrapper for windows
-- `ModuleConfig.cfc` - Your module's configuration. Modify as needed.
-- `readme.md` - Your module's readme. Modify as needed.
-- `settings.gradle` - The gradle settings file
+Most agent frameworks wire tools, skills, routes, and schedules together **at request time**, on every boot. BX Agents does the opposite: `bxAgents build` runs discovery, validation, and code generation exactly once, producing a plain ColdBox application. Booting that application - via `bxAgents serve`, a real [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver) process, or a packaged `.bxa` deployed anywhere BoxLang runs - is then just booting an ordinary app, deterministically and fast.
 
-Here is a brief overview of the source directory structure:
+---
 
-- `build` - Build scripts and assets
-- `main` - The main module source code
-  - `bx` - The BoxLang source code
-  - `ModuleConfig.bx` - The BoxLang module configuration
-    - `bifs` - BoxLang built-in functions
-    - `components` - BoxLang components
-    - `config` - BoxLang configuration, schedulers, etc.
-    - `interceptors` - BoxLang interceptors
-    - `libs` - Java libraries to use that are NOT managed by gradle
-    - `models` - BoxLang models
-  - `java` - Java source code
-  - `resources` - Resources for the module placed in final jar
-- `test`
-  - `bx` - The BoxLang test code
-  - `java` - Java test code
-  - `resources` - Resources for testing
-    - `libs` - BoxLang binary goes here for now.
+## Contributing to BX Agents
 
-## Project Properties
+The rest of this readme covers developing BX Agents itself (this repo), not building an agent with it - see [docs/](docs/README.md) for that.
 
-The project name is defined in the `settings.gradle` file. You can change it there.
-The project version, BoxLang Version and JDK version is defined in the `build.gradle` file. You can change it there.
+### Directory Structure
 
-## Gradle Tasks
+- `.github/workflows` - GitHub Actions to test and build the module via CI
+- `docs/` - GitBook-style user documentation
+- `examples/` - working sample agent projects, built as a CI regression gate (`./gradlew verifyExamples`)
+- `src/main/bx` - the BoxLang source: `ModuleConfig.bx` (CLI entry point), `models/build` (the build pipeline: config resolution, discovery, validation, manifest, and code generators), `models/cli` (one class per CLI verb)
+- `src/main/java` - supporting Java (packager, miniserver launcher, dynamic class loader, key dictionary)
+- `src/test` - JUnit (Java-level) tests and fixtures
+- `tests/` - the TestBox BDD suite (`tests/specs`), including the ColdBox-dependent integration specs under `tests/specs/integration/coldbox`
+- `box.json` - published to ForgeBox; also declares the `bxAgents` native CLI executable
+- `build.gradle` - the Gradle build file, including every verification task below
 
-Before you get started, you need to run the `downloadBoxLang` task in order to download the latest BoxLang binary until we publish to Maven.
+### Gradle Tasks
+
+Before you get started, fetch the BoxLang binary (until this module is published to Maven):
 
 ```bash
-gradle downloadBoxLang
+./gradlew downloadBoxLang
+./gradlew downloadModules        # bx-ai, needed by the TestBox suite
+./gradlew downloadMiniServer     # boxlang-miniserver, needed by the ColdBox integration suite
 ```
 
-This will store the binary under `/src/test/resources/libs` for you to use in your tests and compiler. Here are some basic tasks
+| Task | Description |
+| --- | --- |
+| `build` | The default lifecycle task: `clean`, `assemble`, and others. |
+| `clean` | Deletes the `build` folder. |
+| `compileJava` | Compiles Java source in `src/main/java`. |
+| `test` | Runs the JUnit suite. |
+| `testBx` | Runs the TestBox BDD suite (`tests/specs`, excluding the ColdBox-dependent bundle) via `runTests.bxs`. Requires `testbox/` (`box install`). |
+| `testColdBoxIntegration` | Boots a real `boxlang-miniserver` against a generated app and hits a `toAi()` route over real HTTP, via `runColdBoxIntegrationTests.bxs`. Requires `tests/coldbox/` (`box install` in `tests/`) and the miniserver jar. |
+| `verifyExamples` | Builds every project under `examples/` through the real build pipeline via `verifyExamples.bxs` - a regression net across the whole feature matrix. |
+| `downloadBoxLang` | Downloads the BoxLang binary into `src/test/resources/libs`. |
+| `downloadModules` | Downloads supporting BoxLang modules (bx-ai) into `src/test/resources/modules`. |
+| `downloadMiniServer` | Downloads the `boxlang-miniserver` binary into `src/test/resources/libs`. |
+| `jar` / `shadowJar` | Packages compiled classes/resources into a JAR under `build/libs`. |
+| `javadoc` | Generates Javadocs into `build/docs/javadoc`. |
+| `spotlessApply` / `spotlessCheck` | Formats / checks code formatting. |
+| `tasks` | Lists every available Gradle task. |
 
-| Task                | Description                                                                                                       |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `build`             | The default lifecycle task that triggers the build process, including tasks like `clean`, `assemble`, and others. |
-| `clean`             | Deletes the `build` folders. It helps ensure a clean build by removing any previously generated artifacts.        |
-| `compileJava`       | Compiles Java source code files located in the `src/main/java` directory                                          |
-| `compileTestJava`   | Compiles Java test source code files located in the `src/test/java` directory                                     |
-| `dependencyUpdates` | Checks for updated versions of all dependencies                                                                   |
-| `downloadBoxLang`   | Downloads the latest BoxLang binary for testing                                                                   |
-| `jar`               | Packages your project's compiled classes and resources into a JAR file `build/libs` folder                        |
-| `javadoc`           | Generates the Javadocs for your project and places them in the `build/docs/javadoc` folder                        |
-| `serviceLoader`     | Generates the ServiceLoader file for your project                                                                 |
-| `spotlessApply`     | Runs the Spotless plugin to format the code                                                                       |
-| `spotlessCheck`     | Runs the Spotless plugin to check the formatting of the code                                                      |
-| `tasks`             | Show all the available tasks in the project                                                                       |
-| `test`              | Executes the unit tests in your project and produces the reports in the `build/reports/tests` folder              |
+Run the full local verification pass with:
 
-## Tests
+```bash
+./gradlew shadowJar checkTemplateTokens test testBx testColdBoxIntegration verifyExamples
+```
 
-Please use the `src/test` folder for your unit tests. You can either test using TestBox o JUnit if it's Java.
+### VSCode Tests
 
-## VSCode Tests
+If running tests via the VSCode test explorer, remove the `/src/main/resources` classpath entry first (Java Projects panel → the 3 dots → Configure Classpath), or BoxLang core will try loading service loaders it finds there. Module development only.
 
-If you will be running tests for modules using the VSCode test explorer, then you need to make sure you remove the `/src/main/resources` line item from the configured class path, if not, the BoxLang core will try loading any service loaders it finds in that class path resolution.
+### GitHub Actions Automation
 
-> Please note, this IS ONLY FOR MODULE DEVELOPMENT.
+CI clones, tests, packages, and deploys this module to ForgeBox and the Ortus S3 accounts. The following repository environment variables are required (most are already set at the org level):
 
-Go to the `Java Projects` panel, click on the 3 dots and click on `Configure Classpath`. Remove the `/src/main/resources` line item and hit `APPLY SETTINGS` on the bottom left.
+- `FORGEBOX_TOKEN` - the Ortus ForgeBox API token
+- `AWS_ACCESS_KEY` / `AWS_ACCESS_SECRET` - the S3 credentials
 
-## Github Actions Automation
-
-The github actions will clone, test, package, deploy your module to ForgeBox and the Ortus S3 accounts for API Docs and Artifacts. So please make sure the following environment variables are set in your repository.
-
-> Please note that most of them are already defined at the org level
-
-- `FORGEBOX_TOKEN` - The Ortus ForgeBox API Token
-- `AWS_ACCESS_KEY` - The travis user S3 account
-- `AWS_ACCESS_SECRET` - The travis secret S3
-
-> Please contact the admins in the `#infrastructure` channel for these credentials if needed
+Contact `#infrastructure` for these credentials if needed.
 
 ## Ortus Sponsors
 
