@@ -84,6 +84,33 @@ class extends="testbox.system.BaseSpec" {
 				expect( exitCode ).toBe( 1 );
 			} );
 
+			it( "strips matching surrounding quotes from a --key=`value` assignment, per BoxLang's own CLI convention", function() {
+				var projectRoot = createTempDirectory( prefix = "bxagents-moduleconfig-cli-" );
+				tempDirs.append( projectRoot );
+
+				var exitCode = moduleConfig.main( [
+					"new",
+					"--projectRoot=#projectRoot#/myagent",
+					"--model=openai/gpt-5",
+					'--description="Hello World, quoted!"'
+				] );
+
+				expect( exitCode ).toBe( 0 );
+				var agentSource = fileRead( projectRoot & "/myagent/Agent.bx" );
+				expect( agentSource ).toInclude( 'description : "Hello World, quoted!"' );
+			} );
+
+			it( "parses --no-{opt} / --!opt negation and combined -abc shorthand without breaking dispatch", function() {
+				var projectRoot = newTempProject( "full-project" );
+
+				var exitCode = moduleConfig.main( [
+					"build", "--projectRoot=#projectRoot#", "--debug", "--!verbose", "--no-color", "-abc"
+				] );
+
+				expect( exitCode ).toBe( 0 );
+				expect( directoryExists( projectRoot & "/.build/app" ) ).toBeTrue();
+			} );
+
 		} );
 	}
 

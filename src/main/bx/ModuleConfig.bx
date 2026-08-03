@@ -157,16 +157,26 @@ class {
 	 * that struct shape, without going through argv parsing at all (see the
 	 * build plan's own guidance to skip argv-parsing minutiae in tests).
 	 *
-	 * Deliberately hand-rolled rather than BoxLang's own `CLIGetArgs()`/
-	 * `server.cli.parsed` (confirmed this session, via a real module dispatch,
-	 * to already return exactly this same post-verb `args` array under a
-	 * `{positionals, options}` shape): that stock parser has no `--key value`
-	 * (space-separated) form, only `--key=value` - and `--projectRoot /path`
-	 * is the more natural spelling for this CLI's most common flag. None of
-	 * BX Agents' own verbs use boolean flags today, so the stock parser's
-	 * `--no-{opt}` / `--!opt` negation conventions and short-option combining
-	 * (`-abc`) aren't needed yet either; add them here to match BoxLang's own
-	 * conventions if/when a verb grows a real boolean flag.
+	 * Argument parsing follows BoxLang's own documented CLI conventions
+	 * exactly (see https://boxlang.ortusbooks.com/getting-started/running-boxlang/cli-scripting#parsed-arguments)
+	 * - the same rules `CLIGetArgs()`/`server.cli.parsed` apply: `--option`
+	 * (boolean true), `--option=value` / `--option="quoted value"`,
+	 * `-o=value` / `-o` (short form), `-abc` (combined single-char
+	 * shorthand), and `--!option` / `--no-option` (negation, sets false).
+	 * Everything else becomes a positional. There is deliberately no
+	 * `--key value` (space-separated) form - BoxLang's own convention
+	 * doesn't have one either.
+	 *
+	 * `CLIGetArgs()`/`server.cli.parsed` themselves are NOT used here even
+	 * though they already return this same shape: both are tied to the
+	 * runtime's real process-launch argv, with no equivalent that parses an
+	 * arbitrary array (confirmed via the official BoxLang_Docs source - no
+	 * such BIF/Java class exists). That would make it impossible to call
+	 * `main([...])` directly with a synthetic array in a unit test and get
+	 * that array parsed - which every dispatch test in
+	 * `ModuleConfigCliSpec.bx` depends on. `parseCliOptions()` below applies
+	 * the identical documented rules to the `args` array `main()` actually
+	 * receives, so it's testable AND matches the stock convention.
 	 *
 	 * `--version`/`-v` and `--help`/`-h` (or no verb, or the `help` verb) are
 	 * handled before verb dispatch and never reach a verb class - only
@@ -275,41 +285,75 @@ class {
 
 	/**
 	 * Parses a verb's own argv (module name + verb already stripped) into a
-	 * plain options struct: `--key=value` and `--key value` both set `key`;
-	 * a bare `--flag` (no value, or followed by another `--flag`) sets it to
-	 * `true`; the first non-flag token becomes `_positional` (used as a
-	 * fallback project path by `resolveProjectRoot()`).
+	 * plain options struct, following BoxLang's own documented CLI argument
+	 * conventions (see `main()`'s docblock for why this exists instead of
+	 * just calling `CLIGetArgs()`):
+	 *
+	 * - `--option`          -> `true`
+	 * - `--option=value`    -> `value` (surrounding `"..."` / `'...'` stripped)
+	 * - `-o=value`          -> short form with a value
+	 * - `-o`                -> short form, `true`
+	 * - `-abc`              -> combined single-char shorthand: a/b/c all `true`
+	 * - `--!option`         -> negation, `false`
+	 * - `--no-option`       -> negation, `false`
+	 * - anything else       -> a positional; the first one becomes
+	 *                          `_positional` (a fallback project path for
+	 *                          `resolveProjectRoot()`)
+	 *
+	 * Repeated options override earlier ones, matching the documented "last
+	 * one wins" rule.
 	 */
 	private struct function parseCliOptions( required array rawArgs ) {
 		var options = {}
-		var i = 1
 
-		while ( i <= arrayLen( arguments.rawArgs ) ) {
-			var token = arguments.rawArgs[ i ]
-
-			if ( token.startsWith( "--" ) ) {
+		for ( var token in arguments.rawArgs ) {
+			if ( token.startsWith( "--!" ) ) {
+				options[ token.right( len( token ) - 3 ) ] = false
+			} else if ( token.startsWith( "--no-" ) ) {
+				options[ token.right( len( token ) - 5 ) ] = false
+			} else if ( token.startsWith( "--" ) ) {
 				var body = token.right( len( token ) - 2 )
 				var eqPos = body.find( "=" )
-
 				if ( eqPos ) {
-					options[ body.left( eqPos - 1 ) ] = body.right( len( body ) - eqPos )
+					options[ body.left( eqPos - 1 ) ] = stripQuotes( body.right( len( body ) - eqPos ) )
 				} else {
-					var hasValue = i < arrayLen( arguments.rawArgs ) && !arguments.rawArgs[ i + 1 ].startsWith( "--" )
-					if ( hasValue ) {
-						options[ body ] = arguments.rawArgs[ i + 1 ]
-						i++
-					} else {
-						options[ body ] = true
+					options[ body ] = true
+				}
+			} else if ( token.startsWith( "-" ) && len( token ) > 1 ) {
+				var body = token.right( len( token ) - 1 )
+				var eqPos = body.find( "=" )
+				if ( eqPos ) {
+					options[ body.left( eqPos - 1 ) ] = stripQuotes( body.right( len( body ) - eqPos ) )
+				} else if ( len( body ) > 1 ) {
+					for ( var charIndex = 1; charIndex <= len( body ); charIndex++ ) {
+						options[ body.mid( charIndex, 1 ) ] = true
 					}
+				} else {
+					options[ body ] = true
 				}
 			} else if ( !options.keyExists( "_positional" ) ) {
 				options[ "_positional" ] = token
 			}
-
-			i++
 		}
 
 		return options
+	}
+
+	/**
+	 * Strips one layer of matching surrounding `"..."` / `'...'` quotes from
+	 * a `--option="value"` / `--option='value'` assignment, per BoxLang's own
+	 * documented convention.
+	 */
+	private string function stripQuotes( required string value ) {
+		if ( len( arguments.value ) < 2 ) {
+			return arguments.value
+		}
+		var first = arguments.value.left( 1 )
+		var last  = arguments.value.right( 1 )
+		if ( ( first == '"' && last == '"' ) || ( first == "'" && last == "'" ) ) {
+			return arguments.value.right( len( arguments.value ) - 1 ).left( len( arguments.value ) - 2 )
+		}
+		return arguments.value
 	}
 
 	/**
