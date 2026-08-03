@@ -1,0 +1,179 @@
+/**
+ * Runs a project's own `tests/specs` via TestBox - the `test` CLI verb's
+ * real implementation (M15). Generalizes this repo's own `runTests.bxs`
+ * pattern (`new testbox.system.TestBox(...)` + `JSONReporter`) into a
+ * reusable service that can run ANY project's tests, not just this module's
+ * own.
+ *
+ * Spawns a FRESH BoxLang child process (via TestRunnerLauncher.java) rather
+ * than trying to point TestBox at the target project's `tests/specs` from
+ * within the currently-running process: confirmed empirically this session
+ * that `Configuration.registerMapping()` called mid-script does not reliably
+ * propagate to TestBox's own directory-mapping-based bundle discovery within
+ * the SAME script execution (TestBox's `directory.mapping` is ALWAYS a
+ * dotted path resolved against a REGISTERED mapping - there's no raw
+ * filesystem path form). A fresh process, launched with a purpose-built
+ * `boxlang.json` (a `/specs` mapping pointed straight at the target
+ * project's `tests/specs`, a `/testbox` mapping pointed at its installed
+ * `tests/testbox`, and this SAME runtime's own `modulesDirectory` list
+ * carried over so `bxModules.bxagents.*` - e.g. `BaseAgentSpec` - resolves
+ * identically) sidesteps this entirely, at the cost of one process spawn per
+ * `test` run.
+ *
+ * The currently-running BoxLang jar's own path is located by scanning
+ * `java.class.path` for a `boxlang-*.jar` entry (excluding `boxlang-miniserver-*.jar`)
+ * rather than via `BoxRuntime.class`'s own codeSource: confirmed empirically
+ * this session that `boxlang-miniserver-*.jar` is a fat jar bundling its OWN
+ * copy of `ortus.boxlang.runtime.BoxRuntime`, so when both jars are on the
+ * same classpath (as they are for this project's own dev/test suite, which
+ * needs the miniserver jar for `serve`-related specs), the classloader can
+ * resolve `BoxRuntime.class` to the MINISERVER jar instead of the real
+ * runtime jar - silently launching `MiniServer.main` (which rejects
+ * `--bx-config` and exits 1 immediately, before any BoxLang script or report
+ * is ever produced) instead of `BoxRunner.main`. Falls back to the old
+ * codeSource trick only if no matching classpath entry is found (e.g. some
+ * non-standard launch shape).
+ */
+class {
+
+	/**
+	 * @projectRoot Absolute path to the project root (containing tests/specs)
+	 *
+	 * @return { exitCode, totalBundles, totalSuites, totalSpecs, totalPass, totalFail, totalError, totalSkipped, failures: [ { bundle, suite, spec, message } ] }
+	 */
+	struct function run( required string projectRoot ) {
+		var root = arguments.projectRoot.reReplace( "[\/]+$", "" )
+		var testsDir = root & "/tests"
+		var specsDir = testsDir & "/specs"
+
+		if ( !directoryExists( specsDir ) ) {
+			throw(
+				type    = "BxAgents.NoTestsFound",
+				message = "No tests/specs found at [#specsDir#] - scaffold one via `new`, or add tests/specs/*.bx yourself"
+			)
+		}
+
+		if ( !directoryExists( testsDir & "/testbox" ) ) {
+			throw(
+				type    = "BxAgents.TestBoxNotInstalled",
+				message = "testbox/ not found under [#testsDir#] - run `box install` inside tests/ first"
+			)
+		}
+
+		var workDir = getTempDirectory() & "/bxagents-test-" & createUUID()
+		directoryCreate( path = workDir, createPath = true, ignoreExists = true )
+
+		try {
+			var reportPath = workDir & "/results.json"
+			var configPath = workDir & "/boxlang.json"
+			var scriptPath = workDir & "/runner.bxs"
+
+			fileWrite( configPath, jsonSerialize( {
+				mappings         : {
+					"/specs"   : specsDir,
+					"/testbox" : testsDir & "/testbox"
+				},
+				modulesDirectory : currentModulesDirectory()
+			} ) )
+
+			fileWrite( scriptPath, renderRunnerScript( reportPath ) )
+
+			var javaBin = createObject( "java", "java.lang.System" ).getProperty( "java.home" ) & "/bin/java"
+			var process = createObject( "java", "ortus.boxlang.bxagents.build.TestRunnerLauncher" )
+				.launch( javaBin, currentBoxLangJarPath(), configPath, scriptPath, root )
+
+			process.waitFor()
+			var exitCode = process.exitValue()
+
+			var report = fileExists( reportPath ) ? jsonDeserialize( fileRead( reportPath ) ) : {}
+
+			return {
+				exitCode     : exitCode,
+				totalBundles : report.totalBundles ?: 0,
+				totalSuites  : report.totalSuites ?: 0,
+				totalSpecs   : report.totalSpecs ?: 0,
+				totalPass    : report.totalPass ?: 0,
+				totalFail    : report.totalFail ?: 0,
+				totalError   : report.totalError ?: 0,
+				totalSkipped : report.totalSkipped ?: 0,
+				failures     : extractFailures( report )
+			}
+		} finally {
+			if ( directoryExists( workDir ) ) {
+				directoryDelete( workDir, true )
+			}
+		}
+	}
+
+	private array function extractFailures( required struct report ) {
+		var failures = []
+		for ( var bundleStat in ( arguments.report.bundleStats ?: [] ) ) {
+			for ( var suiteStat in ( bundleStat.suiteStats ?: [] ) ) {
+				for ( var specStat in ( suiteStat.specStats ?: [] ) ) {
+					if ( specStat.status == "Failed" || specStat.status == "Error" ) {
+						failures.append( {
+							bundle  : bundleStat.name,
+							suite   : suiteStat.name,
+							spec    : specStat.name,
+							message : specStat.failMessage ?: ( specStat.error.message ?: "" )
+						} )
+					}
+				}
+			}
+		}
+		return failures
+	}
+
+	private string function currentBoxLangJarPath() {
+		var pathSeparator = createObject( "java", "java.io.File" ).pathSeparator
+		var classpath = createObject( "java", "java.lang.System" ).getProperty( "java.class.path" )
+		for ( var entry in listToArray( classpath, pathSeparator ) ) {
+			var name = getFileFromPath( entry )
+			if ( name.reFindNoCase( "^boxlang-.*\.jar$" ) && !name.reFindNoCase( "miniserver" ) ) {
+				return entry
+			}
+		}
+		// Fallback: the classic "which jar was this class loaded from" trick -
+		// only reliable when boxlang-miniserver-*.jar isn't also on the classpath.
+		return createObject( "java", "ortus.boxlang.runtime.BoxRuntime" )
+			.getClass().getProtectionDomain().getCodeSource().getLocation().getPath()
+	}
+
+	private array function currentModulesDirectory() {
+		var configured = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" )
+			.getInstance().getConfiguration().modulesDirectory
+		var dirs = []
+		for ( var dir in configured ) {
+			dirs.append( toString( dir ) )
+		}
+		return dirs
+	}
+
+	/**
+	 * Mirrors runTests.bxs's own TestBox invocation, parameterized for the
+	 * "/specs" mapping the generated boxlang.json declares, and writing its
+	 * JSON report to a caller-chosen path instead of a fixed repo-relative
+	 * one. Uses TestBox's JSONReporter (not JUnitReporter/ANTJUnitReporter) -
+	 * both call `encodeForXMLAttribute()`, not implemented in the BoxLang
+	 * version this project currently targets.
+	 */
+	private string function renderRunnerScript( required string reportPath ) {
+		var lines = [
+			'testbox = new testbox.system.TestBox( directory = { mapping: "specs", recurse: true } )',
+			"results = testbox.runRaw()",
+			"jsonReporter = new testbox.system.reports.JSONReporter()",
+			"jsonReport = jsonReporter.runReport( results, testbox, {}, true )",
+			'fileWrite( "#bxLiteral( arguments.reportPath )#", jsonReport )',
+			"totalFail = results.getTotalFail() + results.getTotalError()",
+			"if ( totalFail > 0 ) {",
+			"	cliExit( 1 )",
+			"}"
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	private string function bxLiteral( required string value ) {
+		return arguments.value.replace( '"', '""', "all" ).replace( "##", "####", "all" )
+	}
+
+}

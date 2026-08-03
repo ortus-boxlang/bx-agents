@@ -1,0 +1,30 @@
+class extends="bxModules.bxagents.models.testing.BaseAgentSpec" {
+
+	function run() {
+		describe( "testable-agent", function() {
+
+			it( "responds to a greeting", function() {
+				mockResponses( [ "Hello there!" ] )
+
+				var response = agent.run( "Hi" )
+
+				expect( response ).toContainText( "Hello" )
+			} )
+
+			it( "calls the weather tool", function() {
+				mockResponses( [
+					{ toolCalls: [ { name: "getWeather", arguments: { city: "Miami" } } ] },
+					"It's sunny in Miami!"
+				] )
+
+				var response = agent.run( "What's the weather in Miami?" )
+
+				expect( response ).toContainText( "sunny" )
+				expect( agent ).toHaveCalledTool( "getWeather" )
+				expect( agent ).notToHaveCalledTool( "getStockPrice" )
+			} )
+
+		} )
+	}
+
+}

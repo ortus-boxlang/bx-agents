@@ -1,0 +1,39 @@
+/**
+ * ToolRegistryLoader.bx - the real bug fix this session found: no agent BX
+ * Agents ever built (in ANY context) actually received its own project's
+ * tools/, since AiAgent.bx never reads from the global aiToolRegistry()
+ * itself. This class populates that registry from an ABSOLUTE tools
+ * directory path (never a relative one - confirmed that
+ * aiToolRegistry().scan()'s own relative-path resolution silently fails
+ * once called from a DynamicClassLoader-loaded context), so
+ * ColdBoxAppGenerator can pass `tools: aiToolRegistry().getAll()` to every
+ * generated aiAgent() call.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "ToolRegistryLoader", function() {
+
+			beforeEach( function() {
+				variables.loader = new bxagents.models.build.ToolRegistryLoader();
+				variables.fixtures = expandPath( "/fixtures" );
+			} );
+
+			it( "registers a real @AITool-annotated tool from an absolute directory path", function() {
+				loader.load( fixtures & "/e2e-coldbox-route/tools" );
+
+				var tool = aiToolRegistry().get( "sayHello" );
+				expect( isObject( tool ) ).toBeTrue();
+				expect( tool.getName() ).toBe( "sayHello" );
+			} );
+
+			it( "is a no-op when the directory doesn't exist", function() {
+				expect( function() {
+					loader.load( "/nonexistent/tools/path/" & createUUID() );
+				} ).notToThrow();
+			} );
+
+		} );
+	}
+
+}

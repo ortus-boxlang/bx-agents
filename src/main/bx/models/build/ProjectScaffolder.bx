@@ -4,6 +4,15 @@
  * empty convention folder (`tools/`, `skills/`, `subagents/`, `gateways/`,
  * `schedules/`, `mcp/`, `interceptors/`, `models/`, `modules/`) so a user has
  * a working starting point to edit immediately.
+ *
+ * Also scaffolds a ready-to-run `tests/` folder (M15 - inspired by the
+ * `coldbox-templates/boxlang` template's own dedicated `tests/` + `box.json`
+ * folder, adapted to BX Agents' own simpler testing story: agent BEHAVIOR,
+ * not HTTP routing, so no Application.bx/VirtualApp needed here at all):
+ * `tests/box.json` (a `testbox` devDependency, installed via `box install`
+ * inside `tests/`) and `tests/specs/AgentSpec.bx` (one example spec
+ * extending `BaseAgentSpec`, passing out of the box against the scaffolded
+ * `test()` environment override below).
  */
 class {
 
@@ -36,10 +45,18 @@ class {
 			directoryCreate( path = dir & "/" & folder, createPath = true, ignoreExists = true )
 		}
 
+		directoryCreate( path = dir & "/tests/specs", createPath = true, ignoreExists = true )
+		var testsBoxJsonPath = dir & "/tests/box.json"
+		var agentSpecPath = dir & "/tests/specs/AgentSpec.bx"
+		fileWrite( testsBoxJsonPath, renderTestsBoxJson( arguments.name ) )
+		fileWrite( agentSpecPath, renderAgentSpec( arguments.name ) )
+
 		return {
 			projectRoot  : dir,
 			agentBx      : agentBxPath,
-			instructions : instructionsPath
+			instructions : instructionsPath,
+			testsBoxJson : testsBoxJsonPath,
+			agentSpec    : agentSpecPath
 		}
 	}
 
@@ -53,6 +70,58 @@ class {
 			'			model       : "#bxLiteral( arguments.model )#",',
 			'			description : "#bxLiteral( arguments.description )#"',
 			"		};",
+			"	}",
+			"",
+			"	// `bxAgents test` builds against this override by default (see",
+			"	// BaseAgentSpec.bx) so a fresh project's tests need no API key or",
+			"	// network access - swap the model here to test against a real",
+			"	// provider instead.",
+			"	function test() {",
+			"		return {",
+			'			model : "mock/mock-model"',
+			"		};",
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	private string function renderTestsBoxJson( required string name ) {
+		var lines = [
+			"{",
+			'	"name": "#bxLiteral( arguments.name )#-tests",',
+			'	"version": "1.0.0",',
+			'	"private": true,',
+			'	"devDependencies": {',
+			'		"testbox": "*"',
+			"	},",
+			'	"installPaths": {',
+			'		"testbox": "testbox/"',
+			"	}",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	private string function renderAgentSpec( required string name ) {
+		var lines = [
+			'class extends="bxModules.bxagents.models.testing.BaseAgentSpec" {',
+			"",
+			"	function run() {",
+			'		describe( "#bxLiteral( arguments.name )#", function() {',
+			"",
+			'			it( "responds to a greeting", function() {',
+			'				mockResponses( [ "Hello! How can I help you today?" ] )',
+			"",
+			'				var response = agent.run( "Hi there" )',
+			"",
+			'				expect( response ).toContainText( "Hello" )',
+			"			} )",
+			"",
+			"		} )",
 			"	}",
 			"",
 			"}",

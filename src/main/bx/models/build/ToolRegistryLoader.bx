@@ -1,0 +1,49 @@
+/**
+ * Populates bx-ai's global `aiToolRegistry()` from a built app's `tools/`
+ * folder OUTSIDE of a real ColdBox boot - needed by both `chat` and
+ * `BaseAgentSpec` (M15), which both load `GeneratedAgentFactory.bx` directly
+ * via `DynamicClassLoader` rather than booting the generated `Application.bx`/
+ * ColdBox container.
+ *
+ * This is a REAL, previously-undiscovered bug fix: the generated
+ * `Application.bx`'s `onApplicationStart()` is the ONLY place
+ * `aiToolRegistry().scan("tools")` ever ran - a bare `aiAgent()` call has no
+ * `tools:` argument at all in the generated `GeneratedAgentFactory.bx` (see
+ * `ColdBoxAppGenerator.renderAgentStatement()`), relying entirely on bx-ai's
+ * own global tool registry being pre-populated. `chat` (and, before this fix,
+ * every conceivable direct-load consumer) never ran that scan, so `chat` has
+ * never actually been able to use any tool a project declared - confirmed
+ * empirically this session (a scripted tool-call turn against a real tool
+ * silently fell through with a "Unable to find tool named: ..." warning and
+ * no tool ever executing).
+ *
+ * Does NOT use bx-ai's own `aiToolRegistry().scan(packagePath)` - confirmed
+ * empirically this session that `scan()`'s internal `expandPath("/#packagePath#")`
+ * resolution depends on a REGISTERED BoxLang mapping, and a mapping
+ * registered dynamically (mid-script, via `Configuration.registerMapping()`)
+ * does not reliably propagate to it within the same script execution (the
+ * same class of limitation already documented elsewhere in this project for
+ * TestBox's own directory-mapping discovery). Instead, walks the tools
+ * directory directly and calls bx-ai's lower-level `scanClass(instance)` -
+ * which takes a live object, not a path, and so is unaffected by any mapping
+ * question at all.
+ */
+class {
+
+	/**
+	 * @toolsDir Absolute path to a built app's tools/ directory (e.g. "<appDir>/tools") - a no-op if it doesn't exist or is empty
+	 */
+	void function load( required string toolsDir ) {
+		if ( !directoryExists( arguments.toolsDir ) ) {
+			return
+		}
+
+		var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
+
+		for ( var filePath in directoryList( arguments.toolsDir, true, "path", "*.bx" ) ) {
+			var instance = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" ).instantiate( filePath, context )
+			aiToolRegistry().scanClass( instance )
+		}
+	}
+
+}

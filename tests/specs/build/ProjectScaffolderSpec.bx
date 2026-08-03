@@ -66,6 +66,31 @@ class extends="testbox.system.BaseSpec" {
 				expect( config.model ).toBe( "openai/gpt-5" );
 			} );
 
+			it( "scaffolds Agent.bx with a test() override defaulting to the mock provider", function() {
+				var dir = newTargetDir();
+				scaffolder.scaffold( dir, "my-agent", "openai/gpt-5" );
+
+				var resolver = new bxagents.models.build.AgentConfigResolver();
+				var config = resolver.resolve( projectRoot = dir, cliEnvironment = "test" );
+
+				expect( config.model ).toBe( "mock/mock-model" );
+			} );
+
+			it( "scaffolds a ready-to-run tests/ folder", function() {
+				var dir = newTargetDir();
+				var result = scaffolder.scaffold( dir, "my-agent", "openai/gpt-5" );
+
+				expect( fileExists( result.testsBoxJson ) ).toBeTrue();
+				expect( fileExists( result.agentSpec ) ).toBeTrue();
+
+				var boxJson = jsonDeserialize( fileRead( result.testsBoxJson ) );
+				expect( boxJson.devDependencies ).toHaveKey( "testbox" );
+
+				var specContent = fileRead( result.agentSpec );
+				expect( specContent ).toInclude( 'extends="bxModules.bxagents.models.testing.BaseAgentSpec"' );
+				expect( specContent ).toInclude( "mockResponses(" );
+			} );
+
 		} );
 	}
 

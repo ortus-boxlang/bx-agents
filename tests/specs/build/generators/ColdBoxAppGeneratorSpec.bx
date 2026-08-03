@@ -205,6 +205,29 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( "return agent" );
 			} );
 
+			/**
+			 * Regression: a real, previously-undiscovered bug found this
+			 * session - the generated `aiAgent()` call never passed a
+			 * `tools:` argument at all (confirmed against real bx-ai source:
+			 * `AiAgent.bx` never references `aiToolRegistry()` internally),
+			 * so no agent BX Agents ever built - in ANY context (a real
+			 * served app, `chat`, or a test spec) - actually received its
+			 * own project's tools/. Fixed by embedding an absolute
+			 * ToolRegistryLoader.bx call (an absolute path, not a relative
+			 * one depending on whatever "/" mapping happens to be in effect
+			 * for the loading context) plus `tools: aiToolRegistry().getAll()`
+			 * on every generated `aiAgent()` call.
+			 */
+			it( "loads the built app's own tools/ via ToolRegistryLoader and passes them to aiAgent()", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/full-project", buildDir );
+				var content = fileRead( result.agentFactory );
+
+				expect( content ).toInclude( '"models.build.ToolRegistryLoader@bxagents"' );
+				expect( content ).toInclude( buildDir & "/tools" );
+				expect( content ).toInclude( "tools : aiToolRegistry().getAll()" );
+			} );
+
 			it( "produces a byte-identical rebuild of an unchanged project", function() {
 				var buildDir = newBuildDir();
 				generateFor( fixtures & "/full-project", buildDir );

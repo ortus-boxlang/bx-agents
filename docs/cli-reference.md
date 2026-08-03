@@ -48,7 +48,7 @@ bxAgents new my-agent --model=openai/gpt-5 [--name=...] [--description=...]
 - `--model` is **required** - a `provider/model` slug (see [Agent.bx](conventions/agent-bx.md)).
 - `--name` defaults to the target directory's own basename.
 - Refuses to run if the target already contains an `Agent.bx`.
-- Creates `Agent.bx`, `instructions.md`, and every convention folder, empty.
+- Creates `Agent.bx`, `instructions.md`, every convention folder (empty), and a ready-to-run [`tests/`](conventions/testing.md) folder (`tests/box.json` + `tests/specs/AgentSpec.bx`).
 
 ### `build`
 
@@ -59,6 +59,18 @@ bxAgents build [--environment=production]
 ```
 
 Writes `.build/app/` and `.build/manifest.json`. Fails with every collected validation error if the project is invalid.
+
+### `test`
+
+Run your project's own [`tests/specs`](conventions/testing.md) via TestBox.
+
+```bash
+bxAgents test
+```
+
+- Requires `testbox` installed under `tests/testbox` (`cd tests && box install`).
+- Builds your agent against the `mock` provider by default (`Agent.bx`'s `test()` environment override) - no API key or network access needed.
+- Prints pass/fail/error/skipped counts plus one line per failure, and exits non-zero if anything failed.
 
 ### `serve`
 
