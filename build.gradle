@@ -323,6 +323,26 @@ task testColdBoxIntegration( type: JavaExec ) {
 	workingDir = projectDir
 }
 
+/**
+ * Examples Regression Gate
+ * Builds every project under examples/ through the real BuildPipeline via
+ * verifyExamples.bxs - a cheap "the whole feature matrix still builds"
+ * regression net, and a docs-drift guard (each example demonstrates a real
+ * convention documented under docs/conventions/).
+ *
+ * Requires only `downloadBoxLang` (no ColdBox/miniserver needed - this never
+ * boots an app, just runs the build pipeline).
+ */
+task verifyExamples( type: JavaExec ) {
+	group = "verification"
+	description = "Builds every project under examples/ via the real BuildPipeline"
+	dependsOn compileJava
+	classpath = files( "build/classes/java/main" ) + fileTree( dir: 'src/test/resources/libs', include: '*.jar' )
+	mainClass = 'ortus.boxlang.runtime.BoxRunner'
+	args = [ '--bx-config', 'boxlang.json', 'verifyExamples.bxs' ]
+	workingDir = projectDir
+}
+
 test {
     useJUnitPlatform()
     testLogging {

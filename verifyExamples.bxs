@@ -1,0 +1,71 @@
+/**
+ * Docs-drift / regression guard for examples/: builds every project under
+ * examples/ (each an immediate subfolder with its own Agent.bx) through the
+ * real BuildPipeline, exactly the way `bxAgents build` does, and fails
+ * loudly if any of them doesn't produce a working .build/app + manifest.
+ *
+ * This is deliberately NOT a TestBox spec: the examples are meant to be
+ * plain, readable, standalone project directories a user can copy - not
+ * fixtures wired into the test harness - so this is a small standalone CLI
+ * gate instead, run once as its own Gradle task/CI step.
+ *
+ * MUST run from the repo root (same reason as runTests.bxs - BoxLang's own
+ * Application.bx auto-discovery must not re-root relative to this script's
+ * own directory).
+ *
+ * Usage: java -cp <boxlang.jar>:<compiled classes> ortus.boxlang.runtime.BoxRunner \
+ *          --bx-config boxlang.json verifyExamples.bxs
+ */
+
+repoRoot = expandPath( "/" )
+examplesDir = repoRoot & "examples"
+
+if ( !directoryExists( examplesDir ) ) {
+	throw( type = "BxAgents.ExamplesDirMissing", message = "No examples/ directory found at [#examplesDir#]" )
+}
+
+exampleDirs = directoryList( examplesDir, false, "path", "*", "asc", "dir" )
+	.filter( function( path ) { return fileExists( path & "/Agent.bx" ) } )
+
+if ( !exampleDirs.len() ) {
+	throw( type = "BxAgents.NoExamplesFound", message = "No example projects (immediate subfolders with an Agent.bx) found under [#examplesDir#]" )
+}
+
+println( "Verifying #exampleDirs.len()# example project(s) build cleanly..." )
+
+failures = []
+
+for ( exampleDir in exampleDirs ) {
+	exampleName = listLast( exampleDir, "/" )
+	try {
+		pipeline = new bxagents.models.build.BuildPipeline( "verify-examples" )
+		result = pipeline.build( exampleDir )
+
+		if ( !directoryExists( result.appDir ) || !fileExists( result.manifestPath ) ) {
+			throw( type = "BxAgents.IncompleteBuild", message = "build() returned success but appDir/manifest are missing" )
+		}
+
+		println( "  + #exampleName#: OK (#result.appDir#)" )
+	} catch ( any e ) {
+		println( "  ! #exampleName#: FAILED - #e.message#" )
+		failures.append( "#exampleName#: #e.message#" )
+	} finally {
+		// Keep example directories pristine - this is a verification pass,
+		// not a real build a user is expected to keep around.
+		builtDir = exampleDir & "/.build"
+		if ( directoryExists( builtDir ) ) {
+			directoryDelete( builtDir, true )
+		}
+	}
+}
+
+if ( failures.len() ) {
+	println( "" )
+	throw(
+		type    = "BxAgents.ExampleBuildFailed",
+		message = "#failures.len()# of #exampleDirs.len()# example(s) failed to build: #failures.toList( '; ' )#"
+	)
+}
+
+println( "" )
+println( "All #exampleDirs.len()# example project(s) built successfully." )
