@@ -288,6 +288,41 @@ task testBx( type: JavaExec ) {
 	workingDir = projectDir
 }
 
+/**
+ * ColdBox Integration Suite
+ * Runs the ColdBox-dependent specs (tests/specs/integration/coldbox/**) via
+ * runColdBoxIntegrationTests.bxs, which boots a real boxlang-miniserver and
+ * hits tests/runner-coldbox.bxm over real HTTP - a genuine ColdBox boot
+ * needs a real `cgi` scope, which CLI mode (the plain `testBx` task) never
+ * has, confirmed this session. Kept as its own task/CI step rather than
+ * folded into `testBx` for that reason.
+ *
+ * Requires:
+ *  - `downloadMiniServer` to have fetched the boxlang-miniserver jar
+ *  - `tests/coldbox` present (fetch via `box install` in tests/, or let CI's
+ *    "Install ColdBox" step provide it)
+ */
+task testColdBoxIntegration( type: JavaExec ) {
+	group = "verification"
+	description = "Runs the ColdBox-dependent integration specs (tests/specs/integration/coldbox) over real HTTP via boxlang-miniserver"
+	dependsOn compileJava
+	onlyIf {
+		if ( !file( "tests/coldbox" ).exists() ) {
+			println "! Skipping testColdBoxIntegration: tests/coldbox/ not found - run `box install` in tests/ first"
+			return false
+		}
+		if ( fileTree( dir: 'src/test/resources/libs', include: 'boxlang-miniserver-*.jar' ).isEmpty() ) {
+			println "! Skipping testColdBoxIntegration: boxlang-miniserver jar not found - run `./gradlew downloadMiniServer` first"
+			return false
+		}
+		return true
+	}
+	classpath = files( "build/classes/java/main" ) + fileTree( dir: 'src/test/resources/libs', include: '*.jar' )
+	mainClass = 'ortus.boxlang.runtime.BoxRunner'
+	args = [ '--bx-config', 'boxlang.json', 'runColdBoxIntegrationTests.bxs' ]
+	workingDir = projectDir
+}
+
 test {
     useJUnitPlatform()
     testLogging {

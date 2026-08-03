@@ -118,13 +118,42 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( "asSingleton()" );
 			} );
 
+			it( "extends coldbox.system.ioc.config.Binder in config/WireBox.bx - map() is inherited, not a global function", function() {
+				// Regression: a real ColdBox VirtualApp boot (see
+				// integration/ColdBoxRuntimeSpec.bx) caught this - without the
+				// extends clause, `map()` in configure() throws
+				// "Function [map] not found" the moment WireBox loads the
+				// generated binder.
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/full-project", buildDir );
+
+				var content = fileRead( result.wireboxConfig );
+				expect( content ).toInclude( 'extends="coldbox.system.ioc.config.Binder"' );
+			} );
+
 			it( "always maps a singleton GeneratedAgent provider in config/WireBox.bx", function() {
 				var buildDir = newBuildDir();
 				var result = generateFor( fixtures & "/full-project", buildDir );
 
 				var content = fileRead( result.wireboxConfig );
 				expect( content ).toInclude( 'map( "GeneratedAgent" ).toProvider(' );
-				expect( content ).toInclude( 'getInstance( "GeneratedAgentFactory" ).buildAgent()' );
+				expect( content ).toInclude( 'injector.getInstance( "GeneratedAgentFactory" ).buildAgent()' );
+			} );
+
+			it( "uses injector.getInstance(), not a bare getInstance() call, in the provider closure - Binder has no such delegate", function() {
+				// Regression: coldbox.system.ioc.config.Binder has no
+				// getInstance() method or delegate at all (confirmed against
+				// real source this session, via a real ColdBox integration
+				// test - tests/specs/integration/coldbox/ColdBoxRuntimeSpec.bx).
+				// A bare `getInstance(...)` call inside the provider closure
+				// only fails once WireBox actually invokes it (lazily,
+				// building the singleton) - "Function [getInstance] not
+				// found" - not at configure() time, so this was easy to miss.
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/full-project", buildDir );
+
+				var content = fileRead( result.wireboxConfig );
+				expect( content ).notToInclude( "return getInstance(" );
 			} );
 
 			it( "always builds the root agent via the plain aiAgent() BIF - no adapter subclass is generated", function() {

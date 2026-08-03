@@ -28,7 +28,17 @@ if ( !directoryExists( reportsDir ) ) {
 	directoryCreate( reportsDir, true );
 }
 
-testbox = new testbox.system.TestBox( directory = { mapping: "tests.specs", recurse: true } );
+// integration.coldbox is excluded here - those specs need a real ColdBox
+// boot, which needs a genuine `cgi` scope that only exists inside an actual
+// web request (confirmed this session: CLI mode has none at all). They run
+// separately, over real HTTP, via `runColdBoxIntegrationTests.bxs`.
+testbox = new testbox.system.TestBox( directory = {
+	mapping : "tests.specs",
+	recurse : true,
+	filter  : function( path ) {
+		return !arguments.path.reFindNoCase( "[\\/]integration[\\/]coldbox[\\/]" )
+	}
+} );
 results = testbox.runRaw();
 
 // JSON report for CI ingestion (JUnit/ANTJUnit reporters need encodeForXMLAttribute(),

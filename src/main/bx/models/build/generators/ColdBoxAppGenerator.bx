@@ -109,7 +109,19 @@ class {
 			'	COLDBOX_APP_KEY        = ""',
 			"",
 			"	function onApplicationStart() {",
-			"		application.cbBootstrap = new coldbox.system.Bootstrap( COLDBOX_APP_ROOT_PATH, COLDBOX_APP_MAPPING, COLDBOX_CONFIG_MAPPING, COLDBOX_APP_KEY )",
+			// Named args deliberately, not positional - coldbox.system.Bootstrap's
+			// real init() signature is
+			// (COLDBOX_CONFIG_FILE, COLDBOX_APP_ROOT_PATH, COLDBOX_APP_KEY, COLDBOX_APP_MAPPING, COLDBOX_FAIL_FAST, COLDBOX_WEB_MAPPING) -
+			// a prior positional call here passed COLDBOX_APP_ROOT_PATH as the
+			// FIRST arg (silently becoming COLDBOX_CONFIG_FILE), breaking config
+			// loading the moment a real ColdBox boot exercised it. Confirmed
+			// against real coldbox.system.Bootstrap source this session.
+			"		application.cbBootstrap = new coldbox.system.Bootstrap(",
+			"			COLDBOX_CONFIG_FILE   = COLDBOX_CONFIG_MAPPING,",
+			"			COLDBOX_APP_ROOT_PATH = COLDBOX_APP_ROOT_PATH,",
+			"			COLDBOX_APP_KEY       = COLDBOX_APP_KEY,",
+			"			COLDBOX_APP_MAPPING   = COLDBOX_APP_MAPPING",
+			"		)",
 			"		application.cbBootstrap.loadColdbox()"
 		]
 
@@ -190,15 +202,19 @@ class {
 
 	private string function renderWireBox() {
 		var lines = [
-			"class {",
+			'class extends="coldbox.system.ioc.config.Binder" {',
 			"",
 			"	function configure() {",
 			'		map( "GeneratedAgentFactory" ).to( "agent.GeneratedAgentFactory" ).asSingleton()',
 			"",
 			"		// Built once, shared by every consumer (HTTP routes via toAi(), the",
 			"		// CLI chat REPL, etc.) - never construct the agent tree more than once.",
+			"		// `injector`, not a bare getInstance() call - coldbox.system.ioc.config.Binder",
+			"		// has no such delegate/method at all (confirmed against real source this",
+			"		// session); `variables.injector` is the real WireBox Injector reference",
+			"		// Binder itself uses internally for the same purpose.",
 			'		map( "GeneratedAgent" ).toProvider( function() {',
-			'			return getInstance( "GeneratedAgentFactory" ).buildAgent()',
+			'			return injector.getInstance( "GeneratedAgentFactory" ).buildAgent()',
 			"		} ).asSingleton()",
 			"	}",
 			"",

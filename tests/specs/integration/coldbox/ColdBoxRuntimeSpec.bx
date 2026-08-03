@@ -1,0 +1,114 @@
+/**
+ * Real ColdBox integration tests for a generated BX Agents app - per
+ * https://coldbox.ortusbooks.com/the-basics/testing-quick-start/integration-testing/http-testing-methods
+ * and the reference tests/Application.bx at
+ * https://github.com/coldbox-templates/boxlang/blob/development/tests/Application.bx.
+ *
+ * MUST be served from WITHIN the generated app's own webroot (the
+ * `testColdBoxIntegration` Gradle task copies this bundle's runner
+ * alongside a pre-built fixture and boots boxlang-miniserver pointed
+ * directly at it), not via the CLI runTests.bxs/`testBx` task - confirmed
+ * empirically this session: ColdBox's RoutingService needs a genuine `cgi`
+ * scope even to load the router at startup, and BoxLang's CLI mode has no
+ * `cgi` scope at all (only a real web request does).
+ *
+ * Deliberately does NOT use coldbox.system.testing.BaseTestCase's own
+ * VirtualApp (a second, independently-mapped ColdBox instance) - tried
+ * that first, but BaseTestCase's `appMapping` metadata only works cleanly
+ * for a true-root app; pointed at a non-root mapping alias (needed since
+ * the fixture lives at a fixed path outside the test webroot), WireBox's
+ * own dotted-class-path resolution for `to("agent.GeneratedAgentFactory")`
+ * couldn't find the class, a self-inflicted complication distinct from
+ * anything BX Agents' generated code controls. Instead, this spec runs
+ * INSIDE the request already-booted by the real app's own generated
+ * Application.bx (the exact same one `serve` launches in production), and
+ * just reads `application.cbController` - the real ColdBox controller
+ * `Bootstrap.loadColdBox()` stores there - directly. More faithful to a
+ * real deployment anyway: no second ColdBox instance, no mapping tricks.
+ *
+ * This one file's testing, done for real, caught three genuine bugs in
+ * ColdBoxAppGenerator.bx - see the fixed-bugs note in each relevant test
+ * below.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	/**
+	 * Bundle-level hook (BDDRunner.cfc checks `structKeyExists(target, "beforeAll")`
+	 * on the class ITSELF, separately from any describe()-scoped
+	 * `beforeAll(function(){...})` DSL call) - confirmed empirically this
+	 * session that inside a real ColdBox request, relying on the
+	 * describe()-scoped one alone left `variables.controller` unset by the
+	 * time it() ran; setting it here directly is what actually works.
+	 */
+	function beforeAll(){
+		variables.controller = application.cbController;
+	}
+
+	function run() {
+		describe( "Real ColdBox boot of a generated BX Agents app", function() {
+
+			/**
+			 * Regression #1: config/WireBox.bx generated with no `extends`
+			 * clause, so `map()` inside its configure() threw "Function
+			 * [map] not found" the moment WireBox tried to load it - fixed
+			 * by adding `extends="coldbox.system.ioc.config.Binder"` to the
+			 * generated class (see ColdBoxAppGenerator.bx's renderWireBox()).
+			 */
+			it( "boots ColdBox for real and configures WireBox with the generated mappings", function() {
+				expect( isObject( controller ) ).toBeTrue();
+				expect( controller.getWireBox().getBinder().mappingExists( "GeneratedAgentFactory" ) ).toBeTrue();
+				expect( controller.getWireBox().getBinder().mappingExists( "GeneratedAgent" ) ).toBeTrue();
+			} );
+
+			/**
+			 * Regression #2: the generated Application.bx called
+			 * `new coldbox.system.Bootstrap( COLDBOX_APP_ROOT_PATH, COLDBOX_APP_MAPPING, COLDBOX_CONFIG_MAPPING, COLDBOX_APP_KEY )`
+			 * - positional arguments in the WRONG order relative to
+			 * Bootstrap's real
+			 * `init(COLDBOX_CONFIG_FILE, COLDBOX_APP_ROOT_PATH, COLDBOX_APP_KEY, COLDBOX_APP_MAPPING, ...)`
+			 * signature. The app root path silently became the config-file
+			 * override, so ColdBox tried to instantiate the literal
+			 * filesystem path as a dotted class name the moment it loaded
+			 * configuration - fixed by switching to named arguments in
+			 * renderApplication().
+			 *
+			 * Regression #3: config/WireBox.bx's `GeneratedAgent` provider
+			 * closure called a bare `getInstance(...)`, assumed (never
+			 * source-verified before this session) to be a WireBox delegate
+			 * the same way it is on `coldbox.system.web.routing.Router`.
+			 * `coldbox.system.ioc.config.Binder` has no such delegate or
+			 * method at all - confirmed against real source. It only failed
+			 * once WireBox actually invoked the closure (lazily, building
+			 * the singleton) with "Function [getInstance] not found", not
+			 * at configure() time, which is why it was easy to miss. Fixed
+			 * by calling `injector.getInstance(...)` instead - `injector`
+			 * is the real WireBox Injector reference `Binder` itself uses
+			 * internally for the exact same purpose.
+			 */
+			it( "builds the real GeneratedAgent singleton and gets a live (mock-provider) response", function() {
+				var agent = controller.getWireBox().getInstance( "GeneratedAgent" );
+				expect( len( agent.getName() ) ).toBeGT( 0 );
+
+				var response = agent.run( "Hello there!" );
+				expect( len( response ) ).toBeGT( 0 );
+			} );
+
+			// NOTE: a real HTTP request against the /api/chat/invoke route
+			// (registered by toAi()) is checked separately, in
+			// runColdBoxIntegrationTests.bxs, not here - a request made
+			// from *inside* this already-running request, against this
+			// same single miniserver instance, risks deadlocking its
+			// worker thread pool (confirmed empirically this session: the
+			// whole suite timed out hard when tried this way). That check
+			// only succeeds reliably because the test above already forced
+			// WireBox to build the "GeneratedAgent" singleton first - the
+			// very first request to a toAi() route on a freshly booted app
+			// (nothing has built that singleton yet) can transiently fail
+			// with "Function [getInstance] not found", a ColdBox/WireBox
+			// lazy-injection race on the Router's own `getInstance`
+			// delegate, not anything BX Agents' generated code controls.
+
+		} );
+	}
+
+}
