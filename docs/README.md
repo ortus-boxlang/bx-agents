@@ -3,7 +3,7 @@
 **BX Agents** is a conventions-based AI agent framework for [BoxLang](https://boxlang.io), built on top of [ColdBox](https://coldbox.ortusbooks.com) and [BX AI](https://boxlang.ortusbooks.com/boxlang-+-++/modules/bx-ai). You describe an agent with a handful of files and folders - an `Agent.bx`, an `instructions.md`, and whichever of `tools/`, `skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `models/`, `modules/` your agent actually needs - and BX Agents assembles a real, runnable ColdBox application from it at **build time**.
 
 {% hint style="info" %}
-Inspired by Vercel's [Eve](https://vercel.com/blog/eve) - describe the agent with files and folders, not a framework's API surface.
+Describe the agent with files and folders, not a framework's API surface.
 {% endhint %}
 
 ## Why build-time assembly?
