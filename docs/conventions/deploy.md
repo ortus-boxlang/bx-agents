@@ -59,7 +59,7 @@ Ships the newest `.bxa` to a bare server over `scp`, then optionally runs a remo
 {
 	target         : "ssh",
 	host           : "example.com",
-	user           : "deploy",
+	username       : "deploy",
 	remotePath     : "/srv/apps/my-agent",
 	identityFile   : "/home/me/.ssh/id_rsa",   // optional
 	restartCommand : "systemctl restart my-agent"   // optional
@@ -112,32 +112,34 @@ Ships the newest `.bxa` to a remote directory over plain FTP or SFTP, via the re
 ```javascript
 // deploy/ftp-production.bx
 {
-	target     : "ftp",
-	host       : "ftp.example.com",
-	username   : "deploy",
-	password   : "secret",
-	remotePath : "/uploads/my-agent",
-	port       : 21,       // optional, defaults to 21
-	passive    : true,     // optional, defaults to true
-	proxyServer: "proxy.company.com:8080"   // optional
+	target         : "ftp",
+	host           : "ftp.example.com",
+	username       : "deploy",
+	passwordEnvVar : "FTP_PASSWORD",
+	remotePath     : "/uploads/my-agent",
+	port           : 21,       // optional, defaults to 21
+	passive        : true,     // optional, defaults to true
+	timeout        : 30,       // optional, seconds, defaults to 30
+	proxyServer    : "proxy.company.com:8080"   // optional
 }
 ```
 
 ```javascript
 // deploy/sftp-production.bx
 {
-	target      : "sftp",
-	host        : "sftp.example.com",
-	username    : "deploy",
-	key         : "/home/me/.ssh/id_rsa",   // password OR key required
-	passphrase  : "optional-key-passphrase",
-	fingerprint : "SHA256:...",              // optional host key verification
-	remotePath  : "/uploads/my-agent",
-	port        : 22        // optional, defaults to 22
+	target           : "sftp",
+	host             : "sftp.example.com",
+	username         : "deploy",
+	key              : "/home/me/.ssh/id_rsa",   // passwordEnvVar OR key required
+	passphraseEnvVar : "SFTP_KEY_PASSPHRASE",     // optional, only if the key itself is passphrase-protected
+	fingerprint      : "SHA256:...",              // optional host key verification
+	remotePath       : "/uploads/my-agent",
+	port             : 22,       // optional, defaults to 22
+	timeout          : 30        // optional, seconds, defaults to 30
 }
 ```
 
-Requires a prior `bxAgents package`. `ftp` requires a `password`; `sftp` accepts either a `password` or a `key` (SSH private key file path). Every `bx:ftp` action throws on failure (connection refused, auth rejected, a negative server reply) rather than returning a soft failure - this target catches that and re-throws it as a clear `BxAgents.DeployFailed`, always closing the connection afterward even on error.
+Requires a prior `bxAgents package`. `ftp` requires a `passwordEnvVar`; `sftp` accepts either a `passwordEnvVar` or a `key` (SSH private key file path). `passwordEnvVar`/`passphraseEnvVar` name environment variables holding the real secret - **never the secret value itself** - resolved live at deploy time; `key` stays a plain path, since it's already not secret material itself. Every `bx:ftp` action throws on failure (connection refused, auth rejected, a negative server reply) rather than returning a soft failure - this target catches that and re-throws it as a clear `BxAgents.DeployFailed`, always closing the connection afterward even on error.
 
 ## Secrets stay external
 
@@ -148,10 +150,10 @@ No target ever reads a secret (API token, SSH key, registry password) from `depl
 | `ssh` | none required - `identityFile` is a path to a key file you manage yourself |
 | `docker` | `DOCKER_USERNAME`, `DOCKER_PASSWORD` (both optional - only used if set) |
 | `digitalocean` | `DOCKER_USERNAME`/`DOCKER_PASSWORD` (for the image push) + `DIGITALOCEAN_TOKEN` (required) |
-| `ftp` / `sftp` | none required - `password`/`key`/`passphrase` are declared directly in the entry, same as `ssh`'s `identityFile` (a path, not key material itself, for `key`) |
+| `ftp` / `sftp` | whichever env var(s) `passwordEnvVar`/`passphraseEnvVar` name - the entry itself only ever holds the env var's NAME, never its value (`key` is a path, same as `ssh`'s `identityFile`) |
 
 ## Validation
 
 - `target` must be one of `local`, `ssh`, `docker`, `digitalocean`, `ftp`, `sftp`.
 - Entry names must be unique across `deploy/*.bx` and `deploy/*.json`.
-- Each target's required fields (above) are checked when `deploy` runs - `local` needs `destination`, `ssh`/`ftp`/`sftp` need `host`/`user` (or `username`)/`remotePath`, `docker`/`digitalocean` need `registry.repository`, `digitalocean` also needs `appName`, `ftp` also needs `password`, `sftp` also needs `password` or `key`.
+- Each target's required fields (above) are checked when `deploy` runs - `local` needs `destination`, `ssh`/`ftp`/`sftp` need `host`/`username`/`remotePath` (the same field name across all three), `docker`/`digitalocean` need `registry.repository`, `digitalocean` also needs `appName`, `ftp` also needs `passwordEnvVar`, `sftp` also needs `passwordEnvVar` or `key`.

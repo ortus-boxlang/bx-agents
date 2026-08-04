@@ -11,14 +11,11 @@ class {
 	property name="modelSlugParser";
 
 	function init() {
-		// bx-ai's CORE_PROVIDERS (src/main/bx/bifs/aiService.bx) - kept in sync
-		// manually, there are only a handful of these and they change rarely.
-		variables.CORE_PROVIDERS = [
-			"bedrock", "claude", "cohere", "deepseek", "docker", "elevenlabs", "gemini",
-			"grok", "groq", "huggingface", "minimax", "mistral", "mock", "ollama",
-			"openai", "openai-compatible", "openrouter", "perplexity", "voyage"
-		]
-		variables.modelSlugParser = new ModelSlugParser()
+		// "@bxagents" suffix, not a bare "ModelSlugParser" reference - see
+		// BuildPipeline.bx's init() docblock for why. CORE_PROVIDERS itself
+		// lives on ModelSlugParser now (single source of truth shared with
+		// ColdBoxAppGenerator's generation-time model resolution).
+		variables.modelSlugParser = new "models.build.ModelSlugParser@bxagents"()
 		return this
 	}
 
@@ -78,7 +75,9 @@ class {
 
 	private void function validateSubagents( required string projectRoot, required struct discovery, required array errors ) {
 		var subagents = arguments.discovery.subagents ?: []
-		var resolver = new AgentConfigResolver()
+		// "@bxagents" suffix, not a bare "AgentConfigResolver" reference - see
+		// BuildPipeline.bx's init() docblock for why.
+		var resolver = new "models.build.AgentConfigResolver@bxagents"()
 		var graph = {}
 
 		for ( var subagent in subagents ) {
@@ -112,8 +111,9 @@ class {
 
 		for ( var nodeName in graph ) {
 			for ( var refName in graph[ nodeName ] ) {
-				if ( nodeName != "__root__" && !structKeyExists( graph, refName ) ) {
-					arguments.errors.append( "Subagent [#nodeName#] references unknown subagent [#refName#]" )
+				if ( !structKeyExists( graph, refName ) ) {
+					var source = nodeName == "__root__" ? "The project's own Agent.bx" : "Subagent [#nodeName#]"
+					arguments.errors.append( "#source# references unknown subagent [#refName#]" )
 				}
 			}
 		}
@@ -216,6 +216,9 @@ class {
 	private void function validateSchedules( required struct discovery, required array errors ) {
 		var CRON_FIELD = "(\*|\*\/\d+|\d+(-\d+)?(,\d+(-\d+)?)*)"
 		var cronPattern = "^#CRON_FIELD# #CRON_FIELD# #CRON_FIELD# #CRON_FIELD# #CRON_FIELD#$"
+		// "@bxagents" suffix, not a bare "SchedulerGenerator" reference - see
+		// BuildPipeline.bx's init() docblock for why.
+		var schedulerGenerator = new "models.build.generators.SchedulerGenerator@bxagents"()
 
 		for ( var schedule in ( arguments.discovery.schedules ?: [] ) ) {
 			var config = readEntryConfig( schedule.path )
@@ -229,6 +232,17 @@ class {
 				arguments.errors.append( "Schedule [#schedule.name#] is missing a 'cron' expression" )
 			} else if ( !cron.trim().reFind( cronPattern ) ) {
 				arguments.errors.append( "Schedule [#schedule.name#] has an invalid cron expression [#cron#]" )
+			} else if ( !schedulerGenerator.isSupportedCron( cron.trim() ) ) {
+				// Syntactically a valid 5-field cron, but not one of the shapes
+				// SchedulerGenerator can translate into a ColdBox frequency-method
+				// call (see its docblock) - reusing its OWN translation logic here
+				// (rather than a second, hand-maintained "is this supported" check)
+				// is what keeps this in sync with what generation actually accepts.
+				arguments.errors.append( "Schedule [#schedule.name#] has a cron expression [#cron#] with no equivalent in ColdBox's frequency-method scheduler DSL - see docs/conventions/schedules.md for supported shapes" )
+			}
+
+			if ( !len( trim( config.action ?: "" ) ) ) {
+				arguments.errors.append( "Schedule [#schedule.name#] is missing an 'action'" )
 			}
 		}
 	}
@@ -287,8 +301,8 @@ class {
 				var type = config.type ?: ""
 				if ( !validGatewayTypes.contains( type ) ) {
 					arguments.errors.append( "Gateway [#gateway.name#] has an unknown type [#type#] - must be one of: #validGatewayTypes.toList()#" )
-				} else if ( type == "http" && !len( config.secret ?: "" ) ) {
-					arguments.errors.append( "Gateway [#gateway.name#] is of type 'http' and requires a 'secret'" )
+				} else if ( type == "http" && !len( config.secretEnvVar ?: "" ) ) {
+					arguments.errors.append( "Gateway [#gateway.name#] is of type 'http' and requires a 'secretEnvVar' (the NAME of an environment variable holding the signing secret, never the secret value itself)" )
 				}
 			}
 		}
@@ -335,8 +349,8 @@ class {
 
 		if ( modelValue.find( "/" ) ) {
 			var parsed = variables.modelSlugParser.parse( modelValue )
-			if ( !variables.CORE_PROVIDERS.contains( parsed.provider.lcase() ) ) {
-				arguments.errors.append( "Unknown model provider [#parsed.provider#] - must be one of: #variables.CORE_PROVIDERS.toList()#" )
+			if ( !variables.modelSlugParser.isKnownProvider( parsed.provider ) ) {
+				arguments.errors.append( "Unknown model provider [#parsed.provider#] - must be one of: #variables.modelSlugParser.coreProviders().toList()#" )
 			}
 			return
 		}
@@ -344,7 +358,7 @@ class {
 		// No slash: must either be a known provider's default model, or a named
 		// reference to a models/ entry.
 		var modelNames = ( arguments.discovery.models ?: [] ).map( m => m.name )
-		if ( !variables.CORE_PROVIDERS.contains( modelValue.lcase() ) && !modelNames.contains( modelValue ) ) {
+		if ( !variables.modelSlugParser.isKnownProvider( modelValue ) && !modelNames.contains( modelValue ) ) {
 			arguments.errors.append( "model [#modelValue#] has no provider and does not match any models/ entry" )
 		}
 	}

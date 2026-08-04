@@ -92,6 +92,29 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( "mcpServer(" );
 			} );
 
+			/**
+			 * Regression: a real bug this review closed - each subagent's own
+			 * config used to be resolved via `AgentConfigResolver.resolve(
+			 * projectRoot = subPath )` with NO `cliEnvironment` passed, so a
+			 * subagent's own environment-specific overrides always resolved
+			 * against ITS default environment, silently ignoring whatever
+			 * `--environment` the whole build was actually invoked with. A
+			 * `--environment=production` build could generate a subagent still
+			 * wired to its dev-environment config.
+			 */
+			it( "applies the build's --environment to every subagent's own environment overrides, not just the root project's", function() {
+				var projectRoot = newTempProject( "subagent-environment-override" );
+
+				var defaultResult = pipeline.build( projectRoot );
+				var defaultContent = fileRead( defaultResult.appDir & "/agent/GeneratedAgentFactory.bx" );
+				expect( defaultContent ).toInclude( 'model : "gpt-5"' );
+				expect( defaultContent ).notToInclude( 'model : "gpt-5-mini"' );
+
+				var prodResult = pipeline.build( projectRoot, "production" );
+				var prodContent = fileRead( prodResult.appDir & "/agent/GeneratedAgentFactory.bx" );
+				expect( prodContent ).toInclude( 'model : "gpt-5-mini"' );
+			} );
+
 		} );
 	}
 

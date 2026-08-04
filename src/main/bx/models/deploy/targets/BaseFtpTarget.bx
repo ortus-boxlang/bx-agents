@@ -13,6 +13,16 @@
  * supplies its OWN protocol-aware port default (21 for ftp, 22 for sftp)
  * whenever a project doesn't set one explicitly.
  *
+ * `passwordEnvVar`/`passphraseEnvVar` name environment variables holding the
+ * real secret - NEVER the secret value itself - resolved live at deploy time
+ * via `getSystemSetting()`, matching this project's "secrets stay external"
+ * rule (a real, previously unfixed bug had these read as raw plaintext
+ * values straight out of `deploy/*.bx` config, which could end up committed
+ * to version control - see docs/known-limitations.md). `key` stays a plain
+ * config field since it's already a PATH to a key file the caller manages
+ * themselves, never key material - the same convention `ssh`'s
+ * `identityFile` uses.
+ *
  * Ships the newest packaged `.bxa` (via `DistArtifactLocator`, same as
  * `local`/`ssh`) to `remotePath` - a remote DIRECTORY, not a full file path;
  * the uploaded file keeps its own name, mirroring how `ssh`'s `scp` target
@@ -38,7 +48,7 @@ class {
 		var host = trim( arguments.config.host ?: "" )
 		var username = trim( arguments.config.username ?: "" )
 		var remotePath = trim( arguments.config.remotePath ?: "" )
-		var password = trim( arguments.config.password ?: "" )
+		var passwordEnvVar = trim( arguments.config.passwordEnvVar ?: "" )
 		var key = trim( arguments.config.key ?: "" )
 
 		if ( !len( host ) || !len( username ) || !len( remotePath ) ) {
@@ -47,11 +57,11 @@ class {
 				message = "deploy target '#protocol#' requires 'host', 'username', and 'remotePath'"
 			)
 		}
-		if ( !arguments.secure && !len( password ) ) {
-			throw( type = "BxAgents.InvalidDeployConfig", message = "deploy target 'ftp' requires a 'password'" )
+		if ( !arguments.secure && !len( passwordEnvVar ) ) {
+			throw( type = "BxAgents.InvalidDeployConfig", message = "deploy target 'ftp' requires a 'passwordEnvVar'" )
 		}
-		if ( arguments.secure && !len( password ) && !len( key ) ) {
-			throw( type = "BxAgents.InvalidDeployConfig", message = "deploy target 'sftp' requires a 'password' or a 'key'" )
+		if ( arguments.secure && !len( passwordEnvVar ) && !len( key ) ) {
+			throw( type = "BxAgents.InvalidDeployConfig", message = "deploy target 'sftp' requires a 'passwordEnvVar' or a 'key'" )
 		}
 
 		var newest = new "models.deploy.DistArtifactLocator@bxagents"().newestBxa( arguments.context.distDir )
@@ -106,8 +116,9 @@ class {
 
 	/**
 	 * Pure - builds the attribute struct passed to `bx:ftp action="open" attributeCollection="..."`.
-	 * No secret is ever logged or returned beyond what the caller already
-	 * supplied in `config` itself.
+	 * `passwordEnvVar`/`passphraseEnvVar` are resolved into real secret
+	 * values here (via `getSystemSetting()`, defaulting to "" when unset) -
+	 * every other field renders straight through from `config`.
 	 *
 	 * @secure false = ftp, true = sftp
 	 */
@@ -121,16 +132,18 @@ class {
 			secure     : arguments.secure
 		}
 
-		if ( len( arguments.config.password ?: "" ) ) {
-			attrs.password = arguments.config.password
+		var passwordEnvVar = trim( arguments.config.passwordEnvVar ?: "" )
+		if ( len( passwordEnvVar ) ) {
+			attrs.password = getSystemSetting( passwordEnvVar, "" )
 		}
 
 		if ( arguments.secure ) {
 			if ( len( arguments.config.key ?: "" ) ) {
 				attrs.key = arguments.config.key
 			}
-			if ( len( arguments.config.passphrase ?: "" ) ) {
-				attrs.passphrase = arguments.config.passphrase
+			var passphraseEnvVar = trim( arguments.config.passphraseEnvVar ?: "" )
+			if ( len( passphraseEnvVar ) ) {
+				attrs.passphrase = getSystemSetting( passphraseEnvVar, "" )
 			}
 			if ( len( arguments.config.fingerprint ?: "" ) ) {
 				attrs.fingerprint = arguments.config.fingerprint

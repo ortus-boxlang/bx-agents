@@ -34,7 +34,7 @@ class extends="testbox.system.BaseSpec" {
 				} ).toThrow( "BxAgents.InvalidDeployConfig" );
 			} );
 
-			it( "requires a password (ftp has no key-based auth)", function() {
+			it( "requires a passwordEnvVar (ftp has no key-based auth)", function() {
 				expect( function() {
 					target.deploy( { host : "x", username : "y", remotePath : "/z", key : "/some/key" }, { distDir : newTempDir() } );
 				} ).toThrow( "BxAgents.InvalidDeployConfig" );
@@ -43,10 +43,11 @@ class extends="testbox.system.BaseSpec" {
 			it( "attempts a real (secure: false) connection and wraps failure as BxAgents.DeployFailed", function() {
 				var dir = newTempDir();
 				fileWrite( dir & "/myagent-1.0.0.bxa", "fake bxa content" );
+				createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_TEST_FTP_PW", "pass" );
 
 				expect( function() {
 					target.deploy(
-						{ host : "127.0.0.1", port : 1, username : "user", password : "pass", remotePath : "/uploads", timeout : 2 },
+						{ host : "127.0.0.1", port : 1, username : "user", passwordEnvVar : "BXAGENTS_TEST_FTP_PW", remotePath : "/uploads", timeout : 2 },
 						{ distDir : dir }
 					);
 				} ).toThrow( "BxAgents.DeployFailed" );

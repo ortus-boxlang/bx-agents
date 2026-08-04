@@ -45,6 +45,6 @@ Anything else - a list (`1,3,5`), a range (`1-5`), a step value (`*/2`) in the d
 
 ## Validation
 
-- `cron` must be present and match a valid 5-field cron pattern (checked independently of the translation-support check above, at [validation](../build-pipeline.md) time). This regex checks shape only - it does not bound day-of-week/day-of-month/month to their valid numeric ranges.
-- `action` must be present and non-empty.
-- An unsupported (or out-of-range, or syntactically valid but structurally ambiguous) cron shape fails at **generation** time with the message above, naming the exact supported shapes.
+- `cron` must be present and match a valid 5-field cron pattern (checked at [validation](../build-pipeline.md) time). This regex checks shape only - it does not bound day-of-week/day-of-month/month to their valid numeric ranges.
+- `action` must be present and non-empty - also checked at validation time.
+- An unsupported (or out-of-range, or syntactically valid but structurally ambiguous) cron shape is ALSO caught at **validation** time: `ProjectValidator` calls the same translation logic `SchedulerGenerator` uses to render `config/Scheduler.bx` (`SchedulerGenerator.isSupportedCron()`), so a cron shape it can't translate is reported alongside every other error in one pass, naming the exact supported shapes - it never gets as far as generation.

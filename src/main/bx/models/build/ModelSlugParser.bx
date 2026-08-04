@@ -10,6 +10,39 @@
 class {
 
 	/**
+	 * bx-ai's own CORE_PROVIDERS (src/main/bx/bifs/aiService.bx) - kept in
+	 * sync manually, there are only a handful of these and they change
+	 * rarely. Single source of truth for "is this bare name a provider" so
+	 * ProjectValidator's validation-time check and ColdBoxAppGenerator's
+	 * generation-time resolution can never drift apart from each other.
+	 */
+	function init() {
+		variables.CORE_PROVIDERS = [
+			"bedrock", "claude", "cohere", "deepseek", "docker", "elevenlabs", "gemini",
+			"grok", "groq", "huggingface", "minimax", "mistral", "mock", "ollama",
+			"openai", "openai-compatible", "openrouter", "perplexity", "voyage"
+		]
+		return this
+	}
+
+	/**
+	 * Returns bx-ai's recognized core provider names, for callers building
+	 * their own "must be one of: ..." error messages.
+	 */
+	array function coreProviders() {
+		return variables.CORE_PROVIDERS
+	}
+
+	/**
+	 * True if `name` (case-insensitive, no "/") is one of bx-ai's own core
+	 * providers - i.e. a bare model value that names a provider directly
+	 * (its default model applies), as opposed to a `models/` entry name.
+	 */
+	boolean function isKnownProvider( required string name ) {
+		return variables.CORE_PROVIDERS.contains( arguments.name.lcase() )
+	}
+
+	/**
 	 * Parse a model slug into `{ provider, model }`.
 	 *
 	 * @slug The model slug to parse, e.g. "gpt-5", "openai/gpt-5", "openrouter/anthropic/claude-sonnet-4"

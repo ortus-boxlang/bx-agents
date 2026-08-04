@@ -31,6 +31,10 @@ class extends="testbox.system.BaseSpec" {
 				return dir;
 			}
 
+			private function setEnvVar( required string name, required string value ) {
+				createObject( "java", "java.lang.System" ).setProperty( arguments.name, arguments.value );
+			}
+
 			it( "builds a remote file path by joining remotePath and the .bxa's own name", function() {
 				expect( target.buildRemoteFile( "/uploads/2025", "myagent-1.0.0.bxa" ) ).toBe( "/uploads/2025/myagent-1.0.0.bxa" );
 			} );
@@ -40,7 +44,8 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "builds ftp connect attributes defaulting port 21 and passive true", function() {
-				var attrs = target.buildConnectAttributes( { host : "ftp.example.com", username : "user", password : "pass" }, "conn1", false );
+				setEnvVar( "BXAGENTS_TEST_FTP_PW", "pass" );
+				var attrs = target.buildConnectAttributes( { host : "ftp.example.com", username : "user", passwordEnvVar : "BXAGENTS_TEST_FTP_PW" }, "conn1", false );
 
 				expect( attrs.server ).toBe( "ftp.example.com" );
 				expect( attrs.connection ).toBe( "conn1" );
@@ -53,9 +58,23 @@ class extends="testbox.system.BaseSpec" {
 				expect( attrs.keyExists( "key" ) ).toBeFalse();
 			} );
 
+			it( "resolves the password from the named environment variable, not from a literal in config", function() {
+				setEnvVar( "BXAGENTS_TEST_FTP_PW2", "real-secret-value" );
+				var attrs = target.buildConnectAttributes( { host : "x", username : "y", passwordEnvVar : "BXAGENTS_TEST_FTP_PW2" }, "conn1", false );
+
+				expect( attrs.password ).toBe( "real-secret-value" );
+			} );
+
+			it( "resolves an empty password when the named environment variable isn't set", function() {
+				var attrs = target.buildConnectAttributes( { host : "x", username : "y", passwordEnvVar : "BXAGENTS_TEST_DEFINITELY_UNSET_VAR" }, "conn1", false );
+
+				expect( attrs.password ).toBe( "" );
+			} );
+
 			it( "honors an explicit ftp port, passive, and proxyServer", function() {
+				setEnvVar( "BXAGENTS_TEST_FTP_PW", "pass" );
 				var attrs = target.buildConnectAttributes(
-					{ host : "ftp.example.com", username : "user", password : "pass", port : 2121, passive : false, proxyServer : "proxy.company.com:8080" },
+					{ host : "ftp.example.com", username : "user", passwordEnvVar : "BXAGENTS_TEST_FTP_PW", port : 2121, passive : false, proxyServer : "proxy.company.com:8080" },
 					"conn1",
 					false
 				);
@@ -66,7 +85,8 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "builds sftp connect attributes defaulting port 22, with a password", function() {
-				var attrs = target.buildConnectAttributes( { host : "sftp.example.com", username : "user", password : "pass" }, "conn2", true );
+				setEnvVar( "BXAGENTS_TEST_FTP_PW", "pass" );
+				var attrs = target.buildConnectAttributes( { host : "sftp.example.com", username : "user", passwordEnvVar : "BXAGENTS_TEST_FTP_PW" }, "conn2", true );
 
 				expect( attrs.port ).toBe( 22 );
 				expect( attrs.secure ).toBeTrue();
@@ -75,13 +95,14 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "builds sftp connect attributes with a key, passphrase, and fingerprint", function() {
+				setEnvVar( "BXAGENTS_TEST_FTP_PASSPHRASE", "secret" );
 				var attrs = target.buildConnectAttributes(
 					{
-						host        : "sftp.example.com",
-						username    : "deploy",
-						key         : "/home/me/.ssh/id_rsa",
-						passphrase  : "secret",
-						fingerprint : "SHA256:abc123"
+						host              : "sftp.example.com",
+						username          : "deploy",
+						key               : "/home/me/.ssh/id_rsa",
+						passphraseEnvVar  : "BXAGENTS_TEST_FTP_PASSPHRASE",
+						fingerprint       : "SHA256:abc123"
 					},
 					"conn2",
 					true
@@ -99,13 +120,13 @@ class extends="testbox.system.BaseSpec" {
 				} ).toThrow( "BxAgents.InvalidDeployConfig" );
 			} );
 
-			it( "throws BxAgents.InvalidDeployConfig when ftp has no password", function() {
+			it( "throws BxAgents.InvalidDeployConfig when ftp has no passwordEnvVar", function() {
 				expect( function() {
 					target.performDeploy( { host : "x", username : "y", remotePath : "/z" }, { distDir : newTempDir() }, false );
 				} ).toThrow( "BxAgents.InvalidDeployConfig" );
 			} );
 
-			it( "throws BxAgents.InvalidDeployConfig when sftp has neither password nor key", function() {
+			it( "throws BxAgents.InvalidDeployConfig when sftp has neither passwordEnvVar nor key", function() {
 				expect( function() {
 					target.performDeploy( { host : "x", username : "y", remotePath : "/z" }, { distDir : newTempDir() }, true );
 				} ).toThrow( "BxAgents.InvalidDeployConfig" );
@@ -115,7 +136,7 @@ class extends="testbox.system.BaseSpec" {
 				var dir = newTempDir();
 				expect( function() {
 					target.performDeploy(
-						{ host : "x", username : "y", password : "z", remotePath : "/uploads" },
+						{ host : "x", username : "y", passwordEnvVar : "BXAGENTS_TEST_FTP_PW", remotePath : "/uploads" },
 						{ distDir : dir },
 						false
 					);
@@ -128,7 +149,7 @@ class extends="testbox.system.BaseSpec" {
 
 				expect( function() {
 					target.performDeploy(
-						{ host : "127.0.0.1", port : 1, username : "user", password : "pass", remotePath : "/uploads", timeout : 2 },
+						{ host : "127.0.0.1", port : 1, username : "user", passwordEnvVar : "BXAGENTS_TEST_FTP_PW", remotePath : "/uploads", timeout : 2 },
 						{ distDir : dir },
 						false
 					);

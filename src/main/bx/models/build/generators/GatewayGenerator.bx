@@ -10,6 +10,16 @@
  * ColdBoxAppGenerator to insert into Application.bx's onApplicationStart() -
  * this class never writes Application.bx itself).
  *
+ * A `type: "http"` entry's `secretEnvVar` (the NAME of an environment
+ * variable, never the secret value itself) is deliberately never embedded as
+ * a literal - `renderHttpOptions()` emits a live `getSystemSetting(...)` call
+ * for it instead, resolved at server startup. Every other channel-adapter
+ * entry's config renders as an ordinary literal via `renderLiteral()`. This
+ * matches the "secrets stay external" rule used everywhere else in this
+ * project (provider API keys, deploy target credentials) - a real, previously
+ * unfixed bug had this entry's raw secret value embedded in generated source
+ * and shipped unredacted inside the packaged `.bxa` (see docs/known-limitations.md).
+ *
  * `http`-type entries additionally need a generated handler
  * (`handlers/Gateway.bx`) so the fixed 3-route bx-ai Gateway webhook surface
  * (`GatewayRequestProcessor::processHttp()`) is reachable over HTTP - see
@@ -78,7 +88,35 @@ class {
 		var type = arguments.entry.config.type ?: ""
 		var options = duplicate( arguments.entry.config )
 		options.delete( "type" )
-		return "gatewayRegistry().register( aiGateway( #renderLiteral( type )#, #renderLiteral( options )# ) )"
+
+		var renderedOptions = type == "http" ? renderHttpOptions( options ) : renderLiteral( options )
+		return "gatewayRegistry().register( aiGateway( #renderLiteral( type )#, #renderedOptions# ) )"
+	}
+
+	/**
+	 * Like `renderLiteral()` for a struct, but `secretEnvVar` never appears in
+	 * the output - it's replaced with a `"secret" : getSystemSetting( "..." )`
+	 * entry, resolved at server startup rather than baked into generated
+	 * source. `getSystemSetting()` defaults to `""` if the env var is unset -
+	 * bx-ai's own HttpGateway already treats an empty secret as "no signing
+	 * configured" and rejects requests accordingly (confirmed via its source),
+	 * so an operator who forgot to set the env var gets a clear per-request
+	 * rejection rather than a hard crash at startup.
+	 */
+	private string function renderHttpOptions( required struct options ) {
+		var secretEnvVar = trim( arguments.options.secretEnvVar ?: "" )
+		var rest = duplicate( arguments.options )
+		rest.delete( "secretEnvVar" )
+		rest[ "secret" ] = ""
+
+		var keys = rest.keyArray().sort( "textnocase" )
+		var parts = keys.map( function( k ) {
+			if ( k == "secret" ) {
+				return '"secret" : getSystemSetting( #renderLiteral( secretEnvVar )#, "" )'
+			}
+			return '"#bxLiteral( k )#" : #renderLiteral( rest[ k ] )#'
+		} )
+		return "{ " & parts.toList( ", " ) & " }"
 	}
 
 	private string function renderHandler() {

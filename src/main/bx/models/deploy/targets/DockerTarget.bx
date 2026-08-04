@@ -149,19 +149,26 @@ class implements="models.deploy.IDeploymentTarget@bxagents" {
 	 *             (used for `docker login --password-stdin`) before reading output.
 	 */
 	private struct function runProcess( required array command, string stdinInput = "" ) {
-		var builder = createObject( "java", "java.lang.ProcessBuilder" ).init( arguments.command )
-		builder.redirectErrorStream( true )
-		var process = builder.start()
+		try {
+			var builder = createObject( "java", "java.lang.ProcessBuilder" ).init( arguments.command )
+			builder.redirectErrorStream( true )
+			var process = builder.start()
 
-		if ( len( arguments.stdinInput ) ) {
-			var stdin = process.getOutputStream()
-			stdin.write( arguments.stdinInput.getBytes() )
-			stdin.close()
+			if ( len( arguments.stdinInput ) ) {
+				var stdin = process.getOutputStream()
+				stdin.write( arguments.stdinInput.getBytes() )
+				stdin.close()
+			}
+
+			var output = createObject( "java", "java.lang.String" ).init( process.getInputStream().readAllBytes() )
+			process.waitFor()
+			return { exitCode : process.exitValue(), output : output }
+		} catch ( any e ) {
+			throw(
+				type    = "BxAgents.DeployFailed",
+				message = "Could not run [#arguments.command[ 1 ]#] - is it installed and on PATH? (#e.message#)"
+			)
 		}
-
-		var output = createObject( "java", "java.lang.String" ).init( process.getInputStream().readAllBytes() )
-		process.waitFor()
-		return { exitCode : process.exitValue(), output : output }
 	}
 
 }

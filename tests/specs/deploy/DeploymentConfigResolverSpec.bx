@@ -98,14 +98,14 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.errors.toList( "|" ) ).toInclude( "Duplicate deploy entry name" );
 			} );
 
-			it( "requires host, user, and remotePath for an ssh target", function() {
+			it( "requires host, username, and remotePath for an ssh target", function() {
 				var dir = newTempProject();
 				writeEntry( dir, "prod", { target : "ssh" } );
 
 				var result = resolver.resolve( dir );
 
 				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'host'" );
-				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'user'" );
+				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'username'" );
 				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'remotePath'" );
 			} );
 
@@ -127,7 +127,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.errors.toList( "|" ) ).toInclude( "missing an 'appName'" );
 			} );
 
-			it( "requires host, username, remotePath, and password for an ftp target", function() {
+			it( "requires host, username, remotePath, and passwordEnvVar for an ftp target", function() {
 				var dir = newTempProject();
 				writeEntry( dir, "prod", { target : "ftp" } );
 
@@ -136,19 +136,19 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'host'" );
 				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'username'" );
 				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'remotePath'" );
-				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'password'" );
+				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'passwordEnvVar'" );
 			} );
 
 			it( "accepts a valid ftp target", function() {
 				var dir = newTempProject();
-				writeEntry( dir, "prod", { target : "ftp", host : "ftp.example.com", username : "user", password : "pass", remotePath : "/uploads" } );
+				writeEntry( dir, "prod", { target : "ftp", host : "ftp.example.com", username : "user", passwordEnvVar : "FTP_PASSWORD", remotePath : "/uploads" } );
 
 				var result = resolver.resolve( dir );
 
 				expect( result.errors.len() ).toBe( 0 );
 			} );
 
-			it( "requires host, username, and remotePath for an sftp target, plus a password or key", function() {
+			it( "requires host, username, and remotePath for an sftp target, plus a passwordEnvVar or key", function() {
 				var dir = newTempProject();
 				writeEntry( dir, "prod", { target : "sftp" } );
 
@@ -157,7 +157,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'host'" );
 				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'username'" );
 				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'remotePath'" );
-				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'password' or a 'key'" );
+				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'passwordEnvVar' or a 'key'" );
 			} );
 
 			it( "accepts a valid sftp target authenticated by key only", function() {

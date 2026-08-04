@@ -121,15 +121,7 @@ class {
 				break
 			}
 			case "ssh": {
-				if ( !len( arguments.config.host ?: "" ) ) {
-					arguments.errors.append( "deploy/#arguments.name# (ssh) is missing a 'host'" )
-				}
-				if ( !len( arguments.config.user ?: "" ) ) {
-					arguments.errors.append( "deploy/#arguments.name# (ssh) is missing a 'user'" )
-				}
-				if ( !len( arguments.config.remotePath ?: "" ) ) {
-					arguments.errors.append( "deploy/#arguments.name# (ssh) is missing a 'remotePath'" )
-				}
+				validateRemoteHostFields( arguments.name, "ssh", arguments.config, arguments.errors )
 				break
 			}
 			case "docker": {
@@ -144,23 +136,23 @@ class {
 				break
 			}
 			case "ftp": {
-				validateFtpFields( arguments.name, "ftp", arguments.config, arguments.errors )
-				if ( !len( arguments.config.password ?: "" ) ) {
-					arguments.errors.append( "deploy/#arguments.name# (ftp) is missing a 'password'" )
+				validateRemoteHostFields( arguments.name, "ftp", arguments.config, arguments.errors )
+				if ( !len( arguments.config.passwordEnvVar ?: "" ) ) {
+					arguments.errors.append( "deploy/#arguments.name# (ftp) is missing a 'passwordEnvVar'" )
 				}
 				break
 			}
 			case "sftp": {
-				validateFtpFields( arguments.name, "sftp", arguments.config, arguments.errors )
-				if ( !len( arguments.config.password ?: "" ) && !len( arguments.config.key ?: "" ) ) {
-					arguments.errors.append( "deploy/#arguments.name# (sftp) is missing a 'password' or a 'key'" )
+				validateRemoteHostFields( arguments.name, "sftp", arguments.config, arguments.errors )
+				if ( !len( arguments.config.passwordEnvVar ?: "" ) && !len( arguments.config.key ?: "" ) ) {
+					arguments.errors.append( "deploy/#arguments.name# (sftp) is missing a 'passwordEnvVar' or a 'key'" )
 				}
 				break
 			}
 		}
 	}
 
-	private void function validateFtpFields(
+	private void function validateRemoteHostFields(
 		required string name,
 		required string target,
 		required struct config,

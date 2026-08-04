@@ -17,19 +17,23 @@
  * No secrets are ever read from `deploy/*` config - `identityFile` is a
  * PATH to a key file the caller manages themselves, never key material.
  *
- * @config { host (required), user (required), remotePath (required), identityFile, restartCommand }
+ * `username` (not `user`) - matches `ftp`/`sftp`'s field name for the exact
+ * same concept, so switching between remote-host targets in `deploy/`
+ * doesn't require remembering a different field name per target.
+ *
+ * @config { host (required), username (required), remotePath (required), identityFile, restartCommand }
  */
 class implements="models.deploy.IDeploymentTarget@bxagents" {
 
 	struct function deploy( required struct config, required struct context ) {
 		var host = trim( arguments.config.host ?: "" )
-		var user = trim( arguments.config.user ?: "" )
+		var username = trim( arguments.config.username ?: "" )
 		var remotePath = trim( arguments.config.remotePath ?: "" )
 
-		if ( !len( host ) || !len( user ) || !len( remotePath ) ) {
+		if ( !len( host ) || !len( username ) || !len( remotePath ) ) {
 			throw(
 				type    = "BxAgents.InvalidDeployConfig",
-				message = "deploy target 'ssh' requires 'host', 'user', and 'remotePath'"
+				message = "deploy target 'ssh' requires 'host', 'username', and 'remotePath'"
 			)
 		}
 
@@ -59,8 +63,8 @@ class implements="models.deploy.IDeploymentTarget@bxagents" {
 
 		return {
 			success : true,
-			message : "Deployed #bxaName# to #user#@#host#:#remotePath#",
-			details : { host : host, user : user, remotePath : remotePath, bxa : bxaName }
+			message : "Deployed #bxaName# to #username#@#host#:#remotePath#",
+			details : { host : host, username : username, remotePath : remotePath, bxa : bxaName }
 		}
 	}
 
@@ -75,7 +79,7 @@ class implements="models.deploy.IDeploymentTarget@bxagents" {
 			command.append( identityFile )
 		}
 		command.append( arguments.localPath )
-		command.append( "#arguments.config.user#@#arguments.config.host#:#arguments.config.remotePath#" )
+		command.append( "#arguments.config.username#@#arguments.config.host#:#arguments.config.remotePath#" )
 		return command
 	}
 
@@ -86,18 +90,25 @@ class implements="models.deploy.IDeploymentTarget@bxagents" {
 			command.append( "-i" )
 			command.append( identityFile )
 		}
-		command.append( "#arguments.config.user#@#arguments.config.host#" )
+		command.append( "#arguments.config.username#@#arguments.config.host#" )
 		command.append( arguments.config.restartCommand )
 		return command
 	}
 
 	private struct function runProcess( required array command ) {
-		var builder = createObject( "java", "java.lang.ProcessBuilder" ).init( arguments.command )
-		builder.redirectErrorStream( true )
-		var process = builder.start()
-		var output = createObject( "java", "java.lang.String" ).init( process.getInputStream().readAllBytes() )
-		process.waitFor()
-		return { exitCode : process.exitValue(), output : output }
+		try {
+			var builder = createObject( "java", "java.lang.ProcessBuilder" ).init( arguments.command )
+			builder.redirectErrorStream( true )
+			var process = builder.start()
+			var output = createObject( "java", "java.lang.String" ).init( process.getInputStream().readAllBytes() )
+			process.waitFor()
+			return { exitCode : process.exitValue(), output : output }
+		} catch ( any e ) {
+			throw(
+				type    = "BxAgents.DeployFailed",
+				message = "Could not run [#arguments.command[ 1 ]#] - is it installed and on PATH? (#e.message#)"
+			)
+		}
 	}
 
 }
