@@ -105,6 +105,12 @@ class {
 	// Static file rendering
 	// --------------------------------------------------------------------------
 
+	/**
+	 * @appName The agent's name, stamped into `this.name`
+	 * @startupStatements Bare statement strings inserted into `onApplicationStart()`, after `loadColdbox()` - tool scan, MCP registrations, gateway registrations, in that order
+	 *
+	 * @return The rendered Application.bx source
+	 */
 	private string function renderApplication( required string appName, array startupStatements = [] ) {
 		var lines = [
 			"class {",
@@ -161,11 +167,20 @@ class {
 	 * fully handles every request before this file's own body would run - this
 	 * exists only as a physical rewrite target for the web server (MiniServer's
 	 * `rewriteFileName` convention defaults to "index.bxm").
+	 *
+	 * @return The rendered index.bxm source (an empty script body)
 	 */
 	private string function renderIndex() {
 		return "<bx:script>" & char( 10 ) & "</bx:script>" & char( 10 )
 	}
 
+	/**
+	 * @appName The agent's name, stamped into ColdBox's own `coldbox.appName` setting
+	 * @agentInterceptors Names of agent-scope interceptors already copied into `interceptors/` (see InterceptorSplitter), registered here
+	 * @security The resolved config's own `security` block, forwarded verbatim into bx-ai's `moduleSettings.bxai.security` (passthrough only - see M8.5)
+	 *
+	 * @return The rendered config/ColdBox.bx source
+	 */
 	private string function renderColdboxConfig( required string appName, array agentInterceptors = [], struct security = {} ) {
 		var lines = [
 			"class {",
@@ -210,6 +225,9 @@ class {
 		return lines.toList( char( 10 ) )
 	}
 
+	/**
+	 * @return The rendered config/WireBox.bx source - maps GeneratedAgentFactory and a lazily-built, singleton GeneratedAgent
+	 */
 	private string function renderWireBox() {
 		var lines = [
 			'class extends="coldbox.system.ioc.config.Binder" {',
@@ -257,6 +275,14 @@ class {
 	 * nodes exist, since re-registering an already-scanned tool is a no-op
 	 * overwrite (confirmed against real bx-ai `BaseRegistry.register()`
 	 * source).
+	 *
+	 * @projectRoot Absolute path to the project root (containing Agent.bx/instructions.md)
+	 * @appDir Absolute path to the generated ColdBox app dir - its own `tools/` subfolder is loaded
+	 * @resolvedConfig The root project's resolved config
+	 * @cliEnvironment Optional environment name the build was invoked with, re-applied to every subagent's own config resolution
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .models is used)
+	 *
+	 * @return The rendered agent/GeneratedAgentFactory.bx source
 	 */
 	private string function renderAgentFactory( required string projectRoot, required string appDir, required struct resolvedConfig, string cliEnvironment = "", struct discovery = {} ) {
 		var built = buildAgentTree( arguments.projectRoot, arguments.projectRoot, arguments.resolvedConfig, "agent", arguments.cliEnvironment, arguments.discovery )
@@ -303,6 +329,15 @@ class {
 	 * environment, silently ignoring whatever `--environment` the whole
 	 * build was actually invoked with, so a `--environment=production` build
 	 * could still generate a subagent wired to its dev-environment config.
+	 *
+	 * @rootProjectRoot Absolute path to the ROOT project root - fixed across the whole recursion, since subagents always live under its own `subagents/` folder
+	 * @nodePath Absolute path to THIS node's own directory, used to locate its instructions.md
+	 * @resolvedConfig THIS node's own resolved config
+	 * @varName The BoxLang variable name to assign this node's built `aiAgent()` to, e.g. "agent" or "subagent_foo"
+	 * @cliEnvironment Optional environment name the build was invoked with, re-applied to every subagent's own config resolution
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .models is used), shared by every node
+	 *
+	 * @return { statements: [] } - leaf-first `var <name> = aiAgent(...)` statement strings
 	 */
 	private struct function buildAgentTree(
 		required string rootProjectRoot,
@@ -340,6 +375,15 @@ class {
 		return { statements : statements }
 	}
 
+	/**
+	 * @varName The BoxLang variable name to assign this node's built `aiAgent()` to
+	 * @nodePath Absolute path to THIS node's own directory, used to locate its instructions.md
+	 * @resolvedConfig THIS node's own resolved config
+	 * @subAgentVarNames Already-rendered child variable names, to reference in this node's own `subAgents: [...]`
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .models is used)
+	 *
+	 * @return The rendered `var <name> = aiAgent(...)` statement string for this one node
+	 */
 	private string function renderAgentStatement(
 		required string varName,
 		required string nodePath,
@@ -424,6 +468,12 @@ class {
 	 *   2. "openai"        -> a bare CORE_PROVIDERS name, no models/ lookup needed
 	 *   3. "summarizer"    -> a models/summarizer.bx|.json entry's OWN
 	 *                         { provider, model } struct is read and used
+	 *
+	 * @modelSlug The node's own resolvedConfig.model value
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .models is used)
+	 * @nodePath Absolute path to this node's own directory, for error message context
+	 *
+	 * @return { provider, model } - model is "" when only a bare provider name was given
 	 */
 	private struct function resolveModelReference( required string modelSlug, required struct discovery, required string nodePath ) {
 		if ( arguments.modelSlug.find( "/" ) ) {
@@ -462,6 +512,11 @@ class {
 		return { provider : provider, model : trim( entryConfig.model ?: "" ) }
 	}
 
+	/**
+	 * @path Absolute path to a `models/*` entry's `.bx`/`.json` file
+	 *
+	 * @return The entry's config struct, or null if it could not be read
+	 */
 	private any function readModelEntryConfig( required string path ) {
 		try {
 			if ( arguments.path.endsWith( ".json" ) ) {
@@ -484,6 +539,10 @@ class {
 	 * is ever attempted here - reachability is a runtime/warning concern.
 	 * Each subagent has its own resolvedConfig, so this runs per-node, not
 	 * just for the root.
+	 *
+	 * @resolvedConfig A single node's own resolved config
+	 *
+	 * @return A bare array of MCP server URL strings
 	 */
 	private array function extractMcpServerUrls( required struct resolvedConfig ) {
 		var entries = arguments.resolvedConfig.mcpServers ?: []
@@ -512,10 +571,20 @@ class {
 		return urls
 	}
 
+	/**
+	 * @path A filesystem path
+	 *
+	 * @return The path with any trailing slash(es) stripped
+	 */
 	private string function normalizePath( required string path ) {
 		return arguments.path.reReplace( "[\/]+$", "" )
 	}
 
+	/**
+	 * @name A subagent name, which may contain characters not legal in a BoxLang identifier
+	 *
+	 * @return name with any non-alphanumeric/underscore character replaced by "_", and a leading "_" added if it would otherwise start with a digit
+	 */
 	private string function sanitizeIdentifier( required string name ) {
 		var sanitized = arguments.name.reReplace( "[^A-Za-z0-9_]", "_", "all" )
 		return reFind( "^[0-9]", sanitized ) ? "_" & sanitized : sanitized
@@ -525,6 +594,10 @@ class {
 	 * Escapes a value for embedding as a BoxLang double-quoted string literal:
 	 * doubles `"` (quote escaping) and `#` (prevents accidental interpolation
 	 * if the generated source is later re-parsed/evaluated).
+	 *
+	 * @value A raw string to embed inside a generated double-quoted BoxLang string literal
+	 *
+	 * @return value with `"` doubled and `#` doubled
 	 */
 	private string function bxLiteral( required string value ) {
 		// Note: literal "#" is written as "##" in BoxLang source (its own
@@ -540,6 +613,10 @@ class {
 	 * value's actual Java class (not isNumeric()/isBoolean(), which test
 	 * CASTABILITY in BoxLang - a genuine string like "12345" would otherwise be
 	 * misrendered as a bare literal, silently changing its type).
+	 *
+	 * @value Any struct/array/string/numeric/boolean value to render
+	 *
+	 * @return A BoxLang source literal expression for value
 	 */
 	private string function renderLiteral( required any value ) {
 		var val = arguments.value

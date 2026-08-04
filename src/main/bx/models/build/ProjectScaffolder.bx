@@ -21,6 +21,8 @@ class {
 	 * @name The agent's name
 	 * @model The agent's provider/model slug, e.g. "openai/gpt-5"
 	 * @description Optional agent description
+	 *
+	 * @return { projectRoot, agentBx, instructions, testsBoxJson, agentSpec }
 	 */
 	struct function scaffold( required string targetDir, required string name, required string model, string description = "" ) {
 		var dir = arguments.targetDir.reReplace( "[\/]+$", "" )
@@ -60,6 +62,13 @@ class {
 		}
 	}
 
+	/**
+	 * @name The agent's name
+	 * @model The agent's provider/model slug
+	 * @description Optional agent description
+	 *
+	 * @return The rendered Agent.bx source, including a `test()` environment override pointed at the mock provider
+	 */
 	private string function renderAgentBx( required string name, required string model, required string description ) {
 		var lines = [
 			"class {",
@@ -88,6 +97,11 @@ class {
 		return lines.toList( char( 10 ) )
 	}
 
+	/**
+	 * @name The agent's name, used to derive the tests package's own name
+	 *
+	 * @return The rendered tests/box.json source, declaring a testbox devDependency
+	 */
 	private string function renderTestsBoxJson( required string name ) {
 		var lines = [
 			"{",
@@ -106,6 +120,11 @@ class {
 		return lines.toList( char( 10 ) )
 	}
 
+	/**
+	 * @name The agent's name, used in the spec's describe() block
+	 *
+	 * @return The rendered tests/specs/AgentSpec.bx source - one example spec extending BaseAgentSpec
+	 */
 	private string function renderAgentSpec( required string name ) {
 		var lines = [
 			'class extends="bxModules.bxagents.models.testing.BaseAgentSpec" {',
@@ -130,6 +149,11 @@ class {
 		return lines.toList( char( 10 ) )
 	}
 
+	/**
+	 * @name The agent's name
+	 *
+	 * @return The rendered instructions.md source
+	 */
 	private string function renderInstructions( required string name ) {
 		var lines = [
 			"## #arguments.name#",
@@ -140,6 +164,11 @@ class {
 		return lines.toList( char( 10 ) )
 	}
 
+	/**
+	 * @value A raw string to embed inside a generated double-quoted BoxLang string literal
+	 *
+	 * @return value with `"` doubled and `#` doubled, so it round-trips as a literal, not an interpolation
+	 */
 	private string function bxLiteral( required string value ) {
 		return arguments.value.replace( '"', '""', "all" ).replace( "##", "####", "all" )
 	}

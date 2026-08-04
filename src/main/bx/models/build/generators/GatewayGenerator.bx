@@ -36,6 +36,8 @@ class {
 	/**
 	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .gateways is used)
 	 * @appDir Absolute path to the generated ColdBox app dir, e.g. "<projectRoot>/.build/app" - the handler (if needed) is written to "<appDir>/handlers/Gateway.bx"
+	 *
+	 * @return { registrationStatements: [], hasHttpGateway, handlerPath (only if hasHttpGateway) }
 	 */
 	struct function generate( required struct discovery, required string appDir ) {
 		var channelEntries = collectChannelEntries( arguments.discovery )
@@ -63,6 +65,11 @@ class {
 		return result
 	}
 
+	/**
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .gateways is used)
+	 *
+	 * @return { name, config } for every gateways/* entry that is a channel-adapter (not an `exposes` entry), sorted by name
+	 */
 	private array function collectChannelEntries( required struct discovery ) {
 		var entries = []
 
@@ -84,6 +91,11 @@ class {
 		return entries
 	}
 
+	/**
+	 * @entry A single channel-adapter entry { name, config }, from collectChannelEntries()
+	 *
+	 * @return A bare `gatewayRegistry().register( aiGateway(...) )` statement string
+	 */
 	private string function renderRegistration( required struct entry ) {
 		var type = arguments.entry.config.type ?: ""
 		var options = duplicate( arguments.entry.config )
@@ -102,6 +114,10 @@ class {
 	 * configured" and rejects requests accordingly (confirmed via its source),
 	 * so an operator who forgot to set the env var gets a clear per-request
 	 * rejection rather than a hard crash at startup.
+	 *
+	 * @options An `http` gateway entry's own config, minus its `type` key
+	 *
+	 * @return A BoxLang struct-literal expression string, safe to embed in generated source
 	 */
 	private string function renderHttpOptions( required struct options ) {
 		var secretEnvVar = trim( arguments.options.secretEnvVar ?: "" )
@@ -119,6 +135,9 @@ class {
 		return "{ " & parts.toList( ", " ) & " }"
 	}
 
+	/**
+	 * @return The rendered handlers/Gateway.bx source
+	 */
 	private string function renderHandler() {
 		var lines = [
 			"/**",
@@ -152,6 +171,10 @@ class {
 	 * isBoolean(), which test CASTABILITY in BoxLang - a genuine string like
 	 * "12345" or "true" would otherwise be misrendered as a bare literal,
 	 * silently changing its type in the generated source).
+	 *
+	 * @value Any struct/array/string/numeric/boolean value to render
+	 *
+	 * @return A BoxLang source literal expression for value
 	 */
 	private string function renderLiteral( required any value ) {
 		// Captured into locals before any closure below - BoxLang closures don't
@@ -192,6 +215,15 @@ class {
 		return '"#bxLiteral( toString( val ) )#"'
 	}
 
+	/**
+	 * Reads a discovered `gateways/*` entry's config: JSON files are
+	 * deserialized directly, `.bx` files are dynamically loaded and their
+	 * `configure()` invoked.
+	 *
+	 * @path Absolute path to the entry's `.bx`/`.json` file
+	 *
+	 * @return The entry's config struct, or null if it could not be read
+	 */
 	private any function readEntryConfig( required string path ) {
 		try {
 			if ( arguments.path.endsWith( ".json" ) ) {
@@ -207,10 +239,20 @@ class {
 		}
 	}
 
+	/**
+	 * @path A filesystem path
+	 *
+	 * @return The path with any trailing slash(es) stripped
+	 */
 	private string function normalizePath( required string path ) {
 		return arguments.path.reReplace( "[\/]+$", "" )
 	}
 
+	/**
+	 * @value A raw string to embed inside a generated double-quoted BoxLang string literal
+	 *
+	 * @return value with `"` doubled and `#` doubled, so it round-trips as a literal, not an interpolation
+	 */
 	private string function bxLiteral( required string value ) {
 		return arguments.value.replace( '"', '""', "all" ).replace( "##", "####", "all" )
 	}

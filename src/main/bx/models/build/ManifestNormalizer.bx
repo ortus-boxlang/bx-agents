@@ -25,6 +25,8 @@ class {
 	 * @projectRoot Absolute path to the project root
 	 * @discovery The raw discovery struct from ProjectDiscoverer.discover()
 	 * @resolvedConfig The resolved config struct from AgentConfigResolver.resolve()
+	 *
+	 * @return { manifestVersion, generator: { name, version }, agent, files: [ { category, name, path, hash } ] }
 	 */
 	struct function normalize( required string projectRoot, required struct discovery, required struct resolvedConfig ) {
 		var root = arguments.projectRoot.reReplace( "[\\/]+$", "" )
@@ -55,6 +57,11 @@ class {
 		}
 	}
 
+	/**
+	 * @config The resolved config struct from AgentConfigResolver.resolve()
+	 *
+	 * @return Only safe, structural fields (name, description, model, environment) - never secrets
+	 */
 	private struct function buildAgentSummary( required struct config ) {
 		// Only safe, structural fields - never secrets. Secrets stay external
 		// and are resolved by bx-ai itself at runtime (see AgentConfigResolver).
@@ -66,6 +73,14 @@ class {
 		}
 	}
 
+	/**
+	 * Sorts manifest file entries by category then path, so field ordering
+	 * never depends on filesystem iteration order.
+	 *
+	 * @files The manifest's own file-entry array
+	 *
+	 * @return A new, sorted array - the input is not mutated
+	 */
 	private array function sortFiles( required array files ) {
 		var sorted = duplicate( arguments.files )
 		sorted.sort( function( a, b ) {
@@ -80,6 +95,12 @@ class {
 		return sorted
 	}
 
+	/**
+	 * @root The project root, used as the base for relativizing
+	 * @absolutePath An absolute path under (or possibly outside of) root
+	 *
+	 * @return absolutePath relative to root, forward-slash normalized; unchanged if it isn't actually under root
+	 */
 	private string function toRelativePath( required string root, required string absolutePath ) {
 		var normalizedRoot = arguments.root.replace( "\", "/", "all" )
 		var normalizedPath = arguments.absolutePath.replace( "\", "/", "all" )
@@ -91,6 +112,11 @@ class {
 		return normalizedPath
 	}
 
+	/**
+	 * @path A discovered entry's path - a file or a directory (skills/subagents/modules)
+	 *
+	 * @return A SHA-256 content hash, dispatching to hashFileContent()/hashDirectory() as appropriate
+	 */
 	private string function hashEntry( required string path ) {
 		if ( directoryExists( arguments.path ) ) {
 			return hashDirectory( arguments.path )
@@ -98,6 +124,11 @@ class {
 		return hashFileContent( arguments.path )
 	}
 
+	/**
+	 * @path Absolute path to a single file
+	 *
+	 * @return A SHA-256 hash of its line-ending-normalized content
+	 */
 	private string function hashFileContent( required string path ) {
 		return hash( normalizeLineEndings( fileRead( arguments.path ) ), "SHA-256" )
 	}
@@ -107,6 +138,10 @@ class {
 	 * file it contains (recursively, sorted for determinism) - so renaming or
 	 * changing any file inside a skill/subagent/module changes the folder's
 	 * own hash too.
+	 *
+	 * @dirPath Absolute path to a directory (a skill, subagent, or module entry)
+	 *
+	 * @return A single SHA-256 hash summarizing the whole directory's contents
 	 */
 	private string function hashDirectory( required string dirPath ) {
 		var normalizedDir = arguments.dirPath.replace( "\", "/", "all" )
@@ -124,6 +159,11 @@ class {
 		return hash( combined, "SHA-256" )
 	}
 
+	/**
+	 * @content Raw file content, any line-ending style
+	 *
+	 * @return content with CRLF/CR normalized to LF, so identical content hashes identically regardless of checkout line endings
+	 */
 	private string function normalizeLineEndings( required string content ) {
 		return arguments.content
 			.replace( char( 13 ) & char( 10 ), char( 10 ), "all" )

@@ -18,6 +18,8 @@ class {
 	 * @appDir Absolute path to the generated ColdBox app dir, e.g. "<projectRoot>/.build/app". Agent-scope interceptors are copied into "<appDir>/interceptors".
 	 * @runtimeDir Absolute path where runtime-scope interceptors are copied, e.g. "<projectRoot>/.build/runtime-interceptors"
 	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .interceptors is used)
+	 *
+	 * @return { agent: [ { name } ], runtime: [ { name } ] }
 	 */
 	struct function split( required string appDir, required string runtimeDir, required struct discovery ) {
 		var entries = arguments.discovery.interceptors ?: []
@@ -43,6 +45,11 @@ class {
 		}
 	}
 
+	/**
+	 * @entry A discovered interceptors/* entry { name, path, type }
+	 *
+	 * @return "agent" or "runtime", per the entry's own @scope annotation (defaults to "agent" if unset)
+	 */
 	private string function resolveScope( required struct entry ) {
 		var instance = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
 			.instantiate( arguments.entry.path, getDefaultContext() )
@@ -66,10 +73,20 @@ class {
 		return normalized
 	}
 
+	/**
+	 * @return The shared runtime's own BoxLang execution context
+	 */
 	private function getDefaultContext() {
 		return createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
 	}
 
+	/**
+	 * Wipes destDir and recreates it with a fresh copy of entries - matches
+	 * the rest of the build pipeline's "wipe stale output, don't merge" rule.
+	 *
+	 * @entries Discovered interceptors/* entries to copy
+	 * @destDir The destination directory - deleted first if it already exists
+	 */
 	private void function copyEntries( required array entries, required string destDir ) {
 		if ( directoryExists( arguments.destDir ) ) {
 			directoryDelete( arguments.destDir, true )
@@ -86,6 +103,11 @@ class {
 		}
 	}
 
+	/**
+	 * @path A filesystem path
+	 *
+	 * @return The path with any trailing slash(es) stripped
+	 */
 	private string function normalizePath( required string path ) {
 		return arguments.path.reReplace( "[\/]+$", "" )
 	}

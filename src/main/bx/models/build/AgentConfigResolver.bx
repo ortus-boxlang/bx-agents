@@ -17,6 +17,9 @@ class {
 
 	property name="environmentResolver";
 
+	/**
+	 * @return this
+	 */
 	function init() {
 		// "@bxagents" suffix, not a bare "EnvironmentResolver" reference - see
 		// BuildPipeline.bx's init() docblock for why.
@@ -30,6 +33,8 @@ class {
 	 * @projectRoot Absolute path to the project root (containing Agent.bx)
 	 * @cliEnvironment Optional environment name passed explicitly (e.g. via a CLI flag)
 	 * @boxContext The current BoxLang execution context. Defaults to the shared runtime context; only override this if you have a more specific one (e.g. from a CLI's main()).
+	 *
+	 * @return The fully merged config struct, plus a resolved "environment" key
 	 */
 	struct function resolve( required string projectRoot, string cliEnvironment = "", any boxContext ) {
 		var normalizedRoot = arguments.projectRoot.reReplace( "[\\/]+$", "" )
@@ -60,10 +65,19 @@ class {
 		return config
 	}
 
+	/**
+	 * @return The shared runtime's own BoxLang execution context
+	 */
 	private function getDefaultContext() {
 		return createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
 	}
 
+	/**
+	 * @agentBxPath Absolute path to the project's Agent.bx
+	 * @boxContext The BoxLang execution context to instantiate it within
+	 *
+	 * @return The instantiated Agent.bx instance
+	 */
 	private function loadAgentDescriptor( required string agentBxPath, required any boxContext ) {
 		try {
 			return createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
@@ -76,6 +90,12 @@ class {
 		}
 	}
 
+	/**
+	 * @agentDescriptor The instantiated Agent.bx instance, from loadAgentDescriptor()
+	 * @agentBxPath Absolute path to Agent.bx, for error message context
+	 *
+	 * @return The struct returned by Agent.bx's configure()
+	 */
 	private function invokeConfigure( required any agentDescriptor, required string agentBxPath ) {
 		try {
 			var result = arguments.agentDescriptor.configure()
@@ -96,6 +116,13 @@ class {
 		return result
 	}
 
+	/**
+	 * @agentDescriptor The instantiated Agent.bx instance, from loadAgentDescriptor()
+	 * @environment The resolved environment name, e.g. "production" - looked up as a method name on agentDescriptor
+	 * @agentBxPath Absolute path to Agent.bx, for error message context
+	 *
+	 * @return The struct returned by the matching environment-override method, or {} if Agent.bx declares no such method
+	 */
 	private function invokeEnvironmentOverride( required any agentDescriptor, required string environment, required string agentBxPath ) {
 		if ( !hasMethod( arguments.agentDescriptor, arguments.environment ) ) {
 			return {}
@@ -120,6 +147,12 @@ class {
 		return result
 	}
 
+	/**
+	 * @instance Any object instance
+	 * @methodName The method name to look for, case-insensitive
+	 *
+	 * @return True if instance declares a function with that name
+	 */
 	private boolean function hasMethod( required any instance, required string methodName ) {
 		var meta = getMetaData( arguments.instance )
 		var functions = meta.functions ?: []
@@ -127,6 +160,16 @@ class {
 		return functions.some( fn => fn.name.lcase() == targetName )
 	}
 
+	/**
+	 * Reads an optional `{baseName}.json` or `{baseName}-{environment}.json`
+	 * file from the project root - "" environment reads the base file.
+	 *
+	 * @projectRoot Absolute path to the project root
+	 * @baseName The config file's base name, e.g. "boxlang" or "miniserver"
+	 * @environment Optional environment suffix; "" reads the base (non-suffixed) file
+	 *
+	 * @return The parsed JSON object as a struct, or {} if the file doesn't exist
+	 */
 	private struct function readJsonConfig( required string projectRoot, required string baseName, string environment = "" ) {
 		var fileName = len( arguments.environment ) ? "#arguments.baseName#-#arguments.environment#.json" : "#arguments.baseName#.json"
 		var filePath = arguments.projectRoot & "/" & fileName
@@ -154,6 +197,16 @@ class {
 		return parsed
 	}
 
+	/**
+	 * Recursively merges `overrides` on top of `base`. Struct keys merge
+	 * recursively when both sides are structs; arrays and every other
+	 * scalar value are REPLACED wholesale by the override, never appended/merged.
+	 *
+	 * @base The lower-precedence struct
+	 * @overrides The higher-precedence struct, merged on top
+	 *
+	 * @return A new, merged struct - neither input is mutated
+	 */
 	private struct function deepMerge( required struct base, required struct overrides ) {
 		var merged = duplicate( arguments.base )
 

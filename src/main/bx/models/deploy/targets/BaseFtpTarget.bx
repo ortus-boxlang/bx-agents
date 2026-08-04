@@ -41,7 +41,11 @@
 class {
 
 	/**
+	 * @config The `ftp`/`sftp` target's own resolved `deploy/*` entry
+	 * @context { projectRoot, appDir, distDir, manifest } - only `distDir` is used, to locate the newest `.bxa`
 	 * @secure false = ftp, true = sftp
+	 *
+	 * @return { success, message, details: { host, remoteFile, bxa } }
 	 */
 	struct function performDeploy( required struct config, required struct context, required boolean secure ) {
 		var protocol = arguments.secure ? "sftp" : "ftp"
@@ -110,6 +114,12 @@ class {
 		}
 	}
 
+	/**
+	 * @remotePath The config's remote DIRECTORY (not a full file path)
+	 * @bxaName The `.bxa` filename being uploaded, which keeps its own name remotely
+	 *
+	 * @return The full remote file path to upload to
+	 */
 	string function buildRemoteFile( required string remotePath, required string bxaName ) {
 		return arguments.remotePath.reReplace( "[\/]+$", "" ) & "/" & arguments.bxaName
 	}
@@ -120,7 +130,11 @@ class {
 	 * values here (via `getSystemSetting()`, defaulting to "" when unset) -
 	 * every other field renders straight through from `config`.
 	 *
+	 * @config The `ftp`/`sftp` target's own resolved `deploy/*` entry
+	 * @connectionName A unique name for this `bx:ftp` connection, so concurrent deploys never collide
 	 * @secure false = ftp, true = sftp
+	 *
+	 * @return The attribute struct for `bx:ftp action="open" attributeCollection="..."`
 	 */
 	struct function buildConnectAttributes( required struct config, required string connectionName, required boolean secure ) {
 		var attrs = {

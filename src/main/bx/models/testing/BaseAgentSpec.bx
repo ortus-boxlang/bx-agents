@@ -36,6 +36,8 @@ class extends="testbox.system.BaseSpec" {
 	 * relative to the spawned process's own registered "/" mapping, not to
 	 * the target project, and silently copying the WRONG directory tree is
 	 * far worse than a clear error here).
+	 *
+	 * @return Absolute path to the real project root under test
 	 */
 	private string function resolveProjectRoot() {
 		var configured = getSystemSetting( "bxagents.testing.projectRoot", "" )
@@ -48,6 +50,12 @@ class extends="testbox.system.BaseSpec" {
 		return configured
 	}
 
+	/**
+	 * Builds the project under test (a throwaway temp copy, `.build`/`dist`/`tests`
+	 * excluded) against the `test` environment, then loads its
+	 * `GeneratedAgentFactory.bx` directly - no ColdBox container - and exposes
+	 * the built agent as `variables.agent`. Registers the custom matchers.
+	 */
 	function beforeAll() {
 		var projectRoot = resolveProjectRoot()
 
@@ -68,6 +76,9 @@ class extends="testbox.system.BaseSpec" {
 		registerAgentMatchers()
 	}
 
+	/**
+	 * Deletes the throwaway temp copy of the project under test created by beforeAll().
+	 */
 	function afterAll() {
 		if ( structKeyExists( variables, "$bxagentsTempDir" ) && directoryExists( variables.$bxagentsTempDir ) ) {
 			directoryDelete( variables.$bxagentsTempDir, true )
@@ -94,6 +105,12 @@ class extends="testbox.system.BaseSpec" {
 		service.setResponses( arguments.responses )
 	}
 
+	/**
+	 * @instance Any object instance
+	 * @methodName The method name to look for, case-insensitive
+	 *
+	 * @return True if instance declares a function with that name
+	 */
 	private boolean function hasMethod( required any instance, required string methodName ) {
 		var meta = getMetaData( arguments.instance )
 		var functions = meta.functions ?: []
@@ -125,6 +142,11 @@ class extends="testbox.system.BaseSpec" {
 	 * result for you (unlike its own built-in matchers, which each branch on
 	 * `this.isNot` themselves - see toHaveKey() in testbox's Expectation.cfc)
 	 * - every matcher below must check `expectation.isNot` itself.
+	 *
+	 * @expectation TestBox's own expectation object - `.actual` is the expect()'d value, `.isNot` is true under notTo*(), `.message` may be set for a custom failure message
+	 * @args The matcher's own call arguments - `args[1]` is the expected substring
+	 *
+	 * @return True if the match (accounting for `.isNot`) passed
 	 */
 	private function matcherToContainText( expectation, args ) {
 		var expected = arguments.args[ 1 ] ?: ""
@@ -149,6 +171,11 @@ class extends="testbox.system.BaseSpec" {
 	 * message in a later request's own `messages` array) for evidence the
 	 * agent actually decided to invoke the named tool - not just that the
 	 * tool exists. Supports negation - see matcherToContainText()'s docblock.
+	 *
+	 * @expectation TestBox's own expectation object - `.actual` is the expect()'d agent
+	 * @args The matcher's own call arguments - `args[1]` is the expected tool name
+	 *
+	 * @return True if the match (accounting for `.isNot`) passed
 	 */
 	private function matcherToHaveCalledTool( expectation, args ) {
 		var toolName = arguments.args[ 1 ] ?: ""
@@ -183,6 +210,11 @@ class extends="testbox.system.BaseSpec" {
 	 * recorded request) contained the given text - useful for asserting the
 	 * system prompt/instructions actually reached the provider. Supports
 	 * negation - see matcherToContainText()'s docblock.
+	 *
+	 * @expectation TestBox's own expectation object - `.actual` is the expect()'d agent
+	 * @args The matcher's own call arguments - `args[1]` is the expected substring
+	 *
+	 * @return True if the match (accounting for `.isNot`) passed
 	 */
 	private function matcherToHaveReceivedMessage( expectation, args ) {
 		var expected = arguments.args[ 1 ] ?: ""

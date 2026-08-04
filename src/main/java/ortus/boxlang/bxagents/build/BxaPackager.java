@@ -83,6 +83,10 @@ public class BxaPackager {
 	 * Computes the hex SHA-256 digest of a `.bxa` file already on disk -
 	 * exposed separately so callers can independently verify a `.sha256`
 	 * file without re-packaging.
+	 *
+	 * @param bytes The raw bytes to hash
+	 *
+	 * @return The lowercase hex-encoded SHA-256 digest
 	 */
 	public static String sha256Hex( byte[] bytes ) {
 		try {
@@ -99,6 +103,16 @@ public class BxaPackager {
 		}
 	}
 
+	/**
+	 * Builds the deterministic zip's raw bytes in memory: every regular file
+	 * under appPath, sorted by relative path, excluding anything isExcluded()
+	 * rejects.
+	 *
+	 * @param appPath        Absolute path to the generated app directory to zip
+	 * @param ignorePatterns Additional glob patterns (from `.bxaignore`) to exclude
+	 *
+	 * @return The zip's raw bytes
+	 */
 	private static byte[] buildZipBytes( Path appPath, List<String> ignorePatterns ) throws IOException {
 		List<Pattern> compiledIgnores = new ArrayList<>();
 		for ( String glob : ignorePatterns ) {
@@ -131,6 +145,14 @@ public class BxaPackager {
 		return byteStream.toByteArray();
 	}
 
+	/**
+	 * Writes a single zip entry with a fixed timestamp and an explicit
+	 * STORED (uncompressed) size/CRC, so output is byte-identical run to run.
+	 *
+	 * @param zip          The open zip output stream to write to
+	 * @param relativePath The entry's path within the zip, forward-slash separated
+	 * @param content      The entry's raw file content
+	 */
 	private static void writeEntry( ZipOutputStream zip, String relativePath, byte[] content ) throws IOException {
 		ZipEntry entry = new ZipEntry( relativePath );
 		entry.setTime( FIXED_ENTRY_TIME );
@@ -149,6 +171,11 @@ public class BxaPackager {
 	/**
 	 * Hard-excludes dotfiles/`.env`* regardless of `.bxaignore`, then applies
 	 * any additional project-declared ignore globs.
+	 *
+	 * @param relativePath   A file's path relative to the app directory, forward-slash separated
+	 * @param ignorePatterns Compiled `.bxaignore` glob patterns
+	 *
+	 * @return True if the file should be excluded from the packaged artifact
 	 */
 	private static boolean isExcluded( String relativePath, List<Pattern> ignorePatterns ) {
 		for ( String segment : relativePath.split( "/" ) ) {
@@ -166,6 +193,12 @@ public class BxaPackager {
 		return false;
 	}
 
+	/**
+	 * @param root The base directory to relativize against
+	 * @param file An absolute file path under root
+	 *
+	 * @return file's path relative to root, with backslashes normalized to forward slashes
+	 */
 	private static String toRelativeUnixPath( Path root, Path file ) {
 		return root.relativize( file ).toString().replace( '\\', '/' );
 	}
@@ -174,6 +207,10 @@ public class BxaPackager {
 	 * Translates a simple glob (`*` = any run of characters, `?` = one
 	 * character, everything else literal) into a regex Pattern matched
 	 * against a `/`-separated relative path.
+	 *
+	 * @param glob A `.bxaignore` glob pattern
+	 *
+	 * @return The equivalent compiled regex Pattern
 	 */
 	private static Pattern globToPattern( String glob ) {
 		StringBuilder regex = new StringBuilder();

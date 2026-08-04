@@ -14,6 +14,8 @@ class {
 	/**
 	 * @projectRoot Absolute path to the project root
 	 * @buildDir Absolute path to the build output directory, e.g. "<projectRoot>/.build/app"
+	 *
+	 * @return { tools, skills } - absolute paths to the copied destination folders
 	 */
 	struct function copy( required string projectRoot, required string buildDir ) {
 		var root = normalizePath( arguments.projectRoot )
@@ -28,6 +30,14 @@ class {
 		return { tools : toolsDest, skills : skillsDest }
 	}
 
+	/**
+	 * Wipes dest (if present) and recreates it with a fresh copy of src's
+	 * contents - matches the build pipeline's "wipe stale output, don't
+	 * merge" rule. A no-op (after wiping) if src doesn't exist.
+	 *
+	 * @src Absolute path to the source convention folder, e.g. "<projectRoot>/tools"
+	 * @dest Absolute path to the destination folder, e.g. "<appDir>/tools"
+	 */
 	private void function wipeAndCopy( required string src, required string dest ) {
 		if ( directoryExists( arguments.dest ) ) {
 			directoryDelete( arguments.dest, true )
@@ -46,6 +56,9 @@ class {
 	 * a time, skipping any entry (file or directory) whose own name starts
 	 * with "." - so a hidden directory's contents are never reached at all,
 	 * not merely filtered leaf-by-leaf.
+	 *
+	 * @src Absolute path to the source directory (already known to exist)
+	 * @dest Absolute path to the destination directory (already created)
 	 */
 	private void function copyTree( required string src, required string dest ) {
 		var entries = directoryList( path = arguments.src, recurse = false, listInfo = "name", sort = "asc", type = "all" )
@@ -67,6 +80,11 @@ class {
 		}
 	}
 
+	/**
+	 * @path A filesystem path
+	 *
+	 * @return The path with any trailing slash(es) stripped
+	 */
 	private string function normalizePath( required string path ) {
 		return arguments.path.reReplace( "[\/]+$", "" )
 	}

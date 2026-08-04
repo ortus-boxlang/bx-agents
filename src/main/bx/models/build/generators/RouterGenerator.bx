@@ -21,6 +21,8 @@ class {
 	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .gateways is used)
 	 * @appDir Absolute path to the generated ColdBox app dir, e.g. "<projectRoot>/.build/app"
 	 * @hasHttpGateway Whether an http-type channel-adapter gateway exists (see GatewayGenerator) - emits the 3 fixed gateway webhook routes when true
+	 *
+	 * @return { router, hasRoutes, hasAgentExposure }
 	 */
 	struct function generate( required struct discovery, required string appDir, boolean hasHttpGateway = false ) {
 		var exposureEntries = collectExposureEntries( arguments.discovery )
@@ -61,6 +63,11 @@ class {
 		}
 	}
 
+	/**
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .gateways is used)
+	 *
+	 * @return { name, config } for every gateways/* entry that has an `exposes` key, sorted by path
+	 */
 	private array function collectExposureEntries( required struct discovery ) {
 		var entries = []
 
@@ -84,6 +91,11 @@ class {
 		return entries
 	}
 
+	/**
+	 * @entry An exposure entry { name, config }, from collectExposureEntries()
+	 *
+	 * @return A bare `route(...).toAi(...)` or `route(...).toMCP(...)` statement string
+	 */
 	private string function renderExposureRoute( required struct entry ) {
 		var path = arguments.entry.config.path ?: ""
 
@@ -95,6 +107,11 @@ class {
 		return 'route( "#bxLiteral( path )#" ).toMCP( "#bxLiteral( target )#" )'
 	}
 
+	/**
+	 * @lines Bare route/comment statement strings to embed in configure()'s body
+	 *
+	 * @return The rendered config/Router.bx source
+	 */
 	private string function renderRouterFile( required array lines ) {
 		var body = arguments.lines.len() ? arguments.lines : [ "// No HTTP exposure declared under gateways/" ]
 		var indented = body.map( line => len( line ) ? "		" & line : "" )
@@ -115,6 +132,15 @@ class {
 		return fileLines.toList( char( 10 ) )
 	}
 
+	/**
+	 * Reads a discovered `gateways/*` entry's config: JSON files are
+	 * deserialized directly, `.bx` files are dynamically loaded and their
+	 * `configure()` invoked.
+	 *
+	 * @path Absolute path to the entry's `.bx`/`.json` file
+	 *
+	 * @return The entry's config struct, or null if it could not be read
+	 */
 	private any function readEntryConfig( required string path ) {
 		try {
 			if ( arguments.path.endsWith( ".json" ) ) {
@@ -130,10 +156,20 @@ class {
 		}
 	}
 
+	/**
+	 * @path A filesystem path
+	 *
+	 * @return The path with any trailing slash(es) stripped
+	 */
 	private string function normalizePath( required string path ) {
 		return arguments.path.reReplace( "[\/]+$", "" )
 	}
 
+	/**
+	 * @value A raw string to embed inside a generated double-quoted BoxLang string literal
+	 *
+	 * @return value with `"` doubled and `#` doubled, so it round-trips as a literal, not an interpolation
+	 */
 	private string function bxLiteral( required string value ) {
 		return arguments.value.replace( '"', '""', "all" ).replace( "##", "####", "all" )
 	}
