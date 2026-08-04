@@ -119,6 +119,23 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.errors.filter( e => e.findNoCase( "does not match any models/ entry" ) ).len() ).toBeGT( 0 );
 			} );
 
+			/**
+			 * Regression: a real bug this closed - validateModelProvider() was
+			 * only ever called once, against the ROOT project's own resolved
+			 * config. A SUBAGENT's own bad `model` value (unknown provider, or
+			 * a name matching neither a core provider nor a models/ entry)
+			 * passed validation cleanly and only crashed later, mid-generation,
+			 * in ColdBoxAppGenerator - the same "validated but crashes at
+			 * generation" pattern already closed for schedule action/cron
+			 * support and root-level subagent references.
+			 */
+			it( "rejects a subagent's own bad model value, clearly attributed to that subagent", function() {
+				var result = validateFixture( "subagent-bad-model" );
+				var modelErrors = result.errors.filter( e => e.findNoCase( "does not match any models/ entry" ) );
+				expect( modelErrors.len() ).toBeGT( 0 );
+				expect( modelErrors[ 1 ] ).toInclude( "Subagent [bad]" );
+			} );
+
 			it( "detects a circular module dependency", function() {
 				var result = validateFixture( "module-cycle" );
 				expect( result.errors.filter( e => e.findNoCase( "Circular module dependency" ) ).len() ).toBeGT( 0 );

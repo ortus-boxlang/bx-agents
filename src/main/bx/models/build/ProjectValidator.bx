@@ -91,6 +91,7 @@ class {
 			try {
 				var config = resolver.resolve( projectRoot = subagent.path )
 				graph[ subagent.name ] = config.subAgents ?: []
+				validateModelProvider( config, arguments.discovery, arguments.errors, "Subagent [#subagent.name#]'s Agent.bx" )
 			} catch ( any e ) {
 				arguments.errors.append( "Subagent [#subagent.name#] failed to load: #e.message#" )
 				graph[ subagent.name ] = []
@@ -339,27 +340,38 @@ class {
 	// Model / provider validation
 	// --------------------------------------------------------------------------
 
-	private void function validateModelProvider( required struct resolvedConfig, required struct discovery, required array errors ) {
+	/**
+	 * @source Human-readable label for error messages - defaults to describing
+	 * the ROOT project's own Agent.bx. Callers validating a SUBAGENT's config
+	 * pass their own "Subagent [name]'s Agent.bx" label instead, so a bad
+	 * model value on a subagent is reported clearly rather than misattributed
+	 * to the root project.
+	 */
+	private void function validateModelProvider( required struct resolvedConfig, required struct discovery, required array errors, string source = "Agent.bx's configure()" ) {
 		var modelValue = arguments.resolvedConfig.model ?: ""
 
 		if ( !len( modelValue ) ) {
-			arguments.errors.append( "Agent.bx's configure() must declare a 'model'" )
+			arguments.errors.append( "#arguments.source# must declare a 'model'" )
 			return
 		}
 
 		if ( modelValue.find( "/" ) ) {
 			var parsed = variables.modelSlugParser.parse( modelValue )
 			if ( !variables.modelSlugParser.isKnownProvider( parsed.provider ) ) {
-				arguments.errors.append( "Unknown model provider [#parsed.provider#] - must be one of: #variables.modelSlugParser.coreProviders().toList()#" )
+				arguments.errors.append( "#arguments.source#: Unknown model provider [#parsed.provider#] - must be one of: #variables.modelSlugParser.coreProviders().toList()#" )
 			}
 			return
 		}
 
 		// No slash: must either be a known provider's default model, or a named
-		// reference to a models/ entry.
+		// reference to a models/ entry. Subagents have no models/ folder of
+		// their own - they resolve against the ROOT project's discovery.models,
+		// matching the flat-namespace design already used for subAgents
+		// references (see docs/conventions/subagents.md) and ColdBoxAppGenerator's
+		// own generation-time model resolution.
 		var modelNames = ( arguments.discovery.models ?: [] ).map( m => m.name )
 		if ( !variables.modelSlugParser.isKnownProvider( modelValue ) && !modelNames.contains( modelValue ) ) {
-			arguments.errors.append( "model [#modelValue#] has no provider and does not match any models/ entry" )
+			arguments.errors.append( "#arguments.source#: model [#modelValue#] has no provider and does not match any models/ entry" )
 		}
 	}
 
