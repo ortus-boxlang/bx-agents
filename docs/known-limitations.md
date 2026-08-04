@@ -58,6 +58,8 @@ Minute/hour/daily/weekly/monthly/yearly cron shapes translate to ColdBox's frequ
 
 Fixed by resolving the jar from `java.class.path` instead - scanning for a `boxlang-*.jar` entry that does **not** contain `miniserver`, falling back to the old codeSource trick only if no such entry is found.
 
-## `deploy` supports one target
+## `deploy`'s `ssh`/`docker`/`digitalocean` targets aren't exercised by an automated real-process test
 
-Only a `local` (directory copy) deployment target ships in this version - see [Deployment & Secrets](deployment-and-secrets.md#deploying). A real pluggable target interface can be added once a second target actually exists.
+`SshTargetSpec.bx`/`DockerTargetSpec.bx` assert on the exact `scp`/`ssh`/`docker` command each target builds (a real `ProcessBuilder` argument array) without ever invoking the real binary - the same "capture, don't execute" approach used elsewhere in this suite for anything that needs a binary that might not be on `PATH` in CI (see `MiniServerLauncherTest`'s `assumeTrue` skips). `local`'s copy logic IS exercised for real (`LocalTargetSpec.bx`), including a regression test for a real latent bug this refactor fixed: the original `Deploy.bx` picked the "newest" `.bxa` via a lexical filename sort, which silently mis-picks once a project reaches double-digit versions (`v9.0.0` sorts after `v10.0.0`) - fixed by sorting on actual file modification time (`DistArtifactLocator`).
+
+`DigitalOceanTargetSpec.bx` similarly only unit-tests the pure `buildAppSpec()`/`findExistingAppId()` logic - the real `GET/POST /v2/apps` calls are never exercised in CI, since that needs a live DigitalOcean account and API token. Do at least one manual `deploy --name=<ssh-entry>` against a real disposable VM, and one `deploy --name=<digitalocean-entry>` against a real DO account with a throwaway app, before depending on either in production - the same honest framing already used above for the mock-provider-only testing gap.

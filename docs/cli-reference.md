@@ -111,14 +111,17 @@ bxAgents package [--version=1.0.0]
 
 ### `deploy`
 
-Copy the newest packaged `.bxa` to a destination.
+Ship a built/packaged project to a real deployment target via the pluggable [`deploy/`](conventions/deploy.md) convention.
 
 ```bash
+bxAgents deploy --name=production
+# or, the flag-only shorthand (local only):
 bxAgents deploy --destination=/path/to/somewhere [--target=local]
 ```
 
-- Requires a prior `package` - fails clearly if `dist/` has no `.bxa`.
-- `--target` only supports `local` (the default) in this version - copies to `--destination` (required), creating it if needed.
+- `--name=<entry>` dispatches to whatever target the named `deploy/<entry>.bx`/`.json` entry declares (`local`, `ssh`, `docker`, or `digitalocean`).
+- The flag-only form (`--target=local --destination=...`, or no `--target` at all) works with no `deploy/` folder present - only `local` supports it; every other target requires a named entry, since it needs more configuration than a couple of flags can carry.
+- `local`/`ssh` require a prior `package`; `docker`/`digitalocean` require a prior `build` (they build straight from `.build/app`).
 
 ### `inspect`
 

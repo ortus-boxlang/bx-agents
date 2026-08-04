@@ -1,0 +1,52 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "deploy.DistArtifactLocator", function() {
+
+			beforeEach( function() {
+				variables.locator = new bxagents.models.deploy.DistArtifactLocator();
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function newTempDir() {
+				var dir = createTempDirectory( prefix = "bxagents-distlocator-" );
+				tempDirs.append( dir );
+				return dir;
+			}
+
+			it( "throws BxAgents.NotPackaged when dist/ doesn't exist", function() {
+				expect( function() {
+					locator.newestBxa( newTempDir() & "/dist" );
+				} ).toThrow( "BxAgents.NotPackaged" );
+			} );
+
+			it( "throws BxAgents.NotPackaged when dist/ has no .bxa", function() {
+				var dir = newTempDir();
+				expect( function() {
+					locator.newestBxa( dir );
+				} ).toThrow( "BxAgents.NotPackaged" );
+			} );
+
+			it( "picks the most recently modified .bxa, not the lexically-last one", function() {
+				var dir = newTempDir();
+				fileWrite( dir & "/myagent-9.0.0.bxa", "v9" );
+				sleep( 1100 );
+				fileWrite( dir & "/myagent-10.0.0.bxa", "v10" );
+
+				var newest = locator.newestBxa( dir );
+
+				expect( getFileFromPath( newest ) ).toBe( "myagent-10.0.0.bxa" );
+			} );
+
+		} );
+	}
+
+}

@@ -1,0 +1,46 @@
+/**
+ * Locates the newest packaged `.bxa` in a project's `dist/` - shared by
+ * every deploy target that ships the packaged artifact itself (`local`,
+ * `ssh`) rather than building a container image from `.build/app` directly
+ * (`docker`, `digitalocean`).
+ *
+ * Sorts by actual file modification time, not a lexical filename sort - the
+ * latter silently mis-picks once a project reaches double-digit versions
+ * (e.g. `myagent-v9.0.0.bxa` sorts AFTER `myagent-v10.0.0.bxa` lexically,
+ * even though v10 was packaged later). This was a real latent bug in the
+ * original single-target `Deploy.bx` before M16's refactor.
+ */
+class {
+
+	/**
+	 * @distDir Absolute path to a project's dist/ directory
+	 *
+	 * @return Absolute path to the newest .bxa
+	 */
+	string function newestBxa( required string distDir ) {
+		if ( !directoryExists( arguments.distDir ) ) {
+			throw(
+				type    = "BxAgents.NotPackaged",
+				message = "No dist/ found at [#arguments.distDir#] - run `package` first"
+			)
+		}
+
+		var bxaFiles = directoryList( path = arguments.distDir, recurse = false, listInfo = "path", type = "file" )
+			.filter( function( path ) { return getFileFromPath( path ).endsWith( ".bxa" ) } )
+
+		if ( !bxaFiles.len() ) {
+			throw(
+				type    = "BxAgents.NotPackaged",
+				message = "No .bxa found in [#arguments.distDir#] - run `package` first"
+			)
+		}
+
+		return bxaFiles.reduce( function( latest, path ) {
+			if ( isNull( latest ) ) {
+				return path
+			}
+			return getFileInfo( path ).lastModified > getFileInfo( latest ).lastModified ? path : latest
+		} )
+	}
+
+}

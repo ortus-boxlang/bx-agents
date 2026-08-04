@@ -1,67 +1,86 @@
 /**
- * `deploy` CLI verb - copies a packaged `.bxa` to a deployment target.
+ * `deploy` CLI verb - ships a built/packaged project to a real deployment
+ * target via the pluggable `IDeploymentTarget` interface (M16).
  *
- * Only a single "local" target (copy to an arbitrary destination directory -
- * a shared drive, an artifact folder, etc.) ships in this version. `target`
- * is deliberately a plain string switch rather than a real plugin interface:
- * nothing has needed a second target yet, and inventing extension points
- * nobody can use isn't worth the complexity - add a real `IDeploymentTarget`
- * dispatch once a second target actually exists.
+ * Two ways to invoke it:
  *
- * Requires a prior `package` (reads the newest `.bxa` in `dist/`).
+ *  1. `--name=<entry>` - dispatches to whatever target the named
+ *     `deploy/<entry>.bx` (or `.json`) convention entry declares (`local`,
+ *     `ssh`, `docker`, or `digitalocean`), resolved and validated via
+ *     `DeploymentConfigResolver`.
+ *  2. `--target=local --destination=...` (or no `--target` at all, which
+ *     defaults to `local`) - the original flag-only form, kept working with
+ *     no `deploy/` folder present so the simplest case never needs one.
+ *     Only `local` supports this shorthand - every other target needs more
+ *     configuration than a couple of flags can reasonably carry.
  */
 class {
 
+	variables.TARGET_CLASSES = {
+		"local"        : "models.deploy.targets.LocalTarget@bxagents",
+		"ssh"          : "models.deploy.targets.SshTarget@bxagents",
+		"docker"       : "models.deploy.targets.DockerTarget@bxagents",
+		"digitalocean" : "models.deploy.targets.DigitalOceanTarget@bxagents"
+	}
+
 	/**
-	 * @options { projectRoot (required), target (optional, defaults to "local"), destination (required for "local") }
+	 * @options { projectRoot (required), name (optional, a deploy/* entry), target (optional, defaults to "local"), destination (required for flag-only "local") }
 	 */
 	struct function run( struct options = {} ) {
 		var projectRoot = trim( arguments.options.projectRoot ?: "" )
 		if ( !len( projectRoot ) ) {
 			throw( type = "BxAgents.MissingProjectRoot", message = "`deploy` requires a project root" )
 		}
-
-		var target = len( arguments.options.target ?: "" ) ? arguments.options.target : "local"
-		if ( target != "local" ) {
-			throw(
-				type    = "BxAgents.UnknownDeploymentTarget",
-				message = "Unknown deployment target [#target#] - only 'local' is supported in this version"
-			)
-		}
-
-		var destination = trim( arguments.options.destination ?: "" )
-		if ( !len( destination ) ) {
-			throw( type = "BxAgents.MissingDestination", message = "`deploy --target=local` requires --destination" )
-		}
-
 		var root = projectRoot.reReplace( "[\/]+$", "" )
-		var distDir = root & "/dist"
 
-		if ( !directoryExists( distDir ) ) {
-			throw(
-				type    = "BxAgents.NotPackaged",
-				message = "No dist/ found at [#distDir#] - run `package` first"
-			)
+		var name = trim( arguments.options.name ?: "" )
+		var target = ""
+		var config = {}
+
+		if ( len( name ) ) {
+			var resolver = new "models.deploy.DeploymentConfigResolver@bxagents"()
+			var entry = resolver.getEntry( root, name )
+			target = entry.target
+			config = entry.config
+		} else {
+			target = len( arguments.options.target ?: "" ) ? arguments.options.target : "local"
+
+			if ( !variables.TARGET_CLASSES.keyExists( target ) ) {
+				throw(
+					type    = "BxAgents.UnknownDeploymentTarget",
+					message = "Unknown deployment target [#target#] - must be one of: #variables.TARGET_CLASSES.keyArray().toList()#"
+				)
+			}
+
+			if ( target != "local" ) {
+				throw(
+					type    = "BxAgents.MissingDeployEntry",
+					message = "deploy target [#target#] requires a deploy/*.bx entry (`deploy --name=<entry>`) - only 'local' supports the flag-only form"
+				)
+			}
+
+			var destination = trim( arguments.options.destination ?: "" )
+			if ( !len( destination ) ) {
+				throw( type = "BxAgents.MissingDestination", message = "`deploy --target=local` requires --destination" )
+			}
+			config = { destination : destination }
 		}
 
-		var bxaFiles = directoryList( path = distDir, recurse = false, listInfo = "name", sort = "desc", type = "file" )
-			.filter( function( name ) { return name.endsWith( ".bxa" ) } )
-
-		if ( !bxaFiles.len() ) {
-			throw(
-				type    = "BxAgents.NotPackaged",
-				message = "No .bxa found in [#distDir#] - run `package` first"
-			)
+		var manifestPath = root & "/.build/manifest.json"
+		var context = {
+			projectRoot : root,
+			appDir      : root & "/.build/app",
+			distDir     : root & "/dist",
+			manifest    : fileExists( manifestPath ) ? jsonDeserialize( fileRead( manifestPath ) ) : {}
 		}
 
-		var bxaName = bxaFiles[ 1 ]
-		var destinationDir = destination.reReplace( "[\/]+$", "" )
-		directoryCreate( path = destinationDir, createPath = true, ignoreExists = true )
-		fileCopy( distDir & "/" & bxaName, destinationDir & "/" & bxaName )
+		var targetInstance = new "#variables.TARGET_CLASSES[ target ]#"()
+		var result = targetInstance.deploy( config, context )
 
 		return {
-			exitCode : 0,
-			message  : "Deployed #bxaName# to #destinationDir#"
+			exitCode : result.success ? 0 : 1,
+			message  : result.message,
+			result   : result
 		}
 	}
 

@@ -52,9 +52,12 @@ bxAgents serve
 ## Deploying
 
 ```bash
-bxAgents deploy --destination=/path/to/somewhere
+bxAgents deploy --destination=/path/to/somewhere   # local, flag-only shorthand
+bxAgents deploy --name=production                  # any target, via deploy/production.bx
 ```
 
-Copies the newest `.bxa` in `dist/` to `--destination` (created if it doesn't exist). Only a `local` copy target ships in this version - see [CLI Reference](cli-reference.md#deploy) - a real multi-target plugin interface can be added once a second target actually exists.
+Four pluggable targets ship out of the box - `local` (copy the newest `.bxa` somewhere), `ssh` (ship it to a bare server), `docker` (build/push a container image), and `digitalocean` (deploy to a DigitalOcean App Platform app) - see [deploy/](conventions/deploy.md) for the full config shape of each and [CLI Reference](cli-reference.md#deploy) for the CLI flags.
 
-To run a packaged `.bxa` somewhere else: unzip it (it's a plain ColdBox app) and point `boxlang-miniserver` at the extracted directory, setting whatever secret environment variables that deployment needs.
+No target ever reads a secret from `deploy/*` config - credentials (registry passwords, SSH keys, the DigitalOcean API token) are always resolved from environment variables at deploy time, the same "secrets stay external" rule as everywhere else in this doc. See [deploy/](conventions/deploy.md#secrets-stay-external) for the exact env var each target expects.
+
+To run a packaged `.bxa` somewhere else manually: unzip it (it's a plain ColdBox app) and point `boxlang-miniserver` at the extracted directory, setting whatever secret environment variables that deployment needs.

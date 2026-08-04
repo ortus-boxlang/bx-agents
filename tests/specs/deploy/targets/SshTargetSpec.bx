@@ -1,0 +1,68 @@
+/**
+ * Command construction (`buildScpCommand`/`buildSshRestartCommand`) is
+ * tested directly - no real `scp`/`ssh` process is ever invoked here, the
+ * same "capture the command, don't execute it" approach used for
+ * `DockerTargetSpec`.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "deploy.targets.SshTarget", function() {
+
+			beforeEach( function() {
+				variables.target = new bxagents.models.deploy.targets.SshTarget();
+			} );
+
+			it( "builds a scp command without an identity file", function() {
+				var command = target.buildScpCommand(
+					{ host : "example.com", user : "deploy", remotePath : "/srv/app" },
+					"/tmp/myagent-1.0.0.bxa"
+				);
+
+				expect( command ).toBe( [ "scp", "/tmp/myagent-1.0.0.bxa", "deploy@example.com:/srv/app" ] );
+			} );
+
+			it( "builds a scp command with an identity file", function() {
+				var command = target.buildScpCommand(
+					{ host : "example.com", user : "deploy", remotePath : "/srv/app", identityFile : "/home/me/.ssh/id_rsa" },
+					"/tmp/myagent-1.0.0.bxa"
+				);
+
+				expect( command ).toBe( [
+					"scp", "-i", "/home/me/.ssh/id_rsa", "/tmp/myagent-1.0.0.bxa", "deploy@example.com:/srv/app"
+				] );
+			} );
+
+			it( "builds an ssh restart command", function() {
+				var command = target.buildSshRestartCommand( {
+					host           : "example.com",
+					user           : "deploy",
+					restartCommand : "systemctl restart myagent"
+				} );
+
+				expect( command ).toBe( [ "ssh", "deploy@example.com", "systemctl restart myagent" ] );
+			} );
+
+			it( "builds an ssh restart command with an identity file", function() {
+				var command = target.buildSshRestartCommand( {
+					host           : "example.com",
+					user           : "deploy",
+					identityFile   : "/home/me/.ssh/id_rsa",
+					restartCommand : "systemctl restart myagent"
+				} );
+
+				expect( command ).toBe( [
+					"ssh", "-i", "/home/me/.ssh/id_rsa", "deploy@example.com", "systemctl restart myagent"
+				] );
+			} );
+
+			it( "throws BxAgents.InvalidDeployConfig when host/user/remotePath are missing", function() {
+				expect( function() {
+					target.deploy( {}, { distDir : createTempDirectory() } );
+				} ).toThrow( "BxAgents.InvalidDeployConfig" );
+			} );
+
+		} );
+	}
+
+}

@@ -1,0 +1,176 @@
+/**
+ * Deploys to a DigitalOcean App Platform app (M16) - "push and minimal
+ * provision": composes `DockerTarget` to build/push the image (same
+ * `registry` config shape), then either updates an existing app (a fresh
+ * deployment against the just-pushed image) or creates one from scratch if
+ * it doesn't exist yet, via the real DigitalOcean Apps API:
+ *
+ *  - `GET  /v2/apps` - resolve an existing app by name (client-side filter
+ *    on `spec.name`) rather than remembering a local app-ID file, so this
+ *    works identically from any machine or CI runner.
+ *  - `POST /v2/apps/{id}/deployments` - if found, matching `doctl apps
+ *    create-deployment`'s real semantics (always deploys the freshly pushed
+ *    image).
+ *  - `POST /v2/apps` - if not found, with body `{"spec": ...}` per the real
+ *    App Spec schema (`name`, `region`, `services[0].image
+ *    {registry_type, registry, repository, tag}`, `http_port`,
+ *    `instance_size_slug`, `instance_count`, `envs`).
+ *
+ * `registry.repository` must be in `namespace/repo` form (e.g.
+ * `myorg/my-agent`) - the DigitalOcean App Spec's `image` block splits this
+ * into separate `registry` (namespace) and `repository` fields.
+ *
+ * The DigitalOcean API token is resolved from the `DIGITALOCEAN_TOKEN`
+ * environment variable at deploy time - never stored in `deploy/*` config,
+ * matching this project's "secrets stay external" rule.
+ *
+ * `buildAppSpec()` and `findExistingAppId()` are kept pure (no HTTP) so
+ * specs can exercise the spec-building and create-vs-update decision logic
+ * directly, without a real DigitalOcean account - the actual API calls
+ * (`listApps`/`createApp`/`createDeployment`) are exercised only by manual
+ * smoke testing against a real, disposable DO app (see docs/known-limitations.md).
+ *
+ * @config { registry: { type, repository }, appName (required), region, tag, httpPort, instanceSize, instanceCount, envs }
+ */
+class implements="models.deploy.IDeploymentTarget@bxagents" {
+
+	variables.API_BASE = "https://api.digitalocean.com/v2"
+	variables.REGISTRY_TYPE_MAP = { "dockerhub" : "DOCKER_HUB", "ghcr" : "GHCR", "docr" : "DOCR" }
+
+	struct function deploy( required struct config, required struct context ) {
+		var appName = trim( arguments.config.appName ?: "" )
+		if ( !len( appName ) ) {
+			throw( type = "BxAgents.InvalidDeployConfig", message = "deploy target 'digitalocean' requires an 'appName'" )
+		}
+
+		var token = trim( getSystemSetting( "DIGITALOCEAN_TOKEN", "" ) )
+		if ( !len( token ) ) {
+			throw(
+				type    = "BxAgents.MissingCredentials",
+				message = "deploy target 'digitalocean' requires the DIGITALOCEAN_TOKEN environment variable"
+			)
+		}
+
+		// Build + push the image first - the App Spec references it by tag,
+		// so it must exist in the registry before DO can pull it.
+		new "models.deploy.targets.DockerTarget@bxagents"().deploy( arguments.config, arguments.context )
+
+		var appSpec = buildAppSpec( arguments.config )
+		var apps = listApps( token )
+		var existingId = findExistingAppId( apps, appName )
+
+		if ( len( existingId ) ) {
+			createDeployment( token, existingId )
+			return {
+				success : true,
+				message : "Redeployed DigitalOcean app [#appName#] (#existingId#)",
+				details : { appId : existingId, spec : appSpec }
+			}
+		}
+
+		var created = createApp( token, appSpec )
+		return {
+			success : true,
+			message : "Created and deployed DigitalOcean app [#appName#] (#created.id#)",
+			details : { appId : created.id, spec : appSpec }
+		}
+	}
+
+	struct function buildAppSpec( required struct config ) {
+		var registry = arguments.config.registry
+		var parsed = parseRepository( registry.repository )
+		var tag = len( arguments.config.tag ?: "" ) ? arguments.config.tag : "latest"
+		var appName = arguments.config.appName
+
+		return {
+			"name"     : appName,
+			"region"   : len( arguments.config.region ?: "" ) ? arguments.config.region : "nyc",
+			"services" : [
+				{
+					"name"                : appName,
+					"image"               : {
+						"registry_type" : variables.REGISTRY_TYPE_MAP[ registry.type ?: "dockerhub" ] ?: "DOCKER_HUB",
+						"registry"      : parsed.registry,
+						"repository"    : parsed.repository,
+						"tag"           : tag
+					},
+					"http_port"           : arguments.config.httpPort ?: 8080,
+					"instance_size_slug"  : len( arguments.config.instanceSize ?: "" ) ? arguments.config.instanceSize : "apps-s-1vcpu-1gb",
+					"instance_count"      : arguments.config.instanceCount ?: 1,
+					"envs"                : arguments.config.envs ?: []
+				}
+			]
+		}
+	}
+
+	/**
+	 * @apps Parsed `GET /v2/apps` response's `apps` array - each entry has
+	 *       an `id` and a `spec.name`
+	 *
+	 * @return The matching app's id, or "" if none matches
+	 */
+	string function findExistingAppId( required array apps, required string name ) {
+		for ( var app in arguments.apps ) {
+			if ( ( app.spec.name ?: "" ) == arguments.name ) {
+				return app.id
+			}
+		}
+		return ""
+	}
+
+	private struct function parseRepository( required string repository ) {
+		var parts = listToArray( arguments.repository, "/" )
+		if ( parts.len() < 2 ) {
+			throw(
+				type    = "BxAgents.InvalidDeployConfig",
+				message = "deploy target 'digitalocean' requires 'registry.repository' in 'namespace/repo' form (got [#arguments.repository#])"
+			)
+		}
+		var repo = parts[ parts.len() ]
+		var namespace = parts.slice( 1, parts.len() - 1 ).toList( "/" )
+		return { registry : namespace, repository : repo }
+	}
+
+	private array function listApps( required string token ) {
+		var result = ""
+		bx:http url="#variables.API_BASE#/apps" method="GET" result="result" {
+			bx:httpparam type="header" name="Authorization" value="Bearer #arguments.token#";
+		}
+		assertOk( result, "GET /v2/apps" )
+		var body = jsonDeserialize( result.fileContent )
+		return body.apps ?: []
+	}
+
+	private struct function createApp( required string token, required struct spec ) {
+		var result = ""
+		bx:http url="#variables.API_BASE#/apps" method="POST" result="result" {
+			bx:httpparam type="header" name="Authorization" value="Bearer #arguments.token#";
+			bx:httpparam type="header" name="Content-Type" value="application/json";
+			bx:httpparam type="body" value="#jsonSerialize( { spec : arguments.spec } )#";
+		}
+		assertOk( result, "POST /v2/apps" )
+		var body = jsonDeserialize( result.fileContent )
+		return body.app
+	}
+
+	private void function createDeployment( required string token, required string appId ) {
+		var result = ""
+		bx:http url="#variables.API_BASE#/apps/#arguments.appId#/deployments" method="POST" result="result" {
+			bx:httpparam type="header" name="Authorization" value="Bearer #arguments.token#";
+			bx:httpparam type="header" name="Content-Type" value="application/json";
+			bx:httpparam type="body" value="{}";
+		}
+		assertOk( result, "POST /v2/apps/#arguments.appId#/deployments" )
+	}
+
+	private void function assertOk( required struct result, required string operation ) {
+		var statusCode = val( listFirst( arguments.result.statusCode ?: "0", " " ) )
+		if ( statusCode < 200 || statusCode >= 300 ) {
+			throw(
+				type    = "BxAgents.DeployFailed",
+				message = "#arguments.operation# failed (status #arguments.result.statusCode#): #arguments.result.fileContent#"
+			)
+		}
+	}
+
+}
