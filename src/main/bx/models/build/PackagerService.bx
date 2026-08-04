@@ -16,6 +16,8 @@ class {
 	 * @distDir Absolute path to the output dist directory, e.g. "<projectRoot>/dist"
 	 * @manifest The internal manifest struct, from ManifestNormalizer.normalize()
 	 * @baseName The artifact's base file name (no extension), e.g. "my-agent-1.0.0"
+	 *
+	 * @return { bxa, sha256, manifestJson } - absolute paths to each written artifact
 	 */
 	struct function package(
 		required string projectRoot,
@@ -44,6 +46,9 @@ class {
 		}
 	}
 
+	/**
+	 * @manifest The internal manifest struct, from ManifestNormalizer.normalize()
+	 */
 	private void function validateManifest( required struct manifest ) {
 		var version = arguments.manifest.manifestVersion ?: ""
 		if ( !len( version ) || !reFind( "^[0-9]+\.[0-9]+\.[0-9]+$", version ) ) {
@@ -61,6 +66,10 @@ class {
 	 * already only puts safe, structural fields into the manifest, but this
 	 * guards against a future field (or a caller passing a richer struct,
 	 * e.g. for `inspect`) accidentally leaking one.
+	 *
+	 * @value Any value - struct, array, or scalar
+	 *
+	 * @return A deep copy with any secret-looking struct values replaced by "[REDACTED]"
 	 */
 	private any function redact( required any value ) {
 		if ( isStruct( arguments.value ) ) {
@@ -84,10 +93,20 @@ class {
 		return arguments.value
 	}
 
+	/**
+	 * @key A struct key name
+	 *
+	 * @return True if key ends with apiKey/api_key/token/secret/password (case-insensitive)
+	 */
 	private boolean function isSecretKey( required string key ) {
 		return reFindNoCase( "(apikey|api_key|token|secret|password)$", arguments.key ) > 0
 	}
 
+	/**
+	 * @projectRoot Absolute path to the project root, checked for an optional `.bxaignore`
+	 *
+	 * @return The non-empty, non-comment (`##`-prefixed) lines from `.bxaignore`, or [] if it doesn't exist
+	 */
 	private array function readBxaIgnore( required string projectRoot ) {
 		var ignorePath = arguments.projectRoot & "/.bxaignore"
 		if ( !fileExists( ignorePath ) ) {

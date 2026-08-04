@@ -10,6 +10,9 @@ class {
 
 	property name="modelSlugParser";
 
+	/**
+	 * @return this
+	 */
 	function init() {
 		// "@bxagents" suffix, not a bare "ModelSlugParser" reference - see
 		// BuildPipeline.bx's init() docblock for why. CORE_PROVIDERS itself
@@ -25,6 +28,8 @@ class {
 	 * @projectRoot Absolute path to the project root
 	 * @discovery The raw discovery struct from ProjectDiscoverer.discover()
 	 * @resolvedConfig The resolved config struct from AgentConfigResolver.resolve()
+	 *
+	 * @return { errors: [], warnings: [] } - a non-empty errors array means the build must not proceed
 	 */
 	struct function validate( required string projectRoot, required struct discovery, required struct resolvedConfig ) {
 		var errors = []
@@ -45,6 +50,10 @@ class {
 	// Duplicate names
 	// --------------------------------------------------------------------------
 
+	/**
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover()
+	 * @errors Accumulator array - append() any validation errors found
+	 */
 	private void function validateDuplicateNames( required struct discovery, required array errors ) {
 		for ( var category in [ "tools", "skills", "models", "subagents" ] ) {
 			var entries = arguments.discovery[ category ] ?: []
@@ -54,6 +63,11 @@ class {
 		}
 	}
 
+	/**
+	 * @entries A discovery category's entry array (each with a `name`)
+	 *
+	 * @return The distinct `name` values that appear more than once
+	 */
 	private array function findDuplicateNames( required array entries ) {
 		var seen = {}
 		var duplicates = []
@@ -73,6 +87,15 @@ class {
 	// Circular subagent detection
 	// --------------------------------------------------------------------------
 
+	/**
+	 * Validates every subagent's own model, checks for unknown subagent
+	 * references (including the ROOT project's own `subAgents` list, not
+	 * just nested subagents), and detects circular subagent references.
+	 *
+	 * @projectRoot Absolute path to the project root
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover()
+	 * @errors Accumulator array - append() any validation errors found
+	 */
 	private void function validateSubagents( required string projectRoot, required struct discovery, required array errors ) {
 		var subagents = arguments.discovery.subagents ?: []
 		// "@bxagents" suffix, not a bare "AgentConfigResolver" reference - see
@@ -128,6 +151,15 @@ class {
 	// Module dependency validation (same missing/cycle rules as subagents)
 	// --------------------------------------------------------------------------
 
+	/**
+	 * Checks each `modules/*` entry's own `module.json` `dependsOn` list for
+	 * unknown module references and circular dependencies (same rules as
+	 * validateSubagents()'s graph checks).
+	 *
+	 * @projectRoot Absolute path to the project root
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover()
+	 * @errors Accumulator array - append() any validation errors found
+	 */
 	private void function validateModules( required string projectRoot, required struct discovery, required array errors ) {
 		var modules = arguments.discovery.modules ?: []
 		var graph = {}
@@ -179,6 +211,18 @@ class {
 		return cycles
 	}
 
+	/**
+	 * DFS helper for detectCycles() - visits `node`, recursing into its
+	 * references, and records a cycle path whenever it revisits a node
+	 * currently on the recursion stack.
+	 *
+	 * @node The node currently being visited
+	 * @graph The full graph being walked
+	 * @visited Struct of node name -> true, for nodes visited at all (across the whole detectCycles() call)
+	 * @onStack Struct of node name -> boolean, for nodes on the CURRENT recursion path
+	 * @path The ordered list of nodes visited to reach `node`, this call
+	 * @cycles Accumulator array - append() a human-readable cycle path string whenever one is found
+	 */
 	private void function walkForCycles(
 		required string node,
 		required struct graph,
@@ -214,6 +258,15 @@ class {
 	// Schedules
 	// --------------------------------------------------------------------------
 
+	/**
+	 * Checks every `schedules/*` entry's `cron` shape (both syntactic
+	 * validity and whether SchedulerGenerator can actually translate it) and
+	 * `action` presence - both closed at validation time so an unsupported
+	 * cron or a missing action is caught here rather than crashing generation.
+	 *
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover()
+	 * @errors Accumulator array - append() any validation errors found
+	 */
 	private void function validateSchedules( required struct discovery, required array errors ) {
 		var CRON_FIELD = "(\*|\*\/\d+|\d+(-\d+)?(,\d+(-\d+)?)*)"
 		var cronPattern = "^#CRON_FIELD# #CRON_FIELD# #CRON_FIELD# #CRON_FIELD# #CRON_FIELD#$"
@@ -252,6 +305,14 @@ class {
 	// Gateways (two entry kinds - see M8 design notes)
 	// --------------------------------------------------------------------------
 
+	/**
+	 * Validates both `gateways/*` entry kinds: exposure entries (`exposes:
+	 * "agent"|"mcp"`, unique `path`) and channel-adapter entries (`type`,
+	 * unique `name`, `secretEnvVar` required for `http`).
+	 *
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover()
+	 * @errors Accumulator array - append() any validation errors found
+	 */
 	private void function validateGateways( required struct discovery, required array errors ) {
 		var seenPaths = {}
 		var seenNames = {}
@@ -313,6 +374,10 @@ class {
 	// Remote MCP servers (declared on Agent.bx itself, consumed - never dialed - at build time)
 	// --------------------------------------------------------------------------
 
+	/**
+	 * @resolvedConfig The resolved config struct from AgentConfigResolver.resolve() - only `mcpServers` is used
+	 * @errors Accumulator array - append() any validation errors found
+	 */
 	private void function validateMcpServers( required struct resolvedConfig, required array errors ) {
 		var mcpServers = arguments.resolvedConfig.mcpServers ?: []
 
@@ -341,6 +406,9 @@ class {
 	// --------------------------------------------------------------------------
 
 	/**
+	 * @resolvedConfig The node's own resolved config - only `model` is used
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .models is used)
+	 * @errors Accumulator array - append() any validation errors found
 	 * @source Human-readable label for error messages - defaults to describing
 	 * the ROOT project's own Agent.bx. Callers validating a SUBAGENT's config
 	 * pass their own "Subagent [name]'s Agent.bx" label instead, so a bad
@@ -384,6 +452,10 @@ class {
 	 * `.bx` files are dynamically loaded and their configure() invoked.
 	 * Returns null (not throws) if the entry can't be read - callers report
 	 * their own contextual error message.
+	 *
+	 * @path Absolute path to the entry's `.bx`/`.json` file
+	 *
+	 * @return The entry's config struct, or null if it could not be read
 	 */
 	private any function readEntryConfig( required string path ) {
 		try {

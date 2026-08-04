@@ -105,6 +105,11 @@ class {
 		}
 	}
 
+	/**
+	 * @report TestBox's own deserialized JSONReporter output
+	 *
+	 * @return A flattened array of { bundle, suite, spec, message } for every Failed/Error spec
+	 */
 	private array function extractFailures( required struct report ) {
 		var failures = []
 		for ( var bundleStat in ( arguments.report.bundleStats ?: [] ) ) {
@@ -124,6 +129,9 @@ class {
 		return failures
 	}
 
+	/**
+	 * @return Absolute path to the real BoxLang runtime jar to launch the child process with (see the class docblock for why this isn't simply BoxRuntime.class's own codeSource)
+	 */
 	private string function currentBoxLangJarPath() {
 		var pathSeparator = createObject( "java", "java.io.File" ).pathSeparator
 		var classpath = createObject( "java", "java.lang.System" ).getProperty( "java.class.path" )
@@ -139,6 +147,9 @@ class {
 			.getClass().getProtectionDomain().getCodeSource().getLocation().getPath()
 	}
 
+	/**
+	 * @return This runtime's own configured modulesDirectory list, as strings - carried over into the child process's boxlang.json so bxModules.bxagents.* (e.g. BaseAgentSpec) resolves identically there
+	 */
 	private array function currentModulesDirectory() {
 		var configured = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" )
 			.getInstance().getConfiguration().modulesDirectory
@@ -156,6 +167,10 @@ class {
 	 * one. Uses TestBox's JSONReporter (not JUnitReporter/ANTJUnitReporter) -
 	 * both call `encodeForXMLAttribute()`, not implemented in the BoxLang
 	 * version this project currently targets.
+	 *
+	 * @reportPath Absolute path the child process should write its JSON report to
+	 *
+	 * @return The rendered .bxs runner script source
 	 */
 	private string function renderRunnerScript( required string reportPath ) {
 		var lines = [
@@ -172,6 +187,11 @@ class {
 		return lines.toList( char( 10 ) )
 	}
 
+	/**
+	 * @value A raw string to embed inside a generated double-quoted BoxLang string literal
+	 *
+	 * @return value with `"` doubled and `#` doubled, so it round-trips as a literal, not an interpolation
+	 */
 	private string function bxLiteral( required string value ) {
 		return arguments.value.replace( '"', '""', "all" ).replace( "##", "####", "all" )
 	}

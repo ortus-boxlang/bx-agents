@@ -38,6 +38,12 @@ class implements="models.deploy.IDeploymentTarget@bxagents" {
 		"COPY . /app" & char( 10 ) &
 		"EXPOSE 8080" & char( 10 )
 
+	/**
+	 * @config This target's own resolved `deploy/*` entry (see the class docblock's `@config` shape)
+	 * @context { projectRoot, appDir, distDir, manifest } - `appDir` (from `build`) is used as the docker build context
+	 *
+	 * @return { success, message, details: { imageRef, registry } }
+	 */
 	struct function deploy( required struct config, required struct context ) {
 		var registry = arguments.config.registry ?: {}
 		if ( !isStruct( registry ) || !len( registry.repository ?: "" ) ) {
@@ -94,6 +100,11 @@ class implements="models.deploy.IDeploymentTarget@bxagents" {
 		}
 	}
 
+	/**
+	 * @config This target's own resolved `deploy/*` entry - `registry.type`/`registry.repository`/`tag` are used
+	 *
+	 * @return The fully-qualified image reference, e.g. "ghcr.io/org/repo:latest"
+	 */
 	string function buildImageRef( required struct config ) {
 		var registry = arguments.config.registry
 		var host = variables.REGISTRY_HOSTS[ registry.type ?: "dockerhub" ] ?: ""
@@ -103,14 +114,31 @@ class implements="models.deploy.IDeploymentTarget@bxagents" {
 		return "#ref#:#tag#"
 	}
 
+	/**
+	 * @imageRef The fully-qualified image reference from buildImageRef()
+	 * @dockerfilePath Absolute path to the Dockerfile to build with
+	 * @contextDir The docker build context directory (the project's `.build/app`)
+	 *
+	 * @return The `docker build` argv as an array, ready for ProcessBuilder
+	 */
 	array function buildDockerBuildCommand( required string imageRef, required string dockerfilePath, required string contextDir ) {
 		return [ "docker", "build", "-t", arguments.imageRef, "-f", arguments.dockerfilePath, arguments.contextDir ]
 	}
 
+	/**
+	 * @imageRef The fully-qualified image reference from buildImageRef()
+	 *
+	 * @return The `docker push` argv as an array, ready for ProcessBuilder
+	 */
 	array function buildDockerPushCommand( required string imageRef ) {
 		return [ "docker", "push", arguments.imageRef ]
 	}
 
+	/**
+	 * @config This target's own resolved `deploy/*` entry - only `registry.type` is used, to pick the registry host
+	 *
+	 * @return The `docker login` argv (username + `--password-stdin`) as an array, ready for ProcessBuilder - the password itself is passed via runProcess()'s `stdinInput`, never as an argv element
+	 */
 	array function buildDockerLoginCommand( required struct config ) {
 		var registry = arguments.config.registry
 		var host = variables.REGISTRY_HOSTS[ registry.type ?: "dockerhub" ] ?: ""
@@ -128,6 +156,11 @@ class implements="models.deploy.IDeploymentTarget@bxagents" {
 	 * A project-supplied `deploy/Dockerfile` always wins; otherwise a
 	 * built-in default (embedding `ortussolutions/boxlang:miniserver`) is
 	 * written to a throwaway temp file for this build only.
+	 *
+	 * @config This target's own resolved `deploy/*` entry - an explicit `dockerfile` path, if present, wins outright
+	 * @context { projectRoot, appDir, distDir, manifest } - `projectRoot` is checked for a `deploy/Dockerfile`
+	 *
+	 * @return An absolute path to the Dockerfile to build with
 	 */
 	private string function resolveDockerfile( required struct config, required struct context ) {
 		if ( len( arguments.config.dockerfile ?: "" ) ) {
@@ -145,8 +178,13 @@ class implements="models.deploy.IDeploymentTarget@bxagents" {
 	}
 
 	/**
+	 * Runs a local command to completion via `ProcessBuilder`, merging stderr into stdout.
+	 *
+	 * @command The argv to launch, e.g. from buildDockerBuildCommand()/buildDockerPushCommand()/buildDockerLoginCommand()
 	 * @stdinInput Optional string written to the process's stdin then closed
 	 *             (used for `docker login --password-stdin`) before reading output.
+	 *
+	 * @return { exitCode, output }
 	 */
 	private struct function runProcess( required array command, string stdinInput = "" ) {
 		try {

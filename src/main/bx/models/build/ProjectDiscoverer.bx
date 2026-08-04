@@ -24,6 +24,11 @@
  */
 class {
 
+	/**
+	 * @projectRoot Absolute path to the project root
+	 *
+	 * @return { models, tools, skills, subagents, gateways, schedules, mcp, interceptors, modules } - each an array of { name, path, type }
+	 */
 	struct function discover( required string projectRoot ) {
 		var root = arguments.projectRoot.reReplace( "[\\/]+$", "" )
 
@@ -40,6 +45,14 @@ class {
 		}
 	}
 
+	/**
+	 * @dir The convention folder to scan, e.g. "<projectRoot>/tools"
+	 * @extensions Allowed file extensions, lowercase, e.g. [ "bx", "json" ]
+	 * @type The entry `type` to stamp on every result, e.g. "tool"
+	 * @recurse Whether to walk subdirectories too (tools/ does; gateways/schedules/etc. don't)
+	 *
+	 * @return An array of { name, path, type } for every non-dotfile matching a recognized extension
+	 */
 	private array function listFiles(
 		required string dir,
 		required array extensions,
@@ -71,6 +84,12 @@ class {
 			} )
 	}
 
+	/**
+	 * @dir The convention folder to scan, e.g. "<projectRoot>/subagents"
+	 * @type The entry `type` to stamp on every result, e.g. "subagent"
+	 *
+	 * @return An array of { name, path, type } for every immediate, non-dotfile subfolder
+	 */
 	private array function listSubfolders( required string dir, required string type ) {
 		if ( !directoryExists( arguments.dir ) ) {
 			return []
@@ -89,6 +108,11 @@ class {
 			} )
 	}
 
+	/**
+	 * @dir The skills/ folder to scan
+	 *
+	 * @return An array of { name, path, type: "skill" } for every immediate subfolder containing a SKILL.md
+	 */
 	private array function listSkills( required string dir ) {
 		if ( !directoryExists( arguments.dir ) ) {
 			return []
@@ -107,6 +131,12 @@ class {
 			} )
 	}
 
+	/**
+	 * @skillMdPath Absolute path to a skill's SKILL.md
+	 * @fallbackName Used when SKILL.md has no YAML frontmatter `name:` field - typically the folder name
+	 *
+	 * @return The skill's frontmatter `name:` value if present, else fallbackName
+	 */
 	private string function deriveSkillName( required string skillMdPath, required string fallbackName ) {
 		var content = fileRead( arguments.skillMdPath )
 

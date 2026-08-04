@@ -37,6 +37,12 @@ class {
 		}
 	}
 
+	/**
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .mcp is used)
+	 * @appDir Absolute path to the generated ColdBox app dir - entries are copied into "<appDir>/mcp"
+	 *
+	 * @return Bare `mcpServer(...).registerTool(...)` statement strings, one per local server
+	 */
 	private array function copyAndRegisterLocalServers( required struct discovery, required string appDir ) {
 		var localServers = arguments.discovery.mcp ?: []
 		if ( !localServers.len() ) {
@@ -55,6 +61,11 @@ class {
 		return registrations
 	}
 
+	/**
+	 * @mcpEntry A discovered mcp/* entry { name, path, type }
+	 *
+	 * @return A bare `mcpServer(...).registerTool(...)` statement string
+	 */
 	private string function renderRegistration( required struct mcpEntry ) {
 		var config = readEntryConfig( arguments.mcpEntry.path )
 		if ( isNull( config ) ) {
@@ -78,6 +89,15 @@ class {
 		return call
 	}
 
+	/**
+	 * Reads a discovered `mcp/*` entry's config by dynamically loading the
+	 * `.bx` file and invoking its `configure()` (local mcp/* entries are
+	 * `.bx`-only per this convention, unlike gateways/schedules/models).
+	 *
+	 * @path Absolute path to the entry's `.bx` file
+	 *
+	 * @return The entry's config struct, or null if it could not be read
+	 */
 	private any function readEntryConfig( required string path ) {
 		try {
 			var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
@@ -89,10 +109,20 @@ class {
 		}
 	}
 
+	/**
+	 * @path A filesystem path
+	 *
+	 * @return The path with any trailing slash(es) stripped
+	 */
 	private string function normalizePath( required string path ) {
 		return arguments.path.reReplace( "[\/]+$", "" )
 	}
 
+	/**
+	 * @value A raw string to embed inside a generated double-quoted BoxLang string literal
+	 *
+	 * @return value with `"` doubled and `#` doubled, so it round-trips as a literal, not an interpolation
+	 */
 	private string function bxLiteral( required string value ) {
 		return arguments.value.replace( '"', '""', "all" ).replace( "##", "####", "all" )
 	}

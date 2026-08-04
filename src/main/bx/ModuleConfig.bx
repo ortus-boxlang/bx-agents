@@ -272,6 +272,9 @@ class {
 	 * two global flags handled before verb dispatch. Prints line-by-line
 	 * (rather than building and returning one joined string) since BoxLang
 	 * has no `chr()` BIF available in this module-CLI execution context.
+	 *
+	 * @verbs Struct mapping verb name -> dispatch class path
+	 * @verbDescriptions Struct mapping verb name -> one-line help text
 	 */
 	private void function printUsage( required struct verbs, required struct verbDescriptions ) {
 		println( "bxAgents v#this.version# - #this.description#" )
@@ -311,6 +314,10 @@ class {
 	 *
 	 * Repeated options override earlier ones, matching the documented "last
 	 * one wins" rule.
+	 *
+	 * @rawArgs A verb's own argv, with the module name and verb token already stripped
+	 *
+	 * @return A plain options struct (flag names -> value/true/false), plus an optional `_positional` key for the first bare positional argument
 	 */
 	private struct function parseCliOptions( required array rawArgs ) {
 		var options = {}
@@ -352,6 +359,10 @@ class {
 	 * Strips one layer of matching surrounding `"..."` / `'...'` quotes from
 	 * a `--option="value"` / `--option='value'` assignment, per BoxLang's own
 	 * documented convention.
+	 *
+	 * @value The raw assigned value, quotes included if present
+	 *
+	 * @return The value with one layer of matching surrounding quotes removed, or unchanged if none/mismatched
 	 */
 	private string function stripQuotes( required string value ) {
 		if ( len( arguments.value ) < 2 ) {
@@ -369,6 +380,10 @@ class {
 	 * Precedence: --projectRoot flag > first positional arg > the shell's
 	 * current working directory. A relative value is resolved against the
 	 * CWD, never against this module's own file location.
+	 *
+	 * @options The parsed options struct from parseCliOptions()
+	 *
+	 * @return An absolute, trailing-slash-free path to the target project root
 	 */
 	private string function resolveProjectRoot( required struct options ) {
 		var cwd = getSystemSetting( "user.dir", "" )

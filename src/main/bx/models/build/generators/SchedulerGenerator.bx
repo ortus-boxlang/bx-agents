@@ -58,6 +58,11 @@ class {
 		return { scheduler : schedulerPath, hasSchedules : true }
 	}
 
+	/**
+	 * @schedule A discovered schedules/* entry { name, path, type }
+	 *
+	 * @return A bare `task(...).call(...).<frequency>` statement string
+	 */
 	private string function renderTask( required struct schedule ) {
 		var config = readEntryConfig( arguments.schedule.path )
 		if ( isNull( config ) ) {
@@ -98,6 +103,10 @@ class {
 	 * semantically-unsupported cron passed validation cleanly and only crashed
 	 * later, mid-generation, after `.build/app` had already been wiped and
 	 * partially rewritten.
+	 *
+	 * @cron A cron expression to check
+	 *
+	 * @return True if translateCron() can translate it into a ColdBox frequency-method call
 	 */
 	boolean function isSupportedCron( required string cron ) {
 		try {
@@ -108,6 +117,16 @@ class {
 		}
 	}
 
+	/**
+	 * Translates a 5-field cron expression into the closest matching ColdBox
+	 * frequency-method call - see the class docblock for exactly which shapes
+	 * are supported. Throws BxAgents.UnsupportedCronExpression for anything else.
+	 *
+	 * @cron A 5-field cron expression
+	 * @scheduleName The schedule's own name, for error message context
+	 *
+	 * @return A bare ColdBox frequency-method call expression string, e.g. `everyDayAt( "09:00" )`
+	 */
 	private string function translateCron( required string cron, required string scheduleName ) {
 		var fields = listToArray( arguments.cron, " " )
 		if ( fields.len() != 5 ) {
@@ -193,6 +212,12 @@ class {
 	 * ColdBox's everyWeekOn() uses 1 (Monday) -> 7 (Sunday). Validates range
 	 * as part of the remap, since the 5-field cron regex (M3) only checks
 	 * shape, not that a day-of-week value is actually 0-7.
+	 *
+	 * @dow The cron day-of-week field's raw string value (0-7)
+	 * @cron The full cron expression, for error message context
+	 * @scheduleName The schedule's own name, for error message context
+	 *
+	 * @return ColdBox's own 1 (Monday) -> 7 (Sunday) day-of-week number
 	 */
 	private numeric function mapCronDowToColdBox( required string dow, required string cron, required string scheduleName ) {
 		validateFieldRange( arguments.dow, 0, 7, arguments.cron, arguments.scheduleName )
@@ -203,6 +228,15 @@ class {
 		return numericDow
 	}
 
+	/**
+	 * Throws throwUnsupportedCron() if field, as a number, falls outside [min, max].
+	 *
+	 * @field A single cron field's raw string value
+	 * @min Minimum legal value, inclusive
+	 * @max Maximum legal value, inclusive
+	 * @cron The full cron expression, for error message context
+	 * @scheduleName The schedule's own name, for error message context
+	 */
 	private void function validateFieldRange( required string field, required numeric min, required numeric max, required string cron, required string scheduleName ) {
 		var numericField = int( arguments.field )
 		if ( numericField < arguments.min || numericField > arguments.max ) {
@@ -210,6 +244,10 @@ class {
 		}
 	}
 
+	/**
+	 * @cron The full cron expression that has no supported translation
+	 * @scheduleName The schedule's own name
+	 */
 	private void function throwUnsupportedCron( required string cron, required string scheduleName ) {
 		throw(
 			type    = "BxAgents.UnsupportedCronExpression",
@@ -217,10 +255,20 @@ class {
 		)
 	}
 
+	/**
+	 * @field A single cron field's raw string value
+	 *
+	 * @return True if field is a single non-negative integer (no "*", list, range, or step)
+	 */
 	private boolean function isExactNumber( required string field ) {
 		return reFind( "^[0-9]+$", arguments.field ) > 0
 	}
 
+	/**
+	 * @numericField A single/double-digit numeric string
+	 *
+	 * @return numericField left-padded to 2 digits with a leading "0" if needed
+	 */
 	private string function padTime( required string numericField ) {
 		return len( arguments.numericField ) < 2 ? "0" & arguments.numericField : arguments.numericField
 	}
@@ -229,6 +277,11 @@ class {
 	// File rendering
 	// --------------------------------------------------------------------------
 
+	/**
+	 * @lines Bare `task(...).call(...).<frequency>` statement strings, one per schedule
+	 *
+	 * @return The rendered config/Scheduler.bx source
+	 */
 	private string function renderSchedulerFile( required array lines ) {
 		var fileLines = [
 			"/**",
@@ -252,6 +305,15 @@ class {
 		return fileLines.toList( char( 10 ) )
 	}
 
+	/**
+	 * Reads a discovered `schedules/*` entry's config: JSON files are
+	 * deserialized directly, `.bx` files are dynamically loaded and their
+	 * `configure()` invoked.
+	 *
+	 * @path Absolute path to the entry's `.bx`/`.json` file
+	 *
+	 * @return The entry's config struct, or null if it could not be read
+	 */
 	private any function readEntryConfig( required string path ) {
 		try {
 			if ( arguments.path.endsWith( ".json" ) ) {
@@ -267,10 +329,20 @@ class {
 		}
 	}
 
+	/**
+	 * @path A filesystem path
+	 *
+	 * @return The path with any trailing slash(es) stripped
+	 */
 	private string function normalizePath( required string path ) {
 		return arguments.path.reReplace( "[\/]+$", "" )
 	}
 
+	/**
+	 * @value A raw string to embed inside a generated double-quoted BoxLang string literal
+	 *
+	 * @return value with `"` doubled and `#` doubled, so it round-trips as a literal, not an interpolation
+	 */
 	private string function bxLiteral( required string value ) {
 		return arguments.value.replace( '"', '""', "all" ).replace( "##", "####", "all" )
 	}

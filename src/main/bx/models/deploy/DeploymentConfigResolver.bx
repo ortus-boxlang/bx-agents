@@ -17,6 +17,9 @@
  */
 class {
 
+	/**
+	 * @return this
+	 */
 	function init() {
 		variables.VALID_TARGETS = [ "local", "ssh", "docker", "digitalocean", "ftp", "sftp" ]
 		return this
@@ -84,6 +87,11 @@ class {
 	/**
 	 * Resolves a single named `deploy/*` entry, throwing a clear error if it
 	 * doesn't exist or the project's `deploy/` config has validation errors.
+	 *
+	 * @projectRoot Absolute path to the project root
+	 * @name The `deploy/*` entry name to resolve, e.g. "production" for `deploy/production.bx`
+	 *
+	 * @return { name, path, target, config }
 	 */
 	struct function getEntry( required string projectRoot, required string name ) {
 		var result = resolve( arguments.projectRoot )
@@ -107,6 +115,14 @@ class {
 		)
 	}
 
+	/**
+	 * Dispatches to the right per-target-type required-field check, by `target` name.
+	 *
+	 * @name The `deploy/*` entry name, for error message context
+	 * @target The entry's `target` value, e.g. "ssh"/"docker"
+	 * @config The entry's own resolved config struct
+	 * @errors Accumulator array - append() any validation errors found
+	 */
 	private void function validateTargetFields(
 		required string name,
 		required string target,
@@ -152,6 +168,14 @@ class {
 		}
 	}
 
+	/**
+	 * Shared `host`/`username`/`remotePath` presence check, reused by `ssh`, `ftp`, and `sftp`.
+	 *
+	 * @name The `deploy/*` entry name, for error message context
+	 * @target The entry's `target` value, for error message context
+	 * @config The entry's own resolved config struct
+	 * @errors Accumulator array - append() any validation errors found
+	 */
 	private void function validateRemoteHostFields(
 		required string name,
 		required string target,
@@ -169,6 +193,14 @@ class {
 		}
 	}
 
+	/**
+	 * Shared `registry.repository` presence check, reused by `docker` and `digitalocean`.
+	 *
+	 * @name The `deploy/*` entry name, for error message context
+	 * @target The entry's `target` value, for error message context
+	 * @config The entry's own resolved config struct
+	 * @errors Accumulator array - append() any validation errors found
+	 */
 	private void function validateRegistry(
 		required string name,
 		required string target,
@@ -181,6 +213,15 @@ class {
 		}
 	}
 
+	/**
+	 * Reads a discovered `deploy/*` entry's config: JSON files are
+	 * deserialized directly, `.bx` files are dynamically loaded and their
+	 * `configure()` invoked.
+	 *
+	 * @path Absolute path to the entry's `.bx`/`.json` file
+	 *
+	 * @return The entry's config struct, or null if it could not be read
+	 */
 	private any function readEntryConfig( required string path ) {
 		try {
 			if ( arguments.path.endsWith( ".json" ) ) {

@@ -37,6 +37,12 @@ class implements="models.deploy.IDeploymentTarget@bxagents" {
 	variables.API_BASE = "https://api.digitalocean.com/v2"
 	variables.REGISTRY_TYPE_MAP = { "dockerhub" : "DOCKER_HUB", "ghcr" : "GHCR", "docr" : "DOCR" }
 
+	/**
+	 * @config This target's own resolved `deploy/*` entry (see the class docblock's `@config` shape)
+	 * @context { projectRoot, appDir, distDir, manifest } - passed straight through to `DockerTarget.deploy()`
+	 *
+	 * @return { success, message, details: { appId, spec } }
+	 */
 	struct function deploy( required struct config, required struct context ) {
 		var appName = trim( arguments.config.appName ?: "" )
 		if ( !len( appName ) ) {
@@ -76,6 +82,15 @@ class implements="models.deploy.IDeploymentTarget@bxagents" {
 		}
 	}
 
+	/**
+	 * Builds a DigitalOcean App Spec body (`{"spec": ...}`'s inner value) from
+	 * this target's config - pure, no HTTP, so specs can assert on the exact
+	 * struct shape without a real DO account.
+	 *
+	 * @config This target's own resolved `deploy/*` entry
+	 *
+	 * @return The App Spec struct, ready for `jsonSerialize()` into a create/update request body
+	 */
 	struct function buildAppSpec( required struct config ) {
 		var registry = arguments.config.registry
 		var parsed = parseRepository( registry.repository )
@@ -106,6 +121,7 @@ class implements="models.deploy.IDeploymentTarget@bxagents" {
 	/**
 	 * @apps Parsed `GET /v2/apps` response's `apps` array - each entry has
 	 *       an `id` and a `spec.name`
+	 * @name The app name to look for (this target's `appName` config)
 	 *
 	 * @return The matching app's id, or "" if none matches
 	 */
@@ -118,6 +134,14 @@ class implements="models.deploy.IDeploymentTarget@bxagents" {
 		return ""
 	}
 
+	/**
+	 * Splits a `namespace/repo` registry.repository value into the App
+	 * Spec's own separate `registry`/`repository` fields.
+	 *
+	 * @repository The config's `registry.repository` value, e.g. "myorg/my-agent"
+	 *
+	 * @return { registry: namespace, repository: repo }
+	 */
 	private struct function parseRepository( required string repository ) {
 		var parts = listToArray( arguments.repository, "/" )
 		if ( parts.len() < 2 ) {
@@ -131,6 +155,11 @@ class implements="models.deploy.IDeploymentTarget@bxagents" {
 		return { registry : namespace, repository : repo }
 	}
 
+	/**
+	 * @token The DigitalOcean API token (from the `DIGITALOCEAN_TOKEN` env var)
+	 *
+	 * @return The account's apps, as parsed from `GET /v2/apps`'s `apps` array
+	 */
 	private array function listApps( required string token ) {
 		var result = ""
 		bx:http url="#variables.API_BASE#/apps" method="GET" result="result" {
@@ -141,6 +170,12 @@ class implements="models.deploy.IDeploymentTarget@bxagents" {
 		return body.apps ?: []
 	}
 
+	/**
+	 * @token The DigitalOcean API token (from the `DIGITALOCEAN_TOKEN` env var)
+	 * @spec The App Spec struct from buildAppSpec()
+	 *
+	 * @return The newly created app, as parsed from `POST /v2/apps`'s `app` field
+	 */
 	private struct function createApp( required string token, required struct spec ) {
 		var result = ""
 		bx:http url="#variables.API_BASE#/apps" method="POST" result="result" {
@@ -153,6 +188,13 @@ class implements="models.deploy.IDeploymentTarget@bxagents" {
 		return body.app
 	}
 
+	/**
+	 * Triggers a fresh deployment of an existing app's already-pushed image
+	 * (matches `doctl apps create-deployment`'s semantics).
+	 *
+	 * @token The DigitalOcean API token (from the `DIGITALOCEAN_TOKEN` env var)
+	 * @appId The existing app's id, from findExistingAppId()
+	 */
 	private void function createDeployment( required string token, required string appId ) {
 		var result = ""
 		bx:http url="#variables.API_BASE#/apps/#arguments.appId#/deployments" method="POST" result="result" {
@@ -163,6 +205,10 @@ class implements="models.deploy.IDeploymentTarget@bxagents" {
 		assertOk( result, "POST /v2/apps/#arguments.appId#/deployments" )
 	}
 
+	/**
+	 * @result A `bx:http` result struct
+	 * @operation A short label for the request, used in the thrown error message, e.g. "GET /v2/apps"
+	 */
 	private void function assertOk( required struct result, required string operation ) {
 		var statusCode = val( listFirst( arguments.result.statusCode ?: "0", " " ) )
 		if ( statusCode < 200 || statusCode >= 300 ) {

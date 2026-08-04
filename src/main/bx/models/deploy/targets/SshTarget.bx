@@ -25,6 +25,12 @@
  */
 class implements="models.deploy.IDeploymentTarget@bxagents" {
 
+	/**
+	 * @config This target's own resolved `deploy/*` entry (see the class docblock's `@config` shape)
+	 * @context { projectRoot, appDir, distDir, manifest } - only `distDir` is used, to locate the newest `.bxa`
+	 *
+	 * @return { success, message, details: { host, username, remotePath, bxa } }
+	 */
 	struct function deploy( required struct config, required struct context ) {
 		var host = trim( arguments.config.host ?: "" )
 		var username = trim( arguments.config.username ?: "" )
@@ -69,7 +75,10 @@ class implements="models.deploy.IDeploymentTarget@bxagents" {
 	}
 
 	/**
+	 * @config This target's own resolved `deploy/*` entry
 	 * @localPath Absolute local path to the .bxa being shipped
+	 *
+	 * @return The `scp` argv as an array, ready for ProcessBuilder
 	 */
 	array function buildScpCommand( required struct config, required string localPath ) {
 		var command = [ "scp" ]
@@ -83,6 +92,11 @@ class implements="models.deploy.IDeploymentTarget@bxagents" {
 		return command
 	}
 
+	/**
+	 * @config This target's own resolved `deploy/*` entry - `restartCommand` is run verbatim on the remote host
+	 *
+	 * @return The `ssh` argv as an array, ready for ProcessBuilder
+	 */
 	array function buildSshRestartCommand( required struct config ) {
 		var command = [ "ssh" ]
 		var identityFile = trim( arguments.config.identityFile ?: "" )
@@ -95,6 +109,13 @@ class implements="models.deploy.IDeploymentTarget@bxagents" {
 		return command
 	}
 
+	/**
+	 * Runs a local command to completion via `ProcessBuilder`, merging stderr into stdout.
+	 *
+	 * @command The argv to launch, e.g. from buildScpCommand()/buildSshRestartCommand()
+	 *
+	 * @return { exitCode, output }
+	 */
 	private struct function runProcess( required array command ) {
 		try {
 			var builder = createObject( "java", "java.lang.ProcessBuilder" ).init( arguments.command )
