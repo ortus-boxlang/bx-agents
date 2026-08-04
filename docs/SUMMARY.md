@@ -20,6 +20,7 @@
 * [interceptors/](conventions/interceptors.md)
 * [modules/](conventions/modules.md)
 * [tests/](conventions/testing.md)
+* [deploy/](conventions/deploy.md)
 
 ## Reference
 

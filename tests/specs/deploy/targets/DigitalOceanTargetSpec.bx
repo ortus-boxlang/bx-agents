@@ -1,0 +1,123 @@
+/**
+ * `buildAppSpec()` and `findExistingAppId()` are pure (no HTTP) - tested
+ * directly here. The real `listApps`/`createApp`/`createDeployment` calls
+ * against the live DigitalOcean API are never exercised in CI (see
+ * docs/known-limitations.md) - only manual smoke testing against a real,
+ * disposable DO app proves those.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "deploy.targets.DigitalOceanTarget", function() {
+
+			beforeEach( function() {
+				variables.target = new bxagents.models.deploy.targets.DigitalOceanTarget();
+			} );
+
+			it( "builds a full App Spec from a docr registry config", function() {
+				var spec = target.buildAppSpec( {
+					appName  : "my-agent",
+					region   : "sfo3",
+					tag      : "1.2.3",
+					registry : { type : "docr", repository : "myorg/my-agent" }
+				} );
+
+				expect( spec.name ).toBe( "my-agent" );
+				expect( spec.region ).toBe( "sfo3" );
+				expect( spec.services.len() ).toBe( 1 );
+
+				var service = spec.services[ 1 ];
+				expect( service.name ).toBe( "my-agent" );
+				expect( service.image.registry_type ).toBe( "DOCR" );
+				expect( service.image.registry ).toBe( "myorg" );
+				expect( service.image.repository ).toBe( "my-agent" );
+				expect( service.image.tag ).toBe( "1.2.3" );
+				expect( service.http_port ).toBe( 8080 );
+				expect( service.instance_size_slug ).toBe( "apps-s-1vcpu-1gb" );
+				expect( service.instance_count ).toBe( 1 );
+			} );
+
+			it( "defaults region, tag, httpPort, instanceSize, and instanceCount", function() {
+				var spec = target.buildAppSpec( {
+					appName  : "my-agent",
+					registry : { type : "dockerhub", repository : "myorg/my-agent" }
+				} );
+
+				expect( spec.region ).toBe( "nyc" );
+				expect( spec.services[ 1 ].image.registry_type ).toBe( "DOCKER_HUB" );
+				expect( spec.services[ 1 ].image.tag ).toBe( "latest" );
+				expect( spec.services[ 1 ].http_port ).toBe( 8080 );
+			} );
+
+			it( "maps ghcr to the GHCR registry_type", function() {
+				var spec = target.buildAppSpec( {
+					appName  : "my-agent",
+					registry : { type : "ghcr", repository : "myorg/my-agent" }
+				} );
+
+				expect( spec.services[ 1 ].image.registry_type ).toBe( "GHCR" );
+			} );
+
+			it( "honors explicit httpPort, instanceSize, instanceCount, and envs", function() {
+				var spec = target.buildAppSpec( {
+					appName      : "my-agent",
+					registry     : { type : "ghcr", repository : "myorg/my-agent" },
+					httpPort     : 3000,
+					instanceSize : "apps-s-2vcpu-4gb",
+					instanceCount : 2,
+					envs         : [ { key : "OPENAI_API_KEY", scope : "RUN_TIME", type : "SECRET" } ]
+				} );
+
+				var service = spec.services[ 1 ];
+				expect( service.http_port ).toBe( 3000 );
+				expect( service.instance_size_slug ).toBe( "apps-s-2vcpu-4gb" );
+				expect( service.instance_count ).toBe( 2 );
+				expect( service.envs.len() ).toBe( 1 );
+				expect( service.envs[ 1 ].key ).toBe( "OPENAI_API_KEY" );
+			} );
+
+			it( "throws BxAgents.InvalidDeployConfig when registry.repository has no namespace", function() {
+				expect( function() {
+					target.buildAppSpec( { appName : "my-agent", registry : { type : "ghcr", repository : "my-agent" } } );
+				} ).toThrow( "BxAgents.InvalidDeployConfig" );
+			} );
+
+			it( "findExistingAppId() returns the matching app's id", function() {
+				var apps = [
+					{ id : "abc123", spec : { name : "my-agent" } },
+					{ id : "def456", spec : { name : "other-agent" } }
+				];
+
+				expect( target.findExistingAppId( apps, "my-agent" ) ).toBe( "abc123" );
+				expect( target.findExistingAppId( apps, "other-agent" ) ).toBe( "def456" );
+			} );
+
+			it( "findExistingAppId() returns an empty string when nothing matches", function() {
+				var apps = [ { id : "abc123", spec : { name : "some-other-app" } } ];
+
+				expect( target.findExistingAppId( apps, "my-agent" ) ).toBe( "" );
+			} );
+
+			it( "findExistingAppId() returns an empty string for an empty app list", function() {
+				expect( target.findExistingAppId( [], "my-agent" ) ).toBe( "" );
+			} );
+
+			it( "throws BxAgents.InvalidDeployConfig when appName is missing", function() {
+				expect( function() {
+					target.deploy( { registry : { type : "ghcr", repository : "myorg/my-agent" } }, {} );
+				} ).toThrow( "BxAgents.InvalidDeployConfig" );
+			} );
+
+			it( "throws BxAgents.MissingCredentials when DIGITALOCEAN_TOKEN isn't set", function() {
+				expect( function() {
+					target.deploy(
+						{ appName : "my-agent", registry : { type : "ghcr", repository : "myorg/my-agent" } },
+						{ appDir : createTempDirectory() }
+					);
+				} ).toThrow( "BxAgents.MissingCredentials" );
+			} );
+
+		} );
+	}
+
+}

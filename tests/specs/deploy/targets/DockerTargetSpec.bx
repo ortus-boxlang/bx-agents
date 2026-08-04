@@ -1,0 +1,72 @@
+/**
+ * Image-ref building and command construction are tested directly - no
+ * real `docker` process is ever invoked here.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "deploy.targets.DockerTarget", function() {
+
+			beforeEach( function() {
+				variables.target = new bxagents.models.deploy.targets.DockerTarget();
+			} );
+
+			it( "builds a ghcr image ref with an explicit tag", function() {
+				var ref = target.buildImageRef( { registry : { type : "ghcr", repository : "myorg/my-agent" }, tag : "1.0.0" } );
+				expect( ref ).toBe( "ghcr.io/myorg/my-agent:1.0.0" );
+			} );
+
+			it( "builds a docr image ref", function() {
+				var ref = target.buildImageRef( { registry : { type : "docr", repository : "myorg/my-agent" } } );
+				expect( ref ).toBe( "registry.digitalocean.com/myorg/my-agent:latest" );
+			} );
+
+			it( "builds a dockerhub image ref with no registry host prefix", function() {
+				var ref = target.buildImageRef( { registry : { type : "dockerhub", repository : "myorg/my-agent" } } );
+				expect( ref ).toBe( "myorg/my-agent:latest" );
+			} );
+
+			it( "defaults to a dockerhub-style ref when registry.type is omitted", function() {
+				var ref = target.buildImageRef( { registry : { repository : "myorg/my-agent" } } );
+				expect( ref ).toBe( "myorg/my-agent:latest" );
+			} );
+
+			it( "builds the docker build command", function() {
+				var command = target.buildDockerBuildCommand( "myorg/my-agent:1.0.0", "/tmp/Dockerfile", "/tmp/app" );
+				expect( command ).toBe( [ "docker", "build", "-t", "myorg/my-agent:1.0.0", "-f", "/tmp/Dockerfile", "/tmp/app" ] );
+			} );
+
+			it( "builds the docker push command", function() {
+				var command = target.buildDockerPushCommand( "myorg/my-agent:1.0.0" );
+				expect( command ).toBe( [ "docker", "push", "myorg/my-agent:1.0.0" ] );
+			} );
+
+			it( "builds a docker login command for a hosted registry", function() {
+				var command = target.buildDockerLoginCommand( { registry : { type : "ghcr", repository : "myorg/my-agent" } } );
+				expect( command ).toBe( [ "docker", "login", "ghcr.io", "-u", getSystemSetting( "DOCKER_USERNAME", "" ), "--password-stdin" ] );
+			} );
+
+			it( "builds a docker login command with no host for dockerhub", function() {
+				var command = target.buildDockerLoginCommand( { registry : { type : "dockerhub", repository : "myorg/my-agent" } } );
+				expect( command ).toBe( [ "docker", "login", "-u", getSystemSetting( "DOCKER_USERNAME", "" ), "--password-stdin" ] );
+			} );
+
+			it( "throws BxAgents.InvalidDeployConfig when registry.repository is missing", function() {
+				expect( function() {
+					target.deploy( { registry : {} }, { appDir : createTempDirectory() } );
+				} ).toThrow( "BxAgents.InvalidDeployConfig" );
+			} );
+
+			it( "throws BxAgents.NotBuilt when .build/app doesn't exist", function() {
+				expect( function() {
+					target.deploy(
+						{ registry : { type : "dockerhub", repository : "myorg/my-agent" } },
+						{ appDir : "/nonexistent/build/app/" & createUUID() }
+					);
+				} ).toThrow( "BxAgents.NotBuilt" );
+			} );
+
+		} );
+	}
+
+}
