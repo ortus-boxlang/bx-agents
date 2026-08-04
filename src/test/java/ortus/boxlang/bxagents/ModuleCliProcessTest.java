@@ -163,7 +163,8 @@ public class ModuleCliProcessTest {
 	 * exiting 0 - a silent false positive an exit-code-only check would never
 	 * catch).
 	 */
-	private record VerbResult(int exitCode, String output) {}
+	private record VerbResult( int exitCode, String output ) {
+	}
 
 	private VerbResult runVerbCapturing( String... verbArgs ) throws Exception {
 		List<String> command = new java.util.ArrayList<>( List.of(
@@ -174,10 +175,10 @@ public class ModuleCliProcessTest {
 		) );
 		command.addAll( List.of( verbArgs ) );
 
-		Process process = new ProcessBuilder( command ).redirectErrorStream( true ).start();
-		String output = new String( process.getInputStream().readAllBytes() );
+		Process	process		= new ProcessBuilder( command ).redirectErrorStream( true ).start();
+		String	output		= new String( process.getInputStream().readAllBytes() );
 
-		boolean finished = process.waitFor( 60, TimeUnit.SECONDS );
+		boolean	finished	= process.waitFor( 60, TimeUnit.SECONDS );
 		if ( !finished ) {
 			process.destroyForcibly();
 			throw new AssertionError( "module:bxagents " + String.join( " ", verbArgs ) + " never exited within 60s" );
