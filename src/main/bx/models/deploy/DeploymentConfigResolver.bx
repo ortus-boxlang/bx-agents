@@ -18,7 +18,7 @@
 class {
 
 	function init() {
-		variables.VALID_TARGETS = [ "local", "ssh", "docker", "digitalocean" ]
+		variables.VALID_TARGETS = [ "local", "ssh", "docker", "digitalocean", "ftp", "sftp" ]
 		return this
 	}
 
@@ -143,6 +143,37 @@ class {
 				}
 				break
 			}
+			case "ftp": {
+				validateFtpFields( arguments.name, "ftp", arguments.config, arguments.errors )
+				if ( !len( arguments.config.password ?: "" ) ) {
+					arguments.errors.append( "deploy/#arguments.name# (ftp) is missing a 'password'" )
+				}
+				break
+			}
+			case "sftp": {
+				validateFtpFields( arguments.name, "sftp", arguments.config, arguments.errors )
+				if ( !len( arguments.config.password ?: "" ) && !len( arguments.config.key ?: "" ) ) {
+					arguments.errors.append( "deploy/#arguments.name# (sftp) is missing a 'password' or a 'key'" )
+				}
+				break
+			}
+		}
+	}
+
+	private void function validateFtpFields(
+		required string name,
+		required string target,
+		required struct config,
+		required array errors
+	) {
+		if ( !len( arguments.config.host ?: "" ) ) {
+			arguments.errors.append( "deploy/#arguments.name# (#arguments.target#) is missing a 'host'" )
+		}
+		if ( !len( arguments.config.username ?: "" ) ) {
+			arguments.errors.append( "deploy/#arguments.name# (#arguments.target#) is missing a 'username'" )
+		}
+		if ( !len( arguments.config.remotePath ?: "" ) ) {
+			arguments.errors.append( "deploy/#arguments.name# (#arguments.target#) is missing a 'remotePath'" )
 		}
 	}
 

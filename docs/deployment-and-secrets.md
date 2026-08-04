@@ -56,7 +56,7 @@ bxAgents deploy --destination=/path/to/somewhere   # local, flag-only shorthand
 bxAgents deploy --name=production                  # any target, via deploy/production.bx
 ```
 
-Four pluggable targets ship out of the box - `local` (copy the newest `.bxa` somewhere), `ssh` (ship it to a bare server), `docker` (build/push a container image), and `digitalocean` (deploy to a DigitalOcean App Platform app) - see [deploy/](conventions/deploy.md) for the full config shape of each and [CLI Reference](cli-reference.md#deploy) for the CLI flags.
+Six pluggable targets ship out of the box - `local` (copy the newest `.bxa` somewhere), `ssh` (ship it to a bare server), `ftp`/`sftp` (ship it via the real [`bx-ftp`](https://github.com/ortus-boxlang/bx-ftp) module, a genuine runtime dependency of this project), `docker` (build/push a container image), and `digitalocean` (deploy to a DigitalOcean App Platform app) - see [deploy/](conventions/deploy.md) for the full config shape of each and [CLI Reference](cli-reference.md#deploy) for the CLI flags.
 
 No target ever reads a secret from `deploy/*` config - credentials (registry passwords, SSH keys, the DigitalOcean API token) are always resolved from environment variables at deploy time, the same "secrets stay external" rule as everywhere else in this doc. See [deploy/](conventions/deploy.md#secrets-stay-external) for the exact env var each target expects.
 

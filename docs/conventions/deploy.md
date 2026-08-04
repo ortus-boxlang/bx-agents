@@ -105,6 +105,40 @@ Deploys to a [DigitalOcean App Platform](https://www.digitalocean.com/products/a
 
 An existing app is found by name (`GET /v2/apps`, filtered client-side on `spec.name`) rather than remembering a local app-ID file, so this works identically from any machine or CI runner with no local state to go stale.
 
+### `ftp` / `sftp`
+
+Ships the newest `.bxa` to a remote directory over plain FTP or SFTP, via the real [`bx:ftp`](https://github.com/ortus-boxlang/bx-ftp) component - a genuine runtime dependency of this project (like `bx-ai`), not vendored. `remotePath` is a remote **directory** - the uploaded file keeps its own name, the same convention `ssh`'s `scp` target uses.
+
+```javascript
+// deploy/ftp-production.bx
+{
+	target     : "ftp",
+	host       : "ftp.example.com",
+	username   : "deploy",
+	password   : "secret",
+	remotePath : "/uploads/my-agent",
+	port       : 21,       // optional, defaults to 21
+	passive    : true,     // optional, defaults to true
+	proxyServer: "proxy.company.com:8080"   // optional
+}
+```
+
+```javascript
+// deploy/sftp-production.bx
+{
+	target      : "sftp",
+	host        : "sftp.example.com",
+	username    : "deploy",
+	key         : "/home/me/.ssh/id_rsa",   // password OR key required
+	passphrase  : "optional-key-passphrase",
+	fingerprint : "SHA256:...",              // optional host key verification
+	remotePath  : "/uploads/my-agent",
+	port        : 22        // optional, defaults to 22
+}
+```
+
+Requires a prior `bxAgents package`. `ftp` requires a `password`; `sftp` accepts either a `password` or a `key` (SSH private key file path). Every `bx:ftp` action throws on failure (connection refused, auth rejected, a negative server reply) rather than returning a soft failure - this target catches that and re-throws it as a clear `BxAgents.DeployFailed`, always closing the connection afterward even on error.
+
 ## Secrets stay external
 
 No target ever reads a secret (API token, SSH key, registry password) from `deploy/*` config - every credential is resolved from an environment variable at deploy time, matching this project's existing rule that provider API keys are never embedded in a build or package (see [Deployment & Secrets](../deployment-and-secrets.md)):
@@ -114,9 +148,10 @@ No target ever reads a secret (API token, SSH key, registry password) from `depl
 | `ssh` | none required - `identityFile` is a path to a key file you manage yourself |
 | `docker` | `DOCKER_USERNAME`, `DOCKER_PASSWORD` (both optional - only used if set) |
 | `digitalocean` | `DOCKER_USERNAME`/`DOCKER_PASSWORD` (for the image push) + `DIGITALOCEAN_TOKEN` (required) |
+| `ftp` / `sftp` | none required - `password`/`key`/`passphrase` are declared directly in the entry, same as `ssh`'s `identityFile` (a path, not key material itself, for `key`) |
 
 ## Validation
 
-- `target` must be one of `local`, `ssh`, `docker`, `digitalocean`.
+- `target` must be one of `local`, `ssh`, `docker`, `digitalocean`, `ftp`, `sftp`.
 - Entry names must be unique across `deploy/*.bx` and `deploy/*.json`.
-- Each target's required fields (above) are checked when `deploy` runs - `local` needs `destination`, `ssh` needs `host`/`user`/`remotePath`, `docker`/`digitalocean` need `registry.repository`, `digitalocean` also needs `appName`.
+- Each target's required fields (above) are checked when `deploy` runs - `local` needs `destination`, `ssh`/`ftp`/`sftp` need `host`/`user` (or `username`)/`remotePath`, `docker`/`digitalocean` need `registry.repository`, `digitalocean` also needs `appName`, `ftp` also needs `password`, `sftp` also needs `password` or `key`.

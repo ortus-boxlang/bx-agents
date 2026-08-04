@@ -127,6 +127,48 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.errors.toList( "|" ) ).toInclude( "missing an 'appName'" );
 			} );
 
+			it( "requires host, username, remotePath, and password for an ftp target", function() {
+				var dir = newTempProject();
+				writeEntry( dir, "prod", { target : "ftp" } );
+
+				var result = resolver.resolve( dir );
+
+				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'host'" );
+				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'username'" );
+				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'remotePath'" );
+				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'password'" );
+			} );
+
+			it( "accepts a valid ftp target", function() {
+				var dir = newTempProject();
+				writeEntry( dir, "prod", { target : "ftp", host : "ftp.example.com", username : "user", password : "pass", remotePath : "/uploads" } );
+
+				var result = resolver.resolve( dir );
+
+				expect( result.errors.len() ).toBe( 0 );
+			} );
+
+			it( "requires host, username, and remotePath for an sftp target, plus a password or key", function() {
+				var dir = newTempProject();
+				writeEntry( dir, "prod", { target : "sftp" } );
+
+				var result = resolver.resolve( dir );
+
+				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'host'" );
+				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'username'" );
+				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'remotePath'" );
+				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'password' or a 'key'" );
+			} );
+
+			it( "accepts a valid sftp target authenticated by key only", function() {
+				var dir = newTempProject();
+				writeEntry( dir, "prod", { target : "sftp", host : "sftp.example.com", username : "user", key : "/home/me/.ssh/id_rsa", remotePath : "/uploads" } );
+
+				var result = resolver.resolve( dir );
+
+				expect( result.errors.len() ).toBe( 0 );
+			} );
+
 			it( "getEntry() returns the matching entry by name", function() {
 				var dir = newTempProject();
 				writeEntry( dir, "production", { target : "local", destination : "/tmp/wherever" } );

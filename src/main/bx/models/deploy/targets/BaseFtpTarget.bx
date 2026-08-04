@@ -1,0 +1,148 @@
+/**
+ * Shared logic for the `ftp` and `sftp` deploy targets (M16) - both call
+ * the same real `bx:ftp` component provided by the `bx-ftp` BoxLang module
+ * (moduleName `ftp`, a genuine runtime dependency of this project now,
+ * declared in `ext.boxlangModules` - not vendored, the same relationship
+ * this project already has with `bx-ai`), differing only in the `secure`
+ * flag passed to it (`false` = plain FTP, `true` = SFTP) and which extra
+ * authentication/connection options each protocol supports.
+ *
+ * `bx:ftp`'s own declared `port` attribute defaults to 21 REGARDLESS of
+ * `secure` (confirmed via bx-ftp's real source, `FTP.java`/`BaseFTPConnection.java` -
+ * there is no automatic 21-vs-22 switching), so `buildConnectAttributes()`
+ * supplies its OWN protocol-aware port default (21 for ftp, 22 for sftp)
+ * whenever a project doesn't set one explicitly.
+ *
+ * Ships the newest packaged `.bxa` (via `DistArtifactLocator`, same as
+ * `local`/`ssh`) to `remotePath` - a remote DIRECTORY, not a full file path;
+ * the uploaded file keeps its own name, mirroring how `ssh`'s `scp` target
+ * works - using a throwaway, uniquely-named connection that's always closed
+ * in a `finally` block, even on failure.
+ *
+ * Any `IOException` `bx:ftp` throws (connection refused, auth failure, a
+ * negative FTP/SFTP reply) is caught and re-thrown as a clear
+ * `BxAgents.DeployFailed` - confirmed via bx-ftp's own source that EVERY
+ * action throws on failure rather than ever returning a graceful
+ * `succeeded: false` result, so there is no soft-failure path that also
+ * needs checking after a call succeeds without throwing (the `succeeded`
+ * check below is defense-in-depth only, matching bx-ftp's own documented
+ * usage pattern).
+ */
+class {
+
+	/**
+	 * @secure false = ftp, true = sftp
+	 */
+	struct function performDeploy( required struct config, required struct context, required boolean secure ) {
+		var protocol = arguments.secure ? "sftp" : "ftp"
+		var host = trim( arguments.config.host ?: "" )
+		var username = trim( arguments.config.username ?: "" )
+		var remotePath = trim( arguments.config.remotePath ?: "" )
+		var password = trim( arguments.config.password ?: "" )
+		var key = trim( arguments.config.key ?: "" )
+
+		if ( !len( host ) || !len( username ) || !len( remotePath ) ) {
+			throw(
+				type    = "BxAgents.InvalidDeployConfig",
+				message = "deploy target '#protocol#' requires 'host', 'username', and 'remotePath'"
+			)
+		}
+		if ( !arguments.secure && !len( password ) ) {
+			throw( type = "BxAgents.InvalidDeployConfig", message = "deploy target 'ftp' requires a 'password'" )
+		}
+		if ( arguments.secure && !len( password ) && !len( key ) ) {
+			throw( type = "BxAgents.InvalidDeployConfig", message = "deploy target 'sftp' requires a 'password' or a 'key'" )
+		}
+
+		var newest = new "models.deploy.DistArtifactLocator@bxagents"().newestBxa( arguments.context.distDir )
+		var bxaName = getFileFromPath( newest )
+		var remoteFile = buildRemoteFile( remotePath, bxaName )
+		var connectionName = "bxagentsDeploy" & createUUID().replace( "-", "", "all" )
+		var connectAttrs = buildConnectAttributes( arguments.config, connectionName, arguments.secure )
+		var opened = false
+
+		try {
+			bx:ftp action="open" attributeCollection="#connectAttrs#";
+			opened = true
+
+			var putResult = ""
+			bx:ftp action="putfile" connection="#connectionName#" localFile="#newest#" remoteFile="#remoteFile#" result="putResult";
+
+			if ( !( putResult.succeeded ?: false ) ) {
+				throw(
+					type    = "BxAgents.DeployFailed",
+					message = "#protocol# upload to #host# failed: #putResult.statusText ?: ( putResult.errorText ?: '' )#"
+				)
+			}
+		} catch ( any e ) {
+			if ( e.type == "BxAgents.DeployFailed" ) {
+				rethrow;
+			}
+			throw(
+				type    = "BxAgents.DeployFailed",
+				message = "#protocol# deploy to #host# failed: #e.message#"
+			)
+		} finally {
+			if ( opened ) {
+				try {
+					bx:ftp action="close" connection="#connectionName#";
+				} catch ( any ignore ) {
+					// best-effort cleanup - the upload's own outcome already
+					// determined success/failure above
+				}
+			}
+		}
+
+		return {
+			success : true,
+			message : "Deployed #bxaName# to #protocol#://#host#/#remoteFile#",
+			details : { host : host, remoteFile : remoteFile, bxa : bxaName }
+		}
+	}
+
+	string function buildRemoteFile( required string remotePath, required string bxaName ) {
+		return arguments.remotePath.reReplace( "[\/]+$", "" ) & "/" & arguments.bxaName
+	}
+
+	/**
+	 * Pure - builds the attribute struct passed to `bx:ftp action="open" attributeCollection="..."`.
+	 * No secret is ever logged or returned beyond what the caller already
+	 * supplied in `config` itself.
+	 *
+	 * @secure false = ftp, true = sftp
+	 */
+	struct function buildConnectAttributes( required struct config, required string connectionName, required boolean secure ) {
+		var attrs = {
+			connection : arguments.connectionName,
+			server     : arguments.config.host,
+			port       : arguments.config.port ?: ( arguments.secure ? 22 : 21 ),
+			username   : arguments.config.username,
+			timeout    : arguments.config.timeout ?: 30,
+			secure     : arguments.secure
+		}
+
+		if ( len( arguments.config.password ?: "" ) ) {
+			attrs.password = arguments.config.password
+		}
+
+		if ( arguments.secure ) {
+			if ( len( arguments.config.key ?: "" ) ) {
+				attrs.key = arguments.config.key
+			}
+			if ( len( arguments.config.passphrase ?: "" ) ) {
+				attrs.passphrase = arguments.config.passphrase
+			}
+			if ( len( arguments.config.fingerprint ?: "" ) ) {
+				attrs.fingerprint = arguments.config.fingerprint
+			}
+		} else {
+			attrs.passive = arguments.config.passive ?: true
+			if ( len( arguments.config.proxyServer ?: "" ) ) {
+				attrs.proxyServer = arguments.config.proxyServer
+			}
+		}
+
+		return attrs
+	}
+
+}
