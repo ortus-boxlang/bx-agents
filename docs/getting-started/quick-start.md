@@ -24,7 +24,11 @@ my-agent/
 ├── schedules/
 ├── mcp/
 ├── interceptors/
-└── modules/
+├── modules/
+└── tests/
+    ├── box.json
+    └── specs/
+        └── AgentSpec.bx
 ```
 
 `Agent.bx` looks like:
@@ -63,7 +67,16 @@ class {
 
 See the [Conventions](../conventions/agent-bx.md) section for every other folder (`skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `models/`, `modules/`).
 
-## 3. Build
+## 3. Test it
+
+```bash
+cd tests && box install && cd ..   # once, to fetch testbox/
+bxAgents test
+```
+
+The scaffolded `tests/specs/AgentSpec.bx` passes out of the box - it builds your agent against the `mock` provider (no API key or network needed) and asserts on a scripted response. See [tests/](../conventions/testing.md) for `mockResponses()` and the custom matchers (`toHaveCalledTool`, etc.) available to your own specs.
+
+## 4. Build
 
 ```bash
 bxAgents build
@@ -73,7 +86,7 @@ Runs the full [build pipeline](../build-pipeline.md) - config resolution, discov
 
 If your project fails validation (duplicate tool names, a bad cron expression, an unknown model provider, ...) `build` fails with every collected error - not just the first one.
 
-## 4. Run it
+## 5. Run it
 
 Two ways to talk to the built agent - both load the exact same `GeneratedAgentFactory.bx` and build the exact same agent tree, so they never diverge:
 
@@ -95,7 +108,7 @@ If your project has a `gateways/*` entry with `{ exposes: "agent", path: "/api/c
 The very first request to a freshly booted app's `toAi()` route can transiently fail - see [Known Limitations](../known-limitations.md). Send a warm-up request before relying on it under load.
 {% endhint %}
 
-## 5. Inspect, package, deploy
+## 6. Inspect, package, deploy
 
 ```bash
 bxAgents inspect              # pretty-print .build/manifest.json
@@ -105,7 +118,7 @@ bxAgents deploy --destination=/path/to/somewhere   # copies the newest .bxa ther
 
 See [The Manifest](../manifest.md) and [Deployment & Secrets](../deployment-and-secrets.md).
 
-## 6. Clean up
+## 7. Clean up
 
 ```bash
 bxAgents clean

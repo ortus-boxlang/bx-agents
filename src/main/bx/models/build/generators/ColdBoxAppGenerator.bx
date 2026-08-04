@@ -83,7 +83,7 @@ class {
 		fileWrite( applicationPath, renderApplication( appName, startupStatements ) )
 		fileWrite( coldboxPath, renderColdboxConfig( appName, arguments.agentInterceptors, arguments.resolvedConfig.security ?: {} ) )
 		fileWrite( wireboxPath, renderWireBox() )
-		fileWrite( agentFactoryPath, renderAgentFactory( root, arguments.resolvedConfig ) )
+		fileWrite( agentFactoryPath, renderAgentFactory( root, appDir, arguments.resolvedConfig ) )
 
 		var indexPath = appDir & "/index.bxm"
 		fileWrite( indexPath, renderIndex() )
@@ -234,9 +234,30 @@ class {
 	// GeneratedAgentFactory.bx - the agent/subagent build tree
 	// --------------------------------------------------------------------------
 
-	private string function renderAgentFactory( required string projectRoot, required struct resolvedConfig ) {
+	/**
+	 * Real bug found this session: this factory's generated `aiAgent()` calls
+	 * NEVER passed a `tools:` argument at all (confirmed against real bx-ai
+	 * source: `AiAgent.bx` never references `aiToolRegistry()` internally -
+	 * a project's tools/ were copied into the build and made
+	 * name-resolvable for MCP wiring, but no agent BX Agents ever built - in
+	 * ANY context: a real served app, `chat`, or a test spec - actually
+	 * received them). Fixed here, not by relying on `aiToolRegistry().scan("tools")`'s
+	 * relative-path resolution (which depends on whatever "/" mapping is in
+	 * effect for the CALLING context - unverified/fragile the moment this
+	 * factory is loaded via `DynamicClassLoader` rather than a real ColdBox
+	 * boot): `ToolRegistryLoader.bx` is called once here with the tools
+	 * directory's ABSOLUTE path embedded as a literal at generation time
+	 * (the same pattern already used for `instructions.md`'s own absolute
+	 * `fileRead()` path below), then every agent node's `aiAgent()` call
+	 * attaches `aiToolRegistry().getAll()` - safe regardless of how many
+	 * nodes exist, since re-registering an already-scanned tool is a no-op
+	 * overwrite (confirmed against real bx-ai `BaseRegistry.register()`
+	 * source).
+	 */
+	private string function renderAgentFactory( required string projectRoot, required string appDir, required struct resolvedConfig ) {
 		var built = buildAgentTree( arguments.projectRoot, arguments.projectRoot, arguments.resolvedConfig, "agent" )
 		var body = built.statements.toList( char( 10 ) & char( 10 ) )
+		var toolsDir = normalizePath( arguments.appDir ) & "/tools"
 
 		var lines = [
 			"/**",
@@ -246,6 +267,8 @@ class {
 			"class {",
 			"",
 			"	function buildAgent() {",
+			'		new "models.build.ToolRegistryLoader@bxagents"().load( "#bxLiteral( toolsDir )#" )',
+			"",
 			body,
 			"",
 			"		return agent",
@@ -334,6 +357,7 @@ class {
 		lines.append( '	description : "#bxLiteral( description )#",' )
 		lines.append( '	instructions : fileRead( "#bxLiteral( instructionsPath )#" ),' )
 		lines.append( '	model : aiModel( provider : "#bxLiteral( parsedModel.provider )#", params : { model : "#bxLiteral( parsedModel.model )#" } ),' )
+		lines.append( "	tools : aiToolRegistry().getAll()," )
 
 		if ( arguments.subAgentVarNames.len() ) {
 			lines.append( "	subAgents : [ #arguments.subAgentVarNames.toList( ", " )# ]," )

@@ -19,6 +19,7 @@
 * [mcp/](conventions/mcp.md)
 * [interceptors/](conventions/interceptors.md)
 * [modules/](conventions/modules.md)
+* [tests/](conventions/testing.md)
 
 ## Reference
 

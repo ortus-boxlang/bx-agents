@@ -1,0 +1,37 @@
+/**
+ * `test` CLI verb - thin dispatcher over TestRunnerService (M15). Runs a
+ * project's own `tests/specs` via TestBox, in a fresh child process pointed
+ * at the project directly (see TestRunnerService.bx's docblock for why a
+ * fresh process is required).
+ */
+class {
+
+	/**
+	 * @options { projectRoot (required, absolute path) }
+	 */
+	struct function run( struct options = {} ) {
+		var projectRoot = trim( arguments.options.projectRoot ?: "" )
+		if ( !len( projectRoot ) ) {
+			throw( type = "BxAgents.MissingProjectRoot", message = "`test` requires a project root" )
+		}
+
+		var runner = new "models.build.TestRunnerService@bxagents"()
+		var result = runner.run( projectRoot )
+
+		var lines = [
+			"Bundles: #result.totalBundles# | Suites: #result.totalSuites# | Specs: #result.totalSpecs#",
+			"Pass: #result.totalPass# | Fail: #result.totalFail# | Error: #result.totalError# | Skipped: #result.totalSkipped#"
+		]
+
+		for ( var failure in result.failures ) {
+			lines.append( "  [FAILED] #failure.bundle# > #failure.suite# > #failure.spec#: #failure.message#" )
+		}
+
+		return {
+			exitCode : result.exitCode,
+			message  : lines.toList( char( 10 ) ),
+			result   : result
+		}
+	}
+
+}

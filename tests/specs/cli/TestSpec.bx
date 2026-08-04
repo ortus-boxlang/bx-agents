@@ -1,0 +1,110 @@
+/**
+ * `test` CLI verb - real end-to-end coverage. Cases 3-4 spawn a genuine
+ * child BoxLang process (via TestRunnerService.bx/TestRunnerLauncher.java),
+ * so they need `build/modules/bxagents` to exist (run `./gradlew shadowJar`
+ * first - CI already does this before `testBx`) - skipped (not failed) if
+ * missing, the same convention used elsewhere in this suite for a similar
+ * prerequisite (see RuntimeStartupSmokeSpec.bx's miniserver-jar check).
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "cli.Test", function() {
+
+			beforeEach( function() {
+				variables.testVerb = new bxagents.models.cli.Test();
+				variables.fixtures = expandPath( "/fixtures" );
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function newTempProject( required string fixtureName ) {
+				var dir = createTempDirectory( prefix = "bxagents-cli-test-" );
+				directoryCopy( fixtures & "/" & arguments.fixtureName, dir, true );
+				tempDirs.append( dir );
+				return dir;
+			}
+
+			private boolean function hasRealModuleInstall() {
+				return directoryExists( getSystemSetting( "user.dir", "" ) & "/build/modules/bxagents" );
+			}
+
+			it( "errors cleanly when tests/specs doesn't exist", function() {
+				var dir = createTempDirectory( prefix = "bxagents-cli-test-nospecs-" );
+				tempDirs.append( dir );
+				directoryCreate( dir & "/tests", true, true );
+
+				expect( function() {
+					testVerb.run( { projectRoot : dir } );
+				} ).toThrow( "BxAgents.NoTestsFound" );
+			} );
+
+			it( "errors cleanly when testbox isn't installed under tests/", function() {
+				var dir = createTempDirectory( prefix = "bxagents-cli-test-notestbox-" );
+				tempDirs.append( dir );
+				directoryCreate( dir & "/tests/specs", true, true );
+
+				expect( function() {
+					testVerb.run( { projectRoot : dir } );
+				} ).toThrow( "BxAgents.TestBoxNotInstalled" );
+			} );
+
+			it( "runs a real project's tests/specs via a spawned process and reports pass counts", function() {
+				if ( !hasRealModuleInstall() ) {
+					// `./gradlew shadowJar` hasn't been run - skip rather than
+					// fail, same convention as the miniserver-jar checks
+					// elsewhere in this suite.
+					return;
+				}
+
+				var projectRoot = newTempProject( "testable-agent" );
+				directoryCopy( expandPath( "/testbox" ), projectRoot & "/tests/testbox", true );
+
+				var result = testVerb.run( { projectRoot : projectRoot } );
+
+				expect( result.exitCode ).toBe( 0 );
+				expect( result.result.totalSpecs ).toBe( 2 );
+				expect( result.result.totalPass ).toBe( 2 );
+				expect( result.result.totalFail ).toBe( 0 );
+			} );
+
+			it( "reports a real failing spec with exit code 1 and a useful failure message", function() {
+				if ( !hasRealModuleInstall() ) {
+					return;
+				}
+
+				var projectRoot = newTempProject( "testable-agent" );
+				directoryCopy( expandPath( "/testbox" ), projectRoot & "/tests/testbox", true );
+				fileWrite( projectRoot & "/tests/specs/FailingSpec.bx", '
+					class extends="bxModules.bxagents.models.testing.BaseAgentSpec" {
+						function run() {
+							describe( "failing case", function() {
+								it( "fails on purpose", function() {
+									mockResponses( [ "Goodbye!" ] )
+									var response = agent.run( "Hi" )
+									expect( response ).toContainText( "Hello" )
+								} )
+							} )
+						}
+					}
+				' );
+
+				var result = testVerb.run( { projectRoot : projectRoot } );
+
+				expect( result.exitCode ).toBe( 1 );
+				expect( result.result.totalFail ).toBeGT( 0 );
+				expect( result.result.failures.len() ).toBeGT( 0 );
+				expect( result.result.failures[ 1 ].message ).toInclude( "to contain text" );
+			} );
+
+		} );
+	}
+
+}

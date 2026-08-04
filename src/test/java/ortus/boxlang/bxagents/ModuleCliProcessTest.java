@@ -93,12 +93,20 @@ public class ModuleCliProcessTest {
 		Files.createDirectories( modulesDir );
 		copyRecursively( moduleSourceDir, modulesDir.resolve( "bxagents" ) );
 
+		// Also point at this repo's own fetched supporting-modules dir (bx-ai) -
+		// `test` (unlike `new`/`build`, which only ever write generated SOURCE
+		// TEXT and never execute it) actually INVOKES the built agent, which
+		// needs bx-ai's real aiModel()/aiAgent() BIFs registered - confirmed
+		// empirically this session that omitting it here doesn't error loudly,
+		// it just silently reports zero discovered specs.
+		String bxAiModulesDir = Path.of( "src/test/resources/modules" ).toAbsolutePath().toString().replace( "\\", "\\\\" );
+
 		configPath = tempRoot.resolve( "boxlang.json" );
 		Files.writeString( configPath, """
 		                               {
-		                                 "modulesDirectory": [ "%s" ]
+		                                 "modulesDirectory": [ "%s", "%s" ]
 		                               }
-		                               """.formatted( modulesDir.toString().replace( "\\", "\\\\" ) ) );
+		                               """.formatted( modulesDir.toString().replace( "\\", "\\\\" ), bxAiModulesDir ) );
 
 		projectDir = tempRoot.resolve( "myagent" );
 	}
@@ -146,6 +154,38 @@ public class ModuleCliProcessTest {
 		return process.exitValue();
 	}
 
+	/**
+	 * Same as {@link #runVerb(String...)}, but CAPTURES output instead of
+	 * inheriting it, returning it alongside the exit code - needed to assert
+	 * on more than just "exited 0", which is not by itself proof anything
+	 * meaningful ran (confirmed empirically this session: a misconfigured
+	 * modulesDirectory made `test` report zero discovered specs while still
+	 * exiting 0 - a silent false positive an exit-code-only check would never
+	 * catch).
+	 */
+	private record VerbResult(int exitCode, String output) {}
+
+	private VerbResult runVerbCapturing( String... verbArgs ) throws Exception {
+		List<String> command = new java.util.ArrayList<>( List.of(
+		    System.getProperty( "java.home" ) + java.io.File.separator + "bin" + java.io.File.separator + "java",
+		    "-jar", boxlangJar.toAbsolutePath().toString(),
+		    "--bx-config", configPath.toAbsolutePath().toString(),
+		    "module:bxagents"
+		) );
+		command.addAll( List.of( verbArgs ) );
+
+		Process process = new ProcessBuilder( command ).redirectErrorStream( true ).start();
+		String output = new String( process.getInputStream().readAllBytes() );
+
+		boolean finished = process.waitFor( 60, TimeUnit.SECONDS );
+		if ( !finished ) {
+			process.destroyForcibly();
+			throw new AssertionError( "module:bxagents " + String.join( " ", verbArgs ) + " never exited within 60s" );
+		}
+		System.out.println( output );
+		return new VerbResult( process.exitValue(), output );
+	}
+
 	@Order( 1 )
 	@DisplayName( "a real `module:bxagents new` OS process scaffolds a project" )
 	@Test
@@ -174,6 +214,26 @@ public class ModuleCliProcessTest {
 	}
 
 	@Order( 3 )
+	@DisplayName( "a real `module:bxagents test` OS process runs the scaffolded tests/specs" )
+	@Test
+	public void testTestProcess() throws Exception {
+		ensureTempModuleInstall();
+		assumeTrue( Files.exists( projectDir.resolve( "tests/specs/AgentSpec.bx" ) ), "requires testNewProcess to have run first" );
+
+		Path testboxSource = Path.of( "testbox" );
+		assumeTrue( Files.isDirectory( testboxSource ), "testbox/ not found at the repo root - run `box install` first" );
+		copyRecursively( testboxSource, projectDir.resolve( "tests/testbox" ) );
+
+		VerbResult result = runVerbCapturing( "test", projectDir.toString() );
+
+		assertEquals( 0, result.exitCode(), "module:bxagents test should exit 0 - the scaffolded AgentSpec.bx should pass out of the box" );
+		assertTrue( result.output().contains( "Specs: 1" ),
+		    "expected exactly the 1 scaffolded spec to have been discovered and run - got:\n" + result.output() );
+		assertTrue( result.output().contains( "Pass: 1" ),
+		    "expected the 1 scaffolded spec to have passed - got:\n" + result.output() );
+	}
+
+	@Order( 4 )
 	@DisplayName( "a real `module:bxagents clean` OS process removes .build without touching source" )
 	@Test
 	public void testCleanProcess() throws Exception {

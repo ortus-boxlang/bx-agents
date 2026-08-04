@@ -1,0 +1,210 @@
+/**
+ * Base test case for testing an agent project's OWN behavior - extend this
+ * from `tests/specs/*.bx` (M15). Once BX Agents is installed as a real
+ * module, this resolves as `bxModules.bxagents.models.testing.BaseAgentSpec`
+ * with no extra wiring needed in a consuming project.
+ *
+ * Builds the project's agent the SAME way `chat` does (a real `BuildPipeline`
+ * run + `DynamicClassLoader`-loaded `GeneratedAgentFactory.bx`, no ColdBox
+ * container involved) against a throwaway TEMP COPY of the project - never
+ * the project's own `.build/app`, so running tests never clobbers (or is
+ * clobbered by) a real `build`/`serve`/`package` cycle. Defaults to the
+ * `mock` provider via the `test()` environment-override convention (see
+ * `ProjectScaffolder.bx` - a fresh project's scaffolded `Agent.bx` includes
+ * `function test() { return { model: "mock/mock-model" } }`), so a project's
+ * tests need no API key or network access out of the box.
+ *
+ * Note for anyone touching the matcher bodies below: `request` is a
+ * BUILT-IN BoxLang scope name (like CFML's `request` scope) - a local
+ * variable/loop variable named `request` silently shadows-fights with it,
+ * and member access off it (`request.messages`) can resolve against the
+ * EMPTY built-in scope instead of your own value, with no error at all
+ * (confirmed the hard way this session: a `for ( var request in requests )`
+ * loop iterated the right number of times but every `request.messages`
+ * inside it silently read as empty). Use a different loop variable name
+ * (`recordedRequest` below) - never `request`.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	/**
+	 * The real project root under test - resolved from the
+	 * `-Dbxagents.testing.projectRoot=...` JVM system property
+	 * `TestRunnerLauncher.java` sets when spawning the child process this
+	 * spec runs in (see `TestRunnerService.bx`'s docblock for why a fresh
+	 * process is needed at all, and why this can't just be inferred from
+	 * `expandPath("/")` - confirmed empirically this session that resolves
+	 * relative to the spawned process's own registered "/" mapping, not to
+	 * the target project, and silently copying the WRONG directory tree is
+	 * far worse than a clear error here).
+	 */
+	private string function resolveProjectRoot() {
+		var configured = getSystemSetting( "bxagents.testing.projectRoot", "" )
+		if ( !len( configured ) ) {
+			throw(
+				type    = "BxAgents.MissingTestProjectRoot",
+				message = "BaseAgentSpec could not determine the project root under test - it must be run via the `test` CLI verb (which sets this), not directly"
+			)
+		}
+		return configured
+	}
+
+	function beforeAll() {
+		var projectRoot = resolveProjectRoot()
+
+		variables.$bxagentsTempDir = createTempDirectory( prefix = "bxagents-testrun-" )
+		directoryCopy( projectRoot, variables.$bxagentsTempDir, true, function( path ) {
+			return !arguments.path.reFindNoCase( "[\\/](\.build|dist|tests)([\\/]|$)" )
+		} )
+
+		var pipeline = new "models.build.BuildPipeline@bxagents"( "test" )
+		var result = pipeline.build( variables.$bxagentsTempDir, "test" )
+
+		var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
+		var factory = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
+			.instantiate( result.appDir & "/agent/GeneratedAgentFactory.bx", context )
+
+		variables.agent = factory.buildAgent()
+
+		registerAgentMatchers()
+	}
+
+	function afterAll() {
+		if ( structKeyExists( variables, "$bxagentsTempDir" ) && directoryExists( variables.$bxagentsTempDir ) ) {
+			directoryDelete( variables.$bxagentsTempDir, true )
+		}
+	}
+
+	/**
+	 * Seeds the built agent's mock provider with scripted responses -
+	 * consumed in order, one per LLM round-trip (see bx-ai's own
+	 * MockService.setResponses() docs: a string is a plain reply, a
+	 * `{ toolCalls: [ { name, arguments } ] }` struct scripts a tool-call
+	 * turn - the tool itself still executes for real).
+	 *
+	 * @responses Array of strings and/or { toolCalls: [...] } structs
+	 */
+	function mockResponses( required array responses ) {
+		var service = variables.agent.getAiModel().getService()
+		if ( !hasMethod( service, "setResponses" ) ) {
+			throw(
+				type    = "BxAgents.NotUsingMockProvider",
+				message = "mockResponses() requires the agent to be built against bx-ai's 'mock' provider - check Agent.bx's test() environment override"
+			)
+		}
+		service.setResponses( arguments.responses )
+	}
+
+	private boolean function hasMethod( required any instance, required string methodName ) {
+		var meta = getMetaData( arguments.instance )
+		var functions = meta.functions ?: []
+		var targetName = arguments.methodName.lcase()
+		return functions.some( fn => fn.name.lcase() == targetName )
+	}
+
+	/**
+	 * Registers this class's custom matchers via TestBox's own real
+	 * `addMatchers()` extension point (confirmed against real TestBox source
+	 * - testbox/system/BaseSpec.cfc/Expectation.cfc): a matcher function
+	 * receives `(expectation, matcherArguments)`, where `expectation.actual`
+	 * is the value passed to `expect(...)` and `expectation.message` can be
+	 * set for a custom failure message. Must return a boolean.
+	 */
+	private void function registerAgentMatchers() {
+		addMatchers( {
+			toContainText          : matcherToContainText,
+			toHaveCalledTool       : matcherToHaveCalledTool,
+			toHaveReceivedMessage  : matcherToHaveReceivedMessage
+		} )
+	}
+
+	/**
+	 * expect( response ).toContainText( "expected substring" )
+	 * Case-insensitive substring match on a plain string agent response.
+	 * Supports negation (`expect(...).notToContainText(...)`) - TestBox's
+	 * generic `registerMatcher()` wrapper does NOT invert a custom matcher's
+	 * result for you (unlike its own built-in matchers, which each branch on
+	 * `this.isNot` themselves - see toHaveKey() in testbox's Expectation.cfc)
+	 * - every matcher below must check `expectation.isNot` itself.
+	 */
+	private function matcherToContainText( expectation, args ) {
+		var expected = arguments.args[ 1 ] ?: ""
+		var actual = toString( arguments.expectation.actual ?: "" )
+		var found = actual.findNoCase( expected ) > 0
+		var passed = arguments.expectation.isNot ? !found : found
+
+		if ( !passed ) {
+			arguments.expectation.message = arguments.expectation.isNot
+				? "Expected response [#actual#] NOT to contain text [#expected#]"
+				: "Expected response [#actual#] to contain text [#expected#]"
+		}
+		return passed
+	}
+
+	/**
+	 * expect( agent ).toHaveCalledTool( "toolName" )
+	 * Inspects the agent's underlying mock service's recorded requests
+	 * (confirmed empirically against real bx-ai MockService.getReceivedRequests()
+	 * output: a completed tool-call turn appears as an
+	 * `{ role: "assistant", tool_calls: [ { function: { name, arguments } } ] }`
+	 * message in a later request's own `messages` array) for evidence the
+	 * agent actually decided to invoke the named tool - not just that the
+	 * tool exists. Supports negation - see matcherToContainText()'s docblock.
+	 */
+	private function matcherToHaveCalledTool( expectation, args ) {
+		var toolName = arguments.args[ 1 ] ?: ""
+		var agent = arguments.expectation.actual
+		var requests = agent.getAiModel().getService().getReceivedRequests()
+		var called = false
+
+		for ( var recordedRequest in requests ) {
+			for ( var message in ( recordedRequest.messages ?: [] ) ) {
+				if ( message.role == "assistant" && structKeyExists( message, "tool_calls" ) ) {
+					for ( var toolCall in message.tool_calls ) {
+						if ( ( toolCall.function.name ?: "" ) == toolName ) {
+							called = true
+						}
+					}
+				}
+			}
+		}
+
+		var passed = arguments.expectation.isNot ? !called : called
+		if ( !passed ) {
+			arguments.expectation.message = arguments.expectation.isNot
+				? "Expected the agent NOT to have called tool [#toolName#], but it did"
+				: "Expected the agent to have called tool [#toolName#], but it didn't"
+		}
+		return passed
+	}
+
+	/**
+	 * expect( agent ).toHaveReceivedMessage( "expected substring" )
+	 * Asserts some message actually sent to the provider (any role, any
+	 * recorded request) contained the given text - useful for asserting the
+	 * system prompt/instructions actually reached the provider. Supports
+	 * negation - see matcherToContainText()'s docblock.
+	 */
+	private function matcherToHaveReceivedMessage( expectation, args ) {
+		var expected = arguments.args[ 1 ] ?: ""
+		var agent = arguments.expectation.actual
+		var requests = agent.getAiModel().getService().getReceivedRequests()
+		var foundMessage = false
+
+		for ( var recordedRequest in requests ) {
+			for ( var message in ( recordedRequest.messages ?: [] ) ) {
+				if ( toString( message.content ?: "" ).findNoCase( expected ) > 0 ) {
+					foundMessage = true
+				}
+			}
+		}
+
+		var passed = arguments.expectation.isNot ? !foundMessage : foundMessage
+		if ( !passed ) {
+			arguments.expectation.message = arguments.expectation.isNot
+				? "Expected no message sent to the provider to contain [#expected#], but one did"
+				: "Expected some message sent to the provider to contain [#expected#], but none did"
+		}
+		return passed
+	}
+
+}
