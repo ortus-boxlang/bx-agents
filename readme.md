@@ -64,7 +64,7 @@ Before you get started, fetch the BoxLang binary (until this module is published
 
 ```bash
 ./gradlew downloadBoxLang
-./gradlew downloadModules        # bx-ai, needed by the TestBox suite
+./gradlew downloadModules        # bx-ai + bx-ftp, needed by the TestBox suite
 ./gradlew downloadMiniServer     # boxlang-miniserver, needed by the ColdBox integration suite
 ```
 
@@ -78,7 +78,7 @@ Before you get started, fetch the BoxLang binary (until this module is published
 | `testColdBoxIntegration` | Boots a real `boxlang-miniserver` against a generated app and hits a `toAi()` route over real HTTP, via `runColdBoxIntegrationTests.bxs`. Requires `tests/coldbox/` (`box install` in `tests/`) and the miniserver jar. |
 | `verifyExamples` | Builds every project under `examples/` through the real build pipeline via `verifyExamples.bxs` - a regression net across the whole feature matrix. |
 | `downloadBoxLang` | Downloads the BoxLang binary into `src/test/resources/libs`. |
-| `downloadModules` | Downloads supporting BoxLang modules (bx-ai) into `src/test/resources/modules`. |
+| `downloadModules` | Downloads supporting BoxLang modules (bx-ai, bx-ftp) into `src/test/resources/modules`. |
 | `downloadMiniServer` | Downloads the `boxlang-miniserver` binary into `src/test/resources/libs`. |
 | `jar` / `shadowJar` | Packages compiled classes/resources into a JAR under `build/libs`. |
 | `javadoc` | Generates Javadocs into `build/docs/javadoc`. |

@@ -36,6 +36,7 @@ class {
 		return {
 			description : "Internal tools MCP server",
 			version     : "1.0.0",
+			cors        : "*",             // optional - CORS origin(s) allowed to call this server; omit for none
 			tools       : [ "sayHello" ]   // names of tools already declared under tools/
 		};
 	}
@@ -45,10 +46,12 @@ class {
 
 The entry's discovered name is its **filename** (`localServer.bx` → `localServer`), not any `name` field inside its own `configure()` struct - a project may still set one for documentation, but it's ignored for naming/registration purposes.
 
+`cors` is optional and defaults to an empty string (no CORS header) when omitted - passed straight through as `mcpServer()`'s 4th positional argument.
+
 At build time, the file is copied verbatim into the generated app's `mcp/` folder, and a registration statement is emitted into `Application.bx`'s `onApplicationStart()`:
 
 ```javascript
-mcpServer( "localServer", "Internal tools MCP server", "1.0.0", "" )
+mcpServer( "localServer", "Internal tools MCP server", "1.0.0", "*" )
 	.registerTool( aiToolRegistry().get( "sayHello" ) )
 ```
 

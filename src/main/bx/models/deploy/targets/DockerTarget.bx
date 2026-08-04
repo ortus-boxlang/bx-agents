@@ -1,0 +1,174 @@
+/**
+ * Builds a Docker image from a project's `.build/app` and optionally pushes
+ * it to a container registry (M16) - shells out to the real `docker` CLI
+ * (`docker build`/`docker login`/`docker push`) via `ProcessBuilder`,
+ * matching `MiniServerLauncher.java`'s established "shell out, don't add a
+ * dependency" pattern.
+ *
+ * The built-in Dockerfile template is based on the real, published
+ * `ortussolutions/boxlang:miniserver` image (confirmed via
+ * https://boxlang.ortusbooks.com/getting-started/running-boxlang/docker -
+ * it serves `/app` as the webroot on port 8080 by default). A project can
+ * override it entirely with its own `deploy/Dockerfile`.
+ *
+ * `registry.type` accepts `dockerhub`, `ghcr`, or `docr` (DigitalOcean
+ * Container Registry) - this is deliberately the SAME shape the
+ * DigitalOcean App Spec itself uses for `registry_type`/`registry`/
+ * `repository`, so `DigitalOceanTarget` reuses this target's own image
+ * build/push and `registry` config as-is.
+ *
+ * No registry credentials are ever read from `deploy/*` config - `docker
+ * login` (only run when `DOCKER_USERNAME`/`DOCKER_PASSWORD` are both set in
+ * the environment) resolves them from those two env vars at deploy time,
+ * matching this project's "secrets stay external" rule. A registry that
+ * doesn't require login (e.g. an already-authenticated local Docker daemon)
+ * works fine without either set.
+ *
+ * Command construction is kept separate from execution (`runProcess`) so
+ * specs can assert on the exact commands built without actually invoking
+ * `docker`.
+ *
+ * @config { registry: { type, repository }, imageName, tag, dockerfile }
+ */
+class implements="models.deploy.IDeploymentTarget@bxagents" {
+
+	variables.REGISTRY_HOSTS = { "dockerhub" : "", "ghcr" : "ghcr.io", "docr" : "registry.digitalocean.com" }
+
+	variables.DEFAULT_DOCKERFILE = "FROM ortussolutions/boxlang:miniserver" & char( 10 ) &
+		"COPY . /app" & char( 10 ) &
+		"EXPOSE 8080" & char( 10 )
+
+	struct function deploy( required struct config, required struct context ) {
+		var registry = arguments.config.registry ?: {}
+		if ( !isStruct( registry ) || !len( registry.repository ?: "" ) ) {
+			throw(
+				type    = "BxAgents.InvalidDeployConfig",
+				message = "deploy target 'docker' requires a 'registry' struct with a 'repository'"
+			)
+		}
+
+		var appDir = arguments.context.appDir
+		if ( !directoryExists( appDir ) ) {
+			throw(
+				type    = "BxAgents.NotBuilt",
+				message = "No build found at [#appDir#] - run `build` first"
+			)
+		}
+
+		var imageRef = buildImageRef( arguments.config )
+		var dockerfilePath = resolveDockerfile( arguments.config, arguments.context )
+
+		if ( len( trim( getSystemSetting( "DOCKER_USERNAME", "" ) ) ) && len( trim( getSystemSetting( "DOCKER_PASSWORD", "" ) ) ) ) {
+			var loginResult = runProcess(
+				buildDockerLoginCommand( arguments.config ),
+				getSystemSetting( "DOCKER_PASSWORD", "" )
+			)
+			if ( loginResult.exitCode != 0 ) {
+				throw(
+					type    = "BxAgents.DeployFailed",
+					message = "docker login failed (exit #loginResult.exitCode#): #loginResult.output#"
+				)
+			}
+		}
+
+		var buildResult = runProcess( buildDockerBuildCommand( imageRef, dockerfilePath, appDir ) )
+		if ( buildResult.exitCode != 0 ) {
+			throw(
+				type    = "BxAgents.DeployFailed",
+				message = "docker build failed (exit #buildResult.exitCode#): #buildResult.output#"
+			)
+		}
+
+		var pushResult = runProcess( buildDockerPushCommand( imageRef ) )
+		if ( pushResult.exitCode != 0 ) {
+			throw(
+				type    = "BxAgents.DeployFailed",
+				message = "docker push failed (exit #pushResult.exitCode#): #pushResult.output#"
+			)
+		}
+
+		return {
+			success : true,
+			message : "Built and pushed #imageRef#",
+			details : { imageRef : imageRef, registry : registry }
+		}
+	}
+
+	string function buildImageRef( required struct config ) {
+		var registry = arguments.config.registry
+		var host = variables.REGISTRY_HOSTS[ registry.type ?: "dockerhub" ] ?: ""
+		var repository = registry.repository
+		var tag = len( arguments.config.tag ?: "" ) ? arguments.config.tag : "latest"
+		var ref = len( host ) ? "#host#/#repository#" : repository
+		return "#ref#:#tag#"
+	}
+
+	array function buildDockerBuildCommand( required string imageRef, required string dockerfilePath, required string contextDir ) {
+		return [ "docker", "build", "-t", arguments.imageRef, "-f", arguments.dockerfilePath, arguments.contextDir ]
+	}
+
+	array function buildDockerPushCommand( required string imageRef ) {
+		return [ "docker", "push", arguments.imageRef ]
+	}
+
+	array function buildDockerLoginCommand( required struct config ) {
+		var registry = arguments.config.registry
+		var host = variables.REGISTRY_HOSTS[ registry.type ?: "dockerhub" ] ?: ""
+		var command = [ "docker", "login" ]
+		if ( len( host ) ) {
+			command.append( host )
+		}
+		command.append( "-u" )
+		command.append( getSystemSetting( "DOCKER_USERNAME", "" ) )
+		command.append( "--password-stdin" )
+		return command
+	}
+
+	/**
+	 * A project-supplied `deploy/Dockerfile` always wins; otherwise a
+	 * built-in default (embedding `ortussolutions/boxlang:miniserver`) is
+	 * written to a throwaway temp file for this build only.
+	 */
+	private string function resolveDockerfile( required struct config, required struct context ) {
+		if ( len( arguments.config.dockerfile ?: "" ) ) {
+			return arguments.config.dockerfile
+		}
+
+		var projectDockerfile = arguments.context.projectRoot & "/deploy/Dockerfile"
+		if ( fileExists( projectDockerfile ) ) {
+			return projectDockerfile
+		}
+
+		var tempDockerfile = getTempDirectory() & "/bxagents-deploy-dockerfile-" & createUUID()
+		fileWrite( tempDockerfile, variables.DEFAULT_DOCKERFILE )
+		return tempDockerfile
+	}
+
+	/**
+	 * @stdinInput Optional string written to the process's stdin then closed
+	 *             (used for `docker login --password-stdin`) before reading output.
+	 */
+	private struct function runProcess( required array command, string stdinInput = "" ) {
+		try {
+			var builder = createObject( "java", "java.lang.ProcessBuilder" ).init( arguments.command )
+			builder.redirectErrorStream( true )
+			var process = builder.start()
+
+			if ( len( arguments.stdinInput ) ) {
+				var stdin = process.getOutputStream()
+				stdin.write( arguments.stdinInput.getBytes() )
+				stdin.close()
+			}
+
+			var output = createObject( "java", "java.lang.String" ).init( process.getInputStream().readAllBytes() )
+			process.waitFor()
+			return { exitCode : process.exitValue(), output : output }
+		} catch ( any e ) {
+			throw(
+				type    = "BxAgents.DeployFailed",
+				message = "Could not run [#arguments.command[ 1 ]#] - is it installed and on PATH? (#e.message#)"
+			)
+		}
+	}
+
+}

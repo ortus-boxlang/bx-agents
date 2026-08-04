@@ -96,8 +96,9 @@ The active environment is resolved with this precedence (highest wins):
 
 1. `--environment` CLI flag (`bxAgents build --environment=production`)
 2. `BX_AGENTS_ENV` environment variable
-3. ColdBox's own reported environment
-4. `"development"` (default)
+3. `"development"` (default)
+
+This is a **build-time** decision only, distinct from ColdBox's own runtime environment detection (the generated app reads `getSetting("environment")` on its own, per ColdBox's `environments` convention) - this precedence only decides which `environment()` override method on `Agent.bx`, and which `boxlang-{env}.json`/`miniserver-{env}.json` files, the build pipeline applies.
 
 If no method matching the active environment exists, no override is applied - `configure()`'s return value stands alone.
 

@@ -47,9 +47,36 @@ class extends="testbox.system.BaseSpec" {
 				expect( cycleErrors.len() ).toBe( 0 );
 			} );
 
+			it( "rejects the ROOT project's own subAgents referencing an unknown subagent (not just nested ones)", function() {
+				// A real bug this closed: the unknown-reference check explicitly
+				// excluded the root project's own subAgents list, so a typo'd
+				// root-level reference passed validation cleanly and only
+				// surfaced later, mid-generation, after .build/app had already
+				// been partially (re)written.
+				var result = validateFixture( "root-subagent-missing-ref" );
+				var refErrors = result.errors.filter( e => e.findNoCase( "references unknown subagent" ) );
+				expect( refErrors.len() ).toBeGT( 0 );
+				expect( refErrors[ 1 ] ).toInclude( "nonexistent-subagent" );
+			} );
+
 			it( "rejects an invalid cron expression", function() {
 				var result = validateFixture( "bad-cron" );
 				expect( result.errors.filter( e => e.findNoCase( "invalid cron expression" ) ).len() ).toBeGT( 0 );
+			} );
+
+			it( "rejects a syntactically-valid cron that SchedulerGenerator can't translate (day-of-month AND day-of-week both set)", function() {
+				// A real bug this closed: "0 0 15 * 1" is a well-formed 5-field
+				// cron (passes the syntax regex above) but has no ColdBox
+				// frequency-method equivalent (SchedulerGeneratorSpec.bx proves
+				// SchedulerGenerator itself rejects it) - this used to pass
+				// validation cleanly and only crash later, mid-generation.
+				var result = validateFixture( "../schedules-unsupported-cron" );
+				expect( result.errors.filter( e => e.findNoCase( "no equivalent" ) ).len() ).toBeGT( 0 );
+			} );
+
+			it( "missing 'action' on a schedule is caught at validation time, not left to crash generation", function() {
+				var result = validateFixture( "missing-schedule-action" );
+				expect( result.errors.filter( e => e.findNoCase( "missing an 'action'" ) ).len() ).toBeGT( 0 );
 			} );
 
 			it( "rejects duplicate gateway exposure paths", function() {
@@ -62,9 +89,9 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.errors.filter( e => e.findNoCase( "unknown type" ) ).len() ).toBeGT( 0 );
 			} );
 
-			it( "rejects an http gateway missing its required secret", function() {
+			it( "rejects an http gateway missing its required secretEnvVar", function() {
 				var result = validateFixture( "http-gateway-missing-secret" );
-				expect( result.errors.filter( e => e.findNoCase( "requires a 'secret'" ) ).len() ).toBeGT( 0 );
+				expect( result.errors.filter( e => e.findNoCase( "requires a 'secretEnvVar'" ) ).len() ).toBeGT( 0 );
 			} );
 
 			it( "rejects an mcp-exposure gateway entry missing its required target", function() {
@@ -90,6 +117,23 @@ class extends="testbox.system.BaseSpec" {
 			it( "rejects a model reference that matches no models/ entry", function() {
 				var result = validateFixture( "missing-model-reference" );
 				expect( result.errors.filter( e => e.findNoCase( "does not match any models/ entry" ) ).len() ).toBeGT( 0 );
+			} );
+
+			/**
+			 * Regression: a real bug this closed - validateModelProvider() was
+			 * only ever called once, against the ROOT project's own resolved
+			 * config. A SUBAGENT's own bad `model` value (unknown provider, or
+			 * a name matching neither a core provider nor a models/ entry)
+			 * passed validation cleanly and only crashed later, mid-generation,
+			 * in ColdBoxAppGenerator - the same "validated but crashes at
+			 * generation" pattern already closed for schedule action/cron
+			 * support and root-level subagent references.
+			 */
+			it( "rejects a subagent's own bad model value, clearly attributed to that subagent", function() {
+				var result = validateFixture( "subagent-bad-model" );
+				var modelErrors = result.errors.filter( e => e.findNoCase( "does not match any models/ entry" ) );
+				expect( modelErrors.len() ).toBeGT( 0 );
+				expect( modelErrors[ 1 ] ).toInclude( "Subagent [bad]" );
 			} );
 
 			it( "detects a circular module dependency", function() {

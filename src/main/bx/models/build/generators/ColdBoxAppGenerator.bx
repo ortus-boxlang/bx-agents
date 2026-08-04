@@ -45,6 +45,8 @@ class {
 	 * @gatewayRegistrations Bare `gatewayRegistry().register( aiGateway( ... ) )` statement strings (see GatewayGenerator), inserted into Application.bx's onApplicationStart()
 	 * @mcpRegistrations Bare `mcpServer( ... ).registerTool( ... )` statement strings (see McpGenerator), inserted into Application.bx's onApplicationStart()
 	 * @extraStartupStatements Any other bare statement strings to insert into Application.bx's onApplicationStart(), e.g. `aiToolRegistry().scan( "tools" )` (see BuildPipeline)
+	 * @cliEnvironment Optional environment name the build was invoked with (e.g. from `--environment`), re-applied when resolving each subagent's OWN config so a subagent's environment-specific overrides match the same environment the root project was built for, rather than silently falling back to each subagent's default environment
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .models is used, to resolve a bare `model` value against a `models/` entry - see resolveModelReference()). Subagents have no `models/` folder of their own; every node resolves against the ROOT project's models/, matching the flat-namespace design already used for subAgents references (see docs/conventions/subagents.md)
 	 */
 	struct function generate(
 		required string projectRoot,
@@ -53,7 +55,9 @@ class {
 		array agentInterceptors = [],
 		array gatewayRegistrations = [],
 		array mcpRegistrations = [],
-		array extraStartupStatements = []
+		array extraStartupStatements = [],
+		string cliEnvironment = "",
+		struct discovery = {}
 	) {
 		var root = normalizePath( arguments.projectRoot )
 		var appDir = normalizePath( arguments.buildDir )
@@ -83,7 +87,7 @@ class {
 		fileWrite( applicationPath, renderApplication( appName, startupStatements ) )
 		fileWrite( coldboxPath, renderColdboxConfig( appName, arguments.agentInterceptors, arguments.resolvedConfig.security ?: {} ) )
 		fileWrite( wireboxPath, renderWireBox() )
-		fileWrite( agentFactoryPath, renderAgentFactory( root, appDir, arguments.resolvedConfig ) )
+		fileWrite( agentFactoryPath, renderAgentFactory( root, appDir, arguments.resolvedConfig, arguments.cliEnvironment, arguments.discovery ) )
 
 		var indexPath = appDir & "/index.bxm"
 		fileWrite( indexPath, renderIndex() )
@@ -254,8 +258,8 @@ class {
 	 * overwrite (confirmed against real bx-ai `BaseRegistry.register()`
 	 * source).
 	 */
-	private string function renderAgentFactory( required string projectRoot, required string appDir, required struct resolvedConfig ) {
-		var built = buildAgentTree( arguments.projectRoot, arguments.projectRoot, arguments.resolvedConfig, "agent" )
+	private string function renderAgentFactory( required string projectRoot, required string appDir, required struct resolvedConfig, string cliEnvironment = "", struct discovery = {} ) {
+		var built = buildAgentTree( arguments.projectRoot, arguments.projectRoot, arguments.resolvedConfig, "agent", arguments.cliEnvironment, arguments.discovery )
 		var body = built.statements.toList( char( 10 ) & char( 10 ) )
 		var toolsDir = normalizePath( arguments.appDir ) & "/tools"
 
@@ -290,12 +294,23 @@ class {
 	 * that same root-level folder, not a folder nested under itself. So
 	 * `rootProjectRoot` (fixed) is threaded through separately from
 	 * `nodePath` (this node's own directory, used to locate its instructions.md).
+	 *
+	 * `cliEnvironment` (the same value the root project itself was resolved
+	 * with - see BuildPipeline.build()'s `cliEnvironment` param) is re-applied
+	 * to every subagent's own `AgentConfigResolver.resolve()` call too - a
+	 * real bug this closed: without this, a subagent's own environment-
+	 * specific overrides were always resolved against ITS default
+	 * environment, silently ignoring whatever `--environment` the whole
+	 * build was actually invoked with, so a `--environment=production` build
+	 * could still generate a subagent wired to its dev-environment config.
 	 */
 	private struct function buildAgentTree(
 		required string rootProjectRoot,
 		required string nodePath,
 		required struct resolvedConfig,
-		required string varName
+		required string varName,
+		string cliEnvironment = "",
+		struct discovery = {}
 	) {
 		var declaredSubAgents = arguments.resolvedConfig.subAgents ?: []
 		var subAgentVarNames = []
@@ -310,9 +325,9 @@ class {
 				)
 			}
 
-			var subConfig = variables.configResolver.resolve( projectRoot = subPath )
+			var subConfig = variables.configResolver.resolve( projectRoot = subPath, cliEnvironment = arguments.cliEnvironment )
 			var subVarName = "subagent_" & sanitizeIdentifier( subName )
-			var built = buildAgentTree( arguments.rootProjectRoot, subPath, subConfig, subVarName )
+			var built = buildAgentTree( arguments.rootProjectRoot, subPath, subConfig, subVarName, arguments.cliEnvironment, arguments.discovery )
 
 			for ( var stmt in built.statements ) {
 				statements.append( stmt )
@@ -320,7 +335,7 @@ class {
 			subAgentVarNames.append( subVarName )
 		}
 
-		statements.append( renderAgentStatement( arguments.varName, arguments.nodePath, arguments.resolvedConfig, subAgentVarNames ) )
+		statements.append( renderAgentStatement( arguments.varName, arguments.nodePath, arguments.resolvedConfig, subAgentVarNames, arguments.discovery ) )
 
 		return { statements : statements }
 	}
@@ -329,7 +344,8 @@ class {
 		required string varName,
 		required string nodePath,
 		required struct resolvedConfig,
-		required array subAgentVarNames
+		required array subAgentVarNames,
+		struct discovery = {}
 	) {
 		var instructionsPath = arguments.nodePath & "/instructions.md"
 		if ( !fileExists( instructionsPath ) ) {
@@ -347,16 +363,20 @@ class {
 			)
 		}
 
-		var parsedModel = variables.modelSlugParser.parse( modelSlug )
+		var parsedModel = resolveModelReference( modelSlug, arguments.discovery, arguments.nodePath )
 		var name = len( arguments.resolvedConfig.name ?: "" ) ? arguments.resolvedConfig.name : "BxAi"
 		var description = arguments.resolvedConfig.description ?: ""
+
+		var modelExpression = len( parsedModel.model )
+			? 'aiModel( provider : "#bxLiteral( parsedModel.provider )#", params : { model : "#bxLiteral( parsedModel.model )#" } )'
+			: 'aiModel( provider : "#bxLiteral( parsedModel.provider )#" )'
 
 		var lines = []
 		lines.append( "var #arguments.varName# = aiAgent(" )
 		lines.append( '	name : "#bxLiteral( name )#",' )
 		lines.append( '	description : "#bxLiteral( description )#",' )
 		lines.append( '	instructions : fileRead( "#bxLiteral( instructionsPath )#" ),' )
-		lines.append( '	model : aiModel( provider : "#bxLiteral( parsedModel.provider )#", params : { model : "#bxLiteral( parsedModel.model )#" } ),' )
+		lines.append( '	model : #modelExpression#,' )
 		lines.append( "	tools : aiToolRegistry().getAll()," )
 
 		if ( arguments.subAgentVarNames.len() ) {
@@ -383,6 +403,79 @@ class {
 	// --------------------------------------------------------------------------
 	// Helpers
 	// --------------------------------------------------------------------------
+
+	/**
+	 * Resolves a node's `model` value (already validated by ProjectValidator's
+	 * validateModelProvider(), a permissive check happy with ANY of the 3
+	 * shapes below) into a concrete `{ provider, model }` pair -
+	 * `model` is `""` when only a provider was given, meaning "use that
+	 * provider's own default model" (aiModel() supports omitting `params.model`
+	 * entirely - see bx-ai's aiModel.bif docblock).
+	 *
+	 * A real bug this closed: this used to call `modelSlugParser.parse()`
+	 * directly with no `defaultProvider`, which only handles shape 1 below -
+	 * both a bare provider name and a `models/` entry name (shapes 2 and 3,
+	 * both explicitly validated as legal by ProjectValidator and documented
+	 * in docs/conventions/models.md) threw `BxAgents.InvalidModelSlug` here,
+	 * crashing generation on a project that had already passed validation
+	 * cleanly.
+	 *
+	 *   1. "openai/gpt-5"  -> already a full provider/model slug
+	 *   2. "openai"        -> a bare CORE_PROVIDERS name, no models/ lookup needed
+	 *   3. "summarizer"    -> a models/summarizer.bx|.json entry's OWN
+	 *                         { provider, model } struct is read and used
+	 */
+	private struct function resolveModelReference( required string modelSlug, required struct discovery, required string nodePath ) {
+		if ( arguments.modelSlug.find( "/" ) ) {
+			return variables.modelSlugParser.parse( arguments.modelSlug )
+		}
+
+		if ( variables.modelSlugParser.isKnownProvider( arguments.modelSlug ) ) {
+			return { provider : arguments.modelSlug, model : "" }
+		}
+
+		var modelsEntries = arguments.discovery.models ?: []
+		var match = modelsEntries.filter( function( m ) { return m.name == modelSlug } )
+		if ( !match.len() ) {
+			throw(
+				type    = "BxAgents.InvalidModelSlug",
+				message = "Agent at [#arguments.nodePath#] has model [#arguments.modelSlug#] which is neither a known provider nor a models/ entry"
+			)
+		}
+
+		var entryConfig = readModelEntryConfig( match[ 1 ].path )
+		if ( isNull( entryConfig ) ) {
+			throw(
+				type    = "BxAgents.InvalidModelSlug",
+				message = "models/ entry [#arguments.modelSlug#] (referenced from [#arguments.nodePath#]) could not be read"
+			)
+		}
+
+		var provider = trim( entryConfig.provider ?: "" )
+		if ( !len( provider ) ) {
+			throw(
+				type    = "BxAgents.InvalidModelSlug",
+				message = "models/ entry [#arguments.modelSlug#] (referenced from [#arguments.nodePath#]) has no 'provider'"
+			)
+		}
+
+		return { provider : provider, model : trim( entryConfig.model ?: "" ) }
+	}
+
+	private any function readModelEntryConfig( required string path ) {
+		try {
+			if ( arguments.path.endsWith( ".json" ) ) {
+				return jsonDeserialize( fileRead( arguments.path ) )
+			}
+
+			var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
+			var instance = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
+				.instantiate( arguments.path, context )
+			return instance.configure()
+		} catch ( any e ) {
+			return null
+		}
+	}
 
 	/**
 	 * Reduces a node's own `resolvedConfig.mcpServers` (a plain URL string, or

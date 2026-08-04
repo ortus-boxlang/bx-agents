@@ -10,6 +10,10 @@ BX Agents is a BoxLang module. It needs three things on the machine that runs it
 `serve` additionally needs the standalone [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver) binary on `PATH`. `build`, `chat`, `package`, `inspect`, `clean`, and `new` don't need it.
 {% endhint %}
 
+{% hint style="info" %}
+`deploy`'s `ftp`/`sftp` targets need the [`bx-ftp`](https://github.com/ortus-boxlang/bx-ftp) BoxLang module installed alongside `bx-ai`/BX Agents (`install-bx-module bx-ftp`) - a genuine runtime dependency, not vendored, the same relationship this module has with `bx-ai`. No other verb or deploy target needs it.
+{% endhint %}
+
 ## Install BoxLang
 
 Follow the [official BoxLang installation guide](https://boxlang.ortusbooks.com/getting-started/installation). The quick installer also sets up `~/.boxlang/bin` on your `PATH`, which is where module-provided executables (like BX Agents' own `bxAgents` command, below) land.
@@ -52,4 +56,4 @@ bxAgents --version
 bxAgents --help
 ```
 
-`--help` lists all 8 verbs (`new`, `build`, `serve`, `chat`, `package`, `deploy`, `inspect`, `clean`) with a one-line summary of each. See [Quick Start](quick-start.md) to scaffold your first agent.
+`--help` lists all 9 verbs (`new`, `build`, `test`, `serve`, `chat`, `package`, `deploy`, `inspect`, `clean`) with a one-line summary of each. See [Quick Start](quick-start.md) to scaffold your first agent.

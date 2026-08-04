@@ -37,7 +37,7 @@ Subagents are built **leaf-first** (bottom-up): if `A` declares `subAgents: ["B"
 
 ## Validation
 
-- A subagent name in `subAgents` that doesn't correspond to a real `subagents/{name}/Agent.bx` fails the build with a clear "referenced from ... was not found" error.
+- A subagent name in `subAgents` that doesn't correspond to a real `subagents/{name}/Agent.bx` fails validation with a clear "references unknown subagent [...]" error - this applies to **every** node's `subAgents` list, including the root project's own `Agent.bx`, not just nested subagents.
 - **Circular references** (`A` → `B` → `A`) are rejected at validation time, with the full cycle path reported (e.g. `A -> B -> A`), before any code generation happens.
 - A "diamond" shape - two subagents both depending on the same shared descendant - is **not** a cycle and builds fine; only genuine cycles are rejected.
 - A missing `Agent.bx` inside a discovered `subagents/*` folder is reported as its own validation error.

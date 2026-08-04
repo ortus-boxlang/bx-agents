@@ -1,0 +1,199 @@
+/**
+ * Discovers and validates a project's `deploy/*` convention entries (M16).
+ *
+ * Deliberately NOT wired into ProjectDiscoverer/ProjectValidator/BuildPipeline -
+ * deployment config never affects the generated ColdBox app or its manifest,
+ * so validating it on every `build` would be pure overhead for projects that
+ * never deploy. This resolver is only ever invoked by `deploy` itself.
+ *
+ * One `.bx`/`.json` file per target attempt under `deploy/` - same shape as
+ * `gateways/`/`schedules/`/`mcp/`. Each entry must declare a `target` (one of
+ * the registered target names below) plus whatever fields that target type
+ * requires. Secrets (API tokens, SSH keys, registry credentials) are NEVER
+ * expected here - every target resolves those from environment variables at
+ * deploy time instead (see each target's own docblock), matching this
+ * project's existing "secrets stay external" rule (PackagerService's
+ * redaction, AgentConfigResolver never touching provider keys).
+ */
+class {
+
+	function init() {
+		variables.VALID_TARGETS = [ "local", "ssh", "docker", "digitalocean", "ftp", "sftp" ]
+		return this
+	}
+
+	/**
+	 * @projectRoot Absolute path to the project root
+	 *
+	 * @return { entries: [ { name, path, target, config } ], errors: [] }
+	 */
+	struct function resolve( required string projectRoot ) {
+		var root = arguments.projectRoot.reReplace( "[\/]+$", "" )
+		var deployDir = root & "/deploy"
+		var entries = []
+		var errors = []
+
+		if ( !directoryExists( deployDir ) ) {
+			return { entries : entries, errors : errors }
+		}
+
+		var seenNames = {}
+		var files = directoryList( deployDir, false, "path", "*", "asc", "file" )
+			.filter( function( path ) {
+				var fileName = getFileFromPath( path )
+				if ( fileName.left( 1 ) == "." ) {
+					return false
+				}
+				var ext = listLast( fileName, "." ).lcase()
+				return [ "bx", "json" ].contains( ext )
+			} )
+
+		for ( var path in files ) {
+			var name = listFirst( getFileFromPath( path ), "." )
+
+			if ( structKeyExists( seenNames, name ) ) {
+				errors.append( "Duplicate deploy entry name [#name#]" )
+				continue
+			}
+			seenNames[ name ] = true
+
+			var config = readEntryConfig( path )
+			if ( isNull( config ) ) {
+				errors.append( "deploy/#getFileFromPath( path )# could not be read" )
+				continue
+			}
+
+			var target = config.target ?: ""
+			if ( !len( target ) ) {
+				errors.append( "deploy/#name# is missing a 'target'" )
+				continue
+			}
+			if ( !variables.VALID_TARGETS.contains( target ) ) {
+				errors.append( "deploy/#name# has an unknown target [#target#] - must be one of: #variables.VALID_TARGETS.toList()#" )
+				continue
+			}
+
+			validateTargetFields( name, target, config, errors )
+
+			entries.append( { name : name, path : path, target : target, config : config } )
+		}
+
+		return { entries : entries, errors : errors }
+	}
+
+	/**
+	 * Resolves a single named `deploy/*` entry, throwing a clear error if it
+	 * doesn't exist or the project's `deploy/` config has validation errors.
+	 */
+	struct function getEntry( required string projectRoot, required string name ) {
+		var result = resolve( arguments.projectRoot )
+
+		if ( result.errors.len() ) {
+			throw(
+				type    = "BxAgents.InvalidDeployConfig",
+				message = "deploy/ has #result.errors.len()# error(s): #result.errors.toList( '; ' )#"
+			)
+		}
+
+		for ( var entry in result.entries ) {
+			if ( entry.name == arguments.name ) {
+				return entry
+			}
+		}
+
+		throw(
+			type    = "BxAgents.UnknownDeployEntry",
+			message = "No deploy/#arguments.name# entry found"
+		)
+	}
+
+	private void function validateTargetFields(
+		required string name,
+		required string target,
+		required struct config,
+		required array errors
+	) {
+		switch ( arguments.target ) {
+			case "local": {
+				if ( !len( arguments.config.destination ?: "" ) ) {
+					arguments.errors.append( "deploy/#arguments.name# (local) is missing a 'destination'" )
+				}
+				break
+			}
+			case "ssh": {
+				validateRemoteHostFields( arguments.name, "ssh", arguments.config, arguments.errors )
+				break
+			}
+			case "docker": {
+				validateRegistry( arguments.name, "docker", arguments.config, arguments.errors )
+				break
+			}
+			case "digitalocean": {
+				validateRegistry( arguments.name, "digitalocean", arguments.config, arguments.errors )
+				if ( !len( arguments.config.appName ?: "" ) ) {
+					arguments.errors.append( "deploy/#arguments.name# (digitalocean) is missing an 'appName'" )
+				}
+				break
+			}
+			case "ftp": {
+				validateRemoteHostFields( arguments.name, "ftp", arguments.config, arguments.errors )
+				if ( !len( arguments.config.passwordEnvVar ?: "" ) ) {
+					arguments.errors.append( "deploy/#arguments.name# (ftp) is missing a 'passwordEnvVar'" )
+				}
+				break
+			}
+			case "sftp": {
+				validateRemoteHostFields( arguments.name, "sftp", arguments.config, arguments.errors )
+				if ( !len( arguments.config.passwordEnvVar ?: "" ) && !len( arguments.config.key ?: "" ) ) {
+					arguments.errors.append( "deploy/#arguments.name# (sftp) is missing a 'passwordEnvVar' or a 'key'" )
+				}
+				break
+			}
+		}
+	}
+
+	private void function validateRemoteHostFields(
+		required string name,
+		required string target,
+		required struct config,
+		required array errors
+	) {
+		if ( !len( arguments.config.host ?: "" ) ) {
+			arguments.errors.append( "deploy/#arguments.name# (#arguments.target#) is missing a 'host'" )
+		}
+		if ( !len( arguments.config.username ?: "" ) ) {
+			arguments.errors.append( "deploy/#arguments.name# (#arguments.target#) is missing a 'username'" )
+		}
+		if ( !len( arguments.config.remotePath ?: "" ) ) {
+			arguments.errors.append( "deploy/#arguments.name# (#arguments.target#) is missing a 'remotePath'" )
+		}
+	}
+
+	private void function validateRegistry(
+		required string name,
+		required string target,
+		required struct config,
+		required array errors
+	) {
+		var registry = arguments.config.registry ?: {}
+		if ( !isStruct( registry ) || !len( registry.repository ?: "" ) ) {
+			arguments.errors.append( "deploy/#arguments.name# (#arguments.target#) is missing a 'registry.repository'" )
+		}
+	}
+
+	private any function readEntryConfig( required string path ) {
+		try {
+			if ( arguments.path.endsWith( ".json" ) ) {
+				return jsonDeserialize( fileRead( arguments.path ) )
+			}
+
+			var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
+			var instance = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
+				.instantiate( arguments.path, context )
+			return instance.configure()
+		} catch ( any e ) {
+			return null
+		}
+	}
+
+}

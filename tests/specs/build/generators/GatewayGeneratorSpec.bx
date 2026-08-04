@@ -61,7 +61,16 @@ class extends="testbox.system.BaseSpec" {
 				var result = generator.generate( discovery, newAppDir() );
 
 				var httpStatement = result.registrationStatements.filter( s => s.findNoCase( '"http"' ) )[ 1 ];
-				expect( httpStatement ).toInclude( '"secret" : "shared-secret-123"' );
+				expect( httpStatement ).toInclude( '"secret" : getSystemSetting( "MY_WEBHOOK_SECRET", "" )' );
+			} );
+
+			it( "never embeds an http gateway's secretEnvVar NAME as a raw literal secret - only a live getSystemSetting() lookup", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
+				var result = generator.generate( discovery, newAppDir() );
+
+				var httpStatement = result.registrationStatements.filter( s => s.findNoCase( '"http"' ) )[ 1 ];
+				expect( httpStatement ).notToInclude( "secretEnvVar" );
+				expect( httpStatement ).toInclude( "getSystemSetting(" );
 			} );
 
 			it( "writes handlers/Gateway.bx and reports hasHttpGateway=true when an http-type channel exists", function() {

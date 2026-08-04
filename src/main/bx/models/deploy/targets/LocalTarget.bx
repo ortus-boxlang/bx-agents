@@ -1,0 +1,30 @@
+/**
+ * Copies the newest packaged `.bxa` (via `DistArtifactLocator`) to an
+ * arbitrary destination directory - a shared drive, an artifact folder,
+ * etc. Refactor of the original `Deploy.bx`'s only behavior, behind
+ * `IDeploymentTarget` (M16).
+ *
+ * @config { destination (required) }
+ */
+class implements="models.deploy.IDeploymentTarget@bxagents" {
+
+	struct function deploy( required struct config, required struct context ) {
+		var destination = trim( arguments.config.destination ?: "" )
+		if ( !len( destination ) ) {
+			throw( type = "BxAgents.MissingDestination", message = "deploy target 'local' requires a 'destination'" )
+		}
+
+		var newest = new "models.deploy.DistArtifactLocator@bxagents"().newestBxa( arguments.context.distDir )
+		var bxaName = getFileFromPath( newest )
+		var destinationDir = destination.reReplace( "[\/]+$", "" )
+		directoryCreate( path = destinationDir, createPath = true, ignoreExists = true )
+		fileCopy( newest, destinationDir & "/" & bxaName )
+
+		return {
+			success : true,
+			message : "Deployed #bxaName# to #destinationDir#",
+			details : { destination : destinationDir, bxa : bxaName }
+		}
+	}
+
+}

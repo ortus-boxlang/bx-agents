@@ -61,20 +61,22 @@ Registers a bx-ai `IGateway` (a channel adapter for external delivery / human-in
 class {
 	function configure() {
 		return {
-			type   : "http",
-			secret : "some-webhook-secret"
+			type         : "http",
+			secretEnvVar : "SLACK_WEBHOOK_SECRET"
 		};
 	}
 }
 ```
 
-Generates, in `Application.bx`'s `onApplicationStart()`:
+`secretEnvVar` names an environment variable holding the signing secret - **never the secret value itself**. Generates, in `Application.bx`'s `onApplicationStart()`:
 
 ```javascript
-gatewayRegistry().register( aiGateway( "http", { secret : "some-webhook-secret" } ) )
+gatewayRegistry().register( aiGateway( "http", { secret : getSystemSetting( "SLACK_WEBHOOK_SECRET", "" ) } ) )
 ```
 
-**Validation:** `type` must be `mock`, `cli`, or `http`; a `type: "http"` entry requires a `secret`; the entry's own file/base name must be unique across every channel-adapter entry (a `cli`-type gateway backs `chat`; `mock` is test-only).
+The secret is resolved live at server startup, matching this project's "secrets stay external" rule everywhere else (see [Deployment & Secrets](../deployment-and-secrets.md)) - it's never embedded as a literal in generated source, so it's never present in a packaged `.bxa` either. If the env var is unset, bx-ai's own `HttpGateway` treats an empty secret as "no signing configured" and rejects requests accordingly, rather than crashing at startup.
+
+**Validation:** `type` must be `mock`, `cli`, or `http`; a `type: "http"` entry requires a `secretEnvVar`; the entry's own file/base name must be unique across every channel-adapter entry. `mock` is test-only; `cli` is bx-ai's own built-in human-in-the-loop **approval** channel (a blocking stdin/stdout A/R/Q prompt) - it's what `HumanInTheLoopMiddleware` attaches by default when no gateway is specified, and is unrelated to BX Agents' own `chat` verb (which never touches the gateway registry at all).
 
 **`http`-type entries additionally get real HTTP wiring**: a generated `handlers/Gateway.bx` action that proxies straight into bx-ai's own `GatewayRequestProcessor::processHttp()`, and three routes in `config/Router.bx`:
 

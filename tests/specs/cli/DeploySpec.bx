@@ -62,6 +62,43 @@ class extends="testbox.system.BaseSpec" {
 				expect( fileExists( destination & "/full-project-agent-1.0.0.bxa" ) ).toBeTrue();
 			} );
 
+			it( "requires a deploy/*.bx entry (--name) for non-local targets", function() {
+				var projectRoot = newTempProject( "full-project" );
+
+				expect( function() {
+					deployVerb.run( { projectRoot : projectRoot, target : "ssh" } );
+				} ).toThrow( "BxAgents.MissingDeployEntry" );
+			} );
+
+			it( "dispatches to a named deploy/*.bx entry's declared target", function() {
+				var projectRoot = newTempProject( "full-project" );
+				buildVerb.run( { projectRoot : projectRoot } );
+				packageVerb.run( { projectRoot : projectRoot, version : "1.0.0" } );
+
+				var destination = projectRoot & "/deployed-via-entry";
+				directoryCreate( projectRoot & "/deploy", true, true );
+				fileWrite( projectRoot & "/deploy/production.bx", '
+					class {
+						function configure() {
+							return { target: "local", destination: "#destination#" }
+						}
+					}
+				' );
+
+				var result = deployVerb.run( { projectRoot : projectRoot, name : "production" } );
+
+				expect( result.exitCode ).toBe( 0 );
+				expect( fileExists( destination & "/full-project-agent-1.0.0.bxa" ) ).toBeTrue();
+			} );
+
+			it( "throws BxAgents.UnknownDeployEntry for a --name that doesn't exist", function() {
+				var projectRoot = newTempProject( "full-project" );
+
+				expect( function() {
+					deployVerb.run( { projectRoot : projectRoot, name : "nonexistent" } );
+				} ).toThrow( "BxAgents.UnknownDeployEntry" );
+			} );
+
 		} );
 	}
 

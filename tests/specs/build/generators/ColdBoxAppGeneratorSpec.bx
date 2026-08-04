@@ -5,6 +5,7 @@ class extends="testbox.system.BaseSpec" {
 
 			beforeEach( function() {
 				variables.resolver = new bxagents.models.build.AgentConfigResolver();
+				variables.discoverer = new bxagents.models.build.ProjectDiscoverer();
 				variables.generator = new bxagents.models.build.generators.ColdBoxAppGenerator();
 				variables.fixtures = expandPath( "/fixtures" );
 				variables.tempDirs = [];
@@ -203,6 +204,48 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( "full-project-agent" );
 				expect( content ).toInclude( "instructions.md" );
 				expect( content ).toInclude( "return agent" );
+			} );
+
+			/**
+			 * Regression: a real bug this review closed - a bare model value
+			 * (no "/") was only ever handed straight to ModelSlugParser.parse()
+			 * with no defaultProvider, which throws for anything without a
+			 * slash. Both a bare CORE_PROVIDERS name and a models/ entry name
+			 * are explicitly validated as legal by ProjectValidator and
+			 * documented in docs/conventions/models.md, so a project using
+			 * either shape passed validation cleanly and then crashed here,
+			 * mid-generation.
+			 */
+			it( "resolves a bare provider name (no models/ entry, no slash) to aiModel(provider:...) with no params.model", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/bare-provider-model", buildDir );
+
+				var content = fileRead( result.agentFactory );
+				expect( content ).toInclude( 'aiModel( provider : "openai" )' );
+				expect( content ).notToInclude( 'params : { model : "" }' );
+			} );
+
+			it( "resolves a bare model value that names a models/ entry to that entry's own provider+model", function() {
+				var buildDir = newBuildDir();
+				var projectRoot = fixtures & "/models-entry-reference";
+				var config = resolver.resolve( projectRoot = projectRoot );
+				var discovery = discoverer.discover( projectRoot );
+				var result = generator.generate( projectRoot, buildDir, config, [], [], [], [], "", discovery );
+
+				var content = fileRead( result.agentFactory );
+				expect( content ).toInclude( 'provider : "openai"' );
+				expect( content ).toInclude( 'model : "gpt-5-mini"' );
+			} );
+
+			it( "fails clearly when a bare model value matches neither a core provider nor a models/ entry", function() {
+				var buildDir = newBuildDir();
+				var projectRoot = fixtures & "/bare-provider-model";
+				var config = resolver.resolve( projectRoot = projectRoot );
+				config.model = "totally-unknown-name";
+
+				expect( function() {
+					generator.generate( projectRoot, buildDir, config );
+				} ).toThrow( "BxAgents.InvalidModelSlug" );
 			} );
 
 			/**

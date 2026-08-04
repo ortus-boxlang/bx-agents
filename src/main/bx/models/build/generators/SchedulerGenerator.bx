@@ -85,6 +85,29 @@ class {
 	// Cron -> ColdBox frequency-method translation
 	// --------------------------------------------------------------------------
 
+	/**
+	 * Returns true if `cron` translates to a supported ColdBox frequency-method
+	 * shape (see `translateCron()`'s own docblock for exactly which shapes are
+	 * supported). Exposed so `ProjectValidator` can reuse THIS SAME translation
+	 * logic at validation time, rather than maintaining a second, independent
+	 * "is this cron supported" check that can silently drift out of sync with
+	 * what this generator actually supports - confirmed this drift was a real,
+	 * shipped bug: `ProjectValidator`'s old cron regex accepted lists/ranges/
+	 * steps/day-of-month-and-day-of-week-together, none of which
+	 * `translateCron()` below has ever supported, so a syntactically-valid but
+	 * semantically-unsupported cron passed validation cleanly and only crashed
+	 * later, mid-generation, after `.build/app` had already been wiped and
+	 * partially rewritten.
+	 */
+	boolean function isSupportedCron( required string cron ) {
+		try {
+			translateCron( arguments.cron, "" )
+			return true
+		} catch ( any e ) {
+			return false
+		}
+	}
+
 	private string function translateCron( required string cron, required string scheduleName ) {
 		var fields = listToArray( arguments.cron, " " )
 		if ( fields.len() != 5 ) {

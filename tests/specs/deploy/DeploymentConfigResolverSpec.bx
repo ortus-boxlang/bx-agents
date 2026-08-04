@@ -1,0 +1,204 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "deploy.DeploymentConfigResolver", function() {
+
+			beforeEach( function() {
+				variables.resolver = new bxagents.models.deploy.DeploymentConfigResolver();
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function newTempProject() {
+				var dir = createTempDirectory( prefix = "bxagents-deployconfig-" );
+				tempDirs.append( dir );
+				return dir;
+			}
+
+			private function writeEntry( required string dir, required string name, required struct config ) {
+				directoryCreate( arguments.dir & "/deploy", true, true );
+				fileWrite( arguments.dir & "/deploy/#arguments.name#.bx", '
+					class {
+						function configure() {
+							return #jsonSerialize( arguments.config )#
+						}
+					}
+				' );
+			}
+
+			it( "returns no entries or errors when deploy/ doesn't exist", function() {
+				var dir = newTempProject();
+
+				var result = resolver.resolve( dir );
+
+				expect( result.entries.len() ).toBe( 0 );
+				expect( result.errors.len() ).toBe( 0 );
+			} );
+
+			it( "discovers a valid local entry", function() {
+				var dir = newTempProject();
+				writeEntry( dir, "production", { target : "local", destination : "/tmp/wherever" } );
+
+				var result = resolver.resolve( dir );
+
+				expect( result.errors.len() ).toBe( 0 );
+				expect( result.entries.len() ).toBe( 1 );
+				expect( result.entries[ 1 ].name ).toBe( "production" );
+				expect( result.entries[ 1 ].target ).toBe( "local" );
+			} );
+
+			it( "discovers a valid .json entry", function() {
+				var dir = newTempProject();
+				directoryCreate( dir & "/deploy", true, true );
+				fileWrite( dir & "/deploy/staging.json", jsonSerialize( { target : "local", destination : "/tmp/staging" } ) );
+
+				var result = resolver.resolve( dir );
+
+				expect( result.errors.len() ).toBe( 0 );
+				expect( result.entries.len() ).toBe( 1 );
+				expect( result.entries[ 1 ].name ).toBe( "staging" );
+			} );
+
+			it( "rejects an entry missing a target", function() {
+				var dir = newTempProject();
+				writeEntry( dir, "broken", { destination : "/tmp/wherever" } );
+
+				var result = resolver.resolve( dir );
+
+				expect( result.errors.len() ).toBeGT( 0 );
+				expect( result.errors[ 1 ] ).toInclude( "missing a 'target'" );
+			} );
+
+			it( "rejects an entry with an unknown target", function() {
+				var dir = newTempProject();
+				writeEntry( dir, "broken", { target : "kubernetes" } );
+
+				var result = resolver.resolve( dir );
+
+				expect( result.errors.len() ).toBeGT( 0 );
+				expect( result.errors[ 1 ] ).toInclude( "unknown target" );
+			} );
+
+			it( "rejects duplicate entry names across .bx and .json", function() {
+				var dir = newTempProject();
+				writeEntry( dir, "production", { target : "local", destination : "/tmp/a" } );
+				directoryCreate( dir & "/deploy", true, true );
+				fileWrite( dir & "/deploy/production.json", jsonSerialize( { target : "local", destination : "/tmp/b" } ) );
+
+				var result = resolver.resolve( dir );
+
+				expect( result.errors.len() ).toBeGT( 0 );
+				expect( result.errors.toList( "|" ) ).toInclude( "Duplicate deploy entry name" );
+			} );
+
+			it( "requires host, username, and remotePath for an ssh target", function() {
+				var dir = newTempProject();
+				writeEntry( dir, "prod", { target : "ssh" } );
+
+				var result = resolver.resolve( dir );
+
+				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'host'" );
+				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'username'" );
+				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'remotePath'" );
+			} );
+
+			it( "requires registry.repository for a docker target", function() {
+				var dir = newTempProject();
+				writeEntry( dir, "prod", { target : "docker" } );
+
+				var result = resolver.resolve( dir );
+
+				expect( result.errors.toList( "|" ) ).toInclude( "registry.repository" );
+			} );
+
+			it( "requires registry.repository and appName for a digitalocean target", function() {
+				var dir = newTempProject();
+				writeEntry( dir, "prod", { target : "digitalocean", registry : { type : "ghcr", repository : "org/repo" } } );
+
+				var result = resolver.resolve( dir );
+
+				expect( result.errors.toList( "|" ) ).toInclude( "missing an 'appName'" );
+			} );
+
+			it( "requires host, username, remotePath, and passwordEnvVar for an ftp target", function() {
+				var dir = newTempProject();
+				writeEntry( dir, "prod", { target : "ftp" } );
+
+				var result = resolver.resolve( dir );
+
+				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'host'" );
+				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'username'" );
+				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'remotePath'" );
+				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'passwordEnvVar'" );
+			} );
+
+			it( "accepts a valid ftp target", function() {
+				var dir = newTempProject();
+				writeEntry( dir, "prod", { target : "ftp", host : "ftp.example.com", username : "user", passwordEnvVar : "FTP_PASSWORD", remotePath : "/uploads" } );
+
+				var result = resolver.resolve( dir );
+
+				expect( result.errors.len() ).toBe( 0 );
+			} );
+
+			it( "requires host, username, and remotePath for an sftp target, plus a passwordEnvVar or key", function() {
+				var dir = newTempProject();
+				writeEntry( dir, "prod", { target : "sftp" } );
+
+				var result = resolver.resolve( dir );
+
+				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'host'" );
+				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'username'" );
+				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'remotePath'" );
+				expect( result.errors.toList( "|" ) ).toInclude( "missing a 'passwordEnvVar' or a 'key'" );
+			} );
+
+			it( "accepts a valid sftp target authenticated by key only", function() {
+				var dir = newTempProject();
+				writeEntry( dir, "prod", { target : "sftp", host : "sftp.example.com", username : "user", key : "/home/me/.ssh/id_rsa", remotePath : "/uploads" } );
+
+				var result = resolver.resolve( dir );
+
+				expect( result.errors.len() ).toBe( 0 );
+			} );
+
+			it( "getEntry() returns the matching entry by name", function() {
+				var dir = newTempProject();
+				writeEntry( dir, "production", { target : "local", destination : "/tmp/wherever" } );
+
+				var entry = resolver.getEntry( dir, "production" );
+
+				expect( entry.target ).toBe( "local" );
+				expect( entry.config.destination ).toBe( "/tmp/wherever" );
+			} );
+
+			it( "getEntry() throws BxAgents.UnknownDeployEntry for a missing name", function() {
+				var dir = newTempProject();
+				writeEntry( dir, "production", { target : "local", destination : "/tmp/wherever" } );
+
+				expect( function() {
+					resolver.getEntry( dir, "nonexistent" );
+				} ).toThrow( "BxAgents.UnknownDeployEntry" );
+			} );
+
+			it( "getEntry() throws BxAgents.InvalidDeployConfig when deploy/ has any errors", function() {
+				var dir = newTempProject();
+				writeEntry( dir, "production", { target : "local", destination : "/tmp/wherever" } );
+				writeEntry( dir, "broken", { target : "kubernetes" } );
+
+				expect( function() {
+					resolver.getEntry( dir, "production" );
+				} ).toThrow( "BxAgents.InvalidDeployConfig" );
+			} );
+
+		} );
+	}
+
+}

@@ -1,0 +1,21 @@
+/**
+ * Contract every pluggable `deploy` target implements (M16). A target is
+ * responsible for shipping a built/packaged project somewhere real - a
+ * local directory, a remote server over SSH, a container registry, or a
+ * cloud PaaS - and for validating whatever prerequisite artifact IT needs
+ * (some targets need a prior `package`; others need only a `build`), the
+ * same way `Package.bx`/`Serve.bx`/`Chat.bx` already self-check their own
+ * prerequisites rather than relying on a caller to have checked first.
+ */
+interface {
+
+	/**
+	 * @config  The resolved `deploy/*` entry's own config struct (whatever
+	 *          fields this target declares - see each target's own docblock)
+	 * @context { projectRoot, appDir (.build/app), distDir (dist/), manifest }
+	 *
+	 * @return { success: boolean, message: string, details: struct }
+	 */
+	struct function deploy( required struct config, required struct context );
+
+}

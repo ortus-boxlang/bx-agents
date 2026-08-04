@@ -1,0 +1,114 @@
+/**
+ * Ships the newest packaged `.bxa` (via `DistArtifactLocator`) to a bare
+ * remote server over `scp`, then optionally runs a configured remote
+ * restart command over `ssh` (M16).
+ *
+ * Shells out to the real `scp`/`ssh` binaries via `ProcessBuilder` rather
+ * than pulling in a Java SSH client library - matches
+ * `MiniServerLauncher.java`'s established "shell out, don't add a
+ * dependency" pattern for this project's other real-process integrations.
+ *
+ * Command construction (`buildScpCommand`/`buildSshRestartCommand`) is kept
+ * separate from execution (`runProcess`) specifically so specs can assert on
+ * the exact command built without actually invoking `scp`/`ssh` - the same
+ * "capture, don't execute" approach this project already uses to test
+ * `MiniServerLauncher`-adjacent code.
+ *
+ * No secrets are ever read from `deploy/*` config - `identityFile` is a
+ * PATH to a key file the caller manages themselves, never key material.
+ *
+ * `username` (not `user`) - matches `ftp`/`sftp`'s field name for the exact
+ * same concept, so switching between remote-host targets in `deploy/`
+ * doesn't require remembering a different field name per target.
+ *
+ * @config { host (required), username (required), remotePath (required), identityFile, restartCommand }
+ */
+class implements="models.deploy.IDeploymentTarget@bxagents" {
+
+	struct function deploy( required struct config, required struct context ) {
+		var host = trim( arguments.config.host ?: "" )
+		var username = trim( arguments.config.username ?: "" )
+		var remotePath = trim( arguments.config.remotePath ?: "" )
+
+		if ( !len( host ) || !len( username ) || !len( remotePath ) ) {
+			throw(
+				type    = "BxAgents.InvalidDeployConfig",
+				message = "deploy target 'ssh' requires 'host', 'username', and 'remotePath'"
+			)
+		}
+
+		var newest = new "models.deploy.DistArtifactLocator@bxagents"().newestBxa( arguments.context.distDir )
+		var bxaName = getFileFromPath( newest )
+
+		var scpCommand = buildScpCommand( arguments.config, newest )
+		var scpResult = runProcess( scpCommand )
+		if ( scpResult.exitCode != 0 ) {
+			throw(
+				type    = "BxAgents.DeployFailed",
+				message = "scp to #host# failed (exit #scpResult.exitCode#): #scpResult.output#"
+			)
+		}
+
+		var restartCommand = trim( arguments.config.restartCommand ?: "" )
+		if ( len( restartCommand ) ) {
+			var sshCommand = buildSshRestartCommand( arguments.config )
+			var sshResult = runProcess( sshCommand )
+			if ( sshResult.exitCode != 0 ) {
+				throw(
+					type    = "BxAgents.DeployFailed",
+					message = "Remote restart command on #host# failed (exit #sshResult.exitCode#): #sshResult.output#"
+				)
+			}
+		}
+
+		return {
+			success : true,
+			message : "Deployed #bxaName# to #username#@#host#:#remotePath#",
+			details : { host : host, username : username, remotePath : remotePath, bxa : bxaName }
+		}
+	}
+
+	/**
+	 * @localPath Absolute local path to the .bxa being shipped
+	 */
+	array function buildScpCommand( required struct config, required string localPath ) {
+		var command = [ "scp" ]
+		var identityFile = trim( arguments.config.identityFile ?: "" )
+		if ( len( identityFile ) ) {
+			command.append( "-i" )
+			command.append( identityFile )
+		}
+		command.append( arguments.localPath )
+		command.append( "#arguments.config.username#@#arguments.config.host#:#arguments.config.remotePath#" )
+		return command
+	}
+
+	array function buildSshRestartCommand( required struct config ) {
+		var command = [ "ssh" ]
+		var identityFile = trim( arguments.config.identityFile ?: "" )
+		if ( len( identityFile ) ) {
+			command.append( "-i" )
+			command.append( identityFile )
+		}
+		command.append( "#arguments.config.username#@#arguments.config.host#" )
+		command.append( arguments.config.restartCommand )
+		return command
+	}
+
+	private struct function runProcess( required array command ) {
+		try {
+			var builder = createObject( "java", "java.lang.ProcessBuilder" ).init( arguments.command )
+			builder.redirectErrorStream( true )
+			var process = builder.start()
+			var output = createObject( "java", "java.lang.String" ).init( process.getInputStream().readAllBytes() )
+			process.waitFor()
+			return { exitCode : process.exitValue(), output : output }
+		} catch ( any e ) {
+			throw(
+				type    = "BxAgents.DeployFailed",
+				message = "Could not run [#arguments.command[ 1 ]#] - is it installed and on PATH? (#e.message#)"
+			)
+		}
+	}
+
+}

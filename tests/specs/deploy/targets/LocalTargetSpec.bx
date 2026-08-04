@@ -1,0 +1,85 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "deploy.targets.LocalTarget", function() {
+
+			beforeEach( function() {
+				variables.target = new bxagents.models.deploy.targets.LocalTarget();
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function newTempDir() {
+				var dir = createTempDirectory( prefix = "bxagents-localtarget-" );
+				tempDirs.append( dir );
+				return dir;
+			}
+
+			it( "throws BxAgents.MissingDestination when destination is missing", function() {
+				expect( function() {
+					target.deploy( {}, { distDir : newTempDir() } );
+				} ).toThrow( "BxAgents.MissingDestination" );
+			} );
+
+			it( "throws BxAgents.NotPackaged when dist/ doesn't exist", function() {
+				var root = newTempDir();
+				expect( function() {
+					target.deploy( { destination : root & "/deployed" }, { distDir : root & "/dist" } );
+				} ).toThrow( "BxAgents.NotPackaged" );
+			} );
+
+			it( "throws BxAgents.NotPackaged when dist/ has no .bxa", function() {
+				var root = newTempDir();
+				var distDir = root & "/dist";
+				directoryCreate( distDir, true, true );
+
+				expect( function() {
+					target.deploy( { destination : root & "/deployed" }, { distDir : distDir } );
+				} ).toThrow( "BxAgents.NotPackaged" );
+			} );
+
+			it( "copies the newest .bxa (by modification time, not filename) to the destination", function() {
+				var root = newTempDir();
+				var distDir = root & "/dist";
+				directoryCreate( distDir, true, true );
+
+				// "myagent-9.0.0.bxa" sorts AFTER "myagent-10.0.0.bxa" lexically
+				// (a real latent bug this refactor fixed) - write v9 FIRST, then
+				// v10, so only a real modification-time sort picks the right one.
+				fileWrite( distDir & "/myagent-9.0.0.bxa", "v9" );
+				sleep( 1100 );
+				fileWrite( distDir & "/myagent-10.0.0.bxa", "v10" );
+
+				var destination = root & "/deployed";
+				var result = target.deploy( { destination : destination }, { distDir : distDir } );
+
+				expect( result.success ).toBeTrue();
+				expect( result.details.bxa ).toBe( "myagent-10.0.0.bxa" );
+				expect( fileExists( destination & "/myagent-10.0.0.bxa" ) ).toBeTrue();
+				expect( fileRead( destination & "/myagent-10.0.0.bxa" ) ).toBe( "v10" );
+			} );
+
+			it( "creates the destination directory if it doesn't exist", function() {
+				var root = newTempDir();
+				var distDir = root & "/dist";
+				directoryCreate( distDir, true, true );
+				fileWrite( distDir & "/myagent-1.0.0.bxa", "content" );
+
+				var destination = root & "/nested/does/not/exist";
+				var result = target.deploy( { destination : destination }, { distDir : distDir } );
+
+				expect( result.success ).toBeTrue();
+				expect( directoryExists( destination ) ).toBeTrue();
+			} );
+
+		} );
+	}
+
+}
