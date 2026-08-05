@@ -6,6 +6,30 @@
  *
  * Requires a prior `build`. If `boxlang-miniserver` isn't found on PATH,
  * fails with a clear, actionable error rather than silently doing nothing.
+ *
+ * Scopes the server's own BoxLang runtime home to `.build/runtime` via
+ * `serverHome` (confirmed as a real, supported `MiniServerConfig` field -
+ * `boxlang-web`'s own `MiniServer.class` help text: "-s, --serverHome
+ * <PATH>  BoxLang server home directory (default: ~/.boxlang)") - a real
+ * bug this closed: with no `serverHome` set, EVERY served BX Agents
+ * project on a machine defaulted to sharing the same global `~/.boxlang`
+ * (compiled class cache, and critically any machine-level
+ * `~/.boxlang/config/boxlang.json` override, which would then silently
+ * apply to every served project equally). Scoping it under `.build/`
+ * means `clean` (which already wipes `.build` wholesale) sweeps it too,
+ * for a genuinely complete reset - no separate cleanup code needed here.
+ *
+ * This fix only reaches `serve` and anything that reuses it (`invoke
+ * --server`) - both spawn a brand-new, separate JVM process whose launch
+ * config we write ourselves. It does NOT reach the in-process verbs
+ * (`chat`, `build`, `test`, default `invoke`): those run inside the
+ * ALREADY-STARTED `bxAgents` process, whose own BoxLang runtime (and
+ * therefore its home) was resolved before any of our BoxLang code -
+ * including `ModuleConfig.bx`'s own `main()` - ever got a chance to run
+ * (the engine has to exist to interpret that code at all). `BoxRuntime`
+ * is a JVM-wide singleton; its home is fixed at first initialization, so
+ * nothing our own verb classes do can change it retroactively for the
+ * process they're already running in - see docs/known-limitations.md.
  */
 class {
 
@@ -39,6 +63,9 @@ class {
 		var port = arguments.options.port ?: 8080
 		var host = arguments.options.host ?: "0.0.0.0"
 		var configPath = root & "/.build/miniserver.json"
+		var serverHome = root & "/.build/runtime"
+
+		directoryCreate( path = serverHome, createPath = true, ignoreExists = true )
 
 		fileWrite( configPath, jsonSerialize( {
 			port            : port,
@@ -46,7 +73,8 @@ class {
 			webRoot         : appDir,
 			rewrites        : true,
 			rewriteFileName : "index.bxm",
-			healthCheck     : true
+			healthCheck     : true,
+			serverHome      : serverHome
 		} ) )
 
 		var process = createObject( "java", "ortus.boxlang.bxagents.build.MiniServerLauncher" ).launch( executable, configPath, true )
@@ -56,7 +84,8 @@ class {
 			message    : "Serving [#appDir#] on #host#:#port#",
 			process    : process,
 			configPath : configPath,
-			port       : port
+			port       : port,
+			serverHome : serverHome
 		}
 	}
 

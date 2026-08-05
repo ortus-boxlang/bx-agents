@@ -91,6 +91,48 @@ class extends="testbox.system.BaseSpec" {
 				expect( specContent ).toInclude( "mockResponses(" );
 			} );
 
+			/**
+			 * Regression: mirrors `ortus-boxlang/bx-ai-intro`'s own
+			 * `.env`/`BOXLANG_HOME` convention - confirmed empirically against
+			 * the real BoxLang runtime jar that `BOXLANG_HOME` is a genuine
+			 * environment variable `BoxRunner` itself reads (relative paths
+			 * resolve against the CWD, same as an absolute path would), not
+			 * something specific to `serve`'s own miniserver config. Points at
+			 * the SAME `.build/runtime` path `serve`'s own `serverHome`
+			 * already uses (see `Serve.bx`), so both mechanisms agree on one
+			 * canonical location.
+			 */
+			it( "scaffolds a .env declaring BOXLANG_HOME=.build/runtime, matching serve's own serverHome path", function() {
+				var dir = newTargetDir();
+				var result = scaffolder.scaffold( dir, "my-agent", "openai/gpt-5" );
+
+				expect( fileExists( result.env ) ).toBeTrue();
+				expect( fileRead( result.env ) ).toInclude( "BOXLANG_HOME=.build/runtime" );
+			} );
+
+			it( "scaffolds a .gitignore excluding .build/, dist/, and .env", function() {
+				var dir = newTargetDir();
+				var result = scaffolder.scaffold( dir, "my-agent", "openai/gpt-5" );
+
+				expect( fileExists( result.gitignore ) ).toBeTrue();
+				var content = fileRead( result.gitignore );
+				expect( content ).toInclude( ".build/" );
+				expect( content ).toInclude( "dist/" );
+				expect( content ).toInclude( ".env" );
+			} );
+
+			it( "never overwrites an existing .env or .gitignore in the target directory", function() {
+				var dir = newTargetDir();
+				directoryCreate( path = dir, createPath = true, ignoreExists = true );
+				fileWrite( dir & "/.env", "CUSTOM_VAR=already-here" );
+				fileWrite( dir & "/.gitignore", "custom-ignore-line" );
+
+				var result = scaffolder.scaffold( dir, "my-agent", "openai/gpt-5" );
+
+				expect( fileRead( result.env ) ).toBe( "CUSTOM_VAR=already-here" );
+				expect( fileRead( result.gitignore ) ).toBe( "custom-ignore-line" );
+			} );
+
 		} );
 	}
 

@@ -48,7 +48,7 @@ bxAgents new my-agent --model=openai/gpt-5 [--name=...] [--description=...]
 - `--model` is **required** - a `provider/model` slug (see [Agent.bx](conventions/agent-bx.md)).
 - `--name` defaults to the target directory's own basename.
 - Refuses to run if the target already contains an `Agent.bx`.
-- Creates `Agent.bx`, `instructions.md`, every convention folder (empty), and a ready-to-run [`tests/`](conventions/testing.md) folder (`tests/box.json` + `tests/specs/AgentSpec.bx`).
+- Creates `Agent.bx`, `instructions.md`, every convention folder (empty), a ready-to-run [`tests/`](conventions/testing.md) folder (`tests/box.json` + `tests/specs/AgentSpec.bx`), a `.env` declaring `BOXLANG_HOME=.build/runtime` (matching `serve`'s own scoped runtime home - see [known limitations](known-limitations.md) for exactly what this does and doesn't cover), and a `.gitignore` (`.build/`, `dist/`, `.env`). Never overwrites an existing `.env`/`.gitignore`.
 - Also runs `box install` inside the new `tests/` folder, so `bxAgents test` works immediately with no separate `cd tests && box install` step. This is best-effort: if `box` isn't on `PATH` or the install fails, `new` still succeeds - the message just tells you to run it yourself. Pass `--skipInstall` to opt out of this step entirely.
 
 ### `build`
@@ -84,6 +84,7 @@ bxAgents serve [--port=8080] [--host=0.0.0.0]
 - Requires a prior `build` - fails clearly if `.build/app` doesn't exist.
 - Fails clearly if `boxlang-miniserver` isn't found on `PATH`.
 - Writes `.build/miniserver.json` (rewrites enabled, `rewriteFileName: "index.bxm"`, health check on) before launching.
+- Scopes the server's own BoxLang runtime home to `.build/runtime` (via `serverHome`) rather than the shared `~/.boxlang` default, so each project's compiled-class cache and config overrides are isolated - and `clean` sweeps it for free, since it already wipes `.build` wholesale. `invoke --server` gets this too, since it reuses `serve` internally. This does **not** extend to `chat`/`build`/`test`/default `invoke` - see [known limitations](known-limitations.md).
 
 ### `chat`
 

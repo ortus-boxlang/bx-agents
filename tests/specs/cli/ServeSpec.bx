@@ -45,6 +45,38 @@ class extends="testbox.system.BaseSpec" {
 				} ).toThrow( "BxAgents.MiniServerNotFound" );
 			} );
 
+			/**
+			 * Regression: a real bug this closed - the generated
+			 * miniserver.json never set `serverHome` at all, so every served
+			 * BX Agents project on a machine defaulted to sharing the same
+			 * global `~/.boxlang` (compiled class cache, and any machine-level
+			 * `~/.boxlang/config/boxlang.json` override applying to every
+			 * served project equally). `serve` checks `findExecutable()`
+			 * BEFORE writing the config, so this can't be proven up to a
+			 * thrown `BxAgents.MiniServerNotFound` in this sandbox - skipped
+			 * (rather than failed) when `boxlang-miniserver` isn't on PATH,
+			 * same idiom `RuntimeStartupSmokeSpec.bx`/`InvokeSpec.bx` already
+			 * use for their own real-binary-dependent proofs.
+			 */
+			it( "scopes the server's own BoxLang home to .build/runtime, not the shared ~/.boxlang default", function() {
+				var executable = createObject( "java", "ortus.boxlang.bxagents.build.MiniServerLauncher" ).findExecutable();
+				if ( isNull( executable ) ) {
+					return;
+				}
+
+				var projectRoot = newTempProject( "full-project" );
+				buildVerb.run( { projectRoot : projectRoot } );
+
+				var result = serveVerb.run( { projectRoot : projectRoot } );
+				result.process.destroy();
+
+				expect( result.serverHome ).toBe( projectRoot & "/.build/runtime" );
+
+				var config = jsonDeserialize( fileRead( result.configPath ) );
+				expect( config.serverHome ).toBe( projectRoot & "/.build/runtime" );
+				expect( directoryExists( projectRoot & "/.build/runtime" ) ).toBeTrue();
+			} );
+
 		} );
 	}
 
