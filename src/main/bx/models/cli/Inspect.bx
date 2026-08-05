@@ -5,7 +5,7 @@
 class {
 
 	/**
-	 * @options { projectRoot (required, absolute path) }
+	 * @options { projectRoot (required, absolute path), json (optional boolean - print the raw manifest as JSON instead of the human-readable summary) }
 	 */
 	struct function run( struct options = {} ) {
 		var projectRoot = trim( arguments.options.projectRoot ?: "" )
@@ -24,10 +24,11 @@ class {
 		}
 
 		var manifest = jsonDeserialize( fileRead( manifestPath ) )
+		var asJson = arguments.options.json ?: false
 
 		return {
 			exitCode : 0,
-			message  : formatManifest( manifest ),
+			message  : asJson ? jsonSerialize( manifest ) : formatManifest( manifest ),
 			manifest : manifest
 		}
 	}

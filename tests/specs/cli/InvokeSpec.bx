@@ -1,0 +1,110 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "cli.Invoke", function() {
+
+			beforeEach( function() {
+				variables.buildVerb = new bxagents.models.cli.Build();
+				variables.invokeVerb = new bxagents.models.cli.Invoke();
+				variables.fixtures = expandPath( "/fixtures" );
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function newTempProject( required string fixtureName ) {
+				var dir = createTempDirectory( prefix = "bxagents-cli-invoke-" );
+				directoryCopy( fixtures & "/" & arguments.fixtureName, dir, true );
+				tempDirs.append( dir );
+				return dir;
+			}
+
+			it( "throws clearly when projectRoot is missing", function() {
+				expect( function() {
+					invokeVerb.run( { message : "Hi" } );
+				} ).toThrow( "BxAgents.MissingProjectRoot" );
+			} );
+
+			it( "throws clearly when --message is missing", function() {
+				var dir = newTempProject( "invoke-agent" );
+				expect( function() {
+					invokeVerb.run( { projectRoot : dir } );
+				} ).toThrow( "BxAgents.MissingMessage" );
+			} );
+
+			it( "errors cleanly if build hasn't run yet (in-process mode)", function() {
+				var dir = newTempProject( "invoke-agent" );
+				expect( function() {
+					invokeVerb.run( { projectRoot : dir, message : "Hi" } );
+				} ).toThrow( "BxAgents.NotBuilt" );
+			} );
+
+			/**
+			 * Unlike `chat` (which can only be proven up to its pre-flight
+			 * checks - MiniConsole needs a real TTY past that point), `invoke`
+			 * has no interactive loop at all, so its real in-process agent
+			 * call IS fully testable here.
+			 */
+			it( "invokes the agent in-process by default and returns its plain-string response", function() {
+				var dir = newTempProject( "invoke-agent" );
+				buildVerb.run( { projectRoot : dir } );
+
+				var result = invokeVerb.run( { projectRoot : dir, message : "Hello there" } );
+
+				expect( result.exitCode ).toBe( 0 );
+				expect( result.message ).toBe( "Mock response" );
+			} );
+
+			it( "wraps the response in a JSON envelope when --json is passed", function() {
+				var dir = newTempProject( "invoke-agent" );
+				buildVerb.run( { projectRoot : dir } );
+
+				var result = invokeVerb.run( { projectRoot : dir, message : "Hello there", json : true } );
+
+				var parsed = jsonDeserialize( result.message );
+				expect( parsed.response ).toBe( "Mock response" );
+			} );
+
+			it( "throws clearly when --server is passed but no gateway exposes the agent", function() {
+				var dir = newTempProject( "valid-minimal" );
+				buildVerb.run( { projectRoot : dir } );
+
+				expect( function() {
+					invokeVerb.run( { projectRoot : dir, message : "Hi", server : true } );
+				} ).toThrow( "BxAgents.NoAgentExposure" );
+			} );
+
+			/**
+			 * Regression proof for the --server path's real HTTP round-trip:
+			 * skipped rather than failed when boxlang-miniserver isn't
+			 * installed on PATH in the current environment (Serve.bx's own
+			 * lookup is PATH-only - see docs/known-limitations.md) - same
+			 * "check for the real dependency, return early rather than fail"
+			 * idiom RuntimeStartupSmokeSpec.bx already uses for its own
+			 * jar-presence check.
+			 */
+			it( "invokes over real HTTP via a throwaway serve process when --server is passed", function() {
+				var executable = createObject( "java", "ortus.boxlang.bxagents.build.MiniServerLauncher" ).findExecutable();
+				if ( isNull( executable ) ) {
+					return;
+				}
+
+				var dir = newTempProject( "invoke-agent" );
+				buildVerb.run( { projectRoot : dir } );
+
+				var result = invokeVerb.run( { projectRoot : dir, message : "Hello there", server : true } );
+
+				expect( result.exitCode ).toBe( 0 );
+				expect( result.message ).toBe( "Mock response" );
+			} );
+
+		} );
+	}
+
+}
