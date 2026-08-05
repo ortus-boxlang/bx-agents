@@ -84,6 +84,7 @@ bxAgents serve [--port=8080] [--host=0.0.0.0]
 - Requires a prior `build` - fails clearly if `.build/app` doesn't exist.
 - Fails clearly if `boxlang-miniserver` isn't found on `PATH`.
 - Writes `.build/miniserver.json` (rewrites enabled, `rewriteFileName: "index.bxm"`, health check on) before launching.
+- Scopes the server's own BoxLang runtime home to `.build/runtime` (via `serverHome`) rather than the shared `~/.boxlang` default, so each project's compiled-class cache and config overrides are isolated - and `clean` sweeps it for free, since it already wipes `.build` wholesale. `invoke --server` gets this too, since it reuses `serve` internally. This does **not** extend to `chat`/`build`/`test`/default `invoke` - see [known limitations](known-limitations.md).
 
 ### `chat`
 
