@@ -24,7 +24,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "scaffolds a project and returns exitCode 0", function() {
 				var dir = newTargetDir();
-				var result = verb.run( { projectRoot : dir, model : "openai/gpt-5" } );
+				var result = verb.run( { projectRoot : dir, model : "openai/gpt-5", skipInstall : true } );
 
 				expect( result.exitCode ).toBe( 0 );
 				expect( fileExists( dir & "/Agent.bx" ) ).toBeTrue();
@@ -32,7 +32,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "derives the agent name from the target directory name when --name is omitted", function() {
 				var dir = newTargetDir();
-				verb.run( { projectRoot : dir, model : "openai/gpt-5" } );
+				verb.run( { projectRoot : dir, model : "openai/gpt-5", skipInstall : true } );
 
 				var content = fileRead( dir & "/Agent.bx" );
 				expect( content ).toInclude( 'name        : "my-agent"' );
@@ -41,14 +41,33 @@ class extends="testbox.system.BaseSpec" {
 			it( "throws clearly when --model is missing", function() {
 				var dir = newTargetDir();
 				expect( function() {
-					verb.run( { projectRoot : dir } );
+					verb.run( { projectRoot : dir, skipInstall : true } );
 				} ).toThrow( "BxAgents.MissingModel" );
 			} );
 
 			it( "throws clearly when projectRoot is missing", function() {
 				expect( function() {
-					verb.run( { model : "openai/gpt-5" } );
+					verb.run( { model : "openai/gpt-5", skipInstall : true } );
 				} ).toThrow( "BxAgents.MissingProjectRoot" );
+			} );
+
+			/**
+			 * Regression: a real bug this closed - `new` never installed
+			 * tests/'s own declared `testbox` devDependency, so `bxAgents
+			 * test` failed with "testbox/ not found" on every freshly
+			 * scaffolded project until the user manually ran `cd tests &&
+			 * box install` themselves first. Verified here via `skipInstall`
+			 * (fast, network-independent) rather than a real `box install`
+			 * call, which is a genuine network operation this suite can't
+			 * rely on in CI/sandboxes - see docs/known-limitations.md, same
+			 * framing already used for ftp/ssh/digitalocean's own real
+			 * network calls.
+			 */
+			it( "skips the tests/ box install step entirely when --skipInstall is passed", function() {
+				var dir = newTargetDir();
+				var result = verb.run( { projectRoot : dir, model : "openai/gpt-5", skipInstall : true } );
+
+				expect( result.message ).notToInclude( "box install" );
 			} );
 
 		} );

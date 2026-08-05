@@ -2,11 +2,24 @@
  * `new` CLI verb - thin dispatcher over ProjectScaffolder (M12). CLI-agnostic:
  * takes an already-parsed options struct (see ModuleConfig.bx's main()),
  * never touches raw argv or the current working directory itself.
+ *
+ * Also runs `box install` inside the scaffolded `tests/` folder (which
+ * ProjectScaffolder always writes its own `box.json` declaring a `testbox`
+ * devDependency into) so `bxAgents test` works immediately on a fresh
+ * project, without the user having to separately `cd tests && box install`
+ * themselves first. This is a best-effort convenience step, not a build
+ * requirement: if `box` isn't on PATH or the install fails, `new` still
+ * reports success (the project files themselves were written just fine) -
+ * it just tells the user to run the install manually.
+ *
+ * `--skipInstall` opts out of this step entirely (no attempt, no message) -
+ * for CI/tests that need `new` to stay fast and network-independent, the
+ * same reason `eve add`'s own registry install has a `--skip-install` flag.
  */
 class {
 
 	/**
-	 * @options { projectRoot (required, absolute path), name, model (required), description }
+	 * @options { projectRoot (required, absolute path), name, model (required), description, skipInstall (optional boolean - skip the tests/ `box install` convenience step entirely) }
 	 */
 	struct function run( struct options = {} ) {
 		var projectRoot = trim( arguments.options.projectRoot ?: "" )
@@ -30,9 +43,46 @@ class {
 		var scaffolder = new "models.build.ProjectScaffolder@bxagents"()
 		var result = scaffolder.scaffold( projectRoot, name, model, arguments.options.description ?: "" )
 
+		var message = "Created new BX Agents project [#name#] at #result.projectRoot#"
+		if ( !( arguments.options.skipInstall ?: false ) ) {
+			message &= char( 10 ) & installTestsDependencies( result.projectRoot )
+		}
+
 		return {
 			exitCode : 0,
-			message  : "Created new BX Agents project [#name#] at #result.projectRoot#"
+			message  : message
+		}
+	}
+
+	/**
+	 * Runs `box install` inside `<projectRoot>/tests`, where ProjectScaffolder
+	 * always writes a `box.json` (a `testbox` devDependency). Never throws -
+	 * a failed/missing `box` degrades to a clear instruction to install
+	 * manually, since the scaffolded project itself is already complete
+	 * without it.
+	 *
+	 * @projectRoot Absolute path to the newly scaffolded project root
+	 *
+	 * @return A one-line status message to append to `new`'s own success message
+	 */
+	private string function installTestsDependencies( required string projectRoot ) {
+		var testsDir = arguments.projectRoot & "/tests"
+		var manualInstruction = "Run `cd tests && box install` yourself to install testbox before running `bxAgents test`."
+
+		try {
+			var builder = createObject( "java", "java.lang.ProcessBuilder" ).init( [ "box", "install" ] )
+			builder.directory( createObject( "java", "java.io.File" ).init( testsDir ) )
+			builder.redirectErrorStream( true )
+			var process = builder.start()
+			var output = createObject( "java", "java.lang.String" ).init( process.getInputStream().readAllBytes() )
+			process.waitFor()
+
+			if ( process.exitValue() != 0 ) {
+				return "Warning: `box install` in tests/ exited with code #process.exitValue()# - #manualInstruction#"
+			}
+			return "Installed tests/ dependencies via `box install`."
+		} catch ( any e ) {
+			return "Warning: could not run `box install` in tests/ (#e.message#) - #manualInstruction#"
 		}
 	}
 

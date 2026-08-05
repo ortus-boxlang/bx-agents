@@ -49,6 +49,7 @@ bxAgents new my-agent --model=openai/gpt-5 [--name=...] [--description=...]
 - `--name` defaults to the target directory's own basename.
 - Refuses to run if the target already contains an `Agent.bx`.
 - Creates `Agent.bx`, `instructions.md`, every convention folder (empty), and a ready-to-run [`tests/`](conventions/testing.md) folder (`tests/box.json` + `tests/specs/AgentSpec.bx`).
+- Also runs `box install` inside the new `tests/` folder, so `bxAgents test` works immediately with no separate `cd tests && box install` step. This is best-effort: if `box` isn't on `PATH` or the install fails, `new` still succeeds - the message just tells you to run it yourself. Pass `--skipInstall` to opt out of this step entirely.
 
 ### `build`
 
@@ -97,6 +98,20 @@ bxAgents chat
 - Type `exit` or `quit` to leave.
 - Needs a real interactive TTY (`MiniConsole` shells out to `stty` for raw mode) - it will not work piped/non-interactively.
 
+### `invoke`
+
+A single, non-interactive turn against the built agent: submit one message, print the response, exit. Exists for scripting/CI, where `chat`'s TTY requirement is a hard blocker.
+
+```bash
+bxAgents invoke --message="What's the weather in Boston?" [--json]
+bxAgents invoke --message="..." --server [--port=<port>]
+```
+
+- Requires a prior `build`.
+- **Default (no `--server`)**: loads `GeneratedAgentFactory.bx` directly (no ColdBox container, no HTTP) and calls the agent once - the same in-process path `chat` uses internally, just without the REPL loop. No `serve`/gateway prerequisite at all.
+- **`--server`**: launches a real, throwaway `boxlang-miniserver` process (same as `serve`), sends the message as a real HTTP request through the project's `toAi()`-exposed route, then shuts the server back down. Exercises the actual served path (ColdBox routing, interceptors, gateways) rather than the in-process shortcut. Requires a `gateways/*.bx` entry with `{ exposes: "agent", path: "..." }` (see [gateways](conventions/gateways.md)) - fails clearly if none exists. `--port` defaults to a free ephemeral port so it never collides with an already-running `serve`.
+- `--json` prints `{"response": "..."}` instead of the plain-text response.
+
 ### `package`
 
 Package a built project into a `.bxa`.
@@ -129,11 +144,12 @@ bxAgents deploy --destination=/path/to/somewhere [--target=local]
 Pretty-print an existing `.build/manifest.json` without rebuilding.
 
 ```bash
-bxAgents inspect
+bxAgents inspect [--json]
 ```
 
 - Requires a prior `build`.
 - Prints agent name, model, environment, manifest version, generator name/version, and file count.
+- `--json` prints the raw manifest as JSON instead of the human-readable summary - useful for scripting.
 
 ### `clean`
 

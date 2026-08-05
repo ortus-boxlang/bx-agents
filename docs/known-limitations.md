@@ -38,7 +38,11 @@ A related, separate BoxLang pitfall found while diagnosing this: **`request` is 
 
 ## `serve`'s miniserver lookup is PATH-only
 
-`serve` looks for `boxlang-miniserver` only on `PATH` (`MiniServerLauncher.findExecutable()`). There's no fallback to a configured path or a bundled binary - if it isn't installed and on `PATH`, `serve` fails with a clear, actionable error, but there's no alternate way to point it at one.
+`serve` looks for `boxlang-miniserver` only on `PATH` (`MiniServerLauncher.findExecutable()`). There's no fallback to a configured path or a bundled binary - if it isn't installed and on `PATH`, `serve` fails with a clear, actionable error, but there's no alternate way to point it at one. `invoke --server` reuses `serve` internally, so it inherits the same PATH-only lookup - its own `InvokeSpec.bx` test for the real HTTP round-trip checks `MiniServerLauncher.findExecutable()` first and skips (rather than fails) when no real binary is on `PATH`, the same idiom `RuntimeStartupSmokeSpec.bx` already uses for its own jar-presence check. Do at least one manual `bxAgents invoke --message=... --server` run on a machine with `boxlang-miniserver` installed before depending on the real HTTP path in production - the same honest framing already used elsewhere in this page for gaps this suite can't close itself in every environment.
+
+## `new`'s `box install` convenience step isn't exercised by an automated test
+
+`new` runs `box install` inside the scaffolded `tests/` folder by default, so `bxAgents test` works immediately (see [CLI Reference](cli-reference.md)). This is a real network operation (CommandBox resolves `testbox` against ForgeBox) - confirmed to take ~25 seconds and fail with a certificate error in this development sandbox specifically, the same ForgeBox-unreachable constraint already noted elsewhere in this project's own tooling. `NewSpec.bx` only exercises the fast, deterministic `--skipInstall` path (and the OS-process `ModuleCliProcessTest.java`/in-process `ModuleConfigCliSpec.bx` invocations of `new` also pass `--skipInstall` for the same reason) - the default install-attempt path itself is verified by manual testing only, not CI.
 
 ## `chat` needs a real TTY
 

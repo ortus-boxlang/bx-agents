@@ -193,7 +193,12 @@ public class ModuleCliProcessTest {
 	public void testNewProcess() throws Exception {
 		ensureTempModuleInstall();
 
-		int exitCode = runVerb( "new", projectDir.toString(), "--model=mock/mock-model" );
+		// --skipInstall: this is a fast, deterministic OS-process smoke test of
+		// verb dispatch itself, not of `new`'s real `box install` convenience
+		// step (which hits the real ForgeBox network and is a real, honest
+		// gap in this suite's coverage - see docs/known-limitations.md, same
+		// framing already used for ftp/ssh/digitalocean's own network calls).
+		int exitCode = runVerb( "new", projectDir.toString(), "--model=mock/mock-model", "--skipInstall=true" );
 
 		assertEquals( 0, exitCode, "module:bxagents new should exit 0" );
 		assertTrue( Files.exists( projectDir.resolve( "Agent.bx" ) ), "Agent.bx should have been scaffolded" );

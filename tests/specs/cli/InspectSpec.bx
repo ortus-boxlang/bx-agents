@@ -50,6 +50,19 @@ class extends="testbox.system.BaseSpec" {
 				expect( appDirAfterStat ).toBe( appDirBeforeStat );
 			} );
 
+			it( "prints the raw manifest as JSON when --json is passed", function() {
+				var projectRoot = newTempProject( "full-project" );
+				buildVerb.run( { projectRoot : projectRoot } );
+
+				var result = inspectVerb.run( { projectRoot : projectRoot, json : true } );
+
+				expect( result.exitCode ).toBe( 0 );
+				var parsed = jsonDeserialize( result.message );
+				expect( parsed.agent.name ).toBe( "full-project-agent" );
+				expect( parsed.agent.model ).toBe( "openai/gpt-5" );
+				expect( result.message ).notToInclude( "Agent:" );
+			} );
+
 		} );
 	}
 
