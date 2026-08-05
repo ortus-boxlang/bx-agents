@@ -13,6 +13,22 @@
  * inside `tests/`) and `tests/specs/AgentSpec.bx` (one example spec
  * extending `BaseAgentSpec`, passing out of the box against the scaffolded
  * `test()` environment override below).
+ *
+ * Also scaffolds a `.env` declaring `BOXLANG_HOME=.build/runtime` (mirroring
+ * `ortus-boxlang/bx-ai-intro`'s own `.env`/`BOXLANG_HOME` convention, and the
+ * exact same `.build/runtime` path `serve`'s own `serverHome` already uses -
+ * see `Serve.bx`) - confirmed empirically against the real BoxLang runtime
+ * jar (not just documentation) that `BOXLANG_HOME` is a genuine environment
+ * variable read by `BoxRunner` itself, before `BoxRuntime` initializes, for
+ * EVERY invocation - not just `serve`'s own separately-spawned miniserver
+ * process. Whether this actually reaches `chat`/`build`/`test`/`invoke`
+ * depends on whether the BoxLang CLI installation in use loads `.env` from
+ * the project directory automatically (confirmed this is NOT something the
+ * raw runtime jar does itself - a `.env` sitting unexported in the working
+ * directory has no effect - so this may depend on a wrapper/BVM-level
+ * feature this project doesn't control) - see docs/known-limitations.md.
+ * A `.gitignore` is scaffolded alongside it (`.env` may later hold real
+ * provider API keys, and `.build`/`dist` are pure build output).
  */
 class {
 
@@ -53,12 +69,23 @@ class {
 		fileWrite( testsBoxJsonPath, renderTestsBoxJson( arguments.name ) )
 		fileWrite( agentSpecPath, renderAgentSpec( arguments.name ) )
 
+		var envPath = dir & "/.env"
+		var gitignorePath = dir & "/.gitignore"
+		if ( !fileExists( envPath ) ) {
+			fileWrite( envPath, renderEnv() )
+		}
+		if ( !fileExists( gitignorePath ) ) {
+			fileWrite( gitignorePath, renderGitignore() )
+		}
+
 		return {
 			projectRoot  : dir,
 			agentBx      : agentBxPath,
 			instructions : instructionsPath,
 			testsBoxJson : testsBoxJsonPath,
-			agentSpec    : agentSpecPath
+			agentSpec    : agentSpecPath,
+			env          : envPath,
+			gitignore    : gitignorePath
 		}
 	}
 
@@ -159,6 +186,39 @@ class {
 			"## #arguments.name#",
 			"",
 			"You are #arguments.name#, a helpful AI agent.",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * @return The rendered .env source, declaring BOXLANG_HOME (see the class docblock)
+	 */
+	private string function renderEnv() {
+		var lines = [
+			"## BoxLang runtime home - keeps this project's compiled-class cache",
+			"## and config overrides isolated from every other BX Agents project",
+			"## on this machine, instead of silently sharing the default ~/.boxlang.",
+			"## Matches the same .build/runtime path `serve` already scopes its own",
+			"## server-home to (see docs/known-limitations.md for the exact scope",
+			"## of what this does and doesn't reach).",
+			"BOXLANG_HOME=.build/runtime",
+			"",
+			"## Add your own AI provider API keys here too, e.g.:",
+			"## OPENAI_API_KEY=sk-...",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * @return The rendered .gitignore source
+	 */
+	private string function renderGitignore() {
+		var lines = [
+			".build/",
+			"dist/",
+			".env",
 			""
 		]
 		return lines.toList( char( 10 ) )
