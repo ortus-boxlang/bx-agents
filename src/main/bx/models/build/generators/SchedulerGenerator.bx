@@ -1,332 +1,60 @@
 /**
- * Generates `config/Scheduler.bx` for a project's `schedules/*` entries (Build
- * Pipeline Phase 5): one ColdBox scheduled task per entry, invoking the same
- * singleton "GeneratedAgent" instance (see ColdBoxAppGenerator/WireBox.bx from
- * M8) with the schedule's `action` string as a plain prompt - e.g.
- * `{ cron: "0 0 * * *", action: "cleanup" }` wakes the agent up once a day
- * with the message "cleanup" and lets it reason/use tools from there. There is
- * no "does this action exist" check, since any string is a valid prompt -
- * only that `action` is present at all.
+ * Passes a project's own `schedules/Scheduler.bx` through into the build
+ * (Build Pipeline Phase 5) as `config/Scheduler.bx` - a plain file copy, no
+ * generation, no translation.
  *
- * ColdBox's task scheduler has NO raw cron expression support - the DSL is
- * named frequency methods: every()/everyMinute()/everyHour()/everyHourAt()/
- * everyDayAt()/everyWeekOn()/everyMonthOn()/everyYearOn()/etc., not a cron
- * string. `schedules/*`'s cron convention (already 5-field-validated in M3)
- * is translated to the closest matching frequency method here. Exact
- * signatures confirmed directly against real ColdBox source
- * (coldbox/system/async/tasks/ScheduledTask.cfc):
- *   - `everyWeekOn( required numeric dayOfWeek, string time = "00:00" )` -
- *     dayOfWeek 1 (Monday) -> 7 (Sunday), time as 24h "HH:mm".
- *   - `everyMonthOn( required numeric day, string time = "00:00" )` - day of
- *     the month, time as 24h "HH:mm".
- *   - `everyYearOn( required numeric month, required numeric day, string
- *     time = "00:00" )` - month 1-12, day of the month, time as "HH:mm".
+ * `schedules/Scheduler.bx` is a REAL, hand-written ColdBox scheduler class
+ * (`extends="coldbox.system.web.tasks.ColdBoxScheduler"`), using ColdBox's
+ * own full `task()`/`.cron()`/`.everyDayAt()`/`.withNoOverlaps()`/`.when()`/
+ * `.startOn()`/`.endOn()`/etc. DSL directly - not a BX Agents-specific
+ * `{cron, action}` config shape. This project used to translate a narrow
+ * `{cron, action}` convention into ColdBox's frequency-method DSL here, but
+ * that meant re-inventing (and, worse, only PARTIALLY re-inventing - lists,
+ * ranges, step values, and day-of-month-AND-day-of-week combined cron
+ * expressions had no translation) a scheduler ColdBox already has a real,
+ * complete API for. Removing the translation layer means a schedule can use
+ * anything ColdBox's scheduler supports, with nothing left for this project
+ * to keep in sync with it.
  *
- * Only EXACT single-value fields are supported for minute/hour/day-of-month/
- * month/day-of-week - lists, ranges, and step values in those positions are
- * still rejected with a clear error rather than guessed at, matching the
- * project's general "narrow supported subset, fail loud on anything else"
- * approach for this generator.
+ * Each agent in the tree (root + every subagent, recursively) is registered
+ * in the generated `config/WireBox.bx` under its OWN declared `name` from
+ * its `Agent.bx` (see `ColdBoxAppGenerator.renderWireBox()`), so a schedule
+ * reaches whichever agent it wants via a plain `getInstance( "TheAgentName" )` -
+ * exactly like any other WireBox-aware ColdBox code, no BX Agents-specific
+ * lookup needed:
  *
- * Cron's day-of-week (0-7, both 0 and 7 mean Sunday, 1=Monday...6=Saturday)
- * is remapped to ColdBox's 1 (Monday) -> 7 (Sunday) convention - see
- * mapCronDowToColdBox().
+ * ```javascript
+ * // schedules/Scheduler.bx
+ * component extends="coldbox.system.web.tasks.ColdBoxScheduler" {
+ *     function configure() {
+ *         task( "nightly" )
+ *             .call( () => getInstance( "SupportBot" ).run( "cleanup" ) )
+ *             .everyDayAt( "00:00" )
+ *             .withNoOverlaps()
+ *     }
+ * }
+ * ```
  */
 class {
 
 	/**
-	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .schedules is used)
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .hasScheduler is used)
 	 * @appDir Absolute path to the generated ColdBox app dir, e.g. "<projectRoot>/.build/app"
+	 *
+	 * @return { hasSchedules: boolean, scheduler: the written config/Scheduler.bx path, only present when hasSchedules is true }
 	 */
 	struct function generate( required struct discovery, required string appDir ) {
-		var schedules = arguments.discovery.schedules ?: []
-
-		if ( !schedules.len() ) {
+		if ( !( arguments.discovery.hasScheduler ?: false ) ) {
 			return { hasSchedules : false }
-		}
-
-		var lines = []
-		for ( var schedule in schedules ) {
-			lines.append( renderTask( schedule ) )
 		}
 
 		var appDir = normalizePath( arguments.appDir )
 		directoryCreate( path = appDir & "/config", createPath = true, ignoreExists = true )
 		var schedulerPath = appDir & "/config/Scheduler.bx"
-		fileWrite( schedulerPath, renderSchedulerFile( lines ) )
+
+		fileWrite( schedulerPath, fileRead( arguments.discovery.schedulerPath ) )
 
 		return { scheduler : schedulerPath, hasSchedules : true }
-	}
-
-	/**
-	 * @schedule A discovered schedules/* entry { name, path, type }
-	 *
-	 * @return A bare `task(...).call(...).<frequency>` statement string
-	 */
-	private string function renderTask( required struct schedule ) {
-		var config = readEntryConfig( arguments.schedule.path )
-		if ( isNull( config ) ) {
-			throw(
-				type    = "BxAgents.InvalidSchedule",
-				message = "Schedule [#arguments.schedule.name#] could not be read"
-			)
-		}
-
-		var action = trim( config.action ?: "" )
-		if ( !len( action ) ) {
-			throw(
-				type    = "BxAgents.MissingScheduleAction",
-				message = "Schedule [#arguments.schedule.name#] is missing an 'action'"
-			)
-		}
-
-		var cron = trim( config.cron ?: "" )
-		var frequency = translateCron( cron, arguments.schedule.name )
-
-		return 'task( "#bxLiteral( arguments.schedule.name )#" ).call( () => getInstance( "GeneratedAgent" ).run( "#bxLiteral( action )#" ) ).#frequency#'
-	}
-
-	// --------------------------------------------------------------------------
-	// Cron -> ColdBox frequency-method translation
-	// --------------------------------------------------------------------------
-
-	/**
-	 * Returns true if `cron` translates to a supported ColdBox frequency-method
-	 * shape (see `translateCron()`'s own docblock for exactly which shapes are
-	 * supported). Exposed so `ProjectValidator` can reuse THIS SAME translation
-	 * logic at validation time, rather than maintaining a second, independent
-	 * "is this cron supported" check that can silently drift out of sync with
-	 * what this generator actually supports - confirmed this drift was a real,
-	 * shipped bug: `ProjectValidator`'s old cron regex accepted lists/ranges/
-	 * steps/day-of-month-and-day-of-week-together, none of which
-	 * `translateCron()` below has ever supported, so a syntactically-valid but
-	 * semantically-unsupported cron passed validation cleanly and only crashed
-	 * later, mid-generation, after `.build/app` had already been wiped and
-	 * partially rewritten.
-	 *
-	 * @cron A cron expression to check
-	 *
-	 * @return True if translateCron() can translate it into a ColdBox frequency-method call
-	 */
-	boolean function isSupportedCron( required string cron ) {
-		try {
-			translateCron( arguments.cron, "" )
-			return true
-		} catch ( any e ) {
-			return false
-		}
-	}
-
-	/**
-	 * Translates a 5-field cron expression into the closest matching ColdBox
-	 * frequency-method call - see the class docblock for exactly which shapes
-	 * are supported. Throws BxAgents.UnsupportedCronExpression for anything else.
-	 *
-	 * @cron A 5-field cron expression
-	 * @scheduleName The schedule's own name, for error message context
-	 *
-	 * @return A bare ColdBox frequency-method call expression string, e.g. `everyDayAt( "09:00" )`
-	 */
-	private string function translateCron( required string cron, required string scheduleName ) {
-		var fields = listToArray( arguments.cron, " " )
-		if ( fields.len() != 5 ) {
-			throwUnsupportedCron( arguments.cron, arguments.scheduleName )
-		}
-
-		var minute = fields[ 1 ]
-		var hour = fields[ 2 ]
-		var dom = fields[ 3 ]
-		var month = fields[ 4 ]
-		var dow = fields[ 5 ]
-
-		var domIsStar = dom == "*"
-		var monthIsStar = month == "*"
-		var dowIsStar = dow == "*"
-
-		// Minute/hour must always be exact for anything beyond the plain
-		// minute/hour-granularity shapes below - every day-of-month/month/
-		// day-of-week shape fires at one specific time, never on a repeating
-		// sub-daily cadence.
-		if ( !domIsStar || !monthIsStar || !dowIsStar ) {
-			if ( !isExactNumber( minute ) || !isExactNumber( hour ) ) {
-				throwUnsupportedCron( arguments.cron, arguments.scheduleName )
-			}
-
-			var time = '"#padTime( hour )#:#padTime( minute )#"'
-
-			// M H * * D (exact day-of-week, dom/month "*") -> weekly
-			if ( domIsStar && monthIsStar && isExactNumber( dow ) ) {
-				return 'everyWeekOn( #mapCronDowToColdBox( dow, arguments.cron, arguments.scheduleName )#, #time# )'
-			}
-
-			// M H D * * (exact day-of-month, month/dow "*") -> monthly
-			if ( isExactNumber( dom ) && monthIsStar && dowIsStar ) {
-				validateFieldRange( dom, 1, 31, arguments.cron, arguments.scheduleName )
-				return 'everyMonthOn( #dom#, #time# )'
-			}
-
-			// M H D Mo * (exact day-of-month AND month, dow "*") -> yearly
-			if ( isExactNumber( dom ) && isExactNumber( month ) && dowIsStar ) {
-				validateFieldRange( dom, 1, 31, arguments.cron, arguments.scheduleName )
-				validateFieldRange( month, 1, 12, arguments.cron, arguments.scheduleName )
-				return 'everyYearOn( #month#, #dom#, #time# )'
-			}
-
-			// Anything else with a non-"*" dom/month/dow (lists, ranges, step
-			// values, or day-of-month + day-of-week combined) has no
-			// supported equivalent yet.
-			throwUnsupportedCron( arguments.cron, arguments.scheduleName )
-		}
-
-		// */N minutes, every other field "*" -> every(N, "minutes")
-		if ( minute.startsWith( "*/" ) && hour == "*" ) {
-			return 'every( #minute.right( len( minute ) - 2 )#, "minutes" )'
-		}
-
-		// exact minute, */N hours -> every(N, "hours")
-		if ( isExactNumber( minute ) && hour.startsWith( "*/" ) ) {
-			return 'every( #hour.right( len( hour ) - 2 )#, "hours" )'
-		}
-
-		// "*" minute, "*" hour -> every minute
-		if ( minute == "*" && hour == "*" ) {
-			return "everyMinute()"
-		}
-
-		// exact minute, "*" hour -> every hour, at that minute
-		if ( isExactNumber( minute ) && hour == "*" ) {
-			return "everyHourAt( #minute# )"
-		}
-
-		// exact minute, exact hour -> daily at HH:MM
-		if ( isExactNumber( minute ) && isExactNumber( hour ) ) {
-			return 'everyDayAt( "#padTime( hour )#:#padTime( minute )#" )'
-		}
-
-		throwUnsupportedCron( arguments.cron, arguments.scheduleName )
-		return "" // unreachable, keeps the compiler happy about a return on every path
-	}
-
-	/**
-	 * Cron's day-of-week is 0-7 (both 0 and 7 mean Sunday, 1=Monday...6=Saturday).
-	 * ColdBox's everyWeekOn() uses 1 (Monday) -> 7 (Sunday). Validates range
-	 * as part of the remap, since the 5-field cron regex (M3) only checks
-	 * shape, not that a day-of-week value is actually 0-7.
-	 *
-	 * @dow The cron day-of-week field's raw string value (0-7)
-	 * @cron The full cron expression, for error message context
-	 * @scheduleName The schedule's own name, for error message context
-	 *
-	 * @return ColdBox's own 1 (Monday) -> 7 (Sunday) day-of-week number
-	 */
-	private numeric function mapCronDowToColdBox( required string dow, required string cron, required string scheduleName ) {
-		validateFieldRange( arguments.dow, 0, 7, arguments.cron, arguments.scheduleName )
-		var numericDow = int( arguments.dow )
-		if ( numericDow == 0 ) {
-			return 7
-		}
-		return numericDow
-	}
-
-	/**
-	 * Throws throwUnsupportedCron() if field, as a number, falls outside [min, max].
-	 *
-	 * @field A single cron field's raw string value
-	 * @min Minimum legal value, inclusive
-	 * @max Maximum legal value, inclusive
-	 * @cron The full cron expression, for error message context
-	 * @scheduleName The schedule's own name, for error message context
-	 */
-	private void function validateFieldRange( required string field, required numeric min, required numeric max, required string cron, required string scheduleName ) {
-		var numericField = int( arguments.field )
-		if ( numericField < arguments.min || numericField > arguments.max ) {
-			throwUnsupportedCron( arguments.cron, arguments.scheduleName )
-		}
-	}
-
-	/**
-	 * @cron The full cron expression that has no supported translation
-	 * @scheduleName The schedule's own name
-	 */
-	private void function throwUnsupportedCron( required string cron, required string scheduleName ) {
-		throw(
-			type    = "BxAgents.UnsupportedCronExpression",
-			message = "Schedule [#arguments.scheduleName#] uses a cron expression [#arguments.cron#] that has no equivalent in ColdBox's frequency-method scheduler DSL yet - supported shapes: '*/N * * * *', 'M */N * * *', '* * * * *', 'M * * * *', 'M H * * *', 'M H * * D' (weekly, D=0-7), 'M H D * *' (monthly, D=1-31), 'M H D Mo *' (yearly, Mo=1-12) - exact single values only, no lists/ranges/step values, and day-of-month + day-of-week may not both be non-'*'"
-		)
-	}
-
-	/**
-	 * @field A single cron field's raw string value
-	 *
-	 * @return True if field is a single non-negative integer (no "*", list, range, or step)
-	 */
-	private boolean function isExactNumber( required string field ) {
-		return reFind( "^[0-9]+$", arguments.field ) > 0
-	}
-
-	/**
-	 * @numericField A single/double-digit numeric string
-	 *
-	 * @return numericField left-padded to 2 digits with a leading "0" if needed
-	 */
-	private string function padTime( required string numericField ) {
-		return len( arguments.numericField ) < 2 ? "0" & arguments.numericField : arguments.numericField
-	}
-
-	// --------------------------------------------------------------------------
-	// File rendering
-	// --------------------------------------------------------------------------
-
-	/**
-	 * @lines Bare `task(...).call(...).<frequency>` statement strings, one per schedule
-	 *
-	 * @return The rendered config/Scheduler.bx source
-	 */
-	private string function renderSchedulerFile( required array lines ) {
-		var fileLines = [
-			"/**",
-			" * GENERATED FILE - produced by BX Agents' build pipeline.",
-			" * Do not edit by hand; rebuilding your project overwrites this file.",
-			" */",
-			"class {",
-			"",
-			"	function configure() {"
-		]
-
-		for ( var line in arguments.lines ) {
-			fileLines.append( "		" & line )
-		}
-
-		fileLines.append( "	}" )
-		fileLines.append( "" )
-		fileLines.append( "}" )
-		fileLines.append( "" )
-
-		return fileLines.toList( char( 10 ) )
-	}
-
-	/**
-	 * Reads a discovered `schedules/*` entry's config: JSON files are
-	 * deserialized directly, `.bx` files are dynamically loaded and their
-	 * `configure()` invoked.
-	 *
-	 * @path Absolute path to the entry's `.bx`/`.json` file
-	 *
-	 * @return The entry's config struct, or null if it could not be read
-	 */
-	private any function readEntryConfig( required string path ) {
-		try {
-			if ( arguments.path.endsWith( ".json" ) ) {
-				return jsonDeserialize( fileRead( arguments.path ) )
-			}
-
-			var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
-			var instance = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
-				.instantiate( arguments.path, context )
-			return instance.configure()
-		} catch ( any e ) {
-			return null
-		}
 	}
 
 	/**
@@ -336,15 +64,6 @@ class {
 	 */
 	private string function normalizePath( required string path ) {
 		return arguments.path.reReplace( "[\/]+$", "" )
-	}
-
-	/**
-	 * @value A raw string to embed inside a generated double-quoted BoxLang string literal
-	 *
-	 * @return value with `"` doubled and `#` doubled, so it round-trips as a literal, not an interpolation
-	 */
-	private string function bxLiteral( required string value ) {
-		return arguments.value.replace( '"', '""', "all" ).replace( "##", "####", "all" )
 	}
 
 }

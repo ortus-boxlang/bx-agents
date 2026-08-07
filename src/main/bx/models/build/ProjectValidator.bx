@@ -38,7 +38,7 @@ class {
 		validateDuplicateNames( arguments.discovery, errors )
 		validateSubagents( arguments.projectRoot, arguments.discovery, errors )
 		validateModules( arguments.projectRoot, arguments.discovery, errors )
-		validateSchedules( arguments.discovery, errors )
+		validateSchedules( arguments.projectRoot, arguments.discovery, warnings )
 		validateGateways( arguments.discovery, errors )
 		validateMcpServers( arguments.resolvedConfig, errors )
 		validateModelProvider( arguments.resolvedConfig, arguments.discovery, errors )
@@ -90,7 +90,18 @@ class {
 	/**
 	 * Validates every subagent's own model, checks for unknown subagent
 	 * references (including the ROOT project's own `subAgents` list, not
-	 * just nested subagents), and detects circular subagent references.
+	 * just nested subagents), detects circular subagent references, and
+	 * checks that every node's own DECLARED agent name (root + every
+	 * subagent) is unique across the whole tree.
+	 *
+	 * That last check matters now in a way it didn't before: `name` doubles
+	 * as a `config/WireBox.bx` binding key (see `ColdBoxAppGenerator.
+	 * renderWireBox()`), so two nodes sharing a name - including two that
+	 * both leave it unset and silently share the "BxAi" default - would
+	 * collide as a WireBox mapping (the second `map()` call for the same
+	 * key wins, silently shadowing the first) rather than fail loudly.
+	 * Reuses `ColdBoxAppGenerator.resolveAgentName()` for the "no name set"
+	 * default rather than a second, independently-drifting copy of it.
 	 *
 	 * @projectRoot Absolute path to the project root
 	 * @discovery The raw discovery struct from ProjectDiscoverer.discover()
@@ -101,7 +112,9 @@ class {
 		// "@bxagents" suffix, not a bare "AgentConfigResolver" reference - see
 		// BuildPipeline.bx's init() docblock for why.
 		var resolver = new "models.build.AgentConfigResolver@bxagents"()
+		var coldboxAppGenerator = new "models.build.generators.ColdBoxAppGenerator@bxagents"()
 		var graph = {}
+		var nameOwners = {}
 
 		for ( var subagent in subagents ) {
 			var agentBxPath = subagent.path & "/Agent.bx"
@@ -115,6 +128,7 @@ class {
 				var config = resolver.resolve( projectRoot = subagent.path )
 				graph[ subagent.name ] = config.subAgents ?: []
 				validateModelProvider( config, arguments.discovery, arguments.errors, "Subagent [#subagent.name#]'s Agent.bx" )
+				recordNameOwner( nameOwners, coldboxAppGenerator.resolveAgentName( config ), "Subagent [#subagent.name#]" )
 			} catch ( any e ) {
 				arguments.errors.append( "Subagent [#subagent.name#] failed to load: #e.message#" )
 				graph[ subagent.name ] = []
@@ -126,7 +140,9 @@ class {
 		var rootSubAgents = []
 		if ( fileExists( rootProjectAgentBx ) ) {
 			try {
-				rootSubAgents = resolver.resolve( projectRoot = arguments.projectRoot ).subAgents ?: []
+				var rootConfig = resolver.resolve( projectRoot = arguments.projectRoot )
+				rootSubAgents = rootConfig.subAgents ?: []
+				recordNameOwner( nameOwners, coldboxAppGenerator.resolveAgentName( rootConfig ), "The project's own Agent.bx" )
 			} catch ( any e ) {
 				// Already surfaced elsewhere (config resolution failures are not this validator's job)
 			}
@@ -145,6 +161,24 @@ class {
 		for ( var cyclePath in detectCycles( graph ) ) {
 			arguments.errors.append( "Circular subagent reference detected: #cyclePath#" )
 		}
+
+		for ( var name in nameOwners ) {
+			if ( nameOwners[ name ].len() > 1 ) {
+				arguments.errors.append( "Agent name [#name#] is declared by more than one Agent.bx (#nameOwners[ name ].toList( ", " )#) - each agent's name must be unique across the whole project, since it also becomes its config/WireBox.bx binding key" )
+			}
+		}
+	}
+
+	/**
+	 * @nameOwners Accumulator struct of { declaredName : [ sourceLabels ] } - mutated in place
+	 * @name A node's own declared agent name
+	 * @sourceLabel A human-readable label for the node that declared it, e.g. "Subagent [billing]"
+	 */
+	private void function recordNameOwner( required struct nameOwners, required string name, required string sourceLabel ) {
+		if ( !structKeyExists( arguments.nameOwners, arguments.name ) ) {
+			arguments.nameOwners[ arguments.name ] = []
+		}
+		arguments.nameOwners[ arguments.name ].append( arguments.sourceLabel )
 	}
 
 	// --------------------------------------------------------------------------
@@ -259,45 +293,28 @@ class {
 	// --------------------------------------------------------------------------
 
 	/**
-	 * Checks every `schedules/*` entry's `cron` shape (both syntactic
-	 * validity and whether SchedulerGenerator can actually translate it) and
-	 * `action` presence - both closed at validation time so an unsupported
-	 * cron or a missing action is caught here rather than crashing generation.
+	 * `schedules/Scheduler.bx` is real, hand-written ColdBox code passed
+	 * through into the build untouched (see SchedulerGenerator) - there's no
+	 * `{cron, action}` data shape left to validate. The one thing worth
+	 * catching here: a `schedules/` folder that exists but has no
+	 * `Scheduler.bx` in it (e.g. a leftover file from before this project
+	 * moved off its old `{cron, action}` convention) is silently ignored by
+	 * discovery - `hasScheduler` is simply false, and no error surfaces
+	 * anywhere else. Warn here instead, so a schedule that quietly stopped
+	 * running is at least visible at build time.
 	 *
+	 * @projectRoot Absolute path to the project root
 	 * @discovery The raw discovery struct from ProjectDiscoverer.discover()
-	 * @errors Accumulator array - append() any validation errors found
+	 * @warnings Accumulator array - append() any validation warnings found
 	 */
-	private void function validateSchedules( required struct discovery, required array errors ) {
-		var CRON_FIELD = "(\*|\*\/\d+|\d+(-\d+)?(,\d+(-\d+)?)*)"
-		var cronPattern = "^#CRON_FIELD# #CRON_FIELD# #CRON_FIELD# #CRON_FIELD# #CRON_FIELD#$"
-		// "@bxagents" suffix, not a bare "SchedulerGenerator" reference - see
-		// BuildPipeline.bx's init() docblock for why.
-		var schedulerGenerator = new "models.build.generators.SchedulerGenerator@bxagents"()
+	private void function validateSchedules( required string projectRoot, required struct discovery, required array warnings ) {
+		var schedulesDir = arguments.projectRoot & "/schedules"
+		if ( arguments.discovery.hasScheduler ?: false ) {
+			return
+		}
 
-		for ( var schedule in ( arguments.discovery.schedules ?: [] ) ) {
-			var config = readEntryConfig( schedule.path )
-			if ( isNull( config ) ) {
-				arguments.errors.append( "Schedule [#schedule.name#] could not be read" )
-				continue
-			}
-
-			var cron = config.cron ?: ""
-			if ( !len( cron ) ) {
-				arguments.errors.append( "Schedule [#schedule.name#] is missing a 'cron' expression" )
-			} else if ( !cron.trim().reFind( cronPattern ) ) {
-				arguments.errors.append( "Schedule [#schedule.name#] has an invalid cron expression [#cron#]" )
-			} else if ( !schedulerGenerator.isSupportedCron( cron.trim() ) ) {
-				// Syntactically a valid 5-field cron, but not one of the shapes
-				// SchedulerGenerator can translate into a ColdBox frequency-method
-				// call (see its docblock) - reusing its OWN translation logic here
-				// (rather than a second, hand-maintained "is this supported" check)
-				// is what keeps this in sync with what generation actually accepts.
-				arguments.errors.append( "Schedule [#schedule.name#] has a cron expression [#cron#] with no equivalent in ColdBox's frequency-method scheduler DSL - see docs/conventions/schedules.md for supported shapes" )
-			}
-
-			if ( !len( trim( config.action ?: "" ) ) ) {
-				arguments.errors.append( "Schedule [#schedule.name#] is missing an 'action'" )
-			}
+		if ( directoryExists( schedulesDir ) && directoryList( schedulesDir, false, "query" ).recordCount > 0 ) {
+			arguments.warnings.append( "schedules/ exists but has no Scheduler.bx - it's ignored. Add a schedules/Scheduler.bx (a real ColdBox scheduler class) - see docs/conventions/schedules.md" )
 		}
 	}
 

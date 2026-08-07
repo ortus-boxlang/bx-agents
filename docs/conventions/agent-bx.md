@@ -20,7 +20,7 @@ class {
 
 | Field | Type | Notes |
 |---|---|---|
-| `name` | string | Falls back to `"BxAi"` if omitted. |
+| `name` | string | Falls back to `"BxAi"` if omitted. Also becomes this agent's `config/WireBox.bx` binding key at build time (`getInstance( name )`) - see [schedules/](schedules.md) - so it must be unique across the whole project (root + every subagent); `build` fails if two agents share a name. |
 | `model` | string | Required. A `provider/model` slug, a bare provider name, or a name matching a [`models/`](models.md) entry. See below. |
 | `description` | string | Optional. |
 | `subAgents` | array of strings | Names of sibling folders under the root project's `subagents/`. See [subagents/](subagents.md). |

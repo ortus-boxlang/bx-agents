@@ -19,7 +19,7 @@ your-agent/
 ├── subagents/             # nested Agent.bx + instructions.md trees
 ├── models/                # reusable named model configs
 ├── gateways/              # HTTP/MCP exposure + channel-adapter registrations
-├── schedules/              # cron-driven prompts to the agent
+├── schedules/              # Scheduler.bx - a real ColdBox scheduler, passed through untouched
 ├── mcp/                   # local MCP servers this agent hosts
 ├── interceptors/          # @scope("agent"|"runtime") lifecycle hooks
 └── modules/                # BoxLang module dependencies

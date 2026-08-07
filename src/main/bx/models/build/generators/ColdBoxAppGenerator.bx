@@ -84,10 +84,12 @@ class {
 			startupStatements.append( statement )
 		}
 
+		var agentFactory = renderAgentFactory( root, appDir, arguments.resolvedConfig, arguments.cliEnvironment, arguments.discovery )
+
 		fileWrite( applicationPath, renderApplication( appName, startupStatements ) )
 		fileWrite( coldboxPath, renderColdboxConfig( appName, arguments.agentInterceptors, arguments.resolvedConfig.security ?: {} ) )
-		fileWrite( wireboxPath, renderWireBox() )
-		fileWrite( agentFactoryPath, renderAgentFactory( root, appDir, arguments.resolvedConfig, arguments.cliEnvironment, arguments.discovery ) )
+		fileWrite( wireboxPath, renderWireBox( agentFactory.nodes ) )
+		fileWrite( agentFactoryPath, agentFactory.source )
 
 		var indexPath = appDir & "/index.bxm"
 		fileWrite( indexPath, renderIndex() )
@@ -226,9 +228,28 @@ class {
 	}
 
 	/**
-	 * @return The rendered config/WireBox.bx source - maps GeneratedAgentFactory and a lazily-built, singleton GeneratedAgent
+	 * Maps GeneratedAgentFactory, the lazily-built singleton GeneratedAgent
+	 * (the root of the tree), and - the point of `agentNodes` - one
+	 * additional binding PER agent node in the tree (root + every subagent,
+	 * recursively), keyed by that node's OWN declared `name` from its
+	 * Agent.bx. This is what lets a hand-written `schedules/Scheduler.bx`
+	 * (or anything else WireBox-aware) call `getInstance( "SupportBot" )`/
+	 * `getInstance( "Summarizer" )` directly instead of only ever reaching
+	 * the fixed `"GeneratedAgent"` root alias.
+	 *
+	 * Every node resolves off the SAME underlying singleton build - a
+	 * subagent's binding is just `injector.getInstance( "GeneratedAgent" )`
+	 * plus one `getSubAgent( name )` hop per level of nesting (confirmed
+	 * against real bx-ai source: `AiAgent.getSubAgent( name )` searches that
+	 * node's own DIRECT `subAgents` by their own `getAgentName()`, so a
+	 * grandchild needs one hop per ancestor, not just one) - never a second,
+	 * independent construction.
+	 *
+	 * @agentNodes Every node in the tree - { name, accessorPath } structs from buildAgentTree(), where accessorPath is the ordered list of getSubAgent() names needed to reach that node from the root singleton (empty for root itself)
+	 *
+	 * @return The rendered config/WireBox.bx source
 	 */
-	private string function renderWireBox() {
+	private string function renderWireBox( required array agentNodes ) {
 		var lines = [
 			'class extends="coldbox.system.ioc.config.Binder" {',
 			"",
@@ -243,12 +264,27 @@ class {
 			"		// Binder itself uses internally for the same purpose.",
 			'		map( "GeneratedAgent" ).toProvider( function() {',
 			'			return injector.getInstance( "GeneratedAgentFactory" ).buildAgent()',
-			"		} ).asSingleton()",
-			"	}",
-			"",
-			"}",
-			""
+			"		} ).asSingleton()"
 		]
+
+		for ( var node in arguments.agentNodes ) {
+			var accessor = 'injector.getInstance( "GeneratedAgent" )'
+			for ( var hop in node.accessorPath ) {
+				accessor &= '.getSubAgent( "#bxLiteral( hop )#" )'
+			}
+
+			lines.append( "" )
+			lines.append( "		// Lets schedules/Scheduler.bx (or anything else) resolve this" )
+			lines.append( "		// agent directly by the name its own Agent.bx declares." )
+			lines.append( '		map( "#bxLiteral( node.name )#" ).toProvider( function() {' )
+			lines.append( "			return #accessor#" )
+			lines.append( "		} )" )
+		}
+
+		lines.append( "	}" )
+		lines.append( "" )
+		lines.append( "}" )
+		lines.append( "" )
 		return lines.toList( char( 10 ) )
 	}
 
@@ -282,9 +318,9 @@ class {
 	 * @cliEnvironment Optional environment name the build was invoked with, re-applied to every subagent's own config resolution
 	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .models is used)
 	 *
-	 * @return The rendered agent/GeneratedAgentFactory.bx source
+	 * @return { source: the rendered agent/GeneratedAgentFactory.bx source, nodes: every agent node in the tree - see buildAgentTree() }
 	 */
-	private string function renderAgentFactory( required string projectRoot, required string appDir, required struct resolvedConfig, string cliEnvironment = "", struct discovery = {} ) {
+	private struct function renderAgentFactory( required string projectRoot, required string appDir, required struct resolvedConfig, string cliEnvironment = "", struct discovery = {} ) {
 		var built = buildAgentTree( arguments.projectRoot, arguments.projectRoot, arguments.resolvedConfig, "agent", arguments.cliEnvironment, arguments.discovery )
 		var body = built.statements.toList( char( 10 ) & char( 10 ) )
 		var toolsDir = normalizePath( arguments.appDir ) & "/tools"
@@ -307,7 +343,7 @@ class {
 			"}",
 			""
 		]
-		return lines.toList( char( 10 ) )
+		return { source : lines.toList( char( 10 ) ), nodes : built.nodes }
 	}
 
 	/**
@@ -330,14 +366,21 @@ class {
 	 * build was actually invoked with, so a `--environment=production` build
 	 * could still generate a subagent wired to its dev-environment config.
 	 *
+	 * Also collects, per node, `{ name, accessorPath }` - `name` is the
+	 * node's own declared name (see `resolveAgentName()`) and `accessorPath`
+	 * is the ordered list of `getSubAgent()` names needed to reach it from
+	 * the root singleton (empty for root itself) - `renderWireBox()` uses
+	 * these to register every agent under its own name.
+	 *
 	 * @rootProjectRoot Absolute path to the ROOT project root - fixed across the whole recursion, since subagents always live under its own `subagents/` folder
 	 * @nodePath Absolute path to THIS node's own directory, used to locate its instructions.md
 	 * @resolvedConfig THIS node's own resolved config
 	 * @varName The BoxLang variable name to assign this node's built `aiAgent()` to, e.g. "agent" or "subagent_foo"
 	 * @cliEnvironment Optional environment name the build was invoked with, re-applied to every subagent's own config resolution
 	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .models is used), shared by every node
+	 * @accessorPath The ordered list of getSubAgent() names needed to reach THIS node from the root singleton - empty for the initial (root) call
 	 *
-	 * @return { statements: [] } - leaf-first `var <name> = aiAgent(...)` statement strings
+	 * @return { statements: leaf-first `var <name> = aiAgent(...)` statement strings, nodes: [ { name, accessorPath } ] for this node and every descendant }
 	 */
 	private struct function buildAgentTree(
 		required string rootProjectRoot,
@@ -345,11 +388,14 @@ class {
 		required struct resolvedConfig,
 		required string varName,
 		string cliEnvironment = "",
-		struct discovery = {}
+		struct discovery = {},
+		array accessorPath = []
 	) {
 		var declaredSubAgents = arguments.resolvedConfig.subAgents ?: []
 		var subAgentVarNames = []
 		var statements = []
+		var thisName = resolveAgentName( arguments.resolvedConfig )
+		var nodes = [ { name : thisName, accessorPath : arguments.accessorPath } ]
 
 		for ( var subName in declaredSubAgents ) {
 			var subPath = arguments.rootProjectRoot & "/subagents/" & subName
@@ -362,17 +408,37 @@ class {
 
 			var subConfig = variables.configResolver.resolve( projectRoot = subPath, cliEnvironment = arguments.cliEnvironment )
 			var subVarName = "subagent_" & sanitizeIdentifier( subName )
-			var built = buildAgentTree( arguments.rootProjectRoot, subPath, subConfig, subVarName, arguments.cliEnvironment, arguments.discovery )
+			var childAccessorPath = duplicate( arguments.accessorPath )
+			childAccessorPath.append( resolveAgentName( subConfig ) )
+
+			var built = buildAgentTree( arguments.rootProjectRoot, subPath, subConfig, subVarName, arguments.cliEnvironment, arguments.discovery, childAccessorPath )
 
 			for ( var stmt in built.statements ) {
 				statements.append( stmt )
 			}
+			for ( var node in built.nodes ) {
+				nodes.append( node )
+			}
 			subAgentVarNames.append( subVarName )
 		}
 
-		statements.append( renderAgentStatement( arguments.varName, arguments.nodePath, arguments.resolvedConfig, subAgentVarNames, arguments.discovery ) )
+		statements.append( renderAgentStatement( arguments.varName, arguments.nodePath, arguments.resolvedConfig, subAgentVarNames, arguments.discovery, thisName ) )
 
-		return { statements : statements }
+		return { statements : statements, nodes : nodes }
+	}
+
+	/**
+	 * The single source of truth for a node's own declared agent name -
+	 * reused by ProjectValidator's name-uniqueness check (now that a
+	 * duplicate name would silently collide as a WireBox binding key) so
+	 * the two never drift on what "no name set" defaults to.
+	 *
+	 * @resolvedConfig A single node's own resolved config
+	 *
+	 * @return resolvedConfig.name if set, else the default "BxAi"
+	 */
+	string function resolveAgentName( required struct resolvedConfig ) {
+		return len( arguments.resolvedConfig.name ?: "" ) ? arguments.resolvedConfig.name : "BxAi"
 	}
 
 	/**
@@ -381,6 +447,7 @@ class {
 	 * @resolvedConfig THIS node's own resolved config
 	 * @subAgentVarNames Already-rendered child variable names, to reference in this node's own `subAgents: [...]`
 	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .models is used)
+	 * @name This node's own declared agent name (see resolveAgentName()) - passed in rather than recomputed, so it stays identical to the value buildAgentTree() already used to build this node's WireBox accessor path
 	 *
 	 * @return The rendered `var <name> = aiAgent(...)` statement string for this one node
 	 */
@@ -389,7 +456,8 @@ class {
 		required string nodePath,
 		required struct resolvedConfig,
 		required array subAgentVarNames,
-		struct discovery = {}
+		struct discovery = {},
+		required string name
 	) {
 		var instructionsPath = arguments.nodePath & "/instructions.md"
 		if ( !fileExists( instructionsPath ) ) {
@@ -408,7 +476,6 @@ class {
 		}
 
 		var parsedModel = resolveModelReference( modelSlug, arguments.discovery, arguments.nodePath )
-		var name = len( arguments.resolvedConfig.name ?: "" ) ? arguments.resolvedConfig.name : "BxAi"
 		var description = arguments.resolvedConfig.description ?: ""
 
 		var modelExpression = len( parsedModel.model )
@@ -417,7 +484,7 @@ class {
 
 		var lines = []
 		lines.append( "var #arguments.varName# = aiAgent(" )
-		lines.append( '	name : "#bxLiteral( name )#",' )
+		lines.append( '	name : "#bxLiteral( arguments.name )#",' )
 		lines.append( '	description : "#bxLiteral( description )#",' )
 		lines.append( '	instructions : fileRead( "#bxLiteral( instructionsPath )#" ),' )
 		lines.append( '	model : #modelExpression#,' )
