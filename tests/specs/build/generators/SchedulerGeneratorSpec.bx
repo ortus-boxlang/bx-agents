@@ -29,104 +29,31 @@ class extends="testbox.system.BaseSpec" {
 				return generator.generate( discovery, newAppDir() );
 			}
 
-			it( "writes one task() per schedule entry, invoking the GeneratedAgent with the action as a prompt", function() {
+			it( "copies schedules/Scheduler.bx verbatim to config/Scheduler.bx", function() {
 				var result = generateFor( "full-project" );
 
 				expect( result.hasSchedules ).toBeTrue();
 				expect( fileExists( result.scheduler ) ).toBeTrue();
 
+				var sourcePath = expandPath( "/fixtures/full-project/schedules/Scheduler.bx" );
+				expect( fileRead( result.scheduler ) ).toBe( fileRead( sourcePath ) );
+			} );
+
+			it( "writes real ColdBox scheduler source unchanged - no BX Agents-specific translation", function() {
+				var result = generateFor( "full-project" );
 				var content = fileRead( result.scheduler );
+
+				expect( content ).toInclude( 'extends="coldbox.system.web.tasks.ColdBoxScheduler"' );
 				expect( content ).toInclude( 'task( "nightly" )' );
-				expect( content ).toInclude( 'getInstance( "GeneratedAgent" ).run( "cleanup" )' );
+				expect( content ).toInclude( 'getInstance( "full-project-agent" ).run( "cleanup" )' );
 				expect( content ).toInclude( 'everyDayAt( "00:00" )' );
 			} );
 
-			it( "writes no Scheduler.bx when the project has no schedules/", function() {
+			it( "writes no Scheduler.bx when the project has no schedules/Scheduler.bx", function() {
 				var result = generateFor( "valid-minimal" );
 
 				expect( result.hasSchedules ).toBeFalse();
 				expect( result.keyExists( "scheduler" ) ).toBeFalse();
-			} );
-
-			it( "translates '*/N * * * *' to every(N, ""minutes"")", function() {
-				var result = generateFor( "schedules-mixed" );
-				var content = fileRead( result.scheduler );
-				expect( content ).toInclude( 'task( "everyFiveMinutes" )' );
-				expect( content ).toInclude( 'every( 5, "minutes" )' );
-			} );
-
-			it( "translates 'M */N * * *' to every(N, ""hours"")", function() {
-				var result = generateFor( "schedules-mixed" );
-				var content = fileRead( result.scheduler );
-				expect( content ).toInclude( 'task( "everyTwoHours" )' );
-				expect( content ).toInclude( 'every( 2, "hours" )' );
-			} );
-
-			it( "translates '* * * * *' to everyMinute()", function() {
-				var result = generateFor( "schedules-mixed" );
-				var content = fileRead( result.scheduler );
-				expect( content ).toInclude( 'task( "everyMinute" )' );
-				expect( content ).toInclude( "everyMinute()" );
-			} );
-
-			it( "translates 'M * * * *' to everyHourAt(M)", function() {
-				var result = generateFor( "schedules-mixed" );
-				var content = fileRead( result.scheduler );
-				expect( content ).toInclude( 'task( "hourlyAt30" )' );
-				expect( content ).toInclude( "everyHourAt( 30 )" );
-			} );
-
-			it( "translates 'M H * * *' to everyDayAt(""HH:MM"") with zero-padding", function() {
-				var result = generateFor( "schedules-mixed" );
-				var content = fileRead( result.scheduler );
-				expect( content ).toInclude( 'task( "dailyAt" )' );
-				expect( content ).toInclude( 'everyDayAt( "14:09" )' );
-			} );
-
-			it( "translates 'M H * * D' to everyWeekOn(D, ""HH:MM"") - remapping cron's Monday=1 into ColdBox's same convention", function() {
-				var result = generateFor( "schedules-mixed" );
-				var content = fileRead( result.scheduler );
-				expect( content ).toInclude( 'task( "weeklyOnMonday" )' );
-				expect( content ).toInclude( 'everyWeekOn( 1, "09:00" )' );
-			} );
-
-			it( "translates 'M H * * 0' (cron Sunday) to everyWeekOn(7, ...) - ColdBox's Sunday is 7, not 0", function() {
-				var result = generateFor( "schedules-mixed" );
-				var content = fileRead( result.scheduler );
-				expect( content ).toInclude( 'task( "weeklyOnSunday" )' );
-				expect( content ).toInclude( 'everyWeekOn( 7, "08:30" )' );
-			} );
-
-			it( "translates 'M H D * *' to everyMonthOn(D, ""HH:MM"")", function() {
-				var result = generateFor( "schedules-mixed" );
-				var content = fileRead( result.scheduler );
-				expect( content ).toInclude( 'task( "monthlyOnDay" )' );
-				expect( content ).toInclude( 'everyMonthOn( 1, "06:00" )' );
-			} );
-
-			it( "translates 'M H D Mo *' to everyYearOn(Mo, D, ""HH:MM"")", function() {
-				var result = generateFor( "schedules-mixed" );
-				var content = fileRead( result.scheduler );
-				expect( content ).toInclude( 'task( "yearlyOnDate" )' );
-				expect( content ).toInclude( 'everyYearOn( 12, 25, "00:00" )' );
-			} );
-
-			it( "errors clearly on a cron expression combining day-of-month AND day-of-week (no ColdBox equivalent)", function() {
-				expect( function() {
-					generateFor( "schedules-unsupported-cron" );
-				} ).toThrow( "BxAgents.UnsupportedCronExpression" );
-			} );
-
-			it( "errors clearly on a syntactically-valid but out-of-range day-of-week value", function() {
-				expect( function() {
-					generateFor( "schedules-cron-out-of-range" );
-				} ).toThrow( "BxAgents.UnsupportedCronExpression" );
-			} );
-
-			it( "errors clearly when a schedule is missing its 'action'", function() {
-				expect( function() {
-					generateFor( "schedules-missing-action" );
-				} ).toThrow( "BxAgents.MissingScheduleAction" );
 			} );
 
 		} );

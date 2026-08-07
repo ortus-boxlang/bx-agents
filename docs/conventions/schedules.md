@@ -1,50 +1,51 @@
 # schedules/
 
-Each `schedules/*.bx`/`.json` entry wakes the agent up on a cron schedule with a plain-text prompt:
+`schedules/Scheduler.bx` - if present - is a **real, hand-written ColdBox scheduler class**, passed through into the build untouched (a plain file copy to `config/Scheduler.bx`, no generation, no translation):
 
 ```javascript
-// schedules/nightly.bx
-class {
+// schedules/Scheduler.bx
+class extends="coldbox.system.web.tasks.ColdBoxScheduler" {
 
 	function configure() {
-		return {
-			cron   : "0 0 * * *",
-			action : "cleanup"
-		};
+		task( "nightly" )
+			.call( () => getInstance( "SupportBot" ).run( "cleanup" ) )
+			.everyDayAt( "00:00" )
+			.withNoOverlaps()
 	}
 
 }
 ```
 
-This generates a ColdBox scheduled task in `config/Scheduler.bx` that calls the same singleton agent instance every request/chat session shares:
+There's nothing BX Agents-specific about the body of that file - it's ColdBox's own scheduler DSL, in full: `.cron( "0 9 * * 1-5" )`, `.everyWeekOn()`, `.startOn()`/`.endOn()`/`.between()`, `.when()`, `.withNoOverlaps()`, `before()`/`after()`/`onSuccess()`/`onFailure()` hooks, timezones - anything ColdBox's `ScheduledTask` supports, this project doesn't limit or reinterpret. (An earlier version of this convention was a `{ cron, action }` data shape translated into ColdBox's frequency-method DSL here - that translation only covered a narrow subset of cron and threw away everything else the real scheduler API offers, so it's gone. If you're migrating an old project, see below.)
+
+## Retrieving an agent
+
+Every agent in the project's tree - the root project's own `Agent.bx` and every `subagents/*` entry, however deeply nested - is registered in the generated `config/WireBox.bx` under its own declared `name` (the `name` field in its `Agent.bx`'s `configure()`). A schedule reaches whichever agent it wants with a plain `getInstance( "TheAgentName" )` - no BX Agents-specific lookup, just WireBox, exactly like the `getInstance()` calls elsewhere in a ColdBox app.
 
 ```javascript
-task( "nightly" ).call( () => getInstance( "GeneratedAgent" ).run( "cleanup" ) ).everyDayAt( "00:00" )
+// subagents/researcher/Agent.bx
+function configure() {
+	return {
+		name  : "ResearchBot",
+		model : "openai/gpt-5"
+	};
+}
 ```
 
-There's no "does this action exist" check - `action` is just a prompt string, and any non-empty string is valid. The agent reasons/uses tools from there, exactly like a normal request.
+```javascript
+// schedules/Scheduler.bx
+task( "weekly-digest" )
+	.call( () => getInstance( "ResearchBot" ).run( "summarize this week's findings" ) )
+	.everyWeekOn( 1, "08:00" )
+```
 
-## Cron support is a deliberately narrow subset
-
-ColdBox's scheduler has **no** raw cron-string support - its DSL is named frequency methods (`every()`, `everyMinute()`, `everyHourAt()`, `everyDayAt()`, `everyWeekOn()`, `everyMonthOn()`, `everyYearOn()`, etc.). `schedules/*`'s 5-field cron expression (`minute hour day-of-month month day-of-week`) is translated to the closest matching frequency method. Only these shapes are supported - and only with **exact single values**, never lists, ranges, or step values in the day-of-month/month/day-of-week positions:
-
-| Cron shape | Example | Translates to |
-|---|---|---|
-| `*/N * * * *` | `*/15 * * * *` | `every( 15, "minutes" )` |
-| `M */N * * *` | `0 */4 * * *` | `every( 4, "hours" )` |
-| `* * * * *` | | `everyMinute()` |
-| `M * * * *` | `30 * * * *` | `everyHourAt( 30 )` |
-| `M H * * *` | `0 9 * * *` | `everyDayAt( "09:00" )` |
-| `M H * * D` | `0 9 * * 1` | `everyWeekOn( 1, "09:00" )` - weekly |
-| `M H D * *` | `0 6 1 * *` | `everyMonthOn( 1, "06:00" )` - monthly |
-| `M H D Mo *` | `0 0 25 12 *` | `everyYearOn( 12, 25, "00:00" )` - yearly |
-
-Day-of-week (`D`) follows standard cron numbering - `0`-`7`, where both `0` and `7` mean Sunday and `1`-`6` are Monday-Saturday - and is remapped internally to ColdBox's own `1` (Monday) → `7` (Sunday) convention for `everyWeekOn()`. `D` and day-of-month (`D` in the `M H D * *` shape) may not both be non-`*` at once - ColdBox's `everyWeekOn()`/`everyMonthOn()` each only accept one of the two, so a cron combining both has no equivalent.
-
-Anything else - a list (`1,3,5`), a range (`1-5`), a step value (`*/2`) in the day-of-month/month/day-of-week positions, or an out-of-range value (e.g. day-of-week `9`) - is rejected with a clear "no equivalent in ColdBox's frequency-method scheduler DSL yet" error, rather than silently guessed at.
+Because `name` is now also a WireBox binding key, it must be **unique across the whole project** - `build` fails validation if two agents (root or subagent, at any depth) share a name, including two that both leave it unset and silently default to `"BxAi"`. See [subagents/](subagents.md#retrieving-an-agent-from-schedulesschedulerbx) for the distinction between a subagent's folder name (used to wire `subAgents: [...]`) and its own declared `name` (used here).
 
 ## Validation
 
-- `cron` must be present and match a valid 5-field cron pattern (checked at [validation](../build-pipeline.md) time). This regex checks shape only - it does not bound day-of-week/day-of-month/month to their valid numeric ranges.
-- `action` must be present and non-empty - also checked at validation time.
-- An unsupported (or out-of-range, or syntactically valid but structurally ambiguous) cron shape is ALSO caught at **validation** time: `ProjectValidator` calls the same translation logic `SchedulerGenerator` uses to render `config/Scheduler.bx` (`SchedulerGenerator.isSupportedCron()`), so a cron shape it can't translate is reported alongside every other error in one pass, naming the exact supported shapes - it never gets as far as generation.
+- `build` only ever looks for exactly one file: `schedules/Scheduler.bx`. Anything else in `schedules/` (including old `{ cron, action }` files from before this convention changed) is ignored - `build` emits a warning if `schedules/` exists but has no `Scheduler.bx`, so a schedule that quietly stopped running is at least visible.
+- Beyond that, `schedules/Scheduler.bx` is real code - the same kind of "we can't meaningfully validate this without a real ColdBox boot" territory as any other BoxLang class. A syntax error or a bad `getInstance()` name surfaces when the generated app actually boots (`serve`), not at `build` validation time.
+
+## Migrating from the old `{ cron, action }` convention
+
+Before, each file under `schedules/` was its own `{ cron: "0 0 * * *", action: "cleanup" }` entry, translated into a ColdBox frequency-method call against the single root `"GeneratedAgent"` binding. To migrate: delete those files, add one `schedules/Scheduler.bx` extending `coldbox.system.web.tasks.ColdBoxScheduler`, and for each old entry add a `task( name ).call( () => getInstance( "TheAgentName" ).run( "action text" ) )` with whichever real ColdBox frequency method or `.cron()` call matches the old cron expression.

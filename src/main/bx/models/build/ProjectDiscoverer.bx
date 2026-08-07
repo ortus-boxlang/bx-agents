@@ -7,7 +7,7 @@
  * interpretation of contents happens here (that's ProjectValidator, Phase 3).
  *
  * Conventions:
- *  - models/, gateways/, schedules/: one entry per top-level `.bx`/`.json` file
+ *  - models/, gateways/: one entry per top-level `.bx`/`.json` file
  *  - tools/, mcp/, interceptors/: one entry per `.bx` file (tools/ recurses,
  *    matching BX AI's own `aiToolRegistry().scan()` convention - actual tool
  *    names are discovered by BX AI itself at runtime, not here)
@@ -18,6 +18,9 @@
  *    own `Agent.bx` + `instructions.md` convention); the entry name here is
  *    always the folder name (a subagent's *declared* name/subAgents list is
  *    only known once its own Agent.bx is loaded, in a later phase)
+ *  - schedules/: unlike every other convention folder, this holds ONE real
+ *    ColdBox scheduler class - `schedules/Scheduler.bx`, passed through into
+ *    the build untouched (see SchedulerGenerator) - not a list of entries
  *  - modules/: one entry per immediate subfolder
  *
  * Dotfiles and files with no recognized extension (e.g. README.md) are ignored.
@@ -27,21 +30,36 @@ class {
 	/**
 	 * @projectRoot Absolute path to the project root
 	 *
-	 * @return { models, tools, skills, subagents, gateways, schedules, mcp, interceptors, modules } - each an array of { name, path, type }
+	 * @return { models, tools, skills, subagents, gateways, mcp, interceptors, modules, hasScheduler, schedulerPath } - each convention EXCEPT schedules/ is an array of { name, path, type }; schedules/ is instead the single hasScheduler/schedulerPath pair
 	 */
 	struct function discover( required string projectRoot ) {
 		var root = arguments.projectRoot.reReplace( "[\\/]+$", "" )
+		var scheduler = discoverScheduler( root )
 
 		return {
-			models       : listFiles( root & "/models", [ "bx", "json" ], "model" ),
-			tools        : listFiles( root & "/tools", [ "bx" ], "tool", true ),
-			skills       : listSkills( root & "/skills" ),
-			subagents    : listSubfolders( root & "/subagents", "subagent" ),
-			gateways     : listFiles( root & "/gateways", [ "bx", "json" ], "gateway" ),
-			schedules    : listFiles( root & "/schedules", [ "bx", "json" ], "schedule" ),
-			mcp          : listFiles( root & "/mcp", [ "bx" ], "mcp" ),
-			interceptors : listFiles( root & "/interceptors", [ "bx" ], "interceptor" ),
-			modules      : listSubfolders( root & "/modules", "module" )
+			models        : listFiles( root & "/models", [ "bx", "json" ], "model" ),
+			tools         : listFiles( root & "/tools", [ "bx" ], "tool", true ),
+			skills        : listSkills( root & "/skills" ),
+			subagents     : listSubfolders( root & "/subagents", "subagent" ),
+			gateways      : listFiles( root & "/gateways", [ "bx", "json" ], "gateway" ),
+			mcp           : listFiles( root & "/mcp", [ "bx" ], "mcp" ),
+			interceptors  : listFiles( root & "/interceptors", [ "bx" ], "interceptor" ),
+			modules       : listSubfolders( root & "/modules", "module" ),
+			hasScheduler  : scheduler.hasScheduler,
+			schedulerPath : scheduler.schedulerPath
+		}
+	}
+
+	/**
+	 * @root Absolute path to the project root
+	 *
+	 * @return { hasScheduler: boolean, schedulerPath: string } - schedulerPath is "" when hasScheduler is false
+	 */
+	private struct function discoverScheduler( required string root ) {
+		var schedulerPath = arguments.root & "/schedules/Scheduler.bx"
+		return {
+			hasScheduler  : fileExists( schedulerPath ),
+			schedulerPath : fileExists( schedulerPath ) ? schedulerPath : ""
 		}
 	}
 

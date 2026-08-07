@@ -34,7 +34,12 @@ class {
 
 		// Sort categories themselves so field/array ordering never depends on
 		// the discovery struct's own (insertion-order) key iteration.
-		var categories = arguments.discovery.keyArray().sort( "textnocase" )
+		// `hasScheduler`/`schedulerPath` are schedules/'s own pair (see
+		// ProjectDiscoverer) - not an array of { name, path } entries like
+		// every other category, so they're excluded here and handled below.
+		var categories = arguments.discovery.keyArray()
+			.filter( function( category ) { return !listFindNoCase( "hasScheduler,schedulerPath", category ) } )
+			.sort( "textnocase" )
 
 		for ( var category in categories ) {
 			for ( var entry in arguments.discovery[ category ] ) {
@@ -45,6 +50,15 @@ class {
 					hash     : hashEntry( entry.path )
 				} )
 			}
+		}
+
+		if ( arguments.discovery.hasScheduler ?: false ) {
+			files.append( {
+				category : "schedules",
+				name     : "Scheduler",
+				path     : toRelativePath( root, arguments.discovery.schedulerPath ),
+				hash     : hashEntry( arguments.discovery.schedulerPath )
+			} )
 		}
 
 		files = sortFiles( files )

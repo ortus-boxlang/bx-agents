@@ -59,24 +59,34 @@ class extends="testbox.system.BaseSpec" {
 				expect( refErrors[ 1 ] ).toInclude( "nonexistent-subagent" );
 			} );
 
-			it( "rejects an invalid cron expression", function() {
-				var result = validateFixture( "bad-cron" );
-				expect( result.errors.filter( e => e.findNoCase( "invalid cron expression" ) ).len() ).toBeGT( 0 );
+			/**
+			 * schedules/Scheduler.bx is real, hand-written ColdBox code passed
+			 * through untouched (see SchedulerGenerator) - there's no
+			 * {cron, action} data shape left to validate. The one thing this
+			 * validator still checks: a schedules/ folder that exists but has
+			 * no Scheduler.bx in it (e.g. a leftover file from the old
+			 * convention) is silently ignored by discovery otherwise.
+			 */
+			it( "warns (doesn't error) when schedules/ exists but has no Scheduler.bx", function() {
+				var result = validateFixture( "schedules-no-scheduler-file" );
+				expect( result.warnings.filter( w => w.findNoCase( "has no Scheduler.bx" ) ).len() ).toBeGT( 0 );
+				expect( result.errors.len() ).toBe( 0 );
 			} );
 
-			it( "rejects a syntactically-valid cron that SchedulerGenerator can't translate (day-of-month AND day-of-week both set)", function() {
-				// A real bug this closed: "0 0 15 * 1" is a well-formed 5-field
-				// cron (passes the syntax regex above) but has no ColdBox
-				// frequency-method equivalent (SchedulerGeneratorSpec.bx proves
-				// SchedulerGenerator itself rejects it) - this used to pass
-				// validation cleanly and only crash later, mid-generation.
-				var result = validateFixture( "../schedules-unsupported-cron" );
-				expect( result.errors.filter( e => e.findNoCase( "no equivalent" ) ).len() ).toBeGT( 0 );
-			} );
-
-			it( "missing 'action' on a schedule is caught at validation time, not left to crash generation", function() {
-				var result = validateFixture( "missing-schedule-action" );
-				expect( result.errors.filter( e => e.findNoCase( "missing an 'action'" ) ).len() ).toBeGT( 0 );
+			/**
+			 * A real, new collision risk once every agent's `name` also became
+			 * a config/WireBox.bx binding key (see ColdBoxAppGenerator.
+			 * renderWireBox()): two agents in the tree - the root project and
+			 * a subagent, or two subagents - sharing the same declared name
+			 * (explicitly, or both silently defaulting to "BxAi") would
+			 * collide as a WireBox mapping and shadow one another rather than
+			 * fail loudly. Caught here instead, before generation.
+			 */
+			it( "rejects two agents in the tree sharing the same declared name", function() {
+				var result = validateFixture( "duplicate-agent-name" );
+				var nameErrors = result.errors.filter( e => e.findNoCase( "is declared by more than one Agent.bx" ) );
+				expect( nameErrors.len() ).toBeGT( 0 );
+				expect( nameErrors[ 1 ] ).toInclude( "shared-name" );
 			} );
 
 			it( "rejects duplicate gateway exposure paths", function() {
@@ -150,7 +160,7 @@ class extends="testbox.system.BaseSpec" {
 				var result = validateFixture( "multiple-errors" );
 
 				expect( result.errors.filter( e => e.findNoCase( "Duplicate name" ) && e.findNoCase( "tools/" ) ).len() ).toBeGT( 0 );
-				expect( result.errors.filter( e => e.findNoCase( "invalid cron expression" ) ).len() ).toBeGT( 0 );
+				expect( result.errors.filter( e => e.findNoCase( "unknown type" ) ).len() ).toBeGT( 0 );
 				expect( result.errors.filter( e => e.findNoCase( "Unknown model provider" ) ).len() ).toBeGT( 0 );
 				expect( result.errors.len() ).toBeGTE( 3 );
 			} );
