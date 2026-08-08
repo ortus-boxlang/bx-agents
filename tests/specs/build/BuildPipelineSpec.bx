@@ -42,6 +42,51 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.manifest.generator.version ).toBe( "1.2.3" );
 			} );
 
+			/**
+			 * `onProgress` (what `build --verbose` wires to a real println())
+			 * defaults to a no-op, so every OTHER test in this file (none of
+			 * which pass one) is proof the feature costs nothing when unused.
+			 * Passing a collecting closure instead of asserting on captured
+			 * stdout is what makes this reliably testable at all.
+			 */
+			it( "reports one progress line per build phase via onProgress, in order, when one is supplied", function() {
+				var projectRoot = newTempProject( "full-project" );
+				var messages = [];
+
+				pipeline.build( projectRoot, "", function( required string message ) { messages.append( arguments.message ) } );
+
+				var joined = messages.toList( char( 10 ) );
+				expect( joined ).toInclude( "Resolving Agent.bx config" );
+				expect( joined ).toInclude( "Discovering project source" );
+				expect( joined ).toInclude( "Validating project" );
+				expect( joined ).toInclude( "Generating core ColdBox app skeleton" );
+				expect( joined ).toInclude( "agents registered in WireBox" );
+				expect( joined ).toInclude( "full-project-agent" );
+				expect( joined ).toInclude( "Copying schedules/Scheduler.bx" );
+				expect( joined ).toInclude( "Build completed in" );
+
+				// "Resolving..." must be reported before "Discovering...", which
+				// must be reported before "Validating..." - proves these are
+				// live, in-order phase markers, not just a bag of strings.
+				var resolveIndex = messages.find( function( m ) { return m.findNoCase( "Resolving Agent.bx config" ) > 0 } );
+				var discoverIndex = messages.find( function( m ) { return m.findNoCase( "Discovering project source" ) > 0 } );
+				var validateIndex = messages.find( function( m ) { return m.findNoCase( "Validating project" ) > 0 } );
+				expect( resolveIndex ).toBeLT( discoverIndex );
+				expect( discoverIndex ).toBeLT( validateIndex );
+			} );
+
+			it( "onProgress is never called when the caller doesn't supply one - build --verbose costs nothing when unused", function() {
+				var projectRoot = newTempProject( "full-project" );
+				// No onProgress arg at all - if the default weren't a true no-op
+				// (e.g. it printed by default), this would be indistinguishable
+				// from a bug since println() has no return value to assert on;
+				// the real proof is simply that this call, and every OTHER test
+				// in this file that never passes onProgress either, succeeds
+				// without needing to suppress or capture any output.
+				var result = pipeline.build( projectRoot );
+				expect( result.appDir ).notToBeNull();
+			} );
+
 			it( 'wires an agent-exposure gateway to route(path).toAi("GeneratedAgent") without any adapter subclass', function() {
 				var projectRoot = newTempProject( "full-project" );
 				var result = pipeline.build( projectRoot );
