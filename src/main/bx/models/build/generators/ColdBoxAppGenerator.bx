@@ -47,6 +47,8 @@ class {
 	 * @extraStartupStatements Any other bare statement strings to insert into Application.bx's onApplicationStart(), e.g. `aiToolRegistry().scan( "tools" )` (see BuildPipeline)
 	 * @cliEnvironment Optional environment name the build was invoked with (e.g. from `--environment`), re-applied when resolving each subagent's OWN config so a subagent's environment-specific overrides match the same environment the root project was built for, rather than silently falling back to each subagent's default environment
 	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .models is used, to resolve a bare `model` value against a `models/` entry - see resolveModelReference()). Subagents have no `models/` folder of their own; every node resolves against the ROOT project's models/, matching the flat-namespace design already used for subAgents references (see docs/conventions/subagents.md)
+	 *
+	 * @return { applicationBx, coldboxConfig, wireboxConfig, agentFactory, index, agentNodes: every { name, accessorPath } WireBox-registered agent - see buildAgentTree() }
 	 */
 	struct function generate(
 		required string projectRoot,
@@ -99,7 +101,8 @@ class {
 			coldboxConfig : coldboxPath,
 			wireboxConfig : wireboxPath,
 			agentFactory  : agentFactoryPath,
-			index         : indexPath
+			index         : indexPath,
+			agentNodes    : agentFactory.nodes
 		}
 	}
 

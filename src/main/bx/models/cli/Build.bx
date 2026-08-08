@@ -4,7 +4,7 @@
 class {
 
 	/**
-	 * @options { projectRoot (required, absolute path), environment, generatorVersion }
+	 * @options { projectRoot (required, absolute path), environment, generatorVersion, verbose }
 	 */
 	struct function run( struct options = {} ) {
 		var projectRoot = trim( arguments.options.projectRoot ?: "" )
@@ -12,10 +12,21 @@ class {
 			throw( type = "BxAgents.MissingProjectRoot", message = "`build` requires a project root" )
 		}
 
+		// --verbose prints each build phase (and what it found/generated - the
+		// discovered counts, the WireBox-registered agent names, etc.) live as
+		// the build runs, via BuildPipeline's own onProgress callback - useful
+		// for debugging a slow or unexpectedly-behaving build. Silent (the
+		// callback's own no-op default) otherwise, so this costs nothing when
+		// not asked for.
+		var verbose = arguments.options.verbose ?: false
+		var onProgress = verbose
+			? function( required string message ) { println( arguments.message ) }
+			: function( required string message ) {}
+
 		// "@bxagents" suffix, not a bare "bxagents.models...." path - see
 		// BuildPipeline.bx's init() docblock for why.
 		var pipeline = new "models.build.BuildPipeline@bxagents"( arguments.options.generatorVersion ?: "dev" )
-		var result = pipeline.build( projectRoot, arguments.options.environment ?: "" )
+		var result = pipeline.build( projectRoot, arguments.options.environment ?: "", onProgress )
 
 		var lines = [ "Build succeeded: #result.appDir#" ]
 		for ( var warning in result.warnings ) {

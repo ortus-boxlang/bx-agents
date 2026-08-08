@@ -49,37 +49,66 @@ class {
 	/**
 	 * @projectRoot Absolute path to the project root (containing Agent.bx)
 	 * @cliEnvironment Optional environment name, e.g. from a CLI flag
+	 * @onProgress Called with one human-readable line per phase/interaction as the build proceeds - defaults to a no-op, so callers that don't care (every existing caller, before `build --verbose`) pay nothing extra. Passing a closure that collects into an array (rather than printing) is how this is unit-tested - see BuildPipelineSpec.bx
 	 *
 	 * @return { projectRoot, buildDir, appDir, manifestPath, manifest, warnings }
 	 */
-	struct function build( required string projectRoot, string cliEnvironment = "" ) {
+	struct function build( required string projectRoot, string cliEnvironment = "", any onProgress = function( required string message ) {} ) {
 		var root = normalizePath( arguments.projectRoot )
 		var buildDir = root & "/.build"
 		var appDir = buildDir & "/app"
+		var buildStart = getTickCount()
 
+		arguments.onProgress( "+ Resolving Agent.bx config..." )
 		var config = variables.configResolver.resolve( projectRoot = root, cliEnvironment = arguments.cliEnvironment )
+		arguments.onProgress( "    name=#config.name ?: ''#, model=#config.model ?: ''#, environment=#config.environment ?: ''#" )
+
+		arguments.onProgress( "+ Discovering project source..." )
 		var discovery = variables.discoverer.discover( root )
+		arguments.onProgress(
+			"    models=#discovery.models.len()#, tools=#discovery.tools.len()#, skills=#discovery.skills.len()#, subagents=#discovery.subagents.len()#, gateways=#discovery.gateways.len()#, scheduler=#( discovery.hasScheduler ? 'yes' : 'no' )#, mcp=#discovery.mcp.len()#, interceptors=#discovery.interceptors.len()#, modules=#discovery.modules.len()#"
+		)
+
+		arguments.onProgress( "+ Validating project..." )
 		var validation = variables.validator.validate( root, discovery, config )
 
 		if ( validation.errors.len() ) {
+			arguments.onProgress( "    #validation.errors.len()# error(s) - build aborted" )
 			throw(
 				type    = "BxAgents.BuildValidationFailed",
 				message = "Project failed validation with #validation.errors.len()# error(s): #validation.errors.toList( '; ' )#"
 			)
 		}
+		for ( var warning in validation.warnings ) {
+			arguments.onProgress( "    ! #warning#" )
+		}
+		if ( !validation.warnings.len() ) {
+			arguments.onProgress( "    no errors or warnings" )
+		}
 
 		if ( directoryExists( appDir ) ) {
+			arguments.onProgress( "+ Removing stale .build/app..." )
 			directoryDelete( appDir, true )
 		}
 		directoryCreate( path = appDir, createPath = true, ignoreExists = true )
 
+		arguments.onProgress( "+ Splitting interceptors (agent vs runtime scope)..." )
 		var interceptorSplit = variables.interceptorSplitter.split(
 			appDir & "/interceptors",
 			buildDir & "/runtime-interceptors",
 			discovery
 		)
+		arguments.onProgress( "    agent-scope=#interceptorSplit.agent.len()#, runtime-scope=#interceptorSplit.runtime.len()#" )
+
+		arguments.onProgress( "+ Generating gateway registrations..." )
 		var gatewayResult = variables.gatewayGenerator.generate( discovery, appDir )
+		arguments.onProgress( "    #gatewayResult.registrationStatements.len()# registration(s), httpGateway=#( gatewayResult.hasHttpGateway ? 'yes' : 'no' )#" )
+
+		arguments.onProgress( "+ Generating local MCP server registrations..." )
 		var mcpResult = variables.mcpGenerator.generate( discovery, appDir )
+		arguments.onProgress( "    #mcpResult.registrations.len()# registration(s)" )
+
+		arguments.onProgress( "+ Generating config/Router.bx..." )
 		variables.routerGenerator.generate( discovery, appDir, gatewayResult.hasHttpGateway )
 
 		var toolScanStatements = []
@@ -91,7 +120,8 @@ class {
 			toolScanStatements.append( 'aiToolRegistry().scan( "tools" )' )
 		}
 
-		variables.coldboxAppGenerator.generate(
+		arguments.onProgress( "+ Generating core ColdBox app skeleton (Application.bx, config/WireBox.bx, config/ColdBox.bx, agent/GeneratedAgentFactory.bx)..." )
+		var coldboxResult = variables.coldboxAppGenerator.generate(
 			projectRoot           = root,
 			buildDir              = appDir,
 			resolvedConfig        = config,
@@ -102,13 +132,26 @@ class {
 			cliEnvironment        = arguments.cliEnvironment,
 			discovery             = discovery
 		)
+		var agentNames = coldboxResult.agentNodes.map( function( n ) { return n.name } )
+		arguments.onProgress( "    agents registered in WireBox (getInstance-able by name): #agentNames.toList( ', ' )#" )
 
+		arguments.onProgress( "+ Copying tools/ and skills/..." )
 		variables.toolsSkillsCopier.copy( root, appDir )
+
+		if ( discovery.hasScheduler ?: false ) {
+			arguments.onProgress( "+ Copying schedules/Scheduler.bx..." )
+		} else {
+			arguments.onProgress( "+ No schedules/Scheduler.bx found - skipping scheduler" )
+		}
 		variables.schedulerGenerator.generate( discovery, appDir )
 
+		arguments.onProgress( "+ Normalizing and writing the manifest..." )
 		var manifest = variables.manifestNormalizer.normalize( root, discovery, config )
 		var manifestPath = buildDir & "/manifest.json"
 		fileWrite( manifestPath, jsonSerialize( manifest ) )
+		arguments.onProgress( "    #manifest.files.len()# file(s) tracked" )
+
+		arguments.onProgress( "+ Build completed in #( getTickCount() - buildStart )#ms" )
 
 		return {
 			projectRoot  : root,

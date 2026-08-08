@@ -253,4 +253,35 @@ public class ModuleCliProcessTest {
 		assertTrue( Files.exists( projectDir.resolve( "Agent.bx" ) ), "source files must never be touched by clean" );
 	}
 
+	/**
+	 * Runs AFTER testCleanProcess (needs .build gone so this build isn't a
+	 * no-op re-run over already-generated output) - proves --verbose's live
+	 * phase/interaction output reaches a genuine OS process's real stdout,
+	 * not just BuildPipelineSpec.bx's in-process onProgress collection, and
+	 * that the DEFAULT (no --verbose) run stays exactly as quiet as before.
+	 */
+	@Order( 5 )
+	@DisplayName( "`module:bxagents build --verbose` prints live phase/interaction output; plain `build` stays quiet" )
+	@Test
+	public void testBuildVerboseProcess() throws Exception {
+		ensureTempModuleInstall();
+		assumeTrue( Files.exists( projectDir.resolve( "Agent.bx" ) ), "requires testNewProcess to have run first" );
+
+		VerbResult verbose = runVerbCapturing( "build", projectDir.toString(), "--verbose" );
+		assertEquals( 0, verbose.exitCode(), "module:bxagents build --verbose should exit 0" );
+		assertTrue( verbose.output().contains( "Resolving Agent.bx config" ),
+		    "expected a live phase marker in --verbose output - got:\n" + verbose.output() );
+		assertTrue( verbose.output().contains( "Discovering project source" ),
+		    "expected a live phase marker in --verbose output - got:\n" + verbose.output() );
+		assertTrue( verbose.output().contains( "agents registered in WireBox" ),
+		    "expected the WireBox agent-registration interaction line in --verbose output - got:\n" + verbose.output() );
+		assertTrue( verbose.output().contains( "Build completed in" ),
+		    "expected a final timing line in --verbose output - got:\n" + verbose.output() );
+
+		VerbResult quiet = runVerbCapturing( "build", projectDir.toString() );
+		assertEquals( 0, quiet.exitCode(), "module:bxagents build (no --verbose) should exit 0" );
+		assertFalse( quiet.output().contains( "Resolving Agent.bx config" ),
+		    "plain `build` must stay exactly as quiet as before --verbose existed - got:\n" + quiet.output() );
+	}
+
 }
