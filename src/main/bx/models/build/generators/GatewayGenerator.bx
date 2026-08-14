@@ -1,11 +1,11 @@
 /**
- * Generates the bx-ai channel-adapter (`IGateway`/`gatewayRegistry()`) wiring
+ * Generates the bx-ai channel-adapter (`IGateway`/`aiGatewayRegistry()`) wiring
  * for a project's `gateways/*` entries that are NOT HTTP/MCP exposure entries
  * (Build Pipeline Phase 5) - i.e. the `{ type: "mock"|"cli"|"http", ... }`
  * shape, distinct from the `{ exposes: "agent"|"mcp", ... }` shape RouterGenerator
  * handles.
  *
- * Every channel-adapter entry needs a `gatewayRegistry().register(aiGateway(...))`
+ * Every channel-adapter entry needs a `aiGatewayRegistry().register(aiGateway(...))`
  * call at app startup (returned here as bare statement strings for
  * ColdBoxAppGenerator to insert into Application.bx's onApplicationStart() -
  * this class never writes Application.bx itself).
@@ -94,7 +94,7 @@ class {
 	/**
 	 * @entry A single channel-adapter entry { name, config }, from collectChannelEntries()
 	 *
-	 * @return A bare `gatewayRegistry().register( aiGateway(...) )` statement string
+	 * @return A bare `aiGatewayRegistry().register( aiGateway(...) )` statement string
 	 */
 	private string function renderRegistration( required struct entry ) {
 		var type = arguments.entry.config.type ?: ""
@@ -102,7 +102,7 @@ class {
 		options.delete( "type" )
 
 		var renderedOptions = type == "http" ? renderHttpOptions( options ) : renderLiteral( options )
-		return "gatewayRegistry().register( aiGateway( #renderLiteral( type )#, #renderedOptions# ) )"
+		return "aiGatewayRegistry().register( aiGateway( #renderLiteral( type )#, #renderedOptions# ) )"
 	}
 
 	/**
