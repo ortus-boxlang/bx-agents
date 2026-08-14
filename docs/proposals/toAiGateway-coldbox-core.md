@@ -18,7 +18,7 @@ ColdBox 8.1 ships two AI-specific routing DSL terminators:
 - `route(pattern).toMCP(target)` — 1 route, dispatches to `MCPRequestProcessor`.
 
 bx-ai also ships a third HTTP surface that has no ColdBox terminator at all: the
-`IGateway`/`gatewayRegistry()` channel-adapter webhook surface (Slack/webhook delivery,
+`IGateway`/`aiGatewayRegistry()` channel-adapter webhook surface (Slack/webhook delivery,
 human-in-the-loop approval), fronted by a fixed 3-route processor
 (`bxModules.bxai.models.gateway.http.GatewayRequestProcessor::processHttp()`). Today,
 using it from a ColdBox app means hand-wiring 3 plain routes to a passthrough handler.
@@ -55,7 +55,7 @@ static string function processHttp() {
 - Because it parses path segments itself, whatever fronts it must expose these 3 shapes
   **verbatim** (no extra path prefix) for the segment-count/name checks in
   `GatewayRequestProcessor.route()` to match.
-- `gatewayRegistry()` resolves gateways by name; nothing about routing needs the
+- `aiGatewayRegistry()` resolves gateways by name; nothing about routing needs the
   registry's contents, just that gateways were registered at some point before a request
   arrives (typically app startup).
 
@@ -123,7 +123,7 @@ BX Agents' build pipeline generates the equivalent wiring by hand today:
       return arguments.event.noRender()
   }
   ```
-- `gatewayRegistry().register( aiGateway( type, options ) )` calls are inserted into the
+- `aiGatewayRegistry().register( aiGateway( type, options ) )` calls are inserted into the
   generated app's `Application.bx onApplicationStart()`, once per configured
   channel-adapter gateway.
 
@@ -137,7 +137,7 @@ for one `route( ... ).toAiGateway()` call, and `GatewayGenerator` stops generati
   standard route modifiers apply.
 - Integration: a live request to each of the 3 paths reaches
   `GatewayRequestProcessor::processHttp()` and returns its response verbatim (status
-  code, headers, body) — register a `mock`-type gateway via `gatewayRegistry()` in the
+  code, headers, body) — register a `mock`-type gateway via `aiGatewayRegistry()` in the
   test harness (no real network/LLM call needed, `bx-ai` ships a literal `"mock"`
   provider for exactly this).
 - Regression: confirm `event.noRender()` prevents ColdBox from double-writing a response
