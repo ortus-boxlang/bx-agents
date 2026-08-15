@@ -105,6 +105,22 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).notToInclude( "Teams.process" );
 			} );
 
+			it( "emits the Twilio POST webhook route when hasTwilioGateway is true", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
+				var result = generator.generate( discovery, newAppDir(), false, false, false, true );
+
+				var content = fileRead( result.router );
+				expect( content ).toInclude( 'post( "/webhooks/twilio" ).toHandler( "Twilio.process" )' );
+			} );
+
+			it( "does not emit the Twilio webhook route when hasTwilioGateway is false", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
+				var result = generator.generate( discovery, newAppDir(), false, false, false, false );
+
+				var content = fileRead( result.router );
+				expect( content ).notToInclude( "Twilio.process" );
+			} );
+
 			it( "reports hasAgentExposure=true only when an agent-exposure entry exists", function() {
 				var withAgent = discoverer.discover( fixtures & "/full-project" );
 				var withAgentResult = generator.generate( withAgent, newAppDir() );

@@ -23,10 +23,11 @@ class {
 	 * @hasHttpGateway Whether an http-type channel-adapter gateway exists (see GatewayGenerator) - emits the 3 fixed gateway webhook routes when true
 	 * @hasWhatsAppCloudGateway Whether a whatsapp-cloud-type channel-adapter gateway exists (see GatewayGenerator) - emits the GET/POST WhatsApp Cloud webhook routes when true
 	 * @hasTeamsGateway Whether a teams-type channel-adapter gateway exists (see GatewayGenerator) - emits the POST Teams webhook route when true
+	 * @hasTwilioGateway Whether a twilio-type channel-adapter gateway exists (see GatewayGenerator) - emits the POST Twilio webhook route when true
 	 *
 	 * @return { router, hasRoutes, hasAgentExposure }
 	 */
-	struct function generate( required struct discovery, required string appDir, boolean hasHttpGateway = false, boolean hasWhatsAppCloudGateway = false, boolean hasTeamsGateway = false ) {
+	struct function generate( required struct discovery, required string appDir, boolean hasHttpGateway = false, boolean hasWhatsAppCloudGateway = false, boolean hasTeamsGateway = false, boolean hasTwilioGateway = false ) {
 		var exposureEntries = collectExposureEntries( arguments.discovery )
 		var lines = []
 
@@ -66,6 +67,15 @@ class {
 			lines.append( "// one route, handled by TeamsGateway itself (own JWT-bearer scheme," )
 			lines.append( "// not bx-ai's GatewayRequestProcessor)." )
 			lines.append( 'post( "/webhooks/teams" ).toHandler( "Teams.process" )' )
+		}
+
+		if ( arguments.hasTwilioGateway ) {
+			if ( lines.len() ) {
+				lines.append( "" )
+			}
+			lines.append( "// Twilio SMS webhook surface - handled by TwilioGateway itself" )
+			lines.append( "// (own X-Twilio-Signature scheme, not bx-ai's GatewayRequestProcessor)." )
+			lines.append( 'post( "/webhooks/twilio" ).toHandler( "Twilio.process" )' )
 		}
 
 		var appDir = normalizePath( arguments.appDir )

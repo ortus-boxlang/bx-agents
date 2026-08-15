@@ -58,7 +58,8 @@ class {
 			discord       : "bxModules.bxagents.models.gateways.DiscordGateway",
 			email         : "bxModules.bxagents.models.gateways.EmailGateway",
 			"whatsapp-cloud": "bxModules.bxagents.models.gateways.whatsapp.WhatsAppCloudGateway",
-			teams         : "bxModules.bxagents.models.gateways.TeamsGateway"
+			teams         : "bxModules.bxagents.models.gateways.TeamsGateway",
+			twilio        : "bxModules.bxagents.models.gateways.TwilioGateway"
 		}
 
 		// Per push-style type, the *EnvVar option keys renderSecretOptions()
@@ -84,7 +85,8 @@ class {
 				appSecret    : "appSecretEnvVar",
 				verifyToken  : "verifyTokenEnvVar"
 			},
-			teams: { appId: "appIdEnvVar", appPassword: "appPasswordEnvVar" }
+			teams : { appId: "appIdEnvVar", appPassword: "appPasswordEnvVar" },
+			twilio: { accountSid: "accountSidEnvVar", authToken: "authTokenEnvVar", from: "fromEnvVar" }
 		}
 	}
 
@@ -101,6 +103,7 @@ class {
 		var hasEmailGateway = false
 		var hasWhatsAppCloudGateway = false
 		var hasTeamsGateway = false
+		var hasTwilioGateway = false
 		var pushGatewayNames = []
 
 		for ( var entry in channelEntries ) {
@@ -116,6 +119,9 @@ class {
 			}
 			if ( type == "teams" ) {
 				hasTeamsGateway = true
+			}
+			if ( type == "twilio" ) {
+				hasTwilioGateway = true
 			}
 			// The registered aiGatewayRegistry() key is ALWAYS the gateway
 			// class's own fixed getName() (e.g. TelegramGateway.init() sets
@@ -143,7 +149,8 @@ class {
 			hasPushGateway          : pushGatewayNames.len() > 0,
 			hasEmailGateway         : hasEmailGateway,
 			hasWhatsAppCloudGateway : hasWhatsAppCloudGateway,
-			hasTeamsGateway         : hasTeamsGateway
+			hasTeamsGateway         : hasTeamsGateway,
+			hasTwilioGateway        : hasTwilioGateway
 		}
 
 		if ( hasHttpGateway ) {
@@ -168,6 +175,14 @@ class {
 			var teamsHandlerPath = teamsHandlerDir & "/Teams.bx"
 			fileWrite( teamsHandlerPath, renderTeamsHandler() )
 			result[ "teamsHandlerPath" ] = teamsHandlerPath
+		}
+
+		if ( hasTwilioGateway ) {
+			var twilioHandlerDir = normalizePath( arguments.appDir ) & "/handlers"
+			directoryCreate( path = twilioHandlerDir, createPath = true, ignoreExists = true )
+			var twilioHandlerPath = twilioHandlerDir & "/Twilio.bx"
+			fileWrite( twilioHandlerPath, renderTwilioHandler() )
+			result[ "twilioHandlerPath" ] = twilioHandlerPath
 		}
 
 		if ( pushGatewayNames.len() ) {
@@ -453,6 +468,42 @@ class {
 			'		var authHeader = event.getHTTPHeader( "Authorization", "" )',
 			"		var result    = gateway.handleWebhook( authHeader, event.getHTTPContent() )",
 			'		event.renderData( type: "JSON", data: result.body, statusCode: result.status )',
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Twilio is webhook-driven like WhatsApp Cloud/Teams. Its own
+	 * `X-Twilio-Signature` verification needs the exact URL Twilio signed
+	 * (`event.getUrl()`, ColdBox's own documented "current full request URL"
+	 * accessor) - TwilioGateway itself resolves the `publicUrl` override for
+	 * proxy/tunnel deployments where that doesn't match what Twilio actually
+	 * signed. The response body is a raw pre-built TwiML XML string (an
+	 * empty `<Response></Response>` ack - the real reply goes out later via
+	 * deliver()'s own async REST call), rendered as TEXT with an explicit
+	 * text/xml content type rather than type="XML" (which would try to
+	 * re-marshal it) - confirmed against ColdBox's own "Rendering Data" docs.
+	 */
+	private string function renderTwilioHandler() {
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * Twilio SMS webhook surface. A thin passthrough into",
+			" * TwilioGateway's own handleWebhook() - see models/gateways/TwilioGateway.bx.",
+			" */",
+			"class {",
+			"",
+			"	function process( event, rc, prc ) {",
+			'		var gateway   = aiGatewayRegistry().get( "twilio" )',
+			'		var signature = event.getHTTPHeader( "X-Twilio-Signature", "" )',
+			"		var result    = gateway.handleWebhook( event.getUrl(), signature, event.getHTTPContent() )",
+			'		event.renderData( type: "TEXT", data: result.body, contentType: result.contentType, statusCode: result.status )',
 			"	}",
 			"",
 			"}",

@@ -1,0 +1,470 @@
+import bxModules.bxai.models.gateway.IGateway;
+import bxModules.bxai.models.gateway.contracts.GatewayContext;
+import bxModules.bxai.models.gateway.contracts.GatewayEvent;
+import bxModules.bxai.models.gateway.contracts.GatewayMessage;
+import bxModules.bxai.models.gateway.contracts.GatewayDeliveryResult;
+import bxModules.bxai.models.gateway.contracts.HumanInteractionRequest;
+import bxModules.bxai.models.gateway.contracts.HumanInteractionDecision;
+
+/**
+ * Twilio SMS gateway - webhook-driven like WhatsApp Cloud/Teams (Twilio calls
+ * us on every inbound message), extends bx-ai's `BaseGateway` directly - no
+ * scheduler task or connection to manage.
+ *
+ * Ported from Vercel Eve's real Twilio channel (`packages/eve/src/public/channels/twilio/`,
+ * MIT licensed, read directly this session) - the `X-Twilio-Signature`
+ * HMAC-SHA1 verification scheme (over `url + sorted(key+value)`, base64
+ * output - NOT the hex/sha256 scheme every other webhook gateway in this
+ * project uses), the classic dual-path response model (synchronous empty
+ * TwiML ack + a separate async REST send for the actual reply), and the
+ * outbound `Messages.json` Basic-Auth REST call all mirror that
+ * implementation. v1 is SMS-text only - Eve's own Twilio channel is a
+ * combined SMS+voice channel; every voice-specific piece (`/voice` routes,
+ * `<Gather>`/`<Say>` TwiML, call transcription) was deliberately left out.
+ *
+ * Unlike Eve, this DOES apply MessageChunker (at 1600 chars - Twilio's own
+ * documented single-message concatenation ceiling) to outbound sends. Eve's
+ * own source has no length-limiting logic at all (grepped and confirmed
+ * absent) and relies entirely on Twilio's server-side segmentation - BX
+ * Agents adds a bound anyway for consistency with every other gateway's own
+ * chunking behavior, not because Eve does.
+ *
+ * Human-in-the-loop is DEGRADED the same way Email's is - SMS has no native
+ * button/card affordance at all (confirmed via Eve's own docs: "SMS and
+ * voice have no native button or card affordance... HITL prompts do not
+ * render as interactive controls"). Unlike Email (which correlates a reply
+ * to a pending request via a subject-line tag), SMS has no subject line -
+ * so `pendingApprovals` is keyed by conversationID (the sender's own phone
+ * number) instead of requestID, a v1 simplification that assumes at most one
+ * open HITL request per phone number at a time.
+ *
+ * Config, via aiGateway( "bxModules.bxagents.models.gateways.TwilioGateway", options ):
+ *   accountSid            Twilio Account SID (also the Basic-Auth username)
+ *   authToken              Twilio Auth Token (Basic-Auth password AND the X-Twilio-Signature HMAC key)
+ *   from                    The Twilio phone number outbound sends go through (E.164, e.g. "+15551234567")
+ *   messagingServiceSid    Optional - if set, used instead of `from` on outbound sends
+ *   publicUrl               Optional override for the URL used in signature verification - see the class's own verifyTwilioSignature() docblock for why this is sometimes necessary behind a proxy/tunnel
+ */
+class extends="bxModules.bxai.models.gateway.BaseGateway" {
+
+	property name="accountSid" type="string" default="";
+	property name="authToken" type="string" default="";
+	property name="from" type="string" default="";
+	property name="messagingServiceSid" type="string" default="";
+	property name="publicUrl" type="string" default="";
+	property name="chunker";
+
+	property name="messageCallback";
+	property name="errorCallback";
+
+	/**
+	 * conversationID (the sender's phone number) -> { requestId, allowedDecisions, threadId }
+	 * for every open HITL request - see the class docblock for why this is
+	 * keyed by phone number rather than requestID (no subject line to embed
+	 * a tag in, unlike Email).
+	 */
+	property name="pendingApprovals" type="struct" default={};
+
+	/**
+	 * Test-only seam: overrides the outbound Messages.json call. Defaults to
+	 * real HTTP; a test injects a closure returning canned responses instead.
+	 * Signature: function( body ) -> { status: numeric, body: struct }
+	 */
+	property name="apiCaller";
+
+	static {
+		MESSAGES_API_BASE = "https://api.twilio.com/2010-04-01"
+		MAX_MESSAGE_LENGTH = 1600
+	}
+
+	function init() {
+		variables.name = "twilio"
+		variables.description = "Twilio SMS gateway - webhook inbound, Messages API outbound"
+		variables.chunker = new "models.gateways.support.MessageChunker@bxagents"()
+		return this
+	}
+
+	IGateway function configure( required any options ) {
+		super.configure( arguments.options )
+		variables.accountSid = trim( variables.options.accountSid ?: "" )
+		variables.authToken = variables.options.authToken ?: ""
+		variables.from = trim( variables.options.from ?: "" )
+		variables.messagingServiceSid = trim( variables.options.messagingServiceSid ?: "" )
+		variables.publicUrl = trim( variables.options.publicUrl ?: "" )
+		return this
+	}
+
+	array function getDeclaredCapabilities() {
+		// No "interactiveActions" (SMS has no button/card affordance at all -
+		// see the class docblock), no "threads" (Twilio's classic Messages
+		// API has no native reply/quote concept to thread on), no "streaming".
+		return [ "inboundMessages", "outboundMessages", "humanApproval" ]
+	}
+
+	void function setApiCaller( required any caller ) {
+		variables.apiCaller = arguments.caller
+	}
+
+	void function onStart() {
+		if ( !len( variables.accountSid ) || !len( variables.authToken ) || !len( variables.from ) ) {
+			throw(
+				type   : "TwilioGateway.MissingConfig",
+				message: "TwilioGateway requires 'accountSid', 'authToken', and 'from' options (resolved from accountSidEnvVar/authTokenEnvVar/fromEnvVar at startup)."
+			)
+		}
+		logEvent( "Ready (from #variables.from#) - inbound is webhook-driven, no connection to open" )
+	}
+
+	void function onStop() {
+		logEvent( "Stopped" )
+	}
+
+	// -------------------------------------------------------------------------
+	// IGateway.onMessage()/onError()
+	// -------------------------------------------------------------------------
+
+	public void function onMessage( required function callback ) {
+		variables.messageCallback = arguments.callback
+	}
+
+	public void function dispatchInbound( required any message ) {
+		if ( isNull( variables.messageCallback ) ) {
+			return
+		}
+		variables.messageCallback( arguments.message )
+	}
+
+	public void function onError( required function callback ) {
+		variables.errorCallback = arguments.callback
+	}
+
+	public void function dispatchError( required any error ) {
+		if ( isNull( variables.errorCallback ) ) {
+			return
+		}
+		variables.errorCallback( arguments.error )
+	}
+
+	private void function logEvent( required string text, string type = "information" ) {
+		writeLog( text: arguments.text, type: arguments.type, file: "gateway-#variables.name#" )
+	}
+
+	// -------------------------------------------------------------------------
+	// Webhook inbound (POST) — Twilio's classic form-encoded webhook
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Twilio's dual-path model: this always answers synchronously with an
+	 * empty TwiML `<Response></Response>` once authenticated (matching Eve's
+	 * own `emptyTwilioResponse()` - Eve never uses TwiML `<Message>` to reply
+	 * synchronously). The actual agent reply is sent later, out-of-band, via
+	 * deliver()'s own REST call once GatewaySession's async turn completes.
+	 *
+	 * @requestUrl The exact URL Twilio POSTed to (or `publicUrl`, if
+	 *             configured, for proxy/tunnel deployments where the request
+	 *             URL ColdBox sees doesn't match what Twilio actually signed)
+	 * @signatureHeader The X-Twilio-Signature header value
+	 * @rawFormBody The exact raw application/x-www-form-urlencoded POST body
+	 *
+	 * @return { status: numeric, body: string, contentType: string }
+	 */
+	struct function handleWebhook( required string requestUrl, required string signatureHeader, required string rawFormBody ) {
+		if ( !len( variables.authToken ) ) {
+			logEvent( "webhook POST refused: authToken unset", "error" )
+			return { status: 503, body: "", contentType: "text/plain" }
+		}
+
+		var params = parseFormBody( arguments.rawFormBody )
+		var signingUrl = len( variables.publicUrl ) ? variables.publicUrl : arguments.requestUrl
+
+		if ( !verifyTwilioSignature( signingUrl, params, arguments.signatureHeader ) ) {
+			logEvent( "rejected webhook: invalid X-Twilio-Signature", "warning" )
+			return { status: 401, body: "", contentType: "text/plain" }
+		}
+
+		handleInboundMessage( params )
+
+		return { status: 200, body: "<Response></Response>", contentType: "text/xml" }
+	}
+
+	/**
+	 * @rawBody An application/x-www-form-urlencoded body
+	 */
+	private struct function parseFormBody( required string rawBody ) {
+		var result = {}
+		if ( !len( arguments.rawBody ) ) {
+			return result
+		}
+		for ( var pair in listToArray( arguments.rawBody, "&" ) ) {
+			var eqPos = pair.find( "=" )
+			var rawKey = eqPos > 0 ? left( pair, eqPos - 1 ) : pair
+			var rawVal = eqPos > 0 ? mid( pair, eqPos + 1, len( pair ) - eqPos ) : ""
+			result[ urlDecodeComponent( rawKey ) ] = urlDecodeComponent( rawVal )
+		}
+		return result
+	}
+
+	private string function urlDecodeComponent( required string value ) {
+		return createObject( "java", "java.net.URLDecoder" ).decode( arguments.value, "UTF-8" )
+	}
+
+	/**
+	 * Twilio's own documented algorithm: sort every POST param by key
+	 * (ordinal/byte order), concatenate the signing URL followed by each
+	 * `key & value` pair directly (no separators) into one string, then
+	 * HMAC-SHA1 that string with the Auth Token as the key and base64-encode
+	 * the digest (NOT hex - a genuinely different encoding than every other
+	 * webhook signature scheme in this project). Ported from Eve's own
+	 * `buildTwilioSignatureBase()`/`signTwilioRequest()`, cross-checked
+	 * against Eve's own pinned unit-test vector before trusting this
+	 * implementation (see TwilioGatewaySpec.bx).
+	 *
+	 * @url The exact URL Twilio signed
+	 * @params This request's own parsed form params
+	 * @signatureHeader The X-Twilio-Signature header value to compare against
+	 */
+	private boolean function verifyTwilioSignature( required string url, required struct params, required string signatureHeader ) {
+		if ( !len( arguments.signatureHeader ) ) {
+			return false
+		}
+
+		var sortedKeys = arguments.params.keyArray().sort( "text" )
+		var base = arguments.url
+		for ( var key in sortedKeys ) {
+			base &= key & arguments.params[ key ]
+		}
+
+		var keySpec = createObject( "java", "javax.crypto.spec.SecretKeySpec" ).init(
+			charsetDecode( variables.authToken, "UTF-8" ), "HmacSHA1"
+		)
+		var mac = createObject( "java", "javax.crypto.Mac" ).getInstance( "HmacSHA1" )
+		mac.init( keySpec )
+		var digest = mac.doFinal( charsetDecode( base, "UTF-8" ) )
+		var computed = binaryEncode( digest, "base64" )
+
+		return constantTimeEquals( computed, arguments.signatureHeader )
+	}
+
+	private boolean function constantTimeEquals( required string a, required string b ) {
+		return createObject( "java", "java.security.MessageDigest" ).isEqual(
+			charsetDecode( arguments.a, "UTF-8" ), charsetDecode( arguments.b, "UTF-8" )
+		)
+	}
+
+	/**
+	 * @params This request's own parsed Twilio form params (Body/From/To/MessageSid/AccountSid)
+	 */
+	private void function handleInboundMessage( required struct params ) {
+		var from = trim( arguments.params.From ?: "" )
+		var body = trim( arguments.params.Body ?: "" )
+
+		if ( variables.pendingApprovals.keyExists( from ) ) {
+			handleApprovalReply( from, body )
+			return
+		}
+
+		if ( !len( body ) ) {
+			return
+		}
+
+		var context = new GatewayContext(
+			gateway       : variables.name,
+			conversationID: from,
+			userID        : from,
+			raw           : arguments.params
+		)
+		var message = new GatewayMessage(
+			text   : body,
+			context: context,
+			raw    : arguments.params
+		)
+
+		BoxAnnounce( "onGatewayMessageReceived", {
+			gateway       : this,
+			message       : message,
+			threadId      : context.getThreadID(),
+			userId        : from,
+			conversationId: from
+		} )
+
+		dispatchInbound( message )
+	}
+
+	/**
+	 * @from The sender's phone number - the key pendingApprovals is stored under
+	 * @body The inbound reply's raw text body
+	 */
+	private void function handleApprovalReply( required string from, required string body ) {
+		var pending = variables.pendingApprovals[ arguments.from ]
+		var firstLine = trim( listFirst( arguments.body, char( 10 ) ) )
+		var decision = matchDecision( firstLine, pending.allowedDecisions ?: [] )
+
+		BoxAnnounce( "onGatewayMessageReceived", {
+			gateway       : this,
+			message       : null,
+			threadId      : pending.threadId ?: "",
+			userId        : arguments.from,
+			conversationId: arguments.from,
+			decision      : decision
+		} )
+
+		variables.pendingApprovals.delete( arguments.from )
+	}
+
+	/**
+	 * Same best-effort exact-or-prefix, case-insensitive match Email's own
+	 * `matchDecision()` uses - falls back to the raw text verbatim on no
+	 * confident match, left for bx-ai's own HITL coordinator to reject.
+	 */
+	private string function matchDecision( required string text, required array allowedDecisions ) {
+		var normalized = lcase( arguments.text )
+		for ( var decision in arguments.allowedDecisions ) {
+			var normalizedDecision = lcase( decision )
+			if ( normalized == normalizedDecision || normalized.startsWith( normalizedDecision ) ) {
+				return decision
+			}
+		}
+		return arguments.text
+	}
+
+	// -------------------------------------------------------------------------
+	// Outbound — Messages API
+	// -------------------------------------------------------------------------
+
+	GatewayDeliveryResult function deliver( required GatewayEvent event, required GatewayContext context ) {
+		var text = toString( arguments.event.getData().text ?: "" )
+		if ( !len( text ) ) {
+			return GatewayDeliveryResult.failure( "Nothing to deliver — event data has no 'text'" )
+		}
+
+		var to = arguments.context.getConversationID()
+		var chunks = variables.chunker.split( text, static.MAX_MESSAGE_LENGTH )
+		var lastResponse = {}
+
+		for ( var i = 1; i <= chunks.len(); i++ ) {
+			var body = { To: to, Body: chunks[ i ] }
+			if ( len( variables.messagingServiceSid ) ) {
+				body[ "MessagingServiceSid" ] = variables.messagingServiceSid
+			} else {
+				body[ "From" ] = variables.from
+			}
+			lastResponse = callApi( body )
+			if ( lastResponse.status >= 300 ) {
+				return GatewayDeliveryResult.failure( "Twilio Messages API send failed (#lastResponse.status#): #twilioErrorMessage( lastResponse.body )#" )
+			}
+		}
+
+		var messageId = toString( lastResponse.body.sid ?: "" )
+		var result = new GatewayDeliveryResult( deliveryID: len( messageId ) ? messageId : arguments.event.getId() )
+
+		BoxAnnounce( "onGatewayMessageSent", {
+			gateway : this,
+			event   : arguments.event,
+			context : arguments.context,
+			result  : result,
+			threadId: arguments.context.getThreadID()
+		} )
+
+		return result
+	}
+
+	private string function twilioErrorMessage( required any responseBody ) {
+		if ( isStruct( arguments.responseBody ) && structKeyExists( arguments.responseBody, "message" ) ) {
+			return toString( arguments.responseBody.message )
+		}
+		return "unknown error"
+	}
+
+	// -------------------------------------------------------------------------
+	// Human-in-the-loop — DEGRADED: no native buttons, plain-text reply
+	// keyword fallback only, correlated by conversationID (see class docblock)
+	// -------------------------------------------------------------------------
+
+	GatewayDeliveryResult function requestHumanInteraction( required HumanInteractionRequest humanRequest, required GatewayContext context ) {
+		var presentation = presentInteraction( arguments.humanRequest )
+		var allowedDecisions = arguments.humanRequest.getAllowedDecisions()
+		var to = arguments.context.getConversationID()
+
+		var body = { To: to, Body: buildApprovalBodyText( presentation, allowedDecisions ) }
+		if ( len( variables.messagingServiceSid ) ) {
+			body[ "MessagingServiceSid" ] = variables.messagingServiceSid
+		} else {
+			body[ "From" ] = variables.from
+		}
+
+		var response = callApi( body )
+		if ( response.status >= 300 ) {
+			return GatewayDeliveryResult.failure( "Twilio Messages API send (HITL request) failed (#response.status#): #twilioErrorMessage( response.body )#" )
+		}
+
+		variables.pendingApprovals[ to ] = {
+			requestId       : arguments.humanRequest.getId(),
+			allowedDecisions: allowedDecisions,
+			threadId        : arguments.context.getThreadID()
+		}
+
+		var messageId = toString( response.body.sid ?: "" )
+		return new GatewayDeliveryResult( deliveryID: len( messageId ) ? messageId : arguments.humanRequest.getId() )
+	}
+
+	private string function buildApprovalBodyText( required any presentation, required array allowedDecisions ) {
+		var lines = []
+		if ( len( arguments.presentation.getTitle() ) ) {
+			lines.append( arguments.presentation.getTitle() )
+			lines.append( "" )
+		}
+		lines.append( arguments.presentation.getBody() )
+		lines.append( "" )
+		lines.append( "Reply with one of:" )
+		for ( var decision in arguments.allowedDecisions ) {
+			lines.append( "  - #decision#" )
+		}
+		return lines.toList( char( 10 ) )
+	}
+
+	HumanInteractionDecision function parseHumanDecision( required GatewayEvent event ) {
+		var data = arguments.event.getData()
+		return new HumanInteractionDecision(
+			requestID: data.requestID ?: "",
+			decision : data.decision ?: "",
+			decidedBy: data.decidedBy ?: ""
+		)
+	}
+
+	// -------------------------------------------------------------------------
+	// Messages API call
+	// -------------------------------------------------------------------------
+
+	/**
+	 * @body Form fields for the outbound Messages.json POST
+	 *
+	 * @return { status: numeric, body: struct }
+	 */
+	private struct function callApi( required struct body ) {
+		if ( !isNull( variables.apiCaller ) ) {
+			return variables.apiCaller( arguments.body )
+		}
+
+		var url = "#static.MESSAGES_API_BASE#/Accounts/#urlEncodedFormat( variables.accountSid )#/Messages.json"
+		var basicAuth = binaryEncode( charsetDecode( "#variables.accountSid#:#variables.authToken#", "UTF-8" ), "base64" )
+
+		bx:http url=url method="post" result="apiResult" charset="utf-8" {
+			bx:httpParam type="header" name="Authorization" value="Basic #basicAuth#";
+			bx:httpParam type="header" name="content-type" value="application/x-www-form-urlencoded";
+			for ( var key in arguments.body ) {
+				bx:httpParam type="formfield" name="#key#" value="#arguments.body[ key ]#";
+			}
+		}
+
+		var statusCode = val( apiResult.statusCode ?: 0 )
+		var parsedBody = {}
+		try {
+			parsedBody = len( trim( apiResult.fileContent ?: "" ) ) ? jsonDeserialize( apiResult.fileContent ) : {}
+		} catch ( any e ) {
+			parsedBody = { message: "Unparseable response from Twilio API: #e.message#" }
+		}
+
+		return { status: statusCode, body: parsedBody }
+	}
+
+}
