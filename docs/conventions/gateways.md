@@ -206,7 +206,7 @@ class {
 		var agent          = wirebox.getInstance( "GeneratedAgent" )
 		var gatewaySession = aiGatewaySession(
 			agent        : agent,
-			gateways     : [ aiGatewayRegistry().get( "telegramChannel" ) ],
+			gateways     : [ aiGatewayRegistry().get( "telegram" ) ],
 			policy       : "queue",
 			maxQueueDepth: 50
 		)
@@ -218,6 +218,10 @@ class {
 
 {% hint style="info" %}
 The generated variable is deliberately named `gatewaySession`, not `session` - `session` is a reserved BoxLang/ColdBox scope name (like `request`/`server`/`url`/`form`/`cgi`/`thread`), and a local variable reusing one of those names can collide with the live scope instead of behaving as an ordinary local.
+{% endhint %}
+
+{% hint style="warning" %}
+The `aiGatewayRegistry().get(...)` key is always the gateway TYPE string ("telegram", "slack", "discord", "email", ...) - confirmed against bx-ai's real `GatewayRegistry.register()` source, which always keys by the gateway class's own fixed `getName()`, never anything caller-supplied. A real consequence: **two `gateways/*` entries of the same push-style type collide on the same registry slot project-wide** - the second registration silently overwrites the first. There's no per-entry alias today; use a distinct type per additional platform account, or wait for multi-instance support.
 {% endhint %}
 
 An interceptor (not a raw `Application.bx`/`onApplicationStart()` statement, unlike the plain registration calls above) is used specifically because its `afterConfigurationLoad` point is guaranteed by ColdBox's own lifecycle to fire strictly after the framework - including the scheduler these gateways depend on (see below) - has finished loading.

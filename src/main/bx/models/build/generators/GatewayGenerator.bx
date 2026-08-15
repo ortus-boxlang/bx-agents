@@ -100,8 +100,23 @@ class {
 			if ( type == "email" ) {
 				hasEmailGateway = true
 			}
-			if ( static.TYPE_CLASS_MAP.keyExists( type ) ) {
-				pushGatewayNames.append( entry.name )
+			// The registered aiGatewayRegistry() key is ALWAYS the gateway
+			// class's own fixed getName() (e.g. TelegramGateway.init() sets
+			// variables.name = "telegram") - never the discovered gateways/*
+			// entry's own filename-derived name. Confirmed against real
+			// bx-ai source (GatewayRegistry.register() calls
+			// gateway.getName(), never anything caller-supplied) and
+			// empirically: registering a real gateway then calling
+			// aiGatewayRegistry().get() with its discovered entry name
+			// throws "No item found in registry". Every push-style type's
+			// registered name happens to equal its own `type` string, so
+			// that's what the generated interceptor must look up by -
+			// deduplicated, since two entries of the same type would
+			// collide on the same registry slot anyway (bx-ai's registry
+			// is name-keyed, not instance-keyed - see the v1 limitation
+			// noted in docs/known-limitations.md).
+			if ( static.TYPE_CLASS_MAP.keyExists( type ) && !pushGatewayNames.contains( type ) ) {
+				pushGatewayNames.append( type )
 			}
 		}
 
@@ -251,7 +266,7 @@ class {
 	 * root-agent-only (see RouterGenerator). A project with subagents cannot
 	 * yet route different gateways to different subagents.
 	 *
-	 * @pushGatewayNames Names of every push-style gateway entry (see TYPE_CLASS_MAP) discovered in this project
+	 * @pushGatewayNames Every distinct push-style gateway TYPE present (see TYPE_CLASS_MAP) - these ARE the real aiGatewayRegistry() keys (== each gateway class's own fixed getName()), not the discovered gateways/* entries' own filenames
 	 * @resolvedConfig The root project's resolved config - only `gatewaySession` ({ policy, maxQueueDepth }, both optional) is used
 	 *
 	 * @return The rendered interceptors/GatewaySessionBootstrap.bx source

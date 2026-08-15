@@ -192,13 +192,50 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( 'getController().getWireBox()' );
 				expect( content ).toInclude( 'wirebox.getInstance( "GeneratedAgent" )' );
 				expect( content ).toInclude( "aiGatewaySession(" );
-				expect( content ).toInclude( 'aiGatewayRegistry().get( "telegramChannel" )' );
+				// The registry key is the gateway CLASS's own fixed getName()
+				// ("telegram"), never the discovered entry's own filename
+				// ("telegramChannel") - see the regression test below for why.
+				expect( content ).toInclude( 'aiGatewayRegistry().get( "telegram" )' );
+				expect( content ).notToInclude( "telegramChannel" );
 				expect( content ).toInclude( '"queue"' );
 				expect( content ).toInclude( "gatewaySession.start()" );
 				expect( content ).toInclude( "application.bxaiGatewaySession = gatewaySession" );
 				// "session" is a reserved BoxLang/ColdBox scope - the generated
 				// local variable must never be named exactly that.
 				expect( content ).notToInclude( "var session " );
+			} );
+
+			/**
+			 * Regression test for a real, previously-shipped bug: the generated
+			 * interceptor used to look up gateways in aiGatewayRegistry() by
+			 * their discovered gateways/* entry filename (e.g. "telegramChannel"),
+			 * but bx-ai's real GatewayRegistry.register() always keys by the
+			 * gateway CLASS's own fixed getName() ("telegram") - confirmed both
+			 * by reading bx-ai source directly and empirically (registering a
+			 * real gateway then calling .get() with its discovered entry name
+			 * threw "No item found in registry"). This closes the gap that let
+			 * it ship undetected across four gateways: it registers a REAL
+			 * gateway instance the same way generated code does, then proves
+			 * the EXACT key string this generator just emitted actually
+			 * resolves it via a live aiGatewayRegistry() - not just string
+			 * content matching.
+			 */
+			it( "emits an aiGatewayRegistry().get() key that actually resolves a live-registered gateway", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-telegram" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir, { name: "gateways-telegram-agent", model: "openai/gpt-5" } );
+				var interceptorContent = fileRead( appDir & "/interceptors/GatewaySessionBootstrap.bx" );
+
+				var match = reFind( 'aiGatewayRegistry\(\)\.get\(\s*"([^"]+)"\s*\)', interceptorContent, 1, true );
+				expect( match.len.len() ).toBeGTE( 2 );
+				var registryKey = mid( interceptorContent, match.pos[ 2 ], match.len[ 2 ] );
+
+				var realGateway = new bxagents.models.gateways.TelegramGateway();
+				realGateway.configure( { botToken: "live-test-token" } );
+				aiGatewayRegistry().register( realGateway );
+
+				var resolved = aiGatewayRegistry().get( registryKey );
+				expect( resolved ).toBe( realGateway );
 			} );
 
 			it( "honors a resolvedConfig.gatewaySession policy/maxQueueDepth override", function() {
