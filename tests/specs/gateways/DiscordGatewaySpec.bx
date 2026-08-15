@@ -1,0 +1,372 @@
+import bxModules.bxai.models.gateway.contracts.GatewayContext;
+import bxModules.bxai.models.gateway.contracts.GatewayEvent;
+import bxModules.bxai.models.gateway.contracts.HumanInteractionRequest;
+
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "DiscordGateway", function() {
+
+			beforeEach( function() {
+				variables.gateway = new bxagents.models.gateways.DiscordGateway();
+				variables.scheduler = new tests.support.FakeScheduler();
+				variables.gateway.setScheduler( variables.scheduler );
+				variables.gateway.configure( { botToken: "bot-test-token" } );
+			} );
+
+			/**
+			 * @responses keyed by "HTTPMETHOD path" (e.g. "GET /gateway") -> { status, body };
+			 *            an unmatched call (e.g. the interaction-callback ack) gets a default 200
+			 */
+			private function stubApi( required struct responses ) {
+				var calls = [];
+				gateway.setApiCaller( function( httpMethod, path, body ) {
+					calls.append( { httpMethod: httpMethod, path: path, body: body } );
+					var key = arguments.httpMethod & " " & arguments.path;
+					return responses[ key ] ?: { status: 200, body: {} };
+				} );
+				return calls;
+			}
+
+			private function stubSocketOpener() {
+				var sockets = [];
+				gateway.setSocketOpener( function( wssUrl ) {
+					var fake = new tests.support.FakeWebSocket();
+					sockets.append( { wssUrl: wssUrl, socket: fake } );
+					return fake;
+				} );
+				return sockets;
+			}
+
+			it( "declares inboundMessages/outboundMessages/streaming/threads/interactiveActions/humanApproval", function() {
+				var capabilities = gateway.getDeclaredCapabilities();
+				expect( capabilities ).toInclude( "inboundMessages" );
+				expect( capabilities ).toInclude( "outboundMessages" );
+				expect( capabilities ).toInclude( "streaming" );
+				expect( capabilities ).toInclude( "threads" );
+				expect( capabilities ).toInclude( "interactiveActions" );
+				expect( capabilities ).toInclude( "humanApproval" );
+			} );
+
+			it( "onConnect() throws DiscordGateway.MissingToken when botToken is missing", function() {
+				var unconfigured = new bxagents.models.gateways.DiscordGateway();
+				unconfigured.setScheduler( scheduler );
+				expect( function() {
+					unconfigured.start();
+				} ).toThrow( "DiscordGateway.MissingToken" );
+			} );
+
+			it( "start() opens a connection via GET /gateway and registers exactly one watchdog task", function() {
+				var calls = stubApi( { "GET /gateway": { status: 200, body: { url: "wss://gateway.discord.gg/" } } } );
+				var sockets = stubSocketOpener();
+
+				gateway.start();
+
+				expect( calls.len() ).toBe( 1 );
+				expect( calls[ 1 ].httpMethod ).toBe( "GET" );
+				expect( sockets.len() ).toBe( 1 );
+				expect( sockets[ 1 ].wssUrl ).toInclude( "wss://gateway.discord.gg/" );
+				expect( sockets[ 1 ].wssUrl ).toInclude( "v=10" );
+				expect( scheduler.getTaskNames().len() ).toBe( 1 );
+				expect( scheduler.getTaskNames()[ 1 ] ).toInclude( "discord-watchdog" );
+			} );
+
+			it( "handleSocketText() Hello (op 10) registers a heartbeat task and sends Identify (fresh connect, no prior session)", function() {
+				stubApi( { "GET /gateway": { status: 200, body: { url: "wss://gateway.discord.gg/" } } } );
+				var fakeSocket = new tests.support.FakeWebSocket();
+				gateway.setSocketOpener( function( wssUrl ) { return fakeSocket; } );
+				gateway.start();
+
+				gateway.handleSocketText( fakeSocket, jsonSerialize( { op: 10, d: { heartbeat_interval: 41250 } } ) );
+
+				expect( scheduler.getTaskNames().len() ).toBe( 2 );
+				expect( scheduler.getTaskNames()[ 2 ] ).toInclude( "discord-heartbeat" );
+				expect( fakeSocket.getSentTexts().len() ).toBe( 1 );
+				var sent = jsonDeserialize( fakeSocket.getSentTexts()[ 1 ] );
+				expect( sent.op ).toBe( 2 ); // Identify
+				expect( sent.d.token ).toBe( "bot-test-token" );
+			} );
+
+			it( "handleSocketText() Hello sends Resume (not Identify) once a prior session exists", function() {
+				stubApi( { "GET /gateway": { status: 200, body: { url: "wss://gateway.discord.gg/" } } } );
+				var fakeSocket = new tests.support.FakeWebSocket();
+				gateway.setSocketOpener( function( wssUrl ) { return fakeSocket; } );
+				gateway.start();
+				gateway.handleSocketText( fakeSocket, jsonSerialize( { op: 10, d: { heartbeat_interval: 41250 } } ) );
+				// A real READY dispatch is what populates sessionId/resumeGatewayUrl.
+				gateway.handleSocketText( fakeSocket, jsonSerialize( {
+					op: 0, t: "READY", s: 1,
+					d : { session_id: "sess-1", resume_gateway_url: "wss://resume.example.test/" }
+				} ) );
+
+				// A second Hello, as if the socket reconnected.
+				gateway.handleSocketText( fakeSocket, jsonSerialize( { op: 10, d: { heartbeat_interval: 41250 } } ) );
+
+				var sentFrames = fakeSocket.getSentTexts().map( t => jsonDeserialize( t ) );
+				var lastFrame = sentFrames[ sentFrames.len() ];
+				expect( lastFrame.op ).toBe( 6 ); // Resume
+				expect( lastFrame.d.session_id ).toBe( "sess-1" );
+			} );
+
+			it( "heartbeatTick() sends a Heartbeat frame carrying the last sequence number when the prior one was ACKed", function() {
+				stubApi( { "GET /gateway": { status: 200, body: { url: "wss://gateway.discord.gg/" } } } );
+				var fakeSocket = new tests.support.FakeWebSocket();
+				gateway.setSocketOpener( function( wssUrl ) { return fakeSocket; } );
+				gateway.start();
+				gateway.handleSocketText( fakeSocket, jsonSerialize( { op: 0, t: "READY", s: 7, d: { session_id: "s1" } } ) );
+
+				gateway.heartbeatTick();
+
+				var sentFrames = fakeSocket.getSentTexts().map( t => jsonDeserialize( t ) );
+				var lastFrame = sentFrames[ sentFrames.len() ];
+				expect( lastFrame.op ).toBe( 1 );
+				expect( lastFrame.d ).toBe( 7 );
+			} );
+
+			it( "heartbeatTick() reconnects when the previous heartbeat was never ACKed (zombied connection)", function() {
+				var openedSockets = [];
+				var openCalls = stubApi( { "GET /gateway": { status: 200, body: { url: "wss://gateway.discord.gg/" } } } );
+				gateway.setSocketOpener( function( wssUrl ) {
+					var fake = new tests.support.FakeWebSocket();
+					openedSockets.append( fake );
+					return fake;
+				} );
+				gateway.start();
+				var firstSocket = openedSockets[ 1 ];
+
+				gateway.heartbeatTick(); // sends heartbeat #1, awaiting ACK
+				gateway.heartbeatTick(); // no ACK arrived - zombied
+
+				var getCalls = openCalls.filter( c => c.httpMethod == "GET" );
+				expect( getCalls.len() ).toBe( 2 ); // one per openConnection()
+				expect( openedSockets.len() ).toBe( 2 );
+			} );
+
+			it( "handleSocketText() Heartbeat ACK (op 11) clears the awaiting-ack flag so the next tick sends normally", function() {
+				var openedSockets = [];
+				stubApi( { "GET /gateway": { status: 200, body: { url: "wss://gateway.discord.gg/" } } } );
+				gateway.setSocketOpener( function( wssUrl ) {
+					var fake = new tests.support.FakeWebSocket();
+					openedSockets.append( fake );
+					return fake;
+				} );
+				gateway.start();
+				var socket = openedSockets[ 1 ];
+
+				gateway.heartbeatTick();
+				gateway.handleSocketText( socket, jsonSerialize( { op: 11 } ) );
+				gateway.heartbeatTick();
+
+				// Still only the one connection - no zombie-triggered reconnect happened.
+				expect( openedSockets.len() ).toBe( 1 );
+				expect( socket.getSentTexts().len() ).toBe( 2 );
+			} );
+
+			it( "handleSocketText() MESSAGE_CREATE dispatches a normalized inbound message and ignores bot authors", function() {
+				var dispatched = [];
+				gateway.onMessage( function( message ) { dispatched.append( message ); } );
+				stubApi( { "GET /gateway": { status: 200, body: { url: "wss://gateway.discord.gg/" } } } );
+				var fakeSocket = new tests.support.FakeWebSocket();
+				gateway.setSocketOpener( function( wssUrl ) { return fakeSocket; } );
+				gateway.start();
+
+				gateway.handleSocketText( fakeSocket, jsonSerialize( {
+					op: 0, t: "MESSAGE_CREATE", s: 2,
+					d : { channel_id: "chan-1", author: { id: "user-1", bot: false }, content: "hello there" }
+				} ) );
+				gateway.handleSocketText( fakeSocket, jsonSerialize( {
+					op: 0, t: "MESSAGE_CREATE", s: 3,
+					d : { channel_id: "chan-1", author: { id: "bot-2", bot: true }, content: "I am a bot" }
+				} ) );
+
+				expect( dispatched.len() ).toBe( 1 );
+				expect( dispatched[ 1 ].getText() ).toBe( "hello there" );
+				expect( dispatched[ 1 ].getContext().getConversationID() ).toBe( "chan-1" );
+				expect( dispatched[ 1 ].getContext().getUserID() ).toBe( "user-1" );
+			} );
+
+			it( "handleSocketText() INTERACTION_CREATE (button) acks via the callback endpoint and announces the decision", function() {
+				var calls = stubApi( { "GET /gateway": { status: 200, body: { url: "wss://gateway.discord.gg/" } } } );
+				var fakeSocket = new tests.support.FakeWebSocket();
+				gateway.setSocketOpener( function( wssUrl ) { return fakeSocket; } );
+				gateway.start();
+
+				gateway.handleSocketText( fakeSocket, jsonSerialize( {
+					op: 0, t: "INTERACTION_CREATE", s: 4,
+					d : {
+						id        : "interaction-1",
+						token     : "interaction-token-1",
+						type      : 3,
+						channel_id: "chan-1",
+						member    : { user: { id: "user-1" } },
+						data      : { custom_id: "approve" }
+					}
+				} ) );
+
+				var callbackCalls = calls.filter( c => c.path == "/interactions/interaction-1/interaction-token-1/callback" );
+				expect( callbackCalls.len() ).toBe( 1 );
+				expect( callbackCalls[ 1 ].body.type ).toBe( 6 );
+			} );
+
+			it( "handleSocketText() Reconnect (op 7) opens a new connection", function() {
+				var openedSockets = [];
+				var openCalls = stubApi( { "GET /gateway": { status: 200, body: { url: "wss://gateway.discord.gg/" } } } );
+				gateway.setSocketOpener( function( wssUrl ) {
+					var fake = new tests.support.FakeWebSocket();
+					openedSockets.append( fake );
+					return fake;
+				} );
+				gateway.start();
+
+				gateway.handleSocketText( openedSockets[ 1 ], jsonSerialize( { op: 7 } ) );
+
+				expect( openCalls.filter( c => c.httpMethod == "GET" ).len() ).toBe( 2 );
+				expect( openedSockets.len() ).toBe( 2 );
+			} );
+
+			it( "handleSocketText() Invalid Session with d:false clears the session, forcing a fresh Identify next", function() {
+				var openedSockets = [];
+				stubApi( { "GET /gateway": { status: 200, body: { url: "wss://gateway.discord.gg/" } } } );
+				gateway.setSocketOpener( function( wssUrl ) {
+					var fake = new tests.support.FakeWebSocket();
+					openedSockets.append( fake );
+					return fake;
+				} );
+				gateway.start();
+				gateway.handleSocketText( openedSockets[ 1 ], jsonSerialize( { op: 0, t: "READY", s: 1, d: { session_id: "sess-1" } } ) );
+
+				gateway.handleSocketText( openedSockets[ 1 ], jsonSerialize( { op: 9, d: false } ) );
+				expect( openedSockets.len() ).toBe( 2 );
+
+				gateway.handleSocketText( openedSockets[ 2 ], jsonSerialize( { op: 10, d: { heartbeat_interval: 41250 } } ) );
+
+				var sentFrames = openedSockets[ 2 ].getSentTexts().map( t => jsonDeserialize( t ) );
+				expect( sentFrames[ sentFrames.len() ].op ).toBe( 2 ); // Identify, not Resume
+			} );
+
+			it( "handleSocketClose() with a fatal close code stops the gateway and does not reconnect", function() {
+				var openCalls = stubApi( { "GET /gateway": { status: 200, body: { url: "wss://gateway.discord.gg/" } } } );
+				gateway.setSocketOpener( function( wssUrl ) { return new tests.support.FakeWebSocket(); } );
+				gateway.start();
+
+				var beforeCount = openCalls.filter( c => c.httpMethod == "GET" ).len();
+				gateway.handleSocketClose( 4004, "Authentication failed" );
+
+				expect( openCalls.filter( c => c.httpMethod == "GET" ).len() ).toBe( beforeCount );
+			} );
+
+			it( "handleSocketClose() with a non-fatal close code reconnects", function() {
+				var openCalls = stubApi( { "GET /gateway": { status: 200, body: { url: "wss://gateway.discord.gg/" } } } );
+				gateway.setSocketOpener( function( wssUrl ) { return new tests.support.FakeWebSocket(); } );
+				gateway.start();
+
+				var beforeCount = openCalls.filter( c => c.httpMethod == "GET" ).len();
+				gateway.handleSocketClose( 4000, "Unknown error" );
+
+				expect( openCalls.filter( c => c.httpMethod == "GET" ).len() ).toBe( beforeCount + 1 );
+			} );
+
+			it( "handleSocketClose() does not reconnect after a deliberate stop()", function() {
+				var openCalls = stubApi( { "GET /gateway": { status: 200, body: { url: "wss://gateway.discord.gg/" } } } );
+				gateway.setSocketOpener( function( wssUrl ) { return new tests.support.FakeWebSocket(); } );
+				gateway.start();
+				gateway.stop();
+
+				var beforeCount = openCalls.filter( c => c.httpMethod == "GET" ).len();
+				gateway.handleSocketClose( 1000, "normal closure" );
+
+				expect( openCalls.filter( c => c.httpMethod == "GET" ).len() ).toBe( beforeCount );
+			} );
+
+			it( "deliver() posts one message, including a message_reference when a threadID is present", function() {
+				var calls = stubApi( { "POST /channels/chan-1/messages": { status: 200, body: { id: "msg-1" } } } );
+				var event = new GatewayEvent( type: "response.completed", data: { text: "short reply" } );
+				var context = new GatewayContext( conversationID: "chan-1", threadID: "msg-0" );
+
+				var result = gateway.deliver( event, context );
+
+				var sendCalls = calls.filter( c => c.httpMethod == "POST" );
+				expect( sendCalls.len() ).toBe( 1 );
+				expect( sendCalls[ 1 ].body.content ).toBe( "short reply" );
+				expect( sendCalls[ 1 ].body.message_reference.message_id ).toBe( "msg-0" );
+				expect( result.getSuccess() ).toBeTrue();
+				expect( result.getDeliveryID() ).toBe( "msg-1" );
+			} );
+
+			it( "deliver() splits text longer than the 2000-char limit into multiple POST calls", function() {
+				var calls = stubApi( { "POST /channels/chan-1/messages": { status: 200, body: { id: "msg-1" } } } );
+				var longText = repeatString( "a", 5000 );
+				var event = new GatewayEvent( type: "response.completed", data: { text: longText } );
+				var context = new GatewayContext( conversationID: "chan-1" );
+
+				gateway.deliver( event, context );
+
+				expect( calls.filter( c => c.httpMethod == "POST" ).len() ).toBeGT( 1 );
+			} );
+
+			it( "deliver() returns a failure result when the REST call fails", function() {
+				stubApi( { "POST /channels/chan-1/messages": { status: 403, body: { message: "Missing Access" } } } );
+				var event = new GatewayEvent( type: "response.completed", data: { text: "hi" } );
+				var context = new GatewayContext( conversationID: "chan-1" );
+
+				var result = gateway.deliver( event, context );
+
+				expect( result.getSuccess() ).toBeFalse();
+				expect( result.getError() ).toInclude( "Missing Access" );
+			} );
+
+			it( "deliverChunk() posts a placeholder on the first chunk, then PATCHes on completion", function() {
+				var calls = stubApi( {
+					"POST /channels/chan-1/messages"        : { status: 200, body: { id: "msg-1" } },
+					"PATCH /channels/chan-1/messages/msg-1": { status: 200, body: { id: "msg-1" } }
+				} );
+				var context = new GatewayContext( conversationID: "chan-1" );
+				var executionId = "exec-1";
+
+				var startEvent = new GatewayEvent( type: "response.started", executionID: executionId, data: { delta: "Hel" } );
+				gateway.deliverChunk( startEvent, context );
+
+				var completeEvent = new GatewayEvent( type: "response.completed", executionID: executionId, data: { delta: "lo" } );
+				var result = gateway.deliverChunk( completeEvent, context );
+
+				expect( calls.filter( c => c.httpMethod == "POST" ).len() ).toBe( 1 );
+				var patchCalls = calls.filter( c => c.httpMethod == "PATCH" );
+				expect( patchCalls.len() ).toBe( 1 );
+				expect( patchCalls[ 1 ].body.content ).toBe( "Hello" );
+				expect( result.getSuccess() ).toBeTrue();
+			} );
+
+			it( "requestHumanInteraction() sends an action row of buttons built from the request's allowed decisions", function() {
+				var calls = stubApi( { "POST /channels/chan-1/messages": { status: 200, body: { id: "msg-1" } } } );
+				var humanRequest = new HumanInteractionRequest(
+					title           : "Approve tool call?",
+					message         : "delete_file( path: '/tmp/x' )",
+					allowedDecisions: [ "approve", "reject" ]
+				);
+				var context = new GatewayContext( conversationID: "chan-1" );
+
+				var result = gateway.requestHumanInteraction( humanRequest, context );
+
+				var sendCalls = calls.filter( c => c.httpMethod == "POST" );
+				expect( sendCalls.len() ).toBe( 1 );
+				expect( sendCalls[ 1 ].body ).toHaveKey( "components" );
+				var actionRow = sendCalls[ 1 ].body.components[ 1 ];
+				expect( actionRow.type ).toBe( 1 );
+				expect( actionRow.components.len() ).toBe( 2 );
+				expect( result.getSuccess() ).toBeTrue();
+			} );
+
+			it( "parseHumanDecision() reads requestID/decision/decidedBy from a GatewayEvent's data", function() {
+				var event = new GatewayEvent( type: "interaction.decision", data: { requestID: "req-1", decision: "reject", decidedBy: "user-1" } );
+
+				var decision = gateway.parseHumanDecision( event );
+
+				expect( decision.getRequestID() ).toBe( "req-1" );
+				expect( decision.getDecision() ).toBe( "reject" );
+				expect( decision.getDecidedBy() ).toBe( "user-1" );
+			} );
+
+		} );
+	}
+
+}

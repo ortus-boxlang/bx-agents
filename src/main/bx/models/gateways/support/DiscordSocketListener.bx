@@ -1,0 +1,51 @@
+/**
+ * Adapts a DiscordGateway instance to `java.net.http.WebSocket.Listener` by
+ * directly implementing the interface - same pattern established by
+ * SlackSocketListener.bx (see that file's docblock for the full rationale:
+ * `implements="java:..."` compiles this class as a real JVM implementer, no
+ * `createDynamicProxy()` indirection needed, and unimplemented methods
+ * (`onBinary`/`onPing`/`onPong` here) fall through to the JDK's own
+ * `default` behavior automatically).
+ *
+ * Because `onOpen()`/`onText()` ARE overridden here, THIS class is
+ * responsible for the `webSocket.request(1)` calls the JDK's own defaults
+ * would otherwise make - see SlackSocketListener.bx's docblock for the full
+ * backpressure explanation.
+ *
+ * Wired up as:
+ *   listener = new DiscordSocketListener( this )
+ *   ws       = httpClient.newWebSocketBuilder().buildAsync( uri, listener ).get()
+ */
+class implements="java:java.net.http.WebSocket$Listener" {
+
+	property name="gateway";
+
+	/**
+	 * @gateway The DiscordGateway instance to forward every callback to
+	 */
+	function init( required any gateway ) {
+		variables.gateway = arguments.gateway
+		return this
+	}
+
+	function onOpen( required any webSocket ) {
+		arguments.webSocket.request( 1 )
+		variables.gateway.handleSocketOpen( arguments.webSocket )
+	}
+
+	function onText( required any webSocket, required any data, required boolean last ) {
+		arguments.webSocket.request( 1 )
+		variables.gateway.handleSocketText( arguments.webSocket, arguments.data.toString() )
+		return null
+	}
+
+	function onClose( required any webSocket, required numeric statusCode, required string reason ) {
+		variables.gateway.handleSocketClose( arguments.statusCode, arguments.reason )
+		return null
+	}
+
+	function onError( required any webSocket, required any error ) {
+		variables.gateway.handleSocketError( arguments.error )
+	}
+
+}
