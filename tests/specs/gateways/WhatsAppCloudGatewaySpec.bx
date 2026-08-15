@@ -1,0 +1,298 @@
+import bxModules.bxai.models.gateway.contracts.GatewayContext;
+import bxModules.bxai.models.gateway.contracts.GatewayEvent;
+import bxModules.bxai.models.gateway.contracts.HumanInteractionRequest;
+
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "WhatsAppCloudGateway", function() {
+
+			beforeEach( function() {
+				variables.gateway = new bxagents.models.gateways.whatsapp.WhatsAppCloudGateway();
+				variables.gateway.configure( {
+					accessToken  : "tok-test",
+					phoneNumberId: "123456",
+					appSecret    : "shh-secret",
+					verifyToken  : "verify-me"
+				} );
+			} );
+
+			private function computeSignature( required string secret, required string body ) {
+				var keySpec = createObject( "java", "javax.crypto.spec.SecretKeySpec" ).init( charsetDecode( secret, "UTF-8" ), "HmacSHA256" );
+				var mac = createObject( "java", "javax.crypto.Mac" ).getInstance( "HmacSHA256" );
+				mac.init( keySpec );
+				var digest = mac.doFinal( charsetDecode( body, "UTF-8" ) );
+				return "sha256=" & binaryEncode( digest, "hex" ).lCase();
+			}
+
+			private function stubApi( required struct response ) {
+				var calls = [];
+				gateway.setApiCaller( function( path, body ) {
+					calls.append( { path: path, body: body } );
+					return response;
+				} );
+				return calls;
+			}
+
+			private function singleMessagePayload( required string wamid, string type = "text", struct extra = {} ) {
+				var message = { id: arguments.wamid, from: "15550001111", type: arguments.type };
+				structAppend( message, arguments.extra );
+				return {
+					object: "whatsapp_business_account",
+					entry : [ {
+						changes: [ {
+							field: "messages",
+							value: {
+								contacts: [ { wa_id: "15550001111", profile: { name: "Alice" } } ],
+								messages: [ message ]
+							}
+						} ]
+					} ]
+				};
+			}
+
+			it( "declares inboundMessages/outboundMessages/threads/interactiveActions/humanApproval but NOT streaming", function() {
+				var capabilities = gateway.getDeclaredCapabilities();
+				expect( capabilities ).toInclude( "inboundMessages" );
+				expect( capabilities ).toInclude( "outboundMessages" );
+				expect( capabilities ).toInclude( "threads" );
+				expect( capabilities ).toInclude( "interactiveActions" );
+				expect( capabilities ).toInclude( "humanApproval" );
+				expect( capabilities ).notToInclude( "streaming" );
+			} );
+
+			it( "start() throws WhatsAppCloudGateway.MissingConfig when accessToken/phoneNumberId are missing", function() {
+				var unconfigured = new bxagents.models.gateways.whatsapp.WhatsAppCloudGateway();
+				expect( function() {
+					unconfigured.start();
+				} ).toThrow( "WhatsAppCloudGateway.MissingConfig" );
+			} );
+
+			it( "start() does not throw once accessToken/phoneNumberId are present", function() {
+				expect( function() {
+					gateway.start();
+				} ).notToThrow();
+				expect( gateway.isRunning() ).toBeTrue();
+			} );
+
+			describe( "handleVerify()", function() {
+
+				it( "echoes the challenge as plain text when mode=subscribe and the token matches", function() {
+					var result = gateway.handleVerify( "subscribe", "verify-me", "chal-123" );
+					expect( result.status ).toBe( 200 );
+					expect( result.body ).toBe( "chal-123" );
+				} );
+
+				it( "returns 403 when the verify_token doesn't match", function() {
+					var result = gateway.handleVerify( "subscribe", "wrong-token", "chal-123" );
+					expect( result.status ).toBe( 403 );
+				} );
+
+				it( "returns 400 when mode isn't 'subscribe'", function() {
+					var result = gateway.handleVerify( "unsubscribe", "verify-me", "chal-123" );
+					expect( result.status ).toBe( 400 );
+				} );
+
+				it( "returns 400 when the challenge is missing", function() {
+					var result = gateway.handleVerify( "subscribe", "verify-me", "" );
+					expect( result.status ).toBe( 400 );
+				} );
+
+				it( "returns 503 when verifyToken was never configured", function() {
+					var unconfigured = new bxagents.models.gateways.whatsapp.WhatsAppCloudGateway();
+					unconfigured.configure( { accessToken: "t", phoneNumberId: "1" } );
+					var result = unconfigured.handleVerify( "subscribe", "anything", "chal" );
+					expect( result.status ).toBe( 503 );
+				} );
+
+			} );
+
+			describe( "handleWebhook()", function() {
+
+				it( "returns 503 when appSecret was never configured", function() {
+					var unconfigured = new bxagents.models.gateways.whatsapp.WhatsAppCloudGateway();
+					unconfigured.configure( { accessToken: "t", phoneNumberId: "1" } );
+					var result = unconfigured.handleWebhook( "{}", "sha256=whatever" );
+					expect( result.status ).toBe( 503 );
+				} );
+
+				it( "returns 401 and does not dispatch when the signature is invalid", function() {
+					var dispatched = [];
+					gateway.onMessage( function( m ) { dispatched.append( m ); } );
+
+					var raw = jsonSerialize( singleMessagePayload( "wamid.1" ) );
+					var result = gateway.handleWebhook( raw, "sha256=deadbeef" );
+
+					expect( result.status ).toBe( 401 );
+					expect( dispatched.len() ).toBe( 0 );
+				} );
+
+				it( "returns 400 for a body that isn't valid JSON, even with a technically-valid signature over it", function() {
+					var raw = "not json";
+					var sig = computeSignature( "shh-secret", raw );
+					var result = gateway.handleWebhook( raw, sig );
+					expect( result.status ).toBe( 400 );
+				} );
+
+				it( "accepts a correctly-signed payload, returns 200, and dispatches a normalized inbound message", function() {
+					var dispatched = [];
+					gateway.onMessage( function( m ) { dispatched.append( m ); } );
+
+					var payload = singleMessagePayload( "wamid.1", "text", { text: { body: "Hello there" } } );
+					var raw = jsonSerialize( payload );
+					var sig = computeSignature( "shh-secret", raw );
+
+					var result = gateway.handleWebhook( raw, sig );
+
+					expect( result.status ).toBe( 200 );
+					expect( dispatched.len() ).toBe( 1 );
+					expect( dispatched[ 1 ].getText() ).toBe( "Hello there" );
+					expect( dispatched[ 1 ].getContext().getConversationID() ).toBe( "15550001111" );
+				} );
+
+				it( "dedups by wamid - the same message id delivered twice only dispatches once", function() {
+					var dispatched = [];
+					gateway.onMessage( function( m ) { dispatched.append( m ); } );
+
+					var payload = singleMessagePayload( "wamid.dup", "text", { text: { body: "hi" } } );
+					var raw = jsonSerialize( payload );
+					var sig = computeSignature( "shh-secret", raw );
+
+					gateway.handleWebhook( raw, sig );
+					gateway.handleWebhook( raw, sig );
+
+					expect( dispatched.len() ).toBe( 1 );
+				} );
+
+				it( "ignores non-WABA payloads", function() {
+					var dispatched = [];
+					gateway.onMessage( function( m ) { dispatched.append( m ); } );
+
+					var raw = jsonSerialize( { object: "page" } );
+					var sig = computeSignature( "shh-secret", raw );
+					var result = gateway.handleWebhook( raw, sig );
+
+					expect( result.status ).toBe( 200 );
+					expect( dispatched.len() ).toBe( 0 );
+				} );
+
+				it( "threads on context.id when the inbound message is a reply", function() {
+					var dispatched = [];
+					gateway.onMessage( function( m ) { dispatched.append( m ); } );
+
+					var payload = singleMessagePayload( "wamid.2", "text", {
+						text: { body: "following up" },
+						context: { id: "wamid.original" }
+					} );
+					var raw = jsonSerialize( payload );
+					var sig = computeSignature( "shh-secret", raw );
+					gateway.handleWebhook( raw, sig );
+
+					expect( dispatched[ 1 ].getContext().getThreadID() ).toBe( "wamid.original" );
+				} );
+
+				it( "routes an interactive button_reply to the decision path, not ordinary message dispatch", function() {
+					var dispatched = [];
+					gateway.onMessage( function( m ) { dispatched.append( m ); } );
+
+					var payload = singleMessagePayload( "wamid.3", "interactive", {
+						interactive: { type: "button_reply", button_reply: { id: "approve", title: "Approve" } }
+					} );
+					var raw = jsonSerialize( payload );
+					var sig = computeSignature( "shh-secret", raw );
+					gateway.handleWebhook( raw, sig );
+
+					expect( dispatched.len() ).toBe( 0 );
+				} );
+
+			} );
+
+			describe( "deliver()", function() {
+
+				it( "sends a text message, including context.message_id when a threadID is present", function() {
+					var calls = stubApi( { status: 200, body: { messages: [ { id: "wamid.out1" } ] } } );
+					var event = new GatewayEvent( type: "response.completed", data: { text: "Your order shipped." } );
+					var context = new GatewayContext( conversationID: "15550001111", threadID: "wamid.in1" );
+
+					var result = gateway.deliver( event, context );
+
+					expect( calls.len() ).toBe( 1 );
+					expect( calls[ 1 ].body.to ).toBe( "15550001111" );
+					expect( calls[ 1 ].body.type ).toBe( "text" );
+					expect( calls[ 1 ].body.text.body ).toBe( "Your order shipped." );
+					expect( calls[ 1 ].body.context.message_id ).toBe( "wamid.in1" );
+					expect( result.getSuccess() ).toBeTrue();
+					expect( result.getDeliveryID() ).toBe( "wamid.out1" );
+				} );
+
+				it( "splits text longer than the 4096-char limit into multiple sends", function() {
+					var calls = stubApi( { status: 200, body: { messages: [ { id: "wamid.out1" } ] } } );
+					var longText = repeatString( "a", 5000 );
+					var event = new GatewayEvent( type: "response.completed", data: { text: longText } );
+					var context = new GatewayContext( conversationID: "15550001111" );
+
+					gateway.deliver( event, context );
+
+					expect( calls.len() ).toBeGT( 1 );
+				} );
+
+				it( "returns a failure result when the Graph API rejects the send", function() {
+					stubApi( { status: 400, body: { error: { message: "Invalid parameter" } } } );
+					var event = new GatewayEvent( type: "response.completed", data: { text: "hi" } );
+					var context = new GatewayContext( conversationID: "15550001111" );
+
+					var result = gateway.deliver( event, context );
+
+					expect( result.getSuccess() ).toBeFalse();
+					expect( result.getError() ).toInclude( "Invalid parameter" );
+				} );
+
+			} );
+
+			describe( "requestHumanInteraction()", function() {
+
+				it( "renders <=3 decisions as native interactive buttons", function() {
+					var calls = stubApi( { status: 200, body: { messages: [ { id: "wamid.out1" } ] } } );
+					var humanRequest = new HumanInteractionRequest(
+						title: "Approve?", message: "delete_file(x)", allowedDecisions: [ "approve", "reject" ]
+					);
+					var context = new GatewayContext( conversationID: "15550001111" );
+
+					var result = gateway.requestHumanInteraction( humanRequest, context );
+
+					expect( calls[ 1 ].body.type ).toBe( "interactive" );
+					expect( calls[ 1 ].body.interactive.type ).toBe( "button" );
+					expect( calls[ 1 ].body.interactive.action.buttons.len() ).toBe( 2 );
+					expect( result.getSuccess() ).toBeTrue();
+				} );
+
+				it( "renders 4+ decisions as an interactive list instead of buttons", function() {
+					var calls = stubApi( { status: 200, body: { messages: [ { id: "wamid.out1" } ] } } );
+					var humanRequest = new HumanInteractionRequest(
+						title: "Pick one", message: "Choose an option",
+						allowedDecisions: [ "a", "b", "c", "d" ]
+					);
+					var context = new GatewayContext( conversationID: "15550001111" );
+
+					gateway.requestHumanInteraction( humanRequest, context );
+
+					expect( calls[ 1 ].body.interactive.type ).toBe( "list" );
+					expect( calls[ 1 ].body.interactive.action.sections[ 1 ].rows.len() ).toBe( 4 );
+				} );
+
+			} );
+
+			it( "parseHumanDecision() reads requestID/decision/decidedBy from a GatewayEvent's data", function() {
+				var event = new GatewayEvent( type: "interaction.decision", data: { requestID: "req-1", decision: "reject", decidedBy: "15550001111" } );
+
+				var decision = gateway.parseHumanDecision( event );
+
+				expect( decision.getRequestID() ).toBe( "req-1" );
+				expect( decision.getDecision() ).toBe( "reject" );
+				expect( decision.getDecidedBy() ).toBe( "15550001111" );
+			} );
+
+		} );
+	}
+
+}

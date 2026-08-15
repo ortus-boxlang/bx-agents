@@ -72,6 +72,23 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).notToInclude( "Gateway.process" );
 			} );
 
+			it( "emits the WhatsApp Cloud GET/POST webhook routes when hasWhatsAppCloudGateway is true", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
+				var result = generator.generate( discovery, newAppDir(), false, true );
+
+				var content = fileRead( result.router );
+				expect( content ).toInclude( 'get( "/webhooks/whatsapp-cloud" ).toHandler( "WhatsAppCloud.verify" )' );
+				expect( content ).toInclude( 'post( "/webhooks/whatsapp-cloud" ).toHandler( "WhatsAppCloud.process" )' );
+			} );
+
+			it( "does not emit WhatsApp Cloud webhook routes when hasWhatsAppCloudGateway is false", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
+				var result = generator.generate( discovery, newAppDir(), false, false );
+
+				var content = fileRead( result.router );
+				expect( content ).notToInclude( "WhatsAppCloud" );
+			} );
+
 			it( "reports hasAgentExposure=true only when an agent-exposure entry exists", function() {
 				var withAgent = discoverer.discover( fixtures & "/full-project" );
 				var withAgentResult = generator.generate( withAgent, newAppDir() );

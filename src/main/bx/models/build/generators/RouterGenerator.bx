@@ -21,10 +21,11 @@ class {
 	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .gateways is used)
 	 * @appDir Absolute path to the generated ColdBox app dir, e.g. "<projectRoot>/.build/app"
 	 * @hasHttpGateway Whether an http-type channel-adapter gateway exists (see GatewayGenerator) - emits the 3 fixed gateway webhook routes when true
+	 * @hasWhatsAppCloudGateway Whether a whatsapp-cloud-type channel-adapter gateway exists (see GatewayGenerator) - emits the GET/POST WhatsApp Cloud webhook routes when true
 	 *
 	 * @return { router, hasRoutes, hasAgentExposure }
 	 */
-	struct function generate( required struct discovery, required string appDir, boolean hasHttpGateway = false ) {
+	struct function generate( required struct discovery, required string appDir, boolean hasHttpGateway = false, boolean hasWhatsAppCloudGateway = false ) {
 		var exposureEntries = collectExposureEntries( arguments.discovery )
 		var lines = []
 
@@ -42,6 +43,18 @@ class {
 			lines.append( 'post( "/gateways/:gatewayName/events" ).toHandler( "Gateway.process" )' )
 			lines.append( 'get( "/interactions/:requestID" ).toHandler( "Gateway.process" )' )
 			lines.append( 'post( "/interactions/:requestID/decisions" ).toHandler( "Gateway.process" )' )
+		}
+
+		if ( arguments.hasWhatsAppCloudGateway ) {
+			if ( lines.len() ) {
+				lines.append( "" )
+			}
+			lines.append( "// WhatsApp Business Cloud API webhook surface - Meta's own verify" )
+			lines.append( "// handshake (GET) and signed inbound delivery (POST), handled by" )
+			lines.append( "// WhatsAppCloudGateway itself (own X-Hub-Signature-256 scheme, not" )
+			lines.append( "// bx-ai's GatewayRequestProcessor)." )
+			lines.append( 'get( "/webhooks/whatsapp-cloud" ).toHandler( "WhatsAppCloud.verify" )' )
+			lines.append( 'post( "/webhooks/whatsapp-cloud" ).toHandler( "WhatsAppCloud.process" )' )
 		}
 
 		var appDir = normalizePath( arguments.appDir )

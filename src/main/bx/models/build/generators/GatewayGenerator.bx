@@ -53,10 +53,11 @@ class {
 	 */
 	static {
 		TYPE_CLASS_MAP = {
-			telegram: "bxModules.bxagents.models.gateways.TelegramGateway",
-			slack   : "bxModules.bxagents.models.gateways.SlackGateway",
-			discord : "bxModules.bxagents.models.gateways.DiscordGateway",
-			email   : "bxModules.bxagents.models.gateways.EmailGateway"
+			telegram      : "bxModules.bxagents.models.gateways.TelegramGateway",
+			slack         : "bxModules.bxagents.models.gateways.SlackGateway",
+			discord       : "bxModules.bxagents.models.gateways.DiscordGateway",
+			email         : "bxModules.bxagents.models.gateways.EmailGateway",
+			"whatsapp-cloud": "bxModules.bxagents.models.gateways.whatsapp.WhatsAppCloudGateway"
 		}
 
 		// Per push-style type, the *EnvVar option keys renderSecretOptions()
@@ -75,6 +76,12 @@ class {
 				imapUsername: "imapUsernameEnvVar",
 				imapPassword: "imapPasswordEnvVar",
 				fromAddress : "fromAddressEnvVar"
+			},
+			"whatsapp-cloud": {
+				accessToken  : "accessTokenEnvVar",
+				phoneNumberId: "phoneNumberIdEnvVar",
+				appSecret    : "appSecretEnvVar",
+				verifyToken  : "verifyTokenEnvVar"
 			}
 		}
 	}
@@ -84,12 +91,13 @@ class {
 	 * @appDir Absolute path to the generated ColdBox app dir, e.g. "<projectRoot>/.build/app" - the handler (if needed) is written to "<appDir>/handlers/Gateway.bx"
 	 * @resolvedConfig The root project's resolved config (AgentConfigResolver.resolve()) - only `gatewaySession` is used, to configure the generated GatewaySession's policy/maxQueueDepth
 	 *
-	 * @return { registrationStatements: [], hasHttpGateway, handlerPath (only if hasHttpGateway), hasPushGateway, hasEmailGateway, sessionInterceptorName (only if hasPushGateway) }
+	 * @return { registrationStatements: [], hasHttpGateway, handlerPath (only if hasHttpGateway), hasPushGateway, hasEmailGateway, hasWhatsAppCloudGateway, whatsAppCloudHandlerPath (only if hasWhatsAppCloudGateway), sessionInterceptorName (only if hasPushGateway) }
 	 */
 	struct function generate( required struct discovery, required string appDir, struct resolvedConfig = {} ) {
 		var channelEntries = collectChannelEntries( arguments.discovery )
 		var hasHttpGateway = false
 		var hasEmailGateway = false
+		var hasWhatsAppCloudGateway = false
 		var pushGatewayNames = []
 
 		for ( var entry in channelEntries ) {
@@ -99,6 +107,9 @@ class {
 			}
 			if ( type == "email" ) {
 				hasEmailGateway = true
+			}
+			if ( type == "whatsapp-cloud" ) {
+				hasWhatsAppCloudGateway = true
 			}
 			// The registered aiGatewayRegistry() key is ALWAYS the gateway
 			// class's own fixed getName() (e.g. TelegramGateway.init() sets
@@ -121,10 +132,11 @@ class {
 		}
 
 		var result = {
-			registrationStatements : channelEntries.map( e => renderRegistration( e ) ),
-			hasHttpGateway         : hasHttpGateway,
-			hasPushGateway         : pushGatewayNames.len() > 0,
-			hasEmailGateway        : hasEmailGateway
+			registrationStatements  : channelEntries.map( e => renderRegistration( e ) ),
+			hasHttpGateway          : hasHttpGateway,
+			hasPushGateway          : pushGatewayNames.len() > 0,
+			hasEmailGateway         : hasEmailGateway,
+			hasWhatsAppCloudGateway : hasWhatsAppCloudGateway
 		}
 
 		if ( hasHttpGateway ) {
@@ -133,6 +145,14 @@ class {
 			var handlerPath = handlerDir & "/Gateway.bx"
 			fileWrite( handlerPath, renderHandler() )
 			result[ "handlerPath" ] = handlerPath
+		}
+
+		if ( hasWhatsAppCloudGateway ) {
+			var waHandlerDir = normalizePath( arguments.appDir ) & "/handlers"
+			directoryCreate( path = waHandlerDir, createPath = true, ignoreExists = true )
+			var waHandlerPath = waHandlerDir & "/WhatsAppCloud.bx"
+			fileWrite( waHandlerPath, renderWhatsAppCloudHandler() )
+			result[ "whatsAppCloudHandlerPath" ] = waHandlerPath
 		}
 
 		if ( pushGatewayNames.len() ) {
@@ -334,6 +354,55 @@ class {
 			"	function process( event, rc, prc ) {",
 			"		bxModules.bxai.models.gateway.http.GatewayRequestProcessor::processHttp()",
 			"		return arguments.event.noRender()",
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * The `whatsapp-cloud` gateway is genuinely different from the http-type
+	 * webhook surface above: Meta's own `X-Hub-Signature-256` scheme (a
+	 * different HMAC header/format than bx-ai's own GatewaySecurity) means
+	 * this can't reuse GatewayRequestProcessor at all - the verification and
+	 * dispatch logic lives in WhatsAppCloudGateway itself (testable without
+	 * ColdBox), and this handler is a thin passthrough into it, reading the
+	 * raw request the same way ColdBox's own REST recipes document
+	 * (event.getHTTPContent()/getHTTPHeader(), rc's URL-scope-merged query
+	 * params for the GET verify handshake, event.renderData() for the
+	 * response) - see docs/conventions/gateways.md's WhatsApp Cloud section.
+	 *
+	 * The registry lookup key is fixed ("whatsapp-cloud", not a URL param) -
+	 * every push-style gateway registers under its own TYPE string (see the
+	 * aiGatewayRegistry() key fix elsewhere in this file), and v1 supports
+	 * exactly one instance per type project-wide anyway.
+	 */
+	private string function renderWhatsAppCloudHandler() {
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * WhatsApp Business Cloud API webhook surface - Meta's own",
+			" * verify handshake (GET) and signed inbound delivery (POST).",
+			" * Both actions are thin passthroughs into WhatsAppCloudGateway's",
+			" * own handleVerify()/handleWebhook() - see models/gateways/whatsapp/WhatsAppCloudGateway.bx.",
+			" */",
+			"class {",
+			"",
+			"	function verify( event, rc, prc ) {",
+			'		var gateway = aiGatewayRegistry().get( "whatsapp-cloud" )',
+			'		var result  = gateway.handleVerify( rc[ "hub.mode" ] ?: "", rc[ "hub.verify_token" ] ?: "", rc[ "hub.challenge" ] ?: "" )',
+			'		event.renderData( type: "TEXT", data: result.body, statusCode: result.status )',
+			"	}",
+			"",
+			"	function process( event, rc, prc ) {",
+			'		var gateway   = aiGatewayRegistry().get( "whatsapp-cloud" )',
+			'		var signature = event.getHTTPHeader( "X-Hub-Signature-256", "" )',
+			"		var result    = gateway.handleWebhook( event.getHTTPContent(), signature )",
+			'		event.renderData( type: "TEXT", data: "", statusCode: result.status )',
 			"	}",
 			"",
 			"}",
