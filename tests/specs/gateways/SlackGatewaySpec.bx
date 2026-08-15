@@ -1,0 +1,276 @@
+import bxModules.bxai.models.gateway.contracts.GatewayContext;
+import bxModules.bxai.models.gateway.contracts.GatewayEvent;
+import bxModules.bxai.models.gateway.contracts.HumanInteractionRequest;
+
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "SlackGateway", function() {
+
+			beforeEach( function() {
+				variables.gateway = new bxagents.models.gateways.SlackGateway();
+				variables.scheduler = new tests.support.FakeScheduler();
+				variables.gateway.setScheduler( variables.scheduler );
+				variables.gateway.configure( { botToken: "xoxb-test", appToken: "xapp-test" } );
+			} );
+
+			private function stubApi( required struct responses ) {
+				var calls = [];
+				gateway.setApiCaller( function( method, params, token ) {
+					calls.append( { method: method, params: params, token: token } );
+					return responses[ method ] ?: { ok: true };
+				} );
+				return calls;
+			}
+
+			private function stubSocketOpener() {
+				var sockets = [];
+				gateway.setSocketOpener( function( wssUrl ) {
+					var fake = new tests.support.FakeWebSocket();
+					sockets.append( { wssUrl: wssUrl, socket: fake } );
+					return fake;
+				} );
+				return sockets;
+			}
+
+			it( "declares inboundMessages/outboundMessages/streaming/threads/interactiveActions/humanApproval", function() {
+				var capabilities = gateway.getDeclaredCapabilities();
+				expect( capabilities ).toInclude( "inboundMessages" );
+				expect( capabilities ).toInclude( "outboundMessages" );
+				expect( capabilities ).toInclude( "streaming" );
+				expect( capabilities ).toInclude( "threads" );
+				expect( capabilities ).toInclude( "interactiveActions" );
+				expect( capabilities ).toInclude( "humanApproval" );
+			} );
+
+			it( "onConnect() throws SlackGateway.MissingToken when either token is missing", function() {
+				var unconfigured = new bxagents.models.gateways.SlackGateway();
+				unconfigured.setScheduler( scheduler );
+				expect( function() {
+					unconfigured.start();
+				} ).toThrow( "SlackGateway.MissingToken" );
+			} );
+
+			it( "start() opens a connection via apps.connections.open and registers exactly one watchdog task", function() {
+				var calls = stubApi( { "apps.connections.open": { ok: true, url: "wss://example.test/link" } } );
+				var sockets = stubSocketOpener();
+
+				gateway.start();
+
+				expect( calls.len() ).toBe( 1 );
+				expect( calls[ 1 ].method ).toBe( "apps.connections.open" );
+				expect( calls[ 1 ].token ).toBe( "xapp-test" );
+				expect( sockets.len() ).toBe( 1 );
+				expect( sockets[ 1 ].wssUrl ).toBe( "wss://example.test/link" );
+				expect( scheduler.getTaskNames().len() ).toBe( 1 );
+				expect( scheduler.getTaskNames()[ 1 ] ).toInclude( "slack-watchdog" );
+			} );
+
+			it( "onConnect() throws SlackGateway.ConnectionFailed when apps.connections.open fails", function() {
+				stubApi( { "apps.connections.open": { ok: false, error: "invalid_auth" } } );
+				stubSocketOpener();
+
+				expect( function() {
+					gateway.start();
+				} ).toThrow( "SlackGateway.ConnectionFailed" );
+			} );
+
+			it( "handleSocketText() acks an events_api envelope and dispatches a normalized inbound message", function() {
+				var dispatched = [];
+				gateway.onMessage( function( message ) {
+					dispatched.append( message );
+				} );
+				// handleSocketText() sends acks through variables.webSocket, which is
+				// only ever set by a real connect - drive one first so the ack lands
+				// on our fake socket, matching production's actual call order.
+				var fakeSocket = new tests.support.FakeWebSocket();
+				gateway.setSocketOpener( function( wssUrl ) { return fakeSocket; } );
+				stubApi( { "apps.connections.open": { ok: true, url: "wss://example.test/link" } } );
+				gateway.start();
+
+				var frame = {
+					type       : "events_api",
+					envelope_id: "env-1",
+					payload    : { event: { type: "message", channel: "C1", user: "U1", text: "hello", ts: "111.222" } }
+				};
+				gateway.handleSocketText( fakeSocket, jsonSerialize( frame ) );
+
+				expect( fakeSocket.getSentTexts().len() ).toBe( 1 );
+				expect( jsonDeserialize( fakeSocket.getSentTexts()[ 1 ] ).envelope_id ).toBe( "env-1" );
+				expect( dispatched.len() ).toBe( 1 );
+				expect( dispatched[ 1 ].getText() ).toBe( "hello" );
+				expect( dispatched[ 1 ].getContext().getConversationID() ).toBe( "C1" );
+				expect( dispatched[ 1 ].getContext().getThreadID() ).toBe( "111.222" );
+			} );
+
+			it( "handleSocketText() ignores a message event carrying a bot_id (avoids a self-loop)", function() {
+				var dispatched = [];
+				gateway.onMessage( function( message ) { dispatched.append( message ); } );
+				var fakeSocket = new tests.support.FakeWebSocket();
+				gateway.setSocketOpener( function( wssUrl ) { return fakeSocket; } );
+				stubApi( { "apps.connections.open": { ok: true, url: "wss://example.test/link" } } );
+				gateway.start();
+
+				var frame = {
+					type       : "events_api",
+					envelope_id: "env-2",
+					payload    : { event: { type: "message", channel: "C1", bot_id: "B1", text: "I am a bot" } }
+				};
+				gateway.handleSocketText( fakeSocket, jsonSerialize( frame ) );
+
+				expect( dispatched.len() ).toBe( 0 );
+			} );
+
+			it( "handleSocketText() with reason 'link_disabled' stops reconnect attempts", function() {
+				var fakeSocket = new tests.support.FakeWebSocket();
+				var openCalls = stubApi( { "apps.connections.open": { ok: true, url: "wss://example.test/link" } } );
+				gateway.setSocketOpener( function( wssUrl ) { return fakeSocket; } );
+				gateway.start();
+
+				var beforeCount = openCalls.len();
+				gateway.handleSocketText( fakeSocket, jsonSerialize( { type: "disconnect", reason: "link_disabled" } ) );
+
+				expect( openCalls.len() ).toBe( beforeCount );
+				// A subsequent watchdog tick must also stay quiet once stopped this way.
+				gateway.checkConnectionHealth();
+				expect( openCalls.len() ).toBe( beforeCount );
+			} );
+
+			it( "handleSocketText() with reason 'warning' proactively reconnects (opens new before closing old)", function() {
+				var openedSockets = [];
+				var openCalls = stubApi( { "apps.connections.open": { ok: true, url: "wss://example.test/link" } } );
+				gateway.setSocketOpener( function( wssUrl ) {
+					var fake = new tests.support.FakeWebSocket();
+					openedSockets.append( fake );
+					return fake;
+				} );
+				gateway.start();
+				var firstSocket = openedSockets[ 1 ];
+
+				gateway.handleSocketText( firstSocket, jsonSerialize( { type: "disconnect", reason: "warning" } ) );
+
+				expect( openCalls.len() ).toBe( 2 );
+				expect( openedSockets.len() ).toBe( 2 );
+				expect( firstSocket.getClosed() ).toBeTrue();
+			} );
+
+			it( "handleSocketClose() reconnects when not deliberately stopped", function() {
+				var openedSockets = [];
+				var openCalls = stubApi( { "apps.connections.open": { ok: true, url: "wss://example.test/link" } } );
+				gateway.setSocketOpener( function( wssUrl ) {
+					var fake = new tests.support.FakeWebSocket();
+					openedSockets.append( fake );
+					return fake;
+				} );
+				gateway.start();
+
+				gateway.handleSocketClose( 1006, "abnormal closure" );
+
+				expect( openCalls.len() ).toBe( 2 );
+			} );
+
+			it( "handleSocketClose() does not reconnect after a deliberate stop()", function() {
+				var openCalls = stubApi( { "apps.connections.open": { ok: true, url: "wss://example.test/link" } } );
+				gateway.setSocketOpener( function( wssUrl ) { return new tests.support.FakeWebSocket(); } );
+				gateway.start();
+				gateway.stop();
+
+				var beforeCount = openCalls.len();
+				gateway.handleSocketClose( 1000, "normal closure" );
+
+				expect( openCalls.len() ).toBe( beforeCount );
+			} );
+
+			it( "deliver() sends one chat.postMessage call, including thread_ts when present", function() {
+				var calls = stubApi( { "chat.postMessage": { ok: true, ts: "999.111" } } );
+				var event = new GatewayEvent( type: "response.completed", data: { text: "short reply" } );
+				var context = new GatewayContext( conversationID: "C1", threadID: "111.222" );
+
+				var result = gateway.deliver( event, context );
+
+				var sendCalls = calls.filter( c => c.method == "chat.postMessage" );
+				expect( sendCalls.len() ).toBe( 1 );
+				expect( sendCalls[ 1 ].params.channel ).toBe( "C1" );
+				expect( sendCalls[ 1 ].params.thread_ts ).toBe( "111.222" );
+				expect( sendCalls[ 1 ].token ).toBe( "xoxb-test" );
+				expect( result.getSuccess() ).toBeTrue();
+			} );
+
+			it( "deliver() splits text longer than the chunk limit into multiple chat.postMessage calls", function() {
+				var calls = stubApi( { "chat.postMessage": { ok: true, ts: "1" } } );
+				var longText = repeatString( "a", 5000 );
+				var event = new GatewayEvent( type: "response.completed", data: { text: longText } );
+				var context = new GatewayContext( conversationID: "C1" );
+
+				gateway.deliver( event, context );
+
+				var sendCalls = calls.filter( c => c.method == "chat.postMessage" );
+				expect( sendCalls.len() ).toBeGT( 1 );
+			} );
+
+			it( "deliver() returns a failure result when chat.postMessage fails", function() {
+				stubApi( { "chat.postMessage": { ok: false, error: "channel_not_found" } } );
+				var event = new GatewayEvent( type: "response.completed", data: { text: "hi" } );
+				var context = new GatewayContext( conversationID: "C1" );
+
+				var result = gateway.deliver( event, context );
+
+				expect( result.getSuccess() ).toBeFalse();
+				expect( result.getError() ).toInclude( "channel_not_found" );
+			} );
+
+			it( "deliverChunk() posts a placeholder on the first chunk, then chat.update on completion", function() {
+				var calls = stubApi( {
+					"chat.postMessage": { ok: true, ts: "555.1" },
+					"chat.update"     : { ok: true, ts: "555.1" }
+				} );
+				var context = new GatewayContext( conversationID: "C1" );
+				var executionId = "exec-1";
+
+				var startEvent = new GatewayEvent( type: "response.started", executionID: executionId, data: { delta: "Hel" } );
+				gateway.deliverChunk( startEvent, context );
+
+				var completeEvent = new GatewayEvent( type: "response.completed", executionID: executionId, data: { delta: "lo" } );
+				var result = gateway.deliverChunk( completeEvent, context );
+
+				expect( calls.filter( c => c.method == "chat.postMessage" ).len() ).toBe( 1 );
+				var updateCalls = calls.filter( c => c.method == "chat.update" );
+				expect( updateCalls.len() ).toBe( 1 );
+				expect( updateCalls[ 1 ].params.text ).toBe( "Hello" );
+				expect( result.getSuccess() ).toBeTrue();
+			} );
+
+			it( "requestHumanInteraction() sends Block Kit action buttons built from the request's allowed decisions", function() {
+				var calls = stubApi( { "chat.postMessage": { ok: true, ts: "777.1" } } );
+				var humanRequest = new HumanInteractionRequest(
+					title           : "Approve tool call?",
+					message         : "delete_file( path: '/tmp/x' )",
+					allowedDecisions: [ "approve", "reject" ]
+				);
+				var context = new GatewayContext( conversationID: "C1" );
+
+				var result = gateway.requestHumanInteraction( humanRequest, context );
+
+				var sendCalls = calls.filter( c => c.method == "chat.postMessage" );
+				expect( sendCalls.len() ).toBe( 1 );
+				expect( sendCalls[ 1 ].params ).toHaveKey( "blocks" );
+				var actionsBlock = sendCalls[ 1 ].params.blocks[ 2 ];
+				expect( actionsBlock.type ).toBe( "actions" );
+				expect( actionsBlock.elements.len() ).toBe( 2 );
+				expect( result.getSuccess() ).toBeTrue();
+			} );
+
+			it( "parseHumanDecision() reads requestID/decision/decidedBy from a GatewayEvent's data", function() {
+				var event = new GatewayEvent( type: "interaction.decision", data: { requestID: "req-1", decision: "reject", decidedBy: "U1" } );
+
+				var decision = gateway.parseHumanDecision( event );
+
+				expect( decision.getRequestID() ).toBe( "req-1" );
+				expect( decision.getDecision() ).toBe( "reject" );
+				expect( decision.getDecidedBy() ).toBe( "U1" );
+			} );
+
+		} );
+	}
+
+}

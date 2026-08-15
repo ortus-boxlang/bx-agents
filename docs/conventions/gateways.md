@@ -90,9 +90,12 @@ post( "/interactions/:requestID/decisions" ).toHandler( "Gateway.process" )
 ColdBox has no built-in `toAiGateway()` DSL terminator for this surface (only `toAi()` and `toMCP()` exist natively) - this wiring is BX Agents' own generated code, following the same shape a future core terminator would produce. See the [`toAiGateway()` for ColdBox Core](../proposals/toAiGateway-coldbox-core.md) proposal.
 {% endhint %}
 
-## 3. Push-style gateways (`type: "telegram"`, and friends)
+## 3. Push-style gateways (`type: "telegram"` / `"slack"`, and friends)
 
-A different kind of channel adapter from `mock`/`cli`/`http` above: instead of being driven by an inbound HTTP request, a push-style gateway holds its own connection to the platform (a long-poll loop, eventually a persistent websocket for platforms like Slack/Discord) and pushes inbound messages to your agent as they arrive - the closer-to-"real chat bot" experience.
+A different kind of channel adapter from `mock`/`cli`/`http` above: instead of being driven by an inbound HTTP request, a push-style gateway holds its own connection to the platform and pushes inbound messages to your agent as they arrive - the closer-to-"real chat bot" experience. Two transport shapes exist today:
+
+- **Long-poll** (Telegram): a scheduled task periodically asks the platform "anything new?".
+- **Persistent websocket** (Slack, via Socket Mode): the gateway holds a live, long-running connection the platform pushes events down in real time.
 
 ```javascript
 // gateways/telegramChannel.bx
@@ -106,13 +109,37 @@ class {
 }
 ```
 
-Same "secrets stay external" rule as `http`'s `secretEnvVar`: `botTokenEnvVar` names an environment variable, resolved live via `getSystemSetting()` at startup, never embedded as a literal. Unlike the core types, a push-style gateway's class lives inside BX Agents itself (`models/gateways/TelegramGateway.bx`, not bx-ai), so its registration renders as a bare class path rather than a short name:
+```javascript
+// gateways/slackChannel.bx
+class {
+	function configure() {
+		return {
+			type          : "slack",
+			botTokenEnvVar: "SLACK_BOT_TOKEN",   // xoxb-... - chat.postMessage/chat.update
+			appTokenEnvVar: "SLACK_APP_TOKEN"    // xapp-... - apps.connections.open (Socket Mode)
+		};
+	}
+}
+```
+
+Same "secrets stay external" rule as `http`'s `secretEnvVar`: every `*EnvVar` key names an environment variable, resolved live via `getSystemSetting()` at startup, never embedded as a literal. Unlike the core types, a push-style gateway's class lives inside BX Agents itself (`models/gateways/*.bx`, not bx-ai), so its registration renders as a bare class path rather than a short name:
 
 ```javascript
 aiGatewayRegistry().register( aiGateway( "bxModules.bxagents.models.gateways.TelegramGateway", { "botToken" : getSystemSetting( "TELEGRAM_BOT_TOKEN", "" ) } ) )
+aiGatewayRegistry().register( aiGateway( "bxModules.bxagents.models.gateways.SlackGateway", { "appToken" : getSystemSetting( "SLACK_APP_TOKEN", "" ), "botToken" : getSystemSetting( "SLACK_BOT_TOKEN", "" ) } ) )
 ```
 
-**Validation:** `type: "telegram"` requires a `botTokenEnvVar`, checked the same way `http`'s `secretEnvVar` is.
+**Validation:** `type: "telegram"` requires `botTokenEnvVar`; `type: "slack"` requires both `botTokenEnvVar` and `appTokenEnvVar` - checked the same way `http`'s `secretEnvVar` is.
+
+{% hint style="info" %}
+Slack v1 is **Socket Mode only** - no public webhook endpoint is needed or generated for it (unlike `http`, which gets real routes - see §2 above). The Events-API/HTTP-webhook alternative Slack also supports isn't built here.
+{% endhint %}
+
+### Slack's persistent connection
+
+`SlackGateway` holds its websocket via `java.net.http.HttpClient`'s async WebSocket client, bridged from a BoxLang listener class that `implements="java:java.net.http.WebSocket$Listener"` directly (`models/gateways/support/SlackSocketListener.bx`) - BoxLang compiles this as a real JVM implementer of the interface, confirmed empirically by handing an instance straight to `HttpClient.newWebSocketBuilder().buildAsync( uri, listener )` with no casting error (only the expected `java.net.ConnectException` once the real network boundary was reached). Only the methods the class actually declares override the JDK interface's `default` methods; anything left unimplemented falls through to the JDK's own default behavior automatically. This is the reference pattern any future persistent-connection gateway (Discord) follows too.
+
+Reconnects are driven reactively by Slack's own protocol signals - a `disconnect` frame (`warning`/`refresh_requested`) or an unexpected socket close - opening a **new** connection before closing the old one, per Slack's documented recommendation. A lightweight scheduler watchdog (`slack-watchdog-<name>`, every 30s) is only a safety net for the case neither of those signals fires.
 
 ### GatewaySession - wiring the agent to every push-style gateway
 

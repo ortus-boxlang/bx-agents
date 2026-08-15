@@ -1,0 +1,29 @@
+/**
+ * Test double standing in for a real `java.net.http.WebSocket`, injected via
+ * SlackGateway.setSocketOpener() - records every sendText()/sendClose() call
+ * so a spec can assert on acks/outbound frames without any real network I/O.
+ */
+class {
+
+	property name="sentTexts" type="array" default=[];
+	property name="closed" type="boolean" default=false;
+	property name="closeStatusCode" type="numeric" default=0;
+	property name="closeReason" type="string" default="";
+
+	any function sendText( required string text, required boolean last ) {
+		variables.sentTexts.append( arguments.text )
+		return this
+	}
+
+	any function sendClose( required numeric statusCode, required string reason ) {
+		variables.closed = true
+		variables.closeStatusCode = arguments.statusCode
+		variables.closeReason = arguments.reason
+		return this
+	}
+
+	void function request( required numeric n ) {
+		// no-op — flow-control isn't meaningful for this fake
+	}
+
+}

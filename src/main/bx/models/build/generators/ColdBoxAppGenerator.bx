@@ -467,14 +467,16 @@ class {
 	 *
 	 * @resolvedConfig A single node's own resolved config - only `checkpointer` is used
 	 *
-	 * @return A BoxLang `aiMemory( "type", config: {...} )` expression string
+	 * @return A BoxLang `aiMemory( memory: "type", config: {...} )` expression string
 	 */
 	private string function renderCheckpointerExpression( required struct resolvedConfig ) {
 		var checkpointer = arguments.resolvedConfig.checkpointer ?: { type: "cache" }
 		var type = trim( checkpointer.type ?: "cache" )
 		var rest = duplicate( checkpointer )
 		rest.delete( "type" )
-		return 'aiMemory( "#bxLiteral( type )#", config: #renderLiteral( rest )# )'
+		// aiMemory()'s first param is named `memory`, not `type` - all-named-args here
+		// because BoxLang doesn't allow mixing positional and named arguments in one call.
+		return 'aiMemory( memory: "#bxLiteral( type )#", config: #renderLiteral( rest )# )'
 	}
 
 	private string function renderAgentStatement(

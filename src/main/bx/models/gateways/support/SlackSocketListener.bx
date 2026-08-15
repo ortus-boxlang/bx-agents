@@ -1,0 +1,58 @@
+/**
+ * Adapts a SlackGateway instance to `java.net.http.WebSocket.Listener` by
+ * directly implementing the interface - `implements="java:..."` compiles
+ * this class as a real JVM implementer of `WebSocket.Listener`, confirmed
+ * empirically by handing an instance straight to
+ * `HttpClient.newWebSocketBuilder().buildAsync( uri, listener )` with no
+ * proxy/casting error (only the expected `java.net.ConnectException` once
+ * the real network boundary was reached). Since the JVM class only overrides
+ * the methods actually declared here, `onBinary`/`onPing`/`onPong` fall
+ * through to the JDK interface's own `default` implementations automatically
+ * - no `createDynamicProxy()` indirection needed.
+ *
+ * Because `onOpen()`/`onText()` ARE overridden here, THIS class is
+ * responsible for the `webSocket.request(1)` calls the JDK's own defaults
+ * would otherwise make - `java.net.http.WebSocket` uses a Reactive-Streams-
+ * style backpressure model where each `request(n)` permits exactly n more
+ * `onText`/`onBinary` deliveries. Forgetting either call silently stalls
+ * the connection after the very first frame (confirmed via `javap` against
+ * the JDK's own `WebSocket.Listener` interface - `onOpen`'s and every other
+ * default method's real implementation calls `webSocket.request(1)`).
+ *
+ * Wired up as:
+ *   listener = new SlackSocketListener( this )
+ *   ws       = httpClient.newWebSocketBuilder().buildAsync( uri, listener ).get()
+ */
+class implements="java:java.net.http.WebSocket$Listener" {
+
+	property name="gateway";
+
+	/**
+	 * @gateway The SlackGateway instance to forward every callback to
+	 */
+	function init( required any gateway ) {
+		variables.gateway = arguments.gateway
+		return this
+	}
+
+	function onOpen( required any webSocket ) {
+		arguments.webSocket.request( 1 )
+		variables.gateway.handleSocketOpen( arguments.webSocket )
+	}
+
+	function onText( required any webSocket, required any data, required boolean last ) {
+		arguments.webSocket.request( 1 )
+		variables.gateway.handleSocketText( arguments.webSocket, arguments.data.toString() )
+		return null
+	}
+
+	function onClose( required any webSocket, required numeric statusCode, required string reason ) {
+		variables.gateway.handleSocketClose( arguments.statusCode, arguments.reason )
+		return null
+	}
+
+	function onError( required any webSocket, required any error ) {
+		variables.gateway.handleSocketError( arguments.error )
+	}
+
+}

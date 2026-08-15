@@ -44,8 +44,16 @@ abstract class extends="bxModules.bxai.models.gateway.BaseGateway" {
 	 */
 	property name="schedulerOverride";
 
+	/**
+	 * The single callback registered via onError() (IGateway's own default is
+	 * also a genuine no-op) — shared here since every persistent-connection
+	 * gateway (Slack, Discord, ...) has a real "connection dropped
+	 * unexpectedly" case to report, not just a future-hypothetical one.
+	 */
+	property name="errorCallback";
+
 	// -------------------------------------------------------------------------
-	// IGateway.onMessage() — real reference implementation, not the no-op default
+	// IGateway.onMessage()/onError() — real reference implementations, not the no-op defaults
 	// -------------------------------------------------------------------------
 
 	/**
@@ -73,6 +81,30 @@ abstract class extends="bxModules.bxai.models.gateway.BaseGateway" {
 			return
 		}
 		variables.messageCallback( arguments.message )
+	}
+
+	/**
+	 * Stores the callback registered via onError().
+	 *
+	 * @callback function( any error )
+	 */
+	public void function onError( required function callback ) {
+		variables.errorCallback = arguments.callback
+	}
+
+	/**
+	 * Invokes the registered onError() callback, a no-op if nothing has
+	 * registered one. Concrete gateways call this whenever their connection
+	 * drops unexpectedly (not via an explicit stop()) — e.g. a websocket
+	 * close/error event.
+	 *
+	 * @error Whatever error information the gateway has - a message string, a struct, a caught exception
+	 */
+	public void function dispatchError( required any error ) {
+		if ( isNull( variables.errorCallback ) ) {
+			return
+		}
+		variables.errorCallback( arguments.error )
 	}
 
 	// -------------------------------------------------------------------------

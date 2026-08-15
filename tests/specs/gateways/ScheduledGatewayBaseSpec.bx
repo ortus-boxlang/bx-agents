@@ -68,6 +68,23 @@ class extends="testbox.system.BaseSpec" {
 				} ).notToThrow();
 			} );
 
+			it( "stores the onError() callback and dispatchError() invokes it once per error", function() {
+				var received = [];
+				gateway.onError( function( error ) {
+					received.append( error );
+				} );
+
+				gateway.dispatchError( "connection dropped" );
+
+				expect( received ).toBe( [ "connection dropped" ] );
+			} );
+
+			it( "dispatchError() is a safe no-op when no onError() callback was ever registered", function() {
+				expect( function() {
+					gateway.dispatchError( "unheard" );
+				} ).notToThrow();
+			} );
+
 			it( "throws BxAgents.NoScheduler when started with no scheduler override and no live ColdBox application", function() {
 				var bareGateway = new tests.support.TestScheduledGateway();
 

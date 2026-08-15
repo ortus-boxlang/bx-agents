@@ -126,6 +126,19 @@ class extends="testbox.system.BaseSpec" {
 				expect( statement ).toInclude( 'getSystemSetting( "MY_TELEGRAM_BOT_TOKEN", "" )' );
 			} );
 
+			it( "registers a slack gateway via its bare class path, resolving both botToken and appToken live", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-slack" );
+				var result = generator.generate( discovery, newAppDir() );
+
+				expect( result.registrationStatements.len() ).toBe( 1 );
+				var statement = result.registrationStatements[ 1 ];
+				expect( statement ).toInclude( '"bxModules.bxagents.models.gateways.SlackGateway"' );
+				expect( statement ).notToInclude( "botTokenEnvVar" );
+				expect( statement ).notToInclude( "appTokenEnvVar" );
+				expect( statement ).toInclude( 'getSystemSetting( "MY_SLACK_BOT_TOKEN", "" )' );
+				expect( statement ).toInclude( 'getSystemSetting( "MY_SLACK_APP_TOKEN", "" )' );
+			} );
+
 			it( "reports hasPushGateway=true and writes interceptors/GatewaySessionBootstrap.bx for a telegram gateway", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-telegram" );
 				var appDir = newAppDir();

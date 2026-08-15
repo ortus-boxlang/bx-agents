@@ -1,0 +1,550 @@
+import bxModules.bxai.models.gateway.IGateway;
+import bxModules.bxai.models.gateway.contracts.GatewayContext;
+import bxModules.bxai.models.gateway.contracts.GatewayEvent;
+import bxModules.bxai.models.gateway.contracts.GatewayMessage;
+import bxModules.bxai.models.gateway.contracts.GatewayDeliveryResult;
+import bxModules.bxai.models.gateway.contracts.HumanInteractionRequest;
+import bxModules.bxai.models.gateway.contracts.HumanInteractionDecision;
+
+/**
+ * Slack gateway - Socket Mode only in v1 (a persistent websocket Slack
+ * itself initiates events over, no public webhook endpoint needed - the
+ * Events-API/HTTP-webhook alternative Slack also supports is not built
+ * here). Inbound delivery is entirely event-driven via
+ * `SlackSocketListener`'s callbacks; outbound is plain HTTP POST, same
+ * idiom as `TelegramGateway`.
+ *
+ * Config, via aiGateway( "bxModules.bxagents.models.gateways.SlackGateway", options ):
+ *   botToken  The bot token (xoxb-...), used for chat.postMessage/chat.update
+ *   appToken  The app-level token (xapp-...), used only for apps.connections.open
+ *
+ * Verified against Slack's real, current docs (docs.slack.dev, not the
+ * stale api.slack.com mirror): `java.net.http.WebSocket.Listener`'s 7
+ * methods are all `default`, none abstract-required - only `onOpen`/
+ * `onText`/`onClose`/`onError` are implemented (see SlackSocketListener.bx,
+ * which `implements="java:java.net.http.WebSocket$Listener"` directly), the
+ * rest fall through to the JDK's own defaults (auto pong-reply, auto
+ * request(1) flow-control).
+ */
+class extends="ScheduledGatewayBase" {
+
+	property name="botToken" type="string" default="";
+	property name="appToken" type="string" default="";
+	property name="webSocket";
+	property name="socketConnected" type="boolean" default=false;
+	property name="stopping" type="boolean" default=false;
+	property name="streamState" type="struct" default={};
+	property name="chunker";
+
+	/**
+	 * Test-only seam: overrides how calls to the Slack Web API are made.
+	 * Defaults to a real HTTP POST; a test injects a closure returning canned
+	 * responses instead. Signature: function( method, params, token ) -> struct
+	 */
+	property name="apiCaller";
+
+	/**
+	 * Test-only seam: overrides how a live websocket is actually opened.
+	 * Defaults to the real SlackSocketListener+HttpClient chain; a test
+	 * injects a closure returning a fake websocket double (sendText()/
+	 * sendClose()) instead, so connection lifecycle/reconnect logic is
+	 * testable with zero real network I/O. Signature: function( wssUrl ) -> websocket-like object
+	 */
+	property name="socketOpener";
+
+	static {
+		API_BASE           = "https://slack.com/api/"
+		MAX_MESSAGE_LENGTH = 3900
+	}
+
+	function init() {
+		variables.name = "slack"
+		variables.description = "Slack gateway (Socket Mode) - persistent websocket inbound, HTTP outbound"
+		variables.chunker = new "models.gateways.support.MessageChunker@bxagents"()
+		return this
+	}
+
+	IGateway function configure( required any options ) {
+		super.configure( arguments.options )
+		variables.botToken = trim( variables.options.botToken ?: "" )
+		variables.appToken = trim( variables.options.appToken ?: "" )
+		return this
+	}
+
+	array function getDeclaredCapabilities() {
+		return [ "inboundMessages", "outboundMessages", "streaming", "threads", "interactiveActions", "humanApproval" ]
+	}
+
+	/**
+	 * Test-only seam — see apiCaller's own docblock.
+	 */
+	void function setApiCaller( required any caller ) {
+		variables.apiCaller = arguments.caller
+	}
+
+	/**
+	 * Test-only seam — see socketOpener's own docblock.
+	 */
+	void function setSocketOpener( required any opener ) {
+		variables.socketOpener = arguments.opener
+	}
+
+	// -------------------------------------------------------------------------
+	// ScheduledGatewayBase hooks
+	// -------------------------------------------------------------------------
+
+	void function onConnect() {
+		if ( !len( variables.botToken ) || !len( variables.appToken ) ) {
+			throw(
+				type   : "SlackGateway.MissingToken",
+				message: "SlackGateway requires both 'botToken' and 'appToken' options (resolved from botTokenEnvVar/appTokenEnvVar at startup)."
+			)
+		}
+
+		variables.stopping = false
+		openConnection()
+	}
+
+	void function onDisconnect() {
+		variables.stopping = true
+		closeSocketQuietly( variables.webSocket, "gateway stopping" )
+		variables.webSocket = null
+		variables.socketConnected = false
+	}
+
+	void function registerScheduledTasks( required any scheduler ) {
+		// A light safety-net watchdog only - the primary reconnect path is
+		// reactive (handleSocketClose()/handleDisconnectFrame() below), driven
+		// by Slack's own protocol signals, not this poll.
+		var taskName = "slack-watchdog-#variables.name#"
+		arguments.scheduler.task( taskName )
+			.call( () => checkConnectionHealth() )
+			.every( 30, "seconds" )
+			.withNoOverlaps()
+			.onFailure( ( task, exception ) => logEvent( "Watchdog failed: #exception.message#", "error" ) )
+			.start()
+		trackTask( taskName )
+	}
+
+	/**
+	 * Invoked by the watchdog task - reconnects only if the connection is
+	 * genuinely down and we're not in the middle of a deliberate stop().
+	 */
+	void function checkConnectionHealth() {
+		if ( variables.stopping || variables.socketConnected ) {
+			return
+		}
+		logEvent( "Watchdog found the connection down - reconnecting" )
+		reconnect()
+	}
+
+	// -------------------------------------------------------------------------
+	// Connection lifecycle
+	// -------------------------------------------------------------------------
+
+	private void function openConnection() {
+		var wssUrl = openConnectionsApi()
+		variables.webSocket = openSocket( wssUrl )
+		variables.socketConnected = true
+	}
+
+	/**
+	 * Opens a NEW connection before tearing down the old one, per Slack's own
+	 * documented reconnect pattern (docs.slack.dev/apis/events-api/using-socket-mode) -
+	 * Slack explicitly supports up to 10 concurrent Socket Mode connections
+	 * per app precisely to make this overlap-then-cutover safe.
+	 */
+	private void function reconnect() {
+		if ( variables.stopping ) {
+			return
+		}
+
+		var oldSocket = variables.webSocket
+		try {
+			openConnection()
+		} catch ( any e ) {
+			logEvent( "Reconnect failed: #e.message#", "error" )
+			variables.socketConnected = false
+			dispatchError( e )
+			return
+		}
+
+		closeSocketQuietly( oldSocket, "reconnecting" )
+	}
+
+	private void function closeSocketQuietly( required any socket, required string reason ) {
+		if ( isNull( arguments.socket ) ) {
+			return
+		}
+		try {
+			arguments.socket.sendClose( 1000, arguments.reason )
+		} catch ( any e ) {
+			// Best-effort - the socket may already be closed/broken.
+		}
+	}
+
+	/**
+	 * @wssUrl The wss:// URL from apps.connections.open
+	 *
+	 * @return A live websocket (or the test-injected double from socketOpener)
+	 */
+	private any function openSocket( required string wssUrl ) {
+		if ( !isNull( variables.socketOpener ) ) {
+			return variables.socketOpener( arguments.wssUrl )
+		}
+
+		var listener = new "models.gateways.support.SlackSocketListener@bxagents"( this )
+		var httpClient = createObject( "java", "java.net.http.HttpClient" ).newHttpClient()
+		var uri = createObject( "java", "java.net.URI" ).init( arguments.wssUrl )
+		return httpClient.newWebSocketBuilder().buildAsync( uri, listener ).get()
+	}
+
+	/**
+	 * @return The wss:// URL to connect to
+	 */
+	private string function openConnectionsApi() {
+		var response = callApi( "apps.connections.open", {}, variables.appToken )
+		if ( !( response.ok ?: false ) ) {
+			throw(
+				type   : "SlackGateway.ConnectionFailed",
+				message: "apps.connections.open failed: #response.error ?: 'unknown error'#"
+			)
+		}
+		return response.url
+	}
+
+	// -------------------------------------------------------------------------
+	// SlackSocketListener callbacks - see support/SlackSocketListener.bx
+	// -------------------------------------------------------------------------
+
+	void function handleSocketOpen( required any webSocket ) {
+		logEvent( "Connected" )
+		variables.socketConnected = true
+	}
+
+	void function handleSocketClose( required numeric statusCode, required string reason ) {
+		logEvent( "Socket closed: #statusCode# #reason#" )
+		variables.socketConnected = false
+		if ( !variables.stopping ) {
+			reconnect()
+		}
+	}
+
+	void function handleSocketError( required any error ) {
+		logEvent( "Socket error: #error.getMessage()#", "error" )
+		variables.socketConnected = false
+		dispatchError( arguments.error )
+	}
+
+	/**
+	 * @webSocket The live websocket the frame arrived on (used to send acks)
+	 * @text A raw Socket Mode text frame
+	 */
+	void function handleSocketText( required any webSocket, required string text ) {
+		var frame = {}
+		try {
+			frame = jsonDeserialize( arguments.text )
+		} catch ( any e ) {
+			logEvent( "Unparseable Socket Mode frame: #e.message#", "error" )
+			return
+		}
+
+		switch ( frame.type ?: "" ) {
+			case "hello":
+				logEvent( "Received hello" )
+				break
+			case "events_api":
+				ackEnvelope( frame.envelope_id ?: "" )
+				handleEventsApiPayload( frame.payload ?: {} )
+				break
+			case "interactive":
+				ackEnvelope( frame.envelope_id ?: "" )
+				handleInteractivePayload( frame.payload ?: {} )
+				break
+			case "slash_commands":
+				ackEnvelope( frame.envelope_id ?: "" )
+				break
+			case "disconnect":
+				handleDisconnectFrame( frame.reason ?: "" )
+				break
+		}
+	}
+
+	/**
+	 * @envelopeId The Socket Mode envelope to acknowledge - must happen within
+	 *             Slack's ~3-second delivery budget, before any slow processing.
+	 */
+	private void function ackEnvelope( required string envelopeId ) {
+		if ( !len( arguments.envelopeId ) || isNull( variables.webSocket ) ) {
+			return
+		}
+		try {
+			variables.webSocket.sendText( jsonSerialize( { envelope_id: arguments.envelopeId } ), true )
+		} catch ( any e ) {
+			logEvent( "Failed to ack envelope [#arguments.envelopeId#]: #e.message#", "error" )
+		}
+	}
+
+	/**
+	 * @reason "warning" (connection closing soon), "refresh_requested"
+	 *         (periodic rotation), or "link_disabled" (Socket Mode turned off
+	 *         for the app - do not reconnect, it would just fail again)
+	 */
+	private void function handleDisconnectFrame( required string reason ) {
+		logEvent( "Received disconnect frame: #arguments.reason#" )
+		if ( arguments.reason == "link_disabled" ) {
+			variables.stopping = true
+			return
+		}
+		// "warning"/"refresh_requested" - proactively open a new connection
+		// now, before Slack force-closes the current one.
+		reconnect()
+	}
+
+	/**
+	 * @payload A Slack Events API "events_api" envelope's own payload
+	 */
+	private void function handleEventsApiPayload( required struct payload ) {
+		var event = arguments.payload.event ?: {}
+		if ( ( event.type ?: "" ) != "message" ) {
+			return
+		}
+		// Ignore the bot's own messages / message-subtype system events
+		// (channel_join, message_changed, etc.) to avoid a self-loop.
+		if ( len( event.bot_id ?: "" ) || len( event.subtype ?: "" ) ) {
+			return
+		}
+		dispatchInbound( toGatewayMessage( event ) )
+	}
+
+	/**
+	 * @event A raw Slack "message" event object
+	 *
+	 * @return A normalized GatewayMessage; fires onGatewayMessageReceived before returning
+	 */
+	private GatewayMessage function toGatewayMessage( required struct event ) {
+		var channel = arguments.event.channel ?: ""
+		var threadId = len( arguments.event.thread_ts ?: "" ) ? arguments.event.thread_ts : ( arguments.event.ts ?: "" )
+		var context = new GatewayContext(
+			gateway       : variables.name,
+			conversationID: channel,
+			userID        : arguments.event.user ?: "",
+			threadID      : threadId,
+			raw           : arguments.event
+		)
+		var message = new GatewayMessage(
+			text   : arguments.event.text ?: "",
+			context: context,
+			raw    : arguments.event
+		)
+
+		BoxAnnounce( "onGatewayMessageReceived", {
+			gateway       : this,
+			message       : message,
+			threadId      : message.getContext().getThreadID(),
+			userId        : message.getContext().getUserID(),
+			conversationId: message.getContext().getConversationID()
+		} )
+
+		return message
+	}
+
+	/**
+	 * @payload A Slack "interactive" envelope's own payload (block_actions, etc.)
+	 */
+	private void function handleInteractivePayload( required struct payload ) {
+		if ( ( arguments.payload.type ?: "" ) != "block_actions" ) {
+			return
+		}
+
+		var actions = arguments.payload.actions ?: []
+		var action = actions.len() ? actions[ 1 ] : {}
+		var channel = arguments.payload.channel.id ?: ""
+
+		BoxAnnounce( "onGatewayMessageReceived", {
+			gateway       : this,
+			message       : null,
+			threadId      : channel,
+			userId        : arguments.payload.user.id ?: "",
+			conversationId: channel,
+			decision      : action.value ?: ""
+		} )
+	}
+
+	// -------------------------------------------------------------------------
+	// Outbound
+	// -------------------------------------------------------------------------
+
+	GatewayDeliveryResult function deliver( required GatewayEvent event, required GatewayContext context ) {
+		var text = toString( arguments.event.getData().text ?: "" )
+		if ( !len( text ) ) {
+			return GatewayDeliveryResult.failure( "Nothing to deliver — event data has no 'text'" )
+		}
+
+		var channel = arguments.context.getConversationID()
+		var threadTs = arguments.context.getThreadID()
+		var chunks = variables.chunker.split( text, static.MAX_MESSAGE_LENGTH )
+		var lastResponse = {}
+
+		for ( var chunk in chunks ) {
+			var params = { channel: channel, text: chunk }
+			if ( len( threadTs ) ) {
+				params[ "thread_ts" ] = threadTs
+			}
+			lastResponse = callApi( "chat.postMessage", params, variables.botToken )
+			if ( !( lastResponse.ok ?: false ) ) {
+				return GatewayDeliveryResult.failure( "Slack chat.postMessage failed: #lastResponse.error ?: 'unknown error'#" )
+			}
+		}
+
+		var result = new GatewayDeliveryResult( deliveryID: toString( lastResponse.ts ?: arguments.event.getId() ) )
+
+		BoxAnnounce( "onGatewayMessageSent", {
+			gateway : this,
+			event   : arguments.event,
+			context : arguments.context,
+			result  : result,
+			threadId: arguments.context.getThreadID()
+		} )
+
+		return result
+	}
+
+	/**
+	 * Streams via a placeholder message posted on the first chunk, then
+	 * `chat.update` on subsequent chunks - throttled to roughly once/second
+	 * (except the final, always-flushed chunk) to stay well clear of Slack's
+	 * per-channel rate limits on repeated edits of the same message.
+	 */
+	GatewayDeliveryResult function deliverChunk( required GatewayEvent event, required GatewayContext context ) {
+		var executionId = arguments.event.getExecutionID()
+		var channel = arguments.context.getConversationID()
+		var threadTs = arguments.context.getThreadID()
+		var isComplete = arguments.event.getType() == "response.completed"
+
+		if ( !variables.streamState.keyExists( executionId ) ) {
+			var startParams = { channel: channel, text: "…" }
+			if ( len( threadTs ) ) {
+				startParams[ "thread_ts" ] = threadTs
+			}
+			var startResponse = callApi( "chat.postMessage", startParams, variables.botToken )
+			if ( !( startResponse.ok ?: false ) ) {
+				return GatewayDeliveryResult.failure( "Slack chat.postMessage (stream start) failed: #startResponse.error ?: 'unknown error'#" )
+			}
+			variables.streamState[ executionId ] = { channel: channel, ts: startResponse.ts, buffer: "", lastFlushTick: getTickCount() }
+		}
+
+		var state = variables.streamState[ executionId ]
+		state.buffer &= toString( arguments.event.getData().delta ?: arguments.event.getData().text ?: "" )
+
+		var dueForFlush = ( getTickCount() - state.lastFlushTick ) >= 1000
+		if ( isComplete || dueForFlush ) {
+			var updateResponse = callApi( "chat.update", { channel: state.channel, ts: state.ts, text: state.buffer }, variables.botToken )
+			state.lastFlushTick = getTickCount()
+			if ( !( updateResponse.ok ?: false ) ) {
+				return GatewayDeliveryResult.failure( "Slack chat.update failed: #updateResponse.error ?: 'unknown error'#" )
+			}
+		}
+
+		var deliveryId = state.ts
+		if ( isComplete ) {
+			variables.streamState.delete( executionId )
+		}
+
+		return new GatewayDeliveryResult( deliveryID: toString( deliveryId ) )
+	}
+
+	// -------------------------------------------------------------------------
+	// Human-in-the-loop — Block Kit buttons
+	// -------------------------------------------------------------------------
+
+	GatewayDeliveryResult function requestHumanInteraction( required HumanInteractionRequest humanRequest, required GatewayContext context ) {
+		var presentation = presentInteraction( arguments.humanRequest )
+		var blocks = [
+			{ type: "section", text: { type: "mrkdwn", text: buildPresentationText( presentation ) } },
+			{
+				type    : "actions",
+				elements: presentation.getButtons().map( function( btn ) {
+					var element = {
+						type     : "button",
+						text     : { type: "plain_text", text: btn.label },
+						value    : btn.value,
+						action_id: btn.value
+					}
+					if ( btn.style == "primary" || btn.style == "danger" ) {
+						element[ "style" ] = btn.style
+					}
+					return element
+				} )
+			}
+		]
+
+		var params = {
+			channel: arguments.context.getConversationID(),
+			text   : presentation.getTitle(),
+			blocks : blocks
+		}
+		var threadTs = arguments.context.getThreadID()
+		if ( len( threadTs ) ) {
+			params[ "thread_ts" ] = threadTs
+		}
+
+		var response = callApi( "chat.postMessage", params, variables.botToken )
+		if ( !( response.ok ?: false ) ) {
+			return GatewayDeliveryResult.failure( "Slack chat.postMessage (HITL prompt) failed: #response.error ?: 'unknown error'#" )
+		}
+
+		return new GatewayDeliveryResult( deliveryID: toString( response.ts ?: arguments.humanRequest.getId() ) )
+	}
+
+	HumanInteractionDecision function parseHumanDecision( required GatewayEvent event ) {
+		var data = arguments.event.getData()
+		return new HumanInteractionDecision(
+			requestID: data.requestID ?: "",
+			decision : data.decision ?: "",
+			decidedBy: data.decidedBy ?: ""
+		)
+	}
+
+	private string function buildPresentationText( required any presentation ) {
+		return len( arguments.presentation.getTitle() )
+			? "*#arguments.presentation.getTitle()#*" & char( 10 ) & char( 10 ) & arguments.presentation.getBody()
+			: arguments.presentation.getBody()
+	}
+
+	// -------------------------------------------------------------------------
+	// Slack Web API call
+	// -------------------------------------------------------------------------
+
+	/**
+	 * @method A Slack Web API method name, e.g. "apps.connections.open", "chat.postMessage"
+	 * @params Method parameters
+	 * @token  The bearer token to authenticate with (appToken for apps.connections.open, botToken for everything else)
+	 *
+	 * @return The parsed JSON response as a struct — { ok, error, ...method-specific fields }
+	 */
+	private struct function callApi( required string method, required struct params, required string token ) {
+		if ( !isNull( variables.apiCaller ) ) {
+			return variables.apiCaller( arguments.method, arguments.params, arguments.token )
+		}
+
+		var url = static.API_BASE & arguments.method
+		bx:http
+			url     = url
+			method  = "post"
+			result  = "apiResult"
+			charset = "utf-8"
+		{
+			bx:httpParam type="header" name="Authorization" value="Bearer #arguments.token#";
+			bx:httpParam type="header" name="content-type" value="application/json; charset=utf-8";
+			bx:httpParam type="body" value=jsonSerialize( arguments.params );
+		}
+
+		try {
+			return jsonDeserialize( apiResult.fileContent ?: "{}" )
+		} catch ( any e ) {
+			return { ok: false, error: "Unparseable response from Slack: #e.message#" }
+		}
+	}
+
+}
