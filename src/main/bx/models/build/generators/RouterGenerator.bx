@@ -22,10 +22,11 @@ class {
 	 * @appDir Absolute path to the generated ColdBox app dir, e.g. "<projectRoot>/.build/app"
 	 * @hasHttpGateway Whether an http-type channel-adapter gateway exists (see GatewayGenerator) - emits the 3 fixed gateway webhook routes when true
 	 * @hasWhatsAppCloudGateway Whether a whatsapp-cloud-type channel-adapter gateway exists (see GatewayGenerator) - emits the GET/POST WhatsApp Cloud webhook routes when true
+	 * @hasTeamsGateway Whether a teams-type channel-adapter gateway exists (see GatewayGenerator) - emits the POST Teams webhook route when true
 	 *
 	 * @return { router, hasRoutes, hasAgentExposure }
 	 */
-	struct function generate( required struct discovery, required string appDir, boolean hasHttpGateway = false, boolean hasWhatsAppCloudGateway = false ) {
+	struct function generate( required struct discovery, required string appDir, boolean hasHttpGateway = false, boolean hasWhatsAppCloudGateway = false, boolean hasTeamsGateway = false ) {
 		var exposureEntries = collectExposureEntries( arguments.discovery )
 		var lines = []
 
@@ -55,6 +56,16 @@ class {
 			lines.append( "// bx-ai's GatewayRequestProcessor)." )
 			lines.append( 'get( "/webhooks/whatsapp-cloud" ).toHandler( "WhatsAppCloud.verify" )' )
 			lines.append( 'post( "/webhooks/whatsapp-cloud" ).toHandler( "WhatsAppCloud.process" )' )
+		}
+
+		if ( arguments.hasTeamsGateway ) {
+			if ( lines.len() ) {
+				lines.append( "" )
+			}
+			lines.append( "// Microsoft Teams webhook surface (Bot Framework Activity protocol) -" )
+			lines.append( "// one route, handled by TeamsGateway itself (own JWT-bearer scheme," )
+			lines.append( "// not bx-ai's GatewayRequestProcessor)." )
+			lines.append( 'post( "/webhooks/teams" ).toHandler( "Teams.process" )' )
 		}
 
 		var appDir = normalizePath( arguments.appDir )

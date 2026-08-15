@@ -57,7 +57,8 @@ class {
 			slack         : "bxModules.bxagents.models.gateways.SlackGateway",
 			discord       : "bxModules.bxagents.models.gateways.DiscordGateway",
 			email         : "bxModules.bxagents.models.gateways.EmailGateway",
-			"whatsapp-cloud": "bxModules.bxagents.models.gateways.whatsapp.WhatsAppCloudGateway"
+			"whatsapp-cloud": "bxModules.bxagents.models.gateways.whatsapp.WhatsAppCloudGateway",
+			teams         : "bxModules.bxagents.models.gateways.TeamsGateway"
 		}
 
 		// Per push-style type, the *EnvVar option keys renderSecretOptions()
@@ -82,7 +83,8 @@ class {
 				phoneNumberId: "phoneNumberIdEnvVar",
 				appSecret    : "appSecretEnvVar",
 				verifyToken  : "verifyTokenEnvVar"
-			}
+			},
+			teams: { appId: "appIdEnvVar", appPassword: "appPasswordEnvVar" }
 		}
 	}
 
@@ -91,13 +93,14 @@ class {
 	 * @appDir Absolute path to the generated ColdBox app dir, e.g. "<projectRoot>/.build/app" - the handler (if needed) is written to "<appDir>/handlers/Gateway.bx"
 	 * @resolvedConfig The root project's resolved config (AgentConfigResolver.resolve()) - only `gatewaySession` is used, to configure the generated GatewaySession's policy/maxQueueDepth
 	 *
-	 * @return { registrationStatements: [], hasHttpGateway, handlerPath (only if hasHttpGateway), hasPushGateway, hasEmailGateway, hasWhatsAppCloudGateway, whatsAppCloudHandlerPath (only if hasWhatsAppCloudGateway), sessionInterceptorName (only if hasPushGateway) }
+	 * @return { registrationStatements: [], hasHttpGateway, handlerPath (only if hasHttpGateway), hasPushGateway, hasEmailGateway, hasWhatsAppCloudGateway, whatsAppCloudHandlerPath (only if hasWhatsAppCloudGateway), hasTeamsGateway, teamsHandlerPath (only if hasTeamsGateway), sessionInterceptorName (only if hasPushGateway) }
 	 */
 	struct function generate( required struct discovery, required string appDir, struct resolvedConfig = {} ) {
 		var channelEntries = collectChannelEntries( arguments.discovery )
 		var hasHttpGateway = false
 		var hasEmailGateway = false
 		var hasWhatsAppCloudGateway = false
+		var hasTeamsGateway = false
 		var pushGatewayNames = []
 
 		for ( var entry in channelEntries ) {
@@ -110,6 +113,9 @@ class {
 			}
 			if ( type == "whatsapp-cloud" ) {
 				hasWhatsAppCloudGateway = true
+			}
+			if ( type == "teams" ) {
+				hasTeamsGateway = true
 			}
 			// The registered aiGatewayRegistry() key is ALWAYS the gateway
 			// class's own fixed getName() (e.g. TelegramGateway.init() sets
@@ -136,7 +142,8 @@ class {
 			hasHttpGateway          : hasHttpGateway,
 			hasPushGateway          : pushGatewayNames.len() > 0,
 			hasEmailGateway         : hasEmailGateway,
-			hasWhatsAppCloudGateway : hasWhatsAppCloudGateway
+			hasWhatsAppCloudGateway : hasWhatsAppCloudGateway,
+			hasTeamsGateway         : hasTeamsGateway
 		}
 
 		if ( hasHttpGateway ) {
@@ -153,6 +160,14 @@ class {
 			var waHandlerPath = waHandlerDir & "/WhatsAppCloud.bx"
 			fileWrite( waHandlerPath, renderWhatsAppCloudHandler() )
 			result[ "whatsAppCloudHandlerPath" ] = waHandlerPath
+		}
+
+		if ( hasTeamsGateway ) {
+			var teamsHandlerDir = normalizePath( arguments.appDir ) & "/handlers"
+			directoryCreate( path = teamsHandlerDir, createPath = true, ignoreExists = true )
+			var teamsHandlerPath = teamsHandlerDir & "/Teams.bx"
+			fileWrite( teamsHandlerPath, renderTeamsHandler() )
+			result[ "teamsHandlerPath" ] = teamsHandlerPath
 		}
 
 		if ( pushGatewayNames.len() ) {
@@ -403,6 +418,41 @@ class {
 			'		var signature = event.getHTTPHeader( "X-Hub-Signature-256", "" )',
 			"		var result    = gateway.handleWebhook( event.getHTTPContent(), signature )",
 			'		event.renderData( type: "TEXT", data: "", statusCode: result.status )',
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Teams is webhook-driven like WhatsApp Cloud - one route, one action.
+	 * Unlike WhatsApp Cloud there's no GET verify handshake (Bot Framework
+	 * has no equivalent of Meta's hub.challenge), so this is a single POST
+	 * action. The Bot Connector's own JWT-bearer verification and the
+	 * Adaptive-Card-invoke-vs-message branching both live in TeamsGateway
+	 * itself (testable without ColdBox) - this handler is a thin passthrough
+	 * reading the raw Authorization header/body the same documented way the
+	 * WhatsApp Cloud handler does.
+	 */
+	private string function renderTeamsHandler() {
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * Microsoft Teams webhook surface (Bot Framework Activity protocol).",
+			" * A thin passthrough into TeamsGateway's own handleWebhook() - see",
+			" * models/gateways/TeamsGateway.bx.",
+			" */",
+			"class {",
+			"",
+			"	function process( event, rc, prc ) {",
+			'		var gateway   = aiGatewayRegistry().get( "teams" )',
+			'		var authHeader = event.getHTTPHeader( "Authorization", "" )',
+			"		var result    = gateway.handleWebhook( authHeader, event.getHTTPContent() )",
+			'		event.renderData( type: "JSON", data: result.body, statusCode: result.status )',
 			"	}",
 			"",
 			"}",
