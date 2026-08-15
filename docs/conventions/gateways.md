@@ -122,19 +122,23 @@ Any project with at least one push-style gateway entry also gets a generated `in
 // interceptors/GatewaySessionBootstrap.bx (GENERATED)
 class {
 	function afterConfigurationLoad( event, interceptData ) {
-		var wirebox = getController().getWireBox()
-		var agent   = wirebox.getInstance( "GeneratedAgent" )
-		var session = aiGatewaySession(
+		var wirebox        = getController().getWireBox()
+		var agent          = wirebox.getInstance( "GeneratedAgent" )
+		var gatewaySession = aiGatewaySession(
 			agent        : agent,
 			gateways     : [ aiGatewayRegistry().get( "telegramChannel" ) ],
 			policy       : "queue",
 			maxQueueDepth: 50
 		)
-		session.start()
-		application.bxaiGatewaySession = session
+		gatewaySession.start()
+		application.bxaiGatewaySession = gatewaySession
 	}
 }
 ```
+
+{% hint style="info" %}
+The generated variable is deliberately named `gatewaySession`, not `session` - `session` is a reserved BoxLang/ColdBox scope name (like `request`/`server`/`url`/`form`/`cgi`/`thread`), and a local variable reusing one of those names can collide with the live scope instead of behaving as an ordinary local.
+{% endhint %}
 
 An interceptor (not a raw `Application.bx`/`onApplicationStart()` statement, unlike the plain registration calls above) is used specifically because its `afterConfigurationLoad` point is guaranteed by ColdBox's own lifecycle to fire strictly after the framework - including the scheduler these gateways depend on (see below) - has finished loading.
 

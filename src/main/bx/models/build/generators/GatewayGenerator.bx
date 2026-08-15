@@ -259,16 +259,20 @@ class {
 			"class {",
 			"",
 			"	function afterConfigurationLoad( event, interceptData ) {",
-			"		var wirebox = getController().getWireBox()",
-			'		var agent   = wirebox.getInstance( "GeneratedAgent" )',
-			"		var session = aiGatewaySession(",
+			"		var wirebox        = getController().getWireBox()",
+			'		var agent          = wirebox.getInstance( "GeneratedAgent" )',
+			// "session" is a reserved BoxLang/ColdBox scope name (like "request"/
+			// "server"/"url"/"form"/"cgi"/"thread") - a local variable with that
+			// exact name can collide with the live scope rather than behaving as
+			// an ordinary local, so this is deliberately named "gatewaySession".
+			"		var gatewaySession = aiGatewaySession(",
 			"			agent        : agent,",
 			"			gateways     : [ #gatewayRefs.toList( ', ' )# ],",
 			"			policy       : #renderLiteral( policy )#,",
 			"			maxQueueDepth: #maxQueueDepth#",
 			"		)",
-			"		session.start()",
-			"		application.bxaiGatewaySession = session",
+			"		gatewaySession.start()",
+			"		application.bxaiGatewaySession = gatewaySession",
 			"	}",
 			"",
 			"}",
