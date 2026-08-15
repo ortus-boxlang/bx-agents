@@ -121,6 +121,22 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).notToInclude( "Twilio.process" );
 			} );
 
+			it( "emits the GitHub POST webhook route when hasGitHubGateway is true", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
+				var result = generator.generate( discovery, newAppDir(), false, false, false, false, true );
+
+				var content = fileRead( result.router );
+				expect( content ).toInclude( 'post( "/webhooks/github" ).toHandler( "GitHub.process" )' );
+			} );
+
+			it( "does not emit the GitHub webhook route when hasGitHubGateway is false", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
+				var result = generator.generate( discovery, newAppDir(), false, false, false, false, false );
+
+				var content = fileRead( result.router );
+				expect( content ).notToInclude( "GitHub.process" );
+			} );
+
 			it( "reports hasAgentExposure=true only when an agent-exposure entry exists", function() {
 				var withAgent = discoverer.discover( fixtures & "/full-project" );
 				var withAgentResult = generator.generate( withAgent, newAppDir() );

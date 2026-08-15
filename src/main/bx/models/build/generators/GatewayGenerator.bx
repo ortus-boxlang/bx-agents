@@ -59,7 +59,8 @@ class {
 			email         : "bxModules.bxagents.models.gateways.EmailGateway",
 			"whatsapp-cloud": "bxModules.bxagents.models.gateways.whatsapp.WhatsAppCloudGateway",
 			teams         : "bxModules.bxagents.models.gateways.TeamsGateway",
-			twilio        : "bxModules.bxagents.models.gateways.TwilioGateway"
+			twilio        : "bxModules.bxagents.models.gateways.TwilioGateway",
+			github        : "bxModules.bxagents.models.gateways.GitHubGateway"
 		}
 
 		// Per push-style type, the *EnvVar option keys renderSecretOptions()
@@ -86,7 +87,8 @@ class {
 				verifyToken  : "verifyTokenEnvVar"
 			},
 			teams : { appId: "appIdEnvVar", appPassword: "appPasswordEnvVar" },
-			twilio: { accountSid: "accountSidEnvVar", authToken: "authTokenEnvVar", from: "fromEnvVar" }
+			twilio: { accountSid: "accountSidEnvVar", authToken: "authTokenEnvVar", from: "fromEnvVar" },
+			github: { token: "tokenEnvVar", webhookSecret: "webhookSecretEnvVar", botName: "botNameEnvVar" }
 		}
 	}
 
@@ -104,6 +106,7 @@ class {
 		var hasWhatsAppCloudGateway = false
 		var hasTeamsGateway = false
 		var hasTwilioGateway = false
+		var hasGitHubGateway = false
 		var pushGatewayNames = []
 
 		for ( var entry in channelEntries ) {
@@ -122,6 +125,9 @@ class {
 			}
 			if ( type == "twilio" ) {
 				hasTwilioGateway = true
+			}
+			if ( type == "github" ) {
+				hasGitHubGateway = true
 			}
 			// The registered aiGatewayRegistry() key is ALWAYS the gateway
 			// class's own fixed getName() (e.g. TelegramGateway.init() sets
@@ -150,7 +156,8 @@ class {
 			hasEmailGateway         : hasEmailGateway,
 			hasWhatsAppCloudGateway : hasWhatsAppCloudGateway,
 			hasTeamsGateway         : hasTeamsGateway,
-			hasTwilioGateway        : hasTwilioGateway
+			hasTwilioGateway        : hasTwilioGateway,
+			hasGitHubGateway        : hasGitHubGateway
 		}
 
 		if ( hasHttpGateway ) {
@@ -183,6 +190,14 @@ class {
 			var twilioHandlerPath = twilioHandlerDir & "/Twilio.bx"
 			fileWrite( twilioHandlerPath, renderTwilioHandler() )
 			result[ "twilioHandlerPath" ] = twilioHandlerPath
+		}
+
+		if ( hasGitHubGateway ) {
+			var githubHandlerDir = normalizePath( arguments.appDir ) & "/handlers"
+			directoryCreate( path = githubHandlerDir, createPath = true, ignoreExists = true )
+			var githubHandlerPath = githubHandlerDir & "/GitHub.bx"
+			fileWrite( githubHandlerPath, renderGitHubHandler() )
+			result[ "githubHandlerPath" ] = githubHandlerPath
 		}
 
 		if ( pushGatewayNames.len() ) {
@@ -504,6 +519,38 @@ class {
 			'		var signature = event.getHTTPHeader( "X-Twilio-Signature", "" )',
 			"		var result    = gateway.handleWebhook( event.getUrl(), signature, event.getHTTPContent() )",
 			'		event.renderData( type: "TEXT", data: result.body, contentType: result.contentType, statusCode: result.status )',
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * GitHub is webhook-driven like WhatsApp Cloud/Teams/Twilio. Signature
+	 * verification, delivery dedup, and the @mention gate all live in
+	 * GitHubGateway itself - this handler is a thin passthrough reading the
+	 * three GitHub-specific headers plus the raw body.
+	 */
+	private string function renderGitHubHandler() {
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * GitHub webhook surface (issue/PR comments). A thin passthrough",
+			" * into GitHubGateway's own handleWebhook() - see models/gateways/GitHubGateway.bx.",
+			" */",
+			"class {",
+			"",
+			"	function process( event, rc, prc ) {",
+			'		var gateway    = aiGatewayRegistry().get( "github" )',
+			'		var signature  = event.getHTTPHeader( "X-Hub-Signature-256", "" )',
+			'		var eventType  = event.getHTTPHeader( "X-GitHub-Event", "" )',
+			'		var deliveryId = event.getHTTPHeader( "X-GitHub-Delivery", "" )',
+			"		var result     = gateway.handleWebhook( event.getHTTPContent(), signature, eventType, deliveryId )",
+			'		event.renderData( type: "TEXT", data: "", statusCode: result.status )',
 			"	}",
 			"",
 			"}",
