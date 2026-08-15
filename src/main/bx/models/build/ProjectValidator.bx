@@ -40,6 +40,7 @@ class {
 		validateModules( arguments.projectRoot, arguments.discovery, errors )
 		validateSchedules( arguments.projectRoot, arguments.discovery, warnings )
 		validateGateways( arguments.discovery, errors )
+		validateGatewaySession( arguments.resolvedConfig, errors )
 		validateMcpServers( arguments.resolvedConfig, errors )
 		validateModelProvider( arguments.resolvedConfig, arguments.discovery, errors )
 
@@ -323,9 +324,23 @@ class {
 	// --------------------------------------------------------------------------
 
 	/**
+	 * Push-style channel-adapter type -> its own required `*EnvVar` option
+	 * keys, checked by validateGateways() below. Data-driven so adding a 7th
+	 * push-style gateway is one map entry, not new branching logic - the
+	 * core `http` type keeps its own inline check since it predates this map
+	 * and reports a more specific message.
+	 */
+	static {
+		REQUIRED_ENV_VAR_KEYS = {
+			telegram: [ "botTokenEnvVar" ]
+		}
+	}
+
+	/**
 	 * Validates both `gateways/*` entry kinds: exposure entries (`exposes:
 	 * "agent"|"mcp"`, unique `path`) and channel-adapter entries (`type`,
-	 * unique `name`, `secretEnvVar` required for `http`).
+	 * unique `name`, `secretEnvVar` required for `http`, and each push-style
+	 * type's own required `*EnvVar` keys per REQUIRED_ENV_VAR_KEYS).
 	 *
 	 * @discovery The raw discovery struct from ProjectDiscoverer.discover()
 	 * @errors Accumulator array - append() any validation errors found
@@ -334,6 +349,9 @@ class {
 		var seenPaths = {}
 		var seenNames = {}
 		var validGatewayTypes = [ "mock", "cli", "http" ]
+		for ( var pushType in static.REQUIRED_ENV_VAR_KEYS.keyArray() ) {
+			validGatewayTypes.append( pushType )
+		}
 
 		for ( var gateway in ( arguments.discovery.gateways ?: [] ) ) {
 			var config = readEntryConfig( gateway.path )
@@ -382,8 +400,43 @@ class {
 					arguments.errors.append( "Gateway [#gateway.name#] has an unknown type [#type#] - must be one of: #validGatewayTypes.toList()#" )
 				} else if ( type == "http" && !len( config.secretEnvVar ?: "" ) ) {
 					arguments.errors.append( "Gateway [#gateway.name#] is of type 'http' and requires a 'secretEnvVar' (the NAME of an environment variable holding the signing secret, never the secret value itself)" )
+				} else if ( static.REQUIRED_ENV_VAR_KEYS.keyExists( type ) ) {
+					for ( var requiredKey in static.REQUIRED_ENV_VAR_KEYS[ type ] ) {
+						if ( !len( config[ requiredKey ] ?: "" ) ) {
+							arguments.errors.append( "Gateway [#gateway.name#] is of type '#type#' and requires a '#requiredKey#' (the NAME of an environment variable, never the secret value itself)" )
+						}
+					}
 				}
 			}
+		}
+	}
+
+	// --------------------------------------------------------------------------
+	// Gateway session (single project-wide GatewaySession, bundling every
+	// push-style gateway - see GatewayGenerator.renderSessionInterceptor())
+	// --------------------------------------------------------------------------
+
+	/**
+	 * Validates the optional `gatewaySession: { policy, maxQueueDepth }` block
+	 * on the root Agent.bx's configure() return struct, mirroring bx-ai's own
+	 * GatewaySession.VALID_POLICIES exactly, so a bad value fails loudly at
+	 * `build` time instead of surfacing as a GatewaySessionInvalidPolicy
+	 * exception the first time the generated app actually boots.
+	 *
+	 * @resolvedConfig The resolved config struct from AgentConfigResolver.resolve() - only `gatewaySession` is used
+	 * @errors Accumulator array - append() any validation errors found
+	 */
+	private void function validateGatewaySession( required struct resolvedConfig, required array errors ) {
+		if ( !structKeyExists( arguments.resolvedConfig, "gatewaySession" ) ) {
+			return
+		}
+
+		var validPolicies = [ "reject", "queue", "steer", "interrupt" ]
+		var sessionConfig = arguments.resolvedConfig.gatewaySession
+		var policy = sessionConfig.policy ?: "queue"
+
+		if ( !validPolicies.contains( policy ) ) {
+			arguments.errors.append( "Agent.bx's 'gatewaySession.policy' has an invalid value [#policy#] - must be one of: #validPolicies.toList()#" )
 		}
 	}
 

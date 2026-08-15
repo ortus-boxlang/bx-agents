@@ -1,0 +1,306 @@
+import bxModules.bxai.models.gateway.IGateway;
+import bxModules.bxai.models.gateway.contracts.GatewayContext;
+import bxModules.bxai.models.gateway.contracts.GatewayEvent;
+import bxModules.bxai.models.gateway.contracts.GatewayMessage;
+import bxModules.bxai.models.gateway.contracts.GatewayDeliveryResult;
+import bxModules.bxai.models.gateway.contracts.HumanInteractionRequest;
+import bxModules.bxai.models.gateway.contracts.HumanInteractionDecision;
+
+/**
+ * Telegram Bot API gateway — the reference push-style implementation every
+ * other push-style gateway (Slack, Discord, Email) follows. Inbound delivery
+ * is long-poll (Telegram's getUpdates), driven by a ScheduledGatewayBase
+ * scheduler task; outbound delivery is a plain HTTP POST per message.
+ *
+ * Config, via aiGateway( "bxModules.bxagents.models.gateways.TelegramGateway", options ):
+ *   botToken            The bot's API token. Never a literal in generated
+ *                        source — GatewayGenerator resolves it live via
+ *                        getSystemSetting() from a botTokenEnvVar.
+ *   pollIntervalSeconds  How often to call getUpdates. Defaults to 3.
+ */
+class extends="ScheduledGatewayBase" {
+
+	property name="botToken" type="string" default="";
+	property name="pollIntervalSeconds" type="numeric" default=3;
+	property name="lastUpdateId" type="numeric" default=0;
+	property name="chunker";
+
+	/**
+	 * Test-only seam: overrides how calls to the Telegram Bot API are made.
+	 * Defaults to a real HTTP POST; a test injects a closure returning canned
+	 * responses instead. Signature: function( method, params ) -> struct (the parsed API response)
+	 */
+	property name="apiCaller";
+
+	static {
+		API_BASE           = "https://api.telegram.org/bot"
+		MAX_MESSAGE_LENGTH = 4096
+	}
+
+	function init() {
+		variables.name = "telegram"
+		variables.description = "Telegram Bot API gateway — long-poll inbound, HTTP outbound"
+		variables.chunker = new "models.gateways.support.MessageChunker@bxagents"()
+		return this
+	}
+
+	IGateway function configure( required any options ) {
+		super.configure( arguments.options )
+		variables.botToken = trim( variables.options.botToken ?: "" )
+		variables.pollIntervalSeconds = variables.options.pollIntervalSeconds ?: 3
+		return this
+	}
+
+	array function getDeclaredCapabilities() {
+		// Deliberately no "streaming" — Telegram has no true streaming-edit API
+		// worth the rate-limit cost for a reference implementation, so
+		// GatewaySession falls back to one buffered deliver() call per turn.
+		return [ "inboundMessages", "outboundMessages", "threads", "interactiveActions", "humanApproval" ]
+	}
+
+	/**
+	 * Test-only seam — see apiCaller's own docblock.
+	 *
+	 * @caller function( method, params ) -> struct
+	 */
+	void function setApiCaller( required any caller ) {
+		variables.apiCaller = arguments.caller
+	}
+
+	// -------------------------------------------------------------------------
+	// ScheduledGatewayBase hooks
+	// -------------------------------------------------------------------------
+
+	void function onConnect() {
+		if ( !len( variables.botToken ) ) {
+			throw(
+				type   : "TelegramGateway.MissingToken",
+				message: "TelegramGateway requires a 'botToken' option (resolved from botTokenEnvVar at startup)."
+			)
+		}
+
+		var me = callApi( "getMe", {} )
+		if ( !( me.ok ?: false ) ) {
+			throw(
+				type   : "TelegramGateway.InvalidToken",
+				message: "Telegram rejected the configured bot token: #me.description ?: 'unknown error'#"
+			)
+		}
+
+		logEvent( "Connected as @#me.result.username ?: '?'#" )
+	}
+
+	void function onDisconnect() {
+		logEvent( "Disconnected" )
+	}
+
+	void function registerScheduledTasks( required any scheduler ) {
+		var taskName = "telegram-poll-#variables.name#"
+		scheduler.task( taskName )
+			.call( () => pollUpdates() )
+			.every( variables.pollIntervalSeconds, "seconds" )
+			.withNoOverlaps()
+			.onFailure( ( task, exception ) => logEvent( "Poll failed: #exception.message#", "error" ) )
+			.start()
+		trackTask( taskName )
+	}
+
+	// -------------------------------------------------------------------------
+	// Inbound — long-poll
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Invoked by the scheduled poll task (see registerScheduledTasks()) — not
+	 * part of the IGateway contract, purely Telegram-specific machinery.
+	 */
+	void function pollUpdates() {
+		var response = callApi( "getUpdates", { offset: variables.lastUpdateId + 1, timeout: 0 } )
+		if ( !( response.ok ?: false ) ) {
+			logEvent( "getUpdates failed: #response.description ?: 'unknown error'#", "error" )
+			return
+		}
+
+		for ( var update in ( response.result ?: [] ) ) {
+			variables.lastUpdateId = max( variables.lastUpdateId, update.update_id ?: 0 )
+
+			if ( structKeyExists( update, "message" ) && len( update.message.text ?: "" ) ) {
+				dispatchInbound( toGatewayMessage( update.message ) )
+			} else if ( structKeyExists( update, "callback_query" ) ) {
+				handleCallbackQuery( update.callback_query )
+			}
+		}
+	}
+
+	/**
+	 * @message A raw Telegram "message" object (from an update, or a directly-passed payload)
+	 *
+	 * @return A normalized GatewayMessage; fires onGatewayMessageReceived before returning
+	 */
+	private GatewayMessage function toGatewayMessage( required struct message ) {
+		var chatId = arguments.message.chat.id ?: ""
+		var context = new GatewayContext(
+			gateway       : variables.name,
+			conversationID: toString( chatId ),
+			userID        : toString( arguments.message.from.id ?: "" ),
+			threadID      : toString( chatId ),
+			raw           : arguments.message
+		)
+		var gwMessage = new GatewayMessage(
+			text   : arguments.message.text ?: "",
+			context: context,
+			raw    : arguments.message
+		)
+
+		BoxAnnounce( "onGatewayMessageReceived", {
+			gateway       : this,
+			message       : gwMessage,
+			threadId      : gwMessage.getContext().getThreadID(),
+			userId        : gwMessage.getContext().getUserID(),
+			conversationId: gwMessage.getContext().getConversationID()
+		} )
+
+		return gwMessage
+	}
+
+	// verifyInbound()/parseInbound() are bx-ai's HTTP-webhook-style entrypoints.
+	// Telegram v1 is long-poll only (no public webhook needed) — these exist so
+	// a single Telegram "message" payload still normalizes identically to
+	// pollUpdates()'s own internal parsing, for symmetry and testability.
+	boolean function verifyInbound( required any payload, struct requestContext = {} ) {
+		return true
+	}
+
+	array function parseInbound( required any payload, struct requestContext = {} ) {
+		return [ toGatewayMessage( isStruct( arguments.payload ) ? arguments.payload : {} ) ]
+	}
+
+	// -------------------------------------------------------------------------
+	// Outbound
+	// -------------------------------------------------------------------------
+
+	GatewayDeliveryResult function deliver( required GatewayEvent event, required GatewayContext context ) {
+		var text = toString( arguments.event.getData().text ?: "" )
+		if ( !len( text ) ) {
+			return GatewayDeliveryResult.failure( "Nothing to deliver — event data has no 'text'" )
+		}
+
+		var chatId = arguments.context.getConversationID()
+		var chunks = variables.chunker.split( text, static.MAX_MESSAGE_LENGTH )
+		var lastResponse = {}
+
+		for ( var chunk in chunks ) {
+			lastResponse = callApi( "sendMessage", { chat_id: chatId, text: chunk } )
+			if ( !( lastResponse.ok ?: false ) ) {
+				return GatewayDeliveryResult.failure( "Telegram sendMessage failed: #lastResponse.description ?: 'unknown error'#" )
+			}
+		}
+
+		var result = new GatewayDeliveryResult( deliveryID: toString( lastResponse.result.message_id ?: arguments.event.getId() ) )
+
+		BoxAnnounce( "onGatewayMessageSent", {
+			gateway : this,
+			event   : arguments.event,
+			context : arguments.context,
+			result  : result,
+			threadId: arguments.context.getThreadID()
+		} )
+
+		return result
+	}
+
+	// -------------------------------------------------------------------------
+	// Human-in-the-loop — inline keyboard buttons
+	// -------------------------------------------------------------------------
+
+	GatewayDeliveryResult function requestHumanInteraction( required HumanInteractionRequest humanRequest, required GatewayContext context ) {
+		var presentation = presentInteraction( arguments.humanRequest )
+		var keyboard = {
+			inline_keyboard: [
+				presentation.getButtons().map( function( btn ) {
+					return { text: btn.label, callback_data: btn.value }
+				} )
+			]
+		}
+
+		var text = len( presentation.getTitle() )
+			? "*#presentation.getTitle()#*" & char( 10 ) & char( 10 ) & presentation.getBody()
+			: presentation.getBody()
+
+		var response = callApi( "sendMessage", {
+			chat_id     : arguments.context.getConversationID(),
+			text        : text,
+			parse_mode  : "Markdown",
+			reply_markup: jsonSerialize( keyboard )
+		} )
+
+		if ( !( response.ok ?: false ) ) {
+			return GatewayDeliveryResult.failure( "Telegram sendMessage (HITL prompt) failed: #response.description ?: 'unknown error'#" )
+		}
+
+		return new GatewayDeliveryResult( deliveryID: toString( response.result.message_id ?: arguments.humanRequest.getId() ) )
+	}
+
+	HumanInteractionDecision function parseHumanDecision( required GatewayEvent event ) {
+		var data = arguments.event.getData()
+		return new HumanInteractionDecision(
+			requestID: data.requestID ?: "",
+			decision : data.decision ?: "",
+			decidedBy: data.decidedBy ?: ""
+		)
+	}
+
+	/**
+	 * @callbackQuery A raw Telegram "callback_query" update object
+	 */
+	private void function handleCallbackQuery( required struct callbackQuery ) {
+		var messageId = arguments.callbackQuery.message.message_id ?: ""
+		var chatId    = arguments.callbackQuery.message.chat.id ?: ""
+		var decision  = arguments.callbackQuery.data ?: ""
+
+		callApi( "answerCallbackQuery", { callback_query_id: arguments.callbackQuery.id ?: "" } )
+		callApi( "editMessageReplyMarkup", { chat_id: chatId, message_id: messageId, reply_markup: jsonSerialize( { inline_keyboard: [] } ) } )
+
+		BoxAnnounce( "onGatewayMessageReceived", {
+			gateway       : this,
+			message       : javacast( "null", "" ),
+			threadId      : toString( chatId ),
+			userId        : toString( arguments.callbackQuery.from.id ?: "" ),
+			conversationId: toString( chatId ),
+			decision      : decision
+		} )
+	}
+
+	// -------------------------------------------------------------------------
+	// Telegram Bot API call
+	// -------------------------------------------------------------------------
+
+	/**
+	 * @method A Telegram Bot API method name, e.g. "getMe", "sendMessage"
+	 * @params Method parameters
+	 *
+	 * @return The parsed JSON response as a struct — { ok, result, description, error_code }
+	 */
+	private struct function callApi( required string method, required struct params ) {
+		if ( !isNull( variables.apiCaller ) ) {
+			return variables.apiCaller( arguments.method, arguments.params )
+		}
+
+		var url = static.API_BASE & variables.botToken & "/" & arguments.method
+		bx:http
+			url     = url
+			method  = "post"
+			result  = "apiResult"
+			charset = "utf-8"
+		{
+			bx:httpParam type="header" name="content-type" value="application/json";
+			bx:httpParam type="body" value=jsonSerialize( arguments.params );
+		}
+
+		try {
+			return jsonDeserialize( apiResult.fileContent ?: "{}" )
+		} catch ( any e ) {
+			return { ok: false, description: "Unparseable response from Telegram: #e.message#" }
+		}
+	}
+
+}

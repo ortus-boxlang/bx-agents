@@ -101,8 +101,8 @@ class {
 		arguments.onProgress( "    agent-scope=#interceptorSplit.agent.len()#, runtime-scope=#interceptorSplit.runtime.len()#" )
 
 		arguments.onProgress( "+ Generating gateway registrations..." )
-		var gatewayResult = variables.gatewayGenerator.generate( discovery, appDir )
-		arguments.onProgress( "    #gatewayResult.registrationStatements.len()# registration(s), httpGateway=#( gatewayResult.hasHttpGateway ? 'yes' : 'no' )#" )
+		var gatewayResult = variables.gatewayGenerator.generate( discovery, appDir, config )
+		arguments.onProgress( "    #gatewayResult.registrationStatements.len()# registration(s), httpGateway=#( gatewayResult.hasHttpGateway ? 'yes' : 'no' )#, pushGateway=#( gatewayResult.hasPushGateway ? 'yes' : 'no' )#" )
 
 		arguments.onProgress( "+ Generating local MCP server registrations..." )
 		var mcpResult = variables.mcpGenerator.generate( discovery, appDir )
@@ -120,12 +120,17 @@ class {
 			toolScanStatements.append( 'aiToolRegistry().scan( "tools" )' )
 		}
 
+		var agentInterceptorNames = interceptorSplit.agent.map( function( e ) { return e.name } )
+		if ( len( gatewayResult.sessionInterceptorName ?: "" ) ) {
+			agentInterceptorNames.append( gatewayResult.sessionInterceptorName )
+		}
+
 		arguments.onProgress( "+ Generating core ColdBox app skeleton (Application.bx, config/WireBox.bx, config/ColdBox.bx, agent/GeneratedAgentFactory.bx)..." )
 		var coldboxResult = variables.coldboxAppGenerator.generate(
 			projectRoot           = root,
 			buildDir              = appDir,
 			resolvedConfig        = config,
-			agentInterceptors     = interceptorSplit.agent.map( function( e ) { return e.name } ),
+			agentInterceptors     = agentInterceptorNames,
 			gatewayRegistrations  = gatewayResult.registrationStatements,
 			mcpRegistrations      = mcpResult.registrations,
 			extraStartupStatements = toolScanStatements,

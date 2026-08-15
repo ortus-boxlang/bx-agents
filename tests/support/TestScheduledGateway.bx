@@ -1,0 +1,39 @@
+/**
+ * Minimal concrete ScheduledGatewayBase subclass, used only by
+ * ScheduledGatewayBaseSpec.bx to exercise the shared onStart()/onStop()
+ * scheduler-wiring behavior in isolation from any real platform (Telegram,
+ * etc.) - no HTTP calls, no capabilities, just connect/disconnect/task
+ * bookkeeping counters a spec can assert against.
+ */
+class extends="bxagents.models.gateways.ScheduledGatewayBase" {
+
+	property name="connectCount" type="numeric" default=0;
+	property name="disconnectCount" type="numeric" default=0;
+	property name="registeredTaskNames" type="array" default=[];
+
+	function init() {
+		variables.name = "test-scheduled"
+		variables.description = "Test double for ScheduledGatewayBaseSpec"
+		return this
+	}
+
+	array function getDeclaredCapabilities() {
+		return []
+	}
+
+	void function onConnect() {
+		variables.connectCount++
+	}
+
+	void function onDisconnect() {
+		variables.disconnectCount++
+	}
+
+	void function registerScheduledTasks( required any scheduler ) {
+		var taskName = "test-poll-" & variables.name
+		arguments.scheduler.task( taskName )
+		trackTask( taskName )
+		variables.registeredTaskNames.append( taskName )
+	}
+
+}

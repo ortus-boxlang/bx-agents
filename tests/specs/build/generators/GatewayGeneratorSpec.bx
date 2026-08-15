@@ -98,6 +98,66 @@ class extends="testbox.system.BaseSpec" {
 				expect( fileExists( appDir & "/handlers/Gateway.bx" ) ).toBeFalse();
 			} );
 
+			it( "reports hasPushGateway=false and writes no session interceptor for http/cli/mock-only projects", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
+				var appDir = newAppDir();
+				var result = generator.generate( discovery, appDir );
+
+				expect( result.hasPushGateway ).toBeFalse();
+				expect( result.keyExists( "sessionInterceptorName" ) ).toBeFalse();
+				expect( fileExists( appDir & "/interceptors/GatewaySessionBootstrap.bx" ) ).toBeFalse();
+			} );
+
+			it( "registers a telegram gateway via its bare class path, not the bare type name", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-telegram" );
+				var result = generator.generate( discovery, newAppDir() );
+
+				expect( result.registrationStatements.len() ).toBe( 1 );
+				expect( result.registrationStatements[ 1 ] ).toInclude( '"bxModules.bxagents.models.gateways.TelegramGateway"' );
+				expect( result.registrationStatements[ 1 ] ).notToInclude( '"telegram"' );
+			} );
+
+			it( "never embeds a telegram gateway's botTokenEnvVar NAME as a raw literal token - only a live getSystemSetting() lookup", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-telegram" );
+				var result = generator.generate( discovery, newAppDir() );
+
+				var statement = result.registrationStatements[ 1 ];
+				expect( statement ).notToInclude( "botTokenEnvVar" );
+				expect( statement ).toInclude( 'getSystemSetting( "MY_TELEGRAM_BOT_TOKEN", "" )' );
+			} );
+
+			it( "reports hasPushGateway=true and writes interceptors/GatewaySessionBootstrap.bx for a telegram gateway", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-telegram" );
+				var appDir = newAppDir();
+				var result = generator.generate( discovery, appDir, { name: "gateways-telegram-agent", model: "openai/gpt-5" } );
+
+				expect( result.hasPushGateway ).toBeTrue();
+				expect( result.sessionInterceptorName ).toBe( "GatewaySessionBootstrap" );
+
+				var interceptorPath = appDir & "/interceptors/GatewaySessionBootstrap.bx";
+				expect( fileExists( interceptorPath ) ).toBeTrue();
+
+				var content = fileRead( interceptorPath );
+				expect( content ).toInclude( "function afterConfigurationLoad( event, interceptData )" );
+				expect( content ).toInclude( 'getController().getWireBox()' );
+				expect( content ).toInclude( 'wirebox.getInstance( "GeneratedAgent" )' );
+				expect( content ).toInclude( "aiGatewaySession(" );
+				expect( content ).toInclude( 'aiGatewayRegistry().get( "telegramChannel" )' );
+				expect( content ).toInclude( '"queue"' );
+				expect( content ).toInclude( "session.start()" );
+				expect( content ).toInclude( "application.bxaiGatewaySession = session" );
+			} );
+
+			it( "honors a resolvedConfig.gatewaySession policy/maxQueueDepth override", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-telegram" );
+				var appDir = newAppDir();
+				var result = generator.generate( discovery, appDir, { gatewaySession: { policy: "interrupt", maxQueueDepth: 10 } } );
+
+				var content = fileRead( appDir & "/interceptors/GatewaySessionBootstrap.bx" );
+				expect( content ).toInclude( '"interrupt"' );
+				expect( content ).toInclude( "maxQueueDepth: 10" );
+			} );
+
 		} );
 	}
 

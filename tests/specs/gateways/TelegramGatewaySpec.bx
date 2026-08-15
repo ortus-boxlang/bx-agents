@@ -1,0 +1,206 @@
+import bxModules.bxai.models.gateway.contracts.GatewayContext;
+import bxModules.bxai.models.gateway.contracts.GatewayEvent;
+import bxModules.bxai.models.gateway.contracts.HumanInteractionRequest;
+
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "TelegramGateway", function() {
+
+			beforeEach( function() {
+				variables.gateway = new bxagents.models.gateways.TelegramGateway();
+				variables.scheduler = new tests.support.FakeScheduler();
+				variables.gateway.setScheduler( variables.scheduler );
+				variables.gateway.configure( { botToken: "test-token" } );
+			} );
+
+			private function stubApi( required struct responses ) {
+				var calls = [];
+				gateway.setApiCaller( function( method, params ) {
+					calls.append( { method: method, params: params } );
+					return responses[ method ] ?: { ok: true, result: {} };
+				} );
+				return calls;
+			}
+
+			it( "declares inboundMessages/outboundMessages/threads/interactiveActions/humanApproval but NOT streaming", function() {
+				var capabilities = gateway.getDeclaredCapabilities();
+				expect( capabilities ).toInclude( "inboundMessages" );
+				expect( capabilities ).toInclude( "outboundMessages" );
+				expect( capabilities ).toInclude( "threads" );
+				expect( capabilities ).toInclude( "interactiveActions" );
+				expect( capabilities ).toInclude( "humanApproval" );
+				expect( capabilities ).notToInclude( "streaming" );
+			} );
+
+			it( "normalizes a raw Telegram message via parseInbound() into a GatewayMessage with chat id as both conversationID and threadID", function() {
+				var messages = gateway.parseInbound( {
+					text: "hello",
+					chat: { id: 555 },
+					from: { id: 42 }
+				} );
+
+				expect( messages.len() ).toBe( 1 );
+				var context = messages[ 1 ].getContext();
+				expect( messages[ 1 ].getText() ).toBe( "hello" );
+				expect( context.getConversationID() ).toBe( "555" );
+				expect( context.getThreadID() ).toBe( "555" );
+				expect( context.getUserID() ).toBe( "42" );
+				expect( context.getGateway() ).toBe( "telegram" );
+			} );
+
+			it( "onConnect() validates the bot token via getMe and throws TelegramGateway.InvalidToken when Telegram rejects it", function() {
+				stubApi( { getMe: { ok: false, description: "Unauthorized" } } );
+
+				expect( function() {
+					gateway.start();
+				} ).toThrow( "TelegramGateway.InvalidToken" );
+			} );
+
+			it( "onConnect() throws TelegramGateway.MissingToken when no botToken was configured", function() {
+				var unconfigured = new bxagents.models.gateways.TelegramGateway();
+				unconfigured.setScheduler( scheduler );
+				unconfigured.setApiCaller( function( method, params ) {
+					return { ok: true, result: {} };
+				} );
+
+				expect( function() {
+					unconfigured.start();
+				} ).toThrow( "TelegramGateway.MissingToken" );
+			} );
+
+			it( "start() registers exactly one poll task on the scheduler, once getMe succeeds", function() {
+				stubApi( { getMe: { ok: true, result: { username: "mybot" } } } );
+
+				gateway.start();
+
+				expect( scheduler.getTaskNames().len() ).toBe( 1 );
+				expect( scheduler.getTaskNames()[ 1 ] ).toInclude( "telegram-poll" );
+			} );
+
+			it( "pollUpdates() dispatches one inbound message per text update and advances lastUpdateId", function() {
+				var dispatched = [];
+				gateway.onMessage( function( message ) {
+					dispatched.append( message );
+				} );
+				stubApi( {
+					getUpdates: {
+						ok: true,
+						result: [
+							{ update_id: 100, message: { text: "hi", chat: { id: 1 }, from: { id: 9 } } },
+							{ update_id: 101, message: { text: "there", chat: { id: 1 }, from: { id: 9 } } }
+						]
+					}
+				} );
+
+				gateway.pollUpdates();
+
+				expect( dispatched.len() ).toBe( 2 );
+				expect( dispatched[ 1 ].getText() ).toBe( "hi" );
+				expect( dispatched[ 2 ].getText() ).toBe( "there" );
+				expect( gateway.getLastUpdateId() ).toBe( 101 );
+			} );
+
+			it( "pollUpdates() ignores updates with no message.text (e.g. a bare callback_query) for onMessage dispatch", function() {
+				var dispatched = [];
+				gateway.onMessage( function( message ) {
+					dispatched.append( message );
+				} );
+				stubApi( {
+					getUpdates: {
+						ok: true,
+						result: [
+							{ update_id: 5, callback_query: { id: "cbq1", data: "approve", from: { id: 9 }, message: { message_id: 7, chat: { id: 1 } } } }
+						]
+					},
+					answerCallbackQuery: { ok: true, result: {} },
+					editMessageReplyMarkup: { ok: true, result: {} }
+				} );
+
+				gateway.pollUpdates();
+
+				expect( dispatched.len() ).toBe( 0 );
+				expect( gateway.getLastUpdateId() ).toBe( 5 );
+			} );
+
+			it( "deliver() sends one sendMessage call for text under the 4096-char Telegram limit", function() {
+				var calls = stubApi( { sendMessage: { ok: true, result: { message_id: 1 } } } );
+				var event = new GatewayEvent( type: "response.completed", data: { text: "short reply" } );
+				var context = new GatewayContext( conversationID: "555" );
+
+				var result = gateway.deliver( event, context );
+
+				var sendCalls = calls.filter( c => c.method == "sendMessage" );
+				expect( sendCalls.len() ).toBe( 1 );
+				expect( sendCalls[ 1 ].params.chat_id ).toBe( "555" );
+				expect( result.getSuccess() ).toBeTrue();
+			} );
+
+			it( "deliver() splits text longer than 4096 chars into multiple sendMessage calls", function() {
+				var calls = stubApi( { sendMessage: { ok: true, result: { message_id: 1 } } } );
+				var longText = repeatString( "a", 5000 );
+				var event = new GatewayEvent( type: "response.completed", data: { text: longText } );
+				var context = new GatewayContext( conversationID: "555" );
+
+				gateway.deliver( event, context );
+
+				var sendCalls = calls.filter( c => c.method == "sendMessage" );
+				expect( sendCalls.len() ).toBeGT( 1 );
+				for ( var call in sendCalls ) {
+					expect( len( call.params.text ) ).toBeLTE( 4096 );
+				}
+			} );
+
+			it( "deliver() returns a failure GatewayDeliveryResult when Telegram's sendMessage call fails", function() {
+				stubApi( { sendMessage: { ok: false, description: "chat not found" } } );
+				var event = new GatewayEvent( type: "response.completed", data: { text: "hi" } );
+				var context = new GatewayContext( conversationID: "555" );
+
+				var result = gateway.deliver( event, context );
+
+				expect( result.getSuccess() ).toBeFalse();
+				expect( result.getError() ).toInclude( "chat not found" );
+			} );
+
+			it( "deliver() returns a failure result when there is nothing to deliver", function() {
+				var event = new GatewayEvent( type: "response.completed", data: {} );
+				var context = new GatewayContext( conversationID: "555" );
+
+				var result = gateway.deliver( event, context );
+
+				expect( result.getSuccess() ).toBeFalse();
+			} );
+
+			it( "requestHumanInteraction() sends an inline keyboard built from the request's allowed decisions", function() {
+				var calls = stubApi( { sendMessage: { ok: true, result: { message_id: 42 } } } );
+				var humanRequest = new HumanInteractionRequest(
+					title: "Approve tool call?",
+					message: "delete_file( path: '/tmp/x' )",
+					allowedDecisions: [ "approve", "reject" ]
+				);
+				var context = new GatewayContext( conversationID: "555" );
+
+				var result = gateway.requestHumanInteraction( humanRequest, context );
+
+				var sendCalls = calls.filter( c => c.method == "sendMessage" );
+				expect( sendCalls.len() ).toBe( 1 );
+				expect( sendCalls[ 1 ].params ).toHaveKey( "reply_markup" );
+				var keyboard = jsonDeserialize( sendCalls[ 1 ].params.reply_markup );
+				expect( keyboard.inline_keyboard[ 1 ].len() ).toBe( 2 );
+				expect( result.getSuccess() ).toBeTrue();
+			} );
+
+			it( "parseHumanDecision() reads requestID/decision/decidedBy from a GatewayEvent's data", function() {
+				var event = new GatewayEvent( type: "interaction.decision", data: { requestID: "req-1", decision: "approve", decidedBy: "555" } );
+
+				var decision = gateway.parseHumanDecision( event );
+
+				expect( decision.getRequestID() ).toBe( "req-1" );
+				expect( decision.getDecision() ).toBe( "approve" );
+				expect( decision.getDecidedBy() ).toBe( "555" );
+			} );
+
+		} );
+	}
+
+}

@@ -89,3 +89,78 @@ post( "/interactions/:requestID/decisions" ).toHandler( "Gateway.process" )
 {% hint style="info" %}
 ColdBox has no built-in `toAiGateway()` DSL terminator for this surface (only `toAi()` and `toMCP()` exist natively) - this wiring is BX Agents' own generated code, following the same shape a future core terminator would produce. See the [`toAiGateway()` for ColdBox Core](../proposals/toAiGateway-coldbox-core.md) proposal.
 {% endhint %}
+
+## 3. Push-style gateways (`type: "telegram"`, and friends)
+
+A different kind of channel adapter from `mock`/`cli`/`http` above: instead of being driven by an inbound HTTP request, a push-style gateway holds its own connection to the platform (a long-poll loop, eventually a persistent websocket for platforms like Slack/Discord) and pushes inbound messages to your agent as they arrive - the closer-to-"real chat bot" experience.
+
+```javascript
+// gateways/telegramChannel.bx
+class {
+	function configure() {
+		return {
+			type          : "telegram",
+			botTokenEnvVar: "TELEGRAM_BOT_TOKEN"
+		};
+	}
+}
+```
+
+Same "secrets stay external" rule as `http`'s `secretEnvVar`: `botTokenEnvVar` names an environment variable, resolved live via `getSystemSetting()` at startup, never embedded as a literal. Unlike the core types, a push-style gateway's class lives inside BX Agents itself (`models/gateways/TelegramGateway.bx`, not bx-ai), so its registration renders as a bare class path rather than a short name:
+
+```javascript
+aiGatewayRegistry().register( aiGateway( "bxModules.bxagents.models.gateways.TelegramGateway", { "botToken" : getSystemSetting( "TELEGRAM_BOT_TOKEN", "" ) } ) )
+```
+
+**Validation:** `type: "telegram"` requires a `botTokenEnvVar`, checked the same way `http`'s `secretEnvVar` is.
+
+### GatewaySession - wiring the agent to every push-style gateway
+
+Any project with at least one push-style gateway entry also gets a generated `interceptors/GatewaySessionBootstrap.bx`, which builds a single bx-ai `GatewaySession` bundling every push-style gateway in the project, bound to the project's root agent, and starts it once ColdBox itself has finished loading:
+
+```javascript
+// interceptors/GatewaySessionBootstrap.bx (GENERATED)
+class {
+	function afterConfigurationLoad( event, interceptData ) {
+		var wirebox = getController().getWireBox()
+		var agent   = wirebox.getInstance( "GeneratedAgent" )
+		var session = aiGatewaySession(
+			agent        : agent,
+			gateways     : [ aiGatewayRegistry().get( "telegramChannel" ) ],
+			policy       : "queue",
+			maxQueueDepth: 50
+		)
+		session.start()
+		application.bxaiGatewaySession = session
+	}
+}
+```
+
+An interceptor (not a raw `Application.bx`/`onApplicationStart()` statement, unlike the plain registration calls above) is used specifically because its `afterConfigurationLoad` point is guaranteed by ColdBox's own lifecycle to fire strictly after the framework - including the scheduler these gateways depend on (see below) - has finished loading.
+
+Control `GatewaySession`'s policy via an optional `gatewaySession` block on the root project's `Agent.bx`:
+
+```javascript
+// Agent.bx
+function configure() {
+	return {
+		name  : "...",
+		model : "...",
+		gatewaySession: { policy: "queue", maxQueueDepth: 50 }   // both optional - these are the defaults
+	};
+}
+```
+
+`policy` must be one of `reject`/`queue`/`steer`/`interrupt` (bx-ai's own `GatewaySession` policy vocabulary - see the [Gateway Sessions](../gateways.md) overview) - checked at `build` time so a typo fails loudly instead of surfacing as a runtime error the first time the app boots.
+
+{% hint style="warning" %}
+v1 limitation: exactly one `GatewaySession`, always bound to the project's root agent - matches the existing precedent that `exposes: "agent"` HTTP exposure is also always root-agent-only. A project with subagents cannot yet route different gateways to different subagents.
+{% endhint %}
+
+### How a push-style gateway stays connected: the shared ColdBox Scheduler
+
+Rather than a new background-loop primitive, push-style gateways reach the app's own live ColdBox scheduler singleton (`appScheduler@coldbox` - the same one a hand-written `schedules/Scheduler.bx`, if the project has one, runs under) and register their own named task(s) into it dynamically - a recurring long-poll task for Telegram, for example. **One shared scheduler, every push-style gateway registering its own tasks into it** - never one scheduler per gateway, and never in conflict with a project's own cron jobs.
+
+### Logging
+
+Every push-style gateway writes to its own `gateway-<type>` log file (e.g. `gateway-telegram`) via BoxLang's `writeLog()`, rather than one shared/default app log - so an operator can tail exactly the platform they care about without noise from everything else the app logs.

@@ -1,0 +1,52 @@
+/**
+ * Test double standing in for ColdBox's real `appScheduler@coldbox` singleton
+ * (see ScheduledGatewayBase.setScheduler()) - supports both the minimal
+ * `.task(name)` call a bare test gateway might make, and the full fluent
+ * chain (`.call().every().withNoOverlaps().onFailure().start()`) a real
+ * gateway like TelegramGateway uses, so this one fake covers both.
+ */
+class {
+
+	property name="taskNames" type="array" default=[];
+	property name="removedTaskNames" type="array" default=[];
+
+	any function task( required string name ) {
+		variables.taskNames.append( arguments.name )
+		return this
+	}
+
+	void function removeTask( required string name ) {
+		variables.removedTaskNames.append( arguments.name )
+	}
+
+	// Fluent no-ops - the builder methods a real scheduler.task(...) chain
+	// supports, all returning `this` so the chain keeps working against this fake.
+	any function call( required any target ) {
+		return this
+	}
+
+	any function every( required numeric period, string unit = "seconds" ) {
+		return this
+	}
+
+	any function withNoOverlaps() {
+		return this
+	}
+
+	any function onFailure( required any callback ) {
+		return this
+	}
+
+	any function onSuccess( required any callback ) {
+		return this
+	}
+
+	any function delay( required numeric period, string unit = "seconds" ) {
+		return this
+	}
+
+	any function start() {
+		return this
+	}
+
+}

@@ -454,6 +454,29 @@ class {
 	 *
 	 * @return The rendered `var <name> = aiAgent(...)` statement string for this one node
 	 */
+	/**
+	 * Every generated agent gets a checkpointer — without one, bx-ai's
+	 * HumanInTheLoopMiddleware.onAttach() throws NoCheckpointer for any
+	 * gateway other than "cli" (confirmed against bx-ai source: it requires a
+	 * checkpointer whenever the attached gateway can suspend), and
+	 * GatewaySession only forwards a checkpointer to its gateways when the
+	 * agent already has one — so every push-style gateway's HITL support was
+	 * silently broken without this. Defaults to a `cache`-backed memory (not
+	 * restart-durable, but enough for same-process HITL) if the project
+	 * declares no `checkpointer` key of its own.
+	 *
+	 * @resolvedConfig A single node's own resolved config - only `checkpointer` is used
+	 *
+	 * @return A BoxLang `aiMemory( "type", config: {...} )` expression string
+	 */
+	private string function renderCheckpointerExpression( required struct resolvedConfig ) {
+		var checkpointer = arguments.resolvedConfig.checkpointer ?: { type: "cache" }
+		var type = trim( checkpointer.type ?: "cache" )
+		var rest = duplicate( checkpointer )
+		rest.delete( "type" )
+		return 'aiMemory( "#bxLiteral( type )#", config: #renderLiteral( rest )# )'
+	}
+
 	private string function renderAgentStatement(
 		required string varName,
 		required string nodePath,
@@ -485,6 +508,8 @@ class {
 			? 'aiModel( provider : "#bxLiteral( parsedModel.provider )#", params : { model : "#bxLiteral( parsedModel.model )#" } )'
 			: 'aiModel( provider : "#bxLiteral( parsedModel.provider )#" )'
 
+		var checkpointerExpression = renderCheckpointerExpression( arguments.resolvedConfig )
+
 		var lines = []
 		lines.append( "var #arguments.varName# = aiAgent(" )
 		lines.append( '	name : "#bxLiteral( arguments.name )#",' )
@@ -492,6 +517,7 @@ class {
 		lines.append( '	instructions : fileRead( "#bxLiteral( instructionsPath )#" ),' )
 		lines.append( '	model : #modelExpression#,' )
 		lines.append( "	tools : aiToolRegistry().getAll()," )
+		lines.append( "	checkpointer : #checkpointerExpression#," )
 
 		if ( arguments.subAgentVarNames.len() ) {
 			lines.append( "	subAgents : [ #arguments.subAgentVarNames.toList( ", " )# ]," )

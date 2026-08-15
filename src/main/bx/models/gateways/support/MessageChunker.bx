@@ -1,0 +1,85 @@
+/**
+ * Splits outbound text at a platform's own message-length limit (Telegram
+ * 4096 chars, Discord 2000, etc.), preferring to break at the last newline
+ * within the window, then the last space, falling back to a hard cut only
+ * when neither exists — so a chunk boundary doesn't land mid-word when it
+ * can reasonably be avoided.
+ */
+class {
+
+	/**
+	 * @text The text to split
+	 * @maxLength The platform's own per-message character limit
+	 *
+	 * @return Array of chunks, each maxLength characters or shorter; a single-element array [text] if it already fits
+	 */
+	array function split( required string text, required numeric maxLength ) {
+		if ( len( arguments.text ) <= arguments.maxLength ) {
+			return [ arguments.text ]
+		}
+
+		var chunks = []
+		var remaining = arguments.text
+
+		while ( len( remaining ) > arguments.maxLength ) {
+			var window = remaining.left( arguments.maxLength )
+			var breakAt = findBreakPoint( window )
+			chunks.append( remaining.left( breakAt ) )
+			remaining = remaining.mid( breakAt + 1, len( remaining ) - breakAt )
+			// Drop a single leading newline/space left behind by the break, if any.
+			remaining = remaining.reReplace( "^[\r\n ]+", "" )
+		}
+
+		if ( len( remaining ) ) {
+			chunks.append( remaining )
+		}
+
+		return chunks
+	}
+
+	/**
+	 * @window A candidate chunk, already at most the platform's max length
+	 *
+	 * @return The 1-based index to break at — the last newline in window if
+	 *         one exists, else the last space, else window's own full length
+	 *         (a hard cut, only when no natural boundary exists at all)
+	 */
+	private numeric function findBreakPoint( required string window ) {
+		var newlineBreak = lastIndexOfAny( arguments.window, char( 10 ) )
+		if ( newlineBreak > 0 ) {
+			return newlineBreak
+		}
+
+		var spaceBreak = lastIndexOfAny( arguments.window, " " )
+		if ( spaceBreak > 0 ) {
+			return spaceBreak
+		}
+
+		return len( arguments.window )
+	}
+
+	/**
+	 * @text The text to search
+	 * @chars A single character (or a short list of single characters) to look for
+	 *
+	 * @return The 1-based index of the LAST occurrence of any character in chars, or 0 if none are found
+	 */
+	private numeric function lastIndexOfAny( required string text, required string chars ) {
+		var reversed = arguments.text.reverse()
+		var earliestFromEnd = 0
+
+		for ( var c in listToArray( arguments.chars, "" ) ) {
+			var posFromEnd = reversed.find( c )
+			if ( posFromEnd > 0 && ( earliestFromEnd == 0 || posFromEnd < earliestFromEnd ) ) {
+				earliestFromEnd = posFromEnd
+			}
+		}
+
+		if ( earliestFromEnd == 0 ) {
+			return 0
+		}
+
+		return len( arguments.text ) - earliestFromEnd + 1
+	}
+
+}
