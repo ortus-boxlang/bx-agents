@@ -151,6 +151,31 @@ class extends="testbox.system.BaseSpec" {
 				expect( statement ).toInclude( 'getSystemSetting( "MY_DISCORD_BOT_TOKEN", "" )' );
 			} );
 
+			it( "registers an email gateway via its bare class path, resolving every config value live", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-email" );
+				var result = generator.generate( discovery, newAppDir() );
+
+				expect( result.registrationStatements.len() ).toBe( 1 );
+				var statement = result.registrationStatements[ 1 ];
+				expect( statement ).toInclude( '"bxModules.bxagents.models.gateways.EmailGateway"' );
+				expect( statement ).notToInclude( "imapHostEnvVar" );
+				expect( statement ).notToInclude( "imapUsernameEnvVar" );
+				expect( statement ).notToInclude( "imapPasswordEnvVar" );
+				expect( statement ).notToInclude( "fromAddressEnvVar" );
+				expect( statement ).toInclude( 'getSystemSetting( "MY_IMAP_HOST", "" )' );
+				expect( statement ).toInclude( 'getSystemSetting( "MY_IMAP_USERNAME", "" )' );
+				expect( statement ).toInclude( 'getSystemSetting( "MY_IMAP_PASSWORD", "" )' );
+				expect( statement ).toInclude( 'getSystemSetting( "MY_FROM_ADDRESS", "" )' );
+			} );
+
+			it( "reports hasEmailGateway=true only when an email-type channel exists", function() {
+				var emailResult = generator.generate( discoverer.discover( fixtures & "/gateways-email" ), newAppDir() );
+				expect( emailResult.hasEmailGateway ).toBeTrue();
+
+				var telegramResult = generator.generate( discoverer.discover( fixtures & "/gateways-telegram" ), newAppDir() );
+				expect( telegramResult.hasEmailGateway ).toBeFalse();
+			} );
+
 			it( "reports hasPushGateway=true and writes interceptors/GatewaySessionBootstrap.bx for a telegram gateway", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-telegram" );
 				var appDir = newAppDir();

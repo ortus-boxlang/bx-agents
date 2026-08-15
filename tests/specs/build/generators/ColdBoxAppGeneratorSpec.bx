@@ -109,6 +109,25 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).notToInclude( '"security"' );
 			} );
 
+			it( "generates moduleSettings.cbmailservices only when hasEmailGateway is true", function() {
+				var buildDir1 = newBuildDir();
+				var config = resolver.resolve( projectRoot = fixtures & "/full-project" );
+				var withEmail = generator.generate(
+					projectRoot     = fixtures & "/full-project",
+					buildDir        = buildDir1,
+					resolvedConfig  = config,
+					hasEmailGateway = true
+				);
+				var withEmailContent = fileRead( withEmail.coldboxConfig );
+				expect( withEmailContent ).toInclude( "cbmailservices :" );
+				expect( withEmailContent ).toInclude( 'class : "BXMail"' );
+
+				var buildDir2 = newBuildDir();
+				var withoutEmail = generateFor( fixtures & "/full-project", buildDir2 );
+				var withoutEmailContent = fileRead( withoutEmail.coldboxConfig );
+				expect( withoutEmailContent ).notToInclude( "cbmailservices" );
+			} );
+
 			it( "writes a valid config/WireBox.bx", function() {
 				var buildDir = newBuildDir();
 				var result = generateFor( fixtures & "/full-project", buildDir );

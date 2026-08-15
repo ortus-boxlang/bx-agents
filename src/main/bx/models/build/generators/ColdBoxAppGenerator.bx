@@ -47,6 +47,7 @@ class {
 	 * @extraStartupStatements Any other bare statement strings to insert into Application.bx's onApplicationStart(), e.g. `aiToolRegistry().scan( "tools" )` (see BuildPipeline)
 	 * @cliEnvironment Optional environment name the build was invoked with (e.g. from `--environment`), re-applied when resolving each subagent's OWN config so a subagent's environment-specific overrides match the same environment the root project was built for, rather than silently falling back to each subagent's default environment
 	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .models is used, to resolve a bare `model` value against a `models/` entry - see resolveModelReference()). Subagents have no `models/` folder of their own; every node resolves against the ROOT project's models/, matching the flat-namespace design already used for subAgents references (see docs/conventions/subagents.md)
+	 * @hasEmailGateway Whether the project has at least one `type: "email"` gateway (see GatewayGenerator) - when true, `moduleSettings.cbmailservices` is generated so `EmailGateway`'s `MailService@cbmailservices` resolution has a real `BXMail`-protocol mailer configured. cbmailservices/bx-mail themselves are server-level module installs (see box.json `dependencies`), not something this generator installs
 	 *
 	 * @return { applicationBx, coldboxConfig, wireboxConfig, agentFactory, index, agentNodes: every { name, accessorPath } WireBox-registered agent - see buildAgentTree() }
 	 */
@@ -59,7 +60,8 @@ class {
 		array mcpRegistrations = [],
 		array extraStartupStatements = [],
 		string cliEnvironment = "",
-		struct discovery = {}
+		struct discovery = {},
+		boolean hasEmailGateway = false
 	) {
 		var root = normalizePath( arguments.projectRoot )
 		var appDir = normalizePath( arguments.buildDir )
@@ -89,7 +91,7 @@ class {
 		var agentFactory = renderAgentFactory( root, appDir, arguments.resolvedConfig, arguments.cliEnvironment, arguments.discovery )
 
 		fileWrite( applicationPath, renderApplication( appName, startupStatements ) )
-		fileWrite( coldboxPath, renderColdboxConfig( appName, arguments.agentInterceptors, arguments.resolvedConfig.security ?: {} ) )
+		fileWrite( coldboxPath, renderColdboxConfig( appName, arguments.agentInterceptors, arguments.resolvedConfig.security ?: {}, arguments.hasEmailGateway ) )
 		fileWrite( wireboxPath, renderWireBox( agentFactory.nodes ) )
 		fileWrite( agentFactoryPath, agentFactory.source )
 
@@ -183,10 +185,11 @@ class {
 	 * @appName The agent's name, stamped into ColdBox's own `coldbox.appName` setting
 	 * @agentInterceptors Names of agent-scope interceptors already copied into `interceptors/` (see InterceptorSplitter), registered here
 	 * @security The resolved config's own `security` block, forwarded verbatim into bx-ai's `moduleSettings.bxai.security` (passthrough only - see M8.5)
+	 * @hasEmailGateway Whether to also generate `moduleSettings.cbmailservices` (see generate()'s own docblock)
 	 *
 	 * @return The rendered config/ColdBox.bx source
 	 */
-	private string function renderColdboxConfig( required string appName, array agentInterceptors = [], struct security = {} ) {
+	private string function renderColdboxConfig( required string appName, array agentInterceptors = [], struct security = {}, boolean hasEmailGateway = false ) {
 		var lines = [
 			"class {",
 			"",
@@ -219,7 +222,14 @@ class {
 		}
 		lines.append( "" )
 		lines.append( "		moduleSettings = {" )
-		lines.append( "			bxai : #renderLiteral( bxaiSettings )#" )
+		lines.append( "			bxai : #renderLiteral( bxaiSettings )#" & ( arguments.hasEmailGateway ? "," : "" ) )
+		// The `BXMail` protocol (cbmailservices' own dispatch to bx-mail's
+		// `bx:mail` component - see EmailGateway.bx / docs/conventions/gateways.md)
+		// - both modules are real, server-level installs (box.json `dependencies`),
+		// not something this generator installs itself.
+		if ( arguments.hasEmailGateway ) {
+			lines.append( '			cbmailservices : { mailers : { "default" : { class : "BXMail" } } }' )
+		}
 		lines.append( "		}" )
 
 		lines.append( "	}" )

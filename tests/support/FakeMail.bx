@@ -1,0 +1,44 @@
+/**
+ * Test double standing in for cbmailservices' real `Mail@cbmailservices`
+ * payload object - returned by FakeMailService.newMail(), mirroring the real
+ * Mail.cfc's own fluent addMailParam()/send()/hasErrors()/getResultMessages()
+ * shape closely enough for EmailGateway's outbound code to run unmodified
+ * against it.
+ */
+class {
+
+	property name="service";
+	property name="config" type="struct" default={};
+	property name="mailParams" type="array" default=[];
+	property name="results" type="struct" default={};
+
+	function init( required any service, struct config = {} ) {
+		variables.service = arguments.service;
+		variables.config = arguments.config;
+		return this;
+	}
+
+	any function addMailParam() {
+		variables.mailParams.append( duplicate( arguments ) );
+		return this;
+	}
+
+	any function send() {
+		variables.service.recordSend( this );
+		if ( variables.service.getFailNext() ) {
+			variables.results = { error: true, messages: [ variables.service.getFailMessage() ] };
+		} else {
+			variables.results = { error: false, messages: [] };
+		}
+		return this;
+	}
+
+	boolean function hasErrors() {
+		return variables.results.error ?: false;
+	}
+
+	array function getResultMessages() {
+		return variables.results.messages ?: [];
+	}
+
+}

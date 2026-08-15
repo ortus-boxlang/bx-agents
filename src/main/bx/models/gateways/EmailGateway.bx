@@ -1,0 +1,569 @@
+import bxModules.bxai.models.gateway.IGateway;
+import bxModules.bxai.models.gateway.contracts.GatewayContext;
+import bxModules.bxai.models.gateway.contracts.GatewayEvent;
+import bxModules.bxai.models.gateway.contracts.GatewayMessage;
+import bxModules.bxai.models.gateway.contracts.GatewayDeliveryResult;
+import bxModules.bxai.models.gateway.contracts.HumanInteractionRequest;
+import bxModules.bxai.models.gateway.contracts.HumanInteractionDecision;
+
+/**
+ * Email gateway - the simplest transport again (a scheduled IMAP poll, no
+ * persistent connection), but the only push-style gateway that reaches
+ * outside this module's own HTTP-call idiom for delivery: outbound mail is
+ * sent through ColdBox's own `cbmailservices` module (`MailService@cbmailservices`,
+ * WireBox-resolved the same manual way `ScheduledGatewayBase.resolveScheduler()`
+ * already resolves the scheduler - this class is constructed directly by
+ * `aiGateway()`, entirely outside WireBox, so `inject=""` annotations are
+ * never honored here), using its `BXMail` protocol - which itself just calls
+ * BoxLang's own `bx:mail` component (the `bx-mail` module). Both modules are
+ * real, server-level installs (see this project's own `box.json` `dependencies`)
+ * - this generator never installs them itself, matching cbmailservices/bx-mail
+ * both requiring an explicit install, confirmed against their own docs/source.
+ *
+ * Inbound has no ColdBox/BoxLang module equivalent at all - neither `bx-mail`
+ * nor `cbmailservices` receive mail, only send it - so it's hand-rolled IMAP
+ * via the JDK-standard `jakarta.mail` API (confirmed on bx-agents' own
+ * classpath transitively: `bx-mail` depends on `commons-email2-jakarta`,
+ * which itself depends on `jakarta.mail-api` + an Angus Mail implementation -
+ * empirically verified this session against the real jars, not assumed).
+ *
+ * Config, via aiGateway( "bxModules.bxagents.models.gateways.EmailGateway", options ):
+ *   imapHost             IMAP server hostname
+ *   imapPort             IMAP port. Defaults to 993 (IMAPS/implicit TLS)
+ *   imapUsername         IMAP login username
+ *   imapPassword         IMAP login password
+ *   fromAddress          The address outbound mail is sent as - must be one
+ *                        the configured SMTP server (bx-mail's own
+ *                        `modules.mail.settings.mailServers`) is authorized
+ *                        to send as
+ *   pollIntervalSeconds  How often to poll IMAP for new mail. Defaults to 60
+ *                        (mail doesn't need chat-platform-grade latency, and
+ *                        polling too aggressively risks IMAP rate limits)
+ *
+ * Threading and human-in-the-loop are both DEGRADED here relative to the
+ * chat-platform gateways - see the class-level notes on resolveThreadId()
+ * and requestHumanInteraction() below, and docs/conventions/gateways.md's
+ * "Email's degraded threading and HITL" section.
+ */
+class extends="ScheduledGatewayBase" {
+
+	property name="imapHost" type="string" default="";
+	property name="imapPort" type="numeric" default=993;
+	property name="imapUsername" type="string" default="";
+	property name="imapPassword" type="string" default="";
+	property name="fromAddress" type="string" default="";
+	property name="pollIntervalSeconds" type="numeric" default=60;
+
+	/**
+	 * threadID (a Message-ID, always angle-bracketed as received) -> the
+	 * original subject line last seen for that thread, so a reply's subject
+	 * can be "Re: <original>" without re-deriving it from nothing.
+	 */
+	property name="threadSubjects" type="struct" default={};
+
+	/**
+	 * requestID -> { allowedDecisions, threadId } for every HITL request
+	 * still awaiting a reply - see requestHumanInteraction()/handleApprovalReply().
+	 */
+	property name="pendingApprovals" type="struct" default={};
+
+	/**
+	 * Test-only seam: overrides how inbound mail is fetched. Defaults to a
+	 * real IMAP poll; a test injects a closure returning canned normalized
+	 * message structs instead. Signature: function() -> array of
+	 * { from, subject, body, messageId, inReplyTo, references }
+	 */
+	property name="imapPoller";
+
+	/**
+	 * Test-only seam: overrides how the cbmailservices MailService is
+	 * resolved. Defaults to the real WireBox lookup off
+	 * application.cbController; a test injects a fake mail-service double
+	 * (newMail()/send()/hasErrors()/getResultMessages()) instead.
+	 */
+	property name="mailServiceOverride";
+
+	static {
+		DEFAULT_IMAP_PORT   = 993
+		SUBJECT_TAG_PATTERN = "\[bxagents:([^\]]+)\]"
+	}
+
+	function init() {
+		variables.name = "email"
+		variables.description = "Email gateway - scheduled IMAP poll inbound, outbound via cbmailservices"
+		return this
+	}
+
+	IGateway function configure( required any options ) {
+		super.configure( arguments.options )
+		variables.imapHost = trim( variables.options.imapHost ?: "" )
+		variables.imapPort = variables.options.imapPort ?: static.DEFAULT_IMAP_PORT
+		variables.imapUsername = trim( variables.options.imapUsername ?: "" )
+		variables.imapPassword = variables.options.imapPassword ?: ""
+		variables.fromAddress = trim( variables.options.fromAddress ?: "" )
+		variables.pollIntervalSeconds = variables.options.pollIntervalSeconds ?: 60
+		return this
+	}
+
+	array function getDeclaredCapabilities() {
+		// No "streaming" (mail has no partial-delivery concept) and, unlike
+		// the chat-platform gateways, "interactiveActions" is NOT declared -
+		// there is no real button/component surface, only the best-effort
+		// reply-keyword fallback requestHumanInteraction() below implements.
+		return [ "inboundMessages", "outboundMessages", "threads", "humanApproval" ]
+	}
+
+	/**
+	 * Test-only seam — see imapPoller's own docblock.
+	 */
+	void function setImapPoller( required any poller ) {
+		variables.imapPoller = arguments.poller
+	}
+
+	/**
+	 * Test-only seam — see mailServiceOverride's own docblock.
+	 */
+	void function setMailService( required any mailService ) {
+		variables.mailServiceOverride = arguments.mailService
+	}
+
+	// -------------------------------------------------------------------------
+	// ScheduledGatewayBase hooks
+	// -------------------------------------------------------------------------
+
+	void function onConnect() {
+		if ( !len( variables.imapHost ) || !len( variables.imapUsername ) || !len( variables.imapPassword ) ) {
+			throw(
+				type   : "EmailGateway.MissingImapConfig",
+				message: "EmailGateway requires 'imapHost', 'imapUsername', and 'imapPassword' options (resolved from imapHostEnvVar/imapUsernameEnvVar/imapPasswordEnvVar at startup)."
+			)
+		}
+		if ( !len( variables.fromAddress ) ) {
+			throw(
+				type   : "EmailGateway.MissingFromAddress",
+				message: "EmailGateway requires a 'fromAddress' option (resolved from fromAddressEnvVar at startup)."
+			)
+		}
+		logEvent( "Connected (imap #variables.imapHost#:#variables.imapPort#, from #variables.fromAddress#)" )
+	}
+
+	void function onDisconnect() {
+		logEvent( "Disconnected" )
+	}
+
+	void function registerScheduledTasks( required any scheduler ) {
+		var taskName = "email-poll-#variables.name#"
+		arguments.scheduler.task( taskName )
+			.call( () => pollInbox() )
+			.every( variables.pollIntervalSeconds, "seconds" )
+			.withNoOverlaps()
+			.onFailure( ( task, exception ) => logEvent( "Poll failed: #exception.message#", "error" ) )
+			.start()
+		trackTask( taskName )
+	}
+
+	// -------------------------------------------------------------------------
+	// Inbound — scheduled IMAP poll
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Invoked by the scheduled poll task (see registerScheduledTasks()) - not
+	 * part of the IGateway contract, purely Email-specific machinery.
+	 */
+	void function pollInbox() {
+		var messages = []
+		try {
+			messages = fetchInboundMessages()
+		} catch ( any e ) {
+			logEvent( "IMAP poll failed: #e.message#", "error" )
+			dispatchError( e )
+			return
+		}
+
+		for ( var msg in messages ) {
+			handleInboundMessage( msg )
+		}
+	}
+
+	/**
+	 * @msg A normalized inbound message struct - see imapPoller's own docblock for the shape
+	 */
+	private void function handleInboundMessage( required struct msg ) {
+		var requestId = extractRequestTag( arguments.msg.subject ?: "" )
+		if ( len( requestId ) && variables.pendingApprovals.keyExists( requestId ) ) {
+			handleApprovalReply( requestId, arguments.msg )
+			return
+		}
+
+		var threadId = resolveThreadId( arguments.msg )
+		if ( !variables.threadSubjects.keyExists( threadId ) ) {
+			variables.threadSubjects[ threadId ] = arguments.msg.subject ?: ""
+		}
+		dispatchInbound( toGatewayMessage( arguments.msg, threadId ) )
+	}
+
+	/**
+	 * A real Message-ID/In-Reply-To/References chain is the natural, robust
+	 * threading key for an ORDINARY inbound message we're about to reply
+	 * to - we control what we send `In-Reply-To`, so it always resolves.
+	 * v1 simplification: the thread anchor is the FIRST entry in `References`
+	 * if present, else `inReplyTo`, else the message's own `messageId`
+	 * (starting a new thread) - not a full walk of the References chain.
+	 *
+	 * @msg A normalized inbound message struct
+	 */
+	private string function resolveThreadId( required struct msg ) {
+		var references = arguments.msg.references ?: ""
+		if ( len( references ) ) {
+			return trim( listFirst( references, " " ) )
+		}
+		if ( len( arguments.msg.inReplyTo ?: "" ) ) {
+			return arguments.msg.inReplyTo
+		}
+		return arguments.msg.messageId ?: ""
+	}
+
+	/**
+	 * @subject A raw inbound Subject line
+	 *
+	 * @return The requestID embedded via requestHumanInteraction()'s own
+	 *         "[bxagents:<requestID>]" subject tag, or "" if none found
+	 */
+	private string function extractRequestTag( required string subject ) {
+		var match = reFind( static.SUBJECT_TAG_PATTERN, arguments.subject, 1, true )
+		if ( match.len.len() < 2 || match.len[ 2 ] == 0 ) {
+			return ""
+		}
+		return mid( arguments.subject, match.pos[ 2 ], match.len[ 2 ] )
+	}
+
+	/**
+	 * @requestId A pending HITL request this reply answers
+	 * @msg The inbound reply's own normalized message struct
+	 */
+	private void function handleApprovalReply( required string requestId, required struct msg ) {
+		var pending = variables.pendingApprovals[ arguments.requestId ]
+		var firstLine = trim( listFirst( arguments.msg.body ?: "", char( 10 ) ) )
+		var decision = matchDecision( firstLine, pending.allowedDecisions ?: [] )
+
+		BoxAnnounce( "onGatewayMessageReceived", {
+			gateway       : this,
+			message       : null,
+			threadId      : pending.threadId ?: "",
+			userId        : arguments.msg.from ?: "",
+			conversationId: arguments.msg.from ?: "",
+			decision      : decision
+		} )
+
+		variables.pendingApprovals.delete( arguments.requestId )
+	}
+
+	/**
+	 * Best-effort match of a reply's first line against the request's own
+	 * known allowed decisions (exact or prefix, case-insensitive). Falls
+	 * back to the raw text verbatim on no confident match - an unrecognized
+	 * decision is bx-ai's own HITL coordinator's problem to reject, not this
+	 * gateway's to guess at further.
+	 *
+	 * @text A reply's first line, already trimmed
+	 * @allowedDecisions The original request's own allowed decision keywords
+	 */
+	private string function matchDecision( required string text, required array allowedDecisions ) {
+		var normalized = lcase( arguments.text )
+		for ( var decision in arguments.allowedDecisions ) {
+			var normalizedDecision = lcase( decision )
+			if ( normalized == normalizedDecision || normalized.startsWith( normalizedDecision ) ) {
+				return decision
+			}
+		}
+		return arguments.text
+	}
+
+	/**
+	 * @msg A normalized inbound message struct
+	 * @threadId Already resolved via resolveThreadId()
+	 *
+	 * @return A normalized GatewayMessage; fires onGatewayMessageReceived before returning
+	 */
+	private GatewayMessage function toGatewayMessage( required struct msg, required string threadId ) {
+		var fromAddress = arguments.msg.from ?: ""
+		var context = new GatewayContext(
+			gateway       : variables.name,
+			conversationID: fromAddress,
+			userID        : fromAddress,
+			threadID      : arguments.threadId,
+			raw           : arguments.msg
+		)
+		var message = new GatewayMessage(
+			text   : arguments.msg.body ?: "",
+			context: context,
+			raw    : arguments.msg
+		)
+
+		BoxAnnounce( "onGatewayMessageReceived", {
+			gateway       : this,
+			message       : message,
+			threadId      : message.getContext().getThreadID(),
+			userId        : message.getContext().getUserID(),
+			conversationId: message.getContext().getConversationID()
+		} )
+
+		return message
+	}
+
+	/**
+	 * @return An array of normalized { from, subject, body, messageId, inReplyTo, references } structs, one per unseen message - real IMAP unless imapPoller is set
+	 */
+	private array function fetchInboundMessages() {
+		if ( !isNull( variables.imapPoller ) ) {
+			return variables.imapPoller()
+		}
+
+		var results = []
+		var session = createObject( "java", "jakarta.mail.Session" ).getDefaultInstance( createObject( "java", "java.util.Properties" ).init() )
+		var store = session.getStore( "imaps" )
+
+		try {
+			store.connect( variables.imapHost, variables.imapPort, variables.imapUsername, variables.imapPassword )
+			var folder = store.getFolder( "INBOX" )
+			folder.open( createObject( "java", "jakarta.mail.Folder" ).READ_WRITE )
+
+			var seenFlag = createObject( "java", "jakarta.mail.Flags$Flag" ).SEEN
+			var searchFlags = createObject( "java", "jakarta.mail.Flags" ).init( seenFlag )
+			var term = createObject( "java", "jakarta.mail.search.FlagTerm" ).init( searchFlags, false )
+			var messages = folder.search( term )
+
+			for ( var msg in messages ) {
+				try {
+					results.append( parseRawMessage( msg ) )
+					msg.setFlag( seenFlag, true )
+				} catch ( any e ) {
+					logEvent( "Skipping unparseable inbound message: #e.message#", "warning" )
+				}
+			}
+
+			folder.close( false )
+		} finally {
+			try {
+				store.close()
+			} catch ( any e ) {
+				// Best-effort - the store may already be disconnected.
+			}
+		}
+
+		return results
+	}
+
+	/**
+	 * @msg A live jakarta.mail.Message (or MimeMessage) from a real IMAP search
+	 *
+	 * @return { from, subject, body, messageId, inReplyTo, references }
+	 */
+	private struct function parseRawMessage( required any msg ) {
+		var fromAddresses = arguments.msg.getFrom()
+		var fromAddress = ( !isNull( fromAddresses ) && fromAddresses.length > 0 ) ? fromAddresses[ 1 ].toString() : ""
+
+		return {
+			from      : fromAddress,
+			subject   : toString( arguments.msg.getSubject() ?: "" ),
+			body      : extractBodyText( arguments.msg ),
+			messageId : firstHeader( arguments.msg, "Message-ID" ),
+			inReplyTo : firstHeader( arguments.msg, "In-Reply-To" ),
+			references: firstHeader( arguments.msg, "References" )
+		}
+	}
+
+	/**
+	 * @msg A live jakarta.mail.Message
+	 * @headerName A raw header name, e.g. "Message-ID"
+	 *
+	 * @return That header's first value, or "" if absent
+	 */
+	private string function firstHeader( required any msg, required string headerName ) {
+		var values = arguments.msg.getHeader( arguments.headerName )
+		if ( isNull( values ) || values.length == 0 ) {
+			return ""
+		}
+		return toString( values[ 1 ] )
+	}
+
+	/**
+	 * Extracts the first text/plain part of a message - walking one level
+	 * into a multipart body (plain text alongside an HTML alternative, the
+	 * common case) but not recursing into nested multiparts (e.g. inline
+	 * attachments) - a v1 simplification, not full MIME-tree handling.
+	 *
+	 * @msg A live jakarta.mail.Message
+	 */
+	private string function extractBodyText( required any msg ) {
+		if ( arguments.msg.isMimeType( "text/plain" ) ) {
+			return toString( arguments.msg.getContent() )
+		}
+
+		if ( arguments.msg.isMimeType( "multipart/*" ) ) {
+			var multipart = arguments.msg.getContent()
+			for ( var i = 0; i < multipart.getCount(); i++ ) {
+				var part = multipart.getBodyPart( i )
+				if ( part.isMimeType( "text/plain" ) ) {
+					return toString( part.getContent() )
+				}
+			}
+		}
+
+		return ""
+	}
+
+	// -------------------------------------------------------------------------
+	// Outbound — via cbmailservices
+	// -------------------------------------------------------------------------
+
+	GatewayDeliveryResult function deliver( required GatewayEvent event, required GatewayContext context ) {
+		var text = toString( arguments.event.getData().text ?: "" )
+		if ( !len( text ) ) {
+			return GatewayDeliveryResult.failure( "Nothing to deliver — event data has no 'text'" )
+		}
+
+		var threadId = arguments.context.getThreadID()
+		var subject = replySubjectFor( threadId )
+
+		var mail = resolveMailService().newMail(
+			to     : arguments.context.getConversationID(),
+			from   : variables.fromAddress,
+			subject: subject,
+			body   : text,
+			type   : "plain"
+		)
+		threadMailParams( mail, threadId )
+		mail.send()
+
+		if ( mail.hasErrors() ) {
+			return GatewayDeliveryResult.failure( "Email send failed: #mail.getResultMessages().toList( '; ' )#" )
+		}
+
+		var result = new GatewayDeliveryResult( deliveryID: createUUID() )
+
+		BoxAnnounce( "onGatewayMessageSent", {
+			gateway : this,
+			event   : arguments.event,
+			context : arguments.context,
+			result  : result,
+			threadId: threadId
+		} )
+
+		return result
+	}
+
+	/**
+	 * @threadId The thread's own anchor Message-ID (see resolveThreadId()), or "" if this isn't a reply
+	 *
+	 * @return "Re: <original subject>" if a subject is known for this thread, else a generic fallback
+	 */
+	private string function replySubjectFor( required string threadId ) {
+		var base = len( arguments.threadId ) ? ( variables.threadSubjects[ arguments.threadId ] ?: "" ) : ""
+		if ( !len( base ) ) {
+			return "Message from #variables.fromAddress#"
+		}
+		return base.reFindNoCase( "^re:" ) ? base : "Re: #base#"
+	}
+
+	/**
+	 * @mail A Mail@cbmailservices payload, already configured via newMail()
+	 * @threadId The thread's own anchor Message-ID, or "" to skip threading headers entirely
+	 */
+	private void function threadMailParams( required any mail, required string threadId ) {
+		if ( !len( arguments.threadId ) ) {
+			return
+		}
+		arguments.mail.addMailParam( name: "In-Reply-To", value: arguments.threadId )
+		arguments.mail.addMailParam( name: "References", value: arguments.threadId )
+	}
+
+	// -------------------------------------------------------------------------
+	// Human-in-the-loop — DEGRADED: no native buttons, plain-text reply
+	// keyword fallback only. A subject-line tag ("[bxagents:<requestID>]"),
+	// not Message-ID threading, correlates the eventual reply back to this
+	// specific request - we don't reliably know what Message-ID the OUTBOUND
+	// approval email itself gets assigned (cbmailservices' send() doesn't
+	// expose it), so we can't rely on an inbound In-Reply-To pointing back
+	// at it the way ordinary conversation replies can. Most mail clients
+	// preserve a subject tag verbatim through "Re: " replies, matching how
+	// real email-based support-ticket systems solve the identical problem.
+	// -------------------------------------------------------------------------
+
+	GatewayDeliveryResult function requestHumanInteraction( required HumanInteractionRequest humanRequest, required GatewayContext context ) {
+		var presentation = presentInteraction( arguments.humanRequest )
+		var requestId = arguments.humanRequest.getId()
+		var threadId = arguments.context.getThreadID()
+		var baseSubject = replySubjectFor( threadId )
+		var subject = "#baseSubject# [bxagents:#requestId#]"
+		var allowedDecisions = arguments.humanRequest.getAllowedDecisions()
+
+		var mail = resolveMailService().newMail(
+			to     : arguments.context.getConversationID(),
+			from   : variables.fromAddress,
+			subject: subject,
+			body   : buildApprovalBodyText( presentation, allowedDecisions ),
+			type   : "plain"
+		)
+		threadMailParams( mail, threadId )
+		mail.send()
+
+		if ( mail.hasErrors() ) {
+			return GatewayDeliveryResult.failure( "Email send (HITL request) failed: #mail.getResultMessages().toList( '; ' )#" )
+		}
+
+		variables.pendingApprovals[ requestId ] = { allowedDecisions: allowedDecisions, threadId: threadId }
+
+		return new GatewayDeliveryResult( deliveryID: requestId )
+	}
+
+	HumanInteractionDecision function parseHumanDecision( required GatewayEvent event ) {
+		var data = arguments.event.getData()
+		return new HumanInteractionDecision(
+			requestID: data.requestID ?: "",
+			decision : data.decision ?: "",
+			decidedBy: data.decidedBy ?: ""
+		)
+	}
+
+	/**
+	 * @presentation An InteractionPresentation (see BaseGateway.presentInteraction())
+	 * @allowedDecisions The request's own allowed decision keywords
+	 */
+	private string function buildApprovalBodyText( required any presentation, required array allowedDecisions ) {
+		var lines = []
+		if ( len( arguments.presentation.getTitle() ) ) {
+			lines.append( arguments.presentation.getTitle() )
+			lines.append( "" )
+		}
+		lines.append( arguments.presentation.getBody() )
+		lines.append( "" )
+		lines.append( "Reply to this email with one of the following words as the FIRST line of your reply:" )
+		for ( var decision in arguments.allowedDecisions ) {
+			lines.append( "  - #decision#" )
+		}
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Manually resolves cbmailservices' MailService the same way
+	 * ScheduledGatewayBase.resolveScheduler() manually resolves the
+	 * scheduler - this class is constructed directly by aiGateway(),
+	 * entirely outside WireBox, so `inject=""` is never honored on it.
+	 */
+	private any function resolveMailService() {
+		if ( !isNull( variables.mailServiceOverride ) ) {
+			return variables.mailServiceOverride
+		}
+
+		if ( !structKeyExists( application, "cbController" ) || isNull( application.cbController ) ) {
+			throw(
+				type   : "BxAgents.NoMailService",
+				message: "No live ColdBox application found (application.cbController is unset) — the [#variables.name#] gateway needs a real ColdBox boot (bxAgents serve) with cbmailservices installed, not the chat CLI verb or a test with no mail-service double (see setMailService())."
+			)
+		}
+
+		return application.cbController.getWireBox().getInstance( "MailService@cbmailservices" )
+	}
+
+}

@@ -55,17 +55,27 @@ class {
 		TYPE_CLASS_MAP = {
 			telegram: "bxModules.bxagents.models.gateways.TelegramGateway",
 			slack   : "bxModules.bxagents.models.gateways.SlackGateway",
-			discord : "bxModules.bxagents.models.gateways.DiscordGateway"
+			discord : "bxModules.bxagents.models.gateways.DiscordGateway",
+			email   : "bxModules.bxagents.models.gateways.EmailGateway"
 		}
 
 		// Per push-style type, the *EnvVar option keys renderSecretOptions()
 		// resolves live via getSystemSetting() instead of ever embedding a
 		// secret as a literal in generated source - same "secrets stay
-		// external" rule already enforced for the core `http` type.
+		// external" rule already enforced for the core `http` type. email's
+		// imapHost/fromAddress aren't cryptographic secrets, but the SAME
+		// env-var-driven convention is used for every one of its config
+		// values anyway - deployment-varying values never baked in.
 		SECRET_KEY_MAPS = {
 			telegram: { botToken: "botTokenEnvVar" },
 			slack   : { botToken: "botTokenEnvVar", appToken: "appTokenEnvVar" },
-			discord : { botToken: "botTokenEnvVar" }
+			discord : { botToken: "botTokenEnvVar" },
+			email   : {
+				imapHost    : "imapHostEnvVar",
+				imapUsername: "imapUsernameEnvVar",
+				imapPassword: "imapPasswordEnvVar",
+				fromAddress : "fromAddressEnvVar"
+			}
 		}
 	}
 
@@ -74,17 +84,21 @@ class {
 	 * @appDir Absolute path to the generated ColdBox app dir, e.g. "<projectRoot>/.build/app" - the handler (if needed) is written to "<appDir>/handlers/Gateway.bx"
 	 * @resolvedConfig The root project's resolved config (AgentConfigResolver.resolve()) - only `gatewaySession` is used, to configure the generated GatewaySession's policy/maxQueueDepth
 	 *
-	 * @return { registrationStatements: [], hasHttpGateway, handlerPath (only if hasHttpGateway), hasPushGateway, sessionInterceptorName (only if hasPushGateway) }
+	 * @return { registrationStatements: [], hasHttpGateway, handlerPath (only if hasHttpGateway), hasPushGateway, hasEmailGateway, sessionInterceptorName (only if hasPushGateway) }
 	 */
 	struct function generate( required struct discovery, required string appDir, struct resolvedConfig = {} ) {
 		var channelEntries = collectChannelEntries( arguments.discovery )
 		var hasHttpGateway = false
+		var hasEmailGateway = false
 		var pushGatewayNames = []
 
 		for ( var entry in channelEntries ) {
 			var type = entry.config.type ?: ""
 			if ( type == "http" ) {
 				hasHttpGateway = true
+			}
+			if ( type == "email" ) {
+				hasEmailGateway = true
 			}
 			if ( static.TYPE_CLASS_MAP.keyExists( type ) ) {
 				pushGatewayNames.append( entry.name )
@@ -94,7 +108,8 @@ class {
 		var result = {
 			registrationStatements : channelEntries.map( e => renderRegistration( e ) ),
 			hasHttpGateway         : hasHttpGateway,
-			hasPushGateway         : pushGatewayNames.len() > 0
+			hasPushGateway         : pushGatewayNames.len() > 0,
+			hasEmailGateway        : hasEmailGateway
 		}
 
 		if ( hasHttpGateway ) {
