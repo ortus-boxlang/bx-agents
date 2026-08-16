@@ -73,14 +73,65 @@ Generates a real static `<path>/index.html` file (served directly - no route nee
 
 A `webui` exposure entry ships a small, dependency-free, single-page chat UI - vanilla HTML/CSS/JS, no Bootstrap/AlpineJS/Vite build step, **pre-built and vendored inside BX Agents itself**: `bxAgents build` never runs `npm install`/`npm run build`, and a generated project never needs Node/npm installed at all. This is a deliberate v1 scope decision ("small first, then we grow") - a richer UI (thread history, a fuller design system) is a natural later iteration on this same `webui` exposure kind, not a breaking change to it.
 
-The page talks to its own generated `<path>/api` route using ColdBox 8.1's real `toAi()` wire format - `POST <path>/api/stream` for streaming replies (`Accept: text/event-stream`, `data: {"token":"..."}` lines terminated by `data: [DONE]`, exactly as [ColdBox's own AI Routing docs](https://coldbox.ortusbooks.com/the-basics/routing/routing-dsl/ai-routing) describe it) - via `fetch()` + a manual `ReadableStream` reader (not the browser's `EventSource`, since `EventSource` can't do `POST` or set custom headers, both needed here).
+The page talks to its own generated `<path>/api` route via `POST <path>/api/stream` (`Accept: text/event-stream`), using `fetch()` + a manual `ReadableStream` reader - not the browser's `EventSource`, which can't `POST` or set custom headers, both needed here.
+
+{% hint style="warning" %}
+**`toAi()` forwards each bx-ai chunk verbatim - it does not wrap it.** ColdBox's [AI Routing docs](https://coldbox.ortusbooks.com/the-basics/routing/routing-dsl/ai-routing) show the stream as `data: {"token":"..."}` lines, but its own source (`Router.cfc`, `toAi()`'s stream sub-route) does `emitter.send( chunk, "chunk" )` - so every frame carries the **full normalized bx-ai envelope**:
+
+```
+event: chunk
+data: {"object":"chat.completion.chunk","choices":[{"delta":{"role":"assistant","content":"Ray","reasoning":"...","tool_calls":[...]}}]}
+
+event: done
+data: [DONE]
+```
+
+There is no `token` key anywhere. A client written against that docs page - including this UI's own first version - reads `undefined` and renders nothing at all. Read `choices[0].delta.content` instead.
+{% endhint %}
+
+Because the whole envelope arrives, **reasoning and tool calls are already on the wire** with no extra endpoint needed: `delta.reasoning` (normalized across every provider by bx-ai) renders as a collapsed "Thinking" strip, and `delta.tool_calls` as collapsed per-call chips. Tool-call arguments stream as partial JSON fragments keyed by `index`, so the page accumulates per index rather than assuming any single chunk holds a complete call.
+
+#### Branding and theming
+
+Every key below is optional - the entry works with just `exposes` and `path`.
+
+| Key | What it does |
+| --- | --- |
+| `title` | Browser title and header heading |
+| `subtitle` | Small line under the heading |
+| `icon` | An emoji (rendered into an inline-SVG favicon **and** the header) or an image URL/path (`/logo.svg`, `https://…`, `data:image/…`) |
+| `welcome` | Empty-state message shown before the first turn |
+| `placeholder` | Composer input placeholder |
+| `footer` | Small note under the composer - disclaimers, links |
+| `showReasoning` | Show the "Thinking" strip. Default `true` |
+| `showToolCalls` | Show tool-call chips. Default `true` |
+| `theme` | Design tokens - see below |
+| `themeFile` | Path to a CSS override, relative to the project root. Default `resources/webui/theme.css` |
+
+`theme` maps directly onto the page's CSS custom properties: `accent`, `accentFg`, `bg`, `fg`, `muted`, `border`, `surface`, `inputBg`, `bubbleUser`, `bubbleUserFg`, `bubbleAssistant`, `bubbleAssistantFg`, `bubbleError`, `reasoningFg`, `reasoningBg`, `toolFg`, `toolBg`, `radius`, `radiusSm`, `font`, `fontMono`, `fontSize`, `maxWidth`. A nested `theme.dark` block overrides any of the same tokens for dark mode. An unknown token **fails the build** rather than being silently ignored, so a typo surfaces immediately instead of leaving you wondering why your brand color never showed up.
+
+```javascript
+// gateways/chat.bx
+theme: {
+	accent : "0f766e",
+	radius : "10px",
+	font   : "Inter, system-ui, sans-serif",
+	dark   : { accent : "rgb(45, 212, 191)" }
+}
+```
+
+{% hint style="info" %}
+**Write hex colors bare, with no leading hash.** BoxLang begins string interpolation at `#` in **both** single- and double-quoted strings, so a literal hex color in a `.bx` config is a parse error unless the hash is doubled - a footgun nobody remembers. The generator adds it back for you, so `"0f766e"` just works. `rgb()`, `hsl()` and named colors need nothing special either way.
+{% endhint %}
+
+For anything the tokens don't cover - custom fonts, layout, per-element rules - drop a `resources/webui/theme.css` into the project. It's inlined **last** into the page's `<style>`, so it beats both the shipped defaults and the `theme` tokens; and being a real `.css` file, ordinary `#rrggbb` hex works there normally. (A literal `</style` in that file fails the build, since it would terminate the page's style block early.)
 
 {% hint style="warning" %}
 **`apiKeyEnvVar` is a simple, toggleable gate - not a full login system.** Left unset, `<path>/api/*` is wide open (fine for local dev, not for a public deployment). Set it, and a generated `preProcess` interceptor (`interceptors/WebUiAuthGate.bx`) requires every request under `<path>/api/*` to carry a matching `X-API-Key` header, compared via `java.security.MessageDigest.isEqual()` - the same constant-time-compare discipline every webhook gateway's own signature check already uses. **The static shell itself (`<path>/index.html`) is deliberately NOT gated** - only `<path>/api/*` is - because a browser's plain page navigation can't send a custom header, so gating the shell would make the very page that prompts you for the key unreachable without it already. The page's own JS asks for the key (a "Key" button, stored in `localStorage`) and sends it on every API call it makes from then on.
 {% endhint %}
 
 {% hint style="info" %}
-v1 is intentionally small: one conversation thread per page load (a reload starts fresh - no thread history/multi-thread sidebar yet), no reasoning/tool-call visualization, no dark/light auto-detection beyond the OS-level `prefers-color-scheme` plus a manual toggle. These are natural fast-follows, not built here. See `docs/known-limitations.md` for what was and wasn't verified against a real ColdBox boot in this project's own dev environment.
+v1 is intentionally small: one conversation thread per page load (a reload starts fresh - no thread history/multi-thread sidebar yet), no markdown rendering in replies, and no approval UI for a human-in-the-loop suspension (the page surfaces a notice and stops). These are natural fast-follows, not built here. See `docs/known-limitations.md` for what was and wasn't verified against a real ColdBox boot in this project's own dev environment.
 {% endhint %}
 
 ## 2. Channel-adapter gateways (`type: "mock" | "cli" | "http"`)

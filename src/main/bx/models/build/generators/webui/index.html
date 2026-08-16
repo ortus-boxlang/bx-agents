@@ -4,35 +4,69 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>__APP_TITLE__</title>
+__FAVICON__
 <style>
 	:root {
 		color-scheme: light dark;
+
+		/* Surfaces */
 		--bg: rgb(255, 255, 255);
 		--fg: rgb(30, 30, 30);
 		--muted: rgb(110, 110, 110);
 		--border: rgb(225, 225, 225);
-		--bubble-user: rgb(30, 100, 220);
-		--bubble-user-fg: rgb(255, 255, 255);
+		--surface: rgb(248, 248, 250);
+		--input-bg: rgb(250, 250, 250);
+
+		/* Brand */
+		--accent: rgb(30, 100, 220);
+		--accent-fg: rgb(255, 255, 255);
+
+		/* Bubbles */
+		--bubble-user: var(--accent);
+		--bubble-user-fg: var(--accent-fg);
 		--bubble-assistant: rgb(240, 240, 242);
 		--bubble-assistant-fg: rgb(30, 30, 30);
 		--bubble-error: rgb(220, 60, 60);
-		--input-bg: rgb(250, 250, 250);
+
+		/* Reasoning + tools */
+		--reasoning-fg: rgb(120, 90, 180);
+		--reasoning-bg: rgb(246, 243, 252);
+		--tool-fg: rgb(40, 120, 90);
+		--tool-bg: rgb(238, 248, 243);
+
+		/* Shape + type */
+		--radius: 14px;
+		--radius-sm: 8px;
+		--font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+		--font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+		--font-size: 0.95rem;
+		--max-width: 75%;
 	}
 	:root[data-theme="dark"] {
 		--bg: rgb(24, 24, 27);
 		--fg: rgb(235, 235, 238);
 		--muted: rgb(150, 150, 158);
 		--border: rgb(55, 55, 60);
+		--surface: rgb(32, 32, 36);
+		--input-bg: rgb(32, 32, 36);
 		--bubble-assistant: rgb(42, 42, 47);
 		--bubble-assistant-fg: rgb(235, 235, 238);
-		--input-bg: rgb(32, 32, 36);
+		--reasoning-fg: rgb(180, 158, 230);
+		--reasoning-bg: rgb(38, 34, 48);
+		--tool-fg: rgb(120, 200, 165);
+		--tool-bg: rgb(28, 42, 37);
 	}
+
+	/* Generated from the `theme` block in gateways/*.bx - overrides the defaults above. */
+__THEME_TOKENS__
+
 	* { box-sizing: border-box; }
 	html, body { height: 100%; margin: 0; }
 	body {
 		display: flex;
 		flex-direction: column;
-		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+		font-family: var(--font);
+		font-size: var(--font-size);
 		background: var(--bg);
 		color: var(--fg);
 	}
@@ -40,20 +74,50 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
+		gap: 0.75rem;
 		padding: 0.75rem 1rem;
 		border-bottom: 1px solid var(--border);
 		flex-shrink: 0;
+	}
+	header .brand {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		min-width: 0;
+	}
+	header .icon {
+		font-size: 1.35rem;
+		line-height: 1;
+		flex-shrink: 0;
+	}
+	header .icon img {
+		width: 1.6rem;
+		height: 1.6rem;
+		border-radius: var(--radius-sm);
+		display: block;
 	}
 	header h1 {
 		font-size: 1rem;
 		font-weight: 600;
 		margin: 0;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
+	header .subtitle {
+		margin: 0;
+		font-size: 0.8rem;
+		color: var(--muted);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	header .actions { flex-shrink: 0; }
 	header .actions button {
 		background: none;
 		border: 1px solid var(--border);
 		color: var(--fg);
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 		padding: 0.35rem 0.6rem;
 		margin-left: 0.4rem;
 		cursor: pointer;
@@ -67,28 +131,42 @@
 		flex-direction: column;
 		gap: 0.6rem;
 	}
+	.welcome {
+		margin: auto;
+		max-width: 32rem;
+		text-align: center;
+		color: var(--muted);
+		line-height: 1.5;
+	}
+	.turn {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+		max-width: var(--max-width);
+		align-self: flex-start;
+	}
 	.bubble {
-		max-width: 75%;
 		padding: 0.55rem 0.85rem;
-		border-radius: 14px;
+		border-radius: var(--radius);
 		line-height: 1.4;
 		white-space: pre-wrap;
 		word-wrap: break-word;
 	}
 	.bubble.user {
 		align-self: flex-end;
+		max-width: var(--max-width);
 		background: var(--bubble-user);
 		color: var(--bubble-user-fg);
 		border-bottom-right-radius: 4px;
 	}
 	.bubble.assistant {
-		align-self: flex-start;
 		background: var(--bubble-assistant);
 		color: var(--bubble-assistant-fg);
 		border-bottom-left-radius: 4px;
 	}
 	.bubble.error {
 		align-self: flex-start;
+		max-width: var(--max-width);
 		background: transparent;
 		border: 1px solid var(--bubble-error);
 		color: var(--bubble-error);
@@ -103,6 +181,52 @@
 		0%, 100% { opacity: 0.2; }
 		50% { opacity: 0.8; }
 	}
+
+	/* Reasoning + tool disclosure share one compact, collapsed-by-default look. */
+	details.trace {
+		border-radius: var(--radius-sm);
+		font-size: 0.85rem;
+		overflow: hidden;
+	}
+	details.trace > summary {
+		cursor: pointer;
+		padding: 0.3rem 0.6rem;
+		list-style: none;
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		user-select: none;
+	}
+	details.trace > summary::-webkit-details-marker { display: none; }
+	details.trace > summary::before {
+		content: "\25B8";
+		font-size: 0.7em;
+		opacity: 0.7;
+	}
+	details.trace[open] > summary::before { content: "\25BE"; }
+	details.trace .body {
+		padding: 0.1rem 0.6rem 0.5rem 1.5rem;
+		white-space: pre-wrap;
+		word-wrap: break-word;
+		font-family: var(--font-mono);
+		font-size: 0.8rem;
+		line-height: 1.45;
+		opacity: 0.95;
+	}
+	details.reasoning {
+		background: var(--reasoning-bg);
+		color: var(--reasoning-fg);
+	}
+	details.tool {
+		background: var(--tool-bg);
+		color: var(--tool-fg);
+	}
+	details.trace .status {
+		margin-left: auto;
+		font-size: 0.75rem;
+		opacity: 0.75;
+	}
+
 	form#composer {
 		display: flex;
 		gap: 0.5rem;
@@ -113,18 +237,19 @@
 	#composer input[type="text"] {
 		flex: 1;
 		padding: 0.6rem 0.75rem;
-		border-radius: 10px;
+		border-radius: var(--radius-sm);
 		border: 1px solid var(--border);
 		background: var(--input-bg);
 		color: var(--fg);
-		font-size: 0.95rem;
+		font-size: var(--font-size);
+		font-family: var(--font);
 	}
 	#composer button {
 		padding: 0.6rem 1.1rem;
-		border-radius: 10px;
+		border-radius: var(--radius-sm);
 		border: none;
-		background: var(--bubble-user);
-		color: var(--bubble-user-fg);
+		background: var(--accent);
+		color: var(--accent-fg);
 		font-weight: 600;
 		cursor: pointer;
 	}
@@ -137,12 +262,28 @@
 		font-size: 0.8rem;
 		text-align: center;
 		padding: 0.4rem 1rem 0;
+		margin: 0;
 	}
+	footer.note {
+		color: var(--muted);
+		font-size: 0.75rem;
+		text-align: center;
+		padding: 0 1rem 0.5rem;
+	}
+
+	/* Project override: resources/webui/theme.css, inlined last so it always wins. */
+__CUSTOM_CSS__
 </style>
 </head>
 <body>
 	<header>
-		<h1>__APP_TITLE__</h1>
+		<div class="brand">
+			__APP_ICON__
+			<div>
+				<h1>__APP_TITLE__</h1>
+				__APP_SUBTITLE__
+			</div>
+		</div>
 		<div class="actions">
 			<button type="button" id="keyBtn" title="Set the API key this page sends as X-API-Key">Key</button>
 			<button type="button" id="themeBtn" title="Toggle dark/light">Theme</button>
@@ -151,15 +292,19 @@
 	<div id="messages"></div>
 	<p class="hint" id="hint"></p>
 	<form id="composer" autocomplete="off">
-		<input type="text" id="input" placeholder="Message..." autofocus>
+		<input type="text" id="input" placeholder="__PLACEHOLDER__" autofocus>
 		<button type="submit" id="sendBtn">Send</button>
 	</form>
+	__FOOTER__
 
 <script>
 (function () {
 	"use strict";
 
 	var API_BASE = "__API_BASE__";
+	var SHOW_REASONING = __SHOW_REASONING__;
+	var SHOW_TOOLS = __SHOW_TOOLS__;
+	var WELCOME = "__WELCOME__";
 	var KEY_STORAGE = "bxagents_webui_api_key";
 	var THEME_STORAGE = "bxagents_webui_theme";
 
@@ -198,8 +343,7 @@
 		}
 	}
 
-	var storedTheme = localStorage.getItem( THEME_STORAGE );
-	applyTheme( storedTheme );
+	applyTheme( localStorage.getItem( THEME_STORAGE ) );
 
 	themeBtn.addEventListener( "click", function () {
 		var current = document.documentElement.getAttribute( "data-theme" );
@@ -210,13 +354,137 @@
 		applyTheme( next );
 	} );
 
-	function addBubble( role, text ) {
+	function showWelcome() {
+		if ( !WELCOME.length ) {
+			return;
+		}
 		var el = document.createElement( "div" );
-		el.className = "bubble " + role;
+		el.className = "welcome";
+		el.id = "welcome";
+		el.textContent = WELCOME;
+		messagesEl.appendChild( el );
+	}
+
+	function clearWelcome() {
+		var el = document.getElementById( "welcome" );
+		if ( el ) {
+			el.remove();
+		}
+	}
+
+	function scrollToEnd() {
+		messagesEl.scrollTop = messagesEl.scrollHeight;
+	}
+
+	function addUserBubble( text ) {
+		var el = document.createElement( "div" );
+		el.className = "bubble user";
 		el.textContent = text;
 		messagesEl.appendChild( el );
-		messagesEl.scrollTop = messagesEl.scrollHeight;
-		return el;
+		scrollToEnd();
+	}
+
+	function addErrorBubble( text ) {
+		var el = document.createElement( "div" );
+		el.className = "bubble error";
+		el.textContent = text;
+		messagesEl.appendChild( el );
+		scrollToEnd();
+	}
+
+	/**
+	 * One assistant turn: an optional reasoning disclosure, zero or more tool
+	 * disclosures, and the answer bubble. Built lazily so a turn with no
+	 * reasoning and no tools renders exactly like a plain chat reply.
+	 */
+	function createTurn() {
+		var root = document.createElement( "div" );
+		root.className = "turn";
+
+		var bubble = document.createElement( "div" );
+		bubble.className = "bubble assistant pending";
+		root.appendChild( bubble );
+		messagesEl.appendChild( root );
+		scrollToEnd();
+
+		var reasoningEl = null;
+		var reasoningBody = null;
+		var toolEls = {};
+
+		return {
+			appendContent: function ( text ) {
+				bubble.textContent += text;
+				scrollToEnd();
+			},
+			appendReasoning: function ( text ) {
+				if ( !SHOW_REASONING ) {
+					return;
+				}
+				if ( !reasoningEl ) {
+					reasoningEl = document.createElement( "details" );
+					reasoningEl.className = "trace reasoning";
+					var summary = document.createElement( "summary" );
+					summary.textContent = "Thinking";
+					reasoningEl.appendChild( summary );
+					reasoningBody = document.createElement( "div" );
+					reasoningBody.className = "body";
+					reasoningEl.appendChild( reasoningBody );
+					root.insertBefore( reasoningEl, bubble );
+				}
+				reasoningBody.textContent += text;
+				scrollToEnd();
+			},
+			/**
+			 * Tool-call arguments arrive as partial JSON fragments across many
+			 * chunks, keyed by index - accumulate per index rather than assuming
+			 * any single chunk carries a complete call.
+			 */
+			upsertToolCall: function ( index, name, argsFragment ) {
+				if ( !SHOW_TOOLS ) {
+					return;
+				}
+				var entry = toolEls[ index ];
+				if ( !entry ) {
+					var el = document.createElement( "details" );
+					el.className = "trace tool";
+					var summary = document.createElement( "summary" );
+					var label = document.createElement( "span" );
+					label.textContent = name || "tool";
+					var status = document.createElement( "span" );
+					status.className = "status";
+					status.textContent = "calling…";
+					summary.appendChild( label );
+					summary.appendChild( status );
+					el.appendChild( summary );
+					var body = document.createElement( "div" );
+					body.className = "body";
+					el.appendChild( body );
+					root.insertBefore( el, bubble );
+					entry = { el: el, label: label, status: status, body: body, args: "" };
+					toolEls[ index ] = entry;
+				}
+				if ( name && name.length ) {
+					entry.label.textContent = name;
+				}
+				if ( argsFragment && argsFragment.length ) {
+					entry.args += argsFragment;
+					entry.body.textContent = entry.args;
+				}
+				scrollToEnd();
+			},
+			settle: function ( sawContent ) {
+				bubble.classList.remove( "pending" );
+				Object.keys( toolEls ).forEach( function ( key ) {
+					toolEls[ key ].status.textContent = "called";
+				} );
+				if ( !sawContent ) {
+					bubble.textContent = bubble.textContent || "(no response)";
+				}
+			},
+			discard: function () {
+				root.remove();
+			}
+		};
 	}
 
 	function setBusy( busy ) {
@@ -228,15 +496,25 @@
 		hintEl.textContent = text || "";
 	}
 
-	// Parses one Server-Sent Events frame's worth of already-decoded text,
-	// per ColdBox's documented toAi() /stream wire format: lines of
-	// `data: {"token":"..."}`, terminated by a line of `data: [DONE]`.
-	// See https://coldbox.ortusbooks.com/the-basics/routing/routing-dsl/ai-routing
-	function handleSseChunk( raw, onToken ) {
+	/**
+	 * ColdBox's toAi() /stream forwards each bx-ai chunk VERBATIM - see
+	 * Router.cfc's `emitter.send( chunk, "chunk" )` - so every frame carries the
+	 * full normalized envelope, not a token wrapper:
+	 *
+	 *   { object: "chat.completion.chunk",
+	 *     choices: [ { delta: { content, reasoning, tool_calls } } ] }
+	 *
+	 * terminated by a `data: [DONE]` frame. (ColdBox's published AI Routing docs
+	 * show a `{"token":"..."}` shape - that page does not match its own source.)
+	 *
+	 * Only `data:` lines are read; the `event:` name each frame also carries is
+	 * not needed to tell the frames apart.
+	 */
+	function handleSseChunk( raw, handlers ) {
 		var lines = raw.split( "\n" );
 		for ( var i = 0; i < lines.length; i++ ) {
 			var line = lines[ i ];
-			if ( !line.startsWith( "data:" ) ) {
+			if ( line.indexOf( "data:" ) !== 0 ) {
 				continue;
 			}
 			var payload = line.slice( 5 ).trim();
@@ -246,19 +524,46 @@
 			if ( payload === "[DONE]" ) {
 				return true;
 			}
+
+			var parsed;
 			try {
-				var parsed = JSON.parse( payload );
-				if ( typeof parsed.token === "string" ) {
-					onToken( parsed.token );
-				}
+				parsed = JSON.parse( payload );
 			} catch ( e ) {
-				// Not a JSON token frame - ignore rather than break the stream.
+				continue; // Not a JSON frame - ignore rather than break the stream.
+			}
+
+			// A suspended tool call (human-in-the-loop) arrives as a sentinel
+			// chunk with a `type`, not as a delta. Surface it instead of
+			// silently rendering nothing.
+			if ( parsed && parsed.type === "middleware_stop" ) {
+				handlers.onNotice( "The agent paused for human approval. v1 has no approval UI yet." );
+				continue;
+			}
+
+			var choice = parsed && parsed.choices && parsed.choices[ 0 ];
+			var delta = choice && choice.delta;
+			if ( !delta ) {
+				continue;
+			}
+
+			if ( typeof delta.content === "string" && delta.content.length ) {
+				handlers.onContent( delta.content );
+			}
+			if ( typeof delta.reasoning === "string" && delta.reasoning.length ) {
+				handlers.onReasoning( delta.reasoning );
+			}
+			if ( Array.isArray( delta.tool_calls ) ) {
+				delta.tool_calls.forEach( function ( call, position ) {
+					var fn = call.function || {};
+					var index = typeof call.index === "number" ? call.index : position;
+					handlers.onToolCall( index, fn.name || "", fn.arguments || "" );
+				} );
 			}
 		}
 		return false;
 	}
 
-	function streamReply( text, bubbleEl ) {
+	function streamReply( text, turn ) {
 		var headers = { "Content-Type": "application/json", "Accept": "text/event-stream" };
 		var key = getApiKey();
 		if ( key ) {
@@ -279,26 +584,37 @@
 
 			var reader = res.body.getReader();
 			var decoder = new TextDecoder();
-			var full = "";
 			var buffer = "";
+			var sawContent = false;
+
+			var handlers = {
+				onContent: function ( chunk ) {
+					sawContent = true;
+					turn.appendContent( chunk );
+				},
+				onReasoning: function ( chunk ) {
+					turn.appendReasoning( chunk );
+				},
+				onToolCall: function ( index, name, args ) {
+					turn.upsertToolCall( index, name, args );
+				},
+				onNotice: function ( message ) {
+					showHint( message );
+				}
+			};
 
 			function pump() {
 				return reader.read().then( function ( result ) {
 					if ( result.done ) {
-						return full;
+						return sawContent;
 					}
 					buffer += decoder.decode( result.value, { stream: true } );
 					var lastBreak = buffer.lastIndexOf( "\n\n" );
 					var completeChunk = lastBreak >= 0 ? buffer.slice( 0, lastBreak ) : buffer;
 					buffer = lastBreak >= 0 ? buffer.slice( lastBreak + 2 ) : "";
 
-					var done = handleSseChunk( completeChunk, function ( token ) {
-						full += token;
-						bubbleEl.textContent = full;
-						messagesEl.scrollTop = messagesEl.scrollHeight;
-					} );
-					if ( done ) {
-						return full;
+					if ( handleSseChunk( completeChunk, handlers ) ) {
+						return sawContent;
 					}
 					return pump();
 				} );
@@ -315,28 +631,26 @@
 			return;
 		}
 
-		addBubble( "user", text );
+		clearWelcome();
+		addUserBubble( text );
 		inputEl.value = "";
 		setBusy( true );
 		showHint( "" );
 
-		var replyEl = addBubble( "assistant pending", "" );
+		var turn = createTurn();
 
-		streamReply( text, replyEl ).then( function ( full ) {
-			replyEl.className = "bubble assistant";
-			if ( !full.length ) {
-				replyEl.textContent = "(no response)";
-			}
+		streamReply( text, turn ).then( function ( sawContent ) {
+			turn.settle( sawContent );
 		} ).catch( function ( err ) {
-			replyEl.remove();
-			addBubble( "error", err.message || "Something went wrong." );
+			turn.discard();
+			addErrorBubble( err.message || "Something went wrong." );
 		} ).finally( function () {
 			setBusy( false );
 			inputEl.focus();
 		} );
 	} );
 
-	showHint( "Talking to " + API_BASE + " - a fresh page reload starts a new conversation (v1 has no thread history yet)." );
+	showWelcome();
 } )();
 </script>
 </body>

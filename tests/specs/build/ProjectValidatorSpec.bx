@@ -237,6 +237,21 @@ class extends="testbox.system.BaseSpec" {
 				expect( withoutKey.errors.len() ).toBe( 0 );
 			} );
 
+			it( "accepts a fully themed webui entry", function() {
+				var result = validateFixture( "../gateways-webui-themed" );
+				expect( result.errors ).toBeArray();
+				expect( result.errors.len() ).toBe( 0 );
+			} );
+
+			it( "rejects an unknown theme token so a typo fails the build instead of silently doing nothing", function() {
+				var result = validateFixture( "../gateways-webui-bad-theme" );
+				expect( result.errors.len() ).toBeGT( 0 );
+				expect( result.errors.toList( " " ) ).toInclude( "theme.accentColor" );
+
+				// The nested dark-mode block is validated against the same token list
+				expect( result.errors.toList( " " ) ).toInclude( "theme.dark.bakcground" );
+			} );
+
 			it( "returns no errors for a fully valid project", function() {
 				var result = validateFixture( "../full-project" );
 				expect( result.errors ).toBeArray();

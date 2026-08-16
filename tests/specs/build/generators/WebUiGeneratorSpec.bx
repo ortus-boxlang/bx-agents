@@ -79,6 +79,120 @@ class extends="testbox.system.BaseSpec" {
 				expect( src ).notToInclude( 'path.startsWith( "/chat" )' );
 			} );
 
+			it( "parses the REAL bx-ai chunk envelope, not a {token} wrapper", function() {
+				// ColdBox's toAi() /stream forwards each bx-ai chunk verbatim
+				// (Router.cfc: `emitter.send( chunk, "chunk" )`), so the page must read
+				// choices[].delta.*. Its published AI Routing docs show a {"token":"..."}
+				// shape that its own source never produces - the v1 page believed the
+				// docs and therefore rendered nothing at all against a live agent.
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( "delta.content" );
+				expect( html ).toInclude( "parsed.choices" );
+				expect( html ).notToInclude( "parsed.token" );
+			} );
+
+			it( "renders reasoning and tool-call handling from the same envelope", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( "delta.reasoning" );
+				expect( html ).toInclude( "delta.tool_calls" );
+				// Defaults are ON - both were already on the wire and being discarded
+				expect( html ).toInclude( "var SHOW_REASONING = true;" );
+				expect( html ).toInclude( "var SHOW_TOOLS = true;" );
+			} );
+
+			it( "renders branding: title, subtitle, icon, favicon, welcome, placeholder and footer", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui-themed" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				// Title is HTML-escaped, not injected raw
+				expect( html ).toInclude( "Acme &amp; Co &lt;Support&gt;" );
+				expect( html ).notToInclude( "Acme & Co <Support>" );
+				expect( html ).toInclude( "Orders and returns" );
+				expect( html ).toInclude( 'class="subtitle"' );
+				expect( html ).toInclude( 'rel="icon"' );
+				expect( html ).toInclude( "data:image/svg+xml" );
+				expect( html ).toInclude( "Ask away..." );
+				expect( html ).toInclude( "Generated answers may be wrong." );
+				expect( html ).notToInclude( "__PLACEHOLDER__" );
+				expect( html ).notToInclude( "__FOOTER__" );
+				expect( html ).notToInclude( "__FAVICON__" );
+			} );
+
+			it( "escapes the welcome text into a safe JavaScript string literal", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui-themed" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				// A raw newline or quote would terminate the literal and break the page.
+				// Backslash built via char( 92 ) so the assertion does not itself depend
+				// on whether BoxLang treats "\" as an escape character.
+				var slash = char( 92 );
+				expect( html ).toInclude( "var WELCOME = " );
+				expect( html ).toInclude( "Hi there!" & slash & "n" );
+				expect( html ).toInclude( slash & '"anything' & slash & '"' );
+				expect( html ).notToInclude( 'Ask "anything".' );
+			} );
+
+			it( "renders theme tokens, normalizing bare hex that BoxLang cannot express with a leading hash", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui-themed" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				// "0f766e" in config -> a real CSS color
+				expect( html ).toInclude( "--accent: ##0f766e;" );
+				expect( html ).toInclude( "--radius: 10px;" );
+				expect( html ).toInclude( "--font: Inter, system-ui, sans-serif;" );
+				// Dark overrides land on the data-theme rule, not :root
+				expect( html ).toInclude( '[data-theme="dark"]' );
+				expect( html ).toInclude( "--accent: rgb(45, 212, 191);" );
+				expect( html ).notToInclude( "__THEME_TOKENS__" );
+			} );
+
+			it( "honors showToolCalls:false while leaving reasoning on", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui-themed" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( "var SHOW_TOOLS = false;" );
+				expect( html ).toInclude( "var SHOW_REASONING = true;" );
+			} );
+
+			it( "inlines resources/webui/theme.css last so the project override wins", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui-themed" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( "Project override - must be inlined last and win." );
+				expect( html ).notToInclude( "__CUSTOM_CSS__" );
+
+				// It has to come after the generated tokens, or "wins" is a lie
+				expect( html.find( "Project override" ) ).toBeGT( html.find( "--accent: ##0f766e;" ) );
+			} );
+
+			it( "leaves the override placeholder empty when the project has no theme.css", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).notToInclude( "__CUSTOM_CSS__" );
+				expect( html ).notToInclude( "__THEME_TOKENS__" );
+			} );
+
 			it( "does not generate an auth interceptor when no webui entry configures an apiKeyEnvVar", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-webui-no-key" );
 				var appDir = newAppDir();

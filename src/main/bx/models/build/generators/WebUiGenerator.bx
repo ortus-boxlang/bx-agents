@@ -69,7 +69,16 @@ class {
 		for ( var gw in ( arguments.discovery.gateways ?: [] ) ) {
 			var config = readEntryConfig( gw.path )
 			if ( !isNull( config ) && ( config.exposes ?: "" ) == "webui" ) {
-				entries.append( { name : gw.name, config : config } )
+				// discover() returns no projectRoot, but every gateways/* entry sits at
+				// "<root>/gateways/<name>.bx" by convention, so the root is two levels up
+				// from the entry file. Derived here rather than threaded through
+				// generate()'s signature, which BuildPipeline already calls positionally.
+				var gatewaysDir = normalizePath( getDirectoryFromPath( gw.path ) )
+				entries.append( {
+					name        : gw.name,
+					config      : config,
+					projectRoot : normalizePath( getDirectoryFromPath( gatewaysDir ) )
+				} )
 			}
 		}
 
@@ -103,15 +112,276 @@ class {
 		var templateDir = getDirectoryFromPath( getCurrentTemplatePath() )
 		var html = fileRead( templateDir & "webui/index.html" )
 
-		var path = normalizePath( arguments.entry.config.path ?: "" )
-		var title = len( arguments.entry.config.title ?: "" ) ? arguments.entry.config.title : "BX Agents Chat"
+		var config = arguments.entry.config
+		var path = normalizePath( config.path ?: "" )
+		var title = len( config.title ?: "" ) ? config.title : "BX Agents Chat"
+		var subtitle = config.subtitle ?: ""
+		var icon = config.icon ?: ""
+		var welcome = config.welcome ?: ""
+		var placeholder = len( config.placeholder ?: "" ) ? config.placeholder : "Message..."
+		var footer = config.footer ?: ""
+
+		// Both default ON: the whole point of surfacing them is that a turn's
+		// reasoning and tool activity are already on the wire and were being
+		// thrown away. Opt OUT per entry when the surface is user-facing.
+		var showReasoning = isNull( config.showReasoning ?: javacast( "null", "" ) ) ? true : !!config.showReasoning
+		var showTools = isNull( config.showToolCalls ?: javacast( "null", "" ) ) ? true : !!config.showToolCalls
 
 		html = html.replace( "__API_BASE__", path & "/api", "all" )
-		html = html.replace( "__APP_TITLE__", title, "all" )
+		html = html.replace( "__APP_TITLE__", escapeHtml( title ), "all" )
+		html = html.replace( "__PLACEHOLDER__", escapeHtml( placeholder ), "all" )
+		html = html.replace( "__FAVICON__", renderFavicon( icon ), "all" )
+		html = html.replace( "__APP_ICON__", renderHeaderIcon( icon ), "all" )
+		html = html.replace(
+			"__APP_SUBTITLE__",
+			len( subtitle ) ? '<p class="subtitle">' & escapeHtml( subtitle ) & "</p>" : "",
+			"all"
+		)
+		html = html.replace(
+			"__FOOTER__",
+			len( footer ) ? '<footer class="note">' & escapeHtml( footer ) & "</footer>" : "",
+			"all"
+		)
+		html = html.replace( "__WELCOME__", escapeJs( welcome ), "all" )
+		html = html.replace( "__SHOW_REASONING__", showReasoning ? "true" : "false", "all" )
+		html = html.replace( "__SHOW_TOOLS__", showTools ? "true" : "false", "all" )
+		html = html.replace( "__THEME_TOKENS__", renderThemeTokens( config.theme ?: {} ), "all" )
+		html = html.replace( "__CUSTOM_CSS__", readCustomCss( arguments.entry ), "all" )
 
 		var mountDir = normalizePath( arguments.appDir ) & path
 		directoryCreate( path : mountDir, createPath : true, ignoreExists : true )
 		fileWrite( mountDir & "/index.html", html )
+	}
+
+	/**
+	 * Config key -> CSS custom property. This map IS the themeable surface: a
+	 * key outside it is rejected by ProjectValidator rather than silently
+	 * ignored, so a typo fails the build instead of quietly doing nothing.
+	 */
+	private struct function themeTokenMap() {
+		return [
+			"accent"            : "--accent",
+			"accentFg"          : "--accent-fg",
+			"bg"                : "--bg",
+			"fg"                : "--fg",
+			"muted"             : "--muted",
+			"border"            : "--border",
+			"surface"           : "--surface",
+			"inputBg"           : "--input-bg",
+			"bubbleUser"        : "--bubble-user",
+			"bubbleUserFg"      : "--bubble-user-fg",
+			"bubbleAssistant"   : "--bubble-assistant",
+			"bubbleAssistantFg" : "--bubble-assistant-fg",
+			"bubbleError"       : "--bubble-error",
+			"reasoningFg"       : "--reasoning-fg",
+			"reasoningBg"       : "--reasoning-bg",
+			"toolFg"            : "--tool-fg",
+			"toolBg"            : "--tool-bg",
+			"radius"            : "--radius",
+			"radiusSm"          : "--radius-sm",
+			"font"              : "--font",
+			"fontMono"          : "--font-mono",
+			"fontSize"          : "--font-size",
+			"maxWidth"          : "--max-width"
+		]
+	}
+
+	/**
+	 * Renders the `theme` block into two CSS rules: light-mode tokens on
+	 * `:root`, and anything under `theme.dark` on `:root[data-theme="dark"]`,
+	 * both emitted AFTER the template's own defaults so they win by cascade
+	 * order without needing `!important`.
+	 *
+	 * @theme The entry's `theme` config struct (may be empty)
+	 *
+	 * @return CSS text, or "" when nothing is themed
+	 */
+	private string function renderThemeTokens( required struct theme ) {
+		var tokens = themeTokenMap()
+		var lightRules = []
+		var darkRules = []
+
+		for ( var key in tokens ) {
+			if ( arguments.theme.keyExists( key ) ) {
+				lightRules.append( "		#tokens[ key ]#: #normalizeCssValue( arguments.theme[ key ] )#;" )
+			}
+		}
+
+		var dark = arguments.theme.dark ?: {}
+		if ( isStruct( dark ) ) {
+			for ( var key in tokens ) {
+				if ( dark.keyExists( key ) ) {
+					darkRules.append( "		#tokens[ key ]#: #normalizeCssValue( dark[ key ] )#;" )
+				}
+			}
+		}
+
+		var out = []
+		if ( lightRules.len() ) {
+			out.append( "	:root {" )
+			out.append( lightRules.toList( char( 10 ) ) )
+			out.append( "	}" )
+		}
+		if ( darkRules.len() ) {
+			out.append( '	:root[data-theme="dark"] {' )
+			out.append( darkRules.toList( char( 10 ) ) )
+			out.append( "	}" )
+		}
+
+		return out.toList( char( 10 ) )
+	}
+
+	/**
+	 * A bare hex value (`"3b82f6"`) is given its leading `##`. This exists
+	 * because BoxLang starts string interpolation at `##` in BOTH quote styles,
+	 * so `accent: "##3b82f6"` in a `.bx` config is a parse error unless the
+	 * author escapes it as `"####3b82f6"` - a footgun nobody remembers. Writing
+	 * the hex bare sidesteps it entirely; `rgb()`/`hsl()`/named colors need
+	 * nothing special either way.
+	 *
+	 * Rejects the handful of characters that could break out of the `<style>`
+	 * block or the rule itself.
+	 *
+	 * @value A raw theme value from config
+	 *
+	 * @return The CSS-ready value
+	 */
+	private string function normalizeCssValue( required any value ) {
+		var raw = toString( arguments.value ).trim()
+
+		if ( raw.reFind( "[<>{};]" ) ) {
+			throw(
+				type    : "InvalidThemeValue",
+				message : "Theme value [#raw#] contains one of < > { } ; which cannot appear in a CSS custom property value."
+			)
+		}
+
+		// 3, 6, or 8 bare hex digits and nothing else -> a color missing its "##"
+		if ( raw.reFindNoCase( "^[0-9a-f]{3}$|^[0-9a-f]{6}$|^[0-9a-f]{8}$" ) ) {
+			return "##" & raw
+		}
+
+		return raw
+	}
+
+	/**
+	 * Inlines the project's own CSS override file, last in the <style> block so
+	 * it beats both the shipped defaults and the generated `theme` tokens. This
+	 * is the escape hatch for anything the token map doesn't cover - and it's a
+	 * real .css file, so ordinary `##rrggbb` hex works there with no BoxLang
+	 * escaping in play at all.
+	 *
+	 * @entry A webui exposure entry { name, config, projectRoot }
+	 *
+	 * @return The file's contents, or "" when the project has no override
+	 */
+	private string function readCustomCss( required struct entry ) {
+		var relative = len( arguments.entry.config.themeFile ?: "" )
+			? arguments.entry.config.themeFile
+			: "resources/webui/theme.css"
+
+		var cssPath = arguments.entry.projectRoot & "/" & relative.reReplace( "^[\/]+", "" )
+		if ( !fileExists( cssPath ) ) {
+			return ""
+		}
+
+		var css = fileRead( cssPath )
+
+		// The stylesheet is inlined into a <style> element, so a literal
+		// "</style" inside it would close that element early and dump the rest
+		// of the file into the document as markup. Fail the build loudly rather
+		// than silently stripping the author's own CSS.
+		if ( css.findNoCase( "</style" ) ) {
+			throw(
+				type    : "InvalidThemeFile",
+				message : "[#cssPath#] contains a literal ""</style"", which would terminate the page's inline style block. Remove it."
+			)
+		}
+
+		return css
+	}
+
+	/**
+	 * @icon The entry's `icon` config - an emoji/short text, or an image URL/path
+	 *
+	 * @return A <link rel="icon"> tag, or "" when no icon is configured
+	 */
+	private string function renderFavicon( required string icon ) {
+		if ( !len( arguments.icon ) ) {
+			return ""
+		}
+
+		if ( isIconUrl( arguments.icon ) ) {
+			return '<link rel="icon" href="' & escapeHtml( arguments.icon ) & '">'
+		}
+
+		// Emoji favicons have no image file to ship: render the glyph into an
+		// inline SVG data URI, which keeps the page self-contained. The glyph is
+		// percent-encoded rather than dropped in raw - it is almost always
+		// multi-byte, and raw non-ASCII in a data: URI is not reliably decoded.
+		// Attribute values are percent-encoded rather than quoted, so escapeHtml()
+		// below has no quotes to turn into entities and the href stays readable.
+		var svg = "data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%20100%20100%22%3E"
+			& "%3Ctext%20y=%22.9em%22%20font-size=%2290%22%3E" & urlEncodedFormat( arguments.icon ) & "%3C/text%3E%3C/svg%3E"
+		return '<link rel="icon" href="' & escapeHtml( svg ) & '">'
+	}
+
+	/**
+	 * @icon The entry's `icon` config
+	 *
+	 * @return The header brand mark markup, or "" when no icon is configured
+	 */
+	private string function renderHeaderIcon( required string icon ) {
+		if ( !len( arguments.icon ) ) {
+			return ""
+		}
+
+		if ( isIconUrl( arguments.icon ) ) {
+			return '<span class="icon"><img src="' & escapeHtml( arguments.icon ) & '" alt=""></span>'
+		}
+
+		return '<span class="icon">' & escapeHtml( arguments.icon ) & "</span>"
+	}
+
+	/**
+	 * @icon The entry's `icon` config
+	 *
+	 * @return true when the value should be treated as an image reference rather than an emoji/glyph
+	 */
+	private boolean function isIconUrl( required string icon ) {
+		return arguments.icon.reFindNoCase( "^(https?:\/\/|\/|data:image\/)" ) > 0
+	}
+
+	/**
+	 * @value Text destined for HTML body/attribute content
+	 *
+	 * @return value with the five markup-significant characters escaped
+	 */
+	private string function escapeHtml( required string value ) {
+		return arguments.value
+			.replace( "&", "&amp;", "all" )
+			.replace( "<", "&lt;", "all" )
+			.replace( ">", "&gt;", "all" )
+			.replace( '"', "&quot;", "all" )
+			.replace( "'", "&##39;", "all" )
+	}
+
+	/**
+	 * @value Text destined for a double-quoted JavaScript string literal
+	 *
+	 * @return value escaped so it cannot terminate the literal or the <script> block
+	 */
+	private string function escapeJs( required string value ) {
+		// Built from char( 92 ) rather than written as a literal backslash so the
+		// meaning does not depend on whether BoxLang treats "\" as an escape.
+		var slash = char( 92 )
+
+		return arguments.value
+			.replace( slash, slash & slash, "all" )
+			.replace( '"', slash & '"', "all" )
+			.replace( char( 13 ), "", "all" )
+			.replace( char( 10 ), slash & "n", "all" )
+			.replace( "</", "<" & slash & "/", "all" )
 	}
 
 	/**

@@ -399,6 +399,10 @@ class {
 						arguments.errors.append( "Gateway [#gateway.name#] targets unknown mcp server [#target#]" )
 					}
 				}
+
+				if ( config.exposes == "webui" ) {
+					validateWebUiTheme( gateway.name, config.theme ?: {}, arguments.errors )
+				}
 			} else {
 				// Channel-adapter entry: a bx-ai IGateway (mock/cli/http) registered by name
 				if ( structKeyExists( seenNames, gateway.name ) ) {
@@ -419,6 +423,53 @@ class {
 						}
 					}
 				}
+			}
+		}
+	}
+
+	/**
+	 * Validates a `webui` entry's optional `theme` block: every key must name a
+	 * real design token, so a typo (`accentColor` instead of `accent`) fails the
+	 * build rather than silently rendering the default and leaving someone to
+	 * wonder why their brand color never showed up.
+	 *
+	 * The token list is duplicated from WebUiGenerator.themeTokenMap() rather
+	 * than shared, matching this codebase's per-generator self-containment
+	 * convention - that method is the source of truth; keep the two in step.
+	 *
+	 * @gatewayName The gateways/* entry name, for the error message
+	 * @theme The entry's `theme` config value (may be any type - callers pass it unchecked)
+	 * @errors Accumulator array - append() any validation errors found
+	 */
+	private void function validateWebUiTheme( required string gatewayName, required any theme, required array errors ) {
+		if ( !isStruct( arguments.theme ) || arguments.theme.isEmpty() ) {
+			return
+		}
+
+		var validTokens = [
+			"accent", "accentFg", "bg", "fg", "muted", "border", "surface", "inputBg",
+			"bubbleUser", "bubbleUserFg", "bubbleAssistant", "bubbleAssistantFg", "bubbleError",
+			"reasoningFg", "reasoningBg", "toolFg", "toolBg",
+			"radius", "radiusSm", "font", "fontMono", "fontSize", "maxWidth"
+		]
+
+		for ( var key in arguments.theme ) {
+			// `dark` is the nested dark-mode override block, not a token itself
+			if ( key == "dark" ) {
+				if ( !isStruct( arguments.theme.dark ) ) {
+					arguments.errors.append( "Gateway [#arguments.gatewayName#] has a 'theme.dark' that is not a struct - it holds dark-mode token overrides" )
+					continue
+				}
+				for ( var darkKey in arguments.theme.dark ) {
+					if ( !validTokens.contains( darkKey ) ) {
+						arguments.errors.append( "Gateway [#arguments.gatewayName#] has an unknown theme token [theme.dark.#darkKey#] - valid tokens: #validTokens.toList( ", " )#" )
+					}
+				}
+				continue
+			}
+
+			if ( !validTokens.contains( key ) ) {
+				arguments.errors.append( "Gateway [#arguments.gatewayName#] has an unknown theme token [theme.#key#] - valid tokens: #validTokens.toList( ", " )#" )
 			}
 		}
 	}
