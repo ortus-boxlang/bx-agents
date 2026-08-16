@@ -6,9 +6,9 @@
 Don't confuse these with each other - an HTTP-exposed agent (`exposes: "agent"`) is a REST API for your agent; a channel-adapter gateway (`type: "http"`) is a webhook endpoint for a chat platform or human-in-the-loop approval flow. They generate completely different routes.
 {% endhint %}
 
-## 1. HTTP/MCP exposure (`exposes: "agent" | "mcp"`)
+## 1. HTTP/MCP/web-UI exposure (`exposes: "agent" | "mcp" | "webui"`)
 
-Exposes the agent, or a local MCP server, over HTTP using ColdBox 8.1's native AI Routing DSL.
+Exposes the agent, or a local MCP server, over HTTP using ColdBox 8.1's native AI Routing DSL - or a small, pre-built browser chat UI, talking to that same `toAi()` machinery (see [The v1 web chat UI](#the-v1-web-chat-ui) below).
 
 **Expose the agent:**
 
@@ -50,7 +50,38 @@ class {
 
 Generates `route( "/mcp/tools" ).toMCP( "local-server" )`.
 
-**Validation:** `exposes` must be `agent` or `mcp`; `path` is required and must be unique across every exposure entry; an `mcp` exposure's `target` is required and must match a real `mcp/*` entry's declared name.
+**Expose the v1 web chat UI:**
+
+```javascript
+// gateways/chat.bx
+class {
+	function configure() {
+		return {
+			exposes     : "webui",
+			path        : "/chat",
+			apiKeyEnvVar: "CHAT_UI_API_KEY"   // optional - see below
+		};
+	}
+}
+```
+
+Generates a real static `<path>/index.html` file (served directly - no route needed for it) plus `route( "<path>/api" ).toAi( "GeneratedAgent" )` for its own dedicated API, at a fixed `/api` suffix so it never collides with the shell's own files.
+
+**Validation:** `exposes` must be `agent`, `mcp`, or `webui`; `path` is required and must be unique across every exposure entry; an `mcp` exposure's `target` is required and must match a real `mcp/*` entry's declared name; `webui`'s `apiKeyEnvVar` is entirely optional, with no required-field check (see below).
+
+### The v1 web chat UI
+
+A `webui` exposure entry ships a small, dependency-free, single-page chat UI - vanilla HTML/CSS/JS, no Bootstrap/AlpineJS/Vite build step, **pre-built and vendored inside BX Agents itself**: `bxAgents build` never runs `npm install`/`npm run build`, and a generated project never needs Node/npm installed at all. This is a deliberate v1 scope decision ("small first, then we grow") - a richer UI (thread history, a fuller design system) is a natural later iteration on this same `webui` exposure kind, not a breaking change to it.
+
+The page talks to its own generated `<path>/api` route using ColdBox 8.1's real `toAi()` wire format - `POST <path>/api/stream` for streaming replies (`Accept: text/event-stream`, `data: {"token":"..."}` lines terminated by `data: [DONE]`, exactly as [ColdBox's own AI Routing docs](https://coldbox.ortusbooks.com/the-basics/routing/routing-dsl/ai-routing) describe it) - via `fetch()` + a manual `ReadableStream` reader (not the browser's `EventSource`, since `EventSource` can't do `POST` or set custom headers, both needed here).
+
+{% hint style="warning" %}
+**`apiKeyEnvVar` is a simple, toggleable gate - not a full login system.** Left unset, `<path>/api/*` is wide open (fine for local dev, not for a public deployment). Set it, and a generated `preProcess` interceptor (`interceptors/WebUiAuthGate.bx`) requires every request under `<path>/api/*` to carry a matching `X-API-Key` header, compared via `java.security.MessageDigest.isEqual()` - the same constant-time-compare discipline every webhook gateway's own signature check already uses. **The static shell itself (`<path>/index.html`) is deliberately NOT gated** - only `<path>/api/*` is - because a browser's plain page navigation can't send a custom header, so gating the shell would make the very page that prompts you for the key unreachable without it already. The page's own JS asks for the key (a "Key" button, stored in `localStorage`) and sends it on every API call it makes from then on.
+{% endhint %}
+
+{% hint style="info" %}
+v1 is intentionally small: one conversation thread per page load (a reload starts fresh - no thread history/multi-thread sidebar yet), no reasoning/tool-call visualization, no dark/light auto-detection beyond the OS-level `prefers-color-scheme` plus a manual toggle. These are natural fast-follows, not built here. See `docs/known-limitations.md` for what was and wasn't verified against a real ColdBox boot in this project's own dev environment.
+{% endhint %}
 
 ## 2. Channel-adapter gateways (`type: "mock" | "cli" | "http"`)
 

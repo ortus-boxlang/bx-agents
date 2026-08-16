@@ -346,7 +346,7 @@ class {
 
 	/**
 	 * Validates both `gateways/*` entry kinds: exposure entries (`exposes:
-	 * "agent"|"mcp"`, unique `path`) and channel-adapter entries (`type`,
+	 * "agent"|"mcp"|"webui"`, unique `path`) and channel-adapter entries (`type`,
 	 * unique `name`, `secretEnvVar` required for `http`, and each push-style
 	 * type's own required `*EnvVar` keys per REQUIRED_ENV_VAR_KEYS).
 	 *
@@ -369,9 +369,9 @@ class {
 			}
 
 			if ( structKeyExists( config, "exposes" ) ) {
-				// Exposure entry: exposes an agent or an MCP server over HTTP via toAi()/toMCP()
-				if ( ![ "agent", "mcp" ].contains( config.exposes ) ) {
-					arguments.errors.append( "Gateway [#gateway.name#] has an invalid 'exposes' value [#config.exposes#] - must be 'agent' or 'mcp'" )
+				// Exposure entry: exposes an agent (raw HTTP or the v1 web chat UI) or an MCP server
+				if ( ![ "agent", "mcp", "webui" ].contains( config.exposes ) ) {
+					arguments.errors.append( "Gateway [#gateway.name#] has an invalid 'exposes' value [#config.exposes#] - must be 'agent', 'mcp', or 'webui'" )
 				}
 
 				var path = config.path ?: ""
@@ -383,9 +383,13 @@ class {
 					seenPaths[ path ] = true
 				}
 
-				// "agent" exposure always targets the project's single root agent, so
-				// no "target" is needed. "mcp" exposure must name WHICH local mcp/*
-				// server to expose, since a project can declare more than one.
+				// "agent" and "webui" exposure always target the project's single
+				// root agent, so no "target" is needed (webui's own optional
+				// apiKeyEnvVar is just a plain *EnvVar name, same non-required
+				// shape as every other gateway's optional overrides - no
+				// dedicated check beyond 'path' above). "mcp" exposure must name
+				// WHICH local mcp/* server to expose, since a project can
+				// declare more than one.
 				if ( config.exposes == "mcp" ) {
 					var target = config.target ?: ""
 					var mcpNames = ( arguments.discovery.mcp ?: [] ).map( m => m.name )

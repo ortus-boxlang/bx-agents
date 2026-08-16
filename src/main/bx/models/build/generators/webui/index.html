@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__APP_TITLE__</title>
+<style>
+	:root {
+		color-scheme: light dark;
+		--bg: rgb(255, 255, 255);
+		--fg: rgb(30, 30, 30);
+		--muted: rgb(110, 110, 110);
+		--border: rgb(225, 225, 225);
+		--bubble-user: rgb(30, 100, 220);
+		--bubble-user-fg: rgb(255, 255, 255);
+		--bubble-assistant: rgb(240, 240, 242);
+		--bubble-assistant-fg: rgb(30, 30, 30);
+		--bubble-error: rgb(220, 60, 60);
+		--input-bg: rgb(250, 250, 250);
+	}
+	:root[data-theme="dark"] {
+		--bg: rgb(24, 24, 27);
+		--fg: rgb(235, 235, 238);
+		--muted: rgb(150, 150, 158);
+		--border: rgb(55, 55, 60);
+		--bubble-assistant: rgb(42, 42, 47);
+		--bubble-assistant-fg: rgb(235, 235, 238);
+		--input-bg: rgb(32, 32, 36);
+	}
+	* { box-sizing: border-box; }
+	html, body { height: 100%; margin: 0; }
+	body {
+		display: flex;
+		flex-direction: column;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+		background: var(--bg);
+		color: var(--fg);
+	}
+	header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0.75rem 1rem;
+		border-bottom: 1px solid var(--border);
+		flex-shrink: 0;
+	}
+	header h1 {
+		font-size: 1rem;
+		font-weight: 600;
+		margin: 0;
+	}
+	header .actions button {
+		background: none;
+		border: 1px solid var(--border);
+		color: var(--fg);
+		border-radius: 6px;
+		padding: 0.35rem 0.6rem;
+		margin-left: 0.4rem;
+		cursor: pointer;
+		font-size: 0.85rem;
+	}
+	#messages {
+		flex: 1;
+		overflow-y: auto;
+		padding: 1rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+	}
+	.bubble {
+		max-width: 75%;
+		padding: 0.55rem 0.85rem;
+		border-radius: 14px;
+		line-height: 1.4;
+		white-space: pre-wrap;
+		word-wrap: break-word;
+	}
+	.bubble.user {
+		align-self: flex-end;
+		background: var(--bubble-user);
+		color: var(--bubble-user-fg);
+		border-bottom-right-radius: 4px;
+	}
+	.bubble.assistant {
+		align-self: flex-start;
+		background: var(--bubble-assistant);
+		color: var(--bubble-assistant-fg);
+		border-bottom-left-radius: 4px;
+	}
+	.bubble.error {
+		align-self: flex-start;
+		background: transparent;
+		border: 1px solid var(--bubble-error);
+		color: var(--bubble-error);
+	}
+	.bubble.pending::after {
+		content: "\25CF";
+		opacity: 0.4;
+		margin-left: 0.3rem;
+		animation: pulse 1s infinite ease-in-out;
+	}
+	@keyframes pulse {
+		0%, 100% { opacity: 0.2; }
+		50% { opacity: 0.8; }
+	}
+	form#composer {
+		display: flex;
+		gap: 0.5rem;
+		padding: 0.75rem 1rem;
+		border-top: 1px solid var(--border);
+		flex-shrink: 0;
+	}
+	#composer input[type="text"] {
+		flex: 1;
+		padding: 0.6rem 0.75rem;
+		border-radius: 10px;
+		border: 1px solid var(--border);
+		background: var(--input-bg);
+		color: var(--fg);
+		font-size: 0.95rem;
+	}
+	#composer button {
+		padding: 0.6rem 1.1rem;
+		border-radius: 10px;
+		border: none;
+		background: var(--bubble-user);
+		color: var(--bubble-user-fg);
+		font-weight: 600;
+		cursor: pointer;
+	}
+	#composer button:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+	.hint {
+		color: var(--muted);
+		font-size: 0.8rem;
+		text-align: center;
+		padding: 0.4rem 1rem 0;
+	}
+</style>
+</head>
+<body>
+	<header>
+		<h1>__APP_TITLE__</h1>
+		<div class="actions">
+			<button type="button" id="keyBtn" title="Set the API key this page sends as X-API-Key">Key</button>
+			<button type="button" id="themeBtn" title="Toggle dark/light">Theme</button>
+		</div>
+	</header>
+	<div id="messages"></div>
+	<p class="hint" id="hint"></p>
+	<form id="composer" autocomplete="off">
+		<input type="text" id="input" placeholder="Message..." autofocus>
+		<button type="submit" id="sendBtn">Send</button>
+	</form>
+
+<script>
+(function () {
+	"use strict";
+
+	var API_BASE = "__API_BASE__";
+	var KEY_STORAGE = "bxagents_webui_api_key";
+	var THEME_STORAGE = "bxagents_webui_theme";
+
+	var messagesEl = document.getElementById( "messages" );
+	var hintEl = document.getElementById( "hint" );
+	var formEl = document.getElementById( "composer" );
+	var inputEl = document.getElementById( "input" );
+	var sendBtn = document.getElementById( "sendBtn" );
+	var keyBtn = document.getElementById( "keyBtn" );
+	var themeBtn = document.getElementById( "themeBtn" );
+
+	function getApiKey() {
+		return localStorage.getItem( KEY_STORAGE ) || "";
+	}
+
+	function setApiKey( value ) {
+		if ( value ) {
+			localStorage.setItem( KEY_STORAGE, value );
+		} else {
+			localStorage.removeItem( KEY_STORAGE );
+		}
+	}
+
+	keyBtn.addEventListener( "click", function () {
+		var next = window.prompt( "API key (sent as X-API-Key on every request to " + API_BASE + "). Leave blank to clear.", getApiKey() );
+		if ( next !== null ) {
+			setApiKey( next.trim() );
+		}
+	} );
+
+	function applyTheme( theme ) {
+		if ( theme === "dark" || theme === "light" ) {
+			document.documentElement.setAttribute( "data-theme", theme );
+		} else {
+			document.documentElement.removeAttribute( "data-theme" );
+		}
+	}
+
+	var storedTheme = localStorage.getItem( THEME_STORAGE );
+	applyTheme( storedTheme );
+
+	themeBtn.addEventListener( "click", function () {
+		var current = document.documentElement.getAttribute( "data-theme" );
+		var prefersDark = window.matchMedia && window.matchMedia( "(prefers-color-scheme: dark)" ).matches;
+		var effectiveIsDark = current ? current === "dark" : prefersDark;
+		var next = effectiveIsDark ? "light" : "dark";
+		localStorage.setItem( THEME_STORAGE, next );
+		applyTheme( next );
+	} );
+
+	function addBubble( role, text ) {
+		var el = document.createElement( "div" );
+		el.className = "bubble " + role;
+		el.textContent = text;
+		messagesEl.appendChild( el );
+		messagesEl.scrollTop = messagesEl.scrollHeight;
+		return el;
+	}
+
+	function setBusy( busy ) {
+		inputEl.disabled = busy;
+		sendBtn.disabled = busy;
+	}
+
+	function showHint( text ) {
+		hintEl.textContent = text || "";
+	}
+
+	// Parses one Server-Sent Events frame's worth of already-decoded text,
+	// per ColdBox's documented toAi() /stream wire format: lines of
+	// `data: {"token":"..."}`, terminated by a line of `data: [DONE]`.
+	// See https://coldbox.ortusbooks.com/the-basics/routing/routing-dsl/ai-routing
+	function handleSseChunk( raw, onToken ) {
+		var lines = raw.split( "\n" );
+		for ( var i = 0; i < lines.length; i++ ) {
+			var line = lines[ i ];
+			if ( !line.startsWith( "data:" ) ) {
+				continue;
+			}
+			var payload = line.slice( 5 ).trim();
+			if ( !payload.length ) {
+				continue;
+			}
+			if ( payload === "[DONE]" ) {
+				return true;
+			}
+			try {
+				var parsed = JSON.parse( payload );
+				if ( typeof parsed.token === "string" ) {
+					onToken( parsed.token );
+				}
+			} catch ( e ) {
+				// Not a JSON token frame - ignore rather than break the stream.
+			}
+		}
+		return false;
+	}
+
+	function streamReply( text, bubbleEl ) {
+		var headers = { "Content-Type": "application/json", "Accept": "text/event-stream" };
+		var key = getApiKey();
+		if ( key ) {
+			headers[ "X-API-Key" ] = key;
+		}
+
+		return fetch( API_BASE + "/stream", {
+			method: "POST",
+			headers: headers,
+			body: JSON.stringify( { input: text } )
+		} ).then( function ( res ) {
+			if ( res.status === 401 ) {
+				throw new Error( "Unauthorized - set the API key via the \"Key\" button, then try again." );
+			}
+			if ( !res.ok || !res.body ) {
+				throw new Error( "Request failed (HTTP " + res.status + ")" );
+			}
+
+			var reader = res.body.getReader();
+			var decoder = new TextDecoder();
+			var full = "";
+			var buffer = "";
+
+			function pump() {
+				return reader.read().then( function ( result ) {
+					if ( result.done ) {
+						return full;
+					}
+					buffer += decoder.decode( result.value, { stream: true } );
+					var lastBreak = buffer.lastIndexOf( "\n\n" );
+					var completeChunk = lastBreak >= 0 ? buffer.slice( 0, lastBreak ) : buffer;
+					buffer = lastBreak >= 0 ? buffer.slice( lastBreak + 2 ) : "";
+
+					var done = handleSseChunk( completeChunk, function ( token ) {
+						full += token;
+						bubbleEl.textContent = full;
+						messagesEl.scrollTop = messagesEl.scrollHeight;
+					} );
+					if ( done ) {
+						return full;
+					}
+					return pump();
+				} );
+			}
+
+			return pump();
+		} );
+	}
+
+	formEl.addEventListener( "submit", function ( evt ) {
+		evt.preventDefault();
+		var text = inputEl.value.trim();
+		if ( !text ) {
+			return;
+		}
+
+		addBubble( "user", text );
+		inputEl.value = "";
+		setBusy( true );
+		showHint( "" );
+
+		var replyEl = addBubble( "assistant pending", "" );
+
+		streamReply( text, replyEl ).then( function ( full ) {
+			replyEl.className = "bubble assistant";
+			if ( !full.length ) {
+				replyEl.textContent = "(no response)";
+			}
+		} ).catch( function ( err ) {
+			replyEl.remove();
+			addBubble( "error", err.message || "Something went wrong." );
+		} ).finally( function () {
+			setBusy( false );
+			inputEl.focus();
+		} );
+	} );
+
+	showHint( "Talking to " + API_BASE + " - a fresh page reload starts a new conversation (v1 has no thread history yet)." );
+} )();
+</script>
+</body>
+</html>
