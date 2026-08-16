@@ -61,7 +61,8 @@ class {
 		array extraStartupStatements = [],
 		string cliEnvironment = "",
 		struct discovery = {},
-		boolean hasEmailGateway = false
+		boolean hasEmailGateway = false,
+		boolean hasWebUi = false
 	) {
 		var root = normalizePath( arguments.projectRoot )
 		var appDir = normalizePath( arguments.buildDir )
@@ -88,9 +89,27 @@ class {
 			startupStatements.append( statement )
 		}
 
-		var agentFactory = renderAgentFactory( root, appDir, arguments.resolvedConfig, arguments.cliEnvironment, arguments.discovery )
+		// A browser-facing project defaults every agent to session-scoped memory:
+		// the HTTP session is what separates one visitor's conversation from
+		// another's, and it is decided server-side rather than by anything the
+		// client sends. Non-browser projects keep bx-ai's own default.
+		var agentFactory = renderAgentFactory(
+			root,
+			appDir,
+			arguments.resolvedConfig,
+			arguments.cliEnvironment,
+			arguments.discovery,
+			arguments.hasWebUi ? "session" : ""
+		)
 
-		fileWrite( applicationPath, renderApplication( appName, startupStatements ) )
+		fileWrite(
+			applicationPath,
+			renderApplication(
+				appName            : appName,
+				startupStatements  : startupStatements,
+				sessionManagement  : arguments.hasWebUi
+			)
+		)
 		fileWrite( coldboxPath, renderColdboxConfig( appName, arguments.agentInterceptors, arguments.resolvedConfig.security ?: {}, arguments.hasEmailGateway ) )
 		fileWrite( wireboxPath, renderWireBox( agentFactory.nodes ) )
 		fileWrite( agentFactoryPath, agentFactory.source )
@@ -118,35 +137,54 @@ class {
 	 *
 	 * @return The rendered Application.bx source
 	 */
-	private string function renderApplication( required string appName, array startupStatements = [] ) {
+	private string function renderApplication(
+		required string appName,
+		array startupStatements = [],
+		boolean sessionManagement = false,
+		numeric sessionTimeoutMinutes = 60
+	) {
 		var lines = [
 			"class {",
 			"",
-			'	this.name              = "#bxLiteral( arguments.appName )#"',
-			"	this.sessionManagement = false",
-			"	this.setClientCookies  = false",
-			"",
-			"	COLDBOX_APP_ROOT_PATH  = expandPath( ""/"" )",
-			'	COLDBOX_APP_MAPPING    = ""',
-			'	COLDBOX_CONFIG_MAPPING = ""',
-			'	COLDBOX_APP_KEY        = ""',
-			"",
-			"	function onApplicationStart() {",
-			// Named args deliberately, not positional - coldbox.system.Bootstrap's
-			// real init() signature is
-			// (COLDBOX_CONFIG_FILE, COLDBOX_APP_ROOT_PATH, COLDBOX_APP_KEY, COLDBOX_APP_MAPPING, COLDBOX_FAIL_FAST, COLDBOX_WEB_MAPPING) -
-			// a prior positional call here passed COLDBOX_APP_ROOT_PATH as the
-			// FIRST arg (silently becoming COLDBOX_CONFIG_FILE), breaking config
-			// loading the moment a real ColdBox boot exercised it. Confirmed
-			// against real coldbox.system.Bootstrap source this session.
-			"		application.cbBootstrap = new coldbox.system.Bootstrap(",
-			"			COLDBOX_CONFIG_FILE   = COLDBOX_CONFIG_MAPPING,",
-			"			COLDBOX_APP_ROOT_PATH = COLDBOX_APP_ROOT_PATH,",
-			"			COLDBOX_APP_KEY       = COLDBOX_APP_KEY,",
-			"			COLDBOX_APP_MAPPING   = COLDBOX_APP_MAPPING",
-			"		)",
-			"		application.cbBootstrap.loadColdbox()"
+			'	this.name              = "#bxLiteral( arguments.appName )#"'
 		]
+
+		if ( arguments.sessionManagement ) {
+			// A browser-facing project needs a real session: it is what keys each
+			// visitor's own agent memory (see renderMemoryExpression()'s `session`
+			// default). Cookies go with it - without them there is no session to
+			// key by, and every visitor collapses back into one shared bucket.
+			lines.append( "	this.sessionManagement = true" )
+			lines.append( "	this.setClientCookies  = true" )
+			lines.append( "	this.sessionTimeout    = createTimeSpan( 0, 0, #int( arguments.sessionTimeoutMinutes )#, 0 )" )
+		} else {
+			// API/gateway-only projects have no browser to track - sessions would
+			// be pure overhead plus a cookie nobody asked for.
+			lines.append( "	this.sessionManagement = false" )
+			lines.append( "	this.setClientCookies  = false" )
+		}
+
+		lines.append( "" )
+		lines.append( "	COLDBOX_APP_ROOT_PATH  = expandPath( ""/"" )" )
+		lines.append( '	COLDBOX_APP_MAPPING    = ""' )
+		lines.append( '	COLDBOX_CONFIG_MAPPING = ""' )
+		lines.append( '	COLDBOX_APP_KEY        = ""' )
+		lines.append( "" )
+		lines.append( "	function onApplicationStart() {" )
+		// Named args deliberately, not positional - coldbox.system.Bootstrap's
+		// real init() signature is
+		// (COLDBOX_CONFIG_FILE, COLDBOX_APP_ROOT_PATH, COLDBOX_APP_KEY, COLDBOX_APP_MAPPING, COLDBOX_FAIL_FAST, COLDBOX_WEB_MAPPING) -
+		// a prior positional call here passed COLDBOX_APP_ROOT_PATH as the
+		// FIRST arg (silently becoming COLDBOX_CONFIG_FILE), breaking config
+		// loading the moment a real ColdBox boot exercised it. Confirmed
+		// against real coldbox.system.Bootstrap source this session.
+		lines.append( "		application.cbBootstrap = new coldbox.system.Bootstrap(" )
+		lines.append( "			COLDBOX_CONFIG_FILE   = COLDBOX_CONFIG_MAPPING," )
+		lines.append( "			COLDBOX_APP_ROOT_PATH = COLDBOX_APP_ROOT_PATH," )
+		lines.append( "			COLDBOX_APP_KEY       = COLDBOX_APP_KEY," )
+		lines.append( "			COLDBOX_APP_MAPPING   = COLDBOX_APP_MAPPING" )
+		lines.append( "		)" )
+		lines.append( "		application.cbBootstrap.loadColdbox()" )
 
 		for ( var statement in arguments.startupStatements ) {
 			lines.append( "		" & statement )
@@ -333,8 +371,8 @@ class {
 	 *
 	 * @return { source: the rendered agent/GeneratedAgentFactory.bx source, nodes: every agent node in the tree - see buildAgentTree() }
 	 */
-	private struct function renderAgentFactory( required string projectRoot, required string appDir, required struct resolvedConfig, string cliEnvironment = "", struct discovery = {} ) {
-		var built = buildAgentTree( arguments.projectRoot, arguments.projectRoot, arguments.resolvedConfig, "agent", arguments.cliEnvironment, arguments.discovery )
+	private struct function renderAgentFactory( required string projectRoot, required string appDir, required struct resolvedConfig, string cliEnvironment = "", struct discovery = {}, string defaultMemory = "" ) {
+		var built = buildAgentTree( arguments.projectRoot, arguments.projectRoot, arguments.resolvedConfig, "agent", arguments.cliEnvironment, arguments.discovery, [], arguments.defaultMemory )
 		var body = built.statements.toList( char( 10 ) & char( 10 ) )
 		var toolsDir = normalizePath( arguments.appDir ) & "/tools"
 
@@ -402,7 +440,8 @@ class {
 		required string varName,
 		string cliEnvironment = "",
 		struct discovery = {},
-		array accessorPath = []
+		array accessorPath = [],
+		string defaultMemory = ""
 	) {
 		var declaredSubAgents = arguments.resolvedConfig.subAgents ?: []
 		var subAgentVarNames = []
@@ -424,7 +463,7 @@ class {
 			var childAccessorPath = duplicate( arguments.accessorPath )
 			childAccessorPath.append( resolveAgentName( subConfig ) )
 
-			var built = buildAgentTree( arguments.rootProjectRoot, subPath, subConfig, subVarName, arguments.cliEnvironment, arguments.discovery, childAccessorPath )
+			var built = buildAgentTree( arguments.rootProjectRoot, subPath, subConfig, subVarName, arguments.cliEnvironment, arguments.discovery, childAccessorPath, arguments.defaultMemory )
 
 			for ( var stmt in built.statements ) {
 				statements.append( stmt )
@@ -435,7 +474,7 @@ class {
 			subAgentVarNames.append( subVarName )
 		}
 
-		statements.append( renderAgentStatement( arguments.varName, arguments.nodePath, arguments.resolvedConfig, subAgentVarNames, arguments.discovery, thisName ) )
+		statements.append( renderAgentStatement( arguments.varName, arguments.nodePath, arguments.resolvedConfig, subAgentVarNames, arguments.discovery, thisName, arguments.defaultMemory ) )
 
 		return { statements : statements, nodes : nodes }
 	}
@@ -489,13 +528,54 @@ class {
 		return 'aiMemory( memory: "#bxLiteral( type )#", config: #renderLiteral( rest )# )'
 	}
 
+	/**
+	 * Resolves a node's agent MEMORY - the conversation store, distinct from the
+	 * checkpointer above (which only holds suspended-run state).
+	 *
+	 * This is what decides who shares a conversation with whom. bx-ai's own
+	 * default is `window`, an in-process store keyed by (userId, conversationId);
+	 * since the generated agent is a WireBox singleton and nothing supplies those
+	 * ids by default, EVERY visitor to a browser-facing app would otherwise read
+	 * and write one shared bucket. `session` memory instead stores under the
+	 * BoxLang `session` scope, so each visitor is separated server-side, with no
+	 * client-supplied identifier to trust - which is why a `webui` project turns
+	 * session management on (see renderApplication()).
+	 *
+	 * An explicit `memory` key on Agent.bx always wins over that default.
+	 *
+	 * @resolvedConfig A single node's own resolved config - only `memory` is used
+	 * @defaultMemory Memory type to use when the node declares none ("" means leave bx-ai's own default alone)
+	 *
+	 * @return A BoxLang `aiMemory( ... )` expression string, or "" to omit the argument entirely
+	 */
+	private string function renderMemoryExpression( required struct resolvedConfig, string defaultMemory = "" ) {
+		var declared = arguments.resolvedConfig.memory ?: {}
+
+		if ( isSimpleValue( declared ) && len( trim( declared ) ) ) {
+			declared = { type: trim( declared ) }
+		}
+
+		var type = isStruct( declared ) ? trim( declared.type ?: "" ) : ""
+		if ( !len( type ) ) {
+			type = arguments.defaultMemory
+		}
+		if ( !len( type ) ) {
+			return ""
+		}
+
+		var rest = isStruct( declared ) ? duplicate( declared ) : {}
+		rest.delete( "type" )
+		return 'aiMemory( memory: "#bxLiteral( type )#", config: #renderLiteral( rest )# )'
+	}
+
 	private string function renderAgentStatement(
 		required string varName,
 		required string nodePath,
 		required struct resolvedConfig,
 		required array subAgentVarNames,
 		struct discovery = {},
-		required string name
+		required string name,
+		string defaultMemory = ""
 	) {
 		var instructionsPath = arguments.nodePath & "/instructions.md"
 		if ( !fileExists( instructionsPath ) ) {
@@ -521,6 +601,7 @@ class {
 			: 'aiModel( provider : "#bxLiteral( parsedModel.provider )#" )'
 
 		var checkpointerExpression = renderCheckpointerExpression( arguments.resolvedConfig )
+		var memoryExpression = renderMemoryExpression( arguments.resolvedConfig, arguments.defaultMemory )
 
 		var lines = []
 		lines.append( "var #arguments.varName# = aiAgent(" )
@@ -529,6 +610,9 @@ class {
 		lines.append( '	instructions : fileRead( "#bxLiteral( instructionsPath )#" ),' )
 		lines.append( '	model : #modelExpression#,' )
 		lines.append( "	tools : aiToolRegistry().getAll()," )
+		if ( len( memoryExpression ) ) {
+			lines.append( "	memory : #memoryExpression#," )
+		}
 		lines.append( "	checkpointer : #checkpointerExpression#," )
 
 		if ( arguments.subAgentVarNames.len() ) {

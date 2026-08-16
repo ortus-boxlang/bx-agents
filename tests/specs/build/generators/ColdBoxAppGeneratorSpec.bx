@@ -290,6 +290,43 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( "tools : aiToolRegistry().getAll()" );
 			} );
 
+			it( "turns session management on and defaults to session-scoped memory for a browser-facing project", function() {
+				// The HTTP session is what separates one visitor's conversation from
+				// another's. Without sessionManagement there IS no session to key by,
+				// and bx-ai's default `window` memory - an in-process store keyed by
+				// (userId, conversationId), neither of which anything supplies by
+				// default - collapses every visitor into one shared bucket.
+				var buildDir = newBuildDir();
+				var config = resolver.resolve( projectRoot = fixtures & "/full-project" );
+				var result = generator.generate(
+					projectRoot    : fixtures & "/full-project",
+					buildDir       : buildDir,
+					resolvedConfig : config,
+					hasWebUi       : true
+				);
+
+				var app = fileRead( result.applicationBx );
+				expect( app ).toInclude( "this.sessionManagement = true" );
+				// Cookies are load-bearing: no cookie, no session to key by
+				expect( app ).toInclude( "this.setClientCookies  = true" );
+				expect( app ).toInclude( "this.sessionTimeout" );
+
+				expect( fileRead( result.agentFactory ) ).toInclude( 'memory : aiMemory( memory: "session"' );
+			} );
+
+			it( "leaves sessions off and bx-ai's own memory default alone for a non-browser project", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/full-project", buildDir );
+
+				var app = fileRead( result.applicationBx );
+				expect( app ).toInclude( "this.sessionManagement = false" );
+				expect( app ).toInclude( "this.setClientCookies  = false" );
+
+				// No memory argument at all - an API/gateway-only app has no browser
+				// to track, so a session would be overhead plus an unwanted cookie.
+				expect( fileRead( result.agentFactory ) ).notToInclude( "memory : aiMemory(" );
+			} );
+
 			it( "produces a byte-identical rebuild of an unchanged project", function() {
 				var buildDir = newBuildDir();
 				generateFor( fixtures & "/full-project", buildDir );

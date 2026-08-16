@@ -134,18 +134,30 @@ For anything the tokens don't cover - custom fonts, layout, per-element rules - 
 v1 is intentionally small: one conversation per browser (the **New** button starts another; there's no multi-thread sidebar or server-side history list yet), and no approval UI for a human-in-the-loop suspension - the page surfaces a notice and stops. These are natural fast-follows, not built here. See `docs/known-limitations.md` for what was and wasn't verified against a real ColdBox boot in this project's own dev environment.
 {% endhint %}
 
-#### Conversation identity
+#### Conversation identity: the agent's memory decides it
 
-The page sends a per-browser `conversationId` on every request:
+**The memory decides who shares a conversation with whom** - not the UI, and not anything the client sends.
+
+`IAiMemory`'s per-call `userId`/`conversationId` arguments "override instance default"; the memory *instance* owns the scoping. bx-ai's own default is `window` memory - an in-process store keyed by `(userId, conversationId)` - and since `AiAgent.stream()` falls back to `""` for both when nothing supplies them, a browser-facing app on that default puts **every visitor into one shared bucket**, with one person's history feeding the next person's turn.
+
+So a project with a `webui` exposure gets two things automatically:
+
+1. **Session management on** in the generated `Application.bx` (`this.sessionManagement = true`, `this.setClientCookies = true`, a 60-minute `sessionTimeout`). Cookies are load-bearing - with no cookie there is no session to key by.
+2. **Session-scoped agent memory**: the generated `aiAgent()` gets `memory : aiMemory( memory: "session" )`. `SessionMemory` stores under BoxLang's `session` scope, so each visitor is separated **server-side**, by the session the server itself issued.
+
+A project with no `webui` keeps sessions off and bx-ai's own memory default - an API/gateway-only app has no browser to track, and a session would be pure overhead plus a cookie nobody asked for.
+
+Override it per agent with a `memory` key on `Agent.bx`, which always wins over the default:
 
 ```javascript
-body: JSON.stringify( { input: text, options: { conversationId: getConversationId() } } )
+// Agent.bx - same shape as `checkpointer`
+memory: { type: "cache", maxMessages: 50 }
 ```
 
-This matters more than it looks. `AiAgent.stream()` falls back to `""` for **both** `userId` and `conversationId` when neither is supplied, and `loadMemoryMessages( "", "" )` then reads a single bucket - so a page that sends nothing puts **every visitor into one shared conversation**, with one person's history feeding the next person's turn. The id is generated once (`crypto.randomUUID()`), kept in `localStorage` so it survives a reload, and rotated by the **New** button.
+The page additionally sends a `conversationId` in `options`, which sub-divides *within* a session - that's what the **New** button rotates. Because the session scope already separates visitors, that client-supplied id can only reach conversations inside the caller's own session.
 
-{% hint style="danger" %}
-**This is isolation, not authorization.** The `conversationId` travels from the client, so under a single shared `apiKeyEnvVar` a caller can present someone else's id and read that history. It's strictly better than the global bucket it replaces, but it is **not** a security boundary. Real per-user separation needs real user identity, which this gate does not provide - put the UI behind your own authenticated proxy if conversations are sensitive.
+{% hint style="info" %}
+Session memory lives in the `session` scope, so it is per-server and dies with the session. For conversations that must survive a restart or span a cluster, set an explicit `memory` (e.g. `jdbc`, or a distributed `cache`) - and note that scoping then goes back to `(userId, conversationId)`, so supply those yourself.
 {% endhint %}
 
 #### Reply rendering
