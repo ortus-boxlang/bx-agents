@@ -131,7 +131,29 @@ For anything the tokens don't cover - custom fonts, layout, per-element rules - 
 {% endhint %}
 
 {% hint style="info" %}
-v1 is intentionally small: one conversation thread per page load (a reload starts fresh - no thread history/multi-thread sidebar yet), no markdown rendering in replies, and no approval UI for a human-in-the-loop suspension (the page surfaces a notice and stops). These are natural fast-follows, not built here. See `docs/known-limitations.md` for what was and wasn't verified against a real ColdBox boot in this project's own dev environment.
+v1 is intentionally small: one conversation per browser (the **New** button starts another; there's no multi-thread sidebar or server-side history list yet), and no approval UI for a human-in-the-loop suspension - the page surfaces a notice and stops. These are natural fast-follows, not built here. See `docs/known-limitations.md` for what was and wasn't verified against a real ColdBox boot in this project's own dev environment.
+{% endhint %}
+
+#### Conversation identity
+
+The page sends a per-browser `conversationId` on every request:
+
+```javascript
+body: JSON.stringify( { input: text, options: { conversationId: getConversationId() } } )
+```
+
+This matters more than it looks. `AiAgent.stream()` falls back to `""` for **both** `userId` and `conversationId` when neither is supplied, and `loadMemoryMessages( "", "" )` then reads a single bucket - so a page that sends nothing puts **every visitor into one shared conversation**, with one person's history feeding the next person's turn. The id is generated once (`crypto.randomUUID()`), kept in `localStorage` so it survives a reload, and rotated by the **New** button.
+
+{% hint style="danger" %}
+**This is isolation, not authorization.** The `conversationId` travels from the client, so under a single shared `apiKeyEnvVar` a caller can present someone else's id and read that history. It's strictly better than the global bucket it replaces, but it is **not** a security boundary. Real per-user separation needs real user identity, which this gate does not provide - put the UI behind your own authenticated proxy if conversations are sensitive.
+{% endhint %}
+
+#### Reply rendering
+
+Assistant replies render through a deliberately small markdown subset - fenced and inline code, bold/italic, links, bullet and numbered lists, headings. It is applied **escape-first**: the model's text is HTML-escaped before a single tag is introduced, so no model output can become live markup, and link hrefs are allowlisted to `http(s)`/`mailto` so a `javascript:` URL is never turned into an anchor at all.
+
+{% hint style="info" %}
+The composer is a `textarea` - **Enter** sends, **Shift+Enter** adds a newline, and it grows to about six lines before scrolling. A turn in flight can be halted with **Stop** (an `AbortController`), which keeps whatever already streamed rather than discarding it. The transcript only auto-scrolls when you're already at the bottom, so scrolling up to re-read something mid-stream doesn't yank you back down.
 {% endhint %}
 
 ## 2. Channel-adapter gateways (`type: "mock" | "cli" | "http"`)

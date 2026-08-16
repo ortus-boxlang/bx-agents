@@ -193,6 +193,54 @@ class extends="testbox.system.BaseSpec" {
 				expect( html ).notToInclude( "__THEME_TOKENS__" );
 			} );
 
+			it( "sends a per-visitor conversationId so visitors don't share one memory bucket", function() {
+				// Without options.conversationId, AiAgent.stream() falls back to "" for
+				// BOTH userId and conversationId, and loadMemoryMessages( "", "" ) then
+				// reads one bucket shared by every visitor to the page.
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( "conversationId: getConversationId()" );
+				expect( html ).toInclude( "bxagents_webui_conversation" );
+				expect( html ).toInclude( "randomUUID" );
+			} );
+
+			it( "renders markdown escape-first, so model output can never become live markup", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				// The three escapes must precede any tag introduction
+				var escapeAt = html.find( '.replace( /&/g, "&amp;" )' );
+				var firstTagAt = html.find( "<pre><code>" );
+				expect( escapeAt ).toBeGT( 0 );
+				expect( firstTagAt ).toBeGT( escapeAt );
+
+				// Link hrefs are allowlisted to http(s)/mailto - never javascript:
+				expect( html ).toInclude( "https?:" );
+				expect( html ).toInclude( "mailto:" );
+				expect( html ).toInclude( 'rel="noopener noreferrer"' );
+			} );
+
+			it( "ships a real composer: textarea, stop control, and accessible transcript", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( "<textarea" );
+				expect( html ).notToInclude( '<input type="text"' );
+				expect( html ).toInclude( "AbortController" );
+				expect( html ).toInclude( 'id="stopBtn"' );
+				expect( html ).toInclude( 'aria-live="polite"' );
+				expect( html ).toInclude( 'class="visually-hidden" for="input"' );
+				// Autoscroll must be conditional, or reading back mid-stream yanks you down
+				expect( html ).toInclude( "isPinnedToBottom" );
+			} );
+
 			it( "does not generate an auth interceptor when no webui entry configures an apiKeyEnvVar", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-webui-no-key" );
 				var appDir = newAppDir();
