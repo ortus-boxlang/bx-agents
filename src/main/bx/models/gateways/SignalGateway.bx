@@ -1,0 +1,647 @@
+import bxModules.bxai.models.gateway.IGateway;
+import bxModules.bxai.models.gateway.contracts.GatewayContext;
+import bxModules.bxai.models.gateway.contracts.GatewayEvent;
+import bxModules.bxai.models.gateway.contracts.GatewayMessage;
+import bxModules.bxai.models.gateway.contracts.GatewayDeliveryResult;
+import bxModules.bxai.models.gateway.contracts.HumanInteractionRequest;
+import bxModules.bxai.models.gateway.contracts.HumanInteractionDecision;
+
+/**
+ * Signal gateway - talks to a separately-run `signal-cli daemon --http`
+ * process over plain HTTP: Server-Sent Events (SSE) for inbound messages,
+ * JSON-RPC 2.0 for outbound sends. Signal has no official bot API - this
+ * mirrors exactly what real Signal integrations (including Hermes Agent's
+ * own) do: signal-cli itself owns the actual Signal protocol, key material,
+ * and device linking, and is never touched directly by this gateway or by
+ * BoxLang - it's an EXTERNAL PREREQUISITE, the same category of dependency
+ * Email's gateway already has on a real IMAP/SMTP server.
+ *
+ * **External setup required before this gateway can connect (none of this
+ * is automated by BX Agents - do it once, by hand, per Hermes Agent's own
+ * documented runbook)**:
+ *   1. Install signal-cli (Java 17+ runtime required - separate from the
+ *      JVM running BoxLang/this gateway).
+ *   2. Link it as a secondary device: `signal-cli link -n "MyBot"`, then
+ *      scan the printed QR/URI from the Signal app on your phone (Settings
+ *      -> Linked Devices -> Link New Device). This is the actual
+ *      account-registration step; signal-cli's own credential store
+ *      (`~/.local/share/signal-cli/`) should be protected like a password.
+ *   3. Start the daemon: `signal-cli --account +1234567890 daemon --http
+ *      127.0.0.1:8080`.
+ *   4. Only then configure this gateway's `httpUrl`/`account` to match.
+ *
+ * Architecture, ported from Hermes Agent's own `gateway/platforms/signal.py`
+ * (read directly this session): `GET {httpUrl}/api/v1/events?account=...`
+ * with `Accept: text/event-stream` is the inbound SSE stream; `POST
+ * {httpUrl}/api/v1/rpc` with a JSON-RPC 2.0 body is the outbound `send`
+ * call; `GET {httpUrl}/api/v1/check` is the health-check endpoint used both
+ * at connect time and by the periodic watchdog. Reconnect uses the same
+ * exponential-backoff-with-jitter shape Hermes's own SSE listener uses
+ * (2s -> 60s, doubling, +20% jitter), plus a 30s watchdog that force-
+ * reconnects if no SSE activity has been seen for 120s AND a health check
+ * also fails - both constants ported directly from Hermes's own
+ * `SSE_RETRY_DELAY_INITIAL`/`SSE_RETRY_DELAY_MAX`/`HEALTH_CHECK_INTERVAL`/
+ * `HEALTH_CHECK_STALE_THRESHOLD`.
+ *
+ * Unlike Slack/Discord (which use `HttpClient`'s ASYNC websocket API, whose
+ * callbacks the JDK itself invokes with no scheduler task ever blocking),
+ * SSE consumption here uses `HttpClient.sendAsync()` + `BodyHandlers.
+ * ofLines()`, whose returned `Stream<String>` is walked via a BLOCKING
+ * `forEach()` - run from inside `.thenAccept()`'s own async-executor
+ * callback (never the ColdBox request thread, never a scheduler task
+ * thread), so opening the connection in `onConnect()` returns immediately
+ * without blocking gateway/app startup. Confirmed via a real smoke test
+ * this session that BoxLang's Java interop resolves `HttpClient.send()`'s
+ * generic overload correctly (an earlier apparent method-resolution
+ * failure turned out to be a variable named `request` colliding with
+ * BoxLang's own reserved `request` scope, not a real interop limitation -
+ * renaming the variable fixed it immediately) - see docs/known-limitations.md
+ * for exactly what was and wasn't verified against a real signal-cli daemon.
+ *
+ * v1 scope: DM-only plain text (matches Hermes's own default-safe behavior
+ * - group messages there are gated behind an opt-in allowlist, off by
+ * default; this port never wires up the `group:` prefix path at all).
+ * Attachments/media, formatting (bodyRanges), and typing indicators are all
+ * out of scope. Human-in-the-loop is degraded the same way Twilio/GitHub's
+ * is (Signal's own reactions are write-only status cosmetics, not a real
+ * answer-capturing mechanism per Hermes's own source) - plain-text reply,
+ * correlated by conversationID (the sender's own phone number/UUID), the
+ * same v1 simplification Twilio/GitHub both use.
+ *
+ * Config, via aiGateway( "bxModules.bxagents.models.gateways.SignalGateway", options ):
+ *   httpUrl   The running signal-cli daemon's own base URL. Defaults to "http://127.0.0.1:8080"
+ *   account   The linked account's own E.164 phone number (e.g. "+15551234567") or UUID,
+ *             exactly as signal-cli itself was started with (--account)
+ */
+class extends="ScheduledGatewayBase" {
+
+	property name="httpUrl" type="string" default="http://127.0.0.1:8080";
+	property name="account" type="string" default="";
+	property name="chunker";
+
+	property name="connectionOpen" type="boolean" default=false;
+	property name="stopping" type="boolean" default=false;
+	property name="lastActivityTick" type="numeric" default="0";
+	property name="reconnectBackoffMs" type="numeric" default="2000";
+	property name="httpClientInstance";
+
+	/**
+	 * conversationID (the sender's own phone number/UUID) -> { allowedDecisions, threadId }
+	 * for every open HITL request - same v1 simplification TwilioGateway/
+	 * GitHubGateway both use (no per-request correlation key Signal messages
+	 * carry natively).
+	 */
+	property name="pendingApprovals" type="struct" default={};
+
+	/**
+	 * Test-only seams. connector, if set, REPLACES the real async SSE
+	 * connect chain entirely (so onStart()/watchdog tests never make a real
+	 * network call) - a test drives inbound events by calling the public
+	 * handleSseEvent() directly instead. rpcCaller overrides the outbound
+	 * JSON-RPC call, same shape as every other gateway's own apiCaller seam.
+	 */
+	property name="connector";
+	property name="rpcCaller";
+
+	static {
+		MAX_MESSAGE_LENGTH        = 8000
+		RECONNECT_BACKOFF_INITIAL_MS = 2000
+		RECONNECT_BACKOFF_MAX_MS  = 60000
+		HEALTH_STALE_THRESHOLD_MS = 120000
+	}
+
+	function init() {
+		variables.name = "signal"
+		variables.description = "Signal gateway - SSE inbound / JSON-RPC outbound against a signal-cli daemon"
+		variables.chunker = new "models.gateways.support.MessageChunker@bxagents"()
+		return this
+	}
+
+	IGateway function configure( required any options ) {
+		super.configure( arguments.options )
+		if ( len( trim( variables.options.httpUrl ?: "" ) ) ) {
+			variables.httpUrl = trim( variables.options.httpUrl ).reReplace( "/+$", "" )
+		}
+		variables.account = trim( variables.options.account ?: "" )
+		return this
+	}
+
+	array function getDeclaredCapabilities() {
+		// "threads" - Signal's own quote/reply mechanism is a genuine
+		// threading key. No "interactiveActions" (reactions are write-only
+		// status cosmetics, not a real decision input - see class docblock).
+		// No "streaming" (Signal has no message-editing API - Hermes's own
+		// SUPPORTS_MESSAGE_EDITING=false, confirmed this session).
+		return [ "inboundMessages", "outboundMessages", "threads", "humanApproval" ]
+	}
+
+	void function setConnector( required any fn ) {
+		variables.connector = arguments.fn
+	}
+
+	void function setRpcCaller( required any caller ) {
+		variables.rpcCaller = arguments.caller
+	}
+
+	// -------------------------------------------------------------------------
+	// ScheduledGatewayBase hooks
+	// -------------------------------------------------------------------------
+
+	void function onConnect() {
+		if ( !len( variables.account ) ) {
+			throw(
+				type   : "SignalGateway.MissingConfig",
+				message: "SignalGateway requires an 'account' option (resolved from accountEnvVar at startup) - the E.164 number/UUID a signal-cli daemon was started with."
+			)
+		}
+		variables.stopping = false
+		variables.reconnectBackoffMs = static.RECONNECT_BACKOFF_INITIAL_MS
+		logEvent( "Ready (account #variables.account#, daemon #variables.httpUrl#) - connecting SSE stream" )
+		startConnection()
+	}
+
+	void function onDisconnect() {
+		variables.stopping = true
+		variables.connectionOpen = false
+	}
+
+	void function registerScheduledTasks( required any scheduler ) {
+		var taskName = "signal-watchdog-#variables.name#"
+		arguments.scheduler.task( taskName )
+			.call( () => checkConnectionHealth() )
+			.every( 30, "seconds" )
+			.withNoOverlaps()
+			.onFailure( ( task, exception ) => logEvent( "Watchdog failed: #exception.message#", "error" ) )
+			.start()
+		trackTask( taskName )
+	}
+
+	/**
+	 * Safety net only - the primary reconnect path is the backoff loop
+	 * inside handleStreamEnded()/handleConnectFailure(). This additionally
+	 * covers the case Hermes's own health monitor exists for: the stream
+	 * looks "open" but has gone quiet (no SSE keepalive/activity for 120s) -
+	 * ping /api/v1/check, and force a reconnect if that fails too.
+	 */
+	void function checkConnectionHealth() {
+		if ( variables.stopping ) {
+			return
+		}
+		if ( !variables.connectionOpen ) {
+			logEvent( "Watchdog found the connection down - reconnecting" )
+			startConnection()
+			return
+		}
+		var idleMs = currentTimeMillis() - variables.lastActivityTick
+		if ( idleMs > static.HEALTH_STALE_THRESHOLD_MS && !pingHealthCheck() ) {
+			logEvent( "Watchdog: stale connection failed health check - forcing reconnect", "warning" )
+			variables.connectionOpen = false
+			startConnection()
+		}
+	}
+
+	private boolean function pingHealthCheck() {
+		try {
+			var url = "#variables.httpUrl#/api/v1/check"
+			bx:http url=url method="get" result="healthResult" timeout="5" charset="utf-8" { }
+			return val( healthResult.statusCode ?: 0 ) == 200
+		} catch ( any e ) {
+			return false
+		}
+	}
+
+	private numeric function currentTimeMillis() {
+		return createObject( "java", "java.lang.System" ).currentTimeMillis()
+	}
+
+	private void function logEvent( required string text, string type = "information" ) {
+		writeLog( text: arguments.text, type: arguments.type, file: "gateway-#variables.name#" )
+	}
+
+	// -------------------------------------------------------------------------
+	// SSE connection lifecycle
+	// -------------------------------------------------------------------------
+
+	private void function startConnection() {
+		if ( !isNull( variables.connector ) ) {
+			variables.connector()
+			return
+		}
+		connectAsync()
+	}
+
+	private any function resolveHttpClient() {
+		if ( isNull( variables.httpClientInstance ) ) {
+			variables.httpClientInstance = createObject( "java", "java.net.http.HttpClient" ).newHttpClient()
+		}
+		return variables.httpClientInstance
+	}
+
+	/**
+	 * Opens the SSE stream asynchronously - returns immediately, never
+	 * blocking onConnect()/gateway start. The actual line-by-line read loop
+	 * (handleSseStream()) runs later, on the CompletableFuture's own
+	 * async-executor thread, once the connection is established.
+	 */
+	private void function connectAsync() {
+		if ( variables.stopping ) {
+			return
+		}
+
+		var client = resolveHttpClient()
+		var eventsUrl = "#variables.httpUrl#/api/v1/events?account=#urlEncodedFormat( variables.account )#"
+		var uri = createObject( "java", "java.net.URI" ).create( eventsUrl )
+		var reqBuilder = createObject( "java", "java.net.http.HttpRequest" ).newBuilder()
+		reqBuilder.uri( uri )
+		reqBuilder.header( "Accept", "text/event-stream" )
+		reqBuilder.GET()
+		var httpReq = reqBuilder.build()
+		var bodyHandler = createObject( "java", "java.net.http.HttpResponse$BodyHandlers" ).ofLines()
+
+		var future = client.sendAsync( httpReq, bodyHandler )
+		future.thenAccept( function( httpResp ) {
+			handleSseStream( httpResp )
+		} )
+		future.exceptionally( function( err ) {
+			handleConnectFailure( err )
+			return javacast( "null", "" )
+		} )
+	}
+
+	/**
+	 * @httpResponse The connected HttpResponse<Stream<String>> - blocks this
+	 *               (async-executor) thread for as long as the stream stays open
+	 */
+	private void function handleSseStream( required any httpResponse ) {
+		if ( val( arguments.httpResponse.statusCode() ?: 0 ) != 200 ) {
+			logEvent( "SSE connect rejected: HTTP #arguments.httpResponse.statusCode()#", "error" )
+			scheduleReconnect()
+			return
+		}
+
+		variables.connectionOpen = true
+		variables.reconnectBackoffMs = static.RECONNECT_BACKOFF_INITIAL_MS
+		variables.lastActivityTick = currentTimeMillis()
+		logEvent( "Connected (SSE)" )
+
+		try {
+			var lineStream = arguments.httpResponse.body()
+			lineStream.forEach( function( line ) {
+				variables.lastActivityTick = currentTimeMillis()
+				handleSseEvent( line )
+			} )
+		} catch ( any e ) {
+			logEvent( "SSE stream error: #e.message#", "error" )
+			dispatchError( e )
+		}
+
+		variables.connectionOpen = false
+		if ( !variables.stopping ) {
+			logEvent( "SSE stream ended - reconnecting" )
+			scheduleReconnect()
+		}
+	}
+
+	private void function handleConnectFailure( required any error ) {
+		variables.connectionOpen = false
+		logEvent( "SSE connect failed: #error.getMessage()#", "error" )
+		if ( !variables.stopping ) {
+			scheduleReconnect()
+		}
+	}
+
+	/**
+	 * Exponential backoff with 20% jitter, 2s -> 60s, ported from Hermes's
+	 * own SSE_RETRY_DELAY_INITIAL/SSE_RETRY_DELAY_MAX. Runs the delayed
+	 * retry on its own plain java.lang.Thread rather than the ColdBox
+	 * scheduler (no delayed/one-shot task primitive was verified available
+	 * here) - the thread only sleeps, then calls back into connectAsync(),
+	 * which itself returns immediately.
+	 */
+	private void function scheduleReconnect() {
+		var delayMs = variables.reconnectBackoffMs
+		variables.reconnectBackoffMs = min( variables.reconnectBackoffMs * 2, static.RECONNECT_BACKOFF_MAX_MS )
+		var jitterMs = int( delayMs * 0.2 * ( randRange( 0, 100 ) / 100 ) )
+		var totalDelayMs = delayMs + jitterMs
+
+		var retryRunnable = function() {
+			try {
+				createObject( "java", "java.lang.Thread" ).sleep( javaCast( "long", totalDelayMs ) )
+			} catch ( any e ) {
+				return
+			}
+			if ( !variables.stopping ) {
+				connectAsync()
+			}
+		}
+		createObject( "java", "java.lang.Thread" ).init( retryRunnable ).start()
+	}
+
+	// -------------------------------------------------------------------------
+	// Inbound SSE event handling
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Public specifically so tests can drive real inbound-message logic
+	 * directly, without a live SSE connection - same "public handler,
+	 * private connection plumbing" split WhatsAppCloudGateway's
+	 * handleWebhook() uses.
+	 *
+	 * @rawLine One line from the SSE stream - "data: {...}" carries an
+	 *          event; blank lines and ":"-prefixed keepalive comments are
+	 *          ignored, matching the SSE spec.
+	 */
+	public void function handleSseEvent( required string rawLine ) {
+		var trimmedLine = trim( arguments.rawLine )
+		if ( !trimmedLine.startsWith( "data:" ) ) {
+			return
+		}
+		var jsonPart = trim( mid( trimmedLine, 6, len( trimmedLine ) - 5 ) )
+		if ( !len( jsonPart ) ) {
+			return
+		}
+
+		var payload = {}
+		try {
+			payload = jsonDeserialize( jsonPart )
+		} catch ( any e ) {
+			logEvent( "Unparseable SSE event: #e.message#", "warning" )
+			return
+		}
+		if ( !isStruct( payload ) ) {
+			return
+		}
+
+		var envelope = structKeyExists( payload, "envelope" ) ? payload.envelope : payload
+		if ( !isStruct( envelope ) ) {
+			return
+		}
+		handleEnvelope( envelope )
+	}
+
+	/**
+	 * @envelope A signal-cli "envelope" object - `dataMessage` present means
+	 *           an ordinary text message; anything else (receipts, typing,
+	 *           sync messages) is out of v1 scope and ignored
+	 */
+	private void function handleEnvelope( required struct envelope ) {
+		if ( !structKeyExists( arguments.envelope, "dataMessage" ) || !isStruct( arguments.envelope.dataMessage ) ) {
+			return
+		}
+		var dataMessage = arguments.envelope.dataMessage
+
+		// v1 is DM-only - a groupInfo key means this arrived in a group,
+		// matching Hermes's own default-off group handling (see class docblock).
+		if ( structKeyExists( dataMessage, "groupInfo" ) ) {
+			return
+		}
+
+		var sender = resolveSender( arguments.envelope )
+		if ( !len( sender ) ) {
+			return
+		}
+
+		var text = trim( toString( dataMessage.message ?: "" ) )
+
+		if ( variables.pendingApprovals.keyExists( sender ) ) {
+			handleApprovalReply( sender, text )
+			return
+		}
+
+		if ( !len( text ) ) {
+			return
+		}
+
+		var quote = dataMessage.quote ?: {}
+		var threadId = structKeyExists( quote, "id" ) ? toString( quote.id ) : ""
+
+		var context = new GatewayContext(
+			gateway       : variables.name,
+			conversationID: sender,
+			userID        : sender,
+			threadID      : threadId,
+			raw           : arguments.envelope
+		)
+		var message = new GatewayMessage(
+			text   : text,
+			context: context,
+			raw    : arguments.envelope
+		)
+
+		BoxAnnounce( "onGatewayMessageReceived", {
+			gateway       : this,
+			message       : message,
+			threadId      : threadId,
+			userId        : sender,
+			conversationId: sender
+		} )
+
+		dispatchInbound( message )
+	}
+
+	/**
+	 * @envelope A signal-cli envelope - sourceNumber (E.164) is preferred,
+	 *           falling back to sourceUuid, then the legacy "source" field
+	 */
+	private string function resolveSender( required struct envelope ) {
+		var sourceNumber = trim( toString( arguments.envelope.sourceNumber ?: "" ) )
+		if ( len( sourceNumber ) ) {
+			return sourceNumber
+		}
+		var sourceUuid = trim( toString( arguments.envelope.sourceUuid ?: "" ) )
+		if ( len( sourceUuid ) ) {
+			return sourceUuid
+		}
+		return trim( toString( arguments.envelope.source ?: "" ) )
+	}
+
+	/**
+	 * @sender The pending request's own key (conversationID)
+	 * @text The reply's own raw text
+	 */
+	private void function handleApprovalReply( required string sender, required string text ) {
+		var pending = variables.pendingApprovals[ arguments.sender ]
+		var firstLine = trim( listFirst( arguments.text, char( 10 ) ) )
+		var decision = matchDecision( firstLine, pending.allowedDecisions ?: [] )
+
+		BoxAnnounce( "onGatewayMessageReceived", {
+			gateway       : this,
+			message       : null,
+			threadId      : pending.threadId ?: "",
+			userId        : arguments.sender,
+			conversationId: arguments.sender,
+			decision      : decision
+		} )
+
+		variables.pendingApprovals.delete( arguments.sender )
+	}
+
+	private string function matchDecision( required string text, required array allowedDecisions ) {
+		var normalized = lcase( arguments.text )
+		for ( var decision in arguments.allowedDecisions ) {
+			var normalizedDecision = lcase( decision )
+			if ( normalized == normalizedDecision || normalized.startsWith( normalizedDecision ) ) {
+				return decision
+			}
+		}
+		return arguments.text
+	}
+
+	// -------------------------------------------------------------------------
+	// Outbound — JSON-RPC 2.0 "send"
+	// -------------------------------------------------------------------------
+
+	GatewayDeliveryResult function deliver( required GatewayEvent event, required GatewayContext context ) {
+		var text = toString( arguments.event.getData().text ?: "" )
+		if ( !len( text ) ) {
+			return GatewayDeliveryResult.failure( "Nothing to deliver — event data has no 'text'" )
+		}
+
+		var to = arguments.context.getConversationID()
+		var chunks = variables.chunker.split( text, static.MAX_MESSAGE_LENGTH )
+		var lastResponse = {}
+
+		for ( var i = 1; i <= chunks.len(); i++ ) {
+			lastResponse = sendRpc( "send", { account: variables.account, message: chunks[ i ], recipient: [ to ] } )
+			if ( isRpcError( lastResponse ) ) {
+				return GatewayDeliveryResult.failure( "signal-cli send failed: #rpcErrorMessage( lastResponse )#" )
+			}
+		}
+
+		var messageId = extractTimestamp( lastResponse )
+		var result = new GatewayDeliveryResult( deliveryID: len( messageId ) ? messageId : arguments.event.getId() )
+
+		BoxAnnounce( "onGatewayMessageSent", {
+			gateway : this,
+			event   : arguments.event,
+			context : arguments.context,
+			result  : result,
+			threadId: arguments.context.getThreadID()
+		} )
+
+		return result
+	}
+
+	// -------------------------------------------------------------------------
+	// Human-in-the-loop — DEGRADED: reactions are write-only cosmetics (see
+	// class docblock), so this is plain-text-reply-based, correlated by
+	// conversationID (no per-request key Signal messages carry natively) -
+	// same pattern TwilioGateway/GitHubGateway both use.
+	// -------------------------------------------------------------------------
+
+	GatewayDeliveryResult function requestHumanInteraction( required HumanInteractionRequest humanRequest, required GatewayContext context ) {
+		var presentation = presentInteraction( arguments.humanRequest )
+		var allowedDecisions = arguments.humanRequest.getAllowedDecisions()
+		var to = arguments.context.getConversationID()
+
+		var body = buildApprovalBodyText( presentation, allowedDecisions )
+		var response = sendRpc( "send", { account: variables.account, message: body, recipient: [ to ] } )
+		if ( isRpcError( response ) ) {
+			return GatewayDeliveryResult.failure( "signal-cli send (HITL request) failed: #rpcErrorMessage( response )#" )
+		}
+
+		variables.pendingApprovals[ to ] = {
+			allowedDecisions: allowedDecisions,
+			threadId        : arguments.context.getThreadID()
+		}
+
+		var messageId = extractTimestamp( response )
+		return new GatewayDeliveryResult( deliveryID: len( messageId ) ? messageId : arguments.humanRequest.getId() )
+	}
+
+	private string function buildApprovalBodyText( required any presentation, required array allowedDecisions ) {
+		var lines = []
+		if ( len( arguments.presentation.getTitle() ) ) {
+			lines.append( arguments.presentation.getTitle() )
+			lines.append( "" )
+		}
+		lines.append( arguments.presentation.getBody() )
+		lines.append( "" )
+		lines.append( "Reply with one of:" )
+		for ( var decision in arguments.allowedDecisions ) {
+			lines.append( "  - #decision#" )
+		}
+		return lines.toList( char( 10 ) )
+	}
+
+	HumanInteractionDecision function parseHumanDecision( required GatewayEvent event ) {
+		var data = arguments.event.getData()
+		return new HumanInteractionDecision(
+			requestID: data.requestID ?: "",
+			decision : data.decision ?: "",
+			decidedBy: data.decidedBy ?: ""
+		)
+	}
+
+	// -------------------------------------------------------------------------
+	// JSON-RPC call
+	// -------------------------------------------------------------------------
+
+	/**
+	 * @response A sendRpc() result
+	 *
+	 * @return true if the response carries a JSON-RPC "error" member
+	 */
+	private boolean function isRpcError( required struct response ) {
+		var body = arguments.response.body ?: {}
+		return val( arguments.response.status ?: 0 ) >= 300 || ( isStruct( body ) && structKeyExists( body, "error" ) )
+	}
+
+	private string function rpcErrorMessage( required struct response ) {
+		var body = arguments.response.body ?: {}
+		if ( isStruct( body ) && structKeyExists( body, "error" ) && isStruct( body.error ) ) {
+			return toString( body.error.message ?: "unknown signal-cli error" )
+		}
+		return "unknown error (HTTP #arguments.response.status ?: 0#)"
+	}
+
+	/**
+	 * @response A sendRpc() result for a "send" call
+	 *
+	 * @return The result's own "timestamp" (signal-cli's closest analog to a
+	 *         message id), as a string, or "" if absent
+	 */
+	private string function extractTimestamp( required struct response ) {
+		var body = arguments.response.body ?: {}
+		if ( isStruct( body ) && structKeyExists( body, "result" ) && isStruct( body.result ) ) {
+			return toString( body.result.timestamp ?: "" )
+		}
+		return ""
+	}
+
+	/**
+	 * @method A signal-cli JSON-RPC method name, e.g. "send"
+	 * @params That method's own params struct
+	 *
+	 * @return { status: numeric, body: struct } - body is the parsed JSON-RPC response
+	 */
+	private struct function sendRpc( required string method, required struct params ) {
+		if ( !isNull( variables.rpcCaller ) ) {
+			return variables.rpcCaller( arguments.method, arguments.params )
+		}
+
+		var requestBody = {
+			jsonrpc: "2.0",
+			method : arguments.method,
+			params : arguments.params,
+			id     : "#arguments.method#_#currentTimeMillis()#"
+		}
+		var url = "#variables.httpUrl#/api/v1/rpc"
+
+		bx:http url=url method="post" result="rpcResult" charset="utf-8" {
+			bx:httpParam type="header" name="content-type" value="application/json; charset=utf-8";
+			bx:httpParam type="body" value=jsonSerialize( requestBody );
+		}
+
+		var statusCode = val( rpcResult.statusCode ?: 0 )
+		var parsedBody = {}
+		try {
+			parsedBody = len( trim( rpcResult.fileContent ?: "" ) ) ? jsonDeserialize( rpcResult.fileContent ) : {}
+		} catch ( any e ) {
+			parsedBody = { error: { message: "Unparseable response from signal-cli: #e.message#" } }
+		}
+
+		return { status: statusCode, body: parsedBody }
+	}
+
+}

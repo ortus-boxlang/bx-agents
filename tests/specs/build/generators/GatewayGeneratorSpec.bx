@@ -338,6 +338,29 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( 'aiGatewayRegistry().get( "github" )' );
 			} );
 
+			it( "registers a signal gateway via its bare class path, resolving account live, with no webhook handler (push-via-own-connection, not webhook-driven)", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-signal" );
+				var appDir = newAppDir();
+				var result = generator.generate( discovery, appDir );
+
+				expect( result.registrationStatements.len() ).toBe( 1 );
+				var statement = result.registrationStatements[ 1 ];
+				expect( statement ).toInclude( '"bxModules.bxagents.models.gateways.SignalGateway"' );
+				expect( statement ).notToInclude( "accountEnvVar" );
+				expect( statement ).toInclude( 'getSystemSetting( "MY_SIGNAL_ACCOUNT", "" )' );
+				expect( result.keyExists( "signalHandlerPath" ) ).toBeFalse();
+			} );
+
+			it( "reports hasPushGateway=true and includes signal in the generated GatewaySession", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-signal" );
+				var appDir = newAppDir();
+				var result = generator.generate( discovery, appDir, { name: "gateways-signal-agent", model: "openai/gpt-5" } );
+
+				expect( result.hasPushGateway ).toBeTrue();
+				var content = fileRead( appDir & "/interceptors/GatewaySessionBootstrap.bx" );
+				expect( content ).toInclude( 'aiGatewayRegistry().get( "signal" )' );
+			} );
+
 			it( "reports hasPushGateway=true and writes interceptors/GatewaySessionBootstrap.bx for a telegram gateway", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-telegram" );
 				var appDir = newAppDir();
