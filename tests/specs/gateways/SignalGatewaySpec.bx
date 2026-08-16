@@ -1,0 +1,214 @@
+import bxModules.bxai.models.gateway.contracts.GatewayContext;
+import bxModules.bxai.models.gateway.contracts.GatewayEvent;
+import bxModules.bxai.models.gateway.contracts.HumanInteractionRequest;
+
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "SignalGateway", function() {
+
+			beforeEach( function() {
+				variables.gateway = new bxagents.models.gateways.SignalGateway();
+				variables.scheduler = new tests.support.FakeScheduler();
+				variables.gateway.setScheduler( variables.scheduler );
+				// Prevents start()/onConnect() from attempting a real network
+				// connection in every test - handleSseEvent() is exercised
+				// directly instead (see its own docblock for why it's public).
+				variables.gateway.setConnector( function() {} );
+				variables.gateway.configure( { httpUrl: "http://127.0.0.1:8080", account: "+15559998888" } );
+			} );
+
+			private function stubRpc( required struct response ) {
+				var calls = [];
+				gateway.setRpcCaller( function( method, params ) {
+					calls.append( { method: method, params: params } );
+					return response;
+				} );
+				return calls;
+			}
+
+			private function dmEnvelope( string message = "hello", string from = "+15551234567", struct extraDataMessage = {} ) {
+				var dataMessage = { message: arguments.message };
+				structAppend( dataMessage, arguments.extraDataMessage, true );
+				return jsonSerialize( {
+					envelope: { sourceNumber: arguments.from, timestamp: 1700000000000, dataMessage: dataMessage }
+				} );
+			}
+
+			it( "declares inboundMessages/outboundMessages/threads/humanApproval but NOT interactiveActions/streaming", function() {
+				var capabilities = gateway.getDeclaredCapabilities();
+				expect( capabilities ).toInclude( "inboundMessages" );
+				expect( capabilities ).toInclude( "outboundMessages" );
+				expect( capabilities ).toInclude( "threads" );
+				expect( capabilities ).toInclude( "humanApproval" );
+				expect( capabilities ).notToInclude( "interactiveActions" );
+				expect( capabilities ).notToInclude( "streaming" );
+			} );
+
+			it( "onConnect() throws SignalGateway.MissingConfig when account is missing", function() {
+				var unconfigured = new bxagents.models.gateways.SignalGateway();
+				unconfigured.setScheduler( scheduler );
+				unconfigured.setConnector( function() {} );
+				expect( function() {
+					unconfigured.start();
+				} ).toThrow( "SignalGateway.MissingConfig" );
+			} );
+
+			it( "start() does not throw once account is present, and registers exactly one watchdog task", function() {
+				expect( function() {
+					gateway.start();
+				} ).notToThrow();
+				expect( gateway.isRunning() ).toBeTrue();
+				expect( scheduler.taskNames.len() ).toBe( 1 );
+				expect( scheduler.taskNames[ 1 ] ).toInclude( "signal-watchdog" );
+			} );
+
+			describe( "handleSseEvent()", function() {
+
+				it( "accepts a 'data: {...}' line, dispatches a normalized inbound message keyed by the sender's own number", function() {
+					var dispatched = [];
+					gateway.onMessage( function( m ) { dispatched.append( m ); } );
+
+					gateway.handleSseEvent( "data: " & dmEnvelope( "hello from signal", "+15551234567" ) );
+
+					expect( dispatched.len() ).toBe( 1 );
+					expect( dispatched[ 1 ].getText() ).toBe( "hello from signal" );
+					expect( dispatched[ 1 ].getContext().getConversationID() ).toBe( "+15551234567" );
+					expect( dispatched[ 1 ].getContext().getUserID() ).toBe( "+15551234567" );
+				} );
+
+				it( "ignores blank lines and ':'-prefixed SSE keepalive comments without throwing", function() {
+					var dispatched = [];
+					gateway.onMessage( function( m ) { dispatched.append( m ); } );
+
+					expect( function() {
+						gateway.handleSseEvent( "" );
+						gateway.handleSseEvent( ":keepalive" );
+						gateway.handleSseEvent( "event: envelope" );
+					} ).notToThrow();
+					expect( dispatched.len() ).toBe( 0 );
+				} );
+
+				it( "ignores a body that isn't valid JSON, without throwing", function() {
+					expect( function() {
+						gateway.handleSseEvent( "data: not json" );
+					} ).notToThrow();
+				} );
+
+				it( "ignores group messages (v1 is DM-only)", function() {
+					var dispatched = [];
+					gateway.onMessage( function( m ) { dispatched.append( m ); } );
+
+					gateway.handleSseEvent( "data: " & dmEnvelope( "group hi", "+15551234567", { groupInfo: { groupId: "abc123" } } ) );
+
+					expect( dispatched.len() ).toBe( 0 );
+				} );
+
+				it( "ignores envelopes with no dataMessage (receipts, typing, sync messages)", function() {
+					var dispatched = [];
+					gateway.onMessage( function( m ) { dispatched.append( m ); } );
+
+					gateway.handleSseEvent( "data: " & jsonSerialize( { envelope: { sourceNumber: "+15551234567", receiptMessage: { type: "READ" } } } ) );
+
+					expect( dispatched.len() ).toBe( 0 );
+				} );
+
+				it( "threads on the quote's own id when the inbound message is a reply", function() {
+					var dispatched = [];
+					gateway.onMessage( function( m ) { dispatched.append( m ); } );
+
+					gateway.handleSseEvent( "data: " & dmEnvelope( "following up", "+15551234567", { quote: { id: 1699999999000 } } ) );
+
+					expect( dispatched[ 1 ].getContext().getThreadID() ).toBe( "1699999999000" );
+				} );
+
+				it( "resolves the sender via sourceUuid when sourceNumber is absent", function() {
+					var dispatched = [];
+					gateway.onMessage( function( m ) { dispatched.append( m ); } );
+
+					var raw = jsonSerialize( { envelope: { sourceUuid: "11111111-2222-3333-4444-555555555555", dataMessage: { message: "hi" } } } );
+					gateway.handleSseEvent( "data: " & raw );
+
+					expect( dispatched.len() ).toBe( 1 );
+					expect( dispatched[ 1 ].getContext().getConversationID() ).toBe( "11111111-2222-3333-4444-555555555555" );
+				} );
+
+			} );
+
+			describe( "human-in-the-loop reply correlation (degraded - plain text, keyed by conversationID)", function() {
+
+				it( "requestHumanInteraction() sends a plain-text message listing allowed decisions, then a matching reply routes to the decision path instead of ordinary dispatch", function() {
+					stubRpc( { status: 200, body: { result: { timestamp: 1700000001000 } } } );
+					var humanRequest = new HumanInteractionRequest(
+						title: "Approve?", message: "delete_file(x)", allowedDecisions: [ "approve", "reject" ]
+					);
+					var context = new GatewayContext( conversationID: "+15551234567", threadID: "thread-1" );
+					gateway.requestHumanInteraction( humanRequest, context );
+
+					var dispatched = [];
+					gateway.onMessage( function( m ) { dispatched.append( m ); } );
+
+					gateway.handleSseEvent( "data: " & dmEnvelope( "approve", "+15551234567" ) );
+
+					expect( dispatched.len() ).toBe( 0 );
+				} );
+
+			} );
+
+			describe( "deliver()", function() {
+
+				it( "sends via the 'send' JSON-RPC method, recipient as a single-element array", function() {
+					var calls = stubRpc( { status: 200, body: { result: { timestamp: 1700000001000 } } } );
+					var event = new GatewayEvent( type: "response.completed", data: { text: "Your order shipped." } );
+					var context = new GatewayContext( conversationID: "+15551234567" );
+
+					var result = gateway.deliver( event, context );
+
+					expect( calls.len() ).toBe( 1 );
+					expect( calls[ 1 ].method ).toBe( "send" );
+					expect( calls[ 1 ].params.account ).toBe( "+15559998888" );
+					expect( calls[ 1 ].params.message ).toBe( "Your order shipped." );
+					expect( calls[ 1 ].params.recipient ).toBeArray();
+					expect( calls[ 1 ].params.recipient[ 1 ] ).toBe( "+15551234567" );
+					expect( result.getSuccess() ).toBeTrue();
+					expect( result.getDeliveryID() ).toBe( "1700000001000" );
+				} );
+
+				it( "splits text longer than the 8000-char limit into multiple sends", function() {
+					var calls = stubRpc( { status: 200, body: { result: { timestamp: 1700000001000 } } } );
+					var longText = repeatString( "a", 9000 );
+					var event = new GatewayEvent( type: "response.completed", data: { text: longText } );
+					var context = new GatewayContext( conversationID: "+15551234567" );
+
+					gateway.deliver( event, context );
+
+					expect( calls.len() ).toBeGT( 1 );
+				} );
+
+				it( "returns a failure result when signal-cli returns a JSON-RPC error", function() {
+					stubRpc( { status: 200, body: { error: { message: "Recipient not registered" } } } );
+					var event = new GatewayEvent( type: "response.completed", data: { text: "hi" } );
+					var context = new GatewayContext( conversationID: "+15551234567" );
+
+					var result = gateway.deliver( event, context );
+
+					expect( result.getSuccess() ).toBeFalse();
+					expect( result.getError() ).toInclude( "Recipient not registered" );
+				} );
+
+			} );
+
+			it( "parseHumanDecision() reads requestID/decision/decidedBy from a GatewayEvent's data", function() {
+				var event = new GatewayEvent( type: "interaction.decision", data: { requestID: "req-1", decision: "reject", decidedBy: "+15551234567" } );
+
+				var decision = gateway.parseHumanDecision( event );
+
+				expect( decision.getRequestID() ).toBe( "req-1" );
+				expect( decision.getDecision() ).toBe( "reject" );
+				expect( decision.getDecidedBy() ).toBe( "+15551234567" );
+			} );
+
+		} )
+	}
+
+}

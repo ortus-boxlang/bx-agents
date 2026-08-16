@@ -1,0 +1,591 @@
+import bxModules.bxai.models.gateway.IGateway;
+import bxModules.bxai.models.gateway.contracts.GatewayContext;
+import bxModules.bxai.models.gateway.contracts.GatewayEvent;
+import bxModules.bxai.models.gateway.contracts.GatewayMessage;
+import bxModules.bxai.models.gateway.contracts.GatewayDeliveryResult;
+import bxModules.bxai.models.gateway.contracts.HumanInteractionRequest;
+import bxModules.bxai.models.gateway.contracts.HumanInteractionDecision;
+
+/**
+ * GitHub gateway - an agent that responds to `@mentions` in issue/PR
+ * comments, treating each issue/PR (or inline review-comment thread) as a
+ * chat conversation. Webhook-driven like WhatsApp Cloud/Teams/Twilio -
+ * extends bx-ai's `BaseGateway` directly, no scheduler task or connection
+ * to manage.
+ *
+ * Ported from Vercel Eve's real GitHub channel (`packages/eve/src/public/channels/github/`,
+ * MIT licensed, read directly this session) - the `X-Hub-Signature-256`
+ * verification (confirmed identical construction to WhatsApp Cloud's own
+ * Meta scheme: HMAC-SHA256 over the raw body, hex, `sha256=` prefix), the
+ * `@mention`-gated dispatch (`shouldDispatchGitHubComment()`/
+ * `extractGitHubCommentTrigger()`), the issue-vs-review-thread conversation
+ * model, and the outbound Issues/PR-review-comment REST endpoints all mirror
+ * that implementation.
+ *
+ * v1 auth is a plain personal access token (`tokenEnvVar`), not Eve's own
+ * GitHub App JWT + installation-token flow - simpler and more directly
+ * portable for a first cut (Eve itself supports a pre-resolved-token bypass
+ * for exactly this reason). A future GitHub App mode is a natural extension,
+ * not built here.
+ *
+ * v1 scope: `issue_comment`/`pull_request_review_comment` events only
+ * (`action: "created"`), matching Eve's own only-default-dispatched event
+ * kinds - `issues`/`pull_request`/`check_suite`/`check_run`/`workflow_run`
+ * have no default handler in Eve either (they need caller-supplied hooks
+ * there) and aren't wired here. No repo checkout/code-editing (Eve's own
+ * `checkout.ts`) - this is a comment-in/comment-out chat surface only.
+ *
+ * Config, via aiGateway( "bxModules.bxagents.models.gateways.GitHubGateway", options ):
+ *   token          A GitHub personal access token with `repo` (or fine-grained issues/PR read+write) scope
+ *   webhookSecret   HMAC key verifying X-Hub-Signature-256 on inbound webhooks
+ *   botName          The bot's own GitHub login - matched as `@botName` in comment text, and used for the `{botName}[bot]`/type=="Bot" self-loop guard
+ *   apiBaseUrl       Optional override. Defaults to "https://api.github.com"
+ */
+class extends="bxModules.bxai.models.gateway.BaseGateway" {
+
+	property name="token" type="string" default="";
+	property name="webhookSecret" type="string" default="";
+	property name="botName" type="string" default="";
+	property name="apiBaseUrl" type="string" default="https://api.github.com";
+	property name="chunker";
+
+	property name="messageCallback";
+	property name="errorCallback";
+
+	/**
+	 * Bounded FIFO cache of already-seen X-GitHub-Delivery ids, so a webhook
+	 * redelivery doesn't dispatch the same comment twice. Eve's own source
+	 * has no equivalent dedup (confirmed absent this session) - added here
+	 * anyway, matching the dedup discipline WhatsApp Cloud's own `seenWamids`
+	 * already established in this project.
+	 */
+	property name="seenDeliveryIds" type="array" default=[];
+
+	/**
+	 * conversationID -> { allowedDecisions, threadId } for every open HITL
+	 * request - keyed by conversationID (the issue/PR/review-thread's own
+	 * identity string), same v1 simplification TwilioGateway uses, since a
+	 * GitHub comment thread has no separate "subject line" the way email does.
+	 */
+	property name="pendingApprovals" type="struct" default={};
+
+	/**
+	 * Test-only seam: overrides every GitHub REST call. Defaults to real
+	 * HTTP; a test injects a closure returning canned responses instead.
+	 * Signature: function( path, method, body ) -> { status: numeric, body: struct }
+	 */
+	property name="apiCaller";
+
+	static {
+		GITHUB_COMMENT_BODY_MAX_LENGTH = 65536
+		DELIVERY_DEDUP_CACHE_SIZE = 500
+		LOOP_GUARD_MARKER = "<!-- bxagents:posted -->"
+	}
+
+	function init() {
+		variables.name = "github"
+		variables.description = "GitHub gateway - webhook inbound (issue/PR comments), REST outbound"
+		variables.chunker = new "models.gateways.support.MessageChunker@bxagents"()
+		return this
+	}
+
+	IGateway function configure( required any options ) {
+		super.configure( arguments.options )
+		variables.token = variables.options.token ?: ""
+		variables.webhookSecret = variables.options.webhookSecret ?: ""
+		variables.botName = trim( variables.options.botName ?: "" )
+		if ( len( trim( variables.options.apiBaseUrl ?: "" ) ) ) {
+			variables.apiBaseUrl = trim( variables.options.apiBaseUrl )
+		}
+		return this
+	}
+
+	array function getDeclaredCapabilities() {
+		// "threads" - a genuine conversation identity exists (issue, PR, or
+		// review-comment thread). No "interactiveActions" (comment-in/
+		// comment-out only, no buttons). No "streaming".
+		return [ "inboundMessages", "outboundMessages", "threads", "humanApproval" ]
+	}
+
+	void function setApiCaller( required any caller ) {
+		variables.apiCaller = arguments.caller
+	}
+
+	void function onStart() {
+		if ( !len( variables.token ) || !len( variables.botName ) ) {
+			throw(
+				type   : "GitHubGateway.MissingConfig",
+				message: "GitHubGateway requires 'token' and 'botName' options (resolved from tokenEnvVar/botNameEnvVar at startup)."
+			)
+		}
+		logEvent( "Ready (bot @#variables.botName#) - inbound is webhook-driven, no connection to open" )
+	}
+
+	void function onStop() {
+		logEvent( "Stopped" )
+	}
+
+	// -------------------------------------------------------------------------
+	// IGateway.onMessage()/onError()
+	// -------------------------------------------------------------------------
+
+	public void function onMessage( required function callback ) {
+		variables.messageCallback = arguments.callback
+	}
+
+	public void function dispatchInbound( required any message ) {
+		if ( isNull( variables.messageCallback ) ) {
+			return
+		}
+		variables.messageCallback( arguments.message )
+	}
+
+	public void function onError( required function callback ) {
+		variables.errorCallback = arguments.callback
+	}
+
+	public void function dispatchError( required any error ) {
+		if ( isNull( variables.errorCallback ) ) {
+			return
+		}
+		variables.errorCallback( arguments.error )
+	}
+
+	private void function logEvent( required string text, string type = "information" ) {
+		writeLog( text: arguments.text, type: arguments.type, file: "gateway-#variables.name#" )
+	}
+
+	// -------------------------------------------------------------------------
+	// Webhook inbound (POST)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * @rawBody The exact raw POST body, unparsed
+	 * @signatureHeader The X-Hub-Signature-256 header value
+	 * @eventHeader The X-GitHub-Event header value
+	 * @deliveryId The X-GitHub-Delivery header value
+	 *
+	 * @return { status: numeric }
+	 */
+	struct function handleWebhook( required string rawBody, required string signatureHeader, required string eventHeader, required string deliveryId ) {
+		if ( !len( variables.webhookSecret ) ) {
+			logEvent( "webhook POST refused: webhookSecret unset", "error" )
+			return { status: 503 }
+		}
+
+		if ( !verifySignature( arguments.rawBody, arguments.signatureHeader ) ) {
+			logEvent( "rejected webhook: invalid X-Hub-Signature-256", "warning" )
+			return { status: 401 }
+		}
+
+		if ( len( arguments.deliveryId ) && !markSeen( arguments.deliveryId ) ) {
+			return { status: 200 }
+		}
+
+		var payload = {}
+		try {
+			payload = jsonDeserialize( arguments.rawBody )
+		} catch ( any e ) {
+			logEvent( "webhook body is not valid JSON: #e.message#", "warning" )
+			return { status: 200 }
+		}
+
+		if ( !isStruct( payload ) ) {
+			return { status: 200 }
+		}
+
+		try {
+			if ( arguments.eventHeader == "issue_comment" && ( payload.action ?: "" ) == "created" ) {
+				handleIssueComment( payload )
+			} else if ( arguments.eventHeader == "pull_request_review_comment" && ( payload.action ?: "" ) == "created" ) {
+				handleReviewComment( payload )
+			}
+			// "ping" and every other event kind: acknowledged, no dispatch -
+			// matches Eve's own "no default handler for these" stance.
+		} catch ( any e ) {
+			// A processing error must not bubble out as a non-200 - the
+			// delivery is already dedup-marked, and GitHub would otherwise
+			// flag the delivery failed / retry, redelivering into a dedup
+			// no-op on the retry (same reasoning as WhatsApp Cloud's own
+			// dispatchPayload() try/catch).
+			logEvent( "failed to process delivery #arguments.deliveryId#: #e.message#", "error" )
+		}
+
+		return { status: 200 }
+	}
+
+	private boolean function verifySignature( required string rawBody, required string header ) {
+		if ( !len( variables.webhookSecret ) || !len( arguments.header ) || !arguments.header.startsWith( "sha256=" ) ) {
+			return false
+		}
+		var expectedHex = trim( mid( arguments.header, 8, len( arguments.header ) - 7 ) )
+		if ( !len( expectedHex ) ) {
+			return false
+		}
+
+		var keySpec = createObject( "java", "javax.crypto.spec.SecretKeySpec" ).init(
+			charsetDecode( variables.webhookSecret, "UTF-8" ), "HmacSHA256"
+		)
+		var mac = createObject( "java", "javax.crypto.Mac" ).getInstance( "HmacSHA256" )
+		mac.init( keySpec )
+		var digest = mac.doFinal( charsetDecode( arguments.rawBody, "UTF-8" ) )
+		var computedHex = binaryEncode( digest, "hex" ).lCase()
+
+		return constantTimeEquals( computedHex, expectedHex.lCase() )
+	}
+
+	private boolean function constantTimeEquals( required string a, required string b ) {
+		return createObject( "java", "java.security.MessageDigest" ).isEqual(
+			charsetDecode( arguments.a, "UTF-8" ), charsetDecode( arguments.b, "UTF-8" )
+		)
+	}
+
+	private boolean function markSeen( required string deliveryId ) {
+		if ( variables.seenDeliveryIds.contains( arguments.deliveryId ) ) {
+			return false
+		}
+		variables.seenDeliveryIds.append( arguments.deliveryId )
+		if ( variables.seenDeliveryIds.len() > static.DELIVERY_DEDUP_CACHE_SIZE ) {
+			variables.seenDeliveryIds.deleteAt( 1 )
+		}
+		return true
+	}
+
+	/**
+	 * @payload A parsed "issue_comment" webhook payload
+	 */
+	private void function handleIssueComment( required struct payload ) {
+		var comment = arguments.payload.comment ?: {}
+		var issue = arguments.payload.issue ?: {}
+		var repository = arguments.payload.repository ?: {}
+		var repoOwner = repository.owner ?: {}
+		var owner = repoOwner.login ?: ""
+		var repo = repository.name ?: ""
+		var issueNumber = issue.number ?: 0
+
+		var body = toString( comment.body ?: "" )
+		var author = comment.user ?: {}
+		if ( isIgnoredComment( body, author ) ) {
+			return
+		}
+		var mentionMatch = extractMention( body )
+		if ( !mentionMatch.matched ) {
+			return
+		}
+
+		var conversationId = "repo:#owner#/#repo#:issue:#issueNumber#"
+		var context = new GatewayContext(
+			gateway       : variables.name,
+			conversationID: conversationId,
+			userID        : toString( author.login ?: "" ),
+			metadata      : { owner: owner, repo: repo, issueNumber: issueNumber, conversationKind: "issue" },
+			raw           : arguments.payload
+		)
+
+		dispatchOrRouteDecision( conversationId, mentionMatch.text, context, author )
+	}
+
+	/**
+	 * @payload A parsed "pull_request_review_comment" webhook payload
+	 */
+	private void function handleReviewComment( required struct payload ) {
+		var comment = arguments.payload.comment ?: {}
+		var pullRequest = arguments.payload.pull_request ?: {}
+		var repository = arguments.payload.repository ?: {}
+		var repoOwner = repository.owner ?: {}
+		var owner = repoOwner.login ?: ""
+		var repo = repository.name ?: ""
+		var pullRequestNumber = pullRequest.number ?: 0
+		// Replies always go to the THREAD ROOT comment, not the specific
+		// comment being replied to - matches Eve's own `in_reply_to_id ?? id`.
+		var reviewThreadRootCommentId = comment.in_reply_to_id ?: ( comment.id ?: 0 )
+
+		var body = toString( comment.body ?: "" )
+		var author = comment.user ?: {}
+		if ( isIgnoredComment( body, author ) ) {
+			return
+		}
+		var mentionMatch = extractMention( body )
+		if ( !mentionMatch.matched ) {
+			return
+		}
+
+		var conversationId = "repo:#owner#/#repo#:review-comment:#reviewThreadRootCommentId#"
+		var context = new GatewayContext(
+			gateway       : variables.name,
+			conversationID: conversationId,
+			userID        : toString( author.login ?: "" ),
+			metadata      : {
+				owner           : owner,
+				repo            : repo,
+				pullRequestNumber: pullRequestNumber,
+				conversationKind: "review_thread",
+				reviewCommentId : reviewThreadRootCommentId
+			},
+			raw: arguments.payload
+		)
+
+		dispatchOrRouteDecision( conversationId, mentionMatch.text, context, author )
+	}
+
+	/**
+	 * @conversationId This conversation's own identity string
+	 * @text The comment text, with the bot's own @mention already stripped
+	 * @context Already-built GatewayContext for this conversation
+	 * @author The comment's own "user" struct
+	 */
+	private void function dispatchOrRouteDecision( required string conversationId, required string text, required GatewayContext context, required struct author ) {
+		if ( variables.pendingApprovals.keyExists( arguments.conversationId ) ) {
+			handleApprovalReply( arguments.conversationId, arguments.text, arguments.author )
+			return
+		}
+
+		if ( !len( trim( arguments.text ) ) ) {
+			return
+		}
+
+		var message = new GatewayMessage(
+			text   : trim( arguments.text ),
+			context: arguments.context,
+			raw    : arguments.context.getRaw()
+		)
+
+		BoxAnnounce( "onGatewayMessageReceived", {
+			gateway       : this,
+			message       : message,
+			threadId      : arguments.context.getThreadID(),
+			userId        : arguments.context.getUserID(),
+			conversationId: arguments.conversationId
+		} )
+
+		dispatchInbound( message )
+	}
+
+	/**
+	 * @conversationId The pending request's own key
+	 * @text The reply's own text (mention already stripped)
+	 * @author The reply comment's own "user" struct
+	 */
+	private void function handleApprovalReply( required string conversationId, required string text, required struct author ) {
+		var pending = variables.pendingApprovals[ arguments.conversationId ]
+		var firstLine = trim( listFirst( arguments.text, char( 10 ) ) )
+		var decision = matchDecision( firstLine, pending.allowedDecisions ?: [] )
+
+		BoxAnnounce( "onGatewayMessageReceived", {
+			gateway       : this,
+			message       : null,
+			threadId      : pending.threadId ?: "",
+			userId        : toString( arguments.author.login ?: "" ),
+			conversationId: arguments.conversationId,
+			decision      : decision
+		} )
+
+		variables.pendingApprovals.delete( arguments.conversationId )
+	}
+
+	private string function matchDecision( required string text, required array allowedDecisions ) {
+		var normalized = lcase( arguments.text )
+		for ( var decision in arguments.allowedDecisions ) {
+			var normalizedDecision = lcase( decision )
+			if ( normalized == normalizedDecision || normalized.startsWith( normalizedDecision ) ) {
+				return decision
+			}
+		}
+		return arguments.text
+	}
+
+	/**
+	 * @body A comment's own raw body text
+	 * @author A comment's own "user" struct ({ login, type, ... })
+	 *
+	 * @return true if this comment must be ignored (our own echo, or any bot)
+	 */
+	private boolean function isIgnoredComment( required string body, required struct author ) {
+		if ( arguments.body.find( static.LOOP_GUARD_MARKER ) ) {
+			return true
+		}
+		if ( lcase( toString( arguments.author.type ?: "" ) ) == "bot" ) {
+			return true
+		}
+		if ( len( variables.botName ) && lcase( toString( arguments.author.login ?: "" ) ) == lcase( variables.botName ) & "[bot]" ) {
+			return true
+		}
+		return false
+	}
+
+	/**
+	 * `@botName`, matched only when followed by end-of-string or a
+	 * non-identifier character (so `@my-bot2` never matches a bot literally
+	 * named `my-bot`) - ported from Eve's own `extractGitHubCommentTrigger()`.
+	 * GitHub logins are constrained to `[A-Za-z0-9-]` (GitHub's own username
+	 * rules), so `botName` never needs regex-escaping here.
+	 *
+	 * @body A comment's own raw body text
+	 *
+	 * @return { matched: boolean, text: string } - text has the matched @mention removed and is trimmed
+	 */
+	private struct function extractMention( required string body ) {
+		if ( !len( variables.botName ) ) {
+			return { matched: false, text: "" }
+		}
+		var pattern = "@#variables.botName#(?=$|[^A-Za-z0-9_-])"
+		var match = reFindNoCase( pattern, arguments.body, 1, true )
+		if ( !match.pos.len() || match.pos[ 1 ] == 0 ) {
+			return { matched: false, text: "" }
+		}
+		var beforeLen = match.pos[ 1 ] - 1
+		var before = beforeLen > 0 ? left( arguments.body, beforeLen ) : ""
+		var afterStart = match.pos[ 1 ] + match.len[ 1 ]
+		var afterLen = len( arguments.body ) - afterStart + 1
+		var after = afterLen > 0 ? mid( arguments.body, afterStart, afterLen ) : ""
+		return { matched: true, text: trim( before & " " & after ) }
+	}
+
+	// -------------------------------------------------------------------------
+	// Outbound — Issues/PR comments REST API
+	// -------------------------------------------------------------------------
+
+	GatewayDeliveryResult function deliver( required GatewayEvent event, required GatewayContext context ) {
+		var text = toString( arguments.event.getData().text ?: "" )
+		if ( !len( text ) ) {
+			return GatewayDeliveryResult.failure( "Nothing to deliver — event data has no 'text'" )
+		}
+
+		var chunks = variables.chunker.split( text, static.GITHUB_COMMENT_BODY_MAX_LENGTH )
+		var lastResponse = {}
+
+		for ( var i = 1; i <= chunks.len(); i++ ) {
+			lastResponse = postComment( arguments.context, chunks[ i ] & char( 10 ) & char( 10 ) & static.LOOP_GUARD_MARKER )
+			if ( lastResponse.status >= 300 ) {
+				return GatewayDeliveryResult.failure( "GitHub comment post failed (#lastResponse.status#): #githubErrorMessage( lastResponse.body )#" )
+			}
+		}
+
+		var commentId = toString( lastResponse.body.id ?: "" )
+		var result = new GatewayDeliveryResult( deliveryID: len( commentId ) ? commentId : arguments.event.getId() )
+
+		BoxAnnounce( "onGatewayMessageSent", {
+			gateway : this,
+			event   : arguments.event,
+			context : arguments.context,
+			result  : result,
+			threadId: arguments.context.getThreadID()
+		} )
+
+		return result
+	}
+
+	/**
+	 * @context Carries { owner, repo, conversationKind, issueNumber|(pullRequestNumber+reviewCommentId) } in its own metadata
+	 * @body The comment text to post
+	 */
+	private struct function postComment( required GatewayContext context, required string body ) {
+		var metadata = arguments.context.getMetadata()
+		var owner = toString( metadata.owner ?: "" )
+		var repo = toString( metadata.repo ?: "" )
+
+		if ( toString( metadata.conversationKind ?: "" ) == "review_thread" ) {
+			var pullRequestNumber = metadata.pullRequestNumber ?: 0
+			var reviewCommentId = metadata.reviewCommentId ?: 0
+			return callApi( "repos/#owner#/#repo#/pulls/#pullRequestNumber#/comments/#reviewCommentId#/replies", "POST", { body: arguments.body } )
+		}
+
+		var issueNumber = metadata.issueNumber ?: 0
+		return callApi( "repos/#owner#/#repo#/issues/#issueNumber#/comments", "POST", { body: arguments.body } )
+	}
+
+	private string function githubErrorMessage( required any responseBody ) {
+		if ( isStruct( arguments.responseBody ) && structKeyExists( arguments.responseBody, "message" ) ) {
+			return toString( arguments.responseBody.message )
+		}
+		return "unknown error"
+	}
+
+	// -------------------------------------------------------------------------
+	// Human-in-the-loop — DEGRADED: no native buttons, "@mention me in a
+	// reply" plain-text keyword fallback, correlated by conversationID (see
+	// class docblock) - same pattern TwilioGateway uses, for the same reason
+	// (no subject line / no other reliable per-request correlation key).
+	// -------------------------------------------------------------------------
+
+	GatewayDeliveryResult function requestHumanInteraction( required HumanInteractionRequest humanRequest, required GatewayContext context ) {
+		var presentation = presentInteraction( arguments.humanRequest )
+		var allowedDecisions = arguments.humanRequest.getAllowedDecisions()
+		var conversationId = arguments.context.getConversationID()
+
+		var body = buildApprovalBodyText( presentation, allowedDecisions ) & char( 10 ) & char( 10 ) & static.LOOP_GUARD_MARKER
+		var response = postComment( arguments.context, body )
+		if ( response.status >= 300 ) {
+			return GatewayDeliveryResult.failure( "GitHub comment post (HITL request) failed (#response.status#): #githubErrorMessage( response.body )#" )
+		}
+
+		variables.pendingApprovals[ conversationId ] = {
+			allowedDecisions: allowedDecisions,
+			threadId        : arguments.context.getThreadID()
+		}
+
+		var commentId = toString( response.body.id ?: "" )
+		return new GatewayDeliveryResult( deliveryID: len( commentId ) ? commentId : arguments.humanRequest.getId() )
+	}
+
+	private string function buildApprovalBodyText( required any presentation, required array allowedDecisions ) {
+		var lines = []
+		if ( len( arguments.presentation.getTitle() ) ) {
+			lines.append( "**#arguments.presentation.getTitle()#**" )
+			lines.append( "" )
+		}
+		lines.append( arguments.presentation.getBody() )
+		lines.append( "" )
+		lines.append( "Reply mentioning @#variables.botName# with one of:" )
+		for ( var decision in arguments.allowedDecisions ) {
+			lines.append( "  - #decision#" )
+		}
+		return lines.toList( char( 10 ) )
+	}
+
+	HumanInteractionDecision function parseHumanDecision( required GatewayEvent event ) {
+		var data = arguments.event.getData()
+		return new HumanInteractionDecision(
+			requestID: data.requestID ?: "",
+			decision : data.decision ?: "",
+			decidedBy: data.decidedBy ?: ""
+		)
+	}
+
+	// -------------------------------------------------------------------------
+	// GitHub REST call
+	// -------------------------------------------------------------------------
+
+	/**
+	 * @path A path relative to apiBaseUrl, e.g. "repos/owner/repo/issues/1/comments"
+	 * @method HTTP method
+	 * @body The request body
+	 *
+	 * @return { status: numeric, body: struct }
+	 */
+	private struct function callApi( required string path, required string method, required struct body ) {
+		if ( !isNull( variables.apiCaller ) ) {
+			return variables.apiCaller( arguments.path, arguments.method, arguments.body )
+		}
+
+		var url = "#variables.apiBaseUrl#/#arguments.path#"
+		bx:http url=url method=arguments.method result="apiResult" charset="utf-8" {
+			bx:httpParam type="header" name="Authorization" value="Bearer #variables.token#";
+			bx:httpParam type="header" name="accept" value="application/vnd.github+json";
+			bx:httpParam type="header" name="x-github-api-version" value="2022-11-28";
+			bx:httpParam type="header" name="content-type" value="application/json; charset=utf-8";
+			bx:httpParam type="body" value=jsonSerialize( arguments.body );
+		}
+
+		var statusCode = val( apiResult.statusCode ?: 0 )
+		var parsedBody = {}
+		try {
+			parsedBody = len( trim( apiResult.fileContent ?: "" ) ) ? jsonDeserialize( apiResult.fileContent ) : {}
+		} catch ( any e ) {
+			parsedBody = { message: "Unparseable response from GitHub API: #e.message#" }
+		}
+
+		return { status: statusCode, body: parsedBody }
+	}
+
+}

@@ -1,0 +1,226 @@
+import bxModules.bxai.models.gateway.contracts.GatewayContext;
+import bxModules.bxai.models.gateway.contracts.GatewayEvent;
+import bxModules.bxai.models.gateway.contracts.HumanInteractionRequest;
+
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "EmailGateway", function() {
+
+			beforeEach( function() {
+				variables.gateway = new bxagents.models.gateways.EmailGateway();
+				variables.scheduler = new tests.support.FakeScheduler();
+				variables.gateway.setScheduler( variables.scheduler );
+				variables.mailService = new tests.support.FakeMailService();
+				variables.gateway.setMailService( variables.mailService );
+				variables.gateway.configure( {
+					imapHost    : "imap.example.test",
+					imapUsername: "bot@example.test",
+					imapPassword: "secret",
+					fromAddress : "bot@example.test"
+				} );
+			} );
+
+			private function stubImap( required array messages ) {
+				gateway.setImapPoller( function() { return messages; } );
+			}
+
+			it( "declares inboundMessages/outboundMessages/threads/humanApproval but NOT streaming/interactiveActions", function() {
+				var capabilities = gateway.getDeclaredCapabilities();
+				expect( capabilities ).toInclude( "inboundMessages" );
+				expect( capabilities ).toInclude( "outboundMessages" );
+				expect( capabilities ).toInclude( "threads" );
+				expect( capabilities ).toInclude( "humanApproval" );
+				expect( capabilities ).notToInclude( "streaming" );
+				expect( capabilities ).notToInclude( "interactiveActions" );
+			} );
+
+			it( "onConnect() throws EmailGateway.MissingImapConfig when imap fields are missing", function() {
+				var unconfigured = new bxagents.models.gateways.EmailGateway();
+				unconfigured.setScheduler( scheduler );
+				unconfigured.configure( { fromAddress: "bot@example.test" } );
+				expect( function() {
+					unconfigured.start();
+				} ).toThrow( "EmailGateway.MissingImapConfig" );
+			} );
+
+			it( "onConnect() throws EmailGateway.MissingFromAddress when fromAddress is missing", function() {
+				var noFrom = new bxagents.models.gateways.EmailGateway();
+				noFrom.setScheduler( scheduler );
+				noFrom.configure( { imapHost: "imap.example.test", imapUsername: "u", imapPassword: "p" } );
+				expect( function() {
+					noFrom.start();
+				} ).toThrow( "EmailGateway.MissingFromAddress" );
+			} );
+
+			it( "start() registers exactly one poll task", function() {
+				stubImap( [] );
+				gateway.start();
+
+				expect( scheduler.getTaskNames().len() ).toBe( 1 );
+				expect( scheduler.getTaskNames()[ 1 ] ).toInclude( "email-poll" );
+			} );
+
+			it( "pollInbox() dispatches a normalized inbound message for an ordinary email with no In-Reply-To", function() {
+				var dispatched = [];
+				gateway.onMessage( function( message ) { dispatched.append( message ); } );
+				stubImap( [ {
+					from      : "user@example.test",
+					subject   : "Question about my order",
+					body      : "Where is my order?",
+					messageId : "<msg-1@example.test>",
+					inReplyTo : "",
+					references: ""
+				} ] );
+
+				gateway.pollInbox();
+
+				expect( dispatched.len() ).toBe( 1 );
+				expect( dispatched[ 1 ].getText() ).toBe( "Where is my order?" );
+				expect( dispatched[ 1 ].getContext().getConversationID() ).toBe( "user@example.test" );
+				expect( dispatched[ 1 ].getContext().getThreadID() ).toBe( "<msg-1@example.test>" );
+			} );
+
+			it( "pollInbox() threads on References' first entry when present, over inReplyTo/own messageId", function() {
+				var dispatched = [];
+				gateway.onMessage( function( message ) { dispatched.append( message ); } );
+				stubImap( [ {
+					from      : "user@example.test",
+					subject   : "Re: Question about my order",
+					body      : "Following up",
+					messageId : "<msg-3@example.test>",
+					inReplyTo : "<msg-2@example.test>",
+					references: "<msg-1@example.test> <msg-2@example.test>"
+				} ] );
+
+				gateway.pollInbox();
+
+				expect( dispatched[ 1 ].getContext().getThreadID() ).toBe( "<msg-1@example.test>" );
+			} );
+
+			it( "deliver() sends via the mail service, threading In-Reply-To/References when a threadID is present", function() {
+				var event = new GatewayEvent( type: "response.completed", data: { text: "Your order shipped." } );
+				var context = new GatewayContext( conversationID: "user@example.test", threadID: "<msg-1@example.test>" );
+
+				// Simulate the thread's subject having been learned from an earlier inbound poll.
+				gateway.setImapPoller( function() { return []; } );
+				gateway.pollInbox();
+				stubImap( [ {
+					from: "user@example.test", subject: "Question about my order", body: "Where is my order?",
+					messageId: "<msg-1@example.test>", inReplyTo: "", references: ""
+				} ] );
+				gateway.pollInbox();
+
+				var result = gateway.deliver( event, context );
+
+				expect( mailService.getSentMails().len() ).toBe( 1 );
+				var sent = mailService.getSentMails()[ 1 ];
+				expect( sent.getConfig().to ).toBe( "user@example.test" );
+				expect( sent.getConfig().from ).toBe( "bot@example.test" );
+				expect( sent.getConfig().subject ).toBe( "Re: Question about my order" );
+				expect( sent.getConfig().body ).toBe( "Your order shipped." );
+
+				var inReplyToParam = sent.getMailParams().filter( p => p.name == "In-Reply-To" );
+				expect( inReplyToParam.len() ).toBe( 1 );
+				expect( inReplyToParam[ 1 ].value ).toBe( "<msg-1@example.test>" );
+				expect( result.getSuccess() ).toBeTrue();
+			} );
+
+			it( "deliver() falls back to a generic subject when no thread subject is known", function() {
+				var event = new GatewayEvent( type: "response.completed", data: { text: "hi" } );
+				var context = new GatewayContext( conversationID: "user@example.test" );
+
+				gateway.deliver( event, context );
+
+				var sent = mailService.getSentMails()[ 1 ];
+				expect( sent.getConfig().subject ).toBe( "Message from bot@example.test" );
+				expect( sent.getMailParams().len() ).toBe( 0 );
+			} );
+
+			it( "deliver() returns a failure result when the mail service reports an error", function() {
+				mailService.setFailNext( true, "SMTP relay rejected" );
+				var event = new GatewayEvent( type: "response.completed", data: { text: "hi" } );
+				var context = new GatewayContext( conversationID: "user@example.test" );
+
+				var result = gateway.deliver( event, context );
+
+				expect( result.getSuccess() ).toBeFalse();
+				expect( result.getError() ).toInclude( "SMTP relay rejected" );
+			} );
+
+			it( "requestHumanInteraction() tags the subject with the requestID and lists the allowed decisions in the body", function() {
+				var humanRequest = new HumanInteractionRequest(
+					title           : "Approve refund?",
+					message         : "Refund $50 to user@example.test",
+					allowedDecisions: [ "approve", "reject" ]
+				);
+				var context = new GatewayContext( conversationID: "user@example.test" );
+
+				var result = gateway.requestHumanInteraction( humanRequest, context );
+
+				var sent = mailService.getSentMails()[ 1 ];
+				expect( sent.getConfig().subject ).toInclude( "[bxagents:#humanRequest.getId()#]" );
+				expect( sent.getConfig().body ).toInclude( "approve" );
+				expect( sent.getConfig().body ).toInclude( "reject" );
+				expect( result.getSuccess() ).toBeTrue();
+			} );
+
+			it( "a reply tagged with a pending request's subject tag resolves as a decision, consuming the pending request", function() {
+				// onGatewayMessageReceived is a runtime interception point, not directly
+				// observable here without a real interceptor service - assert via the
+				// real, black-box-observable side effects instead: the pending request
+				// is consumed, and a decision reply never becomes an ordinary dispatch.
+				var dispatched = [];
+				gateway.onMessage( function( message ) { dispatched.append( message ); } );
+
+				var humanRequest = new HumanInteractionRequest(
+					title: "Approve refund?", message: "Refund $50", allowedDecisions: [ "approve", "reject" ]
+				);
+				var context = new GatewayContext( conversationID: "user@example.test" );
+				gateway.requestHumanInteraction( humanRequest, context );
+				expect( gateway.getPendingApprovals() ).toHaveKey( humanRequest.getId() );
+
+				stubImap( [ {
+					from      : "user@example.test",
+					subject   : "Re: Approve refund? [bxagents:#humanRequest.getId()#]",
+					body      : "approve" & char( 10 ) & char( 10 ) & "Sent from my phone",
+					messageId : "<reply-1@example.test>",
+					inReplyTo : "",
+					references: ""
+				} ] );
+
+				gateway.pollInbox();
+
+				expect( gateway.getPendingApprovals() ).notToHaveKey( humanRequest.getId() );
+				// A decision reply never becomes an ordinary dispatched message.
+				expect( dispatched.len() ).toBe( 0 );
+			} );
+
+			it( "matchDecision-driven replies fall back to the raw reply text when it doesn't match any allowed decision", function() {
+				var humanRequest = new HumanInteractionRequest(
+					title: "Approve refund?", message: "Refund $50", allowedDecisions: [ "approve", "reject" ]
+				);
+				var context = new GatewayContext( conversationID: "user@example.test" );
+				gateway.requestHumanInteraction( humanRequest, context );
+
+				stubImap( [ {
+					from      : "user@example.test",
+					subject   : "Re: Approve refund? [bxagents:#humanRequest.getId()#]",
+					body      : "maybe later",
+					messageId : "<reply-2@example.test>",
+					inReplyTo : "",
+					references: ""
+				} ] );
+
+				gateway.pollInbox();
+
+				// Still consumed - this gateway doesn't retry/re-prompt on an
+				// unrecognized reply, it passes the raw text through and lets
+				// bx-ai's own HITL coordinator reject it.
+				expect( gateway.getPendingApprovals() ).notToHaveKey( humanRequest.getId() );
+			} );
+
+		} );
+	}
+
+}

@@ -1,0 +1,708 @@
+import bxModules.bxai.models.gateway.IGateway;
+import bxModules.bxai.models.gateway.contracts.GatewayContext;
+import bxModules.bxai.models.gateway.contracts.GatewayEvent;
+import bxModules.bxai.models.gateway.contracts.GatewayMessage;
+import bxModules.bxai.models.gateway.contracts.GatewayDeliveryResult;
+import bxModules.bxai.models.gateway.contracts.HumanInteractionRequest;
+import bxModules.bxai.models.gateway.contracts.HumanInteractionDecision;
+
+/**
+ * Microsoft Teams gateway, via the Bot Framework Activity protocol - webhook
+ * inbound (Microsoft's Bot Connector service POSTs every activity to us),
+ * REST outbound (the same Connector service's `/v3/conversations/...` API).
+ * Like WhatsAppCloudGateway, this extends bx-ai's `BaseGateway` directly
+ * rather than `ScheduledGatewayBase` - there's no scheduler task or
+ * persistent connection to manage, only a generated `handlers/Teams.bx`
+ * (`POST /webhooks/teams`) calling straight into `handleWebhook()` below.
+ *
+ * Ported from Vercel Eve's real Teams channel (`packages/eve/src/public/channels/teams/`,
+ * MIT licensed, read directly this session) - the OAuth2 client-credentials
+ * token flow, the inbound JWT-bearer verification against Bot Connector's own
+ * JWKS, the `v3/conversations/{id}/activities[/{activityId}]` REST triad, and
+ * the Adaptive Card HITL shape all mirror that implementation. Hermes Agent's
+ * own `msgraph_webhook.py` is NOT related to this despite the superficial
+ * "Microsoft webhook" naming similarity - it implements Microsoft Graph
+ * *change-notification* webhooks (mailbox/drive/list change events, a
+ * `clientState`-HMAC-secured, non-Bot-Framework surface with no working
+ * outbound Teams messaging at all), a genuinely different Microsoft product
+ * surface. Nothing from that file was ported here.
+ *
+ * v1 scope, deliberately narrower than Eve's own: **personal (1:1 DM) chats
+ * only** - group chat and channel-wide messages (which need bot-mention
+ * gating and a different reply-threading model, per Eve's own
+ * `inferScope()`/`teamsThreadRootActivityId()` logic) are out of scope,
+ * matching every other push-style gateway's own DM-first v1 scoping
+ * (WhatsApp Cloud, Telegram). A message chunk limit of 4000 chars is used
+ * (Eve's own Adaptive Card text-truncation constant) rather than the Bot
+ * Framework protocol's true 80 KiB ceiling, for UI readability - Eve's own
+ * source notes the 80 KiB figure is a protocol max, not a practical
+ * rendering width.
+ *
+ * Config, via aiGateway( "bxModules.bxagents.models.gateways.TeamsGateway", options ):
+ *   appId        The bot's own Microsoft App ID (also the inbound JWT's required `aud` claim)
+ *   appPassword  The bot's app secret/password, used for the OAuth2 client-credentials token fetch
+ *   tenantId     Optional AAD tenant ID for single-tenant apps. Defaults to "botframework.com" (multi-tenant)
+ */
+class extends="bxModules.bxai.models.gateway.BaseGateway" {
+
+	property name="appId" type="string" default="";
+	property name="appPassword" type="string" default="";
+	property name="tenantId" type="string" default="botframework.com";
+	property name="chunker";
+
+	/**
+	 * Own storage for onMessage()/onError() - see WhatsAppCloudGateway's
+	 * identical docblock for why this is duplicated rather than inherited
+	 * from ScheduledGatewayBase (no scheduler relationship here).
+	 */
+	property name="messageCallback";
+	property name="errorCallback";
+
+	/**
+	 * In-process caches: the OAuth2 access token (client-credentials flow,
+	 * refetched 60s before its stated expiry - Eve's own documented margin)
+	 * and the Bot Connector JWKS keyset (fetched once per gateway instance
+	 * lifetime - see the known-limitations.md note on key-rotation).
+	 */
+	property name="cachedAccessToken" type="string" default="";
+	property name="accessTokenExpiresAtMs" type="numeric" default="0";
+	property name="jwksKeys" type="array" default=[];
+
+	/**
+	 * Test-only seams. tokenFetcher/jwksFetcher stand in for the two
+	 * "infrastructure" HTTP calls (AAD token endpoint, Bot Connector OpenID
+	 * metadata + JWKS) so JWT verification can be driven with a real,
+	 * locally-generated test RSA keypair without any network access.
+	 * apiCaller stands in for the actual Connector REST calls (send/reply/
+	 * update), same shape as every other push-style gateway's own seam.
+	 */
+	property name="apiCaller";
+	property name="tokenFetcher";
+	property name="jwksFetcher";
+
+	static {
+		LOGIN_BASE_URL              = "https://login.microsoftonline.com"
+		BOT_FRAMEWORK_SCOPE         = "https://api.botframework.com/.default"
+		BOT_CONNECTOR_OPENID_METADATA_URL = "https://login.botframework.com/v1/.well-known/openidconfiguration"
+		BOT_CONNECTOR_ISSUER        = "https://api.botframework.com"
+		TOKEN_REFRESH_SKEW_MS       = 60000
+		CLOCK_SKEW_SECONDS          = 300
+		MAX_MESSAGE_LENGTH          = 4000
+		ADAPTIVE_CARD_TEXT_LIMIT    = 4000
+		ADAPTIVE_CARD_ACTION_TITLE_LIMIT = 80
+		ADAPTIVE_CARD_ACTION_LIMIT  = 6
+		HITL_DATA_KEY               = "bxagents_input"
+	}
+
+	function init() {
+		variables.name = "teams"
+		variables.description = "Microsoft Teams gateway - Bot Framework Activity protocol, webhook inbound, Connector REST outbound"
+		variables.chunker = new "models.gateways.support.MessageChunker@bxagents"()
+		return this
+	}
+
+	IGateway function configure( required any options ) {
+		super.configure( arguments.options )
+		variables.appId = trim( variables.options.appId ?: "" )
+		variables.appPassword = variables.options.appPassword ?: ""
+		if ( len( trim( variables.options.tenantId ?: "" ) ) ) {
+			variables.tenantId = trim( variables.options.tenantId )
+		}
+		return this
+	}
+
+	array function getDeclaredCapabilities() {
+		// No "streaming" - Bot Framework supports updating an activity in
+		// place (PUT), but true token-by-token streaming isn't implemented
+		// in v1, matching WhatsApp Cloud/Telegram's own scope decision.
+		return [ "inboundMessages", "outboundMessages", "threads", "interactiveActions", "humanApproval" ]
+	}
+
+	void function setApiCaller( required any caller ) {
+		variables.apiCaller = arguments.caller
+	}
+
+	void function setTokenFetcher( required any fetcher ) {
+		variables.tokenFetcher = arguments.fetcher
+	}
+
+	void function setJwksFetcher( required any fetcher ) {
+		variables.jwksFetcher = arguments.fetcher
+	}
+
+	void function onStart() {
+		if ( !len( variables.appId ) || !len( variables.appPassword ) ) {
+			throw(
+				type   : "TeamsGateway.MissingConfig",
+				message: "TeamsGateway requires 'appId' and 'appPassword' options (resolved from appIdEnvVar/appPasswordEnvVar at startup)."
+			)
+		}
+		logEvent( "Ready (app_id #variables.appId#) - inbound is webhook-driven, no connection to open" )
+	}
+
+	void function onStop() {
+		logEvent( "Stopped" )
+	}
+
+	// -------------------------------------------------------------------------
+	// IGateway.onMessage()/onError()
+	// -------------------------------------------------------------------------
+
+	public void function onMessage( required function callback ) {
+		variables.messageCallback = arguments.callback
+	}
+
+	public void function dispatchInbound( required any message ) {
+		if ( isNull( variables.messageCallback ) ) {
+			return
+		}
+		variables.messageCallback( arguments.message )
+	}
+
+	public void function onError( required function callback ) {
+		variables.errorCallback = arguments.callback
+	}
+
+	public void function dispatchError( required any error ) {
+		if ( isNull( variables.errorCallback ) ) {
+			return
+		}
+		variables.errorCallback( arguments.error )
+	}
+
+	private void function logEvent( required string text, string type = "information" ) {
+		writeLog( text: arguments.text, type: arguments.type, file: "gateway-#variables.name#" )
+	}
+
+	// -------------------------------------------------------------------------
+	// Webhook inbound (POST) — Bot Framework activities
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Verifies the inbound bearer JWT (Bot Connector's own signing keys, NOT
+	 * Azure AD's), then branches on activity.type:
+	 *   - "message" in personal scope -> normal inbound dispatch
+	 *   - "invoke" (an Adaptive Card Action.Submit) -> HITL decision path,
+	 *     returning the required `teamsInvokeResponse` body
+	 *   - anything else (group/channel messages, unrecognized types) -> 200
+	 *     ack with no dispatch, matching Eve's own "always ack 200 for
+	 *     activities we don't act on" behavior (avoids Bot Framework's
+	 *     retry/backoff escalation on non-2xx)
+	 *
+	 * @authorizationHeader The raw "Authorization" header value, e.g. "Bearer <jwt>"
+	 * @rawBody The exact raw POST body, unparsed
+	 *
+	 * @return { status: numeric, body: struct } - body is {} except for an
+	 *         "invoke" activity, where it carries the required
+	 *         teamsInvokeResponse JSON body
+	 */
+	struct function handleWebhook( required string authorizationHeader, required string rawBody ) {
+		if ( !len( variables.appId ) || !len( variables.appPassword ) ) {
+			logEvent( "webhook POST refused: appId/appPassword unset", "error" )
+			return { status: 503, body: {} }
+		}
+
+		if ( !verifyBearerToken( arguments.authorizationHeader ) ) {
+			logEvent( "rejected webhook: invalid or missing bearer token", "warning" )
+			return { status: 401, body: {} }
+		}
+
+		var activity = {}
+		try {
+			activity = jsonDeserialize( arguments.rawBody )
+		} catch ( any e ) {
+			logEvent( "webhook body is not valid JSON: #e.message#", "warning" )
+			return { status: 200, body: {} }
+		}
+
+		if ( !isStruct( activity ) ) {
+			return { status: 200, body: {} }
+		}
+
+		var activityType = toString( activity.type ?: "" )
+
+		if ( activityType == "invoke" ) {
+			return handleInvokeActivity( activity )
+		}
+
+		if ( activityType == "message" ) {
+			handleMessageActivity( activity )
+		}
+
+		return { status: 200, body: {} }
+	}
+
+	/**
+	 * Verifies the JWT's RS256 signature against Bot Connector's JWKS
+	 * (fetched once and cached - see the class docblock/known-limitations.md
+	 * for the key-rotation caveat this implies), and its `aud`/`iss`/`exp`/
+	 * `nbf` claims. Ported from Eve's own `verify.ts` — audience must equal
+	 * this bot's own App ID, issuer must be Bot Connector's fixed issuer
+	 * string, with a 5-minute clock-skew allowance matching Eve's own default.
+	 *
+	 * @authorizationHeader The raw "Authorization" header value
+	 */
+	private boolean function verifyBearerToken( required string authorizationHeader ) {
+		var parts = trim( arguments.authorizationHeader ).listToArray( " " )
+		if ( parts.len() != 2 || lcase( parts[ 1 ] ) != "bearer" ) {
+			return false
+		}
+		var token = parts[ 2 ]
+
+		var segments = token.listToArray( "." )
+		if ( segments.len() != 3 ) {
+			return false
+		}
+
+		var header = {}
+		var payload = {}
+		try {
+			header = jsonDeserialize( base64UrlDecodeToString( segments[ 1 ] ) )
+			payload = jsonDeserialize( base64UrlDecodeToString( segments[ 2 ] ) )
+		} catch ( any e ) {
+			return false
+		}
+
+		var jwk = resolveSigningKey( toString( header.kid ?: "" ) )
+		if ( isNull( jwk ) ) {
+			return false
+		}
+
+		try {
+			var publicKey = buildRsaPublicKey( jwk )
+			var signingInput = segments[ 1 ] & "." & segments[ 2 ]
+			var signatureBytes = base64UrlDecode( segments[ 3 ] )
+
+			var verifier = createObject( "java", "java.security.Signature" ).getInstance( "SHA256withRSA" )
+			verifier.initVerify( publicKey )
+			verifier.update( charsetDecode( signingInput, "UTF-8" ) )
+			if ( !verifier.verify( signatureBytes ) ) {
+				return false
+			}
+		} catch ( any e ) {
+			logEvent( "JWT signature verification error: #e.message#", "warning" )
+			return false
+		}
+
+		if ( toString( payload.aud ?: "" ) != variables.appId ) {
+			return false
+		}
+		if ( toString( payload.iss ?: "" ) != static.BOT_CONNECTOR_ISSUER ) {
+			return false
+		}
+
+		var nowSeconds = int( currentTimeMillis() / 1000 )
+		var exp = val( payload.exp ?: 0 )
+		var nbf = val( payload.nbf ?: 0 )
+		if ( exp > 0 && nowSeconds > ( exp + static.CLOCK_SKEW_SECONDS ) ) {
+			return false
+		}
+		if ( nbf > 0 && nowSeconds < ( nbf - static.CLOCK_SKEW_SECONDS ) ) {
+			return false
+		}
+
+		return true
+	}
+
+	/**
+	 * @kid The JWT header's own "kid" - falls back to the JWKS's only key if
+	 *      there's exactly one and no kid matches, mirroring Eve's own
+	 *      single-key fallback
+	 */
+	private any function resolveSigningKey( required string kid ) {
+		ensureJwksLoaded()
+		for ( var key in variables.jwksKeys ) {
+			if ( toString( key.kid ?: "" ) == arguments.kid ) {
+				return key
+			}
+		}
+		if ( variables.jwksKeys.len() == 1 ) {
+			return variables.jwksKeys[ 1 ]
+		}
+		return javacast( "null", "" )
+	}
+
+	private void function ensureJwksLoaded() {
+		if ( variables.jwksKeys.len() ) {
+			return
+		}
+
+		var jwks = {}
+		if ( !isNull( variables.jwksFetcher ) ) {
+			jwks = variables.jwksFetcher()
+		} else {
+			var metadata = httpGetJson( static.BOT_CONNECTOR_OPENID_METADATA_URL )
+			var jwksUri = toString( metadata.jwks_uri ?: "" )
+			jwks = len( jwksUri ) ? httpGetJson( jwksUri ) : {}
+		}
+		variables.jwksKeys = jwks.keys ?: []
+	}
+
+	/**
+	 * Builds a java.security.PublicKey from a JWK's own "n"/"e" fields (both
+	 * base64url-encoded big-endian unsigned integers) - the standard
+	 * JWK-to-RSA-PublicKey construction (java.math.BigInteger with signum=1,
+	 * java.security.spec.RSAPublicKeySpec, KeyFactory.getInstance("RSA")).
+	 *
+	 * @jwk A single JWK struct from the JWKS "keys" array
+	 */
+	private any function buildRsaPublicKey( required struct jwk ) {
+		var modulusBytes = base64UrlDecode( toString( arguments.jwk.n ?: "" ) )
+		var exponentBytes = base64UrlDecode( toString( arguments.jwk.e ?: "" ) )
+		var modulus = createObject( "java", "java.math.BigInteger" ).init( 1, modulusBytes )
+		var exponent = createObject( "java", "java.math.BigInteger" ).init( 1, exponentBytes )
+		var keySpec = createObject( "java", "java.security.spec.RSAPublicKeySpec" ).init( modulus, exponent )
+		var keyFactory = createObject( "java", "java.security.KeyFactory" ).getInstance( "RSA" )
+		return keyFactory.generatePublic( keySpec )
+	}
+
+	/**
+	 * @url An absolute URL to GET and parse as JSON
+	 */
+	private struct function httpGetJson( required string url ) {
+		bx:http url=arguments.url method="get" result="httpResult" charset="utf-8" {
+			bx:httpParam type="header" name="accept" value="application/json";
+		}
+		var body = trim( httpResult.fileContent ?: "" )
+		return len( body ) ? jsonDeserialize( body ) : {}
+	}
+
+	private string function base64UrlDecodeToString( required string value ) {
+		return charsetEncode( base64UrlDecode( arguments.value ), "UTF-8" )
+	}
+
+	/**
+	 * Base64url (RFC 4648 §5) has no padding and substitutes "-"/"_" for
+	 * "+"/"/" - JWT segments and JWK "n"/"e" fields are both encoded this
+	 * way, never plain base64.
+	 *
+	 * @value A base64url-encoded string, unpadded
+	 */
+	private binary function base64UrlDecode( required string value ) {
+		var normalized = arguments.value.replace( "-", "+", "all" ).replace( "_", "/", "all" )
+		var paddingNeeded = ( 4 - ( len( normalized ) % 4 ) ) % 4
+		normalized &= repeatString( "=", paddingNeeded )
+		return binaryDecode( normalized, "base64" )
+	}
+
+	private numeric function currentTimeMillis() {
+		return createObject( "java", "java.lang.System" ).currentTimeMillis()
+	}
+
+	// -------------------------------------------------------------------------
+	// Inbound activity handling
+	// -------------------------------------------------------------------------
+
+	/**
+	 * v1 scope: personal (1:1 DM) conversations only - `conversation.
+	 * conversationType == "personal"` (or absent, treated as personal, since
+	 * Eve's own `inferScope()` falls back on `conversation.isGroup` and a
+	 * bot-DM's `conversation` object often omits conversationType entirely).
+	 * Group/channel messages are silently ignored (not an error - matches
+	 * Eve's own "unrecognized/out-of-scope activity -> still ack 200").
+	 *
+	 * @activity A parsed "message"-type Bot Framework activity
+	 */
+	private void function handleMessageActivity( required struct activity ) {
+		var conversation = arguments.activity.conversation ?: {}
+		var conversationType = toString( conversation.conversationType ?: "" )
+		if ( len( conversationType ) && conversationType != "personal" ) {
+			return
+		}
+
+		var text = trim( toString( arguments.activity.text ?: "" ) )
+		if ( !len( text ) ) {
+			return
+		}
+
+		var from = arguments.activity.from ?: {}
+		var senderId = toString( from.id ?: "" )
+		var conversationId = toString( conversation.id ?: "" )
+		var serviceUrl = toString( arguments.activity.serviceUrl ?: "" )
+
+		var context = new GatewayContext(
+			gateway       : variables.name,
+			conversationID: conversationId,
+			userID        : senderId,
+			threadID      : toString( arguments.activity.replyToId ?: "" ),
+			metadata      : { serviceUrl: serviceUrl },
+			raw           : arguments.activity
+		)
+		var message = new GatewayMessage(
+			text   : text,
+			context: context,
+			raw    : arguments.activity
+		)
+
+		BoxAnnounce( "onGatewayMessageReceived", {
+			gateway       : this,
+			message       : message,
+			threadId      : context.getThreadID(),
+			userId        : senderId,
+			conversationId: conversationId
+		} )
+
+		dispatchInbound( message )
+	}
+
+	/**
+	 * An Adaptive Card `Action.Submit` click arrives as an "invoke" activity,
+	 * `activity.value.action.data` carrying the hidden payload set on the
+	 * button (see requestHumanInteraction()'s HITL_DATA_KEY). Must be
+	 * answered synchronously with a `teamsInvokeResponse`-shaped HTTP 200
+	 * body, per Bot Framework's invoke-activity contract - NOT sent through
+	 * the Connector REST API like an ordinary reply.
+	 *
+	 * @activity A parsed "invoke"-type Bot Framework activity
+	 */
+	private struct function handleInvokeActivity( required struct activity ) {
+		var value = arguments.activity.value ?: {}
+		var action = value.action ?: {}
+		var data = isStruct( action ) && structKeyExists( action, "data" ) ? action.data : value
+		var payload = isStruct( data ) ? ( data[ static.HITL_DATA_KEY ] ?: data ) : {}
+
+		var requestId = toString( payload.requestId ?: "" )
+		var optionId = toString( payload.optionId ?: "" )
+
+		if ( len( requestId ) && len( optionId ) ) {
+			var from = arguments.activity.from ?: {}
+			BoxAnnounce( "onGatewayMessageReceived", {
+				gateway       : this,
+				message       : null,
+				threadId      : requestId,
+				userId        : toString( from.id ?: "" ),
+				conversationId: toString( ( arguments.activity.conversation ?: {} ).id ?: "" ),
+				decision      : optionId
+			} )
+		}
+
+		var responseBody = { statusCode: 200, type: "application/vnd.microsoft.activity.message", value: "Answer received." }
+		return { status: 200, body: responseBody }
+	}
+
+	// -------------------------------------------------------------------------
+	// Outbound — Bot Framework Connector REST
+	// -------------------------------------------------------------------------
+
+	GatewayDeliveryResult function deliver( required GatewayEvent event, required GatewayContext context ) {
+		var text = toString( arguments.event.getData().text ?: "" )
+		if ( !len( text ) ) {
+			return GatewayDeliveryResult.failure( "Nothing to deliver — event data has no 'text'" )
+		}
+
+		var serviceUrl = toString( arguments.context.getMetadata().serviceUrl ?: "" )
+		var conversationId = arguments.context.getConversationID()
+		if ( !len( serviceUrl ) || !len( conversationId ) ) {
+			return GatewayDeliveryResult.failure( "Missing serviceUrl or conversationId for outbound Teams message" )
+		}
+
+		var replyTo = arguments.context.getThreadID()
+		var chunks = variables.chunker.split( text, static.MAX_MESSAGE_LENGTH )
+		var lastResponse = {}
+
+		for ( var i = 1; i <= chunks.len(); i++ ) {
+			var body = {
+				type: "message",
+				text: chunks[ i ],
+				textFormat: "markdown"
+			}
+			if ( len( replyTo ) ) {
+				body[ "replyToId" ] = replyTo
+			}
+			lastResponse = callConnectorApi( serviceUrl, conversationId, "POST", "", body )
+			if ( lastResponse.status >= 300 ) {
+				return GatewayDeliveryResult.failure( "Teams Connector send failed (#lastResponse.status#)" )
+			}
+		}
+
+		var messageId = toString( lastResponse.body.id ?: "" )
+		var result = new GatewayDeliveryResult( deliveryID: len( messageId ) ? messageId : arguments.event.getId() )
+
+		BoxAnnounce( "onGatewayMessageSent", {
+			gateway : this,
+			event   : arguments.event,
+			context : arguments.context,
+			result  : result,
+			threadId: replyTo
+		} )
+
+		return result
+	}
+
+	// -------------------------------------------------------------------------
+	// Human-in-the-loop — Adaptive Card, one Action.Submit button per decision
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Renders an Adaptive Card (schema 1.5, matching Eve's own version pin)
+	 * with one `Action.Submit` button per allowed decision (up to
+	 * ADAPTIVE_CARD_ACTION_LIMIT = 6, Eve's own cap) - the click comes back
+	 * in as an "invoke" activity, handled by handleInvokeActivity() above.
+	 */
+	GatewayDeliveryResult function requestHumanInteraction( required HumanInteractionRequest humanRequest, required GatewayContext context ) {
+		var presentation = presentInteraction( arguments.humanRequest )
+		var allowedDecisions = arguments.humanRequest.getAllowedDecisions()
+		var bodyText = truncate( buildPresentationText( presentation ), static.ADAPTIVE_CARD_TEXT_LIMIT )
+
+		var serviceUrl = toString( arguments.context.getMetadata().serviceUrl ?: "" )
+		var conversationId = arguments.context.getConversationID()
+		if ( !len( serviceUrl ) || !len( conversationId ) ) {
+			return GatewayDeliveryResult.failure( "Missing serviceUrl or conversationId for outbound Teams interaction" )
+		}
+
+		var card = buildAdaptiveCard( bodyText, allowedDecisions, arguments.humanRequest.getId() )
+		var replyTo = arguments.context.getThreadID()
+		var body = {
+			type       : "message",
+			text       : bodyText,
+			attachments: [ card ]
+		}
+		if ( len( replyTo ) ) {
+			body[ "replyToId" ] = replyTo
+		}
+
+		var response = callConnectorApi( serviceUrl, conversationId, "POST", "", body )
+		if ( response.status >= 300 ) {
+			return GatewayDeliveryResult.failure( "Teams Connector interactive send failed (#response.status#)" )
+		}
+
+		var messageId = toString( response.body.id ?: "" )
+		return new GatewayDeliveryResult( deliveryID: len( messageId ) ? messageId : arguments.humanRequest.getId() )
+	}
+
+	/**
+	 * @bodyText Already-truncated prompt text
+	 * @allowedDecisions Up to 6 decision keywords - each becomes one Action.Submit button
+	 * @requestId The HumanInteractionRequest's own id, round-tripped through the button's hidden data
+	 */
+	private struct function buildAdaptiveCard( required string bodyText, required array allowedDecisions, required string requestId ) {
+		var actions = []
+		var decisions = arguments.allowedDecisions.len() > static.ADAPTIVE_CARD_ACTION_LIMIT
+			? arguments.allowedDecisions.slice( 1, static.ADAPTIVE_CARD_ACTION_LIMIT )
+			: arguments.allowedDecisions
+
+		for ( var decision in decisions ) {
+			actions.append( {
+				type : "Action.Submit",
+				title: truncate( decision, static.ADAPTIVE_CARD_ACTION_TITLE_LIMIT ),
+				data : { "#static.HITL_DATA_KEY#": { requestId: arguments.requestId, optionId: decision } }
+			} )
+		}
+
+		return {
+			contentType: "application/vnd.microsoft.card.adaptive",
+			content    : {
+				"$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+				type     : "AdaptiveCard",
+				version  : "1.5",
+				body     : [ { type: "TextBlock", text: arguments.bodyText, wrap: true } ],
+				actions  : actions
+			}
+		}
+	}
+
+	private string function buildPresentationText( required any presentation ) {
+		return len( arguments.presentation.getTitle() )
+			? "**#arguments.presentation.getTitle()#**" & char( 10 ) & char( 10 ) & arguments.presentation.getBody()
+			: arguments.presentation.getBody()
+	}
+
+	private string function truncate( required string text, required numeric limit ) {
+		return len( arguments.text ) > arguments.limit
+			? left( arguments.text, arguments.limit - 3 ) & "..."
+			: arguments.text
+	}
+
+	HumanInteractionDecision function parseHumanDecision( required GatewayEvent event ) {
+		var data = arguments.event.getData()
+		return new HumanInteractionDecision(
+			requestID: data.requestID ?: "",
+			decision : data.decision ?: "",
+			decidedBy: data.decidedBy ?: ""
+		)
+	}
+
+	// -------------------------------------------------------------------------
+	// Bot Connector REST call + OAuth2 client-credentials token
+	// -------------------------------------------------------------------------
+
+	/**
+	 * @serviceUrl The region-specific Connector base URL, taken from the
+	 *             activity that established the conversation - MUST NOT be
+	 *             hardcoded (see the class docblock / Eve's own documented gotcha)
+	 * @conversationId The Teams conversation id
+	 * @method HTTP method
+	 * @activityId Optional - present for a PUT-in-place update; empty for a new POST
+	 * @body The request body
+	 *
+	 * @return { status: numeric, body: struct }
+	 */
+	private struct function callConnectorApi( required string serviceUrl, required string conversationId, required string method, required string activityId, required struct body ) {
+		var path = "v3/conversations/#urlEncodedComponent( arguments.conversationId )#/activities"
+		if ( len( arguments.activityId ) ) {
+			path &= "/#urlEncodedComponent( arguments.activityId )#"
+		}
+
+		if ( !isNull( variables.apiCaller ) ) {
+			return variables.apiCaller( path, arguments.method, arguments.body )
+		}
+
+		var token = resolveAccessToken()
+		var url = arguments.serviceUrl.reReplace( "/+$", "" ) & "/" & path
+
+		bx:http url=url method=arguments.method result="apiResult" charset="utf-8" {
+			bx:httpParam type="header" name="Authorization" value="Bearer #token#";
+			bx:httpParam type="header" name="content-type" value="application/json; charset=utf-8";
+			bx:httpParam type="body" value=jsonSerialize( arguments.body );
+		}
+
+		var statusCode = val( apiResult.statusCode ?: 0 )
+		var parsedBody = {}
+		try {
+			parsedBody = len( trim( apiResult.fileContent ?: "" ) ) ? jsonDeserialize( apiResult.fileContent ) : {}
+		} catch ( any e ) {
+			parsedBody = {}
+		}
+
+		return { status: statusCode, body: parsedBody }
+	}
+
+	private string function urlEncodedComponent( required string value ) {
+		return urlEncodedFormat( arguments.value )
+	}
+
+	/**
+	 * OAuth2 client-credentials flow against AAD, refetched 60s before its
+	 * stated expiry (Eve's own documented early-refresh margin). Cached
+	 * in-process for this gateway instance's lifetime.
+	 */
+	private string function resolveAccessToken() {
+		if ( len( variables.cachedAccessToken ) && currentTimeMillis() < variables.accessTokenExpiresAtMs ) {
+			return variables.cachedAccessToken
+		}
+
+		var tokenResponse = {}
+		if ( !isNull( variables.tokenFetcher ) ) {
+			tokenResponse = variables.tokenFetcher()
+		} else {
+			var tokenUrl = "#static.LOGIN_BASE_URL#/#urlEncodedComponent( variables.tenantId )#/oauth2/v2.0/token"
+			bx:http url=tokenUrl method="post" result="tokenResult" charset="utf-8" {
+				bx:httpParam type="header" name="content-type" value="application/x-www-form-urlencoded";
+				bx:httpParam type="formfield" name="client_id" value=variables.appId;
+				bx:httpParam type="formfield" name="client_secret" value=variables.appPassword;
+				bx:httpParam type="formfield" name="grant_type" value="client_credentials";
+				bx:httpParam type="formfield" name="scope" value=static.BOT_FRAMEWORK_SCOPE;
+			}
+			tokenResponse = len( trim( tokenResult.fileContent ?: "" ) ) ? jsonDeserialize( tokenResult.fileContent ) : {}
+		}
+
+		var accessToken = toString( tokenResponse.access_token ?: "" )
+		var expiresIn = val( tokenResponse.expires_in ?: 3600 )
+
+		variables.cachedAccessToken = accessToken
+		variables.accessTokenExpiresAtMs = currentTimeMillis() + ( expiresIn * 1000 ) - static.TOKEN_REFRESH_SKEW_MS
+
+		return accessToken
+	}
+
+}

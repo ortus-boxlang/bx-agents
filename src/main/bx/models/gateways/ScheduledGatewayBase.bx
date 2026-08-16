@@ -1,0 +1,236 @@
+/**
+ * Shared base for "push-style" chat-platform gateways (Telegram, Slack, Discord,
+ * Email, ...) that need a live, persistent-or-recurring connection to their
+ * platform rather than being driven by an inbound HTTP request the way bx-ai's
+ * own HttpGateway is.
+ *
+ * Rather than inventing a new background-loop primitive, this reuses ColdBox's
+ * own Scheduler (verified against ColdBox's `development` branch source): every
+ * gateway that extends this class reaches the app's single, shared, already-live
+ * scheduler singleton (`appScheduler@coldbox` — the same one a project's own
+ * hand-written `schedules/Scheduler.bx`, if any, runs under) and registers its
+ * own named task(s) into it dynamically, instead of owning a scheduler/thread
+ * pool of its own. One shared scheduler, N gateways registering their own tasks
+ * into it — never one scheduler per gateway.
+ *
+ * A concrete gateway overrides `onConnect()`/`onDisconnect()`/
+ * `registerScheduledTasks()` — never `onStart()`/`onStop()` directly, which
+ * BaseGateway (bx-ai) already claims as its own template methods for tracking
+ * `isRunning()` and firing `onGatewayConnect`/`onGatewayDisconnect`. This class
+ * fills in BaseGateway's `onStart()`/`onStop()` extension points exactly once,
+ * so every push-style gateway gets the scheduler wiring for free.
+ */
+abstract class extends="bxModules.bxai.models.gateway.BaseGateway" {
+
+	/**
+	 * Names of scheduler tasks this gateway instance has registered, tracked
+	 * here so onStop() knows exactly what to remove.
+	 */
+	property name="schedulerTaskNames" type="array" default=[];
+
+	/**
+	 * The single callback registered via onMessage() (IGateway's own default
+	 * is a genuine no-op — it does NOT store anything — so any gateway that
+	 * wants to push inbound messages has to implement the storing itself;
+	 * this base class does it once for every push-style gateway).
+	 */
+	property name="messageCallback";
+
+	/**
+	 * Test-only seam: a scheduler double, injected via setScheduler(), used
+	 * instead of the real application.cbController-resolved ColdBox scheduler.
+	 * Lets onStart()/onStop() be exercised in a unit spec without a real
+	 * ColdBox boot.
+	 */
+	property name="schedulerOverride";
+
+	/**
+	 * The single callback registered via onError() (IGateway's own default is
+	 * also a genuine no-op) — shared here since every persistent-connection
+	 * gateway (Slack, Discord, ...) has a real "connection dropped
+	 * unexpectedly" case to report, not just a future-hypothetical one.
+	 */
+	property name="errorCallback";
+
+	// -------------------------------------------------------------------------
+	// IGateway.onMessage()/onError() — real reference implementations, not the no-op defaults
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Stores the callback GatewaySession.start() registers here. Concrete
+	 * gateways call dispatchInbound() (below) once per normalized inbound
+	 * message to invoke it — never invoke variables.messageCallback directly,
+	 * so the "no callback registered yet" case is handled in one place.
+	 *
+	 * @callback function( GatewayMessage message )
+	 */
+	public void function onMessage( required function callback ) {
+		variables.messageCallback = arguments.callback
+	}
+
+	/**
+	 * Invokes the registered onMessage() callback for one inbound message, a
+	 * no-op if nothing has registered one yet (e.g. start() called before
+	 * GatewaySession wired itself up — defensive, shouldn't happen in practice
+	 * since GatewaySession.start() always calls onMessage() before gw.start()).
+	 *
+	 * @message A single normalized GatewayMessage
+	 */
+	public void function dispatchInbound( required any message ) {
+		if ( isNull( variables.messageCallback ) ) {
+			return
+		}
+		variables.messageCallback( arguments.message )
+	}
+
+	/**
+	 * Stores the callback registered via onError().
+	 *
+	 * @callback function( any error )
+	 */
+	public void function onError( required function callback ) {
+		variables.errorCallback = arguments.callback
+	}
+
+	/**
+	 * Invokes the registered onError() callback, a no-op if nothing has
+	 * registered one. Concrete gateways call this whenever their connection
+	 * drops unexpectedly (not via an explicit stop()) — e.g. a websocket
+	 * close/error event.
+	 *
+	 * @error Whatever error information the gateway has - a message string, a struct, a caught exception
+	 */
+	public void function dispatchError( required any error ) {
+		if ( isNull( variables.errorCallback ) ) {
+			return
+		}
+		variables.errorCallback( arguments.error )
+	}
+
+	// -------------------------------------------------------------------------
+	// Template hooks for concrete gateways — override these, not onStart()/onStop()
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Override for a one-time platform handshake (validate credentials, open a
+	 * websocket, etc.) — called once per start(), before any scheduled tasks
+	 * are registered. Default is a no-op.
+	 */
+	public void function onConnect() {
+		// no-op by default
+	}
+
+	/**
+	 * Override for platform-specific teardown beyond removing this gateway's
+	 * own scheduler tasks (which onStop() already does automatically before
+	 * calling this) — e.g. closing a websocket. Default is a no-op.
+	 */
+	public void function onDisconnect() {
+		// no-op by default
+	}
+
+	/**
+	 * Override to register this gateway's own scheduler task(s) against the
+	 * shared scheduler — call trackTask() with each task's name so onStop()
+	 * can remove it later. Default is a no-op (a gateway with nothing to poll
+	 * or watch, if one ever extends this base without needing it).
+	 *
+	 * @scheduler The shared ColdBox scheduler (or test double) to register tasks against
+	 */
+	public void function registerScheduledTasks( required any scheduler ) {
+		// no-op by default
+	}
+
+	// -------------------------------------------------------------------------
+	// BaseGateway's onStart()/onStop() template-method hooks — final for
+	// subclasses of THIS class; do not override these further down the chain.
+	// -------------------------------------------------------------------------
+
+	public void function onStart() {
+		var scheduler = resolveScheduler()
+		onConnect()
+		registerScheduledTasks( scheduler )
+	}
+
+	public void function onStop() {
+		var scheduler = resolveScheduler()
+		for ( var taskName in variables.schedulerTaskNames ) {
+			try {
+				scheduler.removeTask( taskName )
+			} catch ( any e ) {
+				logEvent( "Failed to remove scheduler task [#taskName#] on stop: #e.message#", "error" )
+			}
+		}
+		variables.schedulerTaskNames = []
+		onDisconnect()
+	}
+
+	// -------------------------------------------------------------------------
+	// Scheduler access + task bookkeeping
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Test-only seam — inject a fake scheduler double (anything implementing
+	 * task()/removeTask()) so onStart()/onStop() can be exercised without a
+	 * real ColdBox boot. Never called in production; a generated app never
+	 * calls this.
+	 *
+	 * @scheduler A scheduler double
+	 */
+	public void function setScheduler( required any scheduler ) {
+		variables.schedulerOverride = arguments.scheduler
+	}
+
+	/**
+	 * Resolves the app's single shared ColdBox scheduler singleton. Not
+	 * WireBox-injectable here — this class is constructed directly by
+	 * aiGateway()'s `new "..."()`, entirely outside WireBox — so it's reached
+	 * via the live ColdBox controller ColdBoxAppGenerator's generated
+	 * Application.bx stashes on the application scope during
+	 * Bootstrap.loadColdbox().
+	 *
+	 * @return The live appScheduler@coldbox instance, or the injected test double if setScheduler() was called
+	 */
+	private any function resolveScheduler() {
+		if ( !isNull( variables.schedulerOverride ) ) {
+			return variables.schedulerOverride
+		}
+
+		if ( !structKeyExists( application, "cbController" ) || isNull( application.cbController ) ) {
+			throw(
+				type: "BxAgents.NoScheduler",
+				message: "No live ColdBox application found (application.cbController is unset) — the [#variables.name#] gateway needs a real ColdBox boot (bxAgents serve), not the chat CLI verb or a test with no scheduler double (see setScheduler())."
+			)
+		}
+
+		return application.cbController.getWireBox().getInstance( "appScheduler@coldbox" )
+	}
+
+	/**
+	 * Records a scheduler task name this gateway registered, so onStop() knows
+	 * to remove it. Call this immediately after starting a task in
+	 * registerScheduledTasks().
+	 *
+	 * @taskName The scheduler task's own name, as passed to scheduler.task(name)
+	 */
+	public void function trackTask( required string taskName ) {
+		variables.schedulerTaskNames.append( arguments.taskName )
+	}
+
+	// -------------------------------------------------------------------------
+	// Per-section logging
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Every gateway type writes to its own "gateway-<type>" log file (via
+	 * BoxLang's writeLog()) instead of one shared/default app log, so an
+	 * operator can tail exactly the platform they care about.
+	 *
+	 * @text The message to log
+	 * @type BoxLang writeLog() type — "information" (default), "warning", "error", "debug", etc.
+	 */
+	public void function logEvent( required string text, string type = "information" ) {
+		writeLog( text: arguments.text, type: arguments.type, file: "gateway-#variables.name#" )
+	}
+
+}

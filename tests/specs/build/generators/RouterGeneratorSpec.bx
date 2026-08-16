@@ -72,6 +72,71 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).notToInclude( "Gateway.process" );
 			} );
 
+			it( "emits the WhatsApp Cloud GET/POST webhook routes when hasWhatsAppCloudGateway is true", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
+				var result = generator.generate( discovery, newAppDir(), false, true );
+
+				var content = fileRead( result.router );
+				expect( content ).toInclude( 'get( "/webhooks/whatsapp-cloud" ).toHandler( "WhatsAppCloud.verify" )' );
+				expect( content ).toInclude( 'post( "/webhooks/whatsapp-cloud" ).toHandler( "WhatsAppCloud.process" )' );
+			} );
+
+			it( "does not emit WhatsApp Cloud webhook routes when hasWhatsAppCloudGateway is false", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
+				var result = generator.generate( discovery, newAppDir(), false, false );
+
+				var content = fileRead( result.router );
+				expect( content ).notToInclude( "WhatsAppCloud" );
+			} );
+
+			it( "emits the Teams POST webhook route when hasTeamsGateway is true", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
+				var result = generator.generate( discovery, newAppDir(), false, false, true );
+
+				var content = fileRead( result.router );
+				expect( content ).toInclude( 'post( "/webhooks/teams" ).toHandler( "Teams.process" )' );
+			} );
+
+			it( "does not emit the Teams webhook route when hasTeamsGateway is false", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
+				var result = generator.generate( discovery, newAppDir(), false, false, false );
+
+				var content = fileRead( result.router );
+				expect( content ).notToInclude( "Teams.process" );
+			} );
+
+			it( "emits the Twilio POST webhook route when hasTwilioGateway is true", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
+				var result = generator.generate( discovery, newAppDir(), false, false, false, true );
+
+				var content = fileRead( result.router );
+				expect( content ).toInclude( 'post( "/webhooks/twilio" ).toHandler( "Twilio.process" )' );
+			} );
+
+			it( "does not emit the Twilio webhook route when hasTwilioGateway is false", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
+				var result = generator.generate( discovery, newAppDir(), false, false, false, false );
+
+				var content = fileRead( result.router );
+				expect( content ).notToInclude( "Twilio.process" );
+			} );
+
+			it( "emits the GitHub POST webhook route when hasGitHubGateway is true", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
+				var result = generator.generate( discovery, newAppDir(), false, false, false, false, true );
+
+				var content = fileRead( result.router );
+				expect( content ).toInclude( 'post( "/webhooks/github" ).toHandler( "GitHub.process" )' );
+			} );
+
+			it( "does not emit the GitHub webhook route when hasGitHubGateway is false", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
+				var result = generator.generate( discovery, newAppDir(), false, false, false, false, false );
+
+				var content = fileRead( result.router );
+				expect( content ).notToInclude( "GitHub.process" );
+			} );
+
 			it( "reports hasAgentExposure=true only when an agent-exposure entry exists", function() {
 				var withAgent = discoverer.discover( fixtures & "/full-project" );
 				var withAgentResult = generator.generate( withAgent, newAppDir() );

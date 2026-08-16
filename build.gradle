@@ -353,7 +353,14 @@ task testColdBoxIntegration( type: JavaExec ) {
 task verifyExamples( type: JavaExec ) {
 	group = "verification"
 	description = "Builds every project under examples/ via the real BuildPipeline"
-	dependsOn compileJava
+	// boxlang.json's modulesDirectory resolves bxModules.bxagents.* against
+	// build/modules/bxagents (a Copy of src/main/bx, only refreshed when
+	// shadowJar runs - see shadowJar.finalizedBy(createModuleStructure)
+	// above), NOT directly against src/main/bx. Depending on compileJava
+	// alone let this task silently verify a STALE copy of the gateway
+	// classes/validator against a source tree that had already moved on -
+	// confirmed by hand this session after adding new gateway types.
+	dependsOn compileJava, shadowJar
 	classpath = files( "build/classes/java/main" ) + fileTree( dir: 'src/test/resources/libs', include: '*.jar' )
 	mainClass = 'ortus.boxlang.runtime.BoxRunner'
 	args = [ '--bx-config', 'boxlang.json', 'verifyExamples.bxs' ]

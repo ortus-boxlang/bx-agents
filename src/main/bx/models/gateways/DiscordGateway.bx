@@ -1,0 +1,716 @@
+import bxModules.bxai.models.gateway.IGateway;
+import bxModules.bxai.models.gateway.contracts.GatewayContext;
+import bxModules.bxai.models.gateway.contracts.GatewayEvent;
+import bxModules.bxai.models.gateway.contracts.GatewayMessage;
+import bxModules.bxai.models.gateway.contracts.GatewayDeliveryResult;
+import bxModules.bxai.models.gateway.contracts.HumanInteractionRequest;
+import bxModules.bxai.models.gateway.contracts.HumanInteractionDecision;
+
+/**
+ * Discord gateway - the real Gateway websocket (not the HTTP Interactions
+ * Endpoint webhook mode), verified against Discord's real, current docs
+ * (docs.discord.com). Because interactions arrive over this same
+ * authenticated persistent connection rather than a public HTTP endpoint,
+ * no Ed25519 signature verification is needed here (that requirement is
+ * specific to the webhook-based Interactions Endpoint URL mode, which this
+ * gateway does not use) - confirmed directly against Discord's docs.
+ *
+ * Unlike Slack's Socket Mode, Discord's protocol mandates CLIENT-DRIVEN
+ * heartbeats: the server tells us an interval via the `Hello` frame, and
+ * WE must keep sending heartbeats on that cadence or the connection is
+ * dropped as "zombied". That heartbeat is registered as its own scheduler
+ * task (distinct from the safety-net watchdog every other push-style
+ * gateway also has), re-registered whenever a fresh `Hello` arrives since
+ * the interval is only known after connecting, not before.
+ *
+ * Config, via aiGateway( "bxModules.bxagents.models.gateways.DiscordGateway", options ):
+ *   botToken  The bot token, sent as `Authorization: Bot <token>` on every REST call
+ *             and inside the Identify payload
+ *   intents   Optional - a numeric Gateway Intents bitmask override. Defaults to
+ *             GUILDS(1) + GUILD_MESSAGES(512) + DIRECT_MESSAGES(4096) +
+ *             MESSAGE_CONTENT(32768) = 37377 - enough to read message text in
+ *             both guild channels and DMs. MESSAGE_CONTENT is a *privileged*
+ *             intent - it must be enabled for this bot in the Discord Developer
+ *             Portal (and, once the app is verified/in 100+ guilds, approved by
+ *             Discord) or every inbound message arrives with empty `content`.
+ */
+class extends="ScheduledGatewayBase" {
+
+	property name="botToken" type="string" default="";
+	property name="intents" type="numeric" default=37377;
+	property name="webSocket";
+	property name="socketConnected" type="boolean" default=false;
+	property name="stopping" type="boolean" default=false;
+	property name="sessionId" type="string" default="";
+	property name="resumeGatewayUrl" type="string" default="";
+	property name="lastSeq";
+	property name="awaitingHeartbeatAck" type="boolean" default=false;
+	property name="scheduler";
+	property name="heartbeatTaskRegistered" type="boolean" default=false;
+	property name="streamState" type="struct" default={};
+	property name="chunker";
+
+	/**
+	 * Test-only seam: overrides every REST call this gateway makes (GET
+	 * /gateway, POST/PATCH messages, POST interaction callbacks). Defaults to
+	 * real HTTP; a test injects a closure returning canned responses instead.
+	 * Signature: function( httpMethod, path, body ) -> { status: numeric, body: struct }
+	 */
+	property name="apiCaller";
+
+	/**
+	 * Test-only seam: overrides how a live websocket is actually opened.
+	 * Defaults to the real DiscordSocketListener+HttpClient chain; a test
+	 * injects a closure returning a fake websocket double (sendText()/
+	 * sendClose()) instead. Signature: function( wssUrl ) -> websocket-like object
+	 */
+	property name="socketOpener";
+
+	static {
+		API_BASE            = "https://discord.com/api/v10"
+		MAX_MESSAGE_LENGTH  = 2000
+		// Close codes Discord itself documents as non-reconnectable (bad
+		// token, bad shard/version/intents) - retrying would just fail again.
+		FATAL_CLOSE_CODES   = [ 4004, 4010, 4011, 4012, 4013, 4014 ]
+		// Close codes that ARE reconnectable but explicitly invalidate the
+		// current session ("reconnect and start a NEW one", not a resume).
+		NEW_SESSION_REQUIRED = [ 4007, 4009 ]
+	}
+
+	function init() {
+		variables.name = "discord"
+		variables.description = "Discord gateway - persistent websocket inbound (Gateway API), HTTP outbound"
+		variables.chunker = new "models.gateways.support.MessageChunker@bxagents"()
+		return this
+	}
+
+	IGateway function configure( required any options ) {
+		super.configure( arguments.options )
+		variables.botToken = trim( variables.options.botToken ?: "" )
+		if ( !isNull( variables.options.intents ) ) {
+			variables.intents = variables.options.intents
+		}
+		return this
+	}
+
+	array function getDeclaredCapabilities() {
+		return [ "inboundMessages", "outboundMessages", "streaming", "threads", "interactiveActions", "humanApproval" ]
+	}
+
+	/**
+	 * Test-only seam — see apiCaller's own docblock.
+	 */
+	void function setApiCaller( required any caller ) {
+		variables.apiCaller = arguments.caller
+	}
+
+	/**
+	 * Test-only seam — see socketOpener's own docblock.
+	 */
+	void function setSocketOpener( required any opener ) {
+		variables.socketOpener = arguments.opener
+	}
+
+	// -------------------------------------------------------------------------
+	// ScheduledGatewayBase hooks
+	// -------------------------------------------------------------------------
+
+	void function onConnect() {
+		if ( !len( variables.botToken ) ) {
+			throw(
+				type   : "DiscordGateway.MissingToken",
+				message: "DiscordGateway requires a 'botToken' option (resolved from botTokenEnvVar at startup)."
+			)
+		}
+
+		variables.stopping = false
+		openConnection()
+	}
+
+	void function onDisconnect() {
+		variables.stopping = true
+		closeSocketQuietly( variables.webSocket, "gateway stopping" )
+		variables.webSocket = null
+		variables.socketConnected = false
+	}
+
+	void function registerScheduledTasks( required any scheduler ) {
+		variables.scheduler = arguments.scheduler
+
+		// Safety-net watchdog only - Discord's own Reconnect (op 7) / Invalid
+		// Session (op 9) frames and the heartbeat-ACK check (below) drive the
+		// primary reconnect path reactively.
+		var taskName = "discord-watchdog-#variables.name#"
+		arguments.scheduler.task( taskName )
+			.call( () => checkConnectionHealth() )
+			.every( 30, "seconds" )
+			.withNoOverlaps()
+			.onFailure( ( task, exception ) => logEvent( "Watchdog failed: #exception.message#", "error" ) )
+			.start()
+		trackTask( taskName )
+	}
+
+	void function checkConnectionHealth() {
+		if ( variables.stopping || variables.socketConnected ) {
+			return
+		}
+		logEvent( "Watchdog found the connection down - reconnecting" )
+		reconnect()
+	}
+
+	// -------------------------------------------------------------------------
+	// Connection lifecycle
+	// -------------------------------------------------------------------------
+
+	private void function openConnection() {
+		var wssUrl = resolveGatewayUrl()
+		variables.webSocket = openSocket( wssUrl )
+		variables.socketConnected = true
+	}
+
+	/**
+	 * @return `resumeGatewayUrl` (from a prior READY/RESUMED) with query
+	 *         params appended if we have a session to resume, else a fresh
+	 *         `GET /gateway` lookup
+	 */
+	private string function resolveGatewayUrl() {
+		var base = len( variables.sessionId ) && len( variables.resumeGatewayUrl )
+			? variables.resumeGatewayUrl
+			: restCall( "GET", "/gateway" ).body.url ?: "wss://gateway.discord.gg/"
+		return base & ( base.endsWith( "/" ) ? "" : "/" ) & "?v=10&encoding=json"
+	}
+
+	/**
+	 * Opens a NEW connection before tearing down the old one - matches the
+	 * same overlap-then-cutover shape SlackGateway uses, safe here too since
+	 * we don't send Identify/Resume until the fresh socket's own Hello arrives.
+	 *
+	 * @forceFreshSession Clears sessionId/resumeGatewayUrl first, forcing a
+	 *                     fresh Identify rather than a Resume on the new connection
+	 */
+	private void function reconnect( boolean forceFreshSession = false ) {
+		if ( variables.stopping ) {
+			return
+		}
+		if ( arguments.forceFreshSession ) {
+			variables.sessionId = ""
+			variables.resumeGatewayUrl = ""
+		}
+
+		var oldSocket = variables.webSocket
+		try {
+			openConnection()
+		} catch ( any e ) {
+			logEvent( "Reconnect failed: #e.message#", "error" )
+			variables.socketConnected = false
+			dispatchError( e )
+			return
+		}
+
+		closeSocketQuietly( oldSocket, "reconnecting" )
+	}
+
+	private void function closeSocketQuietly( required any socket, required string reason ) {
+		if ( isNull( arguments.socket ) ) {
+			return
+		}
+		try {
+			arguments.socket.sendClose( 1000, arguments.reason )
+		} catch ( any e ) {
+			// Best-effort - the socket may already be closed/broken.
+		}
+	}
+
+	private any function openSocket( required string wssUrl ) {
+		if ( !isNull( variables.socketOpener ) ) {
+			return variables.socketOpener( arguments.wssUrl )
+		}
+
+		var listener = new "models.gateways.support.DiscordSocketListener@bxagents"( this )
+		var httpClient = createObject( "java", "java.net.http.HttpClient" ).newHttpClient()
+		var uri = createObject( "java", "java.net.URI" ).init( arguments.wssUrl )
+		return httpClient.newWebSocketBuilder().buildAsync( uri, listener ).get()
+	}
+
+	// -------------------------------------------------------------------------
+	// Heartbeat - client-driven, mandatory (unlike Slack's Socket Mode)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Registers (or re-registers, on reconnect) the recurring heartbeat task
+	 * at the interval Discord's own `Hello` frame just told us. Re-registering
+	 * under the SAME task name each time - remove-then-recreate is
+	 * best-effort defensive here since ColdBox's own docs don't guarantee
+	 * re-registering a live task name in place is safe.
+	 *
+	 * @heartbeatIntervalMs From Hello's `d.heartbeat_interval`, in milliseconds
+	 */
+	private void function startHeartbeat( required numeric heartbeatIntervalMs ) {
+		if ( isNull( variables.scheduler ) ) {
+			return
+		}
+
+		var taskName = "discord-heartbeat-#variables.name#"
+		try {
+			variables.scheduler.removeTask( taskName )
+		} catch ( any e ) {
+			// No existing task to remove - fine, this is the first Hello.
+		}
+
+		// Floor, never ceil - sending slightly MORE often than the server's
+		// interval is safe; sending less often risks a spurious "zombied"
+		// disconnect. Minimum 1 second as a sane floor.
+		var seconds = max( 1, int( arguments.heartbeatIntervalMs / 1000 ) )
+
+		variables.awaitingHeartbeatAck = false
+		variables.scheduler.task( taskName )
+			.call( () => heartbeatTick() )
+			.every( seconds, "seconds" )
+			.withNoOverlaps()
+			.onFailure( ( task, exception ) => logEvent( "Heartbeat task failed: #exception.message#", "error" ) )
+			.start()
+
+		if ( !variables.heartbeatTaskRegistered ) {
+			trackTask( taskName )
+			variables.heartbeatTaskRegistered = true
+		}
+	}
+
+	/**
+	 * One heartbeat cycle. If the PREVIOUS heartbeat was never ACKed
+	 * (op 11) before this tick fired, the connection is "zombied" per
+	 * Discord's own documented behavior - reconnect rather than send
+	 * another heartbeat into the void.
+	 */
+	void function heartbeatTick() {
+		if ( isNull( variables.webSocket ) || !variables.socketConnected ) {
+			return
+		}
+		if ( variables.awaitingHeartbeatAck ) {
+			logEvent( "Heartbeat ACK missed - connection zombied, reconnecting", "warning" )
+			variables.socketConnected = false
+			reconnect()
+			return
+		}
+		sendHeartbeat()
+	}
+
+	private void function sendHeartbeat() {
+		sendPayload( { op: 1, d: isNull( variables.lastSeq ) ? null : variables.lastSeq } )
+		variables.awaitingHeartbeatAck = true
+	}
+
+	private void function sendPayload( required struct payload ) {
+		if ( isNull( variables.webSocket ) ) {
+			return
+		}
+		variables.webSocket.sendText( jsonSerialize( arguments.payload ), true )
+	}
+
+	// -------------------------------------------------------------------------
+	// DiscordSocketListener callbacks - see support/DiscordSocketListener.bx
+	// -------------------------------------------------------------------------
+
+	void function handleSocketOpen( required any webSocket ) {
+		logEvent( "Socket opened" )
+	}
+
+	/**
+	 * @statusCode A close code (see FATAL_CLOSE_CODES/NEW_SESSION_REQUIRED above)
+	 */
+	void function handleSocketClose( required numeric statusCode, required string reason ) {
+		logEvent( "Socket closed: #statusCode# #reason#" )
+		variables.socketConnected = false
+
+		if ( static.FATAL_CLOSE_CODES.find( arguments.statusCode ) ) {
+			logEvent( "Fatal close code [#statusCode#] - not reconnecting: #reason#", "error" )
+			variables.stopping = true
+			dispatchError( "Discord gateway closed fatally (#statusCode#): #reason#" )
+			return
+		}
+
+		if ( variables.stopping ) {
+			return
+		}
+
+		reconnect( forceFreshSession: static.NEW_SESSION_REQUIRED.find( arguments.statusCode ) > 0 )
+	}
+
+	void function handleSocketError( required any error ) {
+		logEvent( "Socket error: #error.getMessage()#", "error" )
+		variables.socketConnected = false
+		dispatchError( arguments.error )
+	}
+
+	/**
+	 * @webSocket The live websocket the frame arrived on
+	 * @text A raw Gateway text frame (JSON, since we connect with encoding=json)
+	 */
+	void function handleSocketText( required any webSocket, required string text ) {
+		var payload = {}
+		try {
+			payload = jsonDeserialize( arguments.text )
+		} catch ( any e ) {
+			logEvent( "Unparseable Gateway frame: #e.message#", "error" )
+			return
+		}
+
+		if ( structKeyExists( payload, "s" ) && !isNull( payload.s ) ) {
+			variables.lastSeq = payload.s
+		}
+
+		switch ( payload.op ?: -1 ) {
+			case 10: // Hello
+				handleHello( payload.d ?: {} )
+				break
+			case 0: // Dispatch
+				handleDispatch( payload.t ?: "", payload.d ?: {} )
+				break
+			case 1: // Heartbeat request from the server - reply immediately
+				sendHeartbeat()
+				break
+			case 7: // Reconnect
+				logEvent( "Server requested reconnect" )
+				reconnect()
+				break
+			case 9: // Invalid Session - d:true means resumable, d:false means start fresh
+				var resumable = payload.d ?: false
+				logEvent( "Invalid session (resumable: #resumable#)" )
+				reconnect( forceFreshSession: !resumable )
+				break
+			case 11: // Heartbeat ACK
+				variables.awaitingHeartbeatAck = false
+				break
+		}
+	}
+
+	private void function handleHello( required struct data ) {
+		startHeartbeat( arguments.data.heartbeat_interval ?: 45000 )
+		if ( len( variables.sessionId ) ) {
+			sendResume()
+		} else {
+			sendIdentify()
+		}
+	}
+
+	private void function sendIdentify() {
+		sendPayload( {
+			op: 2,
+			d : {
+				token     : variables.botToken,
+				intents   : variables.intents,
+				properties: { os: "linux", browser: "bxagents", device: "bxagents" }
+			}
+		} )
+	}
+
+	private void function sendResume() {
+		sendPayload( {
+			op: 6,
+			d : {
+				token     : variables.botToken,
+				session_id: variables.sessionId,
+				seq       : isNull( variables.lastSeq ) ? 0 : variables.lastSeq
+			}
+		} )
+	}
+
+	/**
+	 * @type A Dispatch (op 0) event name, e.g. "READY", "MESSAGE_CREATE", "INTERACTION_CREATE"
+	 * @data That event's own data payload
+	 */
+	private void function handleDispatch( required string type, required struct data ) {
+		switch ( arguments.type ) {
+			case "READY":
+				variables.sessionId = arguments.data.session_id ?: ""
+				variables.resumeGatewayUrl = arguments.data.resume_gateway_url ?: ""
+				variables.socketConnected = true
+				logEvent( "Connected (session #variables.sessionId#)" )
+				break
+			case "RESUMED":
+				variables.socketConnected = true
+				logEvent( "Session resumed" )
+				break
+			case "MESSAGE_CREATE":
+				handleMessageCreate( arguments.data )
+				break
+			case "INTERACTION_CREATE":
+				handleInteractionCreate( arguments.data )
+				break
+		}
+	}
+
+	/**
+	 * @data A MESSAGE_CREATE dispatch's own message object
+	 */
+	private void function handleMessageCreate( required struct data ) {
+		var author = arguments.data.author ?: {}
+		// Ignore bot messages (including our own) to avoid a self-loop.
+		if ( author.bot ?: false ) {
+			return
+		}
+		dispatchInbound( toGatewayMessage( arguments.data ) )
+	}
+
+	/**
+	 * @data A raw Discord message object (from MESSAGE_CREATE)
+	 *
+	 * @return A normalized GatewayMessage; fires onGatewayMessageReceived before returning
+	 */
+	private GatewayMessage function toGatewayMessage( required struct data ) {
+		var channel = arguments.data.channel_id ?: ""
+		var author = arguments.data.author ?: {}
+		// Discord channels have no built-in "thread_ts"-style concept the way
+		// Slack does - a reply's own message_reference is the closest analog,
+		// so we thread on that when present, otherwise this starts a new thread.
+		var threadId = arguments.data.message_reference.message_id ?: ""
+		var context = new GatewayContext(
+			gateway       : variables.name,
+			conversationID: channel,
+			userID        : author.id ?: "",
+			threadID      : threadId,
+			raw           : arguments.data
+		)
+		var message = new GatewayMessage(
+			text   : arguments.data.content ?: "",
+			context: context,
+			raw    : arguments.data
+		)
+
+		BoxAnnounce( "onGatewayMessageReceived", {
+			gateway       : this,
+			message       : message,
+			threadId      : message.getContext().getThreadID(),
+			userId        : message.getContext().getUserID(),
+			conversationId: message.getContext().getConversationID()
+		} )
+
+		return message
+	}
+
+	/**
+	 * @data An INTERACTION_CREATE dispatch's own interaction object
+	 */
+	private void function handleInteractionCreate( required struct data ) {
+		// Only component (button) interactions are HITL decisions here -
+		// slash commands (type 2) etc. are out of scope for v1.
+		if ( ( arguments.data.type ?: 0 ) != 3 ) {
+			return
+		}
+
+		// Ack within Discord's 3-second budget - DEFERRED_UPDATE_MESSAGE (6)
+		// leaves the original message/buttons as-is with no loading state,
+		// which is the right shape here since GatewaySession's own turn
+		// processing happens well outside this 3-second window.
+		restCall(
+			"POST",
+			"/interactions/#arguments.data.id ?: ''#/#arguments.data.token ?: ''#/callback",
+			{ type: 6 }
+		)
+
+		var channel = arguments.data.channel_id ?: ""
+		var member = arguments.data.member ?: {}
+		var user = member.user ?: ( arguments.data.user ?: {} )
+
+		BoxAnnounce( "onGatewayMessageReceived", {
+			gateway       : this,
+			message       : null,
+			threadId      : channel,
+			userId        : user.id ?: "",
+			conversationId: channel,
+			decision      : arguments.data.data.custom_id ?: ""
+		} )
+	}
+
+	// -------------------------------------------------------------------------
+	// Outbound
+	// -------------------------------------------------------------------------
+
+	GatewayDeliveryResult function deliver( required GatewayEvent event, required GatewayContext context ) {
+		var text = toString( arguments.event.getData().text ?: "" )
+		if ( !len( text ) ) {
+			return GatewayDeliveryResult.failure( "Nothing to deliver — event data has no 'text'" )
+		}
+
+		var channel = arguments.context.getConversationID()
+		var replyToId = arguments.context.getThreadID()
+		var chunks = variables.chunker.split( text, static.MAX_MESSAGE_LENGTH )
+		var lastResponse = {}
+
+		for ( var i = 1; i <= chunks.len(); i++ ) {
+			var body = { content: chunks[ i ] }
+			if ( i == 1 && len( replyToId ) ) {
+				body[ "message_reference" ] = { message_id: replyToId }
+			}
+			lastResponse = restCall( "POST", "/channels/#channel#/messages", body )
+			if ( lastResponse.status >= 300 ) {
+				return GatewayDeliveryResult.failure( "Discord POST messages failed (#lastResponse.status#): #lastResponse.body.message ?: 'unknown error'#" )
+			}
+		}
+
+		var result = new GatewayDeliveryResult( deliveryID: toString( lastResponse.body.id ?: arguments.event.getId() ) )
+
+		BoxAnnounce( "onGatewayMessageSent", {
+			gateway : this,
+			event   : arguments.event,
+			context : arguments.context,
+			result  : result,
+			threadId: arguments.context.getThreadID()
+		} )
+
+		return result
+	}
+
+	/**
+	 * Streams via a placeholder message posted on the first chunk, then a
+	 * PATCH edit on subsequent chunks - throttled to roughly once/second
+	 * (except the final, always-flushed chunk), same shape as Slack's
+	 * chat.update throttling.
+	 */
+	GatewayDeliveryResult function deliverChunk( required GatewayEvent event, required GatewayContext context ) {
+		var executionId = arguments.event.getExecutionID()
+		var channel = arguments.context.getConversationID()
+		var replyToId = arguments.context.getThreadID()
+		var isComplete = arguments.event.getType() == "response.completed"
+
+		if ( !variables.streamState.keyExists( executionId ) ) {
+			var startBody = { content: "…" }
+			if ( len( replyToId ) ) {
+				startBody[ "message_reference" ] = { message_id: replyToId }
+			}
+			var startResponse = restCall( "POST", "/channels/#channel#/messages", startBody )
+			if ( startResponse.status >= 300 ) {
+				return GatewayDeliveryResult.failure( "Discord POST messages (stream start) failed (#startResponse.status#): #startResponse.body.message ?: 'unknown error'#" )
+			}
+			variables.streamState[ executionId ] = { channel: channel, messageId: startResponse.body.id, buffer: "", lastFlushTick: getTickCount() }
+		}
+
+		var state = variables.streamState[ executionId ]
+		state.buffer &= toString( arguments.event.getData().delta ?: arguments.event.getData().text ?: "" )
+
+		var dueForFlush = ( getTickCount() - state.lastFlushTick ) >= 1000
+		if ( isComplete || dueForFlush ) {
+			var updateResponse = restCall( "PATCH", "/channels/#state.channel#/messages/#state.messageId#", { content: state.buffer } )
+			state.lastFlushTick = getTickCount()
+			if ( updateResponse.status >= 300 ) {
+				return GatewayDeliveryResult.failure( "Discord PATCH message failed (#updateResponse.status#): #updateResponse.body.message ?: 'unknown error'#" )
+			}
+		}
+
+		var deliveryId = state.messageId
+		if ( isComplete ) {
+			variables.streamState.delete( executionId )
+		}
+
+		return new GatewayDeliveryResult( deliveryID: toString( deliveryId ) )
+	}
+
+	// -------------------------------------------------------------------------
+	// Human-in-the-loop — message component buttons
+	// -------------------------------------------------------------------------
+
+	GatewayDeliveryResult function requestHumanInteraction( required HumanInteractionRequest humanRequest, required GatewayContext context ) {
+		var presentation = presentInteraction( arguments.humanRequest )
+		var body = {
+			content   : buildPresentationText( presentation ),
+			components: [
+				{
+					type      : 1, // Action Row
+					components: presentation.getButtons().map( function( btn ) {
+						return {
+							type     : 2, // Button
+							style    : mapButtonStyle( btn.style ),
+							label    : btn.label,
+							custom_id: btn.value
+						}
+					} )
+				}
+			]
+		}
+
+		var channel = arguments.context.getConversationID()
+		var replyToId = arguments.context.getThreadID()
+		if ( len( replyToId ) ) {
+			body[ "message_reference" ] = { message_id: replyToId }
+		}
+
+		var response = restCall( "POST", "/channels/#channel#/messages", body )
+		if ( response.status >= 300 ) {
+			return GatewayDeliveryResult.failure( "Discord POST messages (HITL prompt) failed (#response.status#): #response.body.message ?: 'unknown error'#" )
+		}
+
+		return new GatewayDeliveryResult( deliveryID: toString( response.body.id ?: arguments.humanRequest.getId() ) )
+	}
+
+	HumanInteractionDecision function parseHumanDecision( required GatewayEvent event ) {
+		var data = arguments.event.getData()
+		return new HumanInteractionDecision(
+			requestID: data.requestID ?: "",
+			decision : data.decision ?: "",
+			decidedBy: data.decidedBy ?: ""
+		)
+	}
+
+	/**
+	 * @style "primary" -> Discord style 1 (blurple), "danger" -> style 4
+	 *        (red), anything else -> style 2 (grey Secondary) - same
+	 *        primary/danger special-casing SlackGateway uses
+	 */
+	private numeric function mapButtonStyle( required string style ) {
+		if ( arguments.style == "primary" ) {
+			return 1
+		}
+		if ( arguments.style == "danger" ) {
+			return 4
+		}
+		return 2
+	}
+
+	private string function buildPresentationText( required any presentation ) {
+		return len( arguments.presentation.getTitle() )
+			? "**#arguments.presentation.getTitle()#**" & char( 10 ) & char( 10 ) & arguments.presentation.getBody()
+			: arguments.presentation.getBody()
+	}
+
+	// -------------------------------------------------------------------------
+	// Discord REST API call
+	// -------------------------------------------------------------------------
+
+	/**
+	 * @httpMethod "GET", "POST", or "PATCH"
+	 * @path A path relative to API_BASE, e.g. "/channels/123/messages"
+	 * @body The request body (ignored for GET)
+	 *
+	 * @return { status: numeric, body: struct } - body is the parsed JSON response
+	 */
+	private struct function restCall( required string httpMethod, required string path, struct body = {} ) {
+		if ( !isNull( variables.apiCaller ) ) {
+			return variables.apiCaller( arguments.httpMethod, arguments.path, arguments.body )
+		}
+
+		var url = static.API_BASE & arguments.path
+		bx:http
+			url     = url
+			method  = arguments.httpMethod
+			result  = "apiResult"
+			charset = "utf-8"
+		{
+			bx:httpParam type="header" name="Authorization" value="Bot #variables.botToken#";
+			if ( arguments.httpMethod != "GET" ) {
+				bx:httpParam type="header" name="content-type" value="application/json; charset=utf-8";
+				bx:httpParam type="body" value=jsonSerialize( arguments.body );
+			}
+		}
+
+		var statusCode = val( apiResult.statusCode ?: 0 )
+		var parsedBody = {}
+		try {
+			parsedBody = len( trim( apiResult.fileContent ?: "" ) ) ? jsonDeserialize( apiResult.fileContent ) : {}
+		} catch ( any e ) {
+			parsedBody = { message: "Unparseable response from Discord: #e.message#" }
+		}
+
+		return { status: statusCode, body: parsedBody }
+	}
+
+}

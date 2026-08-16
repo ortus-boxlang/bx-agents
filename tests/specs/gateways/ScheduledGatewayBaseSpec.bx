@@ -1,0 +1,99 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "ScheduledGatewayBase", function() {
+
+			beforeEach( function() {
+				variables.gateway = new tests.support.TestScheduledGateway();
+				variables.scheduler = new tests.support.FakeScheduler();
+				variables.gateway.setScheduler( variables.scheduler );
+			} );
+
+			it( "is not running before start(), and is running after", function() {
+				expect( gateway.isRunning() ).toBeFalse();
+				gateway.start();
+				expect( gateway.isRunning() ).toBeTrue();
+			} );
+
+			it( "calls onConnect() and registerScheduledTasks() exactly once on start()", function() {
+				gateway.start();
+
+				expect( gateway.getConnectCount() ).toBe( 1 );
+				expect( scheduler.getTaskNames().len() ).toBe( 1 );
+				expect( scheduler.getTaskNames()[ 1 ] ).toInclude( "test-scheduled" );
+			} );
+
+			it( "does not re-fire onConnect()/register tasks again on a redundant start() call", function() {
+				gateway.start();
+				gateway.start();
+
+				expect( gateway.getConnectCount() ).toBe( 1 );
+				expect( scheduler.getTaskNames().len() ).toBe( 1 );
+			} );
+
+			it( "removes every task it registered, and calls onDisconnect(), on stop()", function() {
+				gateway.start();
+				var registeredTaskNames = gateway.getRegisteredTaskNames();
+
+				gateway.stop();
+
+				expect( gateway.getDisconnectCount() ).toBe( 1 );
+				expect( scheduler.getRemovedTaskNames() ).toBe( registeredTaskNames );
+				expect( gateway.isRunning() ).toBeFalse();
+			} );
+
+			it( "does not re-fire onDisconnect() on a redundant stop() call", function() {
+				gateway.start();
+				gateway.stop();
+				gateway.stop();
+
+				expect( gateway.getDisconnectCount() ).toBe( 1 );
+			} );
+
+			it( "stores the onMessage() callback and dispatchInbound() invokes it once per message", function() {
+				var received = [];
+				gateway.onMessage( function( message ) {
+					received.append( message );
+				} );
+
+				gateway.dispatchInbound( "first" );
+				gateway.dispatchInbound( "second" );
+
+				expect( received ).toBe( [ "first", "second" ] );
+			} );
+
+			it( "dispatchInbound() is a safe no-op when no onMessage() callback was ever registered", function() {
+				expect( function() {
+					gateway.dispatchInbound( "unheard" );
+				} ).notToThrow();
+			} );
+
+			it( "stores the onError() callback and dispatchError() invokes it once per error", function() {
+				var received = [];
+				gateway.onError( function( error ) {
+					received.append( error );
+				} );
+
+				gateway.dispatchError( "connection dropped" );
+
+				expect( received ).toBe( [ "connection dropped" ] );
+			} );
+
+			it( "dispatchError() is a safe no-op when no onError() callback was ever registered", function() {
+				expect( function() {
+					gateway.dispatchError( "unheard" );
+				} ).notToThrow();
+			} );
+
+			it( "throws BxAgents.NoScheduler when started with no scheduler override and no live ColdBox application", function() {
+				var bareGateway = new tests.support.TestScheduledGateway();
+
+				expect( function() {
+					bareGateway.start();
+				} ).toThrow( "BxAgents.NoScheduler" );
+			} );
+
+		} );
+	}
+
+}

@@ -30,28 +30,136 @@
  * is a thin, identical passthrough for all 3 routes - no event/rc/prc
  * translation needed, just `event.noRender()` afterward since processHttp()
  * already wrote the real response.
+ *
+ * "Push-style" entries (`type: "telegram"`/"slack"/"discord"/"email"/
+ * "whatsapp-cloud") resolve to a bx-ai gateway
+ * class living inside THIS module (`bxModules.bxagents.models.gateways.*`),
+ * not a core bx-ai name - so their registration renders `aiGateway( "bxModules.bxagents...",
+ * options )` (a bare class-path string, one of aiGateway()'s own supported
+ * resolution paths) instead of `aiGateway( "telegram", options )`. Any project
+ * with at least one push-style entry also gets a generated
+ * `interceptors/GatewaySessionBootstrap.bx` (see renderSessionInterceptor())
+ * wiring a single `aiGatewaySession()` for the whole project - GatewaySession
+ * itself (bx-ai) is what actually dispatches an inbound message from any of
+ * these gateways to the agent.
  */
 class {
 
 	/**
+	 * Push-style gateway type -> the bx-ai IGateway class (living in THIS
+	 * module) aiGateway() should construct for it, via its bare-class-path
+	 * resolution fallback. Data-driven so adding a 7th push-style gateway is
+	 * one map entry, not new branching logic.
+	 */
+	static {
+		TYPE_CLASS_MAP = {
+			telegram      : "bxModules.bxagents.models.gateways.TelegramGateway",
+			slack         : "bxModules.bxagents.models.gateways.SlackGateway",
+			discord       : "bxModules.bxagents.models.gateways.DiscordGateway",
+			email         : "bxModules.bxagents.models.gateways.EmailGateway",
+			"whatsapp-cloud": "bxModules.bxagents.models.gateways.whatsapp.WhatsAppCloudGateway",
+			teams         : "bxModules.bxagents.models.gateways.TeamsGateway",
+			twilio        : "bxModules.bxagents.models.gateways.TwilioGateway",
+			github        : "bxModules.bxagents.models.gateways.GitHubGateway",
+			signal        : "bxModules.bxagents.models.gateways.SignalGateway"
+		}
+
+		// Per push-style type, the *EnvVar option keys renderSecretOptions()
+		// resolves live via getSystemSetting() instead of ever embedding a
+		// secret as a literal in generated source - same "secrets stay
+		// external" rule already enforced for the core `http` type. email's
+		// imapHost/fromAddress aren't cryptographic secrets, but the SAME
+		// env-var-driven convention is used for every one of its config
+		// values anyway - deployment-varying values never baked in.
+		SECRET_KEY_MAPS = {
+			telegram: { botToken: "botTokenEnvVar" },
+			slack   : { botToken: "botTokenEnvVar", appToken: "appTokenEnvVar" },
+			discord : { botToken: "botTokenEnvVar" },
+			email   : {
+				imapHost    : "imapHostEnvVar",
+				imapUsername: "imapUsernameEnvVar",
+				imapPassword: "imapPasswordEnvVar",
+				fromAddress : "fromAddressEnvVar"
+			},
+			"whatsapp-cloud": {
+				accessToken  : "accessTokenEnvVar",
+				phoneNumberId: "phoneNumberIdEnvVar",
+				appSecret    : "appSecretEnvVar",
+				verifyToken  : "verifyTokenEnvVar"
+			},
+			teams : { appId: "appIdEnvVar", appPassword: "appPasswordEnvVar" },
+			twilio: { accountSid: "accountSidEnvVar", authToken: "authTokenEnvVar", from: "fromEnvVar" },
+			github: { token: "tokenEnvVar", webhookSecret: "webhookSecretEnvVar", botName: "botNameEnvVar" },
+			signal: { account: "accountEnvVar" }
+		}
+	}
+
+	/**
 	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .gateways is used)
 	 * @appDir Absolute path to the generated ColdBox app dir, e.g. "<projectRoot>/.build/app" - the handler (if needed) is written to "<appDir>/handlers/Gateway.bx"
+	 * @resolvedConfig The root project's resolved config (AgentConfigResolver.resolve()) - only `gatewaySession` is used, to configure the generated GatewaySession's policy/maxQueueDepth
 	 *
-	 * @return { registrationStatements: [], hasHttpGateway, handlerPath (only if hasHttpGateway) }
+	 * @return { registrationStatements: [], hasHttpGateway, handlerPath (only if hasHttpGateway), hasPushGateway, hasEmailGateway, hasWhatsAppCloudGateway, whatsAppCloudHandlerPath (only if hasWhatsAppCloudGateway), hasTeamsGateway, teamsHandlerPath (only if hasTeamsGateway), sessionInterceptorName (only if hasPushGateway) }
 	 */
-	struct function generate( required struct discovery, required string appDir ) {
+	struct function generate( required struct discovery, required string appDir, struct resolvedConfig = {} ) {
 		var channelEntries = collectChannelEntries( arguments.discovery )
 		var hasHttpGateway = false
+		var hasEmailGateway = false
+		var hasWhatsAppCloudGateway = false
+		var hasTeamsGateway = false
+		var hasTwilioGateway = false
+		var hasGitHubGateway = false
+		var pushGatewayNames = []
 
 		for ( var entry in channelEntries ) {
-			if ( ( entry.config.type ?: "" ) == "http" ) {
+			var type = entry.config.type ?: ""
+			if ( type == "http" ) {
 				hasHttpGateway = true
+			}
+			if ( type == "email" ) {
+				hasEmailGateway = true
+			}
+			if ( type == "whatsapp-cloud" ) {
+				hasWhatsAppCloudGateway = true
+			}
+			if ( type == "teams" ) {
+				hasTeamsGateway = true
+			}
+			if ( type == "twilio" ) {
+				hasTwilioGateway = true
+			}
+			if ( type == "github" ) {
+				hasGitHubGateway = true
+			}
+			// The registered aiGatewayRegistry() key is ALWAYS the gateway
+			// class's own fixed getName() (e.g. TelegramGateway.init() sets
+			// variables.name = "telegram") - never the discovered gateways/*
+			// entry's own filename-derived name. Confirmed against real
+			// bx-ai source (GatewayRegistry.register() calls
+			// gateway.getName(), never anything caller-supplied) and
+			// empirically: registering a real gateway then calling
+			// aiGatewayRegistry().get() with its discovered entry name
+			// throws "No item found in registry". Every push-style type's
+			// registered name happens to equal its own `type` string, so
+			// that's what the generated interceptor must look up by -
+			// deduplicated, since two entries of the same type would
+			// collide on the same registry slot anyway (bx-ai's registry
+			// is name-keyed, not instance-keyed - see the v1 limitation
+			// noted in docs/known-limitations.md).
+			if ( static.TYPE_CLASS_MAP.keyExists( type ) && !pushGatewayNames.contains( type ) ) {
+				pushGatewayNames.append( type )
 			}
 		}
 
 		var result = {
-			registrationStatements : channelEntries.map( e => renderRegistration( e ) ),
-			hasHttpGateway         : hasHttpGateway
+			registrationStatements  : channelEntries.map( e => renderRegistration( e ) ),
+			hasHttpGateway          : hasHttpGateway,
+			hasPushGateway          : pushGatewayNames.len() > 0,
+			hasEmailGateway         : hasEmailGateway,
+			hasWhatsAppCloudGateway : hasWhatsAppCloudGateway,
+			hasTeamsGateway         : hasTeamsGateway,
+			hasTwilioGateway        : hasTwilioGateway,
+			hasGitHubGateway        : hasGitHubGateway
 		}
 
 		if ( hasHttpGateway ) {
@@ -60,6 +168,46 @@ class {
 			var handlerPath = handlerDir & "/Gateway.bx"
 			fileWrite( handlerPath, renderHandler() )
 			result[ "handlerPath" ] = handlerPath
+		}
+
+		if ( hasWhatsAppCloudGateway ) {
+			var waHandlerDir = normalizePath( arguments.appDir ) & "/handlers"
+			directoryCreate( path = waHandlerDir, createPath = true, ignoreExists = true )
+			var waHandlerPath = waHandlerDir & "/WhatsAppCloud.bx"
+			fileWrite( waHandlerPath, renderWhatsAppCloudHandler() )
+			result[ "whatsAppCloudHandlerPath" ] = waHandlerPath
+		}
+
+		if ( hasTeamsGateway ) {
+			var teamsHandlerDir = normalizePath( arguments.appDir ) & "/handlers"
+			directoryCreate( path = teamsHandlerDir, createPath = true, ignoreExists = true )
+			var teamsHandlerPath = teamsHandlerDir & "/Teams.bx"
+			fileWrite( teamsHandlerPath, renderTeamsHandler() )
+			result[ "teamsHandlerPath" ] = teamsHandlerPath
+		}
+
+		if ( hasTwilioGateway ) {
+			var twilioHandlerDir = normalizePath( arguments.appDir ) & "/handlers"
+			directoryCreate( path = twilioHandlerDir, createPath = true, ignoreExists = true )
+			var twilioHandlerPath = twilioHandlerDir & "/Twilio.bx"
+			fileWrite( twilioHandlerPath, renderTwilioHandler() )
+			result[ "twilioHandlerPath" ] = twilioHandlerPath
+		}
+
+		if ( hasGitHubGateway ) {
+			var githubHandlerDir = normalizePath( arguments.appDir ) & "/handlers"
+			directoryCreate( path = githubHandlerDir, createPath = true, ignoreExists = true )
+			var githubHandlerPath = githubHandlerDir & "/GitHub.bx"
+			fileWrite( githubHandlerPath, renderGitHubHandler() )
+			result[ "githubHandlerPath" ] = githubHandlerPath
+		}
+
+		if ( pushGatewayNames.len() ) {
+			var interceptorDir = normalizePath( arguments.appDir ) & "/interceptors"
+			directoryCreate( path = interceptorDir, createPath = true, ignoreExists = true )
+			var interceptorName = "GatewaySessionBootstrap"
+			fileWrite( interceptorDir & "/#interceptorName#.bx", renderSessionInterceptor( pushGatewayNames, arguments.resolvedConfig ) )
+			result[ "sessionInterceptorName" ] = interceptorName
 		}
 
 		return result
@@ -101,38 +249,137 @@ class {
 		var options = duplicate( arguments.entry.config )
 		options.delete( "type" )
 
-		var renderedOptions = type == "http" ? renderHttpOptions( options ) : renderLiteral( options )
-		return "aiGatewayRegistry().register( aiGateway( #renderLiteral( type )#, #renderedOptions# ) )"
+		var nameExpression = static.TYPE_CLASS_MAP.keyExists( type )
+			? renderLiteral( static.TYPE_CLASS_MAP[ type ] )
+			: renderLiteral( type )
+
+		var secretKeyMap = secretKeyMapFor( type )
+		var renderedOptions = secretKeyMap.count()
+			? renderSecretOptions( options, secretKeyMap )
+			: renderLiteral( options )
+
+		return "aiGatewayRegistry().register( aiGateway( #nameExpression#, #renderedOptions# ) )"
 	}
 
 	/**
-	 * Like `renderLiteral()` for a struct, but `secretEnvVar` never appears in
-	 * the output - it's replaced with a `"secret" : getSystemSetting( "..." )`
-	 * entry, resolved at server startup rather than baked into generated
-	 * source. `getSystemSetting()` defaults to `""` if the env var is unset -
-	 * bx-ai's own HttpGateway already treats an empty secret as "no signing
-	 * configured" and rejects requests accordingly (confirmed via its source),
-	 * so an operator who forgot to set the env var gets a clear per-request
-	 * rejection rather than a hard crash at startup.
+	 * @type A gateway entry's own `type` value
 	 *
-	 * @options An `http` gateway entry's own config, minus its `type` key
+	 * @return This type's own { literalKey: envVarOptionKey } map (see SECRET_KEY_MAPS), or {} if it has none (renders as an ordinary literal instead)
+	 */
+	private struct function secretKeyMapFor( required string type ) {
+		if ( arguments.type == "http" ) {
+			return { secret: "secretEnvVar" }
+		}
+		return static.SECRET_KEY_MAPS[ arguments.type ] ?: {}
+	}
+
+	/**
+	 * Like `renderLiteral()` for a struct, but every key named in
+	 * `secretKeyMap` never appears in the output as its literal value - it's
+	 * replaced with a live `getSystemSetting( "<envVarName>", "" )` call,
+	 * resolved at server startup rather than baked into generated source.
+	 * `getSystemSetting()` defaults to `""` if the env var is unset - bx-ai's
+	 * own HttpGateway already treats an empty secret as "no signing
+	 * configured" and rejects requests accordingly (confirmed via its
+	 * source), so an operator who forgot to set the env var gets a clear
+	 * per-request rejection rather than a hard crash at startup. The same
+	 * discipline is extended here to every push-style gateway's own token/
+	 * secret options (e.g. Telegram's `botToken` <- `botTokenEnvVar`).
+	 *
+	 * @options A gateway entry's own config, minus its `type` key
+	 * @secretKeyMap { outputKey: envVarOptionKeyInOptions } - e.g. { secret: "secretEnvVar" }, { botToken: "botTokenEnvVar" }
 	 *
 	 * @return A BoxLang struct-literal expression string, safe to embed in generated source
 	 */
-	private string function renderHttpOptions( required struct options ) {
-		var secretEnvVar = trim( arguments.options.secretEnvVar ?: "" )
+	private string function renderSecretOptions( required struct options, required struct secretKeyMap ) {
 		var rest = duplicate( arguments.options )
-		rest.delete( "secretEnvVar" )
-		rest[ "secret" ] = ""
+		var envVarNames = {}
+
+		for ( var outputKey in arguments.secretKeyMap ) {
+			var envVarOptionKey = arguments.secretKeyMap[ outputKey ]
+			envVarNames[ outputKey ] = trim( rest[ envVarOptionKey ] ?: "" )
+			rest.delete( envVarOptionKey )
+			rest[ outputKey ] = ""
+		}
 
 		var keys = rest.keyArray().sort( "textnocase" )
 		var parts = keys.map( function( k ) {
-			if ( k == "secret" ) {
-				return '"secret" : getSystemSetting( #renderLiteral( secretEnvVar )#, "" )'
+			if ( envVarNames.keyExists( k ) ) {
+				return '"#bxLiteral( k )#" : getSystemSetting( #renderLiteral( envVarNames[ k ] )#, "" )'
 			}
 			return '"#bxLiteral( k )#" : #renderLiteral( rest[ k ] )#'
 		} )
 		return "{ " & parts.toList( ", " ) & " }"
+	}
+
+	/**
+	 * Renders `interceptors/GatewaySessionBootstrap.bx` - a generated ColdBox
+	 * interceptor (not a raw `Application.bx`/`onApplicationStart()`
+	 * statement, unlike the plain registration calls above) that builds one
+	 * `aiGatewaySession()` for the whole project, bundling every push-style
+	 * gateway entry, and starts it.
+	 *
+	 * An interceptor is used specifically because its `afterConfigurationLoad`
+	 * point is guaranteed by ColdBox's own lifecycle to fire strictly AFTER
+	 * the framework (including SchedulerService, which registers
+	 * `appScheduler@coldbox`) has finished loading - each push-style
+	 * gateway's own `onStart()` needs that scheduler singleton already live,
+	 * an ordering `Application.bx`'s `onApplicationStart()` splice point
+	 * doesn't guarantee.
+	 *
+	 * v1 scope: exactly one GatewaySession, always bound to the project's
+	 * root agent (the fixed "GeneratedAgent" WireBox binding) - matches the
+	 * existing precedent that `exposes: "agent"` HTTP exposure is also always
+	 * root-agent-only (see RouterGenerator). A project with subagents cannot
+	 * yet route different gateways to different subagents.
+	 *
+	 * @pushGatewayNames Every distinct push-style gateway TYPE present (see TYPE_CLASS_MAP) - these ARE the real aiGatewayRegistry() keys (== each gateway class's own fixed getName()), not the discovered gateways/* entries' own filenames
+	 * @resolvedConfig The root project's resolved config - only `gatewaySession` ({ policy, maxQueueDepth }, both optional) is used
+	 *
+	 * @return The rendered interceptors/GatewaySessionBootstrap.bx source
+	 */
+	private string function renderSessionInterceptor( required array pushGatewayNames, struct resolvedConfig = {} ) {
+		var sessionConfig = arguments.resolvedConfig.gatewaySession ?: {}
+		var policy = trim( sessionConfig.policy ?: "queue" )
+		var maxQueueDepth = sessionConfig.maxQueueDepth ?: 50
+
+		var gatewayRefs = arguments.pushGatewayNames.map( function( name ) {
+			return 'aiGatewayRegistry().get( #renderLiteral( name )# )'
+		} )
+
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * Wires the project's root agent to every push-style gateway",
+			" * (Telegram, and friends) via a single bx-ai GatewaySession,",
+			" * started once ColdBox's own framework - including the",
+			" * scheduler these gateways depend on - has finished loading.",
+			" */",
+			"class {",
+			"",
+			"	function afterConfigurationLoad( event, interceptData ) {",
+			"		var wirebox        = getController().getWireBox()",
+			'		var agent          = wirebox.getInstance( "GeneratedAgent" )',
+			// "session" is a reserved BoxLang/ColdBox scope name (like "request"/
+			// "server"/"url"/"form"/"cgi"/"thread") - a local variable with that
+			// exact name can collide with the live scope rather than behaving as
+			// an ordinary local, so this is deliberately named "gatewaySession".
+			"		var gatewaySession = aiGatewaySession(",
+			"			agent        : agent,",
+			"			gateways     : [ #gatewayRefs.toList( ', ' )# ],",
+			"			policy       : #renderLiteral( policy )#,",
+			"			maxQueueDepth: #maxQueueDepth#",
+			"		)",
+			"		gatewaySession.start()",
+			"		application.bxaiGatewaySession = gatewaySession",
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
 	}
 
 	/**
@@ -154,6 +401,158 @@ class {
 			"	function process( event, rc, prc ) {",
 			"		bxModules.bxai.models.gateway.http.GatewayRequestProcessor::processHttp()",
 			"		return arguments.event.noRender()",
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * The `whatsapp-cloud` gateway is genuinely different from the http-type
+	 * webhook surface above: Meta's own `X-Hub-Signature-256` scheme (a
+	 * different HMAC header/format than bx-ai's own GatewaySecurity) means
+	 * this can't reuse GatewayRequestProcessor at all - the verification and
+	 * dispatch logic lives in WhatsAppCloudGateway itself (testable without
+	 * ColdBox), and this handler is a thin passthrough into it, reading the
+	 * raw request the same way ColdBox's own REST recipes document
+	 * (event.getHTTPContent()/getHTTPHeader(), rc's URL-scope-merged query
+	 * params for the GET verify handshake, event.renderData() for the
+	 * response) - see docs/conventions/gateways.md's WhatsApp Cloud section.
+	 *
+	 * The registry lookup key is fixed ("whatsapp-cloud", not a URL param) -
+	 * every push-style gateway registers under its own TYPE string (see the
+	 * aiGatewayRegistry() key fix elsewhere in this file), and v1 supports
+	 * exactly one instance per type project-wide anyway.
+	 */
+	private string function renderWhatsAppCloudHandler() {
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * WhatsApp Business Cloud API webhook surface - Meta's own",
+			" * verify handshake (GET) and signed inbound delivery (POST).",
+			" * Both actions are thin passthroughs into WhatsAppCloudGateway's",
+			" * own handleVerify()/handleWebhook() - see models/gateways/whatsapp/WhatsAppCloudGateway.bx.",
+			" */",
+			"class {",
+			"",
+			"	function verify( event, rc, prc ) {",
+			'		var gateway = aiGatewayRegistry().get( "whatsapp-cloud" )',
+			'		var result  = gateway.handleVerify( rc[ "hub.mode" ] ?: "", rc[ "hub.verify_token" ] ?: "", rc[ "hub.challenge" ] ?: "" )',
+			'		event.renderData( type: "TEXT", data: result.body, statusCode: result.status )',
+			"	}",
+			"",
+			"	function process( event, rc, prc ) {",
+			'		var gateway   = aiGatewayRegistry().get( "whatsapp-cloud" )',
+			'		var signature = event.getHTTPHeader( "X-Hub-Signature-256", "" )',
+			"		var result    = gateway.handleWebhook( event.getHTTPContent(), signature )",
+			'		event.renderData( type: "TEXT", data: "", statusCode: result.status )',
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Teams is webhook-driven like WhatsApp Cloud - one route, one action.
+	 * Unlike WhatsApp Cloud there's no GET verify handshake (Bot Framework
+	 * has no equivalent of Meta's hub.challenge), so this is a single POST
+	 * action. The Bot Connector's own JWT-bearer verification and the
+	 * Adaptive-Card-invoke-vs-message branching both live in TeamsGateway
+	 * itself (testable without ColdBox) - this handler is a thin passthrough
+	 * reading the raw Authorization header/body the same documented way the
+	 * WhatsApp Cloud handler does.
+	 */
+	private string function renderTeamsHandler() {
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * Microsoft Teams webhook surface (Bot Framework Activity protocol).",
+			" * A thin passthrough into TeamsGateway's own handleWebhook() - see",
+			" * models/gateways/TeamsGateway.bx.",
+			" */",
+			"class {",
+			"",
+			"	function process( event, rc, prc ) {",
+			'		var gateway   = aiGatewayRegistry().get( "teams" )',
+			'		var authHeader = event.getHTTPHeader( "Authorization", "" )',
+			"		var result    = gateway.handleWebhook( authHeader, event.getHTTPContent() )",
+			'		event.renderData( type: "JSON", data: result.body, statusCode: result.status )',
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Twilio is webhook-driven like WhatsApp Cloud/Teams. Its own
+	 * `X-Twilio-Signature` verification needs the exact URL Twilio signed
+	 * (`event.getUrl()`, ColdBox's own documented "current full request URL"
+	 * accessor) - TwilioGateway itself resolves the `publicUrl` override for
+	 * proxy/tunnel deployments where that doesn't match what Twilio actually
+	 * signed. The response body is a raw pre-built TwiML XML string (an
+	 * empty `<Response></Response>` ack - the real reply goes out later via
+	 * deliver()'s own async REST call), rendered as TEXT with an explicit
+	 * text/xml content type rather than type="XML" (which would try to
+	 * re-marshal it) - confirmed against ColdBox's own "Rendering Data" docs.
+	 */
+	private string function renderTwilioHandler() {
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * Twilio SMS webhook surface. A thin passthrough into",
+			" * TwilioGateway's own handleWebhook() - see models/gateways/TwilioGateway.bx.",
+			" */",
+			"class {",
+			"",
+			"	function process( event, rc, prc ) {",
+			'		var gateway   = aiGatewayRegistry().get( "twilio" )',
+			'		var signature = event.getHTTPHeader( "X-Twilio-Signature", "" )',
+			"		var result    = gateway.handleWebhook( event.getUrl(), signature, event.getHTTPContent() )",
+			'		event.renderData( type: "TEXT", data: result.body, contentType: result.contentType, statusCode: result.status )',
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * GitHub is webhook-driven like WhatsApp Cloud/Teams/Twilio. Signature
+	 * verification, delivery dedup, and the @mention gate all live in
+	 * GitHubGateway itself - this handler is a thin passthrough reading the
+	 * three GitHub-specific headers plus the raw body.
+	 */
+	private string function renderGitHubHandler() {
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * GitHub webhook surface (issue/PR comments). A thin passthrough",
+			" * into GitHubGateway's own handleWebhook() - see models/gateways/GitHubGateway.bx.",
+			" */",
+			"class {",
+			"",
+			"	function process( event, rc, prc ) {",
+			'		var gateway    = aiGatewayRegistry().get( "github" )',
+			'		var signature  = event.getHTTPHeader( "X-Hub-Signature-256", "" )',
+			'		var eventType  = event.getHTTPHeader( "X-GitHub-Event", "" )',
+			'		var deliveryId = event.getHTTPHeader( "X-GitHub-Delivery", "" )',
+			"		var result     = gateway.handleWebhook( event.getHTTPContent(), signature, eventType, deliveryId )",
+			'		event.renderData( type: "TEXT", data: "", statusCode: result.status )',
 			"	}",
 			"",
 			"}",

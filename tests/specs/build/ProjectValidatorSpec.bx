@@ -104,6 +104,68 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.errors.filter( e => e.findNoCase( "requires a 'secretEnvVar'" ) ).len() ).toBeGT( 0 );
 			} );
 
+			it( "rejects a telegram gateway missing its required botTokenEnvVar", function() {
+				var result = validateFixture( "telegram-gateway-missing-token" );
+				expect( result.errors.filter( e => e.findNoCase( "requires a 'botTokenEnvVar'" ) ).len() ).toBeGT( 0 );
+			} );
+
+			it( "rejects a slack gateway missing its required appTokenEnvVar (botTokenEnvVar present)", function() {
+				var result = validateFixture( "slack-gateway-missing-token" );
+				expect( result.errors.filter( e => e.findNoCase( "requires a 'appTokenEnvVar'" ) ).len() ).toBeGT( 0 );
+				expect( result.errors.filter( e => e.findNoCase( "requires a 'botTokenEnvVar'" ) ).len() ).toBe( 0 );
+			} );
+
+			it( "rejects a discord gateway missing its required botTokenEnvVar", function() {
+				var result = validateFixture( "discord-gateway-missing-token" );
+				expect( result.errors.filter( e => e.findNoCase( "requires a 'botTokenEnvVar'" ) ).len() ).toBeGT( 0 );
+			} );
+
+			it( "rejects an email gateway missing its required imapPasswordEnvVar/fromAddressEnvVar (imapHostEnvVar/imapUsernameEnvVar present)", function() {
+				var result = validateFixture( "email-gateway-missing-token" );
+				expect( result.errors.filter( e => e.findNoCase( "requires a 'imapPasswordEnvVar'" ) ).len() ).toBeGT( 0 );
+				expect( result.errors.filter( e => e.findNoCase( "requires a 'fromAddressEnvVar'" ) ).len() ).toBeGT( 0 );
+				expect( result.errors.filter( e => e.findNoCase( "requires a 'imapHostEnvVar'" ) ).len() ).toBe( 0 );
+				expect( result.errors.filter( e => e.findNoCase( "requires a 'imapUsernameEnvVar'" ) ).len() ).toBe( 0 );
+			} );
+
+			it( "rejects a whatsapp-cloud gateway missing its required appSecretEnvVar/verifyTokenEnvVar (accessTokenEnvVar/phoneNumberIdEnvVar present)", function() {
+				var result = validateFixture( "whatsapp-cloud-gateway-missing-token" );
+				expect( result.errors.filter( e => e.findNoCase( "requires a 'appSecretEnvVar'" ) ).len() ).toBeGT( 0 );
+				expect( result.errors.filter( e => e.findNoCase( "requires a 'verifyTokenEnvVar'" ) ).len() ).toBeGT( 0 );
+				expect( result.errors.filter( e => e.findNoCase( "requires a 'accessTokenEnvVar'" ) ).len() ).toBe( 0 );
+				expect( result.errors.filter( e => e.findNoCase( "requires a 'phoneNumberIdEnvVar'" ) ).len() ).toBe( 0 );
+			} );
+
+			it( "rejects a teams gateway missing its required appPasswordEnvVar (appIdEnvVar present)", function() {
+				var result = validateFixture( "teams-gateway-missing-token" );
+				expect( result.errors.filter( e => e.findNoCase( "requires a 'appPasswordEnvVar'" ) ).len() ).toBeGT( 0 );
+				expect( result.errors.filter( e => e.findNoCase( "requires a 'appIdEnvVar'" ) ).len() ).toBe( 0 );
+			} );
+
+			it( "rejects a twilio gateway missing its required fromEnvVar (accountSidEnvVar/authTokenEnvVar present)", function() {
+				var result = validateFixture( "twilio-gateway-missing-token" );
+				expect( result.errors.filter( e => e.findNoCase( "requires a 'fromEnvVar'" ) ).len() ).toBeGT( 0 );
+				expect( result.errors.filter( e => e.findNoCase( "requires a 'accountSidEnvVar'" ) ).len() ).toBe( 0 );
+				expect( result.errors.filter( e => e.findNoCase( "requires a 'authTokenEnvVar'" ) ).len() ).toBe( 0 );
+			} );
+
+			it( "rejects a github gateway missing its required botNameEnvVar (tokenEnvVar/webhookSecretEnvVar present)", function() {
+				var result = validateFixture( "github-gateway-missing-token" );
+				expect( result.errors.filter( e => e.findNoCase( "requires a 'botNameEnvVar'" ) ).len() ).toBeGT( 0 );
+				expect( result.errors.filter( e => e.findNoCase( "requires a 'tokenEnvVar'" ) ).len() ).toBe( 0 );
+				expect( result.errors.filter( e => e.findNoCase( "requires a 'webhookSecretEnvVar'" ) ).len() ).toBe( 0 );
+			} );
+
+			it( "rejects a signal gateway missing its required accountEnvVar", function() {
+				var result = validateFixture( "signal-gateway-missing-token" );
+				expect( result.errors.filter( e => e.findNoCase( "requires a 'accountEnvVar'" ) ).len() ).toBeGT( 0 );
+			} );
+
+			it( "rejects an invalid gatewaySession.policy value", function() {
+				var result = validateFixture( "bad-gateway-session-policy" );
+				expect( result.errors.filter( e => e.findNoCase( "gatewaySession.policy" ) ).len() ).toBeGT( 0 );
+			} );
+
 			it( "rejects an mcp-exposure gateway entry missing its required target", function() {
 				var result = validateFixture( "mcp-exposure-missing-target" );
 				expect( result.errors.filter( e => e.findNoCase( "missing a 'target'" ) ).len() ).toBeGT( 0 );

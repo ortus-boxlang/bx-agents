@@ -1,0 +1,674 @@
+import bxModules.bxai.models.gateway.IGateway;
+import bxModules.bxai.models.gateway.contracts.GatewayContext;
+import bxModules.bxai.models.gateway.contracts.GatewayEvent;
+import bxModules.bxai.models.gateway.contracts.GatewayMessage;
+import bxModules.bxai.models.gateway.contracts.GatewayDeliveryResult;
+import bxModules.bxai.models.gateway.contracts.HumanInteractionRequest;
+import bxModules.bxai.models.gateway.contracts.HumanInteractionDecision;
+
+/**
+ * WhatsApp Business Cloud API gateway - a genuinely different shape from
+ * every other push-style gateway in this project: it's PULL-DRIVEN over a
+ * public webhook (Meta calls us), not push-style-via-our-own-connection, so
+ * this extends bx-ai's `BaseGateway` directly rather than
+ * `ScheduledGatewayBase` - there's no scheduler task or persistent
+ * connection to manage at all, only a generated `handlers/WhatsAppCloud.bx`
+ * (`GET`/`POST /webhooks/whatsapp-cloud/:gatewayName`) calling straight into
+ * `handleVerify()`/`handleWebhook()` below.
+ *
+ * Ported directly from Hermes Agent's own real, production WhatsApp Cloud
+ * adapter (`gateway/platforms/whatsapp_cloud.py`, NousResearch/hermes-agent,
+ * MIT licensed) - the verify handshake, signature scheme, webhook payload
+ * walk, outbound message/interactive-button shapes, and length limits below
+ * all mirror that implementation, read directly (not from memory) this
+ * session. This does NOT reuse bx-ai's own `HttpGateway`/`GatewaySecurity` -
+ * Meta's `X-Hub-Signature-256` scheme (HMAC-SHA256 over the exact raw body,
+ * `sha256=<hex>` header format) is a different scheme with different header
+ * names than bx-ai's own HMAC gateway security.
+ *
+ * Config, via aiGateway( "bxModules.bxagents.models.gateways.whatsapp.WhatsAppCloudGateway", options ):
+ *   accessToken    Graph API access token, sent as `Authorization: Bearer <token>`
+ *   phoneNumberId  The WhatsApp Business phone number ID outbound sends go through
+ *   appSecret      HMAC key for verifying `X-Hub-Signature-256` on inbound webhooks
+ *   verifyToken    The shared secret Meta's GET verify handshake must present back to us
+ *   apiVersion     Optional Graph API version override. Defaults to "v21.0"
+ */
+class extends="bxModules.bxai.models.gateway.BaseGateway" {
+
+	property name="accessToken" type="string" default="";
+	property name="phoneNumberId" type="string" default="";
+	property name="appSecret" type="string" default="";
+	property name="verifyToken" type="string" default="";
+	property name="apiVersion" type="string" default="v21.0";
+	property name="chunker";
+
+	/**
+	 * The single callback registered via onMessage() - IGateway's own
+	 * default is a genuine no-op, so this class implements its own storage
+	 * the same shape ScheduledGatewayBase does for the poll/socket gateways
+	 * (duplicated rather than inherited, since this class's BaseGateway
+	 * parent is bx-ai's, not ScheduledGatewayBase - there's no scheduler
+	 * relationship here to justify sharing that base).
+	 */
+	property name="messageCallback";
+	property name="errorCallback";
+
+	/**
+	 * Bounded FIFO cache of already-seen wamids, so a webhook retry (Meta
+	 * retries on non-200 for up to 7 days) doesn't dispatch the same
+	 * message twice. Mirrors Hermes's own `_dedup_wamid`.
+	 */
+	property name="seenWamids" type="array" default=[];
+
+	/**
+	 * Test-only seam: overrides every Graph API call this gateway makes.
+	 * Defaults to real HTTP; a test injects a closure returning canned
+	 * responses instead. Signature: function( path, body ) -> { status: numeric, body: struct }
+	 */
+	property name="apiCaller";
+
+	static {
+		GRAPH_API_BASE          = "https://graph.facebook.com"
+		MAX_MESSAGE_LENGTH      = 4096
+		BUTTON_LABEL_LIMIT      = 20
+		INTERACTIVE_BODY_LIMIT  = 1024
+		WAMID_DEDUP_CACHE_SIZE  = 500
+		// Meta's own documented max webhook payload size.
+		WEBHOOK_MAX_BODY_BYTES  = 3 * 1024 * 1024
+	}
+
+	function init() {
+		variables.name = "whatsapp-cloud"
+		variables.description = "WhatsApp Business Cloud API gateway - webhook inbound, Graph API outbound"
+		variables.chunker = new "models.gateways.support.MessageChunker@bxagents"()
+		return this
+	}
+
+	IGateway function configure( required any options ) {
+		super.configure( arguments.options )
+		variables.accessToken = trim( variables.options.accessToken ?: "" )
+		variables.phoneNumberId = trim( variables.options.phoneNumberId ?: "" )
+		variables.appSecret = variables.options.appSecret ?: ""
+		variables.verifyToken = variables.options.verifyToken ?: ""
+		if ( len( trim( variables.options.apiVersion ?: "" ) ) ) {
+			variables.apiVersion = trim( variables.options.apiVersion )
+		}
+		return this
+	}
+
+	array function getDeclaredCapabilities() {
+		// No "streaming" - the Graph API has no live-edit send, same
+		// reasoning as Telegram.
+		return [ "inboundMessages", "outboundMessages", "threads", "interactiveActions", "humanApproval" ]
+	}
+
+	/**
+	 * Test-only seam — see apiCaller's own docblock.
+	 */
+	void function setApiCaller( required any caller ) {
+		variables.apiCaller = arguments.caller
+	}
+
+	void function onStart() {
+		if ( !len( variables.accessToken ) || !len( variables.phoneNumberId ) ) {
+			throw(
+				type   : "WhatsAppCloudGateway.MissingConfig",
+				message: "WhatsAppCloudGateway requires 'accessToken' and 'phoneNumberId' options (resolved from accessTokenEnvVar/phoneNumberIdEnvVar at startup)."
+			)
+		}
+		logEvent( "Ready (phone_number_id #variables.phoneNumberId#) - inbound is webhook-driven, no connection to open" )
+	}
+
+	void function onStop() {
+		logEvent( "Stopped" )
+	}
+
+	// -------------------------------------------------------------------------
+	// IGateway.onMessage()/onError() — own storage, see messageCallback's docblock
+	// -------------------------------------------------------------------------
+
+	public void function onMessage( required function callback ) {
+		variables.messageCallback = arguments.callback
+	}
+
+	public void function dispatchInbound( required any message ) {
+		if ( isNull( variables.messageCallback ) ) {
+			return
+		}
+		variables.messageCallback( arguments.message )
+	}
+
+	public void function onError( required function callback ) {
+		variables.errorCallback = arguments.callback
+	}
+
+	public void function dispatchError( required any error ) {
+		if ( isNull( variables.errorCallback ) ) {
+			return
+		}
+		variables.errorCallback( arguments.error )
+	}
+
+	/**
+	 * Every push-style gateway writes to its own "gateway-<type>" log file -
+	 * ScheduledGatewayBase provides this for the scheduler-based gateways;
+	 * this class provides its own copy for the same reason as
+	 * onMessage()/dispatchInbound() above.
+	 */
+	private void function logEvent( required string text, string type = "information" ) {
+		writeLog( text: arguments.text, type: arguments.type, file: "gateway-#variables.name#" )
+	}
+
+	// -------------------------------------------------------------------------
+	// Webhook verify (GET) — Meta's subscription handshake
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Meta calls GET ?hub.mode=subscribe&hub.verify_token=...&hub.challenge=...
+	 * We must echo the challenge as plain text iff hub.mode=="subscribe" AND
+	 * hub.verify_token matches, constant-time compared. Ported directly from
+	 * Hermes's own `_handle_verify()`.
+	 *
+	 * @return { status: numeric, body: string, contentType: string }
+	 */
+	struct function handleVerify( required string mode, required string token, required string challenge ) {
+		if ( !len( variables.verifyToken ) ) {
+			return { status: 503, body: "verify_token not configured", contentType: "text/plain" }
+		}
+		if ( arguments.mode != "subscribe" ) {
+			return { status: 400, body: "bad mode", contentType: "text/plain" }
+		}
+		if ( !constantTimeEquals( arguments.token, variables.verifyToken ) ) {
+			return { status: 403, body: "verify_token mismatch", contentType: "text/plain" }
+		}
+		if ( !len( arguments.challenge ) ) {
+			return { status: 400, body: "missing challenge", contentType: "text/plain" }
+		}
+		return { status: 200, body: arguments.challenge, contentType: "text/plain" }
+	}
+
+	// -------------------------------------------------------------------------
+	// Webhook inbound (POST)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Lifecycle (ported directly from Hermes's own `_handle_webhook()`):
+	 *   1. Verify X-Hub-Signature-256 over the EXACT raw body (never
+	 *      re-serialized JSON, which would change the bytes and break the
+	 *      signature).
+	 *   2. Parse JSON only after the signature passes.
+	 *   3. Walk entry[].changes[].value.{messages, contacts}.
+	 *   4. Per-message: dedup by wamid, normalize, dispatch.
+	 *   5. Always 200 once authenticated - Meta retries on non-200 for up
+	 *      to 7 days, and a transient downstream bug shouldn't multiply
+	 *      into repeated redelivery of the whole batch.
+	 *
+	 * @rawBody The exact raw POST body bytes/string, unparsed
+	 * @signatureHeader The X-Hub-Signature-256 header value
+	 *
+	 * @return { status: numeric }
+	 */
+	struct function handleWebhook( required string rawBody, required string signatureHeader ) {
+		if ( !len( variables.appSecret ) ) {
+			logEvent( "webhook POST refused: appSecret unset", "error" )
+			return { status: 503 }
+		}
+
+		if ( !verifySignature( arguments.rawBody, arguments.signatureHeader ) ) {
+			logEvent( "rejected webhook: invalid X-Hub-Signature-256", "warning" )
+			return { status: 401 }
+		}
+
+		var payload = {}
+		try {
+			payload = jsonDeserialize( arguments.rawBody )
+		} catch ( any e ) {
+			logEvent( "webhook body is not valid JSON: #e.message#", "warning" )
+			return { status: 400 }
+		}
+
+		if ( !isStruct( payload ) ) {
+			return { status: 400 }
+		}
+
+		dispatchPayload( payload )
+		return { status: 200 }
+	}
+
+	/**
+	 * @rawBody The exact raw body the signature was computed over
+	 * @header The X-Hub-Signature-256 header value, "sha256=<hex>"
+	 */
+	private boolean function verifySignature( required string rawBody, required string header ) {
+		if ( !len( variables.appSecret ) || !len( arguments.header ) ) {
+			return false
+		}
+		if ( !arguments.header.startsWith( "sha256=" ) ) {
+			return false
+		}
+		var expectedHex = trim( mid( arguments.header, 8, len( arguments.header ) - 7 ) )
+		if ( !len( expectedHex ) ) {
+			return false
+		}
+
+		var keySpec = createObject( "java", "javax.crypto.spec.SecretKeySpec" ).init(
+			charsetDecode( variables.appSecret, "UTF-8" ), "HmacSHA256"
+		)
+		var mac = createObject( "java", "javax.crypto.Mac" ).getInstance( "HmacSHA256" )
+		mac.init( keySpec )
+		var digest = mac.doFinal( charsetDecode( arguments.rawBody, "UTF-8" ) )
+		var computedHex = binaryEncode( digest, "hex" ).lCase()
+
+		return constantTimeEquals( computedHex, expectedHex.lCase() )
+	}
+
+	/**
+	 * Constant-time string comparison via java.security.MessageDigest.isEqual()
+	 * (JDK-documented constant-time-safe since 6u17) - avoids timing side
+	 * channels on token/signature comparisons, same discipline Hermes's own
+	 * Python `hmac.compare_digest()` calls document.
+	 */
+	private boolean function constantTimeEquals( required string a, required string b ) {
+		return createObject( "java", "java.security.MessageDigest" ).isEqual(
+			charsetDecode( arguments.a, "UTF-8" ), charsetDecode( arguments.b, "UTF-8" )
+		)
+	}
+
+	/**
+	 * Payload shape: { object, entry: [{ changes: [{ field, value: {
+	 * messages, contacts, statuses, metadata } }] }] }. `statuses` events
+	 * (sent/delivered/read/failed) are logged at debug-equivalent only -
+	 * bx-ai's GatewaySession doesn't consume delivery receipts.
+	 *
+	 * @payload A verified, parsed Meta webhook payload
+	 */
+	private void function dispatchPayload( required struct payload ) {
+		if ( ( arguments.payload.object ?: "" ) != "whatsapp_business_account" ) {
+			return
+		}
+
+		for ( var entry in ( arguments.payload.entry ?: [] ) ) {
+			if ( !isStruct( entry ) ) {
+				continue
+			}
+			for ( var change in ( entry.changes ?: [] ) ) {
+				if ( !isStruct( change ) || ( change.field ?: "" ) != "messages" ) {
+					continue
+				}
+				var value = change.value ?: {}
+				var contactsByWaId = buildContactIndex( value.contacts ?: [] )
+
+				for ( var rawMessage in ( value.messages ?: [] ) ) {
+					if ( !isStruct( rawMessage ) ) {
+						continue
+					}
+					var wamid = toString( rawMessage.id ?: "" )
+					if ( !markSeen( wamid ) ) {
+						continue
+					}
+					try {
+						handleInboundMessage( rawMessage, contactsByWaId )
+					} catch ( any e ) {
+						// A build error must not bubble out - the wamid is
+						// already dedup-marked, so a thrown error here would
+						// make Meta retry the whole batch and every message
+						// in it (this one included) would be silently
+						// dropped as a duplicate on redelivery.
+						logEvent( "failed to process wamid #wamid#: #e.message#", "error" )
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * @contacts A webhook value's own "contacts" array
+	 *
+	 * @return wa_id -> profile name
+	 */
+	private struct function buildContactIndex( required array contacts ) {
+		var index = {}
+		for ( var contact in arguments.contacts ) {
+			if ( !isStruct( contact ) ) {
+				continue
+			}
+			var waId = trim( contact.wa_id ?: "" )
+			var profile = contact.profile ?: {}
+			if ( len( waId ) ) {
+				index[ waId ] = trim( profile.name ?: "" )
+			}
+		}
+		return index
+	}
+
+	/**
+	 * @wamid A message's own unique WhatsApp message id
+	 *
+	 * @return true the first time this wamid is seen; false if already processed
+	 */
+	private boolean function markSeen( required string wamid ) {
+		if ( !len( arguments.wamid ) ) {
+			// No wamid to dedup on - let it through defensively.
+			return true
+		}
+		if ( variables.seenWamids.contains( arguments.wamid ) ) {
+			return false
+		}
+		variables.seenWamids.append( arguments.wamid )
+		if ( variables.seenWamids.len() > static.WAMID_DEDUP_CACHE_SIZE ) {
+			variables.seenWamids.deleteAt( 1 )
+		}
+		return true
+	}
+
+	/**
+	 * @rawMessage A single Cloud API message object
+	 * @contactsByWaId This webhook batch's own wa_id -> profile-name index
+	 */
+	private void function handleInboundMessage( required struct rawMessage, required struct contactsByWaId ) {
+		var msgType = lcase( toString( arguments.rawMessage.type ?: "text" ) )
+
+		// Interactive replies (button taps, list selections) route to the
+		// HITL decision path instead of a fresh conversation turn.
+		if ( msgType == "interactive" || msgType == "button" ) {
+			handleInteractiveReply( arguments.rawMessage, msgType )
+			return
+		}
+
+		dispatchInbound( toGatewayMessage( arguments.rawMessage, arguments.contactsByWaId, msgType ) )
+	}
+
+	/**
+	 * @rawMessage A raw Cloud API message object (type "text", or another
+	 *             non-interactive type - media isn't downloaded in v1, only
+	 *             its caption if present)
+	 * @contactsByWaId This webhook batch's own wa_id -> profile-name index
+	 * @msgType The message's own lowercased "type" field
+	 */
+	private GatewayMessage function toGatewayMessage( required struct rawMessage, required struct contactsByWaId, required string msgType ) {
+		var body = extractBody( arguments.rawMessage, arguments.msgType )
+		var senderId = trim( arguments.rawMessage.from ?: "" )
+		// Cloud API DMs have no separate "chat" entity - chat_id IS the
+		// sender's wa_id. Group messages carry a "chat" field identifying
+		// the group JID; group support is deferred (matches Hermes's own
+		// v1 scope note - see docs/conventions/gateways.md).
+		var context = new GatewayContext(
+			gateway       : variables.name,
+			conversationID: senderId,
+			userID        : senderId,
+			// context.id is set when the user replied to a prior message -
+			// Meta's own quote-reply mechanism, the natural threading key.
+			threadID      : trim( ( arguments.rawMessage.context ?: {} ).id ?: "" ),
+			raw           : arguments.rawMessage
+		)
+		var message = new GatewayMessage(
+			text   : body,
+			context: context,
+			raw    : arguments.rawMessage
+		)
+
+		BoxAnnounce( "onGatewayMessageReceived", {
+			gateway       : this,
+			message       : message,
+			threadId      : message.getContext().getThreadID(),
+			userId        : message.getContext().getUserID(),
+			conversationId: message.getContext().getConversationID()
+		} )
+
+		return message
+	}
+
+	/**
+	 * @rawMessage A raw Cloud API message object
+	 * @msgType Its own lowercased "type" field
+	 */
+	private string function extractBody( required struct rawMessage, required string msgType ) {
+		if ( arguments.msgType == "text" ) {
+			return toString( ( arguments.rawMessage.text ?: {} ).body ?: "" )
+		}
+		if ( arguments.msgType == "button" ) {
+			return toString( ( arguments.rawMessage.button ?: {} ).text ?: "" )
+		}
+		// image/video/audio/voice/document/sticker: captions live on the
+		// per-type sub-object, when present. Media itself isn't downloaded
+		// in v1 - the text body is whatever caption (if any) accompanies it.
+		var inner = arguments.rawMessage[ arguments.msgType ] ?: {}
+		return toString( inner.caption ?: "" )
+	}
+
+	/**
+	 * @rawMessage An "interactive" (button_reply/list_reply) or "button" message
+	 * @msgType Its own lowercased "type" field
+	 */
+	private void function handleInteractiveReply( required struct rawMessage, required string msgType ) {
+		var buttonId = ""
+		if ( arguments.msgType == "button" ) {
+			buttonId = toString( ( arguments.rawMessage.button ?: {} ).payload ?: "" )
+		} else {
+			var inter = arguments.rawMessage.interactive ?: {}
+			var inner = inter.button_reply ?: ( inter.list_reply ?: {} )
+			buttonId = toString( inner.id ?: "" )
+		}
+		if ( !len( buttonId ) ) {
+			return
+		}
+
+		var senderId = trim( arguments.rawMessage.from ?: "" )
+		BoxAnnounce( "onGatewayMessageReceived", {
+			gateway       : this,
+			message       : null,
+			threadId      : senderId,
+			userId        : senderId,
+			conversationId: senderId,
+			decision      : buttonId
+		} )
+	}
+
+	// -------------------------------------------------------------------------
+	// Outbound — Graph API
+	// -------------------------------------------------------------------------
+
+	GatewayDeliveryResult function deliver( required GatewayEvent event, required GatewayContext context ) {
+		var text = toString( arguments.event.getData().text ?: "" )
+		if ( !len( text ) ) {
+			return GatewayDeliveryResult.failure( "Nothing to deliver — event data has no 'text'" )
+		}
+
+		var to = arguments.context.getConversationID()
+		var replyTo = arguments.context.getThreadID()
+		var chunks = variables.chunker.split( text, static.MAX_MESSAGE_LENGTH )
+		var lastResponse = {}
+
+		for ( var i = 1; i <= chunks.len(); i++ ) {
+			var body = {
+				messaging_product: "whatsapp",
+				recipient_type   : "individual",
+				to               : to,
+				type             : "text",
+				text             : { body: chunks[ i ], preview_url: true }
+			}
+			if ( i == 1 && len( replyTo ) ) {
+				body[ "context" ] = { message_id: replyTo }
+			}
+			lastResponse = callApi( "messages", body )
+			if ( lastResponse.status >= 300 ) {
+				return GatewayDeliveryResult.failure( "Graph API send failed (#lastResponse.status#): #graphErrorMessage( lastResponse.body )#" )
+			}
+		}
+
+		var messageId = extractSentMessageId( lastResponse.body )
+		var result = new GatewayDeliveryResult( deliveryID: len( messageId ) ? messageId : arguments.event.getId() )
+
+		BoxAnnounce( "onGatewayMessageSent", {
+			gateway : this,
+			event   : arguments.event,
+			context : arguments.context,
+			result  : result,
+			threadId: replyTo
+		} )
+
+		return result
+	}
+
+	/**
+	 * @responseBody A parsed Graph API response body
+	 */
+	private string function extractSentMessageId( required any responseBody ) {
+		if ( !isStruct( arguments.responseBody ) ) {
+			return ""
+		}
+		var ids = arguments.responseBody.messages ?: []
+		return ( isArray( ids ) && ids.len() ) ? toString( ids[ 1 ].id ?: "" ) : ""
+	}
+
+	/**
+	 * @responseBody A parsed Graph API error response body
+	 */
+	private string function graphErrorMessage( required any responseBody ) {
+		if ( isStruct( arguments.responseBody ) && structKeyExists( arguments.responseBody, "error" ) ) {
+			var err = arguments.responseBody.error
+			return toString( err.message ?: "unknown Graph API error" )
+		}
+		return "unknown error"
+	}
+
+	// -------------------------------------------------------------------------
+	// Human-in-the-loop — native interactive buttons (≤3) / list (4+)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Ported directly from Hermes's own clarify/approval prompt rendering:
+	 * 1-3 allowed decisions -> interactive.type=button (inline pill
+	 * buttons, ≤20-char labels); 4+ -> interactive.type=list (tap-to-open
+	 * sheet, ≤10 rows). WhatsApp's own documented limits, not a BX Agents
+	 * invention.
+	 */
+	GatewayDeliveryResult function requestHumanInteraction( required HumanInteractionRequest humanRequest, required GatewayContext context ) {
+		var presentation = presentInteraction( arguments.humanRequest )
+		var allowedDecisions = arguments.humanRequest.getAllowedDecisions()
+		var bodyText = truncate( buildPresentationText( presentation ), static.INTERACTIVE_BODY_LIMIT )
+
+		var interactive = allowedDecisions.len() <= 3
+			? buildButtonInteractive( bodyText, allowedDecisions )
+			: buildListInteractive( bodyText, allowedDecisions )
+
+		var to = arguments.context.getConversationID()
+		var replyTo = arguments.context.getThreadID()
+		var body = {
+			messaging_product: "whatsapp",
+			recipient_type   : "individual",
+			to               : to,
+			type             : "interactive",
+			interactive      : interactive
+		}
+		if ( len( replyTo ) ) {
+			body[ "context" ] = { message_id: replyTo }
+		}
+
+		var response = callApi( "messages", body )
+		if ( response.status >= 300 ) {
+			return GatewayDeliveryResult.failure( "Graph API interactive send failed (#response.status#): #graphErrorMessage( response.body )#" )
+		}
+
+		var messageId = extractSentMessageId( response.body )
+		return new GatewayDeliveryResult( deliveryID: len( messageId ) ? messageId : arguments.humanRequest.getId() )
+	}
+
+	/**
+	 * @bodyText Already-truncated prompt text
+	 * @allowedDecisions 1-3 decision keywords
+	 */
+	private struct function buildButtonInteractive( required string bodyText, required array allowedDecisions ) {
+		var buttons = []
+		for ( var decision in arguments.allowedDecisions ) {
+			buttons.append( {
+				type : "reply",
+				reply: { id: decision, title: truncate( decision, static.BUTTON_LABEL_LIMIT ) }
+			} )
+		}
+		return {
+			type  : "button",
+			body  : { text: arguments.bodyText },
+			action: { buttons: buttons }
+		}
+	}
+
+	/**
+	 * @bodyText Already-truncated prompt text
+	 * @allowedDecisions 4+ decision keywords - each becomes one list row
+	 */
+	private struct function buildListInteractive( required string bodyText, required array allowedDecisions ) {
+		var rows = []
+		for ( var decision in arguments.allowedDecisions ) {
+			rows.append( { id: decision, title: truncate( decision, 24 ) } )
+		}
+		return {
+			type  : "list",
+			body  : { text: arguments.bodyText },
+			action: {
+				button  : "Choose",
+				sections: [ { title: "Options", rows: rows } ]
+			}
+		}
+	}
+
+	private string function buildPresentationText( required any presentation ) {
+		return len( arguments.presentation.getTitle() )
+			? "*#arguments.presentation.getTitle()#*" & char( 10 ) & char( 10 ) & arguments.presentation.getBody()
+			: arguments.presentation.getBody()
+	}
+
+	private string function truncate( required string text, required numeric limit ) {
+		return len( arguments.text ) > arguments.limit
+			? left( arguments.text, arguments.limit - 3 ) & "..."
+			: arguments.text
+	}
+
+	HumanInteractionDecision function parseHumanDecision( required GatewayEvent event ) {
+		var data = arguments.event.getData()
+		return new HumanInteractionDecision(
+			requestID: data.requestID ?: "",
+			decision : data.decision ?: "",
+			decidedBy: data.decidedBy ?: ""
+		)
+	}
+
+	// -------------------------------------------------------------------------
+	// Graph API call
+	// -------------------------------------------------------------------------
+
+	/**
+	 * @path A path relative to "GRAPH_API_BASE/apiVersion/phoneNumberId/", e.g. "messages"
+	 * @body The request body
+	 *
+	 * @return { status: numeric, body: struct }
+	 */
+	private struct function callApi( required string path, required struct body ) {
+		if ( !isNull( variables.apiCaller ) ) {
+			return variables.apiCaller( arguments.path, arguments.body )
+		}
+
+		var url = "#static.GRAPH_API_BASE#/#variables.apiVersion#/#variables.phoneNumberId#/#arguments.path#"
+		bx:http
+			url     = url
+			method  = "post"
+			result  = "apiResult"
+			charset = "utf-8"
+		{
+			bx:httpParam type="header" name="Authorization" value="Bearer #variables.accessToken#";
+			bx:httpParam type="header" name="content-type" value="application/json; charset=utf-8";
+			bx:httpParam type="body" value=jsonSerialize( arguments.body );
+		}
+
+		var statusCode = val( apiResult.statusCode ?: 0 )
+		var parsedBody = {}
+		try {
+			parsedBody = len( trim( apiResult.fileContent ?: "" ) ) ? jsonDeserialize( apiResult.fileContent ) : {}
+		} catch ( any e ) {
+			parsedBody = { message: "Unparseable response from Graph API: #e.message#" }
+		}
+
+		return { status: statusCode, body: parsedBody }
+	}
+
+}

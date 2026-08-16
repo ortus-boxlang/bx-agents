@@ -1,0 +1,27 @@
+/**
+ * Test double standing in for cbmailservices' real `MailService@cbmailservices`
+ * singleton (see EmailGateway.setMailService()) - captures every `newMail()`
+ * call's config and every sent `FakeMail`'s own mailParams, so a spec can
+ * assert on exactly what EmailGateway tried to send without any real
+ * ColdBox boot or cbmailservices/bx-mail install.
+ */
+class {
+
+	property name="sentMails" type="array" default=[];
+	property name="failNext" type="boolean" default=false;
+	property name="failMessage" type="string" default="Simulated send failure";
+
+	any function newMail() {
+		return new tests.support.FakeMail( this, duplicate( arguments ) );
+	}
+
+	void function recordSend( required any mail ) {
+		variables.sentMails.append( arguments.mail );
+	}
+
+	void function setFailNext( boolean fail = true, string message = "Simulated send failure" ) {
+		variables.failNext = arguments.fail;
+		variables.failMessage = arguments.message;
+	}
+
+}

@@ -1,0 +1,303 @@
+import bxModules.bxai.models.gateway.contracts.GatewayContext;
+import bxModules.bxai.models.gateway.contracts.GatewayEvent;
+import bxModules.bxai.models.gateway.contracts.HumanInteractionRequest;
+
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "TeamsGateway", function() {
+
+			beforeEach( function() {
+				var keyPairGen = createObject( "java", "java.security.KeyPairGenerator" ).getInstance( "RSA" )
+				keyPairGen.initialize( 2048 )
+				variables.keyPair = keyPairGen.generateKeyPair()
+
+				variables.gateway = new bxagents.models.gateways.TeamsGateway()
+				variables.gateway.configure( { appId: "test-app-id", appPassword: "shh" } )
+				variables.gateway.setJwksFetcher( function() {
+					return { keys: [ jwk() ] }
+				} )
+			} )
+
+			private function toBase64Url( required binary bytes ) {
+				var std = binaryEncode( arguments.bytes, "base64" )
+				return std.replace( "+", "-", "all" ).replace( "/", "_", "all" ).reReplace( "=+$", "" )
+			}
+
+			private function bigIntToBase64Url( required any bigInt ) {
+				var hex = arguments.bigInt.toString( 16 )
+				if ( len( hex ) % 2 != 0 ) {
+					hex = "0" & hex
+				}
+				return toBase64Url( binaryDecode( hex, "hex" ) )
+			}
+
+			private struct function jwk() {
+				var pub = variables.keyPair.getPublic()
+				return { kid: "test-kid", n: bigIntToBase64Url( pub.getModulus() ), e: bigIntToBase64Url( pub.getPublicExponent() ) }
+			}
+
+			private string function signJwt( required struct payloadOverrides = {} ) {
+				var header = { alg: "RS256", typ: "JWT", kid: "test-kid" }
+				var payload = {
+					aud: "test-app-id",
+					iss: "https://api.botframework.com",
+					exp: int( currentTimeSeconds() ) + 3600
+				}
+				structAppend( payload, arguments.payloadOverrides, true )
+
+				var signingInput = toBase64Url( charsetDecode( jsonSerialize( header ), "UTF-8" ) )
+					& "." & toBase64Url( charsetDecode( jsonSerialize( payload ), "UTF-8" ) )
+
+				var signer = createObject( "java", "java.security.Signature" ).getInstance( "SHA256withRSA" )
+				signer.initSign( variables.keyPair.getPrivate() )
+				signer.update( charsetDecode( signingInput, "UTF-8" ) )
+				var sigBytes = signer.sign()
+
+				return signingInput & "." & toBase64Url( sigBytes )
+			}
+
+			private numeric function currentTimeSeconds() {
+				return createObject( "java", "java.lang.System" ).currentTimeMillis() / 1000
+			}
+
+			private function messageActivityBody( struct overrides = {} ) {
+				var activity = {
+					type: "message",
+					text: "Approve this?",
+					from: { id: "29:user1" },
+					conversation: { id: "conv1", conversationType: "personal" },
+					serviceUrl: "https://smba.trafficmanager.net/amer/",
+					replyToId: ""
+				}
+				structAppend( activity, arguments.overrides, true )
+				return jsonSerialize( activity )
+			}
+
+			private function stubApi( required struct response ) {
+				var calls = []
+				gateway.setApiCaller( function( path, method, body ) {
+					calls.append( { path: path, method: method, body: body } )
+					return response
+				} )
+				return calls
+			}
+
+			it( "declares inboundMessages/outboundMessages/threads/interactiveActions/humanApproval but NOT streaming", function() {
+				var capabilities = gateway.getDeclaredCapabilities()
+				expect( capabilities ).toInclude( "inboundMessages" )
+				expect( capabilities ).toInclude( "outboundMessages" )
+				expect( capabilities ).toInclude( "threads" )
+				expect( capabilities ).toInclude( "interactiveActions" )
+				expect( capabilities ).toInclude( "humanApproval" )
+				expect( capabilities ).notToInclude( "streaming" )
+			} );
+
+			it( "start() throws TeamsGateway.MissingConfig when appId/appPassword are missing", function() {
+				var unconfigured = new bxagents.models.gateways.TeamsGateway()
+				expect( function() {
+					unconfigured.start()
+				} ).toThrow( "TeamsGateway.MissingConfig" )
+			} );
+
+			it( "start() does not throw once appId/appPassword are present", function() {
+				expect( function() {
+					gateway.start()
+				} ).notToThrow()
+				expect( gateway.isRunning() ).toBeTrue()
+			} );
+
+			describe( "handleWebhook()", function() {
+
+				it( "returns 503 when appId/appPassword were never configured", function() {
+					var unconfigured = new bxagents.models.gateways.TeamsGateway()
+					var result = unconfigured.handleWebhook( "Bearer whatever", "{}" )
+					expect( result.status ).toBe( 503 )
+				} );
+
+				it( "returns 401 and does not dispatch when the Authorization header is missing 'Bearer '", function() {
+					var dispatched = []
+					gateway.onMessage( function( m ) { dispatched.append( m ) } )
+					var result = gateway.handleWebhook( "", messageActivityBody() )
+					expect( result.status ).toBe( 401 )
+					expect( dispatched.len() ).toBe( 0 )
+				} );
+
+				it( "returns 401 and does not dispatch when the JWT signature is invalid", function() {
+					var dispatched = []
+					gateway.onMessage( function( m ) { dispatched.append( m ) } )
+					var jwt = signJwt()
+					var tampered = jwt.left( len( jwt ) - 5 ) & "AAAAA"
+					var result = gateway.handleWebhook( "Bearer " & tampered, messageActivityBody() )
+					expect( result.status ).toBe( 401 )
+					expect( dispatched.len() ).toBe( 0 )
+				} );
+
+				it( "returns 401 when the JWT audience doesn't match this bot's own appId", function() {
+					var other = new bxagents.models.gateways.TeamsGateway()
+					other.configure( { appId: "some-other-app-id", appPassword: "shh" } )
+					other.setJwksFetcher( function() { return { keys: [ jwk() ] } } )
+					var result = other.handleWebhook( "Bearer " & signJwt(), messageActivityBody() )
+					expect( result.status ).toBe( 401 )
+				} );
+
+				it( "returns 401 when the JWT issuer isn't Bot Connector's own fixed issuer", function() {
+					var result = gateway.handleWebhook( "Bearer " & signJwt( { iss: "https://evil.example.com" } ), messageActivityBody() )
+					expect( result.status ).toBe( 401 )
+				} );
+
+				it( "returns 401 when the JWT is expired", function() {
+					var result = gateway.handleWebhook( "Bearer " & signJwt( { exp: int( currentTimeSeconds() ) - 3600 } ), messageActivityBody() )
+					expect( result.status ).toBe( 401 )
+				} );
+
+				it( "accepts a correctly-signed message activity, returns 200, and dispatches a normalized inbound message", function() {
+					var dispatched = []
+					gateway.onMessage( function( m ) { dispatched.append( m ) } )
+
+					var result = gateway.handleWebhook( "Bearer " & signJwt(), messageActivityBody() )
+
+					expect( result.status ).toBe( 200 )
+					expect( dispatched.len() ).toBe( 1 )
+					expect( dispatched[ 1 ].getText() ).toBe( "Approve this?" )
+					expect( dispatched[ 1 ].getContext().getConversationID() ).toBe( "conv1" )
+					expect( dispatched[ 1 ].getContext().getMetadata().serviceUrl ).toBe( "https://smba.trafficmanager.net/amer/" )
+				} );
+
+				it( "ignores group/channel-scope messages (v1 is personal-DM-only)", function() {
+					var dispatched = []
+					gateway.onMessage( function( m ) { dispatched.append( m ) } )
+					var body = messageActivityBody( { conversation: { id: "conv1", conversationType: "groupChat" } } )
+					var result = gateway.handleWebhook( "Bearer " & signJwt(), body )
+					expect( result.status ).toBe( 200 )
+					expect( dispatched.len() ).toBe( 0 )
+				} );
+
+				it( "threads on activity.replyToId when the inbound message is a reply", function() {
+					var dispatched = []
+					gateway.onMessage( function( m ) { dispatched.append( m ) } )
+					var body = messageActivityBody( { replyToId: "activity-999" } )
+					gateway.handleWebhook( "Bearer " & signJwt(), body )
+					expect( dispatched[ 1 ].getContext().getThreadID() ).toBe( "activity-999" )
+				} );
+
+				it( "routes an Adaptive Card Action.Submit invoke to the decision path, returns a teamsInvokeResponse body, and does not dispatch an ordinary message", function() {
+					var dispatched = []
+					gateway.onMessage( function( m ) { dispatched.append( m ) } )
+					var invoke = {
+						type: "invoke",
+						from: { id: "29:user1" },
+						conversation: { id: "conv1" },
+						value: { action: { type: "Action.Submit", data: { bxagents_input: { requestId: "req-1", optionId: "approve" } } } }
+					}
+					var result = gateway.handleWebhook( "Bearer " & signJwt(), jsonSerialize( invoke ) )
+					expect( result.status ).toBe( 200 )
+					expect( result.body.type ).toBe( "application/vnd.microsoft.activity.message" )
+					expect( dispatched.len() ).toBe( 0 )
+				} );
+
+				it( "returns 200 (not an error) for a JSON body that isn't valid JSON", function() {
+					var result = gateway.handleWebhook( "Bearer " & signJwt(), "not json" )
+					expect( result.status ).toBe( 200 )
+				} );
+
+			} );
+
+			describe( "deliver()", function() {
+
+				it( "POSTs a text message, including replyToId when a threadID is present", function() {
+					var calls = stubApi( { status: 200, body: { id: "activity-out-1" } } )
+					var event = new GatewayEvent( type: "response.completed", data: { text: "Your order shipped." } )
+					var context = new GatewayContext( conversationID: "conv1", threadID: "activity-in-1", metadata: { serviceUrl: "https://smba.trafficmanager.net/amer/" } )
+
+					var result = gateway.deliver( event, context )
+
+					expect( calls.len() ).toBe( 1 )
+					expect( calls[ 1 ].method ).toBe( "POST" )
+					expect( calls[ 1 ].body.text ).toBe( "Your order shipped." )
+					expect( calls[ 1 ].body.replyToId ).toBe( "activity-in-1" )
+					expect( result.getSuccess() ).toBeTrue()
+					expect( result.getDeliveryID() ).toBe( "activity-out-1" )
+				} );
+
+				it( "fails without ever calling the API when serviceUrl is missing from context metadata", function() {
+					var calls = stubApi( { status: 200, body: { id: "x" } } )
+					var event = new GatewayEvent( type: "response.completed", data: { text: "hi" } )
+					var context = new GatewayContext( conversationID: "conv1" )
+
+					var result = gateway.deliver( event, context )
+
+					expect( result.getSuccess() ).toBeFalse()
+					expect( calls.len() ).toBe( 0 )
+				} );
+
+				it( "splits text longer than the 4000-char limit into multiple sends", function() {
+					var calls = stubApi( { status: 200, body: { id: "x" } } )
+					var longText = repeatString( "a", 5000 )
+					var event = new GatewayEvent( type: "response.completed", data: { text: longText } )
+					var context = new GatewayContext( conversationID: "conv1", metadata: { serviceUrl: "https://x/" } )
+
+					gateway.deliver( event, context )
+
+					expect( calls.len() ).toBeGT( 1 )
+				} );
+
+				it( "returns a failure result when the Connector API rejects the send", function() {
+					stubApi( { status: 403, body: { error: { code: "Forbidden" } } } )
+					var event = new GatewayEvent( type: "response.completed", data: { text: "hi" } )
+					var context = new GatewayContext( conversationID: "conv1", metadata: { serviceUrl: "https://x/" } )
+
+					var result = gateway.deliver( event, context )
+
+					expect( result.getSuccess() ).toBeFalse()
+				} );
+
+			} );
+
+			describe( "requestHumanInteraction()", function() {
+
+				it( "renders an Adaptive Card with one Action.Submit button per allowed decision", function() {
+					var calls = stubApi( { status: 200, body: { id: "activity-out-1" } } )
+					var humanRequest = new HumanInteractionRequest(
+						title: "Approve?", message: "delete_file(x)", allowedDecisions: [ "approve", "reject" ]
+					)
+					var context = new GatewayContext( conversationID: "conv1", metadata: { serviceUrl: "https://x/" } )
+
+					var result = gateway.requestHumanInteraction( humanRequest, context )
+
+					expect( calls[ 1 ].body.attachments.len() ).toBe( 1 )
+					var card = calls[ 1 ].body.attachments[ 1 ]
+					expect( card.contentType ).toBe( "application/vnd.microsoft.card.adaptive" )
+					expect( card.content.actions.len() ).toBe( 2 )
+					expect( card.content.actions[ 1 ].type ).toBe( "Action.Submit" )
+					expect( result.getSuccess() ).toBeTrue()
+				} );
+
+				it( "caps rendered buttons at 6, even with more allowed decisions", function() {
+					var calls = stubApi( { status: 200, body: { id: "x" } } )
+					var humanRequest = new HumanInteractionRequest(
+						title: "Pick one", message: "Choose", allowedDecisions: [ "a", "b", "c", "d", "e", "f", "g", "h" ]
+					)
+					var context = new GatewayContext( conversationID: "conv1", metadata: { serviceUrl: "https://x/" } )
+
+					gateway.requestHumanInteraction( humanRequest, context )
+
+					expect( calls[ 1 ].body.attachments[ 1 ].content.actions.len() ).toBe( 6 )
+				} );
+
+			} );
+
+			it( "parseHumanDecision() reads requestID/decision/decidedBy from a GatewayEvent's data", function() {
+				var event = new GatewayEvent( type: "interaction.decision", data: { requestID: "req-1", decision: "reject", decidedBy: "29:user1" } )
+
+				var decision = gateway.parseHumanDecision( event )
+
+				expect( decision.getRequestID() ).toBe( "req-1" )
+				expect( decision.getDecision() ).toBe( "reject" )
+				expect( decision.getDecidedBy() ).toBe( "29:user1" )
+			} );
+
+		} )
+	}
+
+}

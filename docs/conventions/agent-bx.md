@@ -26,6 +26,8 @@ class {
 | `subAgents` | array of strings | Names of sibling folders under the root project's `subagents/`. See [subagents/](subagents.md). |
 | `mcpServers` | array | Remote MCP servers - each entry a URL string or `{ url, name }`. See [mcp/](mcp.md). |
 | `security` | struct | Forwarded verbatim into the generated app's `bxai` module settings; bx-ai's own `SecurityDirector` turns it into guardrail middleware. Passthrough only - BX Agents has no own guardrails convention. |
+| `checkpointer` | struct | `{ type: "cache"\|"file"\|"jdbc", ...config }`. Defaults to `{ type: "cache" }` if omitted. Always passed to the generated `aiAgent()` call - without one, human-in-the-loop approval flows through any gateway other than `cli` fail outright. |
+| `gatewaySession` | struct | `{ policy, maxQueueDepth }`, both optional (default `"queue"` / `50`). Only meaningful if the project has at least one push-style [gateway](gateways.md#3-push-style-gateways-type-telegram-and-friends) entry - controls the generated `GatewaySession`'s policy for a second inbound message arriving on a thread that already has a turn in flight. `policy` must be one of `reject`/`queue`/`steer`/`interrupt`. |
 | any other key | any | Merged and available in the resolved config struct, but not interpreted by BX Agents itself. |
 
 ```javascript
