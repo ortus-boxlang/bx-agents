@@ -32,13 +32,20 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( 'route( "/api/chat" ).toAi( "GeneratedAgent" )' );
 			} );
 
-			it( 'emits one route(path & "/api").toAi("GeneratedAgent") per webui-exposure entry, not a route for the path itself', function() {
+			it( 'routes a webui entry to its own ChatUi handler, not toAi(), so userId comes from the session', function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
 				var result = generator.generate( discovery, newAppDir() );
 
 				var content = fileRead( result.router );
-				expect( content ).toInclude( 'route( "/chat/api" ).toAi( "GeneratedAgent" )' );
+				// Deliberately NOT toAi(): its actions forward body.options verbatim,
+				// so a userId could only ever come from the caller. ChatUi reads
+				// session.sessionId server-side instead - see WebUiGenerator.
+				expect( content ).toInclude( 'post( "/chat/api/stream" ).toHandler( "ChatUi.stream" )' );
+				expect( content ).toInclude( 'post( "/chat/api/invoke" ).toHandler( "ChatUi.invoke" )' );
+				expect( content ).toInclude( 'post( "/chat/api/batch" ).toHandler( "ChatUi.batch" )' );
+				expect( content ).toInclude( 'get( "/chat/api/info" ).toHandler( "ChatUi.info" )' );
 				expect( content ).notToInclude( 'route( "/chat" ).toAi( "GeneratedAgent" )' );
+				expect( content ).notToInclude( 'route( "/chat/api" ).toAi( "GeneratedAgent" )' );
 			} );
 
 			it( "emits one route(path).toMCP(target) per mcp-exposure entry", function() {

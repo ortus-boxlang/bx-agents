@@ -134,31 +134,38 @@ For anything the tokens don't cover - custom fonts, layout, per-element rules - 
 v1 is intentionally small: one conversation per browser (the **New** button starts another; there's no multi-thread sidebar or server-side history list yet), and no approval UI for a human-in-the-loop suspension - the page surfaces a notice and stops. These are natural fast-follows, not built here. See `docs/known-limitations.md` for what was and wasn't verified against a real ColdBox boot in this project's own dev environment.
 {% endhint %}
 
-#### Conversation identity: the agent's memory decides it
+#### Conversation identity: the session IS the user identifier
 
-**The memory decides who shares a conversation with whom** - not the UI, and not anything the client sends.
+**Every memory an agent holds is keyed by `(userId, conversationId)`** - and an agent can hold several at once (`AiAgent`'s `memories` is an array; `loadMemoryMessages()` iterates all of them with the same pair). `AiAgent.run()`/`.stream()` fall back to `""` for both when nothing supplies them, so with no server-side identity **every visitor lands in one shared bucket**, regardless of which memory types are configured.
 
-`IAiMemory`'s per-call `userId`/`conversationId` arguments "override instance default"; the memory *instance* owns the scoping. bx-ai's own default is `window` memory - an in-process store keyed by `(userId, conversationId)` - and since `AiAgent.stream()` falls back to `""` for both when nothing supplies them, a browser-facing app on that default puts **every visitor into one shared bucket**, with one person's history feeding the next person's turn.
+The fix is identity, not memory type. A project with a `webui` exposure therefore gets:
 
-So a project with a `webui` exposure gets two things automatically:
-
-1. **Session management on** in the generated `Application.bx` (`this.sessionManagement = true`, `this.setClientCookies = true`, a 60-minute `sessionTimeout`). Cookies are load-bearing - with no cookie there is no session to key by.
-2. **Session-scoped agent memory**: the generated `aiAgent()` gets `memory : aiMemory( memory: "session" )`. `SessionMemory` stores under BoxLang's `session` scope, so each visitor is separated **server-side**, by the session the server itself issued.
-
-A project with no `webui` keeps sessions off and bx-ai's own memory default - an API/gateway-only app has no browser to track, and a session would be pure overhead plus a cookie nobody asked for.
-
-Override it per agent with a `memory` key on `Agent.bx`, which always wins over the default:
+1. **Session management on** in the generated `Application.bx` - `this.sessionManagement = true`, `this.setClientCookies = true`, a 60-minute `sessionTimeout`. Cookies are load-bearing: no cookie, no session id.
+2. **Its own `handlers/ChatUi.bx`**, which passes `session.sessionId` as the agent's `userId` on **all three runner shapes** - `invoke`, `stream` and `batch`.
 
 ```javascript
-// Agent.bx - same shape as `checkpointer`
+// handlers/ChatUi.bx (generated)
+private string function resolveUserId() {
+	return session.sessionId ?: ""
+}
+```
+
+Because the identity is server-issued, scoping holds no matter which memories the project configures - one or many, `window`, `cache`, `jdbc`, vector, any mix.
+
+{% hint style="info" %}
+**Why not `toAi()` for the webui?** `toAi()`'s generated actions forward `body.options` to the runnable verbatim, so a `userId` reaching the agent through them could only ever be one the *caller* supplied - a request, not an identity. The generated handler keeps `toAi()`'s exact route shape (`/invoke`, `/stream`, `/batch`, `/info`) and its exact SSE wire format, and differs only in reading the user id from the session. The other exposure kinds (`exposes: "agent"`) still use `toAi()` unchanged.
+{% endhint %}
+
+`conversationId` still comes from the client, and that's deliberate: it distinguishes several conversations belonging to the *same* visitor - it's what the **New** button rotates. It is not the isolation boundary; the session-derived `userId` is.
+
+No memory type is forced. Choose one (or several) per agent with a `memory` key on `Agent.bx`, same shape as `checkpointer`:
+
+```javascript
+// Agent.bx
 memory: { type: "cache", maxMessages: 50 }
 ```
 
-The page additionally sends a `conversationId` in `options`, which sub-divides *within* a session - that's what the **New** button rotates. Because the session scope already separates visitors, that client-supplied id can only reach conversations inside the caller's own session.
-
-{% hint style="info" %}
-Session memory lives in the `session` scope, so it is per-server and dies with the session. For conversations that must survive a restart or span a cluster, set an explicit `memory` (e.g. `jdbc`, or a distributed `cache`) - and note that scoping then goes back to `(userId, conversationId)`, so supply those yourself.
-{% endhint %}
+A project with no `webui` keeps sessions off and bx-ai's own memory default - an API/gateway-only app has no browser to track, and a session there is overhead plus a cookie nobody asked for.
 
 #### Reply rendering
 

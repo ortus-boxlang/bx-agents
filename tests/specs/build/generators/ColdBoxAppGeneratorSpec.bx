@@ -290,12 +290,11 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( "tools : aiToolRegistry().getAll()" );
 			} );
 
-			it( "turns session management on and defaults to session-scoped memory for a browser-facing project", function() {
-				// The HTTP session is what separates one visitor's conversation from
-				// another's. Without sessionManagement there IS no session to key by,
-				// and bx-ai's default `window` memory - an in-process store keyed by
-				// (userId, conversationId), neither of which anything supplies by
-				// default - collapses every visitor into one shared bucket.
+			it( "turns session management on for a browser-facing project, since the session IS the user identifier", function() {
+				// handlers/ChatUi.bx passes session.sessionId as the agent's userId,
+				// and every memory an agent holds is keyed by (userId, conversationId).
+				// Without sessionManagement there is no session id to pass, and all of
+				// them collapse into one bucket shared by every visitor.
 				var buildDir = newBuildDir();
 				var config = resolver.resolve( projectRoot = fixtures & "/full-project" );
 				var result = generator.generate(
@@ -311,10 +310,12 @@ class extends="testbox.system.BaseSpec" {
 				expect( app ).toInclude( "this.setClientCookies  = true" );
 				expect( app ).toInclude( "this.sessionTimeout" );
 
-				expect( fileRead( result.agentFactory ) ).toInclude( 'memory : aiMemory( memory: "session"' );
+				// No memory TYPE is forced - scoping is by identity, so the project
+				// stays free to configure whichever memories it wants
+				expect( fileRead( result.agentFactory ) ).notToInclude( "memory : aiMemory(" );
 			} );
 
-			it( "leaves sessions off and bx-ai's own memory default alone for a non-browser project", function() {
+			it( "leaves sessions off for a non-browser project, which has no browser to track", function() {
 				var buildDir = newBuildDir();
 				var result = generateFor( fixtures & "/full-project", buildDir );
 

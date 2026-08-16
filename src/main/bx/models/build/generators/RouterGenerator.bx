@@ -152,9 +152,25 @@ class {
 		if ( arguments.entry.config.exposes == "webui" ) {
 			// The static chat shell itself (<path>/index.html) is a real file
 			// under the app's own webroot - see WebUiGenerator - so it's served
-			// directly, no route needed. Only the API needs one, at a fixed
-			// "/api" suffix so it never collides with the shell's own files.
-			return 'route( "#bxLiteral( path )#/api" ).toAi( "GeneratedAgent" )'
+			// directly, no route needed. Only the API needs routes, at a fixed
+			// "/api" suffix so they never collide with the shell's own files.
+			//
+			// Deliberately NOT toAi(): its actions forward body.options to the
+			// runnable verbatim, so a userId could only ever come from the caller.
+			// The web UI needs a SERVER-side identity - session.sessionId - so that
+			// every memory the agent holds is scoped per visitor instead of shared.
+			// handlers/ChatUi.bx (see WebUiGenerator) supplies that while keeping
+			// toAi()'s exact route shape and SSE wire format.
+			var api = bxLiteral( path ) & "/api"
+			return [
+				'post( "#api#/invoke" ).toHandler( "ChatUi.invoke" )',
+				'post( "#api#/stream" ).toHandler( "ChatUi.stream" )',
+				'post( "#api#/batch" ).toHandler( "ChatUi.batch" )',
+				'get( "#api#/info" ).toHandler( "ChatUi.info" )'
+			// renderRouterFile() indents the FIRST line of whatever comes back;
+			// the continuation lines have to carry that same two-tab body indent
+			// themselves or the generated Router.bx comes out ragged.
+			].toList( char( 10 ) & char( 9 ) & char( 9 ) )
 		}
 
 		var target = arguments.entry.config.target ?: ""

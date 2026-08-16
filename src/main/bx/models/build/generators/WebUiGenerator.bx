@@ -43,6 +43,13 @@ class {
 			renderUiBundle( entry, arguments.appDir )
 		}
 
+		// One handler serves every webui entry - the actions are identical, only
+		// the mount paths differ, and RouterGenerator maps each entry's own
+		// <path>/api/* routes onto these same four actions.
+		var handlerDir = normalizePath( arguments.appDir ) & "/handlers"
+		directoryCreate( path : handlerDir, createPath : true, ignoreExists : true )
+		fileWrite( handlerDir & "/ChatUi.bx", renderChatHandler() )
+
 		var gatedEntries = entries.filter( function( entry ) {
 			return len( entry.config.apiKeyEnvVar ?: "" )
 		} )
@@ -382,6 +389,132 @@ class {
 			.replace( char( 13 ), "", "all" )
 			.replace( char( 10 ), slash & "n", "all" )
 			.replace( "</", "<" & slash & "/", "all" )
+	}
+
+	/**
+	 * Renders `handlers/ChatUi.bx` - the web UI's own `/invoke`, `/stream`,
+	 * `/batch` and `/info` surface, replacing ColdBox's `toAi()` for this one
+	 * exposure kind.
+	 *
+	 * The reason is identity. `toAi()`'s generated actions forward `body.options`
+	 * to the runnable verbatim, so the ONLY way a `userId` can reach the agent
+	 * through them is if the caller sent it - and a caller-supplied user id is
+	 * not an identity, it's a request. Every one of an agent's memories is keyed
+	 * by `(userId, conversationId)` (an agent can hold several - see AiAgent's
+	 * `memories` array), so with no server-side userId they all collapse into one
+	 * bucket shared by every visitor.
+	 *
+	 * This handler instead reads `session.sessionId` on the server and passes it
+	 * as `userId` on all three runner shapes, so scoping holds no matter which
+	 * memories the project configures. `conversationId` still comes from the
+	 * client, but it can now only ever sub-divide within the caller's own
+	 * session.
+	 *
+	 * The SSE wire format is deliberately identical to `toAi()`'s - a `chunk`
+	 * event per bx-ai chunk, then a `done` event carrying `[DONE]` - so the
+	 * shipped page (and any other `toAi()` client) needs no changes.
+	 *
+	 * @return The rendered handlers/ChatUi.bx source
+	 */
+	private string function renderChatHandler() {
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * The web chat UI's API. Mirrors ColdBox's own toAi() surface",
+			" * (/invoke, /stream, /batch, /info) with one deliberate difference:",
+			" * the agent's userId is taken from the SERVER's session, never from",
+			" * the request body, so every memory the agent holds is scoped to the",
+			" * visitor rather than shared across all of them.",
+			" */",
+			"class {",
+			"",
+			"	/**",
+			"	 * The identity every runner below is scoped by. session.sessionId is",
+			"	 * issued by the server and cannot be set by the caller, which is the",
+			"	 * whole point - see this project's Application.bx, where",
+			"	 * sessionManagement is enabled precisely so this exists.",
+			"	 */",
+			"	private string function resolveUserId() {",
+			'		return session.sessionId ?: ""',
+			"	}",
+			"",
+			"	/**",
+			"	 * conversationId is caller-supplied on purpose: it distinguishes",
+			"	 * several conversations belonging to the SAME visitor. It is not an",
+			"	 * isolation boundary - the session-derived userId above is.",
+			"	 */",
+			"	private struct function resolveOptions( required struct body ) {",
+			"		var options = isStruct( arguments.body.options ?: {} ) ? duplicate( arguments.body.options ) : {}",
+			'		options[ "userId" ] = resolveUserId()',
+			"		return options",
+			"	}",
+			"",
+			"	function invoke( event, rc, prc ) {",
+			"		var body   = event.getHTTPContent( json: true )",
+			'		var agent  = getInstance( "GeneratedAgent" )',
+			"		var result = agent.run(",
+			'			body.input ?: "",',
+			"			body.params ?: {},",
+			"			resolveOptions( body )",
+			"		)",
+			'		event.renderData( type: "json", data: { "output": result, "success": true } )',
+			"	}",
+			"",
+			"	function stream( event, rc, prc ) {",
+			"		var body  = event.getHTTPContent( json: true )",
+			'		var agent = getInstance( "GeneratedAgent" )',
+			"		SSE(",
+			"			callback: ( emitter ) => {",
+			"				agent.stream(",
+			"					( chunk ) => {",
+			"						if ( !emitter.isClosed() ) {",
+			'							emitter.send( chunk, "chunk" )',
+			"						}",
+			"					},",
+			'					body.input ?: "",',
+			"					body.params ?: {},",
+			"					resolveOptions( body )",
+			"				)",
+			"				if ( !emitter.isClosed() ) {",
+			'					emitter.send( "[DONE]", "done" )',
+			"					emitter.close()",
+			"				}",
+			"			},",
+			"			keepAliveInterval: 30000",
+			"		)",
+			'		return ""',
+			"	}",
+			"",
+			"	function batch( event, rc, prc ) {",
+			"		var body    = event.getHTTPContent( json: true )",
+			'		var agent   = getInstance( "GeneratedAgent" )',
+			"		var options = resolveOptions( body )",
+			"		var outputs = ( body.inputs ?: [] ).map( ( item ) => {",
+			"			try {",
+			"				return { ""output"": agent.run( item, body.params ?: {}, options ), ""success"": true }",
+			"			} catch ( any e ) {",
+			"				return { ""error"": e.message, ""success"": false }",
+			"			}",
+			"		} )",
+			'		event.renderData( type: "json", data: { "outputs": outputs, "success": true } )',
+			"	}",
+			"",
+			"	function info( event, rc, prc ) {",
+			'		var agent = getInstance( "GeneratedAgent" )',
+			'		event.renderData( type: "json", data: {',
+			'			"name"        : agent.getName(),',
+			'			"description" : agent.getDescription(),',
+			'			"sessionBound": true',
+			"		} )",
+			"	}",
+			"",
+			"}",
+			""
+		]
+
+		return lines.toList( char( 10 ) )
 	}
 
 	/**
