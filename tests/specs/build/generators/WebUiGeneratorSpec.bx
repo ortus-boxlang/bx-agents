@@ -1,0 +1,96 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "WebUiGenerator", function() {
+
+			beforeEach( function() {
+				variables.discoverer = new bxagents.models.build.ProjectDiscoverer();
+				variables.generator = new bxagents.models.build.generators.WebUiGenerator();
+				variables.fixtures = expandPath( "/fixtures" );
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function newAppDir() {
+				var dir = createTempDirectory( prefix = "bxagents-webui-" );
+				tempDirs.append( dir );
+				return dir & "/app";
+			}
+
+			it( "reports hasWebUi=false and writes nothing when no webui exposure entry exists", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+				var appDir = newAppDir();
+				var result = generator.generate( discovery, appDir );
+
+				expect( result.hasWebUi ).toBeFalse();
+				expect( result.webUiAuthInterceptorName ).toBe( "" );
+				expect( directoryExists( appDir & "/chat" ) ).toBeFalse();
+			} );
+
+			it( "writes a templated index.html at <appDir><path>/index.html for a webui exposure entry", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				var result = generator.generate( discovery, appDir );
+
+				expect( result.hasWebUi ).toBeTrue();
+
+				var indexPath = appDir & "/chat/index.html";
+				expect( fileExists( indexPath ) ).toBeTrue();
+
+				var html = fileRead( indexPath );
+				expect( html ).toInclude( "/chat/api" );
+				expect( html ).notToInclude( "__API_BASE__" );
+				expect( html ).notToInclude( "__APP_TITLE__" );
+			} );
+
+			it( "generates interceptors/WebUiAuthGate.bx and returns its name when apiKeyEnvVar is set", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				var result = generator.generate( discovery, appDir );
+
+				expect( result.webUiAuthInterceptorName ).toBe( "WebUiAuthGate" );
+
+				var interceptorPath = appDir & "/interceptors/WebUiAuthGate.bx";
+				expect( fileExists( interceptorPath ) ).toBeTrue();
+
+				var src = fileRead( interceptorPath );
+				expect( src ).toInclude( '"/chat/api"' );
+				expect( src ).toInclude( '"CHAT_API_KEY"' );
+				expect( src ).toInclude( "function preProcess(" );
+				expect( src ).toInclude( ".noExecution()" );
+			} );
+
+			it( "does NOT gate the static shell path itself, only <path>/api", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var result = generator.generate( discovery, newAppDir() );
+
+				var interceptorPath = ( tempDirs[ tempDirs.len() ] & "/app" ) & "/interceptors/WebUiAuthGate.bx";
+				var src = fileRead( interceptorPath );
+				// The gated prefix must be the /api sub-path, not the bare mount path -
+				// else the shell that PROMPTS FOR the key would itself require it first.
+				expect( src ).toInclude( 'path.startsWith( "/chat/api" )' );
+				expect( src ).notToInclude( 'path.startsWith( "/chat" )' );
+			} );
+
+			it( "does not generate an auth interceptor when no webui entry configures an apiKeyEnvVar", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui-no-key" );
+				var appDir = newAppDir();
+				var result = generator.generate( discovery, appDir );
+
+				expect( result.hasWebUi ).toBeTrue();
+				expect( result.webUiAuthInterceptorName ).toBe( "" );
+				expect( fileExists( appDir & "/interceptors/WebUiAuthGate.bx" ) ).toBeFalse();
+				expect( fileExists( appDir & "/chat/index.html" ) ).toBeTrue();
+			} );
+
+		} );
+	}
+
+}

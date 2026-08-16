@@ -1,0 +1,223 @@
+/**
+ * Generates the v1 web chat UI (Build Pipeline Phase 5, alongside
+ * RouterGenerator): for every `gateways/*` entry with `exposes: "webui"`,
+ * copies a small, dependency-free, PRE-BUILT static chat page
+ * (`webui/index.html`, sitting next to this class - see the docblock on
+ * `renderUiBundle()` for how its path is resolved) into the generated app
+ * at `<appDir><path>/index.html`, and - when the entry configures an
+ * `apiKeyEnvVar` - generates a `preProcess` interceptor gating just that
+ * entry's own `<path>/api/*` route (never the static shell itself; see
+ * below for why).
+ *
+ * Deliberately NOT a Vite/npm build: v1 is a single self-contained HTML
+ * file (inline CSS/JS, no separate assets to serve or bundle), matching
+ * the "small first, then we grow" v1 scope decision. There is nothing to
+ * `npm install`/`npm run build` here or in a generated project - the page
+ * ships as literal source, read via `fileRead()` and lightly templated
+ * with plain string substitution (`.replace()`), never interpolated as
+ * BoxLang - the file legitimately contains `#` (CSS hex colors), which
+ * would collide with BoxLang's own `#expression#` string-interpolation
+ * syntax if this content were ever embedded as a BoxLang string literal
+ * instead of a real, separate, non-`.bx` file (confirmed empirically this
+ * session - a bare `#fff` inside a BoxLang string literal fails to parse).
+ *
+ * Talks to the SAME `route(path & "/api").toAi("GeneratedAgent")` route
+ * RouterGenerator already knows how to render for `exposes: "agent"` -
+ * see RouterGenerator.renderExposureRoute()'s `webui` branch.
+ */
+class {
+
+	/**
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .gateways is used)
+	 * @appDir Absolute path to the generated ColdBox app dir, e.g. "<projectRoot>/.build/app"
+	 *
+	 * @return { hasWebUi, webUiAuthInterceptorName } - webUiAuthInterceptorName is "" when no webui entry configures an apiKeyEnvVar
+	 */
+	struct function generate( required struct discovery, required string appDir ) {
+		var entries = collectWebUiEntries( arguments.discovery )
+		if ( !entries.len() ) {
+			return { hasWebUi : false, webUiAuthInterceptorName : "" }
+		}
+
+		for ( var entry in entries ) {
+			renderUiBundle( entry, arguments.appDir )
+		}
+
+		var gatedEntries = entries.filter( function( entry ) {
+			return len( entry.config.apiKeyEnvVar ?: "" )
+		} )
+
+		var interceptorName = ""
+		if ( gatedEntries.len() ) {
+			interceptorName = "WebUiAuthGate"
+			var interceptorDir = normalizePath( arguments.appDir ) & "/interceptors"
+			directoryCreate( path : interceptorDir, createPath : true, ignoreExists : true )
+			fileWrite( interceptorDir & "/#interceptorName#.bx", renderAuthInterceptor( gatedEntries ) )
+		}
+
+		return { hasWebUi : true, webUiAuthInterceptorName : interceptorName }
+	}
+
+	/**
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .gateways is used)
+	 *
+	 * @return { name, config } for every gateways/* entry with `exposes: "webui"`, sorted by path
+	 */
+	private array function collectWebUiEntries( required struct discovery ) {
+		var entries = []
+
+		for ( var gw in ( arguments.discovery.gateways ?: [] ) ) {
+			var config = readEntryConfig( gw.path )
+			if ( !isNull( config ) && ( config.exposes ?: "" ) == "webui" ) {
+				entries.append( { name : gw.name, config : config } )
+			}
+		}
+
+		entries.sort( function( a, b ) {
+			var pathA = a.config.path ?: ""
+			var pathB = b.config.path ?: ""
+			if ( pathA != pathB ) {
+				return pathA < pathB ? -1 : 1
+			}
+			return 0
+		} )
+
+		return entries
+	}
+
+	/**
+	 * Reads the vendored `webui/index.html` template sitting next to THIS
+	 * class - resolved via `getCurrentTemplatePath()` (an absolute
+	 * filesystem path to this .bx file itself, confirmed empirically this
+	 * session to resolve correctly whether this class is loaded via this
+	 * repo's own dev-time path mapping or a genuinely installed module's
+	 * `/bxmodules/bxagents` mapping - it doesn't depend on either prefix,
+	 * only on "where am I on disk"), so the template ships alongside this
+	 * generator with no separate resource-mapping/packaging step needed
+	 * beyond `createModuleStructure` also copying `**\/*.html` (see build.gradle).
+	 *
+	 * @entry A webui exposure entry { name, config }, from collectWebUiEntries()
+	 * @appDir Absolute path to the generated ColdBox app dir
+	 */
+	private void function renderUiBundle( required struct entry, required string appDir ) {
+		var templateDir = getDirectoryFromPath( getCurrentTemplatePath() )
+		var html = fileRead( templateDir & "webui/index.html" )
+
+		var path = normalizePath( arguments.entry.config.path ?: "" )
+		var title = len( arguments.entry.config.title ?: "" ) ? arguments.entry.config.title : "BX Agents Chat"
+
+		html = html.replace( "__API_BASE__", path & "/api", "all" )
+		html = html.replace( "__APP_TITLE__", title, "all" )
+
+		var mountDir = normalizePath( arguments.appDir ) & path
+		directoryCreate( path : mountDir, createPath : true, ignoreExists : true )
+		fileWrite( mountDir & "/index.html", html )
+	}
+
+	/**
+	 * @gatedEntries webui entries that configure an apiKeyEnvVar - collectWebUiEntries()'s result, pre-filtered
+	 *
+	 * @return The rendered interceptors/WebUiAuthGate.bx source
+	 */
+	private string function renderAuthInterceptor( required array gatedEntries ) {
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * Gates every gateways/* webui entry's own <path>/api/* route behind",
+			" * an X-API-Key header, when that entry configures an apiKeyEnvVar.",
+			" * The static chat shell itself (<path>/index.html and its inline",
+			" * JS/CSS) is deliberately NOT gated - a browser's plain page",
+			" * navigation can't send a custom header, so gating the shell would",
+			" * make the page that PROMPTS FOR the key unreachable without it.",
+			" * The shell's own JS sends the key on every /api/* call it makes.",
+			" */",
+			"class {",
+			"",
+			"	function preProcess( event, interceptData, rc, prc ) {",
+			"		var path = event.getPath()"
+		]
+
+		for ( var entry in arguments.gatedEntries ) {
+			var apiPrefix = normalizePath( entry.config.path ?: "" ) & "/api"
+			var envVarName = entry.config.apiKeyEnvVar
+			lines.append( "" )
+			lines.append( "		if ( path.startsWith( #renderLiteral( apiPrefix )# ) ) {" )
+			lines.append( '			var provided = event.getHTTPHeader( "X-API-Key", "" )' )
+			lines.append( "			var expected = getSystemSetting( #renderLiteral( envVarName )#, '' )" )
+			lines.append( "			if ( !len( expected ) || !constantTimeEquals( provided, expected ) ) {" )
+			lines.append( "				event" )
+			lines.append( "					.renderData(" )
+			lines.append( '						type       = "json",' )
+			lines.append( '						data       = { error : true, message : "Unauthorized" },' )
+			lines.append( "						statusCode = 401," )
+			lines.append( '						statusText = "Unauthorized"' )
+			lines.append( "					)" )
+			lines.append( "					.noExecution()" )
+			lines.append( "				return" )
+			lines.append( "			}" )
+			lines.append( "		}" )
+		}
+
+		lines.append( "	}" )
+		lines.append( "" )
+		lines.append( "	// Same java.security.MessageDigest.isEqual() constant-time-compare" )
+		lines.append( "	// discipline every webhook gateway's own signature check already uses." )
+		lines.append( "	private boolean function constantTimeEquals( required string a, required string b ) {" )
+		lines.append( '		var aBytes = charsetDecode( arguments.a, "UTF-8" )' )
+		lines.append( '		var bBytes = charsetDecode( arguments.b, "UTF-8" )' )
+		lines.append( '		return createObject( "java", "java.security.MessageDigest" ).isEqual( aBytes, bBytes )' )
+		lines.append( "	}" )
+		lines.append( "" )
+		lines.append( "}" )
+		lines.append( "" )
+
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Reads a discovered `gateways/*` entry's config: JSON files are
+	 * deserialized directly, `.bx` files are dynamically loaded and their
+	 * `configure()` invoked. Duplicated from RouterGenerator/GatewayGenerator
+	 * rather than shared - matches this codebase's existing per-generator
+	 * self-containment convention.
+	 *
+	 * @path Absolute path to the entry's `.bx`/`.json` file
+	 *
+	 * @return The entry's config struct, or null if it could not be read
+	 */
+	private any function readEntryConfig( required string path ) {
+		try {
+			if ( arguments.path.endsWith( ".json" ) ) {
+				return jsonDeserialize( fileRead( arguments.path ) )
+			}
+
+			var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
+			var instance = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
+				.instantiate( arguments.path, context )
+			return instance.configure()
+		} catch ( any e ) {
+			return null
+		}
+	}
+
+	/**
+	 * @path A filesystem path
+	 *
+	 * @return The path with any trailing slash(es) stripped
+	 */
+	private string function normalizePath( required string path ) {
+		return arguments.path.reReplace( "[\/]+$", "" )
+	}
+
+	/**
+	 * @value A raw string to embed inside a generated double-quoted BoxLang string literal
+	 *
+	 * @return value with `"` doubled and `#` doubled, so it round-trips as a literal, not an interpolation
+	 */
+	private string function renderLiteral( required string value ) {
+		return '"' & arguments.value.replace( '"', '""', "all" ).replace( "##", "####", "all" ) & '"'
+	}
+
+}

@@ -40,6 +40,7 @@ class {
 		variables.toolsSkillsCopier = new "models.build.generators.ToolsSkillsCopier@bxagents"()
 		variables.interceptorSplitter = new "models.build.generators.InterceptorSplitter@bxagents"()
 		variables.routerGenerator = new "models.build.generators.RouterGenerator@bxagents"()
+		variables.webUiGenerator = new "models.build.generators.WebUiGenerator@bxagents"()
 		variables.gatewayGenerator = new "models.build.generators.GatewayGenerator@bxagents"()
 		variables.schedulerGenerator = new "models.build.generators.SchedulerGenerator@bxagents"()
 		variables.mcpGenerator = new "models.build.generators.McpGenerator@bxagents"()
@@ -111,6 +112,10 @@ class {
 		arguments.onProgress( "+ Generating config/Router.bx..." )
 		variables.routerGenerator.generate( discovery, appDir, gatewayResult.hasHttpGateway, gatewayResult.hasWhatsAppCloudGateway ?: false, gatewayResult.hasTeamsGateway ?: false, gatewayResult.hasTwilioGateway ?: false, gatewayResult.hasGitHubGateway ?: false )
 
+		arguments.onProgress( "+ Generating the v1 web chat UI (if any gateways/* entry exposes it)..." )
+		var webUiResult = variables.webUiGenerator.generate( discovery, appDir )
+		arguments.onProgress( "    webui=#( webUiResult.hasWebUi ? 'yes' : 'no' )#, apiKeyGate=#( len( webUiResult.webUiAuthInterceptorName ?: '' ) ? 'yes' : 'no' )#" )
+
 		var toolScanStatements = []
 		if ( discovery.tools.len() ) {
 			// bx-ai has no built-in "scan this app's tools/ folder" convention
@@ -123,6 +128,9 @@ class {
 		var agentInterceptorNames = interceptorSplit.agent.map( function( e ) { return e.name } )
 		if ( len( gatewayResult.sessionInterceptorName ?: "" ) ) {
 			agentInterceptorNames.append( gatewayResult.sessionInterceptorName )
+		}
+		if ( len( webUiResult.webUiAuthInterceptorName ?: "" ) ) {
+			agentInterceptorNames.append( webUiResult.webUiAuthInterceptorName )
 		}
 
 		arguments.onProgress( "+ Generating core ColdBox app skeleton (Application.bx, config/WireBox.bx, config/ColdBox.bx, agent/GeneratedAgentFactory.bx)..." )

@@ -1,9 +1,11 @@
 /**
  * Generates `config/Router.bx` for a project's HTTP exposure (Build Pipeline
  * Phase 5): one `route(path).toAi("GeneratedAgent")` per `gateways/*` entry
- * that exposes the agent, one `route(path).toMCP(target)` per entry that
- * exposes a local `mcp/*` server - both native ColdBox 8.1 AI Routing DSL
- * terminators (https://coldbox.ortusbooks.com/the-basics/routing/routing-dsl/ai-routing),
+ * that exposes the agent, one `route(path & "/api").toAi("GeneratedAgent")`
+ * per entry that exposes the v1 web chat UI (see WebUiGenerator - the UI's
+ * own static shell is a real file, not a route), one `route(path).toMCP(target)`
+ * per entry that exposes a local `mcp/*` server - all native ColdBox 8.1 AI
+ * Routing DSL terminators (https://coldbox.ortusbooks.com/the-basics/routing/routing-dsl/ai-routing),
  * confirmed via documentation to auto-register 4 sub-routes (toAi) or 1 route
  * (toMCP) respectively.
  *
@@ -145,6 +147,14 @@ class {
 
 		if ( arguments.entry.config.exposes == "agent" ) {
 			return 'route( "#bxLiteral( path )#" ).toAi( "GeneratedAgent" )'
+		}
+
+		if ( arguments.entry.config.exposes == "webui" ) {
+			// The static chat shell itself (<path>/index.html) is a real file
+			// under the app's own webroot - see WebUiGenerator - so it's served
+			// directly, no route needed. Only the API needs one, at a fixed
+			// "/api" suffix so it never collides with the shell's own files.
+			return 'route( "#bxLiteral( path )#/api" ).toAi( "GeneratedAgent" )'
 		}
 
 		var target = arguments.entry.config.target ?: ""

@@ -32,6 +32,15 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( 'route( "/api/chat" ).toAi( "GeneratedAgent" )' );
 			} );
 
+			it( 'emits one route(path & "/api").toAi("GeneratedAgent") per webui-exposure entry, not a route for the path itself', function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var result = generator.generate( discovery, newAppDir() );
+
+				var content = fileRead( result.router );
+				expect( content ).toInclude( 'route( "/chat/api" ).toAi( "GeneratedAgent" )' );
+				expect( content ).notToInclude( 'route( "/chat" ).toAi( "GeneratedAgent" )' );
+			} );
+
 			it( "emits one route(path).toMCP(target) per mcp-exposure entry", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
 				var result = generator.generate( discovery, newAppDir() );
