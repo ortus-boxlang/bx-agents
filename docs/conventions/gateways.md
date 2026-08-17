@@ -103,7 +103,7 @@ A `webui` entry mounts ten actions under `<path>/api`, served by a generated `ha
 | `POST /cancel` | Stop an in-flight run - `{ threadId, reason? }` |
 | `POST /steer` | Splice a message into a running turn - `{ threadId, input }` |
 | `POST /clear` | Clear this visitor's conversation |
-| `POST /compact` | **501** - see below |
+| `POST /compact` | Summarize this visitor's older messages, keep the recent ones - optional `{ keepRecent }` |
 | `GET /history` | This visitor's stored messages, for rehydrating the transcript |
 | `POST /resume` | Answer a pending approval and stream the continuation - `{ threadId, decision, editedData?, reason? }` |
 | `GET /pending` | What a suspended run is waiting on - `?threadId=` |
@@ -119,11 +119,23 @@ Every one is scoped by ColdBox's `getUserSessionIdentifier()` as the `userId`. T
 **Stop must go through `/cancel`, not just an aborted fetch.** Aborting the HTTP request only stops the browser listening - the server keeps running the turn, calling tools and spending tokens. The page therefore sends a `threadId` with every turn and posts it to `/cancel` before aborting, so `agent.cancelRun()` can signal the run at its next checkpoint.
 {% endhint %}
 
-{% hint style="danger" %}
-**`/compact` deliberately returns 501.** bx-ai's `IAiMemory.summarize( config )` takes no `userId`/`conversationId` - it reads `getNonSystemMessages()` across the whole memory instance. Running it for one visitor would rewrite *other* visitors' conversations, which is data loss rather than compaction. The route exists so the shape is settled for the moment `summarize()` learns to scope itself.
+`/clear` and `/compact` are both careful about scope. `/clear` goes through each memory's own `clear( userId, conversationId )` rather than `AiAgent.clearMemory()`, which takes no arguments and would wipe every visitor's history; `/compact` goes through `summarize( config, userId, conversationId )` for the same reason. Compaction replaces this conversation's older messages with an AI-written summary and keeps the most recent few, touching nothing outside the caller's `(userId, conversationId)` pair.
+
+{% hint style="info" %}
+**`/compact` needs a summary model, and reports whether it has one.** `summarize()` is a silent no-op unless the memory has *both* `summaryProvider` and `summaryModel` configured, and also when the conversation is already at or under `keepRecent`. Neither is an error, so `/compact` returns `{ compacted, before, after }` and lets the caller see for itself, and `/info`'s `capabilities.compact` reports whether a summary model is configured at all - so a page can hide a button that would do nothing rather than look broken.
+
+Only `keepRecent` is taken from the request. `summarize()` also honours `model`/`provider` overrides, but accepting those here would let any visitor aim a summarization call at a provider and model of their choosing on your credentials - the memory's own config decides that instead.
 {% endhint %}
 
-`/clear` avoids the same trap: it goes through each memory's own `clear( userId, conversationId )` rather than `AiAgent.clearMemory()`, which takes no arguments and would wipe every visitor's history.
+```javascript
+// Agent.bx - what makes /compact functional
+memory: {
+	type            : "cache",
+	summaryProvider : "openai",
+	summaryModel    : "gpt-4o-mini",
+	summaryThreshold: 10
+}
+```
 
 #### Human-in-the-loop
 

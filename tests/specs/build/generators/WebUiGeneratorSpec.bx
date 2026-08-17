@@ -275,20 +275,39 @@ class extends="testbox.system.BaseSpec" {
 				expect( src ).toInclude( "mem.clear( userId, conversationId )" );
 			} );
 
-			it( "refuses to compact, because bx-ai's summarize() is not conversation-scoped", function() {
-				// IAiMemory.summarize( config ) reads getNonSystemMessages() across the
-				// whole memory instance - running it for one visitor would rewrite the
-				// conversations of others. Wired up and refusing beats silent data loss.
+			it( "compacts only the caller's conversation, through the scoped summarize()", function() {
+				// bx-ai's IAiMemory.summarize() now takes userId/conversationId, so
+				// compaction can finally run for one visitor without rewriting the
+				// conversations of others. It must be called WITH that pair.
 				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
 				var appDir = newAppDir();
 				generator.generate( discovery, appDir );
 
 				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
-				expect( src ).toInclude( "statusCode: 501" );
-				// The docblock names summarize() to explain the refusal, so assert
-				// that nothing actually CALLS it
-				expect( src ).notToInclude( "mem.summarize(" );
-				expect( src ).notToInclude( ".summarize( {" );
+				expect( src ).toInclude( "mem.summarize( config, userId, conversationId )" );
+				// The old refusal is gone
+				expect( src ).notToInclude( "statusCode: 501" );
+				// Only keepRecent is caller-controlled: accepting model/provider would
+				// let any visitor aim a summarization call at a provider of their
+				// choosing, on this deployment's credentials
+				expect( src ).toInclude( 'config[ "keepRecent" ] = keepRecent' );
+				expect( src ).notToInclude( 'config[ "model" ]' );
+				expect( src ).notToInclude( 'config[ "provider" ]' );
+			} );
+
+			it( "reports the compact capability honestly, from the memory's own summary config", function() {
+				// summarize() is a silent no-op unless BOTH summaryProvider and
+				// summaryModel are set, so advertising compact:true unconditionally
+				// would make an unconfigured deployment look broken instead of
+				// merely unconfigured.
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
+				expect( src ).toInclude( '"compact"   : canCompact()' );
+				expect( src ).toInclude( "getSummaryProvider()" );
+				expect( src ).toInclude( "getSummaryModel()" );
 			} );
 
 			it( "serves history from the agent's own memory for the caller's conversation", function() {
