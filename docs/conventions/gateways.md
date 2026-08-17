@@ -156,6 +156,25 @@ The transcript lives in the DOM; the conversation lives in the agent's memory. W
 
 **New** starts a fresh `conversationId`. It does not delete anything - the previous conversation stays on the server under its own id, which is the groundwork for a conversation list later.
 
+#### What the page does
+
+The shipped page is a real chat client, not a demo shell. It reads `GET /info` **first** and shapes itself to what the server actually reports, so a control only appears where the capability exists.
+
+| Area | Behaviour |
+| --- | --- |
+| **Conversation sidebar** | Lists this visitor's conversations newest-first, with message counts. Switch, rename (✎), delete (×), or start a new one. Titles render through `textContent` — a title is whatever the user typed first, so it is never parsed as markup |
+| **Steer while streaming** | The composer stays live during a turn. **Send** becomes **Steer**, and the message splices into the run already in flight rather than starting a new one |
+| **Stop** | Posts `/cancel` *before* aborting the fetch, so the server actually stops spending tokens, then keeps whatever already streamed |
+| **Clear / Compact** | Clear empties this conversation; Compact appears only when a summary model is configured, and reports what it actually did (`Compacted 12 messages down to 3`, or `Nothing to compact yet`) |
+| **Reasoning + tool calls** | Collapsed disclosures fed from `delta.reasoning` and `delta.tool_calls` on the same envelope |
+| **Approvals** | A human-in-the-loop pause renders an Approve/Reject card from `GET /pending`, answered via `/resume`, which streams the continuation of the same turn |
+| **Theme** | Stored server-side in `preferences`, so it follows the identity rather than the browser. `localStorage` keeps a local copy so the choice survives a failed request |
+| **Model** | `/info`'s model name sits in the header, so it is always clear what answered |
+
+**Recovery matters more than it sounds.** The last-opened conversation is remembered in `localStorage`, but the conversations themselves live on the server. If that id no longer exists — deleted in another tab, or a fresh store — the page falls back to the newest remaining conversation instead of rehydrating into an empty screen with no active row.
+
+Narrow screens get a real layout rather than a squeezed one: under `40rem` the sidebar overlays the transcript instead of stealing its width, and `prefers-reduced-motion` is honoured.
+
 #### The SQLite store
 
 Every `webui` project gets a SQLite database. It isn't optional and there's no flag to turn it off.
@@ -256,7 +275,7 @@ For anything the tokens don't cover - custom fonts, layout, per-element rules - 
 {% endhint %}
 
 {% hint style="info" %}
-v1 is intentionally small: one conversation per browser (the **New** button starts another; there's no multi-thread sidebar or server-side history list yet), and no approval UI for a human-in-the-loop suspension - the page surfaces a notice and stops. These are natural fast-follows, not built here. See `docs/known-limitations.md` for what was and wasn't verified against a real ColdBox boot in this project's own dev environment.
+What is **not** here yet: no attachments or image input (the composer is text-only, though bx-ai itself handles images), no retry/regenerate on a failed turn, no edit-and-resend, and no token/cost display. The page is otherwise complete against the API - every route it needs exists and is exercised. See `docs/known-limitations.md` for what was and wasn't verified against a real ColdBox boot in this project's own dev environment.
 {% endhint %}
 
 #### Conversation identity: the session IS the user identifier

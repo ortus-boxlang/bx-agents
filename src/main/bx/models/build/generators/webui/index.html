@@ -372,6 +372,122 @@ __THEME_TOKENS__
 		padding: 0 1rem 0.5rem;
 	}
 
+	/* ---- Shell: sidebar + conversation pane ---------------------------- */
+	.shell {
+		display: flex;
+		flex: 1;
+		min-height: 0;
+	}
+	#main {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		min-width: 0;
+	}
+	#sidebar {
+		width: 15rem;
+		flex-shrink: 0;
+		border-right: 1px solid var(--border);
+		background: var(--surface);
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+	}
+	#sidebar[hidden] { display: none; }
+	#sidebar .sidebar-head {
+		padding: 0.6rem;
+		border-bottom: 1px solid var(--border);
+		flex-shrink: 0;
+	}
+	#sidebar .sidebar-head button {
+		width: 100%;
+		background: var(--accent);
+		color: var(--accent-fg);
+		border: none;
+		border-radius: var(--radius-sm);
+		padding: 0.45rem 0.6rem;
+		cursor: pointer;
+		font-size: 0.85rem;
+		font-family: inherit;
+	}
+	#convList {
+		list-style: none;
+		margin: 0;
+		padding: 0.4rem;
+		overflow-y: auto;
+		flex: 1;
+	}
+	#convList li {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		border-radius: var(--radius-sm);
+		margin-bottom: 0.15rem;
+	}
+	#convList li.active { background: var(--bubble-assistant); }
+	#convList .pick {
+		flex: 1;
+		min-width: 0;
+		text-align: left;
+		background: none;
+		border: none;
+		color: var(--fg);
+		font-family: inherit;
+		font-size: 0.85rem;
+		padding: 0.45rem 0.5rem;
+		cursor: pointer;
+		border-radius: var(--radius-sm);
+	}
+	#convList .pick .name {
+		display: block;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	#convList .pick .count {
+		display: block;
+		font-size: 0.7rem;
+		color: var(--muted);
+	}
+	#convList .row-actions button {
+		background: none;
+		border: none;
+		color: var(--muted);
+		cursor: pointer;
+		font-size: 0.8rem;
+		padding: 0.2rem 0.3rem;
+		border-radius: var(--radius-sm);
+	}
+	#convList .row-actions button:hover { color: var(--fg); }
+	#convList .empty {
+		color: var(--muted);
+		font-size: 0.8rem;
+		padding: 0.5rem;
+	}
+	header .meta {
+		font-size: 0.7rem;
+		color: var(--muted);
+		white-space: nowrap;
+	}
+
+	/* Narrow screens: the sidebar overlays rather than squeezing the transcript. */
+	@media ( max-width: 40rem ) {
+		#sidebar {
+			position: fixed;
+			top: 0;
+			bottom: 0;
+			left: 0;
+			z-index: 20;
+			width: 78vw;
+			max-width: 17rem;
+			box-shadow: 0 0 2rem rgba( 0, 0, 0, 0.35 );
+		}
+		header .meta { display: none; }
+	}
+	@media ( prefers-reduced-motion: reduce ) {
+		* { animation: none !important; transition: none !important; }
+	}
+
 	/* Project override: resources/webui/theme.css, inlined last so it always wins. */
 __CUSTOM_CSS__
 </style>
@@ -386,20 +502,33 @@ __CUSTOM_CSS__
 			</div>
 		</div>
 		<div class="actions">
-			<button type="button" id="newBtn" title="Start a new conversation">New</button>
+			<span class="meta" id="modelMeta"></span>
+			<button type="button" id="sidebarBtn" aria-expanded="true" aria-controls="sidebar" title="Show or hide conversations">Chats</button>
+			<button type="button" id="clearBtn" title="Delete the messages in this conversation" hidden>Clear</button>
+			<button type="button" id="compactBtn" title="Summarize older messages, keep the recent ones" hidden>Compact</button>
 			<button type="button" id="keyBtn" title="Set the API key this page sends as X-API-Key">Key</button>
 			<button type="button" id="themeBtn" title="Toggle dark/light">Theme</button>
 		</div>
 	</header>
-	<div id="messages" role="log" aria-live="polite" aria-relevant="additions text" aria-label="Conversation"></div>
-	<p class="hint" id="hint" role="status"></p>
-	<form id="composer" autocomplete="off">
-		<label class="visually-hidden" for="input">Message</label>
-		<textarea id="input" rows="1" placeholder="__PLACEHOLDER__" autofocus></textarea>
-		<button type="submit" id="sendBtn">Send</button>
-		<button type="button" id="stopBtn" hidden>Stop</button>
-	</form>
-	__FOOTER__
+	<div class="shell">
+		<aside id="sidebar" aria-label="Conversations">
+			<div class="sidebar-head">
+				<button type="button" id="newBtn" title="Start a new conversation">+ New chat</button>
+			</div>
+			<ul id="convList"></ul>
+		</aside>
+		<div id="main">
+			<div id="messages" role="log" aria-live="polite" aria-relevant="additions text" aria-label="Conversation"></div>
+			<p class="hint" id="hint" role="status"></p>
+			<form id="composer" autocomplete="off">
+				<label class="visually-hidden" for="input">Message</label>
+				<textarea id="input" rows="1" placeholder="__PLACEHOLDER__" autofocus></textarea>
+				<button type="submit" id="sendBtn">Send</button>
+				<button type="button" id="stopBtn" hidden>Stop</button>
+			</form>
+			__FOOTER__
+		</div>
+	</div>
 
 <script>
 (function () {
@@ -422,6 +551,19 @@ __CUSTOM_CSS__
 	var keyBtn = document.getElementById( "keyBtn" );
 	var newBtn = document.getElementById( "newBtn" );
 	var themeBtn = document.getElementById( "themeBtn" );
+	var sidebarBtn = document.getElementById( "sidebarBtn" );
+	var clearBtn = document.getElementById( "clearBtn" );
+	var compactBtn = document.getElementById( "compactBtn" );
+	var sidebarEl = document.getElementById( "sidebar" );
+	var convListEl = document.getElementById( "convList" );
+	var modelMetaEl = document.getElementById( "modelMeta" );
+
+	// What the server says it can do, from GET /info. Read once at load and used
+	// to decide which controls exist at all - a button that would 501 or no-op is
+	// worse than no button.
+	var capabilities = {};
+	var conversations = [];
+	var isBusy = false;
 
 	var activeController = null;
 	// The id the server keys this turn's run by. Sent with the turn so /cancel
@@ -462,6 +604,173 @@ __CUSTOM_CSS__
 		return id;
 	}
 
+	/**
+	 * Points the page at a conversation and reloads its transcript.
+	 *
+	 * The id is remembered locally only so a reload reopens the same chat; the
+	 * conversations themselves live in the server's store, which is what the
+	 * sidebar lists.
+	 */
+	function selectConversation( id ) {
+		if ( activeController ) {
+			activeController.abort();
+		}
+		localStorage.setItem( CONVERSATION_STORAGE, id );
+		renderConversations();
+		return rehydrate();
+	}
+
+	function apiGet( path ) {
+		return fetch( API_BASE + path, { headers: authHeaders( {} ) } )
+			.then( function ( res ) { return res.ok ? res.json() : null; } )
+			.catch( function () { return null; } );
+	}
+
+	/**
+	 * Reads GET /info once and shapes the page to it: the model name in the
+	 * header, and a control only where the server says the capability exists.
+	 * capabilities.compact in particular is false whenever no summary model is
+	 * configured, in which case the button would do nothing at all.
+	 */
+	function loadInfo() {
+		return apiGet( "/info" ).then( function ( payload ) {
+			if ( !payload ) {
+				return;
+			}
+			capabilities = payload.capabilities || {};
+			if ( payload.model ) {
+				modelMetaEl.textContent = payload.model;
+			}
+			clearBtn.hidden = false;
+			compactBtn.hidden = !capabilities.compact;
+			sidebarBtn.hidden = !capabilities.conversations;
+			if ( !capabilities.conversations ) {
+				setSidebar( false );
+			}
+		} );
+	}
+
+	function renderConversations() {
+		var current = getConversationId();
+		convListEl.textContent = "";
+
+		if ( !conversations.length ) {
+			var empty = document.createElement( "li" );
+			empty.className = "empty";
+			empty.textContent = "No conversations yet.";
+			convListEl.appendChild( empty );
+			return;
+		}
+
+		conversations.forEach( function ( conv ) {
+			var li = document.createElement( "li" );
+			if ( conv.id === current ) {
+				li.className = "active";
+			}
+
+			var pick = document.createElement( "button" );
+			pick.type = "button";
+			pick.className = "pick";
+			pick.setAttribute( "aria-current", conv.id === current ? "true" : "false" );
+
+			// textContent throughout - a conversation title is whatever the user
+			// typed first, so it must never be parsed as markup.
+			var name = document.createElement( "span" );
+			name.className = "name";
+			name.textContent = conv.title || "Untitled";
+			pick.appendChild( name );
+
+			var count = document.createElement( "span" );
+			count.className = "count";
+			count.textContent = ( conv.messageCount || 0 ) + " messages";
+			pick.appendChild( count );
+
+			pick.addEventListener( "click", function () {
+				selectConversation( conv.id );
+			} );
+			li.appendChild( pick );
+
+			var actions = document.createElement( "span" );
+			actions.className = "row-actions";
+
+			var renameBtn = document.createElement( "button" );
+			renameBtn.type = "button";
+			renameBtn.title = "Rename";
+			renameBtn.textContent = "\u270e";
+			renameBtn.addEventListener( "click", function () {
+				var next = window.prompt( "Rename this conversation", conv.title || "" );
+				if ( next === null || !next.trim() ) {
+					return;
+				}
+				apiPost( "/conversations/rename", { conversationId: conv.id, title: next.trim() } )
+					.then( loadConversations );
+			} );
+			actions.appendChild( renameBtn );
+
+			var delBtn = document.createElement( "button" );
+			delBtn.type = "button";
+			delBtn.title = "Delete";
+			delBtn.textContent = "\u00d7";
+			delBtn.addEventListener( "click", function () {
+				if ( !window.confirm( "Delete this conversation and its messages?" ) ) {
+					return;
+				}
+				apiPost( "/conversations/delete", { conversationId: conv.id } ).then( function () {
+					return loadConversations();
+				} ).then( function () {
+					// Deleting the open chat leaves nothing shown - move to the
+					// newest remaining one, or start fresh if that was the last.
+					if ( conv.id !== getConversationId() ) {
+						return;
+					}
+					if ( conversations.length ) {
+						return selectConversation( conversations[ 0 ].id );
+					}
+					return startConversation();
+				} );
+			} );
+			actions.appendChild( delBtn );
+
+			li.appendChild( actions );
+			convListEl.appendChild( li );
+		} );
+	}
+
+	function loadConversations() {
+		if ( capabilities.conversations === false ) {
+			return Promise.resolve();
+		}
+		return apiGet( "/conversations" ).then( function ( payload ) {
+			conversations = ( payload && payload.conversations ) || [];
+			renderConversations();
+		} );
+	}
+
+	/**
+	 * Starts a conversation server-side and opens it. The id is minted by the
+	 * server so it cannot collide with one that already exists.
+	 */
+	function startConversation() {
+		return apiPost( "/conversations/create", {} )
+			.then( function ( res ) { return res.ok ? res.json() : null; } )
+			.then( function ( payload ) {
+				var id = ( payload && payload.conversationId ) || newConversationId();
+				localStorage.setItem( CONVERSATION_STORAGE, id );
+				return loadConversations().then( function () {
+					messagesEl.textContent = "";
+					showHint( "" );
+					showWelcome();
+					renderConversations();
+					inputEl.focus();
+				} );
+			} );
+	}
+
+	function setSidebar( open ) {
+		sidebarEl.hidden = !open;
+		sidebarBtn.setAttribute( "aria-expanded", open ? "true" : "false" );
+	}
+
 	function getApiKey() {
 		return localStorage.getItem( KEY_STORAGE ) || "";
 	}
@@ -496,9 +805,28 @@ __CUSTOM_CSS__
 		var prefersDark = window.matchMedia && window.matchMedia( "(prefers-color-scheme: dark)" ).matches;
 		var effectiveIsDark = current ? current === "dark" : prefersDark;
 		var next = effectiveIsDark ? "light" : "dark";
+		// localStorage first so the choice survives even if the request fails,
+		// then the server so it follows the IDENTITY rather than this browser.
 		localStorage.setItem( THEME_STORAGE, next );
 		applyTheme( next );
+		if ( capabilities.preferences !== false ) {
+			apiPost( "/preferences/set", { key: "theme", value: next } ).catch( function () {} );
+		}
 	} );
+
+	/**
+	 * Server-stored preferences win over the local copy: they follow the identity
+	 * across browsers, which is the whole reason they are stored server-side.
+	 */
+	function loadPreferences() {
+		return apiGet( "/preferences" ).then( function ( payload ) {
+			var prefs = ( payload && payload.preferences ) || {};
+			if ( prefs.theme ) {
+				localStorage.setItem( THEME_STORAGE, prefs.theme );
+				applyTheme( prefs.theme );
+			}
+		} );
+	}
 
 	function authHeaders( extra ) {
 		var headers = extra || {};
@@ -803,9 +1131,18 @@ __CUSTOM_CSS__
 		};
 	}
 
+	/**
+	 * While a turn runs, Send becomes Steer rather than being disabled - the
+	 * composer stays usable on purpose, because steering mid-run is the point.
+	 * isBusy is a real variable rather than being read back off the button's
+	 * disabled state, since a disabled button could not be clicked to steer.
+	 */
 	function setBusy( busy ) {
-		sendBtn.disabled = busy;
-		sendBtn.hidden = busy;
+		isBusy = busy;
+		sendBtn.textContent = busy ? "Steer" : "Send";
+		sendBtn.title = busy
+			? "Add a message to the turn already running"
+			: "";
 		stopBtn.hidden = !busy;
 	}
 
@@ -1014,7 +1351,28 @@ __CUSTOM_CSS__
 	formEl.addEventListener( "submit", function ( evt ) {
 		evt.preventDefault();
 		var text = inputEl.value.trim();
-		if ( !text || sendBtn.disabled ) {
+		if ( !text ) {
+			return;
+		}
+
+		// A turn is already running: this is a STEER, not a new turn. bx-ai
+		// splices the message into the run in flight at its next checkpoint, so
+		// the answer continues rather than restarting - which is why the composer
+		// stays usable while streaming instead of being disabled.
+		if ( isBusy && activeThreadId ) {
+			var steering = activeThreadId;
+			inputEl.value = "";
+			autoGrow();
+			addUserBubble( text );
+			apiPost( "/steer", { threadId: steering, input: text } )
+				.then( function ( res ) {
+					showHint( res.ok
+						? "Steered - the agent will pick this up at its next step."
+						: "Could not steer this run." );
+				} )
+				.catch( function () {
+					showHint( "Could not steer this run." );
+				} );
 			return;
 		}
 
@@ -1056,6 +1414,9 @@ __CUSTOM_CSS__
 			activeThreadId = null;
 			setBusy( false );
 			inputEl.focus();
+			// The turn moved this conversation to the top of the list, and may
+			// have just given it its title.
+			loadConversations();
 		} );
 	} );
 
@@ -1090,16 +1451,70 @@ __CUSTOM_CSS__
 		if ( activeController ) {
 			activeController.abort();
 		}
-		newConversationId();
-		messagesEl.textContent = "";
-		showHint( "" );
-		showWelcome();
-		inputEl.focus();
-		// The previous conversation stays on the server under its own id; the
-		// new one starts empty. Nothing is cleared - "New" is not "delete".
+		// The previous conversation stays on the server under its own id and in
+		// the sidebar. "New" is not "delete".
+		startConversation();
 	} );
 
-	rehydrate();
+	sidebarBtn.addEventListener( "click", function () {
+		setSidebar( sidebarEl.hidden );
+	} );
+
+	clearBtn.addEventListener( "click", function () {
+		if ( !window.confirm( "Delete the messages in this conversation? The conversation itself stays." ) ) {
+			return;
+		}
+		apiPost( "/clear", { options: { conversationId: getConversationId() } } )
+			.then( function () {
+				messagesEl.textContent = "";
+				showHint( "Conversation cleared." );
+				showWelcome();
+				return loadConversations();
+			} )
+			.catch( function () {
+				showHint( "Could not clear the conversation." );
+			} );
+	} );
+
+	compactBtn.addEventListener( "click", function () {
+		showHint( "Compacting..." );
+		apiPost( "/compact", { options: { conversationId: getConversationId() } } )
+			.then( function ( res ) { return res.ok ? res.json() : null; } )
+			.then( function ( payload ) {
+				if ( !payload ) {
+					showHint( "Compaction failed." );
+					return;
+				}
+				if ( !payload.compacted ) {
+					// Not an error: too few messages to be worth summarizing.
+					showHint( "Nothing to compact yet (" + payload.before + " messages)." );
+					return;
+				}
+				showHint( "Compacted " + payload.before + " messages down to " + payload.after + "." );
+				return rehydrate().then( loadConversations );
+			} )
+			.catch( function () {
+				showHint( "Compaction failed." );
+			} );
+	} );
+
+	// Boot: capabilities first, since they decide which controls exist, then the
+	// conversation list and the transcript. Preferences are independent, so they
+	// load alongside rather than blocking the chat.
+	loadInfo()
+		.then( loadPreferences )
+		.then( loadConversations )
+		.then( function () {
+			// A remembered conversation that no longer exists server-side (deleted
+			// from another tab, or a fresh store) would rehydrate to nothing and
+			// leave the sidebar with no active row. Fall back to the newest one.
+			var current = getConversationId();
+			var known = conversations.some( function ( c ) { return c.id === current; } );
+			if ( !known && conversations.length ) {
+				return selectConversation( conversations[ 0 ].id );
+			}
+			return rehydrate();
+		} );
 } )();
 </script>
 </body>

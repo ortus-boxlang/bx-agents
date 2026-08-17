@@ -412,6 +412,101 @@ class extends="testbox.system.BaseSpec" {
 				expect( src ).toInclude( 'wirebox.getInstance( "QueryBuilder@qb" )' );
 			} );
 
+			it( "ships a conversation sidebar wired to the conversations API", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( 'id="sidebar"' );
+				expect( html ).toInclude( 'id="convList"' );
+				expect( html ).toInclude( "function loadConversations()" );
+				expect( html ).toInclude( "function selectConversation(" );
+				expect( html ).toInclude( "function startConversation()" );
+				expect( html ).toInclude( '"/conversations/rename"' );
+				expect( html ).toInclude( '"/conversations/delete"' );
+				// A title is whatever the user typed first, so it must never be
+				// parsed as markup
+				expect( html ).toInclude( "name.textContent = conv.title" );
+			} );
+
+			it( "shapes itself to GET /info instead of assuming every capability", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( "function loadInfo()" );
+				expect( html ).toInclude( "capabilities = payload.capabilities" );
+				// Compact is hidden unless a summary model is actually configured,
+				// or the button would do nothing at all
+				expect( html ).toInclude( "compactBtn.hidden = !capabilities.compact" );
+				expect( html ).toInclude( "modelMetaEl.textContent = payload.model" );
+			} );
+
+			it( "turns Send into Steer while a turn is running, rather than disabling the composer", function() {
+				// Steering mid-run is the point of /steer - a disabled composer
+				// would make it unreachable
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( "if ( isBusy && activeThreadId )" );
+				expect( html ).toInclude( 'apiPost( "/steer"' );
+				expect( html ).toInclude( 'sendBtn.textContent = busy ? "Steer" : "Send"' );
+				// isBusy must be a real variable - a disabled button could not be
+				// clicked to steer
+				expect( html ).notToInclude( "sendBtn.disabled = busy" );
+			} );
+
+			it( "exposes Clear and Compact, and reports what compaction actually did", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( 'id="clearBtn"' );
+				expect( html ).toInclude( 'id="compactBtn"' );
+				expect( html ).toInclude( 'apiPost( "/clear"' );
+				expect( html ).toInclude( 'apiPost( "/compact"' );
+				// A no-op compaction is not an error - say so rather than claiming success
+				expect( html ).toInclude( "if ( !payload.compacted )" );
+			} );
+
+			it( "stores the theme server-side so it follows the identity, not the browser", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( "function loadPreferences()" );
+				expect( html ).toInclude( 'apiPost( "/preferences/set", { key: "theme"' );
+				// localStorage stays as the immediate/offline copy
+				expect( html ).toInclude( "localStorage.setItem( THEME_STORAGE, next )" );
+			} );
+
+			it( "lays out for narrow screens and honours reduced motion", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( "@media ( max-width: 40rem )" );
+				expect( html ).toInclude( "prefers-reduced-motion" );
+			} );
+
+			it( "recovers when the remembered conversation no longer exists", function() {
+				// Deleted from another tab, or a fresh store - rehydrating to
+				// nothing would leave the sidebar with no active row
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( "if ( !known && conversations.length )" );
+			} );
+
 			it( "serves the conversation list from the store, scoped to the caller", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
 				var appDir = newAppDir();
@@ -564,8 +659,12 @@ class extends="testbox.system.BaseSpec" {
 				var html = fileRead( appDir & "/chat/index.html" );
 				expect( html ).toInclude( "function rehydrate()" );
 				expect( html ).toInclude( '"/history?conversationId="' );
-				// Bootstraps via rehydrate, which falls back to the welcome itself
-				expect( html ).toInclude( "	rehydrate();" );
+				// Boot order matters: capabilities decide which controls exist at
+				// all, so /info comes first, then preferences, then the list, then
+				// the transcript
+				expect( html ).toInclude( "loadInfo()" );
+				expect( html ).toInclude( ".then( loadPreferences )" );
+				expect( html ).toInclude( ".then( loadConversations )" );
 			} );
 
 			it( "turns a human-in-the-loop suspension into a real approval flow", function() {
