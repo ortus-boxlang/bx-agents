@@ -93,7 +93,7 @@ Because the whole envelope arrives, **reasoning and tool calls are already on th
 
 #### The generated API
 
-A `webui` entry mounts ten actions under `<path>/api`, served by a generated `handlers/ChatUi.bx`:
+A `webui` entry mounts twenty actions under `<path>/api`, served by a generated `handlers/ChatUi.bx`:
 
 | Route | Purpose |
 | --- | --- |
@@ -110,6 +110,13 @@ A `webui` entry mounts ten actions under `<path>/api`, served by a generated `ha
 | `GET /tools` | The agent's registered tools |
 | `GET /health` | Liveness |
 | `GET /info` | Agent name, model, memory/tool counts, capability flags |
+| `GET /conversations` | This visitor's conversations, newest activity first |
+| `POST /conversations/create` | Start one - optional `{ title }`, returns the minted `conversationId` |
+| `POST /conversations/rename` | `{ conversationId, title }` |
+| `POST /conversations/delete` | `{ conversationId }` - drops the row **and** the agent's messages for it |
+| `GET /preferences` | This visitor's stored preferences, as `{ key: value }` |
+| `POST /preferences/set` | `{ key, value }` |
+| `POST /preferences/delete` | `{ key }` |
 
 Every one is scoped by ColdBox's `getUserSessionIdentifier()` as the `userId`. The first three keep `toAi()`'s exact shape and wire format.
 
@@ -194,6 +201,20 @@ An absolute `database.path` **fails the build**: it's resolved with `expandPath(
 {% endhint %}
 
 The grammar is the only SQLite-specific piece. Everything else goes through qb, so pointing this at Postgres or MySQL later is a grammar and datasource change rather than a rewrite.
+
+#### Conversations and preferences
+
+These are what the SQLite store exists for, and both are scoped by the same server-derived `userId` as everything else.
+
+**Conversations.** Every turn through `/invoke`, `/stream` or `/batch` records itself against the index: the row is created on first use, `updatedAt` moves, and the first user message becomes the title (collapsed to one line, truncated to 60 characters) unless one is already set — so a rename is never silently undone by the next turn. `messageCount` is a **display counter**, bumped by two per turn; a turn that dies midway can leave it one high, and `/clear` resets it. The agent's own memory remains the authority on what was actually said.
+
+`/conversations/delete` removes the index row *and* clears the agent's messages for that conversation. Dropping only the row would leave the conversation invisible while still sitting in the model's context the moment anyone reused the id.
+
+{% hint style="warning" %}
+**Why `touchConversation()` is not a qb upsert.** An upsert targets the primary key alone, so a caller who guessed another visitor's `conversationId` would have their own `userId` written onto that row and take the conversation over. The store reads first and refuses when the row belongs to someone else. `setPreference()` *does* upsert, and safely — its target is the `(userId, prefKey)` composite key, so the caller's own identity is part of what it matches on.
+{% endhint %}
+
+**Preferences.** Server-side rather than `localStorage`, so they follow the identity instead of the browser. Point `identifierProvider` at a real authenticated principal and a visitor's preferences follow them across devices with no change to the generated code.
 
 #### Branding and theming
 

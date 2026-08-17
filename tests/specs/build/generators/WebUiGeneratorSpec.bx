@@ -305,7 +305,7 @@ class extends="testbox.system.BaseSpec" {
 				generator.generate( discovery, appDir );
 
 				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
-				expect( src ).toInclude( '"compact"   : canCompact()' );
+				expect( src ).toInclude( '"compact"       : canCompact()' );
 				expect( src ).toInclude( "getSummaryProvider()" );
 				expect( src ).toInclude( "getSummaryModel()" );
 			} );
@@ -410,6 +410,132 @@ class extends="testbox.system.BaseSpec" {
 				var src = fileRead( appDir & "/models/ChatDb.bx" );
 				expect( src ).toInclude( "any function query() {" );
 				expect( src ).toInclude( 'wirebox.getInstance( "QueryBuilder@qb" )' );
+			} );
+
+			it( "serves the conversation list from the store, scoped to the caller", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
+				expect( src ).toInclude( "function conversations( event, rc, prc )" );
+				expect( src ).toInclude( "chatDb().listConversations( resolveUserId() )" );
+				// Never from the request body - that would list someone else's
+				expect( src ).notToInclude( "listConversations( body" );
+			} );
+
+			it( "exposes create, rename and delete for conversations", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
+				for ( var action in [ "conversationCreate", "conversationRename", "conversationDelete" ] ) {
+					expect( src ).toInclude( "function #action#( event, rc, prc )" );
+				}
+				// Every one is scoped by the server-derived identity
+				expect( src ).toInclude( "renameConversation( resolveUserId()" );
+				expect( src ).toInclude( "chatDb().deleteConversation( userId, conversationId )" );
+				// A missing conversation is 404, not a silent success
+				expect( src ).toInclude( "statusCode: 404" );
+			} );
+
+			it( "mints the conversation id server-side on create", function() {
+				// An id chosen by the client could collide with one that already
+				// exists, and the store would refuse for reasons the client cannot act on
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
+				expect( src ).toInclude( "var conversationId = createUUID()" );
+			} );
+
+			it( "deletes the agent's messages too, not just the index row", function() {
+				// Dropping only the row would leave the conversation invisible but
+				// still in the model's context the moment anyone reused the id
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
+				expect( src ).toInclude( "agent().getMemories().each( ( mem ) => mem.clear( userId, conversationId ) )" );
+			} );
+
+			it( "records every turn against the conversation index", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
+				expect( src ).toInclude( "private void function recordTurn(" );
+				// Both the buffered and the streaming turn, or a conversation
+				// started by streaming would never appear in the list
+				expect( src ).toInclude( "recordTurn( body, resolveConversationId( body ) )" );
+				expect( src ).toInclude( "private string function deriveTitle(" );
+				// And /clear must not leave a stale count behind
+				expect( src ).toInclude( "chatDb().resetConversationCount( userId, conversationId )" );
+			} );
+
+			it( "stores preferences server-side, keyed by the same identity", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
+				for ( var action in [ "preferences", "preferenceSet", "preferenceDelete" ] ) {
+					expect( src ).toInclude( "function #action#( event, rc, prc )" );
+				}
+				expect( src ).toInclude( "chatDb().getPreferences( resolveUserId() )" );
+				expect( src ).toInclude( "chatDb().setPreference( resolveUserId(), key," );
+			} );
+
+			it( "refuses to let an upsert reassign another user's conversation", function() {
+				// A qb upsert targets the primary key alone, so a caller who guessed
+				// another user's conversationId would rewrite that row's userId to
+				// their own. touchConversation() reads first and refuses instead.
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/models/ChatDb.bx" );
+				expect( src ).toInclude( "if ( owner.userId != arguments.userId ) {" );
+				expect( src ).toInclude( "return false" );
+				// preferences CAN upsert - its target includes userId
+				expect( src ).toInclude( 'target : [ "userId", "prefKey" ]' );
+			} );
+
+			it( "scopes every conversation read and write by userId", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/models/ChatDb.bx" );
+				for ( var fn in [ "listConversations", "getConversation", "renameConversation", "deleteConversation" ] ) {
+					expect( src ).toInclude( "function #fn#(" );
+				}
+				expect( src ).toInclude( '.where( "userId", arguments.userId )' );
+			} );
+
+			it( "advertises the new capabilities on /info", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
+				expect( src ).toInclude( '"conversations" : true' );
+				expect( src ).toInclude( '"preferences"   : true' );
+			} );
+
+			it( "no longer claims the approval UI is missing", function() {
+				// The page shipped an approval card two revisions ago; the fallback
+				// notice still said v1 had none.
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).notToInclude( "no approval UI yet" );
 			} );
 
 			it( "mints a threadId server-side when the caller omits one, and echoes it back", function() {
