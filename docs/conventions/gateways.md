@@ -65,7 +65,7 @@ class {
 }
 ```
 
-Generates a real static `<path>/index.html` file (served directly - no route needed for it) plus `route( "<path>/api" ).toAi( "GeneratedAgent" )` for its own dedicated API, at a fixed `/api` suffix so it never collides with the shell's own files.
+Generates a real static `<path>/index.html` file (served directly - no route needed for it) plus its own dedicated API under a fixed `<path>/api` prefix, so it never collides with the shell's own files. That API is a generated `handlers/ChatUi.bx` rather than `toAi()` - see [The generated API](#the-generated-api) for the route list and why.
 
 **Validation:** `exposes` must be `agent`, `mcp`, or `webui`; `path` is required and must be unique across every exposure entry; an `mcp` exposure's `target` is required and must match a real `mcp/*` entry's declared name; `webui`'s `apiKeyEnvVar` is entirely optional, with no required-field check (see below).
 
@@ -90,6 +90,41 @@ There is no `token` key anywhere. A client written against that docs page - incl
 {% endhint %}
 
 Because the whole envelope arrives, **reasoning and tool calls are already on the wire** with no extra endpoint needed: `delta.reasoning` (normalized across every provider by bx-ai) renders as a collapsed "Thinking" strip, and `delta.tool_calls` as collapsed per-call chips. Tool-call arguments stream as partial JSON fragments keyed by `index`, so the page accumulates per index rather than assuming any single chunk holds a complete call.
+
+#### The generated API
+
+A `webui` entry mounts ten actions under `<path>/api`, served by a generated `handlers/ChatUi.bx`:
+
+| Route | Purpose |
+| --- | --- |
+| `POST /invoke` | One synchronous turn |
+| `POST /stream` | SSE turn (what the page uses) |
+| `POST /batch` | Run an `inputs[]` array |
+| `POST /cancel` | Stop an in-flight run - `{ threadId, reason? }` |
+| `POST /steer` | Splice a message into a running turn - `{ threadId, input }` |
+| `POST /clear` | Clear this visitor's conversation |
+| `POST /compact` | **501** - see below |
+| `GET /history` | This visitor's stored messages, for rehydrating the transcript |
+| `GET /health` | Liveness |
+| `GET /info` | Agent name, model, memory/tool counts, capability flags |
+
+Every one is scoped by `session.sessionId` as the `userId`. The first three keep `toAi()`'s exact shape and wire format.
+
+{% hint style="warning" %}
+**Stop must go through `/cancel`, not just an aborted fetch.** Aborting the HTTP request only stops the browser listening - the server keeps running the turn, calling tools and spending tokens. The page therefore sends a `threadId` with every turn and posts it to `/cancel` before aborting, so `agent.cancelRun()` can signal the run at its next checkpoint.
+{% endhint %}
+
+{% hint style="danger" %}
+**`/compact` deliberately returns 501.** bx-ai's `IAiMemory.summarize( config )` takes no `userId`/`conversationId` - it reads `getNonSystemMessages()` across the whole memory instance. Running it for one visitor would rewrite *other* visitors' conversations, which is data loss rather than compaction. The route exists so the shape is settled for the moment `summarize()` learns to scope itself.
+{% endhint %}
+
+`/clear` avoids the same trap: it goes through each memory's own `clear( userId, conversationId )` rather than `AiAgent.clearMemory()`, which takes no arguments and would wipe every visitor's history.
+
+#### History and reload
+
+The transcript lives in the DOM; the conversation lives in the agent's memory. Without rehydration a reload shows an empty screen while the agent still remembers everything - so the page would look blank and then answer follow-ups about messages the user cannot see. On load the page therefore calls `GET <path>/api/history` and replays the stored messages (markdown and all), falling back to the welcome message when the conversation is empty or the fetch fails.
+
+**New** starts a fresh `conversationId`. It does not delete anything - the previous conversation stays on the server under its own id, which is the groundwork for a conversation list later.
 
 #### Branding and theming
 

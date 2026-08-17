@@ -392,6 +392,16 @@ __CUSTOM_CSS__
 	var themeBtn = document.getElementById( "themeBtn" );
 
 	var activeController = null;
+	// The id the server keys this turn's run by. Sent with the turn so /cancel
+	// and /steer can reach a run that is still in flight - aborting the fetch
+	// alone would leave the server happily finishing (and billing) the turn.
+	var activeThreadId = null;
+
+	function newThreadId() {
+		return ( window.crypto && window.crypto.randomUUID )
+			? window.crypto.randomUUID()
+			: "t-" + Date.now() + "-" + Math.random().toString( 36 ).slice( 2, 10 );
+	}
 
 	/**
 	 * Without a conversationId the agent falls back to "" for BOTH userId and
@@ -457,6 +467,67 @@ __CUSTOM_CSS__
 		localStorage.setItem( THEME_STORAGE, next );
 		applyTheme( next );
 	} );
+
+	function authHeaders( extra ) {
+		var headers = extra || {};
+		var key = getApiKey();
+		if ( key ) {
+			headers[ "X-API-Key" ] = key;
+		}
+		return headers;
+	}
+
+	function apiPost( path, body ) {
+		return fetch( API_BASE + path, {
+			method : "POST",
+			headers: authHeaders( { "Content-Type": "application/json" } ),
+			body   : JSON.stringify( body || {} )
+		} );
+	}
+
+	/**
+	 * The transcript lives only in the DOM, but the conversation lives in the
+	 * agent's memory on the server. Without this, a reload shows an empty screen
+	 * while the agent still remembers everything - so the page would look blank
+	 * and then answer follow-up questions about messages the user cannot see.
+	 */
+	function rehydrate() {
+		var url = API_BASE + "/history?conversationId=" + encodeURIComponent( getConversationId() );
+		return fetch( url, { headers: authHeaders( {} ) } )
+			.then( function ( res ) { return res.ok ? res.json() : null; } )
+			.then( function ( payload ) {
+				var messages = ( payload && payload.messages ) || [];
+				if ( !messages.length ) {
+					showWelcome();
+					return;
+				}
+				clearWelcome();
+				messages.forEach( function ( message ) {
+					var content = typeof message.content === "string" ? message.content : "";
+					if ( !content.length ) {
+						return;
+					}
+					if ( message.role === "user" ) {
+						addUserBubble( content );
+						return;
+					}
+					if ( message.role === "assistant" ) {
+						var el = document.createElement( "div" );
+						el.className = "bubble assistant";
+						el.innerHTML = renderMarkdown( content );
+						var wrap = document.createElement( "div" );
+						wrap.className = "turn";
+						wrap.appendChild( el );
+						messagesEl.appendChild( wrap );
+					}
+				} );
+				scrollToEnd( true );
+			} )
+			.catch( function () {
+				// A history fetch that fails must never block using the chat
+				showWelcome();
+			} );
+	}
 
 	function showWelcome() {
 		if ( !WELCOME.length ) {
@@ -795,7 +866,10 @@ __CUSTOM_CSS__
 			// together under an empty id.
 			body: JSON.stringify( {
 				input  : text,
-				options: { conversationId: getConversationId() }
+				options: {
+					conversationId: getConversationId(),
+					threadId      : activeThreadId
+				}
 			} )
 		} ).then( function ( res ) {
 			if ( res.status === 401 ) {
@@ -861,6 +935,7 @@ __CUSTOM_CSS__
 		setBusy( true );
 		showHint( "" );
 
+		activeThreadId = newThreadId();
 		var turn = createTurn();
 
 		streamReply( text, turn ).then( function ( sawContent ) {
@@ -877,15 +952,23 @@ __CUSTOM_CSS__
 			addErrorBubble( err.message || "Something went wrong." );
 		} ).finally( function () {
 			activeController = null;
+			activeThreadId = null;
 			setBusy( false );
 			inputEl.focus();
 		} );
 	} );
 
 	stopBtn.addEventListener( "click", function () {
-		if ( activeController ) {
-			activeController.abort();
-		}
+		// Tell the SERVER to stop first - bx-ai signals the run at its next
+		// checkpoint, so tools stop firing and tokens stop being spent. Aborting
+		// the fetch only stops us listening. Abort regardless of the outcome so
+		// Stop always stops the UI.
+		var body = { threadId: activeThreadId, reason: "Stopped by the user." };
+		apiPost( "/cancel", body ).catch( function () {} ).finally( function () {
+			if ( activeController ) {
+				activeController.abort();
+			}
+		} );
 	} );
 
 	// Enter sends, Shift+Enter makes a newline - the convention every chat UI uses.
@@ -911,9 +994,11 @@ __CUSTOM_CSS__
 		showHint( "" );
 		showWelcome();
 		inputEl.focus();
+		// The previous conversation stays on the server under its own id; the
+		// new one starts empty. Nothing is cleared - "New" is not "delete".
 	} );
 
-	showWelcome();
+	rehydrate();
 } )();
 </script>
 </body>

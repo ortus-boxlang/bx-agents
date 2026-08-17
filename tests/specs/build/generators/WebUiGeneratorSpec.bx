@@ -241,6 +241,88 @@ class extends="testbox.system.BaseSpec" {
 				expect( html ).toInclude( "isPinnedToBottom" );
 			} );
 
+			it( "generates a ChatUi handler whose every action is scoped by the SERVER session", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
+				expect( src ).toInclude( "return session.sessionId" );
+				// No fallback: sessionManagement is guaranteed by the same generator,
+				// and an empty-string fallback IS the shared-bucket bug
+				expect( src ).notToInclude( 'session.sessionId ?:' );
+				expect( src ).toInclude( 'options[ "userId" ] = resolveUserId()' );
+
+				for ( var action in [ "invoke", "stream", "batch", "cancel", "steer", "clear", "compact", "history", "health", "info" ] ) {
+					expect( src ).toInclude( "function #action#( event, rc, prc )" );
+				}
+			} );
+
+			it( "clears only the caller's conversation, never every visitor's", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
+				// AiAgent.clearMemory() takes no arguments and would wipe everyone.
+				// Assert on the CALL, not the name - the docblock explains why it is
+				// avoided, so a bare name match would hit the comment.
+				expect( src ).notToInclude( "agent().clearMemory(" );
+				expect( src ).toInclude( "mem.clear( userId, conversationId )" );
+			} );
+
+			it( "refuses to compact, because bx-ai's summarize() is not conversation-scoped", function() {
+				// IAiMemory.summarize( config ) reads getNonSystemMessages() across the
+				// whole memory instance - running it for one visitor would rewrite the
+				// conversations of others. Wired up and refusing beats silent data loss.
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
+				expect( src ).toInclude( "statusCode: 501" );
+				// The docblock names summarize() to explain the refusal, so assert
+				// that nothing actually CALLS it
+				expect( src ).notToInclude( "mem.summarize(" );
+				expect( src ).notToInclude( ".summarize( {" );
+			} );
+
+			it( "serves history from the agent's own memory for the caller's conversation", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				expect( fileRead( appDir & "/handlers/ChatUi.bx" ) )
+					.toInclude( "getMemoryMessages( resolveUserId(), conversationId )" );
+			} );
+
+			it( "sends a threadId with every turn and cancels that same run server-side", function() {
+				// Aborting the fetch only stops the browser listening - the server
+				// keeps running the turn and spending tokens. Real cancellation needs
+				// the threadId to reach agent.cancelRun().
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( "threadId      : activeThreadId" );
+				expect( html ).toInclude( 'apiPost( "/cancel"' );
+				// And it must still abort locally, or Stop would not stop the UI
+				expect( html ).toInclude( "activeController.abort()" );
+			} );
+
+			it( "rehydrates the transcript from /history on load", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( "function rehydrate()" );
+				expect( html ).toInclude( '"/history?conversationId="' );
+				// Bootstraps via rehydrate, which falls back to the welcome itself
+				expect( html ).toInclude( "	rehydrate();" );
+			} );
+
 			it( "does not generate an auth interceptor when no webui entry configures an apiKeyEnvVar", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-webui-no-key" );
 				var appDir = newAppDir();
