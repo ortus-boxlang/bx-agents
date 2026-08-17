@@ -323,6 +323,27 @@ class extends="testbox.system.BaseSpec" {
 				expect( html ).toInclude( "	rehydrate();" );
 			} );
 
+			it( "turns a human-in-the-loop suspension into a real approval flow", function() {
+				// The stream only signals a suspension with a `middleware_stop` chunk
+				// carrying no detail, so the page has to ask /pending what it is being
+				// asked to approve, then answer it via /resume - which streams the
+				// CONTINUATION of the same turn rather than starting a new one.
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
+				expect( src ).toInclude( "checkpointer.loadState( threadId )" );
+				expect( src ).toInclude( "thisAgent.resumeStream(" );
+				// Who approved something is not a claim the caller gets to make
+				expect( src ).toInclude( "var decidedBy = resolveUserId()" );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( "function offerApproval(" );
+				expect( html ).toInclude( '"/pending?threadId="' );
+				expect( html ).toInclude( 'streamInto( "/resume"' );
+			} );
+
 			it( "does not generate an auth interceptor when no webui entry configures an apiKeyEnvVar", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-webui-no-key" );
 				var appDir = newAppDir();

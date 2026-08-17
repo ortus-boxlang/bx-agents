@@ -105,6 +105,9 @@ A `webui` entry mounts ten actions under `<path>/api`, served by a generated `ha
 | `POST /clear` | Clear this visitor's conversation |
 | `POST /compact` | **501** - see below |
 | `GET /history` | This visitor's stored messages, for rehydrating the transcript |
+| `POST /resume` | Answer a pending approval and stream the continuation - `{ threadId, decision, editedData?, reason? }` |
+| `GET /pending` | What a suspended run is waiting on - `?threadId=` |
+| `GET /tools` | The agent's registered tools |
 | `GET /health` | Liveness |
 | `GET /info` | Agent name, model, memory/tool counts, capability flags |
 
@@ -119,6 +122,12 @@ Every one is scoped by `session.sessionId` as the `userId`. The first three keep
 {% endhint %}
 
 `/clear` avoids the same trap: it goes through each memory's own `clear( userId, conversationId )` rather than `AiAgent.clearMemory()`, which takes no arguments and would wipe every visitor's history.
+
+#### Human-in-the-loop
+
+When the agent pauses for approval, the stream emits a `middleware_stop` chunk that carries no detail. The page therefore asks `GET /pending?threadId=` what is being requested, renders it with **Approve** / **Reject**, and answers via `POST /resume` - which streams the *continuation of the same turn*, so the outcome lands in the conversation rather than starting a new one.
+
+`decidedBy` is filled from the session server-side, never from the request body: who approved something is exactly the kind of claim a caller should not get to make about itself.
 
 #### History and reload
 

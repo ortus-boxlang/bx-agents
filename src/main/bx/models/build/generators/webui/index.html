@@ -333,6 +333,38 @@ __THEME_TOKENS__
 		padding: 0.4rem 1rem 0;
 		margin: 0;
 	}
+	/* Human-in-the-loop approval request */
+	.approval {
+		align-self: flex-start;
+		max-width: var(--max-width);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		padding: 0.6rem 0.85rem;
+		background: var(--surface);
+	}
+	.approval-title { font-weight: 600; margin-bottom: 0.35rem; }
+	.approval-action {
+		font-family: var(--font-mono);
+		font-size: 0.8rem;
+		color: var(--muted);
+		word-break: break-all;
+		margin-bottom: 0.2rem;
+	}
+	.approval-buttons { display: flex; gap: 0.4rem; margin-top: 0.5rem; }
+	.approval-buttons button {
+		padding: 0.35rem 0.8rem;
+		border-radius: var(--radius-sm);
+		border: 1px solid var(--border);
+		background: var(--accent);
+		color: var(--accent-fg);
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.approval-buttons button:last-child {
+		background: transparent;
+		color: var(--fg);
+	}
+
 	footer.note {
 		color: var(--muted);
 		font-size: 0.75rem;
@@ -848,29 +880,16 @@ __CUSTOM_CSS__
 		return false;
 	}
 
-	function streamReply( text, turn ) {
-		var headers = { "Content-Type": "application/json", "Accept": "text/event-stream" };
-		var key = getApiKey();
-		if ( key ) {
-			headers[ "X-API-Key" ] = key;
-		}
+	function streamInto( path, payload, turn ) {
+		var headers = authHeaders( { "Content-Type": "application/json", "Accept": "text/event-stream" } );
 
 		activeController = new AbortController();
 
-		return fetch( API_BASE + "/stream", {
+		return fetch( API_BASE + path, {
 			method: "POST",
 			headers: headers,
 			signal: activeController.signal,
-			// options.conversationId is what keeps this visitor's history separate -
-			// see getConversationId(). Without it the agent buckets every visitor
-			// together under an empty id.
-			body: JSON.stringify( {
-				input  : text,
-				options: {
-					conversationId: getConversationId(),
-					threadId      : activeThreadId
-				}
-			} )
+			body: JSON.stringify( payload )
 		} ).then( function ( res ) {
 			if ( res.status === 401 ) {
 				throw new Error( "Unauthorized - set the API key via the \"Key\" button, then try again." );
@@ -883,6 +902,7 @@ __CUSTOM_CSS__
 			var decoder = new TextDecoder();
 			var buffer = "";
 			var sawContent = false;
+			var suspended = false;
 
 			var handlers = {
 				onContent: function ( chunk ) {
@@ -895,15 +915,17 @@ __CUSTOM_CSS__
 				onToolCall: function ( index, name, args ) {
 					turn.upsertToolCall( index, name, args );
 				},
-				onNotice: function ( message ) {
-					showHint( message );
+				onNotice: function () {
+					// A suspension carries no detail on the wire - remember it and
+					// ask /pending once the stream closes.
+					suspended = true;
 				}
 			};
 
 			function pump() {
 				return reader.read().then( function ( result ) {
 					if ( result.done ) {
-						return sawContent;
+						return { sawContent: sawContent, suspended: suspended };
 					}
 					buffer += decoder.decode( result.value, { stream: true } );
 					var lastBreak = buffer.lastIndexOf( "\n\n" );
@@ -911,7 +933,7 @@ __CUSTOM_CSS__
 					buffer = lastBreak >= 0 ? buffer.slice( lastBreak + 2 ) : "";
 
 					if ( handleSseChunk( completeChunk, handlers ) ) {
-						return sawContent;
+						return { sawContent: sawContent, suspended: suspended };
 					}
 					return pump();
 				} );
@@ -919,6 +941,74 @@ __CUSTOM_CSS__
 
 			return pump();
 		} );
+	}
+
+	/**
+	 * The agent paused for human approval. The stream said only that it stopped,
+	 * so ask /pending for what is actually being requested, then let the user
+	 * answer it - /resume streams the CONTINUATION of the same turn, so the
+	 * answer lands in the conversation rather than starting a new one.
+	 */
+	function offerApproval( turn, threadId ) {
+		return fetch( API_BASE + "/pending?threadId=" + encodeURIComponent( threadId ), { headers: authHeaders( {} ) } )
+			.then( function ( res ) { return res.ok ? res.json() : null; } )
+			.then( function ( payload ) {
+				if ( !payload || !payload.pending ) {
+					showHint( "The agent paused, but no pending approval was found." );
+					return;
+				}
+
+				var actions = payload.pendingActions || [];
+				var card = document.createElement( "div" );
+				card.className = "approval";
+
+				var title = document.createElement( "div" );
+				title.className = "approval-title";
+				title.textContent = actions.length === 1
+					? "Approve this action?"
+					: "Approve " + actions.length + " actions?";
+				card.appendChild( title );
+
+				actions.forEach( function ( action ) {
+					var row = document.createElement( "div" );
+					row.className = "approval-action";
+					row.textContent = ( action.name || action.tool || "action" )
+						+ ( action.arguments ? " " + ( typeof action.arguments === "string" ? action.arguments : JSON.stringify( action.arguments ) ) : "" );
+					card.appendChild( row );
+				} );
+
+				var buttons = document.createElement( "div" );
+				buttons.className = "approval-buttons";
+				[ [ "Approve", "approve" ], [ "Reject", "reject" ] ].forEach( function ( pair ) {
+					var btn = document.createElement( "button" );
+					btn.type = "button";
+					btn.textContent = pair[ 0 ];
+					btn.addEventListener( "click", function () {
+						card.remove();
+						setBusy( true );
+						var next = createTurn();
+						streamInto( "/resume", { threadId: threadId, decision: pair[ 1 ] }, next )
+							.then( function ( outcome ) { next.settle( outcome.sawContent ); } )
+							.catch( function ( err ) {
+								next.discard();
+								addErrorBubble( err.message || "Could not resume." );
+							} )
+							.finally( function () {
+								activeController = null;
+								setBusy( false );
+								inputEl.focus();
+							} );
+					} );
+					buttons.appendChild( btn );
+				} );
+				card.appendChild( buttons );
+
+				messagesEl.appendChild( card );
+				scrollToEnd( true );
+			} )
+			.catch( function () {
+				showHint( "The agent paused for approval, but the request could not be read." );
+			} );
 	}
 
 	formEl.addEventListener( "submit", function ( evt ) {
@@ -938,8 +1028,19 @@ __CUSTOM_CSS__
 		activeThreadId = newThreadId();
 		var turn = createTurn();
 
-		streamReply( text, turn ).then( function ( sawContent ) {
-			turn.settle( sawContent );
+		var payload = {
+			input  : text,
+			options: {
+				conversationId: getConversationId(),
+				threadId      : activeThreadId
+			}
+		};
+
+		streamInto( "/stream", payload, turn ).then( function ( outcome ) {
+			turn.settle( outcome.sawContent );
+			if ( outcome.suspended ) {
+				return offerApproval( turn, activeThreadId );
+			}
 		} ).catch( function ( err ) {
 			// An abort is the user pressing Stop, not a failure - keep whatever
 			// already streamed instead of throwing the partial answer away.
