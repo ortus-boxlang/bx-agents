@@ -247,10 +247,14 @@ class extends="testbox.system.BaseSpec" {
 				generator.generate( discovery, appDir );
 
 				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
-				expect( src ).toInclude( "return session.sessionId" );
-				// No fallback: sessionManagement is guaranteed by the same generator,
-				// and an empty-string fallback IS the shared-bucket bug
-				expect( src ).notToInclude( 'session.sessionId ?:' );
+				// ColdBox's own identifier: app-prefixed, session-backed, and pluggable
+				// through the identifierProvider setting - the same value toAi() falls
+				// back to. Reading session.sessionId directly would bypass all of that.
+				expect( src ).toInclude( "controller.getUserSessionIdentifier()" );
+				// The identity is derived server-side ONLY. Honouring a caller-supplied
+				// userId under one shared API key is impersonation, so it must never
+				// be read off the request body the way toAi() does.
+				expect( src ).notToInclude( "body.userId" );
 				expect( src ).toInclude( 'options[ "userId" ] = resolveUserId()' );
 
 				for ( var action in [ "invoke", "stream", "batch", "cancel", "steer", "clear", "compact", "history", "health", "info" ] ) {
@@ -309,6 +313,24 @@ class extends="testbox.system.BaseSpec" {
 				expect( html ).toInclude( 'apiPost( "/cancel"' );
 				// And it must still abort locally, or Stop would not stop the UI
 				expect( html ).toInclude( "activeController.abort()" );
+			} );
+
+			it( "mints a threadId server-side when the caller omits one, and echoes it back", function() {
+				// Matches the contract ColdBox toAi() adopted: the server is the source
+				// of truth for the threadId, and the caller learns it from the response
+				// so a later /cancel or /steer can name the run it is actually in.
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
+				expect( src ).toInclude( "private string function resolveThreadId(" );
+				expect( src ).toInclude( "len( supplied ) ? supplied : createUUID()" );
+				// Echoed on the buffered actions as a header...
+				expect( src ).toInclude( 'event.setHTTPHeader( name: "X-Thread-Id", value: threadId )' );
+				// ...and on the streaming action as the very first SSE frame, because a
+				// header cannot be read before the body starts arriving
+				expect( src ).toInclude( 'emitter.send( { "threadId": threadId }, "thread" )' );
 			} );
 
 			it( "rehydrates the transcript from /history on load", function() {

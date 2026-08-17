@@ -111,7 +111,9 @@ A `webui` entry mounts ten actions under `<path>/api`, served by a generated `ha
 | `GET /health` | Liveness |
 | `GET /info` | Agent name, model, memory/tool counts, capability flags |
 
-Every one is scoped by `session.sessionId` as the `userId`. The first three keep `toAi()`'s exact shape and wire format.
+Every one is scoped by ColdBox's `getUserSessionIdentifier()` as the `userId`. The first three keep `toAi()`'s exact shape and wire format.
+
+`threadId` is server-authoritative: taken from the request when supplied, minted otherwise, and always echoed back - as an `X-Thread-Id` response header on `/invoke` and `/batch`, and as a `thread` SSE event sent *before the first chunk* on `/stream` (a header can't be read before the body starts arriving). That's the same contract ColdBox 8.1's own `toAi()` adopted, so a client written against one works against the other.
 
 {% hint style="warning" %}
 **Stop must go through `/cancel`, not just an aborted fetch.** Aborting the HTTP request only stops the browser listening - the server keeps running the turn, calling tools and spending tokens. The page therefore sends a `threadId` with every turn and posts it to `/cancel` before aborting, so `agent.cancelRun()` can signal the run at its next checkpoint.
@@ -185,19 +187,21 @@ v1 is intentionally small: one conversation per browser (the **New** button star
 The fix is identity, not memory type. A project with a `webui` exposure therefore gets:
 
 1. **Session management on** in the generated `Application.bx` - `this.sessionManagement = true`, `this.setClientCookies = true`, a 60-minute `sessionTimeout`. Cookies are load-bearing: no cookie, no session id.
-2. **Its own `handlers/ChatUi.bx`**, which passes `session.sessionId` as the agent's `userId` on **all three runner shapes** - `invoke`, `stream` and `batch`.
+2. **Its own `handlers/ChatUi.bx`**, which passes ColdBox's `getUserSessionIdentifier()` as the agent's `userId` on **all three runner shapes** - `invoke`, `stream` and `batch`.
 
 ```javascript
 // handlers/ChatUi.bx (generated)
 private string function resolveUserId() {
-	return session.sessionId ?: ""
+	return controller.getUserSessionIdentifier()
 }
 ```
+
+Delegating to ColdBox rather than reading `session.sessionId` directly buys three things: the id is prefixed per application, it falls back through URLToken/CFID if a session is somehow unavailable, and - the one that matters most - it honours the **`identifierProvider`** config setting. Point that at your authenticated principal and every memory re-keys to the real user with no change to the generated handler.
 
 Because the identity is server-issued, scoping holds no matter which memories the project configures - one or many, `window`, `cache`, `jdbc`, vector, any mix.
 
 {% hint style="info" %}
-**Why not `toAi()` for the webui?** `toAi()`'s generated actions forward `body.options` to the runnable verbatim, so a `userId` reaching the agent through them could only ever be one the *caller* supplied - a request, not an identity. The generated handler keeps `toAi()`'s exact route shape (`/invoke`, `/stream`, `/batch`, `/info`) and its exact SSE wire format, and differs only in reading the user id from the session. The other exposure kinds (`exposes: "agent"`) still use `toAi()` unchanged.
+**Why not `toAi()` for the webui?** ColdBox 8.1's `toAi()` now derives conversational context itself, and its fallback is exactly the same call this handler makes: `len( body.userId ) ? body.userId : controller.getUserSessionIdentifier()`. The difference is precedence - `toAi()` lets a **caller-supplied `userId` win**, which is right for a trusted server-to-server caller but wrong for a browser sitting behind one shared API key, where anyone could name themselves anyone and read another visitor's memory. The generated handler derives the identity server-side *only*, and never looks at `body.userId`. It keeps `toAi()`'s exact route shape (`/invoke`, `/stream`, `/batch`, `/info`), its SSE wire format, and its `X-Thread-Id`/`thread`-event echo, so it stays a drop-in. The other exposure kinds (`exposes: "agent"`) still use `toAi()` unchanged - server-to-server is the case its precedence is built for.
 {% endhint %}
 
 `conversationId` still comes from the client, and that's deliberate: it distinguishes several conversations belonging to the *same* visitor - it's what the **New** button rotates. It is not the isolation boundary; the session-derived `userId` is.
