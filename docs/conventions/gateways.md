@@ -149,6 +149,52 @@ The transcript lives in the DOM; the conversation lives in the agent's memory. W
 
 **New** starts a fresh `conversationId`. It does not delete anything - the previous conversation stays on the server under its own id, which is the groundwork for a conversation list later.
 
+#### The SQLite store
+
+Every `webui` project gets a SQLite database. It isn't optional and there's no flag to turn it off.
+
+The reason is a real gap, not a preference: **bx-ai's `IAiMemory` has no enumeration API.** It's a per-`(userId, conversationId)` bucket — you can read, write and clear one, but nothing in it answers *"which conversations does this user have."* A conversation list, per-user preferences, and anything else relational needs real storage alongside the memory, not inside it.
+
+| Piece | What it is |
+| --- | --- |
+| `bx-sqlite` | The JDBC driver. Without it a webui app still boots, but every query fails on an unknown driver |
+| [`qb`](https://github.com/coldbox-modules/qb) | QueryBuilder for reads and writes, SchemaBuilder for the tables. No hand-written SQL anywhere |
+| `models/ChatDb.bx` | Generated. Owns the schema and hands out query builders |
+| `interceptors/WebUiSchema.bx` | Generated. Builds `ChatDb` at boot so migration runs then, not on whichever request touches the database first |
+
+The datasource is registered in `Application.bx` and the grammar is pinned in `config/ColdBox.bx`:
+
+```javascript
+// Application.bx (generated)
+this.datasources[ "bxagents" ] = {
+	"driver"  : "sqlite",
+	"database": expandPath( "./data/chat.db" )
+}
+
+// config/ColdBox.bx (generated)
+qb : {
+	defaultGrammar : "SQLiteGrammar@qb",
+	defaultOptions : { datasource : "bxagents" }
+}
+```
+
+Both are optional to override, per entry:
+
+| Key | What it does | Default |
+| --- | --- | --- |
+| `database.datasource` | The ColdBox datasource name | `bxagents` |
+| `database.path` | The database file, relative to the app root | `./data/chat.db` |
+
+An absolute `database.path` **fails the build**: it's resolved with `expandPath()` inside the generated app, so an absolute path silently escapes the app directory and breaks a packaged `.bxa` deploy.
+
+**Schema is versioned and forward-only.** `ChatDb.migrate()` records what it has applied in a `bxagents_schema_version` table and applies only what's newer, so booting against an existing store is a no-op. v1 creates `conversations` and `preferences`. Evolve it by adding a new `applyV<n>()` and bumping `SCHEMA_VERSION` — never by editing a migration that has shipped, because **SQLite cannot modify or drop a column** and qb's `SQLiteGrammar` throws `UnsupportedOperation` rather than pretending otherwise.
+
+{% hint style="info" %}
+**Two qb details worth knowing if you extend `ChatDb`.** qb maps `SchemaBuilder@qb` with its `grammar` argument *only* — unlike `QueryBuilder`, it never receives `moduleSettings.qb.defaultOptions` — so every schema call has to pass `options: { datasource: ... }` itself. And the datasource must be a **named** datasource, never an inline struct: qb's own `appendSqlComments()` types that argument as `string`, so a struct throws before any SQL runs. Both confirmed directly against qb 13.1.0.
+{% endhint %}
+
+The grammar is the only SQLite-specific piece. Everything else goes through qb, so pointing this at Postgres or MySQL later is a grammar and datasource change rather than a rewrite.
+
 #### Branding and theming
 
 Every key below is optional - the entry works with just `exposes` and `path`.

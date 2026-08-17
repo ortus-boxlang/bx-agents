@@ -402,6 +402,7 @@ class {
 
 				if ( config.exposes == "webui" ) {
 					validateWebUiTheme( gateway.name, config.theme ?: {}, arguments.errors )
+					validateWebUiDatabase( gateway.name, config.database ?: {}, arguments.errors )
 				}
 			} else {
 				// Channel-adapter entry: a bx-ai IGateway (mock/cli/http) registered by name
@@ -441,6 +442,45 @@ class {
 	 * @theme The entry's `theme` config value (may be any type - callers pass it unchecked)
 	 * @errors Accumulator array - append() any validation errors found
 	 */
+	/**
+	 * Validates a `webui` entry's optional `database` block. Both keys are
+	 * optional (the defaults - datasource "bxagents", path "./data/chat.db" -
+	 * mean a project configures nothing), but a key that IS set has to be
+	 * usable, and both feed straight into generated source.
+	 *
+	 * `datasource` becomes a ColdBox datasource name and a qb settings value,
+	 * so it is restricted to word characters. `path` becomes the argument to
+	 * expandPath() in Application.bx - an absolute path there silently escapes
+	 * the app directory, which breaks a packaged .bxa deploy, so it must stay
+	 * relative.
+	 *
+	 * @gatewayName The gateways/* entry name, for the error message
+	 * @database The entry's `database` config value (may be any type - callers pass it unchecked)
+	 * @errors Accumulator array - append() any validation errors found
+	 */
+	private void function validateWebUiDatabase( required string gatewayName, required any database, required array errors ) {
+		if ( !isStruct( arguments.database ) || arguments.database.isEmpty() ) {
+			return
+		}
+
+		var validKeys = [ "datasource", "path" ]
+		for ( var key in arguments.database ) {
+			if ( !validKeys.contains( key ) ) {
+				arguments.errors.append( "Gateway [#arguments.gatewayName#] has an unknown 'database' key [#key#] - valid keys: #validKeys.toList( ", " )#" )
+			}
+		}
+
+		var datasource = arguments.database.datasource ?: ""
+		if ( len( datasource ) && !reFind( "^[A-Za-z][A-Za-z0-9_]*$", datasource ) ) {
+			arguments.errors.append( "Gateway [#arguments.gatewayName#] has an invalid 'database.datasource' [#datasource#] - it names a ColdBox datasource, so it must start with a letter and contain only letters, digits or underscores" )
+		}
+
+		var dbPath = arguments.database.path ?: ""
+		if ( len( dbPath ) && ( dbPath.startsWith( "/" ) || reFind( "^[A-Za-z]:", dbPath ) ) ) {
+			arguments.errors.append( "Gateway [#arguments.gatewayName#] has an absolute 'database.path' [#dbPath#] - it is resolved with expandPath() inside the generated app, so it must be relative to the app root (e.g. ""./data/chat.db"")" )
+		}
+	}
+
 	private void function validateWebUiTheme( required string gatewayName, required any theme, required array errors ) {
 		if ( !isStruct( arguments.theme ) || arguments.theme.isEmpty() ) {
 			return

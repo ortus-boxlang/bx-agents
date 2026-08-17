@@ -114,7 +114,7 @@ class {
 
 		arguments.onProgress( "+ Generating the v1 web chat UI (if any gateways/* entry exposes it)..." )
 		var webUiResult = variables.webUiGenerator.generate( discovery, appDir )
-		arguments.onProgress( "    webui=#( webUiResult.hasWebUi ? 'yes' : 'no' )#, apiKeyGate=#( len( webUiResult.webUiAuthInterceptorName ?: '' ) ? 'yes' : 'no' )#" )
+		arguments.onProgress( "    webui=#( webUiResult.hasWebUi ? 'yes' : 'no' )#, apiKeyGate=#( len( webUiResult.webUiAuthInterceptorName ?: '' ) ? 'yes' : 'no' )#, database=#( webUiResult.webUiDatabase.datasource ?: '-' )#" )
 
 		var toolScanStatements = []
 		if ( discovery.tools.len() ) {
@@ -131,6 +131,10 @@ class {
 		}
 		if ( len( webUiResult.webUiAuthInterceptorName ?: "" ) ) {
 			agentInterceptorNames.append( webUiResult.webUiAuthInterceptorName )
+		}
+		// Migrates the web UI's SQLite store at boot (see WebUiGenerator)
+		if ( len( webUiResult.webUiSchemaInterceptorName ?: "" ) ) {
+			agentInterceptorNames.append( webUiResult.webUiSchemaInterceptorName )
 		}
 
 		arguments.onProgress( "+ Generating core ColdBox app skeleton (Application.bx, config/WireBox.bx, config/ColdBox.bx, agent/GeneratedAgentFactory.bx)..." )
@@ -149,7 +153,10 @@ class {
 			// session-scoped memory default: a browser-facing app needs a real
 			// HTTP session, because that session is what separates one visitor's
 			// conversation from another's.
-			hasWebUi              = webUiResult.hasWebUi ?: false
+			hasWebUi              = webUiResult.hasWebUi ?: false,
+			// { datasource, path } for the web UI's SQLite store - drives both
+			// this.datasources in Application.bx and moduleSettings.qb
+			webUiDatabase         = webUiResult.webUiDatabase ?: {}
 		)
 		var agentNames = coldboxResult.agentNodes.map( function( n ) { return n.name } )
 		arguments.onProgress( "    agents registered in WireBox (getInstance-able by name): #agentNames.toList( ', ' )#" )

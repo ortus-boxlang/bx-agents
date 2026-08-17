@@ -252,6 +252,20 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.errors.toList( " " ) ).toInclude( "theme.dark.bakcground" );
 			} );
 
+			it( "rejects a webui database block that would not survive generation", function() {
+				// Both values are spliced straight into generated source - the
+				// datasource name into ColdBox/qb settings, the path into an
+				// expandPath() call. An absolute path there silently escapes the
+				// app directory, which breaks a packaged .bxa deploy.
+				var result = validateFixture( "../gateways-webui-bad-db" );
+				expect( result.errors.len() ).toBeGT( 0 );
+
+				var joined = result.errors.toList( " " );
+				expect( joined ).toInclude( "database.datasource" );
+				expect( joined ).toInclude( "database.path" );
+				expect( joined ).toInclude( "journalMode" );
+			} );
+
 			it( "returns no errors for a fully valid project", function() {
 				var result = validateFixture( "../full-project" );
 				expect( result.errors ).toBeArray();

@@ -50,6 +50,21 @@ class {
 		directoryCreate( path : handlerDir, createPath : true, ignoreExists : true )
 		fileWrite( handlerDir & "/ChatUi.bx", renderChatHandler() )
 
+		// The SQLite store. Not optional: the agent's own IAiMemory has no
+		// enumeration API - nothing answers "which conversations does this user
+		// have" - so a conversation list, per-user preferences, and anything
+		// else relational needs a real database. One store per app, named after
+		// the first entry's own database config (they all share it).
+		var database = resolveDatabaseConfig( entries )
+
+		var modelDir = normalizePath( arguments.appDir ) & "/models"
+		directoryCreate( path : modelDir, createPath : true, ignoreExists : true )
+		fileWrite( modelDir & "/ChatDb.bx", renderChatDb( database ) )
+
+		var interceptorDir = normalizePath( arguments.appDir ) & "/interceptors"
+		directoryCreate( path : interceptorDir, createPath : true, ignoreExists : true )
+		fileWrite( interceptorDir & "/WebUiSchema.bx", renderSchemaInterceptor() )
+
 		var gatedEntries = entries.filter( function( entry ) {
 			return len( entry.config.apiKeyEnvVar ?: "" )
 		} )
@@ -57,12 +72,51 @@ class {
 		var interceptorName = ""
 		if ( gatedEntries.len() ) {
 			interceptorName = "WebUiAuthGate"
-			var interceptorDir = normalizePath( arguments.appDir ) & "/interceptors"
-			directoryCreate( path : interceptorDir, createPath : true, ignoreExists : true )
 			fileWrite( interceptorDir & "/#interceptorName#.bx", renderAuthInterceptor( gatedEntries ) )
 		}
 
-		return { hasWebUi : true, webUiAuthInterceptorName : interceptorName }
+		return {
+			hasWebUi                 : true,
+			webUiAuthInterceptorName : interceptorName,
+			webUiSchemaInterceptorName : "WebUiSchema",
+			webUiDatabase            : database
+		}
+	}
+
+	/**
+	 * Resolves the one SQLite store every webui entry in a project shares.
+	 *
+	 * Both keys are optional per entry; the first entry that sets one wins,
+	 * which keeps a single-entry project (the overwhelmingly common shape)
+	 * to zero configuration while still allowing a rename.
+	 *
+	 * @entries webui exposure entries, from collectWebUiEntries()
+	 *
+	 * @return { datasource, path } - datasource NAME and app-relative db file path
+	 */
+	private struct function resolveDatabaseConfig( required array entries ) {
+		var datasource = "bxagents"
+		var dbPath = "./data/chat.db"
+
+		for ( var entry in arguments.entries ) {
+			var configured = entry.config.database ?: {}
+			if ( !isStruct( configured ) ) {
+				continue
+			}
+			if ( len( configured.datasource ?: "" ) ) {
+				datasource = configured.datasource
+				break
+			}
+		}
+		for ( var entry in arguments.entries ) {
+			var configured = entry.config.database ?: {}
+			if ( isStruct( configured ) && len( configured.path ?: "" ) ) {
+				dbPath = configured.path
+				break
+			}
+		}
+
+		return { datasource : datasource, path : dbPath }
 	}
 
 	/**
@@ -807,6 +861,219 @@ class {
 	 *
 	 * @return The rendered interceptors/WebUiAuthGate.bx source
 	 */
+	/**
+	 * Renders `models/ChatDb.bx` - the web UI's SQLite store.
+	 *
+	 * Schema is created through qb's SchemaBuilder rather than hand-written
+	 * DDL, and versioned: `migrate()` applies only the migrations newer than
+	 * whatever the database already records, so booting an app whose store
+	 * already exists is a no-op rather than an error.
+	 *
+	 * @database { datasource, path } from resolveDatabaseConfig()
+	 *
+	 * @return The rendered models/ChatDb.bx source
+	 */
+	private string function renderChatDb( required struct database ) {
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * The web UI's SQLite store, reached through qb.",
+			" *",
+			" * Why a database at all, when the agent already remembers the",
+			" * conversation? Because bx-ai's IAiMemory is a per-(userId,",
+			" * conversationId) bucket with NO enumeration API - nothing in it",
+			" * answers ""which conversations does this user have"". A conversation",
+			" * list, per-user preferences, and anything else relational needs real",
+			" * storage alongside the memory, not inside it.",
+			" *",
+			" * Schema is built with qb's SchemaBuilder and versioned. migrate()",
+			" * applies only what the database has not already recorded, so booting",
+			" * against an existing store is a no-op.",
+			" */",
+			"class singleton {",
+			"",
+			'	property name="wirebox" inject="wirebox";',
+			"",
+			"	static {",
+			"		// Bump this and add a matching applyV<n>() below to evolve the schema.",
+			"		final SCHEMA_VERSION = 1",
+			'		final DATASOURCE     = "#escapeJs( arguments.database.datasource )#"',
+			'		final VERSION_TABLE  = "bxagents_schema_version"',
+			"	}",
+			"",
+			"	function onDIComplete() {",
+			"		migrate()",
+			"	}",
+			"",
+			"	string function getDatasource() {",
+			"		return static.DATASOURCE",
+			"	}",
+			"",
+			"	// -----------------------------------------------------------------",
+			"	// Schema",
+			"	// -----------------------------------------------------------------",
+			"",
+			"	/**",
+			"	 * Brings the database up to static.SCHEMA_VERSION, applying only the",
+			"	 * migrations it has not already recorded.",
+			"	 *",
+			"	 * Locked because two requests can race to build this singleton on a",
+			"	 * cold start, and CREATE TABLE is not something to run twice",
+			"	 * concurrently.",
+			"	 *",
+			"	 * @return The version the database is at afterwards",
+			"	 */",
+			"	numeric function migrate() {",
+			'		lock name="bxagents-webui-schema-##static.DATASOURCE##" type="exclusive" timeout="30" {',
+			"			var schema = wirebox.getInstance( ""SchemaBuilder@qb"" )",
+			"			ensureVersionTable( schema )",
+			"",
+			"			var current = currentVersion()",
+			"			if ( current >= static.SCHEMA_VERSION ) {",
+			"				return current",
+			"			}",
+			"",
+			"			if ( current < 1 ) {",
+			"				applyV1( schema )",
+			"				recordVersion( 1 )",
+			"			}",
+			"",
+			"			return static.SCHEMA_VERSION",
+			"		}",
+			"	}",
+			"",
+			"	/**",
+			"	 * SchemaBuilder@qb is mapped with only its `grammar` initArg - qb does",
+			"	 * NOT pass moduleSettings.qb.defaultOptions to it the way it does for",
+			"	 * QueryBuilder - so every schema call has to name the datasource",
+			"	 * itself. Verified against qb 13.1.0's own ModuleConfig.cfc.",
+			"	 */",
+			"	private struct function schemaOptions() {",
+			"		return { datasource : static.DATASOURCE }",
+			"	}",
+			"",
+			"	private void function ensureVersionTable( required any schema ) {",
+			"		if ( arguments.schema.hasTable( name : static.VERSION_TABLE, options : schemaOptions() ) ) {",
+			"			return",
+			"		}",
+			"		arguments.schema.create(",
+			"			table    : static.VERSION_TABLE,",
+			"			callback : ( table ) => {",
+			'				table.integer( "version" ).primaryKey()',
+			'				table.datetime( "appliedAt" )',
+			"			},",
+			"			options  : schemaOptions()",
+			"		)",
+			"	}",
+			"",
+			"	private numeric function currentVersion() {",
+			"		var found = query()",
+			"			.from( static.VERSION_TABLE )",
+			'			.orderBy( "version", "desc" )',
+			"			.first()",
+			"		return isStruct( found ) ? val( found.version ?: 0 ) : 0",
+			"	}",
+			"",
+			"	private void function recordVersion( required numeric version ) {",
+			"		query().from( static.VERSION_TABLE ).insert( {",
+			'			"version"   : arguments.version,',
+			'			"appliedAt" : now()',
+			"		} )",
+			"	}",
+			"",
+			"	/**",
+			"	 * v1: the two tables the web UI's next features need.",
+			"	 *",
+			"	 * SQLite cannot modify or drop a column, and qb's SQLiteGrammar throws",
+			"	 * UnsupportedOperation rather than pretending otherwise - so treat",
+			"	 * migrations here as forward-only: add a new applyV<n>(), never edit",
+			"	 * this one once it has shipped.",
+			"	 */",
+			"	private void function applyV1( required any schema ) {",
+			'		arguments.schema.create( table : "conversations", callback : ( table ) => {',
+			'			table.string( "id", 64 ).primaryKey()',
+			'			table.string( "userId", 255 )',
+			'			table.string( "title", 500 ).nullable()',
+			'			table.integer( "messageCount" ).default( "0" )',
+			'			table.datetime( "createdAt" )',
+			'			table.datetime( "updatedAt" )',
+			"			// The conversation list is always ""this user's, newest first""",
+			'			table.index( [ "userId", "updatedAt" ], "idx_conversations_user_updated" )',
+			"		}, options : schemaOptions() )",
+			"",
+			'		arguments.schema.create( table : "preferences", callback : ( table ) => {',
+			'			table.string( "userId", 255 )',
+			'			table.string( "prefKey", 100 )',
+			'			table.text( "prefValue" ).nullable()',
+			'			table.datetime( "updatedAt" )',
+			"			// One row per (user, key) - the composite key IS the identity",
+			'			table.primaryKey( [ "userId", "prefKey" ] )',
+			"		}, options : schemaOptions() )",
+			"	}",
+			"",
+			"	// -----------------------------------------------------------------",
+			"	// Query entry point",
+			"	// -----------------------------------------------------------------",
+			"",
+			"	/**",
+			"	 * A fresh QueryBuilder per call - qb's builders are stateful and",
+			"	 * accumulate their WHERE/ORDER clauses, so sharing one across calls",
+			"	 * leaks the previous query's conditions into the next.",
+			"	 *",
+			"	 * The datasource comes from moduleSettings.qb.defaultOptions (see",
+			"	 * config/ColdBox.bx), which qb DOES forward to QueryBuilder, so no",
+			"	 * call site has to name it.",
+			"	 */",
+			"	any function query() {",
+			"		return wirebox.getInstance( ""QueryBuilder@qb"" )",
+			"	}",
+			"",
+			"}",
+			""
+		]
+
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Renders `interceptors/WebUiSchema.bx` - forces ChatDb to be built (and
+	 * therefore migrated) at boot rather than lazily on the first request.
+	 *
+	 * afterConfigurationLoad is safe for this: ColdBox's own LoaderService
+	 * calls activateAllModules() BEFORE announcing it (verified in
+	 * coldbox-platform source, system/web/services/LoaderService.cfc), so
+	 * qb's WireBox mappings already exist by the time this fires.
+	 *
+	 * @return The rendered interceptors/WebUiSchema.bx source
+	 */
+	private string function renderSchemaInterceptor() {
+		return [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * Builds models/ChatDb.bx at boot so its schema migration runs then,",
+			" * rather than on whichever request happens to touch the database",
+			" * first. A missing or unmigrated store is a startup problem; it should",
+			" * surface at startup.",
+			" *",
+			" * afterConfigurationLoad fires AFTER ColdBox activates modules",
+			" * (LoaderService.cfc calls activateAllModules() first, then announces",
+			" * this), so qb's SchemaBuilder@qb mapping is already available.",
+			" */",
+			"class {",
+			"",
+			"	function afterConfigurationLoad( event, interceptData, rc, prc ) {",
+			"		getInstance( ""ChatDb"" )",
+			"	}",
+			"",
+			"}",
+			""
+		].toList( char( 10 ) )
+	}
+
 	private string function renderAuthInterceptor( required array gatedEntries ) {
 		var lines = [
 			"/**",

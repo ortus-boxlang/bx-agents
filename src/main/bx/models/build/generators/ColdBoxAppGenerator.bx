@@ -62,7 +62,8 @@ class {
 		string cliEnvironment = "",
 		struct discovery = {},
 		boolean hasEmailGateway = false,
-		boolean hasWebUi = false
+		boolean hasWebUi = false,
+		struct webUiDatabase = {}
 	) {
 		var root = normalizePath( arguments.projectRoot )
 		var appDir = normalizePath( arguments.buildDir )
@@ -109,10 +110,12 @@ class {
 			renderApplication(
 				appName            : appName,
 				startupStatements  : startupStatements,
-				sessionManagement  : arguments.hasWebUi
+				sessionManagement  : arguments.hasWebUi,
+				datasourceName     : arguments.webUiDatabase.datasource ?: "",
+				databasePath       : arguments.webUiDatabase.path ?: ""
 			)
 		)
-		fileWrite( coldboxPath, renderColdboxConfig( appName, arguments.agentInterceptors, arguments.resolvedConfig.security ?: {}, arguments.hasEmailGateway ) )
+		fileWrite( coldboxPath, renderColdboxConfig( appName, arguments.agentInterceptors, arguments.resolvedConfig.security ?: {}, arguments.hasEmailGateway, arguments.webUiDatabase.datasource ?: "" ) )
 		fileWrite( wireboxPath, renderWireBox( agentFactory.nodes ) )
 		fileWrite( agentFactoryPath, agentFactory.source )
 
@@ -143,7 +146,9 @@ class {
 		required string appName,
 		array startupStatements = [],
 		boolean sessionManagement = false,
-		numeric sessionTimeoutMinutes = 60
+		numeric sessionTimeoutMinutes = 60,
+		string datasourceName = "",
+		string databasePath = ""
 	) {
 		var lines = [
 			"class {",
@@ -164,6 +169,25 @@ class {
 			// be pure overhead plus a cookie nobody asked for.
 			lines.append( "	this.sessionManagement = false" )
 			lines.append( "	this.setClientCookies  = false" )
+		}
+
+		if ( len( arguments.datasourceName ) ) {
+			// The web UI's own SQLite store: conversation index, preferences,
+			// and whatever later features need real relational storage that the
+			// agent's own IAiMemory cannot express (it has no enumeration API -
+			// no way to ask "which conversations does this user have").
+			//
+			// Registered as a NAMED datasource on purpose, never as an inline
+			// struct passed per query. qb's own NullSQLCommenter.appendSqlComments()
+			// declares its `datasource` argument as `string`, so handing
+			// QueryBuilder a struct throws a type error before any SQL runs -
+			// confirmed directly against qb 13.1.0, not inferred.
+			lines.append( "" )
+			lines.append( "	// The web UI's SQLite store - see models/ChatDb.bx" )
+			lines.append( '	this.datasources[ "#bxLiteral( arguments.datasourceName )#" ] = {' )
+			lines.append( '		"driver"  : "sqlite",' )
+			lines.append( '		"database": expandPath( "#bxLiteral( arguments.databasePath )#" )' )
+			lines.append( "	}" )
 		}
 
 		lines.append( "" )
@@ -229,7 +253,7 @@ class {
 	 *
 	 * @return The rendered config/ColdBox.bx source
 	 */
-	private string function renderColdboxConfig( required string appName, array agentInterceptors = [], struct security = {}, boolean hasEmailGateway = false ) {
+	private string function renderColdboxConfig( required string appName, array agentInterceptors = [], struct security = {}, boolean hasEmailGateway = false, string webUiDatasource = "" ) {
 		var lines = [
 			"class {",
 			"",
@@ -260,15 +284,37 @@ class {
 		if ( arguments.security.count() ) {
 			bxaiSettings[ "security" ] = arguments.security
 		}
+		var trailingSettings = []
+		if ( arguments.hasEmailGateway ) {
+			trailingSettings.append( "email" )
+		}
+		if ( len( arguments.webUiDatasource ) ) {
+			trailingSettings.append( "qb" )
+		}
+
 		lines.append( "" )
 		lines.append( "		moduleSettings = {" )
-		lines.append( "			bxai : #renderLiteral( bxaiSettings )#" & ( arguments.hasEmailGateway ? "," : "" ) )
+		lines.append( "			bxai : #renderLiteral( bxaiSettings )#" & ( trailingSettings.len() ? "," : "" ) )
 		// The `BXMail` protocol (cbmailservices' own dispatch to bx-mail's
 		// `bx:mail` component - see EmailGateway.bx / docs/conventions/gateways.md)
 		// - both modules are real, server-level installs (box.json `dependencies`),
 		// not something this generator installs itself.
 		if ( arguments.hasEmailGateway ) {
-			lines.append( '			cbmailservices : { mailers : { "default" : { class : "BXMail" } } }' )
+			lines.append( '			cbmailservices : { mailers : { "default" : { class : "BXMail" } } }' & ( len( arguments.webUiDatasource ) ? "," : "" ) )
+		}
+		// Pin qb's grammar rather than leaving it on "AutoDiscover@qb". Autodiscovery
+		// calls cfdbinfo against the DEFAULT datasource, which this app deliberately
+		// never sets - the SQLite store is a named datasource, not the default - so
+		// autodiscovery would either fail or silently resolve BaseGrammar and emit
+		// SQL SQLite cannot run. The grammar is known here, so state it.
+		//
+		// defaultOptions carries the datasource NAME into every QueryBuilder qb
+		// hands out, so no call site has to remember it.
+		if ( len( arguments.webUiDatasource ) ) {
+			lines.append( "			qb : {" )
+			lines.append( '				defaultGrammar : "SQLiteGrammar@qb",' )
+			lines.append( '				defaultOptions : { datasource : "#bxLiteral( arguments.webUiDatasource )#" }' )
+			lines.append( "			}" )
 		}
 		lines.append( "		}" )
 
