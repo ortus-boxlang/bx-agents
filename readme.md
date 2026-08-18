@@ -34,7 +34,7 @@ bxAgents chat       # or: bxAgents serve --port=8080
 ## Documentation & Examples
 
 - **[docs/](docs/README.md)** - GitBook-style documentation: installation, quick start, one page per convention folder, the build pipeline, the manifest schema, the full CLI reference, deployment/secrets, and known limitations.
-- **[examples/](examples/README.md)** - real, buildable sample projects: six core-convention examples (a minimal agent, an HTTP-exposed agent, a scheduled agent, an MCP agent, a multi-agent team, and the v1 web chat UI) plus one per push-style chat-platform gateway (Telegram, Slack, Discord, Email, WhatsApp Cloud, Teams, Twilio, GitHub, Signal), each demonstrating one convention folder end-to-end.
+- **[examples/](examples/README.md)** - real, buildable sample projects: six core-convention examples (a minimal agent, an HTTP-exposed agent, a scheduled agent, an MCP agent, a multi-agent team, and the web chat UI) plus one per push-style chat-platform gateway (Telegram, Slack, Discord, Email, WhatsApp Cloud, Teams, Twilio, GitHub, Signal), each demonstrating one convention folder end-to-end.
 
 ## Why build-time assembly?
 
