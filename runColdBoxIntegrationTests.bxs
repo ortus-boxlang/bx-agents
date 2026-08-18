@@ -56,13 +56,19 @@ fileCopy( repoRoot & "tests/runner-coldbox.bxm", buildResult.appDir & "/runner-c
 // This mirrors what a real deployment must do: `box install qb` in the project.
 // See docs/conventions/gateways.md.
 // ------------------------------------------------------------------
-qbSource = repoRoot & "tests/qb"
-if ( directoryExists( qbSource ) ) {
-	directoryCreate( buildResult.appDir & "/modules", true, true )
-	directoryCopy( qbSource, buildResult.appDir & "/modules/qb", true )
-	println( "+ Installed qb into the built app's modules/" )
-} else {
-	println( "! tests/qb not found - run `box install` in tests/ first. The webui specs will fail." )
+directoryCreate( buildResult.appDir & "/modules", true, true )
+
+// qb, cbauth and cbauth's own cbstorages dependency all have to be REAL
+// ColdBox modules in the app - a bare class-path mapping is not enough for
+// WireBox to resolve QueryBuilder@qb or authenticationService@cbauth.
+for ( moduleName in [ "qb", "cbauth", "cbstorages" ] ) {
+	moduleSource = repoRoot & "tests/" & moduleName
+	if ( directoryExists( moduleSource ) ) {
+		directoryCopy( moduleSource, buildResult.appDir & "/modules/" & moduleName, true )
+		println( "+ Installed " & moduleName & " into the built app's modules/" )
+	} else {
+		println( "! tests/" & moduleName & " not found - run `box install` in tests/ first." )
+	}
 }
 
 // ------------------------------------------------------------------

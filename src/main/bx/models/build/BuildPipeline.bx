@@ -114,7 +114,7 @@ class {
 
 		arguments.onProgress( "+ Generating the web chat UI (if any gateways/* entry exposes it)..." )
 		var webUiResult = variables.webUiGenerator.generate( discovery, appDir )
-		arguments.onProgress( "    webui=#( webUiResult.hasWebUi ? 'yes' : 'no' )#, apiKeyGate=#( len( webUiResult.webUiAuthInterceptorName ?: '' ) ? 'yes' : 'no' )#, database=#( webUiResult.webUiDatabase.datasource ?: '-' )#" )
+		arguments.onProgress( "    webui=#( webUiResult.hasWebUi ? 'yes' : 'no' )#, apiKeyGate=#( len( webUiResult.webUiAuthInterceptorName ?: '' ) ? 'yes' : 'no' )#, signIn=#( webUiResult.webUiHasUsers ?: false ? 'yes' : 'no' )#, database=#( webUiResult.webUiDatabase.datasource ?: '-' )#" )
 
 		var toolScanStatements = []
 		if ( discovery.tools.len() ) {
@@ -133,8 +133,19 @@ class {
 			agentInterceptorNames.append( webUiResult.webUiAuthInterceptorName )
 		}
 		// Migrates the web UI's SQLite store at boot (see WebUiGenerator)
+		// Order matters: the seeder writes into tables the schema interceptor
+		// creates, and ColdBox fires interceptors in registration order.
 		if ( len( webUiResult.webUiSchemaInterceptorName ?: "" ) ) {
 			agentInterceptorNames.append( webUiResult.webUiSchemaInterceptorName )
+		}
+		// Seeds configured accounts - must follow the schema interceptor above.
+		if ( len( webUiResult.webUiSeederInterceptorName ?: "" ) ) {
+			agentInterceptorNames.append( webUiResult.webUiSeederInterceptorName )
+		}
+		// Requires a signed-in user. Registered last so the store exists and the
+		// accounts are seeded before anything can be gated against them.
+		if ( len( webUiResult.webUiLoginGateName ?: "" ) ) {
+			agentInterceptorNames.append( webUiResult.webUiLoginGateName )
 		}
 
 		arguments.onProgress( "+ Generating core ColdBox app skeleton (Application.bx, config/WireBox.bx, config/ColdBox.bx, agent/GeneratedAgentFactory.bx)..." )
@@ -156,7 +167,8 @@ class {
 			hasWebUi              = webUiResult.hasWebUi ?: false,
 			// { datasource, path } for the web UI's SQLite store - drives both
 			// this.datasources in Application.bx and moduleSettings.qb
-			webUiDatabase         = webUiResult.webUiDatabase ?: {}
+			webUiDatabase         = webUiResult.webUiDatabase ?: {},
+			webUiHasUsers         = webUiResult.webUiHasUsers ?: false
 		)
 		var agentNames = coldboxResult.agentNodes.map( function( n ) { return n.name } )
 		arguments.onProgress( "    agents registered in WireBox (getInstance-able by name): #agentNames.toList( ', ' )#" )

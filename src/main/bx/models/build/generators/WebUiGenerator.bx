@@ -60,6 +60,9 @@ class {
 		var modelDir = normalizePath( arguments.appDir ) & "/models"
 		directoryCreate( path : modelDir, createPath : true, ignoreExists : true )
 		fileWrite( modelDir & "/ChatDb.bx", renderChatDb( database ) )
+		fileWrite( modelDir & "/PasswordHasher.bx", renderPasswordHasher() )
+		fileWrite( modelDir & "/UserService.bx", renderUserService() )
+		fileWrite( modelDir & "/User.bx", renderUser() )
 
 		var interceptorDir = normalizePath( arguments.appDir ) & "/interceptors"
 		directoryCreate( path : interceptorDir, createPath : true, ignoreExists : true )
@@ -75,11 +78,36 @@ class {
 			fileWrite( interceptorDir & "/#interceptorName#.bx", renderAuthInterceptor( gatedEntries ) )
 		}
 
+		// Accounts. A project that declares none stays exactly as it was: no
+		// login gate, no seeder, no cbauth in the picture at all - which keeps
+		// `bxAgents serve` on a laptop a zero-ceremony experience.
+		var users = collectWebUiUsers( entries )
+		var userEntries = entries.filter( function( entry ) {
+			return ( entry.config.users ?: [] ).len() > 0
+		} )
+
+		var seederName = ""
+		var loginGateName = ""
+		if ( users.len() ) {
+			seederName = "WebUiUserSeeder"
+			fileWrite( interceptorDir & "/#seederName#.bx", renderUserSeeder( users ) )
+
+			loginGateName = "WebUiLoginGate"
+			fileWrite( interceptorDir & "/#loginGateName#.bx", renderLoginGate( userEntries ) )
+
+			var handlerDir = normalizePath( arguments.appDir ) & "/handlers"
+			directoryCreate( path : handlerDir, createPath : true, ignoreExists : true )
+			fileWrite( handlerDir & "/ChatAuth.bx", renderAuthHandler( userEntries.first() ) )
+		}
+
 		return {
-			hasWebUi                 : true,
-			webUiAuthInterceptorName : interceptorName,
+			hasWebUi                   : true,
+			webUiAuthInterceptorName   : interceptorName,
 			webUiSchemaInterceptorName : "WebUiSchema",
-			webUiDatabase            : database
+			webUiSeederInterceptorName : seederName,
+			webUiLoginGateName         : loginGateName,
+			webUiHasUsers              : users.len() > 0,
+			webUiDatabase              : database
 		}
 	}
 
@@ -212,6 +240,15 @@ class {
 		var mountDir = normalizePath( arguments.appDir ) & path
 		directoryCreate( path : mountDir, createPath : true, ignoreExists : true )
 		fileWrite( mountDir & "/index.html", html )
+
+		// The sign-in form ships only when the entry actually declares users -
+		// an ungated project should not serve a login page that gates nothing.
+		if ( ( arguments.entry.config.users ?: [] ).len() ) {
+			var login = fileRead( templateDir & "webui/login.html" )
+			login = login.replace( "__TITLE__", encodeForHTML( config.title ?: "Chat" ), "all" )
+			login = login.replace( "__LOGIN_ACTION__", path & "/login", "all" )
+			fileWrite( mountDir & "/login.html", login )
+		}
 	}
 
 	/**
@@ -1075,6 +1112,530 @@ class {
 	 * @return The rendered interceptors/WebUiAuthGate.bx source
 	 */
 	/**
+	 * Renders `models/UserService.bx` - cbauth's `IUserService`, backed by the
+	 * web UI's own SQLite store.
+	 *
+	 * cbauth asks for exactly three methods and owns everything else (session
+	 * storage, login/logout, its own interception points), which is why this
+	 * project uses it rather than hand-rolling authentication. The contract was
+	 * read from cbauth 5.x's own `interfaces/IUserService.cfc`, not inferred.
+	 *
+	 * @return The rendered models/UserService.bx source
+	 */
+	private string function renderUserService() {
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * cbauth's IUserService, backed by the web UI's SQLite store.",
+			" *",
+			" * Accounts come from your gateways/* webui entry's `users` block and",
+			" * are seeded at boot - see interceptors/WebUiUserSeeder.bx.",
+			" */",
+			"class singleton {",
+			"",
+			'	property name="wirebox" inject="wirebox";',
+			"",
+			"	/**",
+			"	 * True only for an ACTIVE account whose password verifies.",
+			"	 *",
+			"	 * A missing user still runs a hash verification against a dummy value",
+			"	 * before returning false. Without that, an unknown username answers",
+			"	 * measurably faster than a known one with a wrong password, which",
+			"	 * turns this into a username oracle.",
+			"	 */",
+			"	boolean function isValidCredentials( required username, required password ) {",
+			"		var record = chatDb().findUserByUsername( arguments.username )",
+			"",
+			"		if ( record.isEmpty() ) {",
+			'			hasher().verify( arguments.password, "pbkdf2$210000$bm90LWEtcmVhbC1zYWx0$bm90LWEtcmVhbC1oYXNo" )',
+			"			return false",
+			"		}",
+			"",
+			'		return hasher().verify( arguments.password, record.passwordHash ?: "" )',
+			"	}",
+			"",
+			"	function retrieveUserByUsername( required username ) {",
+			"		return toUser( chatDb().findUserByUsername( arguments.username ) )",
+			"	}",
+			"",
+			"	function retrieveUserById( required id ) {",
+			"		return toUser( chatDb().findUserById( arguments.id ) )",
+			"	}",
+			"",
+			"	/**",
+			"	 * A populated User, or an empty one when no account matched. cbauth",
+			"	 * treats an object whose getId() is empty as 'no user'.",
+			"	 */",
+			"	private any function toUser( required struct record ) {",
+			'		var user = wirebox.getInstance( "User" )',
+			"		if ( arguments.record.isEmpty() ) {",
+			"			return user",
+			"		}",
+			"		return user.populate(",
+			'			id          : arguments.record.id ?: "",',
+			'			username    : arguments.record.username ?: "",',
+			'			displayName : arguments.record.displayName ?: ""',
+			"		)",
+			"	}",
+			"",
+			'	private any function chatDb() {',
+			'		return wirebox.getInstance( "ChatDb" )',
+			"	}",
+			"",
+			"	private any function hasher() {",
+			'		return wirebox.getInstance( "PasswordHasher" )',
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Renders `models/User.bx` - cbauth's `IAuthUser`.
+	 *
+	 * cbauth requires only `getId()`. That id is what the ColdBox
+	 * `identifierProvider` returns once someone is signed in, so it becomes the
+	 * `userId` every conversation, preference, memory and pending-run ownership
+	 * check is already keyed by.
+	 *
+	 * @return The rendered models/User.bx source
+	 */
+	private string function renderUser() {
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * cbauth's IAuthUser. getId() is the whole required contract; the rest",
+			" * is here so a template or handler can greet someone by name.",
+			" *",
+			" * Transient, not a singleton - one instance per signed-in user.",
+			" */",
+			"class {",
+			"",
+			'	property name="id"          type="string" default="";',
+			'	property name="username"    type="string" default="";',
+			'	property name="displayName" type="string" default="";',
+			"",
+			"	function init() {",
+			'		variables.id = ""',
+			'		variables.username = ""',
+			'		variables.displayName = ""',
+			"		return this",
+			"	}",
+			"",
+			'	any function populate( string id = "", string username = "", string displayName = "" ) {',
+			"		variables.id = arguments.id",
+			"		variables.username = arguments.username",
+			"		variables.displayName = arguments.displayName",
+			"		return this",
+			"	}",
+			"",
+			"	// cbauth's IAuthUser contract",
+			"	function getId() {",
+			"		return variables.id",
+			"	}",
+			"",
+			"	boolean function isLoaded() {",
+			"		return len( variables.id ) > 0",
+			"	}",
+			"",
+			"	/**",
+			"	 * What to show in the UI - the display name when set, else the",
+			"	 * username. Never the id, which is an opaque UUID.",
+			"	 */",
+			"	string function getLabel() {",
+			"		return len( variables.displayName ) ? variables.displayName : variables.username",
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Renders `handlers/ChatAuth.bx` - the sign-in endpoints.
+	 *
+	 * The form itself is a real static file (`<path>/login.html`, from
+	 * resources/webui/login.html), served like the chat shell is. This handler
+	 * only verifies and redirects, which keeps HTML out of generated BoxLang
+	 * string arrays entirely - and means a failed attempt renders a fixed
+	 * message from a query flag rather than echoing anything a caller supplied.
+	 *
+	 * @entry The webui entry this login belongs to
+	 *
+	 * @return The rendered handlers/ChatAuth.bx source
+	 */
+	private string function renderAuthHandler( required struct entry ) {
+		var base       = normalizePath( arguments.entry.config.path ?: "" )
+		var appPath    = renderLiteral( base & "/" )
+		var loginPath  = renderLiteral( base & "/login.html" )
+		var failedPath = renderLiteral( base & "/login.html?failed=1" )
+
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * Sign-in for the web UI, backed by cbauth against the users table.",
+			" * The form is the static login.html alongside the chat shell.",
+			" */",
+			"class {",
+			"",
+			'	property name="auth" inject="authenticationService@cbauth";',
+			"",
+			"	/**",
+			"	 * Verify a submitted username/password.",
+			"	 *",
+			"	 * Every failure redirects to the same generic message. Unknown user",
+			"	 * and wrong password are indistinguishable on purpose, so this cannot",
+			"	 * be used to discover which usernames exist.",
+			"	 */",
+			"	function doLogin( event, rc, prc ) {",
+			'		var username = trim( rc.username ?: "" )',
+			"",
+			"		try {",
+			'			auth.authenticate( username, rc.password ?: "" )',
+			"		} catch ( any e ) {",
+			"			writeLog(",
+			'				text : "Failed web UI sign-in for [" & username & "]",',
+			'				type : "warning",',
+			'				file : "webui-auth"',
+			"			)",
+			"			return redirectTo( event, #failedPath# )",
+			"		}",
+			"",
+			"		return redirectTo( event, #appPath# )",
+			"	}",
+			"",
+			"	function doLogout( event, rc, prc ) {",
+			"		auth.logout()",
+			"		return redirectTo( event, #loginPath# )",
+			"	}",
+			"",
+			"	private function redirectTo( required any event, required string location ) {",
+			"		arguments.event.setHTTPHeader( statusCode = 302, statusText = 'Found' )",
+			"		arguments.event.setHTTPHeader( name = 'Location', value = arguments.location )",
+			"		arguments.event.noExecution()",
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Renders `interceptors/WebUiAuthGate.bx` - the sign-in gate.
+	 *
+	 * Generated only when a project actually declares users. With no users
+	 * configured nothing is gated, which keeps `bxAgents serve` on a laptop a
+	 * zero-ceremony experience; the docs are explicit that this is a local-dev
+	 * posture, not a deployment one.
+	 *
+	 * Unlike the API-key gate, this one DOES cover the static shell: a browser
+	 * hitting the page unauthenticated should land on a login form, and there is
+	 * no header for it to be missing. `/login` itself is exempt, or the
+	 * redirect would loop forever.
+	 *
+	 * @entries webui entries that declare users
+	 *
+	 * @return The rendered interceptors/WebUiLoginGate.bx source
+	 */
+	private string function renderLoginGate( required array entries ) {
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * Requires a signed-in user for the web UI.",
+			" *",
+			" * A browser navigation gets a redirect to the login form; an /api/*",
+			" * call gets a 401 with JSON, because the page's own fetch() cannot",
+			" * follow a redirect into an HTML login form and would otherwise try to",
+			" * parse that form as a chat response.",
+			" */",
+			"class {",
+			"",
+			'	property name="auth" inject="authenticationService@cbauth";',
+			"",
+			"	function preProcess( event, interceptData, rc, prc ) {",
+			"		var path = event.getPath()"
+		]
+
+		for ( var entry in arguments.entries ) {
+			var base = normalizePath( entry.config.path ?: "" )
+			// Built as their own variables first. A #renderLiteral(...)#
+			// interpolation containing its own double-quoted string terminates
+			// the surrounding string early - a parse hazard this project has
+			// been bitten by more than once.
+			var basePath   = renderLiteral( base )
+			var loginPath  = renderLiteral( base & "/login" )
+			var logoutPath = renderLiteral( base & "/logout" )
+			var apiPath    = renderLiteral( base & "/api" )
+
+			lines.append( "" )
+			lines.append( "		if ( path.startsWith( #basePath# ) ) {" )
+			lines.append( "			// The login form and its POST target must stay reachable" )
+			lines.append( "			// while signed out, or the redirect below never terminates." )
+			lines.append( "			if ( path.startsWith( #loginPath# ) || path.startsWith( #logoutPath# ) ) {" )
+			lines.append( "				return" )
+			lines.append( "			}" )
+			lines.append( "			if ( !auth.isLoggedIn() ) {" )
+			lines.append( "				if ( path.startsWith( #apiPath# ) ) {" )
+			lines.append( "					event" )
+			lines.append( "						.renderData(" )
+			lines.append( '							type       = "json",' )
+			lines.append( '							data       = { error : true, message : "Not signed in" },' )
+			lines.append( "							statusCode = 401," )
+			lines.append( '							statusText = "Unauthorized"' )
+			lines.append( "						)" )
+			lines.append( "						.noExecution()" )
+			lines.append( "					return" )
+			lines.append( "				}" )
+			lines.append( "				event.setHTTPHeader( statusCode = 302, statusText = 'Found' )" )
+			lines.append( "				event.setHTTPHeader( name = 'Location', value = #loginPath# )" )
+			lines.append( "				event.noExecution()" )
+			lines.append( "				return" )
+			lines.append( "			}" )
+			lines.append( "		}" )
+		}
+
+		lines.append( "	}" )
+		lines.append( "" )
+		lines.append( "}" )
+		lines.append( "" )
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Every configured account across all webui entries, normalized.
+	 *
+	 * A username may only be declared once across the whole project - two
+	 * entries claiming the same username would race each other at seed time and
+	 * whichever ran last would win silently. ProjectValidator rejects that, so
+	 * reaching here with a duplicate is a bug, not user error.
+	 *
+	 * @entries collectWebUiEntries()'s result
+	 *
+	 * @return Array of { username, passwordEnvVar, passwordHash, displayName }
+	 */
+	private array function collectWebUiUsers( required array entries ) {
+		var users = []
+		for ( var entry in arguments.entries ) {
+			for ( var user in ( entry.config.users ?: [] ) ) {
+				users.append( {
+					username       : user.username ?: "",
+					passwordEnvVar : user.passwordEnvVar ?: "",
+					passwordHash   : user.passwordHash ?: "",
+					displayName    : user.displayName ?: ""
+				} )
+			}
+		}
+		return users
+	}
+
+	/**
+	 * Renders `interceptors/WebUiUserSeeder.bx` - reconciles the accounts in
+	 * `gateways/*` config into the users table at boot.
+	 *
+	 * Config is the source of truth for WHO exists. Passwords never appear in
+	 * it: an account names an environment variable holding its plaintext
+	 * (`passwordEnvVar`), or carries an already-hashed value (`passwordHash`),
+	 * which is safe to commit precisely because it cannot be reversed.
+	 *
+	 * Runs at `afterConfigurationLoad`, after WebUiSchema has migrated - the
+	 * users table has to exist before anything is written into it.
+	 *
+	 * @users collectWebUiUsers()'s result
+	 *
+	 * @return The rendered interceptors/WebUiUserSeeder.bx source
+	 */
+	private string function renderUserSeeder( required array users ) {
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * Reconciles the accounts declared in your gateways/* webui entry into",
+			" * the users table, once per boot.",
+			" *",
+			" * Adding a user to config creates them. Changing their password updates",
+			" * it. REMOVING them from config deactivates the account - deliberately",
+			" * not a delete, because their conversations reference their id and",
+			" * dropping the row would orphan that history rather than revoke access.",
+			" */",
+			"class {",
+			"",
+			'	property name="wirebox" inject="wirebox";',
+			"",
+			"	function afterConfigurationLoad( event, interceptData, rc, prc ) {",
+			'		var db = wirebox.getInstance( "ChatDb" )',
+			'		var hasher = wirebox.getInstance( "PasswordHasher" )',
+			"		var configured = []",
+			""
+		]
+
+		for ( var user in arguments.users ) {
+			lines.append( "		// ---- #user.username# ----" )
+			lines.append( "		configured.append( #renderLiteral( user.username )# )" )
+
+			if ( len( user.passwordHash ) ) {
+				// A pre-hashed value needs no work at boot and no environment.
+				lines.append( "		db.upsertUser(" )
+				lines.append( "			username     : #renderLiteral( user.username )#," )
+				lines.append( "			passwordHash : #renderLiteral( user.passwordHash )#," )
+				lines.append( "			displayName  : #renderLiteral( user.displayName )#" )
+				lines.append( "		)" )
+			} else {
+				lines.append( "		var plaintext = getSystemSetting( #renderLiteral( user.passwordEnvVar )#, '' )" )
+				lines.append( "		if ( !len( plaintext ) ) {" )
+				lines.append( "			// Fail CLOSED. Creating the account with an empty or default" )
+				lines.append( "			// password because its environment variable is missing would be" )
+				lines.append( "			// far worse than it simply not existing." )
+				lines.append( '			writeLog(' )
+				lines.append( '				text : "Web UI user [#user.username#] skipped: #user.passwordEnvVar# is not set",' )
+				lines.append( '				type : "warning",' )
+				lines.append( '				file : "webui-auth"' )
+				lines.append( "			)" )
+				lines.append( "		} else {" )
+				lines.append( "			// Re-hash only when the configured password no longer matches what" )
+				lines.append( "			// is stored. Hashing is deliberately expensive, so doing it on" )
+				lines.append( "			// every boot for every user would be a real startup cost." )
+				lines.append( "			var existing = db.findUserByUsername( #renderLiteral( user.username )# )" )
+				lines.append( "			var unchanged = !existing.isEmpty() && hasher.verify( plaintext, existing.passwordHash ?: '' )" )
+				lines.append( "			if ( !unchanged ) {" )
+				lines.append( "				db.upsertUser(" )
+				lines.append( "					username     : #renderLiteral( user.username )#," )
+				lines.append( "					passwordHash : hasher.hash( plaintext )," )
+				lines.append( "					displayName  : #renderLiteral( user.displayName )#" )
+				lines.append( "				)" )
+				lines.append( "			}" )
+				lines.append( "		}" )
+			}
+			lines.append( "" )
+		}
+
+		lines.append( "		// Anyone no longer in config loses access on this boot." )
+		lines.append( "		db.deactivateUsersNotIn( configured )" )
+		lines.append( "	}" )
+		lines.append( "" )
+		lines.append( "}" )
+		lines.append( "" )
+
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Renders `models/PasswordHasher.bx`.
+	 *
+	 * Passwords are HASHED, never encrypted. Encryption is reversible, and a
+	 * stolen SQLite file almost always travels with whatever could decrypt it -
+	 * so a reversible scheme turns one file leak into every user's password. A
+	 * one-way KDF means the file alone yields nothing usable.
+	 *
+	 * PBKDF2-HMAC-SHA256 via `generatePBKDFKey()`, because BoxLang ships no
+	 * bcrypt/argon2 BIF (verified against the runtime, not assumed) and PBKDF2
+	 * is the strongest primitive available without pulling in a dependency.
+	 *
+	 * Two properties matter more than the specific numbers:
+	 *   - a per-user random salt, so identical passwords do not collide and a
+	 *     precomputed table is useless
+	 *   - the iteration count is stored IN the hash, so it can be raised later
+	 *     without invalidating existing hashes - old rows keep verifying at
+	 *     their own cost until they are next written
+	 *
+	 * 210,000 iterations (~350ms on the runtime this was measured against).
+	 * OWASP currently suggests 600,000 for PBKDF2-HMAC-SHA256; this sits lower
+	 * deliberately, because seeding re-verifies every configured user on each
+	 * boot and 600k would add roughly a second per user to startup. Raise it
+	 * if your deployment can absorb that - the stored format already supports
+	 * a mixed estate.
+	 *
+	 * @return The rendered models/PasswordHasher.bx source
+	 */
+	private string function renderPasswordHasher() {
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * One-way password hashing for the web UI's user accounts.",
+			" *",
+			" * Format: pbkdf2$<iterations>$<salt>$<derived>",
+			" *",
+			" * The iteration count travels with each hash, so raising ITERATIONS",
+			" * later does not invalidate anything already stored.",
+			" */",
+			"class singleton {",
+			"",
+			"	// OWASP suggests 600000 for PBKDF2-HMAC-SHA256. This is lower on",
+			"	// purpose: user seeding verifies every configured account on each",
+			"	// boot, and 600000 costs about a second per user there. Raise it if",
+			"	// your startup budget allows - existing hashes keep working.",
+			"	static {",
+			"		final ITERATIONS = 210000",
+			'		final ALGORITHM  = "PBKDF2WithHmacSHA256"',
+			"		final KEY_LENGTH = 256",
+			'		final PREFIX     = "pbkdf2"',
+			"	}",
+			"",
+			"	/**",
+			"	 * Hash a plaintext password with a fresh random salt.",
+			"	 *",
+			"	 * @password The plaintext to hash",
+			"	 *",
+			"	 * @return The encoded hash, safe to store and safe to commit",
+			"	 */",
+			"	string function hash( required string password ) {",
+			'		var salt = generateSecretKey( "AES", 128 )',
+			"		var derived = generatePBKDFKey( static.ALGORITHM, arguments.password, salt, static.ITERATIONS, static.KEY_LENGTH )",
+			'		return static.PREFIX & "$" & static.ITERATIONS & "$" & salt & "$" & derived',
+			"	}",
+			"",
+			"	/**",
+			"	 * Does this plaintext produce the stored hash?",
+			"	 *",
+			"	 * Re-derives using the salt and iteration count recorded in the stored",
+			"	 * value, then compares in constant time - a byte-by-byte comparison",
+			"	 * leaks how much of a guess was correct through its own timing.",
+			"	 *",
+			"	 * Any malformed or empty stored value is a NON-match, never an error:",
+			"	 * a corrupt row must fail closed, not throw its way past the check.",
+			"	 *",
+			"	 * @password The plaintext to check",
+			"	 * @stored The previously stored hash",
+			"	 *",
+			"	 * @return true only on a genuine match",
+			"	 */",
+			"	boolean function verify( required string password, required string stored ) {",
+			"		try {",
+			'			var parts = listToArray( arguments.stored, "$" )',
+			"			if ( parts.len() != 4 || parts[ 1 ] != static.PREFIX ) {",
+			"				return false",
+			"			}",
+			"			var expected = generatePBKDFKey( static.ALGORITHM, arguments.password, parts[ 3 ], parts[ 2 ], static.KEY_LENGTH )",
+			'			return createObject( "java", "java.security.MessageDigest" ).isEqual(',
+			'				charsetDecode( expected, "UTF-8" ),',
+			'				charsetDecode( parts[ 4 ], "UTF-8" )',
+			"			)",
+			"		} catch ( any e ) {",
+			"			return false",
+			"		}",
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
 	 * Renders `models/ChatDb.bx` - the web UI's SQLite store.
 	 *
 	 * Schema is created through qb's SchemaBuilder rather than hand-written
@@ -1111,7 +1672,7 @@ class {
 			"",
 			"	static {",
 			"		// Bump this and add a matching applyV<n>() below to evolve the schema.",
-			"		final SCHEMA_VERSION = 1",
+			"		final SCHEMA_VERSION = 2",
 			'		final DATASOURCE     = "#escapeJs( arguments.database.datasource )#"',
 			'		final VERSION_TABLE  = "bxagents_schema_version"',
 			"	}",
@@ -1151,6 +1712,11 @@ class {
 			"			if ( current < 1 ) {",
 			"				applyV1( schema )",
 			"				recordVersion( 1 )",
+			"			}",
+			"",
+			"			if ( current < 2 ) {",
+			"				applyV2( schema )",
+			"				recordVersion( 2 )",
 			"			}",
 			"",
 			"			return static.SCHEMA_VERSION",
@@ -1224,6 +1790,123 @@ class {
 			"			// One row per (user, key) - the composite key IS the identity",
 			'			table.primaryKey( [ "userId", "prefKey" ] )',
 			"		}, options : schemaOptions() )",
+			"	}",
+			"",
+			"	/**",
+			"	 * v2: the accounts allowed to use this web UI.",
+			"	 *",
+			"	 * `id` is what everything else keys on - the ColdBox identifierProvider",
+			"	 * returns it, so conversations, preferences, agent memory and pending-run",
+			"	 * ownership all re-key to the real account with no other change. It is a",
+			"	 * generated UUID rather than the username on purpose: renaming a user",
+			"	 * must not orphan their history.",
+			"	 *",
+			"	 * `passwordHash` is a one-way PBKDF2 digest (see models/PasswordHasher.bx),",
+			"	 * never a reversible ciphertext - if this file is stolen the passwords",
+			"	 * must not be recoverable from it.",
+			"	 *",
+			"	 * `isActive` rather than DELETE: a user dropped from config keeps their",
+			"	 * conversations (which reference their id) but can no longer sign in.",
+			"	 */",
+			"	private void function applyV2( required any schema ) {",
+			'		arguments.schema.create( table : "users", callback : ( table ) => {',
+			'			table.string( "id", 64 ).primaryKey()',
+			'			table.string( "username", 255 ).unique()',
+			'			table.string( "passwordHash", 512 )',
+			'			table.string( "displayName", 255 ).nullable()',
+			'			table.boolean( "isActive" ).default( true )',
+			'			table.datetime( "createdAt" )',
+			'			table.datetime( "updatedAt" )',
+			"		}, options : schemaOptions() )",
+			"	}",
+			"",
+			"	// -----------------------------------------------------------------",
+			"	// Users",
+			"	// -----------------------------------------------------------------",
+			"",
+			"	/**",
+			"	 * The active account for a username, or an empty struct. Only active",
+			"	 * users are ever returned - a deactivated account must not authenticate.",
+			"	 */",
+			"	struct function findUserByUsername( required string username ) {",
+			"		var found = query()",
+			'			.from( "users" )',
+			'			.where( "username", arguments.username )',
+			'			.where( "isActive", true )',
+			"			.first()",
+			"		return isStruct( found ) ? found : {}",
+			"	}",
+			"",
+			"	struct function findUserById( required string id ) {",
+			"		var found = query()",
+			'			.from( "users" )',
+			'			.where( "id", arguments.id )',
+			'			.where( "isActive", true )',
+			"			.first()",
+			"		return isStruct( found ) ? found : {}",
+			"	}",
+			"",
+			"	/**",
+			"	 * Create or update one configured account, returning its id.",
+			"	 *",
+			"	 * Matched on username, NOT on id - the config is the source of truth for",
+			"	 * who exists, and it has no way to know the generated id. An existing",
+			"	 * user keeps their id (and therefore their whole history) even when the",
+			"	 * password or display name changes.",
+			"	 */",
+			'	string function upsertUser( required string username, required string passwordHash, string displayName = "" ) {',
+			"		var existing = query()",
+			'			.from( "users" )',
+			'			.where( "username", arguments.username )',
+			"			.first()",
+			"",
+			'		if ( isStruct( existing ) && len( existing.id ?: "" ) ) {',
+			"			query()",
+			'				.from( "users" )',
+			'				.where( "id", existing.id )',
+			"				.update( {",
+			'					"passwordHash" : arguments.passwordHash,',
+			'					"displayName"  : arguments.displayName,',
+			'					"isActive"     : true,',
+			'					"updatedAt"    : now()',
+			"				} )",
+			"			return existing.id",
+			"		}",
+			"",
+			"		var id = createUUID()",
+			"		query()",
+			'			.from( "users" )',
+			"			.insert( {",
+			'				"id"           : id,',
+			'				"username"     : arguments.username,',
+			'				"passwordHash" : arguments.passwordHash,',
+			'				"displayName"  : arguments.displayName,',
+			'				"isActive"     : true,',
+			'				"createdAt"    : now(),',
+			'				"updatedAt"    : now()',
+			"			} )",
+			"		return id",
+			"	}",
+			"",
+			"	/**",
+			"	 * Deactivate every account NOT in the configured list, so removing a user",
+			"	 * from config revokes their access on the next boot. Deliberately not a",
+			"	 * DELETE: their conversations reference their id, and dropping the row",
+			"	 * would orphan that history rather than revoke access.",
+			"	 *",
+			"	 * An empty list deactivates nothing - that means the project configures no",
+			"	 * users at all, and wiping every account over a likely misconfiguration is",
+			"	 * not a decision this should make silently.",
+			"	 */",
+			"	numeric function deactivateUsersNotIn( required array usernames ) {",
+			"		if ( arguments.usernames.isEmpty() ) {",
+			"			return 0",
+			"		}",
+			"		return query()",
+			'			.from( "users" )',
+			'			.whereNotIn( "username", arguments.usernames )',
+			'			.where( "isActive", true )',
+			'			.update( { "isActive" : false, "updatedAt" : now() } )',
 			"	}",
 			"",
 			"	// -----------------------------------------------------------------",

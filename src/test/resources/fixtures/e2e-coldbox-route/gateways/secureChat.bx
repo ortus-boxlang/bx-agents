@@ -1,0 +1,33 @@
+/**
+ * A SECOND webui exposure, this one with accounts, so the integration boot
+ * exercises the whole sign-in stack for real: migration v2's users table, the
+ * seeder, cbauth resolving through WireBox, the login gate interceptor and the
+ * generated ChatAuth handler.
+ *
+ * Mounted at its own path on purpose. The orchestrator probes
+ * GET /chat/api/health and fails the build on a non-200, so gating /chat would
+ * break the probe - and a login gate that answered the health check would be
+ * testing the wrong thing anyway.
+ *
+ * The password is supplied as an already-hashed value rather than an env var so
+ * CI needs no secret to run this: a PBKDF2 digest is safe to commit precisely
+ * because it cannot be reversed. It is not a real credential for anything.
+ */
+class {
+
+	function configure() {
+		return {
+			exposes : "webui",
+			path    : "/secure",
+			title   : "E2E Secure Chat",
+			users   : [
+				{
+					username     : "e2e",
+					passwordHash : "pbkdf2$210000$ZTJlLXRlc3Qtc2FsdC12YWx1ZQ==$ZTJlLXRlc3QtZGlnZXN0LXZhbHVlLW5vdC1yZWFs",
+					displayName  : "E2E Test User"
+				}
+			]
+		};
+	}
+
+}

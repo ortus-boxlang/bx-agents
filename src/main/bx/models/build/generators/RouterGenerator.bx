@@ -163,6 +163,18 @@ class {
 			// handlers/ChatUi.bx (see WebUiGenerator) supplies that while keeping
 			// toAi()'s exact route shape and SSE wire format.
 			var api = bxLiteral( path ) & "/api"
+
+			// Sign-in, only when this entry declares accounts. The form itself is
+			// the static login.html mounted beside the shell, so only its POST
+			// target and logout need routes.
+			var authRoutes = ( arguments.entry.config.users ?: [] ).len()
+				? [
+					'post( "#bxLiteral( path )#/login" ).toHandler( "ChatAuth.doLogin" )',
+					'post( "#bxLiteral( path )#/logout" ).toHandler( "ChatAuth.doLogout" )',
+					'get( "#bxLiteral( path )#/logout" ).toHandler( "ChatAuth.doLogout" )'
+				]
+				: []
+
 			return [
 				'post( "#api#/invoke" ).toHandler( "ChatUi.invoke" )',
 				'post( "#api#/stream" ).toHandler( "ChatUi.stream" )',
@@ -187,7 +199,7 @@ class {
 			// renderRouterFile() indents the FIRST line of whatever comes back;
 			// the continuation lines have to carry that same two-tab body indent
 			// themselves or the generated Router.bx comes out ragged.
-			].toList( char( 10 ) & char( 9 ) & char( 9 ) )
+			].append( authRoutes, true ).toList( char( 10 ) & char( 9 ) & char( 9 ) )
 		}
 
 		var target = arguments.entry.config.target ?: ""

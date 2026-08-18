@@ -361,6 +361,11 @@ class {
 			validGatewayTypes.append( pushType )
 		}
 
+		// Usernames are global to the project, not per entry: two entries
+		// claiming the same one would race at seed time and the later boot order
+		// would silently decide whose password wins.
+		var seenUsernames = {}
+
 		for ( var gateway in ( arguments.discovery.gateways ?: [] ) ) {
 			var config = readEntryConfig( gateway.path )
 			if ( isNull( config ) ) {
@@ -403,6 +408,7 @@ class {
 				if ( config.exposes == "webui" ) {
 					validateWebUiTheme( gateway.name, config.theme ?: {}, arguments.errors )
 					validateWebUiDatabase( gateway.name, config.database ?: {}, arguments.errors )
+					validateWebUiUsers( gateway.name, config.users ?: [], arguments.errors, seenUsernames )
 				}
 			} else {
 				// Channel-adapter entry: a bx-ai IGateway (mock/cli/http) registered by name
@@ -458,6 +464,67 @@ class {
 	 * @database The entry's `database` config value (may be any type - callers pass it unchecked)
 	 * @errors Accumulator array - append() any validation errors found
 	 */
+	/**
+	 * Validates a `webui` entry's optional `users` block - the accounts allowed
+	 * to sign in.
+	 *
+	 * A password is NEVER written here. An entry names the environment variable
+	 * holding it (`passwordEnvVar`), or carries an already-hashed value
+	 * (`passwordHash`), which is safe to commit precisely because it cannot be
+	 * reversed. A literal `password` key is rejected outright rather than
+	 * ignored: silently dropping it would leave someone believing they had set
+	 * a password when they had only committed one.
+	 *
+	 * @gatewayName The gateways/* entry name, for the error message
+	 * @users The entry's `users` config value (may be any type - callers pass it unchecked)
+	 * @errors Accumulator array - append() any validation errors found
+	 * @seen Struct of usernames already claimed, mutated as they are seen
+	 */
+	private void function validateWebUiUsers( required string gatewayName, required any users, required array errors, required struct seen ) {
+		if ( !isArray( arguments.users ) ) {
+			if ( isStruct( arguments.users ) || isSimpleValue( arguments.users ) ) {
+				arguments.errors.append( "Gateway [#arguments.gatewayName#] has a 'users' value that is not an array - it must be a list of { username, passwordEnvVar | passwordHash } structs" )
+			}
+			return
+		}
+
+		for ( var user in arguments.users ) {
+			if ( !isStruct( user ) ) {
+				arguments.errors.append( "Gateway [#arguments.gatewayName#] has a 'users' entry that is not a struct - each user needs at least { username, passwordEnvVar }" )
+				continue
+			}
+
+			var username = user.username ?: ""
+			if ( !len( username ) ) {
+				arguments.errors.append( "Gateway [#arguments.gatewayName#] has a 'users' entry with no 'username'" )
+				continue
+			}
+
+			var key = lCase( username )
+			if ( arguments.seen.keyExists( key ) ) {
+				arguments.errors.append( "Gateway [#arguments.gatewayName#] declares the username [#username#] more than once in this project - usernames must be unique across every webui entry" )
+			}
+			arguments.seen[ key ] = true
+
+			if ( structKeyExists( user, "password" ) ) {
+				arguments.errors.append( "Gateway [#arguments.gatewayName#] user [#username#] sets a literal 'password' - never commit a password. Use 'passwordEnvVar' to name an environment variable holding it, or 'passwordHash' for an already-hashed value" )
+			}
+
+			var hasEnvVar = len( user.passwordEnvVar ?: "" )
+			var hasHash = len( user.passwordHash ?: "" )
+
+			if ( !hasEnvVar && !hasHash ) {
+				arguments.errors.append( "Gateway [#arguments.gatewayName#] user [#username#] needs either a 'passwordEnvVar' (the NAME of an environment variable) or a 'passwordHash'" )
+			}
+			if ( hasEnvVar && hasHash ) {
+				arguments.errors.append( "Gateway [#arguments.gatewayName#] user [#username#] sets both 'passwordEnvVar' and 'passwordHash' - pick one, so which wins is never ambiguous" )
+			}
+			if ( hasHash && !( user.passwordHash ).startsWith( "pbkdf2$" ) ) {
+				arguments.errors.append( "Gateway [#arguments.gatewayName#] user [#username#] has a 'passwordHash' that is not in this project's format - it must look like pbkdf2$<iterations>$<salt>$<hash>" )
+			}
+		}
+	}
+
 	private void function validateWebUiDatabase( required string gatewayName, required any database, required array errors ) {
 		if ( !isStruct( arguments.database ) || arguments.database.isEmpty() ) {
 			return

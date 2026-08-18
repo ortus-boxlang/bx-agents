@@ -276,6 +276,24 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.errors.toList( " " ) ).toInclude( "walks outside the app" );
 			} );
 
+			it( "rejects a webui users block that would leak or misconfigure credentials", function() {
+				var result = validateFixture( "../gateways-webui-bad-users" );
+				expect( result.errors.len() ).toBeGT( 0 );
+
+				var joined = result.errors.toList( " " );
+				// A committed password is rejected outright rather than ignored -
+				// silently dropping it leaves someone believing they set one
+				expect( joined ).toInclude( "never commit a password" );
+				// No password source at all
+				expect( joined ).toInclude( "needs either a 'passwordEnvVar'" );
+				// Both sources set
+				expect( joined ).toInclude( "pick one" );
+				// Same username twice would race at seed time
+				expect( joined ).toInclude( "more than once" );
+				// A bcrypt-style hash is not this project's format
+				expect( joined ).toInclude( "not in this project's format" );
+			} );
+
 			it( "returns no errors for a fully valid project", function() {
 				var result = validateFixture( "../full-project" );
 				expect( result.errors ).toBeArray();

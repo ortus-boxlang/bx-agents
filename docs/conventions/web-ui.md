@@ -94,6 +94,59 @@ memory: {
 }
 ```
 
+## Users and sign-in
+
+By default the web UI has no accounts: identity is the browser session, which is fine for `bxAgents serve` on a laptop and is **not** a deployment posture. Declaring `users` on a `webui` entry turns on a real sign-in gate backed by [cbauth](https://forgebox.io/view/cbauth) and the same SQLite store everything else uses.
+
+```javascript
+// gateways/chatUi.bx
+users : [
+    { username: "ada",   passwordEnvVar: "ACME_ADA_PASSWORD", displayName: "Ada Lovelace" },
+    { username: "grace", passwordHash: "pbkdf2$210000$...",   displayName: "Grace Hopper" }
+]
+```
+
+### Passwords are never written in config
+
+An account names the **environment variable** holding its password (`passwordEnvVar`), or carries an **already-hashed** value (`passwordHash`). A literal `password` key is a build error, not a warning — silently ignoring it would leave you believing you had set a password when you had only committed one.
+
+A `passwordHash` is safe to commit precisely because it cannot be reversed. Generate one with the same hasher the app uses:
+
+```
+bxAgents hash-password --password="correct horse battery staple"
+```
+
+{% hint style="danger" %}
+**Hashed, not encrypted.** Encryption is reversible, and a stolen database file almost always travels with whatever could decrypt it — so a reversible scheme turns one file leak into every user's password, including any they reused elsewhere. Passwords here go through PBKDF2-HMAC-SHA256 with a per-user random salt and are never recoverable from the database. (BoxLang ships no bcrypt or argon2 BIF; PBKDF2 is the strongest primitive available without adding a dependency.)
+
+The iteration count is stored *inside* each hash (`pbkdf2$<iterations>$<salt>$<digest>`), so it can be raised later without invalidating anything already stored.
+{% endhint %}
+
+### What sign-in changes
+
+Everything user-scoped re-keys to the real account, with **no change to any generated handler**. The generated `config/ColdBox.bx` sets ColdBox's `identifierProvider` to the signed-in user's id, and `getUserSessionIdentifier()` — which agent memory, the conversation index, preferences and pending-run ownership already key off — returns that instead of a session id.
+
+The practical difference: conversations and preferences follow the person across browsers and devices, and clearing cookies no longer creates a brand-new "user".
+
+| | No `users` | With `users` |
+|---|---|---|
+| Identity | Browser session | The signed-in account |
+| Survives clearing cookies | No | Yes |
+| Reachable without signing in | Everything | Only the login form |
+
+### Lifecycle
+
+Accounts are reconciled from config on every boot, in this order: the schema interceptor migrates, the seeder writes accounts, then the login gate starts enforcing.
+
+- **Adding** a user to config creates them.
+- **Changing** their password updates it. The seeder re-hashes only when the configured password no longer matches what is stored, so an unchanged password costs one verification rather than a fresh hash.
+- **Removing** them from config **deactivates** the account rather than deleting it. Their conversations reference their id, so deleting the row would orphan that history instead of revoking access. They can no longer sign in; their data stays intact and returns if the account is restored.
+- A `passwordEnvVar` whose variable is **unset** skips that account entirely and logs a warning to `webui-auth`. This fails closed on purpose — creating the account with an empty password would be far worse than it not existing.
+
+### What this is not
+
+This is a fixed roster of operator-provisioned accounts, not a user-management system. There is no self-registration, no password reset, no roles or permissions, and no per-user rate limiting or spend cap. If you need federated identity instead, point `identifierProvider` at your own authenticated principal and skip the `users` block entirely — the rest of the web UI neither knows nor cares where the id came from.
+
 ## Human-in-the-loop
 
 When the agent pauses for approval, the stream emits a `middleware_stop` chunk that carries no detail. The page therefore asks `GET /pending?threadId=` what is being requested, renders it with **Approve** / **Reject**, and answers via `POST /resume` - which streams the *continuation of the same turn*, so the outcome lands in the conversation rather than starting a new one.

@@ -759,6 +759,80 @@ class extends="testbox.system.BaseSpec" {
 				expect( src ).toInclude( "This run belongs to another session" );
 			} );
 
+			it( "generates sign-in wiring only when a webui entry declares users", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui-users" );
+				var appDir = newAppDir();
+				var result = generator.generate( discovery, appDir );
+
+				expect( result.webUiHasUsers ).toBeTrue();
+				expect( result.webUiSeederInterceptorName ).toBe( "WebUiUserSeeder" );
+				expect( result.webUiLoginGateName ).toBe( "WebUiLoginGate" );
+
+				for ( var generated in [
+					"/models/PasswordHasher.bx", "/models/UserService.bx", "/models/User.bx",
+					"/handlers/ChatAuth.bx", "/interceptors/WebUiUserSeeder.bx",
+					"/interceptors/WebUiLoginGate.bx", "/chat/login.html"
+				] ) {
+					expect( fileExists( appDir & generated ) ).toBeTrue( "expected #generated# to be generated" );
+				}
+			} );
+
+			it( "never writes a password into generated source, only env var names and hashes", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui-users" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var seeder = fileRead( appDir & "/interceptors/WebUiUserSeeder.bx" );
+				// The env-var user: the NAME is embedded, the value is read at runtime
+				expect( seeder ).toInclude( "ACME_ADA_PASSWORD" );
+				expect( seeder ).toInclude( 'getSystemSetting( "ACME_ADA_PASSWORD"' );
+				// The pre-hashed user needs no environment at all
+				expect( seeder ).toInclude( "pbkdf2$210000$" );
+				// Missing env var must fail CLOSED - never seed an empty password
+				expect( seeder ).toInclude( "if ( !len( plaintext ) ) {" );
+				// Removing a user from config revokes access on the next boot
+				expect( seeder ).toInclude( "deactivateUsersNotIn( configured )" );
+			} );
+
+			it( "hashes with a per-user salt and compares in constant time", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui-users" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var hasher = fileRead( appDir & "/models/PasswordHasher.bx" );
+				expect( hasher ).toInclude( "PBKDF2WithHmacSHA256" );
+				// A fresh salt per hash, so equal passwords never collide
+				expect( hasher ).toInclude( 'generateSecretKey( "AES", 128 )' );
+				// Iterations travel with the hash so they can be raised later
+				expect( hasher ).toInclude( 'static.PREFIX & "$" & static.ITERATIONS' );
+				// Timing-safe compare, same discipline as the API-key gate
+				expect( hasher ).toInclude( "MessageDigest" );
+			} );
+
+			it( "points identifierProvider at the signed-in account so every scope re-keys", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui-users" );
+				var appDir = newAppDir();
+				var result = generator.generate( discovery, appDir );
+
+				// The generator reports it; ColdBoxAppGenerator emits it. Without
+				// this the accounts would exist but nothing would be scoped BY them.
+				expect( result.webUiHasUsers ).toBeTrue();
+			} );
+
+			it( "leaves a project without users completely ungated", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				var result = generator.generate( discovery, appDir );
+
+				expect( result.webUiHasUsers ).toBeFalse();
+				expect( result.webUiSeederInterceptorName ).toBe( "" );
+				expect( result.webUiLoginGateName ).toBe( "" );
+				expect( fileExists( appDir & "/interceptors/WebUiLoginGate.bx" ) ).toBeFalse();
+				expect( fileExists( appDir & "/handlers/ChatAuth.bx" ) ).toBeFalse();
+				// No sign-in form for a project that gates nothing
+				expect( fileExists( appDir & "/chat/login.html" ) ).toBeFalse();
+			} );
+
 			it( "does not generate an auth interceptor when no webui entry configures an apiKeyEnvVar", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-webui-no-key" );
 				var appDir = newAppDir();
