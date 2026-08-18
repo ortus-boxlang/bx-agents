@@ -164,6 +164,19 @@ The qb + bx-sqlite stack underneath `models/ChatDb.bx` was verified directly thi
 
 What was **not** verified, for the same reason as the rest of the web UI: none of this has run inside a real ColdBox boot. `tests/coldbox` requires a real `box install`, and CommandBox/ForgeBox network access was unavailable in this session's sandbox. So the migration logic is proven, but three wiring assumptions are not exercised end to end: that `getInstance( "ChatDb" )` resolves through the generated app's own WireBox, that `SchemaBuilder@qb`/`QueryBuilder@qb` resolve once qb is installed as a real ColdBox module (qb is a `box.json` dependency, not vendored here - the same honest gap `cbmailservices` already carries), and that `this.datasources` in the generated `Application.bx` is picked up as expected. Do one `bxAgents serve` against a webui project with `qb` and `bx-sqlite` genuinely installed before relying on the store in production; the failure mode if any of those is missing is loud at boot (an unresolvable WireBox mapping or an unknown JDBC driver), not silent.
 
+## The web UI over real HTTP: proven by the integration runner's probe
+
+`runColdBoxIntegrationTests.bxs` fetches `GET /chat/api/health` from outside the server, against the generated fixture app booted by a real `boxlang-miniserver`, and fails the build if it is not a 200. On CI it returns:
+
+```
++ App probe GET /chat/api/health -> status=200
+  body: {"success":true,"status":"ok"}
+```
+
+That single request is the end-to-end proof for the web UI's server side: ColdBox routing reaching `handlers/ChatUi.bx`, WireBox resolving the handler and `ChatDb`, `this.datasources` giving bx-sqlite a usable SQLite file, and qb being a genuinely activated ColdBox module - none of which any source-text assertion can establish. `WebUiRuntimeSpec.bx` then covers the store's behaviour (migrations, scoped conversation CRUD, the cross-user guard, preference upserts) by reading real objects out of WireBox inside that same boot.
+
+**What is still not covered:** the other webui routes over HTTP. Only `/health` is fetched. Driving the rest from `WebUiRuntimeSpec` is not possible as structured - that spec runs *inside* a request served by the same single miniserver, so loopback calls starve on the worker the runner itself occupies (seen as `runner-coldbox.bxm never responded: HTTP 408`). Covering them needs either a second server process or a larger miniserver thread pool, and is a natural follow-up rather than something to fake.
+
 ## The web UI's own front-end: driven in a real browser, but against a mocked API
 
 The shipped page's JavaScript was exercised for real this session, not just asserted against as source text: the generated `index.html` was loaded in headless Chromium and driven end to end with every `<path>/api/*` route intercepted and answered with realistic payloads. Confirmed working that way - the conversation sidebar rendering from `GET /conversations` and switching/renaming/deleting through its own routes; `GET /info` shaping the toolbar (Compact appearing only when `capabilities.compact` is true, the model name landing in the header); the theme arriving from server-side `preferences` and applying; `/history` rehydrating the transcript; a real SSE turn streaming content, reasoning and tool-call chips out of the bx-ai envelope; markdown rendering; and **New chat** creating a conversation server-side and opening it. Zero JavaScript errors, zero unreplaced `__TOKEN__` placeholders, and the narrow-screen layout was screenshotted at 390px.

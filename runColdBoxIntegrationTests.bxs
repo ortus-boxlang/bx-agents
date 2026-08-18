@@ -138,6 +138,17 @@ try {
 	println( "+ App probe GET /chat/api/health -> status=#probeStatus#" )
 	println( "  body: #probeDetail#" )
 
+	// Now that it is proven to work, treat it as real coverage rather than
+	// commentary: a non-200 here means the generated app cannot serve its own
+	// web UI, which is a failure worth stopping for - and a far clearer one
+	// than the runner timing out later with no explanation.
+	if ( probeStatus != 200 ) {
+		throw(
+			type    = "BxAgents.WebUiProbeFailed",
+			message = "The generated app did not serve GET /chat/api/health (status #probeStatus#): #probeDetail#"
+		)
+	}
+
 	runnerUrl = "http://127.0.0.1:#port#/runner-coldbox.bxm"
 	deadline  = getTickCount() + 90000
 	report    = ""

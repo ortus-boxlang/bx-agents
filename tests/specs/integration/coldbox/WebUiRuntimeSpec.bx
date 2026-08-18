@@ -16,8 +16,18 @@
  * 127.0.0.1 waits on a worker that this very request is occupying. CI showed
  * it as `runner-coldbox.bxm never responded: HTTP 408` while the app was
  * demonstrably up (its scheduler was ticking throughout). Handler actions are
- * therefore exercised through the controller's own event execution, and the
- * store through its real object - neither needs a second connection.
+ * therefore NOT driven from here at all. runColdBoxIntegrationTests.bxs
+ * probes GET /chat/api/health from the orchestrator instead - outside the
+ * server, where a request costs nothing - and that probe is what proves
+ * routing -> ChatUi -> WireBox -> ChatDb over real HTTP. It returns
+ * {"success":true,"status":"ok"} against a real boot.
+ *
+ * An earlier revision also called controller.runEvent() here. That is worse
+ * than it looks: runner-coldbox.bxm is a plain .bxm served DIRECTLY by
+ * miniserver, not routed through ColdBox, so there is no active request
+ * context for an event to execute in. This file sticks to reading real
+ * objects out of WireBox, which is what the sibling ColdBoxRuntimeSpec does
+ * and what demonstrably works.
  */
 class extends="testbox.system.BaseSpec" {
 
@@ -124,17 +134,6 @@ class extends="testbox.system.BaseSpec" {
 
 				db.deletePreference( userId, "theme" );
 				expect( db.getPreferences( userId ) ).toBeEmpty();
-			} );
-
-			it( "runs the generated ChatUi handler through the real controller", function() {
-				// Proves the handler class resolves and executes under a real boot -
-				// not just that the right source text was generated. /health and
-				// /info are used because they read no request body.
-				var health = controller.runEvent( event: "ChatUi.health", prePostExempt: true );
-				expect( isNull( health ) ).toBeFalse();
-
-				var info = controller.runEvent( event: "ChatUi.info", prePostExempt: true );
-				expect( isNull( info ) ).toBeFalse();
 			} );
 
 			it( "generated the static chat shell with every placeholder substituted", function() {
