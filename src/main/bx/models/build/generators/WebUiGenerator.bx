@@ -86,11 +86,13 @@ class {
 			return ( entry.config.users ?: [] ).len() > 0
 		} )
 
-		var seederName = ""
+		var seedStatement = ""
 		var loginGateName = ""
 		if ( users.len() ) {
-			seederName = "WebUiUserSeeder"
-			fileWrite( interceptorDir & "/#seederName#.bx", renderUserSeeder( users ) )
+			fileWrite( modelDir & "/UserSeeder.bx", renderUserSeeder( users ) )
+			// Runs from onApplicationStart(), where "after ColdBox is loaded" is
+			// a fact rather than an assumption about interceptor ordering.
+			seedStatement = 'application.cbController.getWireBox().getInstance( "UserSeeder" ).seed()'
 
 			loginGateName = "WebUiLoginGate"
 			fileWrite( interceptorDir & "/#loginGateName#.bx", renderLoginGate( userEntries ) )
@@ -104,7 +106,7 @@ class {
 			hasWebUi                   : true,
 			webUiAuthInterceptorName   : interceptorName,
 			webUiSchemaInterceptorName : "WebUiSchema",
-			webUiSeederInterceptorName : seederName,
+			webUiSeedStatement         : seedStatement,
 			webUiLoginGateName         : loginGateName,
 			webUiHasUsers              : users.len() > 0,
 			webUiDatabase              : database
@@ -1131,7 +1133,7 @@ class {
 			" * cbauth's IUserService, backed by the web UI's SQLite store.",
 			" *",
 			" * Accounts come from your gateways/* webui entry's `users` block and",
-			" * are seeded at boot - see interceptors/WebUiUserSeeder.bx.",
+			" * are seeded at boot - see models/UserSeeder.bx.",
 			" */",
 			"class singleton {",
 			"",
@@ -1441,8 +1443,17 @@ class {
 	}
 
 	/**
-	 * Renders `interceptors/WebUiUserSeeder.bx` - reconciles the accounts in
-	 * `gateways/*` config into the users table at boot.
+	 * Renders `models/UserSeeder.bx` - reconciles the accounts in `gateways/*`
+	 * config into the users table at boot.
+	 *
+	 * A MODEL called from `onApplicationStart()`, not an interceptor on
+	 * `afterConfigurationLoad`. It was an interceptor first, and it silently
+	 * never ran: the users table still appeared - because `ChatDb.init()`
+	 * migrates on construction, so the schema shows up the moment WireBox
+	 * builds it - which made the interceptor look like it had fired when
+	 * nothing had. A startup statement runs after `loadColdbox()` has fully
+	 * returned, with no dependence on when a given interception point fires
+	 * relative to when config-declared interceptors are registered.
 	 *
 	 * Config is the source of truth for WHO exists. Passwords never appear in
 	 * it: an account names an environment variable holding its plaintext
@@ -1454,7 +1465,7 @@ class {
 	 *
 	 * @users collectWebUiUsers()'s result
 	 *
-	 * @return The rendered interceptors/WebUiUserSeeder.bx source
+	 * @return The rendered models/UserSeeder.bx source
 	 */
 	private string function renderUserSeeder( required array users ) {
 		var lines = [
@@ -1469,12 +1480,15 @@ class {
 			" * it. REMOVING them from config deactivates the account - deliberately",
 			" * not a delete, because their conversations reference their id and",
 			" * dropping the row would orphan that history rather than revoke access.",
+			" *",
+			" * Called from Application.bx's onApplicationStart(), after ColdBox has",
+			" * finished loading. Idempotent, so running it twice is harmless.",
 			" */",
-			"class {",
+			"class singleton {",
 			"",
 			'	property name="wirebox" inject="wirebox";',
 			"",
-			"	function afterConfigurationLoad( event, interceptData, rc, prc ) {",
+			"	void function seed() {",
 			'		var db = wirebox.getInstance( "ChatDb" )',
 			'		var hasher = wirebox.getInstance( "PasswordHasher" )',
 			"		var configured = []",
@@ -1523,6 +1537,8 @@ class {
 
 		lines.append( "		// Anyone no longer in config loses access on this boot." )
 		lines.append( "		db.deactivateUsersNotIn( configured )" )
+		lines.append( "" )
+		lines.append( '		writeLog( text : "Web UI accounts reconciled: " & configured.len() & " configured", type : "information", file : "webui-auth" )' )
 		lines.append( "	}" )
 		lines.append( "" )
 		lines.append( "}" )
