@@ -272,8 +272,14 @@ class {
 	 * Prints the `--help`/no-verb/unknown-verb usage text: module identity,
 	 * one line per verb (sorted alphabetically) with its description, and the
 	 * two global flags handled before verb dispatch. Prints line-by-line
-	 * (rather than building and returning one joined string) since BoxLang
-	 * has no `chr()` BIF available in this module-CLI execution context.
+	 * rather than building and returning one joined string.
+	 *
+	 * This note used to say BoxLang "has no `chr()` BIF available in this
+	 * module-CLI execution context", which was the wrong conclusion from a
+	 * real symptom: `chr()` does not exist in BoxLang in ANY context - the
+	 * BIF is spelled `char()`. Verified directly against the runtime, and
+	 * separately re-confirmed the expensive way when `chr( 10 )` in the
+	 * ColdBox integration runner page 500'd every request. Use `char()`.
 	 *
 	 * @verbs Struct mapping verb name -> dispatch class path
 	 * @verbDescriptions Struct mapping verb name -> one-line help text
