@@ -197,6 +197,15 @@ class {
 		lines.append( '	COLDBOX_APP_KEY        = ""' )
 		lines.append( "" )
 		lines.append( "	function onApplicationStart() {" )
+		if ( len( arguments.databasePath ) ) {
+			// SQLite creates the database FILE on first connect, but never its
+			// parent directory - a missing ./data/ is an unopenable-database
+			// error at boot, not an auto-created folder. Done here rather than in
+			// ChatDb because this is where the configured path literally is;
+			// ChatDb only ever knows the datasource NAME.
+			lines.append( "		// SQLite creates the db file, but not the directory holding it" )
+			lines.append( '		directoryCreate( getDirectoryFromPath( expandPath( "#bxLiteral( arguments.databasePath )#" ) ), true, true )' )
+		}
 		// Named args deliberately, not positional - coldbox.system.Bootstrap's
 		// real init() signature is
 		// (COLDBOX_CONFIG_FILE, COLDBOX_APP_ROOT_PATH, COLDBOX_APP_KEY, COLDBOX_APP_MAPPING, COLDBOX_FAIL_FAST, COLDBOX_WEB_MAPPING) -

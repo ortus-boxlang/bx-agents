@@ -51,9 +51,17 @@ jobs:
       - name: Install TestBox
         run: box install
 
-      - name: Install ColdBox (for the ColdBox-dependent integration specs)
+      # Installs ColdBox, TestBox AND qb (with its own cbpaginator dependency).
+      # qb is what the generated web UI's models/ChatDb.bx resolves
+      # SchemaBuilder@qb / QueryBuilder@qb through, so without this the
+      # ColdBox integration boot fails at startup rather than skipping.
+      - name: Install ColdBox + qb (for the ColdBox-dependent integration specs)
         run: box install
         working-directory: tests
+
+      - name: Show installed test dependencies
+        run: ls -la tests/ && ls -la tests/qb 2>/dev/null || true
+        shell: bash
 
       # Not Needed in this module
       #- name: Setup Environment For Testing Process
@@ -85,8 +93,26 @@ jobs:
       - name: Run TestBox Suite
         run: ./gradlew testBx --stacktrace --console=plain
 
-      - name: Run ColdBox Integration Suite
+      # The strongest proof point in the suite: boots a REAL boxlang-miniserver
+      # against a generated app and drives it over real HTTP - including the web
+      # UI's own routes against a real SQLite store (see WebUiRuntimeSpec.bx).
+      # Nothing else proves the app actually boots, that WireBox resolves
+      # ChatDb/qb, or that bx-sqlite's driver is real.
+      - name: Run ColdBox Integration Suite (real boot + real SQLite)
         run: ./gradlew testColdBoxIntegration --stacktrace --console=plain
+
+      - name: Dump the generated app on integration failure
+        if: failure()
+        shell: bash
+        run: |
+          echo "=== generated app tree ==="
+          find tests/.coldbox-app -maxdepth 4 -type f 2>/dev/null | head -60 || true
+          echo "=== Application.bx ==="
+          cat tests/.coldbox-app/.build/app/Application.bx 2>/dev/null || true
+          echo "=== config/ColdBox.bx ==="
+          cat tests/.coldbox-app/.build/app/config/ColdBox.bx 2>/dev/null || true
+          echo "=== models/ChatDb.bx ==="
+          cat tests/.coldbox-app/.build/app/models/ChatDb.bx 2>/dev/null || true
 
       - name: Verify examples/ build
         run: ./gradlew verifyExamples --stacktrace --console=plain
@@ -113,6 +139,7 @@ jobs:
             **/build/reports/tests/**
             **/build/test-results/**
             **/tests/results/**
+            tests/.coldbox-app/.build/app/**
 
       - name: Inform Slack
         if: ${{ failure() && github.ref == 'refs/heads/development' }}

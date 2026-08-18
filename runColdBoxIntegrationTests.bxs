@@ -43,6 +43,29 @@ println( "+ Built fixture at: " & buildResult.appDir )
 fileCopy( repoRoot & "tests/runner-coldbox.bxm", buildResult.appDir & "/runner-coldbox.bxm" )
 
 // ------------------------------------------------------------------
+// 1b. Install qb into the built app as a real ColdBox module.
+//
+// A webui project's generated models/ChatDb.bx resolves SchemaBuilder@qb and
+// QueryBuilder@qb through WireBox, which only exist once ColdBox has actually
+// REGISTERED qb as a module - a bare class-path mapping is not enough. ColdBox
+// discovers modules from the app's own modules/ folder, so qb is copied there
+// (bringing its own nested modules/cbpaginator with it - QueryBuilder's init
+// defaults to `new cbpaginator.models.Pagination()`, so it fails to construct
+// without it; confirmed directly, not assumed).
+//
+// This mirrors what a real deployment must do: `box install qb` in the project.
+// See docs/conventions/gateways.md.
+// ------------------------------------------------------------------
+qbSource = repoRoot & "tests/qb"
+if ( directoryExists( qbSource ) ) {
+	directoryCreate( buildResult.appDir & "/modules", true, true )
+	directoryCopy( qbSource, buildResult.appDir & "/modules/qb", true )
+	println( "+ Installed qb into the built app's modules/" )
+} else {
+	println( "! tests/qb not found - run `box install` in tests/ first. The webui specs will fail." )
+}
+
+// ------------------------------------------------------------------
 // 2. Launch a real boxlang-miniserver, pointed directly at the built app,
 //    reusing this project's own boxlang.json for its mappings (/coldbox,
 //    /tests, /testbox, etc. - the runner still needs to resolve
