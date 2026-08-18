@@ -161,9 +161,21 @@ class extends="testbox.system.BaseSpec" {
 
 				expect( schema.hasTable( name: "users", options: { datasource: "bxagentse2e" } ) ).toBeTrue();
 
+				// Checked in two steps on purpose. "no row at all" and "row written
+				// but not findable" are completely different bugs - the first is
+				// the seeder, the second is the read path - and a single assertion
+				// on findUserByUsername() cannot tell them apart. It could not the
+				// first time this failed, either.
+				var raw = db.query().from( "users" ).where( "username", "e2e" ).first();
+				expect( isStruct( raw ) && len( raw.id ?: "" ) ).toBeTrue(
+					"the seeder wrote no users row at all for the configured account"
+				);
+
 				// The /secure entry declares this account with a committed hash
 				var seeded = db.findUserByUsername( "e2e" );
-				expect( seeded ).notToBeEmpty( "the seeder should have created the configured account" );
+				expect( seeded ).notToBeEmpty(
+					"the row exists but findUserByUsername() cannot see it - check how isActive is stored, SQLite has no boolean type"
+				);
 				expect( seeded.username ).toBe( "e2e" );
 				expect( len( seeded.id ) ).toBeGT( 0 );
 				// The stored value is a hash, never the plaintext
