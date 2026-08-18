@@ -382,6 +382,38 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( "subAgents : [ subagent_b ]" );
 			} );
 
+			/**
+			 * The web UI's SQLite store. Nothing asserted on this block before,
+			 * and it shipped without a default datasource - so a real boot
+			 * failed with "No default datasource defined in the application"
+			 * even though the datasource itself was registered.
+			 */
+			it( "registers the web UI datasource AND makes it the app default", function() {
+				var buildDir = newBuildDir();
+				var config = resolver.resolve( projectRoot = fixtures & "/full-project" );
+				generator.generate(
+					projectRoot    : fixtures & "/full-project",
+					buildDir       : buildDir,
+					resolvedConfig : config,
+					hasWebUi       : true,
+					webUiDatabase  : { datasource : "acmechat", path : "./data/chat.db" }
+				);
+
+				var content = fileRead( buildDir & "/Application.bx" );
+				expect( content ).toInclude( 'this.datasources[ "acmechat" ]' );
+				expect( content ).toInclude( '"driver"  : "sqlite"' );
+				expect( content ).toInclude( 'this.defaultDatasource = "acmechat"' );
+			} );
+
+			it( "declares no datasource at all for a project without a web UI", function() {
+				var buildDir = newBuildDir();
+				generateFor( fixtures & "/full-project", buildDir );
+				var content = fileRead( buildDir & "/Application.bx" );
+
+				expect( content ).notToInclude( "this.datasources[" );
+				expect( content ).notToInclude( "this.defaultDatasource" );
+			} );
+
 		} );
 	}
 

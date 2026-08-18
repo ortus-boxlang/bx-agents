@@ -410,6 +410,11 @@ class extends="testbox.system.BaseSpec" {
 				var src = fileRead( appDir & "/models/ChatDb.bx" );
 				expect( src ).toInclude( "any function query() {" );
 				expect( src ).toInclude( 'wirebox.getInstance( "QueryBuilder@qb" )' );
+				// Every builder names its own datasource. Leaving this to
+				// moduleSettings.qb.defaultOptions looked correct and was not:
+				// in a real ColdBox boot the setting never reached QueryBuilder
+				// and every query failed with "No default datasource defined".
+				expect( src ).toInclude( "mergeDefaultOptions( { datasource : static.DATASOURCE } )" );
 			} );
 
 			it( "ships a conversation sidebar wired to the conversations API", function() {
