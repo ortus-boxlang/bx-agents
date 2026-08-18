@@ -21,9 +21,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ "ubuntu-latest", "windows-latest" ]
-        jdkVersion: [ "21" ]
-        experimental: [false]
+        include:
+          - os: "ubuntu-latest"
+            jdkVersion: "21"
+            experimental: false
+          # Non-blocking, for a reason outside this module's control:
+          # Ortus-Solutions/setup-commandbox@v2.0.1 installs CommandBox with
+          # `unzip box.zip -d /usr/local/bin/`, a Linux path. On Windows that
+          # fails with "cannot create extraction directory", `box` never lands
+          # on PATH, and every subsequent step dies with "The term 'box' is not
+          # recognized". Nothing in this repo can fix that from here, so the
+          # job is kept in the matrix - visible, and green the moment the
+          # action gains Windows support - rather than deleted or left
+          # permanently blocking every PR.
+          - os: "windows-latest"
+            jdkVersion: "21"
+            experimental: true
     permissions:
       checks: write
       pull-requests: write
@@ -84,6 +97,22 @@ jobs:
           # Supporting BoxLang modules (bx-ai, etc.) the TestBox suite needs
           # loaded for real - see boxlang.json's modulesDirectory setting.
           ./gradlew downloadModules
+          # Then OVERLAY bx-ai with a build from its own source.
+          #
+          # The published bx-ai@3.4.0-snapshot on ForgeBox lags its own
+          # development branch badly: it still ships bifs/gatewayRegistry.bx
+          # (renamed to aiGatewayRegistry upstream) and has no
+          # models/gateway/BaseGateway.bx at all - the class every push-style
+          # gateway in this module extends. Testing against it fails ~40 specs
+          # for reasons that have nothing to do with this module's own code.
+          #
+          # bx-ftp and bx-sqlite are stable releases and keep coming from
+          # downloadModules; only bx-ai needs this. Remove the overlay once a
+          # published snapshot catches up. See docs/known-limitations.md.
+          git clone --depth 1 --branch development https://github.com/ortus-boxlang/bx-ai.git "$RUNNER_TEMP/bx-ai"
+          ( cd "$RUNNER_TEMP/bx-ai" && ./gradlew createModuleStructure --console=plain -q )
+          cp -R "$RUNNER_TEMP/bx-ai/build/module/." src/test/resources/modules/bxai/
+          echo "+ bx-ai overlaid from source: $( cd "$RUNNER_TEMP/bx-ai" && git rev-parse --short HEAD )"
           # boxlang-miniserver jar - lets integration tests boot a real
           # MiniServer instead of skipping when the binary isn't on PATH.
           ./gradlew downloadMiniServer
