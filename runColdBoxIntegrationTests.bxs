@@ -61,15 +61,27 @@ directoryCreate( buildResult.appDir & "/modules", true, true )
 // qb, cbauth and cbauth's own cbstorages dependency all have to be REAL
 // ColdBox modules in the app - a bare class-path mapping is not enough for
 // WireBox to resolve QueryBuilder@qb or authenticationService@cbauth.
+// cbstorages is cbauth's own dependency. CommandBox may install it as a
+// sibling OR nested under cbauth/modules/, exactly as qb nests cbpaginator -
+// so a missing sibling is normal, not a problem, and only worth reporting.
 for ( moduleName in [ "qb", "cbauth", "cbstorages" ] ) {
 	moduleSource = repoRoot & "tests/" & moduleName
 	if ( directoryExists( moduleSource ) ) {
 		directoryCopy( moduleSource, buildResult.appDir & "/modules/" & moduleName, true )
 		println( "+ Installed " & moduleName & " into the built app's modules/" )
 	} else {
-		println( "! tests/" & moduleName & " not found - run `box install` in tests/ first." )
+		println( "  (no sibling tests/" & moduleName & " - expected when it ships nested inside its parent module)" )
 	}
 }
+
+// Whether cbstorages ended up a sibling or nested, cbauth cannot resolve
+// without it - so say plainly which layout is in play rather than leaving a
+// WireBox error later to explain it.
+nestedStorages = buildResult.appDir & "/modules/cbauth/modules/cbstorages"
+println( "+ cbstorages: " & (
+	directoryExists( buildResult.appDir & "/modules/cbstorages" ) ? "installed as a sibling"
+	: ( directoryExists( nestedStorages ) ? "nested inside cbauth" : "MISSING - cbauth will not resolve" )
+) )
 
 // ------------------------------------------------------------------
 // 2. Launch a real boxlang-miniserver, pointed directly at the built app,

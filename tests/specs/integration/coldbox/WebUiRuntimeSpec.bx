@@ -148,6 +148,69 @@ class extends="testbox.system.BaseSpec" {
 				expect( html ).notToInclude( "__WELCOME__" );
 			} );
 
+			/**
+			 * These are the ONLY thing that proves the generated sign-in code is
+			 * real. Every other auth spec asserts on generated TEXT; nothing else
+			 * compiles it, resolves cbauth, or runs a migration against actual
+			 * SQLite. A green build without these would mean very little - the
+			 * same gap that let a ChatDb.bx that could not even parse ship.
+			 */
+			it( "migrated the users table and seeded the configured account", function() {
+				var db = controller.getWireBox().getInstance( "ChatDb" );
+				var schema = controller.getWireBox().getInstance( "SchemaBuilder@qb" );
+
+				expect( schema.hasTable( name: "users", options: { datasource: "bxagentse2e" } ) ).toBeTrue();
+
+				// The /secure entry declares this account with a committed hash
+				var seeded = db.findUserByUsername( "e2e" );
+				expect( seeded ).notToBeEmpty( "the seeder should have created the configured account" );
+				expect( seeded.username ).toBe( "e2e" );
+				expect( len( seeded.id ) ).toBeGT( 0 );
+				// The stored value is a hash, never the plaintext
+				expect( seeded.passwordHash ).toInclude( "pbkdf2$" );
+
+				// Only ACTIVE accounts are ever returned, and an unknown username
+				// is an empty struct rather than an error
+				expect( db.findUserByUsername( "nobody" ) ).toBeEmpty();
+			} );
+
+			it( "resolves cbauth and the generated user service through WireBox", function() {
+				var binder = controller.getWireBox().getBinder();
+
+				// Proves cbauth loaded as a real ColdBox module - and with it
+				// cbstorages, which it depends on for session storage
+				expect( binder.mappingExists( "authenticationService@cbauth" ) ).toBeTrue();
+
+				var auth = controller.getWireBox().getInstance( "authenticationService@cbauth" );
+				expect( isObject( auth ) ).toBeTrue();
+				// Nobody is signed in during a bare spec request
+				expect( auth.isLoggedIn() ).toBeFalse();
+
+				var users = controller.getWireBox().getInstance( "UserService" );
+				expect( isObject( users ) ).toBeTrue();
+				// A wrong password must not authenticate, and an unknown user must
+				// not throw - both are plain false
+				expect( users.isValidCredentials( "e2e", "definitely-not-the-password" ) ).toBeFalse();
+				expect( users.isValidCredentials( "nobody-at-all", "whatever" ) ).toBeFalse();
+			} );
+
+			it( "hashes and verifies a password for real", function() {
+				var hasher = controller.getWireBox().getInstance( "PasswordHasher" );
+
+				var stored = hasher.hash( "correct horse battery staple" );
+				expect( stored ).toInclude( "pbkdf2$" );
+				expect( hasher.verify( "correct horse battery staple", stored ) ).toBeTrue();
+				expect( hasher.verify( "wrong", stored ) ).toBeFalse();
+
+				// A fresh salt per call: the same password must not produce the
+				// same stored value twice
+				expect( hasher.hash( "same" ) ).notToBe( hasher.hash( "same" ) );
+
+				// A malformed stored value fails closed rather than throwing
+				expect( hasher.verify( "anything", "" ) ).toBeFalse();
+				expect( hasher.verify( "anything", "not-a-hash" ) ).toBeFalse();
+			} );
+
 		} );
 	}
 
