@@ -105,6 +105,39 @@ try {
 	//    any response (this sandbox's proxy can answer a not-yet-listening
 	//    port with a transient 502 - confirmed earlier this session).
 	// ------------------------------------------------------------------
+	// ------------------------------------------------------------------
+	// 2b. Probe a REAL app route before the TestBox runner.
+	//
+	// Two jobs. First, diagnosis: if the runner page later times out, this
+	// says whether the server was serving anything at all, which a bare
+	// "never responded" cannot. Second, coverage: /chat/api/health exercises
+	// ColdBox routing -> the generated ChatUi handler -> WireBox -> ChatDb
+	// over real HTTP from outside the process, which WebUiRuntimeSpec
+	// deliberately cannot do from inside a request (see its docblock).
+	//
+	// Never fails the build on its own - it only reports.
+	// ------------------------------------------------------------------
+	healthUrl     = "http://127.0.0.1:#port#/chat/api/health"
+	probeDeadline = getTickCount() + 60000
+	probeStatus   = 0
+	probeDetail   = "no response"
+
+	while ( getTickCount() < probeDeadline ) {
+		try {
+			bx:http url=healthUrl method="GET" result="probeResult" timeout=10 {}
+			probeStatus = probeResult.status_code ?: 0
+			probeDetail = left( trim( probeResult.fileContent ?: "" ), 240 )
+			if ( probeStatus == 200 ) {
+				break
+			}
+		} catch ( any e ) {
+			probeDetail = e.message
+		}
+		sleep( 1000 )
+	}
+	println( "+ App probe GET /chat/api/health -> status=#probeStatus#" )
+	println( "  body: #probeDetail#" )
+
 	runnerUrl = "http://127.0.0.1:#port#/runner-coldbox.bxm"
 	deadline  = getTickCount() + 90000
 	report    = ""
