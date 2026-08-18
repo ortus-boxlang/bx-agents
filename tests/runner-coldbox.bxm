@@ -11,13 +11,35 @@
 	 * Outputs the same TestBox JSON report shape runTests.bxs writes to disk,
 	 * as the raw HTTP response body, for the calling orchestration script to
 	 * fetch and parse.
+	 *
+	 * PROGRESS MARKERS: each stage appends to runner-progress.txt before it
+	 * starts. When this page hangs the response never arrives, so the log says
+	 * only "never responded" and nothing about where it stopped - the file is
+	 * readable from outside the request and pins that down. The orchestrator
+	 * prints it on timeout. Cheap, and the only way to see inside a request
+	 * that never returns.
 	 */
+	progressFile = expandPath( "/" ) & "runner-progress.txt";
+
+	function mark( required string stage ) {
+		fileAppend( progressFile, "[#dateTimeFormat( now(), 'HH:nn:ss' )#] #arguments.stage##chr(10)#" );
+	}
+
+	fileWrite( progressFile, "" );
+	mark( "page entered" );
+
+	mark( "constructing TestBox over tests.specs.integration.coldbox" );
 	testbox = new testbox.system.TestBox( directory = { mapping: "tests.specs.integration.coldbox", recurse: true } );
+
+	mark( "running specs" );
 	results = testbox.runRaw();
 
+	mark( "building JSON report" );
 	jsonReporter = new testbox.system.reports.JSONReporter();
 	jsonReport   = jsonReporter.runReport( results, testbox, {}, true );
 
+	mark( "writing response" );
 	bx:header name="Content-Type" value="application/json";
 	writeOutput( jsonReport );
+	mark( "done" );
 </bx:script>

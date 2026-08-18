@@ -169,6 +169,13 @@ try {
 	}
 
 	if ( !len( report ) ) {
+		// The page never returned, so the only evidence of how far it got is
+		// the marker file it writes as it goes - see tests/runner-coldbox.bxm.
+		var progressPath = buildResult.appDir & "/runner-progress.txt"
+		println( "" )
+		println( "--- runner progress markers ---" )
+		println( fileExists( progressPath ) ? trim( fileRead( progressPath ) ) : "(no progress file - the page never even started)" )
+		println( "-------------------------------" )
 		throw( type = "BxAgents.ColdBoxRunnerNeverStarted", message = "tests/runner-coldbox.bxm never responded: #lastError#" )
 	}
 
