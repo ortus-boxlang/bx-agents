@@ -402,7 +402,9 @@ class extends="testbox.system.BaseSpec" {
 				var content = fileRead( buildDir & "/Application.bx" );
 				expect( content ).toInclude( 'this.datasources[ "acmechat" ]' );
 				expect( content ).toInclude( '"driver"  : "sqlite"' );
-				expect( content ).toInclude( 'this.defaultDatasource = "acmechat"' );
+				// `this.datasource`, not `this.defaultDatasource` - the latter is
+				// accepted silently and has no effect (verified against the runtime)
+				expect( content ).toInclude( 'this.datasource = "acmechat"' );
 			} );
 
 			it( "declares no datasource at all for a project without a web UI", function() {
@@ -411,7 +413,7 @@ class extends="testbox.system.BaseSpec" {
 				var content = fileRead( buildDir & "/Application.bx" );
 
 				expect( content ).notToInclude( "this.datasources[" );
-				expect( content ).notToInclude( "this.defaultDatasource" );
+				expect( content ).notToInclude( "this.datasource =" );
 			} );
 
 		} );

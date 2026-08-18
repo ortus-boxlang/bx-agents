@@ -192,7 +192,15 @@ class {
 			// so anything that runs a query without naming one should reach it
 			// rather than failing with "No default datasource defined in the
 			// application" - which is precisely what happened in a real boot.
-			lines.append( '	this.defaultDatasource = "#bxLiteral( arguments.datasourceName )#"' )
+			//
+			// The key is `this.datasource`, NOT `this.defaultDatasource`. The
+			// latter is the obvious-looking name, is accepted silently, and
+			// does nothing - verified directly against the runtime: with
+			// `this.defaultDatasource` set, an unqualified query still fails
+			// with "No default datasource defined in the application ...
+			// Registered datasources are: [<name>]"; with `this.datasource` it
+			// resolves.
+			lines.append( '	this.datasource = "#bxLiteral( arguments.datasourceName )#"' )
 		}
 
 		lines.append( "" )
