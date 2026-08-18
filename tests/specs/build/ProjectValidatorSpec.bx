@@ -266,6 +266,16 @@ class extends="testbox.system.BaseSpec" {
 				expect( joined ).toInclude( "journalMode" );
 			} );
 
+			it( "rejects a webui database path that walks out of the app with ..", function() {
+				// The absolute-path check above does not catch this: the value is
+				// relative, so it passed validation cleanly and still escaped the
+				// app directory once expandPath() resolved it - the same failure
+				// the absolute check exists to prevent.
+				var result = validateFixture( "../gateways-webui-traversal-db" );
+				expect( result.errors.len() ).toBeGT( 0 );
+				expect( result.errors.toList( " " ) ).toInclude( "walks outside the app" );
+			} );
+
 			it( "returns no errors for a fully valid project", function() {
 				var result = validateFixture( "../full-project" );
 				expect( result.errors ).toBeArray();

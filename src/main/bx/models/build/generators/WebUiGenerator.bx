@@ -1,5 +1,5 @@
 /**
- * Generates the v1 web chat UI (Build Pipeline Phase 5, alongside
+ * Generates the web chat UI (Build Pipeline Phase 5, alongside
  * RouterGenerator): for every `gateways/*` entry with `exposes: "webui"`,
  * copies a small, dependency-free, PRE-BUILT static chat page
  * (`webui/index.html`, sitting next to this class - see the docblock on
@@ -458,7 +458,8 @@ class {
 	 * `memories` array), so with no server-side userId they all collapse into one
 	 * bucket shared by every visitor.
 	 *
-	 * This handler instead reads `session.sessionId` on the server and passes it
+	 * This handler instead derives the identity server-side via ColdBox's
+	 * `getUserSessionIdentifier()` and passes it
 	 * as `userId` on all three runner shapes, so scoping holds no matter which
 	 * memories the project configures. `conversationId` still comes from the
 	 * client, but it can now only ever sub-divide within the caller's own
@@ -503,6 +504,19 @@ class {
 			"	 * for a trusted server-to-server caller but wrong for a browser behind a",
 			"	 * single shared API key - there, anyone could name themselves anyone.",
 			"	 */",
+			"	/**",
+			"	 * The userId that owns a saved checkpoint, or an empty string when the",
+			"	 * state predates this or was written by some other caller. Read from",
+			"	 * the run options the agent checkpointed, which resolveOptions() fills",
+			"	 * from the session - never from anything a request supplied.",
+			"	 */",
+			"	private string function ownerOf( required struct state ) {",
+			'		if ( !structKeyExists( arguments.state, "options" ) || !isStruct( arguments.state.options ) ) {',
+			'			return ""',
+			"		}",
+			'		return arguments.state.options.userId ?: ""',
+			"	}",
+			"",
 			"	private string function resolveUserId() {",
 			"		return controller.getUserSessionIdentifier()",
 			"	}",
@@ -920,6 +934,20 @@ class {
 			"		}",
 			"",
 			"		var state = checkpointer.loadState( threadId )",
+			"",
+			"		// A suspended run belongs to whoever started it. resolveOptions()",
+			"		// stamps the session-derived userId into the run options, and the",
+			"		// agent saves those options into the checkpoint - so the saved",
+			"		// userId is the authority on ownership, with nothing extra to",
+			"		// store. Without this, any visitor holding a threadId could read",
+			"		// another visitor's pending tool calls and their arguments.",
+			"		//",
+			"		// Answered as though nothing is pending rather than with a distinct",
+			"		// refusal, so this cannot be used to test whether a threadId exists.",
+			"		if ( !state.isEmpty() && ownerOf( state ) != resolveUserId() ) {",
+			'			event.renderData( type: "json", data: { "pending": false, "success": true } )',
+			"			return",
+			"		}",
 			'		event.renderData( type: "json", data: {',
 			'			"pending"       : !state.isEmpty(),',
 			'			"pendingActions": state.suspendData.pendingActions ?: [],',
@@ -948,6 +976,21 @@ class {
 			"",
 			"		var thisAgent = agent()",
 			"		var decidedBy = resolveUserId()",
+			"",
+			"		// Same ownership rule as /pending, and it matters more here:",
+			"		// without it a visitor holding another visitor's threadId could",
+			"		// APPROVE or REJECT their pending action, with their own identity",
+			"		// recorded as decidedBy. Deriving decidedBy server-side stops a",
+			"		// caller lying about who decided; it does not stop them deciding",
+			"		// on a run that is not theirs.",
+			"		var resumeCheckpointer = thisAgent.getCheckpointer()",
+			"		if ( !isNull( resumeCheckpointer ) ) {",
+			"			var resumeState = resumeCheckpointer.loadState( threadId )",
+			"			if ( !resumeState.isEmpty() && ownerOf( resumeState ) != decidedBy ) {",
+			'				event.renderData( type: "json", statusCode: 403, data: { "error": "This run belongs to another session", "success": false } )',
+			"				return",
+			"			}",
+			"		}",
 			"		SSE(",
 			"			callback: ( emitter ) => {",
 			"				thisAgent.resumeStream(",

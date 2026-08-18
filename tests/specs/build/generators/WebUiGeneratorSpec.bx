@@ -727,6 +727,38 @@ class extends="testbox.system.BaseSpec" {
 				}
 			} );
 
+			/**
+			 * Every other action derives the caller from the session, but /pending
+			 * and /resume were addressed purely by threadId - so a visitor holding
+			 * another visitor's threadId could read their pending tool calls and
+			 * their arguments, and approve or reject on their behalf. Deriving
+			 * decidedBy server-side stopped a caller lying about WHO decided; it
+			 * did not stop them deciding on a run that was not theirs.
+			 *
+			 * Ownership needs no new storage: resolveOptions() stamps the
+			 * session-derived userId into the run options, and the agent
+			 * checkpoints those options alongside the suspension.
+			 */
+			it( "scopes /pending and /resume to the session that owns the run", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
+
+				// Ownership is read from the checkpointed options, never the request
+				expect( src ).toInclude( "private string function ownerOf(" );
+				expect( src ).toInclude( 'return arguments.state.options.userId ?: ""' );
+
+				// /pending answers as though nothing is pending, so it cannot be
+				// used to probe whether a given threadId exists at all
+				expect( src ).toInclude( "if ( !state.isEmpty() && ownerOf( state ) != resolveUserId() ) {" );
+
+				// /resume refuses outright
+				expect( src ).toInclude( "if ( !resumeState.isEmpty() && ownerOf( resumeState ) != decidedBy ) {" );
+				expect( src ).toInclude( "This run belongs to another session" );
+			} );
+
 			it( "does not generate an auth interceptor when no webui entry configures an apiKeyEnvVar", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-webui-no-key" );
 				var appDir = newAppDir();

@@ -369,7 +369,7 @@ class {
 			}
 
 			if ( structKeyExists( config, "exposes" ) ) {
-				// Exposure entry: exposes an agent (raw HTTP or the v1 web chat UI) or an MCP server
+				// Exposure entry: exposes an agent (raw HTTP or the web chat UI) or an MCP server
 				if ( ![ "agent", "mcp", "webui" ].contains( config.exposes ) ) {
 					arguments.errors.append( "Gateway [#gateway.name#] has an invalid 'exposes' value [#config.exposes#] - must be 'agent', 'mcp', or 'webui'" )
 				}
@@ -478,6 +478,14 @@ class {
 		var dbPath = arguments.database.path ?: ""
 		if ( len( dbPath ) && ( dbPath.startsWith( "/" ) || reFind( "^[A-Za-z]:", dbPath ) ) ) {
 			arguments.errors.append( "Gateway [#arguments.gatewayName#] has an absolute 'database.path' [#dbPath#] - it is resolved with expandPath() inside the generated app, so it must be relative to the app root (e.g. ""./data/chat.db"")" )
+		}
+		// A relative path can escape the app directory just as effectively as an
+		// absolute one - "../../var/chat.db" is exactly the case the absolute
+		// check exists to stop, and slipped straight past it. Checked on both
+		// separators, since the value is written into generated source that may
+		// be built on one platform and run on another.
+		if ( len( dbPath ) && ( dbPath.listToArray( "/\\" ).contains( ".." ) ) ) {
+			arguments.errors.append( "Gateway [#arguments.gatewayName#] has a 'database.path' [#dbPath#] that walks outside the app with '..' - it is resolved with expandPath() inside the generated app, so it must stay within the app root (e.g. ""./data/chat.db"")" )
 		}
 	}
 
