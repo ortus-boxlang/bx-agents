@@ -1,185 +1,152 @@
 /**
- * Real-boot integration coverage for the web UI's own API, its SQLite store,
- * and qb.
+ * Real-boot integration coverage for the web UI's SQLite store and its qb
+ * wiring.
  *
- * Everything else about the web UI is asserted against GENERATED SOURCE TEXT -
- * useful, but it can only prove the right characters were written, never that
- * the app boots, that WireBox resolves ChatDb/qb, that bx-sqlite's driver is
- * real, or that a route actually answers. This file closes that gap: it runs
- * inside a request served by the generated app's own Application.bx, so every
- * assertion below is against a genuinely booted ColdBox instance backed by a
- * real SQLite file.
+ * Everything else about the web UI is asserted against GENERATED SOURCE TEXT.
+ * That proves the right characters were written; it cannot prove the app
+ * boots, that WireBox resolves ChatDb, that qb is a registered ColdBox module,
+ * that bx-sqlite's driver is real, or that the schema lands in an actual
+ * database file. This file closes exactly that gap - it runs inside a request
+ * served by the generated app's own Application.bx, so every assertion below
+ * is against a genuinely booted ColdBox instance backed by real SQLite.
  *
- * Runs over real HTTP against the same miniserver the sibling
- * ColdBoxRuntimeSpec.bx uses (see runColdBoxIntegrationTests.bxs), because the
- * point is to exercise the ROUTES, not the handler class in isolation.
+ * Deliberately does NOT drive the routes over loopback HTTP. An earlier
+ * revision did, and it deadlocked: this spec is itself executing inside a
+ * request served by the same single miniserver, so calling back into
+ * 127.0.0.1 waits on a worker that this very request is occupying. CI showed
+ * it as `runner-coldbox.bxm never responded: HTTP 408` while the app was
+ * demonstrably up (its scheduler was ticking throughout). Handler actions are
+ * therefore exercised through the controller's own event execution, and the
+ * store through its real object - neither needs a second connection.
  */
 class extends="testbox.system.BaseSpec" {
 
 	function beforeAll(){
 		variables.controller = application.cbController;
-		// Same port runColdBoxIntegrationTests.bxs launches on. Requests loop
-		// back into this very server, which is what makes them real.
-		variables.base = "http://127.0.0.1:39280/chat/api";
-	}
-
-	private struct function callJson( required string path, string method = "GET", any body ) {
-		var target = variables.base & arguments.path;
-		var raw    = "";
-		if ( arguments.method == "POST" ) {
-			bx:http url=target method="POST" result="httpResult" timeout=30 {
-				bx:httpparam type="header" name="Content-Type" value="application/json";
-				bx:httpparam type="body" value=isNull( arguments.body ) ? "{}" : jsonSerialize( arguments.body );
-			}
-		} else {
-			bx:http url=target method="GET" result="httpResult" timeout=30 {}
-		}
-		raw = httpResult.fileContent ?: "";
-		return {
-			status : httpResult.status_code ?: 0,
-			body   : isJSON( raw ) ? jsonDeserialize( raw ) : {},
-			raw    : raw
-		};
 	}
 
 	function run() {
-		describe( "The web UI's API, against a real ColdBox boot", function() {
+		describe( "The web UI's store and wiring, against a real ColdBox boot", function() {
 
-			it( "resolves ChatDb through WireBox and migrated its schema at startup", function() {
+			it( "registered qb as a real module and resolves its builders", function() {
+				// A bare class-path mapping is not enough - these aliases only
+				// exist once ColdBox has ACTIVATED qb as a module. If the
+				// integration runner failed to install it, this is where it shows.
+				var binder = controller.getWireBox().getBinder();
+				expect( binder.mappingExists( "SchemaBuilder@qb" ) ).toBeTrue();
+				expect( binder.mappingExists( "QueryBuilder@qb" ) ).toBeTrue();
+			} );
+
+			it( "built ChatDb through WireBox and migrated at startup", function() {
 				// The generated WebUiSchema interceptor builds ChatDb during
-				// afterConfigurationLoad. If qb were not a registered ColdBox
-				// module, or bx-sqlite's driver were missing, boot itself would
-				// have failed - so reaching this line at all is part of the proof.
+				// afterConfigurationLoad. Reaching this line at all means boot did
+				// not blow up on a missing driver or an unresolvable mapping.
 				expect( controller.getWireBox().getBinder().mappingExists( "ChatDb" ) ).toBeTrue();
 
 				var db = controller.getWireBox().getInstance( "ChatDb" );
 				expect( db.getDatasource() ).toBe( "bxagentse2e" );
-				// migrate() is idempotent - it should report the current version,
-				// not re-run or throw
+				// migrate() is idempotent: it reports the current version rather
+				// than re-running or throwing
+				expect( db.migrate() ).toBeGTE( 1 );
 				expect( db.migrate() ).toBeGTE( 1 );
 			} );
 
 			it( "created the real tables through qb's SchemaBuilder", function() {
-				var db = controller.getWireBox().getInstance( "ChatDb" );
+				var db     = controller.getWireBox().getInstance( "ChatDb" );
 				var schema = controller.getWireBox().getInstance( "SchemaBuilder@qb" );
-				var opts = { datasource: db.getDatasource() };
+				var opts   = { datasource: db.getDatasource() };
 
 				expect( schema.hasTable( name: "conversations", options: opts ) ).toBeTrue();
 				expect( schema.hasTable( name: "preferences", options: opts ) ).toBeTrue();
 				expect( schema.hasTable( name: "bxagents_schema_version", options: opts ) ).toBeTrue();
 			} );
 
-			it( "answers /health and /info over a real route", function() {
-				var health = callJson( "/health" );
-				expect( health.status ).toBe( 200 );
-				expect( health.body.success ?: false ).toBeTrue();
+			it( "round-trips a conversation through the real database", function() {
+				var db     = controller.getWireBox().getInstance( "ChatDb" );
+				var userId = "e2e-user-" & createUUID();
+				var convId = "e2e-conv-" & createUUID();
 
-				var info = callJson( "/info" );
-				expect( info.status ).toBe( 200 );
-				expect( info.body.capabilities.conversations ?: false ).toBeTrue();
-				expect( info.body.capabilities.preferences ?: false ).toBeTrue();
-			} );
+				expect( db.touchConversation( userId, convId, "First message wins", 2 ) ).toBeTrue();
 
-			it( "runs a real turn and records it in the conversation index", function() {
-				var conversationId = "e2e-" & createUUID();
-
-				var turn = callJson(
-					path  : "/invoke",
-					method: "POST",
-					body  : { input: "Hello from the integration suite", options: { conversationId: conversationId } }
-				);
-				expect( turn.status ).toBe( 200 );
-
-				// The turn should have created the conversation row AND titled it
-				// from the first message
-				var list = callJson( "/conversations" );
-				expect( list.status ).toBe( 200 );
-
-				var mine = list.body.conversations.filter( ( c ) => c.id == conversationId );
+				var mine = db.listConversations( userId );
 				expect( mine.len() ).toBe( 1 );
-				expect( mine[ 1 ].title ).toInclude( "Hello from the integration suite" );
-				expect( mine[ 1 ].messageCount ).toBeGT( 0 );
+				expect( mine[ 1 ].title ).toBe( "First message wins" );
+				expect( mine[ 1 ].messageCount ).toBe( 2 );
+
+				// A later turn bumps the count but must NOT overwrite a title
+				db.touchConversation( userId, convId, "should not replace", 2 );
+				expect( db.getConversation( userId, convId ).title ).toBe( "First message wins" );
+				expect( db.getConversation( userId, convId ).messageCount ).toBe( 4 );
+
+				expect( db.renameConversation( userId, convId, "Renamed" ) ).toBeTrue();
+				expect( db.getConversation( userId, convId ).title ).toBe( "Renamed" );
+
+				db.resetConversationCount( userId, convId );
+				expect( db.getConversation( userId, convId ).messageCount ).toBe( 0 );
+
+				expect( db.deleteConversation( userId, convId ) ).toBeTrue();
+				expect( db.listConversations( userId ).len() ).toBe( 0 );
 			} );
 
-			it( "creates, renames and deletes a conversation over HTTP", function() {
-				var created = callJson( path: "/conversations/create", method: "POST", body: { title: "Created by CI" } );
-				expect( created.status ).toBe( 200 );
+			it( "refuses to let one user take over another's conversation", function() {
+				// touchConversation() is deliberately not a qb upsert: an upsert
+				// targets the primary key alone, so a guessed conversationId would
+				// rewrite that row's userId. Proven here against real SQLite.
+				var db     = controller.getWireBox().getInstance( "ChatDb" );
+				var owner  = "owner-" & createUUID();
+				var thief  = "thief-" & createUUID();
+				var convId = "shared-" & createUUID();
 
-				var id = created.body.conversationId ?: "";
-				expect( len( id ) ).toBeGT( 0 );
+				db.touchConversation( owner, convId, "Owned", 2 );
 
-				var renamed = callJson( path: "/conversations/rename", method: "POST", body: { conversationId: id, title: "Renamed by CI" } );
-				expect( renamed.status ).toBe( 200 );
+				expect( db.touchConversation( thief, convId, "Stolen", 2 ) ).toBeFalse();
+				expect( db.renameConversation( thief, convId, "Stolen" ) ).toBeFalse();
+				expect( db.deleteConversation( thief, convId ) ).toBeFalse();
 
-				var afterRename = callJson( "/conversations" ).body.conversations.filter( ( c ) => c.id == id );
-				expect( afterRename.len() ).toBe( 1 );
-				expect( afterRename[ 1 ].title ).toBe( "Renamed by CI" );
-
-				var deleted = callJson( path: "/conversations/delete", method: "POST", body: { conversationId: id } );
-				expect( deleted.status ).toBe( 200 );
-
-				var afterDelete = callJson( "/conversations" ).body.conversations.filter( ( c ) => c.id == id );
-				expect( afterDelete.len() ).toBe( 0 );
+				expect( db.getConversation( owner, convId ).title ).toBe( "Owned" );
+				expect( db.listConversations( thief ).len() ).toBe( 0 );
 			} );
 
-			it( "404s a conversation that does not exist rather than pretending", function() {
-				var missing = callJson(
-					path  : "/conversations/rename",
-					method: "POST",
-					body  : { conversationId: "does-not-exist-" & createUUID(), title: "nope" }
-				);
-				expect( missing.status ).toBe( 404 );
+			it( "upserts a preference instead of duplicating it", function() {
+				// setPreference() CAN upsert safely - its target is the
+				// ( userId, prefKey ) composite key, so the caller's own identity
+				// is part of what it matches on.
+				var db     = controller.getWireBox().getInstance( "ChatDb" );
+				var userId = "prefs-" & createUUID();
+
+				db.setPreference( userId, "theme", "dark" );
+				expect( db.getPreferences( userId ).theme ).toBe( "dark" );
+
+				db.setPreference( userId, "theme", "light" );
+				expect( db.getPreferences( userId ).theme ).toBe( "light" );
+				// Overwritten, not duplicated
+				expect( db.getPreferences( userId ).count() ).toBe( 1 );
+
+				db.deletePreference( userId, "theme" );
+				expect( db.getPreferences( userId ) ).toBeEmpty();
 			} );
 
-			it( "round-trips a preference through the real store", function() {
-				var saved = callJson( path: "/preferences/set", method: "POST", body: { key: "theme", value: "dark" } );
-				expect( saved.status ).toBe( 200 );
+			it( "runs the generated ChatUi handler through the real controller", function() {
+				// Proves the handler class resolves and executes under a real boot -
+				// not just that the right source text was generated. /health and
+				// /info are used because they read no request body.
+				var health = controller.runEvent( event: "ChatUi.health", prePostExempt: true );
+				expect( isNull( health ) ).toBeFalse();
 
-				expect( callJson( "/preferences" ).body.preferences.theme ?: "" ).toBe( "dark" );
-
-				// Upsert, not a second row - setting it again must overwrite
-				callJson( path: "/preferences/set", method: "POST", body: { key: "theme", value: "light" } );
-				expect( callJson( "/preferences" ).body.preferences.theme ?: "" ).toBe( "light" );
-
-				callJson( path: "/preferences/delete", method: "POST", body: { key: "theme" } );
-				expect( structKeyExists( callJson( "/preferences" ).body.preferences, "theme" ) ).toBeFalse();
+				var info = controller.runEvent( event: "ChatUi.info", prePostExempt: true );
+				expect( isNull( info ) ).toBeFalse();
 			} );
 
-			it( "serves history for the caller's own conversation", function() {
-				var conversationId = "e2e-hist-" & createUUID();
-				callJson(
-					path  : "/invoke",
-					method: "POST",
-					body  : { input: "Remember this", options: { conversationId: conversationId } }
-				);
+			it( "generated the static chat shell with every placeholder substituted", function() {
+				// Read from disk rather than fetched over HTTP - see this file's
+				// docblock on why loopback requests deadlock here.
+				var shell = expandPath( "/" ) & "chat/index.html";
+				expect( fileExists( shell ) ).toBeTrue();
 
-				var history = callJson( "/history?conversationId=" & conversationId );
-				expect( history.status ).toBe( 200 );
-				expect( history.body.messages.len() ).toBeGT( 0 );
-			} );
-
-			it( "reports compaction honestly instead of claiming success", function() {
-				// The fixture configures no summary model, so summarize() is a
-				// no-op. The route must say so with real counts rather than
-				// returning success and changing nothing - and must NOT 501,
-				// which is what it did before bx-ai scoped summarize().
-				var compact = callJson(
-					path  : "/compact",
-					method: "POST",
-					body  : { options: { conversationId: "e2e-compact-" & createUUID() } }
-				);
-				expect( compact.status ).toBe( 200 );
-				expect( compact.body ).toHaveKey( "compacted" );
-				expect( compact.body ).toHaveKey( "before" );
-				expect( compact.body ).toHaveKey( "after" );
-			} );
-
-			it( "serves the static chat shell itself", function() {
-				bx:http url="http://127.0.0.1:39280/chat/index.html" method="GET" result="shell" timeout=30 {}
-				expect( shell.status_code ).toBe( 200 );
-				expect( shell.fileContent ).toInclude( "/chat/api" );
-				// Every placeholder must have been substituted at generation time
-				expect( shell.fileContent ).notToInclude( "__API_BASE__" );
+				var html = fileRead( shell );
+				expect( html ).toInclude( "/chat/api" );
+				expect( html ).notToInclude( "__API_BASE__" );
+				expect( html ).notToInclude( "__WELCOME__" );
 			} );
 
 		} );
