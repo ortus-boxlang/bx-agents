@@ -346,7 +346,7 @@ class {
 
 	/**
 	 * Validates both `gateways/*` entry kinds: exposure entries (`exposes:
-	 * "agent"|"mcp"`, unique `path`) and channel-adapter entries (`type`,
+	 * "agent"|"mcp"|"webui"`, unique `path`) and channel-adapter entries (`type`,
 	 * unique `name`, `secretEnvVar` required for `http`, and each push-style
 	 * type's own required `*EnvVar` keys per REQUIRED_ENV_VAR_KEYS).
 	 *
@@ -361,6 +361,11 @@ class {
 			validGatewayTypes.append( pushType )
 		}
 
+		// Usernames are global to the project, not per entry: two entries
+		// claiming the same one would race at seed time and the later boot order
+		// would silently decide whose password wins.
+		var seenUsernames = {}
+
 		for ( var gateway in ( arguments.discovery.gateways ?: [] ) ) {
 			var config = readEntryConfig( gateway.path )
 			if ( isNull( config ) ) {
@@ -369,9 +374,9 @@ class {
 			}
 
 			if ( structKeyExists( config, "exposes" ) ) {
-				// Exposure entry: exposes an agent or an MCP server over HTTP via toAi()/toMCP()
-				if ( ![ "agent", "mcp" ].contains( config.exposes ) ) {
-					arguments.errors.append( "Gateway [#gateway.name#] has an invalid 'exposes' value [#config.exposes#] - must be 'agent' or 'mcp'" )
+				// Exposure entry: exposes an agent (raw HTTP or the web chat UI) or an MCP server
+				if ( ![ "agent", "mcp", "webui" ].contains( config.exposes ) ) {
+					arguments.errors.append( "Gateway [#gateway.name#] has an invalid 'exposes' value [#config.exposes#] - must be 'agent', 'mcp', or 'webui'" )
 				}
 
 				var path = config.path ?: ""
@@ -383,9 +388,13 @@ class {
 					seenPaths[ path ] = true
 				}
 
-				// "agent" exposure always targets the project's single root agent, so
-				// no "target" is needed. "mcp" exposure must name WHICH local mcp/*
-				// server to expose, since a project can declare more than one.
+				// "agent" and "webui" exposure always target the project's single
+				// root agent, so no "target" is needed (webui's own optional
+				// apiKeyEnvVar is just a plain *EnvVar name, same non-required
+				// shape as every other gateway's optional overrides - no
+				// dedicated check beyond 'path' above). "mcp" exposure must name
+				// WHICH local mcp/* server to expose, since a project can
+				// declare more than one.
 				if ( config.exposes == "mcp" ) {
 					var target = config.target ?: ""
 					var mcpNames = ( arguments.discovery.mcp ?: [] ).map( m => m.name )
@@ -394,6 +403,12 @@ class {
 					} else if ( !mcpNames.contains( target ) ) {
 						arguments.errors.append( "Gateway [#gateway.name#] targets unknown mcp server [#target#]" )
 					}
+				}
+
+				if ( config.exposes == "webui" ) {
+					validateWebUiTheme( gateway.name, config.theme ?: {}, arguments.errors )
+					validateWebUiDatabase( gateway.name, config.database ?: {}, arguments.errors )
+					validateWebUiUsers( gateway.name, config.users ?: [], arguments.errors, seenUsernames )
 				}
 			} else {
 				// Channel-adapter entry: a bx-ai IGateway (mock/cli/http) registered by name
@@ -415,6 +430,161 @@ class {
 						}
 					}
 				}
+			}
+		}
+	}
+
+	/**
+	 * Validates a `webui` entry's optional `theme` block: every key must name a
+	 * real design token, so a typo (`accentColor` instead of `accent`) fails the
+	 * build rather than silently rendering the default and leaving someone to
+	 * wonder why their brand color never showed up.
+	 *
+	 * The token list is duplicated from WebUiGenerator.themeTokenMap() rather
+	 * than shared, matching this codebase's per-generator self-containment
+	 * convention - that method is the source of truth; keep the two in step.
+	 *
+	 * @gatewayName The gateways/* entry name, for the error message
+	 * @theme The entry's `theme` config value (may be any type - callers pass it unchecked)
+	 * @errors Accumulator array - append() any validation errors found
+	 */
+	/**
+	 * Validates a `webui` entry's optional `database` block. Both keys are
+	 * optional (the defaults - datasource "bxagents", path "./data/chat.db" -
+	 * mean a project configures nothing), but a key that IS set has to be
+	 * usable, and both feed straight into generated source.
+	 *
+	 * `datasource` becomes a ColdBox datasource name and a qb settings value,
+	 * so it is restricted to word characters. `path` becomes the argument to
+	 * expandPath() in Application.bx - an absolute path there silently escapes
+	 * the app directory, which breaks a packaged .bxa deploy, so it must stay
+	 * relative.
+	 *
+	 * @gatewayName The gateways/* entry name, for the error message
+	 * @database The entry's `database` config value (may be any type - callers pass it unchecked)
+	 * @errors Accumulator array - append() any validation errors found
+	 */
+	/**
+	 * Validates a `webui` entry's optional `users` block - the accounts allowed
+	 * to sign in.
+	 *
+	 * A password is NEVER written here. An entry names the environment variable
+	 * holding it (`passwordEnvVar`), or carries an already-hashed value
+	 * (`passwordHash`), which is safe to commit precisely because it cannot be
+	 * reversed. A literal `password` key is rejected outright rather than
+	 * ignored: silently dropping it would leave someone believing they had set
+	 * a password when they had only committed one.
+	 *
+	 * @gatewayName The gateways/* entry name, for the error message
+	 * @users The entry's `users` config value (may be any type - callers pass it unchecked)
+	 * @errors Accumulator array - append() any validation errors found
+	 * @seen Struct of usernames already claimed, mutated as they are seen
+	 */
+	private void function validateWebUiUsers( required string gatewayName, required any users, required array errors, required struct seen ) {
+		if ( !isArray( arguments.users ) ) {
+			if ( isStruct( arguments.users ) || isSimpleValue( arguments.users ) ) {
+				arguments.errors.append( "Gateway [#arguments.gatewayName#] has a 'users' value that is not an array - it must be a list of { username, passwordEnvVar | passwordHash } structs" )
+			}
+			return
+		}
+
+		for ( var user in arguments.users ) {
+			if ( !isStruct( user ) ) {
+				arguments.errors.append( "Gateway [#arguments.gatewayName#] has a 'users' entry that is not a struct - each user needs at least { username, passwordEnvVar }" )
+				continue
+			}
+
+			var username = user.username ?: ""
+			if ( !len( username ) ) {
+				arguments.errors.append( "Gateway [#arguments.gatewayName#] has a 'users' entry with no 'username'" )
+				continue
+			}
+
+			var key = lCase( username )
+			if ( arguments.seen.keyExists( key ) ) {
+				arguments.errors.append( "Gateway [#arguments.gatewayName#] declares the username [#username#] more than once in this project - usernames must be unique across every webui entry" )
+			}
+			arguments.seen[ key ] = true
+
+			if ( structKeyExists( user, "password" ) ) {
+				arguments.errors.append( "Gateway [#arguments.gatewayName#] user [#username#] sets a literal 'password' - never commit a password. Use 'passwordEnvVar' to name an environment variable holding it, or 'passwordHash' for an already-hashed value" )
+			}
+
+			var hasEnvVar = len( user.passwordEnvVar ?: "" )
+			var hasHash = len( user.passwordHash ?: "" )
+
+			if ( !hasEnvVar && !hasHash ) {
+				arguments.errors.append( "Gateway [#arguments.gatewayName#] user [#username#] needs either a 'passwordEnvVar' (the NAME of an environment variable) or a 'passwordHash'" )
+			}
+			if ( hasEnvVar && hasHash ) {
+				arguments.errors.append( "Gateway [#arguments.gatewayName#] user [#username#] sets both 'passwordEnvVar' and 'passwordHash' - pick one, so which wins is never ambiguous" )
+			}
+			if ( hasHash && !( user.passwordHash ).startsWith( "pbkdf2$" ) ) {
+				arguments.errors.append( "Gateway [#arguments.gatewayName#] user [#username#] has a 'passwordHash' that is not in this project's format - it must look like pbkdf2$<iterations>$<salt>$<hash>" )
+			}
+		}
+	}
+
+	private void function validateWebUiDatabase( required string gatewayName, required any database, required array errors ) {
+		if ( !isStruct( arguments.database ) || arguments.database.isEmpty() ) {
+			return
+		}
+
+		var validKeys = [ "datasource", "path" ]
+		for ( var key in arguments.database ) {
+			if ( !validKeys.contains( key ) ) {
+				arguments.errors.append( "Gateway [#arguments.gatewayName#] has an unknown 'database' key [#key#] - valid keys: #validKeys.toList( ", " )#" )
+			}
+		}
+
+		var datasource = arguments.database.datasource ?: ""
+		if ( len( datasource ) && !reFind( "^[A-Za-z][A-Za-z0-9_]*$", datasource ) ) {
+			arguments.errors.append( "Gateway [#arguments.gatewayName#] has an invalid 'database.datasource' [#datasource#] - it names a ColdBox datasource, so it must start with a letter and contain only letters, digits or underscores" )
+		}
+
+		var dbPath = arguments.database.path ?: ""
+		if ( len( dbPath ) && ( dbPath.startsWith( "/" ) || reFind( "^[A-Za-z]:", dbPath ) ) ) {
+			arguments.errors.append( "Gateway [#arguments.gatewayName#] has an absolute 'database.path' [#dbPath#] - it is resolved with expandPath() inside the generated app, so it must be relative to the app root (e.g. ""./data/chat.db"")" )
+		}
+		// A relative path can escape the app directory just as effectively as an
+		// absolute one - "../../var/chat.db" is exactly the case the absolute
+		// check exists to stop, and slipped straight past it. Checked on both
+		// separators, since the value is written into generated source that may
+		// be built on one platform and run on another.
+		if ( len( dbPath ) && ( dbPath.listToArray( "/\\" ).contains( ".." ) ) ) {
+			arguments.errors.append( "Gateway [#arguments.gatewayName#] has a 'database.path' [#dbPath#] that walks outside the app with '..' - it is resolved with expandPath() inside the generated app, so it must stay within the app root (e.g. ""./data/chat.db"")" )
+		}
+	}
+
+	private void function validateWebUiTheme( required string gatewayName, required any theme, required array errors ) {
+		if ( !isStruct( arguments.theme ) || arguments.theme.isEmpty() ) {
+			return
+		}
+
+		var validTokens = [
+			"accent", "accentFg", "bg", "fg", "muted", "border", "surface", "inputBg",
+			"bubbleUser", "bubbleUserFg", "bubbleAssistant", "bubbleAssistantFg", "bubbleError",
+			"reasoningFg", "reasoningBg", "toolFg", "toolBg",
+			"radius", "radiusSm", "font", "fontMono", "fontSize", "maxWidth"
+		]
+
+		for ( var key in arguments.theme ) {
+			// `dark` is the nested dark-mode override block, not a token itself
+			if ( key == "dark" ) {
+				if ( !isStruct( arguments.theme.dark ) ) {
+					arguments.errors.append( "Gateway [#arguments.gatewayName#] has a 'theme.dark' that is not a struct - it holds dark-mode token overrides" )
+					continue
+				}
+				for ( var darkKey in arguments.theme.dark ) {
+					if ( !validTokens.contains( darkKey ) ) {
+						arguments.errors.append( "Gateway [#arguments.gatewayName#] has an unknown theme token [theme.dark.#darkKey#] - valid tokens: #validTokens.toList( ", " )#" )
+					}
+				}
+				continue
+			}
+
+			if ( !validTokens.contains( key ) ) {
+				arguments.errors.append( "Gateway [#arguments.gatewayName#] has an unknown theme token [theme.#key#] - valid tokens: #validTokens.toList( ", " )#" )
 			}
 		}
 	}

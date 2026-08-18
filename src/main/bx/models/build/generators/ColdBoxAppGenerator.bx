@@ -61,7 +61,10 @@ class {
 		array extraStartupStatements = [],
 		string cliEnvironment = "",
 		struct discovery = {},
-		boolean hasEmailGateway = false
+		boolean hasEmailGateway = false,
+		boolean hasWebUi = false,
+		struct webUiDatabase = {},
+		boolean webUiHasUsers = false
 	) {
 		var root = normalizePath( arguments.projectRoot )
 		var appDir = normalizePath( arguments.buildDir )
@@ -88,10 +91,33 @@ class {
 			startupStatements.append( statement )
 		}
 
-		var agentFactory = renderAgentFactory( root, appDir, arguments.resolvedConfig, arguments.cliEnvironment, arguments.discovery )
+		// No memory TYPE is forced here. Scoping is handled by IDENTITY instead -
+		// handlers/ChatUi.bx passes controller.getUserSessionIdentifier() as the
+		// agent's userId, and
+		// every memory an agent holds is keyed by (userId, conversationId), so a
+		// project stays free to configure whichever memories it wants (an agent
+		// can hold several at once) without any of them collapsing into a bucket
+		// shared across visitors. Only an explicit `memory` key on Agent.bx
+		// changes what gets generated.
+		var agentFactory = renderAgentFactory(
+			root,
+			appDir,
+			arguments.resolvedConfig,
+			arguments.cliEnvironment,
+			arguments.discovery
+		)
 
-		fileWrite( applicationPath, renderApplication( appName, startupStatements ) )
-		fileWrite( coldboxPath, renderColdboxConfig( appName, arguments.agentInterceptors, arguments.resolvedConfig.security ?: {}, arguments.hasEmailGateway ) )
+		fileWrite(
+			applicationPath,
+			renderApplication(
+				appName            : appName,
+				startupStatements  : startupStatements,
+				sessionManagement  : arguments.hasWebUi,
+				datasourceName     : arguments.webUiDatabase.datasource ?: "",
+				databasePath       : arguments.webUiDatabase.path ?: ""
+			)
+		)
+		fileWrite( coldboxPath, renderColdboxConfig( appName, arguments.agentInterceptors, arguments.resolvedConfig.security ?: {}, arguments.hasEmailGateway, arguments.webUiDatabase.datasource ?: "", arguments.webUiHasUsers ) )
 		fileWrite( wireboxPath, renderWireBox( agentFactory.nodes ) )
 		fileWrite( agentFactoryPath, agentFactory.source )
 
@@ -118,35 +144,97 @@ class {
 	 *
 	 * @return The rendered Application.bx source
 	 */
-	private string function renderApplication( required string appName, array startupStatements = [] ) {
+	private string function renderApplication(
+		required string appName,
+		array startupStatements = [],
+		boolean sessionManagement = false,
+		numeric sessionTimeoutMinutes = 60,
+		string datasourceName = "",
+		string databasePath = ""
+	) {
 		var lines = [
 			"class {",
 			"",
-			'	this.name              = "#bxLiteral( arguments.appName )#"',
-			"	this.sessionManagement = false",
-			"	this.setClientCookies  = false",
-			"",
-			"	COLDBOX_APP_ROOT_PATH  = expandPath( ""/"" )",
-			'	COLDBOX_APP_MAPPING    = ""',
-			'	COLDBOX_CONFIG_MAPPING = ""',
-			'	COLDBOX_APP_KEY        = ""',
-			"",
-			"	function onApplicationStart() {",
-			// Named args deliberately, not positional - coldbox.system.Bootstrap's
-			// real init() signature is
-			// (COLDBOX_CONFIG_FILE, COLDBOX_APP_ROOT_PATH, COLDBOX_APP_KEY, COLDBOX_APP_MAPPING, COLDBOX_FAIL_FAST, COLDBOX_WEB_MAPPING) -
-			// a prior positional call here passed COLDBOX_APP_ROOT_PATH as the
-			// FIRST arg (silently becoming COLDBOX_CONFIG_FILE), breaking config
-			// loading the moment a real ColdBox boot exercised it. Confirmed
-			// against real coldbox.system.Bootstrap source this session.
-			"		application.cbBootstrap = new coldbox.system.Bootstrap(",
-			"			COLDBOX_CONFIG_FILE   = COLDBOX_CONFIG_MAPPING,",
-			"			COLDBOX_APP_ROOT_PATH = COLDBOX_APP_ROOT_PATH,",
-			"			COLDBOX_APP_KEY       = COLDBOX_APP_KEY,",
-			"			COLDBOX_APP_MAPPING   = COLDBOX_APP_MAPPING",
-			"		)",
-			"		application.cbBootstrap.loadColdbox()"
+			'	this.name              = "#bxLiteral( arguments.appName )#"'
 		]
+
+		if ( arguments.sessionManagement ) {
+			// A browser-facing project needs a real session: it is what keys each
+			// visitor's own agent memory (see renderMemoryExpression()'s `session`
+			// default). Cookies go with it - without them there is no session to
+			// key by, and every visitor collapses back into one shared bucket.
+			lines.append( "	this.sessionManagement = true" )
+			lines.append( "	this.setClientCookies  = true" )
+			lines.append( "	this.sessionTimeout    = createTimeSpan( 0, 0, #int( arguments.sessionTimeoutMinutes )#, 0 )" )
+		} else {
+			// API/gateway-only projects have no browser to track - sessions would
+			// be pure overhead plus a cookie nobody asked for.
+			lines.append( "	this.sessionManagement = false" )
+			lines.append( "	this.setClientCookies  = false" )
+		}
+
+		if ( len( arguments.datasourceName ) ) {
+			// The web UI's own SQLite store: conversation index, preferences,
+			// and whatever later features need real relational storage that the
+			// agent's own IAiMemory cannot express (it has no enumeration API -
+			// no way to ask "which conversations does this user have").
+			//
+			// Registered as a NAMED datasource on purpose, never as an inline
+			// struct passed per query. qb's own NullSQLCommenter.appendSqlComments()
+			// declares its `datasource` argument as `string`, so handing
+			// QueryBuilder a struct throws a type error before any SQL runs -
+			// confirmed directly against qb 13.1.0, not inferred.
+			lines.append( "" )
+			lines.append( "	// The web UI's SQLite store - see models/ChatDb.bx" )
+			lines.append( '	this.datasources[ "#bxLiteral( arguments.datasourceName )#" ] = {' )
+			lines.append( '		"driver"  : "sqlite",' )
+			lines.append( '		"database": expandPath( "#bxLiteral( arguments.databasePath )#" )' )
+			lines.append( "	}" )
+			// Also the app default. A generated app has exactly one datasource,
+			// so anything that runs a query without naming one should reach it
+			// rather than failing with "No default datasource defined in the
+			// application" - which is precisely what happened in a real boot.
+			//
+			// The key is `this.datasource`, NOT `this.defaultDatasource`. The
+			// latter is the obvious-looking name, is accepted silently, and
+			// does nothing - verified directly against the runtime: with
+			// `this.defaultDatasource` set, an unqualified query still fails
+			// with "No default datasource defined in the application ...
+			// Registered datasources are: [<name>]"; with `this.datasource` it
+			// resolves.
+			lines.append( '	this.datasource = "#bxLiteral( arguments.datasourceName )#"' )
+		}
+
+		lines.append( "" )
+		lines.append( "	COLDBOX_APP_ROOT_PATH  = expandPath( ""/"" )" )
+		lines.append( '	COLDBOX_APP_MAPPING    = ""' )
+		lines.append( '	COLDBOX_CONFIG_MAPPING = ""' )
+		lines.append( '	COLDBOX_APP_KEY        = ""' )
+		lines.append( "" )
+		lines.append( "	function onApplicationStart() {" )
+		if ( len( arguments.databasePath ) ) {
+			// SQLite creates the database FILE on first connect, but never its
+			// parent directory - a missing ./data/ is an unopenable-database
+			// error at boot, not an auto-created folder. Done here rather than in
+			// ChatDb because this is where the configured path literally is;
+			// ChatDb only ever knows the datasource NAME.
+			lines.append( "		// SQLite creates the db file, but not the directory holding it" )
+			lines.append( '		directoryCreate( getDirectoryFromPath( expandPath( "#bxLiteral( arguments.databasePath )#" ) ), true, true )' )
+		}
+		// Named args deliberately, not positional - coldbox.system.Bootstrap's
+		// real init() signature is
+		// (COLDBOX_CONFIG_FILE, COLDBOX_APP_ROOT_PATH, COLDBOX_APP_KEY, COLDBOX_APP_MAPPING, COLDBOX_FAIL_FAST, COLDBOX_WEB_MAPPING) -
+		// a prior positional call here passed COLDBOX_APP_ROOT_PATH as the
+		// FIRST arg (silently becoming COLDBOX_CONFIG_FILE), breaking config
+		// loading the moment a real ColdBox boot exercised it. Confirmed
+		// against real coldbox.system.Bootstrap source this session.
+		lines.append( "		application.cbBootstrap = new coldbox.system.Bootstrap(" )
+		lines.append( "			COLDBOX_CONFIG_FILE   = COLDBOX_CONFIG_MAPPING," )
+		lines.append( "			COLDBOX_APP_ROOT_PATH = COLDBOX_APP_ROOT_PATH," )
+		lines.append( "			COLDBOX_APP_KEY       = COLDBOX_APP_KEY," )
+		lines.append( "			COLDBOX_APP_MAPPING   = COLDBOX_APP_MAPPING" )
+		lines.append( "		)" )
+		lines.append( "		application.cbBootstrap.loadColdbox()" )
 
 		for ( var statement in arguments.startupStatements ) {
 			lines.append( "		" & statement )
@@ -189,7 +277,7 @@ class {
 	 *
 	 * @return The rendered config/ColdBox.bx source
 	 */
-	private string function renderColdboxConfig( required string appName, array agentInterceptors = [], struct security = {}, boolean hasEmailGateway = false ) {
+	private string function renderColdboxConfig( required string appName, array agentInterceptors = [], struct security = {}, boolean hasEmailGateway = false, string webUiDatasource = "", boolean webUiHasUsers = false ) {
 		var lines = [
 			"class {",
 			"",
@@ -198,6 +286,33 @@ class {
 			'			appName : "#bxLiteral( arguments.appName )#"',
 			"		}"
 		]
+
+		if ( arguments.webUiHasUsers ) {
+			// THE hinge of the whole sign-in feature.
+			//
+			// getUserSessionIdentifier() honours this closure, and every part of
+			// the web UI - agent memory, the conversation index, preferences,
+			// and pending-run ownership - is already keyed by whatever it
+			// returns. Pointing it at the signed-in account therefore re-keys
+			// all of them to the real user without touching a line of the
+			// generated handler.
+			//
+			// Falls back to the raw session id while signed out, so anything
+			// reachable before sign-in still gets a stable, per-visitor id
+			// rather than an empty one shared by everybody.
+			lines[ lines.len() ] = "		}"
+			lines.append( "" )
+			lines.append( "		// Identity for the web UI: the signed-in account, else the session." )
+			lines.append( "		// Everything user-scoped keys off this one value." )
+			lines.append( "		coldbox.identifierProvider = () => {" )
+			lines.append( "			// Resolved through application.cbController, NOT a bare" )
+			lines.append( "			// getInstance(): this closure is defined in a config class but" )
+			lines.append( "			// invoked much later by the controller, and getInstance() is not" )
+			lines.append( "			// reliably in scope where it was written." )
+			lines.append( '			var auth = application.cbController.getWireBox().getInstance( "authenticationService@cbauth" )' )
+			lines.append( '			return auth.isLoggedIn() ? auth.getUserId() : ( session.sessionId ?: "" )' )
+			lines.append( "		}" )
+		}
 
 		if ( arguments.agentInterceptors.len() ) {
 			lines.append( "" )
@@ -220,15 +335,37 @@ class {
 		if ( arguments.security.count() ) {
 			bxaiSettings[ "security" ] = arguments.security
 		}
+		var trailingSettings = []
+		if ( arguments.hasEmailGateway ) {
+			trailingSettings.append( "email" )
+		}
+		if ( len( arguments.webUiDatasource ) ) {
+			trailingSettings.append( "qb" )
+		}
+
 		lines.append( "" )
 		lines.append( "		moduleSettings = {" )
-		lines.append( "			bxai : #renderLiteral( bxaiSettings )#" & ( arguments.hasEmailGateway ? "," : "" ) )
+		lines.append( "			bxai : #renderLiteral( bxaiSettings )#" & ( trailingSettings.len() ? "," : "" ) )
 		// The `BXMail` protocol (cbmailservices' own dispatch to bx-mail's
 		// `bx:mail` component - see EmailGateway.bx / docs/conventions/gateways.md)
 		// - both modules are real, server-level installs (box.json `dependencies`),
 		// not something this generator installs itself.
 		if ( arguments.hasEmailGateway ) {
-			lines.append( '			cbmailservices : { mailers : { "default" : { class : "BXMail" } } }' )
+			lines.append( '			cbmailservices : { mailers : { "default" : { class : "BXMail" } } }' & ( len( arguments.webUiDatasource ) ? "," : "" ) )
+		}
+		// Pin qb's grammar rather than leaving it on "AutoDiscover@qb". Autodiscovery
+		// calls cfdbinfo against the DEFAULT datasource, which this app deliberately
+		// never sets - the SQLite store is a named datasource, not the default - so
+		// autodiscovery would either fail or silently resolve BaseGrammar and emit
+		// SQL SQLite cannot run. The grammar is known here, so state it.
+		//
+		// defaultOptions carries the datasource NAME into every QueryBuilder qb
+		// hands out, so no call site has to remember it.
+		if ( len( arguments.webUiDatasource ) ) {
+			lines.append( "			qb : {" )
+			lines.append( '				defaultGrammar : "SQLiteGrammar@qb",' )
+			lines.append( '				defaultOptions : { datasource : "#bxLiteral( arguments.webUiDatasource )#" }' )
+			lines.append( "			}" )
 		}
 		lines.append( "		}" )
 
@@ -333,8 +470,8 @@ class {
 	 *
 	 * @return { source: the rendered agent/GeneratedAgentFactory.bx source, nodes: every agent node in the tree - see buildAgentTree() }
 	 */
-	private struct function renderAgentFactory( required string projectRoot, required string appDir, required struct resolvedConfig, string cliEnvironment = "", struct discovery = {} ) {
-		var built = buildAgentTree( arguments.projectRoot, arguments.projectRoot, arguments.resolvedConfig, "agent", arguments.cliEnvironment, arguments.discovery )
+	private struct function renderAgentFactory( required string projectRoot, required string appDir, required struct resolvedConfig, string cliEnvironment = "", struct discovery = {}, string defaultMemory = "" ) {
+		var built = buildAgentTree( arguments.projectRoot, arguments.projectRoot, arguments.resolvedConfig, "agent", arguments.cliEnvironment, arguments.discovery, [], arguments.defaultMemory )
 		var body = built.statements.toList( char( 10 ) & char( 10 ) )
 		var toolsDir = normalizePath( arguments.appDir ) & "/tools"
 
@@ -402,7 +539,8 @@ class {
 		required string varName,
 		string cliEnvironment = "",
 		struct discovery = {},
-		array accessorPath = []
+		array accessorPath = [],
+		string defaultMemory = ""
 	) {
 		var declaredSubAgents = arguments.resolvedConfig.subAgents ?: []
 		var subAgentVarNames = []
@@ -424,7 +562,7 @@ class {
 			var childAccessorPath = duplicate( arguments.accessorPath )
 			childAccessorPath.append( resolveAgentName( subConfig ) )
 
-			var built = buildAgentTree( arguments.rootProjectRoot, subPath, subConfig, subVarName, arguments.cliEnvironment, arguments.discovery, childAccessorPath )
+			var built = buildAgentTree( arguments.rootProjectRoot, subPath, subConfig, subVarName, arguments.cliEnvironment, arguments.discovery, childAccessorPath, arguments.defaultMemory )
 
 			for ( var stmt in built.statements ) {
 				statements.append( stmt )
@@ -435,7 +573,7 @@ class {
 			subAgentVarNames.append( subVarName )
 		}
 
-		statements.append( renderAgentStatement( arguments.varName, arguments.nodePath, arguments.resolvedConfig, subAgentVarNames, arguments.discovery, thisName ) )
+		statements.append( renderAgentStatement( arguments.varName, arguments.nodePath, arguments.resolvedConfig, subAgentVarNames, arguments.discovery, thisName, arguments.defaultMemory ) )
 
 		return { statements : statements, nodes : nodes }
 	}
@@ -489,13 +627,54 @@ class {
 		return 'aiMemory( memory: "#bxLiteral( type )#", config: #renderLiteral( rest )# )'
 	}
 
+	/**
+	 * Resolves a node's agent MEMORY - the conversation store, distinct from the
+	 * checkpointer above (which only holds suspended-run state).
+	 *
+	 * This is what decides who shares a conversation with whom. bx-ai's own
+	 * default is `window`, an in-process store keyed by (userId, conversationId);
+	 * since the generated agent is a WireBox singleton and nothing supplies those
+	 * ids by default, EVERY visitor to a browser-facing app would otherwise read
+	 * and write one shared bucket. `session` memory instead stores under the
+	 * BoxLang `session` scope, so each visitor is separated server-side, with no
+	 * client-supplied identifier to trust - which is why a `webui` project turns
+	 * session management on (see renderApplication()).
+	 *
+	 * An explicit `memory` key on Agent.bx always wins over that default.
+	 *
+	 * @resolvedConfig A single node's own resolved config - only `memory` is used
+	 * @defaultMemory Memory type to use when the node declares none ("" means leave bx-ai's own default alone)
+	 *
+	 * @return A BoxLang `aiMemory( ... )` expression string, or "" to omit the argument entirely
+	 */
+	private string function renderMemoryExpression( required struct resolvedConfig, string defaultMemory = "" ) {
+		var declared = arguments.resolvedConfig.memory ?: {}
+
+		if ( isSimpleValue( declared ) && len( trim( declared ) ) ) {
+			declared = { type: trim( declared ) }
+		}
+
+		var type = isStruct( declared ) ? trim( declared.type ?: "" ) : ""
+		if ( !len( type ) ) {
+			type = arguments.defaultMemory
+		}
+		if ( !len( type ) ) {
+			return ""
+		}
+
+		var rest = isStruct( declared ) ? duplicate( declared ) : {}
+		rest.delete( "type" )
+		return 'aiMemory( memory: "#bxLiteral( type )#", config: #renderLiteral( rest )# )'
+	}
+
 	private string function renderAgentStatement(
 		required string varName,
 		required string nodePath,
 		required struct resolvedConfig,
 		required array subAgentVarNames,
 		struct discovery = {},
-		required string name
+		required string name,
+		string defaultMemory = ""
 	) {
 		var instructionsPath = arguments.nodePath & "/instructions.md"
 		if ( !fileExists( instructionsPath ) ) {
@@ -521,6 +700,7 @@ class {
 			: 'aiModel( provider : "#bxLiteral( parsedModel.provider )#" )'
 
 		var checkpointerExpression = renderCheckpointerExpression( arguments.resolvedConfig )
+		var memoryExpression = renderMemoryExpression( arguments.resolvedConfig, arguments.defaultMemory )
 
 		var lines = []
 		lines.append( "var #arguments.varName# = aiAgent(" )
@@ -529,6 +709,9 @@ class {
 		lines.append( '	instructions : fileRead( "#bxLiteral( instructionsPath )#" ),' )
 		lines.append( '	model : #modelExpression#,' )
 		lines.append( "	tools : aiToolRegistry().getAll()," )
+		if ( len( memoryExpression ) ) {
+			lines.append( "	memory : #memoryExpression#," )
+		}
 		lines.append( "	checkpointer : #checkpointerExpression#," )
 
 		if ( arguments.subAgentVarNames.len() ) {

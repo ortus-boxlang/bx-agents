@@ -15,6 +15,7 @@
 * [subagents/](conventions/subagents.md)
 * [models/](conventions/models.md)
 * [gateways/](conventions/gateways.md)
+* [The web chat UI](conventions/web-ui.md)
 * [schedules/](conventions/schedules.md)
 * [mcp/](conventions/mcp.md)
 * [interceptors/](conventions/interceptors.md)

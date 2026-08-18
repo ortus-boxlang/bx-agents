@@ -290,6 +290,44 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( "tools : aiToolRegistry().getAll()" );
 			} );
 
+			it( "turns session management on for a browser-facing project, since the session IS the user identifier", function() {
+				// handlers/ChatUi.bx passes session.sessionId as the agent's userId,
+				// and every memory an agent holds is keyed by (userId, conversationId).
+				// Without sessionManagement there is no session id to pass, and all of
+				// them collapse into one bucket shared by every visitor.
+				var buildDir = newBuildDir();
+				var config = resolver.resolve( projectRoot = fixtures & "/full-project" );
+				var result = generator.generate(
+					projectRoot    : fixtures & "/full-project",
+					buildDir       : buildDir,
+					resolvedConfig : config,
+					hasWebUi       : true
+				);
+
+				var app = fileRead( result.applicationBx );
+				expect( app ).toInclude( "this.sessionManagement = true" );
+				// Cookies are load-bearing: no cookie, no session to key by
+				expect( app ).toInclude( "this.setClientCookies  = true" );
+				expect( app ).toInclude( "this.sessionTimeout" );
+
+				// No memory TYPE is forced - scoping is by identity, so the project
+				// stays free to configure whichever memories it wants
+				expect( fileRead( result.agentFactory ) ).notToInclude( "memory : aiMemory(" );
+			} );
+
+			it( "leaves sessions off for a non-browser project, which has no browser to track", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/full-project", buildDir );
+
+				var app = fileRead( result.applicationBx );
+				expect( app ).toInclude( "this.sessionManagement = false" );
+				expect( app ).toInclude( "this.setClientCookies  = false" );
+
+				// No memory argument at all - an API/gateway-only app has no browser
+				// to track, so a session would be overhead plus an unwanted cookie.
+				expect( fileRead( result.agentFactory ) ).notToInclude( "memory : aiMemory(" );
+			} );
+
 			it( "produces a byte-identical rebuild of an unchanged project", function() {
 				var buildDir = newBuildDir();
 				generateFor( fixtures & "/full-project", buildDir );
@@ -342,6 +380,40 @@ class extends="testbox.system.BaseSpec" {
 
 				expect( content ).toInclude( "subAgents : [ subagent_a ]" );
 				expect( content ).toInclude( "subAgents : [ subagent_b ]" );
+			} );
+
+			/**
+			 * The web UI's SQLite store. Nothing asserted on this block before,
+			 * and it shipped without a default datasource - so a real boot
+			 * failed with "No default datasource defined in the application"
+			 * even though the datasource itself was registered.
+			 */
+			it( "registers the web UI datasource AND makes it the app default", function() {
+				var buildDir = newBuildDir();
+				var config = resolver.resolve( projectRoot = fixtures & "/full-project" );
+				generator.generate(
+					projectRoot    : fixtures & "/full-project",
+					buildDir       : buildDir,
+					resolvedConfig : config,
+					hasWebUi       : true,
+					webUiDatabase  : { datasource : "acmechat", path : "./data/chat.db" }
+				);
+
+				var content = fileRead( buildDir & "/Application.bx" );
+				expect( content ).toInclude( 'this.datasources[ "acmechat" ]' );
+				expect( content ).toInclude( '"driver"  : "sqlite"' );
+				// `this.datasource`, not `this.defaultDatasource` - the latter is
+				// accepted silently and has no effect (verified against the runtime)
+				expect( content ).toInclude( 'this.datasource = "acmechat"' );
+			} );
+
+			it( "declares no datasource at all for a project without a web UI", function() {
+				var buildDir = newBuildDir();
+				generateFor( fixtures & "/full-project", buildDir );
+				var content = fileRead( buildDir & "/Application.bx" );
+
+				expect( content ).notToInclude( "this.datasources[" );
+				expect( content ).notToInclude( "this.datasource =" );
 			} );
 
 		} );

@@ -9,6 +9,7 @@ Real, buildable BX Agents projects, each demonstrating one feature area. Every e
 | [`scheduled-agent/`](scheduled-agent) | Waking an agent on a cron schedule via `schedules/`. |
 | [`mcp-agent/`](mcp-agent) | Hosting a local MCP server that re-exposes a tool via `mcp/`. |
 | [`multi-agent-team/`](multi-agent-team) | A root agent delegating to two `subagents/`. |
+| [`webui-agent/`](webui-agent) | The v1 web chat UI, via a `gateways/` entry with `exposes: "webui"`. |
 
 ### Push-style chat-platform gateways
 

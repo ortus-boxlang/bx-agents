@@ -227,6 +227,73 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.errors.len() ).toBeGTE( 3 );
 			} );
 
+			it( "accepts a webui gateway exposure entry, with or without an apiKeyEnvVar", function() {
+				var withKey = validateFixture( "../gateways-webui" );
+				expect( withKey.errors ).toBeArray();
+				expect( withKey.errors.len() ).toBe( 0 );
+
+				var withoutKey = validateFixture( "../gateways-webui-no-key" );
+				expect( withoutKey.errors ).toBeArray();
+				expect( withoutKey.errors.len() ).toBe( 0 );
+			} );
+
+			it( "accepts a fully themed webui entry", function() {
+				var result = validateFixture( "../gateways-webui-themed" );
+				expect( result.errors ).toBeArray();
+				expect( result.errors.len() ).toBe( 0 );
+			} );
+
+			it( "rejects an unknown theme token so a typo fails the build instead of silently doing nothing", function() {
+				var result = validateFixture( "../gateways-webui-bad-theme" );
+				expect( result.errors.len() ).toBeGT( 0 );
+				expect( result.errors.toList( " " ) ).toInclude( "theme.accentColor" );
+
+				// The nested dark-mode block is validated against the same token list
+				expect( result.errors.toList( " " ) ).toInclude( "theme.dark.bakcground" );
+			} );
+
+			it( "rejects a webui database block that would not survive generation", function() {
+				// Both values are spliced straight into generated source - the
+				// datasource name into ColdBox/qb settings, the path into an
+				// expandPath() call. An absolute path there silently escapes the
+				// app directory, which breaks a packaged .bxa deploy.
+				var result = validateFixture( "../gateways-webui-bad-db" );
+				expect( result.errors.len() ).toBeGT( 0 );
+
+				var joined = result.errors.toList( " " );
+				expect( joined ).toInclude( "database.datasource" );
+				expect( joined ).toInclude( "database.path" );
+				expect( joined ).toInclude( "journalMode" );
+			} );
+
+			it( "rejects a webui database path that walks out of the app with ..", function() {
+				// The absolute-path check above does not catch this: the value is
+				// relative, so it passed validation cleanly and still escaped the
+				// app directory once expandPath() resolved it - the same failure
+				// the absolute check exists to prevent.
+				var result = validateFixture( "../gateways-webui-traversal-db" );
+				expect( result.errors.len() ).toBeGT( 0 );
+				expect( result.errors.toList( " " ) ).toInclude( "walks outside the app" );
+			} );
+
+			it( "rejects a webui users block that would leak or misconfigure credentials", function() {
+				var result = validateFixture( "../gateways-webui-bad-users" );
+				expect( result.errors.len() ).toBeGT( 0 );
+
+				var joined = result.errors.toList( " " );
+				// A committed password is rejected outright rather than ignored -
+				// silently dropping it leaves someone believing they set one
+				expect( joined ).toInclude( "never commit a password" );
+				// No password source at all
+				expect( joined ).toInclude( "needs either a 'passwordEnvVar'" );
+				// Both sources set
+				expect( joined ).toInclude( "pick one" );
+				// Same username twice would race at seed time
+				expect( joined ).toInclude( "more than once" );
+				// A bcrypt-style hash is not this project's format
+				expect( joined ).toInclude( "not in this project's format" );
+			} );
+
 			it( "returns no errors for a fully valid project", function() {
 				var result = validateFixture( "../full-project" );
 				expect( result.errors ).toBeArray();

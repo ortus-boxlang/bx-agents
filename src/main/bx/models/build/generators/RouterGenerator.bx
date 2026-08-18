@@ -1,9 +1,11 @@
 /**
  * Generates `config/Router.bx` for a project's HTTP exposure (Build Pipeline
  * Phase 5): one `route(path).toAi("GeneratedAgent")` per `gateways/*` entry
- * that exposes the agent, one `route(path).toMCP(target)` per entry that
- * exposes a local `mcp/*` server - both native ColdBox 8.1 AI Routing DSL
- * terminators (https://coldbox.ortusbooks.com/the-basics/routing/routing-dsl/ai-routing),
+ * that exposes the agent, one `route(path & "/api").toAi("GeneratedAgent")`
+ * per entry that exposes the web chat UI (see WebUiGenerator - the UI's
+ * own static shell is a real file, not a route), one `route(path).toMCP(target)`
+ * per entry that exposes a local `mcp/*` server - all native ColdBox 8.1 AI
+ * Routing DSL terminators (https://coldbox.ortusbooks.com/the-basics/routing/routing-dsl/ai-routing),
  * confirmed via documentation to auto-register 4 sub-routes (toAi) or 1 route
  * (toMCP) respectively.
  *
@@ -145,6 +147,59 @@ class {
 
 		if ( arguments.entry.config.exposes == "agent" ) {
 			return 'route( "#bxLiteral( path )#" ).toAi( "GeneratedAgent" )'
+		}
+
+		if ( arguments.entry.config.exposes == "webui" ) {
+			// The static chat shell itself (<path>/index.html) is a real file
+			// under the app's own webroot - see WebUiGenerator - so it's served
+			// directly, no route needed. Only the API needs routes, at a fixed
+			// "/api" suffix so they never collide with the shell's own files.
+			//
+			// Deliberately NOT toAi(): its actions forward body.options to the
+			// runnable verbatim, so a userId could only ever come from the caller.
+			// The web UI needs a SERVER-side identity - ColdBox's own
+			// getUserSessionIdentifier() - so that
+			// every memory the agent holds is scoped per visitor instead of shared.
+			// handlers/ChatUi.bx (see WebUiGenerator) supplies that while keeping
+			// toAi()'s exact route shape and SSE wire format.
+			var api = bxLiteral( path ) & "/api"
+
+			// Sign-in, only when this entry declares accounts. The form itself is
+			// the static login.html mounted beside the shell, so only its POST
+			// target and logout need routes.
+			var authRoutes = ( arguments.entry.config.users ?: [] ).len()
+				? [
+					'post( "#bxLiteral( path )#/login" ).toHandler( "ChatAuth.doLogin" )',
+					'post( "#bxLiteral( path )#/logout" ).toHandler( "ChatAuth.doLogout" )',
+					'get( "#bxLiteral( path )#/logout" ).toHandler( "ChatAuth.doLogout" )'
+				]
+				: []
+
+			return [
+				'post( "#api#/invoke" ).toHandler( "ChatUi.invoke" )',
+				'post( "#api#/stream" ).toHandler( "ChatUi.stream" )',
+				'post( "#api#/batch" ).toHandler( "ChatUi.batch" )',
+				'post( "#api#/cancel" ).toHandler( "ChatUi.cancel" )',
+				'post( "#api#/steer" ).toHandler( "ChatUi.steer" )',
+				'post( "#api#/clear" ).toHandler( "ChatUi.clear" )',
+				'post( "#api#/compact" ).toHandler( "ChatUi.compact" )',
+				'post( "#api#/resume" ).toHandler( "ChatUi.resume" )',
+				'post( "#api#/conversations/create" ).toHandler( "ChatUi.conversationCreate" )',
+				'post( "#api#/conversations/rename" ).toHandler( "ChatUi.conversationRename" )',
+				'post( "#api#/conversations/delete" ).toHandler( "ChatUi.conversationDelete" )',
+				'post( "#api#/preferences/set" ).toHandler( "ChatUi.preferenceSet" )',
+				'post( "#api#/preferences/delete" ).toHandler( "ChatUi.preferenceDelete" )',
+				'get( "#api#/pending" ).toHandler( "ChatUi.pending" )',
+				'get( "#api#/tools" ).toHandler( "ChatUi.tools" )',
+				'get( "#api#/history" ).toHandler( "ChatUi.history" )',
+				'get( "#api#/conversations" ).toHandler( "ChatUi.conversations" )',
+				'get( "#api#/preferences" ).toHandler( "ChatUi.preferences" )',
+				'get( "#api#/health" ).toHandler( "ChatUi.health" )',
+				'get( "#api#/info" ).toHandler( "ChatUi.info" )'
+			// renderRouterFile() indents the FIRST line of whatever comes back;
+			// the continuation lines have to carry that same two-tab body indent
+			// themselves or the generated Router.bx comes out ragged.
+			].append( authRoutes, true ).toList( char( 10 ) & char( 9 ) & char( 9 ) )
 		}
 
 		var target = arguments.entry.config.target ?: ""

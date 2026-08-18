@@ -6,9 +6,9 @@
 Don't confuse these with each other - an HTTP-exposed agent (`exposes: "agent"`) is a REST API for your agent; a channel-adapter gateway (`type: "http"`) is a webhook endpoint for a chat platform or human-in-the-loop approval flow. They generate completely different routes.
 {% endhint %}
 
-## 1. HTTP/MCP exposure (`exposes: "agent" | "mcp"`)
+## 1. HTTP/MCP/web-UI exposure (`exposes: "agent" | "mcp" | "webui"`)
 
-Exposes the agent, or a local MCP server, over HTTP using ColdBox 8.1's native AI Routing DSL.
+Exposes the agent, or a local MCP server, over HTTP using ColdBox 8.1's native AI Routing DSL - or a pre-built browser chat UI, documented separately in [The web chat UI](web-ui.md).
 
 **Expose the agent:**
 
@@ -50,7 +50,26 @@ class {
 
 Generates `route( "/mcp/tools" ).toMCP( "local-server" )`.
 
-**Validation:** `exposes` must be `agent` or `mcp`; `path` is required and must be unique across every exposure entry; an `mcp` exposure's `target` is required and must match a real `mcp/*` entry's declared name.
+**Expose the v1 web chat UI:**
+
+```javascript
+// gateways/chat.bx
+class {
+	function configure() {
+		return {
+			exposes     : "webui",
+			path        : "/chat",
+			apiKeyEnvVar: "CHAT_UI_API_KEY"   // optional - see below
+		};
+	}
+}
+```
+
+Generates a real static `<path>/index.html` file (served directly - no route needed for it) plus its own dedicated API under a fixed `<path>/api` prefix, so it never collides with the shell's own files. That API is a generated `handlers/ChatUi.bx` rather than `toAi()`, and the entry also brings a generated SQLite store with it.
+
+The web UI is a subsystem rather than a single exposure switch - the route list, the store, conversations and preferences, branding and theming, and why it does not use `toAi()` are all on its own page: **[The web chat UI](web-ui.md)**.
+
+**Validation:** `exposes` must be `agent`, `mcp`, or `webui`; `path` is required and must be unique across every exposure entry; an `mcp` exposure's `target` is required and must match a real `mcp/*` entry's declared name; `webui`'s `apiKeyEnvVar` is entirely optional, with no required-field check (see below).
 
 ## 2. Channel-adapter gateways (`type: "mock" | "cli" | "http"`)
 
@@ -423,7 +442,7 @@ function configure() {
 }
 ```
 
-`policy` must be one of `reject`/`queue`/`steer`/`interrupt` (bx-ai's own `GatewaySession` policy vocabulary - see the [Gateway Sessions](../gateways.md) overview) - checked at `build` time so a typo fails loudly instead of surfacing as a runtime error the first time the app boots.
+`policy` must be one of `reject`/`queue`/`steer`/`interrupt` (bx-ai's own `GatewaySession` policy vocabulary - see [GatewaySession](#gatewaysession---wiring-the-agent-to-every-push-style-gateway) below) - checked at `build` time so a typo fails loudly instead of surfacing as a runtime error the first time the app boots.
 
 {% hint style="warning" %}
 v1 limitation: exactly one `GatewaySession`, always bound to the project's root agent - matches the existing precedent that `exposes: "agent"` HTTP exposure is also always root-agent-only. A project with subagents cannot yet route different gateways to different subagents.

@@ -40,6 +40,7 @@ class {
 		variables.toolsSkillsCopier = new "models.build.generators.ToolsSkillsCopier@bxagents"()
 		variables.interceptorSplitter = new "models.build.generators.InterceptorSplitter@bxagents"()
 		variables.routerGenerator = new "models.build.generators.RouterGenerator@bxagents"()
+		variables.webUiGenerator = new "models.build.generators.WebUiGenerator@bxagents"()
 		variables.gatewayGenerator = new "models.build.generators.GatewayGenerator@bxagents"()
 		variables.schedulerGenerator = new "models.build.generators.SchedulerGenerator@bxagents"()
 		variables.mcpGenerator = new "models.build.generators.McpGenerator@bxagents"()
@@ -111,6 +112,10 @@ class {
 		arguments.onProgress( "+ Generating config/Router.bx..." )
 		variables.routerGenerator.generate( discovery, appDir, gatewayResult.hasHttpGateway, gatewayResult.hasWhatsAppCloudGateway ?: false, gatewayResult.hasTeamsGateway ?: false, gatewayResult.hasTwilioGateway ?: false, gatewayResult.hasGitHubGateway ?: false )
 
+		arguments.onProgress( "+ Generating the web chat UI (if any gateways/* entry exposes it)..." )
+		var webUiResult = variables.webUiGenerator.generate( discovery, appDir )
+		arguments.onProgress( "    webui=#( webUiResult.hasWebUi ? 'yes' : 'no' )#, apiKeyGate=#( len( webUiResult.webUiAuthInterceptorName ?: '' ) ? 'yes' : 'no' )#, signIn=#( webUiResult.webUiHasUsers ?: false ? 'yes' : 'no' )#, database=#( webUiResult.webUiDatabase.datasource ?: '-' )#" )
+
 		var toolScanStatements = []
 		if ( discovery.tools.len() ) {
 			// bx-ai has no built-in "scan this app's tools/ folder" convention
@@ -124,6 +129,24 @@ class {
 		if ( len( gatewayResult.sessionInterceptorName ?: "" ) ) {
 			agentInterceptorNames.append( gatewayResult.sessionInterceptorName )
 		}
+		if ( len( webUiResult.webUiAuthInterceptorName ?: "" ) ) {
+			agentInterceptorNames.append( webUiResult.webUiAuthInterceptorName )
+		}
+		// Migrates the web UI's SQLite store at boot (see WebUiGenerator)
+		// Order matters: the seeder writes into tables the schema interceptor
+		// creates, and ColdBox fires interceptors in registration order.
+		if ( len( webUiResult.webUiSchemaInterceptorName ?: "" ) ) {
+			agentInterceptorNames.append( webUiResult.webUiSchemaInterceptorName )
+		}
+		// Seeds configured accounts - must follow the schema interceptor above.
+		if ( len( webUiResult.webUiSeederInterceptorName ?: "" ) ) {
+			agentInterceptorNames.append( webUiResult.webUiSeederInterceptorName )
+		}
+		// Requires a signed-in user. Registered last so the store exists and the
+		// accounts are seeded before anything can be gated against them.
+		if ( len( webUiResult.webUiLoginGateName ?: "" ) ) {
+			agentInterceptorNames.append( webUiResult.webUiLoginGateName )
+		}
 
 		arguments.onProgress( "+ Generating core ColdBox app skeleton (Application.bx, config/WireBox.bx, config/ColdBox.bx, agent/GeneratedAgentFactory.bx)..." )
 		var coldboxResult = variables.coldboxAppGenerator.generate(
@@ -136,7 +159,16 @@ class {
 			extraStartupStatements = toolScanStatements,
 			cliEnvironment        = arguments.cliEnvironment,
 			discovery             = discovery,
-			hasEmailGateway       = gatewayResult.hasEmailGateway ?: false
+			hasEmailGateway       = gatewayResult.hasEmailGateway ?: false,
+			// Drives BOTH session management in Application.bx and the
+			// session-scoped memory default: a browser-facing app needs a real
+			// HTTP session, because that session is what separates one visitor's
+			// conversation from another's.
+			hasWebUi              = webUiResult.hasWebUi ?: false,
+			// { datasource, path } for the web UI's SQLite store - drives both
+			// this.datasources in Application.bx and moduleSettings.qb
+			webUiDatabase         = webUiResult.webUiDatabase ?: {},
+			webUiHasUsers         = webUiResult.webUiHasUsers ?: false
 		)
 		var agentNames = coldboxResult.agentNodes.map( function( n ) { return n.name } )
 		arguments.onProgress( "    agents registered in WireBox (getInstance-able by name): #agentNames.toList( ', ' )#" )

@@ -21,9 +21,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ "ubuntu-latest", "windows-latest" ]
-        jdkVersion: [ "21" ]
-        experimental: [false]
+        include:
+          - os: "ubuntu-latest"
+            jdkVersion: "21"
+            experimental: false
+          # Non-blocking, for a reason outside this module's control:
+          # Ortus-Solutions/setup-commandbox@v2.0.1 installs CommandBox with
+          # `unzip box.zip -d /usr/local/bin/`, a Linux path. On Windows that
+          # fails with "cannot create extraction directory", `box` never lands
+          # on PATH, and every subsequent step dies with "The term 'box' is not
+          # recognized". Nothing in this repo can fix that from here, so the
+          # job is kept in the matrix - visible, and green the moment the
+          # action gains Windows support - rather than deleted or left
+          # permanently blocking every PR.
+          - os: "windows-latest"
+            jdkVersion: "21"
+            experimental: true
     permissions:
       checks: write
       pull-requests: write
@@ -51,9 +64,17 @@ jobs:
       - name: Install TestBox
         run: box install
 
-      - name: Install ColdBox (for the ColdBox-dependent integration specs)
+      # Installs ColdBox, TestBox AND qb (with its own cbpaginator dependency).
+      # qb is what the generated web UI's models/ChatDb.bx resolves
+      # SchemaBuilder@qb / QueryBuilder@qb through, so without this the
+      # ColdBox integration boot fails at startup rather than skipping.
+      - name: Install ColdBox + qb + cbauth (for the ColdBox-dependent integration specs)
         run: box install
         working-directory: tests
+
+      - name: Show installed test dependencies
+        run: ls -la tests/ && ls -la tests/qb 2>/dev/null || true
+        shell: bash
 
       # Not Needed in this module
       #- name: Setup Environment For Testing Process
@@ -76,6 +97,22 @@ jobs:
           # Supporting BoxLang modules (bx-ai, etc.) the TestBox suite needs
           # loaded for real - see boxlang.json's modulesDirectory setting.
           ./gradlew downloadModules
+          # Then OVERLAY bx-ai with a build from its own source.
+          #
+          # The published bx-ai@3.4.0-snapshot on ForgeBox lags its own
+          # development branch badly: it still ships bifs/gatewayRegistry.bx
+          # (renamed to aiGatewayRegistry upstream) and has no
+          # models/gateway/BaseGateway.bx at all - the class every push-style
+          # gateway in this module extends. Testing against it fails ~40 specs
+          # for reasons that have nothing to do with this module's own code.
+          #
+          # bx-ftp and bx-sqlite are stable releases and keep coming from
+          # downloadModules; only bx-ai needs this. Remove the overlay once a
+          # published snapshot catches up. See docs/known-limitations.md.
+          git clone --depth 1 --branch development https://github.com/ortus-boxlang/bx-ai.git "$RUNNER_TEMP/bx-ai"
+          ( cd "$RUNNER_TEMP/bx-ai" && ./gradlew createModuleStructure --console=plain -q )
+          cp -R "$RUNNER_TEMP/bx-ai/build/module/." src/test/resources/modules/bxai/
+          echo "+ bx-ai overlaid from source: $( cd "$RUNNER_TEMP/bx-ai" && git rev-parse --short HEAD )"
           # boxlang-miniserver jar - lets integration tests boot a real
           # MiniServer instead of skipping when the binary isn't on PATH.
           ./gradlew downloadMiniServer
@@ -85,8 +122,43 @@ jobs:
       - name: Run TestBox Suite
         run: ./gradlew testBx --stacktrace --console=plain
 
-      - name: Run ColdBox Integration Suite
+      # The strongest proof point in the suite: boots a REAL boxlang-miniserver
+      # against a generated app and drives it over real HTTP - including the web
+      # UI's own routes against a real SQLite store (see WebUiRuntimeSpec.bx).
+      # Nothing else proves the app actually boots, that WireBox resolves
+      # ChatDb/qb, or that bx-sqlite's driver is real.
+      - name: Run ColdBox Integration Suite (real boot + real SQLite)
+        # Bounded explicitly: this step boots a real server and drives it over
+        # HTTP, so a hang here would otherwise sit on the job's 6h default.
+        timeout-minutes: 20
         run: ./gradlew testColdBoxIntegration --stacktrace --console=plain
+
+      - name: Dump the generated app on integration failure
+        if: failure()
+        shell: bash
+        run: |
+          echo "=== generated app tree ==="
+          find tests/.coldbox-app -maxdepth 4 -type f 2>/dev/null | head -60 || true
+          echo "=== Application.bx ==="
+          cat tests/.coldbox-app/.build/app/Application.bx 2>/dev/null || true
+          echo "=== config/ColdBox.bx ==="
+          cat tests/.coldbox-app/.build/app/config/ColdBox.bx 2>/dev/null || true
+          echo "=== models/ChatDb.bx ==="
+          cat tests/.coldbox-app/.build/app/models/ChatDb.bx 2>/dev/null || true
+          # Where the TestBox runner page got to before it stopped. The
+          # orchestrator prints this too, but it only reaches that branch if it
+          # got far enough - this copy survives any failure mode.
+          echo "=== interceptors/WebUiUserSeeder.bx ==="
+          cat tests/.coldbox-app/.build/app/interceptors/WebUiUserSeeder.bx 2>/dev/null || echo "(not generated)"
+          echo "=== users table contents ==="
+          if command -v sqlite3 >/dev/null 2>&1; then
+            sqlite3 tests/.coldbox-app/.build/app/data/e2e-chat.db \
+              ".mode line" "select * from users;" 2>/dev/null || echo "(could not read users table)"
+          else
+            echo "(sqlite3 not on PATH)"
+          fi
+          echo "=== runner progress markers ==="
+          cat tests/.coldbox-app/.build/app/runner-progress.txt 2>/dev/null || echo "(no progress file)"
 
       - name: Verify examples/ build
         run: ./gradlew verifyExamples --stacktrace --console=plain
@@ -113,6 +185,7 @@ jobs:
             **/build/reports/tests/**
             **/build/test-results/**
             **/tests/results/**
+            tests/.coldbox-app/.build/app/**
 
       - name: Inform Slack
         if: ${{ failure() && github.ref == 'refs/heads/development' }}

@@ -1,0 +1,850 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "WebUiGenerator", function() {
+
+			beforeEach( function() {
+				variables.discoverer = new bxagents.models.build.ProjectDiscoverer();
+				variables.generator = new bxagents.models.build.generators.WebUiGenerator();
+				variables.fixtures = expandPath( "/fixtures" );
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function newAppDir() {
+				var dir = createTempDirectory( prefix = "bxagents-webui-" );
+				tempDirs.append( dir );
+				return dir & "/app";
+			}
+
+			it( "reports hasWebUi=false and writes nothing when no webui exposure entry exists", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+				var appDir = newAppDir();
+				var result = generator.generate( discovery, appDir );
+
+				expect( result.hasWebUi ).toBeFalse();
+				expect( result.webUiAuthInterceptorName ).toBe( "" );
+				expect( directoryExists( appDir & "/chat" ) ).toBeFalse();
+			} );
+
+			it( "writes a templated index.html at <appDir><path>/index.html for a webui exposure entry", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				var result = generator.generate( discovery, appDir );
+
+				expect( result.hasWebUi ).toBeTrue();
+
+				var indexPath = appDir & "/chat/index.html";
+				expect( fileExists( indexPath ) ).toBeTrue();
+
+				var html = fileRead( indexPath );
+				expect( html ).toInclude( "/chat/api" );
+				expect( html ).notToInclude( "__API_BASE__" );
+				expect( html ).notToInclude( "__APP_TITLE__" );
+			} );
+
+			it( "generates interceptors/WebUiAuthGate.bx and returns its name when apiKeyEnvVar is set", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				var result = generator.generate( discovery, appDir );
+
+				expect( result.webUiAuthInterceptorName ).toBe( "WebUiAuthGate" );
+
+				var interceptorPath = appDir & "/interceptors/WebUiAuthGate.bx";
+				expect( fileExists( interceptorPath ) ).toBeTrue();
+
+				var src = fileRead( interceptorPath );
+				expect( src ).toInclude( '"/chat/api"' );
+				expect( src ).toInclude( '"CHAT_API_KEY"' );
+				expect( src ).toInclude( "function preProcess(" );
+				expect( src ).toInclude( ".noExecution()" );
+			} );
+
+			it( "does NOT gate the static shell path itself, only <path>/api", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var result = generator.generate( discovery, newAppDir() );
+
+				var interceptorPath = ( tempDirs[ tempDirs.len() ] & "/app" ) & "/interceptors/WebUiAuthGate.bx";
+				var src = fileRead( interceptorPath );
+				// The gated prefix must be the /api sub-path, not the bare mount path -
+				// else the shell that PROMPTS FOR the key would itself require it first.
+				expect( src ).toInclude( 'path.startsWith( "/chat/api" )' );
+				expect( src ).notToInclude( 'path.startsWith( "/chat" )' );
+			} );
+
+			it( "parses the REAL bx-ai chunk envelope, not a {token} wrapper", function() {
+				// ColdBox's toAi() /stream forwards each bx-ai chunk verbatim
+				// (Router.cfc: `emitter.send( chunk, "chunk" )`), so the page must read
+				// choices[].delta.*. Its published AI Routing docs show a {"token":"..."}
+				// shape that its own source never produces - the v1 page believed the
+				// docs and therefore rendered nothing at all against a live agent.
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( "delta.content" );
+				expect( html ).toInclude( "parsed.choices" );
+				expect( html ).notToInclude( "parsed.token" );
+			} );
+
+			it( "renders reasoning and tool-call handling from the same envelope", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( "delta.reasoning" );
+				expect( html ).toInclude( "delta.tool_calls" );
+				// Defaults are ON - both were already on the wire and being discarded
+				expect( html ).toInclude( "var SHOW_REASONING = true;" );
+				expect( html ).toInclude( "var SHOW_TOOLS = true;" );
+			} );
+
+			it( "renders branding: title, subtitle, icon, favicon, welcome, placeholder and footer", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui-themed" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				// Title is HTML-escaped, not injected raw
+				expect( html ).toInclude( "Acme &amp; Co &lt;Support&gt;" );
+				expect( html ).notToInclude( "Acme & Co <Support>" );
+				expect( html ).toInclude( "Orders and returns" );
+				expect( html ).toInclude( 'class="subtitle"' );
+				expect( html ).toInclude( 'rel="icon"' );
+				expect( html ).toInclude( "data:image/svg+xml" );
+				expect( html ).toInclude( "Ask away..." );
+				expect( html ).toInclude( "Generated answers may be wrong." );
+				expect( html ).notToInclude( "__PLACEHOLDER__" );
+				expect( html ).notToInclude( "__FOOTER__" );
+				expect( html ).notToInclude( "__FAVICON__" );
+			} );
+
+			it( "escapes the welcome text into a safe JavaScript string literal", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui-themed" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				// A raw newline or quote would terminate the literal and break the page.
+				// Backslash built via char( 92 ) so the assertion does not itself depend
+				// on whether BoxLang treats "\" as an escape character.
+				var slash = char( 92 );
+				expect( html ).toInclude( "var WELCOME = " );
+				expect( html ).toInclude( "Hi there!" & slash & "n" );
+				expect( html ).toInclude( slash & '"anything' & slash & '"' );
+				expect( html ).notToInclude( 'Ask "anything".' );
+			} );
+
+			it( "renders theme tokens, normalizing bare hex that BoxLang cannot express with a leading hash", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui-themed" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				// "0f766e" in config -> a real CSS color
+				expect( html ).toInclude( "--accent: ##0f766e;" );
+				expect( html ).toInclude( "--radius: 10px;" );
+				expect( html ).toInclude( "--font: Inter, system-ui, sans-serif;" );
+				// Dark overrides land on the data-theme rule, not :root
+				expect( html ).toInclude( '[data-theme="dark"]' );
+				expect( html ).toInclude( "--accent: rgb(45, 212, 191);" );
+				expect( html ).notToInclude( "__THEME_TOKENS__" );
+			} );
+
+			it( "honors showToolCalls:false while leaving reasoning on", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui-themed" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( "var SHOW_TOOLS = false;" );
+				expect( html ).toInclude( "var SHOW_REASONING = true;" );
+			} );
+
+			it( "inlines resources/webui/theme.css last so the project override wins", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui-themed" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( "Project override - must be inlined last and win." );
+				expect( html ).notToInclude( "__CUSTOM_CSS__" );
+
+				// It has to come after the generated tokens, or "wins" is a lie
+				expect( html.find( "Project override" ) ).toBeGT( html.find( "--accent: ##0f766e;" ) );
+			} );
+
+			it( "leaves the override placeholder empty when the project has no theme.css", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).notToInclude( "__CUSTOM_CSS__" );
+				expect( html ).notToInclude( "__THEME_TOKENS__" );
+			} );
+
+			it( "sends a per-visitor conversationId so visitors don't share one memory bucket", function() {
+				// Without options.conversationId, AiAgent.stream() falls back to "" for
+				// BOTH userId and conversationId, and loadMemoryMessages( "", "" ) then
+				// reads one bucket shared by every visitor to the page.
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( "conversationId: getConversationId()" );
+				expect( html ).toInclude( "bxagents_webui_conversation" );
+				expect( html ).toInclude( "randomUUID" );
+			} );
+
+			it( "renders markdown escape-first, so model output can never become live markup", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				// The three escapes must precede any tag introduction
+				var escapeAt = html.find( '.replace( /&/g, "&amp;" )' );
+				var firstTagAt = html.find( "<pre><code>" );
+				expect( escapeAt ).toBeGT( 0 );
+				expect( firstTagAt ).toBeGT( escapeAt );
+
+				// Link hrefs are allowlisted to http(s)/mailto - never javascript:
+				expect( html ).toInclude( "https?:" );
+				expect( html ).toInclude( "mailto:" );
+				expect( html ).toInclude( 'rel="noopener noreferrer"' );
+			} );
+
+			it( "ships a real composer: textarea, stop control, and accessible transcript", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( "<textarea" );
+				expect( html ).notToInclude( '<input type="text"' );
+				expect( html ).toInclude( "AbortController" );
+				expect( html ).toInclude( 'id="stopBtn"' );
+				expect( html ).toInclude( 'aria-live="polite"' );
+				expect( html ).toInclude( 'class="visually-hidden" for="input"' );
+				// Autoscroll must be conditional, or reading back mid-stream yanks you down
+				expect( html ).toInclude( "isPinnedToBottom" );
+			} );
+
+			it( "generates a ChatUi handler whose every action is scoped by the SERVER session", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
+				// ColdBox's own identifier: app-prefixed, session-backed, and pluggable
+				// through the identifierProvider setting - the same value toAi() falls
+				// back to. Reading session.sessionId directly would bypass all of that.
+				expect( src ).toInclude( "controller.getUserSessionIdentifier()" );
+				// The identity is derived server-side ONLY. Honouring a caller-supplied
+				// userId under one shared API key is impersonation, so it must never
+				// be read off the request body the way toAi() does.
+				expect( src ).notToInclude( "body.userId" );
+				expect( src ).toInclude( 'options[ "userId" ] = resolveUserId()' );
+
+				for ( var action in [ "invoke", "stream", "batch", "cancel", "steer", "clear", "compact", "history", "health", "info" ] ) {
+					expect( src ).toInclude( "function #action#( event, rc, prc )" );
+				}
+			} );
+
+			it( "clears only the caller's conversation, never every visitor's", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
+				// AiAgent.clearMemory() takes no arguments and would wipe everyone.
+				// Assert on the CALL, not the name - the docblock explains why it is
+				// avoided, so a bare name match would hit the comment.
+				expect( src ).notToInclude( "agent().clearMemory(" );
+				expect( src ).toInclude( "mem.clear( userId, conversationId )" );
+			} );
+
+			it( "compacts only the caller's conversation, through the scoped summarize()", function() {
+				// bx-ai's IAiMemory.summarize() now takes userId/conversationId, so
+				// compaction can finally run for one visitor without rewriting the
+				// conversations of others. It must be called WITH that pair.
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
+				expect( src ).toInclude( "mem.summarize( config, userId, conversationId )" );
+				// The old refusal is gone
+				expect( src ).notToInclude( "statusCode: 501" );
+				// Only keepRecent is caller-controlled: accepting model/provider would
+				// let any visitor aim a summarization call at a provider of their
+				// choosing, on this deployment's credentials
+				expect( src ).toInclude( 'config[ "keepRecent" ] = keepRecent' );
+				expect( src ).notToInclude( 'config[ "model" ]' );
+				expect( src ).notToInclude( 'config[ "provider" ]' );
+			} );
+
+			it( "reports the compact capability honestly, from the memory's own summary config", function() {
+				// summarize() is a silent no-op unless BOTH summaryProvider and
+				// summaryModel are set, so advertising compact:true unconditionally
+				// would make an unconfigured deployment look broken instead of
+				// merely unconfigured.
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
+				expect( src ).toInclude( '"compact"       : canCompact()' );
+				expect( src ).toInclude( "getSummaryProvider()" );
+				expect( src ).toInclude( "getSummaryModel()" );
+			} );
+
+			it( "serves history from the agent's own memory for the caller's conversation", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				expect( fileRead( appDir & "/handlers/ChatUi.bx" ) )
+					.toInclude( "getMemoryMessages( resolveUserId(), conversationId )" );
+			} );
+
+			it( "sends a threadId with every turn and cancels that same run server-side", function() {
+				// Aborting the fetch only stops the browser listening - the server
+				// keeps running the turn and spending tokens. Real cancellation needs
+				// the threadId to reach agent.cancelRun().
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( "threadId      : activeThreadId" );
+				expect( html ).toInclude( 'apiPost( "/cancel"' );
+				// And it must still abort locally, or Stop would not stop the UI
+				expect( html ).toInclude( "activeController.abort()" );
+			} );
+
+			it( "always generates the SQLite store, with no opt-in required", function() {
+				// The agent's own IAiMemory has no enumeration API, so anything
+				// that needs to ask "which conversations does this user have"
+				// needs a real database. It is infrastructure, not a feature
+				// flag - a webui project always gets one.
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				var result = generator.generate( discovery, appDir );
+
+				expect( fileExists( appDir & "/models/ChatDb.bx" ) ).toBeTrue();
+				expect( fileExists( appDir & "/interceptors/WebUiSchema.bx" ) ).toBeTrue();
+				expect( result.webUiSchemaInterceptorName ).toBe( "WebUiSchema" );
+				// Zero config still yields a usable store
+				expect( result.webUiDatabase.datasource ).toBe( "bxagents" );
+				expect( result.webUiDatabase.path ).toBe( "./data/chat.db" );
+			} );
+
+			it( "builds the schema through qb's SchemaBuilder, versioned and forward-only", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/models/ChatDb.bx" );
+				expect( src ).toInclude( 'wirebox.getInstance( "SchemaBuilder@qb" )' );
+				expect( src ).toInclude( "schema.create(" );
+				// No hand-written SQL anywhere - the grammar owns the dialect, so
+				// swapping SQLite for another engine stays a grammar change
+				expect( src ).notToInclude( "queryExecute(" );
+
+				// Versioned, and re-running is a no-op rather than an error
+				expect( src ).toInclude( "bxagents_schema_version" );
+				expect( src ).toInclude( "if ( current >= static.SCHEMA_VERSION )" );
+				expect( src ).toInclude( "hasTable(" );
+
+				// The tables the next features need
+				expect( src ).toInclude( 'schema.create( table : "conversations"' );
+				expect( src ).toInclude( 'schema.create( table : "preferences"' );
+				expect( src ).toInclude( 'table.primaryKey( [ "userId", "prefKey" ] )' );
+				expect( src ).toInclude( 'table.index( [ "userId", "updatedAt" ]' );
+			} );
+
+			it( "names the datasource on every schema call, because qb does not", function() {
+				// qb maps SchemaBuilder@qb with its `grammar` initArg ONLY - unlike
+				// QueryBuilder, it never receives moduleSettings.qb.defaultOptions,
+				// so a schema call that omits the datasource hits the default one,
+				// which this app deliberately never sets.
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/models/ChatDb.bx" );
+				expect( src ).toInclude( "private struct function schemaOptions()" );
+				expect( src ).toInclude( "options : schemaOptions()" );
+				expect( src ).toInclude( "return { datasource : static.DATASOURCE }" );
+			} );
+
+			it( "honours a configured datasource name and database path", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui-themed" );
+				var appDir = newAppDir();
+				var result = generator.generate( discovery, appDir );
+
+				expect( result.webUiDatabase.datasource ).toBe( "acmechat" );
+				expect( result.webUiDatabase.path ).toBe( "./data/acme.db" );
+				expect( fileRead( appDir & "/models/ChatDb.bx" ) ).toInclude( 'final DATASOURCE     = "acmechat"' );
+			} );
+
+			it( "hands out a fresh QueryBuilder per call", function() {
+				// qb's builders accumulate their WHERE/ORDER clauses, so a shared
+				// one leaks the previous query's conditions into the next.
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/models/ChatDb.bx" );
+				expect( src ).toInclude( "any function query() {" );
+				expect( src ).toInclude( 'wirebox.getInstance( "QueryBuilder@qb" )' );
+				// Every builder names its own datasource. Leaving this to
+				// moduleSettings.qb.defaultOptions looked correct and was not:
+				// in a real ColdBox boot the setting never reached QueryBuilder
+				// and every query failed with "No default datasource defined".
+				expect( src ).toInclude( "mergeDefaultOptions( { datasource : static.DATASOURCE } )" );
+			} );
+
+			it( "ships a conversation sidebar wired to the conversations API", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( 'id="sidebar"' );
+				expect( html ).toInclude( 'id="convList"' );
+				expect( html ).toInclude( "function loadConversations()" );
+				expect( html ).toInclude( "function selectConversation(" );
+				expect( html ).toInclude( "function startConversation()" );
+				expect( html ).toInclude( '"/conversations/rename"' );
+				expect( html ).toInclude( '"/conversations/delete"' );
+				// A title is whatever the user typed first, so it must never be
+				// parsed as markup
+				expect( html ).toInclude( "name.textContent = conv.title" );
+			} );
+
+			it( "shapes itself to GET /info instead of assuming every capability", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( "function loadInfo()" );
+				expect( html ).toInclude( "capabilities = payload.capabilities" );
+				// Compact is hidden unless a summary model is actually configured,
+				// or the button would do nothing at all
+				expect( html ).toInclude( "compactBtn.hidden = !capabilities.compact" );
+				expect( html ).toInclude( "modelMetaEl.textContent = payload.model" );
+			} );
+
+			it( "turns Send into Steer while a turn is running, rather than disabling the composer", function() {
+				// Steering mid-run is the point of /steer - a disabled composer
+				// would make it unreachable
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( "if ( isBusy && activeThreadId )" );
+				expect( html ).toInclude( 'apiPost( "/steer"' );
+				expect( html ).toInclude( 'sendBtn.textContent = busy ? "Steer" : "Send"' );
+				// isBusy must be a real variable - a disabled button could not be
+				// clicked to steer
+				expect( html ).notToInclude( "sendBtn.disabled = busy" );
+			} );
+
+			it( "exposes Clear and Compact, and reports what compaction actually did", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( 'id="clearBtn"' );
+				expect( html ).toInclude( 'id="compactBtn"' );
+				expect( html ).toInclude( 'apiPost( "/clear"' );
+				expect( html ).toInclude( 'apiPost( "/compact"' );
+				// A no-op compaction is not an error - say so rather than claiming success
+				expect( html ).toInclude( "if ( !payload.compacted )" );
+			} );
+
+			it( "stores the theme server-side so it follows the identity, not the browser", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( "function loadPreferences()" );
+				expect( html ).toInclude( 'apiPost( "/preferences/set", { key: "theme"' );
+				// localStorage stays as the immediate/offline copy
+				expect( html ).toInclude( "localStorage.setItem( THEME_STORAGE, next )" );
+			} );
+
+			it( "lays out for narrow screens and honours reduced motion", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( "@media ( max-width: 40rem )" );
+				expect( html ).toInclude( "prefers-reduced-motion" );
+			} );
+
+			it( "recovers when the remembered conversation no longer exists", function() {
+				// Deleted from another tab, or a fresh store - rehydrating to
+				// nothing would leave the sidebar with no active row
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( "if ( !known && conversations.length )" );
+			} );
+
+			it( "serves the conversation list from the store, scoped to the caller", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
+				expect( src ).toInclude( "function conversations( event, rc, prc )" );
+				expect( src ).toInclude( "chatDb().listConversations( resolveUserId() )" );
+				// Never from the request body - that would list someone else's
+				expect( src ).notToInclude( "listConversations( body" );
+			} );
+
+			it( "exposes create, rename and delete for conversations", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
+				for ( var action in [ "conversationCreate", "conversationRename", "conversationDelete" ] ) {
+					expect( src ).toInclude( "function #action#( event, rc, prc )" );
+				}
+				// Every one is scoped by the server-derived identity
+				expect( src ).toInclude( "renameConversation( resolveUserId()" );
+				expect( src ).toInclude( "chatDb().deleteConversation( userId, conversationId )" );
+				// A missing conversation is 404, not a silent success
+				expect( src ).toInclude( "statusCode: 404" );
+			} );
+
+			it( "mints the conversation id server-side on create", function() {
+				// An id chosen by the client could collide with one that already
+				// exists, and the store would refuse for reasons the client cannot act on
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
+				expect( src ).toInclude( "var conversationId = createUUID()" );
+			} );
+
+			it( "deletes the agent's messages too, not just the index row", function() {
+				// Dropping only the row would leave the conversation invisible but
+				// still in the model's context the moment anyone reused the id
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
+				expect( src ).toInclude( "agent().getMemories().each( ( mem ) => mem.clear( userId, conversationId ) )" );
+			} );
+
+			it( "records every turn against the conversation index", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
+				expect( src ).toInclude( "private void function recordTurn(" );
+				// Both the buffered and the streaming turn, or a conversation
+				// started by streaming would never appear in the list
+				expect( src ).toInclude( "recordTurn( body, resolveConversationId( body ) )" );
+				expect( src ).toInclude( "private string function deriveTitle(" );
+				// And /clear must not leave a stale count behind
+				expect( src ).toInclude( "chatDb().resetConversationCount( userId, conversationId )" );
+			} );
+
+			it( "stores preferences server-side, keyed by the same identity", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
+				for ( var action in [ "preferences", "preferenceSet", "preferenceDelete" ] ) {
+					expect( src ).toInclude( "function #action#( event, rc, prc )" );
+				}
+				expect( src ).toInclude( "chatDb().getPreferences( resolveUserId() )" );
+				expect( src ).toInclude( "chatDb().setPreference( resolveUserId(), key," );
+			} );
+
+			it( "refuses to let an upsert reassign another user's conversation", function() {
+				// A qb upsert targets the primary key alone, so a caller who guessed
+				// another user's conversationId would rewrite that row's userId to
+				// their own. touchConversation() reads first and refuses instead.
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/models/ChatDb.bx" );
+				expect( src ).toInclude( "if ( owner.userId != arguments.userId ) {" );
+				expect( src ).toInclude( "return false" );
+				// preferences CAN upsert - its target includes userId
+				expect( src ).toInclude( 'target : [ "userId", "prefKey" ]' );
+			} );
+
+			it( "scopes every conversation read and write by userId", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/models/ChatDb.bx" );
+				for ( var fn in [ "listConversations", "getConversation", "renameConversation", "deleteConversation" ] ) {
+					expect( src ).toInclude( "function #fn#(" );
+				}
+				expect( src ).toInclude( '.where( "userId", arguments.userId )' );
+			} );
+
+			it( "advertises the new capabilities on /info", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
+				expect( src ).toInclude( '"conversations" : true' );
+				expect( src ).toInclude( '"preferences"   : true' );
+			} );
+
+			it( "no longer claims the approval UI is missing", function() {
+				// The page shipped an approval card two revisions ago; the fallback
+				// notice still said v1 had none.
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).notToInclude( "no approval UI yet" );
+			} );
+
+			it( "mints a threadId server-side when the caller omits one, and echoes it back", function() {
+				// Matches the contract ColdBox toAi() adopted: the server is the source
+				// of truth for the threadId, and the caller learns it from the response
+				// so a later /cancel or /steer can name the run it is actually in.
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
+				expect( src ).toInclude( "private string function resolveThreadId(" );
+				expect( src ).toInclude( "len( supplied ) ? supplied : createUUID()" );
+				// Echoed on the buffered actions as a header...
+				expect( src ).toInclude( 'event.setHTTPHeader( name: "X-Thread-Id", value: threadId )' );
+				// ...and on the streaming action as the very first SSE frame, because a
+				// header cannot be read before the body starts arriving
+				expect( src ).toInclude( 'emitter.send( { "threadId": threadId }, "thread" )' );
+			} );
+
+			it( "rehydrates the transcript from /history on load", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( "function rehydrate()" );
+				expect( html ).toInclude( '"/history?conversationId="' );
+				// Boot order matters: capabilities decide which controls exist at
+				// all, so /info comes first, then preferences, then the list, then
+				// the transcript
+				expect( html ).toInclude( "loadInfo()" );
+				expect( html ).toInclude( ".then( loadPreferences )" );
+				expect( html ).toInclude( ".then( loadConversations )" );
+			} );
+
+			it( "turns a human-in-the-loop suspension into a real approval flow", function() {
+				// The stream only signals a suspension with a `middleware_stop` chunk
+				// carrying no detail, so the page has to ask /pending what it is being
+				// asked to approve, then answer it via /resume - which streams the
+				// CONTINUATION of the same turn rather than starting a new one.
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
+				expect( src ).toInclude( "checkpointer.loadState( threadId )" );
+				expect( src ).toInclude( "thisAgent.resumeStream(" );
+				// Who approved something is not a claim the caller gets to make
+				expect( src ).toInclude( "var decidedBy = resolveUserId()" );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( "function offerApproval(" );
+				expect( html ).toInclude( '"/pending?threadId="' );
+				expect( html ).toInclude( 'streamInto( "/resume"' );
+			} );
+
+			/**
+			 * The generator builds BoxLang source out of BoxLang string
+			 * literals, where a literal double quote is written "" - so an
+			 * empty-string literal needs FOUR quotes ( """" ), and writing the
+			 * natural-looking two emits a single stray quote that opens a
+			 * string and swallows the rest of the line.
+			 *
+			 * That shipped. `?: ""` in the ChatDb template emitted `?: "`, and
+			 * every generated project's ChatDb.bx failed to compile. No spec
+			 * here caught it because they all assert on substrings of the
+			 * output; only a real ColdBox boot in CI ever tried to compile it.
+			 *
+			 * A line of generated code with an odd number of double quotes is
+			 * always this bug (nothing here emits a string spanning lines), so
+			 * assert the invariant over the whole file rather than pinning the
+			 * two lines that happened to be wrong.
+			 */
+			it( "generates source whose every line has balanced quotes", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				for ( var generated in [ "/models/ChatDb.bx", "/handlers/ChatUi.bx" ] ) {
+					var lineNumber = 0;
+					for ( var line in listToArray( fileRead( appDir & generated ), char( 10 ), true ) ) {
+						lineNumber++;
+						// Counted by removing them: length delta is the count
+						var quotes = len( line ) - len( replace( line, '"', "", "all" ) );
+						expect( quotes % 2 )
+							.toBe( 0, "#generated# line #lineNumber# has #quotes# quote(s), so a string is left open: #line#" );
+					}
+				}
+			} );
+
+			/**
+			 * Every other action derives the caller from the session, but /pending
+			 * and /resume were addressed purely by threadId - so a visitor holding
+			 * another visitor's threadId could read their pending tool calls and
+			 * their arguments, and approve or reject on their behalf. Deriving
+			 * decidedBy server-side stopped a caller lying about WHO decided; it
+			 * did not stop them deciding on a run that was not theirs.
+			 *
+			 * Ownership needs no new storage: resolveOptions() stamps the
+			 * session-derived userId into the run options, and the agent
+			 * checkpoints those options alongside the suspension.
+			 */
+			it( "scopes /pending and /resume to the session that owns the run", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
+
+				// Ownership is read from the checkpointed options, never the request
+				expect( src ).toInclude( "private string function ownerOf(" );
+				expect( src ).toInclude( 'return arguments.state.options.userId ?: ""' );
+
+				// /pending answers as though nothing is pending, so it cannot be
+				// used to probe whether a given threadId exists at all
+				expect( src ).toInclude( "if ( !state.isEmpty() && ownerOf( state ) != resolveUserId() ) {" );
+
+				// /resume refuses outright
+				expect( src ).toInclude( "if ( !resumeState.isEmpty() && ownerOf( resumeState ) != decidedBy ) {" );
+				expect( src ).toInclude( "This run belongs to another session" );
+			} );
+
+			it( "generates sign-in wiring only when a webui entry declares users", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui-users" );
+				var appDir = newAppDir();
+				var result = generator.generate( discovery, appDir );
+
+				expect( result.webUiHasUsers ).toBeTrue();
+				expect( result.webUiSeederInterceptorName ).toBe( "WebUiUserSeeder" );
+				expect( result.webUiLoginGateName ).toBe( "WebUiLoginGate" );
+
+				for ( var generated in [
+					"/models/PasswordHasher.bx", "/models/UserService.bx", "/models/User.bx",
+					"/handlers/ChatAuth.bx", "/interceptors/WebUiUserSeeder.bx",
+					"/interceptors/WebUiLoginGate.bx", "/chat/login.html"
+				] ) {
+					expect( fileExists( appDir & generated ) ).toBeTrue( "expected #generated# to be generated" );
+				}
+			} );
+
+			it( "never writes a password into generated source, only env var names and hashes", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui-users" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var seeder = fileRead( appDir & "/interceptors/WebUiUserSeeder.bx" );
+				// The env-var user: the NAME is embedded, the value is read at runtime
+				expect( seeder ).toInclude( "ACME_ADA_PASSWORD" );
+				expect( seeder ).toInclude( 'getSystemSetting( "ACME_ADA_PASSWORD"' );
+				// The pre-hashed user needs no environment at all
+				expect( seeder ).toInclude( "pbkdf2$210000$" );
+				// Missing env var must fail CLOSED - never seed an empty password
+				expect( seeder ).toInclude( "if ( !len( plaintext ) ) {" );
+				// Removing a user from config revokes access on the next boot
+				expect( seeder ).toInclude( "deactivateUsersNotIn( configured )" );
+			} );
+
+			it( "hashes with a per-user salt and compares in constant time", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui-users" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var hasher = fileRead( appDir & "/models/PasswordHasher.bx" );
+				expect( hasher ).toInclude( "PBKDF2WithHmacSHA256" );
+				// A fresh salt per hash, so equal passwords never collide
+				expect( hasher ).toInclude( 'generateSecretKey( "AES", 128 )' );
+				// Iterations travel with the hash so they can be raised later
+				expect( hasher ).toInclude( 'static.PREFIX & "$" & static.ITERATIONS' );
+				// Timing-safe compare, same discipline as the API-key gate
+				expect( hasher ).toInclude( "MessageDigest" );
+			} );
+
+			it( "points identifierProvider at the signed-in account so every scope re-keys", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui-users" );
+				var appDir = newAppDir();
+				var result = generator.generate( discovery, appDir );
+
+				// The generator reports it; ColdBoxAppGenerator emits it. Without
+				// this the accounts would exist but nothing would be scoped BY them.
+				expect( result.webUiHasUsers ).toBeTrue();
+			} );
+
+			it( "leaves a project without users completely ungated", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				var result = generator.generate( discovery, appDir );
+
+				expect( result.webUiHasUsers ).toBeFalse();
+				expect( result.webUiSeederInterceptorName ).toBe( "" );
+				expect( result.webUiLoginGateName ).toBe( "" );
+				expect( fileExists( appDir & "/interceptors/WebUiLoginGate.bx" ) ).toBeFalse();
+				expect( fileExists( appDir & "/handlers/ChatAuth.bx" ) ).toBeFalse();
+				// No sign-in form for a project that gates nothing
+				expect( fileExists( appDir & "/chat/login.html" ) ).toBeFalse();
+			} );
+
+			it( "does not generate an auth interceptor when no webui entry configures an apiKeyEnvVar", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui-no-key" );
+				var appDir = newAppDir();
+				var result = generator.generate( discovery, appDir );
+
+				expect( result.hasWebUi ).toBeTrue();
+				expect( result.webUiAuthInterceptorName ).toBe( "" );
+				expect( fileExists( appDir & "/interceptors/WebUiAuthGate.bx" ) ).toBeFalse();
+				expect( fileExists( appDir & "/chat/index.html" ) ).toBeTrue();
+			} );
+
+		} );
+	}
+
+}

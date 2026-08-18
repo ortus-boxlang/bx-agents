@@ -1,0 +1,229 @@
+/**
+ * Real-boot integration coverage for the web UI's SQLite store and its qb
+ * wiring.
+ *
+ * Everything else about the web UI is asserted against GENERATED SOURCE TEXT.
+ * That proves the right characters were written; it cannot prove the app
+ * boots, that WireBox resolves ChatDb, that qb is a registered ColdBox module,
+ * that bx-sqlite's driver is real, or that the schema lands in an actual
+ * database file. This file closes exactly that gap - it runs inside a request
+ * served by the generated app's own Application.bx, so every assertion below
+ * is against a genuinely booted ColdBox instance backed by real SQLite.
+ *
+ * Deliberately does NOT drive the routes over loopback HTTP. An earlier
+ * revision did, and it deadlocked: this spec is itself executing inside a
+ * request served by the same single miniserver, so calling back into
+ * 127.0.0.1 waits on a worker that this very request is occupying. CI showed
+ * it as `runner-coldbox.bxm never responded: HTTP 408` while the app was
+ * demonstrably up (its scheduler was ticking throughout). Handler actions are
+ * therefore NOT driven from here at all. runColdBoxIntegrationTests.bxs
+ * probes GET /chat/api/health from the orchestrator instead - outside the
+ * server, where a request costs nothing - and that probe is what proves
+ * routing -> ChatUi -> WireBox -> ChatDb over real HTTP. It returns
+ * {"success":true,"status":"ok"} against a real boot.
+ *
+ * An earlier revision also called controller.runEvent() here. That is worse
+ * than it looks: runner-coldbox.bxm is a plain .bxm served DIRECTLY by
+ * miniserver, not routed through ColdBox, so there is no active request
+ * context for an event to execute in. This file sticks to reading real
+ * objects out of WireBox, which is what the sibling ColdBoxRuntimeSpec does
+ * and what demonstrably works.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function beforeAll(){
+		variables.controller = application.cbController;
+	}
+
+	function run() {
+		describe( "The web UI's store and wiring, against a real ColdBox boot", function() {
+
+			it( "registered qb as a real module and resolves its builders", function() {
+				// A bare class-path mapping is not enough - these aliases only
+				// exist once ColdBox has ACTIVATED qb as a module. If the
+				// integration runner failed to install it, this is where it shows.
+				var binder = controller.getWireBox().getBinder();
+				expect( binder.mappingExists( "SchemaBuilder@qb" ) ).toBeTrue();
+				expect( binder.mappingExists( "QueryBuilder@qb" ) ).toBeTrue();
+			} );
+
+			it( "built ChatDb through WireBox and migrated at startup", function() {
+				// The generated WebUiSchema interceptor builds ChatDb during
+				// afterConfigurationLoad. Reaching this line at all means boot did
+				// not blow up on a missing driver or an unresolvable mapping.
+				expect( controller.getWireBox().getBinder().mappingExists( "ChatDb" ) ).toBeTrue();
+
+				var db = controller.getWireBox().getInstance( "ChatDb" );
+				expect( db.getDatasource() ).toBe( "bxagentse2e" );
+				// migrate() is idempotent: it reports the current version rather
+				// than re-running or throwing
+				expect( db.migrate() ).toBeGTE( 1 );
+				expect( db.migrate() ).toBeGTE( 1 );
+			} );
+
+			it( "created the real tables through qb's SchemaBuilder", function() {
+				var db     = controller.getWireBox().getInstance( "ChatDb" );
+				var schema = controller.getWireBox().getInstance( "SchemaBuilder@qb" );
+				var opts   = { datasource: db.getDatasource() };
+
+				expect( schema.hasTable( name: "conversations", options: opts ) ).toBeTrue();
+				expect( schema.hasTable( name: "preferences", options: opts ) ).toBeTrue();
+				expect( schema.hasTable( name: "bxagents_schema_version", options: opts ) ).toBeTrue();
+			} );
+
+			it( "round-trips a conversation through the real database", function() {
+				var db     = controller.getWireBox().getInstance( "ChatDb" );
+				var userId = "e2e-user-" & createUUID();
+				var convId = "e2e-conv-" & createUUID();
+
+				expect( db.touchConversation( userId, convId, "First message wins", 2 ) ).toBeTrue();
+
+				var mine = db.listConversations( userId );
+				expect( mine.len() ).toBe( 1 );
+				expect( mine[ 1 ].title ).toBe( "First message wins" );
+				expect( mine[ 1 ].messageCount ).toBe( 2 );
+
+				// A later turn bumps the count but must NOT overwrite a title
+				db.touchConversation( userId, convId, "should not replace", 2 );
+				expect( db.getConversation( userId, convId ).title ).toBe( "First message wins" );
+				expect( db.getConversation( userId, convId ).messageCount ).toBe( 4 );
+
+				expect( db.renameConversation( userId, convId, "Renamed" ) ).toBeTrue();
+				expect( db.getConversation( userId, convId ).title ).toBe( "Renamed" );
+
+				db.resetConversationCount( userId, convId );
+				expect( db.getConversation( userId, convId ).messageCount ).toBe( 0 );
+
+				expect( db.deleteConversation( userId, convId ) ).toBeTrue();
+				expect( db.listConversations( userId ).len() ).toBe( 0 );
+			} );
+
+			it( "refuses to let one user take over another's conversation", function() {
+				// touchConversation() is deliberately not a qb upsert: an upsert
+				// targets the primary key alone, so a guessed conversationId would
+				// rewrite that row's userId. Proven here against real SQLite.
+				var db     = controller.getWireBox().getInstance( "ChatDb" );
+				var owner  = "owner-" & createUUID();
+				var thief  = "thief-" & createUUID();
+				var convId = "shared-" & createUUID();
+
+				db.touchConversation( owner, convId, "Owned", 2 );
+
+				expect( db.touchConversation( thief, convId, "Stolen", 2 ) ).toBeFalse();
+				expect( db.renameConversation( thief, convId, "Stolen" ) ).toBeFalse();
+				expect( db.deleteConversation( thief, convId ) ).toBeFalse();
+
+				expect( db.getConversation( owner, convId ).title ).toBe( "Owned" );
+				expect( db.listConversations( thief ).len() ).toBe( 0 );
+			} );
+
+			it( "upserts a preference instead of duplicating it", function() {
+				// setPreference() CAN upsert safely - its target is the
+				// ( userId, prefKey ) composite key, so the caller's own identity
+				// is part of what it matches on.
+				var db     = controller.getWireBox().getInstance( "ChatDb" );
+				var userId = "prefs-" & createUUID();
+
+				db.setPreference( userId, "theme", "dark" );
+				expect( db.getPreferences( userId ).theme ).toBe( "dark" );
+
+				db.setPreference( userId, "theme", "light" );
+				expect( db.getPreferences( userId ).theme ).toBe( "light" );
+				// Overwritten, not duplicated
+				expect( db.getPreferences( userId ).count() ).toBe( 1 );
+
+				db.deletePreference( userId, "theme" );
+				expect( db.getPreferences( userId ) ).toBeEmpty();
+			} );
+
+			it( "generated the static chat shell with every placeholder substituted", function() {
+				// Read from disk rather than fetched over HTTP - see this file's
+				// docblock on why loopback requests deadlock here.
+				var shell = expandPath( "/" ) & "chat/index.html";
+				expect( fileExists( shell ) ).toBeTrue();
+
+				var html = fileRead( shell );
+				expect( html ).toInclude( "/chat/api" );
+				expect( html ).notToInclude( "__API_BASE__" );
+				expect( html ).notToInclude( "__WELCOME__" );
+			} );
+
+			/**
+			 * These are the ONLY thing that proves the generated sign-in code is
+			 * real. Every other auth spec asserts on generated TEXT; nothing else
+			 * compiles it, resolves cbauth, or runs a migration against actual
+			 * SQLite. A green build without these would mean very little - the
+			 * same gap that let a ChatDb.bx that could not even parse ship.
+			 */
+			it( "migrated the users table and seeded the configured account", function() {
+				var db = controller.getWireBox().getInstance( "ChatDb" );
+				var schema = controller.getWireBox().getInstance( "SchemaBuilder@qb" );
+
+				expect( schema.hasTable( name: "users", options: { datasource: "bxagentse2e" } ) ).toBeTrue();
+
+				// Checked in two steps on purpose. "no row at all" and "row written
+				// but not findable" are completely different bugs - the first is
+				// the seeder, the second is the read path - and a single assertion
+				// on findUserByUsername() cannot tell them apart. It could not the
+				// first time this failed, either.
+				var raw = db.query().from( "users" ).where( "username", "e2e" ).first();
+				expect( isStruct( raw ) && len( raw.id ?: "" ) ).toBeTrue(
+					"the seeder wrote no users row at all for the configured account"
+				);
+
+				// The /secure entry declares this account with a committed hash
+				var seeded = db.findUserByUsername( "e2e" );
+				expect( seeded ).notToBeEmpty(
+					"the row exists but findUserByUsername() cannot see it - check how isActive is stored, SQLite has no boolean type"
+				);
+				expect( seeded.username ).toBe( "e2e" );
+				expect( len( seeded.id ) ).toBeGT( 0 );
+				// The stored value is a hash, never the plaintext
+				expect( seeded.passwordHash ).toInclude( "pbkdf2$" );
+
+				// Only ACTIVE accounts are ever returned, and an unknown username
+				// is an empty struct rather than an error
+				expect( db.findUserByUsername( "nobody" ) ).toBeEmpty();
+			} );
+
+			it( "resolves cbauth and the generated user service through WireBox", function() {
+				var binder = controller.getWireBox().getBinder();
+
+				// Proves cbauth loaded as a real ColdBox module - and with it
+				// cbstorages, which it depends on for session storage
+				expect( binder.mappingExists( "authenticationService@cbauth" ) ).toBeTrue();
+
+				var auth = controller.getWireBox().getInstance( "authenticationService@cbauth" );
+				expect( isObject( auth ) ).toBeTrue();
+				// Nobody is signed in during a bare spec request
+				expect( auth.isLoggedIn() ).toBeFalse();
+
+				var users = controller.getWireBox().getInstance( "UserService" );
+				expect( isObject( users ) ).toBeTrue();
+				// A wrong password must not authenticate, and an unknown user must
+				// not throw - both are plain false
+				expect( users.isValidCredentials( "e2e", "definitely-not-the-password" ) ).toBeFalse();
+				expect( users.isValidCredentials( "nobody-at-all", "whatever" ) ).toBeFalse();
+			} );
+
+			it( "hashes and verifies a password for real", function() {
+				var hasher = controller.getWireBox().getInstance( "PasswordHasher" );
+
+				var stored = hasher.hash( "correct horse battery staple" );
+				expect( stored ).toInclude( "pbkdf2$" );
+				expect( hasher.verify( "correct horse battery staple", stored ) ).toBeTrue();
+				expect( hasher.verify( "wrong", stored ) ).toBeFalse();
+
+				// A fresh salt per call: the same password must not produce the
+				// same stored value twice
+				expect( hasher.hash( "same" ) ).notToBe( hasher.hash( "same" ) );
+
+				// A malformed stored value fails closed rather than throwing
+				expect( hasher.verify( "anything", "" ) ).toBeFalse();
+				expect( hasher.verify( "anything", "not-a-hash" ) ).toBeFalse();
+			} );
+
+		} );
+	}
+
+}

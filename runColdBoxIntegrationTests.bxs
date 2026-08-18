@@ -43,6 +43,47 @@ println( "+ Built fixture at: " & buildResult.appDir )
 fileCopy( repoRoot & "tests/runner-coldbox.bxm", buildResult.appDir & "/runner-coldbox.bxm" )
 
 // ------------------------------------------------------------------
+// 1b. Install qb into the built app as a real ColdBox module.
+//
+// A webui project's generated models/ChatDb.bx resolves SchemaBuilder@qb and
+// QueryBuilder@qb through WireBox, which only exist once ColdBox has actually
+// REGISTERED qb as a module - a bare class-path mapping is not enough. ColdBox
+// discovers modules from the app's own modules/ folder, so qb is copied there
+// (bringing its own nested modules/cbpaginator with it - QueryBuilder's init
+// defaults to `new cbpaginator.models.Pagination()`, so it fails to construct
+// without it; confirmed directly, not assumed).
+//
+// This mirrors what a real deployment must do: `box install qb` in the project.
+// See docs/conventions/gateways.md.
+// ------------------------------------------------------------------
+directoryCreate( buildResult.appDir & "/modules", true, true )
+
+// qb, cbauth and cbauth's own cbstorages dependency all have to be REAL
+// ColdBox modules in the app - a bare class-path mapping is not enough for
+// WireBox to resolve QueryBuilder@qb or authenticationService@cbauth.
+// cbstorages is cbauth's own dependency. CommandBox may install it as a
+// sibling OR nested under cbauth/modules/, exactly as qb nests cbpaginator -
+// so a missing sibling is normal, not a problem, and only worth reporting.
+for ( moduleName in [ "qb", "cbauth", "cbstorages" ] ) {
+	moduleSource = repoRoot & "tests/" & moduleName
+	if ( directoryExists( moduleSource ) ) {
+		directoryCopy( moduleSource, buildResult.appDir & "/modules/" & moduleName, true )
+		println( "+ Installed " & moduleName & " into the built app's modules/" )
+	} else {
+		println( "  (no sibling tests/" & moduleName & " - expected when it ships nested inside its parent module)" )
+	}
+}
+
+// Whether cbstorages ended up a sibling or nested, cbauth cannot resolve
+// without it - so say plainly which layout is in play rather than leaving a
+// WireBox error later to explain it.
+nestedStorages = buildResult.appDir & "/modules/cbauth/modules/cbstorages"
+println( "+ cbstorages: " & (
+	directoryExists( buildResult.appDir & "/modules/cbstorages" ) ? "installed as a sibling"
+	: ( directoryExists( nestedStorages ) ? "nested inside cbauth" : "MISSING - cbauth will not resolve" )
+) )
+
+// ------------------------------------------------------------------
 // 2. Launch a real boxlang-miniserver, pointed directly at the built app,
 //    reusing this project's own boxlang.json for its mappings (/coldbox,
 //    /tests, /testbox, etc. - the runner still needs to resolve
@@ -82,26 +123,111 @@ try {
 	//    any response (this sandbox's proxy can answer a not-yet-listening
 	//    port with a transient 502 - confirmed earlier this session).
 	// ------------------------------------------------------------------
-	runnerUrl = "http://127.0.0.1:#port#/runner-coldbox.bxm"
-	deadline  = getTickCount() + 90000
-	report    = ""
-	lastError = ""
+	// ------------------------------------------------------------------
+	// 2b. Probe a REAL app route before the TestBox runner.
+	//
+	// Diagnosis, first and foremost: if the runner page later fails or times
+	// out, this says whether the server was serving anything at all, which a
+	// bare "never responded" cannot.
+	//
+	// Be honest about how much it proves, because it was overstated here
+	// before: the generated health() action renders a literal
+	// { status: "ok", success: true } and touches nothing else. So a 200
+	// proves ColdBox booted and routing reaches the generated ChatUi handler
+	// over real HTTP - and NOT that WireBox, ChatDb or SQLite work. That
+	// distinction is not academic: a run in CI returned 200 here while
+	// models/ChatDb.bx could not even compile. The specs below are what
+	// actually cover the store.
+	// ------------------------------------------------------------------
+	healthUrl     = "http://127.0.0.1:#port#/chat/api/health"
+	probeDeadline = getTickCount() + 60000
+	probeStatus   = 0
+	probeDetail   = "no response"
 
-	while ( getTickCount() < deadline ) {
+	while ( getTickCount() < probeDeadline ) {
 		try {
-			bx:http url=runnerUrl method="GET" result="httpResult" timeout=60 {}
-			if ( httpResult.status_code == 200 && len( trim( httpResult.fileContent ) ) ) {
-				report = httpResult.fileContent
+			bx:http url=healthUrl method="GET" result="probeResult" timeout=10 {}
+			probeStatus = probeResult.status_code ?: 0
+			probeDetail = left( trim( probeResult.fileContent ?: "" ), 240 )
+			if ( probeStatus == 200 ) {
 				break
 			}
-			lastError = "HTTP #httpResult.status_code#"
 		} catch ( any e ) {
-			lastError = e.message
+			probeDetail = e.message
 		}
 		sleep( 1000 )
 	}
+	println( "+ App probe GET /chat/api/health -> status=#probeStatus#" )
+	println( "  body: #probeDetail#" )
+
+	// Now that it is proven to work, treat it as real coverage rather than
+	// commentary: a non-200 here means the generated app cannot serve its own
+	// web UI, which is a failure worth stopping for - and a far clearer one
+	// than the runner timing out later with no explanation.
+	if ( probeStatus != 200 ) {
+		throw(
+			type    = "BxAgents.WebUiProbeFailed",
+			message = "The generated app did not serve GET /chat/api/health (status #probeStatus#): #probeDetail#"
+		)
+	}
+
+	// ------------------------------------------------------------------
+	// 3. Run the specs. ONE request, no retry loop.
+	//
+	// This used to poll the runner once a second until a 90s deadline, which
+	// was wrong twice over. The health probe above has already proven the
+	// server is up and serving real ColdBox routes, so there is nothing left
+	// for a retry to wait for. And the runner page is not idempotent or cheap
+	// - it boots TestBox and runs every integration spec - so retrying it
+	// stacks concurrent full test runs onto a MiniServer worker pool that has
+	// only a handful of threads, which is a way to CAUSE a hang, not to
+	// recover from one. It also destroyed the only evidence: each attempt
+	// re-truncated runner-progress.txt, so the markers the first (hung)
+	// attempt wrote were wiped by the attempts that followed, and the
+	// diagnostics printed an empty file.
+	//
+	// The marker file is cleared here, once, instead - the page only ever
+	// appends to it.
+	// ------------------------------------------------------------------
+	runnerUrl    = "http://127.0.0.1:#port#/runner-coldbox.bxm"
+	progressPath = buildResult.appDir & "/runner-progress.txt"
+	report       = ""
+	lastError    = ""
+
+	fileWrite( progressPath, "" )
+
+	try {
+		bx:http url=runnerUrl method="GET" result="httpResult" timeout=300 {}
+		if ( httpResult.status_code == 200 && len( trim( httpResult.fileContent ) ) ) {
+			report = httpResult.fileContent
+		} else {
+			// Built up in steps: nested double quotes inside a #...#
+			// interpolation inside a double-quoted string is a parse hazard
+			// this project has already been bitten by.
+			errorBody = left( trim( httpResult.fileContent ?: '' ), 2000 )
+			lastError = "HTTP #httpResult.status_code#: #errorBody#"
+		}
+	} catch ( any e ) {
+		lastError = e.message
+	}
 
 	if ( !len( report ) ) {
+		// The page never returned, so the only evidence of how far it got is
+		// the marker file it writes as it goes - see tests/runner-coldbox.bxm.
+		// No `var` - this is the TOP LEVEL of a .bxs script, where there is no
+		// `local` scope to declare into. `var` here throws
+		// "Scope [local] is not available in this context", which is exactly
+		// how this diagnostic block failed on its first run: it crashed before
+		// printing the markers it exists to print.
+		println( "" )
+		println( "--- runner progress markers ---" )
+		try {
+			println( fileExists( progressPath ) ? trim( fileRead( progressPath ) ) : "(no progress file - the page never even started)" )
+		} catch ( any diagError ) {
+			// Diagnostics must never replace the failure they are describing
+			println( "(could not read progress file: #diagError.message#)" )
+		}
+		println( "-------------------------------" )
 		throw( type = "BxAgents.ColdBoxRunnerNeverStarted", message = "tests/runner-coldbox.bxm never responded: #lastError#" )
 	}
 

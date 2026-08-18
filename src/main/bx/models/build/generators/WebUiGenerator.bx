@@ -1,0 +1,2265 @@
+/**
+ * Generates the web chat UI (Build Pipeline Phase 5, alongside
+ * RouterGenerator): for every `gateways/*` entry with `exposes: "webui"`,
+ * copies a small, dependency-free, PRE-BUILT static chat page
+ * (`webui/index.html`, sitting next to this class - see the docblock on
+ * `renderUiBundle()` for how its path is resolved) into the generated app
+ * at `<appDir><path>/index.html`, and - when the entry configures an
+ * `apiKeyEnvVar` - generates a `preProcess` interceptor gating just that
+ * entry's own `<path>/api/*` route (never the static shell itself; see
+ * below for why).
+ *
+ * Deliberately NOT a Vite/npm build: v1 is a single self-contained HTML
+ * file (inline CSS/JS, no separate assets to serve or bundle), matching
+ * the "small first, then we grow" v1 scope decision. There is nothing to
+ * `npm install`/`npm run build` here or in a generated project - the page
+ * ships as literal source, read via `fileRead()` and lightly templated
+ * with plain string substitution (`.replace()`), never interpolated as
+ * BoxLang - the file legitimately contains `#` (CSS hex colors), which
+ * would collide with BoxLang's own `#expression#` string-interpolation
+ * syntax if this content were ever embedded as a BoxLang string literal
+ * instead of a real, separate, non-`.bx` file (confirmed empirically this
+ * session - a bare `#fff` inside a BoxLang string literal fails to parse).
+ *
+ * Talks to the SAME `route(path & "/api").toAi("GeneratedAgent")` route
+ * RouterGenerator already knows how to render for `exposes: "agent"` -
+ * see RouterGenerator.renderExposureRoute()'s `webui` branch.
+ */
+class {
+
+	/**
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .gateways is used)
+	 * @appDir Absolute path to the generated ColdBox app dir, e.g. "<projectRoot>/.build/app"
+	 *
+	 * @return { hasWebUi, webUiAuthInterceptorName } - webUiAuthInterceptorName is "" when no webui entry configures an apiKeyEnvVar
+	 */
+	struct function generate( required struct discovery, required string appDir ) {
+		var entries = collectWebUiEntries( arguments.discovery )
+		if ( !entries.len() ) {
+			return { hasWebUi : false, webUiAuthInterceptorName : "" }
+		}
+
+		for ( var entry in entries ) {
+			renderUiBundle( entry, arguments.appDir )
+		}
+
+		// One handler serves every webui entry - the actions are identical, only
+		// the mount paths differ, and RouterGenerator maps each entry's own
+		// <path>/api/* routes onto these same four actions.
+		var handlerDir = normalizePath( arguments.appDir ) & "/handlers"
+		directoryCreate( path : handlerDir, createPath : true, ignoreExists : true )
+		fileWrite( handlerDir & "/ChatUi.bx", renderChatHandler() )
+
+		// The SQLite store. Not optional: the agent's own IAiMemory has no
+		// enumeration API - nothing answers "which conversations does this user
+		// have" - so a conversation list, per-user preferences, and anything
+		// else relational needs a real database. One store per app, named after
+		// the first entry's own database config (they all share it).
+		var database = resolveDatabaseConfig( entries )
+
+		var modelDir = normalizePath( arguments.appDir ) & "/models"
+		directoryCreate( path : modelDir, createPath : true, ignoreExists : true )
+		fileWrite( modelDir & "/ChatDb.bx", renderChatDb( database ) )
+		fileWrite( modelDir & "/PasswordHasher.bx", renderPasswordHasher() )
+		fileWrite( modelDir & "/UserService.bx", renderUserService() )
+		fileWrite( modelDir & "/User.bx", renderUser() )
+
+		var interceptorDir = normalizePath( arguments.appDir ) & "/interceptors"
+		directoryCreate( path : interceptorDir, createPath : true, ignoreExists : true )
+		fileWrite( interceptorDir & "/WebUiSchema.bx", renderSchemaInterceptor() )
+
+		var gatedEntries = entries.filter( function( entry ) {
+			return len( entry.config.apiKeyEnvVar ?: "" )
+		} )
+
+		var interceptorName = ""
+		if ( gatedEntries.len() ) {
+			interceptorName = "WebUiAuthGate"
+			fileWrite( interceptorDir & "/#interceptorName#.bx", renderAuthInterceptor( gatedEntries ) )
+		}
+
+		// Accounts. A project that declares none stays exactly as it was: no
+		// login gate, no seeder, no cbauth in the picture at all - which keeps
+		// `bxAgents serve` on a laptop a zero-ceremony experience.
+		var users = collectWebUiUsers( entries )
+		var userEntries = entries.filter( function( entry ) {
+			return ( entry.config.users ?: [] ).len() > 0
+		} )
+
+		var seederName = ""
+		var loginGateName = ""
+		if ( users.len() ) {
+			seederName = "WebUiUserSeeder"
+			fileWrite( interceptorDir & "/#seederName#.bx", renderUserSeeder( users ) )
+
+			loginGateName = "WebUiLoginGate"
+			fileWrite( interceptorDir & "/#loginGateName#.bx", renderLoginGate( userEntries ) )
+
+			var handlerDir = normalizePath( arguments.appDir ) & "/handlers"
+			directoryCreate( path : handlerDir, createPath : true, ignoreExists : true )
+			fileWrite( handlerDir & "/ChatAuth.bx", renderAuthHandler( userEntries.first() ) )
+		}
+
+		return {
+			hasWebUi                   : true,
+			webUiAuthInterceptorName   : interceptorName,
+			webUiSchemaInterceptorName : "WebUiSchema",
+			webUiSeederInterceptorName : seederName,
+			webUiLoginGateName         : loginGateName,
+			webUiHasUsers              : users.len() > 0,
+			webUiDatabase              : database
+		}
+	}
+
+	/**
+	 * Resolves the one SQLite store every webui entry in a project shares.
+	 *
+	 * Both keys are optional per entry; the first entry that sets one wins,
+	 * which keeps a single-entry project (the overwhelmingly common shape)
+	 * to zero configuration while still allowing a rename.
+	 *
+	 * @entries webui exposure entries, from collectWebUiEntries()
+	 *
+	 * @return { datasource, path } - datasource NAME and app-relative db file path
+	 */
+	private struct function resolveDatabaseConfig( required array entries ) {
+		var datasource = "bxagents"
+		var dbPath = "./data/chat.db"
+
+		for ( var entry in arguments.entries ) {
+			var configured = entry.config.database ?: {}
+			if ( !isStruct( configured ) ) {
+				continue
+			}
+			if ( len( configured.datasource ?: "" ) ) {
+				datasource = configured.datasource
+				break
+			}
+		}
+		for ( var entry in arguments.entries ) {
+			var configured = entry.config.database ?: {}
+			if ( isStruct( configured ) && len( configured.path ?: "" ) ) {
+				dbPath = configured.path
+				break
+			}
+		}
+
+		return { datasource : datasource, path : dbPath }
+	}
+
+	/**
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .gateways is used)
+	 *
+	 * @return { name, config } for every gateways/* entry with `exposes: "webui"`, sorted by path
+	 */
+	private array function collectWebUiEntries( required struct discovery ) {
+		var entries = []
+
+		for ( var gw in ( arguments.discovery.gateways ?: [] ) ) {
+			var config = readEntryConfig( gw.path )
+			if ( !isNull( config ) && ( config.exposes ?: "" ) == "webui" ) {
+				// discover() returns no projectRoot, but every gateways/* entry sits at
+				// "<root>/gateways/<name>.bx" by convention, so the root is two levels up
+				// from the entry file. Derived here rather than threaded through
+				// generate()'s signature, which BuildPipeline already calls positionally.
+				var gatewaysDir = normalizePath( getDirectoryFromPath( gw.path ) )
+				entries.append( {
+					name        : gw.name,
+					config      : config,
+					projectRoot : normalizePath( getDirectoryFromPath( gatewaysDir ) )
+				} )
+			}
+		}
+
+		entries.sort( function( a, b ) {
+			var pathA = a.config.path ?: ""
+			var pathB = b.config.path ?: ""
+			if ( pathA != pathB ) {
+				return pathA < pathB ? -1 : 1
+			}
+			return 0
+		} )
+
+		return entries
+	}
+
+	/**
+	 * Reads the vendored `webui/index.html` template sitting next to THIS
+	 * class - resolved via `getCurrentTemplatePath()` (an absolute
+	 * filesystem path to this .bx file itself, confirmed empirically this
+	 * session to resolve correctly whether this class is loaded via this
+	 * repo's own dev-time path mapping or a genuinely installed module's
+	 * `/bxmodules/bxagents` mapping - it doesn't depend on either prefix,
+	 * only on "where am I on disk"), so the template ships alongside this
+	 * generator with no separate resource-mapping/packaging step needed
+	 * beyond `createModuleStructure` also copying `**\/*.html` (see build.gradle).
+	 *
+	 * @entry A webui exposure entry { name, config }, from collectWebUiEntries()
+	 * @appDir Absolute path to the generated ColdBox app dir
+	 */
+	private void function renderUiBundle( required struct entry, required string appDir ) {
+		var templateDir = getDirectoryFromPath( getCurrentTemplatePath() )
+		var html = fileRead( templateDir & "webui/index.html" )
+
+		var config = arguments.entry.config
+		var path = normalizePath( config.path ?: "" )
+		var title = len( config.title ?: "" ) ? config.title : "BX Agents Chat"
+		var subtitle = config.subtitle ?: ""
+		var icon = config.icon ?: ""
+		var welcome = config.welcome ?: ""
+		var placeholder = len( config.placeholder ?: "" ) ? config.placeholder : "Message..."
+		var footer = config.footer ?: ""
+
+		// Both default ON: the whole point of surfacing them is that a turn's
+		// reasoning and tool activity are already on the wire and were being
+		// thrown away. Opt OUT per entry when the surface is user-facing.
+		var showReasoning = isNull( config.showReasoning ?: javacast( "null", "" ) ) ? true : !!config.showReasoning
+		var showTools = isNull( config.showToolCalls ?: javacast( "null", "" ) ) ? true : !!config.showToolCalls
+
+		html = html.replace( "__API_BASE__", path & "/api", "all" )
+		html = html.replace( "__APP_TITLE__", escapeHtml( title ), "all" )
+		html = html.replace( "__PLACEHOLDER__", escapeHtml( placeholder ), "all" )
+		html = html.replace( "__FAVICON__", renderFavicon( icon ), "all" )
+		html = html.replace( "__APP_ICON__", renderHeaderIcon( icon ), "all" )
+		html = html.replace(
+			"__APP_SUBTITLE__",
+			len( subtitle ) ? '<p class="subtitle">' & escapeHtml( subtitle ) & "</p>" : "",
+			"all"
+		)
+		html = html.replace(
+			"__FOOTER__",
+			len( footer ) ? '<footer class="note">' & escapeHtml( footer ) & "</footer>" : "",
+			"all"
+		)
+		html = html.replace( "__WELCOME__", escapeJs( welcome ), "all" )
+		html = html.replace( "__SHOW_REASONING__", showReasoning ? "true" : "false", "all" )
+		html = html.replace( "__SHOW_TOOLS__", showTools ? "true" : "false", "all" )
+		html = html.replace( "__THEME_TOKENS__", renderThemeTokens( config.theme ?: {} ), "all" )
+		html = html.replace( "__CUSTOM_CSS__", readCustomCss( arguments.entry ), "all" )
+
+		var mountDir = normalizePath( arguments.appDir ) & path
+		directoryCreate( path : mountDir, createPath : true, ignoreExists : true )
+		fileWrite( mountDir & "/index.html", html )
+
+		// The sign-in form ships only when the entry actually declares users -
+		// an ungated project should not serve a login page that gates nothing.
+		if ( ( arguments.entry.config.users ?: [] ).len() ) {
+			var login = fileRead( templateDir & "webui/login.html" )
+			login = login.replace( "__TITLE__", encodeForHTML( config.title ?: "Chat" ), "all" )
+			login = login.replace( "__LOGIN_ACTION__", path & "/login", "all" )
+			fileWrite( mountDir & "/login.html", login )
+		}
+	}
+
+	/**
+	 * Config key -> CSS custom property. This map IS the themeable surface: a
+	 * key outside it is rejected by ProjectValidator rather than silently
+	 * ignored, so a typo fails the build instead of quietly doing nothing.
+	 */
+	private struct function themeTokenMap() {
+		return [
+			"accent"            : "--accent",
+			"accentFg"          : "--accent-fg",
+			"bg"                : "--bg",
+			"fg"                : "--fg",
+			"muted"             : "--muted",
+			"border"            : "--border",
+			"surface"           : "--surface",
+			"inputBg"           : "--input-bg",
+			"bubbleUser"        : "--bubble-user",
+			"bubbleUserFg"      : "--bubble-user-fg",
+			"bubbleAssistant"   : "--bubble-assistant",
+			"bubbleAssistantFg" : "--bubble-assistant-fg",
+			"bubbleError"       : "--bubble-error",
+			"reasoningFg"       : "--reasoning-fg",
+			"reasoningBg"       : "--reasoning-bg",
+			"toolFg"            : "--tool-fg",
+			"toolBg"            : "--tool-bg",
+			"radius"            : "--radius",
+			"radiusSm"          : "--radius-sm",
+			"font"              : "--font",
+			"fontMono"          : "--font-mono",
+			"fontSize"          : "--font-size",
+			"maxWidth"          : "--max-width"
+		]
+	}
+
+	/**
+	 * Renders the `theme` block into two CSS rules: light-mode tokens on
+	 * `:root`, and anything under `theme.dark` on `:root[data-theme="dark"]`,
+	 * both emitted AFTER the template's own defaults so they win by cascade
+	 * order without needing `!important`.
+	 *
+	 * @theme The entry's `theme` config struct (may be empty)
+	 *
+	 * @return CSS text, or "" when nothing is themed
+	 */
+	private string function renderThemeTokens( required struct theme ) {
+		var tokens = themeTokenMap()
+		var lightRules = []
+		var darkRules = []
+
+		for ( var key in tokens ) {
+			if ( arguments.theme.keyExists( key ) ) {
+				lightRules.append( "		#tokens[ key ]#: #normalizeCssValue( arguments.theme[ key ] )#;" )
+			}
+		}
+
+		var dark = arguments.theme.dark ?: {}
+		if ( isStruct( dark ) ) {
+			for ( var key in tokens ) {
+				if ( dark.keyExists( key ) ) {
+					darkRules.append( "		#tokens[ key ]#: #normalizeCssValue( dark[ key ] )#;" )
+				}
+			}
+		}
+
+		var out = []
+		if ( lightRules.len() ) {
+			out.append( "	:root {" )
+			out.append( lightRules.toList( char( 10 ) ) )
+			out.append( "	}" )
+		}
+		if ( darkRules.len() ) {
+			out.append( '	:root[data-theme="dark"] {' )
+			out.append( darkRules.toList( char( 10 ) ) )
+			out.append( "	}" )
+		}
+
+		return out.toList( char( 10 ) )
+	}
+
+	/**
+	 * A bare hex value (`"3b82f6"`) is given its leading `##`. This exists
+	 * because BoxLang starts string interpolation at `##` in BOTH quote styles,
+	 * so `accent: "##3b82f6"` in a `.bx` config is a parse error unless the
+	 * author escapes it as `"####3b82f6"` - a footgun nobody remembers. Writing
+	 * the hex bare sidesteps it entirely; `rgb()`/`hsl()`/named colors need
+	 * nothing special either way.
+	 *
+	 * Rejects the handful of characters that could break out of the `<style>`
+	 * block or the rule itself.
+	 *
+	 * @value A raw theme value from config
+	 *
+	 * @return The CSS-ready value
+	 */
+	private string function normalizeCssValue( required any value ) {
+		var raw = toString( arguments.value ).trim()
+
+		if ( raw.reFind( "[<>{};]" ) ) {
+			throw(
+				type    : "InvalidThemeValue",
+				message : "Theme value [#raw#] contains one of < > { } ; which cannot appear in a CSS custom property value."
+			)
+		}
+
+		// 3, 6, or 8 bare hex digits and nothing else -> a color missing its "##"
+		if ( raw.reFindNoCase( "^[0-9a-f]{3}$|^[0-9a-f]{6}$|^[0-9a-f]{8}$" ) ) {
+			return "##" & raw
+		}
+
+		return raw
+	}
+
+	/**
+	 * Inlines the project's own CSS override file, last in the <style> block so
+	 * it beats both the shipped defaults and the generated `theme` tokens. This
+	 * is the escape hatch for anything the token map doesn't cover - and it's a
+	 * real .css file, so ordinary `##rrggbb` hex works there with no BoxLang
+	 * escaping in play at all.
+	 *
+	 * @entry A webui exposure entry { name, config, projectRoot }
+	 *
+	 * @return The file's contents, or "" when the project has no override
+	 */
+	private string function readCustomCss( required struct entry ) {
+		var relative = len( arguments.entry.config.themeFile ?: "" )
+			? arguments.entry.config.themeFile
+			: "resources/webui/theme.css"
+
+		var cssPath = arguments.entry.projectRoot & "/" & relative.reReplace( "^[\/]+", "" )
+		if ( !fileExists( cssPath ) ) {
+			return ""
+		}
+
+		var css = fileRead( cssPath )
+
+		// The stylesheet is inlined into a <style> element, so a literal
+		// "</style" inside it would close that element early and dump the rest
+		// of the file into the document as markup. Fail the build loudly rather
+		// than silently stripping the author's own CSS.
+		if ( css.findNoCase( "</style" ) ) {
+			throw(
+				type    : "InvalidThemeFile",
+				message : "[#cssPath#] contains a literal ""</style"", which would terminate the page's inline style block. Remove it."
+			)
+		}
+
+		return css
+	}
+
+	/**
+	 * @icon The entry's `icon` config - an emoji/short text, or an image URL/path
+	 *
+	 * @return A <link rel="icon"> tag, or "" when no icon is configured
+	 */
+	private string function renderFavicon( required string icon ) {
+		if ( !len( arguments.icon ) ) {
+			return ""
+		}
+
+		if ( isIconUrl( arguments.icon ) ) {
+			return '<link rel="icon" href="' & escapeHtml( arguments.icon ) & '">'
+		}
+
+		// Emoji favicons have no image file to ship: render the glyph into an
+		// inline SVG data URI, which keeps the page self-contained. The glyph is
+		// percent-encoded rather than dropped in raw - it is almost always
+		// multi-byte, and raw non-ASCII in a data: URI is not reliably decoded.
+		// Attribute values are percent-encoded rather than quoted, so escapeHtml()
+		// below has no quotes to turn into entities and the href stays readable.
+		var svg = "data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%20100%20100%22%3E"
+			& "%3Ctext%20y=%22.9em%22%20font-size=%2290%22%3E" & urlEncodedFormat( arguments.icon ) & "%3C/text%3E%3C/svg%3E"
+		return '<link rel="icon" href="' & escapeHtml( svg ) & '">'
+	}
+
+	/**
+	 * @icon The entry's `icon` config
+	 *
+	 * @return The header brand mark markup, or "" when no icon is configured
+	 */
+	private string function renderHeaderIcon( required string icon ) {
+		if ( !len( arguments.icon ) ) {
+			return ""
+		}
+
+		if ( isIconUrl( arguments.icon ) ) {
+			return '<span class="icon"><img src="' & escapeHtml( arguments.icon ) & '" alt=""></span>'
+		}
+
+		return '<span class="icon">' & escapeHtml( arguments.icon ) & "</span>"
+	}
+
+	/**
+	 * @icon The entry's `icon` config
+	 *
+	 * @return true when the value should be treated as an image reference rather than an emoji/glyph
+	 */
+	private boolean function isIconUrl( required string icon ) {
+		return arguments.icon.reFindNoCase( "^(https?:\/\/|\/|data:image\/)" ) > 0
+	}
+
+	/**
+	 * @value Text destined for HTML body/attribute content
+	 *
+	 * @return value with the five markup-significant characters escaped
+	 */
+	private string function escapeHtml( required string value ) {
+		return arguments.value
+			.replace( "&", "&amp;", "all" )
+			.replace( "<", "&lt;", "all" )
+			.replace( ">", "&gt;", "all" )
+			.replace( '"', "&quot;", "all" )
+			.replace( "'", "&##39;", "all" )
+	}
+
+	/**
+	 * @value Text destined for a double-quoted JavaScript string literal
+	 *
+	 * @return value escaped so it cannot terminate the literal or the <script> block
+	 */
+	private string function escapeJs( required string value ) {
+		// Built from char( 92 ) rather than written as a literal backslash so the
+		// meaning does not depend on whether BoxLang treats "\" as an escape.
+		var slash = char( 92 )
+
+		return arguments.value
+			.replace( slash, slash & slash, "all" )
+			.replace( '"', slash & '"', "all" )
+			.replace( char( 13 ), "", "all" )
+			.replace( char( 10 ), slash & "n", "all" )
+			.replace( "</", "<" & slash & "/", "all" )
+	}
+
+	/**
+	 * Renders `handlers/ChatUi.bx` - the web UI's own `/invoke`, `/stream`,
+	 * `/batch` and `/info` surface, replacing ColdBox's `toAi()` for this one
+	 * exposure kind.
+	 *
+	 * The reason is identity. `toAi()`'s generated actions forward `body.options`
+	 * to the runnable verbatim, so the ONLY way a `userId` can reach the agent
+	 * through them is if the caller sent it - and a caller-supplied user id is
+	 * not an identity, it's a request. Every one of an agent's memories is keyed
+	 * by `(userId, conversationId)` (an agent can hold several - see AiAgent's
+	 * `memories` array), so with no server-side userId they all collapse into one
+	 * bucket shared by every visitor.
+	 *
+	 * This handler instead derives the identity server-side via ColdBox's
+	 * `getUserSessionIdentifier()` and passes it
+	 * as `userId` on all three runner shapes, so scoping holds no matter which
+	 * memories the project configures. `conversationId` still comes from the
+	 * client, but it can now only ever sub-divide within the caller's own
+	 * session.
+	 *
+	 * The SSE wire format is deliberately identical to `toAi()`'s - a `chunk`
+	 * event per bx-ai chunk, then a `done` event carrying `[DONE]` - so the
+	 * shipped page (and any other `toAi()` client) needs no changes.
+	 *
+	 * @return The rendered handlers/ChatUi.bx source
+	 */
+	private string function renderChatHandler() {
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * The web chat UI's API. Mirrors ColdBox's own toAi() surface",
+			" * (/invoke, /stream, /batch, /info) and adds the session-scoped",
+			" * operations a real chat client needs (/health, /history, /cancel,",
+			" * /clear, /compact, /steer).",
+			" *",
+			" * One deliberate difference from toAi(): the agent's userId is taken",
+			" * from the SERVER's session, never from the request body, so every",
+			" * memory the agent holds is scoped to the visitor rather than shared.",
+			" */",
+			"class {",
+			"",
+			"	/**",
+			"	 * The identity every action below is scoped by, resolved SERVER-side.",
+			"	 *",
+			"	 * Delegates to ColdBox's own getUserSessionIdentifier() rather than",
+			"	 * reading session.sessionId directly, which buys three things: it is",
+			"	 * prefixed per application, it falls back through URLToken/CFID if a",
+			"	 * session is somehow unavailable, and - the reason that matters most -",
+			"	 * it honours the `identifierProvider` config setting. Point that at your",
+			"	 * authenticated principal and every memory re-keys to the real user with",
+			"	 * no change here.",
+			"	 *",
+			"	 * Deliberately NOT taken from the request body. ColdBox's own toAi()",
+			"	 * routes prefer a caller-supplied userId over this, which is reasonable",
+			"	 * for a trusted server-to-server caller but wrong for a browser behind a",
+			"	 * single shared API key - there, anyone could name themselves anyone.",
+			"	 */",
+			"	/**",
+			"	 * The userId that owns a saved checkpoint, or an empty string when the",
+			"	 * state predates this or was written by some other caller. Read from",
+			"	 * the run options the agent checkpointed, which resolveOptions() fills",
+			"	 * from the session - never from anything a request supplied.",
+			"	 */",
+			"	private string function ownerOf( required struct state ) {",
+			'		if ( !structKeyExists( arguments.state, "options" ) || !isStruct( arguments.state.options ) ) {',
+			'			return ""',
+			"		}",
+			'		return arguments.state.options.userId ?: ""',
+			"	}",
+			"",
+			"	private string function resolveUserId() {",
+			"		return controller.getUserSessionIdentifier()",
+			"	}",
+			"",
+			"	/**",
+			"	 * conversationId is caller-supplied on purpose: it distinguishes",
+			"	 * several conversations belonging to the SAME visitor. It is not an",
+			"	 * isolation boundary - the session-derived userId above is.",
+			"	 */",
+			"	private string function resolveConversationId( required struct body ) {",
+			'		return arguments.body.options.conversationId ?: "default"',
+			"	}",
+			"",
+			"	/**",
+			"	 * threadId identifies THIS run, so /cancel and /steer can reach it. Taken",
+			"	 * from the caller when supplied, minted here otherwise, and always echoed",
+			"	 * back - matching the contract ColdBox toAi() now uses (an X-Thread-Id",
+			"	 * header, plus a `thread` SSE event before the first chunk).",
+			"	 */",
+			"	private string function resolveThreadId( required struct body ) {",
+			'		var supplied = arguments.body.options.threadId ?: ( arguments.body.threadId ?: "" )',
+			"		return len( supplied ) ? supplied : createUUID()",
+			"	}",
+			"",
+			"	/**",
+			"	 * Whether /compact can actually do anything here.",
+			"	 *",
+			"	 * BaseMemory.buildSummaryModel() returns empty unless BOTH summaryProvider",
+			"	 * and summaryModel are configured, and summarize() then skips silently.",
+			"	 * Reporting that up front lets the page hide a button that would do",
+			"	 * nothing, rather than looking broken when it is only unconfigured.",
+			"	 */",
+			"	private boolean function canCompact() {",
+			"		return agent().getMemories().some( ( mem ) => {",
+			'			return len( mem.getSummaryProvider() ?: "" ) && len( mem.getSummaryModel() ?: "" )',
+			"		} )",
+			"	}",
+			"",
+			"	private struct function resolveOptions( required struct body, required string threadId ) {",
+			"		var options = isStruct( arguments.body.options ?: {} ) ? duplicate( arguments.body.options ) : {}",
+			'		options[ "userId" ] = resolveUserId()',
+			'		options[ "conversationId" ] = resolveConversationId( arguments.body )',
+			'		options[ "threadId" ] = arguments.threadId',
+			"		return options",
+			"	}",
+			"",
+			"	private function agent() {",
+			'		return getInstance( "GeneratedAgent" )',
+			"	}",
+			"",
+			"	private function chatDb() {",
+			'		return getInstance( "ChatDb" )',
+			"	}",
+			"",
+			"	/**",
+			"	 * A conversation's first user message becomes its title, so a sidebar",
+			"	 * shows something meaningful without asking anyone to name anything.",
+			"	 * Collapsed to one line and truncated - a title is a label, not a",
+			"	 * preview pane.",
+			"	 */",
+			"	private string function deriveTitle( required string input ) {",
+			'		var flat = reReplace( trim( arguments.input ), "[[:space:]]+", " ", "all" )',
+			"		if ( !len( flat ) ) {",
+			'			return ""',
+			"		}",
+			'		return flat.len() > 60 ? flat.left( 57 ) & "..." : flat',
+			"	}",
+			"",
+			"	/**",
+			"	 * Records the turn against the conversation index.",
+			"	 *",
+			"	 * messageCount is a DISPLAY counter, bumped by two per turn (the user",
+			"	 * message and the reply). A turn that dies midway may leave it one",
+			"	 * high; /clear resets it. It is a sidebar hint, not an authority -",
+			"	 * the agent's own memory is.",
+			"	 */",
+			"	private void function recordTurn( required struct body, required string conversationId ) {",
+			"		chatDb().touchConversation(",
+			"			userId         : resolveUserId(),",
+			"			conversationId : arguments.conversationId,",
+			'			title          : deriveTitle( arguments.body.input ?: "" ),',
+			"			messageDelta   : 2",
+			"		)",
+			"	}",
+			"",
+			"	// -----------------------------------------------------------------",
+			"	// Turn execution",
+			"	// -----------------------------------------------------------------",
+			"",
+			"	function invoke( event, rc, prc ) {",
+			"		var body     = event.getHTTPContent( json: true )",
+			"		var threadId = resolveThreadId( body )",
+			"		recordTurn( body, resolveConversationId( body ) )",
+			"		var result   = agent().run(",
+			'			body.input ?: "",',
+			"			body.params ?: {},",
+			"			resolveOptions( body, threadId )",
+			"		)",
+			'		event.setHTTPHeader( name: "X-Thread-Id", value: threadId )',
+			'		event.renderData( type: "json", data: { "output": result, "threadId": threadId, "success": true } )',
+			"	}",
+			"",
+			"	function stream( event, rc, prc ) {",
+			"		var body      = event.getHTTPContent( json: true )",
+			"		var thisAgent = agent()",
+			"		var threadId  = resolveThreadId( body )",
+			"		var options   = resolveOptions( body, threadId )",
+			"		recordTurn( body, resolveConversationId( body ) )",
+			'		event.setHTTPHeader( name: "X-Thread-Id", value: threadId )',
+			"		SSE(",
+			"			callback: ( emitter ) => {",
+			"				// Echoed FIRST so a client that let the server mint the id still has",
+			"				// it in hand before any chunk arrives - it needs it to cancel.",
+			'				emitter.send( { "threadId": threadId }, "thread" )',
+			"				thisAgent.stream(",
+			"					( chunk ) => {",
+			"						if ( !emitter.isClosed() ) {",
+			'							emitter.send( chunk, "chunk" )',
+			"						}",
+			"					},",
+			'					body.input ?: "",',
+			"					body.params ?: {},",
+			"					options",
+			"				)",
+			"				if ( !emitter.isClosed() ) {",
+			'					emitter.send( "[DONE]", "done" )',
+			"					emitter.close()",
+			"				}",
+			"			},",
+			"			keepAliveInterval: 30000",
+			"		)",
+			'		return ""',
+			"	}",
+			"",
+			"	function batch( event, rc, prc ) {",
+			"		var body      = event.getHTTPContent( json: true )",
+			"		var thisAgent = agent()",
+			"		var threadId  = resolveThreadId( body )",
+			"		var options   = resolveOptions( body, threadId )",
+			"		var outputs = ( body.inputs ?: [] ).map( ( item ) => {",
+			"			try {",
+			'				return { "output": thisAgent.run( item, body.params ?: {}, options ), "success": true }',
+			"			} catch ( any e ) {",
+			'				return { "error": e.message, "success": false }',
+			"			}",
+			"		} )",
+			'		event.setHTTPHeader( name: "X-Thread-Id", value: threadId )',
+			'		event.renderData( type: "json", data: { "outputs": outputs, "threadId": threadId, "success": true } )',
+			"	}",
+			"",
+			"	// -----------------------------------------------------------------",
+			"	// Run control - both need the threadId the client sent with its turn",
+			"	// -----------------------------------------------------------------",
+			"",
+			"	/**",
+			"	 * Really stops the run, unlike abandoning the HTTP response: the turn",
+			"	 * is signalled at its next checkpoint, so tools stop firing and tokens",
+			"	 * stop being spent.",
+			"	 */",
+			"	function cancel( event, rc, prc ) {",
+			"		var body     = event.getHTTPContent( json: true )",
+			'		var threadId = body.threadId ?: ""',
+			"		if ( !len( threadId ) ) {",
+			'			event.renderData( type: "json", statusCode: 400, data: { "error": "threadId is required", "success": false } )',
+			"			return",
+			"		}",
+			'		event.renderData( type: "json", data: {',
+			'			"cancelled": agent().cancelRun( threadId, body.reason ?: "Cancelled by the user." ),',
+			'			"success"  : true',
+			"		} )",
+			"	}",
+			"",
+			"	/**",
+			"	 * Splices a message into a run already in flight, without cancelling",
+			"	 * and restarting it - bx-ai's steer is non-destructive.",
+			"	 */",
+			"	function steer( event, rc, prc ) {",
+			"		var body     = event.getHTTPContent( json: true )",
+			'		var threadId = body.threadId ?: ""',
+			'		var input    = body.input ?: ""',
+			"		if ( !len( threadId ) || !len( input ) ) {",
+			'			event.renderData( type: "json", statusCode: 400, data: { "error": "threadId and input are required", "success": false } )',
+			"			return",
+			"		}",
+			'		event.renderData( type: "json", data: { "steered": agent().steerRun( threadId, input ), "success": true } )',
+			"	}",
+			"",
+			"	// -----------------------------------------------------------------",
+			"	// Conversation state",
+			"	// -----------------------------------------------------------------",
+			"",
+			"	/**",
+			"	 * The stored conversation for THIS visitor, so a page reload can",
+			"	 * rehydrate its transcript instead of showing an empty screen while",
+			"	 * the agent still remembers everything.",
+			"	 */",
+			"	function history( event, rc, prc ) {",
+			'		var conversationId = rc.conversationId ?: "default"',
+			"		var messages = agent().getMemoryMessages( resolveUserId(), conversationId )",
+			'		event.renderData( type: "json", data: {',
+			'			"messages"      : messages,',
+			'			"conversationId": conversationId,',
+			'			"success"       : true',
+			"		} )",
+			"	}",
+			"",
+			"	/**",
+			"	 * Clears just this visitor's conversation. Goes through each memory's",
+			"	 * own clear( userId, conversationId ) rather than the agent's",
+			"	 * clearMemory(), which takes no arguments and would wipe EVERY",
+			"	 * visitor's history.",
+			"	 */",
+			"	function clear( event, rc, prc ) {",
+			"		var body = event.getHTTPContent( json: true )",
+			"		var userId = resolveUserId()",
+			"		var conversationId = resolveConversationId( body )",
+			"		agent().getMemories().each( ( mem ) => mem.clear( userId, conversationId ) )",
+			"		// The sidebar must not keep advertising history that is now gone",
+			"		chatDb().resetConversationCount( userId, conversationId )",
+			'		event.renderData( type: "json", data: { "cleared": true, "success": true } )',
+			"	}",
+			"",
+			"	/**",
+			"	 * Compacts just this visitor's conversation - replaces the older",
+			"	 * messages with an AI-written summary and keeps the most recent few.",
+			"	 *",
+			"	 * Scoped through summarize( config, userId, conversationId ), so it",
+			"	 * reads and rewrites only this (userId, conversationId) pair and leaves",
+			"	 * every other visitor's history alone.",
+			"	 *",
+			"	 * Only keepRecent is taken from the caller. model/provider are honoured",
+			"	 * by summarize() too, but accepting them here would let any visitor aim",
+			"	 * the summarization call at a provider and model of their choosing, on",
+			"	 * this deployment's credentials - the project's own memory config",
+			"	 * decides that instead.",
+			"	 *",
+			"	 * summarize() is a no-op when the memory has no summary model",
+			"	 * configured, or when the conversation is already at or under",
+			"	 * keepRecent. Neither is an error, so the response reports the before",
+			"	 * and after counts and lets the caller see for itself.",
+			"	 */",
+			"	function compact( event, rc, prc ) {",
+			"		var body           = event.getHTTPContent( json: true )",
+			"		var userId         = resolveUserId()",
+			"		var conversationId = resolveConversationId( body )",
+			"",
+			"		var config = {}",
+			'		var keepRecent = val( body.keepRecent ?: ( body.options.keepRecent ?: 0 ) )',
+			"		if ( keepRecent > 0 ) {",
+			'			config[ "keepRecent" ] = keepRecent',
+			"		}",
+			"",
+			"		var before = agent().getMemoryMessages( userId, conversationId ).len()",
+			"		agent().getMemories().each( ( mem ) => mem.summarize( config, userId, conversationId ) )",
+			"		var after = agent().getMemoryMessages( userId, conversationId ).len()",
+			"",
+			'		event.renderData( type: "json", data: {',
+			'			"compacted": after < before,',
+			'			"before"   : before,',
+			'			"after"    : after,',
+			'			"success"  : true',
+			"		} )",
+			"	}",
+			"",
+			"	// -----------------------------------------------------------------",
+			"	// Conversations",
+			"	// -----------------------------------------------------------------",
+			"",
+			"	/**",
+			"	 * This visitor's conversations, newest activity first.",
+			"	 *",
+			"	 * Comes from the SQLite store rather than the agent's memory, because",
+			"	 * IAiMemory has no enumeration API - it can hand back ONE conversation's",
+			"	 * messages, but cannot say which conversations exist.",
+			"	 */",
+			"	function conversations( event, rc, prc ) {",
+			'		event.renderData( type: "json", data: {',
+			'			"conversations": chatDb().listConversations( resolveUserId() ),',
+			'			"success"      : true',
+			"		} )",
+			"	}",
+			"",
+			"	/**",
+			"	 * Starts a conversation and returns its id.",
+			"	 *",
+			"	 * The id is minted HERE rather than accepted from the caller: an id",
+			"	 * chosen by the client could collide with a conversation that already",
+			"	 * exists, and the store would then refuse the write for reasons the",
+			"	 * client could not act on.",
+			"	 */",
+			"	function conversationCreate( event, rc, prc ) {",
+			"		var body           = event.getHTTPContent( json: true )",
+			"		var conversationId = createUUID()",
+			"		chatDb().touchConversation(",
+			"			userId         : resolveUserId(),",
+			"			conversationId : conversationId,",
+			'			title          : trim( body.title ?: "" )',
+			"		)",
+			'		event.renderData( type: "json", data: {',
+			'			"conversationId": conversationId,',
+			'			"success"       : true',
+			"		} )",
+			"	}",
+			"",
+			"	function conversationRename( event, rc, prc ) {",
+			"		var body           = event.getHTTPContent( json: true )",
+			'		var conversationId = body.conversationId ?: ""',
+			'		var title          = trim( body.title ?: "" )',
+			"",
+			"		if ( !len( conversationId ) || !len( title ) ) {",
+			'			event.renderData( type: "json", statusCode: 400, data: { "error": "conversationId and title are required", "success": false } )',
+			"			return",
+			"		}",
+			"",
+			"		// Scoped by the session-derived userId inside the store, so renaming",
+			"		// somebody else's conversation reads as not-found rather than working",
+			"		var renamed = chatDb().renameConversation( resolveUserId(), conversationId, title )",
+			"		if ( !renamed ) {",
+			'			event.renderData( type: "json", statusCode: 404, data: { "error": "No such conversation", "success": false } )',
+			"			return",
+			"		}",
+			'		event.renderData( type: "json", data: { "renamed": true, "success": true } )',
+			"	}",
+			"",
+			"	/**",
+			"	 * Deletes a conversation for real: its index row AND the messages the",
+			"	 * agent still holds for it. Dropping only the row would leave the",
+			"	 * conversation invisible but still in the model's context the moment",
+			"	 * anyone reused the id.",
+			"	 */",
+			"	function conversationDelete( event, rc, prc ) {",
+			"		var body           = event.getHTTPContent( json: true )",
+			"		var userId         = resolveUserId()",
+			'		var conversationId = body.conversationId ?: ""',
+			"",
+			"		if ( !len( conversationId ) ) {",
+			'			event.renderData( type: "json", statusCode: 400, data: { "error": "conversationId is required", "success": false } )',
+			"			return",
+			"		}",
+			"",
+			"		var deleted = chatDb().deleteConversation( userId, conversationId )",
+			"		if ( !deleted ) {",
+			'			event.renderData( type: "json", statusCode: 404, data: { "error": "No such conversation", "success": false } )',
+			"			return",
+			"		}",
+			"		agent().getMemories().each( ( mem ) => mem.clear( userId, conversationId ) )",
+			'		event.renderData( type: "json", data: { "deleted": true, "success": true } )',
+			"	}",
+			"",
+			"	// -----------------------------------------------------------------",
+			"	// Preferences",
+			"	// -----------------------------------------------------------------",
+			"",
+			"	/**",
+			"	 * This visitor's stored preferences, as a plain { key : value } struct.",
+			"	 *",
+			"	 * Server-side rather than localStorage so they follow the identity, not",
+			"	 * the browser - point identifierProvider at a real principal and these",
+			"	 * follow that person across devices with no change here.",
+			"	 */",
+			"	function preferences( event, rc, prc ) {",
+			'		event.renderData( type: "json", data: {',
+			'			"preferences": chatDb().getPreferences( resolveUserId() ),',
+			'			"success"    : true',
+			"		} )",
+			"	}",
+			"",
+			"	function preferenceSet( event, rc, prc ) {",
+			"		var body = event.getHTTPContent( json: true )",
+			'		var key  = trim( body.key ?: "" )',
+			"",
+			"		if ( !len( key ) ) {",
+			'			event.renderData( type: "json", statusCode: 400, data: { "error": "key is required", "success": false } )',
+			"			return",
+			"		}",
+			"",
+			'		chatDb().setPreference( resolveUserId(), key, toString( body.value ?: "" ) )',
+			'		event.renderData( type: "json", data: { "saved": true, "success": true } )',
+			"	}",
+			"",
+			"	function preferenceDelete( event, rc, prc ) {",
+			"		var body = event.getHTTPContent( json: true )",
+			'		var key  = trim( body.key ?: "" )',
+			"",
+			"		if ( !len( key ) ) {",
+			'			event.renderData( type: "json", statusCode: 400, data: { "error": "key is required", "success": false } )',
+			"			return",
+			"		}",
+			"",
+			"		chatDb().deletePreference( resolveUserId(), key )",
+			'		event.renderData( type: "json", data: { "deleted": true, "success": true } )',
+			"	}",
+			"",
+			"	// -----------------------------------------------------------------",
+			"	// Human-in-the-loop",
+			"	// -----------------------------------------------------------------",
+			"",
+			"	/**",
+			"	 * Peeks the checkpoint a suspended run left behind, WITHOUT consuming",
+			"	 * it. The stream signals a suspension with a `middleware_stop` chunk but",
+			"	 * carries no detail, so this is how the page learns what it is being",
+			"	 * asked to approve.",
+			"	 */",
+			"	function pending( event, rc, prc ) {",
+			'		var threadId = rc.threadId ?: ""',
+			"		if ( !len( threadId ) ) {",
+			'			event.renderData( type: "json", statusCode: 400, data: { "error": "threadId is required", "success": false } )',
+			"			return",
+			"		}",
+			"",
+			"		var checkpointer = agent().getCheckpointer()",
+			"		if ( isNull( checkpointer ) ) {",
+			'			event.renderData( type: "json", data: { "pending": false, "success": true } )',
+			"			return",
+			"		}",
+			"",
+			"		var state = checkpointer.loadState( threadId )",
+			"",
+			"		// A suspended run belongs to whoever started it. resolveOptions()",
+			"		// stamps the session-derived userId into the run options, and the",
+			"		// agent saves those options into the checkpoint - so the saved",
+			"		// userId is the authority on ownership, with nothing extra to",
+			"		// store. Without this, any visitor holding a threadId could read",
+			"		// another visitor's pending tool calls and their arguments.",
+			"		//",
+			"		// Answered as though nothing is pending rather than with a distinct",
+			"		// refusal, so this cannot be used to test whether a threadId exists.",
+			"		if ( !state.isEmpty() && ownerOf( state ) != resolveUserId() ) {",
+			'			event.renderData( type: "json", data: { "pending": false, "success": true } )',
+			"			return",
+			"		}",
+			'		event.renderData( type: "json", data: {',
+			'			"pending"       : !state.isEmpty(),',
+			'			"pendingActions": state.suspendData.pendingActions ?: [],',
+			'			"threadId"      : threadId,',
+			'			"success"       : true',
+			"		} )",
+			"	}",
+			"",
+			"	/**",
+			"	 * Answers a pending approval and streams the CONTINUATION of the same",
+			"	 * turn - same SSE shape as /stream, so the page can keep rendering into",
+			"	 * the bubble it already has.",
+			"	 *",
+			"	 * decidedBy is taken from the session rather than the request: who",
+			"	 * approved something is exactly the kind of claim a caller should not",
+			"	 * get to make about itself.",
+			"	 */",
+			"	function resume( event, rc, prc ) {",
+			"		var body      = event.getHTTPContent( json: true )",
+			'		var threadId  = body.threadId ?: ""',
+			'		var decision  = body.decision ?: ""',
+			"		if ( !len( threadId ) || !len( decision ) ) {",
+			'			event.renderData( type: "json", statusCode: 400, data: { "error": "threadId and decision are required", "success": false } )',
+			"			return",
+			"		}",
+			"",
+			"		var thisAgent = agent()",
+			"		var decidedBy = resolveUserId()",
+			"",
+			"		// Same ownership rule as /pending, and it matters more here:",
+			"		// without it a visitor holding another visitor's threadId could",
+			"		// APPROVE or REJECT their pending action, with their own identity",
+			"		// recorded as decidedBy. Deriving decidedBy server-side stops a",
+			"		// caller lying about who decided; it does not stop them deciding",
+			"		// on a run that is not theirs.",
+			"		var resumeCheckpointer = thisAgent.getCheckpointer()",
+			"		if ( !isNull( resumeCheckpointer ) ) {",
+			"			var resumeState = resumeCheckpointer.loadState( threadId )",
+			"			if ( !resumeState.isEmpty() && ownerOf( resumeState ) != decidedBy ) {",
+			'				event.renderData( type: "json", statusCode: 403, data: { "error": "This run belongs to another session", "success": false } )',
+			"				return",
+			"			}",
+			"		}",
+			"		SSE(",
+			"			callback: ( emitter ) => {",
+			"				thisAgent.resumeStream(",
+			"					( chunk ) => {",
+			"						if ( !emitter.isClosed() ) {",
+			'							emitter.send( chunk, "chunk" )',
+			"						}",
+			"					},",
+			"					decision,",
+			"					threadId,",
+			"					body.editedData ?: {},",
+			"					decidedBy,",
+			'					body.reason ?: ""',
+			"				)",
+			"				if ( !emitter.isClosed() ) {",
+			'					emitter.send( "[DONE]", "done" )',
+			"					emitter.close()",
+			"				}",
+			"			},",
+			"			keepAliveInterval: 30000",
+			"		)",
+			'		return ""',
+			"	}",
+			"",
+			"	// -----------------------------------------------------------------",
+			"	// Discovery",
+			"	// -----------------------------------------------------------------",
+			"",
+			"	function tools( event, rc, prc ) {",
+			"		var config = agent().getConfig()",
+			'		event.renderData( type: "json", data: {',
+			'			"tools"  : config.tools ?: [],',
+			'			"count"  : config.toolCount ?: 0,',
+			'			"success": true',
+			"		} )",
+			"	}",
+			"",
+			"	function health( event, rc, prc ) {",
+			'		event.renderData( type: "json", data: { "status": "ok", "success": true } )',
+			"	}",
+			"",
+			"	/**",
+			"	 * Self-describing metadata, built from the agent's own getConfig() so it",
+			"	 * cannot drift from what was actually assembled.",
+			"	 */",
+			"	function info( event, rc, prc ) {",
+			"		var config = agent().getConfig()",
+			'		event.renderData( type: "json", data: {',
+			'			"name"        : config.name ?: "",',
+			'			"description" : config.description ?: "",',
+			'			"model"       : config.model ?: "",',
+			'			"memoryCount" : config.memoryCount ?: 0,',
+			'			"toolCount"   : config.toolCount ?: 0,',
+			'			"subAgents"   : ( config.subAgents ?: [] ).map( ( s ) => s.name ?: "" ),',
+			'			"sessionBound": true,',
+			'			"capabilities": {',
+			'				"streaming" : true,',
+			'				"reasoning" : true,',
+			'				"toolCalls" : true,',
+			'				"cancel"    : true,',
+			'				"steer"     : true,',
+			'				"history"   : true,',
+			'				"compact"       : canCompact(),',
+			'				"approvals"     : true,',
+			'				"conversations" : true,',
+			'				"preferences"   : true',
+			"			},",
+			'			"success"     : true',
+			"		} )",
+			"	}",
+			"",
+			"}",
+			""
+		]
+
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * @gatedEntries webui entries that configure an apiKeyEnvVar - collectWebUiEntries()'s result, pre-filtered
+	 *
+	 * @return The rendered interceptors/WebUiAuthGate.bx source
+	 */
+	/**
+	 * Renders `models/UserService.bx` - cbauth's `IUserService`, backed by the
+	 * web UI's own SQLite store.
+	 *
+	 * cbauth asks for exactly three methods and owns everything else (session
+	 * storage, login/logout, its own interception points), which is why this
+	 * project uses it rather than hand-rolling authentication. The contract was
+	 * read from cbauth 5.x's own `interfaces/IUserService.cfc`, not inferred.
+	 *
+	 * @return The rendered models/UserService.bx source
+	 */
+	private string function renderUserService() {
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * cbauth's IUserService, backed by the web UI's SQLite store.",
+			" *",
+			" * Accounts come from your gateways/* webui entry's `users` block and",
+			" * are seeded at boot - see interceptors/WebUiUserSeeder.bx.",
+			" */",
+			"class singleton {",
+			"",
+			'	property name="wirebox" inject="wirebox";',
+			"",
+			"	/**",
+			"	 * True only for an ACTIVE account whose password verifies.",
+			"	 *",
+			"	 * A missing user still runs a hash verification against a dummy value",
+			"	 * before returning false. Without that, an unknown username answers",
+			"	 * measurably faster than a known one with a wrong password, which",
+			"	 * turns this into a username oracle.",
+			"	 */",
+			"	boolean function isValidCredentials( required username, required password ) {",
+			"		var record = chatDb().findUserByUsername( arguments.username )",
+			"",
+			"		if ( record.isEmpty() ) {",
+			'			hasher().verify( arguments.password, "pbkdf2$210000$bm90LWEtcmVhbC1zYWx0$bm90LWEtcmVhbC1oYXNo" )',
+			"			return false",
+			"		}",
+			"",
+			'		return hasher().verify( arguments.password, record.passwordHash ?: "" )',
+			"	}",
+			"",
+			"	function retrieveUserByUsername( required username ) {",
+			"		return toUser( chatDb().findUserByUsername( arguments.username ) )",
+			"	}",
+			"",
+			"	function retrieveUserById( required id ) {",
+			"		return toUser( chatDb().findUserById( arguments.id ) )",
+			"	}",
+			"",
+			"	/**",
+			"	 * A populated User, or an empty one when no account matched. cbauth",
+			"	 * treats an object whose getId() is empty as 'no user'.",
+			"	 */",
+			"	private any function toUser( required struct record ) {",
+			'		var user = wirebox.getInstance( "User" )',
+			"		if ( arguments.record.isEmpty() ) {",
+			"			return user",
+			"		}",
+			"		return user.populate(",
+			'			id          : arguments.record.id ?: "",',
+			'			username    : arguments.record.username ?: "",',
+			'			displayName : arguments.record.displayName ?: ""',
+			"		)",
+			"	}",
+			"",
+			'	private any function chatDb() {',
+			'		return wirebox.getInstance( "ChatDb" )',
+			"	}",
+			"",
+			"	private any function hasher() {",
+			'		return wirebox.getInstance( "PasswordHasher" )',
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Renders `models/User.bx` - cbauth's `IAuthUser`.
+	 *
+	 * cbauth requires only `getId()`. That id is what the ColdBox
+	 * `identifierProvider` returns once someone is signed in, so it becomes the
+	 * `userId` every conversation, preference, memory and pending-run ownership
+	 * check is already keyed by.
+	 *
+	 * @return The rendered models/User.bx source
+	 */
+	private string function renderUser() {
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * cbauth's IAuthUser. getId() is the whole required contract; the rest",
+			" * is here so a template or handler can greet someone by name.",
+			" *",
+			" * Transient, not a singleton - one instance per signed-in user.",
+			" */",
+			"class {",
+			"",
+			'	property name="id"          type="string" default="";',
+			'	property name="username"    type="string" default="";',
+			'	property name="displayName" type="string" default="";',
+			"",
+			"	function init() {",
+			'		variables.id = ""',
+			'		variables.username = ""',
+			'		variables.displayName = ""',
+			"		return this",
+			"	}",
+			"",
+			'	any function populate( string id = "", string username = "", string displayName = "" ) {',
+			"		variables.id = arguments.id",
+			"		variables.username = arguments.username",
+			"		variables.displayName = arguments.displayName",
+			"		return this",
+			"	}",
+			"",
+			"	// cbauth's IAuthUser contract",
+			"	function getId() {",
+			"		return variables.id",
+			"	}",
+			"",
+			"	boolean function isLoaded() {",
+			"		return len( variables.id ) > 0",
+			"	}",
+			"",
+			"	/**",
+			"	 * What to show in the UI - the display name when set, else the",
+			"	 * username. Never the id, which is an opaque UUID.",
+			"	 */",
+			"	string function getLabel() {",
+			"		return len( variables.displayName ) ? variables.displayName : variables.username",
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Renders `handlers/ChatAuth.bx` - the sign-in endpoints.
+	 *
+	 * The form itself is a real static file (`<path>/login.html`, from
+	 * resources/webui/login.html), served like the chat shell is. This handler
+	 * only verifies and redirects, which keeps HTML out of generated BoxLang
+	 * string arrays entirely - and means a failed attempt renders a fixed
+	 * message from a query flag rather than echoing anything a caller supplied.
+	 *
+	 * @entry The webui entry this login belongs to
+	 *
+	 * @return The rendered handlers/ChatAuth.bx source
+	 */
+	private string function renderAuthHandler( required struct entry ) {
+		var base       = normalizePath( arguments.entry.config.path ?: "" )
+		var appPath    = renderLiteral( base & "/" )
+		var loginPath  = renderLiteral( base & "/login.html" )
+		var failedPath = renderLiteral( base & "/login.html?failed=1" )
+
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * Sign-in for the web UI, backed by cbauth against the users table.",
+			" * The form is the static login.html alongside the chat shell.",
+			" */",
+			"class {",
+			"",
+			'	property name="auth" inject="authenticationService@cbauth";',
+			"",
+			"	/**",
+			"	 * Verify a submitted username/password.",
+			"	 *",
+			"	 * Every failure redirects to the same generic message. Unknown user",
+			"	 * and wrong password are indistinguishable on purpose, so this cannot",
+			"	 * be used to discover which usernames exist.",
+			"	 */",
+			"	function doLogin( event, rc, prc ) {",
+			'		var username = trim( rc.username ?: "" )',
+			"",
+			"		try {",
+			'			auth.authenticate( username, rc.password ?: "" )',
+			"		} catch ( any e ) {",
+			"			writeLog(",
+			'				text : "Failed web UI sign-in for [" & username & "]",',
+			'				type : "warning",',
+			'				file : "webui-auth"',
+			"			)",
+			"			return redirectTo( event, #failedPath# )",
+			"		}",
+			"",
+			"		return redirectTo( event, #appPath# )",
+			"	}",
+			"",
+			"	function doLogout( event, rc, prc ) {",
+			"		auth.logout()",
+			"		return redirectTo( event, #loginPath# )",
+			"	}",
+			"",
+			"	private function redirectTo( required any event, required string location ) {",
+			"		arguments.event.setHTTPHeader( statusCode = 302, statusText = 'Found' )",
+			"		arguments.event.setHTTPHeader( name = 'Location', value = arguments.location )",
+			"		arguments.event.noExecution()",
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Renders `interceptors/WebUiAuthGate.bx` - the sign-in gate.
+	 *
+	 * Generated only when a project actually declares users. With no users
+	 * configured nothing is gated, which keeps `bxAgents serve` on a laptop a
+	 * zero-ceremony experience; the docs are explicit that this is a local-dev
+	 * posture, not a deployment one.
+	 *
+	 * Unlike the API-key gate, this one DOES cover the static shell: a browser
+	 * hitting the page unauthenticated should land on a login form, and there is
+	 * no header for it to be missing. `/login` itself is exempt, or the
+	 * redirect would loop forever.
+	 *
+	 * @entries webui entries that declare users
+	 *
+	 * @return The rendered interceptors/WebUiLoginGate.bx source
+	 */
+	private string function renderLoginGate( required array entries ) {
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * Requires a signed-in user for the web UI.",
+			" *",
+			" * A browser navigation gets a redirect to the login form; an /api/*",
+			" * call gets a 401 with JSON, because the page's own fetch() cannot",
+			" * follow a redirect into an HTML login form and would otherwise try to",
+			" * parse that form as a chat response.",
+			" */",
+			"class {",
+			"",
+			'	property name="auth" inject="authenticationService@cbauth";',
+			"",
+			"	function preProcess( event, interceptData, rc, prc ) {",
+			"		var path = event.getPath()"
+		]
+
+		for ( var entry in arguments.entries ) {
+			var base = normalizePath( entry.config.path ?: "" )
+			// Built as their own variables first. A #renderLiteral(...)#
+			// interpolation containing its own double-quoted string terminates
+			// the surrounding string early - a parse hazard this project has
+			// been bitten by more than once.
+			var basePath   = renderLiteral( base )
+			var loginPath  = renderLiteral( base & "/login" )
+			var logoutPath = renderLiteral( base & "/logout" )
+			var apiPath    = renderLiteral( base & "/api" )
+
+			lines.append( "" )
+			lines.append( "		if ( path.startsWith( #basePath# ) ) {" )
+			lines.append( "			// The login form and its POST target must stay reachable" )
+			lines.append( "			// while signed out, or the redirect below never terminates." )
+			lines.append( "			if ( path.startsWith( #loginPath# ) || path.startsWith( #logoutPath# ) ) {" )
+			lines.append( "				return" )
+			lines.append( "			}" )
+			lines.append( "			if ( !auth.isLoggedIn() ) {" )
+			lines.append( "				if ( path.startsWith( #apiPath# ) ) {" )
+			lines.append( "					event" )
+			lines.append( "						.renderData(" )
+			lines.append( '							type       = "json",' )
+			lines.append( '							data       = { error : true, message : "Not signed in" },' )
+			lines.append( "							statusCode = 401," )
+			lines.append( '							statusText = "Unauthorized"' )
+			lines.append( "						)" )
+			lines.append( "						.noExecution()" )
+			lines.append( "					return" )
+			lines.append( "				}" )
+			lines.append( "				event.setHTTPHeader( statusCode = 302, statusText = 'Found' )" )
+			lines.append( "				event.setHTTPHeader( name = 'Location', value = #loginPath# )" )
+			lines.append( "				event.noExecution()" )
+			lines.append( "				return" )
+			lines.append( "			}" )
+			lines.append( "		}" )
+		}
+
+		lines.append( "	}" )
+		lines.append( "" )
+		lines.append( "}" )
+		lines.append( "" )
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Every configured account across all webui entries, normalized.
+	 *
+	 * A username may only be declared once across the whole project - two
+	 * entries claiming the same username would race each other at seed time and
+	 * whichever ran last would win silently. ProjectValidator rejects that, so
+	 * reaching here with a duplicate is a bug, not user error.
+	 *
+	 * @entries collectWebUiEntries()'s result
+	 *
+	 * @return Array of { username, passwordEnvVar, passwordHash, displayName }
+	 */
+	private array function collectWebUiUsers( required array entries ) {
+		var users = []
+		for ( var entry in arguments.entries ) {
+			for ( var user in ( entry.config.users ?: [] ) ) {
+				users.append( {
+					username       : user.username ?: "",
+					passwordEnvVar : user.passwordEnvVar ?: "",
+					passwordHash   : user.passwordHash ?: "",
+					displayName    : user.displayName ?: ""
+				} )
+			}
+		}
+		return users
+	}
+
+	/**
+	 * Renders `interceptors/WebUiUserSeeder.bx` - reconciles the accounts in
+	 * `gateways/*` config into the users table at boot.
+	 *
+	 * Config is the source of truth for WHO exists. Passwords never appear in
+	 * it: an account names an environment variable holding its plaintext
+	 * (`passwordEnvVar`), or carries an already-hashed value (`passwordHash`),
+	 * which is safe to commit precisely because it cannot be reversed.
+	 *
+	 * Runs at `afterConfigurationLoad`, after WebUiSchema has migrated - the
+	 * users table has to exist before anything is written into it.
+	 *
+	 * @users collectWebUiUsers()'s result
+	 *
+	 * @return The rendered interceptors/WebUiUserSeeder.bx source
+	 */
+	private string function renderUserSeeder( required array users ) {
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * Reconciles the accounts declared in your gateways/* webui entry into",
+			" * the users table, once per boot.",
+			" *",
+			" * Adding a user to config creates them. Changing their password updates",
+			" * it. REMOVING them from config deactivates the account - deliberately",
+			" * not a delete, because their conversations reference their id and",
+			" * dropping the row would orphan that history rather than revoke access.",
+			" */",
+			"class {",
+			"",
+			'	property name="wirebox" inject="wirebox";',
+			"",
+			"	function afterConfigurationLoad( event, interceptData, rc, prc ) {",
+			'		var db = wirebox.getInstance( "ChatDb" )',
+			'		var hasher = wirebox.getInstance( "PasswordHasher" )',
+			"		var configured = []",
+			""
+		]
+
+		for ( var user in arguments.users ) {
+			lines.append( "		// ---- #user.username# ----" )
+			lines.append( "		configured.append( #renderLiteral( user.username )# )" )
+
+			if ( len( user.passwordHash ) ) {
+				// A pre-hashed value needs no work at boot and no environment.
+				lines.append( "		db.upsertUser(" )
+				lines.append( "			username     : #renderLiteral( user.username )#," )
+				lines.append( "			passwordHash : #renderLiteral( user.passwordHash )#," )
+				lines.append( "			displayName  : #renderLiteral( user.displayName )#" )
+				lines.append( "		)" )
+			} else {
+				lines.append( "		var plaintext = getSystemSetting( #renderLiteral( user.passwordEnvVar )#, '' )" )
+				lines.append( "		if ( !len( plaintext ) ) {" )
+				lines.append( "			// Fail CLOSED. Creating the account with an empty or default" )
+				lines.append( "			// password because its environment variable is missing would be" )
+				lines.append( "			// far worse than it simply not existing." )
+				lines.append( '			writeLog(' )
+				lines.append( '				text : "Web UI user [#user.username#] skipped: #user.passwordEnvVar# is not set",' )
+				lines.append( '				type : "warning",' )
+				lines.append( '				file : "webui-auth"' )
+				lines.append( "			)" )
+				lines.append( "		} else {" )
+				lines.append( "			// Re-hash only when the configured password no longer matches what" )
+				lines.append( "			// is stored. Hashing is deliberately expensive, so doing it on" )
+				lines.append( "			// every boot for every user would be a real startup cost." )
+				lines.append( "			var existing = db.findUserByUsername( #renderLiteral( user.username )# )" )
+				lines.append( "			var unchanged = !existing.isEmpty() && hasher.verify( plaintext, existing.passwordHash ?: '' )" )
+				lines.append( "			if ( !unchanged ) {" )
+				lines.append( "				db.upsertUser(" )
+				lines.append( "					username     : #renderLiteral( user.username )#," )
+				lines.append( "					passwordHash : hasher.hash( plaintext )," )
+				lines.append( "					displayName  : #renderLiteral( user.displayName )#" )
+				lines.append( "				)" )
+				lines.append( "			}" )
+				lines.append( "		}" )
+			}
+			lines.append( "" )
+		}
+
+		lines.append( "		// Anyone no longer in config loses access on this boot." )
+		lines.append( "		db.deactivateUsersNotIn( configured )" )
+		lines.append( "	}" )
+		lines.append( "" )
+		lines.append( "}" )
+		lines.append( "" )
+
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Renders `models/PasswordHasher.bx`.
+	 *
+	 * Passwords are HASHED, never encrypted. Encryption is reversible, and a
+	 * stolen SQLite file almost always travels with whatever could decrypt it -
+	 * so a reversible scheme turns one file leak into every user's password. A
+	 * one-way KDF means the file alone yields nothing usable.
+	 *
+	 * PBKDF2-HMAC-SHA256 via `generatePBKDFKey()`, because BoxLang ships no
+	 * bcrypt/argon2 BIF (verified against the runtime, not assumed) and PBKDF2
+	 * is the strongest primitive available without pulling in a dependency.
+	 *
+	 * Two properties matter more than the specific numbers:
+	 *   - a per-user random salt, so identical passwords do not collide and a
+	 *     precomputed table is useless
+	 *   - the iteration count is stored IN the hash, so it can be raised later
+	 *     without invalidating existing hashes - old rows keep verifying at
+	 *     their own cost until they are next written
+	 *
+	 * 210,000 iterations (~350ms on the runtime this was measured against).
+	 * OWASP currently suggests 600,000 for PBKDF2-HMAC-SHA256; this sits lower
+	 * deliberately, because seeding re-verifies every configured user on each
+	 * boot and 600k would add roughly a second per user to startup. Raise it
+	 * if your deployment can absorb that - the stored format already supports
+	 * a mixed estate.
+	 *
+	 * @return The rendered models/PasswordHasher.bx source
+	 */
+	private string function renderPasswordHasher() {
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * One-way password hashing for the web UI's user accounts.",
+			" *",
+			" * Format: pbkdf2$<iterations>$<salt>$<derived>",
+			" *",
+			" * The iteration count travels with each hash, so raising ITERATIONS",
+			" * later does not invalidate anything already stored.",
+			" */",
+			"class singleton {",
+			"",
+			"	// OWASP suggests 600000 for PBKDF2-HMAC-SHA256. This is lower on",
+			"	// purpose: user seeding verifies every configured account on each",
+			"	// boot, and 600000 costs about a second per user there. Raise it if",
+			"	// your startup budget allows - existing hashes keep working.",
+			"	static {",
+			"		final ITERATIONS = 210000",
+			'		final ALGORITHM  = "PBKDF2WithHmacSHA256"',
+			"		final KEY_LENGTH = 256",
+			'		final PREFIX     = "pbkdf2"',
+			"	}",
+			"",
+			"	/**",
+			"	 * Hash a plaintext password with a fresh random salt.",
+			"	 *",
+			"	 * @password The plaintext to hash",
+			"	 *",
+			"	 * @return The encoded hash, safe to store and safe to commit",
+			"	 */",
+			"	string function hash( required string password ) {",
+			'		var salt = generateSecretKey( "AES", 128 )',
+			"		var derived = generatePBKDFKey( static.ALGORITHM, arguments.password, salt, static.ITERATIONS, static.KEY_LENGTH )",
+			'		return static.PREFIX & "$" & static.ITERATIONS & "$" & salt & "$" & derived',
+			"	}",
+			"",
+			"	/**",
+			"	 * Does this plaintext produce the stored hash?",
+			"	 *",
+			"	 * Re-derives using the salt and iteration count recorded in the stored",
+			"	 * value, then compares in constant time - a byte-by-byte comparison",
+			"	 * leaks how much of a guess was correct through its own timing.",
+			"	 *",
+			"	 * Any malformed or empty stored value is a NON-match, never an error:",
+			"	 * a corrupt row must fail closed, not throw its way past the check.",
+			"	 *",
+			"	 * @password The plaintext to check",
+			"	 * @stored The previously stored hash",
+			"	 *",
+			"	 * @return true only on a genuine match",
+			"	 */",
+			"	boolean function verify( required string password, required string stored ) {",
+			"		try {",
+			'			var parts = listToArray( arguments.stored, "$" )',
+			"			if ( parts.len() != 4 || parts[ 1 ] != static.PREFIX ) {",
+			"				return false",
+			"			}",
+			"			var expected = generatePBKDFKey( static.ALGORITHM, arguments.password, parts[ 3 ], parts[ 2 ], static.KEY_LENGTH )",
+			'			return createObject( "java", "java.security.MessageDigest" ).isEqual(',
+			'				charsetDecode( expected, "UTF-8" ),',
+			'				charsetDecode( parts[ 4 ], "UTF-8" )',
+			"			)",
+			"		} catch ( any e ) {",
+			"			return false",
+			"		}",
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Renders `models/ChatDb.bx` - the web UI's SQLite store.
+	 *
+	 * Schema is created through qb's SchemaBuilder rather than hand-written
+	 * DDL, and versioned: `migrate()` applies only the migrations newer than
+	 * whatever the database already records, so booting an app whose store
+	 * already exists is a no-op rather than an error.
+	 *
+	 * @database { datasource, path } from resolveDatabaseConfig()
+	 *
+	 * @return The rendered models/ChatDb.bx source
+	 */
+	private string function renderChatDb( required struct database ) {
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * The web UI's SQLite store, reached through qb.",
+			" *",
+			" * Why a database at all, when the agent already remembers the",
+			" * conversation? Because bx-ai's IAiMemory is a per-(userId,",
+			" * conversationId) bucket with NO enumeration API - nothing in it",
+			" * answers ""which conversations does this user have"". A conversation",
+			" * list, per-user preferences, and anything else relational needs real",
+			" * storage alongside the memory, not inside it.",
+			" *",
+			" * Schema is built with qb's SchemaBuilder and versioned. migrate()",
+			" * applies only what the database has not already recorded, so booting",
+			" * against an existing store is a no-op.",
+			" */",
+			"class singleton {",
+			"",
+			'	property name="wirebox" inject="wirebox";',
+			"",
+			"	static {",
+			"		// Bump this and add a matching applyV<n>() below to evolve the schema.",
+			"		final SCHEMA_VERSION = 2",
+			'		final DATASOURCE     = "#escapeJs( arguments.database.datasource )#"',
+			'		final VERSION_TABLE  = "bxagents_schema_version"',
+			"	}",
+			"",
+			"	function onDIComplete() {",
+			"		migrate()",
+			"	}",
+			"",
+			"	string function getDatasource() {",
+			"		return static.DATASOURCE",
+			"	}",
+			"",
+			"	// -----------------------------------------------------------------",
+			"	// Schema",
+			"	// -----------------------------------------------------------------",
+			"",
+			"	/**",
+			"	 * Brings the database up to static.SCHEMA_VERSION, applying only the",
+			"	 * migrations it has not already recorded.",
+			"	 *",
+			"	 * Locked because two requests can race to build this singleton on a",
+			"	 * cold start, and CREATE TABLE is not something to run twice",
+			"	 * concurrently.",
+			"	 *",
+			"	 * @return The version the database is at afterwards",
+			"	 */",
+			"	numeric function migrate() {",
+			'		lock name="bxagents-webui-schema-##static.DATASOURCE##" type="exclusive" timeout="30" {',
+			"			var schema = wirebox.getInstance( ""SchemaBuilder@qb"" )",
+			"			ensureVersionTable( schema )",
+			"",
+			"			var current = currentVersion()",
+			"			if ( current >= static.SCHEMA_VERSION ) {",
+			"				return current",
+			"			}",
+			"",
+			"			if ( current < 1 ) {",
+			"				applyV1( schema )",
+			"				recordVersion( 1 )",
+			"			}",
+			"",
+			"			if ( current < 2 ) {",
+			"				applyV2( schema )",
+			"				recordVersion( 2 )",
+			"			}",
+			"",
+			"			return static.SCHEMA_VERSION",
+			"		}",
+			"	}",
+			"",
+			"	/**",
+			"	 * SchemaBuilder@qb is mapped with only its `grammar` initArg - qb does",
+			"	 * NOT pass moduleSettings.qb.defaultOptions to it the way it does for",
+			"	 * QueryBuilder - so every schema call has to name the datasource",
+			"	 * itself. Verified against qb 13.1.0's own ModuleConfig.cfc.",
+			"	 */",
+			"	private struct function schemaOptions() {",
+			"		return { datasource : static.DATASOURCE }",
+			"	}",
+			"",
+			"	private void function ensureVersionTable( required any schema ) {",
+			"		if ( arguments.schema.hasTable( name : static.VERSION_TABLE, options : schemaOptions() ) ) {",
+			"			return",
+			"		}",
+			"		arguments.schema.create(",
+			"			table    : static.VERSION_TABLE,",
+			"			callback : ( table ) => {",
+			'				table.integer( "version" ).primaryKey()',
+			'				table.datetime( "appliedAt" )',
+			"			},",
+			"			options  : schemaOptions()",
+			"		)",
+			"	}",
+			"",
+			"	private numeric function currentVersion() {",
+			"		var found = query()",
+			"			.from( static.VERSION_TABLE )",
+			'			.orderBy( "version", "desc" )',
+			"			.first()",
+			"		return isStruct( found ) ? val( found.version ?: 0 ) : 0",
+			"	}",
+			"",
+			"	private void function recordVersion( required numeric version ) {",
+			"		query().from( static.VERSION_TABLE ).insert( {",
+			'			"version"   : arguments.version,',
+			'			"appliedAt" : now()',
+			"		} )",
+			"	}",
+			"",
+			"	/**",
+			"	 * v1: the two tables the web UI's next features need.",
+			"	 *",
+			"	 * SQLite cannot modify or drop a column, and qb's SQLiteGrammar throws",
+			"	 * UnsupportedOperation rather than pretending otherwise - so treat",
+			"	 * migrations here as forward-only: add a new applyV<n>(), never edit",
+			"	 * this one once it has shipped.",
+			"	 */",
+			"	private void function applyV1( required any schema ) {",
+			'		arguments.schema.create( table : "conversations", callback : ( table ) => {',
+			'			table.string( "id", 64 ).primaryKey()',
+			'			table.string( "userId", 255 )',
+			'			table.string( "title", 500 ).nullable()',
+			'			table.integer( "messageCount" ).default( "0" )',
+			'			table.datetime( "createdAt" )',
+			'			table.datetime( "updatedAt" )',
+			"			// The conversation list is always ""this user's, newest first""",
+			'			table.index( [ "userId", "updatedAt" ], "idx_conversations_user_updated" )',
+			"		}, options : schemaOptions() )",
+			"",
+			'		arguments.schema.create( table : "preferences", callback : ( table ) => {',
+			'			table.string( "userId", 255 )',
+			'			table.string( "prefKey", 100 )',
+			'			table.text( "prefValue" ).nullable()',
+			'			table.datetime( "updatedAt" )',
+			"			// One row per (user, key) - the composite key IS the identity",
+			'			table.primaryKey( [ "userId", "prefKey" ] )',
+			"		}, options : schemaOptions() )",
+			"	}",
+			"",
+			"	/**",
+			"	 * v2: the accounts allowed to use this web UI.",
+			"	 *",
+			"	 * `id` is what everything else keys on - the ColdBox identifierProvider",
+			"	 * returns it, so conversations, preferences, agent memory and pending-run",
+			"	 * ownership all re-key to the real account with no other change. It is a",
+			"	 * generated UUID rather than the username on purpose: renaming a user",
+			"	 * must not orphan their history.",
+			"	 *",
+			"	 * `passwordHash` is a one-way PBKDF2 digest (see models/PasswordHasher.bx),",
+			"	 * never a reversible ciphertext - if this file is stolen the passwords",
+			"	 * must not be recoverable from it.",
+			"	 *",
+			"	 * `isActive` rather than DELETE: a user dropped from config keeps their",
+			"	 * conversations (which reference their id) but can no longer sign in.",
+			"	 */",
+			"	private void function applyV2( required any schema ) {",
+			'		arguments.schema.create( table : "users", callback : ( table ) => {',
+			'			table.string( "id", 64 ).primaryKey()',
+			'			table.string( "username", 255 ).unique()',
+			'			table.string( "passwordHash", 512 )',
+			'			table.string( "displayName", 255 ).nullable()',
+			'			// INTEGER, not boolean: SQLite has no boolean type, and letting the',
+			'			// driver decide how to bind true/false is how a row gets written',
+			'			// and then not found again. 1 = active, 0 = revoked.',
+			'			table.integer( "isActive" ).default( 1 )',
+			'			table.datetime( "createdAt" )',
+			'			table.datetime( "updatedAt" )',
+			"		}, options : schemaOptions() )",
+			"	}",
+			"",
+			"	// -----------------------------------------------------------------",
+			"	// Users",
+			"	// -----------------------------------------------------------------",
+			"",
+			"	/**",
+			"	 * The active account for a username, or an empty struct. Only active",
+			"	 * users are ever returned - a deactivated account must not authenticate.",
+			"	 */",
+			"	struct function findUserByUsername( required string username ) {",
+			"		var found = query()",
+			'			.from( "users" )',
+			'			.where( "username", arguments.username )',
+			'			.where( "isActive", 1 )',
+			"			.first()",
+			"		return isStruct( found ) ? found : {}",
+			"	}",
+			"",
+			"	struct function findUserById( required string id ) {",
+			"		var found = query()",
+			'			.from( "users" )',
+			'			.where( "id", arguments.id )',
+			'			.where( "isActive", 1 )',
+			"			.first()",
+			"		return isStruct( found ) ? found : {}",
+			"	}",
+			"",
+			"	/**",
+			"	 * Create or update one configured account, returning its id.",
+			"	 *",
+			"	 * Matched on username, NOT on id - the config is the source of truth for",
+			"	 * who exists, and it has no way to know the generated id. An existing",
+			"	 * user keeps their id (and therefore their whole history) even when the",
+			"	 * password or display name changes.",
+			"	 */",
+			'	string function upsertUser( required string username, required string passwordHash, string displayName = "" ) {',
+			"		var existing = query()",
+			'			.from( "users" )',
+			'			.where( "username", arguments.username )',
+			"			.first()",
+			"",
+			'		if ( isStruct( existing ) && len( existing.id ?: "" ) ) {',
+			"			query()",
+			'				.from( "users" )',
+			'				.where( "id", existing.id )',
+			"				.update( {",
+			'					"passwordHash" : arguments.passwordHash,',
+			'					"displayName"  : arguments.displayName,',
+			'					"isActive"     : 1,',
+			'					"updatedAt"    : now()',
+			"				} )",
+			"			return existing.id",
+			"		}",
+			"",
+			"		var id = createUUID()",
+			"		query()",
+			'			.from( "users" )',
+			"			.insert( {",
+			'				"id"           : id,',
+			'				"username"     : arguments.username,',
+			'				"passwordHash" : arguments.passwordHash,',
+			'				"displayName"  : arguments.displayName,',
+			'				"isActive"     : 1,',
+			'				"createdAt"    : now(),',
+			'				"updatedAt"    : now()',
+			"			} )",
+			"		return id",
+			"	}",
+			"",
+			"	/**",
+			"	 * Deactivate every account NOT in the configured list, so removing a user",
+			"	 * from config revokes their access on the next boot. Deliberately not a",
+			"	 * DELETE: their conversations reference their id, and dropping the row",
+			"	 * would orphan that history rather than revoke access.",
+			"	 *",
+			"	 * An empty list deactivates nothing - that means the project configures no",
+			"	 * users at all, and wiping every account over a likely misconfiguration is",
+			"	 * not a decision this should make silently.",
+			"	 */",
+			"	numeric function deactivateUsersNotIn( required array usernames ) {",
+			"		if ( arguments.usernames.isEmpty() ) {",
+			"			return 0",
+			"		}",
+			"		return query()",
+			'			.from( "users" )',
+			'			.whereNotIn( "username", arguments.usernames )',
+			'			.where( "isActive", 1 )',
+			'			.update( { "isActive" : 0, "updatedAt" : now() } )',
+			"	}",
+			"",
+			"	// -----------------------------------------------------------------",
+			"	// Query entry point",
+			"	// -----------------------------------------------------------------",
+			"",
+			"	/**",
+			"	 * A fresh QueryBuilder per call - qb's builders are stateful and",
+			"	 * accumulate their WHERE/ORDER clauses, so sharing one across calls",
+			"	 * leaks the previous query's conditions into the next.",
+			"	 *",
+			"	 * The datasource is named HERE, on every builder, rather than being",
+			"	 * left to moduleSettings.qb.defaultOptions. That setting is still",
+			"	 * written in config/ColdBox.bx (it is the right thing for any other",
+			"	 * qb use in the app), but it was NOT reaching QueryBuilder in a real",
+			"	 * ColdBox boot: every query failed with",
+			"	 *",
+			"	 *   No default datasource defined in the application or globally or",
+			"	 *   in the query options. Registered datasources are: [<name>]",
+			"	 *",
+			"	 * - i.e. the datasource was registered, and the builder still had no",
+			"	 * options. Exactly why the module setting did not arrive was not run",
+			"	 * to ground; naming it explicitly is better than depending on that",
+			"	 * plumbing either way, and it matches what schemaOptions() already",
+			"	 * has to do for SchemaBuilder.",
+			"	 */",
+			"	any function query() {",
+			"		return wirebox.getInstance( ""QueryBuilder@qb"" )",
+			"			.mergeDefaultOptions( { datasource : static.DATASOURCE } )",
+			"	}",
+			"",
+			"	// -----------------------------------------------------------------",
+			"	// Conversations",
+			"	// -----------------------------------------------------------------",
+			"",
+			"	/**",
+			"	 * This user's conversations, newest activity first - the exact shape a",
+			"	 * conversation sidebar needs, and the query the composite index on",
+			"	 * ( userId, updatedAt ) exists for.",
+			"	 */",
+			"	array function listConversations( required string userId, numeric limit = 100 ) {",
+			"		return query()",
+			'			.from( "conversations" )',
+			'			.where( "userId", arguments.userId )',
+			'			.orderBy( "updatedAt", "desc" )',
+			"			.limit( arguments.limit )",
+			"			.get()",
+			"	}",
+			"",
+			"	/**",
+			"	 * One conversation, but ONLY if it belongs to this user.",
+			"	 *",
+			"	 * conversationId comes from the client, so every read and write scopes",
+			"	 * by userId as well - otherwise guessing an id would be enough to read",
+			"	 * or rename somebody else's conversation.",
+			"	 *",
+			"	 * @return The row, or an empty struct when it does not exist or is not theirs",
+			"	 */",
+			"	struct function getConversation( required string userId, required string conversationId ) {",
+			"		var found = query()",
+			'			.from( "conversations" )',
+			'			.where( "id", arguments.conversationId )',
+			'			.where( "userId", arguments.userId )',
+			"			.first()",
+			"		return isStruct( found ) ? found : {}",
+			"	}",
+			"",
+			"	/**",
+			"	 * Records activity on a conversation, creating its row the first time.",
+			"	 *",
+			"	 * Deliberately NOT a qb upsert. An upsert targets the primary key",
+			"	 * alone, so a caller who guessed another user's conversationId would",
+			"	 * rewrite that row's userId to their own and take the conversation over.",
+			"	 * Read-then-write, scoped by userId, refuses instead.",
+			"	 *",
+			"	 * @title Applied only when the conversation has no title yet, so a",
+			"	 *        rename is never silently undone by the next turn",
+			"	 * @messageDelta Added to the displayed message count",
+			"	 *",
+			"	 * @return false when the id exists but belongs to someone else",
+			"	 */",
+			"	boolean function touchConversation(",
+			"		required string userId,",
+			"		required string conversationId,",
+			'		string  title = "",',
+			"		numeric messageDelta = 0",
+			"	) {",
+			"		var owner = query()",
+			'			.from( "conversations" )',
+			'			.where( "id", arguments.conversationId )',
+			"			.first()",
+			"",
+			'		if ( isStruct( owner ) && len( owner.userId ?: "" ) ) {',
+			"			if ( owner.userId != arguments.userId ) {",
+			"				return false",
+			"			}",
+			"			var updates = {",
+			'				"updatedAt"    : now(),',
+			'				"messageCount" : val( owner.messageCount ?: 0 ) + arguments.messageDelta',
+			"			}",
+			'			if ( len( arguments.title ) && !len( owner.title ?: "" ) ) {',
+			'				updates[ "title" ] = arguments.title',
+			"			}",
+			"			query()",
+			'				.from( "conversations" )',
+			'				.where( "id", arguments.conversationId )',
+			'				.where( "userId", arguments.userId )',
+			"				.update( updates )",
+			"			return true",
+			"		}",
+			"",
+			"		query()",
+			'			.from( "conversations" )',
+			"			.insert( {",
+			'				"id"           : arguments.conversationId,',
+			'				"userId"       : arguments.userId,',
+			'				"title"        : arguments.title,',
+			'				"messageCount" : arguments.messageDelta,',
+			'				"createdAt"    : now(),',
+			'				"updatedAt"    : now()',
+			"			} )",
+			"		return true",
+			"	}",
+			"",
+			"	boolean function renameConversation( required string userId, required string conversationId, required string title ) {",
+			"		if ( getConversation( arguments.userId, arguments.conversationId ).isEmpty() ) {",
+			"			return false",
+			"		}",
+			"		query()",
+			'			.from( "conversations" )',
+			'			.where( "id", arguments.conversationId )',
+			'			.where( "userId", arguments.userId )',
+			'			.update( { "title" : arguments.title, "updatedAt" : now() } )',
+			"		return true",
+			"	}",
+			"",
+			"	boolean function deleteConversation( required string userId, required string conversationId ) {",
+			"		if ( getConversation( arguments.userId, arguments.conversationId ).isEmpty() ) {",
+			"			return false",
+			"		}",
+			"		query()",
+			'			.from( "conversations" )',
+			'			.where( "id", arguments.conversationId )',
+			'			.where( "userId", arguments.userId )',
+			"			.delete()",
+			"		return true",
+			"	}",
+			"",
+			"	/**",
+			"	 * Zeroes the displayed message count after the conversation's messages",
+			"	 * have been cleared, so the sidebar does not keep advertising history",
+			"	 * that no longer exists.",
+			"	 */",
+			"	void function resetConversationCount( required string userId, required string conversationId ) {",
+			"		query()",
+			'			.from( "conversations" )',
+			'			.where( "id", arguments.conversationId )',
+			'			.where( "userId", arguments.userId )',
+			'			.update( { "messageCount" : 0, "updatedAt" : now() } )',
+			"	}",
+			"",
+			"	// -----------------------------------------------------------------",
+			"	// Preferences",
+			"	// -----------------------------------------------------------------",
+			"",
+			"	/**",
+			"	 * Every preference this user has set, as a plain { key : value } struct.",
+			"	 */",
+			"	struct function getPreferences( required string userId ) {",
+			"		var out = {}",
+			"		query()",
+			'			.from( "preferences" )',
+			'			.where( "userId", arguments.userId )',
+			"			.get()",
+			"			.each( ( row ) => {",
+			'				out[ row.prefKey ] = row.prefValue ?: ""',
+			"			} )",
+			"		return out",
+			"	}",
+			"",
+			"	/**",
+			"	 * An upsert IS safe here, unlike touchConversation(): the target is the",
+			"	 * ( userId, prefKey ) composite primary key, so the user's own identity",
+			"	 * is part of what it matches on and no other user's row can be hit.",
+			"	 */",
+			"	void function setPreference( required string userId, required string key, required string value ) {",
+			'		query().from( "preferences" ).upsert(',
+			"			values : {",
+			'				"userId"    : arguments.userId,',
+			'				"prefKey"   : arguments.key,',
+			'				"prefValue" : arguments.value,',
+			'				"updatedAt" : now()',
+			"			},",
+			'			target : [ "userId", "prefKey" ],',
+			'			update : [ "prefValue", "updatedAt" ]',
+			"		)",
+			"	}",
+			"",
+			"	boolean function deletePreference( required string userId, required string key ) {",
+			"		query()",
+			'			.from( "preferences" )',
+			'			.where( "userId", arguments.userId )',
+			'			.where( "prefKey", arguments.key )',
+			"			.delete()",
+			"		return true",
+			"	}",
+			"",
+			"}",
+			""
+		]
+
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Renders `interceptors/WebUiSchema.bx` - forces ChatDb to be built (and
+	 * therefore migrated) at boot rather than lazily on the first request.
+	 *
+	 * afterConfigurationLoad is safe for this: ColdBox's own LoaderService
+	 * calls activateAllModules() BEFORE announcing it (verified in
+	 * coldbox-platform source, system/web/services/LoaderService.cfc), so
+	 * qb's WireBox mappings already exist by the time this fires.
+	 *
+	 * @return The rendered interceptors/WebUiSchema.bx source
+	 */
+	private string function renderSchemaInterceptor() {
+		return [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * Builds models/ChatDb.bx at boot so its schema migration runs then,",
+			" * rather than on whichever request happens to touch the database",
+			" * first. A missing or unmigrated store is a startup problem; it should",
+			" * surface at startup.",
+			" *",
+			" * afterConfigurationLoad fires AFTER ColdBox activates modules",
+			" * (LoaderService.cfc calls activateAllModules() first, then announces",
+			" * this), so qb's SchemaBuilder@qb mapping is already available.",
+			" */",
+			"class {",
+			"",
+			"	function afterConfigurationLoad( event, interceptData, rc, prc ) {",
+			"		getInstance( ""ChatDb"" )",
+			"	}",
+			"",
+			"}",
+			""
+		].toList( char( 10 ) )
+	}
+
+	private string function renderAuthInterceptor( required array gatedEntries ) {
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * Gates every gateways/* webui entry's own <path>/api/* route behind",
+			" * an X-API-Key header, when that entry configures an apiKeyEnvVar.",
+			" * The static chat shell itself (<path>/index.html and its inline",
+			" * JS/CSS) is deliberately NOT gated - a browser's plain page",
+			" * navigation can't send a custom header, so gating the shell would",
+			" * make the page that PROMPTS FOR the key unreachable without it.",
+			" * The shell's own JS sends the key on every /api/* call it makes.",
+			" */",
+			"class {",
+			"",
+			"	function preProcess( event, interceptData, rc, prc ) {",
+			"		var path = event.getPath()"
+		]
+
+		for ( var entry in arguments.gatedEntries ) {
+			var apiPrefix = normalizePath( entry.config.path ?: "" ) & "/api"
+			var envVarName = entry.config.apiKeyEnvVar
+			lines.append( "" )
+			lines.append( "		if ( path.startsWith( #renderLiteral( apiPrefix )# ) ) {" )
+			lines.append( '			var provided = event.getHTTPHeader( "X-API-Key", "" )' )
+			lines.append( "			var expected = getSystemSetting( #renderLiteral( envVarName )#, '' )" )
+			lines.append( "			if ( !len( expected ) || !constantTimeEquals( provided, expected ) ) {" )
+			lines.append( "				event" )
+			lines.append( "					.renderData(" )
+			lines.append( '						type       = "json",' )
+			lines.append( '						data       = { error : true, message : "Unauthorized" },' )
+			lines.append( "						statusCode = 401," )
+			lines.append( '						statusText = "Unauthorized"' )
+			lines.append( "					)" )
+			lines.append( "					.noExecution()" )
+			lines.append( "				return" )
+			lines.append( "			}" )
+			lines.append( "		}" )
+		}
+
+		lines.append( "	}" )
+		lines.append( "" )
+		lines.append( "	// Same java.security.MessageDigest.isEqual() constant-time-compare" )
+		lines.append( "	// discipline every webhook gateway's own signature check already uses." )
+		lines.append( "	private boolean function constantTimeEquals( required string a, required string b ) {" )
+		lines.append( '		var aBytes = charsetDecode( arguments.a, "UTF-8" )' )
+		lines.append( '		var bBytes = charsetDecode( arguments.b, "UTF-8" )' )
+		lines.append( '		return createObject( "java", "java.security.MessageDigest" ).isEqual( aBytes, bBytes )' )
+		lines.append( "	}" )
+		lines.append( "" )
+		lines.append( "}" )
+		lines.append( "" )
+
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Reads a discovered `gateways/*` entry's config: JSON files are
+	 * deserialized directly, `.bx` files are dynamically loaded and their
+	 * `configure()` invoked. Duplicated from RouterGenerator/GatewayGenerator
+	 * rather than shared - matches this codebase's existing per-generator
+	 * self-containment convention.
+	 *
+	 * @path Absolute path to the entry's `.bx`/`.json` file
+	 *
+	 * @return The entry's config struct, or null if it could not be read
+	 */
+	private any function readEntryConfig( required string path ) {
+		try {
+			if ( arguments.path.endsWith( ".json" ) ) {
+				return jsonDeserialize( fileRead( arguments.path ) )
+			}
+
+			var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
+			var instance = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
+				.instantiate( arguments.path, context )
+			return instance.configure()
+		} catch ( any e ) {
+			return null
+		}
+	}
+
+	/**
+	 * @path A filesystem path
+	 *
+	 * @return The path with any trailing slash(es) stripped
+	 */
+	private string function normalizePath( required string path ) {
+		return arguments.path.reReplace( "[\/]+$", "" )
+	}
+
+	/**
+	 * @value A raw string to embed inside a generated double-quoted BoxLang string literal
+	 *
+	 * @return value with `"` doubled and `#` doubled, so it round-trips as a literal, not an interpolation
+	 */
+	private string function renderLiteral( required string value ) {
+		return '"' & arguments.value.replace( '"', '""', "all" ).replace( "##", "####", "all" ) & '"'
+	}
+
+}

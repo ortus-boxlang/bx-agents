@@ -25,7 +25,7 @@ jobs:
   # Format PR
   format_check:
     name: Checks Source Code Formatting
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     permissions:
       checks: write
       pull-requests: write
@@ -41,9 +41,11 @@ jobs:
           distribution: "temurin"
           java-version: 21
 
-      - uses: Ortus-Solutions/commandbox-action@v1.0.3
-        with:
-          cmd: run-script format:check
-
+      # The cfformat step that used to sit here ran `run-script format:check`,
+      # but this repo's box.json defines no such script and carries no
+      # .cfformat.json, so it failed on every run rather than checking anything.
+      # Removed rather than left failing; spotless below is the gate that
+      # actually works. Add cfformat back alongside a real config + script if
+      # BoxLang-source formatting should be enforced too.
       - name: Verify Code Formatting
         run: ./gradlew spotlessCheck

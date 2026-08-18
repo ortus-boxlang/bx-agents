@@ -205,7 +205,8 @@ class {
 			"inspect" : "models.cli.Inspect",
 			"chat"    : "models.cli.Chat",
 			"invoke"  : "models.cli.Invoke",
-			"clean"   : "models.cli.Clean"
+			"clean"   : "models.cli.Clean",
+			"hash-password" : "models.cli.HashPassword"
 		}
 
 		var verbDescriptions = {
@@ -218,7 +219,8 @@ class {
 			"package" : "Package a built project into a .bxa    ([--version])",
 			"deploy"  : "Deploy to a target                     (--name, or [--target], --destination)",
 			"inspect" : "Pretty-print a built project's manifest.json ([--json])",
-			"clean"   : "Remove a project's .build/ and dist/ output"
+			"clean"   : "Remove a project's .build/ and dist/ output",
+			"hash-password" : "Hash a password for a webui users entry (--password)"
 		}
 
 		var firstToken = arrayLen( arguments.args ) >= 1 ? arguments.args[ 1 ] : ""
@@ -272,8 +274,14 @@ class {
 	 * Prints the `--help`/no-verb/unknown-verb usage text: module identity,
 	 * one line per verb (sorted alphabetically) with its description, and the
 	 * two global flags handled before verb dispatch. Prints line-by-line
-	 * (rather than building and returning one joined string) since BoxLang
-	 * has no `chr()` BIF available in this module-CLI execution context.
+	 * rather than building and returning one joined string.
+	 *
+	 * This note used to say BoxLang "has no `chr()` BIF available in this
+	 * module-CLI execution context", which was the wrong conclusion from a
+	 * real symptom: `chr()` does not exist in BoxLang in ANY context - the
+	 * BIF is spelled `char()`. Verified directly against the runtime, and
+	 * separately re-confirmed the expensive way when `chr( 10 )` in the
+	 * ColdBox integration runner page 500'd every request. Use `char()`.
 	 *
 	 * @verbs Struct mapping verb name -> dispatch class path
 	 * @verbDescriptions Struct mapping verb name -> one-line help text

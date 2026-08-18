@@ -1,0 +1,1521 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__APP_TITLE__</title>
+__FAVICON__
+<style>
+	:root {
+		color-scheme: light dark;
+
+		/* Surfaces */
+		--bg: rgb(255, 255, 255);
+		--fg: rgb(30, 30, 30);
+		--muted: rgb(110, 110, 110);
+		--border: rgb(225, 225, 225);
+		--surface: rgb(248, 248, 250);
+		--input-bg: rgb(250, 250, 250);
+
+		/* Brand */
+		--accent: rgb(30, 100, 220);
+		--accent-fg: rgb(255, 255, 255);
+
+		/* Bubbles */
+		--bubble-user: var(--accent);
+		--bubble-user-fg: var(--accent-fg);
+		--bubble-assistant: rgb(240, 240, 242);
+		--bubble-assistant-fg: rgb(30, 30, 30);
+		--bubble-error: rgb(220, 60, 60);
+
+		/* Reasoning + tools */
+		--reasoning-fg: rgb(120, 90, 180);
+		--reasoning-bg: rgb(246, 243, 252);
+		--tool-fg: rgb(40, 120, 90);
+		--tool-bg: rgb(238, 248, 243);
+
+		/* Shape + type */
+		--radius: 14px;
+		--radius-sm: 8px;
+		--font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+		--font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+		--font-size: 0.95rem;
+		--max-width: 75%;
+	}
+	:root[data-theme="dark"] {
+		--bg: rgb(24, 24, 27);
+		--fg: rgb(235, 235, 238);
+		--muted: rgb(150, 150, 158);
+		--border: rgb(55, 55, 60);
+		--surface: rgb(32, 32, 36);
+		--input-bg: rgb(32, 32, 36);
+		--bubble-assistant: rgb(42, 42, 47);
+		--bubble-assistant-fg: rgb(235, 235, 238);
+		--reasoning-fg: rgb(180, 158, 230);
+		--reasoning-bg: rgb(38, 34, 48);
+		--tool-fg: rgb(120, 200, 165);
+		--tool-bg: rgb(28, 42, 37);
+	}
+
+	/* Generated from the `theme` block in gateways/*.bx - overrides the defaults above. */
+__THEME_TOKENS__
+
+	* { box-sizing: border-box; }
+	html, body { height: 100%; margin: 0; }
+	body {
+		display: flex;
+		flex-direction: column;
+		font-family: var(--font);
+		font-size: var(--font-size);
+		background: var(--bg);
+		color: var(--fg);
+	}
+	header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		padding: 0.75rem 1rem;
+		border-bottom: 1px solid var(--border);
+		flex-shrink: 0;
+	}
+	header .brand {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		min-width: 0;
+	}
+	header .icon {
+		font-size: 1.35rem;
+		line-height: 1;
+		flex-shrink: 0;
+	}
+	header .icon img {
+		width: 1.6rem;
+		height: 1.6rem;
+		border-radius: var(--radius-sm);
+		display: block;
+	}
+	header h1 {
+		font-size: 1rem;
+		font-weight: 600;
+		margin: 0;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	header .subtitle {
+		margin: 0;
+		font-size: 0.8rem;
+		color: var(--muted);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	header .actions { flex-shrink: 0; }
+	header .actions button {
+		background: none;
+		border: 1px solid var(--border);
+		color: var(--fg);
+		border-radius: var(--radius-sm);
+		padding: 0.35rem 0.6rem;
+		margin-left: 0.4rem;
+		cursor: pointer;
+		font-size: 0.85rem;
+	}
+	#messages {
+		flex: 1;
+		overflow-y: auto;
+		padding: 1rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+	}
+	.welcome {
+		margin: auto;
+		max-width: 32rem;
+		text-align: center;
+		color: var(--muted);
+		line-height: 1.5;
+	}
+	.turn {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+		max-width: var(--max-width);
+		align-self: flex-start;
+	}
+	.bubble {
+		padding: 0.55rem 0.85rem;
+		border-radius: var(--radius);
+		line-height: 1.4;
+		white-space: pre-wrap;
+		word-wrap: break-word;
+	}
+	.bubble.user {
+		align-self: flex-end;
+		max-width: var(--max-width);
+		background: var(--bubble-user);
+		color: var(--bubble-user-fg);
+		border-bottom-right-radius: 4px;
+	}
+	.bubble.assistant {
+		background: var(--bubble-assistant);
+		color: var(--bubble-assistant-fg);
+		border-bottom-left-radius: 4px;
+		/* Assistant replies are rendered as markdown blocks, so the pre-wrap that
+		   preserves raw newlines elsewhere would double every paragraph gap. */
+		white-space: normal;
+	}
+	.bubble.error {
+		align-self: flex-start;
+		max-width: var(--max-width);
+		background: transparent;
+		border: 1px solid var(--bubble-error);
+		color: var(--bubble-error);
+	}
+	.bubble.pending::after {
+		content: "\25CF";
+		opacity: 0.4;
+		margin-left: 0.3rem;
+		animation: pulse 1s infinite ease-in-out;
+	}
+	@keyframes pulse {
+		0%, 100% { opacity: 0.2; }
+		50% { opacity: 0.8; }
+	}
+
+	/* Reasoning + tool disclosure share one compact, collapsed-by-default look. */
+	details.trace {
+		border-radius: var(--radius-sm);
+		font-size: 0.85rem;
+		overflow: hidden;
+	}
+	details.trace > summary {
+		cursor: pointer;
+		padding: 0.3rem 0.6rem;
+		list-style: none;
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		user-select: none;
+	}
+	details.trace > summary::-webkit-details-marker { display: none; }
+	details.trace > summary::before {
+		content: "\25B8";
+		font-size: 0.7em;
+		opacity: 0.7;
+	}
+	details.trace[open] > summary::before { content: "\25BE"; }
+	details.trace .body {
+		padding: 0.1rem 0.6rem 0.5rem 1.5rem;
+		white-space: pre-wrap;
+		word-wrap: break-word;
+		font-family: var(--font-mono);
+		font-size: 0.8rem;
+		line-height: 1.45;
+		opacity: 0.95;
+	}
+	details.reasoning {
+		background: var(--reasoning-bg);
+		color: var(--reasoning-fg);
+	}
+	details.tool {
+		background: var(--tool-bg);
+		color: var(--tool-fg);
+	}
+	details.trace .status {
+		margin-left: auto;
+		font-size: 0.75rem;
+		opacity: 0.75;
+	}
+
+	form#composer {
+		display: flex;
+		gap: 0.5rem;
+		padding: 0.75rem 1rem;
+		border-top: 1px solid var(--border);
+		flex-shrink: 0;
+	}
+	#composer textarea {
+		flex: 1;
+		padding: 0.6rem 0.75rem;
+		border-radius: var(--radius-sm);
+		border: 1px solid var(--border);
+		background: var(--input-bg);
+		color: var(--fg);
+		font-size: var(--font-size);
+		font-family: var(--font);
+		line-height: 1.4;
+		resize: none;
+		overflow-y: auto;
+		max-height: 9rem;
+	}
+	#composer button {
+		padding: 0.6rem 1.1rem;
+		border-radius: var(--radius-sm);
+		border: none;
+		background: var(--accent);
+		color: var(--accent-fg);
+		font-weight: 600;
+		cursor: pointer;
+		align-self: flex-end;
+	}
+	#composer button:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+	#stopBtn {
+		background: transparent;
+		border: 1px solid var(--border);
+		color: var(--fg);
+	}
+	.visually-hidden {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		margin: -1px;
+		padding: 0;
+		overflow: hidden;
+		clip: rect(0 0 0 0);
+		white-space: nowrap;
+		border: 0;
+	}
+
+	/* Copy affordance on an assistant reply */
+	.turn .copy {
+		align-self: flex-start;
+		background: none;
+		border: none;
+		color: var(--muted);
+		font-size: 0.75rem;
+		padding: 0.1rem 0.2rem;
+		cursor: pointer;
+		opacity: 0;
+		transition: opacity 0.12s;
+	}
+	.turn:hover .copy, .turn .copy:focus { opacity: 1; }
+
+	/* Markdown produced by renderMarkdown() - a small, escape-first subset */
+	.bubble.assistant p { margin: 0 0 0.6rem; }
+	.bubble.assistant p:last-child { margin-bottom: 0; }
+	.bubble.assistant ul, .bubble.assistant ol { margin: 0 0 0.6rem; padding-left: 1.3rem; }
+	.bubble.assistant h1, .bubble.assistant h2, .bubble.assistant h3 {
+		margin: 0.4rem 0 0.4rem;
+		font-size: 1.02em;
+	}
+	.bubble.assistant code {
+		font-family: var(--font-mono);
+		font-size: 0.88em;
+		background: var(--surface);
+		border-radius: 4px;
+		padding: 0.08em 0.32em;
+	}
+	.bubble.assistant pre {
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: 0.6rem 0.75rem;
+		overflow-x: auto;
+		margin: 0 0 0.6rem;
+	}
+	.bubble.assistant pre code {
+		background: none;
+		border: 0;
+		padding: 0;
+		font-size: 0.85em;
+	}
+	.bubble.assistant a { color: var(--accent); }
+	.hint {
+		color: var(--muted);
+		font-size: 0.8rem;
+		text-align: center;
+		padding: 0.4rem 1rem 0;
+		margin: 0;
+	}
+	/* Human-in-the-loop approval request */
+	.approval {
+		align-self: flex-start;
+		max-width: var(--max-width);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		padding: 0.6rem 0.85rem;
+		background: var(--surface);
+	}
+	.approval-title { font-weight: 600; margin-bottom: 0.35rem; }
+	.approval-action {
+		font-family: var(--font-mono);
+		font-size: 0.8rem;
+		color: var(--muted);
+		word-break: break-all;
+		margin-bottom: 0.2rem;
+	}
+	.approval-buttons { display: flex; gap: 0.4rem; margin-top: 0.5rem; }
+	.approval-buttons button {
+		padding: 0.35rem 0.8rem;
+		border-radius: var(--radius-sm);
+		border: 1px solid var(--border);
+		background: var(--accent);
+		color: var(--accent-fg);
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.approval-buttons button:last-child {
+		background: transparent;
+		color: var(--fg);
+	}
+
+	footer.note {
+		color: var(--muted);
+		font-size: 0.75rem;
+		text-align: center;
+		padding: 0 1rem 0.5rem;
+	}
+
+	/* ---- Shell: sidebar + conversation pane ---------------------------- */
+	.shell {
+		display: flex;
+		flex: 1;
+		min-height: 0;
+	}
+	#main {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		min-width: 0;
+	}
+	#sidebar {
+		width: 15rem;
+		flex-shrink: 0;
+		border-right: 1px solid var(--border);
+		background: var(--surface);
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+	}
+	#sidebar[hidden] { display: none; }
+	#sidebar .sidebar-head {
+		padding: 0.6rem;
+		border-bottom: 1px solid var(--border);
+		flex-shrink: 0;
+	}
+	#sidebar .sidebar-head button {
+		width: 100%;
+		background: var(--accent);
+		color: var(--accent-fg);
+		border: none;
+		border-radius: var(--radius-sm);
+		padding: 0.45rem 0.6rem;
+		cursor: pointer;
+		font-size: 0.85rem;
+		font-family: inherit;
+	}
+	#convList {
+		list-style: none;
+		margin: 0;
+		padding: 0.4rem;
+		overflow-y: auto;
+		flex: 1;
+	}
+	#convList li {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		border-radius: var(--radius-sm);
+		margin-bottom: 0.15rem;
+	}
+	#convList li.active { background: var(--bubble-assistant); }
+	#convList .pick {
+		flex: 1;
+		min-width: 0;
+		text-align: left;
+		background: none;
+		border: none;
+		color: var(--fg);
+		font-family: inherit;
+		font-size: 0.85rem;
+		padding: 0.45rem 0.5rem;
+		cursor: pointer;
+		border-radius: var(--radius-sm);
+	}
+	#convList .pick .name {
+		display: block;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	#convList .pick .count {
+		display: block;
+		font-size: 0.7rem;
+		color: var(--muted);
+	}
+	#convList .row-actions button {
+		background: none;
+		border: none;
+		color: var(--muted);
+		cursor: pointer;
+		font-size: 0.8rem;
+		padding: 0.2rem 0.3rem;
+		border-radius: var(--radius-sm);
+	}
+	#convList .row-actions button:hover { color: var(--fg); }
+	#convList .empty {
+		color: var(--muted);
+		font-size: 0.8rem;
+		padding: 0.5rem;
+	}
+	header .meta {
+		font-size: 0.7rem;
+		color: var(--muted);
+		white-space: nowrap;
+	}
+
+	/* Narrow screens: the sidebar overlays rather than squeezing the transcript. */
+	@media ( max-width: 40rem ) {
+		#sidebar {
+			position: fixed;
+			top: 0;
+			bottom: 0;
+			left: 0;
+			z-index: 20;
+			width: 78vw;
+			max-width: 17rem;
+			box-shadow: 0 0 2rem rgba( 0, 0, 0, 0.35 );
+		}
+		header .meta { display: none; }
+	}
+	@media ( prefers-reduced-motion: reduce ) {
+		* { animation: none !important; transition: none !important; }
+	}
+
+	/* Project override: resources/webui/theme.css, inlined last so it always wins. */
+__CUSTOM_CSS__
+</style>
+</head>
+<body>
+	<header>
+		<div class="brand">
+			__APP_ICON__
+			<div>
+				<h1>__APP_TITLE__</h1>
+				__APP_SUBTITLE__
+			</div>
+		</div>
+		<div class="actions">
+			<span class="meta" id="modelMeta"></span>
+			<button type="button" id="sidebarBtn" aria-expanded="true" aria-controls="sidebar" title="Show or hide conversations">Chats</button>
+			<button type="button" id="clearBtn" title="Delete the messages in this conversation" hidden>Clear</button>
+			<button type="button" id="compactBtn" title="Summarize older messages, keep the recent ones" hidden>Compact</button>
+			<button type="button" id="keyBtn" title="Set the API key this page sends as X-API-Key">Key</button>
+			<button type="button" id="themeBtn" title="Toggle dark/light">Theme</button>
+		</div>
+	</header>
+	<div class="shell">
+		<aside id="sidebar" aria-label="Conversations">
+			<div class="sidebar-head">
+				<button type="button" id="newBtn" title="Start a new conversation">+ New chat</button>
+			</div>
+			<ul id="convList"></ul>
+		</aside>
+		<div id="main">
+			<div id="messages" role="log" aria-live="polite" aria-relevant="additions text" aria-label="Conversation"></div>
+			<p class="hint" id="hint" role="status"></p>
+			<form id="composer" autocomplete="off">
+				<label class="visually-hidden" for="input">Message</label>
+				<textarea id="input" rows="1" placeholder="__PLACEHOLDER__" autofocus></textarea>
+				<button type="submit" id="sendBtn">Send</button>
+				<button type="button" id="stopBtn" hidden>Stop</button>
+			</form>
+			__FOOTER__
+		</div>
+	</div>
+
+<script>
+(function () {
+	"use strict";
+
+	var API_BASE = "__API_BASE__";
+	var SHOW_REASONING = __SHOW_REASONING__;
+	var SHOW_TOOLS = __SHOW_TOOLS__;
+	var WELCOME = "__WELCOME__";
+	var KEY_STORAGE = "bxagents_webui_api_key";
+	var THEME_STORAGE = "bxagents_webui_theme";
+	var CONVERSATION_STORAGE = "bxagents_webui_conversation";
+
+	var messagesEl = document.getElementById( "messages" );
+	var hintEl = document.getElementById( "hint" );
+	var formEl = document.getElementById( "composer" );
+	var inputEl = document.getElementById( "input" );
+	var sendBtn = document.getElementById( "sendBtn" );
+	var stopBtn = document.getElementById( "stopBtn" );
+	var keyBtn = document.getElementById( "keyBtn" );
+	var newBtn = document.getElementById( "newBtn" );
+	var themeBtn = document.getElementById( "themeBtn" );
+	var sidebarBtn = document.getElementById( "sidebarBtn" );
+	var clearBtn = document.getElementById( "clearBtn" );
+	var compactBtn = document.getElementById( "compactBtn" );
+	var sidebarEl = document.getElementById( "sidebar" );
+	var convListEl = document.getElementById( "convList" );
+	var modelMetaEl = document.getElementById( "modelMeta" );
+
+	// What the server says it can do, from GET /info. Read once at load and used
+	// to decide which controls exist at all - a button that would 501 or no-op is
+	// worse than no button.
+	var capabilities = {};
+	var conversations = [];
+	var isBusy = false;
+
+	var activeController = null;
+	// The id the server keys this turn's run by. Sent with the turn so /cancel
+	// and /steer can reach a run that is still in flight - aborting the fetch
+	// alone would leave the server happily finishing (and billing) the turn.
+	var activeThreadId = null;
+
+	function newThreadId() {
+		return ( window.crypto && window.crypto.randomUUID )
+			? window.crypto.randomUUID()
+			: "t-" + Date.now() + "-" + Math.random().toString( 36 ).slice( 2, 10 );
+	}
+
+	/**
+	 * Without a conversationId the agent falls back to "" for BOTH userId and
+	 * conversationId, and every visitor to this page then reads and writes the
+	 * SAME memory bucket - one person's history leaking into the next person's
+	 * turn. A per-browser id keeps conversations apart and survives a reload.
+	 *
+	 * This is isolation, NOT authorization: the id travels from the client, so
+	 * under a single shared API key a caller could present someone else's id.
+	 * Real per-user separation needs real user identity, which this gate does
+	 * not provide - see the security note in the gateways docs.
+	 */
+	function getConversationId() {
+		var id = localStorage.getItem( CONVERSATION_STORAGE );
+		if ( !id ) {
+			id = newConversationId();
+		}
+		return id;
+	}
+
+	function newConversationId() {
+		var id = ( window.crypto && window.crypto.randomUUID )
+			? window.crypto.randomUUID()
+			: "c-" + Date.now() + "-" + Math.random().toString( 36 ).slice( 2, 10 );
+		localStorage.setItem( CONVERSATION_STORAGE, id );
+		return id;
+	}
+
+	/**
+	 * Points the page at a conversation and reloads its transcript.
+	 *
+	 * The id is remembered locally only so a reload reopens the same chat; the
+	 * conversations themselves live in the server's store, which is what the
+	 * sidebar lists.
+	 */
+	function selectConversation( id ) {
+		if ( activeController ) {
+			activeController.abort();
+		}
+		localStorage.setItem( CONVERSATION_STORAGE, id );
+		renderConversations();
+		return rehydrate();
+	}
+
+	function apiGet( path ) {
+		return fetch( API_BASE + path, { headers: authHeaders( {} ) } )
+			.then( function ( res ) { return res.ok ? res.json() : null; } )
+			.catch( function () { return null; } );
+	}
+
+	/**
+	 * Reads GET /info once and shapes the page to it: the model name in the
+	 * header, and a control only where the server says the capability exists.
+	 * capabilities.compact in particular is false whenever no summary model is
+	 * configured, in which case the button would do nothing at all.
+	 */
+	function loadInfo() {
+		return apiGet( "/info" ).then( function ( payload ) {
+			if ( !payload ) {
+				return;
+			}
+			capabilities = payload.capabilities || {};
+			if ( payload.model ) {
+				modelMetaEl.textContent = payload.model;
+			}
+			clearBtn.hidden = false;
+			compactBtn.hidden = !capabilities.compact;
+			sidebarBtn.hidden = !capabilities.conversations;
+			if ( !capabilities.conversations ) {
+				setSidebar( false );
+			}
+		} );
+	}
+
+	function renderConversations() {
+		var current = getConversationId();
+		convListEl.textContent = "";
+
+		if ( !conversations.length ) {
+			var empty = document.createElement( "li" );
+			empty.className = "empty";
+			empty.textContent = "No conversations yet.";
+			convListEl.appendChild( empty );
+			return;
+		}
+
+		conversations.forEach( function ( conv ) {
+			var li = document.createElement( "li" );
+			if ( conv.id === current ) {
+				li.className = "active";
+			}
+
+			var pick = document.createElement( "button" );
+			pick.type = "button";
+			pick.className = "pick";
+			pick.setAttribute( "aria-current", conv.id === current ? "true" : "false" );
+
+			// textContent throughout - a conversation title is whatever the user
+			// typed first, so it must never be parsed as markup.
+			var name = document.createElement( "span" );
+			name.className = "name";
+			name.textContent = conv.title || "Untitled";
+			pick.appendChild( name );
+
+			var count = document.createElement( "span" );
+			count.className = "count";
+			count.textContent = ( conv.messageCount || 0 ) + " messages";
+			pick.appendChild( count );
+
+			pick.addEventListener( "click", function () {
+				selectConversation( conv.id );
+			} );
+			li.appendChild( pick );
+
+			var actions = document.createElement( "span" );
+			actions.className = "row-actions";
+
+			var renameBtn = document.createElement( "button" );
+			renameBtn.type = "button";
+			renameBtn.title = "Rename";
+			renameBtn.textContent = "\u270e";
+			renameBtn.addEventListener( "click", function () {
+				var next = window.prompt( "Rename this conversation", conv.title || "" );
+				if ( next === null || !next.trim() ) {
+					return;
+				}
+				apiPost( "/conversations/rename", { conversationId: conv.id, title: next.trim() } )
+					.then( loadConversations );
+			} );
+			actions.appendChild( renameBtn );
+
+			var delBtn = document.createElement( "button" );
+			delBtn.type = "button";
+			delBtn.title = "Delete";
+			delBtn.textContent = "\u00d7";
+			delBtn.addEventListener( "click", function () {
+				if ( !window.confirm( "Delete this conversation and its messages?" ) ) {
+					return;
+				}
+				apiPost( "/conversations/delete", { conversationId: conv.id } ).then( function () {
+					return loadConversations();
+				} ).then( function () {
+					// Deleting the open chat leaves nothing shown - move to the
+					// newest remaining one, or start fresh if that was the last.
+					if ( conv.id !== getConversationId() ) {
+						return;
+					}
+					if ( conversations.length ) {
+						return selectConversation( conversations[ 0 ].id );
+					}
+					return startConversation();
+				} );
+			} );
+			actions.appendChild( delBtn );
+
+			li.appendChild( actions );
+			convListEl.appendChild( li );
+		} );
+	}
+
+	function loadConversations() {
+		if ( capabilities.conversations === false ) {
+			return Promise.resolve();
+		}
+		return apiGet( "/conversations" ).then( function ( payload ) {
+			conversations = ( payload && payload.conversations ) || [];
+			renderConversations();
+		} );
+	}
+
+	/**
+	 * Starts a conversation server-side and opens it. The id is minted by the
+	 * server so it cannot collide with one that already exists.
+	 */
+	function startConversation() {
+		return apiPost( "/conversations/create", {} )
+			.then( function ( res ) { return res.ok ? res.json() : null; } )
+			.then( function ( payload ) {
+				var id = ( payload && payload.conversationId ) || newConversationId();
+				localStorage.setItem( CONVERSATION_STORAGE, id );
+				return loadConversations().then( function () {
+					messagesEl.textContent = "";
+					showHint( "" );
+					showWelcome();
+					renderConversations();
+					inputEl.focus();
+				} );
+			} );
+	}
+
+	function setSidebar( open ) {
+		sidebarEl.hidden = !open;
+		sidebarBtn.setAttribute( "aria-expanded", open ? "true" : "false" );
+	}
+
+	function getApiKey() {
+		return localStorage.getItem( KEY_STORAGE ) || "";
+	}
+
+	function setApiKey( value ) {
+		if ( value ) {
+			localStorage.setItem( KEY_STORAGE, value );
+		} else {
+			localStorage.removeItem( KEY_STORAGE );
+		}
+	}
+
+	keyBtn.addEventListener( "click", function () {
+		var next = window.prompt( "API key (sent as X-API-Key on every request to " + API_BASE + "). Leave blank to clear.", getApiKey() );
+		if ( next !== null ) {
+			setApiKey( next.trim() );
+		}
+	} );
+
+	function applyTheme( theme ) {
+		if ( theme === "dark" || theme === "light" ) {
+			document.documentElement.setAttribute( "data-theme", theme );
+		} else {
+			document.documentElement.removeAttribute( "data-theme" );
+		}
+	}
+
+	applyTheme( localStorage.getItem( THEME_STORAGE ) );
+
+	themeBtn.addEventListener( "click", function () {
+		var current = document.documentElement.getAttribute( "data-theme" );
+		var prefersDark = window.matchMedia && window.matchMedia( "(prefers-color-scheme: dark)" ).matches;
+		var effectiveIsDark = current ? current === "dark" : prefersDark;
+		var next = effectiveIsDark ? "light" : "dark";
+		// localStorage first so the choice survives even if the request fails,
+		// then the server so it follows the IDENTITY rather than this browser.
+		localStorage.setItem( THEME_STORAGE, next );
+		applyTheme( next );
+		if ( capabilities.preferences !== false ) {
+			apiPost( "/preferences/set", { key: "theme", value: next } ).catch( function () {} );
+		}
+	} );
+
+	/**
+	 * Server-stored preferences win over the local copy: they follow the identity
+	 * across browsers, which is the whole reason they are stored server-side.
+	 */
+	function loadPreferences() {
+		return apiGet( "/preferences" ).then( function ( payload ) {
+			var prefs = ( payload && payload.preferences ) || {};
+			if ( prefs.theme ) {
+				localStorage.setItem( THEME_STORAGE, prefs.theme );
+				applyTheme( prefs.theme );
+			}
+		} );
+	}
+
+	function authHeaders( extra ) {
+		var headers = extra || {};
+		var key = getApiKey();
+		if ( key ) {
+			headers[ "X-API-Key" ] = key;
+		}
+		return headers;
+	}
+
+	function apiPost( path, body ) {
+		return fetch( API_BASE + path, {
+			method : "POST",
+			headers: authHeaders( { "Content-Type": "application/json" } ),
+			body   : JSON.stringify( body || {} )
+		} );
+	}
+
+	/**
+	 * The transcript lives only in the DOM, but the conversation lives in the
+	 * agent's memory on the server. Without this, a reload shows an empty screen
+	 * while the agent still remembers everything - so the page would look blank
+	 * and then answer follow-up questions about messages the user cannot see.
+	 */
+	function rehydrate() {
+		var url = API_BASE + "/history?conversationId=" + encodeURIComponent( getConversationId() );
+		return fetch( url, { headers: authHeaders( {} ) } )
+			.then( function ( res ) { return res.ok ? res.json() : null; } )
+			.then( function ( payload ) {
+				var messages = ( payload && payload.messages ) || [];
+				if ( !messages.length ) {
+					showWelcome();
+					return;
+				}
+				clearWelcome();
+				messages.forEach( function ( message ) {
+					var content = typeof message.content === "string" ? message.content : "";
+					if ( !content.length ) {
+						return;
+					}
+					if ( message.role === "user" ) {
+						addUserBubble( content );
+						return;
+					}
+					if ( message.role === "assistant" ) {
+						var el = document.createElement( "div" );
+						el.className = "bubble assistant";
+						el.innerHTML = renderMarkdown( content );
+						var wrap = document.createElement( "div" );
+						wrap.className = "turn";
+						wrap.appendChild( el );
+						messagesEl.appendChild( wrap );
+					}
+				} );
+				scrollToEnd( true );
+			} )
+			.catch( function () {
+				// A history fetch that fails must never block using the chat
+				showWelcome();
+			} );
+	}
+
+	function showWelcome() {
+		if ( !WELCOME.length ) {
+			return;
+		}
+		var el = document.createElement( "div" );
+		el.className = "welcome";
+		el.id = "welcome";
+		el.textContent = WELCOME;
+		messagesEl.appendChild( el );
+	}
+
+	function clearWelcome() {
+		var el = document.getElementById( "welcome" );
+		if ( el ) {
+			el.remove();
+		}
+	}
+
+	/**
+	 * Only follow the stream when the reader is already at the bottom. Scrolling
+	 * up to re-read something mid-turn should not get yanked back down on the
+	 * next chunk.
+	 */
+	function isPinnedToBottom() {
+		return ( messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight ) < 48;
+	}
+
+	function scrollToEnd( force ) {
+		if ( force || isPinnedToBottom() ) {
+			messagesEl.scrollTop = messagesEl.scrollHeight;
+		}
+	}
+
+	/**
+	 * A deliberately small markdown subset, applied ESCAPE-FIRST: the model's
+	 * text is HTML-escaped before a single tag is introduced, so no output of
+	 * the model can ever become live markup. Only the constructs below are then
+	 * re-introduced, and nothing accepts arbitrary attributes.
+	 */
+	function renderMarkdown( text ) {
+		var slots = [];
+
+		function stash( html ) {
+			slots.push( html );
+			return "&" + ( slots.length - 1 ) + "&";
+		}
+
+		var out = text
+			.replace( /&/g, "&amp;" )
+			.replace( /</g, "&lt;" )
+			.replace( />/g, "&gt;" );
+
+		// Fenced code first, so nothing inside it is treated as markdown
+		out = out.replace( /```[ \t]*([\w+-]*)\n([\s\S]*?)(?:```|$)/g, function ( _m, _lang, body ) {
+			return stash( "<pre><code>" + body.replace( /\n$/, "" ) + "</code></pre>" );
+		} );
+		out = out.replace( /`([^`\n]+)`/g, function ( _m, body ) {
+			return stash( "<code>" + body + "</code>" );
+		} );
+
+		// Links: only http(s) and mailto, never javascript:
+		out = out.replace( /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)/g, function ( _m, label, href ) {
+			return stash( '<a href="' + href + '" target="_blank" rel="noopener noreferrer">' + label + "</a>" );
+		} );
+
+		out = out.replace( /\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>" );
+		out = out.replace( /(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>" );
+
+		// Block structure, line by line
+		var lines = out.split( "\n" );
+		var html = "";
+		var listType = null;
+
+		function closeList() {
+			if ( listType ) {
+				html += "</" + listType + ">";
+				listType = null;
+			}
+		}
+
+		for ( var i = 0; i < lines.length; i++ ) {
+			var line = lines[ i ];
+			var heading = line.match( /^(##?#?)\s+(.*)$/ );
+			var bullet = line.match( /^[-*+]\s+(.*)$/ );
+			var numbered = line.match( /^\d+\.\s+(.*)$/ );
+
+			if ( heading ) {
+				closeList();
+				var level = heading[ 1 ].length;
+				html += "<h" + level + ">" + heading[ 2 ] + "</h" + level + ">";
+			} else if ( bullet ) {
+				if ( listType !== "ul" ) { closeList(); html += "<ul>"; listType = "ul"; }
+				html += "<li>" + bullet[ 1 ] + "</li>";
+			} else if ( numbered ) {
+				if ( listType !== "ol" ) { closeList(); html += "<ol>"; listType = "ol"; }
+				html += "<li>" + numbered[ 1 ] + "</li>";
+			} else if ( !line.trim().length ) {
+				closeList();
+			} else {
+				closeList();
+				html += "<p>" + line + "</p>";
+			}
+		}
+		closeList();
+
+		// Put the stashed blocks back, now that no further rules will touch them
+		return html.replace( /&(\d+)&/g, function ( _m, index ) {
+			return slots[ Number( index ) ];
+		} );
+	}
+
+	function addUserBubble( text ) {
+		var el = document.createElement( "div" );
+		el.className = "bubble user";
+		el.textContent = text;
+		messagesEl.appendChild( el );
+		scrollToEnd( true );
+	}
+
+	function addErrorBubble( text ) {
+		var el = document.createElement( "div" );
+		el.className = "bubble error";
+		el.textContent = text;
+		messagesEl.appendChild( el );
+		scrollToEnd( true );
+	}
+
+	/**
+	 * One assistant turn: an optional reasoning disclosure, zero or more tool
+	 * disclosures, and the answer bubble. Built lazily so a turn with no
+	 * reasoning and no tools renders exactly like a plain chat reply.
+	 */
+	function createTurn() {
+		var root = document.createElement( "div" );
+		root.className = "turn";
+
+		var bubble = document.createElement( "div" );
+		bubble.className = "bubble assistant pending";
+		root.appendChild( bubble );
+		messagesEl.appendChild( root );
+		scrollToEnd( true );
+
+		var reasoningEl = null;
+		var reasoningBody = null;
+		var toolEls = {};
+		var answer = "";
+
+		return {
+			appendContent: function ( text ) {
+				// Re-render the whole accumulated answer each chunk: markdown is
+				// block-structured, so a fence or list only becomes meaningful once
+				// its later lines arrive - appending per chunk cannot work.
+				answer += text;
+				bubble.innerHTML = renderMarkdown( answer );
+				scrollToEnd();
+			},
+			appendReasoning: function ( text ) {
+				if ( !SHOW_REASONING ) {
+					return;
+				}
+				if ( !reasoningEl ) {
+					reasoningEl = document.createElement( "details" );
+					reasoningEl.className = "trace reasoning";
+					var summary = document.createElement( "summary" );
+					summary.textContent = "Thinking";
+					reasoningEl.appendChild( summary );
+					reasoningBody = document.createElement( "div" );
+					reasoningBody.className = "body";
+					reasoningEl.appendChild( reasoningBody );
+					root.insertBefore( reasoningEl, bubble );
+				}
+				reasoningBody.textContent += text;
+				scrollToEnd();
+			},
+			/**
+			 * Tool-call arguments arrive as partial JSON fragments across many
+			 * chunks, keyed by index - accumulate per index rather than assuming
+			 * any single chunk carries a complete call.
+			 */
+			upsertToolCall: function ( index, name, argsFragment ) {
+				if ( !SHOW_TOOLS ) {
+					return;
+				}
+				var entry = toolEls[ index ];
+				if ( !entry ) {
+					var el = document.createElement( "details" );
+					el.className = "trace tool";
+					var summary = document.createElement( "summary" );
+					var label = document.createElement( "span" );
+					label.textContent = name || "tool";
+					var status = document.createElement( "span" );
+					status.className = "status";
+					status.textContent = "calling…";
+					summary.appendChild( label );
+					summary.appendChild( status );
+					el.appendChild( summary );
+					var body = document.createElement( "div" );
+					body.className = "body";
+					el.appendChild( body );
+					root.insertBefore( el, bubble );
+					entry = { el: el, label: label, status: status, body: body, args: "" };
+					toolEls[ index ] = entry;
+				}
+				if ( name && name.length ) {
+					entry.label.textContent = name;
+				}
+				if ( argsFragment && argsFragment.length ) {
+					entry.args += argsFragment;
+					entry.body.textContent = entry.args;
+				}
+				scrollToEnd();
+			},
+			settle: function ( sawContent ) {
+				bubble.classList.remove( "pending" );
+				Object.keys( toolEls ).forEach( function ( key ) {
+					toolEls[ key ].status.textContent = "called";
+				} );
+				if ( !sawContent && !answer.length ) {
+					bubble.textContent = "(no response)";
+					return;
+				}
+
+				// Copy yields the ORIGINAL markdown, not the rendered text - that's
+				// what someone pasting a code block actually wants back.
+				var copyBtn = document.createElement( "button" );
+				copyBtn.type = "button";
+				copyBtn.className = "copy";
+				copyBtn.textContent = "Copy";
+				copyBtn.addEventListener( "click", function () {
+					navigator.clipboard.writeText( answer ).then( function () {
+						copyBtn.textContent = "Copied";
+						setTimeout( function () { copyBtn.textContent = "Copy"; }, 1200 );
+					} );
+				} );
+				root.appendChild( copyBtn );
+			},
+			discard: function () {
+				root.remove();
+			}
+		};
+	}
+
+	/**
+	 * While a turn runs, Send becomes Steer rather than being disabled - the
+	 * composer stays usable on purpose, because steering mid-run is the point.
+	 * isBusy is a real variable rather than being read back off the button's
+	 * disabled state, since a disabled button could not be clicked to steer.
+	 */
+	function setBusy( busy ) {
+		isBusy = busy;
+		sendBtn.textContent = busy ? "Steer" : "Send";
+		sendBtn.title = busy
+			? "Add a message to the turn already running"
+			: "";
+		stopBtn.hidden = !busy;
+	}
+
+	function showHint( text ) {
+		hintEl.textContent = text || "";
+	}
+
+	/**
+	 * ColdBox's toAi() /stream forwards each bx-ai chunk VERBATIM - see
+	 * Router.cfc's `emitter.send( chunk, "chunk" )` - so every frame carries the
+	 * full normalized envelope, not a token wrapper:
+	 *
+	 *   { object: "chat.completion.chunk",
+	 *     choices: [ { delta: { content, reasoning, tool_calls } } ] }
+	 *
+	 * terminated by a `data: [DONE]` frame. (ColdBox's published AI Routing docs
+	 * show a `{"token":"..."}` shape - that page does not match its own source.)
+	 *
+	 * Only `data:` lines are read; the `event:` name each frame also carries is
+	 * not needed to tell the frames apart.
+	 */
+	function handleSseChunk( raw, handlers ) {
+		var lines = raw.split( "\n" );
+		for ( var i = 0; i < lines.length; i++ ) {
+			var line = lines[ i ];
+			if ( line.indexOf( "data:" ) !== 0 ) {
+				continue;
+			}
+			var payload = line.slice( 5 ).trim();
+			if ( !payload.length ) {
+				continue;
+			}
+			if ( payload === "[DONE]" ) {
+				return true;
+			}
+
+			var parsed;
+			try {
+				parsed = JSON.parse( payload );
+			} catch ( e ) {
+				continue; // Not a JSON frame - ignore rather than break the stream.
+			}
+
+			// A suspended tool call (human-in-the-loop) arrives as a sentinel
+			// chunk with a `type`, not as a delta. Surface it instead of
+			// silently rendering nothing.
+			if ( parsed && parsed.type === "middleware_stop" ) {
+				handlers.onNotice( "The agent paused for human approval." );
+				continue;
+			}
+
+			var choice = parsed && parsed.choices && parsed.choices[ 0 ];
+			var delta = choice && choice.delta;
+			if ( !delta ) {
+				continue;
+			}
+
+			if ( typeof delta.content === "string" && delta.content.length ) {
+				handlers.onContent( delta.content );
+			}
+			if ( typeof delta.reasoning === "string" && delta.reasoning.length ) {
+				handlers.onReasoning( delta.reasoning );
+			}
+			if ( Array.isArray( delta.tool_calls ) ) {
+				delta.tool_calls.forEach( function ( call, position ) {
+					var fn = call.function || {};
+					var index = typeof call.index === "number" ? call.index : position;
+					handlers.onToolCall( index, fn.name || "", fn.arguments || "" );
+				} );
+			}
+		}
+		return false;
+	}
+
+	function streamInto( path, payload, turn ) {
+		var headers = authHeaders( { "Content-Type": "application/json", "Accept": "text/event-stream" } );
+
+		activeController = new AbortController();
+
+		return fetch( API_BASE + path, {
+			method: "POST",
+			headers: headers,
+			signal: activeController.signal,
+			body: JSON.stringify( payload )
+		} ).then( function ( res ) {
+			if ( res.status === 401 ) {
+				throw new Error( "Unauthorized - set the API key via the \"Key\" button, then try again." );
+			}
+			if ( !res.ok || !res.body ) {
+				throw new Error( "Request failed (HTTP " + res.status + ")" );
+			}
+
+			var reader = res.body.getReader();
+			var decoder = new TextDecoder();
+			var buffer = "";
+			var sawContent = false;
+			var suspended = false;
+
+			var handlers = {
+				onContent: function ( chunk ) {
+					sawContent = true;
+					turn.appendContent( chunk );
+				},
+				onReasoning: function ( chunk ) {
+					turn.appendReasoning( chunk );
+				},
+				onToolCall: function ( index, name, args ) {
+					turn.upsertToolCall( index, name, args );
+				},
+				onNotice: function () {
+					// A suspension carries no detail on the wire - remember it and
+					// ask /pending once the stream closes.
+					suspended = true;
+				}
+			};
+
+			function pump() {
+				return reader.read().then( function ( result ) {
+					if ( result.done ) {
+						return { sawContent: sawContent, suspended: suspended };
+					}
+					buffer += decoder.decode( result.value, { stream: true } );
+					var lastBreak = buffer.lastIndexOf( "\n\n" );
+					var completeChunk = lastBreak >= 0 ? buffer.slice( 0, lastBreak ) : buffer;
+					buffer = lastBreak >= 0 ? buffer.slice( lastBreak + 2 ) : "";
+
+					if ( handleSseChunk( completeChunk, handlers ) ) {
+						return { sawContent: sawContent, suspended: suspended };
+					}
+					return pump();
+				} );
+			}
+
+			return pump();
+		} );
+	}
+
+	/**
+	 * The agent paused for human approval. The stream said only that it stopped,
+	 * so ask /pending for what is actually being requested, then let the user
+	 * answer it - /resume streams the CONTINUATION of the same turn, so the
+	 * answer lands in the conversation rather than starting a new one.
+	 */
+	function offerApproval( turn, threadId ) {
+		return fetch( API_BASE + "/pending?threadId=" + encodeURIComponent( threadId ), { headers: authHeaders( {} ) } )
+			.then( function ( res ) { return res.ok ? res.json() : null; } )
+			.then( function ( payload ) {
+				if ( !payload || !payload.pending ) {
+					showHint( "The agent paused, but no pending approval was found." );
+					return;
+				}
+
+				var actions = payload.pendingActions || [];
+				var card = document.createElement( "div" );
+				card.className = "approval";
+
+				var title = document.createElement( "div" );
+				title.className = "approval-title";
+				title.textContent = actions.length === 1
+					? "Approve this action?"
+					: "Approve " + actions.length + " actions?";
+				card.appendChild( title );
+
+				actions.forEach( function ( action ) {
+					var row = document.createElement( "div" );
+					row.className = "approval-action";
+					row.textContent = ( action.name || action.tool || "action" )
+						+ ( action.arguments ? " " + ( typeof action.arguments === "string" ? action.arguments : JSON.stringify( action.arguments ) ) : "" );
+					card.appendChild( row );
+				} );
+
+				var buttons = document.createElement( "div" );
+				buttons.className = "approval-buttons";
+				[ [ "Approve", "approve" ], [ "Reject", "reject" ] ].forEach( function ( pair ) {
+					var btn = document.createElement( "button" );
+					btn.type = "button";
+					btn.textContent = pair[ 0 ];
+					btn.addEventListener( "click", function () {
+						card.remove();
+						setBusy( true );
+						var next = createTurn();
+						streamInto( "/resume", { threadId: threadId, decision: pair[ 1 ] }, next )
+							.then( function ( outcome ) { next.settle( outcome.sawContent ); } )
+							.catch( function ( err ) {
+								next.discard();
+								addErrorBubble( err.message || "Could not resume." );
+							} )
+							.finally( function () {
+								activeController = null;
+								setBusy( false );
+								inputEl.focus();
+							} );
+					} );
+					buttons.appendChild( btn );
+				} );
+				card.appendChild( buttons );
+
+				messagesEl.appendChild( card );
+				scrollToEnd( true );
+			} )
+			.catch( function () {
+				showHint( "The agent paused for approval, but the request could not be read." );
+			} );
+	}
+
+	formEl.addEventListener( "submit", function ( evt ) {
+		evt.preventDefault();
+		var text = inputEl.value.trim();
+		if ( !text ) {
+			return;
+		}
+
+		// A turn is already running: this is a STEER, not a new turn. bx-ai
+		// splices the message into the run in flight at its next checkpoint, so
+		// the answer continues rather than restarting - which is why the composer
+		// stays usable while streaming instead of being disabled.
+		if ( isBusy && activeThreadId ) {
+			var steering = activeThreadId;
+			inputEl.value = "";
+			autoGrow();
+			addUserBubble( text );
+			apiPost( "/steer", { threadId: steering, input: text } )
+				.then( function ( res ) {
+					showHint( res.ok
+						? "Steered - the agent will pick this up at its next step."
+						: "Could not steer this run." );
+				} )
+				.catch( function () {
+					showHint( "Could not steer this run." );
+				} );
+			return;
+		}
+
+		clearWelcome();
+		addUserBubble( text );
+		inputEl.value = "";
+		autoGrow();
+		setBusy( true );
+		showHint( "" );
+
+		activeThreadId = newThreadId();
+		var turn = createTurn();
+
+		var payload = {
+			input  : text,
+			options: {
+				conversationId: getConversationId(),
+				threadId      : activeThreadId
+			}
+		};
+
+		streamInto( "/stream", payload, turn ).then( function ( outcome ) {
+			turn.settle( outcome.sawContent );
+			if ( outcome.suspended ) {
+				return offerApproval( turn, activeThreadId );
+			}
+		} ).catch( function ( err ) {
+			// An abort is the user pressing Stop, not a failure - keep whatever
+			// already streamed instead of throwing the partial answer away.
+			if ( err && err.name === "AbortError" ) {
+				turn.settle( true );
+				showHint( "Stopped." );
+				return;
+			}
+			turn.discard();
+			addErrorBubble( err.message || "Something went wrong." );
+		} ).finally( function () {
+			activeController = null;
+			activeThreadId = null;
+			setBusy( false );
+			inputEl.focus();
+			// The turn moved this conversation to the top of the list, and may
+			// have just given it its title.
+			loadConversations();
+		} );
+	} );
+
+	stopBtn.addEventListener( "click", function () {
+		// Tell the SERVER to stop first - bx-ai signals the run at its next
+		// checkpoint, so tools stop firing and tokens stop being spent. Aborting
+		// the fetch only stops us listening. Abort regardless of the outcome so
+		// Stop always stops the UI.
+		var body = { threadId: activeThreadId, reason: "Stopped by the user." };
+		apiPost( "/cancel", body ).catch( function () {} ).finally( function () {
+			if ( activeController ) {
+				activeController.abort();
+			}
+		} );
+	} );
+
+	// Enter sends, Shift+Enter makes a newline - the convention every chat UI uses.
+	inputEl.addEventListener( "keydown", function ( evt ) {
+		if ( evt.key === "Enter" && !evt.shiftKey ) {
+			evt.preventDefault();
+			formEl.requestSubmit ? formEl.requestSubmit() : formEl.dispatchEvent( new Event( "submit", { cancelable: true } ) );
+		}
+	} );
+
+	function autoGrow() {
+		inputEl.style.height = "auto";
+		inputEl.style.height = Math.min( inputEl.scrollHeight, 144 ) + "px";
+	}
+	inputEl.addEventListener( "input", autoGrow );
+
+	newBtn.addEventListener( "click", function () {
+		if ( activeController ) {
+			activeController.abort();
+		}
+		// The previous conversation stays on the server under its own id and in
+		// the sidebar. "New" is not "delete".
+		startConversation();
+	} );
+
+	sidebarBtn.addEventListener( "click", function () {
+		setSidebar( sidebarEl.hidden );
+	} );
+
+	clearBtn.addEventListener( "click", function () {
+		if ( !window.confirm( "Delete the messages in this conversation? The conversation itself stays." ) ) {
+			return;
+		}
+		apiPost( "/clear", { options: { conversationId: getConversationId() } } )
+			.then( function () {
+				messagesEl.textContent = "";
+				showHint( "Conversation cleared." );
+				showWelcome();
+				return loadConversations();
+			} )
+			.catch( function () {
+				showHint( "Could not clear the conversation." );
+			} );
+	} );
+
+	compactBtn.addEventListener( "click", function () {
+		showHint( "Compacting..." );
+		apiPost( "/compact", { options: { conversationId: getConversationId() } } )
+			.then( function ( res ) { return res.ok ? res.json() : null; } )
+			.then( function ( payload ) {
+				if ( !payload ) {
+					showHint( "Compaction failed." );
+					return;
+				}
+				if ( !payload.compacted ) {
+					// Not an error: too few messages to be worth summarizing.
+					showHint( "Nothing to compact yet (" + payload.before + " messages)." );
+					return;
+				}
+				showHint( "Compacted " + payload.before + " messages down to " + payload.after + "." );
+				return rehydrate().then( loadConversations );
+			} )
+			.catch( function () {
+				showHint( "Compaction failed." );
+			} );
+	} );
+
+	// Boot: capabilities first, since they decide which controls exist, then the
+	// conversation list and the transcript. Preferences are independent, so they
+	// load alongside rather than blocking the chat.
+	loadInfo()
+		.then( loadPreferences )
+		.then( loadConversations )
+		.then( function () {
+			// A remembered conversation that no longer exists server-side (deleted
+			// from another tab, or a fresh store) would rehydrate to nothing and
+			// leave the sidebar with no active row. Fall back to the newest one.
+			var current = getConversationId();
+			var known = conversations.some( function ( c ) { return c.id === current; } );
+			if ( !known && conversations.length ) {
+				return selectConversation( conversations[ 0 ].id );
+			}
+			return rehydrate();
+		} );
+} )();
+</script>
+</body>
+</html>
