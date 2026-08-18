@@ -18,28 +18,67 @@
 	 * readable from outside the request and pins that down. The orchestrator
 	 * prints it on timeout. Cheap, and the only way to see inside a request
 	 * that never returns.
+	 *
+	 * Three rules below are load-bearing, each one paid for by a wasted CI
+	 * cycle. See docs/known-limitations.md.
+	 *
+	 * 1. APPEND ONLY, NEVER TRUNCATE. This page used to open with
+	 *    fileWrite( progressFile, "" ), and the orchestrator used to retry the
+	 *    request once a second - so a later attempt truncated away everything
+	 *    the hung earlier attempt had recorded, and the markers came back
+	 *    EMPTY, saying nothing at all. The orchestrator now clears the file
+	 *    once before its single request, and every write here is an append.
+	 *
+	 * 2. THE WORK LIVES IN A NAMED FUNCTION, not at the top level. A try/catch
+	 *    written directly at the top level of a script has produced
+	 *    `java.lang.VerifyError: Inconsistent stackmap frames` in this project
+	 *    before; wrapping it in a function is the known-good shape.
+	 *
+	 * 3. NOTHING CLOSES OVER AN UNSCOPED OUTER VARIABLE. The progress path is
+	 *    passed in as an argument. Diagnostics that can themselves fail are
+	 *    worse than no diagnostics, because they fail silently and replace the
+	 *    fault they exist to describe.
 	 */
-	progressFile = expandPath( "/" ) & "runner-progress.txt";
-
-	function mark( required string stage ) {
-		fileAppend( progressFile, "[#dateTimeFormat( now(), 'HH:nn:ss' )#] #arguments.stage##chr(10)#" );
+	string function markProgress( required string progressFile, required string attemptID, required string stage ) {
+		fileAppend(
+			arguments.progressFile,
+			"[#dateTimeFormat( now(), 'HH:nn:ss' )#] #arguments.attemptID# #arguments.stage##chr( 10 )#"
+		);
+		return arguments.stage;
 	}
 
-	fileWrite( progressFile, "" );
-	mark( "page entered" );
+	string function runIntegrationSpecs( required string progressFile, required string attemptID ) {
+		try {
+			markProgress( arguments.progressFile, arguments.attemptID, "constructing TestBox over tests.specs.integration.coldbox" );
+			var testbox = new testbox.system.TestBox( directory = { mapping: "tests.specs.integration.coldbox", recurse: true } );
 
-	mark( "constructing TestBox over tests.specs.integration.coldbox" );
-	testbox = new testbox.system.TestBox( directory = { mapping: "tests.specs.integration.coldbox", recurse: true } );
+			markProgress( arguments.progressFile, arguments.attemptID, "running specs" );
+			var results = testbox.runRaw();
 
-	mark( "running specs" );
-	results = testbox.runRaw();
+			markProgress( arguments.progressFile, arguments.attemptID, "building JSON report" );
+			var jsonReporter = new testbox.system.reports.JSONReporter();
+			return jsonReporter.runReport( results, testbox, {}, true );
+		} catch ( any e ) {
+			// Without this, an exception reaches the orchestrator as a bare
+			// "HTTP 500" with no cause anywhere. Record it alongside the
+			// markers, then rethrow so the run still fails.
+			markProgress(
+				arguments.progressFile,
+				arguments.attemptID,
+				"THREW #e.type#: #e.message# #( e.detail ?: '' )##chr( 10 )##( e.stackTrace ?: '' )#"
+			);
+			rethrow;
+		}
+	}
 
-	mark( "building JSON report" );
-	jsonReporter = new testbox.system.reports.JSONReporter();
-	jsonReport   = jsonReporter.runReport( results, testbox, {}, true );
+	progressFile = expandPath( "/" ) & "runner-progress.txt";
+	attemptID    = createUUID();
 
-	mark( "writing response" );
+	markProgress( progressFile, attemptID, "page entered" );
+	jsonReport = runIntegrationSpecs( progressFile, attemptID );
+
+	markProgress( progressFile, attemptID, "writing response" );
 	bx:header name="Content-Type" value="application/json";
 	writeOutput( jsonReport );
-	mark( "done" );
+	markProgress( progressFile, attemptID, "done" );
 </bx:script>

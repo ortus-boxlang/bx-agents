@@ -128,6 +128,9 @@ jobs:
       # Nothing else proves the app actually boots, that WireBox resolves
       # ChatDb/qb, or that bx-sqlite's driver is real.
       - name: Run ColdBox Integration Suite (real boot + real SQLite)
+        # Bounded explicitly: this step boots a real server and drives it over
+        # HTTP, so a hang here would otherwise sit on the job's 6h default.
+        timeout-minutes: 20
         run: ./gradlew testColdBoxIntegration --stacktrace --console=plain
 
       - name: Dump the generated app on integration failure
@@ -142,6 +145,11 @@ jobs:
           cat tests/.coldbox-app/.build/app/config/ColdBox.bx 2>/dev/null || true
           echo "=== models/ChatDb.bx ==="
           cat tests/.coldbox-app/.build/app/models/ChatDb.bx 2>/dev/null || true
+          # Where the TestBox runner page got to before it stopped. The
+          # orchestrator prints this too, but it only reaches that branch if it
+          # got far enough - this copy survives any failure mode.
+          echo "=== runner progress markers ==="
+          cat tests/.coldbox-app/.build/app/runner-progress.txt 2>/dev/null || echo "(no progress file)"
 
       - name: Verify examples/ build
         run: ./gradlew verifyExamples --stacktrace --console=plain

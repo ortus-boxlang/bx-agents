@@ -149,23 +149,44 @@ try {
 		)
 	}
 
-	runnerUrl = "http://127.0.0.1:#port#/runner-coldbox.bxm"
-	deadline  = getTickCount() + 90000
-	report    = ""
-	lastError = ""
+	// ------------------------------------------------------------------
+	// 3. Run the specs. ONE request, no retry loop.
+	//
+	// This used to poll the runner once a second until a 90s deadline, which
+	// was wrong twice over. The health probe above has already proven the
+	// server is up and serving real ColdBox routes, so there is nothing left
+	// for a retry to wait for. And the runner page is not idempotent or cheap
+	// - it boots TestBox and runs every integration spec - so retrying it
+	// stacks concurrent full test runs onto a MiniServer worker pool that has
+	// only a handful of threads, which is a way to CAUSE a hang, not to
+	// recover from one. It also destroyed the only evidence: each attempt
+	// re-truncated runner-progress.txt, so the markers the first (hung)
+	// attempt wrote were wiped by the attempts that followed, and the
+	// diagnostics printed an empty file.
+	//
+	// The marker file is cleared here, once, instead - the page only ever
+	// appends to it.
+	// ------------------------------------------------------------------
+	runnerUrl    = "http://127.0.0.1:#port#/runner-coldbox.bxm"
+	progressPath = buildResult.appDir & "/runner-progress.txt"
+	report       = ""
+	lastError    = ""
 
-	while ( getTickCount() < deadline ) {
-		try {
-			bx:http url=runnerUrl method="GET" result="httpResult" timeout=60 {}
-			if ( httpResult.status_code == 200 && len( trim( httpResult.fileContent ) ) ) {
-				report = httpResult.fileContent
-				break
-			}
-			lastError = "HTTP #httpResult.status_code#"
-		} catch ( any e ) {
-			lastError = e.message
+	fileWrite( progressPath, "" )
+
+	try {
+		bx:http url=runnerUrl method="GET" result="httpResult" timeout=300 {}
+		if ( httpResult.status_code == 200 && len( trim( httpResult.fileContent ) ) ) {
+			report = httpResult.fileContent
+		} else {
+			// Built up in steps: nested double quotes inside a #...#
+			// interpolation inside a double-quoted string is a parse hazard
+			// this project has already been bitten by.
+			errorBody = left( trim( httpResult.fileContent ?: '' ), 2000 )
+			lastError = "HTTP #httpResult.status_code#: #errorBody#"
 		}
-		sleep( 1000 )
+	} catch ( any e ) {
+		lastError = e.message
 	}
 
 	if ( !len( report ) ) {
@@ -176,7 +197,6 @@ try {
 		// "Scope [local] is not available in this context", which is exactly
 		// how this diagnostic block failed on its first run: it crashed before
 		// printing the markers it exists to print.
-		progressPath = buildResult.appDir & "/runner-progress.txt"
 		println( "" )
 		println( "--- runner progress markers ---" )
 		try {
