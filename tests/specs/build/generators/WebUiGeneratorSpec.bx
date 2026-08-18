@@ -769,6 +769,9 @@ class extends="testbox.system.BaseSpec" {
 				// silently never ran, and ChatDb migrating in its own init made
 				// the users table appear anyway - which looked like success.
 				expect( result.webUiSeedStatement ).toInclude( 'getInstance( "UserSeeder" ).seed()' );
+				// Never fatal: seeding runs on the boot path, and a failure there
+				// must degrade to "cannot sign in", not "the app is down"
+				expect( result.webUiSeedStatement ).toInclude( "catch ( any e )" );
 				expect( result.webUiLoginGateName ).toBe( "WebUiLoginGate" );
 
 				for ( var generated in [

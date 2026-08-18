@@ -92,7 +92,10 @@ class {
 			fileWrite( modelDir & "/UserSeeder.bx", renderUserSeeder( users ) )
 			// Runs from onApplicationStart(), where "after ColdBox is loaded" is
 			// a fact rather than an assumption about interceptor ordering.
-			seedStatement = 'application.cbController.getWireBox().getInstance( "UserSeeder" ).seed()'
+			// Wrapped: seeding runs on the boot path, so an exception here would
+			// stop the app serving at all. An account that fails to seed must
+			// degrade to "cannot sign in", never to "the app is down".
+			seedStatement = 'try { application.cbController.getWireBox().getInstance( "UserSeeder" ).seed() } catch ( any e ) { writeLog( text : "Web UI account seeding failed: " & e.message, type : "error", file : "webui-auth" ) }'
 
 			loginGateName = "WebUiLoginGate"
 			fileWrite( interceptorDir & "/#loginGateName#.bx", renderLoginGate( userEntries ) )
@@ -1489,8 +1492,19 @@ class {
 			'	property name="wirebox" inject="wirebox";',
 			"",
 			"	void function seed() {",
+			"		// Step markers. This runs on the boot path, so a hang here means the",
+			"		// app never serves at all - and a 408 on a health probe says nothing",
+			"		// about WHERE it stopped. Cheap, and the only way to see inside a",
+			"		// startup that never finishes. CI prints this file on failure.",
+			'		var progress = expandPath( "/" ) & "seed-progress.txt"',
+			'		fileAppend( progress, "[" & dateTimeFormat( now(), "HH:mm:ss" ) & "] seed() entered" & char( 10 ) )',
+			"",
 			'		var db = wirebox.getInstance( "ChatDb" )',
+			'		fileAppend( progress, "[" & dateTimeFormat( now(), "HH:mm:ss" ) & "] resolved ChatDb" & char( 10 ) )',
+			"",
 			'		var hasher = wirebox.getInstance( "PasswordHasher" )',
+			'		fileAppend( progress, "[" & dateTimeFormat( now(), "HH:mm:ss" ) & "] resolved PasswordHasher" & char( 10 ) )',
+			"",
 			"		var configured = []",
 			""
 		]
@@ -1498,6 +1512,7 @@ class {
 		for ( var user in arguments.users ) {
 			lines.append( "		// ---- #user.username# ----" )
 			lines.append( "		configured.append( #renderLiteral( user.username )# )" )
+			lines.append( '		fileAppend( progress, "[" & dateTimeFormat( now(), "HH:mm:ss" ) & "] upserting #user.username#" & char( 10 ) )' )
 
 			if ( len( user.passwordHash ) ) {
 				// A pre-hashed value needs no work at boot and no environment.
@@ -1535,10 +1550,14 @@ class {
 			lines.append( "" )
 		}
 
+		lines.append( '		fileAppend( progress, "[" & dateTimeFormat( now(), "HH:mm:ss" ) & "] upserts done, deactivating" & char( 10 ) )' )
+		lines.append( "" )
 		lines.append( "		// Anyone no longer in config loses access on this boot." )
 		lines.append( "		db.deactivateUsersNotIn( configured )" )
+		lines.append( '		fileAppend( progress, "[" & dateTimeFormat( now(), "HH:mm:ss" ) & "] deactivate done" & char( 10 ) )' )
 		lines.append( "" )
 		lines.append( '		writeLog( text : "Web UI accounts reconciled: " & configured.len() & " configured", type : "information", file : "webui-auth" )' )
+		lines.append( '		fileAppend( progress, "[" & dateTimeFormat( now(), "HH:mm:ss" ) & "] seed() complete" & char( 10 ) )' )
 		lines.append( "	}" )
 		lines.append( "" )
 		lines.append( "}" )
