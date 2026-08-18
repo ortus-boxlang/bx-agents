@@ -8,43 +8,128 @@
 	 * session (a bare CLI script has no `cgi` scope at all, which ColdBox's
 	 * RoutingService needs even just to load the router at startup).
 	 *
-	 * Outputs the same TestBox JSON report shape runTests.bxs writes to disk,
-	 * as the raw HTTP response body, for the calling orchestration script to
-	 * fetch and parse.
+	 * Outputs a JSON report in the shape runColdBoxIntegrationTests.bxs
+	 * parses, as the raw HTTP response body.
+	 *
+	 * WHY NOT TestBox's own JSONReporter: it serializes the whole result
+	 * memento, and these specs resolve real ColdBox/WireBox/qb singletons.
+	 * Those live objects reach the serializer, which reflects over them
+	 * (`StructUtil.objectToStruct` -> `DynamicInteropService.getMethodNames`)
+	 * and follows their cyclic references until the JVM throws
+	 * StackOverflowError - confirmed in CI, after the specs themselves had
+	 * already run green. So the report is assembled here from scalars only:
+	 * every value written into it is forced through toScalar() below, so no
+	 * object can get into it no matter what a spec leaves behind.
 	 *
 	 * PROGRESS MARKERS: each stage appends to runner-progress.txt before it
-	 * starts. When this page hangs the response never arrives, so the log says
-	 * only "never responded" and nothing about where it stopped - the file is
-	 * readable from outside the request and pins that down. The orchestrator
-	 * prints it on timeout. Cheap, and the only way to see inside a request
-	 * that never returns.
+	 * starts. When this page fails or hangs the response body may never
+	 * arrive, so the file is the only record of how far it got. The
+	 * orchestrator prints it, and CI dumps it too.
 	 *
-	 * Three rules below are load-bearing, each one paid for by a wasted CI
-	 * cycle. See docs/known-limitations.md.
+	 * Four rules below are load-bearing, each paid for by a CI cycle. See
+	 * docs/known-limitations.md.
 	 *
-	 * 1. APPEND ONLY, NEVER TRUNCATE. This page used to open with
-	 *    fileWrite( progressFile, "" ), and the orchestrator used to retry the
-	 *    request once a second - so a later attempt truncated away everything
-	 *    the hung earlier attempt had recorded, and the markers came back
-	 *    EMPTY, saying nothing at all. The orchestrator now clears the file
-	 *    once before its single request, and every write here is an append.
+	 * 1. `char()`, NEVER `chr()`. `chr()` does not exist in BoxLang, in any
+	 *    context. It parses fine and throws at runtime, so it survives
+	 *    review - this page 500'd on every request because of one `chr( 10 )`.
 	 *
-	 * 2. THE WORK LIVES IN A NAMED FUNCTION, not at the top level. A try/catch
-	 *    written directly at the top level of a script has produced
-	 *    `java.lang.VerifyError: Inconsistent stackmap frames` in this project
-	 *    before; wrapping it in a function is the known-good shape.
+	 * 2. `HH:mm:ss`, NEVER `HH:nn:ss`. In a BoxLang time mask `nn` is
+	 *    NANOSECONDS, not minutes, and silently emits timestamps like
+	 *    `02:777491298:32` that look corrupt rather than wrong.
 	 *
-	 * 3. NOTHING CLOSES OVER AN UNSCOPED OUTER VARIABLE. The progress path is
-	 *    passed in as an argument. Diagnostics that can themselves fail are
-	 *    worse than no diagnostics, because they fail silently and replace the
-	 *    fault they exist to describe.
+	 * 3. APPEND ONLY, NEVER TRUNCATE, and one request only. This page used to
+	 *    truncate its own marker file on entry while the orchestrator retried
+	 *    once a second - so later attempts erased what the failing first
+	 *    attempt recorded, and the diagnostics printed an empty file.
+	 *
+	 * 4. THE WORK LIVES IN NAMED FUNCTIONS and nothing closes over an
+	 *    unscoped outer variable. A top-level try/catch has produced
+	 *    `java.lang.VerifyError` in this project before. Diagnostics that can
+	 *    themselves fail are worse than none: they fail silently and replace
+	 *    the fault they exist to describe.
 	 */
+
+	/**
+	 * Force any value to something safe to put in the report. Anything that
+	 * is not a simple value becomes a short type description rather than
+	 * being serialized - this is the guard that keeps a live ColdBox/WireBox
+	 * object out of the JSON, which is what blew the stack before.
+	 */
+	string function toScalar( any value ) {
+		try {
+			if ( isNull( arguments.value ) ) {
+				return "";
+			}
+			if ( isSimpleValue( arguments.value ) ) {
+				// Concatenation rather than toString() - it coerces without
+				// depending on a BIF name, and this file has already been
+				// burned once by assuming a BIF exists.
+				return "" & arguments.value;
+			}
+			if ( isArray( arguments.value ) ) {
+				return "[array of #arrayLen( arguments.value )#]";
+			}
+			return "[non-simple value]";
+		} catch ( any e ) {
+			return "[unreadable value]";
+		}
+	}
+
 	string function markProgress( required string progressFile, required string attemptID, required string stage ) {
 		fileAppend(
 			arguments.progressFile,
-			"[#dateTimeFormat( now(), 'HH:nn:ss' )#] #arguments.attemptID# #arguments.stage##char( 10 )#"
+			"[#dateTimeFormat( now(), 'HH:mm:ss' )#] #arguments.attemptID# #arguments.stage##char( 10 )#"
 		);
 		return arguments.stage;
+	}
+
+	/**
+	 * Walk the TestBox result into a plain, scalar-only struct matching what
+	 * runColdBoxIntegrationTests.bxs reads. The orchestrator falls back to
+	 * `specStat.error.message` when `failMessage` is absent, so errors are
+	 * folded into failMessage here and that fallback simply never fires.
+	 */
+	struct function buildScalarReport( required any results ) {
+		var report = {
+			"totalBundles" : arguments.results.getTotalBundles(),
+			"totalSuites"  : arguments.results.getTotalSuites(),
+			"totalSpecs"   : arguments.results.getTotalSpecs(),
+			"totalPass"    : arguments.results.getTotalPass(),
+			"totalFail"    : arguments.results.getTotalFail(),
+			"totalError"   : arguments.results.getTotalError(),
+			"totalSkipped" : arguments.results.getTotalSkipped(),
+			"bundleStats"  : []
+		};
+
+		for ( var bundleStat in arguments.results.getBundleStats() ) {
+			var bundle = { "name": toScalar( bundleStat.name ?: "" ), "suiteStats": [] };
+
+			for ( var suiteStat in ( bundleStat.suiteStats ?: [] ) ) {
+				var suite = { "name": toScalar( suiteStat.name ?: "" ), "specStats": [] };
+
+				for ( var specStat in ( suiteStat.specStats ?: [] ) ) {
+					var failMessage = toScalar( specStat.failMessage ?: "" );
+					// structKeyExists, not `isNull( specStat.error )` - the
+					// latter has to evaluate the key to test it, which throws
+					// when the key is simply absent.
+					if ( !len( failMessage ) && structKeyExists( specStat, "error" ) ) {
+						failMessage = toScalar( specStat.error.message ?: "" )
+							& " " & toScalar( specStat.error.detail ?: "" );
+					}
+					suite.specStats.append( {
+						"name"        : toScalar( specStat.name ?: "" ),
+						"status"      : toScalar( specStat.status ?: "" ),
+						"failMessage" : trim( failMessage )
+					} );
+				}
+
+				bundle.suiteStats.append( suite );
+			}
+
+			report.bundleStats.append( bundle );
+		}
+
+		return report;
 	}
 
 	string function runIntegrationSpecs( required string progressFile, required string attemptID ) {
@@ -55,9 +140,18 @@
 			markProgress( arguments.progressFile, arguments.attemptID, "running specs" );
 			var results = testbox.runRaw();
 
-			markProgress( arguments.progressFile, arguments.attemptID, "building JSON report" );
-			var jsonReporter = new testbox.system.reports.JSONReporter();
-			return jsonReporter.runReport( results, testbox, {}, true );
+			// Recorded BEFORE the report is built, so that even if assembling
+			// or serializing it blows up, the marker file still says whether
+			// the specs themselves passed. That distinction was invisible for
+			// several CI cycles.
+			markProgress(
+				arguments.progressFile,
+				arguments.attemptID,
+				"specs finished - pass=#results.getTotalPass()# fail=#results.getTotalFail()# error=#results.getTotalError()# skipped=#results.getTotalSkipped()#"
+			);
+
+			markProgress( arguments.progressFile, arguments.attemptID, "building scalar JSON report" );
+			return jsonSerialize( buildScalarReport( results ) );
 		} catch ( any e ) {
 			// Without this, an exception reaches the orchestrator as a bare
 			// "HTTP 500" with no cause anywhere. Record it alongside the
@@ -65,7 +159,7 @@
 			markProgress(
 				arguments.progressFile,
 				arguments.attemptID,
-				"THREW #e.type#: #e.message# #( e.detail ?: '' )##char( 10 )##( e.stackTrace ?: '' )#"
+				"THREW [#e.type#] #e.message# #( e.detail ?: '' )##char( 10 )##( e.stackTrace ?: '' )#"
 			);
 			rethrow;
 		}
