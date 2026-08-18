@@ -108,14 +108,18 @@ try {
 	// ------------------------------------------------------------------
 	// 2b. Probe a REAL app route before the TestBox runner.
 	//
-	// Two jobs. First, diagnosis: if the runner page later times out, this
-	// says whether the server was serving anything at all, which a bare
-	// "never responded" cannot. Second, coverage: /chat/api/health exercises
-	// ColdBox routing -> the generated ChatUi handler -> WireBox -> ChatDb
-	// over real HTTP from outside the process, which WebUiRuntimeSpec
-	// deliberately cannot do from inside a request (see its docblock).
+	// Diagnosis, first and foremost: if the runner page later fails or times
+	// out, this says whether the server was serving anything at all, which a
+	// bare "never responded" cannot.
 	//
-	// Never fails the build on its own - it only reports.
+	// Be honest about how much it proves, because it was overstated here
+	// before: the generated health() action renders a literal
+	// { status: "ok", success: true } and touches nothing else. So a 200
+	// proves ColdBox booted and routing reaches the generated ChatUi handler
+	// over real HTTP - and NOT that WireBox, ChatDb or SQLite work. That
+	// distinction is not academic: a run in CI returned 200 here while
+	// models/ChatDb.bx could not even compile. The specs below are what
+	// actually cover the store.
 	// ------------------------------------------------------------------
 	healthUrl     = "http://127.0.0.1:#port#/chat/api/health"
 	probeDeadline = getTickCount() + 60000

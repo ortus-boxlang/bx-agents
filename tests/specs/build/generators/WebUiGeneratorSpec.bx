@@ -688,6 +688,40 @@ class extends="testbox.system.BaseSpec" {
 				expect( html ).toInclude( 'streamInto( "/resume"' );
 			} );
 
+			/**
+			 * The generator builds BoxLang source out of BoxLang string
+			 * literals, where a literal double quote is written "" - so an
+			 * empty-string literal needs FOUR quotes ( """" ), and writing the
+			 * natural-looking two emits a single stray quote that opens a
+			 * string and swallows the rest of the line.
+			 *
+			 * That shipped. `?: ""` in the ChatDb template emitted `?: "`, and
+			 * every generated project's ChatDb.bx failed to compile. No spec
+			 * here caught it because they all assert on substrings of the
+			 * output; only a real ColdBox boot in CI ever tried to compile it.
+			 *
+			 * A line of generated code with an odd number of double quotes is
+			 * always this bug (nothing here emits a string spanning lines), so
+			 * assert the invariant over the whole file rather than pinning the
+			 * two lines that happened to be wrong.
+			 */
+			it( "generates source whose every line has balanced quotes", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				for ( var generated in [ "/models/ChatDb.bx", "/handlers/ChatUi.bx" ] ) {
+					var lineNumber = 0;
+					for ( var line in listToArray( fileRead( appDir & generated ), char( 10 ), true ) ) {
+						lineNumber++;
+						// Counted by removing them: length delta is the count
+						var quotes = len( line ) - len( replace( line, '"', "", "all" ) );
+						expect( quotes % 2 )
+							.toBe( 0, "#generated# line #lineNumber# has #quotes# quote(s), so a string is left open: #line#" );
+					}
+				}
+			} );
+
 			it( "does not generate an auth interceptor when no webui entry configures an apiKeyEnvVar", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-webui-no-key" );
 				var appDir = newAppDir();
