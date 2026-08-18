@@ -171,10 +171,20 @@ try {
 	if ( !len( report ) ) {
 		// The page never returned, so the only evidence of how far it got is
 		// the marker file it writes as it goes - see tests/runner-coldbox.bxm.
-		var progressPath = buildResult.appDir & "/runner-progress.txt"
+		// No `var` - this is the TOP LEVEL of a .bxs script, where there is no
+		// `local` scope to declare into. `var` here throws
+		// "Scope [local] is not available in this context", which is exactly
+		// how this diagnostic block failed on its first run: it crashed before
+		// printing the markers it exists to print.
+		progressPath = buildResult.appDir & "/runner-progress.txt"
 		println( "" )
 		println( "--- runner progress markers ---" )
-		println( fileExists( progressPath ) ? trim( fileRead( progressPath ) ) : "(no progress file - the page never even started)" )
+		try {
+			println( fileExists( progressPath ) ? trim( fileRead( progressPath ) ) : "(no progress file - the page never even started)" )
+		} catch ( any diagError ) {
+			// Diagnostics must never replace the failure they are describing
+			println( "(could not read progress file: #diagError.message#)" )
+		}
 		println( "-------------------------------" )
 		throw( type = "BxAgents.ColdBoxRunnerNeverStarted", message = "tests/runner-coldbox.bxm never responded: #lastError#" )
 	}
