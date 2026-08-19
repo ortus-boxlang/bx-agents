@@ -1,3 +1,11 @@
+---
+title: Agent.bx
+icon: ⚙️
+summary: The one required file - a configure() method returning your agent's shape.
+description: The one required file - a configure() method returning your agent's shape.
+tags: [conventions, configuration]
+---
+
 # Agent.bx
 
 `Agent.bx` is the only required file in a BX Agents project (alongside `instructions.md`). It's a plain BoxLang class with a `configure()` method that returns a struct:
@@ -136,6 +144,5 @@ Struct keys are merged **recursively** - a nested struct in a higher-precedence 
 
 Building with `--environment=production` here yields `modelDefaults: { temperature: 0.2, maxTokens: 1000 }` - the recursive merge kept `maxTokens` from the base file since `boxlang-production.json` never mentioned it.
 
-{% hint style="warning" %}
-Secrets (API keys, tokens) are never read or merged by BX Agents at build time - they stay external (an OS environment variable, `.env`, a platform secret manager) and are resolved live by bx-ai itself at runtime. See [Deployment & Secrets](../deployment-and-secrets.md).
-{% endhint %}
+!!! warning
+    Secrets (API keys, tokens) are never read or merged by BX Agents at build time - they stay external (an OS environment variable, `.env`, a platform secret manager) and are resolved live by bx-ai itself at runtime. See [Deployment & Secrets](../deployment-and-secrets.md).

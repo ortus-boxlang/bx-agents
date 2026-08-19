@@ -1,3 +1,11 @@
+---
+title: Known Limitations
+icon: ⚠️
+summary: The honest gaps - what is proven against a real running app and what is not.
+description: The honest gaps - what is proven against a real running app and what is not.
+tags: [reference, limitations]
+---
+
 # Known Limitations
 
 BX Agents is under active development. This page tracks the honest gaps - what's tested against a real running app, what still only runs against bx-ai's `"mock"` provider, and real upstream quirks this project ran into.

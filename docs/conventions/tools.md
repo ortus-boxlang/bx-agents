@@ -1,3 +1,11 @@
+---
+title: tools/
+icon: 🔧
+summary: Any @AITool-annotated function under tools/ becomes a callable tool.
+description: Any @AITool-annotated function under tools/ becomes a callable tool.
+tags: [conventions, tools]
+---
+
 # tools/
 
 Any `.bx` file under `tools/` (searched **recursively**, so subfolders like `tools/nested/Search.bx` work too) that declares an `@AITool`-annotated function becomes a callable tool for the agent.

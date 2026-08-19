@@ -1,3 +1,11 @@
+---
+title: subagents/
+icon: 🧩
+summary: Nested agents, each an ordinary BX Agents project of its own.
+description: Nested agents, each an ordinary BX Agents project of its own.
+tags: [conventions, subagents]
+---
+
 # subagents/
 
 `subagents/` holds nested agents, each an ordinary BX Agents project of its own - an `Agent.bx` + `instructions.md` (and optionally its own `tools/`, `skills/`, etc.):

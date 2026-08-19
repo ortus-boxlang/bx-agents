@@ -1,3 +1,11 @@
+---
+title: tests/
+icon: 🧪
+summary: Every scaffolded project gets a ready-to-run TestBox suite.
+description: Every scaffolded project gets a ready-to-run TestBox suite.
+tags: [conventions, testing]
+---
+
 # tests/
 
 Every project scaffolded via `bxAgents new` gets a ready-to-run `tests/` folder: a `tests/box.json` (declaring a `testbox` dependency) and `tests/specs/AgentSpec.bx`, an example spec that passes out of the box.
@@ -9,9 +17,8 @@ cd ..
 bxAgents test
 ```
 
-{% hint style="info" %}
-Inspired by the `coldbox-templates/boxlang` template's own dedicated `tests/` + `box.json` folder - adapted to BX Agents' own simpler testing story. Testing an agent is about its **behavior** (what it says, which tools it calls), not HTTP routing, so there's no `Application.bx`/ColdBox virtual app involved here at all.
-{% endhint %}
+!!! info
+    Inspired by the `coldbox-templates/boxlang` template's own dedicated `tests/` + `box.json` folder - adapted to BX Agents' own simpler testing story. Testing an agent is about its **behavior** (what it says, which tools it calls), not HTTP routing, so there's no `Application.bx`/ColdBox virtual app involved here at all.
 
 ## Writing a spec
 
@@ -93,6 +100,5 @@ bxAgents test
 
 Runs your project's `tests/specs/**` via TestBox, in a fresh child process (so it never fights over BoxLang's own class-mapping caches with anything else you're running). Prints bundle/suite/spec counts and pass/fail/error/skipped totals, plus one line per failure, and exits non-zero if anything failed - suitable as a CI gate before `deploy`.
 
-{% hint style="warning" %}
-`bxAgents test` requires `testbox` actually installed under `tests/testbox` (`cd tests && box install`) - it errors clearly, rather than silently reporting zero specs, if that hasn't been done yet.
-{% endhint %}
+!!! warning
+    `bxAgents test` requires `testbox` actually installed under `tests/testbox` (`cd tests && box install`) - it errors clearly, rather than silently reporting zero specs, if that hasn't been done yet.

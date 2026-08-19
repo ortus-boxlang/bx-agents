@@ -1,3 +1,11 @@
+---
+title: The Build Pipeline
+icon: 🏗️
+summary: The fixed phase sequence that turns a project into a ColdBox application.
+description: The fixed phase sequence that turns a project into a ColdBox application.
+tags: [reference, build]
+---
+
 # The Build Pipeline
 
 `bxAgents build` runs a fixed sequence of phases, once, producing a plain ColdBox application. Nothing here runs again at request time - that's the whole point of build-time assembly. This page walks the phases in the exact order `BuildPipeline.bx` runs them.

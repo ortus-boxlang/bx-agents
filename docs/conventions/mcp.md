@@ -1,3 +1,11 @@
+---
+title: mcp/
+icon: 🔗
+summary: "Model Context Protocol in both directions: consume remote servers, host your own."
+description: "Model Context Protocol in both directions: consume remote servers, host your own."
+tags: [conventions, mcp]
+---
+
 # mcp/
 
 MCP (Model Context Protocol) works two directions - consuming remote servers, and hosting your own.

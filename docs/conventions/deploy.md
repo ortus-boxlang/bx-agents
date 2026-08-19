@@ -1,3 +1,11 @@
+---
+title: deploy/
+icon: 🚢
+summary: "One entry per deployment target: local, ssh, ftp, docker, digitalocean."
+description: "One entry per deployment target: local, ssh, ftp, docker, digitalocean."
+tags: [conventions, deployment]
+---
+
 # deploy/
 
 Each `deploy/*.bx`/`.json` entry describes one deployment target attempt - a place to ship a built/packaged project to:

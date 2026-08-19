@@ -1,3 +1,11 @@
+---
+title: Quick Start
+icon: 🚀
+summary: "The full lifecycle of a project: scaffold, edit, build, run."
+description: "The full lifecycle of a project: scaffold, edit, build, run."
+tags: [getting-started]
+---
+
 # Quick Start
 
 This walks through the full lifecycle of a BX Agents project: scaffold, edit, build, run.
@@ -104,9 +112,8 @@ bxAgents serve --port=8080
 
 If your project has a `gateways/*` entry with `{ exposes: "agent", path: "/api/chat" }`, the agent is now reachable at `POST http://localhost:8080/api/chat/invoke` (and `/stream`, `/batch`, `/info` - see [gateways/](../conventions/gateways.md)).
 
-{% hint style="warning" %}
-The very first request to a freshly booted app's `toAi()` route can transiently fail - see [Known Limitations](../known-limitations.md). Send a warm-up request before relying on it under load.
-{% endhint %}
+!!! warning
+    The very first request to a freshly booted app's `toAi()` route can transiently fail - see [Known Limitations](../known-limitations.md). Send a warm-up request before relying on it under load.
 
 ## 6. Inspect, package, deploy
 
@@ -129,5 +136,5 @@ Removes `.build/` and `dist/` only - your source conventions (`Agent.bx`, `tools
 ## Next steps
 
 - Walk through every convention folder in [Conventions](../conventions/agent-bx.md).
-- Look at the working sample projects in [`examples/`](../../examples/README.md).
+- Look at the working sample projects in [`examples/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples).
 - See every verb's flags in [CLI Reference](../cli-reference.md).

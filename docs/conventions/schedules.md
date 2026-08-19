@@ -1,3 +1,11 @@
+---
+title: schedules/
+icon: ⏰
+summary: A real, hand-written ColdBox scheduler, passed through untouched.
+description: A real, hand-written ColdBox scheduler, passed through untouched.
+tags: [conventions, scheduling]
+---
+
 # schedules/
 
 `schedules/Scheduler.bx` - if present - is a **real, hand-written ColdBox scheduler class**, passed through into the build untouched (a plain file copy to `config/Scheduler.bx`, no generation, no translation):

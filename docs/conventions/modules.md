@@ -1,3 +1,11 @@
+---
+title: modules/
+icon: 🧱
+summary: BoxLang module dependencies, one immediate subfolder per module.
+description: BoxLang module dependencies, one immediate subfolder per module.
+tags: [conventions, modules]
+---
+
 # modules/
 
 `modules/` holds BoxLang module dependencies your agent needs - one immediate subfolder per module, discovered by folder name (not recursive - only the top level of `modules/` is enumerated).

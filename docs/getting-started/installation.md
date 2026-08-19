@@ -1,3 +1,11 @@
+---
+title: Installation
+icon: 📦
+summary: The three things BX Agents needs on the machine that runs it.
+description: The three things BX Agents needs on the machine that runs it.
+tags: [getting-started, setup]
+---
+
 # Installation
 
 BX Agents is a BoxLang module. It needs three things on the machine that runs it:
@@ -6,13 +14,11 @@ BX Agents is a BoxLang module. It needs three things on the machine that runs it
 2. The `bx-ai` BoxLang module (BX Agents generates code that calls it - it doesn't vendor it).
 3. BX Agents itself.
 
-{% hint style="info" %}
-`serve` additionally needs the standalone [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver) binary on `PATH`. `build`, `chat`, `package`, `inspect`, `clean`, and `new` don't need it.
-{% endhint %}
+!!! info
+    `serve` additionally needs the standalone [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver) binary on `PATH`. `build`, `chat`, `package`, `inspect`, `clean`, and `new` don't need it.
 
-{% hint style="info" %}
-`deploy`'s `ftp`/`sftp` targets need the [`bx-ftp`](https://github.com/ortus-boxlang/bx-ftp) BoxLang module installed alongside `bx-ai`/BX Agents (`install-bx-module bx-ftp`) - a genuine runtime dependency, not vendored, the same relationship this module has with `bx-ai`. No other verb or deploy target needs it.
-{% endhint %}
+!!! info
+    `deploy`'s `ftp`/`sftp` targets need the [`bx-ftp`](https://github.com/ortus-boxlang/bx-ftp) BoxLang module installed alongside `bx-ai`/BX Agents (`install-bx-module bx-ftp`) - a genuine runtime dependency, not vendored, the same relationship this module has with `bx-ai`. No other verb or deploy target needs it.
 
 ## Install BoxLang
 

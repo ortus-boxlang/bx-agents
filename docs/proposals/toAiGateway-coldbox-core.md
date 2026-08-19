@@ -1,3 +1,11 @@
+---
+title: toAiGateway() for ColdBox Core
+icon: 💡
+summary: "Draft proposal: a gateway-shaped sibling to ColdBox's own toAi()."
+description: "Draft proposal: a gateway-shaped sibling to ColdBox's own toAi()."
+tags: [proposals]
+---
+
 # Proposal: `toAiGateway()` — a native ColdBox routing DSL terminator for the bx-ai Gateway webhook surface
 
 Status: draft, written from BX Agents (`ortus-boxlang/bx-agents`). Update since first

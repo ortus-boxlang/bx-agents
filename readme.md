@@ -33,7 +33,7 @@ bxAgents chat       # or: bxAgents serve --port=8080
 
 ## Documentation & Examples
 
-- **[docs/](docs/README.md)** - GitBook-style documentation: installation, quick start, one page per convention folder, the build pipeline, the manifest schema, the full CLI reference, deployment/secrets, and known limitations.
+- **[docs/](docs/index.md)** - installation, quick start, one page per convention folder, the build pipeline, the manifest schema, the full CLI reference, deployment/secrets, and known limitations. Built and published with [bx-docs](https://ortus-boxlang.github.io/bx-docs/); see [Working on the docs](#working-on-the-docs).
 - **[examples/](examples/README.md)** - real, buildable sample projects: six core-convention examples (a minimal agent, an HTTP-exposed agent, a scheduled agent, an MCP agent, a multi-agent team, and the web chat UI) plus one per push-style chat-platform gateway (Telegram, Slack, Discord, Email, WhatsApp Cloud, Teams, Twilio, GitHub, Signal), each demonstrating one convention folder end-to-end.
 
 ## Why build-time assembly?
@@ -44,7 +44,7 @@ Most agent frameworks wire tools, skills, routes, and schedules together **at re
 
 ## Contributing to BX Agents
 
-The rest of this readme covers developing BX Agents itself (this repo), not building an agent with it - see [docs/](docs/README.md) for that. See [CONTRIBUTING.md](CONTRIBUTING.md#the-developer-flow---boxlang-is-dynamic) for the actual edit/test loop - BoxLang is a dynamic language, so it isn't the usual edit-compile-run cycle, and there's a real subtlety around how this module's own classes reference each other that's worth reading before you touch `src/main/bx`.
+The rest of this readme covers developing BX Agents itself (this repo), not building an agent with it - see [docs/](docs/index.md) for that. See [CONTRIBUTING.md](CONTRIBUTING.md#the-developer-flow---boxlang-is-dynamic) for the actual edit/test loop - BoxLang is a dynamic language, so it isn't the usual edit-compile-run cycle, and there's a real subtlety around how this module's own classes reference each other that's worth reading before you touch `src/main/bx`.
 
 ### Directory Structure
 
@@ -103,6 +103,22 @@ CI clones, tests, packages, and deploys this module to ForgeBox and the Ortus S3
 - `AWS_ACCESS_KEY` / `AWS_ACCESS_SECRET` - the S3 credentials
 
 Contact `#infrastructure` for these credentials if needed.
+
+### Working on the docs
+
+`docs/` is a [bx-docs](https://ortus-boxlang.github.io/bx-docs/) site - plain Markdown, where the folder structure *is* the navigation and `docs/nav.json` overrides the order. `bxdocs.json` at the repo root holds the site config.
+
+```bash
+# once - bx-docs renders through bx-markdown and encodes through bx-esapi
+install-bx-module bx-docs bx-markdown bx-esapi
+
+bxDocs serve     # live-reloading preview on http://127.0.0.1:8080
+bxDocs build     # render docs/ to site/ (gitignored)
+```
+
+Every page starts with a small frontmatter block (`title`, `icon`, `summary`, `description`, `tags`); `summary` renders under the page title, `description` is meta-only, and `tags` become clickable badges plus a site-wide `/tags/` index.
+
+Pushes to `development` publish to the site root and pushes to `main` publish to `/stable/`, via `.github/workflows/docs.yml`. Both stay live at once.
 
 ## Ortus Sponsors
 

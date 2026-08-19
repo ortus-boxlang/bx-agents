@@ -1,3 +1,11 @@
+---
+title: Deployment & Secrets
+icon: 🔐
+summary: Packaging to .bxa, and why secrets never live in generated source.
+description: Packaging to .bxa, and why secrets never live in generated source.
+tags: [reference, deployment, security]
+---
+
 # Deployment & Secrets
 
 ## Packaging
