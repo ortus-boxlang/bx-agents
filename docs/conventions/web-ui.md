@@ -48,6 +48,30 @@ The page talks to its own generated `<path>/api` route via `POST <path>/api/stre
 
 Because the whole envelope arrives, **reasoning and tool calls are already on the wire** with no extra endpoint needed: `delta.reasoning` (normalized across every provider by bx-ai) renders as a collapsed "Thinking" strip, and `delta.tool_calls` as collapsed per-call chips. Tool-call arguments stream as partial JSON fragments keyed by `index`, so the page accumulates per index rather than assuming any single chunk holds a complete call.
 
+## What a streaming turn actually looks like
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant B as browser (generated index.html)
+    participant H as handlers/ChatUi.bx
+    participant A as the agent
+    participant D as models/ChatDb.bx (SQLite)
+
+    B->>H: POST /chat/api/stream, Accept: text/event-stream
+    H->>D: resolve the conversation for this session
+    H->>A: agent.stream( ... )
+    H-->>B: event: thread - the threadId, sent BEFORE the first chunk
+    loop for every chunk bx-ai emits
+        A-->>H: a full normalized bx-ai envelope
+        H-->>B: event: chunk - choices[0].delta.content / .reasoning / .tool_calls
+    end
+    H->>D: persist the turn
+    H-->>B: event: done - [DONE]
+```
+
+The `thread` event goes first because a response header cannot be read before the body starts arriving, and the page needs that `threadId` to be able to `POST /cancel` mid-turn.
+
 ## The generated API
 
 A `webui` entry mounts twenty actions under `<path>/api`, served by a generated `handlers/ChatUi.bx`:

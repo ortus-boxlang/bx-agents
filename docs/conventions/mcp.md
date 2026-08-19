@@ -10,6 +10,26 @@ tags: [conventions, mcp]
 
 MCP (Model Context Protocol) works two directions - consuming remote servers, and hosting your own.
 
+```mermaid
+flowchart LR
+    subgraph consume["CONSUMING - declared on Agent.bx via mcpServers"]
+        direction LR
+        AG["your agent"] -->|"calls out at runtime"| RM["a remote MCP server<br/>https://example.com/mcp"]
+    end
+
+    subgraph host["HOSTING - one file per server under mcp/"]
+        direction LR
+        TL["tools/<br/>your @AITool functions"] -->|"a named SUBSET"| MS["mcpServer( 'localServer' )<br/>registered at onApplicationStart()"]
+        MS --> GW["a gateways/ entry with exposes: mcp<br/>route( '/mcp/tools' ).toMCP()"]
+        GW -->|"reachable over HTTP"| OC["some outside MCP client"]
+    end
+
+    style consume fill:#e7f1ff,stroke:#004085
+    style host fill:#eaf6ec,stroke:#155724
+```
+
+Nothing links the two: an agent consuming remote servers need not host one, and a hosted server is reachable only if a `gateways/` entry exposes it.
+
 ## Consuming remote servers
 
 Declared directly on `Agent.bx` (not a file under `mcp/`), via `mcpServers`:

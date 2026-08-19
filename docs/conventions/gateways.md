@@ -13,6 +13,22 @@ tags: [conventions, gateways]
 !!! warning
     Don't confuse these with each other - an HTTP-exposed agent (`exposes: "agent"`) is a REST API for your agent; a channel-adapter gateway (`type: "http"`) is a webhook endpoint for a chat platform or human-in-the-loop approval flow. They generate completely different routes.
 
+```mermaid
+flowchart TD
+    F["a file under gateways/"] --> Q{"does configure() return<br/>an 'exposes' key?"}
+    Q -->|"yes"| E["EXPOSURE<br/>a route into your agent"]
+    Q -->|"no - it has a 'type' key instead"| C["CHANNEL ADAPTER<br/>a connection to a chat platform"]
+    E --> E1["exposes: agent<br/>route().toAi()"]
+    E --> E2["exposes: mcp<br/>route().toMCP()"]
+    E --> E3["exposes: webui<br/>generated index.html + /api"]
+    C --> C1["mock / cli / http<br/>pull-driven: something calls US"]
+    C --> C2["telegram, slack, discord, email, whatsapp-cloud,<br/>teams, twilio, github, signal<br/>push-style: holds its own connection"]
+    C2 --> S["one GatewaySession<br/>bound to the root agent"]
+
+    style E fill:#d4edda,stroke:#155724
+    style C fill:#cce5ff,stroke:#004085
+```
+
 ## 1. HTTP/MCP/web-UI exposure (`exposes: "agent" | "mcp" | "webui"`)
 
 Exposes the agent, or a local MCP server, over HTTP using ColdBox 8.1's native AI Routing DSL - or a pre-built browser chat UI, documented separately in [The web chat UI](web-ui.md).
@@ -438,6 +454,31 @@ function configure() {
 
 !!! warning
     v1 limitation: exactly one `GatewaySession`, always bound to the project's root agent - matches the existing precedent that `exposes: "agent"` HTTP exposure is also always root-agent-only. A project with subagents cannot yet route different gateways to different subagents.
+
+What each policy actually does with a message that arrives while a turn is still running:
+
+```mermaid
+flowchart TD
+    M["a message arrives on thread T"] --> B{"is a run already<br/>in flight on T?"}
+    B -->|"no"| D["dispatch a new turn.<br/>The reply streams back through<br/>the gateway the message came from."]
+    B -->|"yes"| P{"policy"}
+    P -->|"reject"| R["Immediate 'busy' reply.<br/>Nothing is queued - the sender must resend."]
+    P -->|"queue<br/>(the default)"| Q["Enqueue, up to maxQueueDepth.<br/>Runs as its own turn once<br/>the current one finishes."]
+    P -->|"steer"| ST["agent.steerRun( T, text )<br/>Spliced into the SAME run at its next<br/>checkpoint - never a second turn."]
+    P -->|"interrupt"| I["agent.cancelRun( T ), AND enqueue.<br/>The current turn winds down at its next<br/>checkpoint, then this message runs."]
+    Q --> OVER{"queue already at<br/>maxQueueDepth?"}
+    I --> OVER
+    OVER -->|"yes"| R
+
+    style D fill:#d4edda,stroke:#155724
+    style R fill:#f8d7da,stroke:#721c24
+```
+
+!!! warning
+    "Steer" here means Hermes Agent's non-destructive splice - the running turn keeps going and the new text is folded into it. It does **not** mean what Eve's `turnPolicy: "steer"` means (cancel the active turn and start a replacement); that behaviour is this vocabulary's `interrupt`.
+
+!!! info
+    Neither `cancelRun()` nor `steerRun()` is instant. Both are signalled and take effect at the run's **next checkpoint** (before the next LLM call or tool call), so `interrupt` is "ask the current turn to wind down soon", not "synchronously replace it".
 
 ### How a push-style gateway stays connected: the shared ColdBox Scheduler
 
