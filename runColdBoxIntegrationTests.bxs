@@ -291,81 +291,41 @@ try {
 	println( "+ Confirmed: a real HTTP request through toAi()'s /invoke route reaches the generated agent: " & routeResult.fileContent )
 
 	// ------------------------------------------------------------------
-	// 5. The ANONYMOUS visitor's identity, over real HTTP.
+	// 5. An open web UI is ONE shared workspace, over real HTTP.
 	//
-	// /chat declares no users, so a visitor there is anonymous - and must
-	// still be an INDIVIDUAL. Everything user-scoped (conversations,
-	// preferences, the agent's own memory) is keyed by
-	// getUserSessionIdentifier(), so if anonymous identity collapsed to one
-	// shared value, every visitor would read and write each other's data.
+	// /chat declares no accounts, so everything in it is shared on purpose:
+	// whoever can reach the UI sees every conversation and preference in it.
+	// Two SEPARATE HTTP calls - different sessions, no shared cookie - must
+	// therefore see the same data.
 	//
-	// This has to run out here rather than in the TestBox specs: the specs
-	// all execute inside ONE request to the runner page, and the whole point
-	// is two SEPARATE requests carrying different X-Visitor-Id headers.
-	//
-	// It also covers the generated closure itself - reFind() over an
-	// attacker-controlled header, and getHTTPRequestData( false ) - which
-	// runs on every single request of an open web UI and is not exercised by
-	// any amount of asserting on generated source text.
+	// This has to run out here rather than in the TestBox specs: those all
+	// execute inside ONE request to the runner page, and the whole point is
+	// two independent callers.
 	// ------------------------------------------------------------------
-	visitorA = "aaaaaaaa-1111-2222-3333-444444444444"
-	visitorB = "bbbbbbbb-5555-6666-7777-888888888888"
-
 	bx:http url="http://127.0.0.1:#port#/chat/api/preferences/set" method="POST" result="prefSet" timeout=30 {
 		bx:httpparam type="header" name="Content-Type" value="application/json";
-		bx:httpparam type="header" name="X-Visitor-Id" value=visitorA;
 		bx:httpparam type="body" value='{"key":"theme","value":"dark"}';
 	}
-	// Assert the BODY, not just the status. A 200 alone proves very little
-	// here: with rewrites on, a route that does not match can still come back
-	// 200 carrying the SPA shell, which looks identical to a successful write
-	// from the status line alone.
+	// Assert the BODY, not just the status: with rewrites on, a route that does
+	// not match can still come back 200 carrying the SPA shell.
 	if ( prefSet.status_code != 200 || !prefSet.fileContent.findNoCase( '"saved":true' ) ) {
 		throw(
-			type    = "BxAgents.AnonymousVisitorWriteFailed",
-			message = "An anonymous visitor could not write a preference (HTTP #prefSet.status_code#): #left( prefSet.fileContent ?: '', 500 )#"
+			type    = "BxAgents.SharedWorkspaceWriteFailed",
+			message = "Could not write a preference to the open web UI (HTTP #prefSet.status_code#): #left( prefSet.fileContent ?: '', 500 )#"
 		)
 	}
 
-	bx:http url="http://127.0.0.1:#port#/chat/api/preferences" method="GET" result="prefA" timeout=30 {
-		bx:httpparam type="header" name="X-Visitor-Id" value=visitorA;
-	}
-	if ( prefA.status_code != 200 || !prefA.fileContent.findNoCase( "dark" ) ) {
-		// The write is already known to have succeeded by here, so this can
-		// only mean the two requests resolved to DIFFERENT identities - print
-		// both sides rather than just the read, or the next run says no more
-		// than this one did.
+	bx:http url="http://127.0.0.1:#port#/chat/api/preferences" method="GET" result="prefRead" timeout=30 {}
+	if ( prefRead.status_code != 200 || !prefRead.fileContent.findNoCase( "dark" ) ) {
 		throw(
-			type    = "BxAgents.AnonymousVisitorIdentityNotStable",
-			message = "The same visitor id did not read back its own preference."
+			type    = "BxAgents.SharedWorkspaceNotShared",
+			message = "A second, independent caller did not see the open UI's shared preference - an accountless web UI is supposed to be ONE workspace."
 				& " write -> HTTP #prefSet.status_code# #left( prefSet.fileContent ?: '', 300 )#"
-				& " | read -> HTTP #prefA.status_code# #left( prefA.fileContent ?: '', 300 )#"
+				& " | read -> HTTP #prefRead.status_code# #left( prefRead.fileContent ?: '', 300 )#"
 		)
 	}
 
-	bx:http url="http://127.0.0.1:#port#/chat/api/preferences" method="GET" result="prefB" timeout=30 {
-		bx:httpparam type="header" name="X-Visitor-Id" value=visitorB;
-	}
-	if ( prefB.status_code != 200 || prefB.fileContent.findNoCase( "dark" ) ) {
-		throw(
-			type    = "BxAgents.AnonymousVisitorsShareIdentity",
-			message = "A DIFFERENT anonymous visitor read the first one's preference - anonymous identity is shared, not per-visitor (HTTP #prefB.status_code#): #left( prefB.fileContent ?: '', 500 )#"
-		)
-	}
-
-	// A tampered/garbage header must not be trusted as an identity - it falls
-	// back to the session rather than becoming a key in its own right.
-	bx:http url="http://127.0.0.1:#port#/chat/api/preferences" method="GET" result="prefJunk" timeout=30 {
-		bx:httpparam type="header" name="X-Visitor-Id" value="../../etc/passwd";
-	}
-	if ( prefJunk.status_code != 200 || prefJunk.fileContent.findNoCase( "dark" ) ) {
-		throw(
-			type    = "BxAgents.AnonymousVisitorRejectsMalformedId",
-			message = "A malformed visitor id was not rejected cleanly (HTTP #prefJunk.status_code#): #left( prefJunk.fileContent ?: '', 500 )#"
-		)
-	}
-
-	println( "+ Confirmed: anonymous visitors are individually identified over real HTTP, and a malformed id is refused" )
+	println( "+ Confirmed: an accountless web UI is one shared workspace across independent callers" )
 } finally {
 	process.destroy()
 	process.waitFor( 5, createObject( "java", "java.util.concurrent.TimeUnit" ).SECONDS )

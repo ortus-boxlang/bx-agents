@@ -98,19 +98,15 @@ memory: {
 
 By default the web UI has **no accounts and no gate** — it is open, and every visitor is anonymous. That is the zero-ceremony `bxAgents serve` experience, and it is **not** a deployment posture. Declaring `users` on a `webui` entry turns on a real sign-in gate backed by [cbauth](https://forgebox.io/view/cbauth) and the same SQLite store everything else uses.
 
-### The anonymous visitor
+### Without accounts, the UI is one shared workspace
 
-An open UI still gives every visitor their **own** identity — anonymous is not the same as shared. On first load the page mints a random id, keeps it in `localStorage`, and sends it as `X-Visitor-Id` on every API call; the generated `identifierProvider` turns that into `visitor-<id>`, and conversations, preferences and the agent's own memory all key off it.
+There is no per-visitor identity, on purpose. Every visitor to an accountless web UI reads and writes the **same** conversations, preferences and agent memory — whoever can reach the page sees everything in it.
 
-It is stored client-side rather than left to the server session on purpose: `sessionTimeout` is 60 minutes, so an idle hour would hand the same browser a brand-new identity and silently orphan everything it had. The `localStorage` id survives that, a browser restart, and a server restart.
+That is the point of running without accounts rather than an oversight: an open UI is a single shared tool (a laptop, a trusted internal box), not a multi-tenant service. Handing each browser its own slice would only fragment one workspace into per-browser copies nobody asked for, and any client-side id doing the fragmenting would be forgeable anyway.
 
 {% hint style="warning" %}
-**This is isolation, not authorization.** The id comes from the client, so anyone can present any value — exactly the caveat that already applies to `conversationId`. It keeps visitors out of each other's conversations by accident, not by force. If you need identity you can actually rely on, declare `users`.
-
-What it *cannot* do is reach an account. Visitor ids are always `visitor-` prefixed and account ids are bare UUIDs, so the two namespaces cannot collide: forging the header can only ever land on another anonymous visitor, never on a signed-in user — including in a project that mounts an open UI and a gated one side by side. A signed-in account is also checked first, so a signed-in user sending the header is unaffected by it.
+**An open UI has no privacy between visitors.** Anyone who can reach the URL sees every conversation in it, and can continue or delete any of them. If that is not what you want — anywhere the page is reachable by more than the people who should see the transcripts — declare `users`.
 {% endhint %}
-
-A malformed or oversized id is refused outright (it has to match `^[A-Za-z0-9._-]{8,64}$` — it ends up as a database key and a memory key) and identity falls back to the session, which is never empty.
 
 ```javascript
 // gateways/chatUi.bx
@@ -138,18 +134,18 @@ The iteration count is stored *inside* each hash (`pbkdf2$<iterations>$<salt>$<d
 
 ### What sign-in changes
 
-Everything user-scoped re-keys to the real account, with **no change to any generated handler**. The generated `config/ColdBox.bx` sets ColdBox's `identifierProvider` to the signed-in user's id, and `getUserSessionIdentifier()` — which agent memory, the conversation index, preferences and pending-run ownership already key off — returns that instead of a session id.
+Everything user-scoped re-keys to the real account. The generated `handlers/ChatUi.bx` resolves identity from cbauth directly, in one method (`resolveUserId()`), and agent memory, the conversation index, preferences and pending-run ownership all key off its return value.
+
+It reads cbauth rather than ColdBox's `identifierProvider` setting deliberately: a closure declared in the `coldbox` config struct never reaches `configSettings` — verified in a real boot, in both the documented literal shape and as a later assignment — so anything leaning on that setting was silently getting a session id instead.
 
 The practical difference: conversations and preferences follow the person across browsers and devices, and clearing cookies no longer creates a brand-new "user".
 
 | | No `users` | With `users` |
 |---|---|---|
-| Identity | `visitor-<localStorage id>` | The signed-in account |
-| Survives a session timeout | Yes | Yes |
-| Survives clearing site data | No | Yes |
-| Follows the person across browsers/devices | No | Yes |
+| Identity | One shared workspace | The signed-in account |
+| Conversations visible to | Everyone who can reach the UI | Only their owner |
+| Follows the person across browsers/devices | n/a — nothing is per-person | Yes |
 | Reachable without signing in | Everything | Only the login form |
-| Trustworthy as authorization | No | Yes |
 
 ### Lifecycle
 
@@ -162,7 +158,7 @@ Accounts are reconciled from config on every boot, in this order: the schema int
 
 ### What this is not
 
-This is a fixed roster of operator-provisioned accounts, not a user-management system. There is no self-registration, no password reset, no roles or permissions, and no per-user rate limiting or spend cap. If you need federated identity instead, point `identifierProvider` at your own authenticated principal and skip the `users` block entirely — the rest of the web UI neither knows nor cares where the id came from.
+This is a fixed roster of operator-provisioned accounts, not a user-management system. There is no self-registration, no password reset, no roles or permissions, and no per-user rate limiting or spend cap. If you need federated identity instead, edit `resolveUserId()` in the generated handler to return your own authenticated principal — the rest of the web UI neither knows nor cares where the id came from.
 
 ## Human-in-the-loop
 

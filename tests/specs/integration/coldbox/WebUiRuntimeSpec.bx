@@ -186,29 +186,6 @@ class extends="testbox.system.BaseSpec" {
 				expect( db.findUserByUsername( "nobody" ) ).toBeEmpty();
 			} );
 
-			/**
-			 * The hinge nothing tested. getUserSessionIdentifier() only calls the
-			 * closure when `identifierProvider` actually lands in configSettings
-			 * as a non-simple value; otherwise ColdBox silently falls back to the
-			 * session id. That fallback is not an error - it is a perfectly valid
-			 * identity - so a generated app whose provider never registered looks
-			 * completely healthy while handing every request a different id.
-			 *
-			 * Both the anonymous visitor AND the signed-in account depend on this
-			 * one setting, and neither had an assertion behind it.
-			 */
-			it( "actually registers the identity provider ColdBox reads", function() {
-				var provider = controller.getSetting( "identifierProvider" );
-
-				expect( isSimpleValue( provider ) ).toBeFalse(
-					"identifierProvider did not reach configSettings - getUserSessionIdentifier() is silently falling back to the session id"
-				);
-
-				// And it is callable: getUserSessionIdentifier() invokes it directly
-				var identity = controller.getUserSessionIdentifier();
-				expect( len( identity ) ).toBeGT( 0 );
-			} );
-
 			it( "resolves cbauth and the generated user service through WireBox", function() {
 				var binder = controller.getWireBox().getBinder();
 
