@@ -765,12 +765,18 @@ class extends="testbox.system.BaseSpec" {
 				var result = generator.generate( discovery, appDir );
 
 				expect( result.webUiHasUsers ).toBeTrue();
-				expect( result.webUiSeederInterceptorName ).toBe( "WebUiUserSeeder" );
+				// A startup statement, NOT an interceptor. As an interceptor it
+				// silently never ran, and ChatDb migrating in its own init made
+				// the users table appear anyway - which looked like success.
+				expect( result.webUiSeedStatement ).toInclude( 'getInstance( "UserSeeder" ).seed()' );
+				// Never fatal: seeding runs on the boot path, and a failure there
+				// must degrade to "cannot sign in", not "the app is down"
+				expect( result.webUiSeedStatement ).toInclude( "catch ( any e )" );
 				expect( result.webUiLoginGateName ).toBe( "WebUiLoginGate" );
 
 				for ( var generated in [
 					"/models/PasswordHasher.bx", "/models/UserService.bx", "/models/User.bx",
-					"/handlers/ChatAuth.bx", "/interceptors/WebUiUserSeeder.bx",
+					"/models/UserSeeder.bx", "/handlers/ChatAuth.bx",
 					"/interceptors/WebUiLoginGate.bx", "/chat/login.html"
 				] ) {
 					expect( fileExists( appDir & generated ) ).toBeTrue( "expected #generated# to be generated" );
@@ -782,7 +788,7 @@ class extends="testbox.system.BaseSpec" {
 				var appDir = newAppDir();
 				generator.generate( discovery, appDir );
 
-				var seeder = fileRead( appDir & "/interceptors/WebUiUserSeeder.bx" );
+				var seeder = fileRead( appDir & "/models/UserSeeder.bx" );
 				// The env-var user: the NAME is embedded, the value is read at runtime
 				expect( seeder ).toInclude( "ACME_ADA_PASSWORD" );
 				expect( seeder ).toInclude( 'getSystemSetting( "ACME_ADA_PASSWORD"' );
@@ -825,7 +831,7 @@ class extends="testbox.system.BaseSpec" {
 				var result = generator.generate( discovery, appDir );
 
 				expect( result.webUiHasUsers ).toBeFalse();
-				expect( result.webUiSeederInterceptorName ).toBe( "" );
+				expect( result.webUiSeedStatement ).toBe( "" );
 				expect( result.webUiLoginGateName ).toBe( "" );
 				expect( fileExists( appDir & "/interceptors/WebUiLoginGate.bx" ) ).toBeFalse();
 				expect( fileExists( appDir & "/handlers/ChatAuth.bx" ) ).toBeFalse();

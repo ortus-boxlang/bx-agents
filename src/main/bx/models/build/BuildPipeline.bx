@@ -138,14 +138,18 @@ class {
 		if ( len( webUiResult.webUiSchemaInterceptorName ?: "" ) ) {
 			agentInterceptorNames.append( webUiResult.webUiSchemaInterceptorName )
 		}
-		// Seeds configured accounts - must follow the schema interceptor above.
-		if ( len( webUiResult.webUiSeederInterceptorName ?: "" ) ) {
-			agentInterceptorNames.append( webUiResult.webUiSeederInterceptorName )
-		}
 		// Requires a signed-in user. Registered last so the store exists and the
 		// accounts are seeded before anything can be gated against them.
 		if ( len( webUiResult.webUiLoginGateName ?: "" ) ) {
 			agentInterceptorNames.append( webUiResult.webUiLoginGateName )
+		}
+
+		// Account seeding runs from onApplicationStart(), not an interception
+		// point: as an interceptor it silently never fired, and the users table
+		// appearing anyway (ChatDb migrates in its own init) hid that.
+		var startupStatements = toolScanStatements.duplicate()
+		if ( len( webUiResult.webUiSeedStatement ?: "" ) ) {
+			startupStatements.append( webUiResult.webUiSeedStatement )
 		}
 
 		arguments.onProgress( "+ Generating core ColdBox app skeleton (Application.bx, config/WireBox.bx, config/ColdBox.bx, agent/GeneratedAgentFactory.bx)..." )
@@ -156,7 +160,7 @@ class {
 			agentInterceptors     = agentInterceptorNames,
 			gatewayRegistrations  = gatewayResult.registrationStatements,
 			mcpRegistrations      = mcpResult.registrations,
-			extraStartupStatements = toolScanStatements,
+			extraStartupStatements = startupStatements,
 			cliEnvironment        = arguments.cliEnvironment,
 			discovery             = discovery,
 			hasEmailGateway       = gatewayResult.hasEmailGateway ?: false,

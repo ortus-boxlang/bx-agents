@@ -223,6 +223,84 @@ class extends="testbox.system.BaseSpec" {
 				expect( hasher.verify( "anything", "not-a-hash" ) ).toBeFalse();
 			} );
 
+			/**
+			 * The seeder runs from onApplicationStart(), where a throw means the
+			 * app never finishes booting and serves NOTHING - which is how this
+			 * first showed up: a health probe returning 408, with no indication
+			 * of which statement stalled. The seed call is wrapped in try/catch
+			 * now, so a throw no longer takes the app down - but a swallowed
+			 * throw is invisible, and "green because the exception was caught"
+			 * would look exactly like "green because seeding worked".
+			 *
+			 * Calling seed() directly is what tells those two apart. An exception
+			 * surfaces HERE, with its message, instead of being logged and lost.
+			 * It also exercises the idempotency the seeder's own docblock claims
+			 * and nothing else tested.
+			 */
+			it( "runs the whole seeder again without throwing", function() {
+				var db = controller.getWireBox().getInstance( "ChatDb" );
+				var seeder = controller.getWireBox().getInstance( "UserSeeder" );
+
+				var before = db.findUserByUsername( "e2e" );
+				expect( before ).notToBeEmpty();
+
+				// Reaching the next line at all is most of the point
+				seeder.seed();
+
+				var after = db.findUserByUsername( "e2e" );
+				expect( after ).notToBeEmpty( "a second seed() run lost the account it had already created" );
+				// Same row, not a duplicate: upsert matches on username, and the
+				// id is what every conversation of theirs references
+				expect( after.id ).toBe( before.id );
+			} );
+
+			/**
+			 * The revocation half of the seeding contract: removing a user from
+			 * config is supposed to take their access away on the next boot.
+			 * Nothing exercised deactivateUsersNotIn() before this, so "removing
+			 * a user revokes access" was a documented claim and nothing more.
+			 */
+			it( "deactivates an account that is no longer configured", function() {
+				var db = controller.getWireBox().getInstance( "ChatDb" );
+
+				db.upsertUser(
+					username     : "retired",
+					passwordHash : "pbkdf2$210000$salt$derived",
+					displayName  : "Retired"
+				);
+				expect( db.findUserByUsername( "retired" ) ).notToBeEmpty();
+
+				// The COUNT matters as much as the effect. Returning qb's own
+				// update() result here throws against the numeric declaration -
+				// after the UPDATE has committed - so the rows look right while
+				// the caller blows up. Asserting the number closes that door.
+				var revoked = db.deactivateUsersNotIn( [ "e2e" ] );
+				expect( isNumeric( revoked ) ).toBeTrue( "deactivateUsersNotIn() must return a row count, not qb's result struct" );
+				expect( revoked ).toBe( 1 );
+
+				// Nothing left to revoke: a second run is a no-op returning 0,
+				// not a repeated write
+				expect( db.deactivateUsersNotIn( [ "e2e" ] ) ).toBe( 0 );
+
+				// An empty configured list deactivates nothing at all, rather
+				// than wiping every account over a likely misconfiguration
+				expect( db.deactivateUsersNotIn( [] ) ).toBe( 0 );
+				expect( db.findUserByUsername( "e2e" ) ).notToBeEmpty();
+
+				// Deactivated, so no longer findable - findUserByUsername() only
+				// ever returns active accounts, which is what gates sign-in
+				expect( db.findUserByUsername( "retired" ) ).toBeEmpty(
+					"an account dropped from config still authenticates"
+				);
+				// ...but not deleted, because their conversations reference the id
+				var raw = db.query().from( "users" ).where( "username", "retired" ).first();
+				expect( isStruct( raw ) && len( raw.id ?: "" ) ).toBeTrue(
+					"the row was deleted rather than deactivated, orphaning that user's history"
+				);
+				// The configured account is untouched
+				expect( db.findUserByUsername( "e2e" ) ).notToBeEmpty();
+			} );
+
 		} );
 	}
 
