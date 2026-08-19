@@ -407,13 +407,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( 'this.datasource = "acmechat"' );
 			} );
 
-			/**
-			 * The open web UI's identity. An anonymous visitor still has to be an
-			 * INDIVIDUAL - conversations, preferences and the agent's own memory
-			 * are all keyed by getUserSessionIdentifier(), so an identity shared
-			 * across visitors is the cross-visitor leak that P4-UI-B.1 fixed.
-			 */
-			it( "identifies an anonymous visitor by their browser id when no accounts exist", function() {
+			it( "declares no identity provider in the config at all", function() {
 				var buildDir = newBuildDir();
 				var config = resolver.resolve( projectRoot = fixtures & "/full-project" );
 				generator.generate(
@@ -425,63 +419,11 @@ class extends="testbox.system.BaseSpec" {
 					webUiHasUsers  : false
 				);
 
+				// A closure declared in the `coldbox` struct never reaches
+				// configSettings - verified in a real boot, both inside the literal
+				// and as a later assignment - so it is registered at startup via
+				// setSetting() instead. See WebUiGenerator/WebUiIdentity.
 				var content = fileRead( buildDir & "/config/ColdBox.bx" );
-				expect( content ).toInclude( "identifierProvider :" );
-				expect( content ).toInclude( "X-Visitor-Id" );
-				// Bounded and charset-checked: attacker-controlled, and it ends up
-				// as a database key and a memory key
-				expect( content ).toInclude( "^[A-Za-z0-9._-]{8,64}$" );
-				// Never empty - an empty identity puts every visitor in one bucket
-				expect( content ).toInclude( "session.sessionId" );
-				// Nothing to sign in to, so cbauth is not in the picture at all
-				expect( content ).notToInclude( "authenticationService@cbauth" );
-			} );
-
-			/**
-			 * What makes honouring a CLIENT-SUPPLIED header safe, including in a
-			 * project that mounts an open UI and a gated one side by side (the CI
-			 * fixture does exactly that).
-			 *
-			 * Account ids are bare createUUID() values; a visitor id is always
-			 * "visitor-" prefixed. The two namespaces cannot collide, so forging
-			 * the header can only ever reach another ANONYMOUS visitor's data,
-			 * never a signed-in account's. That is a structural guarantee, not a
-			 * rule someone has to remember to apply.
-			 */
-			it( "namespaces the visitor id so a forged header cannot reach an account", function() {
-				var buildDir = newBuildDir();
-				var config = resolver.resolve( projectRoot = fixtures & "/full-project" );
-				generator.generate(
-					projectRoot    : fixtures & "/full-project",
-					buildDir       : buildDir,
-					resolvedConfig : config,
-					hasWebUi       : true,
-					webUiDatabase  : { datasource : "acmechat", path : "./data/chat.db" },
-					webUiHasUsers  : true
-				);
-
-				var content = fileRead( buildDir & "/config/ColdBox.bx" );
-				// Signed in wins, and is checked FIRST
-				expect( content ).toInclude( "authenticationService@cbauth" );
-				expect( content ).toInclude( "auth.isLoggedIn()" );
-				expect( content ).toInclude( "auth.getUserId()" );
-				// Anonymous visitors on an ungated entry still get their own id...
-				expect( content ).toInclude( "X-Visitor-Id" );
-				// ...but never one that could equal an account id
-				expect( content ).toInclude( 'return "visitor-" & visitor' );
-
-				// The signed-in branch must be evaluated before the header is even
-				// read, or a signed-in user sending a header would be demoted to an
-				// anonymous visitor and lose their own history
-				expect( content.findNoCase( "auth.isLoggedIn()" ) ).toBeLT( content.findNoCase( "x-visitor-id" ) );
-			} );
-
-			it( "declares no identity provider at all for a project without a web UI", function() {
-				var buildDir = newBuildDir();
-				generateFor( fixtures & "/full-project", buildDir );
-				var content = fileRead( buildDir & "/config/ColdBox.bx" );
-
-				// No browser, no visitor - ColdBox's own default stands
 				expect( content ).notToInclude( "identifierProvider" );
 			} );
 

@@ -825,6 +825,43 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.webUiHasUsers ).toBeTrue();
 			} );
 
+			/**
+			 * Identity is generated for EVERY web UI, accounts or not - an
+			 * anonymous visitor still has to be an individual, and a shared
+			 * identity is the cross-visitor leak P4-UI-B.1 had to fix.
+			 */
+			it( "generates an identity resolver and registers it at startup", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				var result = generator.generate( discovery, appDir );
+
+				expect( fileExists( appDir & "/models/WebUiIdentity.bx" ) ).toBeTrue();
+
+				// Registered via setSetting(), NOT declared in config/ColdBox.bx: a
+				// closure in the `coldbox` struct never reaches configSettings.
+				expect( result.webUiIdentityStatement ).toInclude( 'setSetting( "identifierProvider"' );
+				expect( result.webUiIdentityStatement ).toInclude( "WebUiIdentity" );
+
+				var resolver = fileRead( appDir & "/models/WebUiIdentity.bx" );
+				expect( resolver ).toInclude( "X-Visitor-Id" );
+				expect( resolver ).toInclude( '"visitor-" & visitor' );
+				expect( resolver ).toInclude( "session.sessionId" );
+				// No accounts in this fixture, so nothing to sign in to
+				expect( resolver ).notToInclude( "authenticationService@cbauth" );
+			} );
+
+			it( "checks a signed-in account before the visitor header", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui-users" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var resolver = fileRead( appDir & "/models/WebUiIdentity.bx" );
+				expect( resolver ).toInclude( "auth.isLoggedIn()" );
+				// Order matters: a signed-in user whose page still sends a visitor
+				// header must not be demoted to anonymous and lose their history
+				expect( resolver.findNoCase( "auth.isLoggedIn()" ) ).toBeLT( resolver.findNoCase( "x-visitor-id" ) );
+			} );
+
 			it( "leaves a project without users completely ungated", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
 				var appDir = newAppDir();

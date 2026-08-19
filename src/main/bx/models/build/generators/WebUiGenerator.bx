@@ -86,6 +86,16 @@ class {
 			return ( entry.config.users ?: [] ).len() > 0
 		} )
 
+		// Identity for every visitor, signed-in or not. Registered from
+		// onApplicationStart() rather than declared in config/ColdBox.bx,
+		// because a closure put in the `coldbox` config struct never reaches
+		// configSettings - proven in a real boot, in BOTH the documented
+		// literal shape and as a later assignment. setSetting() writes straight
+		// into the struct getUserSessionIdentifier() reads, so it cannot be
+		// lost in a merge.
+		fileWrite( modelDir & "/WebUiIdentity.bx", renderIdentityResolver( users.len() > 0 ) )
+		var identityStatement = 'application.cbController.setSetting( "identifierProvider", () => application.cbController.getWireBox().getInstance( "WebUiIdentity" ).resolve() )'
+
 		var seedStatement = ""
 		var loginGateName = ""
 		if ( users.len() ) {
@@ -109,6 +119,7 @@ class {
 			hasWebUi                   : true,
 			webUiAuthInterceptorName   : interceptorName,
 			webUiSchemaInterceptorName : "WebUiSchema",
+			webUiIdentityStatement     : identityStatement,
 			webUiSeedStatement         : seedStatement,
 			webUiLoginGateName         : loginGateName,
 			webUiHasUsers              : users.len() > 0,
@@ -1470,6 +1481,92 @@ class {
 	 *
 	 * @return The rendered models/UserSeeder.bx source
 	 */
+	/**
+	 * Renders `models/WebUiIdentity.bx` - the one place that answers "who is
+	 * this visitor".
+	 *
+	 * ColdBox's getUserSessionIdentifier() calls whatever `identifierProvider`
+	 * holds, and agent memory, the conversation index, preferences and
+	 * pending-run ownership are ALL keyed by its return value. So this decides
+	 * identity for every one of them.
+	 *
+	 * It lives in a model rather than inline in the config because a closure
+	 * declared in the `coldbox` config struct never arrives in configSettings -
+	 * verified in a real boot, both inside the struct literal (the shape
+	 * ColdBox documents) and as a later assignment. Registration happens at
+	 * startup via setSetting() instead, which is a direct write to the struct
+	 * that getUserSessionIdentifier() reads.
+	 *
+	 * @hasUsers Whether the project declares any accounts - when it does, a
+	 *           signed-in account wins over the anonymous visitor id
+	 *
+	 * @return The rendered models/WebUiIdentity.bx source
+	 */
+	private string function renderIdentityResolver( required boolean hasUsers ) {
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			' * Answers the question "who is this visitor" for the whole web UI.',
+			" * Registered as ColdBox's identifierProvider at startup, so",
+			" * getUserSessionIdentifier() returns this - and agent memory,",
+			" * conversations, preferences and pending-run ownership all key off it.",
+			" */",
+			"class singleton {",
+			"",
+			'	property name="wirebox" inject="wirebox";',
+			"",
+			"	string function resolve() {"
+		]
+
+		if ( arguments.hasUsers ) {
+			lines.append( "		// Signed in: the account. Checked FIRST, so a signed-in user whose" )
+			lines.append( "		// page still sends a visitor header is unaffected by it." )
+			lines.append( '		var auth = wirebox.getInstance( "authenticationService@cbauth" )' )
+			lines.append( "		if ( auth.isLoggedIn() ) {" )
+			lines.append( "			return auth.getUserId()" )
+			lines.append( "		}" )
+			lines.append( "" )
+		}
+
+		lines.append( "		// Anonymous: the id this browser keeps in localStorage and sends as" )
+		lines.append( "		// X-Visitor-Id. The session id alone will not do - sessionTimeout is" )
+		lines.append( "		// 60 minutes, so an idle hour would hand the same browser a new" )
+		lines.append( "		// identity and silently orphan its conversations and memory." )
+		lines.append( "		//" )
+		lines.append( "		// Read through ColdBox's own request context: header names are" )
+		lines.append( "		// case-insensitive and servers normalize them differently, and" )
+		lines.append( "		// getHTTPHeader() already guards the no-request case (a scheduled" )
+		lines.append( "		// task or a spawned thread reaches this too)." )
+		lines.append( '		var visitor = ""' )
+		lines.append( "		try {" )
+		lines.append( '			visitor = toString( application.cbController.getRequestService().getContext().getHTTPHeader( "X-Visitor-Id", "" ) )' )
+		lines.append( "		} catch ( any e ) {" )
+		lines.append( '			visitor = ""' )
+		lines.append( "		}" )
+		lines.append( "" )
+		lines.append( "		// Bounded and charset-checked - attacker-controlled, and it becomes a" )
+		lines.append( "		// database key and a memory key." )
+		lines.append( '		if ( reFind( "^[A-Za-z0-9._-]{8,64}$", visitor ) ) {' )
+		lines.append( "			// Prefixed so it can never collide with an account id, which is a" )
+		lines.append( "			// bare createUUID(). Forging the header therefore reaches another" )
+		lines.append( "			// anonymous visitor at worst, never a signed-in account." )
+		lines.append( '			return "visitor-" & visitor' )
+		lines.append( "		}" )
+		lines.append( "" )
+		lines.append( "		// No usable header - a plain page load, or a tampered value. The" )
+		lines.append( "		// session keeps identity non-empty; an empty one would put every" )
+		lines.append( "		// visitor in a single shared bucket." )
+		lines.append( '		return session.sessionId ?: ""' )
+		lines.append( "	}" )
+		lines.append( "" )
+		lines.append( "}" )
+		lines.append( "" )
+
+		return lines.toList( char( 10 ) )
+	}
+
 	private string function renderUserSeeder( required array users ) {
 		var lines = [
 			"/**",

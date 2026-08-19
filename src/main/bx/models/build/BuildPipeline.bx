@@ -148,6 +148,11 @@ class {
 		// point: as an interceptor it silently never fired, and the users table
 		// appearing anyway (ChatDb migrates in its own init) hid that.
 		var startupStatements = toolScanStatements.duplicate()
+		// Identity first: it decides what every user-scoped read and write keys
+		// off, so nothing that runs later should observe the default.
+		if ( len( webUiResult.webUiIdentityStatement ?: "" ) ) {
+			startupStatements.append( webUiResult.webUiIdentityStatement )
+		}
 		if ( len( webUiResult.webUiSeedStatement ?: "" ) ) {
 			startupStatements.append( webUiResult.webUiSeedStatement )
 		}

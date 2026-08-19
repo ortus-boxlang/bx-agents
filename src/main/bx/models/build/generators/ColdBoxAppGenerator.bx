@@ -282,80 +282,18 @@ class {
 			"class {",
 			"",
 			"	function configure() {",
-			"		coldbox = {"
+			"		coldbox = {",
+			'			appName : "#bxLiteral( arguments.appName )#"',
+			"		}"
 		]
 
-		// A web UI always names its own identity, signed-in or not. Everything
-		// user-scoped - agent memory, the conversation index, preferences and
-		// pending-run ownership - is keyed by getUserSessionIdentifier(), so
-		// this one closure decides who the visitor is for all of them.
-		//
-		// Emitted INSIDE the struct literal, which is the shape ColdBox
-		// documents and the only one that actually takes effect. Assigning it
-		// afterwards - `coldbox.identifierProvider = () => {}` - parses, reads
-		// correctly, and never reaches configSettings: ApplicationLoader takes
-		// `variables.coldbox` and merges THAT, so the key has to be in the
-		// literal. getUserSessionIdentifier() therefore kept falling back to
-		// the session id, which is not an error path - a session id is a valid
-		// identity - so the app looked healthy while handing out a different
-		// identity per request.
-		var wantsIdentity = len( arguments.webUiDatasource ) > 0
-
-		lines.append( '			appName : "#bxLiteral( arguments.appName )#"' & ( wantsIdentity ? "," : "" ) )
-
-		if ( wantsIdentity ) {
-			lines.append( "" )
-			lines.append( "			// Identity for the web UI. Everything user-scoped keys off this." )
-			lines.append( "			identifierProvider : () => {" )
-
-			if ( arguments.webUiHasUsers ) {
-				lines.append( "				// Signed in: the account. Resolved through application.cbController," )
-				lines.append( "				// NOT a bare getInstance() - this closure is written in a config" )
-				lines.append( "				// class but invoked much later by the controller, where" )
-				lines.append( "				// getInstance() is not reliably in scope." )
-				lines.append( '				var auth = application.cbController.getWireBox().getInstance( "authenticationService@cbauth" )' )
-				lines.append( "				if ( auth.isLoggedIn() ) {" )
-				lines.append( "					return auth.getUserId()" )
-				lines.append( "				}" )
-				lines.append( "" )
-			}
-
-			// Anonymous visitors. An open UI still needs each visitor to be an
-			// INDIVIDUAL - an identity shared across visitors is the
-			// cross-visitor memory leak that P4-UI-B.1 already had to fix.
-			lines.append( "				// Anonymous: the id this browser keeps in localStorage." )
-			lines.append( "				//" )
-			lines.append( "				// Read through ColdBox's OWN request context. Header names are" )
-			lines.append( "				// case-insensitive and servers normalize them differently;" )
-			lines.append( "				// getHTTPHeader() is the framework's tested accessor for that, and" )
-			lines.append( "				// it already guards the no-request case (a scheduled task or a" )
-			lines.append( "				// spawned thread reaches this closure too)." )
-			lines.append( '				var visitor = ""' )
-			lines.append( "				try {" )
-			lines.append( '					visitor = toString( application.cbController.getRequestService().getContext().getHTTPHeader( "X-Visitor-Id", "" ) )' )
-			lines.append( "				} catch ( any e ) {" )
-			lines.append( '					visitor = ""' )
-			lines.append( "				}" )
-			lines.append( "" )
-			lines.append( "				// Bounded and charset-checked before use - it is attacker-controlled" )
-			lines.append( "				// and becomes a database key and a memory key." )
-			lines.append( '				if ( reFind( "^[A-Za-z0-9._-]{8,64}$", visitor ) ) {' )
-			// The prefix is what makes honouring a client-supplied header safe at
-			// all, including in a project that mounts an open UI and a gated one
-			// side by side. Account ids are bare createUUID() values, so a
-			// "visitor-" id can never equal one - forging the header cannot reach
-			// a signed-in account's data, only another anonymous visitor's.
-			lines.append( '					return "visitor-" & visitor' )
-			lines.append( "				}" )
-			lines.append( "" )
-			lines.append( "				// No usable header - a plain page load, or a tampered value. Fall" )
-			lines.append( "				// back to the session so identity is never empty, which would put" )
-			lines.append( "				// every visitor in one shared bucket." )
-			lines.append( '				return session.sessionId ?: ""' )
-			lines.append( "			}" )
-		}
-
-		lines.append( "		}" )
+		// No identifierProvider here on purpose. A closure declared in this
+		// struct never reaches configSettings - verified in a real boot, both
+		// inside the literal (the shape ColdBox documents) and as a later
+		// assignment - so getUserSessionIdentifier() silently kept returning
+		// the session id. models/WebUiIdentity.bx holds it instead, registered
+		// from onApplicationStart() via setSetting(), which writes directly to
+		// the struct that method reads. See WebUiGenerator.
 
 		if ( arguments.agentInterceptors.len() ) {
 			lines.append( "" )
