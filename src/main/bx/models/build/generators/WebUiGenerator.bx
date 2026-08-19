@@ -1539,9 +1539,12 @@ class {
 		}
 
 		lines.append( "		// Anyone no longer in config loses access on this boot." )
-		lines.append( "		db.deactivateUsersNotIn( configured )" )
+		lines.append( "		var revoked = db.deactivateUsersNotIn( configured )" )
 		lines.append( "" )
-		lines.append( '		writeLog( text : "Web UI accounts reconciled: " & configured.len() & " configured", type : "information", file : "webui-auth" )' )
+		lines.append( "		// The revoked count is logged, not just the configured one: a" )
+		lines.append( "		// revocation that silently does nothing looks identical to one that" )
+		lines.append( "		// worked, and that is precisely the failure that went unnoticed." )
+		lines.append( '		writeLog( text : "Web UI accounts reconciled: " & configured.len() & " configured, " & revoked & " revoked", type : "information", file : "webui-auth" )' )
 		lines.append( "	}" )
 		lines.append( "" )
 		lines.append( "}" )
@@ -1919,16 +1922,36 @@ class {
 			"	 * An empty list deactivates nothing - that means the project configures no",
 			"	 * users at all, and wiping every account over a likely misconfiguration is",
 			"	 * not a decision this should make silently.",
+			"	 *",
+			"	 * The count comes from its OWN select rather than from update()'s return",
+			"	 * value. qb hands back a driver result STRUCT there, not a row count, so",
+			"	 * `return query()...update()` under a numeric declaration throws - and it",
+			"	 * throws AFTER the UPDATE has committed, which is how this failed the",
+			"	 * first time: every row in the table was correct and the app still could",
+			"	 * not finish onApplicationStart(), so it served nothing at all.",
 			"	 */",
 			"	numeric function deactivateUsersNotIn( required array usernames ) {",
 			"		if ( arguments.usernames.isEmpty() ) {",
 			"			return 0",
 			"		}",
-			"		return query()",
+			"",
+			"		var doomed = query()",
+			'			.from( "users" )',
+			'			.whereNotIn( "username", arguments.usernames )',
+			'			.where( "isActive", 1 )',
+			"			.get()",
+			"",
+			"		if ( doomed.isEmpty() ) {",
+			"			return 0",
+			"		}",
+			"",
+			"		query()",
 			'			.from( "users" )',
 			'			.whereNotIn( "username", arguments.usernames )',
 			'			.where( "isActive", 1 )',
 			'			.update( { "isActive" : 0, "updatedAt" : now() } )',
+			"",
+			"		return doomed.len()",
 			"	}",
 			"",
 			"	// -----------------------------------------------------------------",

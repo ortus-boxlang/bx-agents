@@ -270,7 +270,22 @@ class extends="testbox.system.BaseSpec" {
 				);
 				expect( db.findUserByUsername( "retired" ) ).notToBeEmpty();
 
-				db.deactivateUsersNotIn( [ "e2e" ] );
+				// The COUNT matters as much as the effect. Returning qb's own
+				// update() result here throws against the numeric declaration -
+				// after the UPDATE has committed - so the rows look right while
+				// the caller blows up. Asserting the number closes that door.
+				var revoked = db.deactivateUsersNotIn( [ "e2e" ] );
+				expect( isNumeric( revoked ) ).toBeTrue( "deactivateUsersNotIn() must return a row count, not qb's result struct" );
+				expect( revoked ).toBe( 1 );
+
+				// Nothing left to revoke: a second run is a no-op returning 0,
+				// not a repeated write
+				expect( db.deactivateUsersNotIn( [ "e2e" ] ) ).toBe( 0 );
+
+				// An empty configured list deactivates nothing at all, rather
+				// than wiping every account over a likely misconfiguration
+				expect( db.deactivateUsersNotIn( [] ) ).toBe( 0 );
+				expect( db.findUserByUsername( "e2e" ) ).notToBeEmpty();
 
 				// Deactivated, so no longer findable - findUserByUsername() only
 				// ever returns active accounts, which is what gates sign-in
