@@ -316,7 +316,11 @@ try {
 		bx:httpparam type="header" name="X-Visitor-Id" value=visitorA;
 		bx:httpparam type="body" value='{"key":"theme","value":"dark"}';
 	}
-	if ( prefSet.status_code != 200 ) {
+	// Assert the BODY, not just the status. A 200 alone proves very little
+	// here: with rewrites on, a route that does not match can still come back
+	// 200 carrying the SPA shell, which looks identical to a successful write
+	// from the status line alone.
+	if ( prefSet.status_code != 200 || !prefSet.fileContent.findNoCase( '"saved":true' ) ) {
 		throw(
 			type    = "BxAgents.AnonymousVisitorWriteFailed",
 			message = "An anonymous visitor could not write a preference (HTTP #prefSet.status_code#): #left( prefSet.fileContent ?: '', 500 )#"
@@ -327,9 +331,15 @@ try {
 		bx:httpparam type="header" name="X-Visitor-Id" value=visitorA;
 	}
 	if ( prefA.status_code != 200 || !prefA.fileContent.findNoCase( "dark" ) ) {
+		// The write is already known to have succeeded by here, so this can
+		// only mean the two requests resolved to DIFFERENT identities - print
+		// both sides rather than just the read, or the next run says no more
+		// than this one did.
 		throw(
 			type    = "BxAgents.AnonymousVisitorIdentityNotStable",
-			message = "The same visitor id did not read back its own preference (HTTP #prefA.status_code#): #left( prefA.fileContent ?: '', 500 )#"
+			message = "The same visitor id did not read back its own preference."
+				& " write -> HTTP #prefSet.status_code# #left( prefSet.fileContent ?: '', 300 )#"
+				& " | read -> HTTP #prefA.status_code# #left( prefA.fileContent ?: '', 300 )#"
 		)
 	}
 
