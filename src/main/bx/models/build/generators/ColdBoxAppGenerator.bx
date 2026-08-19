@@ -282,82 +282,80 @@ class {
 			"class {",
 			"",
 			"	function configure() {",
-			"		coldbox = {",
-			'			appName : "#bxLiteral( arguments.appName )#"',
-			"		}"
+			"		coldbox = {"
 		]
 
 		// A web UI always names its own identity, signed-in or not. Everything
 		// user-scoped - agent memory, the conversation index, preferences and
 		// pending-run ownership - is keyed by getUserSessionIdentifier(), so
 		// this one closure decides who the visitor is for all of them.
-		if ( len( arguments.webUiDatasource ) ) {
-			lines[ lines.len() ] = "		}"
+		//
+		// Emitted INSIDE the struct literal, which is the shape ColdBox
+		// documents and the only one that actually takes effect. Assigning it
+		// afterwards - `coldbox.identifierProvider = () => {}` - parses, reads
+		// correctly, and never reaches configSettings: ApplicationLoader takes
+		// `variables.coldbox` and merges THAT, so the key has to be in the
+		// literal. getUserSessionIdentifier() therefore kept falling back to
+		// the session id, which is not an error path - a session id is a valid
+		// identity - so the app looked healthy while handing out a different
+		// identity per request.
+		var wantsIdentity = len( arguments.webUiDatasource ) > 0
+
+		lines.append( '			appName : "#bxLiteral( arguments.appName )#"' & ( wantsIdentity ? "," : "" ) )
+
+		if ( wantsIdentity ) {
 			lines.append( "" )
-			lines.append( "		// Identity for the web UI. Everything user-scoped keys off this." )
-			lines.append( "		coldbox.identifierProvider = () => {" )
+			lines.append( "			// Identity for the web UI. Everything user-scoped keys off this." )
+			lines.append( "			identifierProvider : () => {" )
 
 			if ( arguments.webUiHasUsers ) {
-				// THE hinge of the whole sign-in feature. getUserSessionIdentifier()
-				// honours this closure, so pointing it at the signed-in account
-				// re-keys memory, conversations, preferences and pending-run
-				// ownership to the real user without touching a generated handler.
-				lines.append( "			// Signed in: the account. Resolved through application.cbController," )
-				lines.append( "			// NOT a bare getInstance() - this closure is written in a config" )
-				lines.append( "			// class but invoked much later by the controller, where" )
-				lines.append( "			// getInstance() is not reliably in scope." )
-				lines.append( '			var auth = application.cbController.getWireBox().getInstance( "authenticationService@cbauth" )' )
-				lines.append( "			if ( auth.isLoggedIn() ) {" )
-				lines.append( "				return auth.getUserId()" )
-				lines.append( "			}" )
+				lines.append( "				// Signed in: the account. Resolved through application.cbController," )
+				lines.append( "				// NOT a bare getInstance() - this closure is written in a config" )
+				lines.append( "				// class but invoked much later by the controller, where" )
+				lines.append( "				// getInstance() is not reliably in scope." )
+				lines.append( '				var auth = application.cbController.getWireBox().getInstance( "authenticationService@cbauth" )' )
+				lines.append( "				if ( auth.isLoggedIn() ) {" )
+				lines.append( "					return auth.getUserId()" )
+				lines.append( "				}" )
 				lines.append( "" )
 			}
 
 			// Anonymous visitors. An open UI still needs each visitor to be an
 			// INDIVIDUAL - an identity shared across visitors is the
 			// cross-visitor memory leak that P4-UI-B.1 already had to fix.
-			//
-			// The session id alone will not do: sessionTimeout is 60 minutes, so
-			// an idle hour hands the same browser a new identity and silently
-			// orphans its conversations, preferences and memory. The id the page
-			// keeps in localStorage survives that, a browser restart and a
-			// server restart.
-			lines.append( "			// Anonymous: the id this browser keeps in localStorage." )
-			lines.append( "			//" )
-			lines.append( "			// Read through ColdBox's OWN request context rather than" )
-			lines.append( "			// getHTTPRequestData(). Header names are case-insensitive and" )
-			lines.append( "			// servers normalize them differently; getHTTPHeader() is the" )
-			lines.append( "			// framework's tested accessor for exactly that, and it already" )
-			lines.append( "			// guards the no-request case (a scheduled task or spawned thread" )
-			lines.append( "			// reaches this closure too). Hand-rolling the lookup here got it" )
-			lines.append( "			// wrong twice." )
-			lines.append( '			var visitor = ""' )
-			lines.append( "			try {" )
-			lines.append( '				visitor = toString( application.cbController.getRequestService().getContext().getHTTPHeader( "X-Visitor-Id", "" ) )' )
-			lines.append( "			} catch ( any e ) {" )
-			lines.append( '				visitor = ""' )
-			lines.append( "			}" )
+			lines.append( "				// Anonymous: the id this browser keeps in localStorage." )
+			lines.append( "				//" )
+			lines.append( "				// Read through ColdBox's OWN request context. Header names are" )
+			lines.append( "				// case-insensitive and servers normalize them differently;" )
+			lines.append( "				// getHTTPHeader() is the framework's tested accessor for that, and" )
+			lines.append( "				// it already guards the no-request case (a scheduled task or a" )
+			lines.append( "				// spawned thread reaches this closure too)." )
+			lines.append( '				var visitor = ""' )
+			lines.append( "				try {" )
+			lines.append( '					visitor = toString( application.cbController.getRequestService().getContext().getHTTPHeader( "X-Visitor-Id", "" ) )' )
+			lines.append( "				} catch ( any e ) {" )
+			lines.append( '					visitor = ""' )
+			lines.append( "				}" )
 			lines.append( "" )
-			lines.append( "			// Bounded and charset-checked before use - it is attacker-controlled" )
-			lines.append( "			// and becomes a database key and a memory key." )
-			lines.append( '			if ( reFind( "^[A-Za-z0-9._-]{8,64}$", visitor ) ) {' )
+			lines.append( "				// Bounded and charset-checked before use - it is attacker-controlled" )
+			lines.append( "				// and becomes a database key and a memory key." )
+			lines.append( '				if ( reFind( "^[A-Za-z0-9._-]{8,64}$", visitor ) ) {' )
 			// The prefix is what makes honouring a client-supplied header safe at
 			// all, including in a project that mounts an open UI and a gated one
 			// side by side. Account ids are bare createUUID() values, so a
 			// "visitor-" id can never equal one - forging the header cannot reach
-			// a signed-in account's data, only another anonymous visitor's. That
-			// is the same isolation-not-authorization caveat conversationId
-			// already carries, and it is a structural guarantee rather than a rule
-			// someone has to remember.
-			lines.append( '				return "visitor-" & visitor' )
-			lines.append( "			}" )
+			// a signed-in account's data, only another anonymous visitor's.
+			lines.append( '					return "visitor-" & visitor' )
+			lines.append( "				}" )
 			lines.append( "" )
-			lines.append( "			// No usable header - a plain page load, or a tampered value. Fall" )
-			lines.append( "			// back to the session so identity is never empty, which would put" )
-			lines.append( "			// every visitor in one shared bucket." )
-			lines.append( '			return session.sessionId ?: ""' )
-			lines.append( "		}" )
+			lines.append( "				// No usable header - a plain page load, or a tampered value. Fall" )
+			lines.append( "				// back to the session so identity is never empty, which would put" )
+			lines.append( "				// every visitor in one shared bucket." )
+			lines.append( '				return session.sessionId ?: ""' )
+			lines.append( "			}" )
 		}
+
+		lines.append( "		}" )
 
 		if ( arguments.agentInterceptors.len() ) {
 			lines.append( "" )
