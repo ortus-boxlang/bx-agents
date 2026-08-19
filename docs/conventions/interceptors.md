@@ -1,3 +1,11 @@
+---
+title: interceptors/
+icon: 🪝
+summary: ColdBox lifecycle interceptors, scoped by an @scope annotation.
+description: ColdBox lifecycle interceptors, scoped by an @scope annotation.
+tags: [conventions, interceptors]
+---
+
 # interceptors/
 
 `interceptors/*.bx` are ColdBox interceptors (lifecycle hook classes - `preProcess`, `postProcess`, etc.), scoped via an `@scope` annotation on the class itself:

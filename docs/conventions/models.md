@@ -1,3 +1,11 @@
+---
+title: models/
+icon: 🧠
+summary: Reusable named model configurations, referenced from Agent.bx by name.
+description: Reusable named model configurations, referenced from Agent.bx by name.
+tags: [conventions, models]
+---
+
 # models/
 
 `models/` lets you define reusable, named model configurations as one `.bx` or `.json` file each, referenced from `Agent.bx`'s `model` field by name (with no `/`, so it isn't mistaken for a `provider/model` slug):

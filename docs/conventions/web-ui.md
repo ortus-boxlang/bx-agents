@@ -1,3 +1,11 @@
+---
+title: The web chat UI
+icon: 💬
+summary: A complete browser chat client - sidebar, streaming, approvals, SQLite store.
+description: A complete browser chat client - sidebar, streaming, approvals, SQLite store.
+tags: [conventions, gateways, web-ui]
+---
+
 # The web chat UI
 
 A `gateways/*.bx` entry with `exposes: "webui"` ships a complete browser chat client for the agent - a conversation sidebar, streaming with reasoning and tool calls, human-in-the-loop approvals, per-visitor theming, and a real SQLite store behind it.
@@ -25,21 +33,44 @@ That constraint is about the build, not about scope. The page is a full client: 
 
 The page talks to its own generated `<path>/api` route via `POST <path>/api/stream` (`Accept: text/event-stream`), using `fetch()` + a manual `ReadableStream` reader - not the browser's `EventSource`, which can't `POST` or set custom headers, both needed here.
 
-{% hint style="warning" %}
-**`toAi()` forwards each bx-ai chunk verbatim - it does not wrap it.** ColdBox's [AI Routing docs](https://coldbox.ortusbooks.com/the-basics/routing/routing-dsl/ai-routing) show the stream as `data: {"token":"..."}` lines, but its own source (`Router.cfc`, `toAi()`'s stream sub-route) does `emitter.send( chunk, "chunk" )` - so every frame carries the **full normalized bx-ai envelope**:
+!!! warning
+    **`toAi()` forwards each bx-ai chunk verbatim - it does not wrap it.** ColdBox's [AI Routing docs](https://coldbox.ortusbooks.com/the-basics/routing/routing-dsl/ai-routing) show the stream as `data: {"token":"..."}` lines, but its own source (`Router.cfc`, `toAi()`'s stream sub-route) does `emitter.send( chunk, "chunk" )` - so every frame carries the **full normalized bx-ai envelope**:
 
-```
-event: chunk
-data: {"object":"chat.completion.chunk","choices":[{"delta":{"role":"assistant","content":"Ray","reasoning":"...","tool_calls":[...]}}]}
+    ```
+    event: chunk
+    data: {"object":"chat.completion.chunk","choices":[{"delta":{"role":"assistant","content":"Ray","reasoning":"...","tool_calls":[...]}}]}
 
-event: done
-data: [DONE]
-```
+    event: done
+    data: [DONE]
+    ```
 
-There is no `token` key anywhere. A client written against that docs page - including this UI's own first version - reads `undefined` and renders nothing at all. Read `choices[0].delta.content` instead.
-{% endhint %}
+    There is no `token` key anywhere. A client written against that docs page - including this UI's own first version - reads `undefined` and renders nothing at all. Read `choices[0].delta.content` instead.
 
 Because the whole envelope arrives, **reasoning and tool calls are already on the wire** with no extra endpoint needed: `delta.reasoning` (normalized across every provider by bx-ai) renders as a collapsed "Thinking" strip, and `delta.tool_calls` as collapsed per-call chips. Tool-call arguments stream as partial JSON fragments keyed by `index`, so the page accumulates per index rather than assuming any single chunk holds a complete call.
+
+## What a streaming turn actually looks like
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant B as browser (generated index.html)
+    participant H as handlers/ChatUi.bx
+    participant A as the agent
+    participant D as models/ChatDb.bx (SQLite)
+
+    B->>H: POST /chat/api/stream, Accept: text/event-stream
+    H->>D: resolve the conversation for this session
+    H->>A: agent.stream( ... )
+    H-->>B: event: thread - the threadId, sent BEFORE the first chunk
+    loop for every chunk bx-ai emits
+        A-->>H: a full normalized bx-ai envelope
+        H-->>B: event: chunk - choices[0].delta.content / .reasoning / .tool_calls
+    end
+    H->>D: persist the turn
+    H-->>B: event: done - [DONE]
+```
+
+The `thread` event goes first because a response header cannot be read before the body starts arriving, and the page needs that `threadId` to be able to `POST /cancel` mid-turn.
 
 ## The generated API
 
@@ -72,17 +103,15 @@ Every one is scoped by ColdBox's `getUserSessionIdentifier()` as the `userId`. T
 
 `threadId` is server-authoritative: taken from the request when supplied, minted otherwise, and always echoed back - as an `X-Thread-Id` response header on `/invoke` and `/batch`, and as a `thread` SSE event sent *before the first chunk* on `/stream` (a header can't be read before the body starts arriving). That's the same contract ColdBox 8.1's own `toAi()` adopted, so a client written against one works against the other.
 
-{% hint style="warning" %}
-**Stop must go through `/cancel`, not just an aborted fetch.** Aborting the HTTP request only stops the browser listening - the server keeps running the turn, calling tools and spending tokens. The page therefore sends a `threadId` with every turn and posts it to `/cancel` before aborting, so `agent.cancelRun()` can signal the run at its next checkpoint.
-{% endhint %}
+!!! warning
+    **Stop must go through `/cancel`, not just an aborted fetch.** Aborting the HTTP request only stops the browser listening - the server keeps running the turn, calling tools and spending tokens. The page therefore sends a `threadId` with every turn and posts it to `/cancel` before aborting, so `agent.cancelRun()` can signal the run at its next checkpoint.
 
 `/clear` and `/compact` are both careful about scope. `/clear` goes through each memory's own `clear( userId, conversationId )` rather than `AiAgent.clearMemory()`, which takes no arguments and would wipe every visitor's history; `/compact` goes through `summarize( config, userId, conversationId )` for the same reason. Compaction replaces this conversation's older messages with an AI-written summary and keeps the most recent few, touching nothing outside the caller's `(userId, conversationId)` pair.
 
-{% hint style="info" %}
-**`/compact` needs a summary model, and reports whether it has one.** `summarize()` is a silent no-op unless the memory has *both* `summaryProvider` and `summaryModel` configured, and also when the conversation is already at or under `keepRecent`. Neither is an error, so `/compact` returns `{ compacted, before, after }` and lets the caller see for itself, and `/info`'s `capabilities.compact` reports whether a summary model is configured at all - so a page can hide a button that would do nothing rather than look broken.
+!!! info
+    **`/compact` needs a summary model, and reports whether it has one.** `summarize()` is a silent no-op unless the memory has *both* `summaryProvider` and `summaryModel` configured, and also when the conversation is already at or under `keepRecent`. Neither is an error, so `/compact` returns `{ compacted, before, after }` and lets the caller see for itself, and `/info`'s `capabilities.compact` reports whether a summary model is configured at all - so a page can hide a button that would do nothing rather than look broken.
 
-Only `keepRecent` is taken from the request. `summarize()` also honours `model`/`provider` overrides, but accepting those here would let any visitor aim a summarization call at a provider and model of their choosing on your credentials - the memory's own config decides that instead.
-{% endhint %}
+    Only `keepRecent` is taken from the request. `summarize()` also honours `model`/`provider` overrides, but accepting those here would let any visitor aim a summarization call at a provider and model of their choosing on your credentials - the memory's own config decides that instead.
 
 ```javascript
 // Agent.bx - what makes /compact functional
@@ -104,9 +133,8 @@ There is no per-visitor identity, on purpose. Every visitor to an accountless we
 
 That is the point of running without accounts rather than an oversight: an open UI is a single shared tool (a laptop, a trusted internal box), not a multi-tenant service. Handing each browser its own slice would only fragment one workspace into per-browser copies nobody asked for, and any client-side id doing the fragmenting would be forgeable anyway.
 
-{% hint style="warning" %}
-**An open UI has no privacy between visitors.** Anyone who can reach the URL sees every conversation in it, and can continue or delete any of them. If that is not what you want — anywhere the page is reachable by more than the people who should see the transcripts — declare `users`.
-{% endhint %}
+!!! warning
+    **An open UI has no privacy between visitors.** Anyone who can reach the URL sees every conversation in it, and can continue or delete any of them. If that is not what you want — anywhere the page is reachable by more than the people who should see the transcripts — declare `users`.
 
 ```javascript
 // gateways/chatUi.bx
@@ -126,11 +154,10 @@ A `passwordHash` is safe to commit precisely because it cannot be reversed. Gene
 bxAgents hash-password --password="correct horse battery staple"
 ```
 
-{% hint style="danger" %}
-**Hashed, not encrypted.** Encryption is reversible, and a stolen database file almost always travels with whatever could decrypt it — so a reversible scheme turns one file leak into every user's password, including any they reused elsewhere. Passwords here go through PBKDF2-HMAC-SHA256 with a per-user random salt and are never recoverable from the database. (BoxLang ships no bcrypt or argon2 BIF; PBKDF2 is the strongest primitive available without adding a dependency.)
+!!! danger
+    **Hashed, not encrypted.** Encryption is reversible, and a stolen database file almost always travels with whatever could decrypt it — so a reversible scheme turns one file leak into every user's password, including any they reused elsewhere. Passwords here go through PBKDF2-HMAC-SHA256 with a per-user random salt and are never recoverable from the database. (BoxLang ships no bcrypt or argon2 BIF; PBKDF2 is the strongest primitive available without adding a dependency.)
 
-The iteration count is stored *inside* each hash (`pbkdf2$<iterations>$<salt>$<digest>`), so it can be raised later without invalidating anything already stored.
-{% endhint %}
+    The iteration count is stored *inside* each hash (`pbkdf2$<iterations>$<salt>$<digest>`), so it can be raised later without invalidating anything already stored.
 
 ### What sign-in changes
 
@@ -166,11 +193,10 @@ When the agent pauses for approval, the stream emits a `middleware_stop` chunk t
 
 `decidedBy` is filled from the session server-side, never from the request body: who approved something is exactly the kind of claim a caller should not get to make about itself.
 
-{% hint style="warning" %}
-**A suspended run belongs to the session that started it, and both routes enforce that.** Deriving `decidedBy` server-side only stops a caller lying about *who* decided - on its own it does nothing about *whose run* they are deciding on. Unlike every other action, `/pending` and `/resume` are addressed by `threadId` rather than by conversation, so without an ownership check a visitor holding someone else's `threadId` could read their pending tool calls and their arguments, and approve or reject on their behalf.
+!!! warning
+    **A suspended run belongs to the session that started it, and both routes enforce that.** Deriving `decidedBy` server-side only stops a caller lying about *who* decided - on its own it does nothing about *whose run* they are deciding on. Unlike every other action, `/pending` and `/resume` are addressed by `threadId` rather than by conversation, so without an ownership check a visitor holding someone else's `threadId` could read their pending tool calls and their arguments, and approve or reject on their behalf.
 
-The owner needs no extra bookkeeping: the handler stamps the session-derived `userId` into the run options, and the agent checkpoints those options alongside the suspension - so the saved state already knows who it belongs to. `/pending` answers as though nothing is pending when the caller is not the owner, so it cannot be used to probe whether a `threadId` exists at all; `/resume` refuses with a `403`.
-{% endhint %}
+    The owner needs no extra bookkeeping: the handler stamps the session-derived `userId` into the run options, and the agent checkpoints those options alongside the suspension - so the saved state already knows who it belongs to. `/pending` answers as though nothing is pending when the caller is not the owner, so it cannot be used to probe whether a `threadId` exists at all; `/resume` refuses with a `403`.
 
 ## History and reload
 
@@ -238,19 +264,18 @@ An absolute `database.path` **fails the build**: it's resolved with `expandPath(
 
 **Schema is versioned and forward-only.** `ChatDb.migrate()` records what it has applied in a `bxagents_schema_version` table and applies only what's newer, so booting against an existing store is a no-op. v1 creates `conversations` and `preferences`. Evolve it by adding a new `applyV<n>()` and bumping `SCHEMA_VERSION` — never by editing a migration that has shipped, because **SQLite cannot modify or drop a column** and qb's `SQLiteGrammar` throws `UnsupportedOperation` rather than pretending otherwise.
 
-{% hint style="warning" %}
-**Two things here are counter-intuitive, and both were established the hard way against a real ColdBox boot rather than read off a docs page.**
+!!! warning
+    **Two things here are counter-intuitive, and both were established the hard way against a real ColdBox boot rather than read off a docs page.**
 
-**The default-datasource setting is `this.datasource`, not `this.defaultDatasource`.** The registration key is plural (`this.datasources[ "name" ]`), so the singular default reads like it should match - and BoxLang accepts `this.defaultDatasource` silently and does nothing with it. The failure it produces names the very datasource you are trying to select (`No default datasource defined in the application or globally or in the query options. Registered datasources are: [bxagents]`), which reads as a broken selection mechanism rather than a misspelled setting.
+    **The default-datasource setting is `this.datasource`, not `this.defaultDatasource`.** The registration key is plural (`this.datasources[ "name" ]`), so the singular default reads like it should match - and BoxLang accepts `this.defaultDatasource` silently and does nothing with it. The failure it produces names the very datasource you are trying to select (`No default datasource defined in the application or globally or in the query options. Registered datasources are: [bxagents]`), which reads as a broken selection mechanism rather than a misspelled setting.
 
-**Name the datasource on every qb builder; do not rely on `moduleSettings.qb.defaultOptions`.** qb's `ModuleConfig.cfc` maps `QueryBuilder@qb` with `.initArg( name = "defaultOptions", value = settings.defaultOptions )` in `onLoad()`, so the setting *looks* like it covers you. It did not arrive in a real boot - the datasource was registered and the builder still had empty options. `ChatDb.query()` therefore calls `.mergeDefaultOptions( { datasource : static.DATASOURCE } )` on every builder it hands out. `SchemaBuilder@qb` never receives `defaultOptions` at all (qb maps it with `grammar` only), so every schema call passes `options: { datasource: ... }` itself.
+    **Name the datasource on every qb builder; do not rely on `moduleSettings.qb.defaultOptions`.** qb's `ModuleConfig.cfc` maps `QueryBuilder@qb` with `.initArg( name = "defaultOptions", value = settings.defaultOptions )` in `onLoad()`, so the setting *looks* like it covers you. It did not arrive in a real boot - the datasource was registered and the builder still had empty options. `ChatDb.query()` therefore calls `.mergeDefaultOptions( { datasource : static.DATASOURCE } )` on every builder it hands out. `SchemaBuilder@qb` never receives `defaultOptions` at all (qb maps it with `grammar` only), so every schema call passes `options: { datasource: ... }` itself.
 
-The `moduleSettings.qb` block is still generated - it is right for any other qb use in the app - but the generated store does not depend on it.
+    The `moduleSettings.qb` block is still generated - it is right for any other qb use in the app - but the generated store does not depend on it.
 
-If you extend `ChatDb`, name the datasource on whatever you add.
+    If you extend `ChatDb`, name the datasource on whatever you add.
 
-One more, unchanged: the datasource must be a **named** datasource, never an inline struct - qb's own `appendSqlComments()` types that argument as `string`, so a struct throws before any SQL runs.
-{% endhint %}
+    One more, unchanged: the datasource must be a **named** datasource, never an inline struct - qb's own `appendSqlComments()` types that argument as `string`, so a struct throws before any SQL runs.
 
 The grammar is the only SQLite-specific piece. Everything else goes through qb, so pointing this at Postgres or MySQL later is a grammar and datasource change rather than a rewrite.
 
@@ -262,9 +287,8 @@ These are what the SQLite store exists for, and both are scoped by the same serv
 
 `/conversations/delete` removes the index row *and* clears the agent's messages for that conversation. Dropping only the row would leave the conversation invisible while still sitting in the model's context the moment anyone reused the id.
 
-{% hint style="warning" %}
-**Why `touchConversation()` is not a qb upsert.** An upsert targets the primary key alone, so a caller who guessed another visitor's `conversationId` would have their own `userId` written onto that row and take the conversation over. The store reads first and refuses when the row belongs to someone else. `setPreference()` *does* upsert, and safely — its target is the `(userId, prefKey)` composite key, so the caller's own identity is part of what it matches on.
-{% endhint %}
+!!! warning
+    **Why `touchConversation()` is not a qb upsert.** An upsert targets the primary key alone, so a caller who guessed another visitor's `conversationId` would have their own `userId` written onto that row and take the conversation over. The store reads first and refuses when the row belongs to someone else. `setPreference()` *does* upsert, and safely — its target is the `(userId, prefKey)` composite key, so the caller's own identity is part of what it matches on.
 
 **Preferences.** Server-side rather than `localStorage`, so they follow the identity instead of the browser. Point `identifierProvider` at a real authenticated principal and a visitor's preferences follow them across devices with no change to the generated code.
 
@@ -297,15 +321,13 @@ theme: {
 }
 ```
 
-{% hint style="info" %}
-**Write hex colors bare, with no leading hash.** BoxLang begins string interpolation at `#` in **both** single- and double-quoted strings, so a literal hex color in a `.bx` config is a parse error unless the hash is doubled - a footgun nobody remembers. The generator adds it back for you, so `"0f766e"` just works. `rgb()`, `hsl()` and named colors need nothing special either way.
-{% endhint %}
+!!! info
+    **Write hex colors bare, with no leading hash.** BoxLang begins string interpolation at `#` in **both** single- and double-quoted strings, so a literal hex color in a `.bx` config is a parse error unless the hash is doubled - a footgun nobody remembers. The generator adds it back for you, so `"0f766e"` just works. `rgb()`, `hsl()` and named colors need nothing special either way.
 
 For anything the tokens don't cover - custom fonts, layout, per-element rules - drop a `resources/webui/theme.css` into the project. It's inlined **last** into the page's `<style>`, so it beats both the shipped defaults and the `theme` tokens; and being a real `.css` file, ordinary `#rrggbb` hex works there normally. (A literal `</style` in that file fails the build, since it would terminate the page's style block early.)
 
-{% hint style="warning" %}
-**`apiKeyEnvVar` is a simple, toggleable gate - not a full login system.** Left unset, `<path>/api/*` is wide open (fine for local dev, not for a public deployment). Set it, and a generated `preProcess` interceptor (`interceptors/WebUiAuthGate.bx`) requires every request under `<path>/api/*` to carry a matching `X-API-Key` header, compared via `java.security.MessageDigest.isEqual()` - the same constant-time-compare discipline every webhook gateway's own signature check already uses. **The static shell itself (`<path>/index.html`) is deliberately NOT gated** - only `<path>/api/*` is - because a browser's plain page navigation can't send a custom header, so gating the shell would make the very page that prompts you for the key unreachable without it already. The page's own JS asks for the key (a "Key" button, stored in `localStorage`) and sends it on every API call it makes from then on.
-{% endhint %}
+!!! warning
+    **`apiKeyEnvVar` is a simple, toggleable gate - not a full login system.** Left unset, `<path>/api/*` is wide open (fine for local dev, not for a public deployment). Set it, and a generated `preProcess` interceptor (`interceptors/WebUiAuthGate.bx`) requires every request under `<path>/api/*` to carry a matching `X-API-Key` header, compared via `java.security.MessageDigest.isEqual()` - the same constant-time-compare discipline every webhook gateway's own signature check already uses. **The static shell itself (`<path>/index.html`) is deliberately NOT gated** - only `<path>/api/*` is - because a browser's plain page navigation can't send a custom header, so gating the shell would make the very page that prompts you for the key unreachable without it already. The page's own JS asks for the key (a "Key" button, stored in `localStorage`) and sends it on every API call it makes from then on.
 
 
 ## Conversation identity: the session IS the user identifier
@@ -328,9 +350,8 @@ Delegating to ColdBox rather than reading `session.sessionId` directly buys thre
 
 Because the identity is server-issued, scoping holds no matter which memories the project configures - one or many, `window`, `cache`, `jdbc`, vector, any mix.
 
-{% hint style="info" %}
-**Why not `toAi()` for the webui?** ColdBox 8.1's `toAi()` now derives conversational context itself, and its fallback is exactly the same call this handler makes: `len( body.userId ) ? body.userId : controller.getUserSessionIdentifier()`. The difference is precedence - `toAi()` lets a **caller-supplied `userId` win**, which is right for a trusted server-to-server caller but wrong for a browser sitting behind one shared API key, where anyone could name themselves anyone and read another visitor's memory. The generated handler derives the identity server-side *only*, and never looks at `body.userId`. It keeps `toAi()`'s exact route shape (`/invoke`, `/stream`, `/batch`, `/info`), its SSE wire format, and its `X-Thread-Id`/`thread`-event echo, so it stays a drop-in. The other exposure kinds (`exposes: "agent"`) still use `toAi()` unchanged - server-to-server is the case its precedence is built for.
-{% endhint %}
+!!! info
+    **Why not `toAi()` for the webui?** ColdBox 8.1's `toAi()` now derives conversational context itself, and its fallback is exactly the same call this handler makes: `len( body.userId ) ? body.userId : controller.getUserSessionIdentifier()`. The difference is precedence - `toAi()` lets a **caller-supplied `userId` win**, which is right for a trusted server-to-server caller but wrong for a browser sitting behind one shared API key, where anyone could name themselves anyone and read another visitor's memory. The generated handler derives the identity server-side *only*, and never looks at `body.userId`. It keeps `toAi()`'s exact route shape (`/invoke`, `/stream`, `/batch`, `/info`), its SSE wire format, and its `X-Thread-Id`/`thread`-event echo, so it stays a drop-in. The other exposure kinds (`exposes: "agent"`) still use `toAi()` unchanged - server-to-server is the case its precedence is built for.
 
 `conversationId` still comes from the client, and that's deliberate: it distinguishes several conversations belonging to the *same* visitor - it's what the **New** button rotates. It is not the isolation boundary; the session-derived `userId` is.
 
@@ -347,9 +368,8 @@ A project with no `webui` keeps sessions off and bx-ai's own memory default - an
 
 Assistant replies render through a deliberately small markdown subset - fenced and inline code, bold/italic, links, bullet and numbered lists, headings. It is applied **escape-first**: the model's text is HTML-escaped before a single tag is introduced, so no model output can become live markup, and link hrefs are allowlisted to `http(s)`/`mailto` so a `javascript:` URL is never turned into an anchor at all.
 
-{% hint style="info" %}
-The composer is a `textarea` - **Enter** sends, **Shift+Enter** adds a newline, and it grows to about six lines before scrolling. A turn in flight can be halted with **Stop** (an `AbortController`), which keeps whatever already streamed rather than discarding it. The transcript only auto-scrolls when you're already at the bottom, so scrolling up to re-read something mid-stream doesn't yank you back down.
-{% endhint %}
+!!! info
+    The composer is a `textarea` - **Enter** sends, **Shift+Enter** adds a newline, and it grows to about six lines before scrolling. A turn in flight can be halted with **Stop** (an `AbortController`), which keeps whatever already streamed rather than discarding it. The transcript only auto-scrolls when you're already at the bottom, so scrolling up to re-read something mid-stream doesn't yank you back down.
 
 ## What is not here yet
 

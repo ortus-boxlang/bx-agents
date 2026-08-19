@@ -1,14 +1,32 @@
+---
+title: The Build Pipeline
+icon: 🏗️
+summary: The fixed phase sequence that turns a project into a ColdBox application.
+description: The fixed phase sequence that turns a project into a ColdBox application.
+tags: [reference, build]
+---
+
 # The Build Pipeline
 
 `bxAgents build` runs a fixed sequence of phases, once, producing a plain ColdBox application. Nothing here runs again at request time - that's the whole point of build-time assembly. This page walks the phases in the exact order `BuildPipeline.bx` runs them.
 
+```mermaid
+flowchart TD
+    A["1 · Resolve config<br/><small>AgentConfigResolver</small>"] --> B["2 · Discover<br/><small>ProjectDiscoverer</small>"]
+    B --> C{"3 · Validate<br/><small>ProjectValidator</small>"}
+    C -->|"any error"| X["Build throws.<br/>.build/app is never written or touched"]
+    C -->|"clean<br/><small>warnings never block</small>"| D["4 · Generate"]
+    D --> D1["1 Interceptors"] --> D2["2 Gateways"] --> D3["3 MCP"] --> D4["4 Router"]
+    D4 --> D5["5 Web UI"] --> D6["6 Core app skeleton"] --> D7["7 Tools/skills copy"] --> D8["8 Scheduler"]
+    D8 --> E["5 · Normalize + write<br/><small>ManifestNormalizer</small>"]
+    E --> F[".build/manifest.json<br/>+ .build/app - a plain ColdBox application"]
+
+    style C fill:#fff3cd,stroke:#856404
+    style X fill:#f8d7da,stroke:#721c24
+    style F fill:#d4edda,stroke:#155724
 ```
-1. Resolve config       AgentConfigResolver
-2. Discover             ProjectDiscoverer
-3. Validate             ProjectValidator          -- fails the build here on any error
-4. Generate             (interceptors, gateways, mcp, router, web UI, app skeleton, tools/skills, scheduler)
-5. Normalize + write     ManifestNormalizer         -- .build/manifest.json
-```
+
+Validation is the gate: it collects **every** error rather than failing fast, and nothing is generated until it comes back clean.
 
 (Packaging into a `.bxa` is a deliberately separate step - see [Deployment & Secrets](deployment-and-secrets.md) - so a fast `build` → inspect → `build` again loop never pays a packaging cost it doesn't need.)
 

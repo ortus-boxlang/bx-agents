@@ -1,0 +1,94 @@
+name: Publish Docs
+
+# Builds docs/ with bx-docs (https://ortus-boxlang.github.io/bx-docs/) and
+# publishes the static site to GitHub Pages:
+#   development -> the site root   (latest, what this repo develops against)
+#   main        -> /stable/        (the released docs)
+#
+# development is the root rather than main on purpose: this project releases
+# from development and that is the branch a reader almost always wants. Flip
+# the two `destination_dir`/`if` pairs below to swap them.
+#
+# ONE-TIME SETUP, and it cannot be done from a workflow file: after the first
+# successful run creates the gh-pages branch, go to
+# Settings -> Pages -> Build and deployment -> Source -> "Deploy from a branch"
+# and pick gh-pages + / (root). Nothing publishes until that is set.
+
+on:
+  push:
+    branches:
+      - main
+      - development
+    paths:
+      - "docs/**"
+      - "bxdocs.json"
+      - ".github/workflows/docs.yml"
+
+  # So a republish never needs an empty commit
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Each branch publishes to its own destination_dir, so the two versions never
+# fight; only serialize a branch against its own earlier runs.
+concurrency:
+  group: "docs-${{ github.ref_name }}"
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build & Publish (${{ github.ref_name }})
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Setup BoxLang + bx-docs
+        uses: ortus-boxlang/setup-boxlang@1.4.0
+        with:
+          with-commandbox: true
+          # bx-docs renders through bx-markdown and encodes through bx-esapi;
+          # both are hard dependencies of the module, not optional extras.
+          modules: bx-docs,bx-markdown,bx-esapi
+
+      - name: Point baseURL and editUri at this branch's own published path
+        if: github.ref_name != 'development'
+        run: |
+          # The committed bxdocs.json points at the site root and the
+          # development branch, because development is what publishes there.
+          # Every other branch publishes under its own sub-path and should
+          # offer "edit this page" against its OWN branch - so patch a
+          # throwaway copy of the config for just this build.
+          jq --arg url "https://ortus-boxlang.github.io/bx-agents/stable/" \
+             --arg editUri "edit/${{ github.ref_name }}/docs/" \
+             '.baseURL = $url | .repo.editUri = $editUri' bxdocs.json > bxdocs.json.tmp
+          mv bxdocs.json.tmp bxdocs.json
+
+      - name: Build the site
+        run: boxlang module:bxdocs build
+
+      - name: Fail if the build produced nothing
+        run: |
+          # bxDocs exits 0 having written an empty site if docs/ is empty or
+          # misconfigured. A published-but-blank docs site is worse than a
+          # failed build, so check for real output rather than trusting exit 0.
+          test -f site/index.html || { echo "::error::site/index.html missing - the docs build produced no site"; exit 1; }
+          echo "Built $(find site -name '*.html' | wc -l) HTML page(s)"
+
+      - name: Publish development to the site root
+        if: github.ref_name == 'development'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
+          keep_files: true
+
+      - name: Publish main to /stable/
+        if: github.ref_name == 'main'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
+          destination_dir: stable
+          keep_files: true

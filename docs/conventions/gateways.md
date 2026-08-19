@@ -1,10 +1,33 @@
+---
+title: gateways/
+icon: 🔌
+summary: "One folder, two unrelated jobs: exposing the agent, and connecting chat platforms to it."
+description: "One folder, two unrelated jobs: exposing the agent, and connecting chat platforms to it."
+tags: [conventions, gateways]
+---
+
 # gateways/
 
 `gateways/*.bx`/`.json` files under this one folder cover **two distinct, unrelated things** - which kind an entry is depends entirely on whether its `configure()` struct has an `exposes` key.
 
-{% hint style="warning" %}
-Don't confuse these with each other - an HTTP-exposed agent (`exposes: "agent"`) is a REST API for your agent; a channel-adapter gateway (`type: "http"`) is a webhook endpoint for a chat platform or human-in-the-loop approval flow. They generate completely different routes.
-{% endhint %}
+!!! warning
+    Don't confuse these with each other - an HTTP-exposed agent (`exposes: "agent"`) is a REST API for your agent; a channel-adapter gateway (`type: "http"`) is a webhook endpoint for a chat platform or human-in-the-loop approval flow. They generate completely different routes.
+
+```mermaid
+flowchart TD
+    F["a file under gateways/"] --> Q{"does configure() return<br/>an 'exposes' key?"}
+    Q -->|"yes"| E["EXPOSURE<br/>a route into your agent"]
+    Q -->|"no - it has a 'type' key instead"| C["CHANNEL ADAPTER<br/>a connection to a chat platform"]
+    E --> E1["exposes: agent<br/>route().toAi()"]
+    E --> E2["exposes: mcp<br/>route().toMCP()"]
+    E --> E3["exposes: webui<br/>generated index.html + /api"]
+    C --> C1["mock / cli / http<br/>pull-driven: something calls US"]
+    C --> C2["telegram, slack, discord, email, whatsapp-cloud,<br/>teams, twilio, github, signal<br/>push-style: holds its own connection"]
+    C2 --> S["one GatewaySession<br/>bound to the root agent"]
+
+    style E fill:#d4edda,stroke:#155724
+    style C fill:#cce5ff,stroke:#004085
+```
 
 ## 1. HTTP/MCP/web-UI exposure (`exposes: "agent" | "mcp" | "webui"`)
 
@@ -105,9 +128,8 @@ get( "/interactions/:requestID" ).toHandler( "Gateway.process" )
 post( "/interactions/:requestID/decisions" ).toHandler( "Gateway.process" )
 ```
 
-{% hint style="info" %}
-ColdBox has no built-in `toAiGateway()` DSL terminator for this surface (only `toAi()` and `toMCP()` exist natively) - this wiring is BX Agents' own generated code, following the same shape a future core terminator would produce. See the [`toAiGateway()` for ColdBox Core](../proposals/toAiGateway-coldbox-core.md) proposal.
-{% endhint %}
+!!! info
+    ColdBox has no built-in `toAiGateway()` DSL terminator for this surface (only `toAi()` and `toMCP()` exist natively) - this wiring is BX Agents' own generated code, following the same shape a future core terminator would produce. See the [`toAiGateway()` for ColdBox Core](../proposals/toAiGateway-coldbox-core.md) proposal.
 
 ## 3. Push-style gateways (`type: "telegram"` / `"slack"` / `"discord"` / `"email"` / `"whatsapp-cloud"` / `"teams"` / `"twilio"` / `"github"` / `"signal"`, and friends)
 
@@ -263,9 +285,8 @@ aiGatewayRegistry().register( aiGateway( "bxModules.bxagents.models.gateways.Sig
 
 **Validation:** `type: "telegram"` requires `botTokenEnvVar`; `type: "slack"` requires both `botTokenEnvVar` and `appTokenEnvVar`; `type: "discord"` requires `botTokenEnvVar`; `type: "email"` requires `imapHostEnvVar`, `imapUsernameEnvVar`, `imapPasswordEnvVar`, and `fromAddressEnvVar`; `type: "whatsapp-cloud"` requires `accessTokenEnvVar`, `phoneNumberIdEnvVar`, `appSecretEnvVar`, and `verifyTokenEnvVar`; `type: "teams"` requires `appIdEnvVar` and `appPasswordEnvVar`; `type: "twilio"` requires `accountSidEnvVar`, `authTokenEnvVar`, and `fromEnvVar`; `type: "github"` requires `tokenEnvVar`, `webhookSecretEnvVar`, and `botNameEnvVar`; `type: "signal"` requires `accountEnvVar` - all checked the same way `http`'s `secretEnvVar` is.
 
-{% hint style="info" %}
-Slack v1 is **Socket Mode only** - no public webhook endpoint is needed or generated for it (unlike `http`, which gets real routes - see §2 above). The Events-API/HTTP-webhook alternative Slack also supports isn't built here. Discord v1 is likewise the real **Gateway API** (a persistent websocket) rather than Discord's alternative HTTP Interactions Endpoint URL webhook mode - no Ed25519 signature verification is needed here as a result, since interactions arrive over the same authenticated connection rather than a public HTTP endpoint (confirmed against Discord's own docs).
-{% endhint %}
+!!! info
+    Slack v1 is **Socket Mode only** - no public webhook endpoint is needed or generated for it (unlike `http`, which gets real routes - see §2 above). The Events-API/HTTP-webhook alternative Slack also supports isn't built here. Discord v1 is likewise the real **Gateway API** (a persistent websocket) rather than Discord's alternative HTTP Interactions Endpoint URL webhook mode - no Ed25519 signature verification is needed here as a result, since interactions arrive over the same authenticated connection rather than a public HTTP endpoint (confirmed against Discord's own docs).
 
 ### Slack's persistent connection
 
@@ -279,9 +300,8 @@ Reconnects are driven reactively by Slack's own protocol signals - a `disconnect
 
 Each heartbeat tick checks whether the *previous* heartbeat was ever acknowledged (`Heartbeat ACK`, opcode 11) - if not, the connection is zombied and gets reconnected proactively rather than left to time out. Reconnects otherwise follow Discord's own documented session model: a `Reconnect` frame (opcode 7) or most close codes trigger a `Resume` (opcode 6, replaying the last sequence number) on the new connection when a prior session exists; an `Invalid Session` frame (opcode 9) with `d: false`, or a close code Discord documents as session-invalidating (`4007`, `4009`), instead forces a fresh `Identify` (opcode 2). A small, fixed set of close codes (`4004` bad token, `4010` invalid shard, `4011` sharding required, `4012` invalid API version, `4013`/`4014` invalid/disallowed intents) are non-recoverable per Discord's own docs - the gateway stops rather than retrying a connection that would just fail again.
 
-{% hint style="warning" %}
-`MESSAGE_CONTENT` (needed to read message text at all, in both guild channels and DMs) is a Discord **privileged** Gateway Intent - it must be explicitly enabled for your bot in the Discord Developer Portal, and once your app is verified (100+ guilds), approved by Discord. Without it, every inbound message arrives with an empty `content` field.
-{% endhint %}
+!!! warning
+    `MESSAGE_CONTENT` (needed to read message text at all, in both guild channels and DMs) is a Discord **privileged** Gateway Intent - it must be explicitly enabled for your bot in the Discord Developer Portal, and once your app is verified (100+ guilds), approved by Discord. Without it, every inbound message arrives with an empty `content` field.
 
 ### Email - server-level dependencies, and degraded threading/HITL
 
@@ -307,13 +327,11 @@ Both actions are thin passthroughs into the gateway's own `handleVerify()`/`hand
 
 Ported directly from [Hermes Agent's](https://github.com/NousResearch/hermes-agent) own real, production WhatsApp Cloud adapter (`gateway/platforms/whatsapp_cloud.py`, MIT licensed) - the verify handshake, signature scheme, webhook payload walk (`entry[].changes[].value.{messages,contacts}`), outbound message/interactive-button shapes (≤3 allowed decisions render as native buttons, 4+ as a tap-to-open list, matching WhatsApp's own documented limits), and length limits (4096-char messages, 20-char button labels, 1024-char interactive body text) were all read directly from that source this session, not reimplemented from scratch. Inbound messages are deduplicated by their own `wamid` (Meta retries webhook delivery on any non-200 response for up to 7 days) via a bounded FIFO cache, mirroring Hermes's own `_dedup_wamid`.
 
-{% hint style="warning" %}
-v1 scope, matching Hermes's own documented limitation: Cloud API DMs have no separate "chat" entity - `chat_id` IS the sender's `wa_id` - and group messages (which carry their own `chat` field identifying the group JID) are out of scope; media (image/video/document/audio) isn't downloaded, only a caption if present. Every other push-style gateway shares the same one-instance-per-type registry ceiling documented above - `whatsapp-cloud` is no exception.
-{% endhint %}
+!!! warning
+    v1 scope, matching Hermes's own documented limitation: Cloud API DMs have no separate "chat" entity - `chat_id` IS the sender's `wa_id` - and group messages (which carry their own `chat` field identifying the group JID) are out of scope; media (image/video/document/audio) isn't downloaded, only a caption if present. Every other push-style gateway shares the same one-instance-per-type registry ceiling documented above - `whatsapp-cloud` is no exception.
 
-{% hint style="info" %}
-The generated `handlers/WhatsAppCloud.bx`'s own ColdBox request-context calls (`event.getHTTPContent()`/`event.getHTTPHeader()`/`event.renderData()`, `rc`'s URL-scope-merged query params for the GET handshake) are the documented, standard ColdBox REST-handler idioms - but unlike the gateway's own signature/dispatch logic (thoroughly unit-tested and empirically verified against real HMAC/JSON behavior this session), this specific generated-route wiring has NOT been exercised against a real ColdBox boot. See known-limitations.md.
-{% endhint %}
+!!! info
+    The generated `handlers/WhatsAppCloud.bx`'s own ColdBox request-context calls (`event.getHTTPContent()`/`event.getHTTPHeader()`/`event.renderData()`, `rc`'s URL-scope-merged query params for the GET handshake) are the documented, standard ColdBox REST-handler idioms - but unlike the gateway's own signature/dispatch logic (thoroughly unit-tested and empirically verified against real HMAC/JSON behavior this session), this specific generated-route wiring has NOT been exercised against a real ColdBox boot. See known-limitations.md.
 
 ### Microsoft Teams - Bot Framework Activity protocol
 
@@ -327,13 +345,11 @@ Unlike WhatsApp Cloud there's no GET verify handshake (Bot Framework has no equi
 
 Ported from [Vercel Eve's](https://github.com/vercel/eve) real Teams channel (`packages/eve/src/public/channels/teams/`, MIT licensed) - the OAuth2 flow, the JWT verification scheme, the `v3/conversations/{id}/activities[/{activityId}]` REST triad, and the Adaptive Card human-in-the-loop shape (schema 1.5, one `Action.Submit` button per allowed decision) all mirror that implementation. **Hermes Agent's own `msgraph_webhook.py` is unrelated** despite the similar "Microsoft webhook" naming - it implements Microsoft Graph *change-notification* webhooks (mailbox/drive/list resource-change events, a different Microsoft product surface with no working outbound Teams messaging at all) and nothing from it was ported here.
 
-{% hint style="warning" %}
-v1 scope is **personal (1:1 DM) conversations only** - group chat and channel-wide messages need bot-mention gating and a different reply-threading model that Eve itself implements but this port doesn't, matching every other push-style gateway's own DM-first v1 scoping. A message chunk limit of 4000 chars is used (Eve's own Adaptive Card text-truncation constant) rather than the Bot Framework protocol's true 80 KiB ceiling, for UI readability.
-{% endhint %}
+!!! warning
+    v1 scope is **personal (1:1 DM) conversations only** - group chat and channel-wide messages need bot-mention gating and a different reply-threading model that Eve itself implements but this port doesn't, matching every other push-style gateway's own DM-first v1 scoping. A message chunk limit of 4000 chars is used (Eve's own Adaptive Card text-truncation constant) rather than the Bot Framework protocol's true 80 KiB ceiling, for UI readability.
 
-{% hint style="info" %}
-The Bot Connector JWKS is fetched once and cached for the gateway instance's lifetime - if Microsoft ever rotates its signing keys without a matching `kid` already cached, verification would start failing until the gateway (and thus the whole app) restarts. No periodic cache invalidation is built for v1. The JWT verification logic itself was empirically verified this session against a real, locally-generated RSA keypair and hand-signed test JWTs (valid signature accepted, tampered signature/wrong audience/expired token all rejected with 401) - not just read against Eve's source.
-{% endhint %}
+!!! info
+    The Bot Connector JWKS is fetched once and cached for the gateway instance's lifetime - if Microsoft ever rotates its signing keys without a matching `kid` already cached, verification would start failing until the gateway (and thus the whole app) restarts. No periodic cache invalidation is built for v1. The JWT verification logic itself was empirically verified this session against a real, locally-generated RSA keypair and hand-signed test JWTs (valid signature accepted, tampered signature/wrong audience/expired token all rejected with 401) - not just read against Eve's source.
 
 ### Twilio SMS - a genuinely different signature scheme, and a dual-path response model
 
@@ -351,13 +367,11 @@ Two things make Twilio's own webhook contract meaningfully different from every 
 
 Outbound sends are Basic-Auth REST calls to `POST /2010-04-01/Accounts/{AccountSid}/Messages.json`, form-encoded body (`To`, `Body`, and either `From` or `MessagingServiceSid` if configured). v1 is SMS-text only - Eve's own Twilio channel is a combined SMS+voice channel (`/voice` routes, `<Gather>`/`<Say>` TwiML, call transcription); none of the voice-specific pieces were ported.
 
-{% hint style="warning" %}
-SMS has **no native button/card affordance at all** (confirmed via Eve's own docs), so human-in-the-loop is degraded the same way Email's is - `getDeclaredCapabilities()` omits `"interactiveActions"` (and `"threads"`, since Twilio's classic Messages API has no native reply/quote concept either). `requestHumanInteraction()` sends a plain-text SMS listing the allowed decisions; unlike Email (which embeds a `[bxagents:<requestID>]` tag in the Subject line to correlate the eventual reply), SMS has no subject line to tag - so the pending request is keyed by the sender's own phone number (conversationID) instead, a v1 simplification that assumes at most one open HITL request per phone number at a time.
-{% endhint %}
+!!! warning
+    SMS has **no native button/card affordance at all** (confirmed via Eve's own docs), so human-in-the-loop is degraded the same way Email's is - `getDeclaredCapabilities()` omits `"interactiveActions"` (and `"threads"`, since Twilio's classic Messages API has no native reply/quote concept either). `requestHumanInteraction()` sends a plain-text SMS listing the allowed decisions; unlike Email (which embeds a `[bxagents:<requestID>]` tag in the Subject line to correlate the eventual reply), SMS has no subject line to tag - so the pending request is keyed by the sender's own phone number (conversationID) instead, a v1 simplification that assumes at most one open HITL request per phone number at a time.
 
-{% hint style="info" %}
-Unlike Eve (which has no length-limiting logic at all - confirmed absent by grepping its source - and relies entirely on Twilio's own server-side segmentation), `TwilioGateway` still applies `MessageChunker` at 1600 chars (Twilio's own documented single-message concatenation ceiling) for consistency with every other gateway's chunking behavior. The HMAC-SHA1 signature scheme was cross-verified this session against an independently computed Python `hmac`/`hashlib` reference value before trusting the BoxLang implementation, the same discipline used for WhatsApp Cloud's own HMAC-SHA256 scheme.
-{% endhint %}
+!!! info
+    Unlike Eve (which has no length-limiting logic at all - confirmed absent by grepping its source - and relies entirely on Twilio's own server-side segmentation), `TwilioGateway` still applies `MessageChunker` at 1600 chars (Twilio's own documented single-message concatenation ceiling) for consistency with every other gateway's chunking behavior. The HMAC-SHA1 signature scheme was cross-verified this session against an independently computed Python `hmac`/`hashlib` reference value before trusting the BoxLang implementation, the same discipline used for WhatsApp Cloud's own HMAC-SHA256 scheme.
 
 ### GitHub - `@mention`-gated issue/PR comment threads
 
@@ -373,13 +387,11 @@ Ported from Vercel Eve's real GitHub channel (`packages/eve/src/public/channels/
 
 A "conversation" is identified by one of two shapes, matching Eve's own model: `repo:{owner}/{repo}:issue:{issueNumber}` for an ordinary issue/PR comment thread, or `repo:{owner}/{repo}:review-comment:{reviewThreadRootCommentId}` for an inline PR review-comment thread - replies to a review thread always go to the **thread root** comment (`comment.in_reply_to_id ?? comment.id`), not the specific comment being replied to, so a multi-message back-and-forth stays one thread. Outbound replies POST to `repos/{owner}/{repo}/issues/{issueNumber}/comments` (ordinary threads) or `repos/{owner}/{repo}/pulls/{pullRequestNumber}/comments/{reviewCommentId}/replies` (review threads).
 
-{% hint style="info" %}
-v1 auth is a plain personal access token (`tokenEnvVar`), not Eve's own GitHub App JWT + installation-token flow - simpler and more directly portable for a first cut (Eve itself supports a pre-resolved-token bypass for exactly this reason, which is what this maps onto). A future GitHub App mode is a natural extension, not built here. Unlike Eve (which has no delivery-id dedup at all, confirmed absent by reading its source), `GitHubGateway` dedups by `X-GitHub-Delivery` via a bounded FIFO cache, matching WhatsApp Cloud's own `wamid` dedup discipline.
-{% endhint %}
+!!! info
+    v1 auth is a plain personal access token (`tokenEnvVar`), not Eve's own GitHub App JWT + installation-token flow - simpler and more directly portable for a first cut (Eve itself supports a pre-resolved-token bypass for exactly this reason, which is what this maps onto). A future GitHub App mode is a natural extension, not built here. Unlike Eve (which has no delivery-id dedup at all, confirmed absent by reading its source), `GitHubGateway` dedups by `X-GitHub-Delivery` via a bounded FIFO cache, matching WhatsApp Cloud's own `wamid` dedup discipline.
 
-{% hint style="warning" %}
-No repo checkout/code-editing (Eve's own `checkout.ts`, which clones the repo into a sandbox so the agent can read/edit code) was ported - this is a comment-in/comment-out chat surface only. Human-in-the-loop is degraded the same way Twilio's is (no native button/card affordance) - `requestHumanInteraction()` posts a comment asking the human to `@mention` the bot again in a reply with one of the allowed decisions, correlated by conversationID (not a per-request tag), the same v1 simplification Twilio's own HITL fallback uses.
-{% endhint %}
+!!! warning
+    No repo checkout/code-editing (Eve's own `checkout.ts`, which clones the repo into a sandbox so the agent can read/edit code) was ported - this is a comment-in/comment-out chat surface only. Human-in-the-loop is degraded the same way Twilio's is (no native button/card affordance) - `requestHumanInteraction()` posts a comment asking the human to `@mention` the bot again in a reply with one of the allowed decisions, correlated by conversationID (not a per-request tag), the same v1 simplification Twilio's own HITL fallback uses.
 
 **There is no `"whatsapp-personal"` type.** The unofficial personal-account bridge (WhatsApp's multi-device Web protocol, the kind Hermes Agent reaches via a Node.js/Baileys subprocess) was researched but deliberately not built - the one MIT-licensed native-Java option (Cobalt, `com.github.auties00:cobalt`) turned out to pull in a commercial/proprietary dependency (`com.aspose:aspose-words`) at the version actually published to Maven Central, and a subprocess-bridge port was set aside in favor of a native-JVM approach. Declaring `type: "whatsapp-personal"` in a `gateways/*` entry fails validation with an "unknown type" error, same as any other unsupported type. See `docs/known-limitations.md` for the full investigation.
 
@@ -389,13 +401,11 @@ No repo checkout/code-editing (Eve's own `checkout.ts`, which clones the repo in
 
 There is no official Signal bot API - `SignalGateway` talks entirely to [`signal-cli`](https://github.com/AsamK/signal-cli) running in its own `daemon --http` mode, an **external prerequisite** this gateway depends on but doesn't manage, the same relationship `EmailGateway` has with an external IMAP/SMTP server. Ported from [Hermes Agent's](https://github.com/NousResearch/hermes-agent) own real Signal channel - the SSE/JSON-RPC wire shapes, the reconnect backoff constants (2s to 60s exponential, +20% jitter), and the 30s/120s idle watchdog are all read directly from that source, not reimplemented from scratch.
 
-{% hint style="warning" %}
-Getting a working `signal-cli` daemon is a real, manual, one-time setup step outside this project entirely: install `signal-cli`, register/link it to a real Signal account (`signal-cli link` or `register`, both require an actual phone number and a device-linking QR/verification step), then run `signal-cli -a <account> daemon --http=127.0.0.1:8080` and keep that process alive (a systemd service or container sidecar, not something `bxAgents serve` starts for you). `SignalGateway`'s own `onConnect()` fails loudly with `MissingConfig` if `account` isn't set, but it can't detect or start the daemon itself - `httpUrl` unreachable at connect time surfaces as an ordinary reconnect-backoff cycle, not a fast failure.
-{% endhint %}
+!!! warning
+    Getting a working `signal-cli` daemon is a real, manual, one-time setup step outside this project entirely: install `signal-cli`, register/link it to a real Signal account (`signal-cli link` or `register`, both require an actual phone number and a device-linking QR/verification step), then run `signal-cli -a <account> daemon --http=127.0.0.1:8080` and keep that process alive (a systemd service or container sidecar, not something `bxAgents serve` starts for you). `SignalGateway`'s own `onConnect()` fails loudly with `MissingConfig` if `account` isn't set, but it can't detect or start the daemon itself - `httpUrl` unreachable at connect time surfaces as an ordinary reconnect-backoff cycle, not a fast failure.
 
-{% hint style="info" %}
-v1 is **DM-only** - Hermes's own Signal channel treats group conversations as opt-in/off by default, and that's the only mode ported here. Human-in-the-loop is degraded the same way Twilio/GitHub's fallback is (`getDeclaredCapabilities()` omits `"interactiveActions"`) - Signal read-receipts/reactions are write-only cosmetic status in signal-cli's own API, not a real answer channel, so `requestHumanInteraction()` falls back to a plain-text message listing the allowed decisions, correlated by conversationID like Twilio's own phone-number-keyed fallback. The JSON-RPC/SSE parsing logic (`handleSseEvent()`, quote-threading, group-message filtering, HITL decision matching) was driven through real public methods with only the outermost `rpcCaller`/`connector` I/O calls stubbed, the same seam-testing discipline as every other gateway - but no real `signal-cli` daemon was available in this environment, so the actual async connection lifecycle (opening the SSE stream, the reconnect-with-backoff loop against a genuinely flaky connection, the JSON-RPC round trip against a live daemon) has never been exercised end-to-end. The `java.net.http.HttpClient` interop chain itself was confirmed sound - a standalone smoke test reached a genuine `java.net.ConnectException` at the real network boundary against an unreachable test address, proving the plumbing works even though it's never touched a live daemon.
-{% endhint %}
+!!! info
+    v1 is **DM-only** - Hermes's own Signal channel treats group conversations as opt-in/off by default, and that's the only mode ported here. Human-in-the-loop is degraded the same way Twilio/GitHub's fallback is (`getDeclaredCapabilities()` omits `"interactiveActions"`) - Signal read-receipts/reactions are write-only cosmetic status in signal-cli's own API, not a real answer channel, so `requestHumanInteraction()` falls back to a plain-text message listing the allowed decisions, correlated by conversationID like Twilio's own phone-number-keyed fallback. The JSON-RPC/SSE parsing logic (`handleSseEvent()`, quote-threading, group-message filtering, HITL decision matching) was driven through real public methods with only the outermost `rpcCaller`/`connector` I/O calls stubbed, the same seam-testing discipline as every other gateway - but no real `signal-cli` daemon was available in this environment, so the actual async connection lifecycle (opening the SSE stream, the reconnect-with-backoff loop against a genuinely flaky connection, the JSON-RPC round trip against a live daemon) has never been exercised end-to-end. The `java.net.http.HttpClient` interop chain itself was confirmed sound - a standalone smoke test reached a genuine `java.net.ConnectException` at the real network boundary against an unreachable test address, proving the plumbing works even though it's never touched a live daemon.
 
 ### GatewaySession - wiring the agent to every push-style gateway
 
@@ -419,13 +429,11 @@ class {
 }
 ```
 
-{% hint style="info" %}
-The generated variable is deliberately named `gatewaySession`, not `session` - `session` is a reserved BoxLang/ColdBox scope name (like `request`/`server`/`url`/`form`/`cgi`/`thread`), and a local variable reusing one of those names can collide with the live scope instead of behaving as an ordinary local.
-{% endhint %}
+!!! info
+    The generated variable is deliberately named `gatewaySession`, not `session` - `session` is a reserved BoxLang/ColdBox scope name (like `request`/`server`/`url`/`form`/`cgi`/`thread`), and a local variable reusing one of those names can collide with the live scope instead of behaving as an ordinary local.
 
-{% hint style="warning" %}
-The `aiGatewayRegistry().get(...)` key is always the gateway TYPE string ("telegram", "slack", "discord", "email", ...) - confirmed against bx-ai's real `GatewayRegistry.register()` source, which always keys by the gateway class's own fixed `getName()`, never anything caller-supplied. A real consequence: **two `gateways/*` entries of the same push-style type collide on the same registry slot project-wide** - the second registration silently overwrites the first. There's no per-entry alias today; use a distinct type per additional platform account, or wait for multi-instance support.
-{% endhint %}
+!!! warning
+    The `aiGatewayRegistry().get(...)` key is always the gateway TYPE string ("telegram", "slack", "discord", "email", ...) - confirmed against bx-ai's real `GatewayRegistry.register()` source, which always keys by the gateway class's own fixed `getName()`, never anything caller-supplied. A real consequence: **two `gateways/*` entries of the same push-style type collide on the same registry slot project-wide** - the second registration silently overwrites the first. There's no per-entry alias today; use a distinct type per additional platform account, or wait for multi-instance support.
 
 An interceptor (not a raw `Application.bx`/`onApplicationStart()` statement, unlike the plain registration calls above) is used specifically because its `afterConfigurationLoad` point is guaranteed by ColdBox's own lifecycle to fire strictly after the framework - including the scheduler these gateways depend on (see below) - has finished loading.
 
@@ -444,9 +452,33 @@ function configure() {
 
 `policy` must be one of `reject`/`queue`/`steer`/`interrupt` (bx-ai's own `GatewaySession` policy vocabulary - see [GatewaySession](#gatewaysession---wiring-the-agent-to-every-push-style-gateway) below) - checked at `build` time so a typo fails loudly instead of surfacing as a runtime error the first time the app boots.
 
-{% hint style="warning" %}
-v1 limitation: exactly one `GatewaySession`, always bound to the project's root agent - matches the existing precedent that `exposes: "agent"` HTTP exposure is also always root-agent-only. A project with subagents cannot yet route different gateways to different subagents.
-{% endhint %}
+!!! warning
+    v1 limitation: exactly one `GatewaySession`, always bound to the project's root agent - matches the existing precedent that `exposes: "agent"` HTTP exposure is also always root-agent-only. A project with subagents cannot yet route different gateways to different subagents.
+
+What each policy actually does with a message that arrives while a turn is still running:
+
+```mermaid
+flowchart TD
+    M["a message arrives on thread T"] --> B{"is a run already<br/>in flight on T?"}
+    B -->|"no"| D["dispatch a new turn.<br/>The reply streams back through<br/>the gateway the message came from."]
+    B -->|"yes"| P{"policy"}
+    P -->|"reject"| R["Immediate 'busy' reply.<br/>Nothing is queued - the sender must resend."]
+    P -->|"queue<br/>(the default)"| Q["Enqueue, up to maxQueueDepth.<br/>Runs as its own turn once<br/>the current one finishes."]
+    P -->|"steer"| ST["agent.steerRun( T, text )<br/>Spliced into the SAME run at its next<br/>checkpoint - never a second turn."]
+    P -->|"interrupt"| I["agent.cancelRun( T ), AND enqueue.<br/>The current turn winds down at its next<br/>checkpoint, then this message runs."]
+    Q --> OVER{"queue already at<br/>maxQueueDepth?"}
+    I --> OVER
+    OVER -->|"yes"| R
+
+    style D fill:#d4edda,stroke:#155724
+    style R fill:#f8d7da,stroke:#721c24
+```
+
+!!! warning
+    "Steer" here means Hermes Agent's non-destructive splice - the running turn keeps going and the new text is folded into it. It does **not** mean what Eve's `turnPolicy: "steer"` means (cancel the active turn and start a replacement); that behaviour is this vocabulary's `interrupt`.
+
+!!! info
+    Neither `cancelRun()` nor `steerRun()` is instant. Both are signalled and take effect at the run's **next checkpoint** (before the next LLM call or tool call), so `interrupt` is "ask the current turn to wind down soon", not "synchronously replace it".
 
 ### How a push-style gateway stays connected: the shared ColdBox Scheduler
 

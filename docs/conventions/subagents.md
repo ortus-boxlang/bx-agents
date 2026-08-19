@@ -1,3 +1,11 @@
+---
+title: subagents/
+icon: 🧩
+summary: Nested agents, each an ordinary BX Agents project of its own.
+description: Nested agents, each an ordinary BX Agents project of its own.
+tags: [conventions, subagents]
+---
+
 # subagents/
 
 `subagents/` holds nested agents, each an ordinary BX Agents project of its own - an `Agent.bx` + `instructions.md` (and optionally its own `tools/`, `skills/`, etc.):
@@ -30,6 +38,37 @@ At build time, bx-ai's `aiAgent()` wraps each built subagent instance as a calla
 ## Flat namespace, sibling references
 
 Every subagent - no matter how deeply another subagent's own config references it - lives directly under the **root** project's `subagents/` folder. A subagent's own declared `subAgents` names reference **sibling** entries in that same root-level folder, not a folder nested under itself. This keeps the discovery/validation model simple: one flat directed graph over `subagents/`'s immediate subfolders, rather than a tree that could nest arbitrarily deep on disk.
+
+Flat on disk, a graph in config, built bottom-up - the three views of the same project:
+
+```mermaid
+flowchart LR
+    subgraph disk["ON DISK - always flat, one level under the ROOT project"]
+        direction TB
+        R1["subagents/A/"]
+        R2["subagents/B/"]
+        R3["subagents/C/"]
+    end
+
+    subgraph declared["DECLARED - each Agent.bx's own subAgents list"]
+        direction TB
+        GA["A"] --> GB["B"] --> GC["C"]
+    end
+
+    subgraph built["BUILT - leaf-first, in GeneratedAgentFactory.bx"]
+        direction TB
+        O1["1. build C"] --> O2["2. build B<br/>with the built C"] --> O3["3. build A<br/>with the built B"]
+    end
+
+    disk -.->|"names resolve<br/>against siblings"| declared
+    declared -.->|"a parent needs its<br/>children already built"| built
+
+    style disk fill:#eef2f7,stroke:#5a6570
+    style declared fill:#e7f1ff,stroke:#004085
+    style built fill:#eaf6ec,stroke:#155724
+```
+
+A cycle in the declared graph (`A -> B -> A`) is rejected at validation, before any of this is generated; a diamond (two parents sharing one descendant) is fine.
 
 ## Build order
 

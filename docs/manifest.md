@@ -1,3 +1,11 @@
+---
+title: The Manifest
+icon: 📋
+summary: What every build records about exactly what went into the generated app.
+description: What every build records about exactly what went into the generated app.
+tags: [reference, build]
+---
+
 # The Manifest
 
 Every `build` writes `.build/manifest.json` - BX Agents' own record of exactly what went into the generated app. `bxAgents inspect` pretty-prints it without rebuilding; `bxAgents package` copies a **redacted** version of it alongside the `.bxa` (see [Deployment & Secrets](deployment-and-secrets.md)).

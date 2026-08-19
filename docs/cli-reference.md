@@ -1,3 +1,11 @@
+---
+title: CLI Reference
+icon: ⌨️
+summary: Every bxAgents verb and its flags.
+description: Every bxAgents verb and its flags.
+tags: [reference, cli]
+---
+
 # CLI Reference
 
 ```

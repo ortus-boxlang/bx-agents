@@ -1,3 +1,11 @@
+---
+title: skills/
+icon: 📚
+summary: "Claude Agent Skills: one subfolder per SKILL.md, loaded on demand."
+description: "Claude Agent Skills: one subfolder per SKILL.md, loaded on demand."
+tags: [conventions, skills]
+---
+
 # skills/
 
 Each immediate subfolder of `skills/` that contains a `SKILL.md` file is one skill, following the Claude Agent Skills convention: YAML frontmatter (`name`, `description`) followed by a body of freeform instructions.
@@ -33,6 +41,5 @@ moduleSettings = {
 }
 ```
 
-{% hint style="info" %}
-bx-ai's own default `skillsDirectory` is `/.agents/skills` - a different path than BX Agents' `skills/` convention. The generator always overrides it explicitly so your project's `skills/` folder is the one bx-ai actually loads from; you never need to set this yourself.
-{% endhint %}
+!!! info
+    bx-ai's own default `skillsDirectory` is `/.agents/skills` - a different path than BX Agents' `skills/` convention. The generator always overrides it explicitly so your project's `skills/` folder is the one bx-ai actually loads from; you never need to set this yourself.

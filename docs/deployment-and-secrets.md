@@ -1,4 +1,28 @@
+---
+title: Deployment & Secrets
+icon: 🔐
+summary: Packaging to .bxa, and why secrets never live in generated source.
+description: Packaging to .bxa, and why secrets never live in generated source.
+tags: [reference, deployment, security]
+---
+
 # Deployment & Secrets
+
+Secrets never enter the artifact - they are supplied to the **process**, at the far right of this chain:
+
+```mermaid
+flowchart LR
+    P["your project"] -->|"bxAgents build"| B[".build/app/<br/>a plain ColdBox app"]
+    B -->|"bxAgents package"| A["dist/name-version.bxa<br/>+ .sha256 + redacted manifest.json"]
+    A -->|"bxAgents deploy"| T["a target:<br/>local / ssh / ftp / sftp<br/>docker / digitalocean"]
+    T --> RUN["boxlang-miniserver runs the unzipped app"]
+    ENV["environment variables<br/>OPENAI_API_KEY, ANTHROPIC_API_KEY,<br/>every *EnvVar a gateway names"] -->|"read at RUNTIME by bx-ai"| RUN
+
+    style A fill:#eaf6ec,stroke:#155724
+    style ENV fill:#fff3cd,stroke:#856404
+```
+
+Nothing on the left of `ENV` ever holds a secret value: `.env`/dotfiles are excluded from the zip unconditionally, and the manifest is redacted on top of never carrying one.
 
 ## Packaging
 

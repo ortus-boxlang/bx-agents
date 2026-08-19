@@ -1,10 +1,17 @@
+---
+title: BX Agents
+icon: 🤖
+summary: Describe an agent in folders and files; build it into a real ColdBox application.
+description: Describe an agent in folders and files; build it into a real ColdBox application.
+tags: [overview]
+---
+
 # BX Agents
 
 **BX Agents** is a conventions-based AI agent framework for [BoxLang](https://boxlang.io), built on top of [ColdBox](https://coldbox.ortusbooks.com) and [BX AI](https://boxlang.ortusbooks.com/boxlang-+-++/modules/bx-ai). You describe an agent with a handful of files and folders - an `Agent.bx`, an `instructions.md`, and whichever of `tools/`, `skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `models/`, `modules/` your agent actually needs - and BX Agents assembles a real, runnable ColdBox application from it at **build time**.
 
-{% hint style="info" %}
-Describe the agent with files and folders, not a framework's API surface.
-{% endhint %}
+!!! info
+    Describe the agent with files and folders, not a framework's API surface.
 
 ## Why build-time assembly?
 
@@ -49,8 +56,7 @@ Only `Agent.bx` and `instructions.md` are required - every other folder is optio
 | Understand exactly what `build` does, in order | [The Build Pipeline](build-pipeline.md) |
 | Look up a CLI verb's flags | [CLI Reference](cli-reference.md) |
 | Ship a `.bxa` somewhere | [Deployment & Secrets](deployment-and-secrets.md) |
-| See working, buildable sample projects | [`examples/`](../examples/README.md) at the repo root |
+| See working, buildable sample projects | [`examples/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples) at the repo root |
 
-{% hint style="warning" %}
-BX Agents is under active development. [Known Limitations](known-limitations.md) tracks the honest gaps - what's tested against a real running app, what still only runs against BX AI's `"mock"` provider, and one real upstream ColdBox quirk this project ran into and worked around.
-{% endhint %}
+!!! warning
+    BX Agents is under active development. [Known Limitations](known-limitations.md) tracks the honest gaps - what's tested against a real running app, what still only runs against BX AI's `"mock"` provider, and one real upstream ColdBox quirk this project ran into and worked around.
