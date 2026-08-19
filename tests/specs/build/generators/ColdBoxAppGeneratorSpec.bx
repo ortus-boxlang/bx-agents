@@ -407,6 +407,26 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( 'this.datasource = "acmechat"' );
 			} );
 
+			it( "never declares an identity provider in the config", function() {
+				var buildDir = newBuildDir();
+				var config = resolver.resolve( projectRoot = fixtures & "/full-project" );
+				generator.generate(
+					projectRoot    : fixtures & "/full-project",
+					buildDir       : buildDir,
+					resolvedConfig : config,
+					hasWebUi       : true,
+					webUiDatabase  : { datasource : "acmechat", path : "./data/chat.db" },
+					webUiHasUsers  : false
+				);
+
+				// A closure declared in the `coldbox` struct never reaches
+				// configSettings - verified in a real boot, both inside the literal
+				// and as a later assignment - so it is registered at startup via
+				// setSetting() instead. See WebUiGenerator/WebUiIdentity.
+				var content = fileRead( buildDir & "/config/ColdBox.bx" );
+				expect( content ).notToInclude( "identifierProvider" );
+			} );
+
 			it( "declares no datasource at all for a project without a web UI", function() {
 				var buildDir = newBuildDir();
 				generateFor( fixtures & "/full-project", buildDir );

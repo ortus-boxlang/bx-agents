@@ -46,9 +46,13 @@ class {
 		// One handler serves every webui entry - the actions are identical, only
 		// the mount paths differ, and RouterGenerator maps each entry's own
 		// <path>/api/* routes onto these same four actions.
+		// Accounts decide how the handler scopes everything, so they are resolved
+		// before it is rendered.
+		var users = collectWebUiUsers( entries )
+
 		var handlerDir = normalizePath( arguments.appDir ) & "/handlers"
 		directoryCreate( path : handlerDir, createPath : true, ignoreExists : true )
-		fileWrite( handlerDir & "/ChatUi.bx", renderChatHandler() )
+		fileWrite( handlerDir & "/ChatUi.bx", renderChatHandler( users.len() > 0 ) )
 
 		// The SQLite store. Not optional: the agent's own IAiMemory has no
 		// enumeration API - nothing answers "which conversations does this user
@@ -81,7 +85,6 @@ class {
 		// Accounts. A project that declares none stays exactly as it was: no
 		// login gate, no seeder, no cbauth in the picture at all - which keeps
 		// `bxAgents serve` on a laptop a zero-ceremony experience.
-		var users = collectWebUiUsers( entries )
 		var userEntries = entries.filter( function( entry ) {
 			return ( entry.config.users ?: [] ).len() > 0
 		} )
@@ -513,7 +516,7 @@ class {
 	 *
 	 * @return The rendered handlers/ChatUi.bx source
 	 */
-	private string function renderChatHandler() {
+	private string function renderChatHandler( required boolean hasUsers ) {
 		var lines = [
 			"/**",
 			" * GENERATED FILE - produced by BX Agents' build pipeline.",
@@ -530,21 +533,20 @@ class {
 			" */",
 			"class {",
 			"",
+			"	static {",
+			"		// One shared workspace when no accounts are configured. Everything",
+			"		// user-scoped - conversations, preferences, agent memory - keys off",
+			"		// this, so every visitor to an open UI sees the same thing.",
+			'		final SHARED_USER_ID = "public"',
+			"	}",
+			"",
 			"	/**",
 			"	 * The identity every action below is scoped by, resolved SERVER-side.",
 			"	 *",
-			"	 * Delegates to ColdBox's own getUserSessionIdentifier() rather than",
-			"	 * reading session.sessionId directly, which buys three things: it is",
-			"	 * prefixed per application, it falls back through URLToken/CFID if a",
-			"	 * session is somehow unavailable, and - the reason that matters most -",
-			"	 * it honours the `identifierProvider` config setting. Point that at your",
-			"	 * authenticated principal and every memory re-keys to the real user with",
-			"	 * no change here.",
-			"	 *",
 			"	 * Deliberately NOT taken from the request body. ColdBox's own toAi()",
 			"	 * routes prefer a caller-supplied userId over this, which is reasonable",
-			"	 * for a trusted server-to-server caller but wrong for a browser behind a",
-			"	 * single shared API key - there, anyone could name themselves anyone.",
+			"	 * for a trusted server-to-server caller but wrong for a browser - there,",
+			"	 * anyone could name themselves anyone.",
 			"	 */",
 			"	/**",
 			"	 * The userId that owns a saved checkpoint, or an empty string when the",
@@ -559,10 +561,39 @@ class {
 			'		return arguments.state.options.userId ?: ""',
 			"	}",
 			"",
-			"	private string function resolveUserId() {",
-			"		return controller.getUserSessionIdentifier()",
-			"	}",
-			"",
+			"	private string function resolveUserId() {"
+		]
+
+		if ( arguments.hasUsers ) {
+			// Accounts exist, so identity is the account. Read straight from
+			// cbauth rather than through ColdBox's identifierProvider: a closure
+			// declared in the `coldbox` config struct never reaches
+			// configSettings (verified in a real boot, in both the documented
+			// literal shape and as a later assignment), so anything that leaned
+			// on that setting was silently getting the session id instead.
+			lines.append( '		var auth = getInstance( "authenticationService@cbauth" )' )
+			lines.append( "		if ( auth.isLoggedIn() ) {" )
+			lines.append( "			return auth.getUserId()" )
+			lines.append( "		}" )
+			lines.append( "		// Signed out. The login gate keeps this unreachable for a gated" )
+			lines.append( "		// entry; an ungated one in the same project shares the open space." )
+			lines.append( "		return static.SHARED_USER_ID" )
+		} else {
+			// No accounts: the UI is open, and everything in it is shared. Every
+			// visitor reads and writes the SAME conversations, preferences and
+			// agent memory - which is the point of an open UI, not an oversight.
+			// A per-visitor id would only fragment one shared workspace into
+			// per-browser slices that nobody asked for.
+			lines.append( "		// No accounts configured: one shared, open workspace. Everyone" )
+			lines.append( "		// who can reach this UI sees everything in it." )
+			lines.append( "		return static.SHARED_USER_ID" )
+		}
+
+		lines.append( "	}" )
+		lines.append( "" )
+
+		// The rest of the handler is identical either way.
+		var tail = [
 			"	/**",
 			"	 * conversationId is caller-supplied on purpose: it distinguishes",
 			"	 * several conversations belonging to the SAME visitor. It is not an",
@@ -1107,6 +1138,8 @@ class {
 			"}",
 			""
 		]
+
+		lines.append( tail, true )
 
 		return lines.toList( char( 10 ) )
 	}

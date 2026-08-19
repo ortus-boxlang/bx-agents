@@ -289,6 +289,43 @@ try {
 		)
 	}
 	println( "+ Confirmed: a real HTTP request through toAi()'s /invoke route reaches the generated agent: " & routeResult.fileContent )
+
+	// ------------------------------------------------------------------
+	// 5. An open web UI is ONE shared workspace, over real HTTP.
+	//
+	// /chat declares no accounts, so everything in it is shared on purpose:
+	// whoever can reach the UI sees every conversation and preference in it.
+	// Two SEPARATE HTTP calls - different sessions, no shared cookie - must
+	// therefore see the same data.
+	//
+	// This has to run out here rather than in the TestBox specs: those all
+	// execute inside ONE request to the runner page, and the whole point is
+	// two independent callers.
+	// ------------------------------------------------------------------
+	bx:http url="http://127.0.0.1:#port#/chat/api/preferences/set" method="POST" result="prefSet" timeout=30 {
+		bx:httpparam type="header" name="Content-Type" value="application/json";
+		bx:httpparam type="body" value='{"key":"theme","value":"dark"}';
+	}
+	// Assert the BODY, not just the status: with rewrites on, a route that does
+	// not match can still come back 200 carrying the SPA shell.
+	if ( prefSet.status_code != 200 || !prefSet.fileContent.findNoCase( '"saved":true' ) ) {
+		throw(
+			type    = "BxAgents.SharedWorkspaceWriteFailed",
+			message = "Could not write a preference to the open web UI (HTTP #prefSet.status_code#): #left( prefSet.fileContent ?: '', 500 )#"
+		)
+	}
+
+	bx:http url="http://127.0.0.1:#port#/chat/api/preferences" method="GET" result="prefRead" timeout=30 {}
+	if ( prefRead.status_code != 200 || !prefRead.fileContent.findNoCase( "dark" ) ) {
+		throw(
+			type    = "BxAgents.SharedWorkspaceNotShared",
+			message = "A second, independent caller did not see the open UI's shared preference - an accountless web UI is supposed to be ONE workspace."
+				& " write -> HTTP #prefSet.status_code# #left( prefSet.fileContent ?: '', 300 )#"
+				& " | read -> HTTP #prefRead.status_code# #left( prefRead.fileContent ?: '', 300 )#"
+		)
+	}
+
+	println( "+ Confirmed: an accountless web UI is one shared workspace across independent callers" )
 } finally {
 	process.destroy()
 	process.waitFor( 5, createObject( "java", "java.util.concurrent.TimeUnit" ).SECONDS )

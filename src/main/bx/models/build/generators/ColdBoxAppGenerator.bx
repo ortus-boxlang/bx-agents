@@ -287,32 +287,13 @@ class {
 			"		}"
 		]
 
-		if ( arguments.webUiHasUsers ) {
-			// THE hinge of the whole sign-in feature.
-			//
-			// getUserSessionIdentifier() honours this closure, and every part of
-			// the web UI - agent memory, the conversation index, preferences,
-			// and pending-run ownership - is already keyed by whatever it
-			// returns. Pointing it at the signed-in account therefore re-keys
-			// all of them to the real user without touching a line of the
-			// generated handler.
-			//
-			// Falls back to the raw session id while signed out, so anything
-			// reachable before sign-in still gets a stable, per-visitor id
-			// rather than an empty one shared by everybody.
-			lines[ lines.len() ] = "		}"
-			lines.append( "" )
-			lines.append( "		// Identity for the web UI: the signed-in account, else the session." )
-			lines.append( "		// Everything user-scoped keys off this one value." )
-			lines.append( "		coldbox.identifierProvider = () => {" )
-			lines.append( "			// Resolved through application.cbController, NOT a bare" )
-			lines.append( "			// getInstance(): this closure is defined in a config class but" )
-			lines.append( "			// invoked much later by the controller, and getInstance() is not" )
-			lines.append( "			// reliably in scope where it was written." )
-			lines.append( '			var auth = application.cbController.getWireBox().getInstance( "authenticationService@cbauth" )' )
-			lines.append( '			return auth.isLoggedIn() ? auth.getUserId() : ( session.sessionId ?: "" )' )
-			lines.append( "		}" )
-		}
+		// No identifierProvider here on purpose. A closure declared in this
+		// struct never reaches configSettings - verified in a real boot, both
+		// inside the literal (the shape ColdBox documents) and as a later
+		// assignment - so getUserSessionIdentifier() silently kept returning
+		// the session id. models/WebUiIdentity.bx holds it instead, registered
+		// from onApplicationStart() via setSetting(), which writes directly to
+		// the struct that method reads. See WebUiGenerator.
 
 		if ( arguments.agentInterceptors.len() ) {
 			lines.append( "" )

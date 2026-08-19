@@ -241,16 +241,14 @@ class extends="testbox.system.BaseSpec" {
 				expect( html ).toInclude( "isPinnedToBottom" );
 			} );
 
-			it( "generates a ChatUi handler whose every action is scoped by the SERVER session", function() {
+			it( "generates a ChatUi handler whose every action is scoped SERVER-side", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
 				var appDir = newAppDir();
 				generator.generate( discovery, appDir );
 
 				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
-				// ColdBox's own identifier: app-prefixed, session-backed, and pluggable
-				// through the identifierProvider setting - the same value toAi() falls
-				// back to. Reading session.sessionId directly would bypass all of that.
-				expect( src ).toInclude( "controller.getUserSessionIdentifier()" );
+				// One place decides scope for every action
+				expect( src ).toInclude( "private string function resolveUserId()" );
 				// The identity is derived server-side ONLY. Honouring a caller-supplied
 				// userId under one shared API key is impersonation, so it must never
 				// be read off the request body the way toAi() does.
@@ -823,6 +821,41 @@ class extends="testbox.system.BaseSpec" {
 				// The generator reports it; ColdBoxAppGenerator emits it. Without
 				// this the accounts would exist but nothing would be scoped BY them.
 				expect( result.webUiHasUsers ).toBeTrue();
+			} );
+
+			/**
+			 * An open web UI is ONE shared workspace. Every visitor reads and
+			 * writes the same conversations, preferences and agent memory - that
+			 * is the point of running without accounts, not an oversight, and it
+			 * is why there is no per-visitor identity to get wrong.
+			 */
+			it( "scopes an accountless web UI to one shared workspace", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var handler = fileRead( appDir & "/handlers/ChatUi.bx" );
+				expect( handler ).toInclude( 'final SHARED_USER_ID = "public"' );
+				expect( handler ).toInclude( "return static.SHARED_USER_ID" );
+				// No accounts, so nothing to sign in to and nothing to resolve
+				expect( handler ).notToInclude( "authenticationService@cbauth" );
+				// And no ColdBox identity plumbing: a closure declared in the
+				// `coldbox` config struct never reaches configSettings anyway
+				// (verified in a real boot), so nothing here depends on it
+				expect( handler ).notToInclude( "getUserSessionIdentifier" );
+			} );
+
+			it( "scopes a web UI WITH accounts to the signed-in account", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui-users" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var handler = fileRead( appDir & "/handlers/ChatUi.bx" );
+				expect( handler ).toInclude( 'getInstance( "authenticationService@cbauth" )' );
+				expect( handler ).toInclude( "auth.getUserId()" );
+				// Read straight from cbauth rather than through ColdBox's
+				// identifierProvider, which never actually arrives
+				expect( handler ).notToInclude( "getUserSessionIdentifier" );
 			} );
 
 			it( "leaves a project without users completely ungated", function() {
