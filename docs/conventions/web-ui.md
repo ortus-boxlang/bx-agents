@@ -96,7 +96,21 @@ memory: {
 
 ## Users and sign-in
 
-By default the web UI has no accounts: identity is the browser session, which is fine for `bxAgents serve` on a laptop and is **not** a deployment posture. Declaring `users` on a `webui` entry turns on a real sign-in gate backed by [cbauth](https://forgebox.io/view/cbauth) and the same SQLite store everything else uses.
+By default the web UI has **no accounts and no gate** — it is open, and every visitor is anonymous. That is the zero-ceremony `bxAgents serve` experience, and it is **not** a deployment posture. Declaring `users` on a `webui` entry turns on a real sign-in gate backed by [cbauth](https://forgebox.io/view/cbauth) and the same SQLite store everything else uses.
+
+### The anonymous visitor
+
+An open UI still gives every visitor their **own** identity — anonymous is not the same as shared. On first load the page mints a random id, keeps it in `localStorage`, and sends it as `X-Visitor-Id` on every API call; the generated `identifierProvider` turns that into `visitor-<id>`, and conversations, preferences and the agent's own memory all key off it.
+
+It is stored client-side rather than left to the server session on purpose: `sessionTimeout` is 60 minutes, so an idle hour would hand the same browser a brand-new identity and silently orphan everything it had. The `localStorage` id survives that, a browser restart, and a server restart.
+
+{% hint style="warning" %}
+**This is isolation, not authorization.** The id comes from the client, so anyone can present any value — exactly the caveat that already applies to `conversationId`. It keeps visitors out of each other's conversations by accident, not by force. If you need identity you can actually rely on, declare `users`.
+
+What it *cannot* do is reach an account. Visitor ids are always `visitor-` prefixed and account ids are bare UUIDs, so the two namespaces cannot collide: forging the header can only ever land on another anonymous visitor, never on a signed-in user — including in a project that mounts an open UI and a gated one side by side. A signed-in account is also checked first, so a signed-in user sending the header is unaffected by it.
+{% endhint %}
+
+A malformed or oversized id is refused outright (it has to match `^[A-Za-z0-9._-]{8,64}$` — it ends up as a database key and a memory key) and identity falls back to the session, which is never empty.
 
 ```javascript
 // gateways/chatUi.bx
@@ -130,9 +144,12 @@ The practical difference: conversations and preferences follow the person across
 
 | | No `users` | With `users` |
 |---|---|---|
-| Identity | Browser session | The signed-in account |
-| Survives clearing cookies | No | Yes |
+| Identity | `visitor-<localStorage id>` | The signed-in account |
+| Survives a session timeout | Yes | Yes |
+| Survives clearing site data | No | Yes |
+| Follows the person across browsers/devices | No | Yes |
 | Reachable without signing in | Everything | Only the login form |
+| Trustworthy as authorization | No | Yes |
 
 ### Lifecycle
 

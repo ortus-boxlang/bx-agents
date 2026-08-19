@@ -541,6 +541,7 @@ __CUSTOM_CSS__
 	var KEY_STORAGE = "bxagents_webui_api_key";
 	var THEME_STORAGE = "bxagents_webui_theme";
 	var CONVERSATION_STORAGE = "bxagents_webui_conversation";
+	var VISITOR_STORAGE = "bxagents_webui_visitor";
 
 	var messagesEl = document.getElementById( "messages" );
 	var hintEl = document.getElementById( "hint" );
@@ -592,6 +593,33 @@ __CUSTOM_CSS__
 		var id = localStorage.getItem( CONVERSATION_STORAGE );
 		if ( !id ) {
 			id = newConversationId();
+		}
+		return id;
+	}
+
+	/**
+	 * A stable id for THIS browser, used as the anonymous visitor's identity
+	 * when the project configures no accounts.
+	 *
+	 * Without it, identity falls back to the server session, which expires
+	 * after an hour idle - and because conversations, preferences and the
+	 * agent's own memory are all keyed by identity, an idle hour would silently
+	 * orphan every one of them. Persisting it here survives the session
+	 * timeout, a browser restart and a server restart.
+	 *
+	 * Isolation, NOT authorization - the same caveat getConversationId() below
+	 * carries, and for the same reason: it comes from the client, so it can be
+	 * changed by whoever holds it. The server therefore only honours it for a
+	 * project with NO accounts at all; the moment one exists, identity comes
+	 * from the signed-in session instead and this header is ignored entirely.
+	 */
+	function getVisitorId() {
+		var id = localStorage.getItem( VISITOR_STORAGE );
+		if ( !id ) {
+			id = ( window.crypto && window.crypto.randomUUID )
+				? window.crypto.randomUUID()
+				: "v-" + Date.now() + "-" + Math.random().toString( 36 ).slice( 2, 10 );
+			localStorage.setItem( VISITOR_STORAGE, id );
 		}
 		return id;
 	}
@@ -834,6 +862,9 @@ __CUSTOM_CSS__
 		if ( key ) {
 			headers[ "X-API-Key" ] = key;
 		}
+		// Every request carries it, but the server ignores it outright unless
+		// the project configures no accounts - see getVisitorId().
+		headers[ "X-Visitor-Id" ] = getVisitorId();
 		return headers;
 	}
 
