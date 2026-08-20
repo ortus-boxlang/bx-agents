@@ -21,22 +21,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Linux only. A windows-latest leg used to sit here as a non-blocking
+        # experimental job, but it never once ran a test: Ortus-Solutions/
+        # setup-commandbox@v2.0.1 installs CommandBox with
+        # `unzip box.zip -d /usr/local/bin/`, a Linux path, so on Windows it
+        # fails with "cannot create extraction directory", `box` never lands on
+        # PATH, and every later step dies with "The term 'box' is not
+        # recognized". All it produced was a permanent red X on every PR that
+        # had to be explained away each time. Add the leg back if and when
+        # setup-commandbox supports Windows - there is nothing to fix here.
         include:
           - os: "ubuntu-latest"
             jdkVersion: "21"
             experimental: false
-          # Non-blocking, for a reason outside this module's control:
-          # Ortus-Solutions/setup-commandbox@v2.0.1 installs CommandBox with
-          # `unzip box.zip -d /usr/local/bin/`, a Linux path. On Windows that
-          # fails with "cannot create extraction directory", `box` never lands
-          # on PATH, and every subsequent step dies with "The term 'box' is not
-          # recognized". Nothing in this repo can fix that from here, so the
-          # job is kept in the matrix - visible, and green the moment the
-          # action gains Windows support - rather than deleted or left
-          # permanently blocking every PR.
-          - os: "windows-latest"
-            jdkVersion: "21"
-            experimental: true
     permissions:
       checks: write
       pull-requests: write
@@ -73,7 +70,13 @@ jobs:
         working-directory: tests
 
       - name: Show installed test dependencies
-        run: ls -la tests/ && ls -la tests/qb 2>/dev/null || true
+        # Purely diagnostic - never fail the job over a listing. Written as
+        # separate guarded commands rather than `A && B || true`, which reads
+        # like if-then-else but is not: the `|| true` there also swallows a
+        # failure of A.
+        run: |
+          ls -la tests/ || true
+          ls -la tests/qb 2>/dev/null || true
         shell: bash
 
       # Not Needed in this module
