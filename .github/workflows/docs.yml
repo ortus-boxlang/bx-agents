@@ -89,44 +89,37 @@ jobs:
           with-commandbox: true
           # bx-docs renders through bx-markdown and encodes through bx-esapi;
           # both are hard dependencies of the module, not optional extras.
-          # bx-docs itself is installed by the NEXT step, not listed here: a
-          # module that fails to install aborts this action outright, and the
-          # next step needs to be able to fall back instead. Move bx-docs back
-          # into this list once FORGEBOX serves its artifact.
-          modules: bx-markdown,bx-esapi
+          # bx-docs renders through bx-markdown and encodes through bx-esapi;
+          # both are hard dependencies of the module, not optional extras.
+          modules: bx-docs,bx-markdown,bx-esapi
 
-      - name: Install bx-docs (FORGEBOX first, source checkout as fallback)
+      - name: Normalize the bx-docs module layout
         run: |
           MODULES_DIR="${BOXLANG_HOME:-$GITHUB_WORKSPACE/.boxlang}/modules"
-          mkdir -p "$MODULES_DIR"
+          D="$MODULES_DIR/bx-docs"
 
-          # Preferred path: the published module. This is a step of its own
-          # rather than another entry in `modules:` above, because a failure
-          # there aborts the whole job - and bx-docs currently DOES fail.
-          if install-bx-module bx-docs && [ -f "$MODULES_DIR/bx-docs/ModuleConfig.bx" ]; then
-            echo "Installed bx-docs from FORGEBOX"
-            exit 0
+          # The published bx-docs zip currently carries one directory level too
+          # many: its contents sit under a `module/` folder, so the install lands
+          # ModuleConfig.bx at bx-docs/module/ModuleConfig.bx instead of
+          # bx-docs/ModuleConfig.bx. BoxLang then cannot see the module at all -
+          # `boxlang module:bxdocs build` fails with
+          #   "Can't execute module [bxdocs] as it does not exist."
+          # even though the install itself reported success. Flattening that one
+          # level makes it load and build normally.
+          #
+          # This whole step becomes a no-op the moment the zip is packaged from
+          # the CONTENTS of build/module rather than the directory itself, and
+          # can be deleted then.
+          if [ -f "$D/module/ModuleConfig.bx" ] && [ ! -f "$D/ModuleConfig.bx" ]; then
+            echo "::warning::bx-docs zip is nested one level deep - flattening $D/module into $D"
+            mv "$D/module" "$D.flat" && rm -rf "$D" && mv "$D.flat" "$D"
           fi
 
-          # Fallback, and why it exists: FORGEBOX has an entry for bx-docs but
-          # no artifact behind it. Its own record points the installer at
-          #   .../bx-docs/1.0.0-snapshot/bx-docs-1.0.0-snapshot.zip
-          # (both boxJSON.location and downloadURL), and that URL 404s - as does
-          # the 1.0.0-snapshot-snapshot path its doubled version string implies.
-          # bx-markdown's equivalent URL returns 200, so this is specific to
-          # bx-docs, not a downloads-host outage.
-          #
-          # bx-docs is pure BoxLang with ModuleConfig.bx at its repo root, so a
-          # checkout IS a usable module. The moment the artifact is published,
-          # the branch above wins on its own and this one stops running - no
-          # edit needed here.
-          echo "::warning::bx-docs could not be installed from FORGEBOX - falling back to a source checkout"
-          rm -rf "$MODULES_DIR/bx-docs"
-          git clone --depth 1 --branch development \
-            https://github.com/ortus-boxlang/bx-docs.git "$MODULES_DIR/bx-docs"
-          test -f "$MODULES_DIR/bx-docs/ModuleConfig.bx" \
-            || { echo "::error::bx-docs checkout has no ModuleConfig.bx at its root"; exit 1; }
-          echo "Installed bx-docs from source @ $(git -C "$MODULES_DIR/bx-docs" rev-parse --short HEAD)"
+          # Fail loudly here rather than letting the build fail with a much less
+          # obvious "module does not exist".
+          test -f "$D/ModuleConfig.bx" \
+            || { echo "::error::bx-docs installed but has no ModuleConfig.bx at its root"; exit 1; }
+          echo "bx-docs ready at $D"
 
       - name: Build development into /development/
         run: |
