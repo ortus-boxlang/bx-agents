@@ -1,14 +1,18 @@
 ---
 title: Agent.bx
 icon: ⚙️
-summary: The one required file - a configure() method returning your agent's shape.
-description: The one required file - a configure() method returning your agent's shape.
+summary: "The one required file, in either of two shapes: a descriptor that configures an agent, or a class that IS one."
+description: "The one required file, in either of two shapes: a descriptor that configures an agent, or a class that IS one."
 tags: [conventions, configuration]
 ---
 
 # Agent.bx
 
-`Agent.bx` is the only required file in a BX Agents project (alongside `instructions.md`). It's a plain BoxLang class with a `configure()` method that returns a struct:
+`Agent.bx` is the only required file in a BX Agents project. It comes in **two shapes**, and both are fully supported - a project can even mix them, with a class-based root over descriptor subagents or the other way round.
+
+## 1. A descriptor - a class that *configures* an agent
+
+The default. A plain BoxLang class whose `configure()` returns a struct; the build renders an `aiAgent( ... )` call from it. Requires an `instructions.md` beside it.
 
 ```javascript
 class {
@@ -24,12 +28,61 @@ class {
 }
 ```
 
-## Recognized fields
+## 2. Class-based - a class that *is* the agent
+
+`Agent.bx` may instead extend bx-ai's own [`AiAgent`](https://ai.ortusbooks.com/main-components/agents/class-based-agents), in which case **it is the agent**. The build instantiates it rather than rebuilding one, so what you write is what runs - and you can put real behaviour in it: private helpers, overridden methods, tools registered in code.
+
+```javascript
+class extends="bxModules.bxai.models.runnables.AiAgent" {
+
+	function init() {
+		super.init(
+			name        : "my-agent",
+			description : "A helpful assistant",
+			instructions: "You are a helpful assistant.",
+			model       : aiModel( provider: "openai", params: { model: "gpt-5" } )
+		)
+		return this
+	}
+
+}
+```
+
+Both `configure()` and `instructions.md` are **optional** here - the class already carries that information. See [`examples/class-based-agent`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/class-based-agent).
+
+### What the build still does for a class-based agent
+
+> **The rule:** an explicitly declared convention wins; otherwise the class is in charge.
+
+So an agent that sets everything in its own `init()` gets nothing imposed on it, while one that sets the bare minimum still picks up the conventions it didn't speak for:
+
+| You declare | The build emits | If you don't declare it |
+|---|---|---|
+| `instructions.md` | `withInstructions( fileRead( ... ) )` | the class's own instructions stand |
+| `model` in config | `setModel( aiModel( ... ) )` | the class's own model stands |
+| `name` / `description` | `setName()` / `setDescription()` | the class's own stand |
+| `memory` in config | `setMemory( ... )` | the class's own stands |
+| *(nothing to declare)* | `withTools( aiToolRegistry().getAll() )` | always - `withTools()` **appends** in bx-ai rather than replacing, so tools your class registered itself are kept and the discovered `tools/` are added |
+| `subAgents` | `addSubAgent( ... )` per child | appended the same way |
+| `checkpointer` | `withCheckpointer( ... )` | **injected anyway** if the class set none - see below |
+
+!!! info
+    The checkpointer is the one thing the build fills in unasked. An agent reachable from a gateway with no checkpointer has *silently* broken human-in-the-loop, so a class that set none still gets the `cache` default. A class that sets its own is left alone.
+
+!!! warning
+    Deliberately **not** implemented by comparing your instance against bx-ai's `DEFAULT_AGENT_*` values. "Did the author mean this, or is it just the default?" is unanswerable, and an author who genuinely wanted the default name would find it silently replaced. Presence of an external declaration is a fact; intent behind a default value is not.
+
+The class is copied into the generated app at `agent/classes/` and instantiated there, exactly as `tools/`, `skills/` and `mcp/` are copied - so a packaged `.bxa` carries it. A descriptor `Agent.bx` is never copied: it's consumed at build time and has no runtime role.
+
+## Recognized fields (descriptor shape)
+
+The fields below are what a `configure()` struct may declare. They apply to a class-based agent too, where declaring one means "override what the class set" per the table above.
+
 
 | Field | Type | Notes |
 |---|---|---|
 | `name` | string | Falls back to `"BxAi"` if omitted. Also becomes this agent's `config/WireBox.bx` binding key at build time (`getInstance( name )`) - see [schedules/](schedules.md) - so it must be unique across the whole project (root + every subagent); `build` fails if two agents share a name. |
-| `model` | string | Required. A `provider/model` slug, a bare provider name, or a name matching a [`models/`](models.md) entry. See below. |
+| `model` | string | Required for a descriptor; **optional** for a class-based agent, which already has one. A `provider/model` slug, a bare provider name, or a name matching a [`models/`](models.md) entry. See below. |
 | `description` | string | Optional. |
 | `subAgents` | array of strings | Names of sibling folders under the root project's `subagents/`. See [subagents/](subagents.md). |
 | `mcpServers` | array | Remote MCP servers - each entry a URL string or `{ url, name }`. See [mcp/](mcp.md). |

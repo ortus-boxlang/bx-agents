@@ -1,8 +1,18 @@
 /**
  * Resolves a BX Agents project's full build-time configuration (Build Pipeline Phase 1).
  *
+ * Agent.bx comes in two shapes, and this resolver handles both:
+ *
+ *   DESCRIPTOR - a plain class whose configure() returns a config struct. The
+ *                build renders an `aiAgent( ... )` call from it.
+ *   CLASS-BASED - a class that `extends` bx-ai's own AiAgent, so it IS the
+ *                agent. The build instantiates it rather than rebuilding one,
+ *                and layers conventions on top. configure() is OPTIONAL here:
+ *                a class-based agent that declares everything in its own
+ *                init() needs no config struct at all.
+ *
  * Merges, in increasing precedence:
- *   1. Agent.bx's configure()
+ *   1. Agent.bx's configure()  (optional for a class-based Agent.bx)
  *   2. Agent.bx's environment() override method (e.g. development(), production())
  *   3. boxlang.json
  *   4. boxlang-{environment}.json
@@ -50,8 +60,9 @@ class {
 
 		var environment			= variables.environmentResolver.resolve( arguments.cliEnvironment )
 		var agentDescriptor		= loadAgentDescriptor( agentBxPath, context )
+		var isClassBased		= isClassBasedAgent( agentDescriptor )
 
-		var baseConfig			= invokeConfigure( agentDescriptor, agentBxPath )
+		var baseConfig			= invokeConfigure( agentDescriptor, agentBxPath, isClassBased )
 		var envOverrides		= invokeEnvironmentOverride( agentDescriptor, environment, agentBxPath )
 
 		var config = deepMerge( baseConfig, envOverrides )
@@ -61,6 +72,21 @@ class {
 		config = deepMerge( config, readJsonConfig( normalizedRoot, "miniserver", environment ) )
 
 		config[ "environment" ] = environment
+
+		// Recorded AFTER the merge so no config file can fake it - whether this
+		// node is class-based is a fact about the loaded class, never a setting.
+		// The generator branches on it. It never reaches manifest.json: that is
+		// built from an explicit allowlist of four fields (ManifestNormalizer's
+		// buildAgentSummary), not by stripping - so nothing here can leak into it.
+		config[ "classBasedAgent" ] = isClassBased
+		if ( isClassBased ) {
+			// Only the checkpointer needs a runtime look at the instance: it is
+			// the one thing the build injects a default for even when the config
+			// declares nothing (a gateway-attached agent without a checkpointer
+			// has silently broken HITL - see ColdBoxAppGenerator), so the build
+			// has to know whether the class already set one.
+			config[ "classHasCheckpointer" ] = classHasCheckpointer( agentDescriptor )
+		}
 
 		return config
 	}
@@ -91,12 +117,54 @@ class {
 	}
 
 	/**
+	 * Is this Agent.bx a class-based agent - i.e. does it extend bx-ai's AiAgent
+	 * and therefore ARE the agent, rather than describing one?
+	 *
+	 * Checked with isInstanceOf against the real class rather than by looking for
+	 * an `extends` attribute or a method name, so a project that subclasses its
+	 * OWN AiAgent subclass is still recognised.
+	 *
+	 * @agentDescriptor The instantiated Agent.bx instance, from loadAgentDescriptor()
+	 *
+	 * @return true when the instance is an AiAgent
+	 */
+	private boolean function isClassBasedAgent( required any agentDescriptor ) {
+		return isInstanceOf( arguments.agentDescriptor, "bxModules.bxai.models.runnables.AiAgent" )
+	}
+
+	/**
+	 * Does a class-based Agent.bx already carry a checkpointer of its own?
+	 *
+	 * @agentDescriptor The instantiated Agent.bx instance - MUST be class-based
+	 *
+	 * @return true when the class set a checkpointer in its own init()
+	 */
+	private boolean function classHasCheckpointer( required any agentDescriptor ) {
+		try {
+			return !isNull( arguments.agentDescriptor.getCheckpointer() )
+		} catch ( any e ) {
+			// Never fail a build over an introspection call - if it cannot be
+			// read, treat it as absent and let the build inject its default.
+			return false
+		}
+	}
+
+	/**
 	 * @agentDescriptor The instantiated Agent.bx instance, from loadAgentDescriptor()
 	 * @agentBxPath Absolute path to Agent.bx, for error message context
+	 * @isClassBased Whether this Agent.bx IS an agent (extends AiAgent), which makes configure() optional
 	 *
-	 * @return The struct returned by Agent.bx's configure()
+	 * @return The struct returned by Agent.bx's configure(), or {} when a class-based Agent.bx declares none
 	 */
-	private function invokeConfigure( required any agentDescriptor, required string agentBxPath ) {
+	private function invokeConfigure( required any agentDescriptor, required string agentBxPath, boolean isClassBased = false ) {
+		// A class-based Agent.bx configures itself in its own init(); a config
+		// struct is an optional extra there, not the point of the file. A
+		// DESCRIPTOR Agent.bx with no configure() is still an error - it would
+		// describe nothing at all.
+		if ( arguments.isClassBased && !hasMethod( arguments.agentDescriptor, "configure" ) ) {
+			return {}
+		}
+
 		try {
 			var result = arguments.agentDescriptor.configure()
 		} catch ( any e ) {

@@ -452,7 +452,7 @@ class {
 	 * @return { source: the rendered agent/GeneratedAgentFactory.bx source, nodes: every agent node in the tree - see buildAgentTree() }
 	 */
 	private struct function renderAgentFactory( required string projectRoot, required string appDir, required struct resolvedConfig, string cliEnvironment = "", struct discovery = {}, string defaultMemory = "" ) {
-		var built = buildAgentTree( arguments.projectRoot, arguments.projectRoot, arguments.resolvedConfig, "agent", arguments.cliEnvironment, arguments.discovery, [], arguments.defaultMemory )
+		var built = buildAgentTree( arguments.projectRoot, arguments.projectRoot, arguments.resolvedConfig, "agent", arguments.cliEnvironment, arguments.discovery, [], arguments.defaultMemory, normalizePath( arguments.appDir ) )
 		var body = built.statements.toList( char( 10 ) & char( 10 ) )
 		var toolsDir = normalizePath( arguments.appDir ) & "/tools"
 
@@ -521,7 +521,8 @@ class {
 		string cliEnvironment = "",
 		struct discovery = {},
 		array accessorPath = [],
-		string defaultMemory = ""
+		string defaultMemory = "",
+		string appDir = ""
 	) {
 		var declaredSubAgents = arguments.resolvedConfig.subAgents ?: []
 		var subAgentVarNames = []
@@ -543,7 +544,7 @@ class {
 			var childAccessorPath = duplicate( arguments.accessorPath )
 			childAccessorPath.append( resolveAgentName( subConfig ) )
 
-			var built = buildAgentTree( arguments.rootProjectRoot, subPath, subConfig, subVarName, arguments.cliEnvironment, arguments.discovery, childAccessorPath, arguments.defaultMemory )
+			var built = buildAgentTree( arguments.rootProjectRoot, subPath, subConfig, subVarName, arguments.cliEnvironment, arguments.discovery, childAccessorPath, arguments.defaultMemory, arguments.appDir )
 
 			for ( var stmt in built.statements ) {
 				statements.append( stmt )
@@ -554,7 +555,7 @@ class {
 			subAgentVarNames.append( subVarName )
 		}
 
-		statements.append( renderAgentStatement( arguments.varName, arguments.nodePath, arguments.resolvedConfig, subAgentVarNames, arguments.discovery, thisName, arguments.defaultMemory ) )
+		statements.append( renderAgentStatement( arguments.varName, arguments.nodePath, arguments.resolvedConfig, subAgentVarNames, arguments.discovery, thisName, arguments.defaultMemory, arguments.appDir ) )
 
 		return { statements : statements, nodes : nodes }
 	}
@@ -655,8 +656,24 @@ class {
 		required array subAgentVarNames,
 		struct discovery = {},
 		required string name,
-		string defaultMemory = ""
+		string defaultMemory = "",
+		string appDir = ""
 	) {
+		// A class-based Agent.bx IS the agent - instantiate it rather than
+		// rebuilding one from its config. Everything below this line describes
+		// the DESCRIPTOR shape.
+		if ( arguments.resolvedConfig.classBasedAgent ?: false ) {
+			return renderClassBasedAgentStatement(
+				varName          : arguments.varName,
+				nodePath         : arguments.nodePath,
+				resolvedConfig   : arguments.resolvedConfig,
+				subAgentVarNames : arguments.subAgentVarNames,
+				discovery        : arguments.discovery,
+				defaultMemory    : arguments.defaultMemory,
+				appDir           : arguments.appDir
+			)
+		}
+
 		var instructionsPath = arguments.nodePath & "/instructions.md"
 		if ( !fileExists( instructionsPath ) ) {
 			throw(
@@ -714,6 +731,156 @@ class {
 		lines.append( ")" )
 
 		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Renders one node when its Agent.bx IS the agent - a class extending bx-ai's
+	 * AiAgent - rather than a descriptor whose configure() we build an
+	 * `aiAgent()` call from.
+	 *
+	 * THE RULE, in one line: an explicitly declared convention wins; otherwise
+	 * the class is in charge.
+	 *
+	 * So a class-based agent that sets everything in its own init() gets nothing
+	 * imposed on it, while one that sets the bare minimum still picks up the
+	 * conventions it did not speak for. Deliberately NOT implemented by comparing
+	 * the instance against bx-ai's DEFAULT_AGENT_* values - "did the author mean
+	 * this, or is it just the default?" is unanswerable, and an author who
+	 * genuinely wants the default name would find it silently replaced. Presence
+	 * of the external declaration is a fact; intent behind a default value is not.
+	 *
+	 *   instructions.md present  -> withInstructions( fileRead(...) )
+	 *   config declares model    -> setModel( aiModel(...) )
+	 *   config declares name     -> setName(), and likewise description/memory
+	 *   tools/ discovered        -> withTools(), which APPENDS in bx-ai rather
+	 *                               than replacing, so the class's own tools stay
+	 *   subagents/ declared      -> addSubAgent() per child, appended the same way
+	 *   checkpointer             -> injected only when the class set none AND the
+	 *                               config declares none (see renderCheckpointerExpression)
+	 *
+	 * @varName The BoxLang variable name to assign this node's instance to
+	 * @nodePath Absolute path to THIS node's own directory, holding its Agent.bx
+	 * @resolvedConfig THIS node's own resolved config
+	 * @subAgentVarNames Already-rendered child variable names to attach
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover()
+	 * @defaultMemory The build-wide default memory type, if any
+	 * @appDir Absolute path to the generated app dir - the class is copied under its agent/classes/
+	 *
+	 * @return The rendered statement block for this one node
+	 */
+	private string function renderClassBasedAgentStatement(
+		required string varName,
+		required string nodePath,
+		required struct resolvedConfig,
+		required array subAgentVarNames,
+		struct discovery = {},
+		string defaultMemory = "",
+		string appDir = ""
+	) {
+		var componentPath = copyAgentClass( arguments.nodePath, arguments.varName, arguments.appDir )
+
+		var lines = []
+		lines.append( "// #arguments.varName#: a class-based Agent.bx - instantiated, not rebuilt." )
+		lines.append( 'var #arguments.varName# = new "#bxLiteral( componentPath )#"()' )
+
+		// --- identity: only what the project declared OUTSIDE the class ---
+		if ( len( arguments.resolvedConfig.name ?: "" ) ) {
+			lines.append( '#arguments.varName#.setName( "#bxLiteral( arguments.resolvedConfig.name )#" )' )
+		}
+		if ( len( arguments.resolvedConfig.description ?: "" ) ) {
+			lines.append( '#arguments.varName#.setDescription( "#bxLiteral( arguments.resolvedConfig.description )#" )' )
+		}
+
+		// instructions.md is optional here, unlike a descriptor agent - the class
+		// carries its own instructions when the file is absent.
+		var instructionsPath = arguments.nodePath & "/instructions.md"
+		if ( fileExists( instructionsPath ) ) {
+			lines.append( '#arguments.varName#.withInstructions( fileRead( "#bxLiteral( instructionsPath )#" ) )' )
+		}
+
+		// model is optional here too - no MissingModel throw, since the class
+		// already has one from its own super.init().
+		var modelSlug = arguments.resolvedConfig.model ?: ""
+		if ( len( modelSlug ) ) {
+			var parsedModel = resolveModelReference( modelSlug, arguments.discovery, arguments.nodePath )
+			var modelExpression = len( parsedModel.model )
+				? 'aiModel( provider : "#bxLiteral( parsedModel.provider )#", params : { model : "#bxLiteral( parsedModel.model )#" } )'
+				: 'aiModel( provider : "#bxLiteral( parsedModel.provider )#" )'
+			lines.append( "#arguments.varName#.setModel( #modelExpression# )" )
+		}
+
+		// --- conventions that ADD rather than replace ---
+		lines.append( "#arguments.varName#.withTools( aiToolRegistry().getAll() )" )
+
+		for ( var subVarName in arguments.subAgentVarNames ) {
+			lines.append( "#arguments.varName#.addSubAgent( #subVarName# )" )
+		}
+
+		var memoryExpression = renderMemoryExpression( arguments.resolvedConfig, arguments.defaultMemory )
+		if ( len( memoryExpression ) ) {
+			lines.append( "#arguments.varName#.setMemory( #memoryExpression# )" )
+		}
+
+		// The one case the build fills in without an explicit declaration: an
+		// agent reachable from a gateway with NO checkpointer has silently broken
+		// human-in-the-loop, so a class that set none still gets the cache default.
+		var declaresCheckpointer = structKeyExists( arguments.resolvedConfig, "checkpointer" )
+		var classHasCheckpointer = arguments.resolvedConfig.classHasCheckpointer ?: false
+		if ( declaresCheckpointer || !classHasCheckpointer ) {
+			lines.append( "#arguments.varName#.withCheckpointer( #renderCheckpointerExpression( arguments.resolvedConfig )# )" )
+		}
+
+		var mcpServerUrls = extractMcpServerUrls( arguments.resolvedConfig )
+		if ( mcpServerUrls.len() ) {
+			var quoted = mcpServerUrls.map( function( url ) {
+				return '"#bxLiteral( url )#"'
+			} )
+			lines.append( "#arguments.varName#.withMCPServers( [ #quoted.toList( ", " )# ] )" )
+		}
+
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Copies a class-based Agent.bx into the generated app so the built app can
+	 * instantiate it at runtime, exactly as tools/, skills/ and mcp/ are copied.
+	 * A descriptor Agent.bx is never copied - it is consumed at build time and
+	 * has no runtime role.
+	 *
+	 * Named by the node's own varName, which buildAgentTree already guarantees is
+	 * unique and identifier-safe across the whole tree, so two subagents cannot
+	 * collide on one file. The "Class" suffix keeps the component path from
+	 * colliding with the local variable of the same name in the generated factory.
+	 *
+	 * @nodePath Absolute path to the node directory holding Agent.bx
+	 * @varName This node's variable name in the generated factory
+	 * @appDir Absolute path to the generated app dir
+	 *
+	 * @return The dotted component path to instantiate, e.g. "agent.classes.agentClass"
+	 */
+	private string function copyAgentClass( required string nodePath, required string varName, required string appDir ) {
+		var source = arguments.nodePath & "/Agent.bx"
+		if ( !fileExists( source ) ) {
+			throw(
+				type    = "BxAgents.MissingAgentDescriptor",
+				message = "No Agent.bx found at [#source#]"
+			)
+		}
+
+		if ( !len( arguments.appDir ) ) {
+			throw(
+				type    = "BxAgents.MissingBuildDir",
+				message = "A class-based Agent.bx at [#source#] cannot be generated without a build directory to copy it into"
+			)
+		}
+
+		var classesDir = arguments.appDir & "/agent/classes"
+		directoryCreate( path = classesDir, createPath = true, ignoreExists = true )
+
+		var className = arguments.varName & "Class"
+		fileCopy( source, classesDir & "/" & className & ".bx" )
+
+		return "agent.classes." & className
 	}
 
 	// --------------------------------------------------------------------------

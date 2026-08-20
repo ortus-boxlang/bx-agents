@@ -5,6 +5,7 @@ Real, buildable BX Agents projects, each demonstrating one feature area. Every e
 | Example | Demonstrates |
 |---|---|
 | [`minimal-agent/`](minimal-agent) | The smallest complete agent: one tool, one skill. Start here. |
+| [`class-based-agent/`](class-based-agent) | The same agent written the other way: `Agent.bx` extends bx-ai's `AiAgent`, so it IS the agent. No `configure()`, no `instructions.md`. |
 | [`http-gateway-agent/`](http-gateway-agent) | Exposing an agent over HTTP via `gateways/` + `toAi()`. |
 | [`scheduled-agent/`](scheduled-agent) | Waking an agent on a cron schedule via `schedules/`. |
 | [`mcp-agent/`](mcp-agent) | Hosting a local MCP server that re-exposes a tool via `mcp/`. |
