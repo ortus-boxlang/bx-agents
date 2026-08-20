@@ -112,13 +112,6 @@ Contact `#infrastructure` for these credentials if needed.
 # once - bx-docs renders through bx-markdown and encodes through bx-esapi
 install-bx-module bx-docs bx-markdown bx-esapi
 
-# The published bx-docs zip is currently nested one directory too deep, so the
-# install lands ModuleConfig.bx at bx-docs/module/ModuleConfig.bx and BoxLang
-# reports "Can't execute module [bxdocs] as it does not exist". Flatten it once
-# (skip this when `ls ~/.boxlang/modules/bx-docs/ModuleConfig.bx` already works):
-D=~/.boxlang/modules/bx-docs
-[ -f "$D/module/ModuleConfig.bx" ] && mv "$D/module" "$D.flat" && rm -rf "$D" && mv "$D.flat" "$D"
-
 bxDocs serve     # live-reloading preview on http://127.0.0.1:8080
 bxDocs build     # render docs/ to site/ (gitignored)
 ```

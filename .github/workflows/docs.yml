@@ -80,34 +80,6 @@ jobs:
           # both are hard dependencies of the module, not optional extras.
           modules: bx-docs,bx-markdown,bx-esapi
 
-      - name: Normalize the bx-docs module layout
-        run: |
-          MODULES_DIR="${BOXLANG_HOME:-$GITHUB_WORKSPACE/.boxlang}/modules"
-          D="$MODULES_DIR/bx-docs"
-
-          # The published bx-docs zip currently carries one directory level too
-          # many: its contents sit under a `module/` folder, so the install lands
-          # ModuleConfig.bx at bx-docs/module/ModuleConfig.bx instead of
-          # bx-docs/ModuleConfig.bx. BoxLang then cannot see the module at all -
-          # `boxlang module:bxdocs build` fails with
-          #   "Can't execute module [bxdocs] as it does not exist."
-          # even though the install itself reported success. Flattening that one
-          # level makes it load and build normally.
-          #
-          # This whole step becomes a no-op the moment the zip is packaged from
-          # the CONTENTS of build/module rather than the directory itself, and
-          # can be deleted then.
-          if [ -f "$D/module/ModuleConfig.bx" ] && [ ! -f "$D/ModuleConfig.bx" ]; then
-            echo "::warning::bx-docs zip is nested one level deep - flattening $D/module into $D"
-            mv "$D/module" "$D.flat" && rm -rf "$D" && mv "$D.flat" "$D"
-          fi
-
-          # Fail loudly here rather than letting the build fail with a much less
-          # obvious "module does not exist".
-          test -f "$D/ModuleConfig.bx" \
-            || { echo "::error::bx-docs installed but has no ModuleConfig.bx at its root"; exit 1; }
-          echo "bx-docs ready at $D"
-
       - name: Build development into /development/
         run: |
           # Each version is served from its own sub-path, so its baseURL and
