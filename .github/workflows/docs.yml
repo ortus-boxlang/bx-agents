@@ -44,13 +44,37 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v7
 
-      - name: Setup BoxLang + bx-docs
+      - name: Setup BoxLang + bx-docs's dependencies
         uses: ortus-boxlang/setup-boxlang@1.4.0
         with:
           with-commandbox: true
           # bx-docs renders through bx-markdown and encodes through bx-esapi;
           # both are hard dependencies of the module, not optional extras.
-          modules: bx-docs,bx-markdown,bx-esapi
+          # bx-docs itself is NOT installed here - see the next step for why.
+          modules: bx-markdown,bx-esapi
+
+      - name: Install bx-docs from source
+        run: |
+          # bx-docs cannot be installed from ForgeBox today. Its entry exists,
+          # but the version it advertises is "1.0.0-snapshot-snapshot" (a
+          # doubled suffix from its own publish step) and NO artifact is
+          # actually uploaded - every candidate path 404s, including the
+          # downloadURL ForgeBox itself records:
+          #   .../bx-docs/1.0.0-snapshot/bx-docs-1.0.0-snapshot.zip  -> 404
+          #   .../bx-docs/1.0.0-snapshot-snapshot/...-snapshot.zip   -> 404
+          # So `modules: bx-docs` fails the whole job at setup.
+          #
+          # bx-docs is a pure-BoxLang module with ModuleConfig.bx at its repo
+          # root, so a plain checkout IS a usable module. Drop this step and
+          # add bx-docs back to `modules:` above once it publishes a real
+          # artifact.
+          MODULES_DIR="${BOXLANG_HOME:-$GITHUB_WORKSPACE/.boxlang}/modules"
+          mkdir -p "$MODULES_DIR"
+          git clone --depth 1 --branch development \
+            https://github.com/ortus-boxlang/bx-docs.git "$MODULES_DIR/bx-docs"
+          test -f "$MODULES_DIR/bx-docs/ModuleConfig.bx" \
+            || { echo "::error::bx-docs checkout has no ModuleConfig.bx at its root"; exit 1; }
+          echo "Installed bx-docs @ $(git -C "$MODULES_DIR/bx-docs" rev-parse --short HEAD) into $MODULES_DIR"
 
       - name: Point baseURL and editUri at this branch's own published path
         if: github.ref_name != 'development'

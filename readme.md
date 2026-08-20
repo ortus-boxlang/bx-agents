@@ -110,7 +110,13 @@ Contact `#infrastructure` for these credentials if needed.
 
 ```bash
 # once - bx-docs renders through bx-markdown and encodes through bx-esapi
-install-bx-module bx-docs bx-markdown bx-esapi
+install-bx-module bx-markdown bx-esapi
+
+# bx-docs itself has no installable artifact on FORGEBOX yet, so clone it into
+# your modules folder - ModuleConfig.bx sits at its repo root, so a plain
+# checkout IS the module. Swap this for `install-bx-module bx-docs` once it
+# publishes one.
+git clone https://github.com/ortus-boxlang/bx-docs.git ~/.boxlang/modules/bx-docs
 
 bxDocs serve     # live-reloading preview on http://127.0.0.1:8080
 bxDocs build     # render docs/ to site/ (gitignored)
