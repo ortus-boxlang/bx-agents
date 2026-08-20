@@ -15,11 +15,16 @@ name: Publish Docs
 # tree and deploys it once. That is why a push to either branch rebuilds both:
 # it is what keeps them consistent, not redundant work.
 #
-# This uses GitHub's own Pages deployment rather than pushing a gh-pages branch
-# for one specific reason: `configure-pages` with `enablement: true` turns Pages
-# ON for the repository via the API during the run. The gh-pages-branch approach
-# cannot do that - it leaves Pages switched off until a human visits
-# Settings -> Pages and points it at the branch.
+# This uses GitHub's own Pages deployment rather than pushing a gh-pages branch.
+#
+# ONE-TIME SETUP, and `enablement` below does NOT cover it: the repository's
+# Settings -> Pages -> Build and deployment -> Source must be set to
+# "GitHub Actions" (not "Deploy from a branch"). configure-pages' own source
+# (findOrCreatePagesSite) only calls createPagesSite - the call that sets
+# build_type: workflow - when NO Pages site exists yet. If a site already
+# exists on a branch source, it is returned as-is and its build_type is never
+# changed, so the deploy below has nothing to publish to. `enablement: true` is
+# still worth keeping: it covers a repository that has never had Pages at all.
 
 on:
 # `configure-pages` with `enablement: true` turns Pages ON for the repository
@@ -70,9 +75,9 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v7
 
-      # enablement: true is the whole point of using this action - it creates
-      # the Pages site if the repository does not have one yet, so nobody has
-      # to switch it on by hand.
+      # Creates the Pages site if the repository has never had one. It does NOT
+      # convert an existing branch-source site to an Actions-source one - see
+      # the setup note at the top of this file.
       - name: Configure GitHub Pages (creating the site if needed)
         uses: actions/configure-pages@v5
         with:

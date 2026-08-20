@@ -126,6 +126,8 @@ Every page starts with a small frontmatter block (`title`, `icon`, `summary`, `d
 
 Pushes to `development` publish to [`/development/`](https://ortus-boxlang.github.io/bx-agents/development/) and pushes to `main` publish to the site root, via `.github/workflows/docs.yml` - one folder per version, and both stay live at once. There is no `main` branch yet, so the root currently redirects into `/development/`.
 
+The repository's **Settings -> Pages -> Source** must be set to **GitHub Actions** for any of this to publish - the workflow cannot set that itself once a Pages site already exists on a branch source.
+
 A push to either branch rebuilds **both** versions in one job. That is deliberate, not waste: GitHub Pages replaces the entire site on every deploy, so two branches cannot each deploy their own sub-path without the second wiping the first.
 
 ## Ortus Sponsors
