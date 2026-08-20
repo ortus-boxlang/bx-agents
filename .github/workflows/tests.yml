@@ -70,7 +70,13 @@ jobs:
         working-directory: tests
 
       - name: Show installed test dependencies
-        run: ls -la tests/ && ls -la tests/qb 2>/dev/null || true
+        # Purely diagnostic - never fail the job over a listing. Written as
+        # separate guarded commands rather than `A && B || true`, which reads
+        # like if-then-else but is not: the `|| true` there also swallows a
+        # failure of A.
+        run: |
+          ls -la tests/ || true
+          ls -la tests/qb 2>/dev/null || true
         shell: bash
 
       # Not Needed in this module

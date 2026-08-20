@@ -62,19 +62,20 @@ jobs:
           # Replace existing prerelease identifier with -snapshot or append -snapshot if none exists
           # If we are on the development branch, we always append -snapshot
           if [[ "${{ github.ref }}" == "refs/heads/development" ]]; then
-            TMPVERSION=$(echo $TMPVERSION | sed 's/-.*$//')-snapshot
+            # ${VAR%%-*} strips from the first "-" onward, same as the sed it replaced
+            TMPVERSION="${TMPVERSION%%-*}-snapshot"
           fi
           # Set the version in the environment
-          echo "VERSION=$TMPVERSION" >> $GITHUB_ENV
+          echo "VERSION=$TMPVERSION" >> "$GITHUB_ENV"
 
           # Branch
           echo "Github Ref is $GITHUB_REF"
-          echo "BRANCH=main" >> $GITHUB_ENV
+          echo "BRANCH=main" >> "$GITHUB_ENV"
 
           # Snapshot
-          if [ $GITHUB_REF == 'refs/heads/development' ]
+          if [ "$GITHUB_REF" = 'refs/heads/development' ]
           then
-            echo "BRANCH=development" >> $GITHUB_ENV
+            echo "BRANCH=development" >> "$GITHUB_ENV"
           fi
 
       - name: Update changelog [unreleased] with latest version
@@ -143,7 +144,7 @@ jobs:
         run: |
           cd build/modules/bxagents
           box forgebox publish --force
-          cd $GITHUB_WORKSPACE
+          cd "$GITHUB_WORKSPACE"
 
       - name: Create Github Release
         uses: taiki-e/create-gh-release-action@v1.11.0
