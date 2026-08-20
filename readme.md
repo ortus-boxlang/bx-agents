@@ -124,7 +124,9 @@ bxDocs build     # render docs/ to site/ (gitignored)
 
 Every page starts with a small frontmatter block (`title`, `icon`, `summary`, `description`, `tags`); `summary` renders under the page title, `description` is meta-only, and `tags` become clickable badges plus a site-wide `/tags/` index.
 
-Pushes to `development` publish to the site root and pushes to `main` publish to `/stable/`, via `.github/workflows/docs.yml`. Both stay live at once.
+Pushes to `development` publish to [`/development/`](https://ortus-boxlang.github.io/bx-agents/development/) and pushes to `main` publish to the site root, via `.github/workflows/docs.yml` - one folder per version, and both stay live at once. There is no `main` branch yet, so the root currently redirects into `/development/`.
+
+A push to either branch rebuilds **both** versions in one job. That is deliberate, not waste: GitHub Pages replaces the entire site on every deploy, so two branches cannot each deploy their own sub-path without the second wiping the first.
 
 ## Ortus Sponsors
 
