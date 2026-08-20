@@ -667,6 +667,12 @@ class {
 		var modelValue = arguments.resolvedConfig.model ?: ""
 
 		if ( !len( modelValue ) ) {
+			// A class-based Agent.bx already HAS a model from its own super.init();
+			// requiring the config to redeclare one would defeat the point. A
+			// descriptor Agent.bx still must, since nothing else supplies it.
+			if ( arguments.resolvedConfig.classBasedAgent ?: false ) {
+				return
+			}
 			arguments.errors.append( "#arguments.source# must declare a 'model'" )
 			return
 		}

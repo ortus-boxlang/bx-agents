@@ -27,6 +27,34 @@ class extends="testbox.system.BaseSpec" {
 				expect( prodConfig.security.outputGuard.blockPatterns ).toBe( [ "ssn", "creditCard" ] );
 			} );
 
+			it( "flags a class-based Agent.bx and makes configure() optional there", function() {
+				// No configure() at all on this fixture - legal only because the
+				// class IS the agent and configures itself in its own init().
+				var config = resolver.resolve( projectRoot = fixtures & "/class-based-minimal" );
+
+				expect( config.classBasedAgent ).toBeTrue();
+				expect( config.classHasCheckpointer ).toBeFalse();
+				expect( config.keyExists( "model" ) ).toBeFalse();
+			} );
+
+			it( "still reads configure() when a class-based Agent.bx declares one", function() {
+				var config = resolver.resolve( projectRoot = fixtures & "/class-based-declared" );
+
+				expect( config.classBasedAgent ).toBeTrue();
+				expect( config.name ).toBe( "FromConfig" );
+				expect( config.model ).toBe( "mock/mock-model" );
+			} );
+
+			it( "reports a checkpointer the class set itself", function() {
+				var config = resolver.resolve( projectRoot = fixtures & "/class-based-own-checkpointer" );
+				expect( config.classHasCheckpointer ).toBeTrue();
+			} );
+
+			it( "marks a plain descriptor Agent.bx as NOT class-based", function() {
+				var config = resolver.resolve( projectRoot = fixtures & "/valid-minimal" );
+				expect( config.classBasedAgent ).toBeFalse();
+			} );
+
 			it( "throws a descriptive error when Agent.bx is missing", function() {
 				expect( function() {
 					resolver.resolve( projectRoot = "/tmp/bx-agents-does-not-exist" );

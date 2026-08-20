@@ -436,6 +436,79 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).notToInclude( "this.datasource =" );
 			} );
 
+
+			describe( "class-based Agent.bx", function() {
+
+				private function factoryFor( required string fixtureName, required string buildDir ) {
+					return fileRead( generateFor( fixtures & "/" & arguments.fixtureName, arguments.buildDir ).agentFactory );
+				}
+
+				it( "instantiates the class instead of rebuilding an aiAgent(), and copies it into the app", function() {
+					var buildDir = newBuildDir();
+					var factory  = factoryFor( "class-based-minimal", buildDir );
+
+					// The class IS the agent - no aiAgent() call for this node at all.
+					expect( factory ).toInclude( 'new "agent.classes.agentClass"()' );
+					expect( factory ).notToInclude( "aiAgent(" );
+
+					// ...and it has to exist at runtime, so it is copied like tools/ and skills/ are.
+					expect( fileExists( buildDir & "/agent/classes/agentClass.bx" ) ).toBeTrue();
+				} );
+
+				it( "imposes nothing on identity the class set, when the project declares none", function() {
+					var factory = factoryFor( "class-based-minimal", newBuildDir() );
+
+					expect( factory ).notToInclude( "setName(" );
+					expect( factory ).notToInclude( "setDescription(" );
+					expect( factory ).notToInclude( "withInstructions(" );
+					expect( factory ).notToInclude( "setModel(" );
+				} );
+
+				it( "still layers on the conventions the class did not speak for", function() {
+					var factory = factoryFor( "class-based-minimal", newBuildDir() );
+
+					// withTools APPENDS in bx-ai rather than replacing, so a class
+					// that registered its own tools keeps them and gains these.
+					expect( factory ).toInclude( "withTools( aiToolRegistry().getAll() )" );
+					// The one thing injected unasked: no checkpointer means silently
+					// broken human-in-the-loop for any gateway-reachable agent.
+					expect( factory ).toInclude( "withCheckpointer(" );
+				} );
+
+				it( "lets an explicitly declared convention win over the class", function() {
+					var factory = factoryFor( "class-based-declared", newBuildDir() );
+
+					expect( factory ).toInclude( 'setName( "FromConfig" )' );
+					expect( factory ).toInclude( 'setDescription( "declared outside the class" )' );
+					expect( factory ).toInclude( "withInstructions( fileRead(" );
+					expect( factory ).toInclude( "setModel( aiModel(" );
+				} );
+
+				it( "leaves a class's own checkpointer alone", function() {
+					var factory = factoryFor( "class-based-own-checkpointer", newBuildDir() );
+
+					expect( factory ).toInclude( 'new "agent.classes.agentClass"()' );
+					expect( factory ).notToInclude( "withCheckpointer(" );
+				} );
+
+				it( "mixes both shapes in one tree - a class-based root over a descriptor subagent", function() {
+					var buildDir = newBuildDir();
+					var factory  = factoryFor( "class-based-mixed-tree", buildDir );
+
+					// the subagent is a descriptor, so it is still BUILT...
+					expect( factory ).toInclude( "var subagent_researcher = aiAgent(" );
+					// ...the root is class-based, so it is INSTANTIATED...
+					expect( factory ).toInclude( 'new "agent.classes.agentClass"()' );
+					// ...and the two are wired together.
+					expect( factory ).toInclude( "addSubAgent( subagent_researcher )" );
+
+					// only the class-based node gets a class copied in
+					expect( fileExists( buildDir & "/agent/classes/agentClass.bx" ) ).toBeTrue();
+					expect( fileExists( buildDir & "/agent/classes/subagent_researcherClass.bx" ) ).toBeFalse();
+				} );
+
+			} );
+
 		} );
 	}
 
