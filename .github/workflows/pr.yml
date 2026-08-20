@@ -22,6 +22,26 @@ jobs:
     uses: ./.github/workflows/tests.yml
     secrets: inherit
 
+  # Validate the workflow files themselves. A malformed workflow does not fail
+  # loudly: GitHub records a zero-duration run with no jobs and a bare "failure"
+  # conclusion, and if the file's own trigger does not match the branch it is not
+  # a PR check either - so it is easy to miss entirely. A duplicated `on:` key
+  # silently disabled Publish Docs this way, and `yaml.safe_load` did not catch
+  # it because duplicate keys are legal YAML (last one wins) but illegal here.
+  workflow_lint:
+    name: Lints GitHub Workflows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Run actionlint
+        uses: raven-actions/actionlint@v2
+        with:
+          files: ".github/workflows/*.yml"
+
   # Format PR
   format_check:
     name: Checks Source Code Formatting
