@@ -1,0 +1,520 @@
+
+
+
+
+
+<!doctype html>
+<html lang="ja" dir="ltr">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Web &#x30c1;&#x30e3;&#x30c3;&#x30c8; UI - BX Agents</title>
+	<meta property="og:type" content="website">
+	<meta property="og:site_name" content="BX Agents">
+	<meta property="og:title" content="Web &#x30c1;&#x30e3;&#x30c3;&#x30c8; UI">
+
+	<meta name="description" content="&#x5b8c;&#x5168;&#x306a;&#x30d6;&#x30e9;&#x30a6;&#x30b6;&#x30c1;&#x30e3;&#x30c3;&#x30c8;&#x30af;&#x30e9;&#x30a4;&#x30a2;&#x30f3;&#x30c8; - &#x30b5;&#x30a4;&#x30c9;&#x30d0;&#x30fc;&#x3001;&#x30b9;&#x30c8;&#x30ea;&#x30fc;&#x30df;&#x30f3;&#x30b0;&#x3001;&#x627f;&#x8a8d;&#x3001;SQLite &#x30b9;&#x30c8;&#x30a2;&#x3002;">
+	<meta property="og:description" content="&#x5b8c;&#x5168;&#x306a;&#x30d6;&#x30e9;&#x30a6;&#x30b6;&#x30c1;&#x30e3;&#x30c3;&#x30c8;&#x30af;&#x30e9;&#x30a4;&#x30a2;&#x30f3;&#x30c8; - &#x30b5;&#x30a4;&#x30c9;&#x30d0;&#x30fc;&#x3001;&#x30b9;&#x30c8;&#x30ea;&#x30fc;&#x30df;&#x30f3;&#x30b0;&#x3001;&#x627f;&#x8a8d;&#x3001;SQLite &#x30b9;&#x30c8;&#x30a2;&#x3002;">
+
+	<meta property="og:image" content="/bx-agents/development/ja/assets/home-banner.jpg">
+	<meta name="twitter:card" content="summary_large_image">
+
+	<link rel="icon" href="/bx-agents/development/ja/assets/favicon.svg">
+
+	<script>
+		( function () {
+			var configuredMode = "auto";
+			var stored = localStorage.getItem( "bxdocs-theme" );
+			var prefersDark = window.matchMedia( "(prefers-color-scheme: dark)" ).matches;
+			var wantsDark = stored ? stored === "dark" : ( configuredMode === "dark" || ( configuredMode === "auto" && prefersDark ) );
+			if ( wantsDark ) {
+				document.documentElement.setAttribute( "data-theme", "dark" );
+			}
+		} )();
+	</script>
+	<link rel="stylesheet" href="/bx-agents/development/ja/assets/vendor/bootstrap/bootstrap.min.css">
+	<link rel="stylesheet" href="/bx-agents/development/ja/assets/vendor/highlight/github.min.css">
+	<link rel="stylesheet" href="/bx-agents/development/ja/assets/theme/style.css">
+	<link rel="stylesheet" href="/bx-agents/development/ja/assets/bx-agents.css">
+
+	<script>window.__BXDOCS_BASE_PATH__ = "/bx-agents/development/ja/";</script>
+	<script src="/bx-agents/development/ja/assets/vendor/lunr/lunr.min.js"></script>
+	<script src="/bx-agents/development/ja/assets/search.js" defer></script>
+
+	<script src="/bx-agents/development/ja/assets/vendor/alpine/cdn.min.js" defer></script>
+</head>
+<body x-data="{ dark: document.documentElement.getAttribute( 'data-theme' ) === 'dark' }" x-init="$watch( 'dark', v => { document.documentElement.setAttribute( 'data-theme', v ? 'dark' : 'light' ); localStorage.setItem( 'bxdocs-theme', v ? 'dark' : 'light' ) } )">
+	<nav class="navbar navbar-expand-lg brand-navbar">
+		<div class="container-fluid navbar-row">
+			<a class="navbar-brand brand-mark" href="/bx-agents/development/ja/"><img class="brand-logo" src="/bx-agents/development/ja/assets/logo.svg" alt=""><span class="brand-name">BX Agents</span></a>
+			<div class="navbar-controls">
+<div class="bxdocs-search position-relative">
+	<input type="search" id="bxdocs-search-input" class="form-control" placeholder="Search docs..." aria-label="Search">
+	<kbd class="bxdocs-search-kbd" aria-hidden="true">Ctrl K</kbd>
+	<ul id="bxdocs-search-results" class="bxdocs-search-results list-unstyled"></ul>
+</div>
+
+
+
+				<div class="locale-dropdown" x-data="{ open: false }" @click.outside="open = false" @keydown.escape.window="open = false"><button type="button" class="locale-dropdown__trigger" @click="open = !open" aria-haspopup="true" :aria-expanded="open" aria-label="Language: &#x65e5;&#x672c;&#x8a9e;"><span class="locale-dropdown__flag" aria-hidden="true">🇯🇵</span><span class="locale-dropdown__caret" aria-hidden="true">▾</span></button><ul class="locale-dropdown__menu" x-show="open" x-cloak role="menu"><li role="none"><a role="menuitem" class="locale-dropdown__item" href="/bx-agents/development/"><span class="locale-dropdown__flag" aria-hidden="true">🇺🇸</span> English</a></li><li role="none"><a role="menuitem" class="locale-dropdown__item" href="/bx-agents/development/es/"><span class="locale-dropdown__flag" aria-hidden="true">🇪🇸</span> Espa&ntilde;ol</a></li><li role="none"><a role="menuitem" class="locale-dropdown__item" href="/bx-agents/development/de/"><span class="locale-dropdown__flag" aria-hidden="true">🇩🇪</span> Deutsch</a></li><li role="none"><a role="menuitem" class="locale-dropdown__item locale-dropdown__item--active" href="/bx-agents/development/ja/"><span class="locale-dropdown__flag" aria-hidden="true">🇯🇵</span> &#x65e5;&#x672c;&#x8a9e;</a></li></ul></div>
+
+				<a class="repo-link" href="https://github.com/ortus-boxlang/bx-agents" target="_blank" rel="noopener noreferrer" aria-label="Repository" title="Repository"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.385-1.333-1.754-1.333-1.754-1.089-.744.083-.729.083-.729 1.205.084 1.84 1.237 1.84 1.237 1.07 1.834 2.807 1.304 3.492.997.108-.775.418-1.305.762-1.605-2.665-.303-5.467-1.332-5.467-5.93 0-1.31.468-2.38 1.235-3.22-.123-.303-.535-1.523.117-3.176 0 0 1.008-.322 3.301 1.23A11.5 11.5 0 0 1 12 5.803c1.02.005 2.045.138 3.003.404 2.29-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.873.118 3.176.77.84 1.235 1.91 1.235 3.22 0 4.61-2.807 5.625-5.48 5.92.43.372.823 1.102.823 2.222 0 1.606-.014 2.898-.014 3.293 0 .322.216.694.825.576C20.565 21.795 24 17.298 24 12c0-6.63-5.37-12-12-12"/></svg></a>
+
+				<button type="button" class="theme-toggle" @click="dark = !dark" aria-label="Toggle dark mode">
+					<span x-show="!dark"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/></svg></span>
+					<span x-show="dark" x-cloak><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg></span>
+				</button>
+				<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#bxdocs-sidebar" aria-controls="bxdocs-sidebar" aria-label="Toggle navigation">
+					<span class="navbar-toggler-icon"></span>
+				</button>
+			</div>
+		</div>
+	</nav>
+	<div class="container-fluid">
+		<div class="row">
+			<aside class="col-lg-3 col-xl-2 sidebar collapse d-lg-block" id="bxdocs-sidebar">
+				<ul class="nav flex-column"><li class="nav-item"><a class="nav-link" href="/bx-agents/development/ja/index.html"><svg class="bxdocs-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M200,56H56A24,24,0,0,0,32,80V192a24,24,0,0,0,24,24H200a24,24,0,0,0,24-24V80A24,24,0,0,0,200,56ZM164,184H92a20,20,0,0,1,0-40h72a20,20,0,0,1,0,40Z" opacity="0.2"/><path d="M200,48H136V16a8,8,0,0,0-16,0V48H56A32,32,0,0,0,24,80V192a32,32,0,0,0,32,32H200a32,32,0,0,0,32-32V80A32,32,0,0,0,200,48Zm16,144a16,16,0,0,1-16,16H56a16,16,0,0,1-16-16V80A16,16,0,0,1,56,64H200a16,16,0,0,1,16,16ZM72,108a12,12,0,1,1,12,12A12,12,0,0,1,72,108Zm88,0a12,12,0,1,1,12,12A12,12,0,0,1,160,108Zm4,28H92a28,28,0,0,0,0,56h72a28,28,0,0,0,0-56Zm-24,16v24H116V152ZM80,164a12,12,0,0,1,12-12h8v24H92A12,12,0,0,1,80,164Zm84,12h-8V152h8a12,12,0,0,1,0,24Z"/></svg> BX Agents</a></li><li class="nav-item"><span class="nav-link disabled">Getting Started</span><ul class="nav flex-column nav--nested"><li class="nav-item"><a class="nav-link" href="/bx-agents/development/ja/getting-started/installation/index.html"><svg class="bxdocs-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M128,129.09V232a8,8,0,0,1-3.84-1l-88-48.18a8,8,0,0,1-4.16-7V80.18a8,8,0,0,1,.7-3.25Z" opacity="0.2"/><path d="M223.68,66.15,135.68,18a15.88,15.88,0,0,0-15.36,0l-88,48.17a16,16,0,0,0-8.32,14v95.64a16,16,0,0,0,8.32,14l88,48.17a15.88,15.88,0,0,0,15.36,0l88-48.17a16,16,0,0,0,8.32-14V80.18A16,16,0,0,0,223.68,66.15ZM128,32l80.34,44-29.77,16.3-80.35-44ZM128,120,47.66,76l33.9-18.56,80.34,44ZM40,90l80,43.78v85.79L40,175.82Zm176,85.78h0l-80,43.79V133.82l32-17.51V152a8,8,0,0,0,16,0V107.55L216,90v85.77Z"/></svg> &#x30a4;&#x30f3;&#x30b9;&#x30c8;&#x30fc;&#x30eb;</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/ja/getting-started/quick-start/index.html"><svg class="bxdocs-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M184,120v61.65a8,8,0,0,1-2.34,5.65l-34.35,34.35a8,8,0,0,1-13.57-4.53L128,176ZM136,72H74.35a8,8,0,0,0-5.65,2.34L34.35,108.69a8,8,0,0,0,4.53,13.57L80,128ZM40,216c37.65,0,50.69-19.69,54.56-28.18L68.18,161.44C59.69,165.31,40,178.35,40,216Z" opacity="0.2"/><path d="M223.85,47.12a16,16,0,0,0-15-15c-12.58-.75-44.73.4-71.41,27.07L132.69,64H74.36A15.91,15.91,0,0,0,63,68.68L28.7,103a16,16,0,0,0,9.07,27.16l38.47,5.37,44.21,44.21,5.37,38.49a15.94,15.94,0,0,0,10.78,12.92,16.11,16.11,0,0,0,5.1.83A15.91,15.91,0,0,0,153,227.3L187.32,193A15.91,15.91,0,0,0,192,181.64V123.31l4.77-4.77C223.45,91.86,224.6,59.71,223.85,47.12ZM74.36,80h42.33L77.16,119.52,40,114.34Zm74.41-9.45a76.65,76.65,0,0,1,59.11-22.47,76.46,76.46,0,0,1-22.42,59.16L128,164.68,91.32,128ZM176,181.64,141.67,216l-5.19-37.17L176,139.31Zm-74.16,9.5C97.34,201,82.29,224,40,224a8,8,0,0,1-8-8c0-42.29,23-57.34,32.86-61.85a8,8,0,0,1,6.64,14.56c-6.43,2.93-20.62,12.36-23.12,38.91,26.55-2.5,36-16.69,38.91-23.12a8,8,0,1,1,14.56,6.64Z"/></svg> &#x30af;&#x30a4;&#x30c3;&#x30af;&#x30b9;&#x30bf;&#x30fc;&#x30c8;</a></li></ul></li><li class="nav-item"><span class="nav-link disabled">Conventions</span><ul class="nav flex-column nav--nested"><li class="nav-item"><a class="nav-link" href="/bx-agents/development/ja/conventions/agent-bx/index.html"><svg class="bxdocs-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M200,56H56A24,24,0,0,0,32,80V192a24,24,0,0,0,24,24H200a24,24,0,0,0,24-24V80A24,24,0,0,0,200,56ZM164,184H92a20,20,0,0,1,0-40h72a20,20,0,0,1,0,40Z" opacity="0.2"/><path d="M200,48H136V16a8,8,0,0,0-16,0V48H56A32,32,0,0,0,24,80V192a32,32,0,0,0,32,32H200a32,32,0,0,0,32-32V80A32,32,0,0,0,200,48Zm16,144a16,16,0,0,1-16,16H56a16,16,0,0,1-16-16V80A16,16,0,0,1,56,64H200a16,16,0,0,1,16,16ZM72,108a12,12,0,1,1,12,12A12,12,0,0,1,72,108Zm88,0a12,12,0,1,1,12,12A12,12,0,0,1,160,108Zm4,28H92a28,28,0,0,0,0,56h72a28,28,0,0,0,0-56Zm-24,16v24H116V152ZM80,164a12,12,0,0,1,12-12h8v24H92A12,12,0,0,1,80,164Zm84,12h-8V152h8a12,12,0,0,1,0,24Z"/></svg> Agent.bx</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/ja/conventions/tools/index.html"><svg class="bxdocs-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M224,96a64,64,0,0,1-94.94,56L73,217A24,24,0,0,1,39,183L104,126.94a64,64,0,0,1,80-90.29L144,80l5.66,26.34L176,112l43.35-40A63.8,63.8,0,0,1,224,96Z" opacity="0.2"/><path d="M226.76,69a8,8,0,0,0-12.84-2.88l-40.3,37.19-17.23-3.7-3.7-17.23,37.19-40.3A8,8,0,0,0,187,29.24,72,72,0,0,0,88,96,72.34,72.34,0,0,0,94,124.94L33.79,177c-.15.12-.29.26-.43.39a32,32,0,0,0,45.26,45.26c.13-.13.27-.28.39-.42L131.06,162A72,72,0,0,0,232,96,71.56,71.56,0,0,0,226.76,69ZM160,152a56.14,56.14,0,0,1-27.07-7,8,8,0,0,0-9.92,1.77L67.11,211.51a16,16,0,0,1-22.62-22.62L109.18,133a8,8,0,0,0,1.77-9.93,56,56,0,0,1,58.36-82.31l-31.2,33.81a8,8,0,0,0-1.94,7.1L141.83,108a8,8,0,0,0,6.14,6.14l26.35,5.66a8,8,0,0,0,7.1-1.94l33.81-31.2A56.06,56.06,0,0,1,160,152Z"/></svg> tools&#x2f;</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/ja/conventions/skills/index.html"><svg class="bxdocs-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M216,113.07v53.22a8,8,0,0,1-2,5.31c-11.3,12.59-38.9,36.4-86,36.4s-74.68-23.81-86-36.4a8,8,0,0,1-2-5.31V113.07L128,160Z" opacity="0.2"/><path d="M251.76,88.94l-120-64a8,8,0,0,0-7.52,0l-120,64a8,8,0,0,0,0,14.12L32,117.87v48.42a15.91,15.91,0,0,0,4.06,10.65C49.16,191.53,78.51,216,128,216a130,130,0,0,0,48-8.76V240a8,8,0,0,0,16,0V199.51a115.63,115.63,0,0,0,27.94-22.57A15.91,15.91,0,0,0,224,166.29V117.87l27.76-14.81a8,8,0,0,0,0-14.12ZM128,200c-43.27,0-68.72-21.14-80-33.71V126.4l76.24,40.66a8,8,0,0,0,7.52,0L176,143.47v46.34C163.4,195.69,147.52,200,128,200Zm80-33.75a97.83,97.83,0,0,1-16,14.25V134.93l16-8.53ZM188,118.94l-.22-.13-56-29.87a8,8,0,0,0-7.52,14.12L171,128l-43,22.93L25,96,128,41.07,231,96Z"/></svg> skills&#x2f;</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/ja/conventions/subagents/index.html"><svg class="bxdocs-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M64,112v32a8,8,0,0,1-8,8H24a8,8,0,0,1-8-8V112a8,8,0,0,1,8-8H56A8,8,0,0,1,64,112ZM208,40H160a8,8,0,0,0-8,8V96a8,8,0,0,0,8,8h48a8,8,0,0,0,8-8V48A8,8,0,0,0,208,40Zm0,112H160a8,8,0,0,0-8,8v48a8,8,0,0,0,8,8h48a8,8,0,0,0,8-8V160A8,8,0,0,0,208,152Z" opacity="0.2"/><path d="M160,112h48a16,16,0,0,0,16-16V48a16,16,0,0,0-16-16H160a16,16,0,0,0-16,16V64H128a24,24,0,0,0-24,24v32H72v-8A16,16,0,0,0,56,96H24A16,16,0,0,0,8,112v32a16,16,0,0,0,16,16H56a16,16,0,0,0,16-16v-8h32v32a24,24,0,0,0,24,24h16v16a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V160a16,16,0,0,0-16-16H160a16,16,0,0,0-16,16v16H128a8,8,0,0,1-8-8V88a8,8,0,0,1,8-8h16V96A16,16,0,0,0,160,112ZM56,144H24V112H56v32Zm104,16h48v48H160Zm0-112h48V96H160Z"/></svg> subagents&#x2f;</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/ja/conventions/models/index.html"><svg class="bxdocs-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M240,124a48,48,0,0,1-32,45.27h0V176a40,40,0,0,1-80,0,40,40,0,0,1-80,0v-6.73h0a48,48,0,0,1,0-90.54V72a40,40,0,0,1,80,0,40,40,0,0,1,80,0v6.73A48,48,0,0,1,240,124Z" opacity="0.2"/><path d="M248,124a56.11,56.11,0,0,0-32-50.61V72a48,48,0,0,0-88-26.49A48,48,0,0,0,40,72v1.39a56,56,0,0,0,0,101.2V176a48,48,0,0,0,88,26.49A48,48,0,0,0,216,176v-1.41A56.09,56.09,0,0,0,248,124ZM88,208a32,32,0,0,1-31.81-28.56A55.87,55.87,0,0,0,64,180h8a8,8,0,0,0,0-16H64A40,40,0,0,1,50.67,86.27,8,8,0,0,0,56,78.73V72a32,32,0,0,1,64,0v68.26A47.8,47.8,0,0,0,88,128a8,8,0,0,0,0,16,32,32,0,0,1,0,64Zm104-44h-8a8,8,0,0,0,0,16h8a55.87,55.87,0,0,0,7.81-.56A32,32,0,1,1,168,144a8,8,0,0,0,0-16,47.8,47.8,0,0,0-32,12.26V72a32,32,0,0,1,64,0v6.73a8,8,0,0,0,5.33,7.54A40,40,0,0,1,192,164Zm16-52a8,8,0,0,1-8,8h-4a36,36,0,0,1-36-36V80a8,8,0,0,1,16,0v4a20,20,0,0,0,20,20h4A8,8,0,0,1,208,112ZM60,120H56a8,8,0,0,1,0-16h4A20,20,0,0,0,80,84V80a8,8,0,0,1,16,0v4A36,36,0,0,1,60,120Z"/></svg> models&#x2f;</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/ja/conventions/gateways/index.html"><svg class="bxdocs-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M185,127,127,185a24,24,0,0,1-33.94,0L71,162.91A24,24,0,0,1,71,129L129,71a24,24,0,0,1,33.94,0L185,93.09A24,24,0,0,1,185,127Z" opacity="0.2"/><path d="M237.66,18.34a8,8,0,0,0-11.32,0l-52.4,52.41-5.37-5.38a32.05,32.05,0,0,0-45.26,0L100,88.69l-6.34-6.35A8,8,0,0,0,82.34,93.66L88.69,100,65.37,123.31a32,32,0,0,0,0,45.26l5.38,5.37-52.41,52.4a8,8,0,0,0,11.32,11.32l52.4-52.41,5.37,5.38a32.06,32.06,0,0,0,45.26,0L156,167.31l6.34,6.35a8,8,0,0,0,11.32-11.32L167.31,156l23.32-23.31a32,32,0,0,0,0-45.26l-5.38-5.37,52.41-52.4A8,8,0,0,0,237.66,18.34Zm-116.29,161a16,16,0,0,1-22.62,0L76.69,157.25a16,16,0,0,1,0-22.62L100,111.31,144.69,156Zm57.94-57.94h0L156,144.69,111.31,100l23.32-23.31a16,16,0,0,1,22.62,0l22.06,22a16,16,0,0,1,0,22.63ZM88.57,35A8,8,0,0,1,103.43,29l8,20A8,8,0,0,1,96.57,55ZM24.57,93A8,8,0,0,1,35,88.57l20,8A8,8,0,0,1,49,111.43l-20-8A8,8,0,0,1,24.57,93ZM231.43,163a8,8,0,0,1-10.4,4.46l-20-8A8,8,0,1,1,207,144.57l20,8A8,8,0,0,1,231.43,163Zm-64,58.06A8,8,0,0,1,152.57,227l-8-20A8,8,0,0,1,159.43,201Z"/></svg> gateways&#x2f;</a></li><li class="nav-item"><a class="nav-link active" href="/bx-agents/development/ja/conventions/web-ui/index.html"><svg class="bxdocs-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M224,128A96,96,0,0,1,79.93,211.11h0L42.54,223.58a8,8,0,0,1-10.12-10.12l12.47-37.39h0A96,96,0,1,1,224,128Z" opacity="0.2"/><path d="M128,24A104,104,0,0,0,36.18,176.88L24.83,210.93a16,16,0,0,0,20.24,20.24l34.05-11.35A104,104,0,1,0,128,24Zm0,192a87.87,87.87,0,0,1-44.06-11.81,8,8,0,0,0-4-1.08,7.85,7.85,0,0,0-2.53.42L40,216,52.47,178.6a8,8,0,0,0-.66-6.54A88,88,0,1,1,128,216Zm40-104a8,8,0,0,1-8,8H96a8,8,0,0,1,0-16h64A8,8,0,0,1,168,112Zm0,32a8,8,0,0,1-8,8H96a8,8,0,0,1,0-16h64A8,8,0,0,1,168,144Z"/></svg> Web &#x30c1;&#x30e3;&#x30c3;&#x30c8; UI</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/ja/conventions/schedules/index.html"><svg class="bxdocs-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M232,136.66A104.12,104.12,0,1,1,119.34,24,8,8,0,0,1,120.66,40,88.12,88.12,0,1,0,216,135.34,8,8,0,0,1,232,136.66ZM120,72v56a8,8,0,0,0,8,8h56a8,8,0,0,0,0-16H136V72a8,8,0,0,0-16,0Zm40-24a12,12,0,1,0-12-12A12,12,0,0,0,160,48Zm36,24a12,12,0,1,0-12-12A12,12,0,0,0,196,72Zm24,36a12,12,0,1,0-12-12A12,12,0,0,0,220,108Z"/></svg> schedules&#x2f;</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/ja/conventions/mcp/index.html"><svg class="bxdocs-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M209.94,113.94l-96,96a48,48,0,0,1-67.88-67.88l96-96a48,48,0,0,1,67.88,67.88Z" opacity="0.2"/><path d="M165.66,90.34a8,8,0,0,1,0,11.32l-64,64a8,8,0,0,1-11.32-11.32l64-64A8,8,0,0,1,165.66,90.34ZM215.6,40.4a56,56,0,0,0-79.2,0L106.34,70.45a8,8,0,0,0,11.32,11.32l30.06-30a40,40,0,0,1,56.57,56.56l-30.07,30.06a8,8,0,0,0,11.31,11.32L215.6,119.6a56,56,0,0,0,0-79.2ZM138.34,174.22l-30.06,30.06a40,40,0,1,1-56.56-56.57l30.05-30.05a8,8,0,0,0-11.32-11.32L40.4,136.4a56,56,0,0,0,79.2,79.2l30.06-30.07a8,8,0,0,0-11.32-11.31Z"/></svg> mcp&#x2f;</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/ja/conventions/interceptors/index.html"><svg class="bxdocs-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M221.9,61.38,152,136v58.65a8,8,0,0,1-3.56,6.66l-32,21.33A8,8,0,0,1,104,216V136L34.1,61.38A8,8,0,0,1,40,48H216A8,8,0,0,1,221.9,61.38Z" opacity="0.2"/><path d="M230.6,49.53A15.81,15.81,0,0,0,216,40H40A16,16,0,0,0,28.19,66.76l.08.09L96,139.17V216a16,16,0,0,0,24.87,13.32l32-21.34A16,16,0,0,0,160,194.66V139.17l67.74-72.32.08-.09A15.8,15.8,0,0,0,230.6,49.53ZM40,56h0Zm106.18,74.58A8,8,0,0,0,144,136v58.66L112,216V136a8,8,0,0,0-2.16-5.47L40,56H216Z"/></svg> interceptors&#x2f;</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/ja/conventions/modules/index.html"><svg class="bxdocs-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M128,129.09V232a8,8,0,0,1-3.84-1l-88-48.16a8,8,0,0,1-4.16-7V80.2a8,8,0,0,1,.7-3.27Z" opacity="0.2"/><path d="M223.68,66.15,135.68,18h0a15.88,15.88,0,0,0-15.36,0l-88,48.17a16,16,0,0,0-8.32,14v95.64a16,16,0,0,0,8.32,14l88,48.17a15.88,15.88,0,0,0,15.36,0l88-48.17a16,16,0,0,0,8.32-14V80.18A16,16,0,0,0,223.68,66.15ZM128,32h0l80.34,44L128,120,47.66,76ZM40,90l80,43.78v85.79L40,175.82Zm96,129.57V133.82L216,90v85.78Z"/></svg> modules&#x2f;</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/ja/conventions/testing/index.html"><svg class="bxdocs-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M167.18,140.82,94.77,213.23a36.77,36.77,0,0,1-52,0h0a36.77,36.77,0,0,1,0-52l30-30c9.37-3.65,25.78-6.36,47.18,4.82S157.81,144.47,167.18,140.82Z" opacity="0.2"/><path d="M237.66,86.34l-60-60a8,8,0,0,0-11.32,0L37.11,155.57a44.77,44.77,0,0,0,63.32,63.32L212.32,107l22.21-7.4a8,8,0,0,0,3.13-13.25ZM89.11,207.57a28.77,28.77,0,0,1-40.68-40.68l28.8-28.8c8.47-2.9,21.75-4,39.07,5,10.6,5.54,20.18,8,28.56,8.73ZM205.47,92.41a8,8,0,0,0-3.13,1.93l-39.57,39.57c-8.47,2.9-21.75,4-39.07-5-10.6-5.54-20.18-8-28.56-8.73L172,43.31,217.19,88.5Z"/></svg> tests&#x2f;</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/ja/conventions/deploy/index.html"><svg class="bxdocs-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M240,128a80,80,0,0,1-80,80H72A56,56,0,1,1,85.92,97.74l0,.1A80,80,0,0,1,240,128Z" opacity="0.2"/><path d="M178.34,165.66,160,147.31V208a8,8,0,0,1-16,0V147.31l-18.34,18.35a8,8,0,0,1-11.32-11.32l32-32a8,8,0,0,1,11.32,0l32,32a8,8,0,0,1-11.32,11.32ZM160,40A88.08,88.08,0,0,0,81.29,88.68,64,64,0,1,0,72,216h40a8,8,0,0,0,0-16H72a48,48,0,0,1,0-96c1.1,0,2.2,0,3.29.12A88,88,0,0,0,72,128a8,8,0,0,0,16,0,72,72,0,1,1,100.8,66,8,8,0,0,0,3.2,15.34,7.9,7.9,0,0,0,3.2-.68A88,88,0,0,0,160,40Z"/></svg> deploy&#x2f;</a></li></ul></li><li class="nav-item"><span class="nav-link disabled">Reference</span><ul class="nav flex-column nav--nested"><li class="nav-item"><a class="nav-link" href="/bx-agents/development/ja/build-pipeline/index.html"><svg class="bxdocs-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M216,136v80H40V88l64,48V88l64,48Z" opacity="0.2"/><path d="M116,176a8,8,0,0,1-8,8H80a8,8,0,0,1,0-16h28A8,8,0,0,1,116,176Zm60-8H148a8,8,0,0,0,0,16h28a8,8,0,0,0,0-16Zm64,48a8,8,0,0,1-8,8H24a8,8,0,0,1,0-16h8V88a8,8,0,0,1,12.8-6.4L96,120V88a8,8,0,0,1,12.8-6.4l38.74,29.05L159.1,29.74A16.08,16.08,0,0,1,174.94,16h18.12A16.08,16.08,0,0,1,208.9,29.74l15,105.13s.08.78.08,1.13v72h8A8,8,0,0,1,240,216Zm-77.86-94.4,8.53,6.4h36.11L193.06,32H174.94ZM48,208H208V144H168a8,8,0,0,1-4.8-1.6l-14.4-10.8,0,0L112,104v32a8,8,0,0,1-12.8,6.4L48,104Z"/></svg> &#x30d3;&#x30eb;&#x30c9;&#x30d1;&#x30a4;&#x30d7;&#x30e9;&#x30a4;&#x30f3;</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/ja/manifest/index.html"><svg class="bxdocs-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M208,48V216a8,8,0,0,1-8,8H56a8,8,0,0,1-8-8V48a8,8,0,0,1,8-8H96a39.83,39.83,0,0,0-8,24v8h80V64a39.83,39.83,0,0,0-8-24h40A8,8,0,0,1,208,48Z" opacity="0.2"/><path d="M168,152a8,8,0,0,1-8,8H96a8,8,0,0,1,0-16h64A8,8,0,0,1,168,152Zm-8-40H96a8,8,0,0,0,0,16h64a8,8,0,0,0,0-16Zm56-64V216a16,16,0,0,1-16,16H56a16,16,0,0,1-16-16V48A16,16,0,0,1,56,32H92.26a47.92,47.92,0,0,1,71.48,0H200A16,16,0,0,1,216,48ZM96,64h64a32,32,0,0,0-64,0ZM200,48H173.25A47.93,47.93,0,0,1,176,64v8a8,8,0,0,1-8,8H88a8,8,0,0,1-8-8V64a47.93,47.93,0,0,1,2.75-16H56V216H200Z"/></svg> &#x30de;&#x30cb;&#x30d5;&#x30a7;&#x30b9;&#x30c8;</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/ja/cli-reference/index.html"><svg class="bxdocs-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M224,56V200a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V56a8,8,0,0,1,8-8H216A8,8,0,0,1,224,56Z" opacity="0.2"/><path d="M128,128a8,8,0,0,1-3,6.25l-40,32a8,8,0,1,1-10-12.5L107.19,128,75,102.25a8,8,0,1,1,10-12.5l40,32A8,8,0,0,1,128,128Zm48,24H136a8,8,0,0,0,0,16h40a8,8,0,0,0,0-16Zm56-96V200a16,16,0,0,1-16,16H40a16,16,0,0,1-16-16V56A16,16,0,0,1,40,40H216A16,16,0,0,1,232,56ZM216,200V56H40V200H216Z"/></svg> CLI &#x30ea;&#x30d5;&#x30a1;&#x30ec;&#x30f3;&#x30b9;</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/ja/deployment-and-secrets/index.html"><svg class="bxdocs-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M208,88H48a8,8,0,0,0-8,8V208a8,8,0,0,0,8,8H208a8,8,0,0,0,8-8V96A8,8,0,0,0,208,88Zm-80,72a20,20,0,1,1,20-20A20,20,0,0,1,128,160Z" opacity="0.2"/><path d="M208,80H176V56a48,48,0,0,0-96,0V80H48A16,16,0,0,0,32,96V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V96A16,16,0,0,0,208,80ZM96,56a32,32,0,0,1,64,0V80H96ZM208,208H48V96H208V208Zm-80-96a28,28,0,0,0-8,54.83V184a8,8,0,0,0,16,0V166.83A28,28,0,0,0,128,112Zm0,40a12,12,0,1,1,12-12A12,12,0,0,1,128,152Z"/></svg> &#x30c7;&#x30d7;&#x30ed;&#x30a4;&#x3068;&#x30b7;&#x30fc;&#x30af;&#x30ec;&#x30c3;&#x30c8;</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/ja/known-limitations/index.html"><svg class="bxdocs-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M215.46,216H40.54C27.92,216,20,202.79,26.13,192.09L113.59,40.22c6.3-11,22.52-11,28.82,0l87.46,151.87C236,202.79,228.08,216,215.46,216Z" opacity="0.2"/><path d="M236.8,188.09,149.35,36.22h0a24.76,24.76,0,0,0-42.7,0L19.2,188.09a23.51,23.51,0,0,0,0,23.72A24.35,24.35,0,0,0,40.55,224h174.9a24.35,24.35,0,0,0,21.33-12.19A23.51,23.51,0,0,0,236.8,188.09ZM222.93,203.8a8.5,8.5,0,0,1-7.48,4.2H40.55a8.5,8.5,0,0,1-7.48-4.2,7.59,7.59,0,0,1,0-7.72L120.52,44.21a8.75,8.75,0,0,1,15,0l87.45,151.87A7.59,7.59,0,0,1,222.93,203.8ZM120,144V104a8,8,0,0,1,16,0v40a8,8,0,0,1-16,0Zm20,36a12,12,0,1,1-12-12A12,12,0,0,1,140,180Z"/></svg> &#x65e2;&#x77e5;&#x306e;&#x5236;&#x9650;</a></li></ul></li><li class="nav-item"><span class="nav-link disabled">Proposals</span><ul class="nav flex-column nav--nested"><li class="nav-item"><a class="nav-link" href="/bx-agents/development/ja/proposals/toAiGateway-coldbox-core/index.html"><svg class="bxdocs-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M208,104a79.86,79.86,0,0,1-30.59,62.92A24.29,24.29,0,0,0,168,186v6a8,8,0,0,1-8,8H96a8,8,0,0,1-8-8v-6a24.11,24.11,0,0,0-9.3-19A79.87,79.87,0,0,1,48,104.45C47.76,61.09,82.72,25,126.07,24A80,80,0,0,1,208,104Z" opacity="0.2"/><path d="M176,232a8,8,0,0,1-8,8H88a8,8,0,0,1,0-16h80A8,8,0,0,1,176,232Zm40-128a87.55,87.55,0,0,1-33.64,69.21A16.24,16.24,0,0,0,176,186v6a16,16,0,0,1-16,16H96a16,16,0,0,1-16-16v-6a16,16,0,0,0-6.23-12.66A87.59,87.59,0,0,1,40,104.49C39.74,56.83,78.26,17.14,125.88,16A88,88,0,0,1,216,104Zm-16,0a72,72,0,0,0-73.74-72c-39,.92-70.47,33.39-70.26,72.39a71.65,71.65,0,0,0,27.64,56.3A32,32,0,0,1,96,186v6h64v-6a32.15,32.15,0,0,1,12.47-25.35A71.65,71.65,0,0,0,200,104Zm-16.11-9.34a57.6,57.6,0,0,0-46.56-46.55,8,8,0,0,0-2.66,15.78c16.57,2.79,30.63,16.85,33.44,33.45A8,8,0,0,0,176,104a9,9,0,0,0,1.35-.11A8,8,0,0,0,183.89,94.66Z"/></svg> toAiGateway&#x28;&#x29; for ColdBox Core</a></li></ul></li></ul>
+			</aside>
+			<main class="col-lg-9 col-xl-8 content">
+
+				<article class="page-content">
+
+					<h1 class="page-title" id="page-title"><a href="#page-title" id="page-title" class="anchor"></a><span class="page-icon"><svg class="bxdocs-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M224,128A96,96,0,0,1,79.93,211.11h0L42.54,223.58a8,8,0,0,1-10.12-10.12l12.47-37.39h0A96,96,0,1,1,224,128Z" opacity="0.2"/><path d="M128,24A104,104,0,0,0,36.18,176.88L24.83,210.93a16,16,0,0,0,20.24,20.24l34.05-11.35A104,104,0,1,0,128,24Zm0,192a87.87,87.87,0,0,1-44.06-11.81,8,8,0,0,0-4-1.08,7.85,7.85,0,0,0-2.53.42L40,216,52.47,178.6a8,8,0,0,0-.66-6.54A88,88,0,1,1,128,216Zm40-104a8,8,0,0,1-8,8H96a8,8,0,0,1,0-16h64A8,8,0,0,1,168,112Zm0,32a8,8,0,0,1-8,8H96a8,8,0,0,1,0-16h64A8,8,0,0,1,168,144Z"/></svg></span> Web &#x30c1;&#x30e3;&#x30c3;&#x30c8; UI</h1>
+					<p class="page-summary">&#x5b8c;&#x5168;&#x306a;&#x30d6;&#x30e9;&#x30a6;&#x30b6;&#x30c1;&#x30e3;&#x30c3;&#x30c8;&#x30af;&#x30e9;&#x30a4;&#x30a2;&#x30f3;&#x30c8; - &#x30b5;&#x30a4;&#x30c9;&#x30d0;&#x30fc;&#x3001;&#x30b9;&#x30c8;&#x30ea;&#x30fc;&#x30df;&#x30f3;&#x30b0;&#x3001;&#x627f;&#x8a8d;&#x3001;SQLite &#x30b9;&#x30c8;&#x30a2;&#x3002;</p>
+<div class="page-tags mb-3"><a class="page-tag" href="/bx-agents/development/ja/tags/index.html#tag-conventions">conventions</a><a class="page-tag" href="/bx-agents/development/ja/tags/index.html#tag-gateways">gateways</a><a class="page-tag" href="/bx-agents/development/ja/tags/index.html#tag-web-ui">web-ui</a></div>
+<details class="bxdocs-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary">On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#ストリーミングターンの実際の様子">&#x30b9;&#x30c8;&#x30ea;&#x30fc;&#x30df;&#x30f3;&#x30b0;&#x30bf;&#x30fc;&#x30f3;&#x306e;&#x5b9f;&#x969b;&#x306e;&#x69d8;&#x5b50;</a></li><li class="toc-level-2"><a href="#生成される-api">&#x751f;&#x6210;&#x3055;&#x308c;&#x308b; API</a></li><li class="toc-level-2"><a href="#ユーザーとサインイン">&#x30e6;&#x30fc;&#x30b6;&#x30fc;&#x3068;&#x30b5;&#x30a4;&#x30f3;&#x30a4;&#x30f3;</a></li><li class="toc-level-3"><a href="#アカウントなしではui-は-1-つの共有ワークスペースです">&#x30a2;&#x30ab;&#x30a6;&#x30f3;&#x30c8;&#x306a;&#x3057;&#x3067;&#x306f;&#x3001;UI &#x306f; 1 &#x3064;&#x306e;&#x5171;&#x6709;&#x30ef;&#x30fc;&#x30af;&#x30b9;&#x30da;&#x30fc;&#x30b9;&#x3067;&#x3059;</a></li><li class="toc-level-3"><a href="#パスワードは-config-に決して書き込まれません">&#x30d1;&#x30b9;&#x30ef;&#x30fc;&#x30c9;&#x306f; config &#x306b;&#x6c7a;&#x3057;&#x3066;&#x66f8;&#x304d;&#x8fbc;&#x307e;&#x308c;&#x307e;&#x305b;&#x3093;</a></li><li class="toc-level-3"><a href="#サインインが変えるもの">&#x30b5;&#x30a4;&#x30f3;&#x30a4;&#x30f3;&#x304c;&#x5909;&#x3048;&#x308b;&#x3082;&#x306e;</a></li><li class="toc-level-3"><a href="#ライフサイクル">&#x30e9;&#x30a4;&#x30d5;&#x30b5;&#x30a4;&#x30af;&#x30eb;</a></li><li class="toc-level-3"><a href="#これではないもの">&#x3053;&#x308c;&#x3067;&#x306f;&#x306a;&#x3044;&#x3082;&#x306e;</a></li><li class="toc-level-2"><a href="#human-in-the-loop">Human-in-the-loop</a></li><li class="toc-level-2"><a href="#履歴と再読み込み">&#x5c65;&#x6b74;&#x3068;&#x518d;&#x8aad;&#x307f;&#x8fbc;&#x307f;</a></li><li class="toc-level-2"><a href="#ページが行うこと">&#x30da;&#x30fc;&#x30b8;&#x304c;&#x884c;&#x3046;&#x3053;&#x3068;</a></li><li class="toc-level-2"><a href="#sqlite-ストア">SQLite &#x30b9;&#x30c8;&#x30a2;</a></li><li class="toc-level-2"><a href="#会話と設定">&#x4f1a;&#x8a71;&#x3068;&#x8a2d;&#x5b9a;</a></li><li class="toc-level-2"><a href="#ブランディングとテーマ">&#x30d6;&#x30e9;&#x30f3;&#x30c7;&#x30a3;&#x30f3;&#x30b0;&#x3068;&#x30c6;&#x30fc;&#x30de;</a></li><li class="toc-level-2"><a href="#会話のアイデンティティ-セッションこそがユーザー識別子">&#x4f1a;&#x8a71;&#x306e;&#x30a2;&#x30a4;&#x30c7;&#x30f3;&#x30c6;&#x30a3;&#x30c6;&#x30a3;&#x3a; &#x30bb;&#x30c3;&#x30b7;&#x30e7;&#x30f3;&#x3053;&#x305d;&#x304c;&#x30e6;&#x30fc;&#x30b6;&#x30fc;&#x8b58;&#x5225;&#x5b50;</a></li><li class="toc-level-2"><a href="#返信のレンダリング">&#x8fd4;&#x4fe1;&#x306e;&#x30ec;&#x30f3;&#x30c0;&#x30ea;&#x30f3;&#x30b0;</a></li><li class="toc-level-2"><a href="#what-is-not-here-yet">What is not here yet</a></li></ul></details>
+					<svg xmlns="http://www.w3.org/2000/svg" class="adm-hidden">
+<symbol id="adm-warning">
+<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="m3.1 18.5 8.1-14c.4-.7 1.4-.7 1.8 0l8.1 14c.4.7-.1 1.6-.9 1.6h-16.1c-.9 0-1.4-.9-1-1.6zm10.6-4.3c0-.1 0-.2 0-.2v-4.6c0-.4 0-.6 0-.6-.1-.1-.3-.2-.7-.3s-.7-.1-1-.1c-.1 0-.2 0-.3 0-.3.1-.5.2-.5.4v4.2s-.1.1-.2.4-.1.4 0 .5c.3.2.7.4 1.2.6s.9.3 1.2.3h.2c.2 0 .3-.2.3-.5-.2 0-.2-.1-.2-.1zm-.8 1.4c-.5-.2-.9-.2-1.2-.2s-.4.1-.5.4v.9c0 .2 0 .3-.1.4-.1.2-.2.3-.1.4s.5.3 1.2.5c.6.2 1 .2 1.1.2.2 0 .4-.1.4-.3s.1-.4.1-.7c0-.1 0-.3.1-.7 0-.3 0-.5 0-.5-.2-.1-.5-.2-1-.4z" fill="currentColor"/>
+</svg>
+</symbol>
+<symbol id="adm-danger">
+<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="m8.5 4h8.5l-4 8h3l-7.1 9.5 1.6-8.5h-1.5z" fill="currentColor"/>
+</svg>
+</symbol>
+<symbol id="adm-info">
+<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="m20.5 11.8c0 4.5-3.7 8.2-8.2 8.2s-8.2-3.7-8.2-8.2 3.7-8.2 8.2-8.2 8.2 3.7 8.2 8.2zm-6.7 4c-.1-.1-.2-.2-.2-.3v-4.5c0-.1.1-.2.2-.4s.2-.3.2-.3 0-.1-.1-.1c-.1-.1-.5-.2-1.2-.4-.7-.1-1.2-.2-1.5-.2-.5 0-.7 0-.7.1s.1.3.2.6v4.7c0 .3-.1.5-.2.6-.2.2-.2.3-.2.3.1.1.5.3 1.2.4.6.1 1.2.2 1.6.2h.3c.4-.1.5-.2.5-.5.1 0 .1-.1-.1-.2zm-.9-8.6c-.7-.1-1.2-.2-1.5-.2-.2 0-.5.2-.7.4s-.3.4-.3.6c0 .1 0 .1.1.2s.6.2 1.5.4c1 .3 1.5.4 1.6.3.1 0 .2-.2.3-.5s.2-.5.2-.6v-.1c-.1-.1-.5-.3-1.2-.5z" fill="currentColor"/>
+</svg>
+</symbol>
+</svg>
+<h1 id="web-チャット-ui"><a href="#web-チャット-ui" id="web-チャット-ui" name="web-チャット-ui" class="anchor"></a>Web チャット UI</h1>
+<p><code>exposes: &quot;webui&quot;</code> を持つ <code>gateways/*.bx</code> エントリは、エージェント向けの完全なブラウザチャットクライアント - 会話サイドバー、推論とツール呼び出しを伴うストリーミング、human-in-the-loop 承認、訪問者ごとのテーマ、そしてその背後にある実際の SQLite ストア - を出荷します。</p>
+<p>これは公開が宣言される場所であるという理由で <a href="/bx-agents/development/ja/conventions/gateways/index.html">gateways/</a> の下にありますが、それ自体が独立したサブシステムであり、それゆえに独自のページを持っています。</p>
+<pre><code class="language-javascript">// gateways/chat.bx
+class {
+	function configure() {
+		return {
+			exposes     : &quot;webui&quot;,
+			path        : &quot;/chat&quot;,
+			apiKeyEnvVar: &quot;CHAT_UI_API_KEY&quot;   // optional - see Securing the API
+		};
+	}
+}
+</code></pre>
+<p>これは静的な <code>&lt;path&gt;/index.html</code> (直接配信され、ルートは不要です) と、生成された <code>handlers/ChatUi.bx</code> と <code>models/ChatDb.bx</code> に支えられた <code>&lt;path&gt;/api</code> 配下の専用 API を生成します。</p>
+<p>この UI は依存関係のない素の HTML/CSS/JS です - Bootstrap、AlpineJS、Vite のビルドステップは一切ありません - そして <strong>BX Agents 自体の中にあらかじめビルドされてバンドルされています</strong>: <code>bxAgents build</code> が <code>npm install</code>/<code>npm run build</code> を実行することは決してなく、生成されたプロジェクトは Node や npm をインストールする必要が一切ありません。ページが必要とするものはすべて、生成された単一の <code>index.html</code> にインライン化されています。</p>
+<p>その制約はビルドについてのものであり、スコープについてのものではありません。このページは完全なクライアントです: 会話サイドバー、推論とツール呼び出しを伴うストリーミング、承認、圧縮 (compaction)、サーバー側のテーマです。実際にまだ足りていないものは <a href="#what-is-not-here-yet">What is not here yet</a> に一覧があります。</p>
+<p>このページは、生成された自身の <code>&lt;path&gt;/api</code> ルートと、<code>POST &lt;path&gt;/api/stream</code> (<code>Accept: text/event-stream</code>) を介して通信します。<code>POST</code> もカスタムヘッダーの設定もできないブラウザの <code>EventSource</code> ではなく、<code>fetch()</code> + 手動の <code>ReadableStream</code> リーダーを使います。両方ともここでは必要だからです。</p>
+<div class="adm-block adm-warning">
+<div class="adm-heading">
+<svg class="adm-icon"><use xlink:href="#adm-warning" /></svg><span>Warning</span>
+</div>
+<div class="adm-body">
+<p><strong><code>toAi()</code> は各 bx-ai チャンクをそのまま転送します - ラップしません。</strong> ColdBox の <a href="https://coldbox.ortusbooks.com/the-basics/routing/routing-dsl/ai-routing">AI Routing ドキュメント</a> はストリームを <code>data: {&quot;token&quot;:&quot;...&quot;}</code> 行として示していますが、そのソース自体 (<code>Router.cfc</code>、<code>toAi()</code> のストリームサブルート) は <code>emitter.send( chunk, &quot;chunk&quot; )</code> を行います - つまり、すべてのフレームが<strong>完全に正規化された bx-ai エンベロープ</strong>を運びます。</p>
+<pre><code>event: chunk
+data: {&quot;object&quot;:&quot;chat.completion.chunk&quot;,&quot;choices&quot;:[{&quot;delta&quot;:{&quot;role&quot;:&quot;assistant&quot;,&quot;content&quot;:&quot;Ray&quot;,&quot;reasoning&quot;:&quot;...&quot;,&quot;tool_calls&quot;:[...]}}]}
+
+event: done
+data: [DONE]
+</code></pre>
+<p><code>token</code> というキーはどこにもありません。そのドキュメントページに沿って書かれたクライアント - このUIの最初のバージョンも含む - は <code>undefined</code> を読み取り、何もレンダリングしません。代わりに <code>choices[0].delta.content</code> を読んでください。</p>
+</div>
+</div>
+<p>エンベロープ全体が届くため、<strong>推論とツール呼び出しはすでに配線の上に載っており</strong>、追加のエンドポイントは不要です: <code>delta.reasoning</code> (bx-ai によってすべてのプロバイダーにわたって正規化されています) は折りたたまれた「Thinking」ストリップとして描画され、<code>delta.tool_calls</code> は折りたたまれた呼び出しごとのチップとして描画されます。ツール呼び出しの引数は <code>index</code> でキー付けされた部分的な JSON フラグメントとしてストリーミングされるため、ページは単一のどのチャンクが完全な呼び出しを保持しているとも仮定せず、インデックスごとに蓄積していきます。</p>
+<h2 id="ストリーミングターンの実際の様子"><a href="#ストリーミングターンの実際の様子" id="ストリーミングターンの実際の様子" name="ストリーミングターンの実際の様子" class="anchor"></a>ストリーミングターンの実際の様子</h2>
+<pre><code class="language-mermaid">sequenceDiagram
+    autonumber
+    participant B as browser (generated index.html)
+    participant H as handlers/ChatUi.bx
+    participant A as the agent
+    participant D as models/ChatDb.bx (SQLite)
+
+    B-&gt;&gt;H: POST /chat/api/stream, Accept: text/event-stream
+    H-&gt;&gt;D: resolve the conversation for this session
+    H-&gt;&gt;A: agent.stream( ... )
+    H--&gt;&gt;B: event: thread - the threadId, sent BEFORE the first chunk
+    loop for every chunk bx-ai emits
+        A--&gt;&gt;H: a full normalized bx-ai envelope
+        H--&gt;&gt;B: event: chunk - choices[0].delta.content / .reasoning / .tool_calls
+    end
+    H-&gt;&gt;D: persist the turn
+    H--&gt;&gt;B: event: done - [DONE]
+</code></pre>
+<p><code>thread</code> イベントが最初に送られるのは、レスポンスヘッダーはボディが届き始める前には読めないためで、ページはターンの途中で <code>POST /cancel</code> できるように、その <code>threadId</code> を必要とします。</p>
+<h2 id="生成される-api"><a href="#生成される-api" id="生成される-api" name="生成される-api" class="anchor"></a>生成される API</h2>
+<p><code>webui</code> エントリは、生成された <code>handlers/ChatUi.bx</code> によって配信される 20 個のアクションを <code>&lt;path&gt;/api</code> の下にマウントします。</p>
+<table class="table">
+<thead>
+<tr><th>ルート</th><th>目的</th></tr>
+</thead>
+<tbody>
+<tr><td><code>POST /invoke</code></td><td>同期の 1 ターン</td></tr>
+<tr><td><code>POST /stream</code></td><td>SSE ターン (このページが使うもの)</td></tr>
+<tr><td><code>POST /batch</code></td><td><code>inputs[]</code> 配列を実行</td></tr>
+<tr><td><code>POST /cancel</code></td><td>進行中のランを停止 - <code>{ threadId, reason? }</code></td></tr>
+<tr><td><code>POST /steer</code></td><td>実行中のターンにメッセージをスプライス - <code>{ threadId, input }</code></td></tr>
+<tr><td><code>POST /clear</code></td><td>この訪問者の会話をクリア</td></tr>
+<tr><td><code>POST /compact</code></td><td>この訪問者の古いメッセージを要約し、最近のものは保持 - 任意の <code>{ keepRecent }</code></td></tr>
+<tr><td><code>GET /history</code></td><td>この訪問者の保存済みメッセージ。トランスクリプトの再水和用</td></tr>
+<tr><td><code>POST /resume</code></td><td>保留中の承認に答え、継続をストリーミング - <code>{ threadId, decision, editedData?, reason? }</code></td></tr>
+<tr><td><code>GET /pending</code></td><td>中断中のランが何を待っているか - <code>?threadId=</code></td></tr>
+<tr><td><code>GET /tools</code></td><td>エージェントの登録済みツール</td></tr>
+<tr><td><code>GET /health</code></td><td>生存確認</td></tr>
+<tr><td><code>GET /info</code></td><td>エージェント名、モデル、メモリ/ツール数、機能フラグ</td></tr>
+<tr><td><code>GET /conversations</code></td><td>この訪問者の会話。最新のアクティビティ順</td></tr>
+<tr><td><code>POST /conversations/create</code></td><td>会話を開始 - 任意の <code>{ title }</code>、発行された <code>conversationId</code> を返す</td></tr>
+<tr><td><code>POST /conversations/rename</code></td><td><code>{ conversationId, title }</code></td></tr>
+<tr><td><code>POST /conversations/delete</code></td><td><code>{ conversationId }</code> - インデックス行<strong>と</strong>そのエージェントのメッセージの両方を削除</td></tr>
+<tr><td><code>GET /preferences</code></td><td>この訪問者の保存済み設定、<code>{ key: value }</code> として</td></tr>
+<tr><td><code>POST /preferences/set</code></td><td><code>{ key, value }</code></td></tr>
+<tr><td><code>POST /preferences/delete</code></td><td><code>{ key }</code></td></tr>
+</tbody>
+</table>
+<p>すべて、<code>userId</code> として ColdBox の <code>getUserSessionIdentifier()</code> によってスコープされています。最初の 3 つは <code>toAi()</code> の形とワイヤーフォーマットを正確に保っています。</p>
+<p><code>threadId</code> はサーバー権威です: 与えられればリクエストから取得され、そうでなければ発行され、常にエコーバックされます - <code>/invoke</code> と <code>/batch</code> では <code>X-Thread-Id</code> レスポンスヘッダーとして、<code>/stream</code> では<em>最初のチャンクより前に</em>送られる <code>thread</code> SSE イベントとして (ヘッダーはボディが届き始める前には読めないためです)。これは ColdBox 8.1 自身の <code>toAi()</code> が採用しているのと同じ契約なので、一方向けに書かれたクライアントはもう一方に対しても動作します。</p>
+<div class="adm-block adm-warning">
+<div class="adm-heading">
+<svg class="adm-icon"><use xlink:href="#adm-warning" /></svg><span>Warning</span>
+</div>
+<div class="adm-body">
+<p><strong>停止は、単にフェッチを中断するのではなく <code>/cancel</code> を経由する必要があります。</strong> HTTP リクエストを中断しても、ブラウザが聞くのをやめるだけです - サーバーはツールを呼び出し、トークンを消費しながらターンの実行を続けます。そのためページはすべてのターンに <code>threadId</code> を添えて送り、中断する前にそれを <code>/cancel</code> に POST し、<code>agent.cancelRun()</code> がそのランの次のチェックポイントにシグナルを送れるようにします。</p>
+</div>
+</div>
+<p><code>/clear</code> と <code>/compact</code> はどちらもスコープに注意深いです。<code>/clear</code> は、引数を取らずすべての訪問者の履歴を消してしまう <code>AiAgent.clearMemory()</code> ではなく、各メモリ自身の <code>clear( userId, conversationId )</code> を経由します。<code>/compact</code> も同じ理由で <code>summarize( config, userId, conversationId )</code> を経由します。圧縮は、この会話の古いメッセージを AI が書いた要約に置き換え、直近のいくつかは保持し、呼び出し元の <code>(userId, conversationId)</code> ペア以外には一切触れません。</p>
+<div class="adm-block adm-info">
+<div class="adm-heading">
+<svg class="adm-icon"><use xlink:href="#adm-info" /></svg><span>Info</span>
+</div>
+<div class="adm-body">
+<p><strong><code>/compact</code> には要約モデルが必要で、それを持っているかどうかを報告します。</strong> <code>summarize()</code> は、メモリに <code>summaryProvider</code> と <code>summaryModel</code> の<em>両方</em>が設定されていない限り、また会話がすでに <code>keepRecent</code> 以下の場合も、サイレントな無操作になります。どちらもエラーではないため、<code>/compact</code> は <code>{ compacted, before, after }</code> を返して呼び出し元自身に確認させ、<code>/info</code> の <code>capabilities.compact</code> は、そもそも要約モデルが設定されているかどうかを報告します - そのため、ページは何もしないボタンを、壊れているように見せる代わりに隠すことができます。</p>
+<p>リクエストから取られるのは <code>keepRecent</code> だけです。<code>summarize()</code> は <code>model</code>/<code>provider</code> のオーバーライドも尊重しますが、ここでそれを受け付けてしまうと、どの訪問者でもあなたの認証情報で好きなプロバイダーとモデルに要約呼び出しを向けられてしまいます - それはメモリ自身の config が決めることです。</p>
+</div>
+</div>
+<pre><code class="language-javascript">// Agent.bx - what makes /compact functional
+memory: {
+	type            : &quot;cache&quot;,
+	summaryProvider : &quot;openai&quot;,
+	summaryModel    : &quot;gpt-4o-mini&quot;,
+	summaryThreshold: 10
+}
+</code></pre>
+<h2 id="ユーザーとサインイン"><a href="#ユーザーとサインイン" id="ユーザーとサインイン" name="ユーザーとサインイン" class="anchor"></a>ユーザーとサインイン</h2>
+<p>デフォルトでは Web UI には<strong>アカウントもゲートもありません</strong> — オープンで、すべての訪問者は匿名です。それがゼロ儀式な <code>bxAgents serve</code> の体験であり、これは<strong>デプロイの姿勢ではありません</strong>。<code>webui</code> エントリで <code>users</code> を宣言すると、<a href="https://forgebox.io/view/cbauth">cbauth</a> と、他のすべてが使うのと同じ SQLite ストアに支えられた、本物のサインインゲートが有効になります。</p>
+<h3 id="アカウントなしではui-は-1-つの共有ワークスペースです"><a href="#アカウントなしではui-は-1-つの共有ワークスペースです" id="アカウントなしではui-は-1-つの共有ワークスペースです" name="アカウントなしではui-は-1-つの共有ワークスペースです" class="anchor"></a>アカウントなしでは、UI は 1 つの共有ワークスペースです</h3>
+<p>意図的に、訪問者ごとのアイデンティティは存在しません。アカウントのない Web UI へのすべての訪問者は、<strong>同じ</strong>会話、設定、エージェントメモリを読み書きします — そのページに到達できる人は誰でも、その中のすべてを見ることができます。</p>
+<p>これは見落としではなく、アカウントなしで実行することの要点そのものです - オープンな UI は 1 つの共有ツール (ラップトップ、信頼できる社内マシン) であり、マルチテナントサービスではありません。ブラウザごとに独自のスライスを持たせても、誰も求めていないブラウザごとのコピーに 1 つのワークスペースを断片化させるだけであり、その断片化を行う任意のクライアント側 ID は、どのみち偽装可能です。</p>
+<div class="adm-block adm-warning">
+<div class="adm-heading">
+<svg class="adm-icon"><use xlink:href="#adm-warning" /></svg><span>Warning</span>
+</div>
+<div class="adm-body">
+<p><strong>オープンな UI には訪問者間のプライバシーがありません。</strong> その URL に到達できる人は誰でも、その中のすべての会話を見ることができ、そのどれでも続けたり削除したりできます。もしそれが望むところでないなら - 見るべき人以上の人がそのページに到達できるあらゆる場所で - <code>users</code> を宣言してください。</p>
+</div>
+</div>
+<pre><code class="language-javascript">// gateways/chatUi.bx
+users : [
+    { username: &quot;ada&quot;,   passwordEnvVar: &quot;ACME_ADA_PASSWORD&quot;, displayName: &quot;Ada Lovelace&quot; },
+    { username: &quot;grace&quot;, passwordHash: &quot;pbkdf2$210000$...&quot;,   displayName: &quot;Grace Hopper&quot; }
+]
+</code></pre>
+<h3 id="パスワードは-config-に決して書き込まれません"><a href="#パスワードは-config-に決して書き込まれません" id="パスワードは-config-に決して書き込まれません" name="パスワードは-config-に決して書き込まれません" class="anchor"></a>パスワードは config に決して書き込まれません</h3>
+<p>アカウントは、パスワードを保持する<strong>環境変数</strong>の名前 (<code>passwordEnvVar</code>) を指定するか、<strong>すでにハッシュ化された</strong>値 (<code>passwordHash</code>) を持ちます。リテラルな <code>password</code> キーは、警告ではなくビルドエラーです — サイレントに無視してしまうと、実際には何もコミットしていないのにパスワードを設定したと信じ込んでしまいます。</p>
+<p><code>passwordHash</code> は、それが逆算不能であるからこそコミットしても安全です。アプリが使うのと同じハッシャーで生成してください。</p>
+<pre><code>bxAgents hash-password --password=&quot;correct horse battery staple&quot;
+</code></pre>
+<div class="adm-block adm-danger">
+<div class="adm-heading">
+<svg class="adm-icon"><use xlink:href="#adm-danger" /></svg><span>Danger</span>
+</div>
+<div class="adm-body">
+<p><strong>ハッシュ化であり、暗号化ではありません。</strong> 暗号化は可逆であり、盗まれたデータベースファイルはほぼ常に、それを復号できる何かと一緒に持ち出されます - そのため可逆な方式は、1 つのファイル漏洩を、他の場所で使い回されたものも含む全ユーザーのパスワード漏洩に変えてしまいます。ここでのパスワードは、ユーザーごとのランダムなソルト付きの PBKDF2-HMAC-SHA256 を経由し、データベースから復元することは決してできません。(BoxLang には bcrypt や argon2 の BIF は出荷されていません。PBKDF2 は依存関係を追加せずに使える最強のプリミティブです。)</p>
+<p>反復回数は各ハッシュの<em>内部</em>に保存されるため (<code>pbkdf2&#x24;&lt;iterations&gt;&#x24;&lt;salt&gt;$&lt;digest&gt;</code>)、すでに保存されているものを無効化せずに後から引き上げることができます。</p>
+</div>
+</div>
+<h3 id="サインインが変えるもの"><a href="#サインインが変えるもの" id="サインインが変えるもの" name="サインインが変えるもの" class="anchor"></a>サインインが変えるもの</h3>
+<p>ユーザースコープのものはすべて、実際のアカウントに再キーされます。生成された <code>handlers/ChatUi.bx</code> は、1 つのメソッド (<code>resolveUserId()</code>) で cbauth から直接アイデンティティを解決し、エージェントメモリ、会話インデックス、設定、保留中のラン所有権はすべてその戻り値をキーにします。</p>
+<p>これは意図的に ColdBox の <code>identifierProvider</code> 設定ではなく cbauth を読み取ります: <code>coldbox</code> config 構造体の中で宣言されたクロージャは決して <code>configSettings</code> に届かない (文書化されているリテラルな形と、後からの代入の両方で、実際の起動で確認済みです) ため、その設定に頼っていたものは何であれ、サイレントにセッション id を代わりに受け取っていました。</p>
+<p>実務上の違いは: 会話と設定はブラウザやデバイスをまたいでその人についていき、Cookie をクリアしても新しい「ユーザー」が作られることはもうありません。</p>
+<table class="table">
+<thead>
+<tr><th> </th><th><code>users</code> なし</th><th><code>users</code> あり</th></tr>
+</thead>
+<tbody>
+<tr><td>アイデンティティ</td><td>1 つの共有ワークスペース</td><td>サインインしているアカウント</td></tr>
+<tr><td>会話が見えるのは</td><td>UI に到達できる誰でも</td><td>その所有者のみ</td></tr>
+<tr><td>ブラウザ/デバイスをまたいでその人についていく</td><td>n/a — 何も個人単位ではない</td><td>はい</td></tr>
+<tr><td>サインインなしで到達可能</td><td>すべて</td><td>ログインフォームのみ</td></tr>
+</tbody>
+</table>
+<h3 id="ライフサイクル"><a href="#ライフサイクル" id="ライフサイクル" name="ライフサイクル" class="anchor"></a>ライフサイクル</h3>
+<p>アカウントは、すべての起動のたびに、この順序で config から調整されます: スキーマインターセプターがマイグレーションを行い、シーダーがアカウントを書き込み、その後ログインゲートが強制を開始します。</p>
+<ul>
+<li><strong>追加</strong> config にユーザーを追加すると作成されます。</li>
+<li><strong>変更</strong> パスワードを変更すると更新されます。シーダーは、設定されたパスワードが保存されているものと一致しなくなった場合にのみ再ハッシュするため、変更のないパスワードには 1 回の検証コストしかかかりません。</li>
+<li><strong>削除</strong> config から削除すると、削除ではなくアカウントを<strong>無効化</strong>します。彼らの会話は彼らの id を参照しているため、行を削除するとアクセスを取り消す代わりにその履歴を孤立させてしまいます。彼らはもうサインインできませんが、データはそのまま残り、アカウントが復元されれば戻ってきます。</li>
+<li>変数が<strong>未設定</strong>の <code>passwordEnvVar</code> を持つアカウントは、そのアカウントを完全にスキップし、<code>webui-auth</code> に警告をログします。これは意図的にクローズ (安全側) に失敗します - 空のパスワードでアカウントを作成してしまうことは、存在しないことよりもずっと悪いことだからです。</li>
+</ul>
+<h3 id="これではないもの"><a href="#これではないもの" id="これではないもの" name="これではないもの" class="anchor"></a>これではないもの</h3>
+<p>これは固定された、オペレーターが用意したアカウントの一覧であり、ユーザー管理システムではありません。セルフ登録も、パスワードリセットも、ロールや権限も、ユーザーごとのレート制限や支出上限もありません。連合アイデンティティが必要な場合は、生成されたハンドラの <code>resolveUserId()</code> を編集して、あなた自身の認証済みプリンシパルを返すようにしてください - Web UI の残りの部分は、その id がどこから来たのか一切知りませんし、気にもしません。</p>
+<h2 id="human-in-the-loop"><a href="#human-in-the-loop" id="human-in-the-loop" name="human-in-the-loop" class="anchor"></a>Human-in-the-loop</h2>
+<p>エージェントが承認のために一時停止すると、ストリームは詳細を運ばない <code>middleware_stop</code> チャンクを発行します。そのためページは <code>GET /pending?threadId=</code> に何がリクエストされているかを尋ね、<strong>Approve</strong> / <strong>Reject</strong> でレンダリングし、<code>POST /resume</code> 経由で答えます - これは<em>同じターンの継続</em>をストリーミングするので、その結果は新しいターンを始めるのではなく、会話の中に収まります。</p>
+<p><code>decidedBy</code> はセッションからサーバー側で埋められ、リクエストボディからは決して埋められません: 何かを承認したのが誰かというのは、まさに呼び出し元が自分自身について主張すべきではない類のことです。</p>
+<div class="adm-block adm-warning">
+<div class="adm-heading">
+<svg class="adm-icon"><use xlink:href="#adm-warning" /></svg><span>Warning</span>
+</div>
+<div class="adm-body">
+<p><strong>中断中のランは、それを開始したセッションに属し、両方のルートがそれを強制します。</strong> <code>decidedBy</code> をサーバー側で導出することは、呼び出し元が<em>誰が</em>決定したかについて嘘をつくことを止めるだけです - それ単体では<em>誰のランを</em>決定しているかについては何も対処しません。他のすべてのアクションと異なり、<code>/pending</code> と <code>/resume</code> は会話ではなく <code>threadId</code> によってアドレスされるため、所有権チェックがなければ、他人の <code>threadId</code> を持つ訪問者が、その人の保留中のツール呼び出しとその引数を読み取り、その人に代わって承認・拒否できてしまいます。</p>
+<p>所有者には追加の記帳は不要です: ハンドラはセッション由来の <code>userId</code> をラン options に刻み込み、エージェントはその中断状態と一緒にその options をチェックポイントします - そのため、保存された状態はすでに自分が誰のものかを知っています。呼び出し元が所有者でない場合、<code>/pending</code> はあたかも何も保留していないかのように答えるので、これを使って <code>threadId</code> が存在するかどうかを探ることはできません。<code>/resume</code> は <code>403</code> で拒否します。</p>
+</div>
+</div>
+<h2 id="履歴と再読み込み"><a href="#履歴と再読み込み" id="履歴と再読み込み" name="履歴と再読み込み" class="anchor"></a>履歴と再読み込み</h2>
+<p>トランスクリプトは DOM の中に存在し、会話はエージェントのメモリの中に存在します。再水和がなければ、リロードは空の画面を表示するのに、エージェントはすべてを覚えたままです - そのためページは空白に見えたのに、ユーザーには見えていないメッセージについてのフォローアップに答えてしまうことになります。そのためページはロード時に <code>GET &lt;path&gt;/api/history</code> を呼び出し、保存されたメッセージ (マークダウンも含めて) を再生し、会話が空か、フェッチが失敗した場合はウェルカムメッセージにフォールバックします。</p>
+<p><strong>New</strong> は新しい <code>conversationId</code> を開始します。何も削除しません - 以前の会話は自身の id のもとでサーバー上に残り、サイドバーに表示されます。それこそが会話テーブルの存在意義です。</p>
+<h2 id="ページが行うこと"><a href="#ページが行うこと" id="ページが行うこと" name="ページが行うこと" class="anchor"></a>ページが行うこと</h2>
+<p>出荷されるページは、デモ用のシェルではなく実際のチャットクライアントです。まず <code>GET /info</code> を読み取り、サーバーが実際に報告する内容に自分自身を合わせるので、あるコントロールは、その機能が実在する場所にのみ現れます。</p>
+<table class="table">
+<thead>
+<tr><th>領域</th><th>振る舞い</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>会話サイドバー</strong></td><td>この訪問者の会話を最新順に、メッセージ数とともに一覧表示します。切り替え、名前変更 (✎)、削除 (×)、または新規開始。タイトルは <code>textContent</code> を通じてレンダリングされます — タイトルはユーザーが最初に入力したものが何であれそのままなので、マークアップとして解釈されることは決してありません</td></tr>
+<tr><td><strong>ストリーミング中に操縦する</strong></td><td>コンポーザーはターンの間ずっと生きたままです。<strong>Send</strong> は <strong>Steer</strong> になり、メッセージは新しいターンを始めるのではなく、すでに進行中のランに継ぎ足されます</td></tr>
+<tr><td><strong>Stop</strong></td><td>フェッチを中断する<em>前に</em> <code>/cancel</code> を POST するので、サーバーは実際にトークンの消費をやめ、その後すでにストリーミングされたものはそのまま保持します</td></tr>
+<tr><td><strong>Clear / Compact</strong></td><td>Clear はこの会話を空にします。Compact は要約モデルが設定されている場合にのみ現れ、実際に何をしたか (<code>Compacted 12 messages down to 3</code>、または <code>Nothing to compact yet</code>) を報告します</td></tr>
+<tr><td><strong>推論 + ツール呼び出し</strong></td><td>同じエンベロープの <code>delta.reasoning</code> と <code>delta.tool_calls</code> から供給される、折りたたみ式の開示</td></tr>
+<tr><td><strong>承認</strong></td><td>human-in-the-loop の一時停止は <code>GET /pending</code> から Approve/Reject カードをレンダリングし、<code>/resume</code> 経由で答えられ、同じターンの継続をストリーミングします</td></tr>
+<tr><td><strong>テーマ</strong></td><td><code>preferences</code> にサーバー側で保存されるので、ブラウザではなくアイデンティティについていきます。<code>localStorage</code> はローカルコピーを保持するので、失敗したリクエストがあっても選択は生き残ります</td></tr>
+<tr><td><strong>モデル</strong></td><td><code>/info</code> のモデル名がヘッダーに収まるので、何が答えたのか常に明確です</td></tr>
+</tbody>
+</table>
+<p><strong>復旧はその響き以上に重要です。</strong> 最後に開いた会話は <code>localStorage</code> に記憶されますが、会話自体はサーバー上に存在します。その id がもう存在しない場合 (別のタブで削除された、あるいは新しいストアである) — ページは、アクティブな行のない空の画面に再水和する代わりに、残っている中で最新の会話にフォールバックします。</p>
+<p>狭い画面には、押しつぶされたものではなく本物のレイアウトが用意されます: <code>40rem</code> 未満では、サイドバーはトランスクリプトの幅を奪うのではなく、その上にオーバーレイされ、<code>prefers-reduced-motion</code> は尊重されます。</p>
+<h2 id="sqlite-ストア"><a href="#sqlite-ストア" id="sqlite-ストア" name="sqlite-ストア" class="anchor"></a>SQLite ストア</h2>
+<p>すべての <code>webui</code> プロジェクトは SQLite データベースを得ます。これは任意ではなく、オフにするフラグもありません。</p>
+<p>その理由は好みではなく、実際のギャップです: <strong>bx-ai の <code>IAiMemory</code> には列挙 API がありません。</strong> これは <code>(userId, conversationId)</code> ごとのバケットです — 1 つを読み書き・クリアできますが、その中の何も「このユーザーはどの会話を持っているか」には答えません。会話一覧、ユーザーごとの設定、その他のリレーショナルなものはすべて、メモリの内部ではなく、それに並ぶ実際のストレージが必要です。</p>
+<table class="table">
+<thead>
+<tr><th>部品</th><th>それが何か</th></tr>
+</thead>
+<tbody>
+<tr><td><code>bx-sqlite</code></td><td>JDBC ドライバです。これがなくても webui アプリは起動しますが、すべてのクエリが未知のドライバで失敗します</td></tr>
+<tr><td><a href="https://github.com/coldbox-modules/qb"><code>qb</code></a></td><td>読み書き用の QueryBuilder、テーブル用の SchemaBuilder。手書きの SQL はどこにもありません</td></tr>
+<tr><td><code>models/ChatDb.bx</code></td><td>生成されます。スキーマを所有し、クエリビルダーを配布します</td></tr>
+<tr><td><code>interceptors/WebUiSchema.bx</code></td><td>生成されます。起動時に <code>ChatDb</code> を構築するので、マイグレーションはその時点で走り、データベースに最初に触れたリクエストで走るわけではありません</td></tr>
+</tbody>
+</table>
+<p>データソースは <code>Application.bx</code> に登録され、グラマーは <code>config/ColdBox.bx</code> に固定されます。</p>
+<pre><code class="language-javascript">// Application.bx (generated)
+this.datasources[ &quot;bxagents&quot; ] = {
+	&quot;driver&quot;  : &quot;sqlite&quot;,
+	&quot;database&quot;: expandPath( &quot;./data/chat.db&quot; )
+}
+this.datasource = &quot;bxagents&quot;   // NOT this.defaultDatasource - see below
+
+// config/ColdBox.bx (generated)
+qb : {
+	defaultGrammar : &quot;SQLiteGrammar@qb&quot;,
+	defaultOptions : { datasource : &quot;bxagents&quot; }
+}
+</code></pre>
+<p>どちらも、エントリごとに上書きするのは任意です。</p>
+<table class="table">
+<thead>
+<tr><th>キー</th><th>何をするか</th><th>デフォルト</th></tr>
+</thead>
+<tbody>
+<tr><td><code>database.datasource</code></td><td>ColdBox のデータソース名</td><td><code>bxagents</code></td></tr>
+<tr><td><code>database.path</code></td><td>データベースファイル、アプリルートからの相対パス</td><td><code>./data/chat.db</code></td></tr>
+</tbody>
+</table>
+<p>絶対パスの <code>database.path</code> は<strong>ビルドを失敗させます</strong>: これは生成されたアプリの内部で <code>expandPath()</code> によって解決されるため、絶対パスはサイレントにアプリディレクトリの外に脱出し、パッケージ化された <code>.bxa</code> デプロイを壊します。</p>
+<p><strong>スキーマはバージョン管理され、前方向専用です。</strong> <code>ChatDb.migrate()</code> は適用したものを <code>bxagents_schema_version</code> テーブルに記録し、新しいものだけを適用するので、既存のストアに対して起動するのは無操作です。v1 は <code>conversations</code> と <code>preferences</code> を作成します。新しい <code>applyV&lt;n&gt;()</code> を追加し <code>SCHEMA_VERSION</code> を上げることで進化させてください — 出荷済みのマイグレーションを編集することでは<strong>決して</strong>行わないでください。<strong>SQLite はカラムを変更したり削除したりできない</strong>からで、qb の <code>SQLiteGrammar</code> はそうであるかのように装う代わりに <code>UnsupportedOperation</code> を投げます。</p>
+<div class="adm-block adm-warning">
+<div class="adm-heading">
+<svg class="adm-icon"><use xlink:href="#adm-warning" /></svg><span>Warning</span>
+</div>
+<div class="adm-body">
+<p><strong>ここでの 2 つのことは直感に反しており、どちらも実際の ColdBox の起動に対して、ドキュメントを読んで確立されたのではなく、苦労して確立されました。</strong></p>
+<p><strong>デフォルトデータソースの設定は <code>this.datasource</code> であり、<code>this.defaultDatasource</code> ではありません。</strong> 登録キーは複数形 (<code>this.datasources[ &quot;name&quot; ]</code>) であるため、単数形のデフォルトはそれに一致するように読めますが — BoxLang は <code>this.defaultDatasource</code> をサイレントに受け入れ、何もしません。それが生み出す失敗は、まさにあなたが選択しようとしているそのデータソースの名前を挙げます (<code>No default datasource defined in the application or globally or in the query options. Registered datasources are: [bxagents]</code>)。これは、設定のスペルミスというより、選択メカニズムが壊れているように読めます。</p>
+<p><strong>すべての qb ビルダーにデータソースの名前を指定してください。<code>moduleSettings.qb.defaultOptions</code> に頼らないでください。</strong> qb の <code>ModuleConfig.cfc</code> は <code>QueryBuilder@qb</code> を <code>onLoad()</code> の中で <code>.initArg( name = &quot;defaultOptions&quot;, value = settings.defaultOptions )</code> としてマッピングするため、その設定はあなたをカバーしているように<em>見えます</em>。それは実際の起動では届きませんでした - データソースは登録されていたのに、ビルダーは空の options を持ったままでした。そのため <code>ChatDb.query()</code> は、配布するすべてのビルダーに対して <code>.mergeDefaultOptions( { datasource : static.DATASOURCE } )</code> を呼び出します。<code>SchemaBuilder@qb</code> は <code>defaultOptions</code> を一切受け取らない (qb はこれを <code>grammar</code> だけでマッピングします) ので、すべてのスキーマ呼び出しは自分自身で <code>options: { datasource: ... }</code> を渡します。</p>
+<p><code>moduleSettings.qb</code> ブロックはそれでも生成されます - アプリ内の他のあらゆる qb の利用にとって正しいものだからです - しかし、生成されたストアはそれに依存していません。</p>
+<p><code>ChatDb</code> を extend する場合は、追加するものすべてにデータソースの名前を指定してください。</p>
+<p>もう一つ、変わらないもの: データソースは<strong>名前付き</strong>データソースである必要があり、インライン構造体では決してありません - qb 自身の <code>appendSqlComments()</code> はその引数を <code>string</code> として型付けしているため、構造体は SQL が一切実行される前に例外を投げます。</p>
+</div>
+</div>
+<p>グラマーだけが SQLite 固有の部分です。それ以外はすべて qb を経由するので、これを後で Postgres や MySQL に向けるのは書き直しではなく、グラマーとデータソースの変更で済みます。</p>
+<h2 id="会話と設定"><a href="#会話と設定" id="会話と設定" name="会話と設定" class="anchor"></a>会話と設定</h2>
+<p>これらは SQLite ストアが存在する理由そのものであり、どちらも他のすべてと同じ、サーバー由来の <code>userId</code> でスコープされています。</p>
+<p><strong>会話。</strong> <code>/invoke</code>、<code>/stream</code>、<code>/batch</code> を通るすべてのターンは、それ自身をインデックスに記録します: その行は初回利用時に作成され、<code>updatedAt</code> が動き、最初のユーザーメッセージがタイトルになります (1 行に折りたたまれ、60 文字に切り詰められます) - すでに設定されている場合を除きます。そのため、名前変更が次のターンによってサイレントに元に戻されることはありません。<code>messageCount</code> は<strong>表示用のカウンター</strong>で、ターンごとに 2 ずつ増えます。途中で終わったターンは 1 だけ多く残すことがあり、<code>/clear</code> はこれをリセットします。実際に何が話されたかについての権威であり続けるのは、エージェント自身のメモリです。</p>
+<p><code>/conversations/delete</code> は、インデックス行<em>と</em>その会話に対するエージェントのメッセージの両方を削除します。行だけを落とすと、誰かがその id を再利用した瞬間にモデルのコンテキストにまだ座ったまま、会話が見えなくなってしまいます。</p>
+<div class="adm-block adm-warning">
+<div class="adm-heading">
+<svg class="adm-icon"><use xlink:href="#adm-warning" /></svg><span>Warning</span>
+</div>
+<div class="adm-body">
+<p><strong><code>touchConversation()</code> が qb の upsert ではない理由。</strong> upsert は主キーだけを対象にするため、他の訪問者の <code>conversationId</code> を推測した呼び出し元が、その行に自分自身の <code>userId</code> を書き込み、会話を乗っ取ってしまうことになります。このストアはまず読み取り、その行が他人のものである場合は拒否します。<code>setPreference()</code> は upsert を<em>行い</em>、安全です — そのターゲットは <code>(userId, prefKey)</code> の複合キーであり、呼び出し元自身のアイデンティティがそのマッチ対象の一部だからです。</p>
+</div>
+</div>
+<p><strong>設定。</strong> <code>localStorage</code> ではなくサーバー側なので、ブラウザではなくアイデンティティについていきます。<code>identifierProvider</code> を実際の認証済みプリンシパルに向ければ、生成されたコードを一切変更することなく、訪問者の設定はデバイスをまたいでその人についていきます。</p>
+<h2 id="ブランディングとテーマ"><a href="#ブランディングとテーマ" id="ブランディングとテーマ" name="ブランディングとテーマ" class="anchor"></a>ブランディングとテーマ</h2>
+<p>以下のキーはすべて任意です - このエントリは <code>exposes</code> と <code>path</code> だけでも動作します。</p>
+<table class="table">
+<thead>
+<tr><th>キー</th><th>何をするか</th></tr>
+</thead>
+<tbody>
+<tr><td><code>title</code></td><td>ブラウザのタイトルとヘッダーの見出し</td></tr>
+<tr><td><code>subtitle</code></td><td>見出しの下の小さな行</td></tr>
+<tr><td><code>icon</code></td><td>絵文字 (インライン SVG のファビコン<strong>と</strong>ヘッダーの両方にレンダリングされます) または画像 URL/パス (<code>/logo.svg</code>、<code>https://…</code>、<code>data:image/…</code>)</td></tr>
+<tr><td><code>welcome</code></td><td>最初のターンの前に表示される空状態のメッセージ</td></tr>
+<tr><td><code>placeholder</code></td><td>コンポーザー入力のプレースホルダー</td></tr>
+<tr><td><code>footer</code></td><td>コンポーザーの下の小さな注記 - 免責事項、リンクなど</td></tr>
+<tr><td><code>showReasoning</code></td><td>「Thinking」ストリップを表示。デフォルト <code>true</code></td></tr>
+<tr><td><code>showToolCalls</code></td><td>ツール呼び出しチップを表示。デフォルト <code>true</code></td></tr>
+<tr><td><code>theme</code></td><td>デザイントークン - 下記参照</td></tr>
+<tr><td><code>themeFile</code></td><td>CSS オーバーライドへのパス。プロジェクトルートからの相対パス。デフォルトは <code>resources/webui/theme.css</code></td></tr>
+</tbody>
+</table>
+<p><code>theme</code> はページの CSS カスタムプロパティに直接マッピングされます: <code>accent</code>、<code>accentFg</code>、<code>bg</code>、<code>fg</code>、<code>muted</code>、<code>border</code>、<code>surface</code>、<code>inputBg</code>、<code>bubbleUser</code>、<code>bubbleUserFg</code>、<code>bubbleAssistant</code>、<code>bubbleAssistantFg</code>、<code>bubbleError</code>、<code>reasoningFg</code>、<code>reasoningBg</code>、<code>toolFg</code>、<code>toolBg</code>、<code>radius</code>、<code>radiusSm</code>、<code>font</code>、<code>fontMono</code>、<code>fontSize</code>、<code>maxWidth</code>。ネストされた <code>theme.dark</code> ブロックは、ダークモード向けに同じトークンのいずれかを上書きします。未知のトークンは、サイレントに無視されるのではなく<strong>ビルドを失敗させる</strong>ので、タイプミスは、ブランドカラーがなぜ現れなかったのか悩ませる代わりに即座に表面化します。</p>
+<pre><code class="language-javascript">// gateways/chat.bx
+theme: {
+	accent : &quot;0f766e&quot;,
+	radius : &quot;10px&quot;,
+	font   : &quot;Inter, system-ui, sans-serif&quot;,
+	dark   : { accent : &quot;rgb(45, 212, 191)&quot; }
+}
+</code></pre>
+<div class="adm-block adm-info">
+<div class="adm-heading">
+<svg class="adm-icon"><use xlink:href="#adm-info" /></svg><span>Info</span>
+</div>
+<div class="adm-body">
+<p><strong>16 進カラーはハッシュを先頭に付けずそのまま書いてください。</strong> BoxLang はシングルクォートとダブルクォートの<strong>両方の</strong>文字列で <code>#</code> から文字列補間を開始するため、<code>.bx</code> の config 内のリテラルな 16 進カラーは、ハッシュを二重にしない限りパースエラーになります - 誰も覚えていない落とし穴です。ジェネレータがあなたに代わってそれを付け直すので、<code>&quot;0f766e&quot;</code> はそのまま動きます。<code>rgb()</code>、<code>hsl()</code>、色名にはどちらにしても特別な対応は不要です。</p>
+</div>
+</div>
+<p>トークンがカバーしない部分 - カスタムフォント、レイアウト、要素ごとのルール - については、プロジェクトに <code>resources/webui/theme.css</code> を置いてください。これはページの <code>&lt;style&gt;</code> に<strong>最後に</strong>インライン化されるので、出荷時のデフォルトと <code>theme</code> トークンの両方に勝ちます。そして実際の <code>.css</code> ファイルなので、普通の <code>#rrggbb</code> の 16 進表記もそこでは正常に動作します。(そのファイル内のリテラルな <code>&lt;/style</code> はページのスタイルブロックを早期に終了させてしまうため、ビルドを失敗させます。)</p>
+<div class="adm-block adm-warning">
+<div class="adm-heading">
+<svg class="adm-icon"><use xlink:href="#adm-warning" /></svg><span>Warning</span>
+</div>
+<div class="adm-body">
+<p><strong><code>apiKeyEnvVar</code> はシンプルで切り替え可能なゲートであり、完全なログインシステムではありません。</strong> 未設定のままだと <code>&lt;path&gt;/api/*</code> は完全にオープンです (ローカル開発には問題ありませんが、公開デプロイには向きません)。設定すると、生成された <code>preProcess</code> インターセプター (<code>interceptors/WebUiAuthGate.bx</code>) が、<code>&lt;path&gt;/api/*</code> の下のすべてのリクエストに対して、<code>java.security.MessageDigest.isEqual()</code> で比較される、一致する <code>X-API-Key</code> ヘッダーを要求します - すでにどの Webhook ゲートウェイ自身の署名チェックも使っている、同じ定数時間比較の規律です。<strong>静的シェル自体 (<code>&lt;path&gt;/index.html</code>) は意図的にゲートされていません</strong> - <code>&lt;path&gt;/api/*</code> だけです - ブラウザの通常のページナビゲーションはカスタムヘッダーを送れないので、シェルをゲートすると、そもそもキーを尋ねてくるはずのそのページ自体が、キーなしには到達不能になってしまうからです。ページ自身の JS がキーを尋ね (「Key」ボタン、<code>localStorage</code> に保存)、それ以降のすべての API 呼び出しにそれを添えて送ります。</p>
+</div>
+</div>
+<h2 id="会話のアイデンティティ-セッションこそがユーザー識別子"><a href="#会話のアイデンティティ-セッションこそがユーザー識別子" id="会話のアイデンティティ-セッションこそがユーザー識別子" name="会話のアイデンティティ-セッションこそがユーザー識別子" class="anchor"></a>会話のアイデンティティ: セッションこそがユーザー識別子</h2>
+<p><strong>エージェントが保持するすべてのメモリは <code>(userId, conversationId)</code> でキー付けされています</strong> - そしてエージェントは一度に複数のメモリを保持できます (<code>AiAgent</code> の <code>memories</code> は配列で、<code>loadMemoryMessages()</code> はすべてを同じペアで反復します)。<code>AiAgent.run()</code>/<code>.stream()</code> は、何も供給されない場合、どちらにも <code>&quot;&quot;</code> にフォールバックします。つまり、サーバー側のアイデンティティが一切なければ、どんなメモリタイプが設定されていようと<strong>すべての訪問者は 1 つの共有バケットに収まります</strong>。</p>
+<p>その修正はメモリのタイプではなく、アイデンティティです。<code>webui</code> 公開を持つプロジェクトは、そのため次を得ます。</p>
+<ol>
+<li>生成された <code>Application.bx</code> での<strong>セッション管理の有効化</strong> - <code>this.sessionManagement = true</code>、<code>this.setClientCookies = true</code>、60 分の <code>sessionTimeout</code>。Cookie はここでの基盤です: Cookie がなければセッション id もありません。</li>
+<li><strong>自身の <code>handlers/ChatUi.bx</code></strong>。これは ColdBox の <code>getUserSessionIdentifier()</code> を、<strong>3 つすべてのランナーの形</strong> - <code>invoke</code>、<code>stream</code>、<code>batch</code> - でエージェントの <code>userId</code> として渡します。</li>
+</ol>
+<pre><code class="language-javascript">// handlers/ChatUi.bx (generated)
+private string function resolveUserId() {
+	return controller.getUserSessionIdentifier()
+}
+</code></pre>
+<p><code>session.sessionId</code> を直接読み取るのではなく ColdBox に委譲することで 3 つの恩恵が得られます: id はアプリケーションごとにプレフィックスされ、セッションが何らかの理由で利用できない場合は URLToken/CFID を通じてフォールバックし - そして最も重要なものとして、<strong><code>identifierProvider</code></strong> config 設定が尊重されます。それをあなたの認証済みプリンシパルに向ければ、生成されたハンドラを一切変更することなく、すべてのメモリが実際のユーザーに再キーされます。</p>
+<p>アイデンティティがサーバー発行であるため、プロジェクトがどんなメモリを設定していても - 1 つでも複数でも、<code>window</code>、<code>cache</code>、<code>jdbc</code>、ベクトル、どんな組み合わせでも - スコープは保たれます。</p>
+<div class="adm-block adm-info">
+<div class="adm-heading">
+<svg class="adm-icon"><use xlink:href="#adm-info" /></svg><span>Info</span>
+</div>
+<div class="adm-body">
+<p><strong>なぜ webui には <code>toAi()</code> を使わないのか?</strong> ColdBox 8.1 の <code>toAi()</code> は今や会話コンテキストを自身で導出しており、そのフォールバックはこのハンドラが行うのと正確に同じ呼び出しです: <code>len( body.userId ) ? body.userId : controller.getUserSessionIdentifier()</code>。違いは優先順位です - <code>toAi()</code> は<strong>呼び出し元が指定した <code>userId</code> を優先させます</strong>。これは信頼できるサーバー間の呼び出し元には正しいですが、1 つの共有 API キーの背後にいるブラウザにとっては誤りです。そこでは誰でも自分を他の誰かとして名乗り、他の訪問者のメモリを読むことができてしまいます。生成されたハンドラはアイデンティティをサーバー側からのみ導出し、<code>body.userId</code> を決して見ません。これは <code>toAi()</code> の正確なルート形状 (<code>/invoke</code>、<code>/stream</code>、<code>/batch</code>、<code>/info</code>)、その SSE ワイヤーフォーマット、その <code>X-Thread-Id</code>/<code>thread</code>-イベントのエコーを保っているので、ドロップインのままです。他の公開の種類 (<code>exposes: &quot;agent&quot;</code>) は引き続き変更なしに <code>toAi()</code> を使います - サーバー間はまさにその優先順位が想定しているケースです。</p>
+</div>
+</div>
+<p><code>conversationId</code> は依然としてクライアントから来ますが、それは意図的です: これは同じ訪問者に属する複数の会話を区別するためのものです - <strong>New</strong> ボタンが回転させるものです。これは分離境界ではありません。分離境界はセッション由来の <code>userId</code> です。</p>
+<p>どんなメモリタイプも強制されません。<code>Agent.bx</code> の <code>memory</code> キーで、エージェントごとに 1 つ (または複数) 選んでください。<code>checkpointer</code> と同じ形です。</p>
+<pre><code class="language-javascript">// Agent.bx
+memory: { type: &quot;cache&quot;, maxMessages: 50 }
+</code></pre>
+<p><code>webui</code> を持たないプロジェクトは、セッションをオフのまま、bx-ai 自身のメモリのデフォルトを保ちます - API/ゲートウェイのみのアプリには追跡すべきブラウザがなく、そこでのセッションは、誰も求めていない Cookie を伴うオーバーヘッドでしかありません。</p>
+<h2 id="返信のレンダリング"><a href="#返信のレンダリング" id="返信のレンダリング" name="返信のレンダリング" class="anchor"></a>返信のレンダリング</h2>
+<p>アシスタントの返信は、意図的に小さなマークダウンのサブセットを通してレンダリングされます: フェンス付き/インラインコード、太字/斜体、リンク、箇条書き/番号付きリスト、見出しです。これは<strong>エスケープファースト</strong>で適用されます: モデルのテキストは、タグが 1 つでも導入される前に HTML エスケープされるので、モデルの出力がライブなマークアップになることは決してなく、リンクの href は <code>http(s)</code>/<code>mailto</code> にホワイトリスト化されているので、<code>javascript:</code> URL がアンカーに変換されることは決してありません。</p>
+<div class="adm-block adm-info">
+<div class="adm-heading">
+<svg class="adm-icon"><use xlink:href="#adm-info" /></svg><span>Info</span>
+</div>
+<div class="adm-body">
+<p>コンポーザーは <code>textarea</code> です — <strong>Enter</strong> で送信、<strong>Shift+Enter</strong> で改行を追加し、約 6 行分までスクロールなしで伸びます。進行中のターンは <strong>Stop</strong> (<code>AbortController</code>) で止められ、すでにストリーミングされたものは破棄されずそのまま保持されます。トランスクリプトは、すでに一番下にいる場合にのみ自動スクロールするので、ストリーミングの途中で何かを読み返すために上にスクロールしても、下に引き戻されることはありません。</p>
+</div>
+</div>
+<h2 id="what-is-not-here-yet"><a href="#what-is-not-here-yet" id="what-is-not-here-yet" name="what-is-not-here-yet" class="anchor"></a>What is not here yet</h2>
+<p>このページは、それ自身の API に対しては完全です - 必要なルートはすべて存在し、実行されています。以下がそのギャップです。</p>
+<table class="table">
+<thead>
+<tr><th>足りないもの</th><th>メモ</th></tr>
+</thead>
+<tbody>
+<tr><td>添付ファイル / 画像入力</td><td>コンポーザーはテキストのみです。bx-ai 自体は画像を扱えるので、これは能力のギャップではなく UI のギャップです</td></tr>
+<tr><td>リトライ / 再生成</td><td>失敗したターンは手動で再送する必要があります</td></tr>
+<tr><td>編集して再送</td><td>すでに送信済みのメッセージを編集することはできません</td></tr>
+<tr><td>トークン / コスト表示</td><td>プロバイダーはそれを返しますが、使用量を表示するものは何もありません</td></tr>
+</tbody>
+</table>
+<p>実際の ColdBox の起動に対して何が検証済みで何が未検証か (ブラウザを駆動するのではなくジェネレータレベルのアサーションだけでカバーされているこのページの部分も含む) については、<a href="/bx-agents/development/ja/known-limitations/index.html">既知の制限</a> を参照してください。</p>
+
+<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/i18n/ja/conventions/web-ui.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/bx-agents/development/ja/conventions/web-ui.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Aug 21, 2026, 6&#x3a;33&#x3a;28 PM</span></div>
+				</article>
+
+				<nav class="page-nav d-flex justify-content-between" aria-label="Page navigation">
+
+					<a class="page-nav__prev" href="/bx-agents/development/ja/conventions/gateways/index.html">&larr; gateways&#x2f;</a>
+
+					<a class="page-nav__next" href="/bx-agents/development/ja/conventions/schedules/index.html">schedules&#x2f; &rarr;</a>
+
+				</nav>
+
+
+
+			</main>
+
+			<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
+				<nav class="toc mb-4" aria-label="On this page"><div class="toc-title">On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#ストリーミングターンの実際の様子">&#x30b9;&#x30c8;&#x30ea;&#x30fc;&#x30df;&#x30f3;&#x30b0;&#x30bf;&#x30fc;&#x30f3;&#x306e;&#x5b9f;&#x969b;&#x306e;&#x69d8;&#x5b50;</a></li><li class="toc-level-2"><a href="#生成される-api">&#x751f;&#x6210;&#x3055;&#x308c;&#x308b; API</a></li><li class="toc-level-2"><a href="#ユーザーとサインイン">&#x30e6;&#x30fc;&#x30b6;&#x30fc;&#x3068;&#x30b5;&#x30a4;&#x30f3;&#x30a4;&#x30f3;</a></li><li class="toc-level-3"><a href="#アカウントなしではui-は-1-つの共有ワークスペースです">&#x30a2;&#x30ab;&#x30a6;&#x30f3;&#x30c8;&#x306a;&#x3057;&#x3067;&#x306f;&#x3001;UI &#x306f; 1 &#x3064;&#x306e;&#x5171;&#x6709;&#x30ef;&#x30fc;&#x30af;&#x30b9;&#x30da;&#x30fc;&#x30b9;&#x3067;&#x3059;</a></li><li class="toc-level-3"><a href="#パスワードは-config-に決して書き込まれません">&#x30d1;&#x30b9;&#x30ef;&#x30fc;&#x30c9;&#x306f; config &#x306b;&#x6c7a;&#x3057;&#x3066;&#x66f8;&#x304d;&#x8fbc;&#x307e;&#x308c;&#x307e;&#x305b;&#x3093;</a></li><li class="toc-level-3"><a href="#サインインが変えるもの">&#x30b5;&#x30a4;&#x30f3;&#x30a4;&#x30f3;&#x304c;&#x5909;&#x3048;&#x308b;&#x3082;&#x306e;</a></li><li class="toc-level-3"><a href="#ライフサイクル">&#x30e9;&#x30a4;&#x30d5;&#x30b5;&#x30a4;&#x30af;&#x30eb;</a></li><li class="toc-level-3"><a href="#これではないもの">&#x3053;&#x308c;&#x3067;&#x306f;&#x306a;&#x3044;&#x3082;&#x306e;</a></li><li class="toc-level-2"><a href="#human-in-the-loop">Human-in-the-loop</a></li><li class="toc-level-2"><a href="#履歴と再読み込み">&#x5c65;&#x6b74;&#x3068;&#x518d;&#x8aad;&#x307f;&#x8fbc;&#x307f;</a></li><li class="toc-level-2"><a href="#ページが行うこと">&#x30da;&#x30fc;&#x30b8;&#x304c;&#x884c;&#x3046;&#x3053;&#x3068;</a></li><li class="toc-level-2"><a href="#sqlite-ストア">SQLite &#x30b9;&#x30c8;&#x30a2;</a></li><li class="toc-level-2"><a href="#会話と設定">&#x4f1a;&#x8a71;&#x3068;&#x8a2d;&#x5b9a;</a></li><li class="toc-level-2"><a href="#ブランディングとテーマ">&#x30d6;&#x30e9;&#x30f3;&#x30c7;&#x30a3;&#x30f3;&#x30b0;&#x3068;&#x30c6;&#x30fc;&#x30de;</a></li><li class="toc-level-2"><a href="#会話のアイデンティティ-セッションこそがユーザー識別子">&#x4f1a;&#x8a71;&#x306e;&#x30a2;&#x30a4;&#x30c7;&#x30f3;&#x30c6;&#x30a3;&#x30c6;&#x30a3;&#x3a; &#x30bb;&#x30c3;&#x30b7;&#x30e7;&#x30f3;&#x3053;&#x305d;&#x304c;&#x30e6;&#x30fc;&#x30b6;&#x30fc;&#x8b58;&#x5225;&#x5b50;</a></li><li class="toc-level-2"><a href="#返信のレンダリング">&#x8fd4;&#x4fe1;&#x306e;&#x30ec;&#x30f3;&#x30c0;&#x30ea;&#x30f3;&#x30b0;</a></li><li class="toc-level-2"><a href="#what-is-not-here-yet">What is not here yet</a></li></ul></nav>
+			</aside>
+
+		</div>
+	</div>
+
+	<footer class="bxdocs-footer">
+		<div class="container-fluid bxdocs-footer__inner">
+			<div class="bxdocs-footer__copy">&copy; 2026 BX Agents</div>
+
+			<div class="bxdocs-footer__social"><a class="social-link" href="https://github.com/ortus-boxlang/bx-agents" target="_blank" rel="noopener noreferrer" aria-label="BX Agents on GitHub" title="BX Agents on GitHub"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.385-1.333-1.754-1.333-1.754-1.089-.744.083-.729.083-.729 1.205.084 1.84 1.237 1.84 1.237 1.07 1.834 2.807 1.304 3.492.997.108-.775.418-1.305.762-1.605-2.665-.303-5.467-1.332-5.467-5.93 0-1.31.468-2.38 1.235-3.22-.123-.303-.535-1.523.117-3.176 0 0 1.008-.322 3.301 1.23A11.5 11.5 0 0 1 12 5.803c1.02.005 2.045.138 3.003.404 2.29-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.873.118 3.176.77.84 1.235 1.91 1.235 3.22 0 4.61-2.807 5.625-5.48 5.92.43.372.823 1.102.823 2.222 0 1.606-.014 2.898-.014 3.293 0 .322.216.694.825.576C20.565 21.795 24 17.298 24 12c0-6.63-5.37-12-12-12"/></svg></a><a class="social-link" href="https://www.ortussolutions.com/community/slack" target="_blank" rel="noopener noreferrer" aria-label="Slack Community" title="Slack Community"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52ZM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313ZM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834ZM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312ZM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834ZM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312ZM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52ZM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313Z"/></svg></a><a class="social-link" href="https://x.com/TryBoxLang" target="_blank" rel="noopener noreferrer" aria-label="X &#x28;Twitter&#x29;" title="X &#x28;Twitter&#x29;"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a></div>
+
+			<div class="bxdocs-footer__credit">Built with <a href="https://github.com/ortus-boxlang/bx-docs" target="_blank" rel="noopener noreferrer">BX Docs</a></div>
+		</div>
+	</footer>
+
+	<script src="/bx-agents/development/ja/assets/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+	<script src="/bx-agents/development/ja/assets/vendor/highlight/highlight.min.js"></script>
+	<script src="/bx-agents/development/ja/assets/highlight-boxlang.js"></script>
+	<script>hljs.highlightAll();</script>
+	<script src="/bx-agents/development/ja/assets/code-lines.js"></script>
+	<script src="/bx-agents/development/ja/assets/copy-code.js" defer></script>
+	<script src="/bx-agents/development/ja/assets/admonition-collapse.js" defer></script>
+	<script src="/bx-agents/development/ja/assets/nav-toggle.js" defer></script>
+	<script src="/bx-agents/development/ja/assets/toc-collapse.js" defer></script>
+	<script src="/bx-agents/development/ja/assets/tabs.js" defer></script>
+
+	<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+	<script src="/bx-agents/development/ja/assets/mermaid-init.js"></script>
+
+	
+</body>
+</html>
+

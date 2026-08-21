@@ -1,0 +1,62 @@
+/*
+ * BX Agents docs - small additions on top of the bx-docs bootstrap theme.
+ * Loaded via `extraCss` in bxdocs.json, so it lands after the theme's own
+ * stylesheet and can override it.
+ */
+
+/*
+ * `.bxdocs-step` is `display: flex`, and a flex item's default `min-width`
+ * is `auto` - it refuses to shrink below its own intrinsic content width.
+ * A step whose body holds a wide code block or a content-tab group therefore
+ * widens the whole document instead of scrolling inside itself, which shows
+ * up as horizontal page scroll on narrow viewports (measured: 540px of
+ * document width in a 375px viewport, before this rule).
+ *
+ * This is the same fix the theme already applies to `.bxdocs-hero`; it just
+ * hasn't been applied to the stepper yet. Drop this block once an upstream
+ * bx-docs release carries it.
+ */
+.bxdocs-step {
+	min-width: 0;
+}
+
+.bxdocs-step__content {
+	min-width: 0;
+	flex: 1 1 auto;
+}
+
+.bxdocs-step__content .bxdocs-tabs,
+.bxdocs-step__content .bxdocs-tabs__nav,
+.bxdocs-step__content .bxdocs-tabs__panels {
+	min-width: 0;
+	max-width: 100%;
+}
+
+.bxdocs-step__content pre {
+	max-width: 100%;
+	overflow-x: auto;
+}
+
+/* Content-tab strips wrap rather than stretch their container. */
+.bxdocs-tabs__nav {
+	flex-wrap: wrap;
+}
+
+/*
+ * The same `min-width: auto` flex trap as `.bxdocs-step` above, but for
+ * `::: columns`. `.bxdocs-column` is a flex item whose `pre` computes
+ * `overflow-x: visible`, so a wide code block - the two directory trees on
+ * the homepage - pushes the column wider than its share instead of
+ * scrolling inside itself, and the whole document grows with it. Measured
+ * on the deployed site: 49px of horizontal page scroll at a 375px viewport,
+ * from a tree reaching 424px.
+ */
+.bxdocs-column {
+	min-width: 0;
+}
+
+.bxdocs-column pre,
+.bxdocs-column .bxdocs-pre {
+	max-width: 100%;
+	overflow-x: auto;
+}
