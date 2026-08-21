@@ -441,12 +441,19 @@ Control `GatewaySession`'s policy via an optional `gatewaySession` block on the 
 
 ```javascript
 // Agent.bx
-function configure() {
-	return {
-		name  : "...",
-		model : "...",
-		gatewaySession: { policy: "queue", maxQueueDepth: 50 }   // both optional - these are the defaults
-	};
+class extends="bxModules.bxai.models.runnables.AiAgent" {
+
+	function init() {
+		super.init( name: "...", model: aiModel( provider: "..." ) )
+		return this
+	}
+
+	function configure() {
+		return {
+			gatewaySession: { policy: "queue", maxQueueDepth: 50 }   // both optional - these are the defaults
+		};
+	}
+
 }
 ```
 

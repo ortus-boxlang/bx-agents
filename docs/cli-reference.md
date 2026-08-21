@@ -45,6 +45,42 @@ Repeated options: last one wins.
 
 ## Verbs
 
+::: cards
+::: card title="new" icon="phosphor-duotone:sparkle" href="#new"
+Scaffold a new agent project.
+:::
+::: card title="build" icon="phosphor-duotone:hammer" href="#build"
+Run the full build pipeline.
+:::
+::: card title="test" icon="phosphor-duotone:test-tube" href="#test"
+Run your project's own tests/specs via TestBox.
+:::
+::: card title="serve" icon="phosphor-duotone:broadcast" href="#serve"
+Launch a real boxlang-miniserver process.
+:::
+::: card title="chat" icon="phosphor-duotone:terminal-window" href="#chat"
+Interactive REPL against the built agent.
+:::
+::: card title="invoke" icon="phosphor-duotone:paper-plane-tilt" href="#invoke"
+One non-interactive turn - for scripting/CI.
+:::
+::: card title="package" icon="phosphor-duotone:package" href="#package"
+Package a built project into a .bxa.
+:::
+::: card title="deploy" icon="phosphor-duotone:cloud-arrow-up" href="#deploy"
+Ship to a real deployment target.
+:::
+::: card title="hash-password" icon="phosphor-duotone:key" href="#hash-password"
+Hash a plaintext password for a webui users entry.
+:::
+::: card title="inspect" icon="phosphor-duotone:magnifying-glass" href="#inspect"
+Pretty-print an existing manifest.json.
+:::
+::: card title="clean" icon="phosphor-duotone:broom" href="#clean"
+Remove a project's .build/ and dist/ output.
+:::
+:::
+
 ### `new`
 
 Scaffold a new agent project.
@@ -149,6 +185,18 @@ bxAgents deploy --destination=/path/to/somewhere [--target=local]
 - The flag-only form (`--target=local --destination=...`, or no `--target` at all) works with no `deploy/` folder present - only `local` supports it; every other target requires a named entry, since it needs more configuration than a couple of flags can carry.
 - `local`/`ssh`/`ftp`/`sftp` require a prior `package`; `docker`/`digitalocean` require a prior `build` (they build straight from `.build/app`).
 - `ftp`/`sftp` need the [`bx-ftp`](https://github.com/ortus-boxlang/bx-ftp) module installed alongside BX Agents (see [Installation](getting-started/installation.md)).
+
+### `hash-password`
+
+Turn a plaintext password into the `passwordHash` value a `webui` entry's [`users`](conventions/web-ui.md) block accepts.
+
+```bash
+bxAgents hash-password --password="correct horse battery staple"
+```
+
+- `--password` is **required**.
+- Prints the hash to stdout - `pbkdf2$<iterations>$<salt>$<derivedKey>`, PBKDF2-HMAC-SHA256, salted per call. Safe to commit: it's one-way, and hashing the same password twice yields two different (both valid) hashes.
+- Kept deliberately identical to the hasher the generated web UI itself uses to verify a sign-in - a hash produced here always verifies there.
 
 ### `inspect`
 
