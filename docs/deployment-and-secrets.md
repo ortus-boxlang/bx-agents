@@ -1,6 +1,6 @@
 ---
 title: Deployment & Secrets
-icon: phosphor-duotone:cloud-arrow-up
+icon: phosphor-duotone:lock-key
 summary: Packaging to .bxa, and why secrets never live in generated source.
 description: Packaging to .bxa, and why secrets never live in generated source.
 tags: [reference, deployment, security]
