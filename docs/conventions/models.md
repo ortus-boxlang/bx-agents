@@ -1,6 +1,6 @@
 ---
 title: models/
-icon: 🧠
+icon: phosphor-duotone:brain
 summary: Reusable named model configurations, referenced from Agent.bx by name.
 description: Reusable named model configurations, referenced from Agent.bx by name.
 tags: [conventions, models]

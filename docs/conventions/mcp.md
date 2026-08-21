@@ -1,6 +1,6 @@
 ---
 title: mcp/
-icon: 🔗
+icon: phosphor-duotone:stack
 summary: "Model Context Protocol in both directions: consume remote servers, host your own."
 description: "Model Context Protocol in both directions: consume remote servers, host your own."
 tags: [conventions, mcp]

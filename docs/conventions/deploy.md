@@ -1,6 +1,6 @@
 ---
 title: deploy/
-icon: 🚢
+icon: phosphor-duotone:package
 summary: "One entry per deployment target: local, ssh, ftp, docker, digitalocean."
 description: "One entry per deployment target: local, ssh, ftp, docker, digitalocean."
 tags: [conventions, deployment]

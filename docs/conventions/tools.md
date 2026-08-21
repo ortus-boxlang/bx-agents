@@ -1,6 +1,6 @@
 ---
 title: tools/
-icon: 🔧
+icon: phosphor-duotone:wrench
 summary: Any @AITool-annotated function under tools/ becomes a callable tool.
 description: Any @AITool-annotated function under tools/ becomes a callable tool.
 tags: [conventions, tools]
