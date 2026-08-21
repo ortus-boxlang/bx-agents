@@ -1,6 +1,6 @@
 ---
 title: Installation
-icon: 📦
+icon: phosphor-duotone:rocket-launch
 summary: The three things BX Agents needs on the machine that runs it.
 description: The three things BX Agents needs on the machine that runs it.
 tags: [getting-started, setup]

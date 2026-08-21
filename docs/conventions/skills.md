@@ -1,6 +1,6 @@
 ---
 title: skills/
-icon: 📚
+icon: phosphor-duotone:books
 summary: "Claude Agent Skills: one subfolder per SKILL.md, loaded on demand."
 description: "Claude Agent Skills: one subfolder per SKILL.md, loaded on demand."
 tags: [conventions, skills]

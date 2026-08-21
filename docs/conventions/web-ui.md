@@ -1,6 +1,6 @@
 ---
 title: The web chat UI
-icon: 💬
+icon: phosphor-duotone:globe-hemisphere-west
 summary: A complete browser chat client - sidebar, streaming, approvals, SQLite store.
 description: A complete browser chat client - sidebar, streaming, approvals, SQLite store.
 tags: [conventions, gateways, web-ui]
