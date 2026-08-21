@@ -42,18 +42,21 @@ my-agent/
 `Agent.bx` looks like:
 
 ```javascript
-class {
+class extends="bxModules.bxai.models.runnables.AiAgent" {
 
-	function configure() {
-		return {
+	function init() {
+		super.init(
 			name        : "my-agent",
-			model       : "openai/gpt-5",
-			description : ""
-		};
+			description : "",
+			model       : aiModel( provider: "openai", params: { model: "gpt-5" } )
+		)
+		return this
 	}
 
 }
 ```
+
+It `extends` bx-ai's own `AiAgent`, so it *is* the agent - inherit and add whatever your agent needs directly on the class. See [Agent.bx](../conventions/agent-bx.md).
 
 Every convention folder is created empty - add files to the ones your agent actually needs and delete (or just ignore) the rest.
 
