@@ -120,9 +120,11 @@ Every page starts with a small frontmatter block (`title`, `icon`, `summary`, `d
 
 Pushes to `development` publish to [`/development/`](https://ortus-boxlang.github.io/bx-agents/development/) and pushes to `main` publish to the site root, via `.github/workflows/docs.yml` - one folder per version, and both stay live at once. There is no `main` branch yet, so the root currently redirects into `/development/`.
 
-The repository's **Settings -> Pages -> Source** must be set to **GitHub Actions** for any of this to publish - the workflow cannot set that itself once a Pages site already exists on a branch source.
+This follows [bx-docs' own documented deployment approach](https://ortus-boxlang.github.io/bx-docs/development/guides/deployment/): the workflow builds `site/` and pushes it to a **`gh-pages`** branch, each branch into its own `destination_dir` with `keep_files: true`, so the two versions never overwrite each other and a push only rebuilds the branch it happened on.
 
-A push to either branch rebuilds **both** versions in one job. That is deliberate, not waste: GitHub Pages replaces the entire site on every deploy, so two branches cannot each deploy their own sub-path without the second wiping the first.
+The repository's **Settings -> Pages -> Build and deployment -> Source** must be **Deploy from a branch** -> **`gh-pages`** -> **`/ (root)`**. The first successful run creates `gh-pages`, so set it after that run completes; no workflow file can set it for itself.
+
+Do **not** point that setting at `development` (or any other source branch), and do **not** add a root `.nojekyll` to quiet a failing Jekyll build. A branch source other than `gh-pages` makes GitHub run its built-in Jekyll pipeline over the whole repository root - which is not a Jekyll site - and a `.nojekyll` would only make that pipeline *succeed*, publishing the raw repo over these docs.
 
 ## Ortus Sponsors
 
