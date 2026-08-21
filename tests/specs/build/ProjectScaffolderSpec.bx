@@ -22,7 +22,7 @@ class extends="testbox.system.BaseSpec" {
 				return parent & "/my-new-agent";
 			}
 
-			it( "scaffolds Agent.bx and instructions.md with the given name/model/description", function() {
+			it( "scaffolds a class-based Agent.bx and instructions.md with the given name/model/description", function() {
 				var dir = newTargetDir();
 				var result = scaffolder.scaffold( dir, "my-agent", "openai/gpt-5", "A helpful test agent" );
 
@@ -30,11 +30,20 @@ class extends="testbox.system.BaseSpec" {
 				expect( fileExists( result.instructions ) ).toBeTrue();
 
 				var content = fileRead( result.agentBx );
+				expect( content ).toInclude( 'extends="bxModules.bxai.models.runnables.AiAgent"' );
 				expect( content ).toInclude( 'name        : "my-agent"' );
-				expect( content ).toInclude( 'model       : "openai/gpt-5"' );
 				expect( content ).toInclude( 'description : "A helpful test agent"' );
+				expect( content ).toInclude( 'aiModel( provider : "openai", params : { model : "gpt-5" } )' );
 
 				expect( fileRead( result.instructions ) ).toInclude( "my-agent" );
+			} );
+
+			it( "renders a bare provider (no slash) model slug as aiModel() with no params", function() {
+				var dir = newTargetDir();
+				var result = scaffolder.scaffold( dir, "my-agent", "mock" );
+
+				var content = fileRead( result.agentBx );
+				expect( content ).toInclude( 'aiModel( provider : "mock" )' );
 			} );
 
 			it( "creates every empty convention folder", function() {
@@ -55,15 +64,23 @@ class extends="testbox.system.BaseSpec" {
 				} ).toThrow( "BxAgents.ProjectAlreadyExists" );
 			} );
 
-			it( "produces an Agent.bx that AgentConfigResolver can resolve", function() {
+			it( "produces a class-based Agent.bx that AgentConfigResolver recognizes, with identity set on the class itself", function() {
 				var dir = newTargetDir();
 				scaffolder.scaffold( dir, "my-agent", "openai/gpt-5", "A helpful test agent" );
 
 				var resolver = new bxagents.models.build.AgentConfigResolver();
 				var config = resolver.resolve( projectRoot = dir );
 
-				expect( config.name ).toBe( "my-agent" );
-				expect( config.model ).toBe( "openai/gpt-5" );
+				// Nothing to override outside the class - name/model/description
+				// are set in the class's own init(), not redeclared in a config
+				// struct, so the resolved config carries neither.
+				expect( config.classBasedAgent ).toBeTrue();
+
+				var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext();
+				var instance = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
+					.instantiate( dir & "/Agent.bx", context );
+				expect( instance.getAgentName() ).toBe( "my-agent" );
+				expect( instance.getDescription() ).toBe( "A helpful test agent" );
 			} );
 
 			it( "scaffolds Agent.bx with a test() override defaulting to the mock provider", function() {

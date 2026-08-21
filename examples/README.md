@@ -5,12 +5,14 @@ Real, buildable BX Agents projects, each demonstrating one feature area. Every e
 | Example | Demonstrates |
 |---|---|
 | [`minimal-agent/`](minimal-agent) | The smallest complete agent: one tool, one skill. Start here. |
-| [`class-based-agent/`](class-based-agent) | The same agent written the other way: `Agent.bx` extends bx-ai's `AiAgent`, so it IS the agent. No `configure()`, no `instructions.md`. |
+| [`simple-agent/`](simple-agent) | A baseline agent combining a tool and an HTTP exposure in one project. |
+| [`class-based-agent/`](class-based-agent) | The same agent as `minimal-agent`, but with everything - name, model, instructions - set directly in the class's own `init()`. No `configure()`, no `instructions.md`. |
 | [`http-gateway-agent/`](http-gateway-agent) | Exposing an agent over HTTP via `gateways/` + `toAi()`. |
 | [`scheduled-agent/`](scheduled-agent) | Waking an agent on a cron schedule via `schedules/`. |
 | [`mcp-agent/`](mcp-agent) | Hosting a local MCP server that re-exposes a tool via `mcp/`. |
 | [`multi-agent-team/`](multi-agent-team) | A root agent delegating to two `subagents/`. |
 | [`webui-agent/`](webui-agent) | The v1 web chat UI, via a `gateways/` entry with `exposes: "webui"`. |
+| [`advanced-agent/`](advanced-agent) | A composite example: named `models/`, `subagents/`, `tools/`, `skills/`, a hosted `mcp/` server, dual `gateways/` exposure, a `schedules/` task, and an `interceptors/` entry, all in one project. |
 
 ### Push-style chat-platform gateways
 
@@ -36,4 +38,4 @@ bxAgents build
 bxAgents chat
 ```
 
-Every example builds independently - each is a complete, self-contained project directory (its own `Agent.bx` + `instructions.md`), not a shared/linked structure. See [Quick Start](../docs/getting-started/quick-start.md) for the full `new` → edit → `build` → `serve`/`chat` walkthrough.
+Every example builds independently - each is a complete, self-contained project directory (its own `Agent.bx`, extending bx-ai's own `AiAgent`), not a shared/linked structure. See [Quick Start](../docs/getting-started/quick-start.md) for the full `new` → edit → `build` → `serve`/`chat` walkthrough.

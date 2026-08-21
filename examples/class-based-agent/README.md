@@ -23,7 +23,8 @@ information.
 So this project's generated factory is just:
 
 ```javascript
-var agent = new "agent.classes.agentClass"()
+var agentContext = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
+var agent = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" ).instantiate( "/absolute/path/to/agent/classes/agentClass.bx", agentContext )
 agent.withTools( aiToolRegistry().getAll() )
 agent.withCheckpointer( aiMemory( memory: "cache", config: {} ) )
 ```

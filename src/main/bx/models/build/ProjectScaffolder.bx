@@ -32,6 +32,18 @@
  */
 class {
 
+	property name="modelSlugParser";
+
+	/**
+	 * @return this
+	 */
+	function init() {
+		// "@bxagents" suffix, not a bare "ModelSlugParser" reference - see
+		// BuildPipeline.bx's init() docblock for why.
+		variables.modelSlugParser = new "models.build.ModelSlugParser@bxagents"()
+		return this
+	}
+
 	/**
 	 * @targetDir Absolute path to the new project directory (created if missing; refuses to run if it already contains an Agent.bx)
 	 * @name The agent's name
@@ -90,6 +102,17 @@ class {
 	}
 
 	/**
+	 * Renders a CLASS-BASED Agent.bx - it `extends` bx-ai's own `AiAgent`, so it
+	 * IS the agent, rather than a plain class whose `configure()` describes one.
+	 * Name/description/model are set directly in `init()`'s `super.init(...)`
+	 * call; `instructions.md` (scaffolded alongside this file) is picked up
+	 * automatically at build time via `withInstructions()` - nothing here needs
+	 * to reference it. This is the only shape BX Agents scaffolds: inheriting
+	 * from `AiAgent` and adding whatever a project needs directly on the class
+	 * (private helpers, overridden methods, tools registered in code) is the
+	 * simpler default, and the class is real BoxLang the IDE can introspect,
+	 * rather than a config struct describing one.
+	 *
 	 * @name The agent's name
 	 * @model The agent's provider/model slug
 	 * @description Optional agent description
@@ -98,14 +121,15 @@ class {
 	 */
 	private string function renderAgentBx( required string name, required string model, required string description ) {
 		var lines = [
-			"class {",
+			'class extends="bxModules.bxai.models.runnables.AiAgent" {',
 			"",
-			"	function configure() {",
-			"		return {",
+			"	function init() {",
+			"		super.init(",
 			'			name        : "#bxLiteral( arguments.name )#",',
-			'			model       : "#bxLiteral( arguments.model )#",',
-			'			description : "#bxLiteral( arguments.description )#"',
-			"		};",
+			'			description : "#bxLiteral( arguments.description )#",',
+			"			model       : #renderModelExpression( arguments.model )#",
+			"		)",
+			"		return this",
 			"	}",
 			"",
 			"	// `bxAgents test` builds against this override by default (see",
@@ -122,6 +146,24 @@ class {
 			""
 		]
 		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Renders a `provider/model` slug as an `aiModel(...)` expression -
+	 * `--model` is documented as always a full slug, but a bare known
+	 * provider name (no "/") is handled too, matching how a project's own
+	 * `Agent.bx` may resolve `model` elsewhere in the build pipeline.
+	 *
+	 * @modelSlug The `--model` value passed to `new`
+	 *
+	 * @return A BoxLang `aiModel( ... )` expression string
+	 */
+	private string function renderModelExpression( required string modelSlug ) {
+		if ( arguments.modelSlug.find( "/" ) ) {
+			var parsed = variables.modelSlugParser.parse( arguments.modelSlug )
+			return 'aiModel( provider : "#bxLiteral( parsed.provider )#", params : { model : "#bxLiteral( parsed.model )#" } )'
+		}
+		return 'aiModel( provider : "#bxLiteral( arguments.modelSlug )#" )'
 	}
 
 	/**

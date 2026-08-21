@@ -137,16 +137,17 @@ into the request path.
 
 ::: columns
 ::: column
-!!! tip "Start with two files"
-    Only `Agent.bx` and `instructions.md` are required. Every other folder is optional and
-    only affects the generated output if it exists **and** has content in it - so you add
+!!! tip "Start with one file"
+    Only `Agent.bx` is required. `instructions.md` is optional - set instructions directly
+    in the class, or drop the file in and let the build wire it in. Every other folder only
+    affects the generated output if it exists **and** has content in it - so you add
     conventions as you actually need them.
 :::
 ::: column
-!!! faq "An Agent.bx can BE the agent"
-    Beyond describing an agent through `configure()`, an `Agent.bx` can extend BX AI's
-    `AiAgent` directly - the build then instantiates your class instead of rebuilding one
-    from config. See [Agent.bx](conventions/agent-bx.md).
+!!! faq "Agent.bx IS the agent"
+    `Agent.bx` extends BX AI's own `AiAgent` directly - the build instantiates your class
+    rather than rebuilding one from a config struct, so what you write is what runs, and an
+    IDE can introspect it like any other class. See [Agent.bx](conventions/agent-bx.md).
 :::
 :::
 

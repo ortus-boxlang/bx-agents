@@ -1,0 +1,24 @@
+class extends="bxModules.bxai.models.runnables.AiAgent" {
+
+	function init() {
+		super.init(
+			name        : "advanced-agent",
+			description : "A research team lead with tools, skills, MCP hosting, and a nightly digest schedule.",
+			model       : aiModel( provider: "mock", params: { model: "mock-model" } )
+		)
+		return this
+	}
+
+	// Declared here so it wins over the placeholder model set in init() above -
+	// resolves against models/fast.bx, a build-time-only convention `super.init()`
+	// itself has no notion of. subAgents is the `subagents/` FOLDER-name list to
+	// wire at build time, distinct from super.init()'s own `subAgents` argument
+	// (already-built instances).
+	function configure() {
+		return {
+			model     : "fast",
+			subAgents : [ "researcher", "writer" ]
+		};
+	}
+
+}

@@ -448,7 +448,9 @@ class extends="testbox.system.BaseSpec" {
 					var factory  = factoryFor( "class-based-minimal", buildDir );
 
 					// The class IS the agent - no aiAgent() call for this node at all.
-					expect( factory ).toInclude( 'new "agent.classes.agentClass"()' );
+					expect( factory ).toInclude( 'DynamicClassLoader" ).instantiate( "' );
+					expect( factory ).toInclude( "/agent/classes/agentClass.bx" );
+					expect( factory ).notToInclude( 'new "agent.classes' );
 					expect( factory ).notToInclude( "aiAgent(" );
 
 					// ...and it has to exist at runtime, so it is copied like tools/ and skills/ are.
@@ -487,7 +489,9 @@ class extends="testbox.system.BaseSpec" {
 				it( "leaves a class's own checkpointer alone", function() {
 					var factory = factoryFor( "class-based-own-checkpointer", newBuildDir() );
 
-					expect( factory ).toInclude( 'new "agent.classes.agentClass"()' );
+					expect( factory ).toInclude( 'DynamicClassLoader" ).instantiate( "' );
+					expect( factory ).toInclude( "/agent/classes/agentClass.bx" );
+					expect( factory ).notToInclude( 'new "agent.classes' );
 					expect( factory ).notToInclude( "withCheckpointer(" );
 				} );
 
@@ -498,7 +502,9 @@ class extends="testbox.system.BaseSpec" {
 					// the subagent is a descriptor, so it is still BUILT...
 					expect( factory ).toInclude( "var subagent_researcher = aiAgent(" );
 					// ...the root is class-based, so it is INSTANTIATED...
-					expect( factory ).toInclude( 'new "agent.classes.agentClass"()' );
+					expect( factory ).toInclude( 'DynamicClassLoader" ).instantiate( "' );
+					expect( factory ).toInclude( "/agent/classes/agentClass.bx" );
+					expect( factory ).notToInclude( 'new "agent.classes' );
 					// ...and the two are wired together.
 					expect( factory ).toInclude( "addSubAgent( subagent_researcher )" );
 
