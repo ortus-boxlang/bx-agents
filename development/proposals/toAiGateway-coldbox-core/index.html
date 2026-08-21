@@ -1,0 +1,294 @@
+
+
+
+
+
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>toAiGateway&#x28;&#x29; for ColdBox Core - BX Agents</title>
+	<meta property="og:type" content="website">
+	<meta property="og:site_name" content="BX Agents">
+	<meta property="og:title" content="toAiGateway&#x28;&#x29; for ColdBox Core">
+
+	<meta name="description" content="Draft proposal&#x3a; a gateway-shaped sibling to ColdBox&#x27;s own toAi&#x28;&#x29;.">
+	<meta property="og:description" content="Draft proposal&#x3a; a gateway-shaped sibling to ColdBox&#x27;s own toAi&#x28;&#x29;.">
+
+	<meta property="og:image" content="/bx-agents/development/assets/home-banner.jpg">
+	<meta name="twitter:card" content="summary_large_image">
+
+	<link rel="icon" href="/bx-agents/development/assets/favicon.svg">
+
+	<script>
+		( function () {
+			var configuredMode = "auto";
+			var stored = localStorage.getItem( "bxdocs-theme" );
+			var prefersDark = window.matchMedia( "(prefers-color-scheme: dark)" ).matches;
+			var wantsDark = stored ? stored === "dark" : ( configuredMode === "dark" || ( configuredMode === "auto" && prefersDark ) );
+			if ( wantsDark ) {
+				document.documentElement.setAttribute( "data-theme", "dark" );
+			}
+		} )();
+	</script>
+	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+	<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/styles/github.min.css">
+	<link rel="stylesheet" href="/bx-agents/development/assets/theme/style.css">
+	<link rel="stylesheet" href="/bx-agents/development/assets/bx-agents.css">
+
+	<script>window.__BXDOCS_BASE_PATH__ = "/bx-agents/development/";</script>
+	<script src="https://cdn.jsdelivr.net/npm/lunr@2.3.9/lunr.min.js"></script>
+	<script src="/bx-agents/development/assets/search.js" defer></script>
+
+	<script src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js" defer></script>
+</head>
+<body x-data="{ dark: document.documentElement.getAttribute( 'data-theme' ) === 'dark' }" x-init="$watch( 'dark', v => { document.documentElement.setAttribute( 'data-theme', v ? 'dark' : 'light' ); localStorage.setItem( 'bxdocs-theme', v ? 'dark' : 'light' ) } )">
+	<nav class="navbar navbar-expand-lg brand-navbar">
+		<div class="container-fluid navbar-row">
+			<a class="navbar-brand brand-mark" href="/bx-agents/development/"><img class="brand-logo" src="/bx-agents/development/assets/logo.svg" alt=""><span class="brand-name">BX Agents</span></a>
+			<div class="navbar-controls">
+<div class="bxdocs-search position-relative">
+	<input type="search" id="bxdocs-search-input" class="form-control" placeholder="Search docs..." aria-label="Search">
+	<kbd class="bxdocs-search-kbd" aria-hidden="true">Ctrl K</kbd>
+	<ul id="bxdocs-search-results" class="bxdocs-search-results list-unstyled"></ul>
+</div>
+
+
+
+				<a class="repo-link" href="https&#x3a;&#x2f;&#x2f;github.com&#x2f;ortus-boxlang&#x2f;bx-agents" target="_blank" rel="noopener noreferrer" aria-label="Repository" title="Repository"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.385-1.333-1.754-1.333-1.754-1.089-.744.083-.729.083-.729 1.205.084 1.84 1.237 1.84 1.237 1.07 1.834 2.807 1.304 3.492.997.108-.775.418-1.305.762-1.605-2.665-.303-5.467-1.332-5.467-5.93 0-1.31.468-2.38 1.235-3.22-.123-.303-.535-1.523.117-3.176 0 0 1.008-.322 3.301 1.23A11.5 11.5 0 0 1 12 5.803c1.02.005 2.045.138 3.003.404 2.29-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.873.118 3.176.77.84 1.235 1.91 1.235 3.22 0 4.61-2.807 5.625-5.48 5.92.43.372.823 1.102.823 2.222 0 1.606-.014 2.898-.014 3.293 0 .322.216.694.825.576C20.565 21.795 24 17.298 24 12c0-6.63-5.37-12-12-12"/></svg></a>
+
+				<button type="button" class="theme-toggle" @click="dark = !dark" aria-label="Toggle dark mode">
+					<span x-show="!dark"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/></svg></span>
+					<span x-show="dark" x-cloak><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg></span>
+				</button>
+				<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#bxdocs-sidebar" aria-controls="bxdocs-sidebar" aria-label="Toggle navigation">
+					<span class="navbar-toggler-icon"></span>
+				</button>
+			</div>
+		</div>
+	</nav>
+	<div class="container-fluid">
+		<div class="row">
+			<aside class="col-lg-3 col-xl-2 sidebar collapse d-lg-block" id="bxdocs-sidebar">
+				<ul class="nav flex-column"><li class="nav-item"><a class="nav-link" href="/bx-agents/development/index.html"><svg class="bxdocs-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M200,56H56A24,24,0,0,0,32,80V192a24,24,0,0,0,24,24H200a24,24,0,0,0,24-24V80A24,24,0,0,0,200,56ZM164,184H92a20,20,0,0,1,0-40h72a20,20,0,0,1,0,40Z" opacity="0.2"/><path d="M200,48H136V16a8,8,0,0,0-16,0V48H56A32,32,0,0,0,24,80V192a32,32,0,0,0,32,32H200a32,32,0,0,0,32-32V80A32,32,0,0,0,200,48Zm16,144a16,16,0,0,1-16,16H56a16,16,0,0,1-16-16V80A16,16,0,0,1,56,64H200a16,16,0,0,1,16,16ZM72,108a12,12,0,1,1,12,12A12,12,0,0,1,72,108Zm88,0a12,12,0,1,1,12,12A12,12,0,0,1,160,108Zm4,28H92a28,28,0,0,0,0,56h72a28,28,0,0,0,0-56Zm-24,16v24H116V152ZM80,164a12,12,0,0,1,12-12h8v24H92A12,12,0,0,1,80,164Zm84,12h-8V152h8a12,12,0,0,1,0,24Z"/></svg> BX Agents</a></li><li class="nav-item"><span class="nav-link disabled">Getting Started</span><ul class="nav flex-column nav--nested"><li class="nav-item"><a class="nav-link" href="/bx-agents/development/getting-started/installation/index.html">📦 Installation</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/getting-started/quick-start/index.html">🚀 Quick Start</a></li></ul></li><li class="nav-item"><span class="nav-link disabled">Conventions</span><ul class="nav flex-column nav--nested"><li class="nav-item"><a class="nav-link" href="/bx-agents/development/conventions/agent-bx/index.html">⚙️ Agent.bx</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/conventions/tools/index.html">🔧 tools&#x2f;</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/conventions/skills/index.html">📚 skills&#x2f;</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/conventions/subagents/index.html">🧩 subagents&#x2f;</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/conventions/models/index.html">🧠 models&#x2f;</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/conventions/gateways/index.html">🔌 gateways&#x2f;</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/conventions/web-ui/index.html">💬 The web chat UI</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/conventions/schedules/index.html">⏰ schedules&#x2f;</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/conventions/mcp/index.html">🔗 mcp&#x2f;</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/conventions/interceptors/index.html">🪝 interceptors&#x2f;</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/conventions/modules/index.html">🧱 modules&#x2f;</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/conventions/testing/index.html">🧪 tests&#x2f;</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/conventions/deploy/index.html">🚢 deploy&#x2f;</a></li></ul></li><li class="nav-item"><span class="nav-link disabled">Reference</span><ul class="nav flex-column nav--nested"><li class="nav-item"><a class="nav-link" href="/bx-agents/development/build-pipeline/index.html">🏗️ The Build Pipeline</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/manifest/index.html">📋 The Manifest</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/cli-reference/index.html">⌨️ CLI Reference</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/deployment-and-secrets/index.html">🔐 Deployment &amp; Secrets</a></li><li class="nav-item"><a class="nav-link" href="/bx-agents/development/known-limitations/index.html">⚠️ Known Limitations</a></li></ul></li><li class="nav-item"><span class="nav-link disabled">Proposals</span><ul class="nav flex-column nav--nested"><li class="nav-item"><a class="nav-link active" href="/bx-agents/development/proposals/toAiGateway-coldbox-core/index.html">💡 toAiGateway&#x28;&#x29; for ColdBox Core</a></li></ul></li></ul>
+			</aside>
+			<main class="col-lg-9 col-xl-10 content">
+
+				<article class="page-content">
+
+					<h1 class="page-title" id="page-title"><a href="#page-title" id="page-title" class="anchor"></a><span class="page-icon">💡</span> toAiGateway&#x28;&#x29; for ColdBox Core</h1>
+					<p class="page-summary">Draft proposal&#x3a; a gateway-shaped sibling to ColdBox&#x27;s own toAi&#x28;&#x29;.</p>
+<div class="page-tags mb-3"><a class="page-tag" href="/bx-agents/development/tags/index.html#tag-proposals">proposals</a></div>
+<nav class="toc mb-4" aria-label="On this page"><div class="toc-title">On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#why">Why</a></li><li class="toc-level-2"><a href="#whats-already-proven-verified-against-bx-ai-source-this-session">What&#x27;s already proven &#x28;verified against bx-ai source this session&#x29;</a></li><li class="toc-level-2"><a href="#proposed-core-implementation">Proposed core implementation</a></li><li class="toc-level-2"><a href="#current-workaround-bx-agents-to-delete-once-this-lands">Current workaround &#x28;BX Agents, to delete once this lands&#x29;</a></li><li class="toc-level-2"><a href="#testing-plan-for-the-core-pr">Testing plan for the core PR</a></li><li class="toc-level-2"><a href="#confirmed-later-this-session-update">Confirmed later this session &#x28;update&#x29;</a></li></ul></nav>
+					<h1 id="proposal-toaigateway--a-native-coldbox-routing-dsl-terminator-for-the-bx-ai-gateway-webhook-surface"><a href="#proposal-toaigateway--a-native-coldbox-routing-dsl-terminator-for-the-bx-ai-gateway-webhook-surface" id="proposal-toaigateway--a-native-coldbox-routing-dsl-terminator-for-the-bx-ai-gateway-webhook-surface" name="proposal-toaigateway--a-native-coldbox-routing-dsl-terminator-for-the-bx-ai-gateway-webhook-surface" class="anchor"></a>Proposal: <code>toAiGateway()</code> — a native ColdBox routing DSL terminator for the bx-ai Gateway webhook surface</h1>
+<p>Status: draft, written from BX Agents (<code>ortus-boxlang/bx-agents</code>). Update since first
+draft: <code>coldbox-platform</code> (specifically ColdBox itself, <code>Router.cfc</code>) WAS attached and
+read directly later in this same session — the cross-owner limit turned out to be
+per-session-state, not permanent; once <code>ColdBox/coldbox-platform</code>'s zip was fetched from
+its real download URL and unpacked, its <code>system/web/routing/Router.cfc</code> source was read
+in full. That resolved the two &quot;worth confirming&quot; items below and, more importantly,
+corrected a real mistake this proposal's <code>toAi()</code>/<code>IAiRunnable</code> section had inherited from
+an earlier documentation-only pass (see the correction notes inline).</p>
+<h2 id="why"><a href="#why" id="why" name="why" class="anchor"></a>Why</h2>
+<p>ColdBox 8.1 ships two AI-specific routing DSL terminators:</p>
+<ul>
+<li><code>route(pattern).toAi(target)</code> — 4 auto-registered routes (<code>invoke</code>/<code>stream</code>/<code>batch</code>/<code>info</code>)
+against an <code>IAiRunnable</code> target.</li>
+<li><code>route(pattern).toMCP(target)</code> — 1 route, dispatches to <code>MCPRequestProcessor</code>.</li>
+</ul>
+<p>bx-ai also ships a third HTTP surface that has no ColdBox terminator at all: the
+<code>IGateway</code>/<code>aiGatewayRegistry()</code> channel-adapter webhook surface (Slack/webhook delivery,
+human-in-the-loop approval), fronted by a fixed 3-route processor
+(<code>bxModules.bxai.models.gateway.http.GatewayRequestProcessor::processHttp()</code>). Today,
+using it from a ColdBox app means hand-wiring 3 plain routes to a passthrough handler.
+That's exactly the kind of wiring <code>toAi()</code>/<code>toMCP()</code> already exist to save people from
+doing by hand for the other two bx-ai surfaces — this proposes closing the gap with a
+third terminator, <code>toAiGateway()</code>, built the same way.</p>
+<p>BX Agents (a conventions-based agent-framework module on top of bx-ai + ColdBox) is
+shipping this wiring itself in the meantime — see &quot;Current workaround&quot; below — precisely
+so it can be deleted once this lands in core.</p>
+<h2 id="whats-already-proven-verified-against-bx-ai-source-this-session"><a href="#whats-already-proven-verified-against-bx-ai-source-this-session" id="whats-already-proven-verified-against-bx-ai-source-this-session" name="whats-already-proven-verified-against-bx-ai-source-this-session" class="anchor"></a>What's already proven (verified against <code>bx-ai</code> source this session)</h2>
+<p><code>bxModules.bxai.models.gateway.http.GatewayRequestProcessor</code>:</p>
+<pre><code class="language-javascript">static string function processHttp() {
+    var requestData = static.httpTransport.readRequest();
+    var response     = route( requestData );
+    static.httpTransport.writeResponse( response );
+    return response.content;
+}
+</code></pre>
+<ul>
+<li><strong>Zero-argument, static.</strong> It reads the live HTTP request itself (via <code>cgi.PATH_INFO</code>,
+<code>cgi.REQUEST_METHOD</code>, <code>getHTTPRequestData()</code>) and writes the response itself (via
+<code>bx:header</code>/<code>bx:content reset=true</code>). It does not need — and cannot use — ColdBox's
+<code>event</code>/<code>rc</code>/<code>prc</code> for its own logic.</li>
+<li><strong>Routes internally off <code>cgi.PATH_INFO</code></strong>, expecting exactly 3 shapes:
+<ul>
+<li><code>POST /gateways/{gatewayName}/events</code> — inbound platform event</li>
+<li><code>GET /interactions/{requestID}</code> — poll a pending human-approval interaction</li>
+<li><code>POST /interactions/{requestID}/decisions</code> — submit a human's decision</li>
+<li>(plus <code>OPTIONS</code> CORS preflight, handled internally too)</li>
+</ul>
+</li>
+<li>Because it parses path segments itself, whatever fronts it must expose these 3 shapes
+<strong>verbatim</strong> (no extra path prefix) for the segment-count/name checks in
+<code>GatewayRequestProcessor.route()</code> to match.</li>
+<li><code>aiGatewayRegistry()</code> resolves gateways by name; nothing about routing needs the
+registry's contents, just that gateways were registered at some point before a request
+arrives (typically app startup).</li>
+</ul>
+<p>This means <code>toAiGateway()</code> needs <strong>no adapter interface at all</strong> — unlike <code>toAi()</code>'s
+<code>IAiRunnable</code>, there is nothing for a target class to implement. The terminator's whole
+job is registering the right routes to the right static call and telling ColdBox not to
+render anything afterward (the processor already wrote the real response).</p>
+<h2 id="proposed-core-implementation"><a href="#proposed-core-implementation" id="proposed-core-implementation" name="proposed-core-implementation" class="anchor"></a>Proposed core implementation</h2>
+<p>A single terminator, auto-registering 3 routes (mirroring <code>toAi()</code>'s &quot;one call → N
+routes&quot; shape) with <strong>no target argument</strong> (mirroring <code>toMCP()</code>'s no-target form, since
+routing is name-driven from the URL itself, not from a WireBox mapping):</p>
+<pre><code class="language-javascript">route( &quot;/bxai&quot; ).toAiGateway();
+</code></pre>
+<p>registers, relative to wherever <code>route()</code>'s pattern anchors it:</p>
+<table class="table">
+<thead>
+<tr><th>Verb</th><th>Path</th><th>Behavior</th></tr>
+</thead>
+<tbody>
+<tr><td>POST</td><td><code>{pattern}/gateways/:gatewayName/events</code></td><td>inbound platform event</td></tr>
+<tr><td>GET</td><td><code>{pattern}/interactions/:requestID</code></td><td>poll interaction</td></tr>
+<tr><td>POST</td><td><code>{pattern}/interactions/:requestID/decisions</code></td><td>submit human decision</td></tr>
+</tbody>
+</table>
+<p>All 3 dispatch to the same generated/internal action, which does nothing but:</p>
+<pre><code class="language-javascript">function process( event, rc, prc ) {
+    bxModules.bxai.models.gateway.http.GatewayRequestProcessor::processHttp();
+    return event.noRender();
+}
+</code></pre>
+<p>Open question for whoever implements this against real <code>Route.bx</code> source: whether
+<code>{pattern}</code> prefixing is safe given <code>GatewayRequestProcessor</code> parses <code>cgi.PATH_INFO</code>
+assuming <strong>no prefix</strong> (see &quot;verbatim&quot; note above). Two ways to resolve, in order of
+preference:</p>
+<ol>
+<li><code>toAiGateway()</code> always anchors at the app root (ignore/reject a non-empty pattern),
+since the processor's own path parsing can't tolerate a prefix anyway.</li>
+<li>If ColdBox's URL rewriting always makes <code>cgi.PATH_INFO</code> reflect the full requested
+path (typical rewrite-everything-to-index.bxm ColdBox deployments), a prefix &quot;just
+works&quot; transparently and this isn't actually a constraint — verify empirically before
+picking either option.</li>
+</ol>
+<p>Standard route modifiers (<code>.as()</code>, <code>.withModule()</code>, <code>.withDomain()</code>, etc.) should apply
+the same way they do for <code>toAi()</code>/<code>toMCP()</code>.</p>
+<h2 id="current-workaround-bx-agents-to-delete-once-this-lands"><a href="#current-workaround-bx-agents-to-delete-once-this-lands" id="current-workaround-bx-agents-to-delete-once-this-lands" name="current-workaround-bx-agents-to-delete-once-this-lands" class="anchor"></a>Current workaround (BX Agents, to delete once this lands)</h2>
+<p>BX Agents' build pipeline generates the equivalent wiring by hand today:</p>
+<ul>
+<li><code>RouterGenerator.bx</code> emits, only when at least one <code>http</code>-type channel-adapter gateway
+is configured:
+<pre><code class="language-javascript">post( &quot;/gateways/:gatewayName/events&quot; ).toHandler( &quot;Gateway.process&quot; )
+get( &quot;/interactions/:requestID&quot; ).toHandler( &quot;Gateway.process&quot; )
+post( &quot;/interactions/:requestID/decisions&quot; ).toHandler( &quot;Gateway.process&quot; )
+</code></pre>
+</li>
+<li><code>GatewayGenerator.bx</code> emits a generated <code>handlers/Gateway.bx</code> with exactly one action:
+<pre><code class="language-javascript">function process( event, rc, prc ) {
+    bxModules.bxai.models.gateway.http.GatewayRequestProcessor::processHttp()
+    return arguments.event.noRender()
+}
+</code></pre>
+</li>
+<li><code>aiGatewayRegistry().register( aiGateway( type, options ) )</code> calls are inserted into the
+generated app's <code>Application.bx onApplicationStart()</code>, once per configured
+channel-adapter gateway.</li>
+</ul>
+<p>Once <code>toAiGateway()</code> exists in core, <code>RouterGenerator</code> swaps its 3 hand-written routes
+for one <code>route( ... ).toAiGateway()</code> call, and <code>GatewayGenerator</code> stops generating
+<code>handlers/Gateway.bx</code> entirely — pure deletion, no new BX Agents-side logic needed.</p>
+<h2 id="testing-plan-for-the-core-pr"><a href="#testing-plan-for-the-core-pr" id="testing-plan-for-the-core-pr" name="testing-plan-for-the-core-pr" class="anchor"></a>Testing plan for the core PR</h2>
+<ul>
+<li>Unit: <code>route(...).toAiGateway()</code> registers exactly 3 routes, correct verbs/paths,
+standard route modifiers apply.</li>
+<li>Integration: a live request to each of the 3 paths reaches
+<code>GatewayRequestProcessor::processHttp()</code> and returns its response verbatim (status
+code, headers, body) — register a <code>mock</code>-type gateway via <code>aiGatewayRegistry()</code> in the
+test harness (no real network/LLM call needed, <code>bx-ai</code> ships a literal <code>&quot;mock&quot;</code>
+provider for exactly this).</li>
+<li>Regression: confirm <code>event.noRender()</code> prevents ColdBox from double-writing a response
+after <code>processHttp()</code> already flushed one via <code>bx:content reset=true</code>.</li>
+</ul>
+<h2 id="confirmed-later-this-session-update"><a href="#confirmed-later-this-session-update" id="confirmed-later-this-session-update" name="confirmed-later-this-session-update" class="anchor"></a>Confirmed later this session (update)</h2>
+<p><code>ColdBox/coldbox-platform</code> (8.1.0) was fetched directly (<code>https://downloads.ortussolutions.com/ortussolutions/coldbox/8.1.0/coldbox-8.1.0.zip</code>)
+and <code>system/web/routing/Router.cfc</code> read in full. Both items originally listed here as
+&quot;worth confirming&quot; are now resolved, and one earlier assumption in this very proposal
+was wrong and has been corrected:</p>
+<ol>
+<li>
+<p><strong><code>toAi(target)</code>'s target resolution — confirmed as assumed.</strong> Router.cfc:
+<code>var runnableInstance = isSimpleValue( capturedRunnable ) ? getInstance( capturedRunnable ) : capturedRunnable</code>.
+A string is resolved via WireBox <code>getInstance()</code>; a live object is used directly.</p>
+</li>
+<li>
+<p><strong>The real <code>IAiRunnable</code> contract — CORRECTED, not what this proposal originally said.</strong>
+The &quot;What's already proven&quot; section above (unchanged, still accurate for the Gateway
+surface) was written from bx-ai source only. Separately, BX Agents' own M8 work relied
+on a <em>published-docs</em> description of <code>toAi()</code>'s target contract that turned out to be
+wrong: <code>invoke</code>/<code>stream</code>/<code>batch</code>/<code>info</code> are the <strong>sub-route names</strong>, not method names
+<code>toAi()</code> calls on the target. Router.cfc's actual closures call
+<code>runnableInstance.run( input, params, options )</code> and
+<code>runnableInstance.stream( onChunk, input, params, options )</code> — i.e. bx-ai's own
+<code>IAiRunnable</code> interface (<code>bxModules.bxai.models.runnables.IAiRunnable</code>), which
+<code>AiAgent</code> already implements natively via <code>AiBaseRunnable</code>. <strong>No adapter subclass is
+needed at all</strong> — the plain <code>aiAgent()</code> BIF's return value already satisfies <code>toAi()</code>.
+BX Agents' generator has been corrected to match (no more
+<code>GeneratedAgentRunnable.bx</code>/<code>exposeAgentAsRunnable</code>).</p>
+</li>
+<li>
+<p><strong>WireBox's <code>.toProvider(closure)</code></strong> — not re-checked this session (Router.cfc doesn't
+touch WireBox binder syntax); still an assumption in BX Agents' <code>config/WireBox.bx</code>
+generator. Low risk: <code>.toProvider()</code> is well-established, commonly-used WireBox DSL,
+just not something this specific source pass happened to touch.</p>
+</li>
+</ol>
+
+<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/proposals/toAiGateway-coldbox-core.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/bx-agents/development/proposals/toAiGateway-coldbox-core.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Aug 21, 2026, 3&#x3a;32&#x3a;47 AM</span></div>
+				</article>
+
+				<nav class="page-nav d-flex justify-content-between" aria-label="Page navigation">
+
+					<a class="page-nav__prev" href="/bx-agents/development/known-limitations/index.html">&larr; Known Limitations</a>
+
+				</nav>
+
+
+
+			</main>
+
+		</div>
+	</div>
+
+	<footer class="bxdocs-footer">
+		<div class="container-fluid bxdocs-footer__inner">
+			<div class="bxdocs-footer__copy">&copy; 2026 BX Agents</div>
+
+			<div class="bxdocs-footer__social"><a class="social-link" href="https&#x3a;&#x2f;&#x2f;github.com&#x2f;ortus-boxlang&#x2f;bx-agents" target="_blank" rel="noopener noreferrer" aria-label="BX Agents on GitHub" title="BX Agents on GitHub"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.385-1.333-1.754-1.333-1.754-1.089-.744.083-.729.083-.729 1.205.084 1.84 1.237 1.84 1.237 1.07 1.834 2.807 1.304 3.492.997.108-.775.418-1.305.762-1.605-2.665-.303-5.467-1.332-5.467-5.93 0-1.31.468-2.38 1.235-3.22-.123-.303-.535-1.523.117-3.176 0 0 1.008-.322 3.301 1.23A11.5 11.5 0 0 1 12 5.803c1.02.005 2.045.138 3.003.404 2.29-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.873.118 3.176.77.84 1.235 1.91 1.235 3.22 0 4.61-2.807 5.625-5.48 5.92.43.372.823 1.102.823 2.222 0 1.606-.014 2.898-.014 3.293 0 .322.216.694.825.576C20.565 21.795 24 17.298 24 12c0-6.63-5.37-12-12-12"/></svg></a><a class="social-link" href="https&#x3a;&#x2f;&#x2f;www.ortussolutions.com&#x2f;community&#x2f;slack" target="_blank" rel="noopener noreferrer" aria-label="Slack Community" title="Slack Community"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52ZM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313ZM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834ZM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312ZM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834ZM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312ZM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52ZM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313Z"/></svg></a><a class="social-link" href="https&#x3a;&#x2f;&#x2f;x.com&#x2f;TryBoxLang" target="_blank" rel="noopener noreferrer" aria-label="X &#x28;Twitter&#x29;" title="X &#x28;Twitter&#x29;"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a></div>
+
+			<div class="bxdocs-footer__credit">Built with <a href="https://github.com/ortus-boxlang/bx-docs" target="_blank" rel="noopener noreferrer">BX Docs</a></div>
+		</div>
+	</footer>
+
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/highlight.min.js"></script>
+	<script src="/bx-agents/development/assets/highlight-boxlang.js"></script>
+	<script>hljs.highlightAll();</script>
+	<script src="/bx-agents/development/assets/code-lines.js"></script>
+	<script src="/bx-agents/development/assets/copy-code.js" defer></script>
+	<script src="/bx-agents/development/assets/admonition-collapse.js" defer></script>
+	<script src="/bx-agents/development/assets/nav-toggle.js" defer></script>
+	<script src="/bx-agents/development/assets/toc-collapse.js" defer></script>
+	<script src="/bx-agents/development/assets/tabs.js" defer></script>
+
+	<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+	<script src="/bx-agents/development/assets/mermaid-init.js"></script>
+
+	
+</body>
+</html>
+
