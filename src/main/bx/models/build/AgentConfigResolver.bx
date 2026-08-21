@@ -86,6 +86,15 @@ class {
 			// has silently broken HITL - see ColdBoxAppGenerator), so the build
 			// has to know whether the class already set one.
 			config[ "classHasCheckpointer" ] = classHasCheckpointer( agentDescriptor )
+			// The class's own name, read the same "declared convention wins,
+			// otherwise the class is in charge" way as everything else - a
+			// class-based Agent.bx with no configure() (the normal shape now
+			// that setting identity in init() is the whole point) still needs
+			// a real, class-carried name for WireBox binding-key uniqueness
+			// (see ColdBoxAppGenerator.resolveAgentName()) and ProjectValidator's
+			// duplicate-name check, rather than every such node silently
+			// colliding on a hardcoded "BxAi" default.
+			config[ "classAgentName" ] = agentDescriptor.getAgentName()
 		}
 
 		return config

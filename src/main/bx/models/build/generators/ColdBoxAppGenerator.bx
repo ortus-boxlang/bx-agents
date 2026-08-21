@@ -568,10 +568,22 @@ class {
 	 *
 	 * @resolvedConfig A single node's own resolved config
 	 *
-	 * @return resolvedConfig.name if set, else the default "BxAi"
+	 * @return resolvedConfig.name if declared via configure(), else the class's
+	 *         own name (resolvedConfig.classAgentName) for a class-based agent
+	 *         that set none, else the default "BxAi"
 	 */
 	string function resolveAgentName( required struct resolvedConfig ) {
-		return len( arguments.resolvedConfig.name ?: "" ) ? arguments.resolvedConfig.name : "BxAi"
+		if ( len( arguments.resolvedConfig.name ?: "" ) ) {
+			return arguments.resolvedConfig.name
+		}
+		// A class-based agent with no configure()-declared name override still
+		// carries a real name from its own super.init() - see AgentConfigResolver's
+		// classAgentName. Only falls through to the bare "BxAi" default for a
+		// descriptor Agent.bx (or a class-based one that never set a name at all).
+		if ( len( arguments.resolvedConfig.classAgentName ?: "" ) ) {
+			return arguments.resolvedConfig.classAgentName
+		}
+		return "BxAi"
 	}
 
 	/**
@@ -777,11 +789,23 @@ class {
 		string defaultMemory = "",
 		string appDir = ""
 	) {
-		var componentPath = copyAgentClass( arguments.nodePath, arguments.varName, arguments.appDir )
+		var classAbsolutePath = copyAgentClass( arguments.nodePath, arguments.varName, arguments.appDir )
 
 		var lines = []
 		lines.append( "// #arguments.varName#: a class-based Agent.bx - instantiated, not rebuilt." )
-		lines.append( 'var #arguments.varName# = new "#bxLiteral( componentPath )#"()' )
+		// Instantiated by its own ABSOLUTE path via DynamicClassLoader, exactly the
+		// same primitive `chat`/default `invoke` already use to load
+		// GeneratedAgentFactory.bx itself - never a relative dotted-path `new`.
+		// A relative `new "agent.classes.#varName#Class"()` only resolves under a
+		// real ColdBox boot (serve/invoke --server), which registers the app root
+		// as a mapping as an ordinary part of startup; `chat` and default `invoke`
+		// never boot ColdBox, and registering a mapping mid-script does not
+		// reliably make relative lookups resolve either (the same limitation
+		// already documented for TestRunnerLauncher's TestBox discovery - see
+		// docs/known-limitations.md). Loading by absolute path sidesteps mapping
+		// resolution entirely, so it works identically in both contexts.
+		lines.append( 'var #arguments.varName#Context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()' )
+		lines.append( 'var #arguments.varName# = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" ).instantiate( "#bxLiteral( classAbsolutePath )#", #arguments.varName#Context )' )
 
 		// --- identity: only what the project declared OUTSIDE the class ---
 		if ( len( arguments.resolvedConfig.name ?: "" ) ) {
@@ -856,7 +880,8 @@ class {
 	 * @varName This node's variable name in the generated factory
 	 * @appDir Absolute path to the generated app dir
 	 *
-	 * @return The dotted component path to instantiate, e.g. "agent.classes.agentClass"
+	 * @return The copied file's own absolute path, e.g. "/path/to/app/agent/classes/agentClass.bx" -
+	 *         instantiated by DynamicClassLoader off this absolute path, never a relative dotted lookup
 	 */
 	private string function copyAgentClass( required string nodePath, required string varName, required string appDir ) {
 		var source = arguments.nodePath & "/Agent.bx"
@@ -878,9 +903,10 @@ class {
 		directoryCreate( path = classesDir, createPath = true, ignoreExists = true )
 
 		var className = arguments.varName & "Class"
-		fileCopy( source, classesDir & "/" & className & ".bx" )
+		var destination = classesDir & "/" & className & ".bx"
+		fileCopy( source, destination )
 
-		return "agent.classes." & className
+		return destination
 	}
 
 	// --------------------------------------------------------------------------

@@ -1,11 +1,20 @@
-class {
+class extends="bxModules.bxai.models.runnables.AiAgent" {
 
+	function init() {
+		super.init(
+			name        : "multi-agent-team",
+			description : "A root agent delegating to a researcher and a writer subagent.",
+			model       : aiModel( provider: "mock", params: { model: "mock-model" } )
+		)
+		return this
+	}
+
+	// subAgents here is the list of `subagents/` FOLDER names to wire at
+	// build time - a build-time concern, distinct from super.init()'s own
+	// `subAgents` argument (which takes already-built AiAgent instances).
 	function configure() {
 		return {
-			name        : "multi-agent-team",
-			model       : "mock/mock-model",
-			description : "A root agent delegating to a researcher and a writer subagent.",
-			subAgents   : [ "researcher", "writer" ]
+			subAgents : [ "researcher", "writer" ]
 		};
 	}
 

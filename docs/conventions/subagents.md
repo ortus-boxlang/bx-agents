@@ -20,20 +20,30 @@ my-agent/
         └── instructions.md
 ```
 
-A subagent is wired to its parent by name, declared in the parent's `Agent.bx`:
+A subagent is wired to its parent by name, declared in the parent's `Agent.bx` `configure()` - the `subagents/` FOLDER name to wire at build time, distinct from `super.init()`'s own `subAgents` argument (which takes already-built `AiAgent` instances, not names):
 
 ```javascript
 // Agent.bx
-function configure() {
-	return {
-		name      : "my-agent",
-		model     : "openai/gpt-5",
-		subAgents : [ "researcher" ]
-	};
+class extends="bxModules.bxai.models.runnables.AiAgent" {
+
+	function init() {
+		super.init(
+			name  : "my-agent",
+			model : aiModel( provider: "openai", params: { model: "gpt-5" } )
+		)
+		return this
+	}
+
+	function configure() {
+		return {
+			subAgents : [ "researcher" ]
+		};
+	}
+
 }
 ```
 
-At build time, bx-ai's `aiAgent()` wraps each built subagent instance as a callable tool on the parent automatically - there's no separate tool-wrapping step to write yourself.
+At build time, bx-ai's `addSubAgent()` wraps each built subagent instance as a callable tool on the parent automatically - there's no separate tool-wrapping step to write yourself.
 
 ## Flat namespace, sibling references
 
