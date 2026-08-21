@@ -1,6 +1,6 @@
 ---
 title: gateways/
-icon: 🔌
+icon: phosphor-duotone:plugs-connected
 summary: "One folder, two unrelated jobs: exposing the agent, and connecting chat platforms to it."
 description: "One folder, two unrelated jobs: exposing the agent, and connecting chat platforms to it."
 tags: [conventions, gateways]

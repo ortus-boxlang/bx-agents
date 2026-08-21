@@ -1,6 +1,6 @@
 ---
 title: The Manifest
-icon: 📋
+icon: phosphor-duotone:clipboard-text
 summary: What every build records about exactly what went into the generated app.
 description: What every build records about exactly what went into the generated app.
 tags: [reference, build]

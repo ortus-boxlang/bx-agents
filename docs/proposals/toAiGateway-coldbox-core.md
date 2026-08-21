@@ -1,6 +1,6 @@
 ---
 title: toAiGateway() for ColdBox Core
-icon: 💡
+icon: phosphor-duotone:lightbulb
 summary: "Draft proposal: a gateway-shaped sibling to ColdBox's own toAi()."
 description: "Draft proposal: a gateway-shaped sibling to ColdBox's own toAi()."
 tags: [proposals]

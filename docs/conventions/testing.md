@@ -1,6 +1,6 @@
 ---
 title: tests/
-icon: 🧪
+icon: phosphor-duotone:test-tube
 summary: Every scaffolded project gets a ready-to-run TestBox suite.
 description: Every scaffolded project gets a ready-to-run TestBox suite.
 tags: [conventions, testing]
