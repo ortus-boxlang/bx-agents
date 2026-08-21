@@ -1,6 +1,6 @@
 ---
 title: schedules/
-icon: ⏰
+icon: phosphor-duotone:alarm
 summary: A real, hand-written ColdBox scheduler, passed through untouched.
 description: A real, hand-written ColdBox scheduler, passed through untouched.
 tags: [conventions, scheduling]

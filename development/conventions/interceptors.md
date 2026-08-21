@@ -1,6 +1,6 @@
 ---
 title: interceptors/
-icon: 🪝
+icon: phosphor-duotone:flow-arrow
 summary: ColdBox lifecycle interceptors, scoped by an @scope annotation.
 description: ColdBox lifecycle interceptors, scoped by an @scope annotation.
 tags: [conventions, interceptors]

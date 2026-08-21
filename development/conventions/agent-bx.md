@@ -1,6 +1,6 @@
 ---
 title: Agent.bx
-icon: ⚙️
+icon: phosphor-duotone:tree-structure
 summary: "The one required file, in either of two shapes: a descriptor that configures an agent, or a class that IS one."
 description: "The one required file, in either of two shapes: a descriptor that configures an agent, or a class that IS one."
 tags: [conventions, configuration]

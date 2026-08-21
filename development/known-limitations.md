@@ -1,6 +1,6 @@
 ---
 title: Known Limitations
-icon: ⚠️
+icon: phosphor-duotone:warning
 summary: The honest gaps - what is proven against a real running app and what is not.
 description: The honest gaps - what is proven against a real running app and what is not.
 tags: [reference, limitations]

@@ -1,6 +1,6 @@
 ---
 title: modules/
-icon: 🧱
+icon: phosphor-duotone:puzzle-piece
 summary: BoxLang module dependencies, one immediate subfolder per module.
 description: BoxLang module dependencies, one immediate subfolder per module.
 tags: [conventions, modules]
