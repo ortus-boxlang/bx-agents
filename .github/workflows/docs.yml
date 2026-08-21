@@ -3,28 +3,29 @@ name: Publish Docs
 # Builds docs/ with bx-docs (https://ortus-boxlang.github.io/bx-docs/) and
 # publishes it to GitHub Pages at https://ortus-boxlang.github.io/bx-agents/.
 #
-# LAYOUT - one version per folder, matching bx-docs' own site:
+# This follows bx-docs' own documented deployment approach - see
+# https://ortus-boxlang.github.io/bx-docs/development/guides/deployment/ and
+# the reference workflow it ships (.github/workflows/pages.yml): build the
+# site, then push site/ to a `gh-pages` branch with peaceiris/actions-gh-pages.
+#
+# LAYOUT - one version per folder:
 #   development -> /development/   (latest, what this repo develops against)
 #   main        -> /               (the released docs)
-# Until a `main` branch exists, the root serves a redirect into /development/
-# so the bare site URL is never a 404.
+# Because each branch deploys with `keep_files: true` into its OWN
+# destination_dir, the two never overwrite each other, and a push only has to
+# rebuild the branch it happened on. Until a `main` branch exists, development
+# also drops a redirect at the root so the bare site URL is never a 404.
 #
-# Because GitHub's Pages deployment replaces the WHOLE site on every deploy,
-# two branches cannot each own a sub-path by deploying separately - the second
-# deploy would wipe the first. So ONE job assembles both versions into a single
-# tree and deploys it once. That is why a push to either branch rebuilds both:
-# it is what keeps them consistent, not redundant work.
+# ONE-TIME SETUP, which no workflow file can do for itself: the repository's
+# Settings -> Pages -> Build and deployment -> Source must be
+# "Deploy from a branch" -> gh-pages -> / (root). The first successful run
+# below creates gh-pages, so set it after that run completes.
 #
-# This uses GitHub's own Pages deployment rather than pushing a gh-pages branch.
-#
-# ONE-TIME SETUP, and `enablement` below does NOT cover it: the repository's
-# Settings -> Pages -> Build and deployment -> Source must be set to
-# "GitHub Actions" (not "Deploy from a branch"). configure-pages' own source
-# (findOrCreatePagesSite) only calls createPagesSite - the call that sets
-# build_type: workflow - when NO Pages site exists yet. If a site already
-# exists on a branch source, it is returned as-is and its build_type is never
-# changed, so the deploy below has nothing to publish to. `enablement: true` is
-# still worth keeping: it covers a repository that has never had Pages at all.
+# Do NOT point that setting at `development` (or any source branch), and do
+# NOT add a root .nojekyll to "fix" a failing Jekyll build. A branch source
+# other than gh-pages makes GitHub run its built-in Jekyll pipeline over the
+# whole repository root - which is not a Jekyll site - and a .nojekyll would
+# only make that pipeline SUCCEED, publishing the raw repo over these docs.
 
 on:
   push:
@@ -39,93 +40,90 @@ on:
   # So a republish never needs an empty commit
   workflow_dispatch:
 
-# contents: read  - checkout
-# pages:    write - create the Pages site (enablement) and deploy to it
-# id-token: write - deploy-pages authenticates via OIDC, not a PAT
+# contents: write - actions-gh-pages commits the built site to gh-pages
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
-# "pages" is the conventional group name for this: a repository has exactly one
-# Pages site, so two concurrent deploys would race over the same target. Queue
-# rather than cancel, so a superseded build still finishes cleanly.
+# Each branch publishes to its own destination_dir, so main and development
+# deploys never conflict - only serialize a branch against its own prior runs.
 concurrency:
-  group: "pages"
+  group: "pages-${{ github.ref_name }}"
   cancel-in-progress: false
 
 jobs:
   build:
-    name: Build the site
+    name: Build & Publish (${{ github.ref_name }})
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v7
 
-      # Creates the Pages site if the repository has never had one. It does NOT
-      # convert an existing branch-source site to an Actions-source one - see
-      # the setup note at the top of this file.
-      - name: Configure GitHub Pages (creating the site if needed)
-        uses: actions/configure-pages@v5
-        with:
-          enablement: true
-
-      - name: Setup BoxLang + bx-docs's dependencies
+      - name: Setup BoxLang + bx-docs
         uses: ortus-boxlang/setup-boxlang@1.4.0
         with:
           with-commandbox: true
           # bx-docs renders through bx-markdown and encodes through bx-esapi;
           # both are hard dependencies of the module, not optional extras.
-          # bx-docs renders through bx-markdown and encodes through bx-esapi;
-          # both are hard dependencies of the module, not optional extras.
           modules: bx-docs,bx-markdown,bx-esapi
 
-      - name: Build development into /development/
+      - name: Point baseURL and repo.editUri at this branch's own sub-path
+        if: github.ref_name != 'main'
         run: |
-          # Each version is served from its own sub-path, so its baseURL and
-          # its "edit this page" links have to point at that sub-path and at
-          # its own branch. Patch a throwaway copy of the config for the build.
-          jq --arg url "https://ortus-boxlang.github.io/bx-agents/development/" \
-             --arg editUri "edit/development/docs/" \
+          # main's committed bxdocs.json already points baseURL/editUri at the
+          # site root and the main branch - every other branch publishes under
+          # /<branch-name>/ and edits against its own branch instead, so patch
+          # a throwaway copy of the config just for this build.
+          jq --arg url "https://ortus-boxlang.github.io/bx-agents/${{ github.ref_name }}/" \
+             --arg editUri "edit/${{ github.ref_name }}/docs/" \
              '.baseURL = $url | .repo.editUri = $editUri' bxdocs.json > bxdocs.patched.json
           mv bxdocs.patched.json bxdocs.json
 
-          boxlang module:bxdocs build
+      - name: Build the site
+        run: boxlang module:bxdocs build
 
-          # bxDocs always writes to site/; the sub-path layout is ours to make.
-          mkdir -p _site
-          mv site _site/development
-
-      - name: Build main into the root, or leave a redirect if there is no main
+      - name: Fail if the build produced nothing
         run: |
-          # A push to EITHER branch rebuilds both versions, because the deploy
-          # below replaces the whole site - see the note at the top of this file.
+          # bxDocs exits 0 having written an empty site if docs/ is empty or
+          # misconfigured. A published-but-blank docs site is worse than a
+          # failed build, so check for real output rather than trusting exit 0.
+          test -f site/index.html \
+            || { echo "::error::site/index.html missing - the docs build produced no site"; exit 1; }
+          echo "Built $(find site -name '*.html' | wc -l) HTML page(s)"
+
+      - name: Deploy main to the site root
+        if: github.ref_name == 'main'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
+          keep_files: true
+
+      - name: Deploy development to /development/
+        if: github.ref_name == 'development'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
+          destination_dir: development
+          keep_files: true
+
+      - name: Stage a root redirect while there is no main branch
+        id: redirect
+        if: github.ref_name == 'development'
+        run: |
+          # Once main exists it owns the root, and this step stops running -
+          # keep_files means the redirect it leaves behind is simply
+          # overwritten by main's own index.html on that branch's next deploy.
           if git ls-remote --exit-code --heads origin main >/dev/null 2>&1; then
-            git clone --depth 1 --branch main \
-              "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" "$RUNNER_TEMP/main-docs"
-
-            if [ -f "$RUNNER_TEMP/main-docs/bxdocs.json" ] && [ -d "$RUNNER_TEMP/main-docs/docs" ]; then
-              cd "$RUNNER_TEMP/main-docs"
-              jq --arg editUri "edit/main/docs/" \
-                 '.repo.editUri = $editUri' bxdocs.json > bxdocs.patched.json
-              mv bxdocs.patched.json bxdocs.json
-              boxlang module:bxdocs build
-              cp -R site/. "$GITHUB_WORKSPACE/_site/"
-              echo "Built main into the site root"
-              exit 0
-            fi
-
-            # main exists but predates the docs move - not an error, just
-            # nothing to publish there yet.
-            echo "main has no bxdocs.json/docs - falling back to the redirect"
-          else
-            echo "No main branch - falling back to the redirect"
+            echo "main exists - it owns the site root; no redirect needed"
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
-          # Keep the bare site URL useful rather than a 404. Both a meta refresh
-          # and a JS hop, so it works with scripting disabled; the visible link
-          # is the fallback if neither fires.
-          cat > "$GITHUB_WORKSPACE/_site/index.html" <<'HTML'
+          mkdir -p _root
+          # Both a meta refresh and a JS hop, so it works with scripting
+          # disabled; the visible link is the fallback if neither fires.
+          cat > _root/index.html <<'HTML'
           <!doctype html>
           <html lang="en">
           <head>
@@ -140,32 +138,12 @@ jobs:
           </body>
           </html>
           HTML
+          echo "needed=true" >> "$GITHUB_OUTPUT"
 
-      - name: Fail if the build produced nothing
-        run: |
-          # bxDocs exits 0 having written an empty site if docs/ is empty or
-          # misconfigured. A published-but-blank docs site is worse than a
-          # failed build, so check for real output rather than trusting exit 0.
-          test -f _site/development/index.html \
-            || { echo "::error::_site/development/index.html missing - the docs build produced no site"; exit 1; }
-          test -f _site/index.html \
-            || { echo "::error::_site/index.html missing - neither main nor the redirect wrote a root page"; exit 1; }
-          echo "Built $(find _site -name '*.html' | wc -l) HTML page(s)"
-          find _site -maxdepth 1 -mindepth 1 | sort
-
-      - name: Upload the site as a Pages artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Deploy the root redirect
+        if: github.ref_name == 'development' && steps.redirect.outputs.needed == 'true'
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          path: ./_site
-
-  deploy:
-    name: Deploy to GitHub Pages
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy
-        id: deployment
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./_root
+          keep_files: true
