@@ -1,6 +1,6 @@
 ---
 title: deploy/
-icon: phosphor-duotone:package
+icon: phosphor-duotone:cloud-arrow-up
 summary: "One entry per deployment target: local, ssh, ftp, docker, digitalocean."
 description: "One entry per deployment target: local, ssh, ftp, docker, digitalocean."
 tags: [conventions, deployment]
@@ -48,6 +48,24 @@ is shorthand for the `local` target. Every other target needs more configuration
 ## Targets
 
 Every target implements the same `IDeploymentTarget` interface (`struct function deploy( config, context )`) - the `target` field picks which one runs.
+
+::: cards
+::: card title="local" icon="phosphor-duotone:folder-simple" href="#local"
+Copy the newest `.bxa` to a destination directory. No `deploy/` folder needed.
+:::
+::: card title="ssh" icon="phosphor-duotone:terminal-window" href="#ssh"
+Ship over `scp`, optionally restart the remote service over `ssh`.
+:::
+::: card title="docker" icon="phosphor-duotone:cube" href="#docker"
+Build an image from `.build/app` and push it to a registry.
+:::
+::: card title="digitalocean" icon="phosphor-duotone:cloud-arrow-up" href="#digitalocean"
+Push-and-minimal-provision against the DigitalOcean App Platform API.
+:::
+::: card title="ftp / sftp" icon="phosphor-duotone:upload-simple" href="#ftp--sftp"
+Ship the newest `.bxa` to a remote directory over plain FTP or SFTP.
+:::
+:::
 
 ### `local`
 

@@ -1,6 +1,6 @@
 ---
 title: subagents/
-icon: phosphor-duotone:users-three
+icon: phosphor-duotone:tree-structure
 summary: Nested agents, each an ordinary BX Agents project of its own.
 description: Nested agents, each an ordinary BX Agents project of its own.
 tags: [conventions, subagents]

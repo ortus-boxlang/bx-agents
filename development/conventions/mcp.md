@@ -1,6 +1,6 @@
 ---
 title: mcp/
-icon: phosphor-duotone:stack
+icon: phosphor-duotone:link-simple
 summary: "Model Context Protocol in both directions: consume remote servers, host your own."
 description: "Model Context Protocol in both directions: consume remote servers, host your own."
 tags: [conventions, mcp]
@@ -36,15 +36,22 @@ Declared directly on `Agent.bx` (not a file under `mcp/`), via `mcpServers`:
 
 ```javascript
 // Agent.bx
-function configure() {
-	return {
-		name       : "my-agent",
-		model      : "openai/gpt-5",
-		mcpServers : [
-			"https://example.com/mcp",
-			{ url : "https://other.com/mcp", name : "other" }
-		]
-	};
+class extends="bxModules.bxai.models.runnables.AiAgent" {
+
+	function init() {
+		super.init( name: "my-agent", model: aiModel( provider: "openai", params: { model: "gpt-5" } ) )
+		return this
+	}
+
+	function configure() {
+		return {
+			mcpServers : [
+				"https://example.com/mcp",
+				{ url : "https://other.com/mcp", name : "other" }
+			]
+		};
+	}
+
 }
 ```
 

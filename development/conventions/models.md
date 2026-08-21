@@ -26,11 +26,20 @@ class {
 
 ```javascript
 // Agent.bx
-function configure() {
-	return {
-		name  : "my-agent",
-		model : "summarizer"   // resolves to models/summarizer.bx
-	};
+class extends="bxModules.bxai.models.runnables.AiAgent" {
+
+	function init() {
+		super.init( name: "my-agent", model: aiModel( provider: "openai", params: { model: "gpt-5-mini" } ) )
+		return this
+	}
+
+	// Overrides the class's own model above - resolves against models/summarizer.bx
+	function configure() {
+		return {
+			model : "summarizer"
+		};
+	}
+
 }
 ```
 

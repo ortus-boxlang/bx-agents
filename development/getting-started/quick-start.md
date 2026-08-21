@@ -1,6 +1,6 @@
 ---
 title: Quick Start
-icon: phosphor-duotone:lightning
+icon: phosphor-duotone:rocket-launch
 summary: "The full lifecycle of a project: scaffold, edit, build, run."
 description: "The full lifecycle of a project: scaffold, edit, build, run."
 tags: [getting-started]

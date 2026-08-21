@@ -1,6 +1,6 @@
 ---
 title: The Build Pipeline
-icon: phosphor-duotone:gear-six
+icon: phosphor-duotone:factory
 summary: The fixed phase sequence that turns a project into a ColdBox application.
 description: The fixed phase sequence that turns a project into a ColdBox application.
 tags: [reference, build]
