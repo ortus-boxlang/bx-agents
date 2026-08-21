@@ -41,5 +41,27 @@ and those take over - see [conventions/agent-bx.md](../../docs/conventions/agent
 
 ```bash
 bxAgents build
-bxAgents chat
+bxAgents serve
 ```
+
+Then, from another terminal, add a `gateways/expose.bx` (`{ exposes: "agent", path: "/api/chat" }`, see [gateways/](../../docs/conventions/gateways.md)) and rebuild, or use `bxAgents invoke --message="..." --server`.
+
+{% hint style="danger" %}
+`bxAgents chat` and the default (non-`--server`) `bxAgents invoke` currently
+**fail** for a class-based `Agent.bx` like this one, with `The requested
+class [agent.classes.agentClass] has not been located in any class
+resolver.` Both load the generated `GeneratedAgentFactory.bx` in-process via
+`DynamicClassLoader.instantiate()` (no ColdBox container, no registered
+mapping for the app root), and that factory's own `new
+"agent.classes.agentClass"()` call can't resolve without one - confirmed
+this isn't fixable by registering a mapping mid-script either (the same
+limitation already documented for `TestRunnerLauncher`'s TestBox discovery:
+a `Configuration.registerMapping()` call made mid-script does not reliably
+propagate to a class's own relative-path lookups within that same process).
+`bxAgents serve` / `invoke --server` boot a real ColdBox container instead,
+which registers this mapping as part of normal app startup, so those work
+correctly. Only class-based `Agent.bx` projects hit this - a descriptor-style
+`Agent.bx` (like [`minimal-agent`](../minimal-agent)) calls bx-ai's own
+`aiAgent()` BIF instead of a relative `new "dotted.path"()`, so it has no
+mapping to resolve in the first place.
+{% endhint %}

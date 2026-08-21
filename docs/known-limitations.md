@@ -94,6 +94,14 @@ One specific, confirmed gotcha even where `.env` loading does happen: **`BOXLANG
 
 `chat` uses BoxLang's own `MiniConsole`, which shells out to `stty` to set up raw terminal mode - it can only run against a genuine interactive terminal. It doesn't work piped, redirected, or from a non-interactive process (a CI job, a script). There's no non-interactive fallback mode.
 
+## `chat` and default (non-`--server`) `invoke` fail for a class-based `Agent.bx`
+
+Confirmed directly against `examples/class-based-agent/` (built, then run through both verbs): both `chat` and default `invoke` throw `The requested class [agent.classes.agentClass] has not been located in any class resolver.` before ever reaching the agent. Root cause: both verbs load the generated `GeneratedAgentFactory.bx` in-process via `DynamicClassLoader.instantiate()` (a raw `RunnableLoader` call against an absolute path, no ColdBox container involved) - fine for a **descriptor**-style `Agent.bx`, whose generated factory only calls bx-ai's own `aiAgent()` BIF, but not for a **class-based** `Agent.bx` (`Agent.bx extends="...AiAgent"`), whose factory instead does a relative dotted-path lookup, `new "agent.classes.agentClass"()`, to reach the user's own class - and nothing has registered a mapping making `.build/app` resolvable as that lookup's root.
+
+Registering one mid-script (`Configuration.registerMapping( "/", appDir )` right before `DynamicClassLoader.instantiate()`) does **not** fix it - confirmed empirically by hand-rolling the exact same sequence in a standalone `.bxs` script. This is the same class of limitation already documented above for `TestRunnerLauncher`'s TestBox discovery: a mapping registered via `Configuration.registerMapping()` mid-script does not reliably propagate to a class's own relative-path lookups made within that same process. `serve` and `invoke --server` are unaffected - a real ColdBox container registers this mapping as an ordinary part of app boot, so both work correctly against `examples/class-based-agent/` (confirmed).
+
+No automated test currently exercises `chat`/default `invoke` against a class-based `Agent.bx` - every existing CLI spec that touches these verbs uses a descriptor-style fixture, which is exactly why this passed CI. `examples/class-based-agent/README.md` has been updated to point at the working `serve`/`invoke --server` path instead of the broken `chat` command it originally suggested.
+
 ## No box.json `executable` install smoke test
 
 `box.json` declares `"boxlang": { "executable": "bxAgents" }` so a real module install produces a native `bxAgents` command (see [Installation](getting-started/installation.md)). This wiring itself isn't exercised by an automated test - it relies on the BoxLang module installer's own documented behavior for generating executable wrappers, verified by reading its source, not by an install-and-run test in this repo's own CI.
