@@ -394,6 +394,31 @@ a:hover {
 	position: relative;
 }
 
+/* Bootstrap's own reboot zeroes every heading's top margin and leaves only
+   `.5rem` below (`h1,h2,h3,h4,h5,h6{margin-top:0;margin-bottom:.5rem}`) -
+   fine for UI chrome, far too tight for long-form article content where a
+   heading needs real separation from the prose above it. Only h2+ - the
+   page's own h1 is `.page-title`, styled (and spaced) separately above, and
+   always the article's own first child (breadcrumbs/summary/tags are all
+   optional, `.page-title` never is), so there's no "first heading in the
+   article" case to zero back out here. */
+.page-content h2 {
+	margin-top: 2.5rem;
+	margin-bottom: 1rem;
+}
+
+.page-content h3 {
+	margin-top: 2rem;
+	margin-bottom: 0.75rem;
+}
+
+.page-content h4,
+.page-content h5,
+.page-content h6 {
+	margin-top: 1.5rem;
+	margin-bottom: 0.5rem;
+}
+
 .page-content .anchor {
 	position: absolute;
 	left: -1.2em;
@@ -736,6 +761,7 @@ dd {
 
 .bxdocs-pre {
 	position: relative;
+	margin: 2rem 0;
 }
 
 .bxdocs-copy-btn {
@@ -989,7 +1015,7 @@ code:not( pre code ) {
 	background: rgba( 255, 255, 255, 0.04 );
 }
 
-/* Code fence annotations: hl_lines / linenums / title (see CodeAnnotationProcessor.bx) */
+/* Code fence annotations: hl_lines / linenums / title / frame / insert / delete (see CodeAnnotationProcessor.bx) */
 .bxdocs-code-title {
 	background: rgba( 0, 0, 0, 0.06 );
 	border: 1px solid rgba( 0, 0, 0, 0.12 );
@@ -999,7 +1025,37 @@ code:not( pre code ) {
 	font-size: 0.8rem;
 	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 	font-weight: 600;
+	margin-top: 2rem;
 }
+
+/* frame="terminal" - macOS-style traffic-light chrome, title centered
+   instead of the plain bar's left-aligned text. */
+.bxdocs-code-title.bxdocs-frame-terminal {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	position: relative;
+}
+
+.bxdocs-frame-dots {
+	position: absolute;
+	left: 0.9rem;
+	top: 50%;
+	transform: translateY( -50% );
+	display: flex;
+	gap: 0.4rem;
+}
+
+.bxdocs-frame-dots span {
+	display: block;
+	width: 0.62rem;
+	height: 0.62rem;
+	border-radius: 50%;
+}
+
+.bxdocs-frame-dots span:nth-child( 1 ) { background: #ff5f56; }
+.bxdocs-frame-dots span:nth-child( 2 ) { background: #ffbd2e; }
+.bxdocs-frame-dots span:nth-child( 3 ) { background: #27c93f; }
 
 .bxdocs-code-title + pre {
 	border-radius: 0 0 0.75rem 0.75rem;
@@ -1031,6 +1087,52 @@ code:not( pre code ) {
 	background: rgba( 255, 213, 0, 0.18 );
 }
 
+/* insert="…" / delete="…" - a tinted row plus a gutter marker, independent
+   of the line-number gutter (data-line::before above) so both can be on at
+   once; the marker shifts right to clear the number column when they are. */
+.bxdocs-insert-line,
+.bxdocs-delete-line {
+	display: block;
+	position: relative;
+	padding-left: 1.6rem;
+}
+
+.bxdocs-code--numbered .bxdocs-insert-line,
+.bxdocs-code--numbered .bxdocs-delete-line {
+	padding-left: 0;
+}
+
+.bxdocs-insert-line {
+	background: rgba( 22, 163, 74, 0.16 );
+}
+
+.bxdocs-delete-line {
+	background: rgba( 220, 38, 38, 0.12 );
+}
+
+.bxdocs-insert-line::after,
+.bxdocs-delete-line::after {
+	position: absolute;
+	left: 0.35rem;
+	font-weight: 700;
+	user-select: none;
+}
+
+.bxdocs-code--numbered .bxdocs-insert-line::after,
+.bxdocs-code--numbered .bxdocs-delete-line::after {
+	left: 1.7rem;
+}
+
+.bxdocs-insert-line::after {
+	content: "+";
+	color: #16a34a;
+}
+
+.bxdocs-delete-line::after {
+	content: "\2013";
+	color: #dc2626;
+}
+
 [data-theme="dark"] .bxdocs-code-title {
 	background: rgba( 255, 255, 255, 0.06 );
 	border-color: rgba( 255, 255, 255, 0.15 );
@@ -1038,6 +1140,31 @@ code:not( pre code ) {
 
 [data-theme="dark"] .bxdocs-hl-line {
 	background: rgba( 255, 213, 0, 0.12 );
+}
+
+[data-theme="dark"] .bxdocs-insert-line {
+	background: rgba( 22, 163, 74, 0.22 );
+}
+
+[data-theme="dark"] .bxdocs-delete-line {
+	background: rgba( 220, 38, 38, 0.18 );
+}
+
+/* A real ```diff fence isn't bx-docs' own markup - highlight.js's vendored
+   `diff` grammar recognizes unified-diff syntax on its own and emits
+   .hljs-addition/.hljs-deletion, styled by the vendored github.min.css
+   (loaded before this stylesheet, so this wins). That stylesheet only ever
+   defines GitHub's *light*-mode pastel pair for both classes, with no dark
+   counterpart - reusing the exact insert/delete tokens above instead of a
+   third, unrelated diff palette. */
+[data-theme="dark"] .hljs-addition {
+	background-color: rgba( 22, 163, 74, 0.22 );
+	color: #4ade9c;
+}
+
+[data-theme="dark"] .hljs-deletion {
+	background-color: rgba( 220, 38, 38, 0.18 );
+	color: #f87171;
 }
 
 /* GitBook-style ::: directive blocks (see DirectiveBlockProcessor.bx) */
@@ -1368,6 +1495,64 @@ a.bxdocs-card:hover {
 	margin-top: 0.15rem;
 }
 
+.bxdocs-link-preview {
+	display: flex;
+	align-items: stretch;
+	border: 1px solid rgba( 0, 0, 0, 0.12 );
+	border-radius: 14px;
+	overflow: hidden;
+	margin: 1rem 0;
+	color: inherit;
+	text-decoration: none;
+	transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.bxdocs-link-preview:hover {
+	border-color: var( --bxdocs-link );
+	box-shadow: 0 2px 10px rgba( 0, 0, 0, 0.08 );
+}
+
+.bxdocs-link-preview__image {
+	flex-shrink: 0;
+	width: 33%;
+	max-width: 220px;
+}
+
+.bxdocs-link-preview__image img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.bxdocs-link-preview__text {
+	padding: 0.9rem 1.1rem;
+	min-width: 0;
+}
+
+.bxdocs-link-preview__title {
+	font-weight: 600;
+}
+
+.bxdocs-link-preview__description {
+	font-size: 0.85rem;
+	opacity: 0.75;
+	margin-top: 0.25rem;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+}
+
+.bxdocs-link-preview__domain {
+	font-size: 0.75rem;
+	opacity: 0.6;
+	margin-top: 0.5rem;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+
 .bxdocs-updates {
 	margin: 1.5rem 0;
 }
@@ -1406,6 +1591,7 @@ a.bxdocs-card:hover {
 [data-theme="dark"] .bxdocs-card,
 [data-theme="dark"] .bxdocs-file,
 [data-theme="dark"] .bxdocs-page-link,
+[data-theme="dark"] .bxdocs-link-preview,
 [data-theme="dark"] .bxdocs-update {
 	border-color: rgba( 255, 255, 255, 0.15 );
 }
@@ -1475,4 +1661,85 @@ a.bxdocs-card:hover {
 	height: 100%;
 	object-fit: cover;
 	border-radius: 10px;
+}
+
+/* Blog: draft preview badge (bxDocs serve only - see BuildPipeline.bx's
+   own includeDrafts), a "Browse by year"/"Browse by category" simple link
+   list on the main /blog/ list page, and the /blog/stats/ page's cards
+   (which reuse .bxdocs-cards/.bxdocs-card above - the ::: cards directive
+   block's own component - rather than a separate stats-card component). */
+.blog-draft-badge {
+	display: inline-block;
+	margin: 0 0 1rem;
+	padding: 0.35rem 0.85rem;
+	border-radius: 999px;
+	background: var( --bxdocs-step-warning-bg );
+	color: var( --bxdocs-step-warning-text );
+	font-size: 0.85rem;
+	font-weight: 600;
+}
+
+.blog-post-card--draft {
+	border: 1px dashed var( --bxdocs-step-warning-bg );
+	border-radius: 10px;
+	padding: 1rem;
+}
+
+.blog-archive-links,
+.blog-category-links {
+	margin: 2rem 0;
+}
+
+.blog-archive-links h2,
+.blog-category-links h2 {
+	margin-bottom: 0.5rem;
+}
+
+.blog-archive-links ul,
+.blog-category-links ul {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem 1.25rem;
+}
+
+.blog-author-posts {
+	margin: 1rem 0 2rem;
+}
+
+.blog-author-search {
+	width: 100%;
+	max-width: 320px;
+	margin-bottom: 1rem;
+	padding: 0.4rem 0.75rem;
+	border: 1px solid var( --bxdocs-border );
+	border-radius: 6px;
+	background: var( --bxdocs-bg );
+	color: inherit;
+	font-size: 0.9rem;
+}
+
+.blog-author-posts-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+}
+
+.blog-author-posts-list li {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0.5rem;
+	padding: 0.5rem 0;
+	border-bottom: 1px solid var( --bxdocs-border );
+}
+
+.blog-author-posts-list .blog-post-meta {
+	color: var( --bxdocs-muted );
+	font-size: 0.85rem;
 }
