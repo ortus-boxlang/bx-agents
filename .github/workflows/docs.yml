@@ -1,10 +1,10 @@
 name: Publish Docs
 
-# Builds docs/ with bx-docs (https://ortus-boxlang.github.io/bx-docs/) and
+# Builds docs/ with bx-sites (https://ortus-boxlang.github.io/bx-sites/) and
 # publishes it to GitHub Pages at https://ortus-boxlang.github.io/bx-agents/.
 #
-# This follows bx-docs' own documented deployment approach - see
-# https://ortus-boxlang.github.io/bx-docs/development/guides/deployment/ and
+# This follows bx-sites' own documented deployment approach - see
+# https://ortus-boxlang.github.io/bx-sites/development/guides/deployment/ and
 # the reference workflow it ships (.github/workflows/pages.yml): build the
 # site, then push site/ to a `gh-pages` branch with peaceiris/actions-gh-pages.
 #
@@ -34,7 +34,7 @@ on:
       - development
     paths:
       - "docs/**"
-      - "bxdocs.json"
+      - "bxsites.yaml"
       - ".github/workflows/docs.yml"
 
   # So a republish never needs an empty commit
@@ -58,32 +58,38 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v7
 
-      - name: Setup BoxLang + bx-docs
+      - name: Setup BoxLang + bx-sites
         uses: ortus-boxlang/setup-boxlang@1.4.0
         with:
           with-commandbox: true
-          # bx-docs renders through bx-markdown and encodes through bx-esapi;
-          # both are hard dependencies of the module, not optional extras.
-          modules: bx-docs,bx-markdown,bx-esapi
+          # bx-sites renders through bx-markdown, encodes through bx-esapi,
+          # reads bxsites.yaml through bx-yaml, and resizes images through
+          # bx-image - all four are hard dependencies of the module, not
+          # optional extras.
+          modules: bx-sites,bx-markdown,bx-esapi,bx-yaml,bx-image
+
+      - name: Install yq
+        run: |
+          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq
+          sudo chmod +x /usr/bin/yq
 
       - name: Point baseURL and repo.editUri at this branch's own sub-path
         if: github.ref_name != 'main'
         run: |
-          # main's committed bxdocs.json already points baseURL/editUri at the
-          # site root and the main branch - every other branch publishes under
-          # /<branch-name>/ and edits against its own branch instead, so patch
-          # a throwaway copy of the config just for this build.
-          jq --arg url "https://ortus-boxlang.github.io/bx-agents/${{ github.ref_name }}/" \
-             --arg editUri "edit/${{ github.ref_name }}/docs/" \
-             '.baseURL = $url | .repo.editUri = $editUri' bxdocs.json > bxdocs.patched.json
-          mv bxdocs.patched.json bxdocs.json
+          # main's committed bxsites.yaml already points baseURL/editUri at
+          # the site root and the main branch - every other branch publishes
+          # under /<branch-name>/ and edits against its own branch instead,
+          # so patch this job's own checkout of the config just for this build.
+          export URL="https://ortus-boxlang.github.io/bx-agents/${{ github.ref_name }}/"
+          export EDIT_URI="edit/${{ github.ref_name }}/docs/"
+          yq eval -i '.baseURL = strenv(URL) | .repo.editUri = strenv(EDIT_URI)' bxsites.yaml
 
       - name: Build the site
-        run: boxlang module:bxdocs build
+        run: boxlang bxSites build
 
       - name: Fail if the build produced nothing
         run: |
-          # bxDocs exits 0 having written an empty site if docs/ is empty or
+          # bxSites exits 0 having written an empty site if docs/ is empty or
           # misconfigured. A published-but-blank docs site is worse than a
           # failed build, so check for real output rather than trusting exit 0.
           test -f site/index.html \
