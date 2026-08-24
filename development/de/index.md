@@ -8,11 +8,11 @@ tags: [overview]
 toc: false
 ---
 
-<div class="bxdocs-hero">
-	<img class="bxdocs-hero__banner" src="assets/home-banner.jpg" alt="BX Agents - Build. Constrain. Orchestrate. A conventions-based agent framework for BoxLang. Conventions first: convention over configuration for faster development. Pluggable and extensible: swap models, tools, memory and more with ease. Powerful agents: create agents that reason, act, and collaborate effectively. Production ready: built for performance, reliability, and real-world applications. The agent framework native to BoxLang.">
-	<div class="bxdocs-hero__actions">
-		<a class="bxdocs-hero__btn bxdocs-hero__btn--primary" href="getting-started/installation.md">Loslegen</a>
-		<a class="bxdocs-hero__btn bxdocs-hero__btn--secondary" href="https://github.com/ortus-boxlang/bx-agents">Auf GitHub ansehen</a>
+<div class="bxsites-hero">
+	<img class="bxsites-hero__banner" src="assets/home-banner.jpg" alt="BX Agents - Build. Constrain. Orchestrate. A conventions-based agent framework for BoxLang. Conventions first: convention over configuration for faster development. Pluggable and extensible: swap models, tools, memory and more with ease. Powerful agents: create agents that reason, act, and collaborate effectively. Production ready: built for performance, reliability, and real-world applications. The agent framework native to BoxLang.">
+	<div class="bxsites-hero__actions">
+		<a class="bxsites-hero__btn bxsites-hero__btn--primary" href="getting-started/installation.md">Loslegen</a>
+		<a class="bxsites-hero__btn bxsites-hero__btn--secondary" href="https://github.com/ortus-boxlang/bx-agents">Auf GitHub ansehen</a>
 	</div>
 </div>
 
