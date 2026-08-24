@@ -33,7 +33,7 @@ bxAgents chat       # or: bxAgents serve --port=8080
 
 ## Documentation & Examples
 
-- **[docs/](docs/index.md)** - installation, quick start, one page per convention folder, the build pipeline, the manifest schema, the full CLI reference, deployment/secrets, and known limitations. Built and published with [bx-docs](https://ortus-boxlang.github.io/bx-docs/); see [Working on the docs](#working-on-the-docs).
+- **[docs/](docs/index.md)** - installation, quick start, one page per convention folder, the build pipeline, the manifest schema, the full CLI reference, deployment/secrets, and known limitations. Built and published with [bx-sites](https://ortus-boxlang.github.io/bx-sites/); see [Working on the docs](#working-on-the-docs).
 - **[examples/](examples/README.md)** - real, buildable sample projects: six core-convention examples (a minimal agent, an HTTP-exposed agent, a scheduled agent, an MCP agent, a multi-agent team, and the web chat UI) plus one per push-style chat-platform gateway (Telegram, Slack, Discord, Email, WhatsApp Cloud, Teams, Twilio, GitHub, Signal), each demonstrating one convention folder end-to-end.
 
 ## Why build-time assembly?
@@ -106,21 +106,27 @@ Contact `#infrastructure` for these credentials if needed.
 
 ### Working on the docs
 
-`docs/` is a [bx-docs](https://ortus-boxlang.github.io/bx-docs/) site - plain Markdown, where the folder structure *is* the navigation and `docs/nav.json` overrides the order. `bxdocs.json` at the repo root holds the site config.
+`docs/` is a [bx-sites](https://ortus-boxlang.github.io/bx-sites/) site - plain Markdown, where the folder structure *is* the navigation and `docs/nav.json` overrides the order. `bxsites.yaml` at the repo root holds the site config.
 
 ```bash
-# once - bx-docs renders through bx-markdown and encodes through bx-esapi
-install-bx-module bx-docs bx-markdown bx-esapi
+# once - bx-sites depends on bx-markdown, bx-esapi, bx-yaml and bx-image;
+# all four install automatically as box.json dependencies
+install-bx-module bx-sites
 
-bxDocs serve     # live-reloading preview on http://127.0.0.1:8080
-bxDocs build     # render docs/ to site/ (gitignored)
+bxSites serve     # live-reloading preview on http://127.0.0.1:8080 - saves rebuild in ~1-2s, not a full site rebuild
+bxSites build     # render docs/ to site/ (gitignored)
+bxSites doctor    # environment/config health check
+bxSites check     # CI-grade broken-link/missing-alt gate over an already-built site/
+bxSites lint      # pre-build content checks on the raw docs/ Markdown
 ```
 
-Every page starts with a small frontmatter block (`title`, `icon`, `summary`, `description`, `tags`); `summary` renders under the page title, `description` is meta-only, and `tags` become clickable badges plus a site-wide `/tags/` index.
+Every page starts with a small frontmatter block (`title`, `icon`, `summary`, `description`, `tags`); `summary` renders under the page title, `description` is meta-only, and `tags` become clickable badges plus a site-wide `/tags/` index. Scaffold a new one with `bxSites page:new --path=guides/setup.md`, or move one (rewriting every relative Markdown link that pointed at it) with `bxSites page:rename --from=... --to=...`.
+
+The Spanish/German/Japanese translations under `docs/i18n/` cover page content; the surrounding theme chrome (search placeholder, "On this page," "Edit this page," the 404 page, ...) is translated automatically too - bx-sites ships built-in `es`/`de`/`ja` chrome translations out of the box, so nothing extra needs configuring for those three locales.
 
 Pushes to `development` publish to [`/development/`](https://ortus-boxlang.github.io/bx-agents/development/) and pushes to `main` publish to the site root, via `.github/workflows/docs.yml` - one folder per version, and both stay live at once. There is no `main` branch yet, so the root currently redirects into `/development/`.
 
-This follows [bx-docs' own documented deployment approach](https://ortus-boxlang.github.io/bx-docs/development/guides/deployment/): the workflow builds `site/` and pushes it to a **`gh-pages`** branch, each branch into its own `destination_dir` with `keep_files: true`, so the two versions never overwrite each other and a push only rebuilds the branch it happened on.
+This follows [bx-sites' own documented deployment approach](https://ortus-boxlang.github.io/bx-sites/development/guides/deployment/): the workflow builds `site/` and pushes it to a **`gh-pages`** branch, each branch into its own `destination_dir` with `keep_files: true`, so the two versions never overwrite each other and a push only rebuilds the branch it happened on.
 
 The repository's **Settings -> Pages -> Build and deployment -> Source** must be **Deploy from a branch** -> **`gh-pages`** -> **`/ (root)`**. The first successful run creates `gh-pages`, so set it after that run completes; no workflow file can set it for itself.
 
