@@ -33,7 +33,7 @@ bxAgents chat       # or: bxAgents serve --port=8080
 
 ## Documentation & Examples
 
-- **[docs/](docs/index.md)** - installation, quick start, one page per convention folder, the build pipeline, the manifest schema, the full CLI reference, deployment/secrets, and known limitations. Built and published with [bx-sites](https://ortus-boxlang.github.io/bx-sites/); see [Working on the docs](#working-on-the-docs).
+- **[docs/](docs/index.md)** - installation, quick start, one page per convention folder, the build pipeline, the manifest schema, the full CLI reference, deployment/secrets, and known limitations. Built and published with [bx-sites](https://ortus-boxlang.github.io/bx-sites/development/) *(there's no `main` branch published yet, so the docs currently only live under `/development/`)*; see [Working on the docs](#working-on-the-docs).
 - **[examples/](examples/README.md)** - real, buildable sample projects: six core-convention examples (a minimal agent, an HTTP-exposed agent, a scheduled agent, an MCP agent, a multi-agent team, and the web chat UI) plus one per push-style chat-platform gateway (Telegram, Slack, Discord, Email, WhatsApp Cloud, Teams, Twilio, GitHub, Signal), each demonstrating one convention folder end-to-end.
 
 ## Why build-time assembly?
@@ -106,7 +106,7 @@ Contact `#infrastructure` for these credentials if needed.
 
 ### Working on the docs
 
-`docs/` is a [bx-sites](https://ortus-boxlang.github.io/bx-sites/) site - plain Markdown, where the folder structure *is* the navigation and `docs/nav.json` overrides the order. `bxsites.yaml` at the repo root holds the site config.
+`docs/` is a [bx-sites](https://ortus-boxlang.github.io/bx-sites/development/) site - plain Markdown, where the folder structure *is* the navigation and `docs/nav.json` overrides the order. `bxsites.yaml` at the repo root holds the site config.
 
 ```bash
 # once - bx-sites depends on bx-markdown, bx-esapi, bx-yaml and bx-image;
