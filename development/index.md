@@ -2,8 +2,8 @@
 title: BxAgents
 order: 1
 icon: phosphor-duotone:robot
-summary: Describe an agent in folders and files; build it into a real ColdBox application.
-description: Describe an agent in folders and files; build it into a real ColdBox application.
+summary: Build AI agents by convention — a conventions-based framework for AI agents powered by BoxLang AI.
+description: Build AI agents by convention — a conventions-based framework for AI agents powered by BoxLang AI.
 tags: [overview]
 toc: false
 ---
