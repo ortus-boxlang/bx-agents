@@ -1,30 +1,30 @@
 ---
 title: インストール
 icon: phosphor-duotone:package
-summary: BX Agents を実行するマシンに必要な 3 つのもの。
-description: BX Agents を実行するマシンに必要な 3 つのもの。
+summary: BxAgents を実行するマシンに必要な 3 つのもの。
+description: BxAgents を実行するマシンに必要な 3 つのもの。
 tags: [getting-started, setup]
 ---
 
 # インストール
 
-BX Agents は BoxLang のモジュールです。これを実行するマシンには、次の 3 つが必要です。
+BxAgents は BoxLang のモジュールです。これを実行するマシンには、次の 3 つが必要です。
 
 1. [BoxLang](https://boxlang.io) ランタイム。
-2. `bx-ai` BoxLang モジュール (BX Agents はこれを呼び出すコードを生成しますが、これ自体をバンドルしているわけではありません)。
-3. BX Agents 自体。
+2. `bx-ai` BoxLang モジュール (BxAgents はこれを呼び出すコードを生成しますが、これ自体をバンドルしているわけではありません)。
+3. BxAgents 自体。
 
 !!! info
     `serve` はさらに、独立した [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver) バイナリが `PATH` 上にある必要があります。`build`、`chat`、`package`、`inspect`、`clean`、`new` にはこれは不要です。
 
 !!! info
-    `deploy` の `ftp`/`sftp` ターゲットには、`bx-ai`/BX Agents と並んで [`bx-ftp`](https://github.com/ortus-boxlang/bx-ftp) BoxLang モジュールがインストールされている必要があります (`install-bx-module bx-ftp`) - これはこのモジュールが `bx-ai` に対して持つのと同じ関係性の、バンドルされていない正真正銘のランタイム依存です。他の動詞やデプロイターゲットではこれは不要です。
+    `deploy` の `ftp`/`sftp` ターゲットには、`bx-ai`/BxAgents と並んで [`bx-ftp`](https://github.com/ortus-boxlang/bx-ftp) BoxLang モジュールがインストールされている必要があります (`install-bx-module bx-ftp`) - これはこのモジュールが `bx-ai` に対して持つのと同じ関係性の、バンドルされていない正真正銘のランタイム依存です。他の動詞やデプロイターゲットではこれは不要です。
 
 ::: stepper
 ::: step "BoxLang をインストールする"
-[公式の BoxLang インストールガイド](https://boxlang.ortusbooks.com/getting-started/installation) に従ってください。クイックインストーラーは `~/.boxlang/bin` を `PATH` にも設定します。これは、モジュールが提供する実行ファイル (下記の BX Agents 自身の `bxAgents` コマンドなど) が置かれる場所です。
+[公式の BoxLang インストールガイド](https://boxlang.ortusbooks.com/getting-started/installation) に従ってください。クイックインストーラーは `~/.boxlang/bin` を `PATH` にも設定します。これは、モジュールが提供する実行ファイル (下記の BxAgents 自身の `bxAgents` コマンドなど) が置かれる場所です。
 :::
-::: step "bx-ai と BX Agents をインストールする"
+::: step "bx-ai と BxAgents をインストールする"
 ```bash
 install-bx-module bx-ai
 install-bx-module bx-agents
@@ -44,7 +44,7 @@ bxAgents --help
 
 ## `bxAgents` コマンド
 
-BX Agents は自身の `box.json` の中でネイティブな実行ファイルを宣言しています。
+BxAgents は自身の `box.json` の中でネイティブな実行ファイルを宣言しています。
 
 ```json
 "boxlang": { "moduleName": "bxagents", "executable": "bxAgents" }

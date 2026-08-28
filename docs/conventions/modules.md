@@ -27,7 +27,7 @@ A module folder may include a `module.json` with a `dependsOn` array naming othe
 }
 ```
 
-This is BX Agents' own dependency-declaration convention for validation purposes - it is independent of BoxLang's own module-loading mechanism.
+This is BxAgents' own dependency-declaration convention for validation purposes - it is independent of BoxLang's own module-loading mechanism.
 
 ## Validation
 

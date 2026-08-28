@@ -42,4 +42,4 @@ moduleSettings = {
 ```
 
 !!! info
-    bx-ais eigenes Standard-`skillsDirectory` ist `/.agents/skills` - ein anderer Pfad als BX Agents' `skills/`-Konvention. Der Generator überschreibt ihn immer explizit, damit der eigene `skills/`-Ordner des Projekts derjenige ist, aus dem bx-ai tatsächlich lädt; das muss nie selbst gesetzt werden.
+    bx-ais eigenes Standard-`skillsDirectory` ist `/.agents/skills` - ein anderer Pfad als BxAgents' `skills/`-Konvention. Der Generator überschreibt ihn immer explizit, damit der eigene `skills/`-Ordner des Projekts derjenige ist, aus dem bx-ai tatsächlich lädt; das muss nie selbst gesetzt werden.

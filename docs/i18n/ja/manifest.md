@@ -8,7 +8,7 @@ tags: [reference, build]
 
 # マニフェスト
 
-すべての `build` は `.build/manifest.json` を書き込みます - これは、生成されたアプリに実際に何が組み込まれたかについての、BX Agents 自身の記録です。`bxAgents inspect` は再ビルドせずにこれを整形して表示します。`bxAgents package` は**機密情報を除去した**バージョンを `.bxa` と一緒にコピーします ([デプロイとシークレット](deployment-and-secrets.md) 参照)。
+すべての `build` は `.build/manifest.json` を書き込みます - これは、生成されたアプリに実際に何が組み込まれたかについての、BxAgents 自身の記録です。`bxAgents inspect` は再ビルドせずにこれを整形して表示します。`bxAgents package` は**機密情報を除去した**バージョンを `.bxa` と一緒にコピーします ([デプロイとシークレット](deployment-and-secrets.md) 参照)。
 
 ## スキーマ
 
@@ -31,7 +31,7 @@ tags: [reference, build]
 | フィールド | 意味 |
 |---|---|
 | `manifestVersion` | マニフェストスキーマ自体の Semver スタンプ (現在は `1.0.0`) - これが未設定または不正な形式の場合、`package` は実行を拒否します。 |
-| `generator.name` / `generator.version` | 常に `"bx-agents"` / このビルドを生成した BX Agents モジュールのバージョンです。 |
+| `generator.name` / `generator.version` | 常に `"bx-agents"` / このビルドを生成した BxAgents モジュールのバージョンです。 |
 | `agent` | 安全で構造的なフィールド (`name`、`description`、`model`、`environment`) のみです - シークレットは**決して**含まれません。シークレットはそもそもマニフェストに読み込まれることがなく、実行時に bx-ai 自身によってライブに解決されます。 |
 | `files` | 発見されたコンベンションフォルダ内の項目ごとに 1 エントリで、決定的な順序のために category、続いて path でソートされています - ファイルシステムの列挙順序には依存しません。 |
 

@@ -1,5 +1,5 @@
 ---
-title: BX Agents
+title: BxAgents
 order: 1
 icon: phosphor-duotone:robot
 summary: フォルダとファイルでエージェントを記述し、実際に動く ColdBox アプリケーションへとビルドします。
@@ -9,14 +9,14 @@ toc: false
 ---
 
 <div class="bxsites-hero">
-	<img class="bxsites-hero__banner" src="assets/home-banner.jpg" alt="BX Agents - Build. Constrain. Orchestrate. A conventions-based agent framework for BoxLang. Conventions first: convention over configuration for faster development. Pluggable and extensible: swap models, tools, memory and more with ease. Powerful agents: create agents that reason, act, and collaborate effectively. Production ready: built for performance, reliability, and real-world applications. The agent framework native to BoxLang.">
+	<img class="bxsites-hero__banner" src="assets/home-banner.jpg" alt="BxAgents - Build. Constrain. Orchestrate. A conventions-based agent framework for BoxLang. Conventions first: convention over configuration for faster development. Pluggable and extensible: swap models, tools, memory and more with ease. Powerful agents: create agents that reason, act, and collaborate effectively. Production ready: built for performance, reliability, and real-world applications. The agent framework native to BoxLang.">
 	<div class="bxsites-hero__actions">
 		<a class="bxsites-hero__btn bxsites-hero__btn--primary" href="getting-started/installation.md">Get Started</a>
 		<a class="bxsites-hero__btn bxsites-hero__btn--secondary" href="https://github.com/ortus-boxlang/bx-agents">View on GitHub</a>
 	</div>
 </div>
 
-**BX Agents** は [BoxLang](https://boxlang.io) 向けの、コンベンションベースの AI エージェントフレームワークです。
+**BxAgents** は [BoxLang](https://boxlang.io) 向けの、コンベンションベースの AI エージェントフレームワークです。
 [ColdBox](https://coldbox.ortusbooks.com) と
 [BX AI](https://boxlang.ortusbooks.com/boxlang-+-++/modules/bx-ai) の上に構築されています。エージェントは
 フレームワークの API を直接扱うのではなく、ファイルとフォルダで記述します。すると `bxAgents build` がそこから
@@ -125,7 +125,7 @@ your-agent/
 
 ::: expandable "なぜリクエスト時ではなくビルド時に組み立てるのか?"
 多くのエージェントフレームワークは、起動のたびに、**リクエスト時に**ツール・スキル・ルート・
-スケジュールを配線します。BX Agents はその逆です。`bxAgents build` が発見・検証・コード生成を
+スケジュールを配線します。BxAgents はその逆です。`bxAgents build` が発見・検証・コード生成を
 正確に一度だけ実行し、`.build/app/` の下にただの ColdBox アプリケーションを生成します。
 
 それを起動する - `bxAgents serve` 経由でも、実際の
@@ -174,7 +174,7 @@ GitHub、Signal - を、`queue` / `steer` / `interrupt` ポリシーを持つ 1 
 
 ::: cards
 ::: card title="インストール" icon="phosphor-duotone:rocket-launch" href="getting-started/installation.md"
-BoxLang、BX AI、BX Agents をインストールします。
+BoxLang、BX AI、BxAgents をインストールします。
 :::
 ::: card title="クイックスタート" icon="phosphor-duotone:lightning" href="getting-started/quick-start.md"
 最初のエージェントをスキャフォールドし、ビルドし、対話します。
@@ -197,7 +197,7 @@ BoxLang、BX AI、BX Agents をインストールします。
 [`examples/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples) 以下に用意されています。
 
 !!! warning
-    BX Agents は現在も活発に開発が進められています。[既知の制限](known-limitations.md) では、
+    BxAgents は現在も活発に開発が進められています。[既知の制限](known-limitations.md) では、
     実際に動くアプリに対して検証済みの部分、BX AI の `"mock"` プロバイダーに対してしか
     まだ実行されていない部分、そしてこのプロジェクトが遭遇し回避した実際の ColdBox 側の
     癖について、正直に記録しています。

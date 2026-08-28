@@ -24,11 +24,11 @@ class extends="coldbox.system.web.tasks.ColdBoxScheduler" {
 }
 ```
 
-このファイルの本体には、BX Agents 固有のものは何もありません - `.cron( "0 9 * * 1-5" )`、`.everyWeekOn()`、`.startOn()`/`.endOn()`/`.between()`、`.when()`、`.withNoOverlaps()`、`before()`/`after()`/`onSuccess()`/`onFailure()` フック、タイムゾーンなど、まるごと ColdBox 自身のスケジューラ DSL です - ColdBox の `ScheduledTask` がサポートするものなら何でも、このプロジェクトは一切制限も再解釈もしません。(このコンベンションの以前のバージョンは `{ cron, action }` というデータ形状を ColdBox の頻度メソッド DSL に変換するものでしたが、その変換は cron のごく一部しかカバーしておらず、実際のスケジューラ API が提供するそれ以外のすべてを捨ててしまうものだったため、廃止されました。古いプロジェクトを移行する場合は下記を参照してください。)
+このファイルの本体には、BxAgents 固有のものは何もありません - `.cron( "0 9 * * 1-5" )`、`.everyWeekOn()`、`.startOn()`/`.endOn()`/`.between()`、`.when()`、`.withNoOverlaps()`、`before()`/`after()`/`onSuccess()`/`onFailure()` フック、タイムゾーンなど、まるごと ColdBox 自身のスケジューラ DSL です - ColdBox の `ScheduledTask` がサポートするものなら何でも、このプロジェクトは一切制限も再解釈もしません。(このコンベンションの以前のバージョンは `{ cron, action }` というデータ形状を ColdBox の頻度メソッド DSL に変換するものでしたが、その変換は cron のごく一部しかカバーしておらず、実際のスケジューラ API が提供するそれ以外のすべてを捨ててしまうものだったため、廃止されました。古いプロジェクトを移行する場合は下記を参照してください。)
 
 ## エージェントを取得する
 
-プロジェクトのツリー内のすべてのエージェント - ルートプロジェクト自身の `Agent.bx` と、どれだけ深くネストされていても、すべての `subagents/*` エントリ - は、生成された `config/WireBox.bx` に、自身の宣言された `name` (`Agent.bx` が `super.init()` で設定した `name`、または `configure()` によってそれを上書きして宣言された `name`) の下で登録されます。スケジュールは、単純な `getInstance( "TheAgentName" )` によって、望むどのエージェントにも到達できます - BX Agents 固有の検索はまったくなく、他の ColdBox アプリのどこにでもある `getInstance()` 呼び出しとまったく同じです。
+プロジェクトのツリー内のすべてのエージェント - ルートプロジェクト自身の `Agent.bx` と、どれだけ深くネストされていても、すべての `subagents/*` エントリ - は、生成された `config/WireBox.bx` に、自身の宣言された `name` (`Agent.bx` が `super.init()` で設定した `name`、または `configure()` によってそれを上書きして宣言された `name`) の下で登録されます。スケジュールは、単純な `getInstance( "TheAgentName" )` によって、望むどのエージェントにも到達できます - BxAgents 固有の検索はまったくなく、他の ColdBox アプリのどこにでもある `getInstance()` 呼び出しとまったく同じです。
 
 ```javascript
 // subagents/researcher/Agent.bx

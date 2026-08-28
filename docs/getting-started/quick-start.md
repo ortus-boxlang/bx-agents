@@ -8,7 +8,7 @@ tags: [getting-started]
 
 # Quick Start
 
-This walks through the full lifecycle of a BX Agents project: scaffold, edit, build, run.
+This walks through the full lifecycle of a BxAgents project: scaffold, edit, build, run.
 
 ## 1. Scaffold a project
 

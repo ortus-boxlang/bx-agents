@@ -18,7 +18,7 @@ bxAgents test
 ```
 
 !!! info
-    Inspiriert vom eigenen dedizierten `tests/`-+-`box.json`-Ordner des Templates `coldbox-templates/boxlang` - angepasst an BX Agents' eigene, einfachere Teststory. Einen Agenten zu testen dreht sich um sein **Verhalten** (was er sagt, welche Tools er aufruft), nicht um HTTP-Routing, hier ist also gar keine `Application.bx`/ColdBox-Virtual-App beteiligt.
+    Inspiriert vom eigenen dedizierten `tests/`-+-`box.json`-Ordner des Templates `coldbox-templates/boxlang` - angepasst an BxAgents' eigene, einfachere Teststory. Einen Agenten zu testen dreht sich um sein **Verhalten** (was er sagt, welche Tools er aufruft), nicht um HTTP-Routing, hier ist also gar keine `Application.bx`/ColdBox-Virtual-App beteiligt.
 
 ## Eine Spec schreiben
 
@@ -60,7 +60,7 @@ function test() {
 }
 ```
 
-Das bedeutet, die eigenen Tests brauchen sofort **weder API-Schlüssel noch Netzwerkzugriff** - dieselbe `mock`-Provider-Konvention, die auch in BX Agents' eigener Testsuite durchgängig verwendet wird. Dieses Override bearbeiten, um eine Spec stattdessen gegen einen echten Provider laufen zu lassen (dafür ist ein echter API-Schlüssel in der Umgebung nötig, die die Tests ausführt).
+Das bedeutet, die eigenen Tests brauchen sofort **weder API-Schlüssel noch Netzwerkzugriff** - dieselbe `mock`-Provider-Konvention, die auch in BxAgents' eigener Testsuite durchgängig verwendet wird. Dieses Override bearbeiten, um eine Spec stattdessen gegen einen echten Provider laufen zu lassen (dafür ist ein echter API-Schlüssel in der Umgebung nötig, die die Tests ausführt).
 
 ### `mockResponses( responses )`
 

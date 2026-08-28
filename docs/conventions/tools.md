@@ -22,7 +22,7 @@ class {
 }
 ```
 
-BX Agents doesn't scan or interpret `@AITool` annotations itself - it discovers one entry per `.bx` file (for name-collision checking) and then copies the whole `tools/` folder **verbatim** into the generated app. At startup, the generated app calls bx-ai's own scanner:
+BxAgents doesn't scan or interpret `@AITool` annotations itself - it discovers one entry per `.bx` file (for name-collision checking) and then copies the whole `tools/` folder **verbatim** into the generated app. At startup, the generated app calls bx-ai's own scanner:
 
 ```javascript
 aiToolRegistry().scan( "tools" )

@@ -8,7 +8,7 @@ tags: [getting-started]
 
 # Inicio rápido
 
-Esto recorre el ciclo de vida completo de un proyecto BX Agents: generar el andamiaje, editar, construir, ejecutar.
+Esto recorre el ciclo de vida completo de un proyecto BxAgents: generar el andamiaje, editar, construir, ejecutar.
 
 ## 1. Genera el andamiaje de un proyecto
 

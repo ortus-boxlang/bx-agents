@@ -118,7 +118,7 @@ aiGatewayRegistry().register( aiGateway( "http", { secret : getSystemSetting( "S
 
 Das Secret wird live beim Serverstart aufgelöst, passend zur "Secrets bleiben extern"-Regel dieses Projekts überall sonst (siehe [Deployment & Secrets](../deployment-and-secrets.md)) - es wird nie als Literal in generierten Quellcode eingebettet, ist also auch nie in einer paketierten `.bxa` vorhanden. Ist die Umgebungsvariable ungesetzt, behandelt bx-ais eigenes `HttpGateway` ein leeres Secret als "keine Signierung konfiguriert" und lehnt Requests entsprechend ab, statt beim Start abzustürzen.
 
-**Validierung:** `type` muss `mock`, `cli` oder `http` sein; ein Eintrag mit `type: "http"` erfordert ein `secretEnvVar`; der eigene Datei-/Basisname des Eintrags muss über jeden Channel-Adapter-Eintrag hinweg eindeutig sein. `mock` ist nur für Tests; `cli` ist bx-ais eigener eingebauter Human-in-the-Loop-**Genehmigungs**-Kanal (ein blockierender A/R/Q-Prompt über stdin/stdout) - er ist es, was `HumanInTheLoopMiddleware` standardmäßig anhängt, wenn kein Gateway angegeben ist, und hat nichts mit BX Agents' eigenem `chat`-Verb zu tun (das die Gateway-Registry überhaupt nie berührt).
+**Validierung:** `type` muss `mock`, `cli` oder `http` sein; ein Eintrag mit `type: "http"` erfordert ein `secretEnvVar`; der eigene Datei-/Basisname des Eintrags muss über jeden Channel-Adapter-Eintrag hinweg eindeutig sein. `mock` ist nur für Tests; `cli` ist bx-ais eigener eingebauter Human-in-the-Loop-**Genehmigungs**-Kanal (ein blockierender A/R/Q-Prompt über stdin/stdout) - er ist es, was `HumanInTheLoopMiddleware` standardmäßig anhängt, wenn kein Gateway angegeben ist, und hat nichts mit BxAgents' eigenem `chat`-Verb zu tun (das die Gateway-Registry überhaupt nie berührt).
 
 **Einträge vom Typ `http` erhalten zusätzlich echte HTTP-Verdrahtung**: eine generierte `handlers/Gateway.bx`-Action, die direkt in bx-ais eigenes `GatewayRequestProcessor::processHttp()` durchreicht, sowie drei Routen in `config/Router.bx`:
 
@@ -129,7 +129,7 @@ post( "/interactions/:requestID/decisions" ).toHandler( "Gateway.process" )
 ```
 
 !!! info
-    ColdBox hat keinen eingebauten `toAiGateway()`-DSL-Terminator für diese Oberfläche (nur `toAi()` und `toMCP()` existieren nativ) - diese Verdrahtung ist BX Agents' eigener generierter Code, in derselben Form, die ein zukünftiger Core-Terminator erzeugen würde. Siehe den Vorschlag [`toAiGateway()` für ColdBox Core](../proposals/toAiGateway-coldbox-core.md).
+    ColdBox hat keinen eingebauten `toAiGateway()`-DSL-Terminator für diese Oberfläche (nur `toAi()` und `toMCP()` existieren nativ) - diese Verdrahtung ist BxAgents' eigener generierter Code, in derselben Form, die ein zukünftiger Core-Terminator erzeugen würde. Siehe den Vorschlag [`toAiGateway()` für ColdBox Core](../proposals/toAiGateway-coldbox-core.md).
 
 ## 3. Push-style gateways (`type: "telegram"` / `"slack"` / `"discord"` / `"email"` / `"whatsapp-cloud"` / `"teams"` / `"twilio"` / `"github"` / `"signal"`, and friends)
 
@@ -269,7 +269,7 @@ class {
 }
 ```
 
-Dieselbe "Secrets bleiben extern"-Regel wie bei `http`s `secretEnvVar`: Jeder `*EnvVar`-Schlüssel benennt eine Umgebungsvariable, live über `getSystemSetting()` beim Start aufgelöst, nie als Literal eingebettet - `email`s `imapHost`/`fromAddress` sind keine kryptografischen Secrets, aber dieselbe umgebungsvariablen-getriebene Konvention wird trotzdem für jeden einzelnen ihrer Konfigurationswerte verwendet, da sie alle pro Deployment variieren. Anders als bei den Core-Typen lebt die Klasse eines Push-Style-Gateways innerhalb von BX Agents selbst (`models/gateways/*.bx`, nicht bx-ai), sodass ihre Registrierung als bloßer Klassenpfad statt als Kurzname gerendert wird:
+Dieselbe "Secrets bleiben extern"-Regel wie bei `http`s `secretEnvVar`: Jeder `*EnvVar`-Schlüssel benennt eine Umgebungsvariable, live über `getSystemSetting()` beim Start aufgelöst, nie als Literal eingebettet - `email`s `imapHost`/`fromAddress` sind keine kryptografischen Secrets, aber dieselbe umgebungsvariablen-getriebene Konvention wird trotzdem für jeden einzelnen ihrer Konfigurationswerte verwendet, da sie alle pro Deployment variieren. Anders als bei den Core-Typen lebt die Klasse eines Push-Style-Gateways innerhalb von BxAgents selbst (`models/gateways/*.bx`, nicht bx-ai), sodass ihre Registrierung als bloßer Klassenpfad statt als Kurzname gerendert wird:
 
 ```javascript
 aiGatewayRegistry().register( aiGateway( "bxModules.bxagents.models.gateways.TelegramGateway", { "botToken" : getSystemSetting( "TELEGRAM_BOT_TOKEN", "" ) } ) )

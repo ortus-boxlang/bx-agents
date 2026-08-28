@@ -8,7 +8,7 @@ tags: [reference, limitations]
 
 # Bekannte Einschränkungen
 
-BX Agents befindet sich in aktiver Entwicklung. Diese Seite hält die ehrlichen Lücken fest - was gegen eine echte laufende App getestet ist, was noch nur gegen bx-ais eingebauten `"mock"`-Provider läuft, und echte vorgelagerte Eigenheiten, auf die dieses Projekt gestoßen ist.
+BxAgents befindet sich in aktiver Entwicklung. Diese Seite hält die ehrlichen Lücken fest - was gegen eine echte laufende App getestet ist, was noch nur gegen bx-ais eingebauten `"mock"`-Provider läuft, und echte vorgelagerte Eigenheiten, auf die dieses Projekt gestoßen ist.
 
 ## Tests laufen nur gegen den `mock`-Provider
 
@@ -38,7 +38,7 @@ Diese Lücke war real: Dieser Test hat aufgedeckt, dass jedes CLI-Verb sofort mi
 
 ## Ein echter, grundlegender Fehler, gefunden beim Bau des Testing-Frameworks: Agenten erhielten nie ihre eigenen Tools
 
-Der Bau des `toHaveCalledTool`-Matchers von `BaseAgentSpec` (M15) deckte einen ernsten, zuvor unentdeckten Fehler auf: `ColdBoxAppGenerator`s generierter `aiAgent()`-Aufruf übergab überhaupt nie ein `tools:`-Argument - bestätigt gegen den echten bx-ai-Quellcode (`AiAgent.bx` referenziert `aiToolRegistry()` intern nie). Die `tools/` eines Projekts wurden in den Build kopiert und für die MCP-Verdrahtung namentlich auflösbar gemacht, aber **kein von BX Agents jemals gebauter Agent - in keinem Kontext: eine echte bereitgestellte App, `chat`, oder eine Test-Spec - erhielt tatsächlich seine eigenen deklarierten Tools.** Das war unentdeckt geblieben, weil kein bestehender Test je einen echten Tool-Aufruf prüfte, sondern nur eine nicht-leere Antwort.
+Der Bau des `toHaveCalledTool`-Matchers von `BaseAgentSpec` (M15) deckte einen ernsten, zuvor unentdeckten Fehler auf: `ColdBoxAppGenerator`s generierter `aiAgent()`-Aufruf übergab überhaupt nie ein `tools:`-Argument - bestätigt gegen den echten bx-ai-Quellcode (`AiAgent.bx` referenziert `aiToolRegistry()` intern nie). Die `tools/` eines Projekts wurden in den Build kopiert und für die MCP-Verdrahtung namentlich auflösbar gemacht, aber **kein von BxAgents jemals gebauter Agent - in keinem Kontext: eine echte bereitgestellte App, `chat`, oder eine Test-Spec - erhielt tatsächlich seine eigenen deklarierten Tools.** Das war unentdeckt geblieben, weil kein bestehender Test je einen echten Tool-Aufruf prüfte, sondern nur eine nicht-leere Antwort.
 
 Behoben in `ColdBoxAppGenerator.renderAgentFactory()`: Jedes generierte `GeneratedAgentFactory.bx` lädt jetzt sein eigenes `tools/`-Verzeichnis über eine neue `ToolRegistryLoader.bx` (unter Verwendung eines zur Generierungszeit eingebetteten ABSOLUTEN Pfads, nicht eines relativen, der von einer wie auch immer im Ladekontext gerade geltenden "/"-Zuordnung abhängt - bestätigt, dass die relative Pfadauflösung von `aiToolRegistry().scan("tools")` stillschweigend fehlschlägt, wenn sie aus einem per `DynamicClassLoader` geladenen Kontext wie `chat` aufgerufen wird), und übergibt dann `tools: aiToolRegistry().getAll()` an jeden `aiAgent()`-Aufruf.
 

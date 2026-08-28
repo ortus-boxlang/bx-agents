@@ -27,7 +27,7 @@ Ein Modulordner kann eine `module.json` mit einem `dependsOn`-Array enthalten, d
 }
 ```
 
-Das ist BX Agents' eigene Konvention zur Abhängigkeitsdeklaration für Validierungszwecke - sie ist unabhängig vom eigenen Modul-Ladermechanismus von BoxLang.
+Das ist BxAgents' eigene Konvention zur Abhängigkeitsdeklaration für Validierungszwecke - sie ist unabhängig vom eigenen Modul-Ladermechanismus von BoxLang.
 
 ## Validierung
 

@@ -8,7 +8,7 @@ tags: [conventions, configuration]
 
 # Agent.bx
 
-`Agent.bx` es el único archivo requerido en un proyecto BX Agents. **Extiende el propio [`AiAgent`](https://ai.ortusbooks.com/main-components/agents/class-based-agents) de bx-ai**, así que *es* el agente - el build lo instancia en lugar de reconstruir uno a partir de un struct de configuración, así que lo que escribes es lo que se ejecuta. Hereda y añade lo que necesites: helpers privados, métodos sobreescritos, tools registradas en código. Porque es una clase real en lugar de un descriptor que devuelve un struct, un IDE puede introspeccionarla como cualquier otra clase de BoxLang - ir a la definición, autocompletar en métodos heredados, todo.
+`Agent.bx` es el único archivo requerido en un proyecto BxAgents. **Extiende el propio [`AiAgent`](https://ai.ortusbooks.com/main-components/agents/class-based-agents) de bx-ai**, así que *es* el agente - el build lo instancia en lugar de reconstruir uno a partir de un struct de configuración, así que lo que escribes es lo que se ejecuta. Hereda y añade lo que necesites: helpers privados, métodos sobreescritos, tools registradas en código. Porque es una clase real en lugar de un descriptor que devuelve un struct, un IDE puede introspeccionarla como cualquier otra clase de BoxLang - ir a la definición, autocompletar en métodos heredados, todo.
 
 ```javascript
 class extends="bxModules.bxai.models.runnables.AiAgent" {
@@ -86,15 +86,15 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 | `description` | string | Opcional. |
 | `subAgents` | array de strings | Nombres de carpetas hermanas bajo el `subagents/` del proyecto raíz. Ver [subagents/](subagents.md). |
 | `mcpServers` | array | Servidores MCP remotos - cada entrada es una cadena URL o `{ url, name }`. Ver [mcp/](mcp.md). |
-| `security` | struct | Reenviado textualmente a los ajustes del módulo `bxai` de la app generada; el propio `SecurityDirector` de bx-ai lo convierte en middleware de guardarraíles. Solo passthrough - BX Agents no tiene convención propia de guardarraíles. |
+| `security` | struct | Reenviado textualmente a los ajustes del módulo `bxai` de la app generada; el propio `SecurityDirector` de bx-ai lo convierte en middleware de guardarraíles. Solo passthrough - BxAgents no tiene convención propia de guardarraíles. |
 | `memory` | string o struct | La memoria de conversación del agente. Una cadena bare es una abreviatura para el tipo (`"cache"`); un struct es `{ type, ...config }` y se pasa textualmente a `aiMemory()` - por ejemplo, `{ type: "cache", maxMessages: 50 }`, o con `summaryProvider`/`summaryModel`/`summaryThreshold` para hacer funcional el `/compact` de la interfaz web. Se aplica por nodo, así que un subagente puede declarar el suyo propio. |
 | `checkpointer` | struct | `{ type: "cache"\|"file"\|"jdbc", ...config }`. Por defecto `{ type: "cache" }` si se omite. Siempre se aplica - sin uno, los flujos de aprobación human-in-the-loop a través de cualquier gateway que no sea `cli` fallan por completo. |
 | `gatewaySession` | struct | `{ policy, maxQueueDepth }`, ambos opcionales (por defecto `"queue"` / `50`). Solo significativo si el proyecto tiene al menos una entrada de [gateway](gateways.md#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends) de estilo push - controla la política del `GatewaySession` generado para un segundo mensaje entrante que llega en un hilo que ya tiene un turno en curso. `policy` debe ser uno de `reject`/`queue`/`steer`/`interrupt`. |
-| cualquier otra clave | cualquiera | Fusionada y disponible en el struct de configuración resuelto, pero no interpretada por BX Agents mismo. |
+| cualquier otra clave | cualquiera | Fusionada y disponible en el struct de configuración resuelto, pero no interpretada por BxAgents mismo. |
 
 ## The model slug
 
-`model` es la propia convención de BX Agents - bx-ai mismo toma `provider` y `model` como dos argumentos separados de `aiModel()`. BX Agents divide el slug **solo en la primera `/`**, así que un proveedor que él mismo contiene una barra (como el `openrouter/anthropic/claude-x` de OpenRouter) todavía se analiza correctamente:
+`model` es la propia convención de BxAgents - bx-ai mismo toma `provider` y `model` como dos argumentos separados de `aiModel()`. BxAgents divide el slug **solo en la primera `/`**, así que un proveedor que él mismo contiene una barra (como el `openrouter/anthropic/claude-x` de OpenRouter) todavía se analiza correctamente:
 
 | Valor de `model` | proveedor | modelo |
 |---|---|---|
@@ -173,4 +173,4 @@ Las claves de struct se fusionan **recursivamente** - un struct anidado en una f
 Construir con `--environment=production` aquí produce `modelDefaults: { temperature: 0.2, maxTokens: 1000 }` - la fusión recursiva mantuvo `maxTokens` del archivo base ya que `boxlang-production.json` nunca lo mencionó.
 
 !!! warning
-    Los secretos (claves de API, tokens) nunca son leídos ni fusionados por BX Agents en tiempo de build - permanecen externos (una variable de entorno del SO, `.env`, un gestor de secretos de plataforma) y son resueltos en vivo por el propio bx-ai en tiempo de ejecución. Ver [Despliegue y secretos](../deployment-and-secrets.md).
+    Los secretos (claves de API, tokens) nunca son leídos ni fusionados por BxAgents en tiempo de build - permanecen externos (una variable de entorno del SO, `.env`, un gestor de secretos de plataforma) y son resueltos en vivo por el propio bx-ai en tiempo de ejecución. Ver [Despliegue y secretos](../deployment-and-secrets.md).

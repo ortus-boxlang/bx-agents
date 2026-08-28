@@ -1,4 +1,4 @@
-# BX Agents Contributing Guide
+# BxAgents Contributing Guide
 
 Hola amigo! I'm really excited that you are interested in contributing to our BoxLang Module.
 Before submitting your contribution, please make sure to take a moment and read through the following guidelines:

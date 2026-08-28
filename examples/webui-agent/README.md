@@ -1,6 +1,6 @@
 # webui-agent
 
-An agent reachable through BX Agents' v1 web chat UI - a small, dependency-free static chat page, generated for free from a `gateways/*` entry with `exposes: "webui"`.
+An agent reachable through BxAgents' v1 web chat UI - a small, dependency-free static chat page, generated for free from a `gateways/*` entry with `exposes: "webui"`.
 
 ```bash
 bxAgents build

@@ -8,7 +8,7 @@ tags: [conventions, configuration]
 
 # Agent.bx
 
-`Agent.bx` is the only required file in a BX Agents project. It **extends bx-ai's own [`AiAgent`](https://ai.ortusbooks.com/main-components/agents/class-based-agents)**, so it *is* the agent - the build instantiates it rather than rebuilding one from a config struct, so what you write is what runs. Inherit and add whatever you need: private helpers, overridden methods, tools registered in code. Because it's a real class rather than a struct-returning descriptor, an IDE can introspect it like any other BoxLang class - jump to definition, autocomplete on inherited methods, the works.
+`Agent.bx` is the only required file in a BxAgents project. It **extends bx-ai's own [`AiAgent`](https://ai.ortusbooks.com/main-components/agents/class-based-agents)**, so it *is* the agent - the build instantiates it rather than rebuilding one from a config struct, so what you write is what runs. Inherit and add whatever you need: private helpers, overridden methods, tools registered in code. Because it's a real class rather than a struct-returning descriptor, an IDE can introspect it like any other BoxLang class - jump to definition, autocomplete on inherited methods, the works.
 
 ```javascript
 class extends="bxModules.bxai.models.runnables.AiAgent" {
@@ -86,15 +86,15 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 | `description` | string | Optional. |
 | `subAgents` | array of strings | Names of sibling folders under the root project's `subagents/`. See [subagents/](subagents.md). |
 | `mcpServers` | array | Remote MCP servers - each entry a URL string or `{ url, name }`. See [mcp/](mcp.md). |
-| `security` | struct | Forwarded verbatim into the generated app's `bxai` module settings; bx-ai's own `SecurityDirector` turns it into guardrail middleware. Passthrough only - BX Agents has no own guardrails convention. |
+| `security` | struct | Forwarded verbatim into the generated app's `bxai` module settings; bx-ai's own `SecurityDirector` turns it into guardrail middleware. Passthrough only - BxAgents has no own guardrails convention. |
 | `memory` | string or struct | The agent's conversation memory. A bare string is shorthand for the type (`"cache"`); a struct is `{ type, ...config }` and is passed through to `aiMemory()` verbatim - e.g. `{ type: "cache", maxMessages: 50 }`, or with `summaryProvider`/`summaryModel`/`summaryThreshold` to make the web UI's `/compact` functional. Applies per node, so a subagent can declare its own. |
 | `checkpointer` | struct | `{ type: "cache"\|"file"\|"jdbc", ...config }`. Defaults to `{ type: "cache" }` if omitted. Always applied - without one, human-in-the-loop approval flows through any gateway other than `cli` fail outright. |
 | `gatewaySession` | struct | `{ policy, maxQueueDepth }`, both optional (default `"queue"` / `50`). Only meaningful if the project has at least one push-style [gateway](gateways.md#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends) entry - controls the generated `GatewaySession`'s policy for a second inbound message arriving on a thread that already has a turn in flight. `policy` must be one of `reject`/`queue`/`steer`/`interrupt`. |
-| any other key | any | Merged and available in the resolved config struct, but not interpreted by BX Agents itself. |
+| any other key | any | Merged and available in the resolved config struct, but not interpreted by BxAgents itself. |
 
 ## The model slug
 
-`model` is BX Agents' own convention - bx-ai itself takes `provider` and `model` as two separate arguments to `aiModel()`. BX Agents splits the slug **on the first `/` only**, so a provider that itself contains a slash (like OpenRouter's `openrouter/anthropic/claude-x`) still parses correctly:
+`model` is BxAgents' own convention - bx-ai itself takes `provider` and `model` as two separate arguments to `aiModel()`. BxAgents splits the slug **on the first `/` only**, so a provider that itself contains a slash (like OpenRouter's `openrouter/anthropic/claude-x`) still parses correctly:
 
 | `model` value | provider | model |
 |---|---|---|
@@ -173,4 +173,4 @@ Struct keys are merged **recursively** - a nested struct in a higher-precedence 
 Building with `--environment=production` here yields `modelDefaults: { temperature: 0.2, maxTokens: 1000 }` - the recursive merge kept `maxTokens` from the base file since `boxlang-production.json` never mentioned it.
 
 !!! warning
-    Secrets (API keys, tokens) are never read or merged by BX Agents at build time - they stay external (an OS environment variable, `.env`, a platform secret manager) and are resolved live by bx-ai itself at runtime. See [Deployment & Secrets](../deployment-and-secrets.md).
+    Secrets (API keys, tokens) are never read or merged by BxAgents at build time - they stay external (an OS environment variable, `.env`, a platform secret manager) and are resolved live by bx-ai itself at runtime. See [Deployment & Secrets](../deployment-and-secrets.md).
