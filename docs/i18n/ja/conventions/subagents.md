@@ -1,14 +1,14 @@
 ---
 title: subagents/
 icon: phosphor-duotone:tree-structure
-summary: 入れ子になったエージェント。それぞれが独立した、ごく普通の BX Agents プロジェクトです。
-description: 入れ子になったエージェント。それぞれが独立した、ごく普通の BX Agents プロジェクトです。
+summary: 入れ子になったエージェント。それぞれが独立した、ごく普通の BxAgents プロジェクトです。
+description: 入れ子になったエージェント。それぞれが独立した、ごく普通の BxAgents プロジェクトです。
 tags: [conventions, subagents]
 ---
 
 # subagents/
 
-`subagents/` は入れ子になったエージェントを保持します。それぞれが独立した、ごく普通の BX Agents プロジェクトです - `Agent.bx` + `instructions.md` (加えて任意で自身の `tools/`、`skills/` など)。
+`subagents/` は入れ子になったエージェントを保持します。それぞれが独立した、ごく普通の BxAgents プロジェクトです - `Agent.bx` + `instructions.md` (加えて任意で自身の `tools/`、`skills/` など)。
 
 ```
 my-agent/

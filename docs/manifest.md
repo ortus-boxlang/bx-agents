@@ -8,7 +8,7 @@ tags: [reference, build]
 
 # The Manifest
 
-Every `build` writes `.build/manifest.json` - BX Agents' own record of exactly what went into the generated app. `bxAgents inspect` pretty-prints it without rebuilding; `bxAgents package` copies a **redacted** version of it alongside the `.bxa` (see [Deployment & Secrets](deployment-and-secrets.md)).
+Every `build` writes `.build/manifest.json` - BxAgents' own record of exactly what went into the generated app. `bxAgents inspect` pretty-prints it without rebuilding; `bxAgents package` copies a **redacted** version of it alongside the `.bxa` (see [Deployment & Secrets](deployment-and-secrets.md)).
 
 ## Schema
 
@@ -31,7 +31,7 @@ Every `build` writes `.build/manifest.json` - BX Agents' own record of exactly w
 | Field | Meaning |
 |---|---|
 | `manifestVersion` | Semver stamp for the manifest schema itself (currently `1.0.0`) - `package` refuses to run if this is unset or malformed. |
-| `generator.name` / `generator.version` | Always `"bx-agents"` / the BX Agents module version that produced this build. |
+| `generator.name` / `generator.version` | Always `"bx-agents"` / the BxAgents module version that produced this build. |
 | `agent` | Only safe, structural fields (`name`, `description`, `model`, `environment`) - **never** secrets. Secrets are never read into the manifest at all; they're resolved by bx-ai itself, live, at runtime. |
 | `files` | One entry per discovered convention-folder item, sorted by category then path for deterministic ordering - independent of filesystem listing order. |
 

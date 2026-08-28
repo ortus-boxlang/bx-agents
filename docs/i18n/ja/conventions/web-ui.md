@@ -27,7 +27,7 @@ class {
 
 これは静的な `<path>/index.html` (直接配信され、ルートは不要です) と、生成された `handlers/ChatUi.bx` と `models/ChatDb.bx` に支えられた `<path>/api` 配下の専用 API を生成します。
 
-この UI は依存関係のない素の HTML/CSS/JS です - Bootstrap、AlpineJS、Vite のビルドステップは一切ありません - そして **BX Agents 自体の中にあらかじめビルドされてバンドルされています**: `bxAgents build` が `npm install`/`npm run build` を実行することは決してなく、生成されたプロジェクトは Node や npm をインストールする必要が一切ありません。ページが必要とするものはすべて、生成された単一の `index.html` にインライン化されています。
+この UI は依存関係のない素の HTML/CSS/JS です - Bootstrap、AlpineJS、Vite のビルドステップは一切ありません - そして **BxAgents 自体の中にあらかじめビルドされてバンドルされています**: `bxAgents build` が `npm install`/`npm run build` を実行することは決してなく、生成されたプロジェクトは Node や npm をインストールする必要が一切ありません。ページが必要とするものはすべて、生成された単一の `index.html` にインライン化されています。
 
 その制約はビルドについてのものであり、スコープについてのものではありません。このページは完全なクライアントです: 会話サイドバー、推論とツール呼び出しを伴うストリーミング、承認、圧縮 (compaction)、サーバー側のテーマです。実際にまだ足りていないものは [What is not here yet](#what-is-not-here-yet) に一覧があります。
 

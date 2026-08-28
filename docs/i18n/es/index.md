@@ -1,5 +1,5 @@
 ---
-title: BX Agents
+title: BxAgents
 order: 1
 icon: phosphor-duotone:robot
 summary: Describe un agente en carpetas y archivos; constrúyelo en una aplicación ColdBox real.
@@ -9,14 +9,14 @@ toc: false
 ---
 
 <div class="bxsites-hero">
-	<img class="bxsites-hero__banner" src="assets/home-banner.jpg" alt="BX Agents - Build. Constrain. Orchestrate. A conventions-based agent framework for BoxLang. Conventions first: convention over configuration for faster development. Pluggable and extensible: swap models, tools, memory and more with ease. Powerful agents: create agents that reason, act, and collaborate effectively. Production ready: built for performance, reliability, and real-world applications. The agent framework native to BoxLang.">
+	<img class="bxsites-hero__banner" src="assets/home-banner.jpg" alt="BxAgents - Build. Constrain. Orchestrate. A conventions-based agent framework for BoxLang. Conventions first: convention over configuration for faster development. Pluggable and extensible: swap models, tools, memory and more with ease. Powerful agents: create agents that reason, act, and collaborate effectively. Production ready: built for performance, reliability, and real-world applications. The agent framework native to BoxLang.">
 	<div class="bxsites-hero__actions">
 		<a class="bxsites-hero__btn bxsites-hero__btn--primary" href="getting-started/installation.md">Comenzar</a>
 		<a class="bxsites-hero__btn bxsites-hero__btn--secondary" href="https://github.com/ortus-boxlang/bx-agents">Ver en GitHub</a>
 	</div>
 </div>
 
-**BX Agents** es un framework de agentes de IA basado en convenciones para [BoxLang](https://boxlang.io),
+**BxAgents** es un framework de agentes de IA basado en convenciones para [BoxLang](https://boxlang.io),
 construido sobre [ColdBox](https://coldbox.ortusbooks.com) y
 [BX AI](https://boxlang.ortusbooks.com/boxlang-+-++/modules/bx-ai). Describes un agente
 con archivos y carpetas - no con la superficie de una API de framework - y `bxAgents build` ensambla
@@ -125,7 +125,7 @@ your-agent/
 
 ::: expandable "¿Por qué ensamblar en tiempo de build en lugar de en tiempo de request?"
 La mayoría de los frameworks de agentes conectan herramientas, skills, rutas y programaciones **en tiempo de request**,
-en cada arranque. BX Agents hace lo contrario: `bxAgents build` ejecuta descubrimiento, validación y
+en cada arranque. BxAgents hace lo contrario: `bxAgents build` ejecuta descubrimiento, validación y
 generación de código exactamente una vez, produciendo una aplicación ColdBox normal bajo `.build/app/`.
 
 Iniciarla - vía `bxAgents serve`, un proceso real de
@@ -172,7 +172,7 @@ Empaqueta un `.bxa` portable y despliégalo con `local`, `ssh`, `docker`, `digit
 
 ::: cards
 ::: card title="Instalación" icon="phosphor-duotone:rocket-launch" href="getting-started/installation.md"
-Instala BoxLang, BX AI y BX Agents.
+Instala BoxLang, BX AI y BxAgents.
 :::
 ::: card title="Inicio rápido" icon="phosphor-duotone:lightning" href="getting-started/quick-start.md"
 Genera el andamiaje, construye y habla con tu primer agente.
@@ -195,7 +195,7 @@ Cada carpeta de convención también tiene una muestra funcional y construible e
 [`examples/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples).
 
 !!! warning
-    BX Agents está en desarrollo activo. [Limitaciones conocidas](known-limitations.md) rastrea
+    BxAgents está en desarrollo activo. [Limitaciones conocidas](known-limitations.md) rastrea
     los vacíos honestos - qué se ha probado contra una aplicación real en ejecución, qué todavía solo corre contra
     el proveedor `"mock"` de BX AI, y una peculiaridad real y ascendente de ColdBox con la que este proyecto se topó y
     solucionó.

@@ -1,4 +1,4 @@
-# ⚡︎ BX Agents
+# ⚡︎ BxAgents
 
 ```
 |:------------------------------------------------------:|
@@ -16,7 +16,7 @@
 
 <p>&nbsp;</p>
 
-**BX Agents** is a conventions-based AI agent framework for [BoxLang](https://boxlang.io), built on top of [ColdBox](https://coldbox.ortusbooks.com) and [BX AI](https://boxlang.ortusbooks.com/boxlang-+-++/modules/bx-ai). Describe an agent with a handful of files and folders - `Agent.bx`, `instructions.md`, and whichever of `tools/`, `skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `models/`, `modules/` it actually needs - and BX Agents assembles a real, runnable ColdBox application from it **at build time**, ready to serve, chat with, or package as a portable `.bxa`.
+**BxAgents** is a conventions-based AI agent framework for [BoxLang](https://boxlang.io), built on top of [ColdBox](https://coldbox.ortusbooks.com) and [BX AI](https://boxlang.ortusbooks.com/boxlang-+-++/modules/bx-ai). Describe an agent with a handful of files and folders - `Agent.bx`, `instructions.md`, and whichever of `tools/`, `skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `models/`, `modules/` it actually needs - and BxAgents assembles a real, runnable ColdBox application from it **at build time**, ready to serve, chat with, or package as a portable `.bxa`.
 
 ## Quick Start
 
@@ -38,13 +38,13 @@ bxAgents chat       # or: bxAgents serve --port=8080
 
 ## Why build-time assembly?
 
-Most agent frameworks wire tools, skills, routes, and schedules together **at request time**, on every boot. BX Agents does the opposite: `bxAgents build` runs discovery, validation, and code generation exactly once, producing a plain ColdBox application. Booting that application - via `bxAgents serve`, a real [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver) process, or a packaged `.bxa` deployed anywhere BoxLang runs - is then just booting an ordinary app, deterministically and fast.
+Most agent frameworks wire tools, skills, routes, and schedules together **at request time**, on every boot. BxAgents does the opposite: `bxAgents build` runs discovery, validation, and code generation exactly once, producing a plain ColdBox application. Booting that application - via `bxAgents serve`, a real [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver) process, or a packaged `.bxa` deployed anywhere BoxLang runs - is then just booting an ordinary app, deterministically and fast.
 
 ---
 
-## Contributing to BX Agents
+## Contributing to BxAgents
 
-The rest of this readme covers developing BX Agents itself (this repo), not building an agent with it - see [docs/](docs/index.md) for that. See [CONTRIBUTING.md](CONTRIBUTING.md#the-developer-flow---boxlang-is-dynamic) for the actual edit/test loop - BoxLang is a dynamic language, so it isn't the usual edit-compile-run cycle, and there's a real subtlety around how this module's own classes reference each other that's worth reading before you touch `src/main/bx`.
+The rest of this readme covers developing BxAgents itself (this repo), not building an agent with it - see [docs/](docs/index.md) for that. See [CONTRIBUTING.md](CONTRIBUTING.md#the-developer-flow---boxlang-is-dynamic) for the actual edit/test loop - BoxLang is a dynamic language, so it isn't the usual edit-compile-run cycle, and there's a real subtlety around how this module's own classes reference each other that's worth reading before you touch `src/main/bx`.
 
 ### Directory Structure
 
@@ -121,6 +121,8 @@ bxSites lint      # pre-build content checks on the raw docs/ Markdown
 ```
 
 Every page starts with a small frontmatter block (`title`, `icon`, `summary`, `description`, `tags`); `summary` renders under the page title, `description` is meta-only, and `tags` become clickable badges plus a site-wide `/tags/` index. Scaffold a new one with `bxSites page:new --path=guides/setup.md`, or move one (rewriting every relative Markdown link that pointed at it) with `bxSites page:rename --from=... --to=...`.
+
+`bxsites.yaml` turns on `generateOgImages` (a distinct 1200x630 social card per page, built from its `title`/`description`, falling back to `ogImage: assets/home-banner.jpg` for anything the generator can't handle) and `pageActions` (the per-page copy/view-as-Markdown/open-in-AI-chat/PDF/share menu). `sitemap.xml`, `robots.txt` and `llms.txt` are generated for free once `baseURL` is an absolute URL, which it already is here - no extra config needed.
 
 The Spanish/German/Japanese translations under `docs/i18n/` cover page content; the surrounding theme chrome (search placeholder, "On this page," "Edit this page," the 404 page, ...) is translated automatically too - bx-sites ships built-in `es`/`de`/`ja` chrome translations out of the box, so nothing extra needs configuring for those three locales.
 

@@ -118,7 +118,7 @@ aiGatewayRegistry().register( aiGateway( "http", { secret : getSystemSetting( "S
 
 シークレットはサーバー起動時にライブに解決され、このプロジェクトの他の箇所すべてと同じ「シークレットは常に外部に置く」というルールに従います ([デプロイとシークレット](../deployment-and-secrets.md) 参照) - 生成されたソース内にリテラルとして埋め込まれることは決してないため、パッケージ化された `.bxa` にも含まれることは決してありません。環境変数が未設定の場合、bx-ai 自身の `HttpGateway` は空のシークレットを「署名が設定されていない」として扱い、起動時にクラッシュするのではなく、それに応じてリクエストを拒否します。
 
-**検証:** `type` は `mock`、`cli`、`http` のいずれかである必要があります。`type: "http"` エントリには `secretEnvVar` が必須です。エントリ自身のファイル/ベース名は、すべてのチャネルアダプタエントリの間で一意である必要があります。`mock` はテスト専用です。`cli` は bx-ai 自身に組み込まれた human-in-the-loop **承認**チャネルです (ブロッキングな stdin/stdout の A/R/Q プロンプト) - これは、ゲートウェイが指定されていない場合に `HumanInTheLoopMiddleware` がデフォルトでアタッチするもので、ゲートウェイレジストリに一切触れない BX Agents 自身の `chat` 動詞とは無関係です。
+**検証:** `type` は `mock`、`cli`、`http` のいずれかである必要があります。`type: "http"` エントリには `secretEnvVar` が必須です。エントリ自身のファイル/ベース名は、すべてのチャネルアダプタエントリの間で一意である必要があります。`mock` はテスト専用です。`cli` は bx-ai 自身に組み込まれた human-in-the-loop **承認**チャネルです (ブロッキングな stdin/stdout の A/R/Q プロンプト) - これは、ゲートウェイが指定されていない場合に `HumanInTheLoopMiddleware` がデフォルトでアタッチするもので、ゲートウェイレジストリに一切触れない BxAgents 自身の `chat` 動詞とは無関係です。
 
 **`http` タイプのエントリはさらに、実際の HTTP 配線を得ます**: bx-ai 自身の `GatewayRequestProcessor::processHttp()` に直接プロキシする、生成された `handlers/Gateway.bx` アクションと、`config/Router.bx` の 3 つのルートです。
 
@@ -129,7 +129,7 @@ post( "/interactions/:requestID/decisions" ).toHandler( "Gateway.process" )
 ```
 
 !!! info
-    ColdBox には、この用途のための組み込みの `toAiGateway()` DSL 終端子はありません (ネイティブに存在するのは `toAi()` と `toMCP()` のみです) - この配線は BX Agents 自身が生成するコードで、将来のコア終端子が生成するであろうものと同じ形状に従っています。詳しくは [ColdBox コア向け `toAiGateway()`](../proposals/toAiGateway-coldbox-core.md) 提案を参照してください。
+    ColdBox には、この用途のための組み込みの `toAiGateway()` DSL 終端子はありません (ネイティブに存在するのは `toAi()` と `toMCP()` のみです) - この配線は BxAgents 自身が生成するコードで、将来のコア終端子が生成するであろうものと同じ形状に従っています。詳しくは [ColdBox コア向け `toAiGateway()`](../proposals/toAiGateway-coldbox-core.md) 提案を参照してください。
 
 ## 3. Push-style gateways (`type: "telegram"` / `"slack"` / `"discord"` / `"email"` / `"whatsapp-cloud"` / `"teams"` / `"twilio"` / `"github"` / `"signal"`, and friends)
 
@@ -269,7 +269,7 @@ class {
 }
 ```
 
-`http` の `secretEnvVar` と同じ「シークレットは常に外部に置く」ルールです - すべての `*EnvVar` キーは環境変数の名前を指定し、起動時に `getSystemSetting()` 経由でライブに解決され、リテラルとして埋め込まれることは決してありません。`email` の `imapHost`/`fromAddress` は暗号学的なシークレットではありませんが、それでもすべての値がデプロイごとに異なるため、同じ環境変数駆動のコンベンションがそのすべてに使われています。コアのタイプとは異なり、push 型ゲートウェイのクラスは bx-ai ではなく BX Agents 自身の内部にあるため (`models/gateways/*.bx`)、その登録は短い名前ではなく、生のクラスパスとしてレンダリングされます。
+`http` の `secretEnvVar` と同じ「シークレットは常に外部に置く」ルールです - すべての `*EnvVar` キーは環境変数の名前を指定し、起動時に `getSystemSetting()` 経由でライブに解決され、リテラルとして埋め込まれることは決してありません。`email` の `imapHost`/`fromAddress` は暗号学的なシークレットではありませんが、それでもすべての値がデプロイごとに異なるため、同じ環境変数駆動のコンベンションがそのすべてに使われています。コアのタイプとは異なり、push 型ゲートウェイのクラスは bx-ai ではなく BxAgents 自身の内部にあるため (`models/gateways/*.bx`)、その登録は短い名前ではなく、生のクラスパスとしてレンダリングされます。
 
 ```javascript
 aiGatewayRegistry().register( aiGateway( "bxModules.bxagents.models.gateways.TelegramGateway", { "botToken" : getSystemSetting( "TELEGRAM_BOT_TOKEN", "" ) } ) )

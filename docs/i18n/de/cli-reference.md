@@ -184,7 +184,7 @@ bxAgents deploy --destination=/path/to/somewhere [--target=local]
 - `--name=<entry>` leitet an das Ziel weiter, das der benannte `deploy/<entry>.bx`/`.json`-Eintrag angibt (`local`, `ssh`, `ftp`, `sftp`, `docker` oder `digitalocean`).
 - Die reine Flag-Form (`--target=local --destination=...`, oder gar kein `--target`) funktioniert ohne vorhandenen `deploy/`-Ordner - nur `local` unterstützt das; jedes andere Ziel benötigt einen benannten Eintrag, da es mehr Konfiguration braucht, als ein paar Flags tragen können.
 - `local`/`ssh`/`ftp`/`sftp` erfordern ein vorheriges `package`; `docker`/`digitalocean` erfordern einen vorherigen `build` (sie bauen direkt aus `.build/app`).
-- `ftp`/`sftp` benötigen das Modul [`bx-ftp`](https://github.com/ortus-boxlang/bx-ftp), installiert neben BX Agents (siehe [Installation](getting-started/installation.md)).
+- `ftp`/`sftp` benötigen das Modul [`bx-ftp`](https://github.com/ortus-boxlang/bx-ftp), installiert neben BxAgents (siehe [Installation](getting-started/installation.md)).
 
 ### `hash-password`
 

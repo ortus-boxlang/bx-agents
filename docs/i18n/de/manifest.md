@@ -8,7 +8,7 @@ tags: [reference, build]
 
 # Das Manifest
 
-Jeder `build` schreibt `.build/manifest.json` - BX Agents' eigenen Datensatz darüber, was genau in die generierte App eingeflossen ist. `bxAgents inspect` gibt es hübsch aus, ohne neu zu bauen; `bxAgents package` kopiert eine **geschwärzte** Version davon neben die `.bxa` (siehe [Deployment & Secrets](deployment-and-secrets.md)).
+Jeder `build` schreibt `.build/manifest.json` - BxAgents' eigenen Datensatz darüber, was genau in die generierte App eingeflossen ist. `bxAgents inspect` gibt es hübsch aus, ohne neu zu bauen; `bxAgents package` kopiert eine **geschwärzte** Version davon neben die `.bxa` (siehe [Deployment & Secrets](deployment-and-secrets.md)).
 
 ## Schema
 

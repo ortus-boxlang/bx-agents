@@ -24,11 +24,11 @@ class extends="coldbox.system.web.tasks.ColdBoxScheduler" {
 }
 ```
 
-There's nothing BX Agents-specific about the body of that file - it's ColdBox's own scheduler DSL, in full: `.cron( "0 9 * * 1-5" )`, `.everyWeekOn()`, `.startOn()`/`.endOn()`/`.between()`, `.when()`, `.withNoOverlaps()`, `before()`/`after()`/`onSuccess()`/`onFailure()` hooks, timezones - anything ColdBox's `ScheduledTask` supports, this project doesn't limit or reinterpret. (An earlier version of this convention was a `{ cron, action }` data shape translated into ColdBox's frequency-method DSL here - that translation only covered a narrow subset of cron and threw away everything else the real scheduler API offers, so it's gone. If you're migrating an old project, see below.)
+There's nothing BxAgents-specific about the body of that file - it's ColdBox's own scheduler DSL, in full: `.cron( "0 9 * * 1-5" )`, `.everyWeekOn()`, `.startOn()`/`.endOn()`/`.between()`, `.when()`, `.withNoOverlaps()`, `before()`/`after()`/`onSuccess()`/`onFailure()` hooks, timezones - anything ColdBox's `ScheduledTask` supports, this project doesn't limit or reinterpret. (An earlier version of this convention was a `{ cron, action }` data shape translated into ColdBox's frequency-method DSL here - that translation only covered a narrow subset of cron and threw away everything else the real scheduler API offers, so it's gone. If you're migrating an old project, see below.)
 
 ## Retrieving an agent
 
-Every agent in the project's tree - the root project's own `Agent.bx` and every `subagents/*` entry, however deeply nested - is registered in the generated `config/WireBox.bx` under its own declared `name` (the `name` its `Agent.bx` set via `super.init()`, or a `configure()`-declared `name` overriding it). A schedule reaches whichever agent it wants with a plain `getInstance( "TheAgentName" )` - no BX Agents-specific lookup, just WireBox, exactly like the `getInstance()` calls elsewhere in a ColdBox app.
+Every agent in the project's tree - the root project's own `Agent.bx` and every `subagents/*` entry, however deeply nested - is registered in the generated `config/WireBox.bx` under its own declared `name` (the `name` its `Agent.bx` set via `super.init()`, or a `configure()`-declared `name` overriding it). A schedule reaches whichever agent it wants with a plain `getInstance( "TheAgentName" )` - no BxAgents-specific lookup, just WireBox, exactly like the `getInstance()` calls elsewhere in a ColdBox app.
 
 ```javascript
 // subagents/researcher/Agent.bx

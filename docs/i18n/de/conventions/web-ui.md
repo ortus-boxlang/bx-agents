@@ -27,7 +27,7 @@ class {
 
 Das erzeugt eine statische `<path>/index.html` (direkt bedient - keine Route nötig) plus eine dedizierte API unter `<path>/api`, unterlegt von einem generierten `handlers/ChatUi.bx` und `models/ChatDb.bx`.
 
-Die UI ist abhängigkeitsfreies, reines HTML/CSS/JS - kein Bootstrap, kein AlpineJS, kein Vite-Build-Schritt - und ist **vorgebaut und in BX Agents selbst vendort**: `bxAgents build` führt nie `npm install`/`npm run build` aus, und ein generiertes Projekt braucht überhaupt nie Node oder npm installiert. Alles, was die Seite braucht, ist in das einzelne generierte `index.html` eingebettet.
+Die UI ist abhängigkeitsfreies, reines HTML/CSS/JS - kein Bootstrap, kein AlpineJS, kein Vite-Build-Schritt - und ist **vorgebaut und in BxAgents selbst vendort**: `bxAgents build` führt nie `npm install`/`npm run build` aus, und ein generiertes Projekt braucht überhaupt nie Node oder npm installiert. Alles, was die Seite braucht, ist in das einzelne generierte `index.html` eingebettet.
 
 Diese Einschränkung betrifft den Build, nicht den Funktionsumfang. Die Seite ist ein vollständiger Client: Konversations-Seitenleiste, Streaming mit Reasoning und Tool-Aufrufen, Genehmigungen, Kompaktierung, serverseitiges Theming. Was tatsächlich noch fehlt, steht unter [Was hier noch fehlt](#what-is-not-here-yet).
 

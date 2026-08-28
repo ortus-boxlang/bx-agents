@@ -8,7 +8,7 @@ tags: [proposals]
 
 # Vorschlag: `toAiGateway()` — ein nativer ColdBox-Routing-DSL-Terminator für die bx-ai-Gateway-Webhook-Oberfläche
 
-Status: Entwurf, verfasst von BX Agents aus (`ortus-boxlang/bx-agents`). Update seit dem ersten
+Status: Entwurf, verfasst von BxAgents aus (`ortus-boxlang/bx-agents`). Update seit dem ersten
 Entwurf: `coldbox-platform` (konkret ColdBox selbst, `Router.cfc`) WURDE später in derselben
 Session angehängt und direkt gelesen — die Cross-Owner-Grenze erwies sich als
 Session-Zustand, nicht als dauerhaft; sobald das Zip von `ColdBox/coldbox-platform` von
@@ -35,7 +35,7 @@ Das ist genau die Art von Verdrahtung, die `toAi()`/`toMCP()` bereits existieren
 sie für die anderen beiden bx-ai-Oberflächen von Hand zu erledigen — dieser Vorschlag schließt die Lücke
 mit einem dritten Terminator, `toAiGateway()`, auf dieselbe Weise gebaut.
 
-BX Agents (ein konventionsbasiertes Agenten-Framework-Modul über bx-ai + ColdBox)
+BxAgents (ein konventionsbasiertes Agenten-Framework-Modul über bx-ai + ColdBox)
 liefert diese Verdrahtung in der Zwischenzeit selbst aus — siehe "Aktuelle Umgehung" unten — genau
 damit sie gelöscht werden kann, sobald dies in Core landet.
 
@@ -114,9 +114,9 @@ der Präferenz:
 Standard-Routen-Modifikatoren (`.as()`, `.withModule()`, `.withDomain()` usw.) sollten auf dieselbe Weise gelten
 wie bei `toAi()`/`toMCP()`.
 
-## Aktuelle Umgehung (BX Agents, zu löschen, sobald dies landet)
+## Aktuelle Umgehung (BxAgents, zu löschen, sobald dies landet)
 
-BX Agents' Build-Pipeline generiert die entsprechende Verdrahtung heute von Hand:
+BxAgents' Build-Pipeline generiert die entsprechende Verdrahtung heute von Hand:
 
 - `RouterGenerator.bx` erzeugt, nur wenn mindestens ein Channel-Adapter-Gateway vom Typ
   `http` konfiguriert ist:
@@ -164,7 +164,7 @@ Vorschlag war falsch und wurde korrigiert:
 
 2. **Der echte `IAiRunnable`-Vertrag — KORRIGIERT, nicht das, was dieser Vorschlag ursprünglich sagte.**
    Der Abschnitt "Was bereits belegt ist" oben (unverändert, weiterhin korrekt für die Gateway-
-   Oberfläche) wurde nur aus dem bx-ai-Quellcode geschrieben. Separat verließ sich BX Agents' eigene
+   Oberfläche) wurde nur aus dem bx-ai-Quellcode geschrieben. Separat verließ sich BxAgents' eigene
    M8-Arbeit auf eine Beschreibung von `toAi()`s Ziel-Vertrag aus der *veröffentlichten Dokumentation*, die sich als
    falsch herausstellte: `invoke`/`stream`/`batch`/`info` sind die **Unterrouten-Namen**, keine Methodennamen,
    die `toAi()` am Ziel aufruft. Router.cfcs tatsächliche Closures rufen
@@ -173,10 +173,10 @@ Vorschlag war falsch und wurde korrigiert:
    `IAiRunnable`-Schnittstelle (`bxModules.bxai.models.runnables.IAiRunnable`), die `AiAgent`
    bereits nativ über `AiBaseRunnable` implementiert. **Es ist überhaupt keine Adapter-Unterklasse
    nötig** — der Rückgabewert des bloßen `aiAgent()`-BIF erfüllt `toAi()` bereits.
-   Der Generator von BX Agents wurde entsprechend korrigiert (kein
+   Der Generator von BxAgents wurde entsprechend korrigiert (kein
    `GeneratedAgentRunnable.bx`/`exposeAgentAsRunnable` mehr).
 
 3. **WireBoxs `.toProvider(closure)`** — in dieser Session nicht erneut geprüft (Router.cfc berührt keine
-   WireBox-Binder-Syntax); bleibt eine Annahme im `config/WireBox.bx`-Generator von BX Agents. Geringes Risiko:
+   WireBox-Binder-Syntax); bleibt eine Annahme im `config/WireBox.bx`-Generator von BxAgents. Geringes Risiko:
    `.toProvider()` ist etabliertes, verbreitet genutztes WireBox-DSL, nur eben nichts, was dieser
    spezifische Quellcode-Durchgang gerade berührt hat.

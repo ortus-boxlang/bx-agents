@@ -42,4 +42,4 @@ moduleSettings = {
 ```
 
 !!! info
-    El propio `skillsDirectory` por defecto de bx-ai es `/.agents/skills` - una ruta diferente a la convención `skills/` de BX Agents. El generador siempre lo sobreescribe explícitamente para que la carpeta `skills/` de tu proyecto sea la que bx-ai realmente carga; nunca necesitas configurar esto tú mismo.
+    El propio `skillsDirectory` por defecto de bx-ai es `/.agents/skills` - una ruta diferente a la convención `skills/` de BxAgents. El generador siempre lo sobreescribe explícitamente para que la carpeta `skills/` de tu proyecto sea la que bx-ai realmente carga; nunca necesitas configurar esto tú mismo.

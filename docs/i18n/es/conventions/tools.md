@@ -22,7 +22,7 @@ class {
 }
 ```
 
-BX Agents no escanea ni interpreta las anotaciones `@AITool` él mismo - descubre una entrada por archivo `.bx` (para comprobación de colisión de nombres) y luego copia toda la carpeta `tools/` **textualmente** a la app generada. En el arranque, la app generada llama al propio scanner de bx-ai:
+BxAgents no escanea ni interpreta las anotaciones `@AITool` él mismo - descubre una entrada por archivo `.bx` (para comprobación de colisión de nombres) y luego copia toda la carpeta `tools/` **textualmente** a la app generada. En el arranque, la app generada llama al propio scanner de bx-ai:
 
 ```javascript
 aiToolRegistry().scan( "tools" )

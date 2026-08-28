@@ -66,7 +66,7 @@ Das schützt vor einem zukünftigen Feld - oder einem Aufrufer, der auf anderem 
 
 ## Wo echte Secrets leben
 
-BX Agents löst Provider-API-Schlüssel, Tokens oder Passwörter nie auf, speichert sie nicht und bettet sie nirgendwo in einem Build oder Paket ein. Das ist ausschließlich bx-ais eigene Aufgabe, zur **Laufzeit**: Es liest sie aus der Prozessumgebung gemäß seiner eigenen `<PROVIDER>_API_KEY`-artigen Konvention (z. B. `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`). Sie werden so gesetzt, wie Secrets für einen deployten Prozess sonst auch verwaltet werden - eine OS-Umgebungsvariable, eine vom Prozessmanager geladene `.env`-Datei (nie committet, nie paketiert), oder der Secret-Manager der eigenen Plattform.
+BxAgents löst Provider-API-Schlüssel, Tokens oder Passwörter nie auf, speichert sie nicht und bettet sie nirgendwo in einem Build oder Paket ein. Das ist ausschließlich bx-ais eigene Aufgabe, zur **Laufzeit**: Es liest sie aus der Prozessumgebung gemäß seiner eigenen `<PROVIDER>_API_KEY`-artigen Konvention (z. B. `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`). Sie werden so gesetzt, wie Secrets für einen deployten Prozess sonst auch verwaltet werden - eine OS-Umgebungsvariable, eine vom Prozessmanager geladene `.env`-Datei (nie committet, nie paketiert), oder der Secret-Manager der eigenen Plattform.
 
 ```bash
 export OPENAI_API_KEY=sk-...

@@ -8,7 +8,7 @@ tags: [proposals]
 
 # 提案: `toAiGateway()` — bx-ai Gateway Webhook 表面のためのネイティブな ColdBox ルーティング DSL 終端子
 
-ステータス: ドラフト、BX Agents (`ortus-boxlang/bx-agents`) から執筆。最初のドラフトからの更新:
+ステータス: ドラフト、BxAgents (`ortus-boxlang/bx-agents`) から執筆。最初のドラフトからの更新:
 `coldbox-platform` (具体的には ColdBox 自体、`Router.cfc`) は、同じセッション内の後の時点で
 実際にアタッチされ、直接読み込まれました — クロスオーナーの制限は永続的なものではなく、
 セッションごとの状態であったことが判明しました。`ColdBox/coldbox-platform` の zip を実際の
@@ -34,7 +34,7 @@ human-in-the-loop 承認) で、固定の 3 ルートプロセッサ
 表面のためにそれを手作業で行わずに済むように存在している類のものです - これは、同じ方法で
 構築される 3 つ目の終端子、`toAiGateway()` によって、そのギャップを埋めることを提案します。
 
-BX Agents (bx-ai + ColdBox の上に構築された、コンベンションベースのエージェントフレームワーク
+BxAgents (bx-ai + ColdBox の上に構築された、コンベンションベースのエージェントフレームワーク
 モジュール) は、当面はこの配線を自分自身で出荷しています - 下記「現在の回避策」参照 - まさに
 これがコアに搭載された時点で削除できるようにするためです。
 
@@ -114,9 +114,9 @@ function process( event, rc, prc ) {
 標準的なルート修飾子 (`.as()`、`.withModule()`、`.withDomain()` など) は、`toAi()`/`toMCP()`
 と同じ方法で適用されるべきです。
 
-## 現在の回避策 (BX Agents、これがコアに搭載されたら削除する)
+## 現在の回避策 (BxAgents、これがコアに搭載されたら削除する)
 
-BX Agents のビルドパイプラインは、今日、同等の配線を手作業で生成しています:
+BxAgents のビルドパイプラインは、今日、同等の配線を手作業で生成しています:
 
 - `RouterGenerator.bx` は、少なくとも 1 つの `http` タイプのチャネルアダプタゲートウェイが
   設定されている場合にのみ、以下を出力します:
@@ -139,7 +139,7 @@ BX Agents のビルドパイプラインは、今日、同等の配線を手作�
 
 `toAiGateway()` がコアに存在するようになれば、`RouterGenerator` は手書きの 3 つのルートを
 単一の `route( ... ).toAiGateway()` 呼び出しに置き換え、`GatewayGenerator` は
-`handlers/Gateway.bx` の生成を完全にやめます - 純粋な削除であり、BX Agents 側の新しい
+`handlers/Gateway.bx` の生成を完全にやめます - 純粋な削除であり、BxAgents 側の新しい
 ロジックは一切不要です。
 
 ## コア PR のためのテスト計画
@@ -168,7 +168,7 @@ BX Agents のビルドパイプラインは、今日、同等の配線を手作�
 
 2. **実際の `IAiRunnable` の契約 — この提案が元々述べていたことから、修正されました。**
    上記の「すでに証明されていること」セクション (変更なし、Gateway 表面については引き続き
-   正確です) は bx-ai のソースのみから書かれました。別に、BX Agents 自身の M8 の作業は、
+   正確です) は bx-ai のソースのみから書かれました。別に、BxAgents 自身の M8 の作業は、
    誤りであったことが判明した `toAi()` のターゲット契約についての*公開ドキュメントの*
    説明に依拠していました: `invoke`/`stream`/`batch`/`info` は**サブルート名**であって、
    `toAi()` がターゲット上で呼び出すメソッド名ではありません。Router.cfc の実際のクロージャは
@@ -177,11 +177,11 @@ BX Agents のビルドパイプラインは、今日、同等の配線を手作�
    bx-ai 自身の `IAiRunnable` インターフェース (`bxModules.bxai.models.runnables.IAiRunnable`)
    であり、これは `AiAgent` がすでに `AiBaseRunnable` を通じてネイティブに実装しています。
    **アダプタサブクラスはまったく不要です** - プレーンな `aiAgent()` BIF の戻り値がすでに
-   `toAi()` を満たします。BX Agents のジェネレータはこれに一致するよう修正されました
+   `toAi()` を満たします。BxAgents のジェネレータはこれに一致するよう修正されました
    (`GeneratedAgentRunnable.bx`/`exposeAgentAsRunnable` はもうありません)。
 
 3. **WireBox の `.toProvider(closure)`** — 今回のセッションでは再確認されていません
-   (Router.cfc は WireBox のバインダー構文には触れません)。BX Agents の `config/WireBox.bx`
+   (Router.cfc は WireBox のバインダー構文には触れません)。BxAgents の `config/WireBox.bx`
    ジェネレータの中では依然として仮定のままです。リスクは低いです: `.toProvider()` は
    確立され広く使われている WireBox の DSL であり、今回のこの特定のソースパスがたまたま
    触れなかっただけです。

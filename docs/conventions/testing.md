@@ -18,7 +18,7 @@ bxAgents test
 ```
 
 !!! info
-    Inspired by the `coldbox-templates/boxlang` template's own dedicated `tests/` + `box.json` folder - adapted to BX Agents' own simpler testing story. Testing an agent is about its **behavior** (what it says, which tools it calls), not HTTP routing, so there's no `Application.bx`/ColdBox virtual app involved here at all.
+    Inspired by the `coldbox-templates/boxlang` template's own dedicated `tests/` + `box.json` folder - adapted to BxAgents' own simpler testing story. Testing an agent is about its **behavior** (what it says, which tools it calls), not HTTP routing, so there's no `Application.bx`/ColdBox virtual app involved here at all.
 
 ## Writing a spec
 
@@ -60,7 +60,7 @@ function test() {
 }
 ```
 
-This means your tests need **no API key and no network access** out of the box - the same `mock` provider convention used throughout BX Agents' own test suite. Edit this override if you want a spec to run against a real provider instead (you'll need a real API key available in the environment running the tests).
+This means your tests need **no API key and no network access** out of the box - the same `mock` provider convention used throughout BxAgents' own test suite. Edit this override if you want a spec to run against a real provider instead (you'll need a real API key available in the environment running the tests).
 
 ### `mockResponses( responses )`
 

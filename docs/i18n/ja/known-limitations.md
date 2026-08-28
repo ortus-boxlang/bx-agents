@@ -8,7 +8,7 @@ tags: [reference, limitations]
 
 # 既知の制限
 
-BX Agents は現在も活発に開発が進められています。このページは、正直なギャップ - 実際に動くアプリに対して検証済みの部分、bx-ai の `"mock"` プロバイダーに対してしかまだ実行されていない部分、そしてこのプロジェクトが遭遇した実際の upstream の癖 - を記録しています。
+BxAgents は現在も活発に開発が進められています。このページは、正直なギャップ - 実際に動くアプリに対して検証済みの部分、bx-ai の `"mock"` プロバイダーに対してしかまだ実行されていない部分、そしてこのプロジェクトが遭遇した実際の upstream の癖 - を記録しています。
 
 ## テストは `mock` プロバイダーに対してのみ実行される
 
@@ -20,7 +20,7 @@ BX Agents は現在も活発に開発が進められています。このペー�
 
 ### `toAi()` の最初のリクエストのレースコンディション
 
-新しく起動したアプリの `toAi()` ルートへの**本当に最初の**HTTP リクエストは、「Function [getInstance] not found」という一時的な失敗をすることがあります - これは、Router 自身の `getInstance` デリゲート上での、本物の ColdBox/WireBox の遅延注入のレースコンディションであり、BX Agents のバグではありません。他の何か (ヘルスチェック、`chat` セッション、別のルート) がすでに `GeneratedAgent` シングルトンを一度構築するよう WireBox に強制した後の、それ以降のすべてのリクエストでは確実に成功します。負荷のかかる状況で新しくデプロイされた `toAi()` ルートに依存する前に、**ウォームアップリクエストを送ってください**。
+新しく起動したアプリの `toAi()` ルートへの**本当に最初の**HTTP リクエストは、「Function [getInstance] not found」という一時的な失敗をすることがあります - これは、Router 自身の `getInstance` デリゲート上での、本物の ColdBox/WireBox の遅延注入のレースコンディションであり、BxAgents のバグではありません。他の何か (ヘルスチェック、`chat` セッション、別のルート) がすでに `GeneratedAgent` シングルトンを一度構築するよう WireBox に強制した後の、それ以降のすべてのリクエストでは確実に成功します。負荷のかかる状況で新しくデプロイされた `toAi()` ルートに依存する前に、**ウォームアップリクエストを送ってください**。
 
 ## 3 つの統合チェック - 元々の計画とは別の経路で解決された
 
@@ -38,7 +38,7 @@ BX Agents は現在も活発に開発が進められています。このペー�
 
 ## テストフレームワークの構築中に見つかった実際の、根本的なバグ: エージェントが自身のツールを一度も受け取っていなかった
 
-`BaseAgentSpec` の `toHaveCalledTool` マッチャー (M15) の構築中に、深刻な、これまで発見されていなかったバグが表面化しました: `ColdBoxAppGenerator` が生成する `aiAgent()` 呼び出しには、`tools:` 引数がまったく渡されていませんでした (実際の bx-ai ソースに照らして確認済みです - `AiAgent.bx` は内部で `aiToolRegistry()` を一切参照しません)。プロジェクトの `tools/` はビルドにコピーされ、MCP 配線のために名前解決可能にはなっていましたが、**BX Agents がこれまでにビルドしたどのエージェントも - 実際に配信されたアプリ、`chat`、テストスペックのどのコンテキストであっても - 自身の宣言されたツールを実際には一度も受け取っていませんでした。** これは、既存のどのテストも実際のツール呼び出しをアサートしたことがなく、空でない応答だけをアサートしていたため、検出されずにいました。
+`BaseAgentSpec` の `toHaveCalledTool` マッチャー (M15) の構築中に、深刻な、これまで発見されていなかったバグが表面化しました: `ColdBoxAppGenerator` が生成する `aiAgent()` 呼び出しには、`tools:` 引数がまったく渡されていませんでした (実際の bx-ai ソースに照らして確認済みです - `AiAgent.bx` は内部で `aiToolRegistry()` を一切参照しません)。プロジェクトの `tools/` はビルドにコピーされ、MCP 配線のために名前解決可能にはなっていましたが、**BxAgents がこれまでにビルドしたどのエージェントも - 実際に配信されたアプリ、`chat`、テストスペックのどのコンテキストであっても - 自身の宣言されたツールを実際には一度も受け取っていませんでした。** これは、既存のどのテストも実際のツール呼び出しをアサートしたことがなく、空でない応答だけをアサートしていたため、検出されずにいました。
 
 `ColdBoxAppGenerator.renderAgentFactory()` で修正されました: 生成されるすべての `GeneratedAgentFactory.bx` は、新しい `ToolRegistryLoader.bx` を経由して自身の `tools/` ディレクトリをロードするようになりました (生成時に埋め込まれた絶対パスを使い、ロードされるコンテキストで有効な「/」マッピングが何かに依存する相対パスは使いません - `aiToolRegistry().scan("tools")` 自身の相対パス解決が、`chat` のような `DynamicClassLoader` によってロードされたコンテキストから呼び出された際にサイレントに失敗することを確認しました)。その後、すべての `aiAgent()` 呼び出しに `tools: aiToolRegistry().getAll()` を渡します。
 
@@ -181,7 +181,7 @@ Aspose によるライセンス汚染と、結果が実際にロードされる�
 
 ## `./gradlew downloadModules` が、`GatewayGenerator` の `aiGatewayRegistry()` コード生成に一時的に遅れた bx-ai のスナップショットを取得することがある
 
-bx-ai は `development` ブランチで `gatewayRegistry()` を `aiGatewayRegistry()` にリネームしました (直接確認済みです - `bifs/gatewayRegistry.bx` は完全に削除され、後方互換のエイリアスはありません)。`GatewayGenerator` はこれに一致するよう更新されました。bx-ai がまだリリースをカットしていないため、このプロジェクト自身の方針は、それを回避策で覆い隠すのではなく、そのまま追従することだったからです。落とし穴: `downloadModules` は、固定された、継続的に再公開されるスナップショットアーティファクト (`bx-ai@3.4.0-snapshot`) を `downloads.ortussolutions.com` から取得しますが、その公開済みの zip は bx-ai 自身の git `development` HEAD にある程度遅れることがあります (今回のセッションで直接確認済みです: この upstream のリネームが着地した直後、ダウンロード可能なスナップショットにはまだ古い `gatewayRegistry.bx` が残っていました)。この改名より前のスナップショットを新しい `downloadModules` が取得してしまうと、チャネルアダプタの `gateways/*` エントリを持つプロジェクトは、生成されたコードが今や新しい名前を呼び出しているにもかかわらず、取得されたモジュールがまだ古いものしか持っていないため、`Function 'aiGatewayRegistry' not found` で起動に失敗します。これは BX Agents 側から修正できるものではありません - ForgeBox が bx-ai の現在の `development` からスナップショットを再公開すれば、自然に解決します。このプロジェクト自身の生成コードが、あるいは古くなっているかもしれないダウンロード済みの zip に頼るのではなく、その git ソース (`ortus-boxlang/bx-ai`) から直接ローカルなモジュール構造を構築することで、bx-ai の本当の HEAD に対して正しいことが検証されています。
+bx-ai は `development` ブランチで `gatewayRegistry()` を `aiGatewayRegistry()` にリネームしました (直接確認済みです - `bifs/gatewayRegistry.bx` は完全に削除され、後方互換のエイリアスはありません)。`GatewayGenerator` はこれに一致するよう更新されました。bx-ai がまだリリースをカットしていないため、このプロジェクト自身の方針は、それを回避策で覆い隠すのではなく、そのまま追従することだったからです。落とし穴: `downloadModules` は、固定された、継続的に再公開されるスナップショットアーティファクト (`bx-ai@3.4.0-snapshot`) を `downloads.ortussolutions.com` から取得しますが、その公開済みの zip は bx-ai 自身の git `development` HEAD にある程度遅れることがあります (今回のセッションで直接確認済みです: この upstream のリネームが着地した直後、ダウンロード可能なスナップショットにはまだ古い `gatewayRegistry.bx` が残っていました)。この改名より前のスナップショットを新しい `downloadModules` が取得してしまうと、チャネルアダプタの `gateways/*` エントリを持つプロジェクトは、生成されたコードが今や新しい名前を呼び出しているにもかかわらず、取得されたモジュールがまだ古いものしか持っていないため、`Function 'aiGatewayRegistry' not found` で起動に失敗します。これは BxAgents 側から修正できるものではありません - ForgeBox が bx-ai の現在の `development` からスナップショットを再公開すれば、自然に解決します。このプロジェクト自身の生成コードが、あるいは古くなっているかもしれないダウンロード済みの zip に頼るのではなく、その git ソース (`ortus-boxlang/bx-ai`) から直接ローカルなモジュール構造を構築することで、bx-ai の本当の HEAD に対して正しいことが検証されています。
 
 push 型ゲートウェイ/`GatewaySession` の作業を構築している最中に、同じ遅延を独立して再確認しました: ダウンロードされた `bx-ai@3.4.0-snapshot` は、その時点でまだ `GatewaySession.bx` を持っておらず、`aiGatewaySession()`/`aiGatewayRegistry()` BIF もなく、`onMessage()`/`onError()` を一切持たない `BaseGateway.bx`/`IGateway.bx` でした - この同じリネームよりずっと前のスナップショットです。`testBx` はこの状態で、`src/test/resources/modules/bxai` の `bifs/`/`models/`/`public/`/`ModuleConfig.bx` を、bx-ai 自身の git ソースからの新しいコピーに置き換えることで実行されました (`libs/`/`box.json` はそのままです)。上記と同じワークアラウンドです。これは `build`/`serve` のエンドユーザーが自分で行う必要のあることではなく、ForgeBox が追いつくまでの、このセッション自身の CI なしの検証のために必要だったものです。
 

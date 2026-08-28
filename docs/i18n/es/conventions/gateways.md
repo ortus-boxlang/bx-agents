@@ -118,7 +118,7 @@ aiGatewayRegistry().register( aiGateway( "http", { secret : getSystemSetting( "S
 
 El secreto se resuelve en vivo en el arranque del servidor, coincidiendo con la regla de "los secretos permanecen externos" de este proyecto en cualquier otro lugar (ver [Despliegue y secretos](../deployment-and-secrets.md)) - nunca se incrusta como un literal en el código fuente generado, así que tampoco está presente jamás en un `.bxa` empaquetado. Si la variable de entorno no está configurada, el propio `HttpGateway` de bx-ai trata un secreto vacío como "sin firma configurada" y rechaza requests en consecuencia, en lugar de fallar en el arranque.
 
-**Validación:** `type` debe ser `mock`, `cli`, o `http`; una entrada `type: "http"` requiere un `secretEnvVar`; el propio nombre de archivo/nombre base de la entrada debe ser único a través de cada entrada de channel-adapter. `mock` es solo para pruebas; `cli` es el propio canal incorporado de **aprobación** human-in-the-loop de bx-ai (un prompt bloqueante de stdin/stdout A/R/Q) - es lo que `HumanInTheLoopMiddleware` conecta por defecto cuando no se especifica ningún gateway, y no está relacionado con el propio verbo `chat` de BX Agents (que nunca toca el registro de gateways en absoluto).
+**Validación:** `type` debe ser `mock`, `cli`, o `http`; una entrada `type: "http"` requiere un `secretEnvVar`; el propio nombre de archivo/nombre base de la entrada debe ser único a través de cada entrada de channel-adapter. `mock` es solo para pruebas; `cli` es el propio canal incorporado de **aprobación** human-in-the-loop de bx-ai (un prompt bloqueante de stdin/stdout A/R/Q) - es lo que `HumanInTheLoopMiddleware` conecta por defecto cuando no se especifica ningún gateway, y no está relacionado con el propio verbo `chat` de BxAgents (que nunca toca el registro de gateways en absoluto).
 
 **Las entradas de tipo `http` adicionalmente obtienen cableado HTTP real**: una acción generada `handlers/Gateway.bx` que hace de proxy directamente hacia el propio `GatewayRequestProcessor::processHttp()` de bx-ai, y tres rutas en `config/Router.bx`:
 
@@ -129,7 +129,7 @@ post( "/interactions/:requestID/decisions" ).toHandler( "Gateway.process" )
 ```
 
 !!! info
-    ColdBox no tiene un terminador de DSL `toAiGateway()` incorporado para esta superficie (solo `toAi()` y `toMCP()` existen nativamente) - este cableado es código propio generado por BX Agents, siguiendo la misma forma que produciría un futuro terminador del núcleo. Ver la propuesta [`toAiGateway()` para ColdBox Core](../proposals/toAiGateway-coldbox-core.md).
+    ColdBox no tiene un terminador de DSL `toAiGateway()` incorporado para esta superficie (solo `toAi()` y `toMCP()` existen nativamente) - este cableado es código propio generado por BxAgents, siguiendo la misma forma que produciría un futuro terminador del núcleo. Ver la propuesta [`toAiGateway()` para ColdBox Core](../proposals/toAiGateway-coldbox-core.md).
 
 ## 3. Push-style gateways (`type: "telegram"` / `"slack"` / `"discord"` / `"email"` / `"whatsapp-cloud"` / `"teams"` / `"twilio"` / `"github"` / `"signal"`, and friends)
 
@@ -269,7 +269,7 @@ class {
 }
 ```
 
-La misma regla de "los secretos permanecen externos" que el `secretEnvVar` de `http`: cada clave `*EnvVar` nombra una variable de entorno, resuelta en vivo vía `getSystemSetting()` en el arranque, nunca incrustada como un literal - el `imapHost`/`fromAddress` de `email` no son secretos criptográficos, pero se usa de todos modos la misma convención impulsada por variable de entorno para cada uno de sus valores de configuración, ya que todos varían por despliegue. A diferencia de los tipos centrales, la clase de un gateway de estilo push vive dentro de BX Agents mismo (`models/gateways/*.bx`, no bx-ai), así que su registro se renderiza como una ruta de clase desnuda en lugar de un nombre corto:
+La misma regla de "los secretos permanecen externos" que el `secretEnvVar` de `http`: cada clave `*EnvVar` nombra una variable de entorno, resuelta en vivo vía `getSystemSetting()` en el arranque, nunca incrustada como un literal - el `imapHost`/`fromAddress` de `email` no son secretos criptográficos, pero se usa de todos modos la misma convención impulsada por variable de entorno para cada uno de sus valores de configuración, ya que todos varían por despliegue. A diferencia de los tipos centrales, la clase de un gateway de estilo push vive dentro de BxAgents mismo (`models/gateways/*.bx`, no bx-ai), así que su registro se renderiza como una ruta de clase desnuda en lugar de un nombre corto:
 
 ```javascript
 aiGatewayRegistry().register( aiGateway( "bxModules.bxagents.models.gateways.TelegramGateway", { "botToken" : getSystemSetting( "TELEGRAM_BOT_TOKEN", "" ) } ) )
