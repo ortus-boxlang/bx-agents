@@ -88,7 +88,8 @@ jobs:
           # committed baseURL rather than hardcoded here, so this step can't
           # drift out of sync with it again the next time the domain changes -
           # only the version sub-path is appended.
-          export ORIGIN="$(yq eval '.baseURL' bxsites.yaml | sed -E 's#^(https?://[^/]+).*#\1#')"
+          ORIGIN="$(yq eval '.baseURL' bxsites.yaml | sed -E 's#^(https?://[^/]+).*#\1#')"
+          export ORIGIN
           export URL="${ORIGIN}/${{ github.ref_name }}/"
           export EDIT_URI="edit/${{ github.ref_name }}/docs/"
           yq eval -i '.baseURL = strenv(URL) | .repo.editUri = strenv(EDIT_URI)' bxsites.yaml
