@@ -27,7 +27,7 @@ Una carpeta de módulo puede incluir un `module.json` con un array `dependsOn` q
 }
 ```
 
-Esta es la propia convención de declaración de dependencias de BX Agents para propósitos de validación - es independiente del propio mecanismo de carga de módulos de BoxLang.
+Esta es la propia convención de declaración de dependencias de BxAgents para propósitos de validación - es independiente del propio mecanismo de carga de módulos de BoxLang.
 
 ## Validación
 

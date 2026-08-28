@@ -1,30 +1,30 @@
 ---
 title: Installation
 icon: phosphor-duotone:package
-summary: The three things BX Agents needs on the machine that runs it.
-description: The three things BX Agents needs on the machine that runs it.
+summary: The three things BxAgents needs on the machine that runs it.
+description: The three things BxAgents needs on the machine that runs it.
 tags: [getting-started, setup]
 ---
 
 # Installation
 
-BX Agents is a BoxLang module. It needs three things on the machine that runs it:
+BxAgents is a BoxLang module. It needs three things on the machine that runs it:
 
 1. A [BoxLang](https://boxlang.io) runtime.
-2. The `bx-ai` BoxLang module (BX Agents generates code that calls it - it doesn't vendor it).
-3. BX Agents itself.
+2. The `bx-ai` BoxLang module (BxAgents generates code that calls it - it doesn't vendor it).
+3. BxAgents itself.
 
 !!! info
     `serve` additionally needs the standalone [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver) binary on `PATH`. `build`, `chat`, `package`, `inspect`, `clean`, and `new` don't need it.
 
 !!! info
-    `deploy`'s `ftp`/`sftp` targets need the [`bx-ftp`](https://github.com/ortus-boxlang/bx-ftp) BoxLang module installed alongside `bx-ai`/BX Agents (`install-bx-module bx-ftp`) - a genuine runtime dependency, not vendored, the same relationship this module has with `bx-ai`. No other verb or deploy target needs it.
+    `deploy`'s `ftp`/`sftp` targets need the [`bx-ftp`](https://github.com/ortus-boxlang/bx-ftp) BoxLang module installed alongside `bx-ai`/BxAgents (`install-bx-module bx-ftp`) - a genuine runtime dependency, not vendored, the same relationship this module has with `bx-ai`. No other verb or deploy target needs it.
 
 ::: stepper
 ::: step "Install BoxLang"
-Follow the [official BoxLang installation guide](https://boxlang.ortusbooks.com/getting-started/installation). The quick installer also sets up `~/.boxlang/bin` on your `PATH`, which is where module-provided executables (like BX Agents' own `bxAgents` command, below) land.
+Follow the [official BoxLang installation guide](https://boxlang.ortusbooks.com/getting-started/installation). The quick installer also sets up `~/.boxlang/bin` on your `PATH`, which is where module-provided executables (like BxAgents' own `bxAgents` command, below) land.
 :::
-::: step "Install bx-ai and BX Agents"
+::: step "Install bx-ai and BxAgents"
 ```bash
 install-bx-module bx-ai
 install-bx-module bx-agents
@@ -44,7 +44,7 @@ bxAgents --help
 
 ## The `bxAgents` command
 
-BX Agents declares a native executable in its `box.json`:
+BxAgents declares a native executable in its `box.json`:
 
 ```json
 "boxlang": { "moduleName": "bxagents", "executable": "bxAgents" }

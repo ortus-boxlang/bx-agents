@@ -27,7 +27,7 @@ class {
 
 Eso genera un `<path>/index.html` estático (servido directamente - no se necesita ruta) más una API dedicada bajo `<path>/api`, respaldada por un `handlers/ChatUi.bx` y `models/ChatDb.bx` generados.
 
-La interfaz es HTML/CSS/JS vainilla sin dependencias - sin Bootstrap, AlpineJS ni un paso de build de Vite - y está **preconstruida y empaquetada dentro de BX Agents mismo**: `bxAgents build` nunca ejecuta `npm install`/`npm run build`, y un proyecto generado nunca necesita Node ni npm instalados en absoluto. Todo lo que la página necesita está incrustado en el único `index.html` generado.
+La interfaz es HTML/CSS/JS vainilla sin dependencias - sin Bootstrap, AlpineJS ni un paso de build de Vite - y está **preconstruida y empaquetada dentro de BxAgents mismo**: `bxAgents build` nunca ejecuta `npm install`/`npm run build`, y un proyecto generado nunca necesita Node ni npm instalados en absoluto. Todo lo que la página necesita está incrustado en el único `index.html` generado.
 
 Esa restricción es sobre el build, no sobre el alcance. La página es un cliente completo: barra lateral de conversación, streaming con razonamiento y llamadas de tool, aprobaciones, compactación, temática del lado del servidor. Lo que realmente todavía falta se lista bajo [What is not here yet](#what-is-not-here-yet).
 

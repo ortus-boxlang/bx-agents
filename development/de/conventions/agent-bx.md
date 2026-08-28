@@ -86,15 +86,15 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 | `description` | string | Optional. |
 | `subAgents` | array of strings | Namen von Geschwister-Ordnern unter dem `subagents/` des Root-Projekts. Siehe [subagents/](subagents.md). |
 | `mcpServers` | array | Remote-MCP-Server - jeder Eintrag ein URL-String oder `{ url, name }`. Siehe [mcp/](mcp.md). |
-| `security` | struct | Wird unverändert in die `bxai`-Moduleinstellungen der generierten App weitergereicht; bx-ais eigener `SecurityDirector` macht daraus Guardrail-Middleware. Nur Durchreichung - BX Agents hat keine eigene Guardrails-Konvention. |
+| `security` | struct | Wird unverändert in die `bxai`-Moduleinstellungen der generierten App weitergereicht; bx-ais eigener `SecurityDirector` macht daraus Guardrail-Middleware. Nur Durchreichung - BxAgents hat keine eigene Guardrails-Konvention. |
 | `memory` | string oder struct | Das Konversationsgedächtnis des Agenten. Ein bloßer String ist eine Kurzform für den Typ (`"cache"`); eine Struktur ist `{ type, ...config }` und wird unverändert an `aiMemory()` weitergereicht - z. B. `{ type: "cache", maxMessages: 50 }`, oder mit `summaryProvider`/`summaryModel`/`summaryThreshold`, damit `/compact` in der Web-UI funktioniert. Gilt pro Knoten, ein Subagent kann also einen eigenen deklarieren. |
 | `checkpointer` | struct | `{ type: "cache"\|"file"\|"jdbc", ...config }`. Fällt bei Weglassen auf `{ type: "cache" }` zurück. Immer angewendet - ohne einen scheitern Human-in-the-Loop-Genehmigungsabläufe über jedes Gateway außer `cli` vollständig. |
 | `gatewaySession` | struct | `{ policy, maxQueueDepth }`, beide optional (Standard `"queue"` / `50`). Nur relevant, falls das Projekt mindestens einen Push-Style-[Gateway](gateways.md#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends)-Eintrag hat - steuert die Richtlinie der generierten `GatewaySession` für eine zweite eingehende Nachricht, die auf einem Thread eintrifft, auf dem bereits ein Turn läuft. `policy` muss `reject`/`queue`/`steer`/`interrupt` sein. |
-| jeder andere Schlüssel | any | Wird gemergt und ist in der aufgelösten Konfigurationsstruktur verfügbar, wird aber von BX Agents selbst nicht interpretiert. |
+| jeder andere Schlüssel | any | Wird gemergt und ist in der aufgelösten Konfigurationsstruktur verfügbar, wird aber von BxAgents selbst nicht interpretiert. |
 
 ## The model slug
 
-`model` ist BX Agents' eigene Konvention - bx-ai selbst nimmt `provider` und `model` als zwei separate Argumente an `aiModel()`. BX Agents teilt den Slug **nur am ersten `/`**, sodass ein Provider, der selbst einen Schrägstrich enthält (wie OpenRouters `openrouter/anthropic/claude-x`), trotzdem korrekt geparst wird:
+`model` ist BxAgents' eigene Konvention - bx-ai selbst nimmt `provider` und `model` als zwei separate Argumente an `aiModel()`. BxAgents teilt den Slug **nur am ersten `/`**, sodass ein Provider, der selbst einen Schrägstrich enthält (wie OpenRouters `openrouter/anthropic/claude-x`), trotzdem korrekt geparst wird:
 
 | `model`-Wert | provider | model |
 |---|---|---|
@@ -173,4 +173,4 @@ Struct-Schlüssel werden **rekursiv** gemergt - eine verschachtelte Struktur aus
 Ein Build mit `--environment=production` ergibt hier `modelDefaults: { temperature: 0.2, maxTokens: 1000 }` - das rekursive Merge behielt `maxTokens` aus der Basisdatei, da `boxlang-production.json` es nie erwähnte.
 
 !!! warning
-    Secrets (API-Schlüssel, Tokens) werden von BX Agents zur Build-Zeit nie gelesen oder gemergt - sie bleiben extern (eine OS-Umgebungsvariable, `.env`, ein Plattform-Secret-Manager) und werden von bx-ai selbst live zur Laufzeit aufgelöst. Siehe [Deployment & Secrets](../deployment-and-secrets.md).
+    Secrets (API-Schlüssel, Tokens) werden von BxAgents zur Build-Zeit nie gelesen oder gemergt - sie bleiben extern (eine OS-Umgebungsvariable, `.env`, ein Plattform-Secret-Manager) und werden von bx-ai selbst live zur Laufzeit aufgelöst. Siehe [Deployment & Secrets](../deployment-and-secrets.md).

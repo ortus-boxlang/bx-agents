@@ -66,7 +66,7 @@ Esto protege contra un futuro campo - o un llamador que pase un struct más rico
 
 ## Dónde viven los secretos reales
 
-BX Agents nunca resuelve, almacena, ni incrusta claves de API, tokens o contraseñas de proveedor en ningún build o package. Eso es enteramente trabajo de bx-ai, en **tiempo de ejecución**: los lee del entorno del proceso siguiendo su propia convención de estilo `<PROVIDER>_API_KEY` (por ejemplo, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`). Configúralos como normalmente gestionas secretos para un proceso desplegado - una variable de entorno del SO, un archivo `.env` cargado por tu gestor de procesos (nunca commiteado, nunca empaquetado), o el gestor de secretos de tu plataforma.
+BxAgents nunca resuelve, almacena, ni incrusta claves de API, tokens o contraseñas de proveedor en ningún build o package. Eso es enteramente trabajo de bx-ai, en **tiempo de ejecución**: los lee del entorno del proceso siguiendo su propia convención de estilo `<PROVIDER>_API_KEY` (por ejemplo, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`). Configúralos como normalmente gestionas secretos para un proceso desplegado - una variable de entorno del SO, un archivo `.env` cargado por tu gestor de procesos (nunca commiteado, nunca empaquetado), o el gestor de secretos de tu plataforma.
 
 ```bash
 export OPENAI_API_KEY=sk-...

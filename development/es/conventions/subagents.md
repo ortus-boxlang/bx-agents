@@ -1,14 +1,14 @@
 ---
 title: subagents/
 icon: phosphor-duotone:tree-structure
-summary: Agentes anidados, cada uno un proyecto BX Agents ordinario propio.
-description: Agentes anidados, cada uno un proyecto BX Agents ordinario propio.
+summary: Agentes anidados, cada uno un proyecto BxAgents ordinario propio.
+description: Agentes anidados, cada uno un proyecto BxAgents ordinario propio.
 tags: [conventions, subagents]
 ---
 
 # subagents/
 
-`subagents/` contiene agentes anidados, cada uno un proyecto BX Agents ordinario propio - un `Agent.bx` + `instructions.md` (y opcionalmente sus propios `tools/`, `skills/`, etc.):
+`subagents/` contiene agentes anidados, cada uno un proyecto BxAgents ordinario propio - un `Agent.bx` + `instructions.md` (y opcionalmente sus propios `tools/`, `skills/`, etc.):
 
 ```
 my-agent/

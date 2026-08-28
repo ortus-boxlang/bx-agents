@@ -42,4 +42,4 @@ moduleSettings = {
 ```
 
 !!! info
-    bx-ai 自身のデフォルトの `skillsDirectory` は `/.agents/skills` です - BX Agents の `skills/` コンベンションとは異なるパスです。ジェネレータは常にこれを明示的に上書きするので、あなたのプロジェクトの `skills/` フォルダこそが bx-ai が実際にロードするものになります。これを自分で設定する必要は一切ありません。
+    bx-ai 自身のデフォルトの `skillsDirectory` は `/.agents/skills` です - BxAgents の `skills/` コンベンションとは異なるパスです。ジェネレータは常にこれを明示的に上書きするので、あなたのプロジェクトの `skills/` フォルダこそが bx-ai が実際にロードするものになります。これを自分で設定する必要は一切ありません。

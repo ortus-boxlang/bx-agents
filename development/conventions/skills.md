@@ -42,4 +42,4 @@ moduleSettings = {
 ```
 
 !!! info
-    bx-ai's own default `skillsDirectory` is `/.agents/skills` - a different path than BX Agents' `skills/` convention. The generator always overrides it explicitly so your project's `skills/` folder is the one bx-ai actually loads from; you never need to set this yourself.
+    bx-ai's own default `skillsDirectory` is `/.agents/skills` - a different path than BxAgents' `skills/` convention. The generator always overrides it explicitly so your project's `skills/` folder is the one bx-ai actually loads from; you never need to set this yourself.

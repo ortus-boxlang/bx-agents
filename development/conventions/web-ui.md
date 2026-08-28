@@ -27,7 +27,7 @@ class {
 
 That generates a static `<path>/index.html` (served directly - no route needed) plus a dedicated API under `<path>/api`, backed by a generated `handlers/ChatUi.bx` and `models/ChatDb.bx`.
 
-The UI is dependency-free vanilla HTML/CSS/JS - no Bootstrap, AlpineJS or Vite build step - and is **pre-built and vendored inside BX Agents itself**: `bxAgents build` never runs `npm install`/`npm run build`, and a generated project never needs Node or npm installed at all. Everything the page needs is inlined into the single generated `index.html`.
+The UI is dependency-free vanilla HTML/CSS/JS - no Bootstrap, AlpineJS or Vite build step - and is **pre-built and vendored inside BxAgents itself**: `bxAgents build` never runs `npm install`/`npm run build`, and a generated project never needs Node or npm installed at all. Everything the page needs is inlined into the single generated `index.html`.
 
 That constraint is about the build, not about scope. The page is a full client: conversation sidebar, streaming with reasoning and tool calls, approvals, compaction, server-side theming. What is genuinely still missing is listed under [What is not here yet](#what-is-not-here-yet).
 

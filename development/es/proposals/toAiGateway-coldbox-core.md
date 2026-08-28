@@ -8,7 +8,7 @@ tags: [proposals]
 
 # Propuesta: `toAiGateway()` — un terminador nativo del DSL de enrutamiento de ColdBox para la superficie de webhook de Gateway de bx-ai
 
-Estado: borrador, escrito desde BX Agents (`ortus-boxlang/bx-agents`). Actualización desde el
+Estado: borrador, escrito desde BxAgents (`ortus-boxlang/bx-agents`). Actualización desde el
 primer borrador: `coldbox-platform` (específicamente ColdBox mismo, `Router.cfc`) SÍ se adjuntó y
 se leyó directamente después en esta misma sesión — el límite entre propietarios resultó ser
 por-estado-de-sesión, no permanente; una vez que el zip de `ColdBox/coldbox-platform` se obtuvo de
@@ -34,7 +34,7 @@ Ese es exactamente el tipo de cableado que `toAi()`/`toMCP()` ya existen para ah
 hacer a mano para las otras dos superficies de bx-ai — esto propone cerrar la brecha con un
 tercer terminador, `toAiGateway()`, construido de la misma manera.
 
-BX Agents (un módulo de framework de agentes basado en convenciones sobre bx-ai + ColdBox) está
+BxAgents (un módulo de framework de agentes basado en convenciones sobre bx-ai + ColdBox) está
 enviando este cableado por su cuenta mientras tanto — ver "Workaround actual" abajo — precisamente
 para que pueda eliminarse una vez que esto aterrice en el núcleo.
 
@@ -114,9 +114,9 @@ de preferencia:
 Los modificadores de ruta estándar (`.as()`, `.withModule()`, `.withDomain()`, etc.) deberían aplicarse
 de la misma manera que lo hacen para `toAi()`/`toMCP()`.
 
-## Workaround actual (BX Agents, a eliminar una vez que esto aterrice)
+## Workaround actual (BxAgents, a eliminar una vez que esto aterrice)
 
-El pipeline de build de BX Agents genera el cableado equivalente a mano hoy:
+El pipeline de build de BxAgents genera el cableado equivalente a mano hoy:
 
 - `RouterGenerator.bx` emite, solo cuando al menos un gateway de channel-adapter de tipo `http`
   está configurado:
@@ -138,7 +138,7 @@ El pipeline de build de BX Agents genera el cableado equivalente a mano hoy:
 
 Una vez que `toAiGateway()` exista en el núcleo, `RouterGenerator` cambia sus 3 rutas escritas a mano
 por una llamada `route( ... ).toAiGateway()`, y `GatewayGenerator` deja de generar
-`handlers/Gateway.bx` por completo — pura eliminación, sin lógica nueva del lado de BX Agents necesaria.
+`handlers/Gateway.bx` por completo — pura eliminación, sin lógica nueva del lado de BxAgents necesaria.
 
 ## Plan de pruebas para el PR del núcleo
 
@@ -166,7 +166,7 @@ resultó incorrecta y ha sido corregida:
 2. **El contrato real de `IAiRunnable` — CORREGIDO, no lo que esta propuesta originalmente decía.**
    La sección "Lo que ya está probado" de arriba (sin cambios, todavía precisa para la superficie de
    Gateway) se escribió solo a partir del código fuente de bx-ai. Por separado, el propio trabajo M8 de
-   BX Agents dependió de una descripción de la *documentación publicada* del contrato de objetivo de
+   BxAgents dependió de una descripción de la *documentación publicada* del contrato de objetivo de
    `toAi()` que resultó ser incorrecta: `invoke`/`stream`/`batch`/`info` son los **nombres de las
    subrutas**, no nombres de métodos que `toAi()` llama en el objetivo. Los closures reales de
    Router.cfc llaman a `runnableInstance.run( input, params, options )` y
@@ -174,10 +174,10 @@ resultó incorrecta y ha sido corregida:
    `IAiRunnable` de bx-ai (`bxModules.bxai.models.runnables.IAiRunnable`), que
    `AiAgent` ya implementa nativamente vía `AiBaseRunnable`. **No se necesita ninguna
    subclase de adaptador en absoluto** — el valor de retorno del BIF `aiAgent()` simple ya
-   satisface a `toAi()`. El generador de BX Agents se ha corregido para coincidir (ya no hay más
+   satisface a `toAi()`. El generador de BxAgents se ha corregido para coincidir (ya no hay más
    `GeneratedAgentRunnable.bx`/`exposeAgentAsRunnable`).
 
 3. **El `.toProvider(closure)` de WireBox** — no revisado de nuevo esta sesión (Router.cfc no
    toca la sintaxis de binder de WireBox); todavía es una suposición en el generador `config/WireBox.bx`
-   de BX Agents. Riesgo bajo: `.toProvider()` es un DSL de WireBox bien establecido y de uso
+   de BxAgents. Riesgo bajo: `.toProvider()` es un DSL de WireBox bien establecido y de uso
    común, simplemente no algo que este pase específico de código fuente haya tocado.

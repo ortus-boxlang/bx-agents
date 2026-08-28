@@ -8,7 +8,7 @@ tags: [conventions, configuration]
 
 # Agent.bx
 
-`Agent.bx` は BX Agents プロジェクトで唯一の必須ファイルです。これは **bx-ai 自身の [`AiAgent`](https://ai.ortusbooks.com/main-components/agents/class-based-agents) を extends** するので、それ自体が*エージェント*です - ビルドは config 構造体から再構築するのではなくこれをそのままインスタンス化するので、書いたものがそのまま実行されます。継承して、必要なものを何でも追加してください。プライベートヘルパー、オーバーライドしたメソッド、コード内で登録したツールなど何でもです。構造体を返すディスクリプタではなく実際のクラスなので、IDE は他の通常の BoxLang クラスと同じように解析できます - 定義へのジャンプ、継承メソッドの補完、すべてです。
+`Agent.bx` は BxAgents プロジェクトで唯一の必須ファイルです。これは **bx-ai 自身の [`AiAgent`](https://ai.ortusbooks.com/main-components/agents/class-based-agents) を extends** するので、それ自体が*エージェント*です - ビルドは config 構造体から再構築するのではなくこれをそのままインスタンス化するので、書いたものがそのまま実行されます。継承して、必要なものを何でも追加してください。プライベートヘルパー、オーバーライドしたメソッド、コード内で登録したツールなど何でもです。構造体を返すディスクリプタではなく実際のクラスなので、IDE は他の通常の BoxLang クラスと同じように解析できます - 定義へのジャンプ、継承メソッドの補完、すべてです。
 
 ```javascript
 class extends="bxModules.bxai.models.runnables.AiAgent" {
@@ -86,15 +86,15 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 | `description` | string | 任意です。 |
 | `subAgents` | array of strings | ルートプロジェクトの `subagents/` 直下にある兄弟フォルダの名前です。[subagents/](subagents.md) 参照。 |
 | `mcpServers` | array | リモート MCP サーバーです - 各エントリは URL 文字列、または `{ url, name }` です。[mcp/](mcp.md) 参照。 |
-| `security` | struct | 生成されたアプリの `bxai` モジュール設定にそのまま転送されます。bx-ai 自身の `SecurityDirector` がこれをガードレールミドルウェアに変換します。パススルーのみで、BX Agents 独自のガードレールコンベンションはありません。 |
+| `security` | struct | 生成されたアプリの `bxai` モジュール設定にそのまま転送されます。bx-ai 自身の `SecurityDirector` がこれをガードレールミドルウェアに変換します。パススルーのみで、BxAgents 独自のガードレールコンベンションはありません。 |
 | `memory` | string or struct | エージェントの会話メモリです。素の文字列は型の省略形です (`"cache"`)。構造体は `{ type, ...config }` で `aiMemory()` にそのまま渡されます - 例えば `{ type: "cache", maxMessages: 50 }`、あるいは Web UI の `/compact` を機能させるために `summaryProvider`/`summaryModel`/`summaryThreshold` を付けます。ノードごとに適用されるので、サブエージェントは自身のものを宣言できます。 |
 | `checkpointer` | struct | `{ type: "cache"\|"file"\|"jdbc", ...config }`。省略時は `{ type: "cache" }` がデフォルトです。常に適用されます - これがないと、`cli` 以外のどのゲートウェイを通した human-in-the-loop 承認フローも完全に壊れてしまいます。 |
 | `gatewaySession` | struct | `{ policy, maxQueueDepth }`、どちらも任意です (デフォルトは `"queue"` / `50`)。プロジェクトが少なくとも 1 つの push 型 [ゲートウェイ](gateways.md#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends) エントリを持つ場合にのみ意味を持ちます - すでにターンが進行中のスレッドに 2 通目の受信メッセージが到着した際の、生成される `GatewaySession` のポリシーを制御します。`policy` は `reject`/`queue`/`steer`/`interrupt` のいずれかである必要があります。 |
-| その他のキー | any | マージされ、解決済み config 構造体で利用できますが、BX Agents 自身では解釈されません。 |
+| その他のキー | any | マージされ、解決済み config 構造体で利用できますが、BxAgents 自身では解釈されません。 |
 
 ## The model slug
 
-`model` は BX Agents 独自のコンベンションです - bx-ai 自身は `provider` と `model` を `aiModel()` への 2 つの別々の引数として受け取ります。BX Agents はスラッグを**最初の `/` だけで**分割するので、それ自体にスラッシュを含むプロバイダー (OpenRouter の `openrouter/anthropic/claude-x` のような) でも正しく解析されます。
+`model` は BxAgents 独自のコンベンションです - bx-ai 自身は `provider` と `model` を `aiModel()` への 2 つの別々の引数として受け取ります。BxAgents はスラッグを**最初の `/` だけで**分割するので、それ自体にスラッシュを含むプロバイダー (OpenRouter の `openrouter/anthropic/claude-x` のような) でも正しく解析されます。
 
 | `model` の値 | provider | model |
 |---|---|---|
@@ -173,4 +173,4 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 ここで `--environment=production` でビルドすると `modelDefaults: { temperature: 0.2, maxTokens: 1000 }` になります - 再帰的マージにより、`boxlang-production.json` が一切言及していない `maxTokens` はベースファイルから保持されます。
 
 !!! warning
-    シークレット (API キー、トークン) は、BX Agents によってビルド時に読み込まれたりマージされたりすることは決してありません - それらは外部に留まり (OS の環境変数、`.env`、プラットフォームのシークレットマネージャー)、実行時に bx-ai 自身によってライブに解決されます。[デプロイとシークレット](../deployment-and-secrets.md) を参照してください。
+    シークレット (API キー、トークン) は、BxAgents によってビルド時に読み込まれたりマージされたりすることは決してありません - それらは外部に留まり (OS の環境変数、`.env`、プラットフォームのシークレットマネージャー)、実行時に bx-ai 自身によってライブに解決されます。[デプロイとシークレット](../deployment-and-secrets.md) を参照してください。

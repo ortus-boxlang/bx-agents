@@ -184,7 +184,7 @@ bxAgents deploy --destination=/path/to/somewhere [--target=local]
 - `--name=<entry>` は、指定した `deploy/<entry>.bx`/`.json` エントリが宣言するターゲット (`local`、`ssh`、`ftp`、`sftp`、`docker`、`digitalocean`) にディスパッチします。
 - フラグのみの形式 (`--target=local --destination=...`、または `--target` を指定しない場合) は `deploy/` フォルダがなくても動作します - `local` のみがこれをサポートしており、それ以外のすべてのターゲットは、数個のフラグでは足りないより多くの設定が必要なため、名前付きエントリが必要です。
 - `local`/`ssh`/`ftp`/`sftp` は事前に `package` が必要です。`docker`/`digitalocean` は事前に `build` が必要です (`.build/app` から直接ビルドします)。
-- `ftp`/`sftp` は BX Agents と並んで [`bx-ftp`](https://github.com/ortus-boxlang/bx-ftp) モジュールがインストールされている必要があります ([インストール](getting-started/installation.md) 参照)。
+- `ftp`/`sftp` は BxAgents と並んで [`bx-ftp`](https://github.com/ortus-boxlang/bx-ftp) モジュールがインストールされている必要があります ([インストール](getting-started/installation.md) 参照)。
 
 ### `hash-password`
 

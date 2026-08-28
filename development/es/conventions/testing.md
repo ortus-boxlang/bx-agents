@@ -18,7 +18,7 @@ bxAgents test
 ```
 
 !!! info
-    Inspirado en la propia carpeta dedicada `tests/` + `box.json` de la plantilla `coldbox-templates/boxlang` - adaptado a la historia de pruebas más simple propia de BX Agents. Probar un agente trata sobre su **comportamiento** (qué dice, qué tools llama), no el enrutamiento HTTP, así que no hay ningún `Application.bx`/app virtual de ColdBox involucrado aquí en absoluto.
+    Inspirado en la propia carpeta dedicada `tests/` + `box.json` de la plantilla `coldbox-templates/boxlang` - adaptado a la historia de pruebas más simple propia de BxAgents. Probar un agente trata sobre su **comportamiento** (qué dice, qué tools llama), no el enrutamiento HTTP, así que no hay ningún `Application.bx`/app virtual de ColdBox involucrado aquí en absoluto.
 
 ## Escribiendo un spec
 
@@ -60,7 +60,7 @@ function test() {
 }
 ```
 
-Esto significa que tus pruebas no necesitan **ni clave de API ni acceso a red** desde el principio - la misma convención de proveedor `mock` usada en toda la propia suite de pruebas de BX Agents. Edita este override si quieres que un spec se ejecute contra un proveedor real en su lugar (necesitarás una clave de API real disponible en el entorno que ejecuta las pruebas).
+Esto significa que tus pruebas no necesitan **ni clave de API ni acceso a red** desde el principio - la misma convención de proveedor `mock` usada en toda la propia suite de pruebas de BxAgents. Edita este override si quieres que un spec se ejecute contra un proveedor real en su lugar (necesitarás una clave de API real disponible en el entorno que ejecuta las pruebas).
 
 ### `mockResponses( responses )`
 

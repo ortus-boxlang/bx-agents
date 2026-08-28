@@ -8,7 +8,7 @@ tags: [proposals]
 
 # Proposal: `toAiGateway()` — a native ColdBox routing DSL terminator for the bx-ai Gateway webhook surface
 
-Status: draft, written from BX Agents (`ortus-boxlang/bx-agents`). Update since first
+Status: draft, written from BxAgents (`ortus-boxlang/bx-agents`). Update since first
 draft: `coldbox-platform` (specifically ColdBox itself, `Router.cfc`) WAS attached and
 read directly later in this same session — the cross-owner limit turned out to be
 per-session-state, not permanent; once `ColdBox/coldbox-platform`'s zip was fetched from
@@ -34,7 +34,7 @@ That's exactly the kind of wiring `toAi()`/`toMCP()` already exist to save peopl
 doing by hand for the other two bx-ai surfaces — this proposes closing the gap with a
 third terminator, `toAiGateway()`, built the same way.
 
-BX Agents (a conventions-based agent-framework module on top of bx-ai + ColdBox) is
+BxAgents (a conventions-based agent-framework module on top of bx-ai + ColdBox) is
 shipping this wiring itself in the meantime — see "Current workaround" below — precisely
 so it can be deleted once this lands in core.
 
@@ -113,9 +113,9 @@ preference:
 Standard route modifiers (`.as()`, `.withModule()`, `.withDomain()`, etc.) should apply
 the same way they do for `toAi()`/`toMCP()`.
 
-## Current workaround (BX Agents, to delete once this lands)
+## Current workaround (BxAgents, to delete once this lands)
 
-BX Agents' build pipeline generates the equivalent wiring by hand today:
+BxAgents' build pipeline generates the equivalent wiring by hand today:
 
 - `RouterGenerator.bx` emits, only when at least one `http`-type channel-adapter gateway
   is configured:
@@ -137,7 +137,7 @@ BX Agents' build pipeline generates the equivalent wiring by hand today:
 
 Once `toAiGateway()` exists in core, `RouterGenerator` swaps its 3 hand-written routes
 for one `route( ... ).toAiGateway()` call, and `GatewayGenerator` stops generating
-`handlers/Gateway.bx` entirely — pure deletion, no new BX Agents-side logic needed.
+`handlers/Gateway.bx` entirely — pure deletion, no new BxAgents-side logic needed.
 
 ## Testing plan for the core PR
 
@@ -164,7 +164,7 @@ was wrong and has been corrected:
 
 2. **The real `IAiRunnable` contract — CORRECTED, not what this proposal originally said.**
    The "What's already proven" section above (unchanged, still accurate for the Gateway
-   surface) was written from bx-ai source only. Separately, BX Agents' own M8 work relied
+   surface) was written from bx-ai source only. Separately, BxAgents' own M8 work relied
    on a *published-docs* description of `toAi()`'s target contract that turned out to be
    wrong: `invoke`/`stream`/`batch`/`info` are the **sub-route names**, not method names
    `toAi()` calls on the target. Router.cfc's actual closures call
@@ -173,10 +173,10 @@ was wrong and has been corrected:
    `IAiRunnable` interface (`bxModules.bxai.models.runnables.IAiRunnable`), which
    `AiAgent` already implements natively via `AiBaseRunnable`. **No adapter subclass is
    needed at all** — the plain `aiAgent()` BIF's return value already satisfies `toAi()`.
-   BX Agents' generator has been corrected to match (no more
+   BxAgents' generator has been corrected to match (no more
    `GeneratedAgentRunnable.bx`/`exposeAgentAsRunnable`).
 
 3. **WireBox's `.toProvider(closure)`** — not re-checked this session (Router.cfc doesn't
-   touch WireBox binder syntax); still an assumption in BX Agents' `config/WireBox.bx`
+   touch WireBox binder syntax); still an assumption in BxAgents' `config/WireBox.bx`
    generator. Low risk: `.toProvider()` is well-established, commonly-used WireBox DSL,
    just not something this specific source pass happened to touch.
