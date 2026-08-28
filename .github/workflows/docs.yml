@@ -3,7 +3,8 @@ name: Publish Docs
 # Builds docs/ with bx-sites (https://ortus-boxlang.github.io/bx-sites/development/ -
 # there's no bx-sites `main` branch published yet, so its own docs currently
 # only live under /development/) and
-# publishes it to GitHub Pages at https://ortus-boxlang.github.io/bx-agents/.
+# publishes it to GitHub Pages at the custom domain https://bxagents.ai/
+# (see the repo's gh-pages branch CNAME file).
 #
 # This follows bx-sites' own documented deployment approach - see
 # https://ortus-boxlang.github.io/bx-sites/development/guides/deployment/ and
@@ -82,7 +83,14 @@ jobs:
           # the site root and the main branch - every other branch publishes
           # under /<branch-name>/ and edits against its own branch instead,
           # so patch this job's own checkout of the config just for this build.
-          export URL="https://ortus-boxlang.github.io/bx-agents/${{ github.ref_name }}/"
+          #
+          # The scheme+host (the custom domain) is read back out of the
+          # committed baseURL rather than hardcoded here, so this step can't
+          # drift out of sync with it again the next time the domain changes -
+          # only the version sub-path is appended.
+          ORIGIN="$(yq eval '.baseURL' bxsites.yaml | sed -E 's#^(https?://[^/]+).*#\1#')"
+          export ORIGIN
+          export URL="${ORIGIN}/${{ github.ref_name }}/"
           export EDIT_URI="edit/${{ github.ref_name }}/docs/"
           yq eval -i '.baseURL = strenv(URL) | .repo.editUri = strenv(EDIT_URI)' bxsites.yaml
 
