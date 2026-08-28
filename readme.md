@@ -2,8 +2,8 @@
 
 ```
 |:------------------------------------------------------:|
-| ⚡︎ B o x L a n g ⚡︎
-| Dynamic : Modular : Productive
+| ⚡︎ B x A g e n t s ⚡︎
+| Build AI Agents by Convention
 |:------------------------------------------------------:|
 ```
 
@@ -16,7 +16,7 @@
 
 <p>&nbsp;</p>
 
-**BxAgents** is a conventions-based AI agent framework for [BoxLang](https://boxlang.io), built on top of [ColdBox](https://coldbox.ortusbooks.com) and [BX AI](https://boxlang.ortusbooks.com/boxlang-+-++/modules/bx-ai). Describe an agent with a handful of files and folders - `Agent.bx`, `instructions.md`, and whichever of `tools/`, `skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `models/`, `modules/` it actually needs - and BxAgents assembles a real, runnable ColdBox application from it **at build time**, ready to serve, chat with, or package as a portable `.bxa`.
+**BxAgents** is a conventions-based framework for building AI agents powered by [BoxLang AI](https://boxlang.ortusbooks.com/boxlang-+-++/modules/bx-ai). Built on top of [ColdBox](https://coldbox.ortusbooks.com), it lets you describe an agent with a handful of files and folders - `Agent.bx`, `instructions.md`, and whichever of `tools/`, `skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `models/`, `modules/` it actually needs - and BxAgents assembles a real, runnable ColdBox application from it **at build time**, ready to serve, chat with, or package as a portable `.bxa`.
 
 ## Quick Start
 
@@ -126,7 +126,7 @@ Every page starts with a small frontmatter block (`title`, `icon`, `summary`, `d
 
 The Spanish/German/Japanese translations under `docs/i18n/` cover page content; the surrounding theme chrome (search placeholder, "On this page," "Edit this page," the 404 page, ...) is translated automatically too - bx-sites ships built-in `es`/`de`/`ja` chrome translations out of the box, so nothing extra needs configuring for those three locales.
 
-Pushes to `development` publish to [`/development/`](https://ortus-boxlang.github.io/bx-agents/development/) and pushes to `main` publish to the site root, via `.github/workflows/docs.yml` - one folder per version, and both stay live at once. There is no `main` branch yet, so the root currently redirects into `/development/`.
+Pushes to `development` publish to [`/development/`](https://bxagents.io/development/) and pushes to `main` publish to the site root, via `.github/workflows/docs.yml` - one folder per version, and both stay live at once. There is no `main` branch yet, so the root currently redirects into `/development/`.
 
 This follows [bx-sites' own documented deployment approach](https://ortus-boxlang.github.io/bx-sites/development/guides/deployment/): the workflow builds `site/` and pushes it to a **`gh-pages`** branch, each branch into its own `destination_dir` with `keep_files: true`, so the two versions never overwrite each other and a push only rebuilds the branch it happened on.
 
