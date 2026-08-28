@@ -6,5 +6,19 @@ on:
 
 jobs:
   tests:
+    # Must match (or exceed) tests.yml's own job-level `permissions:` - a
+    # reusable-workflow call is only granted what the CALLER explicitly
+    # requests here, and a schedule-triggered run gets none of these by
+    # default. Without this block every run fails at startup with "The
+    # nested job 'tests' is requesting '...', but is only allowed
+    # 'checks: none, issues: none, pull-requests: none'" before a single
+    # job is even scheduled - which is exactly what happened on every
+    # scheduled run of this workflow since it was added. pr.yml's own
+    # `tests:` job already sets this same block for the same reason.
+    permissions:
+      checks: write
+      pull-requests: write
+      contents: read
+      issues: read
     uses: ./.github/workflows/tests.yml
     secrets: inherit
