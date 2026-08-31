@@ -110,6 +110,25 @@ We recommend that anytime you hack on the core you start the formatter watcher (
 
 You can also see the Ortus Coding Standards you must follow here: https://github.com/Ortus-Solutions/coding-standards.
 
+## Documentation Versions
+
+The `docs/` site is versioned via bx-sites' own `versions:` support (`bxsites.yaml`).
+`docs/versions/1.0.x/` is a frozen snapshot of `docs/` for the `1.0.x` release
+currently being prepped - it's the configured `versions.default`, so it builds at the
+site root; the live `docs/` tree itself builds at `/next/`.
+
+**While `1.0.x` is unreleased, keep the two trees in sync**: any change made to
+`docs/` (outside `docs/versions/`) should be mirrored into `docs/versions/1.0.x/` in
+the same PR, and vice versa. `docs/assets/`, `docs/i18n/`, `docs/versions/` and
+`docs/blog/` (if it ever exists) are shared/global and are never duplicated into a
+version snapshot - everything else under `docs/`, including `docs/data/`, is.
+
+Once `1.0.x` ships and merges to `main`, stop syncing - `docs/versions/1.0.x/` becomes
+a real historical snapshot of the released docs, and `docs/` moves on as `next` for
+whatever comes after it. Cut the next version the same way: copy `docs/` (excluding
+`assets/`, `i18n/`, `versions/`) into `docs/versions/<name>/` and update
+`versions.default` in `bxsites.yaml`.
+
 ## Financial Contributions
 
 You can support ColdBox and all of our Open Source initiatives at Ortus Solutions by becoming a patreon. You can also get lots of goodies and services depending on the level of contributions.
