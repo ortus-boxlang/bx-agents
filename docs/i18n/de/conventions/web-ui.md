@@ -10,7 +10,7 @@ tags: [conventions, gateways, web-ui]
 
 Ein `gateways/*.bx`-Eintrag mit `exposes: "webui"` liefert einen vollständigen Browser-Chat-Client für den Agenten aus - eine Konversations-Seitenleiste, Streaming mit Reasoning und Tool-Aufrufen, Human-in-the-Loop-Genehmigungen, Theming pro Besucher, und einen echten SQLite-Store dahinter.
 
-Sie lebt unter [gateways/](gateways.md), weil dort Exposures deklariert werden, ist aber ein eigenständiges Subsystem, weshalb sie eine eigene Seite hat.
+Sie lebt unter [gateways/](gateways/index.md), weil dort Exposures deklariert werden, ist aber ein eigenständiges Subsystem, weshalb sie eine eigene Seite hat.
 
 ```javascript
 // gateways/chat.bx

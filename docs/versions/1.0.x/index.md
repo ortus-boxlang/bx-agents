@@ -40,7 +40,7 @@ both are discovered and wired for you.
 `subagents/` nests the exact same convention tree, so a team of specialists is just more
 folders - built leaf-first.
 :::
-::: card title="Twelve gateway types" icon="phosphor-duotone:chats-circle" href="conventions/gateways.md"
+::: card title="Twelve gateway types" icon="phosphor-duotone:chats-circle" href="conventions/gateways/index.md"
 Telegram, Slack, Discord, Email, WhatsApp, Teams, Twilio, GitHub and Signal, plus `http`,
 `cli` and `mock`.
 :::
@@ -155,7 +155,7 @@ into the request path.
 ## Reach it from anywhere
 
 ::: cards
-::: card title="Chat platforms" icon="phosphor-duotone:plugs-connected" href="conventions/gateways.md"
+::: card title="Chat platforms" icon="phosphor-duotone:plugs-connected" href="conventions/gateways/index.md"
 Nine push-style gateways - Telegram, Slack, Discord, Email, WhatsApp Cloud, Teams, Twilio,
 GitHub and Signal - coordinated by one session with `queue` / `steer` / `interrupt` policies.
 :::

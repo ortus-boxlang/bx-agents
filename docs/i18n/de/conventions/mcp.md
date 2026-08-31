@@ -94,7 +94,7 @@ mcpServer( "localServer", "Internal tools MCP server", "1.0.0", "*" )
 
 ## Einen lokalen Server über HTTP exponieren
 
-Ein lokaler `mcp/*`-Server ist nicht von allein über HTTP erreichbar - ihn mit einem [`gateways/`](gateways.md)-Exposure-Eintrag paaren, der ihn als `target` benennt:
+Ein lokaler `mcp/*`-Server ist nicht von allein über HTTP erreichbar - ihn mit einem [`gateways/`](gateways/index.md)-Exposure-Eintrag paaren, der ihn als `target` benennt:
 
 ```javascript
 // gateways/expose-mcp.bx

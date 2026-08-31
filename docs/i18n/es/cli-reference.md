@@ -156,7 +156,7 @@ bxAgents invoke --message="..." --server [--port=<port>]
 
 - Requiere un `build` previo.
 - **Por defecto (sin `--server`)**: carga `GeneratedAgentFactory.bx` directamente (sin contenedor ColdBox, sin HTTP) y llama al agente una vez - el mismo camino en proceso que usa `chat` internamente, solo sin el bucle del REPL. No hay ningún prerequisito de `serve`/gateway en absoluto.
-- **`--server`**: lanza un proceso real y desechable de `boxlang-miniserver` (igual que `serve`), envía el mensaje como un request HTTP real a través de la ruta expuesta con `toAi()` del proyecto, luego apaga el servidor de nuevo. Ejerce el camino realmente servido (enrutamiento ColdBox, interceptores, gateways) en lugar del atajo en proceso. Requiere una entrada `gateways/*.bx` con `{ exposes: "agent", path: "..." }` (ver [gateways](conventions/gateways.md)) - falla claramente si ninguna existe. `--port` por defecto usa un puerto efímero libre para que nunca colisione con un `serve` ya en ejecución.
+- **`--server`**: lanza un proceso real y desechable de `boxlang-miniserver` (igual que `serve`), envía el mensaje como un request HTTP real a través de la ruta expuesta con `toAi()` del proyecto, luego apaga el servidor de nuevo. Ejerce el camino realmente servido (enrutamiento ColdBox, interceptores, gateways) en lugar del atajo en proceso. Requiere una entrada `gateways/*.bx` con `{ exposes: "agent", path: "..." }` (ver [gateways](conventions/gateways/index.md)) - falla claramente si ninguna existe. `--port` por defecto usa un puerto efímero libre para que nunca colisione con un `serve` ya en ejecución.
 - `--json` imprime `{"response": "..."}` en lugar de la respuesta en texto plano.
 
 ### `package`

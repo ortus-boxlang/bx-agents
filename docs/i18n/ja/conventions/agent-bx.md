@@ -89,7 +89,7 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 | `security` | struct | 生成されたアプリの `bxai` モジュール設定にそのまま転送されます。bx-ai 自身の `SecurityDirector` がこれをガードレールミドルウェアに変換します。パススルーのみで、BxAgents 独自のガードレールコンベンションはありません。 |
 | `memory` | string or struct | エージェントの会話メモリです。素の文字列は型の省略形です (`"cache"`)。構造体は `{ type, ...config }` で `aiMemory()` にそのまま渡されます - 例えば `{ type: "cache", maxMessages: 50 }`、あるいは Web UI の `/compact` を機能させるために `summaryProvider`/`summaryModel`/`summaryThreshold` を付けます。ノードごとに適用されるので、サブエージェントは自身のものを宣言できます。 |
 | `checkpointer` | struct | `{ type: "cache"\|"file"\|"jdbc", ...config }`。省略時は `{ type: "cache" }` がデフォルトです。常に適用されます - これがないと、`cli` 以外のどのゲートウェイを通した human-in-the-loop 承認フローも完全に壊れてしまいます。 |
-| `gatewaySession` | struct | `{ policy, maxQueueDepth }`、どちらも任意です (デフォルトは `"queue"` / `50`)。プロジェクトが少なくとも 1 つの push 型 [ゲートウェイ](gateways.md#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends) エントリを持つ場合にのみ意味を持ちます - すでにターンが進行中のスレッドに 2 通目の受信メッセージが到着した際の、生成される `GatewaySession` のポリシーを制御します。`policy` は `reject`/`queue`/`steer`/`interrupt` のいずれかである必要があります。 |
+| `gatewaySession` | struct | `{ policy, maxQueueDepth }`、どちらも任意です (デフォルトは `"queue"` / `50`)。プロジェクトが少なくとも 1 つの push 型 [ゲートウェイ](gateways/index.md#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends) エントリを持つ場合にのみ意味を持ちます - すでにターンが進行中のスレッドに 2 通目の受信メッセージが到着した際の、生成される `GatewaySession` のポリシーを制御します。`policy` は `reject`/`queue`/`steer`/`interrupt` のいずれかである必要があります。 |
 | その他のキー | any | マージされ、解決済み config 構造体で利用できますが、BxAgents 自身では解釈されません。 |
 
 ## The model slug

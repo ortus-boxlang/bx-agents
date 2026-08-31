@@ -10,7 +10,7 @@ tags: [conventions, gateways, web-ui]
 
 `exposes: "webui"` を持つ `gateways/*.bx` エントリは、エージェント向けの完全なブラウザチャットクライアント - 会話サイドバー、推論とツール呼び出しを伴うストリーミング、human-in-the-loop 承認、訪問者ごとのテーマ、そしてその背後にある実際の SQLite ストア - を出荷します。
 
-これは公開が宣言される場所であるという理由で [gateways/](gateways.md) の下にありますが、それ自体が独立したサブシステムであり、それゆえに独自のページを持っています。
+これは公開が宣言される場所であるという理由で [gateways/](gateways/index.md) の下にありますが、それ自体が独立したサブシステムであり、それゆえに独自のページを持っています。
 
 ```javascript
 // gateways/chat.bx

@@ -113,7 +113,7 @@ bxAgents chat
 bxAgents serve --port=8080
 ```
 
-プロジェクトに `{ exposes: "agent", path: "/api/chat" }` を持つ `gateways/*` エントリがあれば、エージェントは `POST http://localhost:8080/api/chat/invoke` (および `/stream`、`/batch`、`/info` - [gateways/](../conventions/gateways.md) 参照) で到達可能になります。
+プロジェクトに `{ exposes: "agent", path: "/api/chat" }` を持つ `gateways/*` エントリがあれば、エージェントは `POST http://localhost:8080/api/chat/invoke` (および `/stream`、`/batch`、`/info` - [gateways/](../conventions/gateways/index.md) 参照) で到達可能になります。
 
 !!! warning
     新しく起動したアプリの `toAi()` ルートへの最初のリクエストは一時的に失敗することがあります - [既知の制限](../known-limitations.md) を参照してください。負荷がかかる状況で信頼して使う前に、ウォームアップリクエストを送ってください。

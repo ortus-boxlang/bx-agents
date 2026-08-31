@@ -94,7 +94,7 @@ mcpServer( "localServer", "Internal tools MCP server", "1.0.0", "*" )
 
 ## ローカルサーバーを HTTP 経由で公開する
 
-ローカルの `mcp/*` サーバーは単体では HTTP 経由で到達できません - それを `target` として指定する [`gateways/`](gateways.md) 公開エントリと組み合わせてください。
+ローカルの `mcp/*` サーバーは単体では HTTP 経由で到達できません - それを `target` として指定する [`gateways/`](gateways/index.md) 公開エントリと組み合わせてください。
 
 ```javascript
 // gateways/expose-mcp.bx
