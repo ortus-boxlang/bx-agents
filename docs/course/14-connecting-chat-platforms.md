@@ -106,6 +106,6 @@ export `TELEGRAM_BOT_TOKEN`, and `bxAgents serve` - message your bot and watch i
 reply. No token handy? Read through a couple of the platform sections in the full
 reference below; the shape is consistent across all nine.
 
-Full reference: [gateways/](../conventions/gateways.md).
+Full reference: [gateways/](../conventions/gateways/index.md).
 
 Next: [Lesson 15 - The Generated Web Chat UI](15-the-generated-web-chat-ui.md)

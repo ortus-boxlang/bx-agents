@@ -39,7 +39,7 @@ toc: false
 `subagents/` はまったく同じコンベンションツリーを入れ子にできるので、専門家チームは単にフォルダを
 増やすだけで作れます - リーフ (末端) から先にビルドされます。
 :::
-::: card title="12 種類のゲートウェイ" icon="phosphor-duotone:chats-circle" href="conventions/gateways.md"
+::: card title="12 種類のゲートウェイ" icon="phosphor-duotone:chats-circle" href="conventions/gateways/index.md"
 Telegram、Slack、Discord、Email、WhatsApp、Teams、Twilio、GitHub、Signal に加え、`http`、
 `cli`、`mock`。
 :::
@@ -155,7 +155,7 @@ your-agent/
 ## どこからでも到達できるように
 
 ::: cards
-::: card title="チャットプラットフォーム" icon="phosphor-duotone:plugs-connected" href="conventions/gateways.md"
+::: card title="チャットプラットフォーム" icon="phosphor-duotone:plugs-connected" href="conventions/gateways/index.md"
 9 種類の push 型ゲートウェイ - Telegram、Slack、Discord、Email、WhatsApp Cloud、Teams、Twilio、
 GitHub、Signal - を、`queue` / `steer` / `interrupt` ポリシーを持つ 1 つのセッションが調整します。
 :::

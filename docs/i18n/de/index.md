@@ -39,7 +39,7 @@ beides wird automatisch erkannt und eingebunden.
 `subagents/` verschachtelt genau denselben Konventionsbaum, sodass ein Team von Spezialisten nur aus weiteren
 Ordnern besteht - von den Blättern aus gebaut.
 :::
-::: card title="Zwölf Gateway-Typen" icon="phosphor-duotone:chats-circle" href="conventions/gateways.md"
+::: card title="Zwölf Gateway-Typen" icon="phosphor-duotone:chats-circle" href="conventions/gateways/index.md"
 Telegram, Slack, Discord, E-Mail, WhatsApp, Teams, Twilio, GitHub und Signal, plus `http`,
 `cli` und `mock`.
 :::
@@ -154,7 +154,7 @@ Build-Zeit-Arbeit, die in den Request-Pfad verschoben wird.
 ## Von überall erreichbar
 
 ::: cards
-::: card title="Chat-Plattformen" icon="phosphor-duotone:plugs-connected" href="conventions/gateways.md"
+::: card title="Chat-Plattformen" icon="phosphor-duotone:plugs-connected" href="conventions/gateways/index.md"
 Neun Push-Style-Gateways - Telegram, Slack, Discord, E-Mail, WhatsApp Cloud, Teams, Twilio,
 GitHub und Signal - koordiniert von einer Session mit `queue`-/`steer`-/`interrupt`-Richtlinien.
 :::

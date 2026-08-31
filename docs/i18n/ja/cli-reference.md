@@ -156,7 +156,7 @@ bxAgents invoke --message="..." --server [--port=<port>]
 
 - 事前に `build` が必要です。
 - **デフォルト (`--server` なし)**: `GeneratedAgentFactory.bx` を直接ロードし (ColdBox コンテナも HTTP もなし)、エージェントを一度呼び出します - `chat` が内部で使うのと同じインプロセスのパスで、REPL ループがないだけです。`serve`/ゲートウェイの前提条件はまったく不要です。
-- **`--server`**: 実際の使い捨て `boxlang-miniserver` プロセスを起動し (`serve` と同様)、メッセージを実際の HTTP リクエストとしてプロジェクトの `toAi()` 公開ルートへ送り、その後サーバーをシャットダウンします。インプロセスのショートカットではなく、実際に公開されるパス (ColdBox のルーティング、インターセプター、ゲートウェイ) を実行します。`{ exposes: "agent", path: "..." }` を持つ `gateways/*.bx` エントリが必要です ([gateways](conventions/gateways.md) 参照) - なければ明確に失敗します。`--port` はデフォルトで空いているエフェメラルポートになるため、すでに動いている `serve` と衝突することはありません。
+- **`--server`**: 実際の使い捨て `boxlang-miniserver` プロセスを起動し (`serve` と同様)、メッセージを実際の HTTP リクエストとしてプロジェクトの `toAi()` 公開ルートへ送り、その後サーバーをシャットダウンします。インプロセスのショートカットではなく、実際に公開されるパス (ColdBox のルーティング、インターセプター、ゲートウェイ) を実行します。`{ exposes: "agent", path: "..." }` を持つ `gateways/*.bx` エントリが必要です ([gateways](conventions/gateways/index.md) 参照) - なければ明確に失敗します。`--port` はデフォルトで空いているエフェメラルポートになるため、すでに動いている `serve` と衝突することはありません。
 - `--json` はプレーンテキストの応答の代わりに `{"response": "..."}` を表示します。
 
 ### `package`

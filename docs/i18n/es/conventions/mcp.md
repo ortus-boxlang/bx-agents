@@ -94,7 +94,7 @@ mcpServer( "localServer", "Internal tools MCP server", "1.0.0", "*" )
 
 ## Exponer un servidor local sobre HTTP
 
-Un servidor local `mcp/*` no es alcanzable sobre HTTP por sí mismo - empárealo con una entrada de exposición de [`gateways/`](gateways.md) nombrándolo como el `target`:
+Un servidor local `mcp/*` no es alcanzable sobre HTTP por sí mismo - empárealo con una entrada de exposición de [`gateways/`](gateways/index.md) nombrándolo como el `target`:
 
 ```javascript
 // gateways/expose-mcp.bx

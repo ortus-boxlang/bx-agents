@@ -93,6 +93,6 @@ curl -X POST http://localhost:8080/api/chat/invoke \
 from [Lesson 8](08-talking-to-your-agent.md), which exercises this exact route without
 you having to manage the server process yourself.)
 
-Full reference: [gateways/](../conventions/gateways.md).
+Full reference: [gateways/](../conventions/gateways/index.md).
 
 Next: [Lesson 14 - Connecting Chat Platforms](14-connecting-chat-platforms.md)
