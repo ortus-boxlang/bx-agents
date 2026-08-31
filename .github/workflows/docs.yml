@@ -11,13 +11,16 @@ name: Publish Docs
 # the reference workflow it ships (.github/workflows/pages.yml): build the
 # site, then push site/ to a `gh-pages` branch with peaceiris/actions-gh-pages.
 #
-# LAYOUT - one version per folder:
-#   development -> /development/   (latest, what this repo develops against)
-#   main        -> /               (the released docs)
-# Because each branch deploys with `keep_files: true` into its OWN
-# destination_dir, the two never overwrite each other, and a push only has to
-# rebuild the branch it happened on. Until a `main` branch exists, development
-# also drops a redirect at the root so the bare site URL is never a 404.
+# LAYOUT - single root, no branch subpath: whichever of main/development
+# triggers publishes straight to the site root (https://bxagents.ai/),
+# using bx-sites' own `versions:` support (bxsites.yaml's `versions.default`)
+# to split "released" (1.0.x, at the root) from "in-progress" (docs/, at
+# /next/) - see CONTRIBUTING.md's "Documentation Versions" section. There is
+# no `main` branch yet, so `development` is what publishes today; this is a
+# deliberate, temporary simplification while nothing has actually shipped -
+# once a real release cuts a `main` branch, this workflow's branch-vs-root
+# story is worth revisiting again (e.g. only main publishes to root, and/or
+# real version folders replace the single default/next split).
 #
 # ONE-TIME SETUP, which no workflow file can do for itself: the repository's
 # Settings -> Pages -> Build and deployment -> Source must be
@@ -47,10 +50,11 @@ on:
 permissions:
   contents: write
 
-# Each branch publishes to its own destination_dir, so main and development
-# deploys never conflict - only serialize a branch against its own prior runs.
+# Every trigger now publishes to the same destination (the site root), so
+# serialize across branches too - a main and a development push landing
+# close together must not race to publish over each other.
 concurrency:
-  group: "pages-${{ github.ref_name }}"
+  group: "pages-deploy"
   cancel-in-progress: false
 
 jobs:
@@ -76,23 +80,15 @@ jobs:
           sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq
           sudo chmod +x /usr/bin/yq
 
-      - name: Point baseURL and repo.editUri at this branch's own sub-path
-        if: github.ref_name != 'main'
+      - name: Point repo.editUri at whichever branch triggered this build
+        if: github.ref_name != 'development'
         run: |
-          # main's committed bxsites.yaml already points baseURL/editUri at
-          # the site root and the main branch - every other branch publishes
-          # under /<branch-name>/ and edits against its own branch instead,
-          # so patch this job's own checkout of the config just for this build.
-          #
-          # The scheme+host (the custom domain) is read back out of the
-          # committed baseURL rather than hardcoded here, so this step can't
-          # drift out of sync with it again the next time the domain changes -
-          # only the version sub-path is appended.
-          ORIGIN="$(yq eval '.baseURL' bxsites.yaml | sed -E 's#^(https?://[^/]+).*#\1#')"
-          export ORIGIN
-          export URL="${ORIGIN}/${{ github.ref_name }}/"
+          # bxsites.yaml is committed with development's own editUri (today's
+          # only real branch). baseURL is always the true site root now, for
+          # every branch - only editUri (which branch "Edit this page" links
+          # into) needs to track whichever branch actually triggered.
           export EDIT_URI="edit/${{ github.ref_name }}/docs/"
-          yq eval -i '.baseURL = strenv(URL) | .repo.editUri = strenv(EDIT_URI)' bxsites.yaml
+          yq eval -i '.repo.editUri = strenv(EDIT_URI)' bxsites.yaml
 
       - name: Build the site
         run: boxlang bxSites build
@@ -106,60 +102,9 @@ jobs:
             || { echo "::error::site/index.html missing - the docs build produced no site"; exit 1; }
           echo "Built $(find site -name '*.html' | wc -l) HTML page(s)"
 
-      - name: Deploy main to the site root
-        if: github.ref_name == 'main'
+      - name: Deploy to the site root
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./site
-          keep_files: true
-
-      - name: Deploy development to /development/
-        if: github.ref_name == 'development'
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./site
-          destination_dir: development
-          keep_files: true
-
-      - name: Stage a root redirect while there is no main branch
-        id: redirect
-        if: github.ref_name == 'development'
-        run: |
-          # Once main exists it owns the root, and this step stops running -
-          # keep_files means the redirect it leaves behind is simply
-          # overwritten by main's own index.html on that branch's next deploy.
-          if git ls-remote --exit-code --heads origin main >/dev/null 2>&1; then
-            echo "main exists - it owns the site root; no redirect needed"
-            echo "needed=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          mkdir -p _root
-          # Both a meta refresh and a JS hop, so it works with scripting
-          # disabled; the visible link is the fallback if neither fires.
-          cat > _root/index.html <<'HTML'
-          <!doctype html>
-          <html lang="en">
-          <head>
-            <meta charset="utf-8">
-            <title>BxAgents Documentation</title>
-            <meta http-equiv="refresh" content="0; url=./development/">
-            <link rel="canonical" href="./development/">
-            <script>location.replace("./development/")</script>
-          </head>
-          <body>
-            <p>Redirecting to the <a href="./development/">BxAgents documentation</a>.</p>
-          </body>
-          </html>
-          HTML
-          echo "needed=true" >> "$GITHUB_OUTPUT"
-
-      - name: Deploy the root redirect
-        if: github.ref_name == 'development' && steps.redirect.outputs.needed == 'true'
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./_root
           keep_files: true
