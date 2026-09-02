@@ -27,6 +27,10 @@ class {
 
 Eso genera un `<path>/index.html` estático (servido directamente - no se necesita ruta) más una API dedicada bajo `<path>/api`, respaldada por un `handlers/ChatUi.bx` y `models/ChatDb.bx` generados.
 
+![La interfaz web de chat generada: una barra lateral de conversaciones, un transcript de varios turnos, y un encabezado/compositor con marca](../assets/webui-chat-light.png)
+
+La captura de pantalla anterior es la página generada real y sin modificar - la misma plantilla que este repositorio distribuye - con la marca de [`examples/webui-agent`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/webui-agent) (su propia configuración de `theme`/`title`/`icon`) y poblada con contenido de conversación de ejemplo para ilustrarla; `bxAgents build && bxAgents serve` en ese ejemplo la reproduce de verdad.
+
 La interfaz es HTML/CSS/JS vainilla sin dependencias - sin Bootstrap, AlpineJS ni un paso de build de Vite - y está **preconstruida y empaquetada dentro de BxAgents mismo**: `bxAgents build` nunca ejecuta `npm install`/`npm run build`, y un proyecto generado nunca necesita Node ni npm instalados en absoluto. Todo lo que la página necesita está incrustado en el único `index.html` generado.
 
 Esa restricción es sobre el build, no sobre el alcance. La página es un cliente completo: barra lateral de conversación, streaming con razonamiento y llamadas de tool, aprobaciones, compactación, temática del lado del servidor. Lo que realmente todavía falta se lista bajo [What is not here yet](#what-is-not-here-yet).
@@ -223,6 +227,8 @@ La página enviada es un cliente de chat real, no una carcasa de demostración. 
 
 Las pantallas estrechas obtienen un layout real en lugar de uno exprimido: bajo `40rem` la barra lateral se superpone al transcript en lugar de robarle su ancho, y se honra `prefers-reduced-motion`.
 
+![La misma página en un viewport estrecho - el transcript conserva todo el ancho, la barra lateral se superpone en lugar de exprimirlo](../assets/webui-chat-mobile.png)
+
 ## El almacén SQLite
 
 Cada proyecto `webui` obtiene una base de datos SQLite. No es opcional y no hay ningún flag para desactivarlo.
@@ -310,6 +316,8 @@ Cada clave de abajo es opcional - la entrada funciona con solo `exposes` y `path
 | `themeFile` | Ruta a un override de CSS, relativo a la raíz del proyecto. Por defecto `resources/webui/theme.css` |
 
 `theme` se mapea directamente sobre las propiedades personalizadas de CSS de la página: `accent`, `accentFg`, `bg`, `fg`, `muted`, `border`, `surface`, `inputBg`, `bubbleUser`, `bubbleUserFg`, `bubbleAssistant`, `bubbleAssistantFg`, `bubbleError`, `reasoningFg`, `reasoningBg`, `toolFg`, `toolBg`, `radius`, `radiusSm`, `font`, `fontMono`, `fontSize`, `maxWidth`. Un bloque anidado `theme.dark` sobreescribe cualquiera de los mismos tokens para el modo oscuro. Un token desconocido **falla el build** en lugar de ser silenciosamente ignorado, así que un typo sale a la superficie de inmediato en lugar de dejarte preguntándote por qué tu color de marca nunca apareció.
+
+![La misma página y conversación con el interruptor Theme cambiado a oscuro - los tokens accent/accentFg de theme.dark se trasladan, el resto es el mismo CSS generado](../assets/webui-chat-dark.png)
 
 ```javascript
 // gateways/chat.bx

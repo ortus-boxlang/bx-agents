@@ -27,6 +27,10 @@ class {
 
 これは静的な `<path>/index.html` (直接配信され、ルートは不要です) と、生成された `handlers/ChatUi.bx` と `models/ChatDb.bx` に支えられた `<path>/api` 配下の専用 API を生成します。
 
+![生成された Web チャット UI: 会話サイドバー、複数ターンのトランスクリプト、ブランディングされたヘッダー/コンポーザー](../assets/webui-chat-light.png)
+
+上のスクリーンショットは、実際の、改変されていない生成済みページです - このリポジトリが出荷するのと同じテンプレートです - [`examples/webui-agent`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/webui-agent) 自身の `theme`/`title`/`icon` 設定でブランディングし、説明のためにサンプルの会話内容を入れています。その例で `bxAgents build && bxAgents serve` を実行すると、実際に同じページが得られます。
+
 この UI は依存関係のない素の HTML/CSS/JS です - Bootstrap、AlpineJS、Vite のビルドステップは一切ありません - そして **BxAgents 自体の中にあらかじめビルドされてバンドルされています**: `bxAgents build` が `npm install`/`npm run build` を実行することは決してなく、生成されたプロジェクトは Node や npm をインストールする必要が一切ありません。ページが必要とするものはすべて、生成された単一の `index.html` にインライン化されています。
 
 その制約はビルドについてのものであり、スコープについてのものではありません。このページは完全なクライアントです: 会話サイドバー、推論とツール呼び出しを伴うストリーミング、承認、圧縮 (compaction)、サーバー側のテーマです。実際にまだ足りていないものは [What is not here yet](#what-is-not-here-yet) に一覧があります。
@@ -223,6 +227,8 @@ bxAgents hash-password --password="correct horse battery staple"
 
 狭い画面には、押しつぶされたものではなく本物のレイアウトが用意されます: `40rem` 未満では、サイドバーはトランスクリプトの幅を奪うのではなく、その上にオーバーレイされ、`prefers-reduced-motion` は尊重されます。
 
+![同じページを狭いビューポートで表示したもの - トランスクリプトは幅をそのまま保ち、サイドバーは幅を奪うのではなくオーバーレイされます](../assets/webui-chat-mobile.png)
+
 ## SQLite ストア
 
 すべての `webui` プロジェクトは SQLite データベースを得ます。これは任意ではなく、オフにするフラグもありません。
@@ -310,6 +316,8 @@ qb : {
 | `themeFile` | CSS オーバーライドへのパス。プロジェクトルートからの相対パス。デフォルトは `resources/webui/theme.css` |
 
 `theme` はページの CSS カスタムプロパティに直接マッピングされます: `accent`、`accentFg`、`bg`、`fg`、`muted`、`border`、`surface`、`inputBg`、`bubbleUser`、`bubbleUserFg`、`bubbleAssistant`、`bubbleAssistantFg`、`bubbleError`、`reasoningFg`、`reasoningBg`、`toolFg`、`toolBg`、`radius`、`radiusSm`、`font`、`fontMono`、`fontSize`、`maxWidth`。ネストされた `theme.dark` ブロックは、ダークモード向けに同じトークンのいずれかを上書きします。未知のトークンは、サイレントに無視されるのではなく**ビルドを失敗させる**ので、タイプミスは、ブランドカラーがなぜ現れなかったのか悩ませる代わりに即座に表面化します。
+
+![同じページと会話で Theme トグルをダークに切り替えたもの - theme.dark の accent/accentFg トークンが引き継がれ、それ以外は同じ生成された CSS です](../assets/webui-chat-dark.png)
 
 ```javascript
 // gateways/chat.bx
