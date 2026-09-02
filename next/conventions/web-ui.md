@@ -27,6 +27,10 @@ class {
 
 That generates a static `<path>/index.html` (served directly - no route needed) plus a dedicated API under `<path>/api`, backed by a generated `handlers/ChatUi.bx` and `models/ChatDb.bx`.
 
+![The generated web chat UI: a conversation sidebar, a multi-turn transcript, and a themed header/composer](../assets/webui-chat-light.png)
+
+The screenshot above is the actual generated page - the real, unmodified template this repo ships - branded with [`examples/webui-agent`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/webui-agent)'s own `theme`/`title`/`icon` config and populated with example conversation content for illustration; `bxAgents build && bxAgents serve` in that example reproduces it.
+
 The UI is dependency-free vanilla HTML/CSS/JS - no Bootstrap, AlpineJS or Vite build step - and is **pre-built and vendored inside BxAgents itself**: `bxAgents build` never runs `npm install`/`npm run build`, and a generated project never needs Node or npm installed at all. Everything the page needs is inlined into the single generated `index.html`.
 
 That constraint is about the build, not about scope. The page is a full client: conversation sidebar, streaming with reasoning and tool calls, approvals, compaction, server-side theming. What is genuinely still missing is listed under [What is not here yet](#what-is-not-here-yet).
@@ -223,6 +227,8 @@ The shipped page is a real chat client, not a demo shell. It reads `GET /info` *
 
 Narrow screens get a real layout rather than a squeezed one: under `40rem` the sidebar overlays the transcript instead of stealing its width, and `prefers-reduced-motion` is honoured.
 
+![The same page at a narrow viewport - the transcript keeps the full width, the sidebar overlays instead of squeezing it](../assets/webui-chat-mobile.png)
+
 ## The SQLite store
 
 Every `webui` project gets a SQLite database. It isn't optional and there's no flag to turn it off.
@@ -310,6 +316,8 @@ Every key below is optional - the entry works with just `exposes` and `path`.
 | `themeFile` | Path to a CSS override, relative to the project root. Default `resources/webui/theme.css` |
 
 `theme` maps directly onto the page's CSS custom properties: `accent`, `accentFg`, `bg`, `fg`, `muted`, `border`, `surface`, `inputBg`, `bubbleUser`, `bubbleUserFg`, `bubbleAssistant`, `bubbleAssistantFg`, `bubbleError`, `reasoningFg`, `reasoningBg`, `toolFg`, `toolBg`, `radius`, `radiusSm`, `font`, `fontMono`, `fontSize`, `maxWidth`. A nested `theme.dark` block overrides any of the same tokens for dark mode. An unknown token **fails the build** rather than being silently ignored, so a typo surfaces immediately instead of leaving you wondering why your brand color never showed up.
+
+![The same page and conversation with the Theme toggle switched to dark - theme.dark's accent/accentFg tokens carry over, everything else is the same generated CSS](../assets/webui-chat-dark.png)
 
 ```javascript
 // gateways/chat.bx
