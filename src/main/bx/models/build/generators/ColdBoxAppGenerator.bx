@@ -661,6 +661,30 @@ class {
 		return 'aiMemory( memory: "#bxLiteral( type )#", config: #renderLiteral( rest )# )'
 	}
 
+	/**
+	 * Renders one node's `aiAgent( ... )` statement - a descriptor-based agent
+	 * built entirely from its resolved config, unless `resolvedConfig.classBasedAgent`
+	 * is set, in which case this defers to renderClassBasedAgentStatement()
+	 * instead (a class-based Agent.bx IS the agent, not a descriptor to build
+	 * one from).
+	 *
+	 * Requires an `instructions.md` alongside the node and a configured model;
+	 * both throw when missing since an agent cannot run without them. The model
+	 * expression, checkpointer, memory, sub-agents and MCP servers are each
+	 * resolved by the matching render*Expression()/extract*() helper and only
+	 * emitted into the statement when non-empty.
+	 *
+	 * @varName The BoxLang variable name to assign this node's instance to
+	 * @nodePath Absolute path to THIS node's own directory, holding its instructions.md
+	 * @resolvedConfig THIS node's own resolved config
+	 * @subAgentVarNames Already-rendered child variable names to attach
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover()
+	 * @name The agent's resolved `name` value
+	 * @defaultMemory The build-wide default memory type, if any
+	 * @appDir Absolute path to the generated app dir - forwarded to renderClassBasedAgentStatement() for class-based nodes
+	 *
+	 * @return The rendered statement block for this one node
+	 */
 	private string function renderAgentStatement(
 		required string varName,
 		required string nodePath,

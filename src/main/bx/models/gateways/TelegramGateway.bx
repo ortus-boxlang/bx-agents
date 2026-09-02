@@ -37,6 +37,13 @@ class extends="ScheduledGatewayBase" {
 		MAX_MESSAGE_LENGTH = 4096
 	}
 
+	/**
+	 * Initializes this gateway instance — sets its name/description and builds
+	 * the message chunker used to split outbound text at Telegram's message
+	 * length limit.
+	 *
+	 * @return this
+	 */
 	function init() {
 		variables.name = "telegram"
 		variables.description = "Telegram Bot API gateway — long-poll inbound, HTTP outbound"
@@ -44,6 +51,15 @@ class extends="ScheduledGatewayBase" {
 		return this
 	}
 
+	/**
+	 * Applies this gateway's own config on top of ScheduledGatewayBase's shared
+	 * options — trims the configured `botToken` and stores
+	 * `pollIntervalSeconds` (defaulting to 3 when not provided).
+	 *
+	 * @options The resolved gateway options — see this file's own header comment for the recognized keys
+	 *
+	 * @return this
+	 */
 	IGateway function configure( required any options ) {
 		super.configure( arguments.options )
 		variables.botToken = trim( variables.options.botToken ?: "" )
@@ -51,6 +67,12 @@ class extends="ScheduledGatewayBase" {
 		return this
 	}
 
+	/**
+	 * The set of capabilities this gateway supports — drives what
+	 * GatewaySession will attempt against it.
+	 *
+	 * @return Array of declared capability names
+	 */
 	array function getDeclaredCapabilities() {
 		// Deliberately no "streaming" — Telegram has no true streaming-edit API
 		// worth the rate-limit cost for a reference implementation, so
@@ -71,6 +93,11 @@ class extends="ScheduledGatewayBase" {
 	// ScheduledGatewayBase hooks
 	// -------------------------------------------------------------------------
 
+	/**
+	 * ScheduledGatewayBase hook — validates that a bot token was configured
+	 * and that Telegram accepts it (via getMe), then logs the connected
+	 * bot's own username.
+	 */
 	void function onConnect() {
 		if ( !len( variables.botToken ) ) {
 			throw(
@@ -90,10 +117,21 @@ class extends="ScheduledGatewayBase" {
 		logEvent( "Connected as @#me.result.username ?: '?'#" )
 	}
 
+	/**
+	 * ScheduledGatewayBase hook — Telegram's long-poll transport has no live
+	 * connection to tear down, so this is just a log line.
+	 */
 	void function onDisconnect() {
 		logEvent( "Disconnected" )
 	}
 
+	/**
+	 * ScheduledGatewayBase hook — registers the recurring long-poll task
+	 * (pollUpdates()) against the shared scheduler, running every
+	 * pollIntervalSeconds with no overlapping runs.
+	 *
+	 * @scheduler The shared ColdBox scheduler (or test double) to register the poll task against
+	 */
 	void function registerScheduledTasks( required any scheduler ) {
 		var taskName = "telegram-poll-#variables.name#"
 		scheduler.task( taskName )
@@ -166,10 +204,29 @@ class extends="ScheduledGatewayBase" {
 	// Telegram v1 is long-poll only (no public webhook needed) — these exist so
 	// a single Telegram "message" payload still normalizes identically to
 	// pollUpdates()'s own internal parsing, for symmetry and testability.
+	/**
+	 * Always accepts — Telegram v1 has no public webhook to verify a
+	 * signature against (see this section's own leading comment), so there
+	 * is nothing to check.
+	 *
+	 * @payload The raw inbound payload (unused)
+	 * @requestContext Request-level context (unused)
+	 *
+	 * @return Always true
+	 */
 	boolean function verifyInbound( required any payload, struct requestContext = {} ) {
 		return true
 	}
 
+	/**
+	 * Normalizes a single directly-passed Telegram "message" payload the same
+	 * way pollUpdates() normalizes each getUpdates() message.
+	 *
+	 * @payload A raw Telegram "message" struct; a non-struct payload normalizes to an empty message
+	 * @requestContext Request-level context (unused)
+	 *
+	 * @return A single-element array containing the normalized GatewayMessage
+	 */
 	array function parseInbound( required any payload, struct requestContext = {} ) {
 		return [ toGatewayMessage( isStruct( arguments.payload ) ? arguments.payload : {} ) ]
 	}
@@ -178,6 +235,17 @@ class extends="ScheduledGatewayBase" {
 	// Outbound
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Sends the event's `text` to the chat identified by the context's
+	 * conversation ID, splitting it into chunks at Telegram's 4096-character
+	 * message limit and sending one sendMessage call per chunk. Fires
+	 * onGatewayMessageSent once all chunks succeed.
+	 *
+	 * @event The outbound event to deliver — only its `data.text` is used
+	 * @context Identifies the target chat via getConversationID()
+	 *
+	 * @return Success with the last chunk's Telegram message_id as deliveryID, or a failure result if there's nothing to send or the API call fails
+	 */
 	GatewayDeliveryResult function deliver( required GatewayEvent event, required GatewayContext context ) {
 		var text = toString( arguments.event.getData().text ?: "" )
 		if ( !len( text ) ) {
@@ -212,6 +280,17 @@ class extends="ScheduledGatewayBase" {
 	// Human-in-the-loop — inline keyboard buttons
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Presents a human-in-the-loop request as a Telegram message with an
+	 * inline keyboard — one button per allowed decision, encoding the
+	 * decision's value as the button's `callback_data` so a tap arrives back
+	 * as a callback_query update (see handleCallbackQuery()).
+	 *
+	 * @humanRequest The request to present — its title/body/buttons come from presentInteraction()
+	 * @context Identifies the target chat via getConversationID()
+	 *
+	 * @return Success with the prompt message's Telegram message_id as deliveryID, or a failure result if the sendMessage call fails
+	 */
 	GatewayDeliveryResult function requestHumanInteraction( required HumanInteractionRequest humanRequest, required GatewayContext context ) {
 		var presentation = presentInteraction( arguments.humanRequest )
 		var keyboard = {
@@ -240,6 +319,15 @@ class extends="ScheduledGatewayBase" {
 		return new GatewayDeliveryResult( deliveryID: toString( response.result.message_id ?: arguments.humanRequest.getId() ) )
 	}
 
+	/**
+	 * Builds a HumanInteractionDecision from an event's already-normalized
+	 * decision data (as populated by handleCallbackQuery()'s
+	 * onGatewayMessageReceived announcement).
+	 *
+	 * @event The gateway event carrying the decision — reads requestID/decision/decidedBy off its data
+	 *
+	 * @return The normalized decision
+	 */
 	HumanInteractionDecision function parseHumanDecision( required GatewayEvent event ) {
 		var data = arguments.event.getData()
 		return new HumanInteractionDecision(

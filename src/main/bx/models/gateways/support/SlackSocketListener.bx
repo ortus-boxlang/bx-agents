@@ -35,22 +35,58 @@ class implements="java:java.net.http.WebSocket$Listener" {
 		return this
 	}
 
+	/**
+	 * WebSocket.Listener.onOpen() override - immediately requests the first
+	 * frame (see class-level docblock on why this class must do so itself),
+	 * then forwards the open event to the gateway.
+	 *
+	 * @webSocket The websocket that just opened
+	 */
 	function onOpen( required any webSocket ) {
 		arguments.webSocket.request( 1 )
 		variables.gateway.handleSocketOpen( arguments.webSocket )
 	}
 
+	/**
+	 * WebSocket.Listener.onText() override - requests the next frame, then
+	 * forwards this one's data (a full Socket Mode JSON frame, since Slack
+	 * never fragments a frame across multiple onText() calls) to the gateway
+	 * as a string.
+	 *
+	 * @webSocket The websocket the frame arrived on
+	 * @data The frame's text payload (a CharSequence)
+	 * @last Whether this completes the current message (per the WebSocket.Listener contract; unused here)
+	 *
+	 * @return null - already handled synchronously, no CompletionStage to await
+	 */
 	function onText( required any webSocket, required any data, required boolean last ) {
 		arguments.webSocket.request( 1 )
 		variables.gateway.handleSocketText( arguments.webSocket, arguments.data.toString() )
 		return null
 	}
 
+	/**
+	 * WebSocket.Listener.onClose() override - forwards the close event to the
+	 * gateway, which decides whether to reconnect.
+	 *
+	 * @webSocket The websocket that closed
+	 * @statusCode The close status code
+	 * @reason The close reason
+	 *
+	 * @return null - already handled synchronously, no CompletionStage to await
+	 */
 	function onClose( required any webSocket, required numeric statusCode, required string reason ) {
 		variables.gateway.handleSocketClose( arguments.statusCode, arguments.reason )
 		return null
 	}
 
+	/**
+	 * WebSocket.Listener.onError() override - forwards the error to the
+	 * gateway.
+	 *
+	 * @webSocket The websocket that errored
+	 * @error The underlying Throwable
+	 */
 	function onError( required any webSocket, required any error ) {
 		variables.gateway.handleSocketError( arguments.error )
 	}

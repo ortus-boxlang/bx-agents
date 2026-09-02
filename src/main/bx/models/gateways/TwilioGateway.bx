@@ -77,6 +77,13 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		MAX_MESSAGE_LENGTH = 1600
 	}
 
+	/**
+	 * Sets this gateway's identity (name/description) and instantiates its
+	 * MessageChunker - no connection or scheduler task to set up, since this
+	 * gateway is entirely webhook-driven (see the class docblock).
+	 *
+	 * @return this
+	 */
 	function init() {
 		variables.name = "twilio"
 		variables.description = "Twilio SMS gateway - webhook inbound, Messages API outbound"
@@ -84,6 +91,15 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		return this
 	}
 
+	/**
+	 * Reads and trims accountSid/authToken/from/messagingServiceSid/publicUrl
+	 * out of the options struct super.configure() resolves - see the class
+	 * docblock for what each option controls.
+	 *
+	 * @options This gateway's resolved config options
+	 *
+	 * @return this
+	 */
 	IGateway function configure( required any options ) {
 		super.configure( arguments.options )
 		variables.accountSid = trim( variables.options.accountSid ?: "" )
@@ -94,6 +110,11 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		return this
 	}
 
+	/**
+	 * @return This gateway's declared capabilities - inbound/outbound
+	 *         messaging plus degraded human-approval only (see the in-body
+	 *         comment for what's deliberately left off and why)
+	 */
 	array function getDeclaredCapabilities() {
 		// No "interactiveActions" (SMS has no button/card affordance at all -
 		// see the class docblock), no "threads" (Twilio's classic Messages
@@ -101,10 +122,20 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		return [ "inboundMessages", "outboundMessages", "humanApproval" ]
 	}
 
+	/**
+	 * Test-only seam - see apiCaller's own docblock.
+	 *
+	 * @caller The closure to use in place of the real Messages.json call
+	 */
 	void function setApiCaller( required any caller ) {
 		variables.apiCaller = arguments.caller
 	}
 
+	/**
+	 * Fails fast if accountSid/authToken/from weren't resolved; otherwise
+	 * just logs readiness - there's no connection to open, inbound arrives
+	 * entirely via handleWebhook().
+	 */
 	void function onStart() {
 		if ( !len( variables.accountSid ) || !len( variables.authToken ) || !len( variables.from ) ) {
 			throw(
@@ -115,6 +146,9 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		logEvent( "Ready (from #variables.from#) - inbound is webhook-driven, no connection to open" )
 	}
 
+	/**
+	 * Logs that the gateway is stopping - there's no open connection to tear down.
+	 */
 	void function onStop() {
 		logEvent( "Stopped" )
 	}
@@ -123,10 +157,20 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 	// IGateway.onMessage()/onError()
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Registers the callback dispatchInbound() invokes for each normalized inbound message.
+	 *
+	 * @callback function( message )
+	 */
 	public void function onMessage( required function callback ) {
 		variables.messageCallback = arguments.callback
 	}
 
+	/**
+	 * Invokes the callback registered via onMessage(), if any.
+	 *
+	 * @message The normalized GatewayMessage to hand off
+	 */
 	public void function dispatchInbound( required any message ) {
 		if ( isNull( variables.messageCallback ) ) {
 			return
@@ -134,10 +178,20 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		variables.messageCallback( arguments.message )
 	}
 
+	/**
+	 * Registers the callback dispatchError() invokes when inbound handling fails.
+	 *
+	 * @callback function( error )
+	 */
 	public void function onError( required function callback ) {
 		variables.errorCallback = arguments.callback
 	}
 
+	/**
+	 * Invokes the callback registered via onError(), if any.
+	 *
+	 * @error The error to hand off
+	 */
 	public void function dispatchError( required any error ) {
 		if ( isNull( variables.errorCallback ) ) {
 			return
@@ -145,6 +199,12 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		variables.errorCallback( arguments.error )
 	}
 
+	/**
+	 * Writes a line to this gateway's own log file (gateway-#name#).
+	 *
+	 * @text The message to log
+	 * @type The log severity, e.g. "information"/"warning"/"error"
+	 */
 	private void function logEvent( required string text, string type = "information" ) {
 		writeLog( text: arguments.text, type: arguments.type, file: "gateway-#variables.name#" )
 	}
@@ -204,6 +264,13 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		return result
 	}
 
+	/**
+	 * application/x-www-form-urlencoded percent-decoding for a single key or value.
+	 *
+	 * @value The raw, percent-encoded component
+	 *
+	 * @return The decoded string
+	 */
 	private string function urlDecodeComponent( required string value ) {
 		return createObject( "java", "java.net.URLDecoder" ).decode( arguments.value, "UTF-8" )
 	}
@@ -245,6 +312,18 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		return constantTimeEquals( computed, arguments.signatureHeader )
 	}
 
+	/**
+	 * Timing-attack-resistant comparison of the computed and received
+	 * signatures, via java.security.MessageDigest.isEqual() (constant-time
+	 * for equal-length inputs) - a plain string `==` comparison here would
+	 * leak timing information an attacker could exploit to forge a valid
+	 * signature byte-by-byte.
+	 *
+	 * @a The locally-computed base64 HMAC-SHA1 signature
+	 * @b The signature received in the X-Twilio-Signature header
+	 *
+	 * @return true if both signatures match exactly
+	 */
 	private boolean function constantTimeEquals( required string a, required string b ) {
 		return createObject( "java", "java.security.MessageDigest" ).isEqual(
 			charsetDecode( arguments.a, "UTF-8" ), charsetDecode( arguments.b, "UTF-8" )
@@ -331,6 +410,20 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 	// Outbound — Messages API
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Chunks the event's text to MAX_MESSAGE_LENGTH and sends each chunk as
+	 * its own Messages.json POST - this is the async half of Twilio's
+	 * dual-path model (see handleWebhook()'s own docblock): the synchronous
+	 * webhook response is always an empty TwiML ack, the actual reply is
+	 * always sent here, out-of-band.
+	 *
+	 * @event The outbound event carrying the reply text
+	 * @context Carries the destination phone number as conversationID
+	 *
+	 * @return A success result keyed by the last chunk's Twilio message SID
+	 *         (falling back to the event's own id), or a failure result if
+	 *         any chunk's send fails
+	 */
 	GatewayDeliveryResult function deliver( required GatewayEvent event, required GatewayContext context ) {
 		var text = toString( arguments.event.getData().text ?: "" )
 		if ( !len( text ) ) {
@@ -368,6 +461,11 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		return result
 	}
 
+	/**
+	 * @responseBody A parsed Twilio API response body
+	 *
+	 * @return The API's own "message" field, or a generic fallback if absent/unparseable
+	 */
 	private string function twilioErrorMessage( required any responseBody ) {
 		if ( isStruct( arguments.responseBody ) && structKeyExists( arguments.responseBody, "message" ) ) {
 			return toString( arguments.responseBody.message )
@@ -380,6 +478,21 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 	// keyword fallback only, correlated by conversationID (see class docblock)
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Sends the HITL prompt as a plain-text SMS (title + body + a "Reply with
+	 * one of:" list of allowed decisions - SMS has no button/card affordance,
+	 * see the class docblock), then records the request under
+	 * pendingApprovals keyed by the destination phone number, so the
+	 * eventual plain-text reply can be correlated back to it in
+	 * handleInboundMessage()/handleApprovalReply().
+	 *
+	 * @humanRequest The pending HITL request to present
+	 * @context Carries the destination phone number as conversationID
+	 *
+	 * @return A success result keyed by the sent message's Twilio SID
+	 *         (falling back to the request's own id), or a failure result if
+	 *         the send fails
+	 */
 	GatewayDeliveryResult function requestHumanInteraction( required HumanInteractionRequest humanRequest, required GatewayContext context ) {
 		var presentation = presentInteraction( arguments.humanRequest )
 		var allowedDecisions = arguments.humanRequest.getAllowedDecisions()
@@ -407,6 +520,12 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		return new GatewayDeliveryResult( deliveryID: len( messageId ) ? messageId : arguments.humanRequest.getId() )
 	}
 
+	/**
+	 * @presentation An InteractionPresentation (see BaseGateway.presentInteraction())
+	 * @allowedDecisions The request's own allowed decision keywords
+	 *
+	 * @return Plain-text SMS body: title, body, then one "  - <decision>" line per allowed decision
+	 */
 	private string function buildApprovalBodyText( required any presentation, required array allowedDecisions ) {
 		var lines = []
 		if ( len( arguments.presentation.getTitle() ) ) {
@@ -422,6 +541,11 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		return lines.toList( char( 10 ) )
 	}
 
+	/**
+	 * @event The inbound gateway event carrying a HITL decision
+	 *
+	 * @return The normalized HumanInteractionDecision built from the event's own data
+	 */
 	HumanInteractionDecision function parseHumanDecision( required GatewayEvent event ) {
 		var data = arguments.event.getData()
 		return new HumanInteractionDecision(

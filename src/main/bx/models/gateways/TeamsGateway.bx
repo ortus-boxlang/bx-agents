@@ -94,6 +94,12 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		HITL_DATA_KEY               = "bxagents_input"
 	}
 
+	/**
+	 * Sets this gateway's identity (name/description) and constructs its
+	 * shared MessageChunker.
+	 *
+	 * @return this, for chaining
+	 */
 	function init() {
 		variables.name = "teams"
 		variables.description = "Microsoft Teams gateway - Bot Framework Activity protocol, webhook inbound, Connector REST outbound"
@@ -101,6 +107,14 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		return this
 	}
 
+	/**
+	 * Applies BaseGateway's own shared option resolution, then reads this
+	 * gateway's own appId/appPassword/tenantId out of the resolved options.
+	 *
+	 * @options The resolved gateway options struct (see the class docblock's Config section)
+	 *
+	 * @return this, for chaining
+	 */
 	IGateway function configure( required any options ) {
 		super.configure( arguments.options )
 		variables.appId = trim( variables.options.appId ?: "" )
@@ -111,6 +125,9 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		return this
 	}
 
+	/**
+	 * @return The capability keys this gateway supports, matching the class docblock's v1 scope notes
+	 */
 	array function getDeclaredCapabilities() {
 		// No "streaming" - Bot Framework supports updating an activity in
 		// place (PUT), but true token-by-token streaming isn't implemented
@@ -118,18 +135,37 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		return [ "inboundMessages", "outboundMessages", "threads", "interactiveActions", "humanApproval" ]
 	}
 
+	/**
+	 * Test-only seam — see apiCaller's own docblock.
+	 *
+	 * @caller A closure standing in for the real Bot Connector REST call
+	 */
 	void function setApiCaller( required any caller ) {
 		variables.apiCaller = arguments.caller
 	}
 
+	/**
+	 * Test-only seam — see tokenFetcher's own docblock.
+	 *
+	 * @fetcher A closure standing in for the real AAD client-credentials token fetch
+	 */
 	void function setTokenFetcher( required any fetcher ) {
 		variables.tokenFetcher = arguments.fetcher
 	}
 
+	/**
+	 * Test-only seam — see jwksFetcher's own docblock.
+	 *
+	 * @fetcher A closure standing in for the real Bot Connector JWKS fetch
+	 */
 	void function setJwksFetcher( required any fetcher ) {
 		variables.jwksFetcher = arguments.fetcher
 	}
 
+	/**
+	 * Validates that appId/appPassword are configured, then logs readiness -
+	 * there's no connection to open since inbound is entirely webhook-driven.
+	 */
 	void function onStart() {
 		if ( !len( variables.appId ) || !len( variables.appPassword ) ) {
 			throw(
@@ -140,6 +176,9 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		logEvent( "Ready (app_id #variables.appId#) - inbound is webhook-driven, no connection to open" )
 	}
 
+	/**
+	 * Logs that this gateway has stopped - there's no connection to close.
+	 */
 	void function onStop() {
 		logEvent( "Stopped" )
 	}
@@ -148,10 +187,20 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 	// IGateway.onMessage()/onError()
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Registers the callback dispatchInbound() invokes for every normalized inbound message.
+	 *
+	 * @callback function( GatewayMessage message )
+	 */
 	public void function onMessage( required function callback ) {
 		variables.messageCallback = arguments.callback
 	}
 
+	/**
+	 * Invokes the callback registered via onMessage(), if one has been set.
+	 *
+	 * @message The normalized inbound message (a GatewayMessage) to hand off
+	 */
 	public void function dispatchInbound( required any message ) {
 		if ( isNull( variables.messageCallback ) ) {
 			return
@@ -159,10 +208,20 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		variables.messageCallback( arguments.message )
 	}
 
+	/**
+	 * Registers the callback dispatchError() invokes on a gateway-level error.
+	 *
+	 * @callback function( any error )
+	 */
 	public void function onError( required function callback ) {
 		variables.errorCallback = arguments.callback
 	}
 
+	/**
+	 * Invokes the callback registered via onError(), if one has been set.
+	 *
+	 * @error The error to hand off
+	 */
 	public void function dispatchError( required any error ) {
 		if ( isNull( variables.errorCallback ) ) {
 			return
@@ -170,6 +229,12 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		variables.errorCallback( arguments.error )
 	}
 
+	/**
+	 * Writes a line to this gateway's own "gateway-teams" log file.
+	 *
+	 * @text The message to log
+	 * @type The writeLog() log type/level. Defaults to "information"
+	 */
 	private void function logEvent( required string text, string type = "information" ) {
 		writeLog( text: arguments.text, type: arguments.type, file: "gateway-#variables.name#" )
 	}
@@ -322,6 +387,13 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		return javacast( "null", "" )
 	}
 
+	/**
+	 * Lazily fetches and caches the Bot Connector JWKS keyset - a no-op once
+	 * variables.jwksKeys is already populated (the keyset is fetched at most
+	 * once per gateway instance lifetime; see the class docblock's
+	 * key-rotation caveat). Uses jwksFetcher if the test seam is set; else
+	 * GETs the OpenID metadata document and follows its own "jwks_uri".
+	 */
 	private void function ensureJwksLoaded() {
 		if ( variables.jwksKeys.len() ) {
 			return
@@ -367,6 +439,15 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		return len( body ) ? jsonDeserialize( body ) : {}
 	}
 
+	/**
+	 * Base64url-decodes a value and interprets the resulting bytes as UTF-8
+	 * text - used to turn a JWT header/payload segment back into its raw
+	 * JSON string ahead of jsonDeserialize().
+	 *
+	 * @value A base64url-encoded string, unpadded
+	 *
+	 * @return The decoded bytes, interpreted as UTF-8 text
+	 */
 	private string function base64UrlDecodeToString( required string value ) {
 		return charsetEncode( base64UrlDecode( arguments.value ), "UTF-8" )
 	}
@@ -385,6 +466,9 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		return binaryDecode( normalized, "base64" )
 	}
 
+	/**
+	 * @return The current epoch time in milliseconds
+	 */
 	private numeric function currentTimeMillis() {
 		return createObject( "java", "java.lang.System" ).currentTimeMillis()
 	}
@@ -484,6 +568,21 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 	// Outbound — Bot Framework Connector REST
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Sends the event's own text as one or more outbound Teams activities -
+	 * split via the shared MessageChunker at MAX_MESSAGE_LENGTH, each chunk
+	 * POSTed in order to the Connector's `v3/conversations/{id}/activities`
+	 * endpoint (threaded to the context's threadID via `replyToId` when set).
+	 * Fires `onGatewayMessageSent` once all chunks have sent successfully.
+	 *
+	 * @event The outbound event; only its `text` data field is used
+	 * @context Must carry a `serviceUrl` (in metadata) and a conversationID - both come from the inbound activity that established the conversation
+	 *
+	 * @return A successful GatewayDeliveryResult (the last chunk's own
+	 *         activity id, or the event's own id if the Connector response
+	 *         carried none), or a failure result if there's no text to send,
+	 *         serviceUrl/conversationId is missing, or the Connector API call fails
+	 */
 	GatewayDeliveryResult function deliver( required GatewayEvent event, required GatewayContext context ) {
 		var text = toString( arguments.event.getData().text ?: "" )
 		if ( !len( text ) ) {
@@ -601,18 +700,47 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		}
 	}
 
+	/**
+	 * Renders a presentation's title (bold, Teams markdown) and body as one
+	 * message text, or just the body when there's no title.
+	 *
+	 * @presentation An InteractionPresentation (see BaseGateway.presentInteraction())
+	 *
+	 * @return The composed message text
+	 */
 	private string function buildPresentationText( required any presentation ) {
 		return len( arguments.presentation.getTitle() )
 			? "**#arguments.presentation.getTitle()#**" & char( 10 ) & char( 10 ) & arguments.presentation.getBody()
 			: arguments.presentation.getBody()
 	}
 
+	/**
+	 * @text The text to bound
+	 * @limit The maximum length, in characters
+	 *
+	 * @return text unchanged if within limit, else left-truncated to (limit - 3) characters with a trailing "..."
+	 */
 	private string function truncate( required string text, required numeric limit ) {
 		return len( arguments.text ) > arguments.limit
 			? left( arguments.text, arguments.limit - 3 ) & "..."
 			: arguments.text
 	}
 
+	/**
+	 * Rehydrates a HumanInteractionDecision from a GatewayEvent's own data
+	 * struct. The actual button-click correlation happens earlier: an
+	 * Adaptive Card Action.Submit click arrives as an "invoke" activity,
+	 * handled by handleInvokeActivity() above, which reads the button's
+	 * hidden `requestId`/`optionId` data and announces
+	 * `onGatewayMessageReceived` with `threadId: requestId, decision:
+	 * optionId` - it's that announcement's downstream handling (the bx-ai
+	 * HITL coordinator) that is expected to build the requestID/decision/
+	 * decidedBy data this method simply reads back off the event.
+	 *
+	 * @event A GatewayEvent whose data carries requestID/decision/decidedBy
+	 *
+	 * @return The decoded HumanInteractionDecision
+	 */
 	HumanInteractionDecision function parseHumanDecision( required GatewayEvent event ) {
 		var data = arguments.event.getData()
 		return new HumanInteractionDecision(
@@ -667,6 +795,11 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		return { status: statusCode, body: parsedBody }
 	}
 
+	/**
+	 * @value A raw path/query component to URL-encode
+	 *
+	 * @return The URL-encoded value
+	 */
 	private string function urlEncodedComponent( required string value ) {
 		return urlEncodedFormat( arguments.value )
 	}

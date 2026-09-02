@@ -57,6 +57,11 @@ class extends="ScheduledGatewayBase" {
 		MAX_MESSAGE_LENGTH = 3900
 	}
 
+	/**
+	 * Sets this gateway's name/description and creates its MessageChunker.
+	 *
+	 * @return this, for chaining
+	 */
 	function init() {
 		variables.name = "slack"
 		variables.description = "Slack gateway (Socket Mode) - persistent websocket inbound, HTTP outbound"
@@ -64,6 +69,14 @@ class extends="ScheduledGatewayBase" {
 		return this
 	}
 
+	/**
+	 * Applies this gateway's own options on top of ScheduledGatewayBase's -
+	 * see the class-level docblock for the botToken/appToken keys.
+	 *
+	 * @options The raw options struct passed to aiGateway( ..., options )
+	 *
+	 * @return this, for chaining
+	 */
 	IGateway function configure( required any options ) {
 		super.configure( arguments.options )
 		variables.botToken = trim( variables.options.botToken ?: "" )
@@ -71,6 +84,11 @@ class extends="ScheduledGatewayBase" {
 		return this
 	}
 
+	/**
+	 * @return The capabilities this gateway supports: inbound/outbound
+	 *         messages, chunked streaming (deliverChunk()), threads,
+	 *         interactive actions (Block Kit buttons), and human approval (HITL)
+	 */
 	array function getDeclaredCapabilities() {
 		return [ "inboundMessages", "outboundMessages", "streaming", "threads", "interactiveActions", "humanApproval" ]
 	}
@@ -93,6 +111,11 @@ class extends="ScheduledGatewayBase" {
 	// ScheduledGatewayBase hooks
 	// -------------------------------------------------------------------------
 
+	/**
+	 * ScheduledGatewayBase hook, called once per start() before scheduled
+	 * tasks are registered - validates the required tokens are present, then
+	 * opens the initial Socket Mode connection.
+	 */
 	void function onConnect() {
 		if ( !len( variables.botToken ) || !len( variables.appToken ) ) {
 			throw(
@@ -105,6 +128,11 @@ class extends="ScheduledGatewayBase" {
 		openConnection()
 	}
 
+	/**
+	 * ScheduledGatewayBase hook, called on stop() - flags this as a
+	 * deliberate shutdown (so handleSocketClose() won't try to reconnect)
+	 * and closes the current websocket.
+	 */
 	void function onDisconnect() {
 		variables.stopping = true
 		closeSocketQuietly( variables.webSocket, "gateway stopping" )
@@ -112,6 +140,12 @@ class extends="ScheduledGatewayBase" {
 		variables.socketConnected = false
 	}
 
+	/**
+	 * ScheduledGatewayBase hook - registers the watchdog task below against
+	 * the shared scheduler.
+	 *
+	 * @scheduler The shared ColdBox scheduler (or test double) to register tasks against
+	 */
 	void function registerScheduledTasks( required any scheduler ) {
 		// A light safety-net watchdog only - the primary reconnect path is
 		// reactive (handleSocketClose()/handleDisconnectFrame() below), driven
@@ -142,6 +176,11 @@ class extends="ScheduledGatewayBase" {
 	// Connection lifecycle
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Fetches a fresh wss:// URL and opens a websocket on it, marking the
+	 * gateway connected. Used both for the initial connect (onConnect()) and
+	 * as the "open the new one" half of reconnect().
+	 */
 	private void function openConnection() {
 		var wssUrl = openConnectionsApi()
 		variables.webSocket = openSocket( wssUrl )
@@ -172,6 +211,13 @@ class extends="ScheduledGatewayBase" {
 		closeSocketQuietly( oldSocket, "reconnecting" )
 	}
 
+	/**
+	 * Sends a close frame on a websocket, swallowing any error - the socket
+	 * may already be closed/broken, and this is always best-effort cleanup.
+	 *
+	 * @socket The websocket to close (a no-op if null/not yet connected)
+	 * @reason The close reason to send Slack, e.g. "reconnecting"
+	 */
 	private void function closeSocketQuietly( required any socket, required string reason ) {
 		if ( isNull( arguments.socket ) ) {
 			return
@@ -217,11 +263,24 @@ class extends="ScheduledGatewayBase" {
 	// SlackSocketListener callbacks - see support/SlackSocketListener.bx
 	// -------------------------------------------------------------------------
 
+	/**
+	 * SlackSocketListener.onOpen() callback - marks the connection live.
+	 *
+	 * @webSocket The websocket that just opened
+	 */
 	void function handleSocketOpen( required any webSocket ) {
 		logEvent( "Connected" )
 		variables.socketConnected = true
 	}
 
+	/**
+	 * SlackSocketListener.onClose() callback - marks the connection down and,
+	 * unless this is a deliberate stop() (onDisconnect() already set
+	 * `stopping`), reconnects.
+	 *
+	 * @statusCode The websocket close status code
+	 * @reason The close reason Slack (or the JDK) sent
+	 */
 	void function handleSocketClose( required numeric statusCode, required string reason ) {
 		logEvent( "Socket closed: #statusCode# #reason#" )
 		variables.socketConnected = false
@@ -230,6 +289,12 @@ class extends="ScheduledGatewayBase" {
 		}
 	}
 
+	/**
+	 * SlackSocketListener.onError() callback - marks the connection down and
+	 * forwards the error to the registered onError() callback, if any.
+	 *
+	 * @error The underlying Throwable the JDK websocket reported
+	 */
 	void function handleSocketError( required any error ) {
 		logEvent( "Socket error: #error.getMessage()#", "error" )
 		variables.socketConnected = false
@@ -375,6 +440,16 @@ class extends="ScheduledGatewayBase" {
 	// Outbound
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Posts an event's text to Slack via chat.postMessage, splitting it into
+	 * multiple messages (via the chunker) if it exceeds MAX_MESSAGE_LENGTH,
+	 * and threading the reply if the context carries a thread_ts.
+	 *
+	 * @event The outbound event to deliver - its data.text is what gets sent
+	 * @context Carries the target channel (conversationID) and thread (threadID)
+	 *
+	 * @return Success with the last chunk's Slack ts as deliveryID, or failure on the first API error
+	 */
 	GatewayDeliveryResult function deliver( required GatewayEvent event, required GatewayContext context ) {
 		var text = toString( arguments.event.getData().text ?: "" )
 		if ( !len( text ) ) {
@@ -458,6 +533,18 @@ class extends="ScheduledGatewayBase" {
 	// Human-in-the-loop — Block Kit buttons
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Presents a HITL request as a Slack Block Kit message: a section block
+	 * with the presentation's title/body, plus an actions block with one
+	 * button per allowed decision (primary/danger styled per button.style).
+	 * The decision itself comes back later as a "block_actions" interactive
+	 * payload, handled by handleInteractivePayload() above.
+	 *
+	 * @humanRequest The pending human-approval request to present
+	 * @context Carries the target channel (conversationID) and thread (threadID)
+	 *
+	 * @return Success with the posted message's Slack ts as deliveryID, or failure on API error
+	 */
 	GatewayDeliveryResult function requestHumanInteraction( required HumanInteractionRequest humanRequest, required GatewayContext context ) {
 		var presentation = presentInteraction( arguments.humanRequest )
 		var blocks = [
@@ -497,6 +584,14 @@ class extends="ScheduledGatewayBase" {
 		return new GatewayDeliveryResult( deliveryID: toString( response.ts ?: arguments.humanRequest.getId() ) )
 	}
 
+	/**
+	 * Reconstructs a HumanInteractionDecision from a gateway event's own data
+	 * struct.
+	 *
+	 * @event The event carrying the decision, keyed requestID/decision/decidedBy
+	 *
+	 * @return The normalized HumanInteractionDecision
+	 */
 	HumanInteractionDecision function parseHumanDecision( required GatewayEvent event ) {
 		var data = arguments.event.getData()
 		return new HumanInteractionDecision(
@@ -506,6 +601,15 @@ class extends="ScheduledGatewayBase" {
 		)
 	}
 
+	/**
+	 * Formats an InteractionPresentation as Slack mrkdwn text for a section
+	 * block: a bolded title line followed by a blank line and the body, or
+	 * just the body if there's no title.
+	 *
+	 * @presentation An InteractionPresentation (see BaseGateway.presentInteraction())
+	 *
+	 * @return The mrkdwn text for requestHumanInteraction()'s section block
+	 */
 	private string function buildPresentationText( required any presentation ) {
 		return len( arguments.presentation.getTitle() )
 			? "*#arguments.presentation.getTitle()#*" & char( 10 ) & char( 10 ) & arguments.presentation.getBody()

@@ -82,6 +82,12 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		LOOP_GUARD_MARKER = "<!-- bxagents:posted -->"
 	}
 
+	/**
+	 * Constructs this gateway instance - sets its name/description and builds
+	 * the message chunker used to split long outbound comments.
+	 *
+	 * @return this
+	 */
 	function init() {
 		variables.name = "github"
 		variables.description = "GitHub gateway - webhook inbound (issue/PR comments), REST outbound"
@@ -89,6 +95,15 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		return this
 	}
 
+	/**
+	 * Applies this gateway's own config options (token, webhookSecret,
+	 * botName, apiBaseUrl) on top of BaseGateway's own configure() - see the
+	 * class docblock for each option's meaning.
+	 *
+	 * @options This gateway's resolved config struct
+	 *
+	 * @return this
+	 */
 	IGateway function configure( required any options ) {
 		super.configure( arguments.options )
 		variables.token = variables.options.token ?: ""
@@ -100,6 +115,9 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		return this
 	}
 
+	/**
+	 * @return The capabilities this gateway declares: inboundMessages, outboundMessages, threads, and humanApproval
+	 */
 	array function getDeclaredCapabilities() {
 		// "threads" - a genuine conversation identity exists (issue, PR, or
 		// review-comment thread). No "interactiveActions" (comment-in/
@@ -107,10 +125,20 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		return [ "inboundMessages", "outboundMessages", "threads", "humanApproval" ]
 	}
 
+	/**
+	 * Test-only seam — see apiCaller's own docblock.
+	 *
+	 * @caller A function( path, method, body ) -> { status, body } replacing the real GitHub REST call
+	 */
 	void function setApiCaller( required any caller ) {
 		variables.apiCaller = arguments.caller
 	}
 
+	/**
+	 * Validates that 'token' and 'botName' are configured before this
+	 * gateway is considered ready - inbound is entirely webhook-driven, so
+	 * there is no connection to open here.
+	 */
 	void function onStart() {
 		if ( !len( variables.token ) || !len( variables.botName ) ) {
 			throw(
@@ -121,6 +149,9 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		logEvent( "Ready (bot @#variables.botName#) - inbound is webhook-driven, no connection to open" )
 	}
 
+	/**
+	 * Logs that this gateway has stopped - no connection or scheduled task to tear down.
+	 */
 	void function onStop() {
 		logEvent( "Stopped" )
 	}
@@ -129,10 +160,20 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 	// IGateway.onMessage()/onError()
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Registers the callback invoked for every dispatched inbound message.
+	 *
+	 * @callback function( message ) invoked by dispatchInbound()
+	 */
 	public void function onMessage( required function callback ) {
 		variables.messageCallback = arguments.callback
 	}
 
+	/**
+	 * Invokes the registered onMessage() callback with an inbound message, if one is registered.
+	 *
+	 * @message The GatewayMessage (or HITL decision payload) to dispatch
+	 */
 	public void function dispatchInbound( required any message ) {
 		if ( isNull( variables.messageCallback ) ) {
 			return
@@ -140,10 +181,20 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		variables.messageCallback( arguments.message )
 	}
 
+	/**
+	 * Registers the callback invoked whenever this gateway dispatches an error.
+	 *
+	 * @callback function( error ) invoked by dispatchError()
+	 */
 	public void function onError( required function callback ) {
 		variables.errorCallback = arguments.callback
 	}
 
+	/**
+	 * Invokes the registered onError() callback with an error, if one is registered.
+	 *
+	 * @error The error to dispatch
+	 */
 	public void function dispatchError( required any error ) {
 		if ( isNull( variables.errorCallback ) ) {
 			return
@@ -151,6 +202,12 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		variables.errorCallback( arguments.error )
 	}
 
+	/**
+	 * Writes a line to this gateway's own log file ("gateway-#name#").
+	 *
+	 * @text The message to log
+	 * @type The log type/severity. Defaults to "information"
+	 */
 	private void function logEvent( required string text, string type = "information" ) {
 		writeLog( text: arguments.text, type: arguments.type, file: "gateway-#variables.name#" )
 	}
@@ -214,6 +271,17 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		return { status: 200 }
 	}
 
+	/**
+	 * Verifies the inbound webhook's X-Hub-Signature-256 header: recomputes
+	 * an HMAC-SHA256 over the raw body using webhookSecret, hex-encodes it,
+	 * and compares it (constant-time, via constantTimeEquals()) against the
+	 * header's own "sha256=" hex digest.
+	 *
+	 * @rawBody The exact raw POST body, unparsed
+	 * @header The X-Hub-Signature-256 header value
+	 *
+	 * @return true if the signature is present, well-formed, and matches; false otherwise
+	 */
 	private boolean function verifySignature( required string rawBody, required string header ) {
 		if ( !len( variables.webhookSecret ) || !len( arguments.header ) || !arguments.header.startsWith( "sha256=" ) ) {
 			return false
@@ -234,12 +302,32 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		return constantTimeEquals( computedHex, expectedHex.lCase() )
 	}
 
+	/**
+	 * Constant-time string comparison (via java.security.MessageDigest.isEqual()),
+	 * used by verifySignature() to avoid leaking timing information about
+	 * how much of the expected signature matched.
+	 *
+	 * @a The first string to compare
+	 * @b The second string to compare
+	 *
+	 * @return true if both strings are byte-for-byte equal
+	 */
 	private boolean function constantTimeEquals( required string a, required string b ) {
 		return createObject( "java", "java.security.MessageDigest" ).isEqual(
 			charsetDecode( arguments.a, "UTF-8" ), charsetDecode( arguments.b, "UTF-8" )
 		)
 	}
 
+	/**
+	 * Dedups a webhook delivery by its X-GitHub-Delivery id against the
+	 * bounded seenDeliveryIds FIFO (see its own docblock) - a redelivery of
+	 * an id already seen is a no-op; a new id is recorded, evicting the
+	 * oldest entry once the cache exceeds DELIVERY_DEDUP_CACHE_SIZE.
+	 *
+	 * @deliveryId The X-GitHub-Delivery header value
+	 *
+	 * @return true if this delivery id is new (not previously seen); false if it's a redelivery already recorded
+	 */
 	private boolean function markSeen( required string deliveryId ) {
 		if ( variables.seenDeliveryIds.contains( arguments.deliveryId ) ) {
 			return false
@@ -383,6 +471,19 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		variables.pendingApprovals.delete( arguments.conversationId )
 	}
 
+	/**
+	 * Best-effort match of a reply's first line against the pending
+	 * request's own known allowed decisions (exact or prefix,
+	 * case-insensitive). Falls back to the raw text verbatim on no
+	 * confident match - an unrecognized decision is bx-ai's own HITL
+	 * coordinator's problem to reject, not this gateway's to guess at
+	 * further.
+	 *
+	 * @text A reply's first line, already trimmed
+	 * @allowedDecisions The pending request's own allowed decision keywords
+	 *
+	 * @return The matched allowed decision, or the raw text verbatim if none matched
+	 */
 	private string function matchDecision( required string text, required array allowedDecisions ) {
 		var normalized = lcase( arguments.text )
 		for ( var decision in arguments.allowedDecisions ) {
@@ -445,6 +546,17 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 	// Outbound — Issues/PR comments REST API
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Posts an outbound message as one or more issue/PR comments (chunked
+	 * to GITHUB_COMMENT_BODY_MAX_LENGTH via the message chunker, each chunk
+	 * tagged with the LOOP_GUARD_MARKER so it's recognized and ignored on
+	 * the way back in). Fires onGatewayMessageSent on success.
+	 *
+	 * @event The outbound GatewayEvent - its data.text is what gets posted
+	 * @context The conversation's own GatewayContext (see postComment()'s own docblock for its required metadata)
+	 *
+	 * @return A successful GatewayDeliveryResult carrying the last posted comment's id, or a failure result if any chunk's post fails
+	 */
 	GatewayDeliveryResult function deliver( required GatewayEvent event, required GatewayContext context ) {
 		var text = toString( arguments.event.getData().text ?: "" )
 		if ( !len( text ) ) {
@@ -494,6 +606,13 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		return callApi( "repos/#owner#/#repo#/issues/#issueNumber#/comments", "POST", { body: arguments.body } )
 	}
 
+	/**
+	 * Extracts a human-readable error message from a failed GitHub API response body.
+	 *
+	 * @responseBody A parsed GitHub API response body
+	 *
+	 * @return The response's own "message" field, or "unknown error" if absent/not a struct
+	 */
 	private string function githubErrorMessage( required any responseBody ) {
 		if ( isStruct( arguments.responseBody ) && structKeyExists( arguments.responseBody, "message" ) ) {
 			return toString( arguments.responseBody.message )
@@ -508,6 +627,17 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 	// (no subject line / no other reliable per-request correlation key).
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Posts a human-approval request as an issue/PR comment listing the
+	 * allowed decisions, and records it in pendingApprovals (keyed by
+	 * conversationID - see the class-level HITL notes) so a later
+	 * @mention reply in the same conversation can be matched back to it.
+	 *
+	 * @humanRequest The HumanInteractionRequest to present
+	 * @context The conversation's own GatewayContext
+	 *
+	 * @return A successful GatewayDeliveryResult carrying the posted comment's id, or a failure result if the post fails
+	 */
 	GatewayDeliveryResult function requestHumanInteraction( required HumanInteractionRequest humanRequest, required GatewayContext context ) {
 		var presentation = presentInteraction( arguments.humanRequest )
 		var allowedDecisions = arguments.humanRequest.getAllowedDecisions()
@@ -528,6 +658,17 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		return new GatewayDeliveryResult( deliveryID: len( commentId ) ? commentId : arguments.humanRequest.getId() )
 	}
 
+	/**
+	 * Renders a human-approval request's presentation into the Markdown
+	 * comment body posted by requestHumanInteraction(), listing each
+	 * allowed decision and instructing the approver to reply with an
+	 * @mention.
+	 *
+	 * @presentation An InteractionPresentation (see BaseGateway.presentInteraction())
+	 * @allowedDecisions The request's own allowed decision keywords
+	 *
+	 * @return The rendered Markdown comment body
+	 */
 	private string function buildApprovalBodyText( required any presentation, required array allowedDecisions ) {
 		var lines = []
 		if ( len( arguments.presentation.getTitle() ) ) {
@@ -543,6 +684,13 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		return lines.toList( char( 10 ) )
 	}
 
+	/**
+	 * Builds a HumanInteractionDecision from an inbound GatewayEvent's own data.
+	 *
+	 * @event A GatewayEvent carrying { requestID, decision, decidedBy } in its data
+	 *
+	 * @return The parsed HumanInteractionDecision
+	 */
 	HumanInteractionDecision function parseHumanDecision( required GatewayEvent event ) {
 		var data = arguments.event.getData()
 		return new HumanInteractionDecision(

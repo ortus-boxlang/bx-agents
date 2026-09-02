@@ -2236,6 +2236,17 @@ class {
 		].toList( char( 10 ) )
 	}
 
+	/**
+	 * Renders `interceptors/WebUiAuthGate.bx` - gates each entry's `<path>/api/*`
+	 * routes behind an `X-API-Key` header check when that entry configures an
+	 * `apiKeyEnvVar`. The static chat shell itself is deliberately left
+	 * ungated, since a plain page navigation can't send a custom header; the
+	 * shell's own JS is what attaches the key to its /api/* calls.
+	 *
+	 * @gatedEntries Array of discovered webui entries `{ config, ... }` whose config sets an `apiKeyEnvVar` - one gate block is emitted per entry
+	 *
+	 * @return The rendered interceptors/WebUiAuth.bx source
+	 */
 	private string function renderAuthInterceptor( required array gatedEntries ) {
 		var lines = [
 			"/**",

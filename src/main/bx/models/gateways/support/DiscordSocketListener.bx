@@ -28,22 +28,56 @@ class implements="java:java.net.http.WebSocket$Listener" {
 		return this
 	}
 
+	/**
+	 * Requests the next message per the JDK's backpressure contract (see
+	 * this class's own docblock), then forwards the open event to the gateway.
+	 *
+	 * @webSocket The live websocket that just opened
+	 */
 	function onOpen( required any webSocket ) {
 		arguments.webSocket.request( 1 )
 		variables.gateway.handleSocketOpen( arguments.webSocket )
 	}
 
+	/**
+	 * Requests the next message, then forwards the frame's text to the
+	 * gateway. `last` is unused - Discord's own encoding=json Gateway frames
+	 * are not observed split across multiple onText() calls in practice.
+	 *
+	 * @webSocket The live websocket the frame arrived on
+	 * @data The frame's payload (a CharSequence), converted to a string before forwarding
+	 * @last Whether this is the final part of the message (unused)
+	 *
+	 * @return null - no pending completion stage, per WebSocket.Listener's own onText() contract
+	 */
 	function onText( required any webSocket, required any data, required boolean last ) {
 		arguments.webSocket.request( 1 )
 		variables.gateway.handleSocketText( arguments.webSocket, arguments.data.toString() )
 		return null
 	}
 
+	/**
+	 * Forwards the close event to the gateway. Unlike onOpen()/onText(), no
+	 * webSocket.request(1) call is made here - the connection is already closing.
+	 *
+	 * @webSocket The websocket that closed
+	 * @statusCode The WebSocket close code
+	 * @reason The close reason text
+	 *
+	 * @return null - no pending completion stage, per WebSocket.Listener's own onClose() contract
+	 */
 	function onClose( required any webSocket, required numeric statusCode, required string reason ) {
 		variables.gateway.handleSocketClose( arguments.statusCode, arguments.reason )
 		return null
 	}
 
+	/**
+	 * Forwards the error to the gateway. No webSocket.request(1) call here -
+	 * the JDK does not expect one after onError().
+	 *
+	 * @webSocket The websocket that errored
+	 * @error The underlying Java exception
+	 */
 	function onError( required any webSocket, required any error ) {
 		variables.gateway.handleSocketError( arguments.error )
 	}

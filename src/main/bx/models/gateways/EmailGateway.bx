@@ -88,12 +88,28 @@ class extends="ScheduledGatewayBase" {
 		SUBJECT_TAG_PATTERN = "\[bxagents:([^\]]+)\]"
 	}
 
+	/**
+	 * Initializes this gateway instance — sets its own name/description used
+	 * throughout logging and capability reporting.
+	 *
+	 * @return this
+	 */
 	function init() {
 		variables.name = "email"
 		variables.description = "Email gateway - scheduled IMAP poll inbound, outbound via cbmailservices"
 		return this
 	}
 
+	/**
+	 * Applies this gateway's own IMAP/SMTP configuration on top of
+	 * ScheduledGatewayBase's configure() - pulling imapHost/imapPort/
+	 * imapUsername/imapPassword/fromAddress/pollIntervalSeconds out of the
+	 * resolved options struct.
+	 *
+	 * @options The resolved gateway options struct (see this class's own top-of-file docblock)
+	 *
+	 * @return this
+	 */
 	IGateway function configure( required any options ) {
 		super.configure( arguments.options )
 		variables.imapHost = trim( variables.options.imapHost ?: "" )
@@ -105,6 +121,13 @@ class extends="ScheduledGatewayBase" {
 		return this
 	}
 
+	/**
+	 * @return This gateway's declared capabilities: inbound/outbound messages,
+	 *         threads, and best-effort human approval - no "streaming" (mail
+	 *         has no partial-delivery concept) and no "interactiveActions"
+	 *         (no real button/component surface, only the reply-keyword
+	 *         fallback requestHumanInteraction() below implements)
+	 */
 	array function getDeclaredCapabilities() {
 		// No "streaming" (mail has no partial-delivery concept) and, unlike
 		// the chat-platform gateways, "interactiveActions" is NOT declared -
@@ -131,6 +154,11 @@ class extends="ScheduledGatewayBase" {
 	// ScheduledGatewayBase hooks
 	// -------------------------------------------------------------------------
 
+	/**
+	 * ScheduledGatewayBase's one-time connect hook - validates that
+	 * imapHost/imapUsername/imapPassword and fromAddress are all configured,
+	 * throwing if not, then logs a successful connect.
+	 */
 	void function onConnect() {
 		if ( !len( variables.imapHost ) || !len( variables.imapUsername ) || !len( variables.imapPassword ) ) {
 			throw(
@@ -147,10 +175,23 @@ class extends="ScheduledGatewayBase" {
 		logEvent( "Connected (imap #variables.imapHost#:#variables.imapPort#, from #variables.fromAddress#)" )
 	}
 
+	/**
+	 * ScheduledGatewayBase's teardown hook - logs the disconnect. There's no
+	 * live connection to close here — each poll opens and closes its own IMAP
+	 * store.
+	 */
 	void function onDisconnect() {
 		logEvent( "Disconnected" )
 	}
 
+	/**
+	 * Registers this gateway's own IMAP poll task against the shared ColdBox
+	 * scheduler, running every pollIntervalSeconds with overlap protection,
+	 * and tracks its name so ScheduledGatewayBase's onStop() can remove it
+	 * later.
+	 *
+	 * @scheduler The shared ColdBox scheduler (or test double) to register the task against
+	 */
 	void function registerScheduledTasks( required any scheduler ) {
 		var taskName = "email-poll-#variables.name#"
 		arguments.scheduler.task( taskName )
@@ -417,6 +458,17 @@ class extends="ScheduledGatewayBase" {
 	// Outbound — via cbmailservices
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Sends one outbound email through cbmailservices' MailService — the
+	 * reply subject and In-Reply-To/References threading headers are derived
+	 * from the context's own threadID (see replySubjectFor()/
+	 * threadMailParams()) — then fires onGatewayMessageSent on success.
+	 *
+	 * @event The outbound event carrying the message text to send (event.getData().text)
+	 * @context The delivery context — conversationID is the recipient address, threadID (if any) anchors the reply subject/headers
+	 *
+	 * @return A success GatewayDeliveryResult carrying a generated deliveryID, or a failure result if there's no text to send or the send itself errors
+	 */
 	GatewayDeliveryResult function deliver( required GatewayEvent event, required GatewayContext context ) {
 		var text = toString( arguments.event.getData().text ?: "" )
 		if ( !len( text ) ) {
@@ -490,6 +542,19 @@ class extends="ScheduledGatewayBase" {
 	// real email-based support-ticket systems solve the identical problem.
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Sends a HITL approval request as a plain-text email, tagging the
+	 * subject with "[bxagents:<requestID>]" so a later reply can be
+	 * correlated back to this specific request (see the class-level notes
+	 * above on why subject tagging, not Message-ID threading, is used here)
+	 * — registers the request in pendingApprovals for handleApprovalReply()
+	 * to consume once IMAP polls up the reply.
+	 *
+	 * @humanRequest The HITL request to present — title/body/allowed decisions
+	 * @context The delivery context — conversationID is the recipient address, threadID (if any) anchors the reply subject/headers
+	 *
+	 * @return A success GatewayDeliveryResult carrying the request's own ID as its deliveryID, or a failure result if the send itself errors
+	 */
 	GatewayDeliveryResult function requestHumanInteraction( required HumanInteractionRequest humanRequest, required GatewayContext context ) {
 		var presentation = presentInteraction( arguments.humanRequest )
 		var requestId = arguments.humanRequest.getId()
@@ -517,6 +582,15 @@ class extends="ScheduledGatewayBase" {
 		return new GatewayDeliveryResult( deliveryID: requestId )
 	}
 
+	/**
+	 * Builds a HumanInteractionDecision straight from the inbound event's own
+	 * data — the decision itself was already resolved by matchDecision() in
+	 * handleApprovalReply() before this event was raised.
+	 *
+	 * @event The inbound event carrying requestID/decision/decidedBy in its data
+	 *
+	 * @return The normalized HumanInteractionDecision
+	 */
 	HumanInteractionDecision function parseHumanDecision( required GatewayEvent event ) {
 		var data = arguments.event.getData()
 		return new HumanInteractionDecision(

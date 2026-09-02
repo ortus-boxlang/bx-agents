@@ -77,6 +77,13 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		WEBHOOK_MAX_BODY_BYTES  = 3 * 1024 * 1024
 	}
 
+	/**
+	 * Initializes this gateway instance — sets its own name/description and
+	 * builds the message chunker used to split outbound text at the Graph
+	 * API's message length limit.
+	 *
+	 * @return this
+	 */
 	function init() {
 		variables.name = "whatsapp-cloud"
 		variables.description = "WhatsApp Business Cloud API gateway - webhook inbound, Graph API outbound"
@@ -84,6 +91,16 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		return this
 	}
 
+	/**
+	 * Applies this gateway's own Graph API configuration on top of
+	 * BaseGateway's configure() - pulling accessToken/phoneNumberId/
+	 * appSecret/verifyToken and an optional apiVersion override out of the
+	 * resolved options struct.
+	 *
+	 * @options The resolved gateway options struct (see this class's own top-of-file docblock)
+	 *
+	 * @return this
+	 */
 	IGateway function configure( required any options ) {
 		super.configure( arguments.options )
 		variables.accessToken = trim( variables.options.accessToken ?: "" )
@@ -96,6 +113,12 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		return this
 	}
 
+	/**
+	 * @return This gateway's declared capabilities: inbound/outbound
+	 *         messages, threads, native interactive actions (buttons/lists),
+	 *         and human approval - no "streaming", since the Graph API has no
+	 *         live-edit send (same reasoning as Telegram)
+	 */
 	array function getDeclaredCapabilities() {
 		// No "streaming" - the Graph API has no live-edit send, same
 		// reasoning as Telegram.
@@ -109,6 +132,12 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		variables.apiCaller = arguments.caller
 	}
 
+	/**
+	 * BaseGateway's start lifecycle hook - validates that accessToken and
+	 * phoneNumberId are configured, throwing if not. There's no connection to
+	 * open here (inbound is webhook-driven, not a scheduler or socket this
+	 * class owns), so this is the whole of "starting".
+	 */
 	void function onStart() {
 		if ( !len( variables.accessToken ) || !len( variables.phoneNumberId ) ) {
 			throw(
@@ -119,6 +148,10 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		logEvent( "Ready (phone_number_id #variables.phoneNumberId#) - inbound is webhook-driven, no connection to open" )
 	}
 
+	/**
+	 * BaseGateway's stop lifecycle hook - logs the stop. Nothing to tear
+	 * down; see onStart()'s own docblock.
+	 */
 	void function onStop() {
 		logEvent( "Stopped" )
 	}
@@ -127,10 +160,24 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 	// IGateway.onMessage()/onError() — own storage, see messageCallback's docblock
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Stores the callback GatewaySession.start() registers here - own
+	 * storage copy of ScheduledGatewayBase's identical implementation (see
+	 * the messageCallback property's own docblock for why this class
+	 * duplicates it rather than inheriting).
+	 *
+	 * @callback function( GatewayMessage message )
+	 */
 	public void function onMessage( required function callback ) {
 		variables.messageCallback = arguments.callback
 	}
 
+	/**
+	 * Invokes the registered onMessage() callback for one inbound message, a
+	 * no-op if nothing has registered one yet.
+	 *
+	 * @message A single normalized GatewayMessage
+	 */
 	public void function dispatchInbound( required any message ) {
 		if ( isNull( variables.messageCallback ) ) {
 			return
@@ -138,10 +185,21 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		variables.messageCallback( arguments.message )
 	}
 
+	/**
+	 * Stores the callback registered via onError().
+	 *
+	 * @callback function( any error )
+	 */
 	public void function onError( required function callback ) {
 		variables.errorCallback = arguments.callback
 	}
 
+	/**
+	 * Invokes the registered onError() callback, a no-op if nothing has
+	 * registered one.
+	 *
+	 * @error Whatever error information the gateway has - a message string, a struct, a caught exception
+	 */
 	public void function dispatchError( required any error ) {
 		if ( isNull( variables.errorCallback ) ) {
 			return
@@ -468,6 +526,20 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 	// Outbound — Graph API
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Sends one outbound WhatsApp text message via the Graph API, chunking
+	 * the text at MAX_MESSAGE_LENGTH and sending one API call per chunk —
+	 * only the first chunk carries the reply "context" (quoting the
+	 * thread's own anchor message id), matching Meta's own quote-reply
+	 * semantics — then fires onGatewayMessageSent using the last sent
+	 * message's own wamid as the delivery ID (falling back to the event's
+	 * own id if the response carries none).
+	 *
+	 * @event The outbound event carrying the message text to send (event.getData().text)
+	 * @context The delivery context — conversationID is the recipient's wa_id, threadID (if any) is the message id being replied to
+	 *
+	 * @return A success GatewayDeliveryResult, or a failure result if there's no text to send or the Graph API call itself errors
+	 */
 	GatewayDeliveryResult function deliver( required GatewayEvent event, required GatewayContext context ) {
 		var text = toString( arguments.event.getData().text ?: "" )
 		if ( !len( text ) ) {
@@ -612,18 +684,43 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		}
 	}
 
+	/**
+	 * @presentation An InteractionPresentation (see BaseGateway.presentInteraction())
+	 *
+	 * @return The presentation formatted for a WhatsApp message body — the
+	 *         title, if present, rendered bold (WhatsApp's `*...*` markdown)
+	 *         on its own line above the body, else just the body
+	 */
 	private string function buildPresentationText( required any presentation ) {
 		return len( arguments.presentation.getTitle() )
 			? "*#arguments.presentation.getTitle()#*" & char( 10 ) & char( 10 ) & arguments.presentation.getBody()
 			: arguments.presentation.getBody()
 	}
 
+	/**
+	 * @text The text to truncate
+	 * @limit The maximum length to allow
+	 *
+	 * @return text unchanged if it already fits within limit, else text cut
+	 *         short with a trailing "..." so the result is exactly limit
+	 *         characters long
+	 */
 	private string function truncate( required string text, required numeric limit ) {
 		return len( arguments.text ) > arguments.limit
 			? left( arguments.text, arguments.limit - 3 ) & "..."
 			: arguments.text
 	}
 
+	/**
+	 * Builds a HumanInteractionDecision straight from the inbound event's
+	 * own data — the decision itself was already resolved from the tapped
+	 * button/list row id by handleInteractiveReply() before this event was
+	 * raised.
+	 *
+	 * @event The inbound event carrying requestID/decision/decidedBy in its data
+	 *
+	 * @return The normalized HumanInteractionDecision
+	 */
 	HumanInteractionDecision function parseHumanDecision( required GatewayEvent event ) {
 		var data = arguments.event.getData()
 		return new HumanInteractionDecision(

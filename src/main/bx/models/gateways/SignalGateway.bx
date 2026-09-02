@@ -110,6 +110,11 @@ class extends="ScheduledGatewayBase" {
 		HEALTH_STALE_THRESHOLD_MS = 120000
 	}
 
+	/**
+	 * Sets this gateway's own name/description and constructs its MessageChunker.
+	 *
+	 * @return this
+	 */
 	function init() {
 		variables.name = "signal"
 		variables.description = "Signal gateway - SSE inbound / JSON-RPC outbound against a signal-cli daemon"
@@ -117,6 +122,17 @@ class extends="ScheduledGatewayBase" {
 		return this
 	}
 
+	/**
+	 * Applies this gateway's own config options on top of
+	 * ScheduledGatewayBase's own configure() - `httpUrl` (trailing slash
+	 * stripped) defaults to "http://127.0.0.1:8080" if unset; `account` is
+	 * the linked signal-cli account's own E.164 number/UUID (see class
+	 * docblock).
+	 *
+	 * @options The options struct aiGateway() was called with
+	 *
+	 * @return this
+	 */
 	IGateway function configure( required any options ) {
 		super.configure( arguments.options )
 		if ( len( trim( variables.options.httpUrl ?: "" ) ) ) {
@@ -126,6 +142,11 @@ class extends="ScheduledGatewayBase" {
 		return this
 	}
 
+	/**
+	 * @return The capabilities this gateway declares to bx-ai's own
+	 *         HITL/session machinery - see the inline comments below for
+	 *         what's deliberately NOT declared and why
+	 */
 	array function getDeclaredCapabilities() {
 		// "threads" - Signal's own quote/reply mechanism is a genuine
 		// threading key. No "interactiveActions" (reactions are write-only
@@ -135,10 +156,20 @@ class extends="ScheduledGatewayBase" {
 		return [ "inboundMessages", "outboundMessages", "threads", "humanApproval" ]
 	}
 
+	/**
+	 * Test-only seam — see connector's own docblock.
+	 *
+	 * @fn A closure that replaces the real async SSE connect chain entirely
+	 */
 	void function setConnector( required any fn ) {
 		variables.connector = arguments.fn
 	}
 
+	/**
+	 * Test-only seam — see rpcCaller's own docblock.
+	 *
+	 * @caller A closure that replaces the real outbound JSON-RPC HTTP call
+	 */
 	void function setRpcCaller( required any caller ) {
 		variables.rpcCaller = arguments.caller
 	}
@@ -147,6 +178,11 @@ class extends="ScheduledGatewayBase" {
 	// ScheduledGatewayBase hooks
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Validates that an `account` is configured, resets connection state,
+	 * and kicks off the async SSE connect chain (see startConnection()) -
+	 * called once per start(), before registerScheduledTasks().
+	 */
 	void function onConnect() {
 		if ( !len( variables.account ) ) {
 			throw(
@@ -160,11 +196,21 @@ class extends="ScheduledGatewayBase" {
 		startConnection()
 	}
 
+	/**
+	 * Marks this gateway as stopping so the SSE read loop and any in-flight
+	 * reconnect backoff stop retrying, and flags the connection as closed.
+	 */
 	void function onDisconnect() {
 		variables.stopping = true
 		variables.connectionOpen = false
 	}
 
+	/**
+	 * Registers the 30s connection-health watchdog (see
+	 * checkConnectionHealth()) against the shared ColdBox scheduler.
+	 *
+	 * @scheduler The shared ColdBox scheduler (or test double) to register the task against
+	 */
 	void function registerScheduledTasks( required any scheduler ) {
 		var taskName = "signal-watchdog-#variables.name#"
 		arguments.scheduler.task( taskName )
@@ -200,6 +246,11 @@ class extends="ScheduledGatewayBase" {
 		}
 	}
 
+	/**
+	 * Calls the signal-cli daemon's own `/api/v1/check` health-check endpoint.
+	 *
+	 * @return true if the daemon responded with HTTP 200, false on any error or non-200 response
+	 */
 	private boolean function pingHealthCheck() {
 		try {
 			var url = "#variables.httpUrl#/api/v1/check"
@@ -210,10 +261,21 @@ class extends="ScheduledGatewayBase" {
 		}
 	}
 
+	/**
+	 * @return The current time in epoch milliseconds, via java.lang.System.currentTimeMillis()
+	 */
 	private numeric function currentTimeMillis() {
 		return createObject( "java", "java.lang.System" ).currentTimeMillis()
 	}
 
+	/**
+	 * Writes to this gateway's own "gateway-signal" log file - shadows
+	 * ScheduledGatewayBase's public logEvent() with an identical private
+	 * implementation (see base class).
+	 *
+	 * @text The message to log
+	 * @type BoxLang writeLog() type - "information" (default), "warning", "error", "debug", etc.
+	 */
 	private void function logEvent( required string text, string type = "information" ) {
 		writeLog( text: arguments.text, type: arguments.type, file: "gateway-#variables.name#" )
 	}
@@ -222,6 +284,11 @@ class extends="ScheduledGatewayBase" {
 	// SSE connection lifecycle
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Entry point for (re)opening the SSE connection - delegates to the
+	 * test seam `connector`, if set (see its own docblock), otherwise
+	 * starts the real async connect chain via connectAsync().
+	 */
 	private void function startConnection() {
 		if ( !isNull( variables.connector ) ) {
 			variables.connector()
@@ -230,6 +297,13 @@ class extends="ScheduledGatewayBase" {
 		connectAsync()
 	}
 
+	/**
+	 * Lazily creates (and thereafter reuses) the single
+	 * java.net.http.HttpClient instance this gateway sends every SSE
+	 * connect attempt through.
+	 *
+	 * @return The cached HttpClient instance
+	 */
 	private any function resolveHttpClient() {
 		if ( isNull( variables.httpClientInstance ) ) {
 			variables.httpClientInstance = createObject( "java", "java.net.http.HttpClient" ).newHttpClient()
@@ -302,6 +376,14 @@ class extends="ScheduledGatewayBase" {
 		}
 	}
 
+	/**
+	 * Handles a failed SSE connect attempt (connectAsync()'s own
+	 * future.exceptionally() callback) - marks the connection closed, logs
+	 * the failure, and schedules a backoff reconnect unless the gateway is
+	 * stopping.
+	 *
+	 * @error The exception the CompletableFuture failed with
+	 */
 	private void function handleConnectFailure( required any error ) {
 		variables.connectionOpen = false
 		logEvent( "SSE connect failed: #error.getMessage()#", "error" )
@@ -476,6 +558,16 @@ class extends="ScheduledGatewayBase" {
 		variables.pendingApprovals.delete( arguments.sender )
 	}
 
+	/**
+	 * Same best-effort exact-or-prefix, case-insensitive match Email's own
+	 * matchDecision() uses - falls back to the raw text verbatim on no
+	 * confident match, left for bx-ai's own HITL coordinator to reject.
+	 *
+	 * @text A reply's first line, already trimmed
+	 * @allowedDecisions The original request's own allowed decision keywords
+	 *
+	 * @return The matched decision keyword, or the raw text verbatim if no match was found
+	 */
 	private string function matchDecision( required string text, required array allowedDecisions ) {
 		var normalized = lcase( arguments.text )
 		for ( var decision in arguments.allowedDecisions ) {
@@ -491,6 +583,20 @@ class extends="ScheduledGatewayBase" {
 	// Outbound — JSON-RPC 2.0 "send"
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Sends an outbound event's text to Signal via signal-cli's JSON-RPC
+	 * `send` method, chunked to MAX_MESSAGE_LENGTH (one RPC call per
+	 * chunk) - fails on the first chunk that errors. Fires
+	 * onGatewayMessageSent before returning.
+	 *
+	 * @event The outbound event to deliver - only `event.getData().text` is used
+	 * @context Carries the destination conversationID (the recipient's own phone number/UUID)
+	 *
+	 * @return Success with the last chunk's signal-cli timestamp as
+	 *         deliveryID (or the event's own id if no timestamp was
+	 *         returned), or failure if there's no text to send or
+	 *         signal-cli returned an RPC error
+	 */
 	GatewayDeliveryResult function deliver( required GatewayEvent event, required GatewayContext context ) {
 		var text = toString( arguments.event.getData().text ?: "" )
 		if ( !len( text ) ) {
@@ -529,6 +635,20 @@ class extends="ScheduledGatewayBase" {
 	// same pattern TwilioGateway/GitHubGateway both use.
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Sends a plain-text HITL approval prompt over Signal and records it in
+	 * `pendingApprovals`, keyed by conversationID (see the section comment
+	 * above for why - Signal has no per-request correlation key of its
+	 * own). The eventual reply is matched back to this request by
+	 * handleApprovalReply()/matchDecision() when the same sender writes back.
+	 *
+	 * @humanRequest The interaction to present - rendered via presentInteraction()
+	 * @context Carries the destination conversationID (the recipient's own phone number/UUID)
+	 *
+	 * @return Success with signal-cli's own timestamp as deliveryID (or
+	 *         the request's own id if none was returned), or failure if
+	 *         signal-cli returned an RPC error
+	 */
 	GatewayDeliveryResult function requestHumanInteraction( required HumanInteractionRequest humanRequest, required GatewayContext context ) {
 		var presentation = presentInteraction( arguments.humanRequest )
 		var allowedDecisions = arguments.humanRequest.getAllowedDecisions()
@@ -549,6 +669,16 @@ class extends="ScheduledGatewayBase" {
 		return new GatewayDeliveryResult( deliveryID: len( messageId ) ? messageId : arguments.humanRequest.getId() )
 	}
 
+	/**
+	 * Builds the plain-text body for an outbound HITL approval message -
+	 * the presentation's own title (if any) and body, followed by the
+	 * allowed decision keywords the recipient is asked to reply with.
+	 *
+	 * @presentation An InteractionPresentation (see BaseGateway.presentInteraction())
+	 * @allowedDecisions The request's own allowed decision keywords
+	 *
+	 * @return The assembled message body, newline-joined
+	 */
 	private string function buildApprovalBodyText( required any presentation, required array allowedDecisions ) {
 		var lines = []
 		if ( len( arguments.presentation.getTitle() ) ) {
@@ -564,6 +694,15 @@ class extends="ScheduledGatewayBase" {
 		return lines.toList( char( 10 ) )
 	}
 
+	/**
+	 * Extracts a HumanInteractionDecision from an already-normalized
+	 * GatewayEvent's own data (as built by handleApprovalReply()'s
+	 * onGatewayMessageReceived announcement).
+	 *
+	 * @event The gateway event carrying the decision
+	 *
+	 * @return The parsed HumanInteractionDecision
+	 */
 	HumanInteractionDecision function parseHumanDecision( required GatewayEvent event ) {
 		var data = arguments.event.getData()
 		return new HumanInteractionDecision(
@@ -587,6 +726,13 @@ class extends="ScheduledGatewayBase" {
 		return val( arguments.response.status ?: 0 ) >= 300 || ( isStruct( body ) && structKeyExists( body, "error" ) )
 	}
 
+	/**
+	 * @response A sendRpc() result
+	 *
+	 * @return The JSON-RPC error's own "message", or a generic "unknown
+	 *         error (HTTP <status>)" fallback if the response carries no
+	 *         structured error
+	 */
 	private string function rpcErrorMessage( required struct response ) {
 		var body = arguments.response.body ?: {}
 		if ( isStruct( body ) && structKeyExists( body, "error" ) && isStruct( body.error ) ) {

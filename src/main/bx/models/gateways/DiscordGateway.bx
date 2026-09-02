@@ -77,6 +77,12 @@ class extends="ScheduledGatewayBase" {
 		NEW_SESSION_REQUIRED = [ 4007, 4009 ]
 	}
 
+	/**
+	 * Sets this gateway's identity (name/description) and constructs its
+	 * shared message chunker.
+	 *
+	 * @return this
+	 */
 	function init() {
 		variables.name = "discord"
 		variables.description = "Discord gateway - persistent websocket inbound (Gateway API), HTTP outbound"
@@ -84,6 +90,15 @@ class extends="ScheduledGatewayBase" {
 		return this
 	}
 
+	/**
+	 * Applies Discord-specific config on top of ScheduledGatewayBase's own -
+	 * the bot token and an optional intents bitmask override (see this
+	 * file's class-level docblock for the recognized option keys).
+	 *
+	 * @options Gateway config, as passed to aiGateway( ..., options )
+	 *
+	 * @return this
+	 */
 	IGateway function configure( required any options ) {
 		super.configure( arguments.options )
 		variables.botToken = trim( variables.options.botToken ?: "" )
@@ -93,6 +108,9 @@ class extends="ScheduledGatewayBase" {
 		return this
 	}
 
+	/**
+	 * @return The capabilities this gateway declares to bx-ai's own gateway registry
+	 */
 	array function getDeclaredCapabilities() {
 		return [ "inboundMessages", "outboundMessages", "streaming", "threads", "interactiveActions", "humanApproval" ]
 	}
@@ -115,6 +133,11 @@ class extends="ScheduledGatewayBase" {
 	// ScheduledGatewayBase hooks
 	// -------------------------------------------------------------------------
 
+	/**
+	 * ScheduledGatewayBase's onConnect() hook - validates the required
+	 * botToken option is present, then opens the initial Gateway websocket
+	 * connection.
+	 */
 	void function onConnect() {
 		if ( !len( variables.botToken ) ) {
 			throw(
@@ -127,6 +150,11 @@ class extends="ScheduledGatewayBase" {
 		openConnection()
 	}
 
+	/**
+	 * ScheduledGatewayBase's onDisconnect() hook - marks the gateway as
+	 * stopping (so the reconnect logic below no-ops) and closes the live
+	 * websocket.
+	 */
 	void function onDisconnect() {
 		variables.stopping = true
 		closeSocketQuietly( variables.webSocket, "gateway stopping" )
@@ -134,6 +162,14 @@ class extends="ScheduledGatewayBase" {
 		variables.socketConnected = false
 	}
 
+	/**
+	 * ScheduledGatewayBase's registerScheduledTasks() hook - registers only
+	 * the safety-net watchdog task here; the heartbeat task itself is
+	 * registered separately (see startHeartbeat()) once Discord's own
+	 * `Hello` frame tells us the interval to use.
+	 *
+	 * @scheduler The shared ColdBox scheduler to register tasks against
+	 */
 	void function registerScheduledTasks( required any scheduler ) {
 		variables.scheduler = arguments.scheduler
 
@@ -150,6 +186,12 @@ class extends="ScheduledGatewayBase" {
 		trackTask( taskName )
 	}
 
+	/**
+	 * The watchdog task's own callback - reconnects if the socket is down
+	 * and we're not intentionally stopping. A safety net only: Discord's own
+	 * Reconnect/Invalid Session frames and the heartbeat-ACK check normally
+	 * trigger a reconnect long before this fires.
+	 */
 	void function checkConnectionHealth() {
 		if ( variables.stopping || variables.socketConnected ) {
 			return
@@ -162,6 +204,11 @@ class extends="ScheduledGatewayBase" {
 	// Connection lifecycle
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Resolves the Gateway URL to connect to and opens the websocket,
+	 * marking the connection as live. Identify/Resume itself happens later,
+	 * once the new socket's own `Hello` frame arrives (see handleHello()).
+	 */
 	private void function openConnection() {
 		var wssUrl = resolveGatewayUrl()
 		variables.webSocket = openSocket( wssUrl )
@@ -210,6 +257,13 @@ class extends="ScheduledGatewayBase" {
 		closeSocketQuietly( oldSocket, "reconnecting" )
 	}
 
+	/**
+	 * Best-effort close of a websocket - swallows any error, since the
+	 * socket may already be closed or broken.
+	 *
+	 * @socket The websocket to close (a no-op if null)
+	 * @reason A close reason sent to Discord as the close frame's payload
+	 */
 	private void function closeSocketQuietly( required any socket, required string reason ) {
 		if ( isNull( arguments.socket ) ) {
 			return
@@ -221,6 +275,15 @@ class extends="ScheduledGatewayBase" {
 		}
 	}
 
+	/**
+	 * Opens a live websocket to Discord's Gateway, wiring a
+	 * DiscordSocketListener back to this gateway instance - or returns the
+	 * test-injected double from socketOpener if one is set.
+	 *
+	 * @wssUrl The wss:// URL to connect to (see resolveGatewayUrl())
+	 *
+	 * @return A live websocket (or the test-injected double from socketOpener)
+	 */
 	private any function openSocket( required string wssUrl ) {
 		if ( !isNull( variables.socketOpener ) ) {
 			return variables.socketOpener( arguments.wssUrl )
@@ -295,11 +358,22 @@ class extends="ScheduledGatewayBase" {
 		sendHeartbeat()
 	}
 
+	/**
+	 * Sends a single Heartbeat (op 1) frame carrying the last sequence
+	 * number seen, then marks a heartbeat as awaiting its ACK (op 11) - see
+	 * heartbeatTick().
+	 */
 	private void function sendHeartbeat() {
 		sendPayload( { op: 1, d: isNull( variables.lastSeq ) ? null : variables.lastSeq } )
 		variables.awaitingHeartbeatAck = true
 	}
 
+	/**
+	 * Serializes and sends one Gateway payload as a text frame - a no-op if
+	 * there's no live websocket.
+	 *
+	 * @payload A Gateway payload struct, e.g. { op: 1, d: ... }
+	 */
 	private void function sendPayload( required struct payload ) {
 		if ( isNull( variables.webSocket ) ) {
 			return
@@ -311,6 +385,13 @@ class extends="ScheduledGatewayBase" {
 	// DiscordSocketListener callbacks - see support/DiscordSocketListener.bx
 	// -------------------------------------------------------------------------
 
+	/**
+	 * DiscordSocketListener's onOpen() callback - just logs; Identify/Resume
+	 * doesn't happen here, only once the new socket's own `Hello` frame
+	 * arrives (see handleHello()).
+	 *
+	 * @webSocket The live websocket that just opened
+	 */
 	void function handleSocketOpen( required any webSocket ) {
 		logEvent( "Socket opened" )
 	}
@@ -336,6 +417,12 @@ class extends="ScheduledGatewayBase" {
 		reconnect( forceFreshSession: static.NEW_SESSION_REQUIRED.find( arguments.statusCode ) > 0 )
 	}
 
+	/**
+	 * DiscordSocketListener's onError() callback - marks the connection down
+	 * and forwards the error to any registered onError() callback.
+	 *
+	 * @error The underlying Java exception the websocket reported
+	 */
 	void function handleSocketError( required any error ) {
 		logEvent( "Socket error: #error.getMessage()#", "error" )
 		variables.socketConnected = false
@@ -384,6 +471,13 @@ class extends="ScheduledGatewayBase" {
 		}
 	}
 
+	/**
+	 * Handles the Gateway's opening `Hello` (op 10) frame - starts the
+	 * heartbeat at the interval it specifies, then either resumes the prior
+	 * session (if we have one) or starts a fresh one via Identify.
+	 *
+	 * @data Hello's own data payload, e.g. { heartbeat_interval: 45000 }
+	 */
 	private void function handleHello( required struct data ) {
 		startHeartbeat( arguments.data.heartbeat_interval ?: 45000 )
 		if ( len( variables.sessionId ) ) {
@@ -393,6 +487,10 @@ class extends="ScheduledGatewayBase" {
 		}
 	}
 
+	/**
+	 * Sends the Identify (op 2) frame that starts a brand-new Gateway
+	 * session - used when there's no prior session to resume.
+	 */
 	private void function sendIdentify() {
 		sendPayload( {
 			op: 2,
@@ -404,6 +502,11 @@ class extends="ScheduledGatewayBase" {
 		} )
 	}
 
+	/**
+	 * Sends the Resume (op 6) frame that reattaches to a prior Gateway
+	 * session at the last sequence number seen, rather than starting a fresh
+	 * one.
+	 */
 	private void function sendResume() {
 		sendPayload( {
 			op: 6,
@@ -526,6 +629,17 @@ class extends="ScheduledGatewayBase" {
 	// Outbound
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Posts an outbound message to a channel, splitting it into multiple
+	 * messages via the shared chunker if it exceeds Discord's per-message
+	 * length limit - the first chunk replies to the thread's own message
+	 * (message_reference) if one is set.
+	 *
+	 * @event The outbound event carrying the text to deliver
+	 * @context Identifies the target channel and, if present, the message to reply to
+	 *
+	 * @return The delivery result, keyed by the last chunk's own Discord message id
+	 */
 	GatewayDeliveryResult function deliver( required GatewayEvent event, required GatewayContext context ) {
 		var text = toString( arguments.event.getData().text ?: "" )
 		if ( !len( text ) ) {
@@ -609,6 +723,16 @@ class extends="ScheduledGatewayBase" {
 	// Human-in-the-loop — message component buttons
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Posts a message with an action row of buttons (message components) for
+	 * a human to click, presenting the request via the shared
+	 * presentInteraction() presentation.
+	 *
+	 * @humanRequest The HITL request to present, including its allowed decisions/buttons
+	 * @context Identifies the target channel and, if present, the message to reply to
+	 *
+	 * @return The delivery result, keyed by the posted message's own Discord id
+	 */
 	GatewayDeliveryResult function requestHumanInteraction( required HumanInteractionRequest humanRequest, required GatewayContext context ) {
 		var presentation = presentInteraction( arguments.humanRequest )
 		var body = {
@@ -642,6 +766,14 @@ class extends="ScheduledGatewayBase" {
 		return new GatewayDeliveryResult( deliveryID: toString( response.body.id ?: arguments.humanRequest.getId() ) )
 	}
 
+	/**
+	 * Extracts a HumanInteractionDecision from a button-click event's own
+	 * data (already normalized by handleInteractionCreate()).
+	 *
+	 * @event The gateway event carrying the raw decision data
+	 *
+	 * @return The parsed decision - requestID, decision value, and who decided
+	 */
 	HumanInteractionDecision function parseHumanDecision( required GatewayEvent event ) {
 		var data = arguments.event.getData()
 		return new HumanInteractionDecision(
@@ -666,6 +798,15 @@ class extends="ScheduledGatewayBase" {
 		return 2
 	}
 
+	/**
+	 * Renders a presentation as Discord message content - a bold title
+	 * (Discord markdown) followed by a blank line and the body, or just the
+	 * body if there's no title.
+	 *
+	 * @presentation An InteractionPresentation (see BaseGateway.presentInteraction())
+	 *
+	 * @return The formatted message content
+	 */
 	private string function buildPresentationText( required any presentation ) {
 		return len( arguments.presentation.getTitle() )
 			? "**#arguments.presentation.getTitle()#**" & char( 10 ) & char( 10 ) & arguments.presentation.getBody()
