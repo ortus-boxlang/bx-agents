@@ -30,6 +30,14 @@ dedicated API under `<path>/api`. The page is dependency-free vanilla HTML/CSS/J
 pre-built and vendored inside BxAgents itself - `bxAgents build` never runs `npm
 install`, and a generated project never needs Node installed at all.
 
+![The generated web chat UI, branded and populated with an example conversation](../assets/webui-chat-light.png)
+
+That's the real, unmodified generated page - this one branded with
+[`examples/webui-agent`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/webui-agent)'s
+`theme`/`title`/`icon` config from [Lesson 13](13-exposing-http-and-mcp.md)'s exposure
+concept, taken further. `bxAgents build && bxAgents serve` in that example gets you the
+same page for real.
+
 ## What the page can do
 
 - **Conversation sidebar** - switch, rename, delete, or start a new conversation.
