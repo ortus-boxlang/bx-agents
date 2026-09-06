@@ -26,7 +26,7 @@ bxAgents serve --port=8080
 `gateways/signalChannel.bx` points `httpUrl` at `http://127.0.0.1:8081` - a different port than this app's own `serve --port=8080`, since both are local HTTP servers and would otherwise collide. `SignalGateway` opens the SSE connection to the daemon as soon as `GatewaySession` starts. Message the linked number from another Signal account - the reply goes out as a JSON-RPC `send` call to the same daemon.
 
 {% hint style="warning" %}
-v1 is **DM-only** - Signal group conversations are out of scope. Human-in-the-loop is degraded the same way Twilio/GitHub's fallback is: Signal reactions/read-receipts are write-only cosmetic status, not a real answer channel, so approval requests arrive as plain text listing the allowed decisions. See [Signal - a fourth transport shape](../../docs/conventions/gateways.md#signal---a-fourth-transport-shape-against-an-external-signal-cli-daemon).
+v1 is **DM-only** - Signal group conversations are out of scope. Human-in-the-loop is degraded the same way Twilio/GitHub's fallback is: Signal reactions/read-receipts are write-only cosmetic status, not a real answer channel, so approval requests arrive as plain text listing the allowed decisions. See [Signal - a fourth transport shape](../../docs/conventions/gateways/signal.md).
 {% endhint %}
 
 {% hint style="info" %}

@@ -24,4 +24,4 @@ bxAgents serve
 Like every other persistent-connection gateway in this directory, there's no `curl`-able entrypoint here - message the bot for real in Discord to see it work.
 {% endhint %}
 
-See [Discord's persistent connection](../../docs/conventions/gateways.md#discords-persistent-connection---mandatory-client-driven-heartbeats) for the heartbeat/reconnect model, and [Known Limitations](../../docs/known-limitations.md) for what is and isn't covered by automated tests.
+See [Discord's persistent connection](../../docs/conventions/gateways/discord.md) for the heartbeat/reconnect model, and [Known Limitations](../../docs/known-limitations.md) for what is and isn't covered by automated tests.

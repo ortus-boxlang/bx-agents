@@ -81,9 +81,8 @@ bxAgents serve
 
 The `nightly` task fires automatically once `serve` is running - no separate cron daemon, no OS-level `cron` entry. ColdBox's own in-process scheduler thread drives it, on the schedule declared in `Scheduler.bx`.
 
-{% hint style="info" %}
-`build` cannot meaningfully validate the *contents* of `Scheduler.bx` beyond checking that the file exists - a typo in a `getInstance()` call or a reference to an agent name that doesn't exist will pass `build` cleanly and only surface once the generated app actually boots. See [Known Limitations](../known-limitations.md) for the current state of that gap.
-{% endhint %}
+!!! info
+    `build` cannot meaningfully validate the *contents* of `Scheduler.bx` beyond checking that the file exists - a typo in a `getInstance()` call or a reference to an agent name that doesn't exist will pass `build` cleanly and only surface once the generated app actually boots. See [Known Limitations](../known-limitations.md) for the current state of that gap.
 
 ## Where to go next
 

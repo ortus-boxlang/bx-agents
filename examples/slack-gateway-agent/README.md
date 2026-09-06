@@ -25,4 +25,4 @@ bxAgents serve
 Like every other persistent-connection gateway in this directory, there's no `curl`-able entrypoint here - message the app for real in Slack to see it work.
 {% endhint %}
 
-See [Slack's persistent connection](../../docs/conventions/gateways.md#slacks-persistent-connection) for the reconnect model, and [Known Limitations](../../docs/known-limitations.md) for what is and isn't covered by automated tests.
+See [Slack's persistent connection](../../docs/conventions/gateways/slack.md) for the reconnect model, and [Known Limitations](../../docs/known-limitations.md) for what is and isn't covered by automated tests.

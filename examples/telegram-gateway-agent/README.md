@@ -20,4 +20,4 @@ bxAgents serve
 This is the only example in this directory with no `curl`-able entrypoint - the whole point of a push-style gateway is that the platform talks to *it*, not the other way around. To see it work you need a real bot token and a real Telegram client.
 {% endhint %}
 
-See [gateways/](../../docs/conventions/gateways.md) for the full push-style gateway model (transport shapes, `GatewaySession`, HITL, logging), and [Known Limitations](../../docs/known-limitations.md) for what is and isn't covered by automated tests for this gateway.
+See [gateways/](../../docs/conventions/gateways/telegram.md) for the full push-style gateway model (transport shapes, `GatewaySession`, HITL, logging), and [Known Limitations](../../docs/known-limitations.md) for what is and isn't covered by automated tests for this gateway.

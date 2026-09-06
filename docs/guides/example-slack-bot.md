@@ -88,9 +88,8 @@ bxAgents serve
 
 DM the bot, or mention it in a channel it's in. Replies stream back token-by-token via a placeholder message that `SlackGateway` posts immediately and then updates in place with `chat.update` as tokens arrive - the same incremental-reveal effect the [web chat UI](../conventions/web-ui.md) gives you in a browser, produced here entirely through Slack's own message-editing API.
 
-{% hint style="info" %}
-There's no `curl`-able entrypoint for this one - message the app for real in Slack to see it work. This is true of every persistent-connection gateway (Telegram's long-poll, Slack/Discord's websockets); only the webhook-driven platforms (WhatsApp Cloud, Teams, Twilio, GitHub) generate a route you can hit locally with a hand-computed signature - each of those examples' own README shows how.
-{% endhint %}
+!!! info
+    There's no `curl`-able entrypoint for this one - message the app for real in Slack to see it work. This is true of every persistent-connection gateway (Telegram's long-poll, Slack/Discord's websockets); only the webhook-driven platforms (WhatsApp Cloud, Teams, Twilio, GitHub) generate a route you can hit locally with a hand-computed signature - each of those examples' own README shows how.
 
 ## What's proven, and what isn't
 
