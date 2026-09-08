@@ -99,23 +99,15 @@ jobs:
           ./gradlew downloadBoxLang
           # Supporting BoxLang modules (bx-ai, etc.) the TestBox suite needs
           # loaded for real - see boxlang.json's modulesDirectory setting.
+          #
+          # bx-ai used to need overlaying from its own git source here: the
+          # published bx-ai@3.4.0-snapshot lagged its own development branch
+          # badly (no aiGatewayRegistry/BaseGateway/scoped IAiMemory.summarize()
+          # at all). bx-ai has since cut a real, stable 3.4.0 release carrying
+          # all of it - confirmed directly against the published ForgeBox
+          # artifact - so build.gradle's boxlangModules now pins that release
+          # and downloadModules alone is enough. See docs/known-limitations.md.
           ./gradlew downloadModules
-          # Then OVERLAY bx-ai with a build from its own source.
-          #
-          # The published bx-ai@3.4.0-snapshot on ForgeBox lags its own
-          # development branch badly: it still ships bifs/gatewayRegistry.bx
-          # (renamed to aiGatewayRegistry upstream) and has no
-          # models/gateway/BaseGateway.bx at all - the class every push-style
-          # gateway in this module extends. Testing against it fails ~40 specs
-          # for reasons that have nothing to do with this module's own code.
-          #
-          # bx-ftp and bx-sqlite are stable releases and keep coming from
-          # downloadModules; only bx-ai needs this. Remove the overlay once a
-          # published snapshot catches up. See docs/known-limitations.md.
-          git clone --depth 1 --branch development https://github.com/ortus-boxlang/bx-ai.git "$RUNNER_TEMP/bx-ai"
-          ( cd "$RUNNER_TEMP/bx-ai" && ./gradlew createModuleStructure --console=plain -q )
-          cp -R "$RUNNER_TEMP/bx-ai/build/module/." src/test/resources/modules/bxai/
-          echo "+ bx-ai overlaid from source: $( cd "$RUNNER_TEMP/bx-ai" && git rev-parse --short HEAD )"
           # boxlang-miniserver jar - lets integration tests boot a real
           # MiniServer instead of skipping when the binary isn't on PATH.
           ./gradlew downloadMiniServer

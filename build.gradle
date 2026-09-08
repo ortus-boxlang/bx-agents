@@ -25,11 +25,17 @@ ext {
 	// BoxLang's own module service uses as the module's identity (its box.json's
 	// `boxlang.moduleName`), which is often different from the slug.
 	boxlangModules = [
-		// 3.4.0-snapshot (not yet a stable release) is required for its "mock"
-		// AI provider - bx-ai's stable 3.3.2 release doesn't have one yet, and
-		// BX Agents' own M13 end-to-end smoke test relies on it to exercise a
-		// real aiModel()/aiAgent() call with no network access.
-		[ name: "bx-ai", moduleName: "bxai", version: "3.4.0-snapshot" ],
+		// 3.4.0 is required for its "mock" AI provider - bx-ai's earlier stable
+		// 3.3.2 release doesn't have one, and BX Agents' own M13 end-to-end smoke
+		// test relies on it to exercise a real aiModel()/aiAgent() call with no
+		// network access. 3.4.0 also carries GatewaySession/aiGatewayRegistry/
+		// BaseGateway (needed by every push-style gateway) and userId/
+		// conversationId-scoped IAiMemory.summarize() (needed by `/compact`) -
+		// confirmed directly against the published ForgeBox artifact, not
+		// assumed. Was pinned to "3.4.0-snapshot" while those were still
+		// unreleased; bx-ai has since cut a real 3.4.0, so this now resolves to
+		// a stable, versioned artifact instead of a continuously-republished one.
+		[ name: "bx-ai", moduleName: "bxai", version: "3.4.0" ],
 		// M16: the ftp/sftp deploy targets call the real bx:ftp component this
 		// module provides - a genuine runtime dependency (like bx-ai), not
 		// vendored, so it must be resolvable via modulesDirectory the same way.
