@@ -125,18 +125,19 @@ class {
 			toolScanStatements.append( 'aiToolRegistry().scan( "tools" )' )
 		}
 
+		// Every name here is a PER-REQUEST interceptor (preProcess and friends),
+		// genuinely registered at runtime via ColdBox's InterceptorService - see
+		// ColdBoxAppGenerator's renderInterceptorRegistration(). A declarative
+		// `interceptors = [...]` array in config/ColdBox.bx used to be how this
+		// worked; it never actually reaches ColdBox's InterceptorService in a
+		// real boot on this stack (confirmed directly - the same
+		// getPropertyMixin()-based config reflection gap already documented for
+		// `coldbox.identifierProvider`, generalized), so both the web UI's own
+		// login/API-key gates and any project-declared interceptor were dead
+		// code. See docs/known-limitations.md.
 		var agentInterceptorNames = interceptorSplit.agent.map( function( e ) { return e.name } )
-		if ( len( gatewayResult.sessionInterceptorName ?: "" ) ) {
-			agentInterceptorNames.append( gatewayResult.sessionInterceptorName )
-		}
 		if ( len( webUiResult.webUiAuthInterceptorName ?: "" ) ) {
 			agentInterceptorNames.append( webUiResult.webUiAuthInterceptorName )
-		}
-		// Migrates the web UI's SQLite store at boot (see WebUiGenerator)
-		// Order matters: the seeder writes into tables the schema interceptor
-		// creates, and ColdBox fires interceptors in registration order.
-		if ( len( webUiResult.webUiSchemaInterceptorName ?: "" ) ) {
-			agentInterceptorNames.append( webUiResult.webUiSchemaInterceptorName )
 		}
 		// Requires a signed-in user. Registered last so the store exists and the
 		// accounts are seeded before anything can be gated against them.
@@ -144,10 +145,19 @@ class {
 			agentInterceptorNames.append( webUiResult.webUiLoginGateName )
 		}
 
-		// Account seeding runs from onApplicationStart(), not an interception
-		// point: as an interceptor it silently never fired, and the users table
-		// appearing anyway (ChatDb migrates in its own init) hid that.
+		// Everything below is a bare onApplicationStart() statement, not an
+		// interceptor - either because it is a one-shot boot action with no
+		// per-request behavior (account seeding, warming the web UI's store,
+		// starting push gateways), or because an interceptor here was already
+		// proven dead on this stack (the seeder; see the comment above).
 		var startupStatements = toolScanStatements.duplicate()
+		if ( len( gatewayResult.sessionStartupStatement ?: "" ) ) {
+			startupStatements.append( gatewayResult.sessionStartupStatement )
+		}
+		// Order matters: the seeder writes into tables this warms/migrates.
+		if ( len( webUiResult.webUiWarmStatement ?: "" ) ) {
+			startupStatements.append( webUiResult.webUiWarmStatement )
+		}
 		if ( len( webUiResult.webUiSeedStatement ?: "" ) ) {
 			startupStatements.append( webUiResult.webUiSeedStatement )
 		}

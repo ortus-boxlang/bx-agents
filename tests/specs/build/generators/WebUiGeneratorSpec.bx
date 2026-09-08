@@ -342,8 +342,10 @@ class extends="testbox.system.BaseSpec" {
 				var result = generator.generate( discovery, appDir );
 
 				expect( fileExists( appDir & "/models/ChatDb.bx" ) ).toBeTrue();
-				expect( fileExists( appDir & "/interceptors/WebUiSchema.bx" ) ).toBeTrue();
-				expect( result.webUiSchemaInterceptorName ).toBe( "WebUiSchema" );
+				// A bare onApplicationStart() statement, not an interceptor file -
+				// an afterConfigurationLoad interceptor here never actually fires
+				// on a real ColdBox boot (see BuildPipeline.bx's own comment).
+				expect( result.webUiWarmStatement ).toInclude( 'getInstance( "ChatDb" )' );
 				// Zero config still yields a usable store
 				expect( result.webUiDatabase.datasource ).toBe( "bxagents" );
 				expect( result.webUiDatabase.path ).toBe( "./data/chat.db" );
@@ -779,6 +781,21 @@ class extends="testbox.system.BaseSpec" {
 				] ) {
 					expect( fileExists( appDir & generated ) ).toBeTrue( "expected #generated# to be generated" );
 				}
+			} );
+
+			/**
+			 * Only found once the login gate was actually registered for real
+			 * (see ColdBoxAppGenerator/BuildPipeline): runColdBoxIntegrationTests.bxs
+			 * probes GET <path>/api/health UNAUTHENTICATED to prove the app is up
+			 * at all - a latent bug invisible while the gate never fired at all.
+			 */
+			it( "exempts <path>/api/health from the login gate, like login/logout", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui-users" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/interceptors/WebUiLoginGate.bx" );
+				expect( src ).toInclude( 'path.startsWith( "/chat/api/health" )' );
 			} );
 
 			it( "never writes a password into generated source, only env var names and hashes", function() {

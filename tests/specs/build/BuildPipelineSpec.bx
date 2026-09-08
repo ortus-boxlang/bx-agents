@@ -108,8 +108,13 @@ class extends="testbox.system.BaseSpec" {
 				expect( routerContent ).toInclude( 'post( "/chat/api/stream" ).toHandler( "ChatUi.stream" )' );
 				expect( fileExists( result.appDir & "/handlers/ChatUi.bx" ) ).toBeTrue();
 
-				var coldboxContent = fileRead( result.appDir & "/config/ColdBox.bx" );
-				expect( coldboxContent ).toInclude( "interceptors.WebUiAuthGate" );
+				// Registered from Application.bx's onApplicationStart(), not a
+				// config/ColdBox.bx `interceptors = [...]` entry - that array
+				// never reaches ColdBox's InterceptorService on a real boot (see
+				// docs/known-limitations.md).
+				var applicationContent = fileRead( result.appDir & "/Application.bx" );
+				expect( applicationContent ).toInclude( 'getWireBox().getInstance( "interceptors.WebUiAuthGate" )' );
+				expect( applicationContent ).toInclude( 'getInterceptorService().register(' );
 			} );
 
 			it( 'calls aiToolRegistry().scan("tools") at startup only when the project declares tools', function() {

@@ -48,8 +48,10 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "built ChatDb through WireBox and migrated at startup", function() {
-				// The generated WebUiSchema interceptor builds ChatDb during
-				// afterConfigurationLoad. Reaching this line at all means boot did
+				// The web UI's own onApplicationStart() warm statement builds
+				// ChatDb (see BuildPipeline.bx/ColdBoxAppGenerator - a bare
+				// statement, not an afterConfigurationLoad interceptor; that never
+				// fired on a real boot). Reaching this line at all means boot did
 				// not blow up on a missing driver or an unresolvable mapping.
 				expect( controller.getWireBox().getBinder().mappingExists( "ChatDb" ) ).toBeTrue();
 
@@ -204,6 +206,74 @@ class extends="testbox.system.BaseSpec" {
 				// not throw - both are plain false
 				expect( users.isValidCredentials( "e2e", "definitely-not-the-password" ) ).toBeFalse();
 				expect( users.isValidCredentials( "nobody-at-all", "whatever" ) ).toBeFalse();
+			} );
+
+			/**
+			 * The one thing "resolves cbauth" above does NOT prove: cbauth's own
+			 * `authenticate()` (as opposed to `isValidCredentials()`, called
+			 * directly) reaches `userServiceClass` via WireBox DSL injection AND
+			 * announces `preAuthentication`/`onInvalidCredentials`/`postAuthentication`
+			 * through `interceptorService.announce()`. Both were real, separate
+			 * bugs found only by calling `authenticate()` itself against a real
+			 * boot: `moduleSettings.cbauth.userServiceClass` in config/ColdBox.bx
+			 * never reached cbauth (fixed via config/modules/cbauth.bx - see
+			 * ColdBoxAppGenerator.renderCbauthModuleOverride()), and an older
+			 * cbauth called ColdBox's removed `interceptorService.processState()`
+			 * instead of `announce()` (fixed by bumping cbauth's own pinned
+			 * version - see tests/box.json).
+			 */
+			it( "authenticates for real through cbauth's own authenticate(), not just isValidCredentials()", function() {
+				var auth = controller.getWireBox().getInstance( "authenticationService@cbauth" );
+
+				try {
+					auth.authenticate( "e2e", "definitely-not-the-password" );
+					fail( "authenticate() must throw on a wrong password" );
+				} catch ( any e ) {
+					// Specifically THIS type, not some other exception a broken
+					// userServiceClass/announce() call would throw instead
+					// (IncompleteConfiguration, "Method 'processState' not found")
+					expect( e.type ).toBe( "InvalidCredentials" );
+				}
+
+				// A real account with a real, known password, authenticated
+				// through the full stack: userServiceClass resolution,
+				// interceptorService.announce(), login()'s session write.
+				var db = controller.getWireBox().getInstance( "ChatDb" )
+				var hasher = controller.getWireBox().getInstance( "PasswordHasher" )
+				db.upsertUser(
+					username     : "runtime-auth-check",
+					passwordHash : hasher.hash( "a real password" ),
+					displayName  : ""
+				)
+				var user = auth.authenticate( "runtime-auth-check", "a real password" )
+				expect( isObject( user ) ).toBeTrue();
+				expect( len( user.getId() ) ).toBeGT( 0 );
+				expect( auth.isLoggedIn() ).toBeTrue();
+				auth.quietLogout()
+			} );
+
+			/**
+			 * `WebUiLoginGate`/`WebUiAuthGate` are declared in Application.bx's
+			 * onApplicationStart() (see ColdBoxAppGenerator.renderInterceptorRegistration()),
+			 * never as a config/ColdBox.bx `interceptors = [...]` entry - that
+			 * array never reaches ColdBox's InterceptorService on a real boot, so
+			 * a `preProcess` interceptor declared that way never fires. Confirmed
+			 * directly this session: every `/chat/api/*` route answered normally
+			 * with zero session, all `users`/`apiKeyEnvVar` configuration
+			 * completely ignored, until switched to this registration.
+			 */
+			it( "genuinely registered the web UI's login gate as a preProcess listener with ColdBox's own InterceptorService", function() {
+				// NOT getInterceptor( "WebUiLoginGate" ): that only resolves
+				// interceptors registered by CLASS PATH (it looks them up via a
+				// WireBox mapping createInterceptor() creates) - register() with
+				// an already-built OBJECT, which is what onApplicationStart()
+				// uses here, never creates that mapping, even though the
+				// interceptor is genuinely registered and does fire (confirmed
+				// separately, over real HTTP). getStateContainer() reads the
+				// SAME interceptionStates registry preProcess is actually
+				// announced against, so it is what genuinely proves this.
+				var preProcessState = controller.getInterceptorService().getStateContainer( "preProcess" );
+				expect( preProcessState.exists( "WebUiLoginGate" ) ).toBeTrue();
 			} );
 
 			it( "hashes and verifies a password for real", function() {

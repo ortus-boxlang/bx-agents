@@ -41,7 +41,7 @@ class {
 	 * @projectRoot Absolute path to the project root (containing Agent.bx/instructions.md)
 	 * @buildDir Absolute path to the build output directory, e.g. "<projectRoot>/.build/app"
 	 * @resolvedConfig The root project's resolved config, from AgentConfigResolver.resolve()
-	 * @agentInterceptors Names of agent-scope interceptors already copied into "<buildDir>/interceptors" (see InterceptorSplitter), to reference from config/ColdBox.bx
+	 * @agentInterceptors Names of agent-scope PER-REQUEST interceptors already copied into "<buildDir>/interceptors" (see InterceptorSplitter) - registered for real from Application.bx's onApplicationStart() (see renderInterceptorRegistration()), never via a declarative config/ColdBox.bx array, which never reaches ColdBox's InterceptorService on this stack (confirmed directly against a real boot)
 	 * @gatewayRegistrations Bare `aiGatewayRegistry().register( aiGateway( ... ) )` statement strings (see GatewayGenerator), inserted into Application.bx's onApplicationStart()
 	 * @mcpRegistrations Bare `mcpServer( ... ).registerTool( ... )` statement strings (see McpGenerator), inserted into Application.bx's onApplicationStart()
 	 * @extraStartupStatements Any other bare statement strings to insert into Application.bx's onApplicationStart(), e.g. `aiToolRegistry().scan( "tools" )` (see BuildPipeline)
@@ -90,6 +90,14 @@ class {
 		for ( var statement in arguments.gatewayRegistrations ) {
 			startupStatements.append( statement )
 		}
+		// Real, per-request interceptor registration - see renderInterceptorRegistration()'s
+		// own docblock for why this can't be the declarative config/ColdBox.bx
+		// array ColdBox itself documents. Registered in the order callers passed
+		// them in arguments.agentInterceptors (BuildPipeline.bx registers the
+		// web UI's login gate last, after its store/accounts exist).
+		for ( var interceptorName in arguments.agentInterceptors ) {
+			startupStatements.append( renderInterceptorRegistration( interceptorName ) )
+		}
 
 		// No memory TYPE is forced here. Scoping is handled by IDENTITY instead -
 		// handlers/ChatUi.bx passes controller.getUserSessionIdentifier() as the
@@ -117,9 +125,21 @@ class {
 				databasePath       : arguments.webUiDatabase.path ?: ""
 			)
 		)
-		fileWrite( coldboxPath, renderColdboxConfig( appName, arguments.agentInterceptors, arguments.resolvedConfig.security ?: {}, arguments.hasEmailGateway, arguments.webUiDatabase.datasource ?: "", arguments.webUiHasUsers ) )
+		fileWrite( coldboxPath, renderColdboxConfig( appName, arguments.resolvedConfig.security ?: {}, arguments.hasEmailGateway, arguments.webUiDatabase.datasource ?: "" ) )
 		fileWrite( wireboxPath, renderWireBox( agentFactory.nodes ) )
 		fileWrite( agentFactoryPath, agentFactory.source )
+
+		// cbauth's userServiceClass CANNOT be set via config/ColdBox.bx's own
+		// `moduleSettings` - see renderCbauthModuleOverride()'s own docblock.
+		// This is ColdBox's OTHER, genuinely-working per-module settings path:
+		// a config/modules/<name>.bx file, invoked directly by ModuleService.cfc
+		// via a plain function call (`oConfig.configure( mConfig.settings )`),
+		// not the reflection-based one that never reaches ColdBox on this stack.
+		if ( arguments.webUiHasUsers ) {
+			var modulesConfigDir = appDir & "/config/modules"
+			directoryCreate( path : modulesConfigDir, createPath : true, ignoreExists : true )
+			fileWrite( modulesConfigDir & "/cbauth.bx", renderCbauthModuleOverride() )
+		}
 
 		var indexPath = appDir & "/index.bxm"
 		fileWrite( indexPath, renderIndex() )
@@ -271,15 +291,13 @@ class {
 
 	/**
 	 * @appName The agent's name, stamped into ColdBox's own `coldbox.appName` setting
-	 * @agentInterceptors Names of agent-scope interceptors already copied into `interceptors/` (see InterceptorSplitter), registered here
 	 * @security The resolved config's own `security` block, forwarded verbatim into bx-ai's `moduleSettings.bxai.security` (passthrough only - see M8.5)
 	 * @hasEmailGateway Whether to also generate `moduleSettings.cbmailservices` (see generate()'s own docblock)
 	 * @webUiDatasource The web UI's SQLite datasource name, or "" - when set, pins qb's grammar and default datasource
-	 * @webUiHasUsers Whether any webui entry declares `users` - when true, emits `moduleSettings.cbauth.userServiceClass`, without which cbauth throws on the first request to the UI
 	 *
 	 * @return The rendered config/ColdBox.bx source
 	 */
-	private string function renderColdboxConfig( required string appName, array agentInterceptors = [], struct security = {}, boolean hasEmailGateway = false, string webUiDatasource = "", boolean webUiHasUsers = false ) {
+	private string function renderColdboxConfig( required string appName, struct security = {}, boolean hasEmailGateway = false, string webUiDatasource = "" ) {
 		var lines = [
 			"class {",
 			"",
@@ -297,15 +315,16 @@ class {
 		// from onApplicationStart() via setSetting(), which writes directly to
 		// the struct that method reads. See WebUiGenerator.
 
-		if ( arguments.agentInterceptors.len() ) {
-			lines.append( "" )
-			lines.append( "		interceptors = [" )
-			for ( var i = 1; i <= arguments.agentInterceptors.len(); i++ ) {
-				var comma = i < arguments.agentInterceptors.len() ? "," : ""
-				lines.append( '			{ class : "interceptors.#bxLiteral( arguments.agentInterceptors[ i ] )#" }#comma#' )
-			}
-			lines.append( "		]" )
-		}
+		// No `interceptors = [...]` here either, for the exact same reason:
+		// confirmed directly against a real ColdBox 8.1.0 boot that this array
+		// never reaches ColdBox's InterceptorService at all (ModuleService.cfc's
+		// own `controller.getSetting( "ColdBoxConfig" ).getPropertyMixin(...)`
+		// reflection, the same mechanism `identifierProvider` above already
+		// falls afoul of, generalizes to every top-level key here - moduleSettings
+		// included, see below). Every project-declared and web-UI interceptor is
+		// instead registered for real from Application.bx's onApplicationStart()
+		// - see renderInterceptorRegistration() and generate()'s own assembly of
+		// startupStatements.
 
 		// bx-ai's own skillsDirectory setting defaults to "/.agents/skills" - a
 		// DIFFERENT path than BX Agents' own skills/ convention (copied verbatim
@@ -349,17 +368,9 @@ class {
 			] )
 		}
 
-		// cbauth resolves its user service by WireBox DSL from this exact setting:
-		// `AuthenticationService.getUserService()` does
-		// `wirebox.getInstance( dsl = variables.userServiceClass )` and throws
-		// `IncompleteConfiguration - No [userServiceClass] provided` when it is
-		// the empty-string default. WebUiGenerator emits `models/UserService.bx`
-		// (cbauth's IUserService) whenever an entry declares `users`, so without
-		// this line the login gate throws on the FIRST request to the UI - taking
-		// down the whole page, not just sign-in.
-		if ( arguments.webUiHasUsers ) {
-			settingBlocks.append( [ '			cbauth : { userServiceClass : "UserService" }' ] )
-		}
+		// cbauth's userServiceClass is deliberately NOT set here via
+		// `moduleSettings.cbauth` - see generate()'s own writing of
+		// config/modules/cbauth.bx instead, and its docblock for why.
 
 		lines.append( "" )
 		lines.append( "		moduleSettings = {" )
@@ -378,6 +389,89 @@ class {
 		lines.append( "" )
 
 		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Renders one onApplicationStart() statement that registers a per-request
+	 * interceptor (already written into `interceptors/<name>.bx` - see
+	 * InterceptorSplitter/WebUiGenerator) directly against ColdBox's real
+	 * InterceptorService, using its OWN plain `register()` method
+	 * (`interceptorService.register( target:, name: )`, which builds its
+	 * listener list off `getMetadata()` on the already-built object - real
+	 * reflection, not the `getPropertyMixin()` indirection that never reaches
+	 * ColdBox on this stack).
+	 *
+	 * This is NOT the same fix as `config/modules/cbauth.bx` below: that one
+	 * targets a broken SETTINGS read; this one targets interceptor
+	 * REGISTRATION, which is entirely undocumented as a config/ColdBox.bx
+	 * concept - `interceptors = [...]` simply never worked at all on this
+	 * stack. Confirmed directly: a `preProcess` interceptor declared that way
+	 * never fired on any real request - the web UI's own login gate and
+	 * API-key gate included, wide open despite `users`/`apiKeyEnvVar` being
+	 * configured, until registered this way instead.
+	 *
+	 * `application.cbController`, not `getController()`/bare `getInstance()`:
+	 * this runs as a plain onApplicationStart() statement, which has none of
+	 * an interceptor's own mixed-in helpers - only what Application.bx itself
+	 * sets up (see the seed statement's own precedent).
+	 *
+	 * `interceptors.<name>`, the module-relative invocation path
+	 * InterceptorSplitter/WebUiGenerator already write these files under -
+	 * `getInstance( "<name>" )` alone throws `Instance not found`.
+	 *
+	 * @interceptorName The interceptor's class name, e.g. "WebUiLoginGate" (no `interceptors.` prefix - added here)
+	 *
+	 * @return A single onApplicationStart() statement
+	 */
+	private string function renderInterceptorRegistration( required string interceptorName ) {
+		return 'application.cbController.getInterceptorService().register( target: application.cbController.getWireBox().getInstance( "interceptors.#bxLiteral( arguments.interceptorName )#" ), name: "#bxLiteral( arguments.interceptorName )#" )'
+	}
+
+	/**
+	 * Renders `config/modules/cbauth.bx` - the ONLY thing that actually sets
+	 * cbauth's `userServiceClass`.
+	 *
+	 * `moduleSettings.cbauth` in config/ColdBox.bx (the documented ColdBox
+	 * convention, and what this generator used to emit) never reaches cbauth
+	 * on this stack: confirmed directly against a real boot that
+	 * `AuthenticationService.getUserService()` still sees the empty-string
+	 * default and throws `IncompleteConfiguration`, even with the setting
+	 * present, correctly spelled, in the generated file - the same
+	 * `getPropertyMixin()` reflection gap `identifierProvider`/`interceptors`
+	 * above already fall afoul of.
+	 *
+	 * `config/modules/<name>.bx` is ColdBox's OTHER per-module settings
+	 * mechanism (`ModuleService.cfc`'s `loadModuleSettingsOverride()`), and it
+	 * genuinely works here: it is invoked with a plain function call -
+	 * `oConfig.configure( mConfig.settings )`, returning the merged struct -
+	 * never the reflection-based `getPropertyMixin()` read the other path
+	 * relies on. Confirmed directly: with this file in place, a real sign-in
+	 * against real cbauth resolves `UserService` and authenticates for real.
+	 *
+	 * @return The rendered config/modules/cbauth.bx source
+	 */
+	private string function renderCbauthModuleOverride() {
+		return [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * cbauth's own per-module settings override (ColdBox's",
+			" * config/modules/<name>.bx convention) - see",
+			" * ColdBoxAppGenerator.renderCbauthModuleOverride()'s docblock for why",
+			" * this, and not config/ColdBox.bx's own `moduleSettings.cbauth`, is",
+			" * what actually sets userServiceClass.",
+			" */",
+			"class {",
+			"",
+			"	function configure( settings ) {",
+			'		arguments.settings.userServiceClass = "UserService"',
+			"		return arguments.settings",
+			"	}",
+			"",
+			"}",
+			""
+		].toList( char( 10 ) )
 	}
 
 	/**

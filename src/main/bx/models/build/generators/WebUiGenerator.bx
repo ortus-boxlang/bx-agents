@@ -70,7 +70,15 @@ class {
 
 		var interceptorDir = normalizePath( arguments.appDir ) & "/interceptors"
 		directoryCreate( path : interceptorDir, createPath : true, ignoreExists : true )
-		fileWrite( interceptorDir & "/WebUiSchema.bx", renderSchemaInterceptor() )
+
+		// Migrates the web UI's SQLite store at boot, rather than on whichever
+		// request happens to touch the database first. Used to be an
+		// afterConfigurationLoad interceptor; as an interceptor it silently
+		// never fired (see BuildPipeline.bx's own note on the seeder, which hit
+		// the exact same thing), masked because ChatDb.onDIComplete() migrates
+		// on first use anyway. A plain onApplicationStart() statement, like the
+		// seeder, actually runs.
+		var warmStatement = 'application.cbController.getWireBox().getInstance( "ChatDb" )'
 
 		var gatedEntries = entries.filter( function( entry ) {
 			return len( entry.config.apiKeyEnvVar ?: "" )
@@ -111,7 +119,7 @@ class {
 		return {
 			hasWebUi                   : true,
 			webUiAuthInterceptorName   : interceptorName,
-			webUiSchemaInterceptorName : "WebUiSchema",
+			webUiWarmStatement         : warmStatement,
 			webUiSeedStatement         : seedStatement,
 			webUiLoginGateName         : loginGateName,
 			webUiHasUsers              : users.len() > 0,
@@ -1354,7 +1362,14 @@ class {
 			"	private function redirectTo( required any event, required string location ) {",
 			"		arguments.event.setHTTPHeader( statusCode = 302, statusText = 'Found' )",
 			"		arguments.event.setHTTPHeader( name = 'Location', value = arguments.location )",
+			// noExecution() alone stops the handler chain but NOT ColdBox's own
+			// view/layout rendering - confirmed against real ColdBox 8.1.0
+			// source (Bootstrap.cfc checks isNoRender()/getIsNoExecution()
+			// separately). Without noRender() too, a plain redirect like this
+			// one 500s trying to render a default view that was never asked
+			// for, clobbering the 302 with an error page.
 			"		arguments.event.noExecution()",
+			"		arguments.event.noRender()",
 			"	}",
 			"",
 			"}",
@@ -1411,12 +1426,15 @@ class {
 			var loginPath  = renderLiteral( base & "/login" )
 			var logoutPath = renderLiteral( base & "/logout" )
 			var apiPath    = renderLiteral( base & "/api" )
+			var healthPath = renderLiteral( base & "/api/health" )
 
 			lines.append( "" )
 			lines.append( "		if ( path.startsWith( #basePath# ) ) {" )
 			lines.append( "			// The login form and its POST target must stay reachable" )
 			lines.append( "			// while signed out, or the redirect below never terminates." )
-			lines.append( "			if ( path.startsWith( #loginPath# ) || path.startsWith( #logoutPath# ) ) {" )
+			lines.append( "			// The health probe must too - it is what proves the app is up" )
+			lines.append( "			// at all, deliberately unauthenticated (see runColdBoxIntegrationTests.bxs)." )
+			lines.append( "			if ( path.startsWith( #loginPath# ) || path.startsWith( #logoutPath# ) || path.startsWith( #healthPath# ) ) {" )
 			lines.append( "				return" )
 			lines.append( "			}" )
 			lines.append( "			if ( !auth.isLoggedIn() ) {" )
@@ -1433,7 +1451,10 @@ class {
 			lines.append( "				}" )
 			lines.append( "				event.setHTTPHeader( statusCode = 302, statusText = 'Found' )" )
 			lines.append( "				event.setHTTPHeader( name = 'Location', value = #loginPath# )" )
+			// See ChatAuth.bx's own redirectTo() for why both calls are needed:
+			// noExecution() alone does not stop ColdBox's own view rendering.
 			lines.append( "				event.noExecution()" )
+			lines.append( "				event.noRender()" )
 			lines.append( "				return" )
 			lines.append( "			}" )
 			lines.append( "		}" )
@@ -1491,7 +1512,8 @@ class {
 	 * (`passwordEnvVar`), or carries an already-hashed value (`passwordHash`),
 	 * which is safe to commit precisely because it cannot be reversed.
 	 *
-	 * Runs at `afterConfigurationLoad`, after WebUiSchema has migrated - the
+	 * Runs from onApplicationStart() after the web UI's own warm statement
+	 * (`getInstance( "ChatDb" )`, see BuildPipeline.bx) has migrated - the
 	 * users table has to exist before anything is written into it.
 	 *
 	 * @users collectWebUiUsers()'s result
@@ -2192,43 +2214,6 @@ class {
 		]
 
 		return lines.toList( char( 10 ) )
-	}
-
-	/**
-	 * Renders `interceptors/WebUiSchema.bx` - forces ChatDb to be built (and
-	 * therefore migrated) at boot rather than lazily on the first request.
-	 *
-	 * afterConfigurationLoad is safe for this: ColdBox's own LoaderService
-	 * calls activateAllModules() BEFORE announcing it (verified in
-	 * coldbox-platform source, system/web/services/LoaderService.cfc), so
-	 * qb's WireBox mappings already exist by the time this fires.
-	 *
-	 * @return The rendered interceptors/WebUiSchema.bx source
-	 */
-	private string function renderSchemaInterceptor() {
-		return [
-			"/**",
-			" * GENERATED FILE - produced by BX Agents' build pipeline.",
-			" * Do not edit by hand; rebuilding your project overwrites this file.",
-			" *",
-			" * Builds models/ChatDb.bx at boot so its schema migration runs then,",
-			" * rather than on whichever request happens to touch the database",
-			" * first. A missing or unmigrated store is a startup problem; it should",
-			" * surface at startup.",
-			" *",
-			" * afterConfigurationLoad fires AFTER ColdBox activates modules",
-			" * (LoaderService.cfc calls activateAllModules() first, then announces",
-			" * this), so qb's SchemaBuilder@qb mapping is already available.",
-			" */",
-			"class {",
-			"",
-			"	function afterConfigurationLoad( event, interceptData, rc, prc ) {",
-			"		getInstance( ""ChatDb"" )",
-			"	}",
-			"",
-			"}",
-			""
-		].toList( char( 10 ) )
 	}
 
 	/**
