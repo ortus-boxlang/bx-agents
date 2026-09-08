@@ -19,31 +19,81 @@
 class implements="java:java.net.http.WebSocket$Listener" {
 
 	property name="gateway";
+	property name="buffer";
 
 	/**
 	 * @gateway The DiscordGateway instance to forward every callback to
 	 */
 	function init( required any gateway ) {
 		variables.gateway = arguments.gateway
+		variables.buffer  = createObject( "java", "java.lang.StringBuilder" ).init()
 		return this
 	}
 
+	/**
+	 * Requests the next message per the JDK's backpressure contract (see
+	 * this class's own docblock), then forwards the open event to the gateway.
+	 *
+	 * @webSocket The live websocket that just opened
+	 */
 	function onOpen( required any webSocket ) {
 		arguments.webSocket.request( 1 )
 		variables.gateway.handleSocketOpen( arguments.webSocket )
 	}
 
+	/**
+	 * Requests the next part, accumulates it, and forwards the COMPLETE Gateway
+	 * frame to the gateway only once `last` is true.
+	 *
+	 * The buffering is not optional: the JDK's `WebSocket.Listener` contract
+	 * delivers a text message in as many parts as it likes (`last` is false on
+	 * every part but the final one), independently of how the server framed it.
+	 * Discord's `READY` dispatch in particular is large, so forwarding each part
+	 * straight through means it reaches `jsonDeserialize()` truncated, throws,
+	 * and is swallowed by that method's own catch - the bot then never records
+	 * its `session_id` and can never RESUME.
+	 *
+	 * @webSocket The live websocket the part arrived on
+	 * @data This part's payload (a CharSequence), converted to a string before buffering
+	 * @last Whether this part completes the current message
+	 *
+	 * @return null - no pending completion stage, per WebSocket.Listener's own onText() contract
+	 */
 	function onText( required any webSocket, required any data, required boolean last ) {
 		arguments.webSocket.request( 1 )
-		variables.gateway.handleSocketText( arguments.webSocket, arguments.data.toString() )
+		variables.buffer.append( arguments.data.toString() )
+
+		if ( arguments.last ) {
+			var complete = variables.buffer.toString()
+			variables.buffer.setLength( 0 )
+			variables.gateway.handleSocketText( arguments.webSocket, complete )
+		}
+
 		return null
 	}
 
+	/**
+	 * Forwards the close event to the gateway. Unlike onOpen()/onText(), no
+	 * webSocket.request(1) call is made here - the connection is already closing.
+	 *
+	 * @webSocket The websocket that closed
+	 * @statusCode The WebSocket close code
+	 * @reason The close reason text
+	 *
+	 * @return null - no pending completion stage, per WebSocket.Listener's own onClose() contract
+	 */
 	function onClose( required any webSocket, required numeric statusCode, required string reason ) {
 		variables.gateway.handleSocketClose( arguments.statusCode, arguments.reason )
 		return null
 	}
 
+	/**
+	 * Forwards the error to the gateway. No webSocket.request(1) call here -
+	 * the JDK does not expect one after onError().
+	 *
+	 * @webSocket The websocket that errored
+	 * @error The underlying Java exception
+	 */
 	function onError( required any webSocket, required any error ) {
 		variables.gateway.handleSocketError( arguments.error )
 	}

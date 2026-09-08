@@ -40,6 +40,8 @@ produces, in `dist/`:
 
 Packaging twice in a row over the same build produces byte-identical zip bytes (deterministic entry order/timestamps) - useful for verifying a CI-built artifact matches a locally-built one.
 
+The `.bxa` is **relocatable**: it carries every file the agent reads at runtime (including each agent node's own `instructions.md`, copied into `agent/` at build time), and the generated `agent/GeneratedAgentFactory.bx` resolves those paths relative to its own location on disk rather than the absolute paths of the machine that built it. So a `.bxa` built on CI runs unchanged when unzipped anywhere else - which also means a `.bxaignore` broad enough to match `*.md` will strip the agent's own instructions out of the artifact.
+
 `package` requires a prior `build` (it reads `.build/manifest.json`) and refuses to run - producing no `.bxa` - if `manifestVersion` is unset or malformed.
 
 ## Excluding files: `.bxaignore`

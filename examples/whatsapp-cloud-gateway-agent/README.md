@@ -39,7 +39,7 @@ curl -X POST http://localhost:8080/webhooks/whatsapp-cloud \
 ```
 
 {% hint style="warning" %}
-v1 scope is WhatsApp DMs only (no group messages), and media isn't downloaded - only a caption if present. See [WhatsApp Business Cloud API](../../docs/conventions/gateways.md#whatsapp-business-cloud-api---webhook-driven-not-connection-driven).
+v1 scope is WhatsApp DMs only (no group messages), and media isn't downloaded - only a caption if present. See [WhatsApp Business Cloud API](../../docs/conventions/gateways/whatsapp-cloud.md).
 {% endhint %}
 
 See [Known Limitations](../../docs/known-limitations.md) for what's verified via real HMAC cross-checks vs. what still needs a real ColdBox boot + real Meta webhook test.

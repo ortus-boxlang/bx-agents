@@ -146,12 +146,23 @@ abstract class extends="bxModules.bxai.models.gateway.BaseGateway" {
 	// subclasses of THIS class; do not override these further down the chain.
 	// -------------------------------------------------------------------------
 
+	/**
+	 * BaseGateway's start lifecycle hook - resolves the shared scheduler, runs
+	 * this gateway's one-time onConnect() handshake, then registers its
+	 * scheduled task(s) against that scheduler.
+	 */
 	public void function onStart() {
 		var scheduler = resolveScheduler()
 		onConnect()
 		registerScheduledTasks( scheduler )
 	}
 
+	/**
+	 * BaseGateway's stop lifecycle hook - removes every scheduler task this
+	 * gateway has tracked (logging, rather than throwing, if a removal fails),
+	 * clears the tracked task list, then runs onDisconnect() for any
+	 * platform-specific teardown.
+	 */
 	public void function onStop() {
 		var scheduler = resolveScheduler()
 		for ( var taskName in variables.schedulerTaskNames ) {

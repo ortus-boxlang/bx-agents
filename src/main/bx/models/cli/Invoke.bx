@@ -143,7 +143,13 @@ class {
 		for ( var gw in ( discovery.gateways ?: [] ) ) {
 			var config = readEntryConfig( gw.path )
 			if ( !isNull( config ) && ( config.exposes ?: "" ) == "agent" ) {
-				return trim( config.path ?: "" )
+				// Strip any trailing separator, exactly as RouterGenerator and
+				// WebUiGenerator do to the same value. The caller concatenates
+				// this straight onto a URL ("...#exposurePath#/invoke"), so a
+				// configured `path: "/api/chat/"` would otherwise request
+				// `/api/chat//invoke` and 404 against the route that was
+				// actually registered.
+				return trim( config.path ?: "" ).reReplace( "[\/]+$", "" )
 			}
 		}
 

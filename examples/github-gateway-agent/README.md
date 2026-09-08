@@ -37,7 +37,7 @@ curl -X POST http://localhost:8080/webhooks/github \
 Only a comment that actually contains `@my-bot-account` (as its own token, not part of another mention) reaches the agent - everything else is acknowledged and ignored, and the gateway never replies to its own comments or another bot's.
 
 {% hint style="info" %}
-v1 auth is a plain personal access token, not a full GitHub App installation flow, and there's no repo checkout - this is a comment-in/comment-out chat surface only. See [GitHub - `@mention`-gated issue/PR comment threads](../../docs/conventions/gateways.md#github---mention-gated-issuepr-comment-threads).
+v1 auth is a plain personal access token, not a full GitHub App installation flow, and there's no repo checkout - this is a comment-in/comment-out chat surface only. See [GitHub - `@mention`-gated issue/PR comment threads](../../docs/conventions/gateways/github.md).
 {% endhint %}
 
 See [Known Limitations](../../docs/known-limitations.md) for the real `left(body, 0)` bug caught during development and what's still unverified against a real repository.

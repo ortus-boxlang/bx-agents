@@ -20,4 +20,4 @@ curl -X POST http://localhost:8080/api/chat/invoke \
 The very first request to a freshly booted app's `toAi()` route can transiently fail - see [Known Limitations](../../docs/known-limitations.md#the-toai-first-request-race). Send a warm-up request first.
 {% endhint %}
 
-See [tools/](../../docs/conventions/tools.md) and [gateways/](../../docs/conventions/gateways.md).
+See [tools/](../../docs/conventions/tools.md) and [gateways/](../../docs/conventions/gateways/index.md).

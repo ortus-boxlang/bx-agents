@@ -141,7 +141,7 @@ Liefert die neueste `.bxa` über einfaches FTP oder SFTP in ein entferntes Verze
 	target         : "ftp",
 	host           : "ftp.example.com",
 	username       : "deploy",
-	passwordEnvVar : "FTP_PASSWORD",
+	passwordEnvVar : "BXAGENTS_FTP_PASSWORD",
 	remotePath     : "/uploads/my-agent",
 	port           : 21,       // optional, defaults to 21
 	passive        : true,     // optional, defaults to true
@@ -157,7 +157,7 @@ Liefert die neueste `.bxa` über einfaches FTP oder SFTP in ein entferntes Verze
 	host             : "sftp.example.com",
 	username         : "deploy",
 	key              : "/home/me/.ssh/id_rsa",   // passwordEnvVar OR key required
-	passphraseEnvVar : "SFTP_KEY_PASSPHRASE",     // optional, only if the key itself is passphrase-protected
+	passphraseEnvVar : "BXAGENTS_SFTP_KEY_PASSPHRASE",     // optional, only if the key itself is passphrase-protected
 	fingerprint      : "SHA256:...",              // optional host key verification
 	remotePath       : "/uploads/my-agent",
 	port             : 22,       // optional, defaults to 22

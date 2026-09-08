@@ -124,7 +124,7 @@ bxAgents test
 `.build/app` を対象に、実際の [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver) プロセスを起動します。
 
 ```bash
-bxAgents serve [--port=8080] [--host=0.0.0.0]
+bxAgents serve [--port=8080] [--host=127.0.0.1]
 ```
 
 - 事前に `build` が必要です - `.build/app` が存在しない場合は明確に失敗します。

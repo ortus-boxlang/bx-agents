@@ -18,10 +18,13 @@
  * via `getSystemSetting()`, matching this project's "secrets stay external"
  * rule (a real, previously unfixed bug had these read as raw plaintext
  * values straight out of `deploy/*.bx` config, which could end up committed
- * to version control - see docs/known-limitations.md). `key` stays a plain
- * config field since it's already a PATH to a key file the caller manages
- * themselves, never key material - the same convention `ssh`'s
- * `identityFile` uses.
+ * to version control - see docs/known-limitations.md). Both may only name a
+ * variable in the deploy-scoped `BXAGENTS_` namespace (see
+ * `resolveSecretEnvVar()`), so a `deploy/*` entry - which is plain data a
+ * reviewer reads as inert config - can never point an arbitrary `host` at an
+ * unrelated environment secret. `key` stays a plain config field since it's
+ * already a PATH to a key file the caller manages themselves, never key
+ * material - the same convention `ssh`'s `identityFile` uses.
  *
  * Ships the newest packaged `.bxa` (via `DistArtifactLocator`, same as
  * `local`/`ssh`) to `remotePath` - a remote DIRECTORY, not a full file path;
@@ -127,8 +130,9 @@ class {
 	/**
 	 * Pure - builds the attribute struct passed to `bx:ftp action="open" attributeCollection="..."`.
 	 * `passwordEnvVar`/`passphraseEnvVar` are resolved into real secret
-	 * values here (via `getSystemSetting()`, defaulting to "" when unset) -
-	 * every other field renders straight through from `config`.
+	 * values here (via `resolveSecretEnvVar()`, which refuses any variable
+	 * outside the deploy-scoped `BXAGENTS_` namespace) - every other field
+	 * renders straight through from `config`.
 	 *
 	 * @config The `ftp`/`sftp` target's own resolved `deploy/*` entry
 	 * @connectionName A unique name for this `bx:ftp` connection, so concurrent deploys never collide
@@ -148,7 +152,7 @@ class {
 
 		var passwordEnvVar = trim( arguments.config.passwordEnvVar ?: "" )
 		if ( len( passwordEnvVar ) ) {
-			attrs.password = getSystemSetting( passwordEnvVar, "" )
+			attrs.password = resolveSecretEnvVar( "passwordEnvVar", passwordEnvVar )
 		}
 
 		if ( arguments.secure ) {
@@ -157,7 +161,7 @@ class {
 			}
 			var passphraseEnvVar = trim( arguments.config.passphraseEnvVar ?: "" )
 			if ( len( passphraseEnvVar ) ) {
-				attrs.passphrase = getSystemSetting( passphraseEnvVar, "" )
+				attrs.passphrase = resolveSecretEnvVar( "passphraseEnvVar", passphraseEnvVar )
 			}
 			if ( len( arguments.config.fingerprint ?: "" ) ) {
 				attrs.fingerprint = arguments.config.fingerprint
@@ -170,6 +174,41 @@ class {
 		}
 
 		return attrs
+	}
+
+	/**
+	 * Resolves ONE deploy secret out of the process environment, refusing any
+	 * variable name outside the deploy-scoped `BXAGENTS_` namespace.
+	 *
+	 * A `deploy/*` entry is DATA, not code - a pure-JSON file reads as inert
+	 * config in review - yet `host` and `passwordEnvVar` together decide which
+	 * secret leaves this machine and where it goes. Without this check, an
+	 * entry naming an unrelated variable (`ANTHROPIC_API_KEY`, `GITHUB_TOKEN`,
+	 * ...) would hand that secret to an arbitrary `host` as an FTP password -
+	 * in the CLEAR for `secure : false`. Constraining the NAME is what keeps a
+	 * deploy entry unable to reach any secret that wasn't provisioned for
+	 * deploying, so the blast radius of a malicious (or simply mistaken)
+	 * `deploy/*` entry is the deploy credentials themselves and nothing else.
+	 * The same rule applies to every secret this target resolves
+	 * (`passwordEnvVar` AND `passphraseEnvVar`) - `key`/`fingerprint` stay
+	 * unchecked, since neither is secret material (a path and a public host
+	 * key fingerprint).
+	 *
+	 * @configField The `deploy/*` field the name came from, quoted back in the error
+	 * @envVarName The environment variable NAME the config supplied - never a value
+	 *
+	 * @return The environment variable's value, or "" when it isn't set - throwing
+	 *         `BxAgents.InvalidDeployConfig` instead when the name is out of namespace
+	 */
+	string function resolveSecretEnvVar( required string configField, required string envVarName ) {
+		if ( !reFind( "^BXAGENTS_[A-Z0-9_]+$", arguments.envVarName ) ) {
+			throw(
+				type    = "BxAgents.InvalidDeployConfig",
+				message = "deploy config '#arguments.configField#' names the environment variable [#arguments.envVarName#], which is outside the deploy-scoped namespace. A deploy entry may only resolve variables named BXAGENTS_<NAME> (uppercase letters, digits and underscores only), e.g. 'BXAGENTS_FTP_PASSWORD' - so a deploy config can never reach an unrelated secret in the environment. Export the deploy credential under a BXAGENTS_-prefixed name and point '#arguments.configField#' at that."
+			)
+		}
+
+		return getSystemSetting( arguments.envVarName, "" )
 	}
 
 }

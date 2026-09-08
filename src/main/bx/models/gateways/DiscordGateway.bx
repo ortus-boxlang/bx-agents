@@ -41,6 +41,14 @@ class extends="ScheduledGatewayBase" {
 	property name="webSocket";
 	property name="socketConnected" type="boolean" default=false;
 	property name="stopping" type="boolean" default=false;
+
+	/**
+	 * How many sockets reconnect() has deliberately superseded and is still
+	 * expecting a (harmless, ignorable) close callback for, and the tick by
+	 * which those callbacks must have arrived - see handleSocketClose().
+	 */
+	property name="supersededCloses" type="numeric" default=0;
+	property name="supersededCloseDeadline" type="numeric" default=0;
 	property name="sessionId" type="string" default="";
 	property name="resumeGatewayUrl" type="string" default="";
 	property name="lastSeq";
@@ -75,8 +83,18 @@ class extends="ScheduledGatewayBase" {
 		// Close codes that ARE reconnectable but explicitly invalidate the
 		// current session ("reconnect and start a NEW one", not a resume).
 		NEW_SESSION_REQUIRED = [ 4007, 4009 ]
+		// How long a socket superseded by reconnect() has to deliver its own
+		// close callback before handleSocketClose() stops ignoring one on its
+		// behalf.
+		SUPERSEDED_CLOSE_WINDOW_MS = 30000
 	}
 
+	/**
+	 * Sets this gateway's identity (name/description) and constructs its
+	 * shared message chunker.
+	 *
+	 * @return this
+	 */
 	function init() {
 		variables.name = "discord"
 		variables.description = "Discord gateway - persistent websocket inbound (Gateway API), HTTP outbound"
@@ -84,6 +102,15 @@ class extends="ScheduledGatewayBase" {
 		return this
 	}
 
+	/**
+	 * Applies Discord-specific config on top of ScheduledGatewayBase's own -
+	 * the bot token and an optional intents bitmask override (see this
+	 * file's class-level docblock for the recognized option keys).
+	 *
+	 * @options Gateway config, as passed to aiGateway( ..., options )
+	 *
+	 * @return this
+	 */
 	IGateway function configure( required any options ) {
 		super.configure( arguments.options )
 		variables.botToken = trim( variables.options.botToken ?: "" )
@@ -93,6 +120,9 @@ class extends="ScheduledGatewayBase" {
 		return this
 	}
 
+	/**
+	 * @return The capabilities this gateway declares to bx-ai's own gateway registry
+	 */
 	array function getDeclaredCapabilities() {
 		return [ "inboundMessages", "outboundMessages", "streaming", "threads", "interactiveActions", "humanApproval" ]
 	}
@@ -115,6 +145,11 @@ class extends="ScheduledGatewayBase" {
 	// ScheduledGatewayBase hooks
 	// -------------------------------------------------------------------------
 
+	/**
+	 * ScheduledGatewayBase's onConnect() hook - validates the required
+	 * botToken option is present, then opens the initial Gateway websocket
+	 * connection.
+	 */
 	void function onConnect() {
 		if ( !len( variables.botToken ) ) {
 			throw(
@@ -124,9 +159,15 @@ class extends="ScheduledGatewayBase" {
 		}
 
 		variables.stopping = false
+		variables.supersededCloses = 0
 		openConnection()
 	}
 
+	/**
+	 * ScheduledGatewayBase's onDisconnect() hook - marks the gateway as
+	 * stopping (so the reconnect logic below no-ops) and closes the live
+	 * websocket.
+	 */
 	void function onDisconnect() {
 		variables.stopping = true
 		closeSocketQuietly( variables.webSocket, "gateway stopping" )
@@ -134,6 +175,14 @@ class extends="ScheduledGatewayBase" {
 		variables.socketConnected = false
 	}
 
+	/**
+	 * ScheduledGatewayBase's registerScheduledTasks() hook - registers only
+	 * the safety-net watchdog task here; the heartbeat task itself is
+	 * registered separately (see startHeartbeat()) once Discord's own
+	 * `Hello` frame tells us the interval to use.
+	 *
+	 * @scheduler The shared ColdBox scheduler to register tasks against
+	 */
 	void function registerScheduledTasks( required any scheduler ) {
 		variables.scheduler = arguments.scheduler
 
@@ -150,6 +199,12 @@ class extends="ScheduledGatewayBase" {
 		trackTask( taskName )
 	}
 
+	/**
+	 * The watchdog task's own callback - reconnects if the socket is down
+	 * and we're not intentionally stopping. A safety net only: Discord's own
+	 * Reconnect/Invalid Session frames and the heartbeat-ACK check normally
+	 * trigger a reconnect long before this fires.
+	 */
 	void function checkConnectionHealth() {
 		if ( variables.stopping || variables.socketConnected ) {
 			return
@@ -162,6 +217,11 @@ class extends="ScheduledGatewayBase" {
 	// Connection lifecycle
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Resolves the Gateway URL to connect to and opens the websocket,
+	 * marking the connection as live. Identify/Resume itself happens later,
+	 * once the new socket's own `Hello` frame arrives (see handleHello()).
+	 */
 	private void function openConnection() {
 		var wssUrl = resolveGatewayUrl()
 		variables.webSocket = openSocket( wssUrl )
@@ -185,6 +245,11 @@ class extends="ScheduledGatewayBase" {
 	 * same overlap-then-cutover shape SlackGateway uses, safe here too since
 	 * we don't send Identify/Resume until the fresh socket's own Hello arrives.
 	 *
+	 * The socket being torn down is counted as superseded first, so the close
+	 * callback Discord's echo of our own close frame triggers is ignored
+	 * rather than taken for the brand-new socket going down - see
+	 * handleSocketClose().
+	 *
 	 * @forceFreshSession Clears sessionId/resumeGatewayUrl first, forcing a
 	 *                     fresh Identify rather than a Resume on the new connection
 	 */
@@ -207,9 +272,22 @@ class extends="ScheduledGatewayBase" {
 			return
 		}
 
+		// Expect (and ignore) the close callback the sendClose() below draws out
+		// of the now-superseded socket - see handleSocketClose().
+		if ( !isNull( oldSocket ) ) {
+			variables.supersededCloses = variables.supersededCloses + 1
+			variables.supersededCloseDeadline = getTickCount() + static.SUPERSEDED_CLOSE_WINDOW_MS
+		}
 		closeSocketQuietly( oldSocket, "reconnecting" )
 	}
 
+	/**
+	 * Best-effort close of a websocket - swallows any error, since the
+	 * socket may already be closed or broken.
+	 *
+	 * @socket The websocket to close (a no-op if null)
+	 * @reason A close reason sent to Discord as the close frame's payload
+	 */
 	private void function closeSocketQuietly( required any socket, required string reason ) {
 		if ( isNull( arguments.socket ) ) {
 			return
@@ -221,6 +299,15 @@ class extends="ScheduledGatewayBase" {
 		}
 	}
 
+	/**
+	 * Opens a live websocket to Discord's Gateway, wiring a
+	 * DiscordSocketListener back to this gateway instance - or returns the
+	 * test-injected double from socketOpener if one is set.
+	 *
+	 * @wssUrl The wss:// URL to connect to (see resolveGatewayUrl())
+	 *
+	 * @return A live websocket (or the test-injected double from socketOpener)
+	 */
 	private any function openSocket( required string wssUrl ) {
 		if ( !isNull( variables.socketOpener ) ) {
 			return variables.socketOpener( arguments.wssUrl )
@@ -295,11 +382,22 @@ class extends="ScheduledGatewayBase" {
 		sendHeartbeat()
 	}
 
+	/**
+	 * Sends a single Heartbeat (op 1) frame carrying the last sequence
+	 * number seen, then marks a heartbeat as awaiting its ACK (op 11) - see
+	 * heartbeatTick().
+	 */
 	private void function sendHeartbeat() {
 		sendPayload( { op: 1, d: isNull( variables.lastSeq ) ? null : variables.lastSeq } )
 		variables.awaitingHeartbeatAck = true
 	}
 
+	/**
+	 * Serializes and sends one Gateway payload as a text frame - a no-op if
+	 * there's no live websocket.
+	 *
+	 * @payload A Gateway payload struct, e.g. { op: 1, d: ... }
+	 */
 	private void function sendPayload( required struct payload ) {
 		if ( isNull( variables.webSocket ) ) {
 			return
@@ -311,15 +409,40 @@ class extends="ScheduledGatewayBase" {
 	// DiscordSocketListener callbacks - see support/DiscordSocketListener.bx
 	// -------------------------------------------------------------------------
 
+	/**
+	 * DiscordSocketListener's onOpen() callback - just logs; Identify/Resume
+	 * doesn't happen here, only once the new socket's own `Hello` frame
+	 * arrives (see handleHello()).
+	 *
+	 * @webSocket The live websocket that just opened
+	 */
 	void function handleSocketOpen( required any webSocket ) {
 		logEvent( "Socket opened" )
 	}
 
 	/**
+	 * DiscordSocketListener's onClose() callback - marks the connection down
+	 * and, unless the close is fatal or we're deliberately stopping,
+	 * reconnects (starting a fresh session when the close code demands one).
+	 *
+	 * No socket reference reaches this callback, so the close of a socket
+	 * reconnect() has already replaced looks exactly like the LIVE one going
+	 * down - and reconnect() always produces one, since Discord echoes the
+	 * close frame it sends. Acting on it would mark the healthy new socket
+	 * down and reconnect again, burning Identify calls against Discord's
+	 * 1000/day cap. Those closes are consumed by isSupersededClose() instead.
+	 *
 	 * @statusCode A close code (see FATAL_CLOSE_CODES/NEW_SESSION_REQUIRED above)
+	 * @reason The close reason text
 	 */
 	void function handleSocketClose( required numeric statusCode, required string reason ) {
 		logEvent( "Socket closed: #statusCode# #reason#" )
+
+		if ( isSupersededClose() ) {
+			logEvent( "Ignored - that close belongs to a socket reconnect() already superseded" )
+			return
+		}
+
 		variables.socketConnected = false
 
 		if ( static.FATAL_CLOSE_CODES.find( arguments.statusCode ) ) {
@@ -336,6 +459,35 @@ class extends="ScheduledGatewayBase" {
 		reconnect( forceFreshSession: static.NEW_SESSION_REQUIRED.find( arguments.statusCode ) > 0 )
 	}
 
+	/**
+	 * Whether the close being handled belongs to a socket reconnect() already
+	 * superseded rather than to the live one, consuming one pending
+	 * supersession when it does.
+	 *
+	 * Pending supersessions expire after SUPERSEDED_CLOSE_WINDOW_MS: should an
+	 * old socket never deliver its close (it errored out instead, say), the
+	 * suppression must not linger and swallow a genuine disconnect later.
+	 *
+	 * @return true when this close should be ignored
+	 */
+	private boolean function isSupersededClose() {
+		if ( variables.supersededCloses <= 0 ) {
+			return false
+		}
+		if ( getTickCount() > variables.supersededCloseDeadline ) {
+			variables.supersededCloses = 0
+			return false
+		}
+		variables.supersededCloses = variables.supersededCloses - 1
+		return true
+	}
+
+	/**
+	 * DiscordSocketListener's onError() callback - marks the connection down
+	 * and forwards the error to any registered onError() callback.
+	 *
+	 * @error The underlying Java exception the websocket reported
+	 */
 	void function handleSocketError( required any error ) {
 		logEvent( "Socket error: #error.getMessage()#", "error" )
 		variables.socketConnected = false
@@ -384,6 +536,13 @@ class extends="ScheduledGatewayBase" {
 		}
 	}
 
+	/**
+	 * Handles the Gateway's opening `Hello` (op 10) frame - starts the
+	 * heartbeat at the interval it specifies, then either resumes the prior
+	 * session (if we have one) or starts a fresh one via Identify.
+	 *
+	 * @data Hello's own data payload, e.g. { heartbeat_interval: 45000 }
+	 */
 	private void function handleHello( required struct data ) {
 		startHeartbeat( arguments.data.heartbeat_interval ?: 45000 )
 		if ( len( variables.sessionId ) ) {
@@ -393,6 +552,10 @@ class extends="ScheduledGatewayBase" {
 		}
 	}
 
+	/**
+	 * Sends the Identify (op 2) frame that starts a brand-new Gateway
+	 * session - used when there's no prior session to resume.
+	 */
 	private void function sendIdentify() {
 		sendPayload( {
 			op: 2,
@@ -404,6 +567,11 @@ class extends="ScheduledGatewayBase" {
 		} )
 	}
 
+	/**
+	 * Sends the Resume (op 6) frame that reattaches to a prior Gateway
+	 * session at the last sequence number seen, rather than starting a fresh
+	 * one.
+	 */
 	private void function sendResume() {
 		sendPayload( {
 			op: 6,
@@ -526,6 +694,19 @@ class extends="ScheduledGatewayBase" {
 	// Outbound
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Posts an outbound message to a channel, splitting it into multiple
+	 * messages via the shared chunker if it exceeds Discord's per-message
+	 * length limit - the first chunk replies to the thread's own message
+	 * (message_reference) if one is set.
+	 *
+	 * @event The outbound event carrying the text to deliver
+	 * @context Identifies the target channel and, if present, the message to reply to
+	 *
+	 * @return The delivery result, keyed by the last chunk's own Discord
+	 *         message id - or a failure result if any chunk came back with a
+	 *         non-2xx status, transport failures included (see restCall())
+	 */
 	GatewayDeliveryResult function deliver( required GatewayEvent event, required GatewayContext context ) {
 		var text = toString( arguments.event.getData().text ?: "" )
 		if ( !len( text ) ) {
@@ -543,7 +724,7 @@ class extends="ScheduledGatewayBase" {
 				body[ "message_reference" ] = { message_id: replyToId }
 			}
 			lastResponse = restCall( "POST", "/channels/#channel#/messages", body )
-			if ( lastResponse.status >= 300 ) {
+			if ( !isSuccessStatus( lastResponse.status ) ) {
 				return GatewayDeliveryResult.failure( "Discord POST messages failed (#lastResponse.status#): #lastResponse.body.message ?: 'unknown error'#" )
 			}
 		}
@@ -579,7 +760,7 @@ class extends="ScheduledGatewayBase" {
 				startBody[ "message_reference" ] = { message_id: replyToId }
 			}
 			var startResponse = restCall( "POST", "/channels/#channel#/messages", startBody )
-			if ( startResponse.status >= 300 ) {
+			if ( !isSuccessStatus( startResponse.status ) ) {
 				return GatewayDeliveryResult.failure( "Discord POST messages (stream start) failed (#startResponse.status#): #startResponse.body.message ?: 'unknown error'#" )
 			}
 			variables.streamState[ executionId ] = { channel: channel, messageId: startResponse.body.id, buffer: "", lastFlushTick: getTickCount() }
@@ -592,7 +773,7 @@ class extends="ScheduledGatewayBase" {
 		if ( isComplete || dueForFlush ) {
 			var updateResponse = restCall( "PATCH", "/channels/#state.channel#/messages/#state.messageId#", { content: state.buffer } )
 			state.lastFlushTick = getTickCount()
-			if ( updateResponse.status >= 300 ) {
+			if ( !isSuccessStatus( updateResponse.status ) ) {
 				return GatewayDeliveryResult.failure( "Discord PATCH message failed (#updateResponse.status#): #updateResponse.body.message ?: 'unknown error'#" )
 			}
 		}
@@ -609,6 +790,16 @@ class extends="ScheduledGatewayBase" {
 	// Human-in-the-loop — message component buttons
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Posts a message with an action row of buttons (message components) for
+	 * a human to click, presenting the request via the shared
+	 * presentInteraction() presentation.
+	 *
+	 * @humanRequest The HITL request to present, including its allowed decisions/buttons
+	 * @context Identifies the target channel and, if present, the message to reply to
+	 *
+	 * @return The delivery result, keyed by the posted message's own Discord id
+	 */
 	GatewayDeliveryResult function requestHumanInteraction( required HumanInteractionRequest humanRequest, required GatewayContext context ) {
 		var presentation = presentInteraction( arguments.humanRequest )
 		var body = {
@@ -635,13 +826,21 @@ class extends="ScheduledGatewayBase" {
 		}
 
 		var response = restCall( "POST", "/channels/#channel#/messages", body )
-		if ( response.status >= 300 ) {
+		if ( !isSuccessStatus( response.status ) ) {
 			return GatewayDeliveryResult.failure( "Discord POST messages (HITL prompt) failed (#response.status#): #response.body.message ?: 'unknown error'#" )
 		}
 
 		return new GatewayDeliveryResult( deliveryID: toString( response.body.id ?: arguments.humanRequest.getId() ) )
 	}
 
+	/**
+	 * Extracts a HumanInteractionDecision from a button-click event's own
+	 * data (already normalized by handleInteractionCreate()).
+	 *
+	 * @event The gateway event carrying the raw decision data
+	 *
+	 * @return The parsed decision - requestID, decision value, and who decided
+	 */
 	HumanInteractionDecision function parseHumanDecision( required GatewayEvent event ) {
 		var data = arguments.event.getData()
 		return new HumanInteractionDecision(
@@ -666,6 +865,15 @@ class extends="ScheduledGatewayBase" {
 		return 2
 	}
 
+	/**
+	 * Renders a presentation as Discord message content - a bold title
+	 * (Discord markdown) followed by a blank line and the body, or just the
+	 * body if there's no title.
+	 *
+	 * @presentation An InteractionPresentation (see BaseGateway.presentInteraction())
+	 *
+	 * @return The formatted message content
+	 */
 	private string function buildPresentationText( required any presentation ) {
 		return len( arguments.presentation.getTitle() )
 			? "**#arguments.presentation.getTitle()#**" & char( 10 ) & char( 10 ) & arguments.presentation.getBody()
@@ -677,11 +885,29 @@ class extends="ScheduledGatewayBase" {
 	// -------------------------------------------------------------------------
 
 	/**
+	 * Whether a restCall() status is a successful Discord response. Anything
+	 * outside 200-299 is an error, crucially INCLUDING the 0 a transport
+	 * failure yields (see restCall()) - which a bare `>= 300` check would let
+	 * through as a successful delivery.
+	 *
+	 * @status A restCall() response's own `status`
+	 *
+	 * @return true only for a 2xx status
+	 */
+	private boolean function isSuccessStatus( required numeric status ) {
+		return arguments.status >= 200 && arguments.status < 300
+	}
+
+	/**
 	 * @httpMethod "GET", "POST", or "PATCH"
 	 * @path A path relative to API_BASE, e.g. "/channels/123/messages"
 	 * @body The request body (ignored for GET)
 	 *
-	 * @return { status: numeric, body: struct } - body is the parsed JSON response
+	 * @return { status: numeric, body: struct } - `status` is the numeric HTTP
+	 *         status, 0 when the request never completed at all, and `body`
+	 *         the parsed JSON response (or a `{ message }` struct carrying the
+	 *         raw status and content when there is no JSON to parse). Callers
+	 *         must gate on isSuccessStatus(), never on `>= 300`.
 	 */
 	private struct function restCall( required string httpMethod, required string path, struct body = {} ) {
 		if ( !isNull( variables.apiCaller ) ) {
@@ -702,12 +928,27 @@ class extends="ScheduledGatewayBase" {
 			}
 		}
 
-		var statusCode = val( apiResult.statusCode ?: 0 )
+		// `bx:http` does NOT throw when it cannot complete a request at all
+		// (DNS failure, connection refused, read timeout, TLS error) - it comes
+		// back with a NON-numeric statusCode, which val() floors to 0. Parsed
+		// the same way DigitalOceanTarget.assertOk() does (listFirst() strips
+		// the reason phrase off the "200 OK" form bx:http also returns), that
+		// leaves such a failure at 0, and isSuccessStatus() then reports it as
+		// the error it is rather than as a successful delivery.
+		var rawStatus = toString( apiResult.statusCode ?: "" )
+		var rawBody = toString( apiResult.fileContent ?: "" )
+		var statusCode = val( listFirst( len( rawStatus ) ? rawStatus : "0", " " ) )
 		var parsedBody = {}
 		try {
-			parsedBody = len( trim( apiResult.fileContent ?: "" ) ) ? jsonDeserialize( apiResult.fileContent ) : {}
+			parsedBody = len( trim( rawBody ) ) ? jsonDeserialize( rawBody ) : {}
 		} catch ( any e ) {
-			parsedBody = { message: "Unparseable response from Discord: #e.message#" }
+			parsedBody = { message: "Unparseable response from Discord (raw status '#rawStatus#'): #rawBody#" }
+		}
+		// Nothing reached Discord on a transport failure, so there is no JSON
+		// error body to report - surface bx:http's own raw status/content so
+		// the failure is diagnosable from the delivery result alone.
+		if ( !isSuccessStatus( statusCode ) && isStruct( parsedBody ) && !len( parsedBody.message ?: "" ) ) {
+			parsedBody[ "message" ] = "Request failed with raw status '#rawStatus#': #rawBody#"
 		}
 
 		return { status: statusCode, body: parsedBody }

@@ -7,6 +7,15 @@
  * Requires a prior `build`. If `boxlang-miniserver` isn't found on PATH,
  * fails with a clear, actionable error rather than silently doing nothing.
  *
+ * Binds to `127.0.0.1` (loopback) unless `--host` says otherwise. It used to
+ * default to `0.0.0.0`, which put the served agent in reach of everyone on
+ * the network by default - and the generated web chat UI's API-key gate is
+ * OPT-IN (only generated when a gateway entry declares `apiKeyEnvVar`), so
+ * that default meant an unauthenticated agent, driving the developer's own
+ * provider API key, on every interface. `--host=0.0.0.0` still exposes it
+ * that way when that is genuinely what's wanted, and the verb's own output
+ * always states which interface it bound to.
+ *
  * Scopes the server's own BoxLang runtime home to `.build/runtime` via
  * `serverHome` (confirmed as a real, supported `MiniServerConfig` field -
  * `boxlang-web`'s own `MiniServer.class` help text: "-s, --serverHome
@@ -34,7 +43,7 @@
 class {
 
 	/**
-	 * @options { projectRoot (required, absolute path), port, host }
+	 * @options { projectRoot (required, absolute path), port (optional, defaults to 8080 - must be a whole number 1-65535), host (optional, defaults to 127.0.0.1 - pass 0.0.0.0 to expose the agent on every network interface) }
 	 */
 	struct function run( struct options = {} ) {
 		var projectRoot = trim( arguments.options.projectRoot ?: "" )
@@ -60,8 +69,11 @@ class {
 			)
 		}
 
-		var port = arguments.options.port ?: 8080
-		var host = arguments.options.host ?: "0.0.0.0"
+		var port = resolvePort( arguments.options.port ?: 8080 )
+		// Loopback by DEFAULT - see the class docblock. `--host=0.0.0.0`
+		// still opts into every interface, deliberately and visibly.
+		var host = arguments.options.host ?: "127.0.0.1"
+		var boundTo = host == "0.0.0.0" ? "ALL network interfaces" : "#host# only"
 		var configPath = root & "/.build/miniserver.json"
 		var serverHome = root & "/.build/runtime"
 
@@ -81,12 +93,40 @@ class {
 
 		return {
 			exitCode   : 0,
-			message    : "Serving [#appDir#] on #host#:#port#",
+			message    : "Serving [#appDir#] on http://#host#:#port# - bound to #boundTo#",
 			process    : process,
 			configPath : configPath,
+			host       : host,
 			port       : port,
 			serverHome : serverHome
 		}
+	}
+
+	/**
+	 * `--port=8080` arrives from argv as the STRING "8080", while this verb's
+	 * own default is the NUMBER 8080 - so `.build/miniserver.json` came out
+	 * with a different shape (`"port": "8080"` vs `"port": 8080`) depending
+	 * on whether the flag was passed at all, and a nonsense `--port=abc` was
+	 * only ever caught inside the launched miniserver child process, long
+	 * after this verb reported success. Validated and cast to a real integer
+	 * here instead, so the generated config always has one shape and a bad
+	 * port fails immediately, here, with a message about `--port`.
+	 *
+	 * @port The raw `port` option - a string from argv, or a number from a direct caller (e.g. `invoke --server`)
+	 *
+	 * @return The port as an integer
+	 */
+	private numeric function resolvePort( required any port ) {
+		var candidate = trim( toString( arguments.port ) )
+
+		if ( !reFind( "^[0-9]+$", candidate ) || val( candidate ) < 1 || val( candidate ) > 65535 ) {
+			throw(
+				type    = "BxAgents.InvalidPort",
+				message = "Invalid --port [#candidate#] - must be a whole number between 1 and 65535"
+			)
+		}
+
+		return javaCast( "int", val( candidate ) )
 	}
 
 }

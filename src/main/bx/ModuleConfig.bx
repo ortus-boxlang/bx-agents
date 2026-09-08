@@ -179,9 +179,26 @@ class {
 	 * receives, so it's testable AND matches the stock convention.
 	 *
 	 * `--version`/`-v` and `--help`/`-h` (or no verb, or the `help` verb) are
-	 * handled before verb dispatch and never reach a verb class - only
-	 * meaningful as the FIRST token, so they can never collide with a verb's
-	 * own same-named flag (e.g. `package --version=1.0.0`).
+	 * handled before verb dispatch and never reach a verb class.
+	 * `--version`/`-v` is only meaningful as the FIRST token, so it can never
+	 * collide with a verb's own same-named flag (e.g. `package
+	 * --version=1.0.0`). `--help`/`-h` is honoured in ANY position - no verb
+	 * has a `--help` flag of its own to collide with, and the previous
+	 * first-token-only handling meant `bxAgents clean --help` DELETED the
+	 * build directories and `bxAgents build --help` ran a whole build instead
+	 * of printing usage.
+	 *
+	 * Because there is no space-separated `--flag value` form, a value-taking
+	 * flag written that way (`--message hello`) parses as boolean `true` with
+	 * its intended value falling through to the positional project root -
+	 * which silently hashed the literal string "true", scaffolded into
+	 * `./openai/gpt-5`, or sent "true" to the model, since every verb tests
+	 * its options with `len()` and `len( true )` is 4. `valueOptions` below
+	 * declares, per verb, which flags REQUIRE a value; a valueless one is
+	 * rejected here, before dispatch, so the check covers every verb in one
+	 * place instead of each verb class re-validating its own flags (the verb
+	 * classes stay thin dispatchers over an already-parsed struct, and stay
+	 * unit-testable against that struct directly).
 	 *
 	 * @args The raw CLI argv, module name and dispatch token excluded
 	 *
@@ -223,6 +240,24 @@ class {
 			"hash-password" : "Hash a password for a webui users entry (--password)"
 		}
 
+		// Per verb, the flags that REQUIRE a value - `--projectRoot` is
+		// universal and appended to every verb's own list below. See this
+		// method's docblock for why a valueless one is a hard error rather
+		// than a silent boolean `true`.
+		var valueOptions = {
+			"new"     : [ "model", "name", "description" ],
+			"build"   : [ "environment", "generatorVersion" ],
+			"test"    : [],
+			"serve"   : [ "port", "host" ],
+			"package" : [ "version" ],
+			"deploy"  : [ "name", "target", "destination" ],
+			"inspect" : [],
+			"chat"    : [],
+			"invoke"  : [ "message", "port" ],
+			"clean"   : [],
+			"hash-password" : [ "password" ]
+		}
+
 		var firstToken = arrayLen( arguments.args ) >= 1 ? arguments.args[ 1 ] : ""
 
 		if ( firstToken == "--version" || firstToken == "-v" ) {
@@ -230,7 +265,9 @@ class {
 			return 0
 		}
 
-		if ( firstToken == "--help" || firstToken == "-h" || firstToken == "help" ) {
+		// Anywhere in argv, not just first: `bxAgents clean --help` must print
+		// usage, NOT delete the project's build directories.
+		if ( firstToken == "help" || hasHelpFlag( arguments.args ) ) {
 			printUsage( verbs, verbDescriptions )
 			return 0
 		}
@@ -255,6 +292,19 @@ class {
 		}
 
 		var options = parseCliOptions( rawVerbArgs )
+
+		var requiredValueFlags = [ "projectRoot" ]
+		requiredValueFlags.append( valueOptions[ verbName ] ?: [], true )
+
+		for ( var flag in requiredValueFlags ) {
+			if ( options._valuelessFlags.keyExists( flag ) ) {
+				println( "Error: --#flag# requires a value - write it as `--#flag#=<value>`." )
+				println( "bxAgents follows BoxLang's own CLI convention: a space-separated `--#flag# <value>` is not supported." )
+				return 1
+			}
+		}
+
+		options.delete( "_valuelessFlags" )
 		options.projectRoot = resolveProjectRoot( options )
 
 		try {
@@ -298,7 +348,7 @@ class {
 
 		println( "" )
 		println( "Global options:" )
-		println( "  -h, --help     Show this help message and exit" )
+		println( "  -h, --help     Show this help message and exit (accepted in any position)" )
 		println( "  -v, --version  Show the module version and exit" )
 		println( "" )
 		println( "Every verb also accepts --projectRoot=<path> (or a bare positional path) to" )
@@ -325,44 +375,82 @@ class {
 	 * Repeated options override earlier ones, matching the documented "last
 	 * one wins" rule.
 	 *
+	 * Also records, in `_valuelessFlags`, every flag whose LAST occurrence
+	 * carried no `=value` (so `--flag`, `--!flag`, `--no-flag`, `-abc`, but
+	 * not `--flag=x`). That has to be tracked HERE, at parse time: once the
+	 * struct is built a boolean `true` is indistinguishable from the string
+	 * "true", and `isBoolean( "true" )` is itself true - so `main()` could
+	 * not otherwise tell `--message` (no value) from `--message=true`. See
+	 * `main()`'s docblock for what it does with it; `main()` strips the key
+	 * again before handing the struct to a verb.
+	 *
 	 * @rawArgs A verb's own argv, with the module name and verb token already stripped
 	 *
-	 * @return A plain options struct (flag names -> value/true/false), plus an optional `_positional` key for the first bare positional argument
+	 * @return A plain options struct (flag names -> value/true/false), plus a `_valuelessFlags` key (struct of flag names given without a value) and an optional `_positional` key for the first bare positional argument
 	 */
 	private struct function parseCliOptions( required array rawArgs ) {
 		var options = {}
+		var valueless = {}
 
 		for ( var token in arguments.rawArgs ) {
 			if ( token.startsWith( "--!" ) ) {
 				options[ token.right( len( token ) - 3 ) ] = false
+				valueless[ token.right( len( token ) - 3 ) ] = true
 			} else if ( token.startsWith( "--no-" ) ) {
 				options[ token.right( len( token ) - 5 ) ] = false
+				valueless[ token.right( len( token ) - 5 ) ] = true
 			} else if ( token.startsWith( "--" ) ) {
 				var body = token.right( len( token ) - 2 )
 				var eqPos = body.find( "=" )
 				if ( eqPos ) {
 					options[ body.left( eqPos - 1 ) ] = stripQuotes( body.right( len( body ) - eqPos ) )
+					valueless.delete( body.left( eqPos - 1 ) )
 				} else {
 					options[ body ] = true
+					valueless[ body ] = true
 				}
 			} else if ( token.startsWith( "-" ) && len( token ) > 1 ) {
 				var body = token.right( len( token ) - 1 )
 				var eqPos = body.find( "=" )
 				if ( eqPos ) {
 					options[ body.left( eqPos - 1 ) ] = stripQuotes( body.right( len( body ) - eqPos ) )
+					valueless.delete( body.left( eqPos - 1 ) )
 				} else if ( len( body ) > 1 ) {
 					for ( var charIndex = 1; charIndex <= len( body ); charIndex++ ) {
 						options[ body.mid( charIndex, 1 ) ] = true
+						valueless[ body.mid( charIndex, 1 ) ] = true
 					}
 				} else {
 					options[ body ] = true
+					valueless[ body ] = true
 				}
 			} else if ( !options.keyExists( "_positional" ) ) {
 				options[ "_positional" ] = token
 			}
 		}
 
+		options[ "_valuelessFlags" ] = valueless
+
 		return options
+	}
+
+	/**
+	 * Does this argv carry a bare `--help`/`-h` in ANY position? Whole-token
+	 * matches only, so a combined `-abc` shorthand that happens to contain an
+	 * `h` is not one, and neither is a `--help=...` assignment.
+	 *
+	 * @args The raw CLI argv, module name and dispatch token excluded
+	 *
+	 * @return True if usage should be printed instead of dispatching a verb
+	 */
+	private boolean function hasHelpFlag( required array args ) {
+		for ( var token in arguments.args ) {
+			if ( token == "--help" || token == "-h" ) {
+				return true
+			}
+		}
+
+		return false
 	}
 
 	/**

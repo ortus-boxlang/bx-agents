@@ -81,6 +81,17 @@ class extends="ScheduledGatewayBase" {
 
 	property name="connectionOpen" type="boolean" default=false;
 	property name="stopping" type="boolean" default=false;
+
+	/**
+	 * True while ONE connect attempt is outstanding - from the moment an
+	 * attempt (or a delayed reconnect) is claimed until it either connects,
+	 * fails, or is abandoned. Both reconnect entry points (the backoff chain
+	 * in scheduleReconnect() and the 30s watchdog in checkConnectionHealth())
+	 * funnel through beginConnectAttempt(), so they can never multiply into
+	 * several self-perpetuating connect chains against the same daemon - which
+	 * would otherwise mean every inbound message being handled once per chain.
+	 */
+	property name="connectPending" type="boolean" default=false;
 	property name="lastActivityTick" type="numeric" default="0";
 	property name="reconnectBackoffMs" type="numeric" default="2000";
 	property name="httpClientInstance";
@@ -110,6 +121,11 @@ class extends="ScheduledGatewayBase" {
 		HEALTH_STALE_THRESHOLD_MS = 120000
 	}
 
+	/**
+	 * Sets this gateway's own name/description and constructs its MessageChunker.
+	 *
+	 * @return this
+	 */
 	function init() {
 		variables.name = "signal"
 		variables.description = "Signal gateway - SSE inbound / JSON-RPC outbound against a signal-cli daemon"
@@ -117,6 +133,17 @@ class extends="ScheduledGatewayBase" {
 		return this
 	}
 
+	/**
+	 * Applies this gateway's own config options on top of
+	 * ScheduledGatewayBase's own configure() - `httpUrl` (trailing slash
+	 * stripped) defaults to "http://127.0.0.1:8080" if unset; `account` is
+	 * the linked signal-cli account's own E.164 number/UUID (see class
+	 * docblock).
+	 *
+	 * @options The options struct aiGateway() was called with
+	 *
+	 * @return this
+	 */
 	IGateway function configure( required any options ) {
 		super.configure( arguments.options )
 		if ( len( trim( variables.options.httpUrl ?: "" ) ) ) {
@@ -126,6 +153,11 @@ class extends="ScheduledGatewayBase" {
 		return this
 	}
 
+	/**
+	 * @return The capabilities this gateway declares to bx-ai's own
+	 *         HITL/session machinery - see the inline comments below for
+	 *         what's deliberately NOT declared and why
+	 */
 	array function getDeclaredCapabilities() {
 		// "threads" - Signal's own quote/reply mechanism is a genuine
 		// threading key. No "interactiveActions" (reactions are write-only
@@ -135,10 +167,20 @@ class extends="ScheduledGatewayBase" {
 		return [ "inboundMessages", "outboundMessages", "threads", "humanApproval" ]
 	}
 
+	/**
+	 * Test-only seam — see connector's own docblock.
+	 *
+	 * @fn A closure that replaces the real async SSE connect chain entirely
+	 */
 	void function setConnector( required any fn ) {
 		variables.connector = arguments.fn
 	}
 
+	/**
+	 * Test-only seam — see rpcCaller's own docblock.
+	 *
+	 * @caller A closure that replaces the real outbound JSON-RPC HTTP call
+	 */
 	void function setRpcCaller( required any caller ) {
 		variables.rpcCaller = arguments.caller
 	}
@@ -147,6 +189,11 @@ class extends="ScheduledGatewayBase" {
 	// ScheduledGatewayBase hooks
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Validates that an `account` is configured, resets connection state,
+	 * and kicks off the async SSE connect chain (see startConnection()) -
+	 * called once per start(), before registerScheduledTasks().
+	 */
 	void function onConnect() {
 		if ( !len( variables.account ) ) {
 			throw(
@@ -160,11 +207,24 @@ class extends="ScheduledGatewayBase" {
 		startConnection()
 	}
 
+	/**
+	 * Marks this gateway as stopping so the SSE read loop, the inbound
+	 * handlers (see handleSseEvent()) and any in-flight reconnect backoff all
+	 * stop, flags the connection as closed, and releases the connect guard so
+	 * a later start() is never blocked by an attempt this stop abandoned.
+	 */
 	void function onDisconnect() {
 		variables.stopping = true
 		variables.connectionOpen = false
+		endConnectAttempt()
 	}
 
+	/**
+	 * Registers the 30s connection-health watchdog (see
+	 * checkConnectionHealth()) against the shared ColdBox scheduler.
+	 *
+	 * @scheduler The shared ColdBox scheduler (or test double) to register the task against
+	 */
 	void function registerScheduledTasks( required any scheduler ) {
 		var taskName = "signal-watchdog-#variables.name#"
 		arguments.scheduler.task( taskName )
@@ -182,6 +242,11 @@ class extends="ScheduledGatewayBase" {
 	 * covers the case Hermes's own health monitor exists for: the stream
 	 * looks "open" but has gone quiet (no SSE keepalive/activity for 120s) -
 	 * ping /api/v1/check, and force a reconnect if that fails too.
+	 *
+	 * Both reconnect calls below go through startConnection(), which is a
+	 * no-op while a connect attempt is already outstanding - this watchdog
+	 * fires every 30s and would otherwise stack a fresh connect chain on top
+	 * of the backoff chain already retrying, once per tick.
 	 */
 	void function checkConnectionHealth() {
 		if ( variables.stopping ) {
@@ -200,6 +265,11 @@ class extends="ScheduledGatewayBase" {
 		}
 	}
 
+	/**
+	 * Calls the signal-cli daemon's own `/api/v1/check` health-check endpoint.
+	 *
+	 * @return true if the daemon responded with HTTP 200, false on any error or non-200 response
+	 */
 	private boolean function pingHealthCheck() {
 		try {
 			var url = "#variables.httpUrl#/api/v1/check"
@@ -210,10 +280,21 @@ class extends="ScheduledGatewayBase" {
 		}
 	}
 
+	/**
+	 * @return The current time in epoch milliseconds, via java.lang.System.currentTimeMillis()
+	 */
 	private numeric function currentTimeMillis() {
 		return createObject( "java", "java.lang.System" ).currentTimeMillis()
 	}
 
+	/**
+	 * Writes to this gateway's own "gateway-signal" log file - shadows
+	 * ScheduledGatewayBase's public logEvent() with an identical private
+	 * implementation (see base class).
+	 *
+	 * @text The message to log
+	 * @type BoxLang writeLog() type - "information" (default), "warning", "error", "debug", etc.
+	 */
 	private void function logEvent( required string text, string type = "information" ) {
 		writeLog( text: arguments.text, type: arguments.type, file: "gateway-#variables.name#" )
 	}
@@ -222,14 +303,63 @@ class extends="ScheduledGatewayBase" {
 	// SSE connection lifecycle
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Entry point for (re)opening the SSE connection - delegates to the
+	 * test seam `connector`, if set (see its own docblock), otherwise claims
+	 * the single connect slot (see beginConnectAttempt()) and starts the real
+	 * async connect chain via connectAsync(). A no-op when an attempt is
+	 * already outstanding, so the watchdog can never stack a second connect
+	 * chain on top of the backoff chain already retrying.
+	 */
 	private void function startConnection() {
 		if ( !isNull( variables.connector ) ) {
 			variables.connector()
 			return
 		}
+		if ( !beginConnectAttempt() ) {
+			logEvent( "Connect attempt already outstanding - not starting another" )
+			return
+		}
 		connectAsync()
 	}
 
+	/**
+	 * Claims the single "a connect attempt is outstanding" slot - the guard
+	 * every reconnect path shares, so at most one attempt is ever in flight.
+	 * Always paired with an endConnectAttempt() on EVERY outcome (connected,
+	 * failed, stopping), or the gateway would wedge permanently disconnected.
+	 *
+	 * @return true if the caller now owns the outstanding attempt, false if one is already in flight
+	 */
+	private boolean function beginConnectAttempt() {
+		var claimed = false
+		lock name="signal-connect-#variables.name#" type="exclusive" timeout="10" {
+			if ( !variables.connectPending ) {
+				variables.connectPending = true
+				claimed = true
+			}
+		}
+		return claimed
+	}
+
+	/**
+	 * Releases the connect guard claimed by beginConnectAttempt(), letting
+	 * the next reconnect path (backoff chain or watchdog) claim it. Safe to
+	 * call when nothing is claimed.
+	 */
+	private void function endConnectAttempt() {
+		lock name="signal-connect-#variables.name#" type="exclusive" timeout="10" {
+			variables.connectPending = false
+		}
+	}
+
+	/**
+	 * Lazily creates (and thereafter reuses) the single
+	 * java.net.http.HttpClient instance this gateway sends every SSE
+	 * connect attempt through.
+	 *
+	 * @return The cached HttpClient instance
+	 */
 	private any function resolveHttpClient() {
 		if ( isNull( variables.httpClientInstance ) ) {
 			variables.httpClientInstance = createObject( "java", "java.net.http.HttpClient" ).newHttpClient()
@@ -242,30 +372,49 @@ class extends="ScheduledGatewayBase" {
 	 * blocking onConnect()/gateway start. The actual line-by-line read loop
 	 * (handleSseStream()) runs later, on the CompletableFuture's own
 	 * async-executor thread, once the connection is established.
+	 *
+	 * ALWAYS called with the connect guard already claimed (by
+	 * startConnection() or scheduleReconnect()) - every exit path below
+	 * therefore either releases it (endConnectAttempt()) or hands it on to
+	 * the callback that will.
 	 */
 	private void function connectAsync() {
 		if ( variables.stopping ) {
+			endConnectAttempt()
 			return
 		}
 
-		var client = resolveHttpClient()
-		var eventsUrl = "#variables.httpUrl#/api/v1/events?account=#urlEncodedFormat( variables.account )#"
-		var uri = createObject( "java", "java.net.URI" ).create( eventsUrl )
-		var reqBuilder = createObject( "java", "java.net.http.HttpRequest" ).newBuilder()
-		reqBuilder.uri( uri )
-		reqBuilder.header( "Accept", "text/event-stream" )
-		reqBuilder.GET()
-		var httpReq = reqBuilder.build()
-		var bodyHandler = createObject( "java", "java.net.http.HttpResponse$BodyHandlers" ).ofLines()
+		try {
+			var client = resolveHttpClient()
+			var eventsUrl = "#variables.httpUrl#/api/v1/events?account=#urlEncodedFormat( variables.account )#"
+			var uri = createObject( "java", "java.net.URI" ).create( eventsUrl )
+			var reqBuilder = createObject( "java", "java.net.http.HttpRequest" ).newBuilder()
+			reqBuilder.uri( uri )
+			reqBuilder.header( "Accept", "text/event-stream" )
+			reqBuilder.GET()
+			var httpReq = reqBuilder.build()
+			var bodyHandler = createObject( "java", "java.net.http.HttpResponse$BodyHandlers" ).ofLines()
 
-		var future = client.sendAsync( httpReq, bodyHandler )
-		future.thenAccept( function( httpResp ) {
-			handleSseStream( httpResp )
-		} )
-		future.exceptionally( function( err ) {
-			handleConnectFailure( err )
-			return javacast( "null", "" )
-		} )
+			var future = client.sendAsync( httpReq, bodyHandler )
+			future.thenAccept( function( httpResp ) {
+				handleSseStream( httpResp )
+			} )
+			future.exceptionally( function( err ) {
+				handleConnectFailure( err )
+				return javacast( "null", "" )
+			} )
+		} catch ( any e ) {
+			// A SYNCHRONOUS setup failure (bad URL, client creation) never
+			// reaches either callback above, so the guard has to be released
+			// here - otherwise it stays claimed forever and every later
+			// reconnect is skipped, wedging the gateway disconnected.
+			logEvent( "SSE connect failed: #e.message#", "error" )
+			variables.connectionOpen = false
+			endConnectAttempt()
+			if ( !variables.stopping ) {
+				scheduleReconnect()
+			}
+		}
 	}
 
 	/**
@@ -273,6 +422,10 @@ class extends="ScheduledGatewayBase" {
 	 *               (async-executor) thread for as long as the stream stays open
 	 */
 	private void function handleSseStream( required any httpResponse ) {
+		// This attempt is resolved either way - release the guard before any
+		// scheduleReconnect() below, which claims it again for the NEXT one.
+		endConnectAttempt()
+
 		if ( val( arguments.httpResponse.statusCode() ?: 0 ) != 200 ) {
 			logEvent( "SSE connect rejected: HTTP #arguments.httpResponse.statusCode()#", "error" )
 			scheduleReconnect()
@@ -302,8 +455,17 @@ class extends="ScheduledGatewayBase" {
 		}
 	}
 
+	/**
+	 * Handles a failed SSE connect attempt (connectAsync()'s own
+	 * future.exceptionally() callback) - marks the connection closed, logs
+	 * the failure, and schedules a backoff reconnect unless the gateway is
+	 * stopping.
+	 *
+	 * @error The exception the CompletableFuture failed with
+	 */
 	private void function handleConnectFailure( required any error ) {
 		variables.connectionOpen = false
+		endConnectAttempt()
 		logEvent( "SSE connect failed: #error.getMessage()#", "error" )
 		if ( !variables.stopping ) {
 			scheduleReconnect()
@@ -317,8 +479,20 @@ class extends="ScheduledGatewayBase" {
 	 * scheduler (no delayed/one-shot task primitive was verified available
 	 * here) - the thread only sleeps, then calls back into connectAsync(),
 	 * which itself returns immediately.
+	 *
+	 * A no-op unless it can claim the single connect slot (see
+	 * beginConnectAttempt()): without that, every failing attempt would spawn
+	 * a retry chain of its own, and the 30s watchdog would keep adding more,
+	 * so a long daemon outage would end with a dozen-plus chains all
+	 * connecting at once and every inbound message being handled once per
+	 * chain. The claim is held ACROSS the sleep - a pending retry counts as
+	 * outstanding - and released on every path that abandons it.
 	 */
 	private void function scheduleReconnect() {
+		if ( variables.stopping || !beginConnectAttempt() ) {
+			return
+		}
+
 		var delayMs = variables.reconnectBackoffMs
 		variables.reconnectBackoffMs = min( variables.reconnectBackoffMs * 2, static.RECONNECT_BACKOFF_MAX_MS )
 		var jitterMs = int( delayMs * 0.2 * ( randRange( 0, 100 ) / 100 ) )
@@ -328,11 +502,15 @@ class extends="ScheduledGatewayBase" {
 			try {
 				createObject( "java", "java.lang.Thread" ).sleep( javaCast( "long", totalDelayMs ) )
 			} catch ( any e ) {
+				endConnectAttempt()
 				return
 			}
-			if ( !variables.stopping ) {
-				connectAsync()
+			if ( variables.stopping ) {
+				endConnectAttempt()
+				return
 			}
+			// connectAsync() inherits this claim - see its own docblock.
+			connectAsync()
 		}
 		createObject( "java", "java.lang.Thread" ).init( retryRunnable ).start()
 	}
@@ -347,11 +525,21 @@ class extends="ScheduledGatewayBase" {
 	 * private connection plumbing" split WhatsAppCloudGateway's
 	 * handleWebhook() uses.
 	 *
+	 * A stopped gateway dispatches nothing: onDisconnect() can't interrupt a
+	 * thread already blocked inside the stream's own forEach(), so the
+	 * `stopping` flag is checked HERE, on the inbound path itself - otherwise
+	 * a stopped gateway would keep running full agent turns for every line
+	 * still buffered in the stream.
+	 *
 	 * @rawLine One line from the SSE stream - "data: {...}" carries an
 	 *          event; blank lines and ":"-prefixed keepalive comments are
 	 *          ignored, matching the SSE spec.
 	 */
 	public void function handleSseEvent( required string rawLine ) {
+		if ( variables.stopping ) {
+			return
+		}
+
 		var trimmedLine = trim( arguments.rawLine )
 		if ( !trimmedLine.startsWith( "data:" ) ) {
 			return
@@ -476,6 +664,16 @@ class extends="ScheduledGatewayBase" {
 		variables.pendingApprovals.delete( arguments.sender )
 	}
 
+	/**
+	 * Same best-effort exact-or-prefix, case-insensitive match Email's own
+	 * matchDecision() uses - falls back to the raw text verbatim on no
+	 * confident match, left for bx-ai's own HITL coordinator to reject.
+	 *
+	 * @text A reply's first line, already trimmed
+	 * @allowedDecisions The original request's own allowed decision keywords
+	 *
+	 * @return The matched decision keyword, or the raw text verbatim if no match was found
+	 */
 	private string function matchDecision( required string text, required array allowedDecisions ) {
 		var normalized = lcase( arguments.text )
 		for ( var decision in arguments.allowedDecisions ) {
@@ -491,6 +689,20 @@ class extends="ScheduledGatewayBase" {
 	// Outbound — JSON-RPC 2.0 "send"
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Sends an outbound event's text to Signal via signal-cli's JSON-RPC
+	 * `send` method, chunked to MAX_MESSAGE_LENGTH (one RPC call per
+	 * chunk) - fails on the first chunk that errors. Fires
+	 * onGatewayMessageSent before returning.
+	 *
+	 * @event The outbound event to deliver - only `event.getData().text` is used
+	 * @context Carries the destination conversationID (the recipient's own phone number/UUID)
+	 *
+	 * @return Success with the last chunk's signal-cli timestamp as
+	 *         deliveryID (or the event's own id if no timestamp was
+	 *         returned), or failure if there's no text to send or
+	 *         signal-cli returned an RPC error
+	 */
 	GatewayDeliveryResult function deliver( required GatewayEvent event, required GatewayContext context ) {
 		var text = toString( arguments.event.getData().text ?: "" )
 		if ( !len( text ) ) {
@@ -529,6 +741,20 @@ class extends="ScheduledGatewayBase" {
 	// same pattern TwilioGateway/GitHubGateway both use.
 	// -------------------------------------------------------------------------
 
+	/**
+	 * Sends a plain-text HITL approval prompt over Signal and records it in
+	 * `pendingApprovals`, keyed by conversationID (see the section comment
+	 * above for why - Signal has no per-request correlation key of its
+	 * own). The eventual reply is matched back to this request by
+	 * handleApprovalReply()/matchDecision() when the same sender writes back.
+	 *
+	 * @humanRequest The interaction to present - rendered via presentInteraction()
+	 * @context Carries the destination conversationID (the recipient's own phone number/UUID)
+	 *
+	 * @return Success with signal-cli's own timestamp as deliveryID (or
+	 *         the request's own id if none was returned), or failure if
+	 *         signal-cli returned an RPC error
+	 */
 	GatewayDeliveryResult function requestHumanInteraction( required HumanInteractionRequest humanRequest, required GatewayContext context ) {
 		var presentation = presentInteraction( arguments.humanRequest )
 		var allowedDecisions = arguments.humanRequest.getAllowedDecisions()
@@ -549,6 +775,16 @@ class extends="ScheduledGatewayBase" {
 		return new GatewayDeliveryResult( deliveryID: len( messageId ) ? messageId : arguments.humanRequest.getId() )
 	}
 
+	/**
+	 * Builds the plain-text body for an outbound HITL approval message -
+	 * the presentation's own title (if any) and body, followed by the
+	 * allowed decision keywords the recipient is asked to reply with.
+	 *
+	 * @presentation An InteractionPresentation (see BaseGateway.presentInteraction())
+	 * @allowedDecisions The request's own allowed decision keywords
+	 *
+	 * @return The assembled message body, newline-joined
+	 */
 	private string function buildApprovalBodyText( required any presentation, required array allowedDecisions ) {
 		var lines = []
 		if ( len( arguments.presentation.getTitle() ) ) {
@@ -564,6 +800,15 @@ class extends="ScheduledGatewayBase" {
 		return lines.toList( char( 10 ) )
 	}
 
+	/**
+	 * Extracts a HumanInteractionDecision from an already-normalized
+	 * GatewayEvent's own data (as built by handleApprovalReply()'s
+	 * onGatewayMessageReceived announcement).
+	 *
+	 * @event The gateway event carrying the decision
+	 *
+	 * @return The parsed HumanInteractionDecision
+	 */
 	HumanInteractionDecision function parseHumanDecision( required GatewayEvent event ) {
 		var data = arguments.event.getData()
 		return new HumanInteractionDecision(
@@ -587,6 +832,13 @@ class extends="ScheduledGatewayBase" {
 		return val( arguments.response.status ?: 0 ) >= 300 || ( isStruct( body ) && structKeyExists( body, "error" ) )
 	}
 
+	/**
+	 * @response A sendRpc() result
+	 *
+	 * @return The JSON-RPC error's own "message", or a generic "unknown
+	 *         error (HTTP <status>)" fallback if the response carries no
+	 *         structured error
+	 */
 	private string function rpcErrorMessage( required struct response ) {
 		var body = arguments.response.body ?: {}
 		if ( isStruct( body ) && structKeyExists( body, "error" ) && isStruct( body.error ) ) {

@@ -16,7 +16,7 @@ Real, buildable BxAgents projects, each demonstrating one feature area. Every ex
 
 ### Push-style chat-platform gateways
 
-Each of these connects the agent to a real chat platform via a `gateways/` entry with its own `type`, per [Push-style gateways](../docs/conventions/gateways.md#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends). Long-poll and websocket ones (Telegram/Slack/Discord/Signal) and IMAP-poll (Email) hold their own outbound connection - there's nothing to `curl`, you message the platform for real. Webhook-driven ones (WhatsApp Cloud/Teams/Twilio/GitHub) generate a real route you can `curl` locally with a hand-computed signature, shown in each README.
+Each of these connects the agent to a real chat platform via a `gateways/` entry with its own `type`, per [Push-style gateways](../docs/conventions/gateways/index.md). Long-poll and websocket ones (Telegram/Slack/Discord/Signal) and IMAP-poll (Email) hold their own outbound connection - there's nothing to `curl`, you message the platform for real. Webhook-driven ones (WhatsApp Cloud/Teams/Twilio/GitHub) generate a real route you can `curl` locally with a hand-computed signature, shown in each README.
 
 | Example | Transport shape |
 |---|---|
