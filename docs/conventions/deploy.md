@@ -141,7 +141,7 @@ Ships the newest `.bxa` to a remote directory over plain FTP or SFTP, via the re
 	target         : "ftp",
 	host           : "ftp.example.com",
 	username       : "deploy",
-	passwordEnvVar : "FTP_PASSWORD",
+	passwordEnvVar : "BXAGENTS_FTP_PASSWORD",
 	remotePath     : "/uploads/my-agent",
 	port           : 21,       // optional, defaults to 21
 	passive        : true,     // optional, defaults to true
@@ -157,7 +157,7 @@ Ships the newest `.bxa` to a remote directory over plain FTP or SFTP, via the re
 	host             : "sftp.example.com",
 	username         : "deploy",
 	key              : "/home/me/.ssh/id_rsa",   // passwordEnvVar OR key required
-	passphraseEnvVar : "SFTP_KEY_PASSPHRASE",     // optional, only if the key itself is passphrase-protected
+	passphraseEnvVar : "BXAGENTS_SFTP_KEY_PASSPHRASE",     // optional, only if the key itself is passphrase-protected
 	fingerprint      : "SHA256:...",              // optional host key verification
 	remotePath       : "/uploads/my-agent",
 	port             : 22,       // optional, defaults to 22
@@ -165,7 +165,7 @@ Ships the newest `.bxa` to a remote directory over plain FTP or SFTP, via the re
 }
 ```
 
-Requires a prior `bxAgents package`. `ftp` requires a `passwordEnvVar`; `sftp` accepts either a `passwordEnvVar` or a `key` (SSH private key file path). `passwordEnvVar`/`passphraseEnvVar` name environment variables holding the real secret - **never the secret value itself** - resolved live at deploy time; `key` stays a plain path, since it's already not secret material itself. Every `bx:ftp` action throws on failure (connection refused, auth rejected, a negative server reply) rather than returning a soft failure - this target catches that and re-throws it as a clear `BxAgents.DeployFailed`, always closing the connection afterward even on error.
+Requires a prior `bxAgents package`. `ftp` requires a `passwordEnvVar`; `sftp` accepts either a `passwordEnvVar` or a `key` (SSH private key file path). `passwordEnvVar`/`passphraseEnvVar` name environment variables holding the real secret - **never the secret value itself** - resolved live at deploy time. The variable they name must sit in the `BXAGENTS_` namespace (`^BXAGENTS_[A-Z0-9_]+$`); anything else is rejected with a `BxAgents.InvalidDeployConfig` error. That keeps a deploy entry - which is plain data, and easy to wave through in review - from naming an unrelated secret already in the environment (say a provider API key) and having it sent to whatever host the same entry points at. `key` stays a plain path, since it's already not secret material itself. Every `bx:ftp` action throws on failure (connection refused, auth rejected, a negative server reply) rather than returning a soft failure - this target catches that and re-throws it as a clear `BxAgents.DeployFailed`, always closing the connection afterward even on error.
 
 ## Secrets stay external
 
@@ -176,7 +176,7 @@ No target ever reads a secret (API token, SSH key, registry password) from `depl
 | `ssh` | none required - `identityFile` is a path to a key file you manage yourself |
 | `docker` | `DOCKER_USERNAME`, `DOCKER_PASSWORD` (both optional - only used if set) |
 | `digitalocean` | `DOCKER_USERNAME`/`DOCKER_PASSWORD` (for the image push) + `DIGITALOCEAN_TOKEN` (required) |
-| `ftp` / `sftp` | whichever env var(s) `passwordEnvVar`/`passphraseEnvVar` name - the entry itself only ever holds the env var's NAME, never its value (`key` is a path, same as `ssh`'s `identityFile`) |
+| `ftp` / `sftp` | whichever `BXAGENTS_`-prefixed env var(s) `passwordEnvVar`/`passphraseEnvVar` name - the entry itself only ever holds the env var's NAME, never its value (`key` is a path, same as `ssh`'s `identityFile`) |
 
 ## Validation
 

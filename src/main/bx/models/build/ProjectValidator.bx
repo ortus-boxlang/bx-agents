@@ -346,7 +346,8 @@ class {
 
 	/**
 	 * Validates both `gateways/*` entry kinds: exposure entries (`exposes:
-	 * "agent"|"mcp"|"webui"`, unique `path`) and channel-adapter entries (`type`,
+	 * "agent"|"mcp"|"webui"`, plus a `path` that is well-formed - see
+	 * validateExposurePath - and unique once normalized) and channel-adapter entries (`type`,
 	 * unique `name`, `secretEnvVar` required for `http`, and each push-style
 	 * type's own required `*EnvVar` keys per REQUIRED_ENV_VAR_KEYS).
 	 *
@@ -380,12 +381,22 @@ class {
 				}
 
 				var path = config.path ?: ""
-				if ( !len( path ) ) {
+				if ( !isSimpleValue( path ) ) {
+					arguments.errors.append( "Gateway [#gateway.name#] has a 'path' that is not a string - it must be a URL path like ""/chat""" )
+				} else if ( !len( path ) ) {
 					arguments.errors.append( "Gateway [#gateway.name#] is missing a 'path'" )
-				} else if ( structKeyExists( seenPaths, path ) ) {
-					arguments.errors.append( "Duplicate gateway exposure path [#path#]" )
-				} else {
-					seenPaths[ path ] = true
+				} else if ( validateExposurePath( gateway.name, path, arguments.errors ) ) {
+					// Uniqueness is checked on the NORMALIZED value: "/chat" and
+					// "/chat/" are the same mount to every consumer (both
+					// RouterGenerator and WebUiGenerator strip the trailing
+					// slash), so comparing the raw strings would let two entries
+					// claim one mount point and silently overwrite each other.
+					var normalizedPath = normalizeExposurePath( path )
+					if ( structKeyExists( seenPaths, normalizedPath ) ) {
+						arguments.errors.append( "Duplicate gateway exposure path [#path#]" )
+					} else {
+						seenPaths[ normalizedPath ] = true
+					}
 				}
 
 				// "agent" and "webui" exposure always target the project's single
@@ -432,6 +443,71 @@ class {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Validates an exposure entry's `path` - the most load-bearing value in a
+	 * `gateways/*` entry, because it is spliced into three unrelated places at
+	 * once: a route literal in the generated `config/Router.bx`, a real
+	 * directory under `.build/app` (WebUiGenerator mounts the chat shell at
+	 * `<appDir><path>/index.html`), and a JavaScript string literal inside that
+	 * shell (`API_BASE`). "Non-empty and unique" is not enough for any of them:
+	 * a path missing its leading slash writes the whole UI to a SIBLING of the
+	 * app directory (`.build/appchat`), one containing `..` writes outside
+	 * `.build/app` altogether - where nothing ever cleans it up - and a quote
+	 * character lands unescaped in the generated JS and HTML.
+	 *
+	 * So the rule is deliberately strict, and matches validateWebUiDatabase's
+	 * own whole-segment `..` check below: the path must be rooted at `/`, carry
+	 * no `.` or `..` segments, and use only unreserved URL characters, which
+	 * are also safe as directory names on every platform. A trailing slash IS
+	 * accepted - an ordinary thing to write - and every consumer normalizes it
+	 * away (see normalizeExposurePath).
+	 *
+	 * @gatewayName The gateways/* entry name, for the error message
+	 * @path The entry's non-empty `path` config value
+	 * @errors Accumulator array - append() any validation errors found
+	 *
+	 * @return true when the path is safe for every generator to consume
+	 */
+	private boolean function validateExposurePath( required string gatewayName, required string path, required array errors ) {
+		if ( !arguments.path.startsWith( "/" ) ) {
+			arguments.errors.append( "Gateway [#arguments.gatewayName#] has a 'path' [#arguments.path#] that does not start with '/' - an exposure path is a rooted URL route, and for a 'webui' entry it is also the directory the UI is mounted in under the generated app, so a bare ""chat"" would write that UI beside the app instead of inside it (e.g. ""/chat"")" )
+			return false
+		}
+
+		// Whole-segment match, on both separators, exactly as
+		// validateWebUiDatabase checks its own path: the value is written into
+		// generated source that may be built on one platform and run on
+		// another, and a single ".." segment escapes .build/app entirely.
+		var segments = arguments.path.listToArray( "/\\" )
+		if ( segments.contains( ".." ) || segments.contains( "." ) ) {
+			arguments.errors.append( "Gateway [#arguments.gatewayName#] has a 'path' [#arguments.path#] containing a '.' or '..' segment - it is spliced into a directory path under the generated app, so it must be an already-resolved path that stays inside it (e.g. ""/chat"")" )
+			return false
+		}
+
+		if ( !reFind( "^(/[A-Za-z0-9._~-]+)*/?$", arguments.path ) ) {
+			arguments.errors.append( "Gateway [#arguments.gatewayName#] has an invalid 'path' [#arguments.path#] - it becomes a route literal, a directory name and a JavaScript string, so every segment must be non-empty and contain only letters, digits, '.', '_', '-' or '~' (e.g. ""/chat"" or ""/api/chat"")" )
+			return false
+		}
+
+		return true
+	}
+
+	/**
+	 * Normalizes an exposure `path` the same way its consumers do, so this
+	 * validator compares what the generators will actually build with.
+	 *
+	 * Kept byte-for-byte in step with RouterGenerator.normalizePath() and
+	 * WebUiGenerator.normalizePath(), matching this codebase's per-generator
+	 * self-containment convention.
+	 *
+	 * @path An exposure entry's `path` config value
+	 *
+	 * @return The path with any trailing slash(es) stripped
+	 */
+	private string function normalizeExposurePath( required string path ) {
+		return arguments.path.reReplace( "[\/]+$", "" )
 	}
 
 	/**

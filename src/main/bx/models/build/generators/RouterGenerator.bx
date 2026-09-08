@@ -143,7 +143,12 @@ class {
 	 * @return A bare `route(...).toAi(...)` or `route(...).toMCP(...)` statement string
 	 */
 	private string function renderExposureRoute( required struct entry ) {
-		var path = arguments.entry.config.path ?: ""
+		// Normalized exactly as WebUiGenerator normalizes the same value when it
+		// mounts the chat shell, so the two generators can never disagree about
+		// where an entry lives: a path of "/chat/" mounts at <appDir>/chat with
+		// an API_BASE of "/chat/api", and without this the router would register
+		// "/chat//api/invoke" and every request from the shell would 404.
+		var path = normalizePath( arguments.entry.config.path ?: "" )
 
 		if ( arguments.entry.config.exposes == "agent" ) {
 			return 'route( "#bxLiteral( path )#" ).toAi( "GeneratedAgent" )'
@@ -256,7 +261,7 @@ class {
 	}
 
 	/**
-	 * @path A filesystem path
+	 * @path A filesystem path, or an exposure entry's URL path
 	 *
 	 * @return The path with any trailing slash(es) stripped
 	 */

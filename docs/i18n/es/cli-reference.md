@@ -124,7 +124,7 @@ bxAgents test
 Lanza un proceso real de [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver) apuntado a `.build/app`.
 
 ```bash
-bxAgents serve [--port=8080] [--host=0.0.0.0]
+bxAgents serve [--port=8080] [--host=127.0.0.1]
 ```
 
 - Requiere un `build` previo - falla claramente si `.build/app` no existe.

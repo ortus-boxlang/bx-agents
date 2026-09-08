@@ -16,12 +16,12 @@ Usage: boxlang module:bxAgents <verb> [options]
 
 ## Global flags
 
-These are handled before verb dispatch and never reach a verb - they're only meaningful as the very first token, so they never collide with a verb's own same-named flag.
+These are handled before verb dispatch and never reach a verb.
 
 | Flag | Effect |
 |---|---|
-| `-h`, `--help`, `help` | Print usage (every verb + description) and exit 0. Also printed (exit 1) if no verb is given at all. |
-| `-v`, `--version` | Print `bxAgents v{version}` and exit 0. |
+| `-h`, `--help`, `help` | Print usage (every verb + description) and exit 0. Accepted in **any** position, so `bxAgents clean --help` prints usage rather than running `clean`. Also printed (exit 1) if no verb is given at all. |
+| `-v`, `--version` | Print `bxAgents v{version}` and exit 0. Only meaningful as the very first token, so it never collides with `package --version=1.0.0`. |
 
 ## Every verb accepts
 
@@ -42,6 +42,15 @@ Follows BoxLang's own documented CLI conventions:
 | anything else | a positional (the first becomes the project-root fallback) |
 
 Repeated options: last one wins.
+
+Note the first row: a bare `--option` is a **boolean**, not a way to pass the next token as its value. A flag that requires a value (`--model`, `--message`, `--password`, `--environment`, `--port`, ...) is therefore rejected with an error when written bare, rather than silently becoming `true`:
+
+```
+$ bxAgents hash-password --password hunter2
+Error: --password requires a value - write it as `--password=<value>`.
+```
+
+Always use the `--flag=value` form. The space-separated form is not supported.
 
 ## Verbs
 
@@ -124,11 +133,13 @@ bxAgents test
 Launch a real [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver) process pointed at `.build/app`.
 
 ```bash
-bxAgents serve [--port=8080] [--host=0.0.0.0]
+bxAgents serve [--port=8080] [--host=127.0.0.1]
 ```
 
 - Requires a prior `build` - fails clearly if `.build/app` doesn't exist.
 - Fails clearly if `boxlang-miniserver` isn't found on `PATH`.
+- **Binds to `127.0.0.1` by default.** A generated app is not authenticated unless you configured it to be (the web UI's API-key gate and sign-in are both opt-in), so the default keeps a development server off the network. Pass `--host=0.0.0.0` to bind all interfaces deliberately - the startup line tells you which of the two you got.
+- `--port` must be an integer in 1-65535; anything else fails immediately rather than inside the server process.
 - Writes `.build/miniserver.json` (rewrites enabled, `rewriteFileName: "index.bxm"`, health check on) before launching.
 - Scopes the server's own BoxLang runtime home to `.build/runtime` (via `serverHome`) rather than the shared `~/.boxlang` default, so each project's compiled-class cache and config overrides are isolated - and `clean` sweeps it for free, since it already wipes `.build` wholesale. `invoke --server` gets this too, since it reuses `serve` internally. This does **not** extend to `chat`/`build`/`test`/default `invoke` - see [known limitations](known-limitations.md).
 
@@ -215,8 +226,10 @@ bxAgents inspect [--json]
 Remove a project's `.build/` and `dist/` output.
 
 ```bash
-bxAgents clean
+bxAgents clean [--force]
 ```
 
 - Only ever removes `.build` and `dist` - source conventions (`Agent.bx`, `tools/`, etc.) are never touched.
+- **Refuses to run unless the directory looks like a BxAgents project** (an `Agent.bx` or a `.build/manifest.json`). `dist/` is a common build-output name across the wider ecosystem, so this stops a `clean` in the wrong directory from deleting something unrelated. `--force` skips the check when you genuinely mean it.
+- Prints the absolute path of each directory before removing it.
 - Reports "Nothing to clean" if neither directory exists.

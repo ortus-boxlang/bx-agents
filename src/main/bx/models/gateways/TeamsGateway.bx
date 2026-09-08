@@ -609,8 +609,8 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 				body[ "replyToId" ] = replyTo
 			}
 			lastResponse = callConnectorApi( serviceUrl, conversationId, "POST", "", body )
-			if ( lastResponse.status >= 300 ) {
-				return GatewayDeliveryResult.failure( "Teams Connector send failed (#lastResponse.status#)" )
+			if ( lastResponse.status < 200 || lastResponse.status >= 300 ) {
+				return GatewayDeliveryResult.failure( "Teams Connector send failed (#lastResponse.rawStatus ?: lastResponse.status#): #teamsErrorMessage( lastResponse.body )#" )
 			}
 		}
 
@@ -626,6 +626,25 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		} )
 
 		return result
+	}
+
+	/**
+	 * @responseBody A parsed Connector API response body - errors arrive as `{ error: { code, message } }`
+	 *
+	 * @return The API's own error message, or a generic fallback if absent/unparseable
+	 */
+	private string function teamsErrorMessage( required any responseBody ) {
+		if ( !isStruct( arguments.responseBody ) ) {
+			return "unknown error"
+		}
+		var err = arguments.responseBody.error ?: ""
+		if ( isStruct( err ) && structKeyExists( err, "message" ) ) {
+			return toString( err.message )
+		}
+		if ( structKeyExists( arguments.responseBody, "message" ) ) {
+			return toString( arguments.responseBody.message )
+		}
+		return "unknown error"
 	}
 
 	// -------------------------------------------------------------------------
@@ -661,8 +680,8 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		}
 
 		var response = callConnectorApi( serviceUrl, conversationId, "POST", "", body )
-		if ( response.status >= 300 ) {
-			return GatewayDeliveryResult.failure( "Teams Connector interactive send failed (#response.status#)" )
+		if ( response.status < 200 || response.status >= 300 ) {
+			return GatewayDeliveryResult.failure( "Teams Connector interactive send failed (#response.rawStatus ?: response.status#): #teamsErrorMessage( response.body )#" )
 		}
 
 		var messageId = toString( response.body.id ?: "" )
@@ -755,6 +774,11 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 	// -------------------------------------------------------------------------
 
 	/**
+	 * `bx:http` does NOT throw when a request never completes (DNS failure,
+	 * refused connection, read timeout, TLS error) - it returns a non-numeric
+	 * statusCode such as "Connection Failure", which parses to 0 here. Callers
+	 * MUST therefore treat anything outside 200-299 as an error, never just >= 300.
+	 *
 	 * @serviceUrl The region-specific Connector base URL, taken from the
 	 *             activity that established the conversation - MUST NOT be
 	 *             hardcoded (see the class docblock / Eve's own documented gotcha)
@@ -763,7 +787,7 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 	 * @activityId Optional - present for a PUT-in-place update; empty for a new POST
 	 * @body The request body
 	 *
-	 * @return { status: numeric, body: struct }
+	 * @return { status: numeric (0 when the request never completed), rawStatus: string (the raw `bx:http` statusCode), body: struct }
 	 */
 	private struct function callConnectorApi( required string serviceUrl, required string conversationId, required string method, required string activityId, required struct body ) {
 		var path = "v3/conversations/#urlEncodedComponent( arguments.conversationId )#/activities"
@@ -784,15 +808,17 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 			bx:httpParam type="body" value=jsonSerialize( arguments.body );
 		}
 
-		var statusCode = val( apiResult.statusCode ?: 0 )
+		var rawStatus = toString( apiResult.statusCode ?: "0" )
+		var rawBody = toString( apiResult.fileContent ?: "" )
+		var statusCode = val( listFirst( rawStatus, " " ) )
 		var parsedBody = {}
 		try {
-			parsedBody = len( trim( apiResult.fileContent ?: "" ) ) ? jsonDeserialize( apiResult.fileContent ) : {}
+			parsedBody = len( trim( rawBody ) ) ? jsonDeserialize( rawBody ) : {}
 		} catch ( any e ) {
-			parsedBody = {}
+			parsedBody = { message: "Unparseable response from Teams Connector API (#e.message#): #rawBody#" }
 		}
 
-		return { status: statusCode, body: parsedBody }
+		return { status: statusCode, rawStatus: rawStatus, body: parsedBody }
 	}
 
 	/**

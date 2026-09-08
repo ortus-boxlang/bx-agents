@@ -59,7 +59,7 @@ If you discover a security vulnerability, please send an email to the developmen
 
 ```bash
 ./gradlew downloadBoxLang     # fetches the BoxLang jar into src/test/resources/libs
-./gradlew downloadModules     # fetches bx-ai + bx-ftp (needed by the TestBox suite) into src/test/resources/modules
+./gradlew downloadModules     # fetches bx-ai + bx-ftp + bx-sqlite (needed by the TestBox suite) into src/test/resources/modules
 ./gradlew downloadMiniServer  # fetches boxlang-miniserver into src/test/resources/libs
 box install                   # TestBox, at the repo root
 cd tests && box install && cd ..  # ColdBox, into tests/coldbox (only needed for the ColdBox integration suite)
@@ -95,18 +95,18 @@ Please make sure you use JDK21+.
 
 We are big on coding styles and have included two codings styles for you to follow:
 
--   [cfformat](../.cfformat.json) - For BoxLang/CFML code
--   [Java](../ortus-java-style.xml) - For Java code
+-   [bxformat](.bxformat.json) - For BoxLang/CFML code
+-   [Java](.ortus-java-style.xml) - For Java code
 
 ```bash
-# Format everything
-box run-script format
+# Format the Java sources (what CI runs)
+./gradlew spotlessApply
 
-# Start a watcher, type away, save and auto-format for you
-box run-script format:watch
+# Check formatting without rewriting anything
+./gradlew spotlessCheck
 ```
 
-We recommend that anytime you hack on the core you start the formatter watcher (`box run-script format:watch`). This will monitor your changes and auto-format your code for you.
+`spotless` is scoped to `**/*.java`; the BoxLang sources follow `.bxformat.json` via CommandBox's `cfformat` if you have it installed.
 
 You can also see the Ortus Coding Standards you must follow here: https://github.com/Ortus-Solutions/coding-standards.
 

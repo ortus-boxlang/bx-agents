@@ -33,6 +33,14 @@ class extends="ScheduledGatewayBase" {
 	property name="webSocket";
 	property name="socketConnected" type="boolean" default=false;
 	property name="stopping" type="boolean" default=false;
+
+	/**
+	 * How many sockets reconnect() has deliberately superseded and is still
+	 * expecting a (harmless, ignorable) close callback for, and the tick by
+	 * which those callbacks must have arrived - see handleSocketClose().
+	 */
+	property name="supersededCloses" type="numeric" default=0;
+	property name="supersededCloseDeadline" type="numeric" default=0;
 	property name="streamState" type="struct" default={};
 	property name="chunker";
 
@@ -53,8 +61,12 @@ class extends="ScheduledGatewayBase" {
 	property name="socketOpener";
 
 	static {
-		API_BASE           = "https://slack.com/api/"
-		MAX_MESSAGE_LENGTH = 3900
+		API_BASE                   = "https://slack.com/api/"
+		MAX_MESSAGE_LENGTH         = 3900
+		// How long a socket superseded by reconnect() has to deliver its own
+		// close callback before handleSocketClose() stops ignoring one on its
+		// behalf.
+		SUPERSEDED_CLOSE_WINDOW_MS = 30000
 	}
 
 	/**
@@ -125,6 +137,7 @@ class extends="ScheduledGatewayBase" {
 		}
 
 		variables.stopping = false
+		variables.supersededCloses = 0
 		openConnection()
 	}
 
@@ -192,6 +205,10 @@ class extends="ScheduledGatewayBase" {
 	 * documented reconnect pattern (docs.slack.dev/apis/events-api/using-socket-mode) -
 	 * Slack explicitly supports up to 10 concurrent Socket Mode connections
 	 * per app precisely to make this overlap-then-cutover safe.
+	 *
+	 * The socket being torn down is counted as superseded first, so the close
+	 * callback Slack's echo of our own close frame triggers is ignored rather
+	 * than taken for the brand-new socket going down - see handleSocketClose().
 	 */
 	private void function reconnect() {
 		if ( variables.stopping ) {
@@ -208,6 +225,12 @@ class extends="ScheduledGatewayBase" {
 			return
 		}
 
+		// Expect (and ignore) the close callback the sendClose() below draws out
+		// of the now-superseded socket - see handleSocketClose().
+		if ( !isNull( oldSocket ) ) {
+			variables.supersededCloses = variables.supersededCloses + 1
+			variables.supersededCloseDeadline = getTickCount() + static.SUPERSEDED_CLOSE_WINDOW_MS
+		}
 		closeSocketQuietly( oldSocket, "reconnecting" )
 	}
 
@@ -278,15 +301,50 @@ class extends="ScheduledGatewayBase" {
 	 * unless this is a deliberate stop() (onDisconnect() already set
 	 * `stopping`), reconnects.
 	 *
+	 * No socket reference reaches this callback, so the close of a socket
+	 * reconnect() has already replaced looks exactly like the LIVE one going
+	 * down - and reconnect() always produces one, since Slack echoes the close
+	 * frame it sends. Acting on it would mark the healthy new socket down and
+	 * reconnect again, on every routine `disconnect`/`refresh_requested`
+	 * rotation (roughly hourly), until Slack rate-limits the app. Those closes
+	 * are consumed by isSupersededClose() instead.
+	 *
 	 * @statusCode The websocket close status code
 	 * @reason The close reason Slack (or the JDK) sent
 	 */
 	void function handleSocketClose( required numeric statusCode, required string reason ) {
 		logEvent( "Socket closed: #statusCode# #reason#" )
+		if ( isSupersededClose() ) {
+			logEvent( "Ignored - that close belongs to a socket reconnect() already superseded" )
+			return
+		}
 		variables.socketConnected = false
 		if ( !variables.stopping ) {
 			reconnect()
 		}
+	}
+
+	/**
+	 * Whether the close being handled belongs to a socket reconnect() already
+	 * superseded rather than to the live one, consuming one pending
+	 * supersession when it does.
+	 *
+	 * Pending supersessions expire after SUPERSEDED_CLOSE_WINDOW_MS: should an
+	 * old socket never deliver its close (it errored out instead, say), the
+	 * suppression must not linger and swallow a genuine disconnect later.
+	 *
+	 * @return true when this close should be ignored
+	 */
+	private boolean function isSupersededClose() {
+		if ( variables.supersededCloses <= 0 ) {
+			return false
+		}
+		if ( getTickCount() > variables.supersededCloseDeadline ) {
+			variables.supersededCloses = 0
+			return false
+		}
+		variables.supersededCloses = variables.supersededCloses - 1
+		return true
 	}
 
 	/**

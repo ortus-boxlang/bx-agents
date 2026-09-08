@@ -286,6 +286,18 @@ class extends="ScheduledGatewayBase" {
 	 * decision's value as the button's `callback_data` so a tap arrives back
 	 * as a callback_query update (see handleCallbackQuery()).
 	 *
+	 * The prompt is sent with NO `parse_mode` — Telegram then treats the
+	 * text literally. Title and body are agent-generated and routinely carry
+	 * Markdown-significant characters: a single `_` (a tool name like
+	 * `write_file`, a path) opens an italic entity that is never closed, and
+	 * Telegram rejects the whole call with
+	 * "400 Bad Request: can't parse entities" — the prompt is never shown and
+	 * the run blocks forever on a decision that can never arrive. Escaping
+	 * the interpolated text was the alternative, but escaping rules differ
+	 * per parse mode and a single missed character reintroduces exactly that
+	 * hard failure; losing bold on a title is far cheaper than losing the
+	 * prompt itself, so formatting is dropped rather than escaped here.
+	 *
 	 * @humanRequest The request to present — its title/body/buttons come from presentInteraction()
 	 * @context Identifies the target chat via getConversationID()
 	 *
@@ -301,14 +313,15 @@ class extends="ScheduledGatewayBase" {
 			]
 		}
 
+		// Plain, unformatted text - no parse_mode, no "*...*" title emphasis
+		// (see this method's own docblock for why).
 		var text = len( presentation.getTitle() )
-			? "*#presentation.getTitle()#*" & char( 10 ) & char( 10 ) & presentation.getBody()
+			? presentation.getTitle() & char( 10 ) & char( 10 ) & presentation.getBody()
 			: presentation.getBody()
 
 		var response = callApi( "sendMessage", {
 			chat_id     : arguments.context.getConversationID(),
 			text        : text,
-			parse_mode  : "Markdown",
 			reply_markup: jsonSerialize( keyboard )
 		} )
 

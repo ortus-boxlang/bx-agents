@@ -33,8 +33,8 @@ bxAgents chat       # or: bxAgents serve --port=8080
 
 ## Documentation & Examples
 
-- **[docs/](docs/index.md)** - installation, quick start, one page per convention folder, the build pipeline, the manifest schema, the full CLI reference, deployment/secrets, and known limitations. Built and published with [bx-sites](https://ortus-boxlang.github.io/bx-sites/development/) *(there's no `main` branch published yet, so the docs currently only live under `/development/`)*; see [Working on the docs](#working-on-the-docs).
-- **[examples/](examples/README.md)** - real, buildable sample projects: six core-convention examples (a minimal agent, an HTTP-exposed agent, a scheduled agent, an MCP agent, a multi-agent team, and the web chat UI) plus one per push-style chat-platform gateway (Telegram, Slack, Discord, Email, WhatsApp Cloud, Teams, Twilio, GitHub, Signal), each demonstrating one convention folder end-to-end.
+- **[docs/](docs/index.md)** - installation, quick start, one page per convention folder, the build pipeline, the manifest schema, the full CLI reference, deployment/secrets, and known limitations. Published at **[bxagents.ai](https://bxagents.ai)**, built with [bx-sites](https://ortus-boxlang.github.io/bx-sites/development/); see [Working on the docs](#working-on-the-docs).
+- **[examples/](examples/README.md)** - real, buildable sample projects: nine core-convention examples (a minimal agent, a simple agent, a class-based agent, an HTTP-exposed agent, a scheduled agent, an MCP agent, a multi-agent team, the web chat UI, and a composite "advanced" agent) plus one per push-style chat-platform gateway (Telegram, Slack, Discord, Email, WhatsApp Cloud, Teams, Twilio, GitHub, Signal), each demonstrating one convention folder end-to-end.
 
 ## Why build-time assembly?
 
@@ -64,7 +64,7 @@ Before you get started, fetch the BoxLang binary (until this module is published
 
 ```bash
 ./gradlew downloadBoxLang
-./gradlew downloadModules        # bx-ai + bx-ftp, needed by the TestBox suite
+./gradlew downloadModules        # bx-ai + bx-ftp + bx-sqlite, needed by the TestBox suite
 ./gradlew downloadMiniServer     # boxlang-miniserver, needed by the ColdBox integration suite
 ```
 
@@ -78,7 +78,7 @@ Before you get started, fetch the BoxLang binary (until this module is published
 | `testColdBoxIntegration` | Boots a real `boxlang-miniserver` against a generated app and hits a `toAi()` route over real HTTP, via `runColdBoxIntegrationTests.bxs`. Requires `tests/coldbox/` (`box install` in `tests/`) and the miniserver jar. |
 | `verifyExamples` | Builds every project under `examples/` through the real build pipeline via `verifyExamples.bxs` - a regression net across the whole feature matrix. |
 | `downloadBoxLang` | Downloads the BoxLang binary into `src/test/resources/libs`. |
-| `downloadModules` | Downloads supporting BoxLang modules (bx-ai, bx-ftp) into `src/test/resources/modules`. |
+| `downloadModules` | Downloads supporting BoxLang modules (bx-ai, bx-ftp, bx-sqlite) into `src/test/resources/modules`. |
 | `downloadMiniServer` | Downloads the `boxlang-miniserver` binary into `src/test/resources/libs`. |
 | `jar` / `shadowJar` | Packages compiled classes/resources into a JAR under `build/libs`. |
 | `javadoc` | Generates Javadocs into `build/docs/javadoc`. |
@@ -99,7 +99,7 @@ If running tests via the VSCode test explorer, remove the `/src/main/resources` 
 
 CI clones, tests, packages, and deploys this module to ForgeBox and the Ortus S3 accounts. The following repository environment variables are required (most are already set at the org level):
 
-- `FORGEBOX_TOKEN` - the Ortus ForgeBox API token
+- `FORGEBOX_API_TOKEN` - the Ortus ForgeBox API token (the name `release.yml` actually reads)
 - `AWS_ACCESS_KEY` / `AWS_ACCESS_SECRET` - the S3 credentials
 
 Contact `#infrastructure` for these credentials if needed.
@@ -126,9 +126,9 @@ Every page starts with a small frontmatter block (`title`, `icon`, `summary`, `d
 
 The Spanish/German/Japanese translations under `docs/i18n/` cover page content; the surrounding theme chrome (search placeholder, "On this page," "Edit this page," the 404 page, ...) is translated automatically too - bx-sites ships built-in `es`/`de`/`ja` chrome translations out of the box, so nothing extra needs configuring for those three locales.
 
-Pushes to `development` publish to [`/development/`](https://bxagents.ai/development/) and pushes to `main` publish to the site root, via `.github/workflows/docs.yml` - one folder per version, and both stay live at once. There is no `main` branch yet, so the root currently redirects into `/development/`.
+`.github/workflows/docs.yml` publishes straight to the site root (<https://bxagents.ai>) for whichever branch it runs on. Versioning is handled inside the docs themselves via bx-sites' own `versions:` support - `bxsites.yaml`'s `versions.default` (`1.0.x`) builds at the root, and in-progress docs build under `/next/`.
 
-This follows [bx-sites' own documented deployment approach](https://ortus-boxlang.github.io/bx-sites/development/guides/deployment/): the workflow builds `site/` and pushes it to a **`gh-pages`** branch, each branch into its own `destination_dir` with `keep_files: true`, so the two versions never overwrite each other and a push only rebuilds the branch it happened on.
+This follows [bx-sites' own documented deployment approach](https://ortus-boxlang.github.io/bx-sites/development/guides/deployment/): the workflow builds `site/` and pushes it to a **`gh-pages`** branch with `keep_files: true`.
 
 The repository's **Settings -> Pages -> Build and deployment -> Source** must be **Deploy from a branch** -> **`gh-pages`** -> **`/ (root)`**. The first successful run creates `gh-pages`, so set it after that run completes; no workflow file can set it for itself.
 

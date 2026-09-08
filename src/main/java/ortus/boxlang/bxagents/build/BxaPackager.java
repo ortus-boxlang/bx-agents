@@ -204,17 +204,57 @@ public class BxaPackager {
 	}
 
 	/**
-	 * Translates a simple glob (`*` = any run of characters, `?` = one
-	 * character, everything else literal) into a regex Pattern matched
-	 * against a `/`-separated relative path.
+	 * Translates a `.bxaignore` glob into a regex Pattern, matched with
+	 * {@code Pattern.matcher( rel ).matches()} - i.e. against a file's WHOLE
+	 * `/`-separated path relative to the app directory.
+	 * <p>
+	 * Only regular files ever become zip entries (a directory is never an
+	 * entry of its own), so a pattern naming a DIRECTORY has to be translated
+	 * into one matching the files BENEATH it or it would silently exclude
+	 * nothing at all - which is exactly how a `scratch/` line could once leave
+	 * `scratch/prod-credentials.json` sitting inside a shipped `.bxa`. The
+	 * `.gitignore`-like semantics implemented here:
+	 * <ul>
+	 * <li>Within a pattern, {@code *} matches any run of characters (including
+	 * `/`), {@code ?} matches any single character, and every other character
+	 * is literal.</li>
+	 * <li><b>Trailing `/`</b> (e.g. {@code scratch/}) - a DIRECTORY pattern:
+	 * matches every file beneath a matching directory ({@code scratch/notes.txt},
+	 * {@code scratch/a/b.txt}) and never a plain FILE named {@code scratch}.</li>
+	 * <li><b>No `/` anywhere</b> (e.g. {@code secrets}, {@code *.log}) - matched
+	 * at ANY depth: the file itself ({@code secrets}, {@code tools/secrets}) and,
+	 * when it is a directory, everything beneath it ({@code secrets/keys.json},
+	 * {@code tools/secrets/keys.json}).</li>
+	 * <li><b>Contains or starts with `/`</b> (e.g. {@code config/local},
+	 * {@code /dist}) - ANCHORED at the app directory's root: that exact path,
+	 * plus everything beneath it when it turns out to be a directory. A leading
+	 * `/` is an anchoring marker only and is stripped, since the relative paths
+	 * being matched never carry one.</li>
+	 * </ul>
+	 * A pattern of nothing but slashes can never name a file and so matches
+	 * nothing.
 	 *
 	 * @param glob A `.bxaignore` glob pattern
 	 *
 	 * @return The equivalent compiled regex Pattern
 	 */
 	private static Pattern globToPattern( String glob ) {
+		boolean	directoryOnly	= glob.endsWith( "/" );
+		String	trimmed			= glob.replaceAll( "/+$", "" );
+		boolean	rooted			= trimmed.startsWith( "/" );
+		String	core			= trimmed.replaceAll( "^/+", "" );
+		boolean	anchored		= rooted || core.contains( "/" );
+
+		// nothing but slashes - never matches any file, rather than matching everything
+		if ( core.isEmpty() ) {
+			return Pattern.compile( "(?!)" );
+		}
+
 		StringBuilder regex = new StringBuilder();
-		for ( char c : glob.toCharArray() ) {
+		if ( !anchored ) {
+			regex.append( "(?:.*/)?" );
+		}
+		for ( char c : core.toCharArray() ) {
 			switch ( c ) {
 				case '*' -> regex.append( ".*" );
 				case '?' -> regex.append( "." );
@@ -227,6 +267,10 @@ public class BxaPackager {
 				}
 			}
 		}
+		// a directory pattern matches only what's UNDER it; anything else also
+		// matches the path itself, in case it names a file rather than a directory
+		regex.append( directoryOnly ? "/.*" : "(?:/.*)?" );
+
 		return Pattern.compile( regex.toString() );
 	}
 

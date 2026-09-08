@@ -41,6 +41,14 @@ class extends="ScheduledGatewayBase" {
 	property name="webSocket";
 	property name="socketConnected" type="boolean" default=false;
 	property name="stopping" type="boolean" default=false;
+
+	/**
+	 * How many sockets reconnect() has deliberately superseded and is still
+	 * expecting a (harmless, ignorable) close callback for, and the tick by
+	 * which those callbacks must have arrived - see handleSocketClose().
+	 */
+	property name="supersededCloses" type="numeric" default=0;
+	property name="supersededCloseDeadline" type="numeric" default=0;
 	property name="sessionId" type="string" default="";
 	property name="resumeGatewayUrl" type="string" default="";
 	property name="lastSeq";
@@ -75,6 +83,10 @@ class extends="ScheduledGatewayBase" {
 		// Close codes that ARE reconnectable but explicitly invalidate the
 		// current session ("reconnect and start a NEW one", not a resume).
 		NEW_SESSION_REQUIRED = [ 4007, 4009 ]
+		// How long a socket superseded by reconnect() has to deliver its own
+		// close callback before handleSocketClose() stops ignoring one on its
+		// behalf.
+		SUPERSEDED_CLOSE_WINDOW_MS = 30000
 	}
 
 	/**
@@ -147,6 +159,7 @@ class extends="ScheduledGatewayBase" {
 		}
 
 		variables.stopping = false
+		variables.supersededCloses = 0
 		openConnection()
 	}
 
@@ -232,6 +245,11 @@ class extends="ScheduledGatewayBase" {
 	 * same overlap-then-cutover shape SlackGateway uses, safe here too since
 	 * we don't send Identify/Resume until the fresh socket's own Hello arrives.
 	 *
+	 * The socket being torn down is counted as superseded first, so the close
+	 * callback Discord's echo of our own close frame triggers is ignored
+	 * rather than taken for the brand-new socket going down - see
+	 * handleSocketClose().
+	 *
 	 * @forceFreshSession Clears sessionId/resumeGatewayUrl first, forcing a
 	 *                     fresh Identify rather than a Resume on the new connection
 	 */
@@ -254,6 +272,12 @@ class extends="ScheduledGatewayBase" {
 			return
 		}
 
+		// Expect (and ignore) the close callback the sendClose() below draws out
+		// of the now-superseded socket - see handleSocketClose().
+		if ( !isNull( oldSocket ) ) {
+			variables.supersededCloses = variables.supersededCloses + 1
+			variables.supersededCloseDeadline = getTickCount() + static.SUPERSEDED_CLOSE_WINDOW_MS
+		}
 		closeSocketQuietly( oldSocket, "reconnecting" )
 	}
 
@@ -397,10 +421,28 @@ class extends="ScheduledGatewayBase" {
 	}
 
 	/**
+	 * DiscordSocketListener's onClose() callback - marks the connection down
+	 * and, unless the close is fatal or we're deliberately stopping,
+	 * reconnects (starting a fresh session when the close code demands one).
+	 *
+	 * No socket reference reaches this callback, so the close of a socket
+	 * reconnect() has already replaced looks exactly like the LIVE one going
+	 * down - and reconnect() always produces one, since Discord echoes the
+	 * close frame it sends. Acting on it would mark the healthy new socket
+	 * down and reconnect again, burning Identify calls against Discord's
+	 * 1000/day cap. Those closes are consumed by isSupersededClose() instead.
+	 *
 	 * @statusCode A close code (see FATAL_CLOSE_CODES/NEW_SESSION_REQUIRED above)
+	 * @reason The close reason text
 	 */
 	void function handleSocketClose( required numeric statusCode, required string reason ) {
 		logEvent( "Socket closed: #statusCode# #reason#" )
+
+		if ( isSupersededClose() ) {
+			logEvent( "Ignored - that close belongs to a socket reconnect() already superseded" )
+			return
+		}
+
 		variables.socketConnected = false
 
 		if ( static.FATAL_CLOSE_CODES.find( arguments.statusCode ) ) {
@@ -415,6 +457,29 @@ class extends="ScheduledGatewayBase" {
 		}
 
 		reconnect( forceFreshSession: static.NEW_SESSION_REQUIRED.find( arguments.statusCode ) > 0 )
+	}
+
+	/**
+	 * Whether the close being handled belongs to a socket reconnect() already
+	 * superseded rather than to the live one, consuming one pending
+	 * supersession when it does.
+	 *
+	 * Pending supersessions expire after SUPERSEDED_CLOSE_WINDOW_MS: should an
+	 * old socket never deliver its close (it errored out instead, say), the
+	 * suppression must not linger and swallow a genuine disconnect later.
+	 *
+	 * @return true when this close should be ignored
+	 */
+	private boolean function isSupersededClose() {
+		if ( variables.supersededCloses <= 0 ) {
+			return false
+		}
+		if ( getTickCount() > variables.supersededCloseDeadline ) {
+			variables.supersededCloses = 0
+			return false
+		}
+		variables.supersededCloses = variables.supersededCloses - 1
+		return true
 	}
 
 	/**
@@ -638,7 +703,9 @@ class extends="ScheduledGatewayBase" {
 	 * @event The outbound event carrying the text to deliver
 	 * @context Identifies the target channel and, if present, the message to reply to
 	 *
-	 * @return The delivery result, keyed by the last chunk's own Discord message id
+	 * @return The delivery result, keyed by the last chunk's own Discord
+	 *         message id - or a failure result if any chunk came back with a
+	 *         non-2xx status, transport failures included (see restCall())
 	 */
 	GatewayDeliveryResult function deliver( required GatewayEvent event, required GatewayContext context ) {
 		var text = toString( arguments.event.getData().text ?: "" )
@@ -657,7 +724,7 @@ class extends="ScheduledGatewayBase" {
 				body[ "message_reference" ] = { message_id: replyToId }
 			}
 			lastResponse = restCall( "POST", "/channels/#channel#/messages", body )
-			if ( lastResponse.status >= 300 ) {
+			if ( !isSuccessStatus( lastResponse.status ) ) {
 				return GatewayDeliveryResult.failure( "Discord POST messages failed (#lastResponse.status#): #lastResponse.body.message ?: 'unknown error'#" )
 			}
 		}
@@ -693,7 +760,7 @@ class extends="ScheduledGatewayBase" {
 				startBody[ "message_reference" ] = { message_id: replyToId }
 			}
 			var startResponse = restCall( "POST", "/channels/#channel#/messages", startBody )
-			if ( startResponse.status >= 300 ) {
+			if ( !isSuccessStatus( startResponse.status ) ) {
 				return GatewayDeliveryResult.failure( "Discord POST messages (stream start) failed (#startResponse.status#): #startResponse.body.message ?: 'unknown error'#" )
 			}
 			variables.streamState[ executionId ] = { channel: channel, messageId: startResponse.body.id, buffer: "", lastFlushTick: getTickCount() }
@@ -706,7 +773,7 @@ class extends="ScheduledGatewayBase" {
 		if ( isComplete || dueForFlush ) {
 			var updateResponse = restCall( "PATCH", "/channels/#state.channel#/messages/#state.messageId#", { content: state.buffer } )
 			state.lastFlushTick = getTickCount()
-			if ( updateResponse.status >= 300 ) {
+			if ( !isSuccessStatus( updateResponse.status ) ) {
 				return GatewayDeliveryResult.failure( "Discord PATCH message failed (#updateResponse.status#): #updateResponse.body.message ?: 'unknown error'#" )
 			}
 		}
@@ -759,7 +826,7 @@ class extends="ScheduledGatewayBase" {
 		}
 
 		var response = restCall( "POST", "/channels/#channel#/messages", body )
-		if ( response.status >= 300 ) {
+		if ( !isSuccessStatus( response.status ) ) {
 			return GatewayDeliveryResult.failure( "Discord POST messages (HITL prompt) failed (#response.status#): #response.body.message ?: 'unknown error'#" )
 		}
 
@@ -818,11 +885,29 @@ class extends="ScheduledGatewayBase" {
 	// -------------------------------------------------------------------------
 
 	/**
+	 * Whether a restCall() status is a successful Discord response. Anything
+	 * outside 200-299 is an error, crucially INCLUDING the 0 a transport
+	 * failure yields (see restCall()) - which a bare `>= 300` check would let
+	 * through as a successful delivery.
+	 *
+	 * @status A restCall() response's own `status`
+	 *
+	 * @return true only for a 2xx status
+	 */
+	private boolean function isSuccessStatus( required numeric status ) {
+		return arguments.status >= 200 && arguments.status < 300
+	}
+
+	/**
 	 * @httpMethod "GET", "POST", or "PATCH"
 	 * @path A path relative to API_BASE, e.g. "/channels/123/messages"
 	 * @body The request body (ignored for GET)
 	 *
-	 * @return { status: numeric, body: struct } - body is the parsed JSON response
+	 * @return { status: numeric, body: struct } - `status` is the numeric HTTP
+	 *         status, 0 when the request never completed at all, and `body`
+	 *         the parsed JSON response (or a `{ message }` struct carrying the
+	 *         raw status and content when there is no JSON to parse). Callers
+	 *         must gate on isSuccessStatus(), never on `>= 300`.
 	 */
 	private struct function restCall( required string httpMethod, required string path, struct body = {} ) {
 		if ( !isNull( variables.apiCaller ) ) {
@@ -843,12 +928,27 @@ class extends="ScheduledGatewayBase" {
 			}
 		}
 
-		var statusCode = val( apiResult.statusCode ?: 0 )
+		// `bx:http` does NOT throw when it cannot complete a request at all
+		// (DNS failure, connection refused, read timeout, TLS error) - it comes
+		// back with a NON-numeric statusCode, which val() floors to 0. Parsed
+		// the same way DigitalOceanTarget.assertOk() does (listFirst() strips
+		// the reason phrase off the "200 OK" form bx:http also returns), that
+		// leaves such a failure at 0, and isSuccessStatus() then reports it as
+		// the error it is rather than as a successful delivery.
+		var rawStatus = toString( apiResult.statusCode ?: "" )
+		var rawBody = toString( apiResult.fileContent ?: "" )
+		var statusCode = val( listFirst( len( rawStatus ) ? rawStatus : "0", " " ) )
 		var parsedBody = {}
 		try {
-			parsedBody = len( trim( apiResult.fileContent ?: "" ) ) ? jsonDeserialize( apiResult.fileContent ) : {}
+			parsedBody = len( trim( rawBody ) ) ? jsonDeserialize( rawBody ) : {}
 		} catch ( any e ) {
-			parsedBody = { message: "Unparseable response from Discord: #e.message#" }
+			parsedBody = { message: "Unparseable response from Discord (raw status '#rawStatus#'): #rawBody#" }
+		}
+		// Nothing reached Discord on a transport failure, so there is no JSON
+		// error body to report - surface bx:http's own raw status/content so
+		// the failure is diagnosable from the delivery result alone.
+		if ( !isSuccessStatus( statusCode ) && isStruct( parsedBody ) && !len( parsedBody.message ?: "" ) ) {
+			parsedBody[ "message" ] = "Request failed with raw status '#rawStatus#': #rawBody#"
 		}
 
 		return { status: statusCode, body: parsedBody }

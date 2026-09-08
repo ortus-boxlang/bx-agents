@@ -2,11 +2,22 @@
  * `clean` CLI verb - recursively removes a project's `.build/` and `dist/`
  * output directories, without touching anything else (source conventions,
  * Agent.bx, etc. are never touched).
+ *
+ * Refuses to run at all unless the target directory is recognizably a BX
+ * Agents project - it must carry an `Agent.bx` or a `.build/manifest.json`
+ * (see `isProjectRoot()` for why those two markers). Every sibling verb
+ * already fails fast on a directory that isn't a project; `clean` did not,
+ * and it is the one verb that DELETES: the project root defaults to the
+ * shell's current working directory and can be any bare positional path
+ * (`bxAgents clean ~/projects`), and `dist/` is one of the most common
+ * build-output names in the wider ecosystem - so one wrong terminal tab
+ * silently destroyed an unrelated project's output. `--force` bypasses the
+ * marker check for the deliberate "I know what I'm doing" case.
  */
 class {
 
 	/**
-	 * @options { projectRoot (required, absolute path) }
+	 * @options { projectRoot (required, absolute path), force (optional boolean - clean even when the directory carries no BX Agents project marker) }
 	 */
 	struct function run( struct options = {} ) {
 		var projectRoot = trim( arguments.options.projectRoot ?: "" )
@@ -15,20 +26,58 @@ class {
 		}
 
 		var root = projectRoot.reReplace( "[\/]+$", "" )
-		var removed = []
 
+		if ( !( arguments.options.force ?: false ) && !isProjectRoot( root ) ) {
+			throw(
+				type    = "BxAgents.NotAProject",
+				message = "[#root#] does not look like a BX Agents project - expected an Agent.bx or a .build/manifest.json there. Refusing to remove .build/ and dist/. Pass --force to clean it anyway."
+			)
+		}
+
+		var targets = []
 		for ( var folder in [ ".build", "dist" ] ) {
 			var path = root & "/" & folder
 			if ( directoryExists( path ) ) {
-				directoryDelete( path, true )
-				removed.append( folder )
+				targets.append( path )
 			}
+		}
+
+		if ( !targets.len() ) {
+			return {
+				exitCode : 0,
+				message  : "Nothing to clean"
+			}
+		}
+
+		// Say what is being deleted, path by path, BEFORE deleting it - a
+		// recursive delete should never be silent about its targets.
+		for ( var target in targets ) {
+			println( "Removing #target#" )
+			directoryDelete( target, true )
 		}
 
 		return {
 			exitCode : 0,
-			message  : removed.len() ? "Removed: #removed.toList( ', ' )#" : "Nothing to clean"
+			message  : "Removed: #targets.toList( ', ' )#"
 		}
+	}
+
+	/**
+	 * Is this directory recognizably a BX Agents project? Keyed off the same
+	 * two markers its sibling verbs already are: an `Agent.bx` (what `build`'s
+	 * own AgentConfigResolver requires, and what `new` refuses to overwrite)
+	 * or a `.build/manifest.json` (what `package`/`inspect` require). Either
+	 * one alone is enough - a project mid-scaffold has no build yet, and a
+	 * build output whose Agent.bx has since been moved away is still this
+	 * project's output to clean.
+	 *
+	 * @root Absolute path to the candidate project root, trailing slash stripped
+	 *
+	 * @return True if the directory carries either project marker
+	 */
+	private boolean function isProjectRoot( required string root ) {
+		return fileExists( arguments.root & "/Agent.bx" )
+			|| fileExists( arguments.root & "/.build/manifest.json" )
 	}
 
 }

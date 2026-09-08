@@ -442,8 +442,8 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 				body[ "From" ] = variables.from
 			}
 			lastResponse = callApi( body )
-			if ( lastResponse.status >= 300 ) {
-				return GatewayDeliveryResult.failure( "Twilio Messages API send failed (#lastResponse.status#): #twilioErrorMessage( lastResponse.body )#" )
+			if ( lastResponse.status < 200 || lastResponse.status >= 300 ) {
+				return GatewayDeliveryResult.failure( "Twilio Messages API send failed (#lastResponse.rawStatus ?: lastResponse.status#): #twilioErrorMessage( lastResponse.body )#" )
 			}
 		}
 
@@ -506,8 +506,8 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		}
 
 		var response = callApi( body )
-		if ( response.status >= 300 ) {
-			return GatewayDeliveryResult.failure( "Twilio Messages API send (HITL request) failed (#response.status#): #twilioErrorMessage( response.body )#" )
+		if ( response.status < 200 || response.status >= 300 ) {
+			return GatewayDeliveryResult.failure( "Twilio Messages API send (HITL request) failed (#response.rawStatus ?: response.status#): #twilioErrorMessage( response.body )#" )
 		}
 
 		variables.pendingApprovals[ to ] = {
@@ -560,9 +560,14 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 	// -------------------------------------------------------------------------
 
 	/**
+	 * `bx:http` does NOT throw when a request never completes (DNS failure,
+	 * refused connection, read timeout, TLS error) - it returns a non-numeric
+	 * statusCode such as "Connection Failure", which parses to 0 here. Callers
+	 * MUST therefore treat anything outside 200-299 as an error, never just >= 300.
+	 *
 	 * @body Form fields for the outbound Messages.json POST
 	 *
-	 * @return { status: numeric, body: struct }
+	 * @return { status: numeric (0 when the request never completed), rawStatus: string (the raw `bx:http` statusCode), body: struct }
 	 */
 	private struct function callApi( required struct body ) {
 		if ( !isNull( variables.apiCaller ) ) {
@@ -580,15 +585,17 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 			}
 		}
 
-		var statusCode = val( apiResult.statusCode ?: 0 )
+		var rawStatus = toString( apiResult.statusCode ?: "0" )
+		var rawBody = toString( apiResult.fileContent ?: "" )
+		var statusCode = val( listFirst( rawStatus, " " ) )
 		var parsedBody = {}
 		try {
-			parsedBody = len( trim( apiResult.fileContent ?: "" ) ) ? jsonDeserialize( apiResult.fileContent ) : {}
+			parsedBody = len( trim( rawBody ) ) ? jsonDeserialize( rawBody ) : {}
 		} catch ( any e ) {
-			parsedBody = { message: "Unparseable response from Twilio API: #e.message#" }
+			parsedBody = { message: "Unparseable response from Twilio API (#e.message#): #rawBody#" }
 		}
 
-		return { status: statusCode, body: parsedBody }
+		return { status: statusCode, rawStatus: rawStatus, body: parsedBody }
 	}
 
 }

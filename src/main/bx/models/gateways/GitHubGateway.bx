@@ -568,8 +568,8 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 
 		for ( var i = 1; i <= chunks.len(); i++ ) {
 			lastResponse = postComment( arguments.context, chunks[ i ] & char( 10 ) & char( 10 ) & static.LOOP_GUARD_MARKER )
-			if ( lastResponse.status >= 300 ) {
-				return GatewayDeliveryResult.failure( "GitHub comment post failed (#lastResponse.status#): #githubErrorMessage( lastResponse.body )#" )
+			if ( lastResponse.status < 200 || lastResponse.status >= 300 ) {
+				return GatewayDeliveryResult.failure( "GitHub comment post failed (#lastResponse.rawStatus ?: lastResponse.status#): #githubErrorMessage( lastResponse.body )#" )
 			}
 		}
 
@@ -645,8 +645,8 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 
 		var body = buildApprovalBodyText( presentation, allowedDecisions ) & char( 10 ) & char( 10 ) & static.LOOP_GUARD_MARKER
 		var response = postComment( arguments.context, body )
-		if ( response.status >= 300 ) {
-			return GatewayDeliveryResult.failure( "GitHub comment post (HITL request) failed (#response.status#): #githubErrorMessage( response.body )#" )
+		if ( response.status < 200 || response.status >= 300 ) {
+			return GatewayDeliveryResult.failure( "GitHub comment post (HITL request) failed (#response.rawStatus ?: response.status#): #githubErrorMessage( response.body )#" )
 		}
 
 		variables.pendingApprovals[ conversationId ] = {
@@ -705,11 +705,16 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 	// -------------------------------------------------------------------------
 
 	/**
+	 * `bx:http` does NOT throw when a request never completes (DNS failure,
+	 * refused connection, read timeout, TLS error) - it returns a non-numeric
+	 * statusCode such as "Connection Failure", which parses to 0 here. Callers
+	 * MUST therefore treat anything outside 200-299 as an error, never just >= 300.
+	 *
 	 * @path A path relative to apiBaseUrl, e.g. "repos/owner/repo/issues/1/comments"
 	 * @method HTTP method
 	 * @body The request body
 	 *
-	 * @return { status: numeric, body: struct }
+	 * @return { status: numeric (0 when the request never completed), rawStatus: string (the raw `bx:http` statusCode), body: struct }
 	 */
 	private struct function callApi( required string path, required string method, required struct body ) {
 		if ( !isNull( variables.apiCaller ) ) {
@@ -725,15 +730,17 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 			bx:httpParam type="body" value=jsonSerialize( arguments.body );
 		}
 
-		var statusCode = val( apiResult.statusCode ?: 0 )
+		var rawStatus = toString( apiResult.statusCode ?: "0" )
+		var rawBody = toString( apiResult.fileContent ?: "" )
+		var statusCode = val( listFirst( rawStatus, " " ) )
 		var parsedBody = {}
 		try {
-			parsedBody = len( trim( apiResult.fileContent ?: "" ) ) ? jsonDeserialize( apiResult.fileContent ) : {}
+			parsedBody = len( trim( rawBody ) ) ? jsonDeserialize( rawBody ) : {}
 		} catch ( any e ) {
-			parsedBody = { message: "Unparseable response from GitHub API: #e.message#" }
+			parsedBody = { message: "Unparseable response from GitHub API (#e.message#): #rawBody#" }
 		}
 
-		return { status: statusCode, body: parsedBody }
+		return { status: statusCode, rawStatus: rawStatus, body: parsedBody }
 	}
 
 }

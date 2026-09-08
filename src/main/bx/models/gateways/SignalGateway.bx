@@ -81,6 +81,17 @@ class extends="ScheduledGatewayBase" {
 
 	property name="connectionOpen" type="boolean" default=false;
 	property name="stopping" type="boolean" default=false;
+
+	/**
+	 * True while ONE connect attempt is outstanding - from the moment an
+	 * attempt (or a delayed reconnect) is claimed until it either connects,
+	 * fails, or is abandoned. Both reconnect entry points (the backoff chain
+	 * in scheduleReconnect() and the 30s watchdog in checkConnectionHealth())
+	 * funnel through beginConnectAttempt(), so they can never multiply into
+	 * several self-perpetuating connect chains against the same daemon - which
+	 * would otherwise mean every inbound message being handled once per chain.
+	 */
+	property name="connectPending" type="boolean" default=false;
 	property name="lastActivityTick" type="numeric" default="0";
 	property name="reconnectBackoffMs" type="numeric" default="2000";
 	property name="httpClientInstance";
@@ -197,12 +208,15 @@ class extends="ScheduledGatewayBase" {
 	}
 
 	/**
-	 * Marks this gateway as stopping so the SSE read loop and any in-flight
-	 * reconnect backoff stop retrying, and flags the connection as closed.
+	 * Marks this gateway as stopping so the SSE read loop, the inbound
+	 * handlers (see handleSseEvent()) and any in-flight reconnect backoff all
+	 * stop, flags the connection as closed, and releases the connect guard so
+	 * a later start() is never blocked by an attempt this stop abandoned.
 	 */
 	void function onDisconnect() {
 		variables.stopping = true
 		variables.connectionOpen = false
+		endConnectAttempt()
 	}
 
 	/**
@@ -228,6 +242,11 @@ class extends="ScheduledGatewayBase" {
 	 * covers the case Hermes's own health monitor exists for: the stream
 	 * looks "open" but has gone quiet (no SSE keepalive/activity for 120s) -
 	 * ping /api/v1/check, and force a reconnect if that fails too.
+	 *
+	 * Both reconnect calls below go through startConnection(), which is a
+	 * no-op while a connect attempt is already outstanding - this watchdog
+	 * fires every 30s and would otherwise stack a fresh connect chain on top
+	 * of the backoff chain already retrying, once per tick.
 	 */
 	void function checkConnectionHealth() {
 		if ( variables.stopping ) {
@@ -286,15 +305,52 @@ class extends="ScheduledGatewayBase" {
 
 	/**
 	 * Entry point for (re)opening the SSE connection - delegates to the
-	 * test seam `connector`, if set (see its own docblock), otherwise
-	 * starts the real async connect chain via connectAsync().
+	 * test seam `connector`, if set (see its own docblock), otherwise claims
+	 * the single connect slot (see beginConnectAttempt()) and starts the real
+	 * async connect chain via connectAsync(). A no-op when an attempt is
+	 * already outstanding, so the watchdog can never stack a second connect
+	 * chain on top of the backoff chain already retrying.
 	 */
 	private void function startConnection() {
 		if ( !isNull( variables.connector ) ) {
 			variables.connector()
 			return
 		}
+		if ( !beginConnectAttempt() ) {
+			logEvent( "Connect attempt already outstanding - not starting another" )
+			return
+		}
 		connectAsync()
+	}
+
+	/**
+	 * Claims the single "a connect attempt is outstanding" slot - the guard
+	 * every reconnect path shares, so at most one attempt is ever in flight.
+	 * Always paired with an endConnectAttempt() on EVERY outcome (connected,
+	 * failed, stopping), or the gateway would wedge permanently disconnected.
+	 *
+	 * @return true if the caller now owns the outstanding attempt, false if one is already in flight
+	 */
+	private boolean function beginConnectAttempt() {
+		var claimed = false
+		lock name="signal-connect-#variables.name#" type="exclusive" timeout="10" {
+			if ( !variables.connectPending ) {
+				variables.connectPending = true
+				claimed = true
+			}
+		}
+		return claimed
+	}
+
+	/**
+	 * Releases the connect guard claimed by beginConnectAttempt(), letting
+	 * the next reconnect path (backoff chain or watchdog) claim it. Safe to
+	 * call when nothing is claimed.
+	 */
+	private void function endConnectAttempt() {
+		lock name="signal-connect-#variables.name#" type="exclusive" timeout="10" {
+			variables.connectPending = false
+		}
 	}
 
 	/**
@@ -316,30 +372,49 @@ class extends="ScheduledGatewayBase" {
 	 * blocking onConnect()/gateway start. The actual line-by-line read loop
 	 * (handleSseStream()) runs later, on the CompletableFuture's own
 	 * async-executor thread, once the connection is established.
+	 *
+	 * ALWAYS called with the connect guard already claimed (by
+	 * startConnection() or scheduleReconnect()) - every exit path below
+	 * therefore either releases it (endConnectAttempt()) or hands it on to
+	 * the callback that will.
 	 */
 	private void function connectAsync() {
 		if ( variables.stopping ) {
+			endConnectAttempt()
 			return
 		}
 
-		var client = resolveHttpClient()
-		var eventsUrl = "#variables.httpUrl#/api/v1/events?account=#urlEncodedFormat( variables.account )#"
-		var uri = createObject( "java", "java.net.URI" ).create( eventsUrl )
-		var reqBuilder = createObject( "java", "java.net.http.HttpRequest" ).newBuilder()
-		reqBuilder.uri( uri )
-		reqBuilder.header( "Accept", "text/event-stream" )
-		reqBuilder.GET()
-		var httpReq = reqBuilder.build()
-		var bodyHandler = createObject( "java", "java.net.http.HttpResponse$BodyHandlers" ).ofLines()
+		try {
+			var client = resolveHttpClient()
+			var eventsUrl = "#variables.httpUrl#/api/v1/events?account=#urlEncodedFormat( variables.account )#"
+			var uri = createObject( "java", "java.net.URI" ).create( eventsUrl )
+			var reqBuilder = createObject( "java", "java.net.http.HttpRequest" ).newBuilder()
+			reqBuilder.uri( uri )
+			reqBuilder.header( "Accept", "text/event-stream" )
+			reqBuilder.GET()
+			var httpReq = reqBuilder.build()
+			var bodyHandler = createObject( "java", "java.net.http.HttpResponse$BodyHandlers" ).ofLines()
 
-		var future = client.sendAsync( httpReq, bodyHandler )
-		future.thenAccept( function( httpResp ) {
-			handleSseStream( httpResp )
-		} )
-		future.exceptionally( function( err ) {
-			handleConnectFailure( err )
-			return javacast( "null", "" )
-		} )
+			var future = client.sendAsync( httpReq, bodyHandler )
+			future.thenAccept( function( httpResp ) {
+				handleSseStream( httpResp )
+			} )
+			future.exceptionally( function( err ) {
+				handleConnectFailure( err )
+				return javacast( "null", "" )
+			} )
+		} catch ( any e ) {
+			// A SYNCHRONOUS setup failure (bad URL, client creation) never
+			// reaches either callback above, so the guard has to be released
+			// here - otherwise it stays claimed forever and every later
+			// reconnect is skipped, wedging the gateway disconnected.
+			logEvent( "SSE connect failed: #e.message#", "error" )
+			variables.connectionOpen = false
+			endConnectAttempt()
+			if ( !variables.stopping ) {
+				scheduleReconnect()
+			}
+		}
 	}
 
 	/**
@@ -347,6 +422,10 @@ class extends="ScheduledGatewayBase" {
 	 *               (async-executor) thread for as long as the stream stays open
 	 */
 	private void function handleSseStream( required any httpResponse ) {
+		// This attempt is resolved either way - release the guard before any
+		// scheduleReconnect() below, which claims it again for the NEXT one.
+		endConnectAttempt()
+
 		if ( val( arguments.httpResponse.statusCode() ?: 0 ) != 200 ) {
 			logEvent( "SSE connect rejected: HTTP #arguments.httpResponse.statusCode()#", "error" )
 			scheduleReconnect()
@@ -386,6 +465,7 @@ class extends="ScheduledGatewayBase" {
 	 */
 	private void function handleConnectFailure( required any error ) {
 		variables.connectionOpen = false
+		endConnectAttempt()
 		logEvent( "SSE connect failed: #error.getMessage()#", "error" )
 		if ( !variables.stopping ) {
 			scheduleReconnect()
@@ -399,8 +479,20 @@ class extends="ScheduledGatewayBase" {
 	 * scheduler (no delayed/one-shot task primitive was verified available
 	 * here) - the thread only sleeps, then calls back into connectAsync(),
 	 * which itself returns immediately.
+	 *
+	 * A no-op unless it can claim the single connect slot (see
+	 * beginConnectAttempt()): without that, every failing attempt would spawn
+	 * a retry chain of its own, and the 30s watchdog would keep adding more,
+	 * so a long daemon outage would end with a dozen-plus chains all
+	 * connecting at once and every inbound message being handled once per
+	 * chain. The claim is held ACROSS the sleep - a pending retry counts as
+	 * outstanding - and released on every path that abandons it.
 	 */
 	private void function scheduleReconnect() {
+		if ( variables.stopping || !beginConnectAttempt() ) {
+			return
+		}
+
 		var delayMs = variables.reconnectBackoffMs
 		variables.reconnectBackoffMs = min( variables.reconnectBackoffMs * 2, static.RECONNECT_BACKOFF_MAX_MS )
 		var jitterMs = int( delayMs * 0.2 * ( randRange( 0, 100 ) / 100 ) )
@@ -410,11 +502,15 @@ class extends="ScheduledGatewayBase" {
 			try {
 				createObject( "java", "java.lang.Thread" ).sleep( javaCast( "long", totalDelayMs ) )
 			} catch ( any e ) {
+				endConnectAttempt()
 				return
 			}
-			if ( !variables.stopping ) {
-				connectAsync()
+			if ( variables.stopping ) {
+				endConnectAttempt()
+				return
 			}
+			// connectAsync() inherits this claim - see its own docblock.
+			connectAsync()
 		}
 		createObject( "java", "java.lang.Thread" ).init( retryRunnable ).start()
 	}
@@ -429,11 +525,21 @@ class extends="ScheduledGatewayBase" {
 	 * private connection plumbing" split WhatsAppCloudGateway's
 	 * handleWebhook() uses.
 	 *
+	 * A stopped gateway dispatches nothing: onDisconnect() can't interrupt a
+	 * thread already blocked inside the stream's own forEach(), so the
+	 * `stopping` flag is checked HERE, on the inbound path itself - otherwise
+	 * a stopped gateway would keep running full agent turns for every line
+	 * still buffered in the stream.
+	 *
 	 * @rawLine One line from the SSE stream - "data: {...}" carries an
 	 *          event; blank lines and ":"-prefixed keepalive comments are
 	 *          ignored, matching the SSE spec.
 	 */
 	public void function handleSseEvent( required string rawLine ) {
+		if ( variables.stopping ) {
+			return
+		}
+
 		var trimmedLine = trim( arguments.rawLine )
 		if ( !trimmedLine.startsWith( "data:" ) ) {
 			return

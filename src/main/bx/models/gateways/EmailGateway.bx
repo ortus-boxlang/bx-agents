@@ -210,6 +210,11 @@ class extends="ScheduledGatewayBase" {
 	/**
 	 * Invoked by the scheduled poll task (see registerScheduledTasks()) - not
 	 * part of the IGateway contract, purely Email-specific machinery.
+	 *
+	 * Every message is handled inside its OWN try/catch: fetchInboundMessages()
+	 * marks messages \Seen on the server before they're ever dispatched, so one
+	 * failing message must never be allowed to abort the batch - the rest would
+	 * be unrecoverable.
 	 */
 	void function pollInbox() {
 		var messages = []
@@ -222,7 +227,21 @@ class extends="ScheduledGatewayBase" {
 		}
 
 		for ( var msg in messages ) {
-			handleInboundMessage( msg )
+			try {
+				handleInboundMessage( msg )
+			} catch ( any e ) {
+				// fetchInboundMessages() has ALREADY marked every message in
+				// this batch \Seen on the server, so an error escaping here
+				// wouldn't just lose this one message - it would abort the
+				// loop and permanently lose every later message in the batch
+				// too, since the next FlagTerm( SEEN, false ) search can
+				// never return any of them again (same reasoning as
+				// WhatsAppCloudGateway's own dispatchPayload() try/catch).
+				var failedId = isStruct( msg ) ? toString( msg.messageId ?: "" ) : ""
+				var failedFrom = isStruct( msg ) ? toString( msg.from ?: "" ) : ""
+				logEvent( "Failed to process inbound message [#failedId#] from [#failedFrom#]: #e.message#", "error" )
+				dispatchError( e )
+			}
 		}
 	}
 
@@ -353,6 +372,10 @@ class extends="ScheduledGatewayBase" {
 	}
 
 	/**
+	 * Each message is marked \Seen whether or not it parsed - an unparseable
+	 * message is logged once and skipped, never re-fetched and re-logged on
+	 * every subsequent poll.
+	 *
 	 * @return An array of normalized { from, subject, body, messageId, inReplyTo, references } structs, one per unseen message - real IMAP unless imapPoller is set
 	 */
 	private array function fetchInboundMessages() {
@@ -377,9 +400,17 @@ class extends="ScheduledGatewayBase" {
 			for ( var msg in messages ) {
 				try {
 					results.append( parseRawMessage( msg ) )
-					msg.setFlag( seenFlag, true )
 				} catch ( any e ) {
 					logEvent( "Skipping unparseable inbound message: #e.message#", "warning" )
+				} finally {
+					// Marked seen even when parsing failed - an unparseable
+					// message is logged ONCE and left alone, instead of being
+					// re-fetched and re-logged on every single poll forever.
+					try {
+						msg.setFlag( seenFlag, true )
+					} catch ( any flagError ) {
+						logEvent( "Failed to mark inbound message seen: #flagError.message#", "warning" )
+					}
 				}
 			}
 
