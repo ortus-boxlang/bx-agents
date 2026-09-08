@@ -46,8 +46,8 @@ Repeated options: last one wins.
 Note the first row: a bare `--option` is a **boolean**, not a way to pass the next token as its value. A flag that requires a value (`--model`, `--message`, `--password`, `--environment`, `--port`, ...) is therefore rejected with an error when written bare, rather than silently becoming `true`:
 
 ```
-$ bxAgents hash-password --password hunter2
-Error: --password requires a value - write it as `--password=<value>`.
+$ bxAgents new my-agent --model openai/gpt-5
+Error: --model requires a value - write it as `--model=<value>`.
 ```
 
 Always use the `--flag=value` form. The space-separated form is not supported.
