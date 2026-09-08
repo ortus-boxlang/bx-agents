@@ -53,20 +53,25 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "copies every node's instructions.md into the app and resolves it relative to the factory", function() {
 				var buildDir = newBuildDir();
-				var result = generateFor( fixtures & "/full-project", buildDir );
+				// full-project's own subagents/researcher/ folder is never wired
+				// up (its root Agent.bx declares no `subAgents`), so it is not
+				// part of the built tree at all - subagent-environment-override
+				// actually declares `subAgents: [ "child" ]`, so its subagent
+				// really gets built and really needs its own copied instructions.
+				var result = generateFor( fixtures & "/subagent-environment-override", buildDir );
 
 				// A .bxa contains ONLY what is under the app dir, so instructions
 				// that live in the source tree are not in the artifact at all -
 				// which is what made a packaged app fail on another machine.
 				expect( fileExists( buildDir & "/agent/instructions.md" ) ).toBeTrue();
-				expect( fileExists( buildDir & "/agent/subagents/researcher/instructions.md" ) ).toBeTrue();
+				expect( fileExists( buildDir & "/agent/subagents/child/instructions.md" ) ).toBeTrue();
 
 				// ...and the factory must reach them by a path relative to itself,
 				// not by the absolute path of the machine that built it. The
 				// absolute path stays on as resolveAppPath()'s fallback.
 				var factory = fileRead( result.agentFactory );
 				expect( factory ).toInclude( 'resolveAppPath( "instructions.md"' );
-				expect( factory ).toInclude( 'resolveAppPath( "subagents/researcher/instructions.md"' );
+				expect( factory ).toInclude( 'resolveAppPath( "subagents/child/instructions.md"' );
 				expect( factory ).toInclude( "private string function resolveAppPath(" );
 			} );
 
