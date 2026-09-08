@@ -274,6 +274,8 @@ class {
 	 * @agentInterceptors Names of agent-scope interceptors already copied into `interceptors/` (see InterceptorSplitter), registered here
 	 * @security The resolved config's own `security` block, forwarded verbatim into bx-ai's `moduleSettings.bxai.security` (passthrough only - see M8.5)
 	 * @hasEmailGateway Whether to also generate `moduleSettings.cbmailservices` (see generate()'s own docblock)
+	 * @webUiDatasource The web UI's SQLite datasource name, or "" - when set, pins qb's grammar and default datasource
+	 * @webUiHasUsers Whether any webui entry declares `users` - when true, emits `moduleSettings.cbauth.userServiceClass`, without which cbauth throws on the first request to the UI
 	 *
 	 * @return The rendered config/ColdBox.bx source
 	 */
@@ -316,24 +318,20 @@ class {
 		if ( arguments.security.count() ) {
 			bxaiSettings[ "security" ] = arguments.security
 		}
-		var trailingSettings = []
-		if ( arguments.hasEmailGateway ) {
-			trailingSettings.append( "email" )
-		}
-		if ( len( arguments.webUiDatasource ) ) {
-			trailingSettings.append( "qb" )
-		}
+		// Each module's settings are collected as a block of lines, then joined
+		// with commas below. Doing it this way rather than having each block
+		// decide its own trailing comma from what MIGHT follow it means adding a
+		// module can't silently produce a dangling comma or a missing one.
+		var settingBlocks = [ [ "			bxai : #renderLiteral( bxaiSettings )#" ] ]
 
-		lines.append( "" )
-		lines.append( "		moduleSettings = {" )
-		lines.append( "			bxai : #renderLiteral( bxaiSettings )#" & ( trailingSettings.len() ? "," : "" ) )
 		// The `BXMail` protocol (cbmailservices' own dispatch to bx-mail's
-		// `bx:mail` component - see EmailGateway.bx / docs/conventions/gateways.md)
+		// `bx:mail` component - see EmailGateway.bx / docs/conventions/gateways/email.md)
 		// - both modules are real, server-level installs (box.json `dependencies`),
 		// not something this generator installs itself.
 		if ( arguments.hasEmailGateway ) {
-			lines.append( '			cbmailservices : { mailers : { "default" : { class : "BXMail" } } }' & ( len( arguments.webUiDatasource ) ? "," : "" ) )
+			settingBlocks.append( [ '			cbmailservices : { mailers : { "default" : { class : "BXMail" } } }' ] )
 		}
+
 		// Pin qb's grammar rather than leaving it on "AutoDiscover@qb". Autodiscovery
 		// calls cfdbinfo against the DEFAULT datasource, which this app deliberately
 		// never sets - the SQLite store is a named datasource, not the default - so
@@ -343,10 +341,34 @@ class {
 		// defaultOptions carries the datasource NAME into every QueryBuilder qb
 		// hands out, so no call site has to remember it.
 		if ( len( arguments.webUiDatasource ) ) {
-			lines.append( "			qb : {" )
-			lines.append( '				defaultGrammar : "SQLiteGrammar@qb",' )
-			lines.append( '				defaultOptions : { datasource : "#bxLiteral( arguments.webUiDatasource )#" }' )
-			lines.append( "			}" )
+			settingBlocks.append( [
+				"			qb : {",
+				'				defaultGrammar : "SQLiteGrammar@qb",',
+				'				defaultOptions : { datasource : "#bxLiteral( arguments.webUiDatasource )#" }',
+				"			}"
+			] )
+		}
+
+		// cbauth resolves its user service by WireBox DSL from this exact setting:
+		// `AuthenticationService.getUserService()` does
+		// `wirebox.getInstance( dsl = variables.userServiceClass )` and throws
+		// `IncompleteConfiguration - No [userServiceClass] provided` when it is
+		// the empty-string default. WebUiGenerator emits `models/UserService.bx`
+		// (cbauth's IUserService) whenever an entry declares `users`, so without
+		// this line the login gate throws on the FIRST request to the UI - taking
+		// down the whole page, not just sign-in.
+		if ( arguments.webUiHasUsers ) {
+			settingBlocks.append( [ '			cbauth : { userServiceClass : "UserService" }' ] )
+		}
+
+		lines.append( "" )
+		lines.append( "		moduleSettings = {" )
+		for ( var blockIndex = 1; blockIndex <= settingBlocks.len(); blockIndex++ ) {
+			var block = settingBlocks[ blockIndex ]
+			var comma = blockIndex < settingBlocks.len() ? "," : ""
+			for ( var lineIndex = 1; lineIndex <= block.len(); lineIndex++ ) {
+				lines.append( block[ lineIndex ] & ( lineIndex == block.len() ? comma : "" ) )
+			}
 		}
 		lines.append( "		}" )
 
@@ -430,18 +452,40 @@ class {
 	 * a project's tools/ were copied into the build and made
 	 * name-resolvable for MCP wiring, but no agent BX Agents ever built - in
 	 * ANY context: a real served app, `chat`, or a test spec - actually
-	 * received them). Fixed here, not by relying on `aiToolRegistry().scan("tools")`'s
-	 * relative-path resolution (which depends on whatever "/" mapping is in
-	 * effect for the CALLING context - unverified/fragile the moment this
-	 * factory is loaded via `DynamicClassLoader` rather than a real ColdBox
-	 * boot): `ToolRegistryLoader.bx` is called once here with the tools
-	 * directory's ABSOLUTE path embedded as a literal at generation time
-	 * (the same pattern already used for `instructions.md`'s own absolute
-	 * `fileRead()` path below), then every agent node's `aiAgent()` call
-	 * attaches `aiToolRegistry().getAll()` - safe regardless of how many
-	 * nodes exist, since re-registering an already-scanned tool is a no-op
-	 * overwrite (confirmed against real bx-ai `BaseRegistry.register()`
+	 * received them). Fixed here, but deliberately NOT by relying on
+	 * `aiToolRegistry().scan("tools")`'s relative-path resolution (which
+	 * depends on whatever "/" mapping is in effect for the CALLING context -
+	 * unverified/fragile the moment this factory is loaded via
+	 * `DynamicClassLoader` rather than a real ColdBox boot, and that
+	 * rejection still stands): `ToolRegistryLoader.bx` is called once here
+	 * with the tools directory's path, then every agent node's `aiAgent()`
+	 * call attaches `aiToolRegistry().getAll()` - safe regardless of how
+	 * many nodes exist, since re-registering an already-scanned tool is a
+	 * no-op overwrite (confirmed against real bx-ai `BaseRegistry.register()`
 	 * source).
+	 *
+	 * PORTABILITY - why that path is no longer a bare baked-in absolute:
+	 * every runtime path this factory needs (its own `tools/` directory,
+	 * each node's `instructions.md`, each class-based node's copied
+	 * Agent.bx) used to be embedded as the ABSOLUTE path it happened to have
+	 * on the BUILDING machine, which made the whole point of `package` - "a
+	 * portable .bxa" - untrue: built on CI at `/home/runner/work/x` and
+	 * unzipped at `/opt/x`, the first `getInstance( "GeneratedAgent" )` blew
+	 * up, and merely RENAMING the project directory broke a local build the
+	 * same way. `instructions.md` was worse still: its baked path pointed
+	 * into the SOURCE project, a file `package` never even put in the
+	 * archive.
+	 *
+	 * So each of those files is now copied into the app (see
+	 * copyNodeInstructions()/copyAgentClass()) and referenced through a
+	 * generated `resolveAppPath( relative, fallback )` helper (see
+	 * renderResolveAppPath()) that locates them relative to this factory's
+	 * OWN location on disk via `getCurrentTemplatePath()`. The build-time
+	 * absolute path is still emitted, as that helper's FALLBACK: if
+	 * self-location ever fails to resolve (proven for a module-loaded class -
+	 * see WebUiGenerator.renderUiBundle()'s docblock - but not independently
+	 * verified for the `DynamicClassLoader` load path `chat`/`invoke` use),
+	 * behaviour is exactly what it was before this change, never worse.
 	 *
 	 * @projectRoot Absolute path to the project root (containing Agent.bx/instructions.md)
 	 * @appDir Absolute path to the generated ColdBox app dir - its own `tools/` subfolder is loaded
@@ -464,17 +508,68 @@ class {
 			"class {",
 			"",
 			"	function buildAgent() {",
-			'		new "models.build.ToolRegistryLoader@bxagents"().load( "#bxLiteral( toolsDir )#" )',
+			'		new "models.build.ToolRegistryLoader@bxagents"().load( resolveAppPath( "../tools", "#bxLiteral( toolsDir )#" ) )',
 			"",
 			body,
 			"",
 			"		return agent",
 			"	}",
-			"",
-			"}",
 			""
 		]
+
+		for ( var helperLine in renderResolveAppPath() ) {
+			lines.append( helperLine )
+		}
+
+		lines.append( "}" )
+		lines.append( "" )
+
 		return { source : lines.toList( char( 10 ) ), nodes : built.nodes }
+	}
+
+	/**
+	 * The generated factory's own private path resolver - emitted into every
+	 * `agent/GeneratedAgentFactory.bx` and used for every file the built app
+	 * reads at runtime (its `tools/` directory, each node's `instructions.md`,
+	 * each class-based node's copied `Agent.bx`).
+	 *
+	 * It answers "where am I on disk?" with `getCurrentTemplatePath()` - the
+	 * same primitive WebUiGenerator.renderUiBundle() already relies on, and
+	 * which was confirmed empirically to resolve correctly for a class loaded
+	 * through a module mapping - and resolves everything else relative to
+	 * that. Since the factory is written to `<appDir>/agent/`, `instructions.md`
+	 * sits beside it, a subagent's at `subagents/<name>/instructions.md`, a
+	 * class-based agent's copied class at `classes/<var>Class.bx`, and the
+	 * app's tools at `../tools`.
+	 *
+	 * The build-time absolute path is passed as `fallbackPath` rather than
+	 * dropped: self-location is NOT independently verified for the
+	 * `DynamicClassLoader` load path `chat`/`invoke` use (see Chat.bx), so if
+	 * it ever comes back as something that doesn't resolve, the generated app
+	 * behaves exactly as it did before portability was addressed - it reads
+	 * the same absolute path it always baked in. Never worse, only better.
+	 *
+	 * Checks `directoryExists()` as well as `fileExists()` because one of the
+	 * three call sites (`tools/`) resolves a DIRECTORY, not a file.
+	 *
+	 * @return The helper's source lines, appended to the generated class body
+	 */
+	private array function renderResolveAppPath() {
+		return [
+			"	/**",
+			"	 * Resolves a path inside this generated app relative to THIS file's own",
+			"	 * location on disk, so the app stays portable - a built app can be zipped",
+			"	 * up (`bxAgents package`) and unzipped anywhere, and every path below",
+			"	 * still resolves. Falls back to the absolute path recorded at build time",
+			"	 * if self-location does not resolve, which is exactly how this app",
+			"	 * behaved before it was made relocatable.",
+			"	 */",
+			"	private string function resolveAppPath( required string relativePath, required string fallbackPath ) {",
+			"		var candidate = getDirectoryFromPath( getCurrentTemplatePath() ) & arguments.relativePath",
+			"		return ( fileExists( candidate ) || directoryExists( candidate ) ) ? candidate : arguments.fallbackPath",
+			"	}",
+			""
+		]
 	}
 
 	/**
@@ -510,6 +605,7 @@ class {
 	 * @cliEnvironment Optional environment name the build was invoked with, re-applied to every subagent's own config resolution
 	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .models is used), shared by every node
 	 * @accessorPath The ordered list of getSubAgent() names needed to reach THIS node from the root singleton - empty for the initial (root) call
+	 * @nodeRelativePath THIS node's own directory expressed RELATIVE to the root project root - "" for the root itself, "subagents/<name>" for every subagent (flat, per the DAG model above, so it is never nested any deeper than that). Used to mirror the node into the generated app, so its instructions.md is copied to a matching place under `<appDir>/agent/` - see copyNodeInstructions()
 	 *
 	 * @return { statements: leaf-first `var <name> = aiAgent(...)` statement strings, nodes: [ { name, accessorPath } ] for this node and every descendant }
 	 */
@@ -522,7 +618,8 @@ class {
 		struct discovery = {},
 		array accessorPath = [],
 		string defaultMemory = "",
-		string appDir = ""
+		string appDir = "",
+		string nodeRelativePath = ""
 	) {
 		var declaredSubAgents = arguments.resolvedConfig.subAgents ?: []
 		var subAgentVarNames = []
@@ -544,7 +641,7 @@ class {
 			var childAccessorPath = duplicate( arguments.accessorPath )
 			childAccessorPath.append( resolveAgentName( subConfig ) )
 
-			var built = buildAgentTree( arguments.rootProjectRoot, subPath, subConfig, subVarName, arguments.cliEnvironment, arguments.discovery, childAccessorPath, arguments.defaultMemory, arguments.appDir )
+			var built = buildAgentTree( arguments.rootProjectRoot, subPath, subConfig, subVarName, arguments.cliEnvironment, arguments.discovery, childAccessorPath, arguments.defaultMemory, arguments.appDir, "subagents/" & subName )
 
 			for ( var stmt in built.statements ) {
 				statements.append( stmt )
@@ -555,7 +652,7 @@ class {
 			subAgentVarNames.append( subVarName )
 		}
 
-		statements.append( renderAgentStatement( arguments.varName, arguments.nodePath, arguments.resolvedConfig, subAgentVarNames, arguments.discovery, thisName, arguments.defaultMemory, arguments.appDir ) )
+		statements.append( renderAgentStatement( arguments.varName, arguments.nodePath, arguments.resolvedConfig, subAgentVarNames, arguments.discovery, thisName, arguments.defaultMemory, arguments.appDir, arguments.nodeRelativePath ) )
 
 		return { statements : statements, nodes : nodes }
 	}
@@ -677,6 +774,14 @@ class {
 	 * emitted (its helper never returns empty - it defaults to `cache`), and
 	 * `subAgents`/`mcpServers` are always emitted, falling back to `[]`.
 	 *
+	 * The node's `instructions.md` is COPIED into the generated app and read
+	 * back from there at runtime (see copyNodeInstructions() for the layout and
+	 * renderResolveAppPath() for why) - it used to be read straight from the
+	 * SOURCE project by an absolute path baked in at build time, a file
+	 * `package` never even put in the `.bxa`, so a built app could only ever
+	 * run on the machine that built it, from an unmoved, unrenamed project
+	 * directory.
+	 *
 	 * @varName The BoxLang variable name to assign this node's instance to
 	 * @nodePath Absolute path to THIS node's own directory, holding its instructions.md
 	 * @resolvedConfig THIS node's own resolved config
@@ -684,7 +789,8 @@ class {
 	 * @discovery The raw discovery struct from ProjectDiscoverer.discover()
 	 * @name The agent's resolved `name` value
 	 * @defaultMemory The build-wide default memory type, if any
-	 * @appDir Absolute path to the generated app dir - forwarded to renderClassBasedAgentStatement() for class-based nodes
+	 * @appDir Absolute path to the generated app dir - this node's instructions.md is copied under its `agent/`, and it is forwarded to renderClassBasedAgentStatement() for class-based nodes
+	 * @nodeRelativePath THIS node's directory relative to the root project root ("" for the root, "subagents/<name>" for a subagent) - mirrored under `<appDir>/agent/` so every node keeps its own instructions.md
 	 *
 	 * @return The rendered statement block for this one node
 	 */
@@ -696,7 +802,8 @@ class {
 		struct discovery = {},
 		required string name,
 		string defaultMemory = "",
-		string appDir = ""
+		string appDir = "",
+		string nodeRelativePath = ""
 	) {
 		// A class-based Agent.bx IS the agent - instantiate it rather than
 		// rebuilding one from its config. Everything below this line describes
@@ -709,7 +816,8 @@ class {
 				subAgentVarNames : arguments.subAgentVarNames,
 				discovery        : arguments.discovery,
 				defaultMemory    : arguments.defaultMemory,
-				appDir           : arguments.appDir
+				appDir           : arguments.appDir,
+				nodeRelativePath : arguments.nodeRelativePath
 			)
 		}
 
@@ -720,6 +828,8 @@ class {
 				message = "No instructions.md found at [#instructionsPath#]"
 			)
 		}
+
+		var instructionsRelative = copyNodeInstructions( instructionsPath, arguments.appDir, arguments.nodeRelativePath )
 
 		var modelSlug = arguments.resolvedConfig.model ?: ""
 		if ( !len( modelSlug ) ) {
@@ -743,7 +853,7 @@ class {
 		lines.append( "var #arguments.varName# = aiAgent(" )
 		lines.append( '	name : "#bxLiteral( arguments.name )#",' )
 		lines.append( '	description : "#bxLiteral( description )#",' )
-		lines.append( '	instructions : fileRead( "#bxLiteral( instructionsPath )#" ),' )
+		lines.append( '	instructions : fileRead( resolveAppPath( "#bxLiteral( instructionsRelative )#", "#bxLiteral( instructionsPath )#" ) ),' )
 		lines.append( '	model : #modelExpression#,' )
 		lines.append( "	tools : aiToolRegistry().getAll()," )
 		if ( len( memoryExpression ) ) {
@@ -803,7 +913,8 @@ class {
 	 * @subAgentVarNames Already-rendered child variable names to attach
 	 * @discovery The raw discovery struct from ProjectDiscoverer.discover()
 	 * @defaultMemory The build-wide default memory type, if any
-	 * @appDir Absolute path to the generated app dir - the class is copied under its agent/classes/
+	 * @appDir Absolute path to the generated app dir - the class is copied under its agent/classes/, and this node's instructions.md (if any) under its agent/
+	 * @nodeRelativePath THIS node's directory relative to the root project root ("" for the root, "subagents/<name>" for a subagent) - mirrored under `<appDir>/agent/` so every node keeps its own instructions.md
 	 *
 	 * @return The rendered statement block for this one node
 	 */
@@ -814,14 +925,16 @@ class {
 		required array subAgentVarNames,
 		struct discovery = {},
 		string defaultMemory = "",
-		string appDir = ""
+		string appDir = "",
+		string nodeRelativePath = ""
 	) {
 		var classAbsolutePath = copyAgentClass( arguments.nodePath, arguments.varName, arguments.appDir )
+		var classRelativePath = "classes/" & getFileFromPath( classAbsolutePath )
 
 		var lines = []
 		lines.append( "// #arguments.varName#: a class-based Agent.bx - instantiated, not rebuilt." )
-		// Instantiated by its own ABSOLUTE path via DynamicClassLoader, exactly the
-		// same primitive `chat`/default `invoke` already use to load
+		// Instantiated by its own FILESYSTEM path via DynamicClassLoader, exactly
+		// the same primitive `chat`/default `invoke` already use to load
 		// GeneratedAgentFactory.bx itself - never a relative dotted-path `new`.
 		// A relative `new "agent.classes.#varName#Class"()` only resolves under a
 		// real ColdBox boot (serve/invoke --server), which registers the app root
@@ -829,10 +942,17 @@ class {
 		// never boot ColdBox, and registering a mapping mid-script does not
 		// reliably make relative lookups resolve either (the same limitation
 		// already documented for TestRunnerLauncher's TestBox discovery - see
-		// docs/known-limitations.md). Loading by absolute path sidesteps mapping
+		// docs/known-limitations.md). Loading by a real path sidesteps mapping
 		// resolution entirely, so it works identically in both contexts.
+		//
+		// That path is resolved at RUNTIME, next to the generated factory itself
+		// (see renderResolveAppPath()), rather than being frozen as the absolute
+		// path this machine happened to build at - otherwise the copied class is
+		// unreachable the moment the app is unzipped anywhere else, which is the
+		// whole promise of a `.bxa`. The build-time absolute path stays on as the
+		// fallback, so nothing regresses if self-location does not resolve.
 		lines.append( 'var #arguments.varName#Context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()' )
-		lines.append( 'var #arguments.varName# = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" ).instantiate( "#bxLiteral( classAbsolutePath )#", #arguments.varName#Context )' )
+		lines.append( 'var #arguments.varName# = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" ).instantiate( resolveAppPath( "#bxLiteral( classRelativePath )#", "#bxLiteral( classAbsolutePath )#" ), #arguments.varName#Context )' )
 
 		// --- identity: only what the project declared OUTSIDE the class ---
 		if ( len( arguments.resolvedConfig.name ?: "" ) ) {
@@ -846,7 +966,8 @@ class {
 		// carries its own instructions when the file is absent.
 		var instructionsPath = arguments.nodePath & "/instructions.md"
 		if ( fileExists( instructionsPath ) ) {
-			lines.append( '#arguments.varName#.withInstructions( fileRead( "#bxLiteral( instructionsPath )#" ) )' )
+			var instructionsRelative = copyNodeInstructions( instructionsPath, arguments.appDir, arguments.nodeRelativePath )
+			lines.append( '#arguments.varName#.withInstructions( fileRead( resolveAppPath( "#bxLiteral( instructionsRelative )#", "#bxLiteral( instructionsPath )#" ) ) )' )
 		}
 
 		// model is optional here too - no MissingModel throw, since the class
@@ -893,6 +1014,50 @@ class {
 	}
 
 	/**
+	 * Copies ONE node's `instructions.md` into the generated app, mirroring the
+	 * node's own place in the source project under the app's `agent/` folder -
+	 * the root project's lands beside the generated factory itself
+	 * (`<appDir>/agent/instructions.md`), and each subagent's under its own
+	 * `<appDir>/agent/subagents/<name>/instructions.md`, so two nodes can never
+	 * collide on one file and every node keeps its own.
+	 *
+	 * Without this, `instructions.md` was the one runtime file a built app read
+	 * that was never copied into it at all: the generated `fileRead()` pointed
+	 * at an absolute path back inside the SOURCE project, so `package` shipped a
+	 * `.bxa` whose agent could not read its own instructions anywhere but on the
+	 * building machine - and not even there once the project was renamed.
+	 *
+	 * A no-op (returning the relative path anyway, which then simply won't
+	 * resolve and lets the generated `resolveAppPath()` fall back to the source
+	 * path) when no app directory is available - a descriptor node can be
+	 * rendered with no `appDir` at all, unlike a class-based one.
+	 *
+	 * @instructionsPath Absolute path to the node's own source instructions.md - the caller has already confirmed it exists
+	 * @appDir Absolute path to the generated app dir, or "" when rendering without one
+	 * @nodeRelativePath This node's directory relative to the root project root - "" for the root, "subagents/<name>" for a subagent
+	 *
+	 * @return The copied file's path RELATIVE to the generated factory's own
+	 *         directory (`<appDir>/agent/`), e.g. "instructions.md" or
+	 *         "subagents/researcher/instructions.md" - passed straight to the
+	 *         generated resolveAppPath() helper
+	 */
+	private string function copyNodeInstructions( required string instructionsPath, required string appDir, required string nodeRelativePath ) {
+		var relative = len( arguments.nodeRelativePath )
+			? arguments.nodeRelativePath & "/instructions.md"
+			: "instructions.md"
+
+		if ( !len( arguments.appDir ) ) {
+			return relative
+		}
+
+		var destination = normalizePath( arguments.appDir ) & "/agent/" & relative
+		directoryCreate( path = getDirectoryFromPath( destination ), createPath = true, ignoreExists = true )
+		fileCopy( arguments.instructionsPath, destination )
+
+		return relative
+	}
+
+	/**
 	 * Copies a class-based Agent.bx into the generated app so the built app can
 	 * instantiate it at runtime, exactly as tools/, skills/ and mcp/ are copied.
 	 * A descriptor Agent.bx is never copied - it is consumed at build time and
@@ -908,7 +1073,10 @@ class {
 	 * @appDir Absolute path to the generated app dir
 	 *
 	 * @return The copied file's own absolute path, e.g. "/path/to/app/agent/classes/agentClass.bx" -
-	 *         instantiated by DynamicClassLoader off this absolute path, never a relative dotted lookup
+	 *         instantiated by DynamicClassLoader off a real filesystem path, never a relative dotted
+	 *         lookup. The caller resolves that path at runtime relative to the generated factory
+	 *         (see renderResolveAppPath()) so the built app stays relocatable, and keeps this
+	 *         absolute one only as that resolution's fallback
 	 */
 	private string function copyAgentClass( required string nodePath, required string varName, required string appDir ) {
 		var source = arguments.nodePath & "/Agent.bx"
