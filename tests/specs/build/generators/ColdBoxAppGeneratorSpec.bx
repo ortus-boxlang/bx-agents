@@ -51,6 +51,25 @@ class extends="testbox.system.BaseSpec" {
 				expect( fileExists( result.index ) ).toBeTrue();
 			} );
 
+			it( "copies every node's instructions.md into the app and resolves it relative to the factory", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/full-project", buildDir );
+
+				// A .bxa contains ONLY what is under the app dir, so instructions
+				// that live in the source tree are not in the artifact at all -
+				// which is what made a packaged app fail on another machine.
+				expect( fileExists( buildDir & "/agent/instructions.md" ) ).toBeTrue();
+				expect( fileExists( buildDir & "/agent/subagents/researcher/instructions.md" ) ).toBeTrue();
+
+				// ...and the factory must reach them by a path relative to itself,
+				// not by the absolute path of the machine that built it. The
+				// absolute path stays on as resolveAppPath()'s fallback.
+				var factory = fileRead( result.agentFactory );
+				expect( factory ).toInclude( 'resolveAppPath( "instructions.md"' );
+				expect( factory ).toInclude( 'resolveAppPath( "subagents/researcher/instructions.md"' );
+				expect( factory ).toInclude( "private string function resolveAppPath(" );
+			} );
+
 			it( "writes a valid Application.bx", function() {
 				var buildDir = newBuildDir();
 				var result = generateFor( fixtures & "/full-project", buildDir );
@@ -448,7 +467,7 @@ class extends="testbox.system.BaseSpec" {
 					var factory  = factoryFor( "class-based-minimal", buildDir );
 
 					// The class IS the agent - no aiAgent() call for this node at all.
-					expect( factory ).toInclude( 'DynamicClassLoader" ).instantiate( "' );
+					expect( factory ).toInclude( 'DynamicClassLoader" ).instantiate( resolveAppPath( "' );
 					expect( factory ).toInclude( "/agent/classes/agentClass.bx" );
 					expect( factory ).notToInclude( 'new "agent.classes' );
 					expect( factory ).notToInclude( "aiAgent(" );
@@ -489,7 +508,7 @@ class extends="testbox.system.BaseSpec" {
 				it( "leaves a class's own checkpointer alone", function() {
 					var factory = factoryFor( "class-based-own-checkpointer", newBuildDir() );
 
-					expect( factory ).toInclude( 'DynamicClassLoader" ).instantiate( "' );
+					expect( factory ).toInclude( 'DynamicClassLoader" ).instantiate( resolveAppPath( "' );
 					expect( factory ).toInclude( "/agent/classes/agentClass.bx" );
 					expect( factory ).notToInclude( 'new "agent.classes' );
 					expect( factory ).notToInclude( "withCheckpointer(" );
@@ -502,7 +521,7 @@ class extends="testbox.system.BaseSpec" {
 					// the subagent is a descriptor, so it is still BUILT...
 					expect( factory ).toInclude( "var subagent_researcher = aiAgent(" );
 					// ...the root is class-based, so it is INSTANTIATED...
-					expect( factory ).toInclude( 'DynamicClassLoader" ).instantiate( "' );
+					expect( factory ).toInclude( 'DynamicClassLoader" ).instantiate( resolveAppPath( "' );
 					expect( factory ).toInclude( "/agent/classes/agentClass.bx" );
 					expect( factory ).notToInclude( 'new "agent.classes' );
 					// ...and the two are wired together.
