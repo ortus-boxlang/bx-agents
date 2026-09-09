@@ -84,6 +84,28 @@ bxAgents serve --port=8080
 :::
 :::
 
+## 何もないところからではなく、何かから始める
+
+`new` は空のエージェントをスキャフォールドするだけではありません - 8 種類の組み込み
+テンプレートから選んだり、既存の GitHub リポジトリをクローンしたり、ForgeBox パッケージを
+インストールしたりできます。
+
+::: cards
+::: card title="8 種類の組み込みテンプレート" icon="phosphor-duotone:squares-four" href="agent-templates.md"
+`--template=webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent` -
+同じベーススケルトンの上に、実際に動くコンテンツを重ねます。
+:::
+::: card title="GitHub リポジトリをクローン" icon="phosphor-duotone:github-logo" href="agent-templates.md"
+`--repo=owner/repo` - 同梱の JGit クライアントがクローンします。`git` バイナリは不要です。
+:::
+::: card title="ForgeBox からインストール" icon="phosphor-duotone:package" href="agent-templates.md"
+`--forgebox=<slug>` - ForgeBox の REST API に直接アクセスします。`box` CLI は不要です。
+:::
+:::
+
+生成される各ファイルの詳細と、自分のテンプレートを公開する方法は
+[Agent Templates](agent-templates.md) を参照してください。
+
 ## `build` が実際に生成するもの
 
 あなたのコンベンションツリーと、`build` がそれを変換する、ただの ColdBox アプリケーション。
@@ -187,6 +209,10 @@ BoxLang、BX AI、BxAgents をインストールします。
 :::
 ::: card title="CLI リファレンス" icon="phosphor-duotone:terminal-window" href="cli-reference.md"
 すべての動詞 (verb) とそのフラグ。
+:::
+::: card title="エージェントテンプレート" icon="phosphor-duotone:squares-four" href="agent-templates.md"
+すべての組み込みスターター、GitHub/ForgeBox からの取得方法、そして自分のテンプレートを
+公開する方法。
 :::
 ::: card title="デプロイとシークレット" icon="phosphor-duotone:cloud-arrow-up" href="deployment-and-secrets.md"
 `.bxa` をパッケージ化し、安全に出荷します。

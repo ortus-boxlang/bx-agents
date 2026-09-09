@@ -84,6 +84,27 @@ bxAgents serve --port=8080
 :::
 :::
 
+## Von etwas anfangen, nicht von nichts
+
+`new` erstellt nicht nur einen leeren Agenten - wähle stattdessen eines von 8 integrierten
+Templates, klone ein bestehendes GitHub-Repository, oder installiere ein ForgeBox-Paket.
+
+::: cards
+::: card title="8 integrierte Templates" icon="phosphor-duotone:squares-four" href="agent-templates.md"
+`--template=webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent` -
+echter, funktionierender Inhalt auf demselben Basis-Skelett.
+:::
+::: card title="Ein GitHub-Repository klonen" icon="phosphor-duotone:github-logo" href="agent-templates.md"
+`--repo=owner/repo` - ein gebündelter JGit-Client klont es; kein `git`-Binary erforderlich.
+:::
+::: card title="Von ForgeBox installieren" icon="phosphor-duotone:package" href="agent-templates.md"
+`--forgebox=<slug>` - spricht direkt mit ForgeBox' REST-API; keine `box`-CLI erforderlich.
+:::
+:::
+
+Siehe [Agent-Templates](agent-templates.md) für jede generierte Datei im Detail und wie man
+ein eigenes veröffentlicht.
+
 ## Was `build` tatsächlich erzeugt
 
 Der eigene Konventionsbaum, und die einfache ColdBox-Anwendung, in die `build` ihn verwandelt.
@@ -185,6 +206,9 @@ Genau das, was `build` tut, in der richtigen Reihenfolge.
 :::
 ::: card title="CLI-Referenz" icon="phosphor-duotone:terminal-window" href="cli-reference.md"
 Jedes Verb und seine Flags.
+:::
+::: card title="Agent-Templates" icon="phosphor-duotone:squares-four" href="agent-templates.md"
+Jeder integrierte Starter, GitHub-/ForgeBox-Quellen, und wie man eigene veröffentlicht.
 :::
 ::: card title="Deployment & Secrets" icon="phosphor-duotone:cloud-arrow-up" href="deployment-and-secrets.md"
 Eine `.bxa` paketieren und sicher ausliefern.

@@ -28,12 +28,15 @@ cd my-agent
 # edit instructions.md, add tools/, skills/, etc.
 
 bxAgents build      # assembles a real ColdBox app under .build/app
+bxAgents doctor     # sanity-check the runtime + your project before build/serve surprise you
 bxAgents chat       # or: bxAgents serve --port=8080
 ```
 
+`new` doesn't only scaffold a blank agent: pick one of 8 built-in `--template`s (a Slack bot, a scheduled agent, a multi-agent team, ...), clone an existing GitHub repo (`--repo=owner/repo`, via a bundled JGit client - no `git` binary required), or install a ForgeBox package (`--forgebox=<slug>`, talking to ForgeBox's REST API directly - no `box` CLI required) - see [Agent Templates](docs/agent-templates.md).
+
 ## Documentation & Examples
 
-- **[docs/](docs/index.md)** - installation, quick start, one page per convention folder, the build pipeline, the manifest schema, the full CLI reference, deployment/secrets, and known limitations. Published at **[bxagents.ai](https://bxagents.ai)**, built with [bx-sites](https://ortus-boxlang.github.io/bx-sites/development/); see [Working on the docs](#working-on-the-docs).
+- **[docs/](docs/index.md)** - installation, quick start, one page per convention folder, agent templates (built-in starters, GitHub/ForgeBox sourcing, publishing your own), the build pipeline, the manifest schema, the full CLI reference, deployment/secrets, and known limitations. Published at **[bxagents.ai](https://bxagents.ai)**, built with [bx-sites](https://ortus-boxlang.github.io/bx-sites/development/); see [Working on the docs](#working-on-the-docs).
 - **[examples/](examples/README.md)** - real, buildable sample projects: nine core-convention examples (a minimal agent, a simple agent, a class-based agent, an HTTP-exposed agent, a scheduled agent, an MCP agent, a multi-agent team, the web chat UI, and a composite "advanced" agent) plus one per push-style chat-platform gateway (Telegram, Slack, Discord, Email, WhatsApp Cloud, Teams, Twilio, GitHub, Signal), each demonstrating one convention folder end-to-end.
 
 ## Why build-time assembly?
@@ -77,6 +80,7 @@ Before you get started, fetch the BoxLang binary (until this module is published
 | `testBx` | Runs the TestBox BDD suite (`tests/specs`, excluding the ColdBox-dependent bundle) via `runTests.bxs`. Requires `testbox/` (`box install`). |
 | `testColdBoxIntegration` | Boots a real `boxlang-miniserver` against a generated app and hits a `toAi()` route over real HTTP, via `runColdBoxIntegrationTests.bxs`. Requires `tests/coldbox/` (`box install` in `tests/`) and the miniserver jar. |
 | `verifyExamples` | Builds every project under `examples/` through the real build pipeline via `verifyExamples.bxs` - a regression net across the whole feature matrix. |
+| `checkTemplateTokens` | Fails if any leftover `@MODULE_*@` boxlang-module-template placeholder tokens remain anywhere in the repo. Runs as part of `check`. |
 | `downloadBoxLang` | Downloads the BoxLang binary into `src/test/resources/libs`. |
 | `downloadModules` | Downloads supporting BoxLang modules (bx-ai, bx-ftp, bx-sqlite) into `src/test/resources/modules`. |
 | `downloadMiniServer` | Downloads the `boxlang-miniserver` binary into `src/test/resources/libs`. |
