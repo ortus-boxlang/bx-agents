@@ -98,17 +98,28 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( "full-project-agent" );
 			} );
 
-			it( "references every agent-scope interceptor exactly once in config/ColdBox.bx", function() {
+			it( "never declares agent-scope interceptors in config/ColdBox.bx's own interceptors array - that array never reaches ColdBox's InterceptorService on a real boot", function() {
 				var buildDir = newBuildDir();
 				var config = resolver.resolve( projectRoot = fixtures & "/full-project" );
 				var result = generator.generate( fixtures & "/full-project", buildDir, config, [ "AgentAudit", "OtherInterceptor" ] );
 
 				var content = fileRead( result.coldboxConfig );
-				expect( content ).toInclude( "interceptors = [" );
+				expect( content ).notToInclude( "interceptors = [" );
+			} );
+
+			it( "registers every agent-scope interceptor for real from Application.bx's onApplicationStart(), exactly once each", function() {
+				var buildDir = newBuildDir();
+				var config = resolver.resolve( projectRoot = fixtures & "/full-project" );
+				var result = generator.generate( fixtures & "/full-project", buildDir, config, [ "AgentAudit", "OtherInterceptor" ] );
+
+				var content = fileRead( result.applicationBx );
+				expect( content ).toInclude( "onApplicationStart" );
 
 				for ( var name in [ "AgentAudit", "OtherInterceptor" ] ) {
-					var needle = 'class : "interceptors.#name#"';
+					var needle = 'getWireBox().getInstance( "interceptors.#name#" )';
 					expect( countOccurrences( content, needle ) ).toBe( 1 );
+					expect( content ).toInclude( 'getInterceptorService().register(' );
+					expect( content ).toInclude( 'name: "#name#"' );
 				}
 			} );
 
@@ -429,6 +440,53 @@ class extends="testbox.system.BaseSpec" {
 				// `this.datasource`, not `this.defaultDatasource` - the latter is
 				// accepted silently and has no effect (verified against the runtime)
 				expect( content ).toInclude( 'this.datasource = "acmechat"' );
+			} );
+
+			/**
+			 * config/ColdBox.bx's OWN `moduleSettings.cbauth.userServiceClass`
+			 * (the ColdBox-documented way to set it) never reaches cbauth on a
+			 * real boot - confirmed directly: with only that struct present,
+			 * cbauth's AuthenticationService still throws IncompleteConfiguration
+			 * on the very first sign-in attempt. config/modules/cbauth.bx (a
+			 * SEPARATE, function-call-based ColdBox mechanism) is what actually
+			 * works - see ColdBoxAppGenerator.renderCbauthModuleOverride().
+			 */
+			it( "writes config/modules/cbauth.bx (not moduleSettings.cbauth) when webUiHasUsers is true", function() {
+				var buildDir = newBuildDir();
+				var config = resolver.resolve( projectRoot = fixtures & "/full-project" );
+				generator.generate(
+					projectRoot    : fixtures & "/full-project",
+					buildDir       : buildDir,
+					resolvedConfig : config,
+					hasWebUi       : true,
+					webUiDatabase  : { datasource : "acmechat", path : "./data/chat.db" },
+					webUiHasUsers  : true
+				);
+
+				var overridePath = buildDir & "/config/modules/cbauth.bx";
+				expect( fileExists( overridePath ) ).toBeTrue();
+
+				var content = fileRead( overridePath );
+				expect( content ).toInclude( "function configure( settings )" );
+				expect( content ).toInclude( 'arguments.settings.userServiceClass = "UserService"' );
+				expect( content ).toInclude( "return arguments.settings" );
+
+				expect( fileRead( buildDir & "/config/ColdBox.bx" ) ).notToInclude( "cbauth" );
+			} );
+
+			it( "writes no config/modules/cbauth.bx when no webui entry declares users", function() {
+				var buildDir = newBuildDir();
+				var config = resolver.resolve( projectRoot = fixtures & "/full-project" );
+				generator.generate(
+					projectRoot    : fixtures & "/full-project",
+					buildDir       : buildDir,
+					resolvedConfig : config,
+					hasWebUi       : true,
+					webUiDatabase  : { datasource : "acmechat", path : "./data/chat.db" },
+					webUiHasUsers  : false
+				);
+
+				expect( fileExists( buildDir & "/config/modules/cbauth.bx" ) ).toBeFalse();
 			} );
 
 			it( "never declares an identity provider in the config", function() {

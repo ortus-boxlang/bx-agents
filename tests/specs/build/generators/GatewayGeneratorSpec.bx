@@ -98,14 +98,13 @@ class extends="testbox.system.BaseSpec" {
 				expect( fileExists( appDir & "/handlers/Gateway.bx" ) ).toBeFalse();
 			} );
 
-			it( "reports hasPushGateway=false and writes no session interceptor for http/cli/mock-only projects", function() {
+			it( "reports hasPushGateway=false and writes no session startup statement for http/cli/mock-only projects", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
 				var appDir = newAppDir();
 				var result = generator.generate( discovery, appDir );
 
 				expect( result.hasPushGateway ).toBeFalse();
-				expect( result.keyExists( "sessionInterceptorName" ) ).toBeFalse();
-				expect( fileExists( appDir & "/interceptors/GatewaySessionBootstrap.bx" ) ).toBeFalse();
+				expect( result.keyExists( "sessionStartupStatement" ) ).toBeFalse();
 			} );
 
 			it( "registers a telegram gateway via its bare class path, not the bare type name", function() {
@@ -216,7 +215,7 @@ class extends="testbox.system.BaseSpec" {
 				var result = generator.generate( discovery, appDir, { name: "gateways-whatsapp-cloud-agent", model: "openai/gpt-5" } );
 
 				expect( result.hasPushGateway ).toBeTrue();
-				var content = fileRead( appDir & "/interceptors/GatewaySessionBootstrap.bx" );
+				var content = result.sessionStartupStatement;
 				expect( content ).toInclude( 'aiGatewayRegistry().get( "whatsapp-cloud" )' );
 			} );
 
@@ -254,7 +253,7 @@ class extends="testbox.system.BaseSpec" {
 				var result = generator.generate( discovery, appDir, { name: "gateways-teams-agent", model: "openai/gpt-5" } );
 
 				expect( result.hasPushGateway ).toBeTrue();
-				var content = fileRead( appDir & "/interceptors/GatewaySessionBootstrap.bx" );
+				var content = result.sessionStartupStatement;
 				expect( content ).toInclude( 'aiGatewayRegistry().get( "teams" )' );
 			} );
 
@@ -294,7 +293,7 @@ class extends="testbox.system.BaseSpec" {
 				var result = generator.generate( discovery, appDir, { name: "gateways-twilio-agent", model: "openai/gpt-5" } );
 
 				expect( result.hasPushGateway ).toBeTrue();
-				var content = fileRead( appDir & "/interceptors/GatewaySessionBootstrap.bx" );
+				var content = result.sessionStartupStatement;
 				expect( content ).toInclude( 'aiGatewayRegistry().get( "twilio" )' );
 			} );
 
@@ -334,7 +333,7 @@ class extends="testbox.system.BaseSpec" {
 				var result = generator.generate( discovery, appDir, { name: "gateways-github-agent", model: "openai/gpt-5" } );
 
 				expect( result.hasPushGateway ).toBeTrue();
-				var content = fileRead( appDir & "/interceptors/GatewaySessionBootstrap.bx" );
+				var content = result.sessionStartupStatement;
 				expect( content ).toInclude( 'aiGatewayRegistry().get( "github" )' );
 			} );
 
@@ -357,24 +356,22 @@ class extends="testbox.system.BaseSpec" {
 				var result = generator.generate( discovery, appDir, { name: "gateways-signal-agent", model: "openai/gpt-5" } );
 
 				expect( result.hasPushGateway ).toBeTrue();
-				var content = fileRead( appDir & "/interceptors/GatewaySessionBootstrap.bx" );
+				var content = result.sessionStartupStatement;
 				expect( content ).toInclude( 'aiGatewayRegistry().get( "signal" )' );
 			} );
 
-			it( "reports hasPushGateway=true and writes interceptors/GatewaySessionBootstrap.bx for a telegram gateway", function() {
+			it( "reports hasPushGateway=true and generates a session startup statement for a telegram gateway", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-telegram" );
 				var appDir = newAppDir();
 				var result = generator.generate( discovery, appDir, { name: "gateways-telegram-agent", model: "openai/gpt-5" } );
 
 				expect( result.hasPushGateway ).toBeTrue();
-				expect( result.sessionInterceptorName ).toBe( "GatewaySessionBootstrap" );
 
-				var interceptorPath = appDir & "/interceptors/GatewaySessionBootstrap.bx";
-				expect( fileExists( interceptorPath ) ).toBeTrue();
-
-				var content = fileRead( interceptorPath );
-				expect( content ).toInclude( "function afterConfigurationLoad( event, interceptData )" );
-				expect( content ).toInclude( 'getController().getWireBox()' );
+				// A bare onApplicationStart() statement, not an interceptor file -
+				// an afterConfigurationLoad interceptor here never actually fires
+				// on a real ColdBox boot (no push gateway would ever start).
+				var content = result.sessionStartupStatement;
+				expect( content ).toInclude( 'application.cbController.getWireBox()' );
 				expect( content ).toInclude( 'wirebox.getInstance( "GeneratedAgent" )' );
 				expect( content ).toInclude( "aiGatewaySession(" );
 				// The registry key is the gateway CLASS's own fixed getName()
@@ -408,8 +405,8 @@ class extends="testbox.system.BaseSpec" {
 			it( "emits an aiGatewayRegistry().get() key that actually resolves a live-registered gateway", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-telegram" );
 				var appDir = newAppDir();
-				generator.generate( discovery, appDir, { name: "gateways-telegram-agent", model: "openai/gpt-5" } );
-				var interceptorContent = fileRead( appDir & "/interceptors/GatewaySessionBootstrap.bx" );
+				var result = generator.generate( discovery, appDir, { name: "gateways-telegram-agent", model: "openai/gpt-5" } );
+				var interceptorContent = result.sessionStartupStatement;
 
 				var match = reFind( 'aiGatewayRegistry\(\)\.get\(\s*"([^"]+)"\s*\)', interceptorContent, 1, true );
 				expect( match.len.len() ).toBeGTE( 2 );
@@ -428,7 +425,7 @@ class extends="testbox.system.BaseSpec" {
 				var appDir = newAppDir();
 				var result = generator.generate( discovery, appDir, { gatewaySession: { policy: "interrupt", maxQueueDepth: 10 } } );
 
-				var content = fileRead( appDir & "/interceptors/GatewaySessionBootstrap.bx" );
+				var content = result.sessionStartupStatement;
 				expect( content ).toInclude( '"interrupt"' );
 				expect( content ).toInclude( "maxQueueDepth: 10" );
 			} );

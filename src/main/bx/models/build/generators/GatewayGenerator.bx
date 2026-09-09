@@ -99,7 +99,7 @@ class {
 	 * @appDir Absolute path to the generated ColdBox app dir, e.g. "<projectRoot>/.build/app" - the handler (if needed) is written to "<appDir>/handlers/Gateway.bx"
 	 * @resolvedConfig The root project's resolved config (AgentConfigResolver.resolve()) - only `gatewaySession` is used, to configure the generated GatewaySession's policy/maxQueueDepth
 	 *
-	 * @return { registrationStatements: [], hasHttpGateway, handlerPath (only if hasHttpGateway), hasPushGateway, hasEmailGateway, hasWhatsAppCloudGateway, whatsAppCloudHandlerPath (only if hasWhatsAppCloudGateway), hasTeamsGateway, teamsHandlerPath (only if hasTeamsGateway), sessionInterceptorName (only if hasPushGateway) }
+	 * @return { registrationStatements: [], hasHttpGateway, handlerPath (only if hasHttpGateway), hasPushGateway, hasEmailGateway, hasWhatsAppCloudGateway, whatsAppCloudHandlerPath (only if hasWhatsAppCloudGateway), hasTeamsGateway, teamsHandlerPath (only if hasTeamsGateway), sessionStartupStatement (only if hasPushGateway) - a bare onApplicationStart() statement, see renderSessionStartupStatement() }
 	 */
 	struct function generate( required struct discovery, required string appDir, struct resolvedConfig = {} ) {
 		var channelEntries = collectChannelEntries( arguments.discovery )
@@ -203,11 +203,12 @@ class {
 		}
 
 		if ( pushGatewayNames.len() ) {
-			var interceptorDir = normalizePath( arguments.appDir ) & "/interceptors"
-			directoryCreate( path = interceptorDir, createPath = true, ignoreExists = true )
-			var interceptorName = "GatewaySessionBootstrap"
-			fileWrite( interceptorDir & "/#interceptorName#.bx", renderSessionInterceptor( pushGatewayNames, arguments.resolvedConfig ) )
-			result[ "sessionInterceptorName" ] = interceptorName
+			// A bare onApplicationStart() statement, not an afterConfigurationLoad
+			// interceptor: an interceptor here silently never fires (the same gap
+			// BuildPipeline.bx's own note describes for the web UI's account
+			// seeder), which would mean no push gateway (Telegram, etc.) ever
+			// actually starts. See renderSessionStartupStatement().
+			result[ "sessionStartupStatement" ] = renderSessionStartupStatement( pushGatewayNames, arguments.resolvedConfig )
 		}
 
 		return result
@@ -336,9 +337,20 @@ class {
 	 * @pushGatewayNames Every distinct push-style gateway TYPE present (see TYPE_CLASS_MAP) - these ARE the real aiGatewayRegistry() keys (== each gateway class's own fixed getName()), not the discovered gateways/* entries' own filenames
 	 * @resolvedConfig The root project's resolved config - only `gatewaySession` ({ policy, maxQueueDepth }, both optional) is used
 	 *
-	 * @return The rendered interceptors/GatewaySessionBootstrap.bx source
+	 * A bare onApplicationStart() statement block, not an afterConfigurationLoad
+	 * interceptor: an interceptor here silently never fires in a real ColdBox
+	 * boot (confirmed directly - `interceptors = [...]` in config/ColdBox.bx
+	 * never actually reaches ColdBox's InterceptorService on this stack, the
+	 * exact same gap BuildPipeline.bx's own comment already documents for the
+	 * web UI's account seeder), which would mean no push gateway ever starts.
+	 * `application.cbController`, not `getController()` - this statement is
+	 * inserted straight into Application.bx's onApplicationStart(), which has
+	 * no interceptor mixins, only what Application.bx itself sets up (see the
+	 * seed statement's own precedent).
+	 *
+	 * @return A single (embedded-newline) onApplicationStart() statement block starting every push gateway via one bx-ai GatewaySession
 	 */
-	private string function renderSessionInterceptor( required array pushGatewayNames, struct resolvedConfig = {} ) {
+	private string function renderSessionStartupStatement( required array pushGatewayNames, struct resolvedConfig = {} ) {
 		var sessionConfig = arguments.resolvedConfig.gatewaySession ?: {}
 		var policy = trim( sessionConfig.policy ?: "queue" )
 		var maxQueueDepth = sessionConfig.maxQueueDepth ?: 50
@@ -348,38 +360,22 @@ class {
 		} )
 
 		var lines = [
-			"/**",
-			" * GENERATED FILE - produced by BX Agents' build pipeline.",
-			" * Do not edit by hand; rebuilding your project overwrites this file.",
-			" *",
-			" * Wires the project's root agent to every push-style gateway",
-			" * (Telegram, and friends) via a single bx-ai GatewaySession,",
-			" * started once ColdBox's own framework - including the",
-			" * scheduler these gateways depend on - has finished loading.",
-			" */",
-			"class {",
-			"",
-			"	function afterConfigurationLoad( event, interceptData ) {",
-			"		var wirebox        = getController().getWireBox()",
-			'		var agent          = wirebox.getInstance( "GeneratedAgent" )',
+			'var wirebox = application.cbController.getWireBox()',
+			'var agent = wirebox.getInstance( "GeneratedAgent" )',
 			// "session" is a reserved BoxLang/ColdBox scope name (like "request"/
 			// "server"/"url"/"form"/"cgi"/"thread") - a local variable with that
 			// exact name can collide with the live scope rather than behaving as
 			// an ordinary local, so this is deliberately named "gatewaySession".
-			"		var gatewaySession = aiGatewaySession(",
-			"			agent        : agent,",
-			"			gateways     : [ #gatewayRefs.toList( ', ' )# ],",
-			"			policy       : #renderLiteral( policy )#,",
-			"			maxQueueDepth: #maxQueueDepth#",
-			"		)",
-			"		gatewaySession.start()",
-			"		application.bxaiGatewaySession = gatewaySession",
-			"	}",
-			"",
-			"}",
-			""
+			"var gatewaySession = aiGatewaySession(",
+			"	agent        : agent,",
+			"	gateways     : [ #gatewayRefs.toList( ', ' )# ],",
+			"	policy       : #renderLiteral( policy )#,",
+			"	maxQueueDepth: #maxQueueDepth#",
+			")",
+			"gatewaySession.start()",
+			"application.bxaiGatewaySession = gatewaySession"
 		]
-		return lines.toList( char( 10 ) )
+		return lines.toList( char( 10 ) & "		" )
 	}
 
 	/**
