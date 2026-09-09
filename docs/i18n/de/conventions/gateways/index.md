@@ -129,7 +129,7 @@ post( "/interactions/:requestID/decisions" ).toHandler( "Gateway.process" )
 ```
 
 !!! info
-    ColdBox hat keinen eingebauten `toAiGateway()`-DSL-Terminator für diese Oberfläche (nur `toAi()` und `toMCP()` existieren nativ) - diese Verdrahtung ist BxAgents' eigener generierter Code, in derselben Form, die ein zukünftiger Core-Terminator erzeugen würde. Siehe den Vorschlag [`toAiGateway()` für ColdBox Core](../../proposals/toAiGateway-coldbox-core.md).
+    ColdBox hat keinen eingebauten `toAiGateway()`-DSL-Terminator für diese Oberfläche (nur `toAi()` und `toMCP()` existieren nativ) - diese Verdrahtung ist BxAgents' eigener generierter Code, in derselben Form, die ein zukünftiger Core-Terminator erzeugen würde.
 
 ## 3. Push-style gateways (`type: "telegram"` / `"slack"` / `"discord"` / `"email"` / `"whatsapp-cloud"` / `"teams"` / `"twilio"` / `"github"` / `"signal"`, and friends)
 

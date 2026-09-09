@@ -129,7 +129,7 @@ post( "/interactions/:requestID/decisions" ).toHandler( "Gateway.process" )
 ```
 
 !!! info
-    ColdBox には、この用途のための組み込みの `toAiGateway()` DSL 終端子はありません (ネイティブに存在するのは `toAi()` と `toMCP()` のみです) - この配線は BxAgents 自身が生成するコードで、将来のコア終端子が生成するであろうものと同じ形状に従っています。詳しくは [ColdBox コア向け `toAiGateway()`](../../proposals/toAiGateway-coldbox-core.md) 提案を参照してください。
+    ColdBox には、この用途のための組み込みの `toAiGateway()` DSL 終端子はありません (ネイティブに存在するのは `toAi()` と `toMCP()` のみです) - この配線は BxAgents 自身が生成するコードで、将来のコア終端子が生成するであろうものと同じ形状に従っています。
 
 ## 3. Push-style gateways (`type: "telegram"` / `"slack"` / `"discord"` / `"email"` / `"whatsapp-cloud"` / `"teams"` / `"twilio"` / `"github"` / `"signal"`, and friends)
 
