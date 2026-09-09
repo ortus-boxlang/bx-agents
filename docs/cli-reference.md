@@ -88,6 +88,9 @@ Pretty-print an existing manifest.json.
 ::: card title="clean" icon="phosphor-duotone:broom" href="#clean"
 Remove a project's .build/ and dist/ output.
 :::
+::: card title="doctor" icon="phosphor-duotone:stethoscope" href="#doctor"
+Diagnose the runtime and project before build/serve surprise you.
+:::
 :::
 
 ### `new`
@@ -233,3 +236,19 @@ bxAgents clean [--force]
 - **Refuses to run unless the directory looks like a BxAgents project** (an `Agent.bx` or a `.build/manifest.json`). `dist/` is a common build-output name across the wider ecosystem, so this stops a `clean` in the wrong directory from deleting something unrelated. `--force` skips the check when you genuinely mean it.
 - Prints the absolute path of each directory before removing it.
 - Reports "Nothing to clean" if neither directory exists.
+
+### `doctor`
+
+Diagnose the runtime and your project - read-only, never builds or writes anything.
+
+```bash
+bxAgents doctor [--json]
+```
+
+- Reports the running BoxLang version, and warns if it is older than this module's own declared minimum.
+- Confirms `bx-ai` is loaded (always required).
+- Runs the exact same discovery/resolve/validate phases `build` runs, without generating anything - every validation error/warning `build` would hit shows up here first.
+- Checks every `*EnvVar`-suffixed config value across `gateways/*` (bot tokens, webhook secrets, IMAP credentials, web UI account passwords, API keys) against the real environment right now, and warns about any that aren't set. Nothing else checks this - `build` only checks that an env var name was *declared*, never that it's actually populated, so a missing one otherwise fails silently at runtime (a gateway that never sends, a web UI account that can't sign in).
+- Warns if a webui-exposed project doesn't have `qb` loaded, or if one declaring `users` doesn't have `cbauth` loaded - both are `box.json` dependencies you install yourself, never bundled by this module.
+- `--json` prints the raw findings as a JSON array (`[{ status, message }, ...]`) instead of the human-readable report - useful for scripting.
+- Exits `1` if any check failed, `0` otherwise - warnings alone don't fail it.

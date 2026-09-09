@@ -1,0 +1,357 @@
+/**
+ * `doctor` CLI verb - diagnoses a project's environment before you find out
+ * the hard way at `build`/`serve` time.
+ *
+ * Runs entirely read-only: nothing here builds, writes, or mutates a
+ * project. Three things a real project can get wrong that nothing else
+ * checks in one place:
+ *
+ *  - Is the running BoxLang new enough, and is bx-ai (always required)
+ *    actually loaded?
+ *  - Does the project's own source validate - the exact same discovery +
+ *    resolve + validate phases `build` runs, surfaced here without
+ *    generating anything.
+ *  - Every `*EnvVar`-suffixed config value across `gateways/*` (bot
+ *    tokens, webhook secrets, IMAP credentials, web UI account passwords,
+ *    API keys) names an environment variable to read at RUNTIME - nothing
+ *    else checks whether that variable is actually SET right now.
+ *    `ProjectValidator` already catches a gateway that never DECLARED one;
+ *    it has no way to know whether the one declared is populated. A
+ *    missing one degrades quietly (a gateway that never sends, a web UI
+ *    account that fails closed) rather than failing loudly, so it is
+ *    worth surfacing before that happens instead of after.
+ *
+ * Also flags `qb`/`cbauth` as missing when the project's own web UI
+ * configuration needs them (an exposed webui entry, or one declaring
+ * `users`) but they are not loaded - both are `box.json` dependencies a
+ * project installs itself, never bundled by this module (the same
+ * `cbmailservices`/`bx-mail` gap `docs/known-limitations.md` already
+ * documents for the email gateway).
+ */
+class {
+
+	/**
+	 * @options { projectRoot (required, absolute path), json (optional boolean - print findings as a JSON array instead of the human-readable report) }
+	 *
+	 * @return { exitCode (1 if any check failed, 0 otherwise), message }
+	 */
+	struct function run( struct options = {} ) {
+		var projectRoot = trim( arguments.options.projectRoot ?: "" )
+		if ( !len( projectRoot ) ) {
+			throw( type = "BxAgents.MissingProjectRoot", message = "`doctor` requires a project root" )
+		}
+
+		var root = projectRoot.reReplace( "[\/]+$", "" )
+		var checks = []
+
+		checkRuntime( checks )
+		checkModule( checks, "bxai", "bx-ai", true )
+
+		if ( !fileExists( root & "/Agent.bx" ) ) {
+			checks.append( {
+				status  : "fail",
+				message : "No Agent.bx found at [#root#] - `doctor` expects to run inside a BX Agents project."
+			} )
+			return finish( checks, arguments.options.json ?: false )
+		}
+		checks.append( { status : "ok", message : "Agent.bx found at [#root#]" } )
+
+		var discovery = ""
+		var config = ""
+		try {
+			discovery = new "models.build.ProjectDiscoverer@bxagents"().discover( root )
+			config = new "models.build.AgentConfigResolver@bxagents"().resolve( projectRoot : root )
+		} catch ( any e ) {
+			checks.append( { status : "fail", message : "Could not resolve Agent.bx: #e.message#" } )
+			return finish( checks, arguments.options.json ?: false )
+		}
+
+		checkProjectValidation( root, discovery, config, checks )
+		checkWebUiDependencies( discovery, checks )
+
+		return finish( checks, arguments.options.json ?: false )
+	}
+
+	// --------------------------------------------------------------------------
+	// Individual checks
+	// --------------------------------------------------------------------------
+
+	/**
+	 * Reports the running BoxLang version, and - best-effort only, since it
+	 * requires reading this module's own `box.json` off disk, which is not
+	 * guaranteed to be reachable from every install layout - whether it
+	 * meets `boxlang.minimumVersion`. A version too old to compare (or a
+	 * `box.json` that cannot be found/read) is silently skipped rather than
+	 * failing the whole check: the version line itself is what matters most.
+	 *
+	 * @checks Accumulator array - append() any findings
+	 */
+	private void function checkRuntime( required array checks ) {
+		var boxlangVersion = server.boxlang.version ?: "unknown"
+		arguments.checks.append( { status : "ok", message : "BoxLang #boxlangVersion#" } )
+
+		try {
+			var boxJsonPath = expandPath( "/bxModules/bxagents/box.json" )
+			if ( !fileExists( boxJsonPath ) ) {
+				return
+			}
+			var minimumVersion = jsonDeserialize( fileRead( boxJsonPath ) ).boxlang.minimumVersion ?: ""
+			if ( !len( minimumVersion ) ) {
+				return
+			}
+			if ( compareVersions( boxlangVersion, minimumVersion ) < 0 ) {
+				arguments.checks.append( {
+					status  : "warn",
+					message : "Running BoxLang #boxlangVersion# is older than bx-agents' declared minimum #minimumVersion#"
+				} )
+			}
+		} catch ( any e ) {
+			// Best-effort only - see this function's own docblock.
+		}
+	}
+
+	/**
+	 * Compares two dotted version strings by their leading numeric
+	 * major.minor.patch segments only - a pre-release/build suffix
+	 * (`-snapshot`, `+18`, `+57`) is stripped first and never compared, so
+	 * this is a coarse "at least as new" check, not a real semver
+	 * comparison.
+	 *
+	 * @a A version string, e.g. "1.16.0-snapshot+4608"
+	 * @b A version string to compare against, e.g. "1.16.0"
+	 *
+	 * @return Negative if a < b, zero if equal, positive if a > b
+	 */
+	private numeric function compareVersions( required string a, required string b ) {
+		var partsA = numericVersionParts( arguments.a )
+		var partsB = numericVersionParts( arguments.b )
+		for ( var i = 1; i <= 3; i++ ) {
+			var diff = ( partsA[ i ] ?: 0 ) - ( partsB[ i ] ?: 0 )
+			if ( diff != 0 ) {
+				return diff
+			}
+		}
+		return 0
+	}
+
+	/**
+	 * @version A version string, e.g. "1.16.0-snapshot+4608"
+	 *
+	 * @return Up to 3 leading numeric segments, e.g. [ 1, 16, 0 ]
+	 */
+	private array function numericVersionParts( required string version ) {
+		var leading = arguments.version.reReplace( "[^0-9.].*$", "" )
+		return leading.listToArray( "." ).map( function( part ) {
+			return isNumeric( part ) ? int( part ) : 0
+		} )
+	}
+
+	/**
+	 * @checks Accumulator array - append() any findings
+	 * @moduleName The BoxLang module name to query via getModuleInfo(), e.g. "bxai"
+	 * @displayName The human-facing name to report, e.g. "bx-ai"
+	 * @required When true, a missing module is a fail; otherwise a warn
+	 */
+	private void function checkModule(
+		required array checks,
+		required string moduleName,
+		required string displayName,
+		boolean required = false
+	) {
+		var info = getModuleInfo( arguments.moduleName )
+		if ( structIsEmpty( info ) ) {
+			arguments.checks.append( {
+				status  : arguments.required ? "fail" : "warn",
+				message : "#arguments.displayName# module not found - `box install #arguments.displayName#` (or confirm modulesDirectory in boxlang.json)"
+			} )
+			return
+		}
+		arguments.checks.append( { status : "ok", message : "#arguments.displayName# #info.version ?: ''# loaded" } )
+	}
+
+	/**
+	 * Runs the same discovery/resolve output `build` already has through
+	 * `ProjectValidator` - the exact checks a real `build` would run,
+	 * without generating anything.
+	 *
+	 * @root Absolute path to the project root
+	 * @discovery ProjectDiscoverer.discover()'s result
+	 * @config AgentConfigResolver.resolve()'s result
+	 * @checks Accumulator array - append() any findings
+	 */
+	private void function checkProjectValidation(
+		required string root,
+		required struct discovery,
+		required struct config,
+		required array checks
+	) {
+		var validation = new "models.build.ProjectValidator@bxagents"().validate( arguments.root, arguments.discovery, arguments.config )
+
+		for ( var error in validation.errors ) {
+			arguments.checks.append( { status : "fail", message : error } )
+		}
+		for ( var warning in validation.warnings ) {
+			arguments.checks.append( { status : "warn", message : warning } )
+		}
+		if ( !validation.errors.len() && !validation.warnings.len() ) {
+			arguments.checks.append( { status : "ok", message : "Project structure validates cleanly" } )
+		}
+	}
+
+	/**
+	 * Loads every `gateways/*` entry's own config (channel adapters AND
+	 * `exposes` entries alike - both live in the same folder, and both can
+	 * declare `*EnvVar` fields), checks every `*EnvVar` value found anywhere
+	 * in it against the real environment, and separately flags `qb`/`cbauth`
+	 * as missing when the project's own web UI configuration needs them.
+	 *
+	 * @discovery ProjectDiscoverer.discover()'s result
+	 * @checks Accumulator array - append() any findings
+	 */
+	private void function checkWebUiDependencies( required struct discovery, required array checks ) {
+		var hasWebUi = false
+		var webUiHasUsers = false
+		var seenEnvVars = {}
+
+		for ( var entry in arguments.discovery.gateways ) {
+			var entryConfig = readEntryConfig( entry.path )
+			if ( !isStruct( entryConfig ) ) {
+				continue
+			}
+
+			if ( ( entryConfig.exposes ?: "" ) == "webui" ) {
+				hasWebUi = true
+				if ( ( entryConfig.users ?: [] ).len() ) {
+					webUiHasUsers = true
+				}
+			}
+
+			collectEnvVarChecks( entryConfig, arguments.checks, seenEnvVars )
+		}
+
+		if ( hasWebUi ) {
+			checkModule( arguments.checks, "qb", "qb", false )
+		}
+		if ( webUiHasUsers ) {
+			checkModule( arguments.checks, "cbauth", "cbauth", false )
+		}
+	}
+
+	/**
+	 * Reads a discovered `gateways/*` entry's config: JSON files are
+	 * deserialized directly, `.bx` files are dynamically loaded and their
+	 * `configure()` invoked. Mirrors GatewayGenerator's own
+	 * `readEntryConfig()` - kept as its own small copy here rather than
+	 * shared, matching this project's existing pattern of small,
+	 * independently-testable per-verb/per-generator helpers.
+	 *
+	 * @path Absolute path to the entry's `.bx`/`.json` file
+	 *
+	 * @return The entry's config struct, or null if it could not be read
+	 */
+	private any function readEntryConfig( required string path ) {
+		try {
+			if ( arguments.path.endsWith( ".json" ) ) {
+				return jsonDeserialize( fileRead( arguments.path ) )
+			}
+
+			var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
+			var instance = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
+				.instantiate( arguments.path, context )
+			return instance.configure()
+		} catch ( any e ) {
+			return null
+		}
+	}
+
+	/**
+	 * Recursively walks a struct/array, and for every struct key ending in
+	 * `EnvVar` whose value is a non-empty string, checks whether that
+	 * environment variable is currently set (`getSystemSetting()`, matching
+	 * every generated gateway's own runtime lookup exactly) and appends one
+	 * finding - `ok` when set, `warn` when not. Each variable name is only
+	 * checked once even if several entries declare the same one.
+	 *
+	 * @node A struct or array to walk (a gateway entry's config, or a nested value within it)
+	 * @checks Accumulator array - append() any findings
+	 * @seenEnvVars Struct used as a set of already-checked variable names - mutated in place
+	 */
+	private void function collectEnvVarChecks( required any node, required array checks, required struct seenEnvVars ) {
+		if ( isStruct( arguments.node ) ) {
+			for ( var key in arguments.node ) {
+				var value = arguments.node[ key ]
+				if ( key.endsWith( "EnvVar" ) && isSimpleValue( value ) && len( value ) ) {
+					if ( !arguments.seenEnvVars.keyExists( value ) ) {
+						arguments.seenEnvVars[ value ] = true
+						var isSet = len( getSystemSetting( value, "" ) ) > 0
+						arguments.checks.append( {
+							status  : isSet ? "ok" : "warn",
+							message : isSet ? "#value# is set" : "#value# is not set"
+						} )
+					}
+				} else {
+					collectEnvVarChecks( value, arguments.checks, arguments.seenEnvVars )
+				}
+			}
+		} else if ( isArray( arguments.node ) ) {
+			for ( var item in arguments.node ) {
+				collectEnvVarChecks( item, arguments.checks, arguments.seenEnvVars )
+			}
+		}
+	}
+
+	// --------------------------------------------------------------------------
+	// Reporting
+	// --------------------------------------------------------------------------
+
+	/**
+	 * @checks Every finding gathered, in the order the checks ran
+	 * @asJson When true, render `message` as a JSON array of the raw findings instead of the human-readable report
+	 *
+	 * @return { exitCode (1 if any check is a fail, 0 otherwise), message, checks }
+	 */
+	private struct function finish( required array checks, boolean asJson = false ) {
+		var hasFail = false
+		for ( var check in arguments.checks ) {
+			if ( check.status == "fail" ) {
+				hasFail = true
+				break
+			}
+		}
+
+		if ( arguments.asJson ) {
+			return {
+				exitCode : hasFail ? 1 : 0,
+				message  : jsonSerialize( arguments.checks ),
+				checks   : arguments.checks
+			}
+		}
+
+		var lines = []
+		var failCount = 0
+		var warnCount = 0
+		for ( var check in arguments.checks ) {
+			var label = check.status == "fail" ? "FAIL" : ( check.status == "warn" ? "WARN" : " OK " )
+			lines.append( "[#label#] #check.message#" )
+			if ( check.status == "fail" ) {
+				failCount++
+			} else if ( check.status == "warn" ) {
+				warnCount++
+			}
+		}
+
+		lines.append( "" )
+		if ( !failCount && !warnCount ) {
+			lines.append( "Everything checks out." )
+		} else {
+			lines.append( "#failCount# problem(s), #warnCount# warning(s)." )
+		}
+
+		return {
+			exitCode : hasFail ? 1 : 0,
+			message  : lines.toList( char( 10 ) ),
+			checks   : arguments.checks
+		}
+	}
+
+}
