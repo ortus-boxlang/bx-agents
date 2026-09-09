@@ -254,13 +254,39 @@ public class ModuleCliProcessTest {
 	}
 
 	/**
+	 * Runs AFTER testCleanProcess (needs .build gone so `package` genuinely
+	 * has nothing to package). Every other exit-code assertion in this class
+	 * only ever proves the SUCCESS path (0) - which `main()` returning a
+	 * plain int, never actually exiting the process, would already have
+	 * satisfied by accident (a process that never calls System.exit() at
+	 * all also "exits 0"). This is the one test in the whole suite that can
+	 * tell the two apart: only a genuine `CLIExit( 1 )` produces a non-zero
+	 * OS exit code here. Confirmed directly this session that before
+	 * ModuleConfig.main() wrapped dispatch() in CLIExit(), this exact
+	 * scenario silently exited 0 - `bxAgents build && deploy` in a CI
+	 * script would have gone on to `deploy` right after a failed `build`.
+	 */
+	@Order( 5 )
+	@DisplayName( "a real failing verb OS process (`package` with no prior build) exits non-zero" )
+	@Test
+	public void testFailingVerbProcessExitsNonZero() throws Exception {
+		ensureTempModuleInstall();
+		assumeTrue( Files.exists( projectDir.resolve( "Agent.bx" ) ), "requires testNewProcess to have run first" );
+		assumeTrue( !Files.exists( projectDir.resolve( ".build" ) ), "requires testCleanProcess to have run first" );
+
+		VerbResult result = runVerbCapturing( "package", projectDir.toString() );
+
+		assertFalse( result.exitCode() == 0, "module:bxagents package with no prior build must exit non-zero - got 0, output:\n" + result.output() );
+	}
+
+	/**
 	 * Runs AFTER testCleanProcess (needs .build gone so this build isn't a
 	 * no-op re-run over already-generated output) - proves --verbose's live
 	 * phase/interaction output reaches a genuine OS process's real stdout,
 	 * not just BuildPipelineSpec.bx's in-process onProgress collection, and
 	 * that the DEFAULT (no --verbose) run stays exactly as quiet as before.
 	 */
-	@Order( 5 )
+	@Order( 6 )
 	@DisplayName( "`module:bxagents build --verbose` prints live phase/interaction output; plain `build` stays quiet" )
 	@Test
 	public void testBuildVerboseProcess() throws Exception {
