@@ -150,6 +150,94 @@ class extends="testbox.system.BaseSpec" {
 				expect( fileRead( result.gitignore ) ).toBe( "custom-ignore-line" );
 			} );
 
+			it( "defaults to the 'minimal' template when --template is omitted", function() {
+				var dir = newTargetDir();
+				var result = scaffolder.scaffold( dir, "my-agent", "openai/gpt-5" );
+
+				expect( result.template ).toBe( "minimal" );
+				expect( fileExists( dir & "/gateways/webui.bx" ) ).toBeFalse();
+				expect( fileExists( dir & "/schedules/Scheduler.bx" ) ).toBeFalse();
+			} );
+
+			it( "rejects an unrecognized --template", function() {
+				var dir = newTargetDir();
+
+				expect( function() {
+					scaffolder.scaffold( dir, "my-agent", "openai/gpt-5", "", "not-a-real-template" );
+				} ).toThrow( "BxAgents.UnknownTemplate" );
+			} );
+
+			it( "the webui-chat template adds a gateways/webui.bx exposing a chat UI at /chat", function() {
+				var dir = newTargetDir();
+				scaffolder.scaffold( dir, "my-agent", "openai/gpt-5", "", "webui-chat" );
+
+				var path = dir & "/gateways/webui.bx";
+				expect( fileExists( path ) ).toBeTrue();
+				var content = fileRead( path );
+				expect( content ).toInclude( 'exposes : "webui"' );
+				expect( content ).toInclude( 'path    : "/chat"' );
+			} );
+
+			it( "the slack-bot template adds a gateways/slack.bx and matching .env stub lines", function() {
+				var dir = newTargetDir();
+				var result = scaffolder.scaffold( dir, "my-agent", "openai/gpt-5", "", "slack-bot" );
+
+				var gatewayPath = dir & "/gateways/slack.bx";
+				expect( fileExists( gatewayPath ) ).toBeTrue();
+				var gatewayContent = fileRead( gatewayPath );
+				expect( gatewayContent ).toInclude( 'type           : "slack"' );
+				expect( gatewayContent ).toInclude( 'botTokenEnvVar : "SLACK_BOT_TOKEN"' );
+				expect( gatewayContent ).toInclude( 'appTokenEnvVar : "SLACK_APP_TOKEN"' );
+
+				var envContent = fileRead( result.env );
+				expect( envContent ).toInclude( "SLACK_BOT_TOKEN=" );
+				expect( envContent ).toInclude( "SLACK_APP_TOKEN=" );
+				// The base .env content is still there too - stubs are appended, not replacing it
+				expect( envContent ).toInclude( "BOXLANG_HOME=.build/runtime" );
+			} );
+
+			it( "the mcp-server template adds an example mcp/ tool and a gateways/ entry exposing it", function() {
+				var dir = newTargetDir();
+				scaffolder.scaffold( dir, "my-agent", "openai/gpt-5", "", "mcp-server" );
+
+				expect( fileExists( dir & "/mcp/exampleServer.bx" ) ).toBeTrue();
+
+				var gatewayPath = dir & "/gateways/mcpExpose.bx";
+				expect( fileExists( gatewayPath ) ).toBeTrue();
+				var content = fileRead( gatewayPath );
+				expect( content ).toInclude( 'exposes : "mcp"' );
+				expect( content ).toInclude( 'target  : "exampleServer"' );
+			} );
+
+			it( "the scheduled template adds a real schedules/Scheduler.bx calling the scaffolded agent by name", function() {
+				var dir = newTargetDir();
+				scaffolder.scaffold( dir, "my-agent", "openai/gpt-5", "", "scheduled" );
+
+				var path = dir & "/schedules/Scheduler.bx";
+				expect( fileExists( path ) ).toBeTrue();
+				var content = fileRead( path );
+				expect( content ).toInclude( 'extends="coldbox.system.web.tasks.ColdBoxScheduler"' );
+				expect( content ).toInclude( 'getInstance( "my-agent" )' );
+			} );
+
+			it( "every non-minimal template validates cleanly with ProjectValidator", function() {
+				var discoverer = new bxagents.models.build.ProjectDiscoverer();
+				var resolver = new bxagents.models.build.AgentConfigResolver();
+				var validator = new bxagents.models.build.ProjectValidator();
+
+				for ( var template in [ "webui-chat", "slack-bot", "mcp-server", "scheduled" ] ) {
+					var dir = newTargetDir();
+					scaffolder.scaffold( dir, "my-agent", "openai/gpt-5", "", template );
+
+					var discovery = discoverer.discover( dir );
+					var config = resolver.resolve( projectRoot = dir );
+					var result = validator.validate( dir, discovery, config );
+
+					expect( result.errors ).toBeArray();
+					expect( result.errors.len() ).toBe( 0 );
+				}
+			} );
+
 		} );
 	}
 

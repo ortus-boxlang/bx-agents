@@ -83,17 +83,37 @@ Die .build/- und dist/-Ausgabe eines Projekts entfernen.
 
 ### `new`
 
-Ein neues Agentenprojekt anlegen.
+Ein neues Agentenprojekt auf eine von drei sich gegenseitig ausschließenden Arten anlegen: aus einer eingebauten Vorlage erstellen, ein GitHub-Repo klonen oder ein ForgeBox-Paket installieren.
 
 ```bash
-bxAgents new my-agent --model=openai/gpt-5 [--name=...] [--description=...]
+# Aus einer eingebauten Vorlage erstellen (Standard: minimal)
+bxAgents new my-agent --model=openai/gpt-5 [--template=minimal|webui-chat|slack-bot|mcp-server|scheduled] [--name=...] [--description=...]
+
+# Ein vorhandenes GitHub-Repo klonen
+bxAgents new my-agent --repo=owner/repo-name
+
+# Ein ForgeBox-Paket installieren
+bxAgents new my-agent --forgebox=some-package-slug
 ```
 
-- `--model` ist **erforderlich** - ein `provider/model`-Slug (siehe [Agent.bx](conventions/agent-bx.md)).
-- `--name` fällt standardmäßig auf den eigenen Basisnamen des Zielverzeichnisses zurück.
-- Verweigert die Ausführung, falls das Ziel bereits ein `Agent.bx` enthält.
-- Erzeugt `Agent.bx`, `instructions.md`, jeden Konventionsordner (leer), einen sofort lauffähigen [`tests/`](conventions/testing.md)-Ordner (`tests/box.json` + `tests/specs/AgentSpec.bx`), eine `.env`, die `BOXLANG_HOME=.build/runtime` deklariert (passend zum eigenen begrenzten Runtime-Home von `serve` - siehe [Bekannte Einschränkungen](known-limitations.md) für genau das, was das abdeckt und was nicht), sowie eine `.gitignore` (`.build/`, `dist/`, `.env`). Überschreibt nie eine vorhandene `.env`/`.gitignore`.
-- Führt außerdem `box install` innerhalb des neuen `tests/`-Ordners aus, sodass `bxAgents test` sofort funktioniert, ohne einen separaten Schritt `cd tests && box install`. Dies erfolgt nach bestem Bemühen: Ist `box` nicht im `PATH` oder schlägt die Installation fehl, gelingt `new` trotzdem - die Meldung weist nur darauf hin, es selbst auszuführen. `--skipInstall` übergeben, um diesen Schritt vollständig zu überspringen.
+- `--template`, `--repo` und `--forgebox` benennen drei verschiedene Projekt-QUELLEN - genau eine davon gilt. Zwei davon zu kombinieren ist ein Fehler.
+- **`--template`-Modus** (der Standard, wenn überhaupt keine Quell-Option übergeben wird - `minimal`):
+  - `--model` ist **erforderlich** - ein `provider/model`-Slug (siehe [Agent.bx](conventions/agent-bx.md)).
+  - `--name` fällt standardmäßig auf den eigenen Basisnamen des Zielverzeichnisses zurück.
+  - Verweigert die Ausführung, falls das Ziel bereits ein `Agent.bx` enthält.
+  - Erzeugt `Agent.bx`, `instructions.md`, jeden Konventionsordner (leer), einen sofort lauffähigen [`tests/`](conventions/testing.md)-Ordner (`tests/box.json` + `tests/specs/AgentSpec.bx`), eine `.env`, die `BOXLANG_HOME=.build/runtime` deklariert (passend zum eigenen begrenzten Runtime-Home von `serve` - siehe [Bekannte Einschränkungen](known-limitations.md) für genau das, was das abdeckt und was nicht), sowie eine `.gitignore` (`.build/`, `dist/`, `.env`). Überschreibt nie eine vorhandene `.env`/`.gitignore`.
+  - `--template` wählt eine von 5 eingebauten Vorlagen, die jeweils etwas vorkonfigurierten Inhalt auf das obige Basisgerüst legen:
+    - `minimal` - das nackte Gerüst, nichts weiter.
+    - `webui-chat` - fügt ein `gateways/webui.bx` hinzu, das die [Web-Chat-UI](conventions/gateways/index.md) unter `/chat` freigibt.
+    - `slack-bot` - fügt einen `gateways/slack.bx`-Kanaladapter hinzu, plus passende `SLACK_BOT_TOKEN`/`SLACK_APP_TOKEN`-Platzhalterzeilen in `.env`.
+    - `mcp-server` - fügt einen Beispiel-Tool-Server `mcp/exampleServer.bx` sowie einen `gateways/mcpExpose.bx`-Eintrag hinzu, der ihn als MCP-Server unter `/mcp` freigibt.
+    - `scheduled` - fügt einen echten [`schedules/Scheduler.bx`](conventions/schedules.md) hinzu, der den Agenten täglich zeitgesteuert aufruft.
+  - Führt außerdem `box install` innerhalb des neuen `tests/`-Ordners aus, sodass `bxAgents test` sofort funktioniert, ohne einen separaten Schritt `cd tests && box install`. Dies erfolgt nach bestem Bemühen: Ist `box` nicht im `PATH` oder schlägt die Installation fehl, gelingt `new` trotzdem - die Meldung weist nur darauf hin, es selbst auszuführen. `--skipInstall` übergeben, um diesen Schritt vollständig zu überspringen.
+- **`--repo`-Modus** (`--repo=owner/repo-name` oder eine vollständige URL): klont das Repo über eine mitgelieferte [JGit](https://www.eclipse.org/jgit/)-Abhängigkeit - es muss kein `git`-Programm installiert sein. Klont immer flach (Tiefe 1) und entfernt den entstandenen `.git`-Ordner danach immer, sodass das neue Projekt mit einer sauberen Historie startet, statt an den eigenen Remote des Vorlagen-Repos gebunden zu bleiben. Verweigert die Ausführung in ein Verzeichnis, das bereits existiert und nicht leer ist, und schlägt klar fehl, wenn im geklonten Repo kein `Agent.bx` gefunden wird.
+- **`--forgebox`-Modus** (`--forgebox=<slug>`): installiert ein [ForgeBox](https://www.forgebox.io)-Paket, indem direkt mit ForgeBox' eigener REST-API gesprochen wird (kein `box`-CLI erforderlich). Schlägt klar fehl, wenn der Slug nicht existiert, der Download fehlschlägt oder das installierte Paket kein `Agent.bx` an seiner Wurzel hat (dabei wird zunächst eine Ebene Verschachtelung aufgelöst, da viele ForgeBox-Archive ihren Inhalt in einem einzigen obersten Ordner verpacken).
+- `--model`, `--repo` und `--forgebox` schließen sich insofern gegenseitig aus, als nur der `--template`-Modus `--model` benötigt - `--repo`/`--forgebox` erfordern es nie, da das Quellprojekt bereits sein eigenes definiert.
+- `--name`/`--description` werden (mit einer Warnung in der Ausgabe) ignoriert, wenn `--repo`/`--forgebox` verwendet wird - das geklonte/installierte Projekt definiert sein eigenes.
+- Der `box install`-Komfortschritt für `tests/` (und `--skipInstall`) gelten nur für den `--template`-Modus - der eigene `tests/`-Ordner eines geklonten/installierten Projekts (falls überhaupt vorhanden) bleibt unangetastet.
 
 ### `build`
 

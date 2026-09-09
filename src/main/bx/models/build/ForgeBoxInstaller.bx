@@ -1,0 +1,115 @@
+/**
+ * Creates a new BX Agents project by installing a ForgeBox package
+ * (`new --forgebox=<slug>`) - CommandBox's package registry, which can host
+ * a full app/template, not just a library.
+ *
+ * Unlike `New.bx`'s existing `installTestsDependencies()` (a best-effort
+ * convenience step for the scaffolded `tests/` folder - it never throws),
+ * this is NOT best-effort: without it succeeding there is no project at
+ * all, so every failure mode throws a typed exception.
+ */
+class {
+
+	property name="forgeBoxClient";
+
+	/**
+	 * @return this
+	 */
+	function init() {
+		variables.forgeBoxClient = new "models.build.ForgeBoxClient@bxagents"()
+		return this
+	}
+
+	/**
+	 * Test-only seam - lets specs stub every ForgeBox call without a real
+	 * network request. See `ForgeBoxClient.bx`'s own `setEntryCaller()`/
+	 * `setDownloadCaller()`.
+	 *
+	 * @client A ForgeBoxClient instance (real or stubbed)
+	 */
+	void function setForgeBoxClient( required any client ) {
+		variables.forgeBoxClient = arguments.client
+	}
+
+	/**
+	 * @slug The ForgeBox package slug
+	 * @targetDir Absolute path to the new project directory - must not already exist, or must be empty
+	 *
+	 * @return { projectRoot }
+	 */
+	struct function install( required string slug, required string targetDir ) {
+		var dir = arguments.targetDir.reReplace( "[\/]+$", "" )
+
+		if ( directoryExists( dir ) && directoryList( dir, false, "query" ).recordCount > 0 ) {
+			throw(
+				type    = "BxAgents.ForgeboxInstallFailed",
+				message = "[#dir#] already exists and is not empty - refusing to install [#arguments.slug#] there"
+			)
+		}
+
+		var entry = variables.forgeBoxClient.getEntry( arguments.slug )
+		var downloadUrl = variables.forgeBoxClient.resolveDownloadUrl( entry )
+
+		var tempZipPath = getTempDirectory() & "/bxagents-forgebox-" & createUUID() & ".zip"
+		try {
+			variables.forgeBoxClient.downloadZip( downloadUrl, tempZipPath )
+
+			directoryCreate( path = dir, createPath = true, ignoreExists = true )
+			extract( source = tempZipPath, destination = dir, format = "zip", overwrite = true )
+		} finally {
+			if ( fileExists( tempZipPath ) ) {
+				fileDelete( tempZipPath )
+			}
+		}
+
+		unwrapSingleNestedFolder( dir )
+
+		if ( !fileExists( dir & "/Agent.bx" ) ) {
+			throw(
+				type    = "BxAgents.ForgeboxInstallFailed",
+				message = "Installed ForgeBox package [#arguments.slug#] into [#dir#], but no Agent.bx was found there - is this a BX Agents project template?"
+			)
+		}
+
+		return { projectRoot : dir }
+	}
+
+	/**
+	 * Many ForgeBox archives nest everything under one top-level folder
+	 * (usually the slug's own name), matching a typical GitHub-style zip
+	 * export. If extraction produced exactly one top-level entry and it's a
+	 * directory, move its contents up one level so `dir` itself is the
+	 * project root.
+	 *
+	 * @dir Absolute path the archive was extracted into
+	 */
+	private void function unwrapSingleNestedFolder( required string dir ) {
+		if ( fileExists( arguments.dir & "/Agent.bx" ) ) {
+			return
+		}
+
+		var entries = directoryList( arguments.dir, false, "query" )
+		if ( entries.recordCount != 1 ) {
+			return
+		}
+
+		var onlyEntryPath = arguments.dir & "/" & entries.name[ 1 ]
+		if ( !directoryExists( onlyEntryPath ) ) {
+			return
+		}
+
+		var children = directoryList( onlyEntryPath, false, "query" )
+		for ( var i = 1; i <= children.recordCount; i++ ) {
+			var childName = children.name[ i ]
+			var childPath = onlyEntryPath & "/" & childName
+			var destPath = arguments.dir & "/" & childName
+			if ( children.type[ i ] == "Dir" ) {
+				directoryMove( childPath, destPath )
+			} else {
+				fileMove( childPath, destPath )
+			}
+		}
+		directoryDelete( onlyEntryPath, true )
+	}
+
+}

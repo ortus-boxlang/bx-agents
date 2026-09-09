@@ -71,6 +71,64 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.message ).notToInclude( "box install" );
 			} );
 
+			it( "passes --template through to ProjectScaffolder", function() {
+				var dir = newTargetDir();
+				verb.run( { projectRoot : dir, model : "openai/gpt-5", template : "webui-chat", skipInstall : true } );
+
+				expect( fileExists( dir & "/gateways/webui.bx" ) ).toBeTrue();
+			} );
+
+			it( "throws BxAgents.ConflictingProjectSource when --repo and --forgebox are both passed", function() {
+				var dir = newTargetDir();
+
+				expect( function() {
+					verb.run( { projectRoot : dir, repo : "someOwner/some-repo", forgebox : "some-slug" } );
+				} ).toThrow( "BxAgents.ConflictingProjectSource" );
+			} );
+
+			it( "throws BxAgents.ConflictingProjectSource when --template is combined with --repo", function() {
+				var dir = newTargetDir();
+
+				expect( function() {
+					verb.run( { projectRoot : dir, repo : "someOwner/some-repo", template : "webui-chat" } );
+				} ).toThrow( "BxAgents.ConflictingProjectSource" );
+			} );
+
+			it( "throws BxAgents.ConflictingProjectSource when --template is combined with --forgebox", function() {
+				var dir = newTargetDir();
+
+				expect( function() {
+					verb.run( { projectRoot : dir, forgebox : "some-slug", template : "webui-chat" } );
+				} ).toThrow( "BxAgents.ConflictingProjectSource" );
+			} );
+
+			/**
+			 * --model is only required in --template mode - a cloned/installed
+			 * project defines its own. Proven without a real network call: a
+			 * pre-populated non-empty target dir makes RepoCloner fail its own
+			 * precondition check instantly, so the error surfaced is provably
+			 * clone-related, never BxAgents.MissingModel.
+			 */
+			it( "does not require --model when --repo is passed", function() {
+				var dir = newTargetDir();
+				directoryCreate( path = dir, createPath = true, ignoreExists = true );
+				fileWrite( dir & "/already-here.txt", "x" );
+
+				expect( function() {
+					verb.run( { projectRoot : dir, repo : "someOwner/some-repo" } );
+				} ).toThrow( "BxAgents.RepoCloneFailed" );
+			} );
+
+			it( "does not require --model when --forgebox is passed", function() {
+				var dir = newTargetDir();
+				directoryCreate( path = dir, createPath = true, ignoreExists = true );
+				fileWrite( dir & "/already-here.txt", "x" );
+
+				expect( function() {
+					verb.run( { projectRoot : dir, forgebox : "some-slug" } );
+				} ).toThrow( "BxAgents.ForgeboxInstallFailed" );
+			} );
+
 		} );
 	}
 

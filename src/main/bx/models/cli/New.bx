@@ -1,7 +1,22 @@
 /**
- * `new` CLI verb - thin dispatcher over ProjectScaffolder (M12). CLI-agnostic:
- * takes an already-parsed options struct (see ModuleConfig.bx's main()),
- * never touches raw argv or the current working directory itself.
+ * `new` CLI verb - creates a new BX Agents project one of three mutually
+ * exclusive ways: CLI-agnostic in every case (takes an already-parsed
+ * options struct - see ModuleConfig.bx's dispatch() - never touches raw
+ * argv or the current working directory itself).
+ *
+ * 1. `--template=<name>` (default `minimal` when no source flag is given at
+ *    all) - scaffolds one of ProjectScaffolder's 5 built-in starters.
+ *    `--model` is REQUIRED in this mode.
+ * 2. `--repo=<owner/repo|url>` - clones an existing GitHub repo via
+ *    RepoCloner (a bundled JGit dependency, no `git` binary required).
+ *    `--model` is NOT required - the cloned project defines its own.
+ * 3. `--forgebox=<slug>` - installs a ForgeBox package via ForgeBoxInstaller
+ *    (a native BoxLang HTTP client, no `box` CLI required). `--model` is NOT
+ *    required either.
+ *
+ * `--template` cannot be combined with `--repo`/`--forgebox`, and `--repo`/
+ * `--forgebox` cannot be combined with each other - each names a different
+ * project SOURCE, so exactly one applies.
  *
  * Also runs `box install` inside the scaffolded `tests/` folder (which
  * ProjectScaffolder always writes its own `box.json` declaring a `testbox`
@@ -10,16 +25,22 @@
  * themselves first. This is a best-effort convenience step, not a build
  * requirement: if `box` isn't on PATH or the install fails, `new` still
  * reports success (the project files themselves were written just fine) -
- * it just tells the user to run the install manually.
+ * it just tells the user to run the install manually. Only ever attempted
+ * for the `--template` path: a cloned/installed project may have no
+ * `tests/box.json` at all, or a completely different one - running `box
+ * install` there would be guessing at someone else's project layout, not
+ * "best-effort convenience."
  *
  * `--skipInstall` opts out of this step entirely (no attempt, no message) -
  * for CI/tests that need `new` to stay fast and network-independent, the
  * same reason `eve add`'s own registry install has a `--skip-install` flag.
+ * It's a silent no-op (not an error) when passed alongside `--repo`/
+ * `--forgebox`, since the step never runs there anyway.
  */
 class {
 
 	/**
-	 * @options { projectRoot (required, absolute path), name, model (required), description, skipInstall (optional boolean - skip the tests/ `box install` convenience step entirely) }
+	 * @options { projectRoot (required, absolute path), name, model (required only with --template/no source flag), description, template (optional, one of ProjectScaffolder.TEMPLATES - default "minimal"), repo (optional - clone this GitHub repo instead of scaffolding), forgebox (optional - install this ForgeBox slug instead of scaffolding), skipInstall (optional boolean - skip the tests/ `box install` convenience step; only applies to --template) }
 	 */
 	struct function run( struct options = {} ) {
 		var projectRoot = trim( arguments.options.projectRoot ?: "" )
@@ -27,25 +48,59 @@ class {
 			throw( type = "BxAgents.MissingProjectRoot", message = "`new` requires a target directory" )
 		}
 
-		var model = trim( arguments.options.model ?: "" )
-		if ( !len( model ) ) {
-			throw( type = "BxAgents.MissingModel", message = "`new` requires --model, e.g. --model=openai/gpt-5" )
+		var repo = trim( arguments.options.repo ?: "" )
+		var forgebox = trim( arguments.options.forgebox ?: "" )
+		var templateGiven = len( trim( arguments.options.template ?: "" ) ) > 0
+
+		if ( len( repo ) && len( forgebox ) ) {
+			throw( type = "BxAgents.ConflictingProjectSource", message = "--repo and --forgebox are mutually exclusive - pick one" )
+		}
+		if ( ( len( repo ) || len( forgebox ) ) && templateGiven ) {
+			throw( type = "BxAgents.ConflictingProjectSource", message = "--template cannot be combined with --repo/--forgebox" )
 		}
 
-		var name = trim( arguments.options.name ?: "" )
-		if ( !len( name ) ) {
-			var segments = listToArray( projectRoot.reReplace( "[\/]+$", "" ), "/" )
-			name = segments.len() ? segments[ segments.len() ] : "bx-agent"
+		var sourceWarning = ""
+		if ( len( repo ) || len( forgebox ) ) {
+			if ( len( trim( arguments.options.name ?: "" ) ) || len( trim( arguments.options.description ?: "" ) ) ) {
+				sourceWarning = char( 10 ) & "Note: --name/--description are ignored with --repo/--forgebox - the cloned/installed project defines its own."
+			}
 		}
 
-		// "@bxagents" suffix, not a bare "bxagents.models...." path - see
-		// BuildPipeline.bx's init() docblock for why.
-		var scaffolder = new "models.build.ProjectScaffolder@bxagents"()
-		var result = scaffolder.scaffold( projectRoot, name, model, arguments.options.description ?: "" )
+		var message = ""
+		var installTests = false
 
-		var message = "Created new BX Agents project [#name#] at #result.projectRoot#"
-		if ( !( arguments.options.skipInstall ?: false ) ) {
-			message &= char( 10 ) & installTestsDependencies( result.projectRoot )
+		if ( len( repo ) ) {
+			// "@bxagents" suffix, not a bare "bxagents.models...." path - see
+			// BuildPipeline.bx's init() docblock for why.
+			var cloner = new "models.build.RepoCloner@bxagents"()
+			var cloneResult = cloner.clone( repo, projectRoot )
+			message = "Cloned [#repo#] into #cloneResult.projectRoot#"
+		} else if ( len( forgebox ) ) {
+			var installer = new "models.build.ForgeBoxInstaller@bxagents"()
+			var installResult = installer.install( forgebox, projectRoot )
+			message = "Installed ForgeBox package [#forgebox#] into #installResult.projectRoot#"
+		} else {
+			var model = trim( arguments.options.model ?: "" )
+			if ( !len( model ) ) {
+				throw( type = "BxAgents.MissingModel", message = "`new` requires --model, e.g. --model=openai/gpt-5" )
+			}
+
+			var name = trim( arguments.options.name ?: "" )
+			if ( !len( name ) ) {
+				var segments = listToArray( projectRoot.reReplace( "[\/]+$", "" ), "/" )
+				name = segments.len() ? segments[ segments.len() ] : "bx-agent"
+			}
+
+			var scaffolder = new "models.build.ProjectScaffolder@bxagents"()
+			var scaffoldResult = scaffolder.scaffold( projectRoot, name, model, arguments.options.description ?: "", arguments.options.template ?: "minimal" )
+			message = "Created new BX Agents project [#name#] at #scaffoldResult.projectRoot#"
+			installTests = true
+		}
+
+		message &= sourceWarning
+
+		if ( installTests && !( arguments.options.skipInstall ?: false ) ) {
+			message &= char( 10 ) & installTestsDependencies( projectRoot )
 		}
 
 		return {

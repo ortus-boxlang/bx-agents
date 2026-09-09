@@ -14,6 +14,17 @@
  * extending `BaseAgentSpec`, passing out of the box against the scaffolded
  * `test()` environment override below).
  *
+ * Also supports 5 built-in `--template=` starters (`new`'s `--template` option,
+ * default `minimal`), each layering a small amount of pre-wired content on top
+ * of the same base skeleton above: `webui-chat` (a `gateways/webui.bx` chat UI
+ * exposure), `slack-bot` (a `gateways/slack.bx` channel adapter + matching
+ * `.env` stub lines), `mcp-server` (an example `mcp/*.bx` tool exposed via a
+ * `gateways/*.bx` `exposes: "mcp"` entry), and `scheduled` (a real hand-written
+ * `schedules/Scheduler.bx` calling the scaffolded agent on a timer). Every
+ * template's extra content reuses a config shape `ProjectValidator.bx` already
+ * accepts (webui exposure, Slack's required env-var keys, mcp exposure+target,
+ * a real Scheduler.bx) - no validator changes are needed for any of them.
+ *
  * Also scaffolds a `.env` declaring `BOXLANG_HOME=.build/runtime` (mirroring
  * `ortus-boxlang/bx-ai-intro`'s own `.env`/`BOXLANG_HOME` convention, and the
  * exact same `.build/runtime` path `serve`'s own `serverHome` already uses -
@@ -45,14 +56,29 @@ class {
 	}
 
 	/**
+	 * The 5 built-in `--template=` names `applyTemplate()` accepts.
+	 */
+	static {
+		TEMPLATES = [ "minimal", "webui-chat", "slack-bot", "mcp-server", "scheduled" ]
+	}
+
+	/**
 	 * @targetDir Absolute path to the new project directory (created if missing; refuses to run if it already contains an Agent.bx)
 	 * @name The agent's name
 	 * @model The agent's provider/model slug, e.g. "openai/gpt-5"
 	 * @description Optional agent description
+	 * @template One of TEMPLATES - "minimal" (the bare skeleton) unless the caller asks for one of the other 4 starters
 	 *
-	 * @return { projectRoot, agentBx, instructions, testsBoxJson, agentSpec }
+	 * @return { projectRoot, agentBx, instructions, testsBoxJson, agentSpec, template }
 	 */
-	struct function scaffold( required string targetDir, required string name, required string model, string description = "" ) {
+	struct function scaffold( required string targetDir, required string name, required string model, string description = "", string template = "minimal" ) {
+		if ( !static.TEMPLATES.contains( arguments.template ) ) {
+			throw(
+				type    = "BxAgents.UnknownTemplate",
+				message = "Unknown --template [#arguments.template#] - must be one of: #static.TEMPLATES.toList()#"
+			)
+		}
+
 		var dir = arguments.targetDir.reReplace( "[\/]+$", "" )
 
 		if ( fileExists( dir & "/Agent.bx" ) ) {
@@ -90,6 +116,8 @@ class {
 			fileWrite( gitignorePath, renderGitignore() )
 		}
 
+		applyTemplate( arguments.template, dir, arguments.name )
+
 		return {
 			projectRoot  : dir,
 			agentBx      : agentBxPath,
@@ -97,7 +125,38 @@ class {
 			testsBoxJson : testsBoxJsonPath,
 			agentSpec    : agentSpecPath,
 			env          : envPath,
-			gitignore    : gitignorePath
+			gitignore    : gitignorePath,
+			template     : arguments.template
+		}
+	}
+
+	/**
+	 * Layers one of the 5 built-in templates' extra content on top of the base
+	 * skeleton `scaffold()` always writes first. "minimal" is a no-op - it IS
+	 * the base skeleton.
+	 *
+	 * @template One of TEMPLATES
+	 * @dir Absolute path to the project root (trailing slash already stripped)
+	 * @name The agent's name - reused so a template's own config (e.g. a Scheduler.bx's getInstance() call) references the correct WireBox binding key
+	 */
+	private void function applyTemplate( required string template, required string dir, required string name ) {
+		switch ( arguments.template ) {
+			case "minimal":
+				return;
+			case "webui-chat":
+				fileWrite( arguments.dir & "/gateways/webui.bx", renderWebUiGateway() )
+				return;
+			case "slack-bot":
+				fileWrite( arguments.dir & "/gateways/slack.bx", renderSlackGateway() )
+				appendSlackEnvStubs( arguments.dir & "/.env" )
+				return;
+			case "mcp-server":
+				fileWrite( arguments.dir & "/mcp/exampleServer.bx", renderMcpExampleServer() )
+				fileWrite( arguments.dir & "/gateways/mcpExpose.bx", renderMcpExposeGateway() )
+				return;
+			case "scheduled":
+				fileWrite( arguments.dir & "/schedules/Scheduler.bx", renderSchedulerBx( arguments.name ) )
+				return;
 		}
 	}
 
@@ -261,6 +320,134 @@ class {
 			".build/",
 			"dist/",
 			".env",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * @return The rendered gateways/webui.bx source - a "webui-chat" template's chat UI exposure, matching the `{ exposes: "webui", path: "/chat" }` shape ProjectValidator/WebUiGenerator already accept
+	 */
+	private string function renderWebUiGateway() {
+		var lines = [
+			"class {",
+			"",
+			"	function configure() {",
+			"		return {",
+			'			exposes : "webui",',
+			'			path    : "/chat"',
+			"		};",
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * @return The rendered gateways/slack.bx source - a "slack-bot" template's channel adapter, matching ProjectValidator's REQUIRED_ENV_VAR_KEYS.slack shape (botTokenEnvVar + appTokenEnvVar)
+	 */
+	private string function renderSlackGateway() {
+		var lines = [
+			"class {",
+			"",
+			"	function configure() {",
+			"		return {",
+			'			type           : "slack",',
+			'			botTokenEnvVar : "SLACK_BOT_TOKEN",',
+			'			appTokenEnvVar : "SLACK_APP_TOKEN"',
+			"		};",
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Appends the `SLACK_BOT_TOKEN`/`SLACK_APP_TOKEN` stub lines `renderSlackGateway()`'s
+	 * entry names, to an already-written `.env` (never overwrites an existing
+	 * one - only ever called right after `scaffold()`'s own base `.env` write).
+	 *
+	 * @envPath Absolute path to the project's `.env`
+	 */
+	private void function appendSlackEnvStubs( required string envPath ) {
+		var lines = [
+			"",
+			"## Slack gateway (gateways/slack.bx) - see https://api.slack.com/apps",
+			"SLACK_BOT_TOKEN=xoxb-...",
+			"SLACK_APP_TOKEN=xapp-...",
+			""
+		]
+		fileWrite( arguments.envPath, fileRead( arguments.envPath ) & lines.toList( char( 10 ) ) )
+	}
+
+	/**
+	 * @return The rendered mcp/exampleServer.bx source - a "mcp-server" template's trivial example MCP tool server
+	 */
+	private string function renderMcpExampleServer() {
+		var lines = [
+			"class {",
+			"",
+			"	function configure() {",
+			"		return {",
+			'			description : "Example MCP tool server",',
+			'			version     : "1.0.0"',
+			"		};",
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * @return The rendered gateways/mcpExpose.bx source - a "mcp-server" template's `exposes: "mcp"` entry targeting exampleServer, matching the `{ exposes, path, target }` shape ProjectValidator already accepts
+	 */
+	private string function renderMcpExposeGateway() {
+		var lines = [
+			"class {",
+			"",
+			"	function configure() {",
+			"		return {",
+			'			exposes : "mcp",',
+			'			path    : "/mcp",',
+			'			target  : "exampleServer"',
+			"		};",
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Renders a real, hand-written ColdBox scheduler class - a "scheduled"
+	 * template's `schedules/Scheduler.bx` (no `{cron, action}` data shape;
+	 * that convention is gone - see docs/conventions/schedules.md). Calls the
+	 * scaffolded agent by the same `name` its own Agent.bx declares via
+	 * `super.init(name: ...)`, so `getInstance()` resolves the correct WireBox
+	 * binding key (see ColdBoxAppGenerator.resolveAgentName()).
+	 *
+	 * @name The agent's name
+	 *
+	 * @return The rendered schedules/Scheduler.bx source
+	 */
+	private string function renderSchedulerBx( required string name ) {
+		var lines = [
+			'class extends="coldbox.system.web.tasks.ColdBoxScheduler" {',
+			"",
+			"	function configure() {",
+			'		task( "example" )',
+			'			.call( () => getInstance( "#bxLiteral( arguments.name )#" ).run( "Give me a status update" ) )',
+			'			.everyDayAt( "00:00" )',
+			"	}",
+			"",
+			"}",
 			""
 		]
 		return lines.toList( char( 10 ) )
