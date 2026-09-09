@@ -183,15 +183,44 @@ Error: --model requires a value - write it as `--model=&lt;value&gt;`.
 </div></a><a class="bxsites-card" href="#doctor"><div class="bxsites-card__icon"><svg class="bxsites-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor"><path d="M240,160a32,32,0,1,1-32-32A32,32,0,0,1,240,160Z" opacity="0.2"/><path d="M220,160a12,12,0,1,1-12-12A12,12,0,0,1,220,160Zm-4.55,39.29A48.08,48.08,0,0,1,168,240H144a48.05,48.05,0,0,1-48-48V151.49A64,64,0,0,1,40,88V40a8,8,0,0,1,8-8H72a8,8,0,0,1,0,16H56V88a48,48,0,0,0,48.64,48c26.11-.34,47.36-22.25,47.36-48.83V48H136a8,8,0,0,1,0-16h24a8,8,0,0,1,8,8V87.17c0,32.84-24.53,60.29-56,64.31V192a32,32,0,0,0,32,32h24a32.06,32.06,0,0,0,31.22-25,40,40,0,1,1,16.23.27ZM232,160a24,24,0,1,0-24,24A24,24,0,0,0,232,160Z"/></svg></div><div class="bxsites-card__title">doctor</div><div class="bxsites-card__body"><p>Diagnose the runtime and project before build/serve surprise you.</p>
 </div></a></div>
 <h3 id="new"><a href="#new" id="new" name="new" class="anchor"></a><code>new</code></h3>
-<p>Scaffold a new agent project.</p>
-<pre><code class="language-bash">bxAgents new my-agent --model=openai/gpt-5 [--name=...] [--description=...]
+<p>Create a new agent project one of three mutually exclusive ways: scaffold from a built-in template, clone a GitHub repo, or install a ForgeBox package.</p>
+<pre><code class="language-bash"># Scaffold from a built-in template (default: minimal)
+bxAgents new my-agent --model=openai/gpt-5 [--template=minimal|webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent] [--name=...] [--description=...]
+
+# Clone an existing GitHub repo
+bxAgents new my-agent --repo=owner/repo-name
+
+# Install a ForgeBox package
+bxAgents new my-agent --forgebox=some-package-slug
 </code></pre>
+<ul>
+<li><code>--template</code>, <code>--repo</code>, and <code>--forgebox</code> name three different project SOURCES - exactly one applies. Combining any two of them is an error.</li>
+<li><strong><code>--template</code> mode</strong> (the default when no source flag is passed at all - <code>minimal</code>):
 <ul>
 <li><code>--model</code> is <strong>required</strong> - a <code>provider/model</code> slug (see <a href="/next/conventions/agent-bx/index.html">Agent.bx</a>).</li>
 <li><code>--name</code> defaults to the target directory's own basename.</li>
 <li>Refuses to run if the target already contains an <code>Agent.bx</code>.</li>
 <li>Creates <code>Agent.bx</code>, <code>instructions.md</code>, every convention folder (empty), a ready-to-run <a href="/next/conventions/testing/index.html"><code>tests/</code></a> folder (<code>tests/box.json</code> + <code>tests/specs/AgentSpec.bx</code>), a <code>.env</code> declaring <code>BOXLANG_HOME=.build/runtime</code> (matching <code>serve</code>'s own scoped runtime home - see <a href="/next/known-limitations/index.html">known limitations</a> for exactly what this does and doesn't cover), and a <code>.gitignore</code> (<code>.build/</code>, <code>dist/</code>, <code>.env</code>). Never overwrites an existing <code>.env</code>/<code>.gitignore</code>.</li>
+<li><code>--template</code> picks one of 8 built-in starters, each layering a bit of pre-wired content on top of the base skeleton above:
+<ul>
+<li><code>minimal</code> - the bare skeleton, nothing extra.</li>
+<li><code>webui-chat</code> - adds a <code>gateways/webui.bx</code> exposing the <a href="/next/conventions/gateways/index.html">web chat UI</a> at <code>/chat</code>.</li>
+<li><code>slack-bot</code> - adds a <code>gateways/slack.bx</code> channel adapter, plus matching <code>SLACK_BOT_TOKEN</code>/<code>SLACK_APP_TOKEN</code> stub lines in <code>.env</code>.</li>
+<li><code>telegram-bot</code> - adds a <code>gateways/telegram.bx</code> channel adapter, plus a matching <code>TELEGRAM_BOT_TOKEN</code> stub line in <code>.env</code>.</li>
+<li><code>github-bot</code> - adds a <code>gateways/github.bx</code> channel adapter, plus matching <code>GITHUB_TOKEN</code>/<code>GITHUB_WEBHOOK_SECRET</code>/<code>GITHUB_BOT_NAME</code> stub lines in <code>.env</code>.</li>
+<li><code>mcp-server</code> - adds an example <code>mcp/exampleServer.bx</code> tool server and a <code>gateways/mcpExpose.bx</code> entry exposing it as an MCP server at <code>/mcp</code>.</li>
+<li><code>scheduled</code> - adds a real <a href="/next/conventions/schedules/index.html"><code>schedules/Scheduler.bx</code></a> calling the agent on a daily timer.</li>
+<li><code>multi-agent</code> - adds a <code>configure()</code> to the root <code>Agent.bx</code> declaring two <a href="/next/conventions/subagents/index.html">subagents</a> (<code>researcher</code>, <code>writer</code>), each scaffolded as its own real <code>subagents/&lt;name&gt;/Agent.bx</code> + <code>instructions.md</code>.</li>
+</ul>
+</li>
 <li>Also runs <code>box install</code> inside the new <code>tests/</code> folder, so <code>bxAgents test</code> works immediately with no separate <code>cd tests &amp;&amp; box install</code> step. This is best-effort: if <code>box</code> isn't on <code>PATH</code> or the install fails, <code>new</code> still succeeds - the message just tells you to run it yourself. Pass <code>--skipInstall</code> to opt out of this step entirely.</li>
+</ul>
+</li>
+<li><strong><code>--repo</code> mode</strong> (<code>--repo=owner/repo-name</code> or a full URL): clones the repo via a bundled <a href="https://www.eclipse.org/jgit/">JGit</a> dependency - no <code>git</code> binary needs to be installed. Always clones shallow (depth 1) and always strips the resulting <code>.git</code> folder afterward, so the new project starts with a clean history rather than staying tied to the template repo's own remote. Refuses to run into a directory that already exists and is non-empty, and fails clearly if no <code>Agent.bx</code> is found in the cloned repo.</li>
+<li><strong><code>--forgebox</code> mode</strong> (<code>--forgebox=&lt;slug&gt;</code>): installs a <a href="https://www.forgebox.io">ForgeBox</a> package by talking to ForgeBox's own REST API directly (no <code>box</code> CLI required). Fails clearly if the slug doesn't exist, the download fails, or the installed package has no <code>Agent.bx</code> at its root (unwrapping one level of nesting first, since many ForgeBox archives wrap their contents in a single top-level folder).</li>
+<li><code>--model</code>, <code>--repo</code>, and <code>--forgebox</code> are mutually exclusive with each other in the sense that only <code>--template</code> mode needs <code>--model</code> - <code>--repo</code>/<code>--forgebox</code> never require it, since the source project already defines its own.</li>
+<li><code>--name</code>/<code>--description</code> are ignored (with a warning in the output) when <code>--repo</code>/<code>--forgebox</code> is used - the cloned/installed project defines its own.</li>
+<li>The <code>tests/</code> <code>box install</code> convenience step (and <code>--skipInstall</code>) only ever apply to <code>--template</code> mode - a cloned/installed project's own <code>tests/</code> folder (if it has one at all) is left untouched.</li>
 </ul>
 <h3 id="build"><a href="#build" id="build" name="build" class="anchor"></a><code>build</code></h3>
 <p>Run the full <a href="/next/build-pipeline/index.html">build pipeline</a>.</p>
