@@ -1,0 +1,126 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "cli.Doctor", function() {
+
+			beforeEach( function() {
+				variables.doctorVerb = new bxagents.models.cli.Doctor();
+				variables.fixtures = expandPath( "/fixtures" );
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function newTempProject( required string fixtureName ) {
+				var dir = createTempDirectory( prefix = "bxagents-cli-doctor-" );
+				directoryCopy( fixtures & "/" & arguments.fixtureName, dir, true );
+				tempDirs.append( dir );
+				return dir;
+			}
+
+			private function countOccurrences( required string haystack, required string needle ) {
+				var count = 0;
+				var pos = haystack.find( needle );
+				var searchFrom = 1;
+
+				while ( pos > 0 ) {
+					count++;
+					searchFrom = pos + len( needle );
+					pos = haystack.find( needle, searchFrom );
+				}
+
+				return count;
+			}
+
+			it( "fails cleanly with no Agent.bx found, rather than throwing", function() {
+				var dir = createTempDirectory( prefix = "bxagents-cli-doctor-" );
+				tempDirs.append( dir );
+
+				var result = doctorVerb.run( { projectRoot : dir } );
+
+				expect( result.exitCode ).toBe( 1 );
+				expect( result.message ).toInclude( "No Agent.bx found" );
+			} );
+
+			it( "reports the running BoxLang version and bx-ai as loaded", function() {
+				var result = doctorVerb.run( { projectRoot : newTempProject( "valid-minimal" ) } );
+
+				expect( result.message ).toInclude( "BoxLang " & server.boxlang.version );
+				expect( result.message ).toInclude( "bx-ai " );
+				expect( result.message ).toInclude( "loaded" );
+			} );
+
+			it( "returns exit code 0 and a clean validation report for a valid project", function() {
+				var result = doctorVerb.run( { projectRoot : newTempProject( "full-project" ) } );
+
+				expect( result.exitCode ).toBe( 0 );
+				expect( result.message ).toInclude( "Everything checks out." );
+			} );
+
+			it( "returns exit code 1 and surfaces the real validation error for an invalid project", function() {
+				var result = doctorVerb.run( { projectRoot : newTempProject( "validation/duplicate-tool-names" ) } );
+
+				expect( result.exitCode ).toBe( 1 );
+				expect( result.message ).toInclude( "[FAIL]" );
+			} );
+
+			it( "warns when a gateway's own *EnvVar is not set, and stops warning once it is", function() {
+				var projectRoot = newTempProject( "gateways-telegram" );
+
+				var before = doctorVerb.run( { projectRoot : projectRoot } );
+				expect( before.exitCode ).toBe( 0 );
+				expect( before.message ).toInclude( "[WARN] MY_TELEGRAM_BOT_TOKEN is not set" );
+
+				createObject( "java", "java.lang.System" ).setProperty( "MY_TELEGRAM_BOT_TOKEN", "a-real-token" );
+				try {
+					var after = doctorVerb.run( { projectRoot : projectRoot } );
+					expect( after.message ).toInclude( "[ OK ] MY_TELEGRAM_BOT_TOKEN is set" );
+					expect( after.message ).notToInclude( "MY_TELEGRAM_BOT_TOKEN is not set" );
+				} finally {
+					createObject( "java", "java.lang.System" ).clearProperty( "MY_TELEGRAM_BOT_TOKEN" );
+				}
+			} );
+
+			it( "checks the same *EnvVar only once even when several entries declare it", function() {
+				var result = doctorVerb.run( { projectRoot : newTempProject( "gateways-webui-users" ) } );
+
+				expect( countOccurrences( result.message, "ACME_ADA_PASSWORD" ) ).toBe( 1 );
+			} );
+
+			it( "flags qb as missing for a webui project, and cbauth as missing only when it declares users", function() {
+				var withoutUsers = doctorVerb.run( { projectRoot : newTempProject( "gateways-webui" ) } );
+				expect( withoutUsers.message ).toInclude( "qb module not found" );
+				expect( withoutUsers.message ).notToInclude( "cbauth module not found" );
+
+				var withUsers = doctorVerb.run( { projectRoot : newTempProject( "gateways-webui-users" ) } );
+				expect( withUsers.message ).toInclude( "qb module not found" );
+				expect( withUsers.message ).toInclude( "cbauth module not found" );
+			} );
+
+			it( "never checks qb/cbauth at all for a project with no webui exposure", function() {
+				var result = doctorVerb.run( { projectRoot : newTempProject( "full-project" ) } );
+
+				expect( result.message ).notToInclude( "qb module" );
+				expect( result.message ).notToInclude( "cbauth module" );
+			} );
+
+			it( "reports findings as a real JSON array via --json", function() {
+				var result = doctorVerb.run( { projectRoot : newTempProject( "full-project" ), json : true } );
+
+				var parsed = jsonDeserialize( result.message );
+				expect( isArray( parsed ) ).toBeTrue();
+				expect( parsed.len() ).toBeGT( 0 );
+				expect( parsed[ 1 ] ).toHaveKey( "status" );
+				expect( parsed[ 1 ] ).toHaveKey( "message" );
+			} );
+
+		} );
+	}
+
+}
