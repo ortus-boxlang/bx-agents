@@ -88,21 +88,47 @@ Pretty-print an existing manifest.json.
 ::: card title="clean" icon="phosphor-duotone:broom" href="#clean"
 Remove a project's .build/ and dist/ output.
 :::
+::: card title="doctor" icon="phosphor-duotone:stethoscope" href="#doctor"
+Diagnose the runtime and project before build/serve surprise you.
+:::
 :::
 
 ### `new`
 
-Scaffold a new agent project.
+Create a new agent project one of three mutually exclusive ways: scaffold from a built-in template, clone a GitHub repo, or install a ForgeBox package.
 
 ```bash
-bxAgents new my-agent --model=openai/gpt-5 [--name=...] [--description=...]
+# Scaffold from a built-in template (default: minimal)
+bxAgents new my-agent --model=openai/gpt-5 [--template=minimal|webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent] [--name=...] [--description=...]
+
+# Clone an existing GitHub repo
+bxAgents new my-agent --repo=owner/repo-name
+
+# Install a ForgeBox package
+bxAgents new my-agent --forgebox=some-package-slug
 ```
 
-- `--model` is **required** - a `provider/model` slug (see [Agent.bx](conventions/agent-bx.md)).
-- `--name` defaults to the target directory's own basename.
-- Refuses to run if the target already contains an `Agent.bx`.
-- Creates `Agent.bx`, `instructions.md`, every convention folder (empty), a ready-to-run [`tests/`](conventions/testing.md) folder (`tests/box.json` + `tests/specs/AgentSpec.bx`), a `.env` declaring `BOXLANG_HOME=.build/runtime` (matching `serve`'s own scoped runtime home - see [known limitations](known-limitations.md) for exactly what this does and doesn't cover), and a `.gitignore` (`.build/`, `dist/`, `.env`). Never overwrites an existing `.env`/`.gitignore`.
-- Also runs `box install` inside the new `tests/` folder, so `bxAgents test` works immediately with no separate `cd tests && box install` step. This is best-effort: if `box` isn't on `PATH` or the install fails, `new` still succeeds - the message just tells you to run it yourself. Pass `--skipInstall` to opt out of this step entirely.
+- `--template`, `--repo`, and `--forgebox` name three different project SOURCES - exactly one applies. Combining any two of them is an error.
+- **`--template` mode** (the default when no source flag is passed at all - `minimal`):
+  - `--model` is **required** - a `provider/model` slug (see [Agent.bx](conventions/agent-bx.md)).
+  - `--name` defaults to the target directory's own basename.
+  - Refuses to run if the target already contains an `Agent.bx`.
+  - Creates `Agent.bx`, `instructions.md`, every convention folder (empty), a ready-to-run [`tests/`](conventions/testing.md) folder (`tests/box.json` + `tests/specs/AgentSpec.bx`), a `.env` declaring `BOXLANG_HOME=.build/runtime` (matching `serve`'s own scoped runtime home - see [known limitations](known-limitations.md) for exactly what this does and doesn't cover), and a `.gitignore` (`.build/`, `dist/`, `.env`). Never overwrites an existing `.env`/`.gitignore`.
+  - `--template` picks one of 8 built-in starters, each layering a bit of pre-wired content on top of the base skeleton above:
+    - `minimal` - the bare skeleton, nothing extra.
+    - `webui-chat` - adds a `gateways/webui.bx` exposing the [web chat UI](conventions/gateways/index.md) at `/chat`.
+    - `slack-bot` - adds a `gateways/slack.bx` channel adapter, plus matching `SLACK_BOT_TOKEN`/`SLACK_APP_TOKEN` stub lines in `.env`.
+    - `telegram-bot` - adds a `gateways/telegram.bx` channel adapter, plus a matching `TELEGRAM_BOT_TOKEN` stub line in `.env`.
+    - `github-bot` - adds a `gateways/github.bx` channel adapter, plus matching `GITHUB_TOKEN`/`GITHUB_WEBHOOK_SECRET`/`GITHUB_BOT_NAME` stub lines in `.env`.
+    - `mcp-server` - adds an example `mcp/exampleServer.bx` tool server and a `gateways/mcpExpose.bx` entry exposing it as an MCP server at `/mcp`.
+    - `scheduled` - adds a real [`schedules/Scheduler.bx`](conventions/schedules.md) calling the agent on a daily timer.
+    - `multi-agent` - adds a `configure()` to the root `Agent.bx` declaring two [subagents](conventions/subagents.md) (`researcher`, `writer`), each scaffolded as its own real `subagents/<name>/Agent.bx` + `instructions.md`.
+  - Also runs `box install` inside the new `tests/` folder, so `bxAgents test` works immediately with no separate `cd tests && box install` step. This is best-effort: if `box` isn't on `PATH` or the install fails, `new` still succeeds - the message just tells you to run it yourself. Pass `--skipInstall` to opt out of this step entirely.
+- **`--repo` mode** (`--repo=owner/repo-name` or a full URL): clones the repo via a bundled [JGit](https://www.eclipse.org/jgit/) dependency - no `git` binary needs to be installed. Always clones shallow (depth 1) and always strips the resulting `.git` folder afterward, so the new project starts with a clean history rather than staying tied to the template repo's own remote. Refuses to run into a directory that already exists and is non-empty, and fails clearly if no `Agent.bx` is found in the cloned repo.
+- **`--forgebox` mode** (`--forgebox=<slug>`): installs a [ForgeBox](https://www.forgebox.io) package by talking to ForgeBox's own REST API directly (no `box` CLI required). Fails clearly if the slug doesn't exist, the download fails, or the installed package has no `Agent.bx` at its root (unwrapping one level of nesting first, since many ForgeBox archives wrap their contents in a single top-level folder).
+- `--model`, `--repo`, and `--forgebox` are mutually exclusive with each other in the sense that only `--template` mode needs `--model` - `--repo`/`--forgebox` never require it, since the source project already defines its own.
+- `--name`/`--description` are ignored (with a warning in the output) when `--repo`/`--forgebox` is used - the cloned/installed project defines its own.
+- The `tests/` `box install` convenience step (and `--skipInstall`) only ever apply to `--template` mode - a cloned/installed project's own `tests/` folder (if it has one at all) is left untouched.
 
 ### `build`
 
@@ -233,3 +259,19 @@ bxAgents clean [--force]
 - **Refuses to run unless the directory looks like a BxAgents project** (an `Agent.bx` or a `.build/manifest.json`). `dist/` is a common build-output name across the wider ecosystem, so this stops a `clean` in the wrong directory from deleting something unrelated. `--force` skips the check when you genuinely mean it.
 - Prints the absolute path of each directory before removing it.
 - Reports "Nothing to clean" if neither directory exists.
+
+### `doctor`
+
+Diagnose the runtime and your project - read-only, never builds or writes anything.
+
+```bash
+bxAgents doctor [--json]
+```
+
+- Reports the running BoxLang version, and warns if it is older than this module's own declared minimum.
+- Confirms `bx-ai` is loaded (always required).
+- Runs the exact same discovery/resolve/validate phases `build` runs, without generating anything - every validation error/warning `build` would hit shows up here first.
+- Checks every `*EnvVar`-suffixed config value across `gateways/*` (bot tokens, webhook secrets, IMAP credentials, web UI account passwords, API keys) against the real environment right now, and warns about any that aren't set. Nothing else checks this - `build` only checks that an env var name was *declared*, never that it's actually populated, so a missing one otherwise fails silently at runtime (a gateway that never sends, a web UI account that can't sign in).
+- Warns if a webui-exposed project doesn't have `qb` loaded, or if one declaring `users` doesn't have `cbauth` loaded - both are `box.json` dependencies you install yourself, never bundled by this module.
+- `--json` prints the raw findings as a JSON array (`[{ status, message }, ...]`) instead of the human-readable report - useful for scripting.
+- Exits `1` if any check failed, `0` otherwise - warnings alone don't fail it.
