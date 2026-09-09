@@ -39,6 +39,8 @@ my-agent/
         └── AgentSpec.bx
 ```
 
+Dies ist der `minimal`-Starter - der Standard, wenn `--template` weggelassen wird. `new` kann außerdem einen von 7 weiteren eingebauten Startern erzeugen (`--template=webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent`), die jeweils etwas vorkonfigurierten Inhalt (ein Gateway, einen Scheduler) auf dasselbe Gerüst legen, oder das Scaffolding ganz überspringen und das Projekt stattdessen aus einem vorhandenen GitHub-Repo (`--repo=owner/repo`) oder einem ForgeBox-Paket (`--forgebox=<slug>`) erstellen - siehe die [CLI-Referenz](../cli-reference.md#new) für die vollständige Liste und wie jede einzelne funktioniert.
+
 `Agent.bx` sieht so aus:
 
 ```javascript

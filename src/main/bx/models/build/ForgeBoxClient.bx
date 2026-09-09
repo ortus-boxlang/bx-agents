@@ -1,0 +1,162 @@
+/**
+ * A native BoxLang client for ForgeBox (CommandBox's package registry,
+ * https://www.forgebox.io) - used by `new --forgebox=<slug>` to resolve a
+ * package slug to a downloadable archive and fetch it.
+ *
+ * Talks to ForgeBox's own public REST API directly via `bx:http` (base URL
+ * `https://www.forgebox.io/api/v1/`, confirmed against CommandBox's own
+ * `ForgeBox.cfc` client), rather than shelling out to the `box` CLI - this
+ * makes the not-found/network-error paths genuinely unit-testable in CI (via
+ * the injectable caller seams below), which shelling out to `box install`
+ * never could be (see `New.bx`'s own `box install` step for tests/, which IS
+ * a real, un-mockable process invocation, and is documented in
+ * docs/known-limitations.md as untested by CI for exactly that reason).
+ *
+ * Two separate injectable seams, not one - unlike `GitHubGateway.bx`'s single
+ * `apiCaller` (every GitHub call is a homogeneous JSON REST call), ForgeBox
+ * entry lookup (JSON) and archive download (a raw binary stream written
+ * straight to disk) are structurally different operations, so each gets its
+ * own seam.
+ */
+class {
+
+	/**
+	 * Test-only seam: overrides the real GET .../entry/<slug> call. Defaults
+	 * to real HTTP; a test injects a closure returning a canned response.
+	 * Signature: function( slug ) -> { status: numeric, body: struct }
+	 */
+	property name="entryCaller";
+
+	/**
+	 * Test-only seam: overrides the real binary archive download. Defaults to
+	 * real HTTP; a test injects a closure that writes a fixture zip to
+	 * destPath itself, exactly as the real download would.
+	 * Signature: function( url, destPath ) -> { status: numeric }
+	 */
+	property name="downloadCaller";
+
+	static {
+		API_BASE = "https://www.forgebox.io/api/v1"
+	}
+
+	/**
+	 * @caller function( slug ) -> { status, body } replacing the real entry lookup
+	 */
+	void function setEntryCaller( required any caller ) {
+		variables.entryCaller = arguments.caller
+	}
+
+	/**
+	 * @caller function( url, destPath ) -> { status } replacing the real binary download
+	 */
+	void function setDownloadCaller( required any caller ) {
+		variables.downloadCaller = arguments.caller
+	}
+
+	/**
+	 * Looks up a ForgeBox package by slug.
+	 *
+	 * Confirmed against the real, live API (GET .../entry/coldbox): a
+	 * non-existent slug returns a genuine HTTP 404 (no need to inspect the
+	 * body for that case), and a found entry's response body is shaped
+	 * `{ data: {...}, error: boolean, pagination: {}, messages: [] }` -
+	 * `error`, not a `success` flag.
+	 *
+	 * @slug The ForgeBox package slug, e.g. "coldbox"
+	 *
+	 * @return The entry's own data struct (ForgeBox's `response.data`)
+	 */
+	struct function getEntry( required string slug ) {
+		var result = callEntryApi( arguments.slug )
+
+		if ( result.status < 200 || result.status >= 300 || !isStruct( result.body ) || ( result.body.error ?: true ) ) {
+			throw(
+				type    = "BxAgents.PackageNotFound",
+				message = "ForgeBox package [#arguments.slug#] was not found (status #result.status#)"
+			)
+		}
+
+		return result.body.data
+	}
+
+	/**
+	 * Resolves the downloadable archive URL from an entry's own data.
+	 *
+	 * Confirmed against the real, live API: an entry's own `latestVersion`
+	 * struct carries the current release's own `downloadURL` directly - no
+	 * need to search the (much larger) `versions` array for the common case.
+	 * Falls back to the first entry in `versions` only if `latestVersion` is
+	 * somehow missing one.
+	 *
+	 * @entry An entry struct, as returned by getEntry()
+	 *
+	 * @return The zip's download URL
+	 */
+	string function resolveDownloadUrl( required struct entry ) {
+		var latestVersion = arguments.entry.latestVersion ?: {}
+		var url = trim( latestVersion.downloadURL ?: "" )
+
+		var versions = arguments.entry.versions ?: []
+		if ( !len( url ) && isArray( versions ) && versions.len() ) {
+			url = trim( versions[ 1 ].downloadURL ?: "" )
+		}
+
+		if ( !len( url ) ) {
+			throw(
+				type    = "BxAgents.ForgeboxInstallFailed",
+				message = "ForgeBox package [#arguments.entry.slug ?: '?'#] has no downloadable archive URL in its entry data"
+			)
+		}
+
+		return url
+	}
+
+	/**
+	 * Downloads a ForgeBox archive to a local file.
+	 *
+	 * @url The archive's download URL, from resolveDownloadUrl()
+	 * @destPath Absolute path to write the downloaded archive to
+	 */
+	void function downloadZip( required string url, required string destPath ) {
+		var status = 0
+
+		if ( !isNull( variables.downloadCaller ) ) {
+			status = variables.downloadCaller( arguments.url, arguments.destPath ).status
+		} else {
+			var destDir = getDirectoryFromPath( arguments.destPath )
+			var destFile = getFileFromPath( arguments.destPath )
+			bx:http url="#arguments.url#" method="GET" path="#destDir#" file="#destFile#" getAsBinary="yes" result="downloadResult";
+			status = val( listFirst( downloadResult.statusCode ?: "0", " " ) )
+		}
+
+		if ( status < 200 || status >= 300 ) {
+			throw(
+				type    = "BxAgents.ForgeboxInstallFailed",
+				message = "Downloading [#arguments.url#] failed (status #status#)"
+			)
+		}
+	}
+
+	/**
+	 * @slug The ForgeBox package slug
+	 *
+	 * @return { status, body }
+	 */
+	private struct function callEntryApi( required string slug ) {
+		if ( !isNull( variables.entryCaller ) ) {
+			return variables.entryCaller( arguments.slug )
+		}
+
+		bx:http url="#static.API_BASE#/entry/#arguments.slug#" method="GET" result="apiResult" throwOnError="false";
+		var status = val( listFirst( apiResult.statusCode ?: "0", " " ) )
+		var body = {}
+		try {
+			body = jsonDeserialize( apiResult.fileContent )
+		} catch ( any e ) {
+			// Non-JSON body (e.g. an HTML error page) - status alone decides below
+		}
+
+		return { status : status, body : body }
+	}
+
+}

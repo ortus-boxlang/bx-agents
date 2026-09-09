@@ -1,0 +1,89 @@
+/**
+ * Creates a new BX Agents project by cloning a GitHub repo (`new --repo=...`)
+ * instead of scaffolding one from a `--template`.
+ *
+ * Clones via JGit (`org.eclipse.jgit:org.eclipse.jgit`, a pure-Java git
+ * implementation from Maven Central), NOT by shelling out to a `git` binary -
+ * unlike `SshTarget.bx`/`DockerTarget.bx`'s "shell out, don't add a
+ * dependency" pattern for `scp`/`ssh`/`docker`, a git client is exactly the
+ * kind of well-established, actively-maintained Java library worth depending
+ * on directly: it ships inside this module's own jar (bundled by the
+ * existing `shadowJar` build), so there is no "is `git` installed and on
+ * PATH?" failure mode at all - only the clone itself (bad URL, repo not
+ * found, network unreachable) can fail.
+ *
+ * Always clones shallow (`--depth=1` - only the current state is ever
+ * needed) and always strips the resulting `.git` folder afterward - a
+ * template repo's own git history/remote has no legitimate reason to survive
+ * into a fresh project. Leaving it in place is a real foot-gun: the new
+ * project's first commit/push could land in the template's own upstream repo
+ * instead of the user's own.
+ */
+class {
+
+	/**
+	 * `"owner/repo"` shorthand -> a full GitHub HTTPS URL; anything that
+	 * already looks like a URL (contains "://") or an SSH-style git remote
+	 * (starts with "git@") is passed through unchanged.
+	 *
+	 * @repoOrUrl The `--repo` value passed to `new`
+	 *
+	 * @return A URL JGit's cloneRepository().setURI() can use directly
+	 */
+	string function resolveCloneUrl( required string repoOrUrl ) {
+		var value = trim( arguments.repoOrUrl )
+		if ( value.find( "://" ) || value.startsWith( "git@" ) ) {
+			return value
+		}
+		return "https://github.com/#value#.git"
+	}
+
+	/**
+	 * @repoOrUrl A `--repo` value - "owner/repo" shorthand, a full HTTPS URL, or an SSH-style git remote
+	 * @targetDir Absolute path to the new project directory - must not already exist, or must be empty
+	 *
+	 * @return { projectRoot }
+	 */
+	struct function clone( required string repoOrUrl, required string targetDir ) {
+		var dir = arguments.targetDir.reReplace( "[\/]+$", "" )
+
+		if ( directoryExists( dir ) && directoryList( dir, false, "query" ).recordCount > 0 ) {
+			throw(
+				type    = "BxAgents.RepoCloneFailed",
+				message = "[#dir#] already exists and is not empty - refusing to clone [#arguments.repoOrUrl#] there"
+			)
+		}
+
+		var url = resolveCloneUrl( arguments.repoOrUrl )
+
+		try {
+			var git = createObject( "java", "org.eclipse.jgit.api.Git" )
+				.cloneRepository()
+				.setURI( url )
+				.setDirectory( createObject( "java", "java.io.File" ).init( dir ) )
+				.setDepth( 1 )
+				.call()
+			git.getRepository().close()
+		} catch ( any e ) {
+			throw(
+				type    = "BxAgents.RepoCloneFailed",
+				message = "Could not clone [#arguments.repoOrUrl#] (resolved to [#url#]): #e.message#"
+			)
+		}
+
+		var gitDir = dir & "/.git"
+		if ( directoryExists( gitDir ) ) {
+			directoryDelete( gitDir, true )
+		}
+
+		if ( !fileExists( dir & "/Agent.bx" ) ) {
+			throw(
+				type    = "BxAgents.RepoCloneFailed",
+				message = "Cloned [#arguments.repoOrUrl#] into [#dir#], but no Agent.bx was found there - is this a BX Agents project?"
+			)
+		}
+
+		return { projectRoot : dir }
+	}
+
+}

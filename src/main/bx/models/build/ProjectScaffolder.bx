@@ -14,6 +14,20 @@
  * extending `BaseAgentSpec`, passing out of the box against the scaffolded
  * `test()` environment override below).
  *
+ * Also supports 8 built-in `--template=` starters (`new`'s `--template` option,
+ * default `minimal`), each layering a small amount of pre-wired content on top
+ * of the same base skeleton above: `webui-chat` (a `gateways/webui.bx` chat UI
+ * exposure), `slack-bot`/`telegram-bot`/`github-bot` (a channel-adapter gateway
+ * + matching `.env` stub lines), `mcp-server` (an example `mcp/*.bx` tool
+ * exposed via a `gateways/*.bx` `exposes: "mcp"` entry), `scheduled` (a real
+ * hand-written `schedules/Scheduler.bx` calling the scaffolded agent on a
+ * timer), and `multi-agent` (a root `configure()` declaring `subAgents`, plus
+ * two real subagent folders). Every template's extra content reuses a config
+ * shape `ProjectValidator.bx`/`AgentConfigResolver.bx` already accept (webui
+ * exposure, each gateway type's own required env-var keys, mcp exposure+target,
+ * a real Scheduler.bx, class-based `subAgents` declaration) - no validator
+ * changes are needed for any of them.
+ *
  * Also scaffolds a `.env` declaring `BOXLANG_HOME=.build/runtime` (mirroring
  * `ortus-boxlang/bx-ai-intro`'s own `.env`/`BOXLANG_HOME` convention, and the
  * exact same `.build/runtime` path `serve`'s own `serverHome` already uses -
@@ -45,14 +59,30 @@ class {
 	}
 
 	/**
+	 * The 8 built-in `--template=` names `applyTemplate()` accepts.
+	 */
+	static {
+		TEMPLATES = [ "minimal", "webui-chat", "slack-bot", "telegram-bot", "github-bot", "mcp-server", "scheduled", "multi-agent" ]
+		MULTI_AGENT_SUBAGENT_NAMES = [ "researcher", "writer" ]
+	}
+
+	/**
 	 * @targetDir Absolute path to the new project directory (created if missing; refuses to run if it already contains an Agent.bx)
 	 * @name The agent's name
 	 * @model The agent's provider/model slug, e.g. "openai/gpt-5"
 	 * @description Optional agent description
+	 * @template One of TEMPLATES - "minimal" (the bare skeleton) unless the caller asks for one of the other 7 starters
 	 *
-	 * @return { projectRoot, agentBx, instructions, testsBoxJson, agentSpec }
+	 * @return { projectRoot, agentBx, instructions, testsBoxJson, agentSpec, template }
 	 */
-	struct function scaffold( required string targetDir, required string name, required string model, string description = "" ) {
+	struct function scaffold( required string targetDir, required string name, required string model, string description = "", string template = "minimal" ) {
+		if ( !static.TEMPLATES.contains( arguments.template ) ) {
+			throw(
+				type    = "BxAgents.UnknownTemplate",
+				message = "Unknown --template [#arguments.template#] - must be one of: #static.TEMPLATES.toList()#"
+			)
+		}
+
 		var dir = arguments.targetDir.reReplace( "[\/]+$", "" )
 
 		if ( fileExists( dir & "/Agent.bx" ) ) {
@@ -67,7 +97,11 @@ class {
 		var agentBxPath = dir & "/Agent.bx"
 		var instructionsPath = dir & "/instructions.md"
 
-		fileWrite( agentBxPath, renderAgentBx( arguments.name, arguments.model, arguments.description ) )
+		// "multi-agent" is the one template that changes the ROOT Agent.bx
+		// itself (a configure() declaring subAgents), rather than only adding
+		// files alongside it - every other template leaves it untouched.
+		var subAgentNames = arguments.template == "multi-agent" ? static.MULTI_AGENT_SUBAGENT_NAMES : []
+		fileWrite( agentBxPath, renderAgentBx( arguments.name, arguments.model, arguments.description, subAgentNames ) )
 		fileWrite( instructionsPath, renderInstructions( arguments.name ) )
 
 		var conventionFolders = [ "tools", "skills", "subagents", "gateways", "schedules", "mcp", "interceptors", "models", "modules" ]
@@ -90,6 +124,8 @@ class {
 			fileWrite( gitignorePath, renderGitignore() )
 		}
 
+		applyTemplate( arguments.template, dir, arguments.name )
+
 		return {
 			projectRoot  : dir,
 			agentBx      : agentBxPath,
@@ -97,7 +133,56 @@ class {
 			testsBoxJson : testsBoxJsonPath,
 			agentSpec    : agentSpecPath,
 			env          : envPath,
-			gitignore    : gitignorePath
+			gitignore    : gitignorePath,
+			template     : arguments.template
+		}
+	}
+
+	/**
+	 * Layers one of the 8 built-in templates' extra content on top of the base
+	 * skeleton `scaffold()` always writes first. "minimal" is a no-op - it IS
+	 * the base skeleton. "multi-agent"'s own change to the ROOT Agent.bx
+	 * itself already happened in scaffold() (via renderAgentBx()'s subAgents
+	 * param) - this only needs to add the subagent folders alongside it.
+	 *
+	 * @template One of TEMPLATES
+	 * @dir Absolute path to the project root (trailing slash already stripped)
+	 * @name The agent's name - reused so a template's own config (e.g. a Scheduler.bx's getInstance() call) references the correct WireBox binding key
+	 */
+	private void function applyTemplate( required string template, required string dir, required string name ) {
+		switch ( arguments.template ) {
+			case "minimal":
+				return;
+			case "webui-chat":
+				fileWrite( arguments.dir & "/gateways/webui.bx", renderWebUiGateway() )
+				return;
+			case "slack-bot":
+				fileWrite( arguments.dir & "/gateways/slack.bx", renderSlackGateway() )
+				appendSlackEnvStubs( arguments.dir & "/.env" )
+				return;
+			case "telegram-bot":
+				fileWrite( arguments.dir & "/gateways/telegram.bx", renderTelegramGateway() )
+				appendTelegramEnvStub( arguments.dir & "/.env" )
+				return;
+			case "github-bot":
+				fileWrite( arguments.dir & "/gateways/github.bx", renderGithubGateway() )
+				appendGithubEnvStubs( arguments.dir & "/.env" )
+				return;
+			case "mcp-server":
+				fileWrite( arguments.dir & "/mcp/exampleServer.bx", renderMcpExampleServer() )
+				fileWrite( arguments.dir & "/gateways/mcpExpose.bx", renderMcpExposeGateway() )
+				return;
+			case "scheduled":
+				fileWrite( arguments.dir & "/schedules/Scheduler.bx", renderSchedulerBx( arguments.name ) )
+				return;
+			case "multi-agent":
+				for ( var subAgentName in static.MULTI_AGENT_SUBAGENT_NAMES ) {
+					var subAgentDir = arguments.dir & "/subagents/" & subAgentName
+					directoryCreate( path = subAgentDir, createPath = true, ignoreExists = true )
+					fileWrite( subAgentDir & "/Agent.bx", renderSubagentBx( subAgentName ) )
+					fileWrite( subAgentDir & "/instructions.md", renderSubagentInstructions( subAgentName ) )
+				}
+				return;
 		}
 	}
 
@@ -116,10 +201,11 @@ class {
 	 * @name The agent's name
 	 * @model The agent's provider/model slug
 	 * @description Optional agent description
+	 * @subAgents `subagents/` folder names to declare via a `configure()` override (the "multi-agent" template only) - empty for every other template, since a class-based Agent.bx's `configure()` is entirely optional (see AgentConfigResolver.bx's `invokeConfigure()`)
 	 *
 	 * @return The rendered Agent.bx source, including a `test()` environment override pointed at the mock provider
 	 */
-	private string function renderAgentBx( required string name, required string model, required string description ) {
+	private string function renderAgentBx( required string name, required string model, required string description, array subAgents = [] ) {
 		var lines = [
 			'class extends="bxModules.bxai.models.runnables.AiAgent" {',
 			"",
@@ -140,11 +226,25 @@ class {
 			"		return {",
 			'			model : "mock/mock-model"',
 			"		};",
-			"	}",
-			"",
-			"}",
-			""
+			"	}"
 		]
+
+		if ( arguments.subAgents.len() ) {
+			var subAgentList = arguments.subAgents.map( n => '"#bxLiteral( n )#"' ).toList( ", " )
+			lines.append( "" )
+			// `subAgents` here is the list of `subagents/` FOLDER names to wire
+			// at build time - distinct from super.init()'s own `subAgents`
+			// argument above (which takes already-built AiAgent instances).
+			lines.append( "	function configure() {" )
+			lines.append( "		return {" )
+			lines.append( "			subAgents : [ #subAgentList# ]" )
+			lines.append( "		};" )
+			lines.append( "	}" )
+		}
+
+		lines.append( "" )
+		lines.append( "}" )
+		lines.append( "" )
 		return lines.toList( char( 10 ) )
 	}
 
@@ -261,6 +361,275 @@ class {
 			".build/",
 			"dist/",
 			".env",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * @return The rendered gateways/webui.bx source - a "webui-chat" template's chat UI exposure, matching the `{ exposes: "webui", path: "/chat" }` shape ProjectValidator/WebUiGenerator already accept
+	 */
+	private string function renderWebUiGateway() {
+		var lines = [
+			"class {",
+			"",
+			"	function configure() {",
+			"		return {",
+			'			exposes : "webui",',
+			'			path    : "/chat"',
+			"		};",
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * @return The rendered gateways/slack.bx source - a "slack-bot" template's channel adapter, matching ProjectValidator's REQUIRED_ENV_VAR_KEYS.slack shape (botTokenEnvVar + appTokenEnvVar)
+	 */
+	private string function renderSlackGateway() {
+		var lines = [
+			"class {",
+			"",
+			"	function configure() {",
+			"		return {",
+			'			type           : "slack",',
+			'			botTokenEnvVar : "SLACK_BOT_TOKEN",',
+			'			appTokenEnvVar : "SLACK_APP_TOKEN"',
+			"		};",
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Appends the `SLACK_BOT_TOKEN`/`SLACK_APP_TOKEN` stub lines `renderSlackGateway()`'s
+	 * entry names, to an already-written `.env` (never overwrites an existing
+	 * one - only ever called right after `scaffold()`'s own base `.env` write).
+	 *
+	 * @envPath Absolute path to the project's `.env`
+	 */
+	private void function appendSlackEnvStubs( required string envPath ) {
+		var lines = [
+			"",
+			"## Slack gateway (gateways/slack.bx) - see https://api.slack.com/apps",
+			"SLACK_BOT_TOKEN=xoxb-...",
+			"SLACK_APP_TOKEN=xapp-...",
+			""
+		]
+		fileWrite( arguments.envPath, fileRead( arguments.envPath ) & lines.toList( char( 10 ) ) )
+	}
+
+	/**
+	 * @return The rendered gateways/telegram.bx source - a "telegram-bot" template's channel adapter, matching ProjectValidator's REQUIRED_ENV_VAR_KEYS.telegram shape (botTokenEnvVar only)
+	 */
+	private string function renderTelegramGateway() {
+		var lines = [
+			"class {",
+			"",
+			"	function configure() {",
+			"		return {",
+			'			type           : "telegram",',
+			'			botTokenEnvVar : "TELEGRAM_BOT_TOKEN"',
+			"		};",
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Appends the `TELEGRAM_BOT_TOKEN` stub line matching `renderTelegramGateway()`'s
+	 * entry name, to an already-written `.env`.
+	 *
+	 * @envPath Absolute path to the project's `.env`
+	 */
+	private void function appendTelegramEnvStub( required string envPath ) {
+		var lines = [
+			"",
+			"## Telegram gateway (gateways/telegram.bx) - from @BotFather",
+			"TELEGRAM_BOT_TOKEN=...",
+			""
+		]
+		fileWrite( arguments.envPath, fileRead( arguments.envPath ) & lines.toList( char( 10 ) ) )
+	}
+
+	/**
+	 * @return The rendered gateways/github.bx source - a "github-bot" template's channel adapter, matching ProjectValidator's REQUIRED_ENV_VAR_KEYS.github shape (tokenEnvVar + webhookSecretEnvVar + botNameEnvVar)
+	 */
+	private string function renderGithubGateway() {
+		var lines = [
+			"class {",
+			"",
+			"	function configure() {",
+			"		return {",
+			'			type                : "github",',
+			'			tokenEnvVar         : "GITHUB_TOKEN",',
+			'			webhookSecretEnvVar : "GITHUB_WEBHOOK_SECRET",',
+			'			botNameEnvVar       : "GITHUB_BOT_NAME"',
+			"		};",
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Appends the `GITHUB_TOKEN`/`GITHUB_WEBHOOK_SECRET`/`GITHUB_BOT_NAME` stub
+	 * lines matching `renderGithubGateway()`'s entry names, to an
+	 * already-written `.env`.
+	 *
+	 * @envPath Absolute path to the project's `.env`
+	 */
+	private void function appendGithubEnvStubs( required string envPath ) {
+		var lines = [
+			"",
+			"## GitHub gateway (gateways/github.bx) - a PAT with repo/issues+PR read+write scope",
+			"GITHUB_TOKEN=...",
+			"GITHUB_WEBHOOK_SECRET=...",
+			"GITHUB_BOT_NAME=...",
+			""
+		]
+		fileWrite( arguments.envPath, fileRead( arguments.envPath ) & lines.toList( char( 10 ) ) )
+	}
+
+	/**
+	 * Renders a subagent's own class-based Agent.bx - a "multi-agent" template's
+	 * `subagents/<name>/Agent.bx`, matching the exact shape
+	 * `docs/conventions/subagents.md`/`examples/multi-agent-team/` document.
+	 * Always the mock provider - a subagent is here to demonstrate the
+	 * delegation shape, not to be a working agent out of the box.
+	 *
+	 * @name The subagent's own name (also its `subagents/` folder name)
+	 *
+	 * @return The rendered subagents/<name>/Agent.bx source
+	 */
+	private string function renderSubagentBx( required string name ) {
+		var lines = [
+			'class extends="bxModules.bxai.models.runnables.AiAgent" {',
+			"",
+			"	function init() {",
+			"		super.init(",
+			'			name        : "#bxLiteral( arguments.name )#",',
+			'			description : "#bxLiteral( subagentDescription( arguments.name ) )#",',
+			'			model       : aiModel( provider : "mock", params : { model : "mock-model" } )',
+			"		)",
+			"		return this",
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * @name The subagent's own name
+	 *
+	 * @return The rendered subagents/<name>/instructions.md source
+	 */
+	private string function renderSubagentInstructions( required string name ) {
+		var lines = [
+			"## #arguments.name#",
+			"",
+			subagentDescription( arguments.name ),
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * A one-line role description per MULTI_AGENT_SUBAGENT_NAMES entry -
+	 * shared between renderSubagentBx()'s own `description` and
+	 * renderSubagentInstructions(), so the two never drift apart. Falls back
+	 * to a generic line for any name outside the known set (defensive only -
+	 * MULTI_AGENT_SUBAGENT_NAMES is the only caller today).
+	 *
+	 * @name The subagent's own name
+	 *
+	 * @return A one-line role description
+	 */
+	private string function subagentDescription( required string name ) {
+		var descriptions = {
+			researcher : "Gathers facts on a topic. Does not write final prose - that's the writer's job.",
+			writer     : "Writes final prose from the researcher's findings."
+		}
+		return descriptions[ arguments.name ] ?: "A subagent of the root project."
+	}
+
+	/**
+	 * @return The rendered mcp/exampleServer.bx source - a "mcp-server" template's trivial example MCP tool server
+	 */
+	private string function renderMcpExampleServer() {
+		var lines = [
+			"class {",
+			"",
+			"	function configure() {",
+			"		return {",
+			'			description : "Example MCP tool server",',
+			'			version     : "1.0.0"',
+			"		};",
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * @return The rendered gateways/mcpExpose.bx source - a "mcp-server" template's `exposes: "mcp"` entry targeting exampleServer, matching the `{ exposes, path, target }` shape ProjectValidator already accepts
+	 */
+	private string function renderMcpExposeGateway() {
+		var lines = [
+			"class {",
+			"",
+			"	function configure() {",
+			"		return {",
+			'			exposes : "mcp",',
+			'			path    : "/mcp",',
+			'			target  : "exampleServer"',
+			"		};",
+			"	}",
+			"",
+			"}",
+			""
+		]
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Renders a real, hand-written ColdBox scheduler class - a "scheduled"
+	 * template's `schedules/Scheduler.bx` (no `{cron, action}` data shape;
+	 * that convention is gone - see docs/conventions/schedules.md). Calls the
+	 * scaffolded agent by the same `name` its own Agent.bx declares via
+	 * `super.init(name: ...)`, so `getInstance()` resolves the correct WireBox
+	 * binding key (see ColdBoxAppGenerator.resolveAgentName()).
+	 *
+	 * @name The agent's name
+	 *
+	 * @return The rendered schedules/Scheduler.bx source
+	 */
+	private string function renderSchedulerBx( required string name ) {
+		var lines = [
+			'class extends="coldbox.system.web.tasks.ColdBoxScheduler" {',
+			"",
+			"	function configure() {",
+			'		task( "example" )',
+			'			.call( () => getInstance( "#bxLiteral( arguments.name )#" ).run( "Give me a status update" ) )',
+			'			.everyDayAt( "00:00" )',
+			"	}",
+			"",
+			"}",
 			""
 		]
 		return lines.toList( char( 10 ) )

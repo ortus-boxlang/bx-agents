@@ -39,6 +39,8 @@ my-agent/
         └── AgentSpec.bx
 ```
 
+これは `minimal` スターターです - `--template` を省略した場合のデフォルトです。`new` は他に7つの組み込みスターター (`--template=webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent`) のいずれかを生成することもでき、それぞれ同じスケルトンの上に少し事前設定済みのコンテンツ (ゲートウェイ、スケジューラー) を重ねます。あるいはスキャフォールディングを完全にスキップして、既存の GitHub リポジトリ (`--repo=owner/repo`) や ForgeBox パッケージ (`--forgebox=<slug>`) からプロジェクトを作成することもできます - 完全なリストと各々の動作については [CLI リファレンス](../cli-reference.md#new) を参照してください。
+
 `Agent.bx` は次のようになります。
 
 ```javascript

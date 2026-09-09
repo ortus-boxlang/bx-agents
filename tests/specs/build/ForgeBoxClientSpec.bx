@@ -1,0 +1,91 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "ForgeBoxClient", function() {
+
+			beforeEach( function() {
+				variables.client = new bxagents.models.build.ForgeBoxClient();
+			} );
+
+			it( "throws BxAgents.PackageNotFound when the entry lookup returns a non-2xx status", function() {
+				client.setEntryCaller( function( slug ) {
+					return { status : 404, body : {} };
+				} );
+
+				expect( function() {
+					client.getEntry( "not-a-real-slug" );
+				} ).toThrow( "BxAgents.PackageNotFound" );
+			} );
+
+			it( "throws BxAgents.PackageNotFound when the response body says error: true", function() {
+				client.setEntryCaller( function( slug ) {
+					return { status : 200, body : { error : true, data : {}, messages : [ "no such entry" ] } };
+				} );
+
+				expect( function() {
+					client.getEntry( "not-a-real-slug" );
+				} ).toThrow( "BxAgents.PackageNotFound" );
+			} );
+
+			/**
+			 * Response shape (`{ data, error, pagination, messages }`, `error`
+			 * not `success`) confirmed against the real, live ForgeBox API
+			 * (GET .../entry/coldbox) - not guessed at.
+			 */
+			it( "returns the entry's own data struct on a successful lookup", function() {
+				client.setEntryCaller( function( slug ) {
+					return { status : 200, body : { error : false, data : { slug : slug, latestVersion : { downloadURL : "https://example.test/pkg.zip" } } } };
+				} );
+
+				var entry = client.getEntry( "my-template" );
+
+				expect( entry.slug ).toBe( "my-template" );
+				expect( entry.latestVersion.downloadURL ).toBe( "https://example.test/pkg.zip" );
+			} );
+
+			it( "resolveDownloadUrl() reads latestVersion.downloadURL when present", function() {
+				var url = client.resolveDownloadUrl( { slug : "x", latestVersion : { downloadURL : "https://example.test/x.zip" } } );
+				expect( url ).toBe( "https://example.test/x.zip" );
+			} );
+
+			it( "resolveDownloadUrl() falls back to the first entry in versions[] when there's no latestVersion", function() {
+				var url = client.resolveDownloadUrl( {
+					slug     : "x",
+					versions : [ { version : "1.0.0", downloadURL : "https://example.test/x-1.0.0.zip" } ]
+				} );
+				expect( url ).toBe( "https://example.test/x-1.0.0.zip" );
+			} );
+
+			it( "resolveDownloadUrl() throws BxAgents.ForgeboxInstallFailed when no URL can be found anywhere", function() {
+				expect( function() {
+					client.resolveDownloadUrl( { slug : "x" } );
+				} ).toThrow( "BxAgents.ForgeboxInstallFailed" );
+			} );
+
+			it( "downloadZip() throws BxAgents.ForgeboxInstallFailed on a non-2xx download status", function() {
+				client.setDownloadCaller( function( url, destPath ) {
+					return { status : 500 };
+				} );
+
+				expect( function() {
+					client.downloadZip( "https://example.test/x.zip", getTempDirectory() & "/bxagents-forgeboxclientspec-" & createUUID() & ".zip" );
+				} ).toThrow( "BxAgents.ForgeboxInstallFailed" );
+			} );
+
+			it( "downloadZip() succeeds silently on a 2xx download status", function() {
+				client.setDownloadCaller( function( url, destPath ) {
+					fileWrite( destPath, "not really a zip, just proving the seam is called" );
+					return { status : 200 };
+				} );
+
+				var destPath = getTempDirectory() & "/bxagents-forgeboxclientspec-" & createUUID() & ".zip";
+				client.downloadZip( "https://example.test/x.zip", destPath );
+
+				expect( fileExists( destPath ) ).toBeTrue();
+				fileDelete( destPath );
+			} );
+
+		} );
+	}
+
+}
