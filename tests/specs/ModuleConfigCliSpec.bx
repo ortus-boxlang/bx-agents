@@ -1,7 +1,15 @@
 /**
- * Exercises ModuleConfig.bx's main(args) CLI dispatch end-to-end - argv
+ * Exercises ModuleConfig.bx's dispatch(args) CLI dispatch end-to-end - argv
  * parsing, project-root resolution, and delegating to the real verb classes
  * under models/cli/ (each of which has its own dedicated, more thorough spec).
+ *
+ * Calls dispatch() directly, never main(): main() is a thin wrapper that
+ * passes dispatch()'s return value to CLIExit() - a real System.exit() -
+ * which would kill this entire TestBox JVM on the very first assertion
+ * below. See ModuleConfig.bx's own main()/dispatch() docblocks for why the
+ * split exists. ModuleCliProcessTest.java (a real OS-process test) is what
+ * actually proves main()'s CLIExit() call produces a genuine non-zero exit
+ * code - something no in-process call here ever could.
  */
 class extends="testbox.system.BaseSpec" {
 
@@ -30,28 +38,28 @@ class extends="testbox.system.BaseSpec" {
 			}
 
 			it( "returns exit code 1 and prints usage when no verb is given", function() {
-				expect( moduleConfig.main( [] ) ).toBe( 1 );
+				expect( moduleConfig.dispatch( [] ) ).toBe( 1 );
 			} );
 
 			it( "returns exit code 1 for an unknown verb", function() {
-				expect( moduleConfig.main( [ "frobnicate" ] ) ).toBe( 1 );
+				expect( moduleConfig.dispatch( [ "frobnicate" ] ) ).toBe( 1 );
 			} );
 
 			it( "returns exit code 0 and prints usage for --help / -h / help", function() {
-				expect( moduleConfig.main( [ "--help" ] ) ).toBe( 0 );
-				expect( moduleConfig.main( [ "-h" ] ) ).toBe( 0 );
-				expect( moduleConfig.main( [ "help" ] ) ).toBe( 0 );
+				expect( moduleConfig.dispatch( [ "--help" ] ) ).toBe( 0 );
+				expect( moduleConfig.dispatch( [ "-h" ] ) ).toBe( 0 );
+				expect( moduleConfig.dispatch( [ "help" ] ) ).toBe( 0 );
 			} );
 
 			it( "returns exit code 0 and prints the module version for --version / -v", function() {
-				expect( moduleConfig.main( [ "--version" ] ) ).toBe( 0 );
-				expect( moduleConfig.main( [ "-v" ] ) ).toBe( 0 );
+				expect( moduleConfig.dispatch( [ "--version" ] ) ).toBe( 0 );
+				expect( moduleConfig.dispatch( [ "-v" ] ) ).toBe( 0 );
 			} );
 
 			it( "dispatches `build` with an absolute --projectRoot flag and returns exit code 0", function() {
 				var projectRoot = newTempProject( "full-project" );
 
-				var exitCode = moduleConfig.main( [ "build", "--projectRoot=#projectRoot#" ] );
+				var exitCode = moduleConfig.dispatch( [ "build", "--projectRoot=#projectRoot#" ] );
 
 				expect( exitCode ).toBe( 0 );
 				expect( directoryExists( projectRoot & "/.build/app" ) ).toBeTrue();
@@ -60,7 +68,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "dispatches `build` with the project root as a bare positional argument", function() {
 				var projectRoot = newTempProject( "full-project" );
 
-				var exitCode = moduleConfig.main( [ "build", projectRoot ] );
+				var exitCode = moduleConfig.dispatch( [ "build", projectRoot ] );
 
 				expect( exitCode ).toBe( 0 );
 				expect( directoryExists( projectRoot & "/.build/app" ) ).toBeTrue();
@@ -68,9 +76,9 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "dispatches `clean` after `build` and removes .build", function() {
 				var projectRoot = newTempProject( "full-project" );
-				moduleConfig.main( [ "build", projectRoot ] );
+				moduleConfig.dispatch( [ "build", projectRoot ] );
 
-				var exitCode = moduleConfig.main( [ "clean", projectRoot ] );
+				var exitCode = moduleConfig.dispatch( [ "clean", projectRoot ] );
 
 				expect( exitCode ).toBe( 0 );
 				expect( directoryExists( projectRoot & "/.build" ) ).toBeFalse();
@@ -79,7 +87,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "dispatches `doctor` against a valid project and returns exit code 0", function() {
 				var projectRoot = newTempProject( "full-project" );
 
-				var exitCode = moduleConfig.main( [ "doctor", projectRoot ] );
+				var exitCode = moduleConfig.dispatch( [ "doctor", projectRoot ] );
 
 				expect( exitCode ).toBe( 0 );
 			} );
@@ -87,7 +95,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "returns exit code 1 and a message when a verb throws", function() {
 				var projectRoot = newTempProject( "full-project" );
 				// `package` requires a prior `build` - none has run here.
-				var exitCode = moduleConfig.main( [ "package", projectRoot ] );
+				var exitCode = moduleConfig.dispatch( [ "package", projectRoot ] );
 
 				expect( exitCode ).toBe( 1 );
 			} );
@@ -96,7 +104,7 @@ class extends="testbox.system.BaseSpec" {
 				var projectRoot = createTempDirectory( prefix = "bxagents-moduleconfig-cli-" );
 				tempDirs.append( projectRoot );
 
-				var exitCode = moduleConfig.main( [
+				var exitCode = moduleConfig.dispatch( [
 					"new",
 					"--projectRoot=#projectRoot#/myagent",
 					"--model=openai/gpt-5",
@@ -112,7 +120,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "parses --no-{opt} / --!opt negation and combined -abc shorthand without breaking dispatch", function() {
 				var projectRoot = newTempProject( "full-project" );
 
-				var exitCode = moduleConfig.main( [
+				var exitCode = moduleConfig.dispatch( [
 					"build", "--projectRoot=#projectRoot#", "--debug", "--!verbose", "--no-color", "-abc"
 				] );
 

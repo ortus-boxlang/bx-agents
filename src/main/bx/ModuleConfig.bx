@@ -200,11 +200,39 @@ class {
 	 * classes stay thin dispatchers over an already-parsed struct, and stay
 	 * unit-testable against that struct directly).
 	 *
+	 * `main()` itself is a thin wrapper around `dispatch()` for exactly one
+	 * reason: `dispatch()`'s own return value must become the real OS
+	 * process exit code for a genuine `boxlang module:bxAgents <verb>`
+	 * invocation, but nothing does that automatically - confirmed directly
+	 * against the official BoxLang_Docs MCP source: a module's `main()`
+	 * return value is NOT mapped to the process exit code by the runtime;
+	 * only an explicit `CLIExit( exitCode )` call (a real `System.exit()`)
+	 * does that. Before this, every verb's own computed failure exit code
+	 * was silently discarded - `bxAgents build && deploy` in a CI script
+	 * would happily run `deploy` after a failed `build`, since the process
+	 * always exited 0 regardless. `CLIExit()` cannot live in `dispatch()`
+	 * itself though: `ModuleConfigCliSpec.bx`'s entire dispatch suite calls
+	 * `dispatch()` directly, in-process, to assert on its returned int -
+	 * calling `CLIExit()` there would `System.exit()` the whole TestBox JVM
+	 * on the very first test. Keeping the real exit behind this outermost
+	 * `main()` wrapper - which nothing in the test suite calls - means the
+	 * exit code is genuinely enforced for real usage while every existing
+	 * `dispatch()`-level test keeps working unchanged.
+	 *
 	 * @args The raw CLI argv, module name and dispatch token excluded
 	 *
-	 * @return The process exit code (0 success, 1 failure)
+	 * @return The process exit code (0 success, 1 failure) - via a real CLIExit(), so nothing after this call runs
 	 */
 	function main( args = [] ) {
+		return CLIExit( dispatch( arguments.args ) )
+	}
+
+	/**
+	 * @args The raw CLI argv, module name and dispatch token excluded
+	 *
+	 * @return The exit code `main()` passes to CLIExit() (0 success, 1 failure) - never exits the process itself, so it stays directly callable from tests
+	 */
+	function dispatch( args = [] ) {
 		// Relative to this file's OWN location (the module root) - confirmed
 		// empirically this session that BoxLang resolves a bare dotted path
 		// like "models.cli.New" relative to the module root ONLY from the
