@@ -26,16 +26,15 @@ Follow the [official BoxLang installation guide](https://boxlang.ortusbooks.com/
 :::
 ::: step "Install bx-ai and BxAgents"
 ```bash
-install-bx-module bx-ai
-install-bx-module bx-agents
+install-bx-module bx-ai bx-agents
 ```
 
 This fetches both modules into your BoxLang modules directory (`~/.boxlang/modules` by default, or `boxlang_modules/` with `--local`).
 :::
 ::: step "Verify it worked"
 ```bash
-bxAgents --version
-bxAgents --help
+boxlang bxAgents --version
+boxlang bxAgents --help
 ```
 
 `--help` lists all 10 verbs (`new`, `build`, `test`, `serve`, `chat`, `invoke`, `package`, `deploy`, `inspect`, `clean`) with a one-line summary of each.
