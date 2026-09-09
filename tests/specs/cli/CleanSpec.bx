@@ -50,6 +50,53 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.message ).toInclude( "Nothing to clean" );
 			} );
 
+			/**
+			 * Regression: a real bug this closed - `clean` is the one verb
+			 * that DELETES, the project root can be any bare positional path,
+			 * and `dist/` is one of the most common build-output names in
+			 * the wider ecosystem, so a wrong terminal tab used to silently
+			 * destroy an unrelated directory's output.
+			 */
+			it( "refuses to run against a directory with no Agent.bx or .build/manifest.json", function() {
+				var dir = createTempDirectory( prefix = "bxagents-cli-clean-not-a-project-" );
+				tempDirs.append( dir );
+				directoryCreate( path = dir & "/dist", createPath = true, ignoreExists = true );
+				fileWrite( dir & "/dist/placeholder.txt", "x" );
+
+				expect( function() {
+					cleanVerb.run( { projectRoot : dir } );
+				} ).toThrow( "BxAgents.NotAProject" );
+
+				// Refusal means nothing was touched
+				expect( directoryExists( dir & "/dist" ) ).toBeTrue();
+			} );
+
+			it( "--force bypasses the project-marker check on a non-project directory", function() {
+				var dir = createTempDirectory( prefix = "bxagents-cli-clean-force-" );
+				tempDirs.append( dir );
+				directoryCreate( path = dir & "/dist", createPath = true, ignoreExists = true );
+				fileWrite( dir & "/dist/placeholder.txt", "x" );
+
+				var result = cleanVerb.run( { projectRoot : dir, force : true } );
+
+				expect( result.exitCode ).toBe( 0 );
+				expect( directoryExists( dir & "/dist" ) ).toBeFalse();
+			} );
+
+			it( "treats a .build/manifest.json marker alone (no Agent.bx) as a valid project", function() {
+				var dir = createTempDirectory( prefix = "bxagents-cli-clean-manifest-only-" );
+				tempDirs.append( dir );
+				directoryCreate( path = dir & "/.build", createPath = true, ignoreExists = true );
+				fileWrite( dir & "/.build/manifest.json", "{}" );
+				directoryCreate( path = dir & "/dist", createPath = true, ignoreExists = true );
+
+				var result = cleanVerb.run( { projectRoot : dir } );
+
+				expect( result.exitCode ).toBe( 0 );
+				expect( directoryExists( dir & "/.build" ) ).toBeFalse();
+				expect( directoryExists( dir & "/dist" ) ).toBeFalse();
+			} );
+
 		} );
 	}
 

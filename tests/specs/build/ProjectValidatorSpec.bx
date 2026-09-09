@@ -94,6 +94,35 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.errors.filter( e => e.findNoCase( "Duplicate gateway exposure path" ) ).len() ).toBeGT( 0 );
 			} );
 
+			it( "rejects duplicate gateway exposure paths that only collide once normalized (trailing slash)", function() {
+				// "/chat" and "/chat/" are the same mount to every consumer -
+				// both RouterGenerator and WebUiGenerator strip the trailing
+				// slash - so comparing raw strings would let both claim it.
+				var result = validateFixture( "duplicate-gateway-path-trailing-slash" );
+				expect( result.errors.filter( e => e.findNoCase( "Duplicate gateway exposure path" ) ).len() ).toBeGT( 0 );
+			} );
+
+			it( "accepts a gateway exposure path with a trailing slash on its own", function() {
+				var result = validateFixture( "gateway-path-trailing-slash-ok" );
+				expect( result.errors ).toBeArray();
+				expect( result.errors.len() ).toBe( 0 );
+			} );
+
+			it( "rejects a gateway exposure path missing its leading slash", function() {
+				var result = validateFixture( "invalid-gateway-path-no-slash" );
+				expect( result.errors.filter( e => e.findNoCase( "does not start with '/'" ) ).len() ).toBeGT( 0 );
+			} );
+
+			it( "rejects a gateway exposure path containing a '..' segment", function() {
+				var result = validateFixture( "invalid-gateway-path-traversal" );
+				expect( result.errors.filter( e => e.findNoCase( "containing a '.' or '..' segment" ) ).len() ).toBeGT( 0 );
+			} );
+
+			it( "rejects a gateway exposure path with characters outside the allowed set", function() {
+				var result = validateFixture( "invalid-gateway-path-bad-chars" );
+				expect( result.errors.filter( e => e.findNoCase( "invalid 'path'" ) ).len() ).toBeGT( 0 );
+			} );
+
 			it( "rejects an unknown gateway type", function() {
 				var result = validateFixture( "unknown-gateway-type" );
 				expect( result.errors.filter( e => e.findNoCase( "unknown type" ) ).len() ).toBeGT( 0 );
