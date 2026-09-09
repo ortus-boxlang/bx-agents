@@ -39,7 +39,7 @@ my-agent/
         └── AgentSpec.bx
 ```
 
-This is the `minimal` starter - the default when `--template` is omitted. `new` can also scaffold one of 4 other built-in starters (`--template=webui-chat|slack-bot|mcp-server|scheduled`), each adding a bit of pre-wired content (a gateway, a scheduler) on top of the same skeleton, or skip scaffolding entirely and create the project from an existing GitHub repo (`--repo=owner/repo`) or a ForgeBox package (`--forgebox=<slug>`) instead - see the [CLI Reference](../cli-reference.md#new) for the full list and how each one works.
+This is the `minimal` starter - the default when `--template` is omitted. `new` can also scaffold one of 7 other built-in starters (`--template=webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent`), each adding a bit of pre-wired content (a gateway, a scheduler) on top of the same skeleton, or skip scaffolding entirely and create the project from an existing GitHub repo (`--repo=owner/repo`) or a ForgeBox package (`--forgebox=<slug>`) instead - see the [CLI Reference](../cli-reference.md#new) for the full list and how each one works.
 
 `Agent.bx` looks like:
 

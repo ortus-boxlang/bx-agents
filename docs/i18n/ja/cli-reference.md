@@ -87,7 +87,7 @@ webui の users エントリ用に平文パスワードをハッシュ化しま�
 
 ```bash
 # 組み込みテンプレートからスキャフォールドする (デフォルト: minimal)
-bxAgents new my-agent --model=openai/gpt-5 [--template=minimal|webui-chat|slack-bot|mcp-server|scheduled] [--name=...] [--description=...]
+bxAgents new my-agent --model=openai/gpt-5 [--template=minimal|webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent] [--name=...] [--description=...]
 
 # 既存の GitHub リポジトリをクローンする
 bxAgents new my-agent --repo=owner/repo-name
@@ -102,12 +102,15 @@ bxAgents new my-agent --forgebox=some-package-slug
   - `--name` は対象ディレクトリ自身のベース名がデフォルトになります。
   - 対象にすでに `Agent.bx` が存在する場合は実行を拒否します。
   - `Agent.bx`、`instructions.md`、すべてのコンベンションフォルダ (空)、すぐに使える [`tests/`](conventions/testing.md) フォルダ (`tests/box.json` + `tests/specs/AgentSpec.bx`)、`BOXLANG_HOME=.build/runtime` を宣言する `.env` (`serve` 自身のスコープ付きランタイムホームと一致します - これが正確に何をカバーし、何をカバーしないかは [既知の制限](known-limitations.md) 参照)、そして `.gitignore` (`.build/`、`dist/`、`.env`) を作成します。既存の `.env`/`.gitignore` は決して上書きしません。
-  - `--template` は5つの組み込みスターターのいずれかを選択します。それぞれ上記のベーススケルトンの上に、少し事前設定済みのコンテンツを重ねます:
+  - `--template` は8つの組み込みスターターのいずれかを選択します。それぞれ上記のベーススケルトンの上に、少し事前設定済みのコンテンツを重ねます:
     - `minimal` - 何も追加されない、素のスケルトン。
     - `webui-chat` - [Web チャット UI](conventions/gateways/index.md) を `/chat` で公開する `gateways/webui.bx` を追加します。
     - `slack-bot` - `gateways/slack.bx` チャンネルアダプタと、対応する `SLACK_BOT_TOKEN`/`SLACK_APP_TOKEN` のプレースホルダー行を `.env` に追加します。
+    - `telegram-bot` - `gateways/telegram.bx` チャンネルアダプタと、対応する `TELEGRAM_BOT_TOKEN` のプレースホルダー行を `.env` に追加します。
+    - `github-bot` - `gateways/github.bx` チャンネルアダプタと、対応する `GITHUB_TOKEN`/`GITHUB_WEBHOOK_SECRET`/`GITHUB_BOT_NAME` のプレースホルダー行を `.env` に追加します。
     - `mcp-server` - サンプルツールサーバー `mcp/exampleServer.bx` と、それを `/mcp` で MCP サーバーとして公開する `gateways/mcpExpose.bx` エントリを追加します。
     - `scheduled` - 毎日タイマーでエージェントを呼び出す実際の [`schedules/Scheduler.bx`](conventions/schedules.md) を追加します。
+    - `multi-agent` - ルートの `Agent.bx` に、2つの [サブエージェント](conventions/subagents.md) (`researcher`、`writer`) を宣言する `configure()` を追加します。それぞれ実際の `subagents/<name>/Agent.bx` + `instructions.md` としてスキャフォールドされます。
   - 新しい `tests/` フォルダ内で `box install` も実行するため、`bxAgents test` が別途 `cd tests && box install` を実行することなく即座に動作します。これはベストエフォートです。`box` が `PATH` にない、あるいはインストールに失敗しても `new` 自体は成功し、メッセージで自分で実行するよう案内するだけです。このステップを完全にスキップするには `--skipInstall` を渡します。
 - **`--repo` モード** (`--repo=owner/repo-name` または完全な URL): バンドルされた [JGit](https://www.eclipse.org/jgit/) 依存関係経由でリポジトリをクローンします - `git` 実行ファイルをインストールする必要はありません。常に浅いクローン (深さ1) を行い、その後生成された `.git` フォルダを常に取り除くため、新しいプロジェクトはテンプレートリポジトリ自身のリモートに縛られることなく、クリーンな履歴から始まります。対象がすでに存在し空でない場合は実行を拒否し、クローンしたリポジトリに `Agent.bx` が見つからない場合は明確に失敗します。
 - **`--forgebox` モード** (`--forgebox=<slug>`): `box` CLI を必要とせず、ForgeBox 自身の REST API と直接やり取りして [ForgeBox](https://www.forgebox.io) パッケージをインストールします。スラッグが存在しない場合、ダウンロードが失敗した場合、またはインストールされたパッケージのルートに `Agent.bx` がない場合 (多くの ForgeBox アーカイブはコンテンツを単一のトップレベルフォルダで包んでいるため、まず1階層分のネストを解除します) は明確に失敗します。

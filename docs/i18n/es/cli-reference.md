@@ -87,7 +87,7 @@ Crea un nuevo proyecto de agente de una de tres formas mutuamente excluyentes: g
 
 ```bash
 # Generar el andamiaje desde una plantilla incorporada (por defecto: minimal)
-bxAgents new my-agent --model=openai/gpt-5 [--template=minimal|webui-chat|slack-bot|mcp-server|scheduled] [--name=...] [--description=...]
+bxAgents new my-agent --model=openai/gpt-5 [--template=minimal|webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent] [--name=...] [--description=...]
 
 # Clonar un repositorio de GitHub existente
 bxAgents new my-agent --repo=owner/repo-name
@@ -102,12 +102,15 @@ bxAgents new my-agent --forgebox=some-package-slug
   - `--name` por defecto toma el propio nombre base del directorio destino.
   - Se niega a ejecutarse si el destino ya contiene un `Agent.bx`.
   - Crea `Agent.bx`, `instructions.md`, cada carpeta de convención (vacía), una carpeta [`tests/`](conventions/testing.md) lista para ejecutar (`tests/box.json` + `tests/specs/AgentSpec.bx`), un `.env` que declara `BOXLANG_HOME=.build/runtime` (coincidiendo con el propio home de runtime delimitado que usa `serve` - ver [limitaciones conocidas](known-limitations.md) para exactamente qué cubre y qué no esto), y un `.gitignore` (`.build/`, `dist/`, `.env`). Nunca sobrescribe un `.env`/`.gitignore` existente.
-  - `--template` elige una de 5 plantillas incorporadas, cada una añadiendo un poco de contenido preconfigurado sobre el esqueleto base anterior:
+  - `--template` elige una de 8 plantillas incorporadas, cada una añadiendo un poco de contenido preconfigurado sobre el esqueleto base anterior:
     - `minimal` - el esqueleto desnudo, nada más.
     - `webui-chat` - añade un `gateways/webui.bx` que expone la [UI de chat web](conventions/gateways/index.md) en `/chat`.
     - `slack-bot` - añade un adaptador de canal `gateways/slack.bx`, más las líneas de marcador de posición `SLACK_BOT_TOKEN`/`SLACK_APP_TOKEN` correspondientes en `.env`.
+    - `telegram-bot` - añade un adaptador de canal `gateways/telegram.bx`, más una línea de marcador de posición `TELEGRAM_BOT_TOKEN` correspondiente en `.env`.
+    - `github-bot` - añade un adaptador de canal `gateways/github.bx`, más las líneas de marcador de posición `GITHUB_TOKEN`/`GITHUB_WEBHOOK_SECRET`/`GITHUB_BOT_NAME` correspondientes en `.env`.
     - `mcp-server` - añade un servidor de herramientas de ejemplo `mcp/exampleServer.bx` y una entrada `gateways/mcpExpose.bx` que lo expone como servidor MCP en `/mcp`.
     - `scheduled` - añade un [`schedules/Scheduler.bx`](conventions/schedules.md) real que llama al agente con un temporizador diario.
+    - `multi-agent` - añade un `configure()` al `Agent.bx` raíz que declara dos [subagentes](conventions/subagents.md) (`researcher`, `writer`), cada uno generado como su propio `subagents/<name>/Agent.bx` + `instructions.md` reales.
   - También ejecuta `box install` dentro de la nueva carpeta `tests/`, así que `bxAgents test` funciona de inmediato sin un paso separado de `cd tests && box install`. Esto es de mejor esfuerzo: si `box` no está en `PATH` o la instalación falla, `new` igual tiene éxito - el mensaje simplemente te indica ejecutarlo tú mismo. Pasa `--skipInstall` para omitir este paso por completo.
 - **Modo `--repo`** (`--repo=owner/repo-name` o una URL completa): clona el repositorio mediante una dependencia [JGit](https://www.eclipse.org/jgit/) incluida - no es necesario tener instalado el binario `git`. Siempre clona de forma superficial (profundidad 1) y siempre elimina la carpeta `.git` resultante después, de modo que el nuevo proyecto empieza con un historial limpio en lugar de quedar atado al propio remoto del repositorio plantilla. Se niega a ejecutarse en un directorio que ya existe y no está vacío, y falla claramente si no se encuentra ningún `Agent.bx` en el repositorio clonado.
 - **Modo `--forgebox`** (`--forgebox=<slug>`): instala un paquete de [ForgeBox](https://www.forgebox.io) hablando directamente con la propia API REST de ForgeBox (no requiere el CLI `box`). Falla claramente si el slug no existe, la descarga falla, o el paquete instalado no tiene un `Agent.bx` en su raíz (desenvolviendo primero un nivel de anidamiento, ya que muchos archivos de ForgeBox envuelven su contenido en una única carpeta de nivel superior).

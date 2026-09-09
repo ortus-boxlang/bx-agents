@@ -196,6 +196,39 @@ class extends="testbox.system.BaseSpec" {
 				expect( envContent ).toInclude( "BOXLANG_HOME=.build/runtime" );
 			} );
 
+			it( "the telegram-bot template adds a gateways/telegram.bx and matching .env stub line", function() {
+				var dir = newTargetDir();
+				var result = scaffolder.scaffold( dir, "my-agent", "openai/gpt-5", "", "telegram-bot" );
+
+				var gatewayPath = dir & "/gateways/telegram.bx";
+				expect( fileExists( gatewayPath ) ).toBeTrue();
+				var gatewayContent = fileRead( gatewayPath );
+				expect( gatewayContent ).toInclude( 'type           : "telegram"' );
+				expect( gatewayContent ).toInclude( 'botTokenEnvVar : "TELEGRAM_BOT_TOKEN"' );
+
+				var envContent = fileRead( result.env );
+				expect( envContent ).toInclude( "TELEGRAM_BOT_TOKEN=" );
+				expect( envContent ).toInclude( "BOXLANG_HOME=.build/runtime" );
+			} );
+
+			it( "the github-bot template adds a gateways/github.bx and matching .env stub lines", function() {
+				var dir = newTargetDir();
+				var result = scaffolder.scaffold( dir, "my-agent", "openai/gpt-5", "", "github-bot" );
+
+				var gatewayPath = dir & "/gateways/github.bx";
+				expect( fileExists( gatewayPath ) ).toBeTrue();
+				var gatewayContent = fileRead( gatewayPath );
+				expect( gatewayContent ).toInclude( 'type                : "github"' );
+				expect( gatewayContent ).toInclude( 'tokenEnvVar         : "GITHUB_TOKEN"' );
+				expect( gatewayContent ).toInclude( 'webhookSecretEnvVar : "GITHUB_WEBHOOK_SECRET"' );
+				expect( gatewayContent ).toInclude( 'botNameEnvVar       : "GITHUB_BOT_NAME"' );
+
+				var envContent = fileRead( result.env );
+				expect( envContent ).toInclude( "GITHUB_TOKEN=" );
+				expect( envContent ).toInclude( "GITHUB_WEBHOOK_SECRET=" );
+				expect( envContent ).toInclude( "GITHUB_BOT_NAME=" );
+			} );
+
 			it( "the mcp-server template adds an example mcp/ tool and a gateways/ entry exposing it", function() {
 				var dir = newTargetDir();
 				scaffolder.scaffold( dir, "my-agent", "openai/gpt-5", "", "mcp-server" );
@@ -220,12 +253,31 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( 'getInstance( "my-agent" )' );
 			} );
 
+			it( "the multi-agent template declares subAgents on the root Agent.bx and scaffolds two real subagent folders", function() {
+				var dir = newTargetDir();
+				var result = scaffolder.scaffold( dir, "my-agent", "openai/gpt-5", "", "multi-agent" );
+
+				var rootContent = fileRead( result.agentBx );
+				expect( rootContent ).toInclude( "function configure()" );
+				expect( rootContent ).toInclude( 'subAgents : [ "researcher", "writer" ]' );
+
+				for ( var subAgentName in [ "researcher", "writer" ] ) {
+					var subAgentDir = dir & "/subagents/" & subAgentName;
+					expect( fileExists( subAgentDir & "/Agent.bx" ) ).toBeTrue();
+					expect( fileExists( subAgentDir & "/instructions.md" ) ).toBeTrue();
+
+					var subAgentContent = fileRead( subAgentDir & "/Agent.bx" );
+					expect( subAgentContent ).toInclude( 'extends="bxModules.bxai.models.runnables.AiAgent"' );
+					expect( subAgentContent ).toInclude( 'name        : "#subAgentName#"' );
+				}
+			} );
+
 			it( "every non-minimal template validates cleanly with ProjectValidator", function() {
 				var discoverer = new bxagents.models.build.ProjectDiscoverer();
 				var resolver = new bxagents.models.build.AgentConfigResolver();
 				var validator = new bxagents.models.build.ProjectValidator();
 
-				for ( var template in [ "webui-chat", "slack-bot", "mcp-server", "scheduled" ] ) {
+				for ( var template in [ "webui-chat", "slack-bot", "telegram-bot", "github-bot", "mcp-server", "scheduled", "multi-agent" ] ) {
 					var dir = newTargetDir();
 					scaffolder.scaffold( dir, "my-agent", "openai/gpt-5", "", template );
 
