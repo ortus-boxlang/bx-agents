@@ -10,9 +10,11 @@ tags: [reference, limitations]
 
 BxAgents is under active development. This page tracks the honest gaps - what's tested against a real running app, what still only runs against bx-ai's `"mock"` provider, and real upstream quirks this project ran into.
 
-## Testing runs against the `mock` provider only
+## Most testing runs against the `mock` provider - one real LLM round trip now runs in CI
 
-Every fast-lane spec (build pipeline, generators, CLI verbs) and the [ColdBox integration suite](#real-coldbox-integration-testing) exercise bx-ai's built-in `"mock"` provider - never a real network call to an LLM. This is deliberate (fast, free, deterministic CI), but it means no automated test currently proves a real provider (OpenAI, Anthropic, etc.) actually round-trips correctly end-to-end. Do at least one manual `chat`/`serve` run against a real provider and a throwaway API key before depending on this in production.
+Every fast-lane spec (build pipeline, generators, CLI verbs) and the [ColdBox integration suite](#real-coldbox-integration-testing) exercise bx-ai's built-in `"mock"` provider - never a real network call to an LLM. This is deliberate (fast, free, deterministic CI). It means no automated test proves any of OpenAI/Anthropic/Gemini/etc.'s own provider-specific request/response shaping actually works against their real APIs - do at least one manual `chat`/`serve` run against the real provider you intend to use and a throwaway API key before depending on this in production.
+
+One narrow but real gap this used to leave is now closed: `tests/specs/integration/LiveLlmSpec.bx` runs a genuine LLM round trip - a plain completion, and a real tool-call turn (the model actually deciding to invoke a BoxLang closure, not a scripted mock response) - against [Novita AI](https://novita.ai)'s OpenAI-compatible endpoint, via bx-ai's own `"openai-compatible"` provider (`OpenAICompatibleService.bx` - a real, existing bx-ai provider this required no changes to). Gated on the `NOVITA_API_KEY` repository secret via each `it()`'s own `skip` argument (TestBox's real conditional-skip mechanism): CI (which has the secret) runs it for real; a local `./gradlew testBx`/fork PR without it reports the two specs as cleanly "Skipped," never a failure. This proves bx-ai's HTTP call/response-parsing/tool-calling machinery is sound against a real model - it does not extend to any provider besides the OpenAI-compatible surface Novita implements.
 
 ## Real ColdBox integration testing
 
