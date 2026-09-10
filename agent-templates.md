@@ -305,7 +305,7 @@ bxAgents new my-agent --forgebox=some-package-slug
 
 Installs a [ForgeBox](https://www.forgebox.io) package - CommandBox's package registry, which can host a full app/project template, not just a library - and uses it as the new project. This talks to ForgeBox's own public REST API (`https://www.forgebox.io/api/v1`) directly, using BoxLang's native `bx:http`/`http()` support - **no `box` CLI is required**.
 
-**What makes a ForgeBox entry a valid template:** an `Agent.bx` at the root of its published archive (or nested exactly one folder deep - see the unwrapping note below). ForgeBox itself has no dedicated "BxAgents template" entry type; `bxAgents new --forgebox` doesn't filter or care about an entry's declared `type` at all - it only cares whether the downloaded archive, once extracted, contains an `Agent.bx`.
+**What makes a ForgeBox entry a valid template:** an `Agent.bx` at the root of its published archive (or nested exactly one folder deep - see the unwrapping note below). ForgeBox has a dedicated `bxagents` entry type for exactly this ("BxAgents" in the ForgeBox UI) - browsing it is the fastest way to find a starting point - but `bxAgents new --forgebox` itself doesn't filter or care about an entry's declared `type` at all when installing; it only cares whether the downloaded archive, once extracted, contains an `Agent.bx`.
 
 **What happens on install, in order:**
 
@@ -357,14 +357,14 @@ ForgeBox packages are described by a `box.json` at the project root - the same f
 	"name": "My BxAgents Template",
 	"slug": "my-bxagents-template",
 	"version": "1.0.0",
-	"type": "projects",
+	"type": "bxagents",
 	"shortDescription": "A short description of what this agent template does",
 	"private": false
 }
 ```
 
 - **`slug`** is the unique name people install with (`--forgebox=my-bxagents-template`) - it's also what `getEntry()` looks up, so pick one you're happy to keep.
-- **`type`** doesn't need to be anything specific - ForgeBox doesn't have a dedicated "agent template"/"app template" entry type as of this writing (run `box forgebox types` for the current list), and `bxAgents new --forgebox` never inspects it. `projects` is a reasonable generic choice; tag it with descriptive `keywords` (e.g. `"boxlang"`, `"bxagents"`, `"ai-agent"`) instead, since that's what search actually uses.
+- **`type`** should be `bxagents` - ForgeBox's own dedicated entry type for BxAgents projects/templates (run `box forgebox types` to see it alongside every other type). `bxAgents new --forgebox` itself never inspects `type` when installing, but declaring it correctly is what gets your template listed under ForgeBox's own "BxAgents" category instead of a generic one, so people can actually find it by browsing. Add descriptive `keywords` too (e.g. `"boxlang"`, `"ai-agent"`), since that's what full-text search uses.
 - **`version`** should be bumped (`box bump --patch`/`--minor`/`--major`, from inside the template's own folder) each time you publish a change - `bxAgents new --forgebox` always installs whatever `latestVersion` currently resolves to.
 
 Then, from inside the project:

@@ -356,7 +356,7 @@ bxAgents new my-agent --repo=https://github.com/owner/repo-name.git
 <pre><code class="language-bash">bxAgents new my-agent --forgebox=some-package-slug
 </code></pre>
 <p>Installs a <a href="https://www.forgebox.io">ForgeBox</a> package - CommandBox's package registry, which can host a full app/project template, not just a library - and uses it as the new project. This talks to ForgeBox's own public REST API (<code>https://www.forgebox.io/api/v1</code>) directly, using BoxLang's native <code>bx:http</code>/<code>http()</code> support - <strong>no <code>box</code> CLI is required</strong>.</p>
-<p><strong>What makes a ForgeBox entry a valid template:</strong> an <code>Agent.bx</code> at the root of its published archive (or nested exactly one folder deep - see the unwrapping note below). ForgeBox itself has no dedicated &quot;BxAgents template&quot; entry type; <code>bxAgents new --forgebox</code> doesn't filter or care about an entry's declared <code>type</code> at all - it only cares whether the downloaded archive, once extracted, contains an <code>Agent.bx</code>.</p>
+<p><strong>What makes a ForgeBox entry a valid template:</strong> an <code>Agent.bx</code> at the root of its published archive (or nested exactly one folder deep - see the unwrapping note below). ForgeBox has a dedicated <code>bxagents</code> entry type for exactly this (&quot;BxAgents&quot; in the ForgeBox UI) - browsing it is the fastest way to find a starting point - but <code>bxAgents new --forgebox</code> itself doesn't filter or care about an entry's declared <code>type</code> at all when installing; it only cares whether the downloaded archive, once extracted, contains an <code>Agent.bx</code>.</p>
 <p><strong>What happens on install, in order:</strong></p>
 <ol>
 <li>Refuses to run if the target directory already exists and is <strong>not empty</strong>.</li>
@@ -392,14 +392,14 @@ bxAgents new my-agent --repo=https://github.com/owner/repo-name.git
 	&quot;name&quot;: &quot;My BxAgents Template&quot;,
 	&quot;slug&quot;: &quot;my-bxagents-template&quot;,
 	&quot;version&quot;: &quot;1.0.0&quot;,
-	&quot;type&quot;: &quot;projects&quot;,
+	&quot;type&quot;: &quot;bxagents&quot;,
 	&quot;shortDescription&quot;: &quot;A short description of what this agent template does&quot;,
 	&quot;private&quot;: false
 }
 </code></pre>
 <ul>
 <li><strong><code>slug</code></strong> is the unique name people install with (<code>--forgebox=my-bxagents-template</code>) - it's also what <code>getEntry()</code> looks up, so pick one you're happy to keep.</li>
-<li><strong><code>type</code></strong> doesn't need to be anything specific - ForgeBox doesn't have a dedicated &quot;agent template&quot;/&quot;app template&quot; entry type as of this writing (run <code>box forgebox types</code> for the current list), and <code>bxAgents new --forgebox</code> never inspects it. <code>projects</code> is a reasonable generic choice; tag it with descriptive <code>keywords</code> (e.g. <code>&quot;boxlang&quot;</code>, <code>&quot;bxagents&quot;</code>, <code>&quot;ai-agent&quot;</code>) instead, since that's what search actually uses.</li>
+<li><strong><code>type</code></strong> should be <code>bxagents</code> - ForgeBox's own dedicated entry type for BxAgents projects/templates (run <code>box forgebox types</code> to see it alongside every other type). <code>bxAgents new --forgebox</code> itself never inspects <code>type</code> when installing, but declaring it correctly is what gets your template listed under ForgeBox's own &quot;BxAgents&quot; category instead of a generic one, so people can actually find it by browsing. Add descriptive <code>keywords</code> too (e.g. <code>&quot;boxlang&quot;</code>, <code>&quot;ai-agent&quot;</code>), since that's what full-text search uses.</li>
 <li><strong><code>version</code></strong> should be bumped (<code>box bump --patch</code>/<code>--minor</code>/<code>--major</code>, from inside the template's own folder) each time you publish a change - <code>bxAgents new --forgebox</code> always installs whatever <code>latestVersion</code> currently resolves to.</li>
 </ul>
 <p>Then, from inside the project:</p>
