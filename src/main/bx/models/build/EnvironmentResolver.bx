@@ -1,13 +1,33 @@
 /**
  * Determines the active build-time environment name for a BX Agents project.
  *
- * Precedence: explicit CLI flag > `BX_AGENTS_ENV` system property/env var > "development".
+ * Precedence: explicit CLI flag > `Agent.bx`'s own `detectEnvironment()` >
+ * `BX_AGENTS_ENV` system property/env var > "development".
  *
- * This is distinct from ColdBox's own RUNTIME environment detection (the generated
- * application reads `getSetting( "environment" )` on its own, per the ColdBox
- * `environments` convention) — this resolver only decides which `environment()`
- * override method on `Agent.bx`, and which `boxlang-{env}.json`/`miniserver-{env}.json`
- * files, the BUILD pipeline should apply.
+ * `detectEnvironment()` mirrors ColdBox's own tier-1 convention (see
+ * `ApplicationLoader.detectEnvironment()`: a config declaring that method has
+ * its return value taken as the environment verbatim). Two deliberate
+ * differences from ColdBox, both forced by this being a BUILD-time resolver:
+ *
+ *   1. An explicit `--environment` flag outranks `detectEnvironment()` here,
+ *      where ColdBox puts its own detect method first. A flag someone typed
+ *      is the most specific statement of intent available, and silently
+ *      ignoring it would be surprising.
+ *   2. ColdBox's OTHER detection tier - an `environments` struct of regexes
+ *      matched against `CGI.HTTP_HOST` - is deliberately NOT supported. It
+ *      cannot work here: this runs in a CLI process with no HTTP host at all,
+ *      so it would only ever match the BUILD machine (a CI runner would
+ *      resolve "development" for a production build). It is also read by
+ *      ColdBox via `getPropertyMixin()`, the same reflection helper this
+ *      project confirmed does not reach a config class's `variables` scope on
+ *      this BoxLang/ColdBox combination - see docs/known-limitations.md.
+ *      `detectEnvironment()` has neither problem: it is a plain method call,
+ *      and the project decides for itself what to inspect.
+ *
+ * This is all distinct from ColdBox's RUNTIME environment detection in the
+ * generated application - this resolver only decides which `environment()`
+ * override method on `Agent.bx`, and which `boxlang-{env}.json`/
+ * `miniserver-{env}.json` files, the BUILD pipeline should apply.
  */
 class {
 
@@ -17,10 +37,19 @@ class {
 	 * Resolve the active environment name.
 	 *
 	 * @cliEnvironment Environment name passed explicitly (e.g. via a CLI flag). Takes precedence when non-empty.
+	 * @agentDescriptor The already-instantiated Agent.bx, checked for a `detectEnvironment()` method. Optional - omit it and only the flag/env-var/default tiers apply.
+	 * @agentBxPath Absolute path to the Agent.bx, for error-message context only
+	 *
+	 * @return The resolved environment name
 	 */
-	string function resolve( string cliEnvironment = "" ) {
+	string function resolve( string cliEnvironment = "", any agentDescriptor, string agentBxPath = "" ) {
 		if ( len( trim( arguments.cliEnvironment ) ) ) {
 			return trim( arguments.cliEnvironment )
+		}
+
+		var detected = invokeDetectEnvironment( arguments.agentDescriptor ?: nullValue(), arguments.agentBxPath )
+		if ( len( detected ) ) {
+			return detected
 		}
 
 		var envVarValue = getSystemSetting( "BX_AGENTS_ENV", "" )
@@ -29,6 +58,48 @@ class {
 		}
 
 		return variables.DEFAULT_ENVIRONMENT
+	}
+
+	/**
+	 * Calls an Agent.bx's own `detectEnvironment()`, if it declares one.
+	 *
+	 * A non-string or blank return is treated as "no opinion" and falls
+	 * through to the next tier rather than erroring: a project that computes
+	 * its environment from something absent on this machine (an unset env var,
+	 * a missing file) should degrade to the default, not fail the build. A
+	 * method that THROWS is a different matter - that is a real bug in the
+	 * project's own code, and is surfaced as one.
+	 *
+	 * @agentDescriptor The instantiated Agent.bx, or null when the caller has none
+	 * @agentBxPath Absolute path to the Agent.bx, for error-message context only
+	 *
+	 * @return The detected environment name, or "" when the method is absent or returned nothing usable
+	 */
+	private string function invokeDetectEnvironment( any agentDescriptor, string agentBxPath = "" ) {
+		if ( isNull( arguments.agentDescriptor ) ) {
+			return ""
+		}
+
+		var meta = getMetaData( arguments.agentDescriptor )
+		var functions = meta.functions ?: []
+		if ( !functions.some( fn => fn.name.lcase() == "detectenvironment" ) ) {
+			return ""
+		}
+
+		try {
+			var detected = arguments.agentDescriptor.detectEnvironment()
+		} catch ( any e ) {
+			throw(
+				type    = "BxAgents.InvalidAgentDescriptor",
+				message = "Agent.bx at [#arguments.agentBxPath#] threw from detectEnvironment(): #e.message#"
+			)
+		}
+
+		if ( isNull( detected ) || !isSimpleValue( detected ) ) {
+			return ""
+		}
+
+		return trim( detected )
 	}
 
 }

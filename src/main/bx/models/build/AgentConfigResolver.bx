@@ -58,9 +58,19 @@ class {
 			)
 		}
 
-		var environment			= variables.environmentResolver.resolve( arguments.cliEnvironment )
+		// The descriptor is loaded BEFORE the environment is resolved, because
+		// an Agent.bx may declare its own detectEnvironment() - see
+		// EnvironmentResolver.resolve()'s own docblock for the precedence, and
+		// ColdBox's ApplicationLoader.detectEnvironment() for the convention
+		// this mirrors. Loading it first is safe: nothing about loading the
+		// class depends on which environment is active.
 		var agentDescriptor		= loadAgentDescriptor( agentBxPath, context )
 		var isClassBased		= isClassBasedAgent( agentDescriptor )
+		var environment			= variables.environmentResolver.resolve(
+			cliEnvironment  : arguments.cliEnvironment,
+			agentDescriptor : agentDescriptor,
+			agentBxPath     : agentBxPath
+		)
 
 		var baseConfig			= invokeConfigure( agentDescriptor, agentBxPath, isClassBased )
 		var envOverrides		= invokeEnvironmentOverride( agentDescriptor, environment, agentBxPath )

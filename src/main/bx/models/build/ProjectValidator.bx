@@ -43,6 +43,7 @@ class {
 		validateGatewaySession( arguments.resolvedConfig, errors )
 		validateMcpServers( arguments.resolvedConfig, errors )
 		validateModelProvider( arguments.resolvedConfig, arguments.discovery, errors )
+		validateAgentApi( arguments.resolvedConfig, errors )
 
 		return { errors : errors, warnings : warnings }
 	}
@@ -342,6 +343,14 @@ class {
 			github  : [ "tokenEnvVar", "webhookSecretEnvVar", "botNameEnvVar" ],
 			signal  : [ "accountEnvVar" ]
 		}
+
+		/**
+		 * The URI prefix reserved for this module's own always-on agent route.
+		 * RouterGenerator.RESERVED_AGENT_PATH is the source of truth - statics
+		 * are per-class in BoxLang, so the value is duplicated here rather than
+		 * shared. Keep the two in step.
+		 */
+		RESERVED_AGENT_PATH = "/__bxagents"
 	}
 
 	/**
@@ -488,6 +497,18 @@ class {
 
 		if ( !reFind( "^(/[A-Za-z0-9._~-]+)*/?$", arguments.path ) ) {
 			arguments.errors.append( "Gateway [#arguments.gatewayName#] has an invalid 'path' [#arguments.path#] - it becomes a route literal, a directory name and a JavaScript string, so every segment must be non-empty and contain only letters, digits, '.', '_', '-' or '~' (e.g. ""/chat"" or ""/api/chat"")" )
+			return false
+		}
+
+		// The reserved prefix is checked LAST, on the normalized value, so a
+		// path that collides is reported for the collision rather than for a
+		// trailing slash. This module's own always-on agent route is always
+		// registered there (see RouterGenerator.renderReservedAgentRoute), so
+		// an exposure claiming the same mount would be silently shadowed - it
+		// would look declared and never answer.
+		var normalized = normalizeExposurePath( arguments.path )
+		if ( normalized == static.RESERVED_AGENT_PATH || normalized.startsWith( static.RESERVED_AGENT_PATH & "/" ) ) {
+			arguments.errors.append( "Gateway [#arguments.gatewayName#] has a 'path' [#arguments.path#] under [#static.RESERVED_AGENT_PATH#], which BX Agents reserves for its own always-on agent route - pick a path outside it" )
 			return false
 		}
 
@@ -664,6 +685,53 @@ class {
 	// Gateway session (single project-wide GatewaySession, bundling every
 	// push-style gateway - see GatewayGenerator.renderSessionInterceptor())
 	// --------------------------------------------------------------------------
+
+	/**
+	 * Validates the optional `agentApi: { enabled, tokenEnvVar }` block on the
+	 * root Agent.bx's configure() return struct - the switch controlling the
+	 * always-on reserved agent route (see RouterGenerator.renderReservedAgentRoute()).
+	 *
+	 * `tokenEnvVar` names an environment VARIABLE, never a secret itself - the
+	 * same rule every other `*EnvVar` key in this project follows, so nothing
+	 * sensitive is ever embedded in generated source or a packaged `.bxa`. A
+	 * value that looks like a literal secret rather than a variable name is
+	 * the one case worth catching here, since it would otherwise "work" while
+	 * quietly committing the secret.
+	 *
+	 * @resolvedConfig The resolved config struct from AgentConfigResolver.resolve() - only `agentApi` is used
+	 * @errors Accumulator array - append() any validation errors found
+	 */
+	private void function validateAgentApi( required struct resolvedConfig, required array errors ) {
+		if ( !structKeyExists( arguments.resolvedConfig, "agentApi" ) ) {
+			return
+		}
+
+		var agentApi = arguments.resolvedConfig.agentApi
+		if ( !isStruct( agentApi ) ) {
+			arguments.errors.append( "Agent.bx's 'agentApi' must be a struct of { enabled, tokenEnvVar }" )
+			return
+		}
+
+		var validKeys = [ "enabled", "tokenEnvVar" ]
+		for ( var key in agentApi ) {
+			if ( !validKeys.contains( key ) ) {
+				arguments.errors.append( "Agent.bx's 'agentApi' has an unknown key [#key#] - valid keys: #validKeys.toList( ", " )#" )
+			}
+		}
+
+		if ( structKeyExists( agentApi, "enabled" ) && !isBoolean( agentApi.enabled ) ) {
+			arguments.errors.append( "Agent.bx's 'agentApi.enabled' must be a boolean" )
+		}
+
+		if ( structKeyExists( agentApi, "tokenEnvVar" ) ) {
+			var tokenEnvVar = agentApi.tokenEnvVar
+			if ( !isSimpleValue( tokenEnvVar ) ) {
+				arguments.errors.append( "Agent.bx's 'agentApi.tokenEnvVar' must be the NAME of an environment variable, as a string" )
+			} else if ( len( trim( tokenEnvVar ) ) && !reFind( "^[A-Za-z_][A-Za-z0-9_]*$", trim( tokenEnvVar ) ) ) {
+				arguments.errors.append( "Agent.bx's 'agentApi.tokenEnvVar' [#tokenEnvVar#] is not a valid environment variable name - it names a variable holding the token, never the token itself" )
+			}
+		}
+	}
 
 	/**
 	 * Validates the optional `gatewaySession: { policy, maxQueueDepth }` block
