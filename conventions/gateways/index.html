@@ -226,17 +226,22 @@ class {
 </code></pre>
 <p>The secret is resolved live at server startup, matching this project's &quot;secrets stay external&quot; rule everywhere else (see <a href="/deployment-and-secrets/index.html">Deployment &amp; Secrets</a>) - it's never embedded as a literal in generated source, so it's never present in a packaged <code>.bxa</code> either. If the env var is unset, bx-ai's own <code>HttpGateway</code> treats an empty secret as &quot;no signing configured&quot; and rejects requests accordingly, rather than crashing at startup.</p>
 <p><strong>Validation:</strong> <code>type</code> must be <code>mock</code>, <code>cli</code>, or <code>http</code>; a <code>type: &quot;http&quot;</code> entry requires a <code>secretEnvVar</code>; the entry's own file/base name must be unique across every channel-adapter entry. <code>mock</code> is test-only; <code>cli</code> is bx-ai's own built-in human-in-the-loop <strong>approval</strong> channel (a blocking stdin/stdout A/R/Q prompt) - it's what <code>HumanInTheLoopMiddleware</code> attaches by default when no gateway is specified, and is unrelated to BxAgents' own <code>chat</code> verb (which never touches the gateway registry at all).</p>
-<p><strong><code>http</code>-type entries additionally get real HTTP wiring</strong>: a generated <code>handlers/Gateway.bx</code> action that proxies straight into bx-ai's own <code>GatewayRequestProcessor::processHttp()</code>, and three routes in <code>config/Router.bx</code>:</p>
-<pre><code class="language-javascript">post( &quot;/gateways/:gatewayName/events&quot; ).toHandler( &quot;Gateway.process&quot; )
-get( &quot;/interactions/:requestID&quot; ).toHandler( &quot;Gateway.process&quot; )
-post( &quot;/interactions/:requestID/decisions&quot; ).toHandler( &quot;Gateway.process&quot; )
+<p><strong><code>http</code>-type entries additionally get real HTTP wiring</strong>: one line in <code>config/Router.bx</code>, using ColdBox's own <code>toAiGateway()</code> terminator.</p>
+<pre><code class="language-javascript">route( &quot;/gateways&quot; ).toAiGateway()
+</code></pre>
+<p>That single terminator mounts the whole bx-ai Gateway surface:</p>
+<pre><code>POST /gateways/:gateway/events                  inbound platform event
+GET  /gateways/:gateway/events                  the platform's URL verification handshake
+GET  /gateways/interactions/:requestID          poll a pending human interaction
+POST /gateways/interactions/:requestID/decisions submit a human's decision
+GET  /gateways/info                             what this mount serves
 </code></pre>
 <div class="adm-block adm-info">
 <div class="adm-heading">
 <svg class="adm-icon"><use xlink:href="#adm-info" /></svg><span>Info</span>
 </div>
 <div class="adm-body">
-<p>ColdBox has no built-in <code>toAiGateway()</code> DSL terminator for this surface (only <code>toAi()</code> and <code>toMCP()</code> exist natively) - this wiring is BxAgents' own generated code, following the same shape a future core terminator would produce.</p>
+<p>Earlier builds emitted three hand-written routes into a generated <code>handlers/Gateway.bx</code> passthrough, because ColdBox had no terminator for this surface. It does now (<code>toAiGateway()</code>, alongside <code>toAi()</code> and <code>toMCP()</code>), so the handler is gone and the interaction endpoints moved under the <code>/gateways</code> base path.</p>
 </div>
 </div>
 <h2 id="3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends"><a href="#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends" id="3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends" name="3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends" class="anchor"></a>3. Push-style gateways (<code>type: &quot;telegram&quot;</code> / <code>&quot;slack&quot;</code> / <code>&quot;discord&quot;</code> / <code>&quot;email&quot;</code> / <code>&quot;whatsapp-cloud&quot;</code> / <code>&quot;teams&quot;</code> / <code>&quot;twilio&quot;</code> / <code>&quot;github&quot;</code> / <code>&quot;signal&quot;</code>, and friends)</h2>
@@ -379,7 +384,7 @@ class extends=&quot;bxModules.bxai.models.runnables.AiAgent&quot; {
 <p>Every push-style gateway writes to its own <code>gateway-&lt;type&gt;</code> log file (e.g. <code>gateway-telegram</code>) via BoxLang's <code>writeLog()</code>, rather than one shared/default app log - so an operator can tail exactly the platform they care about without noise from everything else the app logs.</p>
 
 
-	<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/conventions/gateways/index.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/conventions/gateways/index.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Sep 10, 2026, 9&#x3a;17&#x3a;53 PM</span></div>
+	<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/conventions/gateways/index.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/conventions/gateways/index.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Sep 10, 2026, 9&#x3a;18&#x3a;35 PM</span></div>
 
 				</article>
 
