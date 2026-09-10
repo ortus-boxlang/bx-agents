@@ -123,12 +123,13 @@ bxAgents new my-agent --forgebox=some-package-slug
 Die vollständige [Build-Pipeline](build-pipeline.md) ausführen.
 
 ```bash
-bxAgents build [--environment=production] [--verbose]
+bxAgents build [--environment=production] [--verbose] [--generatorVersion=1.0.0]
 ```
 
 Schreibt `.build/app/` und `.build/manifest.json`. Schlägt mit jedem gesammelten Validierungsfehler fehl, falls das Projekt ungültig ist.
 
 - `--verbose` gibt live eine Zeile pro Build-Phase aus, während sie läuft - was aufgelöst/entdeckt/validiert wurde, Zählwerte pro Phase (Modelle, Tools, Gateways, Warnungen usw.), welche Agenten am Ende in `config/WireBox.bx` unter welchen Namen registriert wurden, ob ein `schedules/Scheduler.bx` gefunden wurde, und eine abschließende Zeitzeile `Build completed in Xms`. Nützlich zur Fehlersuche bei einem langsamen oder unerwartet reagierenden Build. Ansonsten still - `--verbose` kostet nichts, wenn es nicht übergeben wird.
+- `--generatorVersion` überschreibt die Zeichenkette, die in `manifest.json`s `generator.version` geschrieben wird (siehe [Das Manifest](manifest.md)) - standardmäßig `"dev"`, wenn nicht angegeben. Gedacht für Tooling, das gegen eine bestimmte veröffentlichte Version dieses Moduls baut und das im Manifest festhalten möchte, statt des lokalen Dev-Standards.
 
 ### `test`
 

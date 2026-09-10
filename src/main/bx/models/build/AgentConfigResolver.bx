@@ -95,9 +95,47 @@ class {
 			// duplicate-name check, rather than every such node silently
 			// colliding on a hardcoded "BxAi" default.
 			config[ "classAgentName" ] = agentDescriptor.getAgentName()
+			// Same reasoning for description/model: a class-based Agent.bx with
+			// no configure() leaves config.description/config.model unset (by
+			// design - see validateModelProvider()'s classBasedAgent skip and
+			// ColdBoxAppGenerator's own class-based branch, neither of which
+			// reads these class* keys, so this can't affect validation or
+			// generation). Without a class-carried fallback, purely
+			// INFORMATIONAL surfaces - manifest.json's "agent" summary
+			// (ManifestNormalizer) and `build --verbose`'s progress line
+			// (BuildPipeline) - always showed a blank description/model for
+			// the default (and now most common) scaffolded shape, even though
+			// the agent itself is fully identified via its own init().
+			config[ "classAgentDescription" ] = agentDescriptor.getDescription()
+			config[ "classAgentModel" ] = describeAgentModel( agentDescriptor )
 		}
 
 		return config
+	}
+
+	/**
+	 * A human-readable "provider" or "provider/model" string for a class-based
+	 * agent's own `aiModel`, for informational display only (manifest.json,
+	 * `build --verbose`) - never used for validation or code generation, so a
+	 * provider bx-ai itself accepts but this module's own ModelSlugParser
+	 * doesn't recognize is never a problem here, unlike `config.model`.
+	 *
+	 * @agentDescriptor The instantiated, class-based Agent.bx instance
+	 *
+	 * @return "provider/model", just "provider" if no model param is set, or "" if the model itself can't be read
+	 */
+	private string function describeAgentModel( required any agentDescriptor ) {
+		try {
+			var modelConfig = arguments.agentDescriptor.getAiModel().getConfig()
+			var provider = modelConfig.provider ?: ""
+			if ( !len( provider ) ) {
+				return ""
+			}
+			var modelName = modelConfig.params.model ?: ""
+			return len( modelName ) ? "#provider#/#modelName#" : provider
+		} catch ( any e ) {
+			return ""
+		}
 	}
 
 	/**

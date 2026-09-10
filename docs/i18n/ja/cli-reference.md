@@ -123,12 +123,13 @@ bxAgents new my-agent --forgebox=some-package-slug
 [ビルドパイプライン](build-pipeline.md) 全体を実行します。
 
 ```bash
-bxAgents build [--environment=production] [--verbose]
+bxAgents build [--environment=production] [--verbose] [--generatorVersion=1.0.0]
 ```
 
 `.build/app/` と `.build/manifest.json` を書き込みます。プロジェクトが不正な場合は、収集されたすべての検証エラーとともに失敗します。
 
 - `--verbose` は実行中の各ビルドフェーズについて 1 行ずつ、その場でライブに表示します - 何が解決/発見/検証されたか、フェーズごとの件数 (モデル、ツール、ゲートウェイ、警告など)、`config/WireBox.bx` にどのエージェントがどの名前で登録されたか、`schedules/Scheduler.bx` が見つかったかどうか、そして最後に `Build completed in Xms` というタイミング行です。遅い、あるいは予期しない挙動のビルドをデバッグする際に便利です。指定しない場合は無音のままです - `--verbose` は渡さなければ何もコストがかかりません。
+- `--generatorVersion` は `manifest.json` の `generator.version` に書き込まれる文字列を上書きします ([マニフェスト](manifest.md) 参照) - 省略した場合のデフォルトは `"dev"` です。このモジュールの特定のリリース版に対してビルドし、それをマニフェストに記録したいツール向けです。
 
 ### `test`
 
