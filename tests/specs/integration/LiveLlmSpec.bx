@@ -1,0 +1,104 @@
+/**
+ * Real, live LLM integration test - CI only.
+ *
+ * Every other spec in this suite runs against bx-ai's own `mock` provider by
+ * design (see BaseAgentSpec.bx's docblock) - deliberately, so `bxAgents test`
+ * and this module's own `testBx` need no API key or network access. That has
+ * left a real, repeatedly-documented gap (docs/known-limitations.md): no test
+ * anywhere in this suite has ever exercised a genuine LLM request/response
+ * round trip, including real tool-calling - only bx-ai's scripted mock
+ * responses.
+ *
+ * This spec closes that gap, CI only, via Novita AI (https://novita.ai) - an
+ * OpenAI-compatible endpoint - through bx-ai's own `openai-compatible`
+ * provider (see bx-ai's OpenAICompatibleService.bx, a real CORE_PROVIDERS
+ * entry): `aiModel( provider: "openai-compatible", options: { baseURL: "..." } )`
+ * sets the service's `chatURL` to `<baseURL>/chat/completions`, matching
+ * Novita's own documented API surface exactly - no bx-ai code changes were
+ * needed, this is a pure consumer of an existing provider.
+ *
+ * Gated on the NOVITA_API_KEY environment variable (a real GitHub Actions
+ * secret - see .github/workflows/tests.yml) via each it()'s own `skip`
+ * argument - TestBox's real conditional-skip mechanism (evaluated at suite-
+ * definition time, not a path exclusion in runTests.bxs) - so a local
+ * `./gradlew testBx`/`bxAgents test` run with no key set reports these two
+ * specs as "Skipped" rather than failing or silently vanishing, while CI
+ * (which has the secret) actually exercises them for real.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	static {
+		BASE_URL = "https://api.novita.ai/openai"
+		MODEL    = "deepseek/deepseek-v4.1-flash"
+	}
+
+	/**
+	 * @return True if NOVITA_API_KEY is set in the environment - the precondition every it() below is skipped on
+	 */
+	private boolean function hasApiKey() {
+		return len( getSystemSetting( "NOVITA_API_KEY", "" ) ) > 0
+	}
+
+	/**
+	 * @return A real AiModel pointed at Novita's OpenAI-compatible endpoint, via bx-ai's own "openai-compatible" provider
+	 */
+	private any function buildLiveModel() {
+		return aiModel(
+			provider : "openai-compatible",
+			apiKey   : getSystemSetting( "NOVITA_API_KEY", "" ),
+			options  : { baseURL : static.BASE_URL },
+			params   : { model : static.MODEL }
+		)
+	}
+
+	function run() {
+		describe( "Live LLM integration (Novita AI, openai-compatible provider)", function() {
+
+			it(
+				title : "gets a real, coherent response from a real LLM",
+				skip  : !hasApiKey(),
+				body  : function() {
+					var agent = aiAgent(
+						name         : "live-llm-smoke-test",
+						instructions : "You are a terse assistant. Answer with only what is asked, nothing else.",
+						model        : buildLiveModel()
+					)
+
+					var response = agent.run( "What is 2 + 2? Reply with only the digit, nothing else." )
+
+					expect( toString( response ) ).toInclude( "4" )
+				}
+			);
+
+			it(
+				title : "actually invokes a real tool when the model decides to",
+				skip  : !hasApiKey(),
+				body  : function() {
+					var toolWasCalled = false
+					var weatherTool = aiTool(
+						"getWeather",
+						"Get the current weather for a city. Always call this tool when asked about the weather - never guess.",
+						function( city ) {
+							toolWasCalled = true
+							return "72 degrees and sunny in #arguments.city#"
+						}
+					)
+
+					var agent = aiAgent(
+						name         : "live-llm-tool-test",
+						instructions : "You are a helpful assistant. Use the tools available to you whenever they're relevant - never guess at information a tool can give you.",
+						model        : buildLiveModel(),
+						tools        : [ weatherTool ]
+					)
+
+					var response = agent.run( "What's the weather in Boston right now? Use the tool to check, then tell me." )
+
+					expect( toolWasCalled ).toBeTrue();
+					expect( toString( response ) ).toInclude( "72" )
+				}
+			);
+
+		} );
+	}
+
+}

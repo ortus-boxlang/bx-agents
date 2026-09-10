@@ -6,6 +6,8 @@ on:
     secrets:
       SLACK_WEBHOOK_URL:
         required: false
+      NOVITA_API_KEY:
+        required: false
 
 env:
   MODULE_ID: ${{ github.event.repository.name }}
@@ -17,6 +19,11 @@ jobs:
     env:
       DB_USER: root
       DB_PASSWORD: root
+      # Real, live LLM testing via Novita AI's OpenAI-compatible endpoint -
+      # see tests/specs/integration/LiveLlmSpec.bx. That spec self-skips
+      # cleanly (shows as "Skipped", not a failure) whenever this isn't set,
+      # so a fork PR without the secret still runs the rest of the suite.
+      NOVITA_API_KEY: ${{ secrets.NOVITA_API_KEY }}
     continue-on-error: ${{ matrix.experimental }}
     strategy:
       fail-fast: false
