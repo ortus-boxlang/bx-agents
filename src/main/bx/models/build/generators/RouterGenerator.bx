@@ -10,11 +10,12 @@
  * (toMCP) respectively.
  *
  * When at least one channel-adapter gateway of type "http" exists (see
- * GatewayGenerator), also emits the 3 fixed bx-ai Gateway webhook routes.
- * ColdBox has no `toAiGateway()` DSL terminator (confirmed absent from the
- * routing-dsl docs) - so this is BX Agents' own wiring, following the same
- * shape a future core terminator would produce (plain routes to a generated
- * handler), not a reuse of toAi()/toMCP().
+ * GatewayGenerator), also emits one `route( "/gateways" ).toAiGateway()` - the
+ * native ColdBox terminator for the bx-ai Gateway surface, which registers the
+ * inbound-event, verification-handshake, human-interaction and info routes
+ * itself. This replaces the three hand-written routes plus a generated
+ * passthrough handler this generator used to emit, from back when ColdBox had
+ * no such terminator.
  */
 class {
 
@@ -41,12 +42,10 @@ class {
 			if ( lines.len() ) {
 				lines.append( "" )
 			}
-			lines.append( "// bx-ai Gateway webhook surface - ColdBox has no toAiGateway() DSL" )
-			lines.append( "// terminator (yet), so this mirrors the same shape toAi()/toMCP() use:" )
-			lines.append( "// plain routes to a generated handler that proxies GatewayRequestProcessor." )
-			lines.append( 'post( "/gateways/:gatewayName/events" ).toHandler( "Gateway.process" )' )
-			lines.append( 'get( "/interactions/:requestID" ).toHandler( "Gateway.process" )' )
-			lines.append( 'post( "/interactions/:requestID/decisions" ).toHandler( "Gateway.process" )' )
+			lines.append( "// bx-ai Gateway webhook surface - one native ColdBox terminator that" )
+			lines.append( "// registers the inbound-event, verification-handshake, human-interaction" )
+			lines.append( "// and info routes under this base path." )
+			lines.append( 'route( "/gateways" ).toAiGateway()' )
 		}
 
 		if ( arguments.hasWhatsAppCloudGateway ) {

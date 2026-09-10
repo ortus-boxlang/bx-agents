@@ -73,28 +73,24 @@ class extends="testbox.system.BaseSpec" {
 				expect( httpStatement ).toInclude( "getSystemSetting(" );
 			} );
 
-			it( "writes handlers/Gateway.bx and reports hasHttpGateway=true when an http-type channel exists", function() {
+			it( "reports hasHttpGateway=true and writes no handler when an http-type channel exists", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
 				var appDir = newAppDir();
 				var result = generator.generate( discovery, appDir );
 
 				expect( result.hasHttpGateway ).toBeTrue();
-				expect( result.keyExists( "handlerPath" ) ).toBeTrue();
-				expect( fileExists( result.handlerPath ) ).toBeTrue();
-
-				var content = fileRead( result.handlerPath );
-				expect( content ).toInclude( "function process( event, rc, prc )" );
-				expect( content ).toInclude( "GatewayRequestProcessor::processHttp()" );
-				expect( content ).toInclude( "noRender()" );
+				// ColdBox's own route( "/gateways" ).toAiGateway() terminator mounts the whole
+				// surface now, so there is nothing left for a passthrough handler to do.
+				expect( result.keyExists( "handlerPath" ) ).toBeFalse();
+				expect( fileExists( appDir & "/handlers/Gateway.bx" ) ).toBeFalse();
 			} );
 
-			it( "writes no handler and reports hasHttpGateway=false when there is no http-type channel", function() {
+			it( "reports hasHttpGateway=false when there is no http-type channel", function() {
 				var discovery = discoverer.discover( fixtures & "/full-project" );
 				var appDir = newAppDir();
 				var result = generator.generate( discovery, appDir );
 
 				expect( result.hasHttpGateway ).toBeFalse();
-				expect( result.keyExists( "handlerPath" ) ).toBeFalse();
 				expect( fileExists( appDir & "/handlers/Gateway.bx" ) ).toBeFalse();
 			} );
 

@@ -70,6 +70,11 @@ platform's own limit, and human-in-the-loop approval support:
   **Twilio SMS** (`X-Twilio-Signature`) and **GitHub** (`@mention`-gated issue/PR threads).
 - Credentials are always named by *environment variable*, never embedded in config or
   generated source.
+- A `type: "http"` entry's webhook surface is mounted by ColdBox's own
+  `route( "/gateways" ).toAiGateway()` terminator - inbound events, the platform's URL
+  verification handshake, the human-in-the-loop interaction endpoints, and an info route -
+  instead of hand-written routes into a generated passthrough handler. The interaction
+  endpoints now live under the `/gateways` base path.
 
 #### CLI
 
