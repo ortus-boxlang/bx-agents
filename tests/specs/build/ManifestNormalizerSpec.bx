@@ -99,6 +99,20 @@ class extends="testbox.system.BaseSpec" {
 				expect( manifest.generator.version ).toBe( "1.2.3" );
 			} );
 
+			it( "falls back to a class-based agent's own name/description/model when it declares no configure()", function() {
+				// class-based-minimal has no configure() at all - name/description/
+				// model are only ever set via its own super.init(). Before
+				// AgentConfigResolver's classAgentName/classAgentDescription/
+				// classAgentModel fallback, this manifest's "agent" summary (and
+				// `bxAgents inspect`, which reads it verbatim) showed all three
+				// as blank for this - the default, most common - project shape.
+				var manifest = buildManifest( fixtures & "/class-based-minimal" );
+
+				expect( manifest.agent.name ).toBe( "ClassOnly" );
+				expect( manifest.agent.description ).toBe( "set in code" );
+				expect( manifest.agent.model ).toBe( "mock" );
+			} );
+
 		} );
 	}
 

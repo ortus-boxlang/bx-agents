@@ -79,10 +79,20 @@ class {
 	private struct function buildAgentSummary( required struct config ) {
 		// Only safe, structural fields - never secrets. Secrets stay external
 		// and are resolved by bx-ai itself at runtime (see AgentConfigResolver).
+		//
+		// A class-based Agent.bx with no configure() (the normal, most common
+		// shape) never populates config.name/description/model at all - those
+		// are configure()-only keys, left untouched for validation/generation's
+		// sake (see AgentConfigResolver's own classAgent* fallback comment).
+		// Fall back to the class-carried classAgentName/classAgentDescription/
+		// classAgentModel keys for DISPLAY here, so this summary - and
+		// `bxAgents inspect`, which reads it straight from manifest.json -
+		// isn't blank for the default scaffolded project shape.
+		var isClassBased = arguments.config.classBasedAgent ?: false
 		return {
-			name        : arguments.config.name ?: "",
-			description : arguments.config.description ?: "",
-			model       : arguments.config.model ?: "",
+			name        : len( arguments.config.name ?: "" ) ? arguments.config.name : ( isClassBased ? ( arguments.config.classAgentName ?: "" ) : "" ),
+			description : len( arguments.config.description ?: "" ) ? arguments.config.description : ( isClassBased ? ( arguments.config.classAgentDescription ?: "" ) : "" ),
+			model       : len( arguments.config.model ?: "" ) ? arguments.config.model : ( isClassBased ? ( arguments.config.classAgentModel ?: "" ) : "" ),
 			environment : arguments.config.environment ?: ""
 		}
 	}

@@ -48,6 +48,9 @@ class {
 	 * @cliEnvironment Optional environment name the build was invoked with (e.g. from `--environment`), re-applied when resolving each subagent's OWN config so a subagent's environment-specific overrides match the same environment the root project was built for, rather than silently falling back to each subagent's default environment
 	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .models is used, to resolve a bare `model` value against a `models/` entry - see resolveModelReference()). Subagents have no `models/` folder of their own; every node resolves against the ROOT project's models/, matching the flat-namespace design already used for subAgents references (see docs/conventions/subagents.md)
 	 * @hasEmailGateway Whether the project has at least one `type: "email"` gateway (see GatewayGenerator) - when true, `moduleSettings.cbmailservices` is generated so `EmailGateway`'s `MailService@cbmailservices` resolution has a real `BXMail`-protocol mailer configured. cbmailservices/bx-mail themselves are server-level module installs (see box.json `dependencies`), not something this generator installs
+	 * @hasWebUi Whether the project has a `gateways/*` entry with `exposes: "webui"` (see WebUiGenerator) - when true, session management/a datasource for the chat store are wired into config/ColdBox.bx and Application.bx
+	 * @webUiDatabase The web UI's resolved database config (`{ datasource, path }` - see WebUiGenerator) - only meaningful when `hasWebUi` is true
+	 * @webUiHasUsers Whether the web UI's `gateways/*` entry declares `users` (see WebUiGenerator/docs/conventions/web-ui.md) - when true, `moduleSettings.cbauth`/a `config/modules/cbauth.bx` override are generated so the sign-in gate has a real `UserService`/`cbauth` binding to authenticate against
 	 *
 	 * @return { applicationBx, coldboxConfig, wireboxConfig, agentFactory, index, agentNodes: every { name, accessorPath } WireBox-registered agent - see buildAgentTree() }
 	 */
@@ -161,6 +164,10 @@ class {
 	/**
 	 * @appName The agent's name, stamped into `this.name`
 	 * @startupStatements Bare statement strings inserted into `onApplicationStart()`, after `loadColdbox()` - tool scan, MCP registrations, gateway registrations, in that order
+	 * @sessionManagement Whether the project has a `webui` exposure (see `generate()`'s `hasWebUi`) - `true` turns on real cookie-backed sessions (`this.sessionManagement`/`this.setClientCookies`/`this.sessionTimeout`), so browser visitors get their own agent memory; `false` (API/gateway-only projects) skips the overhead and the cookie
+	 * @sessionTimeoutMinutes Only used when `sessionManagement` is true - minutes until `this.sessionTimeout` expires
+	 * @datasourceName Non-empty only when the web UI's chat store needs one (see `generate()`'s `webUiDatabase`) - registers it as a NAMED SQLite `this.datasources[...]` entry AND as `this.datasource` (the app default), so an unqualified query always resolves rather than failing with "No default datasource defined"
+	 * @databasePath Only used alongside `datasourceName` - the SQLite file path passed to `expandPath()` for that datasource's `"database"` key
 	 *
 	 * @return The rendered Application.bx source
 	 */
@@ -700,6 +707,8 @@ class {
 	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .models is used), shared by every node
 	 * @accessorPath The ordered list of getSubAgent() names needed to reach THIS node from the root singleton - empty for the initial (root) call
 	 * @nodeRelativePath THIS node's own directory expressed RELATIVE to the root project root - "" for the root itself, "subagents/<name>" for every subagent (flat, per the DAG model above, so it is never nested any deeper than that). Used to mirror the node into the generated app, so its instructions.md is copied to a matching place under `<appDir>/agent/` - see copyNodeInstructions()
+	 * @defaultMemory The build's own default memory `type` (e.g. "session"), used by renderMemoryExpression() when THIS node's own resolvedConfig declares no `memory` block of its own - passed through unchanged to every descendant call
+	 * @appDir Absolute path to the build output directory (e.g. "<projectRoot>/.build/app") - where copyNodeInstructions()/copyAgentClass() write this node's mirrored instructions.md/class file, passed through unchanged to every descendant call
 	 *
 	 * @return { statements: leaf-first `var <name> = aiAgent(...)` statement strings, nodes: [ { name, accessorPath } ] for this node and every descendant }
 	 */

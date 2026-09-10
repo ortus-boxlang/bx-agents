@@ -62,7 +62,13 @@ class {
 
 		arguments.onProgress( "+ Resolving Agent.bx config..." )
 		var config = variables.configResolver.resolve( projectRoot = root, cliEnvironment = arguments.cliEnvironment )
-		arguments.onProgress( "    name=#config.name ?: ''#, model=#config.model ?: ''#, environment=#config.environment ?: ''#" )
+		// A class-based Agent.bx with no configure() leaves config.name/model
+		// unset by design (see AgentConfigResolver/ManifestNormalizer) - fall
+		// back to the class-carried classAgentName/classAgentModel for this
+		// display line only, so it isn't blank for the default scaffolded shape.
+		var displayName = len( config.name ?: "" ) ? config.name : ( config.classAgentName ?: "" )
+		var displayModel = len( config.model ?: "" ) ? config.model : ( config.classAgentModel ?: "" )
+		arguments.onProgress( "    name=#displayName#, model=#displayModel#, environment=#config.environment ?: ''#" )
 
 		arguments.onProgress( "+ Discovering project source..." )
 		var discovery = variables.discoverer.discover( root )
