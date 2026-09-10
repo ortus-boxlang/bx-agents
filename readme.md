@@ -108,6 +108,8 @@ CI clones, tests, packages, and deploys this module to ForgeBox and the Ortus S3
 
 Contact `#infrastructure` for these credentials if needed.
 
+Optionally, `NOVITA_API_KEY` (a [Novita AI](https://novita.ai) API key) enables one real, live LLM integration test - see [`tests/specs/integration/LiveLlmSpec.bx`](tests/specs/integration/LiveLlmSpec.bx). It's genuinely optional: unset, that spec reports as cleanly "Skipped" rather than failing, so a fork PR without it still runs the rest of the suite.
+
 ### Working on the docs
 
 `docs/` is a [bx-sites](https://ortus-boxlang.github.io/bx-sites/development/) site - plain Markdown, where the folder structure *is* the navigation and `docs/nav.json` overrides the order. `bxsites.yaml` at the repo root holds the site config.
