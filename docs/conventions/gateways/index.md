@@ -120,16 +120,24 @@ The secret is resolved live at server startup, matching this project's "secrets 
 
 **Validation:** `type` must be `mock`, `cli`, or `http`; a `type: "http"` entry requires a `secretEnvVar`; the entry's own file/base name must be unique across every channel-adapter entry. `mock` is test-only; `cli` is bx-ai's own built-in human-in-the-loop **approval** channel (a blocking stdin/stdout A/R/Q prompt) - it's what `HumanInTheLoopMiddleware` attaches by default when no gateway is specified, and is unrelated to BxAgents' own `chat` verb (which never touches the gateway registry at all).
 
-**`http`-type entries additionally get real HTTP wiring**: a generated `handlers/Gateway.bx` action that proxies straight into bx-ai's own `GatewayRequestProcessor::processHttp()`, and three routes in `config/Router.bx`:
+**`http`-type entries additionally get real HTTP wiring**: one line in `config/Router.bx`, using ColdBox's own `toAiGateway()` terminator.
 
 ```javascript
-post( "/gateways/:gatewayName/events" ).toHandler( "Gateway.process" )
-get( "/interactions/:requestID" ).toHandler( "Gateway.process" )
-post( "/interactions/:requestID/decisions" ).toHandler( "Gateway.process" )
+route( "/gateways" ).toAiGateway()
+```
+
+That single terminator mounts the whole bx-ai Gateway surface:
+
+```
+POST /gateways/:gateway/events                  inbound platform event
+GET  /gateways/:gateway/events                  the platform's URL verification handshake
+GET  /gateways/interactions/:requestID          poll a pending human interaction
+POST /gateways/interactions/:requestID/decisions submit a human's decision
+GET  /gateways/info                             what this mount serves
 ```
 
 !!! info
-    ColdBox has no built-in `toAiGateway()` DSL terminator for this surface (only `toAi()` and `toMCP()` exist natively) - this wiring is BxAgents' own generated code, following the same shape a future core terminator would produce.
+    Earlier builds emitted three hand-written routes into a generated `handlers/Gateway.bx` passthrough, because ColdBox had no terminator for this surface. It does now (`toAiGateway()`, alongside `toAi()` and `toMCP()`), so the handler is gone and the interaction endpoints moved under the `/gateways` base path.
 
 ## 3. Push-style gateways (`type: "telegram"` / `"slack"` / `"discord"` / `"email"` / `"whatsapp-cloud"` / `"teams"` / `"twilio"` / `"github"` / `"signal"`, and friends)
 

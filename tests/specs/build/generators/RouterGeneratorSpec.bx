@@ -80,22 +80,22 @@ class extends="testbox.system.BaseSpec" {
 				expect( apiPos < mcpPos ).toBeTrue();
 			} );
 
-			it( "emits the 3 fixed gateway webhook routes when hasHttpGateway is true", function() {
+			it( "emits the native toAiGateway() terminator when hasHttpGateway is true", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
 				var result = generator.generate( discovery, newAppDir(), true );
 
 				var content = fileRead( result.router );
-				expect( content ).toInclude( 'post( "/gateways/:gatewayName/events" ).toHandler( "Gateway.process" )' );
-				expect( content ).toInclude( 'get( "/interactions/:requestID" ).toHandler( "Gateway.process" )' );
-				expect( content ).toInclude( 'post( "/interactions/:requestID/decisions" ).toHandler( "Gateway.process" )' );
+				expect( content ).toInclude( 'route( "/gateways" ).toAiGateway()' );
+				// The old hand-wired surface: three routes into a generated passthrough handler
+				expect( content ).notToInclude( "Gateway.process" );
 			} );
 
-			it( "does not emit gateway webhook routes when hasHttpGateway is false", function() {
+			it( "does not emit the gateway terminator when hasHttpGateway is false", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
 				var result = generator.generate( discovery, newAppDir(), false );
 
 				var content = fileRead( result.router );
-				expect( content ).notToInclude( "Gateway.process" );
+				expect( content ).notToInclude( "toAiGateway" );
 			} );
 
 			it( "emits the WhatsApp Cloud GET/POST webhook routes when hasWhatsAppCloudGateway is true", function() {

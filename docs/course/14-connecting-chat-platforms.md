@@ -39,9 +39,11 @@ class {
 
 `secretEnvVar` names an environment variable holding the signing secret - **never the
 secret value itself**. It's resolved live at server startup, so it's never present in
-generated source or a packaged `.bxa` either. This gets real routes:
-`POST /gateways/:gatewayName/events`, `GET /interactions/:requestID`,
-`POST /interactions/:requestID/decisions`.
+generated source or a packaged `.bxa` either. This gets real routes, from a single
+`route( "/gateways" ).toAiGateway()` in the generated router:
+`POST /gateways/:gateway/events`, `GET /gateways/:gateway/events` (the platform's URL
+verification handshake), `GET /gateways/interactions/:requestID`, and
+`POST /gateways/interactions/:requestID/decisions`.
 
 ## Nine push-style platforms
 

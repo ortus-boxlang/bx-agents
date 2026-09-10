@@ -20,16 +20,11 @@
  * unfixed bug had this entry's raw secret value embedded in generated source
  * and shipped unredacted inside the packaged `.bxa` (see docs/known-limitations.md).
  *
- * `http`-type entries additionally need a generated handler
- * (`handlers/Gateway.bx`) so the fixed 3-route bx-ai Gateway webhook surface
- * (`GatewayRequestProcessor::processHttp()`) is reachable over HTTP - see
- * RouterGenerator for the routes pointing at it. Confirmed via bx-ai source
- * (models/gateway/http/GatewayRequestProcessor.bx) that `processHttp()` is a
- * static, zero-argument call that reads/writes the raw HTTP request/response
- * itself (via cgi.PATH_INFO and its own HTTPTransport), so the handler action
- * is a thin, identical passthrough for all 3 routes - no event/rc/prc
- * translation needed, just `event.noRender()` afterward since processHttp()
- * already wrote the real response.
+ * `http`-type entries need no generated handler at all: ColdBox's own
+ * `route( "/gateways" ).toAiGateway()` terminator mounts the whole bx-ai
+ * Gateway surface itself - see RouterGenerator. This generator used to write a
+ * `handlers/Gateway.bx` passthrough into `GatewayRequestProcessor::processHttp()`
+ * because no such terminator existed.
  *
  * "Push-style" entries (`type: "telegram"`/"slack"/"discord"/"email"/
  * "whatsapp-cloud") resolve to a bx-ai gateway
@@ -96,10 +91,10 @@ class {
 
 	/**
 	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .gateways is used)
-	 * @appDir Absolute path to the generated ColdBox app dir, e.g. "<projectRoot>/.build/app" - the handler (if needed) is written to "<appDir>/handlers/Gateway.bx"
+	 * @appDir Absolute path to the generated ColdBox app dir, e.g. "<projectRoot>/.build/app" - any webhook handler this generator still needs (WhatsApp Cloud, Teams, Twilio, GitHub) is written under "<appDir>/handlers"
 	 * @resolvedConfig The root project's resolved config (AgentConfigResolver.resolve()) - only `gatewaySession` is used, to configure the generated GatewaySession's policy/maxQueueDepth
 	 *
-	 * @return { registrationStatements: [], hasHttpGateway, handlerPath (only if hasHttpGateway), hasPushGateway, hasEmailGateway, hasWhatsAppCloudGateway, whatsAppCloudHandlerPath (only if hasWhatsAppCloudGateway), hasTeamsGateway, teamsHandlerPath (only if hasTeamsGateway), sessionStartupStatement (only if hasPushGateway) - a bare onApplicationStart() statement, see renderSessionStartupStatement() }
+	 * @return { registrationStatements: [], hasHttpGateway, hasPushGateway, hasEmailGateway, hasWhatsAppCloudGateway, whatsAppCloudHandlerPath (only if hasWhatsAppCloudGateway), hasTeamsGateway, teamsHandlerPath (only if hasTeamsGateway), sessionStartupStatement (only if hasPushGateway) - a bare onApplicationStart() statement, see renderSessionStartupStatement() }
 	 */
 	struct function generate( required struct discovery, required string appDir, struct resolvedConfig = {} ) {
 		var channelEntries = collectChannelEntries( arguments.discovery )
@@ -160,14 +155,6 @@ class {
 			hasTeamsGateway         : hasTeamsGateway,
 			hasTwilioGateway        : hasTwilioGateway,
 			hasGitHubGateway        : hasGitHubGateway
-		}
-
-		if ( hasHttpGateway ) {
-			var handlerDir = normalizePath( arguments.appDir ) & "/handlers"
-			directoryCreate( path = handlerDir, createPath = true, ignoreExists = true )
-			var handlerPath = handlerDir & "/Gateway.bx"
-			fileWrite( handlerPath, renderHandler() )
-			result[ "handlerPath" ] = handlerPath
 		}
 
 		if ( hasWhatsAppCloudGateway ) {
@@ -376,33 +363,6 @@ class {
 			"application.bxaiGatewaySession = gatewaySession"
 		]
 		return lines.toList( char( 10 ) & "		" )
-	}
-
-	/**
-	 * @return The rendered handlers/Gateway.bx source
-	 */
-	private string function renderHandler() {
-		var lines = [
-			"/**",
-			" * GENERATED FILE - produced by BX Agents' build pipeline.",
-			" * Do not edit by hand; rebuilding your project overwrites this file.",
-			" *",
-			" * Thin passthrough for the bx-ai Gateway webhook surface - all 3 routes",
-			" * (events/interactions/decisions) share this one action, since",
-			" * GatewayRequestProcessor::processHttp() dispatches internally off the",
-			" * raw request path/method and writes the response itself.",
-			" */",
-			"class {",
-			"",
-			"	function process( event, rc, prc ) {",
-			"		bxModules.bxai.models.gateway.http.GatewayRequestProcessor::processHttp()",
-			"		return arguments.event.noRender()",
-			"	}",
-			"",
-			"}",
-			""
-		]
-		return lines.toList( char( 10 ) )
 	}
 
 	/**
