@@ -7,6 +7,12 @@ class extends="testbox.system.BaseSpec" {
 				variables.resolver = new bxagents.models.build.EnvironmentResolver();
 			} );
 
+			private function descriptorWith( required string value ) {
+				var descriptor = new tests.support.DetectsValue();
+				descriptor.setValue( arguments.value );
+				return descriptor;
+			}
+
 			it( "falls back to 'development' when nothing else is specified", function() {
 				expect( resolver.resolve() ).toBe( "development" );
 			} );
@@ -24,6 +30,40 @@ class extends="testbox.system.BaseSpec" {
 				// exercising the real OS/system-property value requires an external
 				// process-level env var, covered by the CLI smoke tests in M12.
 				expect( resolver.resolve( "" ) ).toBe( getSystemSetting( "BX_AGENTS_ENV", "development" ) );
+			} );
+
+			it( "takes an Agent.bx's own detectEnvironment() return value verbatim", function() {
+				expect( resolver.resolve( agentDescriptor : descriptorWith( "staging" ) ) ).toBe( "staging" );
+			} );
+
+			it( "trims what detectEnvironment() returns", function() {
+				expect( resolver.resolve( agentDescriptor : descriptorWith( "  production  " ) ) ).toBe( "production" );
+			} );
+
+			it( "lets an explicit CLI flag outrank detectEnvironment()", function() {
+				// The one deliberate inversion of ColdBox's own precedence: a flag
+				// someone typed is the most specific statement of intent there is,
+				// and silently ignoring it would be surprising.
+				expect( resolver.resolve( cliEnvironment : "production", agentDescriptor : descriptorWith( "staging" ) ) ).toBe( "production" );
+			} );
+
+			it( "ignores an Agent.bx with no detectEnvironment() at all", function() {
+				expect( resolver.resolve( agentDescriptor : new tests.support.NoDetect() ) ).toBe( getSystemSetting( "BX_AGENTS_ENV", "development" ) );
+			} );
+
+			it( "treats a blank or non-string detectEnvironment() return as 'no opinion' rather than an error", function() {
+				// A project computing its environment from something absent on this
+				// machine should degrade to the next tier, not fail the build.
+				expect( resolver.resolve( agentDescriptor : descriptorWith( "   " ) ) ).toBe( getSystemSetting( "BX_AGENTS_ENV", "development" ) );
+				expect( resolver.resolve( agentDescriptor : new tests.support.DetectsStruct() ) ).toBe( getSystemSetting( "BX_AGENTS_ENV", "development" ) );
+			} );
+
+			it( "surfaces a detectEnvironment() that THROWS as a real error, naming the Agent.bx", function() {
+				// Distinct from returning nothing usable: a throw is a bug in the
+				// project's own code, not a machine it can't read.
+				expect( function() {
+					resolver.resolve( agentDescriptor : new tests.support.DetectThrows(), agentBxPath : "/some/project/Agent.bx" );
+				} ).toThrow( type = "BxAgents.InvalidAgentDescriptor" );
 			} );
 
 		} );

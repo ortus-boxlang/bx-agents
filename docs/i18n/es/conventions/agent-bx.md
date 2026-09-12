@@ -90,6 +90,7 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 | `memory` | string o struct | La memoria de conversación del agente. Una cadena bare es una abreviatura para el tipo (`"cache"`); un struct es `{ type, ...config }` y se pasa textualmente a `aiMemory()` - por ejemplo, `{ type: "cache", maxMessages: 50 }`, o con `summaryProvider`/`summaryModel`/`summaryThreshold` para hacer funcional el `/compact` de la interfaz web. Se aplica por nodo, así que un subagente puede declarar el suyo propio. |
 | `checkpointer` | struct | `{ type: "cache"\|"file"\|"jdbc", ...config }`. Por defecto `{ type: "cache" }` si se omite. Siempre se aplica - sin uno, los flujos de aprobación human-in-the-loop a través de cualquier gateway que no sea `cli` fallan por completo. |
 | `gatewaySession` | struct | `{ policy, maxQueueDepth }`, ambos opcionales (por defecto `"queue"` / `50`). Solo significativo si el proyecto tiene al menos una entrada de [gateway](gateways/index.md#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends) de estilo push - controla la política del `GatewaySession` generado para un segundo mensaje entrante que llega en un hilo que ya tiene un turno en curso. `policy` debe ser uno de `reject`/`queue`/`steer`/`interrupt`. |
+| `agentApi` | struct | `{ enabled, tokenEnvVar }`, ambos opcionales. Controla la ruta de agente siempre activa en `/__bxagents`. Consulta [La ruta de agente siempre activa](#la-ruta-de-agente-siempre-activa) más abajo. |
 | cualquier otra clave | cualquiera | Fusionada y disponible en el struct de configuración resuelto, pero no interpretada por BxAgents mismo. |
 
 ## The model slug
@@ -134,8 +135,35 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 El entorno activo se resuelve con esta precedencia (mayor gana):
 
 1. Flag de CLI `--environment` (`bxAgents build --environment=production`)
-2. Variable de entorno `BX_AGENTS_ENV`
-3. `"development"` (por defecto)
+2. El propio método `detectEnvironment()` de `Agent.bx`, si lo declara
+3. Variable de entorno `BX_AGENTS_ENV`
+4. `"development"` (por defecto)
+
+### `detectEnvironment()`
+
+Para todo lo que el primer y el tercer nivel no puedan expresar, `Agent.bx` puede declarar un método `detectEnvironment()` y decidir por sí mismo. Lo que devuelva se toma como nombre de entorno literalmente:
+
+```javascript
+class extends="bxModules.bxai.models.runnables.AiAgent" {
+
+	function init() {
+		super.init( name : "my-agent", model : aiModel( provider : "openai", params : { model : "gpt-5" } ) )
+		return this
+	}
+
+	function detectEnvironment() {
+		return fileExists( expandPath( "/.production-marker" ) ) ? "production" : "development";
+	}
+
+}
+```
+
+Esto refleja la propia convención de nivel 1 de ColdBox (una config que declara `detectEnvironment()` toma su valor de retorno literalmente), con dos diferencias deliberadas, ambas porque esto se ejecuta en tiempo de **build**:
+
+- Un flag `--environment` explícito **prevalece** sobre `detectEnvironment()` aquí, mientras que ColdBox pone su propio método de detección primero. Un flag que alguien escribió es la declaración de intención más específica disponible.
+- El *otro* nivel de detección de ColdBox - un struct `environments` de regexes comparadas contra `CGI.HTTP_HOST` - **no** está soportado. No puede funcionar aquí: el build corre en un proceso CLI sin host HTTP, así que solo describiría la máquina que construye (un runner de CI resolvería `development` para un build de producción).
+
+Devolver una cadena vacía, o algo que no sea una cadena, significa "sin opinión" y cae al siguiente nivel - así un proyecto que calcula su entorno a partir de algo ausente en esta máquina degrada al valor por defecto en vez de fallar el build. Un `detectEnvironment()` que **lanza** es otra cosa: eso es un bug real en el código del propio proyecto, y `build` falla y lo dice.
 
 Esta es una decisión únicamente de **tiempo de build**, distinta de la propia detección de entorno de runtime de ColdBox (la app generada lee `getSetting("environment")` por sí misma, según la convención `environments` de ColdBox) - esta precedencia solo decide qué método de override `environment()` en `Agent.bx`, y qué archivos `boxlang-{env}.json`/`miniserver-{env}.json`, aplica el pipeline de build.
 
@@ -174,3 +202,57 @@ Construir con `--environment=production` aquí produce `modelDefaults: { tempera
 
 !!! warning
     Los secretos (claves de API, tokens) nunca son leídos ni fusionados por BxAgents en tiempo de build - permanecen externos (una variable de entorno del SO, `.env`, un gestor de secretos de plataforma) y son resueltos en vivo por el propio bx-ai en tiempo de ejecución. Ver [Despliegue y secretos](../deployment-and-secrets.md).
+
+## La ruta de agente siempre activa
+
+Todo proyecto construido expone su agente raíz sobre HTTP en una ruta reservada fija, declare o no entradas de [`gateways/`](gateways/index.md):
+
+```
+POST /__bxagents/invoke
+POST /__bxagents/stream    # SSE
+POST /__bxagents/batch
+GET  /__bxagents/info
+```
+
+Estas son las cuatro sub-rutas que registra el propio terminador `toAi()` de ColdBox. La ruta existe para que el tooling de este módulo siempre tenga una dirección con la que hablar - es la entrada de servicio, no la API pública de tu proyecto. La superficie pública propia de un proyecto va en `gateways/`, en las rutas que elijas.
+
+Como la ruta está reservada, `build` **rechaza** cualquier entrada de `gateways/` cuyo `path` sea `/__bxagents` o cuelgue por debajo. Dos rutas en un mismo punto de montaje son un conflicto real: una eclipsaría silenciosamente a la otra, y la tuya sería la que nunca responde.
+
+### `agentApi`
+
+`configure()` puede devolver un struct `agentApi` para controlarla:
+
+| Clave | Tipo | Notas |
+|---|---|---|
+| `enabled` | boolean | Por defecto `true`. Ponlo a `false` para omitir la ruta por completo - para un build que va a un sitio donde no tiene por qué existir. |
+| `tokenEnvVar` | string | El **nombre** de una variable de entorno que contiene un secreto compartido. Cuando está puesto, cada sub-ruta exige una cabecera de petición `x-bxagents-token` coincidente. |
+
+```javascript
+function configure() {
+	return {
+		name     : "my-agent",
+		model    : "openai/gpt-5",
+		agentApi : {
+			tokenEnvVar : "BXAGENTS_API_TOKEN"
+		}
+	};
+}
+```
+
+Como esto viene de `configure()`, se puede acotar por entorno con un [override de entorno](#overrides-de-entorno) como cualquier otra clave - así un proyecto puede dejar la ruta abierta en local y exigir un token en producción:
+
+```javascript
+function production() {
+	return {
+		agentApi : { tokenEnvVar : "BXAGENTS_API_TOKEN" }
+	};
+}
+```
+
+La verja **falla cerrada**: si la variable nombrada está sin definir o vacía en tiempo de ejecución, no coincide nada - nunca degenera en comparar `""` con `""` y dejar pasar a todo el mundo. Una petición sin un token válido recibe un `401` con un pequeño cuerpo JSON, y nunca llega al agente.
+
+!!! warning
+    `tokenEnvVar` nombra una **variable**, nunca el secreto en sí. `build` rechaza un valor que no sea un nombre válido de variable de entorno, precisamente para que aquí no se pueda commitear un token literal por error. Solo el nombre de la variable llega al código generado.
+
+!!! info
+    La ruta queda ligada al host en el que escuche el [miniserver](../cli-reference.md#serve) - `127.0.0.1` por defecto, así que nada es alcanzable fuera de la máquina salvo que la expongas deliberadamente. `tokenEnvVar` es lo que importa en cuanto lo hagas, y para cualquier artefacto `.bxa` construido que despliegues.

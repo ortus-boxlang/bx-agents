@@ -17,6 +17,32 @@ class extends="testbox.system.BaseSpec" {
 				return validator.validate( projectRoot, discovery, config );
 			}
 
+			it( "rejects a gateway exposure claiming a path under the reserved /__bxagents prefix", function() {
+				// The always-on agent route is registered there unconditionally,
+				// so an exposure on the same mount would look declared and never
+				// actually answer.
+				var result = validateFixture( "reserved-gateway-path" );
+				var reserved = result.errors.filter( e => e.findNoCase( "__bxagents" ) );
+				expect( reserved.len() ).toBeGT( 0 );
+				expect( reserved[ 1 ] ).toInclude( "reserves" );
+			} );
+
+			it( "rejects a malformed agentApi block - unknown key, non-boolean enabled, and a tokenEnvVar that is a secret rather than a variable name", function() {
+				var result = validateFixture( "bad-agent-api" );
+
+				expect( result.errors.filter( e => e.findNoCase( "unknown key" ) && e.findNoCase( "bogusKey" ) ).len() ).toBeGT( 0 );
+				expect( result.errors.filter( e => e.findNoCase( "agentApi.enabled" ) ).len() ).toBeGT( 0 );
+
+				// The important one: a literal secret here would otherwise "work"
+				// while quietly getting committed.
+				expect( result.errors.filter( e => e.findNoCase( "agentApi.tokenEnvVar" ) ).len() ).toBeGT( 0 );
+			} );
+
+			it( "accepts a well-formed agentApi block", function() {
+				var result = validateFixture( "good-agent-api" );
+				expect( result.errors.filter( e => e.findNoCase( "agentApi" ) ).len() ).toBe( 0 );
+			} );
+
 			it( "rejects duplicate tool names", function() {
 				var result = validateFixture( "duplicate-tool-names" );
 				expect( result.errors.filter( e => e.findNoCase( "Duplicate name" ) && e.findNoCase( "tools/" ) ).len() ).toBeGT( 0 );

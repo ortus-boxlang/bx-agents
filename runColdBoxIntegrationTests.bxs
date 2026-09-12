@@ -291,6 +291,31 @@ try {
 	println( "+ Confirmed: a real HTTP request through toAi()'s /invoke route reaches the generated agent: " & routeResult.fileContent )
 
 	// ------------------------------------------------------------------
+	// 4b. The RESERVED agent route answers, over real HTTP.
+	//
+	// /__bxagents is emitted unconditionally by RouterGenerator, whatever
+	// gateways/ declares - it is this module's own service entrance, so
+	// `chat --server` and `invoke --server` always have an address even in
+	// a project that exposes nothing publicly. The fixture above happens to
+	// ALSO declare a /api/chat exposure; this asserts the reserved route is
+	// there ALONGSIDE it, on its own, not as a rename of it.
+	//
+	// Same warm-up caveat as #4 above applies, and is already satisfied by
+	// the time this runs.
+	// ------------------------------------------------------------------
+	bx:http url="http://127.0.0.1:#port#/__bxagents/invoke" method="POST" result="reservedResult" timeout=30 {
+		bx:httpparam type="header" name="Content-Type" value="application/json";
+		bx:httpparam type="body" value='{"input":"Hello there!"}';
+	}
+	if ( reservedResult.status_code != 200 || !reservedResult.fileContent.findNoCase( '"success":true' ) ) {
+		throw(
+			type    = "BxAgents.ReservedAgentRouteDispatchFailed",
+			message = "Expected the always-on /__bxagents/invoke route to answer (HTTP 200, success:true) - got HTTP #reservedResult.status_code#: #reservedResult.fileContent#"
+		)
+	}
+	println( "+ Confirmed: the always-on /__bxagents/invoke route reaches the generated agent: " & reservedResult.fileContent )
+
+	// ------------------------------------------------------------------
 	// 5. An open web UI is ONE shared workspace, over real HTTP.
 	//
 	// /chat declares no accounts, so everything in it is shared on purpose:
@@ -334,5 +359,142 @@ try {
 	}
 	if ( fileExists( miniServerConfigPath ) ) {
 		fileDelete( miniServerConfigPath )
+	}
+}
+
+// ------------------------------------------------------------------
+// 6. The agentApi.tokenEnvVar gate, over real HTTP, on its own app.
+//
+// This needs a SECOND app because the gate is all-or-nothing for a given
+// build: the fixture above deliberately has no token so #4b can prove the
+// route is open by default, and this one deliberately has one. A second
+// miniserver on its own port is cheaper and far clearer than trying to make
+// one app be both.
+//
+// Worth booting for: the generated condition closure is the only place in
+// this module where a wrong ColdBox signature would fail SILENTLY in the
+// permissive direction. RoutingService invokes it as
+// `condition( requestString )` - ONE argument - not with the
+// `( route, params, event )` shape Router.cfc's own docblocks show, so a
+// closure written to the documented signature would blow up on an `event`
+// that is never passed. Only a real request through a real router proves
+// which is right, which is exactly what this does.
+// ------------------------------------------------------------------
+tokenAppDir = repoRoot & "tests/.coldbox-app-token"
+tokenPort   = port + 1
+expectedToken = getSystemSetting( "BXAGENTS_E2E_TOKEN", "" )
+
+if ( !len( expectedToken ) ) {
+	// The gate reads the env var from the MINISERVER process, which inherits
+	// this process's environment - so if it is not set here it cannot be set
+	// there, and a "403/404 as expected" result would prove nothing at all.
+	// build.gradle's testColdBoxIntegration task sets it; say so plainly
+	// rather than passing vacuously.
+	println( "! Skipping the agentApi token-gate check: BXAGENTS_E2E_TOKEN is not set in this process's environment" )
+} else {
+	if ( directoryExists( tokenAppDir ) ) {
+		directoryDelete( tokenAppDir, true )
+	}
+	directoryCreate( tokenAppDir, true )
+	directoryCopy( expandPath( "/fixtures" ) & "/e2e-agent-api-token", tokenAppDir, true )
+
+	tokenBuild = new bxagents.models.build.BuildPipeline( "coldbox-integration-test" ).build( tokenAppDir )
+	println( "+ Built token-gated fixture at: " & tokenBuild.appDir )
+
+	tokenConfigPath = repoRoot & "tests/.coldbox-app-token-miniserver.json"
+	fileWrite( tokenConfigPath, jsonSerialize( {
+		port            : tokenPort,
+		host            : "127.0.0.1",
+		webRoot         : tokenBuild.appDir,
+		configPath      : configPath,
+		rewrites        : true,
+		rewriteFileName : "index.bxm",
+		healthCheck     : true
+	} ) )
+
+	tokenProcess = createObject( "java", "ortus.boxlang.bxagents.build.MiniServerLauncher" ).launch( jarPath, tokenConfigPath, false )
+
+	try {
+		tokenUrl = "http://127.0.0.1:#tokenPort#/__bxagents/invoke"
+		body     = '{"input":"Hello there!"}'
+
+		// Warm-up/readiness: poll WITH the right token until the route
+		// answers. This doubles as the positive case - a 200 here is the
+		// gate passing - and as the same singleton warm-up #4 documents.
+		deadline    = getTickCount() + 90000
+		allowed     = {}
+		allowDetail = "no response"
+		while ( getTickCount() < deadline ) {
+			try {
+				bx:http url=tokenUrl method="POST" result="allowed" timeout=15 {
+					bx:httpparam type="header" name="Content-Type" value="application/json";
+					bx:httpparam type="header" name="x-bxagents-token" value=expectedToken;
+					bx:httpparam type="body" value=body;
+				}
+				allowDetail = left( trim( allowed.fileContent ?: "" ), 240 )
+				if ( ( allowed.status_code ?: 0 ) == 200 && allowDetail.findNoCase( '"success":true' ) ) {
+					break
+				}
+			} catch ( any e ) {
+				allowDetail = e.message
+			}
+			sleep( 1000 )
+		}
+
+		if ( ( allowed.status_code ?: 0 ) != 200 || !allowDetail.findNoCase( '"success":true' ) ) {
+			throw(
+				type    = "BxAgents.AgentApiTokenGateRejectedValidToken",
+				message = "A request carrying the correct x-bxagents-token was not served (HTTP #allowed.status_code ?: 0#): #allowDetail#"
+			)
+		}
+		println( "+ Confirmed: the agentApi token gate ADMITS a request carrying the right x-bxagents-token" )
+
+		// Negative cases. A failing withCondition makes ColdBox skip the
+		// route entirely, so the caller gets a 404 - deliberately not a 403,
+		// which would confirm the endpoint exists.
+		for ( attempt in [
+			{ label : "no x-bxagents-token header at all", token : "" },
+			{ label : "a wrong x-bxagents-token",          token : expectedToken & "-wrong" }
+		] ) {
+			bx:http url=tokenUrl method="POST" result="denied" timeout=30 {
+				bx:httpparam type="header" name="Content-Type" value="application/json";
+				bx:httpparam type="header" name="x-bxagents-token" value=attempt.token;
+				bx:httpparam type="body" value=body;
+			}
+			// Assert on the BODY too: with rewrites on, an unmatched route can
+			// still come back 200 carrying whatever the fallback renders, so
+			// status alone would not prove the agent was never reached.
+			if ( ( denied.status_code ?: 0 ) == 200 && ( denied.fileContent ?: "" ).findNoCase( '"success":true' ) ) {
+				throw(
+					type    = "BxAgents.AgentApiTokenGateFailedOpen",
+					message = "The token gate ADMITTED a request with #attempt.label# - it must fail closed."
+						& " HTTP #denied.status_code#: #left( denied.fileContent ?: '', 300 )#"
+				)
+			}
+			// Not merely "didn't succeed" - a DELIBERATE 401. Anything else
+			// means the refusal fell through to ColdBox's default main.index
+			// event, which a generated app never defines, and the caller is
+			// getting a 500 error page instead of an answer. That is what the
+			// first working version of this actually did, so it is asserted
+			// rather than assumed.
+			if ( ( denied.status_code ?: 0 ) != 401 ) {
+				throw(
+					type    = "BxAgents.AgentApiTokenGateWrongRefusal",
+					message = "The token gate refused #attempt.label# with HTTP #denied.status_code ?: 0#, not a deliberate 401"
+						& " - a refused request is falling through instead of hitting the generated 401 route."
+						& " Body: #left( denied.fileContent ?: '', 300 )#"
+				)
+			}
+			println( "+ Confirmed: the agentApi token gate REFUSES #attempt.label# with a deliberate 401" )
+		}
+	} finally {
+		tokenProcess.destroy()
+		tokenProcess.waitFor( 5, createObject( "java", "java.util.concurrent.TimeUnit" ).SECONDS )
+		if ( tokenProcess.isAlive() ) {
+			tokenProcess.destroyForcibly()
+		}
+		if ( fileExists( tokenConfigPath ) ) {
+			fileDelete( tokenConfigPath )
+		}
 	}
 }

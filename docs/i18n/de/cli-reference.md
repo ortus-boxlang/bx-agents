@@ -153,6 +153,7 @@ bxAgents serve [--port=8080] [--host=127.0.0.1]
 
 - Erfordert einen vorherigen `build` - schlägt klar fehl, falls `.build/app` nicht existiert.
 - Schlägt klar fehl, falls `boxlang-miniserver` nicht im `PATH` gefunden wird.
+- Serviert den Agent immer unter `/__bxagents` (`POST /invoke`, `POST /stream`, `POST /batch`, `GET /info`), unabhängig davon, was das Projekt in [`gateways/`](conventions/gateways/index.md) deklariert - siehe [Die stets aktive Agent-Route](conventions/agent-bx.md#die-stets-aktive-agent-route), um ein Token dafür zu verlangen oder sie abzuschalten.
 - Schreibt `.build/miniserver.json` (Rewrites aktiviert, `rewriteFileName: "index.bxm"`, Health-Check an), bevor der Start erfolgt.
 - Begrenzt das eigene BoxLang-Runtime-Home des Servers auf `.build/runtime` (über `serverHome`) statt auf das geteilte Standardverzeichnis `~/.boxlang`, sodass der Compiled-Class-Cache und die Konfigurations-Overrides jedes Projekts isoliert sind - und `clean` fegt es kostenlos mit, da es `.build` ohnehin komplett löscht. `invoke --server` erhält das ebenfalls, da es intern `serve` wiederverwendet. Das gilt **nicht** für `chat`/`build`/`test`/den standardmäßigen `invoke` - siehe [bekannte Einschränkungen](known-limitations.md).
 

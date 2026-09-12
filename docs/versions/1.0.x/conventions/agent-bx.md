@@ -90,6 +90,7 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 | `memory` | string or struct | The agent's conversation memory. A bare string is shorthand for the type (`"cache"`); a struct is `{ type, ...config }` and is passed through to `aiMemory()` verbatim - e.g. `{ type: "cache", maxMessages: 50 }`, or with `summaryProvider`/`summaryModel`/`summaryThreshold` to make the web UI's `/compact` functional. Applies per node, so a subagent can declare its own. |
 | `checkpointer` | struct | `{ type: "cache"\|"file"\|"jdbc", ...config }`. Defaults to `{ type: "cache" }` if omitted. Always applied - without one, human-in-the-loop approval flows through any gateway other than `cli` fail outright. |
 | `gatewaySession` | struct | `{ policy, maxQueueDepth }`, both optional (default `"queue"` / `50`). Only meaningful if the project has at least one push-style [gateway](gateways/index.md#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends) entry - controls the generated `GatewaySession`'s policy for a second inbound message arriving on a thread that already has a turn in flight. `policy` must be one of `reject`/`queue`/`steer`/`interrupt`. |
+| `agentApi` | struct | `{ enabled, tokenEnvVar }`, both optional. Controls the always-on agent route at `/__bxagents`. See [The always-on agent route](#the-always-on-agent-route) below. |
 | any other key | any | Merged and available in the resolved config struct, but not interpreted by BxAgents itself. |
 
 ## The model slug
@@ -134,8 +135,49 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 The active environment is resolved with this precedence (highest wins):
 
 1. `--environment` CLI flag (`bxAgents build --environment=production`)
-2. `BX_AGENTS_ENV` environment variable
-3. `"development"` (default)
+2. `Agent.bx`'s own `detectEnvironment()` method, if it declares one
+3. `BX_AGENTS_ENV` environment variable
+4. `"development"` (default)
+
+### `detectEnvironment()`
+
+For anything the first and third tiers can't express, `Agent.bx` may declare a
+`detectEnvironment()` method and decide for itself. Whatever it returns is taken
+as the environment name verbatim:
+
+```javascript
+class extends="bxModules.bxai.models.runnables.AiAgent" {
+
+	function init() {
+		super.init( name : "my-agent", model : aiModel( provider : "openai", params : { model : "gpt-5" } ) )
+		return this
+	}
+
+	function detectEnvironment() {
+		return fileExists( expandPath( "/.production-marker" ) ) ? "production" : "development";
+	}
+
+}
+```
+
+This mirrors ColdBox's own tier-1 convention (a config declaring
+`detectEnvironment()` has its return value taken verbatim), with two deliberate
+differences, both because this runs at **build** time:
+
+- An explicit `--environment` flag **outranks** `detectEnvironment()` here, where
+  ColdBox puts its own detect method first. A flag someone typed is the most
+  specific statement of intent available.
+- ColdBox's *other* detection tier - an `environments` struct of regexes matched
+  against `CGI.HTTP_HOST` - is **not** supported. It cannot work here: the build
+  runs in a CLI process with no HTTP host, so it would only ever describe the
+  machine doing the building (a CI runner would resolve `development` for a
+  production build).
+
+Returning a blank string, or anything that isn't a string, means "no opinion" and
+falls through to the next tier - so a project computing its environment from
+something absent on this machine degrades to the default rather than failing the
+build. A `detectEnvironment()` that **throws** is a different matter: that's a real
+bug in the project's own code, and `build` fails and says so.
 
 This is a **build-time** decision only, distinct from ColdBox's own runtime environment detection (the generated app reads `getSetting("environment")` on its own, per ColdBox's `environments` convention) - this precedence only decides which `environment()` override method on `Agent.bx`, and which `boxlang-{env}.json`/`miniserver-{env}.json` files, the build pipeline applies.
 
@@ -174,3 +216,75 @@ Building with `--environment=production` here yields `modelDefaults: { temperatu
 
 !!! warning
     Secrets (API keys, tokens) are never read or merged by BxAgents at build time - they stay external (an OS environment variable, `.env`, a platform secret manager) and are resolved live by bx-ai itself at runtime. See [Deployment & Secrets](../deployment-and-secrets.md).
+
+## The always-on agent route
+
+Every built project exposes its root agent over HTTP at a fixed reserved path,
+whether or not it declares any [`gateways/`](gateways/index.md) entries:
+
+```
+POST /__bxagents/invoke
+POST /__bxagents/stream    # SSE
+POST /__bxagents/batch
+GET  /__bxagents/info
+```
+
+These are the four sub-routes ColdBox's own `toAi()` terminator registers. The
+route exists so this module's own tooling always has an address to talk to -
+it's the service entrance, not your project's public API. A project's own
+public surface belongs in `gateways/`, at whatever paths you choose.
+
+Because the path is reserved, `build` **rejects** any `gateways/` entry whose
+`path` is `/__bxagents` or sits underneath it. Two routes on one mount is a
+genuine conflict: one would silently shadow the other, and yours would be the
+one that never answers.
+
+### `agentApi`
+
+`configure()` may return an `agentApi` struct to control it:
+
+| Key | Type | Notes |
+|---|---|---|
+| `enabled` | boolean | Default `true`. Set `false` to omit the route entirely - for a build going somewhere it has no business existing. |
+| `tokenEnvVar` | string | The **name** of an environment variable holding a shared secret. When set, every sub-route requires a matching `x-bxagents-token` request header. |
+
+```javascript
+function configure() {
+	return {
+		name     : "my-agent",
+		model    : "openai/gpt-5",
+		agentApi : {
+			tokenEnvVar : "BXAGENTS_API_TOKEN"
+		}
+	};
+}
+```
+
+Because this comes from `configure()`, it scopes per environment with an
+[environment override](#environment-overrides) like any other key - so a
+project can leave the route open locally and require a token in production:
+
+```javascript
+function production() {
+	return {
+		agentApi : { tokenEnvVar : "BXAGENTS_API_TOKEN" }
+	};
+}
+```
+
+The gate **fails closed**: if the named variable is unset or blank at runtime,
+nothing matches - it never degenerates into comparing `""` to `""` and letting
+every caller through. A request without a valid token gets a `401` with a small
+JSON body, and never reaches the agent.
+
+!!! warning
+    `tokenEnvVar` names a **variable**, never the secret itself. `build` rejects
+    a value that isn't a valid environment-variable name, precisely so a literal
+    token can't be committed here by mistake. Only the variable's name is ever
+    written into generated source.
+
+!!! info
+    The route is bound to whatever host the [miniserver](../cli-reference.md#serve)
+    is listening on - `127.0.0.1` by default, so nothing is reachable off the
+    machine unless you deliberately expose it. `tokenEnvVar` is what matters once
+    you do, and for any built `.bxa` artifact you deploy.

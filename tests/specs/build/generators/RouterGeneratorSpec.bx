@@ -173,13 +173,87 @@ class extends="testbox.system.BaseSpec" {
 				expect( withoutAgentResult.hasAgentExposure ).toBeFalse();
 			} );
 
-			it( "writes a valid, empty-but-present router when there is nothing to expose", function() {
+			it( "writes a valid router carrying only the reserved agent route when there is nothing else to expose", function() {
+				// The reserved route is unconditional, so even a project that
+				// declares no gateways at all now produces a router with one
+				// route in it - which is the whole point of it being always-on.
 				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
 				var result = generator.generate( discovery, newAppDir() );
 
 				expect( fileExists( result.router ) ).toBeTrue();
-				expect( result.hasRoutes ).toBeFalse();
+				expect( result.hasRoutes ).toBeTrue();
+				expect( result.hasAgentExposure ).toBeFalse();
 				expect( fileRead( result.router ) ).toInclude( "function configure()" );
+			} );
+
+			it( "always emits the reserved /__bxagents agent route, even with zero gateways", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+				var result = generator.generate( discovery, newAppDir() );
+
+				expect( fileRead( result.router ) ).toInclude( 'route( "/__bxagents" ).toAi( "GeneratedAgent" )' );
+			} );
+
+			it( "emits the reserved route ALONGSIDE a project's own exposures, not instead of them", function() {
+				var discovery = discoverer.discover( fixtures & "/full-project" );
+				var content = fileRead( generator.generate( discovery, newAppDir() ).router );
+
+				expect( content ).toInclude( 'route( "/__bxagents" ).toAi( "GeneratedAgent" )' );
+				expect( content ).toInclude( 'route( "/api/chat" ).toAi( "GeneratedAgent" )' );
+			} );
+
+			it( "omits the reserved route entirely when agentApi.enabled is false", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+				var result = generator.generate(
+					discovery,
+					newAppDir(),
+					false, false, false, false, false,
+					{ enabled : false }
+				);
+
+				var content = fileRead( result.router );
+				expect( content ).notToInclude( "__bxagents" );
+				expect( result.hasRoutes ).toBeFalse();
+			} );
+
+			it( "gates the reserved route behind a fail-closed withCondition when agentApi.tokenEnvVar is set", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+				var content = fileRead( generator.generate(
+					discovery,
+					newAppDir(),
+					false, false, false, false, false,
+					{ tokenEnvVar : "BXAGENTS_API_TOKEN" }
+				).router );
+
+				expect( content ).toInclude( 'route( "/__bxagents" )' );
+				expect( content ).toInclude( '.withCondition(' );
+				expect( content ).toInclude( 'getSystemSetting( "BXAGENTS_API_TOKEN", "" )' );
+
+				// The env var NAME is emitted; the secret itself never is.
+				expect( content ).toInclude( 'headers[ "x-bxagents-token" ]' );
+
+				// Fails closed: a blank/unset env var returns false outright
+				// rather than collapsing to "" == "" and admitting everyone.
+				expect( content ).toInclude( "if ( !len( expected ) ) {" );
+
+				// RoutingService invokes the condition as condition( requestString ) -
+				// ONE argument. A ( route, params, event ) closure would blow up on
+				// an event that is never passed.
+				expect( content ).toInclude( ".withCondition( ( requestString ) =>" );
+
+				// A refused request must land on a deliberate 401, not fall
+				// through to ColdBox's default main.index event - which a
+				// generated app never defines, so that path renders a 500
+				// error page instead of a refusal.
+				expect( content ).toInclude( 'route( "/__bxagents/:subroute?" )' );
+				expect( content ).toInclude( "}, 401 )" );
+			} );
+
+			it( "registers no 401 fallback when the reserved route is ungated - there is nothing to turn away", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+				var content = fileRead( generator.generate( discovery, newAppDir() ).router );
+
+				expect( content ).notToInclude( ":subroute?" );
+				expect( content ).notToInclude( "401" );
 			} );
 
 		} );

@@ -153,6 +153,7 @@ bxAgents serve [--port=8080] [--host=127.0.0.1]
 
 - 事前に `build` が必要です - `.build/app` が存在しない場合は明確に失敗します。
 - `boxlang-miniserver` が `PATH` に見つからない場合は明確に失敗します。
+- プロジェクトが [`gateways/`](conventions/gateways/index.md) に何を宣言していても、常に `/__bxagents` でエージェントを提供します (`POST /invoke`、`POST /stream`、`POST /batch`、`GET /info`) - トークンを必須にする方法や無効化する方法は [常時有効なエージェントルート](conventions/agent-bx.md#常時有効なエージェントルート) を参照してください。
 - 起動前に `.build/miniserver.json` を書き込みます (rewrite 有効、`rewriteFileName: "index.bxm"`、ヘルスチェック有効)。
 - サーバー自身の BoxLang ランタイムホームを、共有の `~/.boxlang` デフォルトではなく `.build/runtime` に (`serverHome` 経由で) スコープするので、各プロジェクトのコンパイル済みクラスキャッシュと config オーバーライドは分離されます - また `clean` はすでに `.build` をまるごと削除するため、これも無償で一掃されます。`invoke --server` は内部で `serve` を再利用するため、これも同じ恩恵を受けます。これは `chat`/`build`/`test`/デフォルトの `invoke` には**及びません** - [既知の制限](known-limitations.md) 参照。
 

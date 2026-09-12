@@ -90,6 +90,7 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 | `memory` | string or struct | エージェントの会話メモリです。素の文字列は型の省略形です (`"cache"`)。構造体は `{ type, ...config }` で `aiMemory()` にそのまま渡されます - 例えば `{ type: "cache", maxMessages: 50 }`、あるいは Web UI の `/compact` を機能させるために `summaryProvider`/`summaryModel`/`summaryThreshold` を付けます。ノードごとに適用されるので、サブエージェントは自身のものを宣言できます。 |
 | `checkpointer` | struct | `{ type: "cache"\|"file"\|"jdbc", ...config }`。省略時は `{ type: "cache" }` がデフォルトです。常に適用されます - これがないと、`cli` 以外のどのゲートウェイを通した human-in-the-loop 承認フローも完全に壊れてしまいます。 |
 | `gatewaySession` | struct | `{ policy, maxQueueDepth }`、どちらも任意です (デフォルトは `"queue"` / `50`)。プロジェクトが少なくとも 1 つの push 型 [ゲートウェイ](gateways/index.md#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends) エントリを持つ場合にのみ意味を持ちます - すでにターンが進行中のスレッドに 2 通目の受信メッセージが到着した際の、生成される `GatewaySession` のポリシーを制御します。`policy` は `reject`/`queue`/`steer`/`interrupt` のいずれかである必要があります。 |
+| `agentApi` | struct | `{ enabled, tokenEnvVar }`、どちらも任意です。`/__bxagents` の常時有効なエージェントルートを制御します。下記の [常時有効なエージェントルート](#常時有効なエージェントルート) を参照してください。 |
 | その他のキー | any | マージされ、解決済み config 構造体で利用できますが、BxAgents 自身では解釈されません。 |
 
 ## The model slug
@@ -134,8 +135,35 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 アクティブな環境は、次の優先順位で解決されます (最上位が優先されます)。
 
 1. `--environment` CLI フラグ (`bxAgents build --environment=production`)
-2. `BX_AGENTS_ENV` 環境変数
-3. `"development"` (デフォルト)
+2. `Agent.bx` 自身の `detectEnvironment()` メソッド (宣言されている場合)
+3. `BX_AGENTS_ENV` 環境変数
+4. `"development"` (デフォルト)
+
+### `detectEnvironment()`
+
+1 番目と 3 番目の段階では表現できないものについては、`Agent.bx` が `detectEnvironment()` メソッドを宣言して自分で決定できます。返した値がそのまま環境名として使われます:
+
+```javascript
+class extends="bxModules.bxai.models.runnables.AiAgent" {
+
+	function init() {
+		super.init( name : "my-agent", model : aiModel( provider : "openai", params : { model : "gpt-5" } ) )
+		return this
+	}
+
+	function detectEnvironment() {
+		return fileExists( expandPath( "/.production-marker" ) ) ? "production" : "development";
+	}
+
+}
+```
+
+これは ColdBox 自身の第 1 段階の規約 (`detectEnvironment()` を宣言した config はその戻り値がそのまま採用される) を踏襲したものですが、**ビルド**時に動作するがゆえの意図的な違いが 2 つあります:
+
+- 明示的な `--environment` フラグはここでは `detectEnvironment()` **より優先されます**。ColdBox は自身の detect メソッドを最優先に置きますが、人が打ち込んだフラグこそ最も具体的な意思表示だからです。
+- ColdBox の*もう一方*の検出段階 - `CGI.HTTP_HOST` に対して照合される正規表現の `environments` struct - は**サポートされません**。ここでは機能し得ないからです: ビルドは HTTP ホストを持たない CLI プロセスで動くため、ビルドを行っているマシンを表すことしかできません (CI ランナーは本番ビルドでも `development` に解決してしまいます)。
+
+空文字列や文字列以外を返した場合は「意見なし」とみなされ、次の段階にフォールスルーします - そのため、このマシンに存在しないものから環境を算出するプロジェクトはビルドを失敗させるのではなくデフォルトに縮退します。`detectEnvironment()` が**例外を投げる**のは別の話です: それはプロジェクト自身のコードの本当のバグなので、`build` は失敗し、その旨を伝えます。
 
 これは**ビルド時**の決定のみで、ColdBox 自身のランタイム環境検出 (生成されたアプリは ColdBox の `environments` コンベンションに従って自身で `getSetting("environment")` を読み取ります) とは別物です - この優先順位は、`Agent.bx` のどの `environment()` オーバーライドメソッド、そしてどの `boxlang-{env}.json`/`miniserver-{env}.json` ファイルをビルドパイプラインが適用するかだけを決定します。
 
@@ -174,3 +202,57 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 
 !!! warning
     シークレット (API キー、トークン) は、BxAgents によってビルド時に読み込まれたりマージされたりすることは決してありません - それらは外部に留まり (OS の環境変数、`.env`、プラットフォームのシークレットマネージャー)、実行時に bx-ai 自身によってライブに解決されます。[デプロイとシークレット](../deployment-and-secrets.md) を参照してください。
+
+## 常時有効なエージェントルート
+
+ビルドされたプロジェクトはすべて、[`gateways/`](gateways/index.md) エントリを宣言しているかどうかに関わらず、固定の予約パスでルートエージェントを HTTP 経由で公開します:
+
+```
+POST /__bxagents/invoke
+POST /__bxagents/stream    # SSE
+POST /__bxagents/batch
+GET  /__bxagents/info
+```
+
+これらは ColdBox 自身の `toAi()` ターミネータが登録する 4 つのサブルートです。このルートは、本モジュール自身のツールがいつでも話しかけられるアドレスを持てるように存在します - プロジェクトの公開 API ではなく、サービス用の通用口です。プロジェクト自身の公開面は、任意のパスで `gateways/` に置いてください。
+
+パスが予約されているため、`build` は `path` が `/__bxagents` そのもの、またはその配下にある `gateways/` エントリを**拒否します**。1 つのマウントに 2 つのルートがあるのは本物の競合です: 一方がもう一方を黙って覆い隠し、決して応答しないのはあなたのルートの方になります。
+
+### `agentApi`
+
+`configure()` は `agentApi` struct を返して、これを制御できます:
+
+| キー | 型 | 備考 |
+|---|---|---|
+| `enabled` | boolean | デフォルトは `true`。`false` にするとルートを完全に省略します - 存在すべきでない場所へ向かうビルド用です。 |
+| `tokenEnvVar` | string | 共有シークレットを保持する環境変数の**名前**。設定すると、すべてのサブルートが一致する `x-bxagents-token` リクエストヘッダを要求します。 |
+
+```javascript
+function configure() {
+	return {
+		name     : "my-agent",
+		model    : "openai/gpt-5",
+		agentApi : {
+			tokenEnvVar : "BXAGENTS_API_TOKEN"
+		}
+	};
+}
+```
+
+これは `configure()` から来るので、他のキーと同様に[環境オーバーライド](#環境オーバーライド)で環境ごとに切り替えられます - ローカルではルートを開けたまま、本番ではトークンを必須にできます:
+
+```javascript
+function production() {
+	return {
+		agentApi : { tokenEnvVar : "BXAGENTS_API_TOKEN" }
+	};
+}
+```
+
+このゲートは**閉じる方向に失敗します**: 指定された変数が実行時に未設定または空なら、何にも一致しません - `""` と `""` を比較して全員を通してしまうことは決してありません。有効なトークンのないリクエストは小さな JSON ボディ付きの `401` を受け取り、エージェントには到達しません。
+
+!!! warning
+    `tokenEnvVar` が指すのは**変数**であって、シークレットそのものではありません。`build` は有効な環境変数名でない値を拒否します - まさに、リテラルのトークンをうっかりここにコミットできないようにするためです。生成コードに書き込まれるのは変数名だけです。
+
+!!! info
+    このルートは [miniserver](../cli-reference.md#serve) がリッスンしているホストにバインドされます - デフォルトは `127.0.0.1` なので、意図的に公開しない限りマシンの外からは到達できません。公開した場合、そしてデプロイするビルド済み `.bxa` アーティファクトにとって重要になるのが `tokenEnvVar` です。

@@ -334,7 +334,14 @@ task testBx( type: JavaExec ) {
 task testColdBoxIntegration( type: JavaExec ) {
 	group = "verification"
 	description = "Runs the ColdBox-dependent integration specs (tests/specs/integration/coldbox) over real HTTP via boxlang-miniserver"
-	dependsOn compileJava
+	// shadowJar, not just compileJava, for the same reason verifyExamples
+	// needs it: boxlang.json resolves bxModules.bxagents.* against
+	// build/modules/bxagents, a Copy of src/main/bx that ONLY refreshes when
+	// shadowJar runs. Depending on compileJava alone silently built these
+	// fixtures with a STALE generator - confirmed the hard way this session,
+	// when a corrected route-condition closure kept generating in its old,
+	// broken form and the app 500'd.
+	dependsOn compileJava, shadowJar
 	onlyIf {
 		if ( !file( "tests/coldbox" ).exists() ) {
 			println "! Skipping testColdBoxIntegration: tests/coldbox/ not found - run `box install` in tests/ first"
@@ -350,6 +357,14 @@ task testColdBoxIntegration( type: JavaExec ) {
 	mainClass = 'ortus.boxlang.runtime.BoxRunner'
 	args = [ '--bx-config', 'boxlang.json', 'runColdBoxIntegrationTests.bxs' ]
 	workingDir = projectDir
+	// The agentApi token-gate check needs this in the ENVIRONMENT, not as a
+	// -D system property: it is read by the miniserver the script spawns as a
+	// child process, which inherits this JVM's environment but not its system
+	// properties. A fixed value is fine - it gates a throwaway localhost app
+	// built fresh on every run, and is never written to any generated source
+	// (only the variable NAME is). Without it the script skips that check and
+	// says so rather than passing vacuously.
+	environment "BXAGENTS_E2E_TOKEN", "bxagents-integration-token"
 }
 
 /**
