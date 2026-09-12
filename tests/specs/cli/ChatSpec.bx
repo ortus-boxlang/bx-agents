@@ -39,6 +39,44 @@ class extends="testbox.system.BaseSpec" {
 				} ).toThrow( "BxAgents.NotBuilt" );
 			} );
 
+			it( "rejects --server and --connect together rather than silently honoring one", function() {
+				// They are opposite instructions: one says "start a server for
+				// me", the other "do not, talk to this one". Picking either
+				// would mean ignoring what the other asked for.
+				//
+				// The project here is deliberately UNBUILT: the conflict is
+				// checked before the build gate, so someone who typed both
+				// flags hears about the flags rather than being sent to run
+				// `build` only to hit the same wall afterwards.
+				var dir = createTempDirectory( prefix = "bxagents-cli-chat-" );
+				directoryCopy( fixtures & "/full-project", dir, true );
+				tempDirs.append( dir );
+
+				expect( function() {
+					chatVerb.run( { projectRoot : dir, server : true, connect : "http://127.0.0.1:9999" } );
+				} ).toThrow( "BxAgents.ConflictingChatTarget" );
+			} );
+
+			it( "does NOT require a local build for --connect", function() {
+				// --connect talks to a server someone else is running, which may
+				// be a deployment on another machine entirely, so demanding a
+				// local .build/ would be wrong. An unbuilt project must
+				// therefore get past the build gate - it fails later, on the
+				// terminal or the connection, not on BxAgents.NotBuilt.
+				var dir = createTempDirectory( prefix = "bxagents-cli-chat-" );
+				directoryCopy( fixtures & "/full-project", dir, true );
+				tempDirs.append( dir );
+
+				var threw = "";
+				try {
+					chatVerb.run( { projectRoot : dir, connect : "http://127.0.0.1:1" } );
+				} catch ( any e ) {
+					threw = e.type;
+				}
+
+				expect( threw ).notToBe( "BxAgents.NotBuilt" );
+			} );
+
 		} );
 	}
 

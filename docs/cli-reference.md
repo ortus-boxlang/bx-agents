@@ -176,13 +176,28 @@ bxAgents serve [--port=8080] [--host=127.0.0.1]
 Interactive REPL against the built agent, using BoxLang's own `MiniConsole` for line reading.
 
 ```bash
-bxAgents chat
+bxAgents chat                                  # fast, in-process
+bxAgents chat --server [--port=<port>]         # full app, own throwaway server
+bxAgents chat --connect=http://127.0.0.1:8080  # full app, server you already run
 ```
 
-- Requires a prior `build`.
-- Loads `GeneratedAgentFactory.bx` directly (no ColdBox/WireBox container involved) and calls `buildAgent()` once per session - the exact same factory `serve`'s HTTP routes use, so `chat` and HTTP never diverge.
+Three modes, one REPL:
+
+| Mode | What it talks to | Use it when |
+|---|---|---|
+| default | The generated agent factory, loaded directly in this process | You just want to talk to the agent. Fastest, no server. |
+| `--server` | A throwaway `boxlang-miniserver` it boots and tears down | You need real application semantics - `models/`, interceptors, the scheduler, gateways. |
+| `--connect=<url>` | A server that is already running | You have a `serve` open in another terminal, or want to talk to a deployment. |
+
+- Requires a prior `build` - except with `--connect`, which talks to a server someone else is running and so needs nothing built locally.
+- **Default**: loads `GeneratedAgentFactory.bx` directly (no ColdBox/WireBox container involved) and calls `buildAgent()` once per session - the exact same factory `serve`'s HTTP routes use, so the agent itself never diverges. What *does* differ is everything ColdBox brings: no `models/`, no scheduler, no interceptors, no gateway registry. When that matters, use `--server`.
+- **`--server`**: boots a real miniserver on an ephemeral loopback port and drives the REPL over HTTP against the project's [always-on `/__bxagents` route](conventions/agent-bx.md#the-always-on-agent-route), shutting it down on exit. `--port` pins the port instead of taking a free one.
+- **`--connect`**: drives the same REPL against a running server, starting and stopping nothing. The URL is the server root (`http://host:port`), not the agent path - `chat` appends that itself.
+- `--server` and `--connect` are mutually exclusive: one says "start a server for me", the other "don't". Passing both fails immediately rather than silently honoring one.
+- Both HTTP modes carry the server's `threadId` across turns, so a session is one conversation rather than a series of unrelated first messages.
+- If the route is gated behind [`agentApi.tokenEnvVar`](conventions/agent-bx.md#agentapi), these modes get a clear `401` error rather than a confusing timeout - they send no token.
 - Type `exit` or `quit` to leave.
-- Needs a real interactive TTY (`MiniConsole` shells out to `stty` for raw mode) - it will not work piped/non-interactively.
+- Needs a real interactive TTY (`MiniConsole` shells out to `stty` for raw mode) - it will not work piped/non-interactively. Use [`invoke`](#invoke) for scripting.
 
 ### `invoke`
 
@@ -195,7 +210,7 @@ bxAgents invoke --message="..." --server [--port=<port>]
 
 - Requires a prior `build`.
 - **Default (no `--server`)**: loads `GeneratedAgentFactory.bx` directly (no ColdBox container, no HTTP) and calls the agent once - the same in-process path `chat` uses internally, just without the REPL loop. No `serve`/gateway prerequisite at all.
-- **`--server`**: launches a real, throwaway `boxlang-miniserver` process (same as `serve`), sends the message as a real HTTP request through the project's `toAi()`-exposed route, then shuts the server back down. Exercises the actual served path (ColdBox routing, interceptors, gateways) rather than the in-process shortcut. Requires a `gateways/*.bx` entry with `{ exposes: "agent", path: "..." }` (see [gateways](conventions/gateways/index.md)) - fails clearly if none exists. `--port` defaults to a free ephemeral port so it never collides with an already-running `serve`.
+- **`--server`**: launches a real, throwaway `boxlang-miniserver` process (same as `serve`), sends the message as a real HTTP request to the project's [always-on `/__bxagents` route](conventions/agent-bx.md#the-always-on-agent-route), then shuts the server back down. Exercises the actual served path (ColdBox routing, interceptors, gateways) rather than the in-process shortcut. Needs no `gateways/*` entry of any kind - the reserved route is emitted on every build, so a freshly scaffolded project that exposes nothing publicly still works. `--port` defaults to a free ephemeral port so it never collides with an already-running `serve`.
 - `--json` prints `{"response": "..."}` instead of the plain-text response.
 
 ### `package`
