@@ -120,7 +120,7 @@ The secret is resolved live at server startup, matching this project's "secrets 
 
 **Validation:** `type` must be `mock`, `cli`, or `http`; a `type: "http"` entry requires a `secretEnvVar`; the entry's own file/base name must be unique across every channel-adapter entry. `mock` is test-only; `cli` is bx-ai's own built-in human-in-the-loop **approval** channel (a blocking stdin/stdout A/R/Q prompt) - it's what `HumanInTheLoopMiddleware` attaches by default when no gateway is specified, and is unrelated to BxAgents' own `chat` verb (which never touches the gateway registry at all).
 
-**`http`-type entries additionally get real HTTP wiring**: one line in `config/Router.bx`, using ColdBox's own `toAiGateway()` terminator.
+**Any channel-adapter entry mounts the bx-ai Gateway surface**: one line in `config/Router.bx`, using ColdBox's own `toAiGateway()` terminator.
 
 ```javascript
 route( "/gateways" ).toAiGateway()
@@ -136,8 +136,13 @@ POST /gateways/interactions/:requestID/decisions submit a human's decision
 GET  /gateways/info                             what this mount serves
 ```
 
+This mount is **not** `http`-specific. `http` is one gateway type among many, and the surface is shared: the `/interactions` routes are the human-in-the-loop approval channel for *every* gateway, resolved through bx-ai's own gateway registry rather than per-transport. So a project whose only gateway is Telegram, Slack or Discord gets the same `/gateways` mount - it needs those routes exactly as much, since a paused agent has to be answerable somehow.
+
 !!! info
     Earlier builds emitted three hand-written routes into a generated `handlers/Gateway.bx` passthrough, because ColdBox had no terminator for this surface. It does now (`toAiGateway()`, alongside `toAi()` and `toMCP()`), so the handler is gone and the interaction endpoints moved under the `/gateways` base path.
+
+!!! warning
+    The mount used to be gated on `type: "http"` alone, which left every push-only project able to *pause* for an approval it had no endpoint to answer. Fixed - but note the routes only reach a running server, so a project relying on human-in-the-loop approval needs [`serve`](../../cli-reference.md#serve) (or a real deployment), not `chat`.
 
 ## 3. Push-style gateways (`type: "telegram"` / `"slack"` / `"discord"` / `"email"` / `"whatsapp-cloud"` / `"teams"` / `"twilio"` / `"github"` / `"signal"`, and friends)
 

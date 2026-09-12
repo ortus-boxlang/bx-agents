@@ -35,7 +35,17 @@ ext {
 		// assumed. Was pinned to "3.4.0-snapshot" while those were still
 		// unreleased; bx-ai has since cut a real 3.4.0, so this now resolves to
 		// a stable, versioned artifact instead of a continuously-republished one.
-		[ name: "bx-ai", moduleName: "bxai", version: "3.4.0" ],
+		//
+		// Bumped 3.4.0 -> 3.5.0 for the Gateway HTTP surface. ColdBox's own
+		// `toAiGateway()` terminator (ColdBox 8.2.0-snapshot / @be) dispatches to
+		// GatewayRequestProcessor::processHandshake / processInbound /
+		// readInteraction / submitDecision. NONE of those four exist in 3.4.0,
+		// which only has the older route()/handleGetInteraction() shape - so on
+		// 3.4.0 every sub-route that terminator registers 500s at request time
+		// ("The key [readInteraction] was not found in the struct"). Confirmed by
+		// booting a real generated app against each version, not assumed. 3.5.0
+		// carries all four.
+		[ name: "bx-ai", moduleName: "bxai", version: "3.5.0" ],
 		// M16: the ftp/sftp deploy targets call the real bx:ftp component this
 		// module provides - a genuine runtime dependency (like bx-ai), not
 		// vendored, so it must be resolvable via modulesDirectory the same way.

@@ -351,6 +351,52 @@ try {
 	}
 
 	println( "+ Confirmed: an accountless web UI is one shared workspace across independent callers" )
+
+	// ------------------------------------------------------------------
+	// 5b. The bx-ai Gateway surface is mounted for a NON-http gateway.
+	//
+	// The fixture's only channel-adapter entry is `mock` - deliberately not
+	// `http`. The mount used to be gated on `type: "http"` specifically, which
+	// left every push-only project (Telegram, Slack, Discord, ...) without the
+	// /interactions routes that are how a human answers a pending approval.
+	//
+	// Asserted over real HTTP rather than on generated source, because the
+	// generated text being right is not the same as the routes answering:
+	// this same check is what caught bx-ai 3.4.0 missing the four methods
+	// ColdBox's toAiGateway() dispatches to (readInteraction/submitDecision/
+	// processInbound/processHandshake), which 500'd every one of them.
+	// ------------------------------------------------------------------
+	bx:http url="http://127.0.0.1:#port#/gateways/info" method="GET" result="gwInfo" timeout=30 {}
+	if ( gwInfo.status_code != 200 || !gwInfo.fileContent.findNoCase( "interactions" ) ) {
+		throw(
+			type    = "BxAgents.GatewaySurfaceNotMounted",
+			message = "GET /gateways/info did not describe the gateway surface on a non-http project (HTTP #gwInfo.status_code#): #left( gwInfo.fileContent ?: '', 400 )#"
+		)
+	}
+	println( "+ Confirmed: the bx-ai Gateway surface is mounted for a non-http (mock) gateway" )
+
+	// A 404 with a REAL JSON body is the pass here: it proves the route reached
+	// bx-ai's own processor and got a considered answer. A 500 would mean the
+	// terminator dispatched to a method the pinned bx-ai does not have.
+	bx:http url="http://127.0.0.1:#port#/gateways/interactions/not-a-real-request-id" method="GET" result="hitlGet" timeout=30 {}
+	if ( hitlGet.status_code != 404 || !hitlGet.fileContent.findNoCase( "Interaction not found" ) ) {
+		throw(
+			type    = "BxAgents.HumanInteractionRouteBroken",
+			message = "GET /gateways/interactions/:requestID did not answer from bx-ai's processor (expected HTTP 404 + ""Interaction not found"", got #hitlGet.status_code#): #left( hitlGet.fileContent ?: '', 400 )#"
+		)
+	}
+
+	bx:http url="http://127.0.0.1:#port#/gateways/interactions/not-a-real-request-id/decisions" method="POST" result="hitlPost" timeout=30 {
+		bx:httpparam type="header" name="Content-Type" value="application/json";
+		bx:httpparam type="body" value='{"decision":"approve"}';
+	}
+	if ( hitlPost.status_code != 404 || !hitlPost.fileContent.findNoCase( "Interaction not found" ) ) {
+		throw(
+			type    = "BxAgents.HumanInteractionRouteBroken",
+			message = "POST /gateways/interactions/:requestID/decisions did not answer from bx-ai's processor (expected HTTP 404 + ""Interaction not found"", got #hitlPost.status_code#): #left( hitlPost.fileContent ?: '', 400 )#"
+		)
+	}
+	println( "+ Confirmed: both human-in-the-loop approval routes answer from bx-ai's own processor" )
 } finally {
 	process.destroy()
 	process.waitFor( 5, createObject( "java", "java.util.concurrent.TimeUnit" ).SECONDS )
