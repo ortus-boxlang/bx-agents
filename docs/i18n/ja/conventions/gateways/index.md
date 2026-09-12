@@ -120,16 +120,29 @@ aiGatewayRegistry().register( aiGateway( "http", { secret : getSystemSetting( "S
 
 **検証:** `type` は `mock`、`cli`、`http` のいずれかである必要があります。`type: "http"` エントリには `secretEnvVar` が必須です。エントリ自身のファイル/ベース名は、すべてのチャネルアダプタエントリの間で一意である必要があります。`mock` はテスト専用です。`cli` は bx-ai 自身に組み込まれた human-in-the-loop **承認**チャネルです (ブロッキングな stdin/stdout の A/R/Q プロンプト) - これは、ゲートウェイが指定されていない場合に `HumanInTheLoopMiddleware` がデフォルトでアタッチするもので、ゲートウェイレジストリに一切触れない BxAgents 自身の `chat` 動詞とは無関係です。
 
-**`http` タイプのエントリはさらに、実際の HTTP 配線を得ます**: bx-ai 自身の `GatewayRequestProcessor::processHttp()` に直接プロキシする、生成された `handlers/Gateway.bx` アクションと、`config/Router.bx` の 3 つのルートです。
+**あらゆるチャネルアダプタのエントリが bx-ai の Gateway サーフェスをマウントします**: `config/Router.bx` の 1 行で、ColdBox 自身の `toAiGateway()` 終端子を使います。
 
 ```javascript
-post( "/gateways/:gatewayName/events" ).toHandler( "Gateway.process" )
-get( "/interactions/:requestID" ).toHandler( "Gateway.process" )
-post( "/interactions/:requestID/decisions" ).toHandler( "Gateway.process" )
+route( "/gateways" ).toAiGateway()
 ```
 
+この 1 つの終端子が bx-ai の Gateway サーフェス全体をマウントします:
+
+```
+POST /gateways/:gateway/events                  プラットフォームからの受信イベント
+GET  /gateways/:gateway/events                  プラットフォームの URL 検証ハンドシェイク
+GET  /gateways/interactions/:requestID          保留中の human interaction をポーリング
+POST /gateways/interactions/:requestID/decisions 人間の判断を送信
+GET  /gateways/info                             このマウントが提供するもの
+```
+
+このマウントは `http` 専用では**ありません**。`http` は数あるゲートウェイ種別の 1 つにすぎず、このサーフェスは共有されます: `/interactions` ルートは*すべての*ゲートウェイのための human-in-the-loop 承認チャネルであり、トランスポートごとではなく bx-ai 自身のゲートウェイレジストリを通じて解決されます。したがって Telegram、Slack、Discord だけを使うプロジェクトでも同じ `/gateways` マウントが得られます - 一時停止したエージェントには何らかの応答手段が必要なので、これらのルートは同じくらい必要だからです。
+
 !!! info
-    ColdBox には、この用途のための組み込みの `toAiGateway()` DSL 終端子はありません (ネイティブに存在するのは `toAi()` と `toMCP()` のみです) - この配線は BxAgents 自身が生成するコードで、将来のコア終端子が生成するであろうものと同じ形状に従っています。
+    以前のビルドは、ColdBox にこのサーフェス用の終端子がなかったため、生成した `handlers/Gateway.bx` パススルーへ手書きの 3 ルートを出力していました。現在は終端子があるため (`toAi()` や `toMCP()` と並ぶ `toAiGateway()`)、そのハンドラはなくなり、interaction エンドポイントは `/gateways` ベースパス配下に移動しました。
+
+!!! warning
+    このマウントは以前 `type: "http"` だけで条件付けられており、push 専用のプロジェクトは承認のために*一時停止*できても、それに応答するエンドポイントを持てませんでした。修正済みです - ただしこれらのルートは稼働中のサーバーにしか存在しないため、human-in-the-loop 承認に依存するプロジェクトには `chat` ではなく [`serve`](../../cli-reference.md#serve) (または実際のデプロイ) が必要です。
 
 ## 3. Push-style gateways (`type: "telegram"` / `"slack"` / `"discord"` / `"email"` / `"whatsapp-cloud"` / `"teams"` / `"twilio"` / `"github"` / `"signal"`, and friends)
 
