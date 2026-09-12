@@ -71,13 +71,22 @@ class extends="testbox.system.BaseSpec" {
 				expect( parsed.response ).toBe( "Mock response" );
 			} );
 
-			it( "throws clearly when --server is passed but no gateway exposes the agent", function() {
+			it( "no longer requires a gateway exposure for --server - the reserved agent route is always there", function() {
+				// This used to assert a BxAgents.NoAgentExposure throw: --server
+				// refused to run unless the project declared a gateways/* entry
+				// with exposes:"agent", because that entry was the only thing
+				// that produced a toAi() route to POST to. RouterGenerator now
+				// emits the reserved /__bxagents route on EVERY build, so a
+				// project that exposes nothing publicly is a perfectly good
+				// --server target and that precondition is gone.
+				//
+				// Asserted on the generated router rather than by launching a
+				// server, so this stays a fast, network-free unit test - the
+				// real HTTP round trip is the next spec down.
 				var dir = newTempProject( "valid-minimal" );
 				buildVerb.run( { projectRoot : dir } );
 
-				expect( function() {
-					invokeVerb.run( { projectRoot : dir, message : "Hi", server : true } );
-				} ).toThrow( "BxAgents.NoAgentExposure" );
+				expect( fileRead( dir & "/.build/app/config/Router.bx" ) ).toInclude( 'route( "/__bxagents" ).toAi( "GeneratedAgent" )' );
 			} );
 
 			/**

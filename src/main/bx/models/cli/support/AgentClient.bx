@@ -1,0 +1,187 @@
+/**
+ * A small HTTP client for a built project's always-on agent route, plus the
+ * throwaway-server lifecycle around it.
+ *
+ * Extracted because two verbs need the same three things and had no business
+ * each growing their own copy: `invoke --server` (one message, then tear the
+ * server down) and `chat --server`/`--connect` (many messages over one
+ * session). The pieces are:
+ *
+ *   - `agentUrl()`      - where the agent answers, for a given base URL
+ *   - `send()`          - POST one turn, carrying a threadId so a multi-turn
+ *                         session is actually a conversation
+ *   - `startServer()` / `stopServer()` - a real boxlang-miniserver on an
+ *                         ephemeral port, always torn back down
+ *
+ * Everything targets RouterGenerator's reserved `/__bxagents` route, which is
+ * emitted on every build whatever `gateways/` declares. That is the whole
+ * point of it being reserved: this module's own tooling always has an address,
+ * so neither verb has to hunt for a user-declared `exposes: "agent"` entry, or
+ * refuse to run when the project has none.
+ */
+class {
+
+	/**
+	 * The reserved base path the generated router always mounts the agent at.
+	 *
+	 * RouterGenerator.RESERVED_AGENT_PATH is the source of truth - statics are
+	 * per-class in BoxLang, so the value is duplicated here rather than shared.
+	 * Keep the two in step.
+	 */
+	static {
+		RESERVED_AGENT_PATH = "/__bxagents"
+	}
+
+	/**
+	 * @baseUrl A server root, e.g. "http://127.0.0.1:8080" - a trailing slash is tolerated
+	 * @subRoute Which `toAi()` sub-route to address; defaults to "invoke"
+	 *
+	 * @return The full URL of that sub-route on the reserved agent path
+	 */
+	string function agentUrl( required string baseUrl, string subRoute = "invoke" ) {
+		return arguments.baseUrl.reReplace( "[\/]+$", "" ) & static.RESERVED_AGENT_PATH & "/" & arguments.subRoute
+	}
+
+	/**
+	 * POSTs one turn to the agent, retrying until it answers or the deadline
+	 * passes.
+	 *
+	 * The retry loop doubles as the "wait for the server to be ready" step
+	 * rather than a separate synthetic health probe: a freshly launched
+	 * miniserver refuses connections for a moment, and the first real request
+	 * is the honest test of readiness anyway. Callers talking to an
+	 * already-running server should pass a short timeout, since for them a
+	 * refused connection is a real error rather than a startup race.
+	 *
+	 * @baseUrl The server root to talk to
+	 * @message The prompt to send
+	 * @timeoutSeconds Give up and throw after this many seconds
+	 * @threadId An existing conversation to continue; omit/blank to let the server start one
+	 *
+	 * @return { output, threadId } - threadId is whatever the server echoed back, so the caller can pass it to the next turn
+	 */
+	struct function send(
+		required string baseUrl,
+		required string message,
+		numeric timeoutSeconds = 20,
+		string threadId        = ""
+	) {
+		var url      = agentUrl( arguments.baseUrl )
+		var deadline = getTickCount() + ( arguments.timeoutSeconds * 1000 )
+		var payload  = { "input" : arguments.message }
+
+		// Only sent when we actually have one: ColdBox's toAi() starts a new
+		// thread when none is supplied, and passing a blank string would be a
+		// request to continue a conversation whose id is the empty string.
+		if ( len( trim( arguments.threadId ) ) ) {
+			payload[ "threadId" ] = trim( arguments.threadId )
+		}
+
+		var body      = jsonSerialize( payload )
+		var lastError = ""
+
+		while ( getTickCount() < deadline ) {
+			try {
+				bx:http url=url method="POST" result="httpResult" timeout=10 {
+					bx:httpparam type="header" name="Content-Type" value="application/json";
+					bx:httpparam type="body" value="#body#";
+				}
+
+				if ( httpResult.status_code == 200 ) {
+					var parsed = jsonDeserialize( httpResult.fileContent )
+					if ( parsed.success ?: false ) {
+						return {
+							output   : parsed.output ?: "",
+							// Echoed by ColdBox 8.2+; fall back to whatever we
+							// already had so a server that does not echo one
+							// still behaves like a single continuous session
+							// rather than silently resetting every turn.
+							threadId : parsed.threadId ?: arguments.threadId
+						}
+					}
+					lastError = parsed.error ?: httpResult.fileContent
+				} else if ( httpResult.status_code == 401 ) {
+					// A token gate (agentApi.tokenEnvVar) is in front of the
+					// route. Retrying cannot help, and the generic "never
+					// answered" message would send someone hunting a startup
+					// problem that isn't there.
+					throw(
+						type    = "BxAgents.AgentApiUnauthorized",
+						message = "The agent at [#url#] refused the request with 401 - it is gated behind agentApi.tokenEnvVar and this client sent no token."
+					)
+				} else {
+					lastError = "HTTP #httpResult.status_code#: #httpResult.fileContent#"
+				}
+			} catch ( any e ) {
+				if ( e.type == "BxAgents.AgentApiUnauthorized" ) {
+					rethrow
+				}
+				lastError = e.message
+			}
+			sleep( 500 )
+		}
+
+		throw(
+			type    = "BxAgents.AgentServerNeverReady",
+			message = "The agent at [#url#] never returned a successful response: #lastError#"
+		)
+	}
+
+	/**
+	 * Launches a throwaway `boxlang-miniserver` for a built project, bound to
+	 * loopback on an ephemeral port.
+	 *
+	 * Delegates to `Serve.bx`'s own run() rather than duplicating its
+	 * config-writing and launch logic, so a throwaway server and a real
+	 * `serve` are the same server - if they ever diverge, it is a bug in one
+	 * place rather than a difference to reconcile.
+	 *
+	 * @projectRoot Absolute path to the project root
+	 * @port Optional explicit port; defaults to a free ephemeral one
+	 *
+	 * @return { process, baseUrl, port } - hand `process` back to stopServer() when done
+	 */
+	struct function startServer( required string projectRoot, any port ) {
+		var host       = "127.0.0.1"
+		var resolved   = arguments.port ?: findFreePort()
+		var serveResult = new "models.cli.Serve@bxagents"().run( {
+			projectRoot : arguments.projectRoot,
+			port        : resolved,
+			host        : host
+		} )
+
+		return {
+			process : serveResult.process,
+			baseUrl : "http://#host#:#serveResult.port#",
+			port    : serveResult.port
+		}
+	}
+
+	/**
+	 * Tears a launched server back down. Safe to call with a null/absent
+	 * process, so a caller's `finally` never has to guard it.
+	 *
+	 * @process The Process returned by startServer()
+	 */
+	void function stopServer( any process ) {
+		if ( isNull( arguments.process ) ) {
+			return
+		}
+		arguments.process.destroy()
+		arguments.process.waitFor( 5, createObject( "java", "java.util.concurrent.TimeUnit" ).SECONDS )
+		if ( arguments.process.isAlive() ) {
+			arguments.process.destroyForcibly()
+		}
+	}
+
+	/**
+	 * @return A currently-unused TCP port on localhost
+	 */
+	numeric function findFreePort() {
+		var socket = createObject( "java", "java.net.ServerSocket" ).init( 0 )
+		var port = socket.getLocalPort()
+		socket.close()
+		return port
+	}
+
+}

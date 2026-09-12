@@ -1,0 +1,52 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "cli.support.AgentClient", function() {
+
+			beforeEach( function() {
+				variables.client = new bxagents.models.cli.support.AgentClient();
+			} );
+
+			it( "addresses the reserved agent route, not a user-declared exposure", function() {
+				expect( client.agentUrl( "http://127.0.0.1:8080" ) ).toBe( "http://127.0.0.1:8080/__bxagents/invoke" );
+			} );
+
+			it( "tolerates a trailing slash on the base URL rather than producing a double slash", function() {
+				// A doubled separator ("...//invoke") does not match the route
+				// that was actually registered, so it would 404 - and someone
+				// pasting a URL from a browser bar will have the slash.
+				expect( client.agentUrl( "http://127.0.0.1:8080/" ) ).toBe( "http://127.0.0.1:8080/__bxagents/invoke" );
+			} );
+
+			it( "can address the other toAi() sub-routes on the same reserved path", function() {
+				expect( client.agentUrl( "http://h:1", "stream" ) ).toBe( "http://h:1/__bxagents/stream" );
+				expect( client.agentUrl( "http://h:1", "info" ) ).toBe( "http://h:1/__bxagents/info" );
+			} );
+
+			it( "hands out a real, free, unprivileged port", function() {
+				var port = client.findFreePort();
+				expect( port ).toBeNumeric();
+				expect( port ).toBeGT( 1024 );
+				expect( port ).toBeLT( 65536 );
+			} );
+
+			it( "treats stopServer( null ) as a no-op so a finally block never has to guard it", function() {
+				expect( function() {
+					client.stopServer( nullValue() );
+				} ).notToThrow();
+			} );
+
+			it( "gives up with a clear error when nothing is listening", function() {
+				// Port 1 is privileged and never served by this process, so the
+				// connection is refused immediately. A 1-second deadline keeps
+				// the spec fast while still exercising the real retry/timeout
+				// path rather than a stubbed one.
+				expect( function() {
+					client.send( baseUrl : "http://127.0.0.1:1", message : "hi", timeoutSeconds : 1 );
+				} ).toThrow( "BxAgents.AgentServerNeverReady" );
+			} );
+
+		} );
+	}
+
+}

@@ -3,19 +3,42 @@
  * using BoxLang's own `ortus.boxlang.runtime.cli.MiniConsole` for line
  * reading (history, raw-mode input) rather than hand-rolling stdin reads.
  *
- * Requires a prior `build`. Reuses the SAME `GeneratedAgentFactory` a
- * `serve`-launched app would use, so `chat` and HTTP routes never diverge -
- * loads it directly (not through WireBox, since there's no ColdBox
- * container running here) and calls `buildAgent()` once per session.
+ * Requires a prior `build`. Three modes, all driving the same REPL loop:
+ *
+ *   - DEFAULT (no flag): loads `GeneratedAgentFactory.bx` directly and calls
+ *     `buildAgent()` once per session. Fast - no server, no ColdBox, no
+ *     WireBox - and the same factory a `serve`-launched app uses, so the
+ *     agent itself never diverges. What DOES differ is everything ColdBox
+ *     brings: no `models/`, no scheduler, no interceptors, no gateway
+ *     registry. For a plain "talk to my agent" loop that is the right
+ *     trade; when it isn't, use `--server`.
+ *
+ *   - `--server`: boots a real, throwaway `boxlang-miniserver` on an
+ *     ephemeral loopback port and drives the REPL over HTTP against the
+ *     project's always-on `/__bxagents` route, tearing the server back down
+ *     on exit. Full application semantics, because it IS the application.
+ *
+ *   - `--connect=<url>`: drives the same REPL against an ALREADY-running
+ *     server (a `serve` in another terminal, or a deployment), starting
+ *     nothing and stopping nothing.
+ *
+ * `--server` and `--connect` are mutually exclusive: one says "start a server
+ * for me", the other "do not". Both use `support/AgentClient.bx`, which also
+ * carries the `threadId` across turns so a session is a real conversation
+ * rather than a series of unrelated first messages.
+ *
  * `GeneratedAgentFactory.bx` itself loads the project's tools/ into bx-ai's
  * global tool registry (see ColdBoxAppGenerator.renderAgentFactory()'s
- * docblock for the real bug this fixed), so `chat` needs no special handling
- * for that here.
+ * docblock for the real bug this fixed), so the default mode needs no special
+ * handling for that here.
  */
 class {
 
 	/**
 	 * @options { projectRoot (required, absolute path) }
+	 */
+	/**
+	 * @options { projectRoot (required, absolute path), server (optional boolean - boot a throwaway miniserver and chat over real HTTP), connect (optional - the base URL of an already-running server, e.g. "http://127.0.0.1:8080") }
 	 */
 	struct function run( struct options = {} ) {
 		var projectRoot = trim( arguments.options.projectRoot ?: "" )
@@ -24,15 +47,69 @@ class {
 		}
 
 		var root = projectRoot.reReplace( "[\/]+$", "" )
-		var factoryPath = root & "/.build/app/agent/GeneratedAgentFactory.bx"
 
-		if ( !fileExists( factoryPath ) ) {
+		var useServer  = arguments.options.server ?: false
+		var connectUrl = trim( arguments.options.connect ?: "" )
+
+		// One says "start a server", the other "talk to one that already
+		// exists". Honoring either silently would mean ignoring what the
+		// other one asked for.
+		if ( useServer && len( connectUrl ) ) {
 			throw(
-				type    = "BxAgents.NotBuilt",
-				message = "No build found at [#root#/.build] - run `build` first"
+				type    = "BxAgents.ConflictingChatTarget",
+				message = "--server and --connect are mutually exclusive: --server boots its own throwaway server, --connect talks to one that is already running. Pick one."
 			)
 		}
 
+		if ( len( connectUrl ) ) {
+			return chatOverHttp( connectUrl, "" )
+		}
+
+		requireBuild( root )
+
+		if ( useServer ) {
+			var client = new "models.cli.support.AgentClient@bxagents"()
+			var launched = client.startServer( root, arguments.options.port ?: nullValue() )
+			try {
+				return chatOverHttp( launched.baseUrl, "Started a throwaway server on #launched.baseUrl#" )
+			} finally {
+				client.stopServer( launched.process ?: nullValue() )
+			}
+		}
+
+		return chatInProcess( root )
+	}
+
+	/**
+	 * Fails early and clearly when there is nothing built to chat with.
+	 *
+	 * Deliberately NOT applied to `--connect`: that mode talks to a server
+	 * someone else is running, which may be a deployment on another machine
+	 * entirely, so demanding a local `.build/` would be wrong.
+	 *
+	 * @root Absolute path to the project root, trailing slash stripped
+	 *
+	 * @throws BxAgents.NotBuilt When the project has no generated app
+	 */
+	private void function requireBuild( required string root ) {
+		if ( !fileExists( arguments.root & "/.build/app/agent/GeneratedAgentFactory.bx" ) ) {
+			throw(
+				type    = "BxAgents.NotBuilt",
+				message = "No build found at [#arguments.root#/.build] - run `build` first"
+			)
+		}
+	}
+
+	/**
+	 * The default mode: load the generated factory directly and talk to the
+	 * agent object in this process.
+	 *
+	 * @root Absolute path to the project root, trailing slash stripped
+	 *
+	 * @return This verb's own { exitCode, message } result
+	 */
+	private struct function chatInProcess( required string root ) {
+		var factoryPath = arguments.root & "/.build/app/agent/GeneratedAgentFactory.bx"
 		var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
 		var factory = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" ).instantiate( factoryPath, context )
 		var agent = factory.buildAgent()
@@ -64,6 +141,80 @@ class {
 
 			try {
 				println( "agent> " & agent.run( trimmedInput ) )
+			} catch ( any e ) {
+				println( "error> " & e.message )
+			}
+		}
+
+		return {
+			exitCode : 0,
+			message  : "Chat session ended"
+		}
+	}
+
+	/**
+	 * The `--server` / `--connect` mode: drive the same REPL over real HTTP
+	 * against a project's always-on `/__bxagents` route.
+	 *
+	 * Carries the `threadId` the server hands back into every subsequent turn,
+	 * so the session is one conversation. Without that each line would start a
+	 * fresh thread and the agent would have no memory of the previous one -
+	 * which is exactly what a REPL must not do.
+	 *
+	 * A per-turn error does NOT end the session (same as the in-process loop):
+	 * one failed turn is worth reporting and moving past, not worth throwing
+	 * away the conversation for. A server that never becomes ready at all is
+	 * different, and surfaces from the first send().
+	 *
+	 * @baseUrl The server root to talk to
+	 * @banner An extra line to print before the prompt (e.g. which server was started); blank prints nothing
+	 *
+	 * @return This verb's own { exitCode, message } result
+	 */
+	private struct function chatOverHttp( required string baseUrl, string banner = "" ) {
+		var client = new "models.cli.support.AgentClient@bxagents"()
+		var target = arguments.baseUrl.reReplace( "[\/]+$", "" )
+
+		if ( len( trim( arguments.banner ) ) ) {
+			println( arguments.banner )
+		}
+
+		// Constructed after everything that can fail without a terminal, for
+		// the same reason as the in-process loop: MiniConsole needs a real TTY.
+		var console = createObject( "java", "ortus.boxlang.runtime.cli.MiniConsole" ).init( "you> " )
+
+		println( "Chatting with the agent at #target# - type 'exit' or 'quit' to leave." )
+
+		var threadId = ""
+		var running = true
+		while ( running ) {
+			var input = console.readLine()
+			if ( isNull( input ) ) {
+				running = false
+				continue
+			}
+
+			var trimmedInput = trim( input )
+			if ( trimmedInput == "exit" || trimmedInput == "quit" ) {
+				running = false
+				continue
+			}
+			if ( !len( trimmedInput ) ) {
+				continue
+			}
+
+			try {
+				// The first turn also absorbs server startup, so it gets a
+				// generous deadline; later turns should be answered promptly
+				// by a server already proven to be up.
+				var result = client.send(
+					baseUrl        : target,
+					message        : trimmedInput,
+					timeoutSeconds : len( threadId ) ? 60 : 30,
+					threadId       : threadId
+				)
+				threadId = result.threadId ?: threadId
+				println( "agent> " & result.output )
 			} catch ( any e ) {
 				println( "error> " & e.message )
 			}
