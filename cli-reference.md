@@ -165,6 +165,7 @@ bxAgents serve [--port=8080] [--host=127.0.0.1]
 
 - Requires a prior `build` - fails clearly if `.build/app` doesn't exist.
 - Fails clearly if `boxlang-miniserver` isn't found on `PATH`.
+- Always serves the agent at `/__bxagents` (`POST /invoke`, `POST /stream`, `POST /batch`, `GET /info`), whatever the project declares in [`gateways/`](conventions/gateways/index.md) - see [the always-on agent route](conventions/agent-bx.md#the-always-on-agent-route) for how to require a token on it, or turn it off.
 - **Binds to `127.0.0.1` by default.** A generated app is not authenticated unless you configured it to be (the web UI's API-key gate and sign-in are both opt-in), so the default keeps a development server off the network. Pass `--host=0.0.0.0` to bind all interfaces deliberately - the startup line tells you which of the two you got.
 - `--port` must be an integer in 1-65535; anything else fails immediately rather than inside the server process.
 - Writes `.build/miniserver.json` (rewrites enabled, `rewriteFileName: "index.bxm"`, health check on) before launching.

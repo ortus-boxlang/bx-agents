@@ -41,7 +41,7 @@
 	</script>
 	<link rel="stylesheet" href="/assets/vendor/bootstrap/bootstrap.min.css">
 	<link rel="stylesheet" href="/assets/vendor/highlight/github.min.css">
-	<link rel="stylesheet" href="/assets/theme/style.cf949b4c.css">
+	<link rel="stylesheet" href="/assets/theme/style.075ccbb9.css">
 	<link rel="stylesheet" href="/assets/bundle.60460103.css">
 
 
@@ -125,7 +125,7 @@ Agent.bx</h1>
 
 
 
-	<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary">On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#what-the-build-layers-on-top-of-the-class">What the build layers on top of the class</a></li><li class="toc-level-2"><a href="#configure-optional---overriding-what-the-class-set">configure&#x28;&#x29; &#x28;optional&#x29; - overriding what the class set</a></li><li class="toc-level-2"><a href="#the-model-slug">The model slug</a></li><li class="toc-level-2"><a href="#environment-overrides">Environment overrides</a></li><li class="toc-level-2"><a href="#merge-semantics">Merge semantics</a></li></ul></details>
+	<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary">On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#what-the-build-layers-on-top-of-the-class">What the build layers on top of the class</a></li><li class="toc-level-2"><a href="#configure-optional---overriding-what-the-class-set">configure&#x28;&#x29; &#x28;optional&#x29; - overriding what the class set</a></li><li class="toc-level-2"><a href="#the-model-slug">The model slug</a></li><li class="toc-level-2"><a href="#environment-overrides">Environment overrides</a></li><li class="toc-level-3"><a href="#detectenvironment">detectEnvironment&#x28;&#x29;</a></li><li class="toc-level-2"><a href="#merge-semantics">Merge semantics</a></li><li class="toc-level-2"><a href="#the-always-on-agent-route">The always-on agent route</a></li><li class="toc-level-3"><a href="#agentapi">agentApi</a></li></ul></details>
 
 					<svg xmlns="http://www.w3.org/2000/svg" class="adm-hidden">
 <symbol id="adm-warning">
@@ -229,6 +229,7 @@ Agent.bx</h1>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>memory</code></td><td>string or struct</td><td>The agent's conversation memory. A bare string is shorthand for the type (<code>&quot;cache&quot;</code>); a struct is <code>{ type, ...config }</code> and is passed through to <code>aiMemory()</code> verbatim - e.g. <code>{ type: &quot;cache&quot;, maxMessages: 50 }</code>, or with <code>summaryProvider</code>/<code>summaryModel</code>/<code>summaryThreshold</code> to make the web UI's <code>/compact</code> functional. Applies per node, so a subagent can declare its own.</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>checkpointer</code></td><td>struct</td><td><code>{ type: &quot;cache&quot;\|&quot;file&quot;\|&quot;jdbc&quot;, ...config }</code>. Defaults to <code>{ type: &quot;cache&quot; }</code> if omitted. Always applied - without one, human-in-the-loop approval flows through any gateway other than <code>cli</code> fail outright.</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>gatewaySession</code></td><td>struct</td><td><code>{ policy, maxQueueDepth }</code>, both optional (default <code>&quot;queue&quot;</code> / <code>50</code>). Only meaningful if the project has at least one push-style <a href="/conventions/gateways/index.html#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends">gateway</a> entry - controls the generated <code>GatewaySession</code>'s policy for a second inbound message arriving on a thread that already has a turn in flight. <code>policy</code> must be one of <code>reject</code>/<code>queue</code>/<code>steer</code>/<code>interrupt</code>.</td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>agentApi</code></td><td>struct</td><td><code>{ enabled, tokenEnvVar }</code>, both optional. Controls the always-on agent route at <code>/__bxagents</code>. See <a href="#the-always-on-agent-route">The always-on agent route</a> below.</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td>any other key</td><td>any</td><td>Merged and available in the resolved config struct, but not interpreted by BxAgents itself.</td></tr>
 </tbody>
 </table></div>
@@ -270,9 +271,45 @@ Agent.bx</h1>
 <p>The active environment is resolved with this precedence (highest wins):</p>
 <ol>
 <li><code>--environment</code> CLI flag (<code>bxAgents build --environment=production</code>)</li>
+<li><code>Agent.bx</code>'s own <code>detectEnvironment()</code> method, if it declares one</li>
 <li><code>BX_AGENTS_ENV</code> environment variable</li>
 <li><code>&quot;development&quot;</code> (default)</li>
 </ol>
+<h3 id="detectenvironment"><a href="#detectenvironment" id="detectenvironment" name="detectenvironment" class="anchor"></a><code>detectEnvironment()</code></h3>
+<p>For anything the first and third tiers can't express, <code>Agent.bx</code> may declare a
+<code>detectEnvironment()</code> method and decide for itself. Whatever it returns is taken
+as the environment name verbatim:</p>
+<pre><code class="language-javascript">class extends=&quot;bxModules.bxai.models.runnables.AiAgent&quot; {
+
+	function init() {
+		super.init( name : &quot;my-agent&quot;, model : aiModel( provider : &quot;openai&quot;, params : { model : &quot;gpt-5&quot; } ) )
+		return this
+	}
+
+	function detectEnvironment() {
+		return fileExists( expandPath( &quot;/.production-marker&quot; ) ) ? &quot;production&quot; : &quot;development&quot;;
+	}
+
+}
+</code></pre>
+<p>This mirrors ColdBox's own tier-1 convention (a config declaring
+<code>detectEnvironment()</code> has its return value taken verbatim), with two deliberate
+differences, both because this runs at <strong>build</strong> time:</p>
+<ul>
+<li>An explicit <code>--environment</code> flag <strong>outranks</strong> <code>detectEnvironment()</code> here, where
+ColdBox puts its own detect method first. A flag someone typed is the most
+specific statement of intent available.</li>
+<li>ColdBox's <em>other</em> detection tier - an <code>environments</code> struct of regexes matched
+against <code>CGI.HTTP_HOST</code> - is <strong>not</strong> supported. It cannot work here: the build
+runs in a CLI process with no HTTP host, so it would only ever describe the
+machine doing the building (a CI runner would resolve <code>development</code> for a
+production build).</li>
+</ul>
+<p>Returning a blank string, or anything that isn't a string, means &quot;no opinion&quot; and
+falls through to the next tier - so a project computing its environment from
+something absent on this machine degrades to the default rather than failing the
+build. A <code>detectEnvironment()</code> that <strong>throws</strong> is a different matter: that's a real
+bug in the project's own code, and <code>build</code> fails and says so.</p>
 <p>This is a <strong>build-time</strong> decision only, distinct from ColdBox's own runtime environment detection (the generated app reads <code>getSetting(&quot;environment&quot;)</code> on its own, per ColdBox's <code>environments</code> convention) - this precedence only decides which <code>environment()</code> override method on <code>Agent.bx</code>, and which <code>boxlang-{env}.json</code>/<code>miniserver-{env}.json</code> files, the build pipeline applies.</p>
 <p>If no method matching the active environment exists, no override is applied.</p>
 <h2 id="merge-semantics"><a href="#merge-semantics" id="merge-semantics" name="merge-semantics" class="anchor"></a>Merge semantics</h2>
@@ -306,9 +343,81 @@ Agent.bx</h1>
 <p>Secrets (API keys, tokens) are never read or merged by BxAgents at build time - they stay external (an OS environment variable, <code>.env</code>, a platform secret manager) and are resolved live by bx-ai itself at runtime. See <a href="/deployment-and-secrets/index.html">Deployment &amp; Secrets</a>.</p>
 </div>
 </div>
+<h2 id="the-always-on-agent-route"><a href="#the-always-on-agent-route" id="the-always-on-agent-route" name="the-always-on-agent-route" class="anchor"></a>The always-on agent route</h2>
+<p>Every built project exposes its root agent over HTTP at a fixed reserved path,
+whether or not it declares any <a href="/conventions/gateways/index.html"><code>gateways/</code></a> entries:</p>
+<pre><code>POST /__bxagents/invoke
+POST /__bxagents/stream    # SSE
+POST /__bxagents/batch
+GET  /__bxagents/info
+</code></pre>
+<p>These are the four sub-routes ColdBox's own <code>toAi()</code> terminator registers. The
+route exists so this module's own tooling always has an address to talk to -
+it's the service entrance, not your project's public API. A project's own
+public surface belongs in <code>gateways/</code>, at whatever paths you choose.</p>
+<p>Because the path is reserved, <code>build</code> <strong>rejects</strong> any <code>gateways/</code> entry whose
+<code>path</code> is <code>/__bxagents</code> or sits underneath it. Two routes on one mount is a
+genuine conflict: one would silently shadow the other, and yours would be the
+one that never answers.</p>
+<h3 id="agentapi"><a href="#agentapi" id="agentapi" name="agentapi" class="anchor"></a><code>agentApi</code></h3>
+<p><code>configure()</code> may return an <code>agentApi</code> struct to control it:</p>
+<div class="bxsites-table-wrap"><table class="table">
+<thead>
+<tr><th>Key</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>enabled</code></td><td>boolean</td><td>Default <code>true</code>. Set <code>false</code> to omit the route entirely - for a build going somewhere it has no business existing.</td></tr>
+<tr><td><code>tokenEnvVar</code></td><td>string</td><td>The <strong>name</strong> of an environment variable holding a shared secret. When set, every sub-route requires a matching <code>x-bxagents-token</code> request header.</td></tr>
+</tbody>
+</table></div>
+<pre><code class="language-javascript">function configure() {
+	return {
+		name     : &quot;my-agent&quot;,
+		model    : &quot;openai/gpt-5&quot;,
+		agentApi : {
+			tokenEnvVar : &quot;BXAGENTS_API_TOKEN&quot;
+		}
+	};
+}
+</code></pre>
+<p>Because this comes from <code>configure()</code>, it scopes per environment with an
+<a href="#environment-overrides">environment override</a> like any other key - so a
+project can leave the route open locally and require a token in production:</p>
+<pre><code class="language-javascript">function production() {
+	return {
+		agentApi : { tokenEnvVar : &quot;BXAGENTS_API_TOKEN&quot; }
+	};
+}
+</code></pre>
+<p>The gate <strong>fails closed</strong>: if the named variable is unset or blank at runtime,
+nothing matches - it never degenerates into comparing <code>&quot;&quot;</code> to <code>&quot;&quot;</code> and letting
+every caller through. A request without a valid token gets a <code>401</code> with a small
+JSON body, and never reaches the agent.</p>
+<div class="adm-block adm-warning">
+<div class="adm-heading">
+<svg class="adm-icon"><use xlink:href="#adm-warning" /></svg><span>Warning</span>
+</div>
+<div class="adm-body">
+<p><code>tokenEnvVar</code> names a <strong>variable</strong>, never the secret itself. <code>build</code> rejects
+a value that isn't a valid environment-variable name, precisely so a literal
+token can't be committed here by mistake. Only the variable's name is ever
+written into generated source.</p>
+</div>
+</div>
+<div class="adm-block adm-info">
+<div class="adm-heading">
+<svg class="adm-icon"><use xlink:href="#adm-info" /></svg><span>Info</span>
+</div>
+<div class="adm-body">
+<p>The route is bound to whatever host the <a href="/cli-reference/index.html#serve">miniserver</a>
+is listening on - <code>127.0.0.1</code> by default, so nothing is reachable off the
+machine unless you deliberately expose it. <code>tokenEnvVar</code> is what matters once
+you do, and for any built <code>.bxa</code> artifact you deploy.</p>
+</div>
+</div>
 
 
-	<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/conventions/agent-bx.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/conventions/agent-bx.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Sep 10, 2026, 9&#x3a;18&#x3a;35 PM</span></div>
+	<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/conventions/agent-bx.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/conventions/agent-bx.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Sep 12, 2026, 1&#x3a;04&#x3a;13 PM</span></div>
 
 				</article>
 
@@ -331,7 +440,7 @@ Agent.bx</h1>
 			</main>
 
 			<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-				<nav class="toc mb-4" aria-label="On this page"><div class="toc-title">On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#what-the-build-layers-on-top-of-the-class">What the build layers on top of the class</a></li><li class="toc-level-2"><a href="#configure-optional---overriding-what-the-class-set">configure&#x28;&#x29; &#x28;optional&#x29; - overriding what the class set</a></li><li class="toc-level-2"><a href="#the-model-slug">The model slug</a></li><li class="toc-level-2"><a href="#environment-overrides">Environment overrides</a></li><li class="toc-level-2"><a href="#merge-semantics">Merge semantics</a></li></ul></nav>
+				<nav class="toc mb-4" aria-label="On this page"><div class="toc-title">On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#what-the-build-layers-on-top-of-the-class">What the build layers on top of the class</a></li><li class="toc-level-2"><a href="#configure-optional---overriding-what-the-class-set">configure&#x28;&#x29; &#x28;optional&#x29; - overriding what the class set</a></li><li class="toc-level-2"><a href="#the-model-slug">The model slug</a></li><li class="toc-level-2"><a href="#environment-overrides">Environment overrides</a></li><li class="toc-level-3"><a href="#detectenvironment">detectEnvironment&#x28;&#x29;</a></li><li class="toc-level-2"><a href="#merge-semantics">Merge semantics</a></li><li class="toc-level-2"><a href="#the-always-on-agent-route">The always-on agent route</a></li><li class="toc-level-3"><a href="#agentapi">agentApi</a></li></ul></nav>
 			</aside>
 
 		</div>
