@@ -10,14 +10,15 @@
  *    same in-process path `chat` uses, just without the REPL loop. No
  *    `serve`/gateway prerequisite at all.
  *  - `--server`: launches a REAL, throwaway `boxlang-miniserver` process
- *    (reusing `Serve.bx`'s own run() - not duplicating its config-writing/
- *    launch logic), sends the message as a real HTTP request through the
- *    project's `toAi()`-exposed route, then tears the server back down.
- *    This exercises the actual served path (ColdBox routing, interceptors,
- *    gateways) rather than the shortcut `chat`/the default mode use -
- *    requires the project to declare a `gateways/*.bx` entry with
- *    `{ exposes: "agent", path: "..." }` (see docs/conventions/gateways.md),
- *    since that's what generates the HTTP route at all.
+ *    (via `support/AgentClient.bx`, which delegates to `Serve.bx`'s own
+ *    run() rather than duplicating its config-writing/launch logic), sends
+ *    the message as a real HTTP request to the project's always-on
+ *    `/__bxagents` agent route, then tears the server back down. This
+ *    exercises the actual served path (ColdBox routing, interceptors,
+ *    gateways) rather than the shortcut the default mode uses. It needs no
+ *    `gateways/*` entry of any kind: the reserved route is emitted on every
+ *    build (see RouterGenerator), so a freshly scaffolded project that
+ *    exposes nothing publicly still works.
  *
  *    The exact request/response contract below (`POST {path}/invoke` with
  *    `{"input": "..."}`, a `{"output": "...", "success": true}` response)
@@ -95,9 +96,16 @@ class {
 	}
 
 	/**
-	 * Launches a throwaway `boxlang-miniserver` (via `Serve.bx`'s own run()),
-	 * POSTs the message to the project's `toAi()`-exposed route, then always
-	 * tears the server back down - even on failure.
+	 * Launches a throwaway `boxlang-miniserver`, POSTs the message to the
+	 * project's always-on agent route, then always tears the server back down
+	 * - even on failure.
+	 *
+	 * This used to refuse to run unless the project declared a `gateways/*`
+	 * entry with `exposes: "agent"`, because that entry was the only thing
+	 * that produced a `toAi()` route to POST to. RouterGenerator now emits a
+	 * reserved `/__bxagents` route on EVERY build whatever `gateways/`
+	 * declares, so there is always an address and that precondition is gone -
+	 * `--server` works on a freshly scaffolded project that exposes nothing.
 	 *
 	 * @root Absolute path to the project root, trailing slash stripped
 	 * @message The prompt to send
@@ -106,132 +114,14 @@ class {
 	 * @return The agent's plain-string response (ColdBox toAi()'s "output" field)
 	 */
 	private any function invokeViaServer( required string root, required string message, required struct options ) {
-		var exposurePath = findAgentExposurePath( arguments.root )
-		if ( !len( exposurePath ) ) {
-			throw(
-				type    = "BxAgents.NoAgentExposure",
-				message = "--server requires a gateways/*.bx entry with { exposes: 'agent', path: '...' } - none was found. Omit --server to invoke in-process instead."
-			)
-		}
-
-		var host = "127.0.0.1"
-		var port = arguments.options.port ?: findFreePort()
-
-		var serveResult = new "models.cli.Serve@bxagents"().run( { projectRoot : arguments.root, port : port, host : host } )
-		var process = serveResult.process
+		var client = new "models.cli.support.AgentClient@bxagents"()
+		var launched = client.startServer( arguments.root, arguments.options.port ?: nullValue() )
 
 		try {
-			return postToAgent( "http://#host#:#port##exposurePath#/invoke", arguments.message, 20 )
+			return client.send( baseUrl : launched.baseUrl, message : arguments.message, timeoutSeconds : 20 ).output
 		} finally {
-			process.destroy()
-			process.waitFor( 5, createObject( "java", "java.util.concurrent.TimeUnit" ).SECONDS )
-			if ( process.isAlive() ) {
-				process.destroyForcibly()
-			}
+			client.stopServer( launched.process ?: nullValue() )
 		}
-	}
-
-	/**
-	 * @root Absolute path to the project root, trailing slash stripped
-	 *
-	 * @return The first agent-exposure gateway's own route `path`, or "" if none exists
-	 */
-	private string function findAgentExposurePath( required string root ) {
-		var discoverer = new "models.build.ProjectDiscoverer@bxagents"()
-		var discovery = discoverer.discover( arguments.root )
-
-		for ( var gw in ( discovery.gateways ?: [] ) ) {
-			var config = readEntryConfig( gw.path )
-			if ( !isNull( config ) && ( config.exposes ?: "" ) == "agent" ) {
-				// Strip any trailing separator, exactly as RouterGenerator and
-				// WebUiGenerator do to the same value. The caller concatenates
-				// this straight onto a URL ("...#exposurePath#/invoke"), so a
-				// configured `path: "/api/chat/"` would otherwise request
-				// `/api/chat//invoke` and 404 against the route that was
-				// actually registered.
-				return trim( config.path ?: "" ).reReplace( "[\/]+$", "" )
-			}
-		}
-
-		return ""
-	}
-
-	/**
-	 * Reads a discovered `gateways/*` entry's config: JSON files are
-	 * deserialized directly, `.bx` files are dynamically loaded and their
-	 * `configure()` invoked.
-	 *
-	 * @path Absolute path to the entry's `.bx`/`.json` file
-	 *
-	 * @return The entry's config struct, or null if it could not be read
-	 */
-	private any function readEntryConfig( required string path ) {
-		try {
-			if ( arguments.path.endsWith( ".json" ) ) {
-				return jsonDeserialize( fileRead( arguments.path ) )
-			}
-
-			var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
-			var instance = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
-				.instantiate( arguments.path, context )
-			return instance.configure()
-		} catch ( any e ) {
-			return null
-		}
-	}
-
-	/**
-	 * Retries the real POST until it succeeds or timeoutSeconds elapses -
-	 * see the class docblock for why this doubles as the "wait for the
-	 * server to be ready" step, rather than a separate synthetic health probe.
-	 *
-	 * @url Full URL to the toAi() `/invoke` sub-route, e.g. "http://127.0.0.1:PORT/api/chat/invoke"
-	 * @message The prompt to send, wrapped as `{"input": message}`
-	 * @timeoutSeconds Give up and throw after this many seconds
-	 *
-	 * @return The agent's plain-string response (the response's "output" field)
-	 */
-	private any function postToAgent( required string url, required string message, required numeric timeoutSeconds ) {
-		var deadline = getTickCount() + ( arguments.timeoutSeconds * 1000 )
-		var body = jsonSerialize( { input : arguments.message } )
-		var lastError = ""
-
-		while ( getTickCount() < deadline ) {
-			try {
-				bx:http url=arguments.url method="POST" result="httpResult" timeout=10 {
-					bx:httpparam type="header" name="Content-Type" value="application/json";
-					bx:httpparam type="body" value="#body#";
-				}
-
-				if ( httpResult.status_code == 200 ) {
-					var parsed = jsonDeserialize( httpResult.fileContent )
-					if ( parsed.success ?: false ) {
-						return parsed.output ?: ""
-					}
-					lastError = parsed.error ?: httpResult.fileContent
-				} else {
-					lastError = "HTTP #httpResult.status_code#: #httpResult.fileContent#"
-				}
-			} catch ( any e ) {
-				lastError = e.message
-			}
-			sleep( 500 )
-		}
-
-		throw(
-			type    = "BxAgents.InvokeServerNeverReady",
-			message = "The server at [#arguments.url#] never returned a successful response: #lastError#"
-		)
-	}
-
-	/**
-	 * @return A currently-unused TCP port on localhost
-	 */
-	private numeric function findFreePort() {
-		var socket = createObject( "java", "java.net.ServerSocket" ).init( 0 )
-		var port = socket.getLocalPort()
-		socket.close()
-		return port
 	}
 
 }
