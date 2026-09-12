@@ -85,6 +85,25 @@ class extends="testbox.system.BaseSpec" {
 				expect( fileExists( appDir & "/handlers/Gateway.bx" ) ).toBeFalse();
 			} );
 
+			it( "reports hasChannelGateway=true for a PUSH-only project, even though hasHttpGateway is false", function() {
+				// These two flags are deliberately different questions. RouterGenerator
+				// mounts the bx-ai Gateway surface (and with it the /interactions
+				// human-approval routes) on hasChannelGateway, because that surface
+				// serves every gateway - not only http.
+				var discovery = discoverer.discover( fixtures & "/gateways-telegram" );
+				var result = generator.generate( discovery, newAppDir() );
+
+				expect( result.hasChannelGateway ).toBeTrue();
+				expect( result.hasHttpGateway ).toBeFalse();
+			} );
+
+			it( "reports hasChannelGateway=false when the project declares no channel gateway at all", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+				var result = generator.generate( discovery, newAppDir() );
+
+				expect( result.hasChannelGateway ).toBeFalse();
+			} );
+
 			it( "reports hasHttpGateway=false when there is no http-type channel", function() {
 				var discovery = discoverer.discover( fixtures & "/full-project" );
 				var appDir = newAppDir();

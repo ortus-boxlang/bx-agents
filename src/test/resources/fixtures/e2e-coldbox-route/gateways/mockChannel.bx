@@ -1,0 +1,21 @@
+/**
+ * A `mock`-type channel-adapter gateway - deliberately NOT `http`.
+ *
+ * This is the regression net for a real bug: RouterGenerator used to mount the
+ * bx-ai Gateway surface (`route( "/gateways" ).toAiGateway()`) only when a
+ * gateway of type `http` existed. Every push-only project therefore got no
+ * `/gateways/interactions/:requestID` routes - the human-in-the-loop approval
+ * channel - so such an agent could PAUSE for an approval it had no endpoint to
+ * answer. `http` is one gateway among many and must not gate the others.
+ *
+ * `mock` is used rather than a real push type (telegram/slack/...) on purpose:
+ * it is a genuine channel-adapter entry for the generator's purposes, and it
+ * opens no socket and needs no credential, so it is safe to boot in CI.
+ */
+class {
+
+	function configure() {
+		return { type : "mock" };
+	}
+
+}
