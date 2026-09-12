@@ -120,16 +120,29 @@ El secreto se resuelve en vivo en el arranque del servidor, coincidiendo con la 
 
 **Validación:** `type` debe ser `mock`, `cli`, o `http`; una entrada `type: "http"` requiere un `secretEnvVar`; el propio nombre de archivo/nombre base de la entrada debe ser único a través de cada entrada de channel-adapter. `mock` es solo para pruebas; `cli` es el propio canal incorporado de **aprobación** human-in-the-loop de bx-ai (un prompt bloqueante de stdin/stdout A/R/Q) - es lo que `HumanInTheLoopMiddleware` conecta por defecto cuando no se especifica ningún gateway, y no está relacionado con el propio verbo `chat` de BxAgents (que nunca toca el registro de gateways en absoluto).
 
-**Las entradas de tipo `http` adicionalmente obtienen cableado HTTP real**: una acción generada `handlers/Gateway.bx` que hace de proxy directamente hacia el propio `GatewayRequestProcessor::processHttp()` de bx-ai, y tres rutas en `config/Router.bx`:
+**Cualquier entrada de adaptador de canal monta la superficie Gateway de bx-ai**: una línea en `config/Router.bx`, usando el propio terminador `toAiGateway()` de ColdBox.
 
 ```javascript
-post( "/gateways/:gatewayName/events" ).toHandler( "Gateway.process" )
-get( "/interactions/:requestID" ).toHandler( "Gateway.process" )
-post( "/interactions/:requestID/decisions" ).toHandler( "Gateway.process" )
+route( "/gateways" ).toAiGateway()
 ```
 
+Ese único terminador monta toda la superficie Gateway de bx-ai:
+
+```
+POST /gateways/:gateway/events                  evento entrante de la plataforma
+GET  /gateways/:gateway/events                  el handshake de verificación de URL de la plataforma
+GET  /gateways/interactions/:requestID          consultar una interacción humana pendiente
+POST /gateways/interactions/:requestID/decisions enviar la decisión de una persona
+GET  /gateways/info                             qué sirve este montaje
+```
+
+Este montaje **no** es específico de `http`. `http` es un tipo de gateway entre muchos, y la superficie es compartida: las rutas `/interactions` son el canal de aprobación human-in-the-loop para *todos* los gateways, resuelto a través del propio registro de gateways de bx-ai y no por transporte. Así que un proyecto cuyo único gateway sea Telegram, Slack o Discord obtiene el mismo montaje `/gateways` - necesita esas rutas exactamente igual, ya que un agente pausado tiene que poder responderse de algún modo.
+
 !!! info
-    ColdBox no tiene un terminador de DSL `toAiGateway()` incorporado para esta superficie (solo `toAi()` y `toMCP()` existen nativamente) - este cableado es código propio generado por BxAgents, siguiendo la misma forma que produciría un futuro terminador del núcleo.
+    Builds anteriores emitían tres rutas escritas a mano hacia un passthrough generado `handlers/Gateway.bx`, porque ColdBox no tenía terminador para esta superficie. Ahora sí lo tiene (`toAiGateway()`, junto a `toAi()` y `toMCP()`), así que el handler desapareció y los endpoints de interacción se movieron bajo la ruta base `/gateways`.
+
+!!! warning
+    El montaje solía estar condicionado únicamente a `type: "http"`, lo que dejaba a todo proyecto push-only capaz de *pausarse* esperando una aprobación que no tenía endpoint para responder. Corregido - pero ten en cuenta que las rutas solo existen en un servidor en ejecución, así que un proyecto que dependa de la aprobación human-in-the-loop necesita [`serve`](../../cli-reference.md#serve) (o un despliegue real), no `chat`.
 
 ## 3. Push-style gateways (`type: "telegram"` / `"slack"` / `"discord"` / `"email"` / `"whatsapp-cloud"` / `"teams"` / `"twilio"` / `"github"` / `"signal"`, and friends)
 

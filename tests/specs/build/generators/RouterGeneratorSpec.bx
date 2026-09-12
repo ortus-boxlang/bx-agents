@@ -80,7 +80,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( apiPos < mcpPos ).toBeTrue();
 			} );
 
-			it( "emits the native toAiGateway() terminator when hasHttpGateway is true", function() {
+			it( "emits the native toAiGateway() terminator when a channel gateway exists", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
 				var result = generator.generate( discovery, newAppDir(), true );
 
@@ -90,12 +90,26 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).notToInclude( "Gateway.process" );
 			} );
 
-			it( "does not emit the gateway terminator when hasHttpGateway is false", function() {
+			it( "does not emit the gateway terminator when the project declares no channel gateway at all", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
 				var result = generator.generate( discovery, newAppDir(), false );
 
 				var content = fileRead( result.router );
 				expect( content ).notToInclude( "toAiGateway" );
+			} );
+
+			it( "mounts the gateway surface for a PUSH-only project, not just an http one", function() {
+				// The regression this closes: the mount used to be gated on
+				// `type: "http"` specifically, so a Telegram/Slack/Discord-only
+				// project got no /gateways mount - and therefore no
+				// /interactions/:requestID routes, which are how a human answers
+				// a pending human-in-the-loop approval. Such an agent could pause
+				// for an approval it had no endpoint to receive. `http` is one
+				// gateway among many and must not gate the others.
+				var discovery = discoverer.discover( fixtures & "/gateways-telegram" );
+				var content = fileRead( generator.generate( discovery, newAppDir(), true ).router );
+
+				expect( content ).toInclude( 'route( "/gateways" ).toAiGateway()' );
 			} );
 
 			it( "emits the WhatsApp Cloud GET/POST webhook routes when hasWhatsAppCloudGateway is true", function() {

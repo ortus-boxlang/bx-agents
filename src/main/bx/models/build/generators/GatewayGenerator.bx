@@ -94,7 +94,7 @@ class {
 	 * @appDir Absolute path to the generated ColdBox app dir, e.g. "<projectRoot>/.build/app" - any webhook handler this generator still needs (WhatsApp Cloud, Teams, Twilio, GitHub) is written under "<appDir>/handlers"
 	 * @resolvedConfig The root project's resolved config (AgentConfigResolver.resolve()) - only `gatewaySession` is used, to configure the generated GatewaySession's policy/maxQueueDepth
 	 *
-	 * @return { registrationStatements: [], hasHttpGateway, hasPushGateway, hasEmailGateway, hasWhatsAppCloudGateway, whatsAppCloudHandlerPath (only if hasWhatsAppCloudGateway), hasTeamsGateway, teamsHandlerPath (only if hasTeamsGateway), sessionStartupStatement (only if hasPushGateway) - a bare onApplicationStart() statement, see renderSessionStartupStatement() }
+	 * @return { registrationStatements: [], hasHttpGateway, hasChannelGateway, hasPushGateway, hasEmailGateway, hasWhatsAppCloudGateway, whatsAppCloudHandlerPath (only if hasWhatsAppCloudGateway), hasTeamsGateway, teamsHandlerPath (only if hasTeamsGateway), sessionStartupStatement (only if hasPushGateway) - a bare onApplicationStart() statement, see renderSessionStartupStatement() }
 	 */
 	struct function generate( required struct discovery, required string appDir, struct resolvedConfig = {} ) {
 		var channelEntries = collectChannelEntries( arguments.discovery )
@@ -149,6 +149,16 @@ class {
 		var result = {
 			registrationStatements  : channelEntries.map( e => renderRegistration( e ) ),
 			hasHttpGateway          : hasHttpGateway,
+			// Whether the project declares ANY channel-adapter gateway at all.
+			// Distinct from hasHttpGateway on purpose: the bx-ai Gateway surface
+			// (RouterGenerator's `/gateways` mount) is not http-specific. Its
+			// /interactions routes are the human-in-the-loop approval channel for
+			// EVERY gateway - a Telegram or Slack agent that pauses for approval
+			// needs them exactly as much as an http one, and resolves the pending
+			// interaction through the same registry. Gating the whole surface on
+			// `type: "http"` left every push-only project with no way to answer
+			// its own approval prompts.
+			hasChannelGateway       : channelEntries.len() > 0,
 			hasPushGateway          : pushGatewayNames.len() > 0,
 			hasEmailGateway         : hasEmailGateway,
 			hasWhatsAppCloudGateway : hasWhatsAppCloudGateway,
