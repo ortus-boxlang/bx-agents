@@ -113,6 +113,18 @@ One specific, confirmed gotcha even where `.env` loading does happen: **`BOXLANG
 
 Both are gaps in what the HTTP surface exposes, not in the client - closing either needs a route that does not exist yet.
 
+## BoxLang's native SSE consumption cannot be used against BoxLang's own SSE emitter
+
+`AgentClient.stream()` should be six lines of `http( url ).sse( true ).onChunk( ... )` - BoxLang has had native SSE consumption since 1.8.0 and this module requires 1.16.0. It is not, because three upstream defects block it. All three were **measured against a live `/__bxagents/stream` route**, not inferred:
+
+1. **`.sse( true )` returns `totalEvents: 0`.** `ortus.boxlang.runtime.net.SSEParser` dispatches a frame when it sees a blank line, per the SSE spec. `ortus.boxlang.web.util.SSEEmitter` never sends one: captured off the socket, a 916-byte body contained **zero** occurrences of `\n\n` and zero of `\r\n\r\n`. Even the emitter's own priming frame - the literal `"data: \n\n"` in its bytecode - arrives with a single newline. BoxLang's emitter and BoxLang's parser ship together and disagree.
+2. **Native streaming consumption reads nothing from that response at all.** `onChunk` fires zero times and `fileContent` comes back empty - identically with `.sse( true )`, with `.sse( false )`, and via `.sendAsync()`. The same fluent call against the sibling `/__bxagents/invoke` JSON route on the same server behaves normally (one chunk, 92 bytes), so the client works; this SSE response is what it cannot read.
+3. **`SSEParser` cannot be driven directly as a fallback.** The class is public and returns `Attempt<SSEParserResult>`, but its only frame implementation, `SSEEvent`, is a **package-private** record - calling `toStruct()` on it from user code throws `NoMethodException`.
+
+**This is not a CLI-only problem.** A browser `EventSource` pointed at the same route receives the same unterminated bytes and fires no events either, which affects any BoxLang app streaming through `SSE()` - including ColdBox 8.2's `event.sse()` and the route-level SSE terminator, since both emit through the same `SSEEmitter`.
+
+Until the emitter terminates its frames, `stream()` keeps a `java.net.http` + `BodyHandlers.ofLines()` transport and its own small frame parser. When it is fixed, that parser should be deleted and the native API used directly; the parser flushes on `event:` *and* at end-of-input, so it will not misbehave in the meantime if terminators start appearing.
+
 ## `chat`'s SSE parser depends on two non-spec behaviours of ColdBox's emitter
 
 Confirmed against real bytes on the wire, not assumed, and both are why `AgentClient`'s frame parser is a separate unit-tested method rather than a few lines inline:

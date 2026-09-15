@@ -178,12 +178,42 @@ class {
 	 * Streams one turn from the agent's `/stream` sub-route, calling back with
 	 * each text delta as it arrives rather than waiting for the whole reply.
 	 *
-	 * Uses `java.net.http.HttpClient` + `BodyHandlers.ofLines()` rather than
-	 * `bx:http`, for the reason this method exists at all: `bx:http` buffers
-	 * the entire response before returning, which would collect every SSE
-	 * frame and then hand them over at once - correct output, no streaming.
-	 * `ofLines()` yields a `Stream<String>` that produces lines as they arrive.
-	 * Same approach SignalGateway already uses for its own SSE inbound stream.
+	 * ### BoxLang's native SSE consumption was tried first, and cannot be used yet
+	 *
+	 * BoxLang 1.8.0+ has exactly the right API for this - `http( url ).sse( true )
+	 * .onChunk( ... )`, parsing frames with `ortus.boxlang.runtime.net.SSEParser`
+	 * - and it is what this method should be built on. Three separate upstream
+	 * defects block it today. All three were MEASURED against a live
+	 * `/__bxagents/stream` route, not reasoned about:
+	 *
+	 *   1. `.sse( true )` yields `totalEvents: 0`. `SSEParser` dispatches a frame
+	 *      on a BLANK line, per the SSE spec, and `ortus.boxlang.web.util.SSEEmitter`
+	 *      never sends one: captured off the socket, a 916-byte body held zero
+	 *      occurrences of `\n\n` and zero of `\r\n\r\n`. Even the emitter's own
+	 *      priming frame - the literal `"data: \n\n"` in its bytecode - arrives
+	 *      with a single newline. A browser `EventSource` gets those same
+	 *      unterminated bytes and fires no events either, so this is not a
+	 *      CLI-only problem.
+	 *   2. Native streaming consumption reads nothing from this response at all:
+	 *      `onChunk` fires zero times and `fileContent` comes back empty, alike
+	 *      with `.sse( true )`, with `.sse( false )` and via `.sendAsync()`. The
+	 *      same fluent call against the sibling `/__bxagents/invoke` JSON route
+	 *      on the same server works normally (one chunk, 92 bytes), so the client
+	 *      is fine - it is this SSE response it cannot read.
+	 *   3. `SSEParser` cannot be driven directly either. It is public and returns
+	 *      `Attempt<SSEParserResult>`, but the only frame implementation,
+	 *      `SSEEvent`, is a PACKAGE-PRIVATE record, so `toStruct()` on it throws
+	 *      `NoMethodException` from outside `ortus.boxlang.runtime.net`.
+	 *
+	 * Until those are fixed, the transport is `java.net.http.HttpClient` +
+	 * `BodyHandlers.ofLines()`, which tolerates the response and yields a
+	 * `Stream<String>` producing lines as they arrive. Not `bx:http`: it buffers
+	 * the whole body before returning, which would collect every frame and hand
+	 * them over at once - correct output, no streaming. Same approach
+	 * SignalGateway already uses for its own SSE inbound stream.
+	 *
+	 * When the emitter starts terminating frames, this should move to the native
+	 * API and the parser below should be deleted outright.
 	 *
 	 * @baseUrl The server root to talk to
 	 * @message The prompt to send
@@ -403,7 +433,8 @@ class {
 	 *   2. Frames are delimited by the NEXT `event:` line, not by the spec's
 	 *      blank line - the emitter sends no blank line between frames at
 	 *      all. A strictly spec-compliant parser buffers forever and
-	 *      dispatches nothing.
+	 *      dispatches nothing, which is precisely what BoxLang's own
+	 *      `SSEParser` does against this route: `totalEvents: 0`.
 	 *
 	 * Flushing on `event:` AND at end-of-input handles both shapes, so this
 	 * still works unchanged if the emitter later starts sending blank-line
