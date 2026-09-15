@@ -175,6 +175,267 @@ class {
 	}
 
 	/**
+	 * Streams one turn from the agent's `/stream` sub-route, calling back with
+	 * each text delta as it arrives rather than waiting for the whole reply.
+	 *
+	 * Uses `java.net.http.HttpClient` + `BodyHandlers.ofLines()` rather than
+	 * `bx:http`, for the reason this method exists at all: `bx:http` buffers
+	 * the entire response before returning, which would collect every SSE
+	 * frame and then hand them over at once - correct output, no streaming.
+	 * `ofLines()` yields a `Stream<String>` that produces lines as they arrive.
+	 * Same approach SignalGateway already uses for its own SSE inbound stream.
+	 *
+	 * @baseUrl The server root to talk to
+	 * @message The prompt to send
+	 * @timeoutSeconds Give up and throw after this many seconds
+	 * @threadId An existing conversation to continue; omit/blank to let the server start one
+	 * @onDelta Called with each text delta as it arrives. Optional - omit to just accumulate.
+	 *
+	 * @return { output, threadId, suspended } - `suspended` is true when the turn stopped for a human-in-the-loop decision rather than finishing
+	 */
+	struct function stream(
+		required string baseUrl,
+		required string message,
+		numeric timeoutSeconds = 120,
+		string threadId        = "",
+		any onDelta
+	) {
+		var payload = { "input" : arguments.message }
+		if ( len( trim( arguments.threadId ) ) ) {
+			payload[ "threadId" ] = trim( arguments.threadId )
+		}
+
+		var uri = createObject( "java", "java.net.URI" ).create( agentUrl( arguments.baseUrl, "stream" ) )
+		var publisher = createObject( "java", "java.net.http.HttpRequest$BodyPublishers" ).ofString( jsonSerialize( payload ) )
+		var reqBuilder = createObject( "java", "java.net.http.HttpRequest" ).newBuilder()
+		reqBuilder.uri( uri )
+		reqBuilder.header( "Content-Type", "application/json" )
+		reqBuilder.header( "Accept", "text/event-stream" )
+		reqBuilder.timeout( createObject( "java", "java.time.Duration" ).ofSeconds( arguments.timeoutSeconds ) )
+		reqBuilder.POST( publisher )
+
+		var client = createObject( "java", "java.net.http.HttpClient" ).newHttpClient()
+		var response = client.send(
+			reqBuilder.build(),
+			createObject( "java", "java.net.http.HttpResponse$BodyHandlers" ).ofLines()
+		)
+
+		if ( response.statusCode() == 401 ) {
+			throw(
+				type    = "BxAgents.AgentApiUnauthorized",
+				message = "The agent at [#agentUrl( arguments.baseUrl, "stream" )#] refused the request with 401 - it is gated behind agentApi.tokenEnvVar and this client sent no token."
+			)
+		}
+		if ( response.statusCode() != 200 ) {
+			throw(
+				type    = "BxAgents.AgentStreamFailed",
+				message = "The agent at [#agentUrl( arguments.baseUrl, "stream" )#] answered HTTP #response.statusCode()# rather than opening a stream."
+			)
+		}
+
+		// Frames are applied AS their lines arrive, not collected and parsed at
+		// the end. Buffering the whole body first would still produce the right
+		// answer, and would still be called "streaming" by the transport - but
+		// no delta could reach the caller before the turn finished, which is
+		// the one thing this method exists to do.
+		var state = newSseState()
+		var acc   = { output : "", threadId : arguments.threadId, suspended : false, finished : false }
+		var sink  = arguments.onDelta ?: nullValue()
+
+		response.body().forEach( ( line ) => {
+			var frame = feedSseLine( state, line )
+			if ( !isNull( frame ) ) {
+				applySseFrame( frame, acc, sink )
+			}
+		} )
+
+		// The last frame has no following `event:` line to flush it.
+		var trailing = flushSseState( state )
+		if ( !isNull( trailing ) ) {
+			applySseFrame( trailing, acc, sink )
+		}
+
+		return { output : acc.output, threadId : acc.threadId, suspended : acc.suspended }
+	}
+
+	/**
+	 * @return A fresh, mutable parser state for feedSseLine()
+	 */
+	private struct function newSseState() {
+		return { name : "", data : [] }
+	}
+
+	/**
+	 * Feeds one raw line into the frame parser.
+	 *
+	 * @state A state struct from newSseState(), mutated in place
+	 * @rawLine One line of the SSE body
+	 *
+	 * @return The frame this line COMPLETED, or null if the frame is still being built
+	 */
+	private any function feedSseLine( required struct state, required any rawLine ) {
+		var line = toString( arguments.rawLine ?: "" )
+
+		// ":" starts a comment - the keep-alive pings arrive this way.
+		if ( line.startsWith( ":" ) ) {
+			return null
+		}
+
+		if ( line.startsWith( "event:" ) ) {
+			var completed = flushSseState( arguments.state )
+			arguments.state.name = trim( mid( line, 7, len( line ) - 6 ) )
+			return completed
+		}
+
+		if ( line.startsWith( "data:" ) ) {
+			// Exactly one leading space after the colon is part of the framing,
+			// not the payload; anything beyond it is content and must survive,
+			// or pretty-printed JSON loses its indentation and stops parsing.
+			var value = mid( line, 6, len( line ) - 5 )
+			arguments.state.data.append( value.startsWith( " " ) ? mid( value, 2, len( value ) - 1 ) : value )
+		}
+
+		return null
+	}
+
+	/**
+	 * Closes off whatever frame is in progress.
+	 *
+	 * @state A state struct from newSseState(), reset in place
+	 *
+	 * @return The completed { event, data } frame, or null when nothing was pending
+	 */
+	private any function flushSseState( required struct state ) {
+		var pending = arguments.state
+		if ( !len( pending.name ) && !pending.data.len() ) {
+			// Whitespace between frames, not something a consumer should have
+			// to filter out.
+			arguments.state.name = ""
+			arguments.state.data = []
+			return null
+		}
+
+		var frame = { event : pending.name, data : pending.data.toList( char( 10 ) ) }
+		arguments.state.name = ""
+		arguments.state.data = []
+		return frame
+	}
+
+	/**
+	 * Folds one frame into the running result, emitting its text delta
+	 * immediately so a caller sees the reply build up rather than land at once.
+	 *
+	 * @frame A { event, data } frame
+	 * @acc The running { output, threadId, suspended, finished } accumulator, mutated in place
+	 * @onDelta Called with each text delta; may be null
+	 */
+	private void function applySseFrame( required struct frame, required struct acc, any onDelta ) {
+		if ( arguments.acc.finished ) {
+			return
+		}
+		if ( arguments.frame.event == "done" ) {
+			arguments.acc.finished = true
+			return
+		}
+		if ( !len( trim( arguments.frame.data ) ) ) {
+			return
+		}
+
+		var payload = ""
+		try {
+			payload = jsonDeserialize( arguments.frame.data )
+		} catch ( any e ) {
+			// A frame we cannot parse is not worth ending the turn over - the
+			// rest of the stream is very likely fine.
+			return
+		}
+		if ( !isStruct( payload ) ) {
+			return
+		}
+
+		if ( arguments.frame.event == "thread" ) {
+			arguments.acc.threadId = payload.threadId ?: arguments.acc.threadId
+			return
+		}
+		if ( arguments.frame.event != "chunk" ) {
+			return
+		}
+
+		// A suspended tool call (human-in-the-loop) arrives as a sentinel chunk
+		// rather than content - see bx-ai's AiAgent.stream().
+		if ( ( payload.type ?: "" ) == "middleware_stop" ) {
+			arguments.acc.suspended = true
+			return
+		}
+
+		// Deliberately content only, never `delta.reasoning`: reasoning is the
+		// model's private thinking, and bx-ai itself excludes it from the answer
+		// it persists. Printing it would present thinking as if it were the reply.
+		//
+		// The len() guard is not decoration: a provider's final usage-only chunk
+		// carries `choices: []`, and first() on an empty array throws.
+		if ( !isArray( payload.choices ?: "" ) || !payload.choices.len() ) {
+			return
+		}
+		var delta = payload.choices.first().delta?.content ?: ""
+		if ( !len( delta ) ) {
+			return
+		}
+
+		arguments.acc.output &= delta
+		if ( !isNull( arguments.onDelta ) ) {
+			arguments.onDelta( delta )
+		}
+	}
+
+	/**
+	 * Splits raw SSE lines into `{ event, data }` frames.
+	 *
+	 * Kept separate and pure so the parsing rules below are unit-testable
+	 * without a server, because two of them are NOT what the SSE spec would
+	 * lead you to write - both confirmed against real bytes on the wire from
+	 * ColdBox's own `toAi()` `/stream` route, not assumed:
+	 *
+	 *   1. A frame's JSON payload is PRETTY-PRINTED and therefore spans many
+	 *      `data:` lines. Per the spec these concatenate with a newline to
+	 *      form one payload, so a parser treating one `data:` line as one
+	 *      event parses nothing but fragments.
+	 *   2. Frames are delimited by the NEXT `event:` line, not by the spec's
+	 *      blank line - the emitter sends no blank line between frames at
+	 *      all. A strictly spec-compliant parser buffers forever and
+	 *      dispatches nothing.
+	 *
+	 * Flushing on `event:` AND at end-of-input handles both shapes, so this
+	 * still works unchanged if the emitter later starts sending blank-line
+	 * terminators (a blank line simply carries no `data:` to collect).
+	 *
+	 * @lines The raw lines of an SSE response body, in order
+	 *
+	 * @return An array of { event, data } structs, in order
+	 */
+	array function parseSseLines( required array lines ) {
+		// Implemented on the very same primitives the live stream uses, so these
+		// frames are parsed by the code that actually runs in production rather
+		// than by a second implementation that could drift from it.
+		var state  = newSseState()
+		var frames = []
+
+		for ( var line in arguments.lines ) {
+			var frame = feedSseLine( state, line )
+			if ( !isNull( frame ) ) {
+				frames.append( frame )
+			}
+		}
+
+		var trailing = flushSseState( state )
+		if ( !isNull( trailing ) ) {
+			frames.append( trailing )
+		}
+
+		return frames
+	}
+
+	/**
 	 * @return A currently-unused TCP port on localhost
 	 */
 	numeric function findFreePort() {

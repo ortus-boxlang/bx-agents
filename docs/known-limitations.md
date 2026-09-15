@@ -104,6 +104,24 @@ One specific, confirmed gotcha even where `.env` loading does happen: **`BOXLANG
 
 `chat` uses BoxLang's own `MiniConsole`, which shells out to `stty` to set up raw terminal mode - it can only run against a genuine interactive terminal. It doesn't work piped, redirected, or from a non-interactive process (a CI job, a script). There's no non-interactive fallback mode.
 
+## `chat`'s streaming has no cancel, and no history beyond the live session
+
+`chat --server`/`--connect` stream the reply over the route's `/stream` (SSE) sub-route, but two things ColdBox's `toAi()` surface does not offer are therefore missing:
+
+- **No cancel.** There is no way to interrupt a turn once it starts. `toAi()` registers no cancel endpoint, and the SSE stream is server-driven - a client can stop *reading*, but the agent keeps generating to completion on the server. Ctrl-C ends the whole `chat` process rather than the turn.
+- **No history.** A session's `threadId` keeps one conversation coherent while `chat` is open, but nothing replays a prior conversation into a new session: reconnecting with `--connect` starts fresh. The agent's own [`memory`](conventions/agent-bx.md) may still give it recall server-side - what is missing is the client showing you what was said before.
+
+Both are gaps in what the HTTP surface exposes, not in the client - closing either needs a route that does not exist yet.
+
+## `chat`'s SSE parser depends on two non-spec behaviours of ColdBox's emitter
+
+Confirmed against real bytes on the wire, not assumed, and both are why `AgentClient`'s frame parser is a separate unit-tested method rather than a few lines inline:
+
+1. The emitter **pretty-prints** its JSON, so one logical frame arrives as many `data:` lines. The SSE spec says these concatenate with a newline, which the parser does - but code treating one `data:` line as one event sees only unparseable fragments.
+2. The emitter sends **no blank line between frames**, so frames are delimited by the next `event:` line. A strictly spec-compliant parser - one that dispatches only on a blank line - buffers forever and prints nothing.
+
+The parser flushes on `event:` *and* at end-of-input, so it keeps working unchanged if the emitter is ever fixed to send spec-compliant terminators. If a future ColdBox changes the framing in some other way, `AgentClientSpec`'s "SSE frame parsing" cases are where that shows up first.
+
 ## Fixed: `chat` and default (non-`--server`) `invoke` used to fail for a class-based `Agent.bx`
 
 Previously, both `chat` and default `invoke` threw `The requested class [agent.classes.agentClass] has not been located in any class resolver.` before ever reaching the agent. Root cause: both verbs load the generated `GeneratedAgentFactory.bx` in-process via `DynamicClassLoader.instantiate()` (no ColdBox container involved), and the generated factory used to instantiate a class-based `Agent.bx` via a **relative** dotted-path lookup, which only resolves once something has registered a mapping making the app root resolvable - and nothing did outside a real ColdBox boot. Registering one mid-script doesn't fix it either (confirmed empirically).

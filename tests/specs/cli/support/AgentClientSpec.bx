@@ -36,6 +36,92 @@ class extends="testbox.system.BaseSpec" {
 				} ).notToThrow();
 			} );
 
+			describe( "SSE frame parsing", function() {
+
+				// These cases are written from REAL bytes captured off ColdBox's
+				// own toAi() /stream route, not from the SSE spec - the two
+				// differ, and the differences are the whole reason this parser
+				// is a separate, testable method.
+
+				it( "joins a JSON payload split across many data: lines", function() {
+					// The emitter PRETTY-PRINTS its JSON, so one logical event
+					// arrives as a dozen data: lines. Treating one data: line as
+					// one event yields nothing but unparseable fragments.
+					var frames = client.parseSseLines( [
+						"event: thread",
+						"data: {",
+						"data:   ""threadId"" : ""abc-123""",
+						"data: }"
+					] );
+
+					expect( frames.len() ).toBe( 1 );
+					expect( frames[ 1 ].event ).toBe( "thread" );
+					expect( jsonDeserialize( frames[ 1 ].data ).threadId ).toBe( "abc-123" );
+				} );
+
+				it( "delimits frames on the next event: line, since the emitter sends no blank lines", function() {
+					// Confirmed on the wire: zero blank lines in the whole
+					// response. A strictly spec-compliant parser - one that only
+					// dispatches on a blank line - buffers forever and prints
+					// nothing at all.
+					var frames = client.parseSseLines( [
+						"event: chunk",
+						"data: {""a"":1}",
+						"event: chunk",
+						"data: {""a"":2}",
+						"event: done",
+						"data: [DONE]"
+					] );
+
+					expect( frames.len() ).toBe( 3 );
+					expect( frames[ 1 ].data ).toBe( '{"a":1}' );
+					expect( frames[ 2 ].data ).toBe( '{"a":2}' );
+					expect( frames[ 3 ].event ).toBe( "done" );
+				} );
+
+				it( "still works if blank-line terminators ever appear", function() {
+					// Flushing on event: AND at end-of-input means a
+					// spec-compliant stream parses identically, so this does not
+					// break if the emitter is fixed upstream.
+					var frames = client.parseSseLines( [
+						"event: chunk",
+						"data: {""a"":1}",
+						"",
+						"event: chunk",
+						"data: {""a"":2}",
+						""
+					] );
+
+					expect( frames.len() ).toBe( 2 );
+					expect( frames[ 2 ].data ).toBe( '{"a":2}' );
+				} );
+
+				it( "ignores ':' comment lines, which is how keep-alives arrive", function() {
+					var frames = client.parseSseLines( [
+						":hi",
+						":keep-alive",
+						"event: chunk",
+						"data: {""a"":1}"
+					] );
+
+					expect( frames.len() ).toBe( 1 );
+					expect( frames[ 1 ].data ).toBe( '{"a":1}' );
+				} );
+
+				it( "strips exactly one framing space after 'data:' and keeps the rest", function() {
+					// Pretty-printed JSON is all indentation; eating more than
+					// the single framing space would corrupt every payload.
+					var frames = client.parseSseLines( [ "event: chunk", "data:     ""x""" ] );
+					expect( frames[ 1 ].data ).toBe( '    "x"' );
+				} );
+
+				it( "returns nothing for an empty stream rather than an empty frame", function() {
+					expect( client.parseSseLines( [] ).len() ).toBe( 0 );
+					expect( client.parseSseLines( [ ":keep-alive" ] ).len() ).toBe( 0 );
+				} );
+
+			} );
+
 			it( "gives up with a clear error when nothing is listening", function() {
 				// Port 1 is privileged and never served by this process, so the
 				// connection is refused immediately. A 1-second deadline keeps

@@ -204,17 +204,8 @@ class {
 			}
 
 			try {
-				// The first turn also absorbs server startup, so it gets a
-				// generous deadline; later turns should be answered promptly
-				// by a server already proven to be up.
-				var result = client.send(
-					baseUrl        : target,
-					message        : trimmedInput,
-					timeoutSeconds : len( threadId ) ? 60 : 30,
-					threadId       : threadId
-				)
+				var result = streamTurn( client, target, trimmedInput, threadId )
 				threadId = result.threadId ?: threadId
-				println( "agent> " & result.output )
 			} catch ( any e ) {
 				println( "error> " & e.message )
 			}
@@ -224,6 +215,80 @@ class {
 			exitCode : 0,
 			message  : "Chat session ended"
 		}
+	}
+
+	/**
+	 * Runs one turn, streaming the reply into the terminal as it arrives.
+	 *
+	 * Streaming is what makes an HTTP chat feel like a REPL rather than a slow
+	 * `invoke`: without it a long answer sits behind a blank prompt and then
+	 * lands all at once. The deltas are printed with `print()` so they build up
+	 * on one line, and the newline is written once the turn ends.
+	 *
+	 * Falls back to the non-streaming `/invoke` route if the stream cannot be
+	 * opened. That is not defensive padding - a server old enough to lack a
+	 * `/stream` sub-route, or a proxy that will not do `text/event-stream`,
+	 * should still give someone a working chat rather than an error. An
+	 * auth failure is deliberately NOT caught here: retrying a 401 without a
+	 * token just fails again more slowly and hides the real cause.
+	 *
+	 * @client The shared AgentClient
+	 * @target The server root to talk to
+	 * @message The prompt for this turn
+	 * @threadId The conversation so far; blank starts a new one
+	 *
+	 * @return The client's own { output, threadId, ... } result
+	 */
+	private struct function streamTurn(
+		required any client,
+		required string target,
+		required string message,
+		required string threadId
+	) {
+		print( "agent> " )
+
+		var streamed = false
+		try {
+			var result = arguments.client.stream(
+				baseUrl  : arguments.target,
+				message  : arguments.message,
+				threadId : arguments.threadId,
+				onDelta  : ( delta ) => {
+					streamed = true
+					print( delta )
+				}
+			)
+			println( "" )
+
+			// A turn that stopped for a human decision produces no content at
+			// all, which would otherwise look like the agent simply said
+			// nothing. Say what actually happened, and where to answer it.
+			if ( result.suspended ?: false ) {
+				println( "       (paused for a human-in-the-loop decision - answer it at #arguments.target#/gateways/interactions/)" )
+			}
+			return result
+		} catch ( any e ) {
+			if ( e.type == "BxAgents.AgentApiUnauthorized" ) {
+				rethrow
+			}
+			// Nothing was printed yet, so the fallback's own output still lands
+			// under the same "agent> " prompt already on screen. If deltas HAD
+			// started arriving, re-running the turn would double the visible
+			// answer, so that case surfaces as an error instead.
+			if ( streamed ) {
+				println( "" )
+				rethrow
+			}
+		}
+
+		var fallback = arguments.client.send(
+			baseUrl        : arguments.target,
+			message        : arguments.message,
+			timeoutSeconds : len( arguments.threadId ) ? 60 : 30,
+			threadId       : arguments.threadId
+		)
+		println( fallback.output )
+		return fallback
 	}
 
 }
