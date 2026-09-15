@@ -18,6 +18,8 @@ Check in this order:
 
 A docblock is not evidence. ColdBox's `Router.cfc` documents `withCondition()` as `( route, params, event )`; `RoutingService.cfc` actually calls it with **one** argument. Read the caller.
 
+And a measurement is only evidence of what it actually isolates. A native SSE stream here was measured as emitting no frame terminators, and the emitter was blamed in a commit message - wrongly. The bytes were real; the conclusion was not, because nothing in that test separated the emitter from the response pipeline it was flowing through. The cause was whitespace compression collapsing the blank lines. **Before blaming a component, reproduce the effect with that component and nothing else** - here, a two-line `SSE()` page rather than a full ColdBox route, and a handler writing the bytes by hand. Both would have pointed away from the emitter immediately.
+
 ## Prove It By Running It
 
 Every real bug found in this module was found by running code, never by reading it. Assertions that only prove the shape of a string prove very little.
@@ -34,12 +36,14 @@ Each of these cost real debugging time here:
 - `char( 10 )`, not `chr( 10 )`. `jsonSerialize` / `jsonDeserialize`, not `serializeJSON` / `deserializeJSON`.
 - **`server` and `request` are reserved scopes.** `var server = {...}` does not shadow the scope; it produces baffling "key not found" or "method not found" errors that look like Java-interop failures.
 - `structKeyExists( someJavaObject, "method" )` is **false** for Java methods. Do not use it to feature-detect on an interop object - check the class, or call and catch.
-- A Java class can be public while the type it returns is package-private, so it is unusable from BoxLang. `ortus.boxlang.runtime.net.SSEParser` is public; the `SSEEvent` it returns is not, and `toStruct()` on it throws `NoMethodException`.
+- A Java class can be public while the type it returns is package-private, so it is unusable from BoxLang. `ortus.boxlang.runtime.net.SSEParser` is public; the `SSEEvent` it returns is not, and `toStruct()` on it throws `NoMethodException`. Not a problem in practice - drive SSE through `http().sse( true )`, which parses internally - but it is why you cannot hand-drive that parser.
 - A `try/catch` at the **top level** of a `.bxs` script (outside any function) can trigger `java.lang.VerifyError: Inconsistent stackmap frames`. Wrap it in a function.
 
 ## Server-Sent Events
 
-Do not rewrite `AgentClient.stream()` onto BoxLang's native `http().sse( true ).onChunk()` without re-measuring first. It is the right API and it does not work against this server today: BoxLang's `SSEEmitter` emits **no blank line between frames**, so BoxLang's own `SSEParser` dispatches nothing. See `## BoxLang's native SSE consumption...` in `docs/known-limitations.md` for the three measured defects and the numbers behind them. When the emitter is fixed, delete the local parser and move to the native API.
+SSE here is **native on both sides** and should stay that way: ColdBox's `toAi()` `/stream` emits through BoxLang's `SSE()` BIF, and `AgentClient.stream()` consumes with `http( url ).sse( true ).onChunk( ... )`. Do not write a frame parser - `ortus.boxlang.runtime.net.SSEParser` already does it.
+
+The one thing to know: **SSE frames are terminated by a blank line, and the web runtime's whitespace compression is ON by default and collapses them.** With it on, a `/stream` body carries zero `\n\n` and the native client reports `totalEvents: 0` - the stream looks broken and the emitter looks at fault, but the bug is one config directive. `Serve.bx` sets `whitespaceCompressionEnabled: false` for served projects and this repo's `boxlang.json` sets it for the suite. If streaming ever goes silent, check that first. See `docs/known-limitations.md` for the measured numbers.
 
 ## Architecture
 

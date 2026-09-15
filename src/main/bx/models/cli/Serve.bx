@@ -79,6 +79,24 @@ class {
 
 		directoryCreate( path = serverHome, createPath = true, ignoreExists = true )
 
+		// SSE frames are terminated by a BLANK line, and the web runtime's
+		// whitespace compression - ON by default - collapses consecutive
+		// newlines, which eats exactly those terminators. Measured against a
+		// live `/__bxagents/stream`: with compression on, the body carried zero
+		// occurrences of `\n\n` and `http().sse( true )` reported
+		// `totalEvents: 0`; with it off, the same route parsed cleanly. So
+		// `chat --server`/`--connect` streaming depends on this directive.
+		//
+		// Safe to write because `serverHome` is already scoped to `.build/runtime`
+		// (see the class docblock) - this is THIS project's runtime home, not the
+		// machine's `~/.boxlang`, and `clean` sweeps it with the rest of `.build`.
+		var runtimeConfigDir = serverHome & "/config"
+		directoryCreate( path = runtimeConfigDir, createPath = true, ignoreExists = true )
+		fileWrite(
+			runtimeConfigDir & "/boxlang.json",
+			jsonSerialize( { whitespaceCompressionEnabled : false } )
+		)
+
 		fileWrite( configPath, jsonSerialize( {
 			port            : port,
 			host            : host,

@@ -178,42 +178,31 @@ class {
 	 * Streams one turn from the agent's `/stream` sub-route, calling back with
 	 * each text delta as it arrives rather than waiting for the whole reply.
 	 *
-	 * ### BoxLang's native SSE consumption was tried first, and cannot be used yet
+	 * All of the SSE work is BoxLang's: `http( url ).sse( true ).onChunk( ... )`
+	 * opens the stream and hands over each frame as a `{ data, event, id, retry }`
+	 * struct the moment it completes. Accumulating `data:` lines, tracking
+	 * `event:`/`id:`, skipping `:` comments and handling `retry:` all happen in
+	 * `ortus.boxlang.runtime.net.SSEParser`, so there is no frame parser here.
 	 *
-	 * BoxLang 1.8.0+ has exactly the right API for this - `http( url ).sse( true )
-	 * .onChunk( ... )`, parsing frames with `ortus.boxlang.runtime.net.SSEParser`
-	 * - and it is what this method should be built on. Three separate upstream
-	 * defects block it today. All three were MEASURED against a live
-	 * `/__bxagents/stream` route, not reasoned about:
+	 * The server half is the matching native piece: ColdBox's `toAi()` `/stream`
+	 * sub-route emits through the `SSE()` BIF, so emitter and parser ship
+	 * together.
 	 *
-	 *   1. `.sse( true )` yields `totalEvents: 0`. `SSEParser` dispatches a frame
-	 *      on a BLANK line, per the SSE spec, and `ortus.boxlang.web.util.SSEEmitter`
-	 *      never sends one: captured off the socket, a 916-byte body held zero
-	 *      occurrences of `\n\n` and zero of `\r\n\r\n`. Even the emitter's own
-	 *      priming frame - the literal `"data: \n\n"` in its bytecode - arrives
-	 *      with a single newline. A browser `EventSource` gets those same
-	 *      unterminated bytes and fires no events either, so this is not a
-	 *      CLI-only problem.
-	 *   2. Native streaming consumption reads nothing from this response at all:
-	 *      `onChunk` fires zero times and `fileContent` comes back empty, alike
-	 *      with `.sse( true )`, with `.sse( false )` and via `.sendAsync()`. The
-	 *      same fluent call against the sibling `/__bxagents/invoke` JSON route
-	 *      on the same server works normally (one chunk, 92 bytes), so the client
-	 *      is fine - it is this SSE response it cannot read.
-	 *   3. `SSEParser` cannot be driven directly either. It is public and returns
-	 *      `Attempt<SSEParserResult>`, but the only frame implementation,
-	 *      `SSEEvent`, is a PACKAGE-PRIVATE record, so `toStruct()` on it throws
-	 *      `NoMethodException` from outside `ortus.boxlang.runtime.net`.
+	 * ### One runtime directive makes or breaks this
 	 *
-	 * Until those are fixed, the transport is `java.net.http.HttpClient` +
-	 * `BodyHandlers.ofLines()`, which tolerates the response and yields a
-	 * `Stream<String>` producing lines as they arrive. Not `bx:http`: it buffers
-	 * the whole body before returning, which would collect every frame and hand
-	 * them over at once - correct output, no streaming. Same approach
-	 * SignalGateway already uses for its own SSE inbound stream.
+	 * SSE frames are terminated by a BLANK line, and the web runtime's
+	 * **whitespace compression is on by default** and collapses consecutive
+	 * newlines - eating exactly those terminators. Measured against a live
+	 * `/__bxagents/stream`: with compression on the body carried **zero**
+	 * occurrences of `\n\n` and this call reported `totalEvents: 0`; with
+	 * `whitespaceCompressionEnabled: false` the identical route parsed cleanly.
+	 * It is not specific to ColdBox or to this client - a bare `SSE()` endpoint
+	 * loses its terminators the same way, and a browser `EventSource` would fire
+	 * nothing either.
 	 *
-	 * When the emitter starts terminating frames, this should move to the native
-	 * API and the parser below should be deleted outright.
+	 * `Serve.bx` sets that directive for every served project, and this repo's
+	 * own `boxlang.json` sets it for the test suite. A project served some other
+	 * way needs it too, or this method sees an empty stream.
 	 *
 	 * @baseUrl The server root to talk to
 	 * @message The prompt to send
@@ -230,132 +219,55 @@ class {
 		string threadId        = "",
 		any onDelta
 	) {
+		var url     = agentUrl( arguments.baseUrl, "stream" )
 		var payload = { "input" : arguments.message }
+
+		// Only sent when we actually have one - same reasoning as send().
 		if ( len( trim( arguments.threadId ) ) ) {
 			payload[ "threadId" ] = trim( arguments.threadId )
 		}
 
-		var uri = createObject( "java", "java.net.URI" ).create( agentUrl( arguments.baseUrl, "stream" ) )
-		var publisher = createObject( "java", "java.net.http.HttpRequest$BodyPublishers" ).ofString( jsonSerialize( payload ) )
-		var reqBuilder = createObject( "java", "java.net.http.HttpRequest" ).newBuilder()
-		reqBuilder.uri( uri )
-		reqBuilder.header( "Content-Type", "application/json" )
-		reqBuilder.header( "Accept", "text/event-stream" )
-		reqBuilder.timeout( createObject( "java", "java.time.Duration" ).ofSeconds( arguments.timeoutSeconds ) )
-		reqBuilder.POST( publisher )
+		var acc  = { output : "", threadId : arguments.threadId, suspended : false, finished : false }
+		var sink = arguments.onDelta ?: nullValue()
 
-		var client = createObject( "java", "java.net.http.HttpClient" ).newHttpClient()
-		var response = client.send(
-			reqBuilder.build(),
-			createObject( "java", "java.net.http.HttpResponse$BodyHandlers" ).ofLines()
-		)
+		var httpResult = http( url )
+			.post()
+			.header( "Content-Type", "application/json" )
+			.header( "Accept", "text/event-stream" )
+			.jsonBody( jsonSerialize( payload ) )
+			.timeout( arguments.timeoutSeconds )
+			.sse( true )
+			.onChunk( ( frame, lastEventId, result, client, response ) => {
+				applySseFrame( frame, acc, sink )
+			} )
+			.send()
 
-		if ( response.statusCode() == 401 ) {
+		var status = httpResult.statusCode ?: httpResult.status_code ?: 0
+
+		if ( status == 401 ) {
 			throw(
 				type    = "BxAgents.AgentApiUnauthorized",
-				message = "The agent at [#agentUrl( arguments.baseUrl, "stream" )#] refused the request with 401 - it is gated behind agentApi.tokenEnvVar and this client sent no token."
+				message = "The agent at [#url#] refused the request with 401 - it is gated behind agentApi.tokenEnvVar and this client sent no token."
 			)
 		}
-		if ( response.statusCode() != 200 ) {
+		if ( status != 200 ) {
 			throw(
 				type    = "BxAgents.AgentStreamFailed",
-				message = "The agent at [#agentUrl( arguments.baseUrl, "stream" )#] answered HTTP #response.statusCode()# rather than opening a stream."
+				message = "The agent at [#url#] answered HTTP #status# rather than opening a stream."
 			)
-		}
-
-		// Frames are applied AS their lines arrive, not collected and parsed at
-		// the end. Buffering the whole body first would still produce the right
-		// answer, and would still be called "streaming" by the transport - but
-		// no delta could reach the caller before the turn finished, which is
-		// the one thing this method exists to do.
-		var state = newSseState()
-		var acc   = { output : "", threadId : arguments.threadId, suspended : false, finished : false }
-		var sink  = arguments.onDelta ?: nullValue()
-
-		response.body().forEach( ( line ) => {
-			var frame = feedSseLine( state, line )
-			if ( !isNull( frame ) ) {
-				applySseFrame( frame, acc, sink )
-			}
-		} )
-
-		// The last frame has no following `event:` line to flush it.
-		var trailing = flushSseState( state )
-		if ( !isNull( trailing ) ) {
-			applySseFrame( trailing, acc, sink )
 		}
 
 		return { output : acc.output, threadId : acc.threadId, suspended : acc.suspended }
 	}
 
 	/**
-	 * @return A fresh, mutable parser state for feedSseLine()
-	 */
-	private struct function newSseState() {
-		return { name : "", data : [] }
-	}
-
-	/**
-	 * Feeds one raw line into the frame parser.
-	 *
-	 * @state A state struct from newSseState(), mutated in place
-	 * @rawLine One line of the SSE body
-	 *
-	 * @return The frame this line COMPLETED, or null if the frame is still being built
-	 */
-	private any function feedSseLine( required struct state, required any rawLine ) {
-		var line = toString( arguments.rawLine ?: "" )
-
-		// ":" starts a comment - the keep-alive pings arrive this way.
-		if ( line.startsWith( ":" ) ) {
-			return null
-		}
-
-		if ( line.startsWith( "event:" ) ) {
-			var completed = flushSseState( arguments.state )
-			arguments.state.name = trim( mid( line, 7, len( line ) - 6 ) )
-			return completed
-		}
-
-		if ( line.startsWith( "data:" ) ) {
-			// Exactly one leading space after the colon is part of the framing,
-			// not the payload; anything beyond it is content and must survive,
-			// or pretty-printed JSON loses its indentation and stops parsing.
-			var value = mid( line, 6, len( line ) - 5 )
-			arguments.state.data.append( value.startsWith( " " ) ? mid( value, 2, len( value ) - 1 ) : value )
-		}
-
-		return null
-	}
-
-	/**
-	 * Closes off whatever frame is in progress.
-	 *
-	 * @state A state struct from newSseState(), reset in place
-	 *
-	 * @return The completed { event, data } frame, or null when nothing was pending
-	 */
-	private any function flushSseState( required struct state ) {
-		var pending = arguments.state
-		if ( !len( pending.name ) && !pending.data.len() ) {
-			// Whitespace between frames, not something a consumer should have
-			// to filter out.
-			arguments.state.name = ""
-			arguments.state.data = []
-			return null
-		}
-
-		var frame = { event : pending.name, data : pending.data.toList( char( 10 ) ) }
-		arguments.state.name = ""
-		arguments.state.data = []
-		return frame
-	}
-
-	/**
-	 * Folds one frame into the running result, emitting its text delta
+	 * Folds one SSE frame into the running result, emitting its text delta
 	 * immediately so a caller sees the reply build up rather than land at once.
 	 *
-	 * @frame A { event, data } frame
+	 * `frame` is the runtime's own parsed frame, so everything here is about
+	 * what the frames MEAN to bx-ai, not about how they were framed.
+	 *
+	 * @frame One parsed SSE frame - { data, event, id, retry }
 	 * @acc The running { output, threadId, suspended, finished } accumulator, mutated in place
 	 * @onDelta Called with each text delta; may be null
 	 */
@@ -363,17 +275,21 @@ class {
 		if ( arguments.acc.finished ) {
 			return
 		}
-		if ( arguments.frame.event == "done" ) {
+
+		var frameEvent = arguments.frame.event ?: ""
+		var frameData  = arguments.frame.data ?: ""
+
+		if ( frameEvent == "done" ) {
 			arguments.acc.finished = true
 			return
 		}
-		if ( !len( trim( arguments.frame.data ) ) ) {
+		if ( !len( trim( frameData ) ) ) {
 			return
 		}
 
 		var payload = ""
 		try {
-			payload = jsonDeserialize( arguments.frame.data )
+			payload = jsonDeserialize( frameData )
 		} catch ( any e ) {
 			// A frame we cannot parse is not worth ending the turn over - the
 			// rest of the stream is very likely fine.
@@ -383,11 +299,11 @@ class {
 			return
 		}
 
-		if ( arguments.frame.event == "thread" ) {
+		if ( frameEvent == "thread" ) {
 			arguments.acc.threadId = payload.threadId ?: arguments.acc.threadId
 			return
 		}
-		if ( arguments.frame.event != "chunk" ) {
+		if ( frameEvent != "chunk" ) {
 			return
 		}
 
@@ -416,54 +332,6 @@ class {
 		if ( !isNull( arguments.onDelta ) ) {
 			arguments.onDelta( delta )
 		}
-	}
-
-	/**
-	 * Splits raw SSE lines into `{ event, data }` frames.
-	 *
-	 * Kept separate and pure so the parsing rules below are unit-testable
-	 * without a server, because two of them are NOT what the SSE spec would
-	 * lead you to write - both confirmed against real bytes on the wire from
-	 * ColdBox's own `toAi()` `/stream` route, not assumed:
-	 *
-	 *   1. A frame's JSON payload is PRETTY-PRINTED and therefore spans many
-	 *      `data:` lines. Per the spec these concatenate with a newline to
-	 *      form one payload, so a parser treating one `data:` line as one
-	 *      event parses nothing but fragments.
-	 *   2. Frames are delimited by the NEXT `event:` line, not by the spec's
-	 *      blank line - the emitter sends no blank line between frames at
-	 *      all. A strictly spec-compliant parser buffers forever and
-	 *      dispatches nothing, which is precisely what BoxLang's own
-	 *      `SSEParser` does against this route: `totalEvents: 0`.
-	 *
-	 * Flushing on `event:` AND at end-of-input handles both shapes, so this
-	 * still works unchanged if the emitter later starts sending blank-line
-	 * terminators (a blank line simply carries no `data:` to collect).
-	 *
-	 * @lines The raw lines of an SSE response body, in order
-	 *
-	 * @return An array of { event, data } structs, in order
-	 */
-	array function parseSseLines( required array lines ) {
-		// Implemented on the very same primitives the live stream uses, so these
-		// frames are parsed by the code that actually runs in production rather
-		// than by a second implementation that could drift from it.
-		var state  = newSseState()
-		var frames = []
-
-		for ( var line in arguments.lines ) {
-			var frame = feedSseLine( state, line )
-			if ( !isNull( frame ) ) {
-				frames.append( frame )
-			}
-		}
-
-		var trailing = flushSseState( state )
-		if ( !isNull( trailing ) ) {
-			frames.append( trailing )
-		}
-
-		return frames
 	}
 
 	/**
