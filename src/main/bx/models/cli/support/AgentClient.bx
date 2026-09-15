@@ -175,6 +175,166 @@ class {
 	}
 
 	/**
+	 * Streams one turn from the agent's `/stream` sub-route, calling back with
+	 * each text delta as it arrives rather than waiting for the whole reply.
+	 *
+	 * All of the SSE work is BoxLang's: `http( url ).sse( true ).onChunk( ... )`
+	 * opens the stream and hands over each frame as a `{ data, event, id, retry }`
+	 * struct the moment it completes. Accumulating `data:` lines, tracking
+	 * `event:`/`id:`, skipping `:` comments and handling `retry:` all happen in
+	 * `ortus.boxlang.runtime.net.SSEParser`, so there is no frame parser here.
+	 *
+	 * The server half is the matching native piece: ColdBox's `toAi()` `/stream`
+	 * sub-route emits through the `SSE()` BIF, so emitter and parser ship
+	 * together.
+	 *
+	 * ### One runtime directive makes or breaks this
+	 *
+	 * SSE frames are terminated by a BLANK line, and the web runtime's
+	 * **whitespace compression is on by default** and collapses consecutive
+	 * newlines - eating exactly those terminators. Measured against a live
+	 * `/__bxagents/stream`: with compression on the body carried **zero**
+	 * occurrences of `\n\n` and this call reported `totalEvents: 0`; with
+	 * `whitespaceCompressionEnabled: false` the identical route parsed cleanly.
+	 * It is not specific to ColdBox or to this client - a bare `SSE()` endpoint
+	 * loses its terminators the same way, and a browser `EventSource` would fire
+	 * nothing either.
+	 *
+	 * `Serve.bx` sets that directive for every served project, and this repo's
+	 * own `boxlang.json` sets it for the test suite. A project served some other
+	 * way needs it too, or this method sees an empty stream.
+	 *
+	 * @baseUrl The server root to talk to
+	 * @message The prompt to send
+	 * @timeoutSeconds Give up and throw after this many seconds
+	 * @threadId An existing conversation to continue; omit/blank to let the server start one
+	 * @onDelta Called with each text delta as it arrives. Optional - omit to just accumulate.
+	 *
+	 * @return { output, threadId, suspended } - `suspended` is true when the turn stopped for a human-in-the-loop decision rather than finishing
+	 */
+	struct function stream(
+		required string baseUrl,
+		required string message,
+		numeric timeoutSeconds = 120,
+		string threadId        = "",
+		any onDelta
+	) {
+		var url     = agentUrl( arguments.baseUrl, "stream" )
+		var payload = { "input" : arguments.message }
+
+		// Only sent when we actually have one - same reasoning as send().
+		if ( len( trim( arguments.threadId ) ) ) {
+			payload[ "threadId" ] = trim( arguments.threadId )
+		}
+
+		var acc  = { output : "", threadId : arguments.threadId, suspended : false, finished : false }
+		var sink = arguments.onDelta ?: nullValue()
+
+		var httpResult = http( url )
+			.post()
+			.header( "Content-Type", "application/json" )
+			.header( "Accept", "text/event-stream" )
+			.jsonBody( jsonSerialize( payload ) )
+			.timeout( arguments.timeoutSeconds )
+			.sse( true )
+			.onChunk( ( frame, lastEventId, result, client, response ) => {
+				applySseFrame( frame, acc, sink )
+			} )
+			.send()
+
+		var status = httpResult.statusCode ?: httpResult.status_code ?: 0
+
+		if ( status == 401 ) {
+			throw(
+				type    = "BxAgents.AgentApiUnauthorized",
+				message = "The agent at [#url#] refused the request with 401 - it is gated behind agentApi.tokenEnvVar and this client sent no token."
+			)
+		}
+		if ( status != 200 ) {
+			throw(
+				type    = "BxAgents.AgentStreamFailed",
+				message = "The agent at [#url#] answered HTTP #status# rather than opening a stream."
+			)
+		}
+
+		return { output : acc.output, threadId : acc.threadId, suspended : acc.suspended }
+	}
+
+	/**
+	 * Folds one SSE frame into the running result, emitting its text delta
+	 * immediately so a caller sees the reply build up rather than land at once.
+	 *
+	 * `frame` is the runtime's own parsed frame, so everything here is about
+	 * what the frames MEAN to bx-ai, not about how they were framed.
+	 *
+	 * @frame One parsed SSE frame - { data, event, id, retry }
+	 * @acc The running { output, threadId, suspended, finished } accumulator, mutated in place
+	 * @onDelta Called with each text delta; may be null
+	 */
+	private void function applySseFrame( required struct frame, required struct acc, any onDelta ) {
+		if ( arguments.acc.finished ) {
+			return
+		}
+
+		var frameEvent = arguments.frame.event ?: ""
+		var frameData  = arguments.frame.data ?: ""
+
+		if ( frameEvent == "done" ) {
+			arguments.acc.finished = true
+			return
+		}
+		if ( !len( trim( frameData ) ) ) {
+			return
+		}
+
+		var payload = ""
+		try {
+			payload = jsonDeserialize( frameData )
+		} catch ( any e ) {
+			// A frame we cannot parse is not worth ending the turn over - the
+			// rest of the stream is very likely fine.
+			return
+		}
+		if ( !isStruct( payload ) ) {
+			return
+		}
+
+		if ( frameEvent == "thread" ) {
+			arguments.acc.threadId = payload.threadId ?: arguments.acc.threadId
+			return
+		}
+		if ( frameEvent != "chunk" ) {
+			return
+		}
+
+		// A suspended tool call (human-in-the-loop) arrives as a sentinel chunk
+		// rather than content - see bx-ai's AiAgent.stream().
+		if ( ( payload.type ?: "" ) == "middleware_stop" ) {
+			arguments.acc.suspended = true
+			return
+		}
+
+		// Deliberately content only, never `delta.reasoning`: reasoning is the
+		// model's private thinking, and bx-ai itself excludes it from the answer
+		// it persists. Printing it would present thinking as if it were the reply.
+		//
+		// The len() guard is not decoration: a provider's final usage-only chunk
+		// carries `choices: []`, and first() on an empty array throws.
+		if ( !isArray( payload.choices ?: "" ) || !payload.choices.len() ) {
+			return
+		}
+		var delta = payload.choices.first().delta?.content ?: ""
+		if ( !len( delta ) ) {
+			return
+		}
+
+		arguments.acc.output &= delta
+		if ( !isNull( arguments.onDelta ) ) {
+			arguments.onDelta( delta )
+		}
+	}
+
+	/**
 	 * @return A currently-unused TCP port on localhost
 	 */
 	numeric function findFreePort() {

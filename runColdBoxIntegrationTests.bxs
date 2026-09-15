@@ -316,6 +316,54 @@ try {
 	println( "+ Confirmed: the always-on /__bxagents/invoke route reaches the generated agent: " & reservedResult.fileContent )
 
 	// ------------------------------------------------------------------
+	// 4c. The agent STREAMS over SSE, incrementally.
+	//
+	// Exercised through AgentClient itself - the same code `chat --server`
+	// and `chat --connect` run - rather than by curling the route, so this
+	// covers the whole native path: ColdBox's `toAi()` emitting through the
+	// `SSE()` BIF, and `http().sse( true ).onChunk()` parsing it.
+	//
+	// What this really guards is a CONFIG dependency that is invisible in the
+	// code: SSE frames are terminated by a blank line, and the web runtime's
+	// whitespace compression - ON by default - collapses consecutive newlines
+	// and eats those terminators. With it on, this body carried zero `\n\n`
+	// and the native client reported `totalEvents: 0`. `boxlang.json` here and
+	// `Serve.bx` for real projects both set `whitespaceCompressionEnabled` to
+	// false; if either regresses, this assertion is what catches it.
+	//
+	// The delta COUNT is the point. Reassembled output alone would pass just
+	// as well if the whole body were buffered and parsed at the end, which is
+	// exactly the failure this feature exists to avoid.
+	// ------------------------------------------------------------------
+	streamClient = new bxagents.models.cli.support.AgentClient()
+	streamDeltas = []
+	streamResult = streamClient.stream(
+		baseUrl : "http://127.0.0.1:#port#",
+		message : "Hello there!",
+		onDelta : ( delta ) => { streamDeltas.append( delta ) }
+	)
+
+	if ( !streamDeltas.len() ) {
+		throw(
+			type    = "BxAgents.AgentStreamNoDeltas",
+			message = "Streaming /__bxagents/stream produced no deltas at all. The usual cause is whitespaceCompressionEnabled being back on for this runtime, which collapses the blank lines that terminate SSE frames - check boxlang.json and Serve.bx."
+		)
+	}
+	if ( streamResult.output != "Mock response" ) {
+		throw(
+			type    = "BxAgents.AgentStreamWrongOutput",
+			message = "Streaming reassembled [#streamResult.output#] rather than the mock provider's ""Mock response"" - the deltas are not being joined correctly."
+		)
+	}
+	if ( !len( streamResult.threadId ?: "" ) ) {
+		throw(
+			type    = "BxAgents.AgentStreamNoThreadId",
+			message = "Streaming returned no threadId - the leading `thread` frame was not read, so a chat session could not continue a conversation."
+		)
+	}
+	println( "+ Confirmed: /__bxagents/stream streams #streamDeltas.len()# delta(s) that reassemble to [#streamResult.output#], with a threadId" )
+
+	// ------------------------------------------------------------------
 	// 5. An open web UI is ONE shared workspace, over real HTTP.
 	//
 	// /chat declares no accounts, so everything in it is shared on purpose:

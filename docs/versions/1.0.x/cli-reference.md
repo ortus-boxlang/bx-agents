@@ -194,7 +194,9 @@ Three modes, one REPL:
 - **`--server`**: boots a real miniserver on an ephemeral loopback port and drives the REPL over HTTP against the project's [always-on `/__bxagents` route](conventions/agent-bx.md#the-always-on-agent-route), shutting it down on exit. `--port` pins the port instead of taking a free one.
 - **`--connect`**: drives the same REPL against a running server, starting and stopping nothing. The URL is the server root (`http://host:port`), not the agent path - `chat` appends that itself.
 - `--server` and `--connect` are mutually exclusive: one says "start a server for me", the other "don't". Passing both fails immediately rather than silently honoring one.
+- Both HTTP modes **stream** the reply: the answer appears token by token as the agent produces it, over the route's `/stream` (SSE) sub-route, rather than arriving all at once when the turn ends. If the stream cannot be opened — an older server without a `/stream` sub-route, or a proxy that won't pass `text/event-stream` — it falls back to `/invoke` and you get the whole reply at the end instead of an error.
 - Both HTTP modes carry the server's `threadId` across turns, so a session is one conversation rather than a series of unrelated first messages.
+- A turn that pauses for a [human-in-the-loop](conventions/gateways/index.md) decision says so instead of appearing to answer with silence, and points at the `/gateways/interactions/` endpoint where the decision is submitted.
 - If the route is gated behind [`agentApi.tokenEnvVar`](conventions/agent-bx.md#agentapi), these modes get a clear `401` error rather than a confusing timeout - they send no token.
 - Type `exit` or `quit` to leave.
 - Needs a real interactive TTY (`MiniConsole` shells out to `stty` for raw mode) - it will not work piped/non-interactively. Use [`invoke`](#invoke) for scripting.
