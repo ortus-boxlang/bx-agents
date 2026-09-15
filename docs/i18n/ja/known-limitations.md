@@ -150,7 +150,9 @@ Aspose によるライセンス汚染と、結果が実際にロードされる�
 
 ## `GatewaySession` はプロジェクト全体で 1 つ、かつルートエージェント専用 (v1)
 
-少なくとも 1 つの push 型ゲートウェイエントリを持つプロジェクトは、正確に 1 つの生成された `GatewaySession` を得ます。これはすべての push 型ゲートウェイをまとめ、常にプロジェクトのルートエージェントに束縛されます - `exposes: "agent"` の HTTP 公開も常にルートエージェントのみであるという既存の前例と一致しています ([gateways/](conventions/gateways/index.md#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends) 参照)。サブエージェントを持つプロジェクトは、まだ異なるゲートウェイを異なるサブエージェントにルーティングすることはできません (例えば「Telegram は SupportBot と話し、Slack は ResearchBot と話す」)。将来的な、エージェントごとのノードの `GatewaySession` に消費される、ゲートウェイごとの `targetAgent: "SubagentName"` キー (プロジェクト全体で 1 つのセッションの代わりに) は、自然な拡張ポイントですが、まだ構築されていません。
+少なくとも 1 つの push 型ゲートウェイエントリを持つプロジェクトは、正確に 1 つの生成された `GatewaySession` を得ます。これはすべての push 型ゲートウェイをまとめ、常にプロジェクトのルートエージェントに束縛されます - `exposes: "agent"` の HTTP 公開も常にルートエージェントのみであるという既存の前例と一致しています ([gateways/](conventions/gateways/index.md#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends) 参照)。
+
+**これは設計であり、欠落ではありません。** プロジェクトのルートエージェントは 1 つで、[`subagents/`](conventions/subagents.md) はその*ルートから*委譲されます - 何を誰に渡すかはルートが決めます。したがって、すべての入口 (ゲートウェイ、HTTP エージェントルート、Web UI、スケジュール) は設計上ルートに到達します。ゲートウェイをサブエージェントに直接束縛することは、本来それを統括すべきエージェントを迂回することになります。ゲートウェイごとの `targetAgent` キーが存在しないのはこのためです。「Telegram はサポート、Slack はリサーチ」を実現したい場合は、玄関口を分割するのではなく、そのルーティングロジックをルートに持たせて委譲させてください。
 
 ## 修正済み: `GatewaySessionBootstrap.bx` は誤った `aiGatewayRegistry()` キーでゲートウェイを検索していた
 
