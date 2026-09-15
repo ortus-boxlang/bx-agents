@@ -104,6 +104,35 @@ One specific, confirmed gotcha even where `.env` loading does happen: **`BOXLANG
 
 `chat` uses BoxLang's own `MiniConsole`, which shells out to `stty` to set up raw terminal mode - it can only run against a genuine interactive terminal. It doesn't work piped, redirected, or from a non-interactive process (a CI job, a script). There's no non-interactive fallback mode.
 
+## `chat`'s streaming has no cancel, and no history beyond the live session
+
+`chat --server`/`--connect` stream the reply over the route's `/stream` (SSE) sub-route, but two things ColdBox's `toAi()` surface does not offer are therefore missing:
+
+- **No cancel.** There is no way to interrupt a turn once it starts. `toAi()` registers no cancel endpoint, and the SSE stream is server-driven - a client can stop *reading*, but the agent keeps generating to completion on the server. Ctrl-C ends the whole `chat` process rather than the turn.
+- **No history.** A session's `threadId` keeps one conversation coherent while `chat` is open, but nothing replays a prior conversation into a new session: reconnecting with `--connect` starts fresh. The agent's own [`memory`](conventions/agent-bx.md) may still give it recall server-side - what is missing is the client showing you what was said before.
+
+Both are gaps in what the HTTP surface exposes, not in the client - closing either needs a route that does not exist yet.
+
+## SSE streaming depends on `whitespaceCompressionEnabled` being off
+
+`chat --server`/`--connect` stream through BoxLang's native SSE: ColdBox's `toAi()` `/stream` sub-route emits with the `SSE()` BIF, and `AgentClient.stream()` consumes with `http( url ).sse( true ).onChunk( ... )`. There is no frame parser in this codebase - `ortus.boxlang.runtime.net.SSEParser` does that.
+
+That works only when the web runtime's **whitespace compression is off**, and it is **on by default**. SSE frames are terminated by a blank line; compression collapses consecutive newlines and eats exactly those terminators. Measured against a live `/__bxagents/stream`:
+
+| `whitespaceCompressionEnabled` | Body | `\n\n` in body | `totalEvents` |
+| --- | --- | --- | --- |
+| `true` (default) | 916 bytes | **0** | **0** |
+| `false` | 923 bytes | 6 | 2 |
+
+It is not specific to ColdBox, to `toAi()`, or to this client. A bare two-line `SSE()` endpoint loses its terminators the same way (79 bytes, zero `\n\n`), and so does a handler that writes `\n\n` itself with `writeOutput`. A browser `EventSource` against any of them fires no events either.
+
+Where it is set:
+
+- **`Serve.bx`** writes `whitespaceCompressionEnabled: false` into the served project's own runtime config, under the `.build/runtime` server home it already scopes per project - so it never touches the machine's `~/.boxlang`, and `clean` sweeps it.
+- **This repo's `boxlang.json`** sets it for the test suite.
+
+A project served some other way - a different container, a servlet deployment, someone else's `boxlang.json` - needs the same directive, or its SSE endpoints emit unterminated frames and every SSE client sees nothing. The ColdBox integration run asserts the **delta count** on a real stream, so a regression here fails the build rather than silently degrading to a non-streaming reply.
+
 ## Fixed: `chat` and default (non-`--server`) `invoke` used to fail for a class-based `Agent.bx`
 
 Previously, both `chat` and default `invoke` threw `The requested class [agent.classes.agentClass] has not been located in any class resolver.` before ever reaching the agent. Root cause: both verbs load the generated `GeneratedAgentFactory.bx` in-process via `DynamicClassLoader.instantiate()` (no ColdBox container involved), and the generated factory used to instantiate a class-based `Agent.bx` via a **relative** dotted-path lookup, which only resolves once something has registered a mapping making the app root resolvable - and nothing did outside a real ColdBox boot. Registering one mid-script doesn't fix it either (confirmed empirically).
