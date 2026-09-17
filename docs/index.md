@@ -23,6 +23,8 @@ built on [ColdBox](https://www.coldbox.org) and
 with files and folders - not a framework's API surface - and `bxAgents build` assembles a
 real, runnable ColdBox application out of it.
 
+![A terminal session: bxAgents new scaffolds a project, bxAgents build assembles a ColdBox app, bxAgents inspect prints the agent, model and environment, and bxAgents serve starts it on http://127.0.0.1:8080](assets/cli-quickstart.svg)
+
 ::: cards
 ::: card title="Assembled at build time" icon="phosphor-duotone:gear-six" href="build-pipeline.md"
 Discovery, validation and code generation run **once**, not on every boot. What you run
@@ -105,6 +107,25 @@ real, working content layered on the same base skeleton.
 
 See [Agent Templates](agent-templates.md) for every generated file in detail, and how to
 publish your own.
+
+## A chat UI you didn't have to build
+
+Set `exposes: "webui"` on a gateway and the build emits a complete front end - conversation
+history, streaming replies, light/dark theming and a mobile layout - wired to your agent.
+
+![The generated web chat UI: a conversation sidebar on the left, a multi-turn transcript in the centre, and a themed header and message composer](assets/webui-chat-light.png)
+
+::: columns
+::: column
+![The same conversation with the theme toggle switched to dark](assets/webui-chat-dark.png)
+:::
+::: column
+![The same page at a narrow viewport, where the transcript keeps the full width and the sidebar overlays it](assets/webui-chat-mobile.png)
+:::
+:::
+
+It is generated CSS and generated markup - [themeable from `Agent.bx`](conventions/web-ui.md),
+with no front-end build step of your own.
 
 ## What `build` actually produces
 
@@ -189,6 +210,10 @@ Package a portable `.bxa` and deploy it with `local`, `ssh`, `docker`, `digitalo
 `ftp` or `sftp` - secrets stay environment variables, never build artifacts.
 :::
 :::
+
+## Check your setup at any time
+
+![bxAgents doctor output: BoxLang and bx-ai versions OK, Agent.bx found, project structure validates cleanly, and one warning that the qb module is missing](assets/cli-doctor.svg)
 
 ## Where to go next
 

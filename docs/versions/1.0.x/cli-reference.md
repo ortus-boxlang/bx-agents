@@ -281,6 +281,8 @@ bxAgents clean [--force]
 
 ### `doctor`
 
+![bxAgents doctor output: BoxLang and bx-ai versions OK, Agent.bx found, project structure validates cleanly, and one warning that the qb module is missing](assets/cli-doctor.svg)
+
 Diagnose the runtime and your project - read-only, never builds or writes anything.
 
 ```bash
