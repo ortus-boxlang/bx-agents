@@ -36,9 +36,9 @@ bxAgents --version
 bxAgents --help
 ```
 
-`--help` lists all 10 verbs (`new`, `build`, `test`, `serve`, `chat`, `invoke`,
-`package`, `deploy`, `inspect`, `clean`) with a one-line summary of each. You'll use
-most of them in this course.
+`--help` lists all 12 verbs (`new`, `build`, `test`, `serve`, `chat`, `invoke`,
+`package`, `deploy`, `inspect`, `clean`, `hash-password`, `doctor`) with a one-line
+summary of each. You'll use most of them in this course.
 :::
 :::
 

@@ -130,7 +130,14 @@ Every page starts with a small frontmatter block (`title`, `icon`, `summary`, `d
 
 `bxsites.yaml` turns on `generateOgImages` (a distinct 1200x630 social card per page, built from its `title`/`description`, falling back to `ogImage: assets/home-banner.jpg` for anything the generator can't handle) and `pageActions` (the per-page copy/view-as-Markdown/open-in-AI-chat/PDF/share menu). `sitemap.xml`, `robots.txt` and `llms.txt` are generated for free once `baseURL` is an absolute URL, which it already is here - no extra config needed.
 
-The Spanish/German/Japanese translations under `docs/i18n/` cover page content; the surrounding theme chrome (search placeholder, "On this page," "Edit this page," the 404 page, ...) is translated automatically too - bx-sites ships built-in `es`/`de`/`ja` chrome translations out of the box, so nothing extra needs configuring for those three locales.
+The Spanish translation under `docs/versions/1.0.x/i18n/es/` covers page content; the
+surrounding theme chrome (search placeholder, "On this page," "Edit this page," the 404
+page, ...) is translated automatically too - bx-sites ships built-in `es`/`de`/`ja` chrome
+translations out of the box, so nothing extra needs configuring for those locales. Note the
+path: a translation has to live inside the tree that actually builds at the site root
+(`docs/versions/1.0.x/`, per `versions.default`), not under `docs/i18n/` - see
+[CONTRIBUTING.md](CONTRIBUTING.md) for why. German and Japanese are parked under
+`translations-wip/` until they reach parity.
 
 `.github/workflows/docs.yml` publishes straight to the site root (<https://bxagents.ai>) for whichever branch it runs on. Versioning is handled inside the docs themselves via bx-sites' own `versions:` support - `bxsites.yaml`'s `versions.default` (`1.0.x`) builds at the root, and in-progress docs build under `/next/`.
 
