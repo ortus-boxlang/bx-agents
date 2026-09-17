@@ -10,7 +10,7 @@ tags: [getting-started, setup]
 
 BxAgents is a BoxLang module. It needs three things on the machine that runs it:
 
-1. A [BoxLang](https://boxlang.io) runtime.
+1. A [BoxLang](https://www.boxlang.io) runtime.
 2. The `bx-ai` BoxLang module (BxAgents generates code that calls it - it doesn't vendor it).
 3. BxAgents itself.
 
@@ -26,15 +26,16 @@ Follow the [official BoxLang installation guide](https://boxlang.ortusbooks.com/
 :::
 ::: step "Install bx-ai and BxAgents"
 ```bash
-install-bx-module bx-ai bx-agents
+install-bx-module bx-ai
+install-bx-module bx-agents
 ```
 
 This fetches both modules into your BoxLang modules directory (`~/.boxlang/modules` by default, or `boxlang_modules/` with `--local`).
 :::
 ::: step "Verify it worked"
 ```bash
-boxlang bxAgents --version
-boxlang bxAgents --help
+bxAgents --version
+bxAgents --help
 ```
 
 `--help` lists all 10 verbs (`new`, `build`, `test`, `serve`, `chat`, `invoke`, `package`, `deploy`, `inspect`, `clean`) with a one-line summary of each.

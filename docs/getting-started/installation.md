@@ -10,7 +10,7 @@ tags: [getting-started, setup]
 
 BxAgents is a BoxLang module. It needs three things on the machine that runs it:
 
-1. A [BoxLang](https://boxlang.io) runtime.
+1. A [BoxLang](https://www.boxlang.io) runtime.
 2. The `bx-ai` BoxLang module (BxAgents generates code that calls it - it doesn't vendor it).
 3. BxAgents itself.
 

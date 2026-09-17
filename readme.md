@@ -16,7 +16,7 @@
 
 <p>&nbsp;</p>
 
-**BxAgents** is a conventions-based framework for building AI agents powered by [BoxLang AI](https://boxlang.ortusbooks.com/boxlang-+-++/modules/bx-ai). Built on top of [ColdBox](https://coldbox.ortusbooks.com), it lets you describe an agent with a handful of files and folders - `Agent.bx`, `instructions.md`, and whichever of `tools/`, `skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `models/`, `modules/` it actually needs - and BxAgents assembles a real, runnable ColdBox application from it **at build time**, ready to serve, chat with, or package as a portable `.bxa`.
+**BxAgents** is a conventions-based framework for building AI agents powered by [BoxLang AI](https://ai.boxlang.io). Built on top of [ColdBox](https://www.coldbox.org), it lets you describe an agent with a handful of files and folders - `Agent.bx`, `instructions.md`, and whichever of `tools/`, `skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `models/`, `modules/` it actually needs - and BxAgents assembles a real, runnable ColdBox application from it **at build time**, ready to serve, chat with, or package as a portable `.bxa`.
 
 ## Quick Start
 
@@ -36,7 +36,7 @@ bxAgents chat       # or: bxAgents serve --port=8080
 
 ## Documentation & Examples
 
-- **[docs/](docs/index.md)** - installation, quick start, one page per convention folder, agent templates (built-in starters, GitHub/ForgeBox sourcing, publishing your own), the build pipeline, the manifest schema, the full CLI reference, deployment/secrets, and known limitations. Published at **[bxagents.ai](https://bxagents.ai)**, built with [bx-sites](https://ortus-boxlang.github.io/bx-sites/development/); see [Working on the docs](#working-on-the-docs).
+- **[docs/](docs/index.md)** - installation, quick start, one page per convention folder, agent templates (built-in starters, GitHub/ForgeBox sourcing, publishing your own), the build pipeline, the manifest schema, the full CLI reference, deployment/secrets, and known limitations. Published at **[bxagents.ai](https://bxagents.ai)**, built with [bx-sites](https://bxsites.io/development/); see [Working on the docs](#working-on-the-docs).
 - **[examples/](examples/README.md)** - real, buildable sample projects: nine core-convention examples (a minimal agent, a simple agent, a class-based agent, an HTTP-exposed agent, a scheduled agent, an MCP agent, a multi-agent team, the web chat UI, and a composite "advanced" agent) plus one per push-style chat-platform gateway (Telegram, Slack, Discord, Email, WhatsApp Cloud, Teams, Twilio, GitHub, Signal), each demonstrating one convention folder end-to-end.
 
 ## Why build-time assembly?
@@ -112,7 +112,7 @@ Optionally, `NOVITA_API_KEY` (a [Novita AI](https://novita.ai) API key) enables 
 
 ### Working on the docs
 
-`docs/` is a [bx-sites](https://ortus-boxlang.github.io/bx-sites/development/) site - plain Markdown, where the folder structure *is* the navigation and `docs/nav.json` overrides the order. `bxsites.yaml` at the repo root holds the site config.
+`docs/` is a [bx-sites](https://bxsites.io/development/) site - plain Markdown, where the folder structure *is* the navigation and `docs/nav.json` overrides the order. `bxsites.yaml` at the repo root holds the site config.
 
 ```bash
 # once - bx-sites depends on bx-markdown, bx-esapi, bx-yaml and bx-image;
@@ -134,7 +134,7 @@ The Spanish/German/Japanese translations under `docs/i18n/` cover page content; 
 
 `.github/workflows/docs.yml` publishes straight to the site root (<https://bxagents.ai>) for whichever branch it runs on. Versioning is handled inside the docs themselves via bx-sites' own `versions:` support - `bxsites.yaml`'s `versions.default` (`1.0.x`) builds at the root, and in-progress docs build under `/next/`.
 
-This follows [bx-sites' own documented deployment approach](https://ortus-boxlang.github.io/bx-sites/development/guides/deployment/): the workflow builds `site/` and pushes it to a **`gh-pages`** branch with `keep_files: true`.
+This follows [bx-sites' own documented deployment approach](https://bxsites.io/development/guides/deployment/): the workflow builds `site/` and pushes it to a **`gh-pages`** branch with `keep_files: true`.
 
 The repository's **Settings -> Pages -> Build and deployment -> Source** must be **Deploy from a branch** -> **`gh-pages`** -> **`/ (root)`**. The first successful run creates `gh-pages`, so set it after that run completes; no workflow file can set it for itself.
 

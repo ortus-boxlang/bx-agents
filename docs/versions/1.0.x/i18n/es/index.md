@@ -16,9 +16,9 @@ toc: false
 	</div>
 </div>
 
-**BxAgents** es un framework de agentes de IA basado en convenciones para [BoxLang](https://boxlang.io),
-construido sobre [ColdBox](https://coldbox.ortusbooks.com) y
-[BX AI](https://boxlang.ortusbooks.com/boxlang-+-++/modules/bx-ai). Describes un agente
+**BxAgents** es un framework de agentes de IA basado en convenciones para [BoxLang](https://www.boxlang.io),
+construido sobre [ColdBox](https://www.coldbox.org) y
+[BX AI](https://ai.boxlang.io). Describes un agente
 con archivos y carpetas - no con la superficie de una API de framework - y `bxAgents build` ensambla
 una aplicación ColdBox real y ejecutable a partir de eso.
 

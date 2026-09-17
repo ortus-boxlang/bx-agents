@@ -17,9 +17,9 @@ ogImage: assets/og-home.jpg
 	</div>
 </div>
 
-**BxAgents** is a conventions-based AI agent framework for [BoxLang](https://boxlang.io),
-built on [ColdBox](https://coldbox.ortusbooks.com) and
-[BX AI](https://boxlang.ortusbooks.com/boxlang-+-++/modules/bx-ai). You describe an agent
+**BxAgents** is a conventions-based AI agent framework for [BoxLang](https://www.boxlang.io),
+built on [ColdBox](https://www.coldbox.org) and
+[BX AI](https://ai.boxlang.io). You describe an agent
 with files and folders - not a framework's API surface - and `bxAgents build` assembles a
 real, runnable ColdBox application out of it.
 
