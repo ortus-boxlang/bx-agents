@@ -119,15 +119,40 @@ site root; the live `docs/` tree itself builds at `/next/`.
 
 **While `1.0.x` is unreleased, keep the two trees in sync**: any change made to
 `docs/` (outside `docs/versions/`) should be mirrored into `docs/versions/1.0.x/` in
-the same PR, and vice versa. `docs/assets/`, `docs/i18n/`, `docs/versions/` and
-`docs/blog/` (if it ever exists) are shared/global and are never duplicated into a
-version snapshot - everything else under `docs/`, including `docs/data/`, is.
+the same PR, and vice versa. `docs/assets/`, `docs/versions/` and `docs/blog/` (if it
+ever exists) are shared/global and are never duplicated into a version snapshot -
+everything else under `docs/`, including `docs/data/`, is.
+
+### Translations live inside the versioned tree
+
+Translations go in **`docs/versions/1.0.x/i18n/<code>/`**, not `docs/i18n/`.
+
+bx-sites discovers locales in whichever tree it is *building*. Because
+`versions.default` is set, the tree that builds at the site root is
+`docs/versions/1.0.x/`, so that is the only place a locale is picked up from. A
+translation under `docs/i18n/` belongs to the `docs/` tree, which builds at `/next/` -
+and bx-sites v1 deliberately builds no locale sub-trees there. Putting one there
+publishes nothing *and* adds a `/next/<code>/` entry to every page's language
+switcher that 404s.
+
+Only list a locale in `bxsites.yaml`'s `i18n.locales` once it is actually complete.
+An incomplete locale still builds (untranslated pages fall back to the default), but
+it ships a half-English site under its own flag. Work-in-progress translations are
+parked under `translations-wip/<code>/` at the repo root, outside `docs/` entirely, so
+they neither publish nor generate dead switcher links; move one back under
+`docs/versions/1.0.x/i18n/` when it reaches parity.
+
+Check coverage against the English tree by diffing the file lists. Two bx-sites verbs
+look only at `docs/i18n/` and so under-report this layout: `bxSites i18n:status` says
+"No docs/i18n/ locales found", and `bxSites stats` says "Locales: none (default
+only)". The build itself is the source of truth - it reports `locales 2` and writes a
+real `site/es/` tree.
 
 Once `1.0.x` ships and merges to `main`, stop syncing - `docs/versions/1.0.x/` becomes
 a real historical snapshot of the released docs, and `docs/` moves on as `next` for
 whatever comes after it. Cut the next version the same way: copy `docs/` (excluding
-`assets/`, `i18n/`, `versions/`) into `docs/versions/<name>/` and update
-`versions.default` in `bxsites.yaml`.
+`assets/`, `versions/`) into `docs/versions/<name>/`, bring the previous version's
+`i18n/` across with it, and update `versions.default` in `bxsites.yaml`.
 
 ## Financial Contributions
 

@@ -9,8 +9,8 @@ tags: [course, getting-started]
 # Welcome to BxAgents
 
 Welcome! This is a 20-lesson course on **BxAgents**, a conventions-based AI agent
-framework for [BoxLang](https://boxlang.io), built on [ColdBox](https://coldbox.ortusbooks.com)
-and [BX AI](https://boxlang.ortusbooks.com/boxlang-+-++/modules/bx-ai).
+framework for [BoxLang](https://www.boxlang.io), built on [ColdBox](https://www.coldbox.org)
+and [BX AI](https://ai.boxlang.io).
 
 The idea behind BxAgents is simple: you describe an agent with **files and folders**,
 not a framework's API surface, and one command - `bxAgents build` - assembles a real,

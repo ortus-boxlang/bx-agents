@@ -247,7 +247,7 @@ bxAgents deploy --destination=/path/to/somewhere [--target=local]
 Turn a plaintext password into the `passwordHash` value a `webui` entry's [`users`](conventions/web-ui.md) block accepts.
 
 ```bash
-bxAgents hash-password --password="correct horse battery staple"
+bxAgents hash-password --password="<your-password>"
 ```
 
 - `--password` is **required**.
@@ -280,6 +280,8 @@ bxAgents clean [--force]
 - Reports "Nothing to clean" if neither directory exists.
 
 ### `doctor`
+
+![bxAgents doctor output: BoxLang and bx-ai versions OK, Agent.bx found, project structure validates cleanly, and one warning that the qb module is missing](assets/cli-doctor.svg)
 
 Diagnose the runtime and your project - read-only, never builds or writes anything.
 

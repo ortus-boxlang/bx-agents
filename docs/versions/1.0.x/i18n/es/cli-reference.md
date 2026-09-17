@@ -162,13 +162,30 @@ bxAgents serve [--port=8080] [--host=127.0.0.1]
 REPL interactivo contra el agente construido, usando el propio `MiniConsole` de BoxLang para la lectura de líneas.
 
 ```bash
-bxAgents chat
+bxAgents chat                                  # rápido, en el mismo proceso
+bxAgents chat --server [--port=<puerto>]       # aplicación completa, servidor propio desechable
+bxAgents chat --connect=http://127.0.0.1:8080  # aplicación completa, servidor que ya tienes en marcha
 ```
 
-- Requiere un `build` previo.
-- Carga `GeneratedAgentFactory.bx` directamente (sin ningún contenedor ColdBox/WireBox involucrado) y llama a `buildAgent()` una vez por sesión - exactamente la misma factory que usan las rutas HTTP de `serve`, así que `chat` y HTTP nunca divergen.
+Tres modos, un solo REPL:
+
+| Modo | Con qué habla | Cuándo usarlo |
+|---|---|---|
+| por defecto | La factory de agentes generada, cargada directamente en este proceso | Solo quieres hablar con el agente. Lo más rápido, sin servidor. |
+| `--server` | Un `boxlang-miniserver` desechable que arranca y detiene | Necesitas la semántica real de la aplicación - `models/`, interceptores, el scheduler, los gateways. |
+| `--connect=<url>` | Un servidor que ya está en marcha | Tienes un `serve` abierto en otra terminal, o quieres hablar con un despliegue. |
+
+- Requiere un `build` previo - salvo con `--connect`, que habla con un servidor que mantiene otra persona y por tanto no necesita nada construido localmente.
+- **Por defecto**: carga `GeneratedAgentFactory.bx` directamente (sin ningún contenedor ColdBox/WireBox involucrado) y llama a `buildAgent()` una vez por sesión - exactamente la misma factory que usan las rutas HTTP de `serve`, así que el agente en sí nunca diverge. Lo que **sí** cambia es todo lo que aporta ColdBox: sin `models/`, sin scheduler, sin interceptores, sin registro de gateways. Cuando eso importa, usa `--server`.
+- **`--server`**: arranca un miniserver real en un puerto efímero de loopback y conduce el REPL sobre HTTP contra la [ruta de agente `/__bxagents` siempre activa](conventions/agent-bx.md#the-always-on-agent-route) del proyecto, y lo apaga al salir. `--port` fija el puerto en lugar de tomar uno libre.
+- **`--connect`**: conduce el mismo REPL contra un servidor en marcha, sin arrancar ni detener nada. La URL es la raíz del servidor (`http://host:puerto`), no la ruta del agente - `chat` la añade por su cuenta.
+- `--server` y `--connect` son mutuamente excluyentes: uno dice "arráncame un servidor", el otro "no lo hagas". Pasar ambos falla de inmediato en lugar de honrar uno en silencio.
+- Ambos modos HTTP hacen **streaming** de la respuesta: la contestación aparece token a token a medida que el agente la produce, por la subruta `/stream` (SSE) de la ruta, en vez de llegar de golpe al terminar el turno. Si el stream no se puede abrir - un servidor antiguo sin subruta `/stream`, o un proxy que no deja pasar `text/event-stream` - recurre a `/invoke` y obtienes la respuesta completa al final en lugar de un error.
+- Ambos modos HTTP arrastran el `threadId` del servidor entre turnos, así que una sesión es una sola conversación y no una serie de primeros mensajes inconexos.
+- Un turno que se detiene a esperar una decisión [humana en el bucle](conventions/gateways/index.md) lo indica en lugar de aparentar que responde con silencio, y señala el endpoint `/gateways/interactions/` donde se envía la decisión.
+- Si la ruta está protegida tras [`agentApi.tokenEnvVar`](conventions/agent-bx.md#agentapi), estos modos reciben un `401` claro en lugar de un timeout confuso - no envían ningún token.
 - Escribe `exit` o `quit` para salir.
-- Necesita una TTY interactiva real (`MiniConsole` invoca `stty` para el modo raw) - no funcionará canalizado/no interactivo.
+- Necesita una TTY interactiva real (`MiniConsole` invoca `stty` para el modo raw) - no funcionará canalizado/no interactivo. Usa [`invoke`](#invoke) para scripting.
 
 ### `invoke`
 
@@ -216,7 +233,7 @@ bxAgents deploy --destination=/path/to/somewhere [--target=local]
 Convierte una contraseña en texto plano en el valor `passwordHash` que acepta el bloque [`users`](conventions/web-ui.md) de una entrada `webui`.
 
 ```bash
-bxAgents hash-password --password="correct horse battery staple"
+bxAgents hash-password --password="<tu-contraseña>"
 ```
 
 - `--password` es **requerido**.
@@ -245,3 +262,18 @@ bxAgents clean
 
 - Solo elimina `.build` y `dist` - las convenciones fuente (`Agent.bx`, `tools/`, etc.) nunca se tocan.
 - Reporta "Nothing to clean" si ninguno de los directorios existe.
+
+### `doctor`
+
+![Salida de bxAgents doctor: versiones de BoxLang y bx-ai correctas, Agent.bx encontrado, la estructura del proyecto valida limpiamente, y un aviso de que falta el módulo qb](assets/cli-doctor.svg)
+
+Comprueba el entorno y el proyecto en busca de los problemas que más habitualmente rompen un build.
+
+```bash
+bxAgents doctor [--json]
+```
+
+- No requiere un `build` previo - está pensado precisamente para ejecutarse cuando algo no funciona.
+- Informa de la versión de BoxLang, de si el módulo `bx-ai` está cargado, de si se encuentra `Agent.bx`, de si la estructura del proyecto valida, y de los módulos de apoyo que falten.
+- Distingue entre problemas (que impedirán un build) y avisos (que no), y termina con un recuento de ambos.
+- `--json` imprime el mismo informe como JSON, para scripting y CI.

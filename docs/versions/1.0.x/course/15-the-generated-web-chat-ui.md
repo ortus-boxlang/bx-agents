@@ -70,7 +70,7 @@ already-hashed value - a literal `password` key is a build error, not a warning.
 Generate a hash with:
 
 ```bash
-bxAgents hash-password --password="correct horse battery staple"
+bxAgents hash-password --password="<your-password>"
 ```
 
 ## Branding it

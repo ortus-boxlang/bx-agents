@@ -220,6 +220,16 @@ A project with at least one push-style gateway entry gets exactly one generated 
 
 **This is the architecture, not a gap.** A project has one root agent, and [`subagents/`](conventions/subagents.md) are delegated to *by that root* - the root decides what goes to whom. Every entry point (gateways, the HTTP agent route, the web UI, schedules) therefore lands on the root by design. Binding a gateway straight to a subagent would route around the agent that is supposed to be orchestrating it, which is why there is no per-gateway `targetAgent` key: to make "Telegram talks to support, Slack talks to research" work, give the root that routing logic and let it delegate, rather than splitting the front door.
 
+## The docs site's nav *group* headings stay English in a translated locale
+
+Every nav entry backed by a real page takes its label from that page's own frontmatter `title`, so a translated tree gets translated nav labels for free - `Instalación`, `Inicio rápido`, `Introducción a BxAgents` and so on all render correctly under `/es/`.
+
+The four synthetic grouping nodes in `docs/nav.json` (`Getting Started`, `Conventions`, `Guides`, `Reference`, plus the `Example Agents` sub-group) have no page behind them, so there is nothing to read a translated title from. bx-sites v1 also hands every locale tree the *default* tree's own `navConfig` verbatim - by design, so a locale's nav always mirrors its default tree's structure - which means there's no per-locale `nav.json` to override them in either. They therefore render in English on every locale.
+
+Measured on a real build: the `/es/` sidebar renders `["Getting Started", "Instalación", "Inicio rápido", "Introducción a BxAgents", "Conventions", "Agent.bx", ...]`. Page labels localized, group headings not.
+
+Closing this needs an upstream bx-sites change (a per-locale nav override, or localizable group titles), not a change here.
+
 ## Fixed: `config/ColdBox.bx`'s own `interceptors = [...]` array never actually registered anything on a real boot - the web UI's login gate and API-key gate were both silently wide open
 
 A real, serious, previously-undetected bug, found only by driving the built web UI over genuine HTTP with real `cbauth`/ColdBox module dependencies for the first time (see the `bx-ai 3.4.0` entry below - `retest everything` after that update is what surfaced it). `config/ColdBox.bx`'s `interceptors = [{ class: "interceptors.X" }]` array - the documented ColdBox convention this project used to emit, and the ONLY place it registered `WebUiLoginGate`/`WebUiAuthGate`/`GatewaySessionBootstrap`/any project-declared interceptor - never reached ColdBox's `InterceptorService` at all on this stack. Confirmed directly: `ModuleService.cfc`'s own module-settings merge (a separate but related bug, see the `cbauth` entry below) and `ApplicationLoader.cfc`'s interceptor parsing both read the app's config CFC instance via `getPropertyMixin()`, a reflection helper that reaches into a CFC's own `variables` scope from outside it - and a direct test this session (`new config.ColdBox(); cfgClass.configure(); cfgClass.moduleSettings` immediately after) proved that scope is simply not reachable that way on this BoxLang/ColdBox combination, `variables.`-prefixed or not. `interceptors = [...]` in `config/ColdBox.bx` is dead code on this stack, full stop - not a web-UI-specific bug.

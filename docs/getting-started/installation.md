@@ -10,7 +10,7 @@ tags: [getting-started, setup]
 
 BxAgents is a BoxLang module. It needs three things on the machine that runs it:
 
-1. A [BoxLang](https://boxlang.io) runtime.
+1. A [BoxLang](https://www.boxlang.io) runtime.
 2. The `bx-ai` BoxLang module (BxAgents generates code that calls it - it doesn't vendor it).
 3. BxAgents itself.
 
@@ -38,7 +38,7 @@ bxAgents --version
 bxAgents --help
 ```
 
-`--help` lists all 10 verbs (`new`, `build`, `test`, `serve`, `chat`, `invoke`, `package`, `deploy`, `inspect`, `clean`) with a one-line summary of each.
+`--help` lists all 12 verbs (`new`, `build`, `test`, `serve`, `chat`, `invoke`, `package`, `deploy`, `inspect`, `clean`, `hash-password`, `doctor`) with a one-line summary of each.
 :::
 :::
 
