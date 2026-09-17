@@ -233,7 +233,7 @@ bxAgents deploy --destination=/path/to/somewhere [--target=local]
 Convierte una contraseña en texto plano en el valor `passwordHash` que acepta el bloque [`users`](conventions/web-ui.md) de una entrada `webui`.
 
 ```bash
-bxAgents hash-password --password="correct horse battery staple"
+bxAgents hash-password --password="<tu-contraseña>"
 ```
 
 - `--password` es **requerido**.

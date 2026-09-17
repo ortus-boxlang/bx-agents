@@ -155,7 +155,7 @@ Una cuenta nombra la **variable de entorno** que contiene su contraseña (`passw
 Un `passwordHash` es seguro de commitear precisamente porque no puede revertirse. Genera uno con el mismo hasher que usa la app:
 
 ```
-bxAgents hash-password --password="correct horse battery staple"
+bxAgents hash-password --password="<tu-contraseña>"
 ```
 
 !!! danger

@@ -247,7 +247,7 @@ bxAgents deploy --destination=/path/to/somewhere [--target=local]
 Turn a plaintext password into the `passwordHash` value a `webui` entry's [`users`](conventions/web-ui.md) block accepts.
 
 ```bash
-bxAgents hash-password --password="correct horse battery staple"
+bxAgents hash-password --password="<your-password>"
 ```
 
 - `--password` is **required**.

@@ -71,7 +71,7 @@ Una cuenta nombra la **variable de entorno** que contiene su contraseña, o llev
 hasheado - una clave `password` literal es un error de build, no un aviso. Genera un hash con:
 
 ```bash
-bxAgents hash-password --password="correct horse battery staple"
+bxAgents hash-password --password="<tu-contraseña>"
 ```
 
 ## Personalizar la marca
