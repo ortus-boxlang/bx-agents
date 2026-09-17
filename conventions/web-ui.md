@@ -155,7 +155,7 @@ An account names the **environment variable** holding its password (`passwordEnv
 A `passwordHash` is safe to commit precisely because it cannot be reversed. Generate one with the same hasher the app uses:
 
 ```
-bxAgents hash-password --password="correct horse battery staple"
+bxAgents hash-password --password="<your-password>"
 ```
 
 !!! danger

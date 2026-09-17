@@ -26,7 +26,7 @@ reference for the deep dive - this course is the guided path through it.
 
 Anyone who wants to build an AI agent without hand-wiring a framework's API surface -
 you describe an agent with **files and folders**, and `bxAgents build` assembles a real,
-runnable [ColdBox](https://coldbox.ortusbooks.com) application out of it. No prior
+runnable [ColdBox](https://www.coldbox.org) application out of it. No prior
 BoxLang or ColdBox experience is assumed, though it helps.
 
 ## What you'll have built by Lesson 20

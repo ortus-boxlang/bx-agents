@@ -92,7 +92,10 @@ Removes only `.build/` and `dist/` - your source conventions are never touched.
 ## Every verb, in one place
 
 You've now used `new`, `build`, `test`, `chat`, `invoke`, `serve`, `package`, `deploy`,
-`inspect` and `hash-password` across this course. See the [CLI Reference](../cli-reference.md)
+`inspect`, `clean` and `hash-password` across this course. The twelfth verb, `doctor`,
+is the one you'll reach for when something *isn't* working - it checks your BoxLang
+version, whether `bx-ai` is loaded, whether `Agent.bx` is found and whether the project
+validates, without needing a prior `build`. See the [CLI Reference](../cli-reference.md)
 for every flag on every one of them.
 
 ## Where to go from here

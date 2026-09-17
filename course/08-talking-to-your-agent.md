@@ -15,12 +15,22 @@ the exact same agent tree, so they never diverge from each other.
 ## `chat` - an interactive REPL
 
 ```bash
-bxAgents chat
+bxAgents chat                                  # fast, in-process
+bxAgents chat --server [--port=<port>]         # full app, own throwaway server
+bxAgents chat --connect=http://127.0.0.1:8080  # full app, server you already run
 ```
 
 Uses BoxLang's own `MiniConsole` for line reading. Requires a real interactive
 terminal (it shells out to `stty` for raw mode - it won't work piped or
 non-interactively). Type `exit` or `quit` to leave.
+
+The default mode loads the generated factory directly in this process - fastest, but
+without anything ColdBox brings (no `models/`, no scheduler, no interceptors, no
+gateway registry). When that matters, `--server` boots a real miniserver and drives the
+REPL over HTTP against your project's always-on agent route, and `--connect` does the
+same against a server you already have running. Both HTTP modes **stream** the reply
+token by token and carry the server's `threadId` across turns, so a session is one
+conversation rather than a series of unrelated first messages.
 
 ## `invoke` - one non-interactive turn
 
