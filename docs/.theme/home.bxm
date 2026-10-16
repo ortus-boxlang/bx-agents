@@ -1,0 +1,475 @@
+<!---
+	The BxAgents landing page. Based on the bx-sites bootstrap home.bxm: the head, header and footer machinery are the theme, the content and
+	the look (agents-home.css, agents-home.js) are ours. The outer shell for the site's own homepage (`docs/index.md`'s own
+	`layout: home` frontmatter) - selected in place of `layout.bxm` via
+	ThemeRenderer.renderPage()'s own `layoutHint` (BuildPipeline.bx's
+	renderDocTree() forwards every page's own `page.layout` as the
+	layoutHint, so any page can opt into an alternate outer shell this way,
+	not just the blog). Unlike `blog.bxm`, this is NOT a close derivative of
+	`layout.bxm` - there's no sidebar, no TOC rail, and the header is a
+	horizontal marketing nav instead of the docs hamburger/sidebar toggle.
+	It never includes `#variables.bodyFile#` - the whole page is hardcoded
+	here, so `docs/index.md`'s own Markdown body is unused when this layout
+	renders it.
+--->
+<bx:include template="#variables.moduleAssetsDir#/icons.bxm">
+<bx:include template="#variables.moduleAssetsDir#/locale-flags.bxm">
+<bx:include template="includes/site-helpers.bxm">
+<bx:script>
+	// module spec section 7 - search is fully static/client-side (provider "local") by
+	// default, opt-out via bxsites.json's `search`; `searchProvider.provider` picks a
+	// different provider ("algolia"/"pagefind" built-in here, anything else left to a theme override)
+	variables.searchEnabled = ( variables.siteConfig.search ?: false ) ? true : false
+	variables.searchProviderName = lCase( trim( variables.siteConfig.searchProvider.provider ?: "local" ) )
+	variables.searchAlgolia = variables.siteConfig.searchProvider.algolia ?: {}
+
+	variables.repoUrl = trim( variables.siteConfig.repo.url ?: "" )
+	variables.socialLinks = variables.siteConfig.social ?: []
+	variables.footerEnabled = ( variables.siteConfig.footer ?: false ) ? true : false
+	variables.navCollapsible = ( variables.siteConfig.theme.options.navCollapsible ?: false ) ? true : false
+	variables.navExpandAll = ( variables.siteConfig.theme.options.navExpandAll ?: true ) ? true : false
+	variables.tocPosition = variables.siteConfig.theme.options.tocPosition ?: "top"
+	variables.mainContentClass = variables.tocPosition == "sticky" ? "col-xl-8" : "col-xl-10"
+	variables.pageMetaPosition = variables.siteConfig.theme.options.pageMetaPosition ?: "bottom"
+	variables.breadcrumbsEnabled = ( variables.siteConfig.theme.options.breadcrumbs ?: true ) ? true : false
+	variables.faviconUrl = trim( variables.siteConfig.theme.favicon ?: "" )
+	variables.ogImageUrl = len( trim( variables.page.ogImage ?: "" ) ) ? trim( variables.page.ogImage ) : trim( variables.siteConfig.ogImage ?: "" )
+	variables.ogDescription = len( variables.page.description ?: "" ) ? variables.page.description : ( variables.siteConfig.description ?: "" )
+	variables.analyticsProvider = trim( variables.siteConfig.analytics.provider ?: "" )
+	variables.analyticsId = trim( variables.siteConfig.analytics.id ?: "" )
+	variables.mermaidEnabled = ( variables.siteConfig.mermaid ?: false ) ? true : false
+	variables.mathEnabled = ( variables.siteConfig.math ?: false ) ? true : false
+	variables.openapiEnabled = ( variables.siteConfig.openapi ?: false ) ? true : false
+	variables.pageActionsEnabled = ( variables.siteConfig.pageActions ?: false ) ? true : false
+	variables.pageActionsPosition = variables.siteConfig.theme.options.pageActionsPosition ?: "top"
+	variables.accentColor = trim( variables.siteConfig.theme.options.accentColor ?: "" )
+	variables.accentColorDark = trim( variables.siteConfig.theme.options.accentColorDark ?: "" )
+</bx:script>
+<bx:output>
+<!doctype html>
+<html lang="#encodeForHTML( variables.currentLocale.len() ? variables.currentLocale : 'en' )#" dir="#encodeForHTML( variables.currentLocaleDir )#">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>BxAgents: Build AI Agents by Convention</title>
+	<meta property="og:type" content="#encodeForHTML( len( trim( variables.page.ogType ?: '' ) ) ? variables.page.ogType : 'website' )#">
+	<meta property="og:site_name" content="#encodeForHTML( variables.siteConfig.name )#">
+	<meta property="og:title" content="BxAgents: Build AI Agents by Convention">
+	<meta property="og:url" content="https://bxagents.ai/">
+
+	<!--- Open Graph and meta tags for SEO --->
+	#renderArticleMeta()#
+
+	<!--- Canonical URL --->
+	<bx:if len( variables.page.canonicalUrl )>
+		<link rel="canonical" href="#encodeForHTML( variables.page.canonicalUrl )#">
+	</bx:if>
+
+	<!--- Meta description and Open Graph description --->
+	<bx:if len( variables.ogDescription )>
+		<meta name="description" content="#encodeForHTML( variables.ogDescription )#">
+		<meta property="og:description" content="#encodeForHTML( variables.ogDescription )#">
+	</bx:if>
+
+	<!--- Open Graph image and Twitter card --->
+	<bx:if len( variables.ogImageUrl )>
+		<meta property="og:image" content="#resolveAssetUrl( variables.ogImageUrl )#">
+		<meta name="twitter:card" content="summary_large_image">
+	</bx:if>
+
+	<!--- Favicon --->
+	<bx:if len( variables.faviconUrl )>
+		<link rel="icon" href="#resolveAssetUrl( variables.faviconUrl )#">
+	</bx:if>
+
+	<!--- Color mode detection (before CSS, to avoid flash) --->
+	<script>
+		( function () {
+			var configuredMode = "#variables.siteConfig.theme.options.colorMode ?: 'auto'#";
+			var stored = localStorage.getItem( "bxsites-theme" );
+			var prefersDark = window.matchMedia( "(prefers-color-scheme: dark)" ).matches;
+			var wantsDark = stored ? stored === "dark" : ( configuredMode === "dark" || ( configuredMode === "auto" && prefersDark ) );
+			if ( wantsDark ) {
+				document.documentElement.setAttribute( "data-theme", "dark" );
+			}
+		} )();
+	</script>
+
+	<!--- Base CSS and theme CSS (+ the homepage-only stylesheet) --->
+	<link rel="stylesheet" href="#variables.basePath#assets/vendor/bootstrap/bootstrap.min.css">
+	<link rel="stylesheet" href="#variables.basePath#assets/vendor/highlight/github.min.css">
+	<link rel="stylesheet" href="#themeAssetUrl( 'style.css' )#">
+	<link rel="stylesheet" href="#moduleAssetUrl( 'home.css' )#">
+	<link rel="stylesheet" href="#variables.basePath#assets/vendor/phosphor/style.css">
+	<link rel="stylesheet" href="#themeAssetUrl( 'agents-home.css' )#">
+
+	<!--- Extra CSS --->
+	#renderExtraCss( variables.siteConfig.extraCss ?: [] )#
+
+	<!--- Accent color overrides --->
+	<bx:if len( variables.accentColor ) or len( variables.accentColorDark )>
+		<style>
+			<!--- Light mode accent color --->
+			<bx:if len( variables.accentColor )>
+				:root {
+					--bxsites-accent: #variables.accentColor#;
+					--bxsites-link: #variables.accentColor#;
+					--bxsites-link-hover: color-mix( in srgb, #variables.accentColor# 85%, black );
+				}
+			</bx:if>
+			<!--- Dark mode accent color --->
+			<bx:if len( variables.accentColorDark )>
+				[data-theme="dark"] {
+					--bxsites-accent: #variables.accentColorDark#;
+					--bxsites-link: #variables.accentColorDark#;
+					--bxsites-link-hover: color-mix( in srgb, #variables.accentColorDark# 85%, white );
+				}
+			</bx:if>
+		</style>
+	</bx:if>
+
+	<!--- Math CSS --->
+	<bx:if variables.mathEnabled>
+		<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+	</bx:if>
+
+	<!--- OpenAPI CSS --->
+	<bx:if variables.openapiEnabled>
+		<link rel="stylesheet" href="#variables.basePath#assets/vendor/swagger-ui/swagger-ui.css">
+	</bx:if>
+
+	<!--- Google Analytics --->
+	<bx:if variables.analyticsProvider == 'google'>
+		<script async src="https://www.googletagmanager.com/gtag/js?id=#encodeForHTML( variables.analyticsId )#"></script>
+		<script>
+			window.dataLayer = window.dataLayer || [];
+			function gtag(){dataLayer.push(arguments);}
+			gtag('js', new Date());
+			gtag('config', '#variables.analyticsId#');
+		</script>
+	</bx:if>
+
+	<!--- Local search CSS and JS --->
+	<bx:if variables.searchEnabled and variables.searchProviderName eq 'local'>
+		<script>window.__BXSITES_BASE_PATH__ = "#variables.basePath#";</script>
+		<script>window.__BXSITES_SEARCH_NO_RESULTS__ = "#encodeForJavaScript( variables.strings.searchNoResults )#";</script>
+		<script src="#variables.basePath#assets/vendor/minisearch/minisearch.js"></script>
+		<script src="#moduleAssetUrl( 'search.js' )#" defer></script>
+	</bx:if>
+
+	<!--- Algolia search CSS --->
+	<bx:if variables.searchEnabled and variables.searchProviderName eq 'algolia'>
+		<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@docsearch/css@3">
+	</bx:if>
+
+	<!--- Pagefind search CSS --->
+	<bx:if variables.searchEnabled and variables.searchProviderName eq 'pagefind'>
+		<link rel="stylesheet" href="#variables.basePath#pagefind/pagefind-ui.css">
+	</bx:if>
+
+	<!--- Alpine JS --->
+	<script src="#variables.basePath#assets/vendor/alpine/cdn.min.js" defer></script>
+</head>
+<body
+	class="bxsites-home bxa-home" data-base="#variables.basePath#"
+	x-data="{ dark: document.documentElement.getAttribute( 'data-theme' ) === 'dark' }"
+	x-init="$watch( 'dark', v => { document.documentElement.setAttribute( 'data-theme', v ? 'dark' : 'light' ); localStorage.setItem( 'bxsites-theme', v ? 'dark' : 'light' ) } )">
+
+		<header class="bxa-top"><div class="bxa-wrap">
+  <a class="bxa-brand" href="#variables.basePath#" aria-label="BxAgents home"><img class="bxa-dark" src="#variables.basePath#assets/bxagents-logo-full-dark.svg" alt="BxAgents"><img class="bxa-light" src="#variables.basePath#assets/bxagents-logo-full-light.svg" alt="BxAgents"></a>
+  <nav class="bxa-main" aria-label="Primary"><a href="##start">Quick start</a><a href="##watch">Watch</a><a href="##reach">Gateways</a><a href="##starters">Starters</a><a href="##course">Course</a><a href="#variables.basePath#getting-started/installation/">Docs</a></nav>
+  <span class="bxa-spacer"></span>
+  <div class="bxa-searchwrap"><bx:if variables.searchEnabled><bx:include template="#variables.themeDir#/search.bxm"></bx:if></div>
+  <bx:if len( variables.repoUrl )><a class="bxa-gh" href="#bxsitesUrlAttr( variables.repoUrl )#" target="_blank" rel="noopener noreferrer"><i class="ph-duotone ph-github-logo" style="font-size:1.1rem"></i><span>GitHub</span></a></bx:if>
+  <button type="button" class="bxa-icon-btn" @click="dark = !dark" aria-label="#encodeForHTML( variables.strings.toggleDarkMode )#"><span x-show="!dark"><i class="ph-duotone ph-moon"></i></span><span x-show="dark" x-cloak><i class="ph-duotone ph-sun"></i></span></button>
+</div></header>
+
+<main class="bxa-main-content" id="top">
+<section class="bxa-hero"><div class="bxa-bgring" aria-hidden="true"><i></i></div><div class="bxa-glow" aria-hidden="true"></div><div class="bxa-wrap">
+  <div>
+    <span class="bxa-eyebrow">Conventions-based agent framework for BoxLang</span>
+    <h1 style="margin-top:16px">Build AI agents by <span class="bxa-grad">convention</span>.</h1>
+    <p class="bxa-lede">Describe an agent with files and folders. <code>bxAgents build</code> assembles a real, runnable ColdBox application from them, once, before anything boots.</p>
+    <div class="bxa-cta">
+      <a class="bxa-btn bxa-btn-primary" href="##start">Get started <i class="ph-duotone ph-arrow-up-right"></i></a>
+      <a class="bxa-btn bxa-btn-ghost" href="##how">See how it works</a>
+    </div>
+    <div class="bxa-install" role="group" aria-label="Install command"><code><i>$</i> install-bx-module bx-ai bx-agents</code><button class="bxa-copy" data-copy="install-bx-module bx-ai bx-agents">Copy</button></div>
+    <div class="bxa-tagline"><span>Build</span><span>Constrain</span><span>Orchestrate</span></div>
+  </div>
+
+  <div class="bxa-stagewrap"><div class="bxa-stage" id="stage" aria-label="Interactive: pick a folder to see what the build generates from it">
+    <svg class="bxa-orbit" viewBox="0 0 500 500" aria-hidden="true"><defs><linearGradient id="og" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="##00FF75"/><stop offset="1" stop-color="##00DBFF"/></linearGradient></defs><circle cx="250" cy="250" r="170" fill="none" stroke="url(##og)" stroke-width="28"/><circle cx="250" cy="58" r="46" fill="url(##og)"/><circle cx="62" cy="380" r="46" fill="url(##og)"/><circle cx="438" cy="380" r="46" fill="url(##og)"/></svg>
+    <div class="bxa-stage-bar"><i></i><i></i><i></i><span>your-agent/  →  .build/app/</span></div>
+    <div class="bxa-stage-body">
+      <div class="bxa-tree" role="tablist" aria-orientation="vertical" aria-label="Agent folders">
+        <div class="bxa-root">your-agent/</div>
+        <button role="tab" aria-selected="true" data-k="agent"><i class="ph-duotone ph-file-code"></i>Agent.bx<span class="bxa-tag">required</span></button>
+        <button role="tab" aria-selected="false" data-k="instructions"><i class="ph-duotone ph-file-text"></i>instructions.md</button>
+        <button role="tab" aria-selected="false" data-k="tools"><i class="ph-duotone ph-wrench"></i>tools/</button>
+        <button role="tab" aria-selected="false" data-k="skills"><i class="ph-duotone ph-graduation-cap"></i>skills/</button>
+        <button role="tab" aria-selected="false" data-k="subagents"><i class="ph-duotone ph-users-three"></i>subagents/</button>
+        <button role="tab" aria-selected="false" data-k="gateways"><i class="ph-duotone ph-plugs-connected"></i>gateways/</button>
+        <button role="tab" aria-selected="false" data-k="schedules"><i class="ph-duotone ph-clock-countdown"></i>schedules/</button>
+        <button role="tab" aria-selected="false" data-k="mcp"><i class="ph-duotone ph-cloud-arrow-up"></i>mcp/</button>
+        <button role="tab" aria-selected="false" data-k="interceptors"><i class="ph-duotone ph-lightning"></i>interceptors/</button>
+      </div>
+      <div class="bxa-out" role="tabpanel" aria-live="polite" id="out">
+        <span class="bxa-k" id="o-k">The agent</span>
+        <h3 id="o-h">Agent.bx is the agent</h3>
+        <p id="o-p">Your class extends BX AI's own <code>AiAgent</code>. The build instantiates it, so what you write is what runs.</p>
+        <div class="bxa-gen" id="o-g"></div>
+        <div class="bxa-running"><span class="bxa-dot"></span><span>plain ColdBox app, no scanning at boot</span></div>
+      </div>
+    </div>
+  </div></div>
+</div></section>
+
+<section style="padding-top:0"><div class="bxa-wrap">
+  <div class="bxa-pillars">
+    <div class="bxa-pillar bxa-gc bxa-rv"><span class="bxa-ico"><i class="ph-duotone ph-folders"></i></span><h3>Conventions first</h3><p>Convention over configuration for faster development.</p></div>
+    <div class="bxa-pillar bxa-gc bxa-rv"><span class="bxa-ico"><i class="ph-duotone ph-puzzle-piece"></i></span><h3>Pluggable and extensible</h3><p>Swap models, tools, memory and more with ease.</p></div>
+    <div class="bxa-pillar bxa-gc bxa-rv"><span class="bxa-ico"><i class="ph-duotone ph-brain"></i></span><h3>Powerful agents</h3><p>Agents that reason, act, and collaborate effectively.</p></div>
+    <div class="bxa-pillar bxa-gc bxa-rv"><span class="bxa-ico"><i class="ph-duotone ph-shield-check"></i></span><h3>Production ready</h3><p>Built for performance, reliability, and real-world applications.</p></div>
+  </div>
+</div></section>
+
+<section id="start" class="bxa-band"><div class="bxa-wrap">
+  <div class="bxa-head bxa-rv"><span class="bxa-eyebrow">Quick start</span><h2>From nothing to a chat in four commands.</h2><p>Install the module, scaffold an agent, build it, and talk to it. Nothing else to configure.</p></div>
+  <div class="bxa-cmds bxa-rv">
+    <div class="bxa-cmd bxa-gc"><span class="bxa-n"><b>1</b>Install</span><code>install-bx-module \
+  bx-ai bx-agents</code><button class="bxa-copy" data-copy="install-bx-module bx-ai bx-agents">Copy</button></div>
+    <div class="bxa-cmd bxa-gc"><span class="bxa-n"><b>2</b>Scaffold</span><code>bxAgents new my-agent \
+  --model=openai/gpt-5</code><button class="bxa-copy" data-copy="bxAgents new my-agent --model=openai/gpt-5">Copy</button></div>
+    <div class="bxa-cmd bxa-gc"><span class="bxa-n"><b>3</b>Build</span><code>cd my-agent
+bxAgents build</code><button class="bxa-copy" data-copy="bxAgents build">Copy</button></div>
+    <div class="bxa-cmd bxa-gc"><span class="bxa-n"><b>4</b>Talk to it</span><code>bxAgents chat
+<i>##</i> or serve over HTTP
+bxAgents serve --port=8080</code><button class="bxa-copy" data-copy="bxAgents chat">Copy</button></div>
+  </div>
+  <div class="bxa-result bxa-rv"><span class="bxa-dot"></span><span>Then open <b>http://127.0.0.1:8080</b>. Bound to localhost only.</span></div>
+</div></section>
+
+<section id="watch"><div class="bxa-wrap">
+  <div class="bxa-head bxa-rv"><span class="bxa-eyebrow">Watch it work</span><h2>Real runs, recorded.</h2><p>Every clip is a real session against a real served agent. The model is the mock provider the examples ship with, so each answer is "Mock response" and no model was called.</p></div>
+  <div class="bxa-vplayer bxa-rv">
+    <div class="bxa-vtabs" role="tablist" aria-label="Walkthrough videos" id="vtabs"></div>
+    <div class="bxa-vstage">
+      <video id="vvideo" muted loop playsinline controls preload="metadata" poster="#variables.basePath#assets/video/quickstart-poster.png"><source id="vsrc" src="#variables.basePath#assets/video/quickstart.mp4" type="video/mp4"><source id="vsrc2" src="#variables.basePath#assets/video/quickstart.webm" type="video/webm"></video>
+      <div class="bxa-vcap"><h3 id="vtitle">From nothing to a running agent</h3><p id="vtext"></p><code id="vcmd"></code></div>
+    </div>
+  </div>
+</div></section>
+
+<section id="how"><div class="bxa-wrap">
+  <div class="bxa-head bxa-rv"><span class="bxa-eyebrow">Four files, one running agent</span><h2>You write the agent. The folders do the wiring.</h2><p>This is the whole <code>simple-agent</code> example from the repo: a class, a prompt, one tool. Add a folder when you need it, and the build picks it up.</p></div>
+  <div class="bxa-show bxa-rv">
+    <div>
+      <div class="bxa-tabs" role="tablist" aria-label="Example files">
+        <button role="tab" aria-selected="true" data-f="0">Agent.bx</button>
+        <button role="tab" aria-selected="false" data-f="1">instructions.md</button>
+        <button role="tab" aria-selected="false" data-f="2">tools/Greeter.bx</button>
+      </div>
+      <pre class="bxa-code" id="code" tabindex="0"></pre>
+    </div>
+    <div class="bxa-term" role="img" aria-label="Terminal session: bxAgents new, build, inspect and serve">
+      <div class="bxa-stage-bar"><i></i><i></i><i></i><span>bxAgents, from nothing to a running agent</span></div>
+<pre><span class="bxa-t-p">$</span> bxAgents new support-bot --model=openai/gpt-5 --template=webui-chat
+<span class="bxa-t-d">Created new BX Agents project [support-bot] at /work/support-bot</span>
+<span class="bxa-t-p">$</span> bxAgents build
+<span class="bxa-t-ok">Build succeeded</span><span class="bxa-t-d">: /work/support-bot/.build/app</span>
+<span class="bxa-t-p">$</span> bxAgents inspect
+<span class="bxa-t-d">Agent:</span>         support-bot
+<span class="bxa-t-d">Model:</span>         OpenAI/gpt-5
+<span class="bxa-t-d">Environment:</span>   development
+<span class="bxa-t-d">Manifest ver:</span>  1.0.0
+<span class="bxa-t-p">$</span> bxAgents serve --port=8080
+Serving [<span class="bxa-t-h">/work/support-bot/.build/app</span>] on <span class="bxa-t-h">http://127.0.0.1:8080</span>
+<span class="bxa-t-d">- bound to 127.0.0.1 only</span> <span class="bxa-cur"></span></pre>
+    </div>
+  </div>
+</div></section>
+
+<section class="bxa-band"><div class="bxa-wrap">
+  <div class="bxa-head bxa-rv"><span class="bxa-eyebrow">Assembled at build time</span><h2>Discovery happens once, not on every boot.</h2><p>Most agent frameworks wire tools, skills, routes and schedules together at request time. BxAgents does the work in <code>bxAgents build</code> and ships an ordinary app.</p></div>
+  <div class="bxa-pipe bxa-rv">
+    <div class="bxa-step"><i></i><h3>Discover</h3><p>Walk the convention folders that exist and have content.</p></div>
+    <div class="bxa-step"><i></i><h3>Validate</h3><p>Reject bad config before anything runs.</p></div>
+    <div class="bxa-step"><i></i><h3>Manifest</h3><p>Record what was found in <code>manifest.json</code>.</p></div>
+    <div class="bxa-step"><i></i><h3>Generate</h3><p>Write config, handlers, router and scheduler.</p></div>
+    <div class="bxa-step"><i></i><h3>Run</h3><p>Boot <code>.build/app</code> like any ColdBox app, or ship a <code>.bxa</code>.</p></div>
+  </div>
+  <div class="bxa-versus bxa-rv">
+    <div class="bxa-vs"><h3>Wired at request time</h3><p>Convention scanning and file walking on every boot, and build work deferred into the request path.</p></div>
+    <div class="bxa-vs bxa-win"><h3>Wired at build time</h3><p>No scanning at startup. Starting the agent is booting a plain ColdBox application.</p></div>
+  </div>
+</div></section>
+
+<section id="reach"><div class="bxa-wrap">
+  <div class="bxa-gwtop">
+    <div class="bxa-rv">
+      <span class="bxa-eyebrow">Reach it from anywhere</span>
+      <h2 style="font-size:clamp(1.8rem,3.6vw,2.7rem);line-height:1.1;letter-spacing:-.025em;font-weight:700;margin:12px 0 14px;text-wrap:balance">Twelve gateways. Hover one to inspect it.</h2>
+      <p style="color:var(--muted);font-size:1.05rem;margin-bottom:26px">Drop a file into <code>gateways/</code> and your agent is on that channel. Each tile shows the <code>type</code> you set and the environment variables it reads, straight from the docs.</p>
+      <div class="bxa-gwgrid" id="gwgrid">
+        <a class="bxa-gw bxa-gc" data-g="slack" href="#variables.basePath#conventions/gateways/slack/"><i class="ph-duotone ph-slack-logo"></i>Slack</a>
+        <a class="bxa-gw bxa-gc" data-g="telegram" href="#variables.basePath#conventions/gateways/telegram/"><i class="ph-duotone ph-telegram-logo"></i>Telegram</a>
+        <a class="bxa-gw bxa-gc" data-g="discord" href="#variables.basePath#conventions/gateways/discord/"><i class="ph-duotone ph-discord-logo"></i>Discord</a>
+        <a class="bxa-gw bxa-gc" data-g="email" href="#variables.basePath#conventions/gateways/email/"><i class="ph-duotone ph-envelope-simple"></i>Email</a>
+        <a class="bxa-gw bxa-gc" data-g="whatsapp" href="#variables.basePath#conventions/gateways/whatsapp-cloud/"><i class="ph-duotone ph-whatsapp-logo"></i>WhatsApp</a>
+        <a class="bxa-gw bxa-gc" data-g="teams" href="#variables.basePath#conventions/gateways/teams/"><i class="ph-duotone ph-microsoft-teams-logo"></i>Teams</a>
+        <a class="bxa-gw bxa-gc" data-g="twilio" href="#variables.basePath#conventions/gateways/twilio/"><i class="ph-duotone ph-phone-call"></i>Twilio</a>
+        <a class="bxa-gw bxa-gc" data-g="github" href="#variables.basePath#conventions/gateways/github/"><i class="ph-duotone ph-github-logo"></i>GitHub</a>
+        <a class="bxa-gw bxa-gc" data-g="signal" href="#variables.basePath#conventions/gateways/signal/"><svg class="ph-duotone bxa-sig" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0q-.934 0-1.83.139l.17 1.111a11 11 0 0 1 3.32 0l.172-1.111A12 12 0 0 0 12 0M9.152.34A12 12 0 0 0 5.77 1.742l.584.961a10.8 10.8 0 0 1 3.066-1.27zm5.696 0-.268 1.094a10.8 10.8 0 0 1 3.066 1.27l.584-.962A12 12 0 0 0 14.848.34M12 2.25a9.75 9.75 0 0 0-8.539 14.459c.074.134.1.292.064.441l-1.013 4.338 4.338-1.013a.62.62 0 0 1 .441.064A9.7 9.7 0 0 0 12 21.75c5.385 0 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25m-7.092.068a12 12 0 0 0-2.59 2.59l.909.664a11 11 0 0 1 2.345-2.345zm14.184 0-.664.909a11 11 0 0 1 2.345 2.345l.909-.664a12 12 0 0 0-2.59-2.59M1.742 5.77A12 12 0 0 0 .34 9.152l1.094.268a10.8 10.8 0 0 1 1.269-3.066zm20.516 0-.961.584a10.8 10.8 0 0 1 1.27 3.066l1.093-.268a12 12 0 0 0-1.402-3.383M.138 10.168A12 12 0 0 0 0 12q0 .934.139 1.83l1.111-.17A11 11 0 0 1 1.125 12q0-.848.125-1.66zm23.723.002-1.111.17q.125.812.125 1.66c0 .848-.042 1.12-.125 1.66l1.111.172a12.1 12.1 0 0 0 0-3.662M1.434 14.58l-1.094.268a12 12 0 0 0 .96 2.591l-.265 1.14 1.096.255.36-1.539-.188-.365a10.8 10.8 0 0 1-.87-2.35m21.133 0a10.8 10.8 0 0 1-1.27 3.067l.962.584a12 12 0 0 0 1.402-3.383zm-1.793 3.848a11 11 0 0 1-2.345 2.345l.664.909a12 12 0 0 0 2.59-2.59zm-19.959 1.1L.357 21.48a1.8 1.8 0 0 0 2.162 2.161l1.954-.455-.256-1.095-1.953.455a.675.675 0 0 1-.81-.81l.454-1.954zm16.832 1.769a10.8 10.8 0 0 1-3.066 1.27l.268 1.093a12 12 0 0 0 3.382-1.402zm-10.94.213-1.54.36.256 1.095 1.139-.266c.814.415 1.683.74 2.591.961l.268-1.094a10.8 10.8 0 0 1-2.35-.869zm3.634 1.24-.172 1.111a12.1 12.1 0 0 0 3.662 0l-.17-1.111q-.812.125-1.66.125a11 11 0 0 1-1.66-.125"/></svg>Signal</a>
+        <a class="bxa-gw bxa-gc bxa-alt" data-g="http" href="#variables.basePath#conventions/gateways/"><i class="ph-duotone ph-globe-hemisphere-west"></i>http<small>webhook</small></a>
+        <a class="bxa-gw bxa-gc bxa-alt" data-g="cli" href="#variables.basePath#conventions/gateways/"><i class="ph-duotone ph-terminal-window"></i>cli<small>approval</small></a>
+        <a class="bxa-gw bxa-gc bxa-alt" data-g="mock" href="#variables.basePath#conventions/gateways/"><i class="ph-duotone ph-flask"></i>mock<small>tests</small></a>
+      </div>
+      <p class="bxa-gwnote">Hover, focus or tap a tile.</p>
+    </div>
+    <div class="bxa-rv">
+      <div class="bxa-shot"><img class="bxa-d" src="#variables.basePath#assets/webui-chat-dark.png" alt="The generated web chat UI in dark mode"><img class="bxa-l" src="#variables.basePath#assets/webui-chat-light.png" alt="The generated web chat UI in light mode"></div>
+      <ul class="bxa-facts"><li>A generated chat UI: conversation history, streaming replies and a mobile layout.</li><li>Light and dark theming, themeable from <code>Agent.bx</code>.</li><li>No front-end build step of your own.</li></ul>
+    </div>
+  </div>
+  <div class="bxa-expos bxa-rv">
+    <div class="bxa-ex bxa-gc"><i class="ph-duotone ph-code"></i><b>A REST API</b><code>exposes: "agent"</code><p>Mounts invoke and info routes under a path you choose, like <code>/api/chat</code>.</p></div>
+    <div class="bxa-ex bxa-gc"><i class="ph-duotone ph-chat-circle-dots"></i><b>A web chat UI</b><code>exposes: "webui"</code><p>A streaming chat front end at a path like <code>/chat</code>.</p></div>
+    <div class="bxa-ex bxa-gc"><i class="ph-duotone ph-plugs-connected"></i><b>An MCP server</b><code>exposes: "mcp"</code><p>Any MCP client can connect at a path like <code>/mcp</code>.</p></div>
+  </div>
+</div></section>
+
+<section id="http" class="bxa-band"><div class="bxa-wrap">
+  <div class="bxa-head bxa-rv"><span class="bxa-eyebrow">See it serve</span><h2>One gateway file, a working HTTP API.</h2><p>One small file, <code>gateways/expose.bx</code>, and the build mounts a REST API for your agent. The output on the left is a real capture from a served agent.</p></div>
+  <div class="bxa-rec bxa-rv">
+    <div class="bxa-vid bxa-replay"><div class="bxa-stage-bar"><i></i><i></i><i></i><span>curl, against the served agent</span></div>
+      <pre class="bxa-code" id="replay" aria-live="off" tabindex="0"><span class="bxa-t-d">Loading the captured session...</span></pre></div>
+    <div class="bxa-vid"><div class="bxa-stage-bar"><i></i><i></i><i></i><span>gateways/expose.bx</span></div>
+<pre class="bxa-code" style="border:0;border-radius:0;min-height:0"><span class="bxa-c-k">class</span> {
+
+	<span class="bxa-c-k">function</span> configure() {
+		<span class="bxa-c-k">return</span> {
+			exposes : <span class="bxa-c-s">"agent"</span>,
+			path    : <span class="bxa-c-s">"/api/chat"</span>
+		};
+	}
+
+}</pre>
+      <div class="bxa-routes" id="routes" aria-label="Routes reported by the running agent"></div></div>
+  </div>
+  <p class="bxa-caption">Captured on 2026-10-16 from the <code>http-gateway-agent</code> example on BoxLang 1.16.0. It uses the mock model provider, which answers every input with "Mock response", so no model was called. The routes on the right are read from the <code>/info</code> response.</p>
+</div></section>
+
+<section id="starters"><div class="bxa-wrap">
+  <div class="bxa-head bxa-rv"><span class="bxa-eyebrow">Start from something, not nothing</span><h2>Pick a starter. See exactly what you get.</h2><p>Generated by the real scaffolder for each template. Select a file to read it.</p></div>
+  <div class="bxa-explorer bxa-rv">
+    <div class="bxa-ex-cmd"><code><span class="bxa-p">$</span> bxAgents new my-agent --model=openai/gpt-5 --template=<b id="ex-t">minimal</b></code><button class="bxa-copy" id="ex-copy">Copy</button></div>
+    <div class="bxa-ex-body">
+      <div class="bxa-ex-list" id="ex-list" role="tablist" aria-orientation="vertical" aria-label="Starter templates"></div>
+      <div class="bxa-ex-tree" id="ex-tree" role="tree" aria-label="Files in this starter"></div>
+      <div class="bxa-ex-file"><div class="bxa-ex-file-bar"><span id="ex-path">Agent.bx</span><span id="ex-badge"></span></div><pre id="ex-code" tabindex="0"></pre></div>
+    </div>
+  </div>
+  <div class="bxa-ex-legend bxa-rv"><span><span class="bxa-badge bxa-new">new</span>added by the starter</span><span><span class="bxa-badge bxa-chg">changed</span>differs from minimal</span><span>Dimmed folders are empty conventions, ready for you.</span><span>Also: <code>--repo=owner/repo</code> and <code>--forgebox=&lt;slug&gt;</code>.</span></div>
+</div></section>
+
+<section id="course" class="bxa-band"><div class="bxa-wrap bxa-course">
+  <div class="bxa-lead bxa-rv">
+    <span class="bxa-eyebrow">Learn it properly</span>
+    <h2>A 20-lesson course, from install to a deployed agent.</h2>
+    <p>Follow the guided path through the same conventions you just saw. No account needed: the course remembers where you stopped in your own browser.</p>
+    <div class="bxa-cta"><a class="bxa-btn bxa-btn-primary" href="#variables.basePath#course/">Start Lesson 1 <i class="ph-duotone ph-arrow-right"></i></a><a class="bxa-btn bxa-btn-ghost" href="#variables.basePath#course/">Browse all 20 lessons</a></div>
+    <div class="bxa-outcome"><i class="ph-duotone ph-flag-checkered"></i><div><b>By Lesson 20 you will have built</b><span>An agent with its own tools and a packaged skill, reachable from the CLI, a browser chat UI and an HTTP API, with tests that run without an API key, packaged as a <code>.bxa</code> ready to deploy.</span></div></div>
+    <div class="bxa-progress"><span>0 of 20 lessons read</span><i></i></div>
+  </div>
+  <div class="bxa-path bxa-rv" id="path" aria-label="The 20 lessons, grouped in six stages"></div>
+</div></section>
+
+<section id="cli"><div class="bxa-wrap">
+  <div class="bxa-head bxa-rv"><span class="bxa-eyebrow">The CLI</span><h2>Twelve verbs, one executable.</h2><p>Tab completion for bash, fish and PowerShell ships with the module.</p></div>
+  <div class="bxa-vgrid">
+    <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##new"><i class="ph-duotone ph-hand-waving"></i><b>new</b><small>Scaffold a project</small></a>
+    <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##build"><i class="ph-duotone ph-hammer"></i><b>build</b><small>Assemble the app</small></a>
+    <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##test"><i class="ph-duotone ph-flask"></i><b>test</b><small>Run TestBox specs</small></a>
+    <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##serve"><i class="ph-duotone ph-lightning"></i><b>serve</b><small>boxlang-miniserver</small></a>
+    <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##chat"><i class="ph-duotone ph-chat-circle-dots"></i><b>chat</b><small>Interactive REPL</small></a>
+    <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##invoke"><i class="ph-duotone ph-paper-plane-tilt"></i><b>invoke</b><small>One message, one reply</small></a>
+    <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##package"><i class="ph-duotone ph-package"></i><b>package</b><small>Build a .bxa</small></a>
+    <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##deploy"><i class="ph-duotone ph-rocket-launch"></i><b>deploy</b><small>Ship to a target</small></a>
+    <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##inspect"><i class="ph-duotone ph-magnifying-glass"></i><b>inspect</b><small>Read the manifest</small></a>
+    <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##clean"><i class="ph-duotone ph-broom"></i><b>clean</b><small>Remove build output</small></a>
+    <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##hash-password"><i class="ph-duotone ph-key"></i><b>hash-password</b><small>Web UI users</small></a>
+    <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##doctor"><i class="ph-duotone ph-stethoscope"></i><b>doctor</b><small>Diagnose the setup</small></a>
+  </div>
+</div></section>
+
+<section style="padding-top:0"><div class="bxa-wrap">
+  <div class="bxa-support bxa-rv">
+    <div class="bxa-l">
+      <span class="bxa-eyebrow">Consulting and support</span>
+      <h2>Need agents in production? <span class="bxa-grad">Talk to the people who build BoxLang.</span></h2>
+      <p><a href="https://www.ortussolutions.com">Ortus Solutions</a> offers professional support, architecture reviews and custom development for BoxLang, including agent design, gateways, tools and deployment.</p>
+      <div class="bxa-acts">
+        <a class="bxa-btn bxa-btn-primary" href="https://www.ortussolutions.com/services">Talk to Ortus <i class="ph-duotone ph-arrow-right"></i></a>
+        <a class="bxa-btn bxa-btn-ghost" href="https://boxlang.io/plans">See BoxLang+ plans</a>
+        <a class="bxa-btn bxa-btn-ghost" href="mailto:consulting@ortussolutions.com"><i class="ph-duotone ph-envelope-simple"></i> consulting@ortussolutions.com</a>
+      </div>
+    </div>
+    <div class="bxa-r">
+      <div class="bxa-perk"><span class="bxa-pi"><i class="ph-duotone ph-headset"></i></span><div><b>Priority support</b><span>Answers from the team that wrote the runtime.</span></div></div>
+      <div class="bxa-perk"><span class="bxa-pi"><i class="ph-duotone ph-wrench"></i></span><div><b>Custom development</b><span>Agents, tools, gateways and integrations built to your brief.</span></div></div>
+      <div class="bxa-perk"><span class="bxa-pi"><i class="ph-duotone ph-graduation-cap"></i></span><div><b>Training and review</b><span>Get your team productive and your design checked.</span></div></div>
+    </div>
+  </div>
+</div></section>
+
+<section style="padding-top:0"><div class="bxa-wrap">
+  <div class="bxa-final bxa-rv">
+    <h2>Describe the agent.<br><span class="bxa-grad">Let the folders do the rest.</span></h2>
+    <div class="bxa-cta"><a class="bxa-btn bxa-btn-primary" href="##start">Get started <i class="ph-duotone ph-arrow-up-right"></i></a><a class="bxa-btn bxa-btn-ghost" href="https://github.com/ortus-boxlang/bx-agents">Star on GitHub</a></div>
+  </div>
+</div></section>
+</main>
+
+
+<div class="bxa-tip" id="tip" role="tooltip"></div>
+<footer class="bxa-footer"><div class="bxa-wrap bxa-foot-top">
+  <div class="bxa-foot-brand">
+    <a class="bxa-brand" href="#variables.basePath#"><img class="bxa-dark" src="#variables.basePath#assets/bxagents-logo-full-dark.svg" alt="BxAgents"><img class="bxa-light" src="#variables.basePath#assets/bxagents-logo-full-light.svg" alt="BxAgents"></a>
+    <p>Build AI agents by convention, on BoxLang and ColdBox.</p>
+    <bx:if variables.socialLinks.len() gt 0><div class="bxa-social">#renderSocialLinks( variables.socialLinks )#</div></bx:if>
+  </div>
+  <div class="bxa-foot-col"><h4>Learn</h4>
+    <a href="#variables.basePath#getting-started/installation/">Installation</a>
+    <a href="#variables.basePath#getting-started/quick-start/">Quick start</a>
+    <a href="#variables.basePath#course/">The course</a>
+    <a href="#variables.basePath#guides/example-minimal-agent/">Example agents</a>
+  </div>
+  <div class="bxa-foot-col"><h4>Reference</h4>
+    <a href="#variables.basePath#conventions/agent-bx/">Conventions</a>
+    <a href="#variables.basePath#cli-reference/">CLI</a>
+    <a href="#variables.basePath#agent-templates/">Agent templates</a>
+    <a href="#variables.basePath#manifest/">Manifest</a>
+  </div>
+  <div class="bxa-foot-col"><h4>Project</h4>
+    <a href="#variables.basePath#build-pipeline/">Build pipeline</a>
+    <a href="#variables.basePath#deployment-and-secrets/">Deployment</a>
+    <a href="#variables.basePath#known-limitations/">Known limitations</a>
+    <bx:if len( variables.repoUrl )><a href="#bxsitesUrlAttr( variables.repoUrl )#/issues" target="_blank" rel="noopener noreferrer">Report an issue</a></bx:if>
+  </div>
+  <div class="bxa-foot-col"><h4>Community</h4>
+    <a href="https://www.ortussolutions.com/community/slack" target="_blank" rel="noopener noreferrer">Slack</a>
+    <a href="https://community.ortussolutions.com" target="_blank" rel="noopener noreferrer">Forums</a>
+    <a href="https://www.ortussolutions.com/services" target="_blank" rel="noopener noreferrer">Consulting</a>
+    <a href="https://boxlang.io" target="_blank" rel="noopener noreferrer">BoxLang</a>
+  </div>
+</div>
+<div class="bxa-wrap bxa-foot-bottom"><span>&copy; #year( now() )# Ortus Solutions, Corp. Apache-2.0.</span><a href="https://boxlang.io" target="_blank" rel="noopener noreferrer">Part of the <b>BoxLang</b> ecosystem</a></div>
+</footer>
+	<script src="#themeAssetUrl( 'agents-data.js' )#" defer></script>
+	<script src="#themeAssetUrl( 'agents-home.js' )#" defer></script>
+	<!--- Extra JS --->
+	#renderExtraJs( variables.siteConfig.extraJs ?: [] )#
+</body>
+</html>
+</bx:output>

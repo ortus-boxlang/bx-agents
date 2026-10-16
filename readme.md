@@ -128,6 +128,8 @@ bxSites lint      # pre-build content checks on the raw docs/ Markdown
 
 Every page starts with a small frontmatter block (`title`, `icon`, `summary`, `description`, `tags`); `summary` renders under the page title, `description` is meta-only, and `tags` become clickable badges plus a site-wide `/tags/` index. Scaffold a new one with `bxSites page:new --path=guides/setup.md`, or move one (rewriting every relative Markdown link that pointed at it) with `bxSites page:rename --from=... --to=...`.
 
+The homepage is not Markdown. `docs/.theme/` is an ejected copy of the bx-sites `bootstrap` theme (an override wins outright, so it has to be the whole theme), and its `home.bxm` hardcodes the landing page; `docs/index.md` only selects it with `layout: home`, and its body is kept for search and the MCP index. The look lives in `docs/.theme/assets/agents-home.{css,js}`, every class there is prefixed `bxa-` so nothing collides with bootstrap, and `agents-data.js` holds the real scaffolder output and HTTP capture the page shows. The walkthrough videos under `docs/assets/video/` are recordings of real runs. When bx-sites ships theme changes you want, re-eject `bootstrap` and carry `home.bxm` over.
+
 `bxsites.yaml` turns on `generateOgImages` (a distinct 1200x630 social card per page, built from its `title`/`description`, falling back to `ogImage: assets/home-banner.jpg` for anything the generator can't handle) and `pageActions` (the per-page copy/view-as-Markdown/open-in-AI-chat/PDF/share menu). `sitemap.xml`, `robots.txt` and `llms.txt` are generated for free once `baseURL` is an absolute URL, which it already is here - no extra config needed.
 
 The Spanish translation under `docs/versions/1.0.x/i18n/es/` covers page content; the

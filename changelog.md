@@ -103,6 +103,9 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   guides, the build pipeline, the manifest schema, the CLI reference, deployment and
   secrets, and an honest known-limitations page.
 - 18 real, buildable example projects under `examples/`, built in CI as a regression gate.
+- A new homepage with an interactive folder-to-app panel, a hover inspector for every gateway,
+  a starter explorer built from the real scaffolder output, the course path, walkthrough
+  videos recorded from real runs, and a consulting section. New logo, favicon and social image.
 
 ### Security
 
