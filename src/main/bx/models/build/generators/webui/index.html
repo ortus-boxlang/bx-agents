@@ -85,6 +85,9 @@ __THEME_TOKENS__
 		gap: 0.6rem;
 		min-width: 0;
 	}
+	/* Without min-width:0 the title block never shrinks below its text, so on a
+	   phone it ran underneath the buttons instead of truncating. */
+	header .brand > div { min-width: 0; }
 	header .icon {
 		font-size: 1.35rem;
 		line-height: 1;
@@ -483,6 +486,8 @@ __THEME_TOKENS__
 			box-shadow: 0 0 2rem rgba( 0, 0, 0, 0.35 );
 		}
 		header .meta { display: none; }
+		header { padding: 0.6rem 0.75rem; gap: 0.4rem; }
+		header .actions button { padding: 0.3rem 0.45rem; margin-left: 0.2rem; font-size: 0.78rem; }
 	}
 	@media ( prefers-reduced-motion: reduce ) {
 		* { animation: none !important; transition: none !important; }
@@ -769,6 +774,16 @@ __CUSTOM_CSS__
 	function setSidebar( open ) {
 		sidebarEl.hidden = !open;
 		sidebarBtn.setAttribute( "aria-expanded", open ? "true" : "false" );
+	}
+
+	// Below 40rem the sidebar is a full-height OVERLAY (see the media query), so
+	// open-by-default covered the composer and the Chats button that closes it on
+	// a phone: a 390px viewport showed nothing but the conversation list.
+	function isNarrowScreen() {
+		return !!( window.matchMedia && window.matchMedia( "(max-width: 40rem)" ).matches );
+	}
+	if ( isNarrowScreen() ) {
+		setSidebar( false );
 	}
 
 	function getApiKey() {
@@ -1161,17 +1176,29 @@ __CUSTOM_CSS__
 	 * terminated by a `data: [DONE]` frame. (ColdBox's published AI Routing docs
 	 * show a `{"token":"..."}` shape - that page does not match its own source.)
 	 *
-	 * Only `data:` lines are read; the `event:` name each frame also carries is
-	 * not needed to tell the frames apart.
+	 * Only `data:` lines are read (joined per event - see handleSseChunk); the
+	 * `event:` name each frame also carries is not needed to tell frames apart.
 	 */
 	function handleSseChunk( raw, handlers ) {
-		var lines = raw.split( "\n" );
-		for ( var i = 0; i < lines.length; i++ ) {
-			var line = lines[ i ];
-			if ( line.indexOf( "data:" ) !== 0 ) {
-				continue;
+		// An SSE event is every line up to a blank line. Its payload is ALL of
+		// its `data:` lines joined with a newline (WHATWG SSE spec) - the native
+		// emitter pretty-prints each JSON chunk over several `data:` lines, so
+		// reading line by line parsed fragments such as `{` and dropped every
+		// token. Comment lines (`:hi`, `:keep-alive`) and `event:`/`id:`/`retry:`
+		// fields carry no payload here and are skipped.
+		var events = raw.replace( /\r\n?/g, "\n" ).split( "\n\n" );
+		for ( var e = 0; e < events.length; e++ ) {
+			var dataLines = [];
+			var lines = events[ e ].split( "\n" );
+			for ( var i = 0; i < lines.length; i++ ) {
+				var line = lines[ i ];
+				if ( line.indexOf( "data:" ) !== 0 ) {
+					continue;
+				}
+				var value = line.slice( 5 );
+				dataLines.push( value.charAt( 0 ) === " " ? value.slice( 1 ) : value );
 			}
-			var payload = line.slice( 5 ).trim();
+			var payload = dataLines.join( "\n" ).trim();
 			if ( !payload.length ) {
 				continue;
 			}
@@ -1182,7 +1209,7 @@ __CUSTOM_CSS__
 			var parsed;
 			try {
 				parsed = JSON.parse( payload );
-			} catch ( e ) {
+			} catch ( err ) {
 				continue; // Not a JSON frame - ignore rather than break the stream.
 			}
 
@@ -1229,7 +1256,7 @@ __CUSTOM_CSS__
 			body: JSON.stringify( payload )
 		} ).then( function ( res ) {
 			if ( res.status === 401 ) {
-				throw new Error( "Unauthorized - set the API key via the \"Key\" button, then try again." );
+				throw new Error( "Unauthorized - set the API key via the \"Key\" button, then try again. If you already did, the server's API-key environment variable may be unset: the gate refuses every request in that case." );
 			}
 			if ( !res.ok || !res.body ) {
 				throw new Error( "Request failed (HTTP " + res.status + ")" );
@@ -1262,12 +1289,22 @@ __CUSTOM_CSS__
 			function pump() {
 				return reader.read().then( function ( result ) {
 					if ( result.done ) {
+						// A final event the server never terminated with a blank line.
+						if ( buffer.trim().length ) {
+							handleSseChunk( buffer, handlers );
+						}
 						return { sawContent: sawContent, suspended: suspended };
 					}
-					buffer += decoder.decode( result.value, { stream: true } );
+					buffer += decoder.decode( result.value, { stream: true } ).replace( /\r\n?/g, "\n" );
+					// Only COMPLETE events (up to a blank line) are handled; whatever
+					// follows the last blank line is an event split across network
+					// chunks and stays buffered until its terminator arrives.
 					var lastBreak = buffer.lastIndexOf( "\n\n" );
-					var completeChunk = lastBreak >= 0 ? buffer.slice( 0, lastBreak ) : buffer;
-					buffer = lastBreak >= 0 ? buffer.slice( lastBreak + 2 ) : "";
+					if ( lastBreak < 0 ) {
+						return pump();
+					}
+					var completeChunk = buffer.slice( 0, lastBreak );
+					buffer = buffer.slice( lastBreak + 2 );
 
 					if ( handleSseChunk( completeChunk, handlers ) ) {
 						return { sawContent: sawContent, suspended: suspended };
@@ -1454,6 +1491,9 @@ __CUSTOM_CSS__
 		// The previous conversation stays on the server under its own id and in
 		// the sidebar. "New" is not "delete".
 		startConversation();
+		if ( isNarrowScreen() ) {
+			setSidebar( false );
+		}
 	} );
 
 	sidebarBtn.addEventListener( "click", function () {

@@ -449,6 +449,67 @@ class extends="testbox.system.BaseSpec" {
 				expect( html ).toInclude( "modelMetaEl.textContent = payload.model" );
 			} );
 
+			it( "joins an SSE event's data: lines before parsing, because the native emitter pretty-prints each chunk over several of them", function() {
+				// Measured against a live /chat/api/stream: each chunk arrives as
+				//   event: chunk / data: { / data:   "choices" : [ { ... / data: }
+				// Parsing line by line JSON.parse'd `{` on its own, dropped every
+				// token, and left the live reply as "(no response)" until a reload.
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( "dataLines.push(" );
+				expect( html ).toInclude( 'dataLines.join( "\n" )' );
+				// One JSON.parse per EVENT, never per line
+				expect( html ).notToInclude( "var payload = line.slice( 5 ).trim()" );
+			} );
+
+			it( "keeps an SSE event that is split across network chunks buffered until its blank-line terminator arrives", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				// The old code handed the UNterminated tail to the parser and then
+				// threw it away, losing the first half of a split event
+				expect( html ).notToInclude( "var completeChunk = lastBreak >= 0 ? buffer.slice( 0, lastBreak ) : buffer" );
+				expect( html ).toInclude( "if ( lastBreak < 0 )" );
+				// CRLF framing is normalised, and a final unterminated event is flushed
+				expect( html ).toInclude( '.replace( /\r\n?/g, "\n" )' );
+				expect( html ).toInclude( "handleSseChunk( buffer, handlers )" );
+			} );
+
+			it( "starts with the sidebar closed on a phone, where it is a full-height overlay", function() {
+				// Measured at 390x844: open-by-default hid the composer and the
+				// Chats toggle behind the conversation list
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( "function isNarrowScreen()" );
+				expect( html ).toInclude( 'window.matchMedia( "(max-width: 40rem)" ).matches' );
+				expect( html ).toInclude( "if ( isNarrowScreen() ) {" );
+				// And the title block can shrink, so it truncates instead of running
+				// underneath the header buttons
+				expect( html ).toInclude( "header .brand > div { min-width: 0; }" );
+			} );
+
+			it( "sends GET /info's model as a provider/model label, never the AiModel config struct", function() {
+				// agent().getConfig().model is a STRUCT; serialized as-is the header
+				// printed the literal text "[object Object]"
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
+				expect( src ).toInclude( "var modelLabel = modelConfig" );
+				expect( src ).toInclude( "isStruct( modelConfig )" );
+				expect( src ).toInclude( '"model"       : modelLabel' );
+				expect( src ).notToInclude( '"model"       : config.model ?: ""' );
+			} );
+
 			it( "turns Send into Steer while a turn is running, rather than disabling the composer", function() {
 				// Steering mid-run is the point of /steer - a disabled composer
 				// would make it unreachable
