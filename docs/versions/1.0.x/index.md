@@ -6,7 +6,8 @@ summary: Build AI agents by convention — a conventions-based framework for AI 
 description: Build AI agents by convention — a conventions-based framework for AI agents powered by BoxLang AI.
 tags: [overview]
 toc: false
-ogImage: assets/og-home.jpg
+ogImage: assets/og-home.png
+layout: home
 ---
 
 <div class="bxsites-hero">
