@@ -1,0 +1,118 @@
+import bxagents.ModuleConfig;
+import tools.CompletionsGenerator;
+
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "shell completions", function() {
+
+			beforeEach( function() {
+				variables.root = getDirectoryFromPath( getCurrentTemplatePath() ).reReplace( "[\\/]tests[\\/]specs[\\/]cli[\\/]?$", "" );
+			} );
+
+			// run a command and return { exitCode, output }
+			private function exec( required array cmd ) {
+				var pb = createObject( "java", "java.lang.ProcessBuilder" ).init( arguments.cmd );
+				pb.redirectErrorStream( true );
+				var process = pb.start();
+				var output = createObject( "java", "java.lang.String" ).init( process.getInputStream().readAllBytes(), "UTF-8" );
+				return { exitCode : process.waitFor(), output : output };
+			}
+
+			private function hasCommand( required string name ) {
+				try {
+					return exec( [ "sh", "-c", "command -v " & arguments.name ] ).exitCode == 0;
+				} catch ( any e ) {
+					return false;
+				}
+			}
+
+			private function onWindows() {
+				return server.os.name.findNoCase( "windows" ) > 0;
+			}
+
+			it( "ships a committed script per shell that matches the generator (run tools/generate-completions.bxs)", function() {
+				for ( var shell in CompletionsGenerator::shells() ) {
+					var file = root & "/completions/" & CompletionsGenerator::fileName( shell );
+					expect( fileExists( file ) ).toBeTrue( "missing #file#" );
+					expect( fileRead( file ).replace( char( 13 ), "", "all" ).trim() )
+						.toBe( CompletionsGenerator::render( shell, root ).replace( char( 13 ), "", "all" ).trim(), "#file# is stale" );
+				}
+			} );
+
+			it( "lists every verb, every value flag and every template and target in every script", function() {
+				for ( var shell in CompletionsGenerator::shells() ) {
+					var script = fileRead( root & "/completions/" & CompletionsGenerator::fileName( shell ) );
+					for ( var verb in ModuleConfig::verbs.keyArray() ) {
+						expect( script ).toInclude( verb, "#shell# is missing the verb #verb#" );
+						for ( var flag in ModuleConfig::valueOptions[ verb ] ) {
+							expect( script ).toInclude( flag, "#shell# is missing --#flag# of #verb#" );
+						}
+					}
+					for ( var template in bxagents.models.build.ProjectScaffolder::TEMPLATES ) {
+						expect( script ).toInclude( template, "#shell# is missing the template #template#" );
+					}
+					for ( var target in bxagents.models.cli.Deploy::TARGET_CLASSES.keyArray() ) {
+						expect( script ).toInclude( target, "#shell# is missing the target #target#" );
+					}
+				}
+			} );
+
+			it( "points boxlang.completions in box.json at the bash script and keeps tools/ out of the package", function() {
+				var descriptor = jsonDeserialize( fileRead( root & "/box.json" ) );
+				expect( descriptor.boxlang.completions ).toBe( "completions/bxAgents.bash" );
+				expect( fileExists( root & "/" & descriptor.boxlang.completions ) ).toBeTrue();
+				expect( descriptor.ignore ).toInclude( "/tools/**" );
+			} );
+
+			it( "bash completes verbs, flags and flag values", function() {
+				if ( onWindows() || !hasCommand( "bash" ) ) {
+					return;
+				}
+				var driver = createTempFile( prefix = "bxagents-complete-", suffix = ".sh" );
+				fileWrite( driver, 'source "$1"
+t() { COMP_LINE="$1"; COMP_POINT=${##COMP_LINE}; COMPREPLY=(); _bxagents_complete; echo "$1 => ${COMPREPLY[*]}"; }
+t "bxAgents d"
+t "bxAgents new --t"
+t "bxAgents new --template=s"
+t "bxAgents deploy --target=s"
+t "bxAgents build --v"
+t "bxagents help s"' );
+				try {
+					var result = exec( [ "bash", driver, root & "/completions/bxAgents.bash" ] );
+					expect( result.exitCode ).toBe( 0, result.output );
+					expect( result.output ).toInclude( "bxAgents d => deploy doctor" );
+					expect( result.output ).toInclude( "bxAgents new --t => --template=" );
+					expect( result.output ).toInclude( "bxAgents new --template=s => slack-bot scheduled" );
+					expect( result.output ).toInclude( "bxAgents deploy --target=s => sftp ssh" );
+					expect( result.output ).toInclude( "bxAgents build --v => --verbose --version" );
+					expect( result.output ).toInclude( "bxagents help s => serve" );
+				} finally {
+					fileDelete( driver );
+				}
+			} );
+
+			it( "fish parses the script and completes template values", function() {
+				if ( onWindows() || !hasCommand( "fish" ) ) {
+					return;
+				}
+				var file = root & "/completions/bxAgents.fish";
+				expect( exec( [ "fish", "-n", file ] ).exitCode ).toBe( 0 );
+				var result = exec( [ "fish", "-c", 'source "#file#"; complete -C "bxAgents new --template=s"' ] );
+				expect( result.output ).toInclude( "--template=slack-bot" );
+				expect( result.output ).toInclude( "--template=scheduled" );
+			} );
+
+			it( "PowerShell parses the script", function() {
+				if ( onWindows() || !hasCommand( "pwsh" ) ) {
+					return;
+				}
+				var file = root & "/completions/bxAgents.ps1";
+				var result = exec( [ "pwsh", "-NoProfile", "-Command", '$e = $null; [System.Management.Automation.Language.Parser]::ParseFile( "#file#", [ref]$null, [ref]$e ) | Out-Null; $e.Count' ] );
+				expect( result.output.trim() ).toBe( "0" );
+			} );
+
+		} );
+	}
+
+}

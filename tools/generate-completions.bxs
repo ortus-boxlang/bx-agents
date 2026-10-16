@@ -1,0 +1,34 @@
+import tools.CompletionsGenerator;
+
+/**
+ * Writes the bash, fish and PowerShell tab completion scripts of the
+ * `bxAgents` command to completions/, from the verb tables in ModuleConfig.bx.
+ *
+ *   java -cp <boxlang.jar> ortus.boxlang.runtime.BoxRunner --bx-config boxlang.json tools/generate-completions.bxs           write the three files
+ *   java -cp <boxlang.jar> ortus.boxlang.runtime.BoxRunner --bx-config boxlang.json tools/generate-completions.bxs --check   fail if a file is out of date
+ *
+ * Run it after adding or changing a verb or a flag in ModuleConfig.bx.
+ * boxlang.json maps /bxagents to src/main/bx (how the generator reads the tables) and /tools to this folder.
+ */
+root = getDirectoryFromPath( getCurrentTemplatePath() ).reReplace( "[\\\/]tools[\\\/]?$", "" );
+check = server.cli.parsed.options.keyExists( "check" );
+stale = [];
+
+for( shell in CompletionsGenerator::shells() ){
+	path = root & "/completions/" & CompletionsGenerator::fileName( shell );
+	script = CompletionsGenerator::render( shell, root ).trim() & char( 10 );
+	if( check ){
+		if( !fileExists( path ) || fileRead( path ).replace( char( 13 ), "", "all" ).trim() != script.trim() ){
+			stale.append( CompletionsGenerator::fileName( shell ) );
+		}
+	} else {
+		directoryCreate( root & "/completions", true, true );
+		fileWrite( path, script );
+		println( "Wrote completions/" & CompletionsGenerator::fileName( shell ) );
+	}
+}
+
+if( stale.len() ){
+	println( "Out of date: " & stale.toList( ", " ) & ". Regenerate with tools/generate-completions.bxs and commit the result." );
+	cliExit( 1 );
+}

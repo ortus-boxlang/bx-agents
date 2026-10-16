@@ -52,6 +52,10 @@ Error: --model requires a value - write it as `--model=<value>`.
 
 Always use the `--flag=value` form. The space-separated form is not supported.
 
+## Tab completion
+
+`completions/` holds ready-made completion scripts for bash, fish and PowerShell. See [Installation](getting-started/installation.md#tab-completion) for the one-line setup of each.
+
 ## Verbs
 
 ::: cards
