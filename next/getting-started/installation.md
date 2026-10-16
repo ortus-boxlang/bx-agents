@@ -64,4 +64,16 @@ boxlang module:bxagents new my-agent --model=openai/gpt-5
 
 Both are equivalent - every verb dispatches through the same `ModuleConfig.bx main(args)` entry point either way. This doc uses the short `bxAgents <verb>` form throughout.
 
+## Tab completion
+
+The module ships tab completion for `bxAgents` (and `bxagents`) in three shells. It completes verbs, flags, the `--template` and `--target` values, and project folders.
+
+| Shell | Setup |
+|---|---|
+| bash, zsh | Automatic. `install-bx-module` copies `completions/bxAgents.bash` to `~/.boxlang/completions/` and BVM sources it in new sessions. Without the installer: `source <module folder>/completions/bxAgents.bash`. |
+| fish | `cp <module folder>/completions/bxAgents.fish ~/.config/fish/completions/` |
+| PowerShell | Add `. "<module folder>\completions\bxAgents.ps1"` to your `$PROFILE`. |
+
+The scripts in `completions/` are generated from the CLI's own verb tables, so they cannot drift from the verbs. After changing a verb or a flag in `ModuleConfig.bx`, regenerate them with `tools/generate-completions.bxs` (add `--check` to only verify); the spec suite fails if they are stale.
+
 See [Quick Start](quick-start.md) to scaffold your first agent.
