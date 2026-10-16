@@ -16,13 +16,15 @@
  */
 class {
 
-	variables.TARGET_CLASSES = {
-		"local"        : "models.deploy.targets.LocalTarget@bxagents",
-		"ssh"          : "models.deploy.targets.SshTarget@bxagents",
-		"docker"       : "models.deploy.targets.DockerTarget@bxagents",
-		"digitalocean" : "models.deploy.targets.DigitalOceanTarget@bxagents",
-		"ftp"          : "models.deploy.targets.FtpTarget@bxagents",
-		"sftp"         : "models.deploy.targets.SftpTarget@bxagents"
+	static {
+		TARGET_CLASSES = {
+			"local"        : "models.deploy.targets.LocalTarget@bxagents",
+			"ssh"          : "models.deploy.targets.SshTarget@bxagents",
+			"docker"       : "models.deploy.targets.DockerTarget@bxagents",
+			"digitalocean" : "models.deploy.targets.DigitalOceanTarget@bxagents",
+			"ftp"          : "models.deploy.targets.FtpTarget@bxagents",
+			"sftp"         : "models.deploy.targets.SftpTarget@bxagents"
+		}
 	}
 
 	/**
@@ -47,10 +49,10 @@ class {
 		} else {
 			target = len( arguments.options.target ?: "" ) ? arguments.options.target : "local"
 
-			if ( !variables.TARGET_CLASSES.keyExists( target ) ) {
+			if ( !static.TARGET_CLASSES.keyExists( target ) ) {
 				throw(
 					type    = "BxAgents.UnknownDeploymentTarget",
-					message = "Unknown deployment target [#target#] - must be one of: #variables.TARGET_CLASSES.keyArray().toList()#"
+					message = "Unknown deployment target [#target#] - must be one of: #static.TARGET_CLASSES.keyArray().toList()#"
 				)
 			}
 
@@ -76,7 +78,7 @@ class {
 			manifest    : fileExists( manifestPath ) ? jsonDeserialize( fileRead( manifestPath ) ) : {}
 		}
 
-		var targetInstance = new "#variables.TARGET_CLASSES[ target ]#"()
+		var targetInstance = new "#static.TARGET_CLASSES[ target ]#"()
 		var result = targetInstance.deploy( config, context )
 
 		return {

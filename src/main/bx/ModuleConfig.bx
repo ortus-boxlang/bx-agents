@@ -62,6 +62,59 @@ class {
 	 */
 	this.dependencies = [];
 
+	static {
+		verbs = {
+			"new"     : "models.cli.New",
+			"build"   : "models.cli.Build",
+			"test"    : "models.cli.Test",
+			"serve"   : "models.cli.Serve",
+			"package" : "models.cli.Package",
+			"deploy"  : "models.cli.Deploy",
+			"inspect" : "models.cli.Inspect",
+			"chat"    : "models.cli.Chat",
+			"invoke"  : "models.cli.Invoke",
+			"clean"   : "models.cli.Clean",
+			"hash-password" : "models.cli.HashPassword",
+			"doctor"  : "models.cli.Doctor"
+		}
+
+		verbDescriptions = {
+			"new"     : "Scaffold a new agent project           (--model & [--template], or --repo, or --forgebox)",
+			"build"   : "Build a project into a generated app    ([--environment])",
+			"test"    : "Run a project's own tests/specs via TestBox",
+			"serve"   : "Serve a built project via boxlang-miniserver ([--port], [--host])",
+			"chat"    : "Interactive REPL chat with a built agent ([--server] or [--connect=URL])",
+			"invoke"  : "Send one message to a built agent, print the response, exit (--message, [--json])",
+			"package" : "Package a built project into a .bxa    ([--version])",
+			"deploy"  : "Deploy to a target                     (--name, or [--target], --destination)",
+			"inspect" : "Pretty-print a built project's manifest.json ([--json])",
+			"clean"   : "Remove a project's .build/ and dist/ output",
+			"hash-password" : "Hash a password for a webui users entry (--password)",
+			"doctor"  : "Diagnose the environment and project - runtime, modules, env vars ([--json])"
+		}
+
+		// Per verb, the flags that REQUIRE a value - `--projectRoot` is
+		// universal and appended to every verb's own list below. See this
+		// method's docblock for why a valueless one is a hard error rather
+		// than a silent boolean `true`.
+		valueOptions = {
+			"new"     : [ "model", "name", "description", "template", "repo", "forgebox" ],
+			"build"   : [ "environment", "generatorVersion" ],
+			"test"    : [],
+			"serve"   : [ "port", "host" ],
+			"package" : [ "version" ],
+			"deploy"  : [ "name", "target", "destination" ],
+			"inspect" : [],
+			// `server` is a boolean flag, so it is NOT listed here - only
+			// flags that REQUIRE a value belong in this map.
+			"chat"    : [ "connect", "port" ],
+			"invoke"  : [ "message", "port" ],
+			"clean"   : [],
+			"hash-password" : [ "password" ],
+			"doctor"  : []
+		}
+	}
+
 	/**
 	 * --------------------------------------------------------------------------
 	 * Module Methods
@@ -240,57 +293,6 @@ class {
 		// nested classes (see e.g. New.bx's own reference to
 		// ProjectScaffolder) do NOT get the same relative treatment and must
 		// use the "Class@bxagents" suffix form instead - see BuildPipeline.bx.
-		var verbs = {
-			"new"     : "models.cli.New",
-			"build"   : "models.cli.Build",
-			"test"    : "models.cli.Test",
-			"serve"   : "models.cli.Serve",
-			"package" : "models.cli.Package",
-			"deploy"  : "models.cli.Deploy",
-			"inspect" : "models.cli.Inspect",
-			"chat"    : "models.cli.Chat",
-			"invoke"  : "models.cli.Invoke",
-			"clean"   : "models.cli.Clean",
-			"hash-password" : "models.cli.HashPassword",
-			"doctor"  : "models.cli.Doctor"
-		}
-
-		var verbDescriptions = {
-			"new"     : "Scaffold a new agent project           (--model & [--template], or --repo, or --forgebox)",
-			"build"   : "Build a project into a generated app    ([--environment])",
-			"test"    : "Run a project's own tests/specs via TestBox",
-			"serve"   : "Serve a built project via boxlang-miniserver ([--port], [--host])",
-			"chat"    : "Interactive REPL chat with a built agent ([--server] or [--connect=URL])",
-			"invoke"  : "Send one message to a built agent, print the response, exit (--message, [--json])",
-			"package" : "Package a built project into a .bxa    ([--version])",
-			"deploy"  : "Deploy to a target                     (--name, or [--target], --destination)",
-			"inspect" : "Pretty-print a built project's manifest.json ([--json])",
-			"clean"   : "Remove a project's .build/ and dist/ output",
-			"hash-password" : "Hash a password for a webui users entry (--password)",
-			"doctor"  : "Diagnose the environment and project - runtime, modules, env vars ([--json])"
-		}
-
-		// Per verb, the flags that REQUIRE a value - `--projectRoot` is
-		// universal and appended to every verb's own list below. See this
-		// method's docblock for why a valueless one is a hard error rather
-		// than a silent boolean `true`.
-		var valueOptions = {
-			"new"     : [ "model", "name", "description", "template", "repo", "forgebox" ],
-			"build"   : [ "environment", "generatorVersion" ],
-			"test"    : [],
-			"serve"   : [ "port", "host" ],
-			"package" : [ "version" ],
-			"deploy"  : [ "name", "target", "destination" ],
-			"inspect" : [],
-			// `server` is a boolean flag, so it is NOT listed here - only
-			// flags that REQUIRE a value belong in this map.
-			"chat"    : [ "connect", "port" ],
-			"invoke"  : [ "message", "port" ],
-			"clean"   : [],
-			"hash-password" : [ "password" ],
-			"doctor"  : []
-		}
-
 		var firstToken = arrayLen( arguments.args ) >= 1 ? arguments.args[ 1 ] : ""
 
 		if ( firstToken == "--version" || firstToken == "-v" ) {
@@ -301,21 +303,21 @@ class {
 		// Anywhere in argv, not just first: `bxAgents clean --help` must print
 		// usage, NOT delete the project's build directories.
 		if ( firstToken == "help" || hasHelpFlag( arguments.args ) ) {
-			printUsage( verbs, verbDescriptions )
+			printUsage( static.verbs, static.verbDescriptions )
 			return 0
 		}
 
 		if ( !len( firstToken ) ) {
-			printUsage( verbs, verbDescriptions )
+			printUsage( static.verbs, static.verbDescriptions )
 			return 1
 		}
 
 		var verbName = firstToken
 
-		if ( !verbs.keyExists( verbName ) ) {
+		if ( !static.verbs.keyExists( verbName ) ) {
 			println( "Unknown verb [#verbName#]." )
 			println( "" )
-			printUsage( verbs, verbDescriptions )
+			printUsage( static.verbs, static.verbDescriptions )
 			return 1
 		}
 
@@ -327,7 +329,7 @@ class {
 		var options = parseCliOptions( rawVerbArgs )
 
 		var requiredValueFlags = [ "projectRoot" ]
-		requiredValueFlags.append( valueOptions[ verbName ] ?: [], true )
+		requiredValueFlags.append( static.valueOptions[ verbName ] ?: [], true )
 
 		for ( var flag in requiredValueFlags ) {
 			if ( options._valuelessFlags.keyExists( flag ) ) {
@@ -341,7 +343,7 @@ class {
 		options.projectRoot = resolveProjectRoot( options )
 
 		try {
-			var verbClass = new "#verbs[ verbName ]#"()
+			var verbClass = new "#static.verbs[ verbName ]#"()
 			var result = verbClass.run( options )
 			if ( len( result.message ?: "" ) ) {
 				println( result.message )

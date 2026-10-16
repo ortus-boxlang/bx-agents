@@ -1,0 +1,253 @@
+import bxagents.ModuleConfig;
+import bxagents.models.build.ProjectScaffolder;
+import bxagents.models.cli.Deploy;
+
+/**
+ * Builds the bash, fish and PowerShell tab completion scripts of the
+ * `bxAgents` command from the verb tables in ModuleConfig.bx, so they cannot
+ * drift away from the CLI. `tools/generate-completions.bxs` writes them to
+ * `completions/`; box.json's `boxlang.completions` points the module
+ * installer at the bash one, and all three ship inside the module.
+ *
+ * Everything is static: the verbs, their descriptions and the flags that take
+ * a value come from `ModuleConfig`, the `--template` choices from
+ * `ProjectScaffolder.TEMPLATES` and the `--target` choices from
+ * `Deploy.TARGET_CLASSES`. Only the flags no table knows about (the boolean
+ * ones) are listed here.
+ */
+class {
+
+	static {
+		/** The boolean flags each verb reads: they take no value, so no table of required values lists them */
+		BOOLEAN_FLAGS = {
+			"new"    : [ "skipInstall" ],
+			"build"  : [ "verbose" ],
+			"chat"   : [ "server" ],
+			"clean"  : [ "force" ],
+			"doctor" : [ "json" ],
+			"inspect": [ "json" ],
+			"invoke" : [ "json", "server" ]
+		};
+
+		/** Flags whose value is a folder, when they offer no fixed choices */
+		DIR_FLAGS = [ "projectRoot", "destination" ];
+
+		/** Verbs that take no project folder as a positional argument */
+		NO_POSITIONAL = [ "hash-password" ];
+
+		SHELL_LIST = [ "bash", "fish", "powershell" ];
+		FILE_NAMES = { "bash" : "bxAgents.bash", "fish" : "bxAgents.fish", "powershell" : "bxAgents.ps1" };
+		NL = char( 10 );
+	}
+
+	static function shells(){
+		return static.SHELL_LIST;
+	}
+
+	/**
+	 * The file name a shell's script is written to inside completions/
+	 */
+	static function fileName( required string shell ){
+		return static.FILE_NAMES[ arguments.shell ];
+	}
+
+	/**
+	 * The completion script of one shell: "bash", "fish" or "powershell"
+	 *
+	 * @root The project root: where tools/templates/ is read from
+	 */
+	static function render( required string shell, required string root ){
+		var model = static.buildModel();
+		var template = fileRead( arguments.root.reReplace( "[\\\/]+$", "" ) & "/tools/templates/" & arguments.shell & ".tpl" );
+		switch( arguments.shell ){
+			case "bash": return static.bash( template, model );
+			case "fish": return static.fish( template, model );
+			case "powershell": return static.powershell( template, model );
+		}
+		throw( type = "bxagents.completions", message = "Unknown shell [#arguments.shell#]. Use one of: #static.SHELL_LIST.toList( ', ' )#." );
+	}
+
+	// ---------------------------------------------------------------------------------------------------------------------------
+	// The model: what can follow each verb
+	// ---------------------------------------------------------------------------------------------------------------------------
+
+	/**
+	 * One entry per verb, sorted by name: { name, help, options : [ { name, value, choices, dir } ], positional }
+	 * where `positional` is "dir" (a project folder), "verbs" (a verb name) or "".
+	 */
+	static function buildModel(){
+		var model = [];
+		for( var name in ModuleConfig::verbs.keyArray().sort( "text" ) ){
+			var options = [];
+			var valueFlags = [ "projectRoot" ];
+			valueFlags.append( ModuleConfig::valueOptions[ name ] ?: [], true );
+			for( var flag in valueFlags ){
+				options.append( static.option( flag, true, static.choicesFor( name, flag ) ) );
+			}
+			for( var flag in static.BOOLEAN_FLAGS[ name ] ?: [] ){
+				options.append( static.option( flag, false, [] ) );
+			}
+			model.append( {
+				"name" : name,
+				"help" : static.shortHelp( ModuleConfig::verbDescriptions[ name ] ),
+				"options" : options.sort( ( a, b ) => compare( a.name, b.name ) ),
+				"positional" : static.NO_POSITIONAL.contains( name ) ? "" : "dir"
+			} );
+		}
+		model.append( { "name" : "help", "help" : "Show the usage and the list of verbs", "options" : [], "positional" : "verbs" } );
+		return model;
+	}
+
+	private static function option( required string name, required boolean value, required array choices ){
+		return {
+			"name" : arguments.name,
+			"value" : arguments.value,
+			"choices" : arguments.choices,
+			"dir" : static.DIR_FLAGS.contains( arguments.name ) && !arguments.choices.len()
+		};
+	}
+
+	/**
+	 * The fixed values a flag accepts, read from the code that validates them
+	 */
+	private static function choicesFor( required string verb, required string flag ){
+		if( arguments.verb == "new" && arguments.flag == "template" ){
+			return ProjectScaffolder::TEMPLATES;
+		}
+		if( arguments.verb == "deploy" && arguments.flag == "target" ){
+			return Deploy::TARGET_CLASSES.keyArray().sort( "text" );
+		}
+		return [];
+	}
+
+	/**
+	 * The first part of a help text, up to its first parenthesis, capped at a readable length
+	 */
+	private static function shortHelp( required string text ){
+		var help = arguments.text.reReplace( "\s+\(.*$", "" ).replace( "`", "", "all" ).reReplace( "\s+", " ", "all" ).trim();
+		if( help.len() > 90 ){
+			help = help.left( 90 ).reReplace( "\s+\S*$", "" ) & "...";
+		}
+		return help;
+	}
+
+	private static function words( required array items ){
+		return arguments.items.toList( " " );
+	}
+
+	// ---------------------------------------------------------------------------------------------------------------------------
+	// bash
+	// ---------------------------------------------------------------------------------------------------------------------------
+
+	private static function bash( required string template, required array model ){
+		var t = char( 9 );
+		var flagCases = [];
+		var valueCases = [];
+		var positionalCases = [];
+		for( var verb in arguments.model ){
+			var flags = [];
+			for( var option in verb.options ){
+				flags.append( "--" & option.name & ( option.value ? "=" : "" ) );
+				if( option.choices.len() ){
+					valueCases.append( t & t & t & '"#verb.name# --#option.name#") COMPREPLY=($(compgen -W "#static.words( option.choices )#" -- "$part")) ;;' );
+				} else if( option.dir ){
+					valueCases.append( t & t & t & '"#verb.name# --#option.name#") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;' );
+				}
+			}
+			if( verb.name != "help" ){
+				flagCases.append( t & t & t & '#verb.name#) flags="#static.words( flags )#" ;;' );
+			}
+			if( verb.positional == "dir" ){
+				positionalCases.append( t & t & '#verb.name#) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;' );
+			} else if( verb.positional == "verbs" ){
+				positionalCases.append( t & t & '#verb.name#) COMPREPLY=($(compgen -W "$verbs" -- "$cur")) ;;' );
+			}
+		}
+		return static.fill( arguments.template, {
+			"VERBS" : static.words( arguments.model.map( ( v ) => v.name ) ),
+			"FLAG_CASES" : flagCases.toList( static.NL ),
+			"VALUE_CASES" : valueCases.toList( static.NL ),
+			"POSITIONAL_CASES" : positionalCases.toList( static.NL )
+		} );
+	}
+
+	// ---------------------------------------------------------------------------------------------------------------------------
+	// fish
+	// ---------------------------------------------------------------------------------------------------------------------------
+
+	private static function fish( required string template, required array model ){
+		var verbLines = [];
+		var optionLines = [];
+		for( var verb in arguments.model ){
+			verbLines.append( "complete -c $cmd -n __bxagents_needs_verb -a '#verb.name#' -d '#static.fishText( verb.help )#'" );
+			var condition = "'__bxagents_using_verb #verb.name#'";
+			for( var option in verb.options ){
+				var line = "complete -c $cmd -n #condition# -l #option.name#";
+				if( option.choices.len() ){
+					line &= " -x -a '#static.words( option.choices )#'";
+				} else if( option.dir ){
+					line &= " -x -a '(__fish_complete_directories)'";
+				} else if( option.value ){
+					line &= " -x";
+				}
+				optionLines.append( line );
+			}
+			if( verb.positional == "dir" ){
+				optionLines.append( "complete -c $cmd -n #condition# -a '(__fish_complete_directories)'" );
+			} else if( verb.positional == "verbs" ){
+				optionLines.append( "complete -c $cmd -n #condition# -a '#static.words( arguments.model.map( ( v ) => v.name ) )#'" );
+			}
+		}
+		return static.fill( arguments.template, {
+			"VERBS" : verbLines.map( ( l ) => "    " & l ).toList( static.NL ),
+			"OPTIONS" : optionLines.map( ( l ) => "    " & l ).toList( static.NL )
+		} );
+	}
+
+	private static function fishText( required string text ){
+		return arguments.text.replace( char( 92 ), char( 92 ) & char( 92 ), "all" ).replace( "'", char( 92 ) & "'", "all" );
+	}
+
+	// ---------------------------------------------------------------------------------------------------------------------------
+	// PowerShell
+	// ---------------------------------------------------------------------------------------------------------------------------
+
+	private static function powershell( required string template, required array model ){
+		var t = char( 9 );
+		var verbLines = [];
+		var optionLines = [];
+		for( var verb in arguments.model ){
+			verbLines.append( t & t & "'#verb.name#' = '#static.psText( verb.help )#'" );
+			var items = [];
+			for( var option in verb.options ){
+				var choices = option.choices.map( ( c ) => "'" & static.psText( c ) & "'" ).toList( ", " );
+				items.append( t & t & t & "@{ Name = '#static.psText( option.name )#'; Value = $#option.value#; Choices = @(#choices#); Dir = $#option.dir# }" );
+			}
+			optionLines.append( t & t & "'#verb.name#' = @(" );
+			optionLines.append( items, true );
+			optionLines.append( t & t & ")" );
+			if( verb.positional != "" ){
+				optionLines.append( t & t & "'#verb.name#:positional' = '#verb.positional#'" );
+			}
+		}
+		return static.fill( arguments.template, {
+			"VERBS" : verbLines.toList( static.NL ),
+			"OPTIONS" : optionLines.toList( static.NL )
+		} );
+	}
+
+	private static function psText( required string text ){
+		return arguments.text.replace( "'", "''", "all" );
+	}
+
+	// ---------------------------------------------------------------------------------------------------------------------------
+
+	private static function fill( required string template, required struct values ){
+		var out = arguments.template;
+		for( var key in arguments.values ){
+			out = out.replace( "@@" & key & "@@", arguments.values[ key ], "all" );
+		}
+		return out;
+	}
+
+}

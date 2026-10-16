@@ -81,6 +81,9 @@ platform's own limit, and human-in-the-loop approval support:
 Eleven verbs: `new`, `build`, `test`, `serve`, `chat`, `invoke`, `package`, `deploy`,
 `inspect`, `hash-password` and `clean`, shipped as a native `bxAgents` executable.
 
+Tab completion for bash, fish and PowerShell, generated from the CLI's own verb tables
+(`tools/generate-completions.bxs`) and installed through `boxlang.completions` in `box.json`.
+
 #### Packaging and deployment
 
 - `bxAgents package` produces a deterministic `.bxa` archive (byte-identical across repeated
