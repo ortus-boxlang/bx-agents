@@ -1,0 +1,80 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "AgentDefinitionLocator", function() {
+
+			beforeEach( function() {
+				variables.locator = new bxagents.models.build.AgentDefinitionLocator();
+				variables.dir = createTempDirectory( prefix = "bxagents-locator-" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "finds nothing in an empty folder", function() {
+				expect( locator.exists( dir ) ).toBeFalse();
+				expect( locator.locate( dir ) ).toBe( { kind : "none", path : "" } );
+			} );
+
+			it( "finds an Agent.yaml", function() {
+				fileWrite( dir & "/Agent.yaml", "name: a" );
+
+				var found = locator.locate( dir );
+
+				expect( locator.exists( dir ) ).toBeTrue();
+				expect( found.kind ).toBe( "yaml" );
+				expect( found.path ).toBe( dir & "/Agent.yaml" );
+			} );
+
+			it( "finds an Agent.yml", function() {
+				fileWrite( dir & "/Agent.yml", "name: a" );
+
+				expect( locator.locate( dir ).kind ).toBe( "yaml" );
+				expect( locator.locate( dir ).path ).toBe( dir & "/Agent.yml" );
+			} );
+
+			it( "finds an Agent.bx", function() {
+				fileWrite( dir & "/Agent.bx", "class {}" );
+
+				expect( locator.locate( dir ).kind ).toBe( "bx" );
+				expect( locator.locate( dir ).path ).toBe( dir & "/Agent.bx" );
+			} );
+
+			it( "ignores a trailing slash on the folder", function() {
+				fileWrite( dir & "/Agent.yaml", "name: a" );
+
+				expect( locator.locate( dir & "/" ).kind ).toBe( "yaml" );
+			} );
+
+			it( "rejects Agent.yaml together with Agent.bx and names both", function() {
+				fileWrite( dir & "/Agent.yaml", "name: a" );
+				fileWrite( dir & "/Agent.bx", "class {}" );
+
+				expect( function() {
+					locator.locate( dir );
+				} ).toThrow( type = "BxAgents.AmbiguousAgentDefinition", regex = "Agent\.yaml, Agent\.bx" );
+			} );
+
+			it( "rejects Agent.yaml together with Agent.yml", function() {
+				fileWrite( dir & "/Agent.yaml", "name: a" );
+				fileWrite( dir & "/Agent.yml", "name: a" );
+
+				expect( function() {
+					locator.locate( dir );
+				} ).toThrow( type = "BxAgents.AmbiguousAgentDefinition" );
+			} );
+
+			it( "still reports that an ambiguous folder holds a definition", function() {
+				fileWrite( dir & "/Agent.yaml", "name: a" );
+				fileWrite( dir & "/Agent.bx", "class {}" );
+
+				expect( locator.exists( dir ) ).toBeTrue();
+			} );
+
+		} );
+	}
+
+}

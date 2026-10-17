@@ -30,7 +30,7 @@ class {
 		if ( !( arguments.options.force ?: false ) && !isProjectRoot( root ) ) {
 			throw(
 				type    = "BxAgents.NotAProject",
-				message = "[#root#] does not look like a BX Agents project - expected an Agent.bx or a .build/manifest.json there. Refusing to remove .build/ and dist/. Pass --force to clean it anyway."
+				message = "[#root#] does not look like a BX Agents project - expected an Agent.yaml, an Agent.bx or a .build/manifest.json there. Refusing to remove .build/ and dist/. Pass --force to clean it anyway."
 			)
 		}
 
@@ -76,7 +76,7 @@ class {
 	 * @return True if the directory carries either project marker
 	 */
 	private boolean function isProjectRoot( required string root ) {
-		return fileExists( arguments.root & "/Agent.bx" )
+		return new "models.build.AgentDefinitionLocator@bxagents"().exists( arguments.root )
 			|| fileExists( arguments.root & "/.build/manifest.json" )
 	}
 
