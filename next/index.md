@@ -31,8 +31,8 @@ real, runnable ColdBox application out of it.
 Discovery, validation and code generation run **once**, not on every boot. What you run
 afterwards is a plain ColdBox app.
 :::
-::: card title="Folders are the API" icon="phosphor-duotone:tree-structure" href="conventions/agent-bx.md"
-`Agent.bx` and `instructions.md` are the only required files. Every other convention folder
+::: card title="Folders are the API" icon="phosphor-duotone:tree-structure" href="conventions/agent-yaml.md"
+`Agent.yaml` and `instructions.md` are the only required files. Every other convention folder
 is optional and only shapes the output if it exists.
 :::
 ::: card title="Tools and skills" icon="phosphor-duotone:wrench" href="conventions/tools.md"
@@ -48,7 +48,7 @@ Telegram, Slack, Discord, Email, WhatsApp, Teams, Twilio, GitHub and Signal, plu
 `cli` and `mock`.
 :::
 ::: card title="A web chat UI, generated" icon="phosphor-duotone:globe-hemisphere-west" href="conventions/web-ui.md"
-Ask for it in `Agent.bx` and the build produces a themeable, streaming chat front end with
+Ask for it in a `gateways/` entry and the build produces a themeable, streaming chat front end with
 session history.
 :::
 :::
@@ -125,7 +125,7 @@ history, streaming replies, light/dark theming and a mobile layout - wired to yo
 :::
 :::
 
-It is generated CSS and generated markup - [themeable from `Agent.bx`](conventions/web-ui.md),
+It is generated CSS and generated markup - [themeable from a `gateways/` entry](conventions/web-ui.md),
 with no front-end build step of your own.
 
 ## What `build` actually produces
@@ -136,7 +136,7 @@ Your convention tree, and the plain ColdBox application `build` turns it into.
 ::: column
 ```
 your-agent/
-├── Agent.bx           # name, model, description
+├── Agent.yaml         # name, model, description
 ├── instructions.md    # the system prompt
 ├── tools/             # @AITool functions
 ├── skills/            # SKILL.md capabilities
@@ -182,16 +182,18 @@ into the request path.
 ::: columns
 ::: column
 !!! tip "Start with one file"
-    Only `Agent.bx` is required. `instructions.md` is optional - set instructions directly
-    in the class, or drop the file in and let the build wire it in. Every other folder only
+    Only `Agent.yaml` is required. `instructions.md` is optional - set `instructions` directly
+    in the YAML, or drop the file in and let the build wire it in. Every other folder only
     affects the generated output if it exists **and** has content in it - so you add
     conventions as you actually need them.
 :::
 ::: column
-!!! faq "Agent.bx IS the agent"
-    `Agent.bx` extends BX AI's own `AiAgent` directly - the build instantiates your class
-    rather than rebuilding one from a config struct, so what you write is what runs, and an
-    IDE can introspect it like any other class. See [Agent.bx](conventions/agent-bx.md).
+!!! faq "YAML by default, a class when you need code"
+    `Agent.yaml` holds the agent's settings - most agents are a few lines of it. When the
+    definition needs code (hooks, dynamic instructions, tools registered in code), `Agent.bx`
+    extends BX AI's own `AiAgent` directly - the build instantiates your class, so what you
+    write is what runs. See [Agent.yaml](conventions/agent-yaml.md) and
+    [Agent.bx](conventions/agent-bx.md).
 :::
 :::
 
@@ -214,7 +216,7 @@ Package a portable `.bxa` and deploy it with `local`, `ssh`, `docker`, `digitalo
 
 ## Check your setup at any time
 
-![bxAgents doctor output: BoxLang and bx-ai versions OK, Agent.bx found, project structure validates cleanly, and one warning that the qb module is missing](assets/cli-doctor.svg)
+![bxAgents doctor output: BoxLang and bx-ai versions OK, agent definition found, project structure validates cleanly, and one warning that the qb module is missing](assets/cli-doctor.svg)
 
 ## Where to go next
 
@@ -225,7 +227,7 @@ Install BoxLang, BX AI and BxAgents.
 ::: card title="Quick Start" icon="phosphor-duotone:lightning" href="getting-started/quick-start.md"
 Scaffold, build and chat with your first agent.
 :::
-::: card title="Conventions" icon="phosphor-duotone:cube" href="conventions/agent-bx.md"
+::: card title="Conventions" icon="phosphor-duotone:cube" href="conventions/agent-yaml.md"
 One page per convention folder, start to finish.
 :::
 ::: card title="The Build Pipeline" icon="phosphor-duotone:graph" href="build-pipeline.md"

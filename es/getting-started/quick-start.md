@@ -16,13 +16,13 @@ Esto recorre el ciclo de vida completo de un proyecto BxAgents: generar el andam
 bxAgents new my-agent --model=openai/gpt-5
 ```
 
-`--model` es requerido (un slug `provider/model` - ver [Agent.bx](../conventions/agent-bx.md) para cómo se analiza). `--name` y `--description` son opcionales; `--name` por defecto toma el propio nombre del directorio destino.
+`--model` es requerido (un slug `provider/model` - ver [el slug de modelo](../conventions/agent-bx.md#the-model-slug) para cómo se analiza). `--name` y `--description` son opcionales; `--name` por defecto toma el propio nombre del directorio destino.
 
 Esto crea:
 
 ```
 my-agent/
-├── Agent.bx
+├── Agent.yaml
 ├── instructions.md
 ├── tools/
 ├── skills/
@@ -39,32 +39,32 @@ my-agent/
         └── AgentSpec.bx
 ```
 
-Este es el starter `minimal` - el predeterminado cuando se omite `--template`. `new` también puede generar uno de otros 7 starters incorporados (`--template=webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent`), cada uno añadiendo un poco de contenido preconfigurado (un gateway, un scheduler) sobre el mismo esqueleto, o saltarse el andamiaje por completo y crear el proyecto a partir de un repositorio de GitHub existente (`--repo=owner/repo`) o un paquete de ForgeBox (`--forgebox=<slug>`) en su lugar - ver la [Referencia de la CLI](../cli-reference.md#new) para la lista completa y cómo funciona cada uno.
+Este es el starter `minimal` - el predeterminado cuando se omite `--template`. `new` también puede generar uno de otros 7 starters incorporados (`--template=webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent`), cada uno añadiendo un poco de contenido preconfigurado (un gateway, un scheduler) sobre el mismo esqueleto, o saltarse el andamiaje por completo y crear el proyecto a partir de un repositorio de GitHub existente (`--repo=owner/repo`) o un paquete de ForgeBox (`--forgebox=<slug>`) en su lugar - ver la [Referencia de la CLI](../cli-reference.md#new) para la lista completa y cómo funciona cada uno. El agente se define por defecto con un `Agent.yaml`; pasa `--class` para generar en su lugar el `Agent.bx` avanzado basado en clase (ver [Agent.bx](../conventions/agent-bx.md)).
 
-`Agent.bx` se ve así:
+`Agent.yaml` se ve así:
 
-```javascript
-class extends="bxModules.bxai.models.runnables.AiAgent" {
+```yaml
+# Your agent. Most agents need nothing more than this file and instructions.md.
+# For code in the definition (hooks, dynamic instructions), scaffold with --class.
+name: my-agent
+description: A helpful assistant
+model: openai/gpt-5
 
-	function init() {
-		super.init(
-			name        : "my-agent",
-			description : "",
-			model       : aiModel( provider: "openai", params: { model: "gpt-5" } )
-		)
-		return this
-	}
-
-}
+environments:
+  # `bxAgents test` builds against this override by default (see
+  # BaseAgentSpec.bx) so a fresh project's tests need no API key or
+  # network access - swap the model to test against a real provider.
+  test:
+    model: mock/mock-model
 ```
 
-`extends` el propio `AiAgent` de bx-ai, así que *es* el agente - hereda y añade lo que tu agente necesite directamente en la clase. Ver [Agent.bx](../conventions/agent-bx.md).
+El agente es solo este archivo más `instructions.md`. Ver [Agent.yaml](../conventions/agent-yaml.md) para todas las claves.
 
 Cada carpeta de convención se crea vacía - añade archivos a las que tu agente realmente necesite y elimina (o simplemente ignora) el resto.
 
 ## 2. Edita
 
-Abre `instructions.md` y escribe el system prompt del agente. Añade una tool:
+Abre `instructions.md` y escribe el system prompt del agente, y ajusta `name`, `description` o `model` en `Agent.yaml` a tu gusto. Añade una tool:
 
 ```javascript
 // tools/Greeter.bx
@@ -78,7 +78,7 @@ class {
 }
 ```
 
-Ver la sección de [Convenciones](../conventions/agent-bx.md) para cada otra carpeta (`skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `models/`, `modules/`).
+Ver la sección de [Convenciones](../conventions/agent-yaml.md) para cada otra carpeta (`skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `models/`, `modules/`).
 
 ## 3. Pruébalo
 
@@ -95,7 +95,7 @@ El `tests/specs/AgentSpec.bx` generado pasa de inmediato - construye tu agente c
 bxAgents build
 ```
 
-Ejecuta el [pipeline de build](../build-pipeline.md) completo - resolución de configuración, descubrimiento, validación, generación de código, normalización de manifest - y escribe una aplicación ColdBox real en `.build/app/`, más `.build/manifest.json`. Ejecuta `bxAgents build --environment=production` para construir contra un override de entorno de `Agent.bx` (ver [Agent.bx](../conventions/agent-bx.md)).
+Ejecuta el [pipeline de build](../build-pipeline.md) completo - resolución de configuración, descubrimiento, validación, generación de código, normalización de manifest - y escribe una aplicación ColdBox real en `.build/app/`, más `.build/manifest.json`. Ejecuta `bxAgents build --environment=production` para construir contra un override de entorno de `Agent.yaml` (ver [Agent.yaml](../conventions/agent-yaml.md#entornos)).
 
 Si tu proyecto falla la validación (nombres de tool duplicados, una expresión cron mala, un proveedor de modelo desconocido, ...) `build` falla con todos los errores recopilados - no solo el primero.
 
@@ -136,10 +136,10 @@ Ver [El manifest](../manifest.md) y [Despliegue y secretos](../deployment-and-se
 bxAgents clean
 ```
 
-Elimina solo `.build/` y `dist/` - las convenciones fuente de tu proyecto (`Agent.bx`, `tools/`, etc.) nunca se tocan.
+Elimina solo `.build/` y `dist/` - las convenciones fuente de tu proyecto (`Agent.yaml`, `tools/`, etc.) nunca se tocan.
 
 ## Próximos pasos
 
-- Recorre cada carpeta de convención en [Convenciones](../conventions/agent-bx.md).
+- Recorre cada carpeta de convención en [Convenciones](../conventions/agent-yaml.md).
 - Mira los proyectos de muestra funcionales en [`examples/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples).
 - Ver los flags de cada verbo en [Referencia de CLI](../cli-reference.md).

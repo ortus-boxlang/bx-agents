@@ -117,14 +117,13 @@ Every one is scoped by ColdBox's `getUserSessionIdentifier()` as the `userId`. T
 
     Only `keepRecent` is taken from the request. `summarize()` also honours `model`/`provider` overrides, but accepting those here would let any visitor aim a summarization call at a provider and model of their choosing on your credentials - the memory's own config decides that instead.
 
-```javascript
-// Agent.bx - what makes /compact functional
-memory: {
-	type            : "cache",
-	summaryProvider : "openai",
-	summaryModel    : "gpt-4o-mini",
-	summaryThreshold: 10
-}
+```yaml
+# Agent.yaml - what makes /compact functional
+memory:
+  type: cache
+  summaryProvider: openai
+  summaryModel: gpt-4o-mini
+  summaryThreshold: 10
 ```
 
 ## Users and sign-in
@@ -363,11 +362,13 @@ Because the identity is server-issued, scoping holds no matter which memories th
 
 `conversationId` still comes from the client, and that's deliberate: it distinguishes several conversations belonging to the *same* visitor - it's what the **New** button rotates. It is not the isolation boundary; the session-derived `userId` is.
 
-No memory type is forced. Choose one (or several) per agent with a `memory` key on `Agent.bx`, same shape as `checkpointer`:
+No memory type is forced. Choose one (or several) per agent with a `memory` key on `Agent.yaml`, same shape as `checkpointer`:
 
-```javascript
-// Agent.bx
-memory: { type: "cache", maxMessages: 50 }
+```yaml
+# Agent.yaml
+memory:
+  type: cache
+  maxMessages: 50
 ```
 
 A project with no `webui` keeps sessions off and bx-ai's own memory default - an API/gateway-only app has no browser to track, and a session there is overhead plus a cookie nobody asked for.

@@ -18,13 +18,13 @@ bxAgents new my-agent --model=openai/gpt-5
 `--model` is **required** - a `provider/model` slug (you'll see exactly how this gets
 parsed in [Lesson 5](05-agent-bx.md)). `--name` and `--description` are optional;
 `--name` defaults to the target directory's own name. `new` refuses to run if the
-target already contains an `Agent.bx`.
+target already contains an `Agent.yaml` or `Agent.bx`.
 
 ## What gets created
 
 ```
 my-agent/
-├── Agent.bx
+├── Agent.yaml
 ├── instructions.md
 ├── tools/
 ├── skills/
@@ -49,25 +49,26 @@ Every convention folder is created **empty**. You add files to the ones your age
 actually needs and leave the rest alone - an empty `tools/` folder has zero effect on
 the generated app.
 
-## `Agent.bx` looks like this
+## `Agent.yaml` looks like this
 
-```javascript
-class extends="bxModules.bxai.models.runnables.AiAgent" {
+```yaml
+# Your agent. Most agents need nothing more than this file and instructions.md.
+# For code in the definition (hooks, dynamic instructions), scaffold with --class.
+name: my-agent
+description: A helpful assistant
+model: openai/gpt-5
 
-	function init() {
-		super.init(
-			name        : "my-agent",
-			description : "",
-			model       : aiModel( provider: "openai", params: { model: "gpt-5" } )
-		)
-		return this
-	}
-
-}
+environments:
+  # `bxAgents test` builds against this override by default (see
+  # BaseAgentSpec.bx) so a fresh project's tests need no API key or
+  # network access - swap the model to test against a real provider.
+  test:
+    model: mock/mock-model
 ```
 
-It `extends` bx-ai's own `AiAgent` directly - more on exactly what that means in
-[Lesson 5](05-agent-bx.md).
+That is the whole agent definition - more on each key in [Lesson 5](05-agent-bx.md).
+If you need code in the definition, pass `--class` and `new` scaffolds a class-based
+`Agent.bx` instead (also covered at the end of Lesson 5).
 
 ## The test suite runs itself
 
@@ -87,4 +88,4 @@ ls
 You now have a real, if minimal, BxAgents project. The next four lessons walk through
 what's actually required to run it.
 
-Next: [Lesson 5 - Agent.bx: The Agent Itself](05-agent-bx.md)
+Next: [Lesson 5 - The Agent Definition: Agent.yaml](05-agent-bx.md)

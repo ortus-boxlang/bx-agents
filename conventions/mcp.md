@@ -12,7 +12,7 @@ MCP (Model Context Protocol) works two directions - consuming remote servers, an
 
 ```mermaid
 flowchart LR
-    subgraph consume["CONSUMING - declared on Agent.bx via mcpServers"]
+    subgraph consume["CONSUMING - declared on Agent.yaml via mcpServers"]
         direction LR
         AG["your agent"] -->|"calls out at runtime"| RM["a remote MCP server<br/>https://example.com/mcp"]
     end
@@ -32,27 +32,16 @@ Nothing links the two: an agent consuming remote servers need not host one, and 
 
 ## Consuming remote servers
 
-Declared directly on `Agent.bx` (not a file under `mcp/`), via `mcpServers`:
+Declared directly on `Agent.yaml` (not a file under `mcp/`), via `mcpServers`:
 
-```javascript
-// Agent.bx
-class extends="bxModules.bxai.models.runnables.AiAgent" {
-
-	function init() {
-		super.init( name: "my-agent", model: aiModel( provider: "openai", params: { model: "gpt-5" } ) )
-		return this
-	}
-
-	function configure() {
-		return {
-			mcpServers : [
-				"https://example.com/mcp",
-				{ url : "https://other.com/mcp", name : "other" }
-			]
-		};
-	}
-
-}
+```yaml
+# Agent.yaml
+name: my-agent
+model: openai/gpt-5
+mcpServers:
+  - https://example.com/mcp
+  - url: https://other.com/mcp
+    name: other
 ```
 
 Each entry is either a bare URL string or a `{ url, name }` struct. These are reduced to a bare array of URLs and passed straight into the generated `aiAgent(mcpServers: [...])` call. **No network connection is ever attempted at build time** - reachability is a runtime concern; an unreachable server at build time is not a build error.

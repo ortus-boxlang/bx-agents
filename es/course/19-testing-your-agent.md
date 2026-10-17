@@ -51,15 +51,13 @@ ciclo real de `build`/`serve`/`package`. El agente construido se expone como `ag
 
 ## Probar no necesita ninguna clave de API
 
-Por defecto, `bxAgents test` construye tu agente usando una sobrescritura de entorno `test()`
-en `Agent.bx`, creada automáticamente por `new`:
+Por defecto, `bxAgents test` construye tu agente usando una sobrescritura de entorno `test`
+en `Agent.yaml`, creada automáticamente por `new`:
 
-```javascript
-function test() {
-	return {
-		model : "mock/mock-model"
-	};
-}
+```yaml
+environments:
+  test:
+    model: mock/mock-model
 ```
 
 Es el mismo proveedor `mock` que conociste en la [Lección 5](05-agent-bx.md) - sin llamadas de

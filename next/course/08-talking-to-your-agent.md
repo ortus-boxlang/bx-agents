@@ -67,13 +67,13 @@ compiled-class cache stays isolated.
 ## Testing without a real API key
 
 Every one of these needs a real model to talk to a real provider - but you don't need
-one yet. Add a `test()` override to `Agent.bx` (covered fully in
+one yet. Add a `test` environment override to `Agent.yaml` (covered fully in
 [Lesson 19](19-testing-your-agent.md)):
 
-```javascript
-function test() {
-	return { model : "mock/mock-model" };
-}
+```yaml
+environments:
+  test:
+    model: mock/mock-model
 ```
 
 then `bxAgents build --environment=test && bxAgents chat` runs entirely against bx-ai's

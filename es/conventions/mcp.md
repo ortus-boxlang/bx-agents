@@ -12,7 +12,7 @@ MCP (Model Context Protocol) funciona en dos direcciones - consumiendo servidore
 
 ```mermaid
 flowchart LR
-    subgraph consume["CONSUMIR - declarado en Agent.bx vía mcpServers"]
+    subgraph consume["CONSUMIR - declarado en Agent.yaml vía mcpServers"]
         direction LR
         AG["tu agente"] -->|"llama hacia afuera en tiempo de ejecución"| RM["un servidor MCP remoto<br/>https://example.com/mcp"]
     end
@@ -32,27 +32,16 @@ Nada vincula a los dos: un agente que consume servidores remotos no necesita hos
 
 ## Consumir servidores remotos
 
-Declarados directamente en `Agent.bx` (no un archivo bajo `mcp/`), vía `mcpServers`:
+Declarados directamente en `Agent.yaml` (no un archivo bajo `mcp/`), vía `mcpServers`:
 
-```javascript
-// Agent.bx
-class extends="bxModules.bxai.models.runnables.AiAgent" {
-
-	function init() {
-		super.init( name: "my-agent", model: aiModel( provider: "openai", params: { model: "gpt-5" } ) )
-		return this
-	}
-
-	function configure() {
-		return {
-			mcpServers : [
-				"https://example.com/mcp",
-				{ url : "https://other.com/mcp", name : "other" }
-			]
-		};
-	}
-
-}
+```yaml
+# Agent.yaml
+name: my-agent
+model: openai/gpt-5
+mcpServers:
+  - https://example.com/mcp
+  - url: https://other.com/mcp
+    name: other
 ```
 
 Cada entrada es ya sea una cadena URL simple o un struct `{ url, name }`. Estas se reducen a un array simple de URLs y se pasan directamente a la llamada `aiAgent(mcpServers: [...])` generada. **Nunca se intenta ninguna conexión de red en tiempo de build** - la alcanzabilidad es una preocupación de tiempo de ejecución; un servidor inalcanzable en tiempo de build no es un error de build.

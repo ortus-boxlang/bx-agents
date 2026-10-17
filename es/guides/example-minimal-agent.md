@@ -8,13 +8,13 @@ tags: [guides, examples, tools, skills]
 
 # Ejemplo: un agente mínimo
 
-El proyecto BxAgents completo más pequeño es [`examples/minimal-agent/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/minimal-agent) - tres archivos que muestran la forma completa de un proyecto: un `Agent.bx`, unas instrucciones, una [tool](../conventions/tools.md) y una [skill](../conventions/skills.md). Todos los demás ejemplos de esta serie de guías parten exactamente de esta forma.
+El proyecto BxAgents completo más pequeño es [`examples/minimal-agent/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/minimal-agent) - tres archivos que muestran la forma completa de un proyecto: un `Agent.yaml`, unas instrucciones, una [tool](../conventions/tools.md) y una [skill](../conventions/skills.md). Todos los demás ejemplos de esta serie de guías parten exactamente de esta forma.
 
 ## El proyecto
 
 ```
 minimal-agent/
-├── Agent.bx
+├── Agent.yaml
 ├── instructions.md
 ├── tools/
 │   └── Greeter.bx
@@ -23,21 +23,12 @@ minimal-agent/
         └── SKILL.md
 ```
 
-`Agent.bx` extiende el propio `AiAgent` de bx-ai y declara un nombre, una descripción y un modelo en `init()`:
+`Agent.yaml` declara un nombre, una descripción y un modelo - el slug `provider/model` (consulta [El slug del modelo](../conventions/agent-bx.md#the-model-slug)) - y no hace falta nada más. ¿Necesitas código en la definición (hooks, instrucciones dinámicas)? El [`Agent.bx`](../conventions/agent-bx.md) basado en clase es la alternativa avanzada.
 
-```javascript
-class extends="bxModules.bxai.models.runnables.AiAgent" {
-
-	function init() {
-		super.init(
-			name        : "minimal-agent",
-			description : "The smallest complete BX Agents project: one tool, one skill.",
-			model       : aiModel( provider: "mock", params: { model: "mock-model" } )
-		)
-		return this
-	}
-
-}
+```yaml
+name: minimal-agent
+description: "The smallest complete BX Agents project: one tool, one skill."
+model: mock/mock-model
 ```
 
 `instructions.md` es el system prompt - un archivo Markdown plano, copiado tal cual en tiempo de build:

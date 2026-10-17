@@ -9,28 +9,24 @@ tags: [course, conventions, subagents]
 # Componer subagentes
 
 `subagents/` contiene agentes anidados - cada uno un proyecto BxAgents corriente por sí
-mismo, con su propio `Agent.bx` + `instructions.md`, y opcionalmente sus propios `tools/`,
+mismo, con su propio `Agent.yaml` + `instructions.md`, y opcionalmente sus propios `tools/`,
 `skills/`, etc.
 
 ```
 my-agent/
-├── Agent.bx              # subAgents: ["researcher"]
+├── Agent.yaml            # subAgents: [ researcher ]
 ├── instructions.md
 └── subagents/
     └── researcher/
-        ├── Agent.bx
+        ├── Agent.yaml
         └── instructions.md
 ```
 
-Un subagente se cablea a su padre por nombre, declarado en el `configure()` del `Agent.bx`
+Un subagente se cablea a su padre por nombre, declarado en el `Agent.yaml`
 del padre - este es el **nombre de la carpeta** en `subagents/`:
 
-```javascript
-function configure() {
-	return {
-		subAgents : [ "researcher" ]
-	};
-}
+```yaml
+subAgents: [ researcher ]
 ```
 
 En tiempo de build, el `addSubAgent()` de bx-ai envuelve automáticamente cada instancia de
@@ -52,7 +48,7 @@ flowchart LR
         R2["subagents/B/"]
         R3["subagents/C/"]
     end
-    subgraph declared["DECLARED - each Agent.bx's own subAgents list"]
+    subgraph declared["DECLARED - each agent definition's own subAgents list"]
         direction TB
         GA["A"] --> GB["B"] --> GC["C"]
     end
@@ -71,7 +67,7 @@ nada. Un rombo (dos padres que comparten un descendiente) no supone ningún prob
 
 - El **nombre de la carpeta** bajo `subagents/` es a lo que hace referencia
   `subAgents: [ "..." ]` - puramente una cuestión de cableado en tiempo de build.
-- El **`name` declarado** por el propio subagente (el campo `name` de su `Agent.bx`) es por
+- El **`name` declarado** por el propio subagente (el campo `name` de su definición) es por
   lo que lo recuperas en tiempo de ejecución - cada agente del árbol queda registrado en
   `config/WireBox.bx` bajo ese nombre, así que [`schedules/Scheduler.bx`](../conventions/schedules.md)
   (o cualquier otra cosa que conozca WireBox) lo alcanza con `getInstance( "TheAgentName" )`.
@@ -83,8 +79,8 @@ agentes comparten uno.
 ## Pruébalo
 
 Crea una carpeta `subagents/researcher/` como su propio pequeño proyecto BxAgents (con su
-propio `Agent.bx` + `instructions.md`), y después cablea el subagente en el `configure()` de
-tu `Agent.bx` raíz. Reconstruye y pregunta a tu agente raíz algo que naturalmente delegaría en
+propio `Agent.yaml` + `instructions.md`), y después cablea el subagente en la lista `subAgents`
+de tu `Agent.yaml` raíz. Reconstruye y pregunta a tu agente raíz algo que naturalmente delegaría en
 el subagente investigador - es invocable exactamente igual que cualquier otra tool.
 
 Referencia completa: [subagents/](../conventions/subagents.md).

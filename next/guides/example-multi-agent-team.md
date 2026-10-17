@@ -14,79 +14,47 @@ tags: [guides, examples, subagents]
 
 ```
 multi-agent-team/
-├── Agent.bx
+├── Agent.yaml
 ├── instructions.md
 └── subagents/
     ├── researcher/
-    │   ├── Agent.bx
+    │   ├── Agent.yaml
     │   └── instructions.md
     └── writer/
-        ├── Agent.bx
+        ├── Agent.yaml
         └── instructions.md
 ```
 
-Every `subagents/<name>/` folder is itself a complete mini-agent - its own `Agent.bx`, its own `instructions.md`, and (not used here, but supported) its own `tools/`/`skills/`.
+Every `subagents/<name>/` folder is itself a complete mini-agent - its own `Agent.yaml`, its own `instructions.md`, and (not used here, but supported) its own `tools/`/`skills/`.
 
 ## Declaring the team
 
-The root `Agent.bx` names the subagents to wire in via `configure()`:
+The root `Agent.yaml` names the subagents to wire in with `subAgents`:
 
-```javascript
-class extends="bxModules.bxai.models.runnables.AiAgent" {
+```yaml
+# Agent.yaml
+name: multi-agent-team
+description: A root agent delegating to a researcher and a writer subagent.
+model: mock/mock-model
 
-	function init() {
-		super.init(
-			name        : "multi-agent-team",
-			description : "A root agent delegating to a researcher and a writer subagent.",
-			model       : aiModel( provider: "mock", params: { model: "mock-model" } )
-		)
-		return this
-	}
-
-	// subAgents here is the list of `subagents/` FOLDER names to wire at
-	// build time - a build-time concern, distinct from super.init()'s own
-	// `subAgents` argument (which takes already-built AiAgent instances).
-	function configure() {
-		return {
-			subAgents : [ "researcher", "writer" ]
-		};
-	}
-
-}
+# The list of `subagents/` FOLDER names to wire at build time.
+subAgents: [ researcher, writer ]
 ```
 
-`configure()`'s `subAgents` list is resolved against folder names under `subagents/`; each folder's own `Agent.bx` declares its own `name`, `description`, and `model` independently:
+`subAgents` is resolved against folder names under `subagents/`; each folder's own `Agent.yaml` declares its own `name`, `description`, and `model` independently:
 
-```javascript
-// subagents/researcher/Agent.bx
-class extends="bxModules.bxai.models.runnables.AiAgent" {
-
-	function init() {
-		super.init(
-			name        : "researcher",
-			description : "Gathers facts on a topic.",
-			model       : aiModel( provider: "mock", params: { model: "mock-model" } )
-		)
-		return this
-	}
-
-}
+```yaml
+# subagents/researcher/Agent.yaml
+name: researcher
+description: Gathers facts on a topic.
+model: mock/mock-model
 ```
 
-```javascript
-// subagents/writer/Agent.bx
-class extends="bxModules.bxai.models.runnables.AiAgent" {
-
-	function init() {
-		super.init(
-			name        : "writer",
-			description : "Turns research into polished prose.",
-			model       : aiModel( provider: "mock", params: { model: "mock-model" } )
-		)
-		return this
-	}
-
-}
+```yaml
+# subagents/writer/Agent.yaml
+name: writer
+description: Turns research into polished prose.
+model: mock/mock-model
 ```
 
 ## Instructions divide the responsibility

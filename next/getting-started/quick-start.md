@@ -19,13 +19,13 @@ This walks through the full lifecycle of a BxAgents project: scaffold, edit, bui
 bxAgents new my-agent --model=openai/gpt-5
 ```
 
-`--model` is required (a `provider/model` slug - see [Agent.bx](../conventions/agent-bx.md) for how it's parsed). `--name` and `--description` are optional; `--name` defaults to the target directory's own name.
+`--model` is required (a `provider/model` slug - see [the model slug](../conventions/agent-bx.md#the-model-slug) for how it's parsed). `--name` and `--description` are optional; `--name` defaults to the target directory's own name.
 
 This creates:
 
 ```
 my-agent/
-├── Agent.bx
+├── Agent.yaml
 ├── instructions.md
 ├── tools/
 ├── skills/
@@ -42,32 +42,32 @@ my-agent/
         └── AgentSpec.bx
 ```
 
-This is the `minimal` starter - the default when `--template` is omitted. `new` can also scaffold one of 7 other built-in starters (`--template=webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent`), each adding a bit of pre-wired content (a gateway, a scheduler) on top of the same skeleton, or skip scaffolding entirely and create the project from an existing GitHub repo (`--repo=owner/repo`) or a ForgeBox package (`--forgebox=<slug>`) instead - see the [CLI Reference](../cli-reference.md#new) for the full list and how each one works.
+This is the `minimal` starter - the default when `--template` is omitted. `new` can also scaffold one of 7 other built-in starters (`--template=webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent`), each adding a bit of pre-wired content (a gateway, a scheduler) on top of the same skeleton, or skip scaffolding entirely and create the project from an existing GitHub repo (`--repo=owner/repo`) or a ForgeBox package (`--forgebox=<slug>`) instead - see the [CLI Reference](../cli-reference.md#new) for the full list and how each one works. The agent is defined by an `Agent.yaml` by default; pass `--class` to scaffold the advanced, class-based `Agent.bx` instead (see [Agent.bx](../conventions/agent-bx.md)).
 
-`Agent.bx` looks like:
+`Agent.yaml` looks like:
 
-```javascript
-class extends="bxModules.bxai.models.runnables.AiAgent" {
+```yaml
+# Your agent. Most agents need nothing more than this file and instructions.md.
+# For code in the definition (hooks, dynamic instructions), scaffold with --class.
+name: my-agent
+description: A helpful assistant
+model: openai/gpt-5
 
-	function init() {
-		super.init(
-			name        : "my-agent",
-			description : "",
-			model       : aiModel( provider: "openai", params: { model: "gpt-5" } )
-		)
-		return this
-	}
-
-}
+environments:
+  # `bxAgents test` builds against this override by default (see
+  # BaseAgentSpec.bx) so a fresh project's tests need no API key or
+  # network access - swap the model to test against a real provider.
+  test:
+    model: mock/mock-model
 ```
 
-It `extends` bx-ai's own `AiAgent`, so it *is* the agent - inherit and add whatever your agent needs directly on the class. See [Agent.bx](../conventions/agent-bx.md).
+The agent is just this file plus `instructions.md`. See [Agent.yaml](../conventions/agent-yaml.md) for every key.
 
 Every convention folder is created empty - add files to the ones your agent actually needs and delete (or just ignore) the rest.
 
 ## 2. Edit
 
-Open `instructions.md` and write the agent's system prompt. Add a tool:
+Open `instructions.md` and write the agent's system prompt, and adjust `name`, `description` or `model` in `Agent.yaml` as you like. Add a tool:
 
 ```javascript
 // tools/Greeter.bx
@@ -81,7 +81,7 @@ class {
 }
 ```
 
-See the [Conventions](../conventions/agent-bx.md) section for every other folder (`skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `models/`, `modules/`).
+See the [Conventions](../conventions/agent-yaml.md) section for every other folder (`skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `models/`, `modules/`).
 
 ## 3. Test it
 
@@ -98,7 +98,7 @@ The scaffolded `tests/specs/AgentSpec.bx` passes out of the box - it builds your
 bxAgents build
 ```
 
-Runs the full [build pipeline](../build-pipeline.md) - config resolution, discovery, validation, code generation, manifest normalization - and writes a real ColdBox application to `.build/app/`, plus `.build/manifest.json`. Run `bxAgents build --environment=production` to build against an `Agent.bx` environment override (see [Agent.bx](../conventions/agent-bx.md)).
+Runs the full [build pipeline](../build-pipeline.md) - config resolution, discovery, validation, code generation, manifest normalization - and writes a real ColdBox application to `.build/app/`, plus `.build/manifest.json`. Run `bxAgents build --environment=production` to build against an `Agent.yaml` environment override (see [Agent.yaml](../conventions/agent-yaml.md#environments)).
 
 If your project fails validation (duplicate tool names, a bad cron expression, an unknown model provider, ...) `build` fails with every collected error - not just the first one.
 
@@ -139,10 +139,10 @@ See [The Manifest](../manifest.md) and [Deployment & Secrets](../deployment-and-
 bxAgents clean
 ```
 
-Removes `.build/` and `dist/` only - your source conventions (`Agent.bx`, `tools/`, etc.) are never touched.
+Removes `.build/` and `dist/` only - your source conventions (`Agent.yaml`, `tools/`, etc.) are never touched.
 
 ## Next steps
 
-- Walk through every convention folder in [Conventions](../conventions/agent-bx.md).
+- Walk through every convention folder in [Conventions](../conventions/agent-yaml.md).
 - Look at the working sample projects in [`examples/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples).
 - See every verb's flags in [CLI Reference](../cli-reference.md).

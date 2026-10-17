@@ -94,14 +94,14 @@ Removes only `.build/` and `dist/` - your source conventions are never touched.
 You've now used `new`, `build`, `test`, `chat`, `invoke`, `serve`, `package`, `deploy`,
 `inspect`, `clean` and `hash-password` across this course. The twelfth verb, `doctor`,
 is the one you'll reach for when something *isn't* working - it checks your BoxLang
-version, whether `bx-ai` is loaded, whether `Agent.bx` is found and whether the project
+version, whether `bx-ai` is loaded, whether the agent definition (`Agent.yaml` or `Agent.bx`) is found and whether the project
 validates, without needing a prior `build`. See the [CLI Reference](../cli-reference.md)
 for every flag on every one of them.
 
 ## Where to go from here
 
 ::: cards
-::: card title="Conventions" icon="phosphor-duotone:cube" href="../conventions/agent-bx.md"
+::: card title="Conventions" icon="phosphor-duotone:cube" href="../conventions/agent-yaml.md"
 The full reference for every convention folder this course walked through.
 :::
 ::: card title="The Build Pipeline" icon="phosphor-duotone:factory" href="../build-pipeline.md"

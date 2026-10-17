@@ -32,7 +32,7 @@ Validation is the gate: it collects **every** error rather than failing fast, an
 
 ## 1. Resolve config
 
-[`AgentConfigResolver`](conventions/agent-bx.md) loads `Agent.bx`, invokes `configure()` and the active environment's override method, then deep-merges in `boxlang.json`/`boxlang-{env}.json`/`miniserver.json`/`miniserver-{env}.json` if present. Produces the single resolved config struct every later phase reads from.
+[`AgentConfigResolver`](conventions/agent-yaml.md) loads the agent definition (`Agent.yaml`, or the class-based `Agent.bx`), applies the active environment's overrides (the `environments:` block of an `Agent.yaml`, or the override method and `configure()` of an `Agent.bx`), then deep-merges in `boxlang.json`/`boxlang-{env}.json`/`miniserver.json`/`miniserver-{env}.json` if present. Produces the single resolved config struct every later phase reads from.
 
 ## 2. Discover
 

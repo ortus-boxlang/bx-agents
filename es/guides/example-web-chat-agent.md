@@ -16,27 +16,18 @@ Este es el único ejemplo de esta serie de guías con capturas de pantalla reale
 
 ```
 webui-agent/
-├── Agent.bx
+├── Agent.yaml
 ├── instructions.md
 └── gateways/
     └── chat.bx
 ```
 
-`Agent.bx` tiene la misma forma que en todos los demás ejemplos:
+`Agent.yaml` tiene la misma forma que en todos los demás ejemplos:
 
-```javascript
-class extends="bxModules.bxai.models.runnables.AiAgent" {
-
-	function init() {
-		super.init(
-			name        : "webui-agent",
-			description : "An agent reachable through the v1 web chat UI via gateways/.",
-			model       : aiModel( provider: "mock", params: { model: "mock-model" } )
-		)
-		return this
-	}
-
-}
+```yaml
+name: webui-agent
+description: An agent reachable through the v1 web chat UI via gateways/.
+model: mock/mock-model
 ```
 
 ## El gateway: marca y tema, todo en configuración

@@ -8,12 +8,12 @@ tags: [course, conventions]
 
 # instructions.md and the System Prompt
 
-`instructions.md` is **optional** - `bxAgents new` scaffolds an empty one for you to
-fill in, but you have two equally valid choices for where your agent's system prompt
+`instructions.md` is **optional** - `bxAgents new` scaffolds a starter one for you to
+edit, but you have two equally valid choices for where your agent's system prompt
 lives:
 
-1. Set `instructions` directly in `Agent.bx`'s `super.init()`.
-2. Drop an `instructions.md` file beside `Agent.bx` and let the build wire it in.
+1. Set `instructions` inline in `Agent.yaml`.
+2. Drop an `instructions.md` file beside `Agent.yaml` and let the build wire it in.
 
 ## Letting the file win
 
@@ -23,7 +23,8 @@ If `instructions.md` exists, the build emits:
 withInstructions( fileRead( "instructions.md" ) )
 ```
 
-which overrides whatever the class itself set. This is the more common pattern in
+which wins over an inline `instructions` in `Agent.yaml` (or whatever a class set).
+This is the more common pattern in
 practice - it keeps the prompt as plain text you can edit without touching BoxLang
 code, and it's easy to diff in a pull request.
 
@@ -33,34 +34,29 @@ You are a helpful assistant for a small hardware store. Be concise. If a custome
 asks about a product you don't have information on, say so rather than guessing.
 ```
 
-## Setting it in the class instead
+## Setting it inline instead
 
-```javascript
-class extends="bxModules.bxai.models.runnables.AiAgent" {
-
-	function init() {
-		super.init(
-			name        : "my-agent",
-			instructions: "You are a helpful assistant.",
-			model       : aiModel( provider: "openai", params: { model: "gpt-5" } )
-		)
-		return this
-	}
-
-}
+```yaml
+name: my-agent
+model: openai/gpt-5
+instructions: |
+  You are a helpful assistant.
+  Keep answers short.
 ```
 
-Do this when the prompt is generated or templated in code, or when you'd rather keep
-everything about the agent in one file. If `instructions.md` doesn't exist (or is
-empty), the class's own instructions stand untouched.
+Do this for a short prompt, or when you'd rather keep everything about the agent in one
+file. If both exist, `instructions.md` wins; if neither exists, the build fails and says
+so. A prompt that must be generated or templated in code belongs in the advanced
+class-based `Agent.bx` (see the end of [Lesson 5](05-agent-bx.md)).
 
 ## Which one should you pick?
 
 Start with `instructions.md` - it's what `bxAgents new` scaffolds, it's the simplest
 mental model ("the system prompt is this file"), and it plays nicely with the rest of
-this course, which assumes plain-text prompts throughout. Reach for setting it in the
-class only once you have a concrete reason to (templating, environment-specific
-prompts assembled from smaller pieces, etc.).
+this course, which assumes plain-text prompts throughout. Reach for the inline
+`instructions` key only for a short prompt, and for code only once you have a concrete
+reason to (templating, environment-specific prompts assembled from smaller pieces,
+etc.).
 
 ## Try it
 

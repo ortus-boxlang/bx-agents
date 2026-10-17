@@ -1,14 +1,17 @@
 ---
 title: Agent.bx
 icon: phosphor-duotone:robot
-summary: "The one required file - a class that extends bx-ai's own AiAgent, so it IS the agent."
-description: "The one required file - a class that extends bx-ai's own AiAgent, so it IS the agent."
+summary: "The advanced option - a class that extends bx-ai's own AiAgent, for definitions that need code."
+description: "The advanced option - a class that extends bx-ai's own AiAgent, for definitions that need code."
 tags: [conventions, configuration]
 ---
 
 # Agent.bx
 
-`Agent.bx` is the only required file in a BxAgents project. It **extends bx-ai's own [`AiAgent`](https://ai.ortusbooks.com/main-components/agents/class-based-agents)**, so it *is* the agent - the build instantiates it rather than rebuilding one from a config struct, so what you write is what runs. Inherit and add whatever you need: private helpers, overridden methods, tools registered in code. Because it's a real class rather than a struct-returning descriptor, an IDE can introspect it like any other BoxLang class - jump to definition, autocomplete on inherited methods, the works.
+!!! info "Most agents use Agent.yaml instead"
+    The default way to define an agent is a plain [`Agent.yaml`](agent-yaml.md). Reach for `Agent.bx` when the definition itself needs code: hooks, dynamic instructions, tools registered in code, an overridden method, or `detectEnvironment()`. A folder holds one or the other, never both. The sections on [the model slug](#the-model-slug), [environment overrides](#environment-overrides), [merge semantics](#merge-semantics) and [the always-on agent route](#the-always-on-agent-route) below apply to both.
+
+`Agent.bx` is the advanced way to define an agent. A BxAgents project needs an `Agent.yaml` **or** an `Agent.bx`. It **extends bx-ai's own [`AiAgent`](https://ai.ortusbooks.com/main-components/agents/class-based-agents)**, so it *is* the agent - the build instantiates it rather than rebuilding one from a config struct, so what you write is what runs. Inherit and add whatever you need: private helpers, overridden methods, tools registered in code. Because it's a real class rather than a struct-returning descriptor, an IDE can introspect it like any other BoxLang class - jump to definition, autocomplete on inherited methods, the works.
 
 ```javascript
 class extends="bxModules.bxai.models.runnables.AiAgent" {
@@ -26,7 +29,7 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 }
 ```
 
-`bxAgents new` scaffolds exactly this shape. `instructions.md` is optional - set `instructions` directly in `super.init()`, or drop the file beside `Agent.bx` and let the build wire it in for you (see the table below).
+`bxAgents new --class` scaffolds exactly this shape (without `--class`, `new` scaffolds an `Agent.yaml`). `instructions.md` is optional - set `instructions` directly in `super.init()`, or drop the file beside `Agent.bx` and let the build wire it in for you (see the table below).
 
 ## What the build layers on top of the class
 

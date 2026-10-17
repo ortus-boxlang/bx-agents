@@ -14,79 +14,47 @@ tags: [guides, examples, subagents]
 
 ```
 multi-agent-team/
-├── Agent.bx
+├── Agent.yaml
 ├── instructions.md
 └── subagents/
     ├── researcher/
-    │   ├── Agent.bx
+    │   ├── Agent.yaml
     │   └── instructions.md
     └── writer/
-        ├── Agent.bx
+        ├── Agent.yaml
         └── instructions.md
 ```
 
-Cada carpeta `subagents/<nombre>/` es en sí misma un mini-agente completo - con su propio `Agent.bx`, su propio `instructions.md`, y (aquí no se usan, pero están soportados) sus propios `tools/`/`skills/`.
+Cada carpeta `subagents/<nombre>/` es en sí misma un mini-agente completo - con su propio `Agent.yaml`, su propio `instructions.md`, y (aquí no se usan, pero están soportados) sus propios `tools/`/`skills/`.
 
 ## Declarar el equipo
 
-El `Agent.bx` raíz nombra los subagentes a cablear mediante `configure()`:
+El `Agent.yaml` raíz nombra los subagentes a cablear mediante `subAgents`:
 
-```javascript
-class extends="bxModules.bxai.models.runnables.AiAgent" {
+```yaml
+# Agent.yaml
+name: multi-agent-team
+description: A root agent delegating to a researcher and a writer subagent.
+model: mock/mock-model
 
-	function init() {
-		super.init(
-			name        : "multi-agent-team",
-			description : "A root agent delegating to a researcher and a writer subagent.",
-			model       : aiModel( provider: "mock", params: { model: "mock-model" } )
-		)
-		return this
-	}
-
-	// subAgents here is the list of `subagents/` FOLDER names to wire at
-	// build time - a build-time concern, distinct from super.init()'s own
-	// `subAgents` argument (which takes already-built AiAgent instances).
-	function configure() {
-		return {
-			subAgents : [ "researcher", "writer" ]
-		};
-	}
-
-}
+# The list of `subagents/` FOLDER names to wire at build time.
+subAgents: [ researcher, writer ]
 ```
 
-La lista `subAgents` de `configure()` se resuelve contra los nombres de carpeta bajo `subagents/`; el `Agent.bx` de cada carpeta declara su propio `name`, `description` y `model` de forma independiente:
+`subAgents` se resuelve contra los nombres de carpeta bajo `subagents/`; el `Agent.yaml` de cada carpeta declara su propio `name`, `description` y `model` de forma independiente:
 
-```javascript
-// subagents/researcher/Agent.bx
-class extends="bxModules.bxai.models.runnables.AiAgent" {
-
-	function init() {
-		super.init(
-			name        : "researcher",
-			description : "Gathers facts on a topic.",
-			model       : aiModel( provider: "mock", params: { model: "mock-model" } )
-		)
-		return this
-	}
-
-}
+```yaml
+# subagents/researcher/Agent.yaml
+name: researcher
+description: Gathers facts on a topic.
+model: mock/mock-model
 ```
 
-```javascript
-// subagents/writer/Agent.bx
-class extends="bxModules.bxai.models.runnables.AiAgent" {
-
-	function init() {
-		super.init(
-			name        : "writer",
-			description : "Turns research into polished prose.",
-			model       : aiModel( provider: "mock", params: { model: "mock-model" } )
-		)
-		return this
-	}
-
-}
+```yaml
+# subagents/writer/Agent.yaml
+name: writer
+description: Turns research into polished prose.
+model: mock/mock-model
 ```
 
 ## Las instrucciones reparten la responsabilidad

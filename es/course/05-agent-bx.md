@@ -1,58 +1,59 @@
 ---
-title: "Lección 5: Agent.bx - el agente en sí"
+title: "Lección 5: La definición del agente - Agent.yaml"
 icon: phosphor-duotone:robot
-summary: El único archivo obligatorio - una clase real que el build instancia, no un struct de configuración.
-description: El único archivo obligatorio - una clase real que el build instancia, no un struct de configuración.
+summary: El único archivo obligatorio - un archivo YAML simple que dice qué es tu agente.
+description: El único archivo obligatorio - un archivo YAML simple que dice qué es tu agente.
 tags: [course, conventions]
 ---
 
-# Agent.bx - el agente en sí
+# La definición del agente - Agent.yaml
 
-`Agent.bx` es el **único archivo obligatorio** de un proyecto BxAgents. Extiende el propio
-[`AiAgent`](https://ai.ortusbooks.com/main-components/agents/class-based-agents) de bx-ai,
-así que *es* el agente - el build lo instancia en lugar de reconstruir uno a partir de un
-struct de configuración, de modo que lo que escribes es lo que se ejecuta.
+`Agent.yaml` es el **único archivo obligatorio** de un proyecto BxAgents (además de las
+instrucciones a las que apunta). Son ajustes en texto plano - un nombre, un modelo y
+cualquier extra opcional - y el build los convierte en un
+[agente real de BX AI](https://ai.ortusbooks.com/main-components/agents/class-based-agents).
+No hace falta código.
 
-```javascript
-class extends="bxModules.bxai.models.runnables.AiAgent" {
-
-	function init() {
-		super.init(
-			name        : "my-agent",
-			description : "A helpful assistant",
-			instructions: "You are a helpful assistant.",
-			model       : aiModel( provider: "openai", params: { model: "gpt-5" } )
-		)
-		return this
-	}
-
-}
+```yaml
+name: my-agent
+description: A helpful assistant
+model: openai/gpt-5
+instructions: |
+  You are a helpful assistant.
 ```
 
-Al ser una clase real y no un descriptor que devuelve un struct, un IDE puede
-introspeccionarla como cualquier otra clase de BoxLang - ir a la definición, autocompletar
-métodos heredados, todo. Hereda y añade lo que necesites: helpers privados, métodos
-sobrescritos, tools registradas por código.
+Eso es un agente completo. `bxAgents new` crea esta forma por ti (consulta la
+[Lección 4](04-scaffolding-your-first-agent.md)), con el system prompt en un
+`instructions.md` a su lado (consulta la [Lección 6](06-instructions-and-system-prompt.md)).
 
-## La regla: una declaración explícita gana
+!!! info
+    Una carpeta contiene **una** definición de agente. Un `Agent.yaml` junto con un
+    `Agent.bx` (o un `Agent.yml`) en la misma carpeta es un error, y el build nombra ambos
+    archivos para que conserves uno.
 
-Todo lo que el build puede añadir por encima de la clase es **opcional** - declara un método
-`configure()` que devuelva cualquiera de las claves de abajo para sobrescribir lo que la
-propia clase fijó, o apóyate en la carpeta de convención correspondiente:
+## Las claves
 
-| Lo que declaras | Lo que emite el build | Si no lo declaras |
-|---|---|---|
-| `instructions.md` | `withInstructions( fileRead( ... ) )` | se mantienen las instrucciones de la clase |
-| `model` en `configure()` | `setModel( aiModel( ... ) )` | se mantiene el modelo de la clase |
-| `name` / `description` en `configure()` | `setName()` / `setDescription()` | se mantienen los de la clase |
-| *(nada que declarar)* | `withTools( aiToolRegistry().getAll() )` | siempre - las `tools/` descubiertas se añaden |
-| `subAgents` en la clase, o `subagents/` en disco | `addSubAgent( ... )` por cada hijo | se añaden igualmente |
-| `checkpointer` en `configure()` | `withCheckpointer( ... )` | **se inyecta igualmente** con el valor por defecto `cache` |
+| Clave | Qué hace |
+|---|---|
+| `name` | El nombre del agente. Es además su clave de binding en WireBox, así que debe ser única en todo el proyecto. |
+| `model` | Un slug `provider/model` (ver abajo). |
+| `description` | Opcional. |
+| `instructions` | System prompt en línea. Un `instructions.md` junto al archivo gana si existen ambos. |
+| `subAgents` | Nombres de carpetas hermanas bajo `subagents/` (consulta la [Lección 11](11-composing-subagents.md)). |
+| `mcpServers` | Servidores MCP remotos que el agente puede llamar (consulta la [Lección 17](17-hosting-mcp-servers.md)). |
+| `security`, `memory`, `checkpointer` | Guardrails, memoria de conversación y estado de humano-en-el-bucle. |
+| `gatewaySession` | Cómo los gateways de chat ponen en cola las sesiones (consulta la [Lección 14](14-connecting-chat-platforms.md)). |
+| `agentApi` | La ruta de agente siempre activa. |
+| `environments` | Sobrescrituras por entorno (ver abajo). |
+
+Una **clave desconocida es un error** que lista las válidas, así que un error tipográfico
+como `modle:` nunca puede no hacer nada en silencio. Los tipos incorrectos y los valores
+vacíos también son errores.
 
 !!! info
     El checkpointer es lo único que el build rellena sin que se lo pidas. Un agente
     accesible desde un gateway sin checkpointer tiene el humano-en-el-bucle roto en
-    silencio, así que una clase que no fije ninguno recibe igualmente el valor por
+    silencio, así que una definición que no fije ninguno recibe igualmente el valor por
     defecto `cache`.
 
 ## El slug del modelo
@@ -70,52 +71,68 @@ dos argumentos separados. BxAgents parte el slug **solo por la primera `/`**:
 (consulta la [Lección 19](19-testing-your-agent.md)) y para seguir este curso sin ninguna
 clave de API.
 
-## `configure()` - sobrescribir lo que fijó la clase
+## Añadir ajustes
+
+Los demás ajustes son simplemente más claves:
+
+```yaml
+name: with-mcp-servers-agent
+model: openai/gpt-5
+mcpServers:
+  - https://example.com/mcp
+```
+
+## Sobrescrituras por entorno
+
+`environments` asocia el nombre de un entorno (`production`, `development`, o cualquier
+nombre propio) con un bloque de sobrescrituras:
+
+```yaml
+name: my-agent
+model: openai/gpt-5
+
+environments:
+  production:
+    model: openai/gpt-5-mini
+  test:
+    model: mock/mock-model
+```
+
+El entorno activo se resuelve así, y gana el primero: flag `--environment` de la CLI >
+variable de entorno `BX_AGENTS_ENV` > el valor por defecto `"development"`.
+`bxAgents build --environment=production` lo recoge. Solo se aplica el bloque activo, por
+encima de las claves de primer nivel. Usarás este mismo mecanismo para el proveedor `mock`
+en tus pruebas ([Lección 19](19-testing-your-agent.md)), por eso `bxAgents new` ya te da un
+bloque `test`.
+
+Referencia completa: [Agent.yaml](../conventions/agent-yaml.md).
+
+## Cuando necesitas código: Agent.bx
+
+`Agent.yaml` cubre casi todos los agentes. Recurre a la forma avanzada basada en clase,
+`Agent.bx`, solo cuando la propia definición necesita código: hooks, instrucciones
+dinámicas, tools registradas por código, un método sobrescrito, o calcular el entorno con
+`detectEnvironment()`. Es una clase real que extiende el `AiAgent` de bx-ai, y que el build
+instancia:
 
 ```javascript
 class extends="bxModules.bxai.models.runnables.AiAgent" {
 
 	function init() {
 		super.init(
-			name  : "with-mcp-servers-agent",
-			model : aiModel( provider: "openai", params: { model: "gpt-5" } )
+			name        : "my-agent",
+			description : "A helpful assistant",
+			instructions: "You are a helpful assistant.",
+			model       : aiModel( provider: "openai", params: { model: "gpt-5" } )
 		)
 		return this
 	}
 
-	function configure() {
-		return {
-			mcpServers : [ "https://example.com/mcp" ]
-		};
-	}
-
 }
 ```
 
-Campos útiles: `name` (que es además la clave de binding de este agente en WireBox - debe
-ser única en todo el proyecto), `model`, `description`, `subAgents` (consulta la
-[Lección 11](11-composing-subagents.md)), `mcpServers` (consulta la
-[Lección 17](17-hosting-mcp-servers.md)), `security`, `memory`, `checkpointer`,
-`gatewaySession` (consulta la [Lección 14](14-connecting-chat-platforms.md)).
-
-## Sobrescrituras por entorno
-
-`Agent.bx` puede declarar un método con el nombre de un entorno (`production()`,
-`development()`, o cualquier nombre propio) que devuelva un struct de sobrescrituras:
-
-```javascript
-function production() {
-	return {
-		model : "openai/gpt-5-mini"
-	};
-}
-```
-
-El entorno activo se resuelve así, y gana el primero: flag `--environment` de la CLI >
-variable de entorno `BX_AGENTS_ENV` > el valor por defecto `"development"`.
-`bxAgents build --environment=production` lo recoge. Usarás este mismo mecanismo para el
-proveedor `mock` en tus pruebas ([Lección 19](19-testing-your-agent.md)).
-
-Referencia completa: [Agent.bx](../conventions/agent-bx.md).
+Crea uno con `bxAgents new --class`, o empieza en YAML y cambia más tarde: crea el
+`Agent.bx`, traslada los ajustes y borra el `Agent.yaml`. Referencia completa:
+[Agent.bx](../conventions/agent-bx.md).
 
 Siguiente: [Lección 6 - instructions.md y el system prompt](06-instructions-and-system-prompt.md)
