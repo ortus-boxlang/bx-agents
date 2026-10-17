@@ -36,7 +36,7 @@ bxAgents chat       # or: bxAgents serve --port=8080
 
 ## Documentation & Examples
 
-- **[docs/](docs/index.md)** - installation, quick start, one page per convention folder, agent templates (built-in starters, GitHub/ForgeBox sourcing, publishing your own), the build pipeline, the manifest schema, the full CLI reference, deployment/secrets, and known limitations. Published at **[bxagents.ai](https://bxagents.ai)**, built with [bx-sites](https://bxsites.io/development/); see [Working on the docs](#working-on-the-docs).
+- **[docs/](docs/index.md)** - installation, quick start, one page per convention folder, agent templates (built-in starters, GitHub/ForgeBox sourcing, publishing your own), the build pipeline, the manifest schema, the full CLI reference, and deployment/secrets. Published at **[bxagents.ai](https://bxagents.ai)**, built with [bx-sites](https://bxsites.io/development/); see [Working on the docs](#working-on-the-docs).
 - **[examples/](examples/README.md)** - real, buildable sample projects: nine core-convention examples (a minimal agent, a simple agent, a class-based agent, an HTTP-exposed agent, a scheduled agent, an MCP agent, a multi-agent team, the web chat UI, and a composite "advanced" agent) plus one per push-style chat-platform gateway (Telegram, Slack, Discord, Email, WhatsApp Cloud, Teams, Twilio, GitHub, Signal), each demonstrating one convention folder end-to-end.
 
 ## Why build-time assembly?

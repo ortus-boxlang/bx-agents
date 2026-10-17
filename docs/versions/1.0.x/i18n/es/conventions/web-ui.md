@@ -389,5 +389,3 @@ La página está completa contra su propia API - cada ruta que necesita existe y
 | Reintentar / regenerar | Un turno fallido tiene que reenviarse a mano |
 | Editar y reenviar | No se puede editar un mensaje ya enviado |
 | Visualización de tokens / costo | Nada muestra el uso, aunque el proveedor lo devuelve |
-
-Ver [Limitaciones conocidas](../known-limitations.md) para qué se verificó y qué no contra un arranque real de ColdBox, incluyendo las partes de esta página que solo están cubiertas por aserciones a nivel de generador en lugar de conducir un navegador.

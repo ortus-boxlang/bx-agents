@@ -115,7 +115,7 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
 - A full documentation site at [bxagents.ai](https://bxagents.ai): installation, quick start,
   a tutorial course, one page per convention, per-platform gateway pages, example-agent
   guides, the build pipeline, the manifest schema, the CLI reference, deployment and
-  secrets, and an honest known-limitations page.
+  secrets.
 - 18 real, buildable example projects under `examples/`, built in CI as a regression gate.
 - A new homepage with an interactive folder-to-app panel, a hover inspector for every gateway,
   a starter explorer built from the real scaffolder output, the course path, walkthrough

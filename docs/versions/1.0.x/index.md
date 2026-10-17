@@ -245,8 +245,3 @@ Package a `.bxa` and ship it, safely.
 Every convention folder also has a working, buildable sample under
 [`examples/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples).
 
-!!! warning
-    BxAgents is under active development. [Known Limitations](known-limitations.md) tracks
-    the honest gaps - what's tested against a real running app, what still only runs against
-    BX AI's `"mock"` provider, and one real upstream ColdBox quirk this project ran into and
-    worked around.

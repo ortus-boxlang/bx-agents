@@ -101,7 +101,7 @@ bxAgents new my-agent --forgebox=some-package-slug
   - `--model` は**必須**です - `provider/model` スラッグです ([Agent.bx](conventions/agent-bx.md) 参照)。
   - `--name` は対象ディレクトリ自身のベース名がデフォルトになります。
   - 対象にすでに `Agent.bx` が存在する場合は実行を拒否します。
-  - `Agent.bx`、`instructions.md`、すべてのコンベンションフォルダ (空)、すぐに使える [`tests/`](conventions/testing.md) フォルダ (`tests/box.json` + `tests/specs/AgentSpec.bx`)、`BOXLANG_HOME=.build/runtime` を宣言する `.env` (`serve` 自身のスコープ付きランタイムホームと一致します - これが正確に何をカバーし、何をカバーしないかは [既知の制限](known-limitations.md) 参照)、そして `.gitignore` (`.build/`、`dist/`、`.env`) を作成します。既存の `.env`/`.gitignore` は決して上書きしません。
+  - `Agent.bx`、`instructions.md`、すべてのコンベンションフォルダ (空)、すぐに使える [`tests/`](conventions/testing.md) フォルダ (`tests/box.json` + `tests/specs/AgentSpec.bx`)、`BOXLANG_HOME=.build/runtime` を宣言する `.env` (`serve` 自身のスコープ付きランタイムホームと一致します)、そして `.gitignore` (`.build/`、`dist/`、`.env`) を作成します。既存の `.env`/`.gitignore` は決して上書きしません。
   - `--template` は8つの組み込みスターターのいずれかを選択します。それぞれ上記のベーススケルトンの上に、少し事前設定済みのコンテンツを重ねます:
     - `minimal` - 何も追加されない、素のスケルトン。
     - `webui-chat` - [Web チャット UI](conventions/gateways/index.md) を `/chat` で公開する `gateways/webui.bx` を追加します。
@@ -155,7 +155,7 @@ bxAgents serve [--port=8080] [--host=127.0.0.1]
 - `boxlang-miniserver` が `PATH` に見つからない場合は明確に失敗します。
 - プロジェクトが [`gateways/`](conventions/gateways/index.md) に何を宣言していても、常に `/__bxagents` でエージェントを提供します (`POST /invoke`、`POST /stream`、`POST /batch`、`GET /info`) - トークンを必須にする方法や無効化する方法は [常時有効なエージェントルート](conventions/agent-bx.md#常時有効なエージェントルート) を参照してください。
 - 起動前に `.build/miniserver.json` を書き込みます (rewrite 有効、`rewriteFileName: "index.bxm"`、ヘルスチェック有効)。
-- サーバー自身の BoxLang ランタイムホームを、共有の `~/.boxlang` デフォルトではなく `.build/runtime` に (`serverHome` 経由で) スコープするので、各プロジェクトのコンパイル済みクラスキャッシュと config オーバーライドは分離されます - また `clean` はすでに `.build` をまるごと削除するため、これも無償で一掃されます。`invoke --server` は内部で `serve` を再利用するため、これも同じ恩恵を受けます。これは `chat`/`build`/`test`/デフォルトの `invoke` には**及びません** - [既知の制限](known-limitations.md) 参照。
+- サーバー自身の BoxLang ランタイムホームを、共有の `~/.boxlang` デフォルトではなく `.build/runtime` に (`serverHome` 経由で) スコープするので、各プロジェクトのコンパイル済みクラスキャッシュと config オーバーライドは分離されます - また `clean` はすでに `.build` をまるごと削除するため、これも無償で一掃されます。`invoke --server` は内部で `serve` を再利用するため、これも同じ恩恵を受けます。これは `chat`/`build`/`test`/デフォルトの `invoke` には**及びません**。
 
 ### `chat`
 

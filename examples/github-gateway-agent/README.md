@@ -39,5 +39,3 @@ Only a comment that actually contains `@my-bot-account` (as its own token, not p
 {% hint style="info" %}
 v1 auth is a plain personal access token, not a full GitHub App installation flow, and there's no repo checkout - this is a comment-in/comment-out chat surface only. See [GitHub - `@mention`-gated issue/PR comment threads](../../docs/conventions/gateways/github.md).
 {% endhint %}
-
-See [Known Limitations](../../docs/known-limitations.md) for the real `left(body, 0)` bug caught during development and what's still unverified against a real repository.
