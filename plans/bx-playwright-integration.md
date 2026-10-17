@@ -58,6 +58,26 @@ This matters for the playwright plan in two ways:
    }
    ```
 
+### A `box.json` at the agent's root (agreed)
+
+So users can add their own dependencies, `new` scaffolds a `box.json` in the project root, laid out like the ColdBox templates:
+
+```json
+{
+	"name": "support-bot",
+	"dependencies": { "cbvalidation": "^4" },
+	"devDependencies": { "testbox": "*" },
+	"installPathConventions": { "modules": "lib/modules" },
+	"installPaths": { "testbox": "lib/testbox/" }
+}
+```
+
+- `box.json` declares; the project's `lib/` holds what was installed (gitignored). `build` already copies the project `lib/` over the bundled libraries, so a project can add or override any library.
+- **Installer: both.** `bxAgents install` reads `box.json` and installs natively from ForgeBox (BX Agents already has a ForgeBox client), and `build` runs it when `box.json` changed. Plain `box install` gives the same result because the layout is the same.
+- **One manifest per project.** The scaffolded `tests/box.json` is merged into the root `box.json` (TestBox as a devDependency), the same rule applied to this repo. `bxAgents test` then finds TestBox in `lib/testbox`.
+- Modules named in `tools` (for example `*@bxplaywright`) that are bundled need no entry. One that is not bundled is added to `box.json`, and the build error for a missing module says so.
+- To verify: where a BoxLang module (as opposed to a ColdBox module) installs. The existing `modules/` convention for BoxLang modules may need its own `installPathConventions` entry.
+
 ### What a name can be
 
 | Name | Is | Example |
@@ -102,6 +122,11 @@ Build effects for each name: validate the module is available (bundled or instal
 - [ ] `filesystem` pack with a `workspace/` sandbox.
 - [ ] Factory attaches a filtered list instead of `getAll()`; specs.
 - [ ] Migration note in the changelog.
+
+**Phase 1b: project `box.json`**
+- [ ] `new` scaffolds root `box.json` (replaces `tests/box.json`), `.gitignore` gets `lib/`.
+- [ ] `bxAgents install` verb (native ForgeBox install into `lib/`), `build` runs it when `box.json` changed.
+- [ ] `test` finds TestBox in `lib/testbox`; docs and specs.
 
 **Phase 2: bx-playwright as a bundled module + native tools**
 - [ ] Bundle `bx-playwright` (`gradle.properties`).
