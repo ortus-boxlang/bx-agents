@@ -144,8 +144,16 @@ class {
 	 * @return A hint naming the modules that do have tools registered
 	 */
 	private string function registeredModulesHint( required any registry ) {
-		var modules = arguments.registry.getModules().filter( m => len( m ) )
-		return modules.len() ? "Modules with registered tools: #modules.sort( 'text' ).toList( ', ' )#." : "No module has registered any tool."
+		// Built from the keys: bx-ai's own getModules() throws on a non-empty registry
+		// (it tests `!module.isEmpty` without calling it).
+		var modules = arguments.registry.getKeys()
+			.filter( key => find( "@", key ) )
+			.map( key => listLast( key, "@" ) )
+			.unique()
+		if ( !arrayLen( modules ) ) {
+			return "No module has registered any tool."
+		}
+		return "Modules with registered tools: " & modules.sort( "text" ).toList( ", " ) & "."
 	}
 
 	/**
