@@ -101,7 +101,7 @@ bxAgents new my-agent --forgebox=some-package-slug
   - `--model` es **requerido** - un slug `provider/model` (ver [Agent.bx](conventions/agent-bx.md)).
   - `--name` por defecto toma el propio nombre base del directorio destino.
   - Se niega a ejecutarse si el destino ya contiene un `Agent.bx`.
-  - Crea `Agent.bx`, `instructions.md`, cada carpeta de convención (vacía), una carpeta [`tests/`](conventions/testing.md) lista para ejecutar (`tests/box.json` + `tests/specs/AgentSpec.bx`), un `.env` que declara `BOXLANG_HOME=.build/runtime` (coincidiendo con el propio home de runtime delimitado que usa `serve` - ver [limitaciones conocidas](known-limitations.md) para exactamente qué cubre y qué no esto), y un `.gitignore` (`.build/`, `dist/`, `.env`). Nunca sobrescribe un `.env`/`.gitignore` existente.
+  - Crea `Agent.bx`, `instructions.md`, cada carpeta de convención (vacía), una carpeta [`tests/`](conventions/testing.md) lista para ejecutar (`tests/box.json` + `tests/specs/AgentSpec.bx`), un `.env` que declara `BOXLANG_HOME=.build/runtime` (coincidiendo con el propio home de runtime delimitado que usa `serve`), y un `.gitignore` (`.build/`, `dist/`, `.env`). Nunca sobrescribe un `.env`/`.gitignore` existente.
   - `--template` elige una de 8 plantillas incorporadas, cada una añadiendo un poco de contenido preconfigurado sobre el esqueleto base anterior:
     - `minimal` - el esqueleto desnudo, nada más.
     - `webui-chat` - añade un `gateways/webui.bx` que expone la [UI de chat web](conventions/gateways/index.md) en `/chat`.
@@ -155,7 +155,7 @@ bxAgents serve [--port=8080] [--host=127.0.0.1]
 - Falla claramente si `boxlang-miniserver` no se encuentra en `PATH`.
 - Sirve siempre el agente en `/__bxagents` (`POST /invoke`, `POST /stream`, `POST /batch`, `GET /info`), declare lo que declare el proyecto en [`gateways/`](conventions/gateways/index.md) - consulta [La ruta de agente siempre activa](conventions/agent-bx.md#la-ruta-de-agente-siempre-activa) para exigir un token en ella, o desactivarla.
 - Escribe `.build/miniserver.json` (reescrituras habilitadas, `rewriteFileName: "index.bxm"`, health check activado) antes de lanzar.
-- Delimita el propio home de runtime de BoxLang del servidor a `.build/runtime` (vía `serverHome`) en lugar del `~/.boxlang` compartido por defecto, así que la caché de clases compiladas y los overrides de configuración de cada proyecto están aislados - y `clean` lo elimina gratis, ya que de todos modos borra `.build` por completo. `invoke --server` también obtiene esto, ya que reutiliza `serve` internamente. Esto **no** se extiende a `chat`/`build`/`test`/`invoke` por defecto - ver [limitaciones conocidas](known-limitations.md).
+- Delimita el propio home de runtime de BoxLang del servidor a `.build/runtime` (vía `serverHome`) en lugar del `~/.boxlang` compartido por defecto, así que la caché de clases compiladas y los overrides de configuración de cada proyecto están aislados - y `clean` lo elimina gratis, ya que de todos modos borra `.build` por completo. `invoke --server` también obtiene esto, ya que reutiliza `serve` internamente. Esto **no** se extiende a `chat`/`build`/`test`/`invoke` por defecto.
 
 ### `chat`
 

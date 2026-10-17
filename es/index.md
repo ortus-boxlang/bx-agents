@@ -247,8 +247,3 @@ Empaqueta un `.bxa` y publícalo, de forma segura.
 Cada carpeta de convención tiene además un ejemplo funcional y construible bajo
 [`examples/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples).
 
-!!! warning
-    BxAgents está en desarrollo activo. [Limitaciones conocidas](known-limitations.md) recoge
-    las carencias con honestidad - qué está probado contra una aplicación real en ejecución,
-    qué sigue ejecutándose solo contra el proveedor `"mock"` de BX AI, y una peculiaridad real
-    de ColdBox con la que este proyecto se topó y que tuvo que sortear.

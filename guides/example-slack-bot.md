@@ -55,7 +55,7 @@ class {
 }
 ```
 
-At build time, `GatewayGenerator` turns this into a registered `SlackGateway` instance and wires it into the project's single, project-wide `GatewaySession` (see [`GatewaySession` is project-wide and root-agent-only](../known-limitations.md) for the current v1 ceiling on that). At runtime, `SlackGateway.onConnect()` opens the Socket Mode websocket as soon as `GatewaySession` starts.
+At build time, `GatewayGenerator` turns this into a registered `SlackGateway` instance and wires it into the project's single, project-wide `GatewaySession`. At runtime, `SlackGateway.onConnect()` opens the Socket Mode websocket as soon as `GatewaySession` starts.
 
 ## Instructions
 
@@ -93,10 +93,9 @@ DM the bot, or mention it in a channel it's in. Replies stream back token-by-tok
 
 ## What's proven, and what isn't
 
-`SlackGatewaySpec.bx` exercises the gateway's inbound/outbound logic - chunking, HITL approvals, reconnect handling - entirely against an injectable test seam, never a real Slack connection; a separate smoke test confirms the BoxLang-to-Java WebSocket interop itself works correctly (a real connection attempt to an unreachable address fails with a plain `ConnectException`, not an interop error). No test in this repo has completed a real Socket Mode handshake against Slack's actual servers - see [Known Limitations](../known-limitations.md) for the honest, current state of that gap across every push-style gateway. The steps above are exactly the manual verification that gap calls for.
+`SlackGatewaySpec.bx` exercises the gateway's inbound/outbound logic - chunking, HITL approvals, reconnect handling - entirely against an injectable test seam, never a real Slack connection; a separate smoke test confirms the BoxLang-to-Java WebSocket interop itself works correctly (a real connection attempt to an unreachable address fails with a plain `ConnectException`, not an interop error). No test in this repo has completed a real Socket Mode handshake against Slack's actual servers. The steps above are exactly the manual verification that gap calls for.
 
 ## Where to go next
 
 - [Slack](../conventions/gateways/slack.md) for the full gateway convention - reconnect model, HITL correlation, chunking limits.
 - [Example: A Multi-Agent Team](example-multi-agent-team.md) to combine a gateway-reachable agent with subagent delegation.
-- [Known Limitations](../known-limitations.md) for what every push-style gateway does and doesn't prove in automated tests.
