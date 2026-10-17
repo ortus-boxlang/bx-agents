@@ -25,36 +25,24 @@ ext {
 	// BoxLang's own module service uses as the module's identity (its box.json's
 	// `boxlang.moduleName`), which is often different from the slug.
 	boxlangModules = [
-		// 3.4.0 is required for its "mock" AI provider - bx-ai's earlier stable
-		// 3.3.2 release doesn't have one, and BX Agents' own M13 end-to-end smoke
-		// test relies on it to exercise a real aiModel()/aiAgent() call with no
-		// network access. 3.4.0 also carries GatewaySession/aiGatewayRegistry/
-		// BaseGateway (needed by every push-style gateway) and userId/
-		// conversationId-scoped IAiMemory.summarize() (needed by `/compact`) -
-		// confirmed directly against the published ForgeBox artifact, not
-		// assumed. Was pinned to "3.4.0-snapshot" while those were still
-		// unreleased; bx-ai has since cut a real 3.4.0, so this now resolves to
-		// a stable, versioned artifact instead of a continuously-republished one.
+		// Every BoxLang module BX Agents needs is BUNDLED inside the published
+		// module zip, as a nested module (BoxLang 1.17+ loads anything under a
+		// module's own `modules/` folder, to any depth), so `install-bx-module
+		// bx-agents` is the only install a user ever does. A version of
+		// "latest" resolves to ForgeBox's newest stable release at build time.
 		//
-		// Bumped 3.4.0 -> 3.5.0 for the Gateway HTTP surface. ColdBox's own
-		// `toAiGateway()` terminator (ColdBox 8.2.0-snapshot / @be) dispatches to
-		// GatewayRequestProcessor::processHandshake / processInbound /
-		// readInteraction / submitDecision. NONE of those four exist in 3.4.0,
-		// which only has the older route()/handleGetInteraction() shape - so on
-		// 3.4.0 every sub-route that terminator registers 500s at request time
-		// ("The key [readInteraction] was not found in the struct"). Confirmed by
-		// booting a real generated app against each version, not assumed. 3.5.0
-		// carries all four.
-		[ name: "bx-ai", moduleName: "bxai", version: "3.5.0" ],
-		// M16: the ftp/sftp deploy targets call the real bx:ftp component this
-		// module provides - a genuine runtime dependency (like bx-ai), not
-		// vendored, so it must be resolvable via modulesDirectory the same way.
-		[ name: "bx-ftp", moduleName: "ftp", version: "1.4.0" ],
-		// P5: the web UI's SQLite store. Supplies the JDBC driver that makes
-		// `this.datasources[...] = { driver: "sqlite", ... }` resolvable at all -
-		// without it a webui app still boots, but every query fails on an
-		// unknown driver.
-		[ name: "bx-sqlite", moduleName: "sqlite", version: "1.2.0" ]
+		// The versions live in gradle.properties (bxAiVersion, ...).
+		//
+		// bx-ai: runtime for every agent (aiModel()/aiAgent()/toAi() routing,
+		// GatewaySession, gateways, the "mock" provider the suite relies on).
+		[ name: "bx-ai", moduleName: "bxai", version: bxAiVersion ],
+		// bx-ftp: the ftp/sftp deploy targets call the real bx:ftp component.
+		[ name: "bx-ftp", moduleName: "ftp", version: bxFtpVersion ],
+		// bx-sqlite: the web UI's SQLite store; supplies the JDBC driver that
+		// makes `this.datasources[...] = { driver: "sqlite" }` resolvable.
+		[ name: "bx-sqlite", moduleName: "sqlite", version: bxSqliteVersion ],
+		// bx-mail: the email gateway.
+		[ name: "bx-mail", moduleName: "mail", version: bxMailVersion ]
 	]
 }
 
@@ -205,6 +193,52 @@ spotless {
 }
 
 /**
+ * ColdBox runtime libraries (coldbox, qb, cbsecurity, cbauth, cbmailservices)
+ * Installed with CommandBox (the bx-cli / `commandbox-boxlang` tooling every
+ * developer has installed) from src/main/lib/box.json into build/lib-stage -
+ * `coldbox` to lib/coldbox, every module to lib/modules, via the same
+ * `installPathConventions` the ColdBox application templates use - then bundled into the module as `lib/` by
+ * createModuleStructure. `bxAgents new`/`build` copy them into every generated
+ * app, so users never install them. Needs `box` (CommandBox) on the PATH.
+ */
+task installLibs( type: Exec ) {
+	group = "boxlang"
+	description = "Installs the SHIPPED libraries (dependencies only, no devDependencies) from src/main/lib/box.json with CommandBox into build/lib-prod"
+	// Skipped when the manifest is unchanged and the staged libs are still there
+	inputs.file "src/main/lib/box.json"
+	outputs.dir "build/lib-prod"
+	doFirst {
+		delete( "build/lib-prod" )
+		copy {
+			from "src/main/lib/box.json"
+			into "build/lib-prod"
+		}
+	}
+	workingDir "build/lib-prod"
+	commandLine "box", "install", "--production"
+}
+
+/**
+ * Same manifest, devDependencies included (TestBox and its own dependencies),
+ * for the developer's machine and CI. Never shipped.
+ */
+task installDevLibs( type: Exec ) {
+	group = "boxlang"
+	description = "Installs every library incl. devDependencies (TestBox) from src/main/lib/box.json with CommandBox into build/lib-stage"
+	inputs.file "src/main/lib/box.json"
+	outputs.dir "build/lib-stage"
+	doFirst {
+		delete( "build/lib-stage" )
+		copy {
+			from "src/main/lib/box.json"
+			into "build/lib-stage"
+		}
+	}
+	workingDir "build/lib-stage"
+	commandLine "box", "install"
+}
+
+/**
  * Custom task that creates a build/modules/bxagents folder - a real,
  * installable module structure.
  * - Copies the build/libs/bx-agents-{version}.jar to build/modules/bxagents/libs/
@@ -224,6 +258,9 @@ spotless {
  */
 task createModuleStructure(type: Copy) {
 	mustRunAfter shadowJar, jar
+	// The bundled BoxLang modules and ColdBox libs must be in place BEFORE this copies
+	// and the zip is built, or a fresh build ships a zip without them
+	dependsOn "downloadModules", "installLibs"
     from( 'build/libs' ) {
 		include "${project.name}-${version}.jar"
         into 'libs'
@@ -258,6 +295,16 @@ task createModuleStructure(type: Copy) {
     from( 'completions' ) {
         into 'completions'
     }
+    // Bundled BoxLang modules (see downloadModules), loaded as nested modules
+    from( 'build/bundle-modules' ) {
+		into 'modules'
+	}
+    // Bundled ColdBox runtime libs (see installLibs) - copied into every generated app
+    // (installLibs stages them as build/lib-prod/lib/{coldbox,modules/*} - the layout of lib/ itself;
+    // devDependencies such as TestBox are only in build/lib-stage and never ship)
+    from( 'build/lib-prod/lib' ) {
+		into 'lib'
+	}
     destinationDir = file( 'build/modules/bxagents' )
 }
 task zipModuleStructure( type: Zip ) {
@@ -318,10 +365,10 @@ check.dependsOn checkTemplateTokens
 task testBx( type: JavaExec ) {
 	group = "verification"
 	description = "Runs the TestBox BDD test suite (tests/specs) via runTests.bxs"
-	dependsOn compileJava
+	dependsOn compileJava, installDevLibs
 	onlyIf {
-		if ( !file( "testbox" ).exists() ) {
-			println "! Skipping testBx: testbox/ not found - run `box install` first"
+		if ( !file( "build/lib-stage/lib/testbox" ).exists() ) {
+			println "! Skipping testBx: build/lib-stage/lib/testbox not found - run `./gradlew installDevLibs` first"
 			return false
 		}
 		return true
@@ -347,6 +394,8 @@ task testBx( type: JavaExec ) {
  *    "Install ColdBox" step provide it)
  */
 task testColdBoxIntegration( type: JavaExec ) {
+	// boxlang.json maps /coldbox and /testbox into build/lib-stage
+	dependsOn installDevLibs
 	group = "verification"
 	description = "Runs the ColdBox-dependent integration specs (tests/specs/integration/coldbox) over real HTTP via boxlang-miniserver"
 	// shadowJar, not just compileJava, for the same reason verifyExamples
@@ -358,8 +407,8 @@ task testColdBoxIntegration( type: JavaExec ) {
 	// broken form and the app 500'd.
 	dependsOn compileJava, shadowJar
 	onlyIf {
-		if ( !file( "tests/coldbox" ).exists() ) {
-			println "! Skipping testColdBoxIntegration: tests/coldbox/ not found - run `box install` in tests/ first"
+		if ( !file( "build/lib-stage/lib/coldbox" ).exists() ) {
+			println "! Skipping testColdBoxIntegration: build/lib-stage/lib/coldbox not found - run `./gradlew installDevLibs` first"
 			return false
 		}
 		if ( fileTree( dir: 'src/test/resources/libs', include: 'boxlang-miniserver-*.jar' ).isEmpty() ) {
@@ -411,6 +460,8 @@ task verifyExamples( type: JavaExec ) {
 
 test {
     useJUnitPlatform()
+    // ModuleCliProcessTest copies TestBox out of the dev install
+    dependsOn installDevLibs
     testLogging {
 		showStandardStreams = true
 		events "passed", "skipped", "failed"
@@ -459,33 +510,57 @@ task downloadMiniServer( type: Download ) {
 }
 
 /**
- * Supporting BoxLang Modules
- * Downloads + unpacks every module declared in `ext.boxlangModules` (bx-ai, etc.)
- * from ForgeBox's stable download URL pattern, into
- * `src/test/resources/modules/{moduleName}/` - ready to be referenced by a
- * `boxlang.json`'s `modulesDirectory` setting, e.g.:
- *   "modulesDirectory": [ "${user-dir}/src/test/resources/modules" ]
+ * Bundled BoxLang Modules
+ * Downloads + unpacks every module declared in `ext.boxlangModules` (bx-ai,
+ * etc.) from ForgeBox's stable download URL pattern, into
+ * `build/bundle-modules/{moduleName}/`, which `createModuleStructure` copies into
+ * the module as its nested `modules/` folder - so the very same files are what
+ * the test harness loads and what the published zip ships.
+ * `version: "latest"` is resolved against ForgeBox's API at run time.
  */
-def moduleZipDownloadTasks = boxlangModules.collect { mod ->
-	tasks.register( "downloadModuleZip_${mod.name.replaceAll( '[^a-zA-Z0-9]', '_' )}", Download ) {
-		doFirst {
-			file( "src/test/resources/modules" ).mkdirs()
-		}
-		src "https://downloads.ortussolutions.com/ortussolutions/boxlang-modules/${mod.name}/${mod.version}/${mod.name}-${mod.version}.zip"
-		dest "src/test/resources/modules/${mod.name}-${mod.version}.zip"
-		overwrite true
-		onlyIfModified false
+def resolveModuleVersion = { String slug, String requested ->
+	if ( requested != "latest" ) {
+		return requested
 	}
+	def json = new groovy.json.JsonSlurper().parse( new URL( "https://www.forgebox.io/api/v1/entry/${slug}/latest" ) )
+	if ( json.error || !json.data?.version ) {
+		throw new GradleException( "Could not resolve the latest stable version of [${slug}] from ForgeBox: ${json.messages}" )
+	}
+	// ForgeBox reports "3.5.0+19"; the download URL carries only the semver part
+	return json.data.version.toString().split( '\\+' )[ 0 ]
 }
 
 task downloadModules {
 	group = "boxlang"
-	description = "Downloads and unpacks supporting BoxLang modules (bx-ai, etc.) declared in ext.boxlangModules"
-	dependsOn moduleZipDownloadTasks
+	description = "Downloads and unpacks the BoxLang modules bundled into BX Agents (bx-ai, etc.) declared in ext.boxlangModules"
+	def modulesDir = file( "build/bundle-modules" )
+	// Declared, so it re-runs when a version changes and is skipped otherwise; createModuleStructure
+	// copies it into the module as modules/ (it must NOT write into the module folder itself:
+	// that folder is createModuleStructure's output and it wipes what it did not copy)
+	inputs.property( "modules", boxlangModules.collect { it.name + "@" + it.version }.join( "," ) )
+	outputs.dir modulesDir
 	doLast {
+		modulesDir.mkdirs()
+		def cacheDir = file( "build/module-downloads" )
+		cacheDir.mkdirs()
 		boxlangModules.each { mod ->
-			def zipFile = file( "src/test/resources/modules/${mod.name}-${mod.version}.zip" )
-			def destDir = file( "src/test/resources/modules/${mod.moduleName}" )
+			def version = resolveModuleVersion( mod.name, mod.version )
+			def zipFile = new File( cacheDir, "${mod.name}-${version}.zip" )
+			if ( !zipFile.exists() ) {
+				def url = "https://downloads.ortussolutions.com/ortussolutions/boxlang-modules/${mod.name}/${version}/${mod.name}-${version}.zip"
+				// Download to a temp file and rename, so a failed or interrupted download never
+				// leaves a truncated zip that the exists() check above would trust next time
+				def partFile = new File( cacheDir, zipFile.name + ".part" )
+				try {
+					partFile.withOutputStream { out -> new URL( url ).withInputStream { input -> out << input } }
+					if ( !partFile.renameTo( zipFile ) ) {
+						throw new GradleException( "Could not move ${partFile} to ${zipFile}" )
+					}
+				} finally {
+					partFile.delete()
+				}
+			}
+			def destDir = new File( modulesDir, mod.moduleName )
 			if ( destDir.exists() ) {
 				destDir.deleteDir()
 			}
@@ -493,7 +568,7 @@ task downloadModules {
 				from zipTree( zipFile )
 				into destDir
 			}
-			println "+ Installed module [${mod.name}@${mod.version}] into ${destDir}"
+			println "+ Bundled module [${mod.name}@${version}] into ${destDir}"
 		}
 	}
 }

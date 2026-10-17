@@ -93,20 +93,16 @@ public class ModuleCliProcessTest {
 		Files.createDirectories( modulesDir );
 		copyRecursively( moduleSourceDir, modulesDir.resolve( "bxagents" ) );
 
-		// Also point at this repo's own fetched supporting-modules dir (bx-ai) -
-		// `test` (unlike `new`/`build`, which only ever write generated SOURCE
-		// TEXT and never execute it) actually INVOKES the built agent, which
-		// needs bx-ai's real aiModel()/aiAgent() BIFs registered - confirmed
-		// empirically this session that omitting it here doesn't error loudly,
-		// it just silently reports zero discovered specs.
-		String bxAiModulesDir = Path.of( "src/test/resources/modules" ).toAbsolutePath().toString().replace( "\\", "\\\\" );
-
+		// bx-ai, bx-sqlite, etc. need no separate modules dir: they are bundled
+		// as nested modules inside the module copied above, exactly as in the
+		// published zip. `test` (unlike `new`/`build`) actually INVOKES the built
+		// agent, which needs bx-ai's real aiModel()/aiAgent() BIFs registered.
 		configPath = tempRoot.resolve( "boxlang.json" );
 		Files.writeString( configPath, """
 		                               {
-		                                 "modulesDirectory": [ "%s", "%s" ]
+		                                 "modulesDirectory": [ "%s" ]
 		                               }
-		                               """.formatted( modulesDir.toString().replace( "\\", "\\\\" ), bxAiModulesDir ) );
+		                               """.formatted( modulesDir.toString().replace( "\\", "\\\\" ) ) );
 
 		projectDir = tempRoot.resolve( "myagent" );
 	}
@@ -205,6 +201,28 @@ public class ModuleCliProcessTest {
 		assertTrue( Files.exists( projectDir.resolve( "instructions.md" ) ), "instructions.md should have been scaffolded" );
 	}
 
+	/**
+	 * When a verb fails, say what the child process was actually given: the module
+	 * folder's contents (including the bundled nested modules) and what `doctor`
+	 * reports as loaded. Without it a failure like "bx-ai class not found" is a guess.
+	 */
+	private void printInstallDiagnostics() throws Exception {
+		System.out.println( "---- install diagnostics ----" );
+		for ( String rel : List.of( "", "modules", "lib" ) ) {
+			Path dir = modulesDir.resolve( "bxagents" ).resolve( rel );
+			if ( Files.isDirectory( dir ) ) {
+				try ( var names = Files.list( dir ) ) {
+					System.out.println( "bxagents/" + rel + ": " + names.map( p -> p.getFileName().toString() ).sorted().toList() );
+				}
+			} else {
+				System.out.println( "bxagents/" + rel + ": (missing)" );
+			}
+		}
+		System.out.println( "bxai ModuleConfig.bx present: " + Files.exists( modulesDir.resolve( "bxagents/modules/bxai/ModuleConfig.bx" ) ) );
+		runVerb( "doctor", projectDir.toString() );
+		System.out.println( "---- end diagnostics ----" );
+	}
+
 	@Order( 2 )
 	@DisplayName( "a real `module:bxagents build` OS process assembles the generated app" )
 	@Test
@@ -213,6 +231,9 @@ public class ModuleCliProcessTest {
 		assumeTrue( Files.exists( projectDir.resolve( "Agent.bx" ) ), "requires testNewProcess to have run first" );
 
 		int exitCode = runVerb( "build", projectDir.toString() );
+		if ( exitCode != 0 ) {
+			printInstallDiagnostics();
+		}
 
 		assertEquals( 0, exitCode, "module:bxagents build should exit 0" );
 		assertTrue( Files.exists( projectDir.resolve( ".build/app/Application.bx" ) ), "a real Application.bx should have been generated" );
@@ -226,8 +247,8 @@ public class ModuleCliProcessTest {
 		ensureTempModuleInstall();
 		assumeTrue( Files.exists( projectDir.resolve( "tests/specs/AgentSpec.bx" ) ), "requires testNewProcess to have run first" );
 
-		Path testboxSource = Path.of( "testbox" );
-		assumeTrue( Files.isDirectory( testboxSource ), "testbox/ not found at the repo root - run `box install` first" );
+		Path testboxSource = Path.of( "build/lib-stage/lib/testbox" );
+		assumeTrue( Files.isDirectory( testboxSource ), "build/lib-stage/lib/testbox not found - run `./gradlew installDevLibs` first" );
 		copyRecursively( testboxSource, projectDir.resolve( "tests/testbox" ) );
 
 		VerbResult result = runVerbCapturing( "test", projectDir.toString() );

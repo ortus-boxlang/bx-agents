@@ -916,7 +916,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( handler ).toInclude( 'final SHARED_USER_ID = "public"' );
 				expect( handler ).toInclude( "return static.SHARED_USER_ID" );
 				// No accounts, so nothing to sign in to and nothing to resolve
-				expect( handler ).notToInclude( "authenticationService@cbauth" );
+				expect( handler ).notToInclude( "cbSecurity@cbSecurity" );
 				// And no ColdBox identity plumbing: a closure declared in the
 				// `coldbox` config struct never reaches configSettings anyway
 				// (verified in a real boot), so nothing here depends on it
@@ -929,9 +929,9 @@ class extends="testbox.system.BaseSpec" {
 				generator.generate( discovery, appDir );
 
 				var handler = fileRead( appDir & "/handlers/ChatUi.bx" );
-				expect( handler ).toInclude( 'getInstance( "authenticationService@cbauth" )' );
-				expect( handler ).toInclude( "auth.getUserId()" );
-				// Read straight from cbauth rather than through ColdBox's
+				expect( handler ).toInclude( 'getInstance( "cbSecurity@cbSecurity" )' );
+				expect( handler ).toInclude( "auth.getUser().getId()" );
+				// Read straight from cbsecurity rather than through ColdBox's
 				// identifierProvider, which never actually arrives
 				expect( handler ).notToInclude( "getUserSessionIdentifier" );
 			} );

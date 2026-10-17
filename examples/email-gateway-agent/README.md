@@ -2,15 +2,9 @@
 
 An agent reachable over real email via a push-style `gateways/` entry (`type: "email"`) - a scheduled IMAP poll for inbound, an SMTP send (via ColdBox's `cbmailservices`) for outbound.
 
-## 1. Real, server-level module installs required
+## 1. No extra installs
 
-Unlike every other gateway in this directory, `email` needs two extra modules actually installed on whatever server runs this project - they're already declared as `box.json` `dependencies`, but still require a real install step:
-
-```bash
-box install
-```
-
-Confirm it worked: `modules/bx-mail/` and `modules/cbmailservices/` should exist afterward.
+`email` needs `bx-mail` and `cbmailservices`; both ship inside BxAgents, so there is nothing to install beyond `bx-agents` itself.
 
 ## 2. Mailbox credentials
 

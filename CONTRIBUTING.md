@@ -57,12 +57,13 @@ If you discover a security vulnerability, please send an email to the developmen
 
 ## Development Setup
 
+Development needs **CommandBox with the `bx-cli` tooling** (the `commandbox-boxlang` module) installed. It does all dependency management, from one manifest: `src/main/lib/box.json`. Its `dependencies` (ColdBox, qb, cbsecurity, cbauth, cbmailservices) ship in the module and are copied into every generated app; its `devDependencies` (TestBox) stay on your machine. `./gradlew installLibs` runs `box install --production` against it into `build/lib-prod` (what ships); `./gradlew installDevLibs` runs the full `box install` into `build/lib-stage` (adds TestBox). Users never need CommandBox.
+
 ```bash
 ./gradlew downloadBoxLang     # fetches the BoxLang jar into src/test/resources/libs
-./gradlew downloadModules     # fetches bx-ai + bx-ftp + bx-sqlite (needed by the TestBox suite) into src/test/resources/modules
+./gradlew downloadModules     # fetches the bundled BoxLang modules (bx-ai, bx-sqlite, ...) into build/bundle-modules (copied into the module's modules/ by shadowJar; needed by the TestBox suite)
 ./gradlew downloadMiniServer  # fetches boxlang-miniserver into src/test/resources/libs
-box install                   # TestBox, at the repo root
-cd tests && box install && cd ..  # ColdBox, into tests/coldbox (only needed for the ColdBox integration suite)
+./gradlew installDevLibs      # TestBox + ColdBox + qb + cbsecurity + ... into build/lib-stage (the one manifest; any task that needs it runs it for you)
 ```
 
 ### The developer flow - BoxLang is dynamic

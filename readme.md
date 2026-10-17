@@ -21,7 +21,7 @@
 ## Quick Start
 
 ```bash
-install-bx-module bx-ai bx-agents      # see docs/getting-started/installation.md
+install-bx-module bx-agents      # bundles bx-ai and everything else; see docs/getting-started/installation.md
 
 bxAgents new my-agent --model=openai/gpt-5
 cd my-agent
@@ -67,7 +67,7 @@ Before you get started, fetch the BoxLang binary (until this module is published
 
 ```bash
 ./gradlew downloadBoxLang
-./gradlew downloadModules        # bx-ai + bx-ftp + bx-sqlite, needed by the TestBox suite
+./gradlew downloadModules        # the BoxLang modules bundled into BX Agents (bx-ai, bx-sqlite, ...), needed by the TestBox suite
 ./gradlew downloadMiniServer     # boxlang-miniserver, needed by the ColdBox integration suite
 ```
 
@@ -77,12 +77,14 @@ Before you get started, fetch the BoxLang binary (until this module is published
 | `clean` | Deletes the `build` folder. |
 | `compileJava` | Compiles Java source in `src/main/java`. |
 | `test` | Runs the JUnit suite. |
-| `testBx` | Runs the TestBox BDD suite (`tests/specs`, excluding the ColdBox-dependent bundle) via `runTests.bxs`. Requires `testbox/` (`box install`). |
-| `testColdBoxIntegration` | Boots a real `boxlang-miniserver` against a generated app and hits a `toAi()` route over real HTTP, via `runColdBoxIntegrationTests.bxs`. Requires `tests/coldbox/` (`box install` in `tests/`) and the miniserver jar. |
+| `testBx` | Runs the TestBox BDD suite (`tests/specs`, excluding the ColdBox-dependent bundle) via `runTests.bxs`. Runs `installDevLibs` first for TestBox. |
+| `testColdBoxIntegration` | Boots a real `boxlang-miniserver` against a generated app and hits a `toAi()` route over real HTTP, via `runColdBoxIntegrationTests.bxs`. Needs the miniserver jar; ColdBox and its modules come from the module's bundled `lib/`. |
 | `verifyExamples` | Builds every project under `examples/` through the real build pipeline via `verifyExamples.bxs` - a regression net across the whole feature matrix. |
 | `checkTemplateTokens` | Fails if any leftover `@MODULE_*@` boxlang-module-template placeholder tokens remain anywhere in the repo. Runs as part of `check`. |
 | `downloadBoxLang` | Downloads the BoxLang binary into `src/test/resources/libs`. |
-| `downloadModules` | Downloads supporting BoxLang modules (bx-ai, bx-ftp, bx-sqlite) into `src/test/resources/modules`. |
+| `downloadModules` | Downloads the BoxLang modules BX Agents bundles (bx-ai, bx-ftp, bx-sqlite, bx-mail; versions in `gradle.properties`) into `build/bundle-modules`; `createModuleStructure` copies them into the module's `modules/`, where BoxLang loads them as nested modules. |
+| `installLibs` | Runs `box install --production` (CommandBox required) against `src/main/lib/box.json`, staging ColdBox, qb, cbsecurity, cbauth and cbmailservices in `build/lib-prod`; the module zip ships them as `lib/`. |
+| `installDevLibs` | Same manifest, full `box install` into `build/lib-stage`: adds TestBox (a devDependency, never shipped). The test tasks run it for you. |
 | `downloadMiniServer` | Downloads the `boxlang-miniserver` binary into `src/test/resources/libs`. |
 | `jar` / `shadowJar` | Packages compiled classes/resources into a JAR under `build/libs`. |
 | `javadoc` | Generates Javadocs into `build/docs/javadoc`. |
