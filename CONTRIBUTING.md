@@ -61,7 +61,7 @@ Development needs **CommandBox with the `bx-cli` tooling** (the `commandbox-boxl
 
 ```bash
 ./gradlew downloadBoxLang     # fetches the BoxLang jar into src/test/resources/libs
-./gradlew downloadModules     # fetches the bundled BoxLang modules (bx-ai, bx-sqlite, ...) into build/modules/bxagents/modules (needed by the TestBox suite)
+./gradlew downloadModules     # fetches the bundled BoxLang modules (bx-ai, bx-sqlite, ...) into build/bundle-modules (copied into the module's modules/ by shadowJar; needed by the TestBox suite)
 ./gradlew downloadMiniServer  # fetches boxlang-miniserver into src/test/resources/libs
 ./gradlew installDevLibs      # TestBox + ColdBox + qb + cbsecurity + ... into build/lib-stage (the one manifest; any task that needs it runs it for you)
 ```

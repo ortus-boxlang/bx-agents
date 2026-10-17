@@ -295,6 +295,10 @@ task createModuleStructure(type: Copy) {
     from( 'completions' ) {
         into 'completions'
     }
+    // Bundled BoxLang modules (see downloadModules), loaded as nested modules
+    from( 'build/bundle-modules' ) {
+		into 'modules'
+	}
     // Bundled ColdBox runtime libs (see installLibs) - copied into every generated app
     // (installLibs stages them as build/lib-prod/lib/{coldbox,modules/*} - the layout of lib/ itself;
     // devDependencies such as TestBox are only in build/lib-stage and never ship)
@@ -508,10 +512,10 @@ task downloadMiniServer( type: Download ) {
 /**
  * Bundled BoxLang Modules
  * Downloads + unpacks every module declared in `ext.boxlangModules` (bx-ai,
- * etc.) from ForgeBox's stable download URL pattern, straight into
- * `build/modules/bxagents/modules/{moduleName}/` - the nested-module folder of
- * the module structure `createModuleStructure` assembles, so the very same
- * files are what the test harness loads and what the published zip ships.
+ * etc.) from ForgeBox's stable download URL pattern, into
+ * `build/bundle-modules/{moduleName}/`, which `createModuleStructure` copies into
+ * the module as its nested `modules/` folder - so the very same files are what
+ * the test harness loads and what the published zip ships.
  * `version: "latest"` is resolved against ForgeBox's API at run time.
  */
 def resolveModuleVersion = { String slug, String requested ->
@@ -529,7 +533,12 @@ def resolveModuleVersion = { String slug, String requested ->
 task downloadModules {
 	group = "boxlang"
 	description = "Downloads and unpacks the BoxLang modules bundled into BX Agents (bx-ai, etc.) declared in ext.boxlangModules"
-	def modulesDir = file( "build/modules/bxagents/modules" )
+	def modulesDir = file( "build/bundle-modules" )
+	// Declared, so it re-runs when a version changes and is skipped otherwise; createModuleStructure
+	// copies it into the module as modules/ (it must NOT write into the module folder itself:
+	// that folder is createModuleStructure's output and it wipes what it did not copy)
+	inputs.property( "modules", boxlangModules.collect { it.name + "@" + it.version }.join( "," ) )
+	outputs.dir modulesDir
 	doLast {
 		modulesDir.mkdirs()
 		def cacheDir = file( "build/module-downloads" )

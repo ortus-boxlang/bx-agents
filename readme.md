@@ -82,7 +82,7 @@ Before you get started, fetch the BoxLang binary (until this module is published
 | `verifyExamples` | Builds every project under `examples/` through the real build pipeline via `verifyExamples.bxs` - a regression net across the whole feature matrix. |
 | `checkTemplateTokens` | Fails if any leftover `@MODULE_*@` boxlang-module-template placeholder tokens remain anywhere in the repo. Runs as part of `check`. |
 | `downloadBoxLang` | Downloads the BoxLang binary into `src/test/resources/libs`. |
-| `downloadModules` | Downloads the BoxLang modules BX Agents bundles (bx-ai, bx-ftp, bx-sqlite, bx-mail; versions in `gradle.properties`) into `build/modules/bxagents/modules`, where the module loads them as nested modules. |
+| `downloadModules` | Downloads the BoxLang modules BX Agents bundles (bx-ai, bx-ftp, bx-sqlite, bx-mail; versions in `gradle.properties`) into `build/bundle-modules`; `createModuleStructure` copies them into the module's `modules/`, where BoxLang loads them as nested modules. |
 | `installLibs` | Runs `box install --production` (CommandBox required) against `src/main/lib/box.json`, staging ColdBox, qb, cbsecurity, cbauth and cbmailservices in `build/lib-prod`; the module zip ships them as `lib/`. |
 | `installDevLibs` | Same manifest, full `box install` into `build/lib-stage`: adds TestBox (a devDependency, never shipped). The test tasks run it for you. |
 | `downloadMiniServer` | Downloads the `boxlang-miniserver` binary into `src/test/resources/libs`. |
