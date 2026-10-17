@@ -28,42 +28,41 @@ This matters for the playwright plan in two ways:
 1. If bx-playwright ever registered its tools in the global registry, every agent would get a browser. It must not, and today it does not (`aiTools()` just returns tool objects).
 2. "Which tools does this agent get" needs a real, per-agent answer anyway.
 
-## 2. Proposal: a `tools` selection on the agent
+## 2. Decisions (agreed)
 
-Declared in `Agent.bx` (`configure()` / descriptor form), read by the build:
+1. **Declare in `configure()` of the class.** One plain list of names:
+   ```javascript
+   class extends="bxModules.bxai.models.runnables.AiAgent" {
+   	function configure() {
+   		return { tools : [ "now", "filesystem", "playwright" ] }
+   	}
+   }
+   ```
+2. **Default = only the agent's own `tools/`.** bx-ai built-ins (`now`, `httpGet`, `sendEmail`, `webSearch`, ...) must be named. Fixes the finding in section 1.
+3. **Naming a module includes it automatically.** `"playwright"` makes the build validate the bundled module, wire its tools for **that agent only**, and warn in `doctor` if the browser is not installed.
+4. **Dangerous packs are sandboxed by default.** `filesystem` is limited to a `workspace/` folder in the project; `playwright` to the app's own host. Widen with options:
+   ```javascript
+   tools : [ "filesystem", "playwright" ],
+   moduleOptions : {
+   	filesystem : { roots : [ "/data/reports" ] },
+   	playwright : { allow : [ "docs.example.com" ] }
+   }
+   ```
 
-```javascript
-configure() {
-	return {
-		name  : "support-bot",
-		model : "openai/gpt-5",
+### What a name can be
 
-		tools : {
-			// registry keys, or whole modules, that this agent may use (in addition to its own tools/)
-			include : [ "now@bxai", "webSearch@bxai" ],
-			modules : [ "bxplaywright" ],        // "all the bx-playwright tools"
-			exclude : [ "sendEmail@bxai" ]
-		},
+The build resolves each name in this order:
 
-		// per-module options, passed to the module when the build wires it in
-		moduleOptions : {
-			bxplaywright : { profile : "ci", baseURL : "http://localhost:8080", allow : [ "localhost" ] }
-		}
-	}
-}
-```
+| Name | Is | Example |
+|---|---|---|
+| A registry key | One tool already in bx-ai's registry | `"now"`, `"httpGet"` (short for `now@bxai`) |
+| A pack | A group of tools bx-ai ships but does **not** register on load; BX Agents scans the class on demand, scoped to this agent | `"filesystem"` (the 20 `FileSystemTools`: read, write, delete, move, search, zip, ...) |
+| A module | A whole module's tools, via a small adapter; the module is bundled and wired automatically | `"playwright"` |
+| Your own tool | Anything in `tools/` | always on, never named |
 
-Rules:
-- `tools/` (your own functions) always apply.
-- `include` adds registry keys. `modules` adds every tool of a module. `exclude` removes keys last.
-- **Default when `tools` is absent**: open question 1 below.
-- A module named in `modules` is **required**: the build validates it is installed or bundled, and `doctor` reports it. This is what "include bx-playwright in the agent once it builds" means.
+Packs and modules never go into the global registry for every agent. They are built per agent, which is what keeps `playwright` and `filesystem` off agents that did not ask for them.
 
-What the build does for `modules : [ "bxplaywright" ]`:
-1. **Validate**: the module exists (bundled nested module, or installed). Fail with a clear message if not.
-2. **Wire**: a small per-module adapter registers that module's tools in the registry under `module : "bxplaywright"` at app start, using the options above. For bx-playwright the adapter is `playwright( options ).aiToolDefinitions()` turned into `ITool`s (what `aiTools()` already does). Other modules can get adapters later.
-3. **Attach**: the factory passes this agent only `own tools/ + include + getByModule( modules ) - exclude`, instead of `getAll()`.
-4. **Package and deploy**: the built `.bxa` and the app record the module requirement. `doctor` and the `docker`/`digitalocean` targets check the browser prerequisite (below).
+Build effects for each named pack/module: validate it exists, apply sandbox defaults and `moduleOptions`, attach only to this agent, record it in the manifest (so `package`/`deploy`/`doctor` know), and `doctor` reports missing prerequisites.
 
 ### What "all the bx-playwright tools" means
 
@@ -92,8 +91,8 @@ What the build does for `modules : [ "bxplaywright" ]`:
 ## 4. Phases
 
 **Phase 1: per-agent tool selection (needed first; also fixes the finding above)**
-- [ ] Decide the default (question 1).
-- [ ] `tools` / `moduleOptions` in the config resolver, validator, and docs.
+- [ ] `tools` / `moduleOptions` in the config resolver, validator, and docs; name resolution (key, pack, module).
+- [ ] `filesystem` pack with a `workspace/` sandbox.
 - [ ] Factory attaches a filtered list instead of `getAll()`; specs.
 - [ ] Migration note in the changelog.
 
@@ -117,11 +116,9 @@ What the build does for `modules : [ "bxplaywright" ]`:
 - CI time and disk for browsers: cache them.
 - A model with a browser can act on the web: defaults must be conservative.
 
-## 6. Questions
+## 6. Still open
 
-1. **Default tools.** BX Agents is unreleased, so we can still change this. Option A: no `tools` key means **only your own `tools/`**, and bx-ai built-ins must be named (safe, small breaking change). Option B: keep today's "everything registered" (convenient, but every agent can email and fetch URLs). I recommend A.
-2. **Isolation:** wrapper in BX Agents, or a session key upstream in bx-playwright?
-3. **Snapshot dependency:** OK to depend on `1.0.0-snapshot`, or wait for a stable?
-4. **Default allowlist** for navigation: the app's own host only, or the open web?
-5. **MCP:** stdio entries in `mcpServers` (preferred), or sidecar only at first?
-6. **Testing scope first:** our own CI browser specs, `test --browser`, or both?
+1. **Isolation:** wrapper in BX Agents, or a session key upstream in bx-playwright?
+2. **Snapshot dependency:** OK to depend on `1.0.0-snapshot`, or wait for a stable?
+3. **MCP:** stdio entries in `mcpServers` (preferred), or sidecar only at first?
+4. **Testing scope first:** our own CI browser specs, `test --browser`, or both?
