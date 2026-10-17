@@ -125,11 +125,27 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "rejects settings that arrive in later phases instead of ignoring them", function() {
-				var path = writeYaml( [ "name: a", "model: mock/mock-model", "tools: [ now@bxai ]" ] );
+				var path = writeYaml( [ "name: a", "model: mock/mock-model", "toolOptions: {}" ] );
 
 				expect( function() {
 					loader.load( path );
-				} ).toThrow( type = "BxAgents.InvalidAgentYaml", regex = "unknown setting \[tools\]" );
+				} ).toThrow( type = "BxAgents.InvalidAgentYaml", regex = "unknown setting \[toolOptions\]" );
+			} );
+
+			it( "reads tools as a flat array", function() {
+				var path = writeYaml( [ "name: a", "model: mock/mock-model", "tools: [ now@bxai, '*@bxplaywright' ]" ] );
+
+				var config = loader.load( path ).config;
+
+				expect( config.tools ).toHaveLength( 2 );
+				expect( config.tools[ 1 ] ).toBe( "now@bxai" );
+				expect( config.tools[ 2 ] ).toBe( "*@bxplaywright" );
+			} );
+
+			it( "rejects tools that is not a list", function() {
+				expect( function() {
+					loader.load( writeYaml( [ "name: a", "tools: now@bxai" ] ) );
+				} ).toThrow( type = "BxAgents.InvalidAgentYaml", regex = "\[tools\] must be a list" );
 			} );
 
 			it( "rejects an unknown setting inside an environment override", function() {

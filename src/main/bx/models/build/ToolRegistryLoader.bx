@@ -31,19 +31,25 @@
 class {
 
 	/**
-	 * @toolsDir Absolute path to a built app's tools/ directory (e.g. "<appDir>/tools") - a no-op if it doesn't exist or is empty
+	 * @toolsDir Absolute path to a tools/ directory (the app's own "<appDir>/tools", or a subagent's) - a no-op if it doesn't exist or is empty
+	 *
+	 * @return The tool objects found in the folder: the agent's OWN tools, which ToolSelector attaches to that agent and no other. They are also registered in the global registry, as before, for what resolves tools by name (MCP hosting).
 	 */
-	void function load( required string toolsDir ) {
+	array function load( required string toolsDir ) {
+		var found = []
+
 		if ( !directoryExists( arguments.toolsDir ) ) {
-			return
+			return found
 		}
 
 		var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
 
 		for ( var filePath in directoryList( arguments.toolsDir, true, "path", "*.bx" ) ) {
 			var instance = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" ).instantiate( filePath, context )
-			aiToolRegistry().scanClass( instance )
+			found.append( aiToolRegistry().scanClass( instance ), true )
 		}
+
+		return found
 	}
 
 }

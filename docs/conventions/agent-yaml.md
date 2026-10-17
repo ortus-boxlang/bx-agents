@@ -33,6 +33,7 @@ environments:
 | `model` | string | A `provider/model` slug, a bare provider name, or the name of a [`models/`](models.md) entry. See [The model slug](agent-bx.md#the-model-slug). |
 | `description` | string | Optional. |
 | `instructions` | string | Optional inline instructions. See [Instructions](#instructions). |
+| `tools` | list of strings | Module tools this agent gets, as `item@module` or `*@module`. See [Tools](#tools). |
 | `subAgents` | list of strings | Names of sibling folders under the root project's `subagents/`. See [subagents/](subagents.md). |
 | `mcpServers` | list | Remote MCP servers - each entry a URL string or `{ url, name }`. See [mcp/](mcp.md). |
 | `security` | mapping | Forwarded verbatim into the generated app's `bxai` module settings; bx-ai's own `SecurityDirector` turns it into guardrail middleware. |
@@ -45,9 +46,34 @@ environments:
 These are the same settings an `Agent.bx`'s `configure()` returns, so every behavior documented for them applies unchanged.
 
 !!! warning
-    An **unknown key is an error**, and the message lists the valid ones. A typo such as `modle:` would otherwise do nothing, quietly. Settings that arrive in later releases (for example `tools`) are rejected the same way until they exist, rather than being silently ignored. Anything free-form belongs in an `Agent.bx`.
+    An **unknown key is an error**, and the message lists the valid ones. A typo such as `modle:` would otherwise do nothing, quietly. Settings that arrive in later releases (for example `toolOptions`) are rejected the same way until they exist, rather than being silently ignored. Anything free-form belongs in an `Agent.bx`.
 
 A value of the wrong type (a text where a list belongs, say) and an empty value (`model:` with nothing after it) are errors too.
+
+## Tools
+
+An agent gets its own `tools/` folder, and nothing else, unless it asks. The tools other modules provide (bx-ai's built-ins, `bx-playwright`, ...) are a catalog: they are available, but an agent only has the ones its `tools:` list names. Every entry is `item@module`, the key bx-ai keeps them under:
+
+```yaml
+name: support
+model: openai/gpt-5
+tools:
+  - now@bxai            # one tool from one module
+  - "*@bxplaywright"    # every tool that module registered (quote it: * starts a YAML alias)
+```
+
+| Entry | Gives the agent |
+|---|---|
+| `item@module` | that one tool |
+| `*@module`, or `@module` | every tool the module registered |
+
+- **Default.** No `tools:` means only the agent's own `tools/`. This holds for every [subagent](subagents.md) too: each one has its own `tools/` and its own `tools:`.
+- **Naming a module validates it.** If the module is not installed, or has no such tool, `build` and the generated app fail with a message that lists what the module does provide.
+- **A bare name is an error.** `now` fails with a hint to write `now@bxai`. bx-ai would otherwise resolve it to whichever module registered a tool called `now` first.
+- **Own tools win.** If a tool in the agent's `tools/` has the same name as a module tool it selected, the own tool is used and the module tool is left out, with a warning in the `bxagents-tools` log.
+- **Each tool once.** Listing a tool twice, or listing it along with a `*@module` that covers it, attaches it once.
+
+Per-tool settings (`toolOptions`) are not supported yet.
 
 ## Instructions
 

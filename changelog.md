@@ -44,7 +44,13 @@ or package as a portable `.bxa`.
   one or the other; both together is an error. `bxAgents new` scaffolds an `Agent.yaml`,
   and `--class` scaffolds the class-based `Agent.bx` instead.
 - `tools/` - any class with an `@AITool`-annotated function becomes a callable tool, with
-  no registration step.
+  no registration step. A tool belongs to the agent whose folder it is in; subagents'
+  `tools/` are now loaded and attached to them.
+- `tools:` - an agent lists the module tools it wants as `item@module` or `*@module`
+  (`now@bxai`, `*@bxplaywright`). Without it an agent has only its own `tools/`: agents no
+  longer implicitly receive every tool in bx-ai's registry. A bare name, an unknown tool
+  or an uninstalled module is an error, and an own tool wins over a same-named module tool
+  with a logged warning.
 - `skills/<name>/SKILL.md` - model-selected guidance, distinct from the always-on
   `instructions.md`.
 - `subagents/<name>/` - a full nested agent per folder, built leaf-first and attached to

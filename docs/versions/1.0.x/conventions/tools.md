@@ -22,13 +22,11 @@ class {
 }
 ```
 
-BxAgents doesn't scan or interpret `@AITool` annotations itself - it discovers one entry per `.bx` file (for name-collision checking) and then copies the whole `tools/` folder **verbatim** into the generated app. At startup, the generated app calls bx-ai's own scanner:
+BxAgents doesn't interpret `@AITool` annotations itself. It copies the whole `tools/` folder **verbatim** into the generated app, and the generated agent factory hands each agent's own folder to bx-ai's scanner, which does the real reflection work (walking the files, instantiating each class, finding `@AITool` functions). The tools it finds go to **that agent only**: a root agent's `tools/` are not given to its subagents, and a subagent's `tools/` are not given to its parent.
 
-```javascript
-aiToolRegistry().scan( "tools" )
-```
+## Tools from modules
 
-which does the real reflection work (walking the copied files, instantiating each class, finding `@AITool` functions). This statement is only emitted at all if the project actually has a `tools/` folder with files in it.
+Tools that modules register with bx-ai (its built-ins, `bx-playwright`, ...) are not attached to anything automatically. Name the ones an agent should have in its [`tools:`](agent-yaml.md#tools) list, as `item@module` or `*@module`.
 
 ## Naming
 

@@ -1,0 +1,105 @@
+/**
+ * Runs the REAL ToolSelector against bx-ai's real aiToolRegistry(), with fake
+ * tools registered under throwaway test modules (and removed afterwards).
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "ToolSelector", function() {
+
+			beforeEach( function() {
+				variables.selector = new bxagents.models.build.ToolSelector();
+				variables.registry = aiToolRegistry();
+				registry.register( name : "ping", description : "ping", callback : () => "pong", module : "bxatestmod" );
+				registry.register( name : "pong", description : "pong", callback : () => "ping", module : "bxatestmod" );
+				registry.register( name : "ping", description : "other ping", callback : () => "other", module : "bxatestother" );
+			} );
+
+			afterEach( function() {
+				registry.unregisterByModule( "bxatestmod" );
+				registry.unregisterByModule( "bxatestother" );
+			} );
+
+			it( "selects exactly the named item from its module", function() {
+				var tools = selector.select( [ "ping@bxatestmod" ] );
+
+				expect( tools ).toHaveLength( 1 );
+				expect( tools[ 1 ].getName() ).toBe( "ping" );
+				expect( tools[ 1 ].getDescription() ).toBe( "ping" );
+			} );
+
+			it( "selects every tool of a module with *@module and with @module", function() {
+				expect( selector.select( [ "*@bxatestmod" ] ) ).toHaveLength( 2 );
+				expect( selector.select( [ "@bxatestmod" ] ) ).toHaveLength( 2 );
+			} );
+
+			it( "gives no tools at all when nothing is listed", function() {
+				expect( selector.select( [] ) ).toBeEmpty();
+			} );
+
+			it( "does not fall back to a same-named tool from another module", function() {
+				expect( function() {
+					selector.select( [ "pong@bxatestother" ] );
+				} ).toThrow( type = "BxAgents.UnknownTool", regex = "pong@bxatestother" );
+			} );
+
+			it( "names what a module does provide when a tool is missing", function() {
+				try {
+					selector.select( [ "nope@bxatestmod" ], [], "lead" );
+					fail( "should have thrown" );
+				} catch ( BxAgents.UnknownTool e ) {
+					expect( e.message ).toInclude( "Agent [lead]" );
+					expect( e.message ).toInclude( "ping@bxatestmod" );
+				}
+			} );
+
+			it( "fails for a module with no registered tools", function() {
+				expect( function() {
+					selector.select( [ "*@nosuchmodule" ] );
+				} ).toThrow( type = "BxAgents.UnknownToolModule", regex = "nosuchmodule" );
+			} );
+
+			it( "rejects a bare name and suggests the item@module form", function() {
+				expect( function() {
+					selector.select( [ "now" ] );
+				} ).toThrow( type = "BxAgents.InvalidToolName", regex = "now@bxai" );
+			} );
+
+			it( "rejects empty and malformed entries", function() {
+				for ( var bad in [ "", "@", "a@", "a@b@c", "a b@mod" ] ) {
+					expect( function() {
+						selector.parse( bad );
+					} ).toThrow( type = "BxAgents.InvalidToolName" );
+				}
+			} );
+
+			it( "parses item@module and *@module", function() {
+				expect( selector.parse( "ping@bxatestmod" ) ).toBe( { item : "ping", module : "bxatestmod" } );
+				expect( selector.parse( "*@bxatestmod" ) ).toBe( { item : "*", module : "bxatestmod" } );
+				expect( selector.parse( "@bxatestmod" ) ).toBe( { item : "*", module : "bxatestmod" } );
+			} );
+
+			it( "includes each tool once even if listed twice or covered by a wildcard", function() {
+				var tools = selector.select( [ "ping@bxatestmod", "*@bxatestmod", "ping@bxatestmod" ] );
+
+				expect( tools ).toHaveLength( 2 );
+			} );
+
+			it( "puts the agent's own tools first and lets an own tool win over a same-named module tool", function() {
+				var own = new bxagents.models.build.ToolRegistryLoader().load( expandPath( "/fixtures/yaml-tools/tools" ) );
+				registry.register( name : "greet", description : "module greet", callback : () => "x", module : "bxatestmod" );
+
+				var tools = selector.select( [ "*@bxatestmod" ], own, "yaml-tools-agent" );
+				var greets = tools.filter( t => t.getName() == "greet" );
+
+				expect( tools[ 1 ].getName() ).toBe( "greet" );
+				expect( greets ).toHaveLength( 1 );
+				expect( greets[ 1 ].getDescription() ).toBe( "Greet a person by name." );
+				// ping and pong from the module still arrive
+				expect( tools ).toHaveLength( 3 );
+			} );
+
+		} );
+	}
+
+}

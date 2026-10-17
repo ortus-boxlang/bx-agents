@@ -42,6 +42,7 @@ class {
 		validateGateways( arguments.discovery, errors )
 		validateGatewaySession( arguments.resolvedConfig, errors )
 		validateMcpServers( arguments.resolvedConfig, errors )
+		validateTools( arguments.resolvedConfig, errors, "The project's own agent definition" )
 		validateModelProvider( arguments.resolvedConfig, arguments.discovery, errors )
 		validateAgentApi( arguments.resolvedConfig, errors )
 
@@ -130,6 +131,7 @@ class {
 				var config = resolver.resolve( projectRoot = subagent.path )
 				graph[ subagent.name ] = config.subAgents ?: []
 				validateModelProvider( config, arguments.discovery, arguments.errors, "Subagent [#subagent.name#]'s Agent.bx" )
+				validateTools( config, arguments.errors, "Subagent [#subagent.name#]" )
 				recordNameOwner( nameOwners, coldboxAppGenerator.resolveAgentName( config ), "Subagent [#subagent.name#]" )
 			} catch ( any e ) {
 				arguments.errors.append( "Subagent [#subagent.name#] failed to load: #e.message#" )
@@ -759,6 +761,45 @@ class {
 	// --------------------------------------------------------------------------
 	// Remote MCP servers (declared on Agent.bx itself, consumed - never dialed - at build time)
 	// --------------------------------------------------------------------------
+
+	/**
+	 * A `tools` list must be an array of `item@module` / `*@module` entries.
+	 * Whether the named tools actually exist can only be known inside the
+	 * running app, once the modules that register them have loaded; ToolSelector
+	 * checks that when the agent is assembled. What is checked here is what
+	 * can be known at build time: the shape of every entry.
+	 *
+	 * @resolvedConfig One agent node's resolved config - only `tools` is used
+	 * @errors Accumulator array - append() any validation errors found
+	 * @label Which agent this is, for the message
+	 */
+	private void function validateTools( required struct resolvedConfig, required array errors, required string label ) {
+		if ( !arguments.resolvedConfig.keyExists( "tools" ) ) {
+			return
+		}
+
+		var tools = arguments.resolvedConfig.tools
+
+		if ( !isArray( tools ) ) {
+			arguments.errors.append( "#arguments.label#'s 'tools' must be a list of item@module entries" )
+			return
+		}
+
+		var selector = new "models.build.ToolSelector@bxagents"()
+		var seen = {}
+		for ( var entry in tools ) {
+			try {
+				var parsed = selector.parse( entry, "" )
+				var normalized = parsed.item & "@" & parsed.module
+				if ( seen.keyExists( normalized ) ) {
+					arguments.errors.append( "#arguments.label#'s 'tools' lists [#normalized#] more than once" )
+				}
+				seen[ normalized ] = true
+			} catch ( BxAgents.InvalidToolName e ) {
+				arguments.errors.append( "#arguments.label#: #e.message.replace( 'An agent ', 'its ' )#" )
+			}
+		}
+	}
 
 	/**
 	 * @resolvedConfig The resolved config struct from AgentConfigResolver.resolve() - only `mcpServers` is used

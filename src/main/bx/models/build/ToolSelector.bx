@@ -1,0 +1,166 @@
+/**
+ * Decides which tools one agent gets. Runs inside the built app, once per agent
+ * node, when the generated `GeneratedAgentFactory` assembles its agents.
+ *
+ * The registry bx-ai keeps (`aiToolRegistry()`) is a CATALOG: a tool being in it
+ * only means it is available. An agent gets a tool only when it asks for it:
+ *
+ *   - its OWN tools, the classes in its `tools/` folder, always; and
+ *   - whatever its `tools:` list names. Every name is `item@module`, the same key
+ *     bx-ai uses in its registry, so the module part says what must be installed:
+ *       now@bxai          one tool from one module
+ *       *@bxplaywright    every tool that module has registered (`@bxplaywright` is the same)
+ *
+ * A bare name (`now`) is an error with a hint, never a guess: bx-ai itself would
+ * happily resolve it to whichever module registered a tool of that name first.
+ * That is also why lookups here are EXACT on the registry key: bx-ai's `get()`
+ * falls back to matching by name alone, so `now@somemodule` could silently
+ * resolve to `now@bxai`.
+ *
+ * An own tool wins over a module tool of the same name (the module tool is
+ * dropped and a warning is logged), so a project can override a stock tool by
+ * writing its own.
+ */
+class {
+
+	/**
+	 * @names The agent's `tools:` entries, e.g. [ "now@bxai", "*@bxplaywright" ]
+	 * @ownTools The agent's own tool objects, from its `tools/` folder
+	 * @agentName The agent's name, for messages
+	 *
+	 * @return The tool objects to attach to the agent: its own, then the selected ones, each once
+	 */
+	array function select( required array names, array ownTools = [], string agentName = "" ) {
+		var registry = aiToolRegistry()
+		var registryKeys = registry.getKeys()
+		var selected = arguments.ownTools.duplicate()
+		var seenKeys = {}
+
+		var ownToolNames = {}
+		for ( var own in arguments.ownTools ) {
+			ownToolNames[ own.getName() ] = true
+		}
+
+		for ( var entry in arguments.names ) {
+			var parsed = parse( entry, arguments.agentName )
+			var keys = []
+
+			if ( parsed.item == "*" ) {
+				keys = registryKeys.filter( key => listLast( key, "@" ) == parsed.module && find( "@", key ) > 0 )
+				if ( !keys.len() ) {
+					throw(
+						type    = "BxAgents.UnknownToolModule",
+						message = "#describeAgent( arguments.agentName )# lists [#entry#] but no tools are registered under module [#parsed.module#]. Is the module installed and loaded? #registeredModulesHint( registry )#"
+					)
+				}
+			} else {
+				var key = parsed.item & "@" & parsed.module
+				if ( !registryKeys.contains( key ) ) {
+					throw(
+						type    = "BxAgents.UnknownTool",
+						message = "#describeAgent( arguments.agentName )# lists [#entry#] but there is no tool [#key#]. #availableHint( registryKeys, parsed.module, registry )#"
+					)
+				}
+				keys = [ key ]
+			}
+
+			for ( var toolKey in keys ) {
+				if ( seenKeys.keyExists( toolKey ) ) {
+					continue
+				}
+				seenKeys[ toolKey ] = true
+				var tool = registry.get( toolKey )
+
+				if ( ownToolNames.keyExists( tool.getName() ) ) {
+					writeLog(
+						text : "#describeAgent( arguments.agentName )#: its own tool [#tool.getName()#] wins over [#toolKey#], which was left out.",
+						type : "warning",
+						file : "bxagents-tools"
+					)
+					continue
+				}
+
+				selected.append( tool )
+			}
+		}
+
+		return selected
+	}
+
+	/**
+	 * Split one `tools:` entry into its item and module, rejecting anything malformed.
+	 *
+	 * @entry One entry, e.g. "now@bxai", "*@bxplaywright" or "@bxplaywright"
+	 * @agentName The agent's name, for messages
+	 *
+	 * @return { item, module } - item is "*" for a whole module
+	 */
+	struct function parse( required any entry, string agentName = "" ) {
+		var text = isSimpleValue( arguments.entry ) ? trim( arguments.entry ) : ""
+
+		if ( !len( text ) ) {
+			throw(
+				type    = "BxAgents.InvalidToolName",
+				message = "#describeAgent( arguments.agentName )# has an empty or non-text entry in `tools`."
+			)
+		}
+
+		if ( !find( "@", text ) ) {
+			throw(
+				type    = "BxAgents.InvalidToolName",
+				message = "#describeAgent( arguments.agentName )# lists the bare tool name [#text#]. Write it as item@module, for example #text#@bxai, or *@module for every tool a module provides."
+			)
+		}
+
+		var item = listFirst( text, "@" )
+		var module = listRest( text, "@" )
+		if ( text.left( 1 ) == "@" ) {
+			item = "*"
+			module = text.mid( 2, len( text ) )
+		}
+
+		if ( !len( module ) || find( "@", module ) || !reFind( "^[A-Za-z0-9_.-]+$", module ) || ( item != "*" && !reFind( "^[A-Za-z0-9_.-]+$", item ) ) ) {
+			throw(
+				type    = "BxAgents.InvalidToolName",
+				message = "#describeAgent( arguments.agentName )# has the malformed tool entry [#text#]. Use item@module or *@module."
+			)
+		}
+
+		return { "item" : item, "module" : module }
+	}
+
+	/**
+	 * @agentName The agent's name, possibly blank
+	 *
+	 * @return "Agent [name]" for messages
+	 */
+	private string function describeAgent( string agentName = "" ) {
+		return len( arguments.agentName ) ? "Agent [#arguments.agentName#]" : "An agent"
+	}
+
+	/**
+	 * @registry The tool registry
+	 *
+	 * @return A hint naming the modules that do have tools registered
+	 */
+	private string function registeredModulesHint( required any registry ) {
+		var modules = arguments.registry.getModules().filter( m => len( m ) )
+		return modules.len() ? "Modules with registered tools: #modules.sort( 'text' ).toList( ', ' )#." : "No module has registered any tool."
+	}
+
+	/**
+	 * @registryKeys Every key in the registry
+	 * @module The module the missing tool was asked for in
+	 * @registry The tool registry
+	 *
+	 * @return A hint naming what the module does provide, or which modules exist
+	 */
+	private string function availableHint( required array registryKeys, required string module, required any registry ) {
+		var inModule = arguments.registryKeys.filter( key => find( "@", key ) && listLast( key, "@" ) == module )
+		if ( inModule.len() ) {
+			return "Tools in [#arguments.module#]: #inModule.sort( 'text' ).toList( ', ' )#."
+		}
+		return "No tools are registered under module [#arguments.module#] - is it installed and loaded? #registeredModulesHint( arguments.registry )#"
+	}
+
+}
