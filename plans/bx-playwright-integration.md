@@ -77,7 +77,20 @@ Related: bx-ai's `aiTool()` registers under the bare name by default (`autoRegis
 5. **`*@bxplaywright` works without `toolOptions`.** The defaults above apply; widening them is the developer's responsibility.
 6. **Name conflicts: the agent's own tool wins, with a logged warning.** If `tools/Search.bx` and `search@bxai` are both in play, the own tool is used and a warning names both.
 7. **Browser isolation: a fresh tool set per agent (option A).** BX Agents does not use the shared `browser_*@bxplaywright` registry tools. For each agent that names `@bxplaywright`, it calls `playwright().aiTools()`, which returns tools bound to their own browser and page, so two agents never share a tab. No upstream change is needed. Per-conversation isolation within one agent (the singleton serving many users) is still to be designed.
-8. **MCP is a separate `mcp` key and is general, not just for Playwright.** Entries can name a module that ships an MCP server (`bxplaywright`), a remote URL, or a local stdio command. Tools say *which* tools; `mcp` says *where the tools run* (another process or service). Today `mcpServers` accepts URLs only; stdio entries use bx-ai's `StdioTransport`.
+8. **MCP is a separate `mcp` key and is general, not just for Playwright.** Tools say *which* tools; `mcp` says *where the tools run* (another process or service). Two forms, both required:
+   - **Short form**: a string. A bare module name (`bxplaywright`) or a URL.
+   - **Long form**: a struct with `url` (or `module`), optional `name`, `prefix`, `headers`, `token`, `timeout`, `toolFilter`. Values use BoxLang's own placeholder syntax, `${env.VAR:default}` (a bare `${VAR:default}` also works since BoxLang 1.17), so no new mechanism.
+   - **Tool names are always prefixed** `<name>__<tool>` (bx-ai `development` supports this: `MCPTool` builds `prefix__name`, and `withMCPServer` takes `prefix`, `toolFilter`, `headers`, `token`). BX Agents defaults the prefix to the entry's `name` (or the module name, or the URL host), so servers never clash with each other or with `tools`.
+   ```yaml
+   mcp:
+     - bxplaywright                       # short: module
+     - https://mcp.acme.com/crm           # short: URL
+     - name: crm                          # long
+       url: https://mcp.acme.com/crm
+       token: ${env.CRM_TOKEN}
+       toolFilter: [ find_customer ]
+   ```
+   Correction to an earlier version of this plan: bx-ai's `StdioTransport` is the **server** side (an MCP server reading stdin). `MCPClient` is HTTP only (`init( baseURL )`), so a `command:` stdio entry is not possible without new work in bx-ai. See the MCP path below.
    ```yaml
    mcp:
      - bxplaywright
@@ -122,9 +135,9 @@ Build effects for each name: validate the module is available (bundled or instal
 ### What "all the bx-playwright tools" means
 
 - **Native tools (default path)**: the 10 bx-playwright tools: `browser_visit`, `browser_snapshot`, `browser_click`, `browser_fill`, `browser_select`, `browser_press`, `browser_back`, `browser_text`, `browser_screenshot`, `browser_close`. In-process, no extra server.
-- **MCP server (second path)**: `bxplaywright mcp` is Playwright's own MCP server, with a larger tool set. BX Agents' `mcpServers` accepts **URLs only**, but bx-ai already has a `StdioTransport`. Two ways:
+- **MCP server (second path)**: `bxplaywright mcp` is Playwright's own MCP server, with a larger tool set. bx-ai's `MCPClient` speaks HTTP only. `bxplaywright mcp` can listen on a port. Two ways:
   1. `bxplaywright mcp --port 8931` as a sidecar process, consumed as `http://localhost:8931/mcp`: works today, but the author must run the sidecar.
-  2. Extend `mcpServers` to accept `{ command : [ "bxplaywright", "mcp", "--headless" ], name : "browser" }` and have bx-ai spawn it over stdio. Cleaner; needs a small BX Agents change and a check that bx-ai's client can be handed a stdio command.
+  2. **Managed child process** (proposed for `mcp: [ bxplaywright ]`): BX Agents starts `bxplaywright mcp --port <free port>` itself when the app starts, connects to `http://localhost:<port>/mcp` with the normal client, and stops it on shutdown. No change in bx-ai. A stdio client in bx-ai would be the alternative, but it does not exist today.
   Naming `*@bxplaywright` can later also mean "and its MCP server" through the option `mcp : true`.
 
 ### Problems this must solve
@@ -169,7 +182,7 @@ Build effects for each name: validate the module is available (bundled or instal
 - [ ] Example project and docs.
 
 **Phase 3: MCP**
-- [ ] A separate `mcp` key accepting module names, URLs and stdio commands (bx-ai `StdioTransport`).
+- [ ] A separate `mcp` key with short and long forms, always-prefixed tool names, `${env.X}` placeholders, and a managed `bxplaywright mcp` child process.
 
 **Phase 4: testing**
 - [ ] CI browser specs, `test --browser`, `BaseAgentSpec.browser()`.
@@ -187,4 +200,4 @@ Build effects for each name: validate the module is available (bundled or instal
 1. **Per-conversation browser isolation** inside one agent (see Problems, item 1).
 2. **Hybrid `Agent.yaml` plus `Agent.bx`:** can the class extend the YAML and override parts? Not decided; for now it is an error to have both.
 3. **Testing scope first:** our own CI browser specs, `test --browser`, or both?
-4. **Stdio `command:` entries:** check that bx-ai's MCP client can be handed a stdio command (BX Agents only passes URLs today).
+4. **MCP launch:** managed child process over HTTP (no bx-ai change) or a new stdio client in bx-ai? Also verify `bxplaywright mcp --port` behaves as assumed.
