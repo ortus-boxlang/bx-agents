@@ -32,5 +32,3 @@ bxAgents serve
 {% hint style="warning" %}
 Human-in-the-loop is **degraded** here - there's no button/component surface in email, so approval requests arrive as plain text asking you to reply with a decision keyword, correlated via a `[bxagents:<requestID>]` tag in the Subject line rather than `In-Reply-To`. See [Email - server-level dependencies, and degraded threading/HITL](../../docs/conventions/gateways/email.md).
 {% endhint %}
-
-See [Known Limitations](../../docs/known-limitations.md) for exactly what was and wasn't verified against real `jakarta.mail`/`cbmailservices` infrastructure - this is the least-verified of the push-style gateways in this repo.

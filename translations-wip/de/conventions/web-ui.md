@@ -389,5 +389,3 @@ Die Seite ist gegen die eigene API vollständig - jede benötigte Route existier
 | Wiederholen / neu generieren | Ein fehlgeschlagener Turn muss von Hand erneut gesendet werden |
 | Bearbeiten und erneut senden | Keine Bearbeitung einer bereits gesendeten Nachricht |
 | Token-/Kostenanzeige | Nichts zeigt die Nutzung an, obwohl der Provider sie zurückgibt |
-
-Siehe [Bekannte Einschränkungen](../known-limitations.md) dafür, was gegen einen echten ColdBox-Boot verifiziert wurde und was nicht, einschließlich der Teile dieser Seite, die nur durch Assertions auf Generator-Ebene abgedeckt sind, statt durch das Steuern eines Browsers.

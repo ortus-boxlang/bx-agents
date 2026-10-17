@@ -71,7 +71,7 @@ what a cleanup pass would involve for a typical project.
 
 ## Build and run
 
-Unlike `chat` (which never boots ColdBox at all - see [Known Limitations](../known-limitations.md)), the scheduler only actually fires under a real ColdBox boot, so this one needs `serve`, not `chat`:
+Unlike `chat` (which never boots ColdBox at all), the scheduler only actually fires under a real ColdBox boot, so this one needs `serve`, not `chat`:
 
 ```bash
 cd examples/scheduled-agent
@@ -82,7 +82,7 @@ bxAgents serve
 The `nightly` task fires automatically once `serve` is running - no separate cron daemon, no OS-level `cron` entry. ColdBox's own in-process scheduler thread drives it, on the schedule declared in `Scheduler.bx`.
 
 !!! info
-    `build` cannot meaningfully validate the *contents* of `Scheduler.bx` beyond checking that the file exists - a typo in a `getInstance()` call or a reference to an agent name that doesn't exist will pass `build` cleanly and only surface once the generated app actually boots. See [Known Limitations](../known-limitations.md) for the current state of that gap.
+    `build` cannot meaningfully validate the *contents* of `Scheduler.bx` beyond checking that the file exists - a typo in a `getInstance()` call or a reference to an agent name that doesn't exist will pass `build` cleanly and only surface once the generated app actually boots.
 
 ## Where to go next
 

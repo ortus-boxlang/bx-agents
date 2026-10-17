@@ -71,7 +71,7 @@ what a cleanup pass would involve for a typical project.
 
 ## Construir y ejecutar
 
-A diferencia de `chat` (que nunca llega a arrancar ColdBox - consulta [Limitaciones conocidas](../known-limitations.md)), el scheduler solo se dispara de verdad bajo un arranque real de ColdBox, así que este ejemplo necesita `serve`, no `chat`:
+A diferencia de `chat` (que nunca llega a arrancar ColdBox), el scheduler solo se dispara de verdad bajo un arranque real de ColdBox, así que este ejemplo necesita `serve`, no `chat`:
 
 ```bash
 cd examples/scheduled-agent
@@ -82,7 +82,7 @@ bxAgents serve
 La tarea `nightly` se dispara automáticamente en cuanto `serve` está en marcha - sin ningún demonio cron aparte, sin ninguna entrada `cron` a nivel de sistema operativo. Lo mueve el propio hilo de scheduler en proceso de ColdBox, con la programación declarada en `Scheduler.bx`.
 
 !!! info
-    `build` no puede validar de forma significativa el *contenido* de `Scheduler.bx` más allá de comprobar que el archivo existe - una errata en una llamada a `getInstance()` o una referencia a un nombre de agente que no existe pasarán `build` limpiamente y solo saldrán a la luz cuando la aplicación generada arranque de verdad. Consulta [Limitaciones conocidas](../known-limitations.md) para el estado actual de esa carencia.
+    `build` no puede validar de forma significativa el *contenido* de `Scheduler.bx` más allá de comprobar que el archivo existe - una errata en una llamada a `getInstance()` o una referencia a un nombre de agente que no existe pasarán `build` limpiamente y solo saldrán a la luz cuando la aplicación generada arranque de verdad.
 
 ## Dónde ir a continuación
 

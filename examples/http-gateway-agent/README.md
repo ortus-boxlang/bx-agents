@@ -20,7 +20,7 @@ curl http://localhost:8080/api/chat/info
 ```
 
 {% hint style="warning" %}
-The very first request to a freshly booted app's `toAi()` route can transiently fail - see [Known Limitations](../../docs/known-limitations.md#the-toai-first-request-race). Send a warm-up request first.
+The very first request to a freshly booted app's `toAi()` route can transiently fail. Send a warm-up request first.
 {% endhint %}
 
 See [gateways/](../../docs/conventions/gateways/index.md).

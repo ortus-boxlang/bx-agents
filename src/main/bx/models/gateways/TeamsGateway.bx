@@ -62,7 +62,7 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 	 * In-process caches: the OAuth2 access token (client-credentials flow,
 	 * refetched 60s before its stated expiry - Eve's own documented margin)
 	 * and the Bot Connector JWKS keyset (fetched once per gateway instance
-	 * lifetime - see the known-limitations.md note on key-rotation).
+	 * lifetime, so a rotated key is only picked up on restart).
 	 */
 	property name="cachedAccessToken" type="string" default="";
 	property name="accessTokenExpiresAtMs" type="numeric" default="0";
@@ -299,8 +299,8 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 
 	/**
 	 * Verifies the JWT's RS256 signature against Bot Connector's JWKS
-	 * (fetched once and cached - see the class docblock/known-limitations.md
-	 * for the key-rotation caveat this implies), and its `aud`/`iss`/`exp`/
+	 * (fetched once and cached, so a rotated key is only picked up on
+	 * restart), and its `aud`/`iss`/`exp`/
 	 * `nbf` claims. Ported from Eve's own `verify.ts` — audience must equal
 	 * this bot's own App ID, issuer must be Bot Connector's fixed issuer
 	 * string, with a 5-minute clock-skew allowance matching Eve's own default.

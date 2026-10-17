@@ -32,7 +32,7 @@ curl -X POST http://localhost:8080/mcp/tools \
 ```
 
 {% hint style="warning" %}
-The very first request to a freshly booted app's `toAi()` route can transiently fail - see [Known Limitations](../../docs/known-limitations.md#the-toai-first-request-race). Send a warm-up request first.
+The very first request to a freshly booted app's `toAi()` route can transiently fail. Send a warm-up request first.
 {% endhint %}
 
 See [models/](../../docs/conventions/models.md), [subagents/](../../docs/conventions/subagents.md), [skills/](../../docs/conventions/skills.md), [mcp/](../../docs/conventions/mcp.md), [gateways/](../../docs/conventions/gateways/index.md), [schedules/](../../docs/conventions/schedules.md), and [interceptors/](../../docs/conventions/interceptors.md).

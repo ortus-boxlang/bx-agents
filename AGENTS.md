@@ -43,7 +43,7 @@ Each of these cost real debugging time here:
 
 SSE here is **native on both sides** and should stay that way: ColdBox's `toAi()` `/stream` emits through BoxLang's `SSE()` BIF, and `AgentClient.stream()` consumes with `http( url ).sse( true ).onChunk( ... )`. Do not write a frame parser - `ortus.boxlang.runtime.net.SSEParser` already does it.
 
-The one thing to know: **SSE frames are terminated by a blank line, and the web runtime's whitespace compression is ON by default and collapses them.** With it on, a `/stream` body carries zero `\n\n` and the native client reports `totalEvents: 0` - the stream looks broken and the emitter looks at fault, but the bug is one config directive. `Serve.bx` sets `whitespaceCompressionEnabled: false` for served projects and this repo's `boxlang.json` sets it for the suite. If streaming ever goes silent, check that first. See `docs/known-limitations.md` for the measured numbers.
+The one thing to know: **SSE frames are terminated by a blank line, and the web runtime's whitespace compression is ON by default and collapses them.** With it on, a `/stream` body carries zero `\n\n` and the native client reports `totalEvents: 0` - the stream looks broken and the emitter looks at fault, but the bug is one config directive. `Serve.bx` sets `whitespaceCompressionEnabled: false` for served projects and this repo's `boxlang.json` sets it for the suite. If streaming ever goes silent, check that first.
 
 ## Architecture
 

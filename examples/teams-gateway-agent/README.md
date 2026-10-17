@@ -27,5 +27,3 @@ Unlike WhatsApp Cloud, there's no GET verify-handshake - every inbound activity 
 {% hint style="warning" %}
 v1 scope is **personal (1:1 DM) conversations only** - group chat and channel-wide messages aren't supported. See [Microsoft Teams - Bot Framework Activity protocol](../../docs/conventions/gateways/teams.md).
 {% endhint %}
-
-See [Known Limitations](../../docs/known-limitations.md) for what's verified via a real locally-generated RSA keypair + hand-signed JWTs vs. what still needs a real Azure/Bot Framework registration and a real Teams client.

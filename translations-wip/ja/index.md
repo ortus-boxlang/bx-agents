@@ -222,8 +222,3 @@ BoxLang、BX AI、BxAgents をインストールします。
 すべてのコンベンションフォルダには、実際に動く、ビルド可能なサンプルが
 [`examples/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples) 以下に用意されています。
 
-!!! warning
-    BxAgents は現在も活発に開発が進められています。[既知の制限](known-limitations.md) では、
-    実際に動くアプリに対して検証済みの部分、BX AI の `"mock"` プロバイダーに対してしか
-    まだ実行されていない部分、そしてこのプロジェクトが遭遇し回避した実際の ColdBox 側の
-    癖について、正直に記録しています。
