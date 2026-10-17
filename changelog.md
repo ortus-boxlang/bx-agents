@@ -31,7 +31,7 @@ or package as a portable `.bxa`.
 - The web UI's sign-in is backed by `cbsecurity` (which wraps `cbauth`). cbsecurity's
   firewall is switched off in generated apps for now; it cannot resolve a handler for
   `toAi()` routes.
-- Minimum BoxLang version is now 1.17.0.
+- Minimum BoxLang version is now 1.18.0.
 
 #### Conventions
 

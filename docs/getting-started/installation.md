@@ -14,7 +14,7 @@ BxAgents is a BoxLang module. It needs two things on the machine that runs it:
 2. BxAgents itself. It bundles everything else it needs: `bx-ai`, `bx-sqlite`, `bx-ftp` and `bx-mail` as nested BoxLang modules, plus ColdBox, `qb`, `cbsecurity`, `cbauth` and `cbmailservices` for the apps it generates. There is nothing else to install.
 
 !!! info
-    BxAgents needs BoxLang **1.17.0 or later**, the release that added nested modules.
+    BxAgents needs BoxLang **1.18.0 or later**, which supports the nested modules it bundles.
 
 !!! info
     `serve` additionally needs the standalone [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver) binary on `PATH`. `build`, `chat`, `package`, `inspect`, `clean`, and `new` don't need it.
