@@ -69,13 +69,13 @@ clases compiladas de cada proyecto quede aislada.
 ## Probar sin una clave de API real
 
 Todas estas formas necesitan un modelo real para hablar con un proveedor real - pero todavía
-no te hace falta uno. Añade una sobrescritura `test()` a `Agent.bx` (se cubre por completo en
+no te hace falta uno. Añade una sobrescritura de entorno `test` a `Agent.yaml` (se cubre por completo en
 la [Lección 19](19-testing-your-agent.md)):
 
-```javascript
-function test() {
-	return { model : "mock/mock-model" };
-}
+```yaml
+environments:
+  test:
+    model: mock/mock-model
 ```
 
 y entonces `bxAgents build --environment=test && bxAgents chat` se ejecuta enteramente contra

@@ -66,6 +66,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb invoke' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb invoke' -l server
     complete -c $cmd -n '__bxagents_using_verb invoke' -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb new' -l class
     complete -c $cmd -n '__bxagents_using_verb new' -l description -x
     complete -c $cmd -n '__bxagents_using_verb new' -l forgebox -x
     complete -c $cmd -n '__bxagents_using_verb new' -l model -x

@@ -14,27 +14,18 @@ tags: [guides, examples, schedules]
 
 ```
 scheduled-agent/
-├── Agent.bx
+├── Agent.yaml
 ├── instructions.md
 └── schedules/
     └── Scheduler.bx
 ```
 
-`Agent.bx` is the same shape as every other example - nothing special is needed on the agent side to be schedule-driven:
+`Agent.yaml` is the same shape as every other example - nothing special is needed on the agent side to be schedule-driven:
 
-```javascript
-class extends="bxModules.bxai.models.runnables.AiAgent" {
-
-	function init() {
-		super.init(
-			name        : "scheduled-agent",
-			description : "An agent that wakes up on a cron schedule via schedules/.",
-			model       : aiModel( provider: "mock", params: { model: "mock-model" } )
-		)
-		return this
-	}
-
-}
+```yaml
+name: scheduled-agent
+description: An agent that wakes up on a cron schedule via schedules/.
+model: mock/mock-model
 ```
 
 ## The scheduler
@@ -56,7 +47,7 @@ class extends="coldbox.system.web.tasks.ColdBoxScheduler" {
 
 Because `build` copies this file into the generated app essentially as-is (see [`schedules/`](../conventions/schedules.md)), the full ColdBox scheduler DSL is available - `everyDayAt()`, `everyMinute()`, `withNoOverlaps()`, `onFailure()`, and everything else ColdBox's own scheduler supports, not a subset BxAgents reimplements.
 
-`getInstance( "scheduled-agent" )` resolves by this project's own `Agent.bx`-declared `name` - every agent in a project's tree is registered under its own name in WireBox, not just the root, which is what makes this line work without any extra wiring.
+`getInstance( "scheduled-agent" )` resolves by this project's own `Agent.yaml`-declared `name` - every agent in a project's tree is registered under its own name in WireBox, not just the root, which is what makes this line work without any extra wiring.
 
 ## Instructions for the scheduled prompt
 

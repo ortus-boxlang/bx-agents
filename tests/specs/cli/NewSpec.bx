@@ -27,16 +27,31 @@ class extends="testbox.system.BaseSpec" {
 				var result = verb.run( { projectRoot : dir, model : "openai/gpt-5", skipInstall : true } );
 
 				expect( result.exitCode ).toBe( 0 );
+				expect( fileExists( dir & "/Agent.yaml" ) ).toBeTrue();
+				expect( fileExists( dir & "/Agent.bx" ) ).toBeFalse();
+			} );
+
+			it( "scaffolds a class-based Agent.bx instead when --class is passed", function() {
+				var dir = newTargetDir();
+				var result = verb.run( { projectRoot : dir, model : "openai/gpt-5", skipInstall : true, "class" : true } );
+
+				expect( result.exitCode ).toBe( 0 );
 				expect( fileExists( dir & "/Agent.bx" ) ).toBeTrue();
+				expect( fileExists( dir & "/Agent.yaml" ) ).toBeFalse();
 			} );
 
 			it( "derives the agent name from the target directory name when --name is omitted", function() {
 				var dir = newTargetDir();
 				verb.run( { projectRoot : dir, model : "openai/gpt-5", skipInstall : true } );
 
-				var content = fileRead( dir & "/Agent.bx" );
-				expect( content ).toInclude( 'name        : "my-agent"' );
-				expect( content ).toInclude( 'extends="bxModules.bxai.models.runnables.AiAgent"' );
+				var content = fileRead( dir & "/Agent.yaml" );
+				expect( content ).toInclude( "name: my-agent" );
+
+				var classDir = newTargetDir() & "-class";
+				verb.run( { projectRoot : classDir, model : "openai/gpt-5", skipInstall : true, "class" : true } );
+				var classContent = fileRead( classDir & "/Agent.bx" );
+				expect( classContent ).toInclude( 'name        : "my-agent-class"' );
+				expect( classContent ).toInclude( 'extends="bxModules.bxai.models.runnables.AiAgent"' );
 			} );
 
 			it( "throws clearly when --model is missing", function() {

@@ -14,27 +14,18 @@ tags: [guides, examples, gateways, slack]
 
 ```
 slack-gateway-agent/
-├── Agent.bx
+├── Agent.yaml
 ├── instructions.md
 └── gateways/
     └── slackChannel.bx
 ```
 
-`Agent.bx` tiene la misma forma que en todos los demás ejemplos:
+`Agent.yaml` tiene la misma forma que en todos los demás ejemplos:
 
-```javascript
-class extends="bxModules.bxai.models.runnables.AiAgent" {
-
-	function init() {
-		super.init(
-			name        : "slack-gateway-agent",
-			description : "An agent reachable as a real Slack app via gateways/, over Socket Mode.",
-			model       : aiModel( provider: "mock", params: { model: "mock-model" } )
-		)
-		return this
-	}
-
-}
+```yaml
+name: slack-gateway-agent
+description: An agent reachable as a real Slack app via gateways/, over Socket Mode.
+model: mock/mock-model
 ```
 
 ## El gateway

@@ -1,6 +1,6 @@
 # Class-Based Agent
 
-The same agent as [`minimal-agent`](../minimal-agent), written the other way.
+The same agent as [`minimal-agent`](../minimal-agent), written the advanced way: an `Agent.bx` instead of an `Agent.yaml`. Reach for this only when the agent definition needs code (hooks, dynamic instructions, tools registered in code); `bxAgents new --class` scaffolds it.
 
 `Agent.bx` here **extends bx-ai's `AiAgent`**, so it *is* the agent. The build
 instantiates it rather than rebuilding one from a config struct.

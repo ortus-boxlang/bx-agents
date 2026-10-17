@@ -21,7 +21,7 @@ dinámico de archivos, sin trabajo de build diferido al camino de la petición.
 
 ```mermaid
 flowchart LR
-    A["your convention tree<br/>Agent.bx, tools/, skills/, ..."] -->|"bxAgents build"| B[".build/app/<br/>a plain ColdBox application"]
+    A["your convention tree<br/>Agent.yaml, tools/, skills/, ..."] -->|"bxAgents build"| B[".build/app/<br/>a plain ColdBox application"]
     B -->|"bxAgents serve / chat / invoke"| C["running agent"]
     B -->|"bxAgents package"| D["dist/name-version.bxa"]
     D -->|"bxAgents deploy"| E["a real target"]
@@ -31,18 +31,22 @@ flowchart LR
 
 ## Las carpetas son la API
 
-`Agent.bx` e `instructions.md` son los únicos archivos que importan para empezar. Cualquier
+`Agent.yaml` e `instructions.md` son los únicos archivos que importan para empezar. Cualquier
 otra carpeta de convención - `tools/`, `skills/`, `subagents/`, `models/`, `gateways/`,
 `schedules/`, `mcp/`, `interceptors/`, `modules/` - es opcional y **solo da forma a la salida
 generada si existe y tiene contenido**. Añades convenciones a medida que realmente las
 necesitas, no por adelantado.
 
-## Agent.bx ES el agente
+## Agent.yaml define el agente
 
-`Agent.bx` extiende directamente el propio `AiAgent` de BX AI - el build **instancia tu
-clase** en lugar de reconstruir una a partir de un struct de configuración, así que lo que
-escribes es lo que se ejecuta. Un IDE puede introspeccionarla como cualquier otra clase de
-BoxLang. Escribirás la tuya en la [Lección 5](05-agent-bx.md).
+`Agent.yaml` son ajustes en texto plano - un nombre, un modelo y cualquier extra opcional -
+y el build lo convierte en un agente real de BX AI. La mayoría de los agentes no necesitan
+código. Escribirás el tuyo en la [Lección 5](05-agent-bx.md).
+
+Cuando la propia definición necesita código (hooks, instrucciones dinámicas, tools
+registradas por código), existe una opción avanzada: un `Agent.bx` basado en clase que
+extiende el propio `AiAgent` de BX AI, y que el build **instancia** tal cual. La Lección 5
+termina con cuándo recurrir a ella.
 
 ## Qué produce realmente `build`
 
@@ -53,7 +57,7 @@ convierte a la derecha:
 ::: column
 ```
 your-agent/
-├── Agent.bx
+├── Agent.yaml
 ├── instructions.md
 ├── tools/
 ├── skills/

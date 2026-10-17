@@ -44,14 +44,15 @@ class {
 		checkRuntime( checks )
 		checkModule( checks, "bxai", "bx-ai", true )
 
-		if ( !fileExists( root & "/Agent.bx" ) ) {
+		var locator = new "models.build.AgentDefinitionLocator@bxagents"()
+		if ( !locator.exists( root ) ) {
 			checks.append( {
 				status  : "fail",
-				message : "No Agent.bx found at [#root#] - `doctor` expects to run inside a BX Agents project."
+				message : "No #locator.expected()# found at [#root#] - `doctor` expects to run inside a BX Agents project."
 			} )
 			return finish( checks, arguments.options.json ?: false )
 		}
-		checks.append( { status : "ok", message : "Agent.bx found at [#root#]" } )
+		checks.append( { status : "ok", message : "Agent definition found at [#root#]" } )
 
 		var discovery = ""
 		var config = ""
@@ -59,7 +60,7 @@ class {
 			discovery = new "models.build.ProjectDiscoverer@bxagents"().discover( root )
 			config = new "models.build.AgentConfigResolver@bxagents"().resolve( projectRoot : root )
 		} catch ( any e ) {
-			checks.append( { status : "fail", message : "Could not resolve Agent.bx: #e.message#" } )
+			checks.append( { status : "fail", message : "Could not resolve the agent definition: #e.message#" } )
 			return finish( checks, arguments.options.json ?: false )
 		}
 

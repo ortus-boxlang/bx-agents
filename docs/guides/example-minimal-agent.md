@@ -8,13 +8,13 @@ tags: [guides, examples, tools, skills]
 
 # Example: A Minimal Agent
 
-The smallest complete BxAgents project is [`examples/minimal-agent/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/minimal-agent) - three files that show the whole shape of a project: an `Agent.bx`, instructions, one [tool](../conventions/tools.md), and one [skill](../conventions/skills.md). Every other example in this guide series builds on exactly this shape.
+The smallest complete BxAgents project is [`examples/minimal-agent/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/minimal-agent) - three files that show the whole shape of a project: an `Agent.yaml`, instructions, one [tool](../conventions/tools.md), and one [skill](../conventions/skills.md). Every other example in this guide series builds on exactly this shape.
 
 ## The project
 
 ```
 minimal-agent/
-├── Agent.bx
+├── Agent.yaml
 ├── instructions.md
 ├── tools/
 │   └── Greeter.bx
@@ -23,21 +23,12 @@ minimal-agent/
         └── SKILL.md
 ```
 
-`Agent.bx` extends bx-ai's own `AiAgent` and declares a name, description, and model in `init()`:
+`Agent.yaml` declares a name, description, and model - the `provider/model` slug (see [The model slug](../conventions/agent-bx.md#the-model-slug)) - and nothing else is required. Need code in the definition (hooks, dynamic instructions)? The class-based [`Agent.bx`](../conventions/agent-bx.md) is the advanced alternative.
 
-```javascript
-class extends="bxModules.bxai.models.runnables.AiAgent" {
-
-	function init() {
-		super.init(
-			name        : "minimal-agent",
-			description : "The smallest complete BX Agents project: one tool, one skill.",
-			model       : aiModel( provider: "mock", params: { model: "mock-model" } )
-		)
-		return this
-	}
-
-}
+```yaml
+name: minimal-agent
+description: "The smallest complete BX Agents project: one tool, one skill."
+model: mock/mock-model
 ```
 
 `instructions.md` is the system prompt - a plain Markdown file, copied in as-is at build time:

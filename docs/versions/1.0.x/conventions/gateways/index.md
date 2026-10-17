@@ -238,24 +238,13 @@ class {
 
 An interceptor (not a raw `Application.bx`/`onApplicationStart()` statement, unlike the plain registration calls above) is used specifically because its `afterConfigurationLoad` point is guaranteed by ColdBox's own lifecycle to fire strictly after the framework - including the scheduler these gateways depend on (see below) - has finished loading.
 
-Control `GatewaySession`'s policy via an optional `gatewaySession` block on the root project's `Agent.bx`:
+Control `GatewaySession`'s policy via an optional `gatewaySession` block on the root project's `Agent.yaml`:
 
-```javascript
-// Agent.bx
-class extends="bxModules.bxai.models.runnables.AiAgent" {
-
-	function init() {
-		super.init( name: "...", model: aiModel( provider: "..." ) )
-		return this
-	}
-
-	function configure() {
-		return {
-			gatewaySession: { policy: "queue", maxQueueDepth: 50 }   // both optional - these are the defaults
-		};
-	}
-
-}
+```yaml
+# Agent.yaml
+gatewaySession:       # both optional - these are the defaults
+  policy: queue
+  maxQueueDepth: 50
 ```
 
 `policy` must be one of `reject`/`queue`/`steer`/`interrupt` (bx-ai's own `GatewaySession` policy vocabulary - see [GatewaySession](#gatewaysession---wiring-the-agent-to-every-push-style-gateway) below) - checked at `build` time so a typo fails loudly instead of surfacing as a runtime error the first time the app boots.

@@ -16,7 +16,7 @@
 
 <p>&nbsp;</p>
 
-**BxAgents** is a conventions-based framework for building AI agents powered by [BoxLang AI](https://ai.boxlang.io). Built on top of [ColdBox](https://www.coldbox.org), it lets you describe an agent with a handful of files and folders - `Agent.bx`, `instructions.md`, and whichever of `tools/`, `skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `models/`, `modules/` it actually needs - and BxAgents assembles a real, runnable ColdBox application from it **at build time**, ready to serve, chat with, or package as a portable `.bxa`.
+**BxAgents** is a conventions-based framework for building AI agents powered by [BoxLang AI](https://ai.boxlang.io). Built on top of [ColdBox](https://www.coldbox.org), it lets you describe an agent with a handful of files and folders - `Agent.yaml`, `instructions.md`, and whichever of `tools/`, `skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `models/`, `modules/` it actually needs - and BxAgents assembles a real, runnable ColdBox application from it **at build time**, ready to serve, chat with, or package as a portable `.bxa`.
 
 ## Quick Start
 
@@ -82,7 +82,7 @@ Before you get started, fetch the BoxLang binary (until this module is published
 | `verifyExamples` | Builds every project under `examples/` through the real build pipeline via `verifyExamples.bxs` - a regression net across the whole feature matrix. |
 | `checkTemplateTokens` | Fails if any leftover `@MODULE_*@` boxlang-module-template placeholder tokens remain anywhere in the repo. Runs as part of `check`. |
 | `downloadBoxLang` | Downloads the BoxLang binary into `src/test/resources/libs`. |
-| `downloadModules` | Downloads the BoxLang modules BX Agents bundles (bx-ai, bx-ftp, bx-sqlite, bx-mail; versions in `gradle.properties`) into `build/bundle-modules`; `createModuleStructure` copies them into the module's `modules/`, where BoxLang loads them as nested modules. |
+| `downloadModules` | Downloads the BoxLang modules BX Agents bundles (bx-ai, bx-ftp, bx-sqlite, bx-mail, bx-yaml; versions in `gradle.properties`) into `build/bundle-modules`; `createModuleStructure` copies them into the module's `modules/`, where BoxLang loads them as nested modules. |
 | `installLibs` | Runs `box install --production` (CommandBox required) against `src/main/lib/box.json`, staging ColdBox, qb, cbsecurity, cbauth and cbmailservices in `build/lib-prod`; the module zip ships them as `lib/`. |
 | `installDevLibs` | Same manifest, full `box install` into `build/lib-stage`: adds TestBox (a devDependency, never shipped). The test tasks run it for you. |
 | `downloadMiniServer` | Downloads the `boxlang-miniserver` binary into `src/test/resources/libs`. |

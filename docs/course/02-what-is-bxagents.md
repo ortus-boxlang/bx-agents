@@ -21,7 +21,7 @@ deferred into the request path.
 
 ```mermaid
 flowchart LR
-    A["your convention tree<br/>Agent.bx, tools/, skills/, ..."] -->|"bxAgents build"| B[".build/app/<br/>a plain ColdBox application"]
+    A["your convention tree<br/>Agent.yaml, tools/, skills/, ..."] -->|"bxAgents build"| B[".build/app/<br/>a plain ColdBox application"]
     B -->|"bxAgents serve / chat / invoke"| C["running agent"]
     B -->|"bxAgents package"| D["dist/name-version.bxa"]
     D -->|"bxAgents deploy"| E["a real target"]
@@ -31,18 +31,22 @@ flowchart LR
 
 ## Folders are the API
 
-`Agent.bx` and `instructions.md` are the only files that matter to get started. Every
+`Agent.yaml` and `instructions.md` are the only files that matter to get started. Every
 other convention folder - `tools/`, `skills/`, `subagents/`, `models/`, `gateways/`,
 `schedules/`, `mcp/`, `interceptors/`, `modules/` - is optional and **only shapes the
 generated output if it exists and has content in it**. You add conventions as you
 actually need them, not up front.
 
-## Agent.bx IS the agent
+## Agent.yaml defines the agent
 
-`Agent.bx` extends BX AI's own `AiAgent` directly - the build **instantiates your
-class** rather than rebuilding one from a config struct, so what you write is what
-runs. An IDE can introspect it like any other BoxLang class. You'll write your first
-one in [Lesson 5](05-agent-bx.md).
+`Agent.yaml` is plain settings - a name, a model, and any optional extras - and the
+build turns it into a real BX AI agent. No code is needed for most agents. You'll write
+your first one in [Lesson 5](05-agent-bx.md).
+
+When the definition itself needs code (hooks, dynamic instructions, tools registered in
+code), there is an advanced option: a class-based `Agent.bx` that extends BX AI's own
+`AiAgent`, which the build **instantiates** as-is. Lesson 5 ends with when to reach for
+it.
 
 ## What `build` actually produces
 
@@ -53,7 +57,7 @@ on the right:
 ::: column
 ```
 your-agent/
-├── Agent.bx
+├── Agent.yaml
 ├── instructions.md
 ├── tools/
 ├── skills/

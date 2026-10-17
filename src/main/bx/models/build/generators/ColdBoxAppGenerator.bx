@@ -966,15 +966,22 @@ class {
 			)
 		}
 
+		// An instructions.md beside the agent wins; `instructions:` inline in an
+		// Agent.yaml is the fallback, so the file stays the more deliberate choice.
 		var instructionsPath = arguments.nodePath & "/instructions.md"
-		if ( !fileExists( instructionsPath ) ) {
+		var inlineInstructions = arguments.resolvedConfig.instructions ?: ""
+		var instructionsExpression = ""
+		if ( fileExists( instructionsPath ) ) {
+			var instructionsRelative = copyNodeInstructions( instructionsPath, arguments.appDir, arguments.nodeRelativePath )
+			instructionsExpression = 'fileRead( resolveAppPath( "#bxLiteral( instructionsRelative )#", "#bxLiteral( instructionsPath )#" ) )'
+		} else if ( isSimpleValue( inlineInstructions ) && len( trim( inlineInstructions ) ) ) {
+			instructionsExpression = '"#bxLiteral( inlineInstructions )#"'
+		} else {
 			throw(
 				type    = "BxAgents.MissingInstructions",
-				message = "No instructions.md found at [#instructionsPath#]"
+				message = "No instructions.md found at [#instructionsPath#] (and no `instructions:` in the agent's Agent.yaml)"
 			)
 		}
-
-		var instructionsRelative = copyNodeInstructions( instructionsPath, arguments.appDir, arguments.nodeRelativePath )
 
 		var modelSlug = arguments.resolvedConfig.model ?: ""
 		if ( !len( modelSlug ) ) {
@@ -998,7 +1005,7 @@ class {
 		lines.append( "var #arguments.varName# = aiAgent(" )
 		lines.append( '	name : "#bxLiteral( arguments.name )#",' )
 		lines.append( '	description : "#bxLiteral( description )#",' )
-		lines.append( '	instructions : fileRead( resolveAppPath( "#bxLiteral( instructionsRelative )#", "#bxLiteral( instructionsPath )#" ) ),' )
+		lines.append( '	instructions : #instructionsExpression#,' )
 		lines.append( '	model : #modelExpression#,' )
 		lines.append( "	tools : aiToolRegistry().getAll()," )
 		if ( len( memoryExpression ) ) {

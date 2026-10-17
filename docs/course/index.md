@@ -10,9 +10,9 @@ toc: false
 # Introduction to BxAgents
 
 Twenty lessons, start to finish: install the CLI, scaffold a project, understand
-`Agent.bx`, wire up tools, skills and subagents, expose your agent over HTTP and to
+`Agent.yaml`, wire up tools, skills and subagents, expose your agent over HTTP and to
 chat platforms, ship the generated web UI, schedule background work, test it for real,
-and package + deploy it. Every lesson links back to the full [Conventions](../conventions/agent-bx.md)
+and package + deploy it. Every lesson links back to the full [Conventions](../conventions/agent-yaml.md)
 reference for the deep dive - this course is the guided path through it.
 
 !!! info

@@ -8,11 +8,11 @@ tags: [course, conventions]
 
 # instructions.md y el system prompt
 
-`instructions.md` es **opcional** - `bxAgents new` crea uno vacío para que lo rellenes,
+`instructions.md` es **opcional** - `bxAgents new` crea uno inicial para que lo edites,
 pero tienes dos opciones igual de válidas sobre dónde vive el system prompt de tu agente:
 
-1. Definir `instructions` directamente en el `super.init()` de `Agent.bx`.
-2. Colocar un archivo `instructions.md` junto a `Agent.bx` y dejar que el build lo conecte.
+1. Definir `instructions` en línea en `Agent.yaml`.
+2. Colocar un archivo `instructions.md` junto a `Agent.yaml` y dejar que el build lo conecte.
 
 ## Dejar que gane el archivo
 
@@ -22,7 +22,8 @@ Si `instructions.md` existe, el build emite:
 withInstructions( fileRead( "instructions.md" ) )
 ```
 
-lo que sobrescribe lo que hubiera fijado la propia clase. En la práctica este es el patrón
+lo que gana frente a un `instructions` en línea en `Agent.yaml` (o a lo que hubiera fijado
+una clase). En la práctica este es el patrón
 más habitual - mantiene el prompt como texto plano que puedes editar sin tocar código
 BoxLang, y es fácil de revisar en un pull request.
 
@@ -32,33 +33,28 @@ You are a helpful assistant for a small hardware store. Be concise. If a custome
 asks about a product you don't have information on, say so rather than guessing.
 ```
 
-## Definirlo en la clase
+## Definirlo en línea
 
-```javascript
-class extends="bxModules.bxai.models.runnables.AiAgent" {
-
-	function init() {
-		super.init(
-			name        : "my-agent",
-			instructions: "You are a helpful assistant.",
-			model       : aiModel( provider: "openai", params: { model: "gpt-5" } )
-		)
-		return this
-	}
-
-}
+```yaml
+name: my-agent
+model: openai/gpt-5
+instructions: |
+  You are a helpful assistant.
+  Keep answers short.
 ```
 
-Haz esto cuando el prompt se genere o se construya con plantillas en código, o cuando
-prefieras tener todo lo relativo al agente en un solo archivo. Si `instructions.md` no
-existe (o está vacío), las instrucciones de la propia clase se mantienen intactas.
+Haz esto para un prompt corto, o cuando prefieras tener todo lo relativo al agente en un
+solo archivo. Si existen ambos, gana `instructions.md`; si no existe ninguno, el build
+falla y lo indica. Un prompt que deba generarse o construirse con plantillas en código
+pertenece al `Agent.bx` avanzado basado en clase (consulta el final de la
+[Lección 5](05-agent-bx.md)).
 
 ## ¿Cuál deberías elegir?
 
 Empieza con `instructions.md` - es lo que crea `bxAgents new`, es el modelo mental más
 simple ("el system prompt es este archivo"), y encaja bien con el resto de este curso, que
-asume prompts en texto plano en todo momento. Recurre a definirlo en la clase solo cuando
-tengas una razón concreta (plantillas, prompts específicos por entorno ensamblados a partir
+asume prompts en texto plano en todo momento. Recurre a la clave `instructions` en línea
+solo para un prompt corto, y al código solo cuando tengas una razón concreta (plantillas, prompts específicos por entorno ensamblados a partir
 de piezas más pequeñas, etc.).
 
 ## Pruébalo

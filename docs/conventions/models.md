@@ -1,14 +1,14 @@
 ---
 title: models/
 icon: phosphor-duotone:brain
-summary: Reusable named model configurations, referenced from Agent.bx by name.
-description: Reusable named model configurations, referenced from Agent.bx by name.
+summary: Reusable named model configurations, referenced from Agent.yaml by name.
+description: Reusable named model configurations, referenced from Agent.yaml by name.
 tags: [conventions, models]
 ---
 
 # models/
 
-`models/` lets you define reusable, named model configurations as one `.bx` or `.json` file each, referenced from `Agent.bx`'s `model` field by name (with no `/`, so it isn't mistaken for a `provider/model` slug):
+`models/` lets you define reusable, named model configurations as one `.bx` or `.json` file each, referenced from `Agent.yaml`'s `model` field by name (with no `/`, so it isn't mistaken for a `provider/model` slug):
 
 ```javascript
 // models/summarizer.bx
@@ -24,23 +24,10 @@ class {
 }
 ```
 
-```javascript
-// Agent.bx
-class extends="bxModules.bxai.models.runnables.AiAgent" {
-
-	function init() {
-		super.init( name: "my-agent", model: aiModel( provider: "openai", params: { model: "gpt-5-mini" } ) )
-		return this
-	}
-
-	// Overrides the class's own model above - resolves against models/summarizer.bx
-	function configure() {
-		return {
-			model : "summarizer"
-		};
-	}
-
-}
+```yaml
+# Agent.yaml - resolves against models/summarizer.bx
+name: my-agent
+model: summarizer
 ```
 
 ## Discovery rules
@@ -52,4 +39,4 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 
 ## Validation
 
-If `Agent.bx`'s `model` has no `/`, it must be **either** a known core provider name (see [Agent.bx](agent-bx.md#the-model-slug)) **or** match a `models/` entry's name - anything else fails validation with a clear "no provider and does not match any models/ entry" error.
+If the agent's `model` has no `/`, it must be **either** a known core provider name (see [the model slug](agent-bx.md#the-model-slug)) **or** match a `models/` entry's name - anything else fails validation with a clear "no provider and does not match any models/ entry" error.

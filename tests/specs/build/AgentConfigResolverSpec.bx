@@ -16,6 +16,32 @@ class extends="testbox.system.BaseSpec" {
 				expect( config.environment ).toBe( "development" );
 			} );
 
+			it( "resolves an Agent.yaml the same way as a descriptor Agent.bx", function() {
+				var config = resolver.resolve( projectRoot = fixtures & "/yaml-minimal" );
+
+				expect( config.name ).toBe( "yaml-agent" );
+				expect( config.model ).toBe( "openai/gpt-5" );
+				expect( config.description ).toBe( "A test agent defined in YAML" );
+				expect( config.environment ).toBe( "development" );
+				expect( config.classBasedAgent ).toBeFalse();
+			} );
+
+			it( "applies the matching environments: block of an Agent.yaml", function() {
+				var dev = resolver.resolve( projectRoot = fixtures & "/yaml-environments" );
+				var prod = resolver.resolve( projectRoot = fixtures & "/yaml-environments", cliEnvironment = "production" );
+
+				expect( dev.model ).toBe( "openai/gpt-5" );
+				expect( prod.model ).toBe( "openai/gpt-5-mini" );
+				expect( prod.environment ).toBe( "production" );
+				expect( prod.keyExists( "environments" ) ).toBeFalse();
+			} );
+
+			it( "refuses a folder with both an Agent.yaml and an Agent.bx", function() {
+				expect( function() {
+					resolver.resolve( projectRoot = fixtures & "/yaml-and-bx" );
+				} ).toThrow( type = "BxAgents.AmbiguousAgentDefinition" );
+			} );
+
 			it( "carries Agent.bx's security {} block through unchanged, including under an environment override", function() {
 				var config = resolver.resolve( projectRoot = fixtures & "/with-security" );
 				expect( config.security.inputSanitizer ).toBeTrue();

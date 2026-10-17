@@ -16,27 +16,18 @@ This is the one example in this guide series with real screenshots, because it's
 
 ```
 webui-agent/
-├── Agent.bx
+├── Agent.yaml
 ├── instructions.md
 └── gateways/
     └── chat.bx
 ```
 
-`Agent.bx` is the same shape as every other example:
+`Agent.yaml` is the same shape as every other example:
 
-```javascript
-class extends="bxModules.bxai.models.runnables.AiAgent" {
-
-	function init() {
-		super.init(
-			name        : "webui-agent",
-			description : "An agent reachable through the v1 web chat UI via gateways/.",
-			model       : aiModel( provider: "mock", params: { model: "mock-model" } )
-		)
-		return this
-	}
-
-}
+```yaml
+name: webui-agent
+description: An agent reachable through the v1 web chat UI via gateways/.
+model: mock/mock-model
 ```
 
 ## The gateway: branding and theme, all in config

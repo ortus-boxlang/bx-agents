@@ -18,7 +18,7 @@ runnable ColdBox application out of it.
 
 ```
 my-agent/
-├── Agent.bx           # name, model, description
+├── Agent.yaml         # name, model, description
 ├── instructions.md    # the system prompt
 ├── tools/             # @AITool functions
 ├── skills/            # SKILL.md capabilities
@@ -31,7 +31,7 @@ my-agent/
 └── modules/            # module dependencies
 ```
 
-Every folder above is optional except `Agent.bx`. Add the ones your agent actually
+Every folder above is optional except `Agent.yaml`. Add the ones your agent actually
 needs; the rest can stay empty or simply not exist.
 
 ## How this course is organized
@@ -39,7 +39,7 @@ needs; the rest can stay empty or simply not exist.
 The 20 lessons follow the order you'd naturally build a real project in:
 
 1. **Lessons 1-4** - orientation, install, and your first scaffolded project.
-2. **Lessons 5-8** - the required pieces: `Agent.bx`, instructions, building, and
+2. **Lessons 5-8** - the required pieces: `Agent.yaml`, instructions, building, and
    running the agent from the terminal.
 3. **Lessons 9-12** - giving your agent abilities: tools, skills, subagents, and
    named models.
@@ -57,7 +57,7 @@ The 20 lessons follow the order you'd naturally build a real project in:
 - No prior BoxLang or ColdBox experience required - Lesson 3 installs everything you
   need.
 
-Every lesson links back to the full [Conventions](../conventions/agent-bx.md) reference
+Every lesson links back to the full [Conventions](../conventions/agent-yaml.md) reference
 for anything this course only summarizes - the course is the guided path, the
 Conventions section is the exhaustive reference you'll come back to later.
 

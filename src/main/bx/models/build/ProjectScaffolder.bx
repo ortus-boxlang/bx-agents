@@ -67,15 +67,16 @@ class {
 	}
 
 	/**
-	 * @targetDir Absolute path to the new project directory (created if missing; refuses to run if it already contains an Agent.bx)
+	 * @targetDir Absolute path to the new project directory (created if missing; refuses to run if it already contains an Agent.yaml or Agent.bx)
 	 * @name The agent's name
 	 * @model The agent's provider/model slug, e.g. "openai/gpt-5"
 	 * @description Optional agent description
 	 * @template One of TEMPLATES - "minimal" (the bare skeleton) unless the caller asks for one of the other 7 starters
+	 * @classBased False (the default) writes an Agent.yaml; true writes a class-based Agent.bx instead, for projects that need code in their agent definition (hooks, dynamic instructions, tools registered in code). Applies to every subagent a template scaffolds too.
 	 *
-	 * @return { projectRoot, agentBx, instructions, testsBoxJson, agentSpec, template }
+	 * @return { projectRoot, agentDefinition, instructions, testsBoxJson, agentSpec, template }
 	 */
-	struct function scaffold( required string targetDir, required string name, required string model, string description = "", string template = "minimal" ) {
+	struct function scaffold( required string targetDir, required string name, required string model, string description = "", string template = "minimal", boolean classBased = false ) {
 		if ( !static.TEMPLATES.contains( arguments.template ) ) {
 			throw(
 				type    = "BxAgents.UnknownTemplate",
@@ -85,23 +86,28 @@ class {
 
 		var dir = arguments.targetDir.reReplace( "[\/]+$", "" )
 
-		if ( fileExists( dir & "/Agent.bx" ) ) {
+		if ( new "models.build.AgentDefinitionLocator@bxagents"().exists( dir ) ) {
 			throw(
 				type    = "BxAgents.ProjectAlreadyExists",
-				message = "[#dir#] already contains an Agent.bx - refusing to overwrite an existing project"
+				message = "[#dir#] already contains an Agent.yaml or Agent.bx - refusing to overwrite an existing project"
 			)
 		}
 
 		directoryCreate( path = dir, createPath = true, ignoreExists = true )
 
-		var agentBxPath = dir & "/Agent.bx"
+		var agentDefinitionPath = dir & ( arguments.classBased ? "/Agent.bx" : "/Agent.yaml" )
 		var instructionsPath = dir & "/instructions.md"
 
-		// "multi-agent" is the one template that changes the ROOT Agent.bx
-		// itself (a configure() declaring subAgents), rather than only adding
-		// files alongside it - every other template leaves it untouched.
+		// "multi-agent" is the one template that changes the ROOT definition
+		// itself (a subAgents list), rather than only adding files alongside
+		// it - every other template leaves it untouched.
 		var subAgentNames = arguments.template == "multi-agent" ? static.MULTI_AGENT_SUBAGENT_NAMES : []
-		fileWrite( agentBxPath, renderAgentBx( arguments.name, arguments.model, arguments.description, subAgentNames ) )
+		fileWrite(
+			agentDefinitionPath,
+			arguments.classBased
+				? renderAgentBx( arguments.name, arguments.model, arguments.description, subAgentNames )
+				: renderAgentYaml( arguments.name, arguments.model, arguments.description, subAgentNames )
+		)
 		fileWrite( instructionsPath, renderInstructions( arguments.name ) )
 
 		var conventionFolders = [ "tools", "skills", "subagents", "gateways", "schedules", "mcp", "interceptors", "models", "modules" ]
@@ -124,17 +130,17 @@ class {
 			fileWrite( gitignorePath, renderGitignore() )
 		}
 
-		applyTemplate( arguments.template, dir, arguments.name )
+		applyTemplate( arguments.template, dir, arguments.name, arguments.classBased )
 
 		return {
-			projectRoot  : dir,
-			agentBx      : agentBxPath,
-			instructions : instructionsPath,
-			testsBoxJson : testsBoxJsonPath,
-			agentSpec    : agentSpecPath,
-			env          : envPath,
-			gitignore    : gitignorePath,
-			template     : arguments.template
+			projectRoot     : dir,
+			agentDefinition : agentDefinitionPath,
+			instructions    : instructionsPath,
+			testsBoxJson    : testsBoxJsonPath,
+			agentSpec       : agentSpecPath,
+			env             : envPath,
+			gitignore       : gitignorePath,
+			template        : arguments.template
 		}
 	}
 
@@ -147,9 +153,10 @@ class {
 	 *
 	 * @template One of TEMPLATES
 	 * @dir Absolute path to the project root (trailing slash already stripped)
+	 * @classBased Whether the project is class-based, so a template that scaffolds more agents writes the same kind of definition
 	 * @name The agent's name - reused so a template's own config (e.g. a Scheduler.bx's getInstance() call) references the correct WireBox binding key
 	 */
-	private void function applyTemplate( required string template, required string dir, required string name ) {
+	private void function applyTemplate( required string template, required string dir, required string name, boolean classBased = false ) {
 		switch ( arguments.template ) {
 			case "minimal":
 				return;
@@ -179,7 +186,11 @@ class {
 				for ( var subAgentName in static.MULTI_AGENT_SUBAGENT_NAMES ) {
 					var subAgentDir = arguments.dir & "/subagents/" & subAgentName
 					directoryCreate( path = subAgentDir, createPath = true, ignoreExists = true )
-					fileWrite( subAgentDir & "/Agent.bx", renderSubagentBx( subAgentName ) )
+					if ( arguments.classBased ) {
+						fileWrite( subAgentDir & "/Agent.bx", renderSubagentBx( subAgentName ) )
+					} else {
+						fileWrite( subAgentDir & "/Agent.yaml", renderSubagentYaml( subAgentName ) )
+					}
 					fileWrite( subAgentDir & "/instructions.md", renderSubagentInstructions( subAgentName ) )
 				}
 				return;
@@ -192,11 +203,11 @@ class {
 	 * Name/description/model are set directly in `init()`'s `super.init(...)`
 	 * call; `instructions.md` (scaffolded alongside this file) is picked up
 	 * automatically at build time via `withInstructions()` - nothing here needs
-	 * to reference it. This is the only shape BX Agents scaffolds: inheriting
-	 * from `AiAgent` and adding whatever a project needs directly on the class
-	 * (private helpers, overridden methods, tools registered in code) is the
-	 * simpler default, and the class is real BoxLang the IDE can introspect,
-	 * rather than a config struct describing one.
+	 * to reference it. This is the ADVANCED shape, scaffolded with `--class`:
+	 * inheriting from `AiAgent` lets a project add whatever it needs directly on
+	 * the class (private helpers, overridden methods, tools registered in code),
+	 * and the class is real BoxLang the IDE can introspect. Most agents need
+	 * none of that and get renderAgentYaml() instead.
 	 *
 	 * @name The agent's name
 	 * @model The agent's provider/model slug
@@ -316,6 +327,67 @@ class {
 			""
 		]
 		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Renders the default Agent.yaml: the same settings an Agent.bx's
+	 * `configure()` returns, as plain YAML. The `environments.test` block is the
+	 * YAML spelling of the `test()` override the class form carries, so a fresh
+	 * project's `bxAgents test` needs no API key or network access.
+	 *
+	 * @name The agent's name
+	 * @model The agent's provider/model slug
+	 * @description Optional agent description; left out of the file when blank
+	 * @subAgents `subagents/` folder names to declare (the "multi-agent" template only)
+	 *
+	 * @return The rendered Agent.yaml source
+	 */
+	private string function renderAgentYaml( required string name, required string model, required string description, array subAgents = [] ) {
+		var lines = [
+			"## Your agent. Most agents need nothing more than this file and instructions.md.",
+			"## For code in the definition (hooks, dynamic instructions), scaffold with --class.",
+			"name: #yamlScalar( arguments.name )#"
+		]
+
+		if ( len( trim( arguments.description ) ) ) {
+			lines.append( "description: #yamlScalar( arguments.description )#" )
+		}
+
+		lines.append( "model: #yamlScalar( arguments.model )#" )
+
+		if ( arguments.subAgents.len() ) {
+			lines.append( "subAgents: [ #arguments.subAgents.map( n => yamlScalar( n ) ).toList( ", " )# ]" )
+		}
+
+		lines.append( "" )
+		lines.append( "environments:" )
+		lines.append( "  ## `bxAgents test` builds against this override by default (see" )
+		lines.append( "  ## BaseAgentSpec.bx) so a fresh project's tests need no API key or" )
+		lines.append( "  ## network access - swap the model to test against a real provider." )
+		lines.append( "  test:" )
+		lines.append( "    model: mock/mock-model" )
+		lines.append( "" )
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * A YAML scalar for a value, double quoted unless it is plainly safe bare.
+	 * Bare is kept for the common case (names, slugs) so the file reads well;
+	 * anything YAML could read as something else (a number, true, null, a value
+	 * with a colon or a leading symbol) is quoted.
+	 *
+	 * @value The text to write
+	 *
+	 * @return The scalar, ready to follow a `key: `
+	 */
+	private string function yamlScalar( required string value ) {
+		var plain = arguments.value.reFind( "^[A-Za-z][A-Za-z0-9 ._/@-]*$" ) > 0
+		var reserved = [ "true", "false", "yes", "no", "on", "off", "null", "y", "n" ].contains( arguments.value.lcase() )
+		if ( plain && !reserved && arguments.value == trim( arguments.value ) ) {
+			return arguments.value
+		}
+		// BoxLang string literals have no backslash escapes, so "\" is ONE backslash here
+		return '"' & arguments.value.replace( "\", "\\", "all" ).replace( '"', '\"', "all" ).replace( char( 10 ), "\n", "all" ).replace( char( 13 ), "", "all" ) & '"'
 	}
 
 	/**
@@ -499,6 +571,21 @@ class {
 			""
 		]
 		fileWrite( arguments.envPath, fileRead( arguments.envPath ) & lines.toList( char( 10 ) ) )
+	}
+
+	/**
+	 * @name The subagent's own name
+	 *
+	 * @return The rendered subagents/<name>/Agent.yaml source
+	 */
+	private string function renderSubagentYaml( required string name ) {
+		var lines = [
+			"name: #yamlScalar( arguments.name )#",
+			"description: #yamlScalar( subagentDescription( arguments.name ) )#",
+			"model: mock/mock-model",
+			""
+		]
+		return lines.toList( char( 10 ) )
 	}
 
 	/**

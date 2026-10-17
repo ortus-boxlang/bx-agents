@@ -114,14 +114,14 @@ class {
 		// "@bxagents" suffix, not a bare "AgentConfigResolver" reference - see
 		// BuildPipeline.bx's init() docblock for why.
 		var resolver = new "models.build.AgentConfigResolver@bxagents"()
+		var locator = new "models.build.AgentDefinitionLocator@bxagents"()
 		var coldboxAppGenerator = new "models.build.generators.ColdBoxAppGenerator@bxagents"()
 		var graph = {}
 		var nameOwners = {}
 
 		for ( var subagent in subagents ) {
-			var agentBxPath = subagent.path & "/Agent.bx"
-			if ( !fileExists( agentBxPath ) ) {
-				arguments.errors.append( "Subagent [#subagent.name#] is missing its Agent.bx descriptor" )
+			if ( !locator.exists( subagent.path ) ) {
+				arguments.errors.append( "Subagent [#subagent.name#] is missing its #locator.expected()# descriptor" )
 				graph[ subagent.name ] = []
 				continue
 			}
@@ -138,9 +138,8 @@ class {
 		}
 
 		// Root-level subAgents declared directly on the project's own Agent.bx
-		var rootProjectAgentBx = arguments.projectRoot & "/Agent.bx"
 		var rootSubAgents = []
-		if ( fileExists( rootProjectAgentBx ) ) {
+		if ( locator.exists( arguments.projectRoot ) ) {
 			try {
 				var rootConfig = resolver.resolve( projectRoot = arguments.projectRoot )
 				rootSubAgents = rootConfig.subAgents ?: []

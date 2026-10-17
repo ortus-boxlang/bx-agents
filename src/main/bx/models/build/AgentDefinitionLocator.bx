@@ -1,0 +1,92 @@
+/**
+ * Finds a folder's agent definition: an `Agent.yaml` (or `Agent.yml`), the default,
+ * or an `Agent.bx`, the advanced option. Every place that used to look for an
+ * `Agent.bx` asks this class instead, so the rule lives in one place:
+ *
+ *   - exactly one definition file is fine;
+ *   - none means the folder is not an agent;
+ *   - more than one is an error, because two definitions of one agent leave it
+ *     ambiguous which settings win. The message says which file to delete.
+ */
+class {
+
+	/**
+	 * The names a YAML definition may use.
+	 */
+	variables.YAML_NAMES = [ "Agent.yaml", "Agent.yml" ]
+
+	/**
+	 * The name of the class definition.
+	 */
+	variables.CLASS_NAME = "Agent.bx"
+
+	/**
+	 * Does the folder hold an agent definition of either kind? Never throws, so
+	 * "is this an agent folder at all" questions (clean, doctor) work even on a
+	 * folder with an ambiguous definition.
+	 *
+	 * @folder Absolute path to the folder
+	 *
+	 * @return True when at least one definition file is present
+	 */
+	boolean function exists( required string folder ) {
+		return findFiles( arguments.folder ).len() > 0
+	}
+
+	/**
+	 * Locate the single definition in a folder.
+	 *
+	 * @folder Absolute path to the folder
+	 *
+	 * @return { kind : "yaml"|"bx"|"none", path : absolute path of the file, or "" }
+	 */
+	struct function locate( required string folder ) {
+		var files = findFiles( arguments.folder )
+
+		if ( files.len() > 1 ) {
+			var names = files.map( path => listLast( path, "/" ) )
+			throw(
+				type    = "BxAgents.AmbiguousAgentDefinition",
+				message = "[#arguments.folder#] has more than one agent definition (#names.toList( ', ' )#). Keep one: delete the others, or move their settings into it."
+			)
+		}
+
+		if ( files.len() == 0 ) {
+			return { "kind" : "none", "path" : "" }
+		}
+
+		return {
+			"kind" : listLast( files[ 1 ], "/" ) == variables.CLASS_NAME ? "bx" : "yaml",
+			"path" : files[ 1 ]
+		}
+	}
+
+	/**
+	 * The file names to tell a person to look for, for error messages.
+	 *
+	 * @return "Agent.yaml or Agent.bx"
+	 */
+	string function expected() {
+		return "Agent.yaml or Agent.bx"
+	}
+
+	/**
+	 * @folder Absolute path to the folder
+	 *
+	 * @return The absolute paths of every definition file in the folder
+	 */
+	private array function findFiles( required string folder ) {
+		var root = arguments.folder.reReplace( "[\\/]+$", "" )
+		var found = []
+		for ( var name in variables.YAML_NAMES ) {
+			if ( fileExists( root & "/" & name ) ) {
+				found.append( root & "/" & name )
+			}
+		}
+		if ( fileExists( root & "/" & variables.CLASS_NAME ) ) {
+			found.append( root & "/" & variables.CLASS_NAME )
+		}
+		return found
+	}
+
+}

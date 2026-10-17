@@ -51,15 +51,13 @@ clobbers a real `build`/`serve`/`package` cycle. The built agent is exposed as `
 
 ## Testing needs no API key
 
-By default, `bxAgents test` builds your agent using an `Agent.bx` `test()` environment
+By default, `bxAgents test` builds your agent using an `Agent.yaml` `test` environment
 override, scaffolded automatically by `new`:
 
-```javascript
-function test() {
-	return {
-		model : "mock/mock-model"
-	};
-}
+```yaml
+environments:
+  test:
+    model: mock/mock-model
 ```
 
 This is the same `mock` provider you met in [Lesson 5](05-agent-bx.md) - no network

@@ -14,27 +14,18 @@ tags: [guides, examples, schedules]
 
 ```
 scheduled-agent/
-├── Agent.bx
+├── Agent.yaml
 ├── instructions.md
 └── schedules/
     └── Scheduler.bx
 ```
 
-`Agent.bx` tiene la misma forma que en todos los demás ejemplos - no hace falta nada especial en el lado del agente para que lo dirija una programación:
+`Agent.yaml` tiene la misma forma que en todos los demás ejemplos - no hace falta nada especial en el lado del agente para que lo dirija una programación:
 
-```javascript
-class extends="bxModules.bxai.models.runnables.AiAgent" {
-
-	function init() {
-		super.init(
-			name        : "scheduled-agent",
-			description : "An agent that wakes up on a cron schedule via schedules/.",
-			model       : aiModel( provider: "mock", params: { model: "mock-model" } )
-		)
-		return this
-	}
-
-}
+```yaml
+name: scheduled-agent
+description: An agent that wakes up on a cron schedule via schedules/.
+model: mock/mock-model
 ```
 
 ## El scheduler
@@ -56,7 +47,7 @@ class extends="coldbox.system.web.tasks.ColdBoxScheduler" {
 
 Como `build` copia este archivo a la aplicación generada esencialmente tal cual (consulta [`schedules/`](../conventions/schedules.md)), tienes disponible el DSL completo de scheduler de ColdBox - `everyDayAt()`, `everyMinute()`, `withNoOverlaps()`, `onFailure()`, y todo lo demás que soporte el propio scheduler de ColdBox, no un subconjunto reimplementado por BxAgents.
 
-`getInstance( "scheduled-agent" )` resuelve por el `name` declarado en el propio `Agent.bx` de este proyecto - cada agente del árbol de un proyecto queda registrado con su propio nombre en WireBox, no solo la raíz, y eso es lo que hace que esta línea funcione sin ningún cableado adicional.
+`getInstance( "scheduled-agent" )` resuelve por el `name` declarado en el propio `Agent.yaml` de este proyecto - cada agente del árbol de un proyecto queda registrado con su propio nombre en WireBox, no solo la raíz, y eso es lo que hace que esta línea funcione sin ningún cableado adicional.
 
 ## Instrucciones para el prompt programado
 

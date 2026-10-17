@@ -1,0 +1,212 @@
+/**
+ * Runs the REAL AgentYamlLoader against the real bx-yaml module. It needs bx-yaml
+ * 1.1.0 or later: 1.0.0 wrapped every YAML list in an extra array, which would
+ * show up here as `subAgents` having one item.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "AgentYamlLoader", function() {
+
+			beforeEach( function() {
+				variables.loader = new bxagents.models.build.AgentYamlLoader();
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			/**
+			 * Writes an Agent.yaml with the given lines into a fresh temp folder.
+			 *
+			 * @lines The file's lines
+			 * @fileName The file name, "Agent.yaml" unless told otherwise
+			 *
+			 * @return The absolute path of the file written
+			 */
+			private function writeYaml( required array lines, string fileName = "Agent.yaml" ) {
+				var dir = createTempDirectory( prefix = "bxagents-yaml-" );
+				tempDirs.append( dir );
+				var path = dir & "/" & arguments.fileName;
+				fileWrite( path, arguments.lines.toList( char( 10 ) ) );
+				return path;
+			}
+
+			it( "reads the same keys configure() returns", function() {
+				var path = writeYaml( [
+					"name: support",
+					"description: Answers order questions",
+					"model: openai/gpt-5",
+					"instructions: You help customers.",
+					"subAgents: [ researcher, writer ]",
+					"memory: cache",
+					"checkpointer:",
+					"  type: file",
+					"gatewaySession:",
+					"  policy: queue",
+					"  maxQueueDepth: 10"
+				] );
+
+				var result = loader.load( path );
+
+				expect( result.config.name ).toBe( "support" );
+				expect( result.config.model ).toBe( "openai/gpt-5" );
+				expect( result.config.instructions ).toBe( "You help customers." );
+				expect( result.config.memory ).toBe( "cache" );
+				expect( result.config.checkpointer.type ).toBe( "file" );
+				expect( result.config.gatewaySession.maxQueueDepth ).toBe( 10 );
+				expect( result.environments ).toBeEmpty();
+			} );
+
+			it( "reads lists as flat arrays", function() {
+				var path = writeYaml( [
+					"name: lead",
+					"model: mock/mock-model",
+					"subAgents: [ researcher, writer ]",
+					"mcpServers:",
+					"  - https://example.com/mcp",
+					"  - url: https://other.com/mcp",
+					"    name: other"
+				] );
+
+				var config = loader.load( path ).config;
+
+				expect( config.subAgents ).toHaveLength( 2 );
+				expect( config.subAgents[ 2 ] ).toBe( "writer" );
+				expect( config.mcpServers ).toHaveLength( 2 );
+				expect( config.mcpServers[ 2 ].name ).toBe( "other" );
+			} );
+
+			it( "reads memory as a mapping too", function() {
+				var path = writeYaml( [
+					"name: a",
+					"model: mock/mock-model",
+					"memory:",
+					"  type: cache",
+					"  maxMessages: 50"
+				] );
+
+				expect( loader.load( path ).config.memory.maxMessages ).toBe( 50 );
+			} );
+
+			it( "returns environments separately from the config", function() {
+				var path = writeYaml( [
+					"name: support",
+					"model: openai/gpt-5",
+					"environments:",
+					"  production:",
+					"    model: openai/gpt-5-mini",
+					"  staging:",
+					"    description: Staging copy"
+				] );
+
+				var result = loader.load( path );
+
+				expect( result.config.keyExists( "environments" ) ).toBeFalse();
+				expect( result.environments.production.model ).toBe( "openai/gpt-5-mini" );
+				expect( result.environments.staging.description ).toBe( "Staging copy" );
+			} );
+
+			it( "rejects an unknown setting and names the valid ones", function() {
+				var path = writeYaml( [ "name: a", "modle: openai/gpt-5" ] );
+
+				try {
+					loader.load( path );
+					fail( "an unknown key should have been rejected" );
+				} catch ( BxAgents.InvalidAgentYaml e ) {
+					expect( e.message ).toInclude( "unknown setting [modle]" );
+					expect( e.message ).toInclude( "Valid settings:" );
+				}
+			} );
+
+			it( "rejects settings that arrive in later phases instead of ignoring them", function() {
+				var path = writeYaml( [ "name: a", "model: mock/mock-model", "tools: [ now@bxai ]" ] );
+
+				expect( function() {
+					loader.load( path );
+				} ).toThrow( type = "BxAgents.InvalidAgentYaml", regex = "unknown setting \[tools\]" );
+			} );
+
+			it( "rejects an unknown setting inside an environment override", function() {
+				var path = writeYaml( [
+					"name: a",
+					"environments:",
+					"  production:",
+					"    modle: x"
+				] );
+
+				expect( function() {
+					loader.load( path );
+				} ).toThrow( type = "BxAgents.InvalidAgentYaml", regex = "environments\.production\.modle" );
+			} );
+
+			it( "rejects a nested environments key", function() {
+				var path = writeYaml( [
+					"name: a",
+					"environments:",
+					"  production:",
+					"    environments: {}"
+				] );
+
+				expect( function() {
+					loader.load( path );
+				} ).toThrow( type = "BxAgents.InvalidAgentYaml" );
+			} );
+
+			it( "rejects a value of the wrong type", function() {
+				expect( function() {
+					loader.load( writeYaml( [ "name: a", "subAgents: researcher" ] ) );
+				} ).toThrow( type = "BxAgents.InvalidAgentYaml", regex = "\[subAgents\] must be a list" );
+
+				expect( function() {
+					loader.load( writeYaml( [ "name: a", "security: yes" ] ) );
+				} ).toThrow( type = "BxAgents.InvalidAgentYaml", regex = "\[security\] must be a mapping" );
+
+				expect( function() {
+					loader.load( writeYaml( [ "name: a", "model: [ openai, gpt-5 ]" ] ) );
+				} ).toThrow( type = "BxAgents.InvalidAgentYaml", regex = "\[model\] must be text" );
+			} );
+
+			it( "rejects an empty value", function() {
+				expect( function() {
+					loader.load( writeYaml( [ "name: a", "model:" ] ) );
+				} ).toThrow( type = "BxAgents.InvalidAgentYaml", regex = "\[model\] is empty" );
+			} );
+
+			it( "rejects a file that is not a mapping", function() {
+				expect( function() {
+					loader.load( writeYaml( [ "- name: a" ] ) );
+				} ).toThrow( type = "BxAgents.InvalidAgentYaml", regex = "must be a mapping of settings" );
+			} );
+
+			it( "rejects malformed YAML and says where", function() {
+				var path = writeYaml( [ "name: [unclosed" ] );
+
+				expect( function() {
+					loader.load( path );
+				} ).toThrow( type = "BxAgents.InvalidAgentYaml", regex = "not valid YAML" );
+			} );
+
+			it( "rejects a global YAML tag instead of instantiating a Java class", function() {
+				var path = writeYaml( [ "name: !!java.io.File [ /tmp/x ]" ] );
+
+				expect( function() {
+					loader.load( path );
+				} ).toThrow( type = "BxAgents.InvalidAgentYaml" );
+			} );
+
+			it( "fails cleanly when the file does not exist", function() {
+				expect( function() {
+					loader.load( "/nope/Agent.yaml" );
+				} ).toThrow( type = "BxAgents.InvalidAgentYaml", regex = "does not exist" );
+			} );
+
+		} );
+	}
+
+}

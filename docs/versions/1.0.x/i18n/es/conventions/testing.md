@@ -49,16 +49,16 @@ class extends="bxModules.bxagents.models.testing.BaseAgentSpec" {
 
 ## Probando contra el proveedor mock
 
-Por defecto, `bxAgents test` construye tu agente usando el override de entorno `test()` de `Agent.bx` (generado automáticamente):
+Por defecto, `bxAgents test` construye tu agente usando el override de entorno `test` de `Agent.yaml` (generado automáticamente):
 
-```javascript
-// Agent.bx
-function test() {
-	return {
-		model : "mock/mock-model"
-	};
-}
+```yaml
+# Agent.yaml
+environments:
+  test:
+    model: mock/mock-model
 ```
+
+Un `Agent.bx` basado en clase expresa el mismo override como un método `test()` que devuelve `{ model : "mock/mock-model" }`.
 
 Esto significa que tus pruebas no necesitan **ni clave de API ni acceso a red** desde el principio - la misma convención de proveedor `mock` usada en toda la propia suite de pruebas de BxAgents. Edita este override si quieres que un spec se ejecute contra un proveedor real en su lugar (necesitarás una clave de API real disponible en el entorno que ejecuta las pruebas).
 

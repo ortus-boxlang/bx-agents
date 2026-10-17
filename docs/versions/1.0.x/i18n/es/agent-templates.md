@@ -16,11 +16,11 @@ bxAgents new my-agent --repo=owner/repo-name                     # clonar un rep
 bxAgents new my-agent --forgebox=some-package-slug               # instalar un paquete de ForgeBox
 ```
 
-Los tres caminos acaban en lo mismo: un directorio que contiene un `Agent.bx` en su raíz, listo para `bxAgents build`. Lo que cambia es de dónde viene ese `Agent.bx` (y todo lo que lo rodea).
+Los tres caminos acaban en lo mismo: un directorio que contiene una definición de agente (un [`Agent.yaml`](conventions/agent-yaml.md), o un `Agent.bx` basado en clase) en su raíz, listo para `bxAgents build`. Lo que cambia es de dónde viene esa definición (y todo lo que lo rodea).
 
 ## Las 8 plantillas `--template` integradas
 
-Todas las plantillas parten exactamente del mismo esqueleto base - `Agent.bx`, `instructions.md`, todas las [carpetas de convención](conventions/agent-bx.md) vacías, una carpeta [`tests/`](conventions/testing.md) lista para ejecutar, un `.env` y un `.gitignore` - y encima añaden una cantidad pequeña y concreta de contenido ya cableado. Ninguna necesita cambios en el validador: el contenido extra de cada una reutiliza una forma de configuración que [`ProjectValidator`](conventions/agent-bx.md) ya acepta, así que un proyecto creado con cualquier plantilla valida limpiamente por construcción.
+Todas las plantillas parten exactamente del mismo esqueleto base - `Agent.yaml`, `instructions.md`, todas las [carpetas de convención](conventions/agent-bx.md) vacías, una carpeta [`tests/`](conventions/testing.md) lista para ejecutar, un `.env` y un `.gitignore` - y encima añaden una cantidad pequeña y concreta de contenido ya cableado. Añade `--class` a cualquier `--template` para obtener la forma `Agent.bx` basada en clase de la definición raíz (y de los subagentes que genera la plantilla `multi-agent`) en lugar de `Agent.yaml`; todo lo demás queda igual. Ninguna necesita cambios en el validador: el contenido extra de cada una reutiliza una forma de configuración que [`ProjectValidator`](conventions/agent-bx.md) ya acepta, así que un proyecto creado con cualquier plantilla valida limpiamente por construcción.
 
 ::: cards
 ::: card title="minimal" icon="phosphor-duotone:seedling" href="#minimal"
@@ -45,7 +45,7 @@ Una tool de ejemplo expuesta como servidor MCP.
 Un Scheduler ColdBox real que llama al agente.
 :::
 ::: card title="multi-agent" icon="phosphor-duotone:users-three" href="#multi-agent"
-Dos subagentes, cableados mediante configure().
+Dos subagentes, cableados mediante subAgents.
 :::
 :::
 
@@ -216,28 +216,22 @@ class extends="coldbox.system.web.tasks.ColdBoxScheduler" {
 
 ### `multi-agent`
 
-La única plantilla que cambia el propio `Agent.bx` raíz, en lugar de limitarse a añadir archivos a su lado. Declara dos [subagentes](conventions/subagents.md) mediante una sobrescritura de `configure()`:
+La única plantilla que cambia el propio `Agent.yaml` raíz, en lugar de limitarse a añadir archivos a su lado. Declara dos [subagentes](conventions/subagents.md) con una lista `subAgents`:
 
-```javascript
-// Agent.bx
-class extends="bxModules.bxai.models.runnables.AiAgent" {
+```yaml
+# Agent.yaml
+name: my-agent
+description: A helpful assistant
+model: openai/gpt-5
 
-	function init() {
-		super.init(
-			name        : "my-agent",
-			description : "",
-			model       : aiModel( provider: "openai", params: { model: "gpt-5" } )
-		)
-		return this
-	}
+subAgents: [ researcher, writer ]
 
-	function configure() {
-		return {
-			subAgents : [ "researcher", "writer" ]
-		};
-	}
-
-}
+environments:
+  # `bxAgents test` builds against this override by default (see
+  # BaseAgentSpec.bx) so a fresh project's tests need no API key or
+  # network access - swap the model to test against a real provider.
+  test:
+    model: mock/mock-model
 ```
 
 ...y crea ambos como carpetas de subagente reales y funcionales:
@@ -245,32 +239,23 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 ```
 subagents/
 ├── researcher/
-│   ├── Agent.bx
+│   ├── Agent.yaml
 │   └── instructions.md
 └── writer/
-    ├── Agent.bx
+    ├── Agent.yaml
     └── instructions.md
 ```
 
-El `Agent.bx` de cada subagente es una clase de agente completa y construible (siempre contra el proveedor `mock` - un subagente aquí es una demostración de la forma de la delegación, no un agente funcional de fábrica):
+El `Agent.yaml` de cada subagente es un agente completo y construible (siempre contra el proveedor `mock` - un subagente aquí es una demostración de la forma de la delegación, no un agente funcional de fábrica):
 
-```javascript
-// subagents/researcher/Agent.bx
-class extends="bxModules.bxai.models.runnables.AiAgent" {
-
-	function init() {
-		super.init(
-			name        : "researcher",
-			description : "Gathers facts on a topic. Does not write final prose - that's the writer's job.",
-			model       : aiModel( provider: "mock", params: { model: "mock-model" } )
-		)
-		return this
-	}
-
-}
+```yaml
+# subagents/researcher/Agent.yaml
+name: researcher
+description: Gathers facts on a topic.
+model: mock/mock-model
 ```
 
-`researcher` reúne hechos; `writer` convierte los hallazgos en prosa final - un ejemplo mínimo de delegación entre dos roles. Consulta [subagents/](conventions/subagents.md) para ver en qué se diferencia el array `subAgents` de `configure()` (nombres de carpeta a cablear) del argumento `subAgents` de `super.init()` (instancias de `AiAgent` ya construidas), y el [ejemplo de equipo multiagente](guides/example-multi-agent-team.md) para un recorrido más completo.
+`researcher` reúne hechos; `writer` convierte los hallazgos en prosa final - un ejemplo mínimo de delegación entre dos roles. Consulta [subagents/](conventions/subagents.md) para ver en qué se diferencia la lista `subAgents` (nombres de carpeta a cablear) del argumento `subAgents` de `super.init()` en un `Agent.bx` basado en clase (instancias de `AiAgent` ya construidas), y el [ejemplo de equipo multiagente](guides/example-multi-agent-team.md) para un recorrido más completo.
 
 ## Tomar un proyecto desde GitHub (`--repo`)
 
@@ -282,7 +267,7 @@ bxAgents new my-agent --repo=https://github.com/owner/repo-name.git
 
 En lugar de crear el andamiaje desde una plantilla integrada, `--repo` clona un repositorio existente y lo usa directamente como el nuevo proyecto. El clonado se hace con una dependencia [JGit](https://www.eclipse.org/jgit/) incluida (`org.eclipse.jgit:org.eclipse.jgit`, desde Maven Central) - **no hace falta instalar ningún binario `git` ni tenerlo en el `PATH`**; el cliente git viaja dentro del propio jar del módulo.
 
-**Qué hace que un repositorio sea una plantilla válida:** un `Agent.bx` en la raíz del repositorio, igual que en cualquier proyecto creado con el andamiaje. Más allá de eso, no hay ningún manifiesto ni archivo marcador especial que añadir - cualquier proyecto BxAgents (tuyo, de un compañero, un ejemplo de `examples/`) ya es un origen `--repo` válido tal cual.
+**Qué hace que un repositorio sea una plantilla válida:** un `Agent.yaml` (o `Agent.bx`) en la raíz del repositorio, igual que en cualquier proyecto creado con el andamiaje. Más allá de eso, no hay ningún manifiesto ni archivo marcador especial que añadir - cualquier proyecto BxAgents (tuyo, de un compañero, un ejemplo de `examples/`) ya es un origen `--repo` válido tal cual.
 
 **Qué ocurre al clonar, en orden:**
 
@@ -290,12 +275,12 @@ En lugar de crear el andamiaje desde una plantilla integrada, `--repo` clona un 
 2. Se niega a ejecutarse si el directorio de destino ya existe y **no está vacío** - nunca se clona por encima de archivos existentes.
 3. Clona en modo **shallow** (`--depth=1` - solo el estado actual, sin historial) mediante el `cloneRepository()` de JGit.
 4. **Siempre elimina después la carpeta `.git` resultante, incondicionalmente - no hay ningún flag para conservarla.** Es deliberado: el historial git y el remoto `origin` de un repositorio-plantilla no tienen ninguna razón legítima para sobrevivir dentro de un proyecto nuevo, y dejarlos ahí es una trampa real (el primer `git init`/commit/push de tu proyecto podría interactuar con el repositorio upstream de la *plantilla* en vez de con el tuyo). Si de verdad quieres el historial git del repositorio origen, clónalo a mano con `git clone` en lugar de usar `bxAgents new --repo`.
-5. Verifica que existe `Agent.bx` en la raíz clonada - si no, toda la operación falla con un error claro que nombra lo que falta, en lugar de dejar atrás un directorio a medias que no es un proyecto BxAgents.
+5. Verifica que existe un `Agent.yaml` o `Agent.bx` en la raíz clonada - si no, toda la operación falla con un error claro que nombra lo que falta, en lugar de dejar atrás un directorio a medias que no es un proyecto BxAgents.
 
 !!! warning
     El clonado es **solo HTTPS anónimo** - hoy no se pasan credenciales a JGit, así que un repositorio privado fallará al clonarse. Usa un repositorio público, o clona uno privado a mano: `bxAgents new --repo` todavía no es la herramienta adecuada para ese caso.
 
-`--model`, `--name` y `--description` **no** son obligatorios ni se usan con `--repo` - el proyecto clonado ya define su propio `Agent.bx` (y por tanto su propio nombre/modelo). Pasar `--name`/`--description` de todos modos produce un aviso en la salida en vez de un error, y por lo demás se ignora. El paso automático de `box install` del `tests/` creado (y `--skipInstall`) tampoco aplican aquí - la carpeta `tests/` del proyecto clonado, si la tiene, se deja exactamente como se clonó.
+`--model`, `--name` y `--description` **no** son obligatorios ni se usan con `--repo` - el proyecto clonado ya define su propio `Agent.yaml` o `Agent.bx` (y por tanto su propio nombre/modelo). Pasar `--name`/`--description` de todos modos produce un aviso en la salida en vez de un error, y por lo demás se ignora. El paso automático de `box install` del `tests/` creado (y `--skipInstall`) tampoco aplican aquí - la carpeta `tests/` del proyecto clonado, si la tiene, se deja exactamente como se clonó.
 
 ## Tomar un proyecto desde ForgeBox (`--forgebox`)
 
@@ -305,7 +290,7 @@ bxAgents new my-agent --forgebox=some-package-slug
 
 Instala un paquete de [ForgeBox](https://www.forgebox.io) - el registro de paquetes de CommandBox, que puede alojar la plantilla de una aplicación o proyecto completos, no solo una librería - y lo usa como el nuevo proyecto. Esto habla directamente con la propia API REST pública de ForgeBox (`https://www.forgebox.io/api/v1`), usando el soporte nativo `bx:http`/`http()` de BoxLang - **no hace falta la CLI `box`**.
 
-**Qué hace que una entrada de ForgeBox sea una plantilla válida:** un `Agent.bx` en la raíz de su archivo publicado (o anidado exactamente una carpeta más adentro - ver la nota sobre desanidado más abajo). ForgeBox tiene un tipo de entrada `bxagents` dedicado exactamente a esto ("BxAgents" en la interfaz de ForgeBox) - navegarlo es la forma más rápida de encontrar un punto de partida - pero `bxAgents new --forgebox` en sí no filtra ni se fija en el `type` declarado de una entrada al instalar; solo le importa si el archivo descargado, una vez extraído, contiene un `Agent.bx`.
+**Qué hace que una entrada de ForgeBox sea una plantilla válida:** un `Agent.yaml` (o `Agent.bx`) en la raíz de su archivo publicado (o anidado exactamente una carpeta más adentro - ver la nota sobre desanidado más abajo). ForgeBox tiene un tipo de entrada `bxagents` dedicado exactamente a esto ("BxAgents" en la interfaz de ForgeBox) - navegarlo es la forma más rápida de encontrar un punto de partida - pero `bxAgents new --forgebox` en sí no filtra ni se fija en el `type` declarado de una entrada al instalar; solo le importa si el archivo descargado, una vez extraído, contiene un `Agent.yaml` o `Agent.bx`.
 
 **Qué ocurre al instalar, en orden:**
 
@@ -314,13 +299,13 @@ Instala un paquete de [ForgeBox](https://www.forgebox.io) - el registro de paque
 3. Resuelve la URL de descarga de la versión actual desde el propio `latestVersion.downloadURL` de la entrada (recurriendo a la entrada más reciente de su array `versions` si por algún motivo falta).
 4. Descarga el archivo y lo extrae con la propia BIF `extract()` integrada de BoxLang (soporte zip - sin ningún código de descompresión hecho a medida).
 5. **Desanida un nivel automáticamente**, si lo hay: muchos archivos de ForgeBox (siguiendo lo típico de una exportación zip de GitHub) envuelven todo su contenido en una única carpeta de primer nivel. Si la extracción produce exactamente una entrada de primer nivel y es un directorio, su contenido se sube un nivel para que el propio directorio de destino acabe siendo la raíz del proyecto.
-6. Verifica que existe `Agent.bx` en la raíz (posiblemente ya desanidada) - si no, toda la operación falla, ya que un slug de ForgeBox podría ser perfectamente una librería sin relación en vez de una plantilla de proyecto.
+6. Verifica que existe un `Agent.yaml` o `Agent.bx` en la raíz (posiblemente ya desanidada) - si no, toda la operación falla, ya que un slug de ForgeBox podría ser perfectamente una librería sin relación en vez de una plantilla de proyecto.
 
 Igual que con `--repo`: `--model`/`--name`/`--description` no son obligatorios (se avisa y se ignoran si se pasan de todos modos - el proyecto instalado define los suyos), y el paso automático de `box install` de `tests/` y `--skipInstall` no aplican.
 
 ## Publicar tu propia plantilla
 
-Una plantilla BxAgents - tanto si la compartes vía GitHub, ForgeBox, o ambos - es simplemente un proyecto BxAgents corriente (un `Agent.bx` en su raíz, más las convenciones que use) con los detalles concretos rellenados para que otra persona los copie y adapte, en vez de dejados como marcadores de posición para ti.
+Una plantilla BxAgents - tanto si la compartes vía GitHub, ForgeBox, o ambos - es simplemente un proyecto BxAgents corriente (un `Agent.yaml` en su raíz, más las convenciones que use) con los detalles concretos rellenados para que otra persona los copie y adapte, en vez de dejados como marcadores de posición para ti.
 
 ### 1. Construye el proyecto
 
@@ -332,7 +317,7 @@ bxAgents new my-template --model=openai/gpt-5 --template=<el punto de partida m�
 
 Merece la pena hacer un par de cosas de forma deliberada, ya que otra persona hará `bxAgents new --repo=...`/`--forgebox=...` sobre esto y esperará que funcione sin más:
 
-- **Mantén `Agent.bx` genérico y construible de fábrica.** No fijes una clave de API real ni apuntes por defecto a un modelo solo de pago - la sobrescritura `mock/mock-model` de `test()` (ya incluida en el andamiaje) hace que `bxAgents test` siga funcionando sin ninguna configuración aunque el modelo real de `init()` necesite una clave que solo tienes tú.
+- **Mantén `Agent.yaml` genérico y construible de fábrica.** No fijes una clave de API real ni apuntes por defecto a un modelo solo de pago - la sobrescritura `mock/mock-model` del entorno `test` (ya incluida en el andamiaje) hace que `bxAgents test` siga funcionando sin ninguna configuración aunque el `model` real necesite una clave que solo tienes tú.
 - **Incluye un `instructions.md` real** que describa el propósito verdadero del agente, no el marcador genérico "You are a helpful AI agent" que `new` crea por defecto.
 - **Documenta las variables de entorno necesarias en `.env`** como líneas de ejemplo comentadas (`SLACK_BOT_TOKEN=xoxb-...`, etc.), exactamente como hacen arriba las plantillas `slack-bot`/`telegram-bot`/`github-bot` - es lo primero que alguien lee después de clonar.
 - **Verifícalo en frío**, igual que lo recibiría un desconocido: `rm -rf .build dist`, y después `bxAgents build && bxAgents test` (y `bxAgents doctor` para detectar cualquier cosa relacionada con el entorno o las dependencias) desde un checkout completamente nuevo.
@@ -340,7 +325,7 @@ Merece la pena hacer un par de cosas de forma deliberada, ya que otra persona ha
 
 ### 2a. Publícalo en GitHub
 
-No hace falta nada específico de BxAgents - sube el proyecto a un repositorio público de GitHub con `Agent.bx` en la raíz (o sube un subárbol; `--repo` solo desanida la convención de anidado único propia de ForgeBox, no disposiciones arbitrarias de repositorio, así que mantén `Agent.bx` en la raíz real del repositorio). Cualquiera puede entonces ejecutar:
+No hace falta nada específico de BxAgents - sube el proyecto a un repositorio público de GitHub con `Agent.yaml` en la raíz (o sube un subárbol; `--repo` solo desanida la convención de anidado único propia de ForgeBox, no disposiciones arbitrarias de repositorio, así que mantén `Agent.yaml` en la raíz real del repositorio). Cualquiera puede entonces ejecutar:
 
 ```bash
 bxAgents new my-agent --repo=your-org/your-template-repo

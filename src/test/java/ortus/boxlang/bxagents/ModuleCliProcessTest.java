@@ -197,7 +197,7 @@ public class ModuleCliProcessTest {
 		int exitCode = runVerb( "new", projectDir.toString(), "--model=mock/mock-model", "--skipInstall=true" );
 
 		assertEquals( 0, exitCode, "module:bxagents new should exit 0" );
-		assertTrue( Files.exists( projectDir.resolve( "Agent.bx" ) ), "Agent.bx should have been scaffolded" );
+		assertTrue( Files.exists( projectDir.resolve( "Agent.yaml" ) ), "Agent.yaml should have been scaffolded" );
 		assertTrue( Files.exists( projectDir.resolve( "instructions.md" ) ), "instructions.md should have been scaffolded" );
 	}
 
@@ -228,7 +228,7 @@ public class ModuleCliProcessTest {
 	@Test
 	public void testBuildProcess() throws Exception {
 		ensureTempModuleInstall();
-		assumeTrue( Files.exists( projectDir.resolve( "Agent.bx" ) ), "requires testNewProcess to have run first" );
+		assumeTrue( Files.exists( projectDir.resolve( "Agent.yaml" ) ), "requires testNewProcess to have run first" );
 
 		int exitCode = runVerb( "build", projectDir.toString() );
 		if ( exitCode != 0 ) {
@@ -271,7 +271,7 @@ public class ModuleCliProcessTest {
 
 		assertEquals( 0, exitCode, "module:bxagents clean should exit 0" );
 		assertFalse( Files.exists( projectDir.resolve( ".build" ) ), ".build should have been removed" );
-		assertTrue( Files.exists( projectDir.resolve( "Agent.bx" ) ), "source files must never be touched by clean" );
+		assertTrue( Files.exists( projectDir.resolve( "Agent.yaml" ) ), "source files must never be touched by clean" );
 	}
 
 	/**
@@ -292,7 +292,7 @@ public class ModuleCliProcessTest {
 	@Test
 	public void testFailingVerbProcessExitsNonZero() throws Exception {
 		ensureTempModuleInstall();
-		assumeTrue( Files.exists( projectDir.resolve( "Agent.bx" ) ), "requires testNewProcess to have run first" );
+		assumeTrue( Files.exists( projectDir.resolve( "Agent.yaml" ) ), "requires testNewProcess to have run first" );
 		assumeTrue( !Files.exists( projectDir.resolve( ".build" ) ), "requires testCleanProcess to have run first" );
 
 		VerbResult result = runVerbCapturing( "package", projectDir.toString() );
@@ -312,11 +312,11 @@ public class ModuleCliProcessTest {
 	@Test
 	public void testBuildVerboseProcess() throws Exception {
 		ensureTempModuleInstall();
-		assumeTrue( Files.exists( projectDir.resolve( "Agent.bx" ) ), "requires testNewProcess to have run first" );
+		assumeTrue( Files.exists( projectDir.resolve( "Agent.yaml" ) ), "requires testNewProcess to have run first" );
 
 		VerbResult verbose = runVerbCapturing( "build", projectDir.toString(), "--verbose" );
 		assertEquals( 0, verbose.exitCode(), "module:bxagents build --verbose should exit 0" );
-		assertTrue( verbose.output().contains( "Resolving Agent.bx config" ),
+		assertTrue( verbose.output().contains( "Resolving the agent config" ),
 		    "expected a live phase marker in --verbose output - got:\n" + verbose.output() );
 		assertTrue( verbose.output().contains( "Discovering project source" ),
 		    "expected a live phase marker in --verbose output - got:\n" + verbose.output() );
@@ -327,7 +327,7 @@ public class ModuleCliProcessTest {
 
 		VerbResult quiet = runVerbCapturing( "build", projectDir.toString() );
 		assertEquals( 0, quiet.exitCode(), "module:bxagents build (no --verbose) should exit 0" );
-		assertFalse( quiet.output().contains( "Resolving Agent.bx config" ),
+		assertFalse( quiet.output().contains( "Resolving the agent config" ),
 		    "plain `build` must stay exactly as quiet as before --verbose existed - got:\n" + quiet.output() );
 	}
 

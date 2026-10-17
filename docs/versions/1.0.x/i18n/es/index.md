@@ -30,8 +30,8 @@ ensambla con ello una aplicación ColdBox real y ejecutable.
 El descubrimiento, la validación y la generación de código se ejecutan **una sola vez**, no
 en cada arranque. Lo que ejecutas después es una aplicación ColdBox normal.
 :::
-::: card title="Las carpetas son la API" icon="phosphor-duotone:tree-structure" href="conventions/agent-bx.md"
-`Agent.bx` e `instructions.md` son los únicos archivos obligatorios. Cualquier otra carpeta
+::: card title="Las carpetas son la API" icon="phosphor-duotone:tree-structure" href="conventions/agent-yaml.md"
+`Agent.yaml` e `instructions.md` son los únicos archivos obligatorios. Cualquier otra carpeta
 de convención es opcional y solo da forma a la salida si existe.
 :::
 ::: card title="Tools y skills" icon="phosphor-duotone:wrench" href="conventions/tools.md"
@@ -47,7 +47,7 @@ Telegram, Slack, Discord, Email, WhatsApp, Teams, Twilio, GitHub y Signal, adem�
 `cli` y `mock`.
 :::
 ::: card title="Una UI web de chat, generada" icon="phosphor-duotone:globe-hemisphere-west" href="conventions/web-ui.md"
-Pídela en `Agent.bx` y el build produce un front end de chat con streaming, tematizable y
+Pídela en una entrada de `gateways/` y el build produce un front end de chat con streaming, tematizable y
 con historial de sesión.
 :::
 :::
@@ -125,7 +125,7 @@ conectado a tu agente.
 :::
 :::
 
-Es CSS generado y marcado generado - [tematizable desde `Agent.bx`](conventions/web-ui.md),
+Es CSS generado y marcado generado - [tematizable desde una entrada de `gateways/`](conventions/web-ui.md),
 sin ningún paso de build de front end por tu parte.
 
 ## Qué produce realmente `build`
@@ -136,7 +136,7 @@ Tu árbol de convenciones, y la aplicación ColdBox normal en la que `build` lo 
 ::: column
 ```
 your-agent/
-├── Agent.bx           # nombre, modelo, descripción
+├── Agent.yaml         # nombre, modelo, descripción
 ├── instructions.md    # el system prompt
 ├── tools/             # funciones @AITool
 ├── skills/            # capacidades SKILL.md
@@ -183,17 +183,18 @@ dinámico de archivos, sin trabajo de build diferido al camino de la petición.
 ::: columns
 ::: column
 !!! tip "Empieza con un solo archivo"
-    Solo `Agent.bx` es obligatorio. `instructions.md` es opcional - define las instrucciones
-    directamente en la clase, o coloca el archivo y deja que el build lo conecte. Cualquier
+    Solo `Agent.yaml` es obligatorio. `instructions.md` es opcional - define `instructions`
+    directamente en el YAML, o coloca el archivo y deja que el build lo conecte. Cualquier
     otra carpeta solo afecta a la salida generada si existe **y** tiene contenido - así que
     añades convenciones a medida que realmente las necesitas.
 :::
 ::: column
-!!! faq "Agent.bx ES el agente"
-    `Agent.bx` extiende directamente el propio `AiAgent` de BX AI - el build instancia tu
-    clase en lugar de reconstruir una a partir de un struct de configuración, así que lo que
-    escribes es lo que se ejecuta, y un IDE puede introspeccionarla como cualquier otra
-    clase. Consulta [Agent.bx](conventions/agent-bx.md).
+!!! faq "YAML por defecto, una clase cuando necesitas código"
+    `Agent.yaml` contiene la configuración del agente - la mayoría de los agentes son unas
+    pocas líneas de él. Cuando la definición necesita código (hooks, instrucciones dinámicas,
+    tools registradas en código), `Agent.bx` extiende directamente el propio `AiAgent` de
+    BX AI - el build instancia tu clase, así que lo que escribes es lo que se ejecuta.
+    Consulta [Agent.yaml](conventions/agent-yaml.md) y [Agent.bx](conventions/agent-bx.md).
 :::
 :::
 
@@ -216,7 +217,7 @@ Empaqueta un `.bxa` portable y despliégalo con `local`, `ssh`, `docker`, `digit
 
 ## Comprueba tu instalación en cualquier momento
 
-![Salida de bxAgents doctor: versiones de BoxLang y bx-ai correctas, Agent.bx encontrado, la estructura del proyecto valida limpiamente, y un aviso de que falta el módulo qb](assets/cli-doctor.svg)
+![Salida de bxAgents doctor: versiones de BoxLang y bx-ai correctas, definición del agente encontrada, la estructura del proyecto valida limpiamente, y un aviso de que falta el módulo qb](assets/cli-doctor.svg)
 
 ## Dónde ir a continuación
 
@@ -227,7 +228,7 @@ Instala BoxLang, BX AI y BxAgents.
 ::: card title="Inicio rápido" icon="phosphor-duotone:lightning" href="getting-started/quick-start.md"
 Crea el andamiaje, construye y chatea con tu primer agente.
 :::
-::: card title="Convenciones" icon="phosphor-duotone:cube" href="conventions/agent-bx.md"
+::: card title="Convenciones" icon="phosphor-duotone:cube" href="conventions/agent-yaml.md"
 Una página por carpeta de convención, de principio a fin.
 :::
 ::: card title="El pipeline de build" icon="phosphor-duotone:graph" href="build-pipeline.md"

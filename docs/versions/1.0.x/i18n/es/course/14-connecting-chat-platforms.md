@@ -87,14 +87,12 @@ flowchart TD
     style R fill:#f8d7da,stroke:#721c24
 ```
 
-Controla la política desde `Agent.bx`:
+Controla la política desde `Agent.yaml`:
 
-```javascript
-function configure() {
-	return {
-		gatewaySession: { policy: "queue", maxQueueDepth: 50 }   // both optional, these are the defaults
-	};
-}
+```yaml
+gatewaySession:
+  policy: queue        # both optional, these are the defaults
+  maxQueueDepth: 50
 ```
 
 !!! warning

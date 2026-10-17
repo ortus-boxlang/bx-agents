@@ -62,7 +62,7 @@ _bxagents_complete() {
 			hash-password) flags="--password= --projectRoot=" ;;
 			inspect) flags="--json --projectRoot=" ;;
 			invoke) flags="--json --message= --port= --projectRoot= --server" ;;
-			new) flags="--description= --forgebox= --model= --name= --projectRoot= --repo= --skipInstall --template=" ;;
+			new) flags="--class --description= --forgebox= --model= --name= --projectRoot= --repo= --skipInstall --template=" ;;
 			package) flags="--projectRoot= --version=" ;;
 			serve) flags="--host= --port= --projectRoot=" ;;
 			test) flags="--projectRoot=" ;;

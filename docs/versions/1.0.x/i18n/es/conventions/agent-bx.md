@@ -1,14 +1,17 @@
 ---
 title: Agent.bx
 icon: phosphor-duotone:robot
-summary: "El único archivo requerido - una clase que extiende el propio AiAgent de bx-ai, así que ES el agente."
-description: "El único archivo requerido - una clase que extiende el propio AiAgent de bx-ai, así que ES el agente."
+summary: "La opción avanzada - una clase que extiende el propio AiAgent de bx-ai, para definiciones que necesitan código."
+description: "La opción avanzada - una clase que extiende el propio AiAgent de bx-ai, para definiciones que necesitan código."
 tags: [conventions, configuration]
 ---
 
 # Agent.bx
 
-`Agent.bx` es el único archivo requerido en un proyecto BxAgents. **Extiende el propio [`AiAgent`](https://ai.ortusbooks.com/main-components/agents/class-based-agents) de bx-ai**, así que *es* el agente - el build lo instancia en lugar de reconstruir uno a partir de un struct de configuración, así que lo que escribes es lo que se ejecuta. Hereda y añade lo que necesites: helpers privados, métodos sobreescritos, tools registradas en código. Porque es una clase real en lugar de un descriptor que devuelve un struct, un IDE puede introspeccionarla como cualquier otra clase de BoxLang - ir a la definición, autocompletar en métodos heredados, todo.
+!!! info "La mayoría de los agentes usan Agent.yaml"
+    La forma predeterminada de definir un agente es un [`Agent.yaml`](agent-yaml.md) sencillo. Recurre a `Agent.bx` cuando la definición misma necesita código: hooks, instrucciones dinámicas, tools registradas en código, un método sobreescrito o `detectEnvironment()`. Una carpeta contiene una u otra, nunca ambas. Las secciones sobre [el slug de modelo](#the-model-slug), [overrides de entorno](#overrides-de-entorno), [semántica de fusión](#semantica-de-fusion) y [la ruta de agente siempre activa](#la-ruta-de-agente-siempre-activa) de más abajo aplican a ambas.
+
+`Agent.bx` es la forma avanzada de definir un agente. Un proyecto BxAgents necesita un `Agent.yaml` **o** un `Agent.bx`. **Extiende el propio [`AiAgent`](https://ai.ortusbooks.com/main-components/agents/class-based-agents) de bx-ai**, así que *es* el agente - el build lo instancia en lugar de reconstruir uno a partir de un struct de configuración, así que lo que escribes es lo que se ejecuta. Hereda y añade lo que necesites: helpers privados, métodos sobreescritos, tools registradas en código. Porque es una clase real en lugar de un descriptor que devuelve un struct, un IDE puede introspeccionarla como cualquier otra clase de BoxLang - ir a la definición, autocompletar en métodos heredados, todo.
 
 ```javascript
 class extends="bxModules.bxai.models.runnables.AiAgent" {
@@ -26,7 +29,7 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 }
 ```
 
-`bxAgents new` genera el andamiaje exactamente con esta forma. `instructions.md` es opcional - configura `instructions` directamente en `super.init()`, o coloca el archivo junto a `Agent.bx` y deja que el build lo conecte por ti (ver la tabla abajo).
+`bxAgents new --class` genera el andamiaje exactamente con esta forma (sin `--class`, `new` genera un `Agent.yaml`). `instructions.md` es opcional - configura `instructions` directamente en `super.init()`, o coloca el archivo junto a `Agent.bx` y deja que el build lo conecte por ti (ver la tabla abajo).
 
 ## Lo que el build agrega encima de la clase
 

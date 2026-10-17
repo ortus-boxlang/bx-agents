@@ -374,6 +374,38 @@ class extends="testbox.system.BaseSpec" {
 				expect( first ).toBe( second );
 			} );
 
+			it( "writes inline Agent.yaml instructions as a string literal when there is no instructions.md", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/yaml-inline-instructions", buildDir );
+
+				var factory = fileRead( result.agentFactory );
+				expect( factory ).toInclude( 'instructions : "You are a' );
+				expect( factory ).notToInclude( 'resolveAppPath( "instructions.md"' );
+				// the quote is doubled and the pound sign written "##" in the generated source, or the factory would not compile or would interpolate
+				expect( factory ).toInclude( "costs ####5 per answer" );
+			} );
+
+			it( "resolves an Agent.yaml model that names a models/ entry, like the class form does", function() {
+				var buildDir = newBuildDir();
+				var projectRoot = fixtures & "/yaml-named-model";
+				var config = resolver.resolve( projectRoot = projectRoot );
+				var discovery = discoverer.discover( projectRoot );
+				var result = generator.generate( projectRoot, buildDir, config, [], [], [], [], "", discovery );
+
+				var factory = fileRead( result.agentFactory );
+				expect( factory ).toInclude( 'provider : "mock"' );
+				expect( factory ).toInclude( 'model : "mock-model"' );
+			} );
+
+			it( "lets an instructions.md win over inline Agent.yaml instructions", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/yaml-instructions-file-wins", buildDir );
+
+				var factory = fileRead( result.agentFactory );
+				expect( factory ).toInclude( 'resolveAppPath( "instructions.md"' );
+				expect( factory ).notToInclude( "Inline text that must lose" );
+			} );
+
 			it( "fails clearly if instructions.md is missing", function() {
 				var buildDir = newBuildDir();
 

@@ -24,6 +24,15 @@ class extends="testbox.system.BaseSpec" {
 				return dir;
 			}
 
+			it( "builds a project defined only by an Agent.yaml", function() {
+				var projectRoot = newTempProject( "yaml-inline-instructions" );
+				var result = pipeline.build( projectRoot );
+
+				expect( fileExists( result.appDir & "/Application.bx" ) ).toBeTrue();
+				expect( result.manifest.agent.name ).toBe( "yaml-inline-agent" );
+				expect( result.manifest.agent.model ).toBe( "mock/mock-model" );
+			} );
+
 			it( "builds a full project end-to-end, producing .build/app and .build/manifest.json", function() {
 				var projectRoot = newTempProject( "full-project" );
 				var result = pipeline.build( projectRoot );
@@ -56,7 +65,7 @@ class extends="testbox.system.BaseSpec" {
 				pipeline.build( projectRoot, "", function( required string message ) { messages.append( arguments.message ) } );
 
 				var joined = messages.toList( char( 10 ) );
-				expect( joined ).toInclude( "Resolving Agent.bx config" );
+				expect( joined ).toInclude( "Resolving the agent config" );
 				expect( joined ).toInclude( "Discovering project source" );
 				expect( joined ).toInclude( "Validating project" );
 				expect( joined ).toInclude( "Generating core ColdBox app skeleton" );
@@ -68,7 +77,7 @@ class extends="testbox.system.BaseSpec" {
 				// "Resolving..." must be reported before "Discovering...", which
 				// must be reported before "Validating..." - proves these are
 				// live, in-order phase markers, not just a bag of strings.
-				var resolveIndex = messages.find( function( m ) { return m.findNoCase( "Resolving Agent.bx config" ) > 0 } );
+				var resolveIndex = messages.find( function( m ) { return m.findNoCase( "Resolving the agent config" ) > 0 } );
 				var discoverIndex = messages.find( function( m ) { return m.findNoCase( "Discovering project source" ) > 0 } );
 				var validateIndex = messages.find( function( m ) { return m.findNoCase( "Validating project" ) > 0 } );
 				expect( resolveIndex ).toBeLT( discoverIndex );
