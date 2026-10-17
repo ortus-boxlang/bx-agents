@@ -1,0 +1,205 @@
+/**
+ * Reads a project's `Agent.yaml` (or `Agent.yml`) into the same config struct a
+ * descriptor `Agent.bx`'s `configure()` returns, so everything downstream
+ * (AgentConfigResolver, the validator, the generator) treats both the same way.
+ *
+ * `Agent.yaml` is the default way to define an agent; `Agent.bx` is the advanced
+ * option for behavior YAML cannot express (hooks, dynamic instructions, code).
+ *
+ * The keys are exactly the ones `configure()` documents (docs/conventions/agent-bx.md),
+ * plus two YAML conveniences:
+ *
+ *   instructions  Inline instructions text. An `instructions.md` beside the file
+ *                 wins when both exist (the file is the more deliberate choice).
+ *   environments  `{ production : { model : ... } }` - the YAML spelling of the
+ *                 environment-override methods (`production()`) on an `Agent.bx`.
+ *
+ * Unlike `configure()`, which passes any unknown key through untouched, an unknown
+ * key here is an ERROR. A typo like `modle:` is silent in a struct-returning method
+ * only because nobody reads it; in a file people edit by hand it would just quietly
+ * do nothing. Anything free-form belongs in an `Agent.bx`.
+ *
+ * Needs the bx-yaml module (1.1.0 or later: 1.0.0 wrapped every list in an extra
+ * array). Global YAML tags such as `!!java.io.File` are rejected by bx-yaml itself.
+ */
+class {
+
+	/**
+	 * Keys allowed at the top level of an Agent.yaml. The configure() keys, plus
+	 * `instructions` and `environments`.
+	 */
+	variables.ALLOWED_KEYS = [
+		"name", "description", "model", "instructions", "subAgents", "mcpServers",
+		"security", "memory", "checkpointer", "gatewaySession", "agentApi", "environments"
+	]
+
+	/**
+	 * Expected type of each key: string, array, struct, or stringOrStruct.
+	 */
+	variables.KEY_TYPES = {
+		"name"           : "string",
+		"description"    : "string",
+		"model"          : "string",
+		"instructions"   : "string",
+		"subAgents"      : "array",
+		"mcpServers"     : "array",
+		"security"       : "struct",
+		"memory"         : "stringOrStruct",
+		"checkpointer"   : "struct",
+		"gatewaySession" : "struct",
+		"agentApi"       : "struct",
+		"environments"   : "struct"
+	}
+
+	/**
+	 * The file names an agent definition may use, in lookup order.
+	 */
+	variables.FILE_NAMES = [ "Agent.yaml", "Agent.yml" ]
+
+	/**
+	 * The path of the Agent.yaml / Agent.yml in a project or subagent folder.
+	 *
+	 * @folder Absolute path to the folder to look in
+	 *
+	 * @return The absolute path of the first file found, or "" when there is none
+	 */
+	string function find( required string folder ) {
+		var root = arguments.folder.reReplace( "[\\/]+$", "" )
+		for ( var fileName in variables.FILE_NAMES ) {
+			if ( fileExists( root & "/" & fileName ) ) {
+				return root & "/" & fileName
+			}
+		}
+		return ""
+	}
+
+	/**
+	 * Load and validate an Agent.yaml.
+	 *
+	 * @path Absolute path to the Agent.yaml / Agent.yml
+	 *
+	 * @return { config : the configure()-shaped struct without `environments`, environments : { name : override struct } }
+	 */
+	struct function load( required string path ) {
+		if ( !fileExists( arguments.path ) ) {
+			fail( arguments.path, "the file does not exist" )
+		}
+
+		var parsed = ""
+		try {
+			parsed = yamlDeserialize( fileRead( arguments.path ) )
+		} catch ( any e ) {
+			fail( arguments.path, "it is not valid YAML: #e.message#" )
+		}
+
+		if ( !isStruct( parsed ) ) {
+			fail( arguments.path, "it must be a mapping of settings (name:, model:, ...), not a list or a single value" )
+		}
+
+		validateKeys( arguments.path, parsed, variables.ALLOWED_KEYS, "" )
+		validateTypes( arguments.path, parsed, "" )
+
+		var environments = parsed.environments ?: {}
+		for ( var envName in environments ) {
+			if ( !isStruct( environments[ envName ] ) ) {
+				fail( arguments.path, "environments.#envName# must be a mapping of overrides" )
+			}
+			var overrideKeys = variables.ALLOWED_KEYS.filter( key => key != "environments" )
+			validateKeys( arguments.path, environments[ envName ], overrideKeys, "environments.#envName#." )
+			validateTypes( arguments.path, environments[ envName ], "environments.#envName#." )
+		}
+
+		var config = {}
+		for ( var key in parsed ) {
+			if ( key != "environments" ) {
+				config[ key ] = parsed[ key ]
+			}
+		}
+
+		return { "config" : config, "environments" : environments }
+	}
+
+	/**
+	 * Fail on any key that is not allowed, naming it and listing the valid ones.
+	 *
+	 * @path Absolute path to the Agent.yaml, for the error message
+	 * @data The mapping to check
+	 * @allowed The allowed key names
+	 * @prefix Where the mapping sits, e.g. "environments.production.", for the error message
+	 */
+	private void function validateKeys( required string path, required struct data, required array allowed, required string prefix ) {
+		for ( var key in arguments.data ) {
+			if ( !arguments.allowed.findNoCase( key ) ) {
+				fail(
+					arguments.path,
+					"unknown setting [#arguments.prefix##key#]. Valid settings: #arguments.allowed.toList( ', ' )#. Anything free-form belongs in an Agent.bx."
+				)
+			}
+		}
+	}
+
+	/**
+	 * Fail on any key whose value has the wrong type.
+	 *
+	 * @path Absolute path to the Agent.yaml, for the error message
+	 * @data The mapping to check
+	 * @prefix Where the mapping sits, e.g. "environments.production.", for the error message
+	 */
+	private void function validateTypes( required string path, required struct data, required string prefix ) {
+		for ( var key in arguments.data ) {
+			var expected = variables.KEY_TYPES[ key ]
+			if ( isNull( arguments.data[ key ] ) ) {
+				fail( arguments.path, "[#arguments.prefix##key#] is empty" )
+			}
+			var value = arguments.data[ key ]
+			var ok = false
+			switch ( expected ) {
+				case "string":
+					ok = isSimpleValue( value )
+					break
+				case "array":
+					ok = isArray( value )
+					break
+				case "struct":
+					ok = isStruct( value )
+					break
+				case "stringOrStruct":
+					ok = isSimpleValue( value ) || isStruct( value )
+					break
+			}
+			if ( !ok ) {
+				fail( arguments.path, "[#arguments.prefix##key#] must be #describeType( expected )#" )
+			}
+		}
+	}
+
+	/**
+	 * @type One of the KEY_TYPES values
+	 *
+	 * @return The type in words, for an error message
+	 */
+	private string function describeType( required string type ) {
+		switch ( arguments.type ) {
+			case "string":
+				return "text"
+			case "array":
+				return "a list"
+			case "struct":
+				return "a mapping"
+			default:
+				return "text or a mapping"
+		}
+	}
+
+	/**
+	 * @path Absolute path to the Agent.yaml
+	 * @reason What is wrong with it
+	 */
+	private void function fail( required string path, required string reason ) {
+		throw(
+			type    = "BxAgents.InvalidAgentYaml",
+			message = "Agent.yaml at [#arguments.path#] is invalid: #arguments.reason#"
+		)
+	}
+
+}
