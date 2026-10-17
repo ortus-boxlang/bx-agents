@@ -46,7 +46,7 @@ El zip del módulo lleva sus propias dependencias, fijadas a las versiones estab
 
 | Dónde | Qué | Para qué |
 |---|---|---|
-| `modules/` (módulos de BoxLang anidados) | `bx-ai`, `bx-sqlite`, `bx-ftp`, `bx-mail` | El runtime del agente, el almacén SQLite de la interfaz web, los destinos de deploy `ftp`/`sftp`, el gateway de email, YAML |
+| `modules/` (módulos de BoxLang anidados) | `bx-ai`, `bx-sqlite`, `bx-ftp`, `bx-mail` | El runtime del agente, el almacén SQLite de la interfaz web, los destinos de deploy `ftp`/`sftp`, el gateway de email |
 | `lib/` (runtime de ColdBox) | ColdBox, `qb`, `cbsecurity`, `cbauth`, `cbmailservices` | Se copian en cada app que genera `build` |
 
 `serve` apunta la app servida a esos mismos módulos incluidos.
