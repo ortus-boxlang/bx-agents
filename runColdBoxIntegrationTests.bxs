@@ -58,13 +58,15 @@ fileCopy( repoRoot & "tests/runner-coldbox.bxm", buildResult.appDir & "/runner-c
 // ------------------------------------------------------------------
 directoryCreate( buildResult.appDir & "/modules", true, true )
 
-// qb, cbauth and cbauth's own cbstorages dependency all have to be REAL
-// ColdBox modules in the app - a bare class-path mapping is not enough for
-// WireBox to resolve QueryBuilder@qb or authenticationService@cbauth.
-// cbstorages is cbauth's own dependency. CommandBox may install it as a
+// qb, cbsecurity and the modules cbsecurity/cbauth depend on all have to be
+// REAL ColdBox modules in the app - a bare class-path mapping is not enough
+// for WireBox to resolve QueryBuilder@qb or cbSecurity@cbSecurity. This
+// mirrors what `build` does for a real project: the bundled runtime libs
+// (see RuntimeLibsCopier) are copied into the app.
+// cbstorages is cbauth's own dependency; cbcsrf and cbproxies are cbsecurity's. CommandBox may install it as a
 // sibling OR nested under cbauth/modules/, exactly as qb nests cbpaginator -
 // so a missing sibling is normal, not a problem, and only worth reporting.
-for ( moduleName in [ "qb", "cbauth", "cbstorages" ] ) {
+for ( moduleName in [ "qb", "cbauth", "cbstorages", "cbsecurity", "cbcsrf", "cbproxies" ] ) {
 	moduleSource = repoRoot & "tests/" & moduleName
 	if ( directoryExists( moduleSource ) ) {
 		directoryCopy( moduleSource, buildResult.appDir & "/modules/" & moduleName, true )

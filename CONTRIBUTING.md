@@ -59,10 +59,11 @@ If you discover a security vulnerability, please send an email to the developmen
 
 ```bash
 ./gradlew downloadBoxLang     # fetches the BoxLang jar into src/test/resources/libs
-./gradlew downloadModules     # fetches bx-ai + bx-ftp + bx-sqlite (needed by the TestBox suite) into src/test/resources/modules
+./gradlew downloadModules     # fetches the bundled BoxLang modules (bx-ai, bx-sqlite, ...) into build/modules/bxagents/modules (needed by the TestBox suite)
 ./gradlew downloadMiniServer  # fetches boxlang-miniserver into src/test/resources/libs
 box install                   # TestBox, at the repo root
-cd tests && box install && cd ..  # ColdBox, into tests/coldbox (only needed for the ColdBox integration suite)
+cd tests && box install && cd ..  # ColdBox, qb, cbsecurity, ..., into tests/ (only needed for the ColdBox integration suite)
+./gradlew installLibs         # only to assemble the release zip: stages the ColdBox runtime libs that ship as lib/
 ```
 
 ### The developer flow - BoxLang is dynamic

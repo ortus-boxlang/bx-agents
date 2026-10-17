@@ -55,6 +55,7 @@ The one thing to know: **SSE frames are terminated by a blank line, and the web 
 ## Build And Packaging
 
 - Use the Gradle wrapper from the repo root for build tasks.
+- Dependencies are bundled, never installed by the user. BoxLang modules (`ext.boxlangModules` in `build.gradle`) are downloaded into `build/modules/bxagents/modules` and load as nested modules (BoxLang 1.17+); ColdBox libraries are listed in `src/main/lib/box.json`, installed with `./gradlew installLibs`, shipped as `lib/` and copied into each built app by `RuntimeLibsCopier`. Add a dependency there, not to `box.json`.
 - Prefer narrow validation first: `./gradlew test`, `./gradlew spotlessCheck`, or a targeted Gradle task related to the touched area.
 - Preserve the packaging pipeline in `build.gradle`: shadow jar output, service loader generation, `build/module` assembly, and zip distribution artifacts.
 - Do not reintroduce `src/main/resources` onto the IDE test classpath unless the task explicitly requires it; this template excludes it to avoid BoxLang class loading conflicts during module development.

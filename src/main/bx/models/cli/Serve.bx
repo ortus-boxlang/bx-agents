@@ -92,9 +92,18 @@ class {
 		// machine's `~/.boxlang`, and `clean` sweeps it with the rest of `.build`.
 		var runtimeConfigDir = serverHome & "/config"
 		directoryCreate( path = runtimeConfigDir, createPath = true, ignoreExists = true )
+		// The served app needs this module (its gateways, tool loader, ...) and,
+		// through it, the BoxLang modules bundled inside it (bxai, sqlite, ...).
+		// `serverHome` is isolated, so none of the machine's installed modules are
+		// visible unless the module's own location is named here.
+		var runtimeConfig = { whitespaceCompressionEnabled : false }
+		var modulesParent = installedModulesDirectory()
+		if ( len( modulesParent ) ) {
+			runtimeConfig[ "modulesDirectory" ] = [ modulesParent ]
+		}
 		fileWrite(
 			runtimeConfigDir & "/boxlang.json",
-			jsonSerialize( { whitespaceCompressionEnabled : false } )
+			jsonSerialize( runtimeConfig )
 		)
 
 		fileWrite( configPath, jsonSerialize( {
@@ -118,6 +127,25 @@ class {
 			port       : port,
 			serverHome : serverHome
 		}
+	}
+
+	/**
+	 * The directory holding this module's own folder (e.g. `~/.boxlang/modules`)
+	 * - what the served app's `modulesDirectory` must name for it to load
+	 * `bxagents` and the modules nested inside it. Empty when this verb is not
+	 * running from an installed `bxagents` module folder (a source checkout),
+	 * where there is nothing to point at.
+	 *
+	 * @return Absolute path, or "" when not running from an installed module
+	 */
+	private string function installedModulesDirectory() {
+		var moduleRoot = createObject( "java", "java.nio.file.Paths" )
+			.get( getDirectoryFromPath( getCurrentTemplatePath() ) & "../..", [] )
+			.normalize()
+		if ( moduleRoot.getFileName().toString() != "bxagents" || !fileExists( moduleRoot.toString() & "/ModuleConfig.bx" ) ) {
+			return ""
+		}
+		return moduleRoot.getParent().toString().replace( "\", "/", "all" )
 	}
 
 	/**

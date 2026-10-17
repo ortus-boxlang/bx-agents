@@ -165,9 +165,9 @@ bxAgents hash-password --password="<your-password>"
 
 ### What sign-in changes
 
-Everything user-scoped re-keys to the real account. The generated `handlers/ChatUi.bx` resolves identity from cbauth directly, in one method (`resolveUserId()`), and agent memory, the conversation index, preferences and pending-run ownership all key off its return value.
+Everything user-scoped re-keys to the real account. The generated `handlers/ChatUi.bx` resolves identity from cbsecurity (which wraps cbauth) directly, in one method (`resolveUserId()`), and agent memory, the conversation index, preferences and pending-run ownership all key off its return value.
 
-It reads cbauth rather than ColdBox's `identifierProvider` setting deliberately: a closure declared in the `coldbox` config struct never reaches `configSettings` — verified in a real boot, in both the documented literal shape and as a later assignment — so anything leaning on that setting was silently getting a session id instead.
+It reads cbsecurity rather than ColdBox's `identifierProvider` setting deliberately: a closure declared in the `coldbox` config struct never reaches `configSettings` — verified in a real boot, in both the documented literal shape and as a later assignment — so anything leaning on that setting was silently getting a session id instead.
 
 The practical difference: conversations and preferences follow the person across browsers and devices, and clearing cookies no longer creates a brand-new "user".
 
@@ -237,7 +237,7 @@ The reason is a real gap, not a preference: **bx-ai's `IAiMemory` has no enumera
 
 | Piece | What it is |
 | --- | --- |
-| `bx-sqlite` | The JDBC driver. Without it a webui app still boots, but every query fails on an unknown driver |
+| `bx-sqlite` | The JDBC driver, bundled with BxAgents as a nested module |
 | [`qb`](https://github.com/coldbox-modules/qb) | QueryBuilder for reads and writes, SchemaBuilder for the tables. No hand-written SQL anywhere |
 | `models/ChatDb.bx` | Generated. Owns the schema and hands out query builders |
 | `interceptors/WebUiSchema.bx` | Generated. Builds `ChatDb` at boot so migration runs then, not on whichever request touches the database first |

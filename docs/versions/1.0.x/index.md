@@ -59,12 +59,12 @@ session history.
 ::: step "Install"
 === "BoxLang"
     ```bash
-    install-bx-module bx-ai bx-agents
+    install-bx-module bx-agents
     ```
 
 === "CommandBox"
     ```bash
-    box install bx-ai,bx-agents
+    box install bx-agents
     ```
 :::
 ::: step "Scaffold"

@@ -133,7 +133,7 @@ Una app existente se encuentra por nombre (`GET /v2/apps`, filtrado del lado del
 
 ### `ftp` / `sftp`
 
-Envía el `.bxa` más nuevo a un directorio remoto vía FTP o SFTP simple, a través del componente real [`bx:ftp`](https://github.com/ortus-boxlang/bx-ftp) - una dependencia de runtime genuina de este proyecto (como `bx-ai`), no empaquetada. `remotePath` es un **directorio** remoto - el archivo subido conserva su propio nombre, la misma convención que usa el destino `scp` de `ssh`.
+Envía el `.bxa` más nuevo a un directorio remoto vía FTP o SFTP simple, a través del componente real [`bx:ftp`](https://github.com/ortus-boxlang/bx-ftp) - incluido con BxAgents como módulo anidado. `remotePath` es un **directorio** remoto - el archivo subido conserva su propio nombre, la misma convención que usa el destino `scp` de `ssh`.
 
 ```javascript
 // deploy/ftp-production.bx

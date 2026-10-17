@@ -21,12 +21,9 @@
  *    account that fails closed) rather than failing loudly, so it is
  *    worth surfacing before that happens instead of after.
  *
- * Also flags `qb`/`cbauth` as missing when the project's own web UI
- * configuration needs them (an exposed webui entry, or one declaring
- * `users`) but they are not loaded - both are `box.json` dependencies a
- * project installs itself, never bundled by this module (the same
- * `cbmailservices`/`bx-mail` gap `docs/known-limitations.md` already
- * documents for the email gateway).
+ * `qb`, `cbsecurity`, `cbauth`, `cbmailservices` and ColdBox itself are
+ * bundled inside this module and copied into every built app, so they are
+ * deliberately NOT checked here.
  */
 class {
 
@@ -202,15 +199,12 @@ class {
 	 * Loads every `gateways/*` entry's own config (channel adapters AND
 	 * `exposes` entries alike - both live in the same folder, and both can
 	 * declare `*EnvVar` fields), checks every `*EnvVar` value found anywhere
-	 * in it against the real environment, and separately flags `qb`/`cbauth`
-	 * as missing when the project's own web UI configuration needs them.
+	 * in it against the real environment.
 	 *
 	 * @discovery ProjectDiscoverer.discover()'s result
 	 * @checks Accumulator array - append() any findings
 	 */
 	private void function checkWebUiDependencies( required struct discovery, required array checks ) {
-		var hasWebUi = false
-		var webUiHasUsers = false
 		var seenEnvVars = {}
 
 		for ( var entry in arguments.discovery.gateways ) {
@@ -219,21 +213,7 @@ class {
 				continue
 			}
 
-			if ( ( entryConfig.exposes ?: "" ) == "webui" ) {
-				hasWebUi = true
-				if ( ( entryConfig.users ?: [] ).len() ) {
-					webUiHasUsers = true
-				}
-			}
-
 			collectEnvVarChecks( entryConfig, arguments.checks, seenEnvVars )
-		}
-
-		if ( hasWebUi ) {
-			checkModule( arguments.checks, "qb", "qb", false )
-		}
-		if ( webUiHasUsers ) {
-			checkModule( arguments.checks, "cbauth", "cbauth", false )
 		}
 	}
 

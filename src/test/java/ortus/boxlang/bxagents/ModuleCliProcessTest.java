@@ -93,20 +93,16 @@ public class ModuleCliProcessTest {
 		Files.createDirectories( modulesDir );
 		copyRecursively( moduleSourceDir, modulesDir.resolve( "bxagents" ) );
 
-		// Also point at this repo's own fetched supporting-modules dir (bx-ai) -
-		// `test` (unlike `new`/`build`, which only ever write generated SOURCE
-		// TEXT and never execute it) actually INVOKES the built agent, which
-		// needs bx-ai's real aiModel()/aiAgent() BIFs registered - confirmed
-		// empirically this session that omitting it here doesn't error loudly,
-		// it just silently reports zero discovered specs.
-		String bxAiModulesDir = Path.of( "src/test/resources/modules" ).toAbsolutePath().toString().replace( "\\", "\\\\" );
-
+		// bx-ai, bx-sqlite, etc. need no separate modules dir: they are bundled
+		// as nested modules inside the module copied above, exactly as in the
+		// published zip. `test` (unlike `new`/`build`) actually INVOKES the built
+		// agent, which needs bx-ai's real aiModel()/aiAgent() BIFs registered.
 		configPath = tempRoot.resolve( "boxlang.json" );
 		Files.writeString( configPath, """
 		                               {
-		                                 "modulesDirectory": [ "%s", "%s" ]
+		                                 "modulesDirectory": [ "%s" ]
 		                               }
-		                               """.formatted( modulesDir.toString().replace( "\\", "\\\\" ), bxAiModulesDir ) );
+		                               """.formatted( modulesDir.toString().replace( "\\", "\\\\" ) ) );
 
 		projectDir = tempRoot.resolve( "myagent" );
 	}

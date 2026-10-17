@@ -8,12 +8,12 @@ tags: [course, getting-started]
 
 # Instalar BxAgents
 
-BxAgents es un módulo de BoxLang. Necesita tres cosas en la máquina que lo ejecuta:
+BxAgents es un módulo de BoxLang. Necesita dos cosas en la máquina que lo ejecuta:
 
 1. Un runtime de [BoxLang](https://www.boxlang.io).
-2. El módulo de BoxLang `bx-ai` (BxAgents genera código que lo llama - no lo incluye
-   dentro de sí mismo).
-3. BxAgents.
+2. BxAgents, que incluye todo lo demás que necesita (`bx-ai`, `bx-sqlite`, `bx-ftp`,
+   `bx-mail`, `bx-yaml`, `bx-toml`, y ColdBox con sus módulos para las apps que
+   genera). Hace falta BoxLang **1.17.0 o posterior**.
 
 ::: stepper
 ::: step "Instalar BoxLang"
@@ -21,13 +21,12 @@ Sigue la [guía oficial de instalación de BoxLang](https://boxlang.ortusbooks.c
 El instalador rápido también configura `~/.boxlang/bin` en tu `PATH`, que es donde acaban
 los ejecutables que aportan los módulos (como el propio comando `bxAgents` de BxAgents).
 :::
-::: step "Instalar bx-ai y BxAgents"
+::: step "Instalar BxAgents"
 ```bash
-install-bx-module bx-ai
 install-bx-module bx-agents
 ```
 
-Esto descarga ambos módulos en tu directorio de módulos de BoxLang (`~/.boxlang/modules`
+Esto descarga el módulo, con sus dependencias incluidas, en tu directorio de módulos de BoxLang (`~/.boxlang/modules`
 por defecto, o `boxlang_modules/` con `--local`).
 :::
 ::: step "Comprobar que funcionó"
@@ -64,12 +63,8 @@ Este curso usa la forma corta `bxAgents <verbo>` en todo momento.
 - **`serve`** ([Lección 8](08-talking-to-your-agent.md)) necesita además el binario
   independiente [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver)
   en el `PATH`.
-- Los destinos `ftp`/`sftp` de **`deploy`** ([Lección 20](20-packaging-deploying-and-wrapping-up.md))
-  necesitan el módulo [`bx-ftp`](https://github.com/ortus-boxlang/bx-ftp)
-  (`install-bx-module bx-ftp`) - una dependencia de runtime genuina, no incluida dentro
-  del módulo, igual que `bx-ai`.
 
-Ninguno de los dos hace falta para seguir con `build`, `chat`, `test`, `package`,
+`serve` no hace falta para seguir con `build`, `chat`, `test`, `package`,
 `inspect`, `clean` o `new`.
 
 Consulta [Instalación](../getting-started/installation.md) para la página de referencia completa.

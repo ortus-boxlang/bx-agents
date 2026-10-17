@@ -8,29 +8,27 @@ tags: [getting-started, setup]
 
 # Instalación
 
-BxAgents es un módulo de BoxLang. Necesita tres cosas en la máquina que lo ejecuta:
+BxAgents es un módulo de BoxLang. Necesita dos cosas en la máquina que lo ejecuta:
 
 1. Un runtime de [BoxLang](https://www.boxlang.io).
-2. El módulo de BoxLang `bx-ai` (BxAgents genera código que lo llama - no lo empaqueta él mismo).
-3. BxAgents mismo.
+2. BxAgents mismo. Incluye todo lo demás que necesita: `bx-ai`, `bx-sqlite`, `bx-ftp`, `bx-mail`, `bx-yaml` y `bx-toml` como módulos de BoxLang anidados, además de ColdBox, `qb`, `cbsecurity`, `cbauth` y `cbmailservices` para las apps que genera. No hay nada más que instalar.
+
+!!! info
+    BxAgents necesita BoxLang **1.17.0 o posterior**, la versión que añadió los módulos anidados.
 
 !!! info
     `serve` adicionalmente necesita el binario independiente [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver) en `PATH`. `build`, `chat`, `package`, `inspect`, `clean`, y `new` no lo necesitan.
-
-!!! info
-    Los destinos `ftp`/`sftp` de `deploy` necesitan el módulo de BoxLang [`bx-ftp`](https://github.com/ortus-boxlang/bx-ftp) instalado junto a `bx-ai`/BxAgents (`install-bx-module bx-ftp`) - una dependencia de runtime genuina, no empaquetada, la misma relación que este módulo tiene con `bx-ai`. Ningún otro verbo o destino de deploy lo necesita.
 
 ::: stepper
 ::: step "Instalar BoxLang"
 Sigue la [guía de instalación oficial de BoxLang](https://boxlang.ortusbooks.com/getting-started/installation). El instalador rápido también configura `~/.boxlang/bin` en tu `PATH`, que es donde aterrizan los ejecutables provistos por módulos (como el propio comando `bxAgents` de BxAgents, abajo).
 :::
-::: step "Instalar bx-ai y BxAgents"
+::: step "Instalar BxAgents"
 ```bash
-install-bx-module bx-ai
 install-bx-module bx-agents
 ```
 
-Esto obtiene ambos módulos en tu directorio de módulos de BoxLang (`~/.boxlang/modules` por defecto, o `boxlang_modules/` con `--local`).
+Esto obtiene el módulo, con sus dependencias incluidas, en tu directorio de módulos de BoxLang (`~/.boxlang/modules` por defecto, o `boxlang_modules/` con `--local`).
 :::
 ::: step "Verificar que funcionó"
 ```bash
@@ -41,6 +39,32 @@ bxAgents --help
 `--help` lista los 12 verbos (`new`, `build`, `test`, `serve`, `chat`, `invoke`, `package`, `deploy`, `inspect`, `clean`, `hash-password`, `doctor`) con un resumen de una línea de cada uno.
 :::
 :::
+
+## Qué viene incluido
+
+El zip del módulo lleva sus propias dependencias, fijadas a las versiones estables con las que se construyó. Una corrección en una de ellas sale como una versión de parche de BxAgents, así que nadie las instala ni las actualiza a mano.
+
+| Dónde | Qué | Para qué |
+|---|---|---|
+| `modules/` (módulos de BoxLang anidados) | `bx-ai`, `bx-sqlite`, `bx-ftp`, `bx-mail`, `bx-yaml`, `bx-toml` | El runtime del agente, el almacén SQLite de la interfaz web, los destinos de deploy `ftp`/`sftp`, el gateway de email, YAML y TOML |
+| `lib/` (runtime de ColdBox) | ColdBox, `qb`, `cbsecurity`, `cbauth`, `cbmailservices` | Se copian en cada app que genera `build` |
+
+`serve` apunta la app servida a esos mismos módulos incluidos.
+
+### Añadir tus propias librerías
+
+Pon librerías extra de ColdBox en una carpeta `lib/` de tu proyecto, con la misma estructura que la incluida:
+
+```text
+my-agent/
+  lib/
+    coldbox/          # reemplaza el ColdBox incluido
+    modules/
+      cbvalidation/   # se añade junto a los módulos incluidos
+      qb/             # reemplaza el qb incluido
+```
+
+`build` copia primero el conjunto incluido y después tu `lib/`, así que la tuya gana.
 
 ## El comando `bxAgents`
 

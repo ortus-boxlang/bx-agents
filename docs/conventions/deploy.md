@@ -133,7 +133,7 @@ An existing app is found by name (`GET /v2/apps`, filtered client-side on `spec.
 
 ### `ftp` / `sftp`
 
-Ships the newest `.bxa` to a remote directory over plain FTP or SFTP, via the real [`bx:ftp`](https://github.com/ortus-boxlang/bx-ftp) component - a genuine runtime dependency of this project (like `bx-ai`), not vendored. `remotePath` is a remote **directory** - the uploaded file keeps its own name, the same convention `ssh`'s `scp` target uses.
+Ships the newest `.bxa` to a remote directory over plain FTP or SFTP, via the real [`bx:ftp`](https://github.com/ortus-boxlang/bx-ftp) component - bundled with BxAgents as a nested module. `remotePath` is a remote **directory** - the uploaded file keeps its own name, the same convention `ssh`'s `scp` target uses.
 
 ```javascript
 // deploy/ftp-production.bx
