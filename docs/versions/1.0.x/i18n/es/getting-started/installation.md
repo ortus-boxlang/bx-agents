@@ -11,7 +11,7 @@ tags: [getting-started, setup]
 BxAgents es un módulo de BoxLang. Necesita dos cosas en la máquina que lo ejecuta:
 
 1. Un runtime de [BoxLang](https://www.boxlang.io).
-2. BxAgents mismo. Incluye todo lo demás que necesita: `bx-ai`, `bx-sqlite`, `bx-ftp` y `bx-mail` como módulos de BoxLang anidados, además de ColdBox, `qb`, `cbsecurity`, `cbauth` y `cbmailservices` para las apps que genera. No hay nada más que instalar.
+2. BxAgents mismo. Incluye todo lo demás que necesita: `bx-ai`, `bx-sqlite`, `bx-ftp`, `bx-mail` y `bx-yaml` como módulos de BoxLang anidados, además de ColdBox, `qb`, `cbsecurity`, `cbauth` y `cbmailservices` para las apps que genera. No hay nada más que instalar.
 
 !!! info
     BxAgents necesita BoxLang **1.18.0 o posterior**, que admite los módulos anidados que incluye.
@@ -46,7 +46,7 @@ El zip del módulo lleva sus propias dependencias, fijadas a las versiones estab
 
 | Dónde | Qué | Para qué |
 |---|---|---|
-| `modules/` (módulos de BoxLang anidados) | `bx-ai`, `bx-sqlite`, `bx-ftp`, `bx-mail` | El runtime del agente, el almacén SQLite de la interfaz web, los destinos de deploy `ftp`/`sftp`, el gateway de email |
+| `modules/` (módulos de BoxLang anidados) | `bx-ai`, `bx-sqlite`, `bx-ftp`, `bx-mail`, `bx-yaml` | El runtime del agente, el almacén SQLite de la interfaz web, los destinos de deploy `ftp`/`sftp`, el gateway de email, `Agent.yaml` |
 | `lib/` (runtime de ColdBox) | ColdBox, `qb`, `cbsecurity`, `cbauth`, `cbmailservices` | Se copian en cada app que genera `build` |
 
 `serve` apunta la app servida a esos mismos módulos incluidos.
