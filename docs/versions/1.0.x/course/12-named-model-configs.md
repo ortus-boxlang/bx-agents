@@ -1,15 +1,15 @@
 ---
 title: "Lesson 12: Named Model Configs"
 icon: phosphor-duotone:brain
-summary: Reusable named model configurations, referenced from Agent.bx by name.
-description: Reusable named model configurations, referenced from Agent.bx by name.
+summary: Reusable named model configurations, referenced from Agent.yaml by name.
+description: Reusable named model configurations, referenced from Agent.yaml by name.
 tags: [course, conventions, models]
 ---
 
 # Named Model Configs
 
 `models/` lets you define reusable, named model configurations as one `.bx` or `.json`
-file each, referenced from `Agent.bx`'s `model` field by name (with no `/`, so it
+file each, referenced from `Agent.yaml`'s `model` field by name (with no `/`, so it
 isn't mistaken for a `provider/model` slug - see [Lesson 5](05-agent-bx.md)).
 
 ```javascript
@@ -26,13 +26,9 @@ class {
 }
 ```
 
-```javascript
-// Agent.bx
-function configure() {
-	return {
-		model : "summarizer"   // resolves against models/summarizer.bx
-	};
-}
+```yaml
+# Agent.yaml
+model: summarizer   # resolves against models/summarizer.bx
 ```
 
 ## Why bother with a named config instead of just writing the slug?
@@ -54,9 +50,9 @@ and you don't want to repeat it.
 
 ## Validation
 
-If `Agent.bx`'s `model` has no `/`, it must be **either** a known core provider name
+If `Agent.yaml`'s `model` has no `/`, it must be **either** a known core provider name
 (`openai`, `bedrock`, `claude`, `gemini`, `mock`, and others - see
-[Agent.bx](../conventions/agent-bx.md#the-model-slug)) **or** match a `models/`
+[the model slug](../conventions/agent-bx.md#the-model-slug)) **or** match a `models/`
 entry's name. Anything else fails validation with a clear "no provider and does not
 match any models/ entry" error - a typo here is caught at `build` time, not left to
 surface as a confusing runtime error later.
@@ -64,7 +60,7 @@ surface as a confusing runtime error later.
 ## Try it
 
 Add a `models/fast.bx` config pointing at a smaller/cheaper model than your root
-agent's default, then reference `model: "fast"` from a subagent's `configure()` - a
+agent's default, then reference `model: "fast"` from a subagent's `Agent.yaml` - a
 natural fit for the researcher subagent from [Lesson 11](11-composing-subagents.md),
 which likely doesn't need your biggest model to do its job.
 

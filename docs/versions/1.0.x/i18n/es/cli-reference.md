@@ -87,7 +87,7 @@ Crea un nuevo proyecto de agente de una de tres formas mutuamente excluyentes: g
 
 ```bash
 # Generar el andamiaje desde una plantilla incorporada (por defecto: minimal)
-bxAgents new my-agent --model=openai/gpt-5 [--template=minimal|webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent] [--name=...] [--description=...]
+bxAgents new my-agent --model=openai/gpt-5 [--template=minimal|webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent] [--name=...] [--description=...] [--class]
 
 # Clonar un repositorio de GitHub existente
 bxAgents new my-agent --repo=owner/repo-name
@@ -98,10 +98,10 @@ bxAgents new my-agent --forgebox=some-package-slug
 
 - `--template`, `--repo` y `--forgebox` nombran tres FUENTES de proyecto distintas - se aplica exactamente una. Combinar dos de ellas es un error.
 - **Modo `--template`** (el predeterminado cuando no se pasa ninguna opción de fuente - `minimal`):
-  - `--model` es **requerido** - un slug `provider/model` (ver [Agent.bx](conventions/agent-bx.md)).
+  - `--model` es **requerido** - un slug `provider/model` (ver [el slug de modelo](conventions/agent-bx.md#the-model-slug)).
   - `--name` por defecto toma el propio nombre base del directorio destino.
-  - Se niega a ejecutarse si el destino ya contiene un `Agent.bx`.
-  - Crea `Agent.bx`, `instructions.md`, cada carpeta de convención (vacía), una carpeta [`tests/`](conventions/testing.md) lista para ejecutar (`tests/box.json` + `tests/specs/AgentSpec.bx`), un `.env` que declara `BOXLANG_HOME=.build/runtime` (coincidiendo con el propio home de runtime delimitado que usa `serve`), y un `.gitignore` (`.build/`, `dist/`, `.env`). Nunca sobrescribe un `.env`/`.gitignore` existente.
+  - Se niega a ejecutarse si el destino ya contiene un `Agent.yaml` o un `Agent.bx`.
+  - Crea [`Agent.yaml`](conventions/agent-yaml.md), `instructions.md`, cada carpeta de convención (vacía), una carpeta [`tests/`](conventions/testing.md) lista para ejecutar (`tests/box.json` + `tests/specs/AgentSpec.bx`), un `.env` que declara `BOXLANG_HOME=.build/runtime` (coincidiendo con el propio home de runtime delimitado que usa `serve`), y un `.gitignore` (`.build/`, `dist/`, `.env`). Nunca sobrescribe un `.env`/`.gitignore` existente.
   - `--template` elige una de 8 plantillas incorporadas, cada una añadiendo un poco de contenido preconfigurado sobre el esqueleto base anterior:
     - `minimal` - el esqueleto desnudo, nada más.
     - `webui-chat` - añade un `gateways/webui.bx` que expone la [UI de chat web](conventions/gateways/index.md) en `/chat`.
@@ -110,10 +110,11 @@ bxAgents new my-agent --forgebox=some-package-slug
     - `github-bot` - añade un adaptador de canal `gateways/github.bx`, más las líneas de marcador de posición `GITHUB_TOKEN`/`GITHUB_WEBHOOK_SECRET`/`GITHUB_BOT_NAME` correspondientes en `.env`.
     - `mcp-server` - añade un servidor de herramientas de ejemplo `mcp/exampleServer.bx` y una entrada `gateways/mcpExpose.bx` que lo expone como servidor MCP en `/mcp`.
     - `scheduled` - añade un [`schedules/Scheduler.bx`](conventions/schedules.md) real que llama al agente con un temporizador diario.
-    - `multi-agent` - añade un `configure()` al `Agent.bx` raíz que declara dos [subagentes](conventions/subagents.md) (`researcher`, `writer`), cada uno generado como su propio `subagents/<name>/Agent.bx` + `instructions.md` reales.
+    - `multi-agent` - añade una lista `subAgents` al `Agent.yaml` raíz que declara dos [subagentes](conventions/subagents.md) (`researcher`, `writer`), cada uno generado como su propio `subagents/<name>/Agent.yaml` + `instructions.md` reales.
+  - `--class` (una opción booleana sin valor, como las demás descritas arriba) escribe el [`Agent.bx`](conventions/agent-bx.md) basado en clase en lugar del `Agent.yaml` predeterminado, para agentes cuya definición necesita código (hooks, instrucciones dinámicas). Aplica a la raíz y a los subagentes que genere una plantilla, y solo al modo `--template` - no a `--repo`/`--forgebox`.
   - También ejecuta `box install` dentro de la nueva carpeta `tests/`, así que `bxAgents test` funciona de inmediato sin un paso separado de `cd tests && box install`. Esto es de mejor esfuerzo: si `box` no está en `PATH` o la instalación falla, `new` igual tiene éxito - el mensaje simplemente te indica ejecutarlo tú mismo. Pasa `--skipInstall` para omitir este paso por completo.
-- **Modo `--repo`** (`--repo=owner/repo-name` o una URL completa): clona el repositorio mediante una dependencia [JGit](https://www.eclipse.org/jgit/) incluida - no es necesario tener instalado el binario `git`. Siempre clona de forma superficial (profundidad 1) y siempre elimina la carpeta `.git` resultante después, de modo que el nuevo proyecto empieza con un historial limpio en lugar de quedar atado al propio remoto del repositorio plantilla. Se niega a ejecutarse en un directorio que ya existe y no está vacío, y falla claramente si no se encuentra ningún `Agent.bx` en el repositorio clonado.
-- **Modo `--forgebox`** (`--forgebox=<slug>`): instala un paquete de [ForgeBox](https://www.forgebox.io) hablando directamente con la propia API REST de ForgeBox (no requiere el CLI `box`). Falla claramente si el slug no existe, la descarga falla, o el paquete instalado no tiene un `Agent.bx` en su raíz (desenvolviendo primero un nivel de anidamiento, ya que muchos archivos de ForgeBox envuelven su contenido en una única carpeta de nivel superior).
+- **Modo `--repo`** (`--repo=owner/repo-name` o una URL completa): clona el repositorio mediante una dependencia [JGit](https://www.eclipse.org/jgit/) incluida - no es necesario tener instalado el binario `git`. Siempre clona de forma superficial (profundidad 1) y siempre elimina la carpeta `.git` resultante después, de modo que el nuevo proyecto empieza con un historial limpio en lugar de quedar atado al propio remoto del repositorio plantilla. Se niega a ejecutarse en un directorio que ya existe y no está vacío, y falla claramente si no se encuentra ningún `Agent.yaml` ni `Agent.bx` en el repositorio clonado.
+- **Modo `--forgebox`** (`--forgebox=<slug>`): instala un paquete de [ForgeBox](https://www.forgebox.io) hablando directamente con la propia API REST de ForgeBox (no requiere el CLI `box`). Falla claramente si el slug no existe, la descarga falla, o el paquete instalado no tiene un `Agent.yaml` ni un `Agent.bx` en su raíz (desenvolviendo primero un nivel de anidamiento, ya que muchos archivos de ForgeBox envuelven su contenido en una única carpeta de nivel superior).
 - `--model`, `--repo` y `--forgebox` se excluyen mutuamente en el sentido de que solo el modo `--template` necesita `--model` - `--repo`/`--forgebox` nunca lo requieren, ya que el proyecto fuente ya define el suyo propio.
 - `--name`/`--description` se ignoran (con una advertencia en la salida) cuando se usa `--repo`/`--forgebox` - el proyecto clonado/instalado define el suyo propio.
 - El paso de conveniencia `box install` para `tests/` (y `--skipInstall`) solo aplican al modo `--template` - la propia carpeta `tests/` de un proyecto clonado/instalado (si es que tiene una) se deja intacta.
@@ -140,7 +141,7 @@ bxAgents test
 ```
 
 - Requiere `testbox` instalado bajo `tests/testbox` (`cd tests && box install`).
-- Construye tu agente contra el proveedor `mock` por defecto (el override de entorno `test()` de `Agent.bx`) - no se necesita clave de API ni acceso a red.
+- Construye tu agente contra el proveedor `mock` por defecto (el override de entorno `test` de `Agent.yaml`, o `test()` en un `Agent.bx` basado en clase) - no se necesita clave de API ni acceso a red.
 - Imprime conteos de aprobados/fallidos/con error/omitidos más una línea por fallo, y sale con código distinto de cero si algo falló.
 
 ### `serve`
@@ -260,12 +261,12 @@ Elimina la salida `.build/` y `dist/` de un proyecto.
 bxAgents clean
 ```
 
-- Solo elimina `.build` y `dist` - las convenciones fuente (`Agent.bx`, `tools/`, etc.) nunca se tocan.
+- Solo elimina `.build` y `dist` - las convenciones fuente (`Agent.yaml`, `tools/`, etc.) nunca se tocan.
 - Reporta "Nothing to clean" si ninguno de los directorios existe.
 
 ### `doctor`
 
-![Salida de bxAgents doctor: versiones de BoxLang y bx-ai correctas, Agent.bx encontrado, la estructura del proyecto valida limpiamente, y un aviso de que falta el módulo qb](assets/cli-doctor.svg)
+![Salida de bxAgents doctor: versiones de BoxLang y bx-ai correctas, definición del agente encontrada, la estructura del proyecto valida limpiamente, y un aviso de que falta el módulo qb](assets/cli-doctor.svg)
 
 Comprueba el entorno y el proyecto en busca de los problemas que más habitualmente rompen un build.
 
@@ -274,6 +275,6 @@ bxAgents doctor [--json]
 ```
 
 - No requiere un `build` previo - está pensado precisamente para ejecutarse cuando algo no funciona.
-- Informa de la versión de BoxLang, de si el módulo `bx-ai` está cargado, de si se encuentra `Agent.bx`, de si la estructura del proyecto valida, y de los módulos de apoyo que falten.
+- Informa de la versión de BoxLang, de si el módulo `bx-ai` está cargado, de si se encuentra la definición del agente (`Agent.yaml` o `Agent.bx`), de si la estructura del proyecto valida, y de los módulos de apoyo que falten.
 - Distingue entre problemas (que impedirán un build) y avisos (que no), y termina con un recuento de ambos.
 - `--json` imprime el mismo informe como JSON, para scripting y CI.

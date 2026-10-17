@@ -28,21 +28,13 @@ No hay nada específico de BxAgents en el cuerpo de ese archivo - es el propio D
 
 ## Recuperar un agente
 
-Cada agente en el árbol del proyecto - el propio `Agent.bx` del proyecto raíz y cada entrada `subagents/*`, sin importar cuán profundamente anidada - se registra en el `config/WireBox.bx` generado bajo su propio `name` declarado (el `name` que su `Agent.bx` configuró vía `super.init()`, o un `name` declarado en `configure()` que lo sobreescriba). Un schedule alcanza cualquier agente que quiera con un simple `getInstance( "TheAgentName" )` - sin búsqueda específica de BxAgents, solo WireBox, exactamente como las llamadas `getInstance()` en cualquier otro lugar de una app ColdBox.
+Cada agente en el árbol del proyecto - la propia definición de agente del proyecto raíz y cada entrada `subagents/*`, sin importar cuán profundamente anidada - se registra en el `config/WireBox.bx` generado bajo su propio `name` declarado (el `name` de su `Agent.yaml` o, en un `Agent.bx` basado en clase, el configurado vía `super.init()` o un `name` declarado en `configure()` que lo sobreescriba). Un schedule alcanza cualquier agente que quiera con un simple `getInstance( "TheAgentName" )` - sin búsqueda específica de BxAgents, solo WireBox, exactamente como las llamadas `getInstance()` en cualquier otro lugar de una app ColdBox.
 
-```javascript
-// subagents/researcher/Agent.bx
-class extends="bxModules.bxai.models.runnables.AiAgent" {
-
-	function init() {
-		super.init(
-			name  : "ResearchBot",
-			model : aiModel( provider: "openai", params: { model: "gpt-5" } )
-		)
-		return this
-	}
-
-}
+```yaml
+# subagents/researcher/Agent.yaml
+name: ResearchBot
+description: Researches a topic
+model: openai/gpt-5
 ```
 
 ```javascript

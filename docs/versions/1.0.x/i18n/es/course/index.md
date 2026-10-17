@@ -10,10 +10,10 @@ toc: false
 # Introducción a BxAgents
 
 Veinte lecciones, de principio a fin: instala la CLI, crea el andamiaje de un proyecto,
-entiende `Agent.bx`, conecta tools, skills y subagentes, expón tu agente por HTTP y a
+entiende `Agent.yaml`, conecta tools, skills y subagentes, expón tu agente por HTTP y a
 plataformas de chat, publica la UI web generada, programa trabajo en segundo plano, pruébalo de
 verdad, y empaquétalo y despliégalo. Cada lección enlaza de vuelta a la referencia completa de
-[Convenciones](../conventions/agent-bx.md) para la inmersión profunda - este curso es el camino
+[Convenciones](../conventions/agent-yaml.md) para la inmersión profunda - este curso es el camino
 guiado a través de ella.
 
 !!! info

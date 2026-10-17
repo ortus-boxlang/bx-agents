@@ -95,13 +95,13 @@ Elimina solo `.build/` y `dist/` - tus convenciones fuente no se tocan nunca.
 A lo largo de este curso has usado `new`, `build`, `test`, `chat`, `invoke`, `serve`,
 `package`, `deploy`, `inspect`, `clean` y `hash-password`. El duodécimo verbo, `doctor`, es al
 que recurrirás cuando algo *no* funcione - comprueba tu versión de BoxLang, si `bx-ai` está
-cargado, si se encuentra `Agent.bx` y si el proyecto valida, sin necesitar un `build` previo.
+cargado, si se encuentra la definición del agente (`Agent.yaml` o `Agent.bx`) y si el proyecto valida, sin necesitar un `build` previo.
 Consulta la [Referencia de la CLI](../cli-reference.md) para cada flag de cada uno de ellos.
 
 ## Hacia dónde seguir desde aquí
 
 ::: cards
-::: card title="Convenciones" icon="phosphor-duotone:cube" href="../conventions/agent-bx.md"
+::: card title="Convenciones" icon="phosphor-duotone:cube" href="../conventions/agent-yaml.md"
 La referencia completa de cada carpeta de convención que recorrió este curso.
 :::
 ::: card title="El pipeline de build" icon="phosphor-duotone:factory" href="../build-pipeline.md"

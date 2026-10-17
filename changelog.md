@@ -35,8 +35,14 @@ or package as a portable `.bxa`.
 
 #### Conventions
 
-- `Agent.bx` + `instructions.md` as the minimum viable agent - a descriptor whose
-  `configure()` returns config, or a class extending bx-ai's `AiAgent` that *is* the agent.
+- `Agent.yaml` + `instructions.md` as the minimum viable agent. `Agent.yaml` is the default
+  way to define an agent: plain settings (`name`, `model`, `subAgents`, `memory`, ...),
+  per-environment overrides under `environments:`, and optional inline `instructions:`
+  (an `instructions.md` beside it wins). Unknown keys are an error. The advanced option is
+  an `Agent.bx` - a descriptor whose `configure()` returns config, or a class extending
+  bx-ai's `AiAgent` that *is* the agent - for definitions that need code. A folder holds
+  one or the other; both together is an error. `bxAgents new` scaffolds an `Agent.yaml`,
+  and `--class` scaffolds the class-based `Agent.bx` instead.
 - `tools/` - any class with an `@AITool`-annotated function becomes a callable tool, with
   no registration step.
 - `skills/<name>/SKILL.md` - model-selected guidance, distinct from the always-on

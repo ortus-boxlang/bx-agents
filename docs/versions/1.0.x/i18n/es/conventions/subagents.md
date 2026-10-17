@@ -8,40 +8,29 @@ tags: [conventions, subagents]
 
 # subagents/
 
-`subagents/` contiene agentes anidados, cada uno un proyecto BxAgents ordinario propio - un `Agent.bx` + `instructions.md` (y opcionalmente sus propios `tools/`, `skills/`, etc.):
+`subagents/` contiene agentes anidados, cada uno un proyecto BxAgents ordinario propio - un `Agent.yaml` + `instructions.md` (y opcionalmente sus propios `tools/`, `skills/`, etc.):
 
 ```
 my-agent/
-├── Agent.bx              # subAgents: ["researcher"]
+├── Agent.yaml            # subAgents: [ researcher ]
 ├── instructions.md
 └── subagents/
     └── researcher/
-        ├── Agent.bx
+        ├── Agent.yaml
         └── instructions.md
 ```
 
-Un subagente se conecta a su padre por nombre, declarado en el `configure()` del `Agent.bx` del padre - el nombre de la CARPETA `subagents/` a conectar en tiempo de build, distinto del propio argumento `subAgents` de `super.init()` (que toma instancias de `AiAgent` ya construidas, no nombres):
+Un subagente se conecta a su padre por nombre, declarado en la lista `subAgents` del `Agent.yaml` del padre - el nombre de la CARPETA `subagents/` a conectar en tiempo de build:
 
-```javascript
-// Agent.bx
-class extends="bxModules.bxai.models.runnables.AiAgent" {
-
-	function init() {
-		super.init(
-			name  : "my-agent",
-			model : aiModel( provider: "openai", params: { model: "gpt-5" } )
-		)
-		return this
-	}
-
-	function configure() {
-		return {
-			subAgents : [ "researcher" ]
-		};
-	}
-
-}
+```yaml
+# Agent.yaml
+name: my-agent
+model: openai/gpt-5
+subAgents:
+  - researcher
 ```
+
+La misma lista en un `Agent.bx` basado en clase (la [forma avanzada](agent-bx.md)) va en `configure()`, distinta del propio argumento `subAgents` de `super.init()` (que toma instancias de `AiAgent` ya construidas, no nombres). Un proyecto puede mezclar las dos formas: una raíz YAML con un subagente de clase, o al revés.
 
 En tiempo de build, el `addSubAgent()` propio de bx-ai envuelve cada instancia de subagente construida como una tool invocable en el padre automáticamente - no hay ningún paso separado de envoltura de tool que escribir tú mismo.
 
@@ -60,7 +49,7 @@ flowchart LR
         R3["subagents/C/"]
     end
 
-    subgraph declared["DECLARADO - la propia lista subAgents de cada Agent.bx"]
+    subgraph declared["DECLARADO - la propia lista subAgents de cada definición"]
         direction TB
         GA["A"] --> GB["B"] --> GC["C"]
     end
@@ -86,17 +75,17 @@ Los subagentes se construyen **de hojas primero** (de abajo hacia arriba): si `A
 
 ## Validación
 
-- Un nombre de subagente en `subAgents` que no corresponda a un `subagents/{name}/Agent.bx` real falla la validación con un error claro de "references unknown subagent [...]" - esto aplica a la lista `subAgents` de **cada** nodo, incluyendo el propio `Agent.bx` del proyecto raíz, no solo los subagentes anidados.
+- Un nombre de subagente en `subAgents` que no corresponda a una carpeta `subagents/{name}/` real (con un `Agent.yaml` o `Agent.bx`) falla la validación con un error claro de "references unknown subagent [...]" - esto aplica a la lista `subAgents` de **cada** nodo, incluyendo la propia definición del proyecto raíz, no solo los subagentes anidados.
 - **Las referencias circulares** (`A` → `B` → `A`) se rechazan en tiempo de validación, con la ruta completa del ciclo reportada (por ejemplo, `A -> B -> A`), antes de que ocurra cualquier generación de código.
 - Una forma de "diamante" - dos subagentes ambos dependiendo del mismo descendiente compartido - no es un ciclo y se construye bien; solo se rechazan los ciclos genuinos.
-- Un `Agent.bx` faltante dentro de una carpeta `subagents/*` descubierta se reporta como su propio error de validación.
-- El propio `name` DECLARADO de cada nodo (raíz + cada `Agent.bx` propio de subagente) debe ser único en todo el proyecto - ver abajo.
+- Un `Agent.yaml`/`Agent.bx` faltante dentro de una carpeta `subagents/*` descubierta se reporta como su propio error de validación, y también una carpeta que contiene ambos (`BxAgents.AmbiguousAgentDefinition`) - una carpeta contiene una sola definición.
+- El propio `name` DECLARADO de cada nodo (raíz + la definición propia de cada subagente) debe ser único en todo el proyecto - ver abajo.
 
 ## Retrieving an agent from `schedules/Scheduler.bx`
 
 Dos nombres diferentes están en juego, y no son intercambiables:
 
 - El **nombre de carpeta** bajo `subagents/` (`researcher` arriba) es lo que referencia `subAgents: [ "..." ]` - es puramente una preocupación de cableado de tiempo de build.
-- El propio **`name` declarado** del subagente (el campo `name` de su `Agent.bx`, por ejemplo `"ResearchBot"`) es por lo que lo recuperas en tiempo de ejecución - cada agente en el árbol (raíz + cada subagente) se registra en `config/WireBox.bx` bajo este nombre, así que [`schedules/Scheduler.bx`](schedules.md) (o cualquier otro código consciente de WireBox) lo alcanza con un simple `getInstance( "ResearchBot" )`.
+- El propio **`name` declarado** del subagente (el campo `name` de su definición de agente, por ejemplo `"ResearchBot"`) es por lo que lo recuperas en tiempo de ejecución - cada agente en el árbol (raíz + cada subagente) se registra en `config/WireBox.bx` bajo este nombre, así que [`schedules/Scheduler.bx`](schedules.md) (o cualquier otro código consciente de WireBox) lo alcanza con un simple `getInstance( "ResearchBot" )`.
 
 Estos dos nombres pueden diferir, y a menudo lo harán - el nombre de carpeta es un detalle de implementación, el `name` declarado es el que importa en cualquier otro lugar (prompts, recuperación de WireBox). Porque ahora también es una clave de binding de WireBox, `build` falla la validación si dos agentes en el árbol - sin importar cuán profundamente anidados - terminan con el mismo `name` declarado, incluyendo dos que ambos lo dejan sin configurar y silenciosamente comparten el valor por defecto `"BxAi"`.

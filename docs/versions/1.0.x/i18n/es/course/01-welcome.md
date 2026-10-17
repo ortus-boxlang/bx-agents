@@ -18,7 +18,7 @@ ensambla con ello una aplicación ColdBox real y ejecutable.
 
 ```
 my-agent/
-├── Agent.bx           # name, model, description
+├── Agent.yaml         # name, model, description
 ├── instructions.md    # the system prompt
 ├── tools/             # @AITool functions
 ├── skills/            # SKILL.md capabilities
@@ -31,7 +31,7 @@ my-agent/
 └── modules/            # module dependencies
 ```
 
-Todas las carpetas de arriba son opcionales excepto `Agent.bx`. Añade las que tu agente
+Todas las carpetas de arriba son opcionales excepto `Agent.yaml`. Añade las que tu agente
 realmente necesite; el resto pueden quedarse vacías o simplemente no existir.
 
 ## Cómo está organizado este curso
@@ -39,7 +39,7 @@ realmente necesite; el resto pueden quedarse vacías o simplemente no existir.
 Las 20 lecciones siguen el orden en el que construirías de forma natural un proyecto real:
 
 1. **Lecciones 1-4** - orientación, instalación, y tu primer proyecto creado con el andamiaje.
-2. **Lecciones 5-8** - las piezas obligatorias: `Agent.bx`, las instrucciones, construir, y
+2. **Lecciones 5-8** - las piezas obligatorias: `Agent.yaml`, las instrucciones, construir, y
    ejecutar el agente desde la terminal.
 3. **Lecciones 9-12** - dar capacidades a tu agente: tools, skills, subagentes y modelos
    con nombre.
@@ -57,7 +57,7 @@ Las 20 lecciones siguen el orden en el que construirías de forma natural un pro
 - No hace falta experiencia previa con BoxLang ni ColdBox - la lección 3 instala todo lo
   que necesitas.
 
-Cada lección enlaza de vuelta a la referencia completa de [Convenciones](../conventions/agent-bx.md)
+Cada lección enlaza de vuelta a la referencia completa de [Convenciones](../conventions/agent-yaml.md)
 para todo lo que este curso solo resume - el curso es el camino guiado, y la sección de
 Convenciones es la referencia exhaustiva a la que volverás más adelante.
 

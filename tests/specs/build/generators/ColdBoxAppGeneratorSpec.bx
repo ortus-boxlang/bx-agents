@@ -385,6 +385,18 @@ class extends="testbox.system.BaseSpec" {
 				expect( factory ).toInclude( "costs ####5 per answer" );
 			} );
 
+			it( "resolves an Agent.yaml model that names a models/ entry, like the class form does", function() {
+				var buildDir = newBuildDir();
+				var projectRoot = fixtures & "/yaml-named-model";
+				var config = resolver.resolve( projectRoot = projectRoot );
+				var discovery = discoverer.discover( projectRoot );
+				var result = generator.generate( projectRoot, buildDir, config, [], [], [], [], "", discovery );
+
+				var factory = fileRead( result.agentFactory );
+				expect( factory ).toInclude( 'provider : "mock"' );
+				expect( factory ).toInclude( 'model : "mock-model"' );
+			} );
+
 			it( "lets an instructions.md win over inline Agent.yaml instructions", function() {
 				var buildDir = newBuildDir();
 				var result = generateFor( fixtures & "/yaml-instructions-file-wins", buildDir );

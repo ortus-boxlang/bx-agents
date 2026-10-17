@@ -18,13 +18,13 @@ bxAgents new my-agent --model=openai/gpt-5
 `--model` es **obligatorio** - un slug `provider/model` (verás exactamente cómo se
 interpreta en la [Lección 5](05-agent-bx.md)). `--name` y `--description` son opcionales;
 `--name` toma por defecto el nombre del propio directorio de destino. `new` se niega a
-ejecutarse si el destino ya contiene un `Agent.bx`.
+ejecutarse si el destino ya contiene un `Agent.yaml` o un `Agent.bx`.
 
 ## Qué se crea
 
 ```
 my-agent/
-├── Agent.bx
+├── Agent.yaml
 ├── instructions.md
 ├── tools/
 ├── skills/
@@ -49,25 +49,27 @@ Todas las carpetas de convención se crean **vacías**. Añades archivos a las q
 realmente necesita y dejas el resto en paz - una carpeta `tools/` vacía no tiene ningún
 efecto sobre la aplicación generada.
 
-## `Agent.bx` tiene este aspecto
+## `Agent.yaml` tiene este aspecto
 
-```javascript
-class extends="bxModules.bxai.models.runnables.AiAgent" {
+```yaml
+# Your agent. Most agents need nothing more than this file and instructions.md.
+# For code in the definition (hooks, dynamic instructions), scaffold with --class.
+name: my-agent
+description: A helpful assistant
+model: openai/gpt-5
 
-	function init() {
-		super.init(
-			name        : "my-agent",
-			description : "",
-			model       : aiModel( provider: "openai", params: { model: "gpt-5" } )
-		)
-		return this
-	}
-
-}
+environments:
+  # `bxAgents test` builds against this override by default (see
+  # BaseAgentSpec.bx) so a fresh project's tests need no API key or
+  # network access - swap the model to test against a real provider.
+  test:
+    model: mock/mock-model
 ```
 
-`extends` directamente el propio `AiAgent` de bx-ai - más sobre qué significa eso
-exactamente en la [Lección 5](05-agent-bx.md).
+Esa es toda la definición del agente - más sobre cada clave en la
+[Lección 5](05-agent-bx.md). Si necesitas código en la definición, pasa `--class` y `new`
+crea en su lugar un `Agent.bx` basado en clase (también se explica al final de la
+Lección 5).
 
 ## La suite de pruebas se prepara sola
 
@@ -88,4 +90,4 @@ ls
 Ya tienes un proyecto BxAgents real, aunque mínimo. Las cuatro lecciones siguientes
 recorren lo que hace falta de verdad para ejecutarlo.
 
-Siguiente: [Lección 5 - Agent.bx: el agente en sí](05-agent-bx.md)
+Siguiente: [Lección 5 - La definición del agente: Agent.yaml](05-agent-bx.md)
