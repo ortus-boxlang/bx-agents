@@ -1,6 +1,6 @@
 /**
  * Docs-drift / regression guard for examples/: builds every project under
- * examples/ (each an immediate subfolder with its own Agent.bx) through the
+ * examples/ (each an immediate subfolder with its own Agent.yaml or Agent.bx) through the
  * real BuildPipeline, exactly the way `bxAgents build` does, and fails
  * loudly if any of them doesn't produce a working .build/app + manifest.
  *
@@ -25,10 +25,10 @@ if ( !directoryExists( examplesDir ) ) {
 }
 
 exampleDirs = directoryList( examplesDir, false, "path", "*", "asc", "dir" )
-	.filter( function( path ) { return fileExists( path & "/Agent.bx" ) } )
+	.filter( function( path ) { return new bxagents.models.build.AgentDefinitionLocator().exists( path ) } )
 
 if ( !exampleDirs.len() ) {
-	throw( type = "BxAgents.NoExamplesFound", message = "No example projects (immediate subfolders with an Agent.bx) found under [#examplesDir#]" )
+	throw( type = "BxAgents.NoExamplesFound", message = "No example projects (immediate subfolders with an Agent.yaml or Agent.bx) found under [#examplesDir#]" )
 }
 
 println( "Verifying #exampleDirs.len()# example project(s) build cleanly..." )

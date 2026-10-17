@@ -1,6 +1,6 @@
 # Examples
 
-Real, buildable BxAgents projects, each demonstrating one feature area. Every example uses the `mock` provider (`model: "mock/mock-model"`) so it builds and runs with **no API key and no network access** - swap in a real `provider/model` slug (see [Agent.bx](../docs/conventions/agent-bx.md#the-model-slug)) to use it for real. Every push-style gateway example additionally needs real, platform-specific credentials (a bot token, a webhook secret, ...) to actually connect - each one's own README walks through getting them.
+Real, buildable BxAgents projects, each demonstrating one feature area. Every example uses the `mock` provider (`model: "mock/mock-model"`) so it builds and runs with **no API key and no network access** - swap in a real `provider/model` slug (see [Agent.yaml](../docs/conventions/agent-yaml.md#model)) to use it for real. Every push-style gateway example additionally needs real, platform-specific credentials (a bot token, a webhook secret, ...) to actually connect - each one's own README walks through getting them.
 
 | Example | Demonstrates |
 |---|---|
@@ -38,4 +38,4 @@ bxAgents build
 bxAgents chat
 ```
 
-Every example builds independently - each is a complete, self-contained project directory (its own `Agent.bx`, extending bx-ai's own `AiAgent`), not a shared/linked structure. See [Quick Start](../docs/getting-started/quick-start.md) for the full `new` → edit → `build` → `serve`/`chat` walkthrough.
+Every example builds independently - each is a complete, self-contained project directory (its own `Agent.yaml`), not a shared/linked structure. See [Quick Start](../docs/getting-started/quick-start.md) for the full `new` → edit → `build` → `serve`/`chat` walkthrough.
