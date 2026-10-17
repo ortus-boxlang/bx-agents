@@ -68,7 +68,11 @@ directoryCreate( buildResult.appDir & "/modules", true, true )
 // so a missing sibling is normal, not a problem, and only worth reporting.
 for ( moduleName in [ "qb", "cbauth", "cbstorages", "cbsecurity", "cbcsrf", "cbproxies" ] ) {
 	moduleSource = repoRoot & "tests/" & moduleName
-	if ( directoryExists( moduleSource ) ) {
+	if ( directoryExists( buildResult.appDir & "/modules/" & moduleName ) ) {
+		// The build already copied it from the module's bundled lib/ - the
+		// real path a user's app takes - so the tests/ copy is only a fallback
+		println( "+ " & moduleName & " already in the built app (from the bundled lib/)" )
+	} else if ( directoryExists( moduleSource ) ) {
 		directoryCopy( moduleSource, buildResult.appDir & "/modules/" & moduleName, true )
 		println( "+ Installed " & moduleName & " into the built app's modules/" )
 	} else {
