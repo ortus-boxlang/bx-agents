@@ -407,8 +407,8 @@ task testColdBoxIntegration( type: JavaExec ) {
 	// broken form and the app 500'd.
 	dependsOn compileJava, shadowJar
 	onlyIf {
-		if ( !file( "tests/coldbox" ).exists() ) {
-			println "! Skipping testColdBoxIntegration: tests/coldbox/ not found - run `box install` in tests/ first"
+		if ( !file( "build/lib-stage/lib/coldbox" ).exists() ) {
+			println "! Skipping testColdBoxIntegration: build/lib-stage/lib/coldbox not found - run `./gradlew installDevLibs` first"
 			return false
 		}
 		if ( fileTree( dir: 'src/test/resources/libs', include: 'boxlang-miniserver-*.jar' ).isEmpty() ) {
@@ -548,7 +548,17 @@ task downloadModules {
 			def zipFile = new File( cacheDir, "${mod.name}-${version}.zip" )
 			if ( !zipFile.exists() ) {
 				def url = "https://downloads.ortussolutions.com/ortussolutions/boxlang-modules/${mod.name}/${version}/${mod.name}-${version}.zip"
-				zipFile.withOutputStream { out -> new URL( url ).withInputStream { input -> out << input } }
+				// Download to a temp file and rename, so a failed or interrupted download never
+				// leaves a truncated zip that the exists() check above would trust next time
+				def partFile = new File( cacheDir, zipFile.name + ".part" )
+				try {
+					partFile.withOutputStream { out -> new URL( url ).withInputStream { input -> out << input } }
+					if ( !partFile.renameTo( zipFile ) ) {
+						throw new GradleException( "Could not move ${partFile} to ${zipFile}" )
+					}
+				} finally {
+					partFile.delete()
+				}
 			}
 			def destDir = new File( modulesDir, mod.moduleName )
 			if ( destDir.exists() ) {
