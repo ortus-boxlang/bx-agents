@@ -222,8 +222,8 @@ public class ModuleCliProcessTest {
 		ensureTempModuleInstall();
 		assumeTrue( Files.exists( projectDir.resolve( "tests/specs/AgentSpec.bx" ) ), "requires testNewProcess to have run first" );
 
-		Path testboxSource = Path.of( "testbox" );
-		assumeTrue( Files.isDirectory( testboxSource ), "testbox/ not found at the repo root - run `box install` first" );
+		Path testboxSource = Path.of( "build/lib-stage/lib/testbox" );
+		assumeTrue( Files.isDirectory( testboxSource ), "build/lib-stage/lib/testbox not found - run `./gradlew installLibs` first" );
 		copyRecursively( testboxSource, projectDir.resolve( "tests/testbox" ) );
 
 		VerbResult result = runVerbCapturing( "test", projectDir.toString() );

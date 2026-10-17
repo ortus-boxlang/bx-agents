@@ -77,13 +77,13 @@ Before you get started, fetch the BoxLang binary (until this module is published
 | `clean` | Deletes the `build` folder. |
 | `compileJava` | Compiles Java source in `src/main/java`. |
 | `test` | Runs the JUnit suite. |
-| `testBx` | Runs the TestBox BDD suite (`tests/specs`, excluding the ColdBox-dependent bundle) via `runTests.bxs`. Requires `testbox/` (`box install`). |
-| `testColdBoxIntegration` | Boots a real `boxlang-miniserver` against a generated app and hits a `toAi()` route over real HTTP, via `runColdBoxIntegrationTests.bxs`. Requires `tests/coldbox/` (`box install` in `tests/`) and the miniserver jar. |
+| `testBx` | Runs the TestBox BDD suite (`tests/specs`, excluding the ColdBox-dependent bundle) via `runTests.bxs`. Runs `installLibs` first for TestBox. |
+| `testColdBoxIntegration` | Boots a real `boxlang-miniserver` against a generated app and hits a `toAi()` route over real HTTP, via `runColdBoxIntegrationTests.bxs`. Needs the miniserver jar; ColdBox and its modules come from the module's bundled `lib/`. |
 | `verifyExamples` | Builds every project under `examples/` through the real build pipeline via `verifyExamples.bxs` - a regression net across the whole feature matrix. |
 | `checkTemplateTokens` | Fails if any leftover `@MODULE_*@` boxlang-module-template placeholder tokens remain anywhere in the repo. Runs as part of `check`. |
 | `downloadBoxLang` | Downloads the BoxLang binary into `src/test/resources/libs`. |
 | `downloadModules` | Downloads the BoxLang modules BX Agents bundles (bx-ai, bx-ftp, bx-sqlite, bx-mail; versions in `gradle.properties`) into `build/modules/bxagents/modules`, where the module loads them as nested modules. |
-| `installLibs` | Runs `box install` (CommandBox required) against `src/main/lib/box.json`, staging ColdBox, qb, cbsecurity, cbauth and cbmailservices in `build/lib-stage`, which the module zip ships as `lib/`. |
+| `installLibs` | Runs `box install` (CommandBox required) against `src/main/lib/box.json`, staging ColdBox, qb, cbsecurity, cbauth and cbmailservices (shipped as `lib/`) and TestBox (a devDependency, never shipped) in `build/lib-stage`. |
 | `downloadMiniServer` | Downloads the `boxlang-miniserver` binary into `src/test/resources/libs`. |
 | `jar` / `shadowJar` | Packages compiled classes/resources into a JAR under `build/libs`. |
 | `javadoc` | Generates Javadocs into `build/docs/javadoc`. |

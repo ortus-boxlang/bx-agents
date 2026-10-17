@@ -65,26 +65,9 @@ jobs:
       - name: Setup CommandBox CLI
         uses: Ortus-Solutions/setup-commandbox@v2.0.1
 
-      - name: Install TestBox
-        run: box install
-
-      # Installs ColdBox, TestBox AND qb (with its own cbpaginator dependency).
-      # qb is what the generated web UI's models/ChatDb.bx resolves
-      # SchemaBuilder@qb / QueryBuilder@qb through, so without this the
-      # ColdBox integration boot fails at startup rather than skipping.
-      - name: Install ColdBox + qb + cbsecurity (for the ColdBox-dependent integration specs)
-        run: box install
-        working-directory: tests
-
-      - name: Show installed test dependencies
-        # Purely diagnostic - never fail the job over a listing. Written as
-        # separate guarded commands rather than `A && B || true`, which reads
-        # like if-then-else but is not: the `|| true` there also swallows a
-        # failure of A.
-        run: |
-          ls -la tests/ || true
-          ls -la tests/qb 2>/dev/null || true
-        shell: bash
+      # TestBox, ColdBox, qb, cbsecurity, ... all come from ONE manifest,
+      # src/main/lib/box.json, installed by the Gradle `installLibs` task
+      # (CommandBox, set up above). Nothing else installs dependencies.
 
       # Not Needed in this module
       #- name: Setup Environment For Testing Process

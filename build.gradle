@@ -203,6 +203,9 @@ spotless {
  */
 task installLibs( type: Exec ) {
 	group = "boxlang"
+	// Skipped when the manifest is unchanged and the staged libs are still there
+	inputs.file "src/main/lib/box.json"
+	outputs.dir "build/lib-stage"
 	description = "Installs the bundled ColdBox runtime libraries (src/main/lib/box.json) with CommandBox into build/lib-stage"
 	doFirst {
 		delete( "build/lib-stage" )
@@ -235,6 +238,9 @@ task installLibs( type: Exec ) {
  */
 task createModuleStructure(type: Copy) {
 	mustRunAfter shadowJar, jar
+	// The bundled BoxLang modules and ColdBox libs must be in place BEFORE this copies
+	// and the zip is built, or a fresh build ships a zip without them
+	dependsOn "downloadModules", "installLibs"
     from( 'build/libs' ) {
 		include "${project.name}-${version}.jar"
         into 'libs'
@@ -271,7 +277,9 @@ task createModuleStructure(type: Copy) {
     }
     // Bundled ColdBox runtime libs (see installLibs) - copied into every generated app
     // (installLibs stages them as build/lib-stage/lib/{coldbox,modules/*} - the layout of lib/ itself)
+    // (testbox is a devDependency of the same manifest - it never ships)
     from( 'build/lib-stage/lib' ) {
+		exclude 'testbox/**'
 		into 'lib'
 	}
     destinationDir = file( 'build/modules/bxagents' )
@@ -286,8 +294,6 @@ task zipModuleStructure( type: Zip ) {
         println "+ Module has been zipped to the distribution folder"
     }
 }
-// The published zip must carry the bundled BoxLang modules (see downloadModules)
-zipModuleStructure.dependsOn "downloadModules", "installLibs"
 createModuleStructure.finalizedBy( zipModuleStructure )
 shadowJar.finalizedBy( createModuleStructure )
 
@@ -336,10 +342,10 @@ check.dependsOn checkTemplateTokens
 task testBx( type: JavaExec ) {
 	group = "verification"
 	description = "Runs the TestBox BDD test suite (tests/specs) via runTests.bxs"
-	dependsOn compileJava
+	dependsOn compileJava, installLibs
 	onlyIf {
-		if ( !file( "testbox" ).exists() ) {
-			println "! Skipping testBx: testbox/ not found - run `box install` first"
+		if ( !file( "build/lib-stage/lib/testbox" ).exists() ) {
+			println "! Skipping testBx: build/lib-stage/lib/testbox not found - run `./gradlew installLibs` first"
 			return false
 		}
 		return true

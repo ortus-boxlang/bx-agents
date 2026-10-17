@@ -14,7 +14,7 @@ Check in this order:
 
 1. **The docs MCP servers** - `BoxLang_Docs`, `Coldbox_Docs`, `CommandBox_Docs`, `TestBox_Docs`, `WireBox_Docs`, `CacheBox_Docs`, `LogBox_Docs`. `searchDocumentation` then `getPage`.
 2. **The actual jar.** `src/test/resources/libs/boxlang-*.jar` and `boxlang-miniserver-*.jar` are right there. `unzip -l` to find a class, `javap -p` for signatures, `javap -c -p` for the literals and branches when a signature is not enough. This is how you learn what a method *does*, not what it is documented to do.
-3. **The ColdBox source.** `tests/coldbox` is a real install - grep it. Note it is **gitignored**, so it can be an old build of the same version string; when a documented method appears to be missing, re-download before concluding it does not exist (`coldbox@be` / the 8.2 snapshot).
+3. **The ColdBox source.** `build/lib-stage/lib/coldbox` is a real install (`./gradlew installLibs`) - grep it. Note it is **gitignored**, so it can be an old build of the same version string; when a documented method appears to be missing, re-run `./gradlew installLibs` (after `clean`, or bump the range in `src/main/lib/box.json`) before concluding it does not exist.
 
 A docblock is not evidence. ColdBox's `Router.cfc` documents `withCondition()` as `( route, params, event )`; `RoutingService.cfc` actually calls it with **one** argument. Read the caller.
 
