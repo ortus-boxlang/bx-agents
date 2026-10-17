@@ -203,10 +203,30 @@ spotless {
  */
 task installLibs( type: Exec ) {
 	group = "boxlang"
+	description = "Installs the SHIPPED libraries (dependencies only, no devDependencies) from src/main/lib/box.json with CommandBox into build/lib-prod"
 	// Skipped when the manifest is unchanged and the staged libs are still there
 	inputs.file "src/main/lib/box.json"
+	outputs.dir "build/lib-prod"
+	doFirst {
+		delete( "build/lib-prod" )
+		copy {
+			from "src/main/lib/box.json"
+			into "build/lib-prod"
+		}
+	}
+	workingDir "build/lib-prod"
+	commandLine "box", "install", "--production"
+}
+
+/**
+ * Same manifest, devDependencies included (TestBox and its own dependencies),
+ * for the developer's machine and CI. Never shipped.
+ */
+task installDevLibs( type: Exec ) {
+	group = "boxlang"
+	description = "Installs every library incl. devDependencies (TestBox) from src/main/lib/box.json with CommandBox into build/lib-stage"
+	inputs.file "src/main/lib/box.json"
 	outputs.dir "build/lib-stage"
-	description = "Installs the bundled ColdBox runtime libraries (src/main/lib/box.json) with CommandBox into build/lib-stage"
 	doFirst {
 		delete( "build/lib-stage" )
 		copy {
@@ -276,10 +296,9 @@ task createModuleStructure(type: Copy) {
         into 'completions'
     }
     // Bundled ColdBox runtime libs (see installLibs) - copied into every generated app
-    // (installLibs stages them as build/lib-stage/lib/{coldbox,modules/*} - the layout of lib/ itself)
-    // (testbox is a devDependency of the same manifest - it never ships)
-    from( 'build/lib-stage/lib' ) {
-		exclude 'testbox/**'
+    // (installLibs stages them as build/lib-prod/lib/{coldbox,modules/*} - the layout of lib/ itself;
+    // devDependencies such as TestBox are only in build/lib-stage and never ship)
+    from( 'build/lib-prod/lib' ) {
 		into 'lib'
 	}
     destinationDir = file( 'build/modules/bxagents' )
@@ -342,10 +361,10 @@ check.dependsOn checkTemplateTokens
 task testBx( type: JavaExec ) {
 	group = "verification"
 	description = "Runs the TestBox BDD test suite (tests/specs) via runTests.bxs"
-	dependsOn compileJava, installLibs
+	dependsOn compileJava, installDevLibs
 	onlyIf {
 		if ( !file( "build/lib-stage/lib/testbox" ).exists() ) {
-			println "! Skipping testBx: build/lib-stage/lib/testbox not found - run `./gradlew installLibs` first"
+			println "! Skipping testBx: build/lib-stage/lib/testbox not found - run `./gradlew installDevLibs` first"
 			return false
 		}
 		return true
@@ -371,6 +390,8 @@ task testBx( type: JavaExec ) {
  *    "Install ColdBox" step provide it)
  */
 task testColdBoxIntegration( type: JavaExec ) {
+	// boxlang.json maps /coldbox and /testbox into build/lib-stage
+	dependsOn installDevLibs
 	group = "verification"
 	description = "Runs the ColdBox-dependent integration specs (tests/specs/integration/coldbox) over real HTTP via boxlang-miniserver"
 	// shadowJar, not just compileJava, for the same reason verifyExamples
@@ -435,6 +456,8 @@ task verifyExamples( type: JavaExec ) {
 
 test {
     useJUnitPlatform()
+    // ModuleCliProcessTest copies TestBox out of the dev install
+    dependsOn installDevLibs
     testLogging {
 		showStandardStreams = true
 		events "passed", "skipped", "failed"

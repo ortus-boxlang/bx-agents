@@ -201,6 +201,28 @@ public class ModuleCliProcessTest {
 		assertTrue( Files.exists( projectDir.resolve( "instructions.md" ) ), "instructions.md should have been scaffolded" );
 	}
 
+	/**
+	 * When a verb fails, say what the child process was actually given: the module
+	 * folder's contents (including the bundled nested modules) and what `doctor`
+	 * reports as loaded. Without it a failure like "bx-ai class not found" is a guess.
+	 */
+	private void printInstallDiagnostics() throws Exception {
+		System.out.println( "---- install diagnostics ----" );
+		for ( String rel : List.of( "", "modules", "lib" ) ) {
+			Path dir = modulesDir.resolve( "bxagents" ).resolve( rel );
+			if ( Files.isDirectory( dir ) ) {
+				try ( var names = Files.list( dir ) ) {
+					System.out.println( "bxagents/" + rel + ": " + names.map( p -> p.getFileName().toString() ).sorted().toList() );
+				}
+			} else {
+				System.out.println( "bxagents/" + rel + ": (missing)" );
+			}
+		}
+		System.out.println( "bxai ModuleConfig.bx present: " + Files.exists( modulesDir.resolve( "bxagents/modules/bxai/ModuleConfig.bx" ) ) );
+		runVerb( "doctor", projectDir.toString() );
+		System.out.println( "---- end diagnostics ----" );
+	}
+
 	@Order( 2 )
 	@DisplayName( "a real `module:bxagents build` OS process assembles the generated app" )
 	@Test
@@ -209,6 +231,9 @@ public class ModuleCliProcessTest {
 		assumeTrue( Files.exists( projectDir.resolve( "Agent.bx" ) ), "requires testNewProcess to have run first" );
 
 		int exitCode = runVerb( "build", projectDir.toString() );
+		if ( exitCode != 0 ) {
+			printInstallDiagnostics();
+		}
 
 		assertEquals( 0, exitCode, "module:bxagents build should exit 0" );
 		assertTrue( Files.exists( projectDir.resolve( ".build/app/Application.bx" ) ), "a real Application.bx should have been generated" );
@@ -223,7 +248,7 @@ public class ModuleCliProcessTest {
 		assumeTrue( Files.exists( projectDir.resolve( "tests/specs/AgentSpec.bx" ) ), "requires testNewProcess to have run first" );
 
 		Path testboxSource = Path.of( "build/lib-stage/lib/testbox" );
-		assumeTrue( Files.isDirectory( testboxSource ), "build/lib-stage/lib/testbox not found - run `./gradlew installLibs` first" );
+		assumeTrue( Files.isDirectory( testboxSource ), "build/lib-stage/lib/testbox not found - run `./gradlew installDevLibs` first" );
 		copyRecursively( testboxSource, projectDir.resolve( "tests/testbox" ) );
 
 		VerbResult result = runVerbCapturing( "test", projectDir.toString() );

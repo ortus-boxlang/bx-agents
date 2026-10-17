@@ -14,7 +14,7 @@ Check in this order:
 
 1. **The docs MCP servers** - `BoxLang_Docs`, `Coldbox_Docs`, `CommandBox_Docs`, `TestBox_Docs`, `WireBox_Docs`, `CacheBox_Docs`, `LogBox_Docs`. `searchDocumentation` then `getPage`.
 2. **The actual jar.** `src/test/resources/libs/boxlang-*.jar` and `boxlang-miniserver-*.jar` are right there. `unzip -l` to find a class, `javap -p` for signatures, `javap -c -p` for the literals and branches when a signature is not enough. This is how you learn what a method *does*, not what it is documented to do.
-3. **The ColdBox source.** `build/lib-stage/lib/coldbox` is a real install (`./gradlew installLibs`) - grep it. Note it is **gitignored**, so it can be an old build of the same version string; when a documented method appears to be missing, re-run `./gradlew installLibs` (after `clean`, or bump the range in `src/main/lib/box.json`) before concluding it does not exist.
+3. **The ColdBox source.** `build/lib-stage/lib/coldbox` is a real install (`./gradlew installDevLibs`) - grep it. Note it is **gitignored**, so it can be an old build of the same version string; when a documented method appears to be missing, re-run `./gradlew installDevLibs` (after `clean`, or bump the range in `src/main/lib/box.json`) before concluding it does not exist.
 
 A docblock is not evidence. ColdBox's `Router.cfc` documents `withCondition()` as `( route, params, event )`; `RoutingService.cfc` actually calls it with **one** argument. Read the caller.
 
@@ -55,7 +55,7 @@ The one thing to know: **SSE frames are terminated by a blank line, and the web 
 ## Build And Packaging
 
 - Use the Gradle wrapper from the repo root for build tasks.
-- Dependencies are bundled, never installed by the user. BoxLang modules (`ext.boxlangModules` in `build.gradle`, versions in `gradle.properties`) are downloaded into `build/modules/bxagents/modules` and load as nested modules (BoxLang 1.17+); ColdBox libraries are listed in `src/main/lib/box.json` (same `installPathConventions` as the ColdBox templates: `coldbox` to `lib/coldbox/`, every module to `lib/modules/`), installed with `./gradlew installLibs` (CommandBox / bx-cli is required for development), shipped as `lib/` and copied into each built app by `RuntimeLibsCopier`. Add a dependency there, not to `box.json`.
+- Dependencies are bundled, never installed by the user. BoxLang modules (`ext.boxlangModules` in `build.gradle`, versions in `gradle.properties`) are downloaded into `build/modules/bxagents/modules` and load as nested modules (BoxLang 1.17+); ColdBox libraries are listed in `src/main/lib/box.json` (same `installPathConventions` as the ColdBox templates: `coldbox` to `lib/coldbox/`, every module to `lib/modules/`), installed with `./gradlew installLibs` (shipped set, `--production`) and `installDevLibs` (adds TestBox; never shipped), CommandBox / bx-cli is required for development; shipped as `lib/` and copied into each built app by `RuntimeLibsCopier`. Add a dependency there, not to `box.json`.
 - Prefer narrow validation first: `./gradlew test`, `./gradlew spotlessCheck`, or a targeted Gradle task related to the touched area.
 - Preserve the packaging pipeline in `build.gradle`: shadow jar output, service loader generation, `build/module` assembly, and zip distribution artifacts.
 - Do not reintroduce `src/main/resources` onto the IDE test classpath unless the task explicitly requires it; this template excludes it to avoid BoxLang class loading conflicts during module development.
