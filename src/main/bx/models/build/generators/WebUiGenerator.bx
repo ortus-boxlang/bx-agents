@@ -575,14 +575,14 @@ class {
 
 		if ( arguments.hasUsers ) {
 			// Accounts exist, so identity is the account. Read straight from
-			// cbauth rather than through ColdBox's identifierProvider: a closure
+			// cbsecurity rather than through ColdBox's identifierProvider: a closure
 			// declared in the `coldbox` config struct never reaches
 			// configSettings (verified in a real boot, in both the documented
 			// literal shape and as a later assignment), so anything that leaned
 			// on that setting was silently getting the session id instead.
-			lines.append( '		var auth = getInstance( "authenticationService@cbauth" )' )
+			lines.append( '		var auth = getInstance( "cbSecurity@cbSecurity" )' )
 			lines.append( "		if ( auth.isLoggedIn() ) {" )
-			lines.append( "			return auth.getUserId()" )
+			lines.append( "			return auth.getUser().getId()" )
 			lines.append( "		}" )
 			lines.append( "		// Signed out. The login gate keeps this unreachable for a gated" )
 			lines.append( "		// entry; an ungated one in the same project shares the open space." )
@@ -1333,12 +1333,12 @@ class {
 			" * GENERATED FILE - produced by BX Agents' build pipeline.",
 			" * Do not edit by hand; rebuilding your project overwrites this file.",
 			" *",
-			" * Sign-in for the web UI, backed by cbauth against the users table.",
+			" * Sign-in for the web UI, backed by cbsecurity against the users table.",
 			" * The form is the static login.html alongside the chat shell.",
 			" */",
 			"class {",
 			"",
-			'	property name="auth" inject="authenticationService@cbauth";',
+			'	property name="auth" inject="cbSecurity@cbSecurity";',
 			"",
 			"	/**",
 			"	 * Verify a submitted username/password.",
@@ -1420,7 +1420,7 @@ class {
 			" */",
 			"class {",
 			"",
-			'	property name="auth" inject="authenticationService@cbauth";',
+			'	property name="auth" inject="cbSecurity@cbSecurity";',
 			"",
 			"	function preProcess( event, interceptData, rc, prc ) {",
 			"		var path = event.getPath()"

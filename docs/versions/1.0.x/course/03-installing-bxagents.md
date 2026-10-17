@@ -8,12 +8,12 @@ tags: [course, getting-started]
 
 # Installing BxAgents
 
-BxAgents is a BoxLang module. It needs three things on the machine that runs it:
+BxAgents is a BoxLang module. It needs two things on the machine that runs it:
 
 1. A [BoxLang](https://www.boxlang.io) runtime.
-2. The `bx-ai` BoxLang module (BxAgents generates code that calls it - it doesn't
-   vendor it).
-3. BxAgents itself.
+2. BxAgents itself, which bundles everything else it needs (`bx-ai`, `bx-sqlite`,
+   `bx-ftp`, `bx-mail`, and ColdBox with its modules for the
+   apps it generates). BoxLang **1.18.0 or later** is required.
 
 ::: stepper
 ::: step "Install BoxLang"
@@ -21,13 +21,12 @@ Follow the [official BoxLang installation guide](https://boxlang.ortusbooks.com/
 The quick installer also sets up `~/.boxlang/bin` on your `PATH`, which is where
 module-provided executables (like BxAgents' own `bxAgents` command) land.
 :::
-::: step "Install bx-ai and BxAgents"
+::: step "Install BxAgents"
 ```bash
-install-bx-module bx-ai
 install-bx-module bx-agents
 ```
 
-This fetches both modules into your BoxLang modules directory (`~/.boxlang/modules`
+This fetches the module, with its bundled dependencies, into your BoxLang modules directory (`~/.boxlang/modules`
 by default, or `boxlang_modules/` with `--local`).
 :::
 ::: step "Verify it worked"
@@ -64,12 +63,8 @@ This course uses the short `bxAgents <verb>` form throughout.
 - **`serve`** ([Lesson 8](08-talking-to-your-agent.md)) additionally needs the
   standalone [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver)
   binary on `PATH`.
-- **`deploy`**'s `ftp`/`sftp` targets ([Lesson 20](20-packaging-deploying-and-wrapping-up.md))
-  need the [`bx-ftp`](https://github.com/ortus-boxlang/bx-ftp) module
-  (`install-bx-module bx-ftp`) - a genuine runtime dependency, not vendored, same as
-  `bx-ai`.
 
-Neither is required to follow along with `build`, `chat`, `test`, `package`,
+`serve` is not required to follow along with `build`, `chat`, `test`, `package`,
 `inspect`, `clean` or `new`.
 
 See [Installation](../getting-started/installation.md) for the full reference page.

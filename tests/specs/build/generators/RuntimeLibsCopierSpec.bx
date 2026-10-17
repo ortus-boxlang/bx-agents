@@ -1,0 +1,88 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "RuntimeLibsCopier", function() {
+
+			beforeEach( function() {
+				variables.copier = new bxagents.models.build.generators.RuntimeLibsCopier();
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function newDir( required string prefix ) {
+				var dir = createTempDirectory( prefix = arguments.prefix );
+				tempDirs.append( dir );
+				return dir;
+			}
+
+			// A bundled lib/ shaped like the one the module build assembles
+			private function newBundle() {
+				var lib = newDir( "bxagents-bundle-" );
+				directoryCreate( lib & "/coldbox/system", true );
+				fileWrite( lib & "/coldbox/system/Bootstrap.cfc", "bundled-coldbox" );
+				directoryCreate( lib & "/modules/qb", true );
+				fileWrite( lib & "/modules/qb/ModuleConfig.cfc", "bundled-qb" );
+				directoryCreate( lib & "/modules/cbsecurity", true );
+				fileWrite( lib & "/modules/cbsecurity/ModuleConfig.cfc", "bundled-cbsecurity" );
+				return lib;
+			}
+
+			it( "copies coldbox/ and every modules/<name>/ into the app", function() {
+				var app = newDir( "bxagents-app-" );
+				var result = copier.copy( appDir = app, bundledLibsDir = newBundle() );
+
+				expect( result.bundled ).toBeTrue();
+				expect( fileRead( app & "/coldbox/system/Bootstrap.cfc" ) ).toBe( "bundled-coldbox" );
+				expect( fileRead( app & "/modules/qb/ModuleConfig.cfc" ) ).toBe( "bundled-qb" );
+				expect( fileRead( app & "/modules/cbsecurity/ModuleConfig.cfc" ) ).toBe( "bundled-cbsecurity" );
+				expect( result.copied ).toInclude( "coldbox" );
+				expect( result.copied ).toInclude( "modules/qb" );
+				expect( result.copied ).toInclude( "modules/cbsecurity" );
+			} );
+
+			it( "replaces a stale library instead of merging into it", function() {
+				var app = newDir( "bxagents-app-" );
+				directoryCreate( app & "/modules/qb", true );
+				fileWrite( app & "/modules/qb/stale.txt", "old" );
+				copier.copy( appDir = app, bundledLibsDir = newBundle() );
+
+				expect( fileExists( app & "/modules/qb/stale.txt" ) ).toBeFalse();
+				expect( fileExists( app & "/modules/qb/ModuleConfig.cfc" ) ).toBeTrue();
+			} );
+
+			it( "lets the project's own lib/ add to and override the bundled set", function() {
+				var app = newDir( "bxagents-app-" );
+				var project = newDir( "bxagents-project-" );
+				directoryCreate( project & "/lib/modules/qb", true );
+				fileWrite( project & "/lib/modules/qb/ModuleConfig.cfc", "project-qb" );
+				directoryCreate( project & "/lib/modules/extra", true );
+				fileWrite( project & "/lib/modules/extra/ModuleConfig.cfc", "project-extra" );
+
+				var result = copier.copy( appDir = app, projectRoot = project, bundledLibsDir = newBundle() );
+
+				expect( fileRead( app & "/modules/qb/ModuleConfig.cfc" ) ).toBe( "project-qb" );
+				expect( fileRead( app & "/modules/extra/ModuleConfig.cfc" ) ).toBe( "project-extra" );
+				expect( fileRead( app & "/modules/cbsecurity/ModuleConfig.cfc" ) ).toBe( "bundled-cbsecurity" );
+				expect( result.bundled ).toBeTrue();
+			} );
+
+			it( "reports no bundle, and copies nothing, when the module has no lib/", function() {
+				var app = newDir( "bxagents-app-" );
+				var result = copier.copy( appDir = app, bundledLibsDir = app & "/nope" );
+
+				expect( result.bundled ).toBeFalse();
+				expect( result.copied ).toBeEmpty();
+				expect( directoryExists( app & "/coldbox" ) ).toBeFalse();
+			} );
+
+		} );
+	}
+
+}

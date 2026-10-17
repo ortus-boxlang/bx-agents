@@ -188,14 +188,17 @@ class extends="testbox.system.BaseSpec" {
 				expect( db.findUserByUsername( "nobody" ) ).toBeEmpty();
 			} );
 
-			it( "resolves cbauth and the generated user service through WireBox", function() {
+			it( "resolves cbsecurity and the generated user service through WireBox", function() {
 				var binder = controller.getWireBox().getBinder();
 
-				// Proves cbauth loaded as a real ColdBox module - and with it
-				// cbstorages, which it depends on for session storage
+				// Proves cbsecurity loaded as a real ColdBox module - and with it
+				// cbauth and cbstorages, which it depends on for authentication
+				// and session storage
 				expect( binder.mappingExists( "authenticationService@cbauth" ) ).toBeTrue();
+				expect( binder.mappingExists( "cbSecurity@cbSecurity" ) ).toBeTrue();
 
-				var auth = controller.getWireBox().getInstance( "authenticationService@cbauth" );
+				// The facade the generated handlers actually inject
+				var auth = controller.getWireBox().getInstance( "cbSecurity@cbSecurity" );
 				expect( isObject( auth ) ).toBeTrue();
 				// Nobody is signed in during a bare spec request
 				expect( auth.isLoggedIn() ).toBeFalse();
@@ -222,8 +225,8 @@ class extends="testbox.system.BaseSpec" {
 			 * instead of `announce()` (fixed by bumping cbauth's own pinned
 			 * version - see tests/box.json).
 			 */
-			it( "authenticates for real through cbauth's own authenticate(), not just isValidCredentials()", function() {
-				var auth = controller.getWireBox().getInstance( "authenticationService@cbauth" );
+			it( "authenticates for real through cbsecurity's own authenticate(), not just isValidCredentials()", function() {
+				var auth = controller.getWireBox().getInstance( "cbSecurity@cbSecurity" );
 
 				try {
 					auth.authenticate( "e2e", "definitely-not-the-password" );
@@ -249,7 +252,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( isObject( user ) ).toBeTrue();
 				expect( len( user.getId() ) ).toBeGT( 0 );
 				expect( auth.isLoggedIn() ).toBeTrue();
-				auth.quietLogout()
+				auth.logout()
 			} );
 
 			/**

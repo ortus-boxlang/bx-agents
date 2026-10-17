@@ -19,6 +19,20 @@ or package as a portable `.bxa`.
 
 ### Added
 
+#### Self-contained install
+
+- `install-bx-module bx-agents` is the only install. The module zip bundles `bx-ai`,
+  `bx-sqlite`, `bx-ftp` and `bx-mail` as nested BoxLang modules
+  (BoxLang 1.17+), and a `lib/` with ColdBox, `qb`, `cbsecurity`, `cbauth` and
+  `cbmailservices` that `build` copies into every generated app. A project's own
+  `lib/` folder adds to or overrides them.
+- `serve` loads the bundled modules, so a served app finds `bx-ai` without any
+  install.
+- The web UI's sign-in is backed by `cbsecurity` (which wraps `cbauth`). cbsecurity's
+  firewall is switched off in generated apps for now; it cannot resolve a handler for
+  `toAi()` routes.
+- Minimum BoxLang version is now 1.18.0.
+
 #### Conventions
 
 - `Agent.bx` + `instructions.md` as the minimum viable agent - a descriptor whose

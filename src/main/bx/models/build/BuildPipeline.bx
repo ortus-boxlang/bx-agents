@@ -38,6 +38,7 @@ class {
 		variables.manifestNormalizer = new "models.build.ManifestNormalizer@bxagents"( arguments.generatorVersion )
 		variables.coldboxAppGenerator = new "models.build.generators.ColdBoxAppGenerator@bxagents"()
 		variables.toolsSkillsCopier = new "models.build.generators.ToolsSkillsCopier@bxagents"()
+		variables.runtimeLibsCopier = new "models.build.generators.RuntimeLibsCopier@bxagents"()
 		variables.interceptorSplitter = new "models.build.generators.InterceptorSplitter@bxagents"()
 		variables.routerGenerator = new "models.build.generators.RouterGenerator@bxagents"()
 		variables.webUiGenerator = new "models.build.generators.WebUiGenerator@bxagents"()
@@ -195,6 +196,14 @@ class {
 
 		arguments.onProgress( "+ Copying tools/ and skills/..." )
 		variables.toolsSkillsCopier.copy( root, appDir )
+
+		arguments.onProgress( "+ Copying bundled ColdBox runtime libraries..." )
+		var libsResult = variables.runtimeLibsCopier.copy( appDir = appDir, projectRoot = root )
+		if ( libsResult.bundled ) {
+			arguments.onProgress( "    #libsResult.copied.toList( ', ' )#" )
+		} else {
+			arguments.onProgress( "    ! this BX Agents install has no bundled lib/ (source checkout?) - ColdBox and its modules must already be resolvable" )
+		}
 
 		if ( discovery.hasScheduler ?: false ) {
 			arguments.onProgress( "+ Copying schedules/Scheduler.bx..." )

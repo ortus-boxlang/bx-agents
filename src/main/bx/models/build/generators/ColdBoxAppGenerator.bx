@@ -138,9 +138,12 @@ class {
 		// a config/modules/<name>.bx file, invoked directly by ModuleService.cfc
 		// via a plain function call (`oConfig.configure( mConfig.settings )`),
 		// not the reflection-based one that never reaches ColdBox on this stack.
+		var modulesConfigDir = appDir & "/config/modules"
+		directoryCreate( path : modulesConfigDir, createPath : true, ignoreExists : true )
+		// cbsecurity is bundled into every generated app, so its override is
+		// written for every app (see renderCbsecurityModuleOverride()).
+		fileWrite( modulesConfigDir & "/cbsecurity.bx", renderCbsecurityModuleOverride( arguments.webUiHasUsers ) )
 		if ( arguments.webUiHasUsers ) {
-			var modulesConfigDir = appDir & "/config/modules"
-			directoryCreate( path : modulesConfigDir, createPath : true, ignoreExists : true )
 			fileWrite( modulesConfigDir & "/cbauth.bx", renderCbauthModuleOverride() )
 		}
 
@@ -432,6 +435,55 @@ class {
 	 */
 	private string function renderInterceptorRegistration( required string interceptorName ) {
 		return 'application.cbController.getInterceptorService().register( target: application.cbController.getWireBox().getInstance( "interceptors.#bxLiteral( arguments.interceptorName )#" ), name: "#bxLiteral( arguments.interceptorName )#" )'
+	}
+
+	/**
+	 * Renders `config/modules/cbsecurity.bx` - cbsecurity's per-module settings
+	 * override (the same `config/modules/<name>.bx` mechanism as cbauth's, for
+	 * the same reason: `moduleSettings.cbsecurity` in config/ColdBox.bx does not
+	 * reach the module on this stack).
+	 *
+	 * `firewall.autoLoadFirewall = false`: cbsecurity's firewall runs a
+	 * `preProcess` interceptor that resolves a handler bean for the current
+	 * event. A `toAi()` route has no handler, so with the firewall on EVERY
+	 * agent request fails with `The event: main.index is not a valid registered
+	 * event` (confirmed against a real boot with the bundled cbsecurity 3.9).
+	 * The generated apps gate access with their own interceptors, so the
+	 * firewall stays off until BX Agents exposes cbsecurity rules itself.
+	 *
+	 * When the web UI declares `users`, cbsecurity is also told which
+	 * WireBox id is the user service, so it never has to infer one.
+	 *
+	 * @webUiHasUsers Whether a web UI entry declares `users`
+	 *
+	 * @return The rendered config/modules/cbsecurity.bx source
+	 */
+	private string function renderCbsecurityModuleOverride( required boolean webUiHasUsers ) {
+		var lines = [
+			"/**",
+			" * GENERATED FILE - produced by BX Agents' build pipeline.",
+			" * Do not edit by hand; rebuilding your project overwrites this file.",
+			" *",
+			" * cbsecurity's own per-module settings override (ColdBox's",
+			" * config/modules/<name>.bx convention) - see",
+			" * ColdBoxAppGenerator.renderCbsecurityModuleOverride()'s docblock.",
+			" */",
+			"class {",
+			"",
+			"	function configure( settings ) {",
+			"		arguments.settings.firewall.autoLoadFirewall = false"
+		]
+		if ( arguments.webUiHasUsers ) {
+			lines.append( '		arguments.settings.authentication.userService = "UserService"' )
+		}
+		lines.append( [
+			"		return arguments.settings",
+			"	}",
+			"",
+			"}",
+			""
+		], true )
+		return lines.toList( char( 10 ) )
 	}
 
 	/**

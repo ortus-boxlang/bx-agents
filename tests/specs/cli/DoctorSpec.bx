@@ -93,21 +93,11 @@ class extends="testbox.system.BaseSpec" {
 				expect( countOccurrences( result.message, "ACME_ADA_PASSWORD" ) ).toBe( 1 );
 			} );
 
-			it( "flags qb as missing for a webui project, and cbauth as missing only when it declares users", function() {
-				var withoutUsers = doctorVerb.run( { projectRoot : newTempProject( "gateways-webui" ) } );
-				expect( withoutUsers.message ).toInclude( "qb module not found" );
-				expect( withoutUsers.message ).notToInclude( "cbauth module not found" );
-
-				var withUsers = doctorVerb.run( { projectRoot : newTempProject( "gateways-webui-users" ) } );
-				expect( withUsers.message ).toInclude( "qb module not found" );
-				expect( withUsers.message ).toInclude( "cbauth module not found" );
-			} );
-
-			it( "never checks qb/cbauth at all for a project with no webui exposure", function() {
-				var result = doctorVerb.run( { projectRoot : newTempProject( "full-project" ) } );
-
-				expect( result.message ).notToInclude( "qb module" );
-				expect( result.message ).notToInclude( "cbauth module" );
+			it( "does not check qb/cbauth/cbsecurity - they are bundled with the module, not installed by the project", function() {
+				var webUi = doctorVerb.run( { projectRoot : newTempProject( "gateways-webui-users" ) } );
+				expect( webUi.message ).notToInclude( "qb module" );
+				expect( webUi.message ).notToInclude( "cbauth module" );
+				expect( webUi.message ).notToInclude( "cbsecurity module" );
 			} );
 
 			it( "reports findings as a real JSON array via --json", function() {

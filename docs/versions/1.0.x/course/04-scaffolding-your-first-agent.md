@@ -8,7 +8,7 @@ tags: [course, getting-started]
 
 # Scaffolding Your First Agent
 
-With BoxLang, `bx-ai` and BxAgents installed ([Lesson 3](03-installing-bxagents.md)),
+With BoxLang and BxAgents installed ([Lesson 3](03-installing-bxagents.md)),
 scaffold your first project:
 
 ```bash

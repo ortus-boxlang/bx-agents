@@ -489,6 +489,44 @@ class extends="testbox.system.BaseSpec" {
 				expect( fileExists( buildDir & "/config/modules/cbauth.bx" ) ).toBeFalse();
 			} );
 
+			/**
+			 * cbsecurity is bundled into every generated app. Its firewall
+			 * resolves a handler bean for the current event, which a toAi()
+			 * route does not have - so left on, EVERY agent request fails with
+			 * `The event: main.index is not a valid registered event`.
+			 */
+			it( "always writes config/modules/cbsecurity.bx with the firewall off", function() {
+				var buildDir = newBuildDir();
+				var config = resolver.resolve( projectRoot = fixtures & "/full-project" );
+				generator.generate(
+					projectRoot    : fixtures & "/full-project",
+					buildDir       : buildDir,
+					resolvedConfig : config
+				);
+
+				var content = fileRead( buildDir & "/config/modules/cbsecurity.bx" );
+				expect( content ).toInclude( "function configure( settings )" );
+				expect( content ).toInclude( "arguments.settings.firewall.autoLoadFirewall = false" );
+				expect( content ).toInclude( "return arguments.settings" );
+				expect( content ).notToInclude( "userService" );
+			} );
+
+			it( "tells cbsecurity which user service to use when the web UI declares users", function() {
+				var buildDir = newBuildDir();
+				var config = resolver.resolve( projectRoot = fixtures & "/full-project" );
+				generator.generate(
+					projectRoot    : fixtures & "/full-project",
+					buildDir       : buildDir,
+					resolvedConfig : config,
+					hasWebUi       : true,
+					webUiDatabase  : { datasource : "acmechat", path : "./data/chat.db" },
+					webUiHasUsers  : true
+				);
+
+				expect( fileRead( buildDir & "/config/modules/cbsecurity.bx" ) )
+					.toInclude( 'arguments.settings.authentication.userService = "UserService"' );
+			} );
+
 			it( "never declares an identity provider in the config", function() {
 				var buildDir = newBuildDir();
 				var config = resolver.resolve( projectRoot = fixtures & "/full-project" );

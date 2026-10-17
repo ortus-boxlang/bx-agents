@@ -8,7 +8,7 @@ tags: [course, getting-started]
 
 # Crear el andamiaje de tu primer agente
 
-Con BoxLang, `bx-ai` y BxAgents instalados ([Lección 3](03-installing-bxagents.md)),
+Con BoxLang y BxAgents instalados ([Lección 3](03-installing-bxagents.md)),
 crea el andamiaje de tu primer proyecto:
 
 ```bash

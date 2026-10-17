@@ -1,0 +1,86 @@
+/**
+ * Copies the ColdBox runtime libraries bundled inside the BX Agents module
+ * into the generated app, so `serve`, `package` and `deploy` never depend on
+ * anything the user installed.
+ *
+ * Bundled layout (assembled at module build time by `./gradlew installLibs`,
+ * from `src/main/lib/box.json`):
+ *
+ *   <module>/lib/coldbox/             -> <appDir>/coldbox/
+ *   <module>/lib/modules/<name>/      -> <appDir>/modules/<name>/   (qb, cbsecurity, cbauth, cbmailservices)
+ *
+ * A project may add or override libraries with the same layout in its own
+ * `<project>/lib/` folder; those are copied AFTER the bundled set, so a
+ * project copy of a library wins over the bundled one.
+ *
+ * The bundled `lib/` only exists in a built/installed module. Run from a
+ * source checkout it is absent, in which case nothing is copied and the
+ * result says so (the dev/test harness supplies ColdBox through a mapping).
+ */
+class {
+
+	/**
+	 * @appDir Absolute path to the generated app, e.g. "<projectRoot>/.build/app"
+	 * @projectRoot Absolute path to the project root - its optional `lib/` folder is copied over the bundled libraries
+	 * @bundledLibsDir Test seam - absolute path to the bundled `lib/` folder. Defaults to the one inside this module
+	 *
+	 * @return { bundled : boolean, copied : string[] } - whether a bundled `lib/` was found, and the app-relative folders copied
+	 */
+	struct function copy( required string appDir, string projectRoot = "", string bundledLibsDir = "" ) {
+		var app = normalizePath( arguments.appDir )
+		var bundled = len( arguments.bundledLibsDir ) ? normalizePath( arguments.bundledLibsDir ) : defaultBundledLibsDir()
+		var copied = []
+
+		var hasBundle = directoryExists( bundled )
+		if ( hasBundle ) {
+			copyLibs( bundled, app, copied )
+		}
+		if ( len( arguments.projectRoot ) ) {
+			var projectLibs = normalizePath( arguments.projectRoot ) & "/lib"
+			if ( directoryExists( projectLibs ) ) {
+				copyLibs( projectLibs, app, copied )
+			}
+		}
+
+		return { bundled : hasBundle, copied : copied }
+	}
+
+	/**
+	 * Copies `<libs>/coldbox` and every `<libs>/modules/<name>` into the app.
+	 * A destination folder that already exists is replaced, not merged, so a
+	 * stale library never survives a rebuild.
+	 */
+	private void function copyLibs( required string libsDir, required string app, required array copied ) {
+		if ( directoryExists( arguments.libsDir & "/coldbox" ) ) {
+			replaceDir( arguments.libsDir & "/coldbox", arguments.app & "/coldbox" )
+			arguments.copied.append( "coldbox" )
+		}
+		var modulesDir = arguments.libsDir & "/modules"
+		if ( directoryExists( modulesDir ) ) {
+			for ( var entry in directoryList( path = modulesDir, recurse = false, type = "dir", listInfo = "name" ) ) {
+				replaceDir( modulesDir & "/" & entry, arguments.app & "/modules/" & entry )
+				arguments.copied.append( "modules/" & entry )
+			}
+		}
+	}
+
+	private void function replaceDir( required string src, required string dest ) {
+		if ( directoryExists( arguments.dest ) ) {
+			directoryDelete( arguments.dest, true )
+		}
+		directoryCreate( path = arguments.dest, createPath = true, ignoreExists = true )
+		directoryCopy( arguments.src, arguments.dest, true )
+	}
+
+	/**
+	 * `<module root>/lib` - this class sits at `<module root>/models/build/generators/`
+	 */
+	private string function defaultBundledLibsDir() {
+		return normalizePath( getDirectoryFromPath( getCurrentTemplatePath() ) & "../../../lib" )
+	}
+
+	private string function normalizePath( required string path ) {
+		return createObject( "java", "java.nio.file.Paths" ).get( arguments.path, [] ).normalize().toString().replace( "\", "/", "all" )
+	}
+
+}
