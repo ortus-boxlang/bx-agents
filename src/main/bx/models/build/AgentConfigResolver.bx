@@ -40,7 +40,7 @@ class {
 	/**
 	 * Resolve a project's full build-time configuration.
 	 *
-	 * @projectRoot Absolute path to the project root (containing Agent.bx)
+	 * @projectRoot Absolute path to the project root (containing Agent.yaml or Agent.bx)
 	 * @cliEnvironment Optional environment name passed explicitly (e.g. via a CLI flag)
 	 * @boxContext The current BoxLang execution context. Defaults to the shared runtime context; only override this if you have a more specific one (e.g. from a CLI's main()).
 	 *
@@ -48,32 +48,50 @@ class {
 	 */
 	struct function resolve( required string projectRoot, string cliEnvironment = "", any boxContext ) {
 		var normalizedRoot = arguments.projectRoot.reReplace( "[\\/]+$", "" )
-		var agentBxPath = normalizedRoot & "/Agent.bx"
 		var context = isNull( arguments.boxContext ) ? getDefaultContext() : arguments.boxContext
 
-		if ( !fileExists( agentBxPath ) ) {
+		// Agent.yaml is the default definition, Agent.bx the advanced one; having
+		// both (or neither) is an error the locator words for us.
+		var locator = new "models.build.AgentDefinitionLocator@bxagents"()
+		var definition = locator.locate( normalizedRoot )
+		if ( definition.kind == "none" ) {
 			throw(
 				type    = "BxAgents.MissingAgentDescriptor",
-				message = "No Agent.bx found at [#agentBxPath#]"
+				message = "No #locator.expected()# found at [#normalizedRoot#]"
 			)
 		}
 
-		// The descriptor is loaded BEFORE the environment is resolved, because
-		// an Agent.bx may declare its own detectEnvironment() - see
-		// EnvironmentResolver.resolve()'s own docblock for the precedence, and
-		// ColdBox's ApplicationLoader.detectEnvironment() for the convention
-		// this mirrors. Loading it first is safe: nothing about loading the
-		// class depends on which environment is active.
-		var agentDescriptor		= loadAgentDescriptor( agentBxPath, context )
-		var isClassBased		= isClassBasedAgent( agentDescriptor )
-		var environment			= variables.environmentResolver.resolve(
-			cliEnvironment  : arguments.cliEnvironment,
-			agentDescriptor : agentDescriptor,
-			agentBxPath     : agentBxPath
-		)
+		var agentDescriptor = ""
+		var isClassBased = false
+		var baseConfig = {}
+		var envOverrides = {}
+		var environment = ""
 
-		var baseConfig			= invokeConfigure( agentDescriptor, agentBxPath, isClassBased )
-		var envOverrides		= invokeEnvironmentOverride( agentDescriptor, environment, agentBxPath )
+		if ( definition.kind == "yaml" ) {
+			// A YAML definition has no class to ask for detectEnvironment(), so the
+			// environment comes from the flag, BX_AGENTS_ENV, or the default.
+			var yaml = new "models.build.AgentYamlLoader@bxagents"().load( definition.path )
+			environment = variables.environmentResolver.resolve( cliEnvironment : arguments.cliEnvironment )
+			baseConfig = yaml.config
+			envOverrides = yaml.environments[ environment ] ?: {}
+		} else {
+			var agentBxPath = definition.path
+			// The descriptor is loaded BEFORE the environment is resolved, because
+			// an Agent.bx may declare its own detectEnvironment() - see
+			// EnvironmentResolver.resolve()'s own docblock for the precedence, and
+			// ColdBox's ApplicationLoader.detectEnvironment() for the convention
+			// this mirrors. Loading it first is safe: nothing about loading the
+			// class depends on which environment is active.
+			agentDescriptor	= loadAgentDescriptor( agentBxPath, context )
+			isClassBased	= isClassBasedAgent( agentDescriptor )
+			environment		= variables.environmentResolver.resolve(
+				cliEnvironment  : arguments.cliEnvironment,
+				agentDescriptor : agentDescriptor,
+				agentBxPath     : agentBxPath
+			)
+			baseConfig = invokeConfigure( agentDescriptor, agentBxPath, isClassBased )
+			envOverrides = invokeEnvironmentOverride( agentDescriptor, environment, agentBxPath )
+		}
 
 		var config = deepMerge( baseConfig, envOverrides )
 		config = deepMerge( config, readJsonConfig( normalizedRoot, "boxlang" ) )
