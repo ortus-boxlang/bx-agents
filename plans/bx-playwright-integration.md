@@ -1,110 +1,127 @@
-# Plan: integrate bx-playwright into BX Agents
+# Plan: bx-playwright in BX Agents
 
-Status: proposal, no code yet. Written against bx-playwright `1.0.0-snapshot` (ortus-boxlang/bx-playwright, docs at bxplaywright.boxlang.io).
+Status: proposal, no code yet. Written against bx-playwright `1.0.0-snapshot` and bx-ai 3.5.0.
 
-## 1. What bx-playwright gives us (verified in its source and docs)
+Two goals:
 
-- BoxLang module `bxplaywright`, CLI `bxplaywright`. Needs BoxLang 1.17+ and Java 21+. We already meet both (1.18, JDK 21).
-- Two distributions: `bx-playwright` (about 4 MB, downloads Node.js on `bxplaywright install`) and `bx-playwright-full` (about 206 MB, Node.js bundled for every platform). Browsers are always downloaded from Playwright's CDN, never shipped in a zip.
-- **Agent tools already exist.** `playwright( opts ).aiTools()` returns 10 bx-ai tools: `browser_visit`, `browser_snapshot`, `browser_click`, `browser_fill`, `browser_select`, `browser_press`, `browser_back`, `browser_text`, `browser_screenshot`, `browser_close`. `aiToolDefinitions()` returns the same as plain structs. Each action returns URL, title and an accessibility snapshot with element refs (`e12`); errors come back as text so the model can recover. Backed by `models/AiBrowser.bx`.
-- **One page per `aiTools()` call.** `AiBrowser` keeps a single page in `variables.page`, opened lazily.
-- `bxplaywright mcp` starts Playwright's own MCP server (stdio, or `--port`).
-- **TestBox 7.2+ and ColdBox 8.3+ have first-class browser specs**: `@browser`, `@browserProfile`, `@baseURL`, `browse( ( page ) => ... )`, matchers (`toSee`, `toHavePath`, ...), failure artifacts (screenshot, trace). TestBox provisions the browser on first use via `playwrightEnsureBrowser()`.
-- Profiles (`ci`, `mobile`, `dark`, `headed`, custom) via `modules.bxplaywright.settings.profiles`.
-- Only `1.0.0-snapshot` is published on ForgeBox so far.
+- **A. Test with it.** Use bx-playwright to test anything with a UI: the generated web chat, and agents' UIs in user projects.
+- **B. Ship it as an agent capability.** An agent can say "give me all the bx-playwright tools" (and optionally its MCP server), and the build then includes bx-playwright in the built app. Off by default.
 
-## 2. What BX Agents has today that this plugs into
+## 1. How tools reach an agent today (reviewed in bx-ai and BX Agents)
 
-- `Agent.bx` extends bx-ai's `AiAgent`; `withTools()` appends, so an author can already write `withTools( playwright().aiTools() )` in `init()` with zero framework changes.
-- `tools/` is scanned by `aiToolRegistry().scan( "tools" )` (annotation-based, not programmatic), and the generated `GeneratedAgentFactory` attaches `aiToolRegistry().getAll()` to every agent node.
-- `GeneratedAgent` is a **singleton**; the web UI and gateways serve many users through it.
-- `bxAgents test` runs project specs in a child BoxLang process with `modulesDirectory` pointing at the installed module (nested modules included), TestBox from the project's `tests/testbox`.
-- The module now bundles its BoxLang modules as nested modules (PR #90), so adding one is a `gradle.properties` line.
+| Source | Mechanism | Selectable per agent? |
+|---|---|---|
+| Your `tools/` folder | `@AITool` functions; the app scans them into bx-ai's global tool registry at startup | No: all of them |
+| bx-ai built-ins | bx-ai registers 10 tools in the registry when it loads, keyed `name@bxai` | **No: all of them** |
+| Other modules | A module calls `aiToolRegistry().register( tool, module : "x" )`, keyed `name@x`. `getByModule( "x" )` lists them | No |
+| Class `Agent.bx` code | `withTools( [ ... ] )`, anything: keys or `ITool` objects | Yes, by hand in code |
+| Remote MCP servers | `mcpServers` on `Agent.bx`: a list of **URLs** | Yes |
+| Sub-agents | `subagents/` | Yes |
 
-## 3. Proposal
+**Finding.** The generated `GeneratedAgentFactory` builds every agent with `tools : aiToolRegistry().getAll()`. The registry is global, so **every BX Agents agent gets every registered tool**. With only bx-ai loaded that is:
 
-### A. Bundle it, provision browsers on demand
+`generateImage, httpGet, log, now, print, sendEmail, speak, transcribe, translate, webSearch` (all `@bxai`)
 
-1. Add `bx-playwright` (slim) as a bundled nested module: `bxPlaywrightVersion` in `gradle.properties`, one entry in `boxlangModules`.
-2. Do **not** bundle `bx-playwright-full`: 206 MB on every install for a feature most agents will not use.
-3. Browsers: provision lazily with `playwrightEnsureBrowser( "chromium" )` the first time a browser tool or browser spec runs, plus an explicit path: `bxAgents doctor` reports "browser installed / not installed" and the fix.
-4. `bxAgents browser install|doctor` verb that delegates to the bundled module's installer. A nested module's own CLI executable is probably not on `PATH`, so this verb is how users reach `bxplaywright install` (to verify).
+So today every agent can send email, fetch any URL (`httpGet`) and search the web, without the author asking. There is no way to say "only these". This was verified by listing the registry with only bx-ai loaded.
 
-### B. Browser tools for agents (opt-in)
+This matters for the playwright plan in two ways:
+1. If bx-playwright ever registered its tools in the global registry, every agent would get a browser. It must not, and today it does not (`aiTools()` just returns tool objects).
+2. "Which tools does this agent get" needs a real, per-agent answer anyway.
 
-API shape, in `Agent.bx` config (descriptor and class forms):
+## 2. Proposal: a `tools` selection on the agent
+
+Declared in `Agent.bx` (`configure()` / descriptor form), read by the build:
 
 ```javascript
 configure() {
 	return {
 		name  : "support-bot",
 		model : "openai/gpt-5",
-		browser : {
-			profile : "ci",                    // bx-playwright profile(s), default "default"
-			baseURL : "http://localhost:8080", // relative visit() targets resolve here
-			allow   : [ "localhost", "docs.example.com" ],  // host allowlist, default: baseURL host only
-			approve : [ "fill", "click" ]      // tools that pause for human approval, default none
+
+		tools : {
+			// registry keys, or whole modules, that this agent may use (in addition to its own tools/)
+			include : [ "now@bxai", "webSearch@bxai" ],
+			modules : [ "bxplaywright" ],        // "all the bx-playwright tools"
+			exclude : [ "sendEmail@bxai" ]
+		},
+
+		// per-module options, passed to the module when the build wires it in
+		moduleOptions : {
+			bxplaywright : { profile : "ci", baseURL : "http://localhost:8080", allow : [ "localhost" ] }
 		}
 	}
 }
 ```
 
-- `browser: true` is shorthand for the defaults. Absent means no browser, no module load cost.
-- Build wires `playwright( opts ).aiTools()` into the agent node's tool list in `GeneratedAgentFactory`, next to `aiToolRegistry().getAll()`.
-- Documented escape hatch for anything custom: `withTools( playwright( ... ).aiTools() )` in a class `Agent.bx`. No framework code needed for that path.
+Rules:
+- `tools/` (your own functions) always apply.
+- `include` adds registry keys. `modules` adds every tool of a module. `exclude` removes keys last.
+- **Default when `tools` is absent**: open question 1 below.
+- A module named in `modules` is **required**: the build validates it is installed or bundled, and `doctor` reports it. This is what "include bx-playwright in the agent once it builds" means.
 
-Problems this must solve (these are why it is more than one line):
+What the build does for `modules : [ "bxplaywright" ]`:
+1. **Validate**: the module exists (bundled nested module, or installed). Fail with a clear message if not.
+2. **Wire**: a small per-module adapter registers that module's tools in the registry under `module : "bxplaywright"` at app start, using the options above. For bx-playwright the adapter is `playwright( options ).aiToolDefinitions()` turned into `ITool`s (what `aiTools()` already does). Other modules can get adapters later.
+3. **Attach**: the factory passes this agent only `own tools/ + include + getByModule( modules ) - exclude`, instead of `getAll()`.
+4. **Package and deploy**: the built `.bxa` and the app record the module requirement. `doctor` and the `docker`/`digitalocean` targets check the browser prerequisite (below).
 
-1. **Isolation.** The agent is a singleton and `aiTools()` shares one page, so two users would drive the same browser tab. Needs one page (ideally one browser context) per `(userId, conversationId)`, closed on idle/after the turn. Preferred: a small BX Agents wrapper that builds an `AiBrowser` per conversation and hands the tools a context-aware handler. If bx-playwright can take a "session key" in `aiToolDefinitions()`, upstream is cleaner; open question below.
-2. **Navigation safety (SSRF and data exfiltration).** The model chooses URLs. Enforce `allow` at the tool layer (reject `visit` outside the allowlist, also on redirects), block `file:`/`chrome:`/cloud metadata addresses always.
-3. **Secrets.** `browser_fill` puts model-chosen text into forms and the value appears in tool traces and logs. Mask values for password-type fields, and keep `fill` out of the default allowlist for approval-free runs when credentials are involved.
-4. **Human-in-the-loop.** bx-ai already has HITL approvals and the web UI renders them. `approve: [ ... ]` maps to the same mechanism.
-5. **Cost and size.** A snapshot per action can be large. Cap snapshot length (config `maxSnapshotChars`) and say so in the tool result.
-6. **Deploy.** `docker` target must install the browser and Linux system libraries (`bxplaywright install --with-deps chromium`) in the image; `.bxa`/local targets need the install step documented. Headless is forced when there is no display.
+### What "all the bx-playwright tools" means
 
-Alternative considered: the MCP route (`bxplaywright mcp` registered through the existing `mcp/` convention). Richer Playwright tool set and separate process, but needs Node on the box, a second process lifecycle, and no per-conversation isolation by default. Keep it documented as an option, not the default.
+- **Native tools (default path)**: the 10 bx-playwright tools: `browser_visit`, `browser_snapshot`, `browser_click`, `browser_fill`, `browser_select`, `browser_press`, `browser_back`, `browser_text`, `browser_screenshot`, `browser_close`. In-process, no extra server.
+- **MCP server (second path)**: `bxplaywright mcp` is Playwright's own MCP server, with a larger tool set. BX Agents' `mcpServers` accepts **URLs only**, but bx-ai already has a `StdioTransport`. Two ways:
+  1. `bxplaywright mcp --port 8931` as a sidecar process, consumed as `http://localhost:8931/mcp`: works today, but the author must run the sidecar.
+  2. Extend `mcpServers` to accept `{ command : [ "bxplaywright", "mcp", "--headless" ], name : "browser" }` and have bx-ai spawn it over stdio. Cleaner; needs a small BX Agents change and a check that bx-ai's client can be handed a stdio command.
+  `modules : [ "bxplaywright" ]` can later also mean "and its MCP server" through option `mcp : true`.
 
-### C. Testing
+### Problems this must solve
 
-1. **User-facing, `bxAgents test --browser`**: starts the built app with `serve` on a free port, exports it as the `@baseURL`, runs specs with TestBox browser support, stops the server. Scaffolded `tests/` gets an optional browser spec example. `TestRunnerService` already passes `modulesDirectory`, so `bxplaywright` loads from the nested module.
-2. **Agent-assisted checks**: `BaseAgentSpec` gets a `browser()` helper that returns a page against the served app, so a spec can assert on what the agent *did* in the UI (not only on its text).
-3. **This repo's own CI**: add browser specs for the generated web chat (the sidebar, streaming, 401 message, phone layout) using bx-playwright instead of the ad-hoc Playwright scripts used for the site videos. Needs `bxplaywright install --with-deps chromium` in the workflow, cached.
-4. **Docs and demo videos**: re-record the walkthrough videos with bx-playwright so the repo stops depending on a separate Python/Node Playwright setup.
+1. **Isolation.** The agent is a singleton and bx-playwright's `AiBrowser` keeps one page per `aiTools()` call. Two users would drive one tab. Needs one page (ideally one browser context) per `(userId, conversationId)`, closed when idle. Either a wrapper in BX Agents' adapter, or a session-key option upstream in bx-playwright.
+2. **Navigation safety.** The model picks URLs. Enforce the `allow` host list in the adapter (also on redirects) and always block `file:`, `chrome:` and cloud-metadata addresses. The same reasoning applies to `httpGet@bxai` today.
+3. **Secrets.** `browser_fill` text appears in traces and logs; mask password fields.
+4. **Human approval.** Map an `approve : [ "fill", "click" ]` option to bx-ai's existing human-in-the-loop, which the web UI already renders.
+5. **Prerequisites.** The browser itself is downloaded (`bxplaywright install`), not shipped. Provision lazily with `playwrightEnsureBrowser()` on first use; `bxAgents doctor` reports installed/not; the Docker target runs `install --with-deps chromium` in the image.
+6. **Size.** Cap snapshot length per action.
 
-## 4. Phases and tasks
+## 3. Goal A: testing with it
 
-**Phase 1: module and browser provisioning** (small)
-- [ ] `bxPlaywrightVersion` in `gradle.properties`, add to `boxlangModules`.
-- [ ] `doctor`: check module loaded, driver installed, browser installed.
-- [ ] `bxAgents browser install|doctor` verb (+ completions regenerate, spec).
-- [ ] Decide snapshot-release policy (see questions).
+1. **Our own CI**: add browser specs for the generated web chat (sidebar, streaming, 401 message, phone layout) with TestBox's `@browser` support, replacing the ad-hoc scripts used for the site videos. Needs `bxplaywright install --with-deps chromium` in the workflow (cached).
+2. **For users**: `bxAgents test --browser` starts the built app with `serve` on a free port, sets it as `@baseURL`, runs specs with browser support, stops the server.
+3. **Agent-aware helper**: `BaseAgentSpec.browser()` returns a page against the served app, so a spec can assert on what the agent did in the UI, not only on its text.
+4. **Bundling**: `bx-playwright` (slim, about 4 MB) is added as a bundled nested module once (`gradle.properties` plus `boxlangModules`). The full distribution (about 206 MB) is not bundled.
 
-**Phase 2: agent tools**
-- [ ] Settle the `browser` config shape (this document's sketch) and validate it in `ProjectValidator`.
-- [ ] Per-conversation browser wrapper + idle cleanup (or upstream change).
-- [ ] Allowlist, redirect check, scheme blocklist.
-- [ ] Secret masking in traces.
-- [ ] HITL mapping for `approve`.
-- [ ] Generator change in `GeneratedAgentFactory`; generator specs; one mock-provider integration spec that drives a real page.
-- [ ] Docs: new `conventions` section or `Agent.bx` option table, example project `examples/browser-agent`.
-- [ ] Deploy docs and Docker target support.
+## 4. Phases
 
-**Phase 3: testing**
-- [ ] `test --browser`, `serve` lifecycle inside it.
-- [ ] `BaseAgentSpec.browser()`.
-- [ ] CI job for browser specs; replace ad-hoc video capture.
+**Phase 1: per-agent tool selection (needed first; also fixes the finding above)**
+- [ ] Decide the default (question 1).
+- [ ] `tools` / `moduleOptions` in the config resolver, validator, and docs.
+- [ ] Factory attaches a filtered list instead of `getAll()`; specs.
+- [ ] Migration note in the changelog.
+
+**Phase 2: bx-playwright as a bundled module + native tools**
+- [ ] Bundle `bx-playwright` (`gradle.properties`).
+- [ ] Module adapter interface and the bx-playwright adapter.
+- [ ] Isolation, allowlist, masking, approval.
+- [ ] `doctor` and `bxAgents browser install|doctor`.
+- [ ] Example project and docs.
+
+**Phase 3: MCP**
+- [ ] Stdio MCP entries in `mcpServers`, or the sidecar docs.
+
+**Phase 4: testing**
+- [ ] CI browser specs, `test --browser`, `BaseAgentSpec.browser()`.
 
 ## 5. Risks
 
-- bx-playwright is `1.0.0-snapshot` only; API may move. Pin the snapshot in `gradle.properties` and wait for a stable release before we ship a BX Agents release that depends on it.
-- Browser download in restricted networks (proxy, air-gapped): needs `HTTPS_PROXY` guidance and a documented offline path (`bx-playwright-full` plus pre-seeded browsers).
-- CI time and disk: browser install is hundreds of MB; cache it.
-- A model with a browser can act on the web. Defaults must be conservative (allowlist, headless, no auto-approve for writes).
+- bx-playwright is `1.0.0-snapshot` only. Pin it in `gradle.properties` and wait for a stable release before shipping a BX Agents release that depends on it.
+- Browser download in restricted networks: proxy settings, an offline path.
+- CI time and disk for browsers: cache them.
+- A model with a browser can act on the web: defaults must be conservative.
 
-## 6. Questions for you
+## 6. Questions
 
-1. Opt-in via `browser:` in `Agent.bx` (above), or only documentation for `withTools( playwright().aiTools() )` at first?
-2. Per-conversation isolation: ship the wrapper in BX Agents, or ask bx-playwright to support a session key upstream (you own both)?
-3. OK to depend on a `1.0.0-snapshot` while it is the only release, or wait for a stable?
-4. Default allowlist: baseURL host only (safe) or open web (convenient)?
-5. For testing, is `test --browser` plus repo CI the right first scope, or do you want the visual-verification-by-agent idea first?
+1. **Default tools.** BX Agents is unreleased, so we can still change this. Option A: no `tools` key means **only your own `tools/`**, and bx-ai built-ins must be named (safe, small breaking change). Option B: keep today's "everything registered" (convenient, but every agent can email and fetch URLs). I recommend A.
+2. **Isolation:** wrapper in BX Agents, or a session key upstream in bx-playwright?
+3. **Snapshot dependency:** OK to depend on `1.0.0-snapshot`, or wait for a stable?
+4. **Default allowlist** for navigation: the app's own host only, or the open web?
+5. **MCP:** stdio entries in `mcpServers` (preferred), or sidecar only at first?
+6. **Testing scope first:** our own CI browser specs, `test --browser`, or both?
