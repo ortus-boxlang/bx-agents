@@ -414,8 +414,8 @@ users : [
 </div>
 </div>
 <h3 id="what-sign-in-changes"><a href="#what-sign-in-changes" id="what-sign-in-changes" name="what-sign-in-changes" class="anchor"></a>What sign-in changes</h3>
-<p>Everything user-scoped re-keys to the real account. The generated <code>handlers/ChatUi.bx</code> resolves identity from cbauth directly, in one method (<code>resolveUserId()</code>), and agent memory, the conversation index, preferences and pending-run ownership all key off its return value.</p>
-<p>It reads cbauth rather than ColdBox's <code>identifierProvider</code> setting deliberately: a closure declared in the <code>coldbox</code> config struct never reaches <code>configSettings</code> — verified in a real boot, in both the documented literal shape and as a later assignment — so anything leaning on that setting was silently getting a session id instead.</p>
+<p>Everything user-scoped re-keys to the real account. The generated <code>handlers/ChatUi.bx</code> resolves identity from cbsecurity (which wraps cbauth) directly, in one method (<code>resolveUserId()</code>), and agent memory, the conversation index, preferences and pending-run ownership all key off its return value.</p>
+<p>It reads cbsecurity rather than ColdBox's <code>identifierProvider</code> setting deliberately: a closure declared in the <code>coldbox</code> config struct never reaches <code>configSettings</code> — verified in a real boot, in both the documented literal shape and as a later assignment — so anything leaning on that setting was silently getting a session id instead.</p>
 <p>The practical difference: conversations and preferences follow the person across browsers and devices, and clearing cookies no longer creates a brand-new &quot;user&quot;.</p>
 <div class="bxsites-table-wrap"><table class="table">
 <thead>
@@ -481,7 +481,7 @@ users : [
 <tr><th>Piece</th><th>What it is</th></tr>
 </thead>
 <tbody>
-<tr><td><code>bx-sqlite</code></td><td>The JDBC driver. Without it a webui app still boots, but every query fails on an unknown driver</td></tr>
+<tr><td><code>bx-sqlite</code></td><td>The JDBC driver, bundled with BxAgents as a nested module</td></tr>
 <tr><td><a href="https://github.com/coldbox-modules/qb"><code>qb</code></a></td><td>QueryBuilder for reads and writes, SchemaBuilder for the tables. No hand-written SQL anywhere</td></tr>
 <tr><td><code>models/ChatDb.bx</code></td><td>Generated. Owns the schema and hands out query builders</td></tr>
 <tr><td><code>interceptors/WebUiSchema.bx</code></td><td>Generated. Builds <code>ChatDb</code> at boot so migration runs then, not on whichever request touches the database first</td></tr>

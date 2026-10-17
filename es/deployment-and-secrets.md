@@ -80,7 +80,7 @@ bxAgents deploy --destination=/path/to/somewhere   # local, forma abreviada solo
 bxAgents deploy --name=production                  # cualquier destino, vía deploy/production.bx
 ```
 
-Seis destinos pluggable vienen incluidos - `local` (copiar el `.bxa` más nuevo a algún lugar), `ssh` (enviarlo a un servidor desnudo), `ftp`/`sftp` (enviarlo vía el módulo real [`bx-ftp`](https://github.com/ortus-boxlang/bx-ftp), una dependencia de runtime genuina de este proyecto), `docker` (construir/subir una imagen de contenedor), y `digitalocean` (desplegar a una app de DigitalOcean App Platform) - ver [deploy/](conventions/deploy.md) para la forma completa de configuración de cada uno y [Referencia de CLI](cli-reference.md#deploy) para los flags de CLI.
+Seis destinos pluggable vienen incluidos - `local` (copiar el `.bxa` más nuevo a algún lugar), `ssh` (enviarlo a un servidor desnudo), `ftp`/`sftp` (enviarlo vía el módulo real [`bx-ftp`](https://github.com/ortus-boxlang/bx-ftp), incluido con BxAgents), `docker` (construir/subir una imagen de contenedor), y `digitalocean` (desplegar a una app de DigitalOcean App Platform) - ver [deploy/](conventions/deploy.md) para la forma completa de configuración de cada uno y [Referencia de CLI](cli-reference.md#deploy) para los flags de CLI.
 
 Ningún destino lee jamás un secreto desde la configuración de `deploy/*` - las credenciales (contraseñas de registro, claves SSH, el token de API de DigitalOcean) siempre se resuelven desde variables de entorno en tiempo de despliegue, la misma regla de "los secretos permanecen externos" que en cualquier otro lugar de este documento. Ver [deploy/](conventions/deploy.md#secrets-stay-external) para la variable de entorno exacta que espera cada destino.
 

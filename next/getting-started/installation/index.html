@@ -246,7 +246,7 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-bxagents-command">The bxAgents command</a></li><li class="toc-level-2"><a href="#tab-completion">Tab completion</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-bxagents-command">The bxAgents command</a></li><li class="toc-level-2"><a href="#what-is-bundled">What is bundled</a></li><li class="toc-level-3"><a href="#adding-your-own-libraries">Adding your own libraries</a></li><li class="toc-level-2"><a href="#tab-completion">Tab completion</a></li></ul></details>
 		
 
 		
@@ -258,12 +258,19 @@
 </symbol>
 </svg>
 <h1 id="installation"><a href="#installation" id="installation" name="installation" class="anchor"></a>Installation</h1>
-<p>BxAgents is a BoxLang module. It needs three things on the machine that runs it:</p>
+<p>BxAgents is a BoxLang module. It needs two things on the machine that runs it:</p>
 <ol>
 <li>A <a href="https://www.boxlang.io">BoxLang</a> runtime.</li>
-<li>The <code>bx-ai</code> BoxLang module (BxAgents generates code that calls it - it doesn't vendor it).</li>
-<li>BxAgents itself.</li>
+<li>BxAgents itself. It bundles everything else it needs: <code>bx-ai</code>, <code>bx-sqlite</code>, <code>bx-ftp</code> and <code>bx-mail</code> as nested BoxLang modules, plus ColdBox, <code>qb</code>, <code>cbsecurity</code>, <code>cbauth</code> and <code>cbmailservices</code> for the apps it generates. There is nothing else to install.</li>
 </ol>
+<div class="adm-block adm-info">
+<div class="adm-heading">
+<svg class="adm-icon"><use xlink:href="#adm-info" /></svg><span>Info</span>
+</div>
+<div class="adm-body">
+<p>BxAgents needs BoxLang <strong>1.18.0 or later</strong>, which supports the nested modules it bundles.</p>
+</div>
+</div>
 <div class="adm-block adm-info">
 <div class="adm-heading">
 <svg class="adm-icon"><use xlink:href="#adm-info" /></svg><span>Info</span>
@@ -272,19 +279,10 @@
 <p><code>serve</code> additionally needs the standalone <a href="https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver"><code>boxlang-miniserver</code></a> binary on <code>PATH</code>. <code>build</code>, <code>chat</code>, <code>package</code>, <code>inspect</code>, <code>clean</code>, and <code>new</code> don't need it.</p>
 </div>
 </div>
-<div class="adm-block adm-info">
-<div class="adm-heading">
-<svg class="adm-icon"><use xlink:href="#adm-info" /></svg><span>Info</span>
-</div>
-<div class="adm-body">
-<p><code>deploy</code>'s <code>ftp</code>/<code>sftp</code> targets need the <a href="https://github.com/ortus-boxlang/bx-ftp"><code>bx-ftp</code></a> BoxLang module installed alongside <code>bx-ai</code>/BxAgents (<code>install-bx-module bx-ftp</code>) - a genuine runtime dependency, not vendored, the same relationship this module has with <code>bx-ai</code>. No other verb or deploy target needs it.</p>
-</div>
-</div>
 <div class="bxsites-stepper"><div class="bxsites-step"><div class="bxsites-step__marker">1</div><div class="bxsites-step__content"><div class="bxsites-step__title">Install BoxLang</div><p>Follow the <a href="https://boxlang.ortusbooks.com/getting-started/installation">official BoxLang installation guide</a>. The quick installer also sets up <code>~/.boxlang/bin</code> on your <code>PATH</code>, which is where module-provided executables (like BxAgents' own <code>bxAgents</code> command, below) land.</p>
-</div></div><div class="bxsites-step"><div class="bxsites-step__marker">2</div><div class="bxsites-step__content"><div class="bxsites-step__title">Install bx-ai and BxAgents</div><pre><code class="language-bash">install-bx-module bx-ai
-install-bx-module bx-agents
+</div></div><div class="bxsites-step"><div class="bxsites-step__marker">2</div><div class="bxsites-step__content"><div class="bxsites-step__title">Install BxAgents</div><pre><code class="language-bash">install-bx-module bx-agents
 </code></pre>
-<p>This fetches both modules into your BoxLang modules directory (<code>~/.boxlang/modules</code> by default, or <code>boxlang_modules/</code> with <code>--local</code>).</p>
+<p>This fetches the module, with its bundled dependencies, into your BoxLang modules directory (<code>~/.boxlang/modules</code> by default, or <code>boxlang_modules/</code> with <code>--local</code>).</p>
 </div></div><div class="bxsites-step"><div class="bxsites-step__marker">3</div><div class="bxsites-step__content"><div class="bxsites-step__title">Verify it worked</div><pre><code class="language-bash">bxAgents --version
 bxAgents --help
 </code></pre>
@@ -301,6 +299,28 @@ bxAgents --help
 <pre><code class="language-bash">boxlang module:bxagents new my-agent --model=openai/gpt-5
 </code></pre>
 <p>Both are equivalent - every verb dispatches through the same <code>ModuleConfig.bx main(args)</code> entry point either way. This doc uses the short <code>bxAgents &lt;verb&gt;</code> form throughout.</p>
+<h2 id="what-is-bundled"><a href="#what-is-bundled" id="what-is-bundled" name="what-is-bundled" class="anchor"></a>What is bundled</h2>
+<p>The module zip carries its own dependencies, pinned to the stable releases it was built with. A bug fix in one of them ships as a BxAgents patch release, so nobody installs or updates them by hand.</p>
+<div class="bxsites-table-wrap"><table class="table">
+<thead>
+<tr><th>Where</th><th>What</th><th>Used for</th></tr>
+</thead>
+<tbody>
+<tr><td><code>modules/</code> (nested BoxLang modules)</td><td><code>bx-ai</code>, <code>bx-sqlite</code>, <code>bx-ftp</code>, <code>bx-mail</code></td><td>The agent runtime, the web UI's SQLite store, the <code>ftp</code>/<code>sftp</code> deploy targets, the email gateway</td></tr>
+<tr><td><code>lib/</code> (ColdBox runtime)</td><td>ColdBox, <code>qb</code>, <code>cbsecurity</code>, <code>cbauth</code>, <code>cbmailservices</code></td><td>Copied into every app <code>build</code> generates</td></tr>
+</tbody>
+</table></div>
+<p><code>serve</code> points the served app at the same bundled modules.</p>
+<h3 id="adding-your-own-libraries"><a href="#adding-your-own-libraries" id="adding-your-own-libraries" name="adding-your-own-libraries" class="anchor"></a>Adding your own libraries</h3>
+<p>Put extra ColdBox libraries in a <code>lib/</code> folder in your project, using the same layout as the bundled one:</p>
+<pre><code class="language-text">my-agent/
+  lib/
+    coldbox/          # replaces the bundled ColdBox
+    modules/
+      cbvalidation/   # added next to the bundled modules
+      qb/             # replaces the bundled qb
+</code></pre>
+<p><code>build</code> copies the bundled set first and your <code>lib/</code> second, so yours wins.</p>
 <h2 id="tab-completion"><a href="#tab-completion" id="tab-completion" name="tab-completion" class="anchor"></a>Tab completion</h2>
 <p>The module ships tab completion for <code>bxAgents</code> (and <code>bxagents</code>) in three shells. It completes verbs, flags, the <code>--template</code> and <code>--target</code> values, and project folders.</p>
 <div class="bxsites-table-wrap"><table class="table">
@@ -364,7 +384,7 @@ bxAgents --help
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-bxagents-command">The bxAgents command</a></li><li class="toc-level-2"><a href="#tab-completion">Tab completion</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-bxagents-command">The bxAgents command</a></li><li class="toc-level-2"><a href="#what-is-bundled">What is bundled</a></li><li class="toc-level-3"><a href="#adding-your-own-libraries">Adding your own libraries</a></li><li class="toc-level-2"><a href="#tab-completion">Tab completion</a></li></ul></nav>
 				</aside>
 			
 		</div>

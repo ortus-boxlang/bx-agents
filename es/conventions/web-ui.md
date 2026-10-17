@@ -165,9 +165,9 @@ bxAgents hash-password --password="<tu-contraseña>"
 
 ### Qué cambia el inicio de sesión
 
-Todo lo delimitado por usuario se re-indexa a la cuenta real. El `handlers/ChatUi.bx` generado resuelve la identidad desde cbauth directamente, en un método (`resolveUserId()`), y la memoria del agente, el índice de conversaciones, las preferencias y la propiedad de ejecuciones pendientes todas se indexan por su valor de retorno.
+Todo lo delimitado por usuario se re-indexa a la cuenta real. El `handlers/ChatUi.bx` generado resuelve la identidad desde cbsecurity (que envuelve cbauth) directamente, en un método (`resolveUserId()`), y la memoria del agente, el índice de conversaciones, las preferencias y la propiedad de ejecuciones pendientes todas se indexan por su valor de retorno.
 
-Lee cbauth en lugar del ajuste `identifierProvider` de ColdBox deliberadamente: un closure declarado en el struct de configuración `coldbox` nunca llega a `configSettings` — verificado en un arranque real, tanto en la forma literal documentada como como asignación posterior — así que cualquier cosa que dependiera de ese ajuste estaba silenciosamente obteniendo un id de sesión en su lugar.
+Lee cbsecurity en lugar del ajuste `identifierProvider` de ColdBox deliberadamente: un closure declarado en el struct de configuración `coldbox` nunca llega a `configSettings` — verificado en un arranque real, tanto en la forma literal documentada como como asignación posterior — así que cualquier cosa que dependiera de ese ajuste estaba silenciosamente obteniendo un id de sesión en su lugar.
 
 La diferencia práctica: las conversaciones y preferencias siguen a la persona a través de navegadores y dispositivos, y limpiar cookies ya no crea un "usuario" completamente nuevo.
 
@@ -237,7 +237,7 @@ La razón es un vacío real, no una preferencia: **el `IAiMemory` de bx-ai no ti
 
 | Pieza | Qué es |
 | --- | --- |
-| `bx-sqlite` | El driver JDBC. Sin él, una app webui aún arranca, pero cada query falla en un driver desconocido |
+| `bx-sqlite` | El driver JDBC, incluido con BxAgents como módulo anidado |
 | [`qb`](https://github.com/coldbox-modules/qb) | QueryBuilder para lecturas y escrituras, SchemaBuilder para las tablas. Ningún SQL escrito a mano en ninguna parte |
 | `models/ChatDb.bx` | Generado. Posee el esquema y entrega query builders |
 | `interceptors/WebUiSchema.bx` | Generado. Construye `ChatDb` en el arranque para que la migración se ejecute entonces, no en cualquier request que toque primero la base de datos |

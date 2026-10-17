@@ -8,29 +8,27 @@ tags: [getting-started, setup]
 
 # Installation
 
-BxAgents is a BoxLang module. It needs three things on the machine that runs it:
+BxAgents is a BoxLang module. It needs two things on the machine that runs it:
 
 1. A [BoxLang](https://www.boxlang.io) runtime.
-2. The `bx-ai` BoxLang module (BxAgents generates code that calls it - it doesn't vendor it).
-3. BxAgents itself.
+2. BxAgents itself. It bundles everything else it needs: `bx-ai`, `bx-sqlite`, `bx-ftp` and `bx-mail` as nested BoxLang modules, plus ColdBox, `qb`, `cbsecurity`, `cbauth` and `cbmailservices` for the apps it generates. There is nothing else to install.
+
+!!! info
+    BxAgents needs BoxLang **1.18.0 or later**, which supports the nested modules it bundles.
 
 !!! info
     `serve` additionally needs the standalone [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver) binary on `PATH`. `build`, `chat`, `package`, `inspect`, `clean`, and `new` don't need it.
-
-!!! info
-    `deploy`'s `ftp`/`sftp` targets need the [`bx-ftp`](https://github.com/ortus-boxlang/bx-ftp) BoxLang module installed alongside `bx-ai`/BxAgents (`install-bx-module bx-ftp`) - a genuine runtime dependency, not vendored, the same relationship this module has with `bx-ai`. No other verb or deploy target needs it.
 
 ::: stepper
 ::: step "Install BoxLang"
 Follow the [official BoxLang installation guide](https://boxlang.ortusbooks.com/getting-started/installation). The quick installer also sets up `~/.boxlang/bin` on your `PATH`, which is where module-provided executables (like BxAgents' own `bxAgents` command, below) land.
 :::
-::: step "Install bx-ai and BxAgents"
+::: step "Install BxAgents"
 ```bash
-install-bx-module bx-ai
 install-bx-module bx-agents
 ```
 
-This fetches both modules into your BoxLang modules directory (`~/.boxlang/modules` by default, or `boxlang_modules/` with `--local`).
+This fetches the module, with its bundled dependencies, into your BoxLang modules directory (`~/.boxlang/modules` by default, or `boxlang_modules/` with `--local`).
 :::
 ::: step "Verify it worked"
 ```bash
@@ -63,6 +61,32 @@ boxlang module:bxagents new my-agent --model=openai/gpt-5
 ```
 
 Both are equivalent - every verb dispatches through the same `ModuleConfig.bx main(args)` entry point either way. This doc uses the short `bxAgents <verb>` form throughout.
+
+## What is bundled
+
+The module zip carries its own dependencies, pinned to the stable releases it was built with. A bug fix in one of them ships as a BxAgents patch release, so nobody installs or updates them by hand.
+
+| Where | What | Used for |
+|---|---|---|
+| `modules/` (nested BoxLang modules) | `bx-ai`, `bx-sqlite`, `bx-ftp`, `bx-mail` | The agent runtime, the web UI's SQLite store, the `ftp`/`sftp` deploy targets, the email gateway |
+| `lib/` (ColdBox runtime) | ColdBox, `qb`, `cbsecurity`, `cbauth`, `cbmailservices` | Copied into every app `build` generates |
+
+`serve` points the served app at the same bundled modules.
+
+### Adding your own libraries
+
+Put extra ColdBox libraries in a `lib/` folder in your project, using the same layout as the bundled one:
+
+```text
+my-agent/
+  lib/
+    coldbox/          # replaces the bundled ColdBox
+    modules/
+      cbvalidation/   # added next to the bundled modules
+      qb/             # replaces the bundled qb
+```
+
+`build` copies the bundled set first and your `lib/` second, so yours wins.
 
 ## Tab completion
 

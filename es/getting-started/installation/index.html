@@ -246,7 +246,7 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#el-comando-bxagents">El comando bxAgents</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#qué-viene-incluido">Qu&eacute; viene incluido</a></li><li class="toc-level-3"><a href="#añadir-tus-propias-librerías">A&ntilde;adir tus propias librer&iacute;as</a></li><li class="toc-level-2"><a href="#el-comando-bxagents">El comando bxAgents</a></li></ul></details>
 		
 
 		
@@ -258,12 +258,19 @@
 </symbol>
 </svg>
 <h1 id="instalación"><a href="#instalación" id="instalación" name="instalación" class="anchor"></a>Instalación</h1>
-<p>BxAgents es un módulo de BoxLang. Necesita tres cosas en la máquina que lo ejecuta:</p>
+<p>BxAgents es un módulo de BoxLang. Necesita dos cosas en la máquina que lo ejecuta:</p>
 <ol>
 <li>Un runtime de <a href="https://www.boxlang.io">BoxLang</a>.</li>
-<li>El módulo de BoxLang <code>bx-ai</code> (BxAgents genera código que lo llama - no lo empaqueta él mismo).</li>
-<li>BxAgents mismo.</li>
+<li>BxAgents mismo. Incluye todo lo demás que necesita: <code>bx-ai</code>, <code>bx-sqlite</code>, <code>bx-ftp</code> y <code>bx-mail</code> como módulos de BoxLang anidados, además de ColdBox, <code>qb</code>, <code>cbsecurity</code>, <code>cbauth</code> y <code>cbmailservices</code> para las apps que genera. No hay nada más que instalar.</li>
 </ol>
+<div class="adm-block adm-info">
+<div class="adm-heading">
+<svg class="adm-icon"><use xlink:href="#adm-info" /></svg><span>Info</span>
+</div>
+<div class="adm-body">
+<p>BxAgents necesita BoxLang <strong>1.18.0 o posterior</strong>, que admite los módulos anidados que incluye.</p>
+</div>
+</div>
 <div class="adm-block adm-info">
 <div class="adm-heading">
 <svg class="adm-icon"><use xlink:href="#adm-info" /></svg><span>Info</span>
@@ -272,24 +279,37 @@
 <p><code>serve</code> adicionalmente necesita el binario independiente <a href="https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver"><code>boxlang-miniserver</code></a> en <code>PATH</code>. <code>build</code>, <code>chat</code>, <code>package</code>, <code>inspect</code>, <code>clean</code>, y <code>new</code> no lo necesitan.</p>
 </div>
 </div>
-<div class="adm-block adm-info">
-<div class="adm-heading">
-<svg class="adm-icon"><use xlink:href="#adm-info" /></svg><span>Info</span>
-</div>
-<div class="adm-body">
-<p>Los destinos <code>ftp</code>/<code>sftp</code> de <code>deploy</code> necesitan el módulo de BoxLang <a href="https://github.com/ortus-boxlang/bx-ftp"><code>bx-ftp</code></a> instalado junto a <code>bx-ai</code>/BxAgents (<code>install-bx-module bx-ftp</code>) - una dependencia de runtime genuina, no empaquetada, la misma relación que este módulo tiene con <code>bx-ai</code>. Ningún otro verbo o destino de deploy lo necesita.</p>
-</div>
-</div>
 <div class="bxsites-stepper"><div class="bxsites-step"><div class="bxsites-step__marker">1</div><div class="bxsites-step__content"><div class="bxsites-step__title">Instalar BoxLang</div><p>Sigue la <a href="https://boxlang.ortusbooks.com/getting-started/installation">guía de instalación oficial de BoxLang</a>. El instalador rápido también configura <code>~/.boxlang/bin</code> en tu <code>PATH</code>, que es donde aterrizan los ejecutables provistos por módulos (como el propio comando <code>bxAgents</code> de BxAgents, abajo).</p>
-</div></div><div class="bxsites-step"><div class="bxsites-step__marker">2</div><div class="bxsites-step__content"><div class="bxsites-step__title">Instalar bx-ai y BxAgents</div><pre><code class="language-bash">install-bx-module bx-ai
-install-bx-module bx-agents
+</div></div><div class="bxsites-step"><div class="bxsites-step__marker">2</div><div class="bxsites-step__content"><div class="bxsites-step__title">Instalar BxAgents</div><pre><code class="language-bash">install-bx-module bx-agents
 </code></pre>
-<p>Esto obtiene ambos módulos en tu directorio de módulos de BoxLang (<code>~/.boxlang/modules</code> por defecto, o <code>boxlang_modules/</code> con <code>--local</code>).</p>
+<p>Esto obtiene el módulo, con sus dependencias incluidas, en tu directorio de módulos de BoxLang (<code>~/.boxlang/modules</code> por defecto, o <code>boxlang_modules/</code> con <code>--local</code>).</p>
 </div></div><div class="bxsites-step"><div class="bxsites-step__marker">3</div><div class="bxsites-step__content"><div class="bxsites-step__title">Verificar que funcion&oacute;</div><pre><code class="language-bash">bxAgents --version
 bxAgents --help
 </code></pre>
 <p><code>--help</code> lista los 12 verbos (<code>new</code>, <code>build</code>, <code>test</code>, <code>serve</code>, <code>chat</code>, <code>invoke</code>, <code>package</code>, <code>deploy</code>, <code>inspect</code>, <code>clean</code>, <code>hash-password</code>, <code>doctor</code>) con un resumen de una línea de cada uno.</p>
 </div></div></div>
+<h2 id="qué-viene-incluido"><a href="#qué-viene-incluido" id="qué-viene-incluido" name="qué-viene-incluido" class="anchor"></a>Qué viene incluido</h2>
+<p>El zip del módulo lleva sus propias dependencias, fijadas a las versiones estables con las que se construyó. Una corrección en una de ellas sale como una versión de parche de BxAgents, así que nadie las instala ni las actualiza a mano.</p>
+<div class="bxsites-table-wrap"><table class="table">
+<thead>
+<tr><th>Dónde</th><th>Qué</th><th>Para qué</th></tr>
+</thead>
+<tbody>
+<tr><td><code>modules/</code> (módulos de BoxLang anidados)</td><td><code>bx-ai</code>, <code>bx-sqlite</code>, <code>bx-ftp</code>, <code>bx-mail</code></td><td>El runtime del agente, el almacén SQLite de la interfaz web, los destinos de deploy <code>ftp</code>/<code>sftp</code>, el gateway de email</td></tr>
+<tr><td><code>lib/</code> (runtime de ColdBox)</td><td>ColdBox, <code>qb</code>, <code>cbsecurity</code>, <code>cbauth</code>, <code>cbmailservices</code></td><td>Se copian en cada app que genera <code>build</code></td></tr>
+</tbody>
+</table></div>
+<p><code>serve</code> apunta la app servida a esos mismos módulos incluidos.</p>
+<h3 id="añadir-tus-propias-librerías"><a href="#añadir-tus-propias-librerías" id="añadir-tus-propias-librerías" name="añadir-tus-propias-librerías" class="anchor"></a>Añadir tus propias librerías</h3>
+<p>Pon librerías extra de ColdBox en una carpeta <code>lib/</code> de tu proyecto, con la misma estructura que la incluida:</p>
+<pre><code class="language-text">my-agent/
+  lib/
+    coldbox/          # reemplaza el ColdBox incluido
+    modules/
+      cbvalidation/   # se añade junto a los módulos incluidos
+      qb/             # reemplaza el qb incluido
+</code></pre>
+<p><code>build</code> copia primero el conjunto incluido y después tu <code>lib/</code>, así que la tuya gana.</p>
 <h2 id="el-comando-bxagents"><a href="#el-comando-bxagents" id="el-comando-bxagents" name="el-comando-bxagents" class="anchor"></a>El comando <code>bxAgents</code></h2>
 <p>BxAgents declara un ejecutable nativo en su <code>box.json</code>:</p>
 <pre><code class="language-json">&quot;boxlang&quot;: { &quot;moduleName&quot;: &quot;bxagents&quot;, &quot;executable&quot;: &quot;bxAgents&quot; }
@@ -307,7 +327,7 @@ bxAgents --help
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/getting-started/installation.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/getting-started/installation.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Oct 17, 2026, 10&#x3a;41&#x3a;03 AM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Instalaci%C3%B3n&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fgetting-started%2Finstallation%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/getting-started/installation.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/getting-started/installation.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Oct 17, 2026, 11&#x3a;50&#x3a;05 AM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Instalaci%C3%B3n&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fgetting-started%2Finstallation%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 
@@ -351,7 +371,7 @@ bxAgents --help
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="En esta p&aacute;gina"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#el-comando-bxagents">El comando bxAgents</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="En esta p&aacute;gina"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#qué-viene-incluido">Qu&eacute; viene incluido</a></li><li class="toc-level-3"><a href="#añadir-tus-propias-librerías">A&ntilde;adir tus propias librer&iacute;as</a></li><li class="toc-level-2"><a href="#el-comando-bxagents">El comando bxAgents</a></li></ul></nav>
 				</aside>
 			
 		</div>

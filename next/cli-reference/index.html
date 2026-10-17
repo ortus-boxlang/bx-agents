@@ -436,7 +436,7 @@ bxAgents deploy --destination=/path/to/somewhere [--target=local]
 <li><code>--name=&lt;entry&gt;</code> dispatches to whatever target the named <code>deploy/&lt;entry&gt;.bx</code>/<code>.json</code> entry declares (<code>local</code>, <code>ssh</code>, <code>ftp</code>, <code>sftp</code>, <code>docker</code>, or <code>digitalocean</code>).</li>
 <li>The flag-only form (<code>--target=local --destination=...</code>, or no <code>--target</code> at all) works with no <code>deploy/</code> folder present - only <code>local</code> supports it; every other target requires a named entry, since it needs more configuration than a couple of flags can carry.</li>
 <li><code>local</code>/<code>ssh</code>/<code>ftp</code>/<code>sftp</code> require a prior <code>package</code>; <code>docker</code>/<code>digitalocean</code> require a prior <code>build</code> (they build straight from <code>.build/app</code>).</li>
-<li><code>ftp</code>/<code>sftp</code> need the <a href="https://github.com/ortus-boxlang/bx-ftp"><code>bx-ftp</code></a> module installed alongside BxAgents (see <a href="/next/getting-started/installation/index.html">Installation</a>).</li>
+<li><code>ftp</code>/<code>sftp</code> use the <a href="https://github.com/ortus-boxlang/bx-ftp"><code>bx-ftp</code></a> module, which BxAgents bundles.</li>
 </ul>
 <h3 id="hash-password"><a href="#hash-password" id="hash-password" name="hash-password" class="anchor"></a><code>hash-password</code></h3>
 <p>Turn a plaintext password into the <code>passwordHash</code> value a <code>webui</code> entry's <a href="/next/conventions/web-ui/index.html"><code>users</code></a> block accepts.</p>
@@ -476,7 +476,7 @@ bxAgents deploy --destination=/path/to/somewhere [--target=local]
 <li>Confirms <code>bx-ai</code> is loaded (always required).</li>
 <li>Runs the exact same discovery/resolve/validate phases <code>build</code> runs, without generating anything - every validation error/warning <code>build</code> would hit shows up here first.</li>
 <li>Checks every <code>*EnvVar</code>-suffixed config value across <code>gateways/*</code> (bot tokens, webhook secrets, IMAP credentials, web UI account passwords, API keys) against the real environment right now, and warns about any that aren't set. Nothing else checks this - <code>build</code> only checks that an env var name was <em>declared</em>, never that it's actually populated, so a missing one otherwise fails silently at runtime (a gateway that never sends, a web UI account that can't sign in).</li>
-<li>Warns if a webui-exposed project doesn't have <code>qb</code> loaded, or if one declaring <code>users</code> doesn't have <code>cbauth</code> loaded - both are <code>box.json</code> dependencies you install yourself, never bundled by this module.</li>
+<li>Does not check for <code>qb</code>, <code>cbsecurity</code>, <code>cbauth</code> or <code>cbmailservices</code>: they ship inside BxAgents and are copied into every built app.</li>
 <li><code>--json</code> prints the raw findings as a JSON array (<code>[{ status, message }, ...]</code>) instead of the human-readable report - useful for scripting.</li>
 <li>Exits <code>1</code> if any check failed, <code>0</code> otherwise - warnings alone don't fail it.</li>
 </ul>
