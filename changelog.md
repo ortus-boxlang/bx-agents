@@ -22,7 +22,7 @@ or package as a portable `.bxa`.
 #### Self-contained install
 
 - `install-bx-module bx-agents` is the only install. The module zip bundles `bx-ai`,
-  `bx-sqlite`, `bx-ftp`, `bx-mail` and `bx-yaml` as nested BoxLang modules
+  `bx-sqlite`, `bx-ftp` and `bx-mail` as nested BoxLang modules
   (BoxLang 1.17+), and a `lib/` with ColdBox, `qb`, `cbsecurity`, `cbauth` and
   `cbmailservices` that `build` copies into every generated app. A project's own
   `lib/` folder adds to or overrides them.
