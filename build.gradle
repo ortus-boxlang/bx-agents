@@ -43,9 +43,8 @@ ext {
 		[ name: "bx-sqlite", moduleName: "sqlite", version: "latest" ],
 		// bx-mail: the email gateway.
 		[ name: "bx-mail", moduleName: "mail", version: "latest" ],
-		// bx-yaml / bx-toml: YAML and TOML project configuration.
-		[ name: "bx-yaml", moduleName: "yaml", version: "latest" ],
-		[ name: "bx-toml", moduleName: "bxtoml", version: "latest" ]
+		// bx-yaml: YAML project configuration.
+		[ name: "bx-yaml", moduleName: "yaml", version: "latest" ]
 	]
 }
 
@@ -197,8 +196,10 @@ spotless {
 
 /**
  * ColdBox runtime libraries (coldbox, qb, cbsecurity, cbauth, cbmailservices)
- * Installed with CommandBox (`box install`) from src/main/lib/box.json into
- * build/lib-stage, then bundled into the module as `lib/` by
+ * Installed with CommandBox (the bx-cli / `commandbox-boxlang` tooling every
+ * developer has installed) from src/main/lib/box.json into build/lib-stage -
+ * `coldbox` to lib/coldbox, every module to lib/modules, via the same
+ * `installPathConventions` the ColdBox application templates use - then bundled into the module as `lib/` by
  * createModuleStructure. `bxAgents new`/`build` copy them into every generated
  * app, so users never install them. Needs `box` (CommandBox) on the PATH.
  */
@@ -271,9 +272,8 @@ task createModuleStructure(type: Copy) {
         into 'completions'
     }
     // Bundled ColdBox runtime libs (see installLibs) - copied into every generated app
-    from( 'build/lib-stage' ) {
-		include 'coldbox/**'
-		include 'modules/**'
+    // (installLibs stages them as build/lib-stage/lib/{coldbox,modules/*} - the layout of lib/ itself)
+    from( 'build/lib-stage/lib' ) {
 		into 'lib'
 	}
     destinationDir = file( 'build/modules/bxagents' )

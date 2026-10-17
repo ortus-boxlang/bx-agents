@@ -12,7 +12,7 @@ BxAgents is a BoxLang module. It needs two things on the machine that runs it:
 
 1. A [BoxLang](https://www.boxlang.io) runtime.
 2. BxAgents itself, which bundles everything else it needs (`bx-ai`, `bx-sqlite`,
-   `bx-ftp`, `bx-mail`, `bx-yaml`, `bx-toml`, and ColdBox with its modules for the
+   `bx-ftp`, `bx-mail`, `bx-yaml`, and ColdBox with its modules for the
    apps it generates). BoxLang **1.17.0 or later** is required.
 
 ::: stepper

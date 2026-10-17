@@ -82,7 +82,7 @@ Before you get started, fetch the BoxLang binary (until this module is published
 | `verifyExamples` | Builds every project under `examples/` through the real build pipeline via `verifyExamples.bxs` - a regression net across the whole feature matrix. |
 | `checkTemplateTokens` | Fails if any leftover `@MODULE_*@` boxlang-module-template placeholder tokens remain anywhere in the repo. Runs as part of `check`. |
 | `downloadBoxLang` | Downloads the BoxLang binary into `src/test/resources/libs`. |
-| `downloadModules` | Downloads the BoxLang modules BX Agents bundles (bx-ai, bx-ftp, bx-sqlite, bx-mail, bx-yaml, bx-toml; latest stable) into `build/modules/bxagents/modules`, where the module loads them as nested modules. |
+| `downloadModules` | Downloads the BoxLang modules BX Agents bundles (bx-ai, bx-ftp, bx-sqlite, bx-mail, bx-yaml; latest stable) into `build/modules/bxagents/modules`, where the module loads them as nested modules. |
 | `installLibs` | Runs `box install` (CommandBox required) against `src/main/lib/box.json`, staging ColdBox, qb, cbsecurity, cbauth and cbmailservices in `build/lib-stage`, which the module zip ships as `lib/`. |
 | `downloadMiniServer` | Downloads the `boxlang-miniserver` binary into `src/test/resources/libs`. |
 | `jar` / `shadowJar` | Packages compiled classes/resources into a JAR under `build/libs`. |

@@ -11,7 +11,7 @@ tags: [getting-started, setup]
 BxAgents is a BoxLang module. It needs two things on the machine that runs it:
 
 1. A [BoxLang](https://www.boxlang.io) runtime.
-2. BxAgents itself. It bundles everything else it needs: `bx-ai`, `bx-sqlite`, `bx-ftp`, `bx-mail`, `bx-yaml` and `bx-toml` as nested BoxLang modules, plus ColdBox, `qb`, `cbsecurity`, `cbauth` and `cbmailservices` for the apps it generates. There is nothing else to install.
+2. BxAgents itself. It bundles everything else it needs: `bx-ai`, `bx-sqlite`, `bx-ftp`, `bx-mail` and `bx-yaml` as nested BoxLang modules, plus ColdBox, `qb`, `cbsecurity`, `cbauth` and `cbmailservices` for the apps it generates. There is nothing else to install.
 
 !!! info
     BxAgents needs BoxLang **1.17.0 or later**, the release that added nested modules.
@@ -68,7 +68,7 @@ The module zip carries its own dependencies, pinned to the stable releases it wa
 
 | Where | What | Used for |
 |---|---|---|
-| `modules/` (nested BoxLang modules) | `bx-ai`, `bx-sqlite`, `bx-ftp`, `bx-mail`, `bx-yaml`, `bx-toml` | The agent runtime, the web UI's SQLite store, the `ftp`/`sftp` deploy targets, the email gateway, YAML and TOML |
+| `modules/` (nested BoxLang modules) | `bx-ai`, `bx-sqlite`, `bx-ftp`, `bx-mail`, `bx-yaml` | The agent runtime, the web UI's SQLite store, the `ftp`/`sftp` deploy targets, the email gateway, YAML |
 | `lib/` (ColdBox runtime) | ColdBox, `qb`, `cbsecurity`, `cbauth`, `cbmailservices` | Copied into every app `build` generates |
 
 `serve` points the served app at the same bundled modules.

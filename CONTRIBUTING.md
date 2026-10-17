@@ -57,6 +57,8 @@ If you discover a security vulnerability, please send an email to the developmen
 
 ## Development Setup
 
+Development needs **CommandBox with the `bx-cli` tooling** (the `commandbox-boxlang` module) installed. It does all dependency management: `box install` for TestBox, the test ColdBox libraries, and the bundled runtime libraries (`./gradlew installLibs` calls it). Users never need it.
+
 ```bash
 ./gradlew downloadBoxLang     # fetches the BoxLang jar into src/test/resources/libs
 ./gradlew downloadModules     # fetches the bundled BoxLang modules (bx-ai, bx-sqlite, ...) into build/modules/bxagents/modules (needed by the TestBox suite)
