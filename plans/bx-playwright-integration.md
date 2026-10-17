@@ -30,39 +30,46 @@ This matters for the playwright plan in two ways:
 
 ## 2. Decisions (agreed)
 
-1. **Declare in `configure()` of the class.** One plain list of names:
+1. **Declare in `configure()` of the class, namespaced by module.** Every name is `item@module`, the same key bx-ai already uses in its registry. The module part tells you what must be installed:
    ```javascript
    class extends="bxModules.bxai.models.runnables.AiAgent" {
    	function configure() {
-   		return { tools : [ "now", "filesystem", "playwright" ] }
+   		return {
+   			tools : [
+   				"now@bxai",            // one bx-ai built-in
+   				"filesystem@bxai",     // a bx-ai pack (not registered by default)
+   				"*@bxplaywright"       // every bx-playwright tool
+   			]
+   		}
    	}
    }
    ```
-2. **Default = only the agent's own `tools/`.** bx-ai built-ins (`now`, `httpGet`, `sendEmail`, `webSearch`, ...) must be named. Fixes the finding in section 1.
-3. **Naming a module includes it automatically.** `"playwright"` makes the build validate the bundled module, wire its tools for **that agent only**, and warn in `doctor` if the browser is not installed.
-4. **Dangerous packs are sandboxed by default.** `filesystem` is limited to a `workspace/` folder in the project; `playwright` to the app's own host. Widen with options:
+   - `name@module`: one tool or pack from that module.
+   - `*@module` (or just `@module`): everything that module provides.
+   - A bare name (`"now"`) is an error with a hint: `did you mean now@bxai?`. No guessing.
+2. **Default = only the agent's own `tools/`.** bx-ai built-ins (`now@bxai`, `httpGet@bxai`, `sendEmail@bxai`, `webSearch@bxai`, ...) must be named. Fixes the finding in section 1.
+3. **The module part drives the include.** Naming anything `@bxplaywright` makes the build validate the bundled module, wire its tools for **that agent only**, and warn in `doctor` if the browser is not installed. The error for a missing module names it: `tools lists "*@bxplaywright" but module bxplaywright is not available`.
+4. **Dangerous packs are sandboxed by default.** `filesystem@bxai` is limited to a `workspace/` folder in the project; `*@bxplaywright` to the app's own host. Widen with options, keyed by the same module name:
    ```javascript
-   tools : [ "filesystem", "playwright" ],
+   tools : [ "filesystem@bxai", "*@bxplaywright" ],
    moduleOptions : {
-   	filesystem : { roots : [ "/data/reports" ] },
-   	playwright : { allow : [ "docs.example.com" ] }
+   	bxai         : { filesystem : { roots : [ "/data/reports" ] } },
+   	bxplaywright : { allow : [ "docs.example.com" ] }
    }
    ```
 
 ### What a name can be
 
-The build resolves each name in this order:
-
 | Name | Is | Example |
 |---|---|---|
-| A registry key | One tool already in bx-ai's registry | `"now"`, `"httpGet"` (short for `now@bxai`) |
-| A pack | A group of tools bx-ai ships but does **not** register on load; BX Agents scans the class on demand, scoped to this agent | `"filesystem"` (the 20 `FileSystemTools`: read, write, delete, move, search, zip, ...) |
-| A module | A whole module's tools, via a small adapter; the module is bundled and wired automatically | `"playwright"` |
+| `tool@module` | One tool already in the registry | `"now@bxai"`, `"httpGet@bxai"` |
+| `pack@module` | A group of tools the module ships but does **not** register on load; BX Agents builds it on demand, scoped to this agent | `"filesystem@bxai"` (the 20 `FileSystemTools`: read, write, delete, move, search, zip, ...) |
+| `*@module` | Everything the module provides, via a small adapter | `"*@bxplaywright"` |
 | Your own tool | Anything in `tools/` | always on, never named |
 
-Packs and modules never go into the global registry for every agent. They are built per agent, which is what keeps `playwright` and `filesystem` off agents that did not ask for them.
+Packs and modules never go into the global registry for every agent. They are built per agent, which is what keeps the browser and filesystem off agents that did not ask for them.
 
-Build effects for each named pack/module: validate it exists, apply sandbox defaults and `moduleOptions`, attach only to this agent, record it in the manifest (so `package`/`deploy`/`doctor` know), and `doctor` reports missing prerequisites.
+Build effects for each name: validate the module is available (bundled or installed), apply sandbox defaults and `moduleOptions`, attach only to this agent, record the required modules in the manifest (so `package`/`deploy`/`doctor` know), and `doctor` reports missing prerequisites.
 
 ### What "all the bx-playwright tools" means
 
@@ -70,7 +77,7 @@ Build effects for each named pack/module: validate it exists, apply sandbox defa
 - **MCP server (second path)**: `bxplaywright mcp` is Playwright's own MCP server, with a larger tool set. BX Agents' `mcpServers` accepts **URLs only**, but bx-ai already has a `StdioTransport`. Two ways:
   1. `bxplaywright mcp --port 8931` as a sidecar process, consumed as `http://localhost:8931/mcp`: works today, but the author must run the sidecar.
   2. Extend `mcpServers` to accept `{ command : [ "bxplaywright", "mcp", "--headless" ], name : "browser" }` and have bx-ai spawn it over stdio. Cleaner; needs a small BX Agents change and a check that bx-ai's client can be handed a stdio command.
-  `modules : [ "bxplaywright" ]` can later also mean "and its MCP server" through option `mcp : true`.
+  Naming `*@bxplaywright` can later also mean "and its MCP server" through the option `mcp : true`.
 
 ### Problems this must solve
 
