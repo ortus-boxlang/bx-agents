@@ -71,6 +71,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 		)
 		'invoke:positional' = 'dir'
 		'new' = @(
+			@{ Name = 'class'; Value = $false; Choices = @(); Dir = $false }
 			@{ Name = 'description'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'forgebox'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'model'; Value = $true; Choices = @(); Dir = $false }

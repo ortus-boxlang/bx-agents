@@ -31,6 +31,11 @@
  * install` there would be guessing at someone else's project layout, not
  * "best-effort convenience."
  *
+ * The agent is defined by an `Agent.yaml` by default. `--class` scaffolds a
+ * class-based `Agent.bx` instead, for projects that need code in the agent
+ * definition (hooks, dynamic instructions, tools registered in code); it also
+ * applies to every subagent a template scaffolds. Only applies to `--template`.
+ *
  * `--skipInstall` opts out of this step entirely (no attempt, no message) -
  * for CI/tests that need `new` to stay fast and network-independent, the
  * same reason `eve add`'s own registry install has a `--skip-install` flag.
@@ -40,7 +45,7 @@
 class {
 
 	/**
-	 * @options { projectRoot (required, absolute path), name, model (required only with --template/no source flag), description, template (optional, one of ProjectScaffolder.TEMPLATES - default "minimal"), repo (optional - clone this GitHub repo instead of scaffolding), forgebox (optional - install this ForgeBox slug instead of scaffolding), skipInstall (optional boolean - skip the tests/ `box install` convenience step; only applies to --template) }
+	 * @options { projectRoot (required, absolute path), name, model (required only with --template/no source flag), description, template (optional, one of ProjectScaffolder.TEMPLATES - default "minimal"), class (optional boolean - write a class-based Agent.bx instead of the default Agent.yaml; only applies to --template), repo (optional - clone this GitHub repo instead of scaffolding), forgebox (optional - install this ForgeBox slug instead of scaffolding), skipInstall (optional boolean - skip the tests/ `box install` convenience step; only applies to --template) }
 	 */
 	struct function run( struct options = {} ) {
 		var projectRoot = trim( arguments.options.projectRoot ?: "" )
@@ -92,7 +97,7 @@ class {
 			}
 
 			var scaffolder = new "models.build.ProjectScaffolder@bxagents"()
-			var scaffoldResult = scaffolder.scaffold( projectRoot, name, model, arguments.options.description ?: "", arguments.options.template ?: "minimal" )
+			var scaffoldResult = scaffolder.scaffold( projectRoot, name, model, arguments.options.description ?: "", arguments.options.template ?: "minimal", arguments.options[ "class" ] ?: false )
 			message = "Created new BX Agents project [#name#] at #scaffoldResult.projectRoot#"
 			installTests = true
 		}
