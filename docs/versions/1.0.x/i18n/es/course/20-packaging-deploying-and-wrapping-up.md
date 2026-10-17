@@ -110,9 +110,6 @@ Exactamente qué hace `build`, y en qué orden, con más profundidad que la Lecc
 ::: card title="Despliegue y secretos" icon="phosphor-duotone:lock-key" href="../deployment-and-secrets.md"
 Toda la historia de empaquetado y secretos de la Lección 20, en profundidad.
 :::
-::: card title="Limitaciones conocidas" icon="phosphor-duotone:warning" href="../known-limitations.md"
-Las carencias con honestidad - qué está demostrado contra una aplicación real en ejecución y qué todavía no.
-:::
 :::
 
 Pasaste de una terminal vacía a un agente probado, empaquetado y desplegable, con tools,

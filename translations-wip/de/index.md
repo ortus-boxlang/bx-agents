@@ -218,8 +218,3 @@ Eine `.bxa` paketieren und sicher ausliefern.
 Jeder Konventionsordner hat außerdem ein funktionierendes, baubares Beispielprojekt unter
 [`examples/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples).
 
-!!! warning
-    BxAgents befindet sich in aktiver Entwicklung. [Bekannte Einschränkungen](known-limitations.md) hält
-    die ehrlichen Lücken fest - was gegen eine echte laufende App getestet ist, was noch nur gegen
-    BX AIs `"mock"`-Provider läuft, und eine echte Eigenheit im vorgelagerten ColdBox, auf die dieses Projekt gestoßen ist und
-    die es umschifft hat.

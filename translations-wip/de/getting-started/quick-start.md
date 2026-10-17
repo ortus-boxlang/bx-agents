@@ -118,7 +118,7 @@ bxAgents serve --port=8080
 Hat das Projekt einen `gateways/*`-Eintrag mit `{ exposes: "agent", path: "/api/chat" }`, ist der Agent jetzt unter `POST http://localhost:8080/api/chat/invoke` erreichbar (und `/stream`, `/batch`, `/info` - siehe [gateways/](../conventions/gateways/index.md)).
 
 !!! warning
-    Der allererste Request an die `toAi()`-Route einer frisch gestarteten App kann vorübergehend fehlschlagen - siehe [Bekannte Einschränkungen](../known-limitations.md). Vor einer Nutzung unter Last einen Warm-up-Request senden.
+    Der allererste Request an die `toAi()`-Route einer frisch gestarteten App kann vorübergehend fehlschlagen. Vor einer Nutzung unter Last einen Warm-up-Request senden.
 
 ## 6. Inspizieren, paketieren, ausliefern
 

@@ -55,7 +55,7 @@ class {
 }
 ```
 
-En tiempo de build, `GatewayGenerator` convierte esto en una instancia registrada de `SlackGateway` y la cablea en la única `GatewaySession` del proyecto, que es de ámbito global (consulta [`GatewaySession` es de ámbito de proyecto y solo del agente raíz](../known-limitations.md) para el límite actual de v1 en ese punto). En tiempo de ejecución, `SlackGateway.onConnect()` abre el websocket de Socket Mode en cuanto arranca `GatewaySession`.
+En tiempo de build, `GatewayGenerator` convierte esto en una instancia registrada de `SlackGateway` y la cablea en la única `GatewaySession` del proyecto, que es de ámbito global. En tiempo de ejecución, `SlackGateway.onConnect()` abre el websocket de Socket Mode en cuanto arranca `GatewaySession`.
 
 ## Instrucciones
 
@@ -93,10 +93,9 @@ Envía un DM al bot, o menciónalo en un canal donde esté. Las respuestas vuelv
 
 ## Qué está probado, y qué no
 
-`SlackGatewaySpec.bx` ejercita la lógica de entrada y salida del gateway - troceado, aprobaciones con humano en el bucle, manejo de reconexión - enteramente contra una costura de pruebas inyectable, nunca contra una conexión real a Slack; un smoke test aparte confirma que la propia interoperabilidad WebSocket entre BoxLang y Java funciona correctamente (un intento de conexión real a una dirección inalcanzable falla con un `ConnectException` normal, no con un error de interoperabilidad). Ninguna prueba de este repositorio ha completado un handshake real de Socket Mode contra los servidores de verdad de Slack - consulta [Limitaciones conocidas](../known-limitations.md) para el estado actual y honesto de esa carencia en todos los gateways de tipo push. Los pasos de arriba son exactamente la verificación manual que esa carencia exige.
+`SlackGatewaySpec.bx` ejercita la lógica de entrada y salida del gateway - troceado, aprobaciones con humano en el bucle, manejo de reconexión - enteramente contra una costura de pruebas inyectable, nunca contra una conexión real a Slack; un smoke test aparte confirma que la propia interoperabilidad WebSocket entre BoxLang y Java funciona correctamente (un intento de conexión real a una dirección inalcanzable falla con un `ConnectException` normal, no con un error de interoperabilidad). Ninguna prueba de este repositorio ha completado un handshake real de Socket Mode contra los servidores de verdad de Slack. Los pasos de arriba son exactamente la verificación manual que esa carencia exige.
 
 ## Dónde ir a continuación
 
 - [Slack](../conventions/gateways/slack.md) para la convención completa del gateway - modelo de reconexión, correlación con humano en el bucle, límites de troceado.
 - [Ejemplo: un equipo multiagente](example-multi-agent-team.md) para combinar un agente accesible por gateway con delegación en subagentes.
-- [Limitaciones conocidas](../known-limitations.md) para saber qué demuestran y qué no las pruebas automatizadas de cada gateway de tipo push.

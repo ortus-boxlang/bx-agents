@@ -110,9 +110,6 @@ Exactly what `build` does, in order, in more depth than Lesson 7 covered.
 ::: card title="Deployment & Secrets" icon="phosphor-duotone:lock-key" href="../deployment-and-secrets.md"
 The full packaging and secrets story from Lesson 20, in depth.
 :::
-::: card title="Known Limitations" icon="phosphor-duotone:warning" href="../known-limitations.md"
-The honest gaps - what's proven against a real running app and what isn't yet.
-:::
 :::
 
 You went from an empty terminal to a tested, packaged, deployable agent with tools,

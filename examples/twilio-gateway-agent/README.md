@@ -49,5 +49,3 @@ The synchronous response is always an empty TwiML `<Response></Response>` ack - 
 {% hint style="warning" %}
 Human-in-the-loop is **degraded** here (no button/card affordance in SMS) - `requestHumanInteraction()` sends a plain-text SMS listing allowed decisions, correlated by the sender's phone number rather than a subject-line tag. See [Twilio SMS](../../docs/conventions/gateways/twilio.md).
 {% endhint %}
-
-See [Known Limitations](../../docs/known-limitations.md) for what's cross-verified against an independent Python `hmac` reference vs. what still needs a real Twilio number.

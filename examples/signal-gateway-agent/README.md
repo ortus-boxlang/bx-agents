@@ -30,5 +30,5 @@ v1 is **DM-only** - Signal group conversations are out of scope. Human-in-the-lo
 {% endhint %}
 
 {% hint style="info" %}
-Like the other persistent-connection gateways in this directory, there's no `curl`-able entrypoint - `signal-cli` and a second real Signal account are needed to see this work end-to-end. See [Known Limitations](../../docs/known-limitations.md) for exactly what was smoke-tested against real `HttpClient` interop vs. what still needs a real, running daemon.
+Like the other persistent-connection gateways in this directory, there's no `curl`-able entrypoint - `signal-cli` and a second real Signal account are needed to see this work end-to-end.
 {% endhint %}
