@@ -8,7 +8,7 @@ tags: [conventions, subagents]
 
 # subagents/
 
-`subagents/` holds nested agents, each an ordinary BxAgents project of its own - an `Agent.yaml` + `instructions.md` (and optionally its own `tools/`, `skills/`, etc.):
+`subagents/` holds nested agents, each an ordinary BxAgents project of its own - an `Agent.yaml` + `instructions.md` (and optionally its own `tools/`, `skills/`, etc.). A subagent's `tools/` belong to it alone, and its `tools:` list is its own; neither is inherited from or shared with its parent:
 
 ```
 my-agent/

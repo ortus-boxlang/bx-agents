@@ -246,7 +246,7 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#settings">Settings</a></li><li class="toc-level-2"><a href="#instructions">Instructions</a></li><li class="toc-level-2"><a href="#environments">Environments</a></li><li class="toc-level-2"><a href="#requirements">Requirements</a></li><li class="toc-level-2"><a href="#yaml-or-agentbx">YAML or Agent.bx&#x3f;</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#settings">Settings</a></li><li class="toc-level-2"><a href="#tools">Tools</a></li><li class="toc-level-2"><a href="#instructions">Instructions</a></li><li class="toc-level-2"><a href="#environments">Environments</a></li><li class="toc-level-2"><a href="#requirements">Requirements</a></li><li class="toc-level-2"><a href="#yaml-or-agentbx">YAML or Agent.bx&#x3f;</a></li></ul></details>
 		
 
 		
@@ -299,6 +299,7 @@ environments:
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>model</code></td><td>string</td><td>A <code>provider/model</code> slug, a bare provider name, or the name of a <a href="/next/conventions/models/index.html"><code>models/</code></a> entry. See <a href="/next/conventions/agent-bx/index.html#the-model-slug">The model slug</a>.</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>description</code></td><td>string</td><td>Optional.</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>instructions</code></td><td>string</td><td>Optional inline instructions. See <a href="#instructions">Instructions</a>.</td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>tools</code></td><td>list of strings</td><td>Module tools this agent gets, as <code>item@module</code> or <code>*@module</code>. See <a href="#tools">Tools</a>.</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>subAgents</code></td><td>list of strings</td><td>Names of sibling folders under the root project's <code>subagents/</code>. See <a href="/next/conventions/subagents/index.html">subagents/</a>.</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>mcpServers</code></td><td>list</td><td>Remote MCP servers - each entry a URL string or <code>{ url, name }</code>. See <a href="/next/conventions/mcp/index.html">mcp/</a>.</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>security</code></td><td>mapping</td><td>Forwarded verbatim into the generated app's <code>bxai</code> module settings; bx-ai's own <code>SecurityDirector</code> turns it into guardrail middleware.</td></tr>
@@ -315,10 +316,35 @@ environments:
 <svg class="adm-icon"><use xlink:href="#adm-warning" /></svg><span>Warning</span>
 </div>
 <div class="adm-body">
-<p>An <strong>unknown key is an error</strong>, and the message lists the valid ones. A typo such as <code>modle:</code> would otherwise do nothing, quietly. Settings that arrive in later releases (for example <code>tools</code>) are rejected the same way until they exist, rather than being silently ignored. Anything free-form belongs in an <code>Agent.bx</code>.</p>
+<p>An <strong>unknown key is an error</strong>, and the message lists the valid ones. A typo such as <code>modle:</code> would otherwise do nothing, quietly. Settings that arrive in later releases (for example <code>toolOptions</code>) are rejected the same way until they exist, rather than being silently ignored. Anything free-form belongs in an <code>Agent.bx</code>.</p>
 </div>
 </div>
 <p>A value of the wrong type (a text where a list belongs, say) and an empty value (<code>model:</code> with nothing after it) are errors too.</p>
+<h2 id="tools"><a href="#tools" id="tools" name="tools" class="anchor"></a>Tools</h2>
+<p>An agent gets its own <code>tools/</code> folder, and nothing else, unless it asks. The tools other modules provide (bx-ai's built-ins, <code>bx-playwright</code>, ...) are a catalog: they are available, but an agent only has the ones its <code>tools:</code> list names. Every entry is <code>item@module</code>, the key bx-ai keeps them under:</p>
+<pre><code class="language-yaml">name: support
+model: openai/gpt-5
+tools:
+  - now@bxai            # one tool from one module
+  - &quot;*@bxplaywright&quot;    # every tool that module registered (quote it: * starts a YAML alias)
+</code></pre>
+<div class="bxsites-table-wrap"><table class="table">
+<thead>
+<tr><th>Entry</th><th>Gives the agent</th></tr>
+</thead>
+<tbody>
+<tr><td><code>item@module</code></td><td>that one tool</td></tr>
+<tr><td><code>*@module</code>, or <code>@module</code></td><td>every tool the module registered</td></tr>
+</tbody>
+</table></div>
+<ul>
+<li><strong>Default.</strong> No <code>tools:</code> means only the agent's own <code>tools/</code>. This holds for every <a href="/next/conventions/subagents/index.html">subagent</a> too: each one has its own <code>tools/</code> and its own <code>tools:</code>.</li>
+<li><strong>Naming a module validates it.</strong> If the module is not installed, or has no such tool, <code>build</code> and the generated app fail with a message that lists what the module does provide.</li>
+<li><strong>A bare name is an error.</strong> <code>now</code> fails with a hint to write <code>now@bxai</code>. bx-ai would otherwise resolve it to whichever module registered a tool called <code>now</code> first.</li>
+<li><strong>Own tools win.</strong> If a tool in the agent's <code>tools/</code> has the same name as a module tool it selected, the own tool is used and the module tool is left out, with a warning in the <code>bxagents-tools</code> log.</li>
+<li><strong>Each tool once.</strong> Listing a tool twice, or listing it along with a <code>*@module</code> that covers it, attaches it once.</li>
+</ul>
+<p>Per-tool settings (<code>toolOptions</code>) are not supported yet.</p>
 <h2 id="instructions"><a href="#instructions" id="instructions" name="instructions" class="anchor"></a>Instructions</h2>
 <p>The agent's instructions are its system prompt. Put them in an <code>instructions.md</code> beside <code>Agent.yaml</code>, the usual choice because the file is plain Markdown and easy to edit:</p>
 <pre><code>my-agent/
@@ -423,7 +449,7 @@ environments:
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#settings">Settings</a></li><li class="toc-level-2"><a href="#instructions">Instructions</a></li><li class="toc-level-2"><a href="#environments">Environments</a></li><li class="toc-level-2"><a href="#requirements">Requirements</a></li><li class="toc-level-2"><a href="#yaml-or-agentbx">YAML or Agent.bx&#x3f;</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#settings">Settings</a></li><li class="toc-level-2"><a href="#tools">Tools</a></li><li class="toc-level-2"><a href="#instructions">Instructions</a></li><li class="toc-level-2"><a href="#environments">Environments</a></li><li class="toc-level-2"><a href="#requirements">Requirements</a></li><li class="toc-level-2"><a href="#yaml-or-agentbx">YAML or Agent.bx&#x3f;</a></li></ul></nav>
 				</aside>
 			
 		</div>

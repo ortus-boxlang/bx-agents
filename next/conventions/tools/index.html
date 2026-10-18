@@ -246,7 +246,7 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#naming">Naming</a></li><li class="toc-level-2"><a href="#whats-excluded">What&#x27;s excluded</a></li><li class="toc-level-2"><a href="#rebuilds">Rebuilds</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#tools-from-modules">Tools from modules</a></li><li class="toc-level-2"><a href="#naming">Naming</a></li><li class="toc-level-2"><a href="#whats-excluded">What&#x27;s excluded</a></li><li class="toc-level-2"><a href="#rebuilds">Rebuilds</a></li></ul></details>
 		
 
 		
@@ -262,10 +262,9 @@ class {
 
 }
 </code></pre>
-<p>BxAgents doesn't scan or interpret <code>@AITool</code> annotations itself - it discovers one entry per <code>.bx</code> file (for name-collision checking) and then copies the whole <code>tools/</code> folder <strong>verbatim</strong> into the generated app. At startup, the generated app calls bx-ai's own scanner:</p>
-<pre><code class="language-javascript">aiToolRegistry().scan( &quot;tools&quot; )
-</code></pre>
-<p>which does the real reflection work (walking the copied files, instantiating each class, finding <code>@AITool</code> functions). This statement is only emitted at all if the project actually has a <code>tools/</code> folder with files in it.</p>
+<p>BxAgents doesn't interpret <code>@AITool</code> annotations itself. It copies the whole <code>tools/</code> folder <strong>verbatim</strong> into the generated app, and the generated agent factory hands each agent's own folder to bx-ai's scanner, which does the real reflection work (walking the files, instantiating each class, finding <code>@AITool</code> functions). The tools it finds go to <strong>that agent only</strong>: a root agent's <code>tools/</code> are not given to its subagents, and a subagent's <code>tools/</code> are not given to its parent.</p>
+<h2 id="tools-from-modules"><a href="#tools-from-modules" id="tools-from-modules" name="tools-from-modules" class="anchor"></a>Tools from modules</h2>
+<p>Tools that modules register with bx-ai (its built-ins, <code>bx-playwright</code>, ...) are not attached to anything automatically. Name the ones an agent should have in its <a href="/next/conventions/agent-yaml/index.html#tools"><code>tools:</code></a> list, as <code>item@module</code> or <code>*@module</code>.</p>
 <h2 id="naming"><a href="#naming" id="naming" name="naming" class="anchor"></a>Naming</h2>
 <p>The discovered entry name is the file's own base name (<code>Greeter.bx</code> → <code>Greeter</code>). Two tool files with the same base name (even in different subfolders, since discovery is flat by base name) fail validation with a duplicate-name error.</p>
 <h2 id="whats-excluded"><a href="#whats-excluded" id="whats-excluded" name="whats-excluded" class="anchor"></a>What's excluded</h2>
@@ -324,7 +323,7 @@ class {
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#naming">Naming</a></li><li class="toc-level-2"><a href="#whats-excluded">What&#x27;s excluded</a></li><li class="toc-level-2"><a href="#rebuilds">Rebuilds</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#tools-from-modules">Tools from modules</a></li><li class="toc-level-2"><a href="#naming">Naming</a></li><li class="toc-level-2"><a href="#whats-excluded">What&#x27;s excluded</a></li><li class="toc-level-2"><a href="#rebuilds">Rebuilds</a></li></ul></nav>
 				</aside>
 			
 		</div>
