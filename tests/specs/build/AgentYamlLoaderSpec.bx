@@ -125,11 +125,33 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "rejects settings that arrive in later phases instead of ignoring them", function() {
-				var path = writeYaml( [ "name: a", "model: mock/mock-model", "toolOptions: {}" ] );
+				var path = writeYaml( [ "name: a", "model: mock/mock-model", "toolPacks: []" ] );
 
 				expect( function() {
 					loader.load( path );
-				} ).toThrow( type = "BxAgents.InvalidAgentYaml", regex = "unknown setting \[toolOptions\]" );
+				} ).toThrow( type = "BxAgents.InvalidAgentYaml", regex = "unknown setting \[toolPacks\]" );
+			} );
+
+			it( "reads toolOptions as a mapping and keeps ${env.X} placeholders untouched", function() {
+				var path = writeYaml( [
+					"name: a",
+					"model: mock/mock-model",
+					"toolOptions:",
+					"  bxplaywright:",
+					"    headless: false",
+					"    baseURL: ${env.APP_URL:http://localhost:8080}"
+				] );
+
+				var options = loader.load( path ).config.toolOptions;
+
+				expect( options.bxplaywright.headless ).toBeFalse();
+				expect( options.bxplaywright.baseURL ).toBe( "${env.APP_URL:http://localhost:8080}" );
+			} );
+
+			it( "rejects toolOptions that is not a mapping", function() {
+				expect( function() {
+					loader.load( writeYaml( [ "name: a", "toolOptions: [ bxplaywright ]" ] ) );
+				} ).toThrow( type = "BxAgents.InvalidAgentYaml", regex = "\[toolOptions\] must be a mapping" );
 			} );
 
 			it( "reads tools as a flat array", function() {

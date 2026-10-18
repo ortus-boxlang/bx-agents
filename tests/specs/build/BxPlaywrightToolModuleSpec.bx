@@ -1,0 +1,63 @@
+/**
+ * The bxplaywright adapter, against a stand-in for the playwright() manager so no
+ * browser (and no bx-playwright install) is needed.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "BxPlaywrightToolModule", function() {
+
+			beforeEach( function() {
+				variables.calls = [];
+				variables.adapter = new bxagents.models.build.toolmodules.BxPlaywrightToolModule( ( profile, options ) => {
+					calls.append( { profile : profile, options : options } );
+					return { aiTools : () => [ aiTool( "browser_visit", "visit", () => "ok", false ) ] };
+				} );
+			} );
+
+			it( "is the bxplaywright module and is available with a stand-in manager", function() {
+				expect( adapter.moduleName() ).toBe( "bxplaywright" );
+				expect( adapter.available() ).toBeTrue();
+			} );
+
+			it( "builds a fresh manager for every call", function() {
+				var a = adapter.tools();
+				var b = adapter.tools();
+
+				expect( calls ).toHaveLength( 2 );
+				var identity = createObject( "java", "java.lang.System" );
+				expect( identity.identityHashCode( a[ 1 ] ) ).notToBe( identity.identityHashCode( b[ 1 ] ) );
+			} );
+
+			it( "passes the profile separately from the other options", function() {
+				adapter.tools( { profile : "mobile", headless : false, baseURL : "http://x" } );
+
+				expect( calls[ 1 ].profile ).toBe( "mobile" );
+				expect( calls[ 1 ].options.keyExists( "profile" ) ).toBeFalse();
+				expect( calls[ 1 ].options.headless ).toBeFalse();
+				expect( calls[ 1 ].options.baseURL ).toBe( "http://x" );
+			} );
+
+			it( "uses the default profile when none is given", function() {
+				adapter.tools( { headless : true } );
+
+				expect( calls[ 1 ].profile ).toBe( "" );
+			} );
+
+			it( "accepts the playwright options and rejects the rest", function() {
+				expect( adapter.validateOptions( { profile : [ "mobile", "dark" ], headless : false, viewport : { width : 800, height : 600 } } ) ).toBeEmpty();
+
+				var problems = adapter.validateOptions( { headles : true, home : "/x" } );
+				expect( problems ).toHaveLength( 2 );
+				expect( problems[ 1 ] ).toInclude( "Valid options:" );
+			} );
+
+			it( "rejects options that are not a mapping and a profile that is not a name", function() {
+				expect( adapter.validateOptions( "fast" ) ).toHaveLength( 1 );
+				expect( adapter.validateOptions( { profile : { a : 1 } } ) ).toHaveLength( 1 );
+			} );
+
+		} );
+	}
+
+}
