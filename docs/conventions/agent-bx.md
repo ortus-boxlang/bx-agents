@@ -43,7 +43,8 @@ So an agent that sets everything in its own `init()` gets nothing imposed on it,
 | `model` in `configure()` | `setModel( aiModel( ... ) )` | the class's own model stands |
 | `name` / `description` in `configure()` | `setName()` / `setDescription()` | the class's own stand |
 | `memory` in `configure()` | `setMemory( ... )` | the class's own stands |
-| *(nothing to declare)* | `withTools( aiToolRegistry().getAll() )` | always - `withTools()` **appends** in bx-ai rather than replacing, so tools your class registered itself are kept and the discovered `tools/` are added |
+| the `tools/` folder | `withTools( ... )` with that folder's tools | always - `withTools()` **appends** in bx-ai rather than replacing, so tools your class registered itself are kept and the agent's own `tools/` are added |
+| `tools` in `configure()` | `withTools( ... )` with each `item@module` / `*@module` listed | no module tools; see [Tools](agent-yaml.md#tools) for the rules |
 | `subAgents` on the class, or `subagents/` on disk | `addSubAgent( ... )` per child | appended the same way |
 | `checkpointer` in `configure()` | `withCheckpointer( ... )` | **injected anyway** if the class set none - see below |
 

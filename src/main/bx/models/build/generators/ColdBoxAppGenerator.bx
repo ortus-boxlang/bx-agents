@@ -599,23 +599,23 @@ class {
 	// --------------------------------------------------------------------------
 
 	/**
-	 * Real bug found this session: this factory's generated `aiAgent()` calls
-	 * NEVER passed a `tools:` argument at all (confirmed against real bx-ai
-	 * source: `AiAgent.bx` never references `aiToolRegistry()` internally -
-	 * a project's tools/ were copied into the build and made
-	 * name-resolvable for MCP wiring, but no agent BX Agents ever built - in
-	 * ANY context: a real served app, `chat`, or a test spec - actually
-	 * received them). Fixed here, but deliberately NOT by relying on
-	 * `aiToolRegistry().scan("tools")`'s relative-path resolution (which
-	 * depends on whatever "/" mapping is in effect for the CALLING context -
-	 * unverified/fragile the moment this factory is loaded via
-	 * `DynamicClassLoader` rather than a real ColdBox boot, and that
-	 * rejection still stands): `ToolRegistryLoader.bx` is called once here
-	 * with the tools directory's path, then every agent node's `aiAgent()`
-	 * call attaches `aiToolRegistry().getAll()` - safe regardless of how
-	 * many nodes exist, since re-registering an already-scanned tool is a
-	 * no-op overwrite (confirmed against real bx-ai `BaseRegistry.register()`
-	 * source).
+	 * HOW EACH AGENT GETS ITS TOOLS: every agent node loads its OWN `tools/`
+	 * folder (the root's, or a subagent's own) with ToolRegistryLoader, then
+	 * ToolSelector adds whatever its `tools:` list names (`item@module`,
+	 * `*@module`) from bx-ai's global registry, and the result is that agent's
+	 * `tools`. The registry is a catalog of what is AVAILABLE, never a list of
+	 * what every agent may use: this factory used to attach
+	 * `aiToolRegistry().getAll()` to every node, which handed every agent every
+	 * registered tool (bx-ai's own httpGet and sendEmail among them) without the
+	 * author asking.
+	 *
+	 * Tools are NOT loaded through `aiToolRegistry().scan("tools")`'s
+	 * relative-path resolution: it depends on whatever "/" mapping is in effect
+	 * for the CALLING context, which is unverified/fragile the moment this
+	 * factory is loaded via `DynamicClassLoader` rather than a real ColdBox
+	 * boot. ToolRegistryLoader walks the folder and hands each live object to
+	 * bx-ai's lower-level `scanClass()`, which also registers it globally (still
+	 * needed to resolve tools by name for MCP hosting).
 	 *
 	 * PORTABILITY - why that path is no longer a bare baked-in absolute:
 	 * every runtime path this factory needs (its own `tools/` directory,
@@ -651,7 +651,6 @@ class {
 	private struct function renderAgentFactory( required string projectRoot, required string appDir, required struct resolvedConfig, string cliEnvironment = "", struct discovery = {}, string defaultMemory = "" ) {
 		var built = buildAgentTree( arguments.projectRoot, arguments.projectRoot, arguments.resolvedConfig, "agent", arguments.cliEnvironment, arguments.discovery, [], arguments.defaultMemory, normalizePath( arguments.appDir ) )
 		var body = built.statements.toList( char( 10 ) & char( 10 ) )
-		var toolsDir = normalizePath( arguments.appDir ) & "/tools"
 
 		var lines = [
 			"/**",
@@ -661,8 +660,6 @@ class {
 			"class {",
 			"",
 			"	function buildAgent() {",
-			'		new "models.build.ToolRegistryLoader@bxagents"().load( resolveAppPath( "../tools", "#bxLiteral( toolsDir )#" ) )',
-			"",
 			body,
 			"",
 			"		return agent",
@@ -1001,13 +998,13 @@ class {
 		var checkpointerExpression = renderCheckpointerExpression( arguments.resolvedConfig )
 		var memoryExpression = renderMemoryExpression( arguments.resolvedConfig, arguments.defaultMemory )
 
-		var lines = []
+		var lines = renderToolsLines( arguments.varName, arguments.nodePath, arguments.resolvedConfig, arguments.name, arguments.appDir, arguments.nodeRelativePath )
 		lines.append( "var #arguments.varName# = aiAgent(" )
 		lines.append( '	name : "#bxLiteral( arguments.name )#",' )
 		lines.append( '	description : "#bxLiteral( description )#",' )
 		lines.append( '	instructions : #instructionsExpression#,' )
 		lines.append( '	model : #modelExpression#,' )
-		lines.append( "	tools : aiToolRegistry().getAll()," )
+		lines.append( "	tools : #arguments.varName#Tools," )
 		if ( len( memoryExpression ) ) {
 			lines.append( "	memory : #memoryExpression#," )
 		}
@@ -1133,7 +1130,12 @@ class {
 		}
 
 		// --- conventions that ADD rather than replace ---
-		lines.append( "#arguments.varName#.withTools( aiToolRegistry().getAll() )" )
+		// withTools() appends, so tools the class registered itself are kept; what
+		// is added is this agent's own tools/ plus whatever its `tools:` names.
+		for ( var toolLine in renderToolsLines( arguments.varName, arguments.nodePath, arguments.resolvedConfig, resolveAgentName( arguments.resolvedConfig ), arguments.appDir, arguments.nodeRelativePath ) ) {
+			lines.append( toolLine )
+		}
+		lines.append( "#arguments.varName#.withTools( #arguments.varName#Tools )" )
 
 		for ( var subVarName in arguments.subAgentVarNames ) {
 			lines.append( "#arguments.varName#.addSubAgent( #subVarName# )" )
@@ -1162,6 +1164,82 @@ class {
 		}
 
 		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * The generated statements that decide ONE agent's tools. An agent gets its
+	 * own `tools/` folder plus whatever its `tools:` list names, resolved against
+	 * the registry when the app assembles its agents (see ToolSelector). It does
+	 * NOT get the whole global registry: that registry is a catalog of what is
+	 * available, not a list of what every agent may use.
+	 *
+	 * Defines `<varName>OwnTools` and `<varName>Tools`; the caller attaches the
+	 * latter.
+	 *
+	 * @varName This node's variable name in the generated factory
+	 * @nodePath Absolute path to THIS node's own directory
+	 * @resolvedConfig THIS node's own resolved config - `tools` is the list of item@module entries
+	 * @name The agent's resolved name, for messages
+	 * @appDir Absolute path to the generated app dir, or "" when rendering without one
+	 * @nodeRelativePath THIS node's directory relative to the root project root ("" for the root)
+	 *
+	 * @return The statement lines
+	 */
+	private array function renderToolsLines( required string varName, required string nodePath, required struct resolvedConfig, required string name, string appDir = "", string nodeRelativePath = "" ) {
+		var lines = []
+		var ownToolsRelative = ""
+		var ownToolsFallback = ""
+
+		if ( !len( arguments.nodeRelativePath ) ) {
+			// the root's tools/ is copied into the app by ToolsSkillsCopier
+			ownToolsRelative = "../tools"
+			ownToolsFallback = len( arguments.appDir )
+				? normalizePath( arguments.appDir ) & "/tools"
+				: normalizePath( arguments.nodePath ) & "/tools"
+		} else if ( directoryExists( arguments.nodePath & "/tools" ) ) {
+			ownToolsRelative = copyNodeTools( arguments.nodePath, arguments.appDir, arguments.nodeRelativePath )
+			ownToolsFallback = normalizePath( arguments.nodePath ) & "/tools"
+		}
+
+		if ( len( ownToolsRelative ) ) {
+			lines.append( 'var #arguments.varName#OwnTools = new "models.build.ToolRegistryLoader@bxagents"().load( resolveAppPath( "#bxLiteral( ownToolsRelative )#", "#bxLiteral( ownToolsFallback )#" ) )' )
+		} else {
+			lines.append( "var #arguments.varName#OwnTools = []" )
+		}
+
+		var declared = arguments.resolvedConfig.tools ?: []
+		var quoted = isArray( declared ) ? declared.map( entry => '"#bxLiteral( toString( entry ) )#"' ) : []
+		lines.append( 'var #arguments.varName#Tools = new "models.build.ToolSelector@bxagents"().select( [ #quoted.toList( ", " )# ], #arguments.varName#OwnTools, "#bxLiteral( arguments.name )#" )' )
+
+		return lines
+	}
+
+	/**
+	 * Copies a SUBAGENT's own `tools/` folder into the generated app, next to its
+	 * mirrored instructions.md, so the built app (and a packaged .bxa) carries it.
+	 * The root's `tools/` is copied separately, by ToolsSkillsCopier.
+	 *
+	 * @nodePath Absolute path to the subagent's directory (its tools/ exists - the caller checked)
+	 * @appDir Absolute path to the generated app dir, or "" when rendering without one
+	 * @nodeRelativePath The subagent's directory relative to the root project root, "subagents/<name>"
+	 *
+	 * @return The copied folder's path RELATIVE to the generated factory's own directory, e.g. "subagents/researcher/tools"
+	 */
+	private string function copyNodeTools( required string nodePath, required string appDir, required string nodeRelativePath ) {
+		var relative = arguments.nodeRelativePath & "/tools"
+
+		if ( !len( arguments.appDir ) ) {
+			return relative
+		}
+
+		var destination = normalizePath( arguments.appDir ) & "/agent/" & relative
+		if ( directoryExists( destination ) ) {
+			directoryDelete( destination, true )
+		}
+		directoryCreate( path = destination, createPath = true, ignoreExists = true )
+		directoryCopy( arguments.nodePath & "/tools", destination, true )
+
+		return relative
 	}
 
 	/**

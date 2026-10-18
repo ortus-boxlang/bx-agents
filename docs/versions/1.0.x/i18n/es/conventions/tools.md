@@ -22,13 +22,11 @@ class {
 }
 ```
 
-BxAgents no escanea ni interpreta las anotaciones `@AITool` él mismo - descubre una entrada por archivo `.bx` (para comprobación de colisión de nombres) y luego copia toda la carpeta `tools/` **textualmente** a la app generada. En el arranque, la app generada llama al propio scanner de bx-ai:
+BxAgents no interpreta las anotaciones `@AITool` él mismo. Copia toda la carpeta `tools/` **textualmente** a la app generada, y la fábrica de agentes generada entrega la carpeta de cada agente al scanner de bx-ai, que hace el trabajo real de reflexión (recorre los archivos, instancia cada clase, encuentra funciones `@AITool`). Las tools encontradas van **solo a ese agente**: el `tools/` del agente raíz no se da a sus subagentes, ni el de un subagente a su padre.
 
-```javascript
-aiToolRegistry().scan( "tools" )
-```
+## Tools de módulos
 
-que hace el trabajo real de reflexión (recorriendo los archivos copiados, instanciando cada clase, encontrando funciones `@AITool`). Esta sentencia solo se emite en absoluto si el proyecto realmente tiene una carpeta `tools/` con archivos en ella.
+Las tools que los módulos registran en bx-ai (las integradas, `bx-playwright`, ...) no se adjuntan a nada automáticamente. Nombra las que un agente debe tener en su lista [`tools:`](agent-yaml.md#tools), como `item@module` o `*@module`.
 
 ## Nombramiento
 

@@ -33,6 +33,7 @@ environments:
 | `model` | string | Un slug `provider/model`, un nombre de proveedor sin más, o el nombre de una entrada de [`models/`](models.md). Ver [The model slug](agent-bx.md#the-model-slug). |
 | `description` | string | Opcional. |
 | `instructions` | string | Instrucciones en línea, opcionales. Ver [Instrucciones](#instrucciones). |
+| `tools` | lista de strings | Tools de módulos que recibe este agente, como `item@module` o `*@module`. Ver [Tools](#tools). |
 | `subAgents` | lista de strings | Nombres de carpetas hermanas bajo el `subagents/` del proyecto raíz. Ver [subagents/](subagents.md). |
 | `mcpServers` | lista | Servidores MCP remotos - cada entrada es un string de URL o `{ url, name }`. Ver [mcp/](mcp.md). |
 | `security` | mapa | Se reenvía tal cual a los ajustes del módulo `bxai` de la app generada; el `SecurityDirector` de bx-ai lo convierte en middleware de guardarraíles. |
@@ -45,9 +46,34 @@ environments:
 Son los mismos ajustes que devuelve el `configure()` de un `Agent.bx`, así que todo el comportamiento documentado para ellos aplica sin cambios.
 
 !!! warning
-    Una **clave desconocida es un error**, y el mensaje lista las válidas. Un error de tipeo como `modle:` de otro modo no haría nada, en silencio. Los ajustes que llegan en versiones posteriores (por ejemplo `tools`) se rechazan igual hasta que existan, en lugar de ignorarse en silencio. Todo lo de forma libre pertenece a un `Agent.bx`.
+    Una **clave desconocida es un error**, y el mensaje lista las válidas. Un error de tipeo como `modle:` de otro modo no haría nada, en silencio. Los ajustes que llegan en versiones posteriores (por ejemplo `toolOptions`) se rechazan igual hasta que existan, en lugar de ignorarse en silencio. Todo lo de forma libre pertenece a un `Agent.bx`.
 
 Un valor del tipo equivocado (un texto donde va una lista, por ejemplo) y un valor vacío (`model:` sin nada detrás) también son errores.
+
+## Tools
+
+Un agente recibe su propia carpeta `tools/` y nada más, salvo que lo pida. Las tools que aportan otros módulos (las integradas de bx-ai, `bx-playwright`, ...) son un catálogo: están disponibles, pero un agente solo tiene las que nombra su lista `tools:`. Cada entrada es `item@module`, la clave con la que bx-ai las guarda:
+
+```yaml
+name: support
+model: openai/gpt-5
+tools:
+  - now@bxai            # una tool de un módulo
+  - "*@bxplaywright"    # todas las tools que registró ese módulo (entre comillas: * inicia un alias YAML)
+```
+
+| Entrada | Da al agente |
+|---|---|
+| `item@module` | esa tool |
+| `*@module`, o `@module` | todas las tools que registró el módulo |
+
+- **Por defecto.** Sin `tools:` el agente solo tiene su propio `tools/`. Vale también para cada [subagente](subagents.md): cada uno tiene su `tools/` y su `tools:`.
+- **Nombrar un módulo lo valida.** Si el módulo no está instalado, o no tiene esa tool, `build` y la app generada fallan con un mensaje que lista lo que el módulo sí ofrece.
+- **Un nombre sin módulo es un error.** `now` falla con la sugerencia de escribir `now@bxai`.
+- **Las tools propias ganan.** Si una tool del `tools/` del agente tiene el mismo nombre que una tool de módulo que seleccionó, se usa la propia y la del módulo se omite, con una advertencia en el log `bxagents-tools`.
+- **Cada tool una vez.** Listar una tool dos veces, o junto con un `*@module` que la cubre, la adjunta una sola vez.
+
+Los ajustes por tool (`toolOptions`) aún no se admiten.
 
 ## Instrucciones
 

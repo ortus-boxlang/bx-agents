@@ -43,7 +43,8 @@ Así que un agente que configura todo en su propio `init()` no obtiene nada impu
 | `model` en `configure()` | `setModel( aiModel( ... ) )` | el propio modelo de la clase permanece |
 | `name` / `description` en `configure()` | `setName()` / `setDescription()` | los propios de la clase permanecen |
 | `memory` en `configure()` | `setMemory( ... )` | la propia de la clase permanece |
-| *(nada que declarar)* | `withTools( aiToolRegistry().getAll() )` | siempre - `withTools()` **agrega** en bx-ai en lugar de reemplazar, así que las tools que tu clase registró ella misma se mantienen y las `tools/` descubiertas se añaden |
+| la carpeta `tools/` | `withTools( ... )` con las tools de esa carpeta | siempre - `withTools()` **agrega** en bx-ai en lugar de reemplazar, así que las tools que tu clase registró ella misma se mantienen y las `tools/` propias del agente se añaden |
+| `tools` en `configure()` | `withTools( ... )` con cada `item@module` / `*@module` listado | sin tools de módulos; ver [Tools](agent-yaml.md#tools) |
 | `subAgents` en la clase, o `subagents/` en disco | `addSubAgent( ... )` por cada hijo | agregado de la misma forma |
 | `checkpointer` en `configure()` | `withCheckpointer( ... )` | **inyectado de todos modos** si la clase no configuró ninguno - ver abajo |
 

@@ -27,6 +27,17 @@ class extends="testbox.system.BaseSpec" {
 				expect( tool.getName() ).toBe( "sayHello" );
 			} );
 
+			it( "returns the tools it found so the caller can attach them to one agent", function() {
+				var tools = loader.load( fixtures & "/yaml-tools/tools" );
+
+				expect( tools ).toHaveLength( 1 );
+				expect( tools[ 1 ].getName() ).toBe( "greet" );
+			} );
+
+			it( "returns an empty array when the directory doesn't exist", function() {
+				expect( loader.load( "/nonexistent/tools/path/" & createUUID() ) ).toBeEmpty();
+			} );
+
 			it( "is a no-op when the directory doesn't exist", function() {
 				expect( function() {
 					loader.load( "/nonexistent/tools/path/" & createUUID() );

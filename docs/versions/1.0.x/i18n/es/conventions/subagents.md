@@ -8,7 +8,7 @@ tags: [conventions, subagents]
 
 # subagents/
 
-`subagents/` contiene agentes anidados, cada uno un proyecto BxAgents ordinario propio - un `Agent.yaml` + `instructions.md` (y opcionalmente sus propios `tools/`, `skills/`, etc.):
+`subagents/` contiene agentes anidados, cada uno un proyecto BxAgents ordinario propio - un `Agent.yaml` + `instructions.md` (y opcionalmente sus propios `tools/`, `skills/`, etc.). El `tools/` de un subagente es solo suyo y su lista `tools:` es propia; nada se hereda ni se comparte con el padre:
 
 ```
 my-agent/
