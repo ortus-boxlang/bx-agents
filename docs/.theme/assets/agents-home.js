@@ -49,7 +49,7 @@
 
 	/* hero: folder -> generated output */
 	var T = {
-		agent: { k: "The agent", h: "Agent.bx is the agent", p: "Your class extends BX AI's own AiAgent. The build instantiates it, so what you write is what runs.", g: [["agent/GeneratedAgentFactory.bx", "builds your agent"]] },
+		agent: { k: "The agent", h: "Agent.yaml is the agent", p: "A name, a model and any settings you need, in plain YAML. Need code? Use a class-based Agent.bx instead.", g: [["agent/GeneratedAgentFactory.bx", "builds your agent"]] },
 		instructions: { k: "The system prompt", h: "instructions.md", p: "Optional. Set instructions in the class, or drop the file in and let the build wire it in.", g: [["wired in at build", "read once, not per request"]] },
 		tools: { k: "Tools", h: "Functions become tools", p: "Any class with an @AITool annotated function is callable by the agent, with no registration step.", g: [["tools/", "every @AITool discovered"]] },
 		skills: { k: "Skills", h: "Model-selected guidance", p: "A SKILL.md folder is offered to the model on demand. It is separate from the always-on instructions.", g: [["skills/", "one folder per skill"]] },
@@ -79,7 +79,8 @@
 
 	/* code tabs */
 	var F = [
-		'<span class="bxa-c-k">class</span> <span class="bxa-c-k">extends</span>=<span class="bxa-c-s">"bxModules.bxai.models.runnables.AiAgent"</span> {\n\n\t<span class="bxa-c-k">function</span> init() {\n\t\t<span class="bxa-c-k">super</span>.init(\n\t\t\tname        : <span class="bxa-c-s">"simple-agent"</span>,\n\t\t\tdescription : <span class="bxa-c-s">"A baseline agent: one tool, exposed over HTTP."</span>,\n\t\t\tmodel       : aiModel( provider: <span class="bxa-c-s">"mock"</span>, params: { model: <span class="bxa-c-s">"mock-model"</span> } )\n\t\t)\n\t\t<span class="bxa-c-k">return</span> <span class="bxa-c-k">this</span>\n\t}\n\n}',
+		'<span class="bxa-c-k">name</span>: <span class="bxa-c-s">simple-agent</span>\n<span class="bxa-c-k">description</span>: <span class="bxa-c-s">"A baseline agent: one tool, exposed over HTTP."</span>\n<span class="bxa-c-k">model</span>: <span class="bxa-c-s">mock/mock-model</span>',
+
 		'<span class="bxa-c-d"># Simple Agent</span>\n\nYou are Simple Agent, a helpful AI agent.',
 		'<span class="bxa-c-k">class</span> {\n\n\t<span class="bxa-c-a">@AITool</span>( <span class="bxa-c-s">"Greet a person by name."</span> )\n\t<span class="bxa-c-k">function</span> greet( name ) {\n\t\t<span class="bxa-c-k">return</span> <span class="bxa-c-s">"Hello, "</span> &amp; arguments.name &amp; <span class="bxa-c-s">"! Welcome to BX Agents."</span>;\n\t}\n\n}'
 	];
@@ -141,7 +142,7 @@
 			[3, "03-installing-bxagents", "Installing BxAgents", "Install BoxLang, bx-ai and BxAgents, and verify the bxAgents command works."],
 			[4, "04-scaffolding-your-first-agent", "Scaffolding Your First Agent", "Run bxAgents new and see exactly what it creates for you."]]],
 		["The agent", "Write and run it", [
-			[5, "05-agent-bx", "Agent.bx, the Agent Itself", "The one required file: a real class the build instantiates, not a config struct."],
+			[5, "05-agent-bx", "Agent.yaml, the Agent Itself", "The one required file: a name, a model and your settings in plain YAML."],
 			[6, "06-instructions-and-system-prompt", "instructions.md and the System Prompt", "The optional file that becomes your agent's system prompt."],
 			[7, "07-building-your-agent", "Building Your Agent", "bxAgents build and the five-phase pipeline that turns your project into an app."],
 			[8, "08-talking-to-your-agent", "Talking to Your Agent", "chat, invoke and serve: three ways to run the exact same built agent."]]],
@@ -149,14 +150,14 @@
 			[9, "09-giving-your-agent-tools", "Giving Your Agent Tools", "Any @AITool annotated function under tools/ becomes a callable tool."],
 			[10, "10-packaging-skills", "Packaging Skills", "Claude Agent Skills: one subfolder per SKILL.md, loaded on demand."],
 			[11, "11-composing-subagents", "Composing Subagents", "Nested agents, each an ordinary BxAgents project of its own, wired as callable tools."],
-			[12, "12-named-model-configs", "Named Model Configs", "Reusable named model configurations, referenced from Agent.bx by name."]]],
+			[12, "12-named-model-configs", "Named Model Configs", "Reusable named model configurations, referenced from Agent.yaml by name."]]],
 		["Reach users", "HTTP, chat, web", [
 			[13, "13-exposing-http-and-mcp", "Exposing Your Agent over HTTP and MCP", "gateways/ entries with an exposes key turn your agent into a real HTTP route."],
 			[14, "14-connecting-chat-platforms", "Connecting Chat Platforms", "Channel adapter gateways: nine chat platforms plus http, cli and mock, all one GatewaySession."],
 			[15, "15-the-generated-web-chat-ui", "The Generated Web Chat UI", "A complete browser chat client: sidebar, streaming, approvals, SQLite store."]]],
 		["Beyond chat", "Run on its own", [
 			[16, "16-scheduling-background-work", "Scheduling Background Work", "schedules/Scheduler.bx, a real hand written ColdBox scheduler, passed through untouched."],
-			[17, "17-hosting-mcp-servers", "Hosting and Consuming MCP Servers", "MCP in both directions: consume remote servers from Agent.bx, host your own under mcp/."],
+			[17, "17-hosting-mcp-servers", "Hosting and Consuming MCP Servers", "MCP in both directions: consume remote servers from Agent.yaml, host your own under mcp/."],
 			[18, "18-interceptors-and-modules", "Interceptors and Module Dependencies", "ColdBox lifecycle hooks scoped by @scope, and BoxLang module dependencies under modules/."]]],
 		["Ship it", "Test and deploy", [
 			[19, "19-testing-your-agent", "Testing Your Agent", "A ready to run TestBox suite, mockResponses(), and matchers built for agent behavior."],
@@ -209,7 +210,7 @@
 		"github-bot": ["github-logo", "Issue and PR webhook adapter"],
 		"mcp-server": ["plugs-connected", "An example tool as an MCP server"],
 		"scheduled": ["clock-countdown", "A ColdBox scheduler calls the agent"],
-		"multi-agent": ["users-three", "Two subagents wired via configure()"]
+		"multi-agent": ["users-three", "Two subagents wired via subAgents"]
 	};
 	var list = $("#ex-list"), tree = $("#ex-tree"), codeEl = $("#ex-code"), curT = "minimal";
 	function hl(text, path) {
@@ -217,6 +218,11 @@
 		if (/\.bx$/.test(path)) {
 			return s.replace(/(\/\/[^\n]*)|("[^"\n]*")|(@AITool)|\b(class|extends|function|return|this|super)\b/g, function (m, c, str, ann) {
 				return '<span class="' + (c ? "bxa-c-d" : str ? "bxa-c-s" : ann ? "bxa-c-a" : "bxa-c-k") + '">' + m + '</span>';
+			});
+		}
+		if (/\.ya?ml$/.test(path)) {
+			return s.replace(/(#[^\n]*)|^([A-Za-z][\w-]*)(?=:)|("[^"\n]*")/gm, function (m, c, key, str) {
+				return '<span class="' + (c ? "bxa-c-d" : key ? "bxa-c-k" : "bxa-c-s") + '">' + m + '</span>';
 			});
 		}
 		return s.replace(/^(#[^\n]*)/gm, '<span class="bxa-c-d">$1</span>');
@@ -255,7 +261,7 @@
 		curT = t; $$("button", list).forEach(function (b) { b.setAttribute("aria-selected", b.getAttribute("data-t") === t ? "true" : "false"); });
 		$("#ex-t").textContent = t;
 		var first = renderTree(t), d = STARTERS[t];
-		openFile(first || d.files.filter(function (f) { return f.path === "Agent.bx"; })[0]);
+		openFile(first || d.files.filter(function (f) { return f.path === "Agent.yaml"; })[0]);
 	}
 	if (list && tree && STARTERS.minimal) {
 		ORDER.forEach(function (t) {
