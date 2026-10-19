@@ -34,6 +34,7 @@ environments:
 | `description` | string | Optional. |
 | `instructions` | string | Optional inline instructions. See [Instructions](#instructions). |
 | `tools` | list of strings | Module tools this agent gets, as `item@module` or `*@module`. See [Tools](#tools). |
+| `toolOptions` | mapping | Options for a module's tools, keyed by module name. See [Tool options](#tool-options). |
 | `subAgents` | list of strings | Names of sibling folders under the root project's `subagents/`. See [subagents/](subagents.md). |
 | `mcpServers` | list | Remote MCP servers - each entry a URL string or `{ url, name }`. See [mcp/](mcp.md). |
 | `security` | mapping | Forwarded verbatim into the generated app's `bxai` module settings; bx-ai's own `SecurityDirector` turns it into guardrail middleware. |
@@ -46,7 +47,7 @@ environments:
 These are the same settings an `Agent.bx`'s `configure()` returns, so every behavior documented for them applies unchanged.
 
 !!! warning
-    An **unknown key is an error**, and the message lists the valid ones. A typo such as `modle:` would otherwise do nothing, quietly. Settings that arrive in later releases (for example `toolOptions`) are rejected the same way until they exist, rather than being silently ignored. Anything free-form belongs in an `Agent.bx`.
+    An **unknown key is an error**, and the message lists the valid ones. A typo such as `modle:` would otherwise do nothing, quietly. Settings that arrive in later releases (for example `mcp`) are rejected the same way until they exist, rather than being silently ignored. Anything free-form belongs in an `Agent.bx`.
 
 A value of the wrong type (a text where a list belongs, say) and an empty value (`model:` with nothing after it) are errors too.
 
@@ -73,7 +74,24 @@ tools:
 - **Own tools win.** If a tool in the agent's `tools/` has the same name as a module tool it selected, the own tool is used and the module tool is left out, with a warning in the `bxagents-tools` log.
 - **Each tool once.** Listing a tool twice, or listing it along with a `*@module` that covers it, attaches it once.
 
-Per-tool settings (`toolOptions`) are not supported yet.
+### Tool options
+
+`toolOptions` configures the tools of a module, keyed by **module name**. Today the one module that takes options is `bxplaywright`, whose options are those of bx-playwright's `playwright()`: a `profile` (a name, or a list of names) and settings such as `headless`, `baseURL`, `browser`, `viewport` or `device`.
+
+```yaml
+tools:
+  - "*@bxplaywright"
+toolOptions:
+  bxplaywright:
+    profile: mobile
+    headless: false
+    baseURL: ${env.APP_URL:http://localhost:8080}
+```
+
+- **Each agent gets its own browser.** The browser tools bx-playwright registers share one browser for the whole app. An agent that lists `bxplaywright` tools does not get those: it gets a fresh set built for it alone (`playwright( profile, options ).aiTools()`), so a root agent and its subagent never drive the same page. The browser opens when one of its tools is first used, not at startup. `*@bxplaywright` works with no `toolOptions` at all and uses the module's own settings.
+- **Environment values.** `${env.NAME}` and `${env.NAME:default}` are replaced with the environment variable when the app starts, never at build time, so a secret or a per-machine setting stays out of the project. A variable that is not set and has no default fails the agent at startup, naming it.
+- **Checked at build time.** A key that is not a module the agent lists tools from, a module that takes no options, a key written as `item@module`, or an option bx-playwright does not have (the message lists the valid ones) is a `build` error.
+- The module-wide settings (where browsers are installed, the default profile) stay in bx-playwright's own settings, not here.
 
 ## Instructions
 

@@ -43,6 +43,7 @@ class {
 		validateGatewaySession( arguments.resolvedConfig, errors )
 		validateMcpServers( arguments.resolvedConfig, errors )
 		validateTools( arguments.resolvedConfig, errors, "The project's own agent definition" )
+		validateToolOptions( arguments.resolvedConfig, errors, "The project's own agent definition" )
 		validateModelProvider( arguments.resolvedConfig, arguments.discovery, errors )
 		validateAgentApi( arguments.resolvedConfig, errors )
 
@@ -132,6 +133,7 @@ class {
 				graph[ subagent.name ] = config.subAgents ?: []
 				validateModelProvider( config, arguments.discovery, arguments.errors, "Subagent [#subagent.name#]'s Agent.bx" )
 				validateTools( config, arguments.errors, "Subagent [#subagent.name#]" )
+				validateToolOptions( config, arguments.errors, "Subagent [#subagent.name#]" )
 				recordNameOwner( nameOwners, coldboxAppGenerator.resolveAgentName( config ), "Subagent [#subagent.name#]" )
 			} catch ( any e ) {
 				arguments.errors.append( "Subagent [#subagent.name#] failed to load: #e.message#" )
@@ -797,6 +799,51 @@ class {
 				seen[ normalized ] = true
 			} catch ( BxAgents.InvalidToolName e ) {
 				arguments.errors.append( "#arguments.label#: #e.message.replace( 'An agent ', 'its ' )#" )
+			}
+		}
+	}
+
+	/**
+	 * `toolOptions` is keyed by module name; each key must be a module the agent lists
+	 * tools from, and a module BX Agents knows how to configure (see ToolModules).
+	 *
+	 * @resolvedConfig The resolved config struct from AgentConfigResolver.resolve()
+	 * @errors Accumulator array - append() any validation errors found
+	 * @label Which agent this is, for messages
+	 */
+	private void function validateToolOptions( required struct resolvedConfig, required array errors, required string label ) {
+		if ( !arguments.resolvedConfig.keyExists( "toolOptions" ) ) {
+			return
+		}
+
+		var options = arguments.resolvedConfig.toolOptions
+		if ( !isStruct( options ) ) {
+			arguments.errors.append( "#arguments.label#'s 'toolOptions' must be a mapping of module name to options" )
+			return
+		}
+
+		var selector = new "models.build.ToolSelector@bxagents"()
+		var modules = new "models.build.ToolModules@bxagents"()
+		var listed = {}
+		for ( var entry in ( isArray( arguments.resolvedConfig.tools ?: "" ) ? arguments.resolvedConfig.tools : [] ) ) {
+			try {
+				listed[ selector.parse( entry, "" ).module ] = true
+			} catch ( BxAgents.InvalidToolName e ) {
+				// reported by validateTools
+			}
+		}
+
+		for ( var module in options ) {
+			if ( find( "@", module ) ) {
+				arguments.errors.append( "#arguments.label#'s 'toolOptions' key [#module#] must be a module name (for example bxplaywright), not item@module" )
+			} else if ( !listed.keyExists( module ) ) {
+				arguments.errors.append( "#arguments.label# has toolOptions for [#module#] but lists no tool from that module in `tools`" )
+			} else if ( !modules.has( module ) ) {
+				arguments.errors.append( "#arguments.label# has toolOptions for [#module#], which takes no options" )
+			} else {
+				for ( var problem in modules.get( module ).validateOptions( options[ module ] ) ) {
+					arguments.errors.append( "#arguments.label#'s toolOptions [#module#] #problem#" )
+				}
 			}
 		}
 	}

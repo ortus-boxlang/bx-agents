@@ -48,6 +48,41 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.errors.filter( e => e.findNoCase( "Duplicate name" ) && e.findNoCase( "tools/" ) ).len() ).toBeGT( 0 );
 			} );
 
+			it( "rejects a bare tool name and a tool listed twice", function() {
+				var bare = validateFixture( "tools-bare-name" );
+				expect( bare.errors.filter( e => e.findNoCase( "bare tool name" ) ).len() ).toBeGT( 0 );
+
+				var twice = validateFixture( "tools-duplicate" );
+				expect( twice.errors.filter( e => e.findNoCase( "more than once" ) ).len() ).toBeGT( 0 );
+			} );
+
+			it( "rejects toolOptions for a module the agent lists no tool from", function() {
+				var result = validateFixture( "tool-options-unlisted-module" );
+				expect( result.errors.filter( e => e.findNoCase( "bxplaywright" ) && e.findNoCase( "lists no tool" ) ).len() ).toBeGT( 0 );
+			} );
+
+			it( "rejects toolOptions for a module that takes no options", function() {
+				var result = validateFixture( "tool-options-no-adapter" );
+				expect( result.errors.filter( e => e.findNoCase( "[bxai]" ) && e.findNoCase( "takes no options" ) ).len() ).toBeGT( 0 );
+			} );
+
+			it( "rejects an unknown bxplaywright option and names the valid ones", function() {
+				var result = validateFixture( "tool-options-bad-option" );
+				var hits = result.errors.filter( e => e.findNoCase( "unknown option [headles]" ) );
+				expect( hits ).toHaveLength( 1 );
+				expect( hits[ 1 ] ).toInclude( "Valid options:" );
+			} );
+
+			it( "rejects toolOptions keyed by item@module or given a non-mapping", function() {
+				expect( validateFixture( "tool-options-item-key" ).errors.filter( e => e.findNoCase( "not item@module" ) ).len() ).toBeGT( 0 );
+				expect( validateFixture( "tool-options-not-a-mapping" ).errors.filter( e => e.findNoCase( "must be a mapping" ) ).len() ).toBeGT( 0 );
+			} );
+
+			it( "accepts well-formed toolOptions", function() {
+				var result = validateFixture( "tool-options-good" );
+				expect( result.errors.filter( e => e.findNoCase( "toolOptions" ) ).len() ).toBe( 0 );
+			} );
+
 			it( "rejects duplicate skill names", function() {
 				var result = validateFixture( "duplicate-skill-names" );
 				expect( result.errors.filter( e => e.findNoCase( "Duplicate name" ) && e.findNoCase( "skills/" ) ).len() ).toBeGT( 0 );

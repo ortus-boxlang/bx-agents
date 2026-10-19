@@ -1178,7 +1178,7 @@ class {
 	 *
 	 * @varName This node's variable name in the generated factory
 	 * @nodePath Absolute path to THIS node's own directory
-	 * @resolvedConfig THIS node's own resolved config - `tools` is the list of item@module entries
+	 * @resolvedConfig THIS node's own resolved config - `tools` is the list of item@module entries, `toolOptions` the options by module
 	 * @name The agent's resolved name, for messages
 	 * @appDir Absolute path to the generated app dir, or "" when rendering without one
 	 * @nodeRelativePath THIS node's directory relative to the root project root ("" for the root)
@@ -1209,7 +1209,9 @@ class {
 
 		var declared = arguments.resolvedConfig.tools ?: []
 		var quoted = isArray( declared ) ? declared.map( entry => '"#bxLiteral( toString( entry ) )#"' ) : []
-		lines.append( 'var #arguments.varName#Tools = new "models.build.ToolSelector@bxagents"().select( [ #quoted.toList( ", " )# ], #arguments.varName#OwnTools, "#bxLiteral( arguments.name )#" )' )
+		var toolOptions = arguments.resolvedConfig.toolOptions ?: {}
+		var toolOptionsArgument = isStruct( toolOptions ) && toolOptions.len() ? ", #renderLiteral( toolOptions )#" : ""
+		lines.append( 'var #arguments.varName#Tools = new "models.build.ToolSelector@bxagents"().select( [ #quoted.toList( ", " )# ], #arguments.varName#OwnTools, "#bxLiteral( arguments.name )#"#toolOptionsArgument# )' )
 
 		return lines
 	}

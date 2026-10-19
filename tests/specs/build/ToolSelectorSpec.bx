@@ -100,6 +100,91 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 		} );
+		describe( "ToolSelector with a module BX Agents builds the tools of", function() {
+
+			beforeEach( function() {
+				variables.built = [];
+				// stands in for bxplaywright: hands out a fresh pair of tools each time and records the options it was given
+				variables.fake = {
+					available       : () => true,
+					validateOptions : ( options ) => ( options.keyExists( "bogus" ) ? [ "unknown option [bogus]" ] : [] ),
+					tools           : function( options = {} ) {
+						built.append( options );
+						return [
+							aiTool( "page_visit", "visit", () => "visited", false ),
+							aiTool( "page_close", "close", () => "closed", false )
+						];
+					},
+					moduleName      : () => "bxafake"
+				};
+				variables.selector = new bxagents.models.build.ToolSelector( adapters = { "bxafake" : fake } );
+			} );
+
+			it( "gives each agent its own fresh tools, built once per agent", function() {
+				var first = selector.select( [ "*@bxafake" ], [], "a" );
+				var second = selector.select( [ "page_visit@bxafake", "page_close@bxafake" ], [], "b" );
+
+				expect( first ).toHaveLength( 2 );
+				expect( second ).toHaveLength( 2 );
+				expect( built ).toHaveLength( 2 );
+				var identity = createObject( "java", "java.lang.System" );
+				expect( identity.identityHashCode( first[ 1 ] ) ).notToBe( identity.identityHashCode( second[ 1 ] ) );
+			} );
+
+			it( "passes the agent's toolOptions to the module", function() {
+				selector.select( [ "*@bxafake" ], [], "a", { bxafake : { headless : false, profile : "mobile" } } );
+
+				expect( built[ 1 ].headless ).toBeFalse();
+				expect( built[ 1 ].profile ).toBe( "mobile" );
+			} );
+
+			it( "resolves ${env.X:default} placeholders when the agent is assembled", function() {
+				selector.select( [ "*@bxafake" ], [], "a", { bxafake : { baseURL : "${env.BXA_TEST_UNSET_URL:http://localhost:9999}", nested : { a : [ "x-${env.BXA_TEST_UNSET_URL:y}" ] } } } );
+
+				expect( built[ 1 ].baseURL ).toBe( "http://localhost:9999" );
+				expect( built[ 1 ].nested.a[ 1 ] ).toBe( "x-y" );
+			} );
+
+			it( "fails when a placeholder has no value and no default", function() {
+				expect( function() {
+					selector.select( [ "*@bxafake" ], [], "a", { bxafake : { baseURL : "${env.BXA_TEST_DEFINITELY_UNSET}" } } );
+				} ).toThrow( type = "BxAgents.MissingToolOption", regex = "BXA_TEST_DEFINITELY_UNSET" );
+			} );
+
+			it( "names the tools the module does have when one is missing", function() {
+				try {
+					selector.select( [ "page_nope@bxafake" ], [], "a" );
+					fail( "should have thrown" );
+				} catch ( BxAgents.UnknownTool e ) {
+					expect( e.message ).toInclude( "page_visit@bxafake" );
+				}
+			} );
+
+			it( "rejects toolOptions for a module the agent does not list, or one that takes no options", function() {
+				expect( function() {
+					selector.select( [ "*@bxafake" ], [], "a", { other : {} } );
+				} ).toThrow( type = "BxAgents.InvalidToolOptions", regex = "lists no tool from that module" );
+
+				expect( function() {
+					selector.select( [ "now@bxai" ], [], "a", { bxai : {} } );
+				} ).toThrow( type = "BxAgents.InvalidToolOptions", regex = "takes no options" );
+			} );
+
+			it( "rejects options the module does not accept", function() {
+				expect( function() {
+					selector.select( [ "*@bxafake" ], [], "a", { bxafake : { bogus : 1 } } );
+				} ).toThrow( type = "BxAgents.InvalidToolOptions", regex = "unknown option \[bogus\]" );
+			} );
+
+			it( "tells the user to install a module that is not loaded", function() {
+				fake.available = () => false;
+
+				expect( function() {
+					selector.select( [ "*@bxafake" ], [], "a" );
+				} ).toThrow( type = "BxAgents.UnknownToolModule", regex = "not loaded" );
+			} );
+
+		} );
 	}
 
 }

@@ -17,6 +17,10 @@
  * falls back to matching by name alone, so `now@somemodule` could silently
  * resolve to `now@bxai`.
  *
+ * Modules BX Agents builds the tools of itself (see ToolModules; bxplaywright) are not
+ * taken from the registry: each agent gets a fresh set, configured by its own
+ * `toolOptions.<module>`, so two agents never share one browser.
+ *
  * An own tool wins over a module tool of the same name (the module tool is
  * dropped and a warning is logged), so a project can override a stock tool by
  * writing its own.
@@ -24,13 +28,22 @@
 class {
 
 	/**
+	 * @adapters Extra or replacement module adapters by module name, for tests (see ToolModules)
+	 */
+	function init( struct adapters = {} ) {
+		variables.modules = new "models.build.ToolModules@bxagents"( arguments.adapters )
+		return this
+	}
+
+	/**
 	 * @names The agent's `tools:` entries, e.g. [ "now@bxai", "*@bxplaywright" ]
 	 * @ownTools The agent's own tool objects, from its `tools/` folder
 	 * @agentName The agent's name, for messages
+	 * @toolOptions The agent's `toolOptions`, keyed by module name
 	 *
 	 * @return The tool objects to attach to the agent: its own, then the selected ones, each once
 	 */
-	array function select( required array names, array ownTools = [], string agentName = "" ) {
+	array function select( required array names, array ownTools = [], string agentName = "", struct toolOptions = {} ) {
 		var registry = aiToolRegistry()
 		var registryKeys = registry.getKeys()
 		var selected = arguments.ownTools.duplicate()
@@ -41,12 +54,32 @@ class {
 			ownToolNames[ own.getName() ] = true
 		}
 
-		for ( var entry in arguments.names ) {
-			var parsed = parse( entry, arguments.agentName )
-			var keys = []
+		var parsedEntries = arguments.names.map( entry => parse( entry, agentName ) )
+		checkToolOptions( arguments.toolOptions, parsedEntries, arguments.agentName )
 
+		// A module BX Agents builds the tools of itself (bxplaywright) is asked ONCE per agent,
+		// so every entry for it draws from the same fresh set. Nothing else is shared.
+		var built = {}
+
+		for ( var i = 1; i <= arguments.names.len(); i++ ) {
+			var entry = arguments.names[ i ]
+			var parsed = parsedEntries[ i ]
+			var catalog = {}
+			var catalogKeys = []
+
+			if ( variables.modules.has( parsed.module ) ) {
+				if ( !built.keyExists( parsed.module ) ) {
+					built[ parsed.module ] = buildModuleCatalog( parsed.module, arguments.toolOptions[ parsed.module ] ?: {}, arguments.agentName )
+				}
+				catalog = built[ parsed.module ]
+				catalogKeys = catalog.keyArray()
+			} else {
+				catalogKeys = registryKeys
+			}
+
+			var keys = []
 			if ( parsed.item == "*" ) {
-				keys = registryKeys.filter( key => listLast( key, "@" ) == parsed.module && find( "@", key ) > 0 )
+				keys = catalogKeys.filter( key => find( "@", key ) > 0 && listLast( key, "@" ) == parsed.module )
 				if ( !keys.len() ) {
 					throw(
 						type    = "BxAgents.UnknownToolModule",
@@ -55,10 +88,10 @@ class {
 				}
 			} else {
 				var key = parsed.item & "@" & parsed.module
-				if ( !registryKeys.contains( key ) ) {
+				if ( !catalogKeys.contains( key ) ) {
 					throw(
 						type    = "BxAgents.UnknownTool",
-						message = "#describeAgent( arguments.agentName )# lists [#entry#] but there is no tool [#key#]. #availableHint( registryKeys, parsed.module, registry )#"
+						message = "#describeAgent( arguments.agentName )# lists [#entry#] but there is no tool [#key#]. #availableHint( catalogKeys, parsed.module, registry )#"
 					)
 				}
 				keys = [ key ]
@@ -69,7 +102,7 @@ class {
 					continue
 				}
 				seenKeys[ toolKey ] = true
-				var tool = registry.get( toolKey )
+				var tool = catalog.keyExists( toolKey ) ? catalog[ toolKey ] : registry.get( toolKey )
 
 				if ( ownToolNames.keyExists( tool.getName() ) ) {
 					writeLog(
@@ -85,6 +118,114 @@ class {
 		}
 
 		return selected
+	}
+
+	/**
+	 * Fresh tools for one agent from a module BX Agents builds the tools of itself.
+	 *
+	 * @module The module name
+	 * @options The agent's options for it, placeholders not yet resolved
+	 * @agentName The agent's name, for messages
+	 *
+	 * @return { "name@module" : tool }
+	 */
+	private struct function buildModuleCatalog( required string module, required struct options, required string agentName ) {
+		var adapter = variables.modules.get( arguments.module )
+		if ( !adapter.available() ) {
+			throw(
+				type    = "BxAgents.UnknownToolModule",
+				message = "#describeAgent( arguments.agentName )# lists tools from module [#arguments.module#] but it is not loaded. Install it, for example: install-bx-module bx-playwright"
+			)
+		}
+		var catalog = {}
+		for ( var tool in adapter.tools( resolvePlaceholders( arguments.options, arguments.module ) ) ) {
+			catalog[ tool.getName() & "@" & arguments.module ] = tool
+		}
+		return catalog
+	}
+
+	/**
+	 * Every `toolOptions` key must name a module the agent lists tools from, and that
+	 * module must take options.
+	 *
+	 * @toolOptions The agent's `toolOptions`
+	 * @parsedEntries The parsed `tools:` entries
+	 * @agentName The agent's name, for messages
+	 */
+	private void function checkToolOptions( required struct toolOptions, required array parsedEntries, required string agentName ) {
+		var listed = {}
+		for ( var parsed in arguments.parsedEntries ) {
+			listed[ parsed.module ] = true
+		}
+		for ( var module in arguments.toolOptions ) {
+			if ( !listed.keyExists( module ) ) {
+				throw(
+					type    = "BxAgents.InvalidToolOptions",
+					message = "#describeAgent( arguments.agentName )# has toolOptions for [#module#] but lists no tool from that module in `tools`."
+				)
+			}
+			if ( !variables.modules.has( module ) ) {
+				throw(
+					type    = "BxAgents.InvalidToolOptions",
+					message = "#describeAgent( arguments.agentName )# has toolOptions for [#module#], which takes no options."
+				)
+			}
+			var problems = variables.modules.get( module ).validateOptions( arguments.toolOptions[ module ] )
+			if ( problems.len() ) {
+				throw(
+					type    = "BxAgents.InvalidToolOptions",
+					message = "#describeAgent( arguments.agentName )# toolOptions [#module#]: #problems.toList( '; ' )#"
+				)
+			}
+		}
+	}
+
+	/**
+	 * Replace ${env.NAME} and ${env.NAME:default} in every text value, so a secret or a
+	 * per-machine setting lives in the environment and not in the project. Resolved
+	 * when the app starts, never at build time.
+	 *
+	 * @value A struct, array or simple value
+	 * @module The module name, for messages
+	 *
+	 * @return The same shape with the placeholders replaced
+	 */
+	any function resolvePlaceholders( required any value, string module = "" ) {
+		var input = arguments.value
+		var owner = arguments.module
+		if ( isStruct( input ) ) {
+			var result = {}
+			for ( var key in input ) {
+				result[ key ] = resolvePlaceholders( input[ key ], owner )
+			}
+			return result
+		}
+		if ( isArray( input ) ) {
+			return input.map( item => resolvePlaceholders( item, owner ) )
+		}
+		if ( !isSimpleValue( input ) || isNumeric( input ) || isBoolean( input ) ) {
+			return input
+		}
+		var text = input
+		var match = reFind( "\$\{env\.([A-Za-z0-9_]+)(:([^}]*))?\}", text, 1, true )
+		while ( match.pos[ 1 ] > 0 ) {
+			var name = text.mid( match.pos[ 2 ], match.len[ 2 ] )
+			var hasDefault = match.pos.len() >= 3 && match.pos[ 3 ] > 0
+			var fallback = hasDefault ? text.mid( match.pos[ 4 ], match.len[ 4 ] ) : ""
+			var found = getSystemSetting( name, hasDefault ? fallback : "__bxagents_unset__" )
+			if ( found == "__bxagents_unset__" ) {
+				throw(
+					type    = "BxAgents.MissingToolOption",
+					message = "toolOptions [#owner#] uses ${env.#name#} but the environment variable #name# is not set. Set it, or give a default: ${env.#name#:default}"
+				)
+			}
+			var before = match.pos[ 1 ] > 1 ? text.left( match.pos[ 1 ] - 1 ) : ""
+			var afterStart = match.pos[ 1 ] + match.len[ 1 ]
+			var after = afterStart <= len( text ) ? text.mid( afterStart, len( text ) - afterStart + 1 ) : ""
+			text = before & found & after
+			match = reFind( "\$\{env\.([A-Za-z0-9_]+)(:([^}]*))?\}", text, match.pos[ 1 ] + len( found ), true )
+		}
+		return text
 	}
 
 	/**

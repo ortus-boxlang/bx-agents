@@ -324,6 +324,14 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).notToInclude( "getAll()" );
 			} );
 
+			it( "hands the agent's toolOptions to ToolSelector as a literal, placeholders untouched", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/yaml-tool-options", buildDir );
+				var content = fileRead( result.agentFactory );
+
+				expect( content ).toInclude( '"yaml-tool-options-agent", { "bxplaywright" : { "baseURL" : "${env.APP_URL:http://localhost:8080}", "headless" : false, "profile" : "mobile" } } )' );
+			} );
+
 			it( "attaches no module tools at all to an agent that lists none", function() {
 				var buildDir = newBuildDir();
 				var result = generateFor( fixtures & "/full-project", buildDir );

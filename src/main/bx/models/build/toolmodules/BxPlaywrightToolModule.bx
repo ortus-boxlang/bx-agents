@@ -1,0 +1,98 @@
+/**
+ * Adapter between an agent's `toolOptions.bxplaywright` and the bx-playwright module.
+ *
+ * The browser tools bx-playwright registers in bx-ai's registry share ONE browser
+ * for the whole app. That is fine for a single agent, but two agents (a root and its
+ * subagent, say) would then drive the same page and trample each other's session. So
+ * an agent that lists bxplaywright tools does not get the registered instances: it
+ * gets a fresh `playwright( profile, options ).aiTools()`, built for it alone, with
+ * its own browser opened the first time one of its tools is used.
+ *
+ *   tools:
+ *     - "*@bxplaywright"
+ *   toolOptions:
+ *     bxplaywright:
+ *       profile: mobile          # a bx-playwright profile name, or a list of them
+ *       headless: false          # anything else is a bx-playwright option
+ *       baseURL: ${env.APP_URL:http://localhost:8080}
+ *
+ * The options are the per-call options of bx-playwright's `playwright()`, minus the
+ * module-wide settings (where drivers and browsers are installed), which stay in the
+ * module's own settings.
+ */
+class {
+
+	/**
+	 * The `playwright()` options an agent may set.
+	 */
+	variables.ALLOWED_OPTIONS = [
+		"profile", "browser", "channel", "headless", "slowMo", "baseURL", "viewport", "device",
+		"locale", "timezone", "colorScheme", "ignoreHTTPSErrors", "timeouts", "testIdAttribute",
+		"artifacts", "launchOptions", "contextOptions"
+	]
+
+	/**
+	 * @managerFactory Builds the bx-playwright manager from ( profile, options ). Defaults to the playwright() function; tests pass a stand-in.
+	 */
+	function init( any managerFactory ) {
+		variables.useRealModule = isNull( arguments.managerFactory )
+		if ( variables.useRealModule ) {
+			variables.managerFactory = function( profile, options ) {
+				return playwright( profile, options )
+			}
+		} else {
+			variables.managerFactory = arguments.managerFactory
+		}
+		return this
+	}
+
+	/**
+	 * @return The module name these tools are registered under
+	 */
+	string function moduleName() {
+		return "bxplaywright"
+	}
+
+	/**
+	 * @return True when bx-playwright is loaded (or a stand-in factory was given)
+	 */
+	boolean function available() {
+		return !variables.useRealModule || getFunctionList().keyExists( "playwright" )
+	}
+
+	/**
+	 * @options The agent's `toolOptions.bxplaywright`
+	 *
+	 * @return One message per problem; empty when the options are fine
+	 */
+	array function validateOptions( required any options ) {
+		if ( !isStruct( arguments.options ) ) {
+			return [ "must be a mapping of bx-playwright options" ]
+		}
+		var errors = []
+		for ( var key in arguments.options ) {
+			if ( !variables.ALLOWED_OPTIONS.containsNoCase( key ) ) {
+				errors.append( "unknown option [#key#]. Valid options: #variables.ALLOWED_OPTIONS.toList( ', ' )#" )
+			}
+		}
+		if ( arguments.options.keyExists( "profile" ) && !( isSimpleValue( arguments.options.profile ) || isArray( arguments.options.profile ) ) ) {
+			errors.append( "option [profile] must be a profile name or a list of them" )
+		}
+		return errors
+	}
+
+	/**
+	 * Fresh browser tools for ONE agent.
+	 *
+	 * @options The agent's `toolOptions.bxplaywright`, placeholders already resolved
+	 *
+	 * @return bx-ai tools, each with a registry name like browser_visit
+	 */
+	array function tools( struct options = {} ) {
+		var overrides = duplicate( arguments.options )
+		var profile = overrides.profile ?: ""
+		overrides.delete( "profile" )
+		return variables.managerFactory( profile, overrides ).aiTools()
+	}
+
+}

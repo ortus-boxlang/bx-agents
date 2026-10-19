@@ -1,0 +1,43 @@
+/**
+ * The modules BX Agents knows how to build tools from itself, rather than taking
+ * what the module registered in bx-ai's registry.
+ *
+ * A module appears here when the registered tools cannot be shared between agents
+ * (bx-playwright: they would all drive one browser) or when its tools take options.
+ * Every other module's tools are used as registered and accept no options.
+ *
+ * An adapter is a class with: moduleName(), available(), validateOptions( options )
+ * and tools( options ).
+ */
+class {
+
+	/**
+	 * @adapters Extra or replacement adapters by module name, for tests
+	 */
+	function init( struct adapters = {} ) {
+		variables.adapters = {
+			"bxplaywright" : new "models.build.toolmodules.BxPlaywrightToolModule@bxagents"()
+		}
+		variables.adapters.append( arguments.adapters )
+		return this
+	}
+
+	/**
+	 * @module A module name
+	 *
+	 * @return True when BX Agents builds this module's tools itself
+	 */
+	boolean function has( required string module ) {
+		return variables.adapters.keyExists( arguments.module )
+	}
+
+	/**
+	 * @module A module name for which has() is true
+	 *
+	 * @return The adapter
+	 */
+	any function get( required string module ) {
+		return variables.adapters[ arguments.module ]
+	}
+
+}
