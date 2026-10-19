@@ -40,6 +40,8 @@ produce, en `dist/`:
 
 Empaquetar dos veces seguidas sobre el mismo build produce bytes de zip idénticos byte a byte (orden de entradas/timestamps determinista) - útil para verificar que un artefacto construido en CI coincide con uno construido localmente.
 
+El `.bxa` es **reubicable**: lleva cada archivo que el agente lee en tiempo de ejecución (incluido el `instructions.md` de cada nodo de agente, copiado en `agent/` durante el build), y el `agent/GeneratedAgentFactory.bx` generado resuelve esas rutas relativas a su propia ubicación en disco en lugar de las rutas absolutas de la máquina que lo construyó. Así, un `.bxa` construido en CI se ejecuta sin cambios al descomprimirlo en cualquier otro sitio - lo que también significa que un `.bxaignore` lo bastante amplio como para coincidir con `*.md` quitará del artefacto las propias instrucciones del agente.
+
 `package` requiere un `build` previo (lee `.build/manifest.json`) y se niega a ejecutarse - sin producir ningún `.bxa` - si `manifestVersion` no está definido o está malformado.
 
 ## Excluir archivos: `.bxaignore`
@@ -66,7 +68,7 @@ Esto protege contra un futuro campo - o un llamador que pase un struct más rico
 
 ## Dónde viven los secretos reales
 
-BxAgents nunca resuelve, almacena, ni incrusta claves de API, tokens o contraseñas de proveedor en ningún build o package. Eso es enteramente trabajo de bx-ai, en **tiempo de ejecución**: los lee del entorno del proceso siguiendo su propia convención de estilo `<PROVIDER>_API_KEY` (por ejemplo, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`). Configúralos como normalmente gestionas secretos para un proceso desplegado - una variable de entorno del SO, un archivo `.env` cargado por tu gestor de procesos (nunca commiteado, nunca empaquetado), o el gestor de secretos de tu plataforma.
+BxAgents nunca resuelve, almacena, ni incrusta claves de API, tokens o contraseñas de proveedor en ningún build o package. Eso es enteramente trabajo de bx-ai, en **tiempo de ejecución**: los lee del entorno del proceso siguiendo su propia convención de estilo `<PROVIDER>_API_KEY` (por ejemplo, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`). Configúralos como normalmente gestionas secretos para un proceso desplegado - una variable de entorno del SO o el gestor de secretos de tu plataforma. En desarrollo local, BoxLang y `boxlang-miniserver` cargan por sí mismos un `.env` desde la raíz del proyecto, así que el `.env` que crea `bxAgents new` es el sitio cómodo para ellos; BxAgents nunca lo lee, lo copia ni lo incrusta, y nunca se commitea (el `.gitignore` generado lo cubre) ni se empaqueta. Un `.bxa` desplegado no lleva `.env`, así que dale a ese proceso variables de entorno reales.
 
 ```bash
 export OPENAI_API_KEY=sk-...

@@ -128,16 +128,16 @@ memory:
 
 ## Usuarios e inicio de sesión
 
-Por defecto la interfaz web **no tiene cuentas ni compuerta** — está abierta, y cada visitante es anónimo. Esa es la experiencia de cero ceremonia de `bxAgents serve`, y **no** es una postura de despliegue. Declarar `users` en una entrada `webui` activa una compuerta real de inicio de sesión respaldada por [cbauth](https://forgebox.io/view/cbauth) y el mismo almacén SQLite que usa todo lo demás.
+Por defecto la interfaz web **no tiene cuentas ni compuerta** - está abierta, y cada visitante es anónimo. Esa es la experiencia de cero ceremonia de `bxAgents serve`, y **no** es una postura de despliegue. Declarar `users` en una entrada `webui` activa una compuerta real de inicio de sesión respaldada por [cbauth](https://forgebox.io/view/cbauth) y el mismo almacén SQLite que usa todo lo demás.
 
 ### Sin cuentas, la interfaz es un espacio de trabajo compartido
 
-No hay identidad por visitante, a propósito. Cada visitante a una interfaz web sin cuentas lee y escribe las **mismas** conversaciones, preferencias y memoria de agente — quien pueda alcanzar la página ve todo en ella.
+No hay identidad por visitante, a propósito. Cada visitante a una interfaz web sin cuentas lee y escribe las **mismas** conversaciones, preferencias y memoria de agente - quien pueda alcanzar la página ve todo en ella.
 
 Ese es el punto de ejecutar sin cuentas en lugar de un descuido: una interfaz abierta es una única herramienta compartida (un laptop, una máquina interna de confianza), no un servicio multi-tenant. Darle a cada navegador su propia porción solo fragmentaría un espacio de trabajo en copias por navegador que nadie pidió, y cualquier id del lado del cliente que hiciera la fragmentación sería falsificable de todos modos.
 
 !!! warning
-    **Una interfaz abierta no tiene privacidad entre visitantes.** Cualquiera que pueda alcanzar la URL ve cada conversación en ella, y puede continuar o eliminar cualquiera de ellas. Si eso no es lo que quieres — en cualquier lugar donde la página sea alcanzable por más que las personas que deberían ver los transcripts — declara `users`.
+    **Una interfaz abierta no tiene privacidad entre visitantes.** Cualquiera que pueda alcanzar la URL ve cada conversación en ella, y puede continuar o eliminar cualquiera de ellas. Si eso no es lo que quieres - en cualquier lugar donde la página sea alcanzable por más que las personas que deberían ver los transcripts - declara `users`.
 
 ```javascript
 // gateways/chatUi.bx
@@ -149,7 +149,7 @@ users : [
 
 ### Las contraseñas nunca se escriben en configuración
 
-Una cuenta nombra la **variable de entorno** que contiene su contraseña (`passwordEnvVar`), o lleva un valor **ya hasheado** (`passwordHash`). Una clave `password` literal es un error de build, no una advertencia — ignorarla silenciosamente te dejaría creyendo que habías configurado una contraseña cuando solo habías commiteado una.
+Una cuenta nombra la **variable de entorno** que contiene su contraseña (`passwordEnvVar`), o lleva un valor **ya hasheado** (`passwordHash`). Una clave `password` literal es un error de build, no una advertencia - ignorarla silenciosamente te dejaría creyendo que habías configurado una contraseña cuando solo habías commiteado una.
 
 Un `passwordHash` es seguro de commitear precisamente porque no puede revertirse. Genera uno con el mismo hasher que usa la app:
 
@@ -158,7 +158,7 @@ bxAgents hash-password --password="<tu-contraseña>"
 ```
 
 !!! danger
-    **Hasheado, no encriptado.** La encriptación es reversible, y un archivo de base de datos robado casi siempre viaja con lo que sea que pudiera desencriptarlo — así que un esquema reversible convierte una fuga de archivo en las contraseñas de todos los usuarios, incluyendo cualquiera que hayan reutilizado en otro lugar. Las contraseñas aquí pasan por PBKDF2-HMAC-SHA256 con una sal aleatoria por usuario y nunca son recuperables de la base de datos. (BoxLang no envía ningún BIF de bcrypt o argon2; PBKDF2 es la primitiva más fuerte disponible sin añadir una dependencia.)
+    **Hasheado, no encriptado.** La encriptación es reversible, y un archivo de base de datos robado casi siempre viaja con lo que sea que pudiera desencriptarlo - así que un esquema reversible convierte una fuga de archivo en las contraseñas de todos los usuarios, incluyendo cualquiera que hayan reutilizado en otro lugar. Las contraseñas aquí pasan por PBKDF2-HMAC-SHA256 con una sal aleatoria por usuario y nunca son recuperables de la base de datos. (BoxLang no envía ningún BIF de bcrypt o argon2; PBKDF2 es la primitiva más fuerte disponible sin añadir una dependencia.)
 
     El conteo de iteraciones se almacena *dentro* de cada hash (`pbkdf2$<iterations>$<salt>$<digest>`), así que puede elevarse después sin invalidar nada ya almacenado.
 
@@ -166,7 +166,7 @@ bxAgents hash-password --password="<tu-contraseña>"
 
 Todo lo delimitado por usuario se re-indexa a la cuenta real. El `handlers/ChatUi.bx` generado resuelve la identidad desde cbsecurity (que envuelve cbauth) directamente, en un método (`resolveUserId()`), y la memoria del agente, el índice de conversaciones, las preferencias y la propiedad de ejecuciones pendientes todas se indexan por su valor de retorno.
 
-Lee cbsecurity en lugar del ajuste `identifierProvider` de ColdBox deliberadamente: un closure declarado en el struct de configuración `coldbox` nunca llega a `configSettings` — verificado en un arranque real, tanto en la forma literal documentada como como asignación posterior — así que cualquier cosa que dependiera de ese ajuste estaba silenciosamente obteniendo un id de sesión en su lugar.
+Lee cbsecurity en lugar del ajuste `identifierProvider` de ColdBox deliberadamente: un closure declarado en el struct de configuración `coldbox` nunca llega a `configSettings` - verificado en un arranque real, tanto en la forma literal documentada como como asignación posterior - así que cualquier cosa que dependiera de ese ajuste estaba silenciosamente obteniendo un id de sesión en su lugar.
 
 La diferencia práctica: las conversaciones y preferencias siguen a la persona a través de navegadores y dispositivos, y limpiar cookies ya no crea un "usuario" completamente nuevo.
 
@@ -174,21 +174,21 @@ La diferencia práctica: las conversaciones y preferencias siguen a la persona a
 |---|---|---|
 | Identidad | Un espacio de trabajo compartido | La cuenta con sesión iniciada |
 | Conversaciones visibles para | Cualquiera que pueda alcanzar la interfaz | Solo su propietario |
-| Sigue a la persona a través de navegadores/dispositivos | n/a — nada es por persona | Sí |
+| Sigue a la persona a través de navegadores/dispositivos | n/a - nada es por persona | Sí |
 | Alcanzable sin iniciar sesión | Todo | Solo el formulario de inicio de sesión |
 
 ### Ciclo de vida
 
-Las cuentas se reconcilian desde la configuración en cada arranque, en este orden: el interceptor de esquema migra, el seeder escribe cuentas, luego la compuerta de inicio de sesión empieza a aplicarse.
+Las cuentas se reconcilian desde la configuración en cada arranque, en este orden: `ChatDb` migra el esquema, el seeder escribe cuentas, luego la compuerta de inicio de sesión empieza a aplicarse.
 
 - **Añadir** un usuario a la configuración lo crea.
 - **Cambiar** su contraseña la actualiza. El seeder rehashea solo cuando la contraseña configurada ya no coincide con lo almacenado, así que una contraseña sin cambios cuesta una verificación en lugar de un hash nuevo.
 - **Eliminarlo** de la configuración **desactiva** la cuenta en lugar de eliminarla. Sus conversaciones referencian su id, así que eliminar la fila huerfanaría ese historial en lugar de revocar el acceso. Ya no pueden iniciar sesión; sus datos permanecen intactos y regresan si la cuenta se restaura.
-- Un `passwordEnvVar` cuya variable está **sin configurar** omite esa cuenta por completo y registra una advertencia en `webui-auth`. Esto falla cerrado a propósito — crear la cuenta con una contraseña vacía sería mucho peor que que no existiera.
+- Un `passwordEnvVar` cuya variable está **sin configurar** omite esa cuenta por completo y registra una advertencia en `webui-auth`. Esto falla cerrado a propósito - crear la cuenta con una contraseña vacía sería mucho peor que que no existiera.
 
 ### Qué no es esto
 
-Esto es un roster fijo de cuentas provisionadas por el operador, no un sistema de gestión de usuarios. No hay auto-registro, ni restablecimiento de contraseña, ni roles o permisos, ni límite de tasa o de gasto por usuario. Si necesitas identidad federada en su lugar, edita `resolveUserId()` en el handler generado para devolver tu propio principal autenticado — el resto de la interfaz web ni sabe ni le importa de dónde vino el id.
+Esto es un roster fijo de cuentas provisionadas por el operador, no un sistema de gestión de usuarios. No hay auto-registro, ni restablecimiento de contraseña, ni roles o permisos, ni límite de tasa o de gasto por usuario. Si necesitas identidad federada en su lugar, edita `resolveUserId()` en el handler generado para devolver tu propio principal autenticado - el resto de la interfaz web ni sabe ni le importa de dónde vino el id.
 
 ## Human-in-the-loop
 
@@ -213,7 +213,7 @@ La página enviada es un cliente de chat real, no una carcasa de demostración. 
 
 | Área | Comportamiento |
 | --- | --- |
-| **Barra lateral de conversación** | Lista las conversaciones de este visitante más recientes primero, con conteos de mensajes. Cambia, renombra (✎), elimina (×), o inicia una nueva. Los títulos se renderizan a través de `textContent` — un título es lo que el usuario escribió primero, así que nunca se analiza como markup |
+| **Barra lateral de conversación** | Lista las conversaciones de este visitante más recientes primero, con conteos de mensajes. Cambia, renombra (✎), elimina (×), o inicia una nueva. Los títulos se renderizan a través de `textContent` - un título es lo que el usuario escribió primero, así que nunca se analiza como markup |
 | **Dirigir mientras se transmite** | El compositor permanece activo durante un turno. **Send** se convierte en **Steer**, y el mensaje se empalma en la ejecución ya en curso en lugar de iniciar una nueva |
 | **Stop** | Publica `/cancel` *antes* de abortar el fetch, así que el servidor realmente deja de gastar tokens, luego mantiene lo que ya se transmitió |
 | **Clear / Compact** | Clear vacía esta conversación; Compact aparece solo cuando hay un modelo de resumen configurado, y reporta lo que realmente hizo (`Compacted 12 messages down to 3`, o `Nothing to compact yet`) |
@@ -222,7 +222,7 @@ La página enviada es un cliente de chat real, no una carcasa de demostración. 
 | **Tema** | Almacenado del lado del servidor en `preferences`, así que sigue a la identidad en lugar del navegador. `localStorage` mantiene una copia local para que la elección sobreviva a un request fallido |
 | **Modelo** | El nombre del modelo de `/info` se sitúa en el encabezado, así que siempre está claro qué respondió |
 
-**La recuperación importa más de lo que suena.** La última conversación abierta se recuerda en `localStorage`, pero las conversaciones mismas viven en el servidor. Si ese id ya no existe — eliminado en otra pestaña, o un almacén nuevo — la página recae en la conversación restante más reciente en lugar de rehidratar hacia una pantalla vacía sin fila activa.
+**La recuperación importa más de lo que suena.** La última conversación abierta se recuerda en `localStorage`, pero las conversaciones mismas viven en el servidor. Si ese id ya no existe - eliminado en otra pestaña, o un almacén nuevo - la página recae en la conversación restante más reciente en lugar de rehidratar hacia una pantalla vacía sin fila activa.
 
 Las pantallas estrechas obtienen un layout real en lugar de uno exprimido: bajo `40rem` la barra lateral se superpone al transcript en lugar de robarle su ancho, y se honra `prefers-reduced-motion`.
 
@@ -232,14 +232,14 @@ Las pantallas estrechas obtienen un layout real en lugar de uno exprimido: bajo 
 
 Cada proyecto `webui` obtiene una base de datos SQLite. No es opcional y no hay ningún flag para desactivarlo.
 
-La razón es un vacío real, no una preferencia: **el `IAiMemory` de bx-ai no tiene ninguna API de enumeración.** Es un bucket por `(userId, conversationId)` — puedes leer, escribir y limpiar uno, pero nada en él responde *"qué conversaciones tiene este usuario."* Una lista de conversaciones, preferencias por usuario, y cualquier otra cosa relacional necesita almacenamiento real junto a la memoria, no dentro de ella.
+La razón es un vacío real, no una preferencia: **el `IAiMemory` de bx-ai no tiene ninguna API de enumeración.** Es un bucket por `(userId, conversationId)` - puedes leer, escribir y limpiar uno, pero nada en él responde *"qué conversaciones tiene este usuario."* Una lista de conversaciones, preferencias por usuario, y cualquier otra cosa relacional necesita almacenamiento real junto a la memoria, no dentro de ella.
 
 | Pieza | Qué es |
 | --- | --- |
 | `bx-sqlite` | El driver JDBC, incluido con BxAgents como módulo anidado |
 | [`qb`](https://github.com/coldbox-modules/qb) | QueryBuilder para lecturas y escrituras, SchemaBuilder para las tablas. Ningún SQL escrito a mano en ninguna parte |
 | `models/ChatDb.bx` | Generado. Posee el esquema y entrega query builders |
-| `interceptors/WebUiSchema.bx` | Generado. Construye `ChatDb` en el arranque para que la migración se ejecute entonces, no en cualquier request que toque primero la base de datos |
+| Una sentencia de arranque en `Application.bx` | Generado. Construye `ChatDb` en el arranque para que la migración se ejecute entonces, no en cualquier request que toque primero la base de datos |
 
 El datasource se registra en `Application.bx` y la gramática se fija en `config/ColdBox.bx`:
 
@@ -267,7 +267,7 @@ Ambos son opcionales de sobreescribir, por entrada:
 
 Un `database.path` absoluto **falla el build**: se resuelve con `expandPath()` dentro de la app generada, así que una ruta absoluta escapa silenciosamente del directorio de la app y rompe un despliegue de `.bxa` empaquetado.
 
-**El esquema está versionado y es solo-hacia-adelante.** `ChatDb.migrate()` registra lo que ha aplicado en una tabla `bxagents_schema_version` y solo aplica lo que es más nuevo, así que arrancar contra un almacén existente es un no-op. v1 crea `conversations` y `preferences`. Evolúcionalo añadiendo un nuevo `applyV<n>()` y aumentando `SCHEMA_VERSION` — nunca editando una migración que ya se envió, porque **SQLite no puede modificar ni eliminar una columna** y el propio `SQLiteGrammar` de qb lanza `UnsupportedOperation` en lugar de fingir lo contrario.
+**El esquema está versionado y es solo-hacia-adelante.** `ChatDb.migrate()` registra lo que ha aplicado en una tabla `bxagents_schema_version` y solo aplica lo que es más nuevo, así que arrancar contra un almacén existente es un no-op. v1 crea `conversations` y `preferences`; v2 añade `users`. Evolúcionalo añadiendo un nuevo `applyV<n>()` y aumentando `SCHEMA_VERSION` - nunca editando una migración que ya se envió, porque **SQLite no puede modificar ni eliminar una columna** y el propio `SQLiteGrammar` de qb lanza `UnsupportedOperation` en lugar de fingir lo contrario.
 
 !!! warning
     **Dos cosas aquí son contraintuitivas, y ambas se establecieron por las malas contra un arranque real de ColdBox en lugar de leerse en una página de documentación.**
@@ -288,14 +288,14 @@ La gramática es la única pieza específica de SQLite. Todo lo demás pasa por 
 
 Estas son para lo que existe el almacén SQLite, y ambas están delimitadas por el mismo `userId` derivado del servidor que todo lo demás.
 
-**Conversaciones.** Cada turno a través de `/invoke`, `/stream` o `/batch` se registra a sí mismo contra el índice: la fila se crea en el primer uso, `updatedAt` se mueve, y el primer mensaje de usuario se convierte en el título (colapsado a una línea, truncado a 60 caracteres) a menos que ya haya uno configurado — así que un renombrado nunca se deshace silenciosamente por el siguiente turno. `messageCount` es un **contador de visualización**, incrementado en dos por turno; un turno que muere a mitad de camino puede dejarlo uno más alto, y `/clear` lo reinicia. La propia memoria del agente sigue siendo la autoridad sobre lo que realmente se dijo.
+**Conversaciones.** Cada turno a través de `/invoke`, `/stream` o `/batch` se registra a sí mismo contra el índice: la fila se crea en el primer uso, `updatedAt` se mueve, y el primer mensaje de usuario se convierte en el título (colapsado a una línea, truncado a 60 caracteres) a menos que ya haya uno configurado - así que un renombrado nunca se deshace silenciosamente por el siguiente turno. `messageCount` es un **contador de visualización**, incrementado en dos por turno; un turno que muere a mitad de camino puede dejarlo uno más alto, y `/clear` lo reinicia. La propia memoria del agente sigue siendo la autoridad sobre lo que realmente se dijo.
 
 `/conversations/delete` elimina la fila de índice *y* limpia los mensajes del agente para esa conversación. Eliminar solo la fila dejaría la conversación invisible mientras aún se sienta en el contexto del modelo en el momento en que alguien reutilizara el id.
 
 !!! warning
-    **Por qué `touchConversation()` no es un upsert de qb.** Un upsert apunta solo a la clave primaria, así que un llamador que adivinara el `conversationId` de otro visitante haría que su propio `userId` se escribiera en esa fila y tomara la conversación. El almacén lee primero y se niega cuando la fila pertenece a alguien más. `setPreference()` *sí* hace upsert, y de forma segura — su objetivo es la clave compuesta `(userId, prefKey)`, así que la propia identidad del llamador es parte de lo que coincide.
+    **Por qué `touchConversation()` no es un upsert de qb.** Un upsert apunta solo a la clave primaria, así que un llamador que adivinara el `conversationId` de otro visitante haría que su propio `userId` se escribiera en esa fila y tomara la conversación. El almacén lee primero y se niega cuando la fila pertenece a alguien más. `setPreference()` *sí* hace upsert, y de forma segura - su objetivo es la clave compuesta `(userId, prefKey)`, así que la propia identidad del llamador es parte de lo que coincide.
 
-**Preferencias.** Del lado del servidor en lugar de `localStorage`, así que siguen a la identidad en lugar del navegador. Apunta `identifierProvider` a un principal autenticado real y las preferencias de un visitante lo siguen a través de dispositivos sin cambio al código generado.
+**Preferencias.** Del lado del servidor en lugar de `localStorage`, así que siguen a la identidad en lugar del navegador. Con `users` declarados, las preferencias de una persona la siguen a través de navegadores y dispositivos.
 
 ## Branding y temática
 
@@ -334,33 +334,24 @@ theme: {
 Para cualquier cosa que los tokens no cubran - fuentes personalizadas, layout, reglas por elemento - coloca un `resources/webui/theme.css` en el proyecto. Se incrusta **al final** en el `<style>` de la página, así que le gana tanto a los valores por defecto enviados como a los tokens de `theme`; y siendo un archivo `.css` real, el hex `#rrggbb` ordinario funciona ahí normalmente. (Un `</style` literal en ese archivo falla el build, ya que terminaría prematuramente el bloque de estilo de la página.)
 
 !!! warning
-    **`apiKeyEnvVar` es una compuerta simple y activable - no un sistema de inicio de sesión completo.** Sin configurar, `<path>/api/*` está completamente abierto (bien para desarrollo local, no para un despliegue público). Configúralo, y un interceptor `preProcess` generado (`interceptors/WebUiAuthGate.bx`) requiere que cada request bajo `<path>/api/*` lleve una cabecera `X-API-Key` que coincida, comparada vía `java.security.MessageDigest.isEqual()` - la misma disciplina de comparación en tiempo constante que ya usa la propia comprobación de firma de cada gateway de webhook. **El shell estático mismo (`<path>/index.html`) deliberadamente NO está protegido** - solo `<path>/api/*` lo está - porque la navegación de página simple de un navegador no puede enviar una cabecera personalizada, así que proteger el shell haría inalcanzable, sin la clave ya en mano, la misma página que te pide la clave. El propio JS de la página pide la clave (un botón "Key", almacenado en `localStorage`) y la envía en cada llamada de API que hace de ahí en adelante.
+    **`apiKeyEnvVar` es una compuerta simple y activable - no un sistema de inicio de sesión completo.** Sin configurar, `<path>/api/*` está completamente abierto (bien para desarrollo local, no para un despliegue público). Configúralo, y un interceptor `preProcess` generado (`interceptors/WebUiAuthGate.bx`) requiere que cada request bajo `<path>/api/*` lleve una cabecera `X-API-Key` que coincida, comparada vía `java.security.MessageDigest.isEqual()` - la misma disciplina de comparación en tiempo constante que ya usa la propia comprobación de firma de cada gateway de webhook. **El shell estático mismo (`<path>/index.html`) deliberadamente NO está protegido** - solo `<path>/api/*` lo está - porque la navegación de página simple de un navegador no puede enviar una cabecera personalizada, así que proteger el shell haría inalcanzable, sin la clave ya en mano, la misma página que te pide la clave. El propio JS de la página pide la clave (un botón "Key", almacenado en `localStorage`) y la envía en cada llamada de API que hace de ahí en adelante. Una petición rechazada con `401` muestra un mensaje que te indica configurar o corregir la clave con ese botón, en lugar de un fallo genérico.
 
 
-## Identidad de conversación: la sesión ES el identificador de usuario
+## Identidad de conversación
 
-**Cada memoria que un agente mantiene está indexada por `(userId, conversationId)`** - y un agente puede mantener varias a la vez (`memories` de `AiAgent` es un array; `loadMemoryMessages()` itera sobre todas ellas con el mismo par). `AiAgent.run()`/`.stream()` recaen en `""` para ambos cuando nada los suministra, así que sin identidad del lado del servidor **cada visitante aterriza en un único bucket compartido**, sin importar qué tipos de memoria estén configurados.
+**Cada memoria que un agente mantiene está indexada por `(userId, conversationId)`** - y un agente puede mantener varias a la vez (`memories` de `AiAgent` es un array; `loadMemoryMessages()` itera sobre todas ellas con el mismo par). `AiAgent.run()`/`.stream()` recaen en `""` para ambos cuando nada los suministra, así que la identidad del lado del servidor tiene que salir de algún sitio.
 
-La solución es identidad, no tipo de memoria. Un proyecto con una exposición `webui` por lo tanto obtiene:
+El `handlers/ChatUi.bx` generado la suministra en un único método, `resolveUserId()`, en **las tres formas de ejecutor** - `invoke`, `stream` y `batch`:
 
-1. **Gestión de sesión activada** en el `Application.bx` generado - `this.sessionManagement = true`, `this.setClientCookies = true`, un `sessionTimeout` de 60 minutos. Las cookies son fundamentales: sin cookie, sin id de sesión.
-2. **Su propio `handlers/ChatUi.bx`**, que pasa el `getUserSessionIdentifier()` de ColdBox como el `userId` del agente en **las tres formas de ejecutor** - `invoke`, `stream` y `batch`.
+- **Sin `users` declarados:** un id compartido fijo (`public`). La interfaz es un único espacio de trabajo abierto, como se describe en [Usuarios e inicio de sesión](#usuarios-e-inicio-de-sesión).
+- **Con `users` declarados:** el id de la cuenta con sesión iniciada, leído de cbsecurity (que envuelve a cbauth). Una petición sin sesión recae en el id compartido, que la compuerta de inicio de sesión mantiene inalcanzable para una entrada protegida.
 
-```javascript
-// handlers/ChatUi.bx (generado)
-private string function resolveUserId() {
-	return controller.getUserSessionIdentifier()
-}
-```
+En ambos casos el id se deriva en el servidor y nunca se toma del cuerpo de la petición, así que un llamador no puede hacerse pasar por otro. `conversationId` todavía viene del cliente, y eso es deliberado: distingue varias conversaciones pertenecientes a la *misma* identidad - es lo que rota el botón **New**. No es el límite de aislamiento; el `userId` lo es.
 
-Delegar a ColdBox en lugar de leer `session.sessionId` directamente compra tres cosas: el id está prefijado por aplicación, cae de vuelta a través de URLToken/CFID si una sesión de alguna manera no está disponible, y - lo que más importa - honra el ajuste de configuración **`identifierProvider`**. Apunta eso a tu principal autenticado y cada memoria se re-indexa al usuario real sin cambio al handler generado.
-
-Porque la identidad es emitida por el servidor, el scoping se mantiene sin importar qué memorias configure el proyecto - una o muchas, `window`, `cache`, `jdbc`, vectorial, cualquier mezcla.
+Un proyecto con una exposición `webui` también obtiene la **gestión de sesión activada** en el `Application.bx` generado - `this.sessionManagement = true`, `this.setClientCookies = true`, un `sessionTimeout` de 60 minutos - porque el inicio de sesión se apoya en la sesión. Ahí las cookies son fundamentales: sin cookie, sin sesión. Un proyecto sin `webui` mantiene las sesiones desactivadas - una app solo de API/gateway no tiene navegador que rastrear, y una sesión ahí es overhead más una cookie que nadie pidió.
 
 !!! info
-    **¿Por qué no `toAi()` para la webui?** El `toAi()` de ColdBox 8.1 ahora deriva el contexto conversacional él mismo, y su respaldo es exactamente la misma llamada que hace este handler: `len( body.userId ) ? body.userId : controller.getUserSessionIdentifier()`. La diferencia es la precedencia - `toAi()` deja que **un `userId` suministrado por el llamador gane**, lo cual es correcto para un llamador de confianza servidor-a-servidor pero incorrecto para un navegador sentado detrás de una única clave de API compartida, donde cualquiera podría nombrarse a sí mismo como cualquier otro y leer la memoria de otro visitante. El handler generado deriva la identidad únicamente del lado del servidor, y nunca mira `body.userId`. Mantiene la forma de ruta exacta de `toAi()` (`/invoke`, `/stream`, `/batch`, `/info`), su formato de cable SSE, y su reflejo de evento `X-Thread-Id`/`thread`, así que sigue siendo un reemplazo directo. Los otros tipos de exposición (`exposes: "agent"`) todavía usan `toAi()` sin cambios - servidor-a-servidor es el caso para el que está construida su precedencia.
-
-`conversationId` todavía viene del cliente, y eso es deliberado: distingue varias conversaciones pertenecientes al *mismo* visitante - es lo que rota el botón **New**. No es el límite de aislamiento; el `userId` derivado de la sesión lo es.
+    **¿Por qué no `toAi()` para la webui?** El `toAi()` de ColdBox 8.1 deja que **un `userId` suministrado por el llamador gane** sobre el derivado del servidor, lo cual es correcto para un llamador de confianza servidor-a-servidor pero incorrecto para un navegador sentado detrás de una única clave de API compartida, donde cualquiera podría nombrarse a sí mismo como cualquier otro y leer la memoria de otro visitante. El handler generado deriva la identidad únicamente del lado del servidor, y nunca mira `body.userId`. Mantiene la forma de ruta exacta de `toAi()` (`/invoke`, `/stream`, `/batch`, `/info`), su formato de cable SSE, y su reflejo de evento `X-Thread-Id`/`thread`, así que sigue siendo un reemplazo directo. Los otros tipos de exposición (`exposes: "agent"`) todavía usan `toAi()` sin cambios - servidor-a-servidor es el caso para el que está construida su precedencia.
 
 Ningún tipo de memoria se fuerza. Elige uno (o varios) por agente con una clave `memory` en `Agent.yaml`, la misma forma que `checkpointer`:
 
@@ -370,8 +361,6 @@ memory:
   type: cache
   maxMessages: 50
 ```
-
-Un proyecto sin `webui` mantiene las sesiones desactivadas y el propio valor por defecto de memoria de bx-ai - una app solo de API/gateway no tiene navegador que rastrear, y una sesión ahí es overhead más una cookie que nadie pidió.
 
 ## Renderizado de respuesta
 

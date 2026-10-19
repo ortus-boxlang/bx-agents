@@ -69,8 +69,8 @@ generado.
 
 ## Una sola GatewaySession las une
 
-Cualquier proyecto con al menos un gateway de tipo push obtiene un
-`interceptors/GatewaySessionBootstrap.bx` generado, que construye una única `GatewaySession`
+Cualquier proyecto con al menos un gateway de tipo push obtiene una sentencia de arranque
+generada en `Application.bx` que construye una única `GatewaySession`
 de bx-ai que agrupa todos los gateways de tipo push, vinculada al agente raíz de tu proyecto:
 
 ```mermaid

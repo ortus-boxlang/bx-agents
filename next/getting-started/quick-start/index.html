@@ -282,12 +282,12 @@
     └── specs/
         └── AgentSpec.bx
 </code></pre>
+<p>Plus a <code>.env</code> (with <code>BOXLANG_HOME=.build/runtime</code>; put your provider API keys there too) and a <code>.gitignore</code>. BoxLang loads the <code>.env</code> from the project root itself.</p>
 <p>This is the <code>minimal</code> starter - the default when <code>--template</code> is omitted. <code>new</code> can also scaffold one of 7 other built-in starters (<code>--template=webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent</code>), each adding a bit of pre-wired content (a gateway, a scheduler) on top of the same skeleton, or skip scaffolding entirely and create the project from an existing GitHub repo (<code>--repo=owner/repo</code>) or a ForgeBox package (<code>--forgebox=&lt;slug&gt;</code>) instead - see the <a href="/next/cli-reference/index.html#new">CLI Reference</a> for the full list and how each one works. The agent is defined by an <code>Agent.yaml</code> by default; pass <code>--class</code> to scaffold the advanced, class-based <code>Agent.bx</code> instead (see <a href="/next/conventions/agent-bx/index.html">Agent.bx</a>).</p>
-<p><code>Agent.yaml</code> looks like:</p>
+<p><code>Agent.yaml</code> looks like this (<code>--description</code> adds a <code>description:</code> line):</p>
 <pre><code class="language-yaml"># Your agent. Most agents need nothing more than this file and instructions.md.
 # For code in the definition (hooks, dynamic instructions), scaffold with --class.
 name: my-agent
-description: A helpful assistant
 model: openai/gpt-5
 
 environments:
@@ -313,7 +313,7 @@ class {
 </code></pre>
 <p>See the <a href="/next/conventions/agent-yaml/index.html">Conventions</a> section for every other folder (<code>skills/</code>, <code>subagents/</code>, <code>gateways/</code>, <code>schedules/</code>, <code>mcp/</code>, <code>interceptors/</code>, <code>models/</code>, <code>modules/</code>).</p>
 <h2 id="3-test-it"><a href="#3-test-it" id="3-test-it" name="3-test-it" class="anchor"></a>3. Test it</h2>
-<pre><code class="language-bash">cd tests &amp;&amp; box install &amp;&amp; cd ..   # once, to fetch testbox/
+<pre><code class="language-bash">cd tests &amp;&amp; box install &amp;&amp; cd ..   # once, to fetch testbox/ (`new` already tried this for you)
 bxAgents test
 </code></pre>
 <p>The scaffolded <code>tests/specs/AgentSpec.bx</code> passes out of the box - it builds your agent against the <code>mock</code> provider (no API key or network needed) and asserts on a scripted response. See <a href="/next/conventions/testing/index.html">tests/</a> for <code>mockResponses()</code> and the custom matchers (<code>toHaveCalledTool</code>, etc.) available to your own specs.</p>
@@ -321,7 +321,7 @@ bxAgents test
 <pre><code class="language-bash">bxAgents build
 </code></pre>
 <p>Runs the full <a href="/next/build-pipeline/index.html">build pipeline</a> - config resolution, discovery, validation, code generation, manifest normalization - and writes a real ColdBox application to <code>.build/app/</code>, plus <code>.build/manifest.json</code>. Run <code>bxAgents build --environment=production</code> to build against an <code>Agent.yaml</code> environment override (see <a href="/next/conventions/agent-yaml/index.html#environments">Agent.yaml</a>).</p>
-<p>If your project fails validation (duplicate tool names, a bad cron expression, an unknown model provider, ...) <code>build</code> fails with every collected error - not just the first one.</p>
+<p>If your project fails validation (duplicate tool names, an unknown model provider, a gateway entry with a bad path, ...) <code>build</code> fails with every collected error - not just the first one.</p>
 <h2 id="5-run-it"><a href="#5-run-it" id="5-run-it" name="5-run-it" class="anchor"></a>5. Run it</h2>
 <p>Two ways to talk to the built agent - both load the exact same <code>GeneratedAgentFactory.bx</code> and build the exact same agent tree, so they never diverge:</p>
 <p><strong>Interactively, from the terminal:</strong></p>

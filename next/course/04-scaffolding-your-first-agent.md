@@ -43,7 +43,8 @@ my-agent/
 
 Plus a `.env` declaring `BOXLANG_HOME=.build/runtime` (matching `serve`'s own scoped
 runtime home) and a `.gitignore` (`.build/`, `dist/`, `.env`) - `new` never overwrites
-either if they already exist.
+either if they already exist. BoxLang loads the `.env` from the project root itself, so
+this is also the place for your provider API keys.
 
 Every convention folder is created **empty**. You add files to the ones your agent
 actually needs and leave the rest alone - an empty `tools/` folder has zero effect on
@@ -51,11 +52,12 @@ the generated app.
 
 ## `Agent.yaml` looks like this
 
+(Pass `--description` and `new` adds a `description:` line.)
+
 ```yaml
 # Your agent. Most agents need nothing more than this file and instructions.md.
 # For code in the definition (hooks, dynamic instructions), scaffold with --class.
 name: my-agent
-description: A helpful assistant
 model: openai/gpt-5
 
 environments:

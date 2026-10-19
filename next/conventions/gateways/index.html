@@ -311,7 +311,7 @@ class {
 		return {
 			exposes : &quot;mcp&quot;,
 			path    : &quot;/mcp/tools&quot;,
-			target  : &quot;local-server&quot;   // must match an mcp/*.bx entry's declared name
+			target  : &quot;local-server&quot;   // must match an mcp/*.bx entry's file name
 		};
 	}
 }
@@ -331,7 +331,7 @@ class {
 </code></pre>
 <p>Generates a real static <code>&lt;path&gt;/index.html</code> file (served directly - no route needed for it) plus its own dedicated API under a fixed <code>&lt;path&gt;/api</code> prefix, so it never collides with the shell's own files. That API is a generated <code>handlers/ChatUi.bx</code> rather than <code>toAi()</code>, and the entry also brings a generated SQLite store with it.</p>
 <p>The web UI is a subsystem rather than a single exposure switch - the route list, the store, conversations and preferences, branding and theming, and why it does not use <code>toAi()</code> are all on its own page: <strong><a href="/next/conventions/web-ui/index.html">The web chat UI</a></strong>.</p>
-<p><strong>Validation:</strong> <code>exposes</code> must be <code>agent</code>, <code>mcp</code>, or <code>webui</code>; <code>path</code> is required and must be unique across every exposure entry; an <code>mcp</code> exposure's <code>target</code> is required and must match a real <code>mcp/*</code> entry's declared name; <code>webui</code>'s <code>apiKeyEnvVar</code> is entirely optional, with no required-field check (see below).</p>
+<p><strong>Validation:</strong> <code>exposes</code> must be <code>agent</code>, <code>mcp</code>, or <code>webui</code>; <code>path</code> is required and must be unique across every exposure entry; an <code>mcp</code> exposure's <code>target</code> is required and must match a real <code>mcp/*</code> entry's file name; <code>webui</code>'s <code>apiKeyEnvVar</code> is entirely optional, with no required-field check (see below).</p>
 <h2 id="2-channel-adapter-gateways-type-mock--cli--http"><a href="#2-channel-adapter-gateways-type-mock--cli--http" id="2-channel-adapter-gateways-type-mock--cli--http" name="2-channel-adapter-gateways-type-mock--cli--http" class="anchor"></a>2. Channel-adapter gateways (<code>type: &quot;mock&quot; | &quot;cli&quot; | &quot;http&quot;</code>)</h2>
 <p>Registers a bx-ai <code>IGateway</code> (a channel adapter for external delivery / human-in-the-loop approval) by name - distinct from exposing the agent's own REST API.</p>
 <pre><code class="language-javascript">// gateways/slack.bx
@@ -360,20 +360,12 @@ POST /gateways/interactions/:requestID/decisions submit a human's decision
 GET  /gateways/info                             what this mount serves
 </code></pre>
 <p>This mount is <strong>not</strong> <code>http</code>-specific. <code>http</code> is one gateway type among many, and the surface is shared: the <code>/interactions</code> routes are the human-in-the-loop approval channel for <em>every</em> gateway, resolved through bx-ai's own gateway registry rather than per-transport. So a project whose only gateway is Telegram, Slack or Discord gets the same <code>/gateways</code> mount - it needs those routes exactly as much, since a paused agent has to be answerable somehow.</p>
-<div class="adm-block adm-info">
-<div class="adm-heading">
-<svg class="adm-icon"><use xlink:href="#adm-info" /></svg><span>Info</span>
-</div>
-<div class="adm-body">
-<p>Earlier builds emitted three hand-written routes into a generated <code>handlers/Gateway.bx</code> passthrough, because ColdBox had no terminator for this surface. It does now (<code>toAiGateway()</code>, alongside <code>toAi()</code> and <code>toMCP()</code>), so the handler is gone and the interaction endpoints moved under the <code>/gateways</code> base path.</p>
-</div>
-</div>
 <div class="adm-block adm-warning">
 <div class="adm-heading">
 <svg class="adm-icon"><use xlink:href="#adm-warning" /></svg><span>Warning</span>
 </div>
 <div class="adm-body">
-<p>The mount used to be gated on <code>type: &quot;http&quot;</code> alone, which left every push-only project able to <em>pause</em> for an approval it had no endpoint to answer. Fixed - but note the routes only reach a running server, so a project relying on human-in-the-loop approval needs <a href="/next/cli-reference/index.html#serve"><code>serve</code></a> (or a real deployment), not <code>chat</code>.</p>
+<p>The routes only reach a running server, so a project relying on human-in-the-loop approval needs <a href="/next/cli-reference/index.html#serve"><code>serve</code></a> (or a real deployment), not plain <code>chat</code>.</p>
 </div>
 </div>
 <h2 id="3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends"><a href="#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends" id="3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends" name="3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends" class="anchor"></a>3. Push-style gateways (<code>type: &quot;telegram&quot;</code> / <code>&quot;slack&quot;</code> / <code>&quot;discord&quot;</code> / <code>&quot;email&quot;</code> / <code>&quot;whatsapp-cloud&quot;</code> / <code>&quot;teams&quot;</code> / <code>&quot;twilio&quot;</code> / <code>&quot;github&quot;</code> / <code>&quot;signal&quot;</code>, and friends)</h2>
@@ -418,22 +410,18 @@ aiGatewayRegistry().register( aiGateway( &quot;bxModules.bxagents.models.gateway
 </div>
 </div>
 <h3 id="gatewaysession---wiring-the-agent-to-every-push-style-gateway"><a href="#gatewaysession---wiring-the-agent-to-every-push-style-gateway" id="gatewaysession---wiring-the-agent-to-every-push-style-gateway" name="gatewaysession---wiring-the-agent-to-every-push-style-gateway" class="anchor"></a>GatewaySession - wiring the agent to every push-style gateway</h3>
-<p>Any project with at least one push-style gateway entry also gets a generated <code>interceptors/GatewaySessionBootstrap.bx</code>, which builds a single bx-ai <code>GatewaySession</code> bundling every push-style gateway in the project, bound to the project's root agent, and starts it once ColdBox itself has finished loading:</p>
-<pre><code class="language-javascript">// interceptors/GatewaySessionBootstrap.bx (GENERATED)
-class {
-	function afterConfigurationLoad( event, interceptData ) {
-		var wirebox        = getController().getWireBox()
-		var agent          = wirebox.getInstance( &quot;GeneratedAgent&quot; )
-		var gatewaySession = aiGatewaySession(
-			agent        : agent,
-			gateways     : [ aiGatewayRegistry().get( &quot;telegram&quot; ) ],
-			policy       : &quot;queue&quot;,
-			maxQueueDepth: 50
-		)
-		gatewaySession.start()
-		application.bxaiGatewaySession = gatewaySession
-	}
-}
+<p>Any project with at least one push-style gateway entry also gets a generated start-up statement in <code>Application.bx</code>'s <code>onApplicationStart()</code>. It builds a single bx-ai <code>GatewaySession</code> bundling every push-style gateway in the project, bound to the project's root agent, and starts it:</p>
+<pre><code class="language-javascript">// Application.bx, onApplicationStart() (GENERATED)
+var wirebox        = application.cbController.getWireBox()
+var agent          = wirebox.getInstance( &quot;GeneratedAgent&quot; )
+var gatewaySession = aiGatewaySession(
+	agent        : agent,
+	gateways     : [ aiGatewayRegistry().get( &quot;telegram&quot; ) ],
+	policy       : &quot;queue&quot;,
+	maxQueueDepth: 50
+)
+gatewaySession.start()
+application.bxaiGatewaySession = gatewaySession
 </code></pre>
 <div class="adm-block adm-info">
 <div class="adm-heading">
@@ -451,14 +439,13 @@ class {
 <p>The <code>aiGatewayRegistry().get(...)</code> key is always the gateway TYPE string (&quot;telegram&quot;, &quot;slack&quot;, &quot;discord&quot;, &quot;email&quot;, ...) - confirmed against bx-ai's real <code>GatewayRegistry.register()</code> source, which always keys by the gateway class's own fixed <code>getName()</code>, never anything caller-supplied. A real consequence: <strong>two <code>gateways/*</code> entries of the same push-style type collide on the same registry slot project-wide</strong> - the second registration silently overwrites the first. There's no per-entry alias today; use a distinct type per additional platform account, or wait for multi-instance support.</p>
 </div>
 </div>
-<p>An interceptor (not a raw <code>Application.bx</code>/<code>onApplicationStart()</code> statement, unlike the plain registration calls above) is used specifically because its <code>afterConfigurationLoad</code> point is guaranteed by ColdBox's own lifecycle to fire strictly after the framework - including the scheduler these gateways depend on (see below) - has finished loading.</p>
 <p>Control <code>GatewaySession</code>'s policy via an optional <code>gatewaySession</code> block on the root project's <code>Agent.yaml</code>:</p>
 <pre><code class="language-yaml"># Agent.yaml
 gatewaySession:       # both optional - these are the defaults
   policy: queue
   maxQueueDepth: 50
 </code></pre>
-<p><code>policy</code> must be one of <code>reject</code>/<code>queue</code>/<code>steer</code>/<code>interrupt</code> (bx-ai's own <code>GatewaySession</code> policy vocabulary - see <a href="#gatewaysession---wiring-the-agent-to-every-push-style-gateway">GatewaySession</a> below) - checked at <code>build</code> time so a typo fails loudly instead of surfacing as a runtime error the first time the app boots.</p>
+<p><code>policy</code> must be one of <code>reject</code>/<code>queue</code>/<code>steer</code>/<code>interrupt</code> (bx-ai's own <code>GatewaySession</code> policy vocabulary, illustrated below) - checked at <code>build</code> time so a typo fails loudly instead of surfacing as a runtime error the first time the app boots.</p>
 <div class="adm-block adm-warning">
 <div class="adm-heading">
 <svg class="adm-icon"><use xlink:href="#adm-warning" /></svg><span>Warning</span>

@@ -26,8 +26,8 @@
 
 	
 	
-		<meta name="description" content="Una entrada por destino de despliegue&#x3a; local, ssh, ftp, docker, digitalocean.">
-		<meta property="og:description" content="Una entrada por destino de despliegue&#x3a; local, ssh, ftp, docker, digitalocean.">
+		<meta name="description" content="Una entrada por destino de despliegue&#x3a; local, ssh, ftp, sftp, docker, digitalocean.">
+		<meta property="og:description" content="Una entrada por destino de despliegue&#x3a; local, ssh, ftp, sftp, docker, digitalocean.">
 	
 
 	
@@ -234,7 +234,7 @@
 		</h1>
 		
 		
-			<p class="page-summary">Una entrada por destino de despliegue&#x3a; local, ssh, ftp, docker, digitalocean.</p>
+			<p class="page-summary">Una entrada por destino de despliegue&#x3a; local, ssh, ftp, sftp, docker, digitalocean.</p>
 		
 		
 		
@@ -355,7 +355,7 @@ class {
 	timeout          : 30        // opcional, segundos, por defecto 30
 }
 </code></pre>
-<p>Requiere un <code>bxAgents package</code> previo. <code>ftp</code> requiere un <code>passwordEnvVar</code>; <code>sftp</code> acepta ya sea un <code>passwordEnvVar</code> o un <code>key</code> (ruta de archivo de clave privada SSH). <code>passwordEnvVar</code>/<code>passphraseEnvVar</code> nombran variables de entorno que contienen el secreto real - <strong>nunca el valor del secreto mismo</strong> - resueltas en vivo en tiempo de despliegue; <code>key</code> permanece como una ruta simple, ya que no es en sí misma material secreto. Cada acción de <code>bx:ftp</code> lanza en caso de fallo (conexión rechazada, autenticación rechazada, una respuesta negativa del servidor) en lugar de devolver un fallo suave - este destino captura eso y lo relanza como un <code>BxAgents.DeployFailed</code> claro, siempre cerrando la conexión después, incluso en caso de error.</p>
+<p>Requiere un <code>bxAgents package</code> previo. <code>ftp</code> requiere un <code>passwordEnvVar</code>; <code>sftp</code> acepta ya sea un <code>passwordEnvVar</code> o un <code>key</code> (ruta de archivo de clave privada SSH). <code>passwordEnvVar</code>/<code>passphraseEnvVar</code> nombran variables de entorno que contienen el secreto real - <strong>nunca el valor del secreto mismo</strong> - resueltas en vivo en tiempo de despliegue. La variable que nombran debe estar en el espacio de nombres <code>BXAGENTS_</code> (<code>^BXAGENTS_[A-Z0-9_]+$</code>); cualquier otra se rechaza con un error <code>BxAgents.InvalidDeployConfig</code>. Así una entrada de deploy - que son datos simples y fáciles de dar por buenos en una revisión - no puede nombrar un secreto ajeno que ya esté en el entorno (digamos una clave de API de un proveedor) para que se envíe al host al que apunta esa misma entrada. <code>key</code> permanece como una ruta simple, ya que no es en sí misma material secreto. Cada acción de <code>bx:ftp</code> lanza en caso de fallo (conexión rechazada, autenticación rechazada, una respuesta negativa del servidor) en lugar de devolver un fallo suave - este destino captura eso y lo relanza como un <code>BxAgents.DeployFailed</code> claro, siempre cerrando la conexión después, incluso en caso de error.</p>
 <h2 id="secrets-stay-external"><a href="#secrets-stay-external" id="secrets-stay-external" name="secrets-stay-external" class="anchor"></a>Secrets stay external</h2>
 <p>Ningún destino lee jamás un secreto (token de API, clave SSH, contraseña de registro) desde la configuración de <code>deploy/*</code> - cada credencial se resuelve desde una variable de entorno en tiempo de despliegue, coincidiendo con la regla existente de este proyecto de que las claves de API de proveedor nunca se incrustan en un build o package (ver <a href="/es/deployment-and-secrets/index.html">Despliegue y secretos</a>):</p>
 <div class="bxsites-table-wrap"><table class="table">
@@ -380,7 +380,7 @@ class {
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/conventions/deploy.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/conventions/deploy.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Oct 19, 2026, 8&#x3a;27&#x3a;57 AM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20deploy%2F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fconventions%2Fdeploy%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/conventions/deploy.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/conventions/deploy.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Oct 19, 2026, 9&#x3a;10&#x3a;40 AM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20deploy%2F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fconventions%2Fdeploy%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 

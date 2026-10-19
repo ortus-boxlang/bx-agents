@@ -254,8 +254,7 @@
 		
 		<h1 id="interceptores-y-dependencias-de-módulos"><a href="#interceptores-y-dependencias-de-módulos" id="interceptores-y-dependencias-de-módulos" name="interceptores-y-dependencias-de-módulos" class="anchor"></a>Interceptores y dependencias de módulos</h1>
 <p>Dos convenciones más pequeñas e independientes completan el cuadro: hooks de ciclo de vida
-dentro de la aplicación ColdBox generada, y las dependencias de módulos de BoxLang que tu
-agente necesita en tiempo de ejecución.</p>
+dentro de la aplicación ColdBox generada, y las dependencias de módulos de BoxLang que se declaran.</p>
 <h2 id="interceptors---hooks-de-ciclo-de-vida-de-coldbox"><a href="#interceptors---hooks-de-ciclo-de-vida-de-coldbox" id="interceptors---hooks-de-ciclo-de-vida-de-coldbox" name="interceptors---hooks-de-ciclo-de-vida-de-coldbox" class="anchor"></a><code>interceptors/</code> - hooks de ciclo de vida de ColdBox</h2>
 <p>Los archivos <code>interceptors/*.bx</code> son interceptores de ColdBox (<code>preProcess</code>, <code>postProcess</code> y
 otros puntos de enganche del ciclo de vida), acotados mediante una anotación <code>@scope</code> en la
@@ -278,18 +277,17 @@ class {
 </thead>
 <tbody>
 <tr><td><code>agent</code> (por defecto)</td><td>Se copia en la carpeta <code>interceptors/</code> de la aplicación generada - afecta solo a esta aplicación.</td></tr>
-<tr><td><code>runtime</code></td><td>Se registra contra todo el runtime de BoxLang, no solo contra esta aplicación.</td></tr>
+<tr><td><code>runtime</code></td><td>Se copia a <code>.build/runtime-interceptors</code>, fuera de la aplicación, para todo el runtime de BoxLang y no solo para esta aplicación. BxAgents no los registra por ti.</td></tr>
 </tbody>
 </table></div>
 <p>Un interceptor sin ningún <code>@scope</code> toma por defecto <code>agent</code> - la opción más estrecha y segura,
 ya que el ámbito <code>runtime</code> tiene efectos más allá de una sola aplicación. Un valor de <code>@scope</code>
 que no sea <code>agent</code> ni <code>runtime</code> hace fallar el build con un error claro.</p>
-<p>Ya has visto un interceptor <strong>generado</strong> sin haber escrito ninguno tú -
-<code>GatewaySessionBootstrap.bx</code> de la <a href="/es/course/14-connecting-chat-platforms/index.html">Lección 14</a> y
-<code>WebUiSchema.bx</code> de la <a href="/es/course/15-the-generated-web-chat-ui/index.html">Lección 15</a> funcionan exactamente así,
-solo que escritos por BxAgents en vez de por ti.</p>
+<p>Ya has visto interceptores <strong>generados</strong> sin haber escrito ninguno tú - las compuertas de
+clave de API y de inicio de sesión de la UI web de la <a href="/es/course/15-the-generated-web-chat-ui/index.html">Lección 15</a>
+se registran exactamente así, solo que escritas por BxAgents en vez de por ti.</p>
 <h2 id="modules---dependencias-de-módulos-de-boxlang"><a href="#modules---dependencias-de-módulos-de-boxlang" id="modules---dependencias-de-módulos-de-boxlang" name="modules---dependencias-de-módulos-de-boxlang" class="anchor"></a><code>modules/</code> - dependencias de módulos de BoxLang</h2>
-<p><code>modules/</code> contiene las dependencias de módulos de BoxLang que tu agente necesita - una
+<p><code>modules/</code> contiene las dependencias de módulos de BoxLang que tu agente declara - una
 subcarpeta inmediata por módulo, descubierta por nombre de carpeta (no recursivo):</p>
 <pre><code>modules/
 └── my-extra-module/
@@ -303,7 +301,8 @@ entradas de <code>modules/*</code> por nombre de carpeta:</p>
 }
 </code></pre>
 <p>Esta es la convención propia de BxAgents para declarar dependencias a efectos de validación -
-es independiente del mecanismo de carga de módulos del propio BoxLang. Las <strong>dependencias
+es independiente del mecanismo de carga de módulos del propio BoxLang, y hoy <code>build</code> valida y
+registra estas carpetas en el manifest sin cargarlas en la aplicación generada. Las <strong>dependencias
 circulares</strong> se rechazan igual que los ciclos de subagentes (consulta la
 <a href="/es/course/11-composing-subagents/index.html">Lección 11</a>): se informa del camino completo del ciclo y no se
 genera código hasta que el grafo sea acíclico. Un <code>module.json</code> es totalmente opcional - de
@@ -312,7 +311,7 @@ una carpeta de módulo que no lo tenga se asume que no declara dependencias.</p>
 <p>Añade un <code>interceptors/RequestLogger.bx</code> con una anotación explícita <code>@scope agent</code> que
 registre cada petición entrante mediante <code>writeLog()</code>, reconstruye, y comprueba
 <code>.build/app/interceptors/</code> para ver la copia, más su registro en
-<code>.build/app/config/ColdBox.bx</code>.</p>
+<code>.build/app/Application.bx</code>.</p>
 <p>Referencia completa: <a href="/es/conventions/interceptors/index.html">interceptors/</a>, <a href="/es/conventions/modules/index.html">modules/</a>.</p>
 <p>Siguiente: <a href="/es/course/19-testing-your-agent/index.html">Lección 19 - Probar tu agente</a></p>
 
@@ -320,7 +319,7 @@ registre cada petición entrante mediante <code>writeLog()</code>, reconstruye, 
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/course/18-interceptors-and-modules.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/course/18-interceptors-and-modules.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Oct 19, 2026, 8&#x3a;27&#x3a;57 AM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Lecci%C3%B3n%2018%3A%20Interceptores%20y%20dependencias%20de%20m%C3%B3dulos&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fcourse%2F18-interceptors-and-modules%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/course/18-interceptors-and-modules.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/course/18-interceptors-and-modules.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Oct 19, 2026, 9&#x3a;10&#x3a;40 AM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Lecci%C3%B3n%2018%3A%20Interceptores%20y%20dependencias%20de%20m%C3%B3dulos&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fcourse%2F18-interceptors-and-modules%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 

@@ -65,7 +65,7 @@ class {
 		return {
 			exposes : "mcp",
 			path    : "/mcp/tools",
-			target  : "local-server"   // must match an mcp/*.bx entry's declared name
+			target  : "local-server"   // must match an mcp/*.bx entry's file name
 		};
 	}
 }
@@ -92,7 +92,7 @@ Generates a real static `<path>/index.html` file (served directly - no route nee
 
 The web UI is a subsystem rather than a single exposure switch - the route list, the store, conversations and preferences, branding and theming, and why it does not use `toAi()` are all on its own page: **[The web chat UI](../web-ui.md)**.
 
-**Validation:** `exposes` must be `agent`, `mcp`, or `webui`; `path` is required and must be unique across every exposure entry; an `mcp` exposure's `target` is required and must match a real `mcp/*` entry's declared name; `webui`'s `apiKeyEnvVar` is entirely optional, with no required-field check (see below).
+**Validation:** `exposes` must be `agent`, `mcp`, or `webui`; `path` is required and must be unique across every exposure entry; an `mcp` exposure's `target` is required and must match a real `mcp/*` entry's file name; `webui`'s `apiKeyEnvVar` is entirely optional, with no required-field check (see below).
 
 ## 2. Channel-adapter gateways (`type: "mock" | "cli" | "http"`)
 
@@ -138,11 +138,8 @@ GET  /gateways/info                             what this mount serves
 
 This mount is **not** `http`-specific. `http` is one gateway type among many, and the surface is shared: the `/interactions` routes are the human-in-the-loop approval channel for *every* gateway, resolved through bx-ai's own gateway registry rather than per-transport. So a project whose only gateway is Telegram, Slack or Discord gets the same `/gateways` mount - it needs those routes exactly as much, since a paused agent has to be answerable somehow.
 
-!!! info
-    Earlier builds emitted three hand-written routes into a generated `handlers/Gateway.bx` passthrough, because ColdBox had no terminator for this surface. It does now (`toAiGateway()`, alongside `toAi()` and `toMCP()`), so the handler is gone and the interaction endpoints moved under the `/gateways` base path.
-
 !!! warning
-    The mount used to be gated on `type: "http"` alone, which left every push-only project able to *pause* for an approval it had no endpoint to answer. Fixed - but note the routes only reach a running server, so a project relying on human-in-the-loop approval needs [`serve`](../../cli-reference.md#serve) (or a real deployment), not `chat`.
+    The routes only reach a running server, so a project relying on human-in-the-loop approval needs [`serve`](../../cli-reference.md#serve) (or a real deployment), not plain `chat`.
 
 ## 3. Push-style gateways (`type: "telegram"` / `"slack"` / `"discord"` / `"email"` / `"whatsapp-cloud"` / `"teams"` / `"twilio"` / `"github"` / `"signal"`, and friends)
 
@@ -210,24 +207,20 @@ aiGatewayRegistry().register( aiGateway( "bxModules.bxagents.models.gateways.Sig
 
 ### GatewaySession - wiring the agent to every push-style gateway
 
-Any project with at least one push-style gateway entry also gets a generated `interceptors/GatewaySessionBootstrap.bx`, which builds a single bx-ai `GatewaySession` bundling every push-style gateway in the project, bound to the project's root agent, and starts it once ColdBox itself has finished loading:
+Any project with at least one push-style gateway entry also gets a generated start-up statement in `Application.bx`'s `onApplicationStart()`. It builds a single bx-ai `GatewaySession` bundling every push-style gateway in the project, bound to the project's root agent, and starts it:
 
 ```javascript
-// interceptors/GatewaySessionBootstrap.bx (GENERATED)
-class {
-	function afterConfigurationLoad( event, interceptData ) {
-		var wirebox        = getController().getWireBox()
-		var agent          = wirebox.getInstance( "GeneratedAgent" )
-		var gatewaySession = aiGatewaySession(
-			agent        : agent,
-			gateways     : [ aiGatewayRegistry().get( "telegram" ) ],
-			policy       : "queue",
-			maxQueueDepth: 50
-		)
-		gatewaySession.start()
-		application.bxaiGatewaySession = gatewaySession
-	}
-}
+// Application.bx, onApplicationStart() (GENERATED)
+var wirebox        = application.cbController.getWireBox()
+var agent          = wirebox.getInstance( "GeneratedAgent" )
+var gatewaySession = aiGatewaySession(
+	agent        : agent,
+	gateways     : [ aiGatewayRegistry().get( "telegram" ) ],
+	policy       : "queue",
+	maxQueueDepth: 50
+)
+gatewaySession.start()
+application.bxaiGatewaySession = gatewaySession
 ```
 
 !!! info
@@ -235,8 +228,6 @@ class {
 
 !!! warning
     The `aiGatewayRegistry().get(...)` key is always the gateway TYPE string ("telegram", "slack", "discord", "email", ...) - confirmed against bx-ai's real `GatewayRegistry.register()` source, which always keys by the gateway class's own fixed `getName()`, never anything caller-supplied. A real consequence: **two `gateways/*` entries of the same push-style type collide on the same registry slot project-wide** - the second registration silently overwrites the first. There's no per-entry alias today; use a distinct type per additional platform account, or wait for multi-instance support.
-
-An interceptor (not a raw `Application.bx`/`onApplicationStart()` statement, unlike the plain registration calls above) is used specifically because its `afterConfigurationLoad` point is guaranteed by ColdBox's own lifecycle to fire strictly after the framework - including the scheduler these gateways depend on (see below) - has finished loading.
 
 Control `GatewaySession`'s policy via an optional `gatewaySession` block on the root project's `Agent.yaml`:
 
@@ -247,7 +238,7 @@ gatewaySession:       # both optional - these are the defaults
   maxQueueDepth: 50
 ```
 
-`policy` must be one of `reject`/`queue`/`steer`/`interrupt` (bx-ai's own `GatewaySession` policy vocabulary - see [GatewaySession](#gatewaysession---wiring-the-agent-to-every-push-style-gateway) below) - checked at `build` time so a typo fails loudly instead of surfacing as a runtime error the first time the app boots.
+`policy` must be one of `reject`/`queue`/`steer`/`interrupt` (bx-ai's own `GatewaySession` policy vocabulary, illustrated below) - checked at `build` time so a typo fails loudly instead of surfacing as a runtime error the first time the app boots.
 
 !!! warning
     v1 limitation: exactly one `GatewaySession`, always bound to the project's root agent - matches the existing precedent that `exposes: "agent"` HTTP exposure is also always root-agent-only. A project with subagents cannot yet route different gateways to different subagents.

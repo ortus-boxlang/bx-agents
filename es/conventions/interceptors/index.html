@@ -270,25 +270,26 @@ class {
 <tr><th>Scope</th><th>Efecto</th></tr>
 </thead>
 <tbody>
-<tr><td><code>agent</code> (por defecto)</td><td>Copiado a la propia carpeta <code>interceptors/</code> de la app generada y registrado en la lista <code>interceptors</code> del <code>config/ColdBox.bx</code> generado - afecta solo a esta app.</td></tr>
-<tr><td><code>runtime</code></td><td>Copiado por separado (no dentro de la app generada) para registro de la misma manera en que un módulo de BoxLang registra sus propios interceptores - afecta a todo el runtime de BoxLang, no solo a esta app.</td></tr>
+<tr><td><code>agent</code> (por defecto)</td><td>Copiado a la propia carpeta <code>interceptors/</code> de la app generada y registrado en ColdBox cuando la app arranca - afecta solo a esta app.</td></tr>
+<tr><td><code>runtime</code></td><td>Copiado por separado a <code>.build/runtime-interceptors</code> (no dentro de la app generada), para la forma en que un módulo de BoxLang registra sus propios interceptores. BxAgents no los registra por ti: cargarlos queda de tu lado.</td></tr>
 </tbody>
 </table></div>
 <p>Un interceptor sin ninguna anotación <code>@scope</code> en absoluto tiene por defecto <code>agent</code> - la opción más estrecha y segura, ya que el scope <code>runtime</code> tiene efectos más allá de esta única app.</p>
 <p>Un valor de <code>@scope</code> que no sea <code>agent</code> ni <code>runtime</code> (sin distinguir mayúsculas/minúsculas) falla el build con un error claro - no hay respaldo silencioso para un scope mal escrito.</p>
 <h2 id="cableado-generado"><a href="#cableado-generado" id="cableado-generado" name="cableado-generado" class="anchor"></a>Cableado generado</h2>
-<p>Para los interceptores de scope <code>agent</code>, el <code>config/ColdBox.bx</code> generado obtiene una entrada por interceptor:</p>
-<pre><code class="language-javascript">interceptors = [
-	{ class : &quot;interceptors.AuditLogger&quot; }
-]
+<p>Por cada interceptor de scope <code>agent</code>, el <code>Application.bx</code> generado registra una instancia en el servicio de interceptores de ColdBox desde <code>onApplicationStart()</code>:</p>
+<pre><code class="language-javascript">application.cbController.getInterceptorService().register(
+	target: application.cbController.getWireBox().getInstance( &quot;interceptors.AuditLogger&quot; ),
+	name: &quot;AuditLogger&quot;
+)
 </code></pre>
-<p>referenciando de forma determinista a cada interceptor de scope <code>agent</code> exactamente una vez.</p>
+<p>Cada interceptor de scope <code>agent</code> se registra exactamente una vez. El <code>config/ColdBox.bx</code> generado no tiene ningún array <code>interceptors</code>: un array declarativo ahí nunca llega al servicio de interceptores de ColdBox en el stack para el que genera BxAgents, así que el registro ocurre en el arranque.</p>
 
 	
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/conventions/interceptors.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/conventions/interceptors.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Oct 19, 2026, 8&#x3a;27&#x3a;57 AM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20interceptors%2F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fconventions%2Finterceptors%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/conventions/interceptors.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/conventions/interceptors.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Oct 19, 2026, 9&#x3a;10&#x3a;40 AM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20interceptors%2F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fconventions%2Finterceptors%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 

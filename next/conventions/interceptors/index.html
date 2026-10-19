@@ -270,19 +270,20 @@ class {
 <tr><th>Scope</th><th>Effect</th></tr>
 </thead>
 <tbody>
-<tr><td><code>agent</code> (default)</td><td>Copied into the generated app's own <code>interceptors/</code> folder and registered in the generated <code>config/ColdBox.bx</code>'s <code>interceptors</code> list - affects only this app.</td></tr>
-<tr><td><code>runtime</code></td><td>Copied separately (not into the generated app) for registration the same way a BoxLang module registers its own interceptors - affects the whole BoxLang runtime, not just this app.</td></tr>
+<tr><td><code>agent</code> (default)</td><td>Copied into the generated app's own <code>interceptors/</code> folder and registered with ColdBox when the app starts - affects only this app.</td></tr>
+<tr><td><code>runtime</code></td><td>Copied separately to <code>.build/runtime-interceptors</code> (not into the generated app), for the way a BoxLang module registers its own interceptors. BxAgents does not register them for you: loading them is up to you.</td></tr>
 </tbody>
 </table></div>
 <p>An interceptor with <strong>no</strong> <code>@scope</code> annotation at all defaults to <code>agent</code> - the narrower, safer default, since <code>runtime</code> scope has effects beyond this one app.</p>
 <p>An <code>@scope</code> value that isn't <code>agent</code> or <code>runtime</code> (case-insensitive) fails the build with a clear error - there's no silent fallback for a typo'd scope.</p>
 <h2 id="generated-wiring"><a href="#generated-wiring" id="generated-wiring" name="generated-wiring" class="anchor"></a>Generated wiring</h2>
-<p>For <code>agent</code>-scope interceptors, the generated <code>config/ColdBox.bx</code> gets one entry per interceptor:</p>
-<pre><code class="language-javascript">interceptors = [
-	{ class : &quot;interceptors.AuditLogger&quot; }
-]
+<p>For each <code>agent</code>-scope interceptor, the generated <code>Application.bx</code> registers an instance with ColdBox's interceptor service from <code>onApplicationStart()</code>:</p>
+<pre><code class="language-javascript">application.cbController.getInterceptorService().register(
+	target: application.cbController.getWireBox().getInstance( &quot;interceptors.AuditLogger&quot; ),
+	name: &quot;AuditLogger&quot;
+)
 </code></pre>
-<p>deterministically referencing every agent-scope interceptor exactly once.</p>
+<p>Every agent-scope interceptor is registered exactly once. The generated <code>config/ColdBox.bx</code> has no <code>interceptors</code> array: a declarative array there never reaches ColdBox's interceptor service on the stack BxAgents generates for, so the registration happens at startup instead.</p>
 
 	
 

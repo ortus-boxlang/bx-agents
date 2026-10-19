@@ -284,12 +284,12 @@
     └── specs/
         └── AgentSpec.bx
 </code></pre>
+<p>Plus a <code>.env</code> (with <code>BOXLANG_HOME=.build/runtime</code>; put your provider API keys there too) and a <code>.gitignore</code>. BoxLang loads the <code>.env</code> from the project root itself.</p>
 <p>This is the <code>minimal</code> starter - the default when <code>--template</code> is omitted. <code>new</code> can also scaffold one of 7 other built-in starters (<code>--template=webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent</code>), each adding a bit of pre-wired content (a gateway, a scheduler) on top of the same skeleton, or skip scaffolding entirely and create the project from an existing GitHub repo (<code>--repo=owner/repo</code>) or a ForgeBox package (<code>--forgebox=&lt;slug&gt;</code>) instead - see the <a href="/cli-reference/index.html#new">CLI Reference</a> for the full list and how each one works. The agent is defined by an <code>Agent.yaml</code> by default; pass <code>--class</code> to scaffold the advanced, class-based <code>Agent.bx</code> instead (see <a href="/conventions/agent-bx/index.html">Agent.bx</a>).</p>
-<p><code>Agent.yaml</code> looks like:</p>
+<p><code>Agent.yaml</code> looks like this (<code>--description</code> adds a <code>description:</code> line):</p>
 <pre><code class="language-yaml"># Your agent. Most agents need nothing more than this file and instructions.md.
 # For code in the definition (hooks, dynamic instructions), scaffold with --class.
 name: my-agent
-description: A helpful assistant
 model: openai/gpt-5
 
 environments:
@@ -315,7 +315,7 @@ class {
 </code></pre>
 <p>See the <a href="/conventions/agent-yaml/index.html">Conventions</a> section for every other folder (<code>skills/</code>, <code>subagents/</code>, <code>gateways/</code>, <code>schedules/</code>, <code>mcp/</code>, <code>interceptors/</code>, <code>models/</code>, <code>modules/</code>).</p>
 <h2 id="3-test-it"><a href="#3-test-it" id="3-test-it" name="3-test-it" class="anchor"></a>3. Test it</h2>
-<pre><code class="language-bash">cd tests &amp;&amp; box install &amp;&amp; cd ..   # once, to fetch testbox/
+<pre><code class="language-bash">cd tests &amp;&amp; box install &amp;&amp; cd ..   # once, to fetch testbox/ (`new` already tried this for you)
 bxAgents test
 </code></pre>
 <p>The scaffolded <code>tests/specs/AgentSpec.bx</code> passes out of the box - it builds your agent against the <code>mock</code> provider (no API key or network needed) and asserts on a scripted response. See <a href="/conventions/testing/index.html">tests/</a> for <code>mockResponses()</code> and the custom matchers (<code>toHaveCalledTool</code>, etc.) available to your own specs.</p>
@@ -323,7 +323,7 @@ bxAgents test
 <pre><code class="language-bash">bxAgents build
 </code></pre>
 <p>Runs the full <a href="/build-pipeline/index.html">build pipeline</a> - config resolution, discovery, validation, code generation, manifest normalization - and writes a real ColdBox application to <code>.build/app/</code>, plus <code>.build/manifest.json</code>. Run <code>bxAgents build --environment=production</code> to build against an <code>Agent.yaml</code> environment override (see <a href="/conventions/agent-yaml/index.html#environments">Agent.yaml</a>).</p>
-<p>If your project fails validation (duplicate tool names, a bad cron expression, an unknown model provider, ...) <code>build</code> fails with every collected error - not just the first one.</p>
+<p>If your project fails validation (duplicate tool names, an unknown model provider, a gateway entry with a bad path, ...) <code>build</code> fails with every collected error - not just the first one.</p>
 <h2 id="5-run-it"><a href="#5-run-it" id="5-run-it" name="5-run-it" class="anchor"></a>5. Run it</h2>
 <p>Two ways to talk to the built agent - both load the exact same <code>GeneratedAgentFactory.bx</code> and build the exact same agent tree, so they never diverge:</p>
 <p><strong>Interactively, from the terminal:</strong></p>
@@ -362,7 +362,7 @@ bxAgents deploy --destination=/path/to/somewhere   # copies the newest .bxa ther
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/getting-started/quick-start.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/getting-started/quick-start.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Oct 19, 2026, 8&#x3a;27&#x3a;57 AM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Quick%20Start&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fgetting-started%2Fquick-start%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/getting-started/quick-start.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/getting-started/quick-start.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Oct 19, 2026, 9&#x3a;10&#x3a;40 AM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Quick%20Start&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fgetting-started%2Fquick-start%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 

@@ -143,7 +143,7 @@ Solo se aplica el bloque del entorno activo, encima de los ajustes de nivel supe
 !!! note
     Un `Agent.yaml` no puede calcular su entorno. El método `detectEnvironment()` descrito en [Overrides de entorno](agent-bx.md#overrides-de-entorno) necesita código, así que un proyecto que lo necesite usa un `Agent.bx`.
 
-Las sobreescrituras se fusionan luego con `boxlang.json`, `boxlang-{environment}.json`, `miniserver.json` y `miniserver-{environment}.json` exactamente como se describe en [Semántica de fusión](agent-bx.md#semantica-de-fusion).
+Las sobreescrituras se fusionan luego con `boxlang.json`, `boxlang-{environment}.json`, `miniserver.json` y `miniserver-{environment}.json` exactamente como se describe en [Semántica de fusión](agent-bx.md#semántica-de-fusión).
 
 ## Requisitos
 

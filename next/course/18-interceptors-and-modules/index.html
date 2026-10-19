@@ -254,7 +254,7 @@
 		
 		<h1 id="interceptors-and-module-dependencies"><a href="#interceptors-and-module-dependencies" id="interceptors-and-module-dependencies" name="interceptors-and-module-dependencies" class="anchor"></a>Interceptors and Module Dependencies</h1>
 <p>Two smaller, independent conventions round out the picture: lifecycle hooks into the
-generated ColdBox app, and BoxLang module dependencies your agent needs at runtime.</p>
+generated ColdBox app, and declared BoxLang module dependencies.</p>
 <h2 id="interceptors---coldbox-lifecycle-hooks"><a href="#interceptors---coldbox-lifecycle-hooks" id="interceptors---coldbox-lifecycle-hooks" name="interceptors---coldbox-lifecycle-hooks" class="anchor"></a><code>interceptors/</code> - ColdBox lifecycle hooks</h2>
 <p><code>interceptors/*.bx</code> are ColdBox interceptors (<code>preProcess</code>, <code>postProcess</code>, and other
 lifecycle hook points), scoped via an <code>@scope</code> annotation on the class itself:</p>
@@ -276,18 +276,17 @@ class {
 </thead>
 <tbody>
 <tr><td><code>agent</code> (default)</td><td>Copied into the generated app's own <code>interceptors/</code> folder - affects only this app.</td></tr>
-<tr><td><code>runtime</code></td><td>Registered against the whole BoxLang runtime, not just this app.</td></tr>
+<tr><td><code>runtime</code></td><td>Copied to <code>.build/runtime-interceptors</code>, outside the app, for the whole BoxLang runtime rather than just this app. BxAgents does not register these for you.</td></tr>
 </tbody>
 </table></div>
 <p>An interceptor with no <code>@scope</code> at all defaults to <code>agent</code> - the narrower, safer
 choice, since <code>runtime</code> scope has effects beyond one app. An <code>@scope</code> value that isn't
 <code>agent</code> or <code>runtime</code> fails the build with a clear error.</p>
-<p>You've already seen a <strong>generated</strong> interceptor without writing one yourself -
-<code>GatewaySessionBootstrap.bx</code> from <a href="/next/course/14-connecting-chat-platforms/index.html">Lesson 14</a> and
-<code>WebUiSchema.bx</code> from <a href="/next/course/15-the-generated-web-chat-ui/index.html">Lesson 15</a> both work exactly
-this way, just written by BxAgents instead of by you.</p>
+<p>You've already seen <strong>generated</strong> interceptors without writing one yourself - the web
+UI's API-key and login gates from <a href="/next/course/15-the-generated-web-chat-ui/index.html">Lesson 15</a> are
+registered exactly this way, just written by BxAgents instead of by you.</p>
 <h2 id="modules---boxlang-module-dependencies"><a href="#modules---boxlang-module-dependencies" id="modules---boxlang-module-dependencies" name="modules---boxlang-module-dependencies" class="anchor"></a><code>modules/</code> - BoxLang module dependencies</h2>
-<p><code>modules/</code> holds BoxLang module dependencies your agent needs - one immediate
+<p><code>modules/</code> holds BoxLang module dependencies your agent declares - one immediate
 subfolder per module, discovered by folder name (not recursive):</p>
 <pre><code>modules/
 └── my-extra-module/
@@ -301,7 +300,8 @@ subfolder per module, discovered by folder name (not recursive):</p>
 }
 </code></pre>
 <p>This is BxAgents' own dependency-declaration convention for validation purposes - it's
-independent of BoxLang's own module-loading mechanism. <strong>Circular dependencies</strong> are
+independent of BoxLang's own module-loading mechanism, and today <code>build</code> validates and
+records these folders in the manifest without loading them into the generated app. <strong>Circular dependencies</strong> are
 rejected the same way subagent cycles are (see <a href="/next/course/11-composing-subagents/index.html">Lesson 11</a>):
 full cycle path reported, no code generation until the graph is acyclic. A
 <code>module.json</code> is entirely optional - a module folder with none is assumed to have no
@@ -310,7 +310,7 @@ declared dependencies.</p>
 <p>Add an <code>interceptors/RequestLogger.bx</code> with an explicit <code>@scope agent</code> annotation that
 logs every incoming request via <code>writeLog()</code>, rebuild, and check
 <code>.build/app/interceptors/</code> for the copy plus its registration in
-<code>.build/app/config/ColdBox.bx</code>.</p>
+<code>.build/app/Application.bx</code>.</p>
 <p>Full reference: <a href="/next/conventions/interceptors/index.html">interceptors/</a>, <a href="/next/conventions/modules/index.html">modules/</a>.</p>
 <p>Next: <a href="/next/course/19-testing-your-agent/index.html">Lesson 19 - Testing Your Agent</a></p>
 

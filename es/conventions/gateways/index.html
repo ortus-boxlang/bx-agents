@@ -311,7 +311,7 @@ class {
 		return {
 			exposes : &quot;mcp&quot;,
 			path    : &quot;/mcp/tools&quot;,
-			target  : &quot;local-server&quot;   // debe coincidir con el nombre declarado de una entrada mcp/*.bx
+			target  : &quot;local-server&quot;   // debe coincidir con el nombre de archivo de una entrada mcp/*.bx
 		};
 	}
 }
@@ -331,7 +331,7 @@ class {
 </code></pre>
 <p>Genera un archivo estático real <code>&lt;path&gt;/index.html</code> (servido directamente - no se necesita ruta para él) más su propia API dedicada bajo un prefijo fijo <code>&lt;path&gt;/api</code>, así que nunca colisiona con los propios archivos del shell. Esa API es un <code>handlers/ChatUi.bx</code> generado en lugar de <code>toAi()</code>, y la entrada también trae consigo un almacén SQLite generado.</p>
 <p>La interfaz web es un subsistema en lugar de un simple interruptor de exposición - la lista de rutas, el almacén, las conversaciones y preferencias, el branding y la temática, y por qué no usa <code>toAi()</code> están todos en su propia página: <strong><a href="/es/conventions/web-ui/index.html">La interfaz web de chat</a></strong>.</p>
-<p><strong>Validación:</strong> <code>exposes</code> debe ser <code>agent</code>, <code>mcp</code>, o <code>webui</code>; <code>path</code> es requerido y debe ser único a través de cada entrada de exposición; el <code>target</code> de una exposición <code>mcp</code> es requerido y debe coincidir con el nombre declarado de una entrada real <code>mcp/*</code>; el <code>apiKeyEnvVar</code> de <code>webui</code> es completamente opcional, sin ninguna comprobación de campo requerido (ver abajo).</p>
+<p><strong>Validación:</strong> <code>exposes</code> debe ser <code>agent</code>, <code>mcp</code>, o <code>webui</code>; <code>path</code> es requerido y debe ser único a través de cada entrada de exposición; el <code>target</code> de una exposición <code>mcp</code> es requerido y debe coincidir con el nombre de archivo de una entrada real <code>mcp/*</code>; el <code>apiKeyEnvVar</code> de <code>webui</code> es completamente opcional, sin ninguna comprobación de campo requerido (ver abajo).</p>
 <h2 id="2-gateways-de-channel-adapter-type-mock--cli--http"><a href="#2-gateways-de-channel-adapter-type-mock--cli--http" id="2-gateways-de-channel-adapter-type-mock--cli--http" name="2-gateways-de-channel-adapter-type-mock--cli--http" class="anchor"></a>2. Gateways de channel-adapter (<code>type: &quot;mock&quot; | &quot;cli&quot; | &quot;http&quot;</code>)</h2>
 <p>Registra un <code>IGateway</code> de bx-ai (un channel adapter para entrega externa / aprobación human-in-the-loop) por nombre - distinto de exponer la propia API REST del agente.</p>
 <pre><code class="language-javascript">// gateways/slack.bx
@@ -360,20 +360,12 @@ POST /gateways/interactions/:requestID/decisions enviar la decisión de una pers
 GET  /gateways/info                             qué sirve este montaje
 </code></pre>
 <p>Este montaje <strong>no</strong> es específico de <code>http</code>. <code>http</code> es un tipo de gateway entre muchos, y la superficie es compartida: las rutas <code>/interactions</code> son el canal de aprobación human-in-the-loop para <em>todos</em> los gateways, resuelto a través del propio registro de gateways de bx-ai y no por transporte. Así que un proyecto cuyo único gateway sea Telegram, Slack o Discord obtiene el mismo montaje <code>/gateways</code> - necesita esas rutas exactamente igual, ya que un agente pausado tiene que poder responderse de algún modo.</p>
-<div class="adm-block adm-info">
-<div class="adm-heading">
-<svg class="adm-icon"><use xlink:href="#adm-info" /></svg><span>Info</span>
-</div>
-<div class="adm-body">
-<p>Builds anteriores emitían tres rutas escritas a mano hacia un passthrough generado <code>handlers/Gateway.bx</code>, porque ColdBox no tenía terminador para esta superficie. Ahora sí lo tiene (<code>toAiGateway()</code>, junto a <code>toAi()</code> y <code>toMCP()</code>), así que el handler desapareció y los endpoints de interacción se movieron bajo la ruta base <code>/gateways</code>.</p>
-</div>
-</div>
 <div class="adm-block adm-warning">
 <div class="adm-heading">
 <svg class="adm-icon"><use xlink:href="#adm-warning" /></svg><span>Warning</span>
 </div>
 <div class="adm-body">
-<p>El montaje solía estar condicionado únicamente a <code>type: &quot;http&quot;</code>, lo que dejaba a todo proyecto push-only capaz de <em>pausarse</em> esperando una aprobación que no tenía endpoint para responder. Corregido - pero ten en cuenta que las rutas solo existen en un servidor en ejecución, así que un proyecto que dependa de la aprobación human-in-the-loop necesita <a href="/es/cli-reference/index.html#serve"><code>serve</code></a> (o un despliegue real), no <code>chat</code>.</p>
+<p>Las rutas solo existen en un servidor en ejecución, así que un proyecto que dependa de la aprobación human-in-the-loop necesita <a href="/es/cli-reference/index.html#serve"><code>serve</code></a> (o un despliegue real), no <code>chat</code> a secas.</p>
 </div>
 </div>
 <h2 id="3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends"><a href="#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends" id="3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends" name="3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends" class="anchor"></a>3. Push-style gateways (<code>type: &quot;telegram&quot;</code> / <code>&quot;slack&quot;</code> / <code>&quot;discord&quot;</code> / <code>&quot;email&quot;</code> / <code>&quot;whatsapp-cloud&quot;</code> / <code>&quot;teams&quot;</code> / <code>&quot;twilio&quot;</code> / <code>&quot;github&quot;</code> / <code>&quot;signal&quot;</code>, and friends)</h2>
@@ -418,22 +410,18 @@ aiGatewayRegistry().register( aiGateway( &quot;bxModules.bxagents.models.gateway
 </div>
 </div>
 <h3 id="gatewaysession---wiring-the-agent-to-every-push-style-gateway"><a href="#gatewaysession---wiring-the-agent-to-every-push-style-gateway" id="gatewaysession---wiring-the-agent-to-every-push-style-gateway" name="gatewaysession---wiring-the-agent-to-every-push-style-gateway" class="anchor"></a>GatewaySession - wiring the agent to every push-style gateway</h3>
-<p>Cualquier proyecto con al menos una entrada de gateway de estilo push también obtiene un <code>interceptors/GatewaySessionBootstrap.bx</code> generado, que construye un único <code>GatewaySession</code> de bx-ai que agrupa cada gateway de estilo push en el proyecto, vinculado al agente raíz del proyecto, y lo inicia una vez que ColdBox mismo ha terminado de cargar:</p>
-<pre><code class="language-javascript">// interceptors/GatewaySessionBootstrap.bx (GENERADO)
-class {
-	function afterConfigurationLoad( event, interceptData ) {
-		var wirebox        = getController().getWireBox()
-		var agent          = wirebox.getInstance( &quot;GeneratedAgent&quot; )
-		var gatewaySession = aiGatewaySession(
-			agent        : agent,
-			gateways     : [ aiGatewayRegistry().get( &quot;telegram&quot; ) ],
-			policy       : &quot;queue&quot;,
-			maxQueueDepth: 50
-		)
-		gatewaySession.start()
-		application.bxaiGatewaySession = gatewaySession
-	}
-}
+<p>Cualquier proyecto con al menos una entrada de gateway de estilo push también obtiene una sentencia de arranque generada en el <code>onApplicationStart()</code> de <code>Application.bx</code>. Construye un único <code>GatewaySession</code> de bx-ai que agrupa cada gateway de estilo push en el proyecto, vinculado al agente raíz del proyecto, y lo inicia:</p>
+<pre><code class="language-javascript">// Application.bx, onApplicationStart() (GENERADO)
+var wirebox        = application.cbController.getWireBox()
+var agent          = wirebox.getInstance( &quot;GeneratedAgent&quot; )
+var gatewaySession = aiGatewaySession(
+	agent        : agent,
+	gateways     : [ aiGatewayRegistry().get( &quot;telegram&quot; ) ],
+	policy       : &quot;queue&quot;,
+	maxQueueDepth: 50
+)
+gatewaySession.start()
+application.bxaiGatewaySession = gatewaySession
 </code></pre>
 <div class="adm-block adm-info">
 <div class="adm-heading">
@@ -451,14 +439,13 @@ class {
 <p>La clave de <code>aiGatewayRegistry().get(...)</code> es siempre la cadena de TIPO del gateway (&quot;telegram&quot;, &quot;slack&quot;, &quot;discord&quot;, &quot;email&quot;, ...) - confirmado contra el propio código fuente real de <code>GatewayRegistry.register()</code> de bx-ai, que siempre indexa por el propio <code>getName()</code> fijo de la clase del gateway, nunca nada suministrado por el llamador. Una consecuencia real: <strong>dos entradas <code>gateways/*</code> del mismo tipo de estilo push colisionan en el mismo slot de registro a nivel de todo el proyecto</strong> - el segundo registro silenciosamente sobrescribe al primero. No hay alias por entrada hoy; usa un tipo distinto por cada cuenta de plataforma adicional, o espera al soporte multi-instancia.</p>
 </div>
 </div>
-<p>Un interceptor (no una sentencia cruda de <code>Application.bx</code>/<code>onApplicationStart()</code>, a diferencia de las llamadas de registro simples de arriba) se usa específicamente porque su punto <code>afterConfigurationLoad</code> está garantizado por el propio ciclo de vida de ColdBox de dispararse estrictamente después de que el framework - incluyendo el scheduler del que estos gateways dependen (ver abajo) - haya terminado de cargar.</p>
 <p>Controla la política de <code>GatewaySession</code> vía un bloque opcional <code>gatewaySession</code> en el propio <code>Agent.yaml</code> del proyecto raíz:</p>
 <pre><code class="language-yaml"># Agent.yaml
 gatewaySession:       # ambos opcionales - estos son los valores por defecto
   policy: queue
   maxQueueDepth: 50
 </code></pre>
-<p><code>policy</code> debe ser uno de <code>reject</code>/<code>queue</code>/<code>steer</code>/<code>interrupt</code> (el propio vocabulario de política de <code>GatewaySession</code> de bx-ai - ver <a href="#gatewaysession---wiring-the-agent-to-every-push-style-gateway">GatewaySession</a> abajo) - comprobado en tiempo de <code>build</code> para que un typo falle ruidosamente en lugar de salir a la superficie como un error de runtime la primera vez que la app arranca.</p>
+<p><code>policy</code> debe ser uno de <code>reject</code>/<code>queue</code>/<code>steer</code>/<code>interrupt</code> (el propio vocabulario de política de <code>GatewaySession</code> de bx-ai, ilustrado abajo) - comprobado en tiempo de <code>build</code> para que un typo falle ruidosamente en lugar de salir a la superficie como un error de runtime la primera vez que la app arranca.</p>
 <div class="adm-block adm-warning">
 <div class="adm-heading">
 <svg class="adm-icon"><use xlink:href="#adm-warning" /></svg><span>Warning</span>
@@ -508,7 +495,7 @@ gatewaySession:       # ambos opcionales - estos son los valores por defecto
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/conventions/gateways/index.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/conventions/gateways/index.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Oct 19, 2026, 8&#x3a;27&#x3a;57 AM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20gateways%2F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fconventions%2Fgateways%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/conventions/gateways/index.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/conventions/gateways/index.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Oct 19, 2026, 9&#x3a;10&#x3a;40 AM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20gateways%2F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fconventions%2Fgateways%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 

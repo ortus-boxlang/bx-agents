@@ -281,12 +281,12 @@
     └── specs/
         └── AgentSpec.bx
 </code></pre>
+<p>Más un <code>.env</code> (con <code>BOXLANG_HOME=.build/runtime</code>; pon ahí también las claves de API de tu proveedor) y un <code>.gitignore</code>. BoxLang carga por sí mismo el <code>.env</code> desde la raíz del proyecto.</p>
 <p>Este es el starter <code>minimal</code> - el predeterminado cuando se omite <code>--template</code>. <code>new</code> también puede generar uno de otros 7 starters incorporados (<code>--template=webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent</code>), cada uno añadiendo un poco de contenido preconfigurado (un gateway, un scheduler) sobre el mismo esqueleto, o saltarse el andamiaje por completo y crear el proyecto a partir de un repositorio de GitHub existente (<code>--repo=owner/repo</code>) o un paquete de ForgeBox (<code>--forgebox=&lt;slug&gt;</code>) en su lugar - ver la <a href="/es/cli-reference/index.html#new">Referencia de la CLI</a> para la lista completa y cómo funciona cada uno. El agente se define por defecto con un <code>Agent.yaml</code>; pasa <code>--class</code> para generar en su lugar el <code>Agent.bx</code> avanzado basado en clase (ver <a href="/es/conventions/agent-bx/index.html">Agent.bx</a>).</p>
-<p><code>Agent.yaml</code> se ve así:</p>
+<p><code>Agent.yaml</code> se ve así (<code>--description</code> añade una línea <code>description:</code>):</p>
 <pre><code class="language-yaml"># Your agent. Most agents need nothing more than this file and instructions.md.
 # For code in the definition (hooks, dynamic instructions), scaffold with --class.
 name: my-agent
-description: A helpful assistant
 model: openai/gpt-5
 
 environments:
@@ -312,7 +312,7 @@ class {
 </code></pre>
 <p>Ver la sección de <a href="/es/conventions/agent-yaml/index.html">Convenciones</a> para cada otra carpeta (<code>skills/</code>, <code>subagents/</code>, <code>gateways/</code>, <code>schedules/</code>, <code>mcp/</code>, <code>interceptors/</code>, <code>models/</code>, <code>modules/</code>).</p>
 <h2 id="3-pruébalo"><a href="#3-pruébalo" id="3-pruébalo" name="3-pruébalo" class="anchor"></a>3. Pruébalo</h2>
-<pre><code class="language-bash">cd tests &amp;&amp; box install &amp;&amp; cd ..   # una vez, para obtener testbox/
+<pre><code class="language-bash">cd tests &amp;&amp; box install &amp;&amp; cd ..   # una vez, para obtener testbox/ (`new` ya lo intentó por ti)
 bxAgents test
 </code></pre>
 <p>El <code>tests/specs/AgentSpec.bx</code> generado pasa de inmediato - construye tu agente contra el proveedor <code>mock</code> (sin necesidad de clave de API ni red) y afirma sobre una respuesta guionizada. Ver <a href="/es/conventions/testing/index.html">tests/</a> para <code>mockResponses()</code> y los matchers personalizados (<code>toHaveCalledTool</code>, etc.) disponibles para tus propios specs.</p>
@@ -320,7 +320,7 @@ bxAgents test
 <pre><code class="language-bash">bxAgents build
 </code></pre>
 <p>Ejecuta el <a href="/es/build-pipeline/index.html">pipeline de build</a> completo - resolución de configuración, descubrimiento, validación, generación de código, normalización de manifest - y escribe una aplicación ColdBox real en <code>.build/app/</code>, más <code>.build/manifest.json</code>. Ejecuta <code>bxAgents build --environment=production</code> para construir contra un override de entorno de <code>Agent.yaml</code> (ver <a href="/es/conventions/agent-yaml/index.html#entornos">Agent.yaml</a>).</p>
-<p>Si tu proyecto falla la validación (nombres de tool duplicados, una expresión cron mala, un proveedor de modelo desconocido, ...) <code>build</code> falla con todos los errores recopilados - no solo el primero.</p>
+<p>Si tu proyecto falla la validación (nombres de tool duplicados, un proveedor de modelo desconocido, una entrada de gateway con una ruta incorrecta, ...) <code>build</code> falla con todos los errores recopilados - no solo el primero.</p>
 <h2 id="5-ejecútalo"><a href="#5-ejecútalo" id="5-ejecútalo" name="5-ejecútalo" class="anchor"></a>5. Ejecútalo</h2>
 <p>Dos formas de hablar con el agente construido - ambas cargan exactamente el mismo <code>GeneratedAgentFactory.bx</code> y construyen exactamente el mismo árbol de agentes, así que nunca divergen:</p>
 <p><strong>De forma interactiva, desde la terminal:</strong></p>
@@ -359,7 +359,7 @@ bxAgents deploy --destination=/path/to/somewhere   # copia el .bxa más nuevo al
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/getting-started/quick-start.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/getting-started/quick-start.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Oct 19, 2026, 8&#x3a;27&#x3a;57 AM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Inicio%20r%C3%A1pido&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fgetting-started%2Fquick-start%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/getting-started/quick-start.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/getting-started/quick-start.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Oct 19, 2026, 9&#x3a;10&#x3a;40 AM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Inicio%20r%C3%A1pido&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fgetting-started%2Fquick-start%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 
