@@ -44,7 +44,33 @@ mcpServers:
     name: other
 ```
 
-Each entry is either a bare URL string or a `{ url, name }` struct. These are reduced to a bare array of URLs and passed straight into the generated `aiAgent(mcpServers: [...])` call. **No network connection is ever attempted at build time** - reachability is a runtime concern; an unreachable server at build time is not a build error.
+Each entry is either a bare URL string or a mapping. A mapping can carry the credentials the server wants:
+
+```yaml
+mcpServers:
+  - name: github
+    url: https://api.githubcopilot.com/mcp/
+    token: ${env.GITHUB_PERSONAL_ACCESS_TOKEN}
+  - url: https://other.com/mcp
+    headers:
+      X-Api-Key: ${env.OTHER_API_KEY}
+    timeout: 20000
+```
+
+| Key | Meaning |
+|---|---|
+| `url` | Required. The server's address |
+| `name` | A label for the file. It is not sent to the server |
+| `token` | A bearer token. Must be an `${env.NAME}` placeholder: a token written in the file is a build error |
+| `password`, `user` | Basic authentication. `password` must be an `${env.NAME}` placeholder |
+| `headers` | Extra request headers. Values can use `${env.NAME}` |
+| `timeout` | Milliseconds |
+
+Placeholders are replaced with the environment variable **when the app starts**, never at build time, so a secret stays out of the project and out of a packaged `.bxa`. A variable that is not set fails the agent at startup and names it; one that is set but empty lets the agent start, the server refuses the connection, and bx-ai logs that and carries on without that server's tools. Any other key is a build error that lists the valid ones.
+
+The entries are passed into the generated `aiAgent(mcpServers: [...])` call. **No network connection is ever attempted at build time** - reachability is a runtime concern; an unreachable server at build time is not a build error. This is for servers reached over the web. Servers that run as a local program are not supported by the bx-ai bundled with this release.
+
+[`bxAgents new`](../guides/new-wizard.md#mcp-servers) offers GitHub, Stripe, Notion, Atlassian, Cloudflare and Supabase and writes the entry and the `.env` stub for you.
 
 Subagents can declare their own `mcpServers` independently - each node in the agent tree gets its own resolved list.
 

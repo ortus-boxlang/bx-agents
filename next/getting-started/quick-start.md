@@ -16,10 +16,16 @@ This walks through the full lifecycle of a BxAgents project: scaffold, edit, bui
 ## 1. Scaffold a project
 
 ```bash
+bxAgents new my-agent
+```
+
+At a terminal this asks what the agent should do (its model, tools, MCP servers, channels, how people reach it, where it deploys) and writes the project to match; see [the new wizard](../guides/new-wizard.md). To skip the questions, pass a model:
+
+```bash
 bxAgents new my-agent --model=openai/gpt-5
 ```
 
-`--model` is required (a `provider/model` slug - see [the model slug](../conventions/agent-bx.md#the-model-slug) for how it's parsed). `--name` and `--description` are optional; `--name` defaults to the target directory's own name.
+`--model` is a `provider/model` slug - see [the model slug](../conventions/agent-bx.md#the-model-slug) for how it's parsed. `--name` and `--description` are optional; `--name` defaults to the target directory's own name.
 
 This creates:
 

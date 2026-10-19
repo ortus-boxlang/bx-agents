@@ -13,10 +13,16 @@ Esto recorre el ciclo de vida completo de un proyecto BxAgents: generar el andam
 ## 1. Genera el andamiaje de un proyecto
 
 ```bash
+bxAgents new my-agent
+```
+
+En una terminal esto pregunta qué debe hacer el agente (su modelo, tools, servidores MCP, canales, cómo llega la gente a él, dónde se despliega) y escribe el proyecto a la medida; ver [el asistente de new](../guides/new-wizard.md). Para omitir las preguntas, pasa un modelo:
+
+```bash
 bxAgents new my-agent --model=openai/gpt-5
 ```
 
-`--model` es requerido (un slug `provider/model` - ver [el slug de modelo](../conventions/agent-bx.md#the-model-slug) para cómo se analiza). `--name` y `--description` son opcionales; `--name` por defecto toma el propio nombre del directorio destino.
+`--model` es un slug `provider/model` - ver [el slug de modelo](../conventions/agent-bx.md#the-model-slug) para cómo se analiza. `--name` y `--description` son opcionales; `--name` por defecto toma el propio nombre del directorio destino.
 
 Esto crea:
 

@@ -99,11 +99,17 @@ Diagnostica el runtime y el proyecto antes de que build o serve te sorprendan.
 
 ### `new`
 
-Crea un nuevo proyecto de agente de una de tres formas mutuamente excluyentes: generar el andamiaje desde una plantilla incorporada, clonar un repositorio de GitHub, o instalar un paquete de ForgeBox.
+Crea un nuevo proyecto de agente de una de tres formas mutuamente excluyentes: generar el andamiaje (respondiendo preguntas en una terminal, o con opciones), clonar un repositorio de GitHub, o instalar un paquete de ForgeBox.
 
 ```bash
-# Generar el andamiaje desde una plantilla incorporada (por defecto: minimal)
+# En una terminal: responde preguntas (ver la guía del asistente de new)
+bxAgents new my-agent
+
+# Generar el andamiaje con opciones (plantilla por defecto: minimal)
 bxAgents new my-agent --model=openai/gpt-5 [--template=minimal|webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent] [--name=...] [--description=...] [--class] [--skipInstall]
+
+# Lo mismo, añadiendo lo que ofrecería el asistente
+bxAgents new my-agent --model=claude --with=time,search --search=brave --mcp=github --channels=web,telegram --guard=flag
 
 # Clonar un repositorio de GitHub existente
 bxAgents new my-agent --repo=owner/repo-name
@@ -112,9 +118,10 @@ bxAgents new my-agent --repo=owner/repo-name
 bxAgents new my-agent --forgebox=some-package-slug
 ```
 
+- Sin `--model`, sin `--repo` y sin `--forgebox`, en una terminal, `new` ejecuta el [asistente](guides/new-wizard.md). `--no-wizard` o `--yes` lo desactiva, `--wizard` lo activa incluso con un `--model`, y `--no-tui` hace las mismas preguntas como líneas numeradas. Un `--model` por sí solo nunca lo inicia, porque los scripts siempre han tenido que pasar uno. Las opciones del asistente (`--with`, `--search`, `--files`, `--files-dir`, `--memory`, `--mcp`, `--channels`, `--web-auth`, `--guard`, `--deploy` y los detalles de despliegue) están en la [guía del asistente](guides/new-wizard.md#sin-el-asistente); un valor incorrecto nombra la opción y qué acepta. Necesitan `Agent.yaml`, así que no se pueden combinar con `--class`.
 - `--template`, `--repo` y `--forgebox` nombran tres FUENTES de proyecto distintas - se aplica exactamente una. Combinar dos de ellas es un error.
 - **Modo `--template`** (el predeterminado cuando no se pasa ninguna opción de fuente - `minimal`):
-  - `--model` es **requerido** - un slug `provider/model` (ver [el slug de modelo](conventions/agent-bx.md#the-model-slug)).
+  - `--model` es **requerido** cuando no se hacen preguntas - un slug `provider/model` (ver [el slug de modelo](conventions/agent-bx.md#the-model-slug)).
   - `--name` por defecto toma el propio nombre base del directorio destino.
   - Se niega a ejecutarse si el destino ya contiene un `Agent.yaml` o un `Agent.bx`.
   - Crea [`Agent.yaml`](conventions/agent-yaml.md), `instructions.md`, cada carpeta de convención (vacía), un [`box.json`](conventions/box-json.md) en la raíz (`testbox` como dependencia de desarrollo, instalada en `lib/testbox`), una carpeta [`tests/`](conventions/testing.md) lista para ejecutar (`tests/specs/AgentSpec.bx`), un `.env` que declara `BOXLANG_HOME=.build/runtime` (coincidiendo con el propio home de runtime delimitado que usa `serve`), y un `.gitignore` (`.build/`, `dist/`, `.env`, `lib/`, `boxlang_modules/`). Nunca sobrescribe un `.env`/`.gitignore` existente. BoxLang y `boxlang-miniserver` cargan por sí mismos un `.env` desde la raíz del proyecto, así que el archivo también sirve para tus claves de API; BxAgents nunca lo lee, lo copia ni lo empaqueta.

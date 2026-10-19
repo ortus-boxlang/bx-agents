@@ -10,6 +10,8 @@ tags: [reference, cli, templates]
 
 `bxAgents new` crea un proyecto de una de tres formas mutuamente excluyentes - consulta la [Referencia de la CLI](cli-reference.md#new) para la sintaxis exacta de los flags y las reglas de validación. Esta página entra a fondo en las tres: qué genera exactamente cada `--template` integrado, qué aspecto debe tener un origen `--repo`/`--forgebox` para funcionar como fuente de proyecto, y cómo construir y publicar el tuyo.
 
+Una plantilla es la **forma** de la que parte un proyecto. El [asistente de new](guides/new-wizard.md) te deja elegir una (un agente, un equipo, un agente programado, un servidor MCP) y luego añade encima las tools, servidores MCP, canales y destino de despliegue que elijas, de modo que plantilla y elecciones se combinan. Las plantillas de canal de abajo (`slack-bot`, `telegram-bot`, `github-bot`, `webui-chat`) son lo mismo que elegir ese canal en el asistente.
+
 ```bash
 bxAgents new my-agent --model=openai/gpt-5 --template=<nombre>   # una plantilla integrada
 bxAgents new my-agent --repo=owner/repo-name                     # clonar un repositorio de GitHub

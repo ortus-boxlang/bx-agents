@@ -36,7 +36,7 @@ environments:
 | `tools` | lista de strings | Tools de módulos que recibe este agente, como `item@module` o `*@module`. Ver [Tools](#tools). |
 | `toolOptions` | mapping | Opciones de las tools de un módulo, con el nombre del módulo como clave. Ver [Opciones de tools](#opciones-de-tools). |
 | `subAgents` | lista de strings | Nombres de carpetas hermanas bajo el `subagents/` del proyecto raíz. Ver [subagents/](subagents.md). |
-| `mcpServers` | lista | Servidores MCP remotos - cada entrada es un string de URL o `{ url, name }`. Ver [mcp/](mcp.md). |
+| `mcpServers` | lista | Servidores MCP remotos - cada entrada es un string de URL, o un mapa con `url`, `name` y las credenciales que pida el servidor (`token`, `headers`, `timeout`). Ver [mcp/](mcp.md). |
 | `security` | mapa | Se reenvía tal cual a los ajustes del módulo `bxai` de la app generada; el `SecurityDirector` de bx-ai lo convierte en middleware de guardarraíles. |
 | `memory` | string o mapa | La memoria de conversación del agente. Un string suelto es el tipo (`cache`); un mapa es `{ type, ...config }` y se pasa a `aiMemory()`. |
 | `checkpointer` | mapa | `{ type: cache\|file\|jdbc, ...config }`. Por defecto `{ type: cache }` si se omite. |
@@ -76,7 +76,7 @@ tools:
 
 ### Opciones de tools
 
-`toolOptions` configura las tools de un módulo, con el **nombre del módulo** como clave. Hoy el único módulo que acepta opciones es `bxplaywright`, cuyas opciones son las de `playwright()` de bx-playwright: un `profile` (un nombre o una lista) y ajustes como `headless`, `baseURL`, `browser`, `viewport` o `device`.
+`toolOptions` configura las tools de un módulo, con el **nombre del módulo** como clave. Dos módulos aceptan opciones: `bxai`, para sus [tools de archivos](#tools-de-archivos), y `bxplaywright`, cuyas opciones son las de `playwright()` de bx-playwright: un `profile` (un nombre o una lista) y ajustes como `headless`, `baseURL`, `browser`, `viewport` o `device`.
 
 ```yaml
 tools:
@@ -92,6 +92,29 @@ toolOptions:
 - **Valores de entorno.** `${env.NOMBRE}` y `${env.NOMBRE:valor}` se reemplazan por la variable de entorno cuando arranca la app, nunca al compilar, así un secreto o un ajuste por máquina queda fuera del proyecto. Una variable sin definir y sin valor por defecto hace fallar al agente al arrancar, nombrándola.
 - **Se comprueba al compilar.** Una clave que no es un módulo del que el agente lista tools, un módulo que no acepta opciones, una clave escrita como `item@module` o una opción que bx-playwright no tiene (el mensaje lista las válidas) es un error de `build`.
 - Los ajustes de todo el módulo (dónde se instalan los navegadores, el perfil por defecto) siguen en los ajustes propios de bx-playwright, no aquí.
+
+
+### Tools de archivos
+
+bx-ai tiene 19 tools de archivos (`readFile`, `writeFile`, `listDirectory`, `searchFiles`, `deleteFile`, `zipFiles` y más), pero no registra ninguna. En BxAgents un agente las obtiene listándolas **y** nombrando las carpetas que pueden usar en `toolOptions.bxai.allowedPaths`:
+
+```yaml
+tools:
+  - readFile@bxai
+  - listDirectory@bxai
+toolOptions:
+  bxai:
+    allowedPaths:
+      - tmp                  # la carpeta temporal del sistema
+      - cwd                  # la carpeta desde la que se inicia el agente
+      - /data/reports        # o una ruta absoluta
+```
+
+- **Cada agente tiene sus propias tools, limitadas a sus propias carpetas.** Una ruta fuera de ellas se rechaza (incluidos los trucos con `..`), y las tools nunca se ponen en el registro compartido donde otro agente podría tomarlas.
+- **Sin carpetas, sin tools.** Las tools existen solo cuando `allowedPaths` está definido, y una lista vacía es un error de build, porque bx-ai interpreta una lista vacía como "cualquier ruta". Listar `readFile@bxai` sin `allowedPaths` falla con un mensaje que lo explica.
+- `now@bxai`, `httpGet@bxai`, `webSearch@bxai` y el resto de tools registradas de bx-ai siguen funcionando igual, con o sin `toolOptions.bxai`. `*@bxai` incluye las tools de archivos una vez definido `allowedPaths`.
+- Una entrada puede ser `${env.NAME}` para tomar una carpeta del entorno.
+- `bxAgents new` puede escribir todo esto por ti: ver [el asistente de new](../guides/new-wizard.md).
 
 ## Instrucciones
 
