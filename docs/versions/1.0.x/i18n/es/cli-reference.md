@@ -227,7 +227,7 @@ Tres modos, un solo chat:
 - Un turno que se detiene a esperar una decisión [humana en el bucle](conventions/gateways/index.md) lo indica en lugar de aparentar que responde con silencio, y señala el endpoint `/gateways/interactions/` donde se envía la decisión.
 - Si la ruta está protegida tras [`agentApi.tokenEnvVar`](conventions/agent-bx.md#agentapi), estos modos reciben un `401` claro en lugar de un timeout confuso - no envían ningún token.
 - Escribe `/exit` para salir (`exit` y `quit` funcionan en el REPL simple).
-- Necesita una TTY interactiva real (`MiniConsole` invoca `stty` para el modo raw) - no funcionará canalizado/no interactivo. Usa [`invoke`](#invoke) para scripting.
+- Necesita una terminal interactiva real. Sin ella, vuelve al REPL simple, que también necesita una (`MiniConsole` usa `stty` para el modo raw). Usa [`invoke`](#invoke) para scripts.
 
 ### `invoke`
 
