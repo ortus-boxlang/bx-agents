@@ -1,0 +1,55 @@
+/**
+ * Reads a project's root `box.json`: the developer's own list of packages. The developer
+ * installs them however they like (CommandBox `box install`, or `install-bx-module <name>
+ * --local`); BX Agents never installs anything. This class only reads the file so `build`
+ * can tell what is a development-only dependency (TestBox, a test helper module) and leave
+ * it out of the app.
+ *
+ * Tolerant on purpose: CommandBox accepts many more shapes than a version range (Git and URL
+ * sources, aliases), and the file is the developer's. Only invalid JSON is an error.
+ */
+class {
+
+	/**
+	 * @projectRoot Absolute path to the project root
+	 *
+	 * @return { path, exists, name, dependencies, devDependencies }; the maps are empty when there is no box.json or the section is not an object
+	 */
+	struct function read( required string projectRoot ) {
+		var path = arguments.projectRoot.reReplace( "[\\/]+$", "" ) & "/box.json"
+		var result = { path : path, exists : false, name : "", dependencies : {}, devDependencies : {} }
+		if ( !fileExists( path ) ) {
+			return result
+		}
+		result.exists = true
+
+		var parsed = ""
+		try {
+			parsed = jsonDeserialize( fileRead( path ) )
+		} catch ( any e ) {
+			throw( type = "BxAgents.InvalidBoxJson", message = "box.json at [#path#] is not valid JSON (#e.message#)" )
+		}
+		if ( !isStruct( parsed ) ) {
+			throw( type = "BxAgents.InvalidBoxJson", message = "box.json at [#path#] must be a JSON object" )
+		}
+
+		result.name = isSimpleValue( parsed.name ?: "" ) ? toString( parsed.name ?: "" ) : ""
+		for ( var section in [ "dependencies", "devDependencies" ] ) {
+			if ( isStruct( parsed[ section ] ?: "" ) ) {
+				result[ section ] = parsed[ section ]
+			}
+		}
+		return result
+	}
+
+	/**
+	 * @manifest A struct from read()
+	 *
+	 * @return Package names that are in devDependencies and not also in dependencies
+	 */
+	array function devOnly( required struct manifest ) {
+		var production = arguments.manifest.dependencies
+		return arguments.manifest.devDependencies.keyArray().filter( slug => !production.keyExists( slug ) )
+	}
+
+}

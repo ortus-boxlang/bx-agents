@@ -39,6 +39,7 @@ class {
 		variables.coldboxAppGenerator = new "models.build.generators.ColdBoxAppGenerator@bxagents"()
 		variables.toolsSkillsCopier = new "models.build.generators.ToolsSkillsCopier@bxagents"()
 		variables.runtimeLibsCopier = new "models.build.generators.RuntimeLibsCopier@bxagents"()
+		variables.boxLangModulesCopier = new "models.build.generators.BoxLangModulesCopier@bxagents"()
 		variables.interceptorSplitter = new "models.build.generators.InterceptorSplitter@bxagents"()
 		variables.routerGenerator = new "models.build.generators.RouterGenerator@bxagents"()
 		variables.webUiGenerator = new "models.build.generators.WebUiGenerator@bxagents"()
@@ -196,6 +197,14 @@ class {
 
 		arguments.onProgress( "+ Copying tools/ and skills/..." )
 		variables.toolsSkillsCopier.copy( root, appDir )
+
+		// BoxLang modules the developer installed in the project (boxlang_modules/, by CommandBox or
+		// `install-bx-module --local`) travel with the app, so `serve` and a packaged .bxa carry them
+		var modulesResult = variables.boxLangModulesCopier.copy( root, appDir )
+		if ( modulesResult.copied.len() || modulesResult.skipped.len() ) {
+			arguments.onProgress( "+ Copying boxlang_modules/ into the app..." )
+			arguments.onProgress( "    copied=#modulesResult.copied.toList( ', ' )#" & ( modulesResult.skipped.len() ? ", left out (devDependencies)=#modulesResult.skipped.toList( ', ' )#" : "" ) )
+		}
 
 		arguments.onProgress( "+ Copying bundled ColdBox runtime libraries..." )
 		var libsResult = variables.runtimeLibsCopier.copy( appDir = appDir, projectRoot = root )

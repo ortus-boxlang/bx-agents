@@ -51,6 +51,11 @@ or package as a portable `.bxa`.
   longer implicitly receive every tool in bx-ai's registry. A bare name, an unknown tool
   or an uninstalled module is an error, and an own tool wins over a same-named module tool
   with a logged warning.
+- A project `box.json` lists the extra packages an agent needs (`bx-playwright`, ...). You
+  install them yourself, with CommandBox or `install-bx-module --local`; BxAgents installs
+  nothing. `build` copies the project's `boxlang_modules/` into `.build/app`, leaving out
+  modules that are only devDependencies, so `serve` and a `.bxa` carry them. `serve` and `test`
+  add that folder to the runtime's modules directory.
 - `toolOptions:` - options for a module's tools, keyed by module name. `bxplaywright` takes
   the options of bx-playwright's `playwright()` (`profile`, `headless`, `baseURL`, ...).
   An agent that lists `bxplaywright` tools gets its own fresh browser tools instead of the

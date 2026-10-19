@@ -1,0 +1,70 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "ProjectBoxJson", function() {
+
+			beforeEach( function() {
+				variables.reader = new bxagents.models.build.ProjectBoxJson();
+				variables.dir = createTempDirectory( prefix = "bxagents-boxjson-" );
+			} );
+
+			afterEach( function() {
+				directoryDelete( dir, true );
+			} );
+
+			it( "reports a project with no box.json as having no dependencies", function() {
+				var manifest = reader.read( dir );
+
+				expect( manifest.exists ).toBeFalse();
+				expect( manifest.dependencies ).toBeEmpty();
+				expect( reader.devOnly( manifest ) ).toBeEmpty();
+			} );
+
+			it( "reads the name, dependencies and devDependencies", function() {
+				fileWrite( dir & "/box.json", '{ "name": "support-bot", "dependencies": { "bx-playwright": "*" }, "devDependencies": { "testbox": "*" } }' );
+
+				var manifest = reader.read( dir );
+
+				expect( manifest.exists ).toBeTrue();
+				expect( manifest.name ).toBe( "support-bot" );
+				expect( manifest.dependencies.keyExists( "bx-playwright" ) ).toBeTrue();
+				expect( manifest.devDependencies.keyExists( "testbox" ) ).toBeTrue();
+			} );
+
+			it( "accepts whatever CommandBox accepts as a dependency value, URLs and Git sources included", function() {
+				fileWrite( dir & "/box.json", '{ "dependencies": { "mine": "https://example.com/mine.zip", "other": "github:acme/other##main", "pinned": "forgebox:pinned@^2" } }' );
+
+				expect( reader.read( dir ).dependencies.keyArray() ).toHaveLength( 3 );
+			} );
+
+			it( "treats a section that is not an object as empty rather than failing", function() {
+				fileWrite( dir & "/box.json", '{ "dependencies": [ "a" ], "devDependencies": "b" }' );
+
+				var manifest = reader.read( dir );
+
+				expect( manifest.dependencies ).toBeEmpty();
+				expect( manifest.devDependencies ).toBeEmpty();
+			} );
+
+			it( "fails only for JSON that is not valid or not an object", function() {
+				fileWrite( dir & "/box.json", "{ nope" );
+				expect( function() {
+					reader.read( dir );
+				} ).toThrow( type = "BxAgents.InvalidBoxJson", regex = "not valid JSON" );
+
+				fileWrite( dir & "/box.json", "[ 1 ]" );
+				expect( function() {
+					reader.read( dir );
+				} ).toThrow( type = "BxAgents.InvalidBoxJson", regex = "must be a JSON object" );
+			} );
+
+			it( "lists the packages that are only development dependencies", function() {
+				fileWrite( dir & "/box.json", '{ "dependencies": { "a": "*", "both": "*" }, "devDependencies": { "testbox": "*", "both": "*" } }' );
+
+				expect( reader.devOnly( reader.read( dir ) ) ).toBe( [ "testbox" ] );
+			} );
+
+		} );
+	}
+
+}

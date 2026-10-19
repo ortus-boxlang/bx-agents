@@ -97,9 +97,17 @@ class {
 		// `serverHome` is isolated, so none of the machine's installed modules are
 		// visible unless the module's own location is named here.
 		var runtimeConfig = { whitespaceCompressionEnabled : false }
+		var moduleFolders = []
 		var modulesParent = installedModulesDirectory()
 		if ( len( modulesParent ) ) {
-			runtimeConfig[ "modulesDirectory" ] = [ modulesParent ]
+			moduleFolders.append( modulesParent )
+		}
+		// BoxLang modules the project installed with `install` (copied into the app by `build`)
+		if ( directoryExists( appDir & "/boxlang_modules" ) ) {
+			moduleFolders.append( appDir & "/boxlang_modules" )
+		}
+		if ( moduleFolders.len() ) {
+			runtimeConfig[ "modulesDirectory" ] = moduleFolders
 		}
 		fileWrite(
 			runtimeConfigDir & "/boxlang.json",

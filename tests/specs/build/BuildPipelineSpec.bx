@@ -33,6 +33,32 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.manifest.agent.model ).toBe( "mock/mock-model" );
 			} );
 
+			it( "copies a project's boxlang_modules/ into the app so serve and a .bxa carry them", function() {
+				var projectRoot = newTempProject( "yaml-inline-instructions" );
+				directoryCreate( projectRoot & "/boxlang_modules/bxfake" );
+				fileWrite( projectRoot & "/boxlang_modules/bxfake/ModuleConfig.bx", "class {}" );
+
+				var result = pipeline.build( projectRoot );
+
+				expect( fileExists( result.appDir & "/boxlang_modules/bxfake/ModuleConfig.bx" ) ).toBeTrue();
+			} );
+
+			it( "leaves a devDependency module out of the app", function() {
+				var projectRoot = newTempProject( "yaml-inline-instructions" );
+				fileWrite( projectRoot & "/box.json", '{ "dependencies": { "bx-keep": "*" }, "devDependencies": { "bx-dev": "*" } }' );
+				for ( var folder in [ "bxkeep", "bxdev" ] ) {
+					directoryCreate( path = projectRoot & "/boxlang_modules/" & folder, createPath = true );
+					fileWrite( projectRoot & "/boxlang_modules/#folder#/ModuleConfig.bx", "class {}" );
+				}
+				fileWrite( projectRoot & "/boxlang_modules/bxkeep/box.json", '{ "slug": "bx-keep" }' );
+				fileWrite( projectRoot & "/boxlang_modules/bxdev/box.json", '{ "slug": "bx-dev" }' );
+
+				var result = pipeline.build( projectRoot );
+
+				expect( directoryExists( result.appDir & "/boxlang_modules/bxkeep" ) ).toBeTrue();
+				expect( directoryExists( result.appDir & "/boxlang_modules/bxdev" ) ).toBeFalse();
+			} );
+
 			it( "builds a full project end-to-end, producing .build/app and .build/manifest.json", function() {
 				var projectRoot = newTempProject( "full-project" );
 				var result = pipeline.build( projectRoot );
