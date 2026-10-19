@@ -155,6 +155,10 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   names (`tmp`, `cwd` or absolute paths), each agent with its own set. An empty list is refused.
 - `mcpServers` entries accept `token`, `headers`, `timeout`, `user` and `password`. Secrets must
   be `${env.NAME}` placeholders and are resolved when the app starts.
+- A **Secrets** question: keep keys in `.env` (the default) or encrypted in the project. Encrypted
+  keys go to a committable `secrets.json` in BoxLang's `bxsecret:` format, with a per-project seed in
+  `.env` (`BOXLANG_SECURITY_SECRETSEED`). The built app decrypts it at startup, a real environment variable
+  still wins, `build` refuses plain values in the file and `doctor` checks it. `--secrets=env|encrypted`.
 - A catalog of MCP servers the wizard can add: GitHub, Stripe, Notion, Atlassian, Cloudflare and Supabase.
 
 #### The chat screen

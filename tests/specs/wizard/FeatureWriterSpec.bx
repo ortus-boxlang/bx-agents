@@ -102,6 +102,44 @@ class extends="testbox.system.BaseSpec" {
 				expect( source ).notToInclude( "password :" );
 			} );
 
+			it( "encrypts secrets into secrets.json and puts the seed in .env", function() {
+				var seed = generateSecretKey( "AES", 256 );
+				fileWrite( dir & "/.env", "BOXLANG_HOME=.build/runtime" & char( 10 ) );
+
+				writer.apply( dir, { secrets : { values : { CLAUDE_API_KEY : "sk-in-the-clear", GITHUB_TOKEN : "ghp-in-the-clear" }, seed : seed } } );
+
+				var raw = fileRead( dir & "/secrets.json" );
+				expect( raw ).notToInclude( "sk-in-the-clear" );
+				expect( raw ).notToInclude( "ghp-in-the-clear" );
+				var data = jsonDeserialize( raw );
+				expect( data.CLAUDE_API_KEY ).toMatch( "^bxsecret:" );
+				expect( data.keyExists( "_note" ) ).toBeTrue();
+				expect( data.keyExists( "_seedCheck" ) ).toBeTrue();
+
+				var env = fileRead( dir & "/.env" );
+				expect( env ).toInclude( "BOXLANG_HOME=.build/runtime" );
+				expect( env ).toInclude( "BOXLANG_SECURITY_SECRETSEED=" & seed );
+				expect( env ).notToInclude( "sk-in-the-clear" );
+
+				// and the loader reads it back with that seed
+				var key = "BXA_FW_" & replace( createUUID(), "-", "", "all" );
+				fileWrite( dir & "/s2.json", jsonSerialize( { "#key#" : data.CLAUDE_API_KEY, "_seedCheck" : data._seedCheck } ) );
+				new bxagents.models.build.SecretsLoader().load( dir & "/s2.json", seed );
+				expect( getSystemSetting( key, "MISSING" ) ).toBe( "sk-in-the-clear" );
+				createObject( "java", "java.lang.System" ).clearProperty( key );
+			} );
+
+			it( "makes a fresh seed for every project", function() {
+				var other = createTempDirectory( prefix = "bxagents-seed-" );
+				writer.apply( dir, { secrets : { values : {} } } );
+				writer.apply( other, { secrets : { values : {} } } );
+
+				var seedOf = ( d ) => fileRead( d & "/.env" ).listToArray( char( 10 ) ).filter( l => l.startsWith( "BOXLANG_SECURITY_SECRETSEED=" ) )[ 1 ];
+				expect( seedOf( dir ) ).notToBe( seedOf( other ) );
+				expect( len( seedOf( dir ) ) ).toBeGTE( 44 );
+				directoryDelete( other, true );
+			} );
+
 			it( "writes a deploy entry as indented JSON that reads back", function() {
 				writer.apply( dir, { deploy : { id : "docker", config : { target : "docker", registry : { type : "ghcr", repository : "me/my-agent" }, tag : "latest" } } } );
 

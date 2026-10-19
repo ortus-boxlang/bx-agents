@@ -51,6 +51,7 @@ _bxagents_complete() {
 			"new --memory") COMPREPLY=($(compgen -W "cache file" -- "$part")) ;;
 			"new --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"new --search") COMPREPLY=($(compgen -W "http brave tavily exa google" -- "$part")) ;;
+			"new --secrets") COMPREPLY=($(compgen -W "env encrypted" -- "$part")) ;;
 			"new --template") COMPREPLY=($(compgen -W "minimal webui-chat slack-bot telegram-bot github-bot mcp-server scheduled multi-agent" -- "$part")) ;;
 			"new --web-auth") COMPREPLY=($(compgen -W "open key" -- "$part")) ;;
 			"new --with") COMPREPLY=($(compgen -W "time fetch search browse files media" -- "$part")) ;;
@@ -72,7 +73,7 @@ _bxagents_complete() {
 			hash-password) flags="--password= --projectRoot=" ;;
 			inspect) flags="--json --projectRoot=" ;;
 			invoke) flags="--json --message= --port= --projectRoot= --server" ;;
-			new) flags="--app= --channels= --class --deploy= --description= --destination= --files= --files-dir= --forgebox= --guard= --host= --mcp= --memory= --model= --name= --no-tui --no-wizard --projectRoot= --region= --registry= --remote-path= --repo= --search= --skipInstall --template= --user= --web-auth= --with= --wizard --yes" ;;
+			new) flags="--app= --channels= --class --deploy= --description= --destination= --files= --files-dir= --forgebox= --guard= --host= --mcp= --memory= --model= --name= --no-tui --no-wizard --projectRoot= --region= --registry= --remote-path= --repo= --search= --secrets= --skipInstall --template= --user= --web-auth= --with= --wizard --yes" ;;
 			package) flags="--projectRoot= --version=" ;;
 			serve) flags="--host= --port= --projectRoot=" ;;
 			test) flags="--projectRoot=" ;;

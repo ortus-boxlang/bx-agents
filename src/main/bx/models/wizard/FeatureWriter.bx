@@ -7,6 +7,7 @@
  *                          -> sections of Agent.yaml (see agentYamlLines)
  *   dependencies           -> the project's own box.json
  *   envStubs               -> .env, with the value left empty for the user to fill in
+ *   secrets                -> secrets.json (bxsecret: values) and the seed in .env
  *   gateways, webui        -> gateways/*.bx
  *   deploy                 -> deploy/<target>.json
  *   instructionLines       -> instructions.md
@@ -27,6 +28,7 @@
  *   gateways         [ { id, type, env : [ { config, name } ] } ]
  *   webui            { path, apiKeyEnvVar, users : [ { username, passwordHash, displayName } ] }
  *   agentApi         { path }
+ *   secrets          { values : { NAME : plain value }, seed : optional } encrypts values into secrets.json
  *   deploy           { id, config : { target, ... } }
  *   instructionLines [ "When you search the web, use ..." ]
  */
@@ -109,6 +111,9 @@ class {
 		var f = arguments.features
 
 		appendEnvStubs( arguments.dir & "/.env", f.envStubs ?: [] )
+		if ( f.keyExists( "secrets" ) ) {
+			writeSecrets( arguments.dir, f.secrets )
+		}
 
 		for ( var gateway in ( f.gateways ?: [] ) ) {
 			directoryCreate( path = arguments.dir & "/gateways", createPath = true, ignoreExists = true )
@@ -126,6 +131,37 @@ class {
 			directoryCreate( path = arguments.dir & "/deploy", createPath = true, ignoreExists = true )
 			fileWrite( arguments.dir & "/deploy/" & f.deploy.id & ".json", prettyJson( f.deploy.config ) & char( 10 ) )
 		}
+	}
+
+	/**
+	 * Encrypts the values into secrets.json with a seed made for this project and puts the seed
+	 * in .env, the one place that stays out of git. The file starts with a note and a canary that
+	 * lets a wrong seed be recognised for certain.
+	 *
+	 * @dir The project root
+	 * @secrets { values : { NAME : plain }, seed : optional }
+	 */
+	void function writeSecrets( required string dir, required struct secrets ) {
+		var seed = arguments.secrets.seed ?: generateSecretKey( "AES", 256 )
+		var utility = createObject( "java", "ortus.boxlang.runtime.util.ConfigSecretUtil" )
+		var file = {
+			"_note"      : "Encrypted with BoxLang's bxsecret: scheme. Safe to commit; unreadable without the project's seed, BOXLANG_SECURITY_SECRETSEED (in .env, and in your secret manager).",
+			"_seedCheck" : new "models.build.SecretsLoader@bxagents"().canary( seed )
+		}
+		for ( var name in arguments.secrets.values ) {
+			file[ name ] = utility.SECURE_VALUE_PREFIX & utility.encrypt( arguments.secrets.values[ name ], seed )
+		}
+		fileWrite( arguments.dir & "/secrets.json", prettyJson( file ) & char( 10 ) )
+
+		var envPath = arguments.dir & "/.env"
+		var existing = fileExists( envPath ) ? fileRead( envPath ) : ""
+		fileWrite(
+			envPath,
+			existing.reReplace( "\s+$", "" ) & char( 10 ) & char( 10 )
+				& "## The seed that opens secrets.json. Keep it out of git (this file is ignored)," & char( 10 )
+				& "## and put the same value in your secret manager, in CI and in production." & char( 10 )
+				& "BOXLANG_SECURITY_SECRETSEED=" & seed & char( 10 )
+		)
 	}
 
 	/**
