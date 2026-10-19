@@ -118,7 +118,7 @@ bxAgents new my-agent --repo=owner/repo-name
 bxAgents new my-agent --forgebox=some-package-slug
 ```
 
-- Sin `--model`, sin `--repo` y sin `--forgebox`, en una terminal, `new` ejecuta el [asistente](guides/new-wizard.md). `--no-wizard` o `--yes` lo desactiva, `--wizard` lo activa incluso con un `--model`, y `--no-tui` hace las mismas preguntas como líneas numeradas. Un `--model` por sí solo nunca lo inicia, porque los scripts siempre han tenido que pasar uno. Las opciones del asistente (`--with`, `--search`, `--files`, `--files-dir`, `--memory`, `--mcp`, `--channels`, `--web-auth`, `--guard`, `--deploy` y los detalles de despliegue) están en la [guía del asistente](guides/new-wizard.md#sin-el-asistente); un valor incorrecto nombra la opción y qué acepta. Necesitan `Agent.yaml`, así que no se pueden combinar con `--class`.
+- Sin `--model`, sin `--repo` y sin `--forgebox`, en una terminal, `new` ejecuta el [asistente](guides/new-wizard.md). `--no-wizard` o `--yes` lo desactiva, `--wizard` lo activa incluso con un `--model`, y `--no-tui` hace las mismas preguntas como líneas numeradas. Un `--model` por sí solo nunca lo inicia, porque los scripts siempre han tenido que pasar uno. Las opciones del asistente (`--with`, `--search`, `--files`, `--files-dir`, `--memory`, `--mcp`, `--channels`, `--web-auth`, `--guard`, `--deploy` y los detalles de despliegue, más `--secrets=env|encrypted`) están en la [guía del asistente](guides/new-wizard.md#sin-el-asistente); un valor incorrecto nombra la opción y qué acepta. Necesitan `Agent.yaml`, así que no se pueden combinar con `--class`.
 - `--template`, `--repo` y `--forgebox` nombran tres FUENTES de proyecto distintas - se aplica exactamente una. Combinar dos de ellas es un error.
 - **Modo `--template`** (el predeterminado cuando no se pasa ninguna opción de fuente - `minimal`):
   - `--model` es **requerido** cuando no se hacen preguntas - un slug `provider/model` (ver [el slug de modelo](conventions/agent-bx.md#the-model-slug)).
@@ -185,15 +185,31 @@ bxAgents serve [--port=8080] [--host=127.0.0.1]
 
 ### `chat`
 
-REPL interactivo contra el agente construido, usando el propio `MiniConsole` de BoxLang para la lectura de líneas.
+Un chat con el agente construido, en una pantalla de terminal que conserva tu historial: los turnos terminados se imprimen como texto normal de la terminal (selecciónalos, búscalos y desplázate como siempre) y solo se redibujan el cuadro de mensaje y la respuesta que se está escribiendo. `--no-tui` (y cualquier terminal no interactiva) usa un REPL simple línea por línea, basado en el `MiniConsole` de BoxLang.
 
 ```bash
 bxAgents chat                                  # rápido, en el mismo proceso
+bxAgents chat --no-tui                         # REPL simple línea por línea
 bxAgents chat --server [--port=<puerto>]       # aplicación completa, servidor propio desechable
 bxAgents chat --connect=http://127.0.0.1:8080  # aplicación completa, servidor que ya tienes en marcha
 ```
 
-Tres modos, un solo REPL:
+En la pantalla:
+
+| Tecla | Hace |
+|---|---|
+| Enter | Envía el mensaje |
+| Alt+Enter, Ctrl+J, o `\` y luego Enter | Nueva línea en el mensaje |
+| Arriba / Abajo | Mensajes anteriores (desde la primera o última línea del cuadro) |
+| Esc | Detiene al agente. Se detiene en su siguiente paso, no a mitad de palabra |
+| Enter mientras el agente trabaja | Lo dirige: tu mensaje se añade a la ejecución (solo en el mismo proceso) |
+| Ctrl+C | Limpia el cuadro; con el cuadro vacío, sale. Ctrl+D también sale |
+
+Escribe `/` para ver los comandos: `/help`, `/new` (una conversación nueva), `/tools`, `/copy` (la última respuesta al portapapeles, con la secuencia OSC 52 que honran la mayoría de terminales), `/save [archivo]` (la conversación en Markdown) y `/exit`.
+
+La respuesta se muestra mientras llega y se imprime como Markdown formateado (títulos, listas, bloques de código) cuando está completa. En el modo por defecto cada llamada a una tool se muestra con sus argumentos y lo que tardó, y el razonamiento del modelo se muestra mientras trabaja pero no se conserva. Una ejecución que se detiene por [aprobación humana](conventions/gateways/index.md) te pregunta ahí mismo: aprobar una vez, aprobar para la conversación o rechazar. Por HTTP el stream solo lleva el texto, así que no hay líneas de tools, ni razonamiento, ni dirección, y una aprobación se responde en el servidor.
+
+Tres modos, un solo chat:
 
 | Modo | Con qué habla | Cuándo usarlo |
 |---|---|---|
@@ -210,8 +226,8 @@ Tres modos, un solo REPL:
 - Ambos modos HTTP arrastran el `threadId` del servidor entre turnos, así que una sesión es una sola conversación y no una serie de primeros mensajes inconexos.
 - Un turno que se detiene a esperar una decisión [humana en el bucle](conventions/gateways/index.md) lo indica en lugar de aparentar que responde con silencio, y señala el endpoint `/gateways/interactions/` donde se envía la decisión.
 - Si la ruta está protegida tras [`agentApi.tokenEnvVar`](conventions/agent-bx.md#agentapi), estos modos reciben un `401` claro en lugar de un timeout confuso - no envían ningún token.
-- Escribe `exit` o `quit` para salir.
-- Necesita una TTY interactiva real (`MiniConsole` invoca `stty` para el modo raw) - no funcionará canalizado/no interactivo. Usa [`invoke`](#invoke) para scripting.
+- Escribe `/exit` para salir (`exit` y `quit` funcionan en el REPL simple).
+- Necesita una terminal interactiva real. Sin ella, vuelve al REPL simple, que también necesita una (`MiniConsole` usa `stty` para el modo raw). Usa [`invoke`](#invoke) para scripts.
 
 ### `invoke`
 

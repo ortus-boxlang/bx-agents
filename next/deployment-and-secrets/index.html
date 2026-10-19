@@ -246,7 +246,7 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#packaging">Packaging</a></li><li class="toc-level-2"><a href="#excluding-files-bxaignore">Excluding files&#x3a; .bxaignore</a></li><li class="toc-level-2"><a href="#secret-redaction">Secret redaction</a></li><li class="toc-level-2"><a href="#where-real-secrets-live">Where real secrets live</a></li><li class="toc-level-2"><a href="#deploying">Deploying</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#packaging">Packaging</a></li><li class="toc-level-2"><a href="#excluding-files-bxaignore">Excluding files&#x3a; .bxaignore</a></li><li class="toc-level-2"><a href="#secret-redaction">Secret redaction</a></li><li class="toc-level-2"><a href="#where-real-secrets-live">Where real secrets live</a></li><li class="toc-level-2"><a href="#encrypted-secrets">Encrypted secrets</a></li><li class="toc-level-2"><a href="#deploying">Deploying</a></li></ul></details>
 		
 
 		
@@ -293,6 +293,19 @@ scratch/
 <pre><code class="language-bash">export OPENAI_API_KEY=sk-...
 bxAgents serve
 </code></pre>
+<h2 id="encrypted-secrets"><a href="#encrypted-secrets" id="encrypted-secrets" name="encrypted-secrets" class="anchor"></a>Encrypted secrets</h2>
+<p>Keys can also live in the project, encrypted, so they travel with the repo. <code>bxAgents new</code> offers this as <strong>Encrypted in the project</strong> (the default stays <code>.env</code>). It uses BoxLang's own <code>bxsecret:</code> format, the same one <code>boxlang generatesecret</code> writes.</p>
+<p>The wizard writes two things:</p>
+<ul>
+<li><code>secrets.json</code>: every value as <code>bxsecret:&lt;ciphertext&gt;</code>, plus a <code>_seedCheck</code> entry that lets a wrong seed fail with a clear message. This file is <strong>safe to commit</strong>.</li>
+<li><code>.env</code>: one line, <code>BOXLANG_SECURITY_SECRETSEED=&lt;seed&gt;</code>. This is the key that opens the file. It is gitignored. <strong>Never commit it</strong>, and keep a copy somewhere safe: without it the values cannot be recovered.</li>
+</ul>
+<p>The seed is generated per project, so <code>secrets.json</code> does not depend on any one machine's BoxLang install. At startup the built app reads <code>secrets.json</code>, decrypts each value with the seed and publishes it as a setting, so <code>${env.NAME}</code> placeholders, <code>OPENAI_API_KEY</code>-style provider keys and MCP tokens all work as if they were set in the environment. A variable already set in the real environment wins over the committed value.</p>
+<p>To add or change a value later:</p>
+<pre><code class="language-bash">export BOXLANG_SECURITY_SECRETSEED=&lt;your seed&gt;
+boxlang generatesecret &quot;the-new-value&quot;   # prints bxsecret:...
+</code></pre>
+<p>Paste the output into <code>secrets.json</code> under the variable name. On a server, set <code>BOXLANG_SECURITY_SECRETSEED</code> as a real environment variable; <code>bxAgents build</code> fails if <code>secrets.json</code> holds a plain value, and <code>bxAgents doctor</code> checks the file.</p>
 <h2 id="deploying"><a href="#deploying" id="deploying" name="deploying" class="anchor"></a>Deploying</h2>
 <pre><code class="language-bash">bxAgents deploy --destination=/path/to/somewhere   # local, flag-only shorthand
 bxAgents deploy --name=production                  # any target, via deploy/production.bx
@@ -349,7 +362,7 @@ bxAgents deploy --name=production                  # any target, via deploy/prod
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#packaging">Packaging</a></li><li class="toc-level-2"><a href="#excluding-files-bxaignore">Excluding files&#x3a; .bxaignore</a></li><li class="toc-level-2"><a href="#secret-redaction">Secret redaction</a></li><li class="toc-level-2"><a href="#where-real-secrets-live">Where real secrets live</a></li><li class="toc-level-2"><a href="#deploying">Deploying</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#packaging">Packaging</a></li><li class="toc-level-2"><a href="#excluding-files-bxaignore">Excluding files&#x3a; .bxaignore</a></li><li class="toc-level-2"><a href="#secret-redaction">Secret redaction</a></li><li class="toc-level-2"><a href="#where-real-secrets-live">Where real secrets live</a></li><li class="toc-level-2"><a href="#encrypted-secrets">Encrypted secrets</a></li><li class="toc-level-2"><a href="#deploying">Deploying</a></li></ul></nav>
 				</aside>
 			
 		</div>

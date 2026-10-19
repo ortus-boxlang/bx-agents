@@ -323,7 +323,7 @@ bxAgents new my-agent --repo=owner/repo-name
 bxAgents new my-agent --forgebox=some-package-slug
 </code></pre>
 <ul>
-<li>Sin <code>--model</code>, sin <code>--repo</code> y sin <code>--forgebox</code>, en una terminal, <code>new</code> ejecuta el <a href="/es/guides/new-wizard/index.html">asistente</a>. <code>--no-wizard</code> o <code>--yes</code> lo desactiva, <code>--wizard</code> lo activa incluso con un <code>--model</code>, y <code>--no-tui</code> hace las mismas preguntas como líneas numeradas. Un <code>--model</code> por sí solo nunca lo inicia, porque los scripts siempre han tenido que pasar uno. Las opciones del asistente (<code>--with</code>, <code>--search</code>, <code>--files</code>, <code>--files-dir</code>, <code>--memory</code>, <code>--mcp</code>, <code>--channels</code>, <code>--web-auth</code>, <code>--guard</code>, <code>--deploy</code> y los detalles de despliegue) están en la <a href="/es/guides/new-wizard/index.html#sin-el-asistente">guía del asistente</a>; un valor incorrecto nombra la opción y qué acepta. Necesitan <code>Agent.yaml</code>, así que no se pueden combinar con <code>--class</code>.</li>
+<li>Sin <code>--model</code>, sin <code>--repo</code> y sin <code>--forgebox</code>, en una terminal, <code>new</code> ejecuta el <a href="/es/guides/new-wizard/index.html">asistente</a>. <code>--no-wizard</code> o <code>--yes</code> lo desactiva, <code>--wizard</code> lo activa incluso con un <code>--model</code>, y <code>--no-tui</code> hace las mismas preguntas como líneas numeradas. Un <code>--model</code> por sí solo nunca lo inicia, porque los scripts siempre han tenido que pasar uno. Las opciones del asistente (<code>--with</code>, <code>--search</code>, <code>--files</code>, <code>--files-dir</code>, <code>--memory</code>, <code>--mcp</code>, <code>--channels</code>, <code>--web-auth</code>, <code>--guard</code>, <code>--deploy</code> y los detalles de despliegue, más <code>--secrets=env|encrypted</code>) están en la <a href="/es/guides/new-wizard/index.html#sin-el-asistente">guía del asistente</a>; un valor incorrecto nombra la opción y qué acepta. Necesitan <code>Agent.yaml</code>, así que no se pueden combinar con <code>--class</code>.</li>
 <li><code>--template</code>, <code>--repo</code> y <code>--forgebox</code> nombran tres FUENTES de proyecto distintas - se aplica exactamente una. Combinar dos de ellas es un error.</li>
 <li><strong>Modo <code>--template</code></strong> (el predeterminado cuando no se pasa ninguna opción de fuente - <code>minimal</code>):
 <ul>
@@ -385,12 +385,29 @@ bxAgents new my-agent --forgebox=some-package-slug
 <li>Delimita el propio home de runtime de BoxLang del servidor a <code>.build/runtime</code> (vía <code>serverHome</code>) en lugar del <code>~/.boxlang</code> compartido por defecto, así que la caché de clases compiladas y los overrides de configuración de cada proyecto están aislados - y <code>clean</code> lo elimina gratis, ya que de todos modos borra <code>.build</code> por completo. <code>invoke --server</code> también obtiene esto, ya que reutiliza <code>serve</code> internamente. Esto <strong>no</strong> se extiende a <code>chat</code>/<code>build</code>/<code>test</code>/<code>invoke</code> por defecto.</li>
 </ul>
 <h3 id="chat"><a href="#chat" id="chat" name="chat" class="anchor"></a><code>chat</code></h3>
-<p>REPL interactivo contra el agente construido, usando el propio <code>MiniConsole</code> de BoxLang para la lectura de líneas.</p>
+<p>Un chat con el agente construido, en una pantalla de terminal que conserva tu historial: los turnos terminados se imprimen como texto normal de la terminal (selecciónalos, búscalos y desplázate como siempre) y solo se redibujan el cuadro de mensaje y la respuesta que se está escribiendo. <code>--no-tui</code> (y cualquier terminal no interactiva) usa un REPL simple línea por línea, basado en el <code>MiniConsole</code> de BoxLang.</p>
 <pre><code class="language-bash">bxAgents chat                                  # rápido, en el mismo proceso
+bxAgents chat --no-tui                         # REPL simple línea por línea
 bxAgents chat --server [--port=&lt;puerto&gt;]       # aplicación completa, servidor propio desechable
 bxAgents chat --connect=http://127.0.0.1:8080  # aplicación completa, servidor que ya tienes en marcha
 </code></pre>
-<p>Tres modos, un solo REPL:</p>
+<p>En la pantalla:</p>
+<div class="bxsites-table-wrap"><table class="table">
+<thead>
+<tr><th>Tecla</th><th>Hace</th></tr>
+</thead>
+<tbody>
+<tr><td>Enter</td><td>Envía el mensaje</td></tr>
+<tr><td>Alt+Enter, Ctrl+J, o <code>\</code> y luego Enter</td><td>Nueva línea en el mensaje</td></tr>
+<tr><td>Arriba / Abajo</td><td>Mensajes anteriores (desde la primera o última línea del cuadro)</td></tr>
+<tr><td>Esc</td><td>Detiene al agente. Se detiene en su siguiente paso, no a mitad de palabra</td></tr>
+<tr><td>Enter mientras el agente trabaja</td><td>Lo dirige: tu mensaje se añade a la ejecución (solo en el mismo proceso)</td></tr>
+<tr><td>Ctrl+C</td><td>Limpia el cuadro; con el cuadro vacío, sale. Ctrl+D también sale</td></tr>
+</tbody>
+</table></div>
+<p>Escribe <code>/</code> para ver los comandos: <code>/help</code>, <code>/new</code> (una conversación nueva), <code>/tools</code>, <code>/copy</code> (la última respuesta al portapapeles, con la secuencia OSC 52 que honran la mayoría de terminales), <code>/save [archivo]</code> (la conversación en Markdown) y <code>/exit</code>.</p>
+<p>La respuesta se muestra mientras llega y se imprime como Markdown formateado (títulos, listas, bloques de código) cuando está completa. En el modo por defecto cada llamada a una tool se muestra con sus argumentos y lo que tardó, y el razonamiento del modelo se muestra mientras trabaja pero no se conserva. Una ejecución que se detiene por <a href="/es/conventions/gateways/index.html">aprobación humana</a> te pregunta ahí mismo: aprobar una vez, aprobar para la conversación o rechazar. Por HTTP el stream solo lleva el texto, así que no hay líneas de tools, ni razonamiento, ni dirección, y una aprobación se responde en el servidor.</p>
+<p>Tres modos, un solo chat:</p>
 <div class="bxsites-table-wrap"><table class="table">
 <thead>
 <tr><th>Modo</th><th>Con qué habla</th><th>Cuándo usarlo</th></tr>
@@ -411,8 +428,8 @@ bxAgents chat --connect=http://127.0.0.1:8080  # aplicación completa, servidor 
 <li>Ambos modos HTTP arrastran el <code>threadId</code> del servidor entre turnos, así que una sesión es una sola conversación y no una serie de primeros mensajes inconexos.</li>
 <li>Un turno que se detiene a esperar una decisión <a href="/es/conventions/gateways/index.html">humana en el bucle</a> lo indica en lugar de aparentar que responde con silencio, y señala el endpoint <code>/gateways/interactions/</code> donde se envía la decisión.</li>
 <li>Si la ruta está protegida tras <a href="/es/conventions/agent-bx/index.html#agentapi"><code>agentApi.tokenEnvVar</code></a>, estos modos reciben un <code>401</code> claro en lugar de un timeout confuso - no envían ningún token.</li>
-<li>Escribe <code>exit</code> o <code>quit</code> para salir.</li>
-<li>Necesita una TTY interactiva real (<code>MiniConsole</code> invoca <code>stty</code> para el modo raw) - no funcionará canalizado/no interactivo. Usa <a href="#invoke"><code>invoke</code></a> para scripting.</li>
+<li>Escribe <code>/exit</code> para salir (<code>exit</code> y <code>quit</code> funcionan en el REPL simple).</li>
+<li>Necesita una terminal interactiva real. Sin ella, vuelve al REPL simple, que también necesita una (<code>MiniConsole</code> usa <code>stty</code> para el modo raw). Usa <a href="#invoke"><code>invoke</code></a> para scripts.</li>
 </ul>
 <h3 id="invoke"><a href="#invoke" id="invoke" name="invoke" class="anchor"></a><code>invoke</code></h3>
 <p>Un solo turno no interactivo contra el agente construido: envía un mensaje, imprime la respuesta, sale. Existe para scripting/CI, donde el requisito de TTY de <code>chat</code> es un bloqueo absoluto.</p>
@@ -493,7 +510,7 @@ bxAgents deploy --destination=/path/to/somewhere [--target=local]
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/cli-reference.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/cli-reference.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Oct 19, 2026, 12&#x3a;53&#x3a;58 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Referencia%20de%20CLI&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fcli-reference%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/cli-reference.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/cli-reference.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Oct 19, 2026, 9&#x3a;03&#x3a;34 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Referencia%20de%20CLI&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fcli-reference%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 

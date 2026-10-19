@@ -75,6 +75,26 @@ export OPENAI_API_KEY=sk-...
 bxAgents serve
 ```
 
+## Secretos cifrados
+
+Las claves también pueden vivir cifradas en el proyecto, para que viajen con el repositorio. `bxAgents new` lo ofrece como **Cifrados en el proyecto** (el valor por defecto sigue siendo `.env`). Usa el formato `bxsecret:` propio de BoxLang, el mismo que escribe `boxlang generatesecret`.
+
+El asistente escribe dos cosas:
+
+- `secrets.json`: cada valor como `bxsecret:<texto cifrado>`, más una entrada `_seedCheck` que permite que una semilla incorrecta falle con un mensaje claro. Este archivo es **seguro de commitear**.
+- `.env`: una línea, `BOXLANG_SECURITY_SECRETSEED=<semilla>`. Es la clave que abre el archivo. Está en el `.gitignore`. **Nunca la commitees** y guarda una copia en un lugar seguro: sin ella no se pueden recuperar los valores.
+
+La semilla se genera por proyecto, así que `secrets.json` no depende de la instalación de BoxLang de una máquina. Al arrancar, la app construida lee `secrets.json`, descifra cada valor con la semilla y lo publica como ajuste, de modo que los marcadores `${env.NOMBRE}`, las claves de proveedor tipo `OPENAI_API_KEY` y los tokens MCP funcionan como si estuvieran en el entorno. Una variable ya definida en el entorno real gana sobre el valor commiteado.
+
+Para añadir o cambiar un valor más tarde:
+
+```bash
+export BOXLANG_SECURITY_SECRETSEED=<tu semilla>
+boxlang generatesecret "el-nuevo-valor"   # imprime bxsecret:...
+```
+
+Pega la salida en `secrets.json` bajo el nombre de la variable. En un servidor, define `BOXLANG_SECURITY_SECRETSEED` como variable de entorno real; `bxAgents build` falla si `secrets.json` contiene un valor en claro, y `bxAgents doctor` revisa el archivo.
+
 ## Desplegando
 
 ```bash

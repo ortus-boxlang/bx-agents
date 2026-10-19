@@ -32,6 +32,7 @@ Es una interfaz de pantalla completa en el verde azulado del logo de BxAgents. L
 | Acceso web | Abierto, una clave compartida o usuarios con contraseña | `apiKeyEnvVar` o `users` en la entrada del chat web |
 | Protección | Marcar, bloquear o ignorar entradas sospechosas | Un bloque [`security`](../conventions/agent-yaml.md#ajustes) |
 | Despliegue | Docker, DigitalOcean, SSH, SFTP, FTP, una carpeta local, o más tarde | `deploy/<destino>.json` |
+| Secretos | `.env` (por defecto) o cifrados en el proyecto | Stubs en `.env`, o un `secrets.json` cifrado ([detalles](../deployment-and-secrets.md#secretos-cifrados)) |
 
 Una etapa cuya respuesta ya diste como opción se omite y se muestra como respondida. Una etapa que no aplica (el buscador cuando la búsqueda está desactivada) se omite sin avisar.
 
@@ -106,6 +107,7 @@ bxAgents new support-bot --name=support-bot --model=claude --with=time,fetch,sea
 | `--web-auth` | `open` o `key`. Los usuarios necesitan contraseñas, así que salen del asistente o de `gateways/webui.bx` |
 | `--guard` | `off`, `flag` o `block` |
 | `--deploy` | `docker`, `digitalocean`, `ssh`, `sftp`, `ftp`, `local`, con `--registry=ghcr:owner/name` (o `dockerhub:`, `docr:`), `--app`, `--region`, `--host`, `--user`, `--remote-path`, `--destination` según el destino |
+| `--secrets` | `env` (por defecto) o `encrypted`. El asistente pide los valores cifrados, y los valores solo los pide el asistente, nunca se pasan como flags |
 
 Una opción con un valor incorrecto detiene el comando y dice qué acepta. El asistente se activa así:
 
