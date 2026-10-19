@@ -202,7 +202,11 @@ class {
 	 */
 	private any function newPrompter( required struct options ) {
 		if ( ( arguments.options.tui ?: true ) && isTerminal() ) {
-			return new "models.wizard.prompters.TuiPrompter@bxagents"()
+			try {
+				return new "models.wizard.prompters.TuiPrompter@bxagents"()
+			} catch ( any e ) {
+				// the terminal would not go into raw mode: ask in plain lines rather than fail
+			}
 		}
 		return new "models.wizard.prompters.PlainPrompter@bxagents"()
 	}

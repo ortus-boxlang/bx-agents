@@ -17,6 +17,7 @@
  */
 package ortus.boxlang.bxagents.tui;
 
+import java.io.Console;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -67,7 +68,19 @@ public final class TuiScreen implements AutoCloseable {
 	 * @return true when stdin and stdout are a real terminal that can host the UI
 	 */
 	public static boolean isInteractive() {
-		return System.console() != null && !"dumb".equals( System.getenv( "TERM" ) );
+		if ( "dumb".equals( System.getenv( "TERM" ) ) ) {
+			return false;
+		}
+		Console console = System.console();
+		if ( console == null ) {
+			return false;
+		}
+		// Java 22 made System.console() non-null even when redirected, and added isTerminal() to tell
+		try {
+			return ( Boolean ) Console.class.getMethod( "isTerminal" ).invoke( console );
+		} catch ( ReflectiveOperationException e ) {
+			return true;
+		}
 	}
 
 	/**
