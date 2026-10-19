@@ -15,17 +15,6 @@ class {
 		return this
 	}
 
-	/**
-	 * @return True when the terminal can host the full-screen UI
-	 */
-	static boolean function supported() {
-		try {
-			return createObject( "java", "ortus.boxlang.bxagents.tui.TuiScreen" ).isInteractive()
-		} catch ( any e ) {
-			return false
-		}
-	}
-
 	string function select( required string title, required array choices, string current = "", string help = "" ) {
 		try {
 			return variables.screen.select( arguments.title, arguments.help, arguments.choices, arguments.current )
@@ -38,6 +27,15 @@ class {
 	array function multiSelect( required string title, required array choices, string help = "" ) {
 		try {
 			return variables.screen.multiSelect( arguments.title, arguments.help, arguments.choices ).toArray()
+		} catch ( any e ) {
+			abortOrRethrow( e )
+			rethrow
+		}
+	}
+
+	string function review( required string title, required array lines, required array choices ) {
+		try {
+			return variables.screen.review( arguments.title, arguments.lines, arguments.choices )
 		} catch ( any e ) {
 			abortOrRethrow( e )
 			rethrow

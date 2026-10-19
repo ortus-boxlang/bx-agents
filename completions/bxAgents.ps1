@@ -71,15 +71,36 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 		)
 		'invoke:positional' = 'dir'
 		'new' = @(
+			@{ Name = 'app'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'channels'; Value = $true; Choices = @('web', 'api', 'telegram', 'slack', 'discord', 'whatsapp-cloud', 'teams', 'twilio', 'github', 'email', 'signal'); Dir = $false }
 			@{ Name = 'class'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'deploy'; Value = $true; Choices = @('docker', 'digitalocean', 'ssh', 'sftp', 'ftp', 'local'); Dir = $false }
 			@{ Name = 'description'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'destination'; Value = $true; Choices = @(); Dir = $true }
+			@{ Name = 'files'; Value = $true; Choices = @('read', 'all'); Dir = $false }
+			@{ Name = 'files-dir'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'forgebox'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'guard'; Value = $true; Choices = @('off', 'flag', 'block'); Dir = $false }
+			@{ Name = 'host'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'mcp'; Value = $true; Choices = @('github', 'stripe', 'notion', 'atlassian', 'cloudflare', 'supabase'); Dir = $false }
+			@{ Name = 'memory'; Value = $true; Choices = @('cache', 'file'); Dir = $false }
 			@{ Name = 'model'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'name'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'no-tui'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'no-wizard'; Value = $false; Choices = @(); Dir = $false }
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
+			@{ Name = 'region'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'registry'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'remote-path'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'repo'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'search'; Value = $true; Choices = @('http', 'brave', 'tavily', 'exa', 'google'); Dir = $false }
 			@{ Name = 'skipInstall'; Value = $false; Choices = @(); Dir = $false }
 			@{ Name = 'template'; Value = $true; Choices = @('minimal', 'webui-chat', 'slack-bot', 'telegram-bot', 'github-bot', 'mcp-server', 'scheduled', 'multi-agent'); Dir = $false }
+			@{ Name = 'user'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'web-auth'; Value = $true; Choices = @('open', 'key'); Dir = $false }
+			@{ Name = 'with'; Value = $true; Choices = @('time', 'fetch', 'search', 'browse', 'files', 'media'); Dir = $false }
+			@{ Name = 'wizard'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'yes'; Value = $false; Choices = @(); Dir = $false }
 		)
 		'new:positional' = 'dir'
 		'package' = @(

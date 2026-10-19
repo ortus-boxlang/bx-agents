@@ -225,17 +225,18 @@ class {
 	 * What the project can do, as the `features` ProjectScaffolder writes.
 	 *
 	 * @plan A plan
+	 * @modelKey False leaves the model provider's API key stub out of .env. `new` with only --model and --template keeps the project exactly as it always was; the stub is added once anything else is chosen, or the wizard ran.
 	 *
 	 * @return The features struct (see FeatureWriter)
 	 */
-	struct function toFeatures( required struct plan ) {
+	struct function toFeatures( required struct plan, boolean modelKey = true ) {
 		var p = arguments.plan
 		var features = {}
 		var tools = []
 		var envStubs = []
 
 		var modelProvider = variables.catalog.provider( p.provider )
-		if ( modelProvider.count() && len( modelProvider.envVar ) ) {
+		if ( arguments.modelKey && modelProvider.count() && len( modelProvider.envVar ) ) {
 			envStubs.append( { name : modelProvider.envVar, comment : "#modelProvider.name# API key. Get one at #modelProvider.keyUrl#", value : "" } )
 		}
 

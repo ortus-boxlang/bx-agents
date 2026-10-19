@@ -85,17 +85,17 @@ final class MultiSelectPrompt extends Prompt {
 		if ( !help.isEmpty() ) {
 			rows.add( helpRow() );
 		}
-		int room = Math.max( 3, height - rows.size() );
-		int first = Math.max( 0, Math.min( cursor - room / 2, choices.size() - room ) );
-		int last = Math.min( choices.size(), first + room );
-		int labelWidth = 0;
+		int	room		= Math.max( 3, height - rows.size() );
+		int	first		= Math.max( 0, Math.min( cursor - room / 2, choices.size() - room ) );
+		int	last		= Math.min( choices.size(), first + room );
+		int	labelWidth	= 0;
 		for ( Choice c : choices ) {
 			labelWidth = Math.max( labelWidth, c.label.length() );
 		}
 		for ( int i = first; i < last; i++ ) {
-			Choice c = choices.get( i );
-			boolean on = i == cursor;
-			Row r = Row.of().add( on ? "  > " : "    ", theme.accent );
+			Choice	c	= choices.get( i );
+			boolean	on	= i == cursor;
+			Row		r	= Row.of().add( on ? "  > " : "    ", theme.accent );
 			r.add( ticked[ i ] ? "[x] " : "[ ] ", ticked[ i ] ? theme.ok : theme.muted );
 			r.add( SelectPrompt.pad( c.label, labelWidth ), on ? theme.selected : theme.plain );
 			if ( !c.hint.isEmpty() ) {
@@ -113,6 +113,5 @@ final class MultiSelectPrompt extends Prompt {
 	String footer() {
 		return "↑↓ move   space toggle   a all   enter continue   esc back";
 	}
-
 
 }

@@ -32,7 +32,7 @@ public final class Row {
 	private record Seg( String text, Style style ) {
 	}
 
-	private final List<Seg>	segs	= new ArrayList<>();
+	private final List<Seg> segs = new ArrayList<>();
 
 	/** Bare constructor; chain {@link #add} calls. */
 	public static Row of() {
@@ -83,7 +83,8 @@ public final class Row {
 			if ( room <= 0 ) {
 				return;
 			}
-			String t = s.text.length() > room ? s.text.substring( 0, room ) : s.text;
+			// a clipped line ends in an ellipsis, so it reads as cut rather than as finished
+			String t = s.text.length() > room ? s.text.substring( 0, Math.max( 0, room - 1 ) ) + "…" : s.text;
 			buffer.setString( at, y, t, s.style );
 			at += t.length();
 		}

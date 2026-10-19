@@ -36,7 +36,7 @@ environments:
 | `tools` | list of strings | Module tools this agent gets, as `item@module` or `*@module`. See [Tools](#tools). |
 | `toolOptions` | mapping | Options for a module's tools, keyed by module name. See [Tool options](#tool-options). |
 | `subAgents` | list of strings | Names of sibling folders under the root project's `subagents/`. See [subagents/](subagents.md). |
-| `mcpServers` | list | Remote MCP servers - each entry a URL string or `{ url, name }`. See [mcp/](mcp.md). |
+| `mcpServers` | list | Remote MCP servers - each entry a URL string, or a mapping with `url`, `name` and the credentials the server wants (`token`, `headers`, `timeout`). See [mcp/](mcp.md). |
 | `security` | mapping | Forwarded verbatim into the generated app's `bxai` module settings; bx-ai's own `SecurityDirector` turns it into guardrail middleware. |
 | `memory` | string or mapping | The agent's conversation memory. A bare string is the type (`cache`); a mapping is `{ type, ...config }` and is passed through to `aiMemory()`. |
 | `checkpointer` | mapping | `{ type: cache\|file\|jdbc, ...config }`. Defaults to `{ type: cache }` if omitted. |
@@ -76,7 +76,7 @@ tools:
 
 ### Tool options
 
-`toolOptions` configures the tools of a module, keyed by **module name**. Today the one module that takes options is `bxplaywright`, whose options are those of bx-playwright's `playwright()`: a `profile` (a name, or a list of names) and settings such as `headless`, `baseURL`, `browser`, `viewport` or `device`.
+`toolOptions` configures the tools of a module, keyed by **module name**. Two modules take options: `bxai`, for its [file tools](#file-tools), and `bxplaywright`, whose options are those of bx-playwright's `playwright()`: a `profile` (a name, or a list of names) and settings such as `headless`, `baseURL`, `browser`, `viewport` or `device`.
 
 ```yaml
 tools:
@@ -92,6 +92,28 @@ toolOptions:
 - **Environment values.** `${env.NAME}` and `${env.NAME:default}` are replaced with the environment variable when the app starts, never at build time, so a secret or a per-machine setting stays out of the project. A variable that is not set and has no default fails the agent at startup, naming it.
 - **Checked at build time.** A key that is not a module the agent lists tools from, a module that takes no options, a key written as `item@module`, or an option bx-playwright does not have (the message lists the valid ones) is a `build` error.
 - The module-wide settings (where browsers are installed, the default profile) stay in bx-playwright's own settings, not here.
+
+### File tools
+
+bx-ai has 19 file tools (`readFile`, `writeFile`, `listDirectory`, `searchFiles`, `deleteFile`, `zipFiles` and more), but it registers none of them. In BxAgents an agent gets them by listing them **and** naming the folders they may use in `toolOptions.bxai.allowedPaths`:
+
+```yaml
+tools:
+  - readFile@bxai
+  - listDirectory@bxai
+toolOptions:
+  bxai:
+    allowedPaths:
+      - tmp                  # the system temp folder
+      - cwd                  # the folder the agent is started from
+      - /data/reports        # or an absolute path
+```
+
+- **Each agent gets its own tools, locked to its own folders.** A path outside them is refused (`..` tricks included), and the tools are never put in the shared registry where another agent could pick them up.
+- **No folders, no tools.** The tools exist only when `allowedPaths` is set, and an empty list is a build error, because bx-ai reads an empty list as "any path". Listing `readFile@bxai` with no `allowedPaths` fails with a message saying so.
+- `now@bxai`, `httpGet@bxai`, `webSearch@bxai` and the rest of bx-ai's registered tools keep working as before, with or without `toolOptions.bxai`. `*@bxai` includes the file tools once `allowedPaths` is set.
+- An entry may be `${env.NAME}` to take a folder from the environment.
+- `bxAgents new` can write all of this for you: see [the new wizard](../guides/new-wizard.md).
 
 ## Instructions
 

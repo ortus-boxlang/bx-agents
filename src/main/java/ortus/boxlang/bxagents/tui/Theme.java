@@ -36,10 +36,10 @@ import dev.tamboui.style.Style;
 public final class Theme {
 
 	/** Palette entries by name; the same names {@link #paint} accepts. */
-	private static final String[]	NAMES		= { "accent", "ok", "muted", "warn", "error" };
-	private static final int[][]	RGB			= { { 0x00, 0xDB, 0xFF }, { 0x00, 0xFF, 0x78 }, { 0x93, 0xA8, 0xB8 }, { 0xFF, 0xB4, 0x54 }, { 0xFF, 0x5C, 0x5C } };
-	private static final int[]		INDEXED		= { 45, 48, 109, 214, 203 };
-	private static final int[]		BASIC		= { 36, 32, 90, 33, 31 };
+	private static final String[]	NAMES	= { "accent", "ok", "muted", "warn", "error" };
+	private static final int[][]	RGB		= { { 0x00, 0xDB, 0xFF }, { 0x00, 0xFF, 0x78 }, { 0x93, 0xA8, 0xB8 }, { 0xFF, 0xB4, 0x54 }, { 0xFF, 0x5C, 0x5C } };
+	private static final int[]		INDEXED	= { 45, 48, 109, 214, 203 };
+	private static final int[]		BASIC	= { 36, 32, 90, 33, 31 };
 
 	/** none, basic, indexed or truecolor */
 	private final String			depth;

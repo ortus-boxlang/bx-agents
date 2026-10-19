@@ -69,5 +69,4 @@ final class ConfirmPrompt extends Prompt {
 		return "y yes   n no   ←→ switch   enter confirm   esc back";
 	}
 
-
 }

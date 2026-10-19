@@ -49,16 +49,18 @@ public final class TuiScreen implements AutoCloseable {
 	private static final int			MIN_PROMPT_ROWS	= 8;
 
 	private final TuiRunner				runner;
+	private final ClassLoader			previousLoader;
 	private final Theme					theme;
 	private final String				command;
 	private final Map<String, String[]>	answers			= new LinkedHashMap<>();
 	private int							step;
 	private int							steps;
 
-	private TuiScreen( TuiRunner runner, Theme theme, String command ) {
-		this.runner		= runner;
-		this.theme		= theme;
-		this.command	= command;
+	private TuiScreen( TuiRunner runner, Theme theme, String command, ClassLoader previousLoader ) {
+		this.previousLoader	= previousLoader;
+		this.runner			= runner;
+		this.theme			= theme;
+		this.command		= command;
 	}
 
 	/**
@@ -78,8 +80,21 @@ public final class TuiScreen implements AutoCloseable {
 	 * @throws Exception when the terminal cannot be put in raw mode
 	 */
 	public static TuiScreen open( String command ) throws Exception {
-		TuiConfig cfg = TuiConfig.builder().bracketedPaste( true ).build();
-		return new TuiScreen( TuiRunner.create( cfg ), Theme.detect(), command );
+		// JLine finds its terminal providers (exec, ffm, jni ...) through the thread's context
+		// class loader. Under BoxLang that is the runtime's loader, which cannot see this
+		// module's jar, so every provider is "not found" and JLine settles for a dumb terminal
+		// (measured: "Unable to find terminal provider exec"). Point it at this jar's loader for
+		// as long as the screen is open.
+		ClassLoader	own		= TuiScreen.class.getClassLoader();
+		ClassLoader	before	= Thread.currentThread().getContextClassLoader();
+		Thread.currentThread().setContextClassLoader( own );
+		try {
+			TuiConfig cfg = TuiConfig.builder().bracketedPaste( true ).build();
+			return new TuiScreen( TuiRunner.create( cfg ), Theme.detect(), command, before );
+		} catch ( Exception | Error e ) {
+			Thread.currentThread().setContextClassLoader( before );
+			throw e;
+		}
 	}
 
 	/** @return the palette in use, so BoxLang can paint its own output to match */
@@ -88,7 +103,8 @@ public final class TuiScreen implements AutoCloseable {
 	}
 
 	/**
-	 * Sets the "step n of m" shown in the header.
+	 * Sets the "step n of m" shown in the header; with steps of 0 it shows "step n", for flows
+	 * whose length is not known in advance.
 	 *
 	 * @return this screen
 	 */
@@ -109,20 +125,31 @@ public final class TuiScreen implements AutoCloseable {
 	}
 
 	public String select( String title, String help, List<?> choices, String current ) {
-		return (String) ask( new SelectPrompt( theme, title, help, Choice.listFrom( choices ), current ) );
+		return ( String ) ask( new SelectPrompt( theme, title, help, Choice.listFrom( choices ), current ) );
 	}
 
 	@SuppressWarnings( "unchecked" )
 	public List<String> multiSelect( String title, String help, List<?> choices ) {
-		return new ArrayList<>( (List<String>) ask( new MultiSelectPrompt( theme, title, help, Choice.listFrom( choices ) ) ) );
+		return new ArrayList<>( ( List<String> ) ask( new MultiSelectPrompt( theme, title, help, Choice.listFrom( choices ) ) ) );
+	}
+
+	/**
+	 * A question with lines of text above its choices, for the review screen.
+	 */
+	public String review( String title, List<?> lines, List<?> choices ) {
+		List<String> preface = new ArrayList<>();
+		for ( Object l : lines ) {
+			preface.add( String.valueOf( l ) );
+		}
+		return ( String ) ask( new SelectPrompt( theme, title, "", Choice.listFrom( choices ), null, preface ) );
 	}
 
 	public String text( String title, String help, String fallback, boolean secret, String requiredMessage ) {
-		return (String) ask( new TextPrompt( theme, title, help, fallback, secret, requiredMessage ) );
+		return ( String ) ask( new TextPrompt( theme, title, help, fallback, secret, requiredMessage ) );
 	}
 
 	public boolean confirm( String title, String help, boolean fallback ) {
-		return (Boolean) ask( new ConfirmPrompt( theme, title, help, fallback ) );
+		return ( Boolean ) ask( new ConfirmPrompt( theme, title, help, fallback ) );
 	}
 
 	/** Shows lines of text and waits for Enter. */
@@ -152,27 +179,27 @@ public final class TuiScreen implements AutoCloseable {
 	 * drop off the top when the terminal is short, so the question always fits.
 	 */
 	void paint( Frame frame, Prompt prompt ) {
-		Buffer	buf	= frame.buffer();
-		int		w	= frame.area().width();
-		int		h	= frame.area().height();
+		Buffer	buf		= frame.buffer();
+		int		w		= frame.area().width();
+		int		h		= frame.area().height();
 
 		// header
-		Row head = Row.of().add( " bxAgents", theme.accentBold ).add( "  " + command, theme.muted );
+		Row		head	= Row.of().add( " bxAgents", theme.accentBold ).add( "  " + command, theme.muted );
 		head.draw( buf, 0, 0, w );
-		if ( steps > 0 ) {
-			String right = "step " + step + " of " + steps + " ";
+		if ( step > 0 ) {
+			String right = steps > 0 ? "step " + step + " of " + steps + " " : "step " + step + " ";
 			Row.of( right, theme.muted ).draw( buf, Math.max( 0, w - right.length() ), 0, w );
 		}
 
 		// the prompt decides how much room it needs; answers get what is left
 		int			footerRow	= h - 1;
 		int			bodyTop		= 2;
-		int			bodyRows	= Math.max(1, footerRow - bodyTop);
+		int			bodyRows	= Math.max( 1, footerRow - bodyTop );
 		List<Row>	asked		= prompt.render( w - 2, Math.max( MIN_PROMPT_ROWS, bodyRows - answers.size() - 1 ) );
 		int			room		= Math.max( 0, bodyRows - asked.size() - 1 );
 
-		List<Row> done = new ArrayList<>();
-		int labelWidth = 0;
+		List<Row>	done		= new ArrayList<>();
+		int			labelWidth	= 0;
 		for ( String[] a : answers.values() ) {
 			labelWidth = Math.max( labelWidth, a[ 0 ].length() );
 		}
@@ -202,7 +229,11 @@ public final class TuiScreen implements AutoCloseable {
 
 	@Override
 	public void close() {
-		runner.close();
+		try {
+			runner.close();
+		} finally {
+			Thread.currentThread().setContextClassLoader( previousLoader );
+		}
 	}
 
 }

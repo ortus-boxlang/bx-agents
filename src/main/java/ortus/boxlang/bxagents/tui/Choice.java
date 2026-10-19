@@ -47,8 +47,8 @@ public final class Choice {
 	 */
 	public static Choice from( Object raw ) {
 		if ( raw instanceof Map<?, ?> m ) {
-			String value = str( get( m, "value" ) );
-			String label = get( m, "label" ) == null ? value : str( get( m, "label" ) );
+			String	value	= str( get( m, "value" ) );
+			String	label	= get( m, "label" ) == null ? value : str( get( m, "label" ) );
 			return new Choice( value, label, get( m, "hint" ) == null ? "" : str( get( m, "hint" ) ), truthy( get( m, "selected" ) ) );
 		}
 		String s = String.valueOf( raw );

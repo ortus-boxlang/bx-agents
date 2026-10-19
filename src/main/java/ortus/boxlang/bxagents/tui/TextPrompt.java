@@ -76,8 +76,8 @@ final class TextPrompt extends Prompt {
 			caret = 0;
 		} else if ( key.isKey( KeyCode.CHAR ) && !key.hasCtrl() && !key.hasAlt() ) {
 			text.insert( caret, key.string() );
-			caret += key.string().length();
-			rejected = false;
+			caret		+= key.string().length();
+			rejected	= false;
 		}
 	}
 
@@ -95,8 +95,8 @@ final class TextPrompt extends Prompt {
 		if ( !help.isEmpty() ) {
 			rows.add( helpRow() );
 		}
-		String shown = secret ? "•".repeat( text.length() ) : text.toString();
-		Row r = Row.of().add( "  > ", theme.accent );
+		String	shown	= secret ? "•".repeat( text.length() ) : text.toString();
+		Row		r		= Row.of().add( "  > ", theme.accent );
 		if ( text.length() == 0 && !fallback.isEmpty() ) {
 			r.add( "▏", theme.accent ).add( secret ? "" : fallback, theme.muted );
 		} else {
@@ -113,6 +113,5 @@ final class TextPrompt extends Prompt {
 	String footer() {
 		return "enter confirm   esc back";
 	}
-
 
 }

@@ -58,5 +58,4 @@ final class NotePrompt extends Prompt {
 		return "enter continue   esc back";
 	}
 
-
 }

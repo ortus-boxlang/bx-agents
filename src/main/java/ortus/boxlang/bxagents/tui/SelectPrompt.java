@@ -30,11 +30,20 @@ import dev.tamboui.tui.event.KeyEvent;
 final class SelectPrompt extends Prompt {
 
 	private final List<Choice>	choices;
+	private final List<String>	preface;
 	private int					cursor;
 
 	SelectPrompt( Theme theme, String title, String help, List<Choice> choices, String current ) {
+		this( theme, title, help, choices, current, List.of() );
+	}
+
+	/**
+	 * @param preface lines shown between the question and the choices, for a review screen
+	 */
+	SelectPrompt( Theme theme, String title, String help, List<Choice> choices, String current, List<String> preface ) {
 		super( theme, title, help );
-		this.choices = choices;
+		this.preface	= preface;
+		this.choices	= choices;
 		for ( int i = 0; i < choices.size(); i++ ) {
 			if ( choices.get( i ).value.equals( current ) ) {
 				cursor = i;
@@ -68,17 +77,23 @@ final class SelectPrompt extends Prompt {
 		if ( !help.isEmpty() ) {
 			rows.add( helpRow() );
 		}
-		int room = Math.max( 3, height - rows.size() );
-		int first = Math.max( 0, Math.min( cursor - room / 2, choices.size() - room ) );
-		int last = Math.min( choices.size(), first + room );
-		int labelWidth = 0;
+		for ( String line : preface ) {
+			rows.add( Row.of( "  " + line, theme.plain ) );
+		}
+		if ( !preface.isEmpty() ) {
+			rows.add( Row.of() );
+		}
+		int	room		= Math.max( 3, height - rows.size() );
+		int	first		= Math.max( 0, Math.min( cursor - room / 2, choices.size() - room ) );
+		int	last		= Math.min( choices.size(), first + room );
+		int	labelWidth	= 0;
 		for ( Choice c : choices ) {
 			labelWidth = Math.max( labelWidth, c.label.length() );
 		}
 		for ( int i = first; i < last; i++ ) {
-			Choice c = choices.get( i );
-			boolean on = i == cursor;
-			Row r = Row.of().add( on ? "  > " : "    ", theme.accent );
+			Choice	c	= choices.get( i );
+			boolean	on	= i == cursor;
+			Row		r	= Row.of().add( on ? "  > " : "    ", theme.accent );
 			r.add( pad( c.label, labelWidth ), on ? theme.selected : theme.plain );
 			if ( !c.hint.isEmpty() ) {
 				r.add( "  " + c.hint, theme.muted );
@@ -95,7 +110,6 @@ final class SelectPrompt extends Prompt {
 	String footer() {
 		return "↑↓ move   enter select   esc back";
 	}
-
 
 	static String pad( String s, int w ) {
 		StringBuilder sb = new StringBuilder( s );

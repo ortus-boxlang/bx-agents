@@ -68,6 +68,23 @@ class {
 		return answer
 	}
 
+	string function review( required string title, required array lines, required array choices ) {
+		variables.reviewed = arguments.lines
+		var answer = nextAnswer( "review", arguments.title, arguments.choices )
+		var values = arguments.choices.map( choice => isStruct( choice ) ? choice.value : choice )
+		if ( !values.contains( answer ) ) {
+			throw( type = "BxAgents.ScriptedAnswer", message = "Scripted answer [#answer#] is not one of the choices for [#arguments.title#]: #values.toList( ', ' )#" )
+		}
+		return answer
+	}
+
+	/**
+	 * @return The lines the review screen showed
+	 */
+	array function reviewed() {
+		return variables.reviewed ?: []
+	}
+
 	string function text( required string title, string help = "", string default = "", boolean secret = false, string required = "" ) {
 		var answer = nextAnswer( "text", arguments.title, [] )
 		if ( !len( answer ) ) {

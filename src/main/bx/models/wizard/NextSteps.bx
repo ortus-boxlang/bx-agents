@@ -1,0 +1,113 @@
+/**
+ * The text `new` prints once the project exists: what to fill in, how to try it, and the
+ * setup each chosen channel still needs from outside (a bot token, a public address, a
+ * daemon). It is plain text with the prompter's palette applied, so it stays in the
+ * terminal's scrollback after the full-screen UI has closed.
+ */
+class {
+
+	function init( any catalog ) {
+		variables.catalog = isNull( arguments.catalog ) ? new "models.wizard.WizardCatalog@bxagents"() : arguments.catalog
+		return this
+	}
+
+	/**
+	 * @plan The project plan
+	 * @features The features written (from ProjectPlan.toFeatures)
+	 * @projectRoot Absolute path of the new project
+	 * @installNote What `box install` said, or empty
+	 * @paint A function ( style, text ) that applies the palette; defaults to no color
+	 * @relativeRoot The path to `cd` into, or empty when the project is the current folder
+	 * @command The command that rebuilds the project without questions, shown last; empty to leave it out
+	 *
+	 * @return The text to print
+	 */
+	string function render( required struct plan, required struct features, required string projectRoot, string installNote = "", any paint, string relativeRoot = "", string command = "" ) {
+		var color = isNull( arguments.paint ) ? ( style, text ) => text : arguments.paint
+		var p = arguments.plan
+		var f = arguments.features
+		var out = []
+
+		out.append( color( "ok", "✔ " ) & color( "bold", "Created #p.name#" ) & color( "muted", "  #arguments.projectRoot#" ) )
+		if ( len( arguments.installNote ) ) {
+			out.append( color( "muted", "  " & arguments.installNote ) )
+		}
+		out.append( "" )
+		out.append( color( "accent", "Next" ) )
+
+		var n = 1
+		var fill = ( f.envStubs ?: [] ).filter( stub => !len( stub.value ) || stub.value == "xoxb-" || stub.value == "xapp-" )
+		if ( fill.len() ) {
+			out.append( "  #n#. Fill in .env" )
+			n++
+			var width = 0
+			for ( var stub in fill ) {
+				width = max( width, len( stub.name ) )
+			}
+			for ( var stub in fill ) {
+				out.append( "       " & color( "accent", stub.name ) & repeatString( " ", width - len( stub.name ) + 2 ) & color( "muted", stub.comment ) )
+			}
+		}
+		var generated = ( f.envStubs ?: [] ).filter( stub => stub.name == "CHAT_UI_API_KEY" && len( stub.value ) )
+		if ( generated.len() ) {
+			out.append( "       " & color( "muted", "CHAT_UI_API_KEY was generated for you. Share it only with people who should use the web chat." ) )
+		}
+		var providerNote = variables.catalog.provider( p.provider ).setup ?: ""
+		if ( len( providerNote ) ) {
+			out.append( "  #n#. #providerNote#" )
+			n++
+		}
+
+		var cd = len( arguments.relativeRoot ) ? "cd #arguments.relativeRoot# && " : ""
+		out.append( "  #n#. Talk to it        " & color( "accent", cd & "bxAgents chat" ) )
+		n++
+		out.append( "  #n#. Run its tests     " & color( "accent", "bxAgents test" ) )
+		n++
+		var url = p.channels.contains( "web" ) ? "  http://127.0.0.1:8080/chat" : ( p.channels.contains( "api" ) ? "  http://127.0.0.1:8080/api/chat/info" : "" )
+		out.append( "  #n#. Serve it          " & color( "accent", "bxAgents serve" ) & color( "muted", url ) )
+		n++
+		if ( len( p.deploy.target ) ) {
+			var prepare = [ "docker", "digitalocean" ].contains( p.deploy.target ) ? "bxAgents build" : "bxAgents package"
+			out.append( "  #n#. Deploy it         " & color( "accent", "#prepare# && bxAgents deploy --name=#p.deploy.target#" ) & color( "muted", "  (deploy/#p.deploy.target#.json)" ) )
+			n++
+		} else {
+			out.append( "  #n#. Deploy it         " & color( "accent", "bxAgents package" ) & color( "muted", "  then add a deploy/ entry, see conventions/deploy" ) )
+			n++
+		}
+
+		for ( var id in p.channels ) {
+			if ( [ "web", "api" ].contains( id ) ) {
+				continue
+			}
+			var channel = variables.catalog.channel( id )
+			out.append( "" )
+			out.append( color( "accent", "Set up #channel.name#" ) )
+			for ( var i = 1; i <= channel.steps.len(); i++ ) {
+				out.append( "  #i#. #channel.steps[ i ]#" )
+			}
+			out.append( color( "muted", "  More: docs #channel.docs#" ) )
+		}
+
+		if ( p.channels.contains( "web" ) && p.web.auth == "open" ) {
+			out.append( "" )
+			out.append( color( "warn", "The web chat is open." ) & " Anyone who can reach it sees every conversation. Add users or a key before putting it on the internet." )
+		}
+
+		for ( var id in p.mcp ) {
+			var entry = variables.catalog.mcpServer( id )
+			if ( !( entry.verified ?: true ) ) {
+				out.append( "" )
+				out.append( color( "warn", "#entry.name# is unverified." ) & " " & ( entry.unverifiedNote ?: "" ) )
+			}
+		}
+
+		if ( len( arguments.command ) ) {
+			out.append( "" )
+			out.append( color( "muted", "The same project without questions:" ) )
+			out.append( "  " & arguments.command )
+		}
+
+		return out.toList( char( 10 ) )
+	}
+
+}
