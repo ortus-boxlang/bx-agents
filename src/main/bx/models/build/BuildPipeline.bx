@@ -39,6 +39,7 @@ class {
 		variables.coldboxAppGenerator = new "models.build.generators.ColdBoxAppGenerator@bxagents"()
 		variables.toolsSkillsCopier = new "models.build.generators.ToolsSkillsCopier@bxagents"()
 		variables.runtimeLibsCopier = new "models.build.generators.RuntimeLibsCopier@bxagents"()
+		variables.boxLangModulesCopier = new "models.build.generators.BoxLangModulesCopier@bxagents"()
 		variables.interceptorSplitter = new "models.build.generators.InterceptorSplitter@bxagents"()
 		variables.routerGenerator = new "models.build.generators.RouterGenerator@bxagents"()
 		variables.webUiGenerator = new "models.build.generators.WebUiGenerator@bxagents"()
@@ -60,21 +61,6 @@ class {
 		var buildDir = root & "/.build"
 		var appDir = buildDir & "/app"
 		var buildStart = getTickCount()
-
-		// Packages the project's box.json lists (bx-playwright, ...): installed once, and again only
-		// when box.json changed or an installed folder went missing. devDependencies are not needed to build.
-		var boxJson = new "models.build.ProjectBoxJson@bxagents"()
-		var manifest = boxJson.read( root )
-		if ( boxJson.declared( manifest, false ).len() ) {
-			var installer = new "models.build.DependencyInstaller@bxagents"()
-			if ( installer.isCurrent( root, false ) ) {
-				arguments.onProgress( "+ box.json dependencies are up to date" )
-			} else {
-				arguments.onProgress( "+ Installing box.json dependencies..." )
-				var installed = installer.install( root, false, arguments.onProgress )
-				installer.writeStamp( root, false, installed )
-			}
-		}
 
 		arguments.onProgress( "+ Resolving the agent config..." )
 		var config = variables.configResolver.resolve( projectRoot = root, cliEnvironment = arguments.cliEnvironment )
@@ -212,11 +198,12 @@ class {
 		arguments.onProgress( "+ Copying tools/ and skills/..." )
 		variables.toolsSkillsCopier.copy( root, appDir )
 
-		// BoxLang modules the project installed (boxlang_modules/) travel with the app, so
-		// `serve` and a packaged .bxa carry them
-		if ( directoryExists( root & "/boxlang_modules" ) ) {
+		// BoxLang modules the developer installed in the project (boxlang_modules/, by CommandBox or
+		// `install-bx-module --local`) travel with the app, so `serve` and a packaged .bxa carry them
+		var modulesResult = variables.boxLangModulesCopier.copy( root, appDir )
+		if ( modulesResult.copied.len() || modulesResult.skipped.len() ) {
 			arguments.onProgress( "+ Copying boxlang_modules/ into the app..." )
-			directoryCopy( root & "/boxlang_modules", appDir & "/boxlang_modules", true )
+			arguments.onProgress( "    copied=#modulesResult.copied.toList( ', ' )#" & ( modulesResult.skipped.len() ? ", left out (devDependencies)=#modulesResult.skipped.toList( ', ' )#" : "" ) )
 		}
 
 		arguments.onProgress( "+ Copying bundled ColdBox runtime libraries..." )

@@ -14,7 +14,6 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 		'doctor' = 'Diagnose the environment and project - runtime, modules, env vars'
 		'hash-password' = 'Hash a password for a webui users entry'
 		'inspect' = 'Pretty-print a built project''s manifest.json'
-		'install' = 'Install the packages in a project''s box.json'
 		'invoke' = 'Send one message to a built agent, print the response, exit'
 		'new' = 'Scaffold a new agent project'
 		'package' = 'Package a built project into a .bxa'
@@ -63,11 +62,6 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
 		)
 		'inspect:positional' = 'dir'
-		'install' = @(
-			@{ Name = 'production'; Value = $false; Choices = @(); Dir = $false }
-			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
-		)
-		'install:positional' = 'dir'
 		'invoke' = @(
 			@{ Name = 'json'; Value = $false; Choices = @(); Dir = $false }
 			@{ Name = 'message'; Value = $true; Choices = @(); Dir = $false }

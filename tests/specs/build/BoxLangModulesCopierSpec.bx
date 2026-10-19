@@ -1,0 +1,79 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "BoxLangModulesCopier", function() {
+
+			beforeEach( function() {
+				variables.copier = new bxagents.models.build.generators.BoxLangModulesCopier();
+				variables.root = createTempDirectory( prefix = "bxagents-modcopy-" );
+				variables.app = root & "/.build/app";
+				directoryCreate( path = app, createPath = true );
+			} );
+
+			afterEach( function() {
+				directoryDelete( root, true );
+			} );
+
+			function addModule( required string folder, struct json = {} ) {
+				var dir = root & "/boxlang_modules/" & arguments.folder;
+				directoryCreate( path = dir, createPath = true );
+				fileWrite( dir & "/ModuleConfig.bx", "class {}" );
+				if ( arguments.json.count() ) {
+					fileWrite( dir & "/box.json", jsonSerialize( arguments.json ) );
+				}
+			}
+
+			it( "copies nothing, and creates nothing, when the project has no boxlang_modules", function() {
+				var result = copier.copy( root, app );
+
+				expect( result.copied ).toBeEmpty();
+				expect( directoryExists( app & "/boxlang_modules" ) ).toBeFalse();
+			} );
+
+			it( "copies every installed module into the app, files and subfolders", function() {
+				addModule( "bxplaywright" );
+				directoryCreate( root & "/boxlang_modules/bxplaywright/models" );
+				fileWrite( root & "/boxlang_modules/bxplaywright/models/Page.bx", "class {}" );
+				addModule( "bxother" );
+
+				var result = copier.copy( root, app );
+
+				expect( result.copied.sort( "text" ) ).toBe( [ "bxother", "bxplaywright" ] );
+				expect( fileExists( app & "/boxlang_modules/bxplaywright/models/Page.bx" ) ).toBeTrue();
+				expect( fileExists( app & "/boxlang_modules/bxother/ModuleConfig.bx" ) ).toBeTrue();
+			} );
+
+			it( "leaves out a module that is only a devDependency, matched by the slug in its own box.json", function() {
+				fileWrite( root & "/box.json", '{ "dependencies": { "bx-playwright": "*" }, "devDependencies": { "bx-test-helper": "*" } }' );
+				addModule( "bxplaywright", { slug : "bx-playwright" } );
+				addModule( "helper", { slug : "bx-test-helper" } );
+
+				var result = copier.copy( root, app );
+
+				expect( result.copied ).toBe( [ "bxplaywright" ] );
+				expect( result.skipped ).toBe( [ "helper" ] );
+				expect( directoryExists( app & "/boxlang_modules/helper" ) ).toBeFalse();
+			} );
+
+			it( "falls back to the folder name when a module has no box.json", function() {
+				fileWrite( root & "/box.json", '{ "devDependencies": { "bx-helper": "*" } }' );
+				addModule( "helper" );
+				addModule( "bxkeep" );
+
+				var result = copier.copy( root, app );
+
+				expect( result.skipped ).toBe( [ "helper" ] );
+				expect( result.copied ).toBe( [ "bxkeep" ] );
+			} );
+
+			it( "keeps a module that is in both dependencies and devDependencies", function() {
+				fileWrite( root & "/box.json", '{ "dependencies": { "bx-both": "*" }, "devDependencies": { "bx-both": "*" } }' );
+				addModule( "both", { slug : "bx-both" } );
+
+				expect( copier.copy( root, app ).copied ).toBe( [ "both" ] );
+			} );
+
+		} );
+	}
+
+}

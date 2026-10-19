@@ -12,7 +12,7 @@ _bxagents_complete() {
 	fi
 	local count=${#words[@]}
 	local cur="${words[count-1]}"
-	local verbs="build chat clean deploy doctor hash-password inspect install invoke new package serve test help"
+	local verbs="build chat clean deploy doctor hash-password inspect invoke new package serve test help"
 	local globals="--help -h --version -v"
 	COMPREPLY=()
 
@@ -41,7 +41,6 @@ _bxagents_complete() {
 			"doctor --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"hash-password --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"inspect --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
-			"install --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"invoke --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"new --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"new --template") COMPREPLY=($(compgen -W "minimal webui-chat slack-bot telegram-bot github-bot mcp-server scheduled multi-agent" -- "$part")) ;;
@@ -62,7 +61,6 @@ _bxagents_complete() {
 			doctor) flags="--json --projectRoot=" ;;
 			hash-password) flags="--password= --projectRoot=" ;;
 			inspect) flags="--json --projectRoot=" ;;
-			install) flags="--production --projectRoot=" ;;
 			invoke) flags="--json --message= --port= --projectRoot= --server" ;;
 			new) flags="--class --description= --forgebox= --model= --name= --projectRoot= --repo= --skipInstall --template=" ;;
 			package) flags="--projectRoot= --version=" ;;
@@ -83,7 +81,6 @@ _bxagents_complete() {
 		deploy) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		doctor) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		inspect) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
-		install) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		invoke) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		new) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		package) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;

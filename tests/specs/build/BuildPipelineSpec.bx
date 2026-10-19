@@ -43,25 +43,20 @@ class extends="testbox.system.BaseSpec" {
 				expect( fileExists( result.appDir & "/boxlang_modules/bxfake/ModuleConfig.bx" ) ).toBeTrue();
 			} );
 
-			it( "skips the install step when box.json dependencies are already installed", function() {
+			it( "leaves a devDependency module out of the app", function() {
 				var projectRoot = newTempProject( "yaml-inline-instructions" );
-				fileWrite( projectRoot & "/box.json", '{ "dependencies": { "pkg": "^1" } }' );
-				// what a previous `install` leaves behind
-				var boxJson = new bxagents.models.build.ProjectBoxJson();
-				directoryCreate( path = projectRoot & "/.build", createPath = true, ignoreExists = true );
-				directoryCreate( path = projectRoot & "/lib/modules/pkg", createPath = true, ignoreExists = true );
-				fileWrite( projectRoot & "/.build/install.json", jsonSerialize( {
-					production : boxJson.fingerprint( boxJson.read( projectRoot ), false ),
-					all        : "",
-					targets    : [ "lib/modules/pkg" ]
-				} ) );
-				var lines = [];
+				fileWrite( projectRoot & "/box.json", '{ "dependencies": { "bx-keep": "*" }, "devDependencies": { "bx-dev": "*" } }' );
+				for ( var folder in [ "bxkeep", "bxdev" ] ) {
+					directoryCreate( path = projectRoot & "/boxlang_modules/" & folder, createPath = true );
+					fileWrite( projectRoot & "/boxlang_modules/#folder#/ModuleConfig.bx", "class {}" );
+				}
+				fileWrite( projectRoot & "/boxlang_modules/bxkeep/box.json", '{ "slug": "bx-keep" }' );
+				fileWrite( projectRoot & "/boxlang_modules/bxdev/box.json", '{ "slug": "bx-dev" }' );
 
-				pipeline.build( projectRoot, "", function( line ) {
-					lines.append( line );
-				} );
+				var result = pipeline.build( projectRoot );
 
-				expect( lines.filter( l => l.findNoCase( "box.json dependencies are up to date" ) ) ).toHaveLength( 1 );
+				expect( directoryExists( result.appDir & "/boxlang_modules/bxkeep" ) ).toBeTrue();
+				expect( directoryExists( result.appDir & "/boxlang_modules/bxdev" ) ).toBeFalse();
 			} );
 
 			it( "builds a full project end-to-end, producing .build/app and .build/manifest.json", function() {

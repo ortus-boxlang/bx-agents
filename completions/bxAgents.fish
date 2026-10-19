@@ -26,7 +26,6 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n __bxagents_needs_verb -a 'doctor' -d 'Diagnose the environment and project - runtime, modules, env vars'
     complete -c $cmd -n __bxagents_needs_verb -a 'hash-password' -d 'Hash a password for a webui users entry'
     complete -c $cmd -n __bxagents_needs_verb -a 'inspect' -d 'Pretty-print a built project\'s manifest.json'
-    complete -c $cmd -n __bxagents_needs_verb -a 'install' -d 'Install the packages in a project\'s box.json'
     complete -c $cmd -n __bxagents_needs_verb -a 'invoke' -d 'Send one message to a built agent, print the response, exit'
     complete -c $cmd -n __bxagents_needs_verb -a 'new' -d 'Scaffold a new agent project'
     complete -c $cmd -n __bxagents_needs_verb -a 'package' -d 'Package a built project into a .bxa'
@@ -61,9 +60,6 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb inspect' -l json
     complete -c $cmd -n '__bxagents_using_verb inspect' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb inspect' -a '(__fish_complete_directories)'
-    complete -c $cmd -n '__bxagents_using_verb install' -l production
-    complete -c $cmd -n '__bxagents_using_verb install' -l projectRoot -x -a '(__fish_complete_directories)'
-    complete -c $cmd -n '__bxagents_using_verb install' -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb invoke' -l json
     complete -c $cmd -n '__bxagents_using_verb invoke' -l message -x
     complete -c $cmd -n '__bxagents_using_verb invoke' -l port -x
@@ -89,5 +85,5 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb serve' -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb test' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb test' -a '(__fish_complete_directories)'
-    complete -c $cmd -n '__bxagents_using_verb help' -a 'build chat clean deploy doctor hash-password inspect install invoke new package serve test help'
+    complete -c $cmd -n '__bxagents_using_verb help' -a 'build chat clean deploy doctor hash-password inspect invoke new package serve test help'
 end

@@ -1,0 +1,72 @@
+/**
+ * Copies the BoxLang modules a developer installed in the project (`boxlang_modules/`, put there
+ * by CommandBox or `install-bx-module --local`) into the generated app, so `serve` and a
+ * packaged `.bxa` carry them. BoxLang loads that folder from the project root during local work;
+ * a built app has no project root, so the modules have to travel with it.
+ *
+ * A module that is only a devDependency in the project's `box.json` (a test helper, say) is left
+ * out: the app does not need it to run. A module is matched to box.json by the `slug` in its own
+ * `box.json`, or failing that by its folder name (`bxplaywright` for `bx-playwright`).
+ */
+class {
+
+	/**
+	 * @projectRoot Absolute path to the project root
+	 * @appDir Absolute path to the generated app, e.g. "<projectRoot>/.build/app"
+	 *
+	 * @return { copied : [ module folder names ], skipped : [ module folder names left out as devDependencies ] }
+	 */
+	struct function copy( required string projectRoot, required string appDir ) {
+		var root = arguments.projectRoot.reReplace( "[\\/]+$", "" )
+		var source = root & "/boxlang_modules"
+		var result = { copied : [], skipped : [] }
+		if ( !directoryExists( source ) ) {
+			return result
+		}
+
+		var boxJson = new "models.build.ProjectBoxJson@bxagents"()
+		var devOnly = boxJson.devOnly( boxJson.read( root ) )
+		var target = arguments.appDir.reReplace( "[\\/]+$", "" ) & "/boxlang_modules"
+
+		for ( var folder in directoryList( path = source, recurse = false, type = "dir", listInfo = "name" ) ) {
+			if ( isDevOnly( source & "/" & folder, folder, devOnly ) ) {
+				result.skipped.append( folder )
+				continue
+			}
+			directoryCreate( path = target, createPath = true, ignoreExists = true )
+			directoryCopy( source & "/" & folder, target & "/" & folder, true )
+			result.copied.append( folder )
+		}
+		return result
+	}
+
+	/**
+	 * @path Absolute path to one installed module
+	 * @folder Its folder name
+	 * @devOnly The project's development-only package names
+	 */
+	private boolean function isDevOnly( required string path, required string folder, required array devOnly ) {
+		if ( !arguments.devOnly.len() ) {
+			return false
+		}
+		var names = [ arguments.folder, "bx-" & arguments.folder ]
+		var moduleJson = arguments.path & "/box.json"
+		if ( fileExists( moduleJson ) ) {
+			try {
+				var parsed = jsonDeserialize( fileRead( moduleJson ) )
+				if ( isStruct( parsed ) && len( parsed.slug ?: "" ) ) {
+					names = [ parsed.slug ]
+				}
+			} catch ( any e ) {
+				// an unreadable module box.json: fall back to the folder name
+			}
+		}
+		for ( var name in names ) {
+			if ( arguments.devOnly.contains( name ) ) {
+				return true
+			}
+		}
+		return false
+	}
+
+}
