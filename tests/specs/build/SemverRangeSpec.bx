@@ -1,0 +1,84 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "SemverRange", function() {
+
+			beforeEach( function() {
+				variables.semver = new bxagents.models.build.SemverRange();
+				variables.versions = [ "3.9.0", "4.8.0", "4.9.1+32", "4.9.1+31", "5.0.0", "5.1.0-beta" ];
+			} );
+
+			it( "orders versions numerically, pre-releases below releases, builds as a tie-break", function() {
+				expect( semver.compare( "1.2.10", "1.2.9" ) ).toBe( 1 );
+				expect( semver.compare( "1.0.0-snapshot", "1.0.0" ) ).toBe( -1 );
+				expect( semver.compare( "1.0.0-alpha.2", "1.0.0-alpha.10" ) ).toBe( -1 );
+				expect( semver.compare( "7.2.2+23", "7.2.2+22" ) ).toBe( 1 );
+				expect( semver.compare( "2.0.0", "2.0.0" ) ).toBe( 0 );
+			} );
+
+			it( "rejects a string that is not a version", function() {
+				expect( function() {
+					semver.parse( "banana" );
+				} ).toThrow( type = "BxAgents.InvalidVersion" );
+			} );
+
+			it( "picks the newest release for * and latest, never a pre-release while a release exists", function() {
+				expect( semver.pick( versions, "*" ) ).toBe( "5.0.0" );
+				expect( semver.pick( versions, "latest" ) ).toBe( "5.0.0" );
+				expect( semver.pick( versions, "" ) ).toBe( "5.0.0" );
+			} );
+
+			it( "falls back to the newest pre-release for * when nothing else exists", function() {
+				expect( semver.pick( [ "1.0.0-snapshot" ], "*" ) ).toBe( "1.0.0-snapshot" );
+			} );
+
+			it( "matches an exact version, and a pre-release only by name", function() {
+				expect( semver.pick( versions, "4.8.0" ) ).toBe( "4.8.0" );
+				expect( semver.pick( versions, "=4.8.0" ) ).toBe( "4.8.0" );
+				expect( semver.pick( versions, "5.1.0-beta" ) ).toBe( "5.1.0-beta" );
+				expect( semver.pick( versions, "9.9.9" ) ).toBe( "" );
+			} );
+
+			it( "handles caret ranges, including the 0.x rules", function() {
+				expect( semver.pick( versions, "^4" ) ).toBe( "4.9.1+32" );
+				expect( semver.pick( versions, "^4.8.0" ) ).toBe( "4.9.1+32" );
+				expect( semver.pick( versions, "^6" ) ).toBe( "" );
+				expect( semver.pick( [ "0.2.3", "0.2.5", "0.3.0" ], "^0.2.3" ) ).toBe( "0.2.5" );
+				expect( semver.pick( [ "0.0.3", "0.0.4" ], "^0.0.3" ) ).toBe( "0.0.3" );
+			} );
+
+			it( "handles tilde ranges", function() {
+				expect( semver.pick( versions, "~4.8" ) ).toBe( "4.8.0" );
+				expect( semver.pick( versions, "~4.8.0" ) ).toBe( "4.8.0" );
+				expect( semver.pick( versions, "~4" ) ).toBe( "4.9.1+32" );
+			} );
+
+			it( "handles partial and wildcard versions", function() {
+				expect( semver.pick( versions, "4" ) ).toBe( "4.9.1+32" );
+				expect( semver.pick( versions, "4.x" ) ).toBe( "4.9.1+32" );
+				expect( semver.pick( versions, "4.8.x" ) ).toBe( "4.8.0" );
+				expect( semver.pick( versions, "4.8" ) ).toBe( "4.8.0" );
+			} );
+
+			it( "handles comparators and alternatives", function() {
+				expect( semver.pick( versions, ">=3 <5" ) ).toBe( "4.9.1+32" );
+				expect( semver.pick( versions, ">4.8.0" ) ).toBe( "5.0.0" );
+				expect( semver.pick( versions, "<4" ) ).toBe( "3.9.0" );
+				expect( semver.pick( versions, "<=4.8.0" ) ).toBe( "4.8.0" );
+				expect( semver.pick( versions, "^3 || ^5" ) ).toBe( "5.0.0" );
+			} );
+
+			it( "picks the higher build of equal versions", function() {
+				expect( semver.pick( [ "4.9.1+31", "4.9.1+32" ], "^4" ) ).toBe( "4.9.1+32" );
+			} );
+
+			it( "answers satisfies() directly", function() {
+				expect( semver.satisfies( "1.5.0", "^1.2.0" ) ).toBeTrue();
+				expect( semver.satisfies( "2.0.0", "^1.2.0" ) ).toBeFalse();
+				expect( semver.satisfies( "1.0.0-snapshot", "*" ) ).toBeFalse();
+			} );
+
+		} );
+	}
+
+}

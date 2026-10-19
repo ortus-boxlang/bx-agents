@@ -1,0 +1,165 @@
+/**
+ * Reads a project's root `box.json`: the list of packages the project needs that
+ * BX Agents does not already bundle, and where they go. The layout is the same one
+ * the ColdBox templates use, so plain `box install` gives the same result.
+ *
+ * <pre>
+ * {
+ *   "name": "support-bot",
+ *   "dependencies":    { "bx-playwright": "^1", "cbvalidation": "^4" },
+ *   "devDependencies": { "testbox": "*" },
+ *   "installPathConventions": { "modules": "lib/modules" },
+ *   "installPaths": { "testbox": "lib/testbox/" }
+ * }
+ * </pre>
+ *
+ * Only ForgeBox packages are supported: a value is a version range (`^4`, `~1.2`, `*`,
+ * `1.0.0`, see SemverRange) or `forgebox:slug@range`.
+ *
+ * Where a package goes, in order: `installPaths[ slug ]`; for a BoxLang module (ForgeBox
+ * type `boxlang-modules`) `boxlang_modules/<module name>`, the folder BoxLang loads from
+ * the project root; `installPathConventions[ type ]` plus the slug; otherwise `lib/<slug>`
+ * (`lib/modules/<slug>` for a ColdBox module). `build` copies `lib/` into the app.
+ */
+class {
+
+	/**
+	 * @projectRoot Absolute path to the project root
+	 *
+	 * @return { path, exists, name, dependencies, devDependencies, installPaths, installPathConventions }; every map empty when there is no box.json
+	 */
+	struct function read( required string projectRoot ) {
+		var path = arguments.projectRoot.reReplace( "[\\/]+$", "" ) & "/box.json"
+		var result = {
+			path                   : path,
+			exists                 : false,
+			name                   : "",
+			dependencies           : {},
+			devDependencies        : {},
+			installPaths           : {},
+			installPathConventions : {}
+		}
+		if ( !fileExists( path ) ) {
+			return result
+		}
+		result.exists = true
+
+		var parsed = ""
+		try {
+			parsed = jsonDeserialize( fileRead( path ) )
+		} catch ( any e ) {
+			fail( path, "it is not valid JSON (#e.message#)" )
+		}
+		if ( !isStruct( parsed ) ) {
+			fail( path, "it must be a JSON object" )
+		}
+
+		result.name = isSimpleValue( parsed.name ?: "" ) ? toString( parsed.name ?: "" ) : ""
+
+		for ( var section in [ "dependencies", "devDependencies" ] ) {
+			var declared = parsed[ section ] ?: {}
+			if ( !isStruct( declared ) ) {
+				fail( path, "'#section#' must be an object of package name to version range" )
+			}
+			for ( var slug in declared ) {
+				checkSlug( path, section, slug )
+				result[ section ][ slug ] = normalizeRange( path, section, slug, declared[ slug ] )
+			}
+		}
+
+		for ( var section in [ "installPaths", "installPathConventions" ] ) {
+			var mapping = parsed[ section ] ?: {}
+			if ( !isStruct( mapping ) ) {
+				fail( path, "'#section#' must be an object of name to folder" )
+			}
+			for ( var key in mapping ) {
+				result[ section ][ key ] = checkFolder( path, section, key, mapping[ key ] )
+			}
+		}
+
+		return result
+	}
+
+	/**
+	 * @manifest A struct from read()
+	 * @includeDev Include devDependencies
+	 *
+	 * @return [ { slug, range, dev } ], dependencies first; a package in both is listed once, as a dependency
+	 */
+	array function declared( required struct manifest, boolean includeDev = true ) {
+		var list = []
+		for ( var slug in arguments.manifest.dependencies ) {
+			list.append( { slug : slug, range : arguments.manifest.dependencies[ slug ], dev : false } )
+		}
+		if ( arguments.includeDev ) {
+			for ( var slug in arguments.manifest.devDependencies ) {
+				if ( !arguments.manifest.dependencies.keyExists( slug ) ) {
+					list.append( { slug : slug, range : arguments.manifest.devDependencies[ slug ], dev : true } )
+				}
+			}
+		}
+		return list
+	}
+
+	/**
+	 * A short hash of everything that decides what gets installed and where, so `build`
+	 * can tell whether box.json changed since the last install.
+	 *
+	 * @manifest A struct from read()
+	 * @includeDev Include devDependencies
+	 */
+	string function fingerprint( required struct manifest, boolean includeDev = true ) {
+		var canonical = []
+		for ( var entry in declared( arguments.manifest, arguments.includeDev ) ) {
+			canonical.append( "#entry.slug#=#entry.range#" )
+		}
+		canonical.sort( "text" )
+		for ( var section in [ "installPaths", "installPathConventions" ] ) {
+			var keys = arguments.manifest[ section ].keyArray().sort( "text" )
+			for ( var key in keys ) {
+				canonical.append( "#section#:#key#=#arguments.manifest[ section ][ key ]#" )
+			}
+		}
+		return left( hash( canonical.toList( "|" ), "SHA-256" ), 16 )
+	}
+
+	// ------------------------------------------------------------------------
+
+	private void function checkSlug( required string path, required string section, required string slug ) {
+		if ( !arguments.slug.reFind( "^[A-Za-z0-9_.\-]+$" ) ) {
+			fail( arguments.path, "'#arguments.section#' has the package name [#arguments.slug#], which is not a ForgeBox slug" )
+		}
+	}
+
+	private string function normalizeRange( required string path, required string section, required string slug, required any value ) {
+		if ( !isSimpleValue( arguments.value ) ) {
+			fail( arguments.path, "'#arguments.section#.#arguments.slug#' must be a version range such as ^1.2.0" )
+		}
+		var text = trim( toString( arguments.value ) )
+		if ( text.reFindNoCase( "^forgebox:" ) ) {
+			var spec = text.reReplaceNoCase( "^forgebox:", "" )
+			if ( spec.listFirst( "@" ) != arguments.slug ) {
+				fail( arguments.path, "'#arguments.section#.#arguments.slug#' is [#text#]: the package name after forgebox: must be the same as the key" )
+			}
+			text = find( "@", spec ) ? spec.listRest( "@" ) : "*"
+		}
+		if ( text.reFind( "[:/\\]" ) || text.reFindNoCase( "^(git|http|file|github)" ) ) {
+			fail( arguments.path, "'#arguments.section#.#arguments.slug#' is [#text#]. Only ForgeBox packages are supported: give a version range such as ^1.2.0 or *" )
+		}
+		return text
+	}
+
+	private string function checkFolder( required string path, required string section, required string key, required any value ) {
+		var folder = isSimpleValue( arguments.value ) ? trim( toString( arguments.value ) ) : ""
+		folder = folder.reReplace( "[\\/]+$", "" ).replace( "\", "/", "all" )
+		if ( !len( folder ) || folder.left( 1 ) == "/" || folder.reFind( "^[A-Za-z]:" ) || folder.reFind( "(^|/)\.\.(/|$)" ) ) {
+			fail( arguments.path, "'#arguments.section#.#arguments.key#' must be a folder inside the project, such as lib/testbox/ (not absolute, no ..)" )
+		}
+		return folder
+	}
+
+	private void function fail( required string path, required string reason ) {
+		throw( type = "BxAgents.InvalidBoxJson", message = "box.json at [#arguments.path#] is invalid: #arguments.reason#" )
+	}
+
+}

@@ -73,7 +73,7 @@ class {
 					"/specs"   : specsDir,
 					"/testbox" : testsDir & "/testbox"
 				},
-				modulesDirectory : currentModulesDirectory()
+				modulesDirectory : currentModulesDirectory( root )
 			} ) )
 
 			fileWrite( scriptPath, renderRunnerScript( reportPath ) )
@@ -150,12 +150,16 @@ class {
 	/**
 	 * @return This runtime's own configured modulesDirectory list, as strings - carried over into the child process's boxlang.json so bxModules.bxagents.* (e.g. BaseAgentSpec) resolves identically there
 	 */
-	private array function currentModulesDirectory() {
+	private array function currentModulesDirectory( string projectRoot = "" ) {
 		var configured = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" )
 			.getInstance().getConfiguration().modulesDirectory
 		var dirs = []
 		for ( var dir in configured ) {
 			dirs.append( toString( dir ) )
+		}
+		// BoxLang modules the project installed with `install`
+		if ( len( arguments.projectRoot ?: "" ) && directoryExists( arguments.projectRoot & "/boxlang_modules" ) ) {
+			dirs.append( arguments.projectRoot & "/boxlang_modules" )
 		}
 		return dirs
 	}

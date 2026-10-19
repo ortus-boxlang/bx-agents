@@ -1,0 +1,51 @@
+/**
+ * `install` CLI verb - installs the packages a project's root `box.json` declares, from
+ * ForgeBox, with no `box` CLI needed (see DependencyInstaller for where things go).
+ *
+ * BoxLang modules (bx-playwright, ...) land in `boxlang_modules/`, which BoxLang loads from
+ * the project root; ColdBox modules in `lib/modules`; TestBox wherever `installPaths` says.
+ * Packages this module already bundles (bx-ai, ColdBox, ...) are not installed again unless
+ * the project lists them itself. `--production` leaves devDependencies out (TestBox).
+ *
+ * A project with no box.json has nothing to install, which is not an error: the modules
+ * BX Agents bundles are all most agents need.
+ */
+class {
+
+	/**
+	 * @options { projectRoot (required, absolute path), production (optional boolean - skip devDependencies) }
+	 */
+	struct function run( struct options = {} ) {
+		var projectRoot = trim( arguments.options.projectRoot ?: "" )
+		if ( !len( projectRoot ) ) {
+			throw( type = "BxAgents.MissingProjectRoot", message = "`install` requires a project root" )
+		}
+		var root = projectRoot.reReplace( "[\\/]+$", "" )
+		var includeDev = !( arguments.options.production ?: false )
+
+		var installer = new "models.build.DependencyInstaller@bxagents"()
+		var boxJson = new "models.build.ProjectBoxJson@bxagents"()
+		var manifest = boxJson.read( root )
+		if ( !boxJson.declared( manifest, includeDev ).len() ) {
+			return {
+				exitCode : 0,
+				message  : manifest.exists
+					? "box.json lists no dependencies - nothing to install"
+					: "No box.json in [#root#] - nothing to install. BX Agents already bundles BX AI, ColdBox and the other modules agents use; add a box.json only for more."
+			}
+		}
+
+		var result = installer.install( root, includeDev, ( line ) => println( line ) )
+		installer.writeStamp( root, includeDev, result )
+
+		for ( var skipped in result.skipped ) {
+			println( "  ~ #skipped.slug#: #skipped.reason#" )
+		}
+
+		return {
+			exitCode : 0,
+			message  : "Installed #result.installed.len()# package(s), #result.current.len()# already up to date"
+		}
+	}
+
+}

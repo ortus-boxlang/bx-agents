@@ -1,0 +1,226 @@
+/**
+ * The REAL DependencyInstaller against a stubbed ForgeBox: a catalog of fake packages whose
+ * zips are built on the fly, so no network is involved.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "DependencyInstaller", function() {
+
+			beforeEach( function() {
+				variables.work = createTempDirectory( prefix = "bxagents-installer-" );
+				variables.project = work & "/project";
+				directoryCreate( project );
+				variables.downloads = [];
+				variables.catalog = {};
+				variables.client = new bxagents.models.build.ForgeBoxClient();
+				client.setEntryCaller( function( slug ) {
+					if ( !catalog.keyExists( slug ) ) {
+						return { status : 404, body : {} };
+					}
+					return { status : 200, body : { error : false, data : catalog[ slug ].entry } };
+				} );
+				client.setDownloadCaller( function( url, destPath ) {
+					downloads.append( url );
+					fileCopy( url, destPath );
+					return { status : 200 };
+				} );
+				variables.installer = new bxagents.models.build.DependencyInstaller( client );
+			} );
+
+			afterEach( function() {
+				directoryDelete( work, true );
+			} );
+
+			/**
+			 * Registers a fake ForgeBox package: one zip per version, holding a box.json and one file.
+			 */
+			function addPackage( required string slug, required string type, required array versions, struct packageJson = {} ) {
+				var entries = [];
+				for ( var version in arguments.versions ) {
+					var source = work & "/src-#slug#-#version#";
+					directoryCreate( path = source, createPath = true, ignoreExists = true );
+					var json = duplicate( packageJson );
+					json.slug = slug;
+					fileWrite( source & "/box.json", jsonSerialize( json ) );
+					fileWrite( source & "/Hello.txt", "#slug# #version#" );
+					var zip = work & "/#slug#-#version#.zip";
+					if ( fileExists( zip ) ) {
+						fileDelete( zip );
+					}
+					compress( "zip", source, zip, false );
+					entries.append( { version : version, downloadURL : zip } );
+				}
+				catalog[ slug ] = { entry : { slug : slug, typeSlug : arguments.type, versions : entries, latestVersion : entries[ 1 ] } };
+			}
+
+			function writeBoxJson( required struct content ) {
+				fileWrite( project & "/box.json", jsonSerialize( arguments.content ) );
+			}
+
+			it( "installs a BoxLang module into boxlang_modules under its module name", function() {
+				addPackage( "bx-fake", "boxlang-modules", [ "1.2.0" ], { boxlang : { moduleName : "bxfake" } } );
+				writeBoxJson( { dependencies : { "bx-fake" : "^1" } } );
+
+				var result = installer.install( project );
+
+				expect( result.installed ).toHaveLength( 1 );
+				expect( result.installed[ 1 ].path ).toBe( "boxlang_modules/bxfake" );
+				expect( fileRead( project & "/boxlang_modules/bxfake/Hello.txt" ) ).toBe( "bx-fake 1.2.0" );
+			} );
+
+			it( "picks the newest version inside the range", function() {
+				addPackage( "pkg", "modules", [ "1.0.0", "1.4.0", "2.0.0" ] );
+				writeBoxJson( { dependencies : { "pkg" : "^1" } } );
+
+				var result = installer.install( project );
+
+				expect( result.installed[ 1 ].version ).toBe( "1.4.0" );
+			} );
+
+			it( "puts a ColdBox module in lib/modules, anything else in lib, and honours installPaths and conventions", function() {
+				addPackage( "cbmod", "modules", [ "1.0.0" ] );
+				addPackage( "testbox", "testing", [ "7.0.0" ] );
+				addPackage( "other", "mvc", [ "1.0.0" ] );
+				addPackage( "styled", "themes", [ "1.0.0" ] );
+				writeBoxJson( {
+					dependencies           : { "cbmod" : "*", "other" : "*", "styled" : "*" },
+					devDependencies        : { "testbox" : "*" },
+					installPaths           : { "testbox" : "lib/testbox/" },
+					installPathConventions : { "themes" : "lib/themes" }
+				} );
+
+				installer.install( project );
+
+				expect( fileExists( project & "/lib/modules/cbmod/Hello.txt" ) ).toBeTrue();
+				expect( fileExists( project & "/lib/testbox/Hello.txt" ) ).toBeTrue();
+				expect( fileExists( project & "/lib/other/Hello.txt" ) ).toBeTrue();
+				expect( fileExists( project & "/lib/themes/styled/Hello.txt" ) ).toBeTrue();
+			} );
+
+			it( "leaves devDependencies out when asked", function() {
+				addPackage( "testbox", "testing", [ "7.0.0" ] );
+				addPackage( "pkg", "modules", [ "1.0.0" ] );
+				writeBoxJson( { dependencies : { "pkg" : "*" }, devDependencies : { "testbox" : "*" } } );
+
+				installer.install( project, false );
+
+				expect( directoryExists( project & "/lib/modules/pkg" ) ).toBeTrue();
+				expect( directoryExists( project & "/lib/testbox" ) ).toBeFalse();
+			} );
+
+			it( "does not download again what is already installed at the chosen version", function() {
+				addPackage( "pkg", "modules", [ "1.0.0" ] );
+				writeBoxJson( { dependencies : { "pkg" : "*" } } );
+
+				installer.install( project );
+				var second = installer.install( project );
+
+				expect( second.installed ).toBeEmpty();
+				expect( second.current ).toHaveLength( 1 );
+			} );
+
+			it( "replaces an installed package when a newer version is in range, removing files the old one had", function() {
+				addPackage( "pkg", "modules", [ "1.0.0" ] );
+				writeBoxJson( { dependencies : { "pkg" : "^1" } } );
+				installer.install( project );
+				fileWrite( project & "/lib/modules/pkg/OldOnly.txt", "stale" );
+
+				addPackage( "pkg", "modules", [ "1.1.0", "1.0.0" ] );
+				var result = installer.install( project );
+
+				expect( result.installed[ 1 ].version ).toBe( "1.1.0" );
+				expect( fileExists( project & "/lib/modules/pkg/OldOnly.txt" ) ).toBeFalse();
+				expect( fileRead( project & "/lib/modules/pkg/Hello.txt" ) ).toBe( "pkg 1.1.0" );
+			} );
+
+			it( "installs what a package itself depends on, but not what BX Agents already bundles", function() {
+				addPackage( "bx-fake", "boxlang-modules", [ "1.0.0" ], { boxlang : { moduleName : "bxfake" }, dependencies : { "cbhelper" : "^1", "bx-ai" : "*" } } );
+				addPackage( "cbhelper", "modules", [ "1.3.0" ] );
+				addPackage( "bx-ai", "boxlang-modules", [ "3.0.0" ], { boxlang : { moduleName : "bxai" } } );
+				writeBoxJson( { dependencies : { "bx-fake" : "*" } } );
+
+				var result = installer.install( project );
+
+				expect( result.installed.map( i => i.slug ).sort( "text" ) ).toBe( [ "bx-fake", "cbhelper" ] );
+				expect( directoryExists( project & "/boxlang_modules/bxai" ) ).toBeFalse();
+				expect( result.skipped.filter( s => s.slug == "bx-ai" ) ).toHaveLength( 1 );
+			} );
+
+			it( "installs a bundled package the project lists itself", function() {
+				addPackage( "bx-ai", "boxlang-modules", [ "3.0.0" ], { boxlang : { moduleName : "bxai" } } );
+				writeBoxJson( { dependencies : { "bx-ai" : "*" } } );
+
+				installer.install( project );
+
+				expect( directoryExists( project & "/boxlang_modules/bxai" ) ).toBeTrue();
+			} );
+
+			it( "fails clearly for an unknown package and for a range nothing satisfies", function() {
+				writeBoxJson( { dependencies : { "nope" : "*" } } );
+				expect( function() {
+					installer.install( project );
+				} ).toThrow( type = "BxAgents.PackageNotFound" );
+
+				addPackage( "pkg", "modules", [ "1.0.0", "1.1.0" ] );
+				writeBoxJson( { dependencies : { "pkg" : "^5" } } );
+				expect( function() {
+					installer.install( project );
+				} ).toThrow( type = "BxAgents.NoMatchingVersion", regex = "Available: 1\.0\.0, 1\.1\.0" );
+			} );
+
+			it( "remembers what was installed, so build can tell when nothing changed", function() {
+				addPackage( "pkg", "modules", [ "1.0.0" ] );
+				addPackage( "testbox", "testing", [ "7.0.0" ] );
+				writeBoxJson( { dependencies : { "pkg" : "^1" }, devDependencies : { "testbox" : "*" } } );
+
+				expect( installer.isCurrent( project ) ).toBeFalse();
+
+				installer.writeStamp( project, true, installer.install( project, true ) );
+
+				expect( installer.isCurrent( project, false ) ).toBeTrue();
+				expect( installer.isCurrent( project, true ) ).toBeTrue();
+			} );
+
+			it( "is not current after box.json changes or an installed folder goes missing, and a production install does not vouch for devDependencies", function() {
+				addPackage( "pkg", "modules", [ "1.0.0" ] );
+				addPackage( "testbox", "testing", [ "7.0.0" ] );
+				writeBoxJson( { dependencies : { "pkg" : "^1" }, devDependencies : { "testbox" : "*" } } );
+				installer.writeStamp( project, false, installer.install( project, false ) );
+
+				expect( installer.isCurrent( project, false ) ).toBeTrue();
+				expect( installer.isCurrent( project, true ) ).toBeFalse();
+
+				writeBoxJson( { dependencies : { "pkg" : "^2" }, devDependencies : { "testbox" : "*" } } );
+				expect( installer.isCurrent( project, false ) ).toBeFalse();
+
+				writeBoxJson( { dependencies : { "pkg" : "^1" }, devDependencies : { "testbox" : "*" } } );
+				expect( installer.isCurrent( project, false ) ).toBeTrue();
+				directoryDelete( project & "/lib/modules/pkg", true );
+				expect( installer.isCurrent( project, false ) ).toBeFalse();
+			} );
+
+			it( "does nothing for a project with no box.json", function() {
+				var result = installer.install( project );
+
+				expect( result.installed ).toBeEmpty();
+				expect( downloads ).toBeEmpty();
+			} );
+
+			it( "reports one line per step through onProgress", function() {
+				addPackage( "pkg", "modules", [ "1.0.0" ] );
+				writeBoxJson( { dependencies : { "pkg" : "*" } } );
+				var lines = [];
+
+				installer.install( project, true, function( line ) {
+					lines.append( line );
+				} );
+
+				expect( lines ).toHaveLength( 1 );
+				expect( lines[ 1 ] ).toInclude( "pkg 1.0.0" );
+			} );
+
+		} );
+	}
+
+}

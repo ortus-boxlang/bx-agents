@@ -79,6 +79,9 @@ Imprime de forma legible un manifest.json existente.
 ::: card title="clean" icon="phosphor-duotone:broom" href="#clean"
 Elimina la salida .build/ y dist/ de un proyecto.
 :::
+::: card title="install" icon="phosphor-duotone:package" href="#install"
+Instala los paquetes del box.json de un proyecto.
+:::
 :::
 
 ### `new`
@@ -263,6 +266,20 @@ bxAgents clean
 
 - Solo elimina `.build` y `dist` - las convenciones fuente (`Agent.yaml`, `tools/`, etc.) nunca se tocan.
 - Reporta "Nothing to clean" si ninguno de los directorios existe.
+
+### `install`
+
+Instala los paquetes que lista el [`box.json`](conventions/box-json.md) de un proyecto, desde ForgeBox.
+
+```bash
+bxAgents install [--production]
+```
+
+- Los módulos BoxLang (como `bx-playwright`) van a `boxlang_modules/`, los módulos ColdBox a `lib/modules`, y TestBox y similares a `lib/`. Ver [Dónde van los paquetes](conventions/box-json.md).
+- No necesita el CLI `box`. Un paquete ya instalado en la versión elegida no se descarga de nuevo.
+- `--production` omite `devDependencies`.
+- Un proyecto sin `box.json` no tiene nada que instalar, lo cual no es un error: BxAgents incluye BX AI, ColdBox y los demás módulos que usan los agentes.
+- `build` lo ejecuta por ti cuando `box.json` cambió.
 
 ### `doctor`
 

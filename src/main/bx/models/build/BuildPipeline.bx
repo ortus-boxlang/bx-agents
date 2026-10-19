@@ -61,6 +61,21 @@ class {
 		var appDir = buildDir & "/app"
 		var buildStart = getTickCount()
 
+		// Packages the project's box.json lists (bx-playwright, ...): installed once, and again only
+		// when box.json changed or an installed folder went missing. devDependencies are not needed to build.
+		var boxJson = new "models.build.ProjectBoxJson@bxagents"()
+		var manifest = boxJson.read( root )
+		if ( boxJson.declared( manifest, false ).len() ) {
+			var installer = new "models.build.DependencyInstaller@bxagents"()
+			if ( installer.isCurrent( root, false ) ) {
+				arguments.onProgress( "+ box.json dependencies are up to date" )
+			} else {
+				arguments.onProgress( "+ Installing box.json dependencies..." )
+				var installed = installer.install( root, false, arguments.onProgress )
+				installer.writeStamp( root, false, installed )
+			}
+		}
+
 		arguments.onProgress( "+ Resolving the agent config..." )
 		var config = variables.configResolver.resolve( projectRoot = root, cliEnvironment = arguments.cliEnvironment )
 		// A class-based Agent.bx with no configure() leaves config.name/model
@@ -196,6 +211,13 @@ class {
 
 		arguments.onProgress( "+ Copying tools/ and skills/..." )
 		variables.toolsSkillsCopier.copy( root, appDir )
+
+		// BoxLang modules the project installed (boxlang_modules/) travel with the app, so
+		// `serve` and a packaged .bxa carry them
+		if ( directoryExists( root & "/boxlang_modules" ) ) {
+			arguments.onProgress( "+ Copying boxlang_modules/ into the app..." )
+			directoryCopy( root & "/boxlang_modules", appDir & "/boxlang_modules", true )
+		}
 
 		arguments.onProgress( "+ Copying bundled ColdBox runtime libraries..." )
 		var libsResult = variables.runtimeLibsCopier.copy( appDir = appDir, projectRoot = root )

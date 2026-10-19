@@ -92,6 +92,9 @@ Pretty-print an existing manifest.json.
 ::: card title="clean" icon="phosphor-duotone:broom" href="#clean"
 Remove a project's .build/ and dist/ output.
 :::
+::: card title="install" icon="phosphor-duotone:package" href="#install"
+Install the packages in a project's box.json.
+:::
 ::: card title="doctor" icon="phosphor-duotone:stethoscope" href="#doctor"
 Diagnose the runtime and project before build/serve surprise you.
 :::
@@ -283,6 +286,20 @@ bxAgents clean [--force]
 - **Refuses to run unless the directory looks like a BxAgents project** (an `Agent.yaml`, an `Agent.bx` or a `.build/manifest.json`). `dist/` is a common build-output name across the wider ecosystem, so this stops a `clean` in the wrong directory from deleting something unrelated. `--force` skips the check when you genuinely mean it.
 - Prints the absolute path of each directory before removing it.
 - Reports "Nothing to clean" if neither directory exists.
+
+### `install`
+
+Install the packages a project's [`box.json`](conventions/box-json.md) lists, from ForgeBox.
+
+```bash
+bxAgents install [--production]
+```
+
+- BoxLang modules (such as `bx-playwright`) go to `boxlang_modules/`, ColdBox modules to `lib/modules`, TestBox and the like to `lib/`. See [Where packages go](conventions/box-json.md#where-packages-go).
+- Needs no `box` CLI. A package already installed at the chosen version is not downloaded again.
+- `--production` skips `devDependencies`.
+- A project with no `box.json` has nothing to install, which is not an error: BxAgents bundles BX AI, ColdBox and the other modules agents use.
+- `build` runs this for you when `box.json` changed.
 
 ### `doctor`
 

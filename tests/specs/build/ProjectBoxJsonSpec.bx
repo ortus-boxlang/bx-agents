@@ -1,0 +1,109 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "ProjectBoxJson", function() {
+
+			beforeEach( function() {
+				variables.reader = new bxagents.models.build.ProjectBoxJson();
+				variables.dir = createTempDirectory( prefix = "bxagents-boxjson-" );
+			} );
+
+			afterEach( function() {
+				directoryDelete( dir, true );
+			} );
+
+			function write( required struct content ) {
+				fileWrite( dir & "/box.json", jsonSerialize( arguments.content ) );
+			}
+
+			it( "reports a project with no box.json as having nothing to install", function() {
+				var manifest = reader.read( dir );
+
+				expect( manifest.exists ).toBeFalse();
+				expect( reader.declared( manifest ) ).toBeEmpty();
+			} );
+
+			it( "reads dependencies, devDependencies and the install folders", function() {
+				write( {
+					name                   : "support-bot",
+					dependencies           : { "bx-playwright" : "^1", "cbvalidation" : "^4" },
+					devDependencies        : { "testbox" : "*" },
+					installPathConventions : { "modules" : "lib/modules" },
+					installPaths           : { "testbox" : "lib/testbox/" }
+				} );
+
+				var manifest = reader.read( dir );
+
+				expect( manifest.name ).toBe( "support-bot" );
+				expect( manifest.dependencies[ "bx-playwright" ] ).toBe( "^1" );
+				expect( manifest.installPaths.testbox ).toBe( "lib/testbox" );
+				expect( reader.declared( manifest ).map( d => d.slug ) ).toBe( [ "bx-playwright", "cbvalidation", "testbox" ] );
+				expect( reader.declared( manifest, false ).map( d => d.slug ) ).toBe( [ "bx-playwright", "cbvalidation" ] );
+				expect( reader.declared( manifest )[ 3 ].dev ).toBeTrue();
+			} );
+
+			it( "accepts forgebox:slug@range and reduces it to the range", function() {
+				write( { dependencies : { "coldbox" : "forgebox:coldbox@7", "qb" : "forgebox:qb" } } );
+
+				var manifest = reader.read( dir );
+
+				expect( manifest.dependencies.coldbox ).toBe( "7" );
+				expect( manifest.dependencies.qb ).toBe( "*" );
+			} );
+
+			it( "rejects sources other than ForgeBox, with a message that says what to write", function() {
+				write( { dependencies : { "mine" : "https://example.com/mine.zip" } } );
+
+				expect( function() {
+					reader.read( dir );
+				} ).toThrow( type = "BxAgents.InvalidBoxJson", regex = "Only ForgeBox packages are supported" );
+			} );
+
+			it( "rejects bad JSON, bad shapes and install folders that leave the project", function() {
+				fileWrite( dir & "/box.json", "{ nope" );
+				expect( function() {
+					reader.read( dir );
+				} ).toThrow( type = "BxAgents.InvalidBoxJson", regex = "not valid JSON" );
+
+				write( { dependencies : [ "a" ] } );
+				expect( function() {
+					reader.read( dir );
+				} ).toThrow( type = "BxAgents.InvalidBoxJson", regex = "'dependencies' must be an object" );
+
+				write( { dependencies : { "bad slug!" : "*" } } );
+				expect( function() {
+					reader.read( dir );
+				} ).toThrow( type = "BxAgents.InvalidBoxJson", regex = "not a ForgeBox slug" );
+
+				write( { installPaths : { "x" : "../outside" } } );
+				expect( function() {
+					reader.read( dir );
+				} ).toThrow( type = "BxAgents.InvalidBoxJson", regex = "inside the project" );
+
+				write( { installPaths : { "x" : "/etc" } } );
+				expect( function() {
+					reader.read( dir );
+				} ).toThrow( type = "BxAgents.InvalidBoxJson", regex = "inside the project" );
+			} );
+
+			it( "fingerprints what gets installed: stable, and changed by a range, a path or the dev flag", function() {
+				write( { dependencies : { "a" : "^1", "b" : "*" }, devDependencies : { "testbox" : "*" } } );
+				var base = reader.fingerprint( reader.read( dir ) );
+
+				write( { dependencies : { "b" : "*", "a" : "^1" }, devDependencies : { "testbox" : "*" } } );
+				expect( reader.fingerprint( reader.read( dir ) ) ).toBe( base );
+
+				write( { dependencies : { "a" : "^2", "b" : "*" }, devDependencies : { "testbox" : "*" } } );
+				expect( reader.fingerprint( reader.read( dir ) ) ).notToBe( base );
+
+				write( { dependencies : { "a" : "^1", "b" : "*" }, devDependencies : { "testbox" : "*" }, installPaths : { "a" : "lib/a" } } );
+				expect( reader.fingerprint( reader.read( dir ) ) ).notToBe( base );
+
+				write( { dependencies : { "a" : "^1", "b" : "*" }, devDependencies : { "testbox" : "*" } } );
+				expect( reader.fingerprint( reader.read( dir ), false ) ).notToBe( base );
+			} );
+
+		} );
+	}
+
+}

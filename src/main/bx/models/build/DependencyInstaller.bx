@@ -1,0 +1,311 @@
+/**
+ * Installs the packages a project's root `box.json` declares, straight from ForgeBox,
+ * with no `box` CLI needed (see ProjectBoxJson for the file and where things go).
+ *
+ * For each package: pick the newest version inside the requested range (SemverRange),
+ * download the zip, put it where it belongs, then do the same for the packages ITS
+ * box.json depends on. A package that is already installed at the chosen version is left
+ * alone. Packages this module bundles are never installed again as a dependency of
+ * something else: they are already there.
+ *
+ * A BoxLang module goes to `boxlang_modules/<module name>`, the folder BoxLang loads from
+ * the project root, so every verb that runs from the project finds it. `build` copies it
+ * into the app so `serve` and a packaged `.bxa` carry it too.
+ */
+class {
+
+	static {
+		/**
+		 * Packages the BX Agents module already carries (nested BoxLang modules and the ColdBox
+		 * runtime libraries, see gradle.properties). Not installed again as a dependency of a
+		 * dependency; a project that lists one itself still gets what it asked for.
+		 */
+		BUNDLED = [
+			"bx-ai", "bx-sqlite", "bx-ftp", "bx-mail", "bx-yaml",
+			"coldbox", "qb", "cbsecurity", "cbauth", "cbmailservices", "bx-agents"
+		]
+		MARKER = ".bxagents-install.json"
+	}
+
+	/**
+	 * @forgeBoxClient Optional ForgeBoxClient, so specs can stub the network
+	 */
+	function init( any forgeBoxClient ) {
+		variables.client = arguments.forgeBoxClient ?: new "models.build.ForgeBoxClient@bxagents"()
+		variables.semver = new "models.build.SemverRange@bxagents"()
+		variables.boxJson = new "models.build.ProjectBoxJson@bxagents"()
+		return this
+	}
+
+	/**
+	 * @projectRoot Absolute path to the project root
+	 * @includeDev Also install devDependencies (TestBox); `build` passes false
+	 * @onProgress Optional function( string line ) called with one line per step
+	 *
+	 * @return { installed : [ { slug, version, type, path } ], current : [ same ], skipped : [ { slug, reason } ] }
+	 */
+	struct function install( required string projectRoot, boolean includeDev = true, any onProgress ) {
+		var root = arguments.projectRoot.reReplace( "[\\/]+$", "" ).replace( "\", "/", "all" )
+		var say = isNull( arguments.onProgress ) ? ( line ) => {} : arguments.onProgress
+		var manifest = variables.boxJson.read( root )
+		var result = { installed : [], current : [], skipped : [] }
+
+		var queue = variables.boxJson.declared( manifest, arguments.includeDev ).map( entry => {
+			slug     : entry.slug,
+			range    : entry.range,
+			required : true,
+			by       : ""
+		} )
+		var topLevel = {}
+		for ( var entry in queue ) {
+			topLevel[ entry.slug ] = true
+		}
+		var handled = {}
+
+		while ( queue.len() ) {
+			var next = queue[ 1 ]
+			queue.deleteAt( 1 )
+
+			if ( handled.keyExists( next.slug ) ) {
+				if ( !variables.semver.satisfies( handled[ next.slug ], next.range ) ) {
+					result.skipped.append( {
+						slug   : next.slug,
+						reason : "#next.by# wants #next.slug# #next.range# but #handled[ next.slug ]# is installed; kept #handled[ next.slug ]#"
+					} )
+				}
+				continue
+			}
+			if ( !next.required && static.BUNDLED.contains( next.slug ) ) {
+				result.skipped.append( { slug : next.slug, reason : "bundled with BX Agents (needed by #next.by#)" } )
+				handled[ next.slug ] = ""
+				continue
+			}
+
+			var placed = ""
+			try {
+				placed = place( root, manifest, next, say )
+			} catch ( any e ) {
+				if ( next.required ) {
+					rethrow
+				}
+				result.skipped.append( { slug : next.slug, reason : "needed by #next.by# but could not be installed: #e.message#" } )
+				handled[ next.slug ] = ""
+				continue
+			}
+			handled[ next.slug ] = placed.version
+			var bucket = placed.alreadyCurrent ? result.current : result.installed
+			bucket.append( {
+				slug    : next.slug,
+				version : placed.version,
+				type    : placed.type,
+				path    : placed.relativePath
+			} )
+
+			for ( var dependency in placed.dependencies ) {
+				if ( !topLevel.keyExists( dependency.slug ) ) {
+					queue.append( { slug : dependency.slug, range : dependency.range, required : false, by : next.slug } )
+				}
+			}
+		}
+
+		return result
+	}
+
+	/**
+	 * Remembers what the project's box.json asked for the last time everything was installed,
+	 * so `build` can skip the install when nothing changed. Lives in `.build/install.json`.
+	 *
+	 * @projectRoot Absolute path to the project root
+	 * @includeDev Whether devDependencies were installed in the run that is being recorded
+	 * @result The struct install() returned
+	 */
+	void function writeStamp( required string projectRoot, required boolean includeDev, required struct result ) {
+		var root = arguments.projectRoot.reReplace( "[\\/]+$", "" )
+		var manifest = variables.boxJson.read( root )
+		var targets = arguments.result.installed.map( i => i.path ).append( arguments.result.current.map( i => i.path ), true )
+		directoryCreate( path = root & "/.build", createPath = true, ignoreExists = true )
+		fileWrite( root & "/.build/install.json", jsonSerialize( {
+			production : variables.boxJson.fingerprint( manifest, false ),
+			all        : arguments.includeDev ? variables.boxJson.fingerprint( manifest, true ) : "",
+			targets    : targets
+		} ) )
+	}
+
+	/**
+	 * True when everything box.json asks for was installed by an earlier run and is still there.
+	 *
+	 * @projectRoot Absolute path to the project root
+	 * @includeDev Whether devDependencies must have been installed too
+	 */
+	boolean function isCurrent( required string projectRoot, boolean includeDev = false ) {
+		var root = arguments.projectRoot.reReplace( "[\\/]+$", "" )
+		var stampPath = root & "/.build/install.json"
+		if ( !fileExists( stampPath ) ) {
+			return false
+		}
+		try {
+			var stamp = jsonDeserialize( fileRead( stampPath ) )
+			var manifest = variables.boxJson.read( root )
+			var expected = arguments.includeDev ? ( stamp.all ?: "" ) : ( stamp.production ?: "" )
+			if ( !len( expected ) || expected != variables.boxJson.fingerprint( manifest, arguments.includeDev ) ) {
+				return false
+			}
+			for ( var target in ( stamp.targets ?: [] ) ) {
+				if ( !directoryExists( root & "/" & target ) ) {
+					return false
+				}
+			}
+			return true
+		} catch ( any e ) {
+			return false
+		}
+	}
+
+	/**
+	 * Where a package of this ForgeBox type goes, relative to the project root.
+	 *
+	 * @manifest A struct from ProjectBoxJson.read()
+	 * @slug The package slug
+	 * @type The ForgeBox type slug (boxlang-modules, modules, testing, ...)
+	 * @moduleName The BoxLang module name from the package's own box.json, when it has one
+	 */
+	string function targetFor( required struct manifest, required string slug, required string type, string moduleName = "" ) {
+		if ( arguments.manifest.installPaths.keyExists( arguments.slug ) ) {
+			return arguments.manifest.installPaths[ arguments.slug ]
+		}
+		if ( arguments.type == "boxlang-modules" ) {
+			var name = len( arguments.moduleName ) ? arguments.moduleName : arguments.slug.reReplace( "^bx-", "" ).reReplace( "[^A-Za-z0-9]", "", "all" )
+			return "boxlang_modules/" & name
+		}
+		if ( arguments.manifest.installPathConventions.keyExists( arguments.type ) ) {
+			return arguments.manifest.installPathConventions[ arguments.type ] & "/" & arguments.slug
+		}
+		return arguments.type == "modules" ? "lib/modules/#arguments.slug#" : "lib/#arguments.slug#"
+	}
+
+	// ------------------------------------------------------------------------
+
+	/**
+	 * Resolves, downloads and places ONE package.
+	 *
+	 * @return { version, type, relativePath, alreadyCurrent, dependencies : [ { slug, range } ] }
+	 */
+	private struct function place( required string root, required struct manifest, required struct request, required any say ) {
+		var entry = variables.client.getEntry( arguments.request.slug )
+		var offered = ( entry.versions ?: [] ).filter( v => isStruct( v ) && len( v.version ?: "" ) )
+		var chosen = variables.semver.pick( offered.map( v => v.version ), arguments.request.range )
+		if ( !len( chosen ) ) {
+			var available = offered.map( v => v.version )
+			throw(
+				type    = "BxAgents.NoMatchingVersion",
+				message = "ForgeBox package [#arguments.request.slug#] has no version matching [#arguments.request.range#]. Available: #available.slice( 1, min( available.len(), 8 ) ).toList( ', ' )##available.len() > 8 ? ', ...' : ''#"
+			)
+		}
+		var version = offered.filter( v => v.version == chosen )[ 1 ]
+		var type = entry.typeSlug ?: ( entry.entryType.typeSlug ?: "" )
+
+		var work = getTempDirectory() & "bxagents-install-" & createUUID()
+		var zipPath = work & ".zip"
+		try {
+			variables.client.downloadZip( variables.client.resolveDownloadUrl( { latestVersion : version, slug : arguments.request.slug } ), zipPath )
+			directoryCreate( path = work, createPath = true, ignoreExists = true )
+			extract( source = zipPath, destination = work, format = "zip", overwrite = true )
+			var packageRoot = descendIntoSingleFolder( work )
+			guardAgainstEscapes( work )
+
+			var packageJson = readPackageJson( packageRoot )
+			var moduleName = isStruct( packageJson.boxlang ?: "" ) ? ( packageJson.boxlang.moduleName ?: "" ) : ""
+			var relative = targetFor( arguments.manifest, arguments.request.slug, type, moduleName )
+			var target = arguments.root & "/" & relative
+
+			var dependencies = []
+			if ( isStruct( packageJson.dependencies ?: "" ) ) {
+				for ( var dependencySlug in packageJson.dependencies ) {
+					dependencies.append( { slug : dependencySlug, range : cleanRange( packageJson.dependencies[ dependencySlug ] ) } )
+				}
+			}
+
+			var result = { version : chosen, type : type, relativePath : relative, alreadyCurrent : false, dependencies : dependencies }
+
+			if ( isInstalled( target, arguments.request.slug, chosen ) ) {
+				result.alreadyCurrent = true
+				arguments.say( "  = #arguments.request.slug# #chosen# is up to date (#relative#)" )
+				return result
+			}
+
+			arguments.say( "  + #arguments.request.slug# #chosen# (#type#) -> #relative#" )
+			if ( directoryExists( target ) ) {
+				directoryDelete( target, true )
+			}
+			directoryCreate( path = target, createPath = true, ignoreExists = true )
+			directoryCopy( packageRoot, target, true )
+			fileWrite( target & "/" & static.MARKER, jsonSerialize( { slug : arguments.request.slug, version : chosen } ) )
+			return result
+		} finally {
+			if ( fileExists( zipPath ) ) {
+				fileDelete( zipPath )
+			}
+			if ( directoryExists( work ) ) {
+				directoryDelete( work, true )
+			}
+		}
+	}
+
+	private boolean function isInstalled( required string target, required string slug, required string version ) {
+		var marker = arguments.target & "/" & static.MARKER
+		if ( !fileExists( marker ) ) {
+			return false
+		}
+		try {
+			var seen = jsonDeserialize( fileRead( marker ) )
+			return ( seen.slug ?: "" ) == arguments.slug && ( seen.version ?: "" ) == arguments.version
+		} catch ( any e ) {
+			return false
+		}
+	}
+
+	/** ForgeBox zips normally hold the package at their root; some wrap it in one folder */
+	private string function descendIntoSingleFolder( required string folder ) {
+		var entries = directoryList( arguments.folder, false, "array" )
+		if ( entries.len() == 1 && directoryExists( entries[ 1 ] ) ) {
+			return entries[ 1 ]
+		}
+		return arguments.folder
+	}
+
+	/** Nothing the zip extracted may sit outside the folder it was extracted into */
+	private void function guardAgainstEscapes( required string folder ) {
+		var base = createObject( "java", "java.io.File" ).init( arguments.folder ).getCanonicalPath()
+		for ( var path in directoryList( arguments.folder, true, "array" ) ) {
+			if ( !createObject( "java", "java.io.File" ).init( path ).getCanonicalPath().startsWith( base ) ) {
+				throw( type = "BxAgents.UnsafeArchive", message = "A downloaded package tried to write outside its own folder: [#path#]" )
+			}
+		}
+	}
+
+	private struct function readPackageJson( required string packageRoot ) {
+		var path = arguments.packageRoot & "/box.json"
+		if ( !fileExists( path ) ) {
+			return {}
+		}
+		try {
+			var parsed = jsonDeserialize( fileRead( path ) )
+			return isStruct( parsed ) ? parsed : {}
+		} catch ( any e ) {
+			return {}
+		}
+	}
+
+	private string function cleanRange( required any value ) {
+		if ( !isSimpleValue( arguments.value ) ) {
+			return "*"
+		}
+		var text = trim( toString( arguments.value ) )
+		if ( text.reFindNoCase( "^forgebox:" ) ) {
+			var spec = text.reReplaceNoCase( "^forgebox:", "" )
+			return find( "@", spec ) ? spec.listRest( "@" ) : "*"
+		}
+		return len( text ) ? text : "*"
+	}
+
+}

@@ -33,6 +33,37 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.manifest.agent.model ).toBe( "mock/mock-model" );
 			} );
 
+			it( "copies a project's boxlang_modules/ into the app so serve and a .bxa carry them", function() {
+				var projectRoot = newTempProject( "yaml-inline-instructions" );
+				directoryCreate( projectRoot & "/boxlang_modules/bxfake" );
+				fileWrite( projectRoot & "/boxlang_modules/bxfake/ModuleConfig.bx", "class {}" );
+
+				var result = pipeline.build( projectRoot );
+
+				expect( fileExists( result.appDir & "/boxlang_modules/bxfake/ModuleConfig.bx" ) ).toBeTrue();
+			} );
+
+			it( "skips the install step when box.json dependencies are already installed", function() {
+				var projectRoot = newTempProject( "yaml-inline-instructions" );
+				fileWrite( projectRoot & "/box.json", '{ "dependencies": { "pkg": "^1" } }' );
+				// what a previous `install` leaves behind
+				var boxJson = new bxagents.models.build.ProjectBoxJson();
+				directoryCreate( path = projectRoot & "/.build", createPath = true, ignoreExists = true );
+				directoryCreate( path = projectRoot & "/lib/modules/pkg", createPath = true, ignoreExists = true );
+				fileWrite( projectRoot & "/.build/install.json", jsonSerialize( {
+					production : boxJson.fingerprint( boxJson.read( projectRoot ), false ),
+					all        : "",
+					targets    : [ "lib/modules/pkg" ]
+				} ) );
+				var lines = [];
+
+				pipeline.build( projectRoot, "", function( line ) {
+					lines.append( line );
+				} );
+
+				expect( lines.filter( l => l.findNoCase( "box.json dependencies are up to date" ) ) ).toHaveLength( 1 );
+			} );
+
 			it( "builds a full project end-to-end, producing .build/app and .build/manifest.json", function() {
 				var projectRoot = newTempProject( "full-project" );
 				var result = pipeline.build( projectRoot );

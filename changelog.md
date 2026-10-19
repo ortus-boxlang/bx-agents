@@ -51,6 +51,11 @@ or package as a portable `.bxa`.
   longer implicitly receive every tool in bx-ai's registry. A bare name, an unknown tool
   or an uninstalled module is an error, and an own tool wins over a same-named module tool
   with a logged warning.
+- `bxAgents install` and a project `box.json`: add packages BxAgents does not bundle, such
+  as `bx-playwright`, straight from ForgeBox with no `box` CLI. BoxLang modules install into
+  `boxlang_modules/` (which BoxLang loads from the project root), ColdBox modules into
+  `lib/modules`. `build` runs the install when `box.json` changed and copies
+  `boxlang_modules/` into the app so `serve` and a `.bxa` carry the modules.
 - `toolOptions:` - options for a module's tools, keyed by module name. `bxplaywright` takes
   the options of bx-playwright's `playwright()` (`profile`, `headless`, `baseURL`, ...).
   An agent that lists `bxplaywright` tools gets its own fresh browser tools instead of the
