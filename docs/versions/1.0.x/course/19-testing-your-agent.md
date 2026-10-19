@@ -9,13 +9,12 @@ tags: [course, testing]
 # Testing Your Agent
 
 Every project scaffolded via `bxAgents new` ([Lesson 4](04-scaffolding-your-first-agent.md))
-already has a ready-to-run `tests/` folder: `tests/box.json` and
-`tests/specs/AgentSpec.bx`, a spec that passes out of the box.
+already has a root `box.json` (TestBox as a development dependency) and a ready-to-run
+`tests/` folder with `tests/specs/AgentSpec.bx`, a spec that passes out of the box.
 
 ```bash
-cd my-agent/tests
-box install       # fetches testbox/ into tests/testbox - new already ran this for you
-cd ..
+cd my-agent
+box install       # fetches testbox into lib/testbox - new already ran this for you
 bxAgents test
 ```
 

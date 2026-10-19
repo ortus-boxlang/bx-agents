@@ -22,7 +22,7 @@ BxAgents ya incluye BX AI, ColdBox y los demás módulos que usan los agentes, a
 }
 ```
 
-BxAgents nunca instala nada. Instala los paquetes como lo haces normalmente, con CommandBox (`box install`) o el binario de BoxLang (`install-bx-module bx-playwright --local`), desde la raíz del proyecto. Haz commit de `box.json`; mantén las carpetas instaladas fuera del control de versiones.
+BxAgents nunca instala nada. Instala los paquetes como lo haces normalmente, con CommandBox (`box install`) o el binario de BoxLang (`install-bx-module bx-playwright --local`), desde la raíz del proyecto. `bxAgents new` genera un `box.json` por ti, con TestBox como dependencia de desarrollo instalada en `lib/testbox`, y un `.gitignore` que ya ignora `lib/` y `boxlang_modules/`. Haz commit de `box.json`; mantén las carpetas instaladas fuera del control de versiones.
 
 ## Dónde van los paquetes instalados
 

@@ -84,7 +84,7 @@ Ver la sección de [Convenciones](../conventions/agent-yaml.md) para cada otra c
 ## 3. Pruébalo
 
 ```bash
-cd tests && box install && cd ..   # una vez, para obtener testbox/ (`new` ya lo intentó por ti)
+box install        # una vez, para obtener testbox en lib/testbox (`new` ya lo intentó por ti)
 bxAgents test
 ```
 

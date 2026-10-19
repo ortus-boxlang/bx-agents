@@ -117,7 +117,7 @@ bxAgents new my-agent --forgebox=some-package-slug
   - `--model` is **required** - a `provider/model` slug (see [the model slug](conventions/agent-bx.md#the-model-slug)).
   - `--name` defaults to the target directory's own basename.
   - Refuses to run if the target already contains an `Agent.yaml` or an `Agent.bx`.
-  - Creates [`Agent.yaml`](conventions/agent-yaml.md), `instructions.md`, every convention folder (empty), a ready-to-run [`tests/`](conventions/testing.md) folder (`tests/box.json` + `tests/specs/AgentSpec.bx`), a `.env` declaring `BOXLANG_HOME=.build/runtime` (matching `serve`'s own scoped runtime home), and a `.gitignore` (`.build/`, `dist/`, `.env`). Never overwrites an existing `.env`/`.gitignore`. BoxLang and `boxlang-miniserver` load a `.env` from the project root themselves, so the file also works for your API keys; BxAgents never reads, copies or packages it.
+  - Creates [`Agent.yaml`](conventions/agent-yaml.md), `instructions.md`, every convention folder (empty), a root [`box.json`](conventions/box-json.md) (`testbox` as a development dependency, installed into `lib/testbox`), a ready-to-run [`tests/`](conventions/testing.md) folder (`tests/specs/AgentSpec.bx`), a `.env` declaring `BOXLANG_HOME=.build/runtime` (matching `serve`'s own scoped runtime home), and a `.gitignore` (`.build/`, `dist/`, `.env`, `lib/`, `boxlang_modules/`). Never overwrites an existing `.env`/`.gitignore`. BoxLang and `boxlang-miniserver` load a `.env` from the project root themselves, so the file also works for your API keys; BxAgents never reads, copies or packages it.
   - `--class` (a bare boolean flag, like the others described above) writes the class-based [`Agent.bx`](conventions/agent-bx.md) instead of the default `Agent.yaml`, for agents whose definition needs code (hooks, dynamic instructions). It applies to the root and to any subagents a template scaffolds, and only to `--template` mode - not to `--repo`/`--forgebox`.
   - `--template` picks one of 8 built-in starters, each layering a bit of pre-wired content on top of the base skeleton above (see [Agent Templates](agent-templates.md) for every generated file in full, plus how `--repo`/`--forgebox` sources work and how to publish your own):
     - `minimal` - the bare skeleton, nothing extra.
@@ -128,12 +128,12 @@ bxAgents new my-agent --forgebox=some-package-slug
     - `mcp-server` - adds an example `mcp/exampleServer.bx` tool server and a `gateways/mcpExpose.bx` entry exposing it as an MCP server at `/mcp`.
     - `scheduled` - adds a real [`schedules/Scheduler.bx`](conventions/schedules.md) calling the agent on a daily timer.
     - `multi-agent` - adds a `subAgents` list to the root `Agent.yaml` declaring two [subagents](conventions/subagents.md) (`researcher`, `writer`), each scaffolded as its own real `subagents/<name>/Agent.yaml` + `instructions.md`.
-  - Also runs `box install` inside the new `tests/` folder, so `bxAgents test` works immediately with no separate `cd tests && box install` step. This is best-effort: if `box` isn't on `PATH` or the install fails, `new` still succeeds - the message just tells you to run it yourself. Pass `--skipInstall` to opt out of this step entirely.
+  - Also runs `box install` in the new project root, so `bxAgents test` works immediately with no separate install step. This is best-effort: if `box` isn't on `PATH` or the install fails, `new` still succeeds - the message just tells you to run it yourself. Pass `--skipInstall` to opt out of this step entirely.
 - **`--repo` mode** (`--repo=owner/repo-name` or a full URL): clones the repo via a bundled [JGit](https://www.eclipse.org/jgit/) dependency - no `git` binary needs to be installed. Always clones shallow (depth 1) and always strips the resulting `.git` folder afterward, so the new project starts with a clean history rather than staying tied to the template repo's own remote. Refuses to run into a directory that already exists and is non-empty, and fails clearly if no `Agent.yaml` or `Agent.bx` is found in the cloned repo.
 - **`--forgebox` mode** (`--forgebox=<slug>`): installs a [ForgeBox](https://www.forgebox.io) package by talking to ForgeBox's own REST API directly (no `box` CLI required). Fails clearly if the slug doesn't exist, the download fails, or the installed package has no `Agent.yaml` or `Agent.bx` at its root (unwrapping one level of nesting first, since many ForgeBox archives wrap their contents in a single top-level folder).
 - Only `--template` mode needs `--model`; `--repo`/`--forgebox` never require it, since the source project already defines its own.
 - `--name`/`--description` are ignored (with a warning in the output) when `--repo`/`--forgebox` is used - the cloned/installed project defines its own.
-- The `tests/` `box install` convenience step (and `--skipInstall`) only ever apply to `--template` mode - a cloned/installed project's own `tests/` folder (if it has one at all) is left untouched.
+- The `box install` convenience step (and `--skipInstall`) only ever apply to `--template` mode - a cloned/installed project's own `box.json` (if it has one at all) is left untouched.
 
 ### `build`
 
@@ -156,7 +156,7 @@ Run your project's own [`tests/specs`](conventions/testing.md) via TestBox.
 bxAgents test
 ```
 
-- Requires `testbox` installed under `tests/testbox` (`cd tests && box install`).
+- Requires TestBox installed in `lib/testbox` (`box install` in the project root; `tests/testbox` is also found).
 - Builds your agent against the `mock` provider by default (the `test` environment override in `Agent.yaml`, or `test()` in a class-based `Agent.bx`) - no API key or network access needed.
 - Prints pass/fail/error/skipped counts plus one line per failure, and exits non-zero if anything failed.
 

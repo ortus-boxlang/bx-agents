@@ -15,7 +15,7 @@
  * filesystem path form). A fresh process, launched with a purpose-built
  * `boxlang.json` (a `/specs` mapping pointed straight at the target
  * project's `tests/specs`, a `/testbox` mapping pointed at its installed
- * `tests/testbox`, and this SAME runtime's own `modulesDirectory` list
+ * TestBox (`lib/testbox`, see locateTestBox()), and this SAME runtime's own `modulesDirectory` list
  * carried over so `bxModules.bxagents.*` - e.g. `BaseAgentSpec` - resolves
  * identically) sidesteps this entirely, at the cost of one process spawn per
  * `test` run.
@@ -53,10 +53,11 @@ class {
 			)
 		}
 
-		if ( !directoryExists( testsDir & "/testbox" ) ) {
+		var testBoxDir = locateTestBox( root )
+		if ( !len( testBoxDir ) ) {
 			throw(
 				type    = "BxAgents.TestBoxNotInstalled",
-				message = "testbox/ not found under [#testsDir#] - run `box install` inside tests/ first"
+				message = "TestBox not found under [#root#/lib/testbox] (or [#testsDir#/testbox]) - run `box install` in the project root first (box.json lists testbox as a devDependency)"
 			)
 		}
 
@@ -71,7 +72,7 @@ class {
 			fileWrite( configPath, jsonSerialize( {
 				mappings         : {
 					"/specs"   : specsDir,
-					"/testbox" : testsDir & "/testbox"
+					"/testbox" : testBoxDir
 				},
 				modulesDirectory : currentModulesDirectory( root )
 			} ) )
@@ -145,6 +146,24 @@ class {
 		// only reliable when boxlang-miniserver-*.jar isn't also on the classpath.
 		return createObject( "java", "ortus.boxlang.runtime.BoxRuntime" )
 			.getClass().getProtectionDomain().getCodeSource().getLocation().getPath()
+	}
+
+	/**
+	 * Where TestBox is installed: `lib/testbox` (what a scaffolded box.json installs into), or
+	 * `tests/testbox` (where projects scaffolded before that kept it).
+	 *
+	 * @projectRoot Absolute path to the project root
+	 *
+	 * @return The absolute path, or "" when TestBox is not installed
+	 */
+	string function locateTestBox( required string projectRoot ) {
+		var root = arguments.projectRoot.reReplace( "[\/]+$", "" )
+		for ( var candidate in [ root & "/lib/testbox", root & "/tests/testbox" ] ) {
+			if ( directoryExists( candidate ) ) {
+				return candidate
+			}
+		}
+		return ""
 	}
 
 	/**

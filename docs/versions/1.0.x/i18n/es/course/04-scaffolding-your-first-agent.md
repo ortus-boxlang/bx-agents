@@ -75,7 +75,7 @@ Lección 5).
 
 ## La suite de pruebas se prepara sola
 
-`new` también ejecuta `box install` dentro de la carpeta `tests/` creada, de modo que
+`new` también ejecuta `box install` en la raíz del proyecto creado (su `box.json` lista TestBox), de modo que
 `bxAgents test` ([Lección 19](19-testing-your-agent.md)) funciona de inmediato sin ningún
 paso aparte. Esto es de mejor esfuerzo - si `box` no está en el `PATH` o la instalación
 falla, `new` sigue teniendo éxito y simplemente te dice que lo ejecutes tú. Pasa
