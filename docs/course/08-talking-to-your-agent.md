@@ -44,8 +44,9 @@ internally, just without the REPL loop - no `serve` prerequisite at all. `--json
 prints `{"response": "..."}` instead of plain text.
 
 Add `--server` to instead launch a real, throwaway `boxlang-miniserver` process and
-send the message as a genuine HTTP request through your project's exposed route -
-useful once you've added a `gateways/` entry (see [Lesson 13](13-exposing-http-and-mcp.md)).
+send the message as a genuine HTTP request to your project's always-on agent route -
+no `gateways/` entry needed (those come in [Lesson 13](13-exposing-http-and-mcp.md)). Like
+`serve`, it needs `boxlang-miniserver` on `PATH`.
 
 ## `serve` - a real HTTP server
 

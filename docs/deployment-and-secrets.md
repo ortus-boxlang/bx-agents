@@ -68,7 +68,7 @@ This guards against a future field - or a caller passing a richer struct into `p
 
 ## Where real secrets live
 
-BxAgents never resolves, stores, or embeds provider API keys, tokens, or passwords anywhere in a build or package. That's entirely bx-ai's job, at **runtime**: it reads them from the process environment following its own `<PROVIDER>_API_KEY`-style convention (e.g. `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`). Set them however you normally manage secrets for a deployed process - an OS environment variable, a `.env` file loaded by your process manager (never committed, never packaged), or your platform's secret manager.
+BxAgents never resolves, stores, or embeds provider API keys, tokens, or passwords anywhere in a build or package. That's entirely bx-ai's job, at **runtime**: it reads them from the process environment following its own `<PROVIDER>_API_KEY`-style convention (e.g. `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`). Set them however you normally manage secrets for a deployed process - an OS environment variable or your platform's secret manager. For local development, BoxLang and `boxlang-miniserver` both load a `.env` from the project root themselves, so `bxAgents new`'s `.env` is the easy place for them; BxAgents never reads, copies or embeds it, and it is never committed (the scaffolded `.gitignore` covers it) or packaged. A deployed `.bxa` has no `.env`, so give that process real environment variables.
 
 ```bash
 export OPENAI_API_KEY=sk-...

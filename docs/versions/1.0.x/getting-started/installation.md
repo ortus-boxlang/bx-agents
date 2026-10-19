@@ -1,8 +1,8 @@
 ---
 title: Installation
 icon: phosphor-duotone:package
-summary: The three things BxAgents needs on the machine that runs it.
-description: The three things BxAgents needs on the machine that runs it.
+summary: What BxAgents needs on the machine that runs it - a BoxLang runtime and the module itself.
+description: What BxAgents needs on the machine that runs it - a BoxLang runtime and the module itself.
 tags: [getting-started, setup]
 ---
 
@@ -17,7 +17,7 @@ BxAgents is a BoxLang module. It needs two things on the machine that runs it:
     BxAgents needs BoxLang **1.18.0 or later**, which supports the nested modules it bundles.
 
 !!! info
-    `serve` additionally needs the standalone [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver) binary on `PATH`. `build`, `chat`, `package`, `inspect`, `clean`, and `new` don't need it.
+    `serve`, `chat --server` and `invoke --server` additionally need the standalone [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver) binary on `PATH`. Every other verb (`build`, plain `chat` and `invoke`, `package`, `inspect`, `clean`, `new`, ...) doesn't.
 
 ::: stepper
 ::: step "Install BoxLang"
@@ -68,10 +68,10 @@ The module zip carries its own dependencies, pinned to the stable releases it wa
 
 | Where | What | Used for |
 |---|---|---|
-| `modules/` (nested BoxLang modules) | `bx-ai`, `bx-sqlite`, `bx-ftp`, `bx-mail`, `bx-yaml` | The agent runtime, the web UI's SQLite store, the `ftp`/`sftp` deploy targets, the email gateway, `Agent.yaml` |
+| `modules/` (nested BoxLang modules) | `bx-ai` 3.5.0, `bx-sqlite` 1.3.0, `bx-ftp` 1.9.0, `bx-mail` 1.4.15, `bx-yaml` 1.1.0 | The agent runtime, the web UI's SQLite store, the `ftp`/`sftp` deploy targets, the email gateway, `Agent.yaml` |
 | `lib/` (ColdBox runtime) | ColdBox, `qb`, `cbsecurity`, `cbauth`, `cbmailservices` | Copied into every app `build` generates |
 
-`serve` points the served app at the same bundled modules.
+`serve` points the served app at the same bundled modules. The versions above are the ones pinned in the repository's `gradle.properties` for this release.
 
 ### Adding your own libraries
 

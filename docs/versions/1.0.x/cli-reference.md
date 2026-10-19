@@ -92,9 +92,6 @@ Pretty-print an existing manifest.json.
 ::: card title="clean" icon="phosphor-duotone:broom" href="#clean"
 Remove a project's .build/ and dist/ output.
 :::
-::: card title="install" icon="phosphor-duotone:package" href="#install"
-Install the packages in a project's box.json.
-:::
 ::: card title="doctor" icon="phosphor-duotone:stethoscope" href="#doctor"
 Diagnose the runtime and project before build/serve surprise you.
 :::
@@ -106,7 +103,7 @@ Create a new agent project one of three mutually exclusive ways: scaffold from a
 
 ```bash
 # Scaffold from a built-in template (default: minimal)
-bxAgents new my-agent --model=openai/gpt-5 [--template=minimal|webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent] [--name=...] [--description=...] [--class]
+bxAgents new my-agent --model=openai/gpt-5 [--template=minimal|webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent] [--name=...] [--description=...] [--class] [--skipInstall]
 
 # Clone an existing GitHub repo
 bxAgents new my-agent --repo=owner/repo-name
@@ -120,7 +117,7 @@ bxAgents new my-agent --forgebox=some-package-slug
   - `--model` is **required** - a `provider/model` slug (see [the model slug](conventions/agent-bx.md#the-model-slug)).
   - `--name` defaults to the target directory's own basename.
   - Refuses to run if the target already contains an `Agent.yaml` or an `Agent.bx`.
-  - Creates [`Agent.yaml`](conventions/agent-yaml.md), `instructions.md`, every convention folder (empty), a ready-to-run [`tests/`](conventions/testing.md) folder (`tests/box.json` + `tests/specs/AgentSpec.bx`), a `.env` declaring `BOXLANG_HOME=.build/runtime` (matching `serve`'s own scoped runtime home), and a `.gitignore` (`.build/`, `dist/`, `.env`). Never overwrites an existing `.env`/`.gitignore`.
+  - Creates [`Agent.yaml`](conventions/agent-yaml.md), `instructions.md`, every convention folder (empty), a ready-to-run [`tests/`](conventions/testing.md) folder (`tests/box.json` + `tests/specs/AgentSpec.bx`), a `.env` declaring `BOXLANG_HOME=.build/runtime` (matching `serve`'s own scoped runtime home), and a `.gitignore` (`.build/`, `dist/`, `.env`). Never overwrites an existing `.env`/`.gitignore`. BoxLang and `boxlang-miniserver` load a `.env` from the project root themselves, so the file also works for your API keys; BxAgents never reads, copies or packages it.
   - `--class` (a bare boolean flag, like the others described above) writes the class-based [`Agent.bx`](conventions/agent-bx.md) instead of the default `Agent.yaml`, for agents whose definition needs code (hooks, dynamic instructions). It applies to the root and to any subagents a template scaffolds, and only to `--template` mode - not to `--repo`/`--forgebox`.
   - `--template` picks one of 8 built-in starters, each layering a bit of pre-wired content on top of the base skeleton above (see [Agent Templates](agent-templates.md) for every generated file in full, plus how `--repo`/`--forgebox` sources work and how to publish your own):
     - `minimal` - the bare skeleton, nothing extra.
@@ -134,7 +131,7 @@ bxAgents new my-agent --forgebox=some-package-slug
   - Also runs `box install` inside the new `tests/` folder, so `bxAgents test` works immediately with no separate `cd tests && box install` step. This is best-effort: if `box` isn't on `PATH` or the install fails, `new` still succeeds - the message just tells you to run it yourself. Pass `--skipInstall` to opt out of this step entirely.
 - **`--repo` mode** (`--repo=owner/repo-name` or a full URL): clones the repo via a bundled [JGit](https://www.eclipse.org/jgit/) dependency - no `git` binary needs to be installed. Always clones shallow (depth 1) and always strips the resulting `.git` folder afterward, so the new project starts with a clean history rather than staying tied to the template repo's own remote. Refuses to run into a directory that already exists and is non-empty, and fails clearly if no `Agent.yaml` or `Agent.bx` is found in the cloned repo.
 - **`--forgebox` mode** (`--forgebox=<slug>`): installs a [ForgeBox](https://www.forgebox.io) package by talking to ForgeBox's own REST API directly (no `box` CLI required). Fails clearly if the slug doesn't exist, the download fails, or the installed package has no `Agent.yaml` or `Agent.bx` at its root (unwrapping one level of nesting first, since many ForgeBox archives wrap their contents in a single top-level folder).
-- `--model`, `--repo`, and `--forgebox` are mutually exclusive with each other in the sense that only `--template` mode needs `--model` - `--repo`/`--forgebox` never require it, since the source project already defines its own.
+- Only `--template` mode needs `--model`; `--repo`/`--forgebox` never require it, since the source project already defines its own.
 - `--name`/`--description` are ignored (with a warning in the output) when `--repo`/`--forgebox` is used - the cloned/installed project defines its own.
 - The `tests/` `box install` convenience step (and `--skipInstall`) only ever apply to `--template` mode - a cloned/installed project's own `tests/` folder (if it has one at all) is left untouched.
 
@@ -176,7 +173,7 @@ bxAgents serve [--port=8080] [--host=127.0.0.1]
 - Always serves the agent at `/__bxagents` (`POST /invoke`, `POST /stream`, `POST /batch`, `GET /info`), whatever the project declares in [`gateways/`](conventions/gateways/index.md) - see [the always-on agent route](conventions/agent-bx.md#the-always-on-agent-route) for how to require a token on it, or turn it off.
 - **Binds to `127.0.0.1` by default.** A generated app is not authenticated unless you configured it to be (the web UI's API-key gate and sign-in are both opt-in), so the default keeps a development server off the network. Pass `--host=0.0.0.0` to bind all interfaces deliberately - the startup line tells you which of the two you got.
 - `--port` must be an integer in 1-65535; anything else fails immediately rather than inside the server process.
-- Writes `.build/miniserver.json` (rewrites enabled, `rewriteFileName: "index.bxm"`, health check on) before launching.
+- Writes `.build/miniserver.json` (rewrites enabled, `rewriteFileName: "index.bxm"`, health check on) before launching, and `.build/runtime/config/boxlang.json`, which turns off whitespace compression (it would collapse the blank lines that end each SSE frame) and points the app at the installed BxAgents module and the modules bundled inside it.
 - Scopes the server's own BoxLang runtime home to `.build/runtime` (via `serverHome`) rather than the shared `~/.boxlang` default, so each project's compiled-class cache and config overrides are isolated - and `clean` sweeps it for free, since it already wipes `.build` wholesale. `invoke --server` gets this too, since it reuses `serve` internally. This does **not** extend to `chat`/`build`/`test`/default `invoke`.
 
 ### `chat`
@@ -199,10 +196,10 @@ Three modes, one REPL:
 
 - Requires a prior `build` - except with `--connect`, which talks to a server someone else is running and so needs nothing built locally.
 - **Default**: loads `GeneratedAgentFactory.bx` directly (no ColdBox/WireBox container involved) and calls `buildAgent()` once per session - the exact same factory `serve`'s HTTP routes use, so the agent itself never diverges. What *does* differ is everything ColdBox brings: no `models/`, no scheduler, no interceptors, no gateway registry. When that matters, use `--server`.
-- **`--server`**: boots a real miniserver on an ephemeral loopback port and drives the REPL over HTTP against the project's [always-on `/__bxagents` route](conventions/agent-bx.md#the-always-on-agent-route), shutting it down on exit. `--port` pins the port instead of taking a free one.
+- **`--server`**: boots a real miniserver (needs `boxlang-miniserver` on `PATH`, like `serve`) on an ephemeral loopback port and drives the REPL over HTTP against the project's [always-on `/__bxagents` route](conventions/agent-bx.md#the-always-on-agent-route), shutting it down on exit. `--port` pins the port instead of taking a free one.
 - **`--connect`**: drives the same REPL against a running server, starting and stopping nothing. The URL is the server root (`http://host:port`), not the agent path - `chat` appends that itself.
 - `--server` and `--connect` are mutually exclusive: one says "start a server for me", the other "don't". Passing both fails immediately rather than silently honoring one.
-- Both HTTP modes **stream** the reply: the answer appears token by token as the agent produces it, over the route's `/stream` (SSE) sub-route, rather than arriving all at once when the turn ends. If the stream cannot be opened — an older server without a `/stream` sub-route, or a proxy that won't pass `text/event-stream` — it falls back to `/invoke` and you get the whole reply at the end instead of an error.
+- Both HTTP modes **stream** the reply: the answer appears token by token as the agent produces it, over the route's `/stream` (SSE) sub-route, rather than arriving all at once when the turn ends. If the stream cannot be opened (an older server without a `/stream` sub-route, or a proxy that won't pass `text/event-stream`) it falls back to `/invoke` and you get the whole reply at the end instead of an error.
 - Both HTTP modes carry the server's `threadId` across turns, so a session is one conversation rather than a series of unrelated first messages.
 - A turn that pauses for a [human-in-the-loop](conventions/gateways/index.md) decision says so instead of appearing to answer with silence, and points at the `/gateways/interactions/` endpoint where the decision is submitted.
 - If the route is gated behind [`agentApi.tokenEnvVar`](conventions/agent-bx.md#agentapi), these modes get a clear `401` error rather than a confusing timeout - they send no token.
@@ -220,7 +217,7 @@ bxAgents invoke --message="..." --server [--port=<port>]
 
 - Requires a prior `build`.
 - **Default (no `--server`)**: loads `GeneratedAgentFactory.bx` directly (no ColdBox container, no HTTP) and calls the agent once - the same in-process path `chat` uses internally, just without the REPL loop. No `serve`/gateway prerequisite at all.
-- **`--server`**: launches a real, throwaway `boxlang-miniserver` process (same as `serve`), sends the message as a real HTTP request to the project's [always-on `/__bxagents` route](conventions/agent-bx.md#the-always-on-agent-route), then shuts the server back down. Exercises the actual served path (ColdBox routing, interceptors, gateways) rather than the in-process shortcut. Needs no `gateways/*` entry of any kind - the reserved route is emitted on every build, so a freshly scaffolded project that exposes nothing publicly still works. `--port` defaults to a free ephemeral port so it never collides with an already-running `serve`.
+- **`--server`**: launches a real, throwaway `boxlang-miniserver` process (same as `serve`, so it needs the binary on `PATH`), sends the message as a real HTTP request to the project's [always-on `/__bxagents` route](conventions/agent-bx.md#the-always-on-agent-route), then shuts the server back down. Exercises the actual served path (ColdBox routing, interceptors, gateways) rather than the in-process shortcut. Needs no `gateways/*` entry of any kind - the reserved route is emitted on every build, so a freshly scaffolded project that exposes nothing publicly still works. `--port` defaults to a free ephemeral port so it never collides with an already-running `serve`.
 - `--json` prints `{"response": "..."}` instead of the plain-text response.
 
 ### `package`
@@ -287,23 +284,9 @@ bxAgents clean [--force]
 - Prints the absolute path of each directory before removing it.
 - Reports "Nothing to clean" if neither directory exists.
 
-### `install`
-
-Install the packages a project's [`box.json`](conventions/box-json.md) lists, from ForgeBox.
-
-```bash
-bxAgents install [--production]
-```
-
-- BoxLang modules (such as `bx-playwright`) go to `boxlang_modules/`, ColdBox modules to `lib/modules`, TestBox and the like to `lib/`. See [Where packages go](conventions/box-json.md#where-packages-go).
-- Needs no `box` CLI. A package already installed at the chosen version is not downloaded again.
-- `--production` skips `devDependencies`.
-- A project with no `box.json` has nothing to install, which is not an error: BxAgents bundles BX AI, ColdBox and the other modules agents use.
-- `build` runs this for you when `box.json` changed.
-
 ### `doctor`
 
-![bxAgents doctor output: BoxLang and bx-ai versions OK, agent definition found, project structure validates cleanly, and one warning that the qb module is missing](assets/cli-doctor.svg)
+![bxAgents doctor output: BoxLang and bx-ai versions OK, agent definition found, project structure validates cleanly, ending with 0 problems and 0 warnings](assets/cli-doctor.svg)
 
 Diagnose the runtime and your project - read-only, never builds or writes anything.
 

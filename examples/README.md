@@ -1,6 +1,6 @@
 # Examples
 
-Real, buildable BxAgents projects, each demonstrating one feature area. Every example uses the `mock` provider (`model: "mock/mock-model"`) so it builds and runs with **no API key and no network access** - swap in a real `provider/model` slug (see [Agent.yaml](../docs/conventions/agent-yaml.md#model)) to use it for real. Every push-style gateway example additionally needs real, platform-specific credentials (a bot token, a webhook secret, ...) to actually connect - each one's own README walks through getting them.
+Real, buildable BxAgents projects, each demonstrating one feature area. Every example uses the `mock` provider (`model: "mock/mock-model"`) so it builds and runs with **no API key and no network access** - swap in a real `provider/model` slug (see [the model slug](../docs/conventions/agent-bx.md#the-model-slug)) to use it for real. Every push-style gateway example additionally needs real, platform-specific credentials (a bot token, a webhook secret, ...) to actually connect - each one's own README walks through getting them.
 
 | Example | Demonstrates |
 |---|---|

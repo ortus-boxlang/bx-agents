@@ -51,7 +51,7 @@ flowchart TD
 ## Si tu proyecto no pasa la validación
 
 `build` falla con **todos** los errores recopilados, no solo con el primero - un nombre de
-tool duplicado y una expresión cron incorrecta en el mismo proyecto se reportan ambos en una
+tool duplicado y un proveedor de modelo desconocido en el mismo proyecto se reportan ambos en una
 sola ejecución.
 
 ## Idempotencia

@@ -14,7 +14,7 @@ bxAgents build
 bxAgents serve
 ```
 
-`bxAgents serve` boots a real ColdBox app; a generated `interceptors/GatewaySessionBootstrap.bx` starts a `GatewaySession` that connects `TelegramGateway` right away. Message your bot on Telegram - the reply comes back through the same long-poll connection, chunked automatically at Telegram's 4096-character message limit.
+`bxAgents serve` boots a real ColdBox app; a generated start-up statement in `Application.bx` starts a `GatewaySession` that connects `TelegramGateway` right away. Message your bot on Telegram - the reply comes back through the same long-poll connection, chunked automatically at Telegram's 4096-character message limit.
 
 {% hint style="info" %}
 This is the only example in this directory with no `curl`-able entrypoint - the whole point of a push-style gateway is that the platform talks to *it*, not the other way around. To see it work you need a real bot token and a real Telegram client.

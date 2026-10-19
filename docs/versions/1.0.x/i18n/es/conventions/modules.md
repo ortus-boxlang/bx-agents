@@ -29,6 +29,9 @@ Una carpeta de módulo puede incluir un `module.json` con un array `dependsOn` q
 
 Esta es la propia convención de declaración de dependencias de BxAgents para propósitos de validación - es independiente del propio mecanismo de carga de módulos de BoxLang.
 
+!!! info
+    Hoy `build` valida `modules/` y registra cada entrada (con un hash de contenido) en el [manifest](../manifest.md), pero no copia las carpetas a la app generada ni las carga. Para darle una librería a la app generada, usa la carpeta `lib/` del proyecto descrita en [Instalación](../getting-started/installation.md#añadir-tus-propias-librerías).
+
 ## Validación
 
 - Un `module.json` que no sea JSON válido falla el build con un error de análisis que nombra al módulo culpable.
