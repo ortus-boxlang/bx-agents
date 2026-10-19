@@ -20,7 +20,7 @@ Every path lands on the same thing: a directory containing an agent definition (
 
 ## The 8 built-in `--template` starters
 
-Every template starts from the exact same base skeleton - `Agent.yaml`, `instructions.md`, every empty [convention folder](conventions/agent-bx.md), a ready-to-run [`tests/`](conventions/testing.md) folder, a `.env`, and a `.gitignore` - then layers a small, specific amount of pre-wired content on top. Add `--class` to any `--template` to get the class-based `Agent.bx` form of the root definition (and of the subagents the `multi-agent` template scaffolds) instead of `Agent.yaml`; everything else is unchanged. None of them need a validator change: each one's extra content reuses a config shape [`ProjectValidator`](conventions/agent-bx.md) already accepts, so a scaffolded project of any template validates cleanly by construction.
+Every template starts from the exact same base skeleton - `Agent.yaml`, `instructions.md`, every empty [convention folder](conventions/agent-bx.md), a ready-to-run [`tests/`](conventions/testing.md) folder, a `.env` (declaring `BOXLANG_HOME=.build/runtime`, with room for your API keys) and a `.gitignore` - then layers a small, specific amount of pre-wired content on top. Add `--class` to any `--template` to get the class-based `Agent.bx` form of the root definition (and of the subagents the `multi-agent` template scaffolds) instead of `Agent.yaml`; everything else is unchanged. None of them need a validator change: each one's extra content reuses a config shape [`ProjectValidator`](conventions/agent-bx.md) already accepts, so a scaffolded project of any template validates cleanly by construction.
 
 ::: cards
 ::: card title="minimal" icon="phosphor-duotone:seedling" href="#minimal"
@@ -95,7 +95,7 @@ class {
 Also appends matching stub lines to `.env`:
 
 ```bash
-## Slack gateway (gateways/slack.bx) - see https://api.slack.com/apps
+# Slack gateway (gateways/slack.bx) - see https://api.slack.com/apps
 SLACK_BOT_TOKEN=xoxb-...
 SLACK_APP_TOKEN=xapp-...
 ```
@@ -123,7 +123,7 @@ class {
 Also appends a matching stub line to `.env`:
 
 ```bash
-## Telegram gateway (gateways/telegram.bx) - from @BotFather
+# Telegram gateway (gateways/telegram.bx) - from @BotFather
 TELEGRAM_BOT_TOKEN=...
 ```
 
@@ -152,7 +152,7 @@ class {
 Also appends matching stub lines to `.env`:
 
 ```bash
-## GitHub gateway (gateways/github.bx) - a PAT with repo/issues+PR read+write scope
+# GitHub gateway (gateways/github.bx) - a PAT with repo/issues+PR read+write scope
 GITHUB_TOKEN=...
 GITHUB_WEBHOOK_SECRET=...
 GITHUB_BOT_NAME=...
@@ -193,7 +193,7 @@ class {
 }
 ```
 
-`target` names the `mcp/*` entry to expose - here, the example server above. After `build`/`serve`, any MCP-speaking client can connect at `/mcp`. Add real `@AITool`-annotated functions (or any other MCP-exposable members) to `mcp/exampleServer.bx`, or add more `mcp/*.bx` files entirely, per [mcp/](conventions/mcp.md).
+`target` names the `mcp/*` entry to expose - here, the example server above. After `build`/`serve`, any MCP-speaking client can connect at `/mcp`. The example server registers no tools yet: write `@AITool` functions under `tools/` and list their names in a `tools: [ ... ]` array in `mcp/exampleServer.bx` (or add more `mcp/*.bx` files), per [mcp/](conventions/mcp.md).
 
 ### `scheduled`
 
@@ -221,9 +221,7 @@ The one template that changes the root `Agent.yaml` itself, rather than only add
 ```yaml
 # Agent.yaml
 name: my-agent
-description: A helpful assistant
 model: openai/gpt-5
-
 subAgents: [ researcher, writer ]
 
 environments:
@@ -251,7 +249,7 @@ Each subagent's own `Agent.yaml` is a complete, buildable agent (always against 
 ```yaml
 # subagents/researcher/Agent.yaml
 name: researcher
-description: Gathers facts on a topic.
+description: "Gathers facts on a topic. Does not write final prose - that's the writer's job."
 model: mock/mock-model
 ```
 

@@ -50,7 +50,7 @@ flowchart TD
 ## If your project fails validation
 
 `build` fails with **every** collected error, not just the first one - a duplicate
-tool name and a bad cron expression in the same project both get reported in one run.
+tool name and an unknown model provider in the same project both get reported in one run.
 
 ## Idempotency
 

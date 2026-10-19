@@ -49,7 +49,7 @@ class {
 		return {
 			exposes : "mcp",
 			path    : "/mcp/tools",
-			target  : "local-server"   // must match an mcp/*.bx entry's declared name
+			target  : "local-server"   // must match an mcp/*.bx entry's file name
 		};
 	}
 }
@@ -77,7 +77,7 @@ This one is big enough to earn its own lesson - see [Lesson 15](15-the-generated
 
 `exposes` must be `agent`, `mcp`, or `webui`; `path` is required and must be unique
 across every exposure entry; an `mcp` exposure's `target` must match a real `mcp/*`
-entry's declared name.
+entry's file name.
 
 ## Try it
 
@@ -86,7 +86,7 @@ bxAgents build
 bxAgents serve --port=8080
 curl -X POST http://localhost:8080/api/chat/invoke \
   -H "Content-Type: application/json" \
-  -d '{"message":"Hi there"}'
+  -d '{"input":"Hi there"}'
 ```
 
 (Or skip `serve` entirely and reach for `bxAgents invoke --message="Hi there" --server`

@@ -2,11 +2,11 @@
 title: BxAgents
 order: 1
 icon: phosphor-duotone:robot
-summary: Construye agentes de IA por convención — un framework basado en convenciones para agentes de IA con BoxLang AI.
-description: Construye agentes de IA por convención — un framework basado en convenciones para agentes de IA con BoxLang AI.
+summary: Construye agentes de IA por convención - un framework basado en convenciones para agentes de IA con BoxLang AI.
+description: Construye agentes de IA por convención - un framework basado en convenciones para agentes de IA con BoxLang AI.
 tags: [overview]
 toc: false
-ogImage: assets/og-home.jpg
+ogImage: assets/og-home.png
 ---
 
 <div class="bxsites-hero">
@@ -217,7 +217,7 @@ Empaqueta un `.bxa` portable y despliégalo con `local`, `ssh`, `docker`, `digit
 
 ## Comprueba tu instalación en cualquier momento
 
-![Salida de bxAgents doctor: versiones de BoxLang y bx-ai correctas, definición del agente encontrada, la estructura del proyecto valida limpiamente, y un aviso de que falta el módulo qb](assets/cli-doctor.svg)
+![Salida de bxAgents doctor: versiones de BoxLang y bx-ai correctas, definición del agente encontrada, la estructura del proyecto valida limpiamente, y termina con 0 problemas y 0 avisos](assets/cli-doctor.svg)
 
 ## Dónde ir a continuación
 

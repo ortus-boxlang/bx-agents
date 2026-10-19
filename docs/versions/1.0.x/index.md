@@ -2,8 +2,8 @@
 title: BxAgents
 order: 1
 icon: phosphor-duotone:robot
-summary: Build AI agents by convention — a conventions-based framework for AI agents powered by BoxLang AI.
-description: Build AI agents by convention — a conventions-based framework for AI agents powered by BoxLang AI.
+summary: Build AI agents by convention - a conventions-based framework for AI agents powered by BoxLang AI.
+description: Build AI agents by convention - a conventions-based framework for AI agents powered by BoxLang AI.
 tags: [overview]
 toc: false
 ogImage: assets/og-home.png
@@ -216,7 +216,7 @@ Package a portable `.bxa` and deploy it with `local`, `ssh`, `docker`, `digitalo
 
 ## Check your setup at any time
 
-![bxAgents doctor output: BoxLang and bx-ai versions OK, agent definition found, project structure validates cleanly, and one warning that the qb module is missing](assets/cli-doctor.svg)
+![bxAgents doctor output: BoxLang and bx-ai versions OK, agent definition found, project structure validates cleanly, and ending with 0 problems and 0 warnings](assets/cli-doctor.svg)
 
 ## Where to go next
 

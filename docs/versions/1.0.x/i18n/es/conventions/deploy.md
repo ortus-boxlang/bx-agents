@@ -1,8 +1,8 @@
 ---
 title: deploy/
 icon: phosphor-duotone:cloud-arrow-up
-summary: "Una entrada por destino de despliegue: local, ssh, ftp, docker, digitalocean."
-description: "Una entrada por destino de despliegue: local, ssh, ftp, docker, digitalocean."
+summary: "Una entrada por destino de despliegue: local, ssh, ftp, sftp, docker, digitalocean."
+description: "Una entrada por destino de despliegue: local, ssh, ftp, sftp, docker, digitalocean."
 tags: [conventions, deployment]
 ---
 
@@ -165,7 +165,7 @@ Envía el `.bxa` más nuevo a un directorio remoto vía FTP o SFTP simple, a tra
 }
 ```
 
-Requiere un `bxAgents package` previo. `ftp` requiere un `passwordEnvVar`; `sftp` acepta ya sea un `passwordEnvVar` o un `key` (ruta de archivo de clave privada SSH). `passwordEnvVar`/`passphraseEnvVar` nombran variables de entorno que contienen el secreto real - **nunca el valor del secreto mismo** - resueltas en vivo en tiempo de despliegue; `key` permanece como una ruta simple, ya que no es en sí misma material secreto. Cada acción de `bx:ftp` lanza en caso de fallo (conexión rechazada, autenticación rechazada, una respuesta negativa del servidor) en lugar de devolver un fallo suave - este destino captura eso y lo relanza como un `BxAgents.DeployFailed` claro, siempre cerrando la conexión después, incluso en caso de error.
+Requiere un `bxAgents package` previo. `ftp` requiere un `passwordEnvVar`; `sftp` acepta ya sea un `passwordEnvVar` o un `key` (ruta de archivo de clave privada SSH). `passwordEnvVar`/`passphraseEnvVar` nombran variables de entorno que contienen el secreto real - **nunca el valor del secreto mismo** - resueltas en vivo en tiempo de despliegue. La variable que nombran debe estar en el espacio de nombres `BXAGENTS_` (`^BXAGENTS_[A-Z0-9_]+$`); cualquier otra se rechaza con un error `BxAgents.InvalidDeployConfig`. Así una entrada de deploy - que son datos simples y fáciles de dar por buenos en una revisión - no puede nombrar un secreto ajeno que ya esté en el entorno (digamos una clave de API de un proveedor) para que se envíe al host al que apunta esa misma entrada. `key` permanece como una ruta simple, ya que no es en sí misma material secreto. Cada acción de `bx:ftp` lanza en caso de fallo (conexión rechazada, autenticación rechazada, una respuesta negativa del servidor) en lugar de devolver un fallo suave - este destino captura eso y lo relanza como un `BxAgents.DeployFailed` claro, siempre cerrando la conexión después, incluso en caso de error.
 
 ## Secrets stay external
 

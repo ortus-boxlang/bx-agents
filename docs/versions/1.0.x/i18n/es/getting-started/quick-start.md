@@ -39,15 +39,16 @@ my-agent/
         └── AgentSpec.bx
 ```
 
+Más un `.env` (con `BOXLANG_HOME=.build/runtime`; pon ahí también las claves de API de tu proveedor) y un `.gitignore`. BoxLang carga por sí mismo el `.env` desde la raíz del proyecto.
+
 Este es el starter `minimal` - el predeterminado cuando se omite `--template`. `new` también puede generar uno de otros 7 starters incorporados (`--template=webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent`), cada uno añadiendo un poco de contenido preconfigurado (un gateway, un scheduler) sobre el mismo esqueleto, o saltarse el andamiaje por completo y crear el proyecto a partir de un repositorio de GitHub existente (`--repo=owner/repo`) o un paquete de ForgeBox (`--forgebox=<slug>`) en su lugar - ver la [Referencia de la CLI](../cli-reference.md#new) para la lista completa y cómo funciona cada uno. El agente se define por defecto con un `Agent.yaml`; pasa `--class` para generar en su lugar el `Agent.bx` avanzado basado en clase (ver [Agent.bx](../conventions/agent-bx.md)).
 
-`Agent.yaml` se ve así:
+`Agent.yaml` se ve así (`--description` añade una línea `description:`):
 
 ```yaml
 # Your agent. Most agents need nothing more than this file and instructions.md.
 # For code in the definition (hooks, dynamic instructions), scaffold with --class.
 name: my-agent
-description: A helpful assistant
 model: openai/gpt-5
 
 environments:
@@ -83,7 +84,7 @@ Ver la sección de [Convenciones](../conventions/agent-yaml.md) para cada otra c
 ## 3. Pruébalo
 
 ```bash
-cd tests && box install && cd ..   # una vez, para obtener testbox/
+cd tests && box install && cd ..   # una vez, para obtener testbox/ (`new` ya lo intentó por ti)
 bxAgents test
 ```
 
@@ -97,7 +98,7 @@ bxAgents build
 
 Ejecuta el [pipeline de build](../build-pipeline.md) completo - resolución de configuración, descubrimiento, validación, generación de código, normalización de manifest - y escribe una aplicación ColdBox real en `.build/app/`, más `.build/manifest.json`. Ejecuta `bxAgents build --environment=production` para construir contra un override de entorno de `Agent.yaml` (ver [Agent.yaml](../conventions/agent-yaml.md#entornos)).
 
-Si tu proyecto falla la validación (nombres de tool duplicados, una expresión cron mala, un proveedor de modelo desconocido, ...) `build` falla con todos los errores recopilados - no solo el primero.
+Si tu proyecto falla la validación (nombres de tool duplicados, un proveedor de modelo desconocido, una entrada de gateway con una ruta incorrecta, ...) `build` falla con todos los errores recopilados - no solo el primero.
 
 ## 5. Ejecútalo
 

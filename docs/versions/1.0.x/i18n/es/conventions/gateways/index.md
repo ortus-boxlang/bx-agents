@@ -65,7 +65,7 @@ class {
 		return {
 			exposes : "mcp",
 			path    : "/mcp/tools",
-			target  : "local-server"   // debe coincidir con el nombre declarado de una entrada mcp/*.bx
+			target  : "local-server"   // debe coincidir con el nombre de archivo de una entrada mcp/*.bx
 		};
 	}
 }
@@ -92,7 +92,7 @@ Genera un archivo estático real `<path>/index.html` (servido directamente - no 
 
 La interfaz web es un subsistema en lugar de un simple interruptor de exposición - la lista de rutas, el almacén, las conversaciones y preferencias, el branding y la temática, y por qué no usa `toAi()` están todos en su propia página: **[La interfaz web de chat](../web-ui.md)**.
 
-**Validación:** `exposes` debe ser `agent`, `mcp`, o `webui`; `path` es requerido y debe ser único a través de cada entrada de exposición; el `target` de una exposición `mcp` es requerido y debe coincidir con el nombre declarado de una entrada real `mcp/*`; el `apiKeyEnvVar` de `webui` es completamente opcional, sin ninguna comprobación de campo requerido (ver abajo).
+**Validación:** `exposes` debe ser `agent`, `mcp`, o `webui`; `path` es requerido y debe ser único a través de cada entrada de exposición; el `target` de una exposición `mcp` es requerido y debe coincidir con el nombre de archivo de una entrada real `mcp/*`; el `apiKeyEnvVar` de `webui` es completamente opcional, sin ninguna comprobación de campo requerido (ver abajo).
 
 ## 2. Gateways de channel-adapter (`type: "mock" | "cli" | "http"`)
 
@@ -138,11 +138,8 @@ GET  /gateways/info                             qué sirve este montaje
 
 Este montaje **no** es específico de `http`. `http` es un tipo de gateway entre muchos, y la superficie es compartida: las rutas `/interactions` son el canal de aprobación human-in-the-loop para *todos* los gateways, resuelto a través del propio registro de gateways de bx-ai y no por transporte. Así que un proyecto cuyo único gateway sea Telegram, Slack o Discord obtiene el mismo montaje `/gateways` - necesita esas rutas exactamente igual, ya que un agente pausado tiene que poder responderse de algún modo.
 
-!!! info
-    Builds anteriores emitían tres rutas escritas a mano hacia un passthrough generado `handlers/Gateway.bx`, porque ColdBox no tenía terminador para esta superficie. Ahora sí lo tiene (`toAiGateway()`, junto a `toAi()` y `toMCP()`), así que el handler desapareció y los endpoints de interacción se movieron bajo la ruta base `/gateways`.
-
 !!! warning
-    El montaje solía estar condicionado únicamente a `type: "http"`, lo que dejaba a todo proyecto push-only capaz de *pausarse* esperando una aprobación que no tenía endpoint para responder. Corregido - pero ten en cuenta que las rutas solo existen en un servidor en ejecución, así que un proyecto que dependa de la aprobación human-in-the-loop necesita [`serve`](../../cli-reference.md#serve) (o un despliegue real), no `chat`.
+    Las rutas solo existen en un servidor en ejecución, así que un proyecto que dependa de la aprobación human-in-the-loop necesita [`serve`](../../cli-reference.md#serve) (o un despliegue real), no `chat` a secas.
 
 ## 3. Push-style gateways (`type: "telegram"` / `"slack"` / `"discord"` / `"email"` / `"whatsapp-cloud"` / `"teams"` / `"twilio"` / `"github"` / `"signal"`, and friends)
 
@@ -209,24 +206,20 @@ aiGatewayRegistry().register( aiGateway( "bxModules.bxagents.models.gateways.Sig
 
 ### GatewaySession - wiring the agent to every push-style gateway
 
-Cualquier proyecto con al menos una entrada de gateway de estilo push también obtiene un `interceptors/GatewaySessionBootstrap.bx` generado, que construye un único `GatewaySession` de bx-ai que agrupa cada gateway de estilo push en el proyecto, vinculado al agente raíz del proyecto, y lo inicia una vez que ColdBox mismo ha terminado de cargar:
+Cualquier proyecto con al menos una entrada de gateway de estilo push también obtiene una sentencia de arranque generada en el `onApplicationStart()` de `Application.bx`. Construye un único `GatewaySession` de bx-ai que agrupa cada gateway de estilo push en el proyecto, vinculado al agente raíz del proyecto, y lo inicia:
 
 ```javascript
-// interceptors/GatewaySessionBootstrap.bx (GENERADO)
-class {
-	function afterConfigurationLoad( event, interceptData ) {
-		var wirebox        = getController().getWireBox()
-		var agent          = wirebox.getInstance( "GeneratedAgent" )
-		var gatewaySession = aiGatewaySession(
-			agent        : agent,
-			gateways     : [ aiGatewayRegistry().get( "telegram" ) ],
-			policy       : "queue",
-			maxQueueDepth: 50
-		)
-		gatewaySession.start()
-		application.bxaiGatewaySession = gatewaySession
-	}
-}
+// Application.bx, onApplicationStart() (GENERADO)
+var wirebox        = application.cbController.getWireBox()
+var agent          = wirebox.getInstance( "GeneratedAgent" )
+var gatewaySession = aiGatewaySession(
+	agent        : agent,
+	gateways     : [ aiGatewayRegistry().get( "telegram" ) ],
+	policy       : "queue",
+	maxQueueDepth: 50
+)
+gatewaySession.start()
+application.bxaiGatewaySession = gatewaySession
 ```
 
 !!! info
@@ -234,8 +227,6 @@ class {
 
 !!! warning
     La clave de `aiGatewayRegistry().get(...)` es siempre la cadena de TIPO del gateway ("telegram", "slack", "discord", "email", ...) - confirmado contra el propio código fuente real de `GatewayRegistry.register()` de bx-ai, que siempre indexa por el propio `getName()` fijo de la clase del gateway, nunca nada suministrado por el llamador. Una consecuencia real: **dos entradas `gateways/*` del mismo tipo de estilo push colisionan en el mismo slot de registro a nivel de todo el proyecto** - el segundo registro silenciosamente sobrescribe al primero. No hay alias por entrada hoy; usa un tipo distinto por cada cuenta de plataforma adicional, o espera al soporte multi-instancia.
-
-Un interceptor (no una sentencia cruda de `Application.bx`/`onApplicationStart()`, a diferencia de las llamadas de registro simples de arriba) se usa específicamente porque su punto `afterConfigurationLoad` está garantizado por el propio ciclo de vida de ColdBox de dispararse estrictamente después de que el framework - incluyendo el scheduler del que estos gateways dependen (ver abajo) - haya terminado de cargar.
 
 Controla la política de `GatewaySession` vía un bloque opcional `gatewaySession` en el propio `Agent.yaml` del proyecto raíz:
 
@@ -246,7 +237,7 @@ gatewaySession:       # ambos opcionales - estos son los valores por defecto
   maxQueueDepth: 50
 ```
 
-`policy` debe ser uno de `reject`/`queue`/`steer`/`interrupt` (el propio vocabulario de política de `GatewaySession` de bx-ai - ver [GatewaySession](#gatewaysession---wiring-the-agent-to-every-push-style-gateway) abajo) - comprobado en tiempo de `build` para que un typo falle ruidosamente en lugar de salir a la superficie como un error de runtime la primera vez que la app arranca.
+`policy` debe ser uno de `reject`/`queue`/`steer`/`interrupt` (el propio vocabulario de política de `GatewaySession` de bx-ai, ilustrado abajo) - comprobado en tiempo de `build` para que un typo falle ruidosamente en lugar de salir a la superficie como un error de runtime la primera vez que la app arranca.
 
 !!! warning
     Limitación de v1: exactamente un `GatewaySession`, siempre vinculado al agente raíz del proyecto - coincide con el precedente existente de que la exposición HTTP `exposes: "agent"` también es siempre solo-de-agente-raíz. Un proyecto con subagentes todavía no puede enrutar diferentes gateways a diferentes subagentes.

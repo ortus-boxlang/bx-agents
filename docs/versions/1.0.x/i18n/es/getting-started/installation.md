@@ -1,8 +1,8 @@
 ---
 title: Instalación
 icon: phosphor-duotone:package
-summary: Las tres cosas que BxAgents necesita en la máquina que lo ejecuta.
-description: Las tres cosas que BxAgents necesita en la máquina que lo ejecuta.
+summary: Lo que BxAgents necesita en la máquina que lo ejecuta - un runtime de BoxLang y el propio módulo.
+description: Lo que BxAgents necesita en la máquina que lo ejecuta - un runtime de BoxLang y el propio módulo.
 tags: [getting-started, setup]
 ---
 
@@ -17,7 +17,7 @@ BxAgents es un módulo de BoxLang. Necesita dos cosas en la máquina que lo ejec
     BxAgents necesita BoxLang **1.18.0 o posterior**, que admite los módulos anidados que incluye.
 
 !!! info
-    `serve` adicionalmente necesita el binario independiente [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver) en `PATH`. `build`, `chat`, `package`, `inspect`, `clean`, y `new` no lo necesitan.
+    `serve`, `chat --server` e `invoke --server` necesitan además el binario independiente [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver) en `PATH`. Los demás verbos (`build`, `chat` e `invoke` sin `--server`, `package`, `inspect`, `clean`, `new`, ...) no lo necesitan.
 
 ::: stepper
 ::: step "Instalar BoxLang"
@@ -40,32 +40,6 @@ bxAgents --help
 :::
 :::
 
-## Qué viene incluido
-
-El zip del módulo lleva sus propias dependencias, fijadas a las versiones estables con las que se construyó. Una corrección en una de ellas sale como una versión de parche de BxAgents, así que nadie las instala ni las actualiza a mano.
-
-| Dónde | Qué | Para qué |
-|---|---|---|
-| `modules/` (módulos de BoxLang anidados) | `bx-ai`, `bx-sqlite`, `bx-ftp`, `bx-mail`, `bx-yaml` | El runtime del agente, el almacén SQLite de la interfaz web, los destinos de deploy `ftp`/`sftp`, el gateway de email, `Agent.yaml` |
-| `lib/` (runtime de ColdBox) | ColdBox, `qb`, `cbsecurity`, `cbauth`, `cbmailservices` | Se copian en cada app que genera `build` |
-
-`serve` apunta la app servida a esos mismos módulos incluidos.
-
-### Añadir tus propias librerías
-
-Pon librerías extra de ColdBox en una carpeta `lib/` de tu proyecto, con la misma estructura que la incluida:
-
-```text
-my-agent/
-  lib/
-    coldbox/          # reemplaza el ColdBox incluido
-    modules/
-      cbvalidation/   # se añade junto a los módulos incluidos
-      qb/             # reemplaza el qb incluido
-```
-
-`build` copia primero el conjunto incluido y después tu `lib/`, así que la tuya gana.
-
 ## El comando `bxAgents`
 
 BxAgents declara un ejecutable nativo en su `box.json`:
@@ -87,5 +61,43 @@ boxlang module:bxagents new my-agent --model=openai/gpt-5
 ```
 
 Ambas son equivalentes - cada verbo despacha a través del mismo punto de entrada `ModuleConfig.bx main(args)` de cualquier manera. Este documento usa la forma corta `bxAgents <verb>` en todo momento.
+
+## Qué viene incluido
+
+El zip del módulo lleva sus propias dependencias, fijadas a las versiones estables con las que se construyó. Una corrección en una de ellas sale como una versión de parche de BxAgents, así que nadie las instala ni las actualiza a mano.
+
+| Dónde | Qué | Para qué |
+|---|---|---|
+| `modules/` (módulos de BoxLang anidados) | `bx-ai` 3.5.0, `bx-sqlite` 1.3.0, `bx-ftp` 1.9.0, `bx-mail` 1.4.15, `bx-yaml` 1.1.0 | El runtime del agente, el almacén SQLite de la interfaz web, los destinos de deploy `ftp`/`sftp`, el gateway de email, `Agent.yaml` |
+| `lib/` (runtime de ColdBox) | ColdBox, `qb`, `cbsecurity`, `cbauth`, `cbmailservices` | Se copian en cada app que genera `build` |
+
+`serve` apunta la app servida a esos mismos módulos incluidos. Las versiones de arriba son las fijadas en el `gradle.properties` del repositorio para esta versión.
+
+### Añadir tus propias librerías
+
+Pon librerías extra de ColdBox en una carpeta `lib/` de tu proyecto, con la misma estructura que la incluida:
+
+```text
+my-agent/
+  lib/
+    coldbox/          # reemplaza el ColdBox incluido
+    modules/
+      cbvalidation/   # se añade junto a los módulos incluidos
+      qb/             # reemplaza el qb incluido
+```
+
+`build` copia primero el conjunto incluido y después tu `lib/`, así que la tuya gana.
+
+## Autocompletado con Tab
+
+El módulo incluye autocompletado con Tab para `bxAgents` (y `bxagents`) en tres shells. Completa verbos, flags, los valores de `--template` y `--target`, y carpetas de proyecto.
+
+| Shell | Configuración |
+|---|---|
+| bash, zsh | Automática. `install-bx-module` copia `completions/bxAgents.bash` a `~/.boxlang/completions/` y BVM lo carga en las sesiones nuevas. Sin el instalador: `source <carpeta del módulo>/completions/bxAgents.bash`. |
+| fish | `cp <carpeta del módulo>/completions/bxAgents.fish ~/.config/fish/completions/` |
+| PowerShell | Añade `. "<carpeta del módulo>\completions\bxAgents.ps1"` a tu `$PROFILE`. |
+
+Los scripts de `completions/` se generan a partir de las propias tablas de verbos de la CLI, así que no pueden desincronizarse de los verbos. Tras cambiar un verbo o un flag en `ModuleConfig.bx`, regéneralos con `tools/generate-completions.bxs` (añade `--check` para solo verificar); la suite de specs falla si están desactualizados.
 
 Ver [Inicio rápido](quick-start.md) para generar el andamiaje de tu primer agente.

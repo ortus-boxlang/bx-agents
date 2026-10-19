@@ -31,6 +31,21 @@ generada llama al propio escáner de bx-ai (`aiToolRegistry().scan( "tools" )`),
 trabajo real de reflexión. Esta sentencia solo se emite si tu proyecto tiene realmente una
 carpeta `tools/` con archivos dentro.
 
+## ¿De quién son las tools?
+
+Un agente recibe su propia carpeta `tools/` y nada más: las tools de un agente raíz no se
+entregan a sus subagentes, ni al revés. Las tools que registran los *módulos* en bx-ai
+(las incorporadas, `bx-playwright`, ...) solo se adjuntan cuando el agente las pide en
+`Agent.yaml`:
+
+```yaml
+tools:
+  - now@bxai
+  - "*@bxplaywright"
+```
+
+Consulta [Agent.yaml](../conventions/agent-yaml.md#tools) para los detalles.
+
 ## Nombres
 
 El nombre de la entrada descubierta es el nombre base del propio archivo - `Greeter.bx` pasa a
