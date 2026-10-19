@@ -1,0 +1,211 @@
+/**
+ * What the `new` wizard can offer: model providers, web search providers, channels,
+ * MCP servers, deploy targets, and the bx-ai tools behind each capability. The lists
+ * that change over time (providers, channels, MCP servers) live as JSON in catalog/ so
+ * they can be corrected without touching code; the rest is here.
+ *
+ * Tool names come from bx-ai's own registry (aiToolRegistry().getKeys()), checked
+ * against the bundled bx-ai; the file tools from its FileSystemTools class.
+ */
+class {
+
+	/**
+	 * The capabilities a user can switch on, in the order the wizard lists them.
+	 * `tools` are bx-ai registry names; browse comes from bx-playwright instead.
+	 */
+	static {
+		CAPABILITIES = [
+			{ id : "time", label : "Know the date and time", hint : "now", tools : [ "now@bxai" ], selected : true },
+			{ id : "fetch", label : "Fetch web pages", hint : "httpGet", tools : [ "httpGet@bxai" ], selected : true },
+			{ id : "search", label : "Search the web", hint : "webSearch, you pick the provider next", tools : [ "webSearch@bxai" ], selected : false },
+			{ id : "browse", label : "Browse websites like a person", hint : "bx-playwright", tools : [ "*@bxplaywright" ], selected : false },
+			{ id : "files", label : "Read and write files", hint : "you choose which tools and which folders", tools : [], selected : false },
+			{ id : "media", label : "Images, speech and translation", hint : "generateImage, speak, transcribe, translate", tools : [ "generateImage@bxai", "speak@bxai", "transcribe@bxai", "translate@bxai" ], selected : false }
+		]
+
+		// bx-ai FileSystemTools, split by whether they change anything
+		FILE_TOOLS_READ = [
+			{ name : "readFile", hint : "read a file" },
+			{ name : "readMultipleFiles", hint : "read several files at once" },
+			{ name : "fileMetadata", hint : "size, type and modified date" },
+			{ name : "pathExists", hint : "check a path exists" },
+			{ name : "searchFiles", hint : "search inside files" },
+			{ name : "listDirectory", hint : "list a folder" },
+			{ name : "directoryTree", hint : "a folder as a tree" },
+			{ name : "listAllowedDirectories", hint : "tell the agent which folders it may use" },
+			{ name : "checkZipFile", hint : "check a zip is valid" }
+		]
+		FILE_TOOLS_WRITE = [
+			{ name : "writeFile", hint : "write or overwrite a file" },
+			{ name : "appendFile", hint : "add to a file" },
+			{ name : "editFile", hint : "find and replace in a file" },
+			{ name : "createDirectory", hint : "make a folder" },
+			{ name : "copyFile", hint : "copy a file" },
+			{ name : "moveFile", hint : "move or rename a file" },
+			{ name : "zipFiles", hint : "make a zip" },
+			{ name : "unzipFile", hint : "extract a zip" },
+			{ name : "deleteFile", hint : "delete a file, cannot be undone" },
+			{ name : "deleteDirectory", hint : "delete a folder and its contents, cannot be undone" }
+		]
+
+		FOLDER_TOKENS = [
+			{ value : "tmp", label : "The temp folder", hint : "the system temp directory" },
+			{ value : "cwd", label : "The folder you run the agent from", hint : "usually your project" }
+		]
+
+		TEMPLATES = [
+			{ value : "minimal", label : "A single agent", hint : "the simplest start" },
+			{ value : "multi-agent", label : "A team", hint : "a lead agent with a researcher and a writer" },
+			{ value : "scheduled", label : "An agent that runs on a schedule", hint : "a Scheduler that calls it on a timer" },
+			{ value : "mcp-server", label : "An MCP server", hint : "exposes tools to other AI tools" }
+		]
+	}
+
+	function init() {
+		variables.cache = {}
+		return this
+	}
+
+	/**
+	 * @return The capabilities, in the order the wizard lists them
+	 */
+	array function capabilities() {
+		return static.CAPABILITIES
+	}
+
+	/**
+	 * @return [ { value, label, hint } ] the shapes a project can start from
+	 */
+	array function templates() {
+		return static.TEMPLATES
+	}
+
+	/**
+	 * @value A template name
+	 *
+	 * @return Its readable label
+	 */
+	string function templateLabel( required string value ) {
+		var match = static.TEMPLATES.filter( entry => entry.value == value )
+		return match.len() ? match[ 1 ].label : arguments.value
+	}
+
+	/**
+	 * @return [ { name, hint } ] the file tools that only read
+	 */
+	array function fileToolsRead() {
+		return static.FILE_TOOLS_READ
+	}
+
+	/**
+	 * @return [ { name, hint } ] the file tools that create, change or delete
+	 */
+	array function fileToolsWrite() {
+		return static.FILE_TOOLS_WRITE
+	}
+
+	/**
+	 * @return [ { value, label, hint } ] the folders that can be named without a path
+	 */
+	array function folderTokens() {
+		return static.FOLDER_TOKENS
+	}
+
+	/**
+	 * @return [ { id, name, hint, envVar, keyUrl } ]
+	 */
+	array function providers() {
+		return load( "providers" )
+	}
+
+	/**
+	 * @id A provider id such as claude
+	 *
+	 * @return The provider entry, or an empty struct for an id the catalog does not list
+	 */
+	struct function provider( required string id ) {
+		return byId( providers(), arguments.id )
+	}
+
+	/**
+	 * @return [ { id, name, hint, envVar, keyUrl } ] the web search providers bx-ai supports
+	 */
+	array function searchProviders() {
+		return load( "search" )
+	}
+
+	struct function searchProvider( required string id ) {
+		return byId( searchProviders(), arguments.id )
+	}
+
+	/**
+	 * @return Every channel: [ { id, name, hint, type, env, steps, docs } ]
+	 */
+	array function channels() {
+		return load( "channels" )
+	}
+
+	struct function channel( required string id ) {
+		return byId( channels(), arguments.id )
+	}
+
+	/**
+	 * @return The MCP servers that work with the bundled bx-ai
+	 */
+	array function mcpServers() {
+		return load( "mcp-servers" ).filter( entry => entry.available ?: true )
+	}
+
+	/**
+	 * @return The MCP servers listed but not usable yet, with the reason
+	 */
+	array function unavailableMcpServers() {
+		return load( "mcp-servers" ).filter( entry => !( entry.available ?: true ) )
+	}
+
+	struct function mcpServer( required string id ) {
+		return byId( load( "mcp-servers" ), arguments.id )
+	}
+
+	/**
+	 * @return [ { id, name, hint } ] where a project can be deployed
+	 */
+	array function deployTargets() {
+		return load( "deploy-targets" )
+	}
+
+	/**
+	 * @id A capability id such as search
+	 *
+	 * @return The capability, or an empty struct
+	 */
+	struct function capability( required string id ) {
+		var match = static.CAPABILITIES.filter( entry => entry.id == id )
+		return match.len() ? match[ 1 ] : {}
+	}
+
+	/**
+	 * @return Every file tool name, read-only ones first
+	 */
+	array function fileToolNames() {
+		return readOnlyFileToolNames().append( static.FILE_TOOLS_WRITE.map( tool => tool.name ), true )
+	}
+
+	array function readOnlyFileToolNames() {
+		return static.FILE_TOOLS_READ.map( tool => tool.name )
+	}
+
+	private array function load( required string name ) {
+		if ( !variables.cache.keyExists( arguments.name ) ) {
+			var path = getDirectoryFromPath( getCurrentTemplatePath() ) & "catalog/" & arguments.name & ".json"
+			variables.cache[ arguments.name ] = jsonDeserialize( fileRead( path ) )
+		}
+		return variables.cache[ arguments.name ]
+	}
+
+	private struct function byId( required array entries, required string id ) {
+		var match = arguments.entries.filter( entry => entry.id == id )
+		return match.len() ? match[ 1 ] : {}
+	}
+
+}

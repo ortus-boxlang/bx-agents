@@ -1,0 +1,103 @@
+/**
+ * The bxai file-tools adapter. The real bx-ai FileSystemTools is used for the
+ * lock-down checks, since the point is that a path outside the folders is refused.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "BxAiFileToolsModule", function() {
+
+			beforeEach( function() {
+				variables.adapter = new bxagents.models.build.toolmodules.BxAiFileToolsModule();
+				variables.dir = getTempDirectory() & "bxa-filetools-" & createUUID();
+				directoryCreate( dir );
+				fileWrite( dir & "/note.txt", "hello" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "is the bxai module and adds to bx-ai's registered tools", function() {
+				expect( adapter.moduleName() ).toBe( "bxai" );
+				expect( adapter.supplements() ).toBeTrue();
+				expect( adapter.available() ).toBeTrue();
+			} );
+
+			it( "builds no tools without folders, so they are never open by omission", function() {
+				expect( adapter.tools() ).toBeEmpty();
+				expect( adapter.tools( { allowedPaths : [] } ) ).toBeEmpty();
+			} );
+
+			it( "builds the file tools for the folders it is given", function() {
+				var names = adapter.tools( { allowedPaths : [ dir ] } ).map( t => t.getName() );
+
+				expect( names ).toInclude( "readFile" );
+				expect( names ).toInclude( "writeFile" );
+				expect( names ).toInclude( "listDirectory" );
+				expect( names ).toHaveLength( 19 );
+			} );
+
+			it( "locks each tool to its folders", function() {
+				var read = adapter.tools( { allowedPaths : [ dir ] } ).filter( t => t.getName() == "readFile" )[ 1 ];
+
+				expect( read.doInvoke( { path : dir & "/note.txt" } ) ).toBe( "hello" );
+				expect( function() {
+					read.doInvoke( { path : "/etc/hostname" } );
+				} ).toThrow( type = "FileSystemTools.AccessDenied" );
+			} );
+
+			it( "does not leave the tools in the shared registry", function() {
+				var before = aiToolRegistry().getKeys().len();
+				adapter.tools( { allowedPaths : [ dir ] } );
+
+				expect( aiToolRegistry().getKeys().len() ).toBe( before );
+				expect( aiToolRegistry().getKeys().contains( "readFile@bxai" ) ).toBeFalse();
+			} );
+
+			it( "gives every call its own tools", function() {
+				var a = adapter.tools( { allowedPaths : [ dir ] } );
+				var b = adapter.tools( { allowedPaths : [ dir ] } );
+				var identity = createObject( "java", "java.lang.System" );
+
+				expect( identity.identityHashCode( a[ 1 ] ) ).notToBe( identity.identityHashCode( b[ 1 ] ) );
+			} );
+
+			it( "turns tmp and cwd into real folders", function() {
+				expect( adapter.resolveFolder( "tmp" ) ).toBe( getTempDirectory().reReplace( "[\/]+$", "" ) );
+				expect( adapter.resolveFolder( "cwd" ) ).toBe( createObject( "java", "java.lang.System" ).getProperty( "user.dir" ) );
+				expect( adapter.resolveFolder( "/data/x" ) ).toBe( "/data/x" );
+			} );
+
+			it( "hands the resolved folders to the factory a test passes", function() {
+				var seen = [];
+				var stub = new bxagents.models.build.toolmodules.BxAiFileToolsModule( folders => {
+					seen = folders;
+					return [];
+				} );
+
+				stub.tools( { allowedPaths : [ "tmp", "/data/x" ] } );
+
+				expect( seen ).toHaveLength( 2 );
+				expect( seen[ 2 ] ).toBe( "/data/x" );
+			} );
+
+			it( "requires allowedPaths and rejects an empty list, a relative path and unknown options", function() {
+				expect( adapter.validateOptions( { allowedPaths : [ "tmp", "cwd", "/abs/path" ] } ) ).toBeEmpty();
+				expect( adapter.validateOptions( {} )[ 1 ] ).toInclude( "needs allowedPaths" );
+				expect( adapter.validateOptions( { allowedPaths : [] }  )[ 1 ] ).toInclude( "whole disk" );
+				expect( adapter.validateOptions( { allowedPaths : [ "relative/dir" ] } )[ 1 ] ).toInclude( "absolute path" );
+				expect( adapter.validateOptions( { allowedPaths : [ "tmp" ], bogus : 1 } )[ 1 ] ).toInclude( "unknown option [bogus]" );
+				expect( adapter.validateOptions( "tmp" ) ).toHaveLength( 1 );
+			} );
+
+			it( "lets a placeholder stand in for a path", function() {
+				expect( adapter.validateOptions( { allowedPaths : [ "${env.DATA_DIR}" ] } ) ).toBeEmpty();
+			} );
+
+		} );
+	}
+
+}

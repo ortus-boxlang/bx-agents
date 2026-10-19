@@ -3,11 +3,14 @@
  * what the module registered in bx-ai's registry.
  *
  * A module appears here when the registered tools cannot be shared between agents
- * (bx-playwright: they would all drive one browser) or when its tools take options.
+ * (bx-playwright: they would all drive one browser) or when its tools take options
+ * (bx-ai's file tools, which exist only for the folders an agent names).
  * Every other module's tools are used as registered and accept no options.
  *
  * An adapter is a class with: moduleName(), available(), validateOptions( options )
- * and tools( options ).
+ * and tools( options ). It may also have supplements() returning true, meaning the
+ * module's registered tools stay available next to the ones the adapter builds
+ * (bx-ai: `now@bxai` comes from the registry, `readFile@bxai` from the adapter).
  */
 class {
 
@@ -16,7 +19,8 @@ class {
 	 */
 	function init( struct adapters = {} ) {
 		variables.adapters = {
-			"bxplaywright" : new "models.build.toolmodules.BxPlaywrightToolModule@bxagents"()
+			"bxplaywright" : new "models.build.toolmodules.BxPlaywrightToolModule@bxagents"(),
+			"bxai"         : new "models.build.toolmodules.BxAiFileToolsModule@bxagents"()
 		}
 		variables.adapters.append( arguments.adapters )
 		return this
@@ -38,6 +42,16 @@ class {
 	 */
 	any function get( required string module ) {
 		return variables.adapters[ arguments.module ]
+	}
+
+	/**
+	 * @module A module name for which has() is true
+	 *
+	 * @return True when the module's registered tools stay available next to the adapter's
+	 */
+	boolean function supplements( required string module ) {
+		var adapter = variables.adapters[ arguments.module ]
+		return structKeyExists( adapter, "supplements" ) && adapter.supplements()
 	}
 
 }

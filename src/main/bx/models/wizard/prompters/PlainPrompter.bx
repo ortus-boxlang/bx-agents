@@ -1,0 +1,164 @@
+/**
+ * The prompter for terminals the full-screen UI cannot run in: a pipe, CI, a dumb
+ * terminal, or NO_COLOR with --no-tui. It asks with numbered lists and plain lines,
+ * reading with BoxLang's own cliRead(), and prints no escape codes.
+ *
+ * Typing "back" at a question goes back one step; a closed stdin (Ctrl+D) cancels,
+ * the same as Ctrl+C in the full-screen UI.
+ */
+class {
+
+	/**
+	 * @reader Reads one line given a prompt. Defaults to cliRead(); tests pass a stand-in.
+	 */
+	function init( any reader ) {
+		variables.reader = isNull( arguments.reader ) ? ( message ) => cliRead( message ) : arguments.reader
+		variables.stepInfo = { step : 0, steps : 0 }
+		return this
+	}
+
+	string function select( required string title, required array choices, string current = "", string help = "" ) {
+		var options = normalize( arguments.choices )
+		printQuestion( arguments.title, arguments.help )
+		var defaultIndex = 1
+		for ( var i = 1; i <= options.len(); i++ ) {
+			println( "  #i#) #options[ i ].label##hintOf( options[ i ] )#" )
+			if ( options[ i ].value == arguments.current ) {
+				defaultIndex = i
+			}
+		}
+		while ( true ) {
+			var answer = ask( "Choose 1-#options.len()# [#defaultIndex#]: " )
+			if ( !len( answer ) ) {
+				return options[ defaultIndex ].value
+			}
+			if ( isNumeric( answer ) && answer >= 1 && answer <= options.len() && answer == int( answer ) ) {
+				return options[ answer ].value
+			}
+			println( "Enter a number from 1 to #options.len()#." )
+		}
+	}
+
+	array function multiSelect( required string title, required array choices, string help = "" ) {
+		var options = normalize( arguments.choices )
+		printQuestion( arguments.title, arguments.help )
+		var ticked = []
+		for ( var i = 1; i <= options.len(); i++ ) {
+			println( "  #i#) #options[ i ].label##hintOf( options[ i ] )##options[ i ].selected ? '  (on by default)' : ''#" )
+			if ( options[ i ].selected ) {
+				ticked.append( i )
+			}
+		}
+		while ( true ) {
+			var answer = ask( "Numbers separated by commas, none for nothing#ticked.len() ? ', Enter for the defaults' : ''#: " )
+			if ( !len( answer ) ) {
+				return ticked.sort( "numeric" ).map( n => options[ n ].value )
+			}
+			if ( answer == "none" ) {
+				return []
+			}
+			var picked = answer.listToArray( ", " )
+			var valid = picked.every( n => isNumeric( n ) && n >= 1 && n <= options.len() && n == int( n ) )
+			if ( valid ) {
+				return picked.map( n => int( n ) ).sort( "numeric" ).map( n => options[ n ].value )
+			}
+			println( "Enter numbers from 1 to #options.len()#, separated by commas." )
+		}
+	}
+
+	string function text( required string title, string help = "", string default = "", boolean secret = false, string required = "" ) {
+		printQuestion( arguments.title, arguments.help )
+		while ( true ) {
+			var answer = ask( "#len( arguments.default ) ? '[' & ( arguments.secret ? 'hidden' : arguments.default ) & '] ' : ''#> " )
+			if ( !len( answer ) ) {
+				answer = arguments.default
+			}
+			if ( len( answer ) || !len( arguments.required ) ) {
+				return answer
+			}
+			println( arguments.required )
+		}
+	}
+
+	boolean function confirm( required string title, string help = "", boolean default = true ) {
+		printQuestion( arguments.title, arguments.help )
+		while ( true ) {
+			var answer = ask( "[#arguments.default ? 'Y/n' : 'y/N'#] " ).lcase()
+			if ( !len( answer ) ) {
+				return arguments.default
+			}
+			if ( [ "y", "yes" ].contains( answer ) ) {
+				return true
+			}
+			if ( [ "n", "no" ].contains( answer ) ) {
+				return false
+			}
+			println( "Answer y or n." )
+		}
+	}
+
+	void function note( required string title, required array lines ) {
+		println( "" )
+		println( "! #arguments.title#" )
+		for ( var line in arguments.lines ) {
+			println( "  #line#" )
+		}
+		ask( "Press Enter to continue " )
+	}
+
+	void function record( required string key, required string label, required string value ) {
+	}
+
+	void function forget( required string key ) {
+	}
+
+	void function progress( required numeric step, required numeric steps ) {
+		variables.stepInfo = { step : arguments.step, steps : arguments.steps }
+	}
+
+	void function close() {
+	}
+
+	/**
+	 * @return The text unchanged: this prompter prints no color
+	 */
+	string function paint( required string style, required string text ) {
+		return arguments.text
+	}
+
+	private void function printQuestion( required string title, string help = "" ) {
+		println( "" )
+		var step = variables.stepInfo.steps ? "(#variables.stepInfo.step#/#variables.stepInfo.steps#) " : ""
+		println( "#step##arguments.title#" )
+		if ( len( arguments.help ) ) {
+			println( "  #arguments.help#" )
+		}
+	}
+
+	private string function hintOf( required struct option ) {
+		return len( option.hint ) ? "  - #option.hint#" : ""
+	}
+
+	private array function normalize( required array choices ) {
+		return arguments.choices.map( choice => isStruct( choice )
+			? { value : choice.value, label : choice.label ?: choice.value, hint : choice.hint ?: "", selected : choice.selected ?: false }
+			: { value : choice, label : choice, hint : "", selected : false } )
+	}
+
+	/**
+	 * Reads one line. "back" goes back a step; a closed stdin cancels.
+	 */
+	private string function ask( required string message ) {
+		var answer = ""
+		try {
+			answer = trim( variables.reader( arguments.message ) ?: "" )
+		} catch ( any e ) {
+			throw( type = "BxAgents.WizardAbort", message = "wizard:cancel" )
+		}
+		if ( answer.lcase() == "back" ) {
+			throw( type = "BxAgents.WizardAbort", message = "wizard:back" )
+		}
+		return answer
+	}
+
+}

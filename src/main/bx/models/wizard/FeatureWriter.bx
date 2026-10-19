@@ -1,0 +1,290 @@
+/**
+ * Turns the `features` a `new` run collected (from the wizard or from flags) into the
+ * files of a scaffolded project. ProjectScaffolder writes the base project; this adds
+ * what the answers asked for, and nothing the answers did not:
+ *
+ *   tools, toolOptions, mcpServers, memory, checkpointer, security
+ *                          -> sections of Agent.yaml (see agentYamlLines)
+ *   dependencies           -> the project's own box.json
+ *   envStubs               -> .env, with the value left empty for the user to fill in
+ *   gateways, webui        -> gateways/*.bx
+ *   deploy                 -> deploy/<target>.json
+ *   instructionLines       -> instructions.md
+ *
+ * A feature never carries a secret: credentials are environment variable NAMES, and
+ * the .env lines it adds are stubs. The one value written that is derived from a
+ * secret is a web UI password HASH, which is safe to commit.
+ *
+ * The `features` struct, every key optional:
+ *   tools            [ "now@bxai", ... ]
+ *   toolOptions      { bxai : { allowedPaths : [ "tmp", "cwd" ] } }
+ *   mcpServers       [ { name, url, token : "${env.X}" } ]
+ *   memory           "cache" | "file"
+ *   checkpointer     { type : "file" }
+ *   security         { enabled : true, input : { action : "flag" } }
+ *   dependencies     { "bx-playwright" : "*" }
+ *   envStubs         [ { name, comment, value } ]
+ *   gateways         [ { id, type, env : [ { config, name } ] } ]
+ *   webui            { path, apiKeyEnvVar, users : [ { username, passwordHash, displayName } ] }
+ *   agentApi         { path }
+ *   deploy           { id, config : { target, ... } }
+ *   instructionLines [ "When you search the web, use ..." ]
+ */
+class {
+
+	property name="yaml";
+
+	function init() {
+		variables.yaml = new "models.wizard.YamlWriter@bxagents"()
+		return this
+	}
+
+	/**
+	 * @features The feature struct
+	 *
+	 * @return The Agent.yaml lines for the features that live there, each section after a blank line
+	 */
+	array function agentYamlLines( required struct features ) {
+		var lines = []
+		var f = arguments.features
+
+		if ( f.keyExists( "tools" ) && f.tools.len() ) {
+			lines.append( "" )
+			lines.append( "## What the agent can use. See conventions/agent-yaml in the docs." )
+			lines.append( "tools:" )
+			lines.append( f.tools.map( tool => "  - " & variables.yaml.scalar( tool ) ), true )
+		}
+		if ( f.keyExists( "toolOptions" ) && f.toolOptions.count() ) {
+			lines.append( "toolOptions:" )
+			lines.append( variables.yaml.lines( f.toolOptions, 2 ), true )
+		}
+		if ( f.keyExists( "mcpServers" ) && f.mcpServers.len() ) {
+			lines.append( "" )
+			lines.append( "## Remote MCP servers. Credentials are read from the environment when the app starts." )
+			lines.append( "mcpServers:" )
+			lines.append( variables.yaml.lines( f.mcpServers, 2, [ "name", "url", "token", "headers", "timeout" ] ), true )
+		}
+		if ( f.keyExists( "memory" ) ) {
+			lines.append( "" )
+			lines.append( "memory: " & variables.yaml.scalar( f.memory ) )
+		}
+		if ( f.keyExists( "checkpointer" ) ) {
+			lines.append( "checkpointer:" )
+			lines.append( variables.yaml.lines( f.checkpointer, 2 ), true )
+		}
+		if ( f.keyExists( "security" ) && f.security.count() ) {
+			lines.append( "" )
+			lines.append( "## Prompt-injection guardrails, handled by bx-ai." )
+			lines.append( "security:" )
+			lines.append( variables.yaml.lines( f.security, 2, [ "enabled" ] ), true )
+		}
+		return lines
+	}
+
+	/**
+	 * @features The feature struct
+	 *
+	 * @return The extra text for instructions.md, one entry per line; empty when there is none
+	 */
+	array function instructionLines( required struct features ) {
+		return arguments.features.instructionLines ?: []
+	}
+
+	/**
+	 * @features The feature struct
+	 *
+	 * @return The box.json `dependencies` struct, in a stable order
+	 */
+	struct function dependencies( required struct features ) {
+		return arguments.features.dependencies ?: {}
+	}
+
+	/**
+	 * Writes everything that is not Agent.yaml, box.json or instructions.md.
+	 *
+	 * @dir The project root
+	 * @features The feature struct
+	 */
+	void function apply( required string dir, required struct features ) {
+		var f = arguments.features
+
+		appendEnvStubs( arguments.dir & "/.env", f.envStubs ?: [] )
+
+		for ( var gateway in ( f.gateways ?: [] ) ) {
+			directoryCreate( path = arguments.dir & "/gateways", createPath = true, ignoreExists = true )
+			fileWrite( arguments.dir & "/gateways/" & gateway.id & ".bx", renderChannelGateway( gateway ) )
+		}
+		if ( f.keyExists( "webui" ) ) {
+			directoryCreate( path = arguments.dir & "/gateways", createPath = true, ignoreExists = true )
+			fileWrite( arguments.dir & "/gateways/webui.bx", renderExposure( "webui", f.webui ) )
+		}
+		if ( f.keyExists( "agentApi" ) ) {
+			directoryCreate( path = arguments.dir & "/gateways", createPath = true, ignoreExists = true )
+			fileWrite( arguments.dir & "/gateways/api.bx", renderExposure( "agent", f.agentApi ) )
+		}
+		if ( f.keyExists( "deploy" ) ) {
+			directoryCreate( path = arguments.dir & "/deploy", createPath = true, ignoreExists = true )
+			fileWrite( arguments.dir & "/deploy/" & f.deploy.id & ".json", prettyJson( f.deploy.config ) & char( 10 ) )
+		}
+	}
+
+	/**
+	 * Adds stub lines to the project's .env: each variable the features need, with its
+	 * value empty (or a placeholder prefix such as xoxb-), grouped under a comment. A
+	 * variable already in the file is left alone.
+	 *
+	 * @envPath Absolute path to the .env
+	 * @stubs [ { name, comment, value } ]
+	 */
+	void function appendEnvStubs( required string envPath, required array stubs ) {
+		if ( !arguments.stubs.len() ) {
+			return
+		}
+		var existing = fileExists( arguments.envPath ) ? fileRead( arguments.envPath ) : ""
+		var added = []
+		var seen = {}
+		for ( var stub in arguments.stubs ) {
+			if ( seen.keyExists( stub.name ) || reFind( "(?m)^\s*#stub.name#\s*=", existing ) ) {
+				continue
+			}
+			seen[ stub.name ] = true
+			if ( len( stub.comment ?: "" ) ) {
+				added.append( "## " & stub.comment )
+			}
+			added.append( stub.name & "=" & ( stub.value ?: "" ) )
+		}
+		if ( added.len() ) {
+			fileWrite( arguments.envPath, existing.reReplace( "\s+$", "" ) & char( 10 ) & char( 10 ) & added.toList( char( 10 ) ) & char( 10 ) )
+		}
+	}
+
+	/**
+	 * @gateway { id, type, env : [ { config, name } ], extra : { ... } }
+	 *
+	 * @return The gateways/<id>.bx source for a chat-platform channel
+	 */
+	string function renderChannelGateway( required struct gateway ) {
+		var entries = [ [ "type", arguments.gateway.type ] ]
+		for ( var envVar in arguments.gateway.env ) {
+			entries.append( [ envVar.config, envVar.name ] )
+		}
+		for ( var key in ( arguments.gateway.extra ?: {} ) ) {
+			entries.append( [ key, arguments.gateway.extra[ key ] ] )
+		}
+		return renderGatewayClass( entries )
+	}
+
+	/**
+	 * @kind webui or agent
+	 * @settings webui: { path, apiKeyEnvVar, users }; agent: { path }
+	 *
+	 * @return The gateways/*.bx source for an exposure
+	 */
+	string function renderExposure( required string kind, required struct settings ) {
+		var entries = [ [ "exposes", arguments.kind ], [ "path", arguments.settings.path ] ]
+		if ( len( arguments.settings.apiKeyEnvVar ?: "" ) ) {
+			entries.append( [ "apiKeyEnvVar", arguments.settings.apiKeyEnvVar ] )
+		}
+		if ( ( arguments.settings.users ?: [] ).len() ) {
+			entries.append( [ "users", arguments.settings.users ] )
+		}
+		return renderGatewayClass( entries )
+	}
+
+	/**
+	 * @entries [ [ key, value ], ... ] in the order to write them
+	 *
+	 * @return A gateway class returning those entries from configure()
+	 */
+	private string function renderGatewayClass( required array entries ) {
+		var width = 0
+		for ( var entry in arguments.entries ) {
+			width = max( width, len( entry[ 1 ] ) )
+		}
+		var body = []
+		for ( var i = 1; i <= arguments.entries.len(); i++ ) {
+			var entry = arguments.entries[ i ]
+			body.append( "			" & entry[ 1 ] & repeatString( " ", width - len( entry[ 1 ] ) ) & " : " & literal( entry[ 2 ], 3 ) & ( i < arguments.entries.len() ? "," : "" ) )
+		}
+		return [
+			"class {",
+			"",
+			"	function configure() {",
+			"		return {",
+			body.toList( char( 10 ) ),
+			"		};",
+			"	}",
+			"",
+			"}",
+			""
+		].toList( char( 10 ) )
+	}
+
+	/**
+	 * @value A text, number, boolean, array or struct
+	 * @depth How many tabs the value sits under, for the lines of an array
+	 *
+	 * @return The BoxLang source for the value
+	 */
+	private string function literal( required any value, numeric depth = 0 ) {
+		var input = arguments.value
+		var depth = arguments.depth
+		var tabs = repeatString( char( 9 ), depth + 1 )
+		var closeTabs = repeatString( char( 9 ), depth )
+		if ( isStruct( input ) ) {
+			var priority = [ "username", "passwordHash", "passwordEnvVar", "displayName" ]
+			var keys = input.keyArray()
+			keys = priority.filter( key => keys.containsNoCase( key ) ).append( keys.filter( key => !priority.containsNoCase( key ) ).sort( "textnocase" ), true )
+			var parts = keys.map( key => tabs & key & " : " & literal( input[ key ], depth + 1 ) )
+			return "{" & char( 10 ) & parts.toList( "," & char( 10 ) ) & char( 10 ) & closeTabs & "}"
+		}
+		if ( isArray( input ) ) {
+			if ( !input.len() ) {
+				return "[]"
+			}
+			var items = input.map( item => tabs & literal( item, depth + 1 ) )
+			return "[" & char( 10 ) & items.toList( "," & char( 10 ) ) & char( 10 ) & closeTabs & "]"
+		}
+		var className = input.getClass().getName()
+		if ( className == "java.lang.Boolean" ) {
+			return input ? "true" : "false"
+		}
+		if ( [ "java.lang.Integer", "java.lang.Long", "java.lang.Double", "java.lang.Float", "java.lang.Short" ].contains( className ) ) {
+			return toString( input )
+		}
+		// "#" would start an interpolation in generated source, so it is doubled
+		return '"' & toString( input ).replace( '"', '""', "all" ).replace( "##", "####", "all" ) & '"'
+	}
+
+	/**
+	 * @value A struct, array or simple value
+	 * @indent Tabs the value sits under
+	 *
+	 * @return Indented JSON, with the keys in the order the struct holds them
+	 */
+	string function prettyJson( required any value, numeric indent = 0 ) {
+		var input = arguments.value
+		var level = arguments.indent
+		var tabs = repeatString( char( 9 ), level + 1 )
+		var closeTabs = repeatString( char( 9 ), level )
+		if ( isStruct( input ) ) {
+			if ( input.isEmpty() ) {
+				return "{}"
+			}
+			var keys = input.keyArray()
+			var priority = [ "target" ]
+			keys = priority.filter( key => keys.containsNoCase( key ) ).append( keys.filter( key => !priority.containsNoCase( key ) ).sort( "textnocase" ), true )
+			var parts = keys.map( key => tabs & jsonSerialize( key ) & ": " & prettyJson( input[ key ], level + 1 ) )
+			return "{" & char( 10 ) & parts.toList( "," & char( 10 ) ) & char( 10 ) & closeTabs & "}"
+		}
+		if ( isArray( input ) ) {
+			if ( !input.len() ) {
+				return "[]"
+			}
+			var items = input.map( item => tabs & prettyJson( item, level + 1 ) )
+			return "[" & char( 10 ) & items.toList( "," & char( 10 ) ) & char( 10 ) & closeTabs & "]"
+		}
+		return jsonSerialize( input )
+	}
+
+}

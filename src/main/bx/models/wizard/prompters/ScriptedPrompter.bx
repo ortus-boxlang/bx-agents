@@ -1,0 +1,128 @@
+/**
+ * A prompter that answers from a list it was given up front, for tests and for
+ * `new --answers`-style automation. Every question takes the next answer:
+ *
+ *   select        the value of the choice
+ *   multiSelect   an array of values
+ *   text          the text
+ *   confirm       true or false
+ *   note          any value, ignored
+ *
+ * An answer of "<back>" or "<cancel>" does what Esc and Ctrl+C do. Running out of
+ * answers is an error, never a silent default, so a test that asks one question more
+ * than it planned for fails loudly.
+ *
+ * Every question asked is kept in `asked()` so a test can check what the wizard offered.
+ */
+class {
+
+	/**
+	 * @answers The answers, in the order the wizard will ask
+	 */
+	function init( array answers = [] ) {
+		variables.answers = arguments.answers.duplicate()
+		variables.questions = []
+		variables.recorded = {}
+		variables.stepInfo = { step : 0, steps : 0 }
+		return this
+	}
+
+	/**
+	 * @return [ { kind, title, choices } ] for every question asked so far
+	 */
+	array function asked() {
+		return variables.questions
+	}
+
+	/**
+	 * @return The answers recorded so far, by key: { label, value }
+	 */
+	struct function recorded() {
+		return variables.recorded
+	}
+
+	/**
+	 * @return How many scripted answers are still unused
+	 */
+	numeric function remaining() {
+		return variables.answers.len()
+	}
+
+	string function select( required string title, required array choices, string current = "", string help = "" ) {
+		var answer = nextAnswer( "select", arguments.title, arguments.choices )
+		var values = arguments.choices.map( choice => isStruct( choice ) ? choice.value : choice )
+		if ( !values.contains( answer ) ) {
+			throw( type = "BxAgents.ScriptedAnswer", message = "Scripted answer [#answer#] is not one of the choices for [#arguments.title#]: #values.toList( ', ' )#" )
+		}
+		return answer
+	}
+
+	array function multiSelect( required string title, required array choices, string help = "" ) {
+		var answer = nextAnswer( "multiSelect", arguments.title, arguments.choices )
+		var values = arguments.choices.map( choice => isStruct( choice ) ? choice.value : choice )
+		for ( var picked in answer ) {
+			if ( !values.contains( picked ) ) {
+				throw( type = "BxAgents.ScriptedAnswer", message = "Scripted answer [#picked#] is not one of the choices for [#arguments.title#]: #values.toList( ', ' )#" )
+			}
+		}
+		return answer
+	}
+
+	string function text( required string title, string help = "", string default = "", boolean secret = false, string required = "" ) {
+		var answer = nextAnswer( "text", arguments.title, [] )
+		if ( !len( answer ) ) {
+			answer = arguments.default
+		}
+		if ( !len( answer ) && len( arguments.required ) ) {
+			throw( type = "BxAgents.ScriptedAnswer", message = "Scripted answer for [#arguments.title#] is empty but it is required: #arguments.required#" )
+		}
+		return answer
+	}
+
+	boolean function confirm( required string title, string help = "", boolean default = true ) {
+		return nextAnswer( "confirm", arguments.title, [] )
+	}
+
+	void function note( required string title, required array lines ) {
+		nextAnswer( "note", arguments.title, [] )
+	}
+
+	void function record( required string key, required string label, required string value ) {
+		variables.recorded[ arguments.key ] = { label : arguments.label, value : arguments.value }
+	}
+
+	void function forget( required string key ) {
+		variables.recorded.delete( arguments.key )
+	}
+
+	void function progress( required numeric step, required numeric steps ) {
+		variables.stepInfo = { step : arguments.step, steps : arguments.steps }
+	}
+
+	void function close() {
+	}
+
+	/**
+	 * @return The text unchanged: scripted runs print no color
+	 */
+	string function paint( required string style, required string text ) {
+		return arguments.text
+	}
+
+	private any function nextAnswer( required string kind, required string title, required array choices ) {
+		variables.questions.append( { kind : arguments.kind, title : arguments.title, choices : arguments.choices } )
+		if ( !variables.answers.len() ) {
+			throw( type = "BxAgents.ScriptedAnswer", message = "The wizard asked [#arguments.title#] but the script has no answers left." )
+		}
+		var answer = variables.answers[ 1 ]
+		variables.answers.deleteAt( 1 )
+		if ( isSimpleValue( answer ) && answer == "<back>" ) {
+			throw( type = "BxAgents.WizardAbort", message = "wizard:back" )
+		}
+		if ( isSimpleValue( answer ) && answer == "<cancel>" ) {
+			throw( type = "BxAgents.WizardAbort", message = "wizard:cancel" )
+		}
+		return answer
+	}
+
+}

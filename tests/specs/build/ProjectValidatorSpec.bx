@@ -63,7 +63,17 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "rejects toolOptions for a module that takes no options", function() {
 				var result = validateFixture( "tool-options-no-adapter" );
-				expect( result.errors.filter( e => e.findNoCase( "[bxai]" ) && e.findNoCase( "takes no options" ) ).len() ).toBeGT( 0 );
+				expect( result.errors.filter( e => e.findNoCase( "[bxdemo]" ) && e.findNoCase( "takes no options" ) ).len() ).toBeGT( 0 );
+			} );
+
+			it( "accepts bxai allowedPaths for the file tools", function() {
+				var result = validateFixture( "tool-options-bxai-good" );
+				expect( result.errors.filter( e => e.findNoCase( "toolOptions" ) ) ).toBeEmpty();
+			} );
+
+			it( "rejects an empty bxai allowedPaths list, since it would open the whole disk", function() {
+				var result = validateFixture( "tool-options-bxai-bad" );
+				expect( result.errors.filter( e => e.findNoCase( "[bxai]" ) && e.findNoCase( "whole disk" ) ).len() ).toBeGT( 0 );
 			} );
 
 			it( "rejects an unknown bxplaywright option and names the valid ones", function() {
@@ -274,6 +284,24 @@ class extends="testbox.system.BaseSpec" {
 			it( "rejects mcpServers entries missing required fields", function() {
 				var result = validateFixture( "bad-mcp-server" );
 				expect( result.errors.filter( e => e.findNoCase( "mcpServers" ) ).len() ).toBeGT( 0 );
+			} );
+
+			it( "rejects an mcpServers token or password written in the file, unknown keys and mistyped headers and timeouts", function() {
+				var errors = validateFixture( "bad-mcp-credentials" ).errors.filter( e => e.findNoCase( "mcpServers" ) );
+				var text = errors.toList( char( 10 ) );
+
+				expect( text ).toInclude( "[leaky] writes its [token] in the file" );
+				expect( text ).toInclude( "writes its [password] in the file" );
+				expect( text ).toInclude( "unknown key [colour]" );
+				expect( text ).toInclude( "'headers' must be a mapping" );
+				expect( text ).toInclude( "'timeout' must be a number" );
+			} );
+
+			it( "accepts mcpServers credentials written as environment placeholders", function() {
+				var projectRoot = expandPath( "/fixtures/with-mcp-credentials" );
+				var result = validator.validate( projectRoot, discoverer.discover( projectRoot ), resolver.resolve( projectRoot = projectRoot ) );
+
+				expect( result.errors.filter( e => e.findNoCase( "mcpServers" ) ) ).toBeEmpty();
 			} );
 
 			it( "rejects a model reference that matches no models/ entry", function() {

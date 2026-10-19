@@ -73,6 +73,10 @@ class {
 				}
 				catalog = built[ parsed.module ]
 				catalogKeys = catalog.keyArray()
+				if ( variables.modules.supplements( parsed.module ) ) {
+					// the module's registered tools stay available next to the adapter's (bx-ai: now, httpGet, ...)
+					catalogKeys = registryKeys.filter( key => !catalog.keyExists( key ) ).append( catalogKeys, true )
+				}
 			} else {
 				catalogKeys = registryKeys
 			}
@@ -89,9 +93,10 @@ class {
 			} else {
 				var key = parsed.item & "@" & parsed.module
 				if ( !catalogKeys.contains( key ) ) {
+					var unknownMessage = "#describeAgent( arguments.agentName )# lists [#entry#] but there is no tool [#key#]. #availableHint( catalogKeys, parsed.module, registry )#"
 					throw(
 						type    = "BxAgents.UnknownTool",
-						message = "#describeAgent( arguments.agentName )# lists [#entry#] but there is no tool [#key#]. #availableHint( catalogKeys, parsed.module, registry )#"
+						message = unknownMessage & supplementHint( parsed )
 					)
 				}
 				keys = [ key ]
@@ -118,6 +123,21 @@ class {
 		}
 
 		return selected
+	}
+
+	/**
+	 * Tells a missing tool from a module that adds tools of its own (bx-ai's file tools)
+	 * what it was probably missing.
+	 *
+	 * @parsed The parsed `tools:` entry
+	 *
+	 * @return A sentence to append to the unknown-tool message, or empty
+	 */
+	private string function supplementHint( required struct parsed ) {
+		if ( !variables.modules.has( parsed.module ) || !variables.modules.supplements( parsed.module ) ) {
+			return ""
+		}
+		return " Tools that need folders (the file tools) exist only when `toolOptions.#parsed.module#.allowedPaths` names them, for example allowedPaths: [ tmp, cwd ]."
 	}
 
 	/**
@@ -216,7 +236,7 @@ class {
 			if ( found == "__bxagents_unset__" ) {
 				throw(
 					type    = "BxAgents.MissingToolOption",
-					message = "toolOptions [#owner#] uses ${env.#name#} but the environment variable #name# is not set. Set it, or give a default: ${env.#name#:default}"
+					message = "#find( ' ', owner ) ? owner : 'toolOptions [' & owner & ']'# uses ${env.#name#} but the environment variable #name# is not set. Set it, or give a default: ${env.#name#:default}"
 				)
 			}
 			var before = match.pos[ 1 ] > 1 ? text.left( match.pos[ 1 ] - 1 ) : ""

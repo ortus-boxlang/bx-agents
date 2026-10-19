@@ -1,0 +1,181 @@
+/**
+ * What the answers of a `new` run turn into on disk. The last spec scaffolds a project
+ * with every feature on and runs it through the real validator, which is the check that
+ * counts: an Agent.yaml or gateway that the rest of BX Agents would refuse is a bug here.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "YamlWriter", function() {
+
+			beforeEach( function() {
+				variables.yaml = new bxagents.models.wizard.YamlWriter();
+			} );
+
+			it( "quotes text YAML could read as something else", function() {
+				expect( yaml.scalar( "now@bxai" ) ).toBe( "now@bxai" );
+				expect( yaml.scalar( "*@bxplaywright" ) ).toBe( '"*@bxplaywright"' );
+				expect( yaml.scalar( "${env.GITHUB_TOKEN}" ) ).toBe( '"${env.GITHUB_TOKEN}"' );
+				expect( yaml.scalar( "true" ) ).toBe( '"true"' );
+				expect( yaml.scalar( "12" ) ).toBe( '"12"' );
+				expect( yaml.scalar( "has: colon" ) ).toBe( '"has: colon"' );
+				expect( yaml.scalar( true ) ).toBe( "true" );
+				expect( yaml.scalar( 20000 ) ).toBe( "20000" );
+			} );
+
+			it( "writes mappings and lists, preferred keys first", function() {
+				var out = yaml.lines( [ { url : "https://x.example/mcp", name : "x", token : "${env.X}" } ], 2, [ "name", "url", "token" ] );
+
+				expect( out ).toBe( [
+					'  - name: x',
+					'    url: "https://x.example/mcp"',
+					'    token: "${env.X}"'
+				] );
+			} );
+
+			it( "writes nested mappings and lists of text", function() {
+				var out = yaml.lines( { bxai : { allowedPaths : [ "tmp", "cwd" ] } }, 2 );
+
+				expect( out ).toBe( [ "  bxai:", "    allowedPaths:", "      - tmp", "      - cwd" ] );
+			} );
+
+		} );
+
+		describe( "FeatureWriter", function() {
+
+			beforeEach( function() {
+				variables.writer = new bxagents.models.wizard.FeatureWriter();
+				variables.dir = createTempDirectory( prefix = "bxagents-features-" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "adds nothing for no features", function() {
+				expect( writer.agentYamlLines( {} ) ).toBeEmpty();
+				expect( writer.dependencies( {} ) ).toBeEmpty();
+				expect( writer.instructionLines( {} ) ).toBeEmpty();
+			} );
+
+			it( "adds env stubs under a comment and never repeats or overwrites a variable", function() {
+				fileWrite( dir & "/.env", "FOO=1" & char( 10 ) );
+
+				writer.appendEnvStubs( dir & "/.env", [
+					{ name : "FOO", comment : "already here", value : "x" },
+					{ name : "BAR_TOKEN", comment : "the bar token", value : "" },
+					{ name : "BAR_TOKEN", comment : "again", value : "" },
+					{ name : "SLACK_BOT_TOKEN", comment : "", value : "xoxb-" }
+				] );
+
+				var env = fileRead( dir & "/.env" );
+				expect( env ).toInclude( "FOO=1" );
+				expect( env ).notToInclude( "FOO=x" );
+				expect( env ).toInclude( "## the bar token" & char( 10 ) & "BAR_TOKEN=" );
+				expect( env.listToArray( char( 10 ) ).filter( l => l.startsWith( "BAR_TOKEN=" ) ) ).toHaveLength( 1 );
+				expect( env ).toInclude( "SLACK_BOT_TOKEN=xoxb-" );
+			} );
+
+			it( "writes a channel gateway with the environment variable names, not values", function() {
+				var source = writer.renderChannelGateway( {
+					id : "slack", type : "slack",
+					env : [ { config : "botTokenEnvVar", name : "SLACK_BOT_TOKEN" }, { config : "appTokenEnvVar", name : "SLACK_APP_TOKEN" } ]
+				} );
+
+				expect( source ).toInclude( 'type           : "slack"' );
+				expect( source ).toInclude( 'botTokenEnvVar : "SLACK_BOT_TOKEN"' );
+				expect( source ).toInclude( 'appTokenEnvVar : "SLACK_APP_TOKEN"' );
+			} );
+
+			it( "writes a web UI exposure with users and a key", function() {
+				var source = writer.renderExposure( "webui", {
+					path : "/chat", apiKeyEnvVar : "CHAT_UI_API_KEY",
+					users : [ { username : "ada", passwordHash : "pbkdf2$1$a$b", displayName : "Ada" } ]
+				} );
+
+				expect( source ).toInclude( 'exposes      : "webui"' );
+				expect( source ).toInclude( 'apiKeyEnvVar : "CHAT_UI_API_KEY"' );
+				expect( source ).toInclude( 'username : "ada"' );
+				expect( source ).toInclude( 'passwordHash : "pbkdf2$1$a$b"' );
+				expect( source ).notToInclude( "password :" );
+			} );
+
+			it( "writes a deploy entry as indented JSON that reads back", function() {
+				writer.apply( dir, { deploy : { id : "docker", config : { target : "docker", registry : { type : "ghcr", repository : "me/my-agent" }, tag : "latest" } } } );
+
+				var text = fileRead( dir & "/deploy/docker.json" );
+				expect( text.listFirst( char( 10 ) ) ).toBe( "{" );
+				var parsed = jsonDeserialize( text );
+				expect( parsed.target ).toBe( "docker" );
+				expect( parsed.registry.repository ).toBe( "me/my-agent" );
+			} );
+
+		} );
+
+		describe( "ProjectScaffolder with features", function() {
+
+			beforeEach( function() {
+				variables.scaffolder = new bxagents.models.build.ProjectScaffolder();
+				variables.parent = createTempDirectory( prefix = "bxagents-featproj-" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( parent ) ) {
+					directoryDelete( parent, true );
+				}
+			} );
+
+			it( "refuses features together with a class-based Agent.bx", function() {
+				expect( function() {
+					scaffolder.scaffold( parent & "/a", "a", "openai/gpt-5", "", "minimal", true, { tools : [ "now@bxai" ] } );
+				} ).toThrow( type = "BxAgents.FeaturesNeedYaml" );
+			} );
+
+			it( "scaffolds a project with every feature on and the validator accepts it", function() {
+				var dir = parent & "/full";
+				scaffolder.scaffold( dir, "full", "claude/claude-sonnet-5", "does everything", "minimal", false, {
+					tools : [ "now@bxai", "webSearch@bxai", "readFile@bxai", "*@bxplaywright" ],
+					toolOptions : { bxai : { allowedPaths : [ "tmp", "cwd" ] }, bxplaywright : { headless : true } },
+					mcpServers : [ { name : "github", url : "https://api.githubcopilot.com/mcp/", token : "${env.GITHUB_PERSONAL_ACCESS_TOKEN}" } ],
+					memory : "file",
+					checkpointer : { type : "file" },
+					security : { enabled : true, input : { enabled : true, action : "flag" } },
+					dependencies : { "bx-playwright" : "*" },
+					instructionLines : [ "When you search the web, use the brave provider." ],
+					envStubs : [
+						{ name : "CLAUDE_API_KEY", comment : "Claude API key", value : "" },
+						{ name : "GITHUB_PERSONAL_ACCESS_TOKEN", comment : "GitHub token", value : "" },
+						{ name : "TELEGRAM_BOT_TOKEN", comment : "Telegram", value : "" }
+					],
+					gateways : [ { id : "telegram", type : "telegram", env : [ { config : "botTokenEnvVar", name : "TELEGRAM_BOT_TOKEN" } ] } ],
+					webui : { path : "/chat", apiKeyEnvVar : "CHAT_UI_API_KEY", users : [ { username : "ada", passwordHash : "pbkdf2$210000$c2FsdA==$ZGlnZXN0", displayName : "Ada" } ] },
+					deploy : { id : "docker", config : { target : "docker", registry : { type : "ghcr", repository : "me/full" }, tag : "latest" } }
+				} );
+
+				var parsed = new bxagents.models.build.AgentYamlLoader().load( dir & "/Agent.yaml" );
+				expect( parsed.config.tools ).toHaveLength( 4 );
+				expect( parsed.config.tools[ 4 ] ).toBe( "*@bxplaywright" );
+				expect( parsed.config.toolOptions.bxai.allowedPaths ).toBe( [ "tmp", "cwd" ] );
+				expect( parsed.config.mcpServers[ 1 ].token ).toBe( "${env.GITHUB_PERSONAL_ACCESS_TOKEN}" );
+				expect( parsed.config.memory ).toBe( "file" );
+				expect( parsed.config.checkpointer.type ).toBe( "file" );
+				expect( parsed.config.security.enabled ).toBeTrue();
+				expect( parsed.environments.test.model ).toBe( "mock/mock-model" );
+
+				expect( fileRead( dir & "/instructions.md" ) ).toInclude( "use the brave provider" );
+				expect( jsonDeserialize( fileRead( dir & "/box.json" ) ).dependencies[ "bx-playwright" ] ).toBe( "*" );
+				expect( fileRead( dir & "/.env" ) ).toInclude( "GITHUB_PERSONAL_ACCESS_TOKEN=" );
+				expect( fileRead( dir & "/.gitignore" ) ).toInclude( ".env" );
+
+				var discovery = new bxagents.models.build.ProjectDiscoverer().discover( dir );
+				var config = new bxagents.models.build.AgentConfigResolver().resolve( projectRoot = dir );
+				var result = new bxagents.models.build.ProjectValidator().validate( dir, discovery, config );
+				expect( result.errors ).toBeEmpty();
+			} );
+
+		} );
+	}
+
+}

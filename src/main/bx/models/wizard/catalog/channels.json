@@ -1,0 +1,265 @@
+[
+	{
+		"id": "telegram",
+		"name": "Telegram",
+		"hint": "polls Telegram, no public URL needed",
+		"type": "telegram",
+		"env": [
+			{
+				"config": "botTokenEnvVar",
+				"name": "TELEGRAM_BOT_TOKEN",
+				"stub": "",
+				"comment": "the token BotFather gives you"
+			}
+		],
+		"steps": [
+			"Open Telegram and message @BotFather.",
+			"Send /newbot and follow the prompts to name your bot.",
+			"Copy the token BotFather returns into TELEGRAM_BOT_TOKEN in .env.",
+			"Run bxAgents serve, then send your bot a message."
+		],
+		"docs": "conventions/gateways/telegram"
+	},
+	{
+		"id": "slack",
+		"name": "Slack",
+		"hint": "Socket Mode, no public URL needed",
+		"type": "slack",
+		"env": [
+			{
+				"config": "botTokenEnvVar",
+				"name": "SLACK_BOT_TOKEN",
+				"stub": "xoxb-",
+				"comment": "Bot User OAuth Token (xoxb-...)"
+			},
+			{
+				"config": "appTokenEnvVar",
+				"name": "SLACK_APP_TOKEN",
+				"stub": "xapp-",
+				"comment": "App-Level Token (xapp-...) for Socket Mode"
+			}
+		],
+		"steps": [
+			"Create an app at https://api.slack.com/apps.",
+			"Turn on Socket Mode and make an App-Level Token. Put it in SLACK_APP_TOKEN.",
+			"Add the bot scopes you need (at least chat:write), install the app to your workspace, and put the Bot User OAuth Token in SLACK_BOT_TOKEN.",
+			"Subscribe to the message events your bot should see, then run bxAgents serve and message the bot."
+		],
+		"docs": "conventions/gateways/slack"
+	},
+	{
+		"id": "discord",
+		"name": "Discord",
+		"hint": "persistent connection, no public URL needed",
+		"type": "discord",
+		"env": [
+			{
+				"config": "botTokenEnvVar",
+				"name": "DISCORD_BOT_TOKEN",
+				"stub": "",
+				"comment": "the bot token from the Discord developer portal"
+			}
+		],
+		"steps": [
+			"Create an application and a bot at https://discord.com/developers/applications.",
+			"Copy the bot token into DISCORD_BOT_TOKEN in .env.",
+			"Turn on the Message Content privileged intent for the bot, or it cannot read messages.",
+			"Invite the bot to your server, run bxAgents serve and message it."
+		],
+		"docs": "conventions/gateways/discord"
+	},
+	{
+		"id": "whatsapp-cloud",
+		"name": "WhatsApp (Business Cloud API)",
+		"hint": "Meta calls your server: needs a public https URL",
+		"type": "whatsapp-cloud",
+		"env": [
+			{
+				"config": "accessTokenEnvVar",
+				"name": "WHATSAPP_ACCESS_TOKEN",
+				"stub": "",
+				"comment": "Graph API access token"
+			},
+			{
+				"config": "phoneNumberIdEnvVar",
+				"name": "WHATSAPP_PHONE_NUMBER_ID",
+				"stub": "",
+				"comment": "the WhatsApp Business phone number ID"
+			},
+			{
+				"config": "appSecretEnvVar",
+				"name": "WHATSAPP_APP_SECRET",
+				"stub": "",
+				"comment": "the Meta app secret, used to verify inbound webhooks"
+			},
+			{
+				"config": "verifyTokenEnvVar",
+				"name": "WHATSAPP_VERIFY_TOKEN",
+				"stub": "",
+				"comment": "any secret string you choose; Meta echoes it back during setup"
+			}
+		],
+		"steps": [
+			"Create a Meta app with the WhatsApp product at https://developers.facebook.com/apps and add a business phone number.",
+			"Fill in the four WHATSAPP_ values in .env. The verify token is a string you make up.",
+			"Deploy so your agent has a public https address. Meta cannot reach localhost.",
+			"In the Meta app's WhatsApp configuration, set the callback URL to https://<your-host>/webhooks/whatsapp-cloud and the verify token to your WHATSAPP_VERIFY_TOKEN, then subscribe to the messages field.",
+			"Personal WhatsApp accounts are not supported; this uses the official Business Cloud API only."
+		],
+		"docs": "conventions/gateways/whatsapp-cloud"
+	},
+	{
+		"id": "teams",
+		"name": "Microsoft Teams",
+		"hint": "Bot Framework: needs a public https URL",
+		"type": "teams",
+		"env": [
+			{
+				"config": "appIdEnvVar",
+				"name": "TEAMS_APP_ID",
+				"stub": "",
+				"comment": "the bot's Microsoft App ID"
+			},
+			{
+				"config": "appPasswordEnvVar",
+				"name": "TEAMS_APP_PASSWORD",
+				"stub": "",
+				"comment": "the bot's client secret"
+			}
+		],
+		"steps": [
+			"Register an Azure Bot and note its Microsoft App ID and a client secret. Put them in TEAMS_APP_ID and TEAMS_APP_PASSWORD.",
+			"Deploy so your agent has a public https address.",
+			"Set the bot's messaging endpoint to https://<your-host>/webhooks/teams.",
+			"Add the Teams channel to the bot and message it. Only one-to-one chats are supported."
+		],
+		"docs": "conventions/gateways/teams"
+	},
+	{
+		"id": "twilio",
+		"name": "SMS (Twilio)",
+		"hint": "Twilio calls your server: needs a public https URL",
+		"type": "twilio",
+		"env": [
+			{
+				"config": "accountSidEnvVar",
+				"name": "TWILIO_ACCOUNT_SID",
+				"stub": "",
+				"comment": "Account SID from the Twilio console"
+			},
+			{
+				"config": "authTokenEnvVar",
+				"name": "TWILIO_AUTH_TOKEN",
+				"stub": "",
+				"comment": "Auth token; it also signs inbound webhooks"
+			},
+			{
+				"config": "fromEnvVar",
+				"name": "TWILIO_FROM_NUMBER",
+				"stub": "",
+				"comment": "your Twilio number in E.164 form, for example +15551234567"
+			}
+		],
+		"steps": [
+			"Get a phone number in the Twilio console and copy your Account SID and Auth Token into .env.",
+			"Put the number in TWILIO_FROM_NUMBER, in E.164 form.",
+			"Deploy so your agent has a public https address.",
+			"Set the number's incoming-message webhook to https://<your-host>/webhooks/twilio with the POST method.",
+			"Behind a proxy or tunnel, set publicUrl in gateways/twilio.bx to the exact address Twilio calls, or signature checks will fail."
+		],
+		"docs": "conventions/gateways/twilio"
+	},
+	{
+		"id": "github",
+		"name": "GitHub comments",
+		"hint": "answers when @mentioned: needs a public https URL",
+		"type": "github",
+		"env": [
+			{
+				"config": "tokenEnvVar",
+				"name": "GITHUB_TOKEN",
+				"stub": "",
+				"comment": "a personal access token with repo issues and pull request write access"
+			},
+			{
+				"config": "webhookSecretEnvVar",
+				"name": "GITHUB_WEBHOOK_SECRET",
+				"stub": "",
+				"comment": "any secret string you choose"
+			},
+			{
+				"config": "botNameEnvVar",
+				"name": "GITHUB_BOT_NAME",
+				"stub": "",
+				"comment": "the bot account's GitHub login"
+			}
+		],
+		"steps": [
+			"Create a bot account (or use your own) and a personal access token. Put it in GITHUB_TOKEN and the account's login in GITHUB_BOT_NAME.",
+			"Make up a secret and put it in GITHUB_WEBHOOK_SECRET.",
+			"Deploy so your agent has a public https address.",
+			"In the repository's settings add a webhook to https://<your-host>/webhooks/github with the same secret, sending issue comment and pull request review comment events.",
+			"Comment @<bot name> on an issue or pull request to talk to the agent."
+		],
+		"docs": "conventions/gateways/github"
+	},
+	{
+		"id": "email",
+		"name": "Email",
+		"hint": "reads an IMAP inbox, replies by SMTP",
+		"type": "email",
+		"env": [
+			{
+				"config": "imapHostEnvVar",
+				"name": "IMAP_HOST",
+				"stub": "",
+				"comment": "the IMAP server, for example imap.example.com"
+			},
+			{
+				"config": "imapUsernameEnvVar",
+				"name": "IMAP_USERNAME",
+				"stub": "",
+				"comment": "the mailbox login"
+			},
+			{
+				"config": "imapPasswordEnvVar",
+				"name": "IMAP_PASSWORD",
+				"stub": "",
+				"comment": "the mailbox password or app password"
+			},
+			{
+				"config": "fromAddressEnvVar",
+				"name": "EMAIL_FROM_ADDRESS",
+				"stub": "",
+				"comment": "the address replies are sent from"
+			}
+		],
+		"steps": [
+			"Create a mailbox for the agent and fill in the four values in .env. Many providers need an app password for IMAP.",
+			"Outbound mail goes through BoxLang's mail settings, so configure your SMTP server as described in the Email gateway page.",
+			"The inbox is checked about once a minute. Replies are threaded by message headers."
+		],
+		"docs": "conventions/gateways/email"
+	},
+	{
+		"id": "signal",
+		"name": "Signal",
+		"hint": "needs signal-cli running on this machine",
+		"type": "signal",
+		"env": [
+			{
+				"config": "accountEnvVar",
+				"name": "SIGNAL_ACCOUNT",
+				"stub": "",
+				"comment": "the phone number registered with signal-cli, in E.164 form"
+			}
+		],
+		"steps": [
+			"Install signal-cli and register or link it to a Signal account. This is a manual, one-time step.",
+			"Start its HTTP daemon: signal-cli daemon --http. The gateway expects it at http://127.0.0.1:8080.",
+			"Put the account's phone number in SIGNAL_ACCOUNT, in E.164 form.",
+			"Run bxAgents serve and message that number. Direct messages only."
+		],
+		"docs": "conventions/gateways/signal"
+	}
+]

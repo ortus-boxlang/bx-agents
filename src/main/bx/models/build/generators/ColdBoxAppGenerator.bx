@@ -1016,15 +1016,8 @@ class {
 			lines.append( "	subAgents : []," )
 		}
 
-		var mcpServerUrls = extractMcpServerUrls( arguments.resolvedConfig )
-		if ( mcpServerUrls.len() ) {
-			var quoted = mcpServerUrls.map( function( url ) {
-				return '"#bxLiteral( url )#"'
-			} )
-			lines.append( "	mcpServers : [ #quoted.toList( ", " )# ]" )
-		} else {
-			lines.append( "	mcpServers : []" )
-		}
+		var mcpServers = renderMcpServersExpression( arguments.resolvedConfig, arguments.name )
+		lines.append( "	mcpServers : #len( mcpServers ) ? mcpServers : '[]'#" )
 
 		lines.append( ")" )
 
@@ -1155,12 +1148,9 @@ class {
 			lines.append( "#arguments.varName#.withCheckpointer( #renderCheckpointerExpression( arguments.resolvedConfig )# )" )
 		}
 
-		var mcpServerUrls = extractMcpServerUrls( arguments.resolvedConfig )
-		if ( mcpServerUrls.len() ) {
-			var quoted = mcpServerUrls.map( function( url ) {
-				return '"#bxLiteral( url )#"'
-			} )
-			lines.append( "#arguments.varName#.withMCPServers( [ #quoted.toList( ", " )# ] )" )
+		var mcpServers = renderMcpServersExpression( arguments.resolvedConfig, resolveAgentName( arguments.resolvedConfig ) )
+		if ( len( mcpServers ) ) {
+			lines.append( "#arguments.varName#.withMCPServers( #mcpServers# )" )
 		}
 
 		return lines.toList( char( 10 ) )
@@ -1424,33 +1414,42 @@ class {
 	}
 
 	/**
-	 * Reduces a node's own `resolvedConfig.mcpServers` (a plain URL string, or
-	 * a `{ url, name }` struct - per M3's validated shape) into a bare array
-	 * of URL strings for `aiAgent(mcpServers: [...])`. No network connection
-	 * is ever attempted here - reachability is a runtime/warning concern.
-	 * Each subagent has its own resolvedConfig, so this runs per-node, not
-	 * just for the root.
+	 * The `mcpServers` argument for one node's agent: a list where each entry is a
+	 * URL string, or a `{ url, token, headers, ... }` mapping for a server that
+	 * wants credentials. A mapping can hold ${env.NAME} placeholders, so the list is
+	 * resolved when the app starts (never at build time), and a secret stays in the
+	 * environment. No network connection is ever attempted here: reachability is a
+	 * runtime concern. Each subagent has its own resolvedConfig, so this runs per node.
 	 *
 	 * @resolvedConfig A single node's own resolved config
+	 * @name The agent's name, for messages
 	 *
-	 * @return A bare array of MCP server URL strings
+	 * @return A BoxLang expression for the list, or "" when the node declares none
 	 */
-	private array function extractMcpServerUrls( required struct resolvedConfig ) {
+	private string function renderMcpServersExpression( required struct resolvedConfig, required string name ) {
 		var entries = arguments.resolvedConfig.mcpServers ?: []
-		var urls = []
+		var servers = []
+		var needsResolving = false
 
 		for ( var entry in entries ) {
 			if ( isStruct( entry ) ) {
-				var url = entry.url ?: ""
-				if ( !len( url ) ) {
+				if ( !len( entry.url ?: "" ) ) {
 					throw(
 						type    = "BxAgents.InvalidMcpServer",
 						message = "An mcpServers entry is missing a 'url'"
 					)
 				}
-				urls.append( url )
+				// `name` only labels the entry in the file; bx-ai's connection settings do not take it
+				var connection = duplicate( entry )
+				connection.delete( "name" )
+				if ( connection.len() == 1 ) {
+					servers.append( connection.url )
+				} else {
+					servers.append( connection )
+					needsResolving = true
+				}
 			} else if ( isSimpleValue( entry ) && len( entry ) ) {
-				urls.append( entry )
+				servers.append( toString( entry ) )
 			} else {
 				throw(
 					type    = "BxAgents.InvalidMcpServer",
@@ -1459,7 +1458,13 @@ class {
 			}
 		}
 
-		return urls
+		if ( !servers.len() ) {
+			return ""
+		}
+		if ( !needsResolving ) {
+			return "[ " & servers.map( item => isStruct( item ) ? renderLiteral( item ) : '"#bxLiteral( item )#"' ).toList( ", " ) & " ]"
+		}
+		return 'new "models.build.ToolSelector@bxagents"().resolvePlaceholders( #renderLiteral( servers )#, "mcpServers of #bxLiteral( arguments.name )#" )'
 	}
 
 	/**

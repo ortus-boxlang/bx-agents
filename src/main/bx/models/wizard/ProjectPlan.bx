@@ -1,0 +1,520 @@
+/**
+ * The project a `new` run is going to create, in one struct, and the three ways it is
+ * read: as flags, as the features ProjectScaffolder writes, and as a summary.
+ *
+ * The wizard fills it by asking; `new` with flags fills it from the command line; both
+ * end in the same struct, so the wizard's last screen can print the exact command that
+ * would have produced the same project.
+ *
+ * Keys of a plan (every one always present):
+ *   name, description, template, model, provider
+ *   with        capability ids: time, fetch, search, browse, files, media
+ *   search      web search provider id (when `with` has search)
+ *   files       { tools : "read" | "all" | [ names ], folders : [ "tmp", "cwd", "/abs" ] }
+ *   memory      "cache" | "file"
+ *   mcp         MCP server ids
+ *   channels    "web", "api" and channel ids (telegram, slack, ...)
+ *   web         { auth : "open" | "key" | "users", users : [ { username, passwordHash, displayName } ] }
+ *   guard       "off" | "flag" | "block"   (prompt-injection guard)
+ *   deploy      { target, registry, app, region, host, user, remotePath, destination }
+ */
+class {
+
+	static {
+		MEMORY = [ "cache", "file" ]
+		GUARD = [ "off", "flag", "block" ]
+		WEB_AUTH = [ "open", "key", "users" ]
+		EXPOSURES = [ "web", "api" ]
+		REGISTRIES = [ "ghcr", "dockerhub", "docr" ]
+	}
+
+	function init( any catalog ) {
+		variables.catalog = isNull( arguments.catalog ) ? new "models.wizard.WizardCatalog@bxagents"() : arguments.catalog
+		return this
+	}
+
+	/**
+	 * @return An empty plan
+	 */
+	struct function blank() {
+		return {
+			name        : "",
+			description : "",
+			template    : "minimal",
+			model       : "",
+			provider    : "",
+			with        : [],
+			search      : "",
+			files       : { tools : "read", folders : [] },
+			memory      : "cache",
+			mcp         : [],
+			channels    : [],
+			web         : { auth : "open", users : [] },
+			guard       : "off",
+			deploy      : { target : "", registry : "", app : "", region : "", host : "", user : "", remotePath : "", destination : "" }
+		}
+	}
+
+	/**
+	 * Reads the `new` flags into a plan. Anything wrong is a BxAgents.InvalidNewOption
+	 * that names the flag and what it accepts, so a typo never quietly drops a feature.
+	 *
+	 * @options The parsed CLI options
+	 *
+	 * @return The plan the flags describe
+	 */
+	struct function fromFlags( required struct options ) {
+		var plan = blank()
+		var o = arguments.options
+
+		plan.name = trim( o.name ?: "" )
+		plan.description = trim( o.description ?: "" )
+		if ( len( o.template ?: "" ) ) {
+			plan.template = o.template
+		}
+		plan.model = trim( o.model ?: "" )
+		plan.provider = providerOf( plan.model )
+
+		plan.with = list( o, "with" )
+		for ( var id in plan.with ) {
+			if ( !variables.catalog.capability( id ).count() ) {
+				fail( "with", "[#id#] is not a capability. Use: #variables.catalog.capabilities().map( c => c.id ).toList( ', ' )#" )
+			}
+		}
+
+		plan.search = trim( o.search ?: "" )
+		if ( len( plan.search ) ) {
+			if ( !variables.catalog.searchProvider( plan.search ).count() ) {
+				fail( "search", "[#plan.search#] is not a search provider. Use: #variables.catalog.searchProviders().map( p => p.id ).toList( ', ' )#" )
+			}
+			if ( !plan.with.contains( "search" ) ) {
+				plan.with.append( "search" )
+			}
+		} else if ( plan.with.contains( "search" ) ) {
+			plan.search = "http"
+		}
+
+		if ( len( o.files ?: "" ) ) {
+			plan.files.tools = o.files == "read" || o.files == "all" ? o.files : list( o, "files" )
+			if ( isArray( plan.files.tools ) ) {
+				var known = variables.catalog.fileToolNames()
+				for ( var tool in plan.files.tools ) {
+					if ( !known.contains( tool ) ) {
+						fail( "files", "[#tool#] is not a file tool. Use read, all, or a list of: #known.toList( ', ' )#" )
+					}
+				}
+			}
+			if ( !plan.with.contains( "files" ) ) {
+				plan.with.append( "files" )
+			}
+		}
+		plan.files.folders = list( o, "files-dir" )
+		if ( plan.with.contains( "files" ) && !plan.files.folders.len() ) {
+			fail( "files-dir", "the file tools need folders to work in, for example --files-dir=tmp,cwd. There is deliberately no way to give them the whole disk." )
+		}
+		if ( plan.files.folders.len() && !plan.with.contains( "files" ) ) {
+			fail( "files-dir", "was given without --with=files or --files=read|all|<tools>" )
+		}
+		for ( var folder in plan.files.folders ) {
+			if ( ![ "tmp", "cwd" ].contains( folder ) && !( folder.startsWith( "/" ) || reFind( "^[A-Za-z]:[\/]", folder ) ) ) {
+				fail( "files-dir", "[#folder#] must be tmp, cwd or an absolute path" )
+			}
+		}
+
+		plan.memory = trim( o.memory ?: "cache" )
+		if ( !static.MEMORY.contains( plan.memory ) ) {
+			fail( "memory", "[#plan.memory#] is not valid. Use: #static.MEMORY.toList( ', ' )#" )
+		}
+
+		plan.mcp = list( o, "mcp" )
+		for ( var id in plan.mcp ) {
+			var mcpEntry = variables.catalog.mcpServer( id )
+			if ( !mcpEntry.count() ) {
+				fail( "mcp", "[#id#] is not in the MCP catalog. Use: #variables.catalog.mcpServers().map( s => s.id ).toList( ', ' )#" )
+			}
+			if ( !( mcpEntry.available ?: true ) ) {
+				fail( "mcp", "[#id#] is not available yet: #mcpEntry.unavailableNote ?: ''#" )
+			}
+		}
+
+		plan.channels = list( o, "channels" )
+		for ( var id in plan.channels ) {
+			if ( !static.EXPOSURES.contains( id ) && !variables.catalog.channel( id ).count() ) {
+				fail( "channels", "[#id#] is not a channel. Use: #static.EXPOSURES.duplicate().append( variables.catalog.channels().map( c => c.id ), true ).toList( ', ' )#" )
+			}
+		}
+
+		plan.web.auth = trim( o[ "web-auth" ] ?: "open" )
+		if ( !static.WEB_AUTH.contains( plan.web.auth ) ) {
+			fail( "web-auth", "[#plan.web.auth#] is not valid. Use: #static.WEB_AUTH.toList( ', ' )#" )
+		}
+		if ( plan.web.auth == "users" ) {
+			fail( "web-auth", "users needs passwords, which do not belong on a command line. Run the wizard (bxAgents new), or add users to gateways/webui.bx and make hashes with bxAgents hash-password." )
+		}
+		if ( plan.web.auth != "open" && !plan.channels.contains( "web" ) ) {
+			fail( "web-auth", "was given without --channels=web" )
+		}
+
+		plan.guard = trim( o.guard ?: "off" )
+		if ( !static.GUARD.contains( plan.guard ) ) {
+			fail( "guard", "[#plan.guard#] is not valid. Use: #static.GUARD.toList( ', ' )#" )
+		}
+
+		plan.deploy = deployFromFlags( o )
+		return plan
+	}
+
+	/**
+	 * @plan A plan
+	 * @projectRoot The directory the project will be created in
+	 *
+	 * @return The `bxAgents new ...` command that makes the same project without questions
+	 */
+	string function toCommand( required struct plan, string projectRoot = "" ) {
+		var p = arguments.plan
+		var parts = [ "bxAgents new" ]
+		if ( len( arguments.projectRoot ) ) {
+			parts.append( quoteIfNeeded( arguments.projectRoot ) )
+		}
+		parts.append( "--name=#quoteIfNeeded( p.name )#" )
+		if ( len( p.description ) ) {
+			parts.append( "--description=""#p.description#""" )
+		}
+		if ( p.template != "minimal" ) {
+			parts.append( "--template=#p.template#" )
+		}
+		parts.append( "--model=#p.model#" )
+		var withIds = p.with.filter( id => id != "files" || !isArray( p.files.tools ) )
+		if ( withIds.len() ) {
+			parts.append( "--with=#withIds.toList()#" )
+		}
+		if ( p.with.contains( "search" ) && len( p.search ) ) {
+			parts.append( "--search=#p.search#" )
+		}
+		if ( p.with.contains( "files" ) ) {
+			parts.append( "--files=#isArray( p.files.tools ) ? p.files.tools.toList() : p.files.tools#" )
+			parts.append( "--files-dir=#p.files.folders.toList()#" )
+		}
+		if ( p.memory != "cache" ) {
+			parts.append( "--memory=#p.memory#" )
+		}
+		if ( p.mcp.len() ) {
+			parts.append( "--mcp=#p.mcp.toList()#" )
+		}
+		if ( p.channels.len() ) {
+			parts.append( "--channels=#p.channels.toList()#" )
+		}
+		if ( p.channels.contains( "web" ) && p.web.auth != "open" ) {
+			parts.append( "--web-auth=#p.web.auth#" )
+		}
+		if ( p.guard != "off" ) {
+			parts.append( "--guard=#p.guard#" )
+		}
+		if ( len( p.deploy.target ) ) {
+			parts.append( "--deploy=#p.deploy.target#" )
+			for ( var pair in [ [ "registry", "registry" ], [ "app", "app" ], [ "region", "region" ], [ "host", "host" ], [ "user", "user" ], [ "remotePath", "remote-path" ], [ "destination", "destination" ] ] ) {
+				if ( len( p.deploy[ pair[ 1 ] ] ) ) {
+					parts.append( "--#pair[ 2 ]#=#quoteIfNeeded( p.deploy[ pair[ 1 ] ] )#" )
+				}
+			}
+		}
+		return parts.toList( " " )
+	}
+
+	/**
+	 * What the project can do, as the `features` ProjectScaffolder writes.
+	 *
+	 * @plan A plan
+	 *
+	 * @return The features struct (see FeatureWriter)
+	 */
+	struct function toFeatures( required struct plan ) {
+		var p = arguments.plan
+		var features = {}
+		var tools = []
+		var envStubs = []
+
+		var modelProvider = variables.catalog.provider( p.provider )
+		if ( modelProvider.count() && len( modelProvider.envVar ) ) {
+			envStubs.append( { name : modelProvider.envVar, comment : "#modelProvider.name# API key. Get one at #modelProvider.keyUrl#", value : "" } )
+		}
+
+		for ( var id in p.with ) {
+			if ( id == "files" ) {
+				continue
+			}
+			tools.append( variables.catalog.capability( id ).tools, true )
+		}
+
+		if ( p.with.contains( "browse" ) ) {
+			features.dependencies = { "bx-playwright" : "*" }
+		}
+
+		if ( p.with.contains( "search" ) && len( p.search ) ) {
+			var search = variables.catalog.searchProvider( p.search )
+			if ( len( search.envVar ?: "" ) ) {
+				envStubs.append( { name : search.envVar, comment : "#search.name# API key. Get one at #search.keyUrl#", value : "" } )
+				for ( var extra in ( search.extraEnvVars ?: [] ) ) {
+					envStubs.append( { name : extra, comment : "#search.name# search engine id", value : "" } )
+				}
+			}
+			if ( p.search != "http" ) {
+				features.instructionLines = [ "When you search the web, use the #p.search# provider." ]
+			}
+		}
+
+		if ( p.with.contains( "files" ) ) {
+			var names = p.files.tools == "all" ? variables.catalog.fileToolNames() : ( p.files.tools == "read" ? variables.catalog.readOnlyFileToolNames() : p.files.tools )
+			tools.append( names.map( name => name & "@bxai" ), true )
+			features.toolOptions = { bxai : { allowedPaths : p.files.folders } }
+		}
+
+		if ( tools.len() ) {
+			features.tools = tools
+		}
+		if ( p.memory == "file" ) {
+			features.memory = "file"
+			features.checkpointer = { type : "file" }
+		}
+		if ( p.guard != "off" ) {
+			features.security = { enabled : true, input : { enabled : true, action : p.guard } }
+		}
+
+		var mcpServers = []
+		for ( var id in p.mcp ) {
+			var mcpEntry = variables.catalog.mcpServer( id )
+			var entry = { name : mcpEntry.id, url : mcpEntry.url }
+			if ( ( mcpEntry.auth.type ?: "none" ) == "bearer" ) {
+				entry.token = "${env.#mcpEntry.auth.envVar#}"
+				envStubs.append( { name : mcpEntry.auth.envVar, comment : "#mcpEntry.name# MCP mcpEntry. #mcpEntry.auth.help#", value : "" } )
+			}
+			mcpServers.append( entry )
+		}
+		if ( mcpServers.len() ) {
+			features.mcpServers = mcpServers
+		}
+
+		var gateways = []
+		for ( var id in p.channels ) {
+			if ( static.EXPOSURES.contains( id ) ) {
+				continue
+			}
+			var channel = variables.catalog.channel( id )
+			var envRefs = []
+			for ( var e in channel.env ) {
+				envRefs.append( { config : e.config, name : e.name } )
+				envStubs.append( { name : e.name, comment : "#channel.name#: #e.comment#", value : e.stub } )
+			}
+			gateways.append( { id : channel.id, type : channel.type, env : envRefs } )
+		}
+		if ( gateways.len() ) {
+			features.gateways = gateways
+		}
+
+		if ( p.channels.contains( "web" ) ) {
+			features.webui = { path : "/chat" }
+			if ( p.web.auth == "key" ) {
+				features.webui.apiKeyEnvVar = "CHAT_UI_API_KEY"
+				envStubs.append( { name : "CHAT_UI_API_KEY", comment : "The web chat UI asks for this key. A random one was made for you.", value : generateKey() } )
+			}
+			if ( p.web.auth == "users" ) {
+				features.webui.users = p.web.users
+			}
+		}
+		if ( p.channels.contains( "api" ) ) {
+			features.agentApi = { path : "/api/chat" }
+		}
+
+		if ( len( p.deploy.target ) ) {
+			features.deploy = deployEntry( p, envStubs )
+		}
+
+		if ( envStubs.len() ) {
+			features.envStubs = envStubs
+		}
+		return features
+	}
+
+	/**
+	 * @plan A plan
+	 *
+	 * @return [ { label, value } ] for the review screen, one row per decision that is not the default
+	 */
+	array function summary( required struct plan ) {
+		var p = arguments.plan
+		var rows = [
+			{ label : "Name", value : p.name },
+			{ label : "Model", value : p.model }
+		]
+		if ( len( p.description ) ) {
+			rows.append( { label : "Purpose", value : p.description } )
+		}
+		if ( p.template != "minimal" ) {
+			rows.append( { label : "Shape", value : variables.catalog.templateLabel( p.template ) } )
+		}
+		if ( p.with.len() ) {
+			rows.append( { label : "Tools", value : p.with.map( id => variables.catalog.capability( id ).label ).toList( ", " ) } )
+		}
+		if ( p.with.contains( "search" ) ) {
+			rows.append( { label : "Search", value : variables.catalog.searchProvider( p.search ).name ?: p.search } )
+		}
+		if ( p.with.contains( "files" ) ) {
+			rows.append( { label : "File tools", value : ( isArray( p.files.tools ) ? "#p.files.tools.len()# chosen" : ( p.files.tools == "all" ? "all" : "read only" ) ) & " in " & p.files.folders.toList( ", " ) } )
+		}
+		if ( p.memory != "cache" ) {
+			rows.append( { label : "Memory", value : "saved to disk" } )
+		}
+		if ( p.mcp.len() ) {
+			rows.append( { label : "MCP servers", value : p.mcp.map( id => variables.catalog.mcpServer( id ).name ).toList( ", " ) } )
+		}
+		if ( p.channels.len() ) {
+			rows.append( { label : "Channels", value : p.channels.map( id => channelLabel( id ) ).toList( ", " ) } )
+		}
+		if ( p.channels.contains( "web" ) ) {
+			var access = { open : "open to anyone who can reach it", key : "shared access key", users : "#p.web.users.len()# user#p.web.users.len() == 1 ? '' : 's'#" }
+			rows.append( { label : "Web access", value : access[ p.web.auth ] } )
+		}
+		if ( p.guard != "off" ) {
+			rows.append( { label : "Guard", value : p.guard == "flag" ? "flag suspicious input" : "block suspicious input" } )
+		}
+		if ( len( p.deploy.target ) ) {
+			rows.append( { label : "Deploy", value : p.deploy.target } )
+		}
+		return rows
+	}
+
+	/**
+	 * @id A channel id, "web" or "api"
+	 *
+	 * @return A readable name
+	 */
+	string function channelLabel( required string id ) {
+		if ( arguments.id == "web" ) {
+			return "Web chat"
+		}
+		if ( arguments.id == "api" ) {
+			return "HTTP API"
+		}
+		return variables.catalog.channel( arguments.id ).name ?: arguments.id
+	}
+
+	/**
+	 * @slug A model slug such as claude/claude-sonnet-5 or a bare provider name
+	 *
+	 * @return The provider part, lower case
+	 */
+	string function providerOf( required string slug ) {
+		return arguments.slug.listFirst( "/" ).lcase()
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private struct function deployFromFlags( required struct o ) {
+		var deploy = blank().deploy
+		var target = trim( o.deploy ?: "" )
+		if ( !len( target ) ) {
+			return deploy
+		}
+		var known = variables.catalog.deployTargets().map( t => t.id ).filter( id => id != "none" )
+		if ( !known.contains( target ) ) {
+			fail( "deploy", "[#target#] is not a deploy target. Use: #known.toList( ', ' )#" )
+		}
+		deploy.target = target
+		deploy.registry = trim( o.registry ?: "" )
+		deploy.app = trim( o.app ?: "" )
+		deploy.region = trim( o.region ?: "" )
+		deploy.host = trim( o.host ?: "" )
+		deploy.user = trim( o.user ?: "" )
+		deploy.remotePath = trim( o[ "remote-path" ] ?: "" )
+		deploy.destination = trim( o.destination ?: "" )
+
+		var needs = {
+			docker       : [ "registry" ],
+			digitalocean : [ "registry", "app" ],
+			ssh          : [ "host", "user", "remotePath" ],
+			sftp         : [ "host", "user", "remotePath" ],
+			ftp          : [ "host", "user", "remotePath" ],
+			local        : [ "destination" ]
+		}
+		var flagNames = { remotePath : "remote-path" }
+		for ( var field in needs[ target ] ) {
+			if ( !len( deploy[ field ] ) ) {
+				fail( "deploy", "--deploy=#target# also needs --#flagNames[ field ] ?: field#" )
+			}
+		}
+		if ( [ "docker", "digitalocean" ].contains( target ) ) {
+			var registryParts = deploy.registry.listToArray( ":" )
+			if ( registryParts.len() != 2 || !static.REGISTRIES.contains( registryParts[ 1 ] ) || !registryParts[ 2 ].find( "/" ) ) {
+				fail( "registry", "[#deploy.registry#] must look like ghcr:owner/name. Registries: #static.REGISTRIES.toList( ', ' )#" )
+			}
+		}
+		return deploy
+	}
+
+	/**
+	 * @plan A plan whose deploy target is set
+	 * @envStubs The env stubs so far, to name the secrets a hosted app needs
+	 *
+	 * @return { id, config } for FeatureWriter
+	 */
+	private struct function deployEntry( required struct plan, required array envStubs ) {
+		var d = arguments.plan.deploy
+		var config = { target : d.target }
+		switch ( d.target ) {
+			case "docker":
+				var parts = d.registry.listToArray( ":" )
+				config.registry = { type : parts[ 1 ], repository : parts[ 2 ] }
+				config.tag = "latest"
+				break
+			case "digitalocean":
+				var parts = d.registry.listToArray( ":" )
+				config.appName = d.app
+				config.region = len( d.region ) ? d.region : "nyc"
+				config.registry = { type : parts[ 1 ], repository : parts[ 2 ] }
+				config.httpPort = 8080
+				config.envs = []
+				for ( var stub in arguments.envStubs ) {
+					config.envs.append( { key : stub.name, scope : "RUN_TIME", type : "SECRET" } )
+				}
+				break
+			case "ssh":
+				config.host = d.host
+				config.username = d.user
+				config.remotePath = d.remotePath
+				break
+			case "sftp":
+			case "ftp":
+				config.host = d.host
+				config.username = d.user
+				config.remotePath = d.remotePath
+				config.passwordEnvVar = "BXAGENTS_FTP_PASSWORD"
+				arguments.envStubs.append( { name : "BXAGENTS_FTP_PASSWORD", comment : "The #ucase( d.target )# password used by bxAgents deploy", value : "" } )
+				break
+			case "local":
+				config.destination = d.destination
+				break
+		}
+		return { id : d.target, config : config }
+	}
+
+	private array function list( required struct o, required string key ) {
+		var raw = arguments.o[ arguments.key ] ?: ""
+		if ( !isSimpleValue( raw ) ) {
+			return []
+		}
+		return raw.listToArray( ", " ).map( item => trim( item ) ).filter( item => len( item ) )
+	}
+
+	private void function fail( required string flag, required string message ) {
+		throw( type = "BxAgents.InvalidNewOption", message = "--#arguments.flag# #arguments.message#" )
+	}
+
+	private string function quoteIfNeeded( required string text ) {
+		return reFind( "[\s""']", arguments.text ) ? """#arguments.text#""" : arguments.text
+	}
+
+	private string function generateKey() {
+		return lcase( replace( createUUID(), "-", "", "all" ) & replace( createUUID(), "-", "", "all" ) )
+	}
+
+}
