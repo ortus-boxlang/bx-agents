@@ -66,8 +66,10 @@ or package as a portable `.bxa`.
 - `schedules/Scheduler.bx` - a real ColdBox scheduler class, passed through untouched, so
   the full ColdBox task DSL is available.
 - `mcp/` - host a local MCP server that re-exposes a project's own tools.
-- `interceptors/` - ColdBox interceptors, split by `@scope` into agent-scope and app-scope.
-- `modules/` - additional ColdBox modules to load into the generated app.
+- `interceptors/` - ColdBox interceptors, split by `@scope` into agent-scope (registered with the generated app) and runtime-scope
+  (copied out for you to load).
+- `modules/` - declared BoxLang module dependencies, validated (including cycles) and recorded
+  in the manifest.
 
 #### The build pipeline
 
@@ -81,7 +83,7 @@ or package as a portable `.bxa`.
 
 #### Exposing an agent
 
-- `exposes: "agent"` - an HTTP route via ColdBox's `toAi()`, with `invoke`/`stream`/`batch`
+- `exposes: "agent"` - an HTTP route via ColdBox's `toAi()`, with `invoke`/`stream`/`batch`/`info`
   sub-routes.
 - `exposes: "mcp"` - the project's tools as a hosted MCP server.
 - `exposes: "webui"` - a complete, generated web chat UI: conversation sidebar backed by a
@@ -110,8 +112,8 @@ platform's own limit, and human-in-the-loop approval support:
 
 #### CLI
 
-Eleven verbs: `new`, `build`, `test`, `serve`, `chat`, `invoke`, `package`, `deploy`,
-`inspect`, `hash-password` and `clean`, shipped as a native `bxAgents` executable.
+Twelve verbs: `new`, `build`, `test`, `serve`, `chat`, `invoke`, `package`, `deploy`,
+`inspect`, `hash-password`, `clean` and `doctor`, shipped as a native `bxAgents` executable.
 
 Tab completion for bash, fish and PowerShell, generated from the CLI's own verb tables
 (`tools/generate-completions.bxs`) and installed through `boxlang.completions` in `box.json`.

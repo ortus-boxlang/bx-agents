@@ -29,6 +29,9 @@ A module folder may include a `module.json` with a `dependsOn` array naming othe
 
 This is BxAgents' own dependency-declaration convention for validation purposes - it is independent of BoxLang's own module-loading mechanism.
 
+!!! info
+    Today `build` validates `modules/` and records each entry (with a content hash) in the [manifest](../manifest.md), but it does not copy the folders into the generated app or load them. To give the generated app a library, use the project `lib/` folder described in [Installation](../getting-started/installation.md#adding-your-own-libraries).
+
 ## Validation
 
 - A `module.json` that isn't valid JSON fails the build with a parse error naming the offending module.

@@ -45,9 +45,9 @@ internamente, solo que sin el bucle del REPL - sin ningún requisito previo de `
 `--json` imprime `{"response": "..."}` en lugar de texto plano.
 
 Añade `--server` para lanzar en su lugar un proceso `boxlang-miniserver` real y desechable y
-enviar el mensaje como una petición HTTP genuina a través de la ruta expuesta de tu proyecto -
-útil una vez que hayas añadido una entrada en `gateways/` (consulta la
-[Lección 13](13-exposing-http-and-mcp.md)).
+enviar el mensaje como una petición HTTP genuina a la ruta de agente siempre activa de tu proyecto -
+no hace falta ninguna entrada en `gateways/` (esas llegan en la
+[Lección 13](13-exposing-http-and-mcp.md)). Como `serve`, necesita `boxlang-miniserver` en el `PATH`.
 
 ## `serve` - un servidor HTTP real
 

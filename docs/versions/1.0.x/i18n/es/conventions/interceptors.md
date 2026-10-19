@@ -28,8 +28,8 @@ class {
 
 | Scope | Efecto |
 |---|---|
-| `agent` (por defecto) | Copiado a la propia carpeta `interceptors/` de la app generada y registrado en la lista `interceptors` del `config/ColdBox.bx` generado - afecta solo a esta app. |
-| `runtime` | Copiado por separado (no dentro de la app generada) para registro de la misma manera en que un módulo de BoxLang registra sus propios interceptores - afecta a todo el runtime de BoxLang, no solo a esta app. |
+| `agent` (por defecto) | Copiado a la propia carpeta `interceptors/` de la app generada y registrado en ColdBox cuando la app arranca - afecta solo a esta app. |
+| `runtime` | Copiado por separado a `.build/runtime-interceptors` (no dentro de la app generada), para la forma en que un módulo de BoxLang registra sus propios interceptores. BxAgents no los registra por ti: cargarlos queda de tu lado. |
 
 Un interceptor sin ninguna anotación `@scope` en absoluto tiene por defecto `agent` - la opción más estrecha y segura, ya que el scope `runtime` tiene efectos más allá de esta única app.
 
@@ -37,12 +37,13 @@ Un valor de `@scope` que no sea `agent` ni `runtime` (sin distinguir mayúsculas
 
 ## Cableado generado
 
-Para los interceptores de scope `agent`, el `config/ColdBox.bx` generado obtiene una entrada por interceptor:
+Por cada interceptor de scope `agent`, el `Application.bx` generado registra una instancia en el servicio de interceptores de ColdBox desde `onApplicationStart()`:
 
 ```javascript
-interceptors = [
-	{ class : "interceptors.AuditLogger" }
-]
+application.cbController.getInterceptorService().register(
+	target: application.cbController.getWireBox().getInstance( "interceptors.AuditLogger" ),
+	name: "AuditLogger"
+)
 ```
 
-referenciando de forma determinista a cada interceptor de scope `agent` exactamente una vez.
+Cada interceptor de scope `agent` se registra exactamente una vez. El `config/ColdBox.bx` generado no tiene ningún array `interceptors`: un array declarativo ahí nunca llega al servicio de interceptores de ColdBox en el stack para el que genera BxAgents, así que el registro ocurre en el arranque.

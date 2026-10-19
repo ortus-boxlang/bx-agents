@@ -68,8 +68,8 @@ names an environment variable, resolved live, never a literal in generated code.
 
 ## One GatewaySession ties them together
 
-Any project with at least one push-style gateway gets a generated
-`interceptors/GatewaySessionBootstrap.bx`, building a single bx-ai `GatewaySession`
+Any project with at least one push-style gateway gets a generated start-up
+statement in `Application.bx` that builds a single bx-ai `GatewaySession`
 bundling every push-style gateway, bound to your project's root agent:
 
 ```mermaid

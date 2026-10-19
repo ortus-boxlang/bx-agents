@@ -39,6 +39,8 @@ Eso es un agente completo. `bxAgents new` crea esta forma por ti (consulta la
 | `model` | Un slug `provider/model` (ver abajo). |
 | `description` | Opcional. |
 | `instructions` | System prompt en línea. Un `instructions.md` junto al archivo gana si existen ambos. |
+| `tools` | Tools de módulos que recibe este agente, como `item@module` o `*@module` (consulta la [Lección 9](09-giving-your-agent-tools.md)). |
+| `toolOptions` | Opciones para las tools de un módulo, indexadas por nombre de módulo. |
 | `subAgents` | Nombres de carpetas hermanas bajo `subagents/` (consulta la [Lección 11](11-composing-subagents.md)). |
 | `mcpServers` | Servidores MCP remotos que el agente puede llamar (consulta la [Lección 17](17-hosting-mcp-servers.md)). |
 | `security`, `memory`, `checkpointer` | Guardrails, memoria de conversación y estado de humano-en-el-bucle. |

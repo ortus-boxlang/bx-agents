@@ -52,7 +52,7 @@ The rest of this readme covers developing BxAgents itself (this repo), not build
 ### Directory Structure
 
 - `.github/workflows` - GitHub Actions to test and build the module via CI
-- `docs/` - GitBook-style user documentation
+- `docs/` - user documentation, a [bx-sites](https://bxsites.io/development/) site (see [Working on the docs](#working-on-the-docs))
 - `examples/` - working sample agent projects, built as a CI regression gate (`./gradlew verifyExamples`)
 - `src/main/bx` - the BoxLang source: `ModuleConfig.bx` (CLI entry point), `models/build` (the build pipeline: config resolution, discovery, validation, manifest, and code generators), `models/cli` (one class per CLI verb)
 - `src/main/java` - supporting Java (packager, miniserver launcher, dynamic class loader, key dictionary)
@@ -124,7 +124,7 @@ install-bx-module bx-sites
 bxSites serve     # live-reloading preview on http://127.0.0.1:8080 - saves rebuild in ~1-2s, not a full site rebuild
 bxSites build     # render docs/ to site/ (gitignored)
 bxSites doctor    # environment/config health check
-bxSites check     # CI-grade broken-link/missing-alt gate over an already-built site/
+bxSites audit     # CI-grade broken-link/missing-alt gate over an already-built site/
 bxSites lint      # pre-build content checks on the raw docs/ Markdown
 ```
 

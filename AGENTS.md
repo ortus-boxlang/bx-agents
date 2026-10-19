@@ -66,7 +66,7 @@ The one thing to know: **SSE frames are terminated by a blank line, and the web 
 - Follow the Ortus Java formatter in `.ortus-java-style.xml` for Java changes.
 - Keep BoxLang module metadata, `box.json`, `settings.gradle`, and Gradle properties aligned when changing names, versions, or packaging identifiers.
 - Prefer small template-safe edits. If a change would affect generated modules, update both the implementation and any setup or template placeholders that keep the template consistent.
-- **Docs are dual-written.** While `1.0.x` is unreleased, every change under `docs/` must be mirrored into `docs/versions/1.0.x/` - see `CONTRIBUTING.md`. `docs/i18n/`, `docs/assets/`, `docs/versions/` and `docs/blog/` are shared and are **never** duplicated into a version snapshot.
+- **Docs are dual-written.** While `1.0.x` is unreleased, every change under `docs/` must be mirrored into `docs/versions/1.0.x/` - see `CONTRIBUTING.md`. `docs/assets/`, `docs/versions/` and `docs/blog/` are shared and are **never** duplicated into a version snapshot. Translations live inside the versioned tree, under `docs/versions/1.0.x/i18n/<code>/`, not in `docs/i18n/`.
 - Comments should say *why*, and cite what was measured. A comment claiming a behaviour nobody verified is worse than none.
 
 ## Skills
