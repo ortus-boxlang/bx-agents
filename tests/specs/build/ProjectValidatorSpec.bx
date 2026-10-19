@@ -66,6 +66,24 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.errors.filter( e => e.findNoCase( "[bxdemo]" ) && e.findNoCase( "takes no options" ) ).len() ).toBeGT( 0 );
 			} );
 
+			it( "refuses a secrets.json holding a plain value, and accepts one holding only bxsecret: ciphertext", function() {
+				var root = getTempDirectory() & "bxa-val-" & createUUID();
+				directoryCopy( fixtures & "/tool-options-bxai-good", root, true );
+				try {
+					fileWrite( root & "/secrets.json", '{ "OPENAI_API_KEY": "sk-plain-value" }' );
+					var bad = validator.validate( root, discoverer.discover( root ), resolver.resolve( projectRoot = root ) );
+					var hits = bad.errors.filter( e => e.findNoCase( "OPENAI_API_KEY" ) );
+					expect( hits.len() ).toBeGT( 0 );
+					expect( hits.toList( " " ) ).notToInclude( "sk-plain-value" );
+
+					fileWrite( root & "/secrets.json", '{ "OPENAI_API_KEY": "bxsecret:abcd" }' );
+					var good = validator.validate( root, discoverer.discover( root ), resolver.resolve( projectRoot = root ) );
+					expect( good.errors.filter( e => e.findNoCase( "OPENAI_API_KEY" ) ).len() ).toBe( 0 );
+				} finally {
+					directoryDelete( root, true );
+				}
+			} );
+
 			it( "accepts bxai allowedPaths for the file tools", function() {
 				var result = validateFixture( "tool-options-bxai-good" );
 				expect( result.errors.filter( e => e.findNoCase( "toolOptions" ) ) ).toBeEmpty();

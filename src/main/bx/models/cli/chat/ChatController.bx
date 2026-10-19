@@ -1,0 +1,225 @@
+/**
+ * The loop behind `bxAgents chat`: read a message, run a turn, show what happened. It knows
+ * nothing about terminals or about how the agent is reached; it talks to a screen (the
+ * ChatScreen of the bxagents.tui package, or a stand-in in tests) and a session
+ * (InProcessSession or HttpSession).
+ *
+ * The screen:  readInput(), printUser( text ), print( style, text ), printMarkdown( text ),
+ *              banner( agent, model, mode ), beginTurn(), push( event ), endTurn(),
+ *              cancelRequested(), takeSteer(), choose( title, lines, choices ), copy( text ), close()
+ * The session: agentName(), modelName(), mode(), tools(), newThread(),
+ *              send( text, hooks ), resume( decision, hooks ), close()
+ *
+ * Commands start with a slash. Everything else is a message to the agent.
+ */
+class {
+
+	static {
+		COMMANDS = [
+			{ name : "/help", hint : "show these commands" },
+			{ name : "/new", hint : "start a new conversation" },
+			{ name : "/tools", hint : "list the agent's tools" },
+			{ name : "/copy", hint : "copy the last answer to the clipboard" },
+			{ name : "/save", hint : "save the conversation to a file: /save notes.md" },
+			{ name : "/exit", hint : "leave the chat" }
+		]
+	}
+
+	/**
+	 * @session The session
+	 * @workingDirectory Where /save writes a relative file name; defaults to the current directory
+	 */
+	function init( required any session, string workingDirectory = "" ) {
+		variables.session = arguments.session
+		variables.transcript = []
+		variables.workingDirectory = len( arguments.workingDirectory ) ? arguments.workingDirectory : createObject( "java", "java.lang.System" ).getProperty( "user.dir" )
+		variables.hooks = {
+			push            : ( event ) => variables.screen.push( event ),
+			cancelRequested : () => variables.screen.cancelRequested(),
+			takeSteer       : () => variables.screen.takeSteer()
+		}
+		variables.screen = nullValue()
+		return this
+	}
+
+	/**
+	 * @return The commands, for the screen's slash menu
+	 */
+	array function commands() {
+		return static.COMMANDS
+	}
+
+	/**
+	 * @return [ { role : "you" | "agent", text } ] the conversation so far
+	 */
+	array function transcript() {
+		return variables.transcript
+	}
+
+	/**
+	 * Runs until the user leaves.
+	 *
+	 * @screen The chat screen
+	 */
+	void function run( required any screen ) {
+		variables.screen = arguments.screen
+		variables.screen.banner( variables.session.agentName(), variables.session.modelName(), variables.session.mode() )
+		while ( true ) {
+			var input = variables.screen.readInput()
+			if ( isNull( input ) ) {
+				break
+			}
+			var text = trim( input )
+			if ( !len( text ) ) {
+				continue
+			}
+			if ( text.startsWith( "/" ) ) {
+				if ( !command( text ) ) {
+					break
+				}
+				continue
+			}
+			turn( text )
+		}
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @return False when the command asks to leave
+	 */
+	private boolean function command( required string text ) {
+		var name = listFirst( arguments.text, " " ).lcase()
+		var rest = trim( arguments.text.mid( len( name ) + 1, len( arguments.text ) ) )
+		switch ( name ) {
+			case "/exit":
+			case "/quit":
+				return false
+			case "/help":
+				for ( var entry in static.COMMANDS ) {
+					variables.screen.print( "muted", entry.name & "  " & entry.hint )
+				}
+				break
+			case "/new":
+				variables.session.newThread()
+				variables.transcript = []
+				variables.screen.print( "muted", "New conversation. The agent starts fresh." )
+				break
+			case "/tools":
+				var tools = variables.session.tools()
+				variables.screen.print( "muted", tools.len() ? "Tools: " & tools.toList( ", " ) : "No tool list is available in this mode." )
+				break
+			case "/copy":
+				var last = lastAnswer()
+				if ( len( last ) ) {
+					variables.screen.copy( last )
+					variables.screen.print( "ok", "Copied the last answer." )
+				} else {
+					variables.screen.print( "warn", "There is no answer to copy yet." )
+				}
+				break
+			case "/save":
+				save( rest )
+				break
+			default:
+				variables.screen.print( "warn", "Unknown command #name#. Type /help." )
+		}
+		return true
+	}
+
+	/**
+	 * Sends one message and shows the turn, then deals with a run that stopped for approval.
+	 */
+	private void function turn( required string text ) {
+		variables.screen.printUser( arguments.text )
+		variables.transcript.append( { role : "you", text : arguments.text } )
+
+		var result = execute( () => variables.session.send( text, variables.hooks ) )
+		while ( result.status == "suspended" ) {
+			var decision = askApproval( result.pending )
+			result = execute( () => variables.session.resume( decision, variables.hooks ) )
+		}
+		if ( len( result.text ?: "" ) ) {
+			variables.transcript.append( { role : "agent", text : result.text } )
+		}
+		if ( result.status == "cancelled" ) {
+			variables.screen.print( "warn", "Stopped." )
+		} else if ( result.status == "stopped" ) {
+			variables.screen.print( "warn", result.reason )
+		}
+	}
+
+	/**
+	 * Runs one stretch of the agent's work with the live area drawing it. An error ends the
+	 * turn, not the chat: it is shown and the next message starts clean.
+	 */
+	private struct function execute( required function body ) {
+		variables.screen.beginTurn()
+		var result = { status : "error", text : "", pending : [] }
+		try {
+			result = arguments.body()
+		} catch ( any e ) {
+			variables.screen.push( { type : "error", text : e.message } )
+		} finally {
+			variables.screen.endTurn()
+		}
+		return result
+	}
+
+	/**
+	 * Shows what the agent is waiting to do and asks. No answer counts as no.
+	 *
+	 * @pending [ { toolName, toolArgs } ]
+	 */
+	private string function askApproval( required array pending ) {
+		var lines = []
+		for ( var action in arguments.pending ) {
+			var args = []
+			for ( var key in ( action.toolArgs ?: {} ) ) {
+				args.append( key & "=" & ( isSimpleValue( action.toolArgs[ key ] ) ? action.toolArgs[ key ] : jsonSerialize( action.toolArgs[ key ] ) ) )
+			}
+			lines.append( ( action.toolName ?: "a tool" ) & "  " & args.toList( " " ) )
+		}
+		var decision = variables.screen.choose(
+			"The agent wants to run:",
+			lines,
+			[
+				{ value : "approve", label : "Approve", hint : "this once" },
+				{ value : "approve_session", label : "Approve for this conversation", hint : "do not ask again for these tools" },
+				{ value : "reject", label : "Reject" }
+			]
+		)
+		return isNull( decision ) ? "reject" : decision
+	}
+
+	private string function lastAnswer() {
+		for ( var i = variables.transcript.len(); i >= 1; i-- ) {
+			if ( variables.transcript[ i ].role == "agent" ) {
+				return variables.transcript[ i ].text
+			}
+		}
+		return ""
+	}
+
+	/**
+	 * @name A file name, relative to the working directory or absolute; blank picks a dated one
+	 */
+	private void function save( required string name ) {
+		if ( !variables.transcript.len() ) {
+			variables.screen.print( "warn", "Nothing to save yet." )
+			return
+		}
+		var file = len( arguments.name ) ? arguments.name : "chat-#dateTimeFormat( now(), 'yyyyMMdd-HHmmss' )#.md"
+		var absolute = ( file.startsWith( "/" ) || reFind( "^[A-Za-z]:[\/]", file ) ) ? file : variables.workingDirectory & "/" & file
+		var lines = []
+		for ( var entry in variables.transcript ) {
+			lines.append( "**" & ( entry.role == "you" ? "You" : "Agent" ) & "**" )
+			lines.append( "" )
+			lines.append( entry.text )
+			lines.append( "" )
+		}
+		fileWrite( absolute, lines.toList( char( 10 ) ) )
+		variables.screen.print( "ok", "Saved to #absolute#" )
+	}
+
+}

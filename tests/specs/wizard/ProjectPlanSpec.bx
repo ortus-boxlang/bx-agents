@@ -236,6 +236,47 @@ class extends="testbox.system.BaseSpec" {
 				expect( rebuilt ).toBe( plan );
 			} );
 
+			it( "keeps secrets in .env unless asked, and says what is wrong with a bad value", function() {
+				expect( planner.fromFlags( { model : "openai" } ).secrets ).toBe( "env" );
+				expect( planner.toFeatures( planner.fromFlags( { model : "openai" } ) ).keyExists( "secrets" ) ).toBeFalse();
+				expect( function() {
+					planner.fromFlags( { model : "openai", secrets : "vault" } );
+				} ).toThrow( type = "BxAgents.InvalidNewOption", regex = "env, encrypted" );
+			} );
+
+			it( "lists the values a person has to supply, including prefix hints, but not the generated key", function() {
+				var plan = planner.fromFlags( { model : "claude", mcp : "github", channels : "slack,web", "web-auth" : "key" } );
+				var names = planner.secretSlots( plan ).map( s => s.name );
+
+				expect( names ).toBe( [ "CLAUDE_API_KEY", "GITHUB_PERSONAL_ACCESS_TOKEN", "SLACK_BOT_TOKEN", "SLACK_APP_TOKEN" ] );
+			} );
+
+			it( "moves typed values and the generated key out of .env when secrets are encrypted", function() {
+				var plan = planner.fromFlags( { model : "claude", mcp : "github", channels : "web", "web-auth" : "key", secrets : "encrypted" } );
+				plan.secretValues = { CLAUDE_API_KEY : "sk-typed" };
+				var features = planner.toFeatures( plan );
+
+				expect( features.secrets.values.keyExists( "CLAUDE_API_KEY" ) ).toBeTrue();
+				expect( features.secrets.values.keyExists( "CHAT_UI_API_KEY" ) ).toBeTrue();
+				expect( len( features.secrets.values.CHAT_UI_API_KEY ) ).toBeGTE( 32 );
+				var stubs = features.envStubs.map( s => s.name );
+				expect( stubs ).notToInclude( "CLAUDE_API_KEY" );
+				expect( stubs ).notToInclude( "CHAT_UI_API_KEY" );
+				// not typed: still a stub for the person to fill in
+				expect( stubs ).toInclude( "GITHUB_PERSONAL_ACCESS_TOKEN" );
+			} );
+
+			it( "never shows typed secrets in the summary or the command", function() {
+				var plan = planner.fromFlags( { name : "bot", model : "claude", secrets : "encrypted" } );
+				plan.secretValues = { CLAUDE_API_KEY : "sk-very-private" };
+
+				var shown = jsonSerialize( planner.summary( plan ) ) & planner.toCommand( plan );
+
+				expect( shown ).notToInclude( "sk-very-private" );
+				expect( shown ).toInclude( "encrypted in secrets.json (1 value entered)" );
+				expect( planner.toCommand( plan ) ).toInclude( "--secrets=encrypted" );
+			} );
+
 			it( "summarises only what was chosen", function() {
 				var rows = planner.summary( planner.fromFlags( { name : "bot", model : "openai", with : "time", channels : "web" } ) );
 				var labels = rows.map( r => r.label );

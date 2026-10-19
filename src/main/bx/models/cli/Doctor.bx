@@ -64,6 +64,8 @@ class {
 			return finish( checks, arguments.options.json ?: false )
 		}
 
+		// before the env var checks, so a variable supplied by secrets.json counts as set
+		checkSecrets( root, checks )
 		checkProjectValidation( root, discovery, config, checks )
 		checkWebUiDependencies( discovery, checks )
 
@@ -73,6 +75,39 @@ class {
 	// --------------------------------------------------------------------------
 	// Individual checks
 	// --------------------------------------------------------------------------
+
+	/**
+	 * Reads the project's encrypted `secrets.json`, if it has one, and publishes its values for
+	 * this process (the way the app does at start), saying which names it holds and whether the
+	 * seed in force can read them. Only names are reported, never values.
+	 *
+	 * @root Absolute path to the project root
+	 * @checks Accumulator array - append() any findings
+	 */
+	private void function checkSecrets( required string root, required array checks ) {
+		var file = arguments.root & "/secrets.json"
+		if ( !fileExists( file ) ) {
+			return
+		}
+		var loader = new "models.build.SecretsLoader@bxagents"()
+		try {
+			var names = loader.names( file )
+			var seedSet = len( getSystemSetting( "BOXLANG_SECURITY_SECRETSEED", "" ) ) > 0
+			var result = loader.load( file )
+			arguments.checks.append( {
+				status  : "ok",
+				message : "secrets.json holds #names.len()# encrypted secret#names.len() == 1 ? '' : 's'#: #names.toList( ', ' )#"
+			} )
+			if ( !seedSet ) {
+				arguments.checks.append( {
+					status  : "warn",
+					message : "BOXLANG_SECURITY_SECRETSEED is not set, so BoxLang's own per-install seed was tried. The project's seed is in its .env and should be in your secret manager."
+				} )
+			}
+		} catch ( BxAgents.SecretsUnreadable e ) {
+			arguments.checks.append( { status : "fail", message : e.message } )
+		}
+	}
 
 	/**
 	 * Reports the running BoxLang version, and - best-effort only, since it

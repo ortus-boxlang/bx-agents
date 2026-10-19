@@ -54,6 +54,15 @@ public final class Row {
 		return this;
 	}
 
+	/** @return the row as a TamboUI line, for printing into the scrollback */
+	public dev.tamboui.text.Line toLine() {
+		java.util.List<dev.tamboui.text.Span> spans = new ArrayList<>();
+		for ( Seg s : segs ) {
+			spans.add( dev.tamboui.text.Span.styled( s.text, s.style ) );
+		}
+		return dev.tamboui.text.Line.from( spans );
+	}
+
 	/** @return the text without styles */
 	public String plainText() {
 		StringBuilder sb = new StringBuilder();

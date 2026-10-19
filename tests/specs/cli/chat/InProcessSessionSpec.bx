@@ -1,0 +1,146 @@
+/**
+ * The in-process session against a real bx-ai agent on the mock provider: the events it
+ * produces from the stream, from tool calls, and the cancel and steer calls it makes.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "InProcessSession", function() {
+
+			beforeEach( function() {
+				variables.agent = aiAgent( name : "helper", model : aiModel( provider : "mock" ) )
+				variables.session = new bxagents.models.cli.chat.InProcessSession( agent )
+				variables.events = []
+				variables.controls = { cancel : false, steer : [], onChunk : () => {} }
+				variables.hooks = {
+					push            : ( event ) => events.append( event ),
+					cancelRequested : () => { controls.onChunk(); return controls.cancel },
+					takeSteer       : () => controls.steer.len() ? controls.steer[ 1 ] : nullValue()
+				}
+			} );
+
+			afterEach( function() {
+				session.close()
+			} );
+
+			it( "describes the agent", function() {
+				expect( session.agentName() ).toBe( "helper" );
+				expect( session.mode() ).toBe( "in-process" );
+				expect( session.modelName() ).notToBeEmpty();
+				expect( session.tools() ).toBeArray();
+			} );
+
+			it( "turns the stream into delta events and returns the whole answer", function() {
+				var result = session.send( "hello", hooks )
+
+				expect( result.status ).toBe( "done" );
+				expect( events.len() ).toBeGTE( 1 );
+				expect( events.every( e => e.type == "delta" ) ).toBeTrue();
+				expect( events.map( e => e.text ).toList( "" ) ).toBe( result.text );
+				expect( result.text ).notToBeEmpty();
+			} );
+
+			it( "reports tool calls as running, then ok with the time it took", function() {
+				var tool = aiTool( "lookup", "lookup", ( topic ) => "found " & topic, false )
+				controls.onChunk = () => {
+					if ( !events.some( e => e.type == "tool" ) ) {
+						tool.invoke( { topic : "bx" } )
+					}
+				}
+
+				session.send( "hello", hooks )
+
+				var calls = events.filter( e => e.type == "tool" )
+				expect( calls ).toHaveLength( 2 );
+				expect( calls[ 1 ].status ).toBe( "running" );
+				expect( calls[ 1 ].name ).toBe( "lookup" );
+				expect( calls[ 1 ].summary ).toBe( "topic=bx" );
+				expect( calls[ 2 ].status ).toBe( "ok" );
+				expect( calls[ 2 ].id ).toBe( calls[ 1 ].id );
+				expect( calls[ 2 ].ms ).toBeGTE( 0 );
+			} );
+
+			it( "does not report tool calls made when no turn is running", function() {
+				aiTool( "lonely", "lonely", () => "x", false ).invoke( {} )
+
+				expect( events ).toBeEmpty();
+			} );
+
+			it( "asks bx-ai to cancel the run when the user pressed Esc", function() {
+				controls.cancel = true
+
+				var result = session.send( "hello", hooks )
+
+				expect( result.status ).toBe( "cancelled" );
+			} );
+
+			it( "passes a message typed during the turn to the run", function() {
+				controls.steer = [ "and be brief" ]
+
+				var result = session.send( "hello", hooks )
+
+				expect( result.status ).toBe( "done" );
+			} );
+
+			it( "starts the next conversation on a new thread", function() {
+				session.send( "one", hooks )
+				session.newThread()
+
+				expect( session.send( "two", hooks ).status ).toBe( "done" );
+			} );
+
+			it( "stops reporting tool calls once closed", function() {
+				session.close()
+				aiTool( "late", "late", () => "x", false ).invoke( {} )
+				session.send( "hello", hooks )
+
+				expect( events.filter( e => e.type == "tool" ) ).toBeEmpty();
+				// afterEach closes again: closing twice must be harmless
+			} );
+
+		} );
+
+		describe( "HttpSession", function() {
+
+			function clientFor( array deltas, struct result = {} ) {
+				return {
+					stream : ( baseUrl, message, threadId, onDelta ) => {
+						for ( var d in deltas ) {
+							onDelta( d )
+						}
+						return { threadId : "thread-1" }.append( result )
+					}
+				}
+			}
+
+			it( "turns streamed text into delta events and keeps the thread", function() {
+				var events = []
+				var session = new bxagents.models.cli.chat.HttpSession( "http://127.0.0.1:9/", clientFor( [ "Hel", "lo" ] ) )
+				var result = session.send( "hi", { push : e => events.append( e ), cancelRequested : () => false, takeSteer : () => nullValue() } )
+
+				expect( result ).toBe( { status : "done", text : "Hello", pending : [] } );
+				expect( events.map( e => e.text ) ).toBe( [ "Hel", "lo" ] );
+				expect( session.modelName() ).toBe( "http://127.0.0.1:9" );
+				expect( session.tools() ).toBeEmpty();
+			} );
+
+			it( "stops reading when the user pressed Esc", function() {
+				var session = new bxagents.models.cli.chat.HttpSession( "http://x", clientFor( [ "a", "b", "c" ] ) )
+				var result = session.send( "hi", { push : e => {}, cancelRequested : () => true, takeSteer : () => nullValue() } )
+
+				expect( result.status ).toBe( "cancelled" );
+			} );
+
+			it( "says where to answer a run that waits for a human decision", function() {
+				var events = []
+				var session = new bxagents.models.cli.chat.HttpSession( "http://srv", clientFor( [], { suspended : true } ) )
+				session.send( "hi", { push : e => events.append( e ), cancelRequested : () => false, takeSteer : () => nullValue() } )
+
+				expect( events[ 1 ].type ).toBe( "notice" );
+				expect( events[ 1 ].text ).toInclude( "http://srv/gateways/interactions/" );
+			} );
+
+		} );
+	}
+
+}

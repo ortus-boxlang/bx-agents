@@ -62,7 +62,7 @@ class {
 		}
 
 		if ( len( connectUrl ) ) {
-			return chatOverHttp( connectUrl, "" )
+			return chatOverHttp( connectUrl, "", arguments.options )
 		}
 
 		requireBuild( root )
@@ -71,13 +71,57 @@ class {
 			var client = new "models.cli.support.AgentClient@bxagents"()
 			var launched = client.startServer( root, arguments.options.port ?: nullValue() )
 			try {
-				return chatOverHttp( launched.baseUrl, "Started a throwaway server on #launched.baseUrl#" )
+				return chatOverHttp( launched.baseUrl, "Started a throwaway server on #launched.baseUrl#", arguments.options )
 			} finally {
 				client.stopServer( launched.process ?: nullValue() )
 			}
 		}
 
-		return chatInProcess( root )
+		return chatInProcess( root, arguments.options )
+	}
+
+	/**
+	 * Whether to draw the chat screen: at a terminal, unless --no-tui. The numbered
+	 * line-by-line chat below it stays as the fallback for a pipe or a dumb terminal.
+	 *
+	 * @options The parsed CLI options
+	 */
+	private boolean function wantsScreen( required struct options ) {
+		if ( arguments.options.keyExists( "_screen" ) ) {
+			return true
+		}
+		if ( ( arguments.options.tui ?: true ) == false ) {
+			return false
+		}
+		try {
+			return createObject( "java", "ortus.boxlang.bxagents.tui.TuiScreen" ).isInteractive()
+		} catch ( any e ) {
+			return false
+		}
+	}
+
+	/**
+	 * Chats in the Pi-style screen: finished turns go to the terminal's scrollback, only the
+	 * message box and the answer being written are redrawn.
+	 *
+	 * @session InProcessSession or HttpSession
+	 * @options The parsed CLI options; a `_screen` entry replaces the real screen, for tests
+	 *
+	 * @return This verb's own { exitCode, message } result
+	 */
+	private struct function chatWithScreen( required any session, required struct options ) {
+		var controller = new "models.cli.chat.ChatController@bxagents"( arguments.session )
+		var screen = arguments.options._screen ?: createObject( "java", "ortus.boxlang.bxagents.tui.ChatScreen" ).open( controller.commands() )
+		try {
+			controller.run( screen )
+		} finally {
+			screen.close()
+			arguments.session.close()
+		}
+		return {
+			exitCode : 0,
+			message  : "Chat session ended"
+		}
 	}
 
 	/**
@@ -108,11 +152,15 @@ class {
 	 *
 	 * @return This verb's own { exitCode, message } result
 	 */
-	private struct function chatInProcess( required string root ) {
+	private struct function chatInProcess( required string root, struct options = {} ) {
 		var factoryPath = arguments.root & "/.build/app/agent/GeneratedAgentFactory.bx"
 		var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
 		var factory = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" ).instantiate( factoryPath, context )
 		var agent = factory.buildAgent()
+
+		if ( wantsScreen( arguments.options ) ) {
+			return chatWithScreen( new "models.cli.chat.InProcessSession@bxagents"( agent ), arguments.options )
+		}
 
 		// MiniConsole shells out to `stty` to set up raw terminal mode, so it
 		// can only be constructed against a real interactive TTY - this is
@@ -171,9 +219,16 @@ class {
 	 *
 	 * @return This verb's own { exitCode, message } result
 	 */
-	private struct function chatOverHttp( required string baseUrl, string banner = "" ) {
+	private struct function chatOverHttp( required string baseUrl, string banner = "", struct options = {} ) {
 		var client = new "models.cli.support.AgentClient@bxagents"()
 		var target = arguments.baseUrl.reReplace( "[\/]+$", "" )
+
+		if ( wantsScreen( arguments.options ) ) {
+			if ( len( trim( arguments.banner ) ) ) {
+				println( arguments.banner )
+			}
+			return chatWithScreen( new "models.cli.chat.HttpSession@bxagents"( target, client ), arguments.options )
+		}
 
 		if ( len( trim( arguments.banner ) ) ) {
 			println( arguments.banner )

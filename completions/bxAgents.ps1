@@ -31,6 +31,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 		'build:positional' = 'dir'
 		'chat' = @(
 			@{ Name = 'connect'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'no-tui'; Value = $false; Choices = @(); Dir = $false }
 			@{ Name = 'port'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
 			@{ Name = 'server'; Value = $false; Choices = @(); Dir = $false }
@@ -94,6 +95,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'remote-path'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'repo'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'search'; Value = $true; Choices = @('http', 'brave', 'tavily', 'exa', 'google'); Dir = $false }
+			@{ Name = 'secrets'; Value = $true; Choices = @('env', 'encrypted'); Dir = $false }
 			@{ Name = 'skipInstall'; Value = $false; Choices = @(); Dir = $false }
 			@{ Name = 'template'; Value = $true; Choices = @('minimal', 'webui-chat', 'slack-bot', 'telegram-bot', 'github-bot', 'mcp-server', 'scheduled', 'multi-agent'); Dir = $false }
 			@{ Name = 'user'; Value = $true; Choices = @(); Dir = $false }

@@ -46,8 +46,32 @@ class {
 		validateToolOptions( arguments.resolvedConfig, errors, "The project's own agent definition" )
 		validateModelProvider( arguments.resolvedConfig, arguments.discovery, errors )
 		validateAgentApi( arguments.resolvedConfig, errors )
+		validateSecrets( arguments.projectRoot, errors )
 
 		return { errors : errors, warnings : warnings }
+	}
+
+	// --------------------------------------------------------------------------
+	// Encrypted secrets
+	// --------------------------------------------------------------------------
+
+	/**
+	 * A project's `secrets.json` is committed, so it may hold only bxsecret: ciphertext. A plain
+	 * value in it is a secret about to be pushed, and the build refuses it.
+	 *
+	 * @projectRoot Absolute path to the project root
+	 * @errors Accumulator array - append() any validation errors found
+	 */
+	private void function validateSecrets( required string projectRoot, required array errors ) {
+		var file = arguments.projectRoot & "/secrets.json"
+		if ( !fileExists( file ) ) {
+			return
+		}
+		try {
+			new "models.build.SecretsLoader@bxagents"().read( file )
+		} catch ( BxAgents.SecretsUnreadable e ) {
+			arguments.errors.append( e.message )
+		}
 	}
 
 	// --------------------------------------------------------------------------

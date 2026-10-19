@@ -155,7 +155,21 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   names (`tmp`, `cwd` or absolute paths), each agent with its own set. An empty list is refused.
 - `mcpServers` entries accept `token`, `headers`, `timeout`, `user` and `password`. Secrets must
   be `${env.NAME}` placeholders and are resolved when the app starts.
+- A **Secrets** question: keep keys in `.env` (the default) or encrypted in the project. Encrypted
+  keys go to a committable `secrets.json` in BoxLang's `bxsecret:` format, with a per-project seed in
+  `.env` (`BOXLANG_SECURITY_SECRETSEED`). The built app decrypts it at startup, a real environment variable
+  still wins, `build` refuses plain values in the file and `doctor` checks it. `--secrets=env|encrypted`.
 - A catalog of MCP servers the wizard can add: GitHub, Stripe, Notion, Atlassian, Cloudflare and Supabase.
+
+#### The chat screen
+
+- `bxAgents chat` is now a Pi-style terminal screen that keeps your scrollback: finished turns are
+  ordinary terminal text and only the message box and the streaming answer are redrawn.
+- Answers stream in and are printed as formatted Markdown. Tool calls show their arguments and
+  duration, the model's thinking shows while it works, Esc stops the agent, a message typed
+  while it works steers it, and a run that stops for approval asks in place.
+- A multi-line message box with history, a `/` command menu (`/new`, `/tools`, `/copy`, `/save`,
+  `/exit`) and `NO_COLOR` support. `--no-tui` and non-interactive terminals keep the plain REPL.
 
 #### Documentation
 
