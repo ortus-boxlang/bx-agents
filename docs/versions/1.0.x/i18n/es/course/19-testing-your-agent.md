@@ -9,13 +9,12 @@ tags: [course, testing]
 # Probar tu agente
 
 Todo proyecto creado con `bxAgents new` ([Lección 4](04-scaffolding-your-first-agent.md)) ya
-trae una carpeta `tests/` lista para ejecutar: `tests/box.json` y `tests/specs/AgentSpec.bx`,
-una spec que pasa de fábrica.
+trae un `box.json` en la raíz (TestBox como dependencia de desarrollo) y una carpeta `tests/`
+lista para ejecutar con `tests/specs/AgentSpec.bx`, una spec que pasa de fábrica.
 
 ```bash
-cd my-agent/tests
-box install       # fetches testbox/ into tests/testbox - new already ran this for you
-cd ..
+cd my-agent
+box install       # obtiene testbox en lib/testbox - new ya lo ejecutó por ti
 bxAgents test
 ```
 

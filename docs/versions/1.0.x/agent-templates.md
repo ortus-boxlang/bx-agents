@@ -299,7 +299,7 @@ Installs a [ForgeBox](https://www.forgebox.io) package - CommandBox's package re
 5. **Unwraps one level of nesting automatically**, if present: many ForgeBox archives (matching a typical GitHub zip export) wrap their entire contents in one top-level folder. If extraction produces exactly one top-level entry and it's a directory, its contents are moved up so the target directory itself ends up as the project root.
 6. Verifies an `Agent.yaml` or `Agent.bx` exists at the (possibly unwrapped) root - if not, the whole operation fails, since a ForgeBox slug could just as easily be an unrelated library rather than a project template.
 
-Same as `--repo`: `--model`/`--name`/`--description` are not required (warned-and-ignored if passed anyway - the installed project defines its own), and the `tests/` auto-`box install`/`--skipInstall` step doesn't apply.
+Same as `--repo`: `--model`/`--name`/`--description` are not required (warned-and-ignored if passed anyway - the installed project defines its own), and the auto-`box install`/`--skipInstall` step doesn't apply.
 
 ## Publishing your own template
 

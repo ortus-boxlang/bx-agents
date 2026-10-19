@@ -8,12 +8,11 @@ tags: [conventions, testing]
 
 # tests/
 
-Cada proyecto generado vía `bxAgents new` obtiene una carpeta `tests/` lista para ejecutar: un `tests/box.json` (declarando una dependencia `testbox`) y `tests/specs/AgentSpec.bx`, un spec de ejemplo que pasa de inmediato.
+Cada proyecto generado vía `bxAgents new` obtiene un [`box.json`](box-json.md) en la raíz (declarando `testbox` como dependencia de desarrollo, instalada en `lib/testbox`) y una carpeta `tests/` lista para ejecutar con `tests/specs/AgentSpec.bx`, un spec de ejemplo que pasa de inmediato.
 
 ```bash
-cd my-agent/tests
-box install       # obtiene testbox/ en tests/testbox
-cd ..
+cd my-agent
+box install       # obtiene testbox en lib/testbox (new ya lo ejecutó por ti)
 bxAgents test
 ```
 
@@ -101,4 +100,4 @@ bxAgents test
 Ejecuta los `tests/specs/**` de tu proyecto vía TestBox, en un proceso hijo nuevo (así que nunca compite por las propias cachés de mapeo de clases de BoxLang con cualquier otra cosa que estés ejecutando). Imprime conteos de paquete/suite/spec y totales de aprobado/fallido/con error/omitido, más una línea por fallo, y sale con código distinto de cero si algo falló - adecuado como puerta de CI antes de `deploy`.
 
 !!! warning
-    `bxAgents test` requiere `testbox` realmente instalado bajo `tests/testbox` (`cd tests && box install`) - falla claramente, en lugar de reportar silenciosamente cero specs, si eso todavía no se ha hecho.
+    `bxAgents test` requiere TestBox realmente instalado en `lib/testbox` (`box install` en la raíz del proyecto; también se encuentra `tests/testbox`, para proyectos generados antes de que `box.json` pasara a la raíz) - falla claramente, en lugar de reportar silenciosamente cero specs, si eso todavía no se ha hecho.

@@ -116,9 +116,9 @@ class {
 		}
 
 		directoryCreate( path = dir & "/tests/specs", createPath = true, ignoreExists = true )
-		var testsBoxJsonPath = dir & "/tests/box.json"
+		var boxJsonPath = dir & "/box.json"
 		var agentSpecPath = dir & "/tests/specs/AgentSpec.bx"
-		fileWrite( testsBoxJsonPath, renderTestsBoxJson( arguments.name ) )
+		fileWrite( boxJsonPath, renderBoxJson( arguments.name ) )
 		fileWrite( agentSpecPath, renderAgentSpec( arguments.name ) )
 
 		var envPath = dir & "/.env"
@@ -136,7 +136,7 @@ class {
 			projectRoot     : dir,
 			agentDefinition : agentDefinitionPath,
 			instructions    : instructionsPath,
-			testsBoxJson    : testsBoxJsonPath,
+			boxJson         : boxJsonPath,
 			agentSpec       : agentSpecPath,
 			env             : envPath,
 			gitignore       : gitignorePath,
@@ -278,21 +278,22 @@ class {
 	}
 
 	/**
-	 * @name The agent's name, used to derive the tests package's own name
+	 * @name The agent's name, used as the package name
 	 *
-	 * @return The rendered tests/box.json source, declaring a testbox devDependency
+	 * @return The rendered root box.json source: the developer's own list of extra packages, with testbox as a devDependency installed into lib/testbox
 	 */
-	private string function renderTestsBoxJson( required string name ) {
+	private string function renderBoxJson( required string name ) {
 		var lines = [
 			"{",
-			'	"name": "#bxLiteral( arguments.name )#-tests",',
+			'	"name": "#bxLiteral( arguments.name )#",',
 			'	"version": "1.0.0",',
 			'	"private": true,',
+			'	"dependencies": {},',
 			'	"devDependencies": {',
 			'		"testbox": "*"',
 			"	},",
 			'	"installPaths": {',
-			'		"testbox": "testbox/"',
+			'		"testbox": "lib/testbox/"',
 			"	}",
 			"}",
 			""
@@ -432,6 +433,9 @@ class {
 			".build/",
 			"dist/",
 			".env",
+			"## installed packages (see box.json)",
+			"lib/",
+			"boxlang_modules/",
 			""
 		]
 		return lines.toList( char( 10 ) )

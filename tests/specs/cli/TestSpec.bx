@@ -46,14 +46,28 @@ class extends="testbox.system.BaseSpec" {
 				} ).toThrow( "BxAgents.NoTestsFound" );
 			} );
 
-			it( "errors cleanly when testbox isn't installed under tests/", function() {
+			it( "errors cleanly when TestBox isn't installed, naming where it looked and how to install it", function() {
 				var dir = createTempDirectory( prefix = "bxagents-cli-test-notestbox-" );
 				tempDirs.append( dir );
 				directoryCreate( dir & "/tests/specs", true, true );
 
 				expect( function() {
 					testVerb.run( { projectRoot : dir } );
-				} ).toThrow( "BxAgents.TestBoxNotInstalled" );
+				} ).toThrow( type = "BxAgents.TestBoxNotInstalled", regex = "lib/testbox.*box install" );
+			} );
+
+			it( "finds TestBox in lib/testbox, or in tests/testbox for projects scaffolded before box.json moved to the root", function() {
+				var service = new bxagents.models.build.TestRunnerService();
+				var dir = createTempDirectory( prefix = "bxagents-cli-test-locate-" );
+				tempDirs.append( dir );
+
+				expect( service.locateTestBox( dir ) ).toBe( "" );
+
+				directoryCreate( dir & "/tests/testbox", true, true );
+				expect( service.locateTestBox( dir ) ).toBe( dir & "/tests/testbox" );
+
+				directoryCreate( dir & "/lib/testbox", true, true );
+				expect( service.locateTestBox( dir ) ).toBe( dir & "/lib/testbox" );
 			} );
 
 			it( "runs a real project's tests/specs via a spawned process and reports pass counts", function() {
@@ -65,7 +79,7 @@ class extends="testbox.system.BaseSpec" {
 				}
 
 				var projectRoot = newTempProject( "testable-agent" );
-				directoryCopy( expandPath( "/testbox" ), projectRoot & "/tests/testbox", true );
+				directoryCopy( expandPath( "/testbox" ), projectRoot & "/lib/testbox", true );
 
 				var result = testVerb.run( { projectRoot : projectRoot } );
 
@@ -81,7 +95,7 @@ class extends="testbox.system.BaseSpec" {
 				}
 
 				var projectRoot = newTempProject( "testable-agent" );
-				directoryCopy( expandPath( "/testbox" ), projectRoot & "/tests/testbox", true );
+				directoryCopy( expandPath( "/testbox" ), projectRoot & "/lib/testbox", true );
 				fileWrite( projectRoot & "/tests/specs/FailingSpec.bx", '
 					class extends="bxModules.bxagents.models.testing.BaseAgentSpec" {
 						function run() {

@@ -146,15 +146,31 @@ class extends="testbox.system.BaseSpec" {
 				}
 			} );
 
-			it( "scaffolds a ready-to-run tests/ folder", function() {
+			it( "ignores what gets installed from box.json", function() {
+				var dir = newTargetDir();
+				scaffolder.scaffold( dir, "my-agent", "openai/gpt-5" );
+
+				var ignored = fileRead( dir & "/.gitignore" ).listToArray( char( 10 ) );
+
+				expect( ignored ).toInclude( "lib/" );
+				expect( ignored ).toInclude( "boxlang_modules/" );
+				expect( ignored ).toInclude( ".env" );
+			} );
+
+			it( "scaffolds a ready-to-run tests/ folder and a root box.json that installs testbox into lib/testbox", function() {
 				var dir = newTargetDir();
 				var result = scaffolder.scaffold( dir, "my-agent", "openai/gpt-5" );
 
-				expect( fileExists( result.testsBoxJson ) ).toBeTrue();
+				expect( result.boxJson ).toBe( dir & "/box.json" );
+				expect( fileExists( result.boxJson ) ).toBeTrue();
+				expect( fileExists( dir & "/tests/box.json" ) ).toBeFalse();
 				expect( fileExists( result.agentSpec ) ).toBeTrue();
 
-				var boxJson = jsonDeserialize( fileRead( result.testsBoxJson ) );
+				var boxJson = jsonDeserialize( fileRead( result.boxJson ) );
+				expect( boxJson.name ).toBe( "my-agent" );
+				expect( boxJson.dependencies ).toBeEmpty();
 				expect( boxJson.devDependencies ).toHaveKey( "testbox" );
+				expect( boxJson.installPaths.testbox ).toBe( "lib/testbox/" );
 
 				var specContent = fileRead( result.agentSpec );
 				expect( specContent ).toInclude( 'extends="bxModules.bxagents.models.testing.BaseAgentSpec"' );

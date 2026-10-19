@@ -56,6 +56,10 @@ or package as a portable `.bxa`.
   nothing. `build` copies the project's `boxlang_modules/` into `.build/app`, leaving out
   modules that are only devDependencies, so `serve` and a `.bxa` carry them. `serve` and `test`
   add that folder to the runtime's modules directory.
+- `bxAgents new` scaffolds a root `box.json` (TestBox as a development dependency, installed
+  into `lib/testbox`) in place of `tests/box.json`, and a `.gitignore` that also ignores `lib/`
+  and `boxlang_modules/`. `new` runs `box install` in the project root; `test` finds TestBox in
+  `lib/testbox` (or `tests/testbox` for older projects).
 - `toolOptions:` - options for a module's tools, keyed by module name. `bxplaywright` takes
   the options of bx-playwright's `playwright()` (`profile`, `headless`, `baseURL`, ...).
   An agent that lists `bxplaywright` tools gets its own fresh browser tools instead of the
