@@ -117,7 +117,7 @@ bxAgents new my-agent --forgebox=some-package-slug
   - `--model` es **requerido** - un slug `provider/model` (ver [el slug de modelo](conventions/agent-bx.md#the-model-slug)).
   - `--name` por defecto toma el propio nombre base del directorio destino.
   - Se niega a ejecutarse si el destino ya contiene un `Agent.yaml` o un `Agent.bx`.
-  - Crea [`Agent.yaml`](conventions/agent-yaml.md), `instructions.md`, cada carpeta de convención (vacía), una carpeta [`tests/`](conventions/testing.md) lista para ejecutar (`tests/box.json` + `tests/specs/AgentSpec.bx`), un `.env` que declara `BOXLANG_HOME=.build/runtime` (coincidiendo con el propio home de runtime delimitado que usa `serve`), y un `.gitignore` (`.build/`, `dist/`, `.env`). Nunca sobrescribe un `.env`/`.gitignore` existente. BoxLang y `boxlang-miniserver` cargan por sí mismos un `.env` desde la raíz del proyecto, así que el archivo también sirve para tus claves de API; BxAgents nunca lo lee, lo copia ni lo empaqueta.
+  - Crea [`Agent.yaml`](conventions/agent-yaml.md), `instructions.md`, cada carpeta de convención (vacía), un [`box.json`](conventions/box-json.md) en la raíz (`testbox` como dependencia de desarrollo, instalada en `lib/testbox`), una carpeta [`tests/`](conventions/testing.md) lista para ejecutar (`tests/specs/AgentSpec.bx`), un `.env` que declara `BOXLANG_HOME=.build/runtime` (coincidiendo con el propio home de runtime delimitado que usa `serve`), y un `.gitignore` (`.build/`, `dist/`, `.env`, `lib/`, `boxlang_modules/`). Nunca sobrescribe un `.env`/`.gitignore` existente. BoxLang y `boxlang-miniserver` cargan por sí mismos un `.env` desde la raíz del proyecto, así que el archivo también sirve para tus claves de API; BxAgents nunca lo lee, lo copia ni lo empaqueta.
   - `--template` elige una de 8 plantillas incorporadas, cada una añadiendo un poco de contenido preconfigurado sobre el esqueleto base anterior (consulta [Plantillas de agente](agent-templates.md) para ver cada archivo generado, cómo funcionan las fuentes `--repo`/`--forgebox` y cómo publicar la tuya):
     - `minimal` - el esqueleto desnudo, nada más.
     - `webui-chat` - añade un `gateways/webui.bx` que expone la [UI de chat web](conventions/gateways/index.md) en `/chat`.
@@ -128,12 +128,12 @@ bxAgents new my-agent --forgebox=some-package-slug
     - `scheduled` - añade un [`schedules/Scheduler.bx`](conventions/schedules.md) real que llama al agente con un temporizador diario.
     - `multi-agent` - añade una lista `subAgents` al `Agent.yaml` raíz que declara dos [subagentes](conventions/subagents.md) (`researcher`, `writer`), cada uno generado como su propio `subagents/<name>/Agent.yaml` + `instructions.md` reales.
   - `--class` (una opción booleana sin valor, como las demás descritas arriba) escribe el [`Agent.bx`](conventions/agent-bx.md) basado en clase en lugar del `Agent.yaml` predeterminado, para agentes cuya definición necesita código (hooks, instrucciones dinámicas). Aplica a la raíz y a los subagentes que genere una plantilla, y solo al modo `--template` - no a `--repo`/`--forgebox`.
-  - También ejecuta `box install` dentro de la nueva carpeta `tests/`, así que `bxAgents test` funciona de inmediato sin un paso separado de `cd tests && box install`. Esto es de mejor esfuerzo: si `box` no está en `PATH` o la instalación falla, `new` igual tiene éxito - el mensaje simplemente te indica ejecutarlo tú mismo. Pasa `--skipInstall` para omitir este paso por completo.
+  - También ejecuta `box install` en la raíz del nuevo proyecto, así que `bxAgents test` funciona de inmediato sin un paso de instalación separado. Esto es de mejor esfuerzo: si `box` no está en `PATH` o la instalación falla, `new` igual tiene éxito - el mensaje simplemente te indica ejecutarlo tú mismo. Pasa `--skipInstall` para omitir este paso por completo.
 - **Modo `--repo`** (`--repo=owner/repo-name` o una URL completa): clona el repositorio mediante una dependencia [JGit](https://www.eclipse.org/jgit/) incluida - no es necesario tener instalado el binario `git`. Siempre clona de forma superficial (profundidad 1) y siempre elimina la carpeta `.git` resultante después, de modo que el nuevo proyecto empieza con un historial limpio en lugar de quedar atado al propio remoto del repositorio plantilla. Se niega a ejecutarse en un directorio que ya existe y no está vacío, y falla claramente si no se encuentra ningún `Agent.yaml` ni `Agent.bx` en el repositorio clonado.
 - **Modo `--forgebox`** (`--forgebox=<slug>`): instala un paquete de [ForgeBox](https://www.forgebox.io) hablando directamente con la propia API REST de ForgeBox (no requiere el CLI `box`). Falla claramente si el slug no existe, la descarga falla, o el paquete instalado no tiene un `Agent.yaml` ni un `Agent.bx` en su raíz (desenvolviendo primero un nivel de anidamiento, ya que muchos archivos de ForgeBox envuelven su contenido en una única carpeta de nivel superior).
 - Solo el modo `--template` necesita `--model`; `--repo`/`--forgebox` nunca lo requieren, ya que el proyecto fuente ya define el suyo propio.
 - `--name`/`--description` se ignoran (con una advertencia en la salida) cuando se usa `--repo`/`--forgebox` - el proyecto clonado/instalado define el suyo propio.
-- El paso de conveniencia `box install` para `tests/` (y `--skipInstall`) solo aplican al modo `--template` - la propia carpeta `tests/` de un proyecto clonado/instalado (si es que tiene una) se deja intacta.
+- El paso de conveniencia `box install` (y `--skipInstall`) solo aplican al modo `--template` - el propio `box.json` de un proyecto clonado/instalado (si es que tiene uno) se deja intacto.
 
 ### `build`
 
@@ -156,7 +156,7 @@ Ejecuta los propios [`tests/specs`](conventions/testing.md) de tu proyecto vía 
 bxAgents test
 ```
 
-- Requiere `testbox` instalado bajo `tests/testbox` (`cd tests && box install`).
+- Requiere TestBox instalado en `lib/testbox` (`box install` en la raíz del proyecto; también se encuentra `tests/testbox`).
 - Construye tu agente contra el proveedor `mock` por defecto (el override de entorno `test` de `Agent.yaml`, o `test()` en un `Agent.bx` basado en clase) - no se necesita clave de API ni acceso a red.
 - Imprime conteos de aprobados/fallidos/con error/omitidos más una línea por fallo, y sale con código distinto de cero si algo falló.
 

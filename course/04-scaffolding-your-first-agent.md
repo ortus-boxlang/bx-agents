@@ -74,7 +74,7 @@ If you need code in the definition, pass `--class` and `new` scaffolds a class-b
 
 ## The test suite runs itself
 
-`new` also runs `box install` inside the scaffolded `tests/` folder, so `bxAgents test`
+`new` also runs `box install` in the scaffolded project root (its `box.json` lists TestBox), so `bxAgents test`
 ([Lesson 19](19-testing-your-agent.md)) works immediately with no separate step. This
 is best-effort - if `box` isn't on `PATH` or the install fails, `new` still succeeds
 and just tells you to run it yourself. Pass `--skipInstall` to opt out entirely.

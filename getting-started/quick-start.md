@@ -87,7 +87,7 @@ See the [Conventions](../conventions/agent-yaml.md) section for every other fold
 ## 3. Test it
 
 ```bash
-cd tests && box install && cd ..   # once, to fetch testbox/ (`new` already tried this for you)
+box install        # once, to fetch testbox into lib/testbox (`new` already tried this for you)
 bxAgents test
 ```
 

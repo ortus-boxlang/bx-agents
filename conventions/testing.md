@@ -8,12 +8,11 @@ tags: [conventions, testing]
 
 # tests/
 
-Every project scaffolded via `bxAgents new` gets a ready-to-run `tests/` folder: a `tests/box.json` (declaring a `testbox` dependency) and `tests/specs/AgentSpec.bx`, an example spec that passes out of the box.
+Every project scaffolded via `bxAgents new` gets a root [`box.json`](box-json.md) (declaring `testbox` as a development dependency, installed into `lib/testbox`) and a ready-to-run `tests/` folder with `tests/specs/AgentSpec.bx`, an example spec that passes out of the box.
 
 ```bash
-cd my-agent/tests
-box install       # fetches testbox/ into tests/testbox
-cd ..
+cd my-agent
+box install       # fetches testbox into lib/testbox (new already ran this for you)
 bxAgents test
 ```
 
@@ -101,4 +100,4 @@ bxAgents test
 Runs your project's `tests/specs/**` via TestBox, in a fresh child process (so it never fights over BoxLang's own class-mapping caches with anything else you're running). Prints bundle/suite/spec counts and pass/fail/error/skipped totals, plus one line per failure, and exits non-zero if anything failed - suitable as a CI gate before `deploy`.
 
 !!! warning
-    `bxAgents test` requires `testbox` actually installed under `tests/testbox` (`cd tests && box install`) - it errors clearly, rather than silently reporting zero specs, if that hasn't been done yet.
+    `bxAgents test` requires TestBox actually installed in `lib/testbox` (`box install` in the project root; `tests/testbox` is also found, for projects scaffolded before `box.json` moved to the root) - it errors clearly, rather than silently reporting zero specs, if that hasn't been done yet.

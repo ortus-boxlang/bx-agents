@@ -299,7 +299,7 @@ Instala un paquete de [ForgeBox](https://www.forgebox.io) - el registro de paque
 5. **Desanida un nivel automáticamente**, si lo hay: muchos archivos de ForgeBox (siguiendo lo típico de una exportación zip de GitHub) envuelven todo su contenido en una única carpeta de primer nivel. Si la extracción produce exactamente una entrada de primer nivel y es un directorio, su contenido se sube un nivel para que el propio directorio de destino acabe siendo la raíz del proyecto.
 6. Verifica que existe un `Agent.yaml` o `Agent.bx` en la raíz (posiblemente ya desanidada) - si no, toda la operación falla, ya que un slug de ForgeBox podría ser perfectamente una librería sin relación en vez de una plantilla de proyecto.
 
-Igual que con `--repo`: `--model`/`--name`/`--description` no son obligatorios (se avisa y se ignoran si se pasan de todos modos - el proyecto instalado define los suyos), y el paso automático de `box install` de `tests/` y `--skipInstall` no aplican.
+Igual que con `--repo`: `--model`/`--name`/`--description` no son obligatorios (se avisa y se ignoran si se pasan de todos modos - el proyecto instalado define los suyos), y el paso automático de `box install` y `--skipInstall` no aplican.
 
 ## Publicar tu propia plantilla
 
