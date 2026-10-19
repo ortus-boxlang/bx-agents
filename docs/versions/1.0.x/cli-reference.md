@@ -185,15 +185,31 @@ bxAgents serve [--port=8080] [--host=127.0.0.1]
 
 ### `chat`
 
-Interactive REPL against the built agent, using BoxLang's own `MiniConsole` for line reading.
+A chat with the built agent, in a terminal screen that keeps your scrollback: finished turns are printed as ordinary terminal text (select, search and scroll them as usual) and only the message box and the answer being written are redrawn. `--no-tui` (and any terminal that is not interactive) uses a plain line-by-line REPL instead, built on BoxLang's own `MiniConsole`.
 
 ```bash
 bxAgents chat                                  # fast, in-process
+bxAgents chat --no-tui                         # plain line-by-line REPL
 bxAgents chat --server [--port=<port>]         # full app, own throwaway server
 bxAgents chat --connect=http://127.0.0.1:8080  # full app, server you already run
 ```
 
-Three modes, one REPL:
+In the screen:
+
+| Key | Does |
+|---|---|
+| Enter | Send the message |
+| Alt+Enter, Ctrl+J, or `\` then Enter | New line in the message |
+| Up / Down | Earlier messages (from the first or last line of the box) |
+| Esc | Stop the agent. It stops at its next step, not mid-word |
+| Enter while the agent works | Steer it: your message is added to the run (in-process only) |
+| Ctrl+C | Clear the box; on an empty box, leave. Ctrl+D leaves too |
+
+Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/save [file]` (the conversation as Markdown) and `/exit`.
+
+The answer is shown as it streams and printed as formatted Markdown (headings, lists, code blocks) when it is complete. In the default mode each tool call is shown with its arguments and how long it took, and the model's thinking is shown while it works but never kept. A run that stops for [human approval](conventions/gateways/index.md) asks you in place: approve once, approve for the conversation, or reject. Over HTTP the stream carries only the text, so there are no tool lines, no thinking and no steering, and an approval is answered at the server.
+
+Three modes, one chat:
 
 | Mode | What it talks to | Use it when |
 |---|---|---|
@@ -210,8 +226,8 @@ Three modes, one REPL:
 - Both HTTP modes carry the server's `threadId` across turns, so a session is one conversation rather than a series of unrelated first messages.
 - A turn that pauses for a [human-in-the-loop](conventions/gateways/index.md) decision says so instead of appearing to answer with silence, and points at the `/gateways/interactions/` endpoint where the decision is submitted.
 - If the route is gated behind [`agentApi.tokenEnvVar`](conventions/agent-bx.md#agentapi), these modes get a clear `401` error rather than a confusing timeout - they send no token.
-- Type `exit` or `quit` to leave.
-- Needs a real interactive TTY (`MiniConsole` shells out to `stty` for raw mode) - it will not work piped/non-interactively. Use [`invoke`](#invoke) for scripting.
+- Type `/exit` to leave (`exit` and `quit` work in the plain REPL).
+- Needs a real interactive terminal. Piped or non-interactive, it falls back to the plain REPL, which needs one too (`MiniConsole` shells out to `stty` for raw mode). Use [`invoke`](#invoke) for scripting.
 
 ### `invoke`
 

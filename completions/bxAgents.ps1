@@ -31,6 +31,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 		'build:positional' = 'dir'
 		'chat' = @(
 			@{ Name = 'connect'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'no-tui'; Value = $false; Choices = @(); Dir = $false }
 			@{ Name = 'port'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
 			@{ Name = 'server'; Value = $false; Choices = @(); Dir = $false }

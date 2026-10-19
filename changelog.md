@@ -157,6 +157,16 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   be `${env.NAME}` placeholders and are resolved when the app starts.
 - A catalog of MCP servers the wizard can add: GitHub, Stripe, Notion, Atlassian, Cloudflare and Supabase.
 
+#### The chat screen
+
+- `bxAgents chat` is now a Pi-style terminal screen that keeps your scrollback: finished turns are
+  ordinary terminal text and only the message box and the streaming answer are redrawn.
+- Answers stream in and are printed as formatted Markdown. Tool calls show their arguments and
+  duration, the model's thinking shows while it works, Esc stops the agent, a message typed
+  while it works steers it, and a run that stops for approval asks in place.
+- A multi-line message box with history, a `/` command menu (`/new`, `/tools`, `/copy`, `/save`,
+  `/exit`) and `NO_COLOR` support. `--no-tui` and non-interactive terminals keep the plain REPL.
+
 #### Documentation
 
 - A full documentation site at [bxagents.ai](https://bxagents.ai): installation, quick start,

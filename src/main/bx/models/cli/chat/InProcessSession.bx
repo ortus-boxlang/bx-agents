@@ -1,0 +1,197 @@
+/**
+ * A chat session against the agent object in this process: the same agent a `serve`d
+ * app builds, driven with bx-ai's own streaming. It turns what the agent does into the
+ * small events the chat screen understands:
+ *
+ *   { type : "delta", text }                the answer so far, a piece at a time
+ *   { type : "reasoning", text }            the model's thinking, a piece at a time
+ *   { type : "tool", id, name, summary, status : "running" | "ok", ms }
+ *   { type : "notice", text }  { type : "error", text }
+ *
+ * Tool events are not part of the stream: bx-ai announces beforeAIToolExecute and
+ * afterAIToolExecute for every tool call, and a global interceptor turns those into events.
+ *
+ * Esc cancels with bx-ai's own cancelRun(), which takes effect at the next checkpoint (before
+ * the next model call or tool call), not in the middle of a token. A message typed while the
+ * agent works is spliced into the run with steerRun().
+ */
+class {
+
+	/**
+	 * @agent The agent object from the project's GeneratedAgentFactory
+	 */
+	function init( required any agent ) {
+		variables.agent = arguments.agent
+		variables.threadId = createUUID()
+		variables.hooks = nullValue()
+		variables.calls = {}
+		variables.counter = 0
+		variables.interceptor = BoxRegisterInterceptor(
+			( data ) => onToolEvent( data ),
+			[ "beforeAIToolExecute", "afterAIToolExecute" ]
+		)
+		return this
+	}
+
+	string function agentName() {
+		return variables.agent.getConfig().name
+	}
+
+	string function modelName() {
+		var model = variables.agent.getConfig().model ?: {}
+		return isStruct( model ) ? ( model.model ?: model.provider ?: "" ) : toString( model )
+	}
+
+	string function mode() {
+		return "in-process"
+	}
+
+	/**
+	 * @return The names of the tools the agent has
+	 */
+	array function tools() {
+		return variables.agent.listTools().map( tool => isSimpleValue( tool ) ? tool : ( tool.name ?: toString( tool ) ) )
+	}
+
+	/**
+	 * Starts a new conversation: the agent keeps its memory per thread.
+	 */
+	void function newThread() {
+		variables.threadId = createUUID()
+	}
+
+	/**
+	 * @text What the user said
+	 * @hooks { push( event ), cancelRequested(), takeSteer() }
+	 *
+	 * @return { status : "done" | "suspended" | "cancelled" | "stopped", text, pending : [ { toolName, toolArgs } ] }
+	 */
+	struct function send( required string text, required struct hooks ) {
+		var state = newState()
+		variables.hooks = arguments.hooks
+		try {
+			variables.agent.stream( chunkHandler( state ), arguments.text, {}, { threadId : variables.threadId } )
+		} finally {
+			variables.hooks = nullValue()
+		}
+		return finish( state )
+	}
+
+	/**
+	 * Continues a run that stopped for a human decision.
+	 *
+	 * @decision approve, reject, approve_session or approve_always
+	 * @hooks See send()
+	 */
+	struct function resume( required string decision, required struct hooks ) {
+		var state = newState()
+		variables.hooks = arguments.hooks
+		try {
+			variables.agent.resumeStream( chunkHandler( state ), arguments.decision, variables.threadId )
+		} finally {
+			variables.hooks = nullValue()
+		}
+		return finish( state )
+	}
+
+	void function close() {
+		BoxUnregisterInterceptor( variables.interceptor )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private struct function newState() {
+		return { text : "", cancelled : false, suspended : false, stopped : "", pending : [] }
+	}
+
+	private struct function finish( required struct state ) {
+		var status = arguments.state.suspended ? "suspended" : ( arguments.state.cancelled ? "cancelled" : ( len( arguments.state.stopped ) ? "stopped" : "done" ) )
+		return { status : status, text : arguments.state.text, pending : arguments.state.pending, reason : arguments.state.stopped }
+	}
+
+	/**
+	 * Builds the function bx-ai calls for every streamed chunk.
+	 */
+	private function chunkHandler( required struct state ) {
+		var run = arguments.state
+		var threadId = variables.threadId
+		var agent = variables.agent
+		var screen = variables.hooks
+		return ( chunk ) => {
+			if ( screen.cancelRequested() && !run.cancelled ) {
+				run.cancelled = true
+				agent.cancelRun( threadId, "Stopped by the user." )
+			}
+			var steer = screen.takeSteer()
+			if ( !isNull( steer ) ) {
+				agent.steerRun( threadId, steer )
+			}
+
+			// a run that ends on a middleware decision (a human approval, a guard) arrives as a sentinel
+			if ( isStruct( chunk ) && ( chunk.type ?: "" ) == "middleware_stop" ) {
+				var result = chunk.result
+				if ( result.isSuspended() ) {
+					run.suspended = true
+					run.pending = result.getData().pendingActions ?: []
+				} else {
+					run.stopped = result.getReason() ?: "The run was stopped."
+				}
+				return
+			}
+
+			if ( isStruct( chunk ) && isArray( chunk.choices ?: "" ) && chunk.choices.len() ) {
+				var delta = chunk.choices[ 1 ].delta ?: {}
+				if ( len( delta.reasoning ?: "" ) ) {
+					screen.push( { type : "reasoning", text : delta.reasoning } )
+				}
+				if ( len( delta.content ?: "" ) ) {
+					run.text &= delta.content
+					screen.push( { type : "delta", text : delta.content } )
+				}
+			}
+		}
+	}
+
+	/**
+	 * Turns a bx-ai tool announcement into a chat event. Announced for every agent in the
+	 * process, so it only reports while a turn of this session is running.
+	 */
+	private void function onToolEvent( required struct data ) {
+		if ( isNull( variables.hooks ) ) {
+			return
+		}
+		var name = arguments.data.name
+		if ( arguments.data.keyExists( "results" ) ) {
+			var open = variables.calls[ name ] ?: []
+			var id = open.len() ? open.last() : name
+			if ( open.len() ) {
+				open.deleteAt( open.len() )
+			}
+			variables.hooks.push( { type : "tool", id : id, name : name, summary : summarize( arguments.data.arguments ?: {} ), status : "ok", ms : arguments.data.executionTime ?: 0 } )
+			return
+		}
+		variables.counter++
+		var id = name & "##" & variables.counter
+		variables.calls[ name ] = variables.calls[ name ] ?: []
+		variables.calls[ name ].append( id )
+		variables.hooks.push( { type : "tool", id : id, name : name, summary : summarize( arguments.data.arguments ?: {} ), status : "running", ms : 0 } )
+	}
+
+	/**
+	 * @args The arguments a tool was called with
+	 *
+	 * @return A short readable form, key=value pairs
+	 */
+	private string function summarize( required any args ) {
+		if ( !isStruct( arguments.args ) || arguments.args.isEmpty() ) {
+			return ""
+		}
+		var parts = []
+		for ( var key in arguments.args ) {
+			var value = arguments.args[ key ]
+			parts.append( key & "=" & ( isSimpleValue( value ) ? value : jsonSerialize( value ) ) )
+		}
+		return parts.toList( " " )
+	}
+
+}

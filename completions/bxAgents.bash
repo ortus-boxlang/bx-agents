@@ -65,7 +65,7 @@ _bxagents_complete() {
 		local flags=""
 		case "$verb" in
 			build) flags="--environment= --generatorVersion= --projectRoot= --verbose" ;;
-			chat) flags="--connect= --port= --projectRoot= --server" ;;
+			chat) flags="--connect= --no-tui --port= --projectRoot= --server" ;;
 			clean) flags="--force --projectRoot=" ;;
 			deploy) flags="--destination= --name= --projectRoot= --target=" ;;
 			doctor) flags="--json --projectRoot=" ;;

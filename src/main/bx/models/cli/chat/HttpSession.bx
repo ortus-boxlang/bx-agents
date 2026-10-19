@@ -1,0 +1,84 @@
+/**
+ * A chat session against a running server's always-on agent route: `chat --server` and
+ * `chat --connect`. It sends the same events as InProcessSession, with less to say: the
+ * stream carries the answer's text, so there are no tool cards, no thinking and no steering
+ * here, and a run that stops for a human decision is answered at the server, not in this window.
+ */
+class {
+
+	/**
+	 * @baseUrl The server root
+	 * @client The AgentClient
+	 */
+	function init( required string baseUrl, any client ) {
+		variables.baseUrl = arguments.baseUrl.reReplace( "[\/]+$", "" )
+		variables.client = isNull( arguments.client ) ? new "models.cli.support.AgentClient@bxagents"() : arguments.client
+		variables.threadId = ""
+		return this
+	}
+
+	string function agentName() {
+		return "agent"
+	}
+
+	string function modelName() {
+		return variables.baseUrl
+	}
+
+	string function mode() {
+		return "over http"
+	}
+
+	array function tools() {
+		return []
+	}
+
+	void function newThread() {
+		variables.threadId = ""
+	}
+
+	/**
+	 * @text What the user said
+	 * @hooks { push( event ), cancelRequested(), takeSteer() }
+	 *
+	 * @return { status : "done" | "suspended" | "cancelled", text, pending }
+	 */
+	struct function send( required string text, required struct hooks ) {
+		var screen = arguments.hooks
+		var answer = ""
+		var cancelled = false
+		var result = {}
+		try {
+			result = variables.client.stream(
+				baseUrl  : variables.baseUrl,
+				message  : arguments.text,
+				threadId : variables.threadId,
+				onDelta  : ( delta ) => {
+					if ( screen.cancelRequested() ) {
+						throw( type = "BxAgents.ChatStopped", message = "Stopped by the user." )
+					}
+					answer &= delta
+					screen.push( { type : "delta", text : delta } )
+				}
+			)
+		} catch ( BxAgents.ChatStopped e ) {
+			cancelled = true
+		}
+		variables.threadId = result.threadId ?: variables.threadId
+		if ( cancelled ) {
+			return { status : "cancelled", text : answer, pending : [] }
+		}
+		if ( result.suspended ?: false ) {
+			screen.push( { type : "notice", text : "Paused for a human decision. Answer it at #variables.baseUrl#/gateways/interactions/" } )
+		}
+		return { status : "done", text : answer, pending : [] }
+	}
+
+	struct function resume( required string decision, required struct hooks ) {
+		return { status : "done", text : "", pending : [] }
+	}
+
+	void function close() {
+	}
+
+}

@@ -1,0 +1,544 @@
+/**
+ * [BoxLang]
+ *
+ * Copyright [2023] [Ortus Solutions, Corp]
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package ortus.boxlang.bxagents.tui;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
+
+import dev.tamboui.terminal.Frame;
+import dev.tamboui.text.Line;
+import dev.tamboui.text.Span;
+import dev.tamboui.text.Text;
+import dev.tamboui.tui.InlineTuiConfig;
+import dev.tamboui.tui.InlineTuiRunner;
+import dev.tamboui.tui.event.Event;
+import dev.tamboui.tui.event.KeyCode;
+import dev.tamboui.tui.event.KeyEvent;
+import dev.tamboui.tui.event.PasteEvent;
+
+/**
+ * The chat screen, in the style of Pi: no alternate screen. Everything that is finished
+ * (your messages, the agent's answer rendered as Markdown, each tool call) is printed into
+ * the terminal's own scrollback, so it can be selected, searched and scrolled like any
+ * other terminal output. Only a small live area at the bottom is redrawn: the answer as it
+ * streams, running tools, the message box and a line of key hints.
+ *
+ * Two threads share it during a turn. The caller's thread runs the agent and feeds
+ * {@link #push(Map)}; a thread of this class draws and reads keys. Esc sets a flag the
+ * caller reads with {@link #cancelRequested()}; a message sent while the agent works is
+ * queued for {@link #takeSteer()}. Between turns {@link #readInput()} does both jobs on
+ * the caller's thread.
+ *
+ * Events pushed during a turn are maps with a "type":
+ * <ul>
+ * <li>delta: "text" is more of the answer</li>
+ * <li>reasoning: "text" is more of the model's thinking (shown while it works, never kept)</li>
+ * <li>tool: "id", "name", "summary", "status" (running, ok or error), "ms"</li>
+ * <li>notice: "text" is a note for the user</li>
+ * <li>error: "text" is what went wrong</li>
+ * </ul>
+ */
+public final class ChatScreen implements AutoCloseable {
+
+	private static final String[]			SPINNER			= { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" };
+	private static final int				MAX_TAIL		= 8;
+	private static final int				MAX_MENU		= 6;
+	private static final int				MAX_COMPOSER	= 6;
+
+	private final InlineTuiRunner			runner;
+	private final Theme						theme;
+	private final ClassLoader				previousLoader;
+	private final List<Map<?, ?>>			commands;
+	private final Composer					composer		= new Composer();
+
+	private final Queue<Map<?, ?>>			events			= new ConcurrentLinkedQueue<>();
+	private final Queue<String>				steer			= new ConcurrentLinkedQueue<>();
+	private volatile boolean				cancel;
+	private volatile boolean				turnOver;
+	private Thread							turnThread;
+
+	// turn state, touched only by whichever thread is drawing
+	private final StringBuilder				segment			= new StringBuilder();
+	private final StringBuilder				reasoning		= new StringBuilder();
+	private final Map<String, Map<?, ?>>	running			= new LinkedHashMap<>();
+	private long							turnStarted;
+	private int								frame;
+
+	private ChatScreen( InlineTuiRunner runner, Theme theme, ClassLoader previousLoader, List<Map<?, ?>> commands ) {
+		this.runner			= runner;
+		this.theme			= theme;
+		this.previousLoader	= previousLoader;
+		this.commands		= commands;
+	}
+
+	/**
+	 * Opens the chat area at the bottom of the terminal.
+	 *
+	 * @param slashCommands maps with "name" (such as /new) and "hint", offered when the message starts with /
+	 *
+	 * @return the open screen
+	 *
+	 * @throws Exception when the terminal cannot be put in raw mode
+	 */
+	public static ChatScreen open( List<?> slashCommands ) throws Exception {
+		// see TuiScreen.open(): JLine finds its terminal providers through this loader
+		ClassLoader	own		= ChatScreen.class.getClassLoader();
+		ClassLoader	before	= Thread.currentThread().getContextClassLoader();
+		Thread.currentThread().setContextClassLoader( own );
+		try {
+			List<Map<?, ?>> cmds = new ArrayList<>();
+			for ( Object o : slashCommands ) {
+				if ( o instanceof Map<?, ?> m ) {
+					cmds.add( m );
+				}
+			}
+			InlineTuiConfig cfg = InlineTuiConfig.builder( 3 ).clearOnClose( true ).bracketedPaste( true ).build();
+			return new ChatScreen( InlineTuiRunner.create( cfg ), Theme.detect(), before, cmds );
+		} catch ( Exception | Error e ) {
+			Thread.currentThread().setContextClassLoader( before );
+			throw e;
+		}
+	}
+
+	/** @return the palette, so BoxLang can paint its own output to match */
+	public Theme theme() {
+		return theme;
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Printing into the scrollback
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Prints the heading: what the agent is, how it is reached, and the keys.
+	 */
+	public void banner( String agent, String model, String mode ) {
+		out( Row.of().add( " bxAgents", theme.accentBold ).add( "  chat", theme.muted ).add( "   " + agent, theme.bold )
+		    .add( " · " + model + " · " + mode, theme.muted ).toLine() );
+		out( Row.of( " enter send · alt+enter new line · / commands · esc stops the agent · ctrl+c leaves", theme.muted ).toLine() );
+		out( Text.from( "" ) );
+	}
+
+	private void out( Line line ) {
+		runner.println( Text.from( line ) );
+	}
+
+	private void out( Text text ) {
+		runner.println( text );
+	}
+
+	/** Prints what the user sent. */
+	public void printUser( String text ) {
+		List<String> lines = Wrap.wrap( text, Math.max( 20, runner.width() - 8 ) );
+		for ( int i = 0; i < lines.size(); i++ ) {
+			Row r = Row.of();
+			r.add( i == 0 ? " you  " : "      ", theme.accentBold );
+			r.add( lines.get( i ), theme.plain );
+			out( r.toLine() );
+		}
+		out( Text.from( "" ) );
+	}
+
+	/**
+	 * Prints a note.
+	 *
+	 * @param style accent, ok, muted, warn or error
+	 * @param text  the note
+	 */
+	public void print( String style, String text ) {
+		String			marker	= style.equals( "error" ) ? " ✖ " : style.equals( "ok" ) ? " ✔ " : style.equals( "warn" ) ? " ! " : " · ";
+		Row				r		= Row.of().add( marker, styleOf( style ) );
+		List<String>	lines	= Wrap.wrap( text, Math.max( 20, runner.width() - 6 ) );
+		for ( int i = 0; i < lines.size(); i++ ) {
+			out( ( i == 0 ? r : Row.of().add( "   ", theme.plain ) ).add( lines.get( i ), styleOf( style ) ).toLine() );
+			r = Row.of().add( "   ", theme.plain );
+		}
+	}
+
+	/** Prints Markdown as the agent's answer. */
+	public void printMarkdown( String markdown ) {
+		if ( markdown == null || markdown.isBlank() ) {
+			return;
+		}
+		for ( Line l : MarkdownLines.render( markdown.strip(), runner.width() - 3 ) ) {
+			out( Line.from( Span.raw( "  " ) ).append( l ) );
+		}
+		out( Text.from( "" ) );
+	}
+
+	private dev.tamboui.style.Style styleOf( String name ) {
+		switch ( name ) {
+			case "accent" :
+				return theme.accent;
+			case "ok" :
+				return theme.ok;
+			case "warn" :
+				return theme.warn;
+			case "error" :
+				return theme.error;
+			default :
+				return theme.muted;
+		}
+	}
+
+	/**
+	 * Puts text on the clipboard with the OSC 52 escape, which most terminals honor, including
+	 * over SSH. A terminal that ignores it simply does nothing.
+	 */
+	public void copy( String text ) {
+		String encoded = java.util.Base64.getEncoder().encodeToString( text.getBytes( java.nio.charset.StandardCharsets.UTF_8 ) );
+		System.out.print( "\u001b]52;c;" + encoded + "\u0007" );
+		System.out.flush();
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Reading a message
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Waits for the user to send a message.
+	 *
+	 * @return the message, or null when the user asked to leave (Ctrl+C or Ctrl+D on an empty box)
+	 */
+	public String readInput() {
+		while ( true ) {
+			draw( idleRows() );
+			Event ev = runner.pollEvent( Duration.ofMillis( 150 ) );
+			if ( ev instanceof PasteEvent p ) {
+				composer.paste( p.text() );
+			} else if ( ev instanceof KeyEvent k ) {
+				if ( k.isKey( KeyCode.TAB ) && completeSlash() ) {
+					continue;
+				}
+				Composer.Outcome outcome = composer.key( k );
+				if ( outcome == Composer.Outcome.EXIT ) {
+					return null;
+				}
+				if ( outcome == Composer.Outcome.SUBMIT ) {
+					String text = composer.text().strip();
+					composer.sent();
+					return text;
+				}
+			}
+		}
+	}
+
+	private boolean completeSlash() {
+		List<Map<?, ?>> matches = slashMatches();
+		if ( matches.isEmpty() ) {
+			return false;
+		}
+		composer.setText( String.valueOf( get( matches.get( 0 ), "name" ) ) + " " );
+		return true;
+	}
+
+	private List<Map<?, ?>> slashMatches() {
+		List<Map<?, ?>>	out	= new ArrayList<>();
+		String			t	= composer.text();
+		if ( composer.rowCount() != 1 || !t.startsWith( "/" ) || t.contains( " " ) ) {
+			return out;
+		}
+		for ( Map<?, ?> c : commands ) {
+			if ( String.valueOf( get( c, "name" ) ).startsWith( t ) ) {
+				out.add( c );
+			}
+		}
+		return out;
+	}
+
+	// ----------------------------------------------------------------------------------
+	// A choice, for approvals
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Asks the user to pick one of a few options in the live area.
+	 *
+	 * @param title   the question
+	 * @param lines   context shown above the options
+	 * @param choices strings or maps with value, label and hint
+	 *
+	 * @return the value picked, or null for Esc
+	 */
+	public String choose( String title, List<?> lines, List<?> choices ) {
+		List<String> preface = new ArrayList<>();
+		for ( Object l : lines ) {
+			preface.add( String.valueOf( l ) );
+		}
+		SelectPrompt prompt = new SelectPrompt( theme, title, "", Choice.listFrom( choices ), null, preface );
+		try {
+			while ( !prompt.isDone() ) {
+				List<Row> rows = new ArrayList<>( prompt.render( runner.width() - 2, 14 ) );
+				rows.add( Row.of( " " + prompt.footer(), theme.muted ) );
+				draw( rows );
+				Event ev = runner.pollEvent( Duration.ofMillis( 150 ) );
+				if ( ev instanceof KeyEvent k ) {
+					prompt.key( k );
+				}
+			}
+			return ( String ) prompt.result();
+		} catch ( PromptAbort a ) {
+			return null;
+		}
+	}
+
+	// ----------------------------------------------------------------------------------
+	// A turn
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Starts drawing the agent's work. Call {@link #push(Map)} from the thread that runs it,
+	 * then {@link #endTurn()}.
+	 */
+	public void beginTurn() {
+		cancel		= false;
+		turnOver	= false;
+		events.clear();
+		segment.setLength( 0 );
+		reasoning.setLength( 0 );
+		running.clear();
+		turnStarted	= System.currentTimeMillis();
+		turnThread	= new Thread( this::turnLoop, "bxagents-chat-ui" );
+		turnThread.setDaemon( true );
+		turnThread.start();
+	}
+
+	/** Hands the screen something the agent did. Safe to call from any thread. */
+	public void push( Map<?, ?> event ) {
+		events.add( event );
+	}
+
+	/** @return true once the user pressed Esc (or Ctrl+C) during the turn */
+	public boolean cancelRequested() {
+		return cancel;
+	}
+
+	/** @return a message the user sent while the agent was working, or null */
+	public String takeSteer() {
+		return steer.poll();
+	}
+
+	/** Stops drawing, prints whatever the agent said that is still on screen, and returns the area to the message box. */
+	public void endTurn() {
+		turnOver = true;
+		try {
+			if ( turnThread != null ) {
+				turnThread.join( 3000 );
+			}
+		} catch ( InterruptedException e ) {
+			Thread.currentThread().interrupt();
+		}
+		drain();
+		flushSegment();
+		running.clear();
+	}
+
+	private void turnLoop() {
+		while ( !turnOver ) {
+			drain();
+			draw( turnRows() );
+			Event ev = runner.pollEvent( Duration.ofMillis( 80 ) );
+			frame++;
+			if ( ev instanceof PasteEvent p ) {
+				composer.paste( p.text() );
+			} else if ( ev instanceof KeyEvent k ) {
+				if ( k.isKey( KeyCode.ESCAPE ) || k.hasCtrl() && k.isChar( 'c' ) ) {
+					if ( !cancel ) {
+						cancel = true;
+						print( "warn", "Stopping after the current step." );
+					}
+					continue;
+				}
+				if ( composer.key( k ) == Composer.Outcome.SUBMIT ) {
+					String text = composer.text().strip();
+					composer.sent();
+					steer.add( text );
+					printUser( text );
+				}
+			}
+		}
+	}
+
+	private void drain() {
+		Map<?, ?> e;
+		while ( ( e = events.poll() ) != null ) {
+			String type = String.valueOf( get( e, "type" ) );
+			switch ( type ) {
+				case "delta" :
+					segment.append( get( e, "text" ) );
+					break;
+				case "reasoning" :
+					reasoning.append( get( e, "text" ) );
+					break;
+				case "tool" :
+					tool( e );
+					break;
+				case "notice" :
+					flushSegment();
+					print( "muted", String.valueOf( get( e, "text" ) ) );
+					break;
+				case "error" :
+					flushSegment();
+					print( "error", String.valueOf( get( e, "text" ) ) );
+					break;
+				default :
+					break;
+			}
+		}
+	}
+
+	private void tool( Map<?, ?> e ) {
+		String	id		= String.valueOf( get( e, "id" ) );
+		String	status	= String.valueOf( get( e, "status" ) );
+		if ( status.equals( "running" ) ) {
+			flushSegment();
+			running.put( id, e );
+			return;
+		}
+		running.remove( id );
+		boolean	ok		= status.equals( "ok" );
+		Object	ms		= get( e, "ms" );
+		String	took	= ms == null ? "" : String.format( "  %.1fs", Double.parseDouble( String.valueOf( ms ) ) / 1000.0 );
+		Row		r		= Row.of().add( " ⚙ ", theme.muted ).add( String.valueOf( get( e, "name" ) ), theme.bold );
+		String	summary	= String.valueOf( get( e, "summary" ) );
+		if ( !summary.isEmpty() && !summary.equals( "null" ) ) {
+			r.add( "  " + clip( summary, Math.max( 10, runner.width() - 30 ) ), theme.muted );
+		}
+		r.add( ok ? "  ✔" : "  ✖", ok ? theme.ok : theme.error ).add( took, theme.muted );
+		out( r.toLine() );
+	}
+
+	private void flushSegment() {
+		if ( segment.length() > 0 ) {
+			printMarkdown( segment.toString() );
+			segment.setLength( 0 );
+		}
+		reasoning.setLength( 0 );
+	}
+
+	// ----------------------------------------------------------------------------------
+	// The live area
+	// ----------------------------------------------------------------------------------
+
+	private List<Row> idleRows() {
+		List<Row>		rows	= new ArrayList<>();
+		List<Map<?, ?>>	menu	= slashMatches();
+		for ( int i = 0; i < Math.min( MAX_MENU, menu.size() ); i++ ) {
+			Map<?, ?> c = menu.get( i );
+			rows.add( Row.of().add( "   " + get( c, "name" ), i == 0 ? theme.selected : theme.plain ).add( "  " + get( c, "hint" ), theme.muted ) );
+		}
+		rows.add( separator() );
+		rows.addAll( composerRows() );
+		rows.add( Row.of( " enter send · alt+enter new line · ↑ history" + ( menu.isEmpty() ? "" : " · tab completes" ), theme.muted ) );
+		return rows;
+	}
+
+	private List<Row> turnRows() {
+		List<Row>	rows	= new ArrayList<>();
+		int			width	= Math.max( 20, runner.width() - 4 );
+		if ( segment.length() > 0 ) {
+			for ( String l : Wrap.tail( segment.toString(), width, MAX_TAIL ) ) {
+				rows.add( Row.of( "  " + l, theme.plain ) );
+			}
+		} else if ( reasoning.length() > 0 && running.isEmpty() ) {
+			List<String> t = Wrap.tail( reasoning.toString().replace( '\n', ' ' ), width - 12, 1 );
+			rows.add( Row.of().add( "  thinking  ", theme.muted ).add( t.get( 0 ), theme.muted ) );
+		}
+		String spin = SPINNER[ frame % SPINNER.length ];
+		for ( Map<?, ?> t : running.values() ) {
+			Row		r		= Row.of().add( " " + spin + " ", theme.accent ).add( String.valueOf( get( t, "name" ) ), theme.bold );
+			String	summary	= String.valueOf( get( t, "summary" ) );
+			if ( !summary.isEmpty() && !summary.equals( "null" ) ) {
+				r.add( "  " + clip( summary, Math.max( 10, runner.width() - 30 ) ), theme.muted );
+			}
+			rows.add( r );
+		}
+		rows.add( separator() );
+		rows.addAll( composerRows() );
+		long secs = ( System.currentTimeMillis() - turnStarted ) / 1000;
+		rows.add( Row.of().add( " " + spin + " ", theme.accent ).add( cancel ? "stopping" : "working", theme.plain )
+		    .add( " " + secs + "s · esc stops · type and press enter to steer", theme.muted ) );
+		return rows;
+	}
+
+	private Row separator() {
+		return Row.of( "─".repeat( Math.max( 10, runner.width() - 1 ) ), theme.muted );
+	}
+
+	private List<Row> composerRows() {
+		List<Row>	rows	= new ArrayList<>();
+		int			first	= Math.max( 0, composer.rowCount() - MAX_COMPOSER );
+		for ( int i = first; i < composer.rowCount(); i++ ) {
+			String	text	= composer.line( i );
+			Row		r		= Row.of().add( i == 0 ? " > " : "   ", theme.accentBold );
+			if ( i == composer.caretRow() ) {
+				int c = composer.caretCol();
+				r.add( text.substring( 0, c ), theme.plain ).add( "▏", theme.accent ).add( text.substring( c ), theme.plain );
+			} else {
+				r.add( text, theme.plain );
+			}
+			rows.add( r );
+		}
+		return rows;
+	}
+
+	private void draw( List<Row> rows ) {
+		int height = Math.min( rows.size(), Math.max( 4, runner.height() - 2 ) );
+		runner.setContentHeight( height );
+		List<Row> shown = rows.subList( rows.size() - height, rows.size() );
+		runner.draw( ( Frame f ) -> {
+			int w = f.area().width();
+			for ( int y = 0; y < shown.size(); y++ ) {
+				shown.get( y ).draw( f.buffer(), 0, y, w );
+			}
+		} );
+	}
+
+	private static String clip( String s, int max ) {
+		String one = s.replace( '\n', ' ' );
+		return one.length() <= max ? one : one.substring( 0, Math.max( 0, max - 1 ) ) + "…";
+	}
+
+	private static Object get( Map<?, ?> m, String name ) {
+		Object v = m.get( name );
+		if ( v != null ) {
+			return v;
+		}
+		for ( Map.Entry<?, ?> e : m.entrySet() ) {
+			if ( String.valueOf( e.getKey() ).equalsIgnoreCase( name ) ) {
+				return e.getValue();
+			}
+		}
+		return null;
+	}
+
+	@Override
+	public void close() {
+		turnOver = true;
+		try {
+			runner.close();
+		} finally {
+			Thread.currentThread().setContextClassLoader( previousLoader );
+		}
+	}
+
+}
