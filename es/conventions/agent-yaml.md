@@ -34,6 +34,7 @@ environments:
 | `description` | string | Opcional. |
 | `instructions` | string | Instrucciones en línea, opcionales. Ver [Instrucciones](#instrucciones). |
 | `tools` | lista de strings | Tools de módulos que recibe este agente, como `item@module` o `*@module`. Ver [Tools](#tools). |
+| `toolOptions` | mapping | Opciones de las tools de un módulo, con el nombre del módulo como clave. Ver [Opciones de tools](#opciones-de-tools). |
 | `subAgents` | lista de strings | Nombres de carpetas hermanas bajo el `subagents/` del proyecto raíz. Ver [subagents/](subagents.md). |
 | `mcpServers` | lista | Servidores MCP remotos - cada entrada es un string de URL o `{ url, name }`. Ver [mcp/](mcp.md). |
 | `security` | mapa | Se reenvía tal cual a los ajustes del módulo `bxai` de la app generada; el `SecurityDirector` de bx-ai lo convierte en middleware de guardarraíles. |
@@ -46,7 +47,7 @@ environments:
 Son los mismos ajustes que devuelve el `configure()` de un `Agent.bx`, así que todo el comportamiento documentado para ellos aplica sin cambios.
 
 !!! warning
-    Una **clave desconocida es un error**, y el mensaje lista las válidas. Un error de tipeo como `modle:` de otro modo no haría nada, en silencio. Los ajustes que llegan en versiones posteriores (por ejemplo `toolOptions`) se rechazan igual hasta que existan, en lugar de ignorarse en silencio. Todo lo de forma libre pertenece a un `Agent.bx`.
+    Una **clave desconocida es un error**, y el mensaje lista las válidas. Un error de tipeo como `modle:` de otro modo no haría nada, en silencio. Los ajustes que llegan en versiones posteriores (por ejemplo `mcp`) se rechazan igual hasta que existan, en lugar de ignorarse en silencio. Todo lo de forma libre pertenece a un `Agent.bx`.
 
 Un valor del tipo equivocado (un texto donde va una lista, por ejemplo) y un valor vacío (`model:` sin nada detrás) también son errores.
 
@@ -73,7 +74,24 @@ tools:
 - **Las tools propias ganan.** Si una tool del `tools/` del agente tiene el mismo nombre que una tool de módulo que seleccionó, se usa la propia y la del módulo se omite, con una advertencia en el log `bxagents-tools`.
 - **Cada tool una vez.** Listar una tool dos veces, o junto con un `*@module` que la cubre, la adjunta una sola vez.
 
-Los ajustes por tool (`toolOptions`) aún no se admiten.
+### Opciones de tools
+
+`toolOptions` configura las tools de un módulo, con el **nombre del módulo** como clave. Hoy el único módulo que acepta opciones es `bxplaywright`, cuyas opciones son las de `playwright()` de bx-playwright: un `profile` (un nombre o una lista) y ajustes como `headless`, `baseURL`, `browser`, `viewport` o `device`.
+
+```yaml
+tools:
+  - "*@bxplaywright"
+toolOptions:
+  bxplaywright:
+    profile: mobile
+    headless: false
+    baseURL: ${env.APP_URL:http://localhost:8080}
+```
+
+- **Cada agente tiene su propio navegador.** Las tools de navegador que bx-playwright registra comparten un solo navegador en toda la app. Un agente que lista tools de `bxplaywright` no recibe esas: recibe un conjunto nuevo creado solo para él (`playwright( profile, options ).aiTools()`), así que un agente raíz y su subagente nunca manejan la misma página. El navegador se abre al usar la primera tool, no al arrancar. `*@bxplaywright` funciona sin `toolOptions` y usa los ajustes del propio módulo.
+- **Valores de entorno.** `${env.NOMBRE}` y `${env.NOMBRE:valor}` se reemplazan por la variable de entorno cuando arranca la app, nunca al compilar, así un secreto o un ajuste por máquina queda fuera del proyecto. Una variable sin definir y sin valor por defecto hace fallar al agente al arrancar, nombrándola.
+- **Se comprueba al compilar.** Una clave que no es un módulo del que el agente lista tools, un módulo que no acepta opciones, una clave escrita como `item@module` o una opción que bx-playwright no tiene (el mensaje lista las válidas) es un error de `build`.
+- Los ajustes de todo el módulo (dónde se instalan los navegadores, el perfil por defecto) siguen en los ajustes propios de bx-playwright, no aquí.
 
 ## Instrucciones
 

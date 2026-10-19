@@ -248,7 +248,7 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#settings">Settings</a></li><li class="toc-level-2"><a href="#tools">Tools</a></li><li class="toc-level-2"><a href="#instructions">Instructions</a></li><li class="toc-level-2"><a href="#environments">Environments</a></li><li class="toc-level-2"><a href="#requirements">Requirements</a></li><li class="toc-level-2"><a href="#yaml-or-agentbx">YAML or Agent.bx&#x3f;</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#settings">Settings</a></li><li class="toc-level-2"><a href="#tools">Tools</a></li><li class="toc-level-3"><a href="#tool-options">Tool options</a></li><li class="toc-level-2"><a href="#instructions">Instructions</a></li><li class="toc-level-2"><a href="#environments">Environments</a></li><li class="toc-level-2"><a href="#requirements">Requirements</a></li><li class="toc-level-2"><a href="#yaml-or-agentbx">YAML or Agent.bx&#x3f;</a></li></ul></details>
 		
 
 		
@@ -302,6 +302,7 @@ environments:
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>description</code></td><td>string</td><td>Optional.</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>instructions</code></td><td>string</td><td>Optional inline instructions. See <a href="#instructions">Instructions</a>.</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>tools</code></td><td>list of strings</td><td>Module tools this agent gets, as <code>item@module</code> or <code>*@module</code>. See <a href="#tools">Tools</a>.</td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>toolOptions</code></td><td>mapping</td><td>Options for a module's tools, keyed by module name. See <a href="#tool-options">Tool options</a>.</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>subAgents</code></td><td>list of strings</td><td>Names of sibling folders under the root project's <code>subagents/</code>. See <a href="/conventions/subagents/index.html">subagents/</a>.</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>mcpServers</code></td><td>list</td><td>Remote MCP servers - each entry a URL string or <code>{ url, name }</code>. See <a href="/conventions/mcp/index.html">mcp/</a>.</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>security</code></td><td>mapping</td><td>Forwarded verbatim into the generated app's <code>bxai</code> module settings; bx-ai's own <code>SecurityDirector</code> turns it into guardrail middleware.</td></tr>
@@ -318,7 +319,7 @@ environments:
 <svg class="adm-icon"><use xlink:href="#adm-warning" /></svg><span>Warning</span>
 </div>
 <div class="adm-body">
-<p>An <strong>unknown key is an error</strong>, and the message lists the valid ones. A typo such as <code>modle:</code> would otherwise do nothing, quietly. Settings that arrive in later releases (for example <code>toolOptions</code>) are rejected the same way until they exist, rather than being silently ignored. Anything free-form belongs in an <code>Agent.bx</code>.</p>
+<p>An <strong>unknown key is an error</strong>, and the message lists the valid ones. A typo such as <code>modle:</code> would otherwise do nothing, quietly. Settings that arrive in later releases (for example <code>mcp</code>) are rejected the same way until they exist, rather than being silently ignored. Anything free-form belongs in an <code>Agent.bx</code>.</p>
 </div>
 </div>
 <p>A value of the wrong type (a text where a list belongs, say) and an empty value (<code>model:</code> with nothing after it) are errors too.</p>
@@ -346,7 +347,22 @@ tools:
 <li><strong>Own tools win.</strong> If a tool in the agent's <code>tools/</code> has the same name as a module tool it selected, the own tool is used and the module tool is left out, with a warning in the <code>bxagents-tools</code> log.</li>
 <li><strong>Each tool once.</strong> Listing a tool twice, or listing it along with a <code>*@module</code> that covers it, attaches it once.</li>
 </ul>
-<p>Per-tool settings (<code>toolOptions</code>) are not supported yet.</p>
+<h3 id="tool-options"><a href="#tool-options" id="tool-options" name="tool-options" class="anchor"></a>Tool options</h3>
+<p><code>toolOptions</code> configures the tools of a module, keyed by <strong>module name</strong>. Today the one module that takes options is <code>bxplaywright</code>, whose options are those of bx-playwright's <code>playwright()</code>: a <code>profile</code> (a name, or a list of names) and settings such as <code>headless</code>, <code>baseURL</code>, <code>browser</code>, <code>viewport</code> or <code>device</code>.</p>
+<pre><code class="language-yaml">tools:
+  - &quot;*@bxplaywright&quot;
+toolOptions:
+  bxplaywright:
+    profile: mobile
+    headless: false
+    baseURL: ${env.APP_URL:http://localhost:8080}
+</code></pre>
+<ul>
+<li><strong>Each agent gets its own browser.</strong> The browser tools bx-playwright registers share one browser for the whole app. An agent that lists <code>bxplaywright</code> tools does not get those: it gets a fresh set built for it alone (<code>playwright( profile, options ).aiTools()</code>), so a root agent and its subagent never drive the same page. The browser opens when one of its tools is first used, not at startup. <code>*@bxplaywright</code> works with no <code>toolOptions</code> at all and uses the module's own settings.</li>
+<li><strong>Environment values.</strong> <code>&#x24;&#x7b;env.NAME&#x7d;&#x60; and &#x60;&#x24;{env.NAME:default}</code> are replaced with the environment variable when the app starts, never at build time, so a secret or a per-machine setting stays out of the project. A variable that is not set and has no default fails the agent at startup, naming it.</li>
+<li><strong>Checked at build time.</strong> A key that is not a module the agent lists tools from, a module that takes no options, a key written as <code>item@module</code>, or an option bx-playwright does not have (the message lists the valid ones) is a <code>build</code> error.</li>
+<li>The module-wide settings (where browsers are installed, the default profile) stay in bx-playwright's own settings, not here.</li>
+</ul>
 <h2 id="instructions"><a href="#instructions" id="instructions" name="instructions" class="anchor"></a>Instructions</h2>
 <p>The agent's instructions are its system prompt. Put them in an <code>instructions.md</code> beside <code>Agent.yaml</code>, the usual choice because the file is plain Markdown and easy to edit:</p>
 <pre><code>my-agent/
@@ -407,7 +423,7 @@ environments:
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/conventions/agent-yaml.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/conventions/agent-yaml.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Oct 18, 2026, 1&#x3a;52&#x3a;56 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Agent.yaml&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fconventions%2Fagent-yaml%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/conventions/agent-yaml.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/conventions/agent-yaml.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Oct 19, 2026, 8&#x3a;27&#x3a;57 AM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Agent.yaml&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fconventions%2Fagent-yaml%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 
@@ -451,7 +467,7 @@ environments:
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#settings">Settings</a></li><li class="toc-level-2"><a href="#tools">Tools</a></li><li class="toc-level-2"><a href="#instructions">Instructions</a></li><li class="toc-level-2"><a href="#environments">Environments</a></li><li class="toc-level-2"><a href="#requirements">Requirements</a></li><li class="toc-level-2"><a href="#yaml-or-agentbx">YAML or Agent.bx&#x3f;</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#settings">Settings</a></li><li class="toc-level-2"><a href="#tools">Tools</a></li><li class="toc-level-3"><a href="#tool-options">Tool options</a></li><li class="toc-level-2"><a href="#instructions">Instructions</a></li><li class="toc-level-2"><a href="#environments">Environments</a></li><li class="toc-level-2"><a href="#requirements">Requirements</a></li><li class="toc-level-2"><a href="#yaml-or-agentbx">YAML or Agent.bx&#x3f;</a></li></ul></nav>
 				</aside>
 			
 		</div>
