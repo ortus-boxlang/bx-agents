@@ -165,9 +165,14 @@ class extends="testbox.system.BaseSpec" {
 					selector.select( [ "*@bxafake" ], [], "a", { other : {} } );
 				} ).toThrow( type = "BxAgents.InvalidToolOptions", regex = "lists no tool from that module" );
 
-				expect( function() {
-					selector.select( [ "now@bxai" ], [], "a", { bxai : {} } );
-				} ).toThrow( type = "BxAgents.InvalidToolOptions", regex = "takes no options" );
+				aiToolRegistry().register( name : "plain", description : "plain", callback : () => "x", module : "bxatestplain" );
+				try {
+					expect( function() {
+						selector.select( [ "plain@bxatestplain" ], [], "a", { bxatestplain : {} } );
+					} ).toThrow( type = "BxAgents.InvalidToolOptions", regex = "takes no options" );
+				} finally {
+					aiToolRegistry().unregisterByModule( "bxatestplain" );
+				}
 			} );
 
 			it( "rejects options the module does not accept", function() {
@@ -182,6 +187,55 @@ class extends="testbox.system.BaseSpec" {
 				expect( function() {
 					selector.select( [ "*@bxafake" ], [], "a" );
 				} ).toThrow( type = "BxAgents.UnknownToolModule", regex = "not loaded" );
+			} );
+
+		} );
+
+		describe( "ToolSelector with a module that adds tools next to the registered ones", function() {
+
+			beforeEach( function() {
+				variables.registry = aiToolRegistry();
+				registry.register( name : "ping", description : "registered ping", callback : () => "pong", module : "bxatestmix" );
+				variables.adapterOptions = [];
+				variables.mix = {
+					available       : () => true,
+					supplements     : () => true,
+					validateOptions : ( options ) => ( options.keyExists( "bogus" ) ? [ "unknown option [bogus]" ] : [] ),
+					tools           : function( options = {} ) {
+						adapterOptions.append( options );
+						return options.keyExists( "folders" ) ? [ aiTool( "extra", "extra", () => "x", false ) ] : [];
+					},
+					moduleName      : () => "bxatestmix"
+				};
+				variables.selector = new bxagents.models.build.ToolSelector( adapters = { "bxatestmix" : mix } );
+			} );
+
+			afterEach( function() {
+				registry.unregisterByModule( "bxatestmix" );
+			} );
+
+			it( "still serves the tools the module registered", function() {
+				var tools = selector.select( [ "ping@bxatestmix" ], [], "a" );
+
+				expect( tools ).toHaveLength( 1 );
+				expect( tools[ 1 ].getDescription() ).toBe( "registered ping" );
+			} );
+
+			it( "adds the tools the adapter built when the agent gave it options", function() {
+				var tools = selector.select( [ "ping@bxatestmix", "extra@bxatestmix" ], [], "a", { bxatestmix : { folders : [ "x" ] } } );
+
+				expect( tools.map( t => t.getName() ).sort( "text" ) ).toBe( [ "extra", "ping" ] );
+				expect( adapterOptions[ 1 ].folders ).toBe( [ "x" ] );
+			} );
+
+			it( "says what an unknown tool of such a module needs", function() {
+				try {
+					selector.select( [ "extra@bxatestmix" ], [], "a" );
+					fail( "should have thrown" );
+				} catch ( BxAgents.UnknownTool e ) {
+					expect( e.message ).toInclude( "toolOptions.bxatestmix.allowedPaths" );
+					expect( e.message ).toInclude( "ping@bxatestmix" );
+				}
 			} );
 
 		} );

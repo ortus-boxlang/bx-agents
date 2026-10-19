@@ -99,11 +99,17 @@ Diagnose the runtime and project before build/serve surprise you.
 
 ### `new`
 
-Create a new agent project one of three mutually exclusive ways: scaffold from a built-in template, clone a GitHub repo, or install a ForgeBox package.
+Create a new agent project one of three mutually exclusive ways: scaffold it (answering questions at a terminal, or with flags), clone a GitHub repo, or install a ForgeBox package.
 
 ```bash
-# Scaffold from a built-in template (default: minimal)
+# At a terminal: answer questions (see the new wizard guide)
+bxAgents new my-agent
+
+# Scaffold from flags (default template: minimal)
 bxAgents new my-agent --model=openai/gpt-5 [--template=minimal|webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent] [--name=...] [--description=...] [--class] [--skipInstall]
+
+# The same, adding what the wizard would have offered
+bxAgents new my-agent --model=claude --with=time,search --search=brave --mcp=github --channels=web,telegram --guard=flag
 
 # Clone an existing GitHub repo
 bxAgents new my-agent --repo=owner/repo-name
@@ -112,9 +118,10 @@ bxAgents new my-agent --repo=owner/repo-name
 bxAgents new my-agent --forgebox=some-package-slug
 ```
 
+- With no `--model`, no `--repo` and no `--forgebox`, at a terminal, `new` runs the [wizard](guides/new-wizard.md). `--no-wizard` or `--yes` turns it off, `--wizard` turns it on even with a `--model`, and `--no-tui` asks the same questions as numbered lines. A `--model` on its own never starts it, since scripts have always had to pass one. The wizard's flags (`--with`, `--search`, `--files`, `--files-dir`, `--memory`, `--mcp`, `--channels`, `--web-auth`, `--guard`, `--deploy` and the deploy details) are listed in the [wizard guide](guides/new-wizard.md#without-the-wizard); a bad value names the flag and what it accepts. They need `Agent.yaml`, so they cannot be combined with `--class`.
 - `--template`, `--repo`, and `--forgebox` name three different project SOURCES - exactly one applies. Combining any two of them is an error.
 - **`--template` mode** (the default when no source flag is passed at all - `minimal`):
-  - `--model` is **required** - a `provider/model` slug (see [the model slug](conventions/agent-bx.md#the-model-slug)).
+  - `--model` is **required** when no questions are asked - a `provider/model` slug (see [the model slug](conventions/agent-bx.md#the-model-slug)).
   - `--name` defaults to the target directory's own basename.
   - Refuses to run if the target already contains an `Agent.yaml` or an `Agent.bx`.
   - Creates [`Agent.yaml`](conventions/agent-yaml.md), `instructions.md`, every convention folder (empty), a root [`box.json`](conventions/box-json.md) (`testbox` as a development dependency, installed into `lib/testbox`), a ready-to-run [`tests/`](conventions/testing.md) folder (`tests/specs/AgentSpec.bx`), a `.env` declaring `BOXLANG_HOME=.build/runtime` (matching `serve`'s own scoped runtime home), and a `.gitignore` (`.build/`, `dist/`, `.env`, `lib/`, `boxlang_modules/`). Never overwrites an existing `.env`/`.gitignore`. BoxLang and `boxlang-miniserver` load a `.env` from the project root themselves, so the file also works for your API keys; BxAgents never reads, copies or packages it.

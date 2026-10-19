@@ -10,6 +10,8 @@ tags: [reference, cli, templates]
 
 `bxAgents new` creates a project one of three mutually exclusive ways - see [CLI Reference](cli-reference.md#new) for the exact flag syntax and validation rules. This page goes deep on all three: exactly what each built-in `--template` generates, what a `--repo`/`--forgebox` source needs to look like to work as a project source, and how to build and publish one of your own.
 
+A template is the **shape** a project starts from. The [new wizard](guides/new-wizard.md) lets you pick one (a single agent, a team, a scheduled agent, an MCP server) and then adds the tools, MCP servers, channels and deploy target you choose on top, so a template and those choices combine. The channel starters below (`slack-bot`, `telegram-bot`, `github-bot`, `webui-chat`) are the same thing as picking that channel in the wizard.
+
 ```bash
 bxAgents new my-agent --model=openai/gpt-5 --template=<name>   # a built-in starter
 bxAgents new my-agent --repo=owner/repo-name                   # clone a GitHub repo

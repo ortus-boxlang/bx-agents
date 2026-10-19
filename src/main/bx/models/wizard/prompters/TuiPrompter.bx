@@ -1,0 +1,111 @@
+/**
+ * The prompter for a real terminal: the full-screen UI from the bxagents.tui Java
+ * package (TamboUI over JLine) behind the same methods as the plain and scripted
+ * prompters, so the wizard never knows which one it talks to.
+ *
+ * Esc and Ctrl+C leave a question by throwing; they arrive here as errors whose message
+ * is "wizard:back" or "wizard:cancel", and are rethrown as BxAgents.WizardAbort so the
+ * wizard sees the same thing from every prompter.
+ */
+class {
+
+	function init() {
+		variables.screen = createObject( "java", "ortus.boxlang.bxagents.tui.TuiScreen" ).open( "new" )
+		variables.theme = variables.screen.theme()
+		return this
+	}
+
+	string function select( required string title, required array choices, string current = "", string help = "" ) {
+		try {
+			return variables.screen.select( arguments.title, arguments.help, arguments.choices, arguments.current )
+		} catch ( any e ) {
+			abortOrRethrow( e )
+			rethrow
+		}
+	}
+
+	array function multiSelect( required string title, required array choices, string help = "" ) {
+		try {
+			return variables.screen.multiSelect( arguments.title, arguments.help, arguments.choices ).toArray()
+		} catch ( any e ) {
+			abortOrRethrow( e )
+			rethrow
+		}
+	}
+
+	string function review( required string title, required array lines, required array choices ) {
+		try {
+			return variables.screen.review( arguments.title, arguments.lines, arguments.choices )
+		} catch ( any e ) {
+			abortOrRethrow( e )
+			rethrow
+		}
+	}
+
+	string function text( required string title, string help = "", string default = "", boolean secret = false, string required = "" ) {
+		try {
+			return variables.screen.text( arguments.title, arguments.help, arguments.default, arguments.secret, arguments.required )
+		} catch ( any e ) {
+			abortOrRethrow( e )
+			rethrow
+		}
+	}
+
+	boolean function confirm( required string title, string help = "", boolean default = true ) {
+		try {
+			return variables.screen.confirm( arguments.title, arguments.help, arguments.default )
+		} catch ( any e ) {
+			abortOrRethrow( e )
+			rethrow
+		}
+	}
+
+	void function note( required string title, required array lines ) {
+		try {
+			variables.screen.note( arguments.title, arguments.lines )
+		} catch ( any e ) {
+			abortOrRethrow( e )
+			rethrow
+		}
+	}
+
+	void function record( required string key, required string label, required string value ) {
+		variables.screen.record( arguments.key, arguments.label, arguments.value )
+	}
+
+	void function forget( required string key ) {
+		variables.screen.forget( arguments.key )
+	}
+
+	void function progress( required numeric step, required numeric steps ) {
+		variables.screen.progress( arguments.step, arguments.steps )
+	}
+
+	void function close() {
+		variables.screen.close()
+	}
+
+	/**
+	 * @style accent, ok, muted, warn, error or bold
+	 * @text The text
+	 *
+	 * @return The text in the terminal's palette, for output printed after the screen closes
+	 */
+	string function paint( required string style, required string text ) {
+		return variables.theme.paint( arguments.style, arguments.text )
+	}
+
+	/**
+	 * Esc and Ctrl+C leave a question by throwing an error whose message is a wizard: token;
+	 * those become the BxAgents.WizardAbort every prompter throws. Anything else is left for
+	 * the caller to rethrow.
+	 *
+	 * @error The caught error
+	 */
+	private void function abortOrRethrow( required any error ) {
+		if ( ( arguments.error.message ?: "" ).startsWith( "wizard:" ) ) {
+			throw( type = "BxAgents.WizardAbort", message = arguments.error.message )
+		}
+	}
+
+}

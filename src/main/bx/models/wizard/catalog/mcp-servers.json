@@ -1,0 +1,90 @@
+[
+	{
+		"id": "github",
+		"name": "GitHub",
+		"summary": "Repositories, issues, pull requests, Actions and code search",
+		"transport": "http",
+		"url": "https://api.githubcopilot.com/mcp/",
+		"auth": { "type": "bearer", "envVar": "GITHUB_PERSONAL_ACCESS_TOKEN", "help": "A personal access token. Give it only the repositories and permissions the agent needs." },
+		"risk": "high",
+		"riskNote": "Can create pull requests, push files, merge, delete files and trigger Actions. Prefer a fine-grained token with read access first.",
+		"docs": "https://github.com/github/github-mcp-server",
+		"verified": true
+	},
+	{
+		"id": "stripe",
+		"name": "Stripe",
+		"summary": "Customers, invoices, subscriptions, refunds and documentation search",
+		"transport": "http",
+		"url": "https://mcp.stripe.com",
+		"auth": { "type": "bearer", "envVar": "STRIPE_AGENT_API_KEY", "help": "An agent API key with the smallest set of permissions. Use a sandbox account first." },
+		"risk": "high",
+		"riskNote": "Moves money. Its write tool covers POST, PATCH, PUT and DELETE. Stripe asks for human confirmation on refunds and outbound payments.",
+		"docs": "https://docs.stripe.com/mcp",
+		"verified": true
+	},
+	{
+		"id": "notion",
+		"name": "Notion",
+		"summary": "Search, read, create and update pages and databases",
+		"transport": "http",
+		"url": "https://mcp.notion.com/mcp",
+		"auth": { "type": "bearer", "envVar": "NOTION_MCP_TOKEN", "help": "A token made by a workspace owner under New MCP token in the developer portal. Business and Enterprise plans only; the sign-in flow cannot run without a person." },
+		"risk": "medium",
+		"riskNote": "Can edit and delete pages and databases.",
+		"docs": "https://developers.notion.com/guides/mcp/get-started-with-mcp",
+		"verified": true
+	},
+	{
+		"id": "atlassian",
+		"name": "Atlassian (Jira and Confluence)",
+		"summary": "Jira work items, Confluence pages, Bitbucket",
+		"transport": "http",
+		"url": "https://mcp.atlassian.com/v2/mcp",
+		"auth": { "type": "bearer", "envVar": "ATLASSIAN_API_TOKEN", "help": "Sign-in through the browser is the normal route. Atlassian lists API tokens as an option." },
+		"risk": "medium",
+		"riskNote": "Creates and updates work items and pages and posts comments.",
+		"docs": "https://support.atlassian.com/atlassian-rovo-mcp-server/docs/getting-started-with-the-atlassian-remote-mcp-server/",
+		"verified": false,
+		"unverifiedNote": "The header an API token goes in is not documented, so this entry sends it as a bearer token. Check the Atlassian page before relying on it."
+	},
+	{
+		"id": "cloudflare",
+		"name": "Cloudflare",
+		"summary": "The Cloudflare API: DNS, Workers, rules and more",
+		"transport": "http",
+		"url": "https://mcp.cloudflare.com/mcp",
+		"auth": { "type": "bearer", "envVar": "CLOUDFLARE_API_TOKEN", "help": "A Cloudflare API token. Scope it to the accounts and zones the agent should touch." },
+		"risk": "high",
+		"riskNote": "Can change DNS, Workers and rules, and create billable resources, depending on the token's scope.",
+		"docs": "https://developers.cloudflare.com/agents/model-context-protocol/mcp-servers-for-cloudflare/",
+		"verified": true
+	},
+	{
+		"id": "supabase",
+		"name": "Supabase",
+		"summary": "Database, SQL, migrations, projects and branches",
+		"transport": "http",
+		"url": "https://mcp.supabase.com/mcp?read_only=true",
+		"auth": { "type": "bearer", "envVar": "SUPABASE_ACCESS_TOKEN", "help": "A personal access token." },
+		"risk": "high",
+		"riskNote": "Runs SQL and migrations and can create paid projects. The address starts read-only; add project_ref to limit it to one project. Table data can carry prompt injection, so never give it to end users.",
+		"docs": "https://supabase.com/docs/guides/getting-started/mcp",
+		"verified": true
+	},
+	{
+		"id": "git",
+		"name": "Git",
+		"summary": "Read, search and change local Git repositories",
+		"transport": "stdio",
+		"command": "uvx",
+		"args": [ "mcp-server-git" ],
+		"auth": { "type": "none" },
+		"risk": "medium",
+		"riskNote": "Can add, reset, commit and switch branches. Described by its authors as in early development.",
+		"docs": "https://github.com/modelcontextprotocol/servers/tree/main/src/git",
+		"verified": true,
+		"available": false,
+		"unavailableNote": "Needs bx-ai to run MCP servers as local programs. The bx-ai bundled with this release talks to web MCP servers only."
+	}
+]

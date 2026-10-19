@@ -451,6 +451,19 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( 'mcpServers : [ "https://example.com/mcp", "https://other.com/mcp" ]' );
 			} );
 
+			it( "resolves mcpServers credentials from the environment when the app starts, not at build time", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/with-mcp-credentials", buildDir );
+
+				var content = fileRead( result.agentFactory );
+				expect( content ).toInclude( 'resolvePlaceholders(' );
+				expect( content ).toInclude( 'https://plain.example.com/mcp' );
+				expect( content ).toInclude( '${env.GITHUB_PERSONAL_ACCESS_TOKEN}' );
+				expect( content ).toInclude( '${env.OTHER_API_KEY}' );
+				// the entry's label is for the file, not for bx-ai
+				expect( content ).notToInclude( '"github"' );
+			} );
+
 			it( "emits an empty mcpServers: [] when no mcpServers are declared", function() {
 				var buildDir = newBuildDir();
 				var result = generateFor( fixtures & "/full-project", buildDir );

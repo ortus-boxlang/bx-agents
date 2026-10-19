@@ -1,0 +1,249 @@
+/**
+ * The plan a `new` run builds: from flags, into features, and back out as the one-line
+ * command the wizard prints. The round trip is the property that matters: the command
+ * the wizard shows must rebuild the same plan.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "WizardCatalog", function() {
+
+			beforeEach( function() {
+				variables.catalog = new bxagents.models.wizard.WizardCatalog();
+			} );
+
+			it( "lists providers whose key follows bx-ai's PROVIDER_API_KEY convention", function() {
+				for ( var provider in catalog.providers() ) {
+					if ( len( provider.envVar ) ) {
+						expect( provider.envVar ).toBe( provider.id.ucase() & "_API_KEY" );
+					}
+				}
+				expect( catalog.provider( "claude" ).name ).toBe( "Claude" );
+				expect( catalog.provider( "nope" ) ).toBeEmpty();
+			} );
+
+			it( "only offers MCP servers that work with the bundled bx-ai", function() {
+				var offered = catalog.mcpServers().map( s => s.id );
+
+				expect( offered ).toInclude( "github" );
+				expect( offered ).notToInclude( "git" );
+				expect( catalog.unavailableMcpServers().map( s => s.id ) ).toBe( [ "git" ] );
+				for ( var entry in catalog.mcpServers() ) {
+					expect( entry.transport ).toBe( "http" );
+					expect( entry.url ).toMatch( "^https://" );
+				}
+			} );
+
+			it( "names the settings every channel needs, as in the gateway docs", function() {
+				expect( catalog.channel( "slack" ).env.map( e => e.config ) ).toBe( [ "botTokenEnvVar", "appTokenEnvVar" ] );
+				expect( catalog.channel( "whatsapp-cloud" ).env ).toHaveLength( 4 );
+				expect( catalog.channel( "twilio" ).env.map( e => e.config ) ).toBe( [ "accountSidEnvVar", "authTokenEnvVar", "fromEnvVar" ] );
+				for ( var channel in catalog.channels() ) {
+					expect( channel.steps ).notToBeEmpty();
+				}
+			} );
+
+			it( "knows 19 file tools and which of them only read", function() {
+				expect( catalog.fileToolNames() ).toHaveLength( 19 );
+				expect( catalog.readOnlyFileToolNames() ).notToInclude( "writeFile" );
+				expect( catalog.readOnlyFileToolNames() ).notToInclude( "deleteFile" );
+			} );
+
+		} );
+
+		describe( "ProjectPlan", function() {
+
+			beforeEach( function() {
+				variables.planner = new bxagents.models.wizard.ProjectPlan();
+			} );
+
+			it( "builds a blank plan from no flags", function() {
+				var plan = planner.fromFlags( {} );
+
+				expect( plan.template ).toBe( "minimal" );
+				expect( plan.with ).toBeEmpty();
+				expect( plan.memory ).toBe( "cache" );
+				expect( plan.guard ).toBe( "off" );
+				expect( planner.toFeatures( plan ) ).toBeEmpty();
+			} );
+
+			it( "maps capabilities to tools, dependencies and key stubs", function() {
+				var plan = planner.fromFlags( { model : "claude/claude-sonnet-5", with : "time,search,browse", search : "brave" } );
+				var features = planner.toFeatures( plan );
+
+				expect( features.tools ).toBe( [ "now@bxai", "webSearch@bxai", "*@bxplaywright" ] );
+				expect( features.dependencies ).toBe( { "bx-playwright" : "*" } );
+				expect( features.instructionLines[ 1 ] ).toInclude( "brave provider" );
+				var names = features.envStubs.map( s => s.name );
+				expect( names ).toInclude( "CLAUDE_API_KEY" );
+				expect( names ).toInclude( "BRAVE_API_KEY" );
+			} );
+
+			it( "does not tell the model to use the built-in search provider", function() {
+				var features = planner.toFeatures( planner.fromFlags( { model : "openai", with : "search" } ) );
+
+				expect( features.tools ).toBe( [ "webSearch@bxai" ] );
+				expect( features.keyExists( "instructionLines" ) ).toBeFalse();
+			} );
+
+			it( "locks the file tools to the folders and offers the read-only set by default", function() {
+				var plan = planner.fromFlags( { model : "openai", with : "files", "files-dir" : "tmp,cwd" } );
+				var features = planner.toFeatures( plan );
+
+				expect( features.tools ).toInclude( "readFile@bxai" );
+				expect( features.tools ).notToInclude( "writeFile@bxai" );
+				expect( features.toolOptions.bxai.allowedPaths ).toBe( [ "tmp", "cwd" ] );
+			} );
+
+			it( "gives all 19 file tools for --files=all and exactly the named ones for a list", function() {
+				var all = planner.toFeatures( planner.fromFlags( { model : "openai", files : "all", "files-dir" : "tmp" } ) );
+				var some = planner.toFeatures( planner.fromFlags( { model : "openai", files : "readFile,writeFile", "files-dir" : "/data" } ) );
+
+				expect( all.tools ).toHaveLength( 19 );
+				expect( some.tools ).toBe( [ "readFile@bxai", "writeFile@bxai" ] );
+				expect( some.toolOptions.bxai.allowedPaths ).toBe( [ "/data" ] );
+			} );
+
+			it( "refuses file tools without folders, since that would be the whole disk", function() {
+				expect( function() {
+					planner.fromFlags( { model : "openai", with : "files" } );
+				} ).toThrow( type = "BxAgents.InvalidNewOption", regex = "whole disk" );
+				expect( function() {
+					planner.fromFlags( { model : "openai", files : "all", "files-dir" : "relative/path" } );
+				} ).toThrow( type = "BxAgents.InvalidNewOption", regex = "absolute path" );
+				expect( function() {
+					planner.fromFlags( { model : "openai", "files-dir" : "tmp" } );
+				} ).toThrow( type = "BxAgents.InvalidNewOption", regex = "without --with=files" );
+			} );
+
+			it( "turns MCP servers into entries that read their token from the environment", function() {
+				var features = planner.toFeatures( planner.fromFlags( { model : "openai", mcp : "github,supabase" } ) );
+
+				expect( features.mcpServers[ 1 ].name ).toBe( "github" );
+				expect( features.mcpServers[ 1 ].token ).toBe( "${env.GITHUB_PERSONAL_ACCESS_TOKEN}" );
+				expect( features.mcpServers[ 2 ].url ).toInclude( "read_only=true" );
+				for ( var stub in features.envStubs.filter( s => s.name != "OPENAI_API_KEY" ) ) {
+					expect( stub.value ).toBeEmpty();
+				}
+			} );
+
+			it( "rejects an unknown MCP server and one that is not available yet", function() {
+				expect( function() {
+					planner.fromFlags( { model : "openai", mcp : "nope" } );
+				} ).toThrow( type = "BxAgents.InvalidNewOption", regex = "not in the MCP catalog" );
+				expect( function() {
+					planner.fromFlags( { model : "openai", mcp : "git" } );
+				} ).toThrow( type = "BxAgents.InvalidNewOption", regex = "not available yet" );
+			} );
+
+			it( "writes a gateway and env stubs for each channel", function() {
+				var features = planner.toFeatures( planner.fromFlags( { model : "openai", channels : "telegram,slack,web,api" } ) );
+
+				expect( features.gateways.map( g => g.id ) ).toBe( [ "telegram", "slack" ] );
+				expect( features.envStubs.map( s => s.name ) ).toInclude( "SLACK_APP_TOKEN" );
+				expect( features.webui.path ).toBe( "/chat" );
+				expect( features.agentApi.path ).toBe( "/api/chat" );
+				expect( features.webui.keyExists( "apiKeyEnvVar" ) ).toBeFalse();
+			} );
+
+			it( "makes a random access key for the web UI when asked for one", function() {
+				var first = planner.toFeatures( planner.fromFlags( { model : "openai", channels : "web", "web-auth" : "key" } ) );
+				var second = planner.toFeatures( planner.fromFlags( { model : "openai", channels : "web", "web-auth" : "key" } ) );
+				var keyOf = ( features ) => features.envStubs.filter( s => s.name == "CHAT_UI_API_KEY" )[ 1 ].value;
+
+				expect( first.webui.apiKeyEnvVar ).toBe( "CHAT_UI_API_KEY" );
+				expect( len( keyOf( first ) ) ).toBeGTE( 32 );
+				expect( keyOf( first ) ).notToBe( keyOf( second ) );
+			} );
+
+			it( "will not take web users from the command line", function() {
+				expect( function() {
+					planner.fromFlags( { model : "openai", channels : "web", "web-auth" : "users" } );
+				} ).toThrow( type = "BxAgents.InvalidNewOption", regex = "passwords" );
+			} );
+
+			it( "writes memory, checkpointer and the guard", function() {
+				var features = planner.toFeatures( planner.fromFlags( { model : "openai", memory : "file", guard : "block" } ) );
+
+				expect( features.memory ).toBe( "file" );
+				expect( features.checkpointer ).toBe( { type : "file" } );
+				expect( features.security.input.action ).toBe( "block" );
+			} );
+
+			it( "builds a deploy entry per target and says what a target still needs", function() {
+				var docker = planner.toFeatures( planner.fromFlags( { model : "openai", deploy : "docker", registry : "ghcr:me/bot" } ) );
+				expect( docker.deploy.config.registry ).toBe( { type : "ghcr", repository : "me/bot" } );
+
+				var ssh = planner.toFeatures( planner.fromFlags( { model : "openai", deploy : "ssh", host : "h.example.com", user : "deploy", "remote-path" : "/srv/bot" } ) );
+				expect( ssh.deploy.config.remotePath ).toBe( "/srv/bot" );
+
+				var sftp = planner.toFeatures( planner.fromFlags( { model : "openai", deploy : "sftp", host : "h", user : "u", "remote-path" : "/up" } ) );
+				expect( sftp.deploy.config.passwordEnvVar ).toBe( "BXAGENTS_FTP_PASSWORD" );
+				expect( sftp.envStubs.map( s => s.name ) ).toInclude( "BXAGENTS_FTP_PASSWORD" );
+
+				expect( function() {
+					planner.fromFlags( { model : "openai", deploy : "ssh", host : "h" } );
+				} ).toThrow( type = "BxAgents.InvalidNewOption", regex = "also needs --user" );
+				expect( function() {
+					planner.fromFlags( { model : "openai", deploy : "docker", registry : "ghcr" } );
+				} ).toThrow( type = "BxAgents.InvalidNewOption", regex = "ghcr:owner/name" );
+			} );
+
+			it( "lists the secrets a DigitalOcean app needs at run time", function() {
+				var features = planner.toFeatures( planner.fromFlags( { model : "claude", mcp : "github", deploy : "digitalocean", registry : "docr:me/bot", app : "bot" } ) );
+
+				expect( features.deploy.config.envs.map( e => e.key ) ).toInclude( "CLAUDE_API_KEY" );
+				expect( features.deploy.config.envs.map( e => e.key ) ).toInclude( "GITHUB_PERSONAL_ACCESS_TOKEN" );
+			} );
+
+			it( "names a bad value and what the flag accepts", function() {
+				for ( var bad in [
+					{ with : "telepathy" }, { search : "nope" }, { memory : "tape" }, { guard : "maybe" },
+					{ "web-auth" : "kinda" }, { channels : "carrier-pigeon" }, { deploy : "heroku" }, { files : "readFile,dance", "files-dir" : "tmp" }
+				] ) {
+					bad.model = "openai";
+					try {
+						planner.fromFlags( bad );
+						fail( "should have thrown for #bad.toList()#" );
+					} catch ( BxAgents.InvalidNewOption e ) {
+						expect( e.message ).toInclude( "Use" );
+					}
+				}
+			} );
+
+			it( "prints a command that rebuilds the same plan", function() {
+				var flags = {
+					name : "support-bot", description : "Answers customers", model : "claude/claude-sonnet-5", template : "multi-agent",
+					with : "time,search,browse,files", search : "tavily", files : "readFile,listDirectory", "files-dir" : "tmp,/data/docs",
+					memory : "file", mcp : "github,notion", channels : "web,telegram", "web-auth" : "key", guard : "flag",
+					deploy : "docker", registry : "ghcr:me/support"
+				};
+				var plan = planner.fromFlags( flags );
+				var command = planner.toCommand( plan, "support-bot" );
+
+				// read the command back through the same flag parser the CLI uses
+				var parsed = {};
+				for ( var token in command.listToArray( " " ) ) {
+					if ( token.startsWith( "--" ) ) {
+						parsed[ token.mid( 3, len( token ) ).listFirst( "=" ) ] = token.listRest( "=" );
+					}
+				}
+				expect( command ).toInclude( "bxAgents new support-bot" );
+				var rebuilt = planner.fromFlags( {
+					name : "support-bot", description : "Answers customers"
+				}.append( parsed ) );
+				rebuilt.description = plan.description;
+				expect( rebuilt ).toBe( plan );
+			} );
+
+			it( "summarises only what was chosen", function() {
+				var rows = planner.summary( planner.fromFlags( { name : "bot", model : "openai", with : "time", channels : "web" } ) );
+				var labels = rows.map( r => r.label );
+
+				expect( labels ).toBe( [ "Name", "Model", "Tools", "Channels", "Web access" ] );
+			} );
+
+		} );
+	}
+
+}

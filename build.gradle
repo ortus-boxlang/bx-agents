@@ -79,6 +79,17 @@ dependencies {
 	// own shadowJar like every other runtime dependency here.
 	implementation 'org.eclipse.jgit:org.eclipse.jgit:7.8.0.202609011348-r'
 
+	// Terminal UI for the `new` wizard (and `chat`). TamboUI draws, JLine 3 is
+	// its terminal backend. Bundled in the shadowJar; BoxLang itself ships no
+	// JLine, so nothing here clashes with the runtime. Pinned because TamboUI
+	// says its API is still moving - everything uses it through
+	// ortus.boxlang.bxagents.tui, so a bump touches that package only.
+	implementation platform( 'dev.tamboui:tamboui-bom:0.6.0' )
+	implementation 'dev.tamboui:tamboui-core'
+	implementation 'dev.tamboui:tamboui-widgets'
+	implementation 'dev.tamboui:tamboui-tui'
+	implementation 'dev.tamboui:tamboui-jline3-backend'
+
 	// Test Frameworks
 	testImplementation 'io.github.cdimascio:dotenv-java:3.2.0'
 	testImplementation "org.junit.jupiter:junit-jupiter:6.+"
@@ -272,6 +283,8 @@ task createModuleStructure(type: Copy) {
 		include '**/*.bxm'
 		include '**/*.bxs'
 		include '**/*.html'
+		// the `new` wizard's catalogs (providers, channels, MCP servers ...) are read at run time
+		include 'models/wizard/catalog/*.json'
 		// Token Replacements Go Here
 		filter{ line -> line.replaceAll( '@build.version@', project.version ) }
 		if( project.branch == "development" ){

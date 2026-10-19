@@ -139,6 +139,24 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
 - `BaseAgentSpec` - a TestBox base spec that builds a project into a temp copy, mocks model
   responses, and adds agent-aware matchers including tool-call assertions.
 
+#### The new wizard
+
+- `bxAgents new` at a terminal asks what the agent should do and writes the project to match:
+  model and provider, tools, search provider, file tools and the folders they may use, memory,
+  MCP servers, channels, web access, a prompt-injection guard and a deploy target. It ends on a
+  review screen with the one-line command that builds the same project without questions.
+- A full-screen terminal UI in the BxAgents teal (TamboUI over JLine, bundled), with a numbered
+  fallback for pipes and CI and `NO_COLOR` support. `--no-wizard`, `--yes`, `--wizard` and `--no-tui`.
+- `new` flags for everything the wizard asks: `--with`, `--search`, `--files`, `--files-dir`,
+  `--memory`, `--mcp`, `--channels`, `--web-auth`, `--guard`, `--deploy` and its details.
+- After creating the project it prints what is left to do and, for each channel, the setup that
+  happens outside the project (a bot token, a public address, a `signal-cli` daemon).
+- `toolOptions.bxai.allowedPaths` gives an agent bx-ai's 19 file tools, locked to the folders it
+  names (`tmp`, `cwd` or absolute paths), each agent with its own set. An empty list is refused.
+- `mcpServers` entries accept `token`, `headers`, `timeout`, `user` and `password`. Secrets must
+  be `${env.NAME}` placeholders and are resolved when the app starts.
+- A catalog of MCP servers the wizard can add: GitHub, Stripe, Notion, Atlassian, Cloudflare and Supabase.
+
 #### Documentation
 
 - A full documentation site at [bxagents.ai](https://bxagents.ai): installation, quick start,

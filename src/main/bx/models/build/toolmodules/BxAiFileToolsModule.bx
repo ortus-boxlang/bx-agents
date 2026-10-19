@@ -1,0 +1,150 @@
+/**
+ * Adapter between an agent's `toolOptions.bxai` and bx-ai's file tools.
+ *
+ * bx-ai ships 19 file tools (readFile, writeFile, listDirectory, ...) but never
+ * registers them: an agent that can read and write files must be told where.
+ * So the tools exist for an agent only when its `toolOptions.bxai.allowedPaths`
+ * names the folders they may touch, and each agent gets its own set, locked to
+ * its own folders:
+ *
+ *   tools:
+ *     - readFile@bxai
+ *     - listDirectory@bxai
+ *   toolOptions:
+ *     bxai:
+ *       allowedPaths: [ tmp, cwd, /data/reports ]
+ *
+ * `tmp` is the system temp folder and `cwd` the folder the agent is started
+ * from; any other entry is an absolute path. There is deliberately no way to
+ * leave the list empty: bx-ai treats an empty list as "the whole disk", and an
+ * agent should never get that by omission.
+ *
+ * This adapter ADDS to bx-ai's own tools (now, httpGet, webSearch, ...), which
+ * keep coming from its registry; see supplements().
+ */
+class {
+
+	/**
+	 * Names that stand for a folder the project cannot know in advance.
+	 */
+	variables.TOKENS = [ "tmp", "cwd" ]
+
+	/**
+	 * @toolsFactory Builds the file tools for a list of absolute folders. Defaults to bx-ai's FileSystemTools; tests pass a stand-in.
+	 */
+	function init( any toolsFactory ) {
+		variables.useRealTools = isNull( arguments.toolsFactory )
+		if ( !variables.useRealTools ) {
+			variables.toolsFactory = arguments.toolsFactory
+		}
+		return this
+	}
+
+	/**
+	 * @return The module name these tools are registered under
+	 */
+	string function moduleName() {
+		return "bxai"
+	}
+
+	/**
+	 * @return True when the tools can be built (bx-ai is loaded, or a stand-in was given)
+	 */
+	boolean function available() {
+		return !variables.useRealTools || getFunctionList().keyExists( "aiToolRegistry" )
+	}
+
+	/**
+	 * @return True: bx-ai's registered tools stay available next to the ones built here
+	 */
+	boolean function supplements() {
+		return true
+	}
+
+	/**
+	 * @options The agent's `toolOptions.bxai`
+	 *
+	 * @return One message per problem; empty when the options are fine
+	 */
+	array function validateOptions( required any options ) {
+		if ( !isStruct( arguments.options ) ) {
+			return [ "must be a mapping with an allowedPaths list" ]
+		}
+		var errors = []
+		for ( var key in arguments.options ) {
+			if ( key != "allowedPaths" ) {
+				errors.append( "unknown option [#key#]. Valid options: allowedPaths" )
+			}
+		}
+		if ( !arguments.options.keyExists( "allowedPaths" ) ) {
+			return errors.len() ? errors : [ "needs allowedPaths: the folders the file tools may use, for example [ tmp, cwd ]" ]
+		}
+		var paths = arguments.options.allowedPaths
+		if ( !isArray( paths ) || !paths.len() ) {
+			errors.append( "option [allowedPaths] must be a non-empty list of folders. An empty list would give the tools the whole disk." )
+			return errors
+		}
+		for ( var path in paths ) {
+			if ( !isSimpleValue( path ) || !len( trim( path ) ) ) {
+				errors.append( "option [allowedPaths] has an empty or non-text entry" )
+			} else if ( !variables.TOKENS.contains( path ) && !looksAbsolute( path ) && !path.startsWith( "${" ) ) {
+				errors.append( "allowedPaths entry [#path#] must be an absolute path, or one of: #variables.TOKENS.toList( ', ' )#" )
+			}
+		}
+		return errors
+	}
+
+	/**
+	 * @path A folder as written in the options
+	 *
+	 * @return True for a POSIX path, a drive path or a UNC path
+	 */
+	private boolean function looksAbsolute( required string path ) {
+		return arguments.path.startsWith( "/" ) || arguments.path.startsWith( "\\" ) || reFind( "^[A-Za-z]:[\/]", arguments.path ) > 0
+	}
+
+	/**
+	 * Fresh file tools for ONE agent.
+	 *
+	 * @options The agent's `toolOptions.bxai`, placeholders already resolved
+	 *
+	 * @return bx-ai tools; empty when no folders are given, so the tools are never open by omission
+	 */
+	array function tools( struct options = {} ) {
+		var paths = arguments.options.allowedPaths ?: []
+		if ( !paths.len() ) {
+			return []
+		}
+		var folders = paths.map( path => resolveFolder( path ) )
+		if ( !variables.useRealTools ) {
+			return variables.toolsFactory( folders )
+		}
+
+		// scanClass() always registers; do it under a scratch module name and take it back out,
+		// so these folder-locked tools never reach another agent through the shared registry.
+		var scratch = "bxagents-filetools-" & createUUID()
+		var registry = aiToolRegistry()
+		var built = registry.scanClass(
+			new "bxModules.bxai.models.tools.filesystem.FileSystemTools"( allowedPaths : folders ),
+			scratch
+		)
+		registry.unregisterByModule( scratch )
+		return built
+	}
+
+	/**
+	 * @path A token or an absolute path
+	 *
+	 * @return The absolute folder it stands for
+	 */
+	string function resolveFolder( required string path ) {
+		if ( arguments.path == "tmp" ) {
+			return getTempDirectory().reReplace( "[\/]+$", "" )
+		}
+		if ( arguments.path == "cwd" ) {
+			return createObject( "java", "java.lang.System" ).getProperty( "user.dir" )
+		}
+		return arguments.path
+	}
+
+}

@@ -1,0 +1,87 @@
+/**
+ * The numbered-lines prompter used when there is no full-screen terminal. Its reader is
+ * replaced by a list of typed lines so no stdin is needed.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "PlainPrompter", function() {
+
+			function prompterFor( required array lines ) {
+				variables.typed = lines.duplicate();
+				return new bxagents.models.wizard.prompters.PlainPrompter( ( message ) => {
+					if ( !typed.len() ) {
+						throw( type = "EOF", message = "stdin closed" );
+					}
+					var line = typed[ 1 ];
+					typed.deleteAt( 1 );
+					return line;
+				} );
+			}
+
+			var choices = [ { value : "a", label : "Alpha", hint : "first" }, "b", { value : "c", label : "Gamma" } ];
+
+			it( "selects by number and takes the default on an empty line", function() {
+				expect( prompterFor( [ "2" ] ).select( "Pick", choices ) ).toBe( "b" );
+				expect( prompterFor( [ "" ] ).select( "Pick", choices, "c" ) ).toBe( "c" );
+				expect( prompterFor( [ "" ] ).select( "Pick", choices ) ).toBe( "a" );
+			} );
+
+			it( "asks again for a number that is not on the list", function() {
+				expect( prompterFor( [ "9", "x", "1.5", "3" ] ).select( "Pick", choices ) ).toBe( "c" );
+			} );
+
+			it( "multi-selects by comma separated numbers, none, or the defaults", function() {
+				var withDefaults = [ { value : "a", selected : true }, "b", { value : "c", selected : true } ];
+
+				expect( prompterFor( [ "3, 1" ] ).multiSelect( "Pick", choices ) ).toBe( [ "a", "c" ] );
+				expect( prompterFor( [ "none" ] ).multiSelect( "Pick", withDefaults ) ).toBe( [] );
+				expect( prompterFor( [ "" ] ).multiSelect( "Pick", withDefaults ) ).toBe( [ "a", "c" ] );
+				expect( prompterFor( [ "0", "4", "2" ] ).multiSelect( "Pick", choices ) ).toBe( [ "b" ] );
+			} );
+
+			it( "reads text, uses the default for an empty line, and insists on a required answer", function() {
+				expect( prompterFor( [ "hello" ] ).text( "Name" ) ).toBe( "hello" );
+				expect( prompterFor( [ "" ] ).text( "Name", "", "fallback" ) ).toBe( "fallback" );
+				expect( prompterFor( [ "", "", "ok" ] ).text( "Name", "", "", false, "Required" ) ).toBe( "ok" );
+			} );
+
+			it( "confirms with y or n, and takes the default on an empty line", function() {
+				expect( prompterFor( [ "y" ] ).confirm( "Sure?", "", false ) ).toBeTrue();
+				expect( prompterFor( [ "NO" ] ).confirm( "Sure?", "", true ) ).toBeFalse();
+				expect( prompterFor( [ "" ] ).confirm( "Sure?", "", true ) ).toBeTrue();
+				expect( prompterFor( [ "maybe", "n" ] ).confirm( "Sure?" ) ).toBeFalse();
+			} );
+
+			it( "goes back when the user types back", function() {
+				expect( function() {
+					prompterFor( [ "back" ] ).select( "Pick", choices );
+				} ).toThrow( type = "BxAgents.WizardAbort", regex = "wizard:back" );
+			} );
+
+			it( "cancels when stdin closes", function() {
+				expect( function() {
+					prompterFor( [] ).text( "Name" );
+				} ).toThrow( type = "BxAgents.WizardAbort", regex = "wizard:cancel" );
+			} );
+
+			it( "paints nothing, so output has no escape codes", function() {
+				expect( prompterFor( [] ).paint( "accent", "hi" ) ).toBe( "hi" );
+			} );
+
+			it( "drives the whole wizard", function() {
+				// name, purpose, shape (1), provider (2 = openai), model, tools (defaults), memory (1),
+				// mcp (none), channels (none), guard (3 = off), deploy (1 = later), review (1 = create)
+				var prompter = prompterFor( [ "bot", "", "1", "2", "", "", "1", "", "", "3", "1", "1" ] );
+				var plan = new bxagents.models.wizard.NewWizard( prompter ).run().plan;
+
+				expect( plan.name ).toBe( "bot" );
+				expect( plan.model ).toBe( "openai" );
+				expect( plan.with ).toBe( [ "time", "fetch" ] );
+				expect( plan.guard ).toBe( "off" );
+			} );
+
+		} );
+	}
+
+}

@@ -52,6 +52,14 @@ The one thing to know: **SSE frames are terminated by a blank line, and the web 
 - Keep in mind that each BoxLang module is loaded in its own class loader. Avoid changes that assume shared static state, direct classpath leakage, or IDE-only resource loading behavior.
 - Custom runtime integrations should follow the existing module folders and registration patterns: `bifs`, `interceptors`, `components` or `tags`, `libs`, and service-loader backed Java types.
 
+## Terminal UI
+
+`bxAgents new` (and later `chat`) draw with TamboUI over JLine 3, both bundled in the shadow jar and used only through `src/main/java/ortus/boxlang/bxagents/tui`. TamboUI says its API is still moving, so keep every call to it inside that package; BoxLang code talks to `TuiScreen` and to the prompters in `models/wizard/prompters`.
+
+- JLine finds its terminal providers through the thread's **context class loader**, which under BoxLang is the runtime's loader and cannot see this module's jar. Without `TuiScreen.open()` swapping it, every provider is "not found" and JLine silently settles for a dumb terminal (`Unable to find terminal provider exec`). Anything new that creates a JLine terminal needs the same swap.
+- The prompts are plain objects (keys in, `Row`s out) so they test without a terminal: `TuiPromptsTest`. Test the screen itself in a pseudo terminal against the real runtime (`java ... BoxRunner module:bxagents new` under a pty), not only in isolation; the class loader bug above only appeared there.
+- Honor `NO_COLOR` and `TERM=dumb` (`Theme`), and keep a plain fallback (`PlainPrompter`) so a pipe or CI never needs a terminal.
+
 ## Build And Packaging
 
 - Use the Gradle wrapper from the repo root for build tasks.

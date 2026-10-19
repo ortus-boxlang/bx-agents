@@ -66,15 +66,36 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb invoke' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb invoke' -l server
     complete -c $cmd -n '__bxagents_using_verb invoke' -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb new' -l app -x
+    complete -c $cmd -n '__bxagents_using_verb new' -l channels -x -a 'web api telegram slack discord whatsapp-cloud teams twilio github email signal'
     complete -c $cmd -n '__bxagents_using_verb new' -l class
+    complete -c $cmd -n '__bxagents_using_verb new' -l deploy -x -a 'docker digitalocean ssh sftp ftp local'
     complete -c $cmd -n '__bxagents_using_verb new' -l description -x
+    complete -c $cmd -n '__bxagents_using_verb new' -l destination -x -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb new' -l files -x -a 'read all'
+    complete -c $cmd -n '__bxagents_using_verb new' -l files-dir -x
     complete -c $cmd -n '__bxagents_using_verb new' -l forgebox -x
+    complete -c $cmd -n '__bxagents_using_verb new' -l guard -x -a 'off flag block'
+    complete -c $cmd -n '__bxagents_using_verb new' -l host -x
+    complete -c $cmd -n '__bxagents_using_verb new' -l mcp -x -a 'github stripe notion atlassian cloudflare supabase'
+    complete -c $cmd -n '__bxagents_using_verb new' -l memory -x -a 'cache file'
     complete -c $cmd -n '__bxagents_using_verb new' -l model -x
     complete -c $cmd -n '__bxagents_using_verb new' -l name -x
+    complete -c $cmd -n '__bxagents_using_verb new' -l no-tui
+    complete -c $cmd -n '__bxagents_using_verb new' -l no-wizard
     complete -c $cmd -n '__bxagents_using_verb new' -l projectRoot -x -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb new' -l region -x
+    complete -c $cmd -n '__bxagents_using_verb new' -l registry -x
+    complete -c $cmd -n '__bxagents_using_verb new' -l remote-path -x
     complete -c $cmd -n '__bxagents_using_verb new' -l repo -x
+    complete -c $cmd -n '__bxagents_using_verb new' -l search -x -a 'http brave tavily exa google'
     complete -c $cmd -n '__bxagents_using_verb new' -l skipInstall
     complete -c $cmd -n '__bxagents_using_verb new' -l template -x -a 'minimal webui-chat slack-bot telegram-bot github-bot mcp-server scheduled multi-agent'
+    complete -c $cmd -n '__bxagents_using_verb new' -l user -x
+    complete -c $cmd -n '__bxagents_using_verb new' -l web-auth -x -a 'open key'
+    complete -c $cmd -n '__bxagents_using_verb new' -l with -x -a 'time fetch search browse files media'
+    complete -c $cmd -n '__bxagents_using_verb new' -l wizard
+    complete -c $cmd -n '__bxagents_using_verb new' -l yes
     complete -c $cmd -n '__bxagents_using_verb new' -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb package' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb package' -l version -x

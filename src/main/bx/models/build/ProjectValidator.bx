@@ -849,11 +849,16 @@ class {
 	}
 
 	/**
+	 * Each `mcpServers` entry is a URL, or a mapping that can carry the credentials the
+	 * server wants. A secret is never written in the file: `token` and `password` must
+	 * be an ${env.NAME} placeholder, resolved when the app starts.
+	 *
 	 * @resolvedConfig The resolved config struct from AgentConfigResolver.resolve() - only `mcpServers` is used
 	 * @errors Accumulator array - append() any validation errors found
 	 */
 	private void function validateMcpServers( required struct resolvedConfig, required array errors ) {
 		var mcpServers = arguments.resolvedConfig.mcpServers ?: []
+		var validKeys = [ "url", "name", "token", "headers", "timeout", "user", "password" ]
 
 		if ( !isArray( mcpServers ) ) {
 			arguments.errors.append( "Agent.bx's 'mcpServers' must be an array" )
@@ -864,6 +869,23 @@ class {
 			if ( isStruct( entry ) ) {
 				if ( !len( entry.url ?: "" ) ) {
 					arguments.errors.append( "An mcpServers entry is missing a 'url'" )
+				}
+				var label = "The mcpServers entry [#entry.name ?: entry.url ?: '?'#]"
+				for ( var key in entry ) {
+					if ( !validKeys.containsNoCase( key ) ) {
+						arguments.errors.append( "#label# has an unknown key [#key#]. Valid keys: #validKeys.toList( ', ' )#" )
+					}
+				}
+				for ( var secretKey in [ "token", "password" ] ) {
+					if ( entry.keyExists( secretKey ) && !( isSimpleValue( entry[ secretKey ] ) && find( "${env.", entry[ secretKey ] ) ) ) {
+						arguments.errors.append( "#label# writes its [#secretKey#] in the file. Name an environment variable instead, for example #secretKey#: ${env.MY_#ucase( secretKey )#}" )
+					}
+				}
+				if ( entry.keyExists( "headers" ) && !isStruct( entry.headers ) ) {
+					arguments.errors.append( "#label#'s 'headers' must be a mapping of header name to value" )
+				}
+				if ( entry.keyExists( "timeout" ) && !isNumeric( entry.timeout ) ) {
+					arguments.errors.append( "#label#'s 'timeout' must be a number of milliseconds" )
 				}
 			} else if ( isSimpleValue( entry ) ) {
 				if ( !len( entry ) ) {

@@ -1,6 +1,8 @@
 import bxagents.ModuleConfig;
 import bxagents.models.build.ProjectScaffolder;
 import bxagents.models.cli.Deploy;
+import bxagents.models.wizard.ProjectPlan;
+import bxagents.models.wizard.WizardCatalog;
 
 /**
  * Builds the bash, fish and PowerShell tab completion scripts of the
@@ -20,7 +22,7 @@ class {
 	static {
 		/** The boolean flags each verb reads: they take no value, so no table of required values lists them */
 		BOOLEAN_FLAGS = {
-			"new"    : [ "skipInstall", "class" ],
+			"new"    : [ "skipInstall", "class", "wizard", "no-wizard", "yes", "no-tui" ],
 			"build"  : [ "verbose" ],
 			"chat"   : [ "server" ],
 			"clean"  : [ "force" ],
@@ -116,6 +118,20 @@ class {
 		}
 		if( arguments.verb == "deploy" && arguments.flag == "target" ){
 			return Deploy::TARGET_CLASSES.keyArray().sort( "text" );
+		}
+		if( arguments.verb == "new" ){
+			var catalog = new WizardCatalog();
+			switch( arguments.flag ){
+				case "with": return catalog.capabilities().map( c => c.id );
+				case "search": return catalog.searchProviders().map( p => p.id );
+				case "files": return [ "read", "all" ];
+				case "memory": return ProjectPlan::MEMORY;
+				case "mcp": return catalog.mcpServers().map( s => s.id );
+				case "channels": return ProjectPlan::EXPOSURES.duplicate().append( catalog.channels().map( c => c.id ), true );
+				case "web-auth": return [ "open", "key" ];
+				case "guard": return ProjectPlan::GUARD;
+				case "deploy": return catalog.deployTargets().map( t => t.id ).filter( id => id != "none" );
+			}
 		}
 		return [];
 	}

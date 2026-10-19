@@ -1,0 +1,108 @@
+/**
+ * Writes the small YAML subset the wizard puts in an Agent.yaml: mappings, lists and
+ * scalars. Nothing here reads YAML; reading is bx-yaml's job (see AgentYamlLoader).
+ *
+ * Text is double quoted unless it is plainly safe bare, so a value YAML could read as
+ * something else (a number, true, null, anything starting with a symbol such as * or $)
+ * stays text.
+ */
+class {
+
+	/**
+	 * @value A struct (a mapping), array (a list) or simple value
+	 * @indent Spaces the block starts at
+	 * @keyOrder Keys to write first, in this order; the rest follow alphabetically
+	 *
+	 * @return The lines for the value, without a trailing newline
+	 */
+	array function lines( required any value, numeric indent = 0, array keyOrder = [] ) {
+		var pad = repeatString( " ", arguments.indent )
+		var out = []
+		var input = arguments.value
+
+		if ( isStruct( input ) ) {
+			for ( var key in orderedKeys( input, arguments.keyOrder ) ) {
+				var child = input[ key ]
+				if ( isStruct( child ) ) {
+					if ( child.isEmpty() ) {
+						out.append( "#pad##scalar( key )#: {}" )
+					} else {
+						out.append( "#pad##scalar( key )#:" )
+						out.append( lines( child, arguments.indent + 2 ), true )
+					}
+				} else if ( isArray( child ) ) {
+					if ( child.isEmpty() ) {
+						out.append( "#pad##scalar( key )#: []" )
+					} else {
+						out.append( "#pad##scalar( key )#:" )
+						out.append( lines( child, arguments.indent + 2 ), true )
+					}
+				} else {
+					out.append( "#pad##scalar( key )#: #scalar( child )#" )
+				}
+			}
+			return out
+		}
+
+		for ( var item in input ) {
+			if ( isStruct( item ) ) {
+				var itemLines = lines( item, arguments.indent + 2, arguments.keyOrder )
+				if ( !itemLines.len() ) {
+					out.append( "#pad#- {}" )
+				} else {
+					out.append( "#pad#- " & ltrim( itemLines[ 1 ] ) )
+					out.append( itemLines.slice( 2 ), true )
+				}
+			} else if ( isArray( item ) ) {
+				out.append( "#pad#- [ #item.map( inner => scalar( inner ) ).toList( ', ' )# ]" )
+			} else {
+				out.append( "#pad#- #scalar( item )#" )
+			}
+		}
+		return out
+	}
+
+	/**
+	 * @value A text, number or boolean
+	 *
+	 * @return The YAML for it
+	 */
+	string function scalar( required any value ) {
+		var input = arguments.value
+		var className = input.getClass().getName()
+		if ( className == "java.lang.Boolean" ) {
+			return input ? "true" : "false"
+		}
+		if ( [ "java.lang.Integer", "java.lang.Long", "java.lang.Double", "java.lang.Float", "java.lang.Short" ].contains( className ) ) {
+			return toString( input )
+		}
+		var text = toString( input )
+		var plain = text.reFind( "^[A-Za-z][A-Za-z0-9 ._/@-]*$" ) > 0
+		var reserved = [ "true", "false", "yes", "no", "on", "off", "null", "y", "n" ].contains( text.lcase() )
+		if ( plain && !reserved && text == trim( text ) ) {
+			return text
+		}
+		// BoxLang string literals have no backslash escapes, so "\" is ONE backslash here
+		return '"' & text.replace( "\", "\\", "all" ).replace( '"', '\"', "all" ).replace( char( 10 ), "\n", "all" ).replace( char( 13 ), "", "all" ) & '"'
+	}
+
+	/**
+	 * @input A struct
+	 * @preferred Keys that go first, in this order
+	 *
+	 * @return Every key of the struct, preferred ones first and the rest alphabetically
+	 */
+	private array function orderedKeys( required struct input, required array preferred ) {
+		var present = arguments.input.keyArray()
+		var first = []
+		for ( var key in arguments.preferred ) {
+			var match = present.filter( candidate => candidate.lcase() == key.lcase() )
+			if ( match.len() ) {
+				first.append( match[ 1 ] )
+			}
+		}
+		var rest = present.filter( key => !first.contains( key ) ).sort( "textnocase" )
+		return first.append( rest, true )
+	}
+
+}

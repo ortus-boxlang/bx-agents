@@ -1,0 +1,467 @@
+/**
+ * The questions `bxAgents new` asks at a terminal, one stage at a time, ending in a
+ * ProjectPlan. It talks to a prompter (full-screen, plain or scripted), never to the
+ * terminal, so the same flow runs under every one of them and in tests.
+ *
+ * Stages run in order. A stage whose answer already arrived as a flag is skipped and
+ * shown as answered; a stage that does not apply (the search provider when search is
+ * off) is skipped silently. Esc goes back to the previous stage that asked something and
+ * asks it again; Ctrl+C cancels the wizard with BxAgents.WizardCancelled. The last stage
+ * shows the whole project and the command that would build it without questions.
+ *
+ * What the wizard never does: ask for a secret to store. API keys and tokens go to .env
+ * as empty stubs for the user to fill in. The two exceptions are made, not typed: a random
+ * web access key, and a web UI password, which is stored only as a hash.
+ */
+class {
+
+	static {
+		STAGES = [
+			"name", "purpose", "shape", "model", "tools", "search", "files", "memory",
+			"mcp", "channels", "webAccess", "guard", "deploy", "review"
+		]
+	}
+
+	/**
+	 * @prompter A TuiPrompter, PlainPrompter or ScriptedPrompter
+	 * @catalog The WizardCatalog; defaults to the shipped one
+	 */
+	function init( required any prompter, any catalog ) {
+		variables.prompter = arguments.prompter
+		variables.catalog = isNull( arguments.catalog ) ? new "models.wizard.WizardCatalog@bxagents"() : arguments.catalog
+		variables.planner = new "models.wizard.ProjectPlan@bxagents"( variables.catalog )
+		return this
+	}
+
+	/**
+	 * @flags The options already given on the command line, as parsed by `new`
+	 * @suggestedName The name offered when the user just presses Enter, usually the folder name
+	 * @projectRoot Where the project will be created, for the command shown at the end
+	 *
+	 * @return { plan, command } - the finished plan and the command that rebuilds it
+	 */
+	struct function run( struct flags = {}, string suggestedName = "", string projectRoot = "" ) {
+		variables.flags = arguments.flags
+		variables.suggestedName = arguments.suggestedName
+		variables.projectRoot = arguments.projectRoot
+		variables.plan = variables.planner.fromFlags( arguments.flags )
+		// A flag-given name, model and the rest are already in the plan; the stages below
+		// only ask for what is missing, and show what was given.
+		var stages = static.STAGES
+		var index = 1
+		var asked = []
+
+		while ( index <= stages.len() ) {
+			variables.prompter.progress( asked.len() + 1, 0 )
+			try {
+				var ranStage = invoke( this, "stage_" & stages[ index ], [] )
+				if ( !isNull( ranStage ) && ranStage == true ) {
+					asked.append( index )
+				}
+				index++
+			} catch ( BxAgents.WizardAbort e ) {
+				if ( e.message == "wizard:back" ) {
+					if ( asked.len() ) {
+						index = asked[ asked.len() ]
+						asked.deleteAt( asked.len() )
+					}
+				} else if ( e.message == "wizard:restart" ) {
+					variables.plan = variables.planner.fromFlags( variables.flags )
+					index = 1
+					asked = []
+				} else {
+					throw( type = "BxAgents.WizardCancelled", message = "Cancelled. Nothing was created." )
+				}
+			}
+		}
+
+		return { plan : variables.plan, command : variables.planner.toCommand( variables.plan, variables.projectRoot ) }
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Stages. Each returns true when it asked something, false when it was skipped.
+	// ----------------------------------------------------------------------------------
+
+	function stage_name() {
+		if ( variables.flags.keyExists( "name" ) ) {
+			return showGiven( "name", "Name", variables.plan.name )
+		}
+		variables.prompter.forget( "name" )
+		while ( true ) {
+			var answer = variables.prompter.text( "What do you want to call your agent?", "Used as its name. Letters, numbers, dot, dash and underscore.", len( variables.plan.name ) ? variables.plan.name : variables.suggestedName, false, "A name is required" )
+			if ( reFind( "^[A-Za-z][A-Za-z0-9_.-]*$", answer ) ) {
+				variables.plan.name = answer
+				break
+			}
+			variables.prompter.note( "That name will not do", [ "Start with a letter, then use letters, numbers, dot, dash or underscore." ] )
+		}
+		variables.prompter.record( "name", "Name", variables.plan.name )
+		return true
+	}
+
+	function stage_purpose() {
+		if ( variables.flags.keyExists( "description" ) ) {
+			return showGiven( "purpose", "Purpose", variables.plan.description )
+		}
+		variables.prompter.forget( "purpose" )
+		variables.plan.description = variables.prompter.text( "What should it do?", "One line, optional. It becomes the agent's description.", variables.plan.description )
+		if ( len( variables.plan.description ) ) {
+			variables.prompter.record( "purpose", "Purpose", variables.plan.description )
+		}
+		return true
+	}
+
+	function stage_shape() {
+		if ( variables.flags.keyExists( "template" ) ) {
+			return showGiven( "shape", "Shape", variables.catalog.templateLabel( variables.plan.template ) )
+		}
+		variables.prompter.forget( "shape" )
+		variables.plan.template = variables.prompter.select( "What are you building?", variables.catalog.templates(), variables.plan.template )
+		variables.prompter.record( "shape", "Shape", variables.catalog.templateLabel( variables.plan.template ) )
+		return true
+	}
+
+	function stage_model() {
+		if ( variables.flags.keyExists( "model" ) ) {
+			return showGiven( "model", "Model", variables.plan.model )
+		}
+		variables.prompter.forget( "model" )
+		var choices = variables.catalog.providers().map( provider => ( { value : provider.id, label : provider.name, hint : provider.hint } ) )
+		choices.append( { value : "other", label : "Another provider", hint : "type provider/model yourself" } )
+		var picked = variables.prompter.select( "Which model provider?", choices, len( variables.plan.provider ) ? variables.plan.provider : "claude" )
+
+		if ( picked == "other" ) {
+			variables.plan.model = variables.prompter.text( "Model", "As provider/model, for example openai/gpt-5. Providers: openai, claude, gemini, ollama, groq, mistral and more.", "", false, "A model is required" )
+			variables.plan.provider = variables.planner.providerOf( variables.plan.model )
+		} else {
+			variables.plan.provider = picked
+			var chosen = variables.catalog.provider( picked )
+			var modelName = variables.prompter.text(
+				"Which #chosen.name# model?",
+				"Press Enter for the provider's default, or type a model name.",
+				""
+			)
+			variables.plan.model = len( modelName ) ? "#picked#/#modelName#" : picked
+		}
+		variables.prompter.record( "model", "Model", variables.plan.model )
+		return true
+	}
+
+	function stage_tools() {
+		if ( variables.flags.keyExists( "with" ) || variables.flags.keyExists( "files" ) || variables.flags.keyExists( "search" ) ) {
+			return showGiven( "tools", "Tools", variables.plan.with.map( id => variables.catalog.capability( id ).label ).toList( ", " ) )
+		}
+		variables.prompter.forget( "tools" )
+		var choices = variables.catalog.capabilities().map( capability => ( {
+			value    : capability.id,
+			label    : capability.label,
+			hint     : capability.hint,
+			selected : variables.plan.with.contains( capability.id ) || ( !variables.plan.with.len() && capability.selected )
+		} ) )
+		variables.plan.with = variables.prompter.multiSelect( "What can the agent do?", choices, "Space to toggle. Enter to continue." )
+		variables.prompter.record( "tools", "Tools", variables.plan.with.len() ? variables.plan.with.map( id => variables.catalog.capability( id ).label ).toList( ", " ) : "none" )
+		return true
+	}
+
+	function stage_search() {
+		if ( !variables.plan.with.contains( "search" ) ) {
+			return false
+		}
+		if ( len( variables.plan.search ) && variables.flags.keyExists( "search" ) ) {
+			return showGiven( "search", "Search", variables.catalog.searchProvider( variables.plan.search ).name )
+		}
+		variables.prompter.forget( "search" )
+		var choices = variables.catalog.searchProviders().map( provider => ( { value : provider.id, label : provider.name, hint : provider.hint } ) )
+		variables.plan.search = variables.prompter.select( "Which search provider?", choices, variables.plan.search ?: "http", "The agent is told to use it. Keys go in .env." )
+		variables.prompter.record( "search", "Search", variables.catalog.searchProvider( variables.plan.search ).name )
+		return true
+	}
+
+	function stage_files() {
+		if ( !variables.plan.with.contains( "files" ) ) {
+			return false
+		}
+		if ( variables.flags.keyExists( "files-dir" ) ) {
+			return showGiven( "files", "File tools", fileSummary() )
+		}
+		variables.prompter.forget( "files" )
+
+		var kind = variables.prompter.select(
+			"Which file tools?",
+			[
+				{ value : "read", label : "Read only", hint : "read, list, search. Recommended." },
+				{ value : "all", label : "All 19", hint : "includes writing, moving and deleting" },
+				{ value : "pick", label : "Let me choose", hint : "tool by tool" }
+			],
+			"read"
+		)
+		if ( kind == "pick" ) {
+			var choices = variables.catalog.fileToolsRead().map( tool => ( { value : tool.name, label : tool.name, hint : tool.hint, selected : true } ) )
+			choices.append( variables.catalog.fileToolsWrite().map( tool => ( { value : tool.name, label : tool.name, hint : "changes files: " & tool.hint, selected : false } ) ), true )
+			var picked = []
+			while ( !picked.len() ) {
+				picked = variables.prompter.multiSelect( "Pick the file tools", choices, "Choose at least one." )
+			}
+			variables.plan.files.tools = picked
+		} else {
+			variables.plan.files.tools = kind
+		}
+
+		var folders = []
+		while ( !folders.len() ) {
+			var tokens = variables.catalog.folderTokens().map( token => ( { value : token.value, label : token.label, hint : token.hint, selected : false } ) )
+			tokens.append( { value : "custom", label : "A folder I name", hint : "an absolute path", selected : false } )
+			var chosen = variables.prompter.multiSelect( "Which folders may they use?", tokens, "They can reach nothing outside these. Choose at least one." )
+			folders = chosen.filter( value => value != "custom" )
+			if ( chosen.contains( "custom" ) ) {
+				while ( true ) {
+					var path = variables.prompter.text( "Folder path", "An absolute path. Press Enter when you have added all of them.", "" )
+					if ( !len( path ) ) {
+						break
+					}
+					if ( path.startsWith( "/" ) || reFind( "^[A-Za-z]:[\/]", path ) ) {
+						folders.append( path )
+					} else {
+						variables.prompter.note( "Not an absolute path", [ "[#path#] is relative. Give the full path, starting with / or a drive letter." ] )
+					}
+				}
+			}
+		}
+		variables.plan.files.folders = folders
+		variables.prompter.record( "files", "File tools", fileSummary() )
+		return true
+	}
+
+	function stage_memory() {
+		if ( variables.flags.keyExists( "memory" ) ) {
+			return showGiven( "memory", "Memory", variables.plan.memory == "file" ? "saved to disk" : "in memory" )
+		}
+		variables.prompter.forget( "memory" )
+		variables.plan.memory = variables.prompter.select(
+			"Should it remember conversations?",
+			[
+				{ value : "cache", label : "In memory", hint : "forgotten when the agent restarts" },
+				{ value : "file", label : "Saved to disk", hint : "survives restarts" }
+			],
+			variables.plan.memory
+		)
+		variables.prompter.record( "memory", "Memory", variables.plan.memory == "file" ? "saved to disk" : "in memory" )
+		return true
+	}
+
+	function stage_mcp() {
+		if ( variables.flags.keyExists( "mcp" ) ) {
+			return showGiven( "mcp", "MCP servers", variables.plan.mcp.len() ? variables.plan.mcp.toList( ", " ) : "none" )
+		}
+		variables.prompter.forget( "mcp" )
+		var servers = variables.catalog.mcpServers()
+		var choices = servers.map( entry => ( {
+			value    : entry.id,
+			label    : entry.name,
+			hint     : "#entry.risk# risk. #entry.summary#",
+			selected : variables.plan.mcp.contains( entry.id )
+		} ) )
+		var pending = variables.catalog.unavailableMcpServers().map( entry => entry.name ).toList( ", " )
+		var picked = variables.prompter.multiSelect(
+			"Connect any MCP servers?",
+			choices,
+			"Tools from other services. Credentials go in .env.#len( pending ) ? ' Not offered yet: ' & pending & '.' : ''#"
+		)
+		var risky = picked.filter( id => variables.catalog.mcpServer( id ).risk == "high" )
+		if ( risky.len() ) {
+			var lines = []
+			for ( var id in risky ) {
+				var entry = variables.catalog.mcpServer( id )
+				lines.append( "#entry.name#: #entry.riskNote#" )
+			}
+			variables.prompter.note( "These servers can change things", lines )
+		}
+		variables.plan.mcp = picked
+		variables.prompter.record( "mcp", "MCP servers", picked.len() ? picked.map( id => variables.catalog.mcpServer( id ).name ).toList( ", " ) : "none" )
+		return true
+	}
+
+	function stage_channels() {
+		if ( variables.flags.keyExists( "channels" ) ) {
+			return showGiven( "channels", "Channels", variables.plan.channels.len() ? variables.plan.channels.map( id => variables.planner.channelLabel( id ) ).toList( ", " ) : "none" )
+		}
+		variables.prompter.forget( "channels" )
+		var choices = [
+			{ value : "web", label : "Web chat", hint : "a chat page served by the agent", selected : variables.plan.channels.contains( "web" ) },
+			{ value : "api", label : "HTTP API", hint : "POST /api/chat/invoke and /stream", selected : variables.plan.channels.contains( "api" ) }
+		]
+		choices.append( variables.catalog.channels().map( channel => ( { value : channel.id, label : channel.name, hint : channel.hint, selected : variables.plan.channels.contains( channel.id ) } ) ), true )
+		variables.plan.channels = variables.prompter.multiSelect( "Where will people talk to it?", choices, "You can always chat in the terminal. I will show setup steps for each at the end." )
+		variables.prompter.record( "channels", "Channels", variables.plan.channels.len() ? variables.plan.channels.map( id => variables.planner.channelLabel( id ) ).toList( ", " ) : "terminal only" )
+		return true
+	}
+
+	function stage_webAccess() {
+		if ( !variables.plan.channels.contains( "web" ) ) {
+			return false
+		}
+		if ( variables.flags.keyExists( "web-auth" ) ) {
+			return showGiven( "webAccess", "Web access", variables.plan.web.auth )
+		}
+		variables.prompter.forget( "webAccess" )
+		var mode = variables.prompter.select(
+			"Who can use the web chat?",
+			[
+				{ value : "open", label : "Anyone who can reach it", hint : "fine on your own machine. They all share one workspace." },
+				{ value : "key", label : "Anyone with a shared key", hint : "I make a random key and put it in .env" },
+				{ value : "users", label : "Named users with passwords", hint : "each person gets their own conversations" }
+			],
+			variables.plan.web.auth
+		)
+		variables.plan.web.auth = mode
+		variables.plan.web.users = []
+		if ( mode == "users" ) {
+			collectUsers()
+		}
+		variables.prompter.record( "webAccess", "Web access", mode == "users" ? "#variables.plan.web.users.len()# user#variables.plan.web.users.len() == 1 ? '' : 's'#" : mode )
+		return true
+	}
+
+	function stage_guard() {
+		if ( variables.flags.keyExists( "guard" ) ) {
+			return showGiven( "guard", "Guard", variables.plan.guard )
+		}
+		variables.prompter.forget( "guard" )
+		variables.plan.guard = variables.prompter.select(
+			"Guard against prompt injection?",
+			[
+				{ value : "flag", label : "Flag suspicious input", hint : "keep going, note it in the logs. Recommended." },
+				{ value : "block", label : "Block suspicious input", hint : "refuse the request" },
+				{ value : "off", label : "Off", hint : "" }
+			],
+			"flag",
+			"Checks messages and tool results for attempts to override the agent's instructions."
+		)
+		variables.prompter.record( "guard", "Guard", variables.plan.guard )
+		return true
+	}
+
+	function stage_deploy() {
+		if ( variables.flags.keyExists( "deploy" ) ) {
+			return showGiven( "deploy", "Deploy", len( variables.plan.deploy.target ) ? variables.plan.deploy.target : "later" )
+		}
+		variables.prompter.forget( "deploy" )
+		var choices = variables.catalog.deployTargets().map( target => ( { value : target.id, label : target.name, hint : target.hint } ) )
+		var target = variables.prompter.select( "Where will it run?", choices, "none", "I write the deploy entry. Secrets stay in the environment." )
+		variables.plan.deploy = variables.planner.blank().deploy
+		if ( target != "none" ) {
+			variables.plan.deploy.target = target
+			askDeploy( target )
+		}
+		variables.prompter.record( "deploy", "Deploy", target == "none" ? "later" : target )
+		return true
+	}
+
+	function stage_review() {
+		variables.prompter.forget( "review" )
+		var rows = variables.planner.summary( variables.plan )
+		var width = 0
+		for ( var row in rows ) {
+			width = max( width, len( row.label ) )
+		}
+		var lines = rows.map( row => row.label & repeatString( " ", width - len( row.label ) + 2 ) & row.value )
+		lines.append( "" )
+		lines.append( "The same project without questions:" )
+		lines.append( "  " & variables.planner.toCommand( variables.plan, variables.projectRoot ) )
+
+		var decision = variables.prompter.review(
+			"Ready to create it?",
+			lines,
+			[
+				{ value : "create", label : "Create the project" },
+				{ value : "restart", label : "Start over" },
+				{ value : "cancel", label : "Cancel" }
+			]
+		)
+		if ( decision == "restart" ) {
+			throw( type = "BxAgents.WizardAbort", message = "wizard:restart" )
+		}
+		if ( decision == "cancel" ) {
+			throw( type = "BxAgents.WizardAbort", message = "wizard:cancel" )
+		}
+		return true
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Shows an answer that arrived as a flag, so the screen reads as complete.
+	 */
+	private boolean function showGiven( required string key, required string label, required string value ) {
+		variables.prompter.record( arguments.key, arguments.label, arguments.value & "  (from a flag)" )
+		return false
+	}
+
+	private string function fileSummary() {
+		var tools = isArray( variables.plan.files.tools ) ? "#variables.plan.files.tools.len()# chosen" : ( variables.plan.files.tools == "all" ? "all 19" : "read only" )
+		return tools & " in " & variables.plan.files.folders.toList( ", " )
+	}
+
+	/**
+	 * Asks for web UI users until the person says there are no more. Passwords are
+	 * hashed here and only the hash is kept.
+	 */
+	private void function collectUsers() {
+		var hasher = new "models.cli.HashPassword@bxagents"()
+		var more = true
+		while ( more ) {
+			var username = variables.prompter.text( "Username", "Letters and numbers, no spaces.", "", false, "A username is required" )
+			var password = ""
+			while ( true ) {
+				password = variables.prompter.text( "Password for #username#", "Stored only as a hash. Typing is hidden.", "", true, "A password is required" )
+				var again = variables.prompter.text( "Type it again", "", "", true, "Please repeat the password" )
+				if ( again == password ) {
+					break
+				}
+				variables.prompter.note( "The passwords did not match", [ "Type the same password both times." ] )
+			}
+			var displayName = variables.prompter.text( "Display name", "Shown in the chat. Press Enter to use the username.", username )
+			variables.plan.web.users.append( { username : username, passwordHash : hasher.run( { password : password } ).message, displayName : displayName } )
+			more = variables.prompter.confirm( "Add another user?", "", false )
+		}
+	}
+
+	/**
+	 * The questions each deploy target needs. Only names and places; every secret is an
+	 * environment variable named in the entry.
+	 */
+	private void function askDeploy( required string target ) {
+		var d = variables.plan.deploy
+		switch ( arguments.target ) {
+			case "docker":
+			case "digitalocean":
+				var registryType = variables.prompter.select(
+					"Which container registry?",
+					[
+						{ value : "ghcr", label : "GitHub Container Registry", hint : "ghcr.io" },
+						{ value : "dockerhub", label : "Docker Hub", hint : "" },
+						{ value : "docr", label : "DigitalOcean Container Registry", hint : "namespace/repo form" }
+					],
+					arguments.target == "digitalocean" ? "docr" : "ghcr"
+				)
+				var repository = variables.prompter.text( "Repository", "As owner/name, for example #variables.plan.name.lcase()#/#variables.plan.name.lcase()#.", "", false, "A repository is required" )
+				d.registry = registryType & ":" & repository
+				if ( arguments.target == "digitalocean" ) {
+					d.app = variables.prompter.text( "App name", "", variables.plan.name.lcase() )
+					d.region = variables.prompter.text( "Region", "A DigitalOcean region slug.", "nyc" )
+				}
+				break
+			case "ssh":
+			case "sftp":
+			case "ftp":
+				d.host = variables.prompter.text( "Host", "", "", false, "A host is required" )
+				d.user = variables.prompter.text( "User", "", "", false, "A user is required" )
+				d.remotePath = variables.prompter.text( "Remote folder", "Where the package goes on the server.", "", false, "A folder is required" )
+				break
+			case "local":
+				d.destination = variables.prompter.text( "Destination folder", "An absolute path on this machine.", "", false, "A folder is required" )
+				break
+		}
+	}
+
+}

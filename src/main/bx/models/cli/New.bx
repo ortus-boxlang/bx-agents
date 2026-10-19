@@ -30,6 +30,14 @@
  * install` there would be guessing at someone else's project layout, not
  * "best-effort convenience."
  *
+ * With no `--model` and no `--repo`/`--forgebox`, at a terminal, `new` runs the wizard
+ * (models/wizard/NewWizard.bx): a full-screen set of questions about what the agent
+ * should do, ending in the same project the flags below would build. `--no-wizard` turns
+ * it off, `--wizard` asks for it even with a model, and `--yes` takes every answer from
+ * the flags and the defaults. A `--model` means a script is calling, as it always had to,
+ * so it does not start the wizard on its own. Without a terminal the wizard falls back to
+ * numbered questions, or `--model` is required as before.
+ *
  * The agent is defined by an `Agent.yaml` by default. `--class` scaffolds a
  * class-based `Agent.bx` instead, for projects that need code in the agent
  * definition (hooks, dynamic instructions, tools registered in code); it also
@@ -44,7 +52,7 @@
 class {
 
 	/**
-	 * @options { projectRoot (required, absolute path), name, model (required only with --template/no source flag), description, template (optional, one of ProjectScaffolder.TEMPLATES - default "minimal"), class (optional boolean - write a class-based Agent.bx instead of the default Agent.yaml; only applies to --template), repo (optional - clone this GitHub repo instead of scaffolding), forgebox (optional - install this ForgeBox slug instead of scaffolding), skipInstall (optional boolean - skip the tests/ `box install` convenience step; only applies to --template) }
+	 * @options { wizard (optional boolean, false = never ask, true = ask even with a model), yes (optional boolean - never ask), tui (optional boolean, false = numbered questions instead of the full-screen UI), with/search/files/files-dir/memory/mcp/channels/web-auth/guard/deploy/registry/app/region/host/user/remote-path/destination (optional - see ProjectPlan.fromFlags), projectRoot (required, absolute path), name, model (required only with --template/no source flag), description, template (optional, one of ProjectScaffolder.TEMPLATES - default "minimal"), class (optional boolean - write a class-based Agent.bx instead of the default Agent.yaml; only applies to --template), repo (optional - clone this GitHub repo instead of scaffolding), forgebox (optional - install this ForgeBox slug instead of scaffolding), skipInstall (optional boolean - skip the tests/ `box install` convenience step; only applies to --template) }
 	 */
 	struct function run( struct options = {} ) {
 		var projectRoot = trim( arguments.options.projectRoot ?: "" )
@@ -84,21 +92,67 @@ class {
 			var installResult = installer.install( forgebox, projectRoot )
 			message = "Installed ForgeBox package [#forgebox#] into #installResult.projectRoot#"
 		} else {
-			var model = trim( arguments.options.model ?: "" )
-			if ( !len( model ) ) {
-				throw( type = "BxAgents.MissingModel", message = "`new` requires --model, e.g. --model=openai/gpt-5" )
+			var planner = new "models.wizard.ProjectPlan@bxagents"()
+			var plan = {}
+			var prompter = ""
+			var rebuildCommand = ""
+
+			if ( shouldAskQuestions( arguments.options ) ) {
+				if ( arguments.options[ "class" ] ?: false ) {
+					throw( type = "BxAgents.FeaturesNeedYaml", message = "--class cannot be combined with the wizard: its choices are written to Agent.yaml. Pass --no-wizard to scaffold a class-based Agent.bx." )
+				}
+				prompter = arguments.options._prompter ?: newPrompter( arguments.options )
+				try {
+					var asked = new "models.wizard.NewWizard@bxagents"( prompter ).run(
+						arguments.options,
+						lastSegment( projectRoot ),
+						arguments.options._positional ?: ""
+					)
+					plan = asked.plan
+					rebuildCommand = asked.command
+				} catch ( BxAgents.WizardCancelled e ) {
+					prompter.close()
+					return { exitCode : 1, message : e.message }
+				} catch ( any e ) {
+					prompter.close()
+					rethrow
+				}
+				prompter.close()
+			} else {
+				if ( !len( trim( arguments.options.model ?: "" ) ) ) {
+					throw( type = "BxAgents.MissingModel", message = "`new` requires --model, e.g. --model=openai/gpt-5. Run it in a terminal without --model to be asked instead." )
+				}
+				plan = planner.fromFlags( arguments.options )
 			}
 
-			var name = trim( arguments.options.name ?: "" )
-			if ( !len( name ) ) {
-				var segments = listToArray( projectRoot.reReplace( "[\/]+$", "" ), "/" )
-				name = segments.len() ? segments[ segments.len() ] : "bx-agent"
+			if ( !len( plan.name ) ) {
+				plan.name = lastSegment( projectRoot )
+				if ( !len( plan.name ) ) {
+					plan.name = "bx-agent"
+				}
 			}
 
+			var features = planner.toFeatures( plan, false )
+			if ( features.count() || isObject( prompter ) ) {
+				features = planner.toFeatures( plan, true )
+			}
 			var scaffolder = new "models.build.ProjectScaffolder@bxagents"()
-			var scaffoldResult = scaffolder.scaffold( projectRoot, name, model, arguments.options.description ?: "", arguments.options.template ?: "minimal", arguments.options[ "class" ] ?: false )
-			message = "Created new BX Agents project [#name#] at #scaffoldResult.projectRoot#"
+			var scaffoldResult = scaffolder.scaffold( projectRoot, plan.name, plan.model, plan.description, plan.template, arguments.options[ "class" ] ?: false, features )
+			message = "Created new BX Agents project [#plan.name#] at #scaffoldResult.projectRoot#"
 			installTests = true
+
+			if ( features.count() || isObject( prompter ) ) {
+				var installNote = ""
+				if ( !( arguments.options.skipInstall ?: false ) ) {
+					installNote = installDependencies( projectRoot )
+					installTests = false
+				}
+				var colorize = isObject( prompter ) ? ( style, text ) => prompter.paint( style, text ) : ( style, text ) => text
+				return {
+					exitCode : 0,
+					message  : new "models.wizard.NextSteps@bxagents"().render( plan, features, scaffoldResult.projectRoot, installNote, colorize, arguments.options._positional ?: "", rebuildCommand )
+				}
+			}
 		}
 
 		message &= sourceWarning
@@ -111,6 +165,60 @@ class {
 			exitCode : 0,
 			message  : message
 		}
+	}
+
+	/**
+	 * Whether `new` asks questions: at a terminal when nothing says otherwise.
+	 *
+	 * @options The parsed CLI options
+	 *
+	 * @return True when the wizard should run
+	 */
+	private boolean function shouldAskQuestions( required struct options ) {
+		if ( ( arguments.options.wizard ?: true ) == false || ( arguments.options.yes ?: false ) == true ) {
+			return false
+		}
+		if ( arguments.options.wizard ?: false ) {
+			return true
+		}
+		return !len( trim( arguments.options.model ?: "" ) ) && ( arguments.options._interactive ?: isTerminal() )
+	}
+
+	/**
+	 * @return True when stdin and stdout are a terminal that can host questions
+	 */
+	private boolean function isTerminal() {
+		try {
+			return createObject( "java", "ortus.boxlang.bxagents.tui.TuiScreen" ).isInteractive()
+		} catch ( any e ) {
+			return false
+		}
+	}
+
+	/**
+	 * The full-screen prompter at a capable terminal, numbered questions otherwise.
+	 *
+	 * @options The parsed CLI options
+	 */
+	private any function newPrompter( required struct options ) {
+		if ( ( arguments.options.tui ?: true ) && isTerminal() ) {
+			try {
+				return new "models.wizard.prompters.TuiPrompter@bxagents"()
+			} catch ( any e ) {
+				// the terminal would not go into raw mode: ask in plain lines rather than fail
+			}
+		}
+		return new "models.wizard.prompters.PlainPrompter@bxagents"()
+	}
+
+	/**
+	 * @path A filesystem path
+	 *
+	 * @return Its last segment, or empty
+	 */
+	private string function lastSegment( required string path ) {
+		var segments = listToArray( arguments.path.reReplace( "[\/]+$", "" ), "/\" )
+		return segments.len() ? segments[ segments.len() ] : ""
 	}
 
 	/**

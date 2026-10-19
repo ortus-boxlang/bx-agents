@@ -44,7 +44,33 @@ mcpServers:
     name: other
 ```
 
-Cada entrada es ya sea una cadena URL simple o un struct `{ url, name }`. Estas se reducen a un array simple de URLs y se pasan directamente a la llamada `aiAgent(mcpServers: [...])` generada. **Nunca se intenta ninguna conexión de red en tiempo de build** - la alcanzabilidad es una preocupación de tiempo de ejecución; un servidor inalcanzable en tiempo de build no es un error de build.
+Cada entrada es una cadena URL simple o un mapa. Un mapa puede llevar las credenciales que pida el servidor:
+
+```yaml
+mcpServers:
+  - name: github
+    url: https://api.githubcopilot.com/mcp/
+    token: ${env.GITHUB_PERSONAL_ACCESS_TOKEN}
+  - url: https://other.com/mcp
+    headers:
+      X-Api-Key: ${env.OTHER_API_KEY}
+    timeout: 20000
+```
+
+| Clave | Significado |
+|---|---|
+| `url` | Requerida. La dirección del servidor |
+| `name` | Una etiqueta para el archivo. No se envía al servidor |
+| `token` | Un bearer token. Debe ser un marcador `${env.NAME}`: un token escrito en el archivo es un error de build |
+| `password`, `user` | Autenticación básica. `password` debe ser un marcador `${env.NAME}` |
+| `headers` | Encabezados extra de la petición. Los valores pueden usar `${env.NAME}` |
+| `timeout` | Milisegundos |
+
+Los marcadores se reemplazan por la variable de entorno **cuando arranca la app**, nunca en tiempo de build, así que un secreto se queda fuera del proyecto y de un `.bxa` empaquetado. Una variable que no está definida hace fallar el agente al arrancar y la nombra; una definida pero vacía deja arrancar al agente, el servidor rechaza la conexión, y bx-ai lo registra y sigue sin las tools de ese servidor. Cualquier otra clave es un error de build que lista las válidas.
+
+Las entradas se pasan a la llamada `aiAgent(mcpServers: [...])` generada. **Nunca se intenta ninguna conexión de red en tiempo de build** - la alcanzabilidad es una preocupación de tiempo de ejecución; un servidor inalcanzable en tiempo de build no es un error de build. Esto es para servidores a los que se llega por la web. Los servidores que se ejecutan como programa local no los admite el bx-ai incluido en esta versión.
+
+[`bxAgents new`](../guides/new-wizard.md#servidores-mcp) ofrece GitHub, Stripe, Notion, Atlassian, Cloudflare y Supabase y escribe por ti la entrada y el marcador de `.env`.
 
 Los subagentes pueden declarar sus propios `mcpServers` de forma independiente - cada nodo en el árbol de agentes obtiene su propia lista resuelta.
 

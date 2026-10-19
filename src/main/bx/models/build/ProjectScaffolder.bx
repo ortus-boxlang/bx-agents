@@ -74,9 +74,19 @@ class {
 	 * @template One of TEMPLATES - "minimal" (the bare skeleton) unless the caller asks for one of the other 7 starters
 	 * @classBased False (the default) writes an Agent.yaml; true writes a class-based Agent.bx instead, for projects that need code in their agent definition (hooks, dynamic instructions, tools registered in code). Applies to every subagent a template scaffolds too.
 	 *
+	 * @features What the user asked the project to be able to do, beyond the template: tools, MCP servers, memory, channels, a deploy target and so on. Written by FeatureWriter; see its docblock for the shape. Needs the default Agent.yaml, so it cannot be combined with `classBased`.
+	 *
 	 * @return { projectRoot, agentDefinition, instructions, testsBoxJson, agentSpec, template }
 	 */
-	struct function scaffold( required string targetDir, required string name, required string model, string description = "", string template = "minimal", boolean classBased = false ) {
+	struct function scaffold( required string targetDir, required string name, required string model, string description = "", string template = "minimal", boolean classBased = false, struct features = {} ) {
+		if ( arguments.classBased && arguments.features.count() ) {
+			throw(
+				type    = "BxAgents.FeaturesNeedYaml",
+				message = "Tools, MCP servers, memory and the other options the wizard offers are written to Agent.yaml, so they cannot be combined with --class. Use the default Agent.yaml, or add them to your Agent.bx by hand."
+			)
+		}
+		var featureWriter = new "models.wizard.FeatureWriter@bxagents"()
+
 		if ( !static.TEMPLATES.contains( arguments.template ) ) {
 			throw(
 				type    = "BxAgents.UnknownTemplate",
@@ -106,9 +116,9 @@ class {
 			agentDefinitionPath,
 			arguments.classBased
 				? renderAgentBx( arguments.name, arguments.model, arguments.description, subAgentNames )
-				: renderAgentYaml( arguments.name, arguments.model, arguments.description, subAgentNames )
+				: renderAgentYaml( arguments.name, arguments.model, arguments.description, subAgentNames, featureWriter.agentYamlLines( arguments.features ) )
 		)
-		fileWrite( instructionsPath, renderInstructions( arguments.name ) )
+		fileWrite( instructionsPath, renderInstructions( arguments.name, featureWriter.instructionLines( arguments.features ) ) )
 
 		var conventionFolders = [ "tools", "skills", "subagents", "gateways", "schedules", "mcp", "interceptors", "models", "modules" ]
 		for ( var folder in conventionFolders ) {
@@ -118,7 +128,7 @@ class {
 		directoryCreate( path = dir & "/tests/specs", createPath = true, ignoreExists = true )
 		var boxJsonPath = dir & "/box.json"
 		var agentSpecPath = dir & "/tests/specs/AgentSpec.bx"
-		fileWrite( boxJsonPath, renderBoxJson( arguments.name ) )
+		fileWrite( boxJsonPath, renderBoxJson( arguments.name, featureWriter.dependencies( arguments.features ) ) )
 		fileWrite( agentSpecPath, renderAgentSpec( arguments.name ) )
 
 		var envPath = dir & "/.env"
@@ -131,6 +141,7 @@ class {
 		}
 
 		applyTemplate( arguments.template, dir, arguments.name, arguments.classBased )
+		featureWriter.apply( dir, arguments.features )
 
 		return {
 			projectRoot     : dir,
@@ -279,16 +290,26 @@ class {
 
 	/**
 	 * @name The agent's name, used as the package name
+	 * @dependencies Packages the chosen features need, by ForgeBox slug (bx-playwright for a browsing agent)
 	 *
 	 * @return The rendered root box.json source: the developer's own list of extra packages, with testbox as a devDependency installed into lib/testbox
 	 */
-	private string function renderBoxJson( required string name ) {
+	private string function renderBoxJson( required string name, struct dependencies = {} ) {
+		var deps = arguments.dependencies
+		var slugs = deps.keyArray().sort( "textnocase" )
+		var dependencyLines = slugs.map( ( slug, index ) => '		"#bxLiteral( slug )#": "#bxLiteral( deps[ slug ] )#"' & ( index < slugs.len() ? "," : "" ) )
 		var lines = [
 			"{",
 			'	"name": "#bxLiteral( arguments.name )#",',
 			'	"version": "1.0.0",',
 			'	"private": true,',
-			'	"dependencies": {},',
+			slugs.len() ? '	"dependencies": {' : '	"dependencies": {},'
+		]
+		if ( slugs.len() ) {
+			lines.append( dependencyLines, true )
+			lines.append( "	}," )
+		}
+		lines.append( [
 			'	"devDependencies": {',
 			'		"testbox": "*"',
 			"	},",
@@ -297,7 +318,7 @@ class {
 			"	}",
 			"}",
 			""
-		]
+		], true )
 		return lines.toList( char( 10 ) )
 	}
 
@@ -340,10 +361,11 @@ class {
 	 * @model The agent's provider/model slug
 	 * @description Optional agent description; left out of the file when blank
 	 * @subAgents `subagents/` folder names to declare (the "multi-agent" template only)
+	 * @extraLines Sections the features add (tools, mcpServers, memory ...), already rendered; written after the model and before `environments`
 	 *
 	 * @return The rendered Agent.yaml source
 	 */
-	private string function renderAgentYaml( required string name, required string model, required string description, array subAgents = [] ) {
+	private string function renderAgentYaml( required string name, required string model, required string description, array subAgents = [], array extraLines = [] ) {
 		var lines = [
 			"## Your agent. Most agents need nothing more than this file and instructions.md.",
 			"## For code in the definition (hooks, dynamic instructions), scaffold with --class.",
@@ -358,6 +380,10 @@ class {
 
 		if ( arguments.subAgents.len() ) {
 			lines.append( "subAgents: [ #arguments.subAgents.map( n => yamlScalar( n ) ).toList( ", " )# ]" )
+		}
+
+		if ( arguments.extraLines.len() ) {
+			lines.append( arguments.extraLines, true )
 		}
 
 		lines.append( "" )
@@ -393,16 +419,21 @@ class {
 
 	/**
 	 * @name The agent's name
+	 * @extraLines Lines the features add (for example which search provider to use)
 	 *
 	 * @return The rendered instructions.md source
 	 */
-	private string function renderInstructions( required string name ) {
+	private string function renderInstructions( required string name, array extraLines = [] ) {
 		var lines = [
 			"## #arguments.name#",
 			"",
 			"You are #arguments.name#, a helpful AI agent.",
 			""
 		]
+		if ( arguments.extraLines.len() ) {
+			lines.append( arguments.extraLines, true )
+			lines.append( "" )
+		}
 		return lines.toList( char( 10 ) )
 	}
 

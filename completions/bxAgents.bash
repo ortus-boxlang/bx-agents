@@ -42,8 +42,18 @@ _bxagents_complete() {
 			"hash-password --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"inspect --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"invoke --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
+			"new --channels") COMPREPLY=($(compgen -W "web api telegram slack discord whatsapp-cloud teams twilio github email signal" -- "$part")) ;;
+			"new --deploy") COMPREPLY=($(compgen -W "docker digitalocean ssh sftp ftp local" -- "$part")) ;;
+			"new --destination") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
+			"new --files") COMPREPLY=($(compgen -W "read all" -- "$part")) ;;
+			"new --guard") COMPREPLY=($(compgen -W "off flag block" -- "$part")) ;;
+			"new --mcp") COMPREPLY=($(compgen -W "github stripe notion atlassian cloudflare supabase" -- "$part")) ;;
+			"new --memory") COMPREPLY=($(compgen -W "cache file" -- "$part")) ;;
 			"new --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
+			"new --search") COMPREPLY=($(compgen -W "http brave tavily exa google" -- "$part")) ;;
 			"new --template") COMPREPLY=($(compgen -W "minimal webui-chat slack-bot telegram-bot github-bot mcp-server scheduled multi-agent" -- "$part")) ;;
+			"new --web-auth") COMPREPLY=($(compgen -W "open key" -- "$part")) ;;
+			"new --with") COMPREPLY=($(compgen -W "time fetch search browse files media" -- "$part")) ;;
 			"package --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"serve --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"test --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
@@ -62,7 +72,7 @@ _bxagents_complete() {
 			hash-password) flags="--password= --projectRoot=" ;;
 			inspect) flags="--json --projectRoot=" ;;
 			invoke) flags="--json --message= --port= --projectRoot= --server" ;;
-			new) flags="--class --description= --forgebox= --model= --name= --projectRoot= --repo= --skipInstall --template=" ;;
+			new) flags="--app= --channels= --class --deploy= --description= --destination= --files= --files-dir= --forgebox= --guard= --host= --mcp= --memory= --model= --name= --no-tui --no-wizard --projectRoot= --region= --registry= --remote-path= --repo= --search= --skipInstall --template= --user= --web-auth= --with= --wizard --yes" ;;
 			package) flags="--projectRoot= --version=" ;;
 			serve) flags="--host= --port= --projectRoot=" ;;
 			test) flags="--projectRoot=" ;;

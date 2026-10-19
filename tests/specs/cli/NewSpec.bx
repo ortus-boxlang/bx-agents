@@ -92,6 +92,106 @@ class extends="testbox.system.BaseSpec" {
 				expect( fileExists( dir & "/gateways/webui.bx" ) ).toBeTrue();
 			} );
 
+			it( "builds the features the flags ask for and prints what is left to do", function() {
+				var dir = newTargetDir();
+				var result = verb.run( {
+					projectRoot : dir, model : "claude", skipInstall : true,
+					with : "time,search", search : "brave", mcp : "github", channels : "telegram", memory : "file"
+				} );
+
+				expect( result.exitCode ).toBe( 0 );
+				var agent = fileRead( dir & "/Agent.yaml" );
+				expect( agent ).toInclude( "- now@bxai" );
+				expect( agent ).toInclude( "- webSearch@bxai" );
+				expect( agent ).toInclude( "memory: file" );
+				expect( fileExists( dir & "/gateways/telegram.bx" ) ).toBeTrue();
+				expect( fileRead( dir & "/.env" ) ).toInclude( "BRAVE_API_KEY=" );
+				expect( result.message ).toInclude( "Fill in .env" );
+				expect( result.message ).toInclude( "Set up Telegram" );
+				expect( result.message ).toInclude( "BotFather" );
+			} );
+
+			it( "keeps the old one-line message when no feature flag is used", function() {
+				var dir = newTargetDir();
+				var result = verb.run( { projectRoot : dir, model : "openai/gpt-5", skipInstall : true } );
+
+				expect( result.message ).toBe( "Created new BX Agents project [my-agent] at #dir#" );
+			} );
+
+			it( "says which flag is wrong and what it accepts", function() {
+				expect( function() {
+					verb.run( { projectRoot : newTargetDir(), model : "openai", with : "telepathy", skipInstall : true } );
+				} ).toThrow( type = "BxAgents.InvalidNewOption", regex = "--with .* Use:" );
+			} );
+
+			it( "refuses feature flags together with --class", function() {
+				expect( function() {
+					verb.run( { projectRoot : newTargetDir(), model : "openai", with : "time", "class" : true, skipInstall : true } );
+				} ).toThrow( type = "BxAgents.FeaturesNeedYaml" );
+			} );
+
+			it( "asks questions when a terminal is attached and no model was given, then scaffolds the answers", function() {
+				var dir = newTargetDir();
+				var prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [
+					"helper", "Helps out", "minimal", "claude", "", [ "time" ], "cache", [], [ "web" ],
+					"key", "flag", "none", "create"
+				] );
+
+				var result = verb.run( { projectRoot : dir, skipInstall : true, _interactive : true, _prompter : prompter } );
+
+				expect( result.exitCode ).toBe( 0 );
+				var agent = fileRead( dir & "/Agent.yaml" );
+				expect( agent ).toInclude( "name: helper" );
+				expect( agent ).toInclude( "model: claude" );
+				expect( agent ).toInclude( "- now@bxai" );
+				expect( agent ).toInclude( "enabled: true" );
+				expect( fileRead( dir & "/gateways/webui.bx" ) ).toInclude( 'apiKeyEnvVar : "CHAT_UI_API_KEY"' );
+				expect( fileRead( dir & "/.env" ) ).toMatch( "CHAT_UI_API_KEY=[a-f0-9]{32,}" );
+				expect( result.message ).toInclude( "Created helper" );
+				expect( result.message ).toInclude( "bxAgents chat" );
+				expect( result.message ).toInclude( "The same project without questions" );
+			} );
+
+			it( "creates nothing when the wizard is cancelled", function() {
+				var dir = newTargetDir();
+				var prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [ "helper", "<cancel>" ] );
+
+				var result = verb.run( { projectRoot : dir, skipInstall : true, _interactive : true, _prompter : prompter } );
+
+				expect( result.exitCode ).toBe( 1 );
+				expect( result.message ).toInclude( "Nothing was created" );
+				expect( directoryExists( dir ) ).toBeFalse();
+			} );
+
+			it( "does not ask when --no-wizard, --yes or a model is given", function() {
+				for ( var options in [ { wizard : false, model : "" }, { yes : true, model : "" }, { model : "openai" } ] ) {
+					options.projectRoot = newTargetDir();
+					options.skipInstall = true;
+					options._interactive = true;
+					options._prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [] );
+					if ( !len( options.model ) ) {
+						expect( function() {
+							verb.run( options );
+						} ).toThrow( "BxAgents.MissingModel" );
+					} else {
+						expect( verb.run( options ).exitCode ).toBe( 0 );
+					}
+					expect( options._prompter.asked() ).toBeEmpty();
+				}
+			} );
+
+			it( "asks even with a model when --wizard is passed, and shows the model as given", function() {
+				var dir = newTargetDir();
+				var prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [
+					"x", "minimal", [], "cache", [], [], "off", "none", "create"
+				] );
+
+				verb.run( { projectRoot : dir, model : "openai", name : "named", wizard : true, skipInstall : true, _prompter : prompter } );
+
+				expect( prompter.recorded().model.value ).toInclude( "from a flag" );
+				expect( fileRead( dir & "/Agent.yaml" ) ).toInclude( "name: named" );
+			} );
+
 			it( "throws BxAgents.ConflictingProjectSource when --repo and --forgebox are both passed", function() {
 				var dir = newTargetDir();
 
