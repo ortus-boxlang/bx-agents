@@ -405,7 +405,14 @@ bxAgents chat --connect=http://127.0.0.1:8080  # full app, server you already ru
 <tr><td>Ctrl+C</td><td>Clear the box; on an empty box, leave. Ctrl+D leaves too</td></tr>
 </tbody>
 </table></div>
-<p>Type <code>/</code> for the commands: <code>/help</code>, <code>/new</code> (a fresh conversation), <code>/tools</code>, <code>/copy</code> (the last answer to the clipboard, using the OSC 52 escape most terminals honor), <code>/save [file]</code> (the conversation as Markdown) and <code>/exit</code>.</p>
+<p>Type <code>/</code> for the commands: <code>/help</code>, <code>/new</code> (a fresh conversation), <code>/tools</code>, <code>/copy</code> (the last answer to the clipboard, using the OSC 52 escape most terminals honor), <code>/save [file]</code> (the conversation as Markdown), <code>/record [file]</code> and <code>/record stop</code> (see below) and <code>/exit</code>.</p>
+<h4 id="recording-a-chat"><a href="#recording-a-chat" id="recording-a-chat" name="recording-a-chat" class="anchor"></a>Recording a chat</h4>
+<p><code>--record</code> saves what the screen shows as an <a href="https://docs.asciinema.org/manual/asciicast/v2/">asciicast</a> <code>.cast</code> file, for demos and bug reports. <code>--record</code> alone writes <code>chat-YYYYMMDD-HHMMSS.cast</code> in the current folder, and <code>--record=demo.cast</code> names the file. Inside the chat, <code>/record</code> starts a recording (<code>/record demo.cast</code> names it) and <code>/record stop</code> finishes it. A red <code>● rec</code> shows on the hint line while it is on, and the file is finished when you leave.</p>
+<pre><code class="language-bash">bxAgents chat --record=demo.cast
+asciinema play demo.cast             # replay it in a terminal
+agg demo.cast demo.gif               # turn it into a GIF (agg is a separate tool)
+</code></pre>
+<p>The file holds the screen's output, so it shows what you typed in the message box and everything the agent printed, including tool arguments. Keystrokes themselves are not recorded. A recording started with <code>/record</code> begins at that moment, so earlier lines are not in it. It needs the terminal screen: <code>--no-tui</code> and non-interactive runs record nothing.</p>
 <p>The answer is shown as it streams and printed as formatted Markdown (headings, lists, code blocks) when it is complete. In the default mode each tool call is shown with its arguments and how long it took, and the model's thinking is shown while it works but never kept. A run that stops for <a href="/next/conventions/gateways/index.html">human approval</a> asks you in place: approve once, approve for the conversation, or reject. Over HTTP the stream carries only the text, so there are no tool lines, no thinking and no steering, and an approval is answered at the server.</p>
 <p>Three modes, one chat:</p>
 <div class="bxsites-table-wrap"><table class="table">
