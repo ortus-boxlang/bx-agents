@@ -1,0 +1,165 @@
+/**
+ * AgentClient against a small server in this process that sends scripted frames: the run-control
+ * stream is read into typed events, the token is sent, and the JSON calls work.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "cli.support.AgentClient run control", function() {
+
+			beforeEach( function() {
+				variables.seen = { headers : [], bodies : [], paths : [] };
+				variables.reply = { status : 200, frames : [], json : "{}" };
+				variables.httpServer = createObject( "java", "com.sun.net.httpserver.HttpServer" ).create(
+					createObject( "java", "java.net.InetSocketAddress" ).init( "127.0.0.1", 0 ), 0
+				);
+				httpServer.createContext( "/", ( exchange ) => {
+					seen.paths.append( exchange.getRequestURI().toString() );
+					seen.headers.append( exchange.getRequestHeaders().getFirst( "x-bxagents-token" ) ?: "" );
+					seen.bodies.append( toString( exchange.getRequestBody().readAllBytes(), "UTF-8" ) );
+					var out = exchange.getResponseBody();
+					if ( reply.frames.len() ) {
+						exchange.getResponseHeaders().add( "Content-Type", "text/event-stream" );
+						exchange.sendResponseHeaders( reply.status, 0 );
+						for ( var frame in reply.frames ) {
+							out.write( ( frame & char( 10 ) & char( 10 ) ).getBytes( "UTF-8" ) );
+							out.flush();
+						}
+					} else {
+						var bytes = reply.json.getBytes( "UTF-8" );
+						exchange.getResponseHeaders().add( "Content-Type", "application/json" );
+						exchange.sendResponseHeaders( reply.status, bytes.len() );
+						out.write( bytes );
+					}
+					out.close();
+				} );
+				httpServer.start();
+				variables.base = "http://127.0.0.1:" & httpServer.getAddress().getPort();
+				variables.client = new bxagents.models.cli.support.AgentClient();
+			} );
+
+			afterEach( function() {
+				httpServer.stop( 0 );
+			} );
+
+			private function frame( eventName, data ) {
+				return "event: " & eventName & char( 10 ) & "data: " & ( isSimpleValue( data ) ? data : jsonSerialize( data ) );
+			}
+
+			private function chunk( delta ) {
+				return frame( "chunk", { choices : [ { delta : delta } ] } );
+			}
+
+			it( "reads the run-control stream into typed events", function() {
+				reply.frames = [
+					frame( "thread", { threadId : "t-1" } ),
+					chunk( { reasoning : "hmm" } ),
+					chunk( { content : "It is " } ),
+					chunk( { tool_calls : [ { index : 0, function : { name : "now", arguments : "{}" } } ] } ),
+					frame( "tool", { id : "now##1", name : "now", arguments : { zone : "UTC" }, status : "running", ms : 0 } ),
+					frame( "tool", { id : "now##1", name : "now", arguments : { zone : "UTC" }, status : "ok", ms : 12 } ),
+					chunk( { content : "noon." } ),
+					frame( "chunk", { choices : [] } ),
+					frame( "done", "[DONE]" )
+				];
+				var events = [];
+
+				var result = client.events( baseUrl : base, payload : { input : "time?" }, onEvent : ( e ) => events.append( e ) );
+
+				expect( events.map( e => e.type ) ).toBe( [ "thread", "reasoning", "delta", "tool", "tool", "delta" ] );
+				expect( events[ 4 ].status ).toBe( "running" );
+				expect( events[ 5 ].id ).toBe( "now##1" );
+				expect( events[ 5 ].name ).toBe( "now" );
+				expect( events[ 5 ].status ).toBe( "ok" );
+				expect( events[ 5 ].ms ).toBe( 12 );
+				expect( events[ 5 ].arguments.zone ).toBe( "UTC" );
+				expect( result.output ).toBe( "It is noon." );
+				expect( result.threadId ).toBe( "t-1" );
+				expect( result.suspended ).toBeFalse();
+				expect( seen.paths[ 1 ] ).toBe( "/__bxagents/events" );
+				expect( jsonDeserialize( seen.bodies[ 1 ] ).input ).toBe( "time?" );
+			} );
+
+			it( "reports a run that waits for a human, with what it waits on", function() {
+				reply.frames = [
+					frame( "thread", { threadId : "t-2" } ),
+					frame( "chunk", { type : "middleware_stop" } ),
+					frame( "suspended", { threadId : "t-2", pendingActions : [ { toolName : "deleteFile", toolArgs : { path : "x" } } ] } ),
+					frame( "done", "[DONE]" )
+				];
+				var events = [];
+
+				var result = client.events( baseUrl : base, payload : { input : "go" }, onEvent : ( e ) => events.append( e ) );
+
+				expect( result.suspended ).toBeTrue();
+				expect( result.pending[ 1 ].toolName ).toBe( "deleteFile" );
+				expect( events.map( e => e.type ) ).toBe( [ "thread", "suspended" ] );
+			} );
+
+			it( "tells the caller about an error frame", function() {
+				reply.frames = [ frame( "error", { message : "model offline" } ), frame( "done", "[DONE]" ) ];
+				var events = [];
+
+				var result = client.events( baseUrl : base, payload : { input : "go" }, onEvent : ( e ) => events.append( e ) );
+
+				expect( result.error ).toBe( "model offline" );
+				expect( events[ 1 ].type ).toBe( "error" );
+			} );
+
+			it( "lets the caller stop reading by throwing from onEvent", function() {
+				reply.frames = [ frame( "thread", { threadId : "t-3" } ), chunk( { content : "a" } ), chunk( { content : "b" } ), frame( "done", "[DONE]" ) ];
+				var count = { value : 0 };
+
+				expect( function() {
+					client.events( baseUrl : base, payload : { input : "go" }, onEvent : ( e ) => {
+						count.value++;
+						if ( e.type == "delta" ) {
+							throw( type = "Test.Stop", message = "enough" );
+						}
+					} );
+				} ).toThrow( "Test.Stop" );
+				expect( count.value ).toBe( 2 );
+			} );
+
+			it( "sends the token on every kind of request, and nothing when there is none", function() {
+				reply.frames = [ frame( "done", "[DONE]" ) ];
+				client.events( baseUrl : base, payload : {} );
+				reply.frames = [];
+				client.getJson( base, "tools" );
+				expect( seen.headers ).toBe( [ "", "" ] );
+
+				client.withToken( "s3cret" );
+				reply.frames = [ frame( "done", "[DONE]" ) ];
+				client.events( baseUrl : base, payload : {} );
+				reply.frames = [];
+				client.getJson( base, "tools" );
+				client.postJson( base, "cancel", { threadId : "x" } );
+				expect( seen.headers.slice( 3 ) ).toBe( [ "s3cret", "s3cret", "s3cret" ] );
+			} );
+
+			it( "says so plainly on a 401, and when the route is not there", function() {
+				reply.status = 401;
+				reply.json = '{"success":false}';
+				expect( function() { client.getJson( base, "tools" ); } ).toThrow( "BxAgents.AgentApiUnauthorized" );
+				expect( function() { client.events( baseUrl : base, payload : {} ); } ).toThrow( "BxAgents.AgentApiUnauthorized" );
+
+				reply.status = 404;
+				expect( function() { client.getJson( base, "tools" ); } ).toThrow( "BxAgents.AgentRouteMissing" );
+				expect( function() { client.events( baseUrl : base, payload : {} ); } ).toThrow( "BxAgents.AgentRouteMissing" );
+			} );
+
+			it( "puts query values on a GET and hands back the JSON, including a 400 explanation", function() {
+				reply.json = '{"pending":false,"success":true}';
+				var answer = client.getJson( base, "pending", { threadId : "a b" } );
+				expect( answer.pending ).toBeFalse();
+				expect( seen.paths[ 1 ] ).toBe( "/__bxagents/pending?threadId=a%20b" );
+
+				reply.status = 400;
+				reply.json = '{"success":false,"error":"threadId is required"}';
+				expect( client.postJson( base, "cancel", {} ).error ).toBe( "threadId is required" );
+			} );
+
+		} );
+	}
+
+}

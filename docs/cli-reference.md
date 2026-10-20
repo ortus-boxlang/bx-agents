@@ -202,7 +202,7 @@ In the screen:
 | Alt+Enter, Ctrl+J, or `\` then Enter | New line in the message |
 | Up / Down | Earlier messages (from the first or last line of the box) |
 | Esc | Stop the agent. It stops at its next step, not mid-word |
-| Enter while the agent works | Steer it: your message is added to the run (in-process only) |
+| Enter while the agent works | Steer it: your message is added to the run |
 | Ctrl+C | Clear the box; on an empty box, leave. Ctrl+D leaves too |
 
 Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/save [file]` (the conversation as Markdown), `/record [file]` and `/record stop` (see below) and `/exit`.
@@ -220,7 +220,7 @@ agg demo.cast demo.gif               # turn it into a GIF (agg is a separate too
 The file holds the screen's output, so it shows what you typed in the message box and everything the agent printed, including tool arguments. Keystrokes themselves are not recorded. A recording started with `/record` begins at that moment, so earlier lines are not in it. It needs the terminal screen: `--no-tui` and non-interactive runs record nothing.
 
 
-The answer is shown as it streams and printed as formatted Markdown (headings, lists, code blocks) when it is complete. In the default mode each tool call is shown with its arguments and how long it took, and the model's thinking is shown while it works but never kept. A run that stops for [human approval](conventions/gateways/index.md) asks you in place: approve once, approve for the conversation, or reject. Over HTTP the stream carries only the text, so there are no tool lines, no thinking and no steering, and an approval is answered at the server.
+The answer is shown as it streams and printed as formatted Markdown (headings, lists, code blocks) when it is complete. In the default mode each tool call is shown with its arguments and how long it took, and the model's thinking is shown while it works but never kept. A run that stops for [human approval](conventions/gateways/index.md) asks you in place: approve once, approve for the conversation, or reject. Over HTTP the screen is the same: tool lines, thinking, Esc, steering and approvals all work, through the server's [run-control routes](conventions/agent-bx.md#run-control). A server built by an older bxAgents has no run control; then you get the answer only, with a notice.
 
 Three modes, one chat:
 
@@ -235,9 +235,9 @@ Three modes, one chat:
 - **`--server`**: boots a real miniserver (needs `boxlang-miniserver` on `PATH`, like `serve`) on an ephemeral loopback port and drives the REPL over HTTP against the project's [always-on `/__bxagents` route](conventions/agent-bx.md#the-always-on-agent-route), shutting it down on exit. `--port` pins the port instead of taking a free one.
 - **`--connect`**: drives the same REPL against a running server, starting and stopping nothing. The URL is the server root (`http://host:port`), not the agent path - `chat` appends that itself.
 - `--server` and `--connect` are mutually exclusive: one says "start a server for me", the other "don't". Passing both fails immediately rather than silently honoring one.
-- Both HTTP modes **stream** the reply: the answer appears token by token as the agent produces it, over the route's `/stream` (SSE) sub-route, rather than arriving all at once when the turn ends. If the stream cannot be opened (an older server without a `/stream` sub-route, or a proxy that won't pass `text/event-stream`) it falls back to `/invoke` and you get the whole reply at the end instead of an error.
+- Both HTTP modes **stream** the reply: the answer appears token by token as the agent produces it, over the route's `/events` (SSE) sub-route, which also carries the tool calls and the pause for approval. Esc calls `/cancel`, a message typed while the agent works calls `/steer`, and an approval is answered with `/resume`. The plain REPL (`--no-tui`) uses `/stream`, and falls back to `/invoke` and the whole reply at the end if the stream cannot be opened (an older server without a `/stream` sub-route, or a proxy that won't pass `text/event-stream`).
 - Both HTTP modes carry the server's `threadId` across turns, so a session is one conversation rather than a series of unrelated first messages.
-- A turn that pauses for a [human-in-the-loop](conventions/gateways/index.md) decision says so instead of appearing to answer with silence, and points at the `/gateways/interactions/` endpoint where the decision is submitted.
+- In the screen, a turn that pauses for a [human-in-the-loop](conventions/gateways/index.md) decision asks you in place. In the plain REPL it says so instead of appearing to answer with silence, and points at the `/gateways/interactions/` endpoint where the decision is submitted.
 - If the route is gated behind [`agentApi.tokenEnvVar`](conventions/agent-bx.md#agentapi), these modes get a clear `401` error rather than a confusing timeout - they send no token.
 - Type `/exit` to leave (`exit` and `quit` work in the plain REPL).
 - Needs a real interactive terminal. Piped or non-interactive, it falls back to the plain REPL, which needs one too (`MiniConsole` shells out to `stty` for raw mode). Use [`invoke`](#invoke) for scripting.

@@ -202,6 +202,31 @@ class {
 	}
 
 	/**
+	 * Who the agent is, for a client's banner: name, a short model label and what it can do.
+	 */
+	function about( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var config = agent().getConfig()
+		// AiAgent.getConfig().model is the AiModel's whole config struct; a client wants provider/model
+		var modelConfig = config.model ?: {}
+		var modelLabel = modelConfig
+		if ( isStruct( modelConfig ) ) {
+			var modelId = ( modelConfig.params ?: {} ).model ?: ( modelConfig.name ?: "" )
+			modelLabel = [ modelConfig.provider ?: "", modelId ].filter( ( part ) => len( part ) ).toList( "/" )
+		}
+		event.renderData( type : "json", data : {
+			"success"      : true,
+			"name"         : config.name ?: "",
+			"description"  : config.description ?: "",
+			"model"        : modelLabel,
+			"toolCount"    : config.toolCount ?: 0,
+			"capabilities" : { "events" : true, "cancel" : true, "steer" : true, "approvals" : true }
+		} )
+	}
+
+	/**
 	 * The names of the tools the agent has.
 	 */
 	function tools( event, rc, prc ) {

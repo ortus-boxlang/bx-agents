@@ -1,0 +1,22 @@
+/**
+ * An AgentClient that does not start a real server: chat --server asks it to start and stop one,
+ * and the spec reads back what was asked.
+ */
+class extends="bxagents.models.cli.support.AgentClient" {
+
+	function configure( required string baseUrl, required array log ) {
+		variables.fakeBase = arguments.baseUrl
+		variables.log = arguments.log
+		return this
+	}
+
+	struct function startServer( required string projectRoot, any port ) {
+		variables.log.append( "start" )
+		return { process : "the-process", baseUrl : variables.fakeBase, port : 0 }
+	}
+
+	void function stopServer( any process ) {
+		variables.log.append( "stop:" & ( isNull( arguments.process ) ? "none" : arguments.process ) )
+	}
+
+}

@@ -1,0 +1,203 @@
+/**
+ * The HTTP session turns the run-control stream into the chat screen's events, and uses the
+ * server's cancel, steer and resume routes. The client is a fake that plays scripted events.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "HttpSession", function() {
+
+			beforeEach( function() {
+				variables.calls = [];
+				variables.script = { events : [], tools : [], about : { name : "support", model : "claude/sonnet" }, missing : false, legacy : [] };
+				variables.fake = {
+					events : ( baseUrl, route, payload, onEvent ) => {
+						calls.append( { call : "events", route : route, payload : duplicate( payload ) } );
+						if ( script.missing ) {
+							throw( type = "BxAgents.AgentRouteMissing", message = "404" );
+						}
+						for ( var event in script.events ) {
+							onEvent( event );
+						}
+						return { output : "", threadId : "t-1", suspended : false, pending : [], error : "" };
+					},
+					stream : ( baseUrl, message, threadId, onDelta ) => {
+						calls.append( { call : "stream", message : message, threadId : threadId } );
+						for ( var delta in script.legacy ) {
+							onDelta( delta );
+						}
+						return { output : script.legacy.toList( "" ), threadId : "t-legacy", suspended : false };
+					},
+					getJson : ( baseUrl, route, query = {} ) => {
+						calls.append( { call : "get", route : route } );
+						if ( route == "tools" ) { return { tools : script.tools }; }
+						if ( route == "agent" ) { return script.about; }
+						throw( type = "Test.Unexpected", message = route );
+					},
+					postJson : ( baseUrl, route, body = {} ) => {
+						calls.append( { call : "post", route : route, body : duplicate( body ) } );
+						return { success : true };
+					}
+				};
+				variables.session = new bxagents.models.cli.chat.HttpSession( "http://h:1/", new FakeClient( fake ) );
+				variables.pushed = [];
+				variables.controls = { cancel : false, steer : [] };
+				variables.hooks = {
+					push            : ( event ) => pushed.append( event ),
+					cancelRequested : () => controls.cancel,
+					takeSteer       : () => controls.steer.len() ? controls.steer.shift() : nullValue()
+				};
+			} );
+
+			private function events( list ) {
+				script.events = arguments.list;
+			}
+
+			it( "describes the agent from the server, and falls back when it cannot say", function() {
+				expect( session.agentName() ).toBe( "support" );
+				expect( session.modelName() ).toBe( "claude/sonnet" );
+				expect( session.mode() ).toBe( "over http" );
+
+				script.about = {};
+				var bare = new bxagents.models.cli.chat.HttpSession( "http://h:1", new FakeClient( fake ) );
+				expect( bare.agentName() ).toBe( "agent" );
+				expect( bare.modelName() ).toBe( "http://h:1" );
+			} );
+
+			it( "lists the agent's tools by name", function() {
+				script.tools = [ { name : "now", description : "x" }, "plain" ];
+
+				expect( session.tools() ).toBe( [ "now", "plain" ] );
+			} );
+
+			it( "turns stream events into screen events and returns the whole answer", function() {
+				events( [
+					{ type : "thread", threadId : "t-1" },
+					{ type : "reasoning", text : "hmm" },
+					{ type : "delta", text : "It is " },
+					{ type : "tool", id : "now##1", name : "now", arguments : { zone : "UTC", _chatRequest : "x" }, status : "running", ms : 0 },
+					{ type : "tool", id : "now##1", name : "now", arguments : { zone : "UTC" }, status : "ok", ms : 7 },
+					{ type : "delta", text : "noon." }
+				] );
+
+				var result = session.send( "time?", hooks );
+
+				expect( result.status ).toBe( "done" );
+				expect( result.text ).toBe( "It is noon." );
+				expect( pushed.map( e => e.type ) ).toBe( [ "reasoning", "delta", "tool", "tool", "delta" ] );
+				expect( pushed[ 3 ].summary ).toBe( "zone=UTC" );
+				expect( pushed[ 3 ].status ).toBe( "running" );
+				expect( pushed[ 4 ].status ).toBe( "ok" );
+				expect( pushed[ 4 ].ms ).toBe( 7 );
+				expect( calls.filter( c => c.call == "events" )[ 1 ].route ).toBe( "events" );
+			} );
+
+			it( "keeps the thread from one turn to the next, and starts over on /new", function() {
+				events( [ { type : "thread", threadId : "t-1" }, { type : "delta", text : "a" } ] );
+
+				session.send( "one", hooks );
+				session.send( "two", hooks );
+				session.newThread();
+				session.send( "three", hooks );
+
+				var sent = calls.filter( c => c.call == "events" ).map( c => c.payload.threadId );
+				expect( sent ).toBe( [ "", "t-1", "" ] );
+			} );
+
+			it( "stops the run on the server when the user pressed Esc, and leaves the turn", function() {
+				events( [ { type : "thread", threadId : "t-1" }, { type : "delta", text : "a" }, { type : "delta", text : "b" } ] );
+				controls.cancel = true;
+
+				var result = session.send( "go", hooks );
+
+				expect( result.status ).toBe( "cancelled" );
+				var posts = calls.filter( c => c.call == "post" );
+				expect( posts ).toHaveLength( 1 );
+				expect( posts[ 1 ].route ).toBe( "cancel" );
+				expect( posts[ 1 ].body.threadId ).toBe( "t-1" );
+			} );
+
+			it( "sends a message typed during the turn to the server's steer route", function() {
+				events( [ { type : "thread", threadId : "t-1" }, { type : "delta", text : "a" } ] );
+				controls.steer = [ "and be brief" ];
+
+				var result = session.send( "go", hooks );
+
+				expect( result.status ).toBe( "done" );
+				var posts = calls.filter( c => c.call == "post" );
+				expect( posts[ 1 ].route ).toBe( "steer" );
+				expect( posts[ 1 ].body.input ).toBe( "and be brief" );
+				expect( posts[ 1 ].body.threadId ).toBe( "t-1" );
+			} );
+
+			it( "returns a run that waits for approval with what it waits on, and resume answers it", function() {
+				events( [
+					{ type : "thread", threadId : "t-9" },
+					{ type : "suspended", threadId : "t-9", pendingActions : [ { toolName : "deleteFile", toolArgs : { path : "x" } } ] }
+				] );
+
+				var first = session.send( "clean up", hooks );
+
+				expect( first.status ).toBe( "suspended" );
+				expect( first.pending[ 1 ].toolName ).toBe( "deleteFile" );
+
+				script.events = [ { type : "delta", text : "Done." } ];
+				var second = session.resume( "approve", hooks );
+
+				expect( second.status ).toBe( "done" );
+				expect( second.text ).toBe( "Done." );
+				var resumed = calls.filter( c => c.call == "events" )[ 2 ];
+				expect( resumed.route ).toBe( "resume" );
+				expect( resumed.payload.threadId ).toBe( "t-9" );
+				expect( resumed.payload.decision ).toBe( "approve" );
+			} );
+
+			it( "shows an error the server reports", function() {
+				events( [ { type : "error", message : "model offline" } ] );
+
+				session.send( "go", hooks );
+
+				expect( pushed ).toHaveLength( 1 );
+				expect( pushed[ 1 ].type ).toBe( "error" );
+				expect( pushed[ 1 ].text ).toBe( "model offline" );
+			} );
+
+			it( "falls back to the plain text stream, once and with a notice, on a server without run control", function() {
+				script.missing = true;
+				script.legacy = [ "Hel", "lo" ];
+
+				var first = session.send( "hi", hooks );
+				var second = session.send( "again", hooks );
+
+				expect( first.text ).toBe( "Hello" );
+				expect( first.status ).toBe( "done" );
+				expect( pushed.filter( e => e.type == "notice" ) ).toHaveLength( 1 );
+				expect( calls.filter( c => c.call == "events" ) ).toHaveLength( 1 );
+				expect( calls.filter( c => c.call == "stream" ) ).toHaveLength( 2 );
+				expect( calls.filter( c => c.call == "stream" )[ 2 ].threadId ).toBe( "t-legacy" );
+			} );
+
+			it( "stops the plain text stream of an older server when the user pressed Esc", function() {
+				script.missing = true;
+				script.legacy = [ "a", "b", "c" ];
+				controls.cancel = true;
+
+				var result = session.send( "hi", hooks );
+
+				expect( result.status ).toBe( "cancelled" );
+			} );
+
+			it( "says where to answer an approval on an older server, which the plain stream cannot carry", function() {
+				script.missing = true;
+				fake.stream = ( baseUrl, message, threadId, onDelta ) => ( { output : "", threadId : "t", suspended : true } );
+
+				session.send( "hi", hooks );
+
+				var notices = pushed.filter( e => e.type == "notice" );
+				expect( notices.last().text ).toInclude( "http://h:1/gateways/interactions/" );
+			} );
+
+		} );
+	}
+
+}

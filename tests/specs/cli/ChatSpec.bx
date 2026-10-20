@@ -77,6 +77,129 @@ class extends="testbox.system.BaseSpec" {
 				expect( threw ).notToBe( "BxAgents.NotBuilt" );
 			} );
 
+
+			// ---------------------------------------------------------------
+			// Lifecycle over HTTP: a scripted server in this process answers like an agent's
+			// run-control routes, and a stand-in screen types one line and leaves.
+			// ---------------------------------------------------------------
+
+			function startScriptedServer( required array seen ) {
+				var srv = createObject( "java", "com.sun.net.httpserver.HttpServer" ).create(
+					createObject( "java", "java.net.InetSocketAddress" ).init( "127.0.0.1", 0 ), 0
+				);
+				srv.createContext( "/", ( exchange ) => {
+					seen.append( exchange.getRequestMethod() & " " & exchange.getRequestURI().getPath() );
+					var out = exchange.getResponseBody();
+					var path = exchange.getRequestURI().getPath();
+					if ( path == "/__bxagents/events" ) {
+						exchange.getResponseHeaders().add( "Content-Type", "text/event-stream" );
+						exchange.sendResponseHeaders( 200, 0 );
+						for ( var frame in [
+							'event: thread' & char( 10 ) & 'data: {"threadId":"t-1"}',
+							'event: chunk' & char( 10 ) & 'data: {"choices":[{"delta":{"content":"Hi there"}}]}',
+							'event: done' & char( 10 ) & 'data: [DONE]'
+						] ) {
+							out.write( ( frame & char( 10 ) & char( 10 ) ).getBytes( "UTF-8" ) );
+							out.flush();
+						}
+					} else {
+						var body = path == "/__bxagents/agent" ? '{"success":true,"name":"scripted","model":"mock/m"}' : '{"success":true,"tools":[]}';
+						var bytes = body.getBytes( "UTF-8" );
+						exchange.getResponseHeaders().add( "Content-Type", "application/json" );
+						exchange.sendResponseHeaders( 200, bytes.len() );
+						out.write( bytes );
+					}
+					out.close();
+				} );
+				srv.start();
+				return srv;
+			}
+
+			function scriptedScreen( required array log ) {
+				var s = { inputs : [ "hello" ] };
+				s.readInput = () => {
+					if ( !s.inputs.len() ) { return nullValue(); }
+					var next = s.inputs[ 1 ];
+					s.inputs.deleteAt( 1 );
+					return next;
+				};
+				s.banner = ( agent, model, mode ) => log.append( "banner:" & agent & "|" & model & "|" & mode );
+				s.printUser = ( text ) => {};
+				s.print = ( style, text ) => {};
+				s.printMarkdown = ( text ) => log.append( "markdown:" & text );
+				s.beginTurn = () => {};
+				s.endTurn = () => {};
+				s.push = ( event ) => {};
+				s.cancelRequested = () => false;
+				s.takeSteer = () => nullValue();
+				s.choose = ( title, lines, choices ) => "reject";
+				s.isRecording = () => false;
+				s.recordingFile = () => "";
+				s.recordingError = () => "";
+				s.startRecording = ( file, title ) => {};
+				s.stopRecording = () => "";
+				s.copy = ( text ) => {};
+				s.close = () => log.append( "screen closed" );
+				return s;
+			}
+
+			it( "chats over run control with --connect and leaves that server alone", function() {
+				var seen = [];
+				var log = [];
+				var srv = startScriptedServer( seen );
+				try {
+					var result = chatVerb.run( {
+						projectRoot : createTempDirectory( prefix = "bxagents-cli-chat-" ),
+						connect     : "http://127.0.0.1:" & srv.getAddress().getPort(),
+						_screen     : scriptedScreen( log )
+					} );
+				} finally {
+					srv.stop( 0 );
+				}
+
+				expect( result.exitCode ).toBe( 0 );
+				expect( log[ 1 ] ).toBe( "banner:scripted|mock/m|over http" );
+				expect( seen ).toInclude( "POST /__bxagents/events" );
+				// nothing but the agent's own routes was called: no shutdown, no build
+				expect( seen.filter( r => !r.find( "/__bxagents/" ) ) ).toBeEmpty();
+				expect( seen.filter( r => r.findNoCase( "stop" ) || r.findNoCase( "shutdown" ) ) ).toBeEmpty();
+			} );
+
+			it( "stops the throwaway server of --server when the chat ends", function() {
+				var seen = [];
+				var log = [];
+				var calls = [];
+				var srv = startScriptedServer( seen );
+				try {
+					var client = new LifecycleClient().configure( "http://127.0.0.1:" & srv.getAddress().getPort(), calls );
+					var dir = createTempDirectory( prefix = "bxagents-cli-chat-" );
+					directoryCreate( dir & "/.build/app/agent", true, true );
+					fileWrite( dir & "/.build/app/agent/GeneratedAgentFactory.bx", "class {}" );
+					tempDirs.append( dir );
+					chatVerb.run( { projectRoot : dir, server : true, _client : client, _screen : scriptedScreen( log ) } );
+				} finally {
+					srv.stop( 0 );
+				}
+
+				expect( calls ).toBe( [ "start", "stop:the-process" ] );
+				expect( seen ).toInclude( "POST /__bxagents/events" );
+			} );
+
+			it( "stops the throwaway server of --server even when the chat fails", function() {
+				var calls = [];
+				var client = new LifecycleClient().configure( "http://127.0.0.1:1", calls );
+				var dir = createTempDirectory( prefix = "bxagents-cli-chat-" );
+				directoryCreate( dir & "/.build/app/agent", true, true );
+					fileWrite( dir & "/.build/app/agent/GeneratedAgentFactory.bx", "class {}" );
+				tempDirs.append( dir );
+				var broken = { readInput : () => { throw( type = "Test.Boom", message = "screen broke" ); }, banner : () => {}, close : () => {}, isRecording : () => false };
+
+				expect( function() {
+					chatVerb.run( { projectRoot : dir, server : true, _client : client, _screen : broken } );
+				} ).toThrow( "Test.Boom" );
+				expect( calls ).toBe( [ "start", "stop:the-process" ] );
+			} );
+
 		} );
 	}
 
