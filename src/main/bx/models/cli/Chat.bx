@@ -112,15 +112,18 @@ class {
 	private struct function chatWithScreen( required any session, required struct options ) {
 		var controller = new "models.cli.chat.ChatController@bxagents"( arguments.session )
 		var screen = arguments.options._screen ?: createObject( "java", "ortus.boxlang.bxagents.tui.ChatScreen" ).open( controller.commands() )
+		var saved = ""
 		try {
-			controller.run( screen )
+			controller.run( screen, arguments.options.record ?: false )
 		} finally {
+			// close() finishes the recording, so ask for its file first
+			saved = screen.isRecording() ? screen.recordingFile() : ""
 			screen.close()
 			arguments.session.close()
 		}
 		return {
 			exitCode : 0,
-			message  : "Chat session ended"
+			message  : "Chat session ended" & ( len( saved ) ? ". Recording saved to #saved#" : "" )
 		}
 	}
 

@@ -205,7 +205,20 @@ In the screen:
 | Enter while the agent works | Steer it: your message is added to the run (in-process only) |
 | Ctrl+C | Clear the box; on an empty box, leave. Ctrl+D leaves too |
 
-Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/save [file]` (the conversation as Markdown) and `/exit`.
+Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/save [file]` (the conversation as Markdown), `/record [file]` and `/record stop` (see below) and `/exit`.
+
+#### Recording a chat
+
+`--record` saves what the screen shows as an [asciicast](https://docs.asciinema.org/manual/asciicast/v2/) `.cast` file, for demos and bug reports. `--record` alone writes `chat-YYYYMMDD-HHMMSS.cast` in the current folder, and `--record=demo.cast` names the file. Inside the chat, `/record` starts a recording (`/record demo.cast` names it) and `/record stop` finishes it. A red `● rec` shows on the hint line while it is on, and the file is finished when you leave.
+
+```bash
+bxAgents chat --record=demo.cast
+asciinema play demo.cast             # replay it in a terminal
+agg demo.cast demo.gif               # turn it into a GIF (agg is a separate tool)
+```
+
+The file holds the screen's output, so it shows what you typed in the message box and everything the agent printed, including tool arguments. Keystrokes themselves are not recorded. A recording started with `/record` begins at that moment, so earlier lines are not in it. It needs the terminal screen: `--no-tui` and non-interactive runs record nothing.
+
 
 The answer is shown as it streams and printed as formatted Markdown (headings, lists, code blocks) when it is complete. In the default mode each tool call is shown with its arguments and how long it took, and the model's thinking is shown while it works but never kept. A run that stops for [human approval](conventions/gateways/index.md) asks you in place: approve once, approve for the conversation, or reject. Over HTTP the stream carries only the text, so there are no tool lines, no thinking and no steering, and an approval is answered at the server.
 

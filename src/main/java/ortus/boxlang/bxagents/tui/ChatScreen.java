@@ -17,6 +17,8 @@
  */
 package ortus.boxlang.bxagents.tui;
 
+import java.io.IOException;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -25,6 +27,7 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
+import dev.tamboui.backend.jline3.JLineBackend;
 import dev.tamboui.terminal.Frame;
 import dev.tamboui.text.Line;
 import dev.tamboui.text.Span;
@@ -35,6 +38,8 @@ import dev.tamboui.tui.event.Event;
 import dev.tamboui.tui.event.KeyCode;
 import dev.tamboui.tui.event.KeyEvent;
 import dev.tamboui.tui.event.PasteEvent;
+import org.jline.terminal.Terminal;
+import org.jline.terminal.TerminalBuilder;
 
 /**
  * The chat screen, in the style of Pi: no alternate screen. Everything that is finished
@@ -66,6 +71,8 @@ public final class ChatScreen implements AutoCloseable {
 	private static final int				MAX_COMPOSER	= 6;
 
 	private final InlineTuiRunner			runner;
+	private final Terminal					terminal;
+	private final RecordingTerminal			tap;
 	private final Theme						theme;
 	private final ClassLoader				previousLoader;
 	private final List<Map<?, ?>>			commands;
@@ -84,8 +91,11 @@ public final class ChatScreen implements AutoCloseable {
 	private long							turnStarted;
 	private int								frame;
 
-	private ChatScreen( InlineTuiRunner runner, Theme theme, ClassLoader previousLoader, List<Map<?, ?>> commands ) {
+	private ChatScreen( InlineTuiRunner runner, Terminal terminal, RecordingTerminal tap, Theme theme, ClassLoader previousLoader,
+	    List<Map<?, ?>> commands ) {
 		this.runner			= runner;
+		this.terminal		= terminal;
+		this.tap			= tap;
 		this.theme			= theme;
 		this.previousLoader	= previousLoader;
 		this.commands		= commands;
@@ -112,8 +122,16 @@ public final class ChatScreen implements AutoCloseable {
 					cmds.add( m );
 				}
 			}
-			InlineTuiConfig cfg = InlineTuiConfig.builder( 3 ).clearOnClose( true ).bracketedPaste( true ).build();
-			return new ChatScreen( InlineTuiRunner.create( cfg ), Theme.detect(), before, cmds );
+			InlineTuiConfig		cfg			= InlineTuiConfig.builder( 3 ).clearOnClose( true ).bracketedPaste( true ).build();
+			// the terminal is made here, the way the backend would make it, so a recording can be started on it
+			Terminal			terminal	= TerminalBuilder.builder().system( true ).jansi( true ).build();
+			RecordingTerminal	tap			= RecordingTerminal.wrap( terminal );
+			try {
+				return new ChatScreen( InlineTuiRunner.create( new JLineBackend( tap.terminal() ), cfg ), terminal, tap, Theme.detect(), before, cmds );
+			} catch ( Exception | Error e ) {
+				terminal.close();
+				throw e;
+			}
 		} catch ( Exception | Error e ) {
 			Thread.currentThread().setContextClassLoader( before );
 			throw e;
@@ -448,7 +466,7 @@ public final class ChatScreen implements AutoCloseable {
 		}
 		rows.add( separator() );
 		rows.addAll( composerRows() );
-		rows.add( Row.of( " enter send · alt+enter new line · ↑ history" + ( menu.isEmpty() ? "" : " · tab completes" ), theme.muted ) );
+		rows.add( withRecordingMark( Row.of( " enter send · alt+enter new line · ↑ history" + ( menu.isEmpty() ? "" : " · tab completes" ), theme.muted ) ) );
 		return rows;
 	}
 
@@ -475,9 +493,14 @@ public final class ChatScreen implements AutoCloseable {
 		rows.add( separator() );
 		rows.addAll( composerRows() );
 		long secs = ( System.currentTimeMillis() - turnStarted ) / 1000;
-		rows.add( Row.of().add( " " + spin + " ", theme.accent ).add( cancel ? "stopping" : "working", theme.plain )
-		    .add( " " + secs + "s · esc stops · type and press enter to steer", theme.muted ) );
+		rows.add( withRecordingMark( Row.of().add( " " + spin + " ", theme.accent ).add( cancel ? "stopping" : "working", theme.plain )
+		    .add( " " + secs + "s · esc stops · type and press enter to steer", theme.muted ) ) );
 		return rows;
+	}
+
+	/** a red dot and "rec" at the end of a hint row while a recording is on */
+	private Row withRecordingMark( Row row ) {
+		return tap.isRecording() ? row.add( " · ", theme.muted ).add( "● rec", theme.error ) : row;
 	}
 
 	private Row separator() {
@@ -531,13 +554,69 @@ public final class ChatScreen implements AutoCloseable {
 		return null;
 	}
 
+	/**
+	 * Starts recording what the terminal shows into an asciicast file. One already on is finished first.
+	 *
+	 * @param file  absolute path of the .cast file to write
+	 * @param title shown by players
+	 *
+	 * @return the file being written
+	 *
+	 * @throws IOException when the file cannot be created
+	 */
+	public String startRecording( String file, String title ) throws IOException {
+		Path path = Path.of( file );
+		tap.start( path, title );
+		return path.toString();
+	}
+
+	/**
+	 * Finishes the recording, if one is on.
+	 *
+	 * @return the file that was written, or an empty string when no recording was on
+	 */
+	public String stopRecording() {
+		Path path = tap.stop();
+		return path == null ? "" : path.toString();
+	}
+
+	/**
+	 * @return true while a recording is on
+	 */
+	public boolean isRecording() {
+		return tap.isRecording();
+	}
+
+	/**
+	 * @return the file being written, or an empty string
+	 */
+	public String recordingFile() {
+		Path path = tap.file();
+		return path == null ? "" : path.toString();
+	}
+
+	/**
+	 * @return what stopped the recording early, or an empty string while it is healthy
+	 */
+	public String recordingError() {
+		String error = tap.error();
+		return error == null ? "" : error;
+	}
+
 	@Override
 	public void close() {
 		turnOver = true;
 		try {
 			runner.close();
 		} finally {
-			Thread.currentThread().setContextClassLoader( previousLoader );
+			try {
+				tap.stop();
+				terminal.close();
+			} catch ( IOException e ) {
+				// the terminal is gone either way
+			} finally {
+				Thread.currentThread().setContextClassLoader( previousLoader );
+			}
 		}
 	}
 

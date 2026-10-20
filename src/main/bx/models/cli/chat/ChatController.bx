@@ -21,6 +21,7 @@ class {
 			{ name : "/tools", hint : "list the agent's tools" },
 			{ name : "/copy", hint : "copy the last answer to the clipboard" },
 			{ name : "/save", hint : "save the conversation to a file: /save notes.md" },
+			{ name : "/record", hint : "record the screen as a .cast file: /record [file], /record stop" },
 			{ name : "/exit", hint : "leave the chat" }
 		]
 	}
@@ -60,9 +61,14 @@ class {
 	 * Runs until the user leaves.
 	 *
 	 * @screen The chat screen
+	 * @record False for no recording; true or a file name to record from the first line (a relative name is
+	 *         kept in the working directory, true picks one)
 	 */
-	void function run( required any screen ) {
+	void function run( required any screen, any record = false ) {
 		variables.screen = arguments.screen
+		if ( !isBoolean( arguments.record ) || arguments.record ) {
+			startRecording( isBoolean( arguments.record ) ? "" : arguments.record )
+		}
 		variables.screen.banner( variables.session.agentName(), variables.session.modelName(), variables.session.mode() )
 		while ( true ) {
 			var input = variables.screen.readInput()
@@ -120,6 +126,9 @@ class {
 				break
 			case "/save":
 				save( rest )
+				break
+			case "/record":
+				record( rest )
 				break
 			default:
 				variables.screen.print( "warn", "Unknown command #name#. Type /help." )
@@ -209,8 +218,7 @@ class {
 			variables.screen.print( "warn", "Nothing to save yet." )
 			return
 		}
-		var file = len( arguments.name ) ? arguments.name : "chat-#dateTimeFormat( now(), 'yyyyMMdd-HHmmss' )#.md"
-		var absolute = ( file.startsWith( "/" ) || reFind( "^[A-Za-z]:[\/]", file ) ) ? file : variables.workingDirectory & "/" & file
+		var absolute = absolutePath( len( arguments.name ) ? arguments.name : "chat-#dateTimeFormat( now(), 'yyyyMMdd-HHmmss' )#.md" )
 		var lines = []
 		for ( var entry in variables.transcript ) {
 			lines.append( "**" & ( entry.role == "you" ? "You" : "Agent" ) & "**" )
@@ -220,6 +228,56 @@ class {
 		}
 		fileWrite( absolute, lines.toList( char( 10 ) ) )
 		variables.screen.print( "ok", "Saved to #absolute#" )
+	}
+
+	/**
+	 * @file A file name, absolute or relative to the working directory
+	 *
+	 * @return The absolute path
+	 */
+	private string function absolutePath( required string file ) {
+		return ( arguments.file.startsWith( "/" ) || reFind( "^[A-Za-z]:[\/]", arguments.file ) ) ? arguments.file : variables.workingDirectory & "/" & arguments.file
+	}
+
+	/**
+	 * /record [file] starts, /record stop finishes.
+	 */
+	private void function record( required string rest ) {
+		if ( arguments.rest.lcase() == "stop" ) {
+			stopRecording()
+		} else if ( variables.screen.isRecording() ) {
+			variables.screen.print( "warn", "Already recording to #variables.screen.recordingFile()#. Type /record stop to finish." )
+		} else {
+			startRecording( arguments.rest )
+		}
+	}
+
+	/**
+	 * Starts recording the screen and says where it goes. A failure is shown, not thrown: the chat carries on.
+	 *
+	 * @file A file name, or empty for a dated one in the working directory
+	 */
+	private void function startRecording( required string file ) {
+		var absolute = absolutePath( len( arguments.file ) ? arguments.file : "chat-#dateTimeFormat( now(), 'yyyyMMdd-HHmmss' )#.cast" )
+		try {
+			variables.screen.startRecording( absolute, "bxAgents chat: " & variables.session.agentName() )
+			variables.screen.print( "ok", "Recording to #absolute#. Type /record stop to finish." )
+		} catch ( any e ) {
+			variables.screen.print( "warn", "Could not start recording: #e.message#" )
+		}
+	}
+
+	/**
+	 * Finishes the recording and says where it was saved, or that it stopped early.
+	 */
+	private void function stopRecording() {
+		if ( !variables.screen.isRecording() ) {
+			variables.screen.print( "warn", "No recording is on." )
+			return
+		}
+		var problem = variables.screen.recordingError()
+		var file = variables.screen.stopRecording()
+		variables.screen.print( len( problem ) ? "warn" : "ok", len( problem ) ? "The recording stopped early (#problem#). What was captured is in #file#" : "Recording saved to #file#" )
 	}
 
 }

@@ -205,7 +205,20 @@ En la pantalla:
 | Enter mientras el agente trabaja | Lo dirige: tu mensaje se añade a la ejecución (solo en el mismo proceso) |
 | Ctrl+C | Limpia el cuadro; con el cuadro vacío, sale. Ctrl+D también sale |
 
-Escribe `/` para ver los comandos: `/help`, `/new` (una conversación nueva), `/tools`, `/copy` (la última respuesta al portapapeles, con la secuencia OSC 52 que honran la mayoría de terminales), `/save [archivo]` (la conversación en Markdown) y `/exit`.
+Escribe `/` para ver los comandos: `/help`, `/new` (una conversación nueva), `/tools`, `/copy` (la última respuesta al portapapeles, con la secuencia OSC 52 que honran la mayoría de terminales), `/save [archivo]` (la conversación en Markdown), `/record [archivo]` y `/record stop` (ver abajo) y `/exit`.
+
+#### Grabar un chat
+
+`--record` guarda lo que muestra la pantalla como un archivo `.cast` de [asciicast](https://docs.asciinema.org/manual/asciicast/v2/), útil para demos e informes de errores. `--record` solo escribe `chat-AAAAMMDD-HHMMSS.cast` en la carpeta actual, y `--record=demo.cast` le da nombre. Dentro del chat, `/record` empieza una grabación (`/record demo.cast` le da nombre) y `/record stop` la termina. Mientras está activa se ve un `● rec` rojo en la línea de ayuda, y el archivo se cierra al salir.
+
+```bash
+bxAgents chat --record=demo.cast
+asciinema play demo.cast             # reprodúcelo en una terminal
+agg demo.cast demo.gif               # conviértelo en GIF (agg es otra herramienta)
+```
+
+El archivo guarda la salida de la pantalla, así que muestra lo que escribiste en el cuadro de mensaje y todo lo que imprimió el agente, incluidos los argumentos de las herramientas. Las pulsaciones de teclas en sí no se graban. Una grabación iniciada con `/record` empieza en ese momento, así que no incluye las líneas anteriores. Necesita la pantalla de terminal: `--no-tui` y las ejecuciones no interactivas no graban nada.
+
 
 La respuesta se muestra mientras llega y se imprime como Markdown formateado (títulos, listas, bloques de código) cuando está completa. En el modo por defecto cada llamada a una tool se muestra con sus argumentos y lo que tardó, y el razonamiento del modelo se muestra mientras trabaja pero no se conserva. Una ejecución que se detiene por [aprobación humana](conventions/gateways/index.md) te pregunta ahí mismo: aprobar una vez, aprobar para la conversación o rechazar. Por HTTP el stream solo lleva el texto, así que no hay líneas de tools, ni razonamiento, ni dirección, y una aprobación se responde en el servidor.
 

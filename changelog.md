@@ -169,6 +169,8 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   while it works steers it, and a run that stops for approval asks in place.
 - A multi-line message box with history, a `/` command menu (`/new`, `/tools`, `/copy`, `/save`,
   `/exit`) and `NO_COLOR` support. `--no-tui` and non-interactive terminals keep the plain REPL.
+- `bxAgents chat --record[=file]` and `/record [file]` / `/record stop` save the screen as an asciicast
+  `.cast` file for demos, with a `● rec` marker while it is on.
 
 #### Documentation
 
