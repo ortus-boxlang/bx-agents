@@ -245,9 +245,11 @@ class extends="testbox.system.BaseSpec" {
 				// The env var NAME is emitted; the secret itself never is.
 				expect( content ).toInclude( 'headers[ "x-bxagents-token" ]' );
 
-				// Fails closed: a blank/unset env var returns false outright
-				// rather than collapsing to "" == "" and admitting everyone.
-				expect( content ).toInclude( "if ( !len( expected ) ) {" );
+				// Fails closed: a blank/unset env var never matches, and a request with no
+				// token never gets as far as the comparison, so "" == "" admits nobody.
+				expect( content ).toInclude( "if ( !len( given ) ) {" );
+				expect( content ).toInclude( "if ( len( expected ) && given == expected ) {" );
+				expect( content ).notToInclude( "TokenService" );
 
 				// RoutingService invokes the condition as condition( requestString ) -
 				// ONE argument. A ( route, params, event ) closure would blow up on
@@ -288,6 +290,35 @@ class extends="testbox.system.BaseSpec" {
 				var catchAll = content.find( 'route( "/__bxagents/:subroute?" )' );
 				expect( events ).toBeGT( 0 );
 				expect( catchAll ).toBeGT( events );
+			} );
+
+			it( "gates on issued tokens alone when agentApi.tokens is on and there is no tokenEnvVar", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+				var content = fileRead( generator.generate(
+					discovery,
+					newAppDir(),
+					false, false, false, false, false,
+					{ tokens : true }
+				).router );
+
+				expect( content ).toInclude( '.withCondition(' );
+				expect( content ).toInclude( 'new "models.store.TokenService@bxagents"( new "models.store.ChatStore@bxagents"( "" ) ).authenticate( given )' );
+				expect( content ).notToInclude( "getSystemSetting" );
+				expect( content ).toInclude( 'route( "/__bxagents/:subroute?" )' );
+			} );
+
+			it( "accepts the shared secret as well as issued tokens when both are configured", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+				var content = fileRead( generator.generate(
+					discovery,
+					newAppDir(),
+					false, false, false, false, false,
+					{ tokenEnvVar : "BXAGENTS_API_TOKEN", tokens : true }
+				).router );
+
+				expect( content ).toInclude( 'getSystemSetting( "BXAGENTS_API_TOKEN", "" )' );
+				expect( content ).toInclude( "authenticate( given )" );
+				expect( content.find( "len( expected )" ) ).toBeLT( content.find( "authenticate( given )" ) );
 			} );
 
 			it( "registers no 401 fallback when the reserved route is ungated - there is nothing to turn away", function() {

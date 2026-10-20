@@ -12,7 +12,7 @@ _bxagents_complete() {
 	fi
 	local count=${#words[@]}
 	local cur="${words[count-1]}"
-	local verbs="build chat clean deploy doctor hash-password inspect invoke new package serve test help"
+	local verbs="build chat clean deploy doctor hash-password inspect invoke new package serve test token help"
 	local globals="--help -h --version -v"
 	COMPREPLY=()
 
@@ -57,6 +57,8 @@ _bxagents_complete() {
 			"package --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"serve --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"test --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
+			"token --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
+			"token --scope") COMPREPLY=($(compgen -W "chat admin" -- "$part")) ;;
 		esac
 		return 0
 	fi
@@ -65,7 +67,7 @@ _bxagents_complete() {
 		local flags=""
 		case "$verb" in
 			build) flags="--environment= --generatorVersion= --projectRoot= --verbose" ;;
-			chat) flags="--connect= --no-tui --port= --projectRoot= --record --server" ;;
+			chat) flags="--connect= --no-tui --port= --projectRoot= --record --server --token=" ;;
 			clean) flags="--force --projectRoot=" ;;
 			deploy) flags="--destination= --name= --projectRoot= --target=" ;;
 			doctor) flags="--json --projectRoot=" ;;
@@ -76,6 +78,7 @@ _bxagents_complete() {
 			package) flags="--projectRoot= --version=" ;;
 			serve) flags="--host= --port= --projectRoot=" ;;
 			test) flags="--projectRoot=" ;;
+			token) flags="--expires= --json --name= --projectRoot= --scope=" ;;
 		esac
 		COMPREPLY=($(compgen -W "$flags $globals" -- "$cur"))
 		if (( ${#COMPREPLY[@]} == 1 )) && [[ "${COMPREPLY[0]}" == *= ]]; then

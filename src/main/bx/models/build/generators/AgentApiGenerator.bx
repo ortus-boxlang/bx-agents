@@ -3,13 +3,13 @@
  * routes on the always-on /__bxagents path (see RouterGenerator, which registers the routes that call it).
  *
  * The handler is a real BoxLang class kept in generators/agentapi/AgentApi.bx so it is compiled and
- * checked with the rest of the module; this class only stamps the token variable into a copy.
+ * checked with the rest of the module; this class only stamps the token settings into a copy.
  */
 class {
 
 	/**
 	 * @appDir The generated app folder
-	 * @agentApi The root project's `agentApi` config - `{ enabled, tokenEnvVar }`, both optional
+	 * @agentApi The root project's `agentApi` config - `{ enabled, tokenEnvVar, tokens }`, all optional
 	 *
 	 * @return { written : boolean, path : string } - written is false when `agentApi.enabled` is false
 	 */
@@ -27,6 +27,11 @@ class {
 			throw( type = "BxAgents.AgentApiTemplateBroken", message = "agentapi/AgentApi.bx has lost its token variable marker" )
 		}
 		source = source.replace( marker, '"' & bxLiteral( tokenVariable ) & '"' )
+		var tokensMarker = '"__TOKENS_ENABLED__"'
+		if ( !source.find( tokensMarker ) ) {
+			throw( type = "BxAgents.AgentApiTemplateBroken", message = "agentapi/AgentApi.bx has lost its tokens marker" )
+		}
+		source = source.replace( tokensMarker, '"' & ( ( arguments.agentApi.tokens ?: false ) ? "true" : "false" ) & '"' )
 
 		var path = handlerDir & "/AgentApi.bx"
 		fileWrite( path, source )

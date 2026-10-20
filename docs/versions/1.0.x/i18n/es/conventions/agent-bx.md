@@ -94,7 +94,7 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 | `memory` | string o struct | La memoria de conversación del agente. Una cadena bare es una abreviatura para el tipo (`"cache"`); un struct es `{ type, ...config }` y se pasa textualmente a `aiMemory()` - por ejemplo, `{ type: "cache", maxMessages: 50 }`, o con `summaryProvider`/`summaryModel`/`summaryThreshold` para hacer funcional el `/compact` de la interfaz web. Se aplica por nodo, así que un subagente puede declarar el suyo propio. |
 | `checkpointer` | struct | `{ type: "cache"\|"file"\|"jdbc", ...config }`. Por defecto `{ type: "cache" }` si se omite. Siempre se aplica - sin uno, los flujos de aprobación human-in-the-loop a través de cualquier gateway que no sea `cli` fallan por completo. |
 | `gatewaySession` | struct | `{ policy, maxQueueDepth }`, ambos opcionales (por defecto `"queue"` / `50`). Solo significativo si el proyecto tiene al menos una entrada de [gateway](gateways/index.md#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends) de estilo push - controla la política del `GatewaySession` generado para un segundo mensaje entrante que llega en un hilo que ya tiene un turno en curso. `policy` debe ser uno de `reject`/`queue`/`steer`/`interrupt`. |
-| `agentApi` | struct | `{ enabled, tokenEnvVar }`, ambos opcionales. Controla la ruta de agente siempre activa en `/__bxagents`. Consulta [La ruta de agente siempre activa](#la-ruta-de-agente-siempre-activa) más abajo. |
+| `agentApi` | struct | `{ enabled, tokenEnvVar, tokens }`, todos opcionales. Controla la ruta de agente siempre activa en `/__bxagents`. Consulta [La ruta de agente siempre activa](#la-ruta-de-agente-siempre-activa) más abajo. |
 | cualquier otra clave | cualquiera | Fusionada y disponible en el struct de configuración resuelto, pero no interpretada por BxAgents mismo. |
 
 ## The model slug
@@ -258,6 +258,7 @@ Como la ruta está reservada, `build` **rechaza** cualquier entrada de `gateways
 |---|---|---|
 | `enabled` | boolean | Por defecto `true`. Ponlo a `false` para omitir la ruta por completo - para un build que va a un sitio donde no tiene por qué existir. |
 | `tokenEnvVar` | string | El **nombre** de una variable de entorno que contiene un secreto compartido. Cuando está puesto, cada sub-ruta exige una cabecera de petición `x-bxagents-token` coincidente. |
+| `tokens` | boolean | Por defecto `false`. `true` acepta además los [tokens de acceso](#tokens-de-acceso-para-un-agente-desplegado) hechos con `bxAgents token create`. |
 
 ```javascript
 function configure() {
@@ -285,6 +286,34 @@ La verja **falla cerrada**: si la variable nombrada está sin definir o vacía e
 
 !!! warning
     `tokenEnvVar` nombra una **variable**, nunca el secreto en sí. `build` rechaza un valor que no sea un nombre válido de variable de entorno, precisamente para que aquí no se pueda commitear un token literal por error. Solo el nombre de la variable llega al código generado.
+
+### Tokens de acceso para un agente desplegado
+
+Un secreto compartido (`tokenEnvVar`) basta para un solo llamador. Para dejar entrar a varias personas o máquinas, cada una con un nombre que puedes revocar, activa los tokens emitidos:
+
+```yaml
+# Agent.yaml
+agentApi:
+  tokens: true
+```
+
+Hazlos donde está la base de datos del agente: en el servidor, o en el proyecto antes de empaquetarlo.
+
+```bash
+bxAgents token create --name=laptop --expires=90d
+bxAgents token create --name=ci --scope=admin
+bxAgents token list
+bxAgents token revoke --name=laptop
+```
+
+- Un token se muestra **una vez**, al crearlo. Solo se guarda su SHA-256, así que un archivo de base de datos robado no sirve para llamar al agente.
+- El llamador lo envía en la cabecera `x-bxagents-token`, o lo hace `bxAgents chat --connect=<url> --token=<token>` (o `BXAGENTS_TOKEN`).
+- El nombre es quien llama. Una ejecución pertenece al token que la inició, y un token no puede responder la aprobación pendiente de otro. El alcance (scope) es `chat` o `admin`.
+- Revocar surte efecto en la siguiente petición, sin reiniciar. Un token también puede caducar (`--expires=90d`, `12h`, `2w` o una fecha).
+- Con `tokens: true` y sin `tokenEnvVar`, un servidor que aún no tiene tokens rechaza a todos. Con ambos, el secreto compartido funciona como un token `admin`, así se puede llegar a un despliegue nuevo antes de que exista el primer token.
+- Los tokens viven en la [base de datos de chat compartida](web-ui.md#el-almacén-sqlite) (`data/chat.db`). En un servidor desplegado ejecuta `token` con `BXAGENTS_DB` apuntando al archivo que usa la app.
+
+Pon HTTPS delante de cualquier servidor al que viaje un token: un token por HTTP simple se puede leer en la red.
 
 !!! info
     La ruta queda ligada al host en el que escuche el [miniserver](../cli-reference.md#serve) - `127.0.0.1` por defecto, así que nada es alcanzable fuera de la máquina salvo que la expongas deliberadamente. `tokenEnvVar` es lo que importa en cuanto lo hagas, y para cualquier artefacto `.bxa` construido que despliegues.

@@ -186,6 +186,14 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   Esc to stop the run on the server, steering and approvals answered in place. A server built by an older bxAgents
   falls back to the text stream with a notice. `AgentClient` can send a token.
 
+#### Access tokens for a deployed agent
+
+- `agentApi: { tokens: true }` accepts tokens made with `bxAgents token create --name=laptop [--scope=chat|admin]
+  [--expires=90d]`, plus `token list` and `token revoke`. A token is shown once and only its SHA-256 is kept
+  (in the shared chat database); revoking works at once on a running server. The token's name is who is calling:
+  a run belongs to the token that started it. `tokenEnvVar` still works and acts as an `admin` token.
+- `chat --connect=<url> --token=<token>` (or `BXAGENTS_TOKEN`) talks to a server that wants one.
+
 #### The chat screen
 
 - `bxAgents chat` is now a Pi-style terminal screen that keeps your scrollback: finished turns are

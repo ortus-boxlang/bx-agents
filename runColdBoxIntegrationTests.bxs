@@ -669,3 +669,145 @@ if ( !len( expectedToken ) ) {
 		}
 	}
 }
+
+// ------------------------------------------------------------------
+// 7. Issued access tokens (agentApi.tokens), over real HTTP, on a third app.
+//
+// The tokens are made the way an operator makes them: in the app's own chat database, with the
+// module's TokenService, before the server starts. The server then has to find them through the
+// app's default datasource, accept the right one on every route (the toAi routes and the
+// run-control routes), refuse a wrong one, an expired one and a revoked one, and fail closed
+// when there is no header at all.
+// ------------------------------------------------------------------
+issuedAppDir = repoRoot & "tests/.coldbox-app-issued"
+issuedPort   = port + 2
+if ( directoryExists( issuedAppDir ) ) {
+	directoryDelete( issuedAppDir, true )
+}
+directoryCreate( issuedAppDir, true )
+directoryCopy( expandPath( "/fixtures" ) & "/e2e-agent-api-tokens", issuedAppDir, true )
+
+issuedBuild = new bxagents.models.build.BuildPipeline( "coldbox-integration-test" ).build( issuedAppDir )
+println( "+ Built issued-tokens fixture at: " & issuedBuild.appDir )
+
+// what an operator does: tokens in the database the app will open
+issuedStore = new bxagents.models.store.ChatStore( { driver : "sqlite", database : issuedBuild.appDir & "/data/chat.db" } )
+directoryCreate( issuedBuild.appDir & "/data", true, true )
+issuedStore.migrate()
+issuedTokens = new bxagents.models.store.TokenService( issuedStore )
+goodToken = issuedTokens.create( "laptop" ).token
+adminToken = issuedTokens.create( "boss", "admin" ).token
+expiredToken = issuedTokens.create( "stale", "chat", dateAdd( "n", -5, now() ) ).token
+revokedToken = issuedTokens.create( "gone" ).token
+issuedTokens.revoke( "gone" )
+
+issuedConfigPath = repoRoot & "tests/.coldbox-app-issued-miniserver.json"
+fileWrite( issuedConfigPath, jsonSerialize( {
+	port            : issuedPort,
+	host            : "127.0.0.1",
+	webRoot         : issuedBuild.appDir,
+	configPath      : configPath,
+	rewrites        : true,
+	rewriteFileName : "index.bxm",
+	healthCheck     : true
+} ) )
+issuedProcess = createObject( "java", "ortus.boxlang.bxagents.build.MiniServerLauncher" ).launch( jarPath, issuedConfigPath, false )
+
+try {
+	issuedBase = "http://127.0.0.1:#issuedPort#/__bxagents"
+
+	// readiness: poll with a good token until the run-control route answers
+	issuedDeadline = getTickCount() + 90000
+	issuedReady = {}
+	while ( getTickCount() < issuedDeadline ) {
+		try {
+			bx:http url="#issuedBase#/tools" method="GET" result="issuedReady" timeout=15 {
+				bx:httpparam type="header" name="x-bxagents-token" value=goodToken;
+			}
+			if ( ( issuedReady.status_code ?: 0 ) == 200 ) {
+				break
+			}
+		} catch ( any e ) {
+			// still starting
+		}
+		sleep( 1000 )
+	}
+	if ( ( issuedReady.status_code ?: 0 ) != 200 ) {
+		throw(
+			type    = "BxAgents.IssuedTokenRejectedValidToken",
+			message = "A valid issued token was not accepted on /__bxagents/tools (HTTP #issuedReady.status_code ?: 0#): #left( issuedReady.fileContent ?: '', 300 )#"
+		)
+	}
+
+	// a good token works on the toAi route, the run-control routes and with the admin scope
+	for ( issuedOk in [
+		{ label : "chat token on /invoke", token : goodToken, verb : "POST", path : "/invoke", body : '{"input":"hi"}', expect : '"success":true' },
+		{ label : "admin token on /invoke", token : adminToken, verb : "POST", path : "/invoke", body : '{"input":"hi"}', expect : '"success":true' },
+		{ label : "chat token on /agent", token : goodToken, verb : "GET", path : "/agent", body : "", expect : '"name"' }
+	] ) {
+		bx:http url="#issuedBase##issuedOk.path#" method=issuedOk.verb result="issuedAnswer" timeout=60 {
+			bx:httpparam type="header" name="Content-Type" value="application/json";
+			bx:httpparam type="header" name="x-bxagents-token" value=issuedOk.token;
+			if ( len( issuedOk.body ) ) {
+				bx:httpparam type="body" value=issuedOk.body;
+			}
+		}
+		if ( issuedAnswer.status_code != 200 || !issuedAnswer.fileContent.findNoCase( issuedOk.expect ) ) {
+			throw(
+				type    = "BxAgents.IssuedTokenRejectedValidToken",
+				message = "#issuedOk.label# was not served (HTTP #issuedAnswer.status_code#): #left( issuedAnswer.fileContent ?: '', 300 )#"
+			)
+		}
+	}
+	println( "+ Confirmed: issued tokens are accepted on the toAi route and the run-control routes" )
+
+	// everything else is a deliberate 401, on both kinds of route
+	for ( issuedNo in [
+		{ label : "no token", token : "" },
+		{ label : "a made-up token", token : "bxa_" & repeatString( "A", 43 ) },
+		{ label : "an expired token", token : expiredToken },
+		{ label : "a revoked token", token : revokedToken },
+		{ label : "a token without the prefix", token : "laptop" }
+	] ) {
+		for ( issuedRoute in [ { verb : "POST", path : "/invoke", body : '{"input":"hi"}' }, { verb : "GET", path : "/tools", body : "" } ] ) {
+			bx:http url="#issuedBase##issuedRoute.path#" method=issuedRoute.verb result="issuedDenied" timeout=30 {
+				bx:httpparam type="header" name="Content-Type" value="application/json";
+				if ( len( issuedNo.token ) ) {
+					bx:httpparam type="header" name="x-bxagents-token" value=issuedNo.token;
+				}
+				if ( len( issuedRoute.body ) ) {
+					bx:httpparam type="body" value=issuedRoute.body;
+				}
+			}
+			if ( issuedDenied.status_code != 401 ) {
+				throw(
+					type    = "BxAgents.IssuedTokenGateFailedOpen",
+					message = "#issuedRoute.verb# #issuedRoute.path# with #issuedNo.label# should be a 401, got HTTP #issuedDenied.status_code#: #left( issuedDenied.fileContent ?: '', 300 )#"
+				)
+			}
+		}
+	}
+	println( "+ Confirmed: no token, a made-up, an expired and a revoked token are all refused with a 401" )
+
+	// revoking takes effect on the next request, without a restart
+	issuedTokens.revoke( "laptop" )
+	bx:http url="#issuedBase#/tools" method="GET" result="issuedAfterRevoke" timeout=30 {
+		bx:httpparam type="header" name="x-bxagents-token" value=goodToken;
+	}
+	if ( issuedAfterRevoke.status_code != 401 ) {
+		throw(
+			type    = "BxAgents.IssuedTokenRevokeIgnored",
+			message = "A token revoked after the server started was still accepted (HTTP #issuedAfterRevoke.status_code#)"
+		)
+	}
+	println( "+ Confirmed: revoking a token takes effect on the running server" )
+} finally {
+	issuedProcess.destroy()
+	issuedProcess.waitFor( 5, createObject( "java", "java.util.concurrent.TimeUnit" ).SECONDS )
+	if ( issuedProcess.isAlive() ) {
+		issuedProcess.destroyForcibly()
+	}
+	if ( fileExists( issuedConfigPath ) ) {
+		fileDelete( issuedConfigPath )
+	}
+}

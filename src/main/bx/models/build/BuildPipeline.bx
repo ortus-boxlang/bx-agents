@@ -163,6 +163,14 @@ class {
 		// per-request behavior (account seeding, warming the web UI's store,
 		// starting push gateways), or because an interceptor here was already
 		// proven dead on this stack (the seeder; see the comment above).
+		// Issued tokens live in the shared chat database. Without a web UI there is no store yet, so the
+		// app gets the default one, migrated at start.
+		var chatDatabase = webUiResult.webUiDatabase ?: {}
+		var agentApiConfig = config.agentApi ?: {}
+		var needsTokenStore = ( agentApiConfig.tokens ?: false ) && ( agentApiConfig.enabled ?: true )
+		if ( needsTokenStore && chatDatabase.isEmpty() ) {
+			chatDatabase = { datasource : "bxagents", path : "./data/chat.db" }
+		}
 		var startupStatements = toolScanStatements.duplicate()
 		if ( len( gatewayResult.sessionStartupStatement ?: "" ) ) {
 			startupStatements.append( gatewayResult.sessionStartupStatement )
@@ -173,6 +181,9 @@ class {
 		}
 		if ( len( webUiResult.webUiSeedStatement ?: "" ) ) {
 			startupStatements.append( webUiResult.webUiSeedStatement )
+		}
+		if ( needsTokenStore && !len( webUiResult.webUiWarmStatement ?: "" ) ) {
+			startupStatements.append( 'new "models.store.ChatStore@bxagents"( "" ).migrate()' )
 		}
 
 		arguments.onProgress( "+ Generating core ColdBox app skeleton (Application.bx, config/WireBox.bx, config/ColdBox.bx, agent/GeneratedAgentFactory.bx)..." )
@@ -194,7 +205,7 @@ class {
 			hasWebUi              = webUiResult.hasWebUi ?: false,
 			// { datasource, path } for the web UI's SQLite store - drives both
 			// this.datasources in Application.bx and moduleSettings.qb
-			webUiDatabase         = webUiResult.webUiDatabase ?: {},
+			webUiDatabase         = chatDatabase,
 			webUiHasUsers         = webUiResult.webUiHasUsers ?: false
 		)
 		var agentNames = coldboxResult.agentNodes.map( function( n ) { return n.name } )
