@@ -79,7 +79,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb new' -l forgebox -x
     complete -c $cmd -n '__bxagents_using_verb new' -l guard -x -a 'off flag block'
     complete -c $cmd -n '__bxagents_using_verb new' -l host -x
-    complete -c $cmd -n '__bxagents_using_verb new' -l mcp -x -a 'github stripe notion atlassian cloudflare supabase'
+    complete -c $cmd -n '__bxagents_using_verb new' -l mcp -x -a 'github stripe notion atlassian cloudflare supabase git'
     complete -c $cmd -n '__bxagents_using_verb new' -l memory -x -a 'cache file'
     complete -c $cmd -n '__bxagents_using_verb new' -l model -x
     complete -c $cmd -n '__bxagents_using_verb new' -l name -x

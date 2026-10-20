@@ -456,12 +456,28 @@ class extends="testbox.system.BaseSpec" {
 				var result = generateFor( fixtures & "/with-mcp-credentials", buildDir );
 
 				var content = fileRead( result.agentFactory );
-				expect( content ).toInclude( 'resolvePlaceholders(' );
+				expect( content ).toInclude( 'McpServerResolver@bxagents' );
+				expect( content ).toInclude( '.resolve(' );
 				expect( content ).toInclude( 'https://plain.example.com/mcp' );
 				expect( content ).toInclude( '${env.GITHUB_PERSONAL_ACCESS_TOKEN}' );
 				expect( content ).toInclude( '${env.OTHER_API_KEY}' );
 				// the entry's label is for the file, not for bx-ai
 				expect( content ).notToInclude( '"github"' );
+			} );
+
+			it( "passes stdio mcpServers (command, env, prefix) and web controls through the resolver", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/with-mcp-stdio", buildDir );
+
+				var content = fileRead( result.agentFactory );
+				expect( content ).toInclude( 'McpServerResolver@bxagents' );
+				expect( content ).toInclude( 'mcp-server-git' );
+				expect( content ).toInclude( 'bxplaywright' );
+				expect( content ).toInclude( '${env.PLAYWRIGHT_API_KEY}' );
+				expect( content ).toInclude( 'allowedHosts' );
+				expect( content ).toInclude( 'toolFilter' );
+				// the entry's label is for the file, not for bx-ai
+				expect( content ).notToInclude( '"name" : "git"' );
 			} );
 
 			it( "emits an empty mcpServers: [] when no mcpServers are declared", function() {

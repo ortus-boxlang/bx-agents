@@ -84,7 +84,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'forgebox'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'guard'; Value = $true; Choices = @('off', 'flag', 'block'); Dir = $false }
 			@{ Name = 'host'; Value = $true; Choices = @(); Dir = $false }
-			@{ Name = 'mcp'; Value = $true; Choices = @('github', 'stripe', 'notion', 'atlassian', 'cloudflare', 'supabase'); Dir = $false }
+			@{ Name = 'mcp'; Value = $true; Choices = @('github', 'stripe', 'notion', 'atlassian', 'cloudflare', 'supabase', 'git'); Dir = $false }
 			@{ Name = 'memory'; Value = $true; Choices = @('cache', 'file'); Dir = $false }
 			@{ Name = 'model'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'name'; Value = $true; Choices = @(); Dir = $false }

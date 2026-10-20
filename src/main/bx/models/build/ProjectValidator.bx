@@ -849,16 +849,19 @@ class {
 	}
 
 	/**
-	 * Each `mcpServers` entry is a URL, or a mapping that can carry the credentials the
-	 * server wants. A secret is never written in the file: `token` and `password` must
-	 * be an ${env.NAME} placeholder, resolved when the app starts.
+	 * Each `mcpServers` entry is a URL, a mapping for a web server (`url`), or a mapping for a server that
+	 * runs as a program on this machine (`command`). A secret is never written in the file: `token`,
+	 * `password` and any stdio `env` value that looks like a secret must be an ${env.NAME} placeholder,
+	 * resolved when the app starts.
 	 *
 	 * @resolvedConfig The resolved config struct from AgentConfigResolver.resolve() - only `mcpServers` is used
 	 * @errors Accumulator array - append() any validation errors found
 	 */
 	private void function validateMcpServers( required struct resolvedConfig, required array errors ) {
 		var mcpServers = arguments.resolvedConfig.mcpServers ?: []
-		var validKeys = [ "url", "name", "token", "headers", "timeout", "user", "password" ]
+		var sharedKeys = [ "name", "timeout", "prefix", "toolFilter" ]
+		var webKeys = [ "url", "token", "headers", "user", "password", "allowedHosts", "redirects", "maxResponseBytes", "handshake" ]
+		var stdioKeys = [ "command", "env", "cwd", "inheritEnv", "maxRestarts" ]
 
 		if ( !isArray( mcpServers ) ) {
 			arguments.errors.append( "Agent.bx's 'mcpServers' must be an array" )
@@ -867,33 +870,108 @@ class {
 
 		for ( var entry in mcpServers ) {
 			if ( isStruct( entry ) ) {
-				if ( !len( entry.url ?: "" ) ) {
-					arguments.errors.append( "An mcpServers entry is missing a 'url'" )
+				var hasUrl = len( entry.url ?: "" ) > 0
+				var hasCommand = entry.keyExists( "command" )
+				var label = "The mcpServers entry [#entry.name ?: ( hasCommand && isArray( entry.command ) && entry.command.len() ? entry.command[ 1 ] : ( entry.url ?: '?' ) )#]"
+				if ( hasUrl && hasCommand ) {
+					arguments.errors.append( "#label# has both a 'url' and a 'command'. A web server has a url, a program has a command" )
+					continue
 				}
-				var label = "The mcpServers entry [#entry.name ?: entry.url ?: '?'#]"
+				if ( !hasUrl && !hasCommand ) {
+					arguments.errors.append( "An mcpServers entry is missing a 'url' (web server) or a 'command' (program)" )
+					continue
+				}
+				var validKeys = duplicate( sharedKeys ).append( hasCommand ? stdioKeys : webKeys, true )
 				for ( var key in entry ) {
 					if ( !validKeys.containsNoCase( key ) ) {
 						arguments.errors.append( "#label# has an unknown key [#key#]. Valid keys: #validKeys.toList( ', ' )#" )
 					}
 				}
-				for ( var secretKey in [ "token", "password" ] ) {
-					if ( entry.keyExists( secretKey ) && !( isSimpleValue( entry[ secretKey ] ) && find( "${env.", entry[ secretKey ] ) ) ) {
-						arguments.errors.append( "#label# writes its [#secretKey#] in the file. Name an environment variable instead, for example #secretKey#: ${env.MY_#ucase( secretKey )#}" )
-					}
-				}
-				if ( entry.keyExists( "headers" ) && !isStruct( entry.headers ) ) {
-					arguments.errors.append( "#label#'s 'headers' must be a mapping of header name to value" )
-				}
 				if ( entry.keyExists( "timeout" ) && !isNumeric( entry.timeout ) ) {
 					arguments.errors.append( "#label#'s 'timeout' must be a number of milliseconds" )
+				}
+				if ( entry.keyExists( "prefix" ) && !( isSimpleValue( entry.prefix ) && len( entry.prefix ) ) ) {
+					arguments.errors.append( "#label#'s 'prefix' must be a non-empty text" )
+				}
+				if ( entry.keyExists( "toolFilter" ) && !( isArray( entry.toolFilter ) && entry.toolFilter.every( name => isSimpleValue( name ) && len( name ) ) ) ) {
+					arguments.errors.append( "#label#'s 'toolFilter' must be a list of tool names" )
+				}
+				if ( hasCommand ) {
+					validateStdioMcpServer( entry, label, arguments.errors )
+				} else {
+					validateWebMcpServer( entry, label, arguments.errors )
 				}
 			} else if ( isSimpleValue( entry ) ) {
 				if ( !len( entry ) ) {
 					arguments.errors.append( "An mcpServers entry is an empty string" )
 				}
 			} else {
-				arguments.errors.append( "An mcpServers entry must be a URL string or a { url, name } struct" )
+				arguments.errors.append( "An mcpServers entry must be a URL string, a { url } struct or a { command } struct" )
 			}
+		}
+	}
+
+	/**
+	 * @entry A web server entry (it has a url)
+	 * @label The entry's name for messages
+	 * @errors Accumulator array
+	 */
+	private void function validateWebMcpServer( required struct entry, required string label, required array errors ) {
+		var entry = arguments.entry
+		for ( var secretKey in [ "token", "password" ] ) {
+			if ( entry.keyExists( secretKey ) && !( isSimpleValue( entry[ secretKey ] ) && find( "${env.", entry[ secretKey ] ) ) ) {
+				arguments.errors.append( "#arguments.label# writes its [#secretKey#] in the file. Name an environment variable instead, for example #secretKey#: ${env.MY_#ucase( secretKey )#}" )
+			}
+		}
+		if ( entry.keyExists( "headers" ) && !isStruct( entry.headers ) ) {
+			arguments.errors.append( "#arguments.label#'s 'headers' must be a mapping of header name to value" )
+		}
+		if ( entry.keyExists( "allowedHosts" ) && !( isArray( entry.allowedHosts ) && entry.allowedHosts.len() && entry.allowedHosts.every( host => isSimpleValue( host ) && len( host ) ) ) ) {
+			arguments.errors.append( "#arguments.label#'s 'allowedHosts' must be a list of host names, for example [ api.example.com, *.example.com ]" )
+		}
+		if ( entry.keyExists( "redirects" ) && !isBoolean( entry.redirects ) ) {
+			arguments.errors.append( "#arguments.label#'s 'redirects' must be true or false" )
+		}
+		if ( entry.keyExists( "handshake" ) && !isBoolean( entry.handshake ) ) {
+			arguments.errors.append( "#arguments.label#'s 'handshake' must be true or false" )
+		}
+		if ( entry.keyExists( "maxResponseBytes" ) && !( isNumeric( entry.maxResponseBytes ) && entry.maxResponseBytes >= 0 ) ) {
+			arguments.errors.append( "#arguments.label#'s 'maxResponseBytes' must be a number of characters, 0 or more" )
+		}
+	}
+
+	/**
+	 * @entry A stdio server entry (it has a command)
+	 * @label The entry's name for messages
+	 * @errors Accumulator array
+	 */
+	private void function validateStdioMcpServer( required struct entry, required string label, required array errors ) {
+		var entry = arguments.entry
+		if ( !( isArray( entry.command ) && entry.command.len() && entry.command.every( word => isSimpleValue( word ) && len( word ) ) ) ) {
+			arguments.errors.append( "#arguments.label#'s 'command' must be a list: the program, then its arguments, for example [ uvx, mcp-server-git ]" )
+		}
+		if ( entry.keyExists( "env" ) ) {
+			if ( !isStruct( entry.env ) ) {
+				arguments.errors.append( "#arguments.label#'s 'env' must be a mapping of variable name to value" )
+			} else {
+				for ( var name in entry.env ) {
+					var value = entry.env[ name ]
+					if ( !isSimpleValue( value ) ) {
+						arguments.errors.append( "#arguments.label#'s env [#name#] must be text" )
+					} else if ( reFindNoCase( "(KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)", name ) && len( value ) && !find( "${env.", value ) ) {
+						arguments.errors.append( "#arguments.label# writes its env [#name#] in the file. Name an environment variable instead, for example #name#: ${env.#name#}" )
+					}
+				}
+			}
+		}
+		if ( entry.keyExists( "cwd" ) && !( isSimpleValue( entry.cwd ) && len( entry.cwd ) ) ) {
+			arguments.errors.append( "#arguments.label#'s 'cwd' must be a folder" )
+		}
+		if ( entry.keyExists( "inheritEnv" ) && !isBoolean( entry.inheritEnv ) ) {
+			arguments.errors.append( "#arguments.label#'s 'inheritEnv' must be true or false" )
+		}
+		if ( entry.keyExists( "maxRestarts" ) && !( isNumeric( entry.maxRestarts ) && entry.maxRestarts >= 0 ) ) {
+			arguments.errors.append( "#arguments.label#'s 'maxRestarts' must be a number, 0 or more" )
 		}
 	}
 

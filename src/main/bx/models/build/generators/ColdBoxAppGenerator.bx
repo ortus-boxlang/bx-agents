@@ -1415,10 +1415,11 @@ class {
 
 	/**
 	 * The `mcpServers` argument for one node's agent: a list where each entry is a
-	 * URL string, or a `{ url, token, headers, ... }` mapping for a server that
-	 * wants credentials. A mapping can hold ${env.NAME} placeholders, so the list is
-	 * resolved when the app starts (never at build time), and a secret stays in the
-	 * environment. No network connection is ever attempted here: reachability is a
+	 * URL string, a `{ url, token, headers, ... }` mapping for a web server that
+	 * wants credentials, or a `{ command, env, ... }` mapping for a server that runs
+	 * as a program. A mapping can hold ${env.NAME} placeholders, so the list is
+	 * resolved when the app starts (never at build time) by McpServerResolver, and a
+	 * secret stays in the environment. No network connection is ever attempted here: reachability is a
 	 * runtime concern. Each subagent has its own resolvedConfig, so this runs per node.
 	 *
 	 * @resolvedConfig A single node's own resolved config
@@ -1433,16 +1434,16 @@ class {
 
 		for ( var entry in entries ) {
 			if ( isStruct( entry ) ) {
-				if ( !len( entry.url ?: "" ) ) {
+				if ( !len( entry.url ?: "" ) && !entry.keyExists( "command" ) ) {
 					throw(
 						type    = "BxAgents.InvalidMcpServer",
-						message = "An mcpServers entry is missing a 'url'"
+						message = "An mcpServers entry is missing a 'url' or a 'command'"
 					)
 				}
 				// `name` only labels the entry in the file; bx-ai's connection settings do not take it
 				var connection = duplicate( entry )
 				connection.delete( "name" )
-				if ( connection.len() == 1 ) {
+				if ( connection.len() == 1 && connection.keyExists( "url" ) ) {
 					servers.append( connection.url )
 				} else {
 					servers.append( connection )
@@ -1464,7 +1465,7 @@ class {
 		if ( !needsResolving ) {
 			return "[ " & servers.map( item => isStruct( item ) ? renderLiteral( item ) : '"#bxLiteral( item )#"' ).toList( ", " ) & " ]"
 		}
-		return 'new "models.build.ToolSelector@bxagents"().resolvePlaceholders( #renderLiteral( servers )#, "mcpServers of #bxLiteral( arguments.name )#" )'
+		return 'new "models.build.McpServerResolver@bxagents"().resolve( #renderLiteral( servers )#, "mcpServers of #bxLiteral( arguments.name )#" )'
 	}
 
 	/**
