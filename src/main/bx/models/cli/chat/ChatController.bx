@@ -4,7 +4,7 @@
  * ChatScreen of the bxagents.tui package, or a stand-in in tests) and a session
  * (InProcessSession or HttpSession).
  *
- * The screen:  readInput(), printUser( text ), print( style, text ), printMarkdown( text ),
+ * The screen:  chooseKeys( title, lines, choices, keys, footer ), ask( title, help, initial ), readInput(), printUser( text ), print( style, text ), printMarkdown( text ),
  *              banner( agent, model, mode ), beginTurn(), push( event ), endTurn(),
  *              cancelRequested(), takeSteer(), choose( title, lines, choices ), copy( text ), close()
  * The session: agentName(), modelName(), mode(), tools(), newThread(), notes(), sessions(), resumeSession( ref ),
@@ -28,7 +28,7 @@ class {
 			{ name : "/compact", hint : "shorten this conversation: older messages become a summary" },
 			{ name : "/info", hint : "about this chat: agent, model, conversation, notes, database" },
 			{ name : "/remember", hint : "keep a note about you: /remember I prefer short answers" },
-			{ name : "/notes", hint : "your notes and the agent's: /notes, add [agent] <text>, edit <id> <text>, remove <id>, stats" },
+			{ name : "/notes", hint : "open the notes screen, or: list, add [agent] <text>, edit <id> <text>, remove <id>, stats" },
 			{ name : "/copy", hint : "copy the last answer to the clipboard" },
 			{ name : "/save", hint : "save the conversation to a file: /save notes.md" },
 			{ name : "/record", hint : "record the screen as a .cast file: /record [file], /record stop" },
@@ -250,7 +250,7 @@ class {
 	}
 
 	/**
-	 * /notes with nothing lists both scopes; add, edit, remove and stats change or measure them.
+	 * /notes with nothing opens the notes screen; list, add, edit, remove and stats work in place.
 	 *
 	 * @rest What follows the command
 	 */
@@ -266,6 +266,8 @@ class {
 		try {
 			switch ( verb ) {
 				case "":
+					new "models.cli.chat.NotesMode@bxagents"( variables.screen, kept, variables.session.userId(), variables.session.agentName() ).run()
+					break
 				case "list":
 					var stats = kept.stats()
 					for ( var line in report.listLines( "Your notes", kept.list( "user" ), stats.user ) ) {

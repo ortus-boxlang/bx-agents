@@ -203,7 +203,9 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   chat database. `provider` can name a class implementing `INotesProvider` for a store of your own.
 - The agent gets `remember` and `forget` tools; `forget` stops for a person's approval by default
   (`approveForget`).
-- `chat` has `/remember` and `/notes` (list, add, edit, remove, stats), in-process and over `--connect`.
+- `chat` has `/remember` and `/notes`, in-process and over `--connect`. `/notes` opens a notes screen (`a` add,
+  `e` edit, `d` remove, `t`/Tab switch between your notes and the agent's, `s` stats); `/notes list|add|edit|remove|stats`
+  work in place.
   `--user` sets whose user notes; the default is the operating system user.
 - `bxAgents notes list|add|edit|remove|stats|export|import` manages them from a shell.
 - Run-control routes `GET/POST /__bxagents/notes`, `POST /notes/update` and `POST /notes/remove`;
