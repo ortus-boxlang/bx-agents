@@ -1,0 +1,119 @@
+/**
+ * The notes in the prompt: added to the system message, kept for the conversation, and never in the way.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "NotesMiddleware", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-notesmw-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.provider = new bxagents.models.notes.SqliteNotesProvider( store );
+				variables.middleware = new bxagents.models.notes.NotesMiddleware( provider, "helper" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			private function contextFor( threadId, userId, messages ) {
+				return { threadId : threadId, userId : userId, messages : messages };
+			}
+
+			it( "adds the user's and the agent's notes to the system message", function() {
+				provider.add( "user", "alice", "Prefers short answers" );
+				provider.add( "agent", "helper", "Deploys go through Gradle" );
+				var messages = [ { role : "system", content : "Instructions: be kind" }, { role : "user", content : "hi" } ];
+
+				var result = middleware.beforeAgentRun( contextFor( "t1", "alice", messages ) );
+
+				expect( result.isTerminal() ).toBeFalse();
+				expect( messages ).toHaveLength( 2 );
+				expect( messages[ 1 ].content ).toInclude( "Instructions: be kind" );
+				expect( messages[ 1 ].content ).toInclude( "About the user:" );
+				expect( messages[ 1 ].content ).toInclude( "Prefers short answers" );
+				expect( messages[ 1 ].content ).toInclude( "About this agent:" );
+				expect( messages[ 1 ].content ).toInclude( "Deploys go through Gradle" );
+				expect( messages[ 1 ].content ).toInclude( "remember tool" );
+			} );
+
+			it( "adds a system message when there is none", function() {
+				provider.add( "user", "alice", "likes tea" );
+				var messages = [ { role : "user", content : "hi" } ];
+
+				middleware.beforeAgentRun( contextFor( "t1", "alice", messages ) );
+
+				expect( messages ).toHaveLength( 2 );
+				expect( messages[ 1 ].role ).toBe( "system" );
+				expect( messages[ 1 ].content ).toInclude( "likes tea" );
+			} );
+
+			it( "shows only the notes of the person talking", function() {
+				provider.add( "user", "alice", "likes tea" );
+				provider.add( "user", "bob", "likes coffee" );
+				var messages = [ { role : "system", content : "x" } ];
+
+				middleware.beforeAgentRun( contextFor( "t1", "bob", messages ) );
+
+				expect( messages[ 1 ].content ).toInclude( "likes coffee" );
+				expect( messages[ 1 ].content ).notToInclude( "likes tea" );
+			} );
+
+			it( "keeps the prompt the same for the whole conversation, and shows a new note in the next one", function() {
+				provider.add( "user", "alice", "likes tea" );
+				var first = [ { role : "system", content : "x" } ];
+				middleware.beforeAgentRun( contextFor( "t1", "alice", first ) );
+
+				provider.add( "user", "alice", "lives in Lisbon" );
+				var second = [ { role : "system", content : "x" } ];
+				middleware.beforeAgentRun( contextFor( "t1", "alice", second ) );
+				var third = [ { role : "system", content : "x" } ];
+				middleware.beforeAgentRun( contextFor( "t2", "alice", third ) );
+
+				expect( second[ 1 ].content ).toBe( first[ 1 ].content );
+				expect( second[ 1 ].content ).notToInclude( "Lisbon" );
+				expect( third[ 1 ].content ).toInclude( "Lisbon" );
+			} );
+
+			it( "tells an agent with the tools that there is nothing yet, and adds nothing to one without", function() {
+				var withTools = [ { role : "system", content : "x" } ];
+				middleware.beforeAgentRun( contextFor( "t1", "alice", withTools ) );
+				expect( withTools[ 1 ].content ).toInclude( "(nothing yet)" );
+
+				var readOnly = new bxagents.models.notes.NotesMiddleware( provider, "helper", false );
+				var without = [ { role : "system", content : "x" } ];
+				readOnly.beforeAgentRun( contextFor( "t1", "alice", without ) );
+				expect( without[ 1 ].content ).toBe( "x" );
+			} );
+
+			it( "uses a shared name when there is no user id", function() {
+				provider.add( "user", "default", "likes tea" );
+				var messages = [ { role : "system", content : "x" } ];
+
+				middleware.beforeAgentRun( contextFor( "t1", "", messages ) );
+
+				expect( messages[ 1 ].content ).toInclude( "likes tea" );
+			} );
+
+			it( "goes on without notes when they cannot be read", function() {
+				var broken = { snapshot : () => { throw( type = "Test.Down", message = "database is down" ); } };
+				var safe = new bxagents.models.notes.NotesMiddleware( broken, "helper" );
+				var messages = [ { role : "system", content : "x" } ];
+
+				var result = safe.beforeAgentRun( contextFor( "t1", "alice", messages ) );
+
+				expect( result.isTerminal() ).toBeFalse();
+				expect( messages[ 1 ].content ).toBe( "x" );
+			} );
+
+			it( "exposes its provider", function() {
+				expect( middleware.provider() ).toBe( provider );
+			} );
+
+		} );
+	}
+
+}

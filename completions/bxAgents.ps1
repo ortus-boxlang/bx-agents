@@ -16,6 +16,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 		'inspect' = 'Pretty-print a built project''s manifest.json'
 		'invoke' = 'Send one message to a built agent, print the response, exit'
 		'new' = 'Scaffold a new agent project'
+		'notes' = 'Read and manage the notes of an agent'
 		'package' = 'Package a built project into a .bxa'
 		'serve' = 'Serve a built project via boxlang-miniserver'
 		'test' = 'Run a project''s own tests/specs via TestBox'
@@ -38,6 +39,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'record'; Value = $false; Choices = @(); Dir = $false }
 			@{ Name = 'server'; Value = $false; Choices = @(); Dir = $false }
 			@{ Name = 'token'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'user'; Value = $true; Choices = @(); Dir = $false }
 		)
 		'chat:positional' = 'dir'
 		'clean' = @(
@@ -107,6 +109,15 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'yes'; Value = $false; Choices = @(); Dir = $false }
 		)
 		'new:positional' = 'dir'
+		'notes' = @(
+			@{ Name = 'file'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'id'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'json'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
+			@{ Name = 'scope'; Value = $true; Choices = @('user', 'agent'); Dir = $false }
+			@{ Name = 'text'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'user'; Value = $true; Choices = @(); Dir = $false }
+		)
 		'package' = @(
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
 			@{ Name = 'version'; Value = $true; Choices = @(); Dir = $false }

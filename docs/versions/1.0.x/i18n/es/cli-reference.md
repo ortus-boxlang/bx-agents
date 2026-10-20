@@ -89,6 +89,9 @@ Genera el hash de una contraseña en texto plano para una entrada de usuarios de
 ::: card title="token" icon="phosphor-duotone:identification-card" href="#token"
 Emite, lista y revoca tokens de acceso para un agente desplegado.
 :::
+::: card title="notes" icon="phosphor-duotone:note-pencil" href="#notes"
+Lee y gestiona las notas que guarda un agente.
+:::
 ::: card title="inspect" icon="phosphor-duotone:magnifying-glass" href="#inspect"
 Imprime de forma legible un manifest.json existente.
 :::
@@ -196,6 +199,7 @@ bxAgents chat --no-tui                         # REPL simple línea por línea
 bxAgents chat --server [--port=<puerto>]       # aplicación completa, servidor propio desechable
 bxAgents chat --connect=http://127.0.0.1:8080  # aplicación completa, servidor que ya tienes en marcha
 bxAgents chat --connect=https://agent.example.com --token=<token>   # un servidor que pide uno
+bxAgents chat --user=alice                     # de quién son las notas que lee el agente (por defecto: tu usuario del SO)
 ```
 
 En la pantalla:
@@ -209,7 +213,22 @@ En la pantalla:
 | Enter mientras el agente trabaja | Lo dirige: tu mensaje se añade a la ejecución |
 | Ctrl+C | Limpia el cuadro; con el cuadro vacío, sale. Ctrl+D también sale |
 
-Escribe `/` para ver los comandos: `/help`, `/new` (una conversación nueva), `/tools`, `/copy` (la última respuesta al portapapeles, con la secuencia OSC 52 que honran la mayoría de terminales), `/save [archivo]` (la conversación en Markdown), `/record [archivo]` y `/record stop` (ver abajo) y `/exit`.
+Escribe `/` para ver los comandos: `/help`, `/new` (una conversación nueva), `/tools`, `/copy` (la última respuesta al portapapeles, con la secuencia OSC 52 que honran la mayoría de terminales), `/save [archivo]` (la conversación en Markdown), `/remember <texto>` y `/notes` (ver abajo), `/record [archivo]` y `/record stop` (ver abajo) y `/exit`.
+
+#### Notas en el chat
+
+Cuando el agente guarda [notas](conventions/agent-yaml.md#notas), el chat puede mostrarlas y cambiarlas:
+
+| Comando | Hace |
+|---|---|
+| `/remember <texto>` | Guarda una nota sobre ti |
+| `/notes` | Lista tus notas y las del agente, con cuánto llena cada una |
+| `/notes add [agent] <texto>` | Añade una nota (sobre ti, o con `agent` sobre el trabajo del agente) |
+| `/notes edit <id> <texto>` | Cambia una nota; el id es el código corto de la lista |
+| `/notes remove <id>` | Quita una nota |
+| `/notes stats` | Caracteres usados frente al límite, y los tokens aproximados que añaden a cada conversación |
+
+Funciona en los tres modos. Con `--connect` los comandos usan las rutas de notas del servidor, así que ves las notas de ese servidor, y quitar una nota del agente requiere un token `admin`. Un agente sin bloque `notes` explica cómo activarlas.
 
 #### Grabar un chat
 
@@ -313,6 +332,25 @@ bxAgents token revoke --name=laptop
 - `list` muestra el nombre, alcance, estado (`active`, `expired` o `revoked`), cuándo se creó, se usó por última vez y caduca de cada token. Nunca el token.
 - `revoke` detiene un token al instante. El nombre sigue ocupado, así que no se reutiliza por accidente.
 - Ejecútalo donde está la base de datos: en el servidor, o en el proyecto antes de empaquetarlo. En un servidor desplegado, apunta `BXAGENTS_DB` al archivo que usa la app.
+
+### `notes`
+
+Las notas que guarda un agente, leídas de la [base de datos de chat compartida](conventions/web-ui.md#el-almacén-sqlite) del proyecto (`data/chat.db`, o el archivo que indique `BXAGENTS_DB`). Los límites vienen del bloque [`notes`](conventions/agent-yaml.md#notas) de `Agent.yaml`.
+
+```bash
+bxAgents notes list [--scope=user|agent] [--user=NOMBRE] [--json]
+bxAgents notes add --text="Prefiere respuestas cortas" [--scope=user|agent] [--user=NOMBRE]
+bxAgents notes edit --id=<id> --text="Texto nuevo" [--scope=user|agent]
+bxAgents notes remove --id=<id> [--scope=user|agent]
+bxAgents notes stats [--user=NOMBRE] [--json]
+bxAgents notes export [--file=notes.json]
+bxAgents notes import --file=notes.json
+```
+
+- `--scope` es `user` (por defecto) o `agent`; `list` sin él muestra ambos. `--user` indica de quién son las notas de usuario: por defecto, el usuario del sistema operativo. Las notas del agente pertenecen al `name` del agente.
+- `stats` muestra cuánto llena cada alcance y el tamaño aproximado que añaden al prompt (unos cuatro caracteres por token; una estimación, no un recuento).
+- `export` escribe las notas como JSON, en `--file` o en pantalla. `import` añade las notas de un archivo así; una nota que ya existe se omite y una que no cabe en el límite se informa.
+- Ejecútalo donde está la base de datos: en el proyecto, o en un servidor con `BXAGENTS_DB` definido.
 
 ### `inspect`
 

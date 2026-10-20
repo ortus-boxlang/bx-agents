@@ -1,0 +1,185 @@
+/**
+ * The built-in notes provider: one row per note in the `notes` table of the shared chat database.
+ */
+class implements="INotesProvider" {
+
+	static {
+		SCOPES    = [ "user", "agent" ]
+		// one note is a line, not a document
+		MAX_NOTE  = 500
+		DEFAULT_LIMITS = { user : 1400, agent : 2200 }
+	}
+
+	/**
+	 * @store A ChatStore, already migrated
+	 * @limits { user, agent } in characters; a scope left out gets its default (1400 and 2200)
+	 */
+	function init( required any store, struct limits = {} ) {
+		variables.store = arguments.store
+		variables.limits = {
+			user  : val( arguments.limits.user ?: static.DEFAULT_LIMITS.user ),
+			agent : val( arguments.limits.agent ?: static.DEFAULT_LIMITS.agent )
+		}
+		return this
+	}
+
+	numeric function limit( required string scope ) {
+		return variables.limits[ checkedScope( arguments.scope ) ]
+	}
+
+	array function list( required string scope, required string owner ) {
+		return variables.store.rows(
+			"SELECT id, text, source, sessionId, createdAt, updatedAt FROM notes WHERE scope = :scope AND owner = :owner ORDER BY createdAt, rowid",
+			{ scope : checkedScope( arguments.scope ), owner : arguments.owner }
+		)
+	}
+
+	string function snapshot( required string scope, required string owner ) {
+		var lines = []
+		var used = 0
+		var cap = limit( arguments.scope )
+		for ( var note in list( arguments.scope, arguments.owner ) ) {
+			used += len( note.text )
+			// the limit may have been lowered after notes were saved: show what fits
+			if ( used > cap ) {
+				break
+			}
+			lines.append( "- (#note.id#) #note.text#" )
+		}
+		return lines.toList( char( 10 ) )
+	}
+
+	struct function stats( required string scope, required string owner ) {
+		var found = variables.store.rows(
+			"SELECT COUNT(*) AS n, COALESCE( SUM( LENGTH( text ) ), 0 ) AS used, MIN( createdAt ) AS oldest, MAX( createdAt ) AS newest FROM notes WHERE scope = :scope AND owner = :owner",
+			{ scope : checkedScope( arguments.scope ), owner : arguments.owner }
+		)[ 1 ]
+		return { scope : arguments.scope, owner : arguments.owner, count : found.n, used : found.used, limit : limit( arguments.scope ), oldest : found.oldest ?: "", newest : found.newest ?: "" }
+	}
+
+	struct function add( required string scope, required string owner, required string text, string source = "agent", string sessionId = "" ) {
+		var scope = checkedScope( arguments.scope )
+		var clean = tidy( arguments.text )
+		var refusal = refusalFor( clean )
+		if ( len( refusal ) ) {
+			return { ok : false, reason : refusal, used : usedBy( scope, arguments.owner ), limit : limit( scope ) }
+		}
+		lock name="bxagents-notes-#scope#-#arguments.owner#" type="exclusive" timeout="30" {
+			var existing = variables.store.rows(
+				"SELECT id FROM notes WHERE scope = :scope AND owner = :owner AND LOWER( text ) = :text",
+				{ scope : scope, owner : arguments.owner, text : lCase( clean ) }
+			)
+			var used = usedBy( scope, arguments.owner )
+			if ( existing.len() ) {
+				return { ok : true, id : existing[ 1 ].id, used : used, limit : limit( scope ), duplicate : true }
+			}
+			if ( used + len( clean ) > limit( scope ) ) {
+				return { ok : false, reason : fullMessage( used, scope ), used : used, limit : limit( scope ) }
+			}
+			var id = newId()
+			variables.store.exec(
+				"INSERT INTO notes ( id, scope, owner, text, source, sessionId, createdAt, updatedAt ) VALUES ( :id, :scope, :owner, :text, :source, :sessionId, :now, :now )",
+				{
+					id        : id,
+					scope     : scope,
+					owner     : arguments.owner,
+					text      : clean,
+					source    : arguments.source,
+					sessionId : arguments.sessionId,
+					now       : { value : now(), cfsqltype : "timestamp" }
+				}
+			)
+			return { ok : true, id : id, used : used + len( clean ), limit : limit( scope ) }
+		}
+	}
+
+	struct function replace( required string scope, required string owner, required string id, required string text ) {
+		var scope = checkedScope( arguments.scope )
+		var clean = tidy( arguments.text )
+		var refusal = refusalFor( clean )
+		if ( len( refusal ) ) {
+			return { ok : false, reason : refusal, used : usedBy( scope, arguments.owner ), limit : limit( scope ) }
+		}
+		lock name="bxagents-notes-#scope#-#arguments.owner#" type="exclusive" timeout="30" {
+			var current = variables.store.rows(
+				"SELECT LENGTH( text ) AS size FROM notes WHERE id = :id AND scope = :scope AND owner = :owner",
+				{ id : arguments.id, scope : scope, owner : arguments.owner }
+			)
+			if ( !current.len() ) {
+				return { ok : false, reason : "There is no note with id [#arguments.id#] in the #scope# notes.", used : usedBy( scope, arguments.owner ), limit : limit( scope ) }
+			}
+			var used = usedBy( scope, arguments.owner )
+			var after = used - current[ 1 ].size + len( clean )
+			if ( after > limit( scope ) ) {
+				return { ok : false, reason : fullMessage( used, scope ), used : used, limit : limit( scope ) }
+			}
+			variables.store.exec(
+				"UPDATE notes SET text = :text, updatedAt = :now WHERE id = :id AND scope = :scope AND owner = :owner",
+				{ text : clean, now : { value : now(), cfsqltype : "timestamp" }, id : arguments.id, scope : scope, owner : arguments.owner }
+			)
+			return { ok : true, id : arguments.id, used : after, limit : limit( scope ) }
+		}
+	}
+
+	boolean function remove( required string scope, required string owner, required string id ) {
+		var scope = checkedScope( arguments.scope )
+		var found = variables.store.rows( "SELECT id FROM notes WHERE id = :id AND scope = :scope AND owner = :owner", { id : arguments.id, scope : scope, owner : arguments.owner } )
+		if ( !found.len() ) {
+			return false
+		}
+		variables.store.exec( "DELETE FROM notes WHERE id = :id AND scope = :scope AND owner = :owner", { id : arguments.id, scope : scope, owner : arguments.owner } )
+		return true
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private string function checkedScope( required string scope ) {
+		var scope = lCase( trim( arguments.scope ) )
+		if ( !static.SCOPES.contains( scope ) ) {
+			throw( type = "BxAgents.InvalidNotesScope", message = "A notes scope is user or agent. Got [#arguments.scope#]." )
+		}
+		return scope
+	}
+
+	/**
+	 * Whitespace, including line breaks, becomes single spaces: a note is one line in a prompt.
+	 */
+	private string function tidy( required string text ) {
+		return trim( reReplace( arguments.text, "\s+", " ", "all" ) )
+	}
+
+	private string function refusalFor( required string clean ) {
+		if ( !len( arguments.clean ) ) {
+			return "A note cannot be empty."
+		}
+		if ( len( arguments.clean ) > static.MAX_NOTE ) {
+			return "A note is one short line: at most #static.MAX_NOTE# characters (this one has #len( arguments.clean )#)."
+		}
+		return ""
+	}
+
+	private numeric function usedBy( required string scope, required string owner ) {
+		return variables.store.rows(
+			"SELECT COALESCE( SUM( LENGTH( text ) ), 0 ) AS used FROM notes WHERE scope = :scope AND owner = :owner",
+			{ scope : arguments.scope, owner : arguments.owner }
+		)[ 1 ].used
+	}
+
+	private string function fullMessage( required numeric used, required string scope ) {
+		return "The #arguments.scope# notes are full (#arguments.used# of #limit( arguments.scope )# characters). Replace a note with a shorter one, or forget one, first."
+	}
+
+	/**
+	 * Eight hex characters: short enough for a prompt and for a person to type, with the table's key to catch a clash.
+	 */
+	private string function newId() {
+		for ( var attempt = 1; attempt <= 5; attempt++ ) {
+			var id = lCase( left( replace( createUUID(), "-", "", "all" ), 8 ) )
+			if ( !variables.store.rows( "SELECT 1 AS found FROM notes WHERE id = :id", { id : id } ).len() ) {
+				return id
+			}
+		}
+		return lCase( replace( createUUID(), "-", "", "all" ) )
+	}
+
+}

@@ -1,0 +1,158 @@
+/**
+ * /remember and /notes in the chat, over the notes of this process (LocalNotes) and of a server (RemoteNotes).
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "chat notes commands", function() {
+
+			function screenWith( required array inputs ) {
+				var s = { printed : [], inputs : inputs.duplicate() }
+				s.readInput = () => {
+					if ( !s.inputs.len() ) {
+						return nullValue()
+					}
+					var next = s.inputs[ 1 ]
+					s.inputs.deleteAt( 1 )
+					return next
+				}
+				s.banner = ( agent, model, mode ) => {}
+				s.print = ( style, text ) => s.printed.append( style & ": " & text )
+				s.printUser = ( text ) => {}
+				s.beginTurn = () => {}
+				s.endTurn = () => {}
+				s.push = ( event ) => {}
+				s.cancelRequested = () => false
+				s.takeSteer = () => nullValue()
+				s.close = () => {}
+				return s
+			}
+
+			function sessionWith( required any notes ) {
+				var q = { }
+				q.agentName = () => "helper"
+				q.modelName = () => "m"
+				q.mode = () => "in-process"
+				q.tools = () => []
+				q.newThread = () => {}
+				q.close = () => {}
+				q.notes = () => notes
+				return q
+			}
+
+			function say( required any session, required array inputs ) {
+				var screen = screenWith( inputs )
+				new bxagents.models.cli.chat.ChatController( session, getTempDirectory() ).run( screen )
+				return screen.printed.toList( char( 10 ) )
+			}
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-chatnotes-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.provider = new bxagents.models.notes.SqliteNotesProvider( store, { user : 200, agent : 100 } );
+				variables.kept = new bxagents.models.cli.chat.LocalNotes( provider, "alice", "helper" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "/remember keeps a note about the user", function() {
+				var out = say( sessionWith( kept ), [ "/remember I prefer short answers" ] );
+
+				expect( out ).toInclude( "Noted." );
+				expect( provider.list( "user", "alice" ).map( n => n.text ) ).toBe( [ "I prefer short answers" ] );
+				expect( provider.list( "user", "alice" )[ 1 ].source ).toBe( "command" );
+			} );
+
+			it( "/notes add agent keeps a note for the agent, /notes lists both scopes", function() {
+				var out = say( sessionWith( kept ), [ "/remember likes tea", "/notes add agent The repo uses Gradle", "/notes" ] );
+
+				expect( provider.list( "agent", "helper" ).map( n => n.text ) ).toBe( [ "The repo uses Gradle" ] );
+				expect( out ).toInclude( "Your notes: 9 of 200 characters, 1 note" );
+				expect( out ).toInclude( "likes tea" );
+				expect( out ).toInclude( "Agent notes:" );
+				expect( out ).toInclude( "The repo uses Gradle" );
+			} );
+
+			it( "/notes edit and remove work by id, in either scope", function() {
+				var mine = provider.add( "user", "alice", "likes tea" ).id;
+				var theirs = provider.add( "agent", "helper", "old fact" ).id;
+
+				var out = say( sessionWith( kept ), [ "/notes edit #mine# likes coffee", "/notes remove #theirs#" ] );
+
+				expect( out ).toInclude( "Updated." );
+				expect( out ).toInclude( "Removed." );
+				expect( provider.list( "user", "alice" ).map( n => n.text ) ).toBe( [ "likes coffee" ] );
+				expect( provider.list( "agent", "helper" ) ).toBeEmpty();
+			} );
+
+			it( "answers an unknown id and a missing text without changing anything", function() {
+				var out = say( sessionWith( kept ), [ "/notes remove nosuchid", "/notes edit nosuchid text", "/remember", "/notes edit onlyid" ] );
+
+				expect( out ).toInclude( "There is no note with id [nosuchid]" );
+				expect( out ).toInclude( "Usage: /remember" );
+				expect( out ).toInclude( "Usage: /notes edit" );
+			} );
+
+			it( "shows what the notes cost on /notes stats", function() {
+				provider.add( "user", "alice", "likes tea" );
+				var out = say( sessionWith( kept ), [ "/notes stats" ] );
+
+				expect( out ).toInclude( "user  (alice)" );
+				expect( out ).toInclude( "agent (helper)" );
+				expect( out ).toInclude( "In the system prompt: 9 characters" );
+			} );
+
+			it( "says so when the limit is reached", function() {
+				var out = say( sessionWith( kept ), [ "/notes add agent #repeatString( 'x', 150 )#" ] );
+
+				expect( out ).toInclude( "warn:" );
+				expect( provider.list( "agent", "helper" ) ).toBeEmpty();
+			} );
+
+			it( "explains how to turn notes on when the agent keeps none", function() {
+				var out = say( sessionWith( new bxagents.models.cli.chat.NoNotes() ), [ "/notes", "/remember hi" ] );
+
+				expect( out ).toInclude( "notes: {}" );
+			} );
+
+			it( "RemoteNotes asks the server's notes routes", function() {
+				var calls = [];
+				var snapshot = {
+					success : true, provider : "sqlite",
+					user : { owner : "alice", notes : [ { id : "u1", text : "likes tea" } ], stats : { owner : "alice", count : 1, used : 9, limit : 200 } },
+					agent : { owner : "helper", notes : [ { id : "a1", text : "a fact" } ], stats : { owner : "helper", count : 1, used : 6, limit : 100 } }
+				};
+				var client = new FakeClient( {
+					getJson  : ( base, route, query ) => { calls.append( "GET " & route ); return snapshot; },
+					postJson : ( base, route, body ) => { calls.append( "POST " & route & " " & jsonSerialize( body ) ); return { ok : true, success : true }; }
+				} );
+				var remote = new bxagents.models.cli.chat.RemoteNotes( "http://x", client );
+
+				expect( remote.available() ).toBeTrue();
+				expect( remote.list( "user" ).map( n => n.text ) ).toBe( [ "likes tea" ] );
+				remote.add( "agent", "new fact" );
+				remote.update( "u1", "likes coffee" );
+				remote.remove( "a1" );
+				expect( remote.update( "zzz", "x" ).ok ).toBeFalse();
+
+				expect( calls.filter( c => c.startsWith( "POST" ) ) ).toBe( [
+					'POST notes {"scope":"agent","text":"new fact"}',
+					'POST notes/update {"scope":"user","id":"u1","text":"likes coffee"}',
+					'POST notes/remove {"scope":"agent","id":"a1"}'
+				] );
+			} );
+
+			it( "RemoteNotes is unavailable when the server has no notes routes", function() {
+				var client = new FakeClient( { getJson : ( base, route, query ) => { throw( type = "AgentRouteMissing", message = "404" ); } } );
+
+				expect( new bxagents.models.cli.chat.RemoteNotes( "http://x", client ).available() ).toBeFalse();
+			} );
+
+		} );
+	}
+
+}

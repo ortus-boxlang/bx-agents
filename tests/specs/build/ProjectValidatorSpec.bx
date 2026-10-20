@@ -327,6 +327,24 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.errors.filter( e => e.findNoCase( "mcpServers" ) ) ).toBeEmpty();
 			} );
 
+			it( "rejects a notes block with an unknown key, a bad provider, bad limits and a bad flag", function() {
+				var text = validateFixture( "bad-notes" ).errors.filter( e => e.findNoCase( "notes" ) ).toList( char( 10 ) );
+
+				expect( text ).toInclude( "unknown key [colour]" );
+				expect( text ).toInclude( "'notes.provider' [not a class]" );
+				expect( text ).toInclude( "'notes.user' has an unknown key [unit]" );
+				expect( text ).toInclude( "'notes.user.limit' must be a whole number" );
+				expect( text ).toInclude( "'notes.agent.limit' must be a whole number" );
+				expect( text ).toInclude( "'notes.tool' must be true or false" );
+			} );
+
+			it( "accepts a notes block", function() {
+				var projectRoot = expandPath( "/fixtures/with-notes" );
+				var result = validator.validate( projectRoot, discoverer.discover( projectRoot ), resolver.resolve( projectRoot = projectRoot ) );
+
+				expect( result.errors.filter( e => e.findNoCase( "notes" ) ) ).toBeEmpty();
+			} );
+
 			it( "rejects a model reference that matches no models/ entry", function() {
 				var result = validateFixture( "missing-model-reference" );
 				expect( result.errors.filter( e => e.findNoCase( "does not match any models/ entry" ) ).len() ).toBeGT( 0 );

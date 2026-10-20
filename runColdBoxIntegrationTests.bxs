@@ -789,6 +789,45 @@ try {
 	}
 	println( "+ Confirmed: no token, a made-up, an expired and a revoked token are all refused with a 401" )
 
+	// notes: a person keeps their own, any caller adds to the agent's, only an admin removes from it
+	function issuedCall( required string verb, required string path, required string token, string body = "" ) {
+		bx:http url="#issuedBase##arguments.path#" method=arguments.verb result="issuedNoteAnswer" timeout=30 {
+			bx:httpparam type="header" name="Content-Type" value="application/json";
+			bx:httpparam type="header" name="x-bxagents-token" value=arguments.token;
+			if ( len( arguments.body ) ) {
+				bx:httpparam type="body" value=arguments.body;
+			}
+		}
+		return { status : issuedNoteAnswer.status_code, body : issuedNoteAnswer.fileContent ?: "" }
+	}
+	issuedMine = issuedCall( "POST", "/notes", goodToken, '{"scope":"user","text":"Likes tea"}' )
+	issuedShared = issuedCall( "POST", "/notes", goodToken, '{"scope":"agent","text":"The repo uses Gradle"}' )
+	if ( issuedMine.status != 200 || issuedShared.status != 200 ) {
+		throw( type = "BxAgents.NotesNotServed", message = "Adding notes failed (HTTP #issuedMine.status# and #issuedShared.status#): #left( issuedMine.body, 200 )# #left( issuedShared.body, 200 )#" )
+	}
+	issuedList = jsonDeserialize( issuedCall( "GET", "/notes", goodToken ).body )
+	if ( issuedList.user.owner != "laptop" || issuedList.user.notes.len() != 1 || issuedList.agent.notes.len() != 1 ) {
+		throw( type = "BxAgents.NotesNotScoped", message = "The notes are not kept per caller: #jsonSerialize( issuedList )#" )
+	}
+	// someone else does not see the user notes of laptop, but sees the agent's
+	issuedOthers = jsonDeserialize( issuedCall( "GET", "/notes", adminToken ).body )
+	if ( issuedOthers.user.notes.len() != 0 || issuedOthers.agent.notes.len() != 1 ) {
+		throw( type = "BxAgents.NotesNotScoped", message = "Another caller sees the wrong notes: #jsonSerialize( issuedOthers )#" )
+	}
+	issuedAgentNote = issuedList.agent.notes[ 1 ].id
+	issuedForbidden = issuedCall( "POST", "/notes/remove", goodToken, '{"scope":"agent","id":"#issuedAgentNote#"}' )
+	if ( issuedForbidden.status != 403 ) {
+		throw( type = "BxAgents.NotesRemovalNotGated", message = "A chat token removed an agent note (HTTP #issuedForbidden.status#): #left( issuedForbidden.body, 200 )#" )
+	}
+	issuedRemoved = issuedCall( "POST", "/notes/remove", adminToken, '{"scope":"agent","id":"#issuedAgentNote#"}' )
+	if ( issuedRemoved.status != 200 ) {
+		throw( type = "BxAgents.NotesRemovalFailed", message = "An admin token could not remove an agent note (HTTP #issuedRemoved.status#): #left( issuedRemoved.body, 200 )#" )
+	}
+	if ( issuedCall( "GET", "/notes", "" ).status != 401 ) {
+		throw( type = "BxAgents.NotesGateFailedOpen", message = "The notes route answered without a token" )
+	}
+	println( "+ Confirmed: notes are per caller, any caller adds, only an admin removes from the agent, no token is a 401" )
+
 	// revoking takes effect on the next request, without a restart
 	issuedTokens.revoke( "laptop" )
 	bx:http url="#issuedBase#/tools" method="GET" result="issuedAfterRevoke" timeout=30 {

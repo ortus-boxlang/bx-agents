@@ -233,6 +233,10 @@ GET  /__bxagents/pending   # ?threadId=
 POST /__bxagents/resume    # { threadId, decision } -> SSE, como /events
 GET  /__bxagents/tools
 GET  /__bxagents/agent    # name, model, what it can do
+GET  /__bxagents/notes    # las notas de quien llama y las del agente, con cuánto llenan
+POST /__bxagents/notes    # { scope : "user" | "agent", text }
+POST /__bxagents/notes/update   # { scope, id, text }
+POST /__bxagents/notes/remove   # { scope, id }
 ```
 
 `/events` envía los frames de `/stream` (`thread` primero, `chunk` por cada trozo de la respuesta, `done` al final)
@@ -245,6 +249,8 @@ y añade:
 | `error` | `{ message }` |
 
 `cancel` detiene la ejecución en su siguiente punto de control (antes de la siguiente llamada al modelo o a una tool, no a mitad de un token). `steer` inserta un mensaje en una ejecución en curso. `resume` acepta `approve`, `approve_session` o `reject` y transmite el resto del turno. Una ejecución pertenece a quien la inició: `pending` responde "nada pendiente" y `resume` responde `403` a cualquier otro.
+
+Las rutas `notes` responden `404` en un agente sin bloque [`notes`](agent-yaml.md#notas). Cada quien lee y cambia sus propias notas de usuario (el propietario es el nombre del token que usó, o `api` en una ruta abierta) y las del agente. Cualquiera puede añadir a ambos alcances o editar una nota; quitar una nota del agente requiere un token `admin` (si no, `403`), porque cambia lo que sabe el agente de todos los usuarios.
 
 Estas rutas están detrás de la misma compuerta `x-bxagents-token` que las otras cuatro (un token ausente o incorrecto es un `401`), y `agentApi.enabled: false` las elimina todas.
 

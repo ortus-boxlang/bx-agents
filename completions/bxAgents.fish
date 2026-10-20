@@ -28,6 +28,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n __bxagents_needs_verb -a 'inspect' -d 'Pretty-print a built project\'s manifest.json'
     complete -c $cmd -n __bxagents_needs_verb -a 'invoke' -d 'Send one message to a built agent, print the response, exit'
     complete -c $cmd -n __bxagents_needs_verb -a 'new' -d 'Scaffold a new agent project'
+    complete -c $cmd -n __bxagents_needs_verb -a 'notes' -d 'Read and manage the notes of an agent'
     complete -c $cmd -n __bxagents_needs_verb -a 'package' -d 'Package a built project into a .bxa'
     complete -c $cmd -n __bxagents_needs_verb -a 'serve' -d 'Serve a built project via boxlang-miniserver'
     complete -c $cmd -n __bxagents_needs_verb -a 'test' -d 'Run a project\'s own tests/specs via TestBox'
@@ -47,6 +48,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb chat' -l record
     complete -c $cmd -n '__bxagents_using_verb chat' -l server
     complete -c $cmd -n '__bxagents_using_verb chat' -l token -x
+    complete -c $cmd -n '__bxagents_using_verb chat' -l user -x
     complete -c $cmd -n '__bxagents_using_verb chat' -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb clean' -l force
     complete -c $cmd -n '__bxagents_using_verb clean' -l projectRoot -x -a '(__fish_complete_directories)'
@@ -101,6 +103,13 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb new' -l wizard
     complete -c $cmd -n '__bxagents_using_verb new' -l yes
     complete -c $cmd -n '__bxagents_using_verb new' -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb notes' -l file -x
+    complete -c $cmd -n '__bxagents_using_verb notes' -l id -x
+    complete -c $cmd -n '__bxagents_using_verb notes' -l json
+    complete -c $cmd -n '__bxagents_using_verb notes' -l projectRoot -x -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb notes' -l scope -x -a 'user agent'
+    complete -c $cmd -n '__bxagents_using_verb notes' -l text -x
+    complete -c $cmd -n '__bxagents_using_verb notes' -l user -x
     complete -c $cmd -n '__bxagents_using_verb package' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb package' -l version -x
     complete -c $cmd -n '__bxagents_using_verb package' -a '(__fish_complete_directories)'
@@ -115,5 +124,5 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb token' -l name -x
     complete -c $cmd -n '__bxagents_using_verb token' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb token' -l scope -x -a 'chat admin'
-    complete -c $cmd -n '__bxagents_using_verb help' -a 'build chat clean deploy doctor hash-password inspect invoke new package serve test token help'
+    complete -c $cmd -n '__bxagents_using_verb help' -a 'build chat clean deploy doctor hash-password inspect invoke new notes package serve test token help'
 end
