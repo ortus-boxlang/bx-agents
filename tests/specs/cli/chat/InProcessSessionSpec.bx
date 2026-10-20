@@ -60,6 +60,23 @@ class extends="testbox.system.BaseSpec" {
 				expect( calls[ 2 ].ms ).toBeGTE( 0 );
 			} );
 
+			it( "leaves bx-ai's underscore arguments out of the tool summary", function() {
+				var tool = aiTool( "lookup", "lookup", ( topic ) => "found " & topic, false )
+				controls.onChunk = () => {
+					if ( !events.some( e => e.type == "tool" ) ) {
+						tool.invoke( { topic : "bx", _chatRequest : { logRequest : false } } )
+					}
+				}
+
+				session.send( "hello", hooks )
+
+				var calls = events.filter( e => e.type == "tool" )
+				expect( calls ).notToBeEmpty();
+				for ( var call in calls ) {
+					expect( call.summary ).toBe( "topic=bx" );
+				}
+			} );
+
 			it( "does not report tool calls made when no turn is running", function() {
 				aiTool( "lonely", "lonely", () => "x", false ).invoke( {} )
 
