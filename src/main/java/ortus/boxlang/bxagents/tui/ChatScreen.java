@@ -90,6 +90,7 @@ public final class ChatScreen implements AutoCloseable {
 	private final Map<String, Map<?, ?>>	running			= new LinkedHashMap<>();
 	private long							turnStarted;
 	private int								frame;
+	private int								drawnHeight;
 
 	private ChatScreen( InlineTuiRunner runner, Terminal terminal, RecordingTerminal tap, Theme theme, ClassLoader previousLoader,
 	    List<Map<?, ?>> commands ) {
@@ -525,9 +526,19 @@ public final class ChatScreen implements AutoCloseable {
 	}
 
 	private void draw( List<Row> rows ) {
-		int height = Math.min( rows.size(), Math.max( 4, runner.height() - 2 ) );
+		int			height	= Math.min( rows.size(), Math.max( 4, runner.height() - 2 ) );
+		List<Row>	shown	= rows.subList( rows.size() - height, rows.size() );
+		if ( height < drawnHeight ) {
+			// The area gives up rows when it shrinks (the slash menu closing) and the terminal keeps whatever was
+			// on them, so paint the new rows into the old, taller area first: that blanks the rows being given up.
+			paint( shown );
+		}
 		runner.setContentHeight( height );
-		List<Row> shown = rows.subList( rows.size() - height, rows.size() );
+		paint( shown );
+		drawnHeight = height;
+	}
+
+	private void paint( List<Row> shown ) {
 		runner.draw( ( Frame f ) -> {
 			int w = f.area().width();
 			for ( int y = 0; y < shown.size(); y++ ) {
