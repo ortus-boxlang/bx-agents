@@ -828,6 +828,27 @@ try {
 	}
 	println( "+ Confirmed: notes are per caller, any caller adds, only an admin removes from the agent, no token is a 401" )
 
+	// conversations: the list and the history belong to the caller that started them
+	issuedTurn = issuedCall( "POST", "/events", goodToken, '{"input":"plan my week","conversationId":"it-conv-1"}' )
+	if ( issuedTurn.status != 200 ) {
+		throw( type = "BxAgents.SessionTurnFailed", message = "A turn with a conversationId failed (HTTP #issuedTurn.status#): #left( issuedTurn.body, 200 )#" )
+	}
+	issuedMineList = jsonDeserialize( issuedCall( "GET", "/sessions", goodToken ).body )
+	issuedOthersList = jsonDeserialize( issuedCall( "GET", "/sessions", adminToken ).body )
+	if ( issuedMineList.sessions.len() != 1 || issuedMineList.sessions[ 1 ].title != "plan my week" || issuedOthersList.sessions.len() != 0 ) {
+		throw( type = "BxAgents.SessionsNotScoped", message = "The conversation list is not per caller: #jsonSerialize( issuedMineList )# / #jsonSerialize( issuedOthersList )#" )
+	}
+	if ( issuedCall( "GET", "/history?conversationId=it-conv-1", adminToken ).status != 404 ) {
+		throw( type = "BxAgents.SessionsNotScoped", message = "Another caller could read a conversation that is not theirs" )
+	}
+	if ( issuedCall( "GET", "/history?conversationId=it-conv-1", goodToken ).status != 200 ) {
+		throw( type = "BxAgents.SessionsHistoryFailed", message = "The owner could not read the history of their conversation" )
+	}
+	if ( issuedCall( "GET", "/sessions", "" ).status != 401 ) {
+		throw( type = "BxAgents.SessionsGateFailedOpen", message = "The conversation list answered without a token" )
+	}
+	println( "+ Confirmed: conversations are per caller, a stranger's conversation id is a 404, no token is a 401" )
+
 	// revoking takes effect on the next request, without a restart
 	issuedTokens.revoke( "laptop" )
 	bx:http url="#issuedBase#/tools" method="GET" result="issuedAfterRevoke" timeout=30 {

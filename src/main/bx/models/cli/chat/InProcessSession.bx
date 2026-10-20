@@ -19,10 +19,13 @@ class {
 
 	/**
 	 * @agent The agent object from the project's GeneratedAgentFactory
-	 * @userId Who is talking: the owner of the user notes. Defaults to the operating system user.
+	 * @userId Who is talking: the owner of the user notes and of the conversations. Defaults to the operating system user.
+	 * @sessions A SessionStore: the list of conversations in the shared chat database. Without one the chat keeps no list.
 	 */
-	function init( required any agent, string userId = "" ) {
+	function init( required any agent, string userId = "", any sessions ) {
 		variables.agent = arguments.agent
+		variables.sessions = isNull( arguments.sessions ) ? nullValue() : arguments.sessions
+		variables.conversationId = createUUID()
 		variables.userId = len( trim( arguments.userId ) ) ? trim( arguments.userId ) : createObject( "java", "java.lang.System" ).getProperty( "user.name" ) ?: "default"
 		variables.threadId = createUUID()
 		variables.hooks = nullValue()
@@ -71,6 +74,107 @@ class {
 	 */
 	void function newThread() {
 		variables.threadId = createUUID()
+		variables.conversationId = createUUID()
+	}
+
+	/**
+	 * @return The id of the conversation: the key of its messages in the agent's memory and of its row in the list
+	 */
+	string function conversationId() {
+		return variables.conversationId
+	}
+
+	/**
+	 * @return True when the chat keeps a list of conversations (a shared chat database is open)
+	 */
+	boolean function keepsSessions() {
+		return !isNull( variables.sessions )
+	}
+
+	/**
+	 * @return The user's recent conversations, most recent first: [ { id, title, messageCount, updatedAt } ]
+	 */
+	array function sessions( numeric limit = 20 ) {
+		return keepsSessions() ? variables.sessions.list( variables.userId, arguments.limit ) : []
+	}
+
+	/**
+	 * Switches to another of the user's conversations.
+	 *
+	 * @reference Its number in the list, its id or the start of its id; blank for the most recent
+	 *
+	 * @return { ok, id, title, history } or { ok : false, reason }
+	 */
+	struct function resumeSession( string reference = "" ) {
+		if ( !keepsSessions() ) {
+			return { ok : false, reason : "This chat keeps no list of conversations." }
+		}
+		var found = len( trim( arguments.reference ) ) ? variables.sessions.resolve( variables.userId, arguments.reference ) : variables.sessions.latest( variables.userId )
+		if ( found.isEmpty() ) {
+			return { ok : false, reason : len( trim( arguments.reference ) ) ? "There is no conversation [#arguments.reference#]. Type /sessions to see them." : "There are no earlier conversations." }
+		}
+		variables.conversationId = found.id
+		variables.threadId = createUUID()
+		return { ok : true, id : found.id, title : found.title ?: "", history : history() }
+	}
+
+	/**
+	 * @return What was said in this conversation, from the agent's memory: [ { role : "you" | "agent", text } ]
+	 */
+	array function history() {
+		return new "models.cli.chat.MemoryHistory@bxagents"().of( variables.agent.getMemoryMessages( variables.userId, variables.conversationId ) )
+	}
+
+	/**
+	 * Forgets this conversation's messages (the agent's memory of it) and keeps the conversation.
+	 */
+	struct function clear() {
+		variables.agent.getMemories().each( ( memory ) => memory.clear( variables.userId, variables.conversationId ) )
+		if ( keepsSessions() ) {
+			variables.sessions.resetCount( variables.userId, variables.conversationId )
+		}
+		return { ok : true }
+	}
+
+	/**
+	 * Replaces the older messages with a summary and keeps the most recent few.
+	 *
+	 * @return { available, compacted, before, after }; available is false when the agent's memory has no summary model
+	 */
+	struct function compact() {
+		var summarizes = variables.agent.getMemories().some( ( memory ) => len( memory.getSummaryProvider() ?: "" ) && len( memory.getSummaryModel() ?: "" ) )
+		var before = variables.agent.getMemoryMessages( variables.userId, variables.conversationId ).len()
+		if ( !summarizes ) {
+			return { available : false, compacted : false, before : before, after : before }
+		}
+		variables.agent.getMemories().each( ( memory ) => memory.summarize( {}, variables.userId, variables.conversationId ) )
+		var after = variables.agent.getMemoryMessages( variables.userId, variables.conversationId ).len()
+		return { available : true, compacted : after < before, before : before, after : after }
+	}
+
+	/**
+	 * @return [ [ label, value ] ] about this chat, in the order to show them
+	 */
+	array function info() {
+		var lines = [
+			[ "Agent", agentName() ],
+			[ "Model", modelName() ],
+			[ "Mode", mode() ],
+			[ "Tools", tools().len() ],
+			[ "User", variables.userId ],
+			[ "Conversation", variables.conversationId ],
+			[ "Messages", variables.agent.getMemoryMessages( variables.userId, variables.conversationId ).len() ]
+		]
+		var kept = notes()
+		if ( kept.available() ) {
+			var stats = kept.stats()
+			lines.append( [ "Notes", "#stats.user.count# about you (#stats.user.used#/#stats.user.limit# characters), #stats.agent.count# about the agent (#stats.agent.used#/#stats.agent.limit#)" ] )
+		}
+		var file = trim( getSystemSetting( "BXAGENTS_DB", "" ) )
+		if ( len( file ) ) {
+			lines.append( [ "Database", file ] )
+		}
+		return lines
 	}
 
 	/**
@@ -83,10 +187,11 @@ class {
 		var state = newState()
 		variables.hooks = arguments.hooks
 		try {
-			variables.agent.stream( chunkHandler( state ), arguments.text, {}, { threadId : variables.threadId, userId : variables.userId } )
+			variables.agent.stream( chunkHandler( state ), arguments.text, {}, { threadId : variables.threadId, userId : variables.userId, conversationId : variables.conversationId } )
 		} finally {
 			variables.hooks = nullValue()
 		}
+		recordTurn( arguments.text )
 		return finish( state )
 	}
 
@@ -112,6 +217,20 @@ class {
 	}
 
 	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Notes the turn in the list of conversations. A list that cannot be written must not stop the chat.
+	 */
+	private void function recordTurn( required string text ) {
+		if ( !keepsSessions() ) {
+			return
+		}
+		try {
+			variables.sessions.touch( variables.userId, variables.conversationId, arguments.text )
+		} catch ( any e ) {
+			// the chat goes on without a list
+		}
+	}
 
 	private struct function newState() {
 		return { text : "", cancelled : false, suspended : false, stopped : "", pending : [] }

@@ -1,0 +1,154 @@
+/**
+ * Conversations in the chat: the list, resuming one with its history, /clear, /compact and /info, on a real
+ * bx-ai agent with memory (in-process) and on a scripted server (over HTTP), and the commands that use them.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "chat conversations", function() {
+
+			function hooksFor( required array events ) {
+				return {
+					push            : ( event ) => events.append( event ),
+					cancelRequested : () => false,
+					takeSteer       : () => nullValue()
+				}
+			}
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-chat-sessions-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.sessions = new bxagents.models.store.SessionStore( store );
+				variables.agent = aiAgent( name : "helper", model : aiModel( provider : "mock" ), memory : aiMemory( "cache" ) );
+				variables.session = new bxagents.models.cli.chat.InProcessSession( agent, "alice", sessions );
+				variables.events = [];
+			} );
+
+			afterEach( function() {
+				session.close();
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "lists a conversation after the first turn, titled by what was asked", function() {
+				expect( session.sessions() ).toBeEmpty();
+
+				session.send( "What is the plan?", hooksFor( events ) );
+
+				var listed = session.sessions();
+				expect( listed ).toHaveLength( 1 );
+				expect( listed[ 1 ].id ).toBe( session.conversationId() );
+				expect( listed[ 1 ].title ).toBe( "What is the plan?" );
+			} );
+
+			it( "gives the next conversation a new id and keeps the earlier one in the list", function() {
+				session.send( "first question", hooksFor( events ) );
+				var first = session.conversationId();
+				session.newThread();
+				session.send( "second question", hooksFor( events ) );
+
+				expect( session.conversationId() ).notToBe( first );
+				expect( session.sessions().map( r => r.title ).sort( "text" ) ).toBe( [ "first question", "second question" ] );
+			} );
+
+			it( "shows the history of the conversation from the agent's memory", function() {
+				session.send( "hello there", hooksFor( events ) );
+				var history = session.history();
+
+				expect( history.len() ).toBeGTE( 2 );
+				expect( history[ 1 ] ).toBe( { role : "you", text : "hello there" } );
+				expect( history[ 2 ].role ).toBe( "agent" );
+			} );
+
+			it( "resumes an earlier conversation by number, id or the latest, with its history", function() {
+				session.send( "remember the plan", hooksFor( events ) );
+				var first = session.conversationId();
+				sleep( 1100 );
+				session.newThread();
+				session.send( "something else", hooksFor( events ) );
+
+				var back = session.resumeSession( "2" );
+				expect( back.ok ).toBeTrue();
+				expect( back.id ).toBe( first );
+				expect( back.history[ 1 ].text ).toBe( "remember the plan" );
+				expect( session.conversationId() ).toBe( first );
+
+				expect( session.resumeSession( left( first, 8 ) ).id ).toBe( first );
+				expect( session.resumeSession( "" ).ok ).toBeTrue();
+				expect( session.resumeSession( "99" ).ok ).toBeFalse();
+				expect( session.resumeSession( "99" ).reason ).toInclude( "/sessions" );
+			} );
+
+			it( "does not offer another user's conversations", function() {
+				sessions.touch( "bob", "bobs-conversation", "private" );
+
+				expect( session.sessions() ).toBeEmpty();
+				expect( session.resumeSession( "bobs" ).ok ).toBeFalse();
+			} );
+
+			it( "says there is no list when the chat has no database", function() {
+				var bare = new bxagents.models.cli.chat.InProcessSession( agent, "alice" );
+
+				expect( bare.keepsSessions() ).toBeFalse();
+				expect( bare.sessions() ).toBeEmpty();
+				expect( bare.resumeSession( "" ).ok ).toBeFalse();
+				bare.close();
+			} );
+
+			it( "forgets the messages on clear and zeroes the count", function() {
+				session.send( "hello", hooksFor( events ) );
+				expect( session.history() ).notToBeEmpty();
+
+				expect( session.clear().ok ).toBeTrue();
+
+				expect( session.history() ).toBeEmpty();
+				expect( session.sessions()[ 1 ].messageCount ).toBe( 0 );
+			} );
+
+			it( "reports that compacting needs a summary model when the memory has none", function() {
+				session.send( "hello", hooksFor( events ) );
+
+				var outcome = session.compact();
+				expect( outcome.available ).toBeFalse();
+				expect( outcome.compacted ).toBeFalse();
+			} );
+
+			it( "describes the chat on /info", function() {
+				var info = {};
+				for ( var line in session.info() ) {
+					info[ line[ 1 ] ] = line[ 2 ];
+				}
+
+				expect( info.Agent ).toBe( "helper" );
+				expect( info.User ).toBe( "alice" );
+				expect( info.Conversation ).toBe( session.conversationId() );
+				expect( info.Messages ).toBe( 0 );
+			} );
+
+			it( "does not mind a list it cannot write", function() {
+				var broken = { touch : () => { throw( message = "disk full" ); }, list : () => [] };
+				var tolerant = new bxagents.models.cli.chat.InProcessSession( agent, "alice", broken );
+
+				expect( tolerant.send( "hi", hooksFor( events ) ).status ).toBe( "done" );
+				tolerant.close();
+			} );
+
+			describe( "MemoryHistory", function() {
+				it( "keeps what was said and leaves out prompts, tool calls and tool results", function() {
+					var history = new bxagents.models.cli.chat.MemoryHistory().of( [
+						{ role : "system", content : "be nice" },
+						{ role : "user", content : "hi" },
+						{ role : "assistant", content : "", tool_calls : [ {} ] },
+						{ role : "tool", content : "42" },
+						{ role : "assistant", content : [ { type : "text", text : "hello" }, { type : "image_url" } ] }
+					] );
+
+					expect( history ).toBe( [ { role : "you", text : "hi" }, { role : "agent", text : "hello" } ] );
+				} );
+			} );
+
+		} );
+	}
+
+}

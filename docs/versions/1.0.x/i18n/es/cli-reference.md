@@ -199,7 +199,9 @@ bxAgents chat --no-tui                         # REPL simple línea por línea
 bxAgents chat --server [--port=<puerto>]       # aplicación completa, servidor propio desechable
 bxAgents chat --connect=http://127.0.0.1:8080  # aplicación completa, servidor que ya tienes en marcha
 bxAgents chat --connect=https://agent.example.com --token=<token>   # un servidor que pide uno
-bxAgents chat --user=alice                     # de quién son las notas que lee el agente (por defecto: tu usuario del SO)
+bxAgents chat --user=alice                     # de quién son las notas y conversaciones (por defecto: tu usuario del SO)
+bxAgents chat --continue                       # abre la conversación más reciente, con su historial
+bxAgents chat --session=2                      # abre una por su número en /sessions, o por id
 ```
 
 En la pantalla:
@@ -213,7 +215,22 @@ En la pantalla:
 | Enter mientras el agente trabaja | Lo dirige: tu mensaje se añade a la ejecución |
 | Ctrl+C | Limpia el cuadro; con el cuadro vacío, sale. Ctrl+D también sale |
 
-Escribe `/` para ver los comandos: `/help`, `/new` (una conversación nueva), `/tools`, `/copy` (la última respuesta al portapapeles, con la secuencia OSC 52 que honran la mayoría de terminales), `/save [archivo]` (la conversación en Markdown), `/remember <texto>` y `/notes` (ver abajo), `/record [archivo]` y `/record stop` (ver abajo) y `/exit`.
+Escribe `/` para ver los comandos: `/help`, `/new` (una conversación nueva), `/tools`, `/copy` (la última respuesta al portapapeles, con la secuencia OSC 52 que honran la mayoría de terminales), `/save [archivo]` (la conversación en Markdown), `/sessions`, `/resume`, `/clear`, `/compact` e `/info` (ver abajo), `/remember <texto>` y `/notes` (ver abajo), `/record [archivo]` y `/record stop` (ver abajo) y `/exit`.
+
+#### Conversaciones en el chat
+
+Cada chat es una conversación, listada en la [base de datos de chat compartida](conventions/web-ui.md#el-almacén-sqlite) del proyecto (`data/chat.db`) bajo tu usuario, la misma lista que muestra el chat web. Los mensajes se guardan en la [memoria](conventions/agent-yaml.md#ajustes) del agente, así que una conversación solo se puede retomar mientras dure esa memoria: la memoria `cache` por defecto se pierde al terminar el proceso, una memoria `file` o `jdbc` no.
+
+| Comando | Hace |
+|---|---|
+| `/sessions` | Lista tus conversaciones recientes, numeradas |
+| `/resume [número o id]` | Vuelve a una y muestra lo que se dijo; sin argumento, la más reciente |
+| `/new` | Empieza una conversación nueva (la anterior sigue en la lista) |
+| `/clear` | Olvida los mensajes de esta conversación y conserva la conversación |
+| `/compact` | Sustituye los mensajes más antiguos por un resumen (requiere un modelo de resumen en la memoria del agente) |
+| `/info` | Agente, modelo, conversación, número de mensajes, notas y base de datos |
+
+`--continue` abre la conversación más reciente al iniciar el chat, y `--session=<número o id>` abre una concreta. Ambos muestran primero los mensajes anteriores. Con `--connect` el servidor guarda la lista y los mensajes, con el nombre de tu [token](conventions/agent-bx.md#tokens-de-acceso-para-un-agente-desplegado); un servidor sin base de datos de chat dice que no guarda lista.
 
 #### Notas en el chat
 

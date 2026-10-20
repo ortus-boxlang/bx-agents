@@ -26,6 +26,7 @@ class {
 		variables.baseUrl = arguments.baseUrl.reReplace( "[\/]+$", "" )
 		variables.client = isNull( arguments.client ) ? new "models.cli.support.AgentClient@bxagents"() : arguments.client
 		variables.threadId = ""
+		variables.conversationId = createUUID()
 		variables.about = nullValue()
 		variables.legacy = false
 		variables.summary = new "models.cli.chat.ToolSummary@bxagents"()
@@ -67,6 +68,111 @@ class {
 
 	void function newThread() {
 		variables.threadId = ""
+		variables.conversationId = createUUID()
+	}
+
+	string function conversationId() {
+		return variables.conversationId
+	}
+
+	/**
+	 * @return True when the server keeps a list of conversations
+	 */
+	boolean function keepsSessions() {
+		sessions( 1 )
+		return !( variables.sessionsMissing ?: false )
+	}
+
+	/**
+	 * @return The caller's recent conversations on the server, most recent first; empty when it keeps none
+	 */
+	array function sessions( numeric limit = 20 ) {
+		try {
+			var answer = variables.client.getJson( variables.baseUrl, "sessions", { limit : arguments.limit } )
+			variables.sessionsMissing = false
+			return answer.sessions ?: []
+		} catch ( any e ) {
+			variables.sessionsMissing = true
+			return []
+		}
+	}
+
+	/**
+	 * Switches to another of the caller's conversations on the server.
+	 *
+	 * @reference Its number in the list, its id or the start of its id; blank for the most recent
+	 *
+	 * @return { ok, id, title, history } or { ok : false, reason }
+	 */
+	struct function resumeSession( string reference = "" ) {
+		var recent = sessions( 50 )
+		if ( variables.sessionsMissing ?: false ) {
+			return { ok : false, reason : "This server keeps no list of conversations." }
+		}
+		var ref = trim( arguments.reference )
+		var found = {}
+		if ( !len( ref ) ) {
+			found = recent.len() ? recent[ 1 ] : {}
+		} else if ( isNumeric( ref ) && ref >= 1 && ref <= recent.len() && len( ref ) < 4 ) {
+			found = recent[ int( ref ) ]
+		} else {
+			var matches = recent.filter( row => row.id == ref || row.id.startsWith( ref ) )
+			found = matches.len() == 1 ? matches[ 1 ] : {}
+		}
+		if ( found.isEmpty() ) {
+			return { ok : false, reason : len( ref ) ? "There is no conversation [#ref#]. Type /sessions to see them." : "There are no earlier conversations." }
+		}
+		variables.conversationId = found.id
+		variables.threadId = ""
+		return { ok : true, id : found.id, title : found.title ?: "", history : history() }
+	}
+
+	/**
+	 * @return What was said in this conversation: [ { role : "you" | "agent", text } ]; empty when the server cannot say
+	 */
+	array function history() {
+		try {
+			return variables.client.getJson( variables.baseUrl, "history", { conversationId : variables.conversationId } ).messages ?: []
+		} catch ( any e ) {
+			return []
+		}
+	}
+
+	struct function clear() {
+		try {
+			return variables.client.postJson( variables.baseUrl, "clear", { conversationId : variables.conversationId } )
+		} catch ( any e ) {
+			// a conversation the server has not seen yet has nothing to clear
+			return { ok : true }
+		}
+	}
+
+	struct function compact() {
+		try {
+			return variables.client.postJson( variables.baseUrl, "compact", { conversationId : variables.conversationId } )
+		} catch ( any e ) {
+			return { available : false, compacted : false, before : 0, after : 0 }
+		}
+	}
+
+	/**
+	 * @return [ [ label, value ] ] about this chat, in the order to show them
+	 */
+	array function info() {
+		var lines = [
+			[ "Agent", agentName() ],
+			[ "Model", modelName() ],
+			[ "Mode", mode() ],
+			[ "Server", variables.baseUrl ],
+			[ "Tools", tools().len() ],
+			[ "Conversation", variables.conversationId ]
+		]
+		var kept = notes()
+		if ( kept.available() ) {
+			var stats = kept.stats()
+			lines.append( [ "Notes", "#stats.user.count# about you (#stats.user.used#/#stats.user.limit# characters), #stats.agent.count# about the agent (#stats.agent.used#/#stats.agent.limit#)" ] )
+		}
+		return lines
 	}
 
 	/**
@@ -80,7 +186,7 @@ class {
 			return sendLegacy( arguments.text, arguments.hooks )
 		}
 		try {
-			return runTurn( "events", { "input" : arguments.text, "threadId" : variables.threadId }, arguments.hooks )
+			return runTurn( "events", { "input" : arguments.text, "threadId" : variables.threadId, "conversationId" : variables.conversationId }, arguments.hooks )
 		} catch ( "BxAgents.AgentRouteMissing" e ) {
 			variables.legacy = true
 			arguments.hooks.push( { type : "notice", text : "This server has no run control (it was built by an older bxAgents): showing the answer only." } )

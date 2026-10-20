@@ -186,6 +186,15 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   Esc to stop the run on the server, steering and approvals answered in place. A server built by an older bxAgents
   falls back to the text stream with a notice. `AgentClient` can send a token.
 
+#### Conversations in the chat
+
+- Every chat is a conversation in the shared chat database, under the user (the OS user, or the
+  token name over `--connect`), next to the web chat's own.
+- `/sessions`, `/resume`, `/clear`, `/compact` and `/info` in `chat`; `chat --continue` and
+  `chat --session=<number or id>` open an earlier conversation and show its messages.
+- Server routes `GET /sessions`, `GET /history`, `POST /clear` and `POST /compact`; `/events` takes a
+  `conversationId`. A conversation belongs to the caller that started it.
+
 #### Notes
 
 - `notes: {}` in `Agent.yaml` lets an agent keep short notes about the user and about its own work.

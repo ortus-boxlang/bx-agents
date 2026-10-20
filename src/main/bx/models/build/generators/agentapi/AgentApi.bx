@@ -125,6 +125,7 @@ class {
 		options[ "threadId" ] = threadId
 		if ( len( body.conversationId ?: "" ) ) {
 			options[ "conversationId" ] = body.conversationId
+			recordTurn( callerId( event ), body.conversationId, body.input ?: "" )
 		}
 		event.setHTTPHeader( name : "X-Thread-Id", value : threadId )
 		return streamRun( threadId, ( onChunk ) => {
@@ -258,7 +259,7 @@ class {
 			"description"  : config.description ?: "",
 			"model"        : modelLabel,
 			"toolCount"    : config.toolCount ?: 0,
-			"capabilities" : { "events" : true, "cancel" : true, "steer" : true, "approvals" : true, "notes" : !isNull( notesProvider() ) }
+			"capabilities" : { "events" : true, "cancel" : true, "steer" : true, "approvals" : true, "notes" : !isNull( notesProvider() ), "sessions" : !isNull( sessionStore() ) }
 		} )
 	}
 
@@ -275,6 +276,141 @@ class {
 			"tools"   : config.tools ?: [],
 			"count"   : config.toolCount ?: 0
 		} )
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Conversations
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * The caller's recent conversations, most recent first: { sessions : [ { id, title, messageCount, updatedAt } ] }.
+	 * 404 when this server keeps no conversation list (no shared chat database).
+	 */
+	function sessions( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var store = sessionStore()
+		if ( isNull( store ) ) {
+			noSessions( event )
+			return
+		}
+		event.renderData( type : "json", data : { "success" : true, "sessions" : store.list( callerId( event ), val( rc.limit ?: 20 ) ) } )
+	}
+
+	/**
+	 * What was said in one of the caller's conversations, from the agent's memory.
+	 *
+	 * Query: conversationId
+	 */
+	function history( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var conversationId = ownConversation( event, rc.conversationId ?: "" )
+		if ( !len( conversationId ) ) {
+			return
+		}
+		event.renderData( type : "json", data : {
+			"success"        : true,
+			"conversationId" : conversationId,
+			"messages"       : new "models.cli.chat.MemoryHistory@bxagents"().of( agent().getMemoryMessages( callerId( event ), conversationId ) )
+		} )
+	}
+
+	/**
+	 * Forgets the messages of one of the caller's conversations.
+	 *
+	 * Body: { conversationId }
+	 */
+	function clear( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var conversationId = ownConversation( event, event.getHTTPContent( json : true ).conversationId ?: "" )
+		if ( !len( conversationId ) ) {
+			return
+		}
+		var me = callerId( event )
+		agent().getMemories().each( ( memory ) => memory.clear( me, conversationId ) )
+		sessionStore().resetCount( me, conversationId )
+		event.renderData( type : "json", data : { "success" : true, "ok" : true } )
+	}
+
+	/**
+	 * Replaces the older messages of one of the caller's conversations with a summary.
+	 *
+	 * Body: { conversationId }
+	 */
+	function compact( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var conversationId = ownConversation( event, event.getHTTPContent( json : true ).conversationId ?: "" )
+		if ( !len( conversationId ) ) {
+			return
+		}
+		var me = callerId( event )
+		var thisAgent = agent()
+		var before = thisAgent.getMemoryMessages( me, conversationId ).len()
+		var available = thisAgent.getMemories().some( ( memory ) => len( memory.getSummaryProvider() ?: "" ) && len( memory.getSummaryModel() ?: "" ) )
+		if ( available ) {
+			thisAgent.getMemories().each( ( memory ) => memory.summarize( {}, me, conversationId ) )
+		}
+		var after = thisAgent.getMemoryMessages( me, conversationId ).len()
+		event.renderData( type : "json", data : { "success" : true, "available" : available, "compacted" : after < before, "before" : before, "after" : after } )
+	}
+
+	/**
+	 * The conversation list, or null when the server has no shared chat database.
+	 */
+	private function sessionStore() {
+		try {
+			var store = new "models.store.ChatStore@bxagents"( "" )
+			store.rows( "SELECT 1 AS found FROM conversations LIMIT 1" )
+			return new "models.store.SessionStore@bxagents"( store )
+		} catch ( any e ) {
+			return nullValue()
+		}
+	}
+
+	private void function noSessions( required any event ) {
+		arguments.event.renderData( type : "json", statusCode : 404, data : { "success" : false, "error" : "This server keeps no list of conversations" } )
+	}
+
+	/**
+	 * A conversation the caller owns, or "" after answering 404 (it does not exist, or is somebody else's:
+	 * the same answer, so an id cannot be used to find out).
+	 */
+	private string function ownConversation( required any event, required string conversationId ) {
+		var store = sessionStore()
+		if ( isNull( store ) ) {
+			noSessions( arguments.event )
+			return ""
+		}
+		if ( !len( arguments.conversationId ) ) {
+			arguments.event.renderData( type : "json", statusCode : 400, data : { "success" : false, "error" : "conversationId is required" } )
+			return ""
+		}
+		if ( store.byId( callerId( arguments.event ), arguments.conversationId ).isEmpty() ) {
+			arguments.event.renderData( type : "json", statusCode : 404, data : { "success" : false, "error" : "There is no such conversation" } )
+			return ""
+		}
+		return arguments.conversationId
+	}
+
+	/**
+	 * Notes the turn in the conversation list. A list that cannot be written must not stop the turn.
+	 */
+	private void function recordTurn( required string userId, required string conversationId, required string input ) {
+		try {
+			var store = sessionStore()
+			if ( !isNull( store ) ) {
+				store.touch( arguments.userId, arguments.conversationId, arguments.input )
+			}
+		} catch ( any e ) {
+			// the turn goes on without a list
+		}
 	}
 
 	// ----------------------------------------------------------------------------------
