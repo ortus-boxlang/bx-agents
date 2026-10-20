@@ -30,6 +30,25 @@ class extends="testbox.system.BaseSpec" {
 					s.log.append( [ "choose", title, lines, choices.map( c => c.value ) ] )
 					return s.chosen
 				}
+				s.recording = ""
+				s.recordFail = ""
+				s.recordProblem = ""
+				s.isRecording = () => len( s.recording ) > 0
+				s.recordingFile = () => s.recording
+				s.recordingError = () => s.recordProblem
+				s.startRecording = ( file, title ) => {
+					if ( len( s.recordFail ) ) {
+						throw( message = s.recordFail )
+					}
+					s.recording = file
+					s.log.append( [ "record", file, title ] )
+				}
+				s.stopRecording = () => {
+					var f = s.recording
+					s.recording = ""
+					s.log.append( [ "stopped", f ] )
+					return f
+				}
 				s.copy = ( text ) => s.log.append( [ "copy", text ] )
 				s.close = () => s.log.append( [ "close" ] )
 				return s
@@ -145,6 +164,72 @@ class extends="testbox.system.BaseSpec" {
 				directoryDelete( dir, true )
 			} );
 
+			it( "starts a recording on /record, in the working directory with a dated name, and stops it on /record stop", function() {
+				var screen = fakeScreen( [ "/record", "/record stop" ] )
+				new bxagents.models.cli.chat.ChatController( fakeSession(), "/work" ).run( screen )
+
+				var started = screen.log.filter( e => e[ 1 ] == "record" )
+				expect( started ).toHaveLength( 1 );
+				expect( started[ 1 ][ 2 ] ).toMatch( "^/work/chat-\d{8}-\d{6}\.cast$" );
+				expect( started[ 1 ][ 3 ] ).toBe( "bxAgents chat: helper" );
+				var printed = screen.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] )
+				expect( printed[ 1 ] ).toInclude( "Recording to /work/chat-" );
+				expect( printed[ 2 ] ).toBe( "Recording saved to " & started[ 1 ][ 2 ] );
+			} );
+
+			it( "records to a named file, relative or absolute", function() {
+				var screen = fakeScreen( [ "/record demo.cast", "/record stop", "/record /tmp/x.cast" ] )
+				new bxagents.models.cli.chat.ChatController( fakeSession(), "/work" ).run( screen )
+
+				expect( screen.log.filter( e => e[ 1 ] == "record" ).map( e => e[ 2 ] ) ).toBe( [ "/work/demo.cast", "/tmp/x.cast" ] );
+			} );
+
+			it( "will not start a second recording, and says when none is on to stop", function() {
+				var screen = fakeScreen( [ "/record stop", "/record a.cast", "/record b.cast" ] )
+				new bxagents.models.cli.chat.ChatController( fakeSession(), "/work" ).run( screen )
+
+				var printed = screen.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] )
+				expect( printed[ 1 ] ).toBe( "No recording is on." );
+				expect( printed[ 3 ] ).toInclude( "Already recording to /work/a.cast" );
+				expect( screen.log.filter( e => e[ 1 ] == "record" ) ).toHaveLength( 1 );
+			} );
+
+			it( "shows a recording that cannot start instead of ending the chat", function() {
+				var screen = fakeScreen( [ "/record", "hello" ] )
+				screen.recordFail = "disk full"
+				var session = fakeSession()
+				new bxagents.models.cli.chat.ChatController( session, "/work" ).run( screen )
+
+				expect( screen.log.filter( e => e[ 1 ] == "print" )[ 1 ][ 3 ] ).toBe( "Could not start recording: disk full" );
+				expect( session.sent ).toBe( [ "hello" ] );
+			} );
+
+			it( "warns when a recording stopped early", function() {
+				var screen = fakeScreen( [ "/record a.cast" ] )
+				screen.recordProblem = "no space left"
+				var controller = new bxagents.models.cli.chat.ChatController( fakeSession(), "/work" )
+				controller.run( screen )
+				screen.inputs = [ "/record stop" ]
+				controller.run( screen )
+
+				expect( screen.log.filter( e => e[ 1 ] == "print" ).last()[ 3 ] ).toInclude( "stopped early (no space left)" );
+			} );
+
+			it( "records from the first line when asked to at the start", function() {
+				var auto = fakeScreen( [] )
+				new bxagents.models.cli.chat.ChatController( fakeSession(), "/work" ).run( auto, true )
+				var named = fakeScreen( [] )
+				new bxagents.models.cli.chat.ChatController( fakeSession(), "/work" ).run( named, "talk.cast" )
+				var off = fakeScreen( [] )
+				new bxagents.models.cli.chat.ChatController( fakeSession(), "/work" ).run( off )
+
+				expect( auto.log[ 1 ][ 1 ] ).toBe( "record" );
+				expect( auto.log[ 1 ][ 2 ] ).toMatch( "^/work/chat-.*\.cast$" );
+				expect( named.log[ 1 ] ).toBe( [ "record", "/work/talk.cast", "bxAgents chat: helper" ] );
+				expect( named.log[ 3 ][ 1 ] ).toBe( "banner" );
+				expect( off.log.filter( e => e[ 1 ] == "record" ) ).toBeEmpty();
+			} );
+
 			it( "will not save an empty conversation", function() {
 				var screen = fakeScreen( [ "/save" ] )
 				controllerFor( screen, fakeSession() ).run( screen )
@@ -223,7 +308,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "offers its commands to the screen for the slash menu", function() {
 				var names = new bxagents.models.cli.chat.ChatController( fakeSession() ).commands().map( c => c.name )
 
-				expect( names ).toBe( [ "/help", "/new", "/tools", "/copy", "/save", "/exit" ] );
+				expect( names ).toBe( [ "/help", "/new", "/tools", "/copy", "/save", "/record", "/exit" ] );
 			} );
 
 		} );
