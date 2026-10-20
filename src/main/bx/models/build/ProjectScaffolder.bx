@@ -140,6 +140,8 @@ class {
 			fileWrite( gitignorePath, renderGitignore() )
 		}
 
+		writeRootFiles( dir )
+
 		applyTemplate( arguments.template, dir, arguments.name, arguments.classBased )
 		featureWriter.apply( dir, arguments.features )
 
@@ -438,6 +440,30 @@ class {
 	}
 
 	/**
+	 * Writes the standard dotfiles every project starts with (editor, line endings, linters, and
+	 * the BoxLang runtime config), from templates/project/. A file already there is left alone.
+	 * Stored under plain names because the module build copies plain files only.
+	 *
+	 * @dir Absolute path to the project root
+	 */
+	private void function writeRootFiles( required string dir ) {
+		var templates = getDirectoryFromPath( getCurrentTemplatePath() ) & "templates/project/"
+		var files = {
+			"editorconfig"     : ".editorconfig",
+			"gitattributes"    : ".gitattributes",
+			"bxlint.json"      : ".bxlint.json",
+			"markdownlint.json": ".markdownlint.json",
+			"boxlang.json"     : ".boxlang.json"
+		}
+		for ( var source in files ) {
+			var target = arguments.dir & "/" & files[ source ]
+			if ( !fileExists( target ) ) {
+				fileWrite( target, fileRead( templates & source ) )
+			}
+		}
+	}
+
+	/**
 	 * @return The rendered .env source, declaring BOXLANG_HOME (see the class docblock)
 	 */
 	private string function renderEnv() {
@@ -461,12 +487,25 @@ class {
 	 */
 	private string function renderGitignore() {
 		var lines = [
+			"## secrets: API keys and tokens live here, never in source control",
+			".env",
+			".env.*",
+			"!.env.example",
+			"",
+			"## build output",
 			".build/",
 			"dist/",
-			".env",
+			"",
 			"## installed packages (see box.json)",
 			"lib/",
 			"boxlang_modules/",
+			"",
+			"## editor and OS files",
+			".idea/",
+			".vscode/",
+			"*.swp",
+			".DS_Store",
+			"Thumbs.db",
 			""
 		]
 		return lines.toList( char( 10 ) )

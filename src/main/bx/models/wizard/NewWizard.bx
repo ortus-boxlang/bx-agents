@@ -9,18 +9,16 @@
  * asks it again; Ctrl+C cancels the wizard with BxAgents.WizardCancelled. The last stage
  * shows the whole project and the command that would build it without questions.
  *
- * Secrets: by default the wizard never asks for one. API keys and tokens go to .env as empty
- * stubs for the user to fill in. If the user chooses to keep secrets encrypted in the project,
- * the wizard asks for each value (hidden), encrypts it with a seed made for the project and
- * keeps the plain text only in memory. A web UI password is always stored only as a hash, and
- * the web access key is made, not typed.
+ * What the wizard never does: ask for a secret to store. API keys and tokens go to .env
+ * as empty stubs for the user to fill in. The two exceptions are made, not typed: a random
+ * web access key, and a web UI password, which is stored only as a hash.
  */
 class {
 
 	static {
 		STAGES = [
 			"name", "purpose", "shape", "model", "tools", "search", "files", "memory",
-			"mcp", "channels", "webAccess", "guard", "deploy", "secrets", "review"
+			"mcp", "channels", "webAccess", "guard", "deploy", "review"
 		]
 	}
 
@@ -356,40 +354,6 @@ class {
 			askDeploy( target )
 		}
 		variables.prompter.record( "deploy", "Deploy", target == "none" ? "later" : target )
-		return true
-	}
-
-	function stage_secrets() {
-		if ( variables.flags.keyExists( "secrets" ) ) {
-			return showGiven( "secrets", "Secrets", variables.plan.secrets == "encrypted" ? "encrypted in secrets.json" : ".env" )
-		}
-		var slots = variables.planner.secretSlots( variables.plan )
-		variables.plan.secretValues = {}
-		variables.prompter.forget( "secrets" )
-		if ( !slots.len() ) {
-			variables.plan.secrets = "env"
-			return false
-		}
-
-		variables.plan.secrets = variables.prompter.select(
-			"Where should secrets live?",
-			[
-				{ value : "env", label : ".env file", hint : "kept out of git; you fill in the values. The default." },
-				{ value : "encrypted", label : "Encrypted in the project", hint : "bxsecret: values in secrets.json, safe to commit. A seed in .env opens them." }
-			],
-			variables.plan.secrets,
-			"#slots.len()# value#slots.len() == 1 ? '' : 's'# to supply: #slots.map( slot => slot.name ).toList( ', ' )#"
-		)
-		if ( variables.plan.secrets == "encrypted" ) {
-			for ( var slot in slots ) {
-				var value = variables.prompter.text( "Value for #slot.name#", "#slot.comment#. Typing is hidden. Press Enter to fill it in later.", "", true )
-				if ( len( value ) ) {
-					variables.plan.secretValues[ slot.name ] = value
-				}
-			}
-		}
-		var count = variables.plan.secretValues.count()
-		variables.prompter.record( "secrets", "Secrets", variables.plan.secrets == "encrypted" ? "encrypted in secrets.json (#count# value#count == 1 ? '' : 's'#)" : ".env" )
 		return true
 	}
 
