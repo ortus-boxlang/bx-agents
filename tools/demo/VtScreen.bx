@@ -1,0 +1,663 @@
+/**
+ * A small terminal screen: feed it the text a program wrote to a terminal and it keeps what the screen
+ * would show, one cell per character with its colors and attributes.
+ *
+ * It understands what full-screen and inline text programs actually use: printing (with wide
+ * characters), carriage return, line feed, backspace and tab; cursor movement and saving; erasing in
+ * a line or the display; inserting and deleting lines and characters; scrolling and a scroll region;
+ * and the colors and attributes of SGR (16 colors, the 256 color palette, true color, bold, dim,
+ * italic, underline and reverse). Modes it has no use for (bracketed paste, synchronized output,
+ * titles, the clipboard) are read and ignored. Only the cursor visibility mode is kept.
+ *
+ * Colors are "" for the default, or "r,g,b" for a color, with the 16 and 256 color palettes already
+ * turned into rgb so a renderer needs no palette of its own.
+ *
+ * It is the engine behind render.bxs. It is not a complete VT100.
+ *
+ * Coordinates are 0 based: column 0, row 0 is the top left cell.
+ */
+class {
+
+	static {
+		BOLD      = 1
+		DIM       = 2
+		ITALIC    = 4
+		UNDERLINE = 8
+		REVERSE   = 16
+		// the 16 standard colors, as most terminals draw them
+		PALETTE16 = [
+			"0,0,0", "205,49,49", "13,188,121", "229,229,16", "36,114,200", "188,63,188", "17,168,205", "229,229,229",
+			"102,102,102", "241,76,76", "35,209,139", "245,245,67", "59,142,234", "214,112,214", "41,184,219", "255,255,255"
+		]
+	}
+
+	/**
+	 * @cols Width in columns
+	 * @rows Height in rows
+	 */
+	function init( required numeric cols, required numeric rows ) {
+		variables.cols = arguments.cols
+		variables.rows = arguments.rows
+		variables.state = "ground"
+		variables.params = ""
+		variables.marker = ""
+		variables.oscEsc = false
+		variables.pen = { fg : "", bg : "", flags : 0 }
+		variables.cx = 0
+		variables.cy = 0
+		variables.wrapPending = false
+		variables.saved = { x : 0, y : 0, pen : duplicate( variables.pen ) }
+		variables.cursorHidden = false
+		variables.top = 0
+		variables.bottom = arguments.rows - 1
+		variables.grid = []
+		for ( var y = 1; y <= arguments.rows; y++ ) {
+			variables.grid.append( blankRow() )
+		}
+		return this
+	}
+
+	// ----------------------------------------------------------------------------------
+	// What a renderer or a test asks
+	// ----------------------------------------------------------------------------------
+
+	numeric function cols() {
+		return variables.cols
+	}
+
+	numeric function rows() {
+		return variables.rows
+	}
+
+	/**
+	 * @return The screen as one string per row, trailing spaces removed
+	 */
+	array function lines() {
+		var out = []
+		for ( var y = 1; y <= variables.rows; y++ ) {
+			var text = ""
+			for ( var x = 1; x <= variables.cols; x++ ) {
+				text &= variables.grid[ y ][ x ].ch
+			}
+			out.append( reReplace( text, "\s+$", "" ) )
+		}
+		return out
+	}
+
+	/**
+	 * @return The screen as text, rows joined by a newline, trailing blank rows removed
+	 */
+	string function text() {
+		var all = lines()
+		while ( all.len() && !len( all.last() ) ) {
+			all.deleteAt( all.len() )
+		}
+		return all.toList( char( 10 ) )
+	}
+
+	/**
+	 * @x Column, 0 based
+	 * @y Row, 0 based
+	 *
+	 * @return { ch, fg, bg, flags } of the cell, with "" for a default color
+	 */
+	struct function cell( required numeric x, required numeric y ) {
+		return variables.grid[ arguments.y + 1 ][ arguments.x + 1 ]
+	}
+
+	/**
+	 * @return { x, y, hidden }
+	 */
+	struct function cursor() {
+		return { x : variables.cx, y : variables.cy, hidden : variables.cursorHidden }
+	}
+
+	/**
+	 * Changes the size, keeping what fits from the top left.
+	 */
+	function resize( required numeric cols, required numeric rows ) {
+		var fresh = []
+		for ( var y = 1; y <= arguments.rows; y++ ) {
+			var line = []
+			for ( var x = 1; x <= arguments.cols; x++ ) {
+				line.append( ( y <= variables.rows && x <= variables.cols ) ? variables.grid[ y ][ x ] : blankCell() )
+			}
+			fresh.append( line )
+		}
+		variables.grid = fresh
+		variables.cols = arguments.cols
+		variables.rows = arguments.rows
+		variables.top = 0
+		variables.bottom = arguments.rows - 1
+		variables.cx = min( variables.cx, arguments.cols - 1 )
+		variables.cy = min( variables.cy, arguments.rows - 1 )
+		variables.wrapPending = false
+		return this
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Feeding it text
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @text What the program wrote. A sequence may be split across calls.
+	 */
+	function feed( required string text ) {
+		var jtext = javaCast( "string", arguments.text )
+		var i = 0
+		var n = jtext.length()
+		while ( i < n ) {
+			var cp = jtext.codePointAt( i )
+			i += cp > 65535 ? 2 : 1
+			step( cp )
+		}
+		return this
+	}
+
+	private void function step( required numeric cp ) {
+		var c = arguments.cp
+		switch ( variables.state ) {
+			case "ground":
+				ground( c )
+				break
+			case "esc":
+				escape( c )
+				break
+			case "csi":
+				csi( c )
+				break
+			case "osc":
+				if ( c == 7 ) {
+					variables.state = "ground"
+				} else if ( c == 27 ) {
+					variables.state = "oscEnd"
+				}
+				break
+			case "oscEnd":
+				// ESC \ ends the string; anything else means the ESC began a new sequence
+				variables.state = "ground"
+				if ( c != 92 ) {
+					variables.state = "esc"
+					escape( c )
+				}
+				break
+			case "skip":
+				// a character set designation (ESC ( B) carries one more character
+				variables.state = "ground"
+				break
+		}
+	}
+
+	private void function ground( required numeric c ) {
+		var c = arguments.c
+		if ( c == 27 ) {
+			variables.state = "esc"
+		} else if ( c == 10 || c == 11 || c == 12 ) {
+			lineFeed()
+		} else if ( c == 13 ) {
+			variables.cx = 0
+			variables.wrapPending = false
+		} else if ( c == 8 ) {
+			variables.cx = max( 0, variables.cx - 1 )
+			variables.wrapPending = false
+		} else if ( c == 9 ) {
+			variables.cx = min( variables.cols - 1, ( int( variables.cx / 8 ) + 1 ) * 8 )
+			variables.wrapPending = false
+		} else if ( c >= 32 && c != 127 ) {
+			put( c )
+		}
+	}
+
+	private void function escape( required numeric c ) {
+		var c = arguments.c
+		variables.state = "ground"
+		switch ( c ) {
+			case 91: // [
+				variables.state = "csi"
+				variables.params = ""
+				variables.marker = ""
+				break
+			case 93: // ]
+				variables.state = "osc"
+				break
+			case 80: // P  device control string, ended like an OSC
+			case 94: // ^
+			case 95: // _
+				variables.state = "osc"
+				break
+			case 40: case 41: case 42: case 43: // ( ) * +
+				variables.state = "skip"
+				break
+			case 55: // 7
+				saveCursor()
+				break
+			case 56: // 8
+				restoreCursor()
+				break
+			case 77: // M reverse index
+				reverseIndex()
+				break
+			case 68: // D index
+				lineFeed()
+				break
+			case 69: // E next line
+				variables.cx = 0
+				lineFeed()
+				break
+			case 99: // c reset
+				reset()
+				break
+		}
+	}
+
+	private void function csi( required numeric c ) {
+		var c = arguments.c
+		if ( c >= 48 && c <= 59 ) {
+			// digits, and ; or : between parameters
+			variables.params &= char( c )
+		} else if ( c >= 60 && c <= 63 && !len( variables.params ) && !len( variables.marker ) ) {
+			// < = > ? at the start mark a private sequence
+			variables.marker = char( c )
+		} else if ( c >= 32 && c <= 47 ) {
+			// intermediate bytes such as the space of a cursor style change: kept out of the parameters
+			variables.marker &= char( c )
+		} else if ( c >= 64 && c <= 126 ) {
+			variables.state = "ground"
+			dispatch( c )
+		} else {
+			variables.state = "ground"
+		}
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Control sequences
+	// ----------------------------------------------------------------------------------
+
+	private numeric function param( required array list, required numeric index, required numeric fallback ) {
+		if ( arguments.index > arguments.list.len() || !len( arguments.list[ arguments.index ] ) ) {
+			return arguments.fallback
+		}
+		var v = val( arguments.list[ arguments.index ] )
+		return v == 0 ? arguments.fallback : v
+	}
+
+	private void function dispatch( required numeric final ) {
+		var list = len( variables.params ) ? variables.params.listToArray( ";", true ) : []
+		var f = arguments.final
+		if ( len( variables.marker ) ) {
+			if ( left( variables.marker, 1 ) == "?" && ( f == 104 || f == 108 ) ) {
+				for ( var p in list ) {
+					if ( val( p ) == 25 ) {
+						variables.cursorHidden = f == 108
+					}
+				}
+			}
+			return
+		}
+		switch ( f ) {
+			case 65: // A
+				moveTo( variables.cx, variables.cy - param( list, 1, 1 ), true )
+				break
+			case 66: // B
+				moveTo( variables.cx, variables.cy + param( list, 1, 1 ), true )
+				break
+			case 67: // C
+				moveTo( variables.cx + param( list, 1, 1 ), variables.cy, true )
+				break
+			case 68: // D
+				moveTo( variables.cx - param( list, 1, 1 ), variables.cy, true )
+				break
+			case 69: // E
+				moveTo( 0, variables.cy + param( list, 1, 1 ), true )
+				break
+			case 70: // F
+				moveTo( 0, variables.cy - param( list, 1, 1 ), true )
+				break
+			case 71: // G
+			case 96: // `
+				moveTo( param( list, 1, 1 ) - 1, variables.cy, true )
+				break
+			case 100: // d
+				moveTo( variables.cx, param( list, 1, 1 ) - 1, true )
+				break
+			case 72: // H
+			case 102: // f
+				moveTo( param( list, 2, 1 ) - 1, param( list, 1, 1 ) - 1, true )
+				break
+			case 74: // J
+				eraseDisplay( list.len() ? val( list[ 1 ] ) : 0 )
+				break
+			case 75: // K
+				eraseLine( list.len() ? val( list[ 1 ] ) : 0 )
+				break
+			case 76: // L
+				insertLines( param( list, 1, 1 ) )
+				break
+			case 77: // M
+				deleteLines( param( list, 1, 1 ) )
+				break
+			case 64: // @
+				insertChars( param( list, 1, 1 ) )
+				break
+			case 80: // P
+				deleteChars( param( list, 1, 1 ) )
+				break
+			case 88: // X
+				eraseChars( param( list, 1, 1 ) )
+				break
+			case 83: // S
+				for ( var k = 1; k <= param( list, 1, 1 ); k++ ) {
+					scrollUp()
+				}
+				break
+			case 84: // T
+				for ( var k = 1; k <= param( list, 1, 1 ); k++ ) {
+					scrollDown()
+				}
+				break
+			case 114: // r
+				var t = param( list, 1, 1 ) - 1
+				var b = param( list, 2, variables.rows ) - 1
+				if ( t < b && b < variables.rows ) {
+					variables.top = t
+					variables.bottom = b
+				}
+				variables.cx = 0
+				variables.cy = 0
+				variables.wrapPending = false
+				break
+			case 115: // s
+				saveCursor()
+				break
+			case 117: // u
+				restoreCursor()
+				break
+			case 109: // m
+				sgr( list )
+				break
+		}
+	}
+
+	private void function sgr( required array list ) {
+		var list = arguments.list
+		if ( !list.len() ) {
+			list = [ "0" ]
+		}
+		var i = 1
+		while ( i <= list.len() ) {
+			var n = len( list[ i ] ) ? val( list[ i ] ) : 0
+			if ( n == 0 ) {
+				variables.pen = { fg : "", bg : "", flags : 0 }
+			} else if ( n == 1 ) {
+				flag( static.BOLD, true )
+			} else if ( n == 2 ) {
+				flag( static.DIM, true )
+			} else if ( n == 3 ) {
+				flag( static.ITALIC, true )
+			} else if ( n == 4 ) {
+				flag( static.UNDERLINE, true )
+			} else if ( n == 7 ) {
+				flag( static.REVERSE, true )
+			} else if ( n == 22 ) {
+				flag( static.BOLD, false )
+				flag( static.DIM, false )
+			} else if ( n == 23 ) {
+				flag( static.ITALIC, false )
+			} else if ( n == 24 ) {
+				flag( static.UNDERLINE, false )
+			} else if ( n == 27 ) {
+				flag( static.REVERSE, false )
+			} else if ( n >= 30 && n <= 37 ) {
+				variables.pen.fg = static.PALETTE16[ n - 29 ]
+			} else if ( n == 39 ) {
+				variables.pen.fg = ""
+			} else if ( n >= 40 && n <= 47 ) {
+				variables.pen.bg = static.PALETTE16[ n - 39 ]
+			} else if ( n == 49 ) {
+				variables.pen.bg = ""
+			} else if ( n >= 90 && n <= 97 ) {
+				variables.pen.fg = static.PALETTE16[ n - 81 ]
+			} else if ( n >= 100 && n <= 107 ) {
+				variables.pen.bg = static.PALETTE16[ n - 91 ]
+			} else if ( n == 38 || n == 48 ) {
+				var color = ""
+				var mode = i < list.len() ? val( list[ i + 1 ] ) : 0
+				if ( mode == 5 && i + 2 <= list.len() ) {
+					color = palette256( val( list[ i + 2 ] ) )
+					i += 2
+				} else if ( mode == 2 && i + 4 <= list.len() ) {
+					color = val( list[ i + 2 ] ) & "," & val( list[ i + 3 ] ) & "," & val( list[ i + 4 ] )
+					i += 4
+				}
+				if ( n == 38 ) {
+					variables.pen.fg = color
+				} else {
+					variables.pen.bg = color
+				}
+			}
+			i++
+		}
+	}
+
+	private void function flag( required numeric bit, required boolean on ) {
+		variables.pen.flags = on ? bitOr( variables.pen.flags, arguments.bit ) : bitAnd( variables.pen.flags, bitNot( arguments.bit ) )
+	}
+
+	/**
+	 * @n 0 to 255
+	 *
+	 * @return "r,g,b"
+	 */
+	private string function palette256( required numeric n ) {
+		var n = arguments.n
+		if ( n < 16 ) {
+			return static.PALETTE16[ n + 1 ]
+		}
+		if ( n >= 232 ) {
+			var v = 8 + ( n - 232 ) * 10
+			return v & "," & v & "," & v
+		}
+		n -= 16
+		var levels = [ 0, 95, 135, 175, 215, 255 ]
+		return levels[ int( n / 36 ) + 1 ] & "," & levels[ int( ( n % 36 ) / 6 ) + 1 ] & "," & levels[ ( n % 6 ) + 1 ]
+	}
+
+	// ----------------------------------------------------------------------------------
+	// The grid
+	// ----------------------------------------------------------------------------------
+
+	private struct function blankCell() {
+		return { ch : " ", fg : "", bg : variables.pen.bg, flags : 0 }
+	}
+
+	private array function blankRow() {
+		var line = []
+		for ( var x = 1; x <= variables.cols; x++ ) {
+			line.append( blankCell() )
+		}
+		return line
+	}
+
+	private void function reset() {
+		variables.pen = { fg : "", bg : "", flags : 0 }
+		variables.top = 0
+		variables.bottom = variables.rows - 1
+		eraseDisplay( 2 )
+		variables.cx = 0
+		variables.cy = 0
+	}
+
+	private void function moveTo( required numeric x, required numeric y, boolean clamp = true ) {
+		variables.cx = max( 0, min( variables.cols - 1, arguments.x ) )
+		variables.cy = max( 0, min( variables.rows - 1, arguments.y ) )
+		variables.wrapPending = false
+	}
+
+	private void function saveCursor() {
+		variables.saved = { x : variables.cx, y : variables.cy, pen : duplicate( variables.pen ) }
+	}
+
+	private void function restoreCursor() {
+		variables.cx = variables.saved.x
+		variables.cy = variables.saved.y
+		variables.pen = duplicate( variables.saved.pen )
+		variables.wrapPending = false
+	}
+
+	private void function lineFeed() {
+		variables.wrapPending = false
+		if ( variables.cy == variables.bottom ) {
+			scrollUp()
+		} else if ( variables.cy < variables.rows - 1 ) {
+			variables.cy++
+		}
+	}
+
+	private void function reverseIndex() {
+		variables.wrapPending = false
+		if ( variables.cy == variables.top ) {
+			scrollDown()
+		} else if ( variables.cy > 0 ) {
+			variables.cy--
+		}
+	}
+
+	private void function scrollUp() {
+		variables.grid.deleteAt( variables.top + 1 )
+		variables.grid.insertAt( variables.bottom + 1, blankRow() )
+	}
+
+	private void function scrollDown() {
+		variables.grid.deleteAt( variables.bottom + 1 )
+		variables.grid.insertAt( variables.top + 1, blankRow() )
+	}
+
+	private void function insertLines( required numeric count ) {
+		if ( variables.cy < variables.top || variables.cy > variables.bottom ) {
+			return
+		}
+		for ( var k = 1; k <= min( arguments.count, variables.bottom - variables.cy + 1 ); k++ ) {
+			variables.grid.deleteAt( variables.bottom + 1 )
+			variables.grid.insertAt( variables.cy + 1, blankRow() )
+		}
+		variables.cx = 0
+		variables.wrapPending = false
+	}
+
+	private void function deleteLines( required numeric count ) {
+		if ( variables.cy < variables.top || variables.cy > variables.bottom ) {
+			return
+		}
+		for ( var k = 1; k <= min( arguments.count, variables.bottom - variables.cy + 1 ); k++ ) {
+			variables.grid.deleteAt( variables.cy + 1 )
+			variables.grid.insertAt( variables.bottom + 1, blankRow() )
+		}
+		variables.cx = 0
+		variables.wrapPending = false
+	}
+
+	private void function insertChars( required numeric count ) {
+		var line = variables.grid[ variables.cy + 1 ]
+		for ( var k = 1; k <= min( arguments.count, variables.cols - variables.cx ); k++ ) {
+			line.deleteAt( variables.cols )
+			line.insertAt( variables.cx + 1, blankCell() )
+		}
+	}
+
+	private void function deleteChars( required numeric count ) {
+		var line = variables.grid[ variables.cy + 1 ]
+		for ( var k = 1; k <= min( arguments.count, variables.cols - variables.cx ); k++ ) {
+			line.deleteAt( variables.cx + 1 )
+			line.append( blankCell() )
+		}
+	}
+
+	private void function eraseChars( required numeric count ) {
+		for ( var x = variables.cx; x < min( variables.cols, variables.cx + arguments.count ); x++ ) {
+			variables.grid[ variables.cy + 1 ][ x + 1 ] = blankCell()
+		}
+	}
+
+	private void function eraseLine( required numeric mode ) {
+		var from = arguments.mode == 1 || arguments.mode == 2 ? 0 : variables.cx
+		var to = arguments.mode == 0 || arguments.mode == 2 ? variables.cols - 1 : variables.cx
+		for ( var x = from; x <= to; x++ ) {
+			variables.grid[ variables.cy + 1 ][ x + 1 ] = blankCell()
+		}
+	}
+
+	private void function eraseDisplay( required numeric mode ) {
+		if ( arguments.mode == 0 ) {
+			eraseLine( 0 )
+			for ( var y = variables.cy + 1; y < variables.rows; y++ ) {
+				variables.grid[ y + 1 ] = blankRow()
+			}
+		} else if ( arguments.mode == 1 ) {
+			eraseLine( 1 )
+			for ( var y = 0; y < variables.cy; y++ ) {
+				variables.grid[ y + 1 ] = blankRow()
+			}
+		} else {
+			for ( var y = 0; y < variables.rows; y++ ) {
+				variables.grid[ y + 1 ] = blankRow()
+			}
+		}
+	}
+
+	/**
+	 * Draws one character at the cursor, wrapping first when the last write filled the line.
+	 */
+	private void function put( required numeric cp ) {
+		var width = charWidth( arguments.cp )
+		var ch = createObject( "java", "java.lang.String" ).valueOf( createObject( "java", "java.lang.Character" ).toChars( arguments.cp ) )
+		if ( width == 0 ) {
+			// a combining mark or joiner belongs to the cell before the cursor
+			var px = variables.wrapPending ? variables.cx : variables.cx - 1
+			if ( px >= 0 ) {
+				variables.grid[ variables.cy + 1 ][ px + 1 ].ch &= ch
+			}
+			return
+		}
+		if ( variables.wrapPending || variables.cx + width > variables.cols ) {
+			variables.cx = 0
+			lineFeed()
+		}
+		var line = variables.grid[ variables.cy + 1 ]
+		line[ variables.cx + 1 ] = { ch : ch, fg : variables.pen.fg, bg : variables.pen.bg, flags : variables.pen.flags }
+		if ( width == 2 && variables.cx + 2 <= variables.cols ) {
+			line[ variables.cx + 2 ] = { ch : "", fg : variables.pen.fg, bg : variables.pen.bg, flags : variables.pen.flags }
+		}
+		variables.cx += width
+		if ( variables.cx >= variables.cols ) {
+			variables.cx = variables.cols - 1
+			variables.wrapPending = true
+		} else {
+			variables.wrapPending = false
+		}
+	}
+
+	/**
+	 * @cp A code point
+	 *
+	 * @return 0 for a mark that joins the previous character, 2 for a wide one, else 1
+	 */
+	private numeric function charWidth( required numeric cp ) {
+		var c = arguments.cp
+		if ( c < 768 ) {
+			return 1
+		}
+		if ( ( c >= 768 && c <= 879 ) || ( c >= 8203 && c <= 8207 ) || ( c >= 8400 && c <= 8447 ) || c == 65039 || c == 65038 ) {
+			return 0
+		}
+		if (
+			( c >= 4352 && c <= 4447 ) || ( c >= 11904 && c <= 42191 && c != 12351 ) || ( c >= 44032 && c <= 55203 )
+			|| ( c >= 63744 && c <= 64255 ) || ( c >= 65072 && c <= 65135 ) || ( c >= 65280 && c <= 65376 )
+			|| ( c >= 65504 && c <= 65510 ) || ( c >= 127744 && c <= 128591 ) || ( c >= 129280 && c <= 129535 )
+			|| ( c >= 131072 && c <= 262141 )
+		) {
+			return 2
+		}
+		return 1
+	}
+
+}

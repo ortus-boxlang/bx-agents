@@ -1,0 +1,159 @@
+/**
+ * The terminal screen behind the demo renderer: what it keeps for the sequences a text program uses.
+ * Its output was also compared with the pyte terminal library over real chat recordings, row by row,
+ * after every event.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "VtScreen", function() {
+
+			beforeEach( function() {
+				variables.esc = char( 27 )
+				variables.screen = new tools.demo.VtScreen( 10, 4 )
+			} );
+
+			it( "prints text and moves the cursor", function() {
+				screen.feed( "hello" )
+
+				expect( screen.lines()[ 1 ] ).toBe( "hello" );
+				expect( screen.cursor() ).toBe( { x : 5, y : 0, hidden : false } );
+			} );
+
+			it( "wraps at the right edge, only when the next character arrives", function() {
+				screen.feed( "0123456789" )
+				expect( screen.cursor().y ).toBe( 0 );
+				expect( screen.lines()[ 1 ] ).toBe( "0123456789" );
+
+				screen.feed( "x" )
+				expect( screen.lines()[ 2 ] ).toBe( "x" );
+				expect( screen.cursor() ).toBe( { x : 1, y : 1, hidden : false } );
+			} );
+
+			it( "handles carriage return, line feed, backspace and tab", function() {
+				screen.feed( "ab" & char( 13 ) & char( 10 ) & "cd" & char( 8 ) & "X" & char( 9 ) & "T" )
+
+				expect( screen.lines()[ 1 ] ).toBe( "ab" );
+				expect( screen.lines()[ 2 ] ).toBe( "cX      T" );
+			} );
+
+			it( "scrolls when a line feed is pressed on the last row", function() {
+				screen.feed( "1" & char( 13 ) & char( 10 ) & "2" & char( 13 ) & char( 10 ) & "3" & char( 13 ) & char( 10 ) & "4" & char( 13 ) & char( 10 ) & "5" )
+
+				expect( screen.lines() ).toBe( [ "2", "3", "4", "5" ] );
+			} );
+
+			it( "moves the cursor with A B C D, G, H and d, and clamps at the edges", function() {
+				screen.feed( esc & "[3;4H" & "x" )
+				expect( screen.cell( 3, 2 ).ch ).toBe( "x" );
+
+				screen.feed( esc & "[2A" & esc & "[2D" & "y" )
+				expect( screen.cell( 2, 0 ).ch ).toBe( "y" );
+
+				screen.feed( esc & "[99B" & esc & "[99C" & esc & "[1G" & esc & "[1d" & "z" )
+				expect( screen.cell( 0, 0 ).ch ).toBe( "z" );
+			} );
+
+			it( "saves and restores the cursor", function() {
+				screen.feed( "ab" & esc & "7" & esc & "[3;1H" & "X" & esc & "8" & "c" )
+
+				expect( screen.lines()[ 1 ] ).toBe( "abc" );
+				expect( screen.lines()[ 3 ] ).toBe( "X" );
+			} );
+
+			it( "erases in a line and in the display", function() {
+				screen.feed( "abcdef" & esc & "[3D" & esc & "[K" )
+				expect( screen.lines()[ 1 ] ).toBe( "abc" );
+
+				screen.feed( esc & "[2G" & esc & "[1K" )
+				expect( screen.lines()[ 1 ] ).toBe( "  c" );
+
+				screen.feed( esc & "[2;1Hrow2" & esc & "[3;1Hrow3" & esc & "[2;1H" & esc & "[J" )
+				expect( screen.lines() ).toBe( [ "  c", "", "", "" ] );
+
+				screen.feed( esc & "[2J" )
+				expect( screen.text() ).toBe( "" );
+			} );
+
+			it( "inserts and deletes lines and characters", function() {
+				screen.feed( "a" & char( 13 ) & char( 10 ) & "b" & char( 13 ) & char( 10 ) & "c" & char( 13 ) & char( 10 ) & "d" )
+				screen.feed( esc & "[3;1H" & esc & "[1L" )
+				expect( screen.lines() ).toBe( [ "a", "b", "", "c" ] );
+
+				screen.feed( esc & "[1;1H" & esc & "[2M" )
+				expect( screen.lines() ).toBe( [ "", "c", "", "" ] );
+
+				screen.feed( esc & "[4;1Hxyz" & esc & "[4;1H" & esc & "[1P" )
+				expect( screen.lines()[ 4 ] ).toBe( "yz" );
+
+				screen.feed( esc & "[4;1H" & esc & "[2@" )
+				expect( screen.lines()[ 4 ] ).toBe( "  yz" );
+			} );
+
+			it( "keeps a scroll region and scrolls only inside it", function() {
+				screen.feed( "a" & char( 13 ) & char( 10 ) & "b" & char( 13 ) & char( 10 ) & "c" & char( 13 ) & char( 10 ) & "d" )
+				screen.feed( esc & "[2;3r" & esc & "[3;1H" & char( 10 ) & "X" )
+
+				expect( screen.lines() ).toBe( [ "a", "c", "X", "d" ] );
+			} );
+
+			it( "reads colors and attributes: 16 colors, 256 palette, true color, bold and reverse", function() {
+				screen.feed( esc & "[31;1mA" & esc & "[0m" & esc & "[38;5;196mB" & esc & "[38;2;1;2;3;48;2;9;8;7mC" & esc & "[7mD" & esc & "[0mE" )
+
+				expect( screen.cell( 0, 0 ).fg ).toBe( "205,49,49" );
+				expect( bitAnd( screen.cell( 0, 0 ).flags, 1 ) ).toBe( 1 );
+				expect( screen.cell( 1, 0 ).fg ).toBe( "255,0,0" );
+				expect( screen.cell( 2, 0 ).fg ).toBe( "1,2,3" );
+				expect( screen.cell( 2, 0 ).bg ).toBe( "9,8,7" );
+				expect( bitAnd( screen.cell( 3, 0 ).flags, 16 ) ).toBe( 16 );
+				expect( screen.cell( 4, 0 ).fg ).toBe( "" );
+				expect( screen.cell( 4, 0 ).flags ).toBe( 0 );
+			} );
+
+			it( "treats upper and lower case final letters as different commands", function() {
+				// m is color, M deletes a line: a case insensitive match would erase the first line here
+				screen.feed( "keep" & esc & "[31m" & "red" )
+
+				expect( screen.lines()[ 1 ] ).toBe( "keepred" );
+			} );
+
+			it( "reads and ignores modes, titles and the clipboard, and keeps the cursor mode", function() {
+				screen.feed( esc & "[?2004h" & esc & "]0;a title" & char( 7 ) & esc & "]52;c;QQ==" & esc & "\" & "ok" & esc & "[?25l" )
+
+				expect( screen.lines()[ 1 ] ).toBe( "ok" );
+				expect( screen.cursor().hidden ).toBeTrue();
+
+				screen.feed( esc & "[?25h" )
+				expect( screen.cursor().hidden ).toBeFalse();
+			} );
+
+			it( "continues a sequence split across two feeds", function() {
+				screen.feed( "a" & esc & "[3" )
+				screen.feed( "1mb" )
+
+				expect( screen.cell( 1, 0 ).fg ).toBe( "205,49,49" );
+				expect( screen.lines()[ 1 ] ).toBe( "ab" );
+			} );
+
+			it( "gives a wide character two columns", function() {
+				screen.feed( "你a" )
+
+				expect( screen.cell( 0, 0 ).ch ).toBe( "你" );
+				expect( screen.cell( 1, 0 ).ch ).toBe( "" );
+				expect( screen.cell( 2, 0 ).ch ).toBe( "a" );
+				expect( screen.lines()[ 1 ] ).toBe( "你a" );
+			} );
+
+			it( "resizes, keeping what fits from the top left", function() {
+				screen.feed( "abcdef" & char( 13 ) & char( 10 ) & "second" )
+				screen.resize( 4, 3 )
+
+				expect( screen.cols() ).toBe( 4 );
+				expect( screen.rows() ).toBe( 3 );
+				expect( screen.lines() ).toBe( [ "abcd", "seco", "" ] );
+			} );
+
+		} );
+	}
+
+}

@@ -1,0 +1,219 @@
+/**
+ * Turns an asciicast (.cast) into an MP4 and a GIF.
+ *
+ *   boxlang tools/demo/render.bxs <file.cast> <outdir> [--fps=12] [--size=16] [--font=<ttf>]
+ *                                 [--max-idle=2] [--formats=mp4,gif] [--hold=1.5]
+ *
+ * It replays the recording on a VtScreen, draws a PNG of the screen for every frame with Java2D and
+ * has ffmpeg join them. A pause longer than --max-idle seconds is cut to that length, so a recording
+ * that waited for a slow model does not make a slow video. --hold keeps the last frame on screen.
+ *
+ * Needs: BoxLang, and ffmpeg on the PATH (without it the PNG frames are still written to
+ * <outdir>/frames). --font takes a TrueType file; the default is Java's own "Monospaced" font, which
+ * covers box drawing, braille spinners and check marks on most systems.
+ */
+
+java.lang.System::setProperty( "java.awt.headless", "true" );
+
+args = server.cli.parsed.positionals
+opts = server.cli.parsed.options
+if ( args.len() < 3 ) {
+	println( "usage: boxlang tools/demo/render.bxs <file.cast> <outdir> [--fps=12] [--size=16] [--font=<ttf>] [--max-idle=2] [--formats=mp4,gif] [--hold=1.5]" )
+	java.lang.System::exit( 1 )
+}
+castFile = args[ 2 ]
+outDir = args[ 3 ]
+fps = val( opts.fps ?: 12 )
+fontSize = val( opts.size ?: 16 )
+maxIdle = val( opts[ "max-idle" ] ?: 2 )
+hold = val( opts.hold ?: 1.5 )
+formats = ( opts.formats ?: "mp4,gif" ).listToArray()
+
+if ( !fileExists( castFile ) ) {
+	println( "No such file: #castFile#" )
+	java.lang.System::exit( 1 )
+}
+frameDir = outDir & "/frames"
+directoryCreate( path = frameDir, createPath = true, ignoreExists = true )
+for ( old in directoryList( path = frameDir, type = "file", filter = "*.png" ) ) {
+	fileDelete( old )
+}
+
+// ----------------------------------------------------------------------------------
+// Read the recording
+// ----------------------------------------------------------------------------------
+rows = fileRead( castFile ).listToArray( char( 10 ) ).filter( l => len( trim( l ) ) )
+header = jsonDeserialize( rows[ 1 ] )
+events = []
+clock = 0
+lastT = 0
+for ( i = 2; i <= rows.len(); i++ ) {
+	ev = jsonDeserialize( rows[ i ] )
+	clock += min( max( 0, ev[ 1 ] - lastT ), maxIdle )
+	lastT = ev[ 1 ]
+	events.append( { at : clock, kind : ev[ 2 ], data : ev[ 3 ] } )
+}
+total = events.len() ? events.last().at + hold : hold
+
+// ----------------------------------------------------------------------------------
+// Drawing
+// ----------------------------------------------------------------------------------
+JFont = createObject( "java", "java.awt.Font" )
+JColor = createObject( "java", "java.awt.Color" )
+JImage = createObject( "java", "java.awt.image.BufferedImage" )
+hints = createObject( "java", "java.awt.RenderingHints" )
+
+if ( len( opts.font ?: "" ) ) {
+	base = JFont.createFont( JFont.TRUETYPE_FONT, createObject( "java", "java.io.File" ).init( opts.font ) ).deriveFont( javaCast( "float", fontSize ) )
+} else {
+	base = JFont.init( "Monospaced", JFont.PLAIN, fontSize )
+}
+fonts = {
+	plain  : base,
+	bold   : base.deriveFont( JFont.BOLD ),
+	italic : base.deriveFont( JFont.ITALIC ),
+	both   : base.deriveFont( bitOr( JFont.BOLD, JFont.ITALIC ) )
+}
+probe = JImage.init( 8, 8, JImage.TYPE_INT_RGB ).createGraphics()
+metrics = probe.getFontMetrics( base )
+cellW = metrics.charWidth( 77 )
+cellH = fontSize + 5
+ascent = metrics.getAscent()
+pad = 14
+imgW = header.width * cellW + 2 * pad
+imgH = header.height * cellH + 2 * pad
+imgW += imgW % 2
+imgH += imgH % 2
+
+themeBg = [ 24, 26, 33 ]
+themeFg = [ 214, 218, 228 ]
+colors = {}
+
+function colorOf( required string spec, required array fallback ) {
+	var key = len( arguments.spec ) ? arguments.spec : arguments.fallback.toList()
+	if ( !colors.keyExists( key ) ) {
+		var rgb = len( arguments.spec ) ? arguments.spec.listToArray() : arguments.fallback
+		colors[ key ] = JColor.init( val( rgb[ 1 ] ), val( rgb[ 2 ] ), val( rgb[ 3 ] ) )
+	}
+	return colors[ key ]
+}
+
+function dimmed( required any fg, required any bg ) {
+	return JColor.init(
+		int( ( fg.getRed() * 6 + bg.getRed() * 4 ) / 10 ),
+		int( ( fg.getGreen() * 6 + bg.getGreen() * 4 ) / 10 ),
+		int( ( fg.getBlue() * 6 + bg.getBlue() * 4 ) / 10 )
+	)
+}
+
+function drawFrame( required any screen ) {
+	var img = JImage.init( imgW, imgH, JImage.TYPE_INT_RGB )
+	var g = img.createGraphics()
+	g.setRenderingHint( hints.KEY_TEXT_ANTIALIASING, hints.VALUE_TEXT_ANTIALIAS_ON )
+	g.setRenderingHint( hints.KEY_FRACTIONALMETRICS, hints.VALUE_FRACTIONALMETRICS_ON )
+	var defaultBg = colorOf( "", themeBg )
+	var defaultFg = colorOf( "", themeFg )
+	g.setColor( defaultBg )
+	g.fillRect( 0, 0, imgW, imgH )
+	for ( var y = 0; y < screen.rows(); y++ ) {
+		var py = pad + y * cellH
+		for ( var x = 0; x < screen.cols(); x++ ) {
+			var c = screen.cell( x, y )
+			var fg = colorOf( c.fg, themeFg )
+			var bg = colorOf( c.bg, themeBg )
+			if ( bitAnd( c.flags, 16 ) ) {
+				var swap = fg
+				fg = bg
+				bg = swap
+			}
+			var px = pad + x * cellW
+			if ( bitAnd( c.flags, 16 ) || len( c.bg ) ) {
+				g.setColor( bg )
+				g.fillRect( px, py, cellW, cellH )
+			}
+			if ( len( c.ch ) && c.ch != " " ) {
+				if ( bitAnd( c.flags, 2 ) ) {
+					fg = dimmed( fg, bg )
+				}
+				g.setColor( fg )
+				var bold = bitAnd( c.flags, 1 ) > 0
+				var italic = bitAnd( c.flags, 4 ) > 0
+				g.setFont( bold ? ( italic ? fonts.both : fonts.bold ) : ( italic ? fonts.italic : fonts.plain ) )
+				g.drawString( c.ch, px, py + ascent )
+				if ( bitAnd( c.flags, 8 ) ) {
+					g.fillRect( px, py + cellH - 3, cellW, 1 )
+				}
+			}
+		}
+	}
+	var cursor = screen.cursor()
+	if ( !cursor.hidden ) {
+		g.setColor( defaultFg )
+		g.fillRect( pad + cursor.x * cellW, pad + cursor.y * cellH + cellH - 3, cellW, 2 )
+	}
+	g.dispose()
+	return img
+}
+
+// ----------------------------------------------------------------------------------
+// Frames
+// ----------------------------------------------------------------------------------
+JImageIO = createObject( "java", "javax.imageio.ImageIO" )
+screen = new VtScreen( header.width, header.height )
+frames = int( ceiling( total * fps ) )
+next = 1
+dirty = true
+image = nullValue()
+started = getTickCount()
+for ( k = 0; k < frames; k++ ) {
+	limit = k / fps
+	while ( next <= events.len() && events[ next ].at <= limit ) {
+		ev = events[ next ]
+		if ( ev.kind == "o" ) {
+			screen.feed( ev.data )
+			dirty = true
+		} else if ( ev.kind == "r" ) {
+			size = ev.data.listToArray( "x" )
+			screen.resize( val( size[ 1 ] ), val( size[ 2 ] ) )
+			dirty = true
+		}
+		next++
+	}
+	if ( dirty || isNull( image ) ) {
+		image = drawFrame( screen )
+		dirty = false
+	}
+	JImageIO.write( image, "png", createObject( "java", "java.io.File" ).init( frameDir & "/f" & numberFormat( k, "00000" ) & ".png" ) )
+}
+println( "Drew #frames# frames (#int( total )# seconds at #fps# fps, #imgW#x#imgH#) in #int( ( getTickCount() - started ) / 1000 )# s" )
+
+// ----------------------------------------------------------------------------------
+// Video
+// ----------------------------------------------------------------------------------
+function run( required array command ) {
+	// every argument must be a string for the JVM
+	var pb = new java.lang.ProcessBuilder( arguments.command.map( a => javaCast( "string", a ) ) )
+	pb.redirectErrorStream( true )
+	var process = pb.start()
+	var output = new java.lang.String( process.getInputStream().readAllBytes() )
+	return { exit : process.waitFor(), output : output }
+}
+
+try {
+	run( [ "ffmpeg", "-version" ] )
+} catch ( any e ) {
+	println( "ffmpeg was not found on the PATH, so no video was made. The frames are in #frameDir#" )
+	java.lang.System::exit( 0 )
+}
+pattern = frameDir & "/f%05d.png"
+if ( formats.findNoCase( "mp4" ) ) {
+	result = run( [ "ffmpeg", "-y", "-loglevel", "error", "-framerate", fps, "-i", pattern, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20", outDir & "/demo.mp4" ] )
+	println( result.exit == 0 ? "Wrote #outDir#/demo.mp4" : "mp4 failed: " & result.output )
+}
+if ( formats.findNoCase( "gif" ) ) {
+	result = run( [
+		"ffmpeg", "-y", "-loglevel", "error", "-framerate", fps, "-i", pattern,
+		"-vf", "fps=10,split[a][b];[a]palettegen=max_colors=96[p];[b][p]paletteuse=dither=none", outDir & "/demo.gif"
+	] )
+	println( result.exit == 0 ? "Wrote #outDir#/demo.gif" : "gif failed: " & result.output )
+}
