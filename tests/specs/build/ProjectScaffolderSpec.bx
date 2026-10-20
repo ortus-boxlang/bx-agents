@@ -229,8 +229,12 @@ class extends="testbox.system.BaseSpec" {
 				expect( fileRead( root & "/.gitattributes" ) ).notToInclude( "csharp" );
 				expect( jsonDeserialize( fileRead( root & "/.bxlint.json" ) ) ).toHaveKey( "diagnostics" );
 				expect( jsonDeserialize( fileRead( root & "/.markdownlint.json" ) ) ).toHaveKey( "line-length" );
-				// the starter runtime config is valid JSON with a modules block to extend
-				expect( jsonDeserialize( fileRead( root & "/.boxlang.json" ) ).modules ).toHaveKey( "bxai" );
+				// the starter runtime config carries every bx-ai setting at its default, ready to edit
+				var bxai = jsonDeserialize( fileRead( root & "/.boxlang.json" ) ).modules.bxai.settings;
+				for ( var key in [ "provider", "apiKey", "timeout", "memory", "security", "webSearch", "audio", "image", "hitl", "gateways" ] ) {
+					expect( bxai ).toHaveKey( key );
+				}
+				expect( bxai ).notToHaveKey( "globalSkills" );
 			} );
 
 			it( "does not overwrite a dotfile the project already has", function() {

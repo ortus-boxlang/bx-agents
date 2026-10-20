@@ -156,7 +156,7 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
 - `mcpServers` entries accept `token`, `headers`, `timeout`, `user` and `password`. Secrets must
   be `${env.NAME}` placeholders and are resolved when the app starts.
 - Every new project starts with the standard dotfiles: `.editorconfig`, `.gitattributes`, `.bxlint.json`,
-  `.markdownlint.json`, a starter `.boxlang.json` for module settings and a fuller `.gitignore`
+  `.markdownlint.json`, a `.boxlang.json` listing every bx-ai setting at its default and a fuller `.gitignore`
   (`.env`, `.env.*`, build output, editor files). Existing files are never overwritten.
 - A catalog of MCP servers the wizard can add: GitHub, Stripe, Notion, Atlassian, Cloudflare and Supabase.
 
