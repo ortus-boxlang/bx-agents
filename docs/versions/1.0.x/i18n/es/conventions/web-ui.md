@@ -237,8 +237,9 @@ La razón es un vacío real, no una preferencia: **el `IAiMemory` de bx-ai no ti
 | Pieza | Qué es |
 | --- | --- |
 | `bx-sqlite` | El driver JDBC, incluido con BxAgents como módulo anidado |
-| [`qb`](https://github.com/coldbox-modules/qb) | QueryBuilder para lecturas y escrituras, SchemaBuilder para las tablas. Ningún SQL escrito a mano en ninguna parte |
-| `models/ChatDb.bx` | Generado. Posee el esquema y entrega query builders |
+| [`qb`](https://github.com/coldbox-modules/qb) | QueryBuilder para las lecturas y escrituras de `ChatDb` |
+| `ChatStore` | En el módulo BxAgents, compartido con el chat de terminal. Posee las tablas y sus versiones, en SQL de SQLite simple |
+| `models/ChatDb.bx` | Generado. Entrega query builders; su `migrate()` llama a `ChatStore` |
 | Una sentencia de arranque en `Application.bx` | Generado. Construye `ChatDb` en el arranque para que la migración se ejecute entonces, no en cualquier request que toque primero la base de datos |
 
 El datasource se registra en `Application.bx` y la gramática se fija en `config/ColdBox.bx`:
@@ -267,14 +268,16 @@ Ambos son opcionales de sobreescribir, por entrada:
 
 Un `database.path` absoluto **falla el build**: se resuelve con `expandPath()` dentro de la app generada, así que una ruta absoluta escapa silenciosamente del directorio de la app y rompe un despliegue de `.bxa` empaquetado.
 
-**El esquema está versionado y es solo-hacia-adelante.** `ChatDb.migrate()` registra lo que ha aplicado en una tabla `bxagents_schema_version` y solo aplica lo que es más nuevo, así que arrancar contra un almacén existente es un no-op. v1 crea `conversations` y `preferences`; v2 añade `users`. Evolúcionalo añadiendo un nuevo `applyV<n>()` y aumentando `SCHEMA_VERSION` - nunca editando una migración que ya se envió, porque **SQLite no puede modificar ni eliminar una columna** y el propio `SQLiteGrammar` de qb lanza `UnsupportedOperation` en lugar de fingir lo contrario.
+**Un solo archivo para el chat web y el chat de terminal.** En la máquina de un desarrollador, `bxAgents serve` arranca la app con la variable de entorno `BXAGENTS_DB` apuntando a `data/chat.db` en la carpeta del proyecto, y `bxAgents chat` abrirá el mismo archivo. La app generada usa `BXAGENTS_DB` cuando está definida y `database.path` en caso contrario, así que una app desplegada guarda su archivo dentro de la app a menos que definas `BXAGENTS_DB` también allí (por ejemplo, hacia un volumen montado). Los proyectos nuevos ignoran `data/chat.db*` en git. El archivo está en modo WAL, así que el chat de terminal y un servidor en marcha pueden usarlo a la vez.
+
+**El esquema está versionado y es solo-hacia-adelante.** `ChatStore.migrate()` (que llama `ChatDb.migrate()`) registra lo que ha aplicado en una tabla `bxagents_schema_version` y solo aplica lo que es más nuevo, así que arrancar contra un almacén existente es un no-op. v1 crea `conversations` y `preferences`; v2 añade `users`. Evolúcionalo añadiendo un paso a la lista de migraciones del almacén - nunca editando una migración que ya se envió, porque **SQLite no puede modificar ni eliminar una columna**. Una base de datos creada por una versión anterior de la app generada se reconoce y se deja como está.
 
 !!! warning
     **Dos cosas aquí son contraintuitivas, y ambas se establecieron por las malas contra un arranque real de ColdBox en lugar de leerse en una página de documentación.**
 
     **El ajuste de datasource por defecto es `this.datasource`, no `this.defaultDatasource`.** La clave de registro es plural (`this.datasources[ "name" ]`), así que el valor por defecto singular se lee como si debiera coincidir - y BoxLang acepta `this.defaultDatasource` silenciosamente y no hace nada con él. El fallo que produce nombra el mismísimo datasource que estás intentando seleccionar (`No default datasource defined in the application or globally or in the query options. Registered datasources are: [bxagents]`), lo cual se lee como un mecanismo de selección roto en lugar de un ajuste mal escrito.
 
-    **Nombra el datasource en cada builder de qb; no dependas de `moduleSettings.qb.defaultOptions`.** El `ModuleConfig.cfc` propio de qb mapea `QueryBuilder@qb` con `.initArg( name = "defaultOptions", value = settings.defaultOptions )` en `onLoad()`, así que el ajuste *parece* cubrirte. No llegó en un arranque real - el datasource estaba registrado y el builder todavía tenía opciones vacías. `ChatDb.query()` por lo tanto llama a `.mergeDefaultOptions( { datasource : static.DATASOURCE } )` en cada builder que entrega. `SchemaBuilder@qb` nunca recibe `defaultOptions` en absoluto (qb lo mapea solo con `grammar`), así que cada llamada de esquema pasa `options: { datasource: ... }` ella misma.
+    **Nombra el datasource en cada builder de qb; no dependas de `moduleSettings.qb.defaultOptions`.** El `ModuleConfig.cfc` propio de qb mapea `QueryBuilder@qb` con `.initArg( name = "defaultOptions", value = settings.defaultOptions )` en `onLoad()`, así que el ajuste *parece* cubrirte. No llegó en un arranque real - el datasource estaba registrado y el builder todavía tenía opciones vacías. `ChatDb.query()` por lo tanto llama a `.mergeDefaultOptions( { datasource : static.DATASOURCE } )` en cada builder que entrega.
 
     El bloque `moduleSettings.qb` todavía se genera - es correcto para cualquier otro uso de qb en la app - pero el almacén generado no depende de él.
 
@@ -282,7 +285,7 @@ Un `database.path` absoluto **falla el build**: se resuelve con `expandPath()` d
 
     Una más, sin cambios: el datasource debe ser un datasource **nombrado**, nunca un struct inline - el propio `appendSqlComments()` de qb tipa ese argumento como `string`, así que un struct lanza antes de que corra cualquier SQL.
 
-La gramática es la única pieza específica de SQLite. Todo lo demás pasa por qb, así que apuntar esto a Postgres o MySQL después es un cambio de gramática y datasource en lugar de una reescritura.
+El almacén es SQLite. Las lecturas y escrituras de `ChatDb` pasan por qb, pero las tablas las crea `ChatStore` con SQL de SQLite, así que otra base de datos más adelante significa un nuevo `ChatStore`, no solo un cambio de gramática.
 
 ## Conversaciones y preferencias
 

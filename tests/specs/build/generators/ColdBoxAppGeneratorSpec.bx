@@ -532,6 +532,23 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( 'this.datasource = "acmechat"' );
 			} );
 
+			it( "lets BXAGENTS_DB name the web UI database file, falling back to the configured path inside the app", function() {
+				var buildDir = newBuildDir();
+				var config = resolver.resolve( projectRoot = fixtures & "/full-project" );
+				generator.generate(
+					projectRoot    : fixtures & "/full-project",
+					buildDir       : buildDir,
+					resolvedConfig : config,
+					hasWebUi       : true,
+					webUiDatabase  : { datasource : "acmechat", path : "./data/chat.db" }
+				);
+
+				var content = fileRead( buildDir & "/Application.bx" );
+				expect( content ).toInclude( '"database": getSystemSetting( "BXAGENTS_DB", expandPath( "./data/chat.db" ) )' );
+				// the folder is made for whichever file is used
+				expect( content ).toInclude( 'directoryCreate( getDirectoryFromPath( getSystemSetting( "BXAGENTS_DB", expandPath( "./data/chat.db" ) ) ), true, true )' );
+			} );
+
 			/**
 			 * config/ColdBox.bx's OWN `moduleSettings.cbauth.userServiceClass`
 			 * (the ColdBox-documented way to set it) never reaches cbauth on a

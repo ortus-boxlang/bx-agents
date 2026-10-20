@@ -20,6 +20,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Launches the `boxlang-miniserver` binary (a separate standalone runtime,
@@ -77,6 +78,22 @@ public class MiniServerLauncher {
 	 * @return The started {@link Process}
 	 */
 	public static Process launch( String executablePath, String configPath, boolean inheritIO ) {
+		return launch( executablePath, configPath, inheritIO, Map.of() );
+	}
+
+	/**
+	 * Same as {@link #launch(String, String, boolean)}, with extra environment variables for the child
+	 * (on top of the ones this process has). `serve` uses it to tell the app where the shared chat
+	 * database lives.
+	 *
+	 * @param executablePath Absolute path to the `boxlang-miniserver` executable or jar
+	 * @param configPath     Absolute path to a `miniserver.json` config file
+	 * @param inheritIO      When true, the child process shares this process's stdin/stdout/stderr
+	 * @param environment    Variables to add to the child's environment; may be empty
+	 *
+	 * @return The started {@link Process}
+	 */
+	public static Process launch( String executablePath, String configPath, boolean inheritIO, Map<String, String> environment ) {
 		try {
 			List<String> command = new ArrayList<>();
 			if ( executablePath.endsWith( ".jar" ) ) {
@@ -87,6 +104,7 @@ public class MiniServerLauncher {
 			command.add( configPath );
 
 			ProcessBuilder builder = new ProcessBuilder( command );
+			builder.environment().putAll( environment );
 			if ( inheritIO ) {
 				builder.inheritIO();
 			}
