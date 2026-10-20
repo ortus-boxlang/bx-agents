@@ -1,0 +1,169 @@
+/**
+ * A scripted stand-in for an AI model, for demos and recordings. It speaks the OpenAI chat protocol
+ * (/v1/chat/completions, streaming or not), so an agent that uses the `openai-compatible` provider
+ * (its default address is http://localhost:8080/v1) runs its real streaming and tool-call loop
+ * against it, with answers you wrote. It is not a model: it replays canned text.
+ *
+ *   boxlang tools/demo/fakellm.bxs [--port=8080] [--script=tools/demo/demos/model.json]
+ *
+ * The script is JSON:
+ *
+ *   {
+ *     "thinkMs" : 600,          pause before the first word, so a spinner shows
+ *     "chunkMs" : 45,           pause between words, so the answer streams
+ *     "default" : "text",       what it says when no rule matches
+ *     "rules"   : [
+ *       { "when" : "time", "tool" : "now", "answer" : "It is **{tool}**." }
+ *     ]
+ *   }
+ *
+ * A rule matches when the user's last message contains `when` (any case); the first match wins. With
+ * `tool`, the model first calls the tool whose name contains that text (if the agent has one), then
+ * answers once the tool's result is back; `{tool}` in the answer is replaced by that result.
+ *
+ * Stop it with Ctrl+C, or POST /__stop.
+ */
+
+opts = server.cli.parsed.options
+port = val( opts.port ?: 8080 )
+scriptFile = opts.script ?: ( getDirectoryFromPath( getCurrentTemplatePath() ) & "demos/model.json" )
+script = jsonDeserialize( fileRead( scriptFile ) )
+thinkMs = script.thinkMs ?: 600
+chunkMs = script.chunkMs ?: 45
+rules = script.rules ?: []
+
+function text( required any content ) {
+	if ( isSimpleValue( arguments.content ) ) {
+		return arguments.content
+	}
+	// a list of parts: keep the text ones
+	var parts = []
+	for ( var part in arguments.content ) {
+		if ( isStruct( part ) && structKeyExists( part, "text" ) ) {
+			parts.append( part.text )
+		}
+	}
+	return parts.toList( " " )
+}
+
+/**
+ * @return { tool : name to call or "", answer : text, result : the tool's output if it is back }
+ */
+function plan( required struct payload ) {
+	var messages = arguments.payload.messages ?: []
+	var lastUser = ""
+	for ( var m in messages ) {
+		if ( ( m.role ?: "" ) == "user" ) {
+			lastUser = text( m.content ?: "" )
+		}
+	}
+	var rule = {}
+	for ( var r in rules ) {
+		if ( findNoCase( r.when, lastUser ) ) {
+			rule = r
+			break
+		}
+	}
+	var last = messages.len() ? messages.last() : {}
+	var afterTool = ( last.role ?: "" ) == "tool"
+	var tool = ""
+	if ( len( rule.tool ?: "" ) && !afterTool ) {
+		for ( var t in ( arguments.payload.tools ?: [] ) ) {
+			var name = t.function.name ?: ""
+			if ( findNoCase( rule.tool, name ) ) {
+				tool = name
+				break
+			}
+		}
+	}
+	var answer = rule.answer ?: ( script.default ?: "" )
+	var result = afterTool ? replace( trim( text( last.content ?: "" ) ), '"', "", "all" ) : ""
+	return { tool : tool, answer : replace( answer, "{tool}", result, "all" ) }
+}
+
+function frame( required struct delta, any finish = "" ) {
+	return "data: " & jsonSerialize( {
+		"id"      : "demo",
+		"object"  : "chat.completion.chunk",
+		"model"   : "demo",
+		"choices" : [ { "index" : 0, "delta" : arguments.delta, "finish_reason" : len( arguments.finish ) ? arguments.finish : javaCast( "null", "" ) } ]
+	} ) & char( 10 ) & char( 10 )
+}
+
+function send( required any exchange, required string body, string type = "application/json" ) {
+	var bytes = arguments.body.getBytes( "UTF-8" )
+	arguments.exchange.getResponseHeaders().add( "Content-Type", arguments.type )
+	arguments.exchange.sendResponseHeaders( 200, bytes.len() )
+	arguments.exchange.getResponseBody().write( bytes )
+	arguments.exchange.close()
+}
+
+function handle( required any exchange ) {
+	var raw = toString( arguments.exchange.getRequestBody().readAllBytes(), "UTF-8" )
+	var payload = len( raw ) ? jsonDeserialize( raw ) : {}
+	var p = plan( payload )
+	var call = len( p.tool ) ? [ {
+		"index"    : 0,
+		"id"       : "call_demo",
+		"type"     : "function",
+		"function" : { "name" : p.tool, "arguments" : "{}" }
+	} ] : []
+
+	if ( !( payload.stream ?: false ) ) {
+		var message = { "role" : "assistant", "content" : len( p.tool ) ? javaCast( "null", "" ) : p.answer }
+		if ( call.len() ) {
+			message[ "tool_calls" ] = [ { "id" : "call_demo", "type" : "function", "function" : call[ 1 ].function } ]
+		}
+		send( exchange, jsonSerialize( {
+			"id"      : "demo",
+			"object"  : "chat.completion",
+			"model"   : "demo",
+			"choices" : [ { "index" : 0, "message" : message, "finish_reason" : call.len() ? "tool_calls" : "stop" } ],
+			"usage"   : { "prompt_tokens" : 1, "completion_tokens" : 1, "total_tokens" : 2 }
+		} ) )
+		return
+	}
+
+	arguments.exchange.getResponseHeaders().add( "Content-Type", "text/event-stream" )
+	arguments.exchange.sendResponseHeaders( 200, 0 )
+	var out = arguments.exchange.getResponseBody()
+	var write = ( s ) => {
+		out.write( s.getBytes( "UTF-8" ) )
+		out.flush()
+	}
+	write( frame( { "role" : "assistant" } ) )
+	sleep( thinkMs )
+	if ( call.len() ) {
+		write( frame( { "tool_calls" : call } ) )
+		sleep( 200 )
+		write( frame( {}, "tool_calls" ) )
+	} else {
+		var words = p.answer.listToArray( " ", true )
+		for ( var i = 1; i <= words.len(); i++ ) {
+			write( frame( { "content" : words[ i ] & ( i < words.len() ? " " : "" ) } ) )
+			sleep( chunkMs )
+		}
+		write( frame( {}, "stop" ) )
+	}
+	write( "data: [DONE]" & char( 10 ) & char( 10 ) )
+	arguments.exchange.close()
+}
+
+httpServer = createObject( "java", "com.sun.net.httpserver.HttpServer" ).create( createObject( "java", "java.net.InetSocketAddress" ).init( "127.0.0.1", port ), 0 )
+httpServer.createContext( "/v1/chat/completions", ( exchange ) => {
+	try {
+		handle( exchange )
+	} catch ( any e ) {
+		println( "fakellm: " & e.message )
+		exchange.close()
+	}
+} )
+httpServer.createContext( "/__stop", ( exchange ) => {
+	send( exchange, "{}" )
+	java.lang.System::exit( 0 )
+} )
+httpServer.start()
+println( "fakellm listening on http://127.0.0.1:#port#/v1 (script: #scriptFile#)" )
+while ( true ) {
+	sleep( 1000 )
+}
