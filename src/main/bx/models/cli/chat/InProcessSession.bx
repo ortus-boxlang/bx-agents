@@ -180,7 +180,9 @@ class {
 	/**
 	 * @args The arguments a tool was called with
 	 *
-	 * @return A short readable form, key=value pairs
+	 * @return A short readable form, key=value pairs. Names starting with an underscore are bx-ai's
+	 *         own plumbing (it passes the whole chat request along as `_chatRequest`), not something
+	 *         the model asked for, so they are left out.
 	 */
 	private string function summarize( required any args ) {
 		if ( !isStruct( arguments.args ) || arguments.args.isEmpty() ) {
@@ -188,6 +190,9 @@ class {
 		}
 		var parts = []
 		for ( var key in arguments.args ) {
+			if ( left( key, 1 ) == "_" ) {
+				continue
+			}
 			var value = arguments.args[ key ]
 			parts.append( key & "=" & ( isSimpleValue( value ) ? value : jsonSerialize( value ) ) )
 		}
