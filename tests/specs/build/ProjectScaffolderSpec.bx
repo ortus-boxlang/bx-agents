@@ -207,6 +207,44 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( ".env" );
 			} );
 
+			it( "keeps secrets and local files out of source control", function() {
+				var result = scaffolder.scaffold( newTargetDir(), "my-agent", "openai/gpt-5" );
+				var lines = fileRead( result.gitignore ).listToArray( char( 10 ) );
+
+				expect( lines ).toInclude( ".env" );
+				expect( lines ).toInclude( ".env.*" );
+				expect( lines ).toInclude( "!.env.example" );
+				expect( lines ).toInclude( ".DS_Store" );
+			} );
+
+			it( "scaffolds the standard dotfiles in the project root", function() {
+				var result = scaffolder.scaffold( newTargetDir(), "my-agent", "openai/gpt-5" );
+				var root = result.projectRoot;
+
+				for ( var name in [ ".editorconfig", ".gitattributes", ".bxlint.json", ".markdownlint.json", ".boxlang.json" ] ) {
+					expect( fileExists( root & "/" & name ) ).toBeTrue( name & " should exist" );
+				}
+				expect( fileRead( root & "/.editorconfig" ) ).toInclude( "indent_style = tab" );
+				expect( fileRead( root & "/.gitattributes" ) ).toInclude( "* text=auto" );
+				expect( fileRead( root & "/.gitattributes" ) ).notToInclude( "csharp" );
+				expect( jsonDeserialize( fileRead( root & "/.bxlint.json" ) ) ).toHaveKey( "diagnostics" );
+				expect( jsonDeserialize( fileRead( root & "/.markdownlint.json" ) ) ).toHaveKey( "line-length" );
+				// the starter runtime config is valid JSON with a modules block to extend
+				expect( jsonDeserialize( fileRead( root & "/.boxlang.json" ) ).modules ).toHaveKey( "bxai" );
+			} );
+
+			it( "does not overwrite a dotfile the project already has", function() {
+				var dir = newTargetDir();
+				directoryCreate( path = dir, createPath = true, ignoreExists = true );
+				fileWrite( dir & "/.editorconfig", "mine" );
+				fileWrite( dir & "/.boxlang.json", '{ "mine": true }' );
+
+				scaffolder.scaffold( dir, "my-agent", "openai/gpt-5" );
+
+				expect( fileRead( dir & "/.editorconfig" ) ).toBe( "mine" );
+				expect( fileRead( dir & "/.boxlang.json" ) ).toBe( '{ "mine": true }' );
+			} );
+
 			it( "never overwrites an existing .env or .gitignore in the target directory", function() {
 				var dir = newTargetDir();
 				directoryCreate( path = dir, createPath = true, ignoreExists = true );

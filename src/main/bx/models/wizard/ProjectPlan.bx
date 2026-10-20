@@ -16,9 +16,6 @@
  *   channels    "web", "api" and channel ids (telegram, slack, ...)
  *   web         { auth : "open" | "key" | "users", users : [ { username, passwordHash, displayName } ] }
  *   guard       "off" | "flag" | "block"   (prompt-injection guard)
- *   secrets     "env" (empty stubs in .env, the default) | "encrypted" (bxsecret: values in secrets.json)
- *   secretValues  { NAME : value } typed in the wizard for the encrypted mode. In memory only: it
- *               is never written as it is, never in the summary, never in the command
  *   deploy      { target, registry, app, region, host, user, remotePath, destination }
  */
 class {
@@ -27,7 +24,6 @@ class {
 		MEMORY = [ "cache", "file" ]
 		GUARD = [ "off", "flag", "block" ]
 		WEB_AUTH = [ "open", "key", "users" ]
-		SECRETS = [ "env", "encrypted" ]
 		EXPOSURES = [ "web", "api" ]
 		REGISTRIES = [ "ghcr", "dockerhub", "docr" ]
 	}
@@ -55,8 +51,6 @@ class {
 			channels    : [],
 			web         : { auth : "open", users : [] },
 			guard       : "off",
-			secrets     : "env",
-			secretValues : {},
 			deploy      : { target : "", registry : "", app : "", region : "", host : "", user : "", remotePath : "", destination : "" }
 		}
 	}
@@ -166,11 +160,6 @@ class {
 			fail( "guard", "[#plan.guard#] is not valid. Use: #static.GUARD.toList( ', ' )#" )
 		}
 
-		plan.secrets = trim( o.secrets ?: "env" )
-		if ( !static.SECRETS.contains( plan.secrets ) ) {
-			fail( "secrets", "[#plan.secrets#] is not valid. Use: #static.SECRETS.toList( ', ' )#" )
-		}
-
 		plan.deploy = deployFromFlags( o )
 		return plan
 	}
@@ -220,9 +209,6 @@ class {
 		}
 		if ( p.guard != "off" ) {
 			parts.append( "--guard=#p.guard#" )
-		}
-		if ( p.secrets != "env" ) {
-			parts.append( "--secrets=#p.secrets#" )
 		}
 		if ( len( p.deploy.target ) ) {
 			parts.append( "--deploy=#p.deploy.target#" )
@@ -344,49 +330,10 @@ class {
 			features.deploy = deployEntry( p, envStubs )
 		}
 
-		if ( p.secrets == "encrypted" ) {
-			// A value typed in the wizard, or made for the project (the web access key), moves from
-			// .env into the encrypted file. What is still empty stays a stub for the user to fill.
-			var moved = {}
-			var kept = []
-			for ( var stub in envStubs ) {
-				if ( p.secretValues.keyExists( stub.name ) && len( p.secretValues[ stub.name ] ) ) {
-					moved[ stub.name ] = p.secretValues[ stub.name ]
-				} else if ( stub.name == "CHAT_UI_API_KEY" && len( stub.value ) ) {
-					moved[ stub.name ] = stub.value
-				} else {
-					kept.append( stub )
-				}
-			}
-			envStubs = kept
-			features.secrets = { values : moved }
-		}
-
 		if ( envStubs.len() ) {
 			features.envStubs = envStubs
 		}
 		return features
-	}
-
-	/**
-	 * The environment variables a plan needs a person to supply: the ones a wizard can offer to
-	 * encrypt. Not the web access key, which is made for the project.
-	 *
-	 * @plan A plan
-	 *
-	 * @return [ { name, comment } ] in the order they were found
-	 */
-	array function secretSlots( required struct plan ) {
-		var asEnv = duplicate( arguments.plan )
-		asEnv.secrets = "env"
-		var slots = []
-		for ( var stub in ( toFeatures( asEnv ).envStubs ?: [] ) ) {
-			// a stub whose value is only a prefix hint (xoxb-) still needs the real value
-			if ( !len( stub.value ) || stub.value.endsWith( "-" ) ) {
-				slots.append( { name : stub.name, comment : stub.comment } )
-			}
-		}
-		return slots
 	}
 
 	/**
@@ -430,10 +377,6 @@ class {
 		}
 		if ( p.guard != "off" ) {
 			rows.append( { label : "Guard", value : p.guard == "flag" ? "flag suspicious input" : "block suspicious input" } )
-		}
-		if ( p.secrets == "encrypted" ) {
-			var count = p.secretValues.count()
-			rows.append( { label : "Secrets", value : "encrypted in secrets.json" & ( count ? " (#count# value#count == 1 ? '' : 's'# entered)" : "" ) } )
 		}
 		if ( len( p.deploy.target ) ) {
 			rows.append( { label : "Deploy", value : p.deploy.target } )

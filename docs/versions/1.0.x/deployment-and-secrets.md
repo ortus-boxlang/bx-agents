@@ -75,26 +75,6 @@ export OPENAI_API_KEY=sk-...
 bxAgents serve
 ```
 
-## Encrypted secrets
-
-Keys can also live in the project, encrypted, so they travel with the repo. `bxAgents new` offers this as **Encrypted in the project** (the default stays `.env`). It uses BoxLang's own `bxsecret:` format, the same one `boxlang generatesecret` writes.
-
-The wizard writes two things:
-
-- `secrets.json`: every value as `bxsecret:<ciphertext>`, plus a `_seedCheck` entry that lets a wrong seed fail with a clear message. This file is **safe to commit**.
-- `.env`: one line, `BOXLANG_SECURITY_SECRETSEED=<seed>`. This is the key that opens the file. It is gitignored. **Never commit it**, and keep a copy somewhere safe: without it the values cannot be recovered.
-
-The seed is generated per project, so `secrets.json` does not depend on any one machine's BoxLang install. At startup the built app reads `secrets.json`, decrypts each value with the seed and publishes it as a setting, so `${env.NAME}` placeholders, `OPENAI_API_KEY`-style provider keys and MCP tokens all work as if they were set in the environment. A variable already set in the real environment wins over the committed value.
-
-To add or change a value later:
-
-```bash
-export BOXLANG_SECURITY_SECRETSEED=<your seed>
-boxlang generatesecret "the-new-value"   # prints bxsecret:...
-```
-
-Paste the output into `secrets.json` under the variable name. On a server, set `BOXLANG_SECURITY_SECRETSEED` as a real environment variable; `bxAgents build` fails if `secrets.json` holds a plain value, and `bxAgents doctor` checks the file.
-
 ## Deploying
 
 ```bash

@@ -23,7 +23,6 @@ class extends="testbox.system.BaseSpec" {
 					"users", "ada", "pw", "pw", "Ada Lovelace", false,
 					"flag",
 					"docker", "ghcr", "me/support-bot",
-					"env",
 					"create"
 				] );
 
@@ -50,56 +49,10 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.command ).toInclude( "--web-auth=users" );
 			} );
 
-			it( "asks where secrets should live and takes .env by default", function() {
-				var wizard = wizardFor( [ "bot", "", "minimal", "claude", "", [], "cache", [], [], "off", "none", "env", "create" ] );
-				var plan = wizard.run().plan;
-
-				var asked = prompter.asked().filter( q => q.title == "Where should secrets live?" )[ 1 ];
-				expect( asked.choices.map( c => c.value ) ).toBe( [ "env", "encrypted" ] );
-				expect( plan.secrets ).toBe( "env" );
-				expect( plan.secretValues ).toBeEmpty();
-			} );
-
-			it( "asks for each value, hidden, when secrets are encrypted, and keeps only what was typed", function() {
-				var wizard = wizardFor( [
-					"bot", "", "minimal", "claude", "", [], "cache", [ "github" ], "ok", [], "off", "none",
-					"encrypted", "sk-typed-key", "",
-					"create"
-				] );
-				var plan = wizard.run().plan;
-
-				expect( plan.secrets ).toBe( "encrypted" );
-				expect( plan.secretValues ).toBe( { CLAUDE_API_KEY : "sk-typed-key" } );
-				var value = prompter.asked().filter( q => q.title == "Value for CLAUDE_API_KEY" );
-				expect( value ).toHaveLength( 1 );
-				// the review screen and the command do not carry the typed value
-				expect( prompter.reviewed().toList( " " ) ).notToInclude( "sk-typed-key" );
-				expect( prompter.reviewed().toList( " " ) ).toInclude( "--secrets=encrypted" );
-			} );
-
-			it( "forgets typed values when the user goes back to the question", function() {
-				var wizard = wizardFor( [
-					"bot", "", "minimal", "claude", "", [], "cache", [], [], "off", "none",
-					"encrypted", "sk-first", "<back>",
-					"encrypted", "", "create"
-				] );
-				var plan = wizard.run().plan;
-
-				expect( plan.secretValues ).toBeEmpty();
-				expect( plan.secrets ).toBe( "encrypted" );
-			} );
-
-			it( "skips the question when there is nothing to supply", function() {
-				var wizard = wizardFor( [ "bot", "", "minimal", "ollama", "", [], "cache", [], [], "off", "none", "create" ] );
-
-				expect( wizard.run().plan.secrets ).toBe( "env" );
-				expect( prompter.asked().filter( q => q.title == "Where should secrets live?" ) ).toBeEmpty();
-			} );
-
 			it( "never keeps a plain password", function() {
 				var wizard = wizardFor( [
 					"bot", "", "minimal", "openai", "", [], "cache", [], [ "web" ],
-					"users", "ada", "s3cret-pw", "s3cret-pw", "", false, "off", "none", "env", "create"
+					"users", "ada", "s3cret-pw", "s3cret-pw", "", false, "off", "none", "create"
 				] );
 
 				var plan = wizard.run().plan;
@@ -110,7 +63,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "puts a failed password confirmation back to the same question", function() {
 				var wizard = wizardFor( [
 					"bot", "", "minimal", "openai", "", [], "cache", [], [ "web" ],
-					"users", "ada", "one", "two", "ok", "pw", "pw", "", false, "off", "none", "env", "create"
+					"users", "ada", "one", "two", "ok", "pw", "pw", "", false, "off", "none", "create"
 				] );
 
 				var plan = wizard.run().plan;
@@ -124,7 +77,7 @@ class extends="testbox.system.BaseSpec" {
 
 				var flags = {
 					name : "bot", description : "Does things", template : "minimal", model : "openai", with : "time", memory : "cache",
-					mcp : "", channels : "", guard : "off", deploy : "", secrets : "env"
+					mcp : "", channels : "", guard : "off", deploy : ""
 				};
 				// the stages that are not skipped by those flags: only the review
 				var plan = wizard.run( flags ).plan;
@@ -136,7 +89,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "goes back to the previous question on Esc and asks it again", function() {
 				var wizard = wizardFor( [
-					"first", "<back>", "second", "", "minimal", "openai", "", [], "cache", [], [], "off", "none", "env", "create"
+					"first", "<back>", "second", "", "minimal", "openai", "", [], "cache", [], [], "off", "none", "create"
 				] );
 
 				var plan = wizard.run().plan;
@@ -148,7 +101,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "stays on the first question when there is nothing to go back to", function() {
 				var wizard = wizardFor( [
-					"<back>", "bot", "", "minimal", "openai", "", [], "cache", [], [], "off", "none", "env", "create"
+					"<back>", "bot", "", "minimal", "openai", "", [], "cache", [], [], "off", "none", "create"
 				] );
 
 				expect( wizard.run().plan.name ).toBe( "bot" );
@@ -164,8 +117,8 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "starts over when the review says so", function() {
 				var wizard = wizardFor( [
-					"one", "", "minimal", "openai", "", [], "cache", [], [], "off", "none", "env", "restart",
-					"two", "", "minimal", "openai", "", [], "cache", [], [], "off", "none", "env", "create"
+					"one", "", "minimal", "openai", "", [], "cache", [], [], "off", "none", "restart",
+					"two", "", "minimal", "openai", "", [], "cache", [], [], "off", "none", "create"
 				] );
 
 				expect( wizard.run().plan.name ).toBe( "two" );
@@ -173,7 +126,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "refuses a bad name and asks again", function() {
 				var wizard = wizardFor( [
-					"1bad name", "ok", "good", "", "minimal", "openai", "", [], "cache", [], [], "off", "none", "env", "create"
+					"1bad name", "ok", "good", "", "minimal", "openai", "", [], "cache", [], [], "off", "none", "create"
 				] );
 
 				expect( wizard.run().plan.name ).toBe( "good" );
@@ -183,7 +136,7 @@ class extends="testbox.system.BaseSpec" {
 				var wizard = wizardFor( [
 					"bot", "", "minimal", "openai", "", [ "files" ],
 					"read", [], [ "tmp" ],
-					"cache", [], [], "off", "none", "env", "create"
+					"cache", [], [], "off", "none", "create"
 				] );
 
 				var plan = wizard.run().plan;
@@ -193,7 +146,7 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "offers only MCP servers that work today and says which do not", function() {
-				var wizard = wizardFor( [ "bot", "", "minimal", "openai", "", [], "cache", [], [], "off", "none", "env", "create" ] );
+				var wizard = wizardFor( [ "bot", "", "minimal", "openai", "", [], "cache", [], [], "off", "none", "create" ] );
 				wizard.run();
 				var mcp = prompter.asked().filter( q => q.title == "Connect any MCP servers?" )[ 1 ];
 

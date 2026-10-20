@@ -90,7 +90,6 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb new' -l remote-path -x
     complete -c $cmd -n '__bxagents_using_verb new' -l repo -x
     complete -c $cmd -n '__bxagents_using_verb new' -l search -x -a 'http brave tavily exa google'
-    complete -c $cmd -n '__bxagents_using_verb new' -l secrets -x -a 'env encrypted'
     complete -c $cmd -n '__bxagents_using_verb new' -l skipInstall
     complete -c $cmd -n '__bxagents_using_verb new' -l template -x -a 'minimal webui-chat slack-bot telegram-bot github-bot mcp-server scheduled multi-agent'
     complete -c $cmd -n '__bxagents_using_verb new' -l user -x

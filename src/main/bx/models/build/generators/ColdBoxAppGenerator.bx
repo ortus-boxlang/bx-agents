@@ -242,9 +242,6 @@ class {
 		lines.append( '	COLDBOX_APP_KEY        = ""' )
 		lines.append( "" )
 		lines.append( "	function onApplicationStart() {" )
-		// first, so the model key, gateway tokens and the rest are readable to everything below;
-		// a no-op when the project has no secrets.json (see SecretsLoader)
-		lines.append( '		new "models.build.SecretsLoader@bxagents"().load( expandPath( "/secrets.json" ) )' )
 		if ( len( arguments.databasePath ) ) {
 			// SQLite creates the database FILE on first connect, but never its
 			// parent directory - a missing ./data/ is an unopenable-database
@@ -663,9 +660,6 @@ class {
 			"class {",
 			"",
 			"	function buildAgent() {",
-			// before anything reads the environment: the model key, MCP tokens and the rest may live
-			// in the project's encrypted secrets.json (see SecretsLoader); a no-op when there is none
-			'		new "models.build.SecretsLoader@bxagents"().load( resolveAppPath( "../secrets.json", "#bxLiteral( normalizePath( arguments.projectRoot ) )#/secrets.json" ) )',
 			body,
 			"",
 			"		return agent",
