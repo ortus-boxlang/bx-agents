@@ -103,8 +103,12 @@ class {
 		directoryCreate( path = appDir, createPath = true, ignoreExists = true )
 
 		arguments.onProgress( "+ Splitting interceptors (agent vs runtime scope)..." )
+		// The splitter adds the "interceptors" folder itself: handing it
+		// `<appDir>/interceptors` put the files in `interceptors/interceptors/`, where
+		// the generated Application.bx's getInstance( "interceptors.<Name>" ) cannot
+		// find them and the app fails to start ("Instance not found").
 		var interceptorSplit = variables.interceptorSplitter.split(
-			appDir & "/interceptors",
+			appDir,
 			buildDir & "/runtime-interceptors",
 			discovery
 		)
@@ -149,6 +153,7 @@ class {
 		// login/API-key gates and any project-declared interceptor were dead
 		// code.
 		var agentInterceptorNames = interceptorSplit.agent.map( function( e ) { return e.name } )
+		var projectInterceptorNames = agentInterceptorNames.duplicate()
 		if ( len( webUiResult.webUiAuthInterceptorName ?: "" ) ) {
 			agentInterceptorNames.append( webUiResult.webUiAuthInterceptorName )
 		}
@@ -192,6 +197,7 @@ class {
 			buildDir              = appDir,
 			resolvedConfig        = config,
 			agentInterceptors     = agentInterceptorNames,
+			projectInterceptors   = projectInterceptorNames,
 			gatewayRegistrations  = gatewayResult.registrationStatements,
 			mcpRegistrations      = mcpResult.registrations,
 			extraStartupStatements = startupStatements,
