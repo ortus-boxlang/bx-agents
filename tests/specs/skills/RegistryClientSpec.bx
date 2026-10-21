@@ -1,0 +1,129 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "skills.RegistryClient", function() {
+
+			// An in-memory registry that answers like the real one: a miss is HTTP 200 with
+			// error:true in the body (measured against skills.boxlang.io), not a 404.
+			private function fakeRegistry( required struct skills ) {
+				var store = new bxagents.models.skills.SkillStore();
+				var calls = [];
+				var transport = function( method, url, params ) {
+					calls.append( method & " " & url.reReplace( "^https?://[^/]+", "" ) );
+					var path = url.reReplace( "^https?://[^/]+", "" );
+					var rows = skills.keyArray().map( function( key ) {
+						var s = skills[ key ];
+						return { owner : s.owner, repo : s.repo, skill_name : s.name, skill_slug : s.slug, skill_dir : s.path, description : s.description ?: "", audit_status : s.audit ?: "trusted", install_count : 3, file_sha : store.blobSha( s.content ) };
+					} );
+					if ( method == "POST" ) {
+						var hit = rows.filter( function( r ) {
+							return r.owner == params.owner && r.repo == params.repo && r.skill_slug == params.skill;
+						} );
+						if ( !hit.len() ) {
+							return { status : 200, body : jsonSerialize( { error : true, statusCode : 404, messages : [ "Skill not found" ], data : {} } ) };
+						}
+						if ( hit[ 1 ].audit_status == "block" ) {
+							return { status : 403, body : jsonSerialize( { error : true, statusCode : 403, messages : [ "This skill failed security audit and cannot be installed" ], data : {} } ) };
+						}
+						return { status : 200, body : jsonSerialize( { error : false, data : { skill : hit[ 1 ], content : skills[ hit[ 1 ].skill_name ].content, audit : { status : hit[ 1 ].audit_status } } } ) };
+					}
+					if ( path.reFind( "^/api/skills/[^/]+/[^/?]+$" ) ) {
+						return { status : 200, body : jsonSerialize( { error : false, data : rows.map( function( r ) {
+							return { owner : r.owner, repo : r.repo, name : r.skill_name, slug : r.skill_slug, path : r.skill_dir, description : r.description, audit_status : r.audit_status, sha : r.file_sha };
+						} ) } ) };
+					}
+					var q = ( params.search ?: "" ).lcase();
+					return { status : 200, body : jsonSerialize( { error : false, data : { data : rows.filter( function( r ) {
+						return !len( q ) || r.skill_name.lcase().find( q ) || r.description.lcase().find( q );
+					} ) } } ) };
+				};
+				return { transport : transport, calls : calls };
+			}
+
+			private struct function catalog() {
+				return {
+					"release-notes" : { owner : "acme", repo : "skills", name : "release-notes", slug : "writing~release-notes", path : "writing/release-notes", description : "Use this skill when writing release notes", content : "---" & char( 10 ) & "name: release-notes" & char( 10 ) & "description: Use this skill when writing release notes" & char( 10 ) & "---" & char( 10 ) & "Write them." & char( 10 ) },
+					"triage" : { owner : "acme", repo : "skills", name : "triage", slug : "ops~triage", path : "ops/triage", description : "Use this skill when sorting bugs", content : "---" & char( 10 ) & "name: triage" & char( 10 ) & "description: Use this skill when sorting bugs" & char( 10 ) & "---" & char( 10 ) & "Sort them." & char( 10 ) },
+					"shady" : { owner : "acme", repo : "skills", name : "shady", slug : "x~shady", path : "x/shady", description : "A blocked one", audit : "block", content : "bad" & char( 10 ) }
+				};
+			}
+
+			it( "searches the catalog", function() {
+				var reg = fakeRegistry( catalog() );
+				var client = new bxagents.models.skills.RegistryClient( "https://r.example/", reg.transport );
+
+				var hits = client.search( "release" );
+
+				expect( hits.map( h => h.name ) ).toBe( [ "release-notes" ] );
+				expect( hits[ 1 ].slug ).toBe( "writing~release-notes" );
+				expect( hits[ 1 ].audit ).toBe( "trusted" );
+				expect( reg.calls[ 1 ] ).toBe( "GET /api/skills" );
+			} );
+
+			it( "fetches by slug", function() {
+				var reg = fakeRegistry( catalog() );
+				var client = new bxagents.models.skills.RegistryClient( "https://r.example", reg.transport );
+
+				var got = client.fetch( "acme/skills/writing~release-notes" );
+
+				expect( got.name ).toBe( "release-notes" );
+				expect( got.content ).toInclude( "Write them." );
+				expect( got.sha ).toBe( new bxagents.models.skills.SkillStore().blobSha( got.content ) );
+			} );
+
+			it( "also finds a skill by its path in the repository or by its name", function() {
+				var reg = fakeRegistry( catalog() );
+				var client = new bxagents.models.skills.RegistryClient( "https://r.example", reg.transport );
+
+				expect( client.fetch( "acme/skills/writing/release-notes" ).name ).toBe( "release-notes" );
+				expect( client.fetch( "acme/skills/triage" ).slug ).toBe( "ops~triage" );
+			} );
+
+			it( "says so when a skill is not there, even though the registry answers 200", function() {
+				var client = new bxagents.models.skills.RegistryClient( "https://r.example", fakeRegistry( catalog() ).transport );
+
+				expect( function() {
+					client.fetch( "acme/skills/nothing" );
+				} ).toThrow( "BxAgents.SkillNotFound" );
+			} );
+
+			it( "refuses a skill that failed its audit", function() {
+				var client = new bxagents.models.skills.RegistryClient( "https://r.example", fakeRegistry( catalog() ).transport );
+
+				expect( function() {
+					client.fetch( "acme/skills/x~shady" );
+				} ).toThrow( "BxAgents.SkillBlocked" );
+			} );
+
+			it( "names the registry when it cannot be reached or does not answer JSON", function() {
+				var down = new bxagents.models.skills.RegistryClient( "https://r.example", function() {
+					throw( type = "Any", message = "connection refused" );
+				} );
+				var odd = new bxagents.models.skills.RegistryClient( "https://r.example", function() {
+					return { status : 502, body : "<html>bad gateway</html>" };
+				} );
+
+				expect( function() {
+					down.search( "x" );
+				} ).toThrow( "BxAgents.SkillRegistryUnavailable" );
+				expect( function() {
+					odd.search( "x" );
+				} ).toThrow( "BxAgents.SkillRegistryUnavailable" );
+			} );
+
+			it( "rejects a reference that is not owner/repo/skill", function() {
+				var client = new bxagents.models.skills.RegistryClient( "https://r.example", fakeRegistry( catalog() ).transport );
+
+				expect( function() {
+					client.fetch( "release-notes" );
+				} ).toThrow( "BxAgents.InvalidSkillRef" );
+			} );
+
+			it( "uses the address it is given, then the default", function() {
+				expect( new bxagents.models.skills.RegistryClient( "https://mirror.example/" ).url() ).toBe( "https://mirror.example" );
+			} );
+
+		} );
+	}
+
+}

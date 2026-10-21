@@ -1,0 +1,236 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "cli.Skills", function() {
+
+			beforeEach( function() {
+				variables.verb = new bxagents.models.cli.Skills();
+				variables.fixtures = expandPath( "/fixtures" );
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function newTempProject() {
+				var dir = createTempDirectory( prefix = "bxagents-cli-skills-" );
+				directoryCopy( fixtures & "/yaml-minimal", dir, true );
+				fileWrite( dir & "/.gitignore", ".env" & char( 10 ) );
+				tempDirs.append( dir );
+				return dir;
+			}
+
+			private function skills( required string root, required array args, required any transport, struct flags = {} ) {
+				var options = { projectRoot : root, _positionals : args, _transport : transport };
+				options.append( flags );
+				return verb.run( options );
+			}
+
+			// An in-memory registry that answers like the real one: a miss is HTTP 200 with
+			// error:true in the body (measured against skills.boxlang.io), not a 404.
+			private function fakeRegistry( required struct skills ) {
+				var store = new bxagents.models.skills.SkillStore();
+				var calls = [];
+				var transport = function( method, url, params ) {
+					calls.append( method & " " & url.reReplace( "^https?://[^/]+", "" ) );
+					var path = url.reReplace( "^https?://[^/]+", "" );
+					var rows = skills.keyArray().map( function( key ) {
+						var s = skills[ key ];
+						return { owner : s.owner, repo : s.repo, skill_name : s.name, skill_slug : s.slug, skill_dir : s.path, description : s.description ?: "", audit_status : s.audit ?: "trusted", install_count : 3, file_sha : store.blobSha( s.content ) };
+					} );
+					if ( method == "POST" ) {
+						var hit = rows.filter( function( r ) {
+							return r.owner == params.owner && r.repo == params.repo && r.skill_slug == params.skill;
+						} );
+						if ( !hit.len() ) {
+							return { status : 200, body : jsonSerialize( { error : true, statusCode : 404, messages : [ "Skill not found" ], data : {} } ) };
+						}
+						if ( hit[ 1 ].audit_status == "block" ) {
+							return { status : 403, body : jsonSerialize( { error : true, statusCode : 403, messages : [ "This skill failed security audit and cannot be installed" ], data : {} } ) };
+						}
+						return { status : 200, body : jsonSerialize( { error : false, data : { skill : hit[ 1 ], content : skills[ hit[ 1 ].skill_name ].content, audit : { status : hit[ 1 ].audit_status } } } ) };
+					}
+					if ( path.reFind( "^/api/skills/[^/]+/[^/?]+$" ) ) {
+						return { status : 200, body : jsonSerialize( { error : false, data : rows.map( function( r ) {
+							return { owner : r.owner, repo : r.repo, name : r.skill_name, slug : r.skill_slug, path : r.skill_dir, description : r.description, audit_status : r.audit_status, sha : r.file_sha };
+						} ) } ) };
+					}
+					var q = ( params.search ?: "" ).lcase();
+					return { status : 200, body : jsonSerialize( { error : false, data : { data : rows.filter( function( r ) {
+						return !len( q ) || r.skill_name.lcase().find( q ) || r.description.lcase().find( q );
+					} ) } } ) };
+				};
+				return { transport : transport, calls : calls };
+			}
+
+			private struct function catalog() {
+				return {
+					"release-notes" : { owner : "acme", repo : "skills", name : "release-notes", slug : "writing~release-notes", path : "writing/release-notes", description : "Use this skill when writing release notes", content : "---" & char( 10 ) & "name: release-notes" & char( 10 ) & "description: Use this skill when writing release notes" & char( 10 ) & "---" & char( 10 ) & "Write them." & char( 10 ) },
+					"triage" : { owner : "acme", repo : "skills", name : "triage", slug : "ops~triage", path : "ops/triage", description : "Use this skill when sorting bugs", content : "---" & char( 10 ) & "name: triage" & char( 10 ) & "description: Use this skill when sorting bugs" & char( 10 ) & "---" & char( 10 ) & "Sort them." & char( 10 ) },
+					"shady" : { owner : "acme", repo : "skills", name : "shady", slug : "x~shady", path : "x/shady", description : "A blocked one", audit : "block", content : "bad" & char( 10 ) }
+				};
+			}
+
+			describe( "find", function() {
+
+				it( "lists what matches, with the line to install it", function() {
+					var result = skills( newTempProject(), [ "find", "release" ], fakeRegistry( catalog() ).transport );
+
+					expect( result.message ).toInclude( "release-notes  acme/skills/writing~release-notes" );
+					expect( result.message ).toInclude( "audit: trusted" );
+					expect( result.message ).toInclude( "bxAgents skills install" );
+				} );
+
+				it( "says when nothing matches, and gives JSON on request", function() {
+					var transport = fakeRegistry( catalog() ).transport;
+
+					expect( skills( newTempProject(), [ "find", "zzz" ], transport ).message ).toInclude( "Nothing found" );
+					expect( jsonDeserialize( skills( newTempProject(), [ "find", "triage" ], transport, { json : true } ).message )[ 1 ].name ).toBe( "triage" );
+				} );
+
+				it( "needs no project", function() {
+					var result = verb.run( { _positionals : [ "find", "triage" ], _transport : fakeRegistry( catalog() ).transport } );
+
+					expect( result.exitCode ).toBe( 0 );
+				} );
+
+			} );
+
+			describe( "install, list, update, remove", function() {
+
+				it( "installs under .agents/skills, records the sha, and keeps the folder out of git", function() {
+					var root = newTempProject();
+
+					var result = skills( root, [ "install", "acme/skills/writing~release-notes" ], fakeRegistry( catalog() ).transport );
+					var lock = jsonDeserialize( fileRead( root & "/.agents/skills.lock.json" ) );
+
+					expect( result.message ).toInclude( "+ Installed release-notes" );
+					expect( result.message ).toInclude( "Read what you install" );
+					expect( fileExists( root & "/.agents/skills/release-notes/SKILL.md" ) ).toBeTrue();
+					expect( lock.skills[ "release-notes" ].source ).toBe( "acme/skills" );
+					expect( lock.skills[ "release-notes" ].sha ).toBe( new bxagents.models.skills.SkillStore().blobSha( fileRead( root & "/.agents/skills/release-notes/SKILL.md" ) ) );
+					expect( fileRead( root & "/.gitignore" ) ).toInclude( ".agents/skills/" );
+				} );
+
+				it( "installs several, and says unchanged the second time", function() {
+					var root = newTempProject();
+					var transport = fakeRegistry( catalog() ).transport;
+
+					skills( root, [ "install", "acme/skills/ops~triage", "acme/skills/writing~release-notes" ], transport );
+					var again = skills( root, [ "install", "acme/skills/ops~triage" ], transport );
+
+					expect( structCount( jsonDeserialize( fileRead( root & "/.agents/skills.lock.json" ) ).skills ) ).toBe( 2 );
+					expect( again.message ).toInclude( "= Unchanged triage" );
+				} );
+
+				it( "flags a skill that is not trusted, and refuses a blocked one", function() {
+					var root = newTempProject();
+					var open = catalog();
+					open.triage.audit = "review";
+
+					expect( skills( root, [ "install", "acme/skills/ops~triage" ], fakeRegistry( open ).transport ).message ).toInclude( "! audit: review" );
+					expect( function() {
+						skills( root, [ "install", "acme/skills/x~shady" ], fakeRegistry( catalog() ).transport );
+					} ).toThrow( "BxAgents.SkillBlocked" );
+					expect( directoryExists( root & "/.agents/skills/shady" ) ).toBeFalse();
+				} );
+
+				it( "restores what the lock lists and the disk lacks, fetching nothing else", function() {
+					var root = newTempProject();
+					var reg = fakeRegistry( catalog() );
+					skills( root, [ "install", "acme/skills/ops~triage" ], reg.transport );
+					directoryDelete( root & "/.agents/skills", true );
+					reg.calls.clear();
+
+					var result = skills( root, [ "install" ], reg.transport );
+					var quiet = skills( root, [ "install" ], reg.transport );
+
+					expect( result.message ).toInclude( "+ Restored triage" );
+					expect( fileExists( root & "/.agents/skills/triage/SKILL.md" ) ).toBeTrue();
+					expect( reg.calls ).toHaveLength( 1 );
+					expect( quiet.message ).toInclude( "is installed" );
+				} );
+
+				it( "lists what is installed and whether it is intact", function() {
+					var root = newTempProject();
+					var transport = fakeRegistry( catalog() ).transport;
+					skills( root, [ "install", "acme/skills/ops~triage", "acme/skills/writing~release-notes" ], transport );
+					fileWrite( root & "/.agents/skills/triage/SKILL.md", "edited" );
+					directoryDelete( root & "/.agents/skills/release-notes", true );
+
+					var text = skills( root, [ "list" ], transport ).message;
+
+					expect( text ).toInclude( "acme/skills/ops~triage  edited since it was installed" );
+					expect( text ).toInclude( "not installed; bxAgents skills install restores it" );
+					expect( jsonDeserialize( skills( root, [ "list" ], transport, { json : true } ).message ).map( r => r.state ) ).toBe( [ "missing", "modified" ] );
+				} );
+
+				it( "updates a skill whose registry copy changed, leaves an edited one alone, and does nothing on --dry-run", function() {
+					var root = newTempProject();
+					skills( root, [ "install", "acme/skills/ops~triage", "acme/skills/writing~release-notes" ], fakeRegistry( catalog() ).transport );
+					var newer = catalog();
+					newer.triage.content &= "More." & char( 10 );
+					newer[ "release-notes" ].content &= "Also." & char( 10 );
+					fileWrite( root & "/.agents/skills/release-notes/SKILL.md", "my edit" );
+					var transport = fakeRegistry( newer ).transport;
+
+					var preview = skills( root, [ "update" ], transport, { "dry-run" : true } );
+					expect( preview.message ).toInclude( "~ Would update triage" );
+					expect( fileRead( root & "/.agents/skills/triage/SKILL.md" ) ).notToInclude( "More." );
+
+					var result = skills( root, [ "update" ], transport );
+					expect( result.message ).toInclude( "~ Updated triage" );
+					expect( result.message ).toInclude( "! Skipped release-notes" );
+					expect( fileRead( root & "/.agents/skills/triage/SKILL.md" ) ).toInclude( "More." );
+					expect( fileRead( root & "/.agents/skills/release-notes/SKILL.md" ) ).toBe( "my edit" );
+					expect( jsonDeserialize( fileRead( root & "/.agents/skills.lock.json" ) ).skills.triage.sha ).toBe( new bxagents.models.skills.SkillStore().blobSha( newer.triage.content ) );
+				} );
+
+				it( "exits 1 when an update fails, and names the skill", function() {
+					var root = newTempProject();
+					skills( root, [ "install", "acme/skills/ops~triage" ], fakeRegistry( catalog() ).transport );
+
+					var result = skills( root, [ "update" ], fakeRegistry( {} ).transport );
+
+					expect( result.exitCode ).toBe( 1 );
+					expect( result.message ).toInclude( "x Failed triage" );
+				} );
+
+				it( "removes the skill, its lock entry and its folder", function() {
+					var root = newTempProject();
+					var transport = fakeRegistry( catalog() ).transport;
+					skills( root, [ "install", "acme/skills/ops~triage" ], transport );
+
+					skills( root, [ "remove", "triage" ], transport );
+
+					expect( directoryExists( root & "/.agents/skills/triage" ) ).toBeFalse();
+					expect( jsonDeserialize( fileRead( root & "/.agents/skills.lock.json" ) ).skills ).toBeEmpty();
+					expect( function() {
+						skills( root, [ "remove", "triage" ], transport );
+					} ).toThrow( "BxAgents.SkillNotInstalled" );
+				} );
+
+			} );
+
+			describe( "the verb", function() {
+
+				it( "asks for a subcommand, and needs a project for all but find", function() {
+					expect( function() {
+						verb.run( { _positionals : [] } );
+					} ).toThrow( "BxAgents.UnknownSkillsCommand" );
+					expect( function() {
+						verb.run( { projectRoot : createTempDirectory( prefix = "bxagents-noproj-" ), _positionals : [ "list" ] } );
+					} ).toThrow( "BxAgents.NotAnAgentProject" );
+				} );
+
+			} );
+
+		} );
+	}
+
+}

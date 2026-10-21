@@ -7,7 +7,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 	param( $wordToComplete, $commandAst, $cursorPosition )
 
 	$verbs = @{
-		'add' = 'Add to a project: add <kind> [name] - a tool, interceptor, schedule, mcp, model or gateway'
+		'add' = 'Add to a project: add <kind> [name] - a tool, interceptor, schedule, mcp, model, gateway,...'
 		'build' = 'Build a project into a generated app'
 		'chat' = 'Interactive REPL chat with a built agent'
 		'clean' = 'Remove a project''s .build/ and dist/ output'
@@ -19,6 +19,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 		'new' = 'Scaffold a new agent project'
 		'package' = 'Package a built project into a .bxa'
 		'serve' = 'Serve a built project via boxlang-miniserver'
+		'skills' = 'Skills from skills.boxlang.io: skills <find|install|list|update|remove>'
 		'test' = 'Run a project''s own tests/specs via TestBox'
 		'help' = 'Show the usage and the list of verbs'
 	}
@@ -166,6 +167,13 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
 		)
 		'serve:positional' = 'dir'
+		'skills' = @(
+			@{ Name = 'dry-run'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'json'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'limit'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
+			@{ Name = 'registry'; Value = $true; Choices = @(); Dir = $false }
+		)
 		'test' = @(
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
 		)

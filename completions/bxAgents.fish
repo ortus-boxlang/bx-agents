@@ -19,7 +19,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n __bxagents_needs_verb -s v -l version -d 'Show the module version'
 
     # verbs
-    complete -c $cmd -n __bxagents_needs_verb -a 'add' -d 'Add to a project: add <kind> [name] - a tool, interceptor, schedule, mcp, model or gateway'
+    complete -c $cmd -n __bxagents_needs_verb -a 'add' -d 'Add to a project: add <kind> [name] - a tool, interceptor, schedule, mcp, model, gateway,...'
     complete -c $cmd -n __bxagents_needs_verb -a 'build' -d 'Build a project into a generated app'
     complete -c $cmd -n __bxagents_needs_verb -a 'chat' -d 'Interactive REPL chat with a built agent'
     complete -c $cmd -n __bxagents_needs_verb -a 'clean' -d 'Remove a project\'s .build/ and dist/ output'
@@ -31,6 +31,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n __bxagents_needs_verb -a 'new' -d 'Scaffold a new agent project'
     complete -c $cmd -n __bxagents_needs_verb -a 'package' -d 'Package a built project into a .bxa'
     complete -c $cmd -n __bxagents_needs_verb -a 'serve' -d 'Serve a built project via boxlang-miniserver'
+    complete -c $cmd -n __bxagents_needs_verb -a 'skills' -d 'Skills from skills.boxlang.io: skills <find|install|list|update|remove>'
     complete -c $cmd -n __bxagents_needs_verb -a 'test' -d 'Run a project\'s own tests/specs via TestBox'
     complete -c $cmd -n __bxagents_needs_verb -a 'help' -d 'Show the usage and the list of verbs'
 
@@ -154,7 +155,12 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb serve' -l port -x
     complete -c $cmd -n '__bxagents_using_verb serve' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb serve' -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb skills' -l dry-run
+    complete -c $cmd -n '__bxagents_using_verb skills' -l json
+    complete -c $cmd -n '__bxagents_using_verb skills' -l limit -x
+    complete -c $cmd -n '__bxagents_using_verb skills' -l projectRoot -x -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb skills' -l registry -x
     complete -c $cmd -n '__bxagents_using_verb test' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb test' -a '(__fish_complete_directories)'
-    complete -c $cmd -n '__bxagents_using_verb help' -a 'add build chat clean deploy doctor hash-password inspect invoke new package serve test help'
+    complete -c $cmd -n '__bxagents_using_verb help' -a 'add build chat clean deploy doctor hash-password inspect invoke new package serve skills test help'
 end

@@ -65,6 +65,9 @@ Scaffold a new agent project.
 ::: card title="add" icon="phosphor-duotone:plus-circle" href="#add"
 Add a tool, interceptor, schedule, MCP server, named model, gateway, subagent or skill to an existing project.
 :::
+::: card title="skills" icon="phosphor-duotone:graduation-cap" href="#skills"
+Find, install, update and remove skills from skills.boxlang.io.
+:::
 ::: card title="build" icon="phosphor-duotone:hammer" href="#build"
 Run the full build pipeline.
 :::
@@ -344,6 +347,45 @@ bxAgents add skill                              # asks
 | `--description=<text>` | One sentence starting "Use this skill when". The model reads it to decide whether to load the skill, so it is the part that matters. Without it a TODO is written for you to replace. |
 
 Skills are not wired to an agent: every skill in the build is available to the model. Skills from skills.boxlang.io are not added here; they are installed, not written.
+
+### `skills`
+
+Skills from the registry (skills.boxlang.io), the way `coldbox ai skills` installs them. A skill of your own goes in `skills/` instead: see [`add skill`](#add-skill).
+
+```bash
+bxAgents skills find release                    # search the registry
+bxAgents skills install ortus-boxlang/skills/boxlang-developer~configuration
+bxAgents skills install                         # restore what the lock lists and the disk lacks
+bxAgents skills list                            # what is installed, and whether it is intact
+bxAgents skills update [name...] [--dry-run]    # fetch newer versions
+bxAgents skills remove <name>
+```
+
+| Command | What it does |
+|---|---|
+| `find <words>` | Searches names and descriptions. Shows the reference to install, the registry's audit result and the install count. Needs no project. `--limit=<n>` (default 10), `--json`. |
+| `install <owner/repo/skill>...` | Installs into `.agents/skills/<name>/SKILL.md` and records it in `.agents/skills.lock.json`. The last part can be the slug (`boxlang-developer~configuration`), the path in the repository (`boxlang-developer/configuration`) or the skill's name. A skill that failed the registry's security audit is refused; one that is not `trusted` is flagged. |
+| `install` | With no reference, restores what the lock lists and the disk lacks. |
+| `list` | One line per installed skill. Notes one that is missing, or edited since it was installed. `--json`. |
+| `update [name...]` | Fetches newer versions. A skill you edited is skipped, with what to do; `--dry-run` only reports. |
+| `remove <name>` | Deletes the skill and its lock entry. |
+
+`--registry=<url>` (or the `BXAGENTS_SKILLS_URL` environment variable) points at another registry.
+
+#### Where things live
+
+| Path | What | In source control |
+|---|---|---|
+| `skills/<name>/` | Skills you wrote | Yes |
+| `.agents/skills/<name>/` | Skills installed from the registry | No. `install` adds the folder to `.gitignore`. |
+| `.agents/skills.lock.json` | What is installed, its source and its sha | Yes |
+
+`build` restores any skill the lock lists and the disk lacks, so a fresh checkout builds the same agent, and fails naming the skill if the registry cannot be reached. Nothing is fetched when they are all there, so an offline build of a restored project works. Both folders go into the build; a skill of your own with the same name wins over an installed one.
+
+The sha is the git blob sha of `SKILL.md`, the one the registry reports. An install is checked against it before anything is written, and it is how `update` knows a skill changed and `list` knows you edited one.
+
+!!! warning
+    A skill is instructions your agent follows. The registry audits what it lists, but read what you install before you ship it.
 
 ### `build`
 

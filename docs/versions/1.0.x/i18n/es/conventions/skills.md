@@ -34,6 +34,10 @@ El nombre de la skill es su `name:` de frontmatter si está presente; de lo cont
 
 Una carpeta sin un `SKILL.md` dentro no se descubre como una skill en absoluto - simplemente se ignora (útil para subcarpetas de borrador, activos guardados junto a una skill bajo una estructura diferente, etc., siempre que no se sitúen directamente bajo `skills/` sin un `SKILL.md` propio).
 
+## Skills del registro
+
+Las skills de skills.boxlang.io se instalan con `bxAgents skills install <owner/repo/skill>`, no se copian a mano. Van en `.agents/skills/` (la carpeta por defecto de bx-ai), fuera del control de código; `.agents/skills.lock.json` se versiona y `build` restaura desde él. Ambas carpetas van al build, y una skill de `skills/` con el mismo nombre gana. Consulta [`skills`](../cli-reference.md#skills).
+
 ## Cómo se conecta en tiempo de ejecución
 
 `skills/` se copia textualmente a la app generada (la misma copia de borrar-y-escribir, excluyendo dotfiles, que [`tools/`](tools.md)). El `config/ColdBox.bx` generado siempre apunta el propio ajuste de módulo `skillsDirectory` de bx-ai a `/skills`:
@@ -45,4 +49,4 @@ moduleSettings = {
 ```
 
 !!! info
-    El propio `skillsDirectory` por defecto de bx-ai es `/.agents/skills` - una ruta diferente a la convención `skills/` de BxAgents. El generador siempre lo sobreescribe explícitamente para que la carpeta `skills/` de tu proyecto sea la que bx-ai realmente carga; nunca necesitas configurar esto tú mismo.
+    El propio `skillsDirectory` por defecto de bx-ai es `/.agents/skills` - una ruta diferente a la convención `skills/` de BxAgents. El generador siempre lo sobreescribe explícitamente para que la carpeta `skills/` de la app sea la que bx-ai realmente carga. Las skills instaladas en el `.agents/skills/` de tu proyecto se copian a ella al construir; nunca necesitas configurar esto tú mismo.
