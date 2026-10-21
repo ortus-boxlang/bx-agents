@@ -248,7 +248,7 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#what-the-build-layers-on-top-of-the-class">What the build layers on top of the class</a></li><li class="toc-level-2"><a href="#configure-optional---overriding-what-the-class-set">configure&#x28;&#x29; &#x28;optional&#x29; - overriding what the class set</a></li><li class="toc-level-2"><a href="#the-model-slug">The model slug</a></li><li class="toc-level-2"><a href="#environment-overrides">Environment overrides</a></li><li class="toc-level-3"><a href="#detectenvironment">detectEnvironment&#x28;&#x29;</a></li><li class="toc-level-2"><a href="#merge-semantics">Merge semantics</a></li><li class="toc-level-2"><a href="#the-always-on-agent-route">The always-on agent route</a></li><li class="toc-level-3"><a href="#run-control">Run control</a></li><li class="toc-level-3"><a href="#agentapi">agentApi</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#what-the-build-layers-on-top-of-the-class">What the build layers on top of the class</a></li><li class="toc-level-2"><a href="#configure-optional---overriding-what-the-class-set">configure&#x28;&#x29; &#x28;optional&#x29; - overriding what the class set</a></li><li class="toc-level-2"><a href="#the-model-slug">The model slug</a></li><li class="toc-level-2"><a href="#environment-overrides">Environment overrides</a></li><li class="toc-level-3"><a href="#detectenvironment">detectEnvironment&#x28;&#x29;</a></li><li class="toc-level-2"><a href="#merge-semantics">Merge semantics</a></li><li class="toc-level-2"><a href="#the-always-on-agent-route">The always-on agent route</a></li><li class="toc-level-3"><a href="#run-control">Run control</a></li><li class="toc-level-3"><a href="#agentapi">agentApi</a></li><li class="toc-level-3"><a href="#access-tokens-for-a-deployed-agent">Access tokens for a deployed agent</a></li></ul></details>
 		
 
 		
@@ -363,7 +363,7 @@
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>memory</code></td><td>string or struct</td><td>The agent's conversation memory. A bare string is shorthand for the type (<code>&quot;cache&quot;</code>); a struct is <code>{ type, ...config }</code> and is passed through to <code>aiMemory()</code> verbatim - e.g. <code>{ type: &quot;cache&quot;, maxMessages: 50 }</code>, or with <code>summaryProvider</code>/<code>summaryModel</code>/<code>summaryThreshold</code> to make the web UI's <code>/compact</code> functional. Applies per node, so a subagent can declare its own.</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>checkpointer</code></td><td>struct</td><td><code>{ type: &quot;cache&quot;\|&quot;file&quot;\|&quot;jdbc&quot;, ...config }</code>. Defaults to <code>{ type: &quot;cache&quot; }</code> if omitted. Always applied - without one, human-in-the-loop approval flows through any gateway other than <code>cli</code> fail outright.</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>gatewaySession</code></td><td>struct</td><td><code>{ policy, maxQueueDepth }</code>, both optional (default <code>&quot;queue&quot;</code> / <code>50</code>). Only meaningful if the project has at least one push-style <a href="/conventions/gateways/index.html#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends">gateway</a> entry - controls the generated <code>GatewaySession</code>'s policy for a second inbound message arriving on a thread that already has a turn in flight. <code>policy</code> must be one of <code>reject</code>/<code>queue</code>/<code>steer</code>/<code>interrupt</code>.</td></tr>
-<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>agentApi</code></td><td>struct</td><td><code>{ enabled, tokenEnvVar }</code>, both optional. Controls the always-on agent route at <code>/__bxagents</code>. See <a href="#the-always-on-agent-route">The always-on agent route</a> below.</td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>agentApi</code></td><td>struct</td><td><code>{ enabled, tokenEnvVar, tokens }</code>, all optional. Controls the always-on agent route at <code>/__bxagents</code>. See <a href="#the-always-on-agent-route">The always-on agent route</a> below.</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td>any other key</td><td>any</td><td>Merged and available in the resolved config struct, but not interpreted by BxAgents itself.</td></tr>
 </tbody>
 </table></div>
@@ -498,6 +498,11 @@ POST /__bxagents/steer     # { threadId, input }
 GET  /__bxagents/pending   # ?threadId=
 POST /__bxagents/resume    # { threadId, decision } -&gt; SSE, like /events
 GET  /__bxagents/tools
+GET  /__bxagents/agent    # name, model, what it can do
+GET  /__bxagents/notes    # the caller's notes and the agent's, with how full they are
+POST /__bxagents/notes    # { scope : &quot;user&quot; | &quot;agent&quot;, text }
+POST /__bxagents/notes/update   # { scope, id, text }
+POST /__bxagents/notes/remove   # { scope, id }
 </code></pre>
 <p><code>/events</code> sends the frames of <code>/stream</code> (<code>thread</code> first, <code>chunk</code> for each piece of the answer, <code>done</code> last)
 and adds:</p>
@@ -515,6 +520,7 @@ and adds:</p>
 a token). <code>steer</code> splices a message into a run in flight. <code>resume</code> takes <code>approve</code>, <code>approve_session</code> or
 <code>reject</code> and streams the rest of the turn. A run belongs to whoever started it: <code>pending</code> answers &quot;nothing
 pending&quot; and <code>resume</code> answers <code>403</code> to anyone else.</p>
+<p>The <code>notes</code> routes answer <code>404</code> for an agent that has no <a href="/conventions/agent-yaml/index.html#notes"><code>notes</code></a> block. Each caller reads and changes their own user notes (the owner is the name of the token they used, or <code>api</code> on an open route) and the agent's notes. Any caller can add to either scope or edit a note; removing a note of the agent needs an <code>admin</code> token (a <code>403</code> otherwise), because it changes what every user's agent knows.</p>
 <p>These routes sit behind the same <code>x-bxagents-token</code> gate as the other four (a missing or wrong token is a
 <code>401</code>), and <code>agentApi.enabled: false</code> removes all of them.</p>
 <p>Because the path is reserved, <code>build</code> <strong>rejects</strong> any <code>gateways/</code> entry whose
@@ -530,6 +536,7 @@ one that never answers.</p>
 <tbody>
 <tr><td><code>enabled</code></td><td>boolean</td><td>Default <code>true</code>. Set <code>false</code> to omit the route entirely - for a build going somewhere it has no business existing.</td></tr>
 <tr><td><code>tokenEnvVar</code></td><td>string</td><td>The <strong>name</strong> of an environment variable holding a shared secret. When set, every sub-route requires a matching <code>x-bxagents-token</code> request header.</td></tr>
+<tr><td><code>tokens</code></td><td>boolean</td><td>Default <code>false</code>. <code>true</code> also accepts the <a href="#access-tokens-for-a-deployed-agent">access tokens</a> made with <code>bxAgents token create</code>.</td></tr>
 </tbody>
 </table></div>
 <pre><code class="language-javascript">function configure() {
@@ -566,6 +573,27 @@ token can't be committed here by mistake. Only the variable's name is ever
 written into generated source.</p>
 </div>
 </div>
+<h3 id="access-tokens-for-a-deployed-agent"><a href="#access-tokens-for-a-deployed-agent" id="access-tokens-for-a-deployed-agent" name="access-tokens-for-a-deployed-agent" class="anchor"></a>Access tokens for a deployed agent</h3>
+<p>One shared secret (<code>tokenEnvVar</code>) is enough for a single caller. To let several people or machines in, each with a name you can revoke, turn on issued tokens:</p>
+<pre><code class="language-yaml"># Agent.yaml
+agentApi:
+  tokens: true
+</code></pre>
+<p>Make them where the agent's database is: on the server, or in the project before you pack it.</p>
+<pre><code class="language-bash">bxAgents token create --name=laptop --expires=90d
+bxAgents token create --name=ci --scope=admin
+bxAgents token list
+bxAgents token revoke --name=laptop
+</code></pre>
+<ul>
+<li>A token is shown <strong>once</strong>, when it is made. Only its SHA-256 is stored, so a stolen database file cannot be used to call the agent.</li>
+<li>The caller sends it in the <code>x-bxagents-token</code> header, or <code>bxAgents chat --connect=&lt;url&gt; --token=&lt;token&gt;</code> (or <code>BXAGENTS_TOKEN</code>) does.</li>
+<li>The name is who is calling. A run belongs to the token that started it, and one token cannot answer another's pending approval. The scope is <code>chat</code> or <code>admin</code>.</li>
+<li>Revoking takes effect on the next request, without a restart. A token can also expire (<code>--expires=90d</code>, <code>12h</code>, <code>2w</code> or a date).</li>
+<li>With <code>tokens: true</code> and no <code>tokenEnvVar</code>, a server with no tokens yet refuses everyone. With both, the shared secret works as an <code>admin</code> token, so a fresh deployment can be reached before the first token exists.</li>
+<li>The tokens live in the <a href="/conventions/web-ui/index.html#the-sqlite-store">shared chat database</a> (<code>data/chat.db</code>). On a deployed server run <code>token</code> with <code>BXAGENTS_DB</code> pointing at the file the app uses.</li>
+</ul>
+<p>Put HTTPS in front of any server a token travels to: a token on plain HTTP can be read on the wire.</p>
 <div class="adm-block adm-info">
 <div class="adm-heading">
 <svg class="adm-icon"><use xlink:href="#adm-info" /></svg><span>Info</span>
@@ -582,7 +610,7 @@ you do, and for any built <code>.bxa</code> artifact you deploy.</p>
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/conventions/agent-bx.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/conventions/agent-bx.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Oct 21, 2026, 4&#x3a;11&#x3a;36 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Agent.bx&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fconventions%2Fagent-bx%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/conventions/agent-bx.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/conventions/agent-bx.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Oct 21, 2026, 4&#x3a;13&#x3a;11 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Agent.bx&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fconventions%2Fagent-bx%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 
@@ -626,7 +654,7 @@ you do, and for any built <code>.bxa</code> artifact you deploy.</p>
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#what-the-build-layers-on-top-of-the-class">What the build layers on top of the class</a></li><li class="toc-level-2"><a href="#configure-optional---overriding-what-the-class-set">configure&#x28;&#x29; &#x28;optional&#x29; - overriding what the class set</a></li><li class="toc-level-2"><a href="#the-model-slug">The model slug</a></li><li class="toc-level-2"><a href="#environment-overrides">Environment overrides</a></li><li class="toc-level-3"><a href="#detectenvironment">detectEnvironment&#x28;&#x29;</a></li><li class="toc-level-2"><a href="#merge-semantics">Merge semantics</a></li><li class="toc-level-2"><a href="#the-always-on-agent-route">The always-on agent route</a></li><li class="toc-level-3"><a href="#run-control">Run control</a></li><li class="toc-level-3"><a href="#agentapi">agentApi</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#what-the-build-layers-on-top-of-the-class">What the build layers on top of the class</a></li><li class="toc-level-2"><a href="#configure-optional---overriding-what-the-class-set">configure&#x28;&#x29; &#x28;optional&#x29; - overriding what the class set</a></li><li class="toc-level-2"><a href="#the-model-slug">The model slug</a></li><li class="toc-level-2"><a href="#environment-overrides">Environment overrides</a></li><li class="toc-level-3"><a href="#detectenvironment">detectEnvironment&#x28;&#x29;</a></li><li class="toc-level-2"><a href="#merge-semantics">Merge semantics</a></li><li class="toc-level-2"><a href="#the-always-on-agent-route">The always-on agent route</a></li><li class="toc-level-3"><a href="#run-control">Run control</a></li><li class="toc-level-3"><a href="#agentapi">agentApi</a></li><li class="toc-level-3"><a href="#access-tokens-for-a-deployed-agent">Access tokens for a deployed agent</a></li></ul></nav>
 				</aside>
 			
 		</div>

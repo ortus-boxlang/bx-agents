@@ -246,7 +246,7 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#ajustes">Ajustes</a></li><li class="toc-level-2"><a href="#tools">Tools</a></li><li class="toc-level-3"><a href="#opciones-de-tools">Opciones de tools</a></li><li class="toc-level-3"><a href="#tools-de-archivos">Tools de archivos</a></li><li class="toc-level-2"><a href="#instrucciones">Instrucciones</a></li><li class="toc-level-2"><a href="#entornos">Entornos</a></li><li class="toc-level-2"><a href="#requisitos">Requisitos</a></li><li class="toc-level-2"><a href="#yaml-o-agentbx">&iquest;YAML o Agent.bx&#x3f;</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#ajustes">Ajustes</a></li><li class="toc-level-2"><a href="#tools">Tools</a></li><li class="toc-level-3"><a href="#opciones-de-tools">Opciones de tools</a></li><li class="toc-level-3"><a href="#tools-de-archivos">Tools de archivos</a></li><li class="toc-level-2"><a href="#notas">Notas</a></li><li class="toc-level-2"><a href="#instrucciones">Instrucciones</a></li><li class="toc-level-2"><a href="#entornos">Entornos</a></li><li class="toc-level-2"><a href="#requisitos">Requisitos</a></li><li class="toc-level-2"><a href="#yaml-o-agentbx">&iquest;YAML o Agent.bx&#x3f;</a></li></ul></details>
 		
 
 		
@@ -308,6 +308,7 @@ environments:
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>checkpointer</code></td><td>mapa</td><td><code>{ type: cache\|file\|jdbc, ...config }</code>. Por defecto <code>{ type: cache }</code> si se omite.</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>gatewaySession</code></td><td>mapa</td><td><code>{ policy, maxQueueDepth }</code>, ambos opcionales. Ver <a href="/es/conventions/agent-bx/index.html">Agent.bx</a> para los valores; son idénticos.</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>agentApi</code></td><td>mapa</td><td><code>{ enabled, tokenEnvVar }</code>, ambos opcionales. Ver <a href="/es/conventions/agent-bx/index.html#la-ruta-de-agente-siempre-activa">La ruta de agente siempre activa</a>.</td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>notes</code></td><td>mapa</td><td>Notas cortas que el agente guarda sobre el usuario y sobre su propio trabajo. <code>notes: {}</code> las activa con los valores por defecto. Ver <a href="#notas">Notas</a>.</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>environments</code></td><td>mapa</td><td>Sobreescrituras por entorno. Ver <a href="#entornos">Entornos</a>.</td></tr>
 </tbody>
 </table></div>
@@ -380,6 +381,37 @@ toolOptions:
 <li>Una entrada puede ser <code>${env.NAME}</code> para tomar una carpeta del entorno.</li>
 <li><code>bxAgents new</code> puede escribir todo esto por ti: ver <a href="/es/guides/new-wizard/index.html">el asistente de new</a>.</li>
 </ul>
+<h2 id="notas"><a href="#notas" id="notas" name="notas" class="anchor"></a>Notas</h2>
+<p>Un agente puede guardar notas cortas: cosas sobre el usuario (&quot;prefiere respuestas cortas&quot;) y cosas sobre su propio trabajo (&quot;el repo usa Gradle&quot;). Están desactivadas hasta que existe el bloque:</p>
+<pre><code class="language-yaml">notes: {}
+</code></pre>
+<pre><code class="language-yaml">notes:
+  provider: sqlite        # integrado. O una clase que implemente INotesProvider
+  user:  { limit: 1400 }  # caracteres de notas del usuario que entran en el prompt
+  agent: { limit: 2200 }  # caracteres de notas del agente
+  tool: true              # da al agente las tools remember y forget (por defecto true)
+  approveForget: true     # una persona aprueba lo que el agente olvida (por defecto true)
+</code></pre>
+<div class="bxsites-table-wrap"><table class="table">
+<thead>
+<tr><th>Clave</th><th>Por defecto</th><th>Notas</th></tr>
+</thead>
+<tbody>
+<tr><td><code>provider</code></td><td><code>sqlite</code></td><td><code>sqlite</code> guarda una fila por nota en la <a href="/es/conventions/web-ui/index.html#el-almacén-sqlite">base de datos de chat compartida</a>. Cualquier otro valor es el nombre de una clase que implementa <code>INotesProvider</code> y se crea con <code>( config, agentName )</code>, para un servicio de notas propio.</td></tr>
+<tr><td><code>user.limit</code></td><td>1400</td><td>Caracteres de notas sobre el usuario. Cada usuario tiene las suyas.</td></tr>
+<tr><td><code>agent.limit</code></td><td>2200</td><td>Caracteres de notas sobre el trabajo del agente. Compartidas por todos los que hablan con él.</td></tr>
+<tr><td><code>tool</code></td><td><code>true</code></td><td><code>remember</code> (guardar o reemplazar una nota) y <code>forget</code> (quitar una). Sin ellas, las notas son de solo lectura para el agente y las gestiona una persona.</td></tr>
+<tr><td><code>approveForget</code></td><td><code>true</code></td><td>Una ejecución que quiere <code>forget</code> se detiene para <a href="/es/cli-reference/index.html#chat">aprobación</a>, como cualquier tool que la necesite. Guardar una nota no necesita ninguna.</td></tr>
+</tbody>
+</table></div>
+<p>Cómo funciona:</p>
+<ul>
+<li>Los dos alcances entran en el prompt del sistema como listas cortas, de la más antigua a la más reciente, dentro de sus límites. Se leen una vez por conversación, así que el prompt no cambia de un turno a otro (la caché de prompts del proveedor sigue funcionando) y una nota guardada ahora aparece desde la siguiente conversación.</li>
+<li>Una nota es una línea de 500 caracteres como máximo. Nada se descarta en silencio: una nota que no cabe en el límite se rechaza, y se le dice al agente cuánto llenas están las notas para que reemplace u olvide una más antigua.</li>
+<li><strong>Quién es un usuario</strong>: en <code>bxAgents chat</code> es el usuario del sistema operativo (<code>--user=NOMBRE</code> lo cambia); en un servidor es el nombre del <a href="/es/conventions/agent-bx/index.html#tokens-de-acceso-para-un-agente-desplegado">token de acceso</a> que usó quien llama, o <code>api</code> cuando la ruta está abierta. El alcance del agente pertenece al <code>name</code> del agente.</li>
+<li>El chat de terminal, el chat web y el servidor comparten un archivo, <code>data/chat.db</code> (ver <a href="/es/conventions/web-ui/index.html#el-almacén-sqlite">el almacén SQLite</a>).</li>
+</ul>
+<p>Gestiónalas tú con <code>/remember</code> y <code>/notes</code> en <a href="/es/cli-reference/index.html#chat"><code>chat</code></a>, con <a href="/es/cli-reference/index.html#notes"><code>bxAgents notes</code></a> desde una shell, o por HTTP con las <a href="/es/conventions/agent-bx/index.html#control-de-ejecución">rutas de control de ejecución</a>.</p>
 <h2 id="instrucciones"><a href="#instrucciones" id="instrucciones" name="instrucciones" class="anchor"></a>Instrucciones</h2>
 <p>Las instrucciones del agente son su system prompt. Ponlas en un <code>instructions.md</code> junto a <code>Agent.yaml</code>, la opción habitual porque el archivo es Markdown sencillo y fácil de editar:</p>
 <pre><code>my-agent/
@@ -440,7 +472,7 @@ environments:
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/conventions/agent-yaml.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/conventions/agent-yaml.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Oct 21, 2026, 4&#x3a;11&#x3a;36 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Agent.yaml&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fconventions%2Fagent-yaml%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/conventions/agent-yaml.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/conventions/agent-yaml.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Oct 21, 2026, 4&#x3a;13&#x3a;11 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Agent.yaml&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fconventions%2Fagent-yaml%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 
@@ -484,7 +516,7 @@ environments:
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="En esta p&aacute;gina"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#ajustes">Ajustes</a></li><li class="toc-level-2"><a href="#tools">Tools</a></li><li class="toc-level-3"><a href="#opciones-de-tools">Opciones de tools</a></li><li class="toc-level-3"><a href="#tools-de-archivos">Tools de archivos</a></li><li class="toc-level-2"><a href="#instrucciones">Instrucciones</a></li><li class="toc-level-2"><a href="#entornos">Entornos</a></li><li class="toc-level-2"><a href="#requisitos">Requisitos</a></li><li class="toc-level-2"><a href="#yaml-o-agentbx">&iquest;YAML o Agent.bx&#x3f;</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="En esta p&aacute;gina"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#ajustes">Ajustes</a></li><li class="toc-level-2"><a href="#tools">Tools</a></li><li class="toc-level-3"><a href="#opciones-de-tools">Opciones de tools</a></li><li class="toc-level-3"><a href="#tools-de-archivos">Tools de archivos</a></li><li class="toc-level-2"><a href="#notas">Notas</a></li><li class="toc-level-2"><a href="#instrucciones">Instrucciones</a></li><li class="toc-level-2"><a href="#entornos">Entornos</a></li><li class="toc-level-2"><a href="#requisitos">Requisitos</a></li><li class="toc-level-2"><a href="#yaml-o-agentbx">&iquest;YAML o Agent.bx&#x3f;</a></li></ul></nav>
 				</aside>
 			
 		</div>

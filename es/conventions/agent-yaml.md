@@ -42,6 +42,7 @@ environments:
 | `checkpointer` | mapa | `{ type: cache\|file\|jdbc, ...config }`. Por defecto `{ type: cache }` si se omite. |
 | `gatewaySession` | mapa | `{ policy, maxQueueDepth }`, ambos opcionales. Ver [Agent.bx](agent-bx.md) para los valores; son idénticos. |
 | `agentApi` | mapa | `{ enabled, tokenEnvVar }`, ambos opcionales. Ver [La ruta de agente siempre activa](agent-bx.md#la-ruta-de-agente-siempre-activa). |
+| `notes` | mapa | Notas cortas que el agente guarda sobre el usuario y sobre su propio trabajo. `notes: {}` las activa con los valores por defecto. Ver [Notas](#notas). |
 | `environments` | mapa | Sobreescrituras por entorno. Ver [Entornos](#entornos). |
 
 Son los mismos ajustes que devuelve el `configure()` de un `Agent.bx`, así que todo el comportamiento documentado para ellos aplica sin cambios.
@@ -115,6 +116,40 @@ toolOptions:
 - `now@bxai`, `httpGet@bxai`, `webSearch@bxai` y el resto de tools registradas de bx-ai siguen funcionando igual, con o sin `toolOptions.bxai`. `*@bxai` incluye las tools de archivos una vez definido `allowedPaths`.
 - Una entrada puede ser `${env.NAME}` para tomar una carpeta del entorno.
 - `bxAgents new` puede escribir todo esto por ti: ver [el asistente de new](../guides/new-wizard.md).
+
+## Notas
+
+Un agente puede guardar notas cortas: cosas sobre el usuario ("prefiere respuestas cortas") y cosas sobre su propio trabajo ("el repo usa Gradle"). Están desactivadas hasta que existe el bloque:
+
+```yaml
+notes: {}
+```
+
+```yaml
+notes:
+  provider: sqlite        # integrado. O una clase que implemente INotesProvider
+  user:  { limit: 1400 }  # caracteres de notas del usuario que entran en el prompt
+  agent: { limit: 2200 }  # caracteres de notas del agente
+  tool: true              # da al agente las tools remember y forget (por defecto true)
+  approveForget: true     # una persona aprueba lo que el agente olvida (por defecto true)
+```
+
+| Clave | Por defecto | Notas |
+|---|---|---|
+| `provider` | `sqlite` | `sqlite` guarda una fila por nota en la [base de datos de chat compartida](web-ui.md#el-almacén-sqlite). Cualquier otro valor es el nombre de una clase que implementa `INotesProvider` y se crea con `( config, agentName )`, para un servicio de notas propio. |
+| `user.limit` | 1400 | Caracteres de notas sobre el usuario. Cada usuario tiene las suyas. |
+| `agent.limit` | 2200 | Caracteres de notas sobre el trabajo del agente. Compartidas por todos los que hablan con él. |
+| `tool` | `true` | `remember` (guardar o reemplazar una nota) y `forget` (quitar una). Sin ellas, las notas son de solo lectura para el agente y las gestiona una persona. |
+| `approveForget` | `true` | Una ejecución que quiere `forget` se detiene para [aprobación](../cli-reference.md#chat), como cualquier tool que la necesite. Guardar una nota no necesita ninguna. |
+
+Cómo funciona:
+
+- Los dos alcances entran en el prompt del sistema como listas cortas, de la más antigua a la más reciente, dentro de sus límites. Se leen una vez por conversación, así que el prompt no cambia de un turno a otro (la caché de prompts del proveedor sigue funcionando) y una nota guardada ahora aparece desde la siguiente conversación.
+- Una nota es una línea de 500 caracteres como máximo. Nada se descarta en silencio: una nota que no cabe en el límite se rechaza, y se le dice al agente cuánto llenas están las notas para que reemplace u olvide una más antigua.
+- **Quién es un usuario**: en `bxAgents chat` es el usuario del sistema operativo (`--user=NOMBRE` lo cambia); en un servidor es el nombre del [token de acceso](agent-bx.md#tokens-de-acceso-para-un-agente-desplegado) que usó quien llama, o `api` cuando la ruta está abierta. El alcance del agente pertenece al `name` del agente.
+- El chat de terminal, el chat web y el servidor comparten un archivo, `data/chat.db` (ver [el almacén SQLite](web-ui.md#el-almacén-sqlite)).
+
+Gestiónalas tú con `/remember` y `/notes` en [`chat`](../cli-reference.md#chat), con [`bxAgents notes`](../cli-reference.md#notes) desde una shell, o por HTTP con las [rutas de control de ejecución](agent-bx.md#control-de-ejecución).
 
 ## Instrucciones
 

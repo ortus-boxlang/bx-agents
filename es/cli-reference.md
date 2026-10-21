@@ -86,6 +86,12 @@ Envía a un destino de despliegue real.
 ::: card title="hash-password" icon="phosphor-duotone:key" href="#hash-password"
 Genera el hash de una contraseña en texto plano para una entrada de usuarios de webui.
 :::
+::: card title="token" icon="phosphor-duotone:identification-card" href="#token"
+Emite, lista y revoca tokens de acceso para un agente desplegado.
+:::
+::: card title="notes" icon="phosphor-duotone:note-pencil" href="#notes"
+Lee y gestiona las notas que guarda un agente.
+:::
 ::: card title="inspect" icon="phosphor-duotone:magnifying-glass" href="#inspect"
 Imprime de forma legible un manifest.json existente.
 :::
@@ -192,6 +198,8 @@ bxAgents chat                                  # rápido, en el mismo proceso
 bxAgents chat --no-tui                         # REPL simple línea por línea
 bxAgents chat --server [--port=<puerto>]       # aplicación completa, servidor propio desechable
 bxAgents chat --connect=http://127.0.0.1:8080  # aplicación completa, servidor que ya tienes en marcha
+bxAgents chat --connect=https://agent.example.com --token=<token>   # un servidor que pide uno
+bxAgents chat --user=alice                     # de quién son las notas que lee el agente (por defecto: tu usuario del SO)
 ```
 
 En la pantalla:
@@ -202,10 +210,25 @@ En la pantalla:
 | Alt+Enter, Ctrl+J, o `\` y luego Enter | Nueva línea en el mensaje |
 | Arriba / Abajo | Mensajes anteriores (desde la primera o última línea del cuadro) |
 | Esc | Detiene al agente. Se detiene en su siguiente paso, no a mitad de palabra |
-| Enter mientras el agente trabaja | Lo dirige: tu mensaje se añade a la ejecución (solo en el mismo proceso) |
+| Enter mientras el agente trabaja | Lo dirige: tu mensaje se añade a la ejecución |
 | Ctrl+C | Limpia el cuadro; con el cuadro vacío, sale. Ctrl+D también sale |
 
-Escribe `/` para ver los comandos: `/help`, `/new` (una conversación nueva), `/tools`, `/copy` (la última respuesta al portapapeles, con la secuencia OSC 52 que honran la mayoría de terminales), `/save [archivo]` (la conversación en Markdown), `/record [archivo]` y `/record stop` (ver abajo) y `/exit`.
+Escribe `/` para ver los comandos: `/help`, `/new` (una conversación nueva), `/tools`, `/copy` (la última respuesta al portapapeles, con la secuencia OSC 52 que honran la mayoría de terminales), `/save [archivo]` (la conversación en Markdown), `/remember <texto>` y `/notes` (ver abajo), `/record [archivo]` y `/record stop` (ver abajo) y `/exit`.
+
+#### Notas en el chat
+
+Cuando el agente guarda [notas](conventions/agent-yaml.md#notas), el chat puede mostrarlas y cambiarlas:
+
+| Comando | Hace |
+|---|---|
+| `/remember <texto>` | Guarda una nota sobre ti |
+| `/notes` | Lista tus notas y las del agente, con cuánto llena cada una |
+| `/notes add [agent] <texto>` | Añade una nota (sobre ti, o con `agent` sobre el trabajo del agente) |
+| `/notes edit <id> <texto>` | Cambia una nota; el id es el código corto de la lista |
+| `/notes remove <id>` | Quita una nota |
+| `/notes stats` | Caracteres usados frente al límite, y los tokens aproximados que añaden a cada conversación |
+
+Funciona en los tres modos. Con `--connect` los comandos usan las rutas de notas del servidor, así que ves las notas de ese servidor, y quitar una nota del agente requiere un token `admin`. Un agente sin bloque `notes` explica cómo activarlas.
 
 #### Grabar un chat
 
@@ -220,7 +243,7 @@ agg demo.cast demo.gif               # conviértelo en GIF (agg es otra herramie
 El archivo guarda la salida de la pantalla, así que muestra lo que escribiste en el cuadro de mensaje y todo lo que imprimió el agente, incluidos los argumentos de las herramientas. Las pulsaciones de teclas en sí no se graban. Una grabación iniciada con `/record` empieza en ese momento, así que no incluye las líneas anteriores. Necesita la pantalla de terminal: `--no-tui` y las ejecuciones no interactivas no graban nada.
 
 
-La respuesta se muestra mientras llega y se imprime como Markdown formateado (títulos, listas, bloques de código) cuando está completa. En el modo por defecto cada llamada a una tool se muestra con sus argumentos y lo que tardó, y el razonamiento del modelo se muestra mientras trabaja pero no se conserva. Una ejecución que se detiene por [aprobación humana](conventions/gateways/index.md) te pregunta ahí mismo: aprobar una vez, aprobar para la conversación o rechazar. Por HTTP el stream solo lleva el texto, así que no hay líneas de tools, ni razonamiento, ni dirección, y una aprobación se responde en el servidor.
+La respuesta se muestra mientras llega y se imprime como Markdown formateado (títulos, listas, bloques de código) cuando está completa. En el modo por defecto cada llamada a una tool se muestra con sus argumentos y lo que tardó, y el razonamiento del modelo se muestra mientras trabaja pero no se conserva. Una ejecución que se detiene por [aprobación humana](conventions/gateways/index.md) te pregunta ahí mismo: aprobar una vez, aprobar para la conversación o rechazar. Por HTTP la pantalla es la misma: líneas de tools, razonamiento, Esc, dirección y aprobaciones funcionan, a través de las [rutas de control de ejecución](conventions/agent-bx.md#control-de-ejecución) del servidor. Un servidor construido con un bxAgents antiguo no tiene control de ejecución; entonces obtienes solo la respuesta, con un aviso.
 
 Tres modos, un solo chat:
 
@@ -235,10 +258,10 @@ Tres modos, un solo chat:
 - **`--server`**: arranca un miniserver real (necesita `boxlang-miniserver` en `PATH`, igual que `serve`) en un puerto efímero de loopback y conduce el REPL sobre HTTP contra la [ruta de agente `/__bxagents` siempre activa](conventions/agent-bx.md#la-ruta-de-agente-siempre-activa) del proyecto, y lo apaga al salir. `--port` fija el puerto en lugar de tomar uno libre.
 - **`--connect`**: conduce el mismo REPL contra un servidor en marcha, sin arrancar ni detener nada. La URL es la raíz del servidor (`http://host:puerto`), no la ruta del agente - `chat` la añade por su cuenta.
 - `--server` y `--connect` son mutuamente excluyentes: uno dice "arráncame un servidor", el otro "no lo hagas". Pasar ambos falla de inmediato en lugar de honrar uno en silencio.
-- Ambos modos HTTP hacen **streaming** de la respuesta: la contestación aparece token a token a medida que el agente la produce, por la subruta `/stream` (SSE) de la ruta, en vez de llegar de golpe al terminar el turno. Si el stream no se puede abrir (un servidor antiguo sin subruta `/stream`, o un proxy que no deja pasar `text/event-stream`) recurre a `/invoke` y obtienes la respuesta completa al final en lugar de un error.
+- Ambos modos HTTP hacen **streaming** de la respuesta: la contestación aparece token a token a medida que el agente la produce, por la subruta `/events` (SSE) de la ruta, que también lleva las llamadas a tools y la pausa para aprobación. Esc llama a `/cancel`, un mensaje escrito mientras el agente trabaja llama a `/steer`, y una aprobación se responde con `/resume`. El REPL simple (`--no-tui`) usa `/stream`, y recurre a `/invoke` y a la respuesta completa al final si el stream no se puede abrir (un servidor antiguo sin subruta `/stream`, o un proxy que no deja pasar `text/event-stream`).
 - Ambos modos HTTP arrastran el `threadId` del servidor entre turnos, así que una sesión es una sola conversación y no una serie de primeros mensajes inconexos.
-- Un turno que se detiene a esperar una decisión [humana en el bucle](conventions/gateways/index.md) lo indica en lugar de aparentar que responde con silencio, y señala el endpoint `/gateways/interactions/` donde se envía la decisión.
-- Si la ruta está protegida tras [`agentApi.tokenEnvVar`](conventions/agent-bx.md#agentapi), estos modos reciben un `401` claro en lugar de un timeout confuso - no envían ningún token.
+- En la pantalla, un turno que se detiene a esperar una decisión [humana en el bucle](conventions/gateways/index.md) te pregunta ahí mismo. En el REPL simple lo indica en lugar de aparentar que responde con silencio, y señala el endpoint `/gateways/interactions/` donde se envía la decisión.
+- Si la ruta está protegida tras [`agentApi.tokenEnvVar`](conventions/agent-bx.md#agentapi) o [tokens emitidos](conventions/agent-bx.md#tokens-de-acceso-para-un-agente-desplegado), pasa `--token=<token>` (o define `BXAGENTS_TOKEN`). Sin uno válido estos modos reciben un `401` claro en lugar de un timeout confuso.
 - Escribe `/exit` para salir (`exit` y `quit` funcionan en el REPL simple).
 - Necesita una terminal interactiva real. Sin ella, vuelve al REPL simple, que también necesita una (`MiniConsole` usa `stty` para el modo raw). Usa [`invoke`](#invoke) para scripts.
 
@@ -294,6 +317,40 @@ bxAgents hash-password --password="<tu-contraseña>"
 - `--password` es **requerido**.
 - Imprime el hash a stdout - `pbkdf2$<iterations>$<salt>$<derivedKey>`, PBKDF2-HMAC-SHA256, con salt por llamada. Seguro de commitear: es unidireccional, y hacer el hash de la misma contraseña dos veces produce dos hashes distintos (ambos válidos).
 - Se mantiene deliberadamente idéntico al hasher que la propia interfaz web generada usa para verificar un inicio de sesión - un hash producido aquí siempre se verifica allí.
+
+### `token`
+
+Los tokens de acceso de un agente desplegado, guardados en la [base de datos de chat compartida](conventions/web-ui.md#el-almacén-sqlite) del proyecto (`data/chat.db`, o el archivo que indique `BXAGENTS_DB`). El agente los acepta cuando su [`agentApi`](conventions/agent-bx.md#tokens-de-acceso-para-un-agente-desplegado) tiene `tokens: true`.
+
+```bash
+bxAgents token create --name=laptop [--scope=chat|admin] [--expires=90d]
+bxAgents token list [--json]
+bxAgents token revoke --name=laptop
+```
+
+- `create` imprime el token **una sola vez**, con cómo usarlo; solo se guarda un hash. `--name` es obligatorio (letras, dígitos, `.`, `-`, `_`). `--scope` es `chat` (hablar con el agente, por defecto) o `admin`. `--expires` es una duración (`90d`, `12h`, `30m`, `2w`) o una fecha; sin él, el token no caduca.
+- `list` muestra el nombre, alcance, estado (`active`, `expired` o `revoked`), cuándo se creó, se usó por última vez y caduca de cada token. Nunca el token.
+- `revoke` detiene un token al instante. El nombre sigue ocupado, así que no se reutiliza por accidente.
+- Ejecútalo donde está la base de datos: en el servidor, o en el proyecto antes de empaquetarlo. En un servidor desplegado, apunta `BXAGENTS_DB` al archivo que usa la app.
+
+### `notes`
+
+Las notas que guarda un agente, leídas de la [base de datos de chat compartida](conventions/web-ui.md#el-almacén-sqlite) del proyecto (`data/chat.db`, o el archivo que indique `BXAGENTS_DB`). Los límites vienen del bloque [`notes`](conventions/agent-yaml.md#notas) de `Agent.yaml`.
+
+```bash
+bxAgents notes list [--scope=user|agent] [--user=NOMBRE] [--json]
+bxAgents notes add --text="Prefiere respuestas cortas" [--scope=user|agent] [--user=NOMBRE]
+bxAgents notes edit --id=<id> --text="Texto nuevo" [--scope=user|agent]
+bxAgents notes remove --id=<id> [--scope=user|agent]
+bxAgents notes stats [--user=NOMBRE] [--json]
+bxAgents notes export [--file=notes.json]
+bxAgents notes import --file=notes.json
+```
+
+- `--scope` es `user` (por defecto) o `agent`; `list` sin él muestra ambos. `--user` indica de quién son las notas de usuario: por defecto, el usuario del sistema operativo. Las notas del agente pertenecen al `name` del agente.
+- `stats` muestra cuánto llena cada alcance y el tamaño aproximado que añaden al prompt (unos cuatro caracteres por token; una estimación, no un recuento).
+- `export` escribe las notas como JSON, en `--file` o en pantalla. `import` añade las notas de un archivo así; una nota que ya existe se omite y una que no cabe en el límite se informa.
+- Ejecútalo donde está la base de datos: en el proyecto, o en un servidor con `BXAGENTS_DB` definido.
 
 ### `inspect`
 

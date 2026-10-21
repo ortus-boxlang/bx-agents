@@ -246,7 +246,7 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#settings">Settings</a></li><li class="toc-level-2"><a href="#tools">Tools</a></li><li class="toc-level-3"><a href="#tool-options">Tool options</a></li><li class="toc-level-3"><a href="#file-tools">File tools</a></li><li class="toc-level-2"><a href="#instructions">Instructions</a></li><li class="toc-level-2"><a href="#environments">Environments</a></li><li class="toc-level-2"><a href="#requirements">Requirements</a></li><li class="toc-level-2"><a href="#yaml-or-agentbx">YAML or Agent.bx&#x3f;</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#settings">Settings</a></li><li class="toc-level-2"><a href="#tools">Tools</a></li><li class="toc-level-3"><a href="#tool-options">Tool options</a></li><li class="toc-level-3"><a href="#file-tools">File tools</a></li><li class="toc-level-2"><a href="#notes">Notes</a></li><li class="toc-level-2"><a href="#instructions">Instructions</a></li><li class="toc-level-2"><a href="#environments">Environments</a></li><li class="toc-level-2"><a href="#requirements">Requirements</a></li><li class="toc-level-2"><a href="#yaml-or-agentbx">YAML or Agent.bx&#x3f;</a></li></ul></details>
 		
 
 		
@@ -308,6 +308,7 @@ environments:
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>checkpointer</code></td><td>mapping</td><td><code>{ type: cache\|file\|jdbc, ...config }</code>. Defaults to <code>{ type: cache }</code> if omitted.</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>gatewaySession</code></td><td>mapping</td><td><code>{ policy, maxQueueDepth }</code>, both optional. See <a href="/next/conventions/agent-bx/index.html">Agent.bx</a> for the values; they are identical.</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>agentApi</code></td><td>mapping</td><td><code>{ enabled, tokenEnvVar }</code>, both optional. See <a href="/next/conventions/agent-bx/index.html#the-always-on-agent-route">The always-on agent route</a>.</td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>notes</code></td><td>mapping</td><td>Short notes the agent keeps about the user and its own work. <code>notes: {}</code> turns them on with the defaults. See <a href="#notes">Notes</a>.</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>environments</code></td><td>mapping</td><td>Per-environment overrides. See <a href="#environments">Environments</a>.</td></tr>
 </tbody>
 </table></div>
@@ -380,6 +381,37 @@ toolOptions:
 <li>An entry may be <code>${env.NAME}</code> to take a folder from the environment.</li>
 <li><code>bxAgents new</code> can write all of this for you: see <a href="/next/guides/new-wizard/index.html">the new wizard</a>.</li>
 </ul>
+<h2 id="notes"><a href="#notes" id="notes" name="notes" class="anchor"></a>Notes</h2>
+<p>An agent can keep short notes: things about the user (&quot;prefers short answers&quot;) and things about its own work (&quot;the repo uses Gradle&quot;). They are off until the block is there:</p>
+<pre><code class="language-yaml">notes: {}
+</code></pre>
+<pre><code class="language-yaml">notes:
+  provider: sqlite        # built in. Or a class implementing INotesProvider
+  user:  { limit: 1400 }  # characters of user notes that go into the prompt
+  agent: { limit: 2200 }  # characters of agent notes
+  tool: true              # give the agent the remember and forget tools (default true)
+  approveForget: true     # a person approves what the agent forgets (default true)
+</code></pre>
+<div class="bxsites-table-wrap"><table class="table">
+<thead>
+<tr><th>Key</th><th>Default</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>provider</code></td><td><code>sqlite</code></td><td><code>sqlite</code> keeps one row per note in the <a href="/next/conventions/web-ui/index.html#the-sqlite-store">shared chat database</a>. Any other value is the name of a class that implements <code>INotesProvider</code> and is created with <code>( config, agentName )</code>, for a notes service of your own.</td></tr>
+<tr><td><code>user.limit</code></td><td>1400</td><td>Characters of notes about the user. Each user has their own.</td></tr>
+<tr><td><code>agent.limit</code></td><td>2200</td><td>Characters of notes about the agent's work. Shared by everyone who talks to it.</td></tr>
+<tr><td><code>tool</code></td><td><code>true</code></td><td><code>remember</code> (save or replace a note) and <code>forget</code> (remove one). Without them the notes are read-only for the agent and a person manages them.</td></tr>
+<tr><td><code>approveForget</code></td><td><code>true</code></td><td>A run that wants to <code>forget</code> stops for <a href="/next/cli-reference/index.html#chat">approval</a>, like any tool that needs it. Saving a note needs none.</td></tr>
+</tbody>
+</table></div>
+<p>How it works:</p>
+<ul>
+<li>Both scopes go into the system prompt as short lists, oldest first, within their limits. They are read once per conversation, so the prompt stays the same turn to turn (a provider's prompt cache keeps working) and a note saved now shows from the next conversation.</li>
+<li>A note is one line of at most 500 characters. Nothing is dropped silently: a note that does not fit the limit is refused, and the agent is told how full the notes are so it can replace or forget an older one.</li>
+<li><strong>Who a user is</strong>: in <code>bxAgents chat</code> it is the operating system user (<code>--user=NAME</code> changes it); on a server it is the name of the <a href="/next/conventions/agent-bx/index.html#access-tokens-for-a-deployed-agent">access token</a> the caller used, or <code>api</code> when the route is open. The agent scope belongs to the agent's <code>name</code>.</li>
+<li>The terminal chat, the web chat and the server share one file, <code>data/chat.db</code> (see <a href="/next/conventions/web-ui/index.html#the-sqlite-store">the SQLite store</a>).</li>
+</ul>
+<p>Manage them yourself with <code>/remember</code> and <code>/notes</code> in <a href="/next/cli-reference/index.html#chat"><code>chat</code></a>, with <a href="/next/cli-reference/index.html#notes"><code>bxAgents notes</code></a> from a shell, or over HTTP through the <a href="/next/conventions/agent-bx/index.html#run-control">run-control routes</a>.</p>
 <h2 id="instructions"><a href="#instructions" id="instructions" name="instructions" class="anchor"></a>Instructions</h2>
 <p>The agent's instructions are its system prompt. Put them in an <code>instructions.md</code> beside <code>Agent.yaml</code>, the usual choice because the file is plain Markdown and easy to edit:</p>
 <pre><code>my-agent/
@@ -484,7 +516,7 @@ environments:
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#settings">Settings</a></li><li class="toc-level-2"><a href="#tools">Tools</a></li><li class="toc-level-3"><a href="#tool-options">Tool options</a></li><li class="toc-level-3"><a href="#file-tools">File tools</a></li><li class="toc-level-2"><a href="#instructions">Instructions</a></li><li class="toc-level-2"><a href="#environments">Environments</a></li><li class="toc-level-2"><a href="#requirements">Requirements</a></li><li class="toc-level-2"><a href="#yaml-or-agentbx">YAML or Agent.bx&#x3f;</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#settings">Settings</a></li><li class="toc-level-2"><a href="#tools">Tools</a></li><li class="toc-level-3"><a href="#tool-options">Tool options</a></li><li class="toc-level-3"><a href="#file-tools">File tools</a></li><li class="toc-level-2"><a href="#notes">Notes</a></li><li class="toc-level-2"><a href="#instructions">Instructions</a></li><li class="toc-level-2"><a href="#environments">Environments</a></li><li class="toc-level-2"><a href="#requirements">Requirements</a></li><li class="toc-level-2"><a href="#yaml-or-agentbx">YAML or Agent.bx&#x3f;</a></li></ul></nav>
 				</aside>
 			
 		</div>
