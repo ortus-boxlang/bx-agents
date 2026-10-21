@@ -25,6 +25,9 @@ description: How to greet people warmly.
 Always greet the user warmly and use their name if known.
 ```
 
+!!! tip
+    `bxAgents add skill <name>` crea `skills/<name>/SKILL.md` con el frontmatter y un cuerpo para rellenar. Consulta [`add`](../cli-reference.md#add-skill).
+
 ## Nombramiento
 
 El nombre de la skill es su `name:` de frontmatter si está presente; de lo contrario recae en el nombre de la carpeta (`greeting/` sin nombre de frontmatter de todos modos se descubriría como `greeting`, pero un `name:` explícito siempre gana incluso si difiere de la carpeta). Dos skills que resuelven al mismo nombre fallan la validación con un error de nombre duplicado.

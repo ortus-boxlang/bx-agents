@@ -63,7 +63,7 @@ Usa siempre la forma `--flag=valor`. La forma con espacio no está soportada.
 Genera el andamiaje de un nuevo proyecto de agente.
 :::
 ::: card title="add" icon="phosphor-duotone:plus-circle" href="#add"
-Añade una herramienta, un interceptor, una programación, un servidor MCP, un modelo con nombre, un gateway o un subagente a un proyecto existente.
+Añade una herramienta, un interceptor, una programación, un servidor MCP, un modelo con nombre, un gateway, un subagente o una skill a un proyecto existente.
 :::
 ::: card title="build" icon="phosphor-duotone:hammer" href="#build"
 Ejecuta el pipeline de build completo.
@@ -147,7 +147,7 @@ bxAgents new my-agent --forgebox=some-package-slug
 
 ### `add`
 
-Añade una cosa a un proyecto que ya existe, haciendo las mismas preguntas que `new`. Hoy eso es una `tool`, un `interceptor`, una `schedule`, un servidor `mcp`, un `model`, un `gateway` o un `subagent`.
+Añade una cosa a un proyecto que ya existe, haciendo las mismas preguntas que `new`. Hoy eso es una `tool`, un `interceptor`, una `schedule`, un servidor `mcp`, un `model`, un `gateway`, un `subagent` o una `skill`.
 
 ```bash
 bxAgents add                        # elige qué añadir
@@ -328,6 +328,22 @@ bxAgents add subagent checker --model=claude --parent=writer --with=search --sea
 | `--description`, `--with`, `--search`, `--files`, `--files-dir`, `--memory`, `--mcp`, `--guard` | Los mismos que en [`new`](#new). |
 
 Escribe `subagents/<name>/Agent.yaml` (con el modelo simulado de `environments.test`, para que `bxAgents test` no necesite clave) e `instructions.md`, y añade un marcador vacío en `.env` por cada clave que necesiten las opciones. El nombre se inserta en el `subAgents` del padre sin reescribir el archivo, así que los comentarios y el orden se conservan. Si el padre es una clase, o su lista está escrita de una forma que no se puede ampliar insertando, no se cambia nada en él y se imprime la línea que hay que añadir. Los paquetes que necesite una opción (`bx-playwright` para navegar) se nombran para que los añadas a `box.json`.
+
+#### `add skill`
+
+Añade una skill propia: `skills/<name>/SKILL.md`, con la forma de las Claude Agent Skills. Va al control de código con el proyecto y a cada build.
+
+```bash
+bxAgents add skill release-notes --description="Use this skill when writing release notes"
+bxAgents add skill                              # pregunta
+```
+
+| Flag | Significado |
+|---|---|
+| `--name=<name>` | La carpeta, o el primer posicional. Minúsculas, dígitos y guiones. Se rechaza una skill que ya exista. |
+| `--description=<text>` | Una frase que empiece por "Use this skill when". El modelo la lee para decidir si carga la skill, así que es lo que importa. Sin ella se escribe un TODO para que lo reemplaces. |
+
+Las skills no se conectan a un agente: todas las skills del build están disponibles para el modelo. Las skills de skills.boxlang.io no se añaden aquí; se instalan, no se escriben.
 
 ### `build`
 

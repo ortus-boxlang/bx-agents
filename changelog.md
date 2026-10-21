@@ -215,6 +215,7 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   `new` wizard stages for its model, tools, search, files, memory, MCP servers and guard (or the same flags),
   nests under another subagent with `--parent`, and edits the parent by inserting only, so its comments and
   order stay; a class parent is left alone and the line to add is shown.
+- `add skill` writes a custom skill of your own, `skills/<name>/SKILL.md`, with the frontmatter and a body to fill in.
 
 #### Documentation
 
