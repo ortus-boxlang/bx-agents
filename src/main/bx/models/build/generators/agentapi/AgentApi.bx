@@ -7,9 +7,10 @@
  * top: a stream that also reports tool calls and pauses for approval (events), stopping a run
  * (cancel), steering a run (steer), and the approval round trip (pending, resume), plus tools.
  *
- * Every action is behind the same token gate as the toAi routes: the x-bxagents-token header is
- * compared with the environment variable named by agentApi.tokenEnvVar, and an unset or blank
- * variable refuses everyone.
+ * Every action is behind the same token gate as the toAi routes. The x-bxagents-token header is
+ * compared with the environment variable named by agentApi.tokenEnvVar (an unset or blank variable
+ * matches nothing), and, when agentApi.tokens is on, with the tokens made by `bxAgents token create`.
+ * A route with neither is open. The name of the token that was used is who is calling.
  */
 class {
 
@@ -18,11 +19,11 @@ class {
 	// ----------------------------------------------------------------------------------
 
 	/**
-	 * Every action starts with this: it answers 401 and returns true when the token is wrong, so the
+	 * Every action starts with this: it answers 401 and returns true when the caller is not allowed, so the
 	 * action stops. (A preHandler cannot do it: ColdBox runs the action anyway after event.noExecution().)
 	 */
 	private boolean function refused( required any event ) {
-		if ( authorized() ) {
+		if ( !whoIsCalling( arguments.event ).isEmpty() ) {
 			return false
 		}
 		arguments.event.renderData( type : "json", statusCode : 401, data : { "success" : false, "error" : "Missing or invalid x-bxagents-token header" } )
@@ -30,33 +31,68 @@ class {
 	}
 
 	/**
-	 * The environment variable that holds the shared token, "" when the route is not gated.
+	 * The environment variable that holds the shared token, "" when there is none.
 	 */
 	private string function tokenVariable() {
 		return "__TOKEN_ENV_VAR__"
 	}
 
-	private boolean function authorized() {
-		var variableName = tokenVariable()
-		if ( !len( variableName ) ) {
-			return true
-		}
-		var expected = getSystemSetting( variableName, "" )
-		if ( !len( expected ) ) {
-			return false
-		}
-		var given = getHTTPRequestData( false ).headers[ "x-bxagents-token" ] ?: ""
-		return createObject( "java", "java.security.MessageDigest" ).isEqual(
-			given.getBytes( "UTF-8" ),
-			expected.getBytes( "UTF-8" )
-		)
+	/**
+	 * Whether tokens made by `bxAgents token create` are accepted.
+	 */
+	private boolean function tokensEnabled() {
+		return "__TOKENS_ENABLED__" == "true"
 	}
 
 	/**
-	 * The identity a run is stored under. One shared identity until callers have their own.
+	 * Who is calling, once per request: { name, scope }, or an empty struct for a caller who may not.
+	 *
+	 *   no tokenEnvVar and no tokens   open: everyone is "api"
+	 *   the tokenEnvVar secret         "admin"
+	 *   an issued token                the name and scope it was made with
 	 */
-	private string function callerId() {
-		return "api"
+	private struct function whoIsCalling( required any event ) {
+		var known = arguments.event.getPrivateValue( "bxagentsCaller", {} )
+		if ( !known.isEmpty() ) {
+			return known
+		}
+		var found = lookUpCaller()
+		if ( !found.isEmpty() ) {
+			arguments.event.setPrivateValue( "bxagentsCaller", found )
+		}
+		return found
+	}
+
+	private struct function lookUpCaller() {
+		var variableName = tokenVariable()
+		if ( !len( variableName ) && !tokensEnabled() ) {
+			return { name : "api", scope : "admin" }
+		}
+		var given = getHTTPRequestData( false ).headers[ "x-bxagents-token" ] ?: ""
+		if ( !len( given ) ) {
+			return {}
+		}
+		if ( len( variableName ) ) {
+			var expected = getSystemSetting( variableName, "" )
+			if ( len( expected ) && createObject( "java", "java.security.MessageDigest" ).isEqual( given.getBytes( "UTF-8" ), expected.getBytes( "UTF-8" ) ) ) {
+				return { name : "admin", scope : "admin" }
+			}
+		}
+		if ( tokensEnabled() ) {
+			// the app's default datasource is the shared chat database
+			var who = new "models.store.TokenService@bxagents"( new "models.store.ChatStore@bxagents"( "" ) ).authenticate( given )
+			if ( !who.isEmpty() ) {
+				return who
+			}
+		}
+		return {}
+	}
+
+	/**
+	 * The identity a run is stored under: the name of the token that was used.
+	 */
+	private string function callerId( required any event ) {
+		return whoIsCalling( arguments.event ).name
 	}
 
 	private function agent() {
@@ -85,7 +121,7 @@ class {
 		var threadId = len( body.threadId ?: "" ) ? body.threadId : createUUID()
 		var supplied = body.options ?: {}
 		var options = isStruct( supplied ) ? duplicate( supplied ) : {}
-		options[ "userId" ] = callerId()
+		options[ "userId" ] = callerId( event )
 		options[ "threadId" ] = threadId
 		if ( len( body.conversationId ?: "" ) ) {
 			options[ "conversationId" ] = body.conversationId
@@ -158,7 +194,7 @@ class {
 		var state = checkpointer.loadState( threadId )
 		// A run belongs to whoever started it. Answered as though nothing is pending, so the route
 		// cannot be used to find out whether a threadId exists.
-		if ( !state.isEmpty() && ownerOf( state ) != callerId() ) {
+		if ( !state.isEmpty() && ownerOf( state ) != callerId( event ) ) {
 			event.renderData( type : "json", data : { "success" : true, "pending" : false } )
 			return
 		}
@@ -190,12 +226,12 @@ class {
 		var checkpointer = thisAgent.getCheckpointer()
 		if ( !isNull( checkpointer ) ) {
 			var state = checkpointer.loadState( threadId )
-			if ( !state.isEmpty() && ownerOf( state ) != callerId() ) {
+			if ( !state.isEmpty() && ownerOf( state ) != callerId( event ) ) {
 				event.renderData( type : "json", statusCode : 403, data : { "success" : false, "error" : "This run belongs to another caller" } )
 				return
 			}
 		}
-		var decidedBy = callerId()
+		var decidedBy = callerId( event )
 		return streamRun( threadId, ( onChunk ) => {
 			thisAgent.resumeStream( onChunk, decision, threadId, body.editedData ?: {}, decidedBy, body.reason ?: "" )
 		} )

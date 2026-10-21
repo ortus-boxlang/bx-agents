@@ -38,7 +38,7 @@ class {
 	 * @options { projectRoot (required, absolute path) }
 	 */
 	/**
-	 * @options { projectRoot (required, absolute path), server (optional boolean - boot a throwaway miniserver and chat over real HTTP), connect (optional - the base URL of an already-running server, e.g. "http://127.0.0.1:8080") }
+	 * @options { projectRoot (required, absolute path), server (optional boolean - boot a throwaway miniserver and chat over real HTTP), connect (optional - the base URL of an already-running server, e.g. "http://127.0.0.1:8080"), token (optional - the access token for a server that wants one; BXAGENTS_TOKEN in the environment does the same) }
 	 */
 	struct function run( struct options = {} ) {
 		var projectRoot = trim( arguments.options.projectRoot ?: "" )
@@ -228,6 +228,12 @@ class {
 	private struct function chatOverHttp( required string baseUrl, string banner = "", struct options = {} ) {
 		var client = arguments.options._client ?: new "models.cli.support.AgentClient@bxagents"()
 		var target = arguments.baseUrl.reReplace( "[\/]+$", "" )
+
+		// a server that wants a token: --token=<token>, or BXAGENTS_TOKEN in the environment
+		var token = trim( arguments.options.token ?: getSystemSetting( "BXAGENTS_TOKEN", "" ) )
+		if ( len( token ) ) {
+			client.withToken( token )
+		}
 
 		if ( wantsScreen( arguments.options ) ) {
 			if ( len( trim( arguments.banner ) ) ) {

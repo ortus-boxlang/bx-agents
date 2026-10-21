@@ -191,6 +191,7 @@ class {
 		}
 
 		var tokenEnvVar = trim( arguments.agentApi.tokenEnvVar ?: "" )
+		var issuedTokens = arguments.agentApi.tokens ?: false
 
 		var lines = [
 			"// The reserved agent route - always present, whatever gateways/ declares,",
@@ -198,23 +199,37 @@ class {
 			"// an address. A project's own public API belongs in gateways/ instead."
 		]
 
-		if ( !len( tokenEnvVar ) ) {
+		if ( !len( tokenEnvVar ) && !issuedTokens ) {
 			lines.append( 'route( "#static.RESERVED_AGENT_PATH#" ).toAi( "GeneratedAgent" )' )
 			lines.append( "" )
 			lines.append( renderRunControlRoutes(), true )
 			return lines
 		}
 
-		lines.append( "// Gated on #tokenEnvVar#: an unset or blank value matches nothing," )
-		lines.append( "// so this fails closed rather than letting every caller through." )
+		if ( len( tokenEnvVar ) ) {
+			lines.append( "// Gated on #tokenEnvVar#: an unset or blank value matches nothing," )
+			lines.append( "// so this fails closed rather than letting every caller through." )
+		}
+		if ( issuedTokens ) {
+			lines.append( "// Tokens made by `bxAgents token create` are accepted too (see models/store/TokenService)." )
+		}
 		lines.append( 'route( "#static.RESERVED_AGENT_PATH#" )' )
 		lines.append( '	.withCondition( ( requestString ) => {' )
-		lines.append( '		var expected = getSystemSetting( "#bxLiteral( tokenEnvVar )#", "" )' )
-		lines.append( '		if ( !len( expected ) ) {' )
+		lines.append( '		var given = getHTTPRequestData( false ).headers[ "x-bxagents-token" ] ?: ""' )
+		lines.append( '		if ( !len( given ) ) {' )
 		lines.append( '			return false' )
 		lines.append( '		}' )
-		lines.append( '		var headers = getHTTPRequestData( false ).headers' )
-		lines.append( '		return ( headers[ "x-bxagents-token" ] ?: "" ) == expected' )
+		if ( len( tokenEnvVar ) ) {
+			lines.append( '		var expected = getSystemSetting( "#bxLiteral( tokenEnvVar )#", "" )' )
+			lines.append( '		if ( len( expected ) && given == expected ) {' )
+			lines.append( '			return true' )
+			lines.append( '		}' )
+		}
+		if ( issuedTokens ) {
+			lines.append( '		return !new "models.store.TokenService@bxagents"( new "models.store.ChatStore@bxagents"( "" ) ).authenticate( given ).isEmpty()' )
+		} else {
+			lines.append( '		return false' )
+		}
 		lines.append( '	} )' )
 		lines.append( '	.toAi( "GeneratedAgent" )' )
 		lines.append( "" )

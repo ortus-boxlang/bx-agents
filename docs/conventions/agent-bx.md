@@ -94,7 +94,7 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 | `memory` | string or struct | The agent's conversation memory. A bare string is shorthand for the type (`"cache"`); a struct is `{ type, ...config }` and is passed through to `aiMemory()` verbatim - e.g. `{ type: "cache", maxMessages: 50 }`, or with `summaryProvider`/`summaryModel`/`summaryThreshold` to make the web UI's `/compact` functional. Applies per node, so a subagent can declare its own. |
 | `checkpointer` | struct | `{ type: "cache"\|"file"\|"jdbc", ...config }`. Defaults to `{ type: "cache" }` if omitted. Always applied - without one, human-in-the-loop approval flows through any gateway other than `cli` fail outright. |
 | `gatewaySession` | struct | `{ policy, maxQueueDepth }`, both optional (default `"queue"` / `50`). Only meaningful if the project has at least one push-style [gateway](gateways/index.md#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends) entry - controls the generated `GatewaySession`'s policy for a second inbound message arriving on a thread that already has a turn in flight. `policy` must be one of `reject`/`queue`/`steer`/`interrupt`. |
-| `agentApi` | struct | `{ enabled, tokenEnvVar }`, both optional. Controls the always-on agent route at `/__bxagents`. See [The always-on agent route](#the-always-on-agent-route) below. |
+| `agentApi` | struct | `{ enabled, tokenEnvVar, tokens }`, all optional. Controls the always-on agent route at `/__bxagents`. See [The always-on agent route](#the-always-on-agent-route) below. |
 | any other key | any | Merged and available in the resolved config struct, but not interpreted by BxAgents itself. |
 
 ## The model slug
@@ -283,6 +283,7 @@ one that never answers.
 |---|---|---|
 | `enabled` | boolean | Default `true`. Set `false` to omit the route entirely - for a build going somewhere it has no business existing. |
 | `tokenEnvVar` | string | The **name** of an environment variable holding a shared secret. When set, every sub-route requires a matching `x-bxagents-token` request header. |
+| `tokens` | boolean | Default `false`. `true` also accepts the [access tokens](#access-tokens-for-a-deployed-agent) made with `bxAgents token create`. |
 
 ```javascript
 function configure() {
@@ -318,6 +319,34 @@ JSON body, and never reaches the agent.
     a value that isn't a valid environment-variable name, precisely so a literal
     token can't be committed here by mistake. Only the variable's name is ever
     written into generated source.
+
+### Access tokens for a deployed agent
+
+One shared secret (`tokenEnvVar`) is enough for a single caller. To let several people or machines in, each with a name you can revoke, turn on issued tokens:
+
+```yaml
+# Agent.yaml
+agentApi:
+  tokens: true
+```
+
+Make them where the agent's database is: on the server, or in the project before you pack it.
+
+```bash
+bxAgents token create --name=laptop --expires=90d
+bxAgents token create --name=ci --scope=admin
+bxAgents token list
+bxAgents token revoke --name=laptop
+```
+
+- A token is shown **once**, when it is made. Only its SHA-256 is stored, so a stolen database file cannot be used to call the agent.
+- The caller sends it in the `x-bxagents-token` header, or `bxAgents chat --connect=<url> --token=<token>` (or `BXAGENTS_TOKEN`) does.
+- The name is who is calling. A run belongs to the token that started it, and one token cannot answer another's pending approval. The scope is `chat` or `admin`.
+- Revoking takes effect on the next request, without a restart. A token can also expire (`--expires=90d`, `12h`, `2w` or a date).
+- With `tokens: true` and no `tokenEnvVar`, a server with no tokens yet refuses everyone. With both, the shared secret works as an `admin` token, so a fresh deployment can be reached before the first token exists.
+- The tokens live in the [shared chat database](web-ui.md#the-sqlite-store) (`data/chat.db`). On a deployed server run `token` with `BXAGENTS_DB` pointing at the file the app uses.
+
+Put HTTPS in front of any server a token travels to: a token on plain HTTP can be read on the wire.
 
 !!! info
     The route is bound to whatever host the [miniserver](../cli-reference.md#serve)

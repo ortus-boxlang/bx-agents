@@ -83,12 +83,13 @@ class extends="testbox.system.BaseSpec" {
 			// run-control routes, and a stand-in screen types one line and leaves.
 			// ---------------------------------------------------------------
 
-			function startScriptedServer( required array seen ) {
+			function startScriptedServer( required array seen, array headers = [] ) {
 				var srv = createObject( "java", "com.sun.net.httpserver.HttpServer" ).create(
 					createObject( "java", "java.net.InetSocketAddress" ).init( "127.0.0.1", 0 ), 0
 				);
 				srv.createContext( "/", ( exchange ) => {
 					seen.append( exchange.getRequestMethod() & " " & exchange.getRequestURI().getPath() );
+					headers.append( exchange.getRequestHeaders().getFirst( "x-bxagents-token" ) ?: "" );
 					var out = exchange.getResponseBody();
 					var path = exchange.getRequestURI().getPath();
 					if ( path == "/__bxagents/events" ) {
@@ -163,6 +164,26 @@ class extends="testbox.system.BaseSpec" {
 				// nothing but the agent's own routes was called: no shutdown, no build
 				expect( seen.filter( r => !r.find( "/__bxagents/" ) ) ).toBeEmpty();
 				expect( seen.filter( r => r.findNoCase( "stop" ) || r.findNoCase( "shutdown" ) ) ).toBeEmpty();
+			} );
+
+			it( "sends the token of --token on every request of --connect", function() {
+				var seen = [];
+				var headers = [];
+				var log = [];
+				var srv = startScriptedServer( seen, headers );
+				try {
+					chatVerb.run( {
+						projectRoot : createTempDirectory( prefix = "bxagents-cli-chat-" ),
+						connect     : "http://127.0.0.1:" & srv.getAddress().getPort(),
+						token       : "bxa_example",
+						_screen     : scriptedScreen( log )
+					} );
+				} finally {
+					srv.stop( 0 );
+				}
+
+				expect( seen ).notToBeEmpty();
+				expect( headers.filter( h => h != "bxa_example" ) ).toBeEmpty();
 			} );
 
 			it( "stops the throwaway server of --server when the chat ends", function() {

@@ -1,6 +1,6 @@
 /**
  * The SQLite file that the web chat, the terminal chat and the server share: conversations, preferences,
- * accounts and, as later versions add them, notes, tokens and a chat log.
+ * accounts, access tokens and, as later versions add them, notes and a chat log.
  *
  * It uses plain queryExecute against one datasource, so the same class runs inside the generated web app
  * (a registered datasource, by name) and in the terminal chat (a file, opened on the spot). The schema is
@@ -19,12 +19,13 @@ class {
 	}
 
 	/**
-	 * @datasource A registered datasource name, or a datasource struct such as { driver : "sqlite", database : "/path/chat.db" }
+	 * @datasource A registered datasource name, a datasource struct such as { driver : "sqlite", database : "/path/chat.db" },
+	 *             or "" for the application's default datasource
 	 */
 	function init( required any datasource ) {
 		variables.datasource = arguments.datasource
-		variables.options = { datasource : arguments.datasource }
-		variables.lockName = "bxagents-chatstore-" & ( isSimpleValue( arguments.datasource ) ? arguments.datasource : arguments.datasource.database ?: "inline" )
+		variables.options = ( isSimpleValue( arguments.datasource ) && !len( arguments.datasource ) ) ? {} : { datasource : arguments.datasource }
+		variables.lockName = "bxagents-chatstore-" & ( isSimpleValue( arguments.datasource ) ? ( len( arguments.datasource ) ? arguments.datasource : "default" ) : arguments.datasource.database ?: "inline" )
 		return this
 	}
 
@@ -113,6 +114,14 @@ class {
 				version    : 2,
 				statements : [
 					"CREATE TABLE IF NOT EXISTS users ( id VARCHAR(64) NOT NULL PRIMARY KEY, username VARCHAR(255) NOT NULL UNIQUE, passwordHash VARCHAR(512) NOT NULL, displayName VARCHAR(255), isActive INTEGER DEFAULT 1, createdAt DATETIME, updatedAt DATETIME )"
+				]
+			},
+			{
+				// access tokens for a deployed agent: only a hash of each is kept
+				version    : 3,
+				statements : [
+					"CREATE TABLE IF NOT EXISTS tokens ( id VARCHAR(64) NOT NULL PRIMARY KEY, name VARCHAR(64) NOT NULL UNIQUE, tokenHash VARCHAR(128) NOT NULL, scope VARCHAR(16) NOT NULL DEFAULT 'chat', createdAt DATETIME, lastUsedAt DATETIME, expiresAt DATETIME, revokedAt DATETIME )",
+					"CREATE INDEX IF NOT EXISTS idx_tokens_hash ON tokens ( tokenHash )"
 				]
 			}
 		]

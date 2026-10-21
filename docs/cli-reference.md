@@ -86,6 +86,9 @@ Ship to a real deployment target.
 ::: card title="hash-password" icon="phosphor-duotone:key" href="#hash-password"
 Hash a plaintext password for a webui users entry.
 :::
+::: card title="token" icon="phosphor-duotone:identification-card" href="#token"
+Issue, list and revoke access tokens for a deployed agent.
+:::
 ::: card title="inspect" icon="phosphor-duotone:magnifying-glass" href="#inspect"
 Pretty-print an existing manifest.json.
 :::
@@ -192,6 +195,7 @@ bxAgents chat                                  # fast, in-process
 bxAgents chat --no-tui                         # plain line-by-line REPL
 bxAgents chat --server [--port=<port>]         # full app, own throwaway server
 bxAgents chat --connect=http://127.0.0.1:8080  # full app, server you already run
+bxAgents chat --connect=https://agent.example.com --token=<token>   # a server that wants one
 ```
 
 In the screen:
@@ -238,7 +242,7 @@ Three modes, one chat:
 - Both HTTP modes **stream** the reply: the answer appears token by token as the agent produces it, over the route's `/events` (SSE) sub-route, which also carries the tool calls and the pause for approval. Esc calls `/cancel`, a message typed while the agent works calls `/steer`, and an approval is answered with `/resume`. The plain REPL (`--no-tui`) uses `/stream`, and falls back to `/invoke` and the whole reply at the end if the stream cannot be opened (an older server without a `/stream` sub-route, or a proxy that won't pass `text/event-stream`).
 - Both HTTP modes carry the server's `threadId` across turns, so a session is one conversation rather than a series of unrelated first messages.
 - In the screen, a turn that pauses for a [human-in-the-loop](conventions/gateways/index.md) decision asks you in place. In the plain REPL it says so instead of appearing to answer with silence, and points at the `/gateways/interactions/` endpoint where the decision is submitted.
-- If the route is gated behind [`agentApi.tokenEnvVar`](conventions/agent-bx.md#agentapi), these modes get a clear `401` error rather than a confusing timeout - they send no token.
+- If the route is gated behind [`agentApi.tokenEnvVar`](conventions/agent-bx.md#agentapi) or [issued tokens](conventions/agent-bx.md#access-tokens-for-a-deployed-agent), pass `--token=<token>` (or set `BXAGENTS_TOKEN`). Without a valid one these modes get a clear `401` error rather than a confusing timeout.
 - Type `/exit` to leave (`exit` and `quit` work in the plain REPL).
 - Needs a real interactive terminal. Piped or non-interactive, it falls back to the plain REPL, which needs one too (`MiniConsole` shells out to `stty` for raw mode). Use [`invoke`](#invoke) for scripting.
 
@@ -294,6 +298,21 @@ bxAgents hash-password --password="<your-password>"
 - `--password` is **required**.
 - Prints the hash to stdout - `pbkdf2$<iterations>$<salt>$<derivedKey>`, PBKDF2-HMAC-SHA256, salted per call. Safe to commit: it's one-way, and hashing the same password twice yields two different (both valid) hashes.
 - Kept deliberately identical to the hasher the generated web UI itself uses to verify a sign-in - a hash produced here always verifies there.
+
+### `token`
+
+The access tokens of a deployed agent, kept in the project's [shared chat database](conventions/web-ui.md#the-sqlite-store) (`data/chat.db`, or the file named by `BXAGENTS_DB`). The agent accepts them when its [`agentApi`](conventions/agent-bx.md#access-tokens-for-a-deployed-agent) has `tokens: true`.
+
+```bash
+bxAgents token create --name=laptop [--scope=chat|admin] [--expires=90d]
+bxAgents token list [--json]
+bxAgents token revoke --name=laptop
+```
+
+- `create` prints the token **once**, with how to use it; only a hash of it is stored. `--name` is required (letters, digits, `.`, `-`, `_`). `--scope` is `chat` (talk to the agent, the default) or `admin`. `--expires` is a length (`90d`, `12h`, `30m`, `2w`) or a date; without it the token does not expire.
+- `list` shows each token's name, scope, status (`active`, `expired` or `revoked`), when it was made, last used and expires. Never the token itself.
+- `revoke` stops a token working at once. The name stays taken, so it cannot be reused by accident.
+- Run it where the database is: on the server, or in the project before you pack it. On a deployed server, point `BXAGENTS_DB` at the file the app uses.
 
 ### `inspect`
 

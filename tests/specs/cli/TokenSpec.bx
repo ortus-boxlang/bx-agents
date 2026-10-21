@@ -1,0 +1,91 @@
+/**
+ * The token verb: make, list and revoke access tokens in the project's chat database.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "cli.Token", function() {
+
+			beforeEach( function() {
+				variables.verb = new bxagents.models.cli.Token();
+				variables.root = createTempDirectory( prefix = "bxagents-cli-token-" );
+				// the database path follows BXAGENTS_DB when it is set; these specs are about the default
+				variables.usesDefaultPath = !len( getSystemSetting( "BXAGENTS_DB", "" ) );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( root ) ) {
+					directoryDelete( root, true );
+				}
+			} );
+
+			it( "needs a project root and a known action", function() {
+				expect( function() { verb.run( {} ); } ).toThrow( "BxAgents.MissingProjectRoot" );
+				expect( function() { verb.run( { projectRoot : root } ); } ).toThrow( "BxAgents.UnknownTokenAction" );
+				expect( function() { verb.run( { projectRoot : root, _positional : "mint" } ); } ).toThrow( "BxAgents.UnknownTokenAction" );
+			} );
+
+			it( "makes a token, shows it once with how to use it, and keeps it in data/chat.db", function() {
+				if ( !usesDefaultPath ) { return; }
+
+				var result = verb.run( { projectRoot : root, _positional : "create", name : "laptop", expires : "90d" } );
+
+				expect( result.exitCode ).toBe( 0 );
+				expect( result.token ).toMatch( "^bxa_" );
+				expect( result.message ).toInclude( result.token );
+				expect( result.message ).toInclude( "[laptop] (chat, expires " );
+				expect( result.message ).toInclude( "--token=" );
+				expect( result.message ).toInclude( "x-bxagents-token" );
+				expect( fileExists( root & "/data/chat.db" ) ).toBeTrue();
+			} );
+
+			it( "lists tokens without the token, as a table and as JSON", function() {
+				if ( !usesDefaultPath ) { return; }
+				var made = verb.run( { projectRoot : root, _positional : "create", name : "ci", scope : "admin" } );
+
+				var table = verb.run( { projectRoot : root, _positional : "list" } );
+				var json = jsonDeserialize( verb.run( { projectRoot : root, _positional : "list", json : true } ).message );
+
+				expect( table.message ).toInclude( "NAME" );
+				expect( table.message ).toInclude( "ci" );
+				expect( table.message ).toInclude( "admin" );
+				expect( table.message ).toInclude( "active" );
+				expect( table.message ).notToInclude( made.token );
+				expect( json ).toHaveLength( 1 );
+				expect( json[ 1 ].name ).toBe( "ci" );
+				expect( json[ 1 ].status ).toBe( "active" );
+				expect( jsonSerialize( json ) ).notToInclude( made.token );
+			} );
+
+			it( "says so when there are none", function() {
+				if ( !usesDefaultPath ) { return; }
+
+				expect( verb.run( { projectRoot : root, _positional : "list" } ).message ).toInclude( "No tokens yet" );
+			} );
+
+			it( "revokes a token, and reports one that is not there", function() {
+				if ( !usesDefaultPath ) { return; }
+				verb.run( { projectRoot : root, _positional : "create", name : "old" } );
+
+				var first = verb.run( { projectRoot : root, _positional : "revoke", name : "old" } );
+				var second = verb.run( { projectRoot : root, _positional : "revoke", name : "old" } );
+
+				expect( first.exitCode ).toBe( 0 );
+				expect( first.message ).toInclude( "Revoked [old]" );
+				expect( second.exitCode ).toBe( 1 );
+				expect( verb.run( { projectRoot : root, _positional : "list" } ).message ).toInclude( "revoked" );
+			} );
+
+			it( "asks for a name, and refuses a bad scope or expiry", function() {
+				if ( !usesDefaultPath ) { return; }
+
+				expect( function() { verb.run( { projectRoot : root, _positional : "create" } ); } ).toThrow( "BxAgents.MissingTokenName" );
+				expect( function() { verb.run( { projectRoot : root, _positional : "revoke" } ); } ).toThrow( "BxAgents.MissingTokenName" );
+				expect( function() { verb.run( { projectRoot : root, _positional : "create", name : "x", scope : "root" } ); } ).toThrow( "BxAgents.InvalidTokenScope" );
+				expect( function() { verb.run( { projectRoot : root, _positional : "create", name : "x", expires : "soon" } ); } ).toThrow( "BxAgents.InvalidTokenExpiry" );
+			} );
+
+		} );
+	}
+
+}

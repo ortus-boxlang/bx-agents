@@ -31,6 +31,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n __bxagents_needs_verb -a 'package' -d 'Package a built project into a .bxa'
     complete -c $cmd -n __bxagents_needs_verb -a 'serve' -d 'Serve a built project via boxlang-miniserver'
     complete -c $cmd -n __bxagents_needs_verb -a 'test' -d 'Run a project\'s own tests/specs via TestBox'
+    complete -c $cmd -n __bxagents_needs_verb -a 'token' -d 'Issue, list and revoke access tokens for a deployed agent'
     complete -c $cmd -n __bxagents_needs_verb -a 'help' -d 'Show the usage and the list of verbs'
 
     # flags and values of each verb
@@ -45,6 +46,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb chat' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb chat' -l record
     complete -c $cmd -n '__bxagents_using_verb chat' -l server
+    complete -c $cmd -n '__bxagents_using_verb chat' -l token -x
     complete -c $cmd -n '__bxagents_using_verb chat' -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb clean' -l force
     complete -c $cmd -n '__bxagents_using_verb clean' -l projectRoot -x -a '(__fish_complete_directories)'
@@ -108,5 +110,10 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb serve' -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb test' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb test' -a '(__fish_complete_directories)'
-    complete -c $cmd -n '__bxagents_using_verb help' -a 'build chat clean deploy doctor hash-password inspect invoke new package serve test help'
+    complete -c $cmd -n '__bxagents_using_verb token' -l expires -x
+    complete -c $cmd -n '__bxagents_using_verb token' -l json
+    complete -c $cmd -n '__bxagents_using_verb token' -l name -x
+    complete -c $cmd -n '__bxagents_using_verb token' -l projectRoot -x -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb token' -l scope -x -a 'chat admin'
+    complete -c $cmd -n '__bxagents_using_verb help' -a 'build chat clean deploy doctor hash-password inspect invoke new package serve test token help'
 end
