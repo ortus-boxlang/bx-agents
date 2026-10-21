@@ -68,19 +68,24 @@ class {
 }
 ```
 
-## Lo que registró cada build: el manifiesto
+## Ver cómo está compuesto el agente
 
-`bxAgents inspect` imprime de forma legible `.build/manifest.json` sin reconstruir:
+`bxAgents inspect` imprime un informe de tu agente directamente desde su código fuente - no necesita un build:
 
 ```bash
 bxAgents inspect
+bxAgents inspect --section=tools,env
 bxAgents inspect --json
 ```
 
-Es un registro sellado con hashes de exactamente qué entró en el build - nombre del agente,
+Obtienes el árbol de agentes y subagentes con cada modelo, las herramientas y skills, a través de qué se expone el proyecto, la programación, y cada variable de entorno que necesita con una marca para las que no están definidas (solo nombres, nunca valores). `--md` escribe lo mismo como Markdown para un pull request. Consulta la [Referencia de la CLI](../cli-reference.md#inspect) para ver cada sección.
+
+## Lo que registró cada build: el manifiesto
+
+Cada `build` escribe además `.build/manifest.json`, un registro sellado con hashes de exactamente qué entró en el build - nombre del agente,
 modelo, entorno, y una entrada por cada archivo descubierto con un hash de contenido SHA-256.
 Esto es lo que hace que reconstruir un proyecto sin cambios sea idéntico byte a byte, la idea
-que conociste por primera vez en la [Lección 2](02-what-is-bxagents.md).
+que conociste por primera vez en la [Lección 2](02-what-is-bxagents.md). Ábrelo en cualquier editor; `inspect` muestra su versión y número de archivos en la sección `build`.
 
 ## Limpiar
 

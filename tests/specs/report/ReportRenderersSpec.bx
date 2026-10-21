@@ -1,0 +1,136 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "report renderers", function() {
+
+			beforeEach( function() {
+				variables.fixtures = expandPath( "/fixtures" );
+				variables.tempDirs = [];
+				variables.report = {};
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			// a run of hash signs inside a BoxLang string starts interpolation
+			private function heading( required numeric level, required string text ) {
+				return repeatString( char( 35 ), arguments.level ) & " " & arguments.text;
+			}
+
+			private function reportFor( required string fixtureName ) {
+				var dir = createTempDirectory( prefix = "bxagents-render-" );
+				directoryCopy( fixtures & "/" & arguments.fixtureName, dir, true );
+				tempDirs.append( dir );
+				return new bxagents.models.report.ProjectReport().build( dir );
+			}
+
+			describe( "the terminal view", function() {
+
+				it( "draws the header, the tree and the sections that have something in them", function() {
+					var text = new bxagents.models.report.ReportTextRenderer().render( reportFor( "full-project" ) );
+
+					expect( text ).toInclude( "full-project-agent" );
+					expect( text ).toInclude( "── Agents" );
+					expect( text ).toInclude( "── Tools" );
+					expect( text ).toInclude( "getWeather" );
+					expect( text ).toInclude( "── Exposed through" );
+					expect( text ).toInclude( "── Schedule" );
+					expect( text ).toInclude( "── Checks" );
+				} );
+
+				it( "leaves out a section with nothing in it", function() {
+					var text = new bxagents.models.report.ReportTextRenderer().render( reportFor( "subagents-chain" ) );
+
+					expect( text ).notToInclude( "── Tools" );
+					expect( text ).notToInclude( "── Schedule" );
+				} );
+
+				it( "draws subagents as a tree", function() {
+					var text = new bxagents.models.report.ReportTextRenderer().render( reportFor( "subagents-chain" ) );
+
+					expect( text ).toInclude( "└─● a" );
+					expect( text ).toInclude( "└─● b" );
+				} );
+
+				it( "shows only the sections asked for, and says none for an empty one", function() {
+					var text = new bxagents.models.report.ReportTextRenderer().render( reportFor( "subagents-chain" ), [ "tools" ] );
+
+					expect( text ).toInclude( "── Tools" );
+					expect( text ).toInclude( "none" );
+					expect( text ).notToInclude( "── Agents" );
+				} );
+
+				it( "applies the palette it is given", function() {
+					var text = new bxagents.models.report.ReportTextRenderer( paint = ( style, text ) => "<#style#>#text#</#style#>" ).render( reportFor( "full-project" ) );
+
+					expect( text ).toInclude( "<bold>full-project-agent</bold>" );
+					expect( text ).toInclude( "<accent>Agents</accent>" );
+				} );
+
+				it( "is plain text with no escape codes when no palette is given", function() {
+					var text = new bxagents.models.report.ReportTextRenderer().render( reportFor( "full-project" ) );
+
+					expect( text ).notToInclude( char( 27 ) );
+				} );
+
+				it( "draws with ASCII only when asked", function() {
+					var text = new bxagents.models.report.ReportTextRenderer( ascii = true ).render( reportFor( "subagents-chain" ) );
+
+					expect( reFind( "[^\x00-\x7F]", text ) ).toBe( 0 );
+					expect( text ).toInclude( "`-* a" );
+				} );
+
+				it( "keeps every line inside the width", function() {
+					var text = new bxagents.models.report.ReportTextRenderer( width = 60 ).render( reportFor( "full-project" ) );
+
+					for ( var line in text.listToArray( char( 10 ) ) ) {
+						expect( len( line ) ).toBeLTE( 60, "line too long: [#line#]" );
+					}
+				} );
+
+				it( "marks an unset variable with a warning symbol", function() {
+					var text = new bxagents.models.report.ReportTextRenderer().render( reportFor( "gateways-slack" ) );
+
+					expect( text ).toInclude( "── Environment" );
+					expect( text ).toInclude( "MY_SLACK_BOT_TOKEN" );
+				} );
+
+			} );
+
+			describe( "the Markdown view", function() {
+
+				it( "writes headings, a tree and tables", function() {
+					var md = new bxagents.models.report.ReportMarkdownRenderer().render( reportFor( "full-project" ) );
+
+					expect( md ).toInclude( heading( 2, "full-project-agent" ) );
+					expect( md ).toInclude( heading( 3, "Agents" ) );
+					expect( md ).toInclude( "| Tool | Description | File |" );
+					expect( md ).toInclude( "`getWeather`" );
+					expect( md ).toInclude( heading( 3, "Exposed through" ) );
+				} );
+
+				it( "shows only the sections asked for", function() {
+					var md = new bxagents.models.report.ReportMarkdownRenderer().render( reportFor( "full-project" ), [ "env" ] );
+
+					expect( md ).toInclude( heading( 3, "Environment" ) );
+					expect( md ).notToInclude( heading( 3, "Agents" ) );
+				} );
+
+				it( "writes the variables as a table with a Set column and no values", function() {
+					var md = new bxagents.models.report.ReportMarkdownRenderer().render( reportFor( "gateways-slack" ), [ "env" ] );
+
+					expect( md ).toInclude( "| Variable | Set | Used by |" );
+					expect( md ).toInclude( "`MY_SLACK_BOT_TOKEN`" );
+				} );
+
+			} );
+
+		} );
+	}
+
+}

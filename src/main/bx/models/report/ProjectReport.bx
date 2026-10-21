@@ -1,0 +1,676 @@
+/**
+ * Describes how a project's agent is composed - the data behind `inspect`.
+ *
+ * Reads the project's SOURCE, not a build: it runs the same discovery, resolve and
+ * validate phases `build` and `doctor` run (nothing is generated or written), then
+ * lays the result out as one structure the renderers print. A project that has
+ * never been built reports as well as one that has; the manifest, when there is
+ * one, only adds the `build` section.
+ *
+ * Secrets are never read into the report. Credentials are environment variable
+ * NAMES, and `env` records whether each is set, never what it is set to.
+ *
+ * The shape ( every key always present ):
+ *
+ *   project     { root, name, description, definition, environment }
+ *   agent       the root agent node
+ *   models      [ { name, file, provider, model } ]   named models/ entries
+ *   gateways    [ { name, file, kind, summary, path } ]
+ *   mcpHosted   [ { name, file, description, tools } ]
+ *   interceptors[ { name, file, scope } ]
+ *   schedule    { present, file, tasks : [ name ] }
+ *   modules     [ { name } ]
+ *   deploy      [ { name, file, target } ]
+ *   env         [ { name, usedBy : [ text ], set } ]
+ *   validation  { errors : [], warnings : [] }
+ *   build       { built, manifestVersion, generator, files }
+ *
+ * An agent node:
+ *   { id, name, folder, description, model, modelSource, provider, modelId, definition,
+ *     instructions : { source, chars }, tools : { own : [ { name, description, file } ], module : [], options : [] },
+ *     skills : [ name ], mcpServers : [ { name, url, env } ], memory, checkpointer, security,
+ *     gatewaySession, agentApi, classBased, children : [ node ] }
+ */
+class {
+
+	/**
+	 * @return this
+	 */
+	function init() {
+		// "@bxagents" suffix form, see BuildPipeline.init()
+		variables.resolver = new "models.build.AgentConfigResolver@bxagents"()
+		variables.discoverer = new "models.build.ProjectDiscoverer@bxagents"()
+		variables.validator = new "models.build.ProjectValidator@bxagents"()
+		variables.nameResolver = new "models.build.generators.ColdBoxAppGenerator@bxagents"()
+		variables.slugParser = new "models.build.ModelSlugParser@bxagents"()
+		variables.locator = new "models.build.AgentDefinitionLocator@bxagents"()
+		variables.catalog = new "models.wizard.WizardCatalog@bxagents"()
+		return this
+	}
+
+	/**
+	 * The sections a report is made of, in the order they are drawn. `--section` takes these.
+	 *
+	 * @return The section names
+	 */
+	array function sectionNames() {
+		return [ "agents", "tools", "skills", "mcp", "gateways", "schedule", "models", "interceptors", "modules", "deploy", "env", "checks", "build" ]
+	}
+
+	/**
+	 * @csv A comma-separated list of section names, as `--section` is written
+	 *
+	 * @return The names, lower-cased and de-duplicated
+	 */
+	array function parseSections( required string csv ) {
+		var wanted = []
+		for ( var raw in arguments.csv.listToArray( "," ) ) {
+			var name = trim( raw ).lcase()
+			if ( !len( name ) ) {
+				continue
+			}
+			if ( !sectionNames().contains( name ) ) {
+				throw(
+					type    = "BxAgents.UnknownSection",
+					message = "Unknown section [#name#] - the sections are: #sectionNames().toList( ', ' )#"
+				)
+			}
+			if ( !wanted.contains( name ) ) {
+				wanted.append( name )
+			}
+		}
+		return wanted
+	}
+
+	/**
+	 * @projectRoot Absolute path to the project root
+	 * @cliEnvironment Optional environment name, as `build --environment` takes
+	 *
+	 * @return The report structure described above
+	 */
+	struct function build( required string projectRoot, string cliEnvironment = "" ) {
+		var root = arguments.projectRoot.reReplace( "[\\/]+$", "" )
+
+		if ( !variables.locator.exists( root ) ) {
+			throw(
+				type    = "BxAgents.NotAnAgentProject",
+				message = "No #variables.locator.expected()# found at [#root#] - run `inspect` inside a BX Agents project, or pass --projectRoot"
+			)
+		}
+
+		var config = variables.resolver.resolve( projectRoot = root, cliEnvironment = arguments.cliEnvironment )
+		var discovery = variables.discoverer.discover( root )
+		var envUse = {}
+
+		var rootNode = agentNode( root, root, config, discovery, arguments.cliEnvironment, [], envUse )
+		var agents = []
+		flatten( rootNode, agents )
+
+		var gateways = []
+		for ( var entry in discovery.gateways ) {
+			gateways.append( gatewayInfo( entry, envUse ) )
+		}
+		var models = []
+		for ( var entry in discovery.models ) {
+			models.append( modelInfo( entry ) )
+		}
+		var mcpHosted = []
+		for ( var entry in discovery.mcp ) {
+			mcpHosted.append( mcpHostedInfo( entry ) )
+		}
+		var interceptors = []
+		for ( var entry in discovery.interceptors ) {
+			interceptors.append( interceptorInfo( entry ) )
+		}
+		var deploy = deployEntries( root, envUse )
+		registerProviderEnv( agents, envUse )
+
+		var validation = variables.validator.validate( root, discovery, config )
+
+		return {
+			project      : {
+				root        : root,
+				name        : rootNode.name,
+				description : rootNode.description,
+				definition  : rootNode.definition,
+				environment : config.environment ?: ""
+			},
+			agent        : rootNode,
+			models       : models,
+			gateways     : gateways,
+			mcpHosted    : mcpHosted,
+			interceptors : interceptors,
+			schedule     : scheduleInfo( root, discovery ),
+			modules      : discovery.modules.map( function( entry ) { return { name : entry.name } } ),
+			deploy       : deploy,
+			env          : envList( envUse ),
+			validation   : { errors : validation.errors, warnings : validation.warnings },
+			build        : buildInfo( root )
+		}
+	}
+
+	// --------------------------------------------------------------------------
+	// Agents
+	// --------------------------------------------------------------------------
+
+	/**
+	 * One agent and, recursively, every subagent it lists. Subagents are flat
+	 * siblings under the ROOT's `subagents/` (see ColdBoxAppGenerator), so a name
+	 * is always looked up there. `trail` stops a circular reference from looping:
+	 * the validator reports the cycle, the report just does not follow it.
+	 *
+	 * @root The root project path
+	 * @path This agent's own folder
+	 * @config This agent's resolved config
+	 * @discovery The discovery for THIS agent's folder
+	 * @cliEnvironment Environment to resolve subagents against
+	 * @trail Names already on the path to this node
+	 * @envUse The shared env-var accumulator
+	 */
+	private struct function agentNode(
+		required string root,
+		required string path,
+		required struct config,
+		required struct discovery,
+		required string cliEnvironment,
+		required array trail,
+		required struct envUse
+	) {
+		var c = arguments.config
+		var name = variables.nameResolver.resolveAgentName( c )
+		var folder = arguments.path == arguments.root ? "." : "subagents/" & arguments.path.listLast( "/\" )
+		var classBased = c.classBasedAgent ?: false
+		var modelValue = len( c.model ?: "" ) ? c.model : ( c.classAgentModel ?: "" )
+		var described = describeModel( modelValue, arguments.root )
+		var ownTools = []
+		for ( var entry in arguments.discovery.tools ) {
+			ownTools.append( toolInfo( entry, arguments.path ), true )
+		}
+		var mcpClients = []
+		for ( var mcpEntry in c.mcpServers ?: [] ) {
+			mcpClients.append( mcpClientInfo( mcpEntry, name, arguments.envUse ) )
+		}
+		var skillNames = []
+		for ( var skill in arguments.discovery.skills ) {
+			skillNames.append( skill.name )
+		}
+
+		var node = {
+			id             : folder,
+			name           : name,
+			folder         : folder,
+			description    : c.description ?: "",
+			model          : modelValue,
+			modelSource    : described.source,
+			provider       : described.provider,
+			modelId        : described.model,
+			definition     : variables.locator.locate( arguments.path ).kind == "yaml" ? "Agent.yaml" : "Agent.bx",
+			classBased     : classBased,
+			instructions   : instructionsInfo( arguments.path, c ),
+			tools          : {
+				own     : ownTools,
+				module  : c.tools ?: [],
+				options : ( c.toolOptions ?: {} ).keyArray()
+			},
+			skills         : skillNames,
+			mcpServers     : mcpClients,
+			memory         : memoryName( c.memory ?: "" ),
+			checkpointer   : isStruct( c.checkpointer ?: "" ) ? ( c.checkpointer.type ?: "cache" ) : "cache",
+			security       : isStruct( c.security ?: "" ) && ( c.security.enabled ?: false ),
+			gatewaySession : c.gatewaySession ?: {},
+			agentApi       : agentApiInfo( c, name, arguments.envUse ),
+			children       : []
+		}
+
+		for ( var tool in c.toolOptions ?: {} ) {
+			collectEnvPlaceholders( c.toolOptions[ tool ], "#name# toolOptions.#tool#", arguments.envUse )
+		}
+
+		var nextTrail = duplicate( arguments.trail )
+		nextTrail.append( folder )
+		for ( var childName in c.subAgents ?: [] ) {
+			var childPath = arguments.root & "/subagents/" & childName
+			if ( nextTrail.contains( "subagents/" & childName ) || !directoryExists( childPath ) ) {
+				continue
+			}
+			try {
+				var childConfig = variables.resolver.resolve( projectRoot = childPath, cliEnvironment = arguments.cliEnvironment )
+				var childDiscovery = variables.discoverer.discover( childPath )
+				node.children.append(
+					agentNode( arguments.root, childPath, childConfig, childDiscovery, arguments.cliEnvironment, nextTrail, arguments.envUse )
+				)
+			} catch ( any e ) {
+				// A subagent that does not load is the validator's finding to report
+			}
+		}
+
+		return node
+	}
+
+	/**
+	 * @node The root of a tree
+	 * @into Array to append every node to, in tree order
+	 */
+	private void function flatten( required struct node, required array into ) {
+		arguments.into.append( arguments.node )
+		for ( var child in arguments.node.children ) {
+			flatten( child, arguments.into )
+		}
+	}
+
+	/**
+	 * @slug The agent's model value: a slug, a bare provider, or a models/ entry name
+	 * @root The project root, to look a models/ entry up in
+	 *
+	 * @return { source : slug|provider|named|none, provider, model }
+	 */
+	private struct function describeModel( required string slug, required string root ) {
+		if ( !len( arguments.slug ) ) {
+			return { source : "none", provider : "", model : "" }
+		}
+		if ( arguments.slug.find( "/" ) ) {
+			var parsed = variables.slugParser.parse( arguments.slug )
+			return { source : "slug", provider : parsed.provider, model : parsed.model }
+		}
+		if ( variables.slugParser.isKnownProvider( arguments.slug ) ) {
+			return { source : "provider", provider : arguments.slug, model : "" }
+		}
+		var entry = readNamedModel( arguments.root, arguments.slug )
+		return { source : "named", provider : entry.provider ?: "", model : entry.model ?: "" }
+	}
+
+	/**
+	 * @path The agent's folder
+	 * @config Its resolved config
+	 *
+	 * @return { source : file|inline|code|none, chars }
+	 */
+	private struct function instructionsInfo( required string path, required struct config ) {
+		var file = arguments.path & "/instructions.md"
+		if ( fileExists( file ) ) {
+			return { source : "instructions.md", chars : len( fileRead( file ) ) }
+		}
+		if ( len( arguments.config.instructions ?: "" ) ) {
+			return { source : "inline", chars : len( arguments.config.instructions ) }
+		}
+		return { source : arguments.config.classBasedAgent ?: false ? "code" : "none", chars : 0 }
+	}
+
+	/**
+	 * @memory The agent's `memory` setting: a type name or a { type } struct
+	 *
+	 * @return The memory type, or "" for none
+	 */
+	private string function memoryName( required any memory ) {
+		if ( isStruct( arguments.memory ) ) {
+			return arguments.memory.type ?: ""
+		}
+		return isSimpleValue( arguments.memory ) ? arguments.memory : ""
+	}
+
+	/**
+	 * @config The agent's resolved config
+	 * @agentName For the env-var usage note
+	 * @envUse The shared env-var accumulator
+	 */
+	private struct function agentApiInfo( required struct config, required string agentName, required struct envUse ) {
+		var api = arguments.config.agentApi ?: {}
+		var enabled = api.enabled ?: true
+		var tokenVar = api.tokenEnvVar ?: ""
+		if ( len( tokenVar ) ) {
+			noteEnv( arguments.envUse, tokenVar, "#arguments.agentName# agentApi token" )
+		}
+		return { enabled : enabled, tokenEnvVar : tokenVar }
+	}
+
+	// --------------------------------------------------------------------------
+	// Tools, MCP clients, named models
+	// --------------------------------------------------------------------------
+
+	/**
+	 * A tools/ file can hold several @AITool functions, and bx-ai names the tools
+	 * itself at runtime, so this reads the annotations rather than the file name.
+	 *
+	 * @entry A discovered { name, path, type }
+	 * @agentPath The agent's folder, to show the file relative to it
+	 *
+	 * @return [ { name, description, file } ] - one per @AITool function; the file alone when none is found
+	 */
+	private array function toolInfo( required struct entry, required string agentPath ) {
+		var rel = arguments.entry.path.replace( arguments.agentPath & "/", "" )
+		var source = ""
+		try {
+			source = fileRead( arguments.entry.path )
+		} catch ( any e ) {
+			return [ { name : arguments.entry.name, description : "", file : rel } ]
+		}
+		var found = []
+		for ( var match in reMatch( "(?s)@AITool\s*\(\s*[""'](.*?)[""']\s*\)\s*(?:\w+\s+)*function\s+\w+", source ) ) {
+			found.append( {
+				name        : match.reReplace( "(?s)^.*function\s+(\w+)$", "\1" ),
+				description : match.reReplace( "(?s)^@AITool\s*\(\s*[""'](.*?)[""']\s*\).*$", "\1" ),
+				file        : rel
+			} )
+		}
+		return found.len() ? found : [ { name : arguments.entry.name, description : "", file : rel } ]
+	}
+
+	/**
+	 * @entry One `mcpServers` entry: a URL string or a mapping
+	 * @agentName For the env-var usage note
+	 * @envUse The shared env-var accumulator
+	 *
+	 * @return { name, url, env : [ names ] }
+	 */
+	private struct function mcpClientInfo( required any entry, required string agentName, required struct envUse ) {
+		var rawUrl = isStruct( arguments.entry ) ? ( arguments.entry.url ?: "" ) : arguments.entry
+		var url = safeUrl( rawUrl )
+		var name = isStruct( arguments.entry ) ? ( arguments.entry.name ?: "" ) : ""
+		var names = collectEnvPlaceholders( arguments.entry, "#arguments.agentName# MCP #len( name ) ? name : url#", arguments.envUse )
+		return { name : name, url : url, env : names }
+	}
+
+	/**
+	 * A URL can carry a credential in its user info or query string, and the report
+	 * is the kind of output that gets pasted into a pull request, so neither is shown.
+	 *
+	 * @url A URL, possibly with a `${env.X}` placeholder in it
+	 *
+	 * @return The URL up to its path
+	 */
+	private string function safeUrl( required string url ) {
+		return arguments.url.reReplace( "^([a-zA-Z][a-zA-Z0-9+.-]*://)[^/@?##]*@", "\1" ).reReplace( "[?##].*$", "" )
+	}
+
+	/**
+	 * @entry A discovered models/ entry
+	 */
+	private struct function modelInfo( required struct entry ) {
+		var config = readEntryConfig( arguments.entry.path )
+		config = isStruct( config ) ? config : {}
+		return {
+			name     : arguments.entry.name,
+			file     : arguments.entry.path.listLast( "/\" ),
+			provider : config.provider ?: "",
+			model    : config.model ?: ( config.params.model ?: "" )
+		}
+	}
+
+	/**
+	 * @root The project root
+	 * @name A models/ entry name
+	 *
+	 * @return The entry's { provider, model }, or an empty struct
+	 */
+	private struct function readNamedModel( required string root, required string name ) {
+		for ( var ext in [ "json", "bx" ] ) {
+			var file = arguments.root & "/models/" & arguments.name & "." & ext
+			if ( fileExists( file ) ) {
+				var config = readEntryConfig( file )
+				return isStruct( config ) ? config : {}
+			}
+		}
+		return {}
+	}
+
+	// --------------------------------------------------------------------------
+	// Exposure and project-level conventions
+	// --------------------------------------------------------------------------
+
+	/**
+	 * @entry A discovered gateways/ entry
+	 * @envUse The shared env-var accumulator
+	 *
+	 * @return { name, file, kind, summary, path }
+	 */
+	private struct function gatewayInfo( required struct entry, required struct envUse ) {
+		var config = readEntryConfig( arguments.entry.path )
+		config = isStruct( config ) ? config : {}
+		var kind = config.exposes ?: ( config.type ?: "unknown" )
+		var summary = ""
+		if ( kind == "webui" ) {
+			var auth = isStruct( config.users ?: "" ) || isArray( config.users ?: "" ) ? "sign-in" : ( len( config.apiKeyEnvVar ?: "" ) ? "API key" : "open" )
+			summary = "web chat UI, auth: #auth#"
+		} else if ( kind == "mcp" ) {
+			summary = "hosted MCP server"
+		} else if ( kind == "agent" ) {
+			summary = "agent HTTP route"
+		} else {
+			summary = "chat channel"
+		}
+		collectEnvKeys( config, "gateway #arguments.entry.name#", arguments.envUse )
+		return {
+			name    : arguments.entry.name,
+			file    : arguments.entry.path.listLast( "/\" ),
+			kind    : kind,
+			summary : summary,
+			path    : config.path ?: ""
+		}
+	}
+
+	/**
+	 * @entry A discovered mcp/ entry
+	 */
+	private struct function mcpHostedInfo( required struct entry ) {
+		var config = readEntryConfig( arguments.entry.path )
+		config = isStruct( config ) ? config : {}
+		return {
+			name        : arguments.entry.name,
+			file        : arguments.entry.path.listLast( "/\" ),
+			description : config.description ?: "",
+			tools       : config.tools ?: []
+		}
+	}
+
+	/**
+	 * @entry A discovered interceptors/ entry
+	 */
+	private struct function interceptorInfo( required struct entry ) {
+		var scope = "agent"
+		try {
+			var hit = reMatch( "@scope\s+(\w+)", fileRead( arguments.entry.path ) )
+			if ( hit.len() ) {
+				scope = hit[ 1 ].reReplace( "@scope\s+", "" )
+			}
+		} catch ( any e ) {
+		}
+		return { name : arguments.entry.name, file : arguments.entry.path.listLast( "/\" ), scope : scope }
+	}
+
+	/**
+	 * @root The project root
+	 * @discovery The root discovery
+	 *
+	 * @return { present, file, tasks : [ names ] } - task names read from `task( "name" )` calls
+	 */
+	private struct function scheduleInfo( required string root, required struct discovery ) {
+		if ( !arguments.discovery.hasScheduler ) {
+			return { present : false, file : "", tasks : [] }
+		}
+		var tasks = []
+		try {
+			for ( var hit in reMatch( "task\(\s*[""']([^""']+)[""']", fileRead( arguments.discovery.schedulerPath ) ) ) {
+				tasks.append( hit.reReplace( "task\(\s*[""']", "" ).reReplace( "[""']$", "" ) )
+			}
+		} catch ( any e ) {
+		}
+		return { present : true, file : "schedules/Scheduler.bx", tasks : tasks }
+	}
+
+	/**
+	 * deploy/ is read the way `deploy` reads it: one .bx/.json entry each.
+	 *
+	 * @root The project root
+	 * @envUse The shared env-var accumulator
+	 *
+	 * @return [ { name, file, target } ]
+	 */
+	private array function deployEntries( required string root, required struct envUse ) {
+		var dir = arguments.root & "/deploy"
+		if ( !directoryExists( dir ) ) {
+			return []
+		}
+		var entries = []
+		for ( var file in directoryList( path = dir, recurse = false, type = "file", listInfo = "name" ) ) {
+			if ( file.startsWith( "." ) || ![ "bx", "json" ].contains( file.listLast( "." ) ) ) {
+				continue
+			}
+			var name = file.reReplace( "\.[a-z]+$", "" )
+			var config = readEntryConfig( dir & "/" & file )
+			config = isStruct( config ) ? config : {}
+			collectEnvKeys( config, "deploy #name#", arguments.envUse )
+			entries.append( { name : name, file : "deploy/" & file, target : config.target ?: "" } )
+		}
+		return entries
+	}
+
+	/**
+	 * @root The project root
+	 *
+	 * @return { built, manifestVersion, generator, files } - from .build/manifest.json when there is one
+	 */
+	private struct function buildInfo( required string root ) {
+		var path = arguments.root & "/.build/manifest.json"
+		if ( !fileExists( path ) ) {
+			return { built : false, manifestVersion : "", generator : "", files : 0 }
+		}
+		try {
+			var manifest = jsonDeserialize( fileRead( path ) )
+			return {
+				built           : true,
+				manifestVersion : manifest.manifestVersion ?: "",
+				generator       : "#( manifest.generator.name ?: '' )# #( manifest.generator.version ?: '' )#".trim(),
+				files           : ( manifest.files ?: [] ).len()
+			}
+		} catch ( any e ) {
+			return { built : false, manifestVersion : "", generator : "", files : 0 }
+		}
+	}
+
+	// --------------------------------------------------------------------------
+	// Environment variables
+	// --------------------------------------------------------------------------
+
+	/**
+	 * Each distinct provider an agent uses needs its API key, as the `new` wizard's
+	 * catalog records it. `mock` and keyless providers add nothing.
+	 *
+	 * @agents Every agent node
+	 * @envUse The shared env-var accumulator
+	 */
+	private void function registerProviderEnv( required array agents, required struct envUse ) {
+		for ( var agent in arguments.agents ) {
+			if ( !len( agent.provider ) ) {
+				continue
+			}
+			var envVar = variables.catalog.provider( agent.provider ).envVar ?: ""
+			if ( len( envVar ) ) {
+				noteEnv( arguments.envUse, envVar, "#agent.name# model (#agent.provider#)" )
+			}
+		}
+	}
+
+	/**
+	 * @envUse The accumulator { NAME : [ usedBy ] }
+	 * @name The variable name
+	 * @usedBy Where it is used
+	 */
+	private void function noteEnv( required struct envUse, required string name, required string usedBy ) {
+		if ( !arguments.envUse.keyExists( arguments.name ) ) {
+			arguments.envUse[ arguments.name ] = []
+		}
+		if ( !arguments.envUse[ arguments.name ].contains( arguments.usedBy ) ) {
+			arguments.envUse[ arguments.name ].append( arguments.usedBy )
+		}
+	}
+
+	/**
+	 * Every struct key ending in `EnvVar` with a text value, anywhere in the node.
+	 *
+	 * @node A struct or array
+	 * @usedBy Where it is used
+	 * @envUse The shared env-var accumulator
+	 */
+	private void function collectEnvKeys( required any node, required string usedBy, required struct envUse ) {
+		if ( isStruct( arguments.node ) ) {
+			for ( var key in arguments.node ) {
+				var value = arguments.node[ key ]
+				if ( key.endsWith( "EnvVar" ) && isSimpleValue( value ) && len( value ) ) {
+					noteEnv( arguments.envUse, value, arguments.usedBy )
+				} else {
+					collectEnvKeys( value, arguments.usedBy, arguments.envUse )
+				}
+			}
+		} else if ( isArray( arguments.node ) ) {
+			for ( var item in arguments.node ) {
+				collectEnvKeys( item, arguments.usedBy, arguments.envUse )
+			}
+		}
+	}
+
+	/**
+	 * Every `${env.NAME}` or `${env.NAME:default}` placeholder in the node's text.
+	 *
+	 * @node A struct, array or string
+	 * @usedBy Where it is used
+	 * @envUse The shared env-var accumulator
+	 *
+	 * @return The variable names found
+	 */
+	private array function collectEnvPlaceholders( required any node, required string usedBy, required struct envUse ) {
+		var names = []
+		var text = isSimpleValue( arguments.node ) ? arguments.node : jsonSerialize( arguments.node )
+		for ( var hit in reMatch( "\$\{env\.[A-Za-z0-9_]+", text ) ) {
+			var name = hit.replace( "${env.", "" )
+			if ( !names.contains( name ) ) {
+				names.append( name )
+			}
+			noteEnv( arguments.envUse, name, arguments.usedBy )
+		}
+		return names
+	}
+
+	/**
+	 * @envUse The accumulator { NAME : [ usedBy ] }
+	 *
+	 * @return [ { name, usedBy, set } ], sorted by name
+	 */
+	private array function envList( required struct envUse ) {
+		var out = []
+		for ( var name in arguments.envUse.keyArray().sort( "textnocase" ) ) {
+			out.append( {
+				name   : name,
+				usedBy : arguments.envUse[ name ],
+				set    : len( getSystemSetting( name, "" ) ) > 0
+			} )
+		}
+		return out
+	}
+
+	// --------------------------------------------------------------------------
+	// Reading entries
+	// --------------------------------------------------------------------------
+
+	/**
+	 * Reads a gateways/, models/, mcp/ or deploy/ entry's config: a JSON file is
+	 * parsed, a `.bx` is loaded and its `configure()` called. Mirrors `doctor`.
+	 *
+	 * @path Absolute path to the entry
+	 *
+	 * @return The config, or null when it cannot be read
+	 */
+	private any function readEntryConfig( required string path ) {
+		try {
+			if ( arguments.path.endsWith( ".json" ) ) {
+				return jsonDeserialize( fileRead( arguments.path ) )
+			}
+			var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
+			return createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
+				.instantiate( arguments.path, context )
+				.configure()
+		} catch ( any e ) {
+			return null
+		}
+	}
+
+}

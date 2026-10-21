@@ -1,11 +1,29 @@
 /**
- * `inspect` CLI verb - reads and pretty-prints an existing `.build/manifest.json`
- * without rebuilding. Requires a prior `build`.
+ * `inspect` CLI verb - a report of how a project's agent is composed: the agents and
+ * subagents with their models, tools, skills and MCP servers, what the project is
+ * exposed through, its schedule, the environment variables it needs and whether they
+ * are set, and whether it validates.
+ *
+ * It reads the project's source, like `doctor`, so it works on a project that has
+ * never been built. Nothing is generated or written, except the Markdown file when
+ * `--md=<file>` names one. See ProjectReport for what is in the report.
  */
 class {
 
 	/**
-	 * @options { projectRoot (required, absolute path), json (optional boolean - print the raw manifest as JSON instead of the human-readable summary) }
+	 * @options {
+	 *   projectRoot (required, absolute path),
+	 *   json        (optional boolean - print the whole report as JSON),
+	 *   md          (optional - true prints Markdown, a file name writes it there),
+	 *   section     (optional - comma-separated section names to show),
+	 *   environment (optional - resolve the agent for this environment),
+	 *   color       (optional boolean - false for no color),
+	 *   ascii       (optional boolean - avoid box-drawing characters),
+	 *   _paint      (test seam - a function ( style, text ) replacing the palette),
+	 *   _width      (test seam - the width to draw at)
+	 * }
+	 *
+	 * @return { exitCode, message, report }
 	 */
 	struct function run( struct options = {} ) {
 		var projectRoot = trim( arguments.options.projectRoot ?: "" )
@@ -13,45 +31,64 @@ class {
 			throw( type = "BxAgents.MissingProjectRoot", message = "`inspect` requires a project root" )
 		}
 
-		var root = projectRoot.reReplace( "[\/]+$", "" )
-		var manifestPath = root & "/.build/manifest.json"
+		var builder = new "models.report.ProjectReport@bxagents"()
+		var sections = builder.parseSections( arguments.options.section ?: "" )
+		var report = builder.build( projectRoot, arguments.options.environment ?: "" )
 
-		if ( !fileExists( manifestPath ) ) {
-			throw(
-				type    = "BxAgents.NotBuilt",
-				message = "No build found at [#root#/.build] - run `build` first"
-			)
+		if ( arguments.options.json ?: false ) {
+			return { exitCode : 0, message : jsonSerialize( report ), report : report }
 		}
 
-		var manifest = jsonDeserialize( fileRead( manifestPath ) )
-		var asJson = arguments.options.json ?: false
+		var md = arguments.options.md ?: false
+		if ( isSimpleValue( md ) && len( md ) && md != "false" ) {
+			var markdown = new "models.report.ReportMarkdownRenderer@bxagents"().render( report, sections )
+			if ( md == "true" ) {
+				return { exitCode : 0, message : markdown, report : report }
+			}
+			var target = reFind( "^([A-Za-z]:)?[/\\]", md ) ? md : projectRoot & "/" & md
+			fileWrite( target, markdown )
+			return { exitCode : 0, message : "Wrote #target#", report : report }
+		}
 
-		return {
-			exitCode : 0,
-			message  : asJson ? jsonSerialize( manifest ) : formatManifest( manifest ),
-			manifest : manifest
+		var text = new "models.report.ReportTextRenderer@bxagents"(
+			paint : arguments.options._paint ?: palette( arguments.options ),
+			width : arguments.options._width ?: terminalWidth(),
+			ascii : arguments.options.ascii ?: ( getSystemSetting( "TERM", "" ) == "dumb" )
+		).render( report, sections )
+
+		return { exitCode : 0, message : text, report : report }
+	}
+
+	/**
+	 * Color only at an interactive terminal, and never against `NO_COLOR`, `TERM=dumb`
+	 * or `--no-color`, so a pipe or a log file gets plain text.
+	 *
+	 * @options The verb's options
+	 *
+	 * @return A function ( style, text ) that applies the palette, or one that does not
+	 */
+	private function palette( required struct options ) {
+		var plain = ( style, text ) => text
+		if ( !( arguments.options.color ?: true ) ) {
+			return plain
+		}
+		try {
+			if ( !createObject( "java", "ortus.boxlang.bxagents.tui.TuiScreen" ).isInteractive() ) {
+				return plain
+			}
+			var theme = createObject( "java", "ortus.boxlang.bxagents.tui.Theme" ).detect()
+			return ( style, text ) => theme.paint( style, text )
+		} catch ( any e ) {
+			return plain
 		}
 	}
 
 	/**
-	 * @manifest The built project's manifest.json, deserialized
-	 *
-	 * @return A human-readable, pretty-printed summary of the manifest
+	 * @return The terminal width from `COLUMNS` when the shell exports it, else 80
 	 */
-	private string function formatManifest( required struct manifest ) {
-		var agent = arguments.manifest.agent ?: {}
-		var generator = arguments.manifest.generator ?: {}
-		var files = arguments.manifest.files ?: []
-
-		var lines = [
-			"Agent:        #agent.name ?: ''#",
-			"Model:        #agent.model ?: ''#",
-			"Environment:  #agent.environment ?: ''#",
-			"Manifest ver: #arguments.manifest.manifestVersion ?: ''#",
-			"Generator:    #generator.name ?: ''# #generator.version ?: ''#",
-			"Files:        #files.len()#"
-		]
-		return lines.toList( char( 10 ) )
+	private numeric function terminalWidth() {
+		var columns = getSystemSetting( "COLUMNS", "" )
+		return isNumeric( columns ) ? int( columns ) : 80
 	}
 
 }

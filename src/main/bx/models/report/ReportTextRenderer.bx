@@ -1,0 +1,429 @@
+/**
+ * Draws a ProjectReport for a terminal: a header, an at-a-glance line, and one ruled
+ * section per part of the agent, with the subagent tree drawn as a tree.
+ *
+ * Plain text with the prompter's palette applied through `paint`, the same function
+ * `NextSteps` takes, so `NO_COLOR`, `TERM=dumb` and a pipe all come out as plain text
+ * by passing an identity function. With `ascii` the box-drawing and symbols fall back
+ * to characters any terminal can show.
+ *
+ * Sections with nothing in them are left out, unless the caller asked for that section
+ * by name, in which case it says "none".
+ */
+class {
+
+	/**
+	 * @paint A function ( style, text ) that applies the palette; no color when omitted
+	 * @width The terminal width; clamped to 60-110 so lines stay readable
+	 * @ascii True to avoid box-drawing characters and symbols
+	 *
+	 * @return this
+	 */
+	function init( any paint, numeric width = 80, boolean ascii = false ) {
+		variables.paint = isNull( arguments.paint ) ? ( style, text ) => text : arguments.paint
+		variables.width = max( 60, min( 110, arguments.width ) )
+		variables.g = arguments.ascii
+			? { dot : "*", ok : "+", bad : "x", warn : "!", rule : "-", tee : "|-", last : "`-", bar : "|", sep : "-", arrow : "->", ellipsis : "..." }
+			: { dot : "●", ok : "✔", bad : "✖", warn : "▲", rule : "─", tee : "├─", last : "└─", bar : "│", sep : "·", arrow : "→", ellipsis : "…" }
+		return this
+	}
+
+	/**
+	 * @report A ProjectReport.build() result
+	 * @sections Section names to draw, in report order; empty for all of them
+	 *
+	 * @return The text to print
+	 */
+	string function render( required struct report, array sections = [] ) {
+		var r = arguments.report
+		var asked = arguments.sections.len() > 0
+		var out = []
+
+		drawHeader( r, out )
+
+		var parts = [
+			{ name : "agents", title : "Agents", draw : lines => drawAgents( r, lines ) },
+			{ name : "tools", title : "Tools", draw : lines => drawTools( r, lines ) },
+			{ name : "skills", title : "Skills", draw : lines => drawSkills( r, lines ) },
+			{ name : "mcp", title : "MCP", draw : lines => drawMcp( r, lines ) },
+			{ name : "gateways", title : "Exposed through", draw : lines => drawGateways( r, lines ) },
+			{ name : "schedule", title : "Schedule", draw : lines => drawSchedule( r, lines ) },
+			{ name : "models", title : "Named models", draw : lines => drawModels( r, lines ) },
+			{ name : "interceptors", title : "Interceptors", draw : lines => drawInterceptors( r, lines ) },
+			{ name : "modules", title : "Modules", draw : lines => drawModules( r, lines ) },
+			{ name : "deploy", title : "Deploy targets", draw : lines => drawDeploy( r, lines ) },
+			{ name : "env", title : "Environment", draw : lines => drawEnv( r, lines ) },
+			{ name : "checks", title : "Checks", draw : lines => drawChecks( r, lines ) },
+			{ name : "build", title : "Build", draw : lines => drawBuild( r, lines ) }
+		]
+
+		for ( var part in parts ) {
+			if ( asked && !arguments.sections.contains( part.name ) ) {
+				continue
+			}
+			var body = []
+			part.draw( body )
+			if ( !body.len() ) {
+				if ( !asked ) {
+					continue
+				}
+				body.append( p( "muted", "  none" ) )
+			}
+			out.append( "" )
+			out.append( rule( part.title ) )
+			out.append( body, true )
+		}
+
+		return out.toList( char( 10 ) )
+	}
+
+	// --------------------------------------------------------------------------
+	// Header
+	// --------------------------------------------------------------------------
+
+	private void function drawHeader( required struct r, required array out ) {
+		var project = arguments.r.project
+		var root = arguments.r.agent
+		arguments.out.append(
+			p( "accent", variables.g.dot ) & " " & p( "bold", project.name )
+			& p( "muted", "   #project.definition# #variables.g.sep# #project.environment#" )
+		)
+		if ( len( project.description ) ) {
+			arguments.out.append( "  " & clip( project.description, variables.width - 2 ) )
+		}
+		arguments.out.append( p( "muted", "  " & project.root ) )
+
+		var counts = []
+		var agentCount = flatten( root ).len()
+		var toolCount = 0
+		var skillCount = 0
+		for ( var node in flatten( root ) ) {
+			toolCount += node.tools.own.len() + node.tools.module.len()
+			skillCount += node.skills.len()
+		}
+		counts.append( plural( agentCount, "agent" ) )
+		counts.append( plural( toolCount, "tool" ) )
+		if ( skillCount ) {
+			counts.append( plural( skillCount, "skill" ) )
+		}
+		if ( arguments.r.gateways.len() ) {
+			counts.append( plural( arguments.r.gateways.len(), "gateway" ) )
+		}
+		var missing = arguments.r.env.filter( v => !v.set ).len()
+		var problems = arguments.r.validation.errors.len()
+		var styled = counts.map( c => { text : c, style : "plain" } )
+		if ( missing ) {
+			styled.append( { text : "#missing# env var#missing == 1 ? '' : 's'# not set", style : "warn" } )
+		}
+		if ( problems ) {
+			styled.append( { text : plural( problems, "error" ), style : "error" } )
+		}
+
+		// The glance line wraps rather than run past the width
+		arguments.out.append( "" )
+		var line = ""
+		var lineWidth = 0
+		var joiner = " #variables.g.sep# "
+		for ( var piece in styled ) {
+			var shown = piece.style == "plain" ? piece.text : p( piece.style, piece.text )
+			if ( lineWidth && lineWidth + len( joiner ) + len( piece.text ) + 2 > variables.width ) {
+				arguments.out.append( "  " & line )
+				line = ""
+				lineWidth = 0
+			}
+			line &= ( lineWidth ? joiner : "" ) & shown
+			lineWidth += ( lineWidth ? len( joiner ) : 0 ) + len( piece.text )
+		}
+		arguments.out.append( "  " & line )
+	}
+
+	// --------------------------------------------------------------------------
+	// Sections
+	// --------------------------------------------------------------------------
+
+	private void function drawAgents( required struct r, required array out ) {
+		treeNode( arguments.r.agent, "", true, true, arguments.out )
+	}
+
+	/**
+	 * @node The agent to draw
+	 * @prefix The tree lines of the parents
+	 * @isLast Whether this is the last child of its parent
+	 * @isRoot Whether this is the root agent
+	 * @out The lines so far
+	 */
+	private void function treeNode( required struct node, required string prefix, required boolean isLast, required boolean isRoot, required array out ) {
+		var n = arguments.node
+		var connector = arguments.isRoot ? "" : ( arguments.isLast ? variables.g.last : variables.g.tee )
+		var spine = arguments.isRoot ? "  " : ( arguments.isLast ? "   " : variables.g.bar & "  " ) & " "
+
+		arguments.out.append(
+			p( "muted", arguments.prefix & connector ) & p( "accent", variables.g.dot ) & " " & p( "bold", n.name ) & "  " & modelLabel( n )
+		)
+
+		var facts = []
+		facts.append( n.instructions.source == "none" ? "no instructions" : ( n.instructions.source == "code" ? "instructions in code" : "instructions: #n.instructions.source#" ) )
+		var toolTotal = n.tools.own.len() + n.tools.module.len()
+		if ( toolTotal ) {
+			facts.append( plural( toolTotal, "tool" ) )
+		}
+		if ( n.skills.len() ) {
+			facts.append( plural( n.skills.len(), "skill" ) )
+		}
+		if ( n.mcpServers.len() ) {
+			facts.append( plural( n.mcpServers.len(), "MCP server" ) )
+		}
+		if ( len( n.memory ) ) {
+			facts.append( "memory: #n.memory#" )
+		}
+		if ( n.security ) {
+			facts.append( "guard on" )
+		}
+		if ( n.children.len() ) {
+			facts.append( plural( n.children.len(), "subagent" ) )
+		}
+		var childPrefix = arguments.prefix & ( arguments.isRoot ? "" : ( arguments.isLast ? "   " : variables.g.bar & "  " ) )
+		arguments.out.append( p( "muted", arguments.prefix & spine & facts.toList( " #variables.g.sep# " ) ) )
+
+		for ( var i = 1; i <= n.children.len(); i++ ) {
+			treeNode( n.children[ i ], childPrefix, i == n.children.len(), false, arguments.out )
+		}
+	}
+
+	private void function drawTools( required struct r, required array out ) {
+		var first = true
+		for ( var node in flatten( arguments.r.agent ) ) {
+			if ( !node.tools.own.len() && !node.tools.module.len() ) {
+				continue
+			}
+			if ( !first ) {
+				arguments.out.append( "" )
+			}
+			first = false
+			arguments.out.append( "  " & p( "accent", node.name ) )
+			var rows = []
+			for ( var tool in node.tools.own ) {
+				rows.append( [ tool.name, tool.description, tool.file ] )
+			}
+			for ( var tool in node.tools.module ) {
+				rows.append( [ tool, "module tool", "" ] )
+			}
+			table( rows, arguments.out, 4, 2 )
+			if ( node.tools.options.len() ) {
+				arguments.out.append( p( "muted", "    options for: " & node.tools.options.toList( ", " ) ) )
+			}
+		}
+	}
+
+	private void function drawSkills( required struct r, required array out ) {
+		for ( var node in flatten( arguments.r.agent ) ) {
+			if ( node.skills.len() ) {
+				arguments.out.append( "  " & p( "accent", node.name ) & "  " & node.skills.toList( ", " ) )
+			}
+		}
+	}
+
+	private void function drawMcp( required struct r, required array out ) {
+		for ( var node in flatten( arguments.r.agent ) ) {
+			for ( var mcpClient in node.mcpServers ) {
+				var label = len( mcpClient.name ) ? mcpClient.name : mcpClient.url
+				var env = mcpClient.env.len() ? "  " & p( "muted", "needs " & mcpClient.env.toList( ", " ) ) : ""
+				arguments.out.append( "  " & p( "accent", node.name ) & " #variables.g.arrow# " & label & ( len( mcpClient.name ) ? p( "muted", "  " & mcpClient.url ) : "" ) & env )
+			}
+		}
+		for ( var hosted in arguments.r.mcpHosted ) {
+			var tools = hosted.tools.len() ? plural( hosted.tools.len(), "tool" ) : "all tools"
+			arguments.out.append( "  " & p( "accent", "hosts" ) & " " & hosted.name & p( "muted", "  #tools#" & ( len( hosted.description ) ? " #variables.g.sep# #hosted.description#" : "" ) ) )
+		}
+	}
+
+	private void function drawGateways( required struct r, required array out ) {
+		var rows = []
+		for ( var gateway in arguments.r.gateways ) {
+			rows.append( [ gateway.name, gateway.kind, gateway.path, gateway.summary ] )
+		}
+		table( rows, arguments.out, 2 )
+	}
+
+	private void function drawSchedule( required struct r, required array out ) {
+		if ( !arguments.r.schedule.present ) {
+			return
+		}
+		var s = arguments.r.schedule
+		arguments.out.append( "  " & s.file & p( "muted", s.tasks.len() ? "  " & s.tasks.toList( ", " ) : "  no task() calls found" ) )
+	}
+
+	private void function drawModels( required struct r, required array out ) {
+		var rows = []
+		for ( var model in arguments.r.models ) {
+			rows.append( [ model.name, len( model.provider ) ? model.provider & ( len( model.model ) ? "/" & model.model : "" ) : "", model.file ] )
+		}
+		table( rows, arguments.out, 2 )
+	}
+
+	private void function drawInterceptors( required struct r, required array out ) {
+		var rows = []
+		for ( var interceptor in arguments.r.interceptors ) {
+			rows.append( [ interceptor.name, "#interceptor.scope# scope", interceptor.file ] )
+		}
+		table( rows, arguments.out, 2 )
+	}
+
+	private void function drawModules( required struct r, required array out ) {
+		for ( var module in arguments.r.modules ) {
+			arguments.out.append( "  " & module.name )
+		}
+	}
+
+	private void function drawDeploy( required struct r, required array out ) {
+		var rows = []
+		for ( var entry in arguments.r.deploy ) {
+			rows.append( [ entry.name, entry.target, entry.file ] )
+		}
+		table( rows, arguments.out, 2 )
+	}
+
+	private void function drawEnv( required struct r, required array out ) {
+		var nameWidth = 0
+		for ( var v in arguments.r.env ) {
+			nameWidth = max( nameWidth, len( v.name ) )
+		}
+		for ( var v in arguments.r.env ) {
+			var mark = v.set ? p( "ok", variables.g.ok ) : p( "warn", variables.g.warn )
+			var usedBy = clip( v.usedBy.toList( "; " ), max( 10, variables.width - nameWidth - 8 ) )
+			arguments.out.append( "  #mark# " & v.name & repeatString( " ", nameWidth - len( v.name ) + 2 ) & p( "muted", usedBy ) )
+		}
+	}
+
+	private void function drawChecks( required struct r, required array out ) {
+		var v = arguments.r.validation
+		for ( var error in v.errors ) {
+			arguments.out.append( "  " & p( "error", variables.g.bad ) & " " & clip( error, variables.width - 4 ) )
+		}
+		for ( var warning in v.warnings ) {
+			arguments.out.append( "  " & p( "warn", variables.g.warn ) & " " & clip( warning, variables.width - 4 ) )
+		}
+		if ( !v.errors.len() && !v.warnings.len() ) {
+			arguments.out.append( "  " & p( "ok", variables.g.ok ) & " The project validates cleanly" )
+		}
+	}
+
+	private void function drawBuild( required struct r, required array out ) {
+		var b = arguments.r.build
+		if ( b.built ) {
+			arguments.out.append( "  " & p( "ok", variables.g.ok ) & " Built " & p( "muted", "#b.generator# #variables.g.sep# manifest #b.manifestVersion# #variables.g.sep# #plural( b.files, 'file' )#" ) )
+		} else {
+			arguments.out.append( "  " & p( "muted", "Not built yet. Run `bxAgents build`." ) )
+		}
+	}
+
+	// --------------------------------------------------------------------------
+	// Pieces
+	// --------------------------------------------------------------------------
+
+	/**
+	 * @node An agent node
+	 *
+	 * @return The model as a person would say it
+	 */
+	private string function modelLabel( required struct node ) {
+		var n = arguments.node
+		if ( n.modelSource == "none" ) {
+			return p( "muted", n.classBased ? "model set in code" : "no model" )
+		}
+		if ( n.modelSource == "named" ) {
+			var target = len( n.provider ) ? n.provider & ( len( n.modelId ) ? "/" & n.modelId : "" ) : "unreadable"
+			return n.model & p( "muted", " #variables.g.arrow# #target#" )
+		}
+		if ( n.modelSource == "provider" ) {
+			return n.provider & p( "muted", " (its default model)" )
+		}
+		return n.model
+	}
+
+	/**
+	 * @title The section title
+	 */
+	private string function rule( required string title ) {
+		var left = repeatString( variables.g.rule, 2 ) & " "
+		var fill = max( 3, variables.width - len( arguments.title ) - 4 )
+		return p( "muted", left ) & p( "accent", arguments.title ) & p( "muted", " " & repeatString( variables.g.rule, fill ) )
+	}
+
+	/**
+	 * Draws rows as aligned columns. The last column is clipped to the room left;
+	 * every column but the first is muted so the names stand out.
+	 *
+	 * @rows [ [ cell, ... ] ]
+	 * @out The lines so far
+	 * @indent Spaces before the first column
+	 * @flex The column that is clipped when the rows are too wide; the last by default
+	 */
+	private void function table( required array rows, required array out, numeric indent = 2, numeric flex = 0 ) {
+		if ( !arguments.rows.len() ) {
+			return
+		}
+		var cols = arguments.rows[ 1 ].len()
+		var flexCol = arguments.flex > 0 ? arguments.flex : cols
+		var widths = []
+		for ( var c = 1; c <= cols; c++ ) {
+			widths.append( 0 )
+		}
+		for ( var row in arguments.rows ) {
+			for ( var c = 1; c <= cols; c++ ) {
+				widths[ c ] = max( widths[ c ], len( row[ c ] ) )
+			}
+		}
+		// When the rows are wider than the line, only the flexible column gives way
+		var total = arguments.indent
+		for ( var c = 1; c <= cols; c++ ) {
+			total += widths[ c ] + ( c < cols ? 2 : 0 )
+		}
+		if ( total > variables.width ) {
+			widths[ flexCol ] = max( 12, widths[ flexCol ] - ( total - variables.width ) )
+		}
+
+		for ( var row in arguments.rows ) {
+			var line = repeatString( " ", arguments.indent )
+			for ( var c = 1; c <= cols; c++ ) {
+				var cell = clip( row[ c ], widths[ c ] )
+				var shown = c == 1 ? cell : p( "muted", cell )
+				line &= shown & ( c < cols ? repeatString( " ", widths[ c ] - len( cell ) + 2 ) : "" )
+			}
+			arguments.out.append( line.rtrim() )
+		}
+	}
+
+	/**
+	 * @text The text
+	 * @max The most characters to keep
+	 *
+	 * @return The text, ending in an ellipsis if it was cut
+	 */
+	private string function clip( required string text, required numeric max ) {
+		var flat = arguments.text.reReplace( "\s+", " ", "all" )
+		return len( flat ) <= arguments.max ? flat : left( flat, max( 1, arguments.max - 1 ) ) & variables.g.ellipsis
+	}
+
+	private string function plural( required numeric count, required string word ) {
+		return "#arguments.count# #arguments.word##arguments.count == 1 ? '' : 's'#"
+	}
+
+	private string function p( required string style, required string text ) {
+		return variables.paint( arguments.style, arguments.text )
+	}
+
+	/**
+	 * @node The root of an agent tree
+	 *
+	 * @return Every agent in the tree, in tree order
+	 */
+	private array function flatten( required struct node ) {
+		var all = [ arguments.node ]
+		for ( var child in arguments.node.children ) {
+			all.append( flatten( child ), true )
+		}
+		return all
+	}
+
+}
