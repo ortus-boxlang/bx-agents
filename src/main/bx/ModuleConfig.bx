@@ -63,7 +63,7 @@ class {
 	this.dependencies = [];
 
 	static {
-		subcommandVerbs = [ "token", "notes" ]
+		subcommandVerbs = [ "token", "notes", "add" ]
 
 		verbs = {
 			"new"     : "models.cli.New",
@@ -79,7 +79,8 @@ class {
 			"hash-password" : "models.cli.HashPassword",
 			"token"   : "models.cli.Token",
 			"notes"   : "models.cli.Notes",
-			"doctor"  : "models.cli.Doctor"
+			"doctor"  : "models.cli.Doctor",
+			"add"     : "models.cli.Add"
 		}
 
 		verbDescriptions = {
@@ -96,7 +97,8 @@ class {
 			"hash-password" : "Hash a password for a webui users entry (--password)",
 			"token"   : "Issue, list and revoke access tokens for a deployed agent (create --name, list, revoke --name)",
 			"notes"   : "Read and manage the notes of an agent (list, add, edit, remove, stats, export, import)",
-			"doctor"  : "Diagnose the environment and project - runtime, modules, env vars ([--json])"
+			"doctor"  : "Diagnose the environment and project - runtime, modules, env vars ([--json])",
+			"add"     : "Add to a project: add <kind> [name] - a tool today ([--force], [--dry-run], [--yes])"
 		}
 
 		// Per verb, the flags that REQUIRE a value - `--projectRoot` is
@@ -123,7 +125,8 @@ class {
 			"hash-password" : [ "password" ],
 			"token"   : [ "name", "scope", "expires" ],
 			"notes"   : [ "scope", "user", "text", "id", "file" ],
-			"doctor"  : []
+			"doctor"  : [],
+			"add"     : [ "name", "agent", "function", "description", "args" ]
 		}
 	}
 
@@ -352,7 +355,7 @@ class {
 		}
 
 		options.delete( "_valuelessFlags" )
-		// `token create` and `notes list`: the first word is the action, not a project path
+		// `token create`, `notes list` and `add tool`: the first word is the action, not a project path
 		if ( static.subcommandVerbs.contains( verbName ) ) {
 			options.projectRoot = resolveProjectRoot( options, false )
 		} else {
@@ -443,6 +446,7 @@ class {
 	private struct function parseCliOptions( required array rawArgs ) {
 		var options = {}
 		var valueless = {}
+		var positionals = []
 
 		for ( var token in arguments.rawArgs ) {
 			if ( token.startsWith( "--!" ) ) {
@@ -476,11 +480,15 @@ class {
 					options[ body ] = true
 					valueless[ body ] = true
 				}
-			} else if ( !options.keyExists( "_positional" ) ) {
-				options[ "_positional" ] = token
+			} else {
+				if ( !options.keyExists( "_positional" ) ) {
+					options[ "_positional" ] = token
+				}
+				positionals.append( token )
 			}
 		}
 
+		options[ "_positionals" ] = positionals
 		options[ "_valuelessFlags" ] = valueless
 
 		return options

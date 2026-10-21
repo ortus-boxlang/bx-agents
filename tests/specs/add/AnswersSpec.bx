@@ -1,0 +1,77 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "add.Answers", function() {
+
+			function answersFor( struct options = {}, any prompter = "", struct presets = {} ) {
+				return new bxagents.models.add.Answers( options, prompter, presets );
+			}
+
+			it( "takes a flag before anything else, and never asks for it", function() {
+				var prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [] );
+				var answers = answersFor( { name : "FromFlag" }, prompter, { name : "FromPreset" } );
+
+				expect( answers.text( key = "name", title = "Name" ) ).toBe( "FromFlag" );
+				expect( prompter.asked() ).toBeEmpty();
+			} );
+
+			it( "takes the positional preset when there is no flag", function() {
+				var answers = answersFor( {}, "", { name : "FromPreset" } );
+
+				expect( answers.text( key = "name", title = "Name" ) ).toBe( "FromPreset" );
+			} );
+
+			it( "asks when neither was given", function() {
+				var prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [ "Typed" ] );
+
+				expect( answersFor( {}, prompter ).text( key = "name", title = "Name" ) ).toBe( "Typed" );
+				expect( prompter.remaining() ).toBe( 0 );
+			} );
+
+			it( "uses the default with no prompter, and names the missing flag when there is none", function() {
+				var answers = answersFor();
+
+				expect( answers.text( key = "x", title = "X", default = "dflt" ) ).toBe( "dflt" );
+				expect( function() {
+					answers.text( key = "x", title = "The X", required = true );
+				} ).toThrow( "BxAgents.MissingAnswer" );
+			} );
+
+			it( "refuses an invalid flag value, naming the flag", function() {
+				var answers = answersFor( { name : "9" } );
+
+				expect( function() {
+					answers.text( key = "name", title = "Name", validate = ( v ) => "not good" );
+				} ).toThrow( "BxAgents.InvalidAnswer" );
+			} );
+
+			it( "asks again with the reason when a typed answer is invalid", function() {
+				var prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [ "bad", "good" ] );
+				var answers = answersFor( {}, prompter );
+
+				var value = answers.text( key = "name", title = "Name", validate = ( v ) => v == "good" ? "" : "try again" );
+
+				expect( value ).toBe( "good" );
+				expect( prompter.asked() ).toHaveLength( 2 );
+			} );
+
+			it( "chooses by flag, by prompt or by default, and rejects a value that is not a choice", function() {
+				var choices = [ "a", "b" ];
+
+				expect( answersFor( { pick : "b" } ).select( key = "pick", title = "Pick", choices = choices ) ).toBe( "b" );
+				expect( answersFor().select( key = "pick", title = "Pick", choices = choices ) ).toBe( "a" );
+				expect( answersFor( {}, new bxagents.models.wizard.prompters.ScriptedPrompter( [ "b" ] ) ).select( key = "pick", title = "Pick", choices = choices ) ).toBe( "b" );
+				expect( function() {
+					answersFor( { pick : "z" } ).select( key = "pick", title = "Pick", choices = choices );
+				} ).toThrow( "BxAgents.InvalidAnswer" );
+			} );
+
+			it( "reports whether questions can be asked", function() {
+				expect( answersFor().interactive() ).toBeFalse();
+				expect( answersFor( {}, new bxagents.models.wizard.prompters.ScriptedPrompter( [] ) ).interactive() ).toBeTrue();
+			} );
+
+		} );
+	}
+
+}

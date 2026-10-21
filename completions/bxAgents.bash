@@ -12,7 +12,7 @@ _bxagents_complete() {
 	fi
 	local count=${#words[@]}
 	local cur="${words[count-1]}"
-	local verbs="build chat clean deploy doctor hash-password inspect invoke new notes package serve test token help"
+	local verbs="add build chat clean deploy doctor hash-password inspect invoke new notes package serve test token help"
 	local globals="--help -h --version -v"
 	COMPREPLY=()
 
@@ -32,6 +32,7 @@ _bxagents_complete() {
 	if [[ "$cur" == --*=* ]]; then
 		local flag="${cur%%=*}" part="${cur#*=}"
 		case "$verb $flag" in
+			"add --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"build --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"chat --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"clean --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
@@ -68,6 +69,7 @@ _bxagents_complete() {
 	if [[ "$cur" == -* ]]; then
 		local flags=""
 		case "$verb" in
+			add) flags="--agent= --args= --description= --dry-run --force --function= --name= --no-tui --projectRoot= --yes" ;;
 			build) flags="--environment= --generatorVersion= --projectRoot= --verbose" ;;
 			chat) flags="--connect= --continue --no-tui --port= --projectRoot= --record --server --session= --token= --user=" ;;
 			clean) flags="--force --projectRoot=" ;;

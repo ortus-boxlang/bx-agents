@@ -1,0 +1,201 @@
+/**
+ * `add tool` - scaffolds `tools/<Name>.bx` with one `@AITool` function, in the shape
+ * bx-ai documents: a docblock describing each argument, the annotation carrying the
+ * description the model reads, and typed arguments from which bx-ai builds the schema.
+ *
+ * A tool belongs to the agent whose folder it is in, so this asks which agent when the
+ * project has subagents. Two tool files of one agent may not share a base name (the
+ * validator rejects it), so a clash is refused here rather than at the next build.
+ */
+class {
+
+	static {
+		TYPES = [ "string", "numeric", "boolean", "array", "struct", "date", "any" ]
+		PLACEHOLDER = "TODO: say what this tool does, so the model knows when to call it."
+	}
+
+	struct function info() {
+		return { name : "tool", summary : "A function the agent can call (tools/<Name>.bx)" }
+	}
+
+	/**
+	 * @answers An Answers
+	 * @ctx The add context
+	 *
+	 * @return { name, agent, function, description, args : [ { name, type } ] }
+	 */
+	struct function ask( required any answers, required struct ctx ) {
+		var a = arguments.answers
+		var name = a.text(
+			key      = "name",
+			title    = "Tool name",
+			help     = "The file name: tools/<Name>.bx. Letters and digits, starting with a letter, e.g. WeatherTools.",
+			required = true,
+			validate = ( value ) => identifierProblem( value )
+		)
+
+		var agent = "."
+		var choices = [ { value : ".", label : "The root agent", hint : arguments.ctx.project.rootName } ]
+		for ( var sub in arguments.ctx.project.subagents ) {
+			choices.append( { value : sub, label : sub, hint : "subagents/#sub#" } )
+		}
+		if ( choices.len() > 1 ) {
+			agent = a.select( key = "agent", title = "Which agent gets this tool?", choices = choices, default = "." )
+		} else if ( ( arguments.ctx.options.agent ?: "." ) != "." ) {
+			throw( type = "BxAgents.InvalidAnswer", message = "--agent: this project has no subagents" )
+		}
+		if ( agent == "root" ) {
+			agent = "."
+		}
+
+		var clash = arguments.ctx.project.toolNames[ agent ] ?: []
+		if ( clash.findNoCase( name ) ) {
+			throw( type = "BxAgents.ToolExists", message = "#agent == '.' ? 'The root agent' : 'Subagent ' & agent# already has a tool file named #name#. Pick another name." )
+		}
+
+		var functionName = a.text(
+			key      = "function",
+			title    = "Function name",
+			help     = "What the model calls, e.g. getWeather.",
+			default  = lcase( left( name, 1 ) ) & mid( name, 2 ),
+			validate = ( value ) => identifierProblem( value )
+		)
+		var description = a.text(
+			key      = "description",
+			title    = "What does it do?",
+			help     = "The model reads this to decide when to call the tool.",
+			default  = a.interactive() ? "" : static.PLACEHOLDER,
+			required = true
+		)
+		var argText = a.text(
+			key     = "args",
+			title   = "Arguments",
+			help    = "Comma separated, each name or name:type, e.g. city, units:string, days:numeric. Leave empty for none.",
+			default = "",
+			validate = ( value ) => argsProblem( value )
+		)
+
+		return {
+			name        : name,
+			agent       : agent,
+			function    : functionName,
+			description : description,
+			args        : parseArgs( argText )
+		}
+	}
+
+	/**
+	 * @answers The answers from ask()
+	 * @ctx The add context
+	 * @changes A ChangeSet
+	 */
+	void function plan( required struct answers, required struct ctx, required any changes ) {
+		arguments.changes.file( pathFor( arguments.answers ), render( arguments.answers ) )
+	}
+
+	/**
+	 * @return [ text ] what is left to do
+	 */
+	array function next( required struct answers, required struct ctx ) {
+		var lines = [ "Implement #arguments.answers.function#() in #pathFor( arguments.answers )#." ]
+		if ( arguments.answers.description == static.PLACEHOLDER ) {
+			lines.append( "Replace the TODO description: it is what the model reads to decide when to call the tool." )
+		}
+		lines.append( "It is attached to the agent automatically because it lives in that agent's tools/ folder." )
+		lines.append( "Check it with: bxAgents inspect --section=tools" )
+		return lines
+	}
+
+	// --------------------------------------------------------------------------
+
+	private string function pathFor( required struct answers ) {
+		return ( arguments.answers.agent == "." ? "" : "subagents/" & arguments.answers.agent & "/" ) & "tools/" & arguments.answers.name & ".bx"
+	}
+
+	/**
+	 * @answers The answers from ask()
+	 *
+	 * @return The tool's source
+	 */
+	private string function render( required struct answers ) {
+		var nl = char( 10 )
+		var tab = char( 9 )
+		var desc = escape( arguments.answers.description )
+		var lines = [ "class {", "" ]
+
+		lines.append( tab & "/**" )
+		lines.append( tab & " * " & arguments.answers.description.replace( char( 10 ), " ", "all" ) )
+		if ( arguments.answers.args.len() ) {
+			lines.append( tab & " *" )
+			for ( var arg in arguments.answers.args ) {
+				lines.append( tab & " * @#arg.name# TODO: describe #arg.name# so the model knows what to pass" )
+			}
+		}
+		lines.append( tab & " */" )
+		lines.append( tab & '@AITool( "' & desc & '" )' )
+		lines.append( tab & "public string function " & arguments.answers.function & "(" & signature( arguments.answers.args ) & ") {" )
+		lines.append( tab & tab & "// TODO: implement" )
+		lines.append( tab & tab & 'return ""' )
+		lines.append( tab & "}" )
+		lines.append( "" )
+		lines.append( "}" )
+		return lines.toList( nl ) & nl
+	}
+
+	private string function signature( required array args ) {
+		if ( !arguments.args.len() ) {
+			return ""
+		}
+		return " " & arguments.args.map( arg => "required #arg.type# #arg.name#" ).toList( ", " ) & " "
+	}
+
+	/**
+	 * A BoxLang string: quotes are doubled and a hash sign would start interpolation.
+	 */
+	private string function escape( required string text ) {
+		return arguments.text
+			.replace( char( 10 ), " ", "all" )
+			.replace( '"', '""', "all" )
+			.replace( char( 35 ), char( 35 ) & char( 35 ), "all" )
+	}
+
+	private array function parseArgs( required string text ) {
+		var out = []
+		for ( var raw in arguments.text.listToArray( "," ) ) {
+			var parts = trim( raw ).listToArray( ":" )
+			if ( parts.len() ) {
+				out.append( { name : trim( parts[ 1 ] ), type : parts.len() > 1 ? lcase( trim( parts[ 2 ] ) ) : "string" } )
+			}
+		}
+		return out
+	}
+
+	private string function identifierProblem( required string value ) {
+		if ( !len( arguments.value ) ) {
+			return "A name is needed."
+		}
+		if ( !reFind( "^[A-Za-z][A-Za-z0-9_]*$", arguments.value ) ) {
+			return "[#arguments.value#] must start with a letter and use only letters, digits and underscores."
+		}
+		return ""
+	}
+
+	private string function argsProblem( required string value ) {
+		var seen = []
+		for ( var arg in parseArgs( arguments.value ) ) {
+			var problem = identifierProblem( arg.name )
+			if ( len( problem ) ) {
+				return problem
+			}
+			if ( !static.TYPES.contains( arg.type ) ) {
+				return "[#arg.type#] is not an argument type. Use one of: #static.TYPES.toList( ', ' )#."
+			}
+			if ( seen.findNoCase( arg.name ) ) {
+				return "[#arg.name#] is listed twice."
+			}
+			seen.append( arg.name )
+		}
+		return ""
+	}
+
+}

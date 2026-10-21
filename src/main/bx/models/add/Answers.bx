@@ -1,0 +1,145 @@
+/**
+ * Where an `add` kind gets each answer from, in this order: a flag on the command line,
+ * the positional name (`presets`), a question asked through the prompter, and last a
+ * default. One kind therefore works the same typed, scripted and in CI: given every
+ * answer as a flag it never asks, and with no prompter (a pipe, `--yes`) it uses
+ * defaults or says which flag is missing.
+ *
+ * A bad value is an error naming the flag when it came from the command line, and a
+ * question asked again with the reason when it came from a person.
+ */
+class {
+
+	/**
+	 * @options The parsed CLI options
+	 * @prompter A prompter, or an empty string when nothing may be asked
+	 * @presets Answers that arrived another way, such as the positional name: { name : "Greeter" }
+	 */
+	function init( struct options = {}, any prompter = "", struct presets = {} ) {
+		variables.options = arguments.options
+		variables.prompter = arguments.prompter
+		variables.presets = arguments.presets
+		return this
+	}
+
+	/**
+	 * @return True when questions can be asked
+	 */
+	boolean function interactive() {
+		return isObject( variables.prompter )
+	}
+
+	/**
+	 * @key The flag and answer name
+	 * @title The question
+	 * @default The answer when nothing else gives one
+	 * @help A line under the question
+	 * @required True when an empty answer is not acceptable
+	 * @validate A function ( value ) returning an error message, or an empty string when the value is fine
+	 *
+	 * @return The answer
+	 */
+	string function text( required string key, required string title, string default = "", string help = "", boolean required = false, any validate ) {
+		var given = fromFlags( arguments.key )
+		if ( !isNull( given ) ) {
+			return checked( given, arguments.key, arguments.validate ?: null )
+		}
+
+		if ( !interactive() ) {
+			if ( arguments.required && !len( arguments.default ) ) {
+				throw( type = "BxAgents.MissingAnswer", message = "Pass --#arguments.key#=<value>: #arguments.title#" )
+			}
+			return checked( arguments.default, arguments.key, arguments.validate ?: null )
+		}
+
+		var help = arguments.help
+		while ( true ) {
+			var answer = trim( variables.prompter.text(
+				arguments.title,
+				help,
+				arguments.default,
+				false,
+				arguments.required ? "An answer is needed." : ""
+			) )
+			var problem = problemWith( arguments.validate ?: null, answer )
+			if ( !len( problem ) ) {
+				return answer
+			}
+			help = problem
+		}
+	}
+
+	/**
+	 * @key The flag and answer name
+	 * @title The question
+	 * @choices [ value ] or [ { value, label, hint } ]
+	 * @default The value chosen when nothing else gives one
+	 * @help A line under the question
+	 *
+	 * @return The chosen value
+	 */
+	string function select( required string key, required string title, required array choices, string default = "", string help = "" ) {
+		var values = arguments.choices.map( choice => isStruct( choice ) ? choice.value : choice )
+		var given = fromFlags( arguments.key )
+		if ( !isNull( given ) ) {
+			if ( !values.contains( given ) ) {
+				throw( type = "BxAgents.InvalidAnswer", message = "--#arguments.key#: [#given#] is not one of: #values.toList( ', ' )#" )
+			}
+			return given
+		}
+		var fallback = len( arguments.default ) ? arguments.default : values[ 1 ]
+		if ( !interactive() ) {
+			return fallback
+		}
+		return variables.prompter.select( arguments.title, arguments.choices, fallback, arguments.help )
+	}
+
+	/**
+	 * @key The flag and answer name
+	 * @title The question
+	 * @default The answer when nothing else gives one
+	 * @help A line under the question
+	 */
+	boolean function confirm( required string key, required string title, boolean default = true, string help = "" ) {
+		if ( variables.options.keyExists( arguments.key ) ) {
+			return isBoolean( variables.options[ arguments.key ] ) && variables.options[ arguments.key ]
+		}
+		return interactive() ? variables.prompter.confirm( arguments.title, arguments.help, arguments.default ) : arguments.default
+	}
+
+	/**
+	 * @key The flag name
+	 *
+	 * @return The flag's text, the preset, or null when neither was given
+	 */
+	private any function fromFlags( required string key ) {
+		if ( variables.options.keyExists( arguments.key ) ) {
+			return trim( variables.options[ arguments.key ] )
+		}
+		if ( variables.presets.keyExists( arguments.key ) && len( variables.presets[ arguments.key ] ) ) {
+			return trim( variables.presets[ arguments.key ] )
+		}
+		return null
+	}
+
+	/**
+	 * @validate A validator, or null for none
+	 *
+	 * @return The error message, or an empty string
+	 */
+	private string function problemWith( any validate, required string value ) {
+		return isNull( arguments.validate ) ? "" : arguments.validate( arguments.value )
+	}
+
+	/**
+	 * @return The value when it passes the validator, else an error naming the flag
+	 */
+	private string function checked( required string value, required string key, any validate ) {
+		var problem = problemWith( arguments.validate ?: null, arguments.value )
+		if ( len( problem ) ) {
+			throw( type = "BxAgents.InvalidAnswer", message = "--#arguments.key#: #problem#" )
+		}
+		return arguments.value
+	}
+
+}

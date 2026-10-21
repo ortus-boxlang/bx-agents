@@ -92,6 +92,27 @@ class extends="testbox.system.BaseSpec" {
 				expect( exitCode ).toBe( 0 );
 			} );
 
+			it( "gives `add` every positional as its own, and finds the project by --projectRoot", function() {
+				var projectRoot = newTempProject( "full-project" );
+
+				var exitCode = moduleConfig.dispatch( [
+					"add", "tool", "Greeter2", "--projectRoot=" & projectRoot,
+					"--description=Say hello", "--yes"
+				] );
+
+				expect( exitCode ).toBe( 0 );
+				expect( fileExists( projectRoot & "/tools/Greeter2.bx" ) ).toBeTrue();
+			} );
+
+			it( "rejects a valueless --description for `add`", function() {
+				var projectRoot = newTempProject( "full-project" );
+
+				var exitCode = moduleConfig.dispatch( [ "add", "tool", "Greeter2", "--projectRoot=" & projectRoot, "--description" ] );
+
+				expect( exitCode ).toBe( 1 );
+				expect( fileExists( projectRoot & "/tools/Greeter2.bx" ) ).toBeFalse();
+			} );
+
 			it( "returns exit code 1 and a message when a verb throws", function() {
 				var projectRoot = newTempProject( "full-project" );
 				// `package` requires a prior `build` - none has run here.

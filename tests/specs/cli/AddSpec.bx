@@ -1,0 +1,250 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "cli.Add", function() {
+
+			beforeEach( function() {
+				variables.addVerb = new bxagents.models.cli.Add();
+				variables.fixtures = expandPath( "/fixtures" );
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function newTempProject( required string fixtureName ) {
+				var dir = createTempDirectory( prefix = "bxagents-cli-add-" );
+				directoryCopy( fixtures & "/" & arguments.fixtureName, dir, true );
+				tempDirs.append( dir );
+				return dir;
+			}
+
+			private function addTool( required string root, struct flags = {}, array positionals = [ "tool", "Greeter2" ] ) {
+				var options = { projectRoot : root, _positionals : positionals, yes : true };
+				options.append( flags );
+				return addVerb.run( options );
+			}
+
+			describe( "add tool, by flags", function() {
+
+				it( "writes tools/<Name>.bx in bx-ai's shape", function() {
+					var root = newTempProject( "full-project" );
+
+					var result = addTool( root, { function : "greet", description : "Say hello", args : "name, times:numeric" } );
+					var source = fileRead( root & "/tools/Greeter2.bx" );
+
+					expect( result.exitCode ).toBe( 0 );
+					expect( source ).toInclude( '@AITool( "Say hello" )' );
+					expect( source ).toInclude( "public string function greet( required string name, required numeric times )" );
+					expect( source ).toInclude( "@name TODO: describe name" );
+					expect( result.message ).toInclude( "tools/Greeter2.bx" );
+				} );
+
+				it( "is found by the next build and by inspect", function() {
+					var root = newTempProject( "full-project" );
+					addTool( root, { function : "greet", description : "Say hello" } );
+
+					new bxagents.models.cli.Build().run( { projectRoot : root } );
+					var report = new bxagents.models.report.ProjectReport().build( root );
+
+					expect( report.agent.tools.own.map( t => t.name ) ).toInclude( "greet" );
+					expect( report.validation.errors ).toBeEmpty();
+				} );
+
+				it( "defaults the function name from the file name", function() {
+					var root = newTempProject( "full-project" );
+
+					addTool( root, { description : "d" }, [ "tool", "WeatherNow" ] );
+
+					expect( fileRead( root & "/tools/WeatherNow.bx" ) ).toInclude( "function weatherNow(" );
+				} );
+
+				it( "escapes quotes and hash signs in the description so the file still compiles", function() {
+					var root = newTempProject( "full-project" );
+
+					var hash = char( 35 );
+					addTool( root, { description : 'Find the "best" ' & hash & '1 result' } );
+					var source = fileRead( root & "/tools/Greeter2.bx" );
+
+					expect( source ).toInclude( '@AITool( "Find the ""best"" ' & hash & hash & '1 result" )' );
+					expect( function() {
+						new bxagents.models.report.ProjectReport().build( root );
+					} ).notToThrow();
+				} );
+
+				it( "leaves a TODO description when none is given and nothing can be asked", function() {
+					var root = newTempProject( "full-project" );
+
+					var result = addTool( root );
+
+					expect( fileRead( root & "/tools/Greeter2.bx" ) ).toInclude( "TODO: say what this tool does" );
+					expect( result.message ).toInclude( "Replace the TODO description" );
+				} );
+
+				it( "refuses a name already used by a tool of that agent, even in a subfolder", function() {
+					var root = newTempProject( "full-project" );
+
+					expect( function() {
+						addTool( root, {}, [ "tool", "Search" ] );
+					} ).toThrow( "BxAgents.ToolExists" );
+				} );
+
+				it( "refuses to overwrite an existing file and changes nothing", function() {
+					var root = newTempProject( "full-project" );
+					addTool( root, { description : "first" } );
+
+					expect( function() {
+						addTool( root, { description : "second" }, [ "tool", "Greeter2" ] );
+					} ).toThrow( "BxAgents.ToolExists" );
+					expect( fileRead( root & "/tools/Greeter2.bx" ) ).toInclude( "first" );
+				} );
+
+				it( "writes nothing on --dry-run and shows the file", function() {
+					var root = newTempProject( "full-project" );
+
+					var result = addTool( root, { description : "d", "dry-run" : true } );
+
+					expect( fileExists( root & "/tools/Greeter2.bx" ) ).toBeFalse();
+					expect( result.message ).toInclude( "Would create tools/Greeter2.bx" );
+					expect( result.message ).toInclude( "@AITool" );
+				} );
+
+				it( "rejects a bad name, a bad argument type and a duplicate argument", function() {
+					var root = newTempProject( "full-project" );
+
+					expect( function() {
+						addTool( root, { description : "d" }, [ "tool", "9bad" ] );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					expect( function() {
+						addTool( root, { description : "d", args : "x:widget" } );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					expect( function() {
+						addTool( root, { description : "d", args : "x, x" } );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+				} );
+
+				it( "puts the tool in a subagent's own tools/ folder with --agent", function() {
+					var root = newTempProject( "subagents-chain" );
+
+					addTool( root, { description : "d", agent : "a" } );
+
+					expect( fileExists( root & "/subagents/a/tools/Greeter2.bx" ) ).toBeTrue();
+					expect( fileExists( root & "/tools/Greeter2.bx" ) ).toBeFalse();
+				} );
+
+				it( "rejects an --agent that is not a subagent", function() {
+					var root = newTempProject( "subagents-chain" );
+
+					expect( function() {
+						addTool( root, { description : "d", agent : "nope" } );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+				} );
+
+			} );
+
+			describe( "the verb", function() {
+
+				it( "refuses a folder that is not an agent project", function() {
+					var dir = createTempDirectory( prefix = "bxagents-cli-add-" );
+					tempDirs.append( dir );
+
+					expect( function() {
+						addTool( dir );
+					} ).toThrow( "BxAgents.NotAnAgentProject" );
+				} );
+
+				it( "says what it can add when asked for an unknown kind or none", function() {
+					var root = newTempProject( "full-project" );
+
+					expect( function() {
+						addTool( root, {}, [ "widget" ] );
+					} ).toThrow( "BxAgents.UnknownAddKind" );
+					expect( function() {
+						addTool( root, {}, [] );
+					} ).toThrow( "BxAgents.MissingAddKind" );
+				} );
+
+			} );
+
+			describe( "add tool, by questions", function() {
+
+				function askWith( required string root, required array answers, struct flags = {}, array positionals = [ "tool" ] ) {
+					variables.prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( answers );
+					var options = { projectRoot : root, _positionals : positionals, _prompter : prompter, _interactive : true };
+					options.append( flags );
+					return addVerb.run( options );
+				}
+
+				it( "asks for the name, function, description and arguments, reviews, then writes", function() {
+					var root = newTempProject( "full-project" );
+
+					var result = askWith( root, [ "Pinger", ".", "ping", "Pings a host", "host", "create" ] );
+
+					expect( prompter.remaining() ).toBe( 0 );
+					expect( fileRead( root & "/tools/Pinger.bx" ) ).toInclude( "public string function ping( required string host )" );
+					expect( result.exitCode ).toBe( 0 );
+				} );
+
+				it( "does not ask what a flag or the positional name already answered", function() {
+					var root = newTempProject( "full-project" );
+
+					askWith( root, [ ".", "Pings a host", "", "create" ], { function : "ping" }, [ "tool", "Pinger" ] );
+
+					expect( prompter.asked().map( q => q.title ) ).notToInclude( "Tool name" );
+					expect( prompter.asked().map( q => q.title ) ).notToInclude( "Function name" );
+				} );
+
+				it( "asks which agent when the project has subagents", function() {
+					var root = newTempProject( "subagents-chain" );
+
+					askWith( root, [ "Pinger", "a", "ping", "Pings", "", "create" ] );
+
+					expect( fileExists( root & "/subagents/a/tools/Pinger.bx" ) ).toBeTrue();
+				} );
+
+				it( "writes nothing when the review is cancelled", function() {
+					var root = newTempProject( "full-project" );
+
+					var result = askWith( root, [ "Pinger", ".", "ping", "Pings", "", "cancel" ] );
+
+					expect( result.exitCode ).toBe( 1 );
+					expect( fileExists( root & "/tools/Pinger.bx" ) ).toBeFalse();
+				} );
+
+				it( "writes nothing when a question is cancelled", function() {
+					var root = newTempProject( "full-project" );
+
+					var result = askWith( root, [ "<cancel>" ] );
+
+					expect( result.exitCode ).toBe( 1 );
+					expect( result.message ).toInclude( "Nothing was changed" );
+				} );
+
+				it( "offers a picker of kinds when none is given", function() {
+					var root = newTempProject( "full-project" );
+
+					askWith( root, [ "tool", "Pinger", ".", "ping", "Pings", "", "create" ], {}, [] );
+
+					expect( prompter.asked()[ 1 ].title ).toBe( "What do you want to add?" );
+					expect( fileExists( root & "/tools/Pinger.bx" ) ).toBeTrue();
+				} );
+
+				it( "asks again after a bad typed name instead of failing", function() {
+					var root = newTempProject( "full-project" );
+
+					askWith( root, [ "9bad", "Pinger", ".", "ping", "Pings", "", "create" ] );
+
+					expect( fileExists( root & "/tools/Pinger.bx" ) ).toBeTrue();
+				} );
+
+			} );
+
+		} );
+	}
+
+}

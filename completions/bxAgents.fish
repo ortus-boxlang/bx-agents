@@ -19,6 +19,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n __bxagents_needs_verb -s v -l version -d 'Show the module version'
 
     # verbs
+    complete -c $cmd -n __bxagents_needs_verb -a 'add' -d 'Add to a project: add <kind> [name] - a tool today'
     complete -c $cmd -n __bxagents_needs_verb -a 'build' -d 'Build a project into a generated app'
     complete -c $cmd -n __bxagents_needs_verb -a 'chat' -d 'Interactive REPL chat with a built agent'
     complete -c $cmd -n __bxagents_needs_verb -a 'clean' -d 'Remove a project\'s .build/ and dist/ output'
@@ -36,6 +37,16 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n __bxagents_needs_verb -a 'help' -d 'Show the usage and the list of verbs'
 
     # flags and values of each verb
+    complete -c $cmd -n '__bxagents_using_verb add' -l agent -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l args -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l description -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l dry-run
+    complete -c $cmd -n '__bxagents_using_verb add' -l force
+    complete -c $cmd -n '__bxagents_using_verb add' -l function -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l name -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l no-tui
+    complete -c $cmd -n '__bxagents_using_verb add' -l projectRoot -x -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb add' -l yes
     complete -c $cmd -n '__bxagents_using_verb build' -l environment -x
     complete -c $cmd -n '__bxagents_using_verb build' -l generatorVersion -x
     complete -c $cmd -n '__bxagents_using_verb build' -l projectRoot -x -a '(__fish_complete_directories)'
@@ -131,5 +142,5 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb token' -l name -x
     complete -c $cmd -n '__bxagents_using_verb token' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb token' -l scope -x -a 'chat admin'
-    complete -c $cmd -n '__bxagents_using_verb help' -a 'build chat clean deploy doctor hash-password inspect invoke new notes package serve test token help'
+    complete -c $cmd -n '__bxagents_using_verb help' -a 'add build chat clean deploy doctor hash-password inspect invoke new notes package serve test token help'
 end

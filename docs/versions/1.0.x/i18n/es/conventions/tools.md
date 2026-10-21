@@ -24,6 +24,9 @@ class {
 
 BxAgents no interpreta las anotaciones `@AITool` él mismo. Copia toda la carpeta `tools/` **textualmente** a la app generada, y la fábrica de agentes generada entrega la carpeta de cada agente al scanner de bx-ai, que hace el trabajo real de reflexión (recorre los archivos, instancia cada clase, encuentra funciones `@AITool`). Las tools encontradas van **solo a ese agente**: el `tools/` del agente raíz no se da a sus subagentes, ni el de un subagente a su padre.
 
+!!! tip
+    `bxAgents add tool` crea una: pregunta el nombre, la función, qué hace y sus argumentos, y escribe `tools/<Name>.bx` (o el `tools/` propio de un subagente) con esta forma. Ver [`add`](../cli-reference.md#add).
+
 ## Tools de módulos
 
 Las tools que los módulos registran en bx-ai (las integradas, `bx-playwright`, ...) no se adjuntan a nada automáticamente. Nombra las que un agente debe tener en su lista [`tools:`](agent-yaml.md#tools), como `item@module` o `*@module`.

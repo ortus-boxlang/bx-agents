@@ -62,6 +62,9 @@ Always use the `--flag=value` form. The space-separated form is not supported.
 ::: card title="new" icon="phosphor-duotone:sparkle" href="#new"
 Scaffold a new agent project.
 :::
+::: card title="add" icon="phosphor-duotone:plus-circle" href="#add"
+Add a tool to an existing project.
+:::
 ::: card title="build" icon="phosphor-duotone:hammer" href="#build"
 Run the full build pipeline.
 :::
@@ -147,6 +150,38 @@ bxAgents new my-agent --forgebox=some-package-slug
 - Only `--template` mode needs `--model`; `--repo`/`--forgebox` never require it, since the source project already defines its own.
 - `--name`/`--description` are ignored (with a warning in the output) when `--repo`/`--forgebox` is used - the cloned/installed project defines its own.
 - The `box install` convenience step (and `--skipInstall`) only ever apply to `--template` mode - a cloned/installed project's own `box.json` (if it has one at all) is left untouched.
+
+### `add`
+
+Add one thing to a project that already exists, asking the same questions `new` asks. Today that is a `tool`.
+
+```bash
+bxAgents add                        # pick what to add
+bxAgents add tool                   # asks for the name, function, description and arguments
+bxAgents add tool WeatherTools --function=getWeather --description="Get the weather for a city" --args="city, days:numeric"
+bxAgents add tool Pinger --agent=researcher     # into subagents/researcher/tools/
+bxAgents add tool Pinger --dry-run              # show the file, write nothing
+```
+
+- The positional arguments are the kind and the name, so the project is found by `--projectRoot=<path>` or the current folder only.
+- At a terminal, whatever is not given as a flag is asked, in the full-screen UI (or numbered lines with `--no-tui`). With `--yes`, in a pipe or in CI nothing is asked: flags and defaults are used, and a required answer that is missing names the flag to pass.
+- Questions end on a review of the files that will be written. Cancelling, with Esc or Ctrl+C, changes nothing.
+- **Nothing is overwritten.** If a file already exists none are written and the error names it; `--force` replaces it.
+- `--dry-run` prints each file with its text and writes nothing.
+
+#### `add tool`
+
+Creates `tools/<Name>.bx` with one `@AITool` function in the shape [bx-ai documents](conventions/tools.md): a docblock describing each argument, the annotation carrying the description the model reads, and typed `required` arguments from which bx-ai builds the tool's schema.
+
+| Flag | Meaning |
+|---|---|
+| `--name=<Name>` | The file name, or the second positional. Letters, digits and underscores, starting with a letter. |
+| `--agent=<subagent>` | Whose tool it is. Asked only when the project has subagents; `.` (the default) is the root agent. |
+| `--function=<name>` | The function the model calls. Defaults to the file name with a lower-case first letter. |
+| `--description=<text>` | What the tool does. The model reads it to decide when to call the tool. Without it, and with nothing to ask, the file gets a `TODO` description and the output reminds you to replace it. |
+| `--args=<list>` | Comma separated, each `name` or `name:type` (`string` by default; `numeric`, `boolean`, `array`, `struct`, `date` and `any` also work). |
+
+A tool belongs to the agent whose folder it is in and is attached to that agent automatically. Two tool files of one agent may not share a name, even in different subfolders, so a clash is refused here instead of at the next `build`. Check the result with `bxAgents inspect --section=tools`.
 
 ### `build`
 
