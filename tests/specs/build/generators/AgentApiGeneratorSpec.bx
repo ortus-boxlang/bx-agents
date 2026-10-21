@@ -1,0 +1,90 @@
+/**
+ * The run-control handler written into the generated app.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "AgentApiGenerator", function() {
+
+			beforeEach( function() {
+				variables.generator = new bxagents.models.build.generators.AgentApiGenerator();
+				variables.dirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in dirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function newAppDir() {
+				var dir = createTempDirectory( prefix = "bxagents-agentapi-" );
+				dirs.append( dir );
+				return dir;
+			}
+
+			it( "writes handlers/AgentApi.bx with every run-control action", function() {
+				var dir = newAppDir();
+				var result = generator.generate( dir, {} );
+				var source = fileRead( result.path );
+
+				expect( result.written ).toBeTrue();
+				expect( result.path ).toBe( dir & "/handlers/AgentApi.bx" );
+				for ( var action in [ "events", "cancel", "steer", "pending", "resume", "tools", "about", "notes", "sessions", "history", "clear", "compact", "updateNote", "removeNote" ] ) {
+					expect( source ).toInclude( "function #action#( event, rc, prc )" );
+				}
+				// every action starts by checking the token (a preHandler cannot stop the action)
+				expect( source.reMatch( "if \( refused\( event \) \)" ) ).toHaveLength( 14 );
+				expect( source ).notToInclude( "function preHandler(" );
+			} );
+
+			it( "accepts issued tokens only when agentApi.tokens is on", function() {
+				var off = fileRead( generator.generate( newAppDir(), {} ).path );
+				var on = fileRead( generator.generate( newAppDir(), { tokens : true } ).path );
+
+				expect( off ).toInclude( '"false" == "true"' );
+				expect( on ).toInclude( '"true" == "true"' );
+				expect( on ).toInclude( 'new "models.store.TokenService@bxagents"' );
+			} );
+
+			it( "leaves the route ungated when no token variable is configured", function() {
+				var source = fileRead( generator.generate( newAppDir(), {} ).path );
+
+				expect( source ).toInclude( 'return ""' );
+				expect( source ).notToInclude( "__TOKEN_ENV_VAR__" );
+			} );
+
+			it( "names the token variable and compares it in constant time", function() {
+				var source = fileRead( generator.generate( newAppDir(), { tokenEnvVar : "MY_AGENT_TOKEN" } ).path );
+
+				expect( source ).toInclude( 'return "MY_AGENT_TOKEN"' );
+				expect( source ).toInclude( "MessageDigest" );
+				expect( source ).toInclude( "isEqual(" );
+				// an unset or blank variable matches nothing, and a request with no token is refused
+				expect( source ).toInclude( "if ( len( expected ) && createObject" );
+				expect( source ).toInclude( "if ( !len( given ) ) {" );
+			} );
+
+			it( "writes nothing when agentApi.enabled is false", function() {
+				var dir = newAppDir();
+				var result = generator.generate( dir, { enabled : false } );
+
+				expect( result.written ).toBeFalse();
+				expect( directoryExists( dir & "/handlers" ) ).toBeFalse();
+			} );
+
+			it( "writes a class BoxLang can compile", function() {
+				var dir = newAppDir();
+				generator.generate( dir, { tokenEnvVar : "T" } );
+
+				var handler = createObject( "component", "bxagents.models.build.generators.agentapi.AgentApi" );
+
+				expect( isObject( handler ) ).toBeTrue();
+			} );
+
+		} );
+	}
+
+}

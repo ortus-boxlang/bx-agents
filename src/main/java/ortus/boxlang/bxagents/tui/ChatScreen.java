@@ -320,6 +320,68 @@ public final class ChatScreen implements AutoCloseable {
 		}
 	}
 
+	/**
+	 * A list to pick from where some letters act on the row under the cursor.
+	 *
+	 * @param title   the heading
+	 * @param lines   context shown above the options
+	 * @param choices strings or maps with value, label and hint
+	 * @param keys    the letters that act, for example "aedst"; Tab also acts
+	 * @param footer  the hint line
+	 *
+	 * @return the value picked on Enter, "letter:value" (or "tab:value") for a letter, null for Esc
+	 */
+	public String chooseKeys( String title, List<?> lines, List<?> choices, String keys, String footer ) {
+		List<String> preface = new ArrayList<>();
+		for ( Object l : lines ) {
+			preface.add( String.valueOf( l ) );
+		}
+		SelectPrompt prompt = new SelectPrompt( theme, title, "", Choice.listFrom( choices ), null, preface ).withHotkeys( keys, footer );
+		try {
+			while ( !prompt.isDone() ) {
+				List<Row> rows = new ArrayList<>( prompt.render( runner.width() - 2, 16 ) );
+				rows.add( Row.of( " " + prompt.footer(), theme.muted ) );
+				draw( rows );
+				Event ev = runner.pollEvent( Duration.ofMillis( 150 ) );
+				if ( ev instanceof KeyEvent k ) {
+					prompt.key( k );
+				}
+			}
+			return ( String ) prompt.result();
+		} catch ( PromptAbort a ) {
+			return null;
+		}
+	}
+
+	/**
+	 * Asks for one line of text in the live area.
+	 *
+	 * @param title   the question
+	 * @param help    a line of help, or empty
+	 * @param initial text to start with, for editing
+	 *
+	 * @return the text, or null for Esc
+	 */
+	public String ask( String title, String help, String initial ) {
+		TextPrompt prompt = new TextPrompt( theme, title, help, "", false, "Type something, or press esc.", initial );
+		try {
+			while ( !prompt.isDone() ) {
+				List<Row> rows = new ArrayList<>( prompt.render( runner.width() - 2, 6 ) );
+				rows.add( Row.of( " " + prompt.footer(), theme.muted ) );
+				draw( rows );
+				Event ev = runner.pollEvent( Duration.ofMillis( 150 ) );
+				if ( ev instanceof KeyEvent k ) {
+					prompt.key( k );
+				} else if ( ev instanceof PasteEvent p ) {
+					prompt.paste( p.text() );
+				}
+			}
+			return ( String ) prompt.result();
+		} catch ( PromptAbort a ) {
+			return null;
+		}
+	}
+
 	// ----------------------------------------------------------------------------------
 	// A turn
 	// ----------------------------------------------------------------------------------

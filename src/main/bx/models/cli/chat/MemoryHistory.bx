@@ -1,0 +1,53 @@
+/**
+ * Turns the messages in an agent's memory into what a person said and what the agent answered, for
+ * showing a resumed conversation. System prompts, tool calls and tool results are left out: they are
+ * how the agent worked, not the conversation.
+ */
+class {
+
+	/**
+	 * @messages bx-ai memory messages: [ { role, content } ]
+	 *
+	 * @return [ { role : "you" | "agent", text } ] in order
+	 */
+	array function of( required array messages ) {
+		var out = []
+		for ( var message in arguments.messages ) {
+			if ( !isStruct( message ) ) {
+				continue
+			}
+			var role = lCase( message.role ?: "" )
+			if ( role != "user" && role != "assistant" ) {
+				continue
+			}
+			var text = textOf( message.content ?: "" )
+			if ( !len( text ) ) {
+				continue
+			}
+			out.append( { role : role == "user" ? "you" : "agent", text : text } )
+		}
+		return out
+	}
+
+	/**
+	 * @content A string, or a list of parts ( [ { type : "text", text } ] ) when the message carried more than text
+	 */
+	private string function textOf( required any content ) {
+		if ( isSimpleValue( arguments.content ) ) {
+			return trim( arguments.content )
+		}
+		if ( isArray( arguments.content ) ) {
+			var pieces = []
+			for ( var part in arguments.content ) {
+				if ( isSimpleValue( part ) ) {
+					pieces.append( part )
+				} else if ( isStruct( part ) && ( part.type ?: "text" ) == "text" ) {
+					pieces.append( part.text ?: "" )
+				}
+			}
+			return trim( pieces.toList( char( 10 ) ) )
+		}
+		return ""
+	}
+
+}

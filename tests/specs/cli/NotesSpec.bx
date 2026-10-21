@@ -1,0 +1,87 @@
+/**
+ * The notes verb: read and manage the notes of a project's agent in its chat database.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "cli.Notes", function() {
+
+			beforeEach( function() {
+				variables.verb = new bxagents.models.cli.Notes();
+				variables.root = createTempDirectory( prefix = "bxagents-cli-notes-" );
+				fileWrite( root & "/Agent.yaml", "name: helper" & char( 10 ) & "model: openai/gpt-4o" & char( 10 ) & "notes:" & char( 10 ) & "  user: { limit: 120 }" & char( 10 ) );
+				variables.usesDefaultPath = !len( getSystemSetting( "BXAGENTS_DB", "" ) );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( root ) ) {
+					directoryDelete( root, true );
+				}
+			} );
+
+			function run_( required string action, struct more = {} ) {
+				return verb.run( { projectRoot : root, _positional : action, user : "alice" }.append( more ) );
+			}
+
+			it( "needs a project root and a known action", function() {
+				expect( function() { verb.run( {} ); } ).toThrow( "BxAgents.MissingProjectRoot" );
+				expect( function() { verb.run( { projectRoot : root } ); } ).toThrow( "BxAgents.UnknownNotesAction" );
+				expect( function() { run_( "list", { scope : "team" } ); } ).toThrow( "BxAgents.InvalidNotesScope" );
+			} );
+
+			it( "adds, lists, edits and removes a note", function() {
+				if ( !usesDefaultPath ) { return; }
+
+				expect( run_( "add", { text : "Prefers short answers" } ).message ).toBe( "Noted (user)." );
+				var listed = run_( "list", { scope : "user", json : true } );
+				var notes = jsonDeserialize( listed.message ).user.notes;
+				expect( notes ).toHaveLength( 1 );
+				expect( notes[ 1 ].source ).toBe( "cli" );
+				expect( fileExists( root & "/data/chat.db" ) ).toBeTrue();
+
+				expect( run_( "edit", { id : notes[ 1 ].id, text : "Likes long answers" } ).exitCode ).toBe( 0 );
+				expect( run_( "list" ).message ).toInclude( "Likes long answers" );
+				expect( run_( "remove", { id : notes[ 1 ].id } ).message ).toBe( "Removed." );
+				expect( run_( "remove", { id : notes[ 1 ].id } ).exitCode ).toBe( 1 );
+			} );
+
+			it( "keeps agent notes under the agent's name and uses the limits from Agent.yaml", function() {
+				if ( !usesDefaultPath ) { return; }
+
+				run_( "add", { scope : "agent", text : "The repo uses Gradle" } );
+				var stats = jsonDeserialize( run_( "stats", { json : true } ).message );
+
+				expect( stats.agent.owner ).toBe( "helper" );
+				expect( stats.agent.count ).toBe( 1 );
+				expect( stats.user.limit ).toBe( 120 );
+				expect( stats.agent.limit ).toBe( 2200 );
+				expect( run_( "stats" ).message ).toInclude( "In the system prompt: 20 characters" );
+				var refused = run_( "add", { text : repeatString( "y", 130 ) } );
+				expect( refused.exitCode ).toBe( 1 );
+			} );
+
+			it( "needs the text, the id and the file where it makes no sense without them", function() {
+				expect( function() { run_( "add" ); } ).toThrow( "BxAgents.MissingNoteText" );
+				expect( function() { run_( "edit", { id : "x" } ); } ).toThrow( "BxAgents.MissingNoteText" );
+				expect( function() { run_( "remove" ); } ).toThrow( "BxAgents.MissingNoteId" );
+				expect( function() { run_( "import" ); } ).toThrow( "BxAgents.MissingNotesFile" );
+			} );
+
+			it( "exports the notes and imports them again without duplicating", function() {
+				if ( !usesDefaultPath ) { return; }
+
+				run_( "add", { text : "likes tea" } );
+				run_( "add", { scope : "agent", text : "a fact" } );
+				var target = root & "/notes.json";
+				expect( run_( "export", { file : target } ).message ).toInclude( "Exported 1 user and 1 agent notes" );
+
+				var second = run_( "import", { file : target } );
+				expect( second.exitCode ).toBe( 0 );
+				expect( second.message ).toInclude( "Imported 2 notes." );
+				expect( jsonDeserialize( run_( "list", { scope : "user", json : true } ).message ).user.notes ).toHaveLength( 1 );
+			} );
+
+		} );
+	}
+
+}

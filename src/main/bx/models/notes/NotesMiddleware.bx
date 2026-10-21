@@ -1,0 +1,107 @@
+import bxModules.bxai.models.middleware.AiMiddlewareResult;
+
+/**
+ * Puts the notes into the prompt: at the start of each run it adds the notes of the user and of the
+ * agent to the system message.
+ *
+ * The notes are read once per conversation thread and kept for the thread: the prompt does not change
+ * from turn to turn, so a provider's prompt caching keeps working, and a note saved in this conversation
+ * shows from the next conversation. (The agent has just said it saved it, so it still knows.)
+ */
+class extends="bxModules.bxai.models.middleware.BaseAiMiddleware" {
+
+	static {
+		// remembered conversations before the oldest are read again
+		KEEP_THREADS = 2000
+		NO_USER = "default"
+	}
+
+	/**
+	 * @provider An INotesProvider
+	 * @agentName The agent's name: the owner of the agent notes
+	 * @hasTools True when the agent has the remember and forget tools, so the prompt tells it how to use them
+	 */
+	function init( required any provider, required string agentName, boolean hasTools = true ) {
+		super.init()
+		variables.notesProvider = arguments.provider
+		variables.agentName = arguments.agentName
+		variables.hasTools = arguments.hasTools
+		variables.frozen = createObject( "java", "java.util.concurrent.ConcurrentHashMap" ).init()
+		variables.name = "Notes"
+		variables.description = "Adds the user's and the agent's notes to the system message"
+		return this
+	}
+
+	/**
+	 * @return The notes provider, for the chat commands and the CLI
+	 */
+	any function provider() {
+		return variables.notesProvider
+	}
+
+	AiMiddlewareResult function beforeAgentRun( required struct context ) {
+		var userId = len( arguments.context.userId ?: "" ) ? arguments.context.userId : static.NO_USER
+		var block = blockFor( arguments.context.threadId ?: "", userId )
+		if ( len( block ) ) {
+			var messages = arguments.context.messages
+			if ( messages.len() && ( messages[ 1 ].role ?: "" ) == "system" ) {
+				messages[ 1 ].content = messages[ 1 ].content & char( 10 ) & char( 10 ) & block
+			} else {
+				messages.prepend( { role : "system", content : block } )
+			}
+		}
+		return AiMiddlewareResult.continue()
+	}
+
+	/**
+	 * The block for one conversation, read once and kept.
+	 *
+	 * @threadId The conversation thread; blank is never kept
+	 * @userId Whose user notes
+	 */
+	string function blockFor( required string threadId, required string userId ) {
+		var key = arguments.threadId & "|" & arguments.userId
+		if ( len( arguments.threadId ) && variables.frozen.containsKey( key ) ) {
+			return variables.frozen.get( key )
+		}
+		var block = render( arguments.userId )
+		if ( len( arguments.threadId ) ) {
+			if ( variables.frozen.size() >= static.KEEP_THREADS ) {
+				variables.frozen.clear()
+			}
+			variables.frozen.put( key, block )
+		}
+		return block
+	}
+
+	/**
+	 * @return The notes as prompt text; blank when there are none and the agent has no tools to add any
+	 */
+	string function render( required string userId ) {
+		var userNotes = ""
+		var agentNotes = ""
+		try {
+			userNotes = variables.notesProvider.snapshot( "user", arguments.userId )
+			agentNotes = variables.notesProvider.snapshot( "agent", variables.agentName )
+		} catch ( any e ) {
+			// notes must never stop an answer: the agent goes on without them
+			writeLog( text = "Notes could not be read: #e.message#", type = "error", log = "application" )
+			return ""
+		}
+		if ( !len( userNotes ) && !len( agentNotes ) && !variables.hasTools ) {
+			return ""
+		}
+		var lines = [ "Notes you kept from earlier conversations." ]
+		if ( variables.hasTools ) {
+			lines.append( "Use the remember tool to save a short note when the user asks you to remember something or tells you a lasting preference (scope user), or when you learn something lasting about this job (scope agent). Pass a note's id in `replaces` to correct it, and use the forget tool to remove one. Keep notes short." )
+		}
+		lines.append( "" )
+		lines.append( "About the user:" )
+		lines.append( len( userNotes ) ? userNotes : "(nothing yet)" )
+		lines.append( "" )
+		lines.append( "About this agent:" )
+		lines.append( len( agentNotes ) ? agentNotes : "(nothing yet)" )
+		return lines.toList( char( 10 ) )
+	}
+
+}

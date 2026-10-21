@@ -40,6 +40,19 @@ public class MiniServerLauncherTest {
 		} );
 	}
 
+	@DisplayName( "launch() hands the extra environment variables to the child process" )
+	@Test
+	public void testLaunchPassesEnvironment( @org.junit.jupiter.api.io.TempDir Path dir ) throws Exception {
+		assumeTrue( !System.getProperty( "os.name", "" ).toLowerCase().contains( "win" ), "needs /bin/sh" );
+		Path	out		= dir.resolve( "out.txt" );
+		Path	script	= dir.resolve( "probe.sh" );
+		Files.writeString( script, "echo \"$BXAGENTS_TEST_VAR\" > \"" + out + "\"\n" );
+
+		Process process = MiniServerLauncher.launch( "/bin/sh", script.toString(), false, java.util.Map.of( "BXAGENTS_TEST_VAR", "from-launcher" ) );
+		assertEquals( 0, process.waitFor() );
+		assertEquals( "from-launcher", Files.readString( out ).trim() );
+	}
+
 	/**
 	 * Finds the boxlang-miniserver jar fetched by the `downloadMiniServer`
 	 * Gradle task into src/test/resources/libs/boxlang-miniserver-*.jar.

@@ -1,0 +1,36 @@
+/**
+ * Where a project's chat database lives, for the commands that run on a developer's machine
+ * (`chat` and `serve`) so the terminal chat and the web chat open the same file.
+ *
+ * The environment variable BXAGENTS_DB names the file and wins. Without it the file is
+ * `data/chat.db` in the project folder. A deployed app does not use this: it keeps the file
+ * where its gateway's `database.path` says, inside the app, unless BXAGENTS_DB is set there too.
+ */
+class {
+
+	static {
+		ENVIRONMENT_VARIABLE = "BXAGENTS_DB"
+		DEFAULT_FILE         = "data/chat.db"
+	}
+
+	/**
+	 * @projectRoot The project folder
+	 *
+	 * @return The absolute path of the chat database file, with forward slashes
+	 */
+	string function forProject( required string projectRoot ) {
+		var fromEnvironment = trim( getSystemSetting( static.ENVIRONMENT_VARIABLE, "" ) )
+		if ( len( fromEnvironment ) ) {
+			return fromEnvironment.replace( "\", "/", "all" )
+		}
+		return arguments.projectRoot.reReplace( "[\/]+$", "" ).replace( "\", "/", "all" ) & "/" & static.DEFAULT_FILE
+	}
+
+	/**
+	 * @return The variable name, for code that sets it for a child process
+	 */
+	string function variableName() {
+		return static.ENVIRONMENT_VARIABLE
+	}
+
+}

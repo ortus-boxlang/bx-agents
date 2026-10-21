@@ -27,7 +27,7 @@ It is a full-screen UI in the teal of the BxAgents logo. Arrow keys (or `j`/`k`)
 | Search provider | The built-in one, Brave, Tavily, Exa or Google | A key stub in `.env`, and a line in `instructions.md` telling the agent which provider to use |
 | File tools | Read only, all 19, or tool by tool, then the folders they may use | [`toolOptions.bxai.allowedPaths`](../conventions/agent-yaml.md#file-tools) |
 | Memory | In memory, or saved to disk | `memory` and `checkpointer` |
-| MCP servers | GitHub, Stripe, Notion, Atlassian, Cloudflare, Supabase | [`mcpServers`](../conventions/mcp.md#consuming-remote-servers) entries and token stubs |
+| MCP servers | GitHub, Stripe, Notion, Atlassian, Cloudflare, Supabase, Git | [`mcpServers`](../conventions/mcp.md#consuming-remote-servers) entries and token stubs |
 | Channels | Web chat, HTTP API, Telegram, Slack, Discord, WhatsApp, Teams, SMS, GitHub, Email, Signal | A `gateways/*.bx` file and the stubs it needs |
 | Web access | Open, a shared key, or named users with passwords | `apiKeyEnvVar` or `users` on the web chat entry |
 | Guard | Flag, block or ignore suspicious input | A [`security`](../conventions/agent-yaml.md#settings) block |
@@ -80,7 +80,7 @@ mcpServers:
 | Cloudflare | `CLOUDFLARE_API_TOKEN` | High: DNS, Workers, billable resources, depending on the token |
 | Supabase | `SUPABASE_ACCESS_TOKEN` | High: runs SQL. The address starts read-only |
 
-Picking a high-risk server shows what it can do before you continue. **Git** is in the catalog but not offered yet: it runs as a local program, and the bx-ai bundled with this release talks to web MCP servers only.
+Picking a high-risk server shows what it can do before you continue. **Git** runs as a program on your machine (`uvx mcp-server-git`), so it needs [uv](https://docs.astral.sh/uv/) installed where the agent runs, and it works in the folder you start the agent from. The wizard writes it as a `command` entry; see [programs as MCP servers](../conventions/mcp.md#servers-that-run-as-a-program).
 
 ## After it is created
 

@@ -1,0 +1,83 @@
+/**
+ * Prepares mcpServers when the app starts: placeholders, host guard, stdio allow-list.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "McpServerResolver", function() {
+
+			beforeEach( function() {
+				variables.resolver = new bxagents.models.build.McpServerResolver();
+				variables.stdio = getModuleInfo( "bxai" ).settings.mcp.stdio;
+				variables.savedAllowed = duplicate( stdio.allowedCommands );
+				variables.hadMarker = stdio.keyExists( "managedByBxAgents" );
+				stdio.allowedCommands = [];
+				stdio.delete( "managedByBxAgents" );
+			} );
+
+			afterEach( function() {
+				stdio.allowedCommands = savedAllowed;
+				stdio.delete( "managedByBxAgents" );
+				if ( hadMarker ) {
+					stdio[ "managedByBxAgents" ] = true;
+				}
+			} );
+
+			it( "replaces ${env.NAME:default} in every part of a stdio entry", function() {
+				var resolved = resolver.resolve( [ { command : [ "uvx", "mcp-${env.BXA_NOPE_X:git}" ], env : { MODE : "${env.BXA_NOPE_Y:quiet}" } } ] );
+
+				expect( resolved[ 1 ].command ).toBe( [ "uvx", "mcp-git" ] );
+				expect( resolved[ 1 ].env.MODE ).toBe( "quiet" );
+			} );
+
+			it( "fails with the label when an environment variable has no value and no default", function() {
+				expect( function() {
+					resolver.resolve( [ { command : [ "uvx", "${env.BXA_DEFINITELY_UNSET_VAR}" ] } ], "mcpServers of tester" );
+				} ).toThrow( "BxAgents.MissingToolOption" );
+			} );
+
+			it( "turns allowedHosts into a urlGuard that refuses other hosts", function() {
+				var resolved = resolver.resolve( [ { url : "https://api.example.com/mcp", allowedHosts : [ "api.example.com", "*.corp.test" ] } ] );
+				var guard = resolved[ 1 ].urlGuard;
+
+				expect( resolved[ 1 ].keyExists( "allowedHosts" ) ).toBeFalse();
+				expect( guard( "https://api.example.com/mcp" ) ).toBeTrue();
+				expect( guard( "https://API.example.com:8443/x" ) ).toBeTrue();
+				expect( guard( "https://a.b.corp.test/mcp" ) ).toBeTrue();
+				expect( guard( "https://corp.test/mcp" ) ).toBeFalse();
+				expect( guard( "https://evil.example.org/mcp" ) ).toBeFalse();
+				expect( guard( "https://api.example.com.evil.org/mcp" ) ).toBeFalse();
+				expect( guard( "not a url" ) ).toBeFalse();
+			} );
+
+			it( "adds the programs of stdio entries to an empty bx-ai allow-list, once each", function() {
+				resolver.resolve( [ { command : [ "uvx", "a" ] }, { command : [ "npx", "b" ] }, { command : [ "uvx", "c" ] }, "https://x.example.com/mcp" ] );
+
+				expect( stdio.allowedCommands ).toBe( [ "uvx", "npx" ] );
+			} );
+
+			it( "keeps adding to a list it filled in earlier", function() {
+				resolver.resolve( [ { command : [ "uvx", "a" ] } ] );
+				resolver.resolve( [ { command : [ "bxplaywright", "mcp" ] } ] );
+
+				expect( stdio.allowedCommands ).toBe( [ "uvx", "bxplaywright" ] );
+			} );
+
+			it( "leaves an allow-list that someone else filled in alone", function() {
+				stdio.allowedCommands = [ "npx" ];
+				resolver.resolve( [ { command : [ "uvx", "a" ] } ] );
+
+				expect( stdio.allowedCommands ).toBe( [ "npx" ] );
+			} );
+
+			it( "touches nothing when there are only web servers", function() {
+				resolver.resolve( [ "https://x.example.com/mcp" ] );
+
+				expect( stdio.allowedCommands ).toBeEmpty();
+				expect( stdio.keyExists( "managedByBxAgents" ) ).toBeFalse();
+			} );
+
+		} );
+	}
+
+}

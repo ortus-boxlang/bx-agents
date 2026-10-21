@@ -1,0 +1,125 @@
+/**
+ * Access tokens: made once, kept only as a hash, checked, expired and revoked.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "TokenService", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-tokens-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.tokens = new bxagents.models.store.TokenService( store );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "makes a token that identifies its owner, and keeps only a hash of it", function() {
+				var made = tokens.create( "laptop" );
+
+				expect( made.token ).toMatch( "^bxa_[A-Za-z0-9_-]{43}$" );
+				expect( made.name ).toBe( "laptop" );
+				expect( made.scope ).toBe( "chat" );
+				var whoIs = tokens.authenticate( made.token );
+				expect( whoIs.name ).toBe( "laptop" );
+				expect( whoIs.scope ).toBe( "chat" );
+
+				var raw = store.rows( "SELECT * FROM tokens" );
+				expect( raw ).toHaveLength( 1 );
+				expect( raw[ 1 ].tokenHash ).toMatch( "^[0-9a-f]{64}$" );
+				expect( jsonSerialize( raw ) ).notToInclude( made.token );
+			} );
+
+			it( "makes a different token every time", function() {
+				var one = tokens.create( "a" ).token;
+				var two = tokens.create( "b" ).token;
+
+				expect( one ).notToBe( two );
+			} );
+
+			it( "refuses what is not a token it made", function() {
+				tokens.create( "laptop" );
+
+				expect( tokens.authenticate( "" ) ).toBeEmpty();
+				expect( tokens.authenticate( "nope" ) ).toBeEmpty();
+				expect( tokens.authenticate( "bxa_" & repeatString( "A", 43 ) ) ).toBeEmpty();
+			} );
+
+			it( "stops a revoked token, and says what it did", function() {
+				var made = tokens.create( "ci" );
+
+				expect( tokens.revoke( "ci" ) ).toBeTrue();
+				expect( tokens.authenticate( made.token ) ).toBeEmpty();
+				expect( tokens.revoke( "ci" ) ).toBeFalse();
+				expect( tokens.revoke( "never-made" ) ).toBeFalse();
+				expect( tokens.list()[ 1 ].status ).toBe( "revoked" );
+			} );
+
+			it( "stops an expired token", function() {
+				var made = tokens.create( "short", "chat", dateAdd( "n", -5, now() ) );
+				var later = tokens.create( "long", "chat", dateAdd( "d", 30, now() ) );
+
+				expect( tokens.authenticate( made.token ) ).toBeEmpty();
+				expect( tokens.authenticate( later.token ).name ).toBe( "long" );
+				var byName = {};
+				for ( var row in tokens.list() ) {
+					byName[ row.name ] = row.status;
+				}
+				expect( byName.short ).toBe( "expired" );
+				expect( byName.long ).toBe( "active" );
+			} );
+
+			it( "carries the scope", function() {
+				var made = tokens.create( "boss", "admin" );
+
+				expect( tokens.authenticate( made.token ).scope ).toBe( "admin" );
+			} );
+
+			it( "records when a token was last used", function() {
+				var made = tokens.create( "laptop" );
+				expect( isDate( tokens.list()[ 1 ].lastUsedAt ?: "" ) ).toBeFalse();
+
+				tokens.authenticate( made.token );
+
+				expect( isDate( tokens.list()[ 1 ].lastUsedAt ) ).toBeTrue();
+			} );
+
+			it( "lists tokens without ever showing the token", function() {
+				var made = tokens.create( "laptop" );
+				tokens.create( "ci", "admin" );
+
+				var listing = tokens.list();
+
+				expect( listing.map( t => t.name ).sort( "text" ) ).toBe( [ "ci", "laptop" ] );
+				expect( jsonSerialize( listing ) ).notToInclude( made.token );
+				expect( jsonSerialize( listing ) ).notToInclude( "tokenHash" );
+			} );
+
+			it( "rejects bad names, bad scopes and a name already taken", function() {
+				tokens.create( "taken" );
+
+				expect( function() { tokens.create( "has space" ); } ).toThrow( "BxAgents.InvalidTokenName" );
+				expect( function() { tokens.create( "" ); } ).toThrow( "BxAgents.InvalidTokenName" );
+				expect( function() { tokens.create( "x", "root" ); } ).toThrow( "BxAgents.InvalidTokenScope" );
+				expect( function() { tokens.create( "taken" ); } ).toThrow( "BxAgents.TokenNameTaken" );
+			} );
+
+			it( "reads expiry as a length or a date", function() {
+				var inTwoWeeks = tokens.expiry( "2w" );
+				expect( dateDiff( "d", now(), inTwoWeeks ) ).toBeGTE( 13 );
+				expect( dateDiff( "d", now(), inTwoWeeks ) ).toBeLTE( 14 );
+				expect( dateDiff( "h", now(), tokens.expiry( "12h" ) ) ).toBeGTE( 11 );
+				expect( dateDiff( "n", now(), tokens.expiry( "30m" ) ) ).toBeGTE( 29 );
+				expect( year( tokens.expiry( "2031-12-31" ) ) ).toBe( 2031 );
+				expect( tokens.expiry( "" ) ).toBe( "" );
+				expect( function() { tokens.expiry( "soon" ); } ).toThrow( "BxAgents.InvalidTokenExpiry" );
+			} );
+
+		} );
+	}
+
+}

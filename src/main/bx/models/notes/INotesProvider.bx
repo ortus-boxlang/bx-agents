@@ -1,0 +1,83 @@
+/**
+ * Where an agent's notes are kept: short things worth remembering, in two scopes.
+ *
+ *   user    about a person: their name, how they like answers. Follows them across agents.
+ *   agent   about this agent's own job: facts about the project, lessons learned.
+ *
+ * `owner` is the user id for the user scope and the agent's name for the agent scope. Each scope has a
+ * limit in characters, so the notes that go into a prompt stay small. Nothing is dropped silently: an
+ * `add` that does not fit is refused with how full the notes are.
+ *
+ * The built-in provider is SqliteNotesProvider, on the shared chat database. To keep notes somewhere else,
+ * write a class that implements this interface and name it in `notes: { provider: "my.Provider" }`; it is
+ * created with `( config, agentName )`, where config is the `notes` block of Agent.yaml.
+ */
+interface {
+
+	/**
+	 * The notes of one scope as the lines that go into a prompt, oldest first, within the limit.
+	 *
+	 * @scope user or agent
+	 * @owner The user id, or the agent's name
+	 *
+	 * @return One "- (id) text" line per note, joined by newlines; blank when there are none
+	 */
+	string function snapshot( required string scope, required string owner );
+
+	/**
+	 * Saves a note.
+	 *
+	 * @scope user or agent
+	 * @owner The user id, or the agent's name
+	 * @text The note; whitespace is collapsed to single spaces
+	 * @source Who made it: agent, command or import
+	 * @sessionId The conversation it came from, if any
+	 *
+	 * @return { ok : true, id, used, limit } or { ok : false, reason, used, limit }; a note that is already saved answers ok with duplicate : true
+	 */
+	struct function add( required string scope, required string owner, required string text, string source = "agent", string sessionId = "" );
+
+	/**
+	 * Changes the text of a note.
+	 *
+	 * @return { ok : true, id, used, limit } or { ok : false, reason, used, limit }
+	 */
+	struct function replace( required string scope, required string owner, required string id, required string text );
+
+	/**
+	 * Forgets a note.
+	 *
+	 * @return True when a note was removed, false when there is none with that id in this scope and owner
+	 */
+	boolean function remove( required string scope, required string owner, required string id );
+
+	/**
+	 * @return The notes, oldest first: [ { id, text, source, sessionId, createdAt, updatedAt } ]
+	 */
+	array function list( required string scope, required string owner );
+
+	/**
+	 * @return { scope, owner, count, used, limit, oldest, newest } - used and limit are characters
+	 */
+	struct function stats( required string scope, required string owner );
+
+	/**
+	 * @return The limit of a scope, in characters
+	 */
+	numeric function limit( required string scope );
+
+	/**
+	 * For providers that fetch notes by relevance (a vector store): the notes worth showing for a question.
+	 * The built-in provider has none.
+	 */
+	default string function prefetch( required string owner, required string query ) {
+		return ""
+	}
+
+	/**
+	 * For providers that learn from the conversation: called after each turn. The built-in provider ignores it.
+	 */
+	default void function sync( required string owner, required struct turn ) {
+	}
+
+}

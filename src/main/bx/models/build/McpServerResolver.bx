@@ -1,0 +1,119 @@
+/**
+ * Prepares an agent's `mcpServers` list when the app starts, never at build time.
+ *
+ * - `${env.NAME}` and `${env.NAME:default}` are replaced everywhere in an entry, so a token, a header or
+ *   an environment value stays in the environment and not in the project.
+ * - `allowedHosts` (a web server entry) becomes the `urlGuard` function bx-ai asks for: a request to a host
+ *   that is not listed is refused before anything is sent.
+ * - The programs the stdio servers start are added to bx-ai's `mcp.stdio.allowedCommands` setting, so the
+ *   process runs only what the project declared. A setting someone already filled in is left alone.
+ */
+class {
+
+	/**
+	 * @placeholders Replaces ${env.NAME}; a ToolSelector by default
+	 */
+	function init( any placeholders ) {
+		variables.placeholders = isNull( arguments.placeholders ) ? new "models.build.ToolSelector@bxagents"() : arguments.placeholders
+		return this
+	}
+
+	/**
+	 * @servers The entries: a URL string, a web server struct or a stdio struct ( { command, env, ... } )
+	 * @label What the list belongs to, for messages
+	 *
+	 * @return The entries ready for bx-ai's withMCPServers()
+	 */
+	array function resolve( required array servers, string label = "mcpServers" ) {
+		var resolved = variables.placeholders.resolvePlaceholders( arguments.servers, arguments.label )
+		var executables = []
+		for ( var entry in resolved ) {
+			if ( !isStruct( entry ) ) {
+				continue
+			}
+			if ( entry.keyExists( "allowedHosts" ) ) {
+				entry[ "urlGuard" ] = hostGuard( entry.allowedHosts )
+				entry.delete( "allowedHosts" )
+			}
+			if ( entry.keyExists( "command" ) ) {
+				executables.append( executableOf( entry.command ) )
+			}
+		}
+		allowCommands( executables )
+		return resolved
+	}
+
+	/**
+	 * @hosts Host names; "*.example.com" matches any subdomain of example.com (not example.com itself)
+	 *
+	 * @return A function ( url ) => boolean for bx-ai's withUrlGuard()
+	 */
+	function hostGuard( required any hosts ) {
+		var allowed = isArray( arguments.hosts ) ? arguments.hosts.map( host => lCase( trim( toString( host ) ) ) ) : [ lCase( trim( toString( arguments.hosts ) ) ) ]
+		return ( url ) => {
+			var host = ""
+			try {
+				host = lCase( createObject( "java", "java.net.URI" ).create( url ).getHost() ?: "" )
+			} catch ( any e ) {
+				return false
+			}
+			if ( !len( host ) ) {
+				return false
+			}
+			for ( var pattern in allowed ) {
+				if ( pattern == host ) {
+					return true
+				}
+				if ( left( pattern, 2 ) == "*." && host.endsWith( mid( pattern, 2, len( pattern ) ) ) ) {
+					return true
+				}
+			}
+			return false
+		}
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @command The command array of a stdio server
+	 *
+	 * @return The program: "uvx", or the full path when it has a directory, as bx-ai matches it
+	 */
+	private string function executableOf( required any command ) {
+		return isArray( arguments.command ) && arguments.command.len() ? toString( arguments.command[ 1 ] ) : ""
+	}
+
+	/**
+	 * Adds the programs to bx-ai's allow-list, but only when nobody set one: an empty list means "any program"
+	 * to bx-ai, and a list we filled in earlier keeps growing as more agents start.
+	 */
+	private void function allowCommands( required array executables ) {
+		var wanted = arguments.executables.filter( name => len( name ) )
+		if ( !wanted.len() ) {
+			return
+		}
+		try {
+			var settings = getModuleInfo( "bxai" ).settings
+			if ( !isStruct( settings.mcp ?: "" ) || !isStruct( settings.mcp.stdio ?: "" ) ) {
+				return
+			}
+			var stdio = settings.mcp.stdio
+			if ( !isArray( stdio.allowedCommands ?: "" ) ) {
+				return
+			}
+			var managed = stdio.keyExists( "managedByBxAgents" )
+			if ( stdio.allowedCommands.len() && !managed ) {
+				return
+			}
+			stdio[ "managedByBxAgents" ] = true
+			for ( var name in wanted ) {
+				if ( !stdio.allowedCommands.contains( name ) ) {
+					stdio.allowedCommands.append( name )
+				}
+			}
+		} catch ( any e ) {
+			// bx-ai is not loaded or has no such setting: nothing to restrict
+		}
+	}
+
+}

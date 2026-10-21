@@ -495,6 +495,52 @@ __THEME_TOKENS__
 
 	/* Project override: resources/webui/theme.css, inlined last so it always wins. */
 __CUSTOM_CSS__
+
+	/* Notes: the short things the agent keeps about you and about its own work */
+	#notesPanel {
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		background: var(--bg);
+		color: var(--fg);
+		padding: 0;
+		width: min(36rem, 94vw);
+		max-height: 80vh;
+		font-family: inherit;
+	}
+	#notesPanel::backdrop { background: rgba(0, 0, 0, 0.35); }
+	#notesPanel .notes-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		padding: 0.7rem 0.9rem;
+		border-bottom: 1px solid var(--border);
+	}
+	#notesPanel h2 { font-size: 1rem; margin: 0; }
+	#notesPanel button {
+		background: transparent;
+		color: var(--fg);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: 0.3rem 0.6rem;
+		cursor: pointer;
+		font: inherit;
+		font-size: 0.82rem;
+	}
+	#notesPanel button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+	#notesPanel button[aria-selected="true"] { border-color: var(--accent); color: var(--accent); }
+	#notesPanel .notes-tabs { display: flex; gap: 0.4rem; padding: 0.6rem 0.9rem 0; }
+	#notesPanel .notes-usage { padding: 0.5rem 0.9rem 0; font-size: 0.8rem; color: var(--muted); }
+	#notesPanel progress { width: 100%; height: 0.5rem; margin-top: 0.25rem; accent-color: var(--accent); }
+	#notesList { list-style: none; margin: 0; padding: 0.5rem 0.9rem; overflow-y: auto; max-height: 40vh; }
+	#notesList li { display: flex; gap: 0.5rem; align-items: flex-start; padding: 0.4rem 0; border-bottom: 1px solid var(--border); }
+	#notesList li .note-text { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 0.9rem; }
+	#notesList li input { flex: 1; min-width: 0; font: inherit; padding: 0.3rem; background: var(--input-bg); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+	#notesList li .note-id { color: var(--muted); font-family: var(--font-mono); font-size: 0.72rem; }
+	#notesList .notes-empty { color: var(--muted); border: none; }
+	#notesForm { display: flex; gap: 0.4rem; padding: 0 0.9rem 0.7rem; }
+	#notesForm input { flex: 1; min-width: 0; font: inherit; padding: 0.4rem; background: var(--input-bg); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+	#notesPanel .notes-foot { padding: 0 0.9rem 0.8rem; font-size: 0.78rem; color: var(--muted); min-height: 1.2em; }
 </style>
 </head>
 <body>
@@ -511,6 +557,7 @@ __CUSTOM_CSS__
 			<button type="button" id="sidebarBtn" aria-expanded="true" aria-controls="sidebar" title="Show or hide conversations">Chats</button>
 			<button type="button" id="clearBtn" title="Delete the messages in this conversation" hidden>Clear</button>
 			<button type="button" id="compactBtn" title="Summarize older messages, keep the recent ones" hidden>Compact</button>
+			<button type="button" id="notesBtn" title="What the agent keeps about you and about its own work" hidden>Notes</button>
 			<button type="button" id="keyBtn" title="Set the API key this page sends as X-API-Key">Key</button>
 			<button type="button" id="themeBtn" title="Toggle dark/light">Theme</button>
 		</div>
@@ -534,6 +581,24 @@ __CUSTOM_CSS__
 			__FOOTER__
 		</div>
 	</div>
+
+	<dialog id="notesPanel" aria-labelledby="notesTitle">
+		<div class="notes-head">
+			<h2 id="notesTitle">Notes</h2>
+			<button type="button" id="notesClose">Close</button>
+		</div>
+		<div class="notes-tabs" role="tablist">
+			<button type="button" role="tab" id="notesTabUser" aria-selected="true">About you</button>
+			<button type="button" role="tab" id="notesTabAgent" aria-selected="false">About the agent</button>
+		</div>
+		<div class="notes-usage"><span id="notesUsage"></span><progress id="notesMeter" max="100" value="0"></progress></div>
+		<ul id="notesList"></ul>
+		<form id="notesForm" autocomplete="off">
+			<input id="notesInput" maxlength="500" placeholder="Add a note" aria-label="New note">
+			<button type="submit" class="primary">Add</button>
+		</form>
+		<p class="notes-foot" id="notesFoot" role="status"></p>
+	</dialog>
 
 <script>
 (function () {
@@ -649,6 +714,7 @@ __CUSTOM_CSS__
 			clearBtn.hidden = false;
 			compactBtn.hidden = !capabilities.compact;
 			sidebarBtn.hidden = !capabilities.conversations;
+			notesBtn.hidden = !capabilities.notes;
 			if ( !capabilities.conversations ) {
 				setSidebar( false );
 			}
@@ -1536,6 +1602,162 @@ __CUSTOM_CSS__
 			.catch( function () {
 				showHint( "Compaction failed." );
 			} );
+	} );
+
+	// ---- Notes -----------------------------------------------------------------
+	var notesBtn = document.getElementById( "notesBtn" );
+	var notesPanel = document.getElementById( "notesPanel" );
+	var notesList = document.getElementById( "notesList" );
+	var notesUsage = document.getElementById( "notesUsage" );
+	var notesMeter = document.getElementById( "notesMeter" );
+	var notesFoot = document.getElementById( "notesFoot" );
+	var notesInput = document.getElementById( "notesInput" );
+	var notesScope = "user";
+	var notesData = null;
+
+	function notesSay( text ) {
+		notesFoot.textContent = text || "";
+	}
+
+	function notesFail( res, fallback ) {
+		return res.json().then( function ( body ) {
+			notesSay( ( body && ( body.reason || body.error ) ) || fallback );
+		} ).catch( function () { notesSay( fallback ); } );
+	}
+
+	function renderNotes() {
+		if ( !notesData ) {
+			return;
+		}
+		var scope = notesData[ notesScope ];
+		document.getElementById( "notesTabUser" ).setAttribute( "aria-selected", String( notesScope === "user" ) );
+		document.getElementById( "notesTabAgent" ).setAttribute( "aria-selected", String( notesScope === "agent" ) );
+		var used = scope.stats.used, limit = scope.stats.limit;
+		notesUsage.textContent = scope.notes.length + ( scope.notes.length === 1 ? " note, " : " notes, " ) + used + " of " + limit
+			+ " characters (about " + Math.ceil( used / 4 ) + " tokens in every conversation)";
+		notesMeter.max = limit;
+		notesMeter.value = used;
+		notesList.textContent = "";
+		if ( !scope.notes.length ) {
+			var none = document.createElement( "li" );
+			none.className = "notes-empty";
+			none.textContent = "No notes yet.";
+			notesList.appendChild( none );
+		}
+		scope.notes.forEach( function ( note ) {
+			var li = document.createElement( "li" );
+			var text = document.createElement( "span" );
+			text.className = "note-text";
+			text.textContent = note.text;
+			var id = document.createElement( "span" );
+			id.className = "note-id";
+			id.textContent = note.id;
+			var edit = document.createElement( "button" );
+			edit.type = "button";
+			edit.textContent = "Edit";
+			edit.addEventListener( "click", function () { editNote( li, note ); } );
+			li.appendChild( text );
+			li.appendChild( id );
+			li.appendChild( edit );
+			// A note of the agent is shared by everyone who talks to it: removing it is for an admin
+			if ( notesScope === "user" ) {
+				var del = document.createElement( "button" );
+				del.type = "button";
+				del.textContent = "Remove";
+				del.addEventListener( "click", function () { removeNote( note ); } );
+				li.appendChild( del );
+			}
+			notesList.appendChild( li );
+		} );
+		if ( notesScope === "agent" ) {
+			notesSay( "Notes of the agent are shared by everyone. Removing one takes an admin token or the command line." );
+		}
+	}
+
+	function loadNotes() {
+		return apiGet( "/notes" ).then( function ( payload ) {
+			if ( payload && payload.success ) {
+				notesData = payload;
+				renderNotes();
+			} else {
+				notesSay( "Could not load the notes." );
+			}
+		} );
+	}
+
+	function editNote( li, note ) {
+		li.textContent = "";
+		var input = document.createElement( "input" );
+		input.type = "text";
+		input.value = note.text;
+		input.maxLength = 500;
+		var save = document.createElement( "button" );
+		save.type = "button";
+		save.className = "primary";
+		save.textContent = "Save";
+		var cancel = document.createElement( "button" );
+		cancel.type = "button";
+		cancel.textContent = "Cancel";
+		save.addEventListener( "click", function () {
+			var text = input.value.trim();
+			if ( !text || text === note.text ) {
+				renderNotes();
+				return;
+			}
+			apiPost( "/notes/update", { scope: notesScope, id: note.id, text: text } ).then( function ( res ) {
+				if ( res.ok ) {
+					notesSay( "Updated." );
+					return loadNotes();
+				}
+				return notesFail( res, "Could not update the note." );
+			} );
+		} );
+		cancel.addEventListener( "click", renderNotes );
+		input.addEventListener( "keydown", function ( e ) {
+			if ( e.key === "Enter" ) { e.preventDefault(); save.click(); }
+			if ( e.key === "Escape" ) { e.stopPropagation(); renderNotes(); }
+		} );
+		li.appendChild( input );
+		li.appendChild( save );
+		li.appendChild( cancel );
+		input.focus();
+	}
+
+	function removeNote( note ) {
+		if ( !window.confirm( "Remove this note?\n\n" + note.text ) ) {
+			return;
+		}
+		apiPost( "/notes/remove", { scope: notesScope, id: note.id } ).then( function ( res ) {
+			if ( res.ok ) {
+				notesSay( "Removed." );
+				return loadNotes();
+			}
+			return notesFail( res, "Could not remove the note." );
+		} );
+	}
+
+	notesBtn.addEventListener( "click", function () {
+		notesSay( "" );
+		notesPanel.showModal();
+		loadNotes();
+	} );
+	document.getElementById( "notesClose" ).addEventListener( "click", function () { notesPanel.close(); } );
+	document.getElementById( "notesTabUser" ).addEventListener( "click", function () { notesScope = "user"; notesSay( "" ); renderNotes(); } );
+	document.getElementById( "notesTabAgent" ).addEventListener( "click", function () { notesScope = "agent"; notesSay( "" ); renderNotes(); } );
+	document.getElementById( "notesForm" ).addEventListener( "submit", function ( e ) {
+		e.preventDefault();
+		var text = notesInput.value.trim();
+		if ( !text ) {
+			return;
+		}
+		apiPost( "/notes/add", { scope: notesScope, text: text } ).then( function ( res ) {
+			if ( res.ok ) {
+				notesInput.value = "";
+				notesSay( "Noted." );
+				return loadNotes();
+			}
+			return notesFail( res, "Could not add the note." );
+		} );
 	} );
 
 	// Boot: capabilities first, since they decide which controls exist, then the
