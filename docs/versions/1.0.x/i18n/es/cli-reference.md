@@ -65,6 +65,9 @@ Genera el andamiaje de un nuevo proyecto de agente.
 ::: card title="add" icon="phosphor-duotone:plus-circle" href="#add"
 Añade una herramienta, un interceptor, una programación, un servidor MCP, un modelo con nombre, un gateway, un subagente o una skill a un proyecto existente.
 :::
+::: card title="skills" icon="phosphor-duotone:graduation-cap" href="#skills"
+Busca, instala, actualiza y elimina skills de skills.boxlang.io.
+:::
 ::: card title="build" icon="phosphor-duotone:hammer" href="#build"
 Ejecuta el pipeline de build completo.
 :::
@@ -344,6 +347,45 @@ bxAgents add skill                              # pregunta
 | `--description=<text>` | Una frase que empiece por "Use this skill when". El modelo la lee para decidir si carga la skill, así que es lo que importa. Sin ella se escribe un TODO para que lo reemplaces. |
 
 Las skills no se conectan a un agente: todas las skills del build están disponibles para el modelo. Las skills de skills.boxlang.io no se añaden aquí; se instalan, no se escriben.
+
+### `skills`
+
+Skills del registro (skills.boxlang.io), como las instala `coldbox ai skills`. Una skill propia va en `skills/`: consulta [`add skill`](#add-skill).
+
+```bash
+bxAgents skills find release                    # busca en el registro
+bxAgents skills install ortus-boxlang/skills/boxlang-developer~configuration
+bxAgents skills install                         # restaura lo que el lock lista y el disco no tiene
+bxAgents skills list                            # qué está instalado y si está intacto
+bxAgents skills update [name...] [--dry-run]    # obtiene versiones más nuevas
+bxAgents skills remove <name>
+```
+
+| Comando | Qué hace |
+|---|---|
+| `find <words>` | Busca en nombres y descripciones. Muestra la referencia para instalar, el resultado de la auditoría del registro y el número de instalaciones. No necesita proyecto. `--limit=<n>` (10 por defecto), `--json`. |
+| `install <owner/repo/skill>...` | Instala en `.agents/skills/<name>/SKILL.md` y lo anota en `.agents/skills.lock.json`. La última parte puede ser el slug (`boxlang-developer~configuration`), la ruta en el repositorio (`boxlang-developer/configuration`) o el nombre de la skill. Una skill que no pasó la auditoría de seguridad del registro se rechaza; una que no es `trusted` se marca. |
+| `install` | Sin referencia, restaura lo que el lock lista y el disco no tiene. |
+| `list` | Una línea por skill instalada. Avisa de una que falta o que se editó tras instalarla. `--json`. |
+| `update [name...]` | Obtiene versiones más nuevas. Una skill que editaste se omite, con lo que hacer; `--dry-run` solo informa. |
+| `remove <name>` | Borra la skill y su entrada del lock. |
+
+`--registry=<url>` (o la variable de entorno `BXAGENTS_SKILLS_URL`) apunta a otro registro.
+
+#### Dónde vive cada cosa
+
+| Ruta | Qué | En el control de código |
+|---|---|---|
+| `skills/<name>/` | Skills que escribiste | Sí |
+| `.agents/skills/<name>/` | Skills instaladas del registro | No. `install` añade la carpeta a `.gitignore`. |
+| `.agents/skills.lock.json` | Qué está instalado, su origen y su sha | Sí |
+
+`build` restaura cualquier skill que el lock liste y el disco no tenga, así que un checkout nuevo construye el mismo agente, y falla nombrando la skill si no se alcanza el registro. No se descarga nada cuando están todas, así que un build sin conexión de un proyecto restaurado funciona. Ambas carpetas van al build; una skill propia con el mismo nombre gana a una instalada.
+
+El sha es el sha de blob de git de `SKILL.md`, el que informa el registro. Una instalación se comprueba contra él antes de escribir nada, y así sabe `update` que una skill cambió y `list` que editaste una.
+
+!!! warning
+    Una skill son instrucciones que tu agente sigue. El registro audita lo que lista, pero lee lo que instalas antes de publicarlo.
 
 ### `build`
 

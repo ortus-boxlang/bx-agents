@@ -1,0 +1,180 @@
+/**
+ * Where installed skills live and what is recorded about them.
+ *
+ *   .agents/skills/<name>/SKILL.md   the installed skill. bx-ai's own default skills folder,
+ *                                    kept out of source control and restored at build time
+ *   .agents/skills.lock.json         what is installed and the sha it had. Committed.
+ *
+ * A skill of your own goes in skills/ instead (see `add skill`) and wins over an installed
+ * one of the same name.
+ *
+ * The sha is the git blob sha of SKILL.md, the same one the registry reports, so what is on
+ * disk can be checked against both the lock (edited since install?) and the registry
+ * (newer upstream?).
+ */
+class {
+
+	/**
+	 * @return The lock file's path relative to the project root
+	 */
+	string function lockFile() {
+		return ".agents/skills.lock.json"
+	}
+
+	/**
+	 * @return The installed skills' folder relative to the project root
+	 */
+	string function skillsDir() {
+		return ".agents/skills"
+	}
+
+	/**
+	 * @root Project root
+	 *
+	 * @return { version, skills : { name : { source, skill, path, sha } } }, empty when there is no lock
+	 */
+	struct function readLock( required string root ) {
+		var path = arguments.root & "/" & lockFile()
+		var lock = { version : 1, skills : {} }
+		if ( !fileExists( path ) ) {
+			return lock
+		}
+		try {
+			var parsed = jsonDeserialize( fileRead( path ) )
+		} catch ( any e ) {
+			throw( type = "BxAgents.InvalidSkillLock", message = "#lockFile()# is not valid JSON (#e.message#). Fix it or delete it and run: bxAgents skills install" )
+		}
+		if ( isStruct( parsed ) && isStruct( parsed.skills ?: "" ) ) {
+			lock.skills = parsed.skills
+		}
+		return lock
+	}
+
+	/**
+	 * @root Project root
+	 * @lock A struct from readLock()
+	 */
+	void function writeLock( required string root, required struct lock ) {
+		var path = arguments.root & "/" & lockFile()
+		// prettyJson writes the keys in order, so a diff shows only what changed
+		var out = { version : 1, skills : arguments.lock.skills }
+		directoryCreate( path = getDirectoryFromPath( path ), createPath = true, ignoreExists = true )
+		fileWrite( path, new "models.wizard.FeatureWriter@bxagents"().prettyJson( out ) & char( 10 ) )
+	}
+
+	/**
+	 * @name The skill's name
+	 *
+	 * @return An empty string when the name is a safe folder name, else the reason it is not
+	 */
+	string function nameProblem( required string name ) {
+		if ( !reFind( "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$", arguments.name ) || arguments.name.find( ".." ) ) {
+			return "[#arguments.name#] is not a name that is safe to use as a folder"
+		}
+		return ""
+	}
+
+	/**
+	 * @root Project root
+	 * @name The skill's name
+	 *
+	 * @return The path to the installed SKILL.md (it may not exist)
+	 */
+	string function pathOf( required string root, required string name ) {
+		return arguments.root & "/" & skillsDir() & "/" & arguments.name & "/SKILL.md"
+	}
+
+	/**
+	 * Writes a fetched skill, after checking that what arrived is what the registry said
+	 * it was.
+	 *
+	 * @root Project root
+	 * @fetched A struct from RegistryClient.fetch()
+	 *
+	 * @return The lock entry for it
+	 */
+	struct function write( required string root, required struct fetched ) {
+		var f = arguments.fetched
+		var problem = nameProblem( f.name )
+		if ( len( problem ) ) {
+			throw( type = "BxAgents.InvalidSkillName", message = "#problem#. The registry sent #f.owner#/#f.repo#/#f.slug#." )
+		}
+		var actual = blobSha( f.content )
+		if ( len( f.sha ) && actual != f.sha ) {
+			throw( type = "BxAgents.SkillShaMismatch", message = "#f.name# arrived as #actual# but the registry says #f.sha#. Nothing was written. Try again; if it repeats, the registry is serving a damaged copy." )
+		}
+		var path = pathOf( arguments.root, f.name )
+		directoryCreate( path = getDirectoryFromPath( path ), createPath = true, ignoreExists = true )
+		fileWrite( path, f.content )
+		return { source : f.owner & "/" & f.repo, skill : f.slug, path : f.path, sha : actual }
+	}
+
+	/**
+	 * @root Project root
+	 * @name The skill's name
+	 */
+	void function remove( required string root, required string name ) {
+		var dir = arguments.root & "/" & skillsDir() & "/" & arguments.name
+		if ( len( nameProblem( arguments.name ) ) ) {
+			return
+		}
+		if ( directoryExists( dir ) ) {
+			directoryDelete( dir, true )
+		}
+	}
+
+	/**
+	 * @root Project root
+	 * @name The skill's name
+	 * @entry Its lock entry
+	 *
+	 * @return ok, missing, or modified (the file on disk is not what was installed)
+	 */
+	string function state( required string root, required string name, required struct entry ) {
+		var path = pathOf( arguments.root, arguments.name )
+		if ( !fileExists( path ) ) {
+			return "missing"
+		}
+		return blobSha( fileRead( path ) ) == arguments.entry.sha ? "ok" : "modified"
+	}
+
+	/**
+	 * Git's own hash of a file's content: sha1( "blob <bytes>" NUL content ).
+	 *
+	 * @content The file's text
+	 *
+	 * @return The 40-character hex sha
+	 */
+	string function blobSha( required string content ) {
+		var text = createObject( "java", "java.lang.String" )
+		var bytes = text.init( arguments.content ).getBytes( "UTF-8" )
+		var digest = createObject( "java", "java.security.MessageDigest" ).getInstance( "SHA-1" )
+		digest.update( text.init( "blob " & bytes.len() & char( 0 ) ).getBytes( "UTF-8" ) )
+		digest.update( bytes )
+		return createObject( "java", "java.util.HexFormat" ).of().formatHex( digest.digest() )
+	}
+
+	/**
+	 * Keeps installed skills out of source control: adds .agents/skills/ to the project's
+	 * .gitignore when there is one that does not already say so. The lock file stays
+	 * committed; that is what restores them.
+	 *
+	 * @root Project root
+	 *
+	 * @return True when the line was added
+	 */
+	boolean function ignoreInstalled( required string root ) {
+		var path = arguments.root & "/.gitignore"
+		if ( !fileExists( path ) ) {
+			return false
+		}
+		var text = fileRead( path )
+		if ( reFind( "(?m)^/?\.agents/(skills/?)?\s*$", text ) ) {
+			return false
+		}
+		var body = text.reReplace( "\s+$", "" )
+		fileWrite( path, body & char( 10 ) & char( 10 ) & "## skills installed from skills.boxlang.io, restored at build time from .agents/skills.lock.json" & char( 10 ) & ".agents/skills/" & char( 10 ) )
+		return true
+	}
+
+}

@@ -1,0 +1,96 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "skills.SkillStore", function() {
+
+			beforeEach( function() {
+				variables.store = new bxagents.models.skills.SkillStore();
+				variables.root = createTempDirectory( prefix = "bxagents-skillstore-" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( root ) ) {
+					directoryDelete( root, true );
+				}
+			} );
+
+			it( "hashes content the way git hashes a blob", function() {
+				// git hash-object of a file holding "hello\n"
+				expect( store.blobSha( "hello" & char( 10 ) ) ).toBe( "ce013625030ba8dba906f756967f9e9ca394464a" );
+				expect( store.blobSha( "" ) ).toBe( "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391" );
+			} );
+
+			it( "counts bytes, not characters, when it hashes", function() {
+				expect( store.blobSha( "caf" & char( 233 ) ) ).notToBe( store.blobSha( "cafe" ) );
+				expect( len( store.blobSha( "caf" & char( 233 ) ) ) ).toBe( 40 );
+			} );
+
+			it( "round-trips the lock with the names in order", function() {
+				var lock = { version : 1, skills : {
+					"zeta" : { source : "a/b", skill : "z", path : "z", sha : "1" },
+					"alpha" : { source : "a/b", skill : "a", path : "a", sha : "2" }
+				} };
+
+				store.writeLock( root, lock );
+				var text = fileRead( root & "/.agents/skills.lock.json" );
+
+				expect( text.find( "alpha" ) ).toBeLT( text.find( "zeta" ) );
+				expect( store.readLock( root ).skills.alpha.sha ).toBe( "2" );
+				expect( store.readLock( createTempDirectory( prefix = "bxagents-empty-" ) ).skills ).toBeEmpty();
+			} );
+
+			it( "refuses a lock that is not JSON, naming the file", function() {
+				directoryCreate( root & "/.agents" );
+				fileWrite( root & "/.agents/skills.lock.json", "{ nope" );
+
+				expect( function() {
+					store.readLock( root );
+				} ).toThrow( "BxAgents.InvalidSkillLock" );
+			} );
+
+			it( "does not accept a name that could leave the skills folder", function() {
+				expect( store.nameProblem( "release-notes" ) ).toBe( "" );
+				expect( store.nameProblem( "../evil" ) ).notToBe( "" );
+				expect( store.nameProblem( "a/b" ) ).notToBe( "" );
+				expect( store.nameProblem( ".hidden" ) ).notToBe( "" );
+				expect( store.nameProblem( "a..b" ) ).notToBe( "" );
+			} );
+
+			it( "writes a skill, and refuses one whose content is not the sha the registry gave", function() {
+				var good = { owner : "a", repo : "b", name : "x", slug : "s~x", path : "s/x", content : "hi" & char( 10 ), sha : store.blobSha( "hi" & char( 10 ) ) };
+				var entry = store.write( root, good );
+
+				expect( fileRead( root & "/.agents/skills/x/SKILL.md" ) ).toBe( "hi" & char( 10 ) );
+				expect( entry.sha ).toBe( good.sha );
+				expect( store.state( root, "x", entry ) ).toBe( "ok" );
+
+				good.content = "tampered";
+				expect( function() {
+					store.write( root, good );
+				} ).toThrow( "BxAgents.SkillShaMismatch" );
+			} );
+
+			it( "tells an intact skill from an edited or missing one", function() {
+				var fetched = { owner : "a", repo : "b", name : "x", slug : "s~x", path : "s/x", content : "hi", sha : store.blobSha( "hi" ) };
+				var entry = store.write( root, fetched );
+
+				fileWrite( root & "/.agents/skills/x/SKILL.md", "edited" );
+				expect( store.state( root, "x", entry ) ).toBe( "modified" );
+				store.remove( root, "x" );
+				expect( store.state( root, "x", entry ) ).toBe( "missing" );
+			} );
+
+			it( "adds the installed folder to .gitignore once, and only when there is a .gitignore", function() {
+				expect( store.ignoreInstalled( root ) ).toBeFalse();
+				fileWrite( root & "/.gitignore", ".env" & char( 10 ) );
+
+				expect( store.ignoreInstalled( root ) ).toBeTrue();
+				expect( store.ignoreInstalled( root ) ).toBeFalse();
+				expect( fileRead( root & "/.gitignore" ) ).toInclude( ".agents/skills/" );
+				expect( fileRead( root & "/.gitignore" ).listToArray( char( 10 ) ) ).toInclude( ".env" );
+			} );
+
+		} );
+	}
+
+}

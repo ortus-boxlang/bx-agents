@@ -1,0 +1,203 @@
+/**
+ * Talks to the skills registry (skills.boxlang.io by default), the same service the
+ * ColdBox CLI installs from:
+ *
+ *   GET  /api/skills?search=<q>&perPage=<n>      the catalog
+ *   GET  /api/skills/<owner>/<repo>              every skill in one repository
+ *   POST /api/install?owner=&repo=&skill=<slug>  one skill's SKILL.md, with its audit
+ *
+ * Measured against the live service, not assumed from the docs: a skill that is not found
+ * answers HTTP 200 with `error: true` and a 404 in the body, so failure is read from the
+ * body; `file_sha` is the git blob sha of the SKILL.md content, which is what lets an
+ * install be verified; and a skill that failed its security audit is refused by the
+ * server.
+ *
+ * The base address is the `--registry` option, then BXAGENTS_SKILLS_URL, then the
+ * default. The transport is a function ( method, url, params ) returning { status, body },
+ * so tests run without a network.
+ */
+class {
+
+	static {
+		DEFAULT_URL = "https://skills.boxlang.io"
+	}
+
+	/**
+	 * @baseUrl The registry address; empty for BXAGENTS_SKILLS_URL, then the default
+	 * @transport A function ( method, url, params ) returning { status, body }; empty for real HTTP
+	 */
+	function init( string baseUrl = "", any transport = "" ) {
+		var configured = len( arguments.baseUrl ) ? arguments.baseUrl : getSystemSetting( "BXAGENTS_SKILLS_URL", static.DEFAULT_URL )
+		variables.baseUrl = configured.reReplace( "/+$", "" )
+		variables.transport = isCustomFunction( arguments.transport ) || isClosure( arguments.transport ) ? arguments.transport : httpTransport
+		return this
+	}
+
+	/**
+	 * @return The registry address in use
+	 */
+	string function url() {
+		return variables.baseUrl
+	}
+
+	/**
+	 * @query What to look for in names and descriptions
+	 * @limit How many to return
+	 *
+	 * @return [ { owner, repo, name, slug, path, description, audit, installs, sha } ]
+	 */
+	array function search( required string query, numeric limit = 10 ) {
+		var body = get( "/api/skills", { search : arguments.query, perPage : arguments.limit } )
+		var data = body.data ?: []
+		var rows = isArray( data ) ? data : ( data.data ?: [] )
+		return rows.map( row => ( {
+			owner       : row.owner,
+			repo        : row.repo,
+			name        : row.skill_name,
+			slug        : row.skill_slug,
+			path        : row.skill_dir,
+			description : row.description ?: "",
+			audit       : row.audit_status ?: "",
+			installs    : val( row.install_count ?: 0 ),
+			sha         : row.file_sha ?: ""
+		} ) )
+	}
+
+	/**
+	 * @owner The repository owner
+	 * @repo The repository
+	 *
+	 * @return [ { owner, repo, name, slug, path, description, audit, sha } ] for every skill in it
+	 */
+	array function repoSkills( required string owner, required string repo ) {
+		var body = get( "/api/skills/#urlEncodedFormat( arguments.owner )#/#urlEncodedFormat( arguments.repo )#", {} )
+		var rows = body.data ?: []
+		return rows.map( row => ( {
+			owner       : row.owner,
+			repo        : row.repo,
+			name        : row.name,
+			slug        : row.slug,
+			path        : row.path,
+			description : row.description ?: "",
+			audit       : row.audit_status ?: "",
+			sha         : row.sha ?: ""
+		} ) )
+	}
+
+	/**
+	 * Finds a skill by what a person would type: owner/repo/<slug>, owner/repo/<path in the
+	 * repository> or owner/repo/<skill name>, and downloads it.
+	 *
+	 * @ref owner/repo/skill
+	 *
+	 * @return { owner, repo, name, slug, path, sha, audit, content }
+	 */
+	struct function fetch( required string ref ) {
+		var parts = parse( arguments.ref )
+		var slug = parts.skill.replace( "/", "~", "all" )
+		var found = install( parts.owner, parts.repo, slug )
+		if ( found.keyExists( "skill" ) ) {
+			return shape( found )
+		}
+
+		// Not found as typed: match the name or path against the repository's own list
+		var wanted = parts.skill.lcase()
+		for ( var candidate in repoSkills( parts.owner, parts.repo ) ) {
+			if ( candidate.name.lcase() == wanted || candidate.path.lcase() == wanted || candidate.slug.lcase() == wanted ) {
+				var again = install( parts.owner, parts.repo, candidate.slug )
+				if ( again.keyExists( "skill" ) ) {
+					return shape( again )
+				}
+				found = again
+			}
+		}
+		throw( type = "BxAgents.SkillNotFound", message = "#found.message#. Look for it with: bxAgents skills find <words>" )
+	}
+
+	/**
+	 * @ref owner/repo/skill
+	 *
+	 * @return { owner, repo, skill }
+	 */
+	struct function parse( required string ref ) {
+		var m = reFind( "^([^/\s]+)/([^/\s]+)/(.+)$", trim( arguments.ref ), 1, true )
+		if ( m.pos.len() < 4 ) {
+			throw( type = "BxAgents.InvalidSkillRef", message = "[#arguments.ref#] is not owner/repo/skill, for example ortus-boxlang/skills/boxlang-developer~configuration. Find one with: bxAgents skills find <words>" )
+		}
+		var text = trim( arguments.ref )
+		return {
+			owner : text.mid( m.pos[ 2 ], m.len[ 2 ] ),
+			repo  : text.mid( m.pos[ 3 ], m.len[ 3 ] ),
+			skill : text.mid( m.pos[ 4 ], m.len[ 4 ] )
+		}
+	}
+
+	// --------------------------------------------------------------------------
+
+	/**
+	 * @return { skill, content, audit } on success, or { message } when the registry says no
+	 */
+	private struct function install( required string owner, required string repo, required string slug ) {
+		var reply = call( "POST", "/api/install", { owner : arguments.owner, repo : arguments.repo, skill : arguments.slug } )
+		var body = reply.body
+		if ( ( body.error ?: false ) || !isStruct( body.data ?: "" ) || !( body.data.skill ?: {} ).count() ) {
+			var why = ( body.messages ?: [] ).len() ? body.messages[ 1 ] : ( body.errorMessage ?: "" )
+			if ( ( body.statusCode ?: 0 ) == 403 || reply.status == 403 ) {
+				why = len( why ) ? why : "This skill failed the registry's security audit and cannot be installed"
+				throw( type = "BxAgents.SkillBlocked", message = "#arguments.owner#/#arguments.repo#/#arguments.slug#: #why#" )
+			}
+			return { message : len( why ) ? "#arguments.owner#/#arguments.repo#/#arguments.slug# was not found in the registry (#why#)" : "#arguments.owner#/#arguments.repo#/#arguments.slug# was not found in the registry" }
+		}
+		return { skill : body.data.skill, content : body.data.content ?: "", audit : body.data.audit ?: {} }
+	}
+
+	private struct function shape( required struct found ) {
+		return {
+			owner   : arguments.found.skill.owner,
+			repo    : arguments.found.skill.repo,
+			name    : arguments.found.skill.skill_name,
+			slug    : arguments.found.skill.skill_slug,
+			path    : arguments.found.skill.skill_dir,
+			sha     : arguments.found.skill.file_sha ?: "",
+			audit   : arguments.found.audit.status ?: ( arguments.found.skill.audit_status ?: "" ),
+			content : arguments.found.content
+		}
+	}
+
+	private struct function get( required string path, required struct params ) {
+		return call( "GET", arguments.path, arguments.params ).body
+	}
+
+	/**
+	 * @return { status, body : the parsed JSON }
+	 */
+	private struct function call( required string method, required string path, required struct params ) {
+		var reply = {}
+		try {
+			reply = variables.transport( arguments.method, variables.baseUrl & arguments.path, arguments.params )
+		} catch ( any e ) {
+			throw( type = "BxAgents.SkillRegistryUnavailable", message = "Could not reach the skills registry at #variables.baseUrl#: #e.message#" )
+		}
+		var body = {}
+		try {
+			body = jsonDeserialize( reply.body )
+		} catch ( any e ) {
+			throw( type = "BxAgents.SkillRegistryUnavailable", message = "The skills registry at #variables.baseUrl# answered with something that is not JSON (HTTP #reply.status#)." )
+		}
+		if ( !isStruct( body ) ) {
+			throw( type = "BxAgents.SkillRegistryUnavailable", message = "The skills registry at #variables.baseUrl# answered with an unexpected shape (HTTP #reply.status#)." )
+		}
+		return { status : reply.status, body : body }
+	}
+
+	private struct function httpTransport( required string method, required string url, required struct params ) {
+		var result = {}
+		bx:http url=arguments.url method=arguments.method result="result" timeout=20 {
+			for ( var key in arguments.params ) {
+				bx:httpparam type="url" name=key value=arguments.params[ key ];
+			}
+		}
+		return { status : val( result.statusCode ?: 0 ), body : result.fileContent }
+	}
+
+}

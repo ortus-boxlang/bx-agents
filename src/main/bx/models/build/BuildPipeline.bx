@@ -50,6 +50,34 @@ class {
 	}
 
 	/**
+	 * For tests: a RegistryClient that does not touch the network.
+	 *
+	 * @client A RegistryClient
+	 */
+	function setSkillsClient( required any client ) {
+		variables.skillsClient = arguments.client
+		return this
+	}
+
+	/**
+	 * Installs the skills .agents/skills.lock.json lists and the disk lacks, so a fresh
+	 * checkout builds the same agent. Nothing is fetched when they are all there.
+	 */
+	private void function restoreSkills( required string root, required any onProgress ) {
+		if ( !fileExists( arguments.root & "/.agents/skills.lock.json" ) ) {
+			return
+		}
+		var client = variables.skillsClient ?: new "models.skills.RegistryClient@bxagents"()
+		var restored = new "models.skills.SkillInstaller@bxagents"( client ).restore( arguments.root )
+		if ( restored.len() ) {
+			arguments.onProgress( "+ Restoring installed skills..." )
+			for ( var skill in restored ) {
+				arguments.onProgress( "    #skill.name#" & ( skill.moved ? " (the registry's copy differs from the locked one: bxAgents skills update #skill.name#)" : "" ) )
+			}
+		}
+	}
+
+	/**
 	 * @projectRoot Absolute path to the project root (containing Agent.bx)
 	 * @cliEnvironment Optional environment name, e.g. from a CLI flag
 	 * @onProgress Called with one human-readable line per phase/interaction as the build proceeds - defaults to a no-op, so callers that don't care (every existing caller, before `build --verbose`) pay nothing extra. Passing a closure that collects into an array (rather than printing) is how this is unit-tested - see BuildPipelineSpec.bx
@@ -61,6 +89,8 @@ class {
 		var buildDir = root & "/.build"
 		var appDir = buildDir & "/app"
 		var buildStart = getTickCount()
+
+		restoreSkills( root, arguments.onProgress )
 
 		arguments.onProgress( "+ Resolving the agent config..." )
 		var config = variables.configResolver.resolve( projectRoot = root, cliEnvironment = arguments.cliEnvironment )

@@ -216,6 +216,11 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   nests under another subagent with `--parent`, and edits the parent by inserting only, so its comments and
   order stay; a class parent is left alone and the line to add is shown.
 - `add skill` writes a custom skill of your own, `skills/<name>/SKILL.md`, with the frontmatter and a body to fill in.
+- `skills find|install|list|update|remove` installs skills from skills.boxlang.io into `.agents/skills/` (out of
+  source control) and records them in `.agents/skills.lock.json` (committed). The install is checked against the
+  registry's git blob sha before anything is written, a skill that failed the registry's audit is refused, and
+  `build` restores whatever the lock lists and the disk lacks. Skills in `skills/` and installed ones both go
+  into the build; one of your own with the same name wins. New projects ignore `.agents/skills/`.
 
 #### Documentation
 

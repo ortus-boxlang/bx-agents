@@ -1,0 +1,144 @@
+/**
+ * Installs, updates, removes and restores skills from the registry, keeping the lock file
+ * in step. The verbs (`skills ...`) and the build (which restores whatever the lock lists
+ * but the disk lacks) both go through here, so they cannot disagree.
+ *
+ * Every method returns what it did as data; none of them prints.
+ */
+class {
+
+	/**
+	 * @client A RegistryClient
+	 */
+	function init( required any client ) {
+		variables.client = arguments.client
+		variables.store = new "models.skills.SkillStore@bxagents"()
+		return this
+	}
+
+	/**
+	 * @root Project root
+	 * @refs [ owner/repo/skill ]
+	 *
+	 * @return [ { name, ref, sha, audit, change : installed|updated|unchanged } ]
+	 */
+	array function install( required string root, required array refs ) {
+		var lock = variables.store.readLock( arguments.root )
+		var done = []
+		for ( var ref in arguments.refs ) {
+			var fetched = variables.client.fetch( ref )
+			var existing = lock.skills[ fetched.name ] ?: {}
+			var change = existing.isEmpty() ? "installed" : ( existing.sha == fetched.sha ? "unchanged" : "updated" )
+			lock.skills[ fetched.name ] = variables.store.write( arguments.root, fetched )
+			done.append( { name : fetched.name, ref : fetched.owner & "/" & fetched.repo & "/" & fetched.slug, sha : fetched.sha, audit : fetched.audit, change : change } )
+		}
+		variables.store.writeLock( arguments.root, lock )
+		variables.store.ignoreInstalled( arguments.root )
+		return done
+	}
+
+	/**
+	 * Fetches what the lock lists and the disk lacks. Nothing is fetched when everything is
+	 * there, so an offline build of a restored project works.
+	 *
+	 * @root Project root
+	 *
+	 * @return [ { name, ref, sha, moved : true when the registry's copy differs from the locked sha } ] for what was restored
+	 */
+	array function restore( required string root ) {
+		var lock = variables.store.readLock( arguments.root )
+		var restored = []
+		for ( var name in lock.skills.keyArray().sort( "textnocase" ) ) {
+			var entry = lock.skills[ name ]
+			if ( variables.store.state( arguments.root, name, entry ) != "missing" ) {
+				continue
+			}
+			var ref = entry.source & "/" & entry.skill
+			var fetched = {}
+			try {
+				fetched = variables.client.fetch( ref )
+			} catch ( any e ) {
+				throw( type = "BxAgents.SkillRestoreFailed", message = "Skill #name# is in #variables.store.lockFile()# but is not installed, and restoring it failed: #e.message# Run bxAgents skills install when the registry is reachable, or remove it with bxAgents skills remove #name#." )
+			}
+			variables.store.write( arguments.root, fetched )
+			restored.append( { name : name, ref : ref, sha : fetched.sha, moved : fetched.sha != entry.sha } )
+		}
+		return restored
+	}
+
+	/**
+	 * @root Project root
+	 * @names Skills to update; empty for all of them
+	 * @dryRun True to only report what would change
+	 *
+	 * @return [ { name, ref, from, to, change : updated|current|modified|failed, reason } ]
+	 */
+	array function update( required string root, array names = [], boolean dryRun = false ) {
+		var lock = variables.store.readLock( arguments.root )
+		var wanted = arguments.names.len() ? arguments.names : lock.skills.keyArray().sort( "textnocase" )
+		var done = []
+		for ( var name in wanted ) {
+			if ( !lock.skills.keyExists( name ) ) {
+				throw( type = "BxAgents.SkillNotInstalled", message = "[#name#] is not an installed skill. Installed: #lock.skills.keyArray().sort( 'textnocase' ).toList( ', ' )#" )
+			}
+			var entry = lock.skills[ name ]
+			var row = { name : name, ref : entry.source & "/" & entry.skill, from : entry.sha, to : entry.sha, change : "current", reason : "" }
+			try {
+				var fetched = variables.client.fetch( row.ref )
+				row.to = fetched.sha
+				if ( fetched.sha != entry.sha ) {
+					// Never overwrite a skill someone edited in .agents/skills: move it to skills/ first
+					if ( variables.store.state( arguments.root, name, entry ) == "modified" ) {
+						row.change = "modified"
+						row.reason = "edited since it was installed. Move your version to skills/ (it wins over the installed one), or remove it and install again."
+					} else {
+						row.change = "updated"
+						if ( !arguments.dryRun ) {
+							lock.skills[ name ] = variables.store.write( arguments.root, fetched )
+						}
+					}
+				}
+			} catch ( any e ) {
+				row.change = "failed"
+				row.reason = e.message
+			}
+			done.append( row )
+		}
+		if ( !arguments.dryRun ) {
+			variables.store.writeLock( arguments.root, lock )
+		}
+		return done
+	}
+
+	/**
+	 * @root Project root
+	 * @name An installed skill
+	 */
+	void function remove( required string root, required string name ) {
+		var lock = variables.store.readLock( arguments.root )
+		if ( !lock.skills.keyExists( arguments.name ) ) {
+			throw( type = "BxAgents.SkillNotInstalled", message = "[#arguments.name#] is not an installed skill. Installed: #lock.skills.keyArray().sort( 'textnocase' ).toList( ', ' )#" )
+		}
+		variables.store.remove( arguments.root, arguments.name )
+		lock.skills.delete( arguments.name )
+		variables.store.writeLock( arguments.root, lock )
+	}
+
+	/**
+	 * @root Project root
+	 *
+	 * @return [ { name, source, skill, sha, state : ok|missing|modified } ] by name
+	 */
+	array function installed( required string root ) {
+		var lock = variables.store.readLock( arguments.root )
+		var projectRoot = arguments.root
+		return lock.skills.keyArray().sort( "textnocase" ).map( name => ( {
+			name   : name,
+			source : lock.skills[ name ].source,
+			skill  : lock.skills[ name ].skill,
+			sha    : lock.skills[ name ].sha,
+			state  : variables.store.state( projectRoot, name, lock.skills[ name ] )
+		} ) )
+	}
+
+}
