@@ -663,6 +663,42 @@ class extends="testbox.system.BaseSpec" {
 				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
 				expect( src ).toInclude( '"conversations" : true' );
 				expect( src ).toInclude( '"preferences"   : true' );
+				expect( src ).toInclude( '"notes"         : !isNull( notesProvider() )' );
+			} );
+
+			it( "serves the agent's notes to the page, one owner per visitor, and never removes the agent's", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var src = fileRead( appDir & "/handlers/ChatUi.bx" );
+				for ( var action in [ "notes", "noteAdd", "noteUpdate", "noteRemove" ] ) {
+					expect( src ).toInclude( "function #action#( event, rc, prc )" );
+				}
+				expect( src ).toInclude( 'NotesWiring@bxagents"().providerOf( agent() )' );
+				// a visitor's user notes belong to the identity the rest of the page uses
+				expect( src ).toInclude( 'arguments.scope == "agent" ? ( agent().getConfig().name ?: "" ) : resolveUserId()' );
+				expect( src ).toInclude( "statusCode: 403" );
+				expect( src ).toInclude( "A note of the agent is shared by everyone" );
+			} );
+
+			it( "has a notes panel that only appears when the agent keeps notes", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( 'id="notesBtn"' );
+				expect( html ).toInclude( 'id="notesPanel"' );
+				expect( html ).toInclude( "notesBtn.hidden = !capabilities.notes" );
+				expect( html ).toInclude( 'apiGet( "/notes" )' );
+				expect( html ).toInclude( 'apiPost( "/notes/add"' );
+				expect( html ).toInclude( 'apiPost( "/notes/update"' );
+				expect( html ).toInclude( 'apiPost( "/notes/remove"' );
+				// the agent's notes get no Remove button
+				expect( html ).toInclude( 'if ( notesScope === "user" )' );
+				// text from a note goes in with textContent, never as markup
+				expect( html ).toInclude( "text.textContent = note.text" );
 			} );
 
 			it( "no longer claims the approval UI is missing", function() {

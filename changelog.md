@@ -210,6 +210,8 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
 - `bxAgents notes list|add|edit|remove|stats|export|import` manages them from a shell.
 - Run-control routes `GET/POST /__bxagents/notes`, `POST /notes/update` and `POST /notes/remove`;
   removing a note of the agent needs an `admin` token.
+- The web chat has a Notes panel (about you, about the agent: add, edit, remove your own), over `GET /notes`,
+  `POST /notes/add|update|remove` under the web API. Agent notes cannot be removed from the page.
 - `token` and `notes` take their action as the first word without mistaking it for a project folder.
 
 #### Access tokens for a deployed agent
