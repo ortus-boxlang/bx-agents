@@ -972,6 +972,80 @@ class extends="testbox.system.BaseSpec" {
 
 			} );
 
+			describe( "add skill", function() {
+
+				private function addSkill( required string root, struct flags = {}, array positionals = [ "skill", "release-notes" ] ) {
+					var options = { projectRoot : root, _positionals : positionals, yes : true };
+					options.append( flags );
+					return addVerb.run( options );
+				}
+
+				it( "writes skills/<name>/SKILL.md with frontmatter and a body to fill in", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					var result = addSkill( root, { description : "Use this skill when writing release notes" } );
+					var source = fileRead( root & "/skills/release-notes/SKILL.md" );
+
+					expect( result.exitCode ).toBe( 0 );
+					expect( source ).toInclude( "name: release-notes" );
+					expect( source ).toInclude( "description: Use this skill when writing release notes" );
+					expect( source ).toInclude( "## Steps" );
+				} );
+
+				it( "quotes a description YAML would misread", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					addSkill( root, { description : "Use this skill when: the user asks for notes" } );
+
+					expect( fileRead( root & "/skills/release-notes/SKILL.md" ) ).toInclude( 'description: "Use this skill when: the user asks for notes"' );
+				} );
+
+				it( "is discovered by the next build and by inspect", function() {
+					var root = newTempProject( "yaml-minimal" );
+					addSkill( root, { description : "Use this skill when writing release notes" } );
+
+					new bxagents.models.cli.Build().run( { projectRoot : root } );
+					var report = new bxagents.models.report.ProjectReport().build( root );
+
+					expect( report.agent.skills ).toInclude( "release-notes" );
+					expect( fileExists( root & "/.build/app/skills/release-notes/SKILL.md" ) ).toBeTrue();
+					expect( report.validation.errors ).toBeEmpty();
+				} );
+
+				it( "leaves a placeholder description to fill in, and says so", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					var result = addSkill( root );
+
+					expect( fileRead( root & "/skills/release-notes/SKILL.md" ) ).toInclude( "TODO: Use this skill when" );
+					expect( result.message ).toInclude( "Replace the TODO description" );
+				} );
+
+				it( "refuses a bad name and one that exists", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					expect( function() {
+						addSkill( root, {}, [ "skill", "Release Notes" ] );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					addSkill( root );
+					expect( function() {
+						addSkill( root );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+				} );
+
+				it( "asks the name and when to use it", function() {
+					var root = newTempProject( "yaml-minimal" );
+					var prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [ "triage", "Use this skill when sorting bugs", "create" ] );
+
+					var result = addVerb.run( { projectRoot : root, _positionals : [ "skill" ], _prompter : prompter, _interactive : true } );
+
+					expect( prompter.remaining() ).toBe( 0 );
+					expect( result.exitCode ).toBe( 0 );
+					expect( fileExists( root & "/skills/triage/SKILL.md" ) ).toBeTrue();
+				} );
+
+			} );
+
 			describe( "the verb", function() {
 
 				it( "refuses a folder that is not an agent project", function() {

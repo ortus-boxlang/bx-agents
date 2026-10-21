@@ -63,7 +63,7 @@ Always use the `--flag=value` form. The space-separated form is not supported.
 Scaffold a new agent project.
 :::
 ::: card title="add" icon="phosphor-duotone:plus-circle" href="#add"
-Add a tool, interceptor, schedule, MCP server, named model, gateway or subagent to an existing project.
+Add a tool, interceptor, schedule, MCP server, named model, gateway, subagent or skill to an existing project.
 :::
 ::: card title="build" icon="phosphor-duotone:hammer" href="#build"
 Run the full build pipeline.
@@ -147,7 +147,7 @@ bxAgents new my-agent --forgebox=some-package-slug
 
 ### `add`
 
-Add one thing to a project that already exists, asking the same questions `new` asks. Today that is a `tool`, an `interceptor`, a `schedule`, an `mcp` server, a `model`, a `gateway` or a `subagent`.
+Add one thing to a project that already exists, asking the same questions `new` asks. Today that is a `tool`, an `interceptor`, a `schedule`, an `mcp` server, a `model`, a `gateway`, a `subagent` or a `skill`.
 
 ```bash
 bxAgents add                        # pick what to add
@@ -328,6 +328,22 @@ bxAgents add subagent checker --model=claude --parent=writer --with=search --sea
 | `--description`, `--with`, `--search`, `--files`, `--files-dir`, `--memory`, `--mcp`, `--guard` | The same as [`new`](#new). |
 
 Writes `subagents/<name>/Agent.yaml` (with the `environments.test` mock model, so `bxAgents test` needs no key) and `instructions.md`, and adds an empty `.env` stub for each key the choices need. The name is inserted into the parent's `subAgents` without rewriting the file, so comments and order stay as they were. If the parent is a class, or its list is written in a shape that cannot be extended by inserting, nothing in it is changed and the line to add is printed. Packages a choice needs (`bx-playwright` for browsing) are named for you to add to `box.json`.
+
+#### `add skill`
+
+Adds a custom skill of your own: `skills/<name>/SKILL.md`, in the Claude Agent Skills shape. It goes into source control with the project and into every build.
+
+```bash
+bxAgents add skill release-notes --description="Use this skill when writing release notes"
+bxAgents add skill                              # asks
+```
+
+| Flag | Meaning |
+|---|---|
+| `--name=<name>` | The folder, or the first positional. Lowercase letters, digits and hyphens. A skill that already exists is refused. |
+| `--description=<text>` | One sentence starting "Use this skill when". The model reads it to decide whether to load the skill, so it is the part that matters. Without it a TODO is written for you to replace. |
+
+Skills are not wired to an agent: every skill in the build is available to the model. Skills from skills.boxlang.io are not added here; they are installed, not written.
 
 ### `build`
 
