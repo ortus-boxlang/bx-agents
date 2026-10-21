@@ -220,6 +220,33 @@ GET  /__bxagents/info
 
 Estas son las cuatro sub-rutas que registra el propio terminador `toAi()` de ColdBox. La ruta existe para que el tooling de este módulo siempre tenga una dirección con la que hablar - es la entrada de servicio, no la API pública de tu proyecto. La superficie pública propia de un proyecto va en `gateways/`, en las rutas que elijas.
 
+### Control de ejecución
+
+Junto a esas cuatro, un handler generado (`handlers/AgentApi.bx`) sirve lo que un cliente de chat necesita para
+controlar una ejecución. Es lo que usan `chat --server` y `chat --connect`:
+
+```
+POST /__bxagents/events    # SSE: como /stream, más frames tool y suspended
+POST /__bxagents/cancel    # { threadId, reason? }
+POST /__bxagents/steer     # { threadId, input }
+GET  /__bxagents/pending   # ?threadId=
+POST /__bxagents/resume    # { threadId, decision } -> SSE, como /events
+GET  /__bxagents/tools
+```
+
+`/events` envía los frames de `/stream` (`thread` primero, `chunk` por cada trozo de la respuesta, `done` al final)
+y añade:
+
+| Frame | Datos |
+|---|---|
+| `tool` | `{ id, name, arguments, status, ms }`, una vez con `status: "running"` y otra con `"ok"` y el tiempo que tardó |
+| `suspended` | `{ threadId, pendingActions : [ { toolName, toolArgs } ] }` cuando la ejecución espera una decisión humana |
+| `error` | `{ message }` |
+
+`cancel` detiene la ejecución en su siguiente punto de control (antes de la siguiente llamada al modelo o a una tool, no a mitad de un token). `steer` inserta un mensaje en una ejecución en curso. `resume` acepta `approve`, `approve_session` o `reject` y transmite el resto del turno. Una ejecución pertenece a quien la inició: `pending` responde "nada pendiente" y `resume` responde `403` a cualquier otro.
+
+Estas rutas están detrás de la misma compuerta `x-bxagents-token` que las otras cuatro (un token ausente o incorrecto es un `401`), y `agentApi.enabled: false` las elimina todas.
+
 Como la ruta está reservada, `build` **rechaza** cualquier entrada de `gateways/` cuyo `path` sea `/__bxagents` o cuelgue por debajo. Dos rutas en un mismo punto de montaje son un conflicto real: una eclipsaría silenciosamente a la otra, y la tuya sería la que nunca responde.
 
 ### `agentApi`

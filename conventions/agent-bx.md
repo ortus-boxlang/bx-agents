@@ -238,6 +238,37 @@ route exists so this module's own tooling always has an address to talk to -
 it's the service entrance, not your project's public API. A project's own
 public surface belongs in `gateways/`, at whatever paths you choose.
 
+### Run control
+
+Beside those four, a generated handler (`handlers/AgentApi.bx`) serves what a chat client needs to
+control a run. It is what `chat --server` and `chat --connect` use:
+
+```
+POST /__bxagents/events    # SSE: like /stream, plus tool and suspended frames
+POST /__bxagents/cancel    # { threadId, reason? }
+POST /__bxagents/steer     # { threadId, input }
+GET  /__bxagents/pending   # ?threadId=
+POST /__bxagents/resume    # { threadId, decision } -> SSE, like /events
+GET  /__bxagents/tools
+```
+
+`/events` sends the frames of `/stream` (`thread` first, `chunk` for each piece of the answer, `done` last)
+and adds:
+
+| Frame | Data |
+|---|---|
+| `tool` | `{ id, name, arguments, status, ms }`, once with `status: "running"` and once with `"ok"` and the time it took |
+| `suspended` | `{ threadId, pendingActions : [ { toolName, toolArgs } ] }` when the run waits for a human decision |
+| `error` | `{ message }` |
+
+`cancel` stops the run at its next checkpoint (before the next model call or tool call, not in the middle of
+a token). `steer` splices a message into a run in flight. `resume` takes `approve`, `approve_session` or
+`reject` and streams the rest of the turn. A run belongs to whoever started it: `pending` answers "nothing
+pending" and `resume` answers `403` to anyone else.
+
+These routes sit behind the same `x-bxagents-token` gate as the other four (a missing or wrong token is a
+`401`), and `agentApi.enabled: false` removes all of them.
+
 Because the path is reserved, `build` **rejects** any `gateways/` entry whose
 `path` is `/__bxagents` or sits underneath it. Two routes on one mount is a
 genuine conflict: one would silently shadow the other, and yours would be the

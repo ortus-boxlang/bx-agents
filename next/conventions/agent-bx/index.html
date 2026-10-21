@@ -246,7 +246,7 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#what-the-build-layers-on-top-of-the-class">What the build layers on top of the class</a></li><li class="toc-level-2"><a href="#configure-optional---overriding-what-the-class-set">configure&#x28;&#x29; &#x28;optional&#x29; - overriding what the class set</a></li><li class="toc-level-2"><a href="#the-model-slug">The model slug</a></li><li class="toc-level-2"><a href="#environment-overrides">Environment overrides</a></li><li class="toc-level-3"><a href="#detectenvironment">detectEnvironment&#x28;&#x29;</a></li><li class="toc-level-2"><a href="#merge-semantics">Merge semantics</a></li><li class="toc-level-2"><a href="#the-always-on-agent-route">The always-on agent route</a></li><li class="toc-level-3"><a href="#agentapi">agentApi</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#what-the-build-layers-on-top-of-the-class">What the build layers on top of the class</a></li><li class="toc-level-2"><a href="#configure-optional---overriding-what-the-class-set">configure&#x28;&#x29; &#x28;optional&#x29; - overriding what the class set</a></li><li class="toc-level-2"><a href="#the-model-slug">The model slug</a></li><li class="toc-level-2"><a href="#environment-overrides">Environment overrides</a></li><li class="toc-level-3"><a href="#detectenvironment">detectEnvironment&#x28;&#x29;</a></li><li class="toc-level-2"><a href="#merge-semantics">Merge semantics</a></li><li class="toc-level-2"><a href="#the-always-on-agent-route">The always-on agent route</a></li><li class="toc-level-3"><a href="#run-control">Run control</a></li><li class="toc-level-3"><a href="#agentapi">agentApi</a></li></ul></details>
 		
 
 		
@@ -487,6 +487,34 @@ GET  /__bxagents/info
 route exists so this module's own tooling always has an address to talk to -
 it's the service entrance, not your project's public API. A project's own
 public surface belongs in <code>gateways/</code>, at whatever paths you choose.</p>
+<h3 id="run-control"><a href="#run-control" id="run-control" name="run-control" class="anchor"></a>Run control</h3>
+<p>Beside those four, a generated handler (<code>handlers/AgentApi.bx</code>) serves what a chat client needs to
+control a run. It is what <code>chat --server</code> and <code>chat --connect</code> use:</p>
+<pre><code>POST /__bxagents/events    # SSE: like /stream, plus tool and suspended frames
+POST /__bxagents/cancel    # { threadId, reason? }
+POST /__bxagents/steer     # { threadId, input }
+GET  /__bxagents/pending   # ?threadId=
+POST /__bxagents/resume    # { threadId, decision } -&gt; SSE, like /events
+GET  /__bxagents/tools
+</code></pre>
+<p><code>/events</code> sends the frames of <code>/stream</code> (<code>thread</code> first, <code>chunk</code> for each piece of the answer, <code>done</code> last)
+and adds:</p>
+<div class="bxsites-table-wrap"><table class="table">
+<thead>
+<tr><th>Frame</th><th>Data</th></tr>
+</thead>
+<tbody>
+<tr><td><code>tool</code></td><td><code>{ id, name, arguments, status, ms }</code>, once with <code>status: &quot;running&quot;</code> and once with <code>&quot;ok&quot;</code> and the time it took</td></tr>
+<tr><td><code>suspended</code></td><td><code>{ threadId, pendingActions : [ { toolName, toolArgs } ] }</code> when the run waits for a human decision</td></tr>
+<tr><td><code>error</code></td><td><code>{ message }</code></td></tr>
+</tbody>
+</table></div>
+<p><code>cancel</code> stops the run at its next checkpoint (before the next model call or tool call, not in the middle of
+a token). <code>steer</code> splices a message into a run in flight. <code>resume</code> takes <code>approve</code>, <code>approve_session</code> or
+<code>reject</code> and streams the rest of the turn. A run belongs to whoever started it: <code>pending</code> answers &quot;nothing
+pending&quot; and <code>resume</code> answers <code>403</code> to anyone else.</p>
+<p>These routes sit behind the same <code>x-bxagents-token</code> gate as the other four (a missing or wrong token is a
+<code>401</code>), and <code>agentApi.enabled: false</code> removes all of them.</p>
 <p>Because the path is reserved, <code>build</code> <strong>rejects</strong> any <code>gateways/</code> entry whose
 <code>path</code> is <code>/__bxagents</code> or sits underneath it. Two routes on one mount is a
 genuine conflict: one would silently shadow the other, and yours would be the
@@ -596,7 +624,7 @@ you do, and for any built <code>.bxa</code> artifact you deploy.</p>
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#what-the-build-layers-on-top-of-the-class">What the build layers on top of the class</a></li><li class="toc-level-2"><a href="#configure-optional---overriding-what-the-class-set">configure&#x28;&#x29; &#x28;optional&#x29; - overriding what the class set</a></li><li class="toc-level-2"><a href="#the-model-slug">The model slug</a></li><li class="toc-level-2"><a href="#environment-overrides">Environment overrides</a></li><li class="toc-level-3"><a href="#detectenvironment">detectEnvironment&#x28;&#x29;</a></li><li class="toc-level-2"><a href="#merge-semantics">Merge semantics</a></li><li class="toc-level-2"><a href="#the-always-on-agent-route">The always-on agent route</a></li><li class="toc-level-3"><a href="#agentapi">agentApi</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#what-the-build-layers-on-top-of-the-class">What the build layers on top of the class</a></li><li class="toc-level-2"><a href="#configure-optional---overriding-what-the-class-set">configure&#x28;&#x29; &#x28;optional&#x29; - overriding what the class set</a></li><li class="toc-level-2"><a href="#the-model-slug">The model slug</a></li><li class="toc-level-2"><a href="#environment-overrides">Environment overrides</a></li><li class="toc-level-3"><a href="#detectenvironment">detectEnvironment&#x28;&#x29;</a></li><li class="toc-level-2"><a href="#merge-semantics">Merge semantics</a></li><li class="toc-level-2"><a href="#the-always-on-agent-route">The always-on agent route</a></li><li class="toc-level-3"><a href="#run-control">Run control</a></li><li class="toc-level-3"><a href="#agentapi">agentApi</a></li></ul></nav>
 				</aside>
 			
 		</div>
