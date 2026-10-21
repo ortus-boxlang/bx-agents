@@ -132,6 +132,44 @@ class extends="testbox.system.BaseSpec" {
 				expect( routerContent ).toInclude( 'route( "/api/chat" ).toAi( "GeneratedAgent" )' );
 			} );
 
+			it( "carries a models/ entry's params, options and key variable into the agent's model", function() {
+				var projectRoot = createTempDirectory( prefix = "bxagents-pipeline-models-" );
+				tempDirs.append( projectRoot );
+				fileWrite( projectRoot & "/Agent.yaml", "name: modeled" & char( 10 ) & "model: researcher" & char( 10 ) );
+				fileWrite( projectRoot & "/instructions.md", "Be helpful." );
+				directoryCreate( projectRoot & "/models" );
+				fileWrite( projectRoot & "/models/researcher.yaml", "provider: openai" & char( 10 ) & "model: gpt-5-mini" & char( 10 ) & "apiKeyEnvVar: RESEARCH_KEY" & char( 10 ) & "params:" & char( 10 ) & "  temperature: 0.2" & char( 10 ) & "options:" & char( 10 ) & "  timeout: 60" & char( 10 ) );
+
+				var result = pipeline.build( projectRoot );
+				var factory = fileRead( result.appDir & "/agent/GeneratedAgentFactory.bx" );
+
+				expect( factory ).toInclude( 'provider : "openai"' );
+				expect( factory ).toInclude( 'apiKey : getSystemSetting( "RESEARCH_KEY" )' );
+				expect( factory ).toInclude( '"model" : "gpt-5-mini"' );
+				expect( factory ).toInclude( '"temperature" : 0.2' );
+				expect( factory ).toInclude( '"timeout" : 60' );
+			} );
+
+			it( "refuses a build whose models/ entry is wrong, naming the entry and the problem", function() {
+				var projectRoot = createTempDirectory( prefix = "bxagents-pipeline-models-" );
+				tempDirs.append( projectRoot );
+				fileWrite( projectRoot & "/Agent.yaml", "name: modeled" & char( 10 ) & "model: openai/gpt-5" & char( 10 ) );
+				fileWrite( projectRoot & "/instructions.md", "Be helpful." );
+				directoryCreate( projectRoot & "/models" );
+				fileWrite( projectRoot & "/models/broken.json", '{ "provider": "skynet", "temperature": 1, "params": { "apiKey": "sk-secret" } }' );
+
+				expect( function() {
+					pipeline.build( projectRoot );
+				} ).toThrow( "BxAgents.BuildValidationFailed" );
+				try {
+					pipeline.build( projectRoot );
+				} catch ( BxAgents.BuildValidationFailed e ) {
+					expect( e.message ).toInclude( "models/ entry [broken]" );
+					expect( e.message ).toInclude( "unknown provider [skynet]" );
+					expect( e.message ).toInclude( "unknown key [temperature]" );
+				}
+			} );
+
 			it( "puts a project's agent-scope interceptor where the generated Application.bx looks it up", function() {
 				var projectRoot = newTempProject( "full-project" );
 				var result = pipeline.build( projectRoot );

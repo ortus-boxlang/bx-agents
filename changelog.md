@@ -202,6 +202,11 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   with the sign-in as an `${env.NAME}` placeholder and an empty `.env` stub); `add mcp server` writes
   `mcp/<name>.bx` offering the project's tools through bx-ai's MCP server, plus the `gateways/` entry
   that serves it. `Agent.yaml` is edited by inserting lines only, so comments and layout stay.
+- `add model` writes a named model configuration, `models/<name>.yaml` or `.json`. Named models are
+  now YAML or JSON (a `.bx` class still works) and carry more than a provider and model: `params`
+  (temperature, max_tokens, ...), `options`, and `apiKeyEnvVar` to read their key from a different
+  environment variable. Entries are validated at build time, and the key variable is read when the
+  app starts and named if it is missing.
 
 #### Documentation
 

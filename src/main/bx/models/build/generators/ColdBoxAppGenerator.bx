@@ -1008,9 +1008,7 @@ class {
 		var parsedModel = resolveModelReference( modelSlug, arguments.discovery, arguments.nodePath )
 		var description = arguments.resolvedConfig.description ?: ""
 
-		var modelExpression = len( parsedModel.model )
-			? 'aiModel( provider : "#bxLiteral( parsedModel.provider )#", params : { model : "#bxLiteral( parsedModel.model )#" } )'
-			: 'aiModel( provider : "#bxLiteral( parsedModel.provider )#" )'
+		var modelExpression = renderModelExpression( parsedModel )
 
 		var checkpointerExpression = renderCheckpointerExpression( arguments.resolvedConfig )
 		var memoryExpression = renderMemoryExpression( arguments.resolvedConfig, arguments.defaultMemory )
@@ -1133,9 +1131,7 @@ class {
 		var modelSlug = arguments.resolvedConfig.model ?: ""
 		if ( len( modelSlug ) ) {
 			var parsedModel = resolveModelReference( modelSlug, arguments.discovery, arguments.nodePath )
-			var modelExpression = len( parsedModel.model )
-				? 'aiModel( provider : "#bxLiteral( parsedModel.provider )#", params : { model : "#bxLiteral( parsedModel.model )#" } )'
-				: 'aiModel( provider : "#bxLiteral( parsedModel.provider )#" )'
+			var modelExpression = renderModelExpression( parsedModel )
 			lines.append( "#arguments.varName#.setModel( #modelExpression# )" )
 		}
 
@@ -1364,7 +1360,7 @@ class {
 	 *
 	 *   1. "openai/gpt-5"  -> already a full provider/model slug
 	 *   2. "openai"        -> a bare CORE_PROVIDERS name, no models/ lookup needed
-	 *   3. "summarizer"    -> a models/summarizer.bx|.json entry's OWN
+	 *   3. "summarizer"    -> a models/summarizer.yaml|.json entry's OWN
 	 *                         { provider, model } struct is read and used
 	 *
 	 * @modelSlug The node's own resolvedConfig.model value
@@ -1399,35 +1395,41 @@ class {
 			)
 		}
 
-		var provider = trim( entryConfig.provider ?: "" )
-		if ( !len( provider ) ) {
+		var resolved = new "models.build.NamedModels@bxagents"().resolve( entryConfig )
+		if ( !len( resolved.provider ) ) {
 			throw(
 				type    = "BxAgents.InvalidModelSlug",
 				message = "models/ entry [#arguments.modelSlug#] (referenced from [#arguments.nodePath#]) has no 'provider'"
 			)
 		}
 
-		return { provider : provider, model : trim( entryConfig.model ?: "" ) }
+		// provider, model, and the entry's params / options / apiKeyEnvVar
+		return resolved
 	}
 
 	/**
-	 * @path Absolute path to a `models/*` entry's `.bx`/`.json` file
+	 * The `aiModel(...)` call for a resolved model. A plain slug gives just a provider and a
+	 * model; a models/ entry also carries its params, options and API key variable.
+	 *
+	 * @parsedModel { provider, model } or a full NamedModels.resolve() struct
+	 *
+	 * @return BoxLang source
+	 */
+	private string function renderModelExpression( required struct parsedModel ) {
+		return new "models.build.NamedModels@bxagents"().expression(
+			arguments.parsedModel,
+			( value ) => renderLiteral( value ),
+			( text ) => bxLiteral( text )
+		)
+	}
+
+	/**
+	 * @path Absolute path to a `models/*` entry's `.yaml`, `.json` or `.bx` file
 	 *
 	 * @return The entry's config struct, or null if it could not be read
 	 */
 	private any function readModelEntryConfig( required string path ) {
-		try {
-			if ( arguments.path.endsWith( ".json" ) ) {
-				return jsonDeserialize( fileRead( arguments.path ) )
-			}
-
-			var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
-			var instance = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
-				.instantiate( arguments.path, context )
-			return instance.configure()
-		} catch ( any e ) {
-			return null
-		}
+		return new "models.build.NamedModels@bxagents"().read( arguments.path )
 	}
 
 	/**

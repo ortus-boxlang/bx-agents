@@ -63,7 +63,7 @@ Usa siempre la forma `--flag=valor`. La forma con espacio no está soportada.
 Genera el andamiaje de un nuevo proyecto de agente.
 :::
 ::: card title="add" icon="phosphor-duotone:plus-circle" href="#add"
-Añade una herramienta, un interceptor, una programación o un servidor MCP a un proyecto existente.
+Añade una herramienta, un interceptor, una programación, un servidor MCP o un modelo con nombre a un proyecto existente.
 :::
 ::: card title="build" icon="phosphor-duotone:hammer" href="#build"
 Ejecuta el pipeline de build completo.
@@ -147,7 +147,7 @@ bxAgents new my-agent --forgebox=some-package-slug
 
 ### `add`
 
-Añade una cosa a un proyecto que ya existe, haciendo las mismas preguntas que `new`. Hoy eso es una `tool`, un `interceptor`, una `schedule` o un servidor `mcp`.
+Añade una cosa a un proyecto que ya existe, haciendo las mismas preguntas que `new`. Hoy eso es una `tool`, un `interceptor`, una `schedule`, un servidor `mcp` o un `model`.
 
 ```bash
 bxAgents add                        # elige qué añadir
@@ -262,6 +262,28 @@ La lista de herramientas se escribe al ejecutar el comando, así que una herrami
 
 - `Agent.yaml` se edita solo insertando líneas, así que sus comentarios y su formato se quedan como están. Si la lista no se puede ampliar así (escrita en una línea, por ejemplo), o la definición es un `Agent.bx` basado en clase, no se cambia nada y el error incluye la entrada para pegarla.
 - Se rechaza un servidor que el agente ya usa, por nombre o dirección.
+
+#### `add model`
+
+Escribe una configuración de modelo con nombre, `models/<name>.yaml` (o `.json`): un proveedor, un modelo y los ajustes que los acompañan, que cualquier agente puede usar escribiendo `model: <name>`.
+
+```bash
+bxAgents add model researcher --provider=openai --model=gpt-5-mini --temperature=0.2
+bxAgents add model coder --provider=claude --model=claude-sonnet-5-5 --env=CODER_KEY --format=json
+bxAgents add model analyst                       # pregunta proveedor, modelo, variable de la clave, temperatura, longitud, formato
+```
+
+| Flag | Significado |
+|---|---|
+| `--name=<name>` | El nombre del archivo, o el segundo posicional. Se rechaza un nombre que ya esté en `models/`, y también el nombre de un proveedor (`model: openai` significaría el proveedor). |
+| `--provider=<id>` | Cualquier proveedor que tenga bx-ai. Los del asistente de new aparecen primero. |
+| `--model=<id>` | El modelo del proveedor. Vacío usa el modelo por defecto del proveedor. |
+| `--env=<NAME>` | Lee la API key de esta variable de entorno en lugar de la habitual del proveedor. Solo se escribe el nombre; se añade un `NAME=` vacío a `.env`. |
+| `--temperature=<0-2>`, `--max-tokens=<n>` | Se escriben bajo `params`. Opcionales. |
+| `--description=<text>` | Para las personas. Opcional. |
+| `--format=yaml\|json` | Por defecto `yaml`. |
+
+Úsalo en `Agent.yaml` (o en el de un subagente) con `model: <name>`. Los `params`, `options` y la variable de la clave de la entrada viajan con él al agente construido. Consulta [models/](conventions/models.md) para ver cada clave.
 
 ### `build`
 

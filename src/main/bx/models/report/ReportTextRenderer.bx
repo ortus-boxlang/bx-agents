@@ -256,7 +256,11 @@ class {
 	private void function drawModels( required struct r, required array out ) {
 		var rows = []
 		for ( var model in arguments.r.models ) {
-			rows.append( [ model.name, len( model.provider ) ? model.provider & ( len( model.model ) ? "/" & model.model : "" ) : "", model.file ] )
+			var settings = model.params.len() ? model.params.toList( ", " ) : ""
+			if ( len( model.apiKeyEnvVar ) ) {
+				settings = ( len( settings ) ? settings & "; " : "" ) & "key: " & model.apiKeyEnvVar
+			}
+			rows.append( [ model.name, len( model.provider ) ? model.provider & ( len( model.model ) ? "/" & model.model : "" ) : "", settings, model.file ] )
 		}
 		table( rows, arguments.out, 2 )
 	}

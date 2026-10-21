@@ -604,6 +604,119 @@ class extends="testbox.system.BaseSpec" {
 
 			} );
 
+			describe( "add model", function() {
+
+				private function addModel( required string root, struct flags = {}, array positionals = [ "model", "researcher" ] ) {
+					var options = { projectRoot : root, _positionals : positionals, yes : true, provider : "openai" };
+					options.append( flags );
+					return addVerb.run( options );
+				}
+
+				it( "writes models/<name>.yaml with the provider, model and settings", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					var result = addModel( root, { model : "gpt-5-mini", temperature : "0.2", "max-tokens" : "2000", description : "Cheap research" } );
+					var yaml = fileRead( root & "/models/researcher.yaml" );
+
+					expect( result.exitCode ).toBe( 0 );
+					expect( yaml ).toInclude( "description: Cheap research" );
+					expect( yaml ).toInclude( "provider: openai" );
+					expect( yaml ).toInclude( "model: gpt-5-mini" );
+					expect( yaml ).toInclude( "max_tokens: 2000" );
+					expect( yaml ).toInclude( "temperature: 0.2" );
+					expect( result.message ).toInclude( "model: researcher" );
+				} );
+
+				it( "writes JSON when asked", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					addModel( root, { format : "json", model : "gpt-5" }, [ "model", "coder" ] );
+					var parsed = jsonDeserialize( fileRead( root & "/models/coder.json" ) );
+
+					expect( parsed.provider ).toBe( "openai" );
+					expect( parsed.model ).toBe( "gpt-5" );
+				} );
+
+				it( "adds the provider's key variable to .env as an empty stub, or the one named", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					addModel( root );
+					addModel( root, { env : "CODER_KEY", provider : "claude" }, [ "model", "coder" ] );
+					var env = fileRead( root & "/.env" );
+
+					expect( env ).toInclude( "OPENAI_API_KEY=" & char( 10 ) );
+					expect( env ).toInclude( "CODER_KEY=" );
+					expect( fileRead( root & "/models/coder.yaml" ) ).toInclude( "apiKeyEnvVar: CODER_KEY" );
+					expect( fileRead( root & "/models/researcher.yaml" ) ).notToInclude( "apiKeyEnvVar" );
+				} );
+
+				it( "is used by an agent that names it, and the build carries its settings", function() {
+					var root = newTempProject( "yaml-minimal" );
+					addModel( root, { provider : "mock", model : "mock-model", temperature : "0.3" }, [ "model", "mocky" ] );
+					fileWrite( root & "/Agent.yaml", "name: yaml-agent" & char( 10 ) & "model: mocky" & char( 10 ) );
+
+					var built = new bxagents.models.build.BuildPipeline( "test" ).build( root );
+					var report = new bxagents.models.report.ProjectReport().build( root );
+
+					expect( fileRead( built.appDir & "/agent/GeneratedAgentFactory.bx" ) ).toInclude( '"temperature" : 0.3' );
+					expect( report.agent.modelSource ).toBe( "named" );
+					expect( report.agent.provider ).toBe( "mock" );
+					expect( report.validation.errors ).toBeEmpty();
+				} );
+
+				it( "does not ask for the default provider's key variable when a model names its own", function() {
+					var root = newTempProject( "yaml-minimal" );
+					addModel( root, { env : "OWN_KEY" } );
+					fileWrite( root & "/Agent.yaml", "name: yaml-agent" & char( 10 ) & "model: researcher" & char( 10 ) );
+
+					var names = new bxagents.models.report.ProjectReport().build( root ).env.map( v => v.name );
+
+					expect( names ).toInclude( "OWN_KEY" );
+					expect( names ).notToInclude( "OPENAI_API_KEY" );
+				} );
+
+				it( "refuses a name that is a provider, a name in use, an unknown provider and bad numbers", function() {
+					var root = newTempProject( "yaml-minimal" );
+					addModel( root );
+
+					expect( function() {
+						addModel( root, {}, [ "model", "openai" ] );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					expect( function() {
+						addModel( root );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					expect( function() {
+						addModel( root, { provider : "skynet" }, [ "model", "other" ] );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					expect( function() {
+						addModel( root, { temperature : "9" }, [ "model", "other" ] );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					expect( function() {
+						addModel( root, { "max-tokens" : "lots" }, [ "model", "other" ] );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+				} );
+
+				it( "offers every bx-ai provider, not only the ones the wizard lists", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					addModel( root, { provider : "bedrock" }, [ "model", "aws" ] );
+
+					expect( fileRead( root & "/models/aws.yaml" ) ).toInclude( "provider: bedrock" );
+				} );
+
+				it( "asks for the name, provider, model, key variable, temperature, length and format", function() {
+					var root = newTempProject( "yaml-minimal" );
+					var prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [ "analyst", "Reads reports", "claude", "claude-sonnet-5-5", "", "0.1", "4000", "yaml", "create" ] );
+
+					var result = addVerb.run( { projectRoot : root, _positionals : [ "model" ], _prompter : prompter, _interactive : true } );
+
+					expect( prompter.remaining() ).toBe( 0 );
+					expect( result.exitCode ).toBe( 0 );
+					expect( fileRead( root & "/models/analyst.yaml" ) ).toInclude( "model: claude-sonnet-5-5" );
+				} );
+
+			} );
+
 			describe( "the verb", function() {
 
 				it( "refuses a folder that is not an agent project", function() {

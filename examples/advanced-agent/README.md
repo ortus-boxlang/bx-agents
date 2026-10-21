@@ -4,7 +4,7 @@ A composite, "everything together" example - unlike the other examples, which
 each isolate one convention folder, this one combines most of them in a
 single project to show they compose cleanly:
 
-- `models/fast.bx` - a named, reusable model configuration, referenced from `Agent.bx` as `model: "fast"`.
+- `models/fast.yaml` - a named, reusable model configuration, referenced from `Agent.bx` as `model: "fast"`.
 - `subagents/researcher` and `subagents/writer` - two subagents, auto-wrapped as callable tools on the root agent.
 - `tools/Finance.bx` - two `@AITool` functions on the root agent itself.
 - `skills/citation-style/` - a Claude Agent Skill the subagents' instructions reference.

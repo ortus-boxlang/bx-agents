@@ -63,7 +63,7 @@ Always use the `--flag=value` form. The space-separated form is not supported.
 Scaffold a new agent project.
 :::
 ::: card title="add" icon="phosphor-duotone:plus-circle" href="#add"
-Add a tool, interceptor, schedule or MCP server to an existing project.
+Add a tool, interceptor, schedule, MCP server or named model to an existing project.
 :::
 ::: card title="build" icon="phosphor-duotone:hammer" href="#build"
 Run the full build pipeline.
@@ -147,7 +147,7 @@ bxAgents new my-agent --forgebox=some-package-slug
 
 ### `add`
 
-Add one thing to a project that already exists, asking the same questions `new` asks. Today that is a `tool`, an `interceptor`, a `schedule` or an `mcp` server.
+Add one thing to a project that already exists, asking the same questions `new` asks. Today that is a `tool`, an `interceptor`, a `schedule`, an `mcp` server or a `model`.
 
 ```bash
 bxAgents add                        # pick what to add
@@ -262,6 +262,28 @@ The tool list is written out when you run the command, so a tool added later has
 
 - `Agent.yaml` is edited by inserting lines only, so its comments and layout stay as they are. If the list cannot be extended that way (written on one line, say), or the definition is a class-based `Agent.bx`, nothing is changed and the error carries the entry to paste.
 - A server the agent already uses, by name or address, is refused.
+
+#### `add model`
+
+Writes a named model configuration, `models/<name>.yaml` (or `.json`): a provider, a model and the settings that go with them, which any agent can then use by writing `model: <name>`.
+
+```bash
+bxAgents add model researcher --provider=openai --model=gpt-5-mini --temperature=0.2
+bxAgents add model coder --provider=claude --model=claude-sonnet-5-5 --env=CODER_KEY --format=json
+bxAgents add model analyst                       # asks provider, model, key variable, temperature, length, format
+```
+
+| Flag | Meaning |
+|---|---|
+| `--name=<name>` | The file name, or the second positional. A name already in `models/` is refused, and so is the name of a provider (`model: openai` would mean the provider). |
+| `--provider=<id>` | Any provider bx-ai has. The new wizard's providers are listed first. |
+| `--model=<id>` | The provider's model. Empty uses the provider's own default. |
+| `--env=<NAME>` | Read the API key from this environment variable instead of the provider's usual one. Only the name is written; an empty `NAME=` stub goes into `.env`. |
+| `--temperature=<0-2>`, `--max-tokens=<n>` | Written under `params`. Optional. |
+| `--description=<text>` | For people. Optional. |
+| `--format=yaml\|json` | Defaults to `yaml`. |
+
+Use it in `Agent.yaml` (or a subagent's) with `model: <name>`. The entry's `params`, `options` and key variable go with it into the built agent. See [models/](conventions/models.md) for every key.
 
 ### `build`
 
