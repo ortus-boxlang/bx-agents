@@ -87,7 +87,7 @@ Envía a un destino de despliegue real.
 Genera el hash de una contraseña en texto plano para una entrada de usuarios de webui.
 :::
 ::: card title="inspect" icon="phosphor-duotone:magnifying-glass" href="#inspect"
-Imprime de forma legible un manifest.json existente.
+Informa de cómo está compuesto el agente, a partir de su código fuente.
 :::
 ::: card title="clean" icon="phosphor-duotone:broom" href="#clean"
 Elimina la salida .build/ y dist/ de un proyecto.
@@ -297,15 +297,60 @@ bxAgents hash-password --password="<tu-contraseña>"
 
 ### `inspect`
 
-Imprime de forma legible un `.build/manifest.json` existente sin reconstruir.
+Un informe de cómo está compuesto el agente: los agentes y subagentes con sus modelos, herramientas, skills y servidores MCP, a través de qué se expone el proyecto, su programación y las variables de entorno que necesita. Lee el **código fuente** de tu proyecto, las mismas fases de descubrimiento, resolución y validación que ejecutan `build` y `doctor`, así que funciona antes de haber ejecutado `build` y no genera nada.
 
 ```bash
-bxAgents inspect [--json]
+bxAgents inspect                        # el informe
+bxAgents inspect --section=tools,env    # solo algunas secciones
+bxAgents inspect --json                 # el informe completo como JSON, para scripts
+bxAgents inspect --md                   # Markdown, para pegar en un pull request
+bxAgents inspect --md=AGENT.md          # escribe el Markdown en un archivo del proyecto
+bxAgents inspect --environment=production
 ```
 
-- Requiere un `build` previo.
-- Imprime nombre del agente, modelo, entorno, versión del manifest, nombre/versión del generador, y conteo de archivos.
-- `--json` imprime el manifest crudo como JSON en lugar del resumen legible para humanos - útil para scripting.
+```
+● advanced-agent   Agent.bx · development
+  /home/me/advanced-agent
+
+  3 agents · 3 tools · 1 skill · 2 gateways
+
+── Agents ──────────────────────────────────────────────────────────────────────
+● advanced-agent  fast → mock/mock-model
+  instructions: instructions.md · 2 tools · 1 skill · 2 subagents
+├─● ResearchBot  mock/mock-model
+│   instructions: instructions.md · 1 tool
+└─● WriterBot  mock/mock-model
+    instructions: instructions.md
+
+── Tools ───────────────────────────────────────────────────────────────────────
+  advanced-agent
+    getStockQuote    Get the latest stock quote for a ticker …  tools/Finance.bx
+    convertCurrency  Convert an amount from one currency to a…  tools/Finance.bx
+```
+
+El informe tiene estas secciones, en este orden. `--section` acepta cualquiera de los nombres de la primera columna, separados por comas.
+
+| Sección | Muestra |
+|---|---|
+| `agents` | El agente raíz y sus subagentes como un árbol: modelo (y a qué resuelve un nombre de [`models/`](conventions/models.md)), de dónde vienen las instrucciones, y un recuento de herramientas, skills y servidores MCP, además de la memoria y la protección contra inyección de prompts cuando están definidas. |
+| `tools` | Por agente: cada función `@AITool` de `tools/` con su descripción y archivo, luego las herramientas de módulo que lista (`now@bxai`) y qué módulos tienen `toolOptions`. |
+| `skills` | Las skills de cada agente. |
+| `mcp` | Los servidores MCP que usa cada agente (las URLs se muestran sin usuario ni query string, y con las variables de entorno que necesitan) y los servidores MCP que aloja el proyecto. |
+| `gateways` | Cada entrada de `gateways/`: su tipo (`agent`, `mcp`, `webui` con su modo de autenticación, o una plataforma de chat) y su ruta. |
+| `schedule` | `schedules/Scheduler.bx` y los nombres de sus llamadas `task()`. |
+| `models` | Las entradas con nombre de [`models/`](conventions/models.md) y a qué apuntan. |
+| `interceptors`, `modules`, `deploy` | Interceptores con su ámbito, módulos declarados y entradas de `deploy/` con su destino. |
+| `env` | Cada variable de entorno que lee el proyecto: credenciales de gateways, tokens MCP, la API key de cada proveedor de modelos, `agentApi.tokenEnvVar`. |
+| `checks` | Lo que `build` rechazaría. Los errores y avisos se listan aquí; `inspect` sigue saliendo con `0`, usa [`doctor`](#doctor) para un resultado de éxito o fallo. |
+| `build` | Si existe `.build/manifest.json`, y su versión de manifest, generador y número de archivos. |
+
+- Una sección sin contenido se omite. Nómbrala con `--section` y dice `none`.
+- **Las variables de entorno se muestran por nombre, nunca por valor.** `▲` significa que la variable no está definida ahora mismo, `✔` que sí lo está; el texto siguiente dice dónde se usa. Es la misma comprobación que hace `doctor` con las variables de los gateways, ampliada a todo el proyecto.
+- Un `Agent.bx` basado en clase cuyo modelo o instrucciones se definen en código aparece como `model set in code` o `instructions in code`; `inspect` lee lo declarado, no ejecuta el agente.
+- El color solo se usa en una terminal interactiva. `NO_COLOR`, `TERM=dumb` y `--no-color` lo desactivan, un pipe o un archivo recibe texto plano, y `TERM=dumb` o `--ascii` también cambian los caracteres de dibujo de cajas por otros simples. Las líneas se ajustan a `COLUMNS` (80 si no está exportada).
+- `--json` es el propio informe, no el manifest. El manifest es un archivo plano en `.build/manifest.json`, descrito en [El manifest](manifest.md).
+- `--md=FILE` es lo único que `inspect` escribe. Un archivo relativo se crea dentro del proyecto.
+- Una carpeta sin `Agent.yaml` ni `Agent.bx` es un error.
 
 ### `clean`
 

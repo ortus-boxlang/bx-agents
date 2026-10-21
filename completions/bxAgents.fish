@@ -25,7 +25,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n __bxagents_needs_verb -a 'deploy' -d 'Deploy to a target'
     complete -c $cmd -n __bxagents_needs_verb -a 'doctor' -d 'Diagnose the environment and project - runtime, modules, env vars'
     complete -c $cmd -n __bxagents_needs_verb -a 'hash-password' -d 'Hash a password for a webui users entry'
-    complete -c $cmd -n __bxagents_needs_verb -a 'inspect' -d 'Pretty-print a built project\'s manifest.json'
+    complete -c $cmd -n __bxagents_needs_verb -a 'inspect' -d 'Report how the agent is composed: agents, tools, skills, MCP, exposure, env'
     complete -c $cmd -n __bxagents_needs_verb -a 'invoke' -d 'Send one message to a built agent, print the response, exit'
     complete -c $cmd -n __bxagents_needs_verb -a 'new' -d 'Scaffold a new agent project'
     complete -c $cmd -n __bxagents_needs_verb -a 'package' -d 'Package a built project into a .bxa'
@@ -59,8 +59,10 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb doctor' -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb hash-password' -l password -x
     complete -c $cmd -n '__bxagents_using_verb hash-password' -l projectRoot -x -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb inspect' -l environment -x
     complete -c $cmd -n '__bxagents_using_verb inspect' -l json
     complete -c $cmd -n '__bxagents_using_verb inspect' -l projectRoot -x -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb inspect' -l section -x
     complete -c $cmd -n '__bxagents_using_verb inspect' -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb invoke' -l json
     complete -c $cmd -n '__bxagents_using_verb invoke' -l message -x

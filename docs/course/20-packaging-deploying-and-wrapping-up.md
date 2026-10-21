@@ -67,19 +67,24 @@ class {
 }
 ```
 
-## What every build recorded: the manifest
+## Seeing how the agent is composed
 
-`bxAgents inspect` pretty-prints `.build/manifest.json` without rebuilding:
+`bxAgents inspect` prints a report of your agent straight from its source - it does not need a build:
 
 ```bash
 bxAgents inspect
+bxAgents inspect --section=tools,env
 bxAgents inspect --json
 ```
 
-It's a hash-stamped record of exactly what went into the build - agent name, model,
+You get the agent and subagent tree with each model, the tools and skills, what the project is exposed through, the schedule, and every environment variable it needs with a marker for the ones that are not set (names only, never values). `--md` writes the same thing as Markdown for a pull request. See the [CLI Reference](../cli-reference.md#inspect) for every section.
+
+## What every build recorded: the manifest
+
+Every `build` also writes `.build/manifest.json`, a hash-stamped record of exactly what went into the build - agent name, model,
 environment, and one entry per discovered file with a SHA-256 content hash. This is
 what makes rebuilding an unchanged project byte-identical, the idea you first met back
-in [Lesson 2](02-what-is-bxagents.md).
+in [Lesson 2](02-what-is-bxagents.md). Open it in any editor; `inspect` shows its version and file count in the `build` section.
 
 ## Cleaning up
 

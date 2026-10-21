@@ -8,7 +8,7 @@ tags: [reference, build]
 
 # El manifest
 
-Cada `build` escribe `.build/manifest.json` - el propio registro de BxAgents de exactamente qué entró en la app generada. `bxAgents inspect` lo imprime de forma legible sin reconstruir; `bxAgents package` copia una versión **redactada** de él junto al `.bxa` (ver [Despliegue y secretos](deployment-and-secrets.md)).
+Cada `build` escribe `.build/manifest.json` - el propio registro de BxAgents de exactamente qué entró en la app generada. `bxAgents inspect` indica en su sección `build` si el proyecto se construyó y la versión y el número de archivos del manifest (el manifest en sí es un archivo plano que puedes abrir); `bxAgents package` copia una versión **redactada** de él junto al `.bxa` (ver [Despliegue y secretos](deployment-and-secrets.md)).
 
 ## Esquema
 

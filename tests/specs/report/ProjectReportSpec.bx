@@ -1,0 +1,176 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "report.ProjectReport", function() {
+
+			beforeEach( function() {
+				variables.reporter = new bxagents.models.report.ProjectReport();
+				variables.fixtures = expandPath( "/fixtures" );
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function newTempProject( required string fixtureName ) {
+				var dir = createTempDirectory( prefix = "bxagents-report-" );
+				directoryCopy( fixtures & "/" & arguments.fixtureName, dir, true );
+				tempDirs.append( dir );
+				return dir;
+			}
+
+			private function newYamlProject( required string yaml ) {
+				var dir = createTempDirectory( prefix = "bxagents-report-" );
+				fileWrite( dir & "/Agent.yaml", arguments.yaml );
+				fileWrite( dir & "/instructions.md", "Be helpful." );
+				tempDirs.append( dir );
+				return dir;
+			}
+
+			it( "reports on a project that has never been built, and writes nothing", function() {
+				var root = newTempProject( "full-project" );
+
+				var report = reporter.build( root );
+
+				expect( report.project.name ).toBe( "full-project-agent" );
+				expect( report.build.built ).toBeFalse();
+				expect( directoryExists( root & "/.build" ) ).toBeFalse();
+			} );
+
+			it( "refuses a folder that is not an agent project", function() {
+				var dir = createTempDirectory( prefix = "bxagents-report-" );
+				tempDirs.append( dir );
+
+				expect( function() {
+					reporter.build( dir );
+				} ).toThrow( "BxAgents.NotAnAgentProject" );
+			} );
+
+			it( "reads the @AITool functions out of tools/, not just the file names", function() {
+				var root = newTempProject( "full-project" );
+
+				var own = reporter.build( root ).agent.tools.own;
+				var names = own.map( t => t.name );
+
+				expect( names ).toInclude( "getWeather" );
+				expect( names ).toInclude( "search" );
+				expect( own.filter( t => t.name == "getWeather" )[ 1 ].description ).toBe( "Gets the current weather for a city" );
+				expect( own.filter( t => t.name == "search" )[ 1 ].file ).toBe( "tools/nested/Search.bx" );
+			} );
+
+			it( "lists skills, gateways, hosted MCP, interceptors, named models, modules and the schedule", function() {
+				var report = reporter.build( newTempProject( "full-project" ) );
+
+				expect( report.agent.skills ).toInclude( "named-skill" );
+				expect( report.gateways.map( g => g.name ) ).toInclude( "http" );
+				expect( report.gateways.filter( g => g.name == "http" )[ 1 ].kind ).toBe( "agent" );
+				expect( report.mcpHosted.map( m => m.name ) ).toInclude( "localServer" );
+				expect( report.interceptors[ 1 ].name ).toBe( "AuditLogger" );
+				expect( report.interceptors[ 1 ].scope ).toBe( "agent" );
+				expect( report.models[ 1 ].name ).toBe( "summarizer" );
+				expect( report.models[ 1 ].provider ).toBe( "openai" );
+				expect( report.modules.map( m => m.name ) ).toInclude( "my-extra-module" );
+				expect( report.schedule.present ).toBeTrue();
+				expect( report.schedule.tasks ).toInclude( "nightly" );
+			} );
+
+			it( "walks a chain of subagents as a tree", function() {
+				var report = reporter.build( newTempProject( "subagents-chain" ) );
+
+				expect( report.agent.name ).toBe( "root" );
+				expect( report.agent.children ).toHaveLength( 1 );
+				expect( report.agent.children[ 1 ].name ).toBe( "a" );
+				expect( report.agent.children[ 1 ].children[ 1 ].name ).toBe( "b" );
+				expect( report.agent.children[ 1 ].children[ 1 ].provider ).toBe( "openai" );
+			} );
+
+			it( "says how a named model resolves", function() {
+				var report = reporter.build( newYamlProject( "name: named#char( 10 )#model: fast#char( 10 )#" ) );
+
+				// no models/ entry: validation reports it, the report does not guess
+				expect( report.agent.modelSource ).toBe( "named" );
+				expect( report.agent.provider ).toBe( "" );
+				expect( report.validation.errors.len() ).toBeGT( 0 );
+			} );
+
+			it( "lists the module tools and tool option names of a yaml agent", function() {
+				var report = reporter.build( newYamlProject( "name: tooled#char( 10 )#model: mock/mock-model#char( 10 )#tools:#char( 10 )#  - now@bxai#char( 10 )#" ) );
+
+				expect( report.agent.tools.module ).toBe( [ "now@bxai" ] );
+			} );
+
+			it( "records environment variables by name with where they are used, never their values", function() {
+				var root = newTempProject( "gateways-slack" );
+
+				var report = reporter.build( root );
+				var names = report.env.map( v => v.name );
+
+				expect( names ).toInclude( "MY_SLACK_BOT_TOKEN" );
+				expect( names ).toInclude( "MY_SLACK_APP_TOKEN" );
+				expect( report.env.filter( v => v.name == "MY_SLACK_BOT_TOKEN" )[ 1 ].usedBy[ 1 ] ).toInclude( "slack" );
+				for ( var v in report.env ) {
+					expect( v ).toHaveKey( "set" );
+					expect( v ).notToHaveKey( "value" );
+				}
+			} );
+
+			it( "adds the model provider's API key variable", function() {
+				var report = reporter.build( newYamlProject( "name: keyed#char( 10 )#model: openai/gpt-5#char( 10 )#" ) );
+
+				expect( report.env.map( v => v.name ) ).toInclude( "OPENAI_API_KEY" );
+			} );
+
+			it( "does not list a variable for the mock provider", function() {
+				var report = reporter.build( newYamlProject( "name: mocked#char( 10 )#model: mock/mock-model#char( 10 )#" ) );
+
+				expect( report.env ).toBeEmpty();
+			} );
+
+			it( "finds the variables an MCP server asks for and drops credentials from its URL", function() {
+				var yaml = "name: mcp-agent#char( 10 )#model: mock/mock-model#char( 10 )#mcpServers:#char( 10 )#"
+					& "  - url: https://user:hunter2@mcp.example.com/mcp?key=SUPERSECRET#char( 10 )#"
+					& "    name: ex#char( 10 )#"
+					& "    token: ${env.EX_TOKEN}#char( 10 )#";
+				var report = reporter.build( newYamlProject( yaml ) );
+				var serialized = jsonSerialize( report );
+
+				expect( report.agent.mcpServers[ 1 ].url ).toBe( "https://mcp.example.com/mcp" );
+				expect( report.agent.mcpServers[ 1 ].env ).toBe( [ "EX_TOKEN" ] );
+				expect( serialized ).notToInclude( "hunter2" );
+				expect( serialized ).notToInclude( "SUPERSECRET" );
+			} );
+
+			it( "surfaces what the validator found", function() {
+				var report = reporter.build( newYamlProject( "name: bad#char( 10 )#model: nonsense#char( 10 )#" ) );
+
+				expect( report.validation.errors.len() ).toBeGT( 0 );
+			} );
+
+			it( "adds the build section from the manifest when the project was built", function() {
+				var root = newTempProject( "full-project" );
+				new bxagents.models.cli.Build().run( { projectRoot : root } );
+
+				var built = reporter.build( root ).build;
+
+				expect( built.built ).toBeTrue();
+				expect( built.files ).toBeGT( 0 );
+				expect( built.generator ).toInclude( "bx-agents" );
+			} );
+
+			it( "parses a --section list and rejects an unknown name", function() {
+				expect( reporter.parseSections( "tools, Env,tools" ) ).toBe( [ "tools", "env" ] );
+				expect( reporter.parseSections( "" ) ).toBeEmpty();
+				expect( function() {
+					reporter.parseSections( "tools,bogus" );
+				} ).toThrow( "BxAgents.UnknownSection" );
+			} );
+
+		} );
+	}
+
+}

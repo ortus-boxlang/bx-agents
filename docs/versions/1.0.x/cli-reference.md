@@ -87,7 +87,7 @@ Ship to a real deployment target.
 Hash a plaintext password for a webui users entry.
 :::
 ::: card title="inspect" icon="phosphor-duotone:magnifying-glass" href="#inspect"
-Pretty-print an existing manifest.json.
+Report how the agent is composed, from its source.
 :::
 ::: card title="clean" icon="phosphor-duotone:broom" href="#clean"
 Remove a project's .build/ and dist/ output.
@@ -297,15 +297,60 @@ bxAgents hash-password --password="<your-password>"
 
 ### `inspect`
 
-Pretty-print an existing `.build/manifest.json` without rebuilding.
+A report of how the agent is composed: the agents and subagents with their models, tools, skills and MCP servers, what the project is exposed through, its schedule, and the environment variables it needs. It reads your project's **source**, the same discovery, resolve and validate phases `build` and `doctor` run, so it works before you have ever run `build` and it generates nothing.
 
 ```bash
-bxAgents inspect [--json]
+bxAgents inspect                        # the report
+bxAgents inspect --section=tools,env    # only some sections
+bxAgents inspect --json                 # the whole report as JSON, for scripts
+bxAgents inspect --md                   # Markdown, to paste into a pull request
+bxAgents inspect --md=AGENT.md          # write the Markdown to a file in the project
+bxAgents inspect --environment=production
 ```
 
-- Requires a prior `build`.
-- Prints agent name, model, environment, manifest version, generator name/version, and file count.
-- `--json` prints the raw manifest as JSON instead of the human-readable summary - useful for scripting.
+```
+● advanced-agent   Agent.bx · development
+  /home/me/advanced-agent
+
+  3 agents · 3 tools · 1 skill · 2 gateways
+
+── Agents ──────────────────────────────────────────────────────────────────────
+● advanced-agent  fast → mock/mock-model
+  instructions: instructions.md · 2 tools · 1 skill · 2 subagents
+├─● ResearchBot  mock/mock-model
+│   instructions: instructions.md · 1 tool
+└─● WriterBot  mock/mock-model
+    instructions: instructions.md
+
+── Tools ───────────────────────────────────────────────────────────────────────
+  advanced-agent
+    getStockQuote    Get the latest stock quote for a ticker …  tools/Finance.bx
+    convertCurrency  Convert an amount from one currency to a…  tools/Finance.bx
+```
+
+The report has these sections, in this order. `--section` takes any of the names in the first column, comma separated.
+
+| Section | Shows |
+|---|---|
+| `agents` | The root agent and its subagents as a tree: model (and what a [`models/`](conventions/models.md) name resolves to), where the instructions come from, and a count of tools, skills, MCP servers, plus memory and the prompt-injection guard when set. |
+| `tools` | Per agent: each `@AITool` function in `tools/` with its description and file, then the module tools it lists (`now@bxai`) and which modules have `toolOptions`. |
+| `skills` | The skills each agent has. |
+| `mcp` | The MCP servers each agent uses (URLs are shown without a user name or query string, and with the environment variables they need) and the MCP servers the project hosts. |
+| `gateways` | Every `gateways/` entry: its kind (`agent`, `mcp`, `webui` with its auth mode, or a chat platform) and path. |
+| `schedule` | `schedules/Scheduler.bx` and the names of its `task()` calls. |
+| `models` | The named [`models/`](conventions/models.md) entries and what they point at. |
+| `interceptors`, `modules`, `deploy` | Interceptors with their scope, declared modules, and `deploy/` entries with their target. |
+| `env` | Every environment variable the project reads: gateway credentials, MCP tokens, each model provider's API key, `agentApi.tokenEnvVar`. |
+| `checks` | What `build` would reject. Errors and warnings are listed here; `inspect` still exits `0`, use [`doctor`](#doctor) for a pass or fail. |
+| `build` | Whether `.build/manifest.json` exists, and its manifest version, generator and file count. |
+
+- A section with nothing in it is left out. Name it with `--section` and it says `none`.
+- **Environment variables are shown by name, never by value.** `▲` means the variable is not set right now, `✔` that it is; the text after it says where it is used. This is the same check `doctor` makes of gateway variables, widened to the whole project.
+- A class-based `Agent.bx` whose model or instructions are set in code is shown as `model set in code` or `instructions in code`; `inspect` reads what is declared, it does not run the agent.
+- Color is used only at an interactive terminal. `NO_COLOR`, `TERM=dumb` and `--no-color` turn it off, a pipe or a file gets plain text, and `TERM=dumb` or `--ascii` also swaps the box-drawing characters for plain ones. Lines are fitted to `COLUMNS` (80 when it is not exported).
+- `--json` is the report itself, not the manifest. The manifest is a plain file at `.build/manifest.json`, described in [The Manifest](manifest.md).
+- `--md=FILE` is the only thing `inspect` ever writes. A relative file is created inside the project.
+- A folder with no `Agent.yaml` or `Agent.bx` is an error.
 
 ### `clean`
 

@@ -172,6 +172,18 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
 - `bxAgents chat --record[=file]` and `/record [file]` / `/record stop` save the screen as an asciicast
   `.cast` file for demos, with a `● rec` marker while it is on.
 
+#### The inspect report
+
+- `bxAgents inspect` reports how the agent is composed, from the project's source, so it works
+  before `build`: the agent and subagent tree with each model, tools (the `@AITool` functions in
+  `tools/` and the module tools), skills, MCP servers used and hosted, gateways and what each
+  exposes, the schedule, named models, interceptors, modules, deploy targets, every environment
+  variable the project reads with whether it is set (names only, never values), what `build`
+  would reject, and the build state.
+- `--section=<names>` shows only some sections, `--json` prints the whole report, `--md` prints it
+  as Markdown and `--md=<file>` writes it. Color only at an interactive terminal; `NO_COLOR`,
+  `TERM=dumb`, `--no-color` and `--ascii` are honored.
+
 #### Documentation
 
 - A full documentation site at [bxagents.ai](https://bxagents.ai): installation, quick start,

@@ -130,7 +130,7 @@ Si tu proyecto tiene una entrada `gateways/*` con `{ exposes: "agent", path: "/a
 ## 6. Inspecciona, empaqueta, despliega
 
 ```bash
-bxAgents inspect              # imprime .build/manifest.json de forma legible
+bxAgents inspect              # cómo está compuesto el agente: agentes, herramientas, variables, comprobaciones
 bxAgents package --version=1.0.0   # escribe dist/my-agent-1.0.0.bxa + .sha256
 bxAgents deploy --destination=/path/to/somewhere   # copia el .bxa más nuevo allí
 ```

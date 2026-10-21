@@ -18,6 +18,11 @@ class extends="testbox.system.BaseSpec" {
 				}
 			} );
 
+			// a run of hash signs inside a BoxLang string starts interpolation
+			private function heading( required numeric level, required string text ) {
+				return repeatString( char( 35 ), arguments.level ) & " " & arguments.text;
+			}
+
 			private function newTempProject( required string fixtureName ) {
 				var dir = createTempDirectory( prefix = "bxagents-cli-inspect-" );
 				directoryCopy( fixtures & "/" & arguments.fixtureName, dir, true );
@@ -25,42 +30,93 @@ class extends="testbox.system.BaseSpec" {
 				return dir;
 			}
 
-			it( "errors cleanly if build hasn't run yet", function() {
+			it( "reports on a project that has not been built, and builds nothing", function() {
 				var projectRoot = newTempProject( "full-project" );
-
-				expect( function() {
-					inspectVerb.run( { projectRoot : projectRoot } );
-				} ).toThrow( "BxAgents.NotBuilt" );
-			} );
-
-			it( "reads the existing manifest without rebuilding", function() {
-				var projectRoot = newTempProject( "full-project" );
-				buildVerb.run( { projectRoot : projectRoot } );
-
-				var appDirBeforeStat = getFileInfo( projectRoot & "/.build/app/Application.bx" ).lastModified;
 
 				var result = inspectVerb.run( { projectRoot : projectRoot } );
 
 				expect( result.exitCode ).toBe( 0 );
-				expect( result.manifest.agent.name ).toBe( "full-project-agent" );
 				expect( result.message ).toInclude( "full-project-agent" );
 				expect( result.message ).toInclude( "openai/gpt-5" );
-
-				var appDirAfterStat = getFileInfo( projectRoot & "/.build/app/Application.bx" ).lastModified;
-				expect( appDirAfterStat ).toBe( appDirBeforeStat );
+				expect( result.message ).toInclude( "Not built yet" );
+				expect( directoryExists( projectRoot & "/.build" ) ).toBeFalse();
 			} );
 
-			it( "prints the raw manifest as JSON when --json is passed", function() {
+			it( "says built, and does not rebuild, when the project was built", function() {
 				var projectRoot = newTempProject( "full-project" );
 				buildVerb.run( { projectRoot : projectRoot } );
+				var appDirBeforeStat = getFileInfo( projectRoot & "/.build/app/Application.bx" ).lastModified;
 
-				var result = inspectVerb.run( { projectRoot : projectRoot, json : true } );
+				var result = inspectVerb.run( { projectRoot : projectRoot } );
 
-				expect( result.exitCode ).toBe( 0 );
+				expect( result.message ).toInclude( "Built" );
+				expect( result.message ).notToInclude( "Not built yet" );
+				expect( getFileInfo( projectRoot & "/.build/app/Application.bx" ).lastModified ).toBe( appDirBeforeStat );
+			} );
+
+			it( "refuses a folder that is not an agent project", function() {
+				var dir = createTempDirectory( prefix = "bxagents-cli-inspect-" );
+				tempDirs.append( dir );
+
+				expect( function() {
+					inspectVerb.run( { projectRoot : dir } );
+				} ).toThrow( "BxAgents.NotAnAgentProject" );
+			} );
+
+			it( "requires a project root", function() {
+				expect( function() {
+					inspectVerb.run( {} );
+				} ).toThrow( "BxAgents.MissingProjectRoot" );
+			} );
+
+			it( "prints the whole report as JSON with --json", function() {
+				var result = inspectVerb.run( { projectRoot : newTempProject( "full-project" ), json : true } );
+
 				var parsed = jsonDeserialize( result.message );
-				expect( parsed.agent.name ).toBe( "full-project-agent" );
-				expect( parsed.agent.model ).toBe( "openai/gpt-5" );
-				expect( result.message ).notToInclude( "Agent:" );
+				expect( parsed.project.name ).toBe( "full-project-agent" );
+				expect( parsed.agent.tools.own ).toHaveLength( 2 );
+				expect( parsed ).toHaveKey( "env" );
+				expect( parsed ).toHaveKey( "validation" );
+			} );
+
+			it( "shows only the sections named by --section", function() {
+				var result = inspectVerb.run( { projectRoot : newTempProject( "full-project" ), section : "tools,skills" } );
+
+				expect( result.message ).toInclude( "── Tools" );
+				expect( result.message ).toInclude( "── Skills" );
+				expect( result.message ).notToInclude( "── Schedule" );
+			} );
+
+			it( "rejects an unknown section and names the valid ones", function() {
+				expect( function() {
+					inspectVerb.run( { projectRoot : newTempProject( "full-project" ), section : "nope" } );
+				} ).toThrow( "BxAgents.UnknownSection" );
+			} );
+
+			it( "prints Markdown with --md", function() {
+				var result = inspectVerb.run( { projectRoot : newTempProject( "full-project" ), md : true } );
+
+				expect( result.message ).toInclude( heading( 2, "full-project-agent" ) );
+				expect( result.message ).toInclude( "| Tool | Description | File |" );
+			} );
+
+			it( "writes Markdown to a file with --md=FILE, relative to the project", function() {
+				var projectRoot = newTempProject( "full-project" );
+
+				var result = inspectVerb.run( { projectRoot : projectRoot, md : "REPORT.md" } );
+
+				expect( result.message ).toInclude( "REPORT.md" );
+				expect( fileRead( projectRoot & "/REPORT.md" ) ).toInclude( heading( 2, "full-project-agent" ) );
+			} );
+
+			it( "uses the palette it is handed, and plain text with none at a pipe", function() {
+				var projectRoot = newTempProject( "full-project" );
+
+				var painted = inspectVerb.run( { projectRoot : projectRoot, _paint : ( style, text ) => "<#style#>#text#</#style#>" } );
+				var plain = inspectVerb.run( { projectRoot : projectRoot, color : false } );
+
+				expect( painted.message ).toInclude( "<accent>" );
+				expect( plain.message ).notToInclude( char( 27 ) );
 			} );
 
 		} );

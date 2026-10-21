@@ -133,7 +133,7 @@ If your project has a `gateways/*` entry with `{ exposes: "agent", path: "/api/c
 ## 6. Inspect, package, deploy
 
 ```bash
-bxAgents inspect              # pretty-print .build/manifest.json
+bxAgents inspect              # how the agent is composed: agents, tools, env vars, checks
 bxAgents package --version=1.0.0   # writes dist/my-agent-1.0.0.bxa + .sha256
 bxAgents deploy --destination=/path/to/somewhere   # copies the newest .bxa there
 ```

@@ -1,0 +1,276 @@
+/**
+ * Writes a ProjectReport as Markdown, for a pull request description, a README or a
+ * docs page. The same sections as the terminal view, as headings, lists and tables.
+ *
+ * Environment variables appear as names with a Set column, never with values.
+ */
+class {
+
+	/**
+	 * @report A ProjectReport.build() result
+	 * @sections Section names to write, in report order; empty for all of them
+	 *
+	 * @return The Markdown
+	 */
+	string function render( required struct report, array sections = [] ) {
+		var r = arguments.report
+		var asked = arguments.sections.len() > 0
+		var out = []
+
+		out.append( heading( 2, r.project.name ) )
+		out.append( "" )
+		if ( len( r.project.description ) ) {
+			out.append( r.project.description )
+			out.append( "" )
+		}
+		out.append( "Defined in `#r.project.definition#`, environment `#r.project.environment#`." )
+
+		var parts = [
+			{ name : "agents", title : "Agents", draw : lines => drawAgents( r, lines ) },
+			{ name : "tools", title : "Tools", draw : lines => drawTools( r, lines ) },
+			{ name : "skills", title : "Skills", draw : lines => drawSkills( r, lines ) },
+			{ name : "mcp", title : "MCP", draw : lines => drawMcp( r, lines ) },
+			{ name : "gateways", title : "Exposed through", draw : lines => drawGateways( r, lines ) },
+			{ name : "schedule", title : "Schedule", draw : lines => drawSchedule( r, lines ) },
+			{ name : "models", title : "Named models", draw : lines => drawModels( r, lines ) },
+			{ name : "interceptors", title : "Interceptors", draw : lines => drawInterceptors( r, lines ) },
+			{ name : "modules", title : "Modules", draw : lines => drawModules( r, lines ) },
+			{ name : "deploy", title : "Deploy targets", draw : lines => drawDeploy( r, lines ) },
+			{ name : "env", title : "Environment", draw : lines => drawEnv( r, lines ) },
+			{ name : "checks", title : "Checks", draw : lines => drawChecks( r, lines ) },
+			{ name : "build", title : "Build", draw : lines => drawBuild( r, lines ) }
+		]
+
+		for ( var part in parts ) {
+			if ( asked && !arguments.sections.contains( part.name ) ) {
+				continue
+			}
+			var body = []
+			part.draw( body )
+			if ( !body.len() ) {
+				if ( !asked ) {
+					continue
+				}
+				body.append( "None." )
+			}
+			out.append( "" )
+			out.append( heading( 3, part.title ) )
+			out.append( "" )
+			out.append( body, true )
+		}
+
+		return out.toList( char( 10 ) ) & char( 10 )
+	}
+
+	// --------------------------------------------------------------------------
+	// Sections
+	// --------------------------------------------------------------------------
+
+	private void function drawAgents( required struct r, required array out ) {
+		treeNode( arguments.r.agent, 0, arguments.out )
+	}
+
+	private void function treeNode( required struct node, required numeric depth, required array out ) {
+		var n = arguments.node
+		var pad = repeatString( "  ", arguments.depth )
+		arguments.out.append( "#pad#- **#n.name#**, #modelLabel( n )#" )
+
+		var facts = []
+		facts.append( n.instructions.source == "none" ? "no instructions" : ( n.instructions.source == "code" ? "instructions in code" : "instructions: `#n.instructions.source#`" ) )
+		var toolTotal = n.tools.own.len() + n.tools.module.len()
+		if ( toolTotal ) {
+			facts.append( "#toolTotal# tool#toolTotal == 1 ? '' : 's'#" )
+		}
+		if ( n.skills.len() ) {
+			facts.append( "#n.skills.len()# skill#n.skills.len() == 1 ? '' : 's'#" )
+		}
+		if ( n.mcpServers.len() ) {
+			facts.append( "#n.mcpServers.len()# MCP server#n.mcpServers.len() == 1 ? '' : 's'#" )
+		}
+		if ( len( n.memory ) ) {
+			facts.append( "memory: #n.memory#" )
+		}
+		if ( n.security ) {
+			facts.append( "guard on" )
+		}
+		arguments.out.append( "#pad#  #facts.toList( ', ' )#" )
+
+		for ( var child in n.children ) {
+			treeNode( child, arguments.depth + 1, arguments.out )
+		}
+	}
+
+	private void function drawTools( required struct r, required array out ) {
+		for ( var node in flatten( arguments.r.agent ) ) {
+			if ( !node.tools.own.len() && !node.tools.module.len() ) {
+				continue
+			}
+			arguments.out.append( "**#node.name#**" )
+			arguments.out.append( "" )
+			var rows = []
+			for ( var tool in node.tools.own ) {
+				rows.append( [ "`#tool.name#`", tool.description, len( tool.file ) ? "`#tool.file#`" : "" ] )
+			}
+			for ( var tool in node.tools.module ) {
+				rows.append( [ "`#tool#`", "module tool", "" ] )
+			}
+			table( [ "Tool", "Description", "File" ], rows, arguments.out )
+			if ( node.tools.options.len() ) {
+				arguments.out.append( "" )
+				arguments.out.append( "Options for: #node.tools.options.toList( ', ' )#" )
+			}
+			arguments.out.append( "" )
+		}
+		if ( arguments.out.len() && arguments.out[ arguments.out.len() ] == "" ) {
+			arguments.out.deleteAt( arguments.out.len() )
+		}
+	}
+
+	private void function drawSkills( required struct r, required array out ) {
+		for ( var node in flatten( arguments.r.agent ) ) {
+			if ( node.skills.len() ) {
+				arguments.out.append( "- **#node.name#**: #node.skills.map( s => '`' & s & '`' ).toList( ', ' )#" )
+			}
+		}
+	}
+
+	private void function drawMcp( required struct r, required array out ) {
+		for ( var node in flatten( arguments.r.agent ) ) {
+			for ( var mcpClient in node.mcpServers ) {
+				var label = len( mcpClient.name ) ? mcpClient.name : mcpClient.url
+				var needs = mcpClient.env.len() ? ", needs #mcpClient.env.map( e => '`' & e & '`' ).toList( ', ' )#" : ""
+				arguments.out.append( "- **#node.name#** uses `#label#`#needs#" )
+			}
+		}
+		for ( var hosted in arguments.r.mcpHosted ) {
+			var tools = hosted.tools.len() ? hosted.tools.map( t => '`' & t & '`' ).toList( ', ' ) : "all tools"
+			arguments.out.append( "- Hosts `#hosted.name#`: #tools#" )
+		}
+	}
+
+	private void function drawGateways( required struct r, required array out ) {
+		var rows = []
+		for ( var gateway in arguments.r.gateways ) {
+			rows.append( [ "`#gateway.name#`", gateway.kind, len( gateway.path ) ? "`#gateway.path#`" : "", gateway.summary ] )
+		}
+		table( [ "Entry", "Kind", "Path", "What it is" ], rows, arguments.out )
+	}
+
+	private void function drawSchedule( required struct r, required array out ) {
+		if ( arguments.r.schedule.present ) {
+			var s = arguments.r.schedule
+			arguments.out.append( "`#s.file#`" & ( s.tasks.len() ? ": #s.tasks.map( t => '`' & t & '`' ).toList( ', ' )#" : "" ) )
+		}
+	}
+
+	private void function drawModels( required struct r, required array out ) {
+		var rows = []
+		for ( var model in arguments.r.models ) {
+			rows.append( [ "`#model.name#`", len( model.provider ) ? "#model.provider##len( model.model ) ? '/' & model.model : ''#" : "", "`#model.file#`" ] )
+		}
+		table( [ "Name", "Provider and model", "File" ], rows, arguments.out )
+	}
+
+	private void function drawInterceptors( required struct r, required array out ) {
+		var rows = []
+		for ( var interceptor in arguments.r.interceptors ) {
+			rows.append( [ "`#interceptor.name#`", interceptor.scope, "`#interceptor.file#`" ] )
+		}
+		table( [ "Interceptor", "Scope", "File" ], rows, arguments.out )
+	}
+
+	private void function drawModules( required struct r, required array out ) {
+		for ( var module in arguments.r.modules ) {
+			arguments.out.append( "- `#module.name#`" )
+		}
+	}
+
+	private void function drawDeploy( required struct r, required array out ) {
+		var rows = []
+		for ( var entry in arguments.r.deploy ) {
+			rows.append( [ "`#entry.name#`", entry.target, "`#entry.file#`" ] )
+		}
+		table( [ "Entry", "Target", "File" ], rows, arguments.out )
+	}
+
+	private void function drawEnv( required struct r, required array out ) {
+		var rows = []
+		for ( var v in arguments.r.env ) {
+			rows.append( [ "`#v.name#`", v.set ? "yes" : "no", v.usedBy.toList( "; " ) ] )
+		}
+		table( [ "Variable", "Set", "Used by" ], rows, arguments.out )
+	}
+
+	private void function drawChecks( required struct r, required array out ) {
+		var v = arguments.r.validation
+		for ( var error in v.errors ) {
+			arguments.out.append( "- Error: #error#" )
+		}
+		for ( var warning in v.warnings ) {
+			arguments.out.append( "- Warning: #warning#" )
+		}
+		if ( !v.errors.len() && !v.warnings.len() ) {
+			arguments.out.append( "The project validates cleanly." )
+		}
+	}
+
+	private void function drawBuild( required struct r, required array out ) {
+		var b = arguments.r.build
+		arguments.out.append( b.built ? "Built with #b.generator#, manifest #b.manifestVersion#, #b.files# files." : "Not built yet." )
+	}
+
+	// --------------------------------------------------------------------------
+	// Pieces
+	// --------------------------------------------------------------------------
+
+	/**
+	 * Built with char( 35 ) because a run of hash signs inside a BoxLang string starts
+	 * interpolation instead of writing a Markdown heading.
+	 *
+	 * @level The heading level
+	 * @text The heading text
+	 */
+	private string function heading( required numeric level, required string text ) {
+		return repeatString( char( 35 ), arguments.level ) & " " & arguments.text
+	}
+
+	private string function modelLabel( required struct node ) {
+		var n = arguments.node
+		if ( n.modelSource == "none" ) {
+			return n.classBased ? "model set in code" : "no model"
+		}
+		if ( n.modelSource == "named" ) {
+			var target = len( n.provider ) ? n.provider & ( len( n.modelId ) ? "/" & n.modelId : "" ) : "unreadable"
+			return "`#n.model#` (#target#)"
+		}
+		if ( n.modelSource == "provider" ) {
+			return "`#n.provider#` (its default model)"
+		}
+		return "`#n.model#`"
+	}
+
+	/**
+	 * @headers Column titles
+	 * @rows [ [ cell, ... ] ]
+	 * @out The lines so far
+	 */
+	private void function table( required array headers, required array rows, required array out ) {
+		if ( !arguments.rows.len() ) {
+			return
+		}
+		arguments.out.append( "| " & arguments.headers.toList( " | " ) & " |" )
+		arguments.out.append( "|" & arguments.headers.map( h => " --- |" ).toList( "" ) )
+		for ( var row in arguments.rows ) {
+			arguments.out.append( "| " & row.map( cell => cell.replace( "|", "\|", "all" ) ).toList( " | " ) & " |" )
+		}
+	}
+
+	private array function flatten( required struct node ) {
+		var all = [ arguments.node ]
+		for ( var child in arguments.node.children ) {
+			all.append( flatten( child ), true )
+		}
+		return all
+	}
+
+}
