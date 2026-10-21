@@ -98,7 +98,8 @@ Elimina solo `.build/` y `dist/` - tus convenciones fuente no se tocan nunca.
 ## Todos los verbos, en un solo sitio
 
 A lo largo de este curso has usado `new`, `build`, `test`, `chat`, `invoke`, `serve`,
-`package`, `deploy`, `inspect`, `clean` y `hash-password`. El duodécimo verbo, `doctor`, es al
+`package`, `deploy`, `inspect`, `clean` y `hash-password`. Merece la pena conocer dos más: `add`,
+que añade una herramienta a un proyecto que ya existe, y `doctor`, al
 que recurrirás cuando algo *no* funcione - comprueba tu versión de BoxLang, si `bx-ai` está
 cargado, si se encuentra la definición del agente (`Agent.yaml` o `Agent.bx`) y si el proyecto valida, sin necesitar un `build` previo.
 Consulta la [Referencia de la CLI](../cli-reference.md) para cada flag de cada uno de ellos.
