@@ -1,6 +1,6 @@
 /**
  * The SQLite file that the web chat, the terminal chat and the server share: conversations, preferences,
- * accounts, access tokens and, as later versions add them, notes and a chat log.
+ * accounts, access tokens, notes and, as later versions add them, a chat log.
  *
  * It uses plain queryExecute against one datasource, so the same class runs inside the generated web app
  * (a registered datasource, by name) and in the terminal chat (a file, opened on the spot). The schema is
@@ -122,6 +122,14 @@ class {
 				statements : [
 					"CREATE TABLE IF NOT EXISTS tokens ( id VARCHAR(64) NOT NULL PRIMARY KEY, name VARCHAR(64) NOT NULL UNIQUE, tokenHash VARCHAR(128) NOT NULL, scope VARCHAR(16) NOT NULL DEFAULT 'chat', createdAt DATETIME, lastUsedAt DATETIME, expiresAt DATETIME, revokedAt DATETIME )",
 					"CREATE INDEX IF NOT EXISTS idx_tokens_hash ON tokens ( tokenHash )"
+				]
+			},
+			{
+				// short notes an agent keeps about a person (scope user) or about its own job (scope agent)
+				version    : 4,
+				statements : [
+					"CREATE TABLE IF NOT EXISTS notes ( id VARCHAR(64) NOT NULL PRIMARY KEY, scope VARCHAR(16) NOT NULL, owner VARCHAR(255) NOT NULL, text TEXT NOT NULL, source VARCHAR(16) NOT NULL DEFAULT 'agent', sessionId VARCHAR(64), createdAt DATETIME, updatedAt DATETIME )",
+					"CREATE INDEX IF NOT EXISTS idx_notes_owner ON notes ( scope, owner, createdAt )"
 				]
 			}
 		]

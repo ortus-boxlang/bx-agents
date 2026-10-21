@@ -251,6 +251,10 @@ GET  /__bxagents/pending   # ?threadId=
 POST /__bxagents/resume    # { threadId, decision } -> SSE, like /events
 GET  /__bxagents/tools
 GET  /__bxagents/agent    # name, model, what it can do
+GET  /__bxagents/notes    # the caller's notes and the agent's, with how full they are
+POST /__bxagents/notes    # { scope : "user" | "agent", text }
+POST /__bxagents/notes/update   # { scope, id, text }
+POST /__bxagents/notes/remove   # { scope, id }
 ```
 
 `/events` sends the frames of `/stream` (`thread` first, `chunk` for each piece of the answer, `done` last)
@@ -266,6 +270,8 @@ and adds:
 a token). `steer` splices a message into a run in flight. `resume` takes `approve`, `approve_session` or
 `reject` and streams the rest of the turn. A run belongs to whoever started it: `pending` answers "nothing
 pending" and `resume` answers `403` to anyone else.
+
+The `notes` routes answer `404` for an agent that has no [`notes`](agent-yaml.md#notes) block. Each caller reads and changes their own user notes (the owner is the name of the token they used, or `api` on an open route) and the agent's notes. Any caller can add to either scope or edit a note; removing a note of the agent needs an `admin` token (a `403` otherwise), because it changes what every user's agent knows.
 
 These routes sit behind the same `x-bxagents-token` gate as the other four (a missing or wrong token is a
 `401`), and `agentApi.enabled: false` removes all of them.

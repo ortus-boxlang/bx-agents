@@ -186,6 +186,21 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   Esc to stop the run on the server, steering and approvals answered in place. A server built by an older bxAgents
   falls back to the text stream with a notice. `AgentClient` can send a token.
 
+#### Notes
+
+- `notes: {}` in `Agent.yaml` lets an agent keep short notes about the user and about its own work.
+  They go into the system prompt within a limit (defaults 1400 characters for the user, 2200 for the
+  agent, configurable), are read once per conversation, and are saved one row per note in the shared
+  chat database. `provider` can name a class implementing `INotesProvider` for a store of your own.
+- The agent gets `remember` and `forget` tools; `forget` stops for a person's approval by default
+  (`approveForget`).
+- `chat` has `/remember` and `/notes` (list, add, edit, remove, stats), in-process and over `--connect`.
+  `--user` sets whose user notes; the default is the operating system user.
+- `bxAgents notes list|add|edit|remove|stats|export|import` manages them from a shell.
+- Run-control routes `GET/POST /__bxagents/notes`, `POST /notes/update` and `POST /notes/remove`;
+  removing a note of the agent needs an `admin` token.
+- `token` and `notes` take their action as the first word without mistaking it for a project folder.
+
 #### Access tokens for a deployed agent
 
 - `agentApi: { tokens: true }` accepts tokens made with `bxAgents token create --name=laptop [--scope=chat|admin]

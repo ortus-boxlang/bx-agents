@@ -89,6 +89,9 @@ Hash a plaintext password for a webui users entry.
 ::: card title="token" icon="phosphor-duotone:identification-card" href="#token"
 Issue, list and revoke access tokens for a deployed agent.
 :::
+::: card title="notes" icon="phosphor-duotone:note-pencil" href="#notes"
+Read and manage the notes an agent keeps.
+:::
 ::: card title="inspect" icon="phosphor-duotone:magnifying-glass" href="#inspect"
 Pretty-print an existing manifest.json.
 :::
@@ -196,6 +199,7 @@ bxAgents chat --no-tui                         # plain line-by-line REPL
 bxAgents chat --server [--port=<port>]         # full app, own throwaway server
 bxAgents chat --connect=http://127.0.0.1:8080  # full app, server you already run
 bxAgents chat --connect=https://agent.example.com --token=<token>   # a server that wants one
+bxAgents chat --user=alice                     # whose notes the agent reads (default: your OS user)
 ```
 
 In the screen:
@@ -209,7 +213,22 @@ In the screen:
 | Enter while the agent works | Steer it: your message is added to the run |
 | Ctrl+C | Clear the box; on an empty box, leave. Ctrl+D leaves too |
 
-Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/save [file]` (the conversation as Markdown), `/record [file]` and `/record stop` (see below) and `/exit`.
+Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/save [file]` (the conversation as Markdown), `/remember <text>` and `/notes` (see below), `/record [file]` and `/record stop` (see below) and `/exit`.
+
+#### Notes in the chat
+
+When the agent keeps [notes](conventions/agent-yaml.md#notes), the chat can show and change them:
+
+| Command | Does |
+|---|---|
+| `/remember <text>` | Keep a note about you |
+| `/notes` | List your notes and the agent's, with how full each is |
+| `/notes add [agent] <text>` | Add a note (about you, or with `agent` about the agent's work) |
+| `/notes edit <id> <text>` | Change a note; the id is the short code in the list |
+| `/notes remove <id>` | Remove a note |
+| `/notes stats` | Characters used against the limit, and the rough tokens they add to every conversation |
+
+It works in all three modes. Over `--connect` the commands use the server's notes routes, so you see the notes of that server, and removing a note of the agent needs an `admin` token. An agent without a `notes` block says how to turn them on.
 
 #### Recording a chat
 
@@ -313,6 +332,25 @@ bxAgents token revoke --name=laptop
 - `list` shows each token's name, scope, status (`active`, `expired` or `revoked`), when it was made, last used and expires. Never the token itself.
 - `revoke` stops a token working at once. The name stays taken, so it cannot be reused by accident.
 - Run it where the database is: on the server, or in the project before you pack it. On a deployed server, point `BXAGENTS_DB` at the file the app uses.
+
+### `notes`
+
+The notes an agent keeps, read from the project's [shared chat database](conventions/web-ui.md#the-sqlite-store) (`data/chat.db`, or the file named by `BXAGENTS_DB`). Limits come from the [`notes`](conventions/agent-yaml.md#notes) block of `Agent.yaml`.
+
+```bash
+bxAgents notes list [--scope=user|agent] [--user=NAME] [--json]
+bxAgents notes add --text="Prefers short answers" [--scope=user|agent] [--user=NAME]
+bxAgents notes edit --id=<id> --text="New text" [--scope=user|agent]
+bxAgents notes remove --id=<id> [--scope=user|agent]
+bxAgents notes stats [--user=NAME] [--json]
+bxAgents notes export [--file=notes.json]
+bxAgents notes import --file=notes.json
+```
+
+- `--scope` is `user` (the default) or `agent`; `list` without it shows both. `--user` is whose user notes: the operating system user by default. Agent notes belong to the agent's `name`.
+- `stats` shows how full each scope is and the rough size they add to the prompt (about four characters to a token; an estimate, not a count).
+- `export` writes the notes as JSON, to `--file` or to the screen. `import` adds the notes of such a file; a note already there is skipped and one that does not fit the limit is reported.
+- Run it where the database is: in the project, or on a server with `BXAGENTS_DB` set.
 
 ### `inspect`
 

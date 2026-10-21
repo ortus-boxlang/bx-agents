@@ -118,17 +118,30 @@ class {
 			arguments.discovery
 		)
 
+		// An agent that keeps notes needs the shared chat database even in a project with no web UI (and no
+		// issued tokens): it gets the default datasource, migrated at start.
+		var database = arguments.webUiDatabase
+		if ( agentFactory.source.find( "NotesWiring@bxagents" ) ) {
+			if ( database.isEmpty() ) {
+				database = { datasource : "bxagents", path : "./data/chat.db" }
+			}
+			var storeIsMigrated = startupStatements.some( statement => statement.find( "ChatStore@bxagents" ) || statement.find( "ChatDb" ) )
+			if ( !storeIsMigrated ) {
+				startupStatements.append( 'new "models.store.ChatStore@bxagents"( "" ).migrate()' )
+			}
+		}
+
 		fileWrite(
 			applicationPath,
 			renderApplication(
 				appName            : appName,
 				startupStatements  : startupStatements,
 				sessionManagement  : arguments.hasWebUi,
-				datasourceName     : arguments.webUiDatabase.datasource ?: "",
-				databasePath       : arguments.webUiDatabase.path ?: ""
+				datasourceName     : database.datasource ?: "",
+				databasePath       : database.path ?: ""
 			)
 		)
-		fileWrite( coldboxPath, renderColdboxConfig( appName, arguments.resolvedConfig.security ?: {}, arguments.hasEmailGateway, arguments.webUiDatabase.datasource ?: "" ) )
+		fileWrite( coldboxPath, renderColdboxConfig( appName, arguments.resolvedConfig.security ?: {}, arguments.hasEmailGateway, database.datasource ?: "" ) )
 		fileWrite( wireboxPath, renderWireBox( agentFactory.nodes ) )
 		fileWrite( agentFactoryPath, agentFactory.source )
 
@@ -807,6 +820,10 @@ class {
 		}
 
 		statements.append( renderAgentStatement( arguments.varName, arguments.nodePath, arguments.resolvedConfig, subAgentVarNames, arguments.discovery, thisName, arguments.defaultMemory, arguments.appDir, arguments.nodeRelativePath ) )
+		if ( structKeyExists( arguments.resolvedConfig, "notes" ) && isStruct( arguments.resolvedConfig.notes ) ) {
+			// the notes this agent keeps: a prompt block and the remember and forget tools
+			statements.append( 'new "models.notes.NotesWiring@bxagents"().attach( #arguments.varName#, #renderLiteral( arguments.resolvedConfig.notes )#, "#bxLiteral( thisName )#" )' )
+		}
 
 		return { statements : statements, nodes : nodes }
 	}

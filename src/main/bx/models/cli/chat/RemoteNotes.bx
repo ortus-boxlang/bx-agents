@@ -1,0 +1,81 @@
+/**
+ * The notes of the agent on a server, for the chat commands, through the server's /notes routes.
+ */
+class {
+
+	/**
+	 * @baseUrl The server root
+	 * @client An AgentClient
+	 */
+	function init( required string baseUrl, required any client ) {
+		variables.baseUrl = arguments.baseUrl
+		variables.client = arguments.client
+		variables.known = nullValue()
+		return this
+	}
+
+	/**
+	 * True when the server keeps notes for this agent.
+	 */
+	boolean function available() {
+		try {
+			return snapshot().success ?: false
+		} catch ( any e ) {
+			return false
+		}
+	}
+
+	string function why() {
+		return "This agent keeps no notes (or the server does not support them). Add `notes: {}` to its Agent.yaml to turn them on."
+	}
+
+	array function list( required string scope ) {
+		return snapshot()[ arguments.scope ].notes
+	}
+
+	struct function add( required string scope, required string text ) {
+		return variables.client.postJson( variables.baseUrl, "notes", { scope : arguments.scope, text : arguments.text } )
+	}
+
+	struct function update( required string id, required string text ) {
+		var scope = scopeOf( arguments.id )
+		if ( !len( scope ) ) {
+			return notFound( arguments.id )
+		}
+		return variables.client.postJson( variables.baseUrl, "notes/update", { scope : scope, id : arguments.id, text : arguments.text } )
+	}
+
+	struct function remove( required string id ) {
+		var scope = scopeOf( arguments.id )
+		if ( !len( scope ) ) {
+			return notFound( arguments.id )
+		}
+		return variables.client.postJson( variables.baseUrl, "notes/remove", { scope : scope, id : arguments.id } )
+	}
+
+	struct function stats() {
+		var all = snapshot()
+		return { provider : all.provider ?: "", user : all.user.stats, agent : all.agent.stats }
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private struct function snapshot() {
+		return variables.client.getJson( variables.baseUrl, "notes" )
+	}
+
+	private string function scopeOf( required string id ) {
+		var all = snapshot()
+		for ( var scope in [ "user", "agent" ] ) {
+			if ( all[ scope ].notes.some( note => note.id == id ) ) {
+				return scope
+			}
+		}
+		return ""
+	}
+
+	private struct function notFound( required string id ) {
+		return { ok : false, reason : "There is no note with id [#arguments.id#]. Type /notes to see them." }
+	}
+
+}

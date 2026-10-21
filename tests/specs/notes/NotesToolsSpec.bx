@@ -1,0 +1,110 @@
+/**
+ * The remember and forget tools, called the way bx-ai calls them: with the chat request of the run.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "NotesTools", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-notestools-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.provider = new bxagents.models.notes.SqliteNotesProvider( store );
+				variables.tools = new bxagents.models.notes.NotesTools( provider, "helper" ).tools();
+				variables.remember = tools[ 1 ];
+				variables.forget = tools[ 2 ];
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			private function requestFor( userId ) {
+				return new bxModules.bxai.models.requests.AiChatRequest( new bxModules.bxai.models.runnables.AiMessage(), {}, { userId : userId, threadId : "t-1" } );
+			}
+
+			private function call( tool, args, userId = "alice" ) {
+				return jsonDeserialize( tool.invoke( args, requestFor( userId ) ) );
+			}
+
+			it( "are named remember and forget, described for the model", function() {
+				expect( tools ).toHaveLength( 2 );
+				expect( remember.getName() ).toBe( "remember" );
+				expect( forget.getName() ).toBe( "forget" );
+				expect( remember.getSchema().function.parameters.required ).toBe( [ "text" ] );
+				expect( remember.getSchema().function.parameters.properties.keyArray().sort( "text" ) ).toBe( [ "replaces", "scope", "text" ] );
+				expect( forget.getSchema().function.parameters.required ).toBe( [ "id" ] );
+			} );
+
+			it( "remember saves a note for the user of the run", function() {
+				var answer = call( remember, { text : "Prefers short answers" } );
+
+				expect( answer.ok ).toBeTrue();
+				expect( provider.list( "user", "alice" ).map( n => n.text ) ).toBe( [ "Prefers short answers" ] );
+				expect( provider.list( "user", "alice" )[ 1 ].sessionId ).toBe( "t-1" );
+				expect( provider.list( "user", "bob" ) ).toBeEmpty();
+			} );
+
+			it( "remember with scope agent saves a note for the agent", function() {
+				call( remember, { text : "The repo uses Gradle", scope : "agent" } );
+
+				expect( provider.list( "agent", "helper" ).map( n => n.text ) ).toBe( [ "The repo uses Gradle" ] );
+				expect( provider.list( "user", "alice" ) ).toBeEmpty();
+			} );
+
+			it( "remember with replaces corrects a note", function() {
+				var saved = call( remember, { text : "likes tea" } );
+
+				var answer = call( remember, { text : "likes green tea", replaces : saved.id } );
+
+				expect( answer.ok ).toBeTrue();
+				expect( provider.list( "user", "alice" ).map( n => n.text ) ).toBe( [ "likes green tea" ] );
+			} );
+
+			it( "remember says when the notes are full", function() {
+				call( remember, { text : repeatString( "a", 400 ) } );
+				call( remember, { text : repeatString( "b", 400 ) } );
+				call( remember, { text : repeatString( "c", 400 ) } );
+
+				var answer = call( remember, { text : repeatString( "d", 400 ) } );
+
+				expect( answer.ok ).toBeFalse();
+				expect( answer.reason ).toInclude( "full" );
+			} );
+
+			it( "remember refuses a scope it does not know", function() {
+				var answer = call( remember, { text : "x", scope : "team" } );
+
+				expect( answer.ok ).toBeFalse();
+				expect( answer.reason ).toInclude( "user or agent" );
+			} );
+
+			it( "forget removes a note of the user, and says when there is none", function() {
+				var saved = call( remember, { text : "likes tea" } );
+
+				expect( call( forget, { id : saved.id } ).ok ).toBeTrue();
+				expect( provider.list( "user", "alice" ) ).toBeEmpty();
+				var again = call( forget, { id : saved.id } );
+				expect( again.ok ).toBeFalse();
+				expect( again.reason ).toInclude( "no note with id" );
+			} );
+
+			it( "forget cannot reach another user's note", function() {
+				var saved = call( remember, { text : "likes tea" }, "alice" );
+
+				expect( call( forget, { id : saved.id }, "bob" ).ok ).toBeFalse();
+				expect( provider.list( "user", "alice" ) ).toHaveLength( 1 );
+			} );
+
+			it( "use a shared name when the run has no user", function() {
+				call( remember, { text : "likes tea" }, "" );
+
+				expect( provider.list( "user", "default" ) ).toHaveLength( 1 );
+			} );
+
+		} );
+	}
+
+}

@@ -1,0 +1,182 @@
+/**
+ * The built-in notes: one row per note, two scopes, limits in characters, nothing dropped silently.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "SqliteNotesProvider", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-notes-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.notes = new bxagents.models.notes.SqliteNotesProvider( store, { user : 100, agent : 60 } );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "saves a note and lists it with its id", function() {
+				var saved = notes.add( "user", "alice", "Prefers short answers" );
+
+				expect( saved.ok ).toBeTrue();
+				expect( saved.id ).toMatch( "^[0-9a-f]{8}$" );
+				expect( saved.used ).toBe( 21 );
+				expect( saved.limit ).toBe( 100 );
+				var all = notes.list( "user", "alice" );
+				expect( all ).toHaveLength( 1 );
+				expect( all[ 1 ].text ).toBe( "Prefers short answers" );
+				expect( all[ 1 ].id ).toBe( saved.id );
+				expect( all[ 1 ].source ).toBe( "agent" );
+			} );
+
+			it( "keeps the two scopes and the owners apart", function() {
+				notes.add( "user", "alice", "likes tea" );
+				notes.add( "user", "bob", "likes coffee" );
+				notes.add( "agent", "helper", "the repo uses Gradle" );
+
+				expect( notes.list( "user", "alice" ).map( n => n.text ) ).toBe( [ "likes tea" ] );
+				expect( notes.list( "user", "bob" ).map( n => n.text ) ).toBe( [ "likes coffee" ] );
+				expect( notes.list( "agent", "helper" ).map( n => n.text ) ).toBe( [ "the repo uses Gradle" ] );
+				expect( notes.list( "agent", "alice" ) ).toBeEmpty();
+			} );
+
+			it( "collapses whitespace and line breaks into one line", function() {
+				notes.add( "user", "alice", "  likes" & char( 10 ) & "   tea  " );
+
+				expect( notes.list( "user", "alice" )[ 1 ].text ).toBe( "likes tea" );
+			} );
+
+			it( "answers an identical note with the one it has, instead of keeping two", function() {
+				var first = notes.add( "user", "alice", "Likes tea" );
+				var again = notes.add( "user", "alice", "likes TEA" );
+
+				expect( again.ok ).toBeTrue();
+				expect( again.duplicate ).toBeTrue();
+				expect( again.id ).toBe( first.id );
+				expect( notes.list( "user", "alice" ) ).toHaveLength( 1 );
+			} );
+
+			it( "refuses a note that does not fit, with how full the notes are, and keeps what it has", function() {
+				notes.add( "agent", "helper", repeatString( "a", 40 ) );
+
+				var refused = notes.add( "agent", "helper", repeatString( "b", 30 ) );
+
+				expect( refused.ok ).toBeFalse();
+				expect( refused.reason ).toInclude( "full (40 of 60 characters)" );
+				expect( refused.used ).toBe( 40 );
+				expect( refused.limit ).toBe( 60 );
+				expect( notes.list( "agent", "helper" ) ).toHaveLength( 1 );
+				expect( notes.add( "agent", "helper", repeatString( "c", 20 ) ).ok ).toBeTrue();
+			} );
+
+			it( "refuses an empty note and one that is longer than a line", function() {
+				expect( notes.add( "user", "alice", "   " ).ok ).toBeFalse();
+				var long = notes.add( "user", "alice", repeatString( "x", 501 ) );
+				expect( long.ok ).toBeFalse();
+				expect( long.reason ).toInclude( "at most 500" );
+			} );
+
+			it( "replaces a note, within the limit, and only in its own scope and owner", function() {
+				var saved = notes.add( "user", "alice", "likes tea" );
+				notes.add( "user", "bob", "likes coffee" );
+
+				expect( notes.replace( "user", "alice", saved.id, "likes green tea" ).ok ).toBeTrue();
+				expect( notes.list( "user", "alice" )[ 1 ].text ).toBe( "likes green tea" );
+				expect( notes.replace( "user", "bob", saved.id, "stolen" ).ok ).toBeFalse();
+				expect( notes.replace( "agent", "alice", saved.id, "stolen" ).ok ).toBeFalse();
+				expect( notes.replace( "user", "alice", "nosuchid", "x" ).reason ).toInclude( "no note with id" );
+				var tooBig = notes.replace( "user", "alice", saved.id, repeatString( "z", 200 ) );
+				expect( tooBig.ok ).toBeFalse();
+				expect( notes.list( "user", "alice" )[ 1 ].text ).toBe( "likes green tea" );
+			} );
+
+			it( "removes a note, and only from the right owner", function() {
+				var saved = notes.add( "user", "alice", "likes tea" );
+
+				expect( notes.remove( "user", "bob", saved.id ) ).toBeFalse();
+				expect( notes.remove( "agent", "alice", saved.id ) ).toBeFalse();
+				expect( notes.remove( "user", "alice", saved.id ) ).toBeTrue();
+				expect( notes.remove( "user", "alice", saved.id ) ).toBeFalse();
+				expect( notes.list( "user", "alice" ) ).toBeEmpty();
+			} );
+
+			it( "frees the room of a removed note", function() {
+				var saved = notes.add( "agent", "helper", repeatString( "a", 50 ) );
+				expect( notes.add( "agent", "helper", repeatString( "b", 30 ) ).ok ).toBeFalse();
+
+				notes.remove( "agent", "helper", saved.id );
+
+				expect( notes.add( "agent", "helper", repeatString( "b", 30 ) ).ok ).toBeTrue();
+			} );
+
+			it( "gives the notes as prompt lines, oldest first, with ids", function() {
+				var one = notes.add( "user", "alice", "likes tea" );
+				sleep( 5 );
+				var two = notes.add( "user", "alice", "lives in Lisbon" );
+
+				expect( notes.snapshot( "user", "alice" ) ).toBe( "- (#one.id#) likes tea" & char( 10 ) & "- (#two.id#) lives in Lisbon" );
+				expect( notes.snapshot( "user", "nobody" ) ).toBe( "" );
+			} );
+
+			it( "shows only what fits when the limit was lowered after notes were saved", function() {
+				var generous = new bxagents.models.notes.SqliteNotesProvider( store, { user : 1400, agent : 2200 } );
+				generous.add( "user", "alice", repeatString( "a", 60 ) );
+				sleep( 5 );
+				generous.add( "user", "alice", repeatString( "b", 60 ) );
+
+				var snapshot = notes.snapshot( "user", "alice" );
+
+				expect( snapshot ).toInclude( repeatString( "a", 60 ) );
+				expect( snapshot ).notToInclude( "bbb" );
+			} );
+
+			it( "reports the numbers for stats", function() {
+				notes.add( "user", "alice", "likes tea" );
+				notes.add( "user", "alice", "lives in Lisbon" );
+
+				var stats = notes.stats( "user", "alice" );
+
+				expect( stats.count ).toBe( 2 );
+				expect( stats.used ).toBe( 9 + 15 );
+				expect( stats.limit ).toBe( 100 );
+				expect( isDate( stats.oldest ) ).toBeTrue();
+				expect( notes.stats( "user", "nobody" ).count ).toBe( 0 );
+				expect( notes.stats( "user", "nobody" ).used ).toBe( 0 );
+			} );
+
+			it( "uses the default limits when none are given, and rejects an unknown scope", function() {
+				var defaults = new bxagents.models.notes.SqliteNotesProvider( store );
+
+				expect( defaults.limit( "user" ) ).toBe( 1400 );
+				expect( defaults.limit( "agent" ) ).toBe( 2200 );
+				expect( function() { defaults.list( "team", "x" ); } ).toThrow( "BxAgents.InvalidNotesScope" );
+			} );
+
+			it( "has the optional hooks do nothing", function() {
+				expect( notes.prefetch( "alice", "anything" ) ).toBe( "" );
+				expect( function() { notes.sync( "alice", {} ); } ).notToThrow();
+			} );
+
+			it( "keeps every note when two providers add at once", function() {
+				var other = new bxagents.models.notes.SqliteNotesProvider( bxagents.models.store.ChatStore::forFile( dir & "/chat.db" ), { user : 5000, agent : 5000 } );
+				var big = new bxagents.models.notes.SqliteNotesProvider( store, { user : 5000, agent : 5000 } );
+				var write = ( provider, tag ) => {
+					for ( var i = 1; i <= 20; i++ ) {
+						provider.add( "user", "alice", tag & i );
+					}
+				};
+				var one = runAsync( () => write( big, "a" ) );
+				var two = runAsync( () => write( other, "b" ) );
+				one.get();
+				two.get();
+
+				expect( big.list( "user", "alice" ) ).toHaveLength( 40 );
+			} );
+
+		} );
+	}
+
+}

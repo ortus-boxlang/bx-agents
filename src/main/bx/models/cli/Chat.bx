@@ -159,13 +159,18 @@ class {
 	 * @return This verb's own { exitCode, message } result
 	 */
 	private struct function chatInProcess( required string root, struct options = {} ) {
+		// the terminal chat and the web chat open the same file; the notes store reads this setting
+		if ( !len( trim( getSystemSetting( "BXAGENTS_DB", "" ) ) ) ) {
+			createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_DB", new "models.store.ChatStorePath@bxagents"().forProject( arguments.root ) )
+		}
+		var user = trim( arguments.options.user ?: "" )
 		var factoryPath = arguments.root & "/.build/app/agent/GeneratedAgentFactory.bx"
 		var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
 		var factory = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" ).instantiate( factoryPath, context )
 		var agent = factory.buildAgent()
 
 		if ( wantsScreen( arguments.options ) ) {
-			return chatWithScreen( new "models.cli.chat.InProcessSession@bxagents"( agent ), arguments.options )
+			return chatWithScreen( new "models.cli.chat.InProcessSession@bxagents"( agent, user ), arguments.options )
 		}
 
 		// MiniConsole shells out to `stty` to set up raw terminal mode, so it
@@ -194,7 +199,7 @@ class {
 			}
 
 			try {
-				println( "agent> " & agent.run( trimmedInput ) )
+				println( "agent> " & agent.run( trimmedInput, {}, { userId : len( user ) ? user : ( createObject( "java", "java.lang.System" ).getProperty( "user.name" ) ?: "default" ) } ) )
 			} catch ( any e ) {
 				println( "error> " & e.message )
 			}

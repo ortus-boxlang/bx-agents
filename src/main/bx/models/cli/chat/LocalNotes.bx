@@ -1,0 +1,79 @@
+/**
+ * The notes of the agent in this process, for the chat commands: the provider the agent was given,
+ * seen as one user talking to one agent.
+ */
+class {
+
+	/**
+	 * @provider An INotesProvider
+	 * @userId Whose user notes
+	 * @agentName The owner of the agent notes
+	 * @providerName What to call the provider in the stats
+	 */
+	function init( required any provider, required string userId, required string agentName, string providerName = "sqlite" ) {
+		variables.provider = arguments.provider
+		variables.userId = arguments.userId
+		variables.agentName = arguments.agentName
+		variables.providerName = arguments.providerName
+		return this
+	}
+
+	boolean function available() {
+		return true
+	}
+
+	array function list( required string scope ) {
+		return variables.provider.list( arguments.scope, ownerOf( arguments.scope ) )
+	}
+
+	struct function add( required string scope, required string text ) {
+		return variables.provider.add( arguments.scope, ownerOf( arguments.scope ), arguments.text, "command" )
+	}
+
+	struct function update( required string id, required string text ) {
+		var scope = scopeOf( arguments.id )
+		if ( !len( scope ) ) {
+			return notFound( arguments.id )
+		}
+		return variables.provider.replace( scope, ownerOf( scope ), arguments.id, arguments.text )
+	}
+
+	struct function remove( required string id ) {
+		var scope = scopeOf( arguments.id )
+		if ( !len( scope ) ) {
+			return notFound( arguments.id )
+		}
+		return { ok : variables.provider.remove( scope, ownerOf( scope ), arguments.id ) }
+	}
+
+	struct function stats() {
+		return {
+			provider : variables.providerName,
+			user     : variables.provider.stats( "user", variables.userId ),
+			agent    : variables.provider.stats( "agent", variables.agentName )
+		}
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private string function ownerOf( required string scope ) {
+		return arguments.scope == "agent" ? variables.agentName : variables.userId
+	}
+
+	/**
+	 * @return The scope a note id belongs to for this user and agent, or "" when it is in neither
+	 */
+	private string function scopeOf( required string id ) {
+		for ( var scope in [ "user", "agent" ] ) {
+			if ( variables.provider.list( scope, ownerOf( scope ) ).some( note => note.id == id ) ) {
+				return scope
+			}
+		}
+		return ""
+	}
+
+	private struct function notFound( required string id ) {
+		return { ok : false, reason : "There is no note with id [#arguments.id#]. Type /notes to see them." }
+	}
+
+}

@@ -480,6 +480,27 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).notToInclude( '"name" : "git"' );
 			} );
 
+			it( "attaches the notes to an agent that declares them, and gives the app the shared database", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/with-notes", buildDir );
+
+				var factory = fileRead( result.agentFactory );
+				expect( factory ).toInclude( 'new "models.notes.NotesWiring@bxagents"().attach( agent, {' );
+				expect( factory ).toInclude( '"limit" : 900' );
+				expect( factory ).toInclude( '"approveForget" : false' );
+				var appSource = fileRead( buildDir & "/Application.bx" );
+				expect( appSource ).toInclude( 'this.datasources[ "bxagents" ]' );
+				expect( appSource ).toInclude( 'new "models.store.ChatStore@bxagents"( "" ).migrate()' );
+			} );
+
+			it( "leaves notes and the shared database out of an agent that keeps none", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/valid-minimal", buildDir );
+
+				expect( fileRead( result.agentFactory ) ).notToInclude( "NotesWiring" );
+				expect( fileRead( buildDir & "/Application.bx" ) ).notToInclude( "this.datasources" );
+			} );
+
 			it( "emits an empty mcpServers: [] when no mcpServers are declared", function() {
 				var buildDir = newBuildDir();
 				var result = generateFor( fixtures & "/full-project", buildDir );

@@ -12,7 +12,7 @@ _bxagents_complete() {
 	fi
 	local count=${#words[@]}
 	local cur="${words[count-1]}"
-	local verbs="build chat clean deploy doctor hash-password inspect invoke new package serve test token help"
+	local verbs="build chat clean deploy doctor hash-password inspect invoke new notes package serve test token help"
 	local globals="--help -h --version -v"
 	COMPREPLY=()
 
@@ -54,6 +54,8 @@ _bxagents_complete() {
 			"new --template") COMPREPLY=($(compgen -W "minimal webui-chat slack-bot telegram-bot github-bot mcp-server scheduled multi-agent" -- "$part")) ;;
 			"new --web-auth") COMPREPLY=($(compgen -W "open key" -- "$part")) ;;
 			"new --with") COMPREPLY=($(compgen -W "time fetch search browse files media" -- "$part")) ;;
+			"notes --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
+			"notes --scope") COMPREPLY=($(compgen -W "user agent" -- "$part")) ;;
 			"package --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"serve --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"test --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
@@ -67,7 +69,7 @@ _bxagents_complete() {
 		local flags=""
 		case "$verb" in
 			build) flags="--environment= --generatorVersion= --projectRoot= --verbose" ;;
-			chat) flags="--connect= --no-tui --port= --projectRoot= --record --server --token=" ;;
+			chat) flags="--connect= --no-tui --port= --projectRoot= --record --server --token= --user=" ;;
 			clean) flags="--force --projectRoot=" ;;
 			deploy) flags="--destination= --name= --projectRoot= --target=" ;;
 			doctor) flags="--json --projectRoot=" ;;
@@ -75,6 +77,7 @@ _bxagents_complete() {
 			inspect) flags="--json --projectRoot=" ;;
 			invoke) flags="--json --message= --port= --projectRoot= --server" ;;
 			new) flags="--app= --channels= --class --deploy= --description= --destination= --files= --files-dir= --forgebox= --guard= --host= --mcp= --memory= --model= --name= --no-tui --no-wizard --projectRoot= --region= --registry= --remote-path= --repo= --search= --skipInstall --template= --user= --web-auth= --with= --wizard --yes" ;;
+			notes) flags="--file= --id= --json --projectRoot= --scope= --text= --user=" ;;
 			package) flags="--projectRoot= --version=" ;;
 			serve) flags="--host= --port= --projectRoot=" ;;
 			test) flags="--projectRoot=" ;;

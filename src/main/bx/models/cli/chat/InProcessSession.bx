@@ -19,9 +19,11 @@ class {
 
 	/**
 	 * @agent The agent object from the project's GeneratedAgentFactory
+	 * @userId Who is talking: the owner of the user notes. Defaults to the operating system user.
 	 */
-	function init( required any agent ) {
+	function init( required any agent, string userId = "" ) {
 		variables.agent = arguments.agent
+		variables.userId = len( trim( arguments.userId ) ) ? trim( arguments.userId ) : createObject( "java", "java.lang.System" ).getProperty( "user.name" ) ?: "default"
 		variables.threadId = createUUID()
 		variables.hooks = nullValue()
 		variables.calls = {}
@@ -54,6 +56,17 @@ class {
 	}
 
 	/**
+	 * @return The notes of this agent for the chat commands: LocalNotes, or NoNotes when the agent keeps none
+	 */
+	any function notes() {
+		var provider = new "models.notes.NotesWiring@bxagents"().providerOf( variables.agent )
+		if ( isNull( provider ) ) {
+			return new "models.cli.chat.NoNotes@bxagents"()
+		}
+		return new "models.cli.chat.LocalNotes@bxagents"( provider, variables.userId, agentName() )
+	}
+
+	/**
 	 * Starts a new conversation: the agent keeps its memory per thread.
 	 */
 	void function newThread() {
@@ -70,7 +83,7 @@ class {
 		var state = newState()
 		variables.hooks = arguments.hooks
 		try {
-			variables.agent.stream( chunkHandler( state ), arguments.text, {}, { threadId : variables.threadId } )
+			variables.agent.stream( chunkHandler( state ), arguments.text, {}, { threadId : variables.threadId, userId : variables.userId } )
 		} finally {
 			variables.hooks = nullValue()
 		}
