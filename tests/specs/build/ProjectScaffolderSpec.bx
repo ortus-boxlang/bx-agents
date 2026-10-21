@@ -207,6 +207,12 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( ".env" );
 			} );
 
+			it( "keeps skills installed from the registry out of source control", function() {
+				var result = scaffolder.scaffold( newTargetDir(), "my-agent", "openai/gpt-5" );
+
+				expect( fileRead( result.gitignore ).listToArray( char( 10 ) ) ).toInclude( ".agents/skills/" );
+			} );
+
 			it( "keeps secrets and local files out of source control", function() {
 				var result = scaffolder.scaffold( newTargetDir(), "my-agent", "openai/gpt-5" );
 				var lines = fileRead( result.gitignore ).listToArray( char( 10 ) );

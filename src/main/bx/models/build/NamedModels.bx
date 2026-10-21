@@ -1,0 +1,150 @@
+/**
+ * The named model configurations under `models/`: `researcher.yaml`, `coder.json` and so
+ * on, each one provider, one model and the settings that go with it, referenced by name
+ * from any agent's `model:`.
+ *
+ *   description:  optional, for people
+ *   provider:     required, a provider bx-ai knows (openai, claude, ollama, ...)
+ *   model:        optional; the provider's own default model when left out
+ *   apiKeyEnvVar: optional; read this environment variable for the key instead of the
+ *                 provider's usual one. A missing variable stops the agent at start and
+ *                 names it. A key is never written in the file.
+ *   params:       optional mapping, sent with every request (temperature, max_tokens, ...)
+ *   options:      optional mapping of bx-ai model options (timeout, logRequest, ...)
+ *
+ * A `.bx` class returning the same struct from `configure()` still works for projects
+ * that have one, but YAML and JSON are what `add model` writes and what the docs show.
+ */
+class {
+
+	static {
+		KEYS = [ "description", "provider", "model", "apiKeyEnvVar", "params", "options" ]
+		EXTENSIONS = [ "yaml", "yml", "json", "bx" ]
+	}
+
+	/**
+	 * @return [ extension ] a models/ entry may have
+	 */
+	array function extensions() {
+		return static.EXTENSIONS
+	}
+
+	/**
+	 * @path Absolute path to a models/ entry
+	 *
+	 * @return The entry's config struct, or null when it cannot be read
+	 */
+	any function read( required string path ) {
+		try {
+			var ext = arguments.path.listLast( "." ).lcase()
+			if ( ext == "json" ) {
+				return jsonDeserialize( fileRead( arguments.path ) )
+			}
+			if ( ext == "yaml" || ext == "yml" ) {
+				return yamlDeserialize( fileRead( arguments.path ) )
+			}
+			var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
+			return createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
+				.instantiate( arguments.path, context )
+				.configure()
+		} catch ( any e ) {
+			return null
+		}
+	}
+
+	/**
+	 * @config What read() returned
+	 *
+	 * @return { provider, model, params, options, apiKeyEnvVar } with every key present
+	 */
+	struct function resolve( required any config ) {
+		var c = isStruct( arguments.config ) ? arguments.config : {}
+		return {
+			provider     : trim( c.provider ?: "" ),
+			model        : trim( c.model ?: "" ),
+			params       : isStruct( c.params ?: "" ) ? c.params : {},
+			options      : isStruct( c.options ?: "" ) ? c.options : {},
+			apiKeyEnvVar : trim( c.apiKeyEnvVar ?: "" )
+		}
+	}
+
+	/**
+	 * What is wrong with one entry, in words a person can act on.
+	 *
+	 * @name The entry's name
+	 * @config What read() returned, or null when the file could not be read
+	 * @isClass True for a `.bx` entry, whose keys are not checked
+	 *
+	 * @return [ message ]
+	 */
+	array function problems( required string name, any config, boolean isClass = false ) {
+		var label = "models/ entry [#arguments.name#]"
+		var out = []
+
+		if ( isNull( arguments.config ) || !isStruct( arguments.config ) ) {
+			return [ "#label# could not be read: it must be a mapping with a provider and a model" ]
+		}
+		var c = arguments.config
+		var parser = new "models.build.ModelSlugParser@bxagents"()
+
+		if ( !len( trim( c.provider ?: "" ) ) ) {
+			out.append( "#label# has no 'provider'" )
+		} else if ( !parser.isKnownProvider( trim( c.provider ) ) ) {
+			out.append( "#label# has an unknown provider [#c.provider#]. Use one of: #parser.coreProviders().toList( ', ' )#" )
+		}
+		if ( arguments.isClass ) {
+			return out
+		}
+		for ( var key in c ) {
+			if ( !static.KEYS.containsNoCase( key ) ) {
+				out.append( "#label# has an unknown key [#key#]. Valid keys: #static.KEYS.toList( ', ' )#" )
+			}
+		}
+		for ( var key in [ "params", "options" ] ) {
+			if ( c.keyExists( key ) && !isStruct( c[ key ] ) ) {
+				out.append( "#label#'s '#key#' must be a mapping" )
+			}
+		}
+		if ( len( c.apiKeyEnvVar ?: "" ) && !reFind( "^[A-Za-z_][A-Za-z0-9_]*$", c.apiKeyEnvVar ) ) {
+			out.append( "#label#'s 'apiKeyEnvVar' must be the NAME of an environment variable, not a key" )
+		}
+		for ( var section in [ "params", "options" ] ) {
+			if ( isStruct( c[ section ] ?: "" ) && c[ section ].keyExists( "apiKey" ) ) {
+				out.append( "#label# writes an apiKey in '#section#'. Name an environment variable with apiKeyEnvVar instead" )
+			}
+		}
+		return out
+	}
+
+	/**
+	 * The `aiModel(...)` call for a resolved entry or slug.
+	 *
+	 * @resolved { provider, model, params, options, apiKeyEnvVar }
+	 * @literal A function ( struct ) returning the BoxLang literal for a struct
+	 * @bx A function ( text ) escaping text for a BoxLang string
+	 *
+	 * @return BoxLang source
+	 */
+	string function expression( required struct resolved, required any literal, required any bx ) {
+		var r = arguments.resolved
+		var params = duplicate( r.params ?: {} )
+		if ( len( r.model ?: "" ) ) {
+			params[ "model" ] = r.model
+		}
+		var parts = [ 'provider : "#arguments.bx( r.provider )#"' ]
+		if ( len( r.apiKeyEnvVar ?: "" ) ) {
+			parts.append( 'apiKey : getSystemSetting( "#arguments.bx( r.apiKeyEnvVar )#" )' )
+		}
+		if ( params.count() == 1 && params.keyExists( "model" ) ) {
+			// the shape every build has always produced for a plain provider/model slug
+			parts.append( 'params : { model : "#arguments.bx( params.model )#" }' )
+		} else if ( params.count() ) {
+			parts.append( "params : " & arguments.literal( params ) )
+		}
+		if ( ( r.options ?: {} ).count() ) {
+			parts.append( "options : " & arguments.literal( r.options ) )
+		}
+		return "aiModel( " & parts.toList( ", " ) & " )"
+	}
+
+}

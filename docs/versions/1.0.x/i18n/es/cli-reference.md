@@ -63,7 +63,10 @@ Usa siempre la forma `--flag=valor`. La forma con espacio no está soportada.
 Genera el andamiaje de un nuevo proyecto de agente.
 :::
 ::: card title="add" icon="phosphor-duotone:plus-circle" href="#add"
-Añade una herramienta, un interceptor, una programación o un servidor MCP a un proyecto existente.
+Añade una herramienta, un interceptor, una programación, un servidor MCP, un modelo con nombre, un gateway, un subagente o una skill a un proyecto existente.
+:::
+::: card title="skills" icon="phosphor-duotone:graduation-cap" href="#skills"
+Busca, instala, actualiza y elimina skills de skills.boxlang.io.
 :::
 ::: card title="build" icon="phosphor-duotone:hammer" href="#build"
 Ejecuta el pipeline de build completo.
@@ -153,7 +156,7 @@ bxAgents new my-agent --forgebox=some-package-slug
 
 ### `add`
 
-Añade una cosa a un proyecto que ya existe, haciendo las mismas preguntas que `new`. Hoy eso es una `tool`, un `interceptor`, una `schedule` o un servidor `mcp`.
+Añade una cosa a un proyecto que ya existe, haciendo las mismas preguntas que `new`. Hoy eso es una `tool`, un `interceptor`, una `schedule`, un servidor `mcp`, un `model`, un `gateway`, un `subagent` o una `skill`.
 
 ```bash
 bxAgents add                        # elige qué añadir
@@ -243,7 +246,7 @@ bxAgents add mcp server tools --description="My tools"
 bxAgents add mcp                                # pregunta en qué dirección
 ```
 
-**`add mcp client`** añade una entrada a la lista `mcpServers:` del agente. Un nombre del catálogo (`github`, `stripe`, `notion`, `atlassian`, `cloudflare`, `supabase`) rellena la dirección y el inicio de sesión; si no, indica `--url`. Los servidores que se ejecutan como programa local no se ofrecen, porque el bx-ai incluido en esta versión solo habla con servidores web.
+**`add mcp client`** añade una entrada a la lista `mcpServers:` del agente. Un nombre del catálogo (`github`, `stripe`, `notion`, `atlassian`, `cloudflare`, `supabase`, `git`) rellena la dirección y el inicio de sesión, o, para un servidor que se ejecuta como programa en esta máquina (`git`), el `command` para iniciarlo y lo que necesita en el PATH; si no, indica `--url`.
 
 | Flag | Significado |
 |---|---|
@@ -268,6 +271,127 @@ La lista de herramientas se escribe al ejecutar el comando, así que una herrami
 
 - `Agent.yaml` se edita solo insertando líneas, así que sus comentarios y su formato se quedan como están. Si la lista no se puede ampliar así (escrita en una línea, por ejemplo), o la definición es un `Agent.bx` basado en clase, no se cambia nada y el error incluye la entrada para pegarla.
 - Se rechaza un servidor que el agente ya usa, por nombre o dirección.
+
+#### `add model`
+
+Escribe una configuración de modelo con nombre, `models/<name>.yaml` (o `.json`): un proveedor, un modelo y los ajustes que los acompañan, que cualquier agente puede usar escribiendo `model: <name>`.
+
+```bash
+bxAgents add model researcher --provider=openai --model=gpt-5-mini --temperature=0.2
+bxAgents add model coder --provider=claude --model=claude-sonnet-5-5 --env=CODER_KEY --format=json
+bxAgents add model analyst                       # pregunta proveedor, modelo, variable de la clave, temperatura, longitud, formato
+```
+
+| Flag | Significado |
+|---|---|
+| `--name=<name>` | El nombre del archivo, o el segundo posicional. Se rechaza un nombre que ya esté en `models/`, y también el nombre de un proveedor (`model: openai` significaría el proveedor). |
+| `--provider=<id>` | Cualquier proveedor que tenga bx-ai. Los del asistente de new aparecen primero. |
+| `--model=<id>` | El modelo del proveedor. Vacío usa el modelo por defecto del proveedor. |
+| `--env=<NAME>` | Lee la API key de esta variable de entorno en lugar de la habitual del proveedor. Solo se escribe el nombre; se añade un `NAME=` vacío a `.env`. |
+| `--temperature=<0-2>`, `--max-tokens=<n>` | Se escriben bajo `params`. Opcionales. |
+| `--description=<text>` | Para las personas. Opcional. |
+| `--format=yaml\|json` | Por defecto `yaml`. |
+
+Úsalo en `Agent.yaml` (o en el de un subagente) con `model: <name>`. Los `params`, `options` y la variable de la clave de la entrada viajan con él al agente construido. Consulta [models/](conventions/models.md) para ver cada clave.
+
+#### `add gateway`
+
+Añade una forma de llegar al agente: una plataforma de chat, la interfaz web de chat o la API HTTP. (Una ruta MCP alojada se añade con `add mcp server`.)
+
+```bash
+bxAgents add gateway telegram                   # consulta Telegram, no necesita dirección pública
+bxAgents add gateway slack --env=botTokenEnvVar=ACME_BOT,appTokenEnvVar=ACME_APP --policy=steer
+bxAgents add gateway web --auth=key             # la página de chat en el navegador, con una clave compartida aleatoria
+bxAgents add gateway api --path=/api/chat
+bxAgents add gateway                            # pregunta cuál
+```
+
+Las plataformas son las que ofrece el asistente de new: `telegram`, `slack`, `discord`, `whatsapp-cloud`, `teams`, `twilio`, `github`, `email` y `signal`.
+
+| Flag | Significado |
+|---|---|
+| `--name=<name>` | El archivo, `gateways/<name>.bx`, o el segundo posicional. Por defecto, el tipo. Se rechaza un nombre en uso. |
+| `--env=<config=NAME,...>` | Plataformas de chat: qué variable guarda cada credencial, por ejemplo `botTokenEnvVar=ACME_BOT`. Sin él se usan los nombres habituales (`SLACK_BOT_TOKEN`, ...). En el archivo del gateway solo van los nombres; en `.env` se añade un marcador vacío para cada uno. |
+| `--policy=queue\|reject\|steer\|interrupt` | Plataformas de chat: qué hacer con un mensaje que llega mientras el agente sigue respondiendo. Se escribe en el `gatewaySession` de Agent.yaml salvo que sea el valor por defecto, `queue`. |
+| `--path=<path>` | `web` y `api`: dónde se sirve (`/chat` y `/api/chat` por defecto). Se rechaza una ruta que otro gateway use. |
+| `--auth=open\|key\|users` | `web`: cualquiera que pueda alcanzarlo, una clave compartida aleatoria guardada en `.env` como `CHAT_UI_API_KEY`, o usuarios con nombre. |
+| `--users=<name:hash,...>` | `web` con `users`: cada hash sale de `bxAgents hash-password`. Una contraseña nunca se acepta como flag; en una terminal la escribes, oculta, y solo se guarda su hash. |
+
+Tras añadir una plataforma de chat, la salida lista los pasos que ocurren fuera del proyecto (crear el bot, una dirección pública, un daemon) y qué variables de `.env` rellenar; `bxAgents doctor` informa de las que sigan sin definir. La ruta de la API HTTP no tiene autenticación salvo que se defina `agentApi.tokenEnvVar` en `Agent.yaml`.
+
+#### `add subagent`
+
+Añade un subagente: un agente completo en `subagents/<name>/` con su propio modelo, herramientas, servidores MCP, memoria y guard, conectado a la lista `subAgents` de un padre. En una terminal hace las mismas preguntas que `new` (propósito, modelo, herramientas, búsqueda, archivos, memoria, MCP, guard); se omiten las que solo importan a un proyecto entero (forma, canales, despliegue).
+
+```bash
+bxAgents add subagent researcher                # pregunta
+bxAgents add subagent writer --model=openai/gpt-5 --description="Escribe la respuesta"
+bxAgents add subagent checker --model=claude --parent=writer --with=search --search=brave --guard=flag
+```
+
+| Flag | Significado |
+|---|---|
+| `--name=<name>` | La carpeta, o el primer posicional. Se rechaza un nombre que ya tenga cualquier agente del proyecto. |
+| `--parent=<carpeta>` | El agente que delega en él: `.` para la raíz (por defecto) o la carpeta de otro subagente, que es como se anidan. |
+| `--model=<provider/model>` | Obligatorio sin terminal. |
+| `--description`, `--with`, `--search`, `--files`, `--files-dir`, `--memory`, `--mcp`, `--guard` | Los mismos que en [`new`](#new). |
+
+Escribe `subagents/<name>/Agent.yaml` (con el modelo simulado de `environments.test`, para que `bxAgents test` no necesite clave) e `instructions.md`, y añade un marcador vacío en `.env` por cada clave que necesiten las opciones. El nombre se inserta en el `subAgents` del padre sin reescribir el archivo, así que los comentarios y el orden se conservan. Si el padre es una clase, o su lista está escrita de una forma que no se puede ampliar insertando, no se cambia nada en él y se imprime la línea que hay que añadir. Los paquetes que necesite una opción (`bx-playwright` para navegar) se nombran para que los añadas a `box.json`.
+
+#### `add skill`
+
+Añade una skill propia: `skills/<name>/SKILL.md`, con la forma de las Claude Agent Skills. Va al control de código con el proyecto y a cada build.
+
+```bash
+bxAgents add skill release-notes --description="Use this skill when writing release notes"
+bxAgents add skill                              # pregunta
+```
+
+| Flag | Significado |
+|---|---|
+| `--name=<name>` | La carpeta, o el primer posicional. Minúsculas, dígitos y guiones. Se rechaza una skill que ya exista. |
+| `--description=<text>` | Una frase que empiece por "Use this skill when". El modelo la lee para decidir si carga la skill, así que es lo que importa. Sin ella se escribe un TODO para que lo reemplaces. |
+
+Las skills no se conectan a un agente: todas las skills del build están disponibles para el modelo. Las skills de skills.boxlang.io no se añaden aquí; se instalan, no se escriben.
+
+### `skills`
+
+Skills del registro (skills.boxlang.io), como las instala `coldbox ai skills`. Una skill propia va en `skills/`: consulta [`add skill`](#add-skill).
+
+```bash
+bxAgents skills find release                    # busca en el registro
+bxAgents skills install ortus-boxlang/skills/boxlang-developer~configuration
+bxAgents skills install                         # restaura lo que el lock lista y el disco no tiene
+bxAgents skills list                            # qué está instalado y si está intacto
+bxAgents skills update [name...] [--dry-run]    # obtiene versiones más nuevas
+bxAgents skills remove <name>
+```
+
+| Comando | Qué hace |
+|---|---|
+| `find <words>` | Busca en nombres y descripciones. Muestra la referencia para instalar, el resultado de la auditoría del registro y el número de instalaciones. No necesita proyecto. `--limit=<n>` (10 por defecto), `--json`. |
+| `install <owner/repo/skill>...` | Instala en `.agents/skills/<name>/SKILL.md` y lo anota en `.agents/skills.lock.json`. La última parte puede ser el slug (`boxlang-developer~configuration`), la ruta en el repositorio (`boxlang-developer/configuration`) o el nombre de la skill. Una skill que no pasó la auditoría de seguridad del registro se rechaza; una que no es `trusted` se marca. |
+| `install` | Sin referencia, restaura lo que el lock lista y el disco no tiene. |
+| `list` | Una línea por skill instalada. Avisa de una que falta o que se editó tras instalarla. `--json`. |
+| `update [name...]` | Obtiene versiones más nuevas. Una skill que editaste se omite, con lo que hacer; `--dry-run` solo informa. |
+| `remove <name>` | Borra la skill y su entrada del lock. |
+
+`--registry=<url>` (o la variable de entorno `BXAGENTS_SKILLS_URL`) apunta a otro registro.
+
+#### Dónde vive cada cosa
+
+| Ruta | Qué | En el control de código |
+|---|---|---|
+| `skills/<name>/` | Skills que escribiste | Sí |
+| `.agents/skills/<name>/` | Skills instaladas del registro | No. `install` añade la carpeta a `.gitignore`. |
+| `.agents/skills.lock.json` | Qué está instalado, su origen y su sha | Sí |
+
+`build` restaura cualquier skill que el lock liste y el disco no tenga, así que un checkout nuevo construye el mismo agente, y falla nombrando la skill si no se alcanza el registro. No se descarga nada cuando están todas, así que un build sin conexión de un proyecto restaurado funciona. Ambas carpetas van al build; una skill propia con el mismo nombre gana a una instalada.
+
+El sha es el sha de blob de git de `SKILL.md`, el que informa el registro. Una instalación se comprueba contra él antes de escribir nada, y así sabe `update` que una skill cambió y `list` que editaste una.
+
+!!! warning
+    Una skill son instrucciones que tu agente sigue. El registro audita lo que lista, pero lee lo que instalas antes de publicarlo.
 
 ### `build`
 

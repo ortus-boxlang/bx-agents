@@ -1,5 +1,6 @@
 /**
- * Copies a project's `tools/` and `skills/` conventions into the generated
+ * Copies a project's `tools/` and `skills/` conventions (and the skills installed
+ * from the registry, .agents/skills/) into the generated
  * app verbatim (Build Pipeline Phase 5, BX AI wiring), so bx-ai's own
  * `aiToolRegistry().scan()` / `AiSkill::fromDirectory()` discover them
  * unmodified at startup - BX Agents does not duplicate those scanners.
@@ -26,8 +27,32 @@ class {
 
 		wipeAndCopy( root & "/tools", toolsDest )
 		wipeAndCopy( root & "/skills", skillsDest )
+		copyInstalledSkills( root, skillsDest )
 
 		return { tools : toolsDest, skills : skillsDest }
+	}
+
+	/**
+	 * Adds the skills installed from the registry (.agents/skills/) to the app's skills/.
+	 * A skill of your own with the same folder name is already there and is left alone, so
+	 * it wins; the dotfile rule still applies to everything inside.
+	 *
+	 * @root The project root
+	 * @skillsDest The app's skills/ folder (already filled with the project's own)
+	 */
+	private void function copyInstalledSkills( required string root, required string skillsDest ) {
+		var src = arguments.root & "/.agents/skills"
+		if ( !directoryExists( src ) ) {
+			return
+		}
+		directoryCreate( path = arguments.skillsDest, createPath = true, ignoreExists = true )
+		for ( var entry in directoryList( path = src, recurse = false, listInfo = "name", sort = "asc", type = "dir" ) ) {
+			if ( entry.startsWith( "." ) || directoryExists( arguments.skillsDest & "/" & entry ) ) {
+				continue
+			}
+			directoryCreate( path = arguments.skillsDest & "/" & entry, createPath = true, ignoreExists = true )
+			copyTree( src & "/" & entry, arguments.skillsDest & "/" & entry )
+		}
 	}
 
 	/**

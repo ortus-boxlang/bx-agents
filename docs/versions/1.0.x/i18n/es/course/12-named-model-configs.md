@@ -9,27 +9,21 @@ tags: [course, conventions, models]
 # Configuraciones de modelo con nombre
 
 `models/` te permite definir configuraciones de modelo reutilizables y con nombre, una por
-archivo `.bx` o `.json`, referenciadas desde el campo `model` de `Agent.yaml` por su nombre (sin
+archivo YAML o JSON, referenciadas desde el campo `model` de `Agent.yaml` por su nombre (sin
 `/`, para que no se confunda con un slug `provider/model` - consulta la
 [Lección 5](05-agent-bx.md)).
 
-```javascript
-// models/summarizer.bx
-class {
-
-	function configure() {
-		return {
-			provider : "openai",
-			model    : "gpt-5-mini"
-		};
-	}
-
-}
+```yaml
+# models/summarizer.yaml
+provider: openai
+model: gpt-5-mini
+params:
+  temperature: 0.2
 ```
 
 ```yaml
 # Agent.yaml
-model: summarizer   # resolves against models/summarizer.bx
+model: summarizer   # se resuelve contra models/summarizer.yaml
 ```
 
 ## ¿Por qué molestarse con una configuración con nombre en vez de escribir el slug?
@@ -42,9 +36,9 @@ proveedor y de modelo y no quieras repetirla.
 
 ## Reglas de descubrimiento
 
-- Una entrada por archivo `.bx` o `.json` de primer nivel directamente bajo `models/` - no es
-  recursivo.
-- El nombre de la entrada es el nombre base del archivo (`summarizer.bx` pasa a ser
+- Una entrada por archivo `.yaml`, `.yml` o `.json` de primer nivel directamente bajo `models/` - no es
+  recursivo. (Una clase `.bx` que devuelva el mismo struct sigue funcionando.)
+- El nombre de la entrada es el nombre base del archivo (`summarizer.yaml` pasa a ser
   `summarizer`).
 - Se ignoran los archivos ocultos y las extensiones no reconocidas (como un `README.md` que
   dejes con tus propias notas).
@@ -63,12 +57,13 @@ ejecución.
 
 ## Pruébalo
 
-Añade una configuración `models/fast.bx` que apunte a un modelo más pequeño o barato que el
+Ejecuta `bxAgents add model fast` (o escribe un `models/fast.yaml`) que apunte a un modelo más pequeño o barato que el
 predeterminado de tu agente raíz, y después referencia `model: "fast"` desde el `Agent.yaml`
 de un subagente - encaja de forma natural con el subagente investigador de la
 [Lección 11](11-composing-subagents.md), que probablemente no necesita tu modelo más grande
 para hacer su trabajo.
 
-Referencia completa: [models/](../conventions/models.md).
+Además de `provider` y `model`, una entrada puede llevar `params` (como `temperature`), `options` y
+`apiKeyEnvVar` - el nombre de una variable de entorno de la que leer su clave. Referencia completa: [models/](../conventions/models.md).
 
 Siguiente: [Lección 13 - Exponer tu agente por HTTP y MCP](13-exposing-http-and-mcp.md)

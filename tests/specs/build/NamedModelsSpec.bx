@@ -1,0 +1,87 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "build.NamedModels", function() {
+
+			beforeEach( function() {
+				variables.named = new bxagents.models.build.NamedModels();
+				variables.tempDirs = [];
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			private function writeEntry( required string fileName, required string content ) {
+				var dir = createTempDirectory( prefix = "bxagents-namedmodels-" );
+				tempDirs.append( dir );
+				fileWrite( dir & "/" & arguments.fileName, arguments.content );
+				return dir & "/" & arguments.fileName;
+			}
+
+			it( "reads YAML, JSON and a legacy class to the same shape", function() {
+				var nl = char( 10 );
+				var yaml = named.resolve( named.read( writeEntry( "a.yaml", "provider: openai" & nl & "model: gpt-5-mini" & nl & "apiKeyEnvVar: A_KEY" & nl & "params:" & nl & "  temperature: 0.2" & nl & "options:" & nl & "  timeout: 60" & nl ) ) );
+				var json = named.resolve( named.read( writeEntry( "a.json", '{ "provider": "claude", "model": "m", "params": { "max_tokens": 10 } }' ) ) );
+				var yml = named.resolve( named.read( writeEntry( "a.yml", "provider: ollama" & nl ) ) );
+				var bx = named.resolve( named.read( writeEntry( "a.bx", "class { function configure() { return { provider : ""groq"", model : ""x"" } } }" ) ) );
+
+				expect( yaml.provider ).toBe( "openai" );
+				expect( yaml.model ).toBe( "gpt-5-mini" );
+				expect( yaml.apiKeyEnvVar ).toBe( "A_KEY" );
+				expect( yaml.params.temperature ).toBe( 0.2 );
+				expect( yaml.options.timeout ).toBe( 60 );
+				expect( json.provider ).toBe( "claude" );
+				expect( json.params.max_tokens ).toBe( 10 );
+				expect( yml.provider ).toBe( "ollama" );
+				expect( yml.model ).toBe( "" );
+				expect( yml.params ).toBeEmpty();
+				expect( bx.provider ).toBe( "groq" );
+			} );
+
+			it( "returns null for a file it cannot read", function() {
+				expect( isNull( named.read( writeEntry( "bad.yaml", "provider: [unclosed" ) ) ) ).toBeTrue();
+				expect( isNull( named.read( writeEntry( "bad.json", "{ nope" ) ) ) ).toBeTrue();
+			} );
+
+			it( "finds no problem in a good entry", function() {
+				expect( named.problems( "ok", { provider : "openai", model : "x", params : { temperature : 1 }, options : { timeout : 5 }, apiKeyEnvVar : "OK_KEY", description : "d" } ) ).toBeEmpty();
+			} );
+
+			it( "says what is wrong, naming the entry", function() {
+				expect( named.problems( "e", {} )[ 1 ] ).toInclude( "no 'provider'" );
+				expect( named.problems( "e", { provider : "skynet" } )[ 1 ] ).toInclude( "unknown provider [skynet]" );
+				expect( named.problems( "e", { provider : "openai", temperature : 1 } )[ 1 ] ).toInclude( "unknown key [temperature]" );
+				expect( named.problems( "e", { provider : "openai", params : "hot" } )[ 1 ] ).toInclude( "'params' must be a mapping" );
+				expect( named.problems( "e", { provider : "openai", apiKeyEnvVar : "sk-abc123 def" } )[ 1 ] ).toInclude( "NAME of an environment variable" );
+				expect( named.problems( "e", { provider : "openai", params : { apiKey : "sk-x" } } )[ 1 ] ).toInclude( "apiKeyEnvVar" );
+				expect( named.problems( "e", "" )[ 1 ] ).toInclude( "could not be read" );
+			} );
+
+			it( "checks only the provider of a legacy class entry", function() {
+				expect( named.problems( "c", { provider : "openai", anything : 1 }, true ) ).toBeEmpty();
+				expect( named.problems( "c", { provider : "skynet" }, true ) ).toHaveLength( 1 );
+			} );
+
+			it( "writes the aiModel call, with the key variable read at start and params as a literal", function() {
+				var literal = ( v ) => jsonSerialize( v );
+				var bx = ( t ) => t;
+
+				var plain = named.expression( { provider : "openai", model : "gpt-5" }, literal, bx );
+				var full = named.expression( { provider : "openai", model : "gpt-5", apiKeyEnvVar : "K", params : { temperature : 0.5 }, options : { timeout : 9 } }, literal, bx );
+				var bare = named.expression( { provider : "ollama", model : "" }, literal, bx );
+
+				expect( plain ).toBe( 'aiModel( provider : "openai", params : { model : "gpt-5" } )' );
+				expect( full ).toInclude( 'apiKey : getSystemSetting( "K" )' );
+				expect( full ).toInclude( 'options : {"timeout":9}' );
+				expect( bare ).toBe( 'aiModel( provider : "ollama" )' );
+			} );
+
+		} );
+	}
+
+}

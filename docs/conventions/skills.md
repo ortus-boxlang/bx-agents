@@ -25,11 +25,18 @@ description: How to greet people warmly.
 Always greet the user warmly and use their name if known.
 ```
 
+!!! tip
+    `bxAgents add skill <name>` creates `skills/<name>/SKILL.md` with the frontmatter and a body to fill in. See [`add`](../cli-reference.md#add-skill).
+
 ## Naming
 
 The skill's name is its frontmatter `name:` if present; otherwise it falls back to the folder name (`greeting/` with no frontmatter name would be discovered as `greeting` anyway, but an explicit `name:` always wins even if it differs from the folder). Two skills resolving to the same name fail validation with a duplicate-name error.
 
 A folder without a `SKILL.md` inside it is not discovered as a skill at all - it's simply ignored (useful for scratch subfolders, assets kept alongside a skill under a different structure, etc., as long as they don't sit directly under `skills/` themselves without a `SKILL.md`).
+
+## Skills from the registry
+
+Skills from skills.boxlang.io are installed with `bxAgents skills install <owner/repo/skill>`, not copied by hand. They go in `.agents/skills/` (bx-ai's own default folder), out of source control; `.agents/skills.lock.json` is committed and `build` restores from it. Both folders go into the build, and a skill in `skills/` with the same name wins. See [`skills`](../cli-reference.md#skills).
 
 ## How it's wired at runtime
 
@@ -42,4 +49,4 @@ moduleSettings = {
 ```
 
 !!! info
-    bx-ai's own default `skillsDirectory` is `/.agents/skills` - a different path than BxAgents' `skills/` convention. The generator always overrides it explicitly so your project's `skills/` folder is the one bx-ai actually loads from; you never need to set this yourself.
+    bx-ai's own default `skillsDirectory` is `/.agents/skills` - a different path than BxAgents' `skills/` convention. The generator always overrides it explicitly so the app's `skills/` folder is the one bx-ai actually loads from. Skills installed under your project's `.agents/skills/` are copied into it at build time; you never need to set this yourself.

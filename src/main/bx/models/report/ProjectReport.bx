@@ -14,7 +14,7 @@
  *
  *   project     { root, name, description, definition, environment }
  *   agent       the root agent node
- *   models      [ { name, file, provider, model } ]   named models/ entries
+ *   models      [ { name, file, provider, model, apiKeyEnvVar, params : [ names ] } ]   named models/ entries
  *   gateways    [ { name, file, kind, summary, path } ]
  *   mcpHosted   [ { name, file, description, tools } ]
  *   interceptors[ { name, file, scope } ]
@@ -106,6 +106,12 @@ class {
 		var agents = []
 		flatten( rootNode, agents )
 
+		for ( var entry in discovery.models ) {
+			var keyVar = new "models.build.NamedModels@bxagents"().resolve( new "models.build.NamedModels@bxagents"().read( entry.path ) ).apiKeyEnvVar
+			if ( len( keyVar ) ) {
+				noteEnv( envUse, keyVar, "model #entry.name#" )
+			}
+		}
 		var gateways = []
 		for ( var entry in discovery.gateways ) {
 			gateways.append( gatewayInfo( entry, envUse ) )
@@ -204,6 +210,7 @@ class {
 			modelSource    : described.source,
 			provider       : described.provider,
 			modelId        : described.model,
+			apiKeyEnvVar   : described.apiKeyEnvVar,
 			definition     : variables.locator.locate( arguments.path ).kind == "yaml" ? "Agent.yaml" : "Agent.bx",
 			classBased     : classBased,
 			instructions   : instructionsInfo( arguments.path, c ),
@@ -266,17 +273,17 @@ class {
 	 */
 	private struct function describeModel( required string slug, required string root ) {
 		if ( !len( arguments.slug ) ) {
-			return { source : "none", provider : "", model : "" }
+			return { source : "none", provider : "", model : "", apiKeyEnvVar : "" }
 		}
 		if ( arguments.slug.find( "/" ) ) {
 			var parsed = variables.slugParser.parse( arguments.slug )
-			return { source : "slug", provider : parsed.provider, model : parsed.model }
+			return { source : "slug", provider : parsed.provider, model : parsed.model, apiKeyEnvVar : "" }
 		}
 		if ( variables.slugParser.isKnownProvider( arguments.slug ) ) {
-			return { source : "provider", provider : arguments.slug, model : "" }
+			return { source : "provider", provider : arguments.slug, model : "", apiKeyEnvVar : "" }
 		}
 		var entry = readNamedModel( arguments.root, arguments.slug )
-		return { source : "named", provider : entry.provider ?: "", model : entry.model ?: "" }
+		return { source : "named", provider : entry.provider ?: "", model : entry.model ?: "", apiKeyEnvVar : entry.apiKeyEnvVar ?: "" }
 	}
 
 	/**
@@ -386,13 +393,15 @@ class {
 	 * @entry A discovered models/ entry
 	 */
 	private struct function modelInfo( required struct entry ) {
-		var config = readEntryConfig( arguments.entry.path )
-		config = isStruct( config ) ? config : {}
+		var named = new "models.build.NamedModels@bxagents"()
+		var resolved = named.resolve( named.read( arguments.entry.path ) )
 		return {
-			name     : arguments.entry.name,
-			file     : arguments.entry.path.listLast( "/\" ),
-			provider : config.provider ?: "",
-			model    : config.model ?: ( config.params.model ?: "" )
+			name         : arguments.entry.name,
+			file         : arguments.entry.path.listLast( "/\" ),
+			provider     : resolved.provider,
+			model        : resolved.model,
+			apiKeyEnvVar : resolved.apiKeyEnvVar,
+			params       : resolved.params.keyArray().sort( "textnocase" )
 		}
 	}
 
@@ -400,14 +409,15 @@ class {
 	 * @root The project root
 	 * @name A models/ entry name
 	 *
-	 * @return The entry's { provider, model }, or an empty struct
+	 * @return The entry's { provider, model, ... }, or an empty struct
 	 */
 	private struct function readNamedModel( required string root, required string name ) {
-		for ( var ext in [ "json", "bx" ] ) {
+		var named = new "models.build.NamedModels@bxagents"()
+		for ( var ext in named.extensions() ) {
 			var file = arguments.root & "/models/" & arguments.name & "." & ext
 			if ( fileExists( file ) ) {
-				var config = readEntryConfig( file )
-				return isStruct( config ) ? config : {}
+				var config = named.read( file )
+				return isNull( config ) ? {} : named.resolve( config )
 			}
 		}
 		return {}
@@ -561,7 +571,8 @@ class {
 	 */
 	private void function registerProviderEnv( required array agents, required struct envUse ) {
 		for ( var agent in arguments.agents ) {
-			if ( !len( agent.provider ) ) {
+			// a models/ entry that names its own key variable replaces the provider's usual one
+			if ( !len( agent.provider ) || len( agent.apiKeyEnvVar ) ) {
 				continue
 			}
 			var envVar = variables.catalog.provider( agent.provider ).envVar ?: ""

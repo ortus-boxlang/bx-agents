@@ -19,7 +19,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n __bxagents_needs_verb -s v -l version -d 'Show the module version'
 
     # verbs
-    complete -c $cmd -n __bxagents_needs_verb -a 'add' -d 'Add to a project: add <kind> [name] - a tool, interceptor, schedule or mcp'
+    complete -c $cmd -n __bxagents_needs_verb -a 'add' -d 'Add to a project: add <kind> [name] - a tool, interceptor, schedule, mcp, model, gateway,...'
     complete -c $cmd -n __bxagents_needs_verb -a 'build' -d 'Build a project into a generated app'
     complete -c $cmd -n __bxagents_needs_verb -a 'chat' -d 'Interactive REPL chat with a built agent'
     complete -c $cmd -n __bxagents_needs_verb -a 'clean' -d 'Remove a project\'s .build/ and dist/ output'
@@ -32,6 +32,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n __bxagents_needs_verb -a 'notes' -d 'Read and manage the notes of an agent'
     complete -c $cmd -n __bxagents_needs_verb -a 'package' -d 'Package a built project into a .bxa'
     complete -c $cmd -n __bxagents_needs_verb -a 'serve' -d 'Serve a built project via boxlang-miniserver'
+    complete -c $cmd -n __bxagents_needs_verb -a 'skills' -d 'Skills from skills.boxlang.io: skills <find|install|list|update|remove>'
     complete -c $cmd -n __bxagents_needs_verb -a 'test' -d 'Run a project\'s own tests/specs via TestBox'
     complete -c $cmd -n __bxagents_needs_verb -a 'token' -d 'Issue, list and revoke access tokens for a deployed agent'
     complete -c $cmd -n __bxagents_needs_verb -a 'help' -d 'Show the usage and the list of verbs'
@@ -45,23 +46,39 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb add' -l direction -x
     complete -c $cmd -n '__bxagents_using_verb add' -l dry-run
     complete -c $cmd -n '__bxagents_using_verb add' -l env -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l files -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l files-dir -x
     complete -c $cmd -n '__bxagents_using_verb add' -l force
+    complete -c $cmd -n '__bxagents_using_verb add' -l format -x
     complete -c $cmd -n '__bxagents_using_verb add' -l function -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l guard -x
     complete -c $cmd -n '__bxagents_using_verb add' -l header -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l max-tokens -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l mcp -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l memory -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l model -x
     complete -c $cmd -n '__bxagents_using_verb add' -l name -x
     complete -c $cmd -n '__bxagents_using_verb add' -l no-tui
+    complete -c $cmd -n '__bxagents_using_verb add' -l parent -x
     complete -c $cmd -n '__bxagents_using_verb add' -l path -x
     complete -c $cmd -n '__bxagents_using_verb add' -l points -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l policy -x
     complete -c $cmd -n '__bxagents_using_verb add' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb add' -l prompt -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l provider -x
     complete -c $cmd -n '__bxagents_using_verb add' -l scope -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l search -x
     complete -c $cmd -n '__bxagents_using_verb add' -l server -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l temperature -x
     complete -c $cmd -n '__bxagents_using_verb add' -l timeout -x
     complete -c $cmd -n '__bxagents_using_verb add' -l tools -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l type -x
     complete -c $cmd -n '__bxagents_using_verb add' -l url -x
     complete -c $cmd -n '__bxagents_using_verb add' -l user -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l users -x
     complete -c $cmd -n '__bxagents_using_verb add' -l version -x
     complete -c $cmd -n '__bxagents_using_verb add' -l when -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l with -x
     complete -c $cmd -n '__bxagents_using_verb add' -l yes
     complete -c $cmd -n '__bxagents_using_verb build' -l environment -x
     complete -c $cmd -n '__bxagents_using_verb build' -l generatorVersion -x
@@ -151,6 +168,11 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb serve' -l port -x
     complete -c $cmd -n '__bxagents_using_verb serve' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb serve' -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb skills' -l dry-run
+    complete -c $cmd -n '__bxagents_using_verb skills' -l json
+    complete -c $cmd -n '__bxagents_using_verb skills' -l limit -x
+    complete -c $cmd -n '__bxagents_using_verb skills' -l projectRoot -x -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb skills' -l registry -x
     complete -c $cmd -n '__bxagents_using_verb test' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb test' -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb token' -l expires -x
@@ -158,5 +180,5 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb token' -l name -x
     complete -c $cmd -n '__bxagents_using_verb token' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb token' -l scope -x -a 'chat admin'
-    complete -c $cmd -n '__bxagents_using_verb help' -a 'add build chat clean deploy doctor hash-password inspect invoke new notes package serve test token help'
+    complete -c $cmd -n '__bxagents_using_verb help' -a 'add build chat clean deploy doctor hash-password inspect invoke new notes package serve skills test token help'
 end

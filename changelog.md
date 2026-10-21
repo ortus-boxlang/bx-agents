@@ -264,6 +264,25 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   with the sign-in as an `${env.NAME}` placeholder and an empty `.env` stub); `add mcp server` writes
   `mcp/<name>.bx` offering the project's tools through bx-ai's MCP server, plus the `gateways/` entry
   that serves it. `Agent.yaml` is edited by inserting lines only, so comments and layout stay.
+- `add model` writes a named model configuration, `models/<name>.yaml` or `.json`. Named models are
+  now YAML or JSON (a `.bx` class still works) and carry more than a provider and model: `params`
+  (temperature, max_tokens, ...), `options`, and `apiKeyEnvVar` to read their key from a different
+  environment variable. Entries are validated at build time, and the key variable is read when the
+  app starts and named if it is missing.
+- `add gateway` adds a chat platform (the same catalog the wizard uses: credentials as environment
+  variable names with empty `.env` stubs, and the setup steps that happen outside the project), the web
+  chat UI (open, behind a random shared key, or with named users stored as hashes only), or the HTTP
+  API, and can set what to do with a message that arrives while the agent is answering.
+- `add subagent` adds a whole agent under `subagents/<name>/` and wires it into a parent's `subAgents`. It runs the
+  `new` wizard stages for its model, tools, search, files, memory, MCP servers and guard (or the same flags),
+  nests under another subagent with `--parent`, and edits the parent by inserting only, so its comments and
+  order stay; a class parent is left alone and the line to add is shown.
+- `add skill` writes a custom skill of your own, `skills/<name>/SKILL.md`, with the frontmatter and a body to fill in.
+- `skills find|install|list|update|remove` installs skills from skills.boxlang.io into `.agents/skills/` (out of
+  source control) and records them in `.agents/skills.lock.json` (committed). The install is checked against the
+  registry's git blob sha before anything is written, a skill that failed the registry's audit is refused, and
+  `build` restores whatever the lock lists and the disk lacks. Skills in `skills/` and installed ones both go
+  into the build; one of your own with the same name wins. New projects ignore `.agents/skills/`.
 
 #### Documentation
 

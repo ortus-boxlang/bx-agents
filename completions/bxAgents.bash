@@ -12,7 +12,7 @@ _bxagents_complete() {
 	fi
 	local count=${#words[@]}
 	local cur="${words[count-1]}"
-	local verbs="add build chat clean deploy doctor hash-password inspect invoke new notes package serve test token help"
+	local verbs="add build chat clean deploy doctor hash-password inspect invoke new notes package serve skills test token help"
 	local globals="--help -h --version -v"
 	COMPREPLY=()
 
@@ -59,6 +59,7 @@ _bxagents_complete() {
 			"notes --scope") COMPREPLY=($(compgen -W "user agent" -- "$part")) ;;
 			"package --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"serve --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
+			"skills --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"test --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"token --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"token --scope") COMPREPLY=($(compgen -W "chat admin" -- "$part")) ;;
@@ -69,7 +70,7 @@ _bxagents_complete() {
 	if [[ "$cur" == -* ]]; then
 		local flags=""
 		case "$verb" in
-			add) flags="--agent= --args= --auth= --cors= --description= --direction= --dry-run --env= --force --function= --header= --name= --no-tui --path= --points= --projectRoot= --prompt= --scope= --server= --timeout= --tools= --url= --user= --version= --when= --yes" ;;
+			add) flags="--agent= --args= --auth= --cors= --description= --direction= --dry-run --env= --files= --files-dir= --force --format= --function= --guard= --header= --max-tokens= --mcp= --memory= --model= --name= --no-tui --parent= --path= --points= --policy= --projectRoot= --prompt= --provider= --scope= --search= --server= --temperature= --timeout= --tools= --type= --url= --user= --users= --version= --when= --with= --yes" ;;
 			build) flags="--environment= --generatorVersion= --projectRoot= --verbose" ;;
 			chat) flags="--connect= --continue --no-tui --port= --projectRoot= --record --server --session= --token= --user=" ;;
 			clean) flags="--force --projectRoot=" ;;
@@ -82,6 +83,7 @@ _bxagents_complete() {
 			notes) flags="--file= --id= --json --projectRoot= --scope= --text= --user=" ;;
 			package) flags="--projectRoot= --version=" ;;
 			serve) flags="--host= --port= --projectRoot=" ;;
+			skills) flags="--dry-run --json --limit= --projectRoot= --registry=" ;;
 			test) flags="--projectRoot=" ;;
 			token) flags="--expires= --json --name= --projectRoot= --scope=" ;;
 		esac

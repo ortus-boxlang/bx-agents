@@ -7,7 +7,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 	param( $wordToComplete, $commandAst, $cursorPosition )
 
 	$verbs = @{
-		'add' = 'Add to a project: add <kind> [name] - a tool, interceptor, schedule or mcp'
+		'add' = 'Add to a project: add <kind> [name] - a tool, interceptor, schedule, mcp, model, gateway,...'
 		'build' = 'Build a project into a generated app'
 		'chat' = 'Interactive REPL chat with a built agent'
 		'clean' = 'Remove a project''s .build/ and dist/ output'
@@ -20,6 +20,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 		'notes' = 'Read and manage the notes of an agent'
 		'package' = 'Package a built project into a .bxa'
 		'serve' = 'Serve a built project via boxlang-miniserver'
+		'skills' = 'Skills from skills.boxlang.io: skills <find|install|list|update|remove>'
 		'test' = 'Run a project''s own tests/specs via TestBox'
 		'token' = 'Issue, list and revoke access tokens for a deployed agent'
 		'help' = 'Show the usage and the list of verbs'
@@ -34,23 +35,39 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'direction'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'dry-run'; Value = $false; Choices = @(); Dir = $false }
 			@{ Name = 'env'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'files'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'files-dir'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'force'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'format'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'function'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'guard'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'header'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'max-tokens'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'mcp'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'memory'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'model'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'name'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'no-tui'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'parent'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'path'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'points'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'policy'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
 			@{ Name = 'prompt'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'provider'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'scope'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'search'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'server'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'temperature'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'timeout'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'tools'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'type'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'url'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'user'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'users'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'version'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'when'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'with'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'yes'; Value = $false; Choices = @(); Dir = $false }
 		)
 		'build' = @(
@@ -165,6 +182,13 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
 		)
 		'serve:positional' = 'dir'
+		'skills' = @(
+			@{ Name = 'dry-run'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'json'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'limit'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
+			@{ Name = 'registry'; Value = $true; Choices = @(); Dir = $false }
+		)
 		'test' = @(
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
 		)

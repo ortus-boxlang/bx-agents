@@ -42,6 +42,14 @@ class {
 	}
 
 	/**
+	 * @return The prompter, or an empty string when nothing may be asked. For a kind that
+	 *         runs a whole wizard flow (add subagent) instead of single questions.
+	 */
+	any function prompter() {
+		return variables.prompter
+	}
+
+	/**
 	 * @return True when questions can be asked
 	 */
 	boolean function interactive() {
@@ -120,6 +128,22 @@ class {
 			return fallback
 		}
 		return variables.prompter.select( arguments.title, arguments.choices, fallback, arguments.help )
+	}
+
+	/**
+	 * A secret typed at a prompt: hidden on the screen, and never a flag, since a flag would
+	 * sit in the shell history. Only asks, so a caller must check interactive() first.
+	 *
+	 * @title The question
+	 * @help A line under the question
+	 *
+	 * @return What was typed
+	 */
+	string function secret( required string title, string help = "" ) {
+		if ( !interactive() ) {
+			throw( type = "BxAgents.MissingAnswer", message = "#arguments.title# can only be typed at a terminal." )
+		}
+		return variables.prompter.text( arguments.title, arguments.help, "", true, "An answer is needed." )
 	}
 
 	/**

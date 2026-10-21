@@ -76,6 +76,40 @@ class extends="testbox.system.BaseSpec" {
 				expect( editor.hasKey( "mcpServersExtra: 1", "mcpServers" ) ).toBeFalse();
 			} );
 
+
+			describe( "addValue", function() {
+
+				it( "starts a block list when the key is missing", function() {
+					var result = editor.addValue( "name: a" & nl, "subAgents", "b" );
+
+					expect( result.text ).toBe( "name: a" & nl & nl & "subAgents:" & nl & "  - b" & nl );
+				} );
+
+				it( "extends an inline list in place and keeps its trailing comment", function() {
+					var result = editor.addValue( "subAgents: [ a, b ] " & hash & " mine" & nl & "memory: cache" & nl, "subAgents", "c" );
+
+					expect( result.text ).toBe( "subAgents: [ a, b, c ] " & hash & " mine" & nl & "memory: cache" & nl );
+				} );
+
+				it( "fills an empty inline list", function() {
+					expect( editor.addValue( "subAgents: []" & nl, "subAgents", "a" ).text ).toBe( "subAgents: [ a ]" & nl );
+				} );
+
+				it( "extends a block list", function() {
+					var result = editor.addValue( "subAgents:" & nl & "  - a" & nl & "memory: cache" & nl, "subAgents", "b" );
+
+					expect( result.text ).toBe( "subAgents:" & nl & "  - a" & nl & "  - b" & nl & "memory: cache" & nl );
+				} );
+
+				it( "declines a value that is not a list", function() {
+					var result = editor.addValue( "subAgents: a" & nl, "subAgents", "b" );
+
+					expect( result.ok ).toBeFalse();
+					expect( result.reason ).toInclude( "not a plain list" );
+				} );
+
+			} );
+
 		} );
 	}
 

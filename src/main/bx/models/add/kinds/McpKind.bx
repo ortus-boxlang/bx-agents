@@ -82,7 +82,12 @@ class {
 			if ( len( a.riskNote ?: "" ) ) {
 				out.append( "Read this before you let an agent use it: " & a.riskNote )
 			}
-			out.append( "Nothing connects until the app starts; the server must be reachable then." )
+			if ( a.item.keyExists( "command" ) ) {
+				out.append( "#a.serverName# runs as a program on this machine: " & a.requires.help ?: "it must be installed and on the PATH." )
+				out.append( "The app only starts programs the project declares. bxAgents doctor warns when one is not on the PATH." )
+			} else {
+				out.append( "Nothing connects until the app starts; the server must be reachable then." )
+			}
 			out.append( "Check it with: bxAgents inspect --section=mcp" )
 			return out
 		}
@@ -125,13 +130,18 @@ class {
 		}
 
 		var url = ""
+		var command = []
+		var requires = {}
 		var auth = "none"
 		var envVar = ""
 		var help = ""
 		var risk = ""
 		if ( entry.count() ) {
 			label = entry.id
-			url = entry.url
+			// A catalog server is a web address, or a program started on this machine (stdio)
+			url = entry.url ?: ""
+			command = ( entry.transport ?: "http" ) == "stdio" ? duplicate( entry.command ) : []
+			requires = entry.requires ?: {}
 			auth = entry.auth.type ?: "none"
 			envVar = entry.auth.envVar ?: ""
 			help = entry.auth.help ?: ""
@@ -188,12 +198,12 @@ class {
 		var agent = askAgent( arguments.a, arguments.ctx )
 		var already = findAgent( arguments.ctx, agent )
 		for ( var used in already.mcpServers ?: [] ) {
-			if ( used.name == label || used.url == url.reReplace( "[?##].*$", "" ) ) {
-				throw( type = "BxAgents.McpExists", message = "#agent == '.' ? 'The root agent' : 'Subagent ' & agent# already uses #len( used.name ) ? used.name : used.url#." )
+			if ( used.name == label || ( len( url ) && ( used.url ?: "" ) == url.reReplace( "[?##].*$", "" ) ) ) {
+				throw( type = "BxAgents.McpExists", message = "#agent == '.' ? 'The root agent' : 'Subagent ' & agent# already uses #len( used.name ) ? used.name : ( used.url ?: "that server" )#." )
 			}
 		}
 
-		var item = { name : label, url : url }
+		var item = command.len() ? { name : label, command : command } : { name : label, url : url }
 		if ( auth == "bearer" ) {
 			item.token = "${env.#envVar#}"
 		} else if ( auth == "header" ) {
@@ -206,14 +216,14 @@ class {
 			item.timeout = int( timeout )
 		}
 
-		return { item : item, agent : agent, env : envVar, help : help, riskNote : risk, serverName : label }
+		return { item : item, agent : agent, env : envVar, help : help, riskNote : risk, serverName : label, requires : requires }
 	}
 
 	private void function planClient( required struct answers, required struct ctx, required any changes ) {
 		var a = arguments.answers
 		var def = definitionFor( arguments.ctx, a.agent )
 		var yaml = new "models.wizard.YamlWriter@bxagents"()
-		var itemLines = yaml.lines( [ a.item ], 0, [ "name", "url", "token", "headers", "user", "password", "timeout" ] )
+		var itemLines = yaml.lines( [ a.item ], 0, [ "name", "url", "command", "token", "headers", "user", "password", "timeout" ] )
 
 		if ( def.kind != "yaml" ) {
 			throw(
@@ -405,12 +415,14 @@ class {
 	 */
 	private string function structLiteral( required struct item ) {
 		var parts = []
-		for ( var key in [ "name", "url", "token", "headers", "user", "password", "timeout" ] ) {
+		for ( var key in [ "name", "url", "command", "token", "headers", "user", "password", "timeout" ] ) {
 			if ( !arguments.item.keyExists( key ) ) {
 				continue
 			}
 			var value = arguments.item[ key ]
-			if ( isStruct( value ) ) {
+			if ( isArray( value ) ) {
+				parts.append( key & " : [ " & value.map( v => '"' & literal( v ) & '"' ).toList( ", " ) & " ]" )
+			} else if ( isStruct( value ) ) {
 				var inner = []
 				for ( var k in value ) {
 					inner.append( '"' & literal( k ) & '" : "' & literal( value[ k ] ) & '"' )

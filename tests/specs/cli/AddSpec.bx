@@ -468,12 +468,18 @@ class extends="testbox.system.BaseSpec" {
 					} ).toThrow( "BxAgents.MissingAnswer" );
 				} );
 
-				it( "says a server that needs a local program is not available yet", function() {
+				it( "adds a server that runs as a local program as a command, with what it needs on the PATH", function() {
 					var root = newTempProject( "yaml-minimal" );
 
-					expect( function() {
-						addMcp( root, {}, [ "mcp", "client", "git" ] );
-					} ).toThrow( "BxAgents.InvalidAnswer" );
+					var result = addMcp( root, {}, [ "mcp", "client", "git" ] );
+					var yaml = fileRead( root & "/Agent.yaml" );
+
+					expect( yaml ).toInclude( "name: git" );
+					expect( yaml ).toInclude( "command:" );
+					expect( yaml ).toInclude( "uvx" );
+					expect( yaml ).notToInclude( "url:" );
+					expect( result.message ).toInclude( "runs as a program on this machine" );
+					expect( new bxagents.models.cli.Build().run( { projectRoot : root } ).exitCode ).toBe( 0 );
 				} );
 
 				it( "writes into a subagent's own Agent.yaml with --agent", function() {
@@ -600,6 +606,448 @@ class extends="testbox.system.BaseSpec" {
 					expect( prompter.remaining() ).toBe( 0 );
 					expect( result.exitCode ).toBe( 0 );
 					expect( fileRead( root & "/mcp/helpers.bx" ) ).toInclude( 'version     : "2.0.0"' );
+				} );
+
+			} );
+
+			describe( "add model", function() {
+
+				private function addModel( required string root, struct flags = {}, array positionals = [ "model", "researcher" ] ) {
+					var options = { projectRoot : root, _positionals : positionals, yes : true, provider : "openai" };
+					options.append( flags );
+					return addVerb.run( options );
+				}
+
+				it( "writes models/<name>.yaml with the provider, model and settings", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					var result = addModel( root, { model : "gpt-5-mini", temperature : "0.2", "max-tokens" : "2000", description : "Cheap research" } );
+					var yaml = fileRead( root & "/models/researcher.yaml" );
+
+					expect( result.exitCode ).toBe( 0 );
+					expect( yaml ).toInclude( "description: Cheap research" );
+					expect( yaml ).toInclude( "provider: openai" );
+					expect( yaml ).toInclude( "model: gpt-5-mini" );
+					expect( yaml ).toInclude( "max_tokens: 2000" );
+					expect( yaml ).toInclude( "temperature: 0.2" );
+					expect( result.message ).toInclude( "model: researcher" );
+				} );
+
+				it( "writes JSON when asked", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					addModel( root, { format : "json", model : "gpt-5" }, [ "model", "coder" ] );
+					var parsed = jsonDeserialize( fileRead( root & "/models/coder.json" ) );
+
+					expect( parsed.provider ).toBe( "openai" );
+					expect( parsed.model ).toBe( "gpt-5" );
+				} );
+
+				it( "adds the provider's key variable to .env as an empty stub, or the one named", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					addModel( root );
+					addModel( root, { env : "CODER_KEY", provider : "claude" }, [ "model", "coder" ] );
+					var env = fileRead( root & "/.env" );
+
+					expect( env ).toInclude( "OPENAI_API_KEY=" & char( 10 ) );
+					expect( env ).toInclude( "CODER_KEY=" );
+					expect( fileRead( root & "/models/coder.yaml" ) ).toInclude( "apiKeyEnvVar: CODER_KEY" );
+					expect( fileRead( root & "/models/researcher.yaml" ) ).notToInclude( "apiKeyEnvVar" );
+				} );
+
+				it( "is used by an agent that names it, and the build carries its settings", function() {
+					var root = newTempProject( "yaml-minimal" );
+					addModel( root, { provider : "mock", model : "mock-model", temperature : "0.3" }, [ "model", "mocky" ] );
+					fileWrite( root & "/Agent.yaml", "name: yaml-agent" & char( 10 ) & "model: mocky" & char( 10 ) );
+
+					var built = new bxagents.models.build.BuildPipeline( "test" ).build( root );
+					var report = new bxagents.models.report.ProjectReport().build( root );
+
+					expect( fileRead( built.appDir & "/agent/GeneratedAgentFactory.bx" ) ).toInclude( '"temperature" : 0.3' );
+					expect( report.agent.modelSource ).toBe( "named" );
+					expect( report.agent.provider ).toBe( "mock" );
+					expect( report.validation.errors ).toBeEmpty();
+				} );
+
+				it( "does not ask for the default provider's key variable when a model names its own", function() {
+					var root = newTempProject( "yaml-minimal" );
+					addModel( root, { env : "OWN_KEY" } );
+					fileWrite( root & "/Agent.yaml", "name: yaml-agent" & char( 10 ) & "model: researcher" & char( 10 ) );
+
+					var names = new bxagents.models.report.ProjectReport().build( root ).env.map( v => v.name );
+
+					expect( names ).toInclude( "OWN_KEY" );
+					expect( names ).notToInclude( "OPENAI_API_KEY" );
+				} );
+
+				it( "refuses a name that is a provider, a name in use, an unknown provider and bad numbers", function() {
+					var root = newTempProject( "yaml-minimal" );
+					addModel( root );
+
+					expect( function() {
+						addModel( root, {}, [ "model", "openai" ] );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					expect( function() {
+						addModel( root );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					expect( function() {
+						addModel( root, { provider : "skynet" }, [ "model", "other" ] );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					expect( function() {
+						addModel( root, { temperature : "9" }, [ "model", "other" ] );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					expect( function() {
+						addModel( root, { "max-tokens" : "lots" }, [ "model", "other" ] );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+				} );
+
+				it( "offers every bx-ai provider, not only the ones the wizard lists", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					addModel( root, { provider : "bedrock" }, [ "model", "aws" ] );
+
+					expect( fileRead( root & "/models/aws.yaml" ) ).toInclude( "provider: bedrock" );
+				} );
+
+				it( "asks for the name, provider, model, key variable, temperature, length and format", function() {
+					var root = newTempProject( "yaml-minimal" );
+					var prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [ "analyst", "Reads reports", "claude", "claude-sonnet-5-5", "", "0.1", "4000", "yaml", "create" ] );
+
+					var result = addVerb.run( { projectRoot : root, _positionals : [ "model" ], _prompter : prompter, _interactive : true } );
+
+					expect( prompter.remaining() ).toBe( 0 );
+					expect( result.exitCode ).toBe( 0 );
+					expect( fileRead( root & "/models/analyst.yaml" ) ).toInclude( "model: claude-sonnet-5-5" );
+				} );
+
+			} );
+
+			describe( "add gateway", function() {
+
+				private function addGateway( required string root, struct flags = {}, array positionals = [ "gateway", "slack" ] ) {
+					var options = { projectRoot : root, _positionals : positionals, yes : true };
+					options.append( flags );
+					return addVerb.run( options );
+				}
+
+				it( "writes a chat platform's gateway with the usual variable names, empty .env stubs and its setup steps", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					var result = addGateway( root );
+					var source = fileRead( root & "/gateways/slack.bx" );
+
+					expect( source ).toInclude( 'type           : "slack"' );
+					expect( source ).toInclude( 'botTokenEnvVar : "SLACK_BOT_TOKEN"' );
+					expect( source ).toInclude( 'appTokenEnvVar : "SLACK_APP_TOKEN"' );
+					expect( fileRead( root & "/.env" ) ).toInclude( "SLACK_BOT_TOKEN=xoxb-" );
+					expect( fileRead( root & "/.env" ) ).toInclude( "SLACK_APP_TOKEN=xapp-" );
+					expect( result.message ).toInclude( "Socket Mode" );
+					expect( result.message ).toInclude( "SLACK_BOT_TOKEN, SLACK_APP_TOKEN" );
+				} );
+
+				it( "uses the variable names it is given, per credential", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					addGateway( root, { env : "botTokenEnvVar=ACME_BOT,appTokenEnvVar=ACME_APP" } );
+
+					expect( fileRead( root & "/gateways/slack.bx" ) ).toInclude( 'botTokenEnvVar : "ACME_BOT"' );
+					expect( fileRead( root & "/.env" ) ).toInclude( "ACME_APP=xapp-" );
+					expect( fileRead( root & "/.env" ) ).notToInclude( "SLACK_BOT_TOKEN" );
+				} );
+
+				it( "is understood by the build and by inspect", function() {
+					var root = newTempProject( "yaml-minimal" );
+					addGateway( root, {}, [ "gateway", "telegram" ] );
+					addGateway( root, { path : "/api/chat" }, [ "gateway", "api" ] );
+
+					new bxagents.models.cli.Build().run( { projectRoot : root } );
+					var report = new bxagents.models.report.ProjectReport().build( root );
+
+					expect( report.validation.errors ).toBeEmpty();
+					expect( report.gateways.map( g => g.name ) ).toInclude( "telegram" );
+					expect( report.gateways.filter( g => g.name == "api" )[ 1 ].path ).toBe( "/api/chat" );
+					expect( report.env.map( v => v.name ) ).toInclude( "TELEGRAM_BOT_TOKEN" );
+				} );
+
+				it( "writes the busy-agent policy to Agent.yaml only when it is not the default", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					addGateway( root, { policy : "queue" }, [ "gateway", "telegram" ] );
+					expect( fileRead( root & "/Agent.yaml" ) ).notToInclude( "gatewaySession" );
+
+					addGateway( root, { policy : "steer" }, [ "gateway", "discord" ] );
+					expect( fileRead( root & "/Agent.yaml" ) ).toInclude( "gatewaySession:" & char( 10 ) & "  policy: steer" );
+					expect( new bxagents.models.report.ProjectReport().build( root ).validation.errors ).toBeEmpty();
+				} );
+
+				it( "will not rewrite a gatewaySession that is already there, and says what to set", function() {
+					var root = newTempProject( "yaml-minimal" );
+					fileAppend( root & "/Agent.yaml", char( 10 ) & "gatewaySession:" & char( 10 ) & "  policy: reject" & char( 10 ) );
+
+					expect( function() {
+						addGateway( root, { policy : "steer" }, [ "gateway", "telegram" ] );
+					} ).toThrow( "BxAgents.AgentNotEditable" );
+					expect( fileExists( root & "/gateways/telegram.bx" ) ).toBeFalse();
+				} );
+
+				it( "adds the web chat UI behind a random shared key kept in .env", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					var result = addGateway( root, { auth : "key" }, [ "gateway", "web" ] );
+
+					expect( fileRead( root & "/gateways/web.bx" ) ).toInclude( 'exposes      : "webui"' );
+					expect( fileRead( root & "/gateways/web.bx" ) ).toInclude( 'apiKeyEnvVar : "CHAT_UI_API_KEY"' );
+					expect( fileRead( root & "/.env" ) ).toMatch( "CHAT_UI_API_KEY=[0-9a-f]{64}" );
+					expect( result.message ).toInclude( "CHAT_UI_API_KEY" );
+				} );
+
+				it( "adds the web chat UI open, and says what that means", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					var result = addGateway( root, { auth : "open", path : "/talk" }, [ "gateway", "web" ] );
+
+					expect( fileRead( root & "/gateways/web.bx" ) ).notToInclude( "apiKeyEnvVar" );
+					expect( fileRead( root & "/gateways/web.bx" ) ).toInclude( 'path    : "/talk"' );
+					expect( result.message ).toInclude( "Anyone who can reach the app" );
+				} );
+
+				it( "takes web users only as name:hash from hash-password, never a password flag", function() {
+					var root = newTempProject( "yaml-minimal" );
+					var hash = new bxagents.models.cli.HashPassword().run( { password : "correct horse" } ).message;
+
+					addGateway( root, { auth : "users", users : "ada:" & hash }, [ "gateway", "web" ] );
+					var source = fileRead( root & "/gateways/web.bx" );
+
+					expect( source ).toInclude( 'username : "ada"' );
+					expect( source ).toInclude( hash );
+					expect( source ).notToInclude( "correct horse" );
+					expect( function() {
+						addGateway( root, { auth : "users", users : "bob:plaintext", name : "web2", path : "/w2" }, [ "gateway", "web" ] );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					expect( function() {
+						addGateway( root, { auth : "users", name : "web3", path : "/w3" }, [ "gateway", "web" ] );
+					} ).toThrow( "BxAgents.MissingAnswer" );
+				} );
+
+				it( "asks for users at a terminal, hides the passwords and stores only a hash", function() {
+					var root = newTempProject( "yaml-minimal" );
+					var prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [ "web", "/chat", "users", "ada", "pw1", "pw1", "Ada L", false, "create" ] );
+
+					addVerb.run( { projectRoot : root, _positionals : [ "gateway", "web" ], _prompter : prompter, _interactive : true } );
+					var source = fileRead( root & "/gateways/web.bx" );
+
+					expect( prompter.remaining() ).toBe( 0 );
+					expect( source ).toInclude( 'displayName : "Ada L"' );
+					expect( source ).toInclude( "pbkdf2$" );
+					expect( source ).notToInclude( "pw1" );
+				} );
+
+				it( "adds the HTTP API", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					addGateway( root, {}, [ "gateway", "api" ] );
+
+					expect( fileRead( root & "/gateways/api.bx" ) ).toInclude( 'exposes : "agent"' );
+					expect( fileRead( root & "/gateways/api.bx" ) ).toInclude( 'path    : "/api/chat"' );
+				} );
+
+				it( "refuses a path or a name already in use, an unknown type and a bad variable pair", function() {
+					var root = newTempProject( "yaml-minimal" );
+					addGateway( root, {}, [ "gateway", "api" ] );
+
+					expect( function() {
+						addGateway( root, { name : "api2" }, [ "gateway", "api" ] );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					expect( function() {
+						addGateway( root, { path : "/other" }, [ "gateway", "api" ] );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					expect( function() {
+						addGateway( root, {}, [ "gateway", "fax" ] );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					expect( function() {
+						addGateway( root, { env : "nonsense" }, [ "gateway", "slack" ] );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+				} );
+
+				it( "asks which gateway, the file name, whether to keep the usual variables and the busy policy", function() {
+					var root = newTempProject( "yaml-minimal" );
+					var prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [ "telegram", "telegram", true, "queue", "create" ] );
+
+					var result = addVerb.run( { projectRoot : root, _positionals : [ "gateway" ], _prompter : prompter, _interactive : true } );
+
+					expect( prompter.remaining() ).toBe( 0 );
+					expect( result.exitCode ).toBe( 0 );
+					expect( fileExists( root & "/gateways/telegram.bx" ) ).toBeTrue();
+				} );
+
+			} );
+
+			describe( "add subagent", function() {
+
+				private function addSub( required string root, struct flags = {}, array positionals = [ "subagent", "writer" ] ) {
+					var options = { projectRoot : root, _positionals : positionals, yes : true };
+					options.append( flags );
+					return addVerb.run( options );
+				}
+
+				it( "writes the agent, its instructions and adds it to the root's subAgents", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					var result = addSub( root, { model : "openai/gpt-5", description : "Writes the answer" } );
+					var yaml = fileRead( root & "/subagents/writer/Agent.yaml" );
+
+					expect( result.exitCode ).toBe( 0 );
+					expect( yaml ).toInclude( "name: writer" );
+					expect( yaml ).toInclude( "description: Writes the answer" );
+					expect( yaml ).toInclude( "model: openai/gpt-5" );
+					expect( yaml ).toInclude( "model: mock/mock-model" );
+					expect( fileRead( root & "/subagents/writer/instructions.md" ) ).toInclude( "You are writer." );
+					expect( fileRead( root & "/Agent.yaml" ) ).toInclude( "subAgents:" & char( 10 ) & "  - writer" );
+				} );
+
+				it( "takes the same capability flags as new, and the .env stubs they need", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					addSub( root, { model : "claude", with : "search", search : "brave", memory : "file", guard : "flag" } );
+					var yaml = fileRead( root & "/subagents/writer/Agent.yaml" );
+
+					expect( yaml ).toInclude( "tools:" );
+					expect( yaml ).toInclude( "memory: file" );
+					expect( yaml ).toInclude( "action: flag" );
+					expect( fileRead( root & "/.env" ) ).toInclude( "CLAUDE_API_KEY=" );
+				} );
+
+				it( "nests under another subagent with --parent, keeping an inline list inline", function() {
+					var root = newTempProject( "yaml-minimal" );
+					addSub( root, { model : "claude" } );
+					addSub( root, { model : "claude", parent : "writer" }, [ "subagent", "editor" ] );
+					addSub( root, { model : "claude", parent : "writer" }, [ "subagent", "checker" ] );
+
+					expect( fileRead( root & "/subagents/writer/Agent.yaml" ) ).toInclude( "subAgents:" & char( 10 ) & "  - editor" & char( 10 ) & "  - checker" );
+					expect( fileRead( root & "/Agent.yaml" ) ).notToInclude( "editor" );
+				} );
+
+				it( "builds and shows the nesting in inspect", function() {
+					var root = newTempProject( "yaml-minimal" );
+					addSub( root, { model : "mock/mock-model" } );
+					addSub( root, { model : "mock/mock-model", parent : "writer" }, [ "subagent", "editor" ] );
+
+					var report = new bxagents.models.report.ProjectReport().build( root );
+
+					expect( report.agent.children.map( c => c.name ) ).toBe( [ "writer" ] );
+					expect( report.agent.children[ 1 ].children.map( c => c.name ) ).toBe( [ "editor" ] );
+					expect( report.validation.errors ).toBeEmpty();
+				} );
+
+				it( "adds the files and tells how to wire it in when the parent is a class", function() {
+					var root = newTempProject( "full-project" );
+
+					var result = addSub( root, { model : "claude" } );
+
+					expect( fileExists( root & "/subagents/writer/Agent.yaml" ) ).toBeTrue();
+					expect( fileRead( root & "/Agent.bx" ) ).notToInclude( "writer" );
+					expect( result.message ).toInclude( "is a class, so it was not edited" );
+				} );
+
+				it( "needs a model without a terminal, and refuses a name that is taken or a missing parent", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					expect( function() {
+						addSub( root );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					addSub( root, { model : "claude" } );
+					expect( function() {
+						addSub( root, { model : "claude" } );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					expect( function() {
+						addSub( root, { model : "claude", parent : "ghost" }, [ "subagent", "other" ] );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+				} );
+
+				it( "runs the wizard stages, then reviews", function() {
+					var root = newTempProject( "yaml-minimal" );
+					var prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [ "Researches", "claude", "", [], "cache", [], "off", "create" ] );
+
+					var result = addVerb.run( { projectRoot : root, _positionals : [ "subagent", "researcher" ], _prompter : prompter, _interactive : true } );
+
+					expect( prompter.remaining() ).toBe( 0 );
+					expect( result.exitCode ).toBe( 0 );
+					expect( fileRead( root & "/subagents/researcher/Agent.yaml" ) ).toInclude( "description: Researches" );
+				} );
+
+			} );
+
+			describe( "add skill", function() {
+
+				private function addSkill( required string root, struct flags = {}, array positionals = [ "skill", "release-notes" ] ) {
+					var options = { projectRoot : root, _positionals : positionals, yes : true };
+					options.append( flags );
+					return addVerb.run( options );
+				}
+
+				it( "writes skills/<name>/SKILL.md with frontmatter and a body to fill in", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					var result = addSkill( root, { description : "Use this skill when writing release notes" } );
+					var source = fileRead( root & "/skills/release-notes/SKILL.md" );
+
+					expect( result.exitCode ).toBe( 0 );
+					expect( source ).toInclude( "name: release-notes" );
+					expect( source ).toInclude( "description: Use this skill when writing release notes" );
+					expect( source ).toInclude( "## Steps" );
+				} );
+
+				it( "quotes a description YAML would misread", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					addSkill( root, { description : "Use this skill when: the user asks for notes" } );
+
+					expect( fileRead( root & "/skills/release-notes/SKILL.md" ) ).toInclude( 'description: "Use this skill when: the user asks for notes"' );
+				} );
+
+				it( "is discovered by the next build and by inspect", function() {
+					var root = newTempProject( "yaml-minimal" );
+					addSkill( root, { description : "Use this skill when writing release notes" } );
+
+					new bxagents.models.cli.Build().run( { projectRoot : root } );
+					var report = new bxagents.models.report.ProjectReport().build( root );
+
+					expect( report.agent.skills ).toInclude( "release-notes" );
+					expect( fileExists( root & "/.build/app/skills/release-notes/SKILL.md" ) ).toBeTrue();
+					expect( report.validation.errors ).toBeEmpty();
+				} );
+
+				it( "leaves a placeholder description to fill in, and says so", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					var result = addSkill( root );
+
+					expect( fileRead( root & "/skills/release-notes/SKILL.md" ) ).toInclude( "TODO: Use this skill when" );
+					expect( result.message ).toInclude( "Replace the TODO description" );
+				} );
+
+				it( "refuses a bad name and one that exists", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					expect( function() {
+						addSkill( root, {}, [ "skill", "Release Notes" ] );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					addSkill( root );
+					expect( function() {
+						addSkill( root );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+				} );
+
+				it( "asks the name and when to use it", function() {
+					var root = newTempProject( "yaml-minimal" );
+					var prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [ "triage", "Use this skill when sorting bugs", "create" ] );
+
+					var result = addVerb.run( { projectRoot : root, _positionals : [ "skill" ], _prompter : prompter, _interactive : true } );
+
+					expect( prompter.remaining() ).toBe( 0 );
+					expect( result.exitCode ).toBe( 0 );
+					expect( fileExists( root & "/skills/triage/SKILL.md" ) ).toBeTrue();
 				} );
 
 			} );

@@ -1,0 +1,92 @@
+/**
+ * `add skill` - a custom skill of your own: skills/<name>/SKILL.md, in the Claude Agent
+ * Skills shape (frontmatter `name` and `description`, then instructions). It goes into
+ * source control with the project and into every build.
+ *
+ * Skills from skills.boxlang.io are a different thing: `bxAgents skills install` puts
+ * those under .agents/skills/ (out of source control, restored at build time). A skill
+ * here with the same name wins over an installed one.
+ *
+ * Skills are not wired to an agent: bx-ai loads every skill in the build and the model
+ * reads each description to decide when to use it, so the description is the part that
+ * matters.
+ */
+class {
+
+	static {
+		PLACEHOLDER = "TODO: Use this skill when ..."
+	}
+
+	struct function info() {
+		return { name : "skill", summary : "A custom skill of your own (skills/<name>/SKILL.md). Skills from skills.boxlang.io: bxAgents skills install" }
+	}
+
+	/**
+	 * @answers An Answers
+	 * @ctx The add context
+	 *
+	 * @return { name, description }
+	 */
+	struct function ask( required any answers, required struct ctx ) {
+		var a = arguments.answers.withPresets( { name : arguments.ctx.args.len() ? arguments.ctx.args[ 1 ] : "" } )
+		var taken = ( arguments.ctx.project.report.agent.skills ?: [] ).duplicate()
+		var root = arguments.ctx.root
+
+		var name = a.text(
+			key      = "name",
+			title    = "Skill name",
+			help     = "Its folder under skills/. Lowercase letters, digits and hyphens, e.g. release-notes.",
+			required = true,
+			validate = ( value ) => !reFind( "^[a-z][a-z0-9-]{0,63}$", value ) ? "Lowercase letters, digits and hyphens, starting with a letter (64 at most)." : ( taken.findNoCase( value ) || directoryExists( root & "/skills/" & value ) ? "A skill named #value# already exists." : "" )
+		)
+		var description = a.text(
+			key      = "description",
+			title    = "When should the agent use it?",
+			help     = "One sentence starting 'Use this skill when'. The model reads it to decide whether to load the skill.",
+			default  = a.interactive() ? "" : static.PLACEHOLDER,
+			required = true
+		)
+		return { name : name, description : description }
+	}
+
+	/**
+	 * @answers The answers from ask()
+	 * @ctx The add context
+	 * @changes A ChangeSet
+	 */
+	void function plan( required struct answers, required struct ctx, required any changes ) {
+		var yaml = new "models.wizard.YamlWriter@bxagents"()
+		var lines = [
+			"---",
+			"name: " & yaml.scalar( arguments.answers.name ),
+			"description: " & yaml.scalar( arguments.answers.description ),
+			"---",
+			"",
+			"## " & arguments.answers.name,
+			"",
+			"## When to use it",
+			"",
+			"Say when this applies and when it does not.",
+			"",
+			"## Steps",
+			"",
+			"1. The first thing to do.",
+			"2. What to check before finishing.",
+			""
+		]
+		arguments.changes.file( "skills/" & arguments.answers.name & "/SKILL.md", lines.toList( char( 10 ) ) )
+	}
+
+	/**
+	 * @return [ text ] what is left to do
+	 */
+	array function next( required struct answers, required struct ctx ) {
+		var steps = [ "Write the instructions in skills/#arguments.answers.name#/SKILL.md. Extra files can sit beside it." ]
+		if ( arguments.answers.description == static.PLACEHOLDER ) {
+			steps.append( "Replace the TODO description: it is what the model reads to decide when to load the skill." )
+		}
+		steps.append( "bxAgents inspect --section=skills" )
+		return steps
+	}
+
+}

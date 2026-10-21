@@ -7,7 +7,8 @@
  * interpretation of contents happens here (that's ProjectValidator, Phase 3).
  *
  * Conventions:
- *  - models/, gateways/: one entry per top-level `.bx`/`.json` file
+ *  - models/: one entry per top-level `.yaml`/`.yml`/`.json` file (or a legacy `.bx` class)
+ *  - gateways/: one entry per top-level `.bx`/`.json` file
  *  - tools/, mcp/, interceptors/: one entry per `.bx` file (tools/ recurses,
  *    matching BX AI's own `aiToolRegistry().scan()` convention - actual tool
  *    names are discovered by BX AI itself at runtime, not here)
@@ -37,9 +38,9 @@ class {
 		var scheduler = discoverScheduler( root )
 
 		return {
-			models        : listFiles( root & "/models", [ "bx", "json" ], "model" ),
+			models        : listFiles( root & "/models", [ "bx", "json", "yaml", "yml" ], "model" ),
 			tools         : listFiles( root & "/tools", [ "bx" ], "tool", true ),
-			skills        : listSkills( root & "/skills" ),
+			skills        : allSkills( root ),
 			subagents     : listSubfolders( root & "/subagents", "subagent" ),
 			gateways      : listFiles( root & "/gateways", [ "bx", "json" ], "gateway" ),
 			mcp           : listFiles( root & "/mcp", [ "bx" ], "mcp" ),
@@ -127,24 +128,45 @@ class {
 	}
 
 	/**
-	 * @dir The skills/ folder to scan
+	 * Your own skills (skills/) and the ones installed from the registry (.agents/skills/,
+	 * bx-ai's own default folder, restored by the build from .agents/skills.lock.json).
+	 * One of your own with the same name or folder wins over an installed one.
 	 *
-	 * @return An array of { name, path, type: "skill" } for every immediate subfolder containing a SKILL.md
+	 * @root The project root
+	 *
+	 * @return An array of { name, path, type: "skill", source : project|registry }
 	 */
-	private array function listSkills( required string dir ) {
+	private array function allSkills( required string root ) {
+		var mine = listSkills( arguments.root & "/skills", "project" )
+		var names = mine.map( s => s.name )
+		var folders = mine.map( s => getFileFromPath( s.path ) )
+		var installed = listSkills( arguments.root & "/.agents/skills", "registry" )
+			.filter( s => !names.contains( s.name ) && !folders.contains( getFileFromPath( s.path ) ) )
+		return mine.append( installed, true )
+	}
+
+	/**
+	 * @dir A skills folder to scan
+	 * @source Where these skills come from: project or registry
+	 *
+	 * @return An array of { name, path, type: "skill", source } for every immediate subfolder containing a SKILL.md
+	 */
+	private array function listSkills( required string dir, string source = "project" ) {
 		if ( !directoryExists( arguments.dir ) ) {
 			return []
 		}
 
+		var origin = arguments.source
 		return directoryList( arguments.dir, false, "path", "*", "asc", "dir" )
 			.filter( path => getFileFromPath( path ).left( 1 ) != "." )
 			.filter( path => fileExists( path & "/SKILL.md" ) )
 			.map( path => {
 				var folderName = getFileFromPath( path )
 				return {
-					name : deriveSkillName( path & "/SKILL.md", folderName ),
-					path : path,
-					type : "skill"
+					name   : deriveSkillName( path & "/SKILL.md", folderName ),
+					path   : path,
+					type   : "skill",
+					source : origin
 				}
 			} )
 	}

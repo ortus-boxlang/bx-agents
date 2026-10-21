@@ -132,6 +132,44 @@ class extends="testbox.system.BaseSpec" {
 				expect( routerContent ).toInclude( 'route( "/api/chat" ).toAi( "GeneratedAgent" )' );
 			} );
 
+			it( "carries a models/ entry's params, options and key variable into the agent's model", function() {
+				var projectRoot = createTempDirectory( prefix = "bxagents-pipeline-models-" );
+				tempDirs.append( projectRoot );
+				fileWrite( projectRoot & "/Agent.yaml", "name: modeled" & char( 10 ) & "model: researcher" & char( 10 ) );
+				fileWrite( projectRoot & "/instructions.md", "Be helpful." );
+				directoryCreate( projectRoot & "/models" );
+				fileWrite( projectRoot & "/models/researcher.yaml", "provider: openai" & char( 10 ) & "model: gpt-5-mini" & char( 10 ) & "apiKeyEnvVar: RESEARCH_KEY" & char( 10 ) & "params:" & char( 10 ) & "  temperature: 0.2" & char( 10 ) & "options:" & char( 10 ) & "  timeout: 60" & char( 10 ) );
+
+				var result = pipeline.build( projectRoot );
+				var factory = fileRead( result.appDir & "/agent/GeneratedAgentFactory.bx" );
+
+				expect( factory ).toInclude( 'provider : "openai"' );
+				expect( factory ).toInclude( 'apiKey : getSystemSetting( "RESEARCH_KEY" )' );
+				expect( factory ).toInclude( '"model" : "gpt-5-mini"' );
+				expect( factory ).toInclude( '"temperature" : 0.2' );
+				expect( factory ).toInclude( '"timeout" : 60' );
+			} );
+
+			it( "refuses a build whose models/ entry is wrong, naming the entry and the problem", function() {
+				var projectRoot = createTempDirectory( prefix = "bxagents-pipeline-models-" );
+				tempDirs.append( projectRoot );
+				fileWrite( projectRoot & "/Agent.yaml", "name: modeled" & char( 10 ) & "model: openai/gpt-5" & char( 10 ) );
+				fileWrite( projectRoot & "/instructions.md", "Be helpful." );
+				directoryCreate( projectRoot & "/models" );
+				fileWrite( projectRoot & "/models/broken.json", '{ "provider": "skynet", "temperature": 1, "params": { "apiKey": "sk-secret" } }' );
+
+				expect( function() {
+					pipeline.build( projectRoot );
+				} ).toThrow( "BxAgents.BuildValidationFailed" );
+				try {
+					pipeline.build( projectRoot );
+				} catch ( BxAgents.BuildValidationFailed e ) {
+					expect( e.message ).toInclude( "models/ entry [broken]" );
+					expect( e.message ).toInclude( "unknown provider [skynet]" );
+					expect( e.message ).toInclude( "unknown key [temperature]" );
+				}
+			} );
+
 			it( "puts a project's agent-scope interceptor where the generated Application.bx looks it up", function() {
 				var projectRoot = newTempProject( "full-project" );
 				var result = pipeline.build( projectRoot );
@@ -233,6 +271,125 @@ class extends="testbox.system.BaseSpec" {
 				var prodResult = pipeline.build( projectRoot, "production" );
 				var prodContent = fileRead( prodResult.appDir & "/agent/GeneratedAgentFactory.bx" );
 				expect( prodContent ).toInclude( 'model : "gpt-5-mini"' );
+			} );
+
+
+			describe( "skills installed from the registry", function() {
+
+				// An in-memory registry that answers like the real one: a miss is HTTP 200 with
+				// error:true in the body (measured against skills.boxlang.io), not a 404.
+				private function fakeRegistry( required struct skills ) {
+					var store = new bxagents.models.skills.SkillStore();
+					var calls = [];
+					var transport = function( method, url, params ) {
+						calls.append( method & " " & url.reReplace( "^https?://[^/]+", "" ) );
+						var path = url.reReplace( "^https?://[^/]+", "" );
+						var rows = skills.keyArray().map( function( key ) {
+							var s = skills[ key ];
+							return { owner : s.owner, repo : s.repo, skill_name : s.name, skill_slug : s.slug, skill_dir : s.path, description : s.description ?: "", audit_status : s.audit ?: "trusted", install_count : 3, file_sha : store.blobSha( s.content ) };
+						} );
+						if ( method == "POST" ) {
+							var hit = rows.filter( function( r ) {
+								return r.owner == params.owner && r.repo == params.repo && r.skill_slug == params.skill;
+							} );
+							if ( !hit.len() ) {
+								return { status : 200, body : jsonSerialize( { error : true, statusCode : 404, messages : [ "Skill not found" ], data : {} } ) };
+							}
+							if ( hit[ 1 ].audit_status == "block" ) {
+								return { status : 403, body : jsonSerialize( { error : true, statusCode : 403, messages : [ "This skill failed security audit and cannot be installed" ], data : {} } ) };
+							}
+							return { status : 200, body : jsonSerialize( { error : false, data : { skill : hit[ 1 ], content : skills[ hit[ 1 ].skill_name ].content, audit : { status : hit[ 1 ].audit_status } } } ) };
+						}
+						if ( path.reFind( "^/api/skills/[^/]+/[^/?]+$" ) ) {
+							return { status : 200, body : jsonSerialize( { error : false, data : rows.map( function( r ) {
+								return { owner : r.owner, repo : r.repo, name : r.skill_name, slug : r.skill_slug, path : r.skill_dir, description : r.description, audit_status : r.audit_status, sha : r.file_sha };
+							} ) } ) };
+						}
+						var q = ( params.search ?: "" ).lcase();
+						return { status : 200, body : jsonSerialize( { error : false, data : { data : rows.filter( function( r ) {
+							return !len( q ) || r.skill_name.lcase().find( q ) || r.description.lcase().find( q );
+						} ) } } ) };
+					};
+					return { transport : transport, calls : calls };
+				}
+
+				private struct function catalog() {
+					return {
+						"release-notes" : { owner : "acme", repo : "skills", name : "release-notes", slug : "writing~release-notes", path : "writing/release-notes", description : "Use this skill when writing release notes", content : "---" & char( 10 ) & "name: release-notes" & char( 10 ) & "description: Use this skill when writing release notes" & char( 10 ) & "---" & char( 10 ) & "Write them." & char( 10 ) },
+						"triage" : { owner : "acme", repo : "skills", name : "triage", slug : "ops~triage", path : "ops/triage", description : "Use this skill when sorting bugs", content : "---" & char( 10 ) & "name: triage" & char( 10 ) & "description: Use this skill when sorting bugs" & char( 10 ) & "---" & char( 10 ) & "Sort them." & char( 10 ) },
+						"shady" : { owner : "acme", repo : "skills", name : "shady", slug : "x~shady", path : "x/shady", description : "A blocked one", audit : "block", content : "bad" & char( 10 ) }
+					};
+				}
+
+				it( "restores what the lock lists and the disk lacks, then bundles it", function() {
+					var projectRoot = newTempProject( "yaml-inline-instructions" );
+					var reg = fakeRegistry( catalog() );
+					var client = new bxagents.models.skills.RegistryClient( "https://r.example", reg.transport );
+					new bxagents.models.skills.SkillInstaller( client ).install( projectRoot, [ "acme/skills/ops~triage" ] );
+					directoryDelete( projectRoot & "/.agents/skills", true );
+					reg.calls.clear();
+
+					var result = pipeline.setSkillsClient( client ).build( projectRoot );
+
+					expect( reg.calls ).toHaveLength( 1 );
+					expect( fileExists( result.appDir & "/skills/triage/SKILL.md" ) ).toBeTrue();
+				} );
+
+				it( "fetches nothing when everything the lock lists is already there", function() {
+					var projectRoot = newTempProject( "yaml-inline-instructions" );
+					var reg = fakeRegistry( catalog() );
+					var client = new bxagents.models.skills.RegistryClient( "https://r.example", reg.transport );
+					new bxagents.models.skills.SkillInstaller( client ).install( projectRoot, [ "acme/skills/ops~triage" ] );
+					reg.calls.clear();
+
+					pipeline.setSkillsClient( client ).build( projectRoot );
+
+					expect( reg.calls ).toBeEmpty();
+				} );
+
+				it( "fails the build, naming the skill, when a locked skill cannot be restored", function() {
+					var projectRoot = newTempProject( "yaml-inline-instructions" );
+					var client = new bxagents.models.skills.RegistryClient( "https://r.example", fakeRegistry( catalog() ).transport );
+					new bxagents.models.skills.SkillInstaller( client ).install( projectRoot, [ "acme/skills/ops~triage" ] );
+					directoryDelete( projectRoot & "/.agents/skills", true );
+					var empty = new bxagents.models.skills.RegistryClient( "https://r.example", fakeRegistry( {} ).transport );
+
+					var message = "";
+					try {
+						pipeline.setSkillsClient( empty ).build( projectRoot );
+					} catch ( BxAgents.SkillRestoreFailed e ) {
+						message = e.message;
+					}
+
+					expect( message ).toInclude( "Skill triage" );
+					expect( message ).toInclude( "skills remove triage" );
+				} );
+
+				it( "lets a skill of your own with the same name win over an installed one", function() {
+					var projectRoot = newTempProject( "yaml-inline-instructions" );
+					var client = new bxagents.models.skills.RegistryClient( "https://r.example", fakeRegistry( catalog() ).transport );
+					new bxagents.models.skills.SkillInstaller( client ).install( projectRoot, [ "acme/skills/ops~triage" ] );
+					directoryCreate( projectRoot & "/skills/triage" );
+					fileWrite( projectRoot & "/skills/triage/SKILL.md", "---" & char( 10 ) & "name: triage" & char( 10 ) & "description: mine" & char( 10 ) & "---" & char( 10 ) );
+
+					var result = pipeline.setSkillsClient( client ).build( projectRoot );
+					var discovered = new bxagents.models.build.ProjectDiscoverer().discover( projectRoot ).skills;
+
+					expect( fileRead( result.appDir & "/skills/triage/SKILL.md" ) ).toInclude( "description: mine" );
+					expect( discovered ).toHaveLength( 1 );
+					expect( discovered[ 1 ].source ).toBe( "project" );
+				} );
+
+				it( "marks installed skills as coming from the registry", function() {
+					var projectRoot = newTempProject( "yaml-inline-instructions" );
+					var client = new bxagents.models.skills.RegistryClient( "https://r.example", fakeRegistry( catalog() ).transport );
+					new bxagents.models.skills.SkillInstaller( client ).install( projectRoot, [ "acme/skills/ops~triage" ] );
+
+					var discovered = new bxagents.models.build.ProjectDiscoverer().discover( projectRoot ).skills;
+
+					expect( discovered.map( s => s.name & ":" & s.source ) ).toBe( [ "triage:registry" ] );
+				} );
+
 			} );
 
 		} );
