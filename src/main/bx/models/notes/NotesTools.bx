@@ -1,0 +1,68 @@
+/**
+ * The tools that let an agent keep its own notes: `remember` (save or correct) and `forget` (remove).
+ */
+class {
+
+	static {
+		NO_USER = "default"
+	}
+
+	/**
+	 * @provider An INotesProvider
+	 * @agentName The agent's name: the owner of the agent notes
+	 */
+	function init( required any provider, required string agentName ) {
+		variables.notesProvider = arguments.provider
+		variables.agentName = arguments.agentName
+		return this
+	}
+
+	/**
+	 * @return [ remember, forget ] as bx-ai tools, not entered in the global tool registry
+	 */
+	array function tools() {
+		var provider = variables.notesProvider
+		var agentName = variables.agentName
+		var ownerOf = ( scope, chatRequest ) => scope == "agent" ? agentName : ( len( chatRequest.getUserId() ?: "" ) ? chatRequest.getUserId() : static.NO_USER )
+
+		var remember = aiTool(
+			"remember",
+			"Save a short note that lasts across conversations. Use scope user for facts about the person (their name, how they like answers) and scope agent for lasting lessons about this job. Keep each note to one short line. To correct a note, pass its id in replaces. The answer says whether it was saved; if the notes are full it says so, and you must replace or forget a note first.",
+			( required string text, string scope = "user", string replaces = "" ) => {
+				var chatRequest = arguments._chatRequest
+				var noteScope = lCase( trim( arguments.scope ) )
+				if ( ![ "user", "agent" ].contains( noteScope ) ) {
+					return { ok : false, reason : "scope must be user or agent." }
+				}
+				var owner = ownerOf( noteScope, chatRequest )
+				return len( trim( arguments.replaces ) )
+					? provider.replace( noteScope, owner, trim( arguments.replaces ), arguments.text )
+					: provider.add( noteScope, owner, arguments.text, "agent", chatRequest.getThreadId() ?: "" )
+			},
+			false
+		)
+		remember.describeArg( "text", "The note: one short line." )
+		remember.describeArg( "scope", "user for facts about the person, agent for lessons about this job. Default user." )
+		remember.describeArg( "replaces", "The id of an existing note to correct. Leave out to save a new note." )
+
+		var forget = aiTool(
+			"forget",
+			"Remove a note by its id. Use it when the user asks you to forget something, or a note is no longer true.",
+			( required string id, string scope = "user" ) => {
+				var chatRequest = arguments._chatRequest
+				var noteScope = lCase( trim( arguments.scope ) )
+				if ( ![ "user", "agent" ].contains( noteScope ) ) {
+					return { ok : false, reason : "scope must be user or agent." }
+				}
+				var removed = provider.remove( noteScope, ownerOf( noteScope, chatRequest ), trim( arguments.id ) )
+				return removed ? { ok : true } : { ok : false, reason : "There is no note with id [#arguments.id#] in the #noteScope# notes." }
+			},
+			false
+		)
+		forget.describeArg( "id", "The id of the note, as shown in your notes." )
+		forget.describeArg( "scope", "user or agent. Default user." )
+
+		return [ remember, forget ]
+	}
+
+}

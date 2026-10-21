@@ -340,6 +340,72 @@ try {
 	println( "+ Confirmed: /__bxagents/stream streams #streamDeltas.len()# delta(s) that reassemble to [#streamResult.output#], with a threadId" )
 
 	// ------------------------------------------------------------------
+	// 4d. Run control beside toAi on the reserved route: handlers/AgentApi.bx.
+	//
+	// /events is /stream plus `tool` and `suspended` frames (the mock model
+	// calls no tool, so here it proves the frames the chat client depends on:
+	// thread first, chunks, done last). The others answer their input checks.
+	// ------------------------------------------------------------------
+	bx:http url="http://127.0.0.1:#port#/__bxagents/tools" method="GET" result="rcTools" timeout=30 {}
+	if ( rcTools.status_code != 200 || !rcTools.fileContent.findNoCase( '"success":true' ) ) {
+		throw(
+			type    = "BxAgents.RunControlToolsFailed",
+			message = "GET /__bxagents/tools did not answer (HTTP #rcTools.status_code#): #left( rcTools.fileContent ?: '', 400 )#"
+		)
+	}
+
+	bx:http url="http://127.0.0.1:#port#/__bxagents/agent" method="GET" result="rcAbout" timeout=30 {}
+	if ( rcAbout.status_code != 200 || !rcAbout.fileContent.findNoCase( '"name"' ) || !rcAbout.fileContent.findNoCase( '"capabilities"' ) ) {
+		throw(
+			type    = "BxAgents.RunControlAgentFailed",
+			message = "GET /__bxagents/agent did not describe the agent (HTTP #rcAbout.status_code#): #left( rcAbout.fileContent ?: '', 400 )#"
+		)
+	}
+
+	bx:http url="http://127.0.0.1:#port#/__bxagents/events" method="POST" result="rcEvents" timeout=60 {
+		bx:httpparam type="header" name="Content-Type" value="application/json";
+		bx:httpparam type="header" name="Accept" value="text/event-stream";
+		bx:httpparam type="body" value='{"input":"Hello there!"}';
+	}
+	rcBody = rcEvents.fileContent ?: ""
+	rcNames = reMatch( "(?m)^event: ([a-z]+)", rcBody ).map( line => line.replace( "event: ", "" ) )
+	if ( rcEvents.status_code != 200 || rcNames.isEmpty() || rcNames.first() != "thread" || rcNames.last() != "done" || !rcNames.contains( "chunk" ) ) {
+		throw(
+			type    = "BxAgents.RunControlEventsFailed",
+			message = "POST /__bxagents/events should stream thread, chunk(s), done (HTTP #rcEvents.status_code#, events: #rcNames.toList()#): #left( rcBody, 400 )#"
+		)
+	}
+
+	for ( rcCheck in [
+		{ verb : "POST", path : "/__bxagents/cancel", body : "{}" },
+		{ verb : "POST", path : "/__bxagents/steer", body : "{}" },
+		{ verb : "POST", path : "/__bxagents/resume", body : "{}" },
+		{ verb : "GET", path : "/__bxagents/pending", body : "" }
+	] ) {
+		bx:http url="http://127.0.0.1:#port##rcCheck.path#" method=rcCheck.verb result="rcAnswer" timeout=30 {
+			bx:httpparam type="header" name="Content-Type" value="application/json";
+			if ( len( rcCheck.body ) ) {
+				bx:httpparam type="body" value=rcCheck.body;
+			}
+		}
+		if ( rcAnswer.status_code != 400 || !rcAnswer.fileContent.findNoCase( "required" ) ) {
+			throw(
+				type    = "BxAgents.RunControlInputCheckFailed",
+				message = "#rcCheck.verb# #rcCheck.path# without its input should answer 400 ""... is required"" (HTTP #rcAnswer.status_code#): #left( rcAnswer.fileContent ?: '', 300 )#"
+			)
+		}
+	}
+
+	bx:http url="http://127.0.0.1:#port#/__bxagents/pending?threadId=no-such-thread" method="GET" result="rcPending" timeout=30 {}
+	if ( rcPending.status_code != 200 || !rcPending.fileContent.findNoCase( '"pending":false' ) ) {
+		throw(
+			type    = "BxAgents.RunControlPendingFailed",
+			message = "GET /__bxagents/pending for an unknown thread should say nothing is pending (HTTP #rcPending.status_code#): #left( rcPending.fileContent ?: '', 300 )#"
+		)
+	}
+	println( "+ Confirmed: run control answers on /__bxagents - events streams [#rcNames.toList()#], and cancel, steer, resume and pending check their input" )
+
+	// ------------------------------------------------------------------
 	// 5. An open web UI is ONE shared workspace, over real HTTP.
 	//
 	// /chat declares no accounts, so everything in it is shared on purpose:
@@ -519,6 +585,41 @@ if ( !len( expectedToken ) ) {
 		}
 		println( "+ Confirmed: the agentApi token gate ADMITS a request carrying the right x-bxagents-token" )
 
+		// The run-control routes are gated by their handler, with the same variable and header
+		bx:http url="http://127.0.0.1:#tokenPort#/__bxagents/tools" method="GET" result="rcAllowed" timeout=30 {
+			bx:httpparam type="header" name="x-bxagents-token" value=expectedToken;
+		}
+		if ( rcAllowed.status_code != 200 || !rcAllowed.fileContent.findNoCase( '"success":true' ) ) {
+			throw(
+				type    = "BxAgents.RunControlRejectedValidToken",
+				message = "GET /__bxagents/tools with the right token was not served (HTTP #rcAllowed.status_code#): #left( rcAllowed.fileContent ?: '', 300 )#"
+			)
+		}
+		for ( rcPath in [ "/__bxagents/tools", "/__bxagents/pending?threadId=x" ] ) {
+			for ( rcToken in [ "", expectedToken & "-wrong" ] ) {
+				bx:http url="http://127.0.0.1:#tokenPort##rcPath#" method="GET" result="rcDenied" timeout=30 {
+					bx:httpparam type="header" name="x-bxagents-token" value=rcToken;
+				}
+				if ( rcDenied.status_code != 401 ) {
+					throw(
+						type    = "BxAgents.RunControlTokenGateFailedOpen",
+						message = "GET #rcPath# with #len( rcToken ) ? 'a wrong' : 'no'# token should be a 401, got HTTP #rcDenied.status_code#: #left( rcDenied.fileContent ?: '', 300 )#"
+					)
+				}
+			}
+		}
+		bx:http url="http://127.0.0.1:#tokenPort#/__bxagents/events" method="POST" result="rcDeniedEvents" timeout=30 {
+			bx:httpparam type="header" name="Content-Type" value="application/json";
+			bx:httpparam type="body" value='{"input":"hi"}';
+		}
+		if ( rcDeniedEvents.status_code != 401 ) {
+			throw(
+				type    = "BxAgents.RunControlTokenGateFailedOpen",
+				message = "POST /__bxagents/events with no token should be a 401, got HTTP #rcDeniedEvents.status_code#: #left( rcDeniedEvents.fileContent ?: '', 300 )#"
+			)
+		}
+		println( "+ Confirmed: the run-control routes sit behind the same token gate (401 without or with a wrong token)" )
+
 		// Negative cases. A failing withCondition makes ColdBox skip the
 		// route entirely, so the caller gets a 404 - deliberately not a 403,
 		// which would confirm the endpoint exists.
@@ -566,5 +667,207 @@ if ( !len( expectedToken ) ) {
 		if ( fileExists( tokenConfigPath ) ) {
 			fileDelete( tokenConfigPath )
 		}
+	}
+}
+
+// ------------------------------------------------------------------
+// 7. Issued access tokens (agentApi.tokens), over real HTTP, on a third app.
+//
+// The tokens are made the way an operator makes them: in the app's own chat database, with the
+// module's TokenService, before the server starts. The server then has to find them through the
+// app's default datasource, accept the right one on every route (the toAi routes and the
+// run-control routes), refuse a wrong one, an expired one and a revoked one, and fail closed
+// when there is no header at all.
+// ------------------------------------------------------------------
+issuedAppDir = repoRoot & "tests/.coldbox-app-issued"
+issuedPort   = port + 2
+if ( directoryExists( issuedAppDir ) ) {
+	directoryDelete( issuedAppDir, true )
+}
+directoryCreate( issuedAppDir, true )
+directoryCopy( expandPath( "/fixtures" ) & "/e2e-agent-api-tokens", issuedAppDir, true )
+
+issuedBuild = new bxagents.models.build.BuildPipeline( "coldbox-integration-test" ).build( issuedAppDir )
+println( "+ Built issued-tokens fixture at: " & issuedBuild.appDir )
+
+// what an operator does: tokens in the database the app will open
+issuedStore = new bxagents.models.store.ChatStore( { driver : "sqlite", database : issuedBuild.appDir & "/data/chat.db" } )
+directoryCreate( issuedBuild.appDir & "/data", true, true )
+issuedStore.migrate()
+issuedTokens = new bxagents.models.store.TokenService( issuedStore )
+goodToken = issuedTokens.create( "laptop" ).token
+adminToken = issuedTokens.create( "boss", "admin" ).token
+expiredToken = issuedTokens.create( "stale", "chat", dateAdd( "n", -5, now() ) ).token
+revokedToken = issuedTokens.create( "gone" ).token
+issuedTokens.revoke( "gone" )
+
+issuedConfigPath = repoRoot & "tests/.coldbox-app-issued-miniserver.json"
+fileWrite( issuedConfigPath, jsonSerialize( {
+	port            : issuedPort,
+	host            : "127.0.0.1",
+	webRoot         : issuedBuild.appDir,
+	configPath      : configPath,
+	rewrites        : true,
+	rewriteFileName : "index.bxm",
+	healthCheck     : true
+} ) )
+issuedProcess = createObject( "java", "ortus.boxlang.bxagents.build.MiniServerLauncher" ).launch( jarPath, issuedConfigPath, false )
+
+try {
+	issuedBase = "http://127.0.0.1:#issuedPort#/__bxagents"
+
+	// readiness: poll with a good token until the run-control route answers
+	issuedDeadline = getTickCount() + 90000
+	issuedReady = {}
+	while ( getTickCount() < issuedDeadline ) {
+		try {
+			bx:http url="#issuedBase#/tools" method="GET" result="issuedReady" timeout=15 {
+				bx:httpparam type="header" name="x-bxagents-token" value=goodToken;
+			}
+			if ( ( issuedReady.status_code ?: 0 ) == 200 ) {
+				break
+			}
+		} catch ( any e ) {
+			// still starting
+		}
+		sleep( 1000 )
+	}
+	if ( ( issuedReady.status_code ?: 0 ) != 200 ) {
+		throw(
+			type    = "BxAgents.IssuedTokenRejectedValidToken",
+			message = "A valid issued token was not accepted on /__bxagents/tools (HTTP #issuedReady.status_code ?: 0#): #left( issuedReady.fileContent ?: '', 300 )#"
+		)
+	}
+
+	// a good token works on the toAi route, the run-control routes and with the admin scope
+	for ( issuedOk in [
+		{ label : "chat token on /invoke", token : goodToken, verb : "POST", path : "/invoke", body : '{"input":"hi"}', expect : '"success":true' },
+		{ label : "admin token on /invoke", token : adminToken, verb : "POST", path : "/invoke", body : '{"input":"hi"}', expect : '"success":true' },
+		{ label : "chat token on /agent", token : goodToken, verb : "GET", path : "/agent", body : "", expect : '"name"' }
+	] ) {
+		bx:http url="#issuedBase##issuedOk.path#" method=issuedOk.verb result="issuedAnswer" timeout=60 {
+			bx:httpparam type="header" name="Content-Type" value="application/json";
+			bx:httpparam type="header" name="x-bxagents-token" value=issuedOk.token;
+			if ( len( issuedOk.body ) ) {
+				bx:httpparam type="body" value=issuedOk.body;
+			}
+		}
+		if ( issuedAnswer.status_code != 200 || !issuedAnswer.fileContent.findNoCase( issuedOk.expect ) ) {
+			throw(
+				type    = "BxAgents.IssuedTokenRejectedValidToken",
+				message = "#issuedOk.label# was not served (HTTP #issuedAnswer.status_code#): #left( issuedAnswer.fileContent ?: '', 300 )#"
+			)
+		}
+	}
+	println( "+ Confirmed: issued tokens are accepted on the toAi route and the run-control routes" )
+
+	// everything else is a deliberate 401, on both kinds of route
+	for ( issuedNo in [
+		{ label : "no token", token : "" },
+		{ label : "a made-up token", token : "bxa_" & repeatString( "A", 43 ) },
+		{ label : "an expired token", token : expiredToken },
+		{ label : "a revoked token", token : revokedToken },
+		{ label : "a token without the prefix", token : "laptop" }
+	] ) {
+		for ( issuedRoute in [ { verb : "POST", path : "/invoke", body : '{"input":"hi"}' }, { verb : "GET", path : "/tools", body : "" } ] ) {
+			bx:http url="#issuedBase##issuedRoute.path#" method=issuedRoute.verb result="issuedDenied" timeout=30 {
+				bx:httpparam type="header" name="Content-Type" value="application/json";
+				if ( len( issuedNo.token ) ) {
+					bx:httpparam type="header" name="x-bxagents-token" value=issuedNo.token;
+				}
+				if ( len( issuedRoute.body ) ) {
+					bx:httpparam type="body" value=issuedRoute.body;
+				}
+			}
+			if ( issuedDenied.status_code != 401 ) {
+				throw(
+					type    = "BxAgents.IssuedTokenGateFailedOpen",
+					message = "#issuedRoute.verb# #issuedRoute.path# with #issuedNo.label# should be a 401, got HTTP #issuedDenied.status_code#: #left( issuedDenied.fileContent ?: '', 300 )#"
+				)
+			}
+		}
+	}
+	println( "+ Confirmed: no token, a made-up, an expired and a revoked token are all refused with a 401" )
+
+	// notes: a person keeps their own, any caller adds to the agent's, only an admin removes from it
+	function issuedCall( required string verb, required string path, required string token, string body = "" ) {
+		bx:http url="#issuedBase##arguments.path#" method=arguments.verb result="issuedNoteAnswer" timeout=30 {
+			bx:httpparam type="header" name="Content-Type" value="application/json";
+			bx:httpparam type="header" name="x-bxagents-token" value=arguments.token;
+			if ( len( arguments.body ) ) {
+				bx:httpparam type="body" value=arguments.body;
+			}
+		}
+		return { status : issuedNoteAnswer.status_code, body : issuedNoteAnswer.fileContent ?: "" }
+	}
+	issuedMine = issuedCall( "POST", "/notes", goodToken, '{"scope":"user","text":"Likes tea"}' )
+	issuedShared = issuedCall( "POST", "/notes", goodToken, '{"scope":"agent","text":"The repo uses Gradle"}' )
+	if ( issuedMine.status != 200 || issuedShared.status != 200 ) {
+		throw( type = "BxAgents.NotesNotServed", message = "Adding notes failed (HTTP #issuedMine.status# and #issuedShared.status#): #left( issuedMine.body, 200 )# #left( issuedShared.body, 200 )#" )
+	}
+	issuedList = jsonDeserialize( issuedCall( "GET", "/notes", goodToken ).body )
+	if ( issuedList.user.owner != "laptop" || issuedList.user.notes.len() != 1 || issuedList.agent.notes.len() != 1 ) {
+		throw( type = "BxAgents.NotesNotScoped", message = "The notes are not kept per caller: #jsonSerialize( issuedList )#" )
+	}
+	// someone else does not see the user notes of laptop, but sees the agent's
+	issuedOthers = jsonDeserialize( issuedCall( "GET", "/notes", adminToken ).body )
+	if ( issuedOthers.user.notes.len() != 0 || issuedOthers.agent.notes.len() != 1 ) {
+		throw( type = "BxAgents.NotesNotScoped", message = "Another caller sees the wrong notes: #jsonSerialize( issuedOthers )#" )
+	}
+	issuedAgentNote = issuedList.agent.notes[ 1 ].id
+	issuedForbidden = issuedCall( "POST", "/notes/remove", goodToken, '{"scope":"agent","id":"#issuedAgentNote#"}' )
+	if ( issuedForbidden.status != 403 ) {
+		throw( type = "BxAgents.NotesRemovalNotGated", message = "A chat token removed an agent note (HTTP #issuedForbidden.status#): #left( issuedForbidden.body, 200 )#" )
+	}
+	issuedRemoved = issuedCall( "POST", "/notes/remove", adminToken, '{"scope":"agent","id":"#issuedAgentNote#"}' )
+	if ( issuedRemoved.status != 200 ) {
+		throw( type = "BxAgents.NotesRemovalFailed", message = "An admin token could not remove an agent note (HTTP #issuedRemoved.status#): #left( issuedRemoved.body, 200 )#" )
+	}
+	if ( issuedCall( "GET", "/notes", "" ).status != 401 ) {
+		throw( type = "BxAgents.NotesGateFailedOpen", message = "The notes route answered without a token" )
+	}
+	println( "+ Confirmed: notes are per caller, any caller adds, only an admin removes from the agent, no token is a 401" )
+
+	// conversations: the list and the history belong to the caller that started them
+	issuedTurn = issuedCall( "POST", "/events", goodToken, '{"input":"plan my week","conversationId":"it-conv-1"}' )
+	if ( issuedTurn.status != 200 ) {
+		throw( type = "BxAgents.SessionTurnFailed", message = "A turn with a conversationId failed (HTTP #issuedTurn.status#): #left( issuedTurn.body, 200 )#" )
+	}
+	issuedMineList = jsonDeserialize( issuedCall( "GET", "/sessions", goodToken ).body )
+	issuedOthersList = jsonDeserialize( issuedCall( "GET", "/sessions", adminToken ).body )
+	if ( issuedMineList.sessions.len() != 1 || issuedMineList.sessions[ 1 ].title != "plan my week" || issuedOthersList.sessions.len() != 0 ) {
+		throw( type = "BxAgents.SessionsNotScoped", message = "The conversation list is not per caller: #jsonSerialize( issuedMineList )# / #jsonSerialize( issuedOthersList )#" )
+	}
+	if ( issuedCall( "GET", "/history?conversationId=it-conv-1", adminToken ).status != 404 ) {
+		throw( type = "BxAgents.SessionsNotScoped", message = "Another caller could read a conversation that is not theirs" )
+	}
+	if ( issuedCall( "GET", "/history?conversationId=it-conv-1", goodToken ).status != 200 ) {
+		throw( type = "BxAgents.SessionsHistoryFailed", message = "The owner could not read the history of their conversation" )
+	}
+	if ( issuedCall( "GET", "/sessions", "" ).status != 401 ) {
+		throw( type = "BxAgents.SessionsGateFailedOpen", message = "The conversation list answered without a token" )
+	}
+	println( "+ Confirmed: conversations are per caller, a stranger's conversation id is a 404, no token is a 401" )
+
+	// revoking takes effect on the next request, without a restart
+	issuedTokens.revoke( "laptop" )
+	bx:http url="#issuedBase#/tools" method="GET" result="issuedAfterRevoke" timeout=30 {
+		bx:httpparam type="header" name="x-bxagents-token" value=goodToken;
+	}
+	if ( issuedAfterRevoke.status_code != 401 ) {
+		throw(
+			type    = "BxAgents.IssuedTokenRevokeIgnored",
+			message = "A token revoked after the server started was still accepted (HTTP #issuedAfterRevoke.status_code#)"
+		)
+	}
+	println( "+ Confirmed: revoking a token takes effect on the running server" )
+} finally {
+	issuedProcess.destroy()
+	issuedProcess.waitFor( 5, createObject( "java", "java.util.concurrent.TimeUnit" ).SECONDS )
+	if ( issuedProcess.isAlive() ) {
+		issuedProcess.destroyForcibly()
+	}
+	if ( fileExists( issuedConfigPath ) ) {
+		fileDelete( issuedConfigPath )
 	}
 }

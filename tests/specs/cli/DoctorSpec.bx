@@ -56,6 +56,16 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.message ).toInclude( "loaded" );
 			} );
 
+			it( "warns when a stdio MCP server's program is not on the PATH, and says where a found one lives", function() {
+				var result = doctorVerb.run( { projectRoot : newTempProject( "doctor-mcp-programs" ) } );
+
+				expect( result.message ).toInclude( "MCP server [absent] starts [bxa-no-such-program-xyz], which is not on the PATH" );
+				if ( !server.os.name.findNoCase( "win" ) ) {
+					expect( result.message ).toInclude( "MCP server [present] starts [sh]" );
+				}
+				expect( result.checks.filter( c => c.message.findNoCase( "absent" ) )[ 1 ].status ).toBe( "warn" );
+			} );
+
 			it( "returns exit code 0 and a clean validation report for a valid project", function() {
 				var result = doctorVerb.run( { projectRoot : newTempProject( "full-project" ) } );
 

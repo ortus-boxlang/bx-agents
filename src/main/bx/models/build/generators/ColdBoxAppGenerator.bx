@@ -120,17 +120,30 @@ class {
 			arguments.discovery
 		)
 
+		// An agent that keeps notes needs the shared chat database even in a project with no web UI (and no
+		// issued tokens): it gets the default datasource, migrated at start.
+		var database = arguments.webUiDatabase
+		if ( agentFactory.source.find( "NotesWiring@bxagents" ) ) {
+			if ( database.isEmpty() ) {
+				database = { datasource : "bxagents", path : "./data/chat.db" }
+			}
+			var storeIsMigrated = startupStatements.some( statement => statement.find( "ChatStore@bxagents" ) || statement.find( "ChatDb" ) )
+			if ( !storeIsMigrated ) {
+				startupStatements.append( 'new "models.store.ChatStore@bxagents"( "" ).migrate()' )
+			}
+		}
+
 		fileWrite(
 			applicationPath,
 			renderApplication(
 				appName            : appName,
 				startupStatements  : startupStatements,
 				sessionManagement  : arguments.hasWebUi,
-				datasourceName     : arguments.webUiDatabase.datasource ?: "",
-				databasePath       : arguments.webUiDatabase.path ?: ""
+				datasourceName     : database.datasource ?: "",
+				databasePath       : database.path ?: ""
 			)
 		)
-		fileWrite( coldboxPath, renderColdboxConfig( appName, arguments.resolvedConfig.security ?: {}, arguments.hasEmailGateway, arguments.webUiDatabase.datasource ?: "" ) )
+		fileWrite( coldboxPath, renderColdboxConfig( appName, arguments.resolvedConfig.security ?: {}, arguments.hasEmailGateway, database.datasource ?: "" ) )
 		fileWrite( wireboxPath, renderWireBox( agentFactory.nodes ) )
 		fileWrite( agentFactoryPath, agentFactory.source )
 
@@ -220,7 +233,9 @@ class {
 			lines.append( "	// The web UI's SQLite store - see models/ChatDb.bx" )
 			lines.append( '	this.datasources[ "#bxLiteral( arguments.datasourceName )#" ] = {' )
 			lines.append( '		"driver"  : "sqlite",' )
-			lines.append( '		"database": expandPath( "#bxLiteral( arguments.databasePath )#" )' )
+			// BXAGENTS_DB, when set, names the file: `serve` sets it so the web chat and
+			// the terminal chat share one database in the project's data/ folder
+			lines.append( '		"database": getSystemSetting( "BXAGENTS_DB", expandPath( "#bxLiteral( arguments.databasePath )#" ) )' )
 			lines.append( "	}" )
 			// Also the app default. A generated app has exactly one datasource,
 			// so anything that runs a query without naming one should reach it
@@ -251,7 +266,7 @@ class {
 			// ChatDb because this is where the configured path literally is;
 			// ChatDb only ever knows the datasource NAME.
 			lines.append( "		// SQLite creates the db file, but not the directory holding it" )
-			lines.append( '		directoryCreate( getDirectoryFromPath( expandPath( "#bxLiteral( arguments.databasePath )#" ) ), true, true )' )
+			lines.append( '		directoryCreate( getDirectoryFromPath( getSystemSetting( "BXAGENTS_DB", expandPath( "#bxLiteral( arguments.databasePath )#" ) ) ), true, true )' )
 		}
 		// Named args deliberately, not positional - coldbox.system.Bootstrap's
 		// real init() signature is
@@ -822,6 +837,10 @@ class {
 		}
 
 		statements.append( renderAgentStatement( arguments.varName, arguments.nodePath, arguments.resolvedConfig, subAgentVarNames, arguments.discovery, thisName, arguments.defaultMemory, arguments.appDir, arguments.nodeRelativePath ) )
+		if ( structKeyExists( arguments.resolvedConfig, "notes" ) && isStruct( arguments.resolvedConfig.notes ) ) {
+			// the notes this agent keeps: a prompt block and the remember and forget tools
+			statements.append( 'new "models.notes.NotesWiring@bxagents"().attach( #arguments.varName#, #renderLiteral( arguments.resolvedConfig.notes )#, "#bxLiteral( thisName )#" )' )
+		}
 
 		return { statements : statements, nodes : nodes }
 	}
@@ -1434,10 +1453,11 @@ class {
 
 	/**
 	 * The `mcpServers` argument for one node's agent: a list where each entry is a
-	 * URL string, or a `{ url, token, headers, ... }` mapping for a server that
-	 * wants credentials. A mapping can hold ${env.NAME} placeholders, so the list is
-	 * resolved when the app starts (never at build time), and a secret stays in the
-	 * environment. No network connection is ever attempted here: reachability is a
+	 * URL string, a `{ url, token, headers, ... }` mapping for a web server that
+	 * wants credentials, or a `{ command, env, ... }` mapping for a server that runs
+	 * as a program. A mapping can hold ${env.NAME} placeholders, so the list is
+	 * resolved when the app starts (never at build time) by McpServerResolver, and a
+	 * secret stays in the environment. No network connection is ever attempted here: reachability is a
 	 * runtime concern. Each subagent has its own resolvedConfig, so this runs per node.
 	 *
 	 * @resolvedConfig A single node's own resolved config
@@ -1452,16 +1472,16 @@ class {
 
 		for ( var entry in entries ) {
 			if ( isStruct( entry ) ) {
-				if ( !len( entry.url ?: "" ) ) {
+				if ( !len( entry.url ?: "" ) && !entry.keyExists( "command" ) ) {
 					throw(
 						type    = "BxAgents.InvalidMcpServer",
-						message = "An mcpServers entry is missing a 'url'"
+						message = "An mcpServers entry is missing a 'url' or a 'command'"
 					)
 				}
 				// `name` only labels the entry in the file; bx-ai's connection settings do not take it
 				var connection = duplicate( entry )
 				connection.delete( "name" )
-				if ( connection.len() == 1 ) {
+				if ( connection.len() == 1 && connection.keyExists( "url" ) ) {
 					servers.append( connection.url )
 				} else {
 					servers.append( connection )
@@ -1483,7 +1503,7 @@ class {
 		if ( !needsResolving ) {
 			return "[ " & servers.map( item => isStruct( item ) ? renderLiteral( item ) : '"#bxLiteral( item )#"' ).toList( ", " ) & " ]"
 		}
-		return 'new "models.build.ToolSelector@bxagents"().resolvePlaceholders( #renderLiteral( servers )#, "mcpServers of #bxLiteral( arguments.name )#" )'
+		return 'new "models.build.McpServerResolver@bxagents"().resolve( #renderLiteral( servers )#, "mcpServers of #bxLiteral( arguments.name )#" )'
 	}
 
 	/**

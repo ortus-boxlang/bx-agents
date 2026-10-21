@@ -304,6 +304,47 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.errors.filter( e => e.findNoCase( "mcpServers" ) ) ).toBeEmpty();
 			} );
 
+			it( "rejects stdio and web mcpServers entries that are mixed up, mistyped or leak a secret", function() {
+				var text = validateFixture( "bad-mcp-stdio" ).errors.filter( e => e.findNoCase( "mcpServers" ) ).toList( char( 10 ) );
+
+				expect( text ).toInclude( "[both] has both a 'url' and a 'command'" );
+				expect( text ).toInclude( "[string-command]'s 'command' must be a list" );
+				expect( text ).toInclude( "[leaky-env] writes its env [X_API_TOKEN] in the file" );
+				expect( text ).notToInclude( "env [PLAIN]" );
+				expect( text ).toInclude( "[web-only-key] has an unknown key [token]" );
+				expect( text ).toInclude( "'allowedHosts' must be a list of host names" );
+				expect( text ).toInclude( "'redirects' must be true or false" );
+				expect( text ).toInclude( "[bad-web] has an unknown key [cwd]" );
+				expect( text ).toInclude( "'prefix' must be a non-empty text" );
+				expect( text ).toInclude( "'toolFilter' must be a list of tool names" );
+				expect( text ).toInclude( "'maxRestarts' must be a number" );
+			} );
+
+			it( "accepts stdio mcpServers and the web server controls", function() {
+				var projectRoot = expandPath( "/fixtures/with-mcp-stdio" );
+				var result = validator.validate( projectRoot, discoverer.discover( projectRoot ), resolver.resolve( projectRoot = projectRoot ) );
+
+				expect( result.errors.filter( e => e.findNoCase( "mcpServers" ) ) ).toBeEmpty();
+			} );
+
+			it( "rejects a notes block with an unknown key, a bad provider, bad limits and a bad flag", function() {
+				var text = validateFixture( "bad-notes" ).errors.filter( e => e.findNoCase( "notes" ) ).toList( char( 10 ) );
+
+				expect( text ).toInclude( "unknown key [colour]" );
+				expect( text ).toInclude( "'notes.provider' [not a class]" );
+				expect( text ).toInclude( "'notes.user' has an unknown key [unit]" );
+				expect( text ).toInclude( "'notes.user.limit' must be a whole number" );
+				expect( text ).toInclude( "'notes.agent.limit' must be a whole number" );
+				expect( text ).toInclude( "'notes.tool' must be true or false" );
+			} );
+
+			it( "accepts a notes block", function() {
+				var projectRoot = expandPath( "/fixtures/with-notes" );
+				var result = validator.validate( projectRoot, discoverer.discover( projectRoot ), resolver.resolve( projectRoot = projectRoot ) );
+
+				expect( result.errors.filter( e => e.findNoCase( "notes" ) ) ).toBeEmpty();
+			} );
+
 			it( "rejects a model reference that matches no models/ entry", function() {
 				var result = validateFixture( "missing-model-reference" );
 				expect( result.errors.filter( e => e.findNoCase( "does not match any models/ entry" ) ).len() ).toBeGT( 0 );

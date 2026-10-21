@@ -78,7 +78,7 @@ The `thread` event goes first because a response header cannot be read before th
 
 ## The generated API
 
-A `webui` entry mounts twenty actions under `<path>/api`, served by a generated `handlers/ChatUi.bx`:
+A `webui` entry mounts twenty-four actions under `<path>/api`, served by a generated `handlers/ChatUi.bx`:
 
 | Route | Purpose |
 | --- | --- |
@@ -102,6 +102,10 @@ A `webui` entry mounts twenty actions under `<path>/api`, served by a generated 
 | `GET /preferences` | This visitor's stored preferences, as `{ key: value }` |
 | `POST /preferences/set` | `{ key, value }` |
 | `POST /preferences/delete` | `{ key }` |
+| `GET /notes` | The visitor's notes and the agent's, with how full each is. `404` when the agent has no [`notes`](agent-yaml.md#notes) block |
+| `POST /notes/add` | `{ scope: "user" \| "agent", text }` |
+| `POST /notes/update` | `{ scope, id, text }` |
+| `POST /notes/remove` | `{ scope, id }` - the visitor's own notes only; a note of the agent is a `403` |
 
 Every one is scoped by ColdBox's `getUserSessionIdentifier()` as the `userId`. The first three keep `toAi()`'s exact shape and wire format.
 
@@ -237,8 +241,9 @@ The reason is a real gap, not a preference: **bx-ai's `IAiMemory` has no enumera
 | Piece | What it is |
 | --- | --- |
 | `bx-sqlite` | The JDBC driver, bundled with BxAgents as a nested module |
-| [`qb`](https://github.com/coldbox-modules/qb) | QueryBuilder for reads and writes, SchemaBuilder for the tables. No hand-written SQL anywhere |
-| `models/ChatDb.bx` | Generated. Owns the schema and hands out query builders |
+| [`qb`](https://github.com/coldbox-modules/qb) | QueryBuilder for the reads and writes of `ChatDb` |
+| `ChatStore` | In the BxAgents module, shared with the terminal chat. Owns the tables and their versions, in plain SQLite SQL |
+| `models/ChatDb.bx` | Generated. Hands out query builders; its `migrate()` calls `ChatStore` |
 | A start-up statement in `Application.bx` | Generated. Builds `ChatDb` at boot so migration runs then, not on whichever request touches the database first |
 
 The datasource is registered in `Application.bx` and the grammar is pinned in `config/ColdBox.bx`:
@@ -267,14 +272,16 @@ Both are optional to override, per entry:
 
 An absolute `database.path` **fails the build**: it's resolved with `expandPath()` inside the generated app, so an absolute path silently escapes the app directory and breaks a packaged `.bxa` deploy.
 
-**Schema is versioned and forward-only.** `ChatDb.migrate()` records what it has applied in a `bxagents_schema_version` table and applies only what's newer, so booting against an existing store is a no-op. v1 creates `conversations` and `preferences`; v2 adds `users`. Evolve it by adding a new `applyV<n>()` and bumping `SCHEMA_VERSION` - never by editing a migration that has shipped, because **SQLite cannot modify or drop a column** and qb's `SQLiteGrammar` throws `UnsupportedOperation` rather than pretending otherwise.
+**One file for the web chat and the terminal chat.** On a developer's machine, `bxAgents serve` starts the app with the environment variable `BXAGENTS_DB` set to `data/chat.db` in the project folder, and `bxAgents chat` opens the same file. The generated app uses `BXAGENTS_DB` when it is set and `database.path` otherwise, so a deployed app keeps its file inside the app unless you set `BXAGENTS_DB` there too (for example to a mounted volume). New projects git-ignore `data/chat.db*`. The file is in WAL mode, so the terminal chat and a running server can use it at the same time.
+
+**Schema is versioned and forward-only.** `ChatStore.migrate()` (called by `ChatDb.migrate()`) records what it has applied in a `bxagents_schema_version` table and applies only what's newer, so booting against an existing store is a no-op. v1 creates `conversations` and `preferences`; v2 adds `users`. Evolve it by adding a step to the store's migration list - never by editing a migration that has shipped, because **SQLite cannot modify or drop a column**. A database made by an earlier version of the generated app is recognised and left as it is.
 
 !!! warning
     **Two things here are counter-intuitive, and both were established the hard way against a real ColdBox boot rather than read off a docs page.**
 
     **The default-datasource setting is `this.datasource`, not `this.defaultDatasource`.** The registration key is plural (`this.datasources[ "name" ]`), so the singular default reads like it should match - and BoxLang accepts `this.defaultDatasource` silently and does nothing with it. The failure it produces names the very datasource you are trying to select (`No default datasource defined in the application or globally or in the query options. Registered datasources are: [bxagents]`), which reads as a broken selection mechanism rather than a misspelled setting.
 
-    **Name the datasource on every qb builder; do not rely on `moduleSettings.qb.defaultOptions`.** qb's `ModuleConfig.cfc` maps `QueryBuilder@qb` with `.initArg( name = "defaultOptions", value = settings.defaultOptions )` in `onLoad()`, so the setting *looks* like it covers you. It did not arrive in a real boot - the datasource was registered and the builder still had empty options. `ChatDb.query()` therefore calls `.mergeDefaultOptions( { datasource : static.DATASOURCE } )` on every builder it hands out. `SchemaBuilder@qb` never receives `defaultOptions` at all (qb maps it with `grammar` only), so every schema call passes `options: { datasource: ... }` itself.
+    **Name the datasource on every qb builder; do not rely on `moduleSettings.qb.defaultOptions`.** qb's `ModuleConfig.cfc` maps `QueryBuilder@qb` with `.initArg( name = "defaultOptions", value = settings.defaultOptions )` in `onLoad()`, so the setting *looks* like it covers you. It did not arrive in a real boot - the datasource was registered and the builder still had empty options. `ChatDb.query()` therefore calls `.mergeDefaultOptions( { datasource : static.DATASOURCE } )` on every builder it hands out.
 
     The `moduleSettings.qb` block is still generated - it is right for any other qb use in the app - but the generated store does not depend on it.
 
@@ -282,7 +289,7 @@ An absolute `database.path` **fails the build**: it's resolved with `expandPath(
 
     One more, unchanged: the datasource must be a **named** datasource, never an inline struct - qb's own `appendSqlComments()` types that argument as `string`, so a struct throws before any SQL runs.
 
-The grammar is the only SQLite-specific piece. Everything else goes through qb, so pointing this at Postgres or MySQL later is a grammar and datasource change rather than a rewrite.
+The store is SQLite. `ChatDb` reads and writes go through qb, but the tables are created by `ChatStore` with SQLite SQL, so another database later means a new `ChatStore`, not only a grammar change.
 
 ## Conversations and preferences
 
@@ -368,6 +375,14 @@ Assistant replies render through a deliberately small markdown subset - fenced a
 
 !!! info
     The composer is a `textarea` - **Enter** sends, **Shift+Enter** adds a newline, and it grows to about six lines before scrolling. A turn in flight can be halted with **Stop** (an `AbortController`), which keeps whatever already streamed rather than discarding it. The transcript only auto-scrolls when you're already at the bottom, so scrolling up to re-read something mid-stream doesn't yank you back down.
+
+## Notes
+
+When the agent has a [`notes`](agent-yaml.md#notes) block, the header shows a **Notes** button. It opens a panel with two tabs, *About you* and *About the agent*, how full each is (characters of the limit, and about how many tokens that adds to every conversation), and the notes with their ids. Add, edit in place and remove work on your own notes. The page and the terminal chat share the same database, so a note added in one shows in the other.
+
+- *About you* belongs to the same identity as your conversations: your account with [`users`](#users-and-sign-in), or the shared workspace without accounts.
+- *About the agent* is shared by everyone who uses the agent, so anyone using the page may add or edit one, but the page has no Remove button for it and `/notes/remove` answers `403`. Removing a note of the agent takes an admin [token](agent-bx.md#access-tokens-for-a-deployed-agent) on the agent's own `/__bxagents/notes/remove` route, or `bxAgents notes remove --scope=agent` where the agent runs.
+- Without a `notes` block the button is not shown and the routes answer `404`: `/info`'s `capabilities.notes` says which.
 
 ## What is not here yet
 

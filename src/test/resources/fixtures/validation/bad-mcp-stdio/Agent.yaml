@@ -1,0 +1,26 @@
+name: bad-mcp-stdio-agent
+model: openai/gpt-5
+mcpServers:
+  - name: both
+    url: https://a.example.com/mcp
+    command: [uvx, mcp-server-git]
+  - name: string-command
+    command: uvx mcp-server-git
+  - name: leaky-env
+    command: [uvx, mcp-server-x]
+    env:
+      X_API_TOKEN: literal-secret
+      PLAIN: fine
+  - name: web-only-key
+    command: [npx, -y, some-server]
+    token: ${env.T}
+  - name: bad-web
+    url: https://b.example.com/mcp
+    allowedHosts: []
+    redirects: maybe
+    cwd: /tmp
+  - name: bad-shared
+    command: [uvx, y]
+    prefix: ""
+    toolFilter: nope
+    maxRestarts: -1

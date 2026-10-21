@@ -12,7 +12,7 @@ _bxagents_complete() {
 	fi
 	local count=${#words[@]}
 	local cur="${words[count-1]}"
-	local verbs="add build chat clean deploy doctor hash-password inspect invoke new package serve skills test help"
+	local verbs="add build chat clean deploy doctor hash-password inspect invoke new notes package serve skills test token help"
 	local globals="--help -h --version -v"
 	COMPREPLY=()
 
@@ -48,17 +48,21 @@ _bxagents_complete() {
 			"new --destination") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"new --files") COMPREPLY=($(compgen -W "read all" -- "$part")) ;;
 			"new --guard") COMPREPLY=($(compgen -W "off flag block" -- "$part")) ;;
-			"new --mcp") COMPREPLY=($(compgen -W "github stripe notion atlassian cloudflare supabase" -- "$part")) ;;
+			"new --mcp") COMPREPLY=($(compgen -W "github stripe notion atlassian cloudflare supabase git" -- "$part")) ;;
 			"new --memory") COMPREPLY=($(compgen -W "cache file" -- "$part")) ;;
 			"new --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"new --search") COMPREPLY=($(compgen -W "http brave tavily exa google" -- "$part")) ;;
 			"new --template") COMPREPLY=($(compgen -W "minimal webui-chat slack-bot telegram-bot github-bot mcp-server scheduled multi-agent" -- "$part")) ;;
 			"new --web-auth") COMPREPLY=($(compgen -W "open key" -- "$part")) ;;
 			"new --with") COMPREPLY=($(compgen -W "time fetch search browse files media" -- "$part")) ;;
+			"notes --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
+			"notes --scope") COMPREPLY=($(compgen -W "user agent" -- "$part")) ;;
 			"package --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"serve --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"skills --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"test --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
+			"token --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
+			"token --scope") COMPREPLY=($(compgen -W "chat admin" -- "$part")) ;;
 		esac
 		return 0
 	fi
@@ -68,7 +72,7 @@ _bxagents_complete() {
 		case "$verb" in
 			add) flags="--agent= --args= --auth= --cors= --description= --direction= --dry-run --env= --files= --files-dir= --force --format= --function= --guard= --header= --max-tokens= --mcp= --memory= --model= --name= --no-tui --parent= --path= --points= --policy= --projectRoot= --prompt= --provider= --scope= --search= --server= --temperature= --timeout= --tools= --type= --url= --user= --users= --version= --when= --with= --yes" ;;
 			build) flags="--environment= --generatorVersion= --projectRoot= --verbose" ;;
-			chat) flags="--connect= --no-tui --port= --projectRoot= --record --server" ;;
+			chat) flags="--connect= --continue --no-tui --port= --projectRoot= --record --server --session= --token= --user=" ;;
 			clean) flags="--force --projectRoot=" ;;
 			deploy) flags="--destination= --name= --projectRoot= --target=" ;;
 			doctor) flags="--json --projectRoot=" ;;
@@ -76,10 +80,12 @@ _bxagents_complete() {
 			inspect) flags="--ascii --environment= --json --md --no-color --projectRoot= --section=" ;;
 			invoke) flags="--json --message= --port= --projectRoot= --server" ;;
 			new) flags="--app= --channels= --class --deploy= --description= --destination= --files= --files-dir= --forgebox= --guard= --host= --mcp= --memory= --model= --name= --no-tui --no-wizard --projectRoot= --region= --registry= --remote-path= --repo= --search= --skipInstall --template= --user= --web-auth= --with= --wizard --yes" ;;
+			notes) flags="--file= --id= --json --projectRoot= --scope= --text= --user=" ;;
 			package) flags="--projectRoot= --version=" ;;
 			serve) flags="--host= --port= --projectRoot=" ;;
 			skills) flags="--dry-run --json --limit= --projectRoot= --registry=" ;;
 			test) flags="--projectRoot=" ;;
+			token) flags="--expires= --json --name= --projectRoot= --scope=" ;;
 		esac
 		COMPREPLY=($(compgen -W "$flags $globals" -- "$cur"))
 		if (( ${#COMPREPLY[@]} == 1 )) && [[ "${COMPREPLY[0]}" == *= ]]; then

@@ -468,12 +468,18 @@ class extends="testbox.system.BaseSpec" {
 					} ).toThrow( "BxAgents.MissingAnswer" );
 				} );
 
-				it( "says a server that needs a local program is not available yet", function() {
+				it( "adds a server that runs as a local program as a command, with what it needs on the PATH", function() {
 					var root = newTempProject( "yaml-minimal" );
 
-					expect( function() {
-						addMcp( root, {}, [ "mcp", "client", "git" ] );
-					} ).toThrow( "BxAgents.InvalidAnswer" );
+					var result = addMcp( root, {}, [ "mcp", "client", "git" ] );
+					var yaml = fileRead( root & "/Agent.yaml" );
+
+					expect( yaml ).toInclude( "name: git" );
+					expect( yaml ).toInclude( "command:" );
+					expect( yaml ).toInclude( "uvx" );
+					expect( yaml ).notToInclude( "url:" );
+					expect( result.message ).toInclude( "runs as a program on this machine" );
+					expect( new bxagents.models.cli.Build().run( { projectRoot : root } ).exitCode ).toBe( 0 );
 				} );
 
 				it( "writes into a subagent's own Agent.yaml with --agent", function() {

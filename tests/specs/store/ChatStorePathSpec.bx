@@ -1,0 +1,24 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "ChatStorePath", function() {
+
+			it( "puts the database in the project's data folder", function() {
+				var path = new bxagents.models.store.ChatStorePath();
+				if ( len( getSystemSetting( "BXAGENTS_DB", "" ) ) ) {
+					return;
+				}
+
+				expect( path.forProject( "/work/my-agent" ) ).toBe( "/work/my-agent/data/chat.db" );
+				expect( path.forProject( "/work/my-agent/" ) ).toBe( "/work/my-agent/data/chat.db" );
+				expect( path.forProject( "C:\work\my-agent" ) ).toBe( "C:/work/my-agent/data/chat.db" );
+			} );
+
+			it( "names the variable serve sets", function() {
+				expect( new bxagents.models.store.ChatStorePath().variableName() ).toBe( "BXAGENTS_DB" );
+			} );
+
+		} );
+	}
+
+}

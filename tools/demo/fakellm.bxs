@@ -18,8 +18,9 @@
  *   }
  *
  * A rule matches when the user's last message contains `when` (any case); the first match wins. With
- * `tool`, the model first calls the tool whose name contains that text (if the agent has one), then
- * answers once the tool's result is back; `{tool}` in the answer is replaced by that result.
+ * `tool`, the model first calls the tool whose name contains that text (if the agent has one), with the
+ * arguments in `args` (an object, default none), then answers once the tool's result is back; `{tool}` in
+ * the answer is replaced by that result and `{system}` by the system message the agent sent.
  *
  * Stop it with Ctrl+C, or POST /__stop.
  */
@@ -47,7 +48,7 @@ function text( required any content ) {
 }
 
 /**
- * @return { tool : name to call or "", answer : text, result : the tool's output if it is back }
+ * @return { tool : name to call or "", answer : text, args : the tool's arguments }
  */
 function plan( required struct payload ) {
 	var messages = arguments.payload.messages ?: []
@@ -78,7 +79,16 @@ function plan( required struct payload ) {
 	}
 	var answer = rule.answer ?: ( script.default ?: "" )
 	var result = afterTool ? replace( trim( text( last.content ?: "" ) ), '"', "", "all" ) : ""
-	return { tool : tool, answer : replace( answer, "{tool}", result, "all" ) }
+	var system = ""
+	for ( var m in messages ) {
+		if ( ( m.role ?: "" ) == "system" ) {
+			system = text( m.content ?: "" )
+			break
+		}
+	}
+	answer = replace( answer, "{tool}", result, "all" )
+	answer = replace( answer, "{system}", system, "all" )
+	return { tool : tool, answer : answer, args : rule.args ?: {} }
 }
 
 function frame( required struct delta, any finish = "" ) {
@@ -106,7 +116,7 @@ function handle( required any exchange ) {
 		"index"    : 0,
 		"id"       : "call_demo",
 		"type"     : "function",
-		"function" : { "name" : p.tool, "arguments" : "{}" }
+		"function" : { "name" : p.tool, "arguments" : jsonSerialize( p.args ) }
 	} ] : []
 
 	if ( !( payload.stream ?: false ) ) {

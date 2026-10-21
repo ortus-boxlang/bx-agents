@@ -47,6 +47,7 @@ class {
 		validateToolOptions( arguments.resolvedConfig, errors, "The project's own agent definition" )
 		validateModelProvider( arguments.resolvedConfig, arguments.discovery, errors )
 		validateAgentApi( arguments.resolvedConfig, errors )
+		validateNotes( arguments.resolvedConfig, errors )
 
 		return { errors : errors, warnings : warnings }
 	}
@@ -734,11 +735,11 @@ class {
 
 		var agentApi = arguments.resolvedConfig.agentApi
 		if ( !isStruct( agentApi ) ) {
-			arguments.errors.append( "Agent.bx's 'agentApi' must be a struct of { enabled, tokenEnvVar }" )
+			arguments.errors.append( "Agent.bx's 'agentApi' must be a struct of { enabled, tokenEnvVar, tokens }" )
 			return
 		}
 
-		var validKeys = [ "enabled", "tokenEnvVar" ]
+		var validKeys = [ "enabled", "tokenEnvVar", "tokens" ]
 		for ( var key in agentApi ) {
 			if ( !validKeys.contains( key ) ) {
 				arguments.errors.append( "Agent.bx's 'agentApi' has an unknown key [#key#] - valid keys: #validKeys.toList( ", " )#" )
@@ -749,12 +750,80 @@ class {
 			arguments.errors.append( "Agent.bx's 'agentApi.enabled' must be a boolean" )
 		}
 
+		if ( structKeyExists( agentApi, "tokens" ) && !isBoolean( agentApi.tokens ) ) {
+			arguments.errors.append( "Agent.bx's 'agentApi.tokens' must be a boolean" )
+		}
+
 		if ( structKeyExists( agentApi, "tokenEnvVar" ) ) {
 			var tokenEnvVar = agentApi.tokenEnvVar
 			if ( !isSimpleValue( tokenEnvVar ) ) {
 				arguments.errors.append( "Agent.bx's 'agentApi.tokenEnvVar' must be the NAME of an environment variable, as a string" )
 			} else if ( len( trim( tokenEnvVar ) ) && !reFind( "^[A-Za-z_][A-Za-z0-9_]*$", trim( tokenEnvVar ) ) ) {
 				arguments.errors.append( "Agent.bx's 'agentApi.tokenEnvVar' [#tokenEnvVar#] is not a valid environment variable name - it names a variable holding the token, never the token itself" )
+			}
+		}
+	}
+
+	/**
+	 * Validates the optional `notes` block: the notes an agent keeps about a person (scope user) and about
+	 * its own job (scope agent). Absent means off.
+	 *
+	 *   notes:
+	 *     provider: sqlite          # built in, or a class implementing models.notes.INotesProvider
+	 *     user:  { limit: 1400 }    # characters in the prompt
+	 *     agent: { limit: 2200 }
+	 *     tool: true                # the remember and forget tools
+	 *     approveForget: true       # a person approves what the agent forgets
+	 *
+	 * @resolvedConfig The resolved config struct from AgentConfigResolver.resolve() - only `notes` is used
+	 * @errors Accumulator array - append() any validation errors found
+	 */
+	private void function validateNotes( required struct resolvedConfig, required array errors ) {
+		if ( !structKeyExists( arguments.resolvedConfig, "notes" ) ) {
+			return
+		}
+		var notes = arguments.resolvedConfig.notes
+		if ( !isStruct( notes ) ) {
+			arguments.errors.append( "Agent.bx's 'notes' must be a struct of { provider, user, agent, tool, approveForget }" )
+			return
+		}
+		var validKeys = [ "provider", "user", "agent", "tool", "approveForget" ]
+		for ( var key in notes ) {
+			if ( !validKeys.contains( key ) ) {
+				arguments.errors.append( "Agent.bx's 'notes' has an unknown key [#key#] - valid keys: #validKeys.toList( ", " )#" )
+			}
+		}
+		if ( structKeyExists( notes, "provider" ) ) {
+			var provider = notes.provider
+			if ( !isSimpleValue( provider ) || !len( trim( provider ) ) ) {
+				arguments.errors.append( "Agent.bx's 'notes.provider' must be sqlite or the path of a class that implements INotesProvider" )
+			} else if ( trim( provider ) != "sqlite" && !reFind( "^[A-Za-z_][A-Za-z0-9_.]*$", trim( provider ) ) ) {
+				arguments.errors.append( "Agent.bx's 'notes.provider' [#provider#] is neither sqlite nor a class path such as my.notes.Provider" )
+			}
+		}
+		for ( var scope in [ "user", "agent" ] ) {
+			if ( !structKeyExists( notes, scope ) ) {
+				continue
+			}
+			if ( !isStruct( notes[ scope ] ) ) {
+				arguments.errors.append( "Agent.bx's 'notes.#scope#' must be a struct such as { limit: 1400 }" )
+				continue
+			}
+			for ( var key in notes[ scope ] ) {
+				if ( key != "limit" ) {
+					arguments.errors.append( "Agent.bx's 'notes.#scope#' has an unknown key [#key#] - the only key is limit" )
+				}
+			}
+			if ( structKeyExists( notes[ scope ], "limit" ) ) {
+				var limit = notes[ scope ].limit
+				if ( !isNumeric( limit ) || limit != int( limit ) || limit < 100 || limit > 20000 ) {
+					arguments.errors.append( "Agent.bx's 'notes.#scope#.limit' must be a whole number of characters from 100 to 20000 (it is a cost in every prompt)" )
+				}
+			}
+		}
+		for ( var flag in [ "tool", "approveForget" ] ) {
+			if ( structKeyExists( notes, flag ) && !isBoolean( notes[ flag ] ) ) {
+				arguments.errors.append( "Agent.bx's 'notes.#flag#' must be true or false" )
 			}
 		}
 	}
@@ -872,16 +941,19 @@ class {
 	}
 
 	/**
-	 * Each `mcpServers` entry is a URL, or a mapping that can carry the credentials the
-	 * server wants. A secret is never written in the file: `token` and `password` must
-	 * be an ${env.NAME} placeholder, resolved when the app starts.
+	 * Each `mcpServers` entry is a URL, a mapping for a web server (`url`), or a mapping for a server that
+	 * runs as a program on this machine (`command`). A secret is never written in the file: `token`,
+	 * `password` and any stdio `env` value that looks like a secret must be an ${env.NAME} placeholder,
+	 * resolved when the app starts.
 	 *
 	 * @resolvedConfig The resolved config struct from AgentConfigResolver.resolve() - only `mcpServers` is used
 	 * @errors Accumulator array - append() any validation errors found
 	 */
 	private void function validateMcpServers( required struct resolvedConfig, required array errors ) {
 		var mcpServers = arguments.resolvedConfig.mcpServers ?: []
-		var validKeys = [ "url", "name", "token", "headers", "timeout", "user", "password" ]
+		var sharedKeys = [ "name", "timeout", "prefix", "toolFilter" ]
+		var webKeys = [ "url", "token", "headers", "user", "password", "allowedHosts", "redirects", "maxResponseBytes", "handshake" ]
+		var stdioKeys = [ "command", "env", "cwd", "inheritEnv", "maxRestarts" ]
 
 		if ( !isArray( mcpServers ) ) {
 			arguments.errors.append( "Agent.bx's 'mcpServers' must be an array" )
@@ -890,33 +962,108 @@ class {
 
 		for ( var entry in mcpServers ) {
 			if ( isStruct( entry ) ) {
-				if ( !len( entry.url ?: "" ) ) {
-					arguments.errors.append( "An mcpServers entry is missing a 'url'" )
+				var hasUrl = len( entry.url ?: "" ) > 0
+				var hasCommand = entry.keyExists( "command" )
+				var label = "The mcpServers entry [#entry.name ?: ( hasCommand && isArray( entry.command ) && entry.command.len() ? entry.command[ 1 ] : ( entry.url ?: '?' ) )#]"
+				if ( hasUrl && hasCommand ) {
+					arguments.errors.append( "#label# has both a 'url' and a 'command'. A web server has a url, a program has a command" )
+					continue
 				}
-				var label = "The mcpServers entry [#entry.name ?: entry.url ?: '?'#]"
+				if ( !hasUrl && !hasCommand ) {
+					arguments.errors.append( "An mcpServers entry is missing a 'url' (web server) or a 'command' (program)" )
+					continue
+				}
+				var validKeys = duplicate( sharedKeys ).append( hasCommand ? stdioKeys : webKeys, true )
 				for ( var key in entry ) {
 					if ( !validKeys.containsNoCase( key ) ) {
 						arguments.errors.append( "#label# has an unknown key [#key#]. Valid keys: #validKeys.toList( ', ' )#" )
 					}
 				}
-				for ( var secretKey in [ "token", "password" ] ) {
-					if ( entry.keyExists( secretKey ) && !( isSimpleValue( entry[ secretKey ] ) && find( "${env.", entry[ secretKey ] ) ) ) {
-						arguments.errors.append( "#label# writes its [#secretKey#] in the file. Name an environment variable instead, for example #secretKey#: ${env.MY_#ucase( secretKey )#}" )
-					}
-				}
-				if ( entry.keyExists( "headers" ) && !isStruct( entry.headers ) ) {
-					arguments.errors.append( "#label#'s 'headers' must be a mapping of header name to value" )
-				}
 				if ( entry.keyExists( "timeout" ) && !isNumeric( entry.timeout ) ) {
 					arguments.errors.append( "#label#'s 'timeout' must be a number of milliseconds" )
+				}
+				if ( entry.keyExists( "prefix" ) && !( isSimpleValue( entry.prefix ) && len( entry.prefix ) ) ) {
+					arguments.errors.append( "#label#'s 'prefix' must be a non-empty text" )
+				}
+				if ( entry.keyExists( "toolFilter" ) && !( isArray( entry.toolFilter ) && entry.toolFilter.every( name => isSimpleValue( name ) && len( name ) ) ) ) {
+					arguments.errors.append( "#label#'s 'toolFilter' must be a list of tool names" )
+				}
+				if ( hasCommand ) {
+					validateStdioMcpServer( entry, label, arguments.errors )
+				} else {
+					validateWebMcpServer( entry, label, arguments.errors )
 				}
 			} else if ( isSimpleValue( entry ) ) {
 				if ( !len( entry ) ) {
 					arguments.errors.append( "An mcpServers entry is an empty string" )
 				}
 			} else {
-				arguments.errors.append( "An mcpServers entry must be a URL string or a { url, name } struct" )
+				arguments.errors.append( "An mcpServers entry must be a URL string, a { url } struct or a { command } struct" )
 			}
+		}
+	}
+
+	/**
+	 * @entry A web server entry (it has a url)
+	 * @label The entry's name for messages
+	 * @errors Accumulator array
+	 */
+	private void function validateWebMcpServer( required struct entry, required string label, required array errors ) {
+		var entry = arguments.entry
+		for ( var secretKey in [ "token", "password" ] ) {
+			if ( entry.keyExists( secretKey ) && !( isSimpleValue( entry[ secretKey ] ) && find( "${env.", entry[ secretKey ] ) ) ) {
+				arguments.errors.append( "#arguments.label# writes its [#secretKey#] in the file. Name an environment variable instead, for example #secretKey#: ${env.MY_#ucase( secretKey )#}" )
+			}
+		}
+		if ( entry.keyExists( "headers" ) && !isStruct( entry.headers ) ) {
+			arguments.errors.append( "#arguments.label#'s 'headers' must be a mapping of header name to value" )
+		}
+		if ( entry.keyExists( "allowedHosts" ) && !( isArray( entry.allowedHosts ) && entry.allowedHosts.len() && entry.allowedHosts.every( host => isSimpleValue( host ) && len( host ) ) ) ) {
+			arguments.errors.append( "#arguments.label#'s 'allowedHosts' must be a list of host names, for example [ api.example.com, *.example.com ]" )
+		}
+		if ( entry.keyExists( "redirects" ) && !isBoolean( entry.redirects ) ) {
+			arguments.errors.append( "#arguments.label#'s 'redirects' must be true or false" )
+		}
+		if ( entry.keyExists( "handshake" ) && !isBoolean( entry.handshake ) ) {
+			arguments.errors.append( "#arguments.label#'s 'handshake' must be true or false" )
+		}
+		if ( entry.keyExists( "maxResponseBytes" ) && !( isNumeric( entry.maxResponseBytes ) && entry.maxResponseBytes >= 0 ) ) {
+			arguments.errors.append( "#arguments.label#'s 'maxResponseBytes' must be a number of characters, 0 or more" )
+		}
+	}
+
+	/**
+	 * @entry A stdio server entry (it has a command)
+	 * @label The entry's name for messages
+	 * @errors Accumulator array
+	 */
+	private void function validateStdioMcpServer( required struct entry, required string label, required array errors ) {
+		var entry = arguments.entry
+		if ( !( isArray( entry.command ) && entry.command.len() && entry.command.every( word => isSimpleValue( word ) && len( word ) ) ) ) {
+			arguments.errors.append( "#arguments.label#'s 'command' must be a list: the program, then its arguments, for example [ uvx, mcp-server-git ]" )
+		}
+		if ( entry.keyExists( "env" ) ) {
+			if ( !isStruct( entry.env ) ) {
+				arguments.errors.append( "#arguments.label#'s 'env' must be a mapping of variable name to value" )
+			} else {
+				for ( var name in entry.env ) {
+					var value = entry.env[ name ]
+					if ( !isSimpleValue( value ) ) {
+						arguments.errors.append( "#arguments.label#'s env [#name#] must be text" )
+					} else if ( reFindNoCase( "(KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)", name ) && len( value ) && !find( "${env.", value ) ) {
+						arguments.errors.append( "#arguments.label# writes its env [#name#] in the file. Name an environment variable instead, for example #name#: ${env.#name#}" )
+					}
+				}
+			}
+		}
+		if ( entry.keyExists( "cwd" ) && !( isSimpleValue( entry.cwd ) && len( entry.cwd ) ) ) {
+			arguments.errors.append( "#arguments.label#'s 'cwd' must be a folder" )
+		}
+		if ( entry.keyExists( "inheritEnv" ) && !isBoolean( entry.inheritEnv ) ) {
+			arguments.errors.append( "#arguments.label#'s 'inheritEnv' must be true or false" )
+		}
+		if ( entry.keyExists( "maxRestarts" ) && !( isNumeric( entry.maxRestarts ) && entry.maxRestarts >= 0 ) ) {
+			arguments.errors.append( "#arguments.label#'s 'maxRestarts' must be a number, 0 or more" )
 		}
 	}
 

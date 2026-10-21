@@ -1,0 +1,168 @@
+/**
+ * `notes` CLI verb - the notes of an agent, kept in the project's shared chat database
+ * (`data/chat.db`, or the file named by BXAGENTS_DB).
+ *
+ *   bxAgents notes list [--scope=user|agent] [--user=NAME] [--json]
+ *   bxAgents notes add --text="Prefers short answers" [--scope=user|agent] [--user=NAME]
+ *   bxAgents notes edit --id=<id> --text="new text" [--scope=...] [--user=NAME]
+ *   bxAgents notes remove --id=<id> [--scope=...] [--user=NAME]
+ *   bxAgents notes stats [--user=NAME] [--json]
+ *   bxAgents notes export [--file=notes.json]
+ *   bxAgents notes import --file=notes.json
+ *
+ * The scope defaults to the notes about the user, the user to the operating system user. The notes of the
+ * agent belong to the agent's name in Agent.yaml. Limits come from the agent's `notes` block.
+ */
+class {
+
+	static {
+		ACTIONS = [ "list", "add", "edit", "remove", "stats", "export", "import" ]
+	}
+
+	/**
+	 * @options { projectRoot (required), _positional (the action), scope, user, text, id, file, json }
+	 */
+	struct function run( struct options = {} ) {
+		var projectRoot = trim( arguments.options.projectRoot ?: "" )
+		if ( !len( projectRoot ) ) {
+			throw( type = "BxAgents.MissingProjectRoot", message = "`notes` requires a project root" )
+		}
+		var action = lCase( trim( arguments.options._positional ?: "" ) )
+		if ( !static.ACTIONS.contains( action ) ) {
+			throw( type = "BxAgents.UnknownNotesAction", message = "`notes` needs one of: #static.ACTIONS.toList( ', ' )# - for example `bxAgents notes list`." )
+		}
+
+		var root = projectRoot.reReplace( "[\/]+$", "" )
+		var file = new "models.store.ChatStorePath@bxagents"().forProject( root )
+		directoryCreate( getDirectoryFromPath( file ), true, true )
+		var store = new "models.store.ChatStore@bxagents"( { driver : "sqlite", database : file } )
+		store.migrate()
+
+		var config = notesConfig( root )
+		var provider = new "models.notes.SqliteNotesProvider@bxagents"( store, { user : ( config.user ?: {} ).limit ?: 1400, agent : ( config.agent ?: {} ).limit ?: 2200 } )
+		var user = len( trim( arguments.options.user ?: "" ) ) ? trim( arguments.options.user ) : ( createObject( "java", "java.lang.System" ).getProperty( "user.name" ) ?: "default" )
+		var agentName = agentNameOf( root )
+
+		var scope = lCase( trim( arguments.options.scope ?: "user" ) )
+		if ( !listFindNoCase( "user,agent", scope ) ) {
+			throw( type = "BxAgents.InvalidNotesScope", message = "--scope must be user or agent." )
+		}
+		var owner = scope == "agent" ? agentName : user
+		var report = new "models.notes.NotesReport@bxagents"()
+
+		switch ( action ) {
+			case "list":
+				return list( provider, arguments.options, user, agentName, report )
+			case "stats":
+				var all = { provider : "sqlite", user : provider.stats( "user", user ), agent : provider.stats( "agent", agentName ) }
+				return { exitCode : 0, message : ( arguments.options.json ?: false ) ? jsonSerialize( all ) : report.statsLines( all ).toList( char( 10 ) ) }
+			case "add":
+				var text = trim( arguments.options.text ?: "" )
+				if ( !len( text ) ) {
+					throw( type = "BxAgents.MissingNoteText", message = "`notes add` needs --text=<the note>" )
+				}
+				return outcome( provider.add( scope, owner, text, "cli" ), "Noted (#scope#)." )
+			case "edit":
+				var id = trim( arguments.options.id ?: "" )
+				var newText = trim( arguments.options.text ?: "" )
+				if ( !len( id ) || !len( newText ) ) {
+					throw( type = "BxAgents.MissingNoteText", message = "`notes edit` needs --id=<id> and --text=<the new text>" )
+				}
+				return outcome( provider.replace( scope, owner, id, newText ), "Updated." )
+			case "remove":
+				var gone = trim( arguments.options.id ?: "" )
+				if ( !len( gone ) ) {
+					throw( type = "BxAgents.MissingNoteId", message = "`notes remove` needs --id=<id> (see `bxAgents notes list`)." )
+				}
+				return provider.remove( scope, owner, gone )
+					? { exitCode : 0, message : "Removed." }
+					: { exitCode : 1, message : "There is no #scope# note with id [#gone#]." }
+			case "export":
+				return exportNotes( provider, user, agentName, arguments.options )
+			case "import":
+				return importNotes( provider, user, agentName, arguments.options )
+		}
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private struct function list( required any provider, required struct options, required string user, required string agentName, required any report ) {
+		var wanted = trim( arguments.options.scope ?: "" )
+		var scopes = len( wanted ) ? [ lCase( wanted ) ] : [ "user", "agent" ]
+		var shown = {}
+		var lines = []
+		for ( var scope in scopes ) {
+			var owner = scope == "agent" ? arguments.agentName : arguments.user
+			shown[ scope ] = { owner : owner, notes : arguments.provider.list( scope, owner ), stats : arguments.provider.stats( scope, owner ) }
+			lines.append( arguments.report.listLines( scope == "agent" ? "Agent notes (#owner#)" : "Notes about #owner#", shown[ scope ].notes, shown[ scope ].stats ), true )
+		}
+		return { exitCode : 0, message : ( arguments.options.json ?: false ) ? jsonSerialize( shown ) : lines.toList( char( 10 ) ) }
+	}
+
+	private struct function outcome( required struct result, required string done ) {
+		return ( arguments.result.ok ?: false )
+			? { exitCode : 0, message : arguments.done }
+			: { exitCode : 1, message : arguments.result.reason ?: "That did not work." }
+	}
+
+	private struct function exportNotes( required any provider, required string user, required string agentName, required struct options ) {
+		var data = {
+			"user"  : { "owner" : arguments.user, "notes" : arguments.provider.list( "user", arguments.user ).map( n => n.text ) },
+			"agent" : { "owner" : arguments.agentName, "notes" : arguments.provider.list( "agent", arguments.agentName ).map( n => n.text ) }
+		}
+		var json = jsonSerialize( data )
+		var target = trim( arguments.options.file ?: "" )
+		if ( !len( target ) ) {
+			return { exitCode : 0, message : json }
+		}
+		fileWrite( target, json )
+		return { exitCode : 0, message : "Exported #data.user.notes.len()# user and #data.agent.notes.len()# agent notes to #target#" }
+	}
+
+	/**
+	 * Adds the notes of an export. A note that is already there is skipped, and a note that does not fit the limit is reported.
+	 */
+	private struct function importNotes( required any provider, required string user, required string agentName, required struct options ) {
+		var source = trim( arguments.options.file ?: "" )
+		if ( !len( source ) || !fileExists( source ) ) {
+			throw( type = "BxAgents.MissingNotesFile", message = "`notes import` needs --file=<an export made by `notes export`>" )
+		}
+		var data = jsonDeserialize( fileRead( source ) )
+		var added = 0
+		var refused = []
+		for ( var scope in [ "user", "agent" ] ) {
+			var owner = scope == "agent" ? arguments.agentName : arguments.user
+			for ( var text in ( ( data[ scope ] ?: {} ).notes ?: [] ) ) {
+				var result = arguments.provider.add( scope, owner, text, "import" )
+				if ( result.ok ?: false ) {
+					added++
+				} else {
+					refused.append( "#scope#: #left( text, 40 )# (#result.reason ?: 'refused'#)" )
+				}
+			}
+		}
+		return { exitCode : refused.len() ? 1 : 0, message : ( [ "Imported #added# note#added == 1 ? '' : 's'#." ].append( refused, true ) ).toList( char( 10 ) ) }
+	}
+
+	/**
+	 * @return The `notes` block of the project's Agent.yaml, empty when there is none
+	 */
+	private struct function notesConfig( required string root ) {
+		try {
+			var agent = new "models.build.AgentYamlLoader@bxagents"().load( arguments.root & "/Agent.yaml" ).config
+			return isStruct( agent.notes ?: "" ) ? agent.notes : {}
+		} catch ( any e ) {
+			return {}
+		}
+	}
+
+	private string function agentNameOf( required string root ) {
+		try {
+			var agent = new "models.build.AgentYamlLoader@bxagents"().load( arguments.root & "/Agent.yaml" ).config
+			return agent.name ?: listLast( arguments.root, "/" )
+		} catch ( any e ) {
+			return listLast( arguments.root, "/" )
+		}
+	}
+
+}

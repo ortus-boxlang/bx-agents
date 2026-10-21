@@ -36,12 +36,13 @@ environments:
 | `tools` | lista de strings | Tools de módulos que recibe este agente, como `item@module` o `*@module`. Ver [Tools](#tools). |
 | `toolOptions` | mapping | Opciones de las tools de un módulo, con el nombre del módulo como clave. Ver [Opciones de tools](#opciones-de-tools). |
 | `subAgents` | lista de strings | Nombres de carpetas hermanas bajo el `subagents/` del proyecto raíz. Ver [subagents/](subagents.md). |
-| `mcpServers` | lista | Servidores MCP remotos - cada entrada es un string de URL, o un mapa con `url`, `name` y las credenciales que pida el servidor (`token`, `headers`, `timeout`). Ver [mcp/](mcp.md). |
+| `mcpServers` | lista | Servidores MCP - cada entrada es un string de URL, un mapa con `url` y las credenciales que pida el servidor (`token`, `headers`, `timeout`), o un mapa con `command` para un servidor que se ejecuta como programa (`env`, `cwd`, `prefix`, `toolFilter`). Ver [mcp/](mcp.md). |
 | `security` | mapa | Se reenvía tal cual a los ajustes del módulo `bxai` de la app generada; el `SecurityDirector` de bx-ai lo convierte en middleware de guardarraíles. |
 | `memory` | string o mapa | La memoria de conversación del agente. Un string suelto es el tipo (`cache`); un mapa es `{ type, ...config }` y se pasa a `aiMemory()`. |
 | `checkpointer` | mapa | `{ type: cache\|file\|jdbc, ...config }`. Por defecto `{ type: cache }` si se omite. |
 | `gatewaySession` | mapa | `{ policy, maxQueueDepth }`, ambos opcionales. Ver [Agent.bx](agent-bx.md) para los valores; son idénticos. |
 | `agentApi` | mapa | `{ enabled, tokenEnvVar }`, ambos opcionales. Ver [La ruta de agente siempre activa](agent-bx.md#la-ruta-de-agente-siempre-activa). |
+| `notes` | mapa | Notas cortas que el agente guarda sobre el usuario y sobre su propio trabajo. `notes: {}` las activa con los valores por defecto. Ver [Notas](#notas). |
 | `environments` | mapa | Sobreescrituras por entorno. Ver [Entornos](#entornos). |
 
 Son los mismos ajustes que devuelve el `configure()` de un `Agent.bx`, así que todo el comportamiento documentado para ellos aplica sin cambios.
@@ -115,6 +116,40 @@ toolOptions:
 - `now@bxai`, `httpGet@bxai`, `webSearch@bxai` y el resto de tools registradas de bx-ai siguen funcionando igual, con o sin `toolOptions.bxai`. `*@bxai` incluye las tools de archivos una vez definido `allowedPaths`.
 - Una entrada puede ser `${env.NAME}` para tomar una carpeta del entorno.
 - `bxAgents new` puede escribir todo esto por ti: ver [el asistente de new](../guides/new-wizard.md).
+
+## Notas
+
+Un agente puede guardar notas cortas: cosas sobre el usuario ("prefiere respuestas cortas") y cosas sobre su propio trabajo ("el repo usa Gradle"). Están desactivadas hasta que existe el bloque:
+
+```yaml
+notes: {}
+```
+
+```yaml
+notes:
+  provider: sqlite        # integrado. O una clase que implemente INotesProvider
+  user:  { limit: 1400 }  # caracteres de notas del usuario que entran en el prompt
+  agent: { limit: 2200 }  # caracteres de notas del agente
+  tool: true              # da al agente las tools remember y forget (por defecto true)
+  approveForget: true     # una persona aprueba lo que el agente olvida (por defecto true)
+```
+
+| Clave | Por defecto | Notas |
+|---|---|---|
+| `provider` | `sqlite` | `sqlite` guarda una fila por nota en la [base de datos de chat compartida](web-ui.md#el-almacén-sqlite). Cualquier otro valor es el nombre de una clase que implementa `INotesProvider` y se crea con `( config, agentName )`, para un servicio de notas propio. |
+| `user.limit` | 1400 | Caracteres de notas sobre el usuario. Cada usuario tiene las suyas. |
+| `agent.limit` | 2200 | Caracteres de notas sobre el trabajo del agente. Compartidas por todos los que hablan con él. |
+| `tool` | `true` | `remember` (guardar o reemplazar una nota) y `forget` (quitar una). Sin ellas, las notas son de solo lectura para el agente y las gestiona una persona. |
+| `approveForget` | `true` | Una ejecución que quiere `forget` se detiene para [aprobación](../cli-reference.md#chat), como cualquier tool que la necesite. Guardar una nota no necesita ninguna. |
+
+Cómo funciona:
+
+- Los dos alcances entran en el prompt del sistema como listas cortas, de la más antigua a la más reciente, dentro de sus límites. Se leen una vez por conversación, así que el prompt no cambia de un turno a otro (la caché de prompts del proveedor sigue funcionando) y una nota guardada ahora aparece desde la siguiente conversación.
+- Una nota es una línea de 500 caracteres como máximo. Nada se descarta en silencio: una nota que no cabe en el límite se rechaza, y se le dice al agente cuánto llenas están las notas para que reemplace u olvide una más antigua.
+- **Quién es un usuario**: en `bxAgents chat` es el usuario del sistema operativo (`--user=NOMBRE` lo cambia); en un servidor es el nombre del [token de acceso](agent-bx.md#tokens-de-acceso-para-un-agente-desplegado) que usó quien llama, o `api` cuando la ruta está abierta. El alcance del agente pertenece al `name` del agente.
+- El chat de terminal, el chat web y el servidor comparten un archivo, `data/chat.db` (ver [el almacén SQLite](web-ui.md#el-almacén-sqlite)).
+
+Gestiónalas tú con `/remember` y `/notes` en [`chat`](../cli-reference.md#chat), con [`bxAgents notes`](../cli-reference.md#notes) desde una shell, o por HTTP con las [rutas de control de ejecución](agent-bx.md#control-de-ejecución).
 
 ## Instrucciones
 

@@ -4,11 +4,14 @@
  * ChatScreen of the bxagents.tui package, or a stand-in in tests) and a session
  * (InProcessSession or HttpSession).
  *
- * The screen:  readInput(), printUser( text ), print( style, text ), printMarkdown( text ),
+ * The screen:  chooseKeys( title, lines, choices, keys, footer ), ask( title, help, initial ), readInput(), printUser( text ), print( style, text ), printMarkdown( text ),
  *              banner( agent, model, mode ), beginTurn(), push( event ), endTurn(),
  *              cancelRequested(), takeSteer(), choose( title, lines, choices ), copy( text ), close()
- * The session: agentName(), modelName(), mode(), tools(), newThread(),
+ * The session: agentName(), modelName(), mode(), tools(), newThread(), notes(), sessions(), resumeSession( ref ),
+ *              clear(), compact(), info(),
  *              send( text, hooks ), resume( decision, hooks ), close()
+ *              notes() is an object with available(), list( scope ), add( scope, text ), update( id, text ),
+ *              remove( id ), stats()
  *
  * Commands start with a slash. Everything else is a message to the agent.
  */
@@ -19,6 +22,13 @@ class {
 			{ name : "/help", hint : "show these commands" },
 			{ name : "/new", hint : "start a new conversation" },
 			{ name : "/tools", hint : "list the agent's tools" },
+			{ name : "/sessions", hint : "list your recent conversations" },
+			{ name : "/resume", hint : "go back to one: /resume 2, or /resume <id> (no number: the last one)" },
+			{ name : "/clear", hint : "forget this conversation's messages, keep the conversation" },
+			{ name : "/compact", hint : "shorten this conversation: older messages become a summary" },
+			{ name : "/info", hint : "about this chat: agent, model, conversation, notes, database" },
+			{ name : "/remember", hint : "keep a note about you: /remember I prefer short answers" },
+			{ name : "/notes", hint : "open the notes screen, or: list, add [agent] <text>, edit <id> <text>, remove <id>, stats" },
 			{ name : "/copy", hint : "copy the last answer to the clipboard" },
 			{ name : "/save", hint : "save the conversation to a file: /save notes.md" },
 			{ name : "/record", hint : "record the screen as a .cast file: /record [file], /record stop" },
@@ -61,15 +71,20 @@ class {
 	 * Runs until the user leaves.
 	 *
 	 * @screen The chat screen
+	 * @resume A conversation to open first: "last" for the most recent, or a number or id; blank starts a new one
 	 * @record False for no recording; true or a file name to record from the first line (a relative name is
 	 *         kept in the working directory, true picks one)
 	 */
-	void function run( required any screen, any record = false ) {
+	void function run( required any screen, any record = false, string resume = "" ) {
 		variables.screen = arguments.screen
 		if ( !isBoolean( arguments.record ) || arguments.record ) {
 			startRecording( isBoolean( arguments.record ) ? "" : arguments.record )
 		}
 		variables.screen.banner( variables.session.agentName(), variables.session.modelName(), variables.session.mode() )
+		if ( len( arguments.resume ) ) {
+			// "last" is the most recent conversation
+			openConversation( arguments.resume == "last" ? "" : arguments.resume )
+		}
 		while ( true ) {
 			var input = variables.screen.readInput()
 			if ( isNull( input ) ) {
@@ -115,6 +130,35 @@ class {
 				var tools = variables.session.tools()
 				variables.screen.print( "muted", tools.len() ? "Tools: " & tools.toList( ", " ) : "No tool list is available in this mode." )
 				break
+			case "/sessions":
+				sessions()
+				break
+			case "/resume":
+				resumeConversation( rest )
+				break
+			case "/clear":
+				var cleared = variables.session.clear()
+				if ( cleared.ok ?: false ) {
+					variables.transcript = []
+					variables.screen.print( "ok", "Cleared. The agent no longer remembers this conversation." )
+				} else {
+					variables.screen.print( "warn", cleared.reason ?: "Could not clear." )
+				}
+				break
+			case "/compact":
+				compactConversation()
+				break
+			case "/info":
+				for ( var line in variables.session.info() ) {
+					variables.screen.print( "muted", left( line[ 1 ] & ":" & repeatString( " ", 14 ), 14 ) & line[ 2 ] )
+				}
+				break
+			case "/remember":
+				notes( "add " & rest )
+				break
+			case "/notes":
+				notes( rest )
+				break
 			case "/copy":
 				var last = lastAnswer()
 				if ( len( last ) ) {
@@ -134,6 +178,153 @@ class {
 				variables.screen.print( "warn", "Unknown command #name#. Type /help." )
 		}
 		return true
+	}
+
+	/**
+	 * Opens the conversation a chat started in, when it was asked to continue one.
+	 *
+	 * @reference "" for the most recent, or a number or id
+	 */
+	private void function openConversation( required string reference ) {
+		var outcome = variables.session.resumeSession( arguments.reference )
+		if ( !( outcome.ok ?: false ) ) {
+			variables.screen.print( "warn", outcome.reason ?: "Could not open that conversation." )
+			return
+		}
+		showHistory( outcome )
+	}
+
+	/**
+	 * /resume [number or id]
+	 */
+	private void function resumeConversation( required string rest ) {
+		openConversation( arguments.rest )
+	}
+
+	/**
+	 * Shows what was said in a conversation that was just opened, and keeps it as the transcript so /save and /copy work.
+	 */
+	private void function showHistory( required struct opened ) {
+		variables.transcript = []
+		variables.screen.print( "ok", "Resumed" & ( len( arguments.opened.title ?: "" ) ? ": " & arguments.opened.title : "." ) )
+		if ( !arguments.opened.history.len() ) {
+			variables.screen.print( "muted", "No messages were kept for it, so the agent starts without the earlier conversation." )
+			return
+		}
+		for ( var entry in arguments.opened.history ) {
+			if ( entry.role == "you" ) {
+				variables.screen.printUser( entry.text )
+			} else {
+				variables.screen.printMarkdown( entry.text )
+			}
+			variables.transcript.append( entry )
+		}
+	}
+
+	/**
+	 * /sessions: the recent conversations, numbered for /resume.
+	 */
+	private void function sessions() {
+		var recent = variables.session.sessions()
+		if ( !recent.len() ) {
+			variables.screen.print( "muted", "No conversations yet." )
+			return
+		}
+		var number = 0
+		for ( var row in recent ) {
+			number++
+			variables.screen.print( "muted", right( "  " & number, 3 ) & "  " & left( row.title ?: "", 60 ) & "  " & ( row.messageCount ?: 0 ) & " messages  " & dateTimeFormat( row.updatedAt, "yyyy-mm-dd HH:nn" ) & "  " & left( row.id, 8 ) )
+		}
+		variables.screen.print( "muted", "Type /resume <number> to go back to one." )
+	}
+
+	private void function compactConversation() {
+		var outcome = variables.session.compact()
+		if ( !( outcome.available ?: false ) ) {
+			variables.screen.print( "warn", "This agent's memory has no summary model, so there is nothing to compact with. Set summaryProvider and summaryModel on its memory." )
+		} else if ( outcome.compacted ) {
+			variables.screen.print( "ok", "Compacted: #outcome.before# messages became #outcome.after#." )
+		} else {
+			variables.screen.print( "muted", "Nothing to compact: #outcome.before# messages, already short." )
+		}
+	}
+
+	/**
+	 * /notes with nothing opens the notes screen; list, add, edit, remove and stats work in place.
+	 *
+	 * @rest What follows the command
+	 */
+	private void function notes( required string rest ) {
+		var kept = variables.session.notes()
+		if ( !kept.available() ) {
+			variables.screen.print( "warn", kept.why() )
+			return
+		}
+		var report = new "models.notes.NotesReport@bxagents"()
+		var verb = lCase( listFirst( arguments.rest, " " ) )
+		var after = trim( mid( arguments.rest, len( verb ) + 1, len( arguments.rest ) ) )
+		try {
+			switch ( verb ) {
+				case "":
+					new "models.cli.chat.NotesMode@bxagents"( variables.screen, kept, variables.session.userId(), variables.session.agentName() ).run()
+					break
+				case "list":
+					var stats = kept.stats()
+					for ( var line in report.listLines( "Your notes", kept.list( "user" ), stats.user ) ) {
+						variables.screen.print( "muted", line )
+					}
+					for ( var line in report.listLines( "Agent notes", kept.list( "agent" ), stats.agent ) ) {
+						variables.screen.print( "muted", line )
+					}
+					break
+				case "stats":
+					for ( var line in report.statsLines( kept.stats() ) ) {
+						variables.screen.print( "muted", line )
+					}
+					break
+				case "add":
+					var scope = "user"
+					if ( lCase( listFirst( after, " " ) ) == "agent" ) {
+						scope = "agent"
+						after = trim( mid( after, 6, len( after ) ) )
+					}
+					if ( !len( after ) ) {
+						variables.screen.print( "warn", "Usage: /remember <text>, or /notes add [agent] <text>" )
+						break
+					}
+					showOutcome( kept.add( scope, after ), "Noted." )
+					break
+				case "edit":
+					var id = listFirst( after, " " )
+					var text = trim( mid( after, len( id ) + 1, len( after ) ) )
+					if ( !len( id ) || !len( text ) ) {
+						variables.screen.print( "warn", "Usage: /notes edit <id> <new text>" )
+						break
+					}
+					showOutcome( kept.update( id, text ), "Updated." )
+					break
+				case "remove":
+				case "delete":
+					if ( !len( after ) ) {
+						variables.screen.print( "warn", "Usage: /notes remove <id>" )
+						break
+					}
+					showOutcome( kept.remove( after ), "Removed." )
+					break
+				default:
+					variables.screen.print( "warn", "Usage: /notes [list], add [agent] <text>, edit <id> <text>, remove <id>, stats" )
+			}
+		} catch ( any e ) {
+			variables.screen.print( "warn", "Notes: " & e.message )
+		}
+	}
+
+	private void function showOutcome( required struct outcome, required string done ) {
+		if ( arguments.outcome.ok ?: false ) {
+			variables.screen.print( "ok", arguments.done )
+		} else {
+			variables.screen.print( "warn", arguments.outcome.reason ?: "That did not work." )
+		}
 	}
 
 	/**

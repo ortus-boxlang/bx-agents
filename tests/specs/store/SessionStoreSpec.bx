@@ -1,0 +1,93 @@
+/**
+ * The conversation list in the shared chat database.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "SessionStore", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-sessions-" );
+				variables.sessions = new bxagents.models.store.SessionStore( bxagents.models.store.ChatStore::forFile( dir & "/chat.db" ) );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "creates a conversation on the first turn, titled by the first message", function() {
+				expect( sessions.touch( "alice", "c1", "  What is   the plan for" & char( 10 ) & "the week? " ) ).toBeTrue();
+
+				var row = sessions.byId( "alice", "c1" );
+				expect( row.title ).toBe( "What is the plan for the week?" );
+				expect( row.messageCount ).toBe( 2 );
+			} );
+
+			it( "counts later turns and keeps the first title", function() {
+				sessions.touch( "alice", "c1", "first" );
+				sessions.touch( "alice", "c1", "second" );
+
+				var row = sessions.byId( "alice", "c1" );
+				expect( row.title ).toBe( "first" );
+				expect( row.messageCount ).toBe( 4 );
+			} );
+
+			it( "cuts a long title at 60 characters", function() {
+				sessions.touch( "alice", "c1", repeatString( "word ", 30 ) );
+
+				var title = sessions.byId( "alice", "c1" ).title;
+				expect( len( title ) ).toBe( 60 );
+				expect( title ).toMatch( "\.\.\.$" );
+			} );
+
+			it( "refuses to touch, read or change a conversation that belongs to someone else", function() {
+				sessions.touch( "alice", "c1", "mine" );
+
+				expect( sessions.touch( "bob", "c1", "stolen" ) ).toBeFalse( "touch" );
+				expect( sessions.byId( "bob", "c1" ) ).toBeEmpty( "find" );
+				expect( sessions.rename( "bob", "c1", "x" ) ).toBeFalse( "rename" );
+				expect( sessions.delete( "bob", "c1" ) ).toBeFalse( "delete" );
+				expect( sessions.byId( "alice", "c1" ).title ).toBe( "mine" );
+			} );
+
+			it( "lists the user's conversations, most recent first", function() {
+				sessions.touch( "alice", "c1", "one" );
+				sleep( 1100 );
+				sessions.touch( "alice", "c2", "two" );
+				sessions.touch( "bob", "c3", "other" );
+
+				expect( sessions.list( "alice" ).map( r => r.id ) ).toBe( [ "c2", "c1" ] );
+				expect( sessions.latest( "alice" ).id ).toBe( "c2" );
+				expect( sessions.latest( "nobody" ) ).toBeEmpty();
+			} );
+
+			it( "finds a conversation by its number, its id or the start of its id", function() {
+				sessions.touch( "alice", "abc123", "one" );
+				sleep( 1100 );
+				sessions.touch( "alice", "abd456", "two" );
+
+				expect( sessions.resolve( "alice", "1" ).id ).toBe( "abd456" );
+				expect( sessions.resolve( "alice", "2" ).id ).toBe( "abc123" );
+				expect( sessions.resolve( "alice", "abc" ).id ).toBe( "abc123" );
+				expect( sessions.resolve( "alice", "ab" ) ).toBeEmpty();
+				expect( sessions.resolve( "alice", "9" ) ).toBeEmpty();
+				expect( sessions.resolve( "alice", "" ) ).toBeEmpty();
+			} );
+
+			it( "renames, resets the count and deletes", function() {
+				sessions.touch( "alice", "c1", "one" );
+
+				expect( sessions.rename( "alice", "c1", "Renamed" ) ).toBeTrue();
+				sessions.resetCount( "alice", "c1" );
+				expect( sessions.byId( "alice", "c1" ).title ).toBe( "Renamed" );
+				expect( sessions.byId( "alice", "c1" ).messageCount ).toBe( 0 );
+				expect( sessions.delete( "alice", "c1" ) ).toBeTrue();
+				expect( sessions.byId( "alice", "c1" ) ).toBeEmpty();
+			} );
+
+		} );
+	}
+
+}

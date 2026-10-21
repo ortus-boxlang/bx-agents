@@ -1,0 +1,145 @@
+/**
+ * The notes screen: a list with keys to add, edit, remove and switch scope, driven by a scripted screen
+ * that answers each list and each question in turn.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "NotesMode", function() {
+
+			function scripted( required array picks, array answers = [], array confirms = [] ) {
+				var s = { picks : picks.duplicate(), answers : answers.duplicate(), confirms : confirms.duplicate(), shown : [], printed : [], asked : [] }
+				s.chooseKeys = ( title, lines, choices, keys, footer ) => {
+					s.shown.append( { title : title, lines : lines, choices : choices, keys : keys, footer : footer } );
+					if ( !s.picks.len() ) {
+						return nullValue();
+					}
+					var next = s.picks[ 1 ];
+					s.picks.deleteAt( 1 );
+					return next;
+				};
+				s.ask = ( title, help, initial ) => {
+					s.asked.append( { title : title, initial : initial } );
+					if ( !s.answers.len() ) {
+						return nullValue();
+					}
+					var next = s.answers[ 1 ];
+					s.answers.deleteAt( 1 );
+					return next;
+				};
+				s.choose = ( title, lines, choices ) => {
+					if ( !s.confirms.len() ) {
+						return nullValue();
+					}
+					var next = s.confirms[ 1 ];
+					s.confirms.deleteAt( 1 );
+					return next;
+				};
+				s.print = ( style, text ) => s.printed.append( style & ": " & text );
+				return s;
+			}
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-notesmode-" );
+				variables.provider = new bxagents.models.notes.SqliteNotesProvider( bxagents.models.store.ChatStore::forFile( dir & "/chat.db" ), { user : 200, agent : 100 } );
+				variables.notes = new bxagents.models.cli.chat.LocalNotes( provider, "alice", "helper" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function open( required any screen ) {
+				new bxagents.models.cli.chat.NotesMode( screen, notes, "alice", "helper" ).run();
+			}
+
+			it( "shows the notes with their ids and how full the scope is, and leaves on Esc", function() {
+				var id = provider.add( "user", "alice", "likes tea" ).id;
+				var screen = scripted( [] );
+
+				open( screen );
+
+				expect( screen.shown ).toHaveLength( 1 );
+				expect( screen.shown[ 1 ].title ).toInclude( "about you (alice)" );
+				expect( screen.shown[ 1 ].lines[ 1 ] ).toInclude( "1 note, 9 of 200 characters" );
+				expect( screen.shown[ 1 ].choices ).toBe( [ { value : id, label : "likes tea", hint : id } ] );
+				expect( screen.shown[ 1 ].keys ).toInclude( "a" );
+			} );
+
+			it( "invites the first note when there are none", function() {
+				var screen = scripted( [] );
+				open( screen );
+
+				expect( screen.shown[ 1 ].choices[ 1 ].label ).toInclude( "press a" );
+			} );
+
+			it( "adds a note with a, to the scope on screen", function() {
+				var screen = scripted( [ "a:", "t:", "a:" ], [ "likes tea", "uses Gradle" ] );
+
+				open( screen );
+
+				expect( provider.list( "user", "alice" ).map( n => n.text ) ).toBe( [ "likes tea" ] );
+				expect( provider.list( "agent", "helper" ).map( n => n.text ) ).toBe( [ "uses Gradle" ] );
+				expect( screen.shown[ 3 ].title ).toInclude( "the agent's (helper)" );
+			} );
+
+			it( "does nothing when the question is cancelled or left empty", function() {
+				var screen = scripted( [ "a:", "a:" ], [ "   " ] );
+
+				open( screen );
+
+				expect( provider.list( "user", "alice" ) ).toBeEmpty();
+			} );
+
+			it( "edits the note under the cursor, starting from its text, with e or Enter", function() {
+				var id = provider.add( "user", "alice", "likes tea" ).id;
+				var screen = scripted( [ "e:" & id, id ], [ "likes coffee", "likes cocoa" ] );
+
+				open( screen );
+
+				expect( screen.asked[ 1 ].initial ).toBe( "likes tea" );
+				expect( screen.asked[ 2 ].initial ).toBe( "likes coffee" );
+				expect( provider.list( "user", "alice" ).map( n => n.text ) ).toBe( [ "likes cocoa" ] );
+			} );
+
+			it( "removes a note only after a yes", function() {
+				var id = provider.add( "user", "alice", "likes tea" ).id;
+				var screen = scripted( [ "d:" & id, "d:" & id ], [], [ "no", "yes" ] );
+
+				open( screen );
+
+				expect( provider.list( "user", "alice" ) ).toBeEmpty();
+				expect( screen.printed.toList( char( 10 ) ) ).toInclude( "Removed." );
+			} );
+
+			it( "switches scope with Tab, and shows the stats of both scopes on s", function() {
+				provider.add( "user", "alice", "likes tea" );
+				var screen = scripted( [ "tab:", "s:" ] );
+
+				open( screen );
+
+				expect( screen.shown[ 2 ].title ).toInclude( "the agent's" );
+				expect( screen.printed.toList( char( 10 ) ) ).toInclude( "In the system prompt: 9 characters" );
+			} );
+
+			it( "reports a refusal from the notes", function() {
+				var screen = scripted( [ "a:" ], [ repeatString( "x", 250 ) ] );
+				open( screen );
+
+				expect( screen.printed.toList( char( 10 ) ) ).toInclude( "warn:" );
+			} );
+
+			it( "says how to turn notes on when the agent keeps none", function() {
+				var screen = scripted( [] );
+				new bxagents.models.cli.chat.NotesMode( screen, new bxagents.models.cli.chat.NoNotes(), "alice", "helper" ).run();
+
+				expect( screen.shown ).toBeEmpty();
+				expect( screen.printed.toList( char( 10 ) ) ).toInclude( "notes: {}" );
+			} );
+
+		} );
+	}
+
+}

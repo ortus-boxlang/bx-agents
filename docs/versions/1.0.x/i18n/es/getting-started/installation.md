@@ -68,7 +68,7 @@ El zip del módulo lleva sus propias dependencias, fijadas a las versiones estab
 
 | Dónde | Qué | Para qué |
 |---|---|---|
-| `modules/` (módulos de BoxLang anidados) | `bx-ai` 3.5.0, `bx-sqlite` 1.3.0, `bx-ftp` 1.9.0, `bx-mail` 1.4.15, `bx-yaml` 1.1.0 | El runtime del agente, el almacén SQLite de la interfaz web, los destinos de deploy `ftp`/`sftp`, el gateway de email, `Agent.yaml` |
+| `modules/` (módulos de BoxLang anidados) | `bx-ai` 3.6.0, `bx-sqlite` 1.3.0, `bx-ftp` 1.9.0, `bx-mail` 1.4.15, `bx-yaml` 1.1.0 | El runtime del agente, el almacén SQLite de la interfaz web, los destinos de deploy `ftp`/`sftp`, el gateway de email, `Agent.yaml` |
 | `lib/` (runtime de ColdBox) | ColdBox, `qb`, `cbsecurity`, `cbauth`, `cbmailservices` | Se copian en cada app que genera `build` |
 
 `serve` apunta la app servida a esos mismos módulos incluidos. Las versiones de arriba son las fijadas en el `gradle.properties` del repositorio para esta versión.

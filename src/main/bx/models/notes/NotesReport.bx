@@ -1,0 +1,60 @@
+/**
+ * The notes as lines of text, for the chat commands and the CLI.
+ */
+class {
+
+	/**
+	 * @return Rough tokens for some characters: about four characters to a token. An estimate, not a count.
+	 */
+	numeric function tokens( required numeric chars ) {
+		return ceiling( arguments.chars / 4 )
+	}
+
+	/**
+	 * What the notes cost: how full each scope is, and what goes into the system prompt.
+	 *
+	 * @stats { provider, user : { owner, count, used, limit, oldest, newest }, agent : { ... } }
+	 *
+	 * @return Lines of text
+	 */
+	array function statsLines( required struct stats ) {
+		var user = arguments.stats.user
+		var agent = arguments.stats.agent
+		var lines = [
+			pad( "Notes (#arguments.stats.provider ?: 'sqlite'#)", 30 ) & pad( "used", 8 ) & pad( "limit", 8 ) & pad( "notes", 7 ) & "~tokens",
+			pad( "  user  (#user.owner#)", 30 ) & pad( user.used, 8 ) & pad( user.limit, 8 ) & pad( user.count, 7 ) & "~" & tokens( user.used ),
+			pad( "  agent (#agent.owner#)", 30 ) & pad( agent.used, 8 ) & pad( agent.limit, 8 ) & pad( agent.count, 7 ) & "~" & tokens( agent.used )
+		]
+		var total = user.used + agent.used
+		lines.append( "In the system prompt: #total# characters, ~#tokens( total )# tokens" )
+		var oldest = [ user.oldest ?: "", agent.oldest ?: "" ].filter( d => isDate( d ) ).sort( "text" )
+		var newest = [ user.newest ?: "", agent.newest ?: "" ].filter( d => isDate( d ) ).sort( "text" )
+		if ( oldest.len() ) {
+			lines.append( "Oldest: #dateFormat( oldest.first(), 'yyyy-mm-dd' )#   Newest: #dateFormat( newest.last(), 'yyyy-mm-dd' )#" )
+		}
+		return lines
+	}
+
+	/**
+	 * @heading What the scope is called, for example "Your notes"
+	 * @notes The notes of one scope: [ { id, text } ]
+	 * @stats The stats of that scope
+	 *
+	 * @return Lines of text: a heading with how full the notes are, then one line per note
+	 */
+	array function listLines( required string heading, required array notes, required struct stats ) {
+		var lines = [ "#arguments.heading#: #arguments.stats.used# of #arguments.stats.limit# characters, #arguments.notes.len()# note#arguments.notes.len() == 1 ? '' : 's'#" ]
+		for ( var note in arguments.notes ) {
+			lines.append( "  #note.id#  #note.text#" )
+		}
+		if ( !arguments.notes.len() ) {
+			lines.append( "  (none yet)" )
+		}
+		return lines
+	}
+
+	private string function pad( required any value, required numeric width ) {
+		return left( toString( arguments.value ) & repeatString( " ", arguments.width ), arguments.width )
+	}
+
+}
