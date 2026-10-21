@@ -24,18 +24,20 @@ class {
 		BOOLEAN_FLAGS = {
 			"new"    : [ "skipInstall", "class", "wizard", "no-wizard", "yes", "no-tui" ],
 			"build"  : [ "verbose" ],
-			"chat"   : [ "server", "no-tui", "record" ],
+			"chat"   : [ "server", "no-tui", "record", "continue" ],
 			"clean"  : [ "force" ],
 			"doctor" : [ "json" ],
 			"inspect": [ "json", "md", "no-color", "ascii" ],
-			"invoke" : [ "json", "server" ]
+			"invoke" : [ "json", "server" ],
+			"token"  : [ "json" ],
+			"notes"  : [ "json" ]
 		};
 
 		/** Flags whose value is a folder, when they offer no fixed choices */
 		DIR_FLAGS = [ "projectRoot", "destination" ];
 
 		/** Verbs that take no project folder as a positional argument */
-		NO_POSITIONAL = [ "hash-password" ];
+		NO_POSITIONAL = [ "hash-password", "token", "notes" ];
 
 		SHELL_LIST = [ "bash", "fish", "powershell" ];
 		FILE_NAMES = { "bash" : "bxAgents.bash", "fish" : "bxAgents.fish", "powershell" : "bxAgents.ps1" };
@@ -115,6 +117,12 @@ class {
 	private static function choicesFor( required string verb, required string flag ){
 		if( arguments.verb == "new" && arguments.flag == "template" ){
 			return ProjectScaffolder::TEMPLATES;
+		}
+		if( arguments.verb == "token" && arguments.flag == "scope" ){
+			return [ "chat", "admin" ];
+		}
+		if( arguments.verb == "notes" && arguments.flag == "scope" ){
+			return [ "user", "agent" ];
 		}
 		if( arguments.verb == "deploy" && arguments.flag == "target" ){
 			return Deploy::TARGET_CLASSES.keyArray().sort( "text" );

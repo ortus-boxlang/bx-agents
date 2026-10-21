@@ -1,0 +1,103 @@
+/**
+ * The shared SQLite store: schema, versions, and two connections writing at once.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "ChatStore", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-chatstore-" );
+				variables.file = dir & "/data/chat.db";
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "creates the file, its folder and the web chat's tables on a new database", function() {
+				var store = bxagents.models.store.ChatStore::forFile( file );
+				var tables = store.rows( "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name" ).map( r => r.name );
+
+				expect( fileExists( file ) ).toBeTrue();
+				expect( store.schemaVersion() ).toBe( 4 );
+				expect( tables ).toInclude( "conversations" );
+				expect( tables ).toInclude( "preferences" );
+				expect( tables ).toInclude( "users" );
+				expect( tables ).toInclude( "tokens" );
+				expect( tables ).toInclude( "notes" );
+			} );
+
+			it( "switches the file to write-ahead logging", function() {
+				var store = bxagents.models.store.ChatStore::forFile( file );
+
+				expect( store.rows( "PRAGMA journal_mode" )[ 1 ].journal_mode ).toBe( "wal" );
+			} );
+
+			it( "is safe to open again and keeps what is in it", function() {
+				var store = bxagents.models.store.ChatStore::forFile( file );
+				store.exec( "INSERT INTO preferences ( userId, prefKey, prefValue, updatedAt ) VALUES ( 'luis', 'theme', 'dark', :now )", { now : { value : now(), cfsqltype : "timestamp" } } );
+
+				var again = bxagents.models.store.ChatStore::forFile( file );
+
+				expect( again.schemaVersion() ).toBe( 4 );
+				expect( again.rows( "SELECT prefValue FROM preferences WHERE userId = 'luis'" )[ 1 ].prefValue ).toBe( "dark" );
+				expect( again.rows( "SELECT COUNT(*) AS n FROM bxagents_schema_version" )[ 1 ].n ).toBe( 4 );
+			} );
+
+			it( "recognises a database the web chat created before the store existed", function() {
+				directoryCreate( dir & "/data", true, true );
+				var ds = { driver : "sqlite", database : file };
+				queryExecute( "CREATE TABLE bxagents_schema_version ( version INTEGER PRIMARY KEY, appliedAt DATETIME )", {}, { datasource : ds } );
+				queryExecute( "CREATE TABLE conversations ( id VARCHAR(64) PRIMARY KEY, userId VARCHAR(255), title VARCHAR(500), messageCount INTEGER DEFAULT 0, createdAt DATETIME, updatedAt DATETIME )", {}, { datasource : ds } );
+				queryExecute( "CREATE TABLE preferences ( userId VARCHAR(255), prefKey VARCHAR(100), prefValue TEXT, updatedAt DATETIME, PRIMARY KEY ( userId, prefKey ) )", {}, { datasource : ds } );
+				queryExecute( "CREATE TABLE users ( id VARCHAR(64) PRIMARY KEY, username VARCHAR(255) UNIQUE, passwordHash VARCHAR(512), displayName VARCHAR(255), isActive INTEGER DEFAULT 1, createdAt DATETIME, updatedAt DATETIME )", {}, { datasource : ds } );
+				queryExecute( "INSERT INTO conversations ( id, userId, title ) VALUES ( 'c1', 'luis', 'Old chat' )", {}, { datasource : ds } );
+				queryExecute( "INSERT INTO bxagents_schema_version ( version, appliedAt ) VALUES ( 1, '2026-01-01' ), ( 2, '2026-01-01' )", {}, { datasource : ds } );
+
+				var store = new bxagents.models.store.ChatStore( ds );
+
+				expect( store.migrate() ).toBe( 4 );
+				expect( store.rows( "SELECT title FROM conversations WHERE id = 'c1'" )[ 1 ].title ).toBe( "Old chat" );
+			} );
+
+			it( "finishes a half-made database without failing on tables that exist", function() {
+				directoryCreate( dir & "/data", true, true );
+				var ds = { driver : "sqlite", database : file };
+				queryExecute( "CREATE TABLE conversations ( id VARCHAR(64) PRIMARY KEY, userId VARCHAR(255), title VARCHAR(500), messageCount INTEGER DEFAULT 0, createdAt DATETIME, updatedAt DATETIME )", {}, { datasource : ds } );
+
+				var store = new bxagents.models.store.ChatStore( ds );
+
+				expect( store.migrate() ).toBe( 4 );
+				expect( store.rows( "SELECT name FROM sqlite_master WHERE name = 'users'" ) ).toHaveLength( 1 );
+			} );
+
+			it( "keeps every write when two stores write to the same file at once", function() {
+				var first = bxagents.models.store.ChatStore::forFile( file );
+				var second = new bxagents.models.store.ChatStore( { driver : "sqlite", database : file } );
+				var write = ( store, who ) => {
+					for ( var i = 1; i <= 40; i++ ) {
+						store.exec(
+							"INSERT INTO preferences ( userId, prefKey, prefValue, updatedAt ) VALUES ( :u, :k, 'x', :now )",
+							{ u : who, k : "key" & i, now : { value : now(), cfsqltype : "timestamp" } }
+						);
+					}
+				};
+				var one = runAsync( () => write( first, "a" ) );
+				var two = runAsync( () => write( second, "b" ) );
+				one.get();
+				two.get();
+
+				expect( first.rows( "SELECT COUNT(*) AS n FROM preferences" )[ 1 ].n ).toBe( 80 );
+			} );
+
+			it( "reports the newest version it knows", function() {
+				expect( new bxagents.models.store.ChatStore( "ignored" ).latestVersion() ).toBe( 4 );
+			} );
+
+		} );
+	}
+
+}

@@ -238,6 +238,9 @@ class {
 		var modelProvider = variables.catalog.provider( p.provider )
 		if ( arguments.modelKey && modelProvider.count() && len( modelProvider.envVar ) ) {
 			envStubs.append( { name : modelProvider.envVar, comment : "#modelProvider.name# API key. Get one at #modelProvider.keyUrl#", value : "" } )
+			for ( var extra in ( modelProvider.extraEnv ?: [] ) ) {
+				envStubs.append( { name : extra.name, comment : extra.comment, value : "" } )
+			}
 		}
 
 		for ( var id in p.with ) {
@@ -284,7 +287,7 @@ class {
 		var mcpServers = []
 		for ( var id in p.mcp ) {
 			var mcpEntry = variables.catalog.mcpServer( id )
-			var entry = { name : mcpEntry.id, url : mcpEntry.url }
+			var entry = ( mcpEntry.transport ?: "http" ) == "stdio" ? { name : mcpEntry.id, command : duplicate( mcpEntry.command ) } : { name : mcpEntry.id, url : mcpEntry.url }
 			if ( ( mcpEntry.auth.type ?: "none" ) == "bearer" ) {
 				entry.token = "${env.#mcpEntry.auth.envVar#}"
 				envStubs.append( { name : mcpEntry.auth.envVar, comment : "#mcpEntry.name# MCP mcpEntry. #mcpEntry.auth.help#", value : "" } )

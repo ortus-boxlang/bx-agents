@@ -1,0 +1,199 @@
+/**
+ * /sessions, /resume, /clear, /compact and /info in the chat loop, --continue, and the same operations over HTTP.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "session commands", function() {
+
+			function screenWith( required array inputs ) {
+				var s = { printed : [], users : [], markdown : [], inputs : inputs.duplicate() }
+				s.readInput = () => {
+					if ( !s.inputs.len() ) {
+						return nullValue()
+					}
+					var next = s.inputs[ 1 ]
+					s.inputs.deleteAt( 1 )
+					return next
+				}
+				s.banner = ( agent, model, mode ) => {}
+				s.print = ( style, text ) => s.printed.append( style & ": " & text )
+				s.printUser = ( text ) => s.users.append( text )
+				s.printMarkdown = ( text ) => s.markdown.append( text )
+				s.beginTurn = () => {}
+				s.endTurn = () => {}
+				s.push = ( event ) => {}
+				s.cancelRequested = () => false
+				s.takeSteer = () => nullValue()
+				s.close = () => {}
+				return s
+			}
+
+			function sessionWith( struct overrides = {} ) {
+				var q = { calls : [] }
+				q.agentName = () => "helper"
+				q.modelName = () => "m"
+				q.mode = () => "in-process"
+				q.tools = () => []
+				q.newThread = () => {}
+				q.close = () => {}
+				q.sessions = () => [
+					{ id : "aaaa1111-0000", title : "Plan the week", messageCount : 6, updatedAt : now() },
+					{ id : "bbbb2222-0000", title : "Fix the build", messageCount : 2, updatedAt : now() }
+				]
+				q.resumeSession = ( ref = "" ) => {
+					q.calls.append( "resume:" & ref );
+					return ref == "9" ? { ok : false, reason : "There is no conversation [9]. Type /sessions to see them." } : { ok : true, id : "aaaa1111-0000", title : "Plan the week", history : [ { role : "you", text : "plan it" }, { role : "agent", text : "**Monday** first" } ] };
+				}
+				q.clear = () => { q.calls.append( "clear" ); return { ok : true }; }
+				q.compact = () => { q.calls.append( "compact" ); return { available : true, compacted : true, before : 12, after : 4 }; }
+				q.info = () => [ [ "Agent", "helper" ], [ "User", "alice" ] ]
+				return q.append( overrides );
+			}
+
+			function say( required any session, required array inputs, string resume = "" ) {
+				var screen = screenWith( inputs );
+				var controller = new bxagents.models.cli.chat.ChatController( session, getTempDirectory() );
+				controller.run( screen, false, resume );
+				return { screen : screen, text : screen.printed.toList( char( 10 ) ), controller : controller };
+			}
+
+			it( "lists the conversations numbered, with how to go back", function() {
+				var out = say( sessionWith(), [ "/sessions" ] );
+
+				expect( out.text ).toInclude( "1  Plan the week" );
+				expect( out.text ).toInclude( "2  Fix the build" );
+				expect( out.text ).toInclude( "/resume <number>" );
+			} );
+
+			it( "says so when there are no conversations", function() {
+				var out = say( sessionWith( { sessions : () => [] } ), [ "/sessions" ] );
+
+				expect( out.text ).toInclude( "No conversations yet." );
+			} );
+
+			it( "shows the history when it resumes a conversation, and keeps it as the transcript", function() {
+				var session = sessionWith();
+				var out = say( session, [ "/resume 1" ] );
+
+				expect( session.calls ).toBe( [ "resume:1" ] );
+				expect( out.text ).toInclude( "Resumed: Plan the week" );
+				expect( out.screen.users ).toBe( [ "plan it" ] );
+				expect( out.screen.markdown ).toBe( [ "**Monday** first" ] );
+				expect( out.controller.transcript() ).toHaveLength( 2 );
+			} );
+
+			it( "explains when a resumed conversation kept no messages", function() {
+				var session = sessionWith( { resumeSession : ( ref = "" ) => { return { ok : true, id : "x", title : "Old", history : [] }; } } );
+				var out = say( session, [ "/resume" ] );
+
+				expect( out.text ).toInclude( "No messages were kept" );
+			} );
+
+			it( "says why a conversation could not be opened", function() {
+				var out = say( sessionWith(), [ "/resume 9" ] );
+
+				expect( out.text ).toInclude( "warn: There is no conversation [9]" );
+			} );
+
+			it( "opens the most recent conversation first with --continue, or the one named", function() {
+				var session = sessionWith();
+				say( session, [], "last" );
+				say( session, [], "3" );
+
+				expect( session.calls ).toBe( [ "resume:", "resume:3" ] );
+			} );
+
+			it( "clears the conversation and the transcript on /clear", function() {
+				var session = sessionWith();
+				var out = say( session, [ "/resume 1", "/clear" ] );
+
+				expect( session.calls ).toBe( [ "resume:1", "clear" ] );
+				expect( out.text ).toInclude( "Cleared." );
+				expect( out.controller.transcript() ).toBeEmpty();
+			} );
+
+			it( "reports what /compact did, and when it cannot", function() {
+				expect( say( sessionWith(), [ "/compact" ] ).text ).toInclude( "Compacted: 12 messages became 4." );
+				expect( say( sessionWith( { compact : () => { return { available : false, compacted : false, before : 3, after : 3 }; } } ), [ "/compact" ] ).text ).toInclude( "no summary model" );
+				expect( say( sessionWith( { compact : () => { return { available : true, compacted : false, before : 3, after : 3 }; } } ), [ "/compact" ] ).text ).toInclude( "Nothing to compact" );
+			} );
+
+			it( "prints the lines of /info", function() {
+				var out = say( sessionWith(), [ "/info" ] );
+
+				expect( out.text ).toInclude( "Agent:" );
+				expect( out.text ).toInclude( "helper" );
+				expect( out.text ).toInclude( "alice" );
+			} );
+
+			describe( "over HTTP", function() {
+
+				function httpWith( required struct routes ) {
+					var requests = [];
+					var client = new FakeClient( {
+						getJson  : ( base, route, query ) => {
+							requests.append( "GET " & route & ( query.isEmpty() ? "" : "?" & query.keyArray().sort( "text" ).map( k => k & "=" & query[ k ] ).toList( "&" ) ) );
+							if ( !routes.keyExists( route ) ) { throw( type = "BxAgents.AgentRouteMissing", message = "404" ); }
+							return routes[ route ];
+						},
+						postJson : ( base, route, body ) => {
+							requests.append( "POST " & route & " " & jsonSerialize( body ) );
+							return routes[ route ] ?: { ok : true };
+						},
+						events   : ( base, route, payload, onEvent ) => {
+							requests.append( "EVENTS " & route & " " & ( payload.conversationId ?: "" ) );
+							return { output : "", threadId : "t", suspended : false, pending : [], error : "" };
+						},
+						stream   : () => {}
+					} );
+					return { session : new bxagents.models.cli.chat.HttpSession( "http://x", client ), requests : requests };
+				}
+
+				it( "sends the conversation id with every turn and makes a new one on /new", function() {
+					var h = httpWith( {} );
+					var first = h.session.conversationId();
+					h.session.send( "hi", { push : () => {}, cancelRequested : () => false, takeSteer : () => nullValue() } );
+					h.session.newThread();
+
+					expect( h.requests[ 1 ] ).toBe( "EVENTS events " & first );
+					expect( h.session.conversationId() ).notToBe( first );
+				} );
+
+				it( "lists the server's conversations and resumes one with its history", function() {
+					var h = httpWith( {
+						sessions : { sessions : [ { id : "aaaa-1", title : "Plan", messageCount : 2, updatedAt : now() } ] },
+						history  : { messages : [ { role : "you", text : "hi" }, { role : "agent", text : "hello" } ] }
+					} );
+
+					expect( h.session.keepsSessions() ).toBeTrue();
+					var back = h.session.resumeSession( "1" );
+
+					expect( back.ok ).toBeTrue();
+					expect( back.history ).toHaveLength( 2 );
+					expect( h.session.conversationId() ).toBe( "aaaa-1" );
+					expect( h.requests.last() ).toBe( "GET history?conversationId=aaaa-1" );
+				} );
+
+				it( "says so when the server keeps no list", function() {
+					var h = httpWith( {} );
+
+					expect( h.session.keepsSessions() ).toBeFalse();
+					expect( h.session.sessions() ).toBeEmpty();
+					expect( h.session.resumeSession( "1" ).ok ).toBeFalse();
+				} );
+
+				it( "clears and compacts through the server", function() {
+					var h = httpWith( { compact : { available : true, compacted : true, before : 8, after : 3 } } );
+
+					expect( h.session.clear().ok ).toBeTrue();
+					expect( h.session.compact().after ).toBe( 3 );
+					expect( h.requests[ 1 ] ).toInclude( "POST clear" );
+					expect( h.requests[ 2 ] ).toInclude( "POST compact" );
+				} );
+			} );
+
+		} );
+	}
+
+}

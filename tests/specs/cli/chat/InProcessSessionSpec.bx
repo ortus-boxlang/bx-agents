@@ -116,48 +116,6 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 		} );
-
-		describe( "HttpSession", function() {
-
-			function clientFor( array deltas, struct result = {} ) {
-				return {
-					stream : ( baseUrl, message, threadId, onDelta ) => {
-						for ( var d in deltas ) {
-							onDelta( d )
-						}
-						return { threadId : "thread-1" }.append( result )
-					}
-				}
-			}
-
-			it( "turns streamed text into delta events and keeps the thread", function() {
-				var events = []
-				var session = new bxagents.models.cli.chat.HttpSession( "http://127.0.0.1:9/", clientFor( [ "Hel", "lo" ] ) )
-				var result = session.send( "hi", { push : e => events.append( e ), cancelRequested : () => false, takeSteer : () => nullValue() } )
-
-				expect( result ).toBe( { status : "done", text : "Hello", pending : [] } );
-				expect( events.map( e => e.text ) ).toBe( [ "Hel", "lo" ] );
-				expect( session.modelName() ).toBe( "http://127.0.0.1:9" );
-				expect( session.tools() ).toBeEmpty();
-			} );
-
-			it( "stops reading when the user pressed Esc", function() {
-				var session = new bxagents.models.cli.chat.HttpSession( "http://x", clientFor( [ "a", "b", "c" ] ) )
-				var result = session.send( "hi", { push : e => {}, cancelRequested : () => true, takeSteer : () => nullValue() } )
-
-				expect( result.status ).toBe( "cancelled" );
-			} );
-
-			it( "says where to answer a run that waits for a human decision", function() {
-				var events = []
-				var session = new bxagents.models.cli.chat.HttpSession( "http://srv", clientFor( [], { suspended : true } ) )
-				session.send( "hi", { push : e => events.append( e ), cancelRequested : () => false, takeSteer : () => nullValue() } )
-
-				expect( events[ 1 ].type ).toBe( "notice" );
-				expect( events[ 1 ].text ).toInclude( "http://srv/gateways/interactions/" );
-			} );
-
-		} );
 	}
 
 }

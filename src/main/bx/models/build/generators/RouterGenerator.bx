@@ -191,6 +191,7 @@ class {
 		}
 
 		var tokenEnvVar = trim( arguments.agentApi.tokenEnvVar ?: "" )
+		var issuedTokens = arguments.agentApi.tokens ?: false
 
 		var lines = [
 			"// The reserved agent route - always present, whatever gateways/ declares,",
@@ -198,23 +199,43 @@ class {
 			"// an address. A project's own public API belongs in gateways/ instead."
 		]
 
-		if ( !len( tokenEnvVar ) ) {
+		if ( !len( tokenEnvVar ) && !issuedTokens ) {
 			lines.append( 'route( "#static.RESERVED_AGENT_PATH#" ).toAi( "GeneratedAgent" )' )
+			lines.append( "" )
+			lines.append( renderRunControlRoutes(), true )
 			return lines
 		}
 
-		lines.append( "// Gated on #tokenEnvVar#: an unset or blank value matches nothing," )
-		lines.append( "// so this fails closed rather than letting every caller through." )
+		if ( len( tokenEnvVar ) ) {
+			lines.append( "// Gated on #tokenEnvVar#: an unset or blank value matches nothing," )
+			lines.append( "// so this fails closed rather than letting every caller through." )
+		}
+		if ( issuedTokens ) {
+			lines.append( "// Tokens made by `bxAgents token create` are accepted too (see models/store/TokenService)." )
+		}
 		lines.append( 'route( "#static.RESERVED_AGENT_PATH#" )' )
 		lines.append( '	.withCondition( ( requestString ) => {' )
-		lines.append( '		var expected = getSystemSetting( "#bxLiteral( tokenEnvVar )#", "" )' )
-		lines.append( '		if ( !len( expected ) ) {' )
+		lines.append( '		var given = getHTTPRequestData( false ).headers[ "x-bxagents-token" ] ?: ""' )
+		lines.append( '		if ( !len( given ) ) {' )
 		lines.append( '			return false' )
 		lines.append( '		}' )
-		lines.append( '		var headers = getHTTPRequestData( false ).headers' )
-		lines.append( '		return ( headers[ "x-bxagents-token" ] ?: "" ) == expected' )
+		if ( len( tokenEnvVar ) ) {
+			lines.append( '		var expected = getSystemSetting( "#bxLiteral( tokenEnvVar )#", "" )' )
+			lines.append( '		if ( len( expected ) && given == expected ) {' )
+			lines.append( '			return true' )
+			lines.append( '		}' )
+		}
+		if ( issuedTokens ) {
+			lines.append( '		return !new "models.store.TokenService@bxagents"( new "models.store.ChatStore@bxagents"( "" ) ).authenticate( given ).isEmpty()' )
+		} else {
+			lines.append( '		return false' )
+		}
 		lines.append( '	} )' )
 		lines.append( '	.toAi( "GeneratedAgent" )' )
+		lines.append( "" )
+		// Before the catch-all below, or it would answer 401 for these too. They are gated by the
+		// handler itself (handlers/AgentApi.bx), with the same variable and header.
+		lines.append( renderRunControlRoutes(), true )
 		lines.append( "" )
 		lines.append( "// Registered AFTER the gated route, so it only ever catches what the" )
 		lines.append( "// condition above turned away. Without it a refused request falls" )
@@ -228,6 +249,36 @@ class {
 		lines.append( '	}, 401 )' )
 
 		return lines
+	}
+
+	/**
+	 * The run-control routes beside toAi()'s four: the rich event stream, stopping and steering a run,
+	 * and the approval round trip. They are served by handlers/AgentApi.bx (see AgentApiGenerator), which
+	 * checks the same token itself.
+	 *
+	 * @return The route statement lines
+	 */
+	private array function renderRunControlRoutes() {
+		var base = static.RESERVED_AGENT_PATH
+		return [
+			"// Run control - the same path, served by handlers/AgentApi.bx",
+			'post( "#base#/events" ).toHandler( "AgentApi.events" )',
+			'post( "#base#/cancel" ).toHandler( "AgentApi.cancel" )',
+			'post( "#base#/steer" ).toHandler( "AgentApi.steer" )',
+			'post( "#base#/resume" ).toHandler( "AgentApi.resume" )',
+			'get( "#base#/pending" ).toHandler( "AgentApi.pending" )',
+			'get( "#base#/tools" ).toHandler( "AgentApi.tools" )',
+			'get( "#base#/agent" ).toHandler( "AgentApi.about" )',
+			'get( "#base#/sessions" ).toHandler( "AgentApi.sessions" )',
+			'get( "#base#/history" ).toHandler( "AgentApi.history" )',
+			'post( "#base#/clear" ).toHandler( "AgentApi.clear" )',
+			'post( "#base#/compact" ).toHandler( "AgentApi.compact" )',
+			'post( "#base#/notes/update" ).toHandler( "AgentApi.updateNote" )',
+			'post( "#base#/notes/remove" ).toHandler( "AgentApi.removeNote" )',
+			// one route for the list (GET) and for adding (POST): the handler tells them apart, as a pattern also
+			// matches what follows it and ColdBox does not keep a GET route from answering a POST
+			'route( "#base#/notes" ).toHandler( "AgentApi.notes" )'
+		]
 	}
 
 	/**
@@ -313,6 +364,11 @@ class {
 				'post( "#api#/conversations/create" ).toHandler( "ChatUi.conversationCreate" )',
 				'post( "#api#/conversations/rename" ).toHandler( "ChatUi.conversationRename" )',
 				'post( "#api#/conversations/delete" ).toHandler( "ChatUi.conversationDelete" )',
+				// the specific note routes first: a pattern also matches what follows it
+				'post( "#api#/notes/add" ).toHandler( "ChatUi.noteAdd" )',
+				'post( "#api#/notes/update" ).toHandler( "ChatUi.noteUpdate" )',
+				'post( "#api#/notes/remove" ).toHandler( "ChatUi.noteRemove" )',
+				'get( "#api#/notes" ).toHandler( "ChatUi.notes" )',
 				'post( "#api#/preferences/set" ).toHandler( "ChatUi.preferenceSet" )',
 				'post( "#api#/preferences/delete" ).toHandler( "ChatUi.preferenceDelete" )',
 				'get( "#api#/pending" ).toHandler( "ChatUi.pending" )',

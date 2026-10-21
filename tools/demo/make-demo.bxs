@@ -1,0 +1,147 @@
+/**
+ * Makes a demo of `bxAgents chat` from nothing, in one command: scaffolds and builds a small agent,
+ * starts the scripted model (fakellm.bxs), types at the chat from a script (drive.bxs) while
+ * `chat --record` saves the session, and turns the recording into a GIF and an MP4 (render.bxs).
+ *
+ *   boxlang tools/demo/make-demo.bxs [--out=demo-out] [--boxlang=boxlang] [--spec=<chat.json>] [--home=<dir>]
+ *
+ * --out      where everything goes (default ./demo-out): the project, session.cast, demo.gif, demo.mp4
+ * --boxlang  the command that runs BoxLang, split on spaces (default `boxlang`). For a working copy
+ *            of this repository, point it at the jar, e.g.
+ *            --boxlang="java -cp boxlang.jar ortus.boxlang.runtime.BoxRunner --bx-config /abs/path/boxlang.json"
+ * --spec     a different list of steps (default demos/chat.json). See drive.bxs for the format
+ * --home     BOXLANG_HOME for every step, to keep a demo out of your own runtime home
+ *
+ * The agent uses the `openai-compatible` provider, whose default address is http://localhost:8080/v1, so
+ * port 8080 must be free. The answers are the canned ones in demos/model.json: this shows how the
+ * chat looks, not what a real model says.
+ *
+ * Needs the bxAgents module installed for the BoxLang you run, `script` (Linux or macOS) and ffmpeg.
+ */
+
+opts = server.cli.parsed.options
+here = getDirectoryFromPath( getCurrentTemplatePath() )
+outDir = expandPath( opts.out ?: "demo-out" )
+boxlang = ( opts.boxlang ?: "boxlang" ).listToArray( " " )
+specFile = opts.spec ?: here & "demos/chat.json"
+env = {}
+if ( len( opts.home ?: "" ) ) {
+	env[ "BOXLANG_HOME" ] = expandPath( opts.home )
+}
+project = outDir & "/demo-assistant"
+cast = outDir & "/session.cast"
+port = 8080
+
+/**
+ * @return A new array: the BoxLang command followed by these arguments
+ */
+function bl( required array more ) {
+	var all = duplicate( boxlang )
+	all.append( arguments.more, true )
+	return all
+}
+
+function fail( required string message ) {
+	println( arguments.message )
+	java.lang.System::exit( 1 )
+}
+
+/**
+ * Starts a command; the caller decides whether to wait for it.
+ */
+function start( required array command, required string cwd, string logFile = "" ) {
+	var pb = new java.lang.ProcessBuilder( arguments.command.map( a => javaCast( "string", a ) ) )
+	pb.directory( createObject( "java", "java.io.File" ).init( arguments.cwd ) )
+	pb.redirectErrorStream( true )
+	pb.environment().remove( "JAVA_TOOL_OPTIONS" )
+	for ( var name in env ) {
+		pb.environment().put( javaCast( "string", name ), javaCast( "string", env[ name ] ) )
+	}
+	if ( len( arguments.logFile ) ) {
+		pb.redirectOutput( createObject( "java", "java.io.File" ).init( arguments.logFile ) )
+	}
+	return pb.start()
+}
+
+/**
+ * Runs a command to the end and returns { exit, output }.
+ */
+function run( required array command, required string cwd ) {
+	var process = start( arguments.command, arguments.cwd )
+	var output = toString( process.getInputStream().readAllBytes(), "UTF-8" )
+	return { exit : process.waitFor(), output : output }
+}
+
+function step( required string title, required struct result ) {
+	if ( arguments.result.exit != 0 ) {
+		fail( "Failed: #arguments.title#" & char( 10 ) & arguments.result.output )
+	}
+	println( "ok  #arguments.title#" )
+}
+
+function portOpen() {
+	try {
+		var socket = createObject( "java", "java.net.Socket" ).init()
+		socket.connect( createObject( "java", "java.net.InetSocketAddress" ).init( "127.0.0.1", port ), 300 )
+		socket.close()
+		return true
+	} catch ( any e ) {
+		return false
+	}
+}
+
+// ----------------------------------------------------------------------------------
+// The agent
+// ----------------------------------------------------------------------------------
+if ( portOpen() ) {
+	fail( "Port #port# is already in use. The demo agent reaches its model on http://localhost:#port#/v1, so free it first." )
+}
+if ( directoryExists( project ) ) {
+	directoryDelete( project, true )
+}
+directoryCreate( path = outDir, createPath = true, ignoreExists = true )
+
+step( "scaffold demo-assistant", run( bl( [ "module:bxagents", "new", "demo-assistant", "--model=openai-compatible/demo", "--with=time", "--yes", "--skipInstall" ] ), outDir ) )
+fileWrite( project & "/instructions.md", "You are a friendly assistant. Keep answers short." & char( 10 ) )
+step( "build it", run( bl( [ "module:bxagents", "build", "--projectRoot=" & project ] ), outDir ) )
+
+// ----------------------------------------------------------------------------------
+// The scripted model, then the chat
+// ----------------------------------------------------------------------------------
+model = start( bl( [ here & "fakellm.bxs", "--port=" & port ] ), outDir, outDir & "/fakellm.log" )
+try {
+	for ( i = 1; i <= 60 && !portOpen(); i++ ) {
+		sleep( 500 )
+	}
+	if ( !portOpen() ) {
+		fail( "The scripted model did not start; see #outDir#/fakellm.log" )
+	}
+	println( "ok  scripted model on port #port#" )
+
+	template = jsonDeserialize( fileRead( specFile ) )
+	template[ "command" ] = bl( [ "module:bxagents", "chat", "--projectRoot=" & project, "--record=" & cast ] )
+	template[ "cwd" ] = outDir
+	template[ "env" ] = env
+	driveSpec = outDir & "/drive-spec.json"
+	fileWrite( driveSpec, jsonSerialize( template ) )
+	if ( fileExists( cast ) ) {
+		fileDelete( cast )
+	}
+	step( "type the chat (this takes about a minute)", run( bl( [ here & "drive.bxs", driveSpec ] ), outDir ) )
+	if ( !fileExists( cast ) ) {
+		fail( "The chat did not write #cast#. Is the bxAgents module installed for this BoxLang?" )
+	}
+} finally {
+	model.destroy()
+}
+
+// ----------------------------------------------------------------------------------
+// The video
+// ----------------------------------------------------------------------------------
+result = run( bl( [ here & "render.bxs", cast, outDir ] ), outDir )
+println( result.output )
+if ( result.exit != 0 ) {
+	fail( "Failed: render" )
+}
+println( "Done. Look in #outDir# for session.cast, demo.gif and demo.mp4." )
+java.lang.System::exit( 0 )

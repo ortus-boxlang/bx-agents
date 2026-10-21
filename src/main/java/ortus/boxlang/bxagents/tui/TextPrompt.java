@@ -38,11 +38,19 @@ final class TextPrompt extends Prompt {
 	private boolean				rejected;
 
 	TextPrompt( Theme theme, String title, String help, String fallback, boolean secret, String requiredMessage ) {
+		this( theme, title, help, fallback, secret, requiredMessage, "" );
+	}
+
+	/**
+	 * @param initial text already in the box with the caret at its end, for editing
+	 */
+	TextPrompt( Theme theme, String title, String help, String fallback, boolean secret, String requiredMessage, String initial ) {
 		super( theme, title, help );
 		this.fallback			= fallback == null ? "" : fallback;
 		this.secret				= secret;
 		this.requiredMessage	= requiredMessage == null ? "" : requiredMessage;
-		this.text				= new StringBuilder();
+		this.text				= new StringBuilder( initial == null ? "" : initial );
+		this.caret				= this.text.length();
 	}
 
 	@Override

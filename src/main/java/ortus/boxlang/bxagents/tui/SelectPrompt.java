@@ -31,6 +31,8 @@ final class SelectPrompt extends Prompt {
 
 	private final List<Choice>	choices;
 	private final List<String>	preface;
+	private String				hotkeys		= "";
+	private String				footerText	= "";
 	private int					cursor;
 
 	SelectPrompt( Theme theme, String title, String help, List<Choice> choices, String current ) {
@@ -51,9 +53,33 @@ final class SelectPrompt extends Prompt {
 		}
 	}
 
+	/**
+	 * Letters that finish the prompt with "letter:value" (the value of the option under the cursor), so a
+	 * list can offer actions on its rows. Tab does the same as "tab:value".
+	 *
+	 * @param keys   the letters
+	 * @param footer the hint line, or empty for the default
+	 */
+	SelectPrompt withHotkeys( String keys, String footer ) {
+		this.hotkeys	= keys == null ? "" : keys;
+		this.footerText	= footer == null ? "" : footer;
+		return this;
+	}
+
 	@Override
 	void key( KeyEvent key ) {
 		abortKeys( key );
+		if ( !key.hasCtrl() && !key.hasAlt() ) {
+			String under = choices.isEmpty() ? "" : choices.get( cursor ).value;
+			if ( key.isKey( KeyCode.TAB ) && !hotkeys.isEmpty() ) {
+				finish( "tab:" + under );
+				return;
+			}
+			if ( key.isKey( KeyCode.CHAR ) && key.string().length() == 1 && hotkeys.indexOf( key.string().charAt( 0 ) ) >= 0 ) {
+				finish( key.string() + ":" + under );
+				return;
+			}
+		}
 		if ( choices.isEmpty() ) {
 			return;
 		}
@@ -108,7 +134,7 @@ final class SelectPrompt extends Prompt {
 
 	@Override
 	String footer() {
-		return "↑↓ move   enter select   esc back";
+		return footerText.isEmpty() ? "↑↓ move   enter select   esc back" : footerText;
 	}
 
 	static String pad( String s, int w ) {

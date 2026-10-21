@@ -271,4 +271,44 @@ class TuiPromptsTest {
 		assertThat( line.toString() ).isEqualTo( "012345678…" );
 	}
 
+	@Test
+	@DisplayName( "SelectPrompt: a hotkey finishes with the letter and the row under the cursor, Tab too, Enter still just picks" )
+	void hotkeys() {
+		SelectPrompt p = new SelectPrompt( PLAIN, "Notes", "", choices( "n1", "n2", "n3" ), null ).withHotkeys( "aed", "a add" );
+		p.key( KeyEvent.ofKey( KeyCode.DOWN ) );
+		p.key( KeyEvent.ofChar( 'e', KeyModifiers.NONE ) );
+		assertThat( p.result() ).isEqualTo( "e:n2" );
+		assertThat( p.footer() ).isEqualTo( "a add" );
+
+		SelectPrompt tab = new SelectPrompt( PLAIN, "Notes", "", choices( "n1" ), null ).withHotkeys( "a", "" );
+		tab.key( KeyEvent.ofKey( KeyCode.TAB ) );
+		assertThat( tab.result() ).isEqualTo( "tab:n1" );
+
+		SelectPrompt enter = new SelectPrompt( PLAIN, "Notes", "", choices( "n1", "n2" ), null ).withHotkeys( "a", "" );
+		enter.key( KeyEvent.ofKey( KeyCode.ENTER ) );
+		assertThat( enter.result() ).isEqualTo( "n1" );
+
+		SelectPrompt other = new SelectPrompt( PLAIN, "Notes", "", choices( "n1" ), null ).withHotkeys( "a", "" );
+		other.key( KeyEvent.ofChar( 'x', KeyModifiers.NONE ) );
+		assertThat( other.isDone() ).isFalse();
+	}
+
+	@Test
+	@DisplayName( "SelectPrompt: a hotkey works on an empty list, with an empty value" )
+	void hotkeyOnEmptyList() {
+		SelectPrompt p = new SelectPrompt( PLAIN, "Notes", "", List.of(), null ).withHotkeys( "a", "" );
+		p.key( KeyEvent.ofChar( 'a', KeyModifiers.NONE ) );
+		assertThat( p.result() ).isEqualTo( "a:" );
+	}
+
+	@Test
+	@DisplayName( "TextPrompt: starts with the text to edit and the caret at its end" )
+	void textInitial() {
+		TextPrompt p = new TextPrompt( PLAIN, "Edit", "", "", false, "required", "likes tea" );
+		p.key( KeyEvent.ofKey( KeyCode.BACKSPACE ) );
+		p.key( KeyEvent.ofChar( 'x', KeyModifiers.NONE ) );
+		p.key( KeyEvent.ofKey( KeyCode.ENTER ) );
+		assertThat( p.result() ).isEqualTo( "likes tex" );
+	}
+
 }

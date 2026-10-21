@@ -1,0 +1,48 @@
+/**
+ * Writes `handlers/AgentApi.bx` into the generated app: the run-control actions beside ColdBox's toAi()
+ * routes on the always-on /__bxagents path (see RouterGenerator, which registers the routes that call it).
+ *
+ * The handler is a real BoxLang class kept in generators/agentapi/AgentApi.bx so it is compiled and
+ * checked with the rest of the module; this class only stamps the token settings into a copy.
+ */
+class {
+
+	/**
+	 * @appDir The generated app folder
+	 * @agentApi The root project's `agentApi` config - `{ enabled, tokenEnvVar, tokens }`, all optional
+	 *
+	 * @return { written : boolean, path : string } - written is false when `agentApi.enabled` is false
+	 */
+	struct function generate( required string appDir, struct agentApi = {} ) {
+		if ( !( arguments.agentApi.enabled ?: true ) ) {
+			return { written : false, path : "" }
+		}
+		var handlerDir = arguments.appDir.reReplace( "[\/]+$", "" ) & "/handlers"
+		directoryCreate( path = handlerDir, createPath = true, ignoreExists = true )
+
+		var tokenVariable = trim( arguments.agentApi.tokenEnvVar ?: "" )
+		var source = fileRead( getDirectoryFromPath( getCurrentTemplatePath() ) & "agentapi/AgentApi.bx", "UTF-8" )
+		var marker = '"__TOKEN_ENV_VAR__"'
+		if ( !source.find( marker ) ) {
+			throw( type = "BxAgents.AgentApiTemplateBroken", message = "agentapi/AgentApi.bx has lost its token variable marker" )
+		}
+		source = source.replace( marker, '"' & bxLiteral( tokenVariable ) & '"' )
+		var tokensMarker = '"__TOKENS_ENABLED__"'
+		if ( !source.find( tokensMarker ) ) {
+			throw( type = "BxAgents.AgentApiTemplateBroken", message = "agentapi/AgentApi.bx has lost its tokens marker" )
+		}
+		source = source.replace( tokensMarker, '"' & ( ( arguments.agentApi.tokens ?: false ) ? "true" : "false" ) & '"' )
+
+		var path = handlerDir & "/AgentApi.bx"
+		fileWrite( path, source )
+		return { written : true, path : path }
+	}
+
+	/**
+	 * @return The value safe inside a double-quoted BoxLang string
+	 */
+	private string function bxLiteral( required string value ) {
+		return arguments.value.replace( '"', '""', "all" ).replace( "##", "####", "all" )
+	}
+
+}

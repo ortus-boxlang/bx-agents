@@ -78,7 +78,7 @@ El evento `thread` va primero porque una cabecera de respuesta no puede leerse a
 
 ## La API generada
 
-Una entrada `webui` monta veinte acciones bajo `<path>/api`, servidas por un `handlers/ChatUi.bx` generado:
+Una entrada `webui` monta veinticuatro acciones bajo `<path>/api`, servidas por un `handlers/ChatUi.bx` generado:
 
 | Ruta | Propósito |
 | --- | --- |
@@ -102,6 +102,10 @@ Una entrada `webui` monta veinte acciones bajo `<path>/api`, servidas por un `ha
 | `GET /preferences` | Las preferencias almacenadas de este visitante, como `{ key: value }` |
 | `POST /preferences/set` | `{ key, value }` |
 | `POST /preferences/delete` | `{ key }` |
+| `GET /notes` | Las notas del visitante y las del agente, con cuánto llena cada una. `404` si el agente no tiene bloque [`notes`](agent-yaml.md#notas) |
+| `POST /notes/add` | `{ scope: "user" \| "agent", text }` |
+| `POST /notes/update` | `{ scope, id, text }` |
+| `POST /notes/remove` | `{ scope, id }` - solo las notas propias del visitante; una nota del agente da `403` |
 
 Cada una está delimitada por el `getUserSessionIdentifier()` de ColdBox como el `userId`. Las primeras tres mantienen la forma y el formato de cable exactos de `toAi()`.
 
@@ -237,8 +241,9 @@ La razón es un vacío real, no una preferencia: **el `IAiMemory` de bx-ai no ti
 | Pieza | Qué es |
 | --- | --- |
 | `bx-sqlite` | El driver JDBC, incluido con BxAgents como módulo anidado |
-| [`qb`](https://github.com/coldbox-modules/qb) | QueryBuilder para lecturas y escrituras, SchemaBuilder para las tablas. Ningún SQL escrito a mano en ninguna parte |
-| `models/ChatDb.bx` | Generado. Posee el esquema y entrega query builders |
+| [`qb`](https://github.com/coldbox-modules/qb) | QueryBuilder para las lecturas y escrituras de `ChatDb` |
+| `ChatStore` | En el módulo BxAgents, compartido con el chat de terminal. Posee las tablas y sus versiones, en SQL de SQLite simple |
+| `models/ChatDb.bx` | Generado. Entrega query builders; su `migrate()` llama a `ChatStore` |
 | Una sentencia de arranque en `Application.bx` | Generado. Construye `ChatDb` en el arranque para que la migración se ejecute entonces, no en cualquier request que toque primero la base de datos |
 
 El datasource se registra en `Application.bx` y la gramática se fija en `config/ColdBox.bx`:
@@ -267,14 +272,16 @@ Ambos son opcionales de sobreescribir, por entrada:
 
 Un `database.path` absoluto **falla el build**: se resuelve con `expandPath()` dentro de la app generada, así que una ruta absoluta escapa silenciosamente del directorio de la app y rompe un despliegue de `.bxa` empaquetado.
 
-**El esquema está versionado y es solo-hacia-adelante.** `ChatDb.migrate()` registra lo que ha aplicado en una tabla `bxagents_schema_version` y solo aplica lo que es más nuevo, así que arrancar contra un almacén existente es un no-op. v1 crea `conversations` y `preferences`; v2 añade `users`. Evolúcionalo añadiendo un nuevo `applyV<n>()` y aumentando `SCHEMA_VERSION` - nunca editando una migración que ya se envió, porque **SQLite no puede modificar ni eliminar una columna** y el propio `SQLiteGrammar` de qb lanza `UnsupportedOperation` en lugar de fingir lo contrario.
+**Un solo archivo para el chat web y el chat de terminal.** En la máquina de un desarrollador, `bxAgents serve` arranca la app con la variable de entorno `BXAGENTS_DB` apuntando a `data/chat.db` en la carpeta del proyecto, y `bxAgents chat` abrirá el mismo archivo. La app generada usa `BXAGENTS_DB` cuando está definida y `database.path` en caso contrario, así que una app desplegada guarda su archivo dentro de la app a menos que definas `BXAGENTS_DB` también allí (por ejemplo, hacia un volumen montado). Los proyectos nuevos ignoran `data/chat.db*` en git. El archivo está en modo WAL, así que el chat de terminal y un servidor en marcha pueden usarlo a la vez.
+
+**El esquema está versionado y es solo-hacia-adelante.** `ChatStore.migrate()` (que llama `ChatDb.migrate()`) registra lo que ha aplicado en una tabla `bxagents_schema_version` y solo aplica lo que es más nuevo, así que arrancar contra un almacén existente es un no-op. v1 crea `conversations` y `preferences`; v2 añade `users`. Evolúcionalo añadiendo un paso a la lista de migraciones del almacén - nunca editando una migración que ya se envió, porque **SQLite no puede modificar ni eliminar una columna**. Una base de datos creada por una versión anterior de la app generada se reconoce y se deja como está.
 
 !!! warning
     **Dos cosas aquí son contraintuitivas, y ambas se establecieron por las malas contra un arranque real de ColdBox en lugar de leerse en una página de documentación.**
 
     **El ajuste de datasource por defecto es `this.datasource`, no `this.defaultDatasource`.** La clave de registro es plural (`this.datasources[ "name" ]`), así que el valor por defecto singular se lee como si debiera coincidir - y BoxLang acepta `this.defaultDatasource` silenciosamente y no hace nada con él. El fallo que produce nombra el mismísimo datasource que estás intentando seleccionar (`No default datasource defined in the application or globally or in the query options. Registered datasources are: [bxagents]`), lo cual se lee como un mecanismo de selección roto en lugar de un ajuste mal escrito.
 
-    **Nombra el datasource en cada builder de qb; no dependas de `moduleSettings.qb.defaultOptions`.** El `ModuleConfig.cfc` propio de qb mapea `QueryBuilder@qb` con `.initArg( name = "defaultOptions", value = settings.defaultOptions )` en `onLoad()`, así que el ajuste *parece* cubrirte. No llegó en un arranque real - el datasource estaba registrado y el builder todavía tenía opciones vacías. `ChatDb.query()` por lo tanto llama a `.mergeDefaultOptions( { datasource : static.DATASOURCE } )` en cada builder que entrega. `SchemaBuilder@qb` nunca recibe `defaultOptions` en absoluto (qb lo mapea solo con `grammar`), así que cada llamada de esquema pasa `options: { datasource: ... }` ella misma.
+    **Nombra el datasource en cada builder de qb; no dependas de `moduleSettings.qb.defaultOptions`.** El `ModuleConfig.cfc` propio de qb mapea `QueryBuilder@qb` con `.initArg( name = "defaultOptions", value = settings.defaultOptions )` en `onLoad()`, así que el ajuste *parece* cubrirte. No llegó en un arranque real - el datasource estaba registrado y el builder todavía tenía opciones vacías. `ChatDb.query()` por lo tanto llama a `.mergeDefaultOptions( { datasource : static.DATASOURCE } )` en cada builder que entrega.
 
     El bloque `moduleSettings.qb` todavía se genera - es correcto para cualquier otro uso de qb en la app - pero el almacén generado no depende de él.
 
@@ -282,7 +289,7 @@ Un `database.path` absoluto **falla el build**: se resuelve con `expandPath()` d
 
     Una más, sin cambios: el datasource debe ser un datasource **nombrado**, nunca un struct inline - el propio `appendSqlComments()` de qb tipa ese argumento como `string`, así que un struct lanza antes de que corra cualquier SQL.
 
-La gramática es la única pieza específica de SQLite. Todo lo demás pasa por qb, así que apuntar esto a Postgres o MySQL después es un cambio de gramática y datasource en lugar de una reescritura.
+El almacén es SQLite. Las lecturas y escrituras de `ChatDb` pasan por qb, pero las tablas las crea `ChatStore` con SQL de SQLite, así que otra base de datos más adelante significa un nuevo `ChatStore`, no solo un cambio de gramática.
 
 ## Conversaciones y preferencias
 
@@ -368,6 +375,14 @@ Las respuestas del asistente se renderizan a través de un subconjunto de markdo
 
 !!! info
     El compositor es un `textarea` - **Enter** envía, **Shift+Enter** añade una línea nueva, y crece hasta unas seis líneas antes de hacer scroll. Un turno en curso puede detenerse con **Stop** (un `AbortController`), que mantiene lo que ya se transmitió en lugar de descartarlo. El transcript solo hace auto-scroll cuando ya estás en la parte inferior, así que desplazarte hacia arriba para releer algo a mitad de stream no te jala de vuelta hacia abajo.
+
+## Notas
+
+Cuando el agente tiene un bloque [`notes`](agent-yaml.md#notas), la cabecera muestra un botón **Notes**. Abre un panel con dos pestañas, *About you* y *About the agent*, cuánto llena cada una (caracteres del límite y unos tokens aproximados que añade a cada conversación) y las notas con sus ids. Añadir, editar en el sitio y quitar funcionan con tus propias notas. La página y el chat de terminal comparten la misma base de datos, así que una nota añadida en uno aparece en el otro.
+
+- *About you* pertenece a la misma identidad que tus conversaciones: tu cuenta con [`users`](#usuarios-e-inicio-de-sesión), o el espacio compartido sin cuentas.
+- *About the agent* la comparte todo el que usa el agente: cualquiera puede añadir o editar una, pero la página no tiene botón Remove para ella y `/notes/remove` responde `403`. Quitar una nota del agente requiere un [token](agent-bx.md#tokens-de-acceso-para-un-agente-desplegado) admin en la ruta `/__bxagents/notes/remove` del agente, o `bxAgents notes remove --scope=agent` donde se ejecuta.
+- Sin bloque `notes` el botón no se muestra y las rutas responden `404`: `capabilities.notes` de `/info` lo indica.
 
 ## What is not here yet
 

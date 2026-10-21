@@ -27,7 +27,7 @@ Es una interfaz de pantalla completa en el verde azulado del logo de BxAgents. L
 | Buscador | El integrado, Brave, Tavily, Exa o Google | Un marcador de clave en `.env` y una línea en `instructions.md` que indica al agente qué proveedor usar |
 | Tools de archivos | Solo lectura, las 19, o una por una; luego las carpetas que pueden usar | [`toolOptions.bxai.allowedPaths`](../conventions/agent-yaml.md#tools-de-archivos) |
 | Memoria | En memoria o guardada en disco | `memory` y `checkpointer` |
-| Servidores MCP | GitHub, Stripe, Notion, Atlassian, Cloudflare, Supabase | Entradas [`mcpServers`](../conventions/mcp.md#consumir-servidores-remotos) y marcadores de token |
+| Servidores MCP | GitHub, Stripe, Notion, Atlassian, Cloudflare, Supabase, Git | Entradas [`mcpServers`](../conventions/mcp.md#consumir-servidores-remotos) y marcadores de token |
 | Canales | Chat web, API HTTP, Telegram, Slack, Discord, WhatsApp, Teams, SMS, GitHub, Email, Signal | Un archivo `gateways/*.bx` y los marcadores que necesita |
 | Acceso web | Abierto, una clave compartida o usuarios con contraseña | `apiKeyEnvVar` o `users` en la entrada del chat web |
 | Protección | Marcar, bloquear o ignorar entradas sospechosas | Un bloque [`security`](../conventions/agent-yaml.md#ajustes) |
@@ -80,7 +80,7 @@ mcpServers:
 | Cloudflare | `CLOUDFLARE_API_TOKEN` | Alto: DNS, Workers, recursos facturables, según el token |
 | Supabase | `SUPABASE_ACCESS_TOKEN` | Alto: ejecuta SQL. La dirección empieza en solo lectura |
 
-Elegir un servidor de riesgo alto muestra lo que puede hacer antes de continuar. **Git** está en el catálogo pero aún no se ofrece: se ejecuta como programa local y el bx-ai incluido en esta versión solo habla con servidores MCP web.
+Elegir un servidor de riesgo alto muestra lo que puede hacer antes de continuar. **Git** se ejecuta como programa en tu máquina (`uvx mcp-server-git`), así que necesita [uv](https://docs.astral.sh/uv/) instalado donde corre el agente, y trabaja en la carpeta desde la que arrancas el agente. El asistente lo escribe como una entrada `command`; consulta [programas como servidores MCP](../conventions/mcp.md#servidores-que-se-ejecutan-como-programa).
 
 ## Después de crearlo
 

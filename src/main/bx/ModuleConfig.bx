@@ -63,6 +63,8 @@ class {
 	this.dependencies = [];
 
 	static {
+		subcommandVerbs = [ "token", "notes" ]
+
 		verbs = {
 			"new"     : "models.cli.New",
 			"build"   : "models.cli.Build",
@@ -75,6 +77,8 @@ class {
 			"invoke"  : "models.cli.Invoke",
 			"clean"   : "models.cli.Clean",
 			"hash-password" : "models.cli.HashPassword",
+			"token"   : "models.cli.Token",
+			"notes"   : "models.cli.Notes",
 			"doctor"  : "models.cli.Doctor"
 		}
 
@@ -90,6 +94,8 @@ class {
 			"inspect" : "Report how the agent is composed: agents, tools, skills, MCP, exposure, env ([--json], [--md[=FILE]], [--section=a,b])",
 			"clean"   : "Remove a project's .build/ and dist/ output",
 			"hash-password" : "Hash a password for a webui users entry (--password)",
+			"token"   : "Issue, list and revoke access tokens for a deployed agent (create --name, list, revoke --name)",
+			"notes"   : "Read and manage the notes of an agent (list, add, edit, remove, stats, export, import)",
 			"doctor"  : "Diagnose the environment and project - runtime, modules, env vars ([--json])"
 		}
 
@@ -111,10 +117,12 @@ class {
 			"inspect" : [ "section", "environment" ],
 			// `server` is a boolean flag, so it is NOT listed here - only
 			// flags that REQUIRE a value belong in this map.
-			"chat"    : [ "connect", "port" ],
+			"chat"    : [ "connect", "port", "token", "user", "session" ],
 			"invoke"  : [ "message", "port" ],
 			"clean"   : [],
 			"hash-password" : [ "password" ],
+			"token"   : [ "name", "scope", "expires" ],
+			"notes"   : [ "scope", "user", "text", "id", "file" ],
 			"doctor"  : []
 		}
 	}
@@ -344,7 +352,12 @@ class {
 		}
 
 		options.delete( "_valuelessFlags" )
-		options.projectRoot = resolveProjectRoot( options )
+		// `token create` and `notes list`: the first word is the action, not a project path
+		if ( static.subcommandVerbs.contains( verbName ) ) {
+			options.projectRoot = resolveProjectRoot( options, false )
+		} else {
+			options.projectRoot = resolveProjectRoot( options )
+		}
 
 		try {
 			var verbClass = new "#static.verbs[ verbName ]#"()
@@ -519,14 +532,15 @@ class {
 	 * CWD, never against this module's own file location.
 	 *
 	 * @options The parsed options struct from parseCliOptions()
+	 * @usePositional False for a verb whose first positional is an action (`token create`), not a path
 	 *
 	 * @return An absolute, trailing-slash-free path to the target project root
 	 */
-	private string function resolveProjectRoot( required struct options ) {
+	private string function resolveProjectRoot( required struct options, boolean usePositional = true ) {
 		var cwd = getSystemSetting( "user.dir", "" )
 		var candidate = len( arguments.options.projectRoot ?: "" )
 			? arguments.options.projectRoot
-			: ( len( arguments.options._positional ?: "" ) ? arguments.options._positional : "." )
+			: ( arguments.usePositional && len( arguments.options._positional ?: "" ) ? arguments.options._positional : "." )
 
 		if ( candidate == "." ) {
 			return cwd.reReplace( "[\/]+$", "" )
