@@ -132,6 +132,27 @@ class extends="testbox.system.BaseSpec" {
 				expect( routerContent ).toInclude( 'route( "/api/chat" ).toAi( "GeneratedAgent" )' );
 			} );
 
+			it( "puts a project's agent-scope interceptor where the generated Application.bx looks it up", function() {
+				var projectRoot = newTempProject( "full-project" );
+				var result = pipeline.build( projectRoot );
+
+				// Registered through ColdBox's class registration, which WireBox resolves to
+				// <appDir>/interceptors/AuditLogger.bx. One folder deeper and the app fails to start
+				// with "Instance not found" (measured by booting examples/advanced-agent).
+				expect( fileRead( result.appDir & "/Application.bx" ) ).toInclude( 'registerInterceptor( interceptorClass: "interceptors.AuditLogger", interceptorName: "AuditLogger" )' );
+				expect( fileExists( result.appDir & "/interceptors/AuditLogger.bx" ) ).toBeTrue();
+				expect( directoryExists( result.appDir & "/interceptors/interceptors" ) ).toBeFalse();
+			} );
+
+			it( "does not hand a project interceptor to WireBox's getInstance(), which reads its @scope agent as an object scope", function() {
+				var projectRoot = newTempProject( "full-project" );
+				var result = pipeline.build( projectRoot );
+
+				// `@scope agent` is also WireBox's own scope annotation: getInstance() on such a class
+				// died with "The key [agent] was not found in the struct" on a real boot.
+				expect( fileRead( result.appDir & "/Application.bx" ) ).notToInclude( 'getInstance( "interceptors.AuditLogger" )' );
+			} );
+
 			it( "generates the v1 web chat UI and wires its auth-gate interceptor into config/ColdBox.bx end-to-end", function() {
 				var projectRoot = newTempProject( "gateways-webui" );
 				var result = pipeline.build( projectRoot );

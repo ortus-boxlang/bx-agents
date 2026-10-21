@@ -46,6 +46,33 @@ class extends="testbox.system.BaseSpec" {
 				expect( fileExists( dirs.appDir & "/interceptors/AgentAudit.bx" ) ).toBeTrue();
 			} );
 
+			it( "reads @scope from a docblock too, the form docs/conventions/interceptors.md shows", function() {
+				var root = createTempDirectory( prefix = "bxagents-interceptors-doc-" );
+				tempDirs.append( root );
+				directoryCreate( root & "/interceptors" );
+				fileWrite( root & "/interceptors/DocRuntime.bx", "/**" & char( 10 ) & " * Listens in the runtime." & char( 10 ) & " *" & char( 10 ) & " * @scope runtime" & char( 10 ) & " */" & char( 10 ) & "class {" & char( 10 ) & "}" & char( 10 ) );
+				fileWrite( root & "/interceptors/DocAgent.bx", "/**" & char( 10 ) & " * @scope agent" & char( 10 ) & " */" & char( 10 ) & "class {" & char( 10 ) & "}" & char( 10 ) );
+				var dirs = newDirs();
+
+				var result = splitter.split( dirs.appDir, dirs.runtimeDir, discoverer.discover( root ) );
+
+				expect( result.runtime.map( e => e.name ) ).toBe( [ "DocRuntime" ] );
+				expect( result.agent.map( e => e.name ) ).toBe( [ "DocAgent" ] );
+				expect( fileExists( dirs.runtimeDir & "/DocRuntime.bx" ) ).toBeTrue();
+			} );
+
+			it( "rejects an unrecognized @scope value written in a docblock", function() {
+				var root = createTempDirectory( prefix = "bxagents-interceptors-doc-" );
+				tempDirs.append( root );
+				directoryCreate( root & "/interceptors" );
+				fileWrite( root & "/interceptors/Typo.bx", "/**" & char( 10 ) & " * @scope globl" & char( 10 ) & " */" & char( 10 ) & "class {" & char( 10 ) & "}" & char( 10 ) );
+				var dirs = newDirs();
+
+				expect( function() {
+					splitter.split( dirs.appDir, dirs.runtimeDir, discoverer.discover( root ) );
+				} ).toThrow( "BxAgents.InvalidInterceptorScope" );
+			} );
+
 			it( "defaults to agent scope when no @scope annotation is present", function() {
 				var discovery = discoverer.discover( fixtures & "/interceptors-mixed" );
 				var dirs = newDirs();

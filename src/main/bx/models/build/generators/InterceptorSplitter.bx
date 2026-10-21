@@ -54,13 +54,18 @@ class {
 		var instance = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
 			.instantiate( arguments.entry.path, getDefaultContext() )
 		var meta = getMetaData( instance )
+		// `@scope( "runtime" )` before the class is an annotation; `@scope runtime` inside
+		// its docblock, the form docs/conventions/interceptors.md shows, is documentation
+		// metadata instead. Measured on BoxLang 1.18: the docblock form never reaches
+		// `annotations`, so reading only that silently made every docblock interceptor "agent".
 		var annotations = meta.annotations ?: {}
+		var documentation = meta.documentation ?: {}
 
-		if ( !annotations.keyExists( "scope" ) ) {
+		if ( !annotations.keyExists( "scope" ) && !documentation.keyExists( "scope" ) ) {
 			return "agent"
 		}
 
-		var value = annotations.scope
+		var value = annotations.keyExists( "scope" ) ? annotations.scope : documentation.scope
 		var normalized = isSimpleValue( value ) ? lcase( trim( value ) ) : ""
 
 		if ( normalized != "agent" && normalized != "runtime" ) {
