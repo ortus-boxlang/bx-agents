@@ -239,13 +239,25 @@ When the agent keeps [notes](conventions/agent-yaml.md#notes), the chat can show
 | Command | Does |
 |---|---|
 | `/remember <text>` | Keep a note about you |
-| `/notes` | List your notes and the agent's, with how full each is |
+| `/notes` | Open the notes screen (below) |
+| `/notes list` | Print your notes and the agent's, with how full each is |
 | `/notes add [agent] <text>` | Add a note (about you, or with `agent` about the agent's work) |
 | `/notes edit <id> <text>` | Change a note; the id is the short code in the list |
 | `/notes remove <id>` | Remove a note |
 | `/notes stats` | Characters used against the limit, and the rough tokens they add to every conversation |
 
-It works in all three modes. Over `--connect` the commands use the server's notes routes, so you see the notes of that server, and removing a note of the agent needs an `admin` token. An agent without a `notes` block says how to turn them on.
+`/notes` opens a screen with your notes (press `t` or Tab for the agent's). The note under the cursor is the one the keys act on:
+
+| Key | Does |
+|---|---|
+| `a` | Add a note to the scope on screen |
+| `e` or Enter | Edit the note, starting from its text |
+| `d` | Remove the note, after a yes |
+| `t` or Tab | Switch between your notes and the agent's |
+| `s` | Show the stats |
+| Esc | Back to the chat |
+
+The heading shows how many characters of the limit are used and about how many tokens that adds to every conversation. It works in all three modes. Over `--connect` the commands use the server's notes routes, so you see the notes of that server, and removing a note of the agent needs an `admin` token. An agent without a `notes` block says how to turn them on.
 
 #### Recording a chat
 

@@ -239,13 +239,25 @@ Cuando el agente guarda [notas](conventions/agent-yaml.md#notas), el chat puede 
 | Comando | Hace |
 |---|---|
 | `/remember <texto>` | Guarda una nota sobre ti |
-| `/notes` | Lista tus notas y las del agente, con cuánto llena cada una |
+| `/notes` | Abre la pantalla de notas (abajo) |
+| `/notes list` | Imprime tus notas y las del agente, con cuánto llena cada una |
 | `/notes add [agent] <texto>` | Añade una nota (sobre ti, o con `agent` sobre el trabajo del agente) |
 | `/notes edit <id> <texto>` | Cambia una nota; el id es el código corto de la lista |
 | `/notes remove <id>` | Quita una nota |
 | `/notes stats` | Caracteres usados frente al límite, y los tokens aproximados que añaden a cada conversación |
 
-Funciona en los tres modos. Con `--connect` los comandos usan las rutas de notas del servidor, así que ves las notas de ese servidor, y quitar una nota del agente requiere un token `admin`. Un agente sin bloque `notes` explica cómo activarlas.
+`/notes` abre una pantalla con tus notas (pulsa `t` o Tab para las del agente). Las teclas actúan sobre la nota bajo el cursor:
+
+| Tecla | Hace |
+|---|---|
+| `a` | Añade una nota al alcance en pantalla |
+| `e` o Enter | Edita la nota, partiendo de su texto |
+| `d` | Quita la nota, tras un sí |
+| `t` o Tab | Cambia entre tus notas y las del agente |
+| `s` | Muestra las estadísticas |
+| Esc | Vuelve al chat |
+
+El encabezado muestra cuántos caracteres del límite se usan y cuántos tokens aproximados añade a cada conversación. Funciona en los tres modos. Con `--connect` los comandos usan las rutas de notas del servidor, así que ves las notas de ese servidor, y quitar una nota del agente requiere un token `admin`. Un agente sin bloque `notes` explica cómo activarlas.
 
 #### Grabar un chat
 
