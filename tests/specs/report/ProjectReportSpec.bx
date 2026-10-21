@@ -79,6 +79,21 @@ class extends="testbox.system.BaseSpec" {
 				expect( report.schedule.tasks ).toInclude( "nightly" );
 			} );
 
+			it( "reads an interceptor's scope from either form the splitter accepts", function() {
+				var root = newTempProject( "valid-minimal" );
+				directoryCreate( root & "/interceptors" );
+				fileWrite( root & "/interceptors/Doc.bx", "/**" & char( 10 ) & " * @scope runtime" & char( 10 ) & " */" & char( 10 ) & "class {" & char( 10 ) & "}" & char( 10 ) );
+				fileWrite( root & "/interceptors/Ann.bx", "@scope( ""runtime"" )" & char( 10 ) & "class {" & char( 10 ) & "}" & char( 10 ) );
+				fileWrite( root & "/interceptors/None.bx", "class {" & char( 10 ) & "}" & char( 10 ) );
+
+				var scopes = {};
+				for ( var i in reporter.build( root ).interceptors ) {
+					scopes[ i.name ] = i.scope;
+				}
+
+				expect( scopes ).toBe( { Doc : "runtime", Ann : "runtime", None : "agent" } );
+			} );
+
 			it( "walks a chain of subagents as a tree", function() {
 				var report = reporter.build( newTempProject( "subagents-chain" ) );
 

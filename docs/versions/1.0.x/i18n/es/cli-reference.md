@@ -63,7 +63,7 @@ Usa siempre la forma `--flag=valor`. La forma con espacio no está soportada.
 Genera el andamiaje de un nuevo proyecto de agente.
 :::
 ::: card title="add" icon="phosphor-duotone:plus-circle" href="#add"
-Añade una herramienta a un proyecto existente.
+Añade una herramienta o un interceptor a un proyecto existente.
 :::
 ::: card title="build" icon="phosphor-duotone:hammer" href="#build"
 Ejecuta el pipeline de build completo.
@@ -153,7 +153,7 @@ bxAgents new my-agent --forgebox=some-package-slug
 
 ### `add`
 
-Añade una cosa a un proyecto que ya existe, haciendo las mismas preguntas que `new`. Hoy eso es una `tool`.
+Añade una cosa a un proyecto que ya existe, haciendo las mismas preguntas que `new`. Hoy eso es una `tool` o un `interceptor`.
 
 ```bash
 bxAgents add                        # elige qué añadir
@@ -182,6 +182,22 @@ Crea `tools/<Name>.bx` con una función `@AITool` con la forma que [documenta bx
 | `--args=<list>` | Separados por comas, cada uno `name` o `name:type` (`string` por defecto; también `numeric`, `boolean`, `array`, `struct`, `date` y `any`). |
 
 Una herramienta pertenece al agente en cuya carpeta está y se le asocia automáticamente. Dos archivos de herramienta de un mismo agente no pueden compartir nombre, ni siquiera en subcarpetas distintas, así que un choque se rechaza aquí en lugar de en el siguiente `build`. Comprueba el resultado con `bxAgents inspect --section=tools`.
+
+#### `add interceptor`
+
+Crea `interceptors/<Name>.bx` con un método por cada punto de interceptación que elijas, y el `@scope` por el que [el build separa los interceptores](conventions/interceptors.md).
+
+```bash
+bxAgents add interceptor AuditLogger --points=preProcess,onException --description="Log every request"
+bxAgents add interceptor AiWatch --scope=runtime --points=beforeAIModelInvoke,onAIError
+```
+
+| Flag | Significado |
+|---|---|
+| `--name=<Name>` | El nombre del archivo, o el segundo posicional. Se rechaza un nombre que otro interceptor ya usa. |
+| `--scope=agent\|runtime` | `agent` (el valor por defecto) es un interceptor de ColdBox registrado en la app generada al arrancar; sus métodos reciben `( event, interceptData, rc, prc )`. `runtime` escucha los eventos que bx-ai anuncia en el runtime de BoxLang y recibe los datos del evento como único argumento; BxAgents lo copia a `.build/runtime-interceptors` pero no lo registra por ti. |
+| `--points=<list>` | Puntos de interceptación separados por comas. El selector ofrece los habituales; aquí se puede nombrar cualquier punto del núcleo de ColdBox (`agent`) o evento de bx-ai (`runtime`), y se rechaza un nombre que no sea un punto de ese ámbito. Por defecto `preProcess` (`agent`) o `beforeAIModelInvoke` (`runtime`). |
+| `--description=<text>` | Una línea para el docblock de la clase. Opcional. |
 
 ### `build`
 

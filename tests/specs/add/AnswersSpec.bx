@@ -66,6 +66,28 @@ class extends="testbox.system.BaseSpec" {
 				} ).toThrow( "BxAgents.InvalidAnswer" );
 			} );
 
+			it( "reads a list from a comma separated flag, trimmed, and checks each against the allowed values", function() {
+				var answers = answersFor( { points : "a, b" } );
+
+				expect( answers.list( key = "points", title = "Points", choices = [ "a", "b", "c" ] ) ).toBe( [ "a", "b" ] );
+				expect( function() {
+					answersFor( { points : "a,zzz" } ).list( key = "points", title = "Points", choices = [ "a", "b" ] );
+				} ).toThrow( "BxAgents.InvalidAnswer" );
+			} );
+
+			it( "accepts a flagged list value outside the choices offered when valid says so", function() {
+				var answers = answersFor( { points : "z" } );
+
+				expect( answers.list( key = "points", title = "Points", choices = [ "a" ], valid = [ "a", "z" ] ) ).toBe( [ "z" ] );
+			} );
+
+			it( "asks for a list with a multi-select, or falls back to the default with nobody to ask", function() {
+				var prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [ [ "b", "c" ] ] );
+
+				expect( answersFor( {}, prompter ).list( key = "x", title = "X", choices = [ "a", "b", "c" ] ) ).toBe( [ "b", "c" ] );
+				expect( answersFor().list( key = "x", title = "X", choices = [ "a", "b" ], default = [ "a" ] ) ).toBe( [ "a" ] );
+			} );
+
 			it( "reports whether questions can be asked", function() {
 				expect( answersFor().interactive() ).toBeFalse();
 				expect( answersFor( {}, new bxagents.models.wizard.prompters.ScriptedPrompter( [] ) ).interactive() ).toBeTrue();

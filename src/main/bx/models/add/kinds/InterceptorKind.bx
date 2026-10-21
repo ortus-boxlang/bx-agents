@@ -1,0 +1,139 @@
+/**
+ * `add interceptor` - scaffolds `interceptors/<Name>.bx` with one method per interception
+ * point chosen, and the `@scope` the build splits on (see docs/conventions/interceptors).
+ *
+ * `agent` scope is a ColdBox interceptor registered with the generated app, so its
+ * methods take ( event, interceptData, rc, prc ). `runtime` scope is a BoxLang runtime
+ * interceptor (bx-ai announces the points) which BxAgents copies to
+ * `.build/runtime-interceptors` but does not register; its methods receive the event data
+ * as the first argument, which is what the runtime was measured to pass.
+ */
+class {
+
+	struct function info() {
+		return { name : "interceptor", summary : "Code that runs at a lifecycle point (interceptors/<Name>.bx)" }
+	}
+
+	/**
+	 * @answers An Answers
+	 * @ctx The add context
+	 *
+	 * @return { name, scope, points, description }
+	 */
+	struct function ask( required any answers, required struct ctx ) {
+		var a = arguments.answers
+		var points = new "models.add.InterceptionPoints@bxagents"()
+
+		var name = a.text(
+			key      = "name",
+			title    = "Interceptor name",
+			help     = "The file name: interceptors/<Name>.bx, e.g. AuditLogger.",
+			required = true,
+			validate = ( value ) => identifierProblem( value )
+		)
+		if ( arguments.ctx.project.interceptorNames.findNoCase( name ) ) {
+			throw( type = "BxAgents.InterceptorExists", message = "An interceptor named #name# already exists. Pick another name." )
+		}
+
+		var scope = a.select(
+			key     = "scope",
+			title   = "Where does it run?",
+			choices = [
+				{ value : "agent", label : "In this app (agent)", hint : "a ColdBox interceptor, registered when the app starts" },
+				{ value : "runtime", label : "In the BoxLang runtime (runtime)", hint : "listens to bx-ai's events; you load it yourself" }
+			],
+			default = "agent"
+		)
+
+		var chosen = a.list(
+			key     = "points",
+			title   = "Which points should it listen to?",
+			choices = points.featured( scope ),
+			default = [ scope == "agent" ? "preProcess" : "beforeAIModelInvoke" ],
+			valid   = points.all( scope ),
+			help    = "Space ticks one. Any other point can be named with --points=a,b."
+		)
+		if ( !chosen.len() ) {
+			throw( type = "BxAgents.InvalidAnswer", message = "--points: pick at least one interception point" )
+		}
+
+		var description = a.text(
+			key     = "description",
+			title   = "What is it for? (optional)",
+			help    = "One line, written into the class's docblock.",
+			default = ""
+		)
+
+		return { name : name, scope : scope, points : chosen, description : description }
+	}
+
+	/**
+	 * @answers The answers from ask()
+	 * @ctx The add context
+	 * @changes A ChangeSet
+	 */
+	void function plan( required struct answers, required struct ctx, required any changes ) {
+		arguments.changes.file( "interceptors/" & arguments.answers.name & ".bx", render( arguments.answers ) )
+	}
+
+	/**
+	 * @return [ text ] what is left to do
+	 */
+	array function next( required struct answers, required struct ctx ) {
+		if ( arguments.answers.scope == "runtime" ) {
+			return [
+				"Fill in the methods in interceptors/#arguments.answers.name#.bx.",
+				"Runtime scope is copied to .build/runtime-interceptors by `build` but not registered: load it from a module's ModuleConfig or the runtime's boxlang.json.",
+				"Check it with: bxAgents inspect --section=interceptors"
+			]
+		}
+		return [
+			"Fill in the methods in interceptors/#arguments.answers.name#.bx.",
+			"It is registered with the app when it starts; `bxAgents build` copies it in.",
+			"Check it with: bxAgents inspect --section=interceptors"
+		]
+	}
+
+	// --------------------------------------------------------------------------
+
+	private string function render( required struct answers ) {
+		var tab = char( 9 )
+		var points = new "models.add.InterceptionPoints@bxagents"()
+		var lines = [ "/**" ]
+		if ( len( arguments.answers.description ) ) {
+			lines.append( " * " & arguments.answers.description.replace( char( 10 ), " ", "all" ) )
+			lines.append( " *" )
+		}
+		lines.append( " * @scope " & arguments.answers.scope )
+		lines.append( " */" )
+		lines.append( "class {" )
+
+		for ( var point in arguments.answers.points ) {
+			lines.append( "" )
+			var hint = points.hint( point, arguments.answers.scope )
+			if ( len( hint ) ) {
+				lines.append( tab & "/**" )
+				lines.append( tab & " * Runs on " & point & ": " & hint & "." )
+				lines.append( tab & " */" )
+			}
+			lines.append( tab & "function " & point & "(" & ( arguments.answers.scope == "agent" ? " event, interceptData, rc, prc " : " data " ) & ") {" )
+			lines.append( tab & tab & "// TODO: implement" )
+			lines.append( tab & "}" )
+		}
+
+		lines.append( "" )
+		lines.append( "}" )
+		return lines.toList( char( 10 ) ) & char( 10 )
+	}
+
+	private string function identifierProblem( required string value ) {
+		if ( !len( arguments.value ) ) {
+			return "A name is needed."
+		}
+		if ( !reFind( "^[A-Za-z][A-Za-z0-9_]*$", arguments.value ) ) {
+			return "[#arguments.value#] must start with a letter and use only letters, digits and underscores."
+		}
+		return ""
+	}
+
+}

@@ -468,9 +468,10 @@ class {
 	private struct function interceptorInfo( required struct entry ) {
 		var scope = "agent"
 		try {
-			var hit = reMatch( "@scope\s+(\w+)", fileRead( arguments.entry.path ) )
+			// Both forms the splitter accepts: a docblock `@scope agent` and an annotation `@scope( "runtime" )`
+			var hit = reMatch( "@scope\s*\(?\s*[""']?\w+", fileRead( arguments.entry.path ) )
 			if ( hit.len() ) {
-				scope = hit[ 1 ].reReplace( "@scope\s+", "" )
+				scope = hit[ 1 ].reReplace( "@scope\s*\(?\s*[""']?", "" )
 			}
 		} catch ( any e ) {
 		}

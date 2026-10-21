@@ -147,6 +147,98 @@ class extends="testbox.system.BaseSpec" {
 
 			} );
 
+			describe( "add interceptor", function() {
+
+				private function addInterceptor( required string root, struct flags = {}, array positionals = [ "interceptor", "AuditLogger2" ] ) {
+					var options = { projectRoot : root, _positionals : positionals, yes : true };
+					options.append( flags );
+					return addVerb.run( options );
+				}
+
+				it( "writes interceptors/<Name>.bx with a method per point and the scope in the docblock", function() {
+					var root = newTempProject( "full-project" );
+
+					var result = addInterceptor( root, { points : "preProcess,onException", description : "Log every request" } );
+					var source = fileRead( root & "/interceptors/AuditLogger2.bx" );
+
+					expect( result.exitCode ).toBe( 0 );
+					expect( source ).toInclude( " * Log every request" );
+					expect( source ).toInclude( " * @scope agent" );
+					expect( source ).toInclude( "function preProcess( event, interceptData, rc, prc )" );
+					expect( source ).toInclude( "function onException( event, interceptData, rc, prc )" );
+				} );
+
+				it( "is split to the scope it declares by the next build, in both scopes", function() {
+					var root = newTempProject( "full-project" );
+					addInterceptor( root, { points : "preProcess" } );
+					addInterceptor( root, { scope : "runtime", points : "beforeAIModelInvoke,onAIError" }, [ "interceptor", "AiWatch" ] );
+
+					var result = new bxagents.models.build.BuildPipeline( "test" ).build( root );
+					var report = new bxagents.models.report.ProjectReport().build( root );
+
+					expect( fileExists( result.appDir & "/interceptors/AuditLogger2.bx" ) ).toBeTrue();
+					expect( fileExists( root & "/.build/runtime-interceptors/AiWatch.bx" ) ).toBeTrue();
+					expect( fileExists( result.appDir & "/interceptors/AiWatch.bx" ) ).toBeFalse();
+					expect( report.interceptors.filter( i => i.name == "AiWatch" )[ 1 ].scope ).toBe( "runtime" );
+					expect( report.validation.errors ).toBeEmpty();
+				} );
+
+				it( "uses bx-ai's event data argument for runtime scope", function() {
+					var root = newTempProject( "full-project" );
+
+					addInterceptor( root, { scope : "runtime", points : "onAIError" } );
+
+					expect( fileRead( root & "/interceptors/AuditLogger2.bx" ) ).toInclude( "function onAIError( data )" );
+				} );
+
+				it( "compiles and can be instantiated", function() {
+					var root = newTempProject( "full-project" );
+					addInterceptor( root, { points : "preProcess,postProcess" } );
+
+					var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext();
+					var instance = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
+						.instantiate( root & "/interceptors/AuditLogger2.bx", context );
+
+					expect( isObject( instance ) ).toBeTrue();
+				} );
+
+				it( "defaults to the agent scope and the preProcess point", function() {
+					var root = newTempProject( "full-project" );
+
+					addInterceptor( root );
+
+					var source = fileRead( root & "/interceptors/AuditLogger2.bx" );
+					expect( source ).toInclude( "@scope agent" );
+					expect( source ).toInclude( "function preProcess(" );
+				} );
+
+				it( "refuses a name already used, a point that does not exist for the scope, and an unknown scope", function() {
+					var root = newTempProject( "full-project" );
+
+					expect( function() {
+						addInterceptor( root, {}, [ "interceptor", "AuditLogger" ] );
+					} ).toThrow( "BxAgents.InterceptorExists" );
+					expect( function() {
+						addInterceptor( root, { points : "beforeAIModelInvoke" } );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					expect( function() {
+						addInterceptor( root, { scope : "global" } );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+				} );
+
+				it( "asks for the name, where it runs, the points and a description", function() {
+					var root = newTempProject( "full-project" );
+					var prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [ "Watcher", "runtime", [ "beforeAIModelInvoke", "onAIError" ], "Watches calls", "create" ] );
+
+					var result = addVerb.run( { projectRoot : root, _positionals : [ "interceptor" ], _prompter : prompter, _interactive : true } );
+
+					expect( prompter.remaining() ).toBe( 0 );
+					expect( result.exitCode ).toBe( 0 );
+					expect( fileRead( root & "/interceptors/Watcher.bx" ) ).toInclude( "function onAIError( data )" );
+				} );
+
+			} );
+
 			describe( "the verb", function() {
 
 				it( "refuses a folder that is not an agent project", function() {

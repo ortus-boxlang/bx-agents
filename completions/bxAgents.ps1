@@ -7,7 +7,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 	param( $wordToComplete, $commandAst, $cursorPosition )
 
 	$verbs = @{
-		'add' = 'Add to a project: add <kind> [name] - a tool today'
+		'add' = 'Add to a project: add <kind> [name] - a tool or an interceptor'
 		'build' = 'Build a project into a generated app'
 		'chat' = 'Interactive REPL chat with a built agent'
 		'clean' = 'Remove a project''s .build/ and dist/ output'
@@ -34,7 +34,9 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'function'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'name'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'no-tui'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'points'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
+			@{ Name = 'scope'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'yes'; Value = $false; Choices = @(); Dir = $false }
 		)
 		'build' = @(
