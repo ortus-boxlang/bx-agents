@@ -27,7 +27,7 @@ class extends="coldbox.system.web.tasks.ColdBoxScheduler" {
 ```
 
 There's nothing BxAgents-specific about the body of that file - it's ColdBox's own
-scheduler DSL, in full: `.cron( "0 9 * * 1-5" )`, `.everyWeekOn()`, `.startOn()`/
+scheduler DSL, in full: `.every( 15, "minutes" )`, `.everyDayAt( "09:00" )`, `.onWeekdays( "08:30" )`, `.everyWeekOn()`, `.startOn()`/
 `.endOn()`/`.between()`, `.when()`, `.withNoOverlaps()`, lifecycle hooks, timezones -
 anything ColdBox's `ScheduledTask` supports.
 

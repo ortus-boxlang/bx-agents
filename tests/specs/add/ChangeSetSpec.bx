@@ -61,6 +61,18 @@ class extends="testbox.system.BaseSpec" {
 				expect( second.appended ).toBeEmpty();
 			} );
 
+			it( "edits a file that exists without calling it a conflict, and lists it as updated", function() {
+				fileWrite( root & "/s.txt", "old" );
+				var changes = new bxagents.models.add.ChangeSet( root );
+				changes.edit( "s.txt", "old and new", "new" );
+
+				expect( changes.conflicts() ).toBeEmpty();
+				expect( changes.lines() ).toBe( [ "update  s.txt" ] );
+				expect( changes.preview() ).toInclude( "Would update s.txt, adding" );
+				expect( changes.apply().updated ).toBe( [ "s.txt" ] );
+				expect( fileRead( root & "/s.txt" ) ).toBe( "old and new" );
+			} );
+
 			it( "shows a preview with the text, and writes nothing", function() {
 				var changes = new bxagents.models.add.ChangeSet( root );
 				changes.file( "x.txt", "line" );

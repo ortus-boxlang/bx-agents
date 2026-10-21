@@ -256,6 +256,10 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   shape, into the root agent or a subagent (`--agent`).
 - `add interceptor` scaffolds `interceptors/<Name>.bx` with a method per interception point and the
   `@scope` the build splits on: ColdBox's core points for `agent`, bx-ai's events for `runtime`.
+- `add schedule` adds a task to `schedules/Scheduler.bx` from two answers, when and what to tell the
+  agent (`every 15 minutes`, `daily 09:00`, `weekly mon 09:00`, ...), creating the file if there is
+  none and otherwise adding at the end of `configure()`. There is no cron phrase: ColdBox's
+  `ScheduledTask` has none.
 
 #### Documentation
 

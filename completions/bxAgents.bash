@@ -69,7 +69,7 @@ _bxagents_complete() {
 	if [[ "$cur" == -* ]]; then
 		local flags=""
 		case "$verb" in
-			add) flags="--agent= --args= --description= --dry-run --force --function= --name= --no-tui --points= --projectRoot= --scope= --yes" ;;
+			add) flags="--agent= --args= --description= --dry-run --force --function= --name= --no-tui --points= --projectRoot= --prompt= --scope= --when= --yes" ;;
 			build) flags="--environment= --generatorVersion= --projectRoot= --verbose" ;;
 			chat) flags="--connect= --continue --no-tui --port= --projectRoot= --record --server --session= --token= --user=" ;;
 			clean) flags="--force --projectRoot=" ;;

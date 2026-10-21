@@ -15,6 +15,7 @@ class {
 		variables.root = arguments.root.reReplace( "[\\/]+$", "" )
 		variables.files = []
 		variables.appends = []
+		variables.edits = []
 		return this
 	}
 
@@ -46,12 +47,28 @@ class {
 	}
 
 	/**
+	 * Change a file that is already there, keeping the rest of it. Unlike file(), an
+	 * existing target is the point, so it is not a conflict.
+	 *
+	 * @path Project-relative path
+	 * @content The whole file as it should be after the change
+	 * @added The part that is new, shown in the review and by --dry-run
+	 */
+	function edit( required string path, required string content, required string added ) {
+		variables.edits.append( { path : safe( arguments.path ), content : arguments.content, added : arguments.added } )
+		return this
+	}
+
+	/**
 	 * @return [ text ] one line per change, for the review step
 	 */
 	array function lines() {
 		var out = []
 		for ( var f in variables.files ) {
 			out.append( ( exists( f.path ) ? "replace " : "create  " ) & f.path )
+		}
+		for ( var e in variables.edits ) {
+			out.append( "update  " & e.path )
 		}
 		for ( var a in variables.appends ) {
 			out.append( "append  " & a.path )
@@ -75,6 +92,10 @@ class {
 			out.append( ( exists( f.path ) ? "Would replace " : "Would create " ) & f.path )
 			out.append( indent( f.content ) )
 		}
+		for ( var e in variables.edits ) {
+			out.append( "Would update " & e.path & ", adding" )
+			out.append( indent( e.added ) )
+		}
 		for ( var a in variables.appends ) {
 			out.append( "Would append to " & a.path )
 			out.append( indent( a.text ) )
@@ -85,7 +106,7 @@ class {
 	/**
 	 * @force True to overwrite files that exist
 	 *
-	 * @return { created : [ paths ], replaced : [ paths ], appended : [ paths ] }
+	 * @return { created : [ paths ], replaced : [ paths ], updated : [ paths ], appended : [ paths ] }
 	 */
 	struct function apply( boolean force = false ) {
 		var clashes = conflicts()
@@ -96,7 +117,7 @@ class {
 			)
 		}
 
-		var done = { created : [], replaced : [], appended : [] }
+		var done = { created : [], replaced : [], updated : [], appended : [] }
 		for ( var f in variables.files ) {
 			var target = variables.root & "/" & f.path
 			var existed = fileExists( target )
@@ -107,6 +128,10 @@ class {
 			} else {
 				done.created.append( f.path )
 			}
+		}
+		for ( var e in variables.edits ) {
+			fileWrite( variables.root & "/" & e.path, e.content )
+			done.updated.append( e.path )
 		}
 		for ( var a in variables.appends ) {
 			var target = variables.root & "/" & a.path

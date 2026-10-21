@@ -63,7 +63,7 @@ Always use the `--flag=value` form. The space-separated form is not supported.
 Scaffold a new agent project.
 :::
 ::: card title="add" icon="phosphor-duotone:plus-circle" href="#add"
-Add a tool or an interceptor to an existing project.
+Add a tool, interceptor or schedule to an existing project.
 :::
 ::: card title="build" icon="phosphor-duotone:hammer" href="#build"
 Run the full build pipeline.
@@ -153,7 +153,7 @@ bxAgents new my-agent --forgebox=some-package-slug
 
 ### `add`
 
-Add one thing to a project that already exists, asking the same questions `new` asks. Today that is a `tool` or an `interceptor`.
+Add one thing to a project that already exists, asking the same questions `new` asks. Today that is a `tool`, an `interceptor` or a `schedule`.
 
 ```bash
 bxAgents add                        # pick what to add
@@ -198,6 +198,39 @@ bxAgents add interceptor AiWatch --scope=runtime --points=beforeAIModelInvoke,on
 | `--scope=agent\|runtime` | `agent` (the default) is a ColdBox interceptor registered with the generated app when it starts; its methods take `( event, interceptData, rc, prc )`. `runtime` listens to the events bx-ai announces in the BoxLang runtime and takes the event data as its one argument; BxAgents copies it to `.build/runtime-interceptors` but does not register it for you. |
 | `--points=<list>` | Comma separated interception points. The picker offers the common ones; any ColdBox core point (`agent`) or bx-ai event (`runtime`) can be named here, and a name that is not a point for that scope is refused. Defaults to `preProcess` (`agent`) or `beforeAIModelInvoke` (`runtime`). |
 | `--description=<text>` | One line for the class's docblock. Optional. |
+
+#### `add schedule`
+
+Adds a task to `schedules/Scheduler.bx` that sends the agent a message on a schedule. Only two things are asked: when it runs and what it says to the agent. Overlapping runs are always prevented (`.withNoOverlaps()`).
+
+```bash
+bxAgents add schedule --when="weekdays 08:30" --prompt="Summarize yesterday's findings"
+bxAgents add schedule digest --when="every 15 minutes" --prompt="Check for new tickets" --agent=researcher
+bxAgents add schedule                          # asks how often, the details, a name, and what to say
+```
+
+| Flag | Meaning |
+|---|---|
+| `--when=<phrase>` | When it runs, in one of the phrases below. At a terminal, leave it out and you are asked how often, then the details. |
+| `--prompt=<text>` | The message sent to the agent each time. |
+| `--name=<name>` | The task's name, or the second positional. Defaults to a name made from the phrase. A name already in the scheduler is refused. |
+| `--agent=<subagent>` | Which agent runs it. Asked only when the project has subagents; `.` (the default) is the root agent. The task looks the agent up by its declared `name`, so renaming the agent means editing the task. |
+
+| Phrase | Runs |
+|---|---|
+| `every 15 minutes`, `every 2 hours`, `every 1 days` | At that interval |
+| `hourly`, `hourly :15` | Every hour, on the hour or at that minute |
+| `daily 09:00` | Every day at that time |
+| `weekdays 08:30`, `weekends 10:00` | Monday to Friday, or Saturday and Sunday |
+| `weekly mon 09:00` | Once a week (`mon` `tue` `wed` `thu` `fri` `sat` `sun`) |
+| `monthly 1 09:00` | Once a month on that day, 1 to 28 so that no month skips it |
+| `first-business-day 09:00`, `last-business-day 17:00` | On that business day of each month |
+
+Times are 24 hour `HH:mm` in the scheduler's timezone. There is no cron phrase: ColdBox's `ScheduledTask` has no cron method, so for anything else write the task by hand with its full DSL.
+
+- If `schedules/Scheduler.bx` does not exist it is created. If it does, the task is added at the end of `configure()` and the rest of the file is left as it was.
+- If `configure()` cannot be found, nothing is changed and the error carries the task to paste in.
+- Scheduled tasks run while the app is served (`bxAgents serve`). Check the result with `bxAgents inspect --section=schedule`.
 
 ### `build`
 

@@ -239,6 +239,144 @@ class extends="testbox.system.BaseSpec" {
 
 			} );
 
+			describe( "add schedule", function() {
+
+				private function addSchedule( required string root, struct flags = {}, array positionals = [ "schedule" ] ) {
+					var options = { projectRoot : root, _positionals : positionals, yes : true, prompt : "Say hi" };
+					options.append( flags );
+					return addVerb.run( options );
+				}
+
+				it( "creates schedules/Scheduler.bx when there is none, naming the agent by its declared name", function() {
+					var root = newTempProject( "valid-minimal" );
+
+					var result = addSchedule( root, { when : "daily 09:00", name : "morning" } );
+					var source = fileRead( root & "/schedules/Scheduler.bx" );
+
+					expect( result.exitCode ).toBe( 0 );
+					expect( source ).toInclude( 'extends="coldbox.system.web.tasks.ColdBoxScheduler"' );
+					expect( source ).toInclude( 'task( "morning" )' );
+					expect( source ).toInclude( '.everyDayAt( "09:00" )' );
+					expect( source ).toInclude( ".withNoOverlaps()" );
+					expect( source ).toInclude( 'getInstance( "' & new bxagents.models.report.ProjectReport().build( root ).agent.name & '" ).run( "Say hi" )' );
+				} );
+
+				it( "adds a task to an existing scheduler, keeping what is there and its layout", function() {
+					var root = newTempProject( "full-project" );
+					var before = fileRead( root & "/schedules/Scheduler.bx" );
+
+					addSchedule( root, { when : "weekly mon 08:00", name : "monday" } );
+					var after = fileRead( root & "/schedules/Scheduler.bx" );
+
+					expect( after ).toInclude( 'task( "monday" )' );
+					expect( after ).toInclude( ".everyWeekOn( 1, ""08:00"" )".replace( '""', '"', "all" ) );
+					expect( after.find( "nightly" ) ).toBeGT( 0 );
+					expect( after.find( "nightly" ) ).toBeLT( after.find( "monday" ) );
+					expect( after ).toMatch( "\n\t\}\n\n\}\n$" );
+					expect( after ).toInclude( before.listToArray( char( 10 ) )[ 1 ] );
+				} );
+
+				it( "is read back by inspect, with the task name", function() {
+					var root = newTempProject( "valid-minimal" );
+					addSchedule( root, { when : "hourly", name : "tick" } );
+
+					var report = new bxagents.models.report.ProjectReport().build( root );
+
+					expect( report.schedule.tasks ).toInclude( "tick" );
+					expect( report.validation.errors ).toBeEmpty();
+				} );
+
+				it( "puts a hash sign, quotes and braces in the prompt through safely", function() {
+					var root = newTempProject( "valid-minimal" );
+					var hash = char( 35 );
+
+					addSchedule( root, { when : "hourly", name : "tricky", prompt : 'Report "the" {top} ' & hash & '1' } );
+
+					expect( fileRead( root & "/schedules/Scheduler.bx" ) ).toInclude( 'run( "Report ""the"" {top} ' & hash & hash & '1" )' );
+				} );
+
+				it( "finds the end of configure() past braces in strings and comments", function() {
+					var root = newTempProject( "valid-minimal" );
+					directoryCreate( root & "/schedules" );
+					fileWrite( root & "/schedules/Scheduler.bx", 'class extends="coldbox.system.web.tasks.ColdBoxScheduler" {' & char( 10 ) & char( 10 ) & char( 9 ) & '// a } in a comment' & char( 10 ) & char( 9 ) & 'function configure() {' & char( 10 ) & char( 9 ) & char( 9 ) & 'task( "odd" ).call( () => getInstance( "x" ).run( "a } and ""q}""" ) ).everyHour()' & char( 10 ) & char( 9 ) & '}' & char( 10 ) & char( 10 ) & '}' & char( 10 ) );
+
+					addSchedule( root, { when : "hourly :30", name : "next" } );
+					var after = fileRead( root & "/schedules/Scheduler.bx" );
+
+					expect( after.find( 'task( "next" )' ) ).toBeGT( after.find( 'task( "odd" )' ) );
+					expect( after.find( 'task( "next" )' ) ).toBeLT( after.find( "everyHourAt" ) );
+					expect( after ).toMatch( "\n\t\}\n\n\}\n$" );
+				} );
+
+				it( "will not guess when there is no configure(), and hands over the text to paste", function() {
+					var root = newTempProject( "valid-minimal" );
+					directoryCreate( root & "/schedules" );
+					fileWrite( root & "/schedules/Scheduler.bx", "class {" & char( 10 ) & "}" & char( 10 ) );
+
+					expect( function() {
+						addSchedule( root, { when : "daily 09:00", name : "x" } );
+					} ).toThrow( "BxAgents.SchedulerNotEditable" );
+					expect( fileRead( root & "/schedules/Scheduler.bx" ) ).toBe( "class {" & char( 10 ) & "}" & char( 10 ) );
+				} );
+
+				it( "refuses a task name already in the scheduler, a bad phrase and a missing --when", function() {
+					var root = newTempProject( "full-project" );
+
+					expect( function() {
+						addSchedule( root, { when : "daily 09:00", name : "nightly" } );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					expect( function() {
+						addSchedule( root, { when : "daily 25:00", name : "x" } );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					expect( function() {
+						addSchedule( root, { name : "x" } );
+					} ).toThrow( "BxAgents.MissingAnswer" );
+				} );
+
+				it( "targets a subagent by its declared name, not its folder", function() {
+					var root = newTempProject( "subagents-chain" );
+
+					addSchedule( root, { when : "daily 09:00", name : "sub", agent : "a" } );
+
+					expect( fileRead( root & "/schedules/Scheduler.bx" ) ).toInclude( 'getInstance( "a" )' );
+				} );
+
+				it( "shows the new task and writes nothing on --dry-run", function() {
+					var root = newTempProject( "full-project" );
+					var before = fileRead( root & "/schedules/Scheduler.bx" );
+
+					var result = addSchedule( root, { when : "daily 09:00", name : "dry", "dry-run" : true } );
+
+					expect( result.message ).toInclude( "Would update schedules/Scheduler.bx" );
+					expect( result.message ).toInclude( 'task( "dry" )' );
+					expect( fileRead( root & "/schedules/Scheduler.bx" ) ).toBe( before );
+				} );
+
+				it( "builds the phrase from questions: how often, then the details, a name, what to say", function() {
+					var root = newTempProject( "valid-minimal" );
+					var prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [ "weekly", "fri", "16:00", "friday-report", "Write the weekly report", "create" ] );
+
+					var result = addVerb.run( { projectRoot : root, _positionals : [ "schedule" ], _prompter : prompter, _interactive : true } );
+
+					expect( prompter.remaining() ).toBe( 0 );
+					expect( result.exitCode ).toBe( 0 );
+					expect( fileRead( root & "/schedules/Scheduler.bx" ) ).toInclude( '.everyWeekOn( 5, "16:00" )' );
+				} );
+
+				it( "offers the name a person would choose from the phrase", function() {
+					var root = newTempProject( "valid-minimal" );
+					var prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [ "daily", "09:30", "", "Check in", "create" ] );
+
+					// an empty answer to the name question takes its default
+					prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [ "daily", "09:30", "every-day-at-09-30", "Check in", "create" ] );
+					addVerb.run( { projectRoot : root, _positionals : [ "schedule" ], _prompter : prompter, _interactive : true } );
+
+					expect( prompter.asked().filter( q => q.title == "Task name" ) ).toHaveLength( 1 );
+					expect( fileRead( root & "/schedules/Scheduler.bx" ) ).toInclude( 'task( "every-day-at-09-30" )' );
+				} );
+
+			} );
+
 			describe( "the verb", function() {
 
 				it( "refuses a folder that is not an agent project", function() {

@@ -69,7 +69,7 @@ class {
 	 *
 	 * @root Absolute path to the project root
 	 *
-	 * @return { rootName, interceptorNames : [ names ], subagents : [ folder names ], toolNames : { ".": [ names ], "<subagent>": [ names ] } }
+	 * @return { rootName, interceptorNames : [ names ], taskNames : [ names ], agentNames : { "." : name, "<subagent>" : name }, subagents : [ folder names ], toolNames : { ".": [ names ], "<subagent>": [ names ] } }
 	 */
 	private struct function projectInfo( required string root ) {
 		var discoverer = new "models.build.ProjectDiscoverer@bxagents"()
@@ -78,12 +78,48 @@ class {
 			rootName         : lastSegment( arguments.root ),
 			interceptorNames : rootDiscovery.interceptors.map( i => i.name ),
 			subagents        : rootDiscovery.subagents.map( s => s.name ),
-			toolNames : { "." : rootDiscovery.tools.map( t => t.name ) }
+			toolNames        : { "." : rootDiscovery.tools.map( t => t.name ) },
+			agentNames       : { "." : agentName( arguments.root ) },
+			taskNames        : taskNames( rootDiscovery )
 		}
 		for ( var sub in rootDiscovery.subagents ) {
 			info.toolNames[ sub.name ] = discoverer.discover( sub.path ).tools.map( t => t.name )
+			info.agentNames[ sub.name ] = agentName( sub.path )
 		}
 		return info
+	}
+
+	/**
+	 * The name an agent is registered under in WireBox, which is what a scheduler's
+	 * getInstance() needs: its declared `name`, not its folder.
+	 *
+	 * @path The agent's folder
+	 *
+	 * @return The name, or the folder's name when the definition cannot be read
+	 */
+	private string function agentName( required string path ) {
+		try {
+			var config = new "models.build.AgentConfigResolver@bxagents"().resolve( projectRoot = arguments.path )
+			return new "models.build.generators.ColdBoxAppGenerator@bxagents"().resolveAgentName( config )
+		} catch ( any e ) {
+			return lastSegment( arguments.path )
+		}
+	}
+
+	/**
+	 * @discovery The root discovery
+	 *
+	 * @return The names of the task( "..." ) calls already in schedules/Scheduler.bx
+	 */
+	private array function taskNames( required struct discovery ) {
+		var names = []
+		if ( !arguments.discovery.hasScheduler ) {
+			return names
+		}
+		for ( var hit in reMatch( "task\(\s*[""']([^""']+)[""']", fileRead( arguments.discovery.schedulerPath ) ) ) {
+			names.append( hit.reReplace( "task\(\s*[""']", "" ).reReplace( "[""']$", "" ) )
+		}
+		return names
 	}
 
 	private string function lastSegment( required string path ) {

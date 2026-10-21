@@ -1,0 +1,146 @@
+/**
+ * Turns "when should it run" into a ColdBox scheduled-task chain, from a few plain
+ * phrases rather than a cron expression (ColdBox's ScheduledTask has no cron method;
+ * checked against coldbox 8.3's async/tasks/ScheduledTask.cfc).
+ *
+ *   every 15 minutes | every 2 hours | every 1 days
+ *   hourly | hourly :15           on the hour, or at that minute
+ *   daily 09:00
+ *   weekdays 08:30 | weekends 10:00
+ *   weekly mon 09:00              mon tue wed thu fri sat sun (or the full name)
+ *   monthly 1 09:00               day 1-28, so no month skips it
+ *   first-business-day 09:00 | last-business-day 17:00
+ *
+ * Times are 24 hour HH:mm in the scheduler's timezone.
+ */
+class {
+
+	static {
+		KINDS = [
+			{ value : "every", label : "Every few minutes, hours or days", hint : "every 15 minutes" },
+			{ value : "hourly", label : "Every hour", hint : "hourly, or hourly :15 for the quarter past" },
+			{ value : "daily", label : "Every day at a time", hint : "daily 09:00" },
+			{ value : "weekdays", label : "Monday to Friday at a time", hint : "weekdays 08:30" },
+			{ value : "weekends", label : "Saturday and Sunday at a time", hint : "weekends 10:00" },
+			{ value : "weekly", label : "Once a week", hint : "weekly mon 09:00" },
+			{ value : "monthly", label : "Once a month", hint : "monthly 1 09:00" },
+			{ value : "first-business-day", label : "First business day of the month", hint : "first-business-day 09:00" },
+			{ value : "last-business-day", label : "Last business day of the month", hint : "last-business-day 17:00" }
+		]
+		DAYS = { mon : 1, tue : 2, wed : 3, thu : 4, fri : 5, sat : 6, sun : 7 }
+		DAY_NAMES = { mon : "Monday", tue : "Tuesday", wed : "Wednesday", thu : "Thursday", fri : "Friday", sat : "Saturday", sun : "Sunday" }
+		UNITS = [ "minutes", "hours", "days" ]
+	}
+
+	/**
+	 * @return [ { value, label, hint } ] the shapes the picker offers
+	 */
+	array function kinds() {
+		return static.KINDS
+	}
+
+	/**
+	 * @text A phrase from the list above
+	 *
+	 * @return { kind, call : the chain method call, summary : how to say it to a person }
+	 *
+	 * @throws BxAgents.InvalidSchedule with what was wrong and an example
+	 */
+	struct function parse( required string text ) {
+		var words = trim( arguments.text ).lcase().reReplace( "\s+", " ", "all" ).listToArray( " " )
+		if ( !words.len() ) {
+			fail( "Say when it runs." )
+		}
+		var kind = words[ 1 ]
+
+		switch ( kind ) {
+			case "every":
+				if ( words.len() != 3 || !reFind( "^[1-9][0-9]*$", words[ 2 ] ) ) {
+					fail( "[#arguments.text#] is not 'every <number> <minutes|hours|days>'." )
+				}
+				var unit = words[ 3 ].reReplace( "s$", "" ) & "s"
+				if ( !static.UNITS.contains( unit ) ) {
+					fail( "[#words[ 3 ]#] is not a unit here. Use minutes, hours or days." )
+				}
+				var n = int( words[ 2 ] )
+				return {
+					kind    : "every",
+					call    : '.every( #n#, "#unit#" )',
+					summary : "every #n == 1 ? unit.reReplace( 's$', '' ) : n & ' ' & unit#"
+				}
+			case "hourly":
+				if ( words.len() == 1 ) {
+					return { kind : "hourly", call : ".everyHour()", summary : "every hour" }
+				}
+				var minute = words[ 2 ].reReplace( "^:", "" )
+				if ( words.len() != 2 || !reFind( "^[0-9]{1,2}$", minute ) || int( minute ) > 59 ) {
+					fail( "[#arguments.text#] is not 'hourly' or 'hourly :MM' (MM 0-59)." )
+				}
+				return { kind : "hourly", call : ".everyHourAt( #int( minute )# )", summary : "every hour at :#numberFormat( int( minute ), '00' )#" }
+			case "daily":
+				return timed( words, 2, arguments.text, "daily", ( t ) => '.everyDayAt( "#t#" )', ( t ) => "every day at #t#" )
+			case "weekdays":
+				return timed( words, 2, arguments.text, "weekdays", ( t ) => '.onWeekdays( "#t#" )', ( t ) => "Monday to Friday at #t#" )
+			case "weekends":
+				return timed( words, 2, arguments.text, "weekends", ( t ) => '.onWeekends( "#t#" )', ( t ) => "Saturday and Sunday at #t#" )
+			case "first-business-day":
+				return timed( words, 2, arguments.text, kind, ( t ) => '.onFirstBusinessDayOfTheMonth( "#t#" )', ( t ) => "the first business day of each month at #t#" )
+			case "last-business-day":
+				return timed( words, 2, arguments.text, kind, ( t ) => '.onLastBusinessDayOfTheMonth( "#t#" )', ( t ) => "the last business day of each month at #t#" )
+			case "weekly":
+				if ( words.len() != 3 ) {
+					fail( "[#arguments.text#] is not 'weekly <day> HH:mm', e.g. weekly mon 09:00." )
+				}
+				var day = words[ 2 ].left( 3 )
+				if ( !static.DAYS.keyExists( day ) ) {
+					fail( "[#words[ 2 ]#] is not a day. Use mon, tue, wed, thu, fri, sat or sun." )
+				}
+				var weeklyTime = checkTime( words[ 3 ] )
+				return {
+					kind    : "weekly",
+					call    : '.everyWeekOn( #static.DAYS[ day ]#, "#weeklyTime#" )',
+					summary : "every #static.DAY_NAMES[ day ]# at #weeklyTime#"
+				}
+			case "monthly":
+				if ( words.len() != 3 || !reFind( "^[0-9]{1,2}$", words[ 2 ] ) || int( words[ 2 ] ) < 1 || int( words[ 2 ] ) > 28 ) {
+					fail( "[#arguments.text#] is not 'monthly <day 1-28> HH:mm', e.g. monthly 1 09:00. Days 29-31 are left out so no month skips the run." )
+				}
+				var monthlyTime = checkTime( words[ 3 ] )
+				return {
+					kind    : "monthly",
+					call    : '.everyMonthOn( #int( words[ 2 ] )#, "#monthlyTime#" )',
+					summary : "on day #int( words[ 2 ] )# of each month at #monthlyTime#"
+				}
+		}
+
+		fail( "[#words[ 1 ]#] is not a schedule. Use one of: #static.KINDS.map( k => k.value ).toList( ', ' )#." )
+	}
+
+	/**
+	 * @words The phrase, split
+	 * @at Where the time is
+	 */
+	private struct function timed( required array words, required numeric at, required string text, required string kind, required any call, required any say ) {
+		if ( arguments.words.len() != arguments.at ) {
+			fail( "[#arguments.text#] is not '#arguments.kind# HH:mm', e.g. #arguments.kind# 09:00." )
+		}
+		var time = checkTime( arguments.words[ arguments.at ] )
+		return { kind : arguments.kind, call : arguments.call( time ), summary : arguments.say( time ) }
+	}
+
+	/**
+	 * @return The time as HH:mm, or an error
+	 */
+	private string function checkTime( required string time ) {
+		if ( !reFind( "^([01]?[0-9]|2[0-3]):[0-5][0-9]$", arguments.time ) ) {
+			fail( "[#arguments.time#] is not a 24 hour time like 09:00 or 17:30." )
+		}
+		var parts = arguments.time.listToArray( ":" )
+		return numberFormat( int( parts[ 1 ] ), "00" ) & ":" & parts[ 2 ]
+	}
+
+	private void function fail( required string message ) {
+		throw( type = "BxAgents.InvalidSchedule", message = arguments.message )
+	}
+
+}
