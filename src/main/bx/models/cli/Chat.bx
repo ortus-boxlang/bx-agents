@@ -117,7 +117,12 @@ class {
 		var screen = arguments.options._screen ?: createObject( "java", "ortus.boxlang.bxagents.tui.ChatScreen" ).open( controller.commands() )
 		var saved = ""
 		try {
-			controller.run( screen, arguments.options.record ?: false )
+			// --session=<number or id> opens that conversation, --continue the most recent one
+			var resume = trim( arguments.options.session ?: "" )
+			if ( !len( resume ) && ( arguments.options.continue ?: false ) ) {
+				resume = "last"
+			}
+			controller.run( screen, arguments.options.record ?: false, resume )
 		} finally {
 			// close() finishes the recording, so ask for its file first
 			saved = screen.isRecording() ? screen.recordingFile() : ""
@@ -170,7 +175,7 @@ class {
 		var agent = factory.buildAgent()
 
 		if ( wantsScreen( arguments.options ) ) {
-			return chatWithScreen( new "models.cli.chat.InProcessSession@bxagents"( agent, user ), arguments.options )
+			return chatWithScreen( new "models.cli.chat.InProcessSession@bxagents"( agent, user, openSessions( arguments.root ) ), arguments.options )
 		}
 
 		// MiniConsole shells out to `stty` to set up raw terminal mode, so it
@@ -208,6 +213,25 @@ class {
 		return {
 			exitCode : 0,
 			message  : "Chat session ended"
+		}
+	}
+
+	/**
+	 * The list of conversations in the project's chat database, shared with the web chat.
+	 *
+	 * @root The project root
+	 *
+	 * @return A SessionStore, or null when the database cannot be opened (the chat then keeps no list)
+	 */
+	private any function openSessions( required string root ) {
+		try {
+			var file = new "models.store.ChatStorePath@bxagents"().forProject( arguments.root )
+			directoryCreate( getDirectoryFromPath( file ), true, true )
+			var store = new "models.store.ChatStore@bxagents"( { driver : "sqlite", database : file } )
+			store.migrate()
+			return new "models.store.SessionStore@bxagents"( store )
+		} catch ( any e ) {
+			return nullValue()
 		}
 	}
 

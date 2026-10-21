@@ -1,0 +1,156 @@
+/**
+ * The list of conversations in the shared chat database: one row per conversation, owned by a user. The web chat's
+ * sidebar and the terminal chat's /sessions read the same rows.
+ *
+ * It holds the index only (title, how many messages, when). The messages themselves live in the agent's memory,
+ * keyed by ( userId, conversationId ), which is why a conversation survives a restart only when the agent's
+ * memory does.
+ *
+ * Every read and write is scoped by the user: a conversation id comes from the client, so guessing one must not
+ * be enough to read or rename somebody else's.
+ */
+class {
+
+	static {
+		TITLE_LENGTH = 60
+	}
+
+	/**
+	 * @store A ChatStore
+	 */
+	function init( required any store ) {
+		variables.store = arguments.store
+		return this
+	}
+
+	/**
+	 * Records activity on a conversation, creating its row the first time.
+	 *
+	 * @userId Whose conversation
+	 * @conversationId The conversation
+	 * @firstMessage What the user said; the first one becomes the title
+	 * @messageDelta Added to the message count (a turn is two: the question and the answer)
+	 *
+	 * @return False when the id exists and belongs to someone else
+	 */
+	boolean function touch( required string userId, required string conversationId, string firstMessage = "", numeric messageDelta = 2 ) {
+		var owner = variables.store.rows( "SELECT userId, title, messageCount FROM conversations WHERE id = :id", { id : arguments.conversationId } )
+		if ( owner.len() ) {
+			if ( owner[ 1 ].userId != arguments.userId ) {
+				return false
+			}
+			variables.store.exec(
+				"UPDATE conversations SET updatedAt = :now, messageCount = :count, title = :title WHERE id = :id AND userId = :userId",
+				{
+					now    : { value : now(), cfsqltype : "timestamp" },
+					count  : val( owner[ 1 ].messageCount ?: 0 ) + arguments.messageDelta,
+					title  : len( owner[ 1 ].title ?: "" ) ? owner[ 1 ].title : titleOf( arguments.firstMessage ),
+					id     : arguments.conversationId,
+					userId : arguments.userId
+				}
+			)
+			return true
+		}
+		variables.store.exec(
+			"INSERT INTO conversations ( id, userId, title, messageCount, createdAt, updatedAt ) VALUES ( :id, :userId, :title, :count, :now, :now )",
+			{
+				id     : arguments.conversationId,
+				userId : arguments.userId,
+				title  : titleOf( arguments.firstMessage ),
+				count  : arguments.messageDelta,
+				now    : { value : now(), cfsqltype : "timestamp" }
+			}
+		)
+		return true
+	}
+
+	/**
+	 * @return The user's conversations, most recent first: [ { id, title, messageCount, createdAt, updatedAt } ]
+	 */
+	array function list( required string userId, numeric limit = 20 ) {
+		return variables.store.rows(
+			"SELECT id, title, messageCount, createdAt, updatedAt FROM conversations WHERE userId = :userId ORDER BY updatedAt DESC, rowid DESC LIMIT #int( arguments.limit )#",
+			{ userId : arguments.userId }
+		)
+	}
+
+	/**
+	 * @return The conversation, or an empty struct when it does not exist or is not the user's
+	 */
+	struct function byId( required string userId, required string conversationId ) {
+		var found = variables.store.rows(
+			"SELECT id, title, messageCount, createdAt, updatedAt FROM conversations WHERE id = :id AND userId = :userId",
+			{ id : arguments.conversationId, userId : arguments.userId }
+		)
+		return found.len() ? found[ 1 ] : {}
+	}
+
+	/**
+	 * The conversation to open for "continue": the user's most recent one.
+	 *
+	 * @return The conversation, or an empty struct when there is none
+	 */
+	struct function latest( required string userId ) {
+		var found = list( arguments.userId, 1 )
+		return found.len() ? found[ 1 ] : {}
+	}
+
+	/**
+	 * Finds a conversation by what a person typed: its number in the list ( "2" ), or its id or the start of it.
+	 *
+	 * @reference "2", "a1b2c3", or a whole id
+	 *
+	 * @return The conversation, or an empty struct when nothing (or more than one) matches
+	 */
+	struct function resolve( required string userId, required string reference ) {
+		var ref = trim( arguments.reference )
+		if ( !len( ref ) ) {
+			return {}
+		}
+		var recent = list( arguments.userId, 50 )
+		if ( isNumeric( ref ) && ref >= 1 && ref <= recent.len() && len( ref ) < 4 ) {
+			return recent[ int( ref ) ]
+		}
+		var matches = recent.filter( row => row.id == ref || row.id.startsWith( ref ) )
+		return matches.len() == 1 ? matches[ 1 ] : {}
+	}
+
+	boolean function rename( required string userId, required string conversationId, required string title ) {
+		if ( byId( arguments.userId, arguments.conversationId ).isEmpty() ) {
+			return false
+		}
+		variables.store.exec(
+			"UPDATE conversations SET title = :title, updatedAt = :now WHERE id = :id AND userId = :userId",
+			{ title : arguments.title, now : { value : now(), cfsqltype : "timestamp" }, id : arguments.conversationId, userId : arguments.userId }
+		)
+		return true
+	}
+
+	boolean function delete( required string userId, required string conversationId ) {
+		if ( byId( arguments.userId, arguments.conversationId ).isEmpty() ) {
+			return false
+		}
+		variables.store.exec( "DELETE FROM conversations WHERE id = :id AND userId = :userId", { id : arguments.conversationId, userId : arguments.userId } )
+		return true
+	}
+
+	/**
+	 * Sets the count to zero after the conversation's messages were cleared, so lists do not advertise history
+	 * that is gone.
+	 */
+	void function resetCount( required string userId, required string conversationId ) {
+		variables.store.exec(
+			"UPDATE conversations SET messageCount = 0, updatedAt = :now WHERE id = :id AND userId = :userId",
+			{ now : { value : now(), cfsqltype : "timestamp" }, id : arguments.conversationId, userId : arguments.userId }
+		)
+	}
+
+	/**
+	 * A title is a label, not a preview: one line, cut at 60 characters.
+	 */
+	string function titleOf( required string message ) {
+		var flat = reReplace( trim( arguments.message ), "[[:space:]]+", " ", "all" )
+		return len( flat ) > static.TITLE_LENGTH ? left( flat, static.TITLE_LENGTH - 3 ) & "..." : flat
+	}
+
+}

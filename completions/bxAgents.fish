@@ -42,11 +42,13 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb build' -l verbose
     complete -c $cmd -n '__bxagents_using_verb build' -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb chat' -l connect -x
+    complete -c $cmd -n '__bxagents_using_verb chat' -l continue
     complete -c $cmd -n '__bxagents_using_verb chat' -l no-tui
     complete -c $cmd -n '__bxagents_using_verb chat' -l port -x
     complete -c $cmd -n '__bxagents_using_verb chat' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb chat' -l record
     complete -c $cmd -n '__bxagents_using_verb chat' -l server
+    complete -c $cmd -n '__bxagents_using_verb chat' -l session -x
     complete -c $cmd -n '__bxagents_using_verb chat' -l token -x
     complete -c $cmd -n '__bxagents_using_verb chat' -l user -x
     complete -c $cmd -n '__bxagents_using_verb chat' -a '(__fish_complete_directories)'
