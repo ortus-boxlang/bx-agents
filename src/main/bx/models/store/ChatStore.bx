@@ -1,0 +1,184 @@
+/**
+ * The SQLite file that the web chat, the terminal chat and the server share: conversations, preferences,
+ * accounts and, as later versions add them, notes, tokens and a chat log.
+ *
+ * It uses plain queryExecute against one datasource, so the same class runs inside the generated web app
+ * (a registered datasource, by name) and in the terminal chat (a file, opened on the spot). The schema is
+ * versioned in `bxagents_schema_version` and migrations only ever move forward: add one to migrations(),
+ * never edit one that has shipped (SQLite cannot change or drop a column in place).
+ *
+ * Two processes can have the file open at once (the terminal chat and a running server). WAL mode lets a
+ * reader work while a writer writes, and a write that still meets a lock is tried again for a few seconds.
+ */
+class {
+
+	static {
+		VERSION_TABLE = "bxagents_schema_version"
+		// How long a write that meets a lock keeps trying, in milliseconds
+		BUSY_WAIT_MS  = 8000
+	}
+
+	/**
+	 * @datasource A registered datasource name, or a datasource struct such as { driver : "sqlite", database : "/path/chat.db" }
+	 */
+	function init( required any datasource ) {
+		variables.datasource = arguments.datasource
+		variables.options = { datasource : arguments.datasource }
+		variables.lockName = "bxagents-chatstore-" & ( isSimpleValue( arguments.datasource ) ? arguments.datasource : arguments.datasource.database ?: "inline" )
+		return this
+	}
+
+	/**
+	 * Opens (and creates, with its folder) a store in a file and brings it up to date.
+	 *
+	 * @path Absolute path of the SQLite file
+	 *
+	 * @return A migrated ChatStore
+	 */
+	static function forFile( required string path ) {
+		directoryCreate( getDirectoryFromPath( arguments.path ), true, true )
+		var store = new ChatStore( { driver : "sqlite", database : arguments.path } )
+		store.migrate()
+		return store
+	}
+
+	any function datasource() {
+		return variables.datasource
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Schema
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @return The newest schema version this code knows
+	 */
+	numeric function latestVersion() {
+		return migrations().len()
+	}
+
+	/**
+	 * Applies the migrations the database has not recorded yet. Safe to call on every start and from
+	 * several processes: the check and the changes run under a lock, and a table that already exists is kept.
+	 *
+	 * @return The version the database is at afterwards
+	 */
+	numeric function migrate() {
+		lock name=variables.lockName type="exclusive" timeout="60" {
+			enableWal()
+			exec( "CREATE TABLE IF NOT EXISTS #static.VERSION_TABLE# ( version INTEGER PRIMARY KEY, appliedAt DATETIME )" )
+			var current = schemaVersion()
+			for ( var step in migrations() ) {
+				if ( step.version <= current ) {
+					continue
+				}
+				for ( var statement in step.statements ) {
+					exec( statement )
+				}
+				exec(
+					"INSERT INTO #static.VERSION_TABLE# ( version, appliedAt ) VALUES ( :version, :appliedAt )",
+					{ version : { value : step.version, cfsqltype : "integer" }, appliedAt : { value : now(), cfsqltype : "timestamp" } }
+				)
+				current = step.version
+			}
+			return current
+		}
+	}
+
+	/**
+	 * @return The version recorded in the database, 0 for a new file
+	 */
+	numeric function schemaVersion() {
+		var found = rows( "SELECT MAX( version ) AS version FROM #static.VERSION_TABLE#" )
+		return found.len() && isNumeric( found[ 1 ].version ?: "" ) ? found[ 1 ].version : 0
+	}
+
+	/**
+	 * The ordered schema changes. The version of a step is its position.
+	 *
+	 * v1 and v2 are the tables the web chat has always had (conversations and preferences, then accounts),
+	 * written to match what it created before this class existed, so an existing database is recognised.
+	 */
+	private array function migrations() {
+		return [
+			{
+				version    : 1,
+				statements : [
+					"CREATE TABLE IF NOT EXISTS conversations ( id VARCHAR(64) NOT NULL PRIMARY KEY, userId VARCHAR(255) NOT NULL, title VARCHAR(500), messageCount INTEGER DEFAULT 0, createdAt DATETIME, updatedAt DATETIME )",
+					"CREATE INDEX IF NOT EXISTS idx_conversations_user_updated ON conversations ( userId, updatedAt )",
+					"CREATE TABLE IF NOT EXISTS preferences ( userId VARCHAR(255) NOT NULL, prefKey VARCHAR(100) NOT NULL, prefValue TEXT, updatedAt DATETIME, PRIMARY KEY ( userId, prefKey ) )"
+				]
+			},
+			{
+				version    : 2,
+				statements : [
+					"CREATE TABLE IF NOT EXISTS users ( id VARCHAR(64) NOT NULL PRIMARY KEY, username VARCHAR(255) NOT NULL UNIQUE, passwordHash VARCHAR(512) NOT NULL, displayName VARCHAR(255), isActive INTEGER DEFAULT 1, createdAt DATETIME, updatedAt DATETIME )"
+				]
+			}
+		]
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Queries
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Runs a SELECT.
+	 *
+	 * @sql The statement, with :name parameters
+	 * @params Values by name; wrap one as { value, cfsqltype } to set its type
+	 *
+	 * @return An array of structs, one per row
+	 */
+	array function rows( required string sql, struct params = {} ) {
+		var found = queryExecute( arguments.sql, arguments.params, variables.options )
+		var out = []
+		for ( var row in found ) {
+			out.append( row )
+		}
+		return out
+	}
+
+	/**
+	 * Runs an INSERT, UPDATE, DELETE or DDL statement. A write that meets a lock from another connection is
+	 * tried again for BUSY_WAIT_MS before the error is allowed through.
+	 *
+	 * @sql The statement, with :name parameters
+	 * @params Values by name; wrap one as { value, cfsqltype } to set its type
+	 *
+	 * @return The result struct of the statement
+	 */
+	struct function exec( required string sql, struct params = {} ) {
+		var deadline = getTickCount() + static.BUSY_WAIT_MS
+		var pause = 20
+		while ( true ) {
+			try {
+				var outcome = ""
+				queryExecute( arguments.sql, arguments.params, variables.options.copy().append( { result : "outcome" } ) )
+				return isStruct( outcome ) ? outcome : {}
+			} catch ( any e ) {
+				var busy = ( e.message & " " & ( e.detail ?: "" ) ).findNoCase( "database is locked" ) || ( e.message & " " & ( e.detail ?: "" ) ).findNoCase( "SQLITE_BUSY" ) || ( e.message & " " & ( e.detail ?: "" ) ).findNoCase( "database table is locked" )
+				if ( !busy || getTickCount() >= deadline ) {
+					rethrow
+				}
+				sleep( pause )
+				pause = min( pause * 2, 400 )
+			}
+		}
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Write-ahead logging: readers do not wait for the writer. The setting is kept in the file, so one call
+	 * covers every later connection.
+	 */
+	private void function enableWal() {
+		try {
+			queryExecute( "PRAGMA journal_mode = WAL", {}, variables.options )
+		} catch ( any e ) {
+			// a read-only file or another database engine: the store still works without it
+		}
+	}
+
+}

@@ -351,43 +351,20 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.webUiDatabase.path ).toBe( "./data/chat.db" );
 			} );
 
-			it( "builds the schema through qb's SchemaBuilder, versioned and forward-only", function() {
+			it( "leaves the schema to the module's shared ChatStore, which is versioned and forward-only", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
 				var appDir = newAppDir();
 				generator.generate( discovery, appDir );
 
 				var src = fileRead( appDir & "/models/ChatDb.bx" );
-				expect( src ).toInclude( 'wirebox.getInstance( "SchemaBuilder@qb" )' );
-				expect( src ).toInclude( "schema.create(" );
-				// No hand-written SQL anywhere - the grammar owns the dialect, so
-				// swapping SQLite for another engine stays a grammar change
-				expect( src ).notToInclude( "queryExecute(" );
-
-				// Versioned, and re-running is a no-op rather than an error
-				expect( src ).toInclude( "bxagents_schema_version" );
-				expect( src ).toInclude( "if ( current >= static.SCHEMA_VERSION )" );
-				expect( src ).toInclude( "hasTable(" );
-
-				// The tables the next features need
-				expect( src ).toInclude( 'schema.create( table : "conversations"' );
-				expect( src ).toInclude( 'schema.create( table : "preferences"' );
-				expect( src ).toInclude( 'table.primaryKey( [ "userId", "prefKey" ] )' );
-				expect( src ).toInclude( 'table.index( [ "userId", "updatedAt" ]' );
-			} );
-
-			it( "names the datasource on every schema call, because qb does not", function() {
-				// qb maps SchemaBuilder@qb with its `grammar` initArg ONLY - unlike
-				// QueryBuilder, it never receives moduleSettings.qb.defaultOptions,
-				// so a schema call that omits the datasource hits the default one,
-				// which this app deliberately never sets.
-				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-				var appDir = newAppDir();
-				generator.generate( discovery, appDir );
-
-				var src = fileRead( appDir & "/models/ChatDb.bx" );
-				expect( src ).toInclude( "private struct function schemaOptions()" );
-				expect( src ).toInclude( "options : schemaOptions()" );
-				expect( src ).toInclude( "return { datasource : static.DATASOURCE }" );
+				expect( src ).toInclude( 'new "models.store.ChatStore@bxagents"( static.DATASOURCE ).migrate()' );
+				// the schema code moved out: nothing here builds tables any more
+				expect( src ).notToInclude( "SchemaBuilder" );
+				expect( src ).notToInclude( "applyV1" );
+				expect( src ).notToInclude( "schemaOptions" );
+				// queries still go through qb, naming the datasource on every builder
+				expect( src ).toInclude( 'getInstance( "QueryBuilder@qb" )' );
+				expect( src ).toInclude( "mergeDefaultOptions( { datasource : static.DATASOURCE } )" );
 			} );
 
 			it( "honours a configured datasource name and database path", function() {

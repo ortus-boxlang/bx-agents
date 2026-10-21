@@ -168,6 +168,15 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
 - The Cloudflare Workers AI provider (`cloudflare/<model>`) is in the wizard, with its account id stub in `.env`;
   `cartesia` and `cloudflare` are recognised provider names.
 
+#### The shared chat database
+
+- The web chat and the terminal chat share one SQLite file, `data/chat.db` in the project (git-ignored in new
+  projects): `bxAgents serve` starts the app with `BXAGENTS_DB` pointing at it. A deployed app keeps using
+  `database.path` inside the app unless `BXAGENTS_DB` is set.
+- The schema moved out of the generated app into the module's `ChatStore` (plain SQLite, versioned,
+  forward-only, write-ahead logging, a write that meets a lock tries again for a few seconds). A database made by
+  an earlier generated app is recognised.
+
 #### The chat screen
 
 - `bxAgents chat` is now a Pi-style terminal screen that keeps your scrollback: finished turns are
