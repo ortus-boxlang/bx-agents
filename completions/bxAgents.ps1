@@ -60,8 +60,11 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
 		)
 		'inspect' = @(
+			@{ Name = 'ascii'; Value = $false; Choices = @(); Dir = $false }
 			@{ Name = 'environment'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'json'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'md'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'no-color'; Value = $false; Choices = @(); Dir = $false }
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
 			@{ Name = 'section'; Value = $true; Choices = @(); Dir = $false }
 		)

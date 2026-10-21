@@ -59,8 +59,11 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb doctor' -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb hash-password' -l password -x
     complete -c $cmd -n '__bxagents_using_verb hash-password' -l projectRoot -x -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb inspect' -l ascii
     complete -c $cmd -n '__bxagents_using_verb inspect' -l environment -x
     complete -c $cmd -n '__bxagents_using_verb inspect' -l json
+    complete -c $cmd -n '__bxagents_using_verb inspect' -l md
+    complete -c $cmd -n '__bxagents_using_verb inspect' -l no-color
     complete -c $cmd -n '__bxagents_using_verb inspect' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb inspect' -l section -x
     complete -c $cmd -n '__bxagents_using_verb inspect' -a '(__fish_complete_directories)'
