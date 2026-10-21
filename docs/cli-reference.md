@@ -63,7 +63,7 @@ Always use the `--flag=value` form. The space-separated form is not supported.
 Scaffold a new agent project.
 :::
 ::: card title="add" icon="phosphor-duotone:plus-circle" href="#add"
-Add a tool, interceptor, schedule, MCP server or named model to an existing project.
+Add a tool, interceptor, schedule, MCP server, named model or gateway to an existing project.
 :::
 ::: card title="build" icon="phosphor-duotone:hammer" href="#build"
 Run the full build pipeline.
@@ -147,7 +147,7 @@ bxAgents new my-agent --forgebox=some-package-slug
 
 ### `add`
 
-Add one thing to a project that already exists, asking the same questions `new` asks. Today that is a `tool`, an `interceptor`, a `schedule`, an `mcp` server or a `model`.
+Add one thing to a project that already exists, asking the same questions `new` asks. Today that is a `tool`, an `interceptor`, a `schedule`, an `mcp` server, a `model` or a `gateway`.
 
 ```bash
 bxAgents add                        # pick what to add
@@ -284,6 +284,31 @@ bxAgents add model analyst                       # asks provider, model, key var
 | `--format=yaml\|json` | Defaults to `yaml`. |
 
 Use it in `Agent.yaml` (or a subagent's) with `model: <name>`. The entry's `params`, `options` and key variable go with it into the built agent. See [models/](conventions/models.md) for every key.
+
+#### `add gateway`
+
+Adds one way in to the agent: a chat platform, the web chat UI, or the HTTP API. (A hosted MCP route is added with `add mcp server`.)
+
+```bash
+bxAgents add gateway telegram                   # polls Telegram, no public address needed
+bxAgents add gateway slack --env=botTokenEnvVar=ACME_BOT,appTokenEnvVar=ACME_APP --policy=steer
+bxAgents add gateway web --auth=key             # the browser chat page, behind a random shared key
+bxAgents add gateway api --path=/api/chat
+bxAgents add gateway                            # asks which
+```
+
+The platforms are the ones the new wizard offers: `telegram`, `slack`, `discord`, `whatsapp-cloud`, `teams`, `twilio`, `github`, `email` and `signal`.
+
+| Flag | Meaning |
+|---|---|
+| `--name=<name>` | The file, `gateways/<name>.bx`, or the second positional. Defaults to the type. A name in use is refused. |
+| `--env=<config=NAME,...>` | Chat platforms: which variable holds which credential, for example `botTokenEnvVar=ACME_BOT`. Without it the usual names are used (`SLACK_BOT_TOKEN`, ...). Only names go in the gateway file; an empty stub for each goes in `.env`. |
+| `--policy=queue\|reject\|steer\|interrupt` | Chat platforms: what to do with a message that arrives while the agent is still answering. Written to Agent.yaml's `gatewaySession` unless it is the default `queue`. |
+| `--path=<path>` | `web` and `api`: where it is served (`/chat` and `/api/chat` by default). A path another gateway uses is refused. |
+| `--auth=open\|key\|users` | `web`: anyone who can reach it, a random shared key kept in `.env` as `CHAT_UI_API_KEY`, or named users. |
+| `--users=<name:hash,...>` | `web` with `users`: each hash comes from `bxAgents hash-password`. A password is never taken as a flag; at a terminal you type it, hidden, and only its hash is stored. |
+
+After a chat platform is added, the output lists the steps that happen outside the project (creating the bot, a public address, a daemon) and which `.env` variables to fill in; `bxAgents doctor` reports any that are still not set. The HTTP API route has no authentication unless `agentApi.tokenEnvVar` is set in `Agent.yaml`.
 
 ### `build`
 
