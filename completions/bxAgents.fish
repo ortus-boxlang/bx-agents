@@ -43,14 +43,20 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb add' -l direction -x
     complete -c $cmd -n '__bxagents_using_verb add' -l dry-run
     complete -c $cmd -n '__bxagents_using_verb add' -l env -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l files -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l files-dir -x
     complete -c $cmd -n '__bxagents_using_verb add' -l force
     complete -c $cmd -n '__bxagents_using_verb add' -l format -x
     complete -c $cmd -n '__bxagents_using_verb add' -l function -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l guard -x
     complete -c $cmd -n '__bxagents_using_verb add' -l header -x
     complete -c $cmd -n '__bxagents_using_verb add' -l max-tokens -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l mcp -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l memory -x
     complete -c $cmd -n '__bxagents_using_verb add' -l model -x
     complete -c $cmd -n '__bxagents_using_verb add' -l name -x
     complete -c $cmd -n '__bxagents_using_verb add' -l no-tui
+    complete -c $cmd -n '__bxagents_using_verb add' -l parent -x
     complete -c $cmd -n '__bxagents_using_verb add' -l path -x
     complete -c $cmd -n '__bxagents_using_verb add' -l points -x
     complete -c $cmd -n '__bxagents_using_verb add' -l policy -x
@@ -58,6 +64,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb add' -l prompt -x
     complete -c $cmd -n '__bxagents_using_verb add' -l provider -x
     complete -c $cmd -n '__bxagents_using_verb add' -l scope -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l search -x
     complete -c $cmd -n '__bxagents_using_verb add' -l server -x
     complete -c $cmd -n '__bxagents_using_verb add' -l temperature -x
     complete -c $cmd -n '__bxagents_using_verb add' -l timeout -x
@@ -68,6 +75,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb add' -l users -x
     complete -c $cmd -n '__bxagents_using_verb add' -l version -x
     complete -c $cmd -n '__bxagents_using_verb add' -l when -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l with -x
     complete -c $cmd -n '__bxagents_using_verb add' -l yes
     complete -c $cmd -n '__bxagents_using_verb build' -l environment -x
     complete -c $cmd -n '__bxagents_using_verb build' -l generatorVersion -x

@@ -877,6 +877,101 @@ class extends="testbox.system.BaseSpec" {
 
 			} );
 
+			describe( "add subagent", function() {
+
+				private function addSub( required string root, struct flags = {}, array positionals = [ "subagent", "writer" ] ) {
+					var options = { projectRoot : root, _positionals : positionals, yes : true };
+					options.append( flags );
+					return addVerb.run( options );
+				}
+
+				it( "writes the agent, its instructions and adds it to the root's subAgents", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					var result = addSub( root, { model : "openai/gpt-5", description : "Writes the answer" } );
+					var yaml = fileRead( root & "/subagents/writer/Agent.yaml" );
+
+					expect( result.exitCode ).toBe( 0 );
+					expect( yaml ).toInclude( "name: writer" );
+					expect( yaml ).toInclude( "description: Writes the answer" );
+					expect( yaml ).toInclude( "model: openai/gpt-5" );
+					expect( yaml ).toInclude( "model: mock/mock-model" );
+					expect( fileRead( root & "/subagents/writer/instructions.md" ) ).toInclude( "You are writer." );
+					expect( fileRead( root & "/Agent.yaml" ) ).toInclude( "subAgents:" & char( 10 ) & "  - writer" );
+				} );
+
+				it( "takes the same capability flags as new, and the .env stubs they need", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					addSub( root, { model : "claude", with : "search", search : "brave", memory : "file", guard : "flag" } );
+					var yaml = fileRead( root & "/subagents/writer/Agent.yaml" );
+
+					expect( yaml ).toInclude( "tools:" );
+					expect( yaml ).toInclude( "memory: file" );
+					expect( yaml ).toInclude( "action: flag" );
+					expect( fileRead( root & "/.env" ) ).toInclude( "CLAUDE_API_KEY=" );
+				} );
+
+				it( "nests under another subagent with --parent, keeping an inline list inline", function() {
+					var root = newTempProject( "yaml-minimal" );
+					addSub( root, { model : "claude" } );
+					addSub( root, { model : "claude", parent : "writer" }, [ "subagent", "editor" ] );
+					addSub( root, { model : "claude", parent : "writer" }, [ "subagent", "checker" ] );
+
+					expect( fileRead( root & "/subagents/writer/Agent.yaml" ) ).toInclude( "subAgents:" & char( 10 ) & "  - editor" & char( 10 ) & "  - checker" );
+					expect( fileRead( root & "/Agent.yaml" ) ).notToInclude( "editor" );
+				} );
+
+				it( "builds and shows the nesting in inspect", function() {
+					var root = newTempProject( "yaml-minimal" );
+					addSub( root, { model : "mock/mock-model" } );
+					addSub( root, { model : "mock/mock-model", parent : "writer" }, [ "subagent", "editor" ] );
+
+					var report = new bxagents.models.report.ProjectReport().build( root );
+
+					expect( report.agent.children.map( c => c.name ) ).toBe( [ "writer" ] );
+					expect( report.agent.children[ 1 ].children.map( c => c.name ) ).toBe( [ "editor" ] );
+					expect( report.validation.errors ).toBeEmpty();
+				} );
+
+				it( "adds the files and tells how to wire it in when the parent is a class", function() {
+					var root = newTempProject( "full-project" );
+
+					var result = addSub( root, { model : "claude" } );
+
+					expect( fileExists( root & "/subagents/writer/Agent.yaml" ) ).toBeTrue();
+					expect( fileRead( root & "/Agent.bx" ) ).notToInclude( "writer" );
+					expect( result.message ).toInclude( "is a class, so it was not edited" );
+				} );
+
+				it( "needs a model without a terminal, and refuses a name that is taken or a missing parent", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					expect( function() {
+						addSub( root );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					addSub( root, { model : "claude" } );
+					expect( function() {
+						addSub( root, { model : "claude" } );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					expect( function() {
+						addSub( root, { model : "claude", parent : "ghost" }, [ "subagent", "other" ] );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+				} );
+
+				it( "runs the wizard stages, then reviews", function() {
+					var root = newTempProject( "yaml-minimal" );
+					var prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [ "Researches", "claude", "", [], "cache", [], "off", "create" ] );
+
+					var result = addVerb.run( { projectRoot : root, _positionals : [ "subagent", "researcher" ], _prompter : prompter, _interactive : true } );
+
+					expect( prompter.remaining() ).toBe( 0 );
+					expect( result.exitCode ).toBe( 0 );
+					expect( fileRead( root & "/subagents/researcher/Agent.yaml" ) ).toInclude( "description: Researches" );
+				} );
+
+			} );
+
 			describe( "the verb", function() {
 
 				it( "refuses a folder that is not an agent project", function() {

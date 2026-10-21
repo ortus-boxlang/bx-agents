@@ -63,7 +63,7 @@ Usa siempre la forma `--flag=valor`. La forma con espacio no está soportada.
 Genera el andamiaje de un nuevo proyecto de agente.
 :::
 ::: card title="add" icon="phosphor-duotone:plus-circle" href="#add"
-Añade una herramienta, un interceptor, una programación, un servidor MCP, un modelo con nombre o un gateway a un proyecto existente.
+Añade una herramienta, un interceptor, una programación, un servidor MCP, un modelo con nombre, un gateway o un subagente a un proyecto existente.
 :::
 ::: card title="build" icon="phosphor-duotone:hammer" href="#build"
 Ejecuta el pipeline de build completo.
@@ -147,7 +147,7 @@ bxAgents new my-agent --forgebox=some-package-slug
 
 ### `add`
 
-Añade una cosa a un proyecto que ya existe, haciendo las mismas preguntas que `new`. Hoy eso es una `tool`, un `interceptor`, una `schedule`, un servidor `mcp`, un `model` o un `gateway`.
+Añade una cosa a un proyecto que ya existe, haciendo las mismas preguntas que `new`. Hoy eso es una `tool`, un `interceptor`, una `schedule`, un servidor `mcp`, un `model`, un `gateway` o un `subagent`.
 
 ```bash
 bxAgents add                        # elige qué añadir
@@ -309,6 +309,25 @@ Las plataformas son las que ofrece el asistente de new: `telegram`, `slack`, `di
 | `--users=<name:hash,...>` | `web` con `users`: cada hash sale de `bxAgents hash-password`. Una contraseña nunca se acepta como flag; en una terminal la escribes, oculta, y solo se guarda su hash. |
 
 Tras añadir una plataforma de chat, la salida lista los pasos que ocurren fuera del proyecto (crear el bot, una dirección pública, un daemon) y qué variables de `.env` rellenar; `bxAgents doctor` informa de las que sigan sin definir. La ruta de la API HTTP no tiene autenticación salvo que se defina `agentApi.tokenEnvVar` en `Agent.yaml`.
+
+#### `add subagent`
+
+Añade un subagente: un agente completo en `subagents/<name>/` con su propio modelo, herramientas, servidores MCP, memoria y guard, conectado a la lista `subAgents` de un padre. En una terminal hace las mismas preguntas que `new` (propósito, modelo, herramientas, búsqueda, archivos, memoria, MCP, guard); se omiten las que solo importan a un proyecto entero (forma, canales, despliegue).
+
+```bash
+bxAgents add subagent researcher                # pregunta
+bxAgents add subagent writer --model=openai/gpt-5 --description="Escribe la respuesta"
+bxAgents add subagent checker --model=claude --parent=writer --with=search --search=brave --guard=flag
+```
+
+| Flag | Significado |
+|---|---|
+| `--name=<name>` | La carpeta, o el primer posicional. Se rechaza un nombre que ya tenga cualquier agente del proyecto. |
+| `--parent=<carpeta>` | El agente que delega en él: `.` para la raíz (por defecto) o la carpeta de otro subagente, que es como se anidan. |
+| `--model=<provider/model>` | Obligatorio sin terminal. |
+| `--description`, `--with`, `--search`, `--files`, `--files-dir`, `--memory`, `--mcp`, `--guard` | Los mismos que en [`new`](#new). |
+
+Escribe `subagents/<name>/Agent.yaml` (con el modelo simulado de `environments.test`, para que `bxAgents test` no necesite clave) e `instructions.md`, y añade un marcador vacío en `.env` por cada clave que necesiten las opciones. El nombre se inserta en el `subAgents` del padre sin reescribir el archivo, así que los comentarios y el orden se conservan. Si el padre es una clase, o su lista está escrita de una forma que no se puede ampliar insertando, no se cambia nada en él y se imprime la línea que hay que añadir. Los paquetes que necesite una opción (`bx-playwright` para navegar) se nombran para que los añadas a `box.json`.
 
 ### `build`
 

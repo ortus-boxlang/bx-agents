@@ -32,14 +32,20 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'direction'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'dry-run'; Value = $false; Choices = @(); Dir = $false }
 			@{ Name = 'env'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'files'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'files-dir'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'force'; Value = $false; Choices = @(); Dir = $false }
 			@{ Name = 'format'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'function'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'guard'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'header'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'max-tokens'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'mcp'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'memory'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'model'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'name'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'no-tui'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'parent'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'path'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'points'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'policy'; Value = $true; Choices = @(); Dir = $false }
@@ -47,6 +53,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'prompt'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'provider'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'scope'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'search'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'server'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'temperature'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'timeout'; Value = $true; Choices = @(); Dir = $false }
@@ -57,6 +64,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'users'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'version'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'when'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'with'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'yes'; Value = $false; Choices = @(); Dir = $false }
 		)
 		'build' = @(
