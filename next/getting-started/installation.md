@@ -68,7 +68,7 @@ The module zip carries its own dependencies, pinned to the stable releases it wa
 
 | Where | What | Used for |
 |---|---|---|
-| `modules/` (nested BoxLang modules) | `bx-ai` 3.5.0, `bx-sqlite` 1.3.0, `bx-ftp` 1.9.0, `bx-mail` 1.4.15, `bx-yaml` 1.1.0 | The agent runtime, the web UI's SQLite store, the `ftp`/`sftp` deploy targets, the email gateway, `Agent.yaml` |
+| `modules/` (nested BoxLang modules) | `bx-ai` 3.6.0, `bx-sqlite` 1.3.0, `bx-ftp` 1.9.0, `bx-mail` 1.4.15, `bx-yaml` 1.1.0 | The agent runtime, the web UI's SQLite store, the `ftp`/`sftp` deploy targets, the email gateway, `Agent.yaml` |
 | `lib/` (ColdBox runtime) | ColdBox, `qb`, `cbsecurity`, `cbauth`, `cbmailservices` | Copied into every app `build` generates |
 
 `serve` points the served app at the same bundled modules. The versions above are the ones pinned in the repository's `gradle.properties` for this release.
