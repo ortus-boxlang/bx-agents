@@ -63,7 +63,7 @@ Always use the `--flag=value` form. The space-separated form is not supported.
 Scaffold a new agent project.
 :::
 ::: card title="add" icon="phosphor-duotone:plus-circle" href="#add"
-Add a tool to an existing project.
+Add a tool or an interceptor to an existing project.
 :::
 ::: card title="build" icon="phosphor-duotone:hammer" href="#build"
 Run the full build pipeline.
@@ -147,7 +147,7 @@ bxAgents new my-agent --forgebox=some-package-slug
 
 ### `add`
 
-Add one thing to a project that already exists, asking the same questions `new` asks. Today that is a `tool`.
+Add one thing to a project that already exists, asking the same questions `new` asks. Today that is a `tool` or an `interceptor`.
 
 ```bash
 bxAgents add                        # pick what to add
@@ -176,6 +176,22 @@ Creates `tools/<Name>.bx` with one `@AITool` function in the shape [bx-ai docume
 | `--args=<list>` | Comma separated, each `name` or `name:type` (`string` by default; `numeric`, `boolean`, `array`, `struct`, `date` and `any` also work). |
 
 A tool belongs to the agent whose folder it is in and is attached to that agent automatically. Two tool files of one agent may not share a name, even in different subfolders, so a clash is refused here instead of at the next `build`. Check the result with `bxAgents inspect --section=tools`.
+
+#### `add interceptor`
+
+Creates `interceptors/<Name>.bx` with one method for each interception point you pick, and the `@scope` that [the build splits on](conventions/interceptors.md).
+
+```bash
+bxAgents add interceptor AuditLogger --points=preProcess,onException --description="Log every request"
+bxAgents add interceptor AiWatch --scope=runtime --points=beforeAIModelInvoke,onAIError
+```
+
+| Flag | Meaning |
+|---|---|
+| `--name=<Name>` | The file name, or the second positional. A name another interceptor already uses is refused. |
+| `--scope=agent\|runtime` | `agent` (the default) is a ColdBox interceptor registered with the generated app when it starts; its methods take `( event, interceptData, rc, prc )`. `runtime` listens to the events bx-ai announces in the BoxLang runtime and takes the event data as its one argument; BxAgents copies it to `.build/runtime-interceptors` but does not register it for you. |
+| `--points=<list>` | Comma separated interception points. The picker offers the common ones; any ColdBox core point (`agent`) or bx-ai event (`runtime`) can be named here, and a name that is not a point for that scope is refused. Defaults to `preProcess` (`agent`) or `beforeAIModelInvoke` (`runtime`). |
+| `--description=<text>` | One line for the class's docblock. Optional. |
 
 ### `build`
 

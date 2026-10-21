@@ -69,14 +69,15 @@ class {
 	 *
 	 * @root Absolute path to the project root
 	 *
-	 * @return { rootName, subagents : [ folder names ], toolNames : { ".": [ names ], "<subagent>": [ names ] } }
+	 * @return { rootName, interceptorNames : [ names ], subagents : [ folder names ], toolNames : { ".": [ names ], "<subagent>": [ names ] } }
 	 */
 	private struct function projectInfo( required string root ) {
 		var discoverer = new "models.build.ProjectDiscoverer@bxagents"()
 		var rootDiscovery = discoverer.discover( arguments.root )
 		var info = {
-			rootName  : lastSegment( arguments.root ),
-			subagents : rootDiscovery.subagents.map( s => s.name ),
+			rootName         : lastSegment( arguments.root ),
+			interceptorNames : rootDiscovery.interceptors.map( i => i.name ),
+			subagents        : rootDiscovery.subagents.map( s => s.name ),
 			toolNames : { "." : rootDiscovery.tools.map( t => t.name ) }
 		}
 		for ( var sub in rootDiscovery.subagents ) {

@@ -95,6 +95,37 @@ class {
 	}
 
 	/**
+	 * Several values from a list: `--key=a,b` on the command line, or a multi-select.
+	 *
+	 * @key The flag and answer name
+	 * @title The question
+	 * @choices [ value ] or [ { value, label, hint, selected } ] offered when asking
+	 * @default The values used when nothing else gives any
+	 * @help A line under the question
+	 * @valid Every value a flag may name, when that is wider than the choices offered
+	 *
+	 * @return The chosen values
+	 */
+	array function list( required string key, required string title, required array choices, array default = [], string help = "", array valid = [] ) {
+		var offered = arguments.choices.map( choice => isStruct( choice ) ? choice.value : choice )
+		var allowed = arguments.valid.len() ? arguments.valid : offered
+		var given = fromFlags( arguments.key )
+		if ( !isNull( given ) ) {
+			var values = given.listToArray( "," ).map( v => trim( v ) ).filter( v => len( v ) )
+			for ( var value in values ) {
+				if ( !allowed.contains( value ) ) {
+					throw( type = "BxAgents.InvalidAnswer", message = "--#arguments.key#: [#value#] is not one of: #allowed.toList( ', ' )#" )
+				}
+			}
+			return values
+		}
+		if ( !interactive() ) {
+			return arguments.default
+		}
+		return variables.prompter.multiSelect( arguments.title, arguments.choices, arguments.help )
+	}
+
+	/**
 	 * @key The flag and answer name
 	 * @title The question
 	 * @default The answer when nothing else gives one

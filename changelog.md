@@ -192,6 +192,8 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   `--force`.
 - `add tool` scaffolds `tools/<Name>.bx` with a typed `@AITool` function in bx-ai's documented
   shape, into the root agent or a subagent (`--agent`).
+- `add interceptor` scaffolds `interceptors/<Name>.bx` with a method per interception point and the
+  `@scope` the build splits on: ColdBox's core points for `agent`, bx-ai's events for `runtime`.
 
 #### Documentation
 

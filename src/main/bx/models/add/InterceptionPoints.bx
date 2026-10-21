@@ -1,0 +1,103 @@
+/**
+ * The interception points an interceptor can listen to, by scope. The full lists are
+ * what `--points` accepts; the picker offers the commonly useful ones first.
+ *
+ * `agent` scope interceptors are ColdBox's: their points come from ColdBox's own
+ * InterceptorService (build/lib-stage/lib/coldbox/system/web/services/InterceptorService.cfc,
+ * ColdBox 8.3). `runtime` scope interceptors are BoxLang's: the points bx-ai announces,
+ * from its ModuleConfig `customInterceptionPoints` (bx-ai 3.5).
+ */
+class {
+
+	static {
+		COLDBOX = [
+			"afterConfigurationLoad", "afterAspectsLoad", "cbLoadInterceptorHelpers", "preReinit",
+			"onAuthenticationFailure", "onAuthorizationFailure", "onValidationException", "onEntityNotFoundException",
+			"onException", "onRequestCapture", "onInvalidEvent", "onColdBoxShutdown", "applicationEnd", "sessionStart", "sessionEnd",
+			"preProcess", "preEvent", "postEvent", "postProcess", "preProxyResults", "preSSEConnection", "postSSEConnection", "onSSEError",
+			"preLayout", "preRender", "postRender", "preViewRender", "postViewRender", "preLayoutRender", "postLayoutRender", "afterRendererInit",
+			"preModuleLoad", "postModuleLoad", "preModuleUnload", "postModuleUnload", "preModuleRegistration", "postModuleRegistration",
+			"afterModuleRegistrations", "afterModuleActivations"
+		]
+
+		BXAI = [
+			"beforeAIAgentRun", "afterAIAgentRun", "onAIAgentCreate", "onAIAgentRunCancel", "onAIAgentRunSteer",
+			"beforeAIModelInvoke", "afterAIModelInvoke", "onAIModelCreate", "onAIProviderCreate", "onMissingAiProvider",
+			"onAIChatRequest", "onAIChatRequestCreate", "onAIChatResponse", "onAIRateLimitHit", "onAIError",
+			"beforeAIEmbed", "afterAIEmbed", "onAIEmbedRequest", "onAIEmbedResponse", "beforeAIPipelineRun", "afterAIPipelineRun",
+			"beforeAIToolExecute", "afterAIToolExecute", "onAIToolCreate", "onAiLoaderCreate", "onAiMemoryCreate", "onAIMessageCreate",
+			"onAITransformerCreate", "onAITokenCount", "onHybridMemoryAdd", "onVectorSearch",
+			"beforeAISpeech", "afterAISpeech", "beforeAITranscription", "afterAITranscription", "beforeAITranslation", "afterAITranslation",
+			"beforeAIImageGeneration", "afterAIImageGeneration", "onAIImageRequest", "onAIImageResponse",
+			"onMCPServerCreate", "onMCPServerPause", "onMCPServerRemove", "onMCPServerResume", "onMCPRequest", "onMCPResponse", "onMCPError",
+			"onMCPClientRequest", "onMCPClientResponse", "onMCPClientError", "onAIToolRegistryRegister", "onAIToolRegistryUnregister",
+			"onAIAgentRegistryRegister", "onAIAgentRegistryUnregister", "beforeAIWebSearch", "afterAIWebSearch",
+			"onAIWebSearchRequest", "onAIWebSearchResponse", "onAIWebSearchError", "onAIMemorySummarize",
+			"onGatewayRegistryRegister", "onGatewayRegistryUnregister", "onGatewayCreate", "onGatewaySessionCreate", "onGatewayConnect",
+			"onGatewayDisconnect", "onGatewayMessageReceived", "onGatewayMessageSent", "onAiDecisionStoreCreate"
+		]
+
+		FEATURED = {
+			agent   : [
+				{ value : "preProcess", hint : "the start of every request" },
+				{ value : "postProcess", hint : "the end of every request" },
+				{ value : "preEvent", hint : "before an event handler runs" },
+				{ value : "postEvent", hint : "after an event handler runs" },
+				{ value : "onException", hint : "an unhandled error" },
+				{ value : "onInvalidEvent", hint : "an event that does not exist" },
+				{ value : "afterConfigurationLoad", hint : "once, when the app has loaded its config" }
+			],
+			runtime : [
+				{ value : "beforeAIAgentRun", hint : "an agent is about to run" },
+				{ value : "afterAIAgentRun", hint : "an agent finished a run" },
+				{ value : "beforeAIModelInvoke", hint : "a model is about to be called" },
+				{ value : "afterAIModelInvoke", hint : "a model answered" },
+				{ value : "beforeAIToolExecute", hint : "a tool is about to run" },
+				{ value : "afterAIToolExecute", hint : "a tool finished" },
+				{ value : "onAIError", hint : "an AI call failed" },
+				{ value : "onAIRateLimitHit", hint : "a provider rate limit was hit" },
+				{ value : "onAITokenCount", hint : "tokens were counted" }
+			]
+		}
+	}
+
+	/**
+	 * @scope agent or runtime
+	 *
+	 * @return Every point a flag may name for that scope
+	 */
+	array function all( required string scope ) {
+		return arguments.scope == "runtime" ? static.BXAI : static.COLDBOX
+	}
+
+	/**
+	 * @scope agent or runtime
+	 *
+	 * @return [ { value, label, hint, selected } ] the points the picker offers, the first one ticked
+	 */
+	array function featured( required string scope ) {
+		var out = []
+		var i = 0
+		for ( var point in static.FEATURED[ arguments.scope ] ) {
+			i++
+			out.append( { value : point.value, label : point.value, hint : point.hint, selected : i == 1 } )
+		}
+		return out
+	}
+
+	/**
+	 * @point A point name
+	 * @scope agent or runtime
+	 *
+	 * @return What the point is for, or an empty string when it is not one of the featured
+	 */
+	string function hint( required string point, required string scope ) {
+		for ( var featured in static.FEATURED[ arguments.scope ] ) {
+			if ( featured.value == arguments.point ) {
+				return featured.hint
+			}
+		}
+		return ""
+	}
+
+}

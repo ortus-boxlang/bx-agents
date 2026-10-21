@@ -24,6 +24,9 @@ class {
 }
 ```
 
+!!! tip
+    `bxAgents add interceptor` crea uno: elige el ámbito y los puntos de interceptación y escribe `interceptors/<Name>.bx` con un método para cada uno. Ver [`add`](../cli-reference.md#add-interceptor).
+
 ## Scope `agent` vs `runtime`
 
 | Scope | Efecto |
