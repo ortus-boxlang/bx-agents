@@ -1,0 +1,337 @@
+/**
+ * GENERATED FILE - produced by BX Agents' build pipeline.
+ * Do not edit by hand; rebuilding your project overwrites this file.
+ *
+ * Run control for the agent's always-on route, /__bxagents. ColdBox's toAi() gives that route
+ * invoke, stream, batch and info; this handler sits beside them with what a chat client needs on
+ * top: a stream that also reports tool calls and pauses for approval (events), stopping a run
+ * (cancel), steering a run (steer), and the approval round trip (pending, resume), plus tools.
+ *
+ * Every action is behind the same token gate as the toAi routes: the x-bxagents-token header is
+ * compared with the environment variable named by agentApi.tokenEnvVar, and an unset or blank
+ * variable refuses everyone.
+ */
+class {
+
+	// ----------------------------------------------------------------------------------
+	// Who is calling
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Every action starts with this: it answers 401 and returns true when the token is wrong, so the
+	 * action stops. (A preHandler cannot do it: ColdBox runs the action anyway after event.noExecution().)
+	 */
+	private boolean function refused( required any event ) {
+		if ( authorized() ) {
+			return false
+		}
+		arguments.event.renderData( type : "json", statusCode : 401, data : { "success" : false, "error" : "Missing or invalid x-bxagents-token header" } )
+		return true
+	}
+
+	/**
+	 * The environment variable that holds the shared token, "" when the route is not gated.
+	 */
+	private string function tokenVariable() {
+		return "__TOKEN_ENV_VAR__"
+	}
+
+	private boolean function authorized() {
+		var variableName = tokenVariable()
+		if ( !len( variableName ) ) {
+			return true
+		}
+		var expected = getSystemSetting( variableName, "" )
+		if ( !len( expected ) ) {
+			return false
+		}
+		var given = getHTTPRequestData( false ).headers[ "x-bxagents-token" ] ?: ""
+		return createObject( "java", "java.security.MessageDigest" ).isEqual(
+			given.getBytes( "UTF-8" ),
+			expected.getBytes( "UTF-8" )
+		)
+	}
+
+	/**
+	 * The identity a run is stored under. One shared identity until callers have their own.
+	 */
+	private string function callerId() {
+		return "api"
+	}
+
+	private function agent() {
+		return getInstance( "GeneratedAgent" )
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Turns
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Streams one turn. The same frames as /stream (thread, chunk, done), plus:
+	 *
+	 *   tool       { id, name, arguments, status : "running" | "ok", ms }
+	 *   suspended  { threadId, pendingActions : [ { toolName, toolArgs } ] } when the run waits for a human
+	 *   error      { message }
+	 *
+	 * Body: { input, threadId?, conversationId?, params?, options? }
+	 */
+	function events( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var body = event.getHTTPContent( json : true )
+		var thisAgent = agent()
+		var threadId = len( body.threadId ?: "" ) ? body.threadId : createUUID()
+		var supplied = body.options ?: {}
+		var options = isStruct( supplied ) ? duplicate( supplied ) : {}
+		options[ "userId" ] = callerId()
+		options[ "threadId" ] = threadId
+		if ( len( body.conversationId ?: "" ) ) {
+			options[ "conversationId" ] = body.conversationId
+		}
+		event.setHTTPHeader( name : "X-Thread-Id", value : threadId )
+		return streamRun( threadId, ( onChunk ) => {
+			thisAgent.stream( onChunk, body.input ?: "", body.params ?: {}, options )
+		} )
+	}
+
+	/**
+	 * Stops a run at its next checkpoint (before the next model call or tool call).
+	 *
+	 * Body: { threadId, reason? }
+	 */
+	function cancel( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var body = event.getHTTPContent( json : true )
+		var threadId = body.threadId ?: ""
+		if ( !len( threadId ) ) {
+			event.renderData( type : "json", statusCode : 400, data : { "success" : false, "error" : "threadId is required" } )
+			return
+		}
+		event.renderData( type : "json", data : {
+			"success"   : true,
+			"cancelled" : agent().cancelRun( threadId, body.reason ?: "Cancelled by the user." )
+		} )
+	}
+
+	/**
+	 * Splices a message into a run in flight, without stopping and restarting it.
+	 *
+	 * Body: { threadId, input }
+	 */
+	function steer( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var body = event.getHTTPContent( json : true )
+		var threadId = body.threadId ?: ""
+		var input = body.input ?: ""
+		if ( !len( threadId ) || !len( input ) ) {
+			event.renderData( type : "json", statusCode : 400, data : { "success" : false, "error" : "threadId and input are required" } )
+			return
+		}
+		event.renderData( type : "json", data : { "success" : true, "steered" : agent().steerRun( threadId, input ) } )
+	}
+
+	/**
+	 * What a run that stopped for approval is waiting on, without consuming the checkpoint.
+	 *
+	 * Query: threadId
+	 */
+	function pending( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var threadId = rc.threadId ?: ""
+		if ( !len( threadId ) ) {
+			event.renderData( type : "json", statusCode : 400, data : { "success" : false, "error" : "threadId is required" } )
+			return
+		}
+		var checkpointer = agent().getCheckpointer()
+		if ( isNull( checkpointer ) ) {
+			event.renderData( type : "json", data : { "success" : true, "pending" : false } )
+			return
+		}
+		var state = checkpointer.loadState( threadId )
+		// A run belongs to whoever started it. Answered as though nothing is pending, so the route
+		// cannot be used to find out whether a threadId exists.
+		if ( !state.isEmpty() && ownerOf( state ) != callerId() ) {
+			event.renderData( type : "json", data : { "success" : true, "pending" : false } )
+			return
+		}
+		event.renderData( type : "json", data : {
+			"success"        : true,
+			"pending"        : !state.isEmpty(),
+			"pendingActions" : state.suspendData.pendingActions ?: [],
+			"threadId"       : threadId
+		} )
+	}
+
+	/**
+	 * Answers an approval and streams the rest of the turn, in the same frames as events.
+	 *
+	 * Body: { threadId, decision : "approve" | "approve_session" | "reject", editedData?, reason? }
+	 */
+	function resume( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var body = event.getHTTPContent( json : true )
+		var threadId = body.threadId ?: ""
+		var decision = body.decision ?: ""
+		if ( !len( threadId ) || !len( decision ) ) {
+			event.renderData( type : "json", statusCode : 400, data : { "success" : false, "error" : "threadId and decision are required" } )
+			return
+		}
+		var thisAgent = agent()
+		var checkpointer = thisAgent.getCheckpointer()
+		if ( !isNull( checkpointer ) ) {
+			var state = checkpointer.loadState( threadId )
+			if ( !state.isEmpty() && ownerOf( state ) != callerId() ) {
+				event.renderData( type : "json", statusCode : 403, data : { "success" : false, "error" : "This run belongs to another caller" } )
+				return
+			}
+		}
+		var decidedBy = callerId()
+		return streamRun( threadId, ( onChunk ) => {
+			thisAgent.resumeStream( onChunk, decision, threadId, body.editedData ?: {}, decidedBy, body.reason ?: "" )
+		} )
+	}
+
+	/**
+	 * The names of the tools the agent has.
+	 */
+	function tools( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var config = agent().getConfig()
+		event.renderData( type : "json", data : {
+			"success" : true,
+			"tools"   : config.tools ?: [],
+			"count"   : config.toolCount ?: 0
+		} )
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Streaming
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Opens the event stream and runs the work in it.
+	 *
+	 * @threadId The conversation thread, sent first so a client that let the server pick it has it
+	 * @run A function taking the chunk handler; it does the agent call
+	 */
+	private string function streamRun( required string threadId, required function run ) {
+		var threadId = arguments.threadId
+		var work = arguments.run
+		SSE(
+			callback : ( emitter ) => {
+				var calls = {}
+				var counter = { value : 0 }
+				emitter.send( { "threadId" : threadId }, "thread" )
+
+				// bx-ai announces every tool call in the process. Only this thread's are sent on.
+				var interceptor = BoxRegisterInterceptor( ( data ) => {
+					if ( emitter.isClosed() || !belongsToThread( data, threadId ) ) {
+						return
+					}
+					var name = data.name
+					var shown = visibleArguments( data.arguments ?: {} )
+					if ( data.keyExists( "results" ) ) {
+						var open = calls[ name ] ?: []
+						var finished = open.len() ? open.first() : name
+						if ( open.len() ) {
+							open.deleteAt( 1 )
+						}
+						emitter.send( { "id" : finished, "name" : name, "arguments" : shown, "status" : "ok", "ms" : data.executionTime ?: 0 }, "tool" )
+						return
+					}
+					counter.value++
+					var started = name & "##" & counter.value
+					calls[ name ] = calls[ name ] ?: []
+					calls[ name ].append( started )
+					emitter.send( { "id" : started, "name" : name, "arguments" : shown, "status" : "running", "ms" : 0 }, "tool" )
+				}, [ "beforeAIToolExecute", "afterAIToolExecute" ] )
+
+				try {
+					work( ( chunk ) => {
+						if ( emitter.isClosed() ) {
+							return
+						}
+						emitter.send( chunk, "chunk" )
+						// the sentinel for a run that stops on a human decision
+						if ( isStruct( chunk ) && ( chunk.type ?: "" ) == "middleware_stop" ) {
+							var actions = []
+							try {
+								if ( chunk.result.isSuspended() ) {
+									actions = chunk.result.getData().pendingActions ?: []
+								}
+							} catch ( any ignored ) {
+								// the details stay available from /pending
+							}
+							emitter.send( { "threadId" : threadId, "pendingActions" : actions }, "suspended" )
+						}
+					} )
+					if ( !emitter.isClosed() ) {
+						emitter.send( "[DONE]", "done" )
+						emitter.close()
+					}
+				} catch ( any e ) {
+					if ( !emitter.isClosed() ) {
+						emitter.send( { "message" : e.message }, "error" )
+						emitter.close()
+					}
+				} finally {
+					BoxUnregisterInterceptor( interceptor )
+				}
+			},
+			keepAliveInterval : 30000
+		)
+		return ""
+	}
+
+	/**
+	 * @data A beforeAIToolExecute or afterAIToolExecute announcement
+	 *
+	 * @return True when the tool call belongs to the run on this thread
+	 */
+	private boolean function belongsToThread( required struct data, required string threadId ) {
+		var chatRequest = arguments.data.chatRequest ?: nullValue()
+		if ( isNull( chatRequest ) ) {
+			return false
+		}
+		return chatRequest.getThreadId() == arguments.threadId
+	}
+
+	/**
+	 * bx-ai passes the whole chat request to tools as `_chatRequest`; names starting with an underscore are its
+	 * plumbing, not something the model asked for.
+	 */
+	private struct function visibleArguments( required any args ) {
+		var shown = {}
+		if ( isStruct( arguments.args ) ) {
+			for ( var key in arguments.args ) {
+				if ( left( key, 1 ) != "_" ) {
+					shown[ key ] = arguments.args[ key ]
+				}
+			}
+		}
+		return shown
+	}
+
+	/**
+	 * The identity a suspended run was started under, kept in the checkpoint by the agent.
+	 */
+	private string function ownerOf( required struct state ) {
+		if ( !structKeyExists( arguments.state, "options" ) || !isStruct( arguments.state.options ) ) {
+			return ""
+		}
+		return arguments.state.options.userId ?: ""
+	}
+
+}

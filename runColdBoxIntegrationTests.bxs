@@ -340,6 +340,64 @@ try {
 	println( "+ Confirmed: /__bxagents/stream streams #streamDeltas.len()# delta(s) that reassemble to [#streamResult.output#], with a threadId" )
 
 	// ------------------------------------------------------------------
+	// 4d. Run control beside toAi on the reserved route: handlers/AgentApi.bx.
+	//
+	// /events is /stream plus `tool` and `suspended` frames (the mock model
+	// calls no tool, so here it proves the frames the chat client depends on:
+	// thread first, chunks, done last). The others answer their input checks.
+	// ------------------------------------------------------------------
+	bx:http url="http://127.0.0.1:#port#/__bxagents/tools" method="GET" result="rcTools" timeout=30 {}
+	if ( rcTools.status_code != 200 || !rcTools.fileContent.findNoCase( '"success":true' ) ) {
+		throw(
+			type    = "BxAgents.RunControlToolsFailed",
+			message = "GET /__bxagents/tools did not answer (HTTP #rcTools.status_code#): #left( rcTools.fileContent ?: '', 400 )#"
+		)
+	}
+
+	bx:http url="http://127.0.0.1:#port#/__bxagents/events" method="POST" result="rcEvents" timeout=60 {
+		bx:httpparam type="header" name="Content-Type" value="application/json";
+		bx:httpparam type="header" name="Accept" value="text/event-stream";
+		bx:httpparam type="body" value='{"input":"Hello there!"}';
+	}
+	rcBody = rcEvents.fileContent ?: ""
+	rcNames = reMatch( "(?m)^event: ([a-z]+)", rcBody ).map( line => line.replace( "event: ", "" ) )
+	if ( rcEvents.status_code != 200 || rcNames.isEmpty() || rcNames.first() != "thread" || rcNames.last() != "done" || !rcNames.contains( "chunk" ) ) {
+		throw(
+			type    = "BxAgents.RunControlEventsFailed",
+			message = "POST /__bxagents/events should stream thread, chunk(s), done (HTTP #rcEvents.status_code#, events: #rcNames.toList()#): #left( rcBody, 400 )#"
+		)
+	}
+
+	for ( rcCheck in [
+		{ verb : "POST", path : "/__bxagents/cancel", body : "{}" },
+		{ verb : "POST", path : "/__bxagents/steer", body : "{}" },
+		{ verb : "POST", path : "/__bxagents/resume", body : "{}" },
+		{ verb : "GET", path : "/__bxagents/pending", body : "" }
+	] ) {
+		bx:http url="http://127.0.0.1:#port##rcCheck.path#" method=rcCheck.verb result="rcAnswer" timeout=30 {
+			bx:httpparam type="header" name="Content-Type" value="application/json";
+			if ( len( rcCheck.body ) ) {
+				bx:httpparam type="body" value=rcCheck.body;
+			}
+		}
+		if ( rcAnswer.status_code != 400 || !rcAnswer.fileContent.findNoCase( "required" ) ) {
+			throw(
+				type    = "BxAgents.RunControlInputCheckFailed",
+				message = "#rcCheck.verb# #rcCheck.path# without its input should answer 400 ""... is required"" (HTTP #rcAnswer.status_code#): #left( rcAnswer.fileContent ?: '', 300 )#"
+			)
+		}
+	}
+
+	bx:http url="http://127.0.0.1:#port#/__bxagents/pending?threadId=no-such-thread" method="GET" result="rcPending" timeout=30 {}
+	if ( rcPending.status_code != 200 || !rcPending.fileContent.findNoCase( '"pending":false' ) ) {
+		throw(
+			type    = "BxAgents.RunControlPendingFailed",
+			message = "GET /__bxagents/pending for an unknown thread should say nothing is pending (HTTP #rcPending.status_code#): #left( rcPending.fileContent ?: '', 300 )#"
+		)
+	}
+	println( "+ Confirmed: run control answers on /__bxagents - events streams [#rcNames.toList()#], and cancel, steer, resume and pending check their input" )
+
+	// ------------------------------------------------------------------
 	// 5. An open web UI is ONE shared workspace, over real HTTP.
 	//
 	// /chat declares no accounts, so everything in it is shared on purpose:
@@ -518,6 +576,41 @@ if ( !len( expectedToken ) ) {
 			)
 		}
 		println( "+ Confirmed: the agentApi token gate ADMITS a request carrying the right x-bxagents-token" )
+
+		// The run-control routes are gated by their handler, with the same variable and header
+		bx:http url="http://127.0.0.1:#tokenPort#/__bxagents/tools" method="GET" result="rcAllowed" timeout=30 {
+			bx:httpparam type="header" name="x-bxagents-token" value=expectedToken;
+		}
+		if ( rcAllowed.status_code != 200 || !rcAllowed.fileContent.findNoCase( '"success":true' ) ) {
+			throw(
+				type    = "BxAgents.RunControlRejectedValidToken",
+				message = "GET /__bxagents/tools with the right token was not served (HTTP #rcAllowed.status_code#): #left( rcAllowed.fileContent ?: '', 300 )#"
+			)
+		}
+		for ( rcPath in [ "/__bxagents/tools", "/__bxagents/pending?threadId=x" ] ) {
+			for ( rcToken in [ "", expectedToken & "-wrong" ] ) {
+				bx:http url="http://127.0.0.1:#tokenPort##rcPath#" method="GET" result="rcDenied" timeout=30 {
+					bx:httpparam type="header" name="x-bxagents-token" value=rcToken;
+				}
+				if ( rcDenied.status_code != 401 ) {
+					throw(
+						type    = "BxAgents.RunControlTokenGateFailedOpen",
+						message = "GET #rcPath# with #len( rcToken ) ? 'a wrong' : 'no'# token should be a 401, got HTTP #rcDenied.status_code#: #left( rcDenied.fileContent ?: '', 300 )#"
+					)
+				}
+			}
+		}
+		bx:http url="http://127.0.0.1:#tokenPort#/__bxagents/events" method="POST" result="rcDeniedEvents" timeout=30 {
+			bx:httpparam type="header" name="Content-Type" value="application/json";
+			bx:httpparam type="body" value='{"input":"hi"}';
+		}
+		if ( rcDeniedEvents.status_code != 401 ) {
+			throw(
+				type    = "BxAgents.RunControlTokenGateFailedOpen",
+				message = "POST /__bxagents/events with no token should be a 401, got HTTP #rcDeniedEvents.status_code#: #left( rcDeniedEvents.fileContent ?: '', 300 )#"
+			)
+		}
+		println( "+ Confirmed: the run-control routes sit behind the same token gate (401 without or with a wrong token)" )
 
 		// Negative cases. A failing withCondition makes ColdBox skip the
 		// route entirely, so the caller gets a 404 - deliberately not a 403,

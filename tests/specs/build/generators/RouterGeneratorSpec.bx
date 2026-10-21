@@ -262,6 +262,33 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( "}, 401 )" );
 			} );
 
+			it( "adds the run-control routes beside toAi, served by handlers/AgentApi", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+				var content = fileRead( generator.generate( discovery, newAppDir() ).router );
+
+				expect( content ).toInclude( 'post( "/__bxagents/events" ).toHandler( "AgentApi.events" )' );
+				expect( content ).toInclude( 'post( "/__bxagents/cancel" ).toHandler( "AgentApi.cancel" )' );
+				expect( content ).toInclude( 'post( "/__bxagents/steer" ).toHandler( "AgentApi.steer" )' );
+				expect( content ).toInclude( 'post( "/__bxagents/resume" ).toHandler( "AgentApi.resume" )' );
+				expect( content ).toInclude( 'get( "/__bxagents/pending" ).toHandler( "AgentApi.pending" )' );
+				expect( content ).toInclude( 'get( "/__bxagents/tools" ).toHandler( "AgentApi.tools" )' );
+			} );
+
+			it( "registers the run-control routes BEFORE the 401 catch-all, or it would answer for them", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+				var content = fileRead( generator.generate(
+					discovery,
+					newAppDir(),
+					false, false, false, false, false,
+					{ tokenEnvVar : "BXAGENTS_API_TOKEN" }
+				).router );
+
+				var events = content.find( '"/__bxagents/events"' );
+				var catchAll = content.find( 'route( "/__bxagents/:subroute?" )' );
+				expect( events ).toBeGT( 0 );
+				expect( catchAll ).toBeGT( events );
+			} );
+
 			it( "registers no 401 fallback when the reserved route is ungated - there is nothing to turn away", function() {
 				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
 				var content = fileRead( generator.generate( discovery, newAppDir() ).router );

@@ -42,6 +42,7 @@ class {
 		variables.boxLangModulesCopier = new "models.build.generators.BoxLangModulesCopier@bxagents"()
 		variables.interceptorSplitter = new "models.build.generators.InterceptorSplitter@bxagents"()
 		variables.routerGenerator = new "models.build.generators.RouterGenerator@bxagents"()
+		variables.agentApiGenerator = new "models.build.generators.AgentApiGenerator@bxagents"()
 		variables.webUiGenerator = new "models.build.generators.WebUiGenerator@bxagents"()
 		variables.gatewayGenerator = new "models.build.generators.GatewayGenerator@bxagents"()
 		variables.schedulerGenerator = new "models.build.generators.SchedulerGenerator@bxagents"()
@@ -119,6 +120,10 @@ class {
 
 		arguments.onProgress( "+ Generating config/Router.bx..." )
 		variables.routerGenerator.generate( discovery, appDir, gatewayResult.hasChannelGateway ?: false, gatewayResult.hasWhatsAppCloudGateway ?: false, gatewayResult.hasTeamsGateway ?: false, gatewayResult.hasTwilioGateway ?: false, gatewayResult.hasGitHubGateway ?: false, config.agentApi ?: {} )
+
+		arguments.onProgress( "+ Generating the agent API run control (handlers/AgentApi.bx)..." )
+		var agentApiResult = variables.agentApiGenerator.generate( appDir, config.agentApi ?: {} )
+		arguments.onProgress( "    #agentApiResult.written ? 'written' : 'off (agentApi.enabled is false)'#" )
 
 		arguments.onProgress( "+ Generating the web chat UI (if any gateways/* entry exposes it)..." )
 		var webUiResult = variables.webUiGenerator.generate( discovery, appDir )

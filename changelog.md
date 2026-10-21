@@ -177,6 +177,12 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   forward-only, write-ahead logging, a write that meets a lock tries again for a few seconds). A database made by
   an earlier generated app is recognised.
 
+#### Run control over HTTP
+
+- `/__bxagents` gains `events` (the `/stream` frames plus `tool` and `suspended` frames), `cancel`, `steer`,
+  `pending`, `resume` and `tools`, from a generated `handlers/AgentApi.bx`. They sit behind the same
+  `x-bxagents-token` gate as the `toAi()` routes.
+
 #### The chat screen
 
 - `bxAgents chat` is now a Pi-style terminal screen that keeps your scrollback: finished turns are

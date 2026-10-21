@@ -200,6 +200,8 @@ class {
 
 		if ( !len( tokenEnvVar ) ) {
 			lines.append( 'route( "#static.RESERVED_AGENT_PATH#" ).toAi( "GeneratedAgent" )' )
+			lines.append( "" )
+			lines.append( renderRunControlRoutes(), true )
 			return lines
 		}
 
@@ -216,6 +218,10 @@ class {
 		lines.append( '	} )' )
 		lines.append( '	.toAi( "GeneratedAgent" )' )
 		lines.append( "" )
+		// Before the catch-all below, or it would answer 401 for these too. They are gated by the
+		// handler itself (handlers/AgentApi.bx), with the same variable and header.
+		lines.append( renderRunControlRoutes(), true )
+		lines.append( "" )
 		lines.append( "// Registered AFTER the gated route, so it only ever catches what the" )
 		lines.append( "// condition above turned away. Without it a refused request falls" )
 		lines.append( "// through to ColdBox's default main.index event, which a generated app" )
@@ -228,6 +234,26 @@ class {
 		lines.append( '	}, 401 )' )
 
 		return lines
+	}
+
+	/**
+	 * The run-control routes beside toAi()'s four: the rich event stream, stopping and steering a run,
+	 * and the approval round trip. They are served by handlers/AgentApi.bx (see AgentApiGenerator), which
+	 * checks the same token itself.
+	 *
+	 * @return The route statement lines
+	 */
+	private array function renderRunControlRoutes() {
+		var base = static.RESERVED_AGENT_PATH
+		return [
+			"// Run control - the same path, served by handlers/AgentApi.bx",
+			'post( "#base#/events" ).toHandler( "AgentApi.events" )',
+			'post( "#base#/cancel" ).toHandler( "AgentApi.cancel" )',
+			'post( "#base#/steer" ).toHandler( "AgentApi.steer" )',
+			'post( "#base#/resume" ).toHandler( "AgentApi.resume" )',
+			'get( "#base#/pending" ).toHandler( "AgentApi.pending" )',
+			'get( "#base#/tools" ).toHandler( "AgentApi.tools" )'
+		]
 	}
 
 	/**
