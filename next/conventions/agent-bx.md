@@ -251,6 +251,10 @@ GET  /__bxagents/pending   # ?threadId=
 POST /__bxagents/resume    # { threadId, decision } -> SSE, like /events
 GET  /__bxagents/tools
 GET  /__bxagents/agent    # name, model, what it can do
+GET  /__bxagents/sessions   # the caller's recent conversations
+GET  /__bxagents/history    # ?conversationId= what was said in one
+POST /__bxagents/clear      # { conversationId } forget its messages
+POST /__bxagents/compact    # { conversationId } summarize the older messages
 GET  /__bxagents/notes    # the caller's notes and the agent's, with how full they are
 POST /__bxagents/notes    # { scope : "user" | "agent", text }
 POST /__bxagents/notes/update   # { scope, id, text }
@@ -270,6 +274,8 @@ and adds:
 a token). `steer` splices a message into a run in flight. `resume` takes `approve`, `approve_session` or
 `reject` and streams the rest of the turn. A run belongs to whoever started it: `pending` answers "nothing
 pending" and `resume` answers `403` to anyone else.
+
+Send a `conversationId` with `/events` to keep the turn in a conversation: the server lists it under the caller (the name of the token used, or `api` on an open route) and the agent's memory keeps its messages under the same id. `sessions`, `history`, `clear` and `compact` work on the caller's own conversations only; someone else's id is a `404`, the same as one that does not exist. They answer `404` when the server has no shared chat database, and `compact` reports `available: false` when the agent's memory has no summary model.
 
 The `notes` routes answer `404` for an agent that has no [`notes`](agent-yaml.md#notes) block. Each caller reads and changes their own user notes (the owner is the name of the token they used, or `api` on an open route) and the agent's notes. Any caller can add to either scope or edit a note; removing a note of the agent needs an `admin` token (a `403` otherwise), because it changes what every user's agent knows.
 

@@ -199,7 +199,9 @@ bxAgents chat --no-tui                         # plain line-by-line REPL
 bxAgents chat --server [--port=<port>]         # full app, own throwaway server
 bxAgents chat --connect=http://127.0.0.1:8080  # full app, server you already run
 bxAgents chat --connect=https://agent.example.com --token=<token>   # a server that wants one
-bxAgents chat --user=alice                     # whose notes the agent reads (default: your OS user)
+bxAgents chat --user=alice                     # whose notes and conversations (default: your OS user)
+bxAgents chat --continue                       # open the most recent conversation, with its history
+bxAgents chat --session=2                      # open one by its number in /sessions, or by id
 ```
 
 In the screen:
@@ -213,7 +215,22 @@ In the screen:
 | Enter while the agent works | Steer it: your message is added to the run |
 | Ctrl+C | Clear the box; on an empty box, leave. Ctrl+D leaves too |
 
-Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/save [file]` (the conversation as Markdown), `/remember <text>` and `/notes` (see below), `/record [file]` and `/record stop` (see below) and `/exit`.
+Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/save [file]` (the conversation as Markdown), `/sessions`, `/resume`, `/clear`, `/compact` and `/info` (see below), `/remember <text>` and `/notes` (see below), `/record [file]` and `/record stop` (see below) and `/exit`.
+
+#### Conversations in the chat
+
+Every chat is a conversation, listed in the project's [shared chat database](conventions/web-ui.md#the-sqlite-store) (`data/chat.db`) under your user, the same list the web chat shows. The messages themselves are kept in the agent's [memory](conventions/agent-yaml.md#settings), so a conversation can be picked up again only as far as that memory lasts: the default `cache` memory is lost when the process ends, a `file` or `jdbc` memory is not.
+
+| Command | Does |
+|---|---|
+| `/sessions` | List your recent conversations, numbered |
+| `/resume [number or id]` | Go back to one and show what was said; without an argument, the most recent |
+| `/new` | Start a new conversation (the old one stays in the list) |
+| `/clear` | Forget this conversation's messages and keep the conversation |
+| `/compact` | Replace the older messages with a summary (needs a summary model on the agent's memory) |
+| `/info` | Agent, model, conversation, message count, notes and database |
+
+`--continue` opens the most recent conversation when the chat starts, and `--session=<number or id>` opens a particular one. Both show the earlier messages first. Over `--connect` the server keeps the list and the messages, under the name of your [token](conventions/agent-bx.md#access-tokens-for-a-deployed-agent); a server without a chat database says it keeps no list.
 
 #### Notes in the chat
 
