@@ -1,8 +1,20 @@
 /**
  * A chat session against a running server's always-on agent route: `chat --server` and
- * `chat --connect`. It sends the same events as InProcessSession, with less to say: the
- * stream carries the answer's text, so there are no tool cards, no thinking and no steering
- * here, and a run that stops for a human decision is answered at the server, not in this window.
+ * `chat --connect`. It sends the same events as InProcessSession, from the server's run-control
+ * stream (`/__bxagents/events`):
+ *
+ *   { type : "delta", text }                the answer so far, a piece at a time
+ *   { type : "reasoning", text }            the model's thinking, a piece at a time
+ *   { type : "tool", id, name, summary, status : "running" | "ok", ms }
+ *   { type : "notice", text }  { type : "error", text }
+ *
+ * Esc stops the run on the server (`/cancel`) and leaves the turn at once. A message typed while
+ * the agent works is spliced into the run (`/steer`). A run that stops for a human decision
+ * returns "suspended" with what it waits on, and `resume()` answers it (`/resume`), so approvals are
+ * answered in this window like they are in-process.
+ *
+ * A server built by an older bxAgents has no run control. The session then falls back to the plain
+ * text stream (`/stream`): the answer, nothing else, and a notice says so.
  */
 class {
 
@@ -14,23 +26,35 @@ class {
 		variables.baseUrl = arguments.baseUrl.reReplace( "[\/]+$", "" )
 		variables.client = isNull( arguments.client ) ? new "models.cli.support.AgentClient@bxagents"() : arguments.client
 		variables.threadId = ""
+		variables.about = nullValue()
+		variables.legacy = false
+		variables.summary = new "models.cli.chat.ToolSummary@bxagents"()
 		return this
 	}
 
 	string function agentName() {
-		return "agent"
+		return describe().name ?: "agent"
 	}
 
 	string function modelName() {
-		return variables.baseUrl
+		var label = describe().model ?: ""
+		return len( label ) ? label : variables.baseUrl
 	}
 
 	string function mode() {
 		return "over http"
 	}
 
+	/**
+	 * @return The names of the tools the agent has, or an empty list when the server cannot say
+	 */
 	array function tools() {
-		return []
+		try {
+			var answer = variables.client.getJson( variables.baseUrl, "tools" )
+			return ( answer.tools ?: [] ).map( tool => isSimpleValue( tool ) ? tool : ( tool.name ?: toString( tool ) ) )
+		} catch ( any e ) {
+			return []
+		}
 	}
 
 	void function newThread() {
@@ -41,9 +65,109 @@ class {
 	 * @text What the user said
 	 * @hooks { push( event ), cancelRequested(), takeSteer() }
 	 *
-	 * @return { status : "done" | "suspended" | "cancelled", text, pending }
+	 * @return { status : "done" | "suspended" | "cancelled" | "stopped", text, pending : [ { toolName, toolArgs } ], reason }
 	 */
 	struct function send( required string text, required struct hooks ) {
+		if ( variables.legacy ) {
+			return sendLegacy( arguments.text, arguments.hooks )
+		}
+		try {
+			return runTurn( "events", { "input" : arguments.text, "threadId" : variables.threadId }, arguments.hooks )
+		} catch ( "BxAgents.AgentRouteMissing" e ) {
+			variables.legacy = true
+			arguments.hooks.push( { type : "notice", text : "This server has no run control (it was built by an older bxAgents): showing the answer only." } )
+			return sendLegacy( arguments.text, arguments.hooks )
+		}
+	}
+
+	/**
+	 * Answers a run that stopped for a human decision and carries it on.
+	 *
+	 * @decision approve, approve_session or reject
+	 * @hooks See send()
+	 */
+	struct function resume( required string decision, required struct hooks ) {
+		return runTurn( "resume", { "threadId" : variables.threadId, "decision" : arguments.decision }, arguments.hooks )
+	}
+
+	void function close() {
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Reads one stretch of a run: the events become chat events, Esc cancels, typed text steers.
+	 */
+	private struct function runTurn( required string route, required struct payload, required struct hooks ) {
+		var screen = arguments.hooks
+		var session = this
+		var client = variables.client
+		var target = variables.baseUrl
+		var summary = variables.summary
+		var run = { cancelled : false, text : "", pending : [], suspended : false, error : "", threadId : variables.threadId }
+
+		try {
+			var result = client.events(
+				baseUrl : target,
+				route   : arguments.route,
+				payload : arguments.payload,
+				onEvent : ( event ) => {
+					switch ( event.type ) {
+						case "thread":
+							run.threadId = event.threadId
+							break
+						case "delta":
+							run.text &= event.text
+							screen.push( { type : "delta", text : event.text } )
+							break
+						case "reasoning":
+							screen.push( { type : "reasoning", text : event.text } )
+							break
+						case "tool":
+							screen.push( { type : "tool", id : event.id, name : event.name, summary : summary.of( event.arguments ), status : event.status, ms : event.ms } )
+							break
+						case "suspended":
+							run.suspended = true
+							run.pending = event.pendingActions
+							break
+						case "error":
+							screen.push( { type : "error", text : event.message } )
+							run.error = event.message
+							break
+					}
+
+					if ( screen.cancelRequested() && !run.cancelled ) {
+						run.cancelled = true
+						try {
+							client.postJson( target, "cancel", { "threadId" : run.threadId, "reason" : "Stopped by the user." } )
+						} catch ( any ignored ) {
+							// the turn is left either way
+						}
+						throw( type = "BxAgents.ChatStopped", message = "Stopped by the user." )
+					}
+					var steer = screen.takeSteer()
+					if ( !isNull( steer ) && len( run.threadId ) ) {
+						try {
+							client.postJson( target, "steer", { "threadId" : run.threadId, "input" : steer } )
+						} catch ( any ignored ) {
+							screen.push( { type : "notice", text : "The server did not take that message." } )
+						}
+					}
+				}
+			)
+		} catch ( "BxAgents.ChatStopped" e ) {
+			// the user walked away from the turn; the server was told to stop it
+		}
+
+		variables.threadId = len( run.threadId ) ? run.threadId : variables.threadId
+		var status = run.suspended ? "suspended" : ( run.cancelled ? "cancelled" : "done" )
+		return { status : status, text : run.text, pending : run.pending, reason : "" }
+	}
+
+	/**
+	 * The plain text stream of a server without run control: the answer, nothing else.
+	 */
+	private struct function sendLegacy( required string text, required struct hooks ) {
 		var screen = arguments.hooks
 		var answer = ""
 		var cancelled = false
@@ -61,24 +185,31 @@ class {
 					screen.push( { type : "delta", text : delta } )
 				}
 			)
-		} catch ( BxAgents.ChatStopped e ) {
+		} catch ( "BxAgents.ChatStopped" e ) {
 			cancelled = true
 		}
 		variables.threadId = result.threadId ?: variables.threadId
 		if ( cancelled ) {
-			return { status : "cancelled", text : answer, pending : [] }
+			return { status : "cancelled", text : answer, pending : [], reason : "" }
 		}
 		if ( result.suspended ?: false ) {
 			screen.push( { type : "notice", text : "Paused for a human decision. Answer it at #variables.baseUrl#/gateways/interactions/" } )
 		}
-		return { status : "done", text : answer, pending : [] }
+		return { status : "done", text : answer, pending : [], reason : "" }
 	}
 
-	struct function resume( required string decision, required struct hooks ) {
-		return { status : "done", text : "", pending : [] }
-	}
-
-	void function close() {
+	/**
+	 * What the server says about the agent, asked once.
+	 */
+	private struct function describe() {
+		if ( isNull( variables.about ) ) {
+			try {
+				variables.about = variables.client.getJson( variables.baseUrl, "agent" )
+			} catch ( any e ) {
+				variables.about = {}
+			}
+		}
+		return variables.about
 	}
 
 }

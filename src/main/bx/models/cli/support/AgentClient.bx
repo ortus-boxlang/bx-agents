@@ -32,6 +32,24 @@ class {
 		RESERVED_AGENT_PATH = "/__bxagents"
 	}
 
+	function init() {
+		variables.token = ""
+		return this
+	}
+
+	/**
+	 * Sends this token in the x-bxagents-token header of every request, for a server gated behind
+	 * agentApi.tokenEnvVar.
+	 *
+	 * @token The shared secret; blank sends none
+	 *
+	 * @return This client
+	 */
+	function withToken( required string token ) {
+		variables.token = trim( arguments.token )
+		return this
+	}
+
 	/**
 	 * @baseUrl A server root, e.g. "http://127.0.0.1:8080" - a trailing slash is tolerated
 	 * @subRoute Which `toAi()` sub-route to address; defaults to "invoke"
@@ -84,6 +102,9 @@ class {
 			try {
 				bx:http url=url method="POST" result="httpResult" timeout=10 {
 					bx:httpparam type="header" name="Content-Type" value="application/json";
+					if ( len( variables.token ) ) {
+						bx:httpparam type="header" name="x-bxagents-token" value=variables.token;
+					}
 					bx:httpparam type="body" value="#body#";
 				}
 
@@ -227,20 +248,31 @@ class {
 			payload[ "threadId" ] = trim( arguments.threadId )
 		}
 
-		var acc  = { output : "", threadId : arguments.threadId, suspended : false, finished : false }
+		var acc  = { output : "", threadId : arguments.threadId, suspended : false, finished : false, stopped : nullValue() }
 		var sink = arguments.onDelta ?: nullValue()
 
-		var httpResult = http( url )
+		var call = http( url )
 			.post()
 			.header( "Content-Type", "application/json" )
 			.header( "Accept", "text/event-stream" )
+		if ( len( variables.token ) ) {
+			call = call.header( "x-bxagents-token", variables.token )
+		}
+		var httpResult = call
 			.jsonBody( jsonSerialize( payload ) )
 			.timeout( arguments.timeoutSeconds )
 			.sse( true )
 			.onChunk( ( frame, lastEventId, result, client, response ) => {
-				applySseFrame( frame, acc, sink )
+				try {
+					applySseFrame( frame, acc, sink )
+				} catch ( any e ) {
+					// BoxLang ends the stream when this callback throws, but swallows the exception
+					acc.stopped = { type : e.type, message : e.message }
+					rethrow
+				}
 			} )
 			.send()
+		raiseStop( acc )
 
 		var status = httpResult.statusCode ?: httpResult.status_code ?: 0
 
@@ -331,6 +363,245 @@ class {
 		arguments.acc.output &= delta
 		if ( !isNull( arguments.onDelta ) ) {
 			arguments.onDelta( delta )
+		}
+	}
+
+	/**
+	 * Runs one turn against the run-control stream (`/events`, or `/resume` for an approval), telling the
+	 * caller everything that happens as it happens: not only the text, but the model's thinking, each
+	 * tool call and a pause for approval.
+	 *
+	 * Events passed to `onEvent` (all are structs with a `type`):
+	 *
+	 *   thread      { threadId }
+	 *   delta       { text }                        a piece of the answer
+	 *   reasoning   { text }                        a piece of the model's thinking
+	 *   tool        { id, name, arguments, status : "running" | "ok", ms }
+	 *   suspended   { threadId, pendingActions }    the run waits for a human decision
+	 *   error       { message }
+	 *
+	 * `onEvent` may throw to stop reading: the exception reaches the caller of this method, which is how
+	 * a chat screen walks away from a turn the user cancelled.
+	 *
+	 * @baseUrl The server root to talk to
+	 * @route `events` to start a turn, `resume` to answer an approval
+	 * @payload The JSON body: { input, threadId } for events, { threadId, decision } for resume
+	 * @timeoutSeconds Give up and throw after this many seconds
+	 * @onEvent Called with each event as it arrives; optional
+	 *
+	 * @return { output, threadId, suspended, pending, error } when the stream ends
+	 *
+	 * @throws BxAgents.AgentApiUnauthorized when the server wants a token this client did not send
+	 * @throws BxAgents.AgentRouteMissing when the server has no run control (a server built by an older bxAgents)
+	 */
+	struct function events(
+		required string baseUrl,
+		string route           = "events",
+		required struct payload,
+		numeric timeoutSeconds = 600,
+		any onEvent
+	) {
+		var url  = agentUrl( arguments.baseUrl, arguments.route )
+		var acc  = { output : "", threadId : arguments.payload.threadId ?: "", suspended : false, pending : [], error : "", finished : false, stopped : nullValue() }
+		var sink = arguments.onEvent ?: nullValue()
+
+		var call = http( url )
+			.post()
+			.header( "Content-Type", "application/json" )
+			.header( "Accept", "text/event-stream" )
+		if ( len( variables.token ) ) {
+			call = call.header( "x-bxagents-token", variables.token )
+		}
+		var httpResult = call
+			.jsonBody( jsonSerialize( arguments.payload ) )
+			.timeout( arguments.timeoutSeconds )
+			.sse( true )
+			.onChunk( ( frame, lastEventId, result, client, response ) => {
+				try {
+					applyEventFrame( frame, acc, sink )
+				} catch ( any e ) {
+					// BoxLang ends the stream when this callback throws, but swallows the exception
+					acc.stopped = { type : e.type, message : e.message }
+					rethrow
+				}
+			} )
+			.send()
+		raiseStop( acc )
+
+		var status = httpResult.statusCode ?: httpResult.status_code ?: 0
+		checkStatus( status, url )
+
+		return { output : acc.output, threadId : acc.threadId, suspended : acc.suspended, pending : acc.pending, error : acc.error }
+	}
+
+	/**
+	 * A GET that answers JSON: tools, pending, agent.
+	 *
+	 * @baseUrl The server root
+	 * @route The sub-route on the reserved path, for example "tools"
+	 * @query Query string values
+	 *
+	 * @return The parsed JSON body
+	 */
+	struct function getJson( required string baseUrl, required string route, struct query = {}, numeric timeoutSeconds = 15 ) {
+		var url = agentUrl( arguments.baseUrl, arguments.route )
+		var pairs = []
+		for ( var key in arguments.query ) {
+			pairs.append( urlEncodedFormat( key ) & "=" & urlEncodedFormat( arguments.query[ key ] ) )
+		}
+		if ( pairs.len() ) {
+			url &= "?" & pairs.toList( "&" )
+		}
+		bx:http url=url method="GET" result="httpResult" timeout=arguments.timeoutSeconds {
+			if ( len( variables.token ) ) {
+				bx:httpparam type="header" name="x-bxagents-token" value=variables.token;
+			}
+		}
+		return parseJson( httpResult, url )
+	}
+
+	/**
+	 * A POST that answers JSON: cancel, steer.
+	 *
+	 * @baseUrl The server root
+	 * @route The sub-route on the reserved path, for example "cancel"
+	 * @body The JSON body
+	 *
+	 * @return The parsed JSON body
+	 */
+	struct function postJson( required string baseUrl, required string route, struct body = {}, numeric timeoutSeconds = 15 ) {
+		var url = agentUrl( arguments.baseUrl, arguments.route )
+		var json = jsonSerialize( arguments.body )
+		bx:http url=url method="POST" result="httpResult" timeout=arguments.timeoutSeconds {
+			bx:httpparam type="header" name="Content-Type" value="application/json";
+			if ( len( variables.token ) ) {
+				bx:httpparam type="header" name="x-bxagents-token" value=variables.token;
+			}
+			bx:httpparam type="body" value=json;
+		}
+		return parseJson( httpResult, url )
+	}
+
+	private struct function parseJson( required any httpResult, required string url ) {
+		var status = arguments.httpResult.status_code ?: 0
+		if ( status == 400 ) {
+			// the server explains a bad request in JSON; hand that back
+			try {
+				return jsonDeserialize( arguments.httpResult.fileContent )
+			} catch ( any e ) {
+				checkStatus( status, arguments.url )
+			}
+		}
+		checkStatus( status, arguments.url )
+		try {
+			var parsed = jsonDeserialize( arguments.httpResult.fileContent )
+		} catch ( any e ) {
+			throw( type = "BxAgents.AgentBadAnswer", message = "The agent at [#arguments.url#] did not answer JSON: #left( arguments.httpResult.fileContent ?: '', 200 )#" )
+		}
+		return isStruct( parsed ) ? parsed : { value : parsed }
+	}
+
+	/**
+	 * A callback that throws ends an SSE read, and BoxLang swallows the exception. This raises it again
+	 * for the caller of stream() or events(), so a chat screen can leave a turn the user cancelled.
+	 */
+	private void function raiseStop( required struct acc ) {
+		if ( !isNull( arguments.acc.stopped ) ) {
+			throw( type = arguments.acc.stopped.type, message = arguments.acc.stopped.message )
+		}
+	}
+
+	private void function checkStatus( required numeric status, required string url ) {
+		if ( arguments.status == 401 ) {
+			throw(
+				type    = "BxAgents.AgentApiUnauthorized",
+				message = "The agent at [#arguments.url#] refused the request with 401 - it is gated behind agentApi.tokenEnvVar and the token this client sent is missing or wrong."
+			)
+		}
+		if ( arguments.status == 404 ) {
+			throw(
+				type    = "BxAgents.AgentRouteMissing",
+				message = "The agent at [#arguments.url#] has no such route (404). A server built by an older bxAgents has no run control."
+			)
+		}
+		if ( arguments.status != 200 ) {
+			throw(
+				type    = "BxAgents.AgentStreamFailed",
+				message = "The agent at [#arguments.url#] answered HTTP #arguments.status#."
+			)
+		}
+	}
+
+	/**
+	 * Folds one frame of the run-control stream into the running result and tells the caller about it.
+	 *
+	 * @frame One parsed SSE frame - { data, event, id, retry }
+	 * @acc The running { output, threadId, suspended, pending, error, finished } accumulator, mutated in place
+	 * @onEvent Called with each event; may be null
+	 */
+	private void function applyEventFrame( required struct frame, required struct acc, any onEvent ) {
+		if ( arguments.acc.finished ) {
+			return
+		}
+		var frameEvent = arguments.frame.event ?: ""
+		if ( frameEvent == "done" ) {
+			arguments.acc.finished = true
+			return
+		}
+		var frameData = arguments.frame.data ?: ""
+		if ( !len( trim( frameData ) ) ) {
+			return
+		}
+		var payload = ""
+		try {
+			payload = jsonDeserialize( frameData )
+		} catch ( any e ) {
+			return
+		}
+		if ( !isStruct( payload ) ) {
+			return
+		}
+		var tell = ( event ) => {
+			if ( !isNull( onEvent ) ) {
+				onEvent( event )
+			}
+		}
+
+		switch ( frameEvent ) {
+			case "thread":
+				arguments.acc.threadId = payload.threadId ?: arguments.acc.threadId
+				tell( { type : "thread", threadId : arguments.acc.threadId } )
+				break
+			case "tool":
+				tell( { type : "tool", id : payload.id ?: "", name : payload.name ?: "", arguments : payload.arguments ?: {}, status : payload.status ?: "running", ms : payload.ms ?: 0 } )
+				break
+			case "suspended":
+				arguments.acc.suspended = true
+				arguments.acc.pending = payload.pendingActions ?: []
+				tell( { type : "suspended", threadId : payload.threadId ?: arguments.acc.threadId, pendingActions : arguments.acc.pending } )
+				break
+			case "error":
+				arguments.acc.error = payload.message ?: "The agent reported an error."
+				tell( { type : "error", message : arguments.acc.error } )
+				break
+			case "chunk":
+				// the sentinel for a run that waits on a human: the `suspended` frame carries the detail
+				if ( ( payload.type ?: "" ) == "middleware_stop" ) {
+					return
+				}
+				// a provider's final usage-only chunk carries `choices: []`
+				if ( !isArray( payload.choices ?: "" ) || !payload.choices.len() ) {
+					return
+				}
+				var delta = payload.choices.first().delta ?: {}
+				if ( len( delta.reasoning ?: "" ) ) {
+					tell( { type : "reasoning", text : delta.reasoning } )
+				}
+				if ( len( delta.content ?: "" ) ) {
+					arguments.acc.output &= delta.content
+					tell( { type : "delta", text : delta.content } )
+				}
+				break
 		}
 	}
 

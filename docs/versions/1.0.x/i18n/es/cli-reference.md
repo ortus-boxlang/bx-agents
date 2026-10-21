@@ -202,7 +202,7 @@ En la pantalla:
 | Alt+Enter, Ctrl+J, o `\` y luego Enter | Nueva línea en el mensaje |
 | Arriba / Abajo | Mensajes anteriores (desde la primera o última línea del cuadro) |
 | Esc | Detiene al agente. Se detiene en su siguiente paso, no a mitad de palabra |
-| Enter mientras el agente trabaja | Lo dirige: tu mensaje se añade a la ejecución (solo en el mismo proceso) |
+| Enter mientras el agente trabaja | Lo dirige: tu mensaje se añade a la ejecución |
 | Ctrl+C | Limpia el cuadro; con el cuadro vacío, sale. Ctrl+D también sale |
 
 Escribe `/` para ver los comandos: `/help`, `/new` (una conversación nueva), `/tools`, `/copy` (la última respuesta al portapapeles, con la secuencia OSC 52 que honran la mayoría de terminales), `/save [archivo]` (la conversación en Markdown), `/record [archivo]` y `/record stop` (ver abajo) y `/exit`.
@@ -220,7 +220,7 @@ agg demo.cast demo.gif               # conviértelo en GIF (agg es otra herramie
 El archivo guarda la salida de la pantalla, así que muestra lo que escribiste en el cuadro de mensaje y todo lo que imprimió el agente, incluidos los argumentos de las herramientas. Las pulsaciones de teclas en sí no se graban. Una grabación iniciada con `/record` empieza en ese momento, así que no incluye las líneas anteriores. Necesita la pantalla de terminal: `--no-tui` y las ejecuciones no interactivas no graban nada.
 
 
-La respuesta se muestra mientras llega y se imprime como Markdown formateado (títulos, listas, bloques de código) cuando está completa. En el modo por defecto cada llamada a una tool se muestra con sus argumentos y lo que tardó, y el razonamiento del modelo se muestra mientras trabaja pero no se conserva. Una ejecución que se detiene por [aprobación humana](conventions/gateways/index.md) te pregunta ahí mismo: aprobar una vez, aprobar para la conversación o rechazar. Por HTTP el stream solo lleva el texto, así que no hay líneas de tools, ni razonamiento, ni dirección, y una aprobación se responde en el servidor.
+La respuesta se muestra mientras llega y se imprime como Markdown formateado (títulos, listas, bloques de código) cuando está completa. En el modo por defecto cada llamada a una tool se muestra con sus argumentos y lo que tardó, y el razonamiento del modelo se muestra mientras trabaja pero no se conserva. Una ejecución que se detiene por [aprobación humana](conventions/gateways/index.md) te pregunta ahí mismo: aprobar una vez, aprobar para la conversación o rechazar. Por HTTP la pantalla es la misma: líneas de tools, razonamiento, Esc, dirección y aprobaciones funcionan, a través de las [rutas de control de ejecución](conventions/agent-bx.md#control-de-ejecucion) del servidor. Un servidor construido con un bxAgents antiguo no tiene control de ejecución; entonces obtienes solo la respuesta, con un aviso.
 
 Tres modos, un solo chat:
 
@@ -235,9 +235,9 @@ Tres modos, un solo chat:
 - **`--server`**: arranca un miniserver real (necesita `boxlang-miniserver` en `PATH`, igual que `serve`) en un puerto efímero de loopback y conduce el REPL sobre HTTP contra la [ruta de agente `/__bxagents` siempre activa](conventions/agent-bx.md#la-ruta-de-agente-siempre-activa) del proyecto, y lo apaga al salir. `--port` fija el puerto en lugar de tomar uno libre.
 - **`--connect`**: conduce el mismo REPL contra un servidor en marcha, sin arrancar ni detener nada. La URL es la raíz del servidor (`http://host:puerto`), no la ruta del agente - `chat` la añade por su cuenta.
 - `--server` y `--connect` son mutuamente excluyentes: uno dice "arráncame un servidor", el otro "no lo hagas". Pasar ambos falla de inmediato en lugar de honrar uno en silencio.
-- Ambos modos HTTP hacen **streaming** de la respuesta: la contestación aparece token a token a medida que el agente la produce, por la subruta `/stream` (SSE) de la ruta, en vez de llegar de golpe al terminar el turno. Si el stream no se puede abrir (un servidor antiguo sin subruta `/stream`, o un proxy que no deja pasar `text/event-stream`) recurre a `/invoke` y obtienes la respuesta completa al final en lugar de un error.
+- Ambos modos HTTP hacen **streaming** de la respuesta: la contestación aparece token a token a medida que el agente la produce, por la subruta `/events` (SSE) de la ruta, que también lleva las llamadas a tools y la pausa para aprobación. Esc llama a `/cancel`, un mensaje escrito mientras el agente trabaja llama a `/steer`, y una aprobación se responde con `/resume`. El REPL simple (`--no-tui`) usa `/stream`, y recurre a `/invoke` y a la respuesta completa al final si el stream no se puede abrir (un servidor antiguo sin subruta `/stream`, o un proxy que no deja pasar `text/event-stream`).
 - Ambos modos HTTP arrastran el `threadId` del servidor entre turnos, así que una sesión es una sola conversación y no una serie de primeros mensajes inconexos.
-- Un turno que se detiene a esperar una decisión [humana en el bucle](conventions/gateways/index.md) lo indica en lugar de aparentar que responde con silencio, y señala el endpoint `/gateways/interactions/` donde se envía la decisión.
+- En la pantalla, un turno que se detiene a esperar una decisión [humana en el bucle](conventions/gateways/index.md) te pregunta ahí mismo. En el REPL simple lo indica en lugar de aparentar que responde con silencio, y señala el endpoint `/gateways/interactions/` donde se envía la decisión.
 - Si la ruta está protegida tras [`agentApi.tokenEnvVar`](conventions/agent-bx.md#agentapi), estos modos reciben un `401` claro en lugar de un timeout confuso - no envían ningún token.
 - Escribe `/exit` para salir (`exit` y `quit` funcionan en el REPL simple).
 - Necesita una terminal interactiva real. Sin ella, vuelve al REPL simple, que también necesita una (`MiniConsole` usa `stty` para el modo raw). Usa [`invoke`](#invoke) para scripts.

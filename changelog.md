@@ -182,6 +182,9 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
 - `/__bxagents` gains `events` (the `/stream` frames plus `tool` and `suspended` frames), `cancel`, `steer`,
   `pending`, `resume` and `tools`, from a generated `handlers/AgentApi.bx`. They sit behind the same
   `x-bxagents-token` gate as the `toAi()` routes.
+- `chat --server` and `chat --connect` use them: the same screen as the in-process chat, with tool lines, thinking,
+  Esc to stop the run on the server, steering and approvals answered in place. A server built by an older bxAgents
+  falls back to the text stream with a notice. `AgentClient` can send a token.
 
 #### The chat screen
 

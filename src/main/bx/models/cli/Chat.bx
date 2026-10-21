@@ -68,8 +68,11 @@ class {
 		requireBuild( root )
 
 		if ( useServer ) {
-			var client = new "models.cli.support.AgentClient@bxagents"()
+			// `_client` replaces the real one, for tests
+			var client = arguments.options._client ?: new "models.cli.support.AgentClient@bxagents"()
 			var launched = client.startServer( root, arguments.options.port ?: nullValue() )
+			// The throwaway server belongs to this chat: it goes down when the chat ends, however it ends.
+			// (--connect never stops anything: that server is somebody else's.)
 			try {
 				return chatOverHttp( launched.baseUrl, "Started a throwaway server on #launched.baseUrl#", arguments.options )
 			} finally {
@@ -223,7 +226,7 @@ class {
 	 * @return This verb's own { exitCode, message } result
 	 */
 	private struct function chatOverHttp( required string baseUrl, string banner = "", struct options = {} ) {
-		var client = new "models.cli.support.AgentClient@bxagents"()
+		var client = arguments.options._client ?: new "models.cli.support.AgentClient@bxagents"()
 		var target = arguments.baseUrl.reReplace( "[\/]+$", "" )
 
 		if ( wantsScreen( arguments.options ) ) {

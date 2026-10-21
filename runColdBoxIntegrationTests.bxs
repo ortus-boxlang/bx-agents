@@ -354,6 +354,14 @@ try {
 		)
 	}
 
+	bx:http url="http://127.0.0.1:#port#/__bxagents/agent" method="GET" result="rcAbout" timeout=30 {}
+	if ( rcAbout.status_code != 200 || !rcAbout.fileContent.findNoCase( '"name"' ) || !rcAbout.fileContent.findNoCase( '"capabilities"' ) ) {
+		throw(
+			type    = "BxAgents.RunControlAgentFailed",
+			message = "GET /__bxagents/agent did not describe the agent (HTTP #rcAbout.status_code#): #left( rcAbout.fileContent ?: '', 400 )#"
+		)
+	}
+
 	bx:http url="http://127.0.0.1:#port#/__bxagents/events" method="POST" result="rcEvents" timeout=60 {
 		bx:httpparam type="header" name="Content-Type" value="application/json";
 		bx:httpparam type="header" name="Accept" value="text/event-stream";

@@ -232,6 +232,7 @@ POST /__bxagents/steer     # { threadId, input }
 GET  /__bxagents/pending   # ?threadId=
 POST /__bxagents/resume    # { threadId, decision } -> SSE, como /events
 GET  /__bxagents/tools
+GET  /__bxagents/agent    # name, model, what it can do
 ```
 
 `/events` envía los frames de `/stream` (`thread` primero, `chunk` por cada trozo de la respuesta, `done` al final)
