@@ -260,6 +260,10 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   agent (`every 15 minutes`, `daily 09:00`, `weekly mon 09:00`, ...), creating the file if there is
   none and otherwise adding at the end of `configure()`. There is no cron phrase: ColdBox's
   `ScheduledTask` has none.
+- `add mcp client` adds a remote MCP server to an agent's `mcpServers:` (a catalog name or `--url`,
+  with the sign-in as an `${env.NAME}` placeholder and an empty `.env` stub); `add mcp server` writes
+  `mcp/<name>.bx` offering the project's tools through bx-ai's MCP server, plus the `gateways/` entry
+  that serves it. `Agent.yaml` is edited by inserting lines only, so comments and layout stay.
 
 #### Documentation
 

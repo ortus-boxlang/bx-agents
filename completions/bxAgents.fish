@@ -19,7 +19,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n __bxagents_needs_verb -s v -l version -d 'Show the module version'
 
     # verbs
-    complete -c $cmd -n __bxagents_needs_verb -a 'add' -d 'Add to a project: add <kind> [name] - a tool, interceptor or schedule'
+    complete -c $cmd -n __bxagents_needs_verb -a 'add' -d 'Add to a project: add <kind> [name] - a tool, interceptor, schedule or mcp'
     complete -c $cmd -n __bxagents_needs_verb -a 'build' -d 'Build a project into a generated app'
     complete -c $cmd -n __bxagents_needs_verb -a 'chat' -d 'Interactive REPL chat with a built agent'
     complete -c $cmd -n __bxagents_needs_verb -a 'clean' -d 'Remove a project\'s .build/ and dist/ output'
@@ -39,16 +39,28 @@ for cmd in bxAgents bxagents
     # flags and values of each verb
     complete -c $cmd -n '__bxagents_using_verb add' -l agent -x
     complete -c $cmd -n '__bxagents_using_verb add' -l args -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l auth -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l cors -x
     complete -c $cmd -n '__bxagents_using_verb add' -l description -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l direction -x
     complete -c $cmd -n '__bxagents_using_verb add' -l dry-run
+    complete -c $cmd -n '__bxagents_using_verb add' -l env -x
     complete -c $cmd -n '__bxagents_using_verb add' -l force
     complete -c $cmd -n '__bxagents_using_verb add' -l function -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l header -x
     complete -c $cmd -n '__bxagents_using_verb add' -l name -x
     complete -c $cmd -n '__bxagents_using_verb add' -l no-tui
+    complete -c $cmd -n '__bxagents_using_verb add' -l path -x
     complete -c $cmd -n '__bxagents_using_verb add' -l points -x
     complete -c $cmd -n '__bxagents_using_verb add' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb add' -l prompt -x
     complete -c $cmd -n '__bxagents_using_verb add' -l scope -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l server -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l timeout -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l tools -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l url -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l user -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l version -x
     complete -c $cmd -n '__bxagents_using_verb add' -l when -x
     complete -c $cmd -n '__bxagents_using_verb add' -l yes
     complete -c $cmd -n '__bxagents_using_verb build' -l environment -x

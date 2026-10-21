@@ -175,13 +175,16 @@ class {
 	}
 
 	/**
-	 * @kind webui or agent
-	 * @settings webui: { path, apiKeyEnvVar, users }; agent: { path }
+	 * @kind webui, agent or mcp
+	 * @settings webui: { path, apiKeyEnvVar, users }; agent: { path }; mcp: { path, target } where target is an mcp/ entry's file name
 	 *
 	 * @return The gateways/*.bx source for an exposure
 	 */
 	string function renderExposure( required string kind, required struct settings ) {
 		var entries = [ [ "exposes", arguments.kind ], [ "path", arguments.settings.path ] ]
+		if ( len( arguments.settings.target ?: "" ) ) {
+			entries.append( [ "target", arguments.settings.target ] )
+		}
 		if ( len( arguments.settings.apiKeyEnvVar ?: "" ) ) {
 			entries.append( [ "apiKeyEnvVar", arguments.settings.apiKeyEnvVar ] )
 		}

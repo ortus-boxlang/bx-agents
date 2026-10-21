@@ -63,7 +63,7 @@ Always use the `--flag=value` form. The space-separated form is not supported.
 Scaffold a new agent project.
 :::
 ::: card title="add" icon="phosphor-duotone:plus-circle" href="#add"
-Add a tool, interceptor or schedule to an existing project.
+Add a tool, interceptor, schedule or MCP server to an existing project.
 :::
 ::: card title="build" icon="phosphor-duotone:hammer" href="#build"
 Run the full build pipeline.
@@ -153,7 +153,7 @@ bxAgents new my-agent --forgebox=some-package-slug
 
 ### `add`
 
-Add one thing to a project that already exists, asking the same questions `new` asks. Today that is a `tool`, an `interceptor` or a `schedule`.
+Add one thing to a project that already exists, asking the same questions `new` asks. Today that is a `tool`, an `interceptor`, a `schedule` or an `mcp` server.
 
 ```bash
 bxAgents add                        # pick what to add
@@ -231,6 +231,43 @@ Times are 24 hour `HH:mm` in the scheduler's timezone. There is no cron phrase: 
 - If `schedules/Scheduler.bx` does not exist it is created. If it does, the task is added at the end of `configure()` and the rest of the file is left as it was.
 - If `configure()` cannot be found, nothing is changed and the error carries the task to paste in.
 - Scheduled tasks run while the app is served (`bxAgents serve`). Check the result with `bxAgents inspect --section=schedule`.
+
+#### `add mcp`
+
+Adds an MCP server in either direction: one the agent **calls** (written into `Agent.yaml`), or one the project **hosts** (`mcp/<name>.bx`).
+
+```bash
+bxAgents add mcp client github                 # a server from the catalog the new wizard uses
+bxAgents add mcp client --url=https://mcp.acme.dev/mcp --name=acme --auth=bearer --env=ACME_TOKEN
+bxAgents add mcp server tools --description="My tools"
+bxAgents add mcp                                # asks which way
+```
+
+**`add mcp client`** adds an entry to the agent's `mcpServers:` list. A name from the catalog (`github`, `stripe`, `notion`, `atlassian`, `cloudflare`, `supabase`) fills in the address and the sign-in; otherwise give `--url`. Servers that run as a local program are not offered, because the bx-ai bundled with this release talks to web servers only.
+
+| Flag | Meaning |
+|---|---|
+| `--url=<address>` | A server not in the catalog. An address with a user name, password or key in it is refused: the secret belongs in an environment variable. |
+| `--name=<label>` | A label for `Agent.yaml`; it is not sent to the server. |
+| `--auth=none\|bearer\|header\|basic` | How it signs you in. `bearer` writes `token`, `header` writes `headers` (name it with `--header=`), `basic` writes `user` (with `--user=`) and `password`. |
+| `--env=<NAME>` | The environment variable that holds the key or password. Only the name goes in `Agent.yaml`, as `${env.NAME}`; an empty `NAME=` is added to `.env` for you to fill in. |
+| `--timeout=<ms>` | Optional. |
+| `--agent=<subagent>` | Which agent uses it; `.` (the default) is the root agent. |
+
+**`add mcp server`** writes `mcp/<name>.bx` offering the project's tools through bx-ai's MCP server, and, unless you decline, a `gateways/<name>Mcp.bx` entry that serves it over HTTP.
+
+| Flag | Meaning |
+|---|---|
+| `--name=<name>` | The file name and the server's name. Defaults to `tools`. |
+| `--description=<text>`, `--version=<x.y.z>` | What other agents see. |
+| `--tools=<list>` | Which tools to offer. Defaults to all of the root agent's tools; a name that is not one of them is refused. |
+| `--cors=<origin>` | Web origins allowed to call it from a browser; `*` for any. Empty for none. |
+| `--expose` / `--no-expose`, `--path=<path>` | Whether to serve it over HTTP, and where (default `/mcp/<name>`). A path another `gateways/` entry uses is refused. |
+
+The tool list is written out when you run the command, so a tool added later has to be added to `mcp/<name>.bx`. The served route has no authentication of its own: keep it off public networks or put it behind a proxy that checks a credential.
+
+- `Agent.yaml` is edited by inserting lines only, so its comments and layout stay as they are. If the list cannot be extended that way (written on one line, say), or the definition is a class-based `Agent.bx`, nothing is changed and the error carries the entry to paste.
+- A server the agent already uses, by name or address, is refused.
 
 ### `build`
 

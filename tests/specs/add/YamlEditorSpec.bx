@@ -1,0 +1,82 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "add.YamlEditor", function() {
+
+			beforeEach( function() {
+				variables.editor = new bxagents.models.add.YamlEditor();
+				variables.nl = char( 10 );
+				variables.hash = char( 35 );
+			} );
+
+			it( "adds an item at the end of an existing list and touches nothing else", function() {
+				var text = hash & " my agent" & nl & "name: a" & nl & nl & "mcpServers:" & nl & "  " & hash & " first" & nl & "  - name: one" & nl & "    url: https://one" & nl & nl & "memory: cache" & nl;
+
+				var result = editor.addItem( text, "mcpServers", [ "- name: two", "  url: https://two" ] );
+
+				expect( result.ok ).toBeTrue();
+				expect( result.text ).toBe( hash & " my agent" & nl & "name: a" & nl & nl & "mcpServers:" & nl & "  " & hash & " first" & nl & "  - name: one" & nl & "    url: https://one" & nl & "  - name: two" & nl & "    url: https://two" & nl & nl & "memory: cache" & nl );
+			} );
+
+			it( "follows the indentation the list already uses, including items at column 0", function() {
+				var flush = "mcpServers:" & nl & "- name: one" & nl & "  url: https://one" & nl;
+
+				var result = editor.addItem( flush, "mcpServers", [ "- name: two" ] );
+				var deep = editor.addItem( "mcpServers:" & nl & "    - name: one" & nl, "mcpServers", [ "- name: two" ] );
+
+				expect( result.text ).toBe( "mcpServers:" & nl & "- name: one" & nl & "  url: https://one" & nl & "- name: two" & nl );
+				expect( deep.text ).toBe( "mcpServers:" & nl & "    - name: one" & nl & "    - name: two" & nl );
+			} );
+
+			it( "adds the key as a new block at the end, after a blank line, when it is not there", function() {
+				var result = editor.addItem( "name: a" & nl & "model: x" & nl, "mcpServers", [ "- name: two", "  url: https://two" ] );
+
+				expect( result.ok ).toBeTrue();
+				expect( result.text ).toBe( "name: a" & nl & "model: x" & nl & nl & "mcpServers:" & nl & "  - name: two" & nl & "    url: https://two" & nl );
+			} );
+
+			it( "adds a block to a file that has no final newline", function() {
+				var result = editor.addBlock( "name: a", "memory", [ "memory: cache" ] );
+
+				expect( result.text ).toBe( "name: a" & nl & nl & "memory: cache" & nl );
+			} );
+
+			it( "puts the new item before the next key, not after a trailing comment", function() {
+				var text = "mcpServers:" & nl & "  - name: one" & nl & hash & " about memory" & nl & "memory: cache" & nl;
+
+				var result = editor.addItem( text, "mcpServers", [ "- name: two" ] );
+
+				expect( result.text ).toBe( "mcpServers:" & nl & "  - name: one" & nl & "  - name: two" & nl & hash & " about memory" & nl & "memory: cache" & nl );
+			} );
+
+			it( "declines a list written on one line, with the reason", function() {
+				var result = editor.addItem( "mcpServers: [ https://one ]" & nl, "mcpServers", [ "- name: two" ] );
+
+				expect( result.ok ).toBeFalse();
+				expect( result.reason ).toInclude( "one line" );
+			} );
+
+			it( "declines to add a block whose key is already there", function() {
+				expect( editor.addBlock( "memory: cache" & nl, "memory", [ "memory: file" ] ).ok ).toBeFalse();
+			} );
+
+			it( "keeps the file's Windows line endings", function() {
+				var crlf = char( 13 ) & char( 10 );
+				var text = "name: a" & crlf & "mcpServers:" & crlf & "  - name: one" & crlf;
+
+				var result = editor.addItem( text, "mcpServers", [ "- name: two" ] );
+
+				expect( result.text ).toBe( "name: a" & crlf & "mcpServers:" & crlf & "  - name: one" & crlf & "  - name: two" & crlf );
+			} );
+
+			it( "does not mistake a key that only starts the same way", function() {
+				var result = editor.addItem( "mcpServersExtra:" & nl & "  - x" & nl, "mcpServers", [ "- name: two" ] );
+
+				expect( result.text ).toInclude( "mcpServers:" & nl & "  - name: two" );
+				expect( editor.hasKey( "mcpServersExtra: 1", "mcpServers" ) ).toBeFalse();
+			} );
+
+		} );
+	}
+
+}

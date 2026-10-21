@@ -49,6 +49,7 @@ class {
 			var ctx = {
 				root    : root,
 				name    : args.len() > 1 ? args[ 2 ] : "",
+				args    : args.len() > 1 ? args.slice( 2 ) : [],
 				options : arguments.options,
 				project : projectInfo( root )
 			}
@@ -69,7 +70,7 @@ class {
 	 *
 	 * @root Absolute path to the project root
 	 *
-	 * @return { rootName, interceptorNames : [ names ], taskNames : [ names ], agentNames : { "." : name, "<subagent>" : name }, subagents : [ folder names ], toolNames : { ".": [ names ], "<subagent>": [ names ] } }
+	 * @return { report : the ProjectReport or an empty struct, mcpNames : [ names ], rootName, interceptorNames : [ names ], taskNames : [ names ], agentNames : { "." : name, "<subagent>" : name }, subagents : [ folder names ], toolNames : { ".": [ names ], "<subagent>": [ names ] } }
 	 */
 	private struct function projectInfo( required string root ) {
 		var discoverer = new "models.build.ProjectDiscoverer@bxagents"()
@@ -86,7 +87,27 @@ class {
 			info.toolNames[ sub.name ] = discoverer.discover( sub.path ).tools.map( t => t.name )
 			info.agentNames[ sub.name ] = agentName( sub.path )
 		}
+		info.mcpNames = rootDiscovery.mcp.map( m => m.name )
+		info.report = readReport( arguments.root )
 		return info
+	}
+
+	/**
+	 * The `inspect` report, for the kinds that need to know what the project already has
+	 * (the tools an MCP server can expose, the MCP servers an agent already uses, the paths
+	 * taken). A project that does not load yet has no report, and `add` still works for the
+	 * kinds that do not need one.
+	 *
+	 * @root Absolute path to the project root
+	 *
+	 * @return The ProjectReport, or an empty struct when it cannot be built
+	 */
+	private struct function readReport( required string root ) {
+		try {
+			return new "models.report.ProjectReport@bxagents"().build( arguments.root )
+		} catch ( any e ) {
+			return {}
+		}
 	}
 
 	/**

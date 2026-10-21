@@ -1,0 +1,432 @@
+/**
+ * `add mcp` - two directions, one verb:
+ *
+ *   add mcp client [github|<name>]   an MCP server the agent CALLS, written into Agent.yaml
+ *   add mcp server [name]            an MCP server the project HOSTS (mcp/<name>.bx, plus an
+ *                                    optional gateways/ entry that serves it over HTTP)
+ *
+ * The client side is remote servers over HTTP. A server that runs as a local program
+ * (stdio) is not supported by the bx-ai bundled with this release (see
+ * wizard/catalog/mcp-servers.json), so it is not offered. Credentials are never typed:
+ * they are `${env.NAME}` placeholders in Agent.yaml and an empty stub in `.env`.
+ */
+class {
+
+	static {
+		AUTH = [
+			{ value : "none", label : "None", hint : "the server is open" },
+			{ value : "bearer", label : "A bearer token", hint : "token: ${env.NAME}" },
+			{ value : "header", label : "A header with a key", hint : "headers: { X-Api-Key: ${env.NAME} }" },
+			{ value : "basic", label : "A user name and password", hint : "user, and password: ${env.NAME}" }
+		]
+	}
+
+	struct function info() {
+		return { name : "mcp", summary : "An MCP server to call, or one to host (Agent.yaml mcpServers, or mcp/<name>.bx)" }
+	}
+
+	/**
+	 * @answers An Answers
+	 * @ctx The add context
+	 *
+	 * @return The answers, with `direction` set to client or server
+	 */
+	struct function ask( required any answers, required struct ctx ) {
+		var args = duplicate( arguments.ctx.args ?: [] )
+		var direction = ""
+		if ( args.len() && [ "client", "server" ].contains( args[ 1 ] ) ) {
+			direction = args[ 1 ]
+			args.deleteAt( 1 )
+		}
+		var a = arguments.answers.withPresets( { name : args.len() ? args[ 1 ] : "" } )
+
+		if ( !len( direction ) ) {
+			direction = a.select(
+				key     = "direction",
+				title   = "Which way?",
+				choices = [
+					{ value : "client", label : "Use an MCP server", hint : "the agent calls out to it" },
+					{ value : "server", label : "Host an MCP server", hint : "serve this project's tools to other agents" }
+				],
+				default = "client"
+			)
+		}
+		var result = direction == "client" ? askClient( a, arguments.ctx ) : askServer( a, arguments.ctx )
+		result.direction = direction
+		return result
+	}
+
+	/**
+	 * @answers The answers from ask()
+	 * @ctx The add context
+	 * @changes A ChangeSet
+	 */
+	void function plan( required struct answers, required struct ctx, required any changes ) {
+		if ( arguments.answers.direction == "client" ) {
+			planClient( arguments.answers, arguments.ctx, arguments.changes )
+		} else {
+			planServer( arguments.answers, arguments.ctx, arguments.changes )
+		}
+	}
+
+	/**
+	 * @return [ text ] what is left to do
+	 */
+	array function next( required struct answers, required struct ctx ) {
+		var out = []
+		var a = arguments.answers
+		if ( a.direction == "client" ) {
+			if ( len( a.env ) ) {
+				out.append( "Set #a.env# in .env. " & ( a.help ?: "" ) )
+			}
+			if ( len( a.riskNote ?: "" ) ) {
+				out.append( "Read this before you let an agent use it: " & a.riskNote )
+			}
+			out.append( "Nothing connects until the app starts; the server must be reachable then." )
+			out.append( "Check it with: bxAgents inspect --section=mcp" )
+			return out
+		}
+		out.append( "The server exposes #a.tools.len()# tool#a.tools.len() == 1 ? '' : 's'#: #a.tools.toList( ', ' )#. A tool added later has to be added to mcp/#a.name#.bx." )
+		if ( a.expose ) {
+			out.append( "It is served at #a.path# once the app runs. That route has no authentication of its own: keep it off public networks or put it behind a proxy that checks a credential." )
+		} else {
+			out.append( "It is not served yet. Add a gateways/ entry with exposes: ""mcp"" and target: ""#a.name#"" to reach it over HTTP." )
+		}
+		out.append( "Check it with: bxAgents inspect --section=mcp,gateways" )
+		return out
+	}
+
+	// --------------------------------------------------------------------------
+	// Client
+	// --------------------------------------------------------------------------
+
+	private struct function askClient( required any a, required struct ctx ) {
+		var catalog = new "models.wizard.WizardCatalog@bxagents"()
+		var known = catalog.mcpServers()
+		var knownIds = known.map( s => s.id )
+		var given = arguments.a.presetName()
+		var entry = {}
+		var label = ""
+
+		if ( len( given ) && knownIds.contains( given ) ) {
+			entry = catalog.mcpServer( given )
+		} else if ( len( given ) && ( arguments.ctx.options.url ?: "" ) == "" && catalog.mcpServer( given ).count() ) {
+			throw( type = "BxAgents.InvalidAnswer", message = "[#given#] is not available yet: #catalog.mcpServer( given ).unavailableNote ?: ''#" )
+		} else if ( !len( given ) && !arguments.a.given( "url" ) ) {
+			if ( !arguments.a.interactive() ) {
+				throw( type = "BxAgents.MissingAnswer", message = "Name a server (bxAgents add mcp client #knownIds.toList( '|' )#) or pass --url=<address>" )
+			}
+			var choices = known.map( s => { value : s.id, label : s.name, hint : s.summary } )
+			choices.append( { value : "custom", label : "Another server (I have its address)", hint : "" } )
+			var picked = arguments.a.select( key = "server", title = "Which MCP server?", choices = choices, default = known[ 1 ].id )
+			if ( picked != "custom" ) {
+				entry = catalog.mcpServer( picked )
+			}
+		}
+
+		var url = ""
+		var auth = "none"
+		var envVar = ""
+		var help = ""
+		var risk = ""
+		if ( entry.count() ) {
+			label = entry.id
+			url = entry.url
+			auth = entry.auth.type ?: "none"
+			envVar = entry.auth.envVar ?: ""
+			help = entry.auth.help ?: ""
+			risk = entry.riskNote ?: ""
+		} else {
+			url = arguments.a.text(
+				key      = "url",
+				title    = "The server's address",
+				help     = "https://... The address of its MCP endpoint.",
+				required = true,
+				validate = ( value ) => urlProblem( value )
+			)
+			label = arguments.a.text(
+				key     = "name",
+				title   = "A name for it",
+				help    = "A label for Agent.yaml; it is not sent to the server.",
+				default = len( given ) ? given : hostLabel( url ),
+				validate = ( value ) => reFind( "^[A-Za-z][A-Za-z0-9_-]*$", value ) ? "" : "Letters, digits, - and _, starting with a letter."
+			)
+			auth = arguments.a.select( key = "auth", title = "How does it sign you in?", choices = static.AUTH, default = "none" )
+		}
+
+		var header = ""
+		var user = ""
+		if ( auth != "none" ) {
+			if ( auth == "header" ) {
+				header = arguments.a.text(
+					key      = "header",
+					title    = "Which header carries the key?",
+					default  = "X-Api-Key",
+					validate = ( value ) => reFind( "^[A-Za-z][A-Za-z0-9-]*$", value ) ? "" : "A header name such as X-Api-Key."
+				)
+			}
+			if ( auth == "basic" ) {
+				user = arguments.a.text( key = "user", title = "The user name", required = true )
+			}
+			envVar = arguments.a.text(
+				key      = "env",
+				title    = auth == "basic" ? "Which environment variable holds the password?" : "Which environment variable holds the key?",
+				help     = "Only the variable's name goes in Agent.yaml; its value goes in .env.",
+				default  = len( envVar ) ? envVar : defaultEnvVar( label ),
+				validate = ( value ) => reFind( "^[A-Z][A-Z0-9_]*$", value ) ? "" : "Capital letters, digits and underscores, e.g. MY_SERVER_TOKEN."
+			)
+		}
+
+		var timeout = arguments.a.text(
+			key      = "timeout",
+			title    = "Timeout in milliseconds? (optional)",
+			help     = "Leave empty for the default.",
+			default  = "",
+			validate = ( value ) => !len( value ) || reFind( "^[1-9][0-9]*$", value ) ? "" : "A number of milliseconds."
+		)
+
+		var agent = askAgent( arguments.a, arguments.ctx )
+		var already = findAgent( arguments.ctx, agent )
+		for ( var used in already.mcpServers ?: [] ) {
+			if ( used.name == label || used.url == url.reReplace( "[?##].*$", "" ) ) {
+				throw( type = "BxAgents.McpExists", message = "#agent == '.' ? 'The root agent' : 'Subagent ' & agent# already uses #len( used.name ) ? used.name : used.url#." )
+			}
+		}
+
+		var item = { name : label, url : url }
+		if ( auth == "bearer" ) {
+			item.token = "${env.#envVar#}"
+		} else if ( auth == "header" ) {
+			item.headers = { "#header#" : "${env.#envVar#}" }
+		} else if ( auth == "basic" ) {
+			item.user = user
+			item.password = "${env.#envVar#}"
+		}
+		if ( len( timeout ) ) {
+			item.timeout = int( timeout )
+		}
+
+		return { item : item, agent : agent, env : envVar, help : help, riskNote : risk, serverName : label }
+	}
+
+	private void function planClient( required struct answers, required struct ctx, required any changes ) {
+		var a = arguments.answers
+		var def = definitionFor( arguments.ctx, a.agent )
+		var yaml = new "models.wizard.YamlWriter@bxagents"()
+		var itemLines = yaml.lines( [ a.item ], 0, [ "name", "url", "token", "headers", "user", "password", "timeout" ] )
+
+		if ( def.kind != "yaml" ) {
+			throw(
+				type    = "BxAgents.AgentNotEditable",
+				message = "#def.file# is a class, so it is not edited. Add this to the mcpServers returned by its configure():" & char( 10 ) & char( 10 ) & structLiteral( a.item )
+			)
+		}
+
+		var file = arguments.ctx.root & "/" & def.file
+		var edit = new "models.add.YamlEditor@bxagents"().addItem( fileRead( file ), "mcpServers", itemLines )
+		if ( !edit.ok ) {
+			throw(
+				type    = "BxAgents.AgentNotEditable",
+				message = "#def.file# was not changed: #edit.reason#. Add this to its mcpServers list:" & char( 10 ) & char( 10 ) & itemLines.toList( char( 10 ) )
+			)
+		}
+		arguments.changes.edit( def.file, edit.text, itemLines.toList( char( 10 ) ) )
+
+		if ( len( a.env ) ) {
+			var note = len( a.help ) ? "## #a.serverName# MCP. #a.help##char( 10 )#" : "## #a.serverName# MCP#char( 10 )#"
+			arguments.changes.append( ".env", char( 10 ) & note & a.env & "=" & char( 10 ), a.env & "=" )
+		}
+	}
+
+	// --------------------------------------------------------------------------
+	// Server
+	// --------------------------------------------------------------------------
+
+	private struct function askServer( required any a, required struct ctx ) {
+		var report = arguments.ctx.project.report
+		var tools = []
+		for ( var tool in ( report.agent.tools.own ?: [] ) ) {
+			tools.append( tool.name )
+		}
+		if ( !tools.len() ) {
+			throw( type = "BxAgents.NoToolsToHost", message = "This project has no tools in tools/ to host yet. Add one first: bxAgents add tool" )
+		}
+		var taken = arguments.ctx.project.mcpNames
+
+		var name = arguments.a.text(
+			key      = "name",
+			title    = "Server name",
+			help     = "The file name: mcp/<name>.bx, and the name other agents see.",
+			default  = "tools",
+			validate = ( value ) => !reFind( "^[A-Za-z][A-Za-z0-9_-]*$", value ) ? "Letters, digits, - and _, starting with a letter." : ( taken.findNoCase( value ) ? "An MCP server named #value# already exists." : "" )
+		)
+		var description = arguments.a.text(
+			key     = "description",
+			title   = "What is it? (optional)",
+			help    = "One line other agents may see.",
+			default = ( report.project.name ?: "" ) & " tools"
+		)
+		var version = arguments.a.text(
+			key      = "version",
+			title    = "Version",
+			default  = "1.0.0",
+			validate = ( value ) => reFind( "^[0-9]+\.[0-9]+\.[0-9]+$", value ) ? "" : "A version like 1.0.0."
+		)
+		var chosen = arguments.a.list(
+			key     = "tools",
+			title   = "Which tools does it offer?",
+			help    = "All of this project's tools are ticked.",
+			choices = tools.map( t => { value : t, label : t, selected : true } ),
+			default = tools
+		)
+		if ( !chosen.len() ) {
+			throw( type = "BxAgents.InvalidAnswer", message = "--tools: pick at least one tool" )
+		}
+		var cors = arguments.a.text(
+			key     = "cors",
+			title   = "Which web origins may call it from a browser? (optional)",
+			help    = "Empty for none, * for any origin, or an origin such as https://app.example.com.",
+			default = ""
+		)
+
+		var expose = arguments.a.confirm( key = "expose", title = "Serve it over HTTP now?", default = true )
+		var path = ""
+		if ( expose ) {
+			var paths = ( report.gateways ?: [] ).map( g => g.path )
+			path = arguments.a.text(
+				key      = "path",
+				title    = "At which path?",
+				default  = "/mcp/" & name,
+				validate = ( value ) => !reFind( "^/[A-Za-z0-9/_-]+$", value ) ? "A path such as /mcp/tools." : ( paths.contains( value ) ? "#value# is already served by another gateways/ entry." : "" )
+			)
+		}
+
+		return { name : name, description : description, version : version, tools : chosen, cors : cors, expose : expose, path : path }
+	}
+
+	private void function planServer( required struct answers, required struct ctx, required any changes ) {
+		var a = arguments.answers
+		var tab = char( 9 )
+		var lines = [ "class {", "", tab & "function configure() {", tab & tab & "return {" ]
+		lines.append( tab & tab & tab & 'description : "' & literal( a.description ) & '",' )
+		lines.append( tab & tab & tab & 'version     : "' & literal( a.version ) & '",' )
+		if ( len( a.cors ) ) {
+			lines.append( tab & tab & tab & 'cors        : "' & literal( a.cors ) & '",' )
+		}
+		lines.append( tab & tab & tab & "tools       : [ " & a.tools.map( t => '"' & literal( t ) & '"' ).toList( ", " ) & " ]" )
+		lines.append( tab & tab & "};" )
+		lines.append( tab & "}" )
+		lines.append( "" )
+		lines.append( "}" )
+		arguments.changes.file( "mcp/" & a.name & ".bx", lines.toList( char( 10 ) ) & char( 10 ) )
+
+		if ( a.expose ) {
+			var source = new "models.wizard.FeatureWriter@bxagents"().renderExposure( "mcp", { path : a.path, target : a.name } )
+			arguments.changes.file( "gateways/" & a.name & "Mcp.bx", source )
+		}
+	}
+
+	// --------------------------------------------------------------------------
+
+	private string function askAgent( required any a, required struct ctx ) {
+		var choices = [ { value : ".", label : "The root agent", hint : arguments.ctx.project.agentNames[ "." ] } ]
+		for ( var sub in arguments.ctx.project.subagents ) {
+			choices.append( { value : sub, label : sub, hint : arguments.ctx.project.agentNames[ sub ] ?: sub } )
+		}
+		if ( choices.len() > 1 ) {
+			return arguments.a.select( key = "agent", title = "Which agent uses it?", choices = choices, default = "." )
+		}
+		if ( ( arguments.ctx.options.agent ?: "." ) != "." ) {
+			throw( type = "BxAgents.InvalidAnswer", message = "--agent: this project has no subagents" )
+		}
+		return "."
+	}
+
+	private struct function findAgent( required struct ctx, required string agent ) {
+		var report = arguments.ctx.project.report
+		if ( !report.keyExists( "agent" ) ) {
+			return {}
+		}
+		return arguments.agent == "." ? report.agent : search( report.agent, "subagents/" & arguments.agent )
+	}
+
+	private struct function search( required struct node, required string folder ) {
+		for ( var child in arguments.node.children ) {
+			if ( child.folder == arguments.folder ) {
+				return child
+			}
+			var deeper = search( child, arguments.folder )
+			if ( deeper.count() ) {
+				return deeper
+			}
+		}
+		return {}
+	}
+
+	/**
+	 * @return { kind : yaml|bx, file : project-relative path of the agent's definition }
+	 */
+	private struct function definitionFor( required struct ctx, required string agent ) {
+		var folder = arguments.agent == "." ? "" : "subagents/" & arguments.agent & "/"
+		var located = new "models.build.AgentDefinitionLocator@bxagents"().locate( arguments.ctx.root & ( len( folder ) ? "/" & folder.reReplace( "/$", "" ) : "" ) )
+		return { kind : located.kind, file : folder & located.path.listLast( "/\" ) }
+	}
+
+	/**
+	 * Agent.yaml is committed, so a credential written into the address would be committed
+	 * with it. The address may name a place; the key goes in an environment variable.
+	 *
+	 * @return The reason the address is not acceptable, or an empty string
+	 */
+	private string function urlProblem( required string value ) {
+		if ( reFind( "^https?://[^/]*@", arguments.value ) ) {
+			return "Take the user name and password out of the address: choose a sign-in method below and keep the secret in an environment variable."
+		}
+		if ( !reFind( "^https?://[^\s/]+", arguments.value ) ) {
+			return "An http:// or https:// address."
+		}
+		if ( reFindNoCase( "[?&](api[_-]?key|key|token|secret|password|passwd|auth|access[_-]?token|sig|signature)=", arguments.value ) ) {
+			return "The address carries a key in its query string. Take it out and choose a sign-in method (bearer token or header) so the key stays in an environment variable."
+		}
+		return ""
+	}
+
+	private string function defaultEnvVar( required string label ) {
+		return ucase( arguments.label.reReplace( "[^A-Za-z0-9]+", "_", "all" ) ) & "_TOKEN"
+	}
+
+	private string function hostLabel( required string url ) {
+		var host = arguments.url.reReplace( "^https?://", "" ).reReplace( "[/:?].*$", "" ).reReplace( "^(www|api|mcp)\.", "" )
+		return host.listFirst( "." ).reReplace( "[^A-Za-z0-9_-]", "", "all" )
+	}
+
+	/**
+	 * A BoxLang struct literal for an Agent.bx's configure(), for when the definition is a class.
+	 */
+	private string function structLiteral( required struct item ) {
+		var parts = []
+		for ( var key in [ "name", "url", "token", "headers", "user", "password", "timeout" ] ) {
+			if ( !arguments.item.keyExists( key ) ) {
+				continue
+			}
+			var value = arguments.item[ key ]
+			if ( isStruct( value ) ) {
+				var inner = []
+				for ( var k in value ) {
+					inner.append( '"' & literal( k ) & '" : "' & literal( value[ k ] ) & '"' )
+				}
+				parts.append( key & " : { " & inner.toList( ", " ) & " }" )
+			} else if ( isNumeric( value ) ) {
+				parts.append( key & " : " & value )
+			} else {
+				parts.append( key & ' : "' & literal( value ) & '"' )
+			}
+		}
+		return char( 9 ) & "{ " & parts.toList( ", " ) & " }"
+	}
+
+	private string function literal( required string text ) {
+		return arguments.text.replace( '"', '""', "all" ).replace( char( 35 ), char( 35 ) & char( 35 ), "all" )
+	}
+
+}
