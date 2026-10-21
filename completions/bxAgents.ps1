@@ -7,6 +7,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 	param( $wordToComplete, $commandAst, $cursorPosition )
 
 	$verbs = @{
+		'add' = 'Add to a project: add <kind> [name] - a tool today'
 		'build' = 'Build a project into a generated app'
 		'chat' = 'Interactive REPL chat with a built agent'
 		'clean' = 'Remove a project''s .build/ and dist/ output'
@@ -22,6 +23,18 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 		'help' = 'Show the usage and the list of verbs'
 	}
 	$options = @{
+		'add' = @(
+			@{ Name = 'agent'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'args'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'description'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'dry-run'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'force'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'function'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'name'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'no-tui'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
+			@{ Name = 'yes'; Value = $false; Choices = @(); Dir = $false }
+		)
 		'build' = @(
 			@{ Name = 'environment'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'generatorVersion'; Value = $true; Choices = @(); Dir = $false }

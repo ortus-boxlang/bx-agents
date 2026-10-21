@@ -35,7 +35,7 @@ bxAgents --version
 bxAgents --help
 ```
 
-`--help` lista los 12 verbos (`new`, `build`, `test`, `serve`, `chat`, `invoke`,
+`--help` lista los 13 verbos (`new`, `add`, `build`, `test`, `serve`, `chat`, `invoke`,
 `package`, `deploy`, `inspect`, `clean`, `hash-password`, `doctor`) con un resumen de una
 línea de cada uno. Usarás la mayoría en este curso.
 :::

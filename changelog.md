@@ -121,7 +121,7 @@ platform's own limit, and human-in-the-loop approval support:
 
 #### CLI
 
-Twelve verbs: `new`, `build`, `test`, `serve`, `chat`, `invoke`, `package`, `deploy`,
+Thirteen verbs: `new`, `add`, `build`, `test`, `serve`, `chat`, `invoke`, `package`, `deploy`,
 `inspect`, `hash-password`, `clean` and `doctor`, shipped as a native `bxAgents` executable.
 
 Tab completion for bash, fish and PowerShell, generated from the CLI's own verb tables
@@ -183,6 +183,15 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
 - `--section=<names>` shows only some sections, `--json` prints the whole report, `--md` prints it
   as Markdown and `--md=<file>` writes it. Color only at an interactive terminal; `NO_COLOR`,
   `TERM=dumb`, `--no-color` and `--ascii` are honored.
+
+#### The add verb
+
+- `bxAgents add` adds one thing to an existing project, asking the questions `new` asks through
+  the same prompters; every answer is also a flag, so it runs in a pipe or CI. A review step lists
+  the files first, `--dry-run` shows them without writing, and nothing is overwritten without
+  `--force`.
+- `add tool` scaffolds `tools/<Name>.bx` with a typed `@AITool` function in bx-ai's documented
+  shape, into the root agent or a subagent (`--agent`).
 
 #### Documentation
 

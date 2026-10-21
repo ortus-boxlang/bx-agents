@@ -75,7 +75,8 @@ class {
 			"invoke"  : "models.cli.Invoke",
 			"clean"   : "models.cli.Clean",
 			"hash-password" : "models.cli.HashPassword",
-			"doctor"  : "models.cli.Doctor"
+			"doctor"  : "models.cli.Doctor",
+			"add"     : "models.cli.Add"
 		}
 
 		verbDescriptions = {
@@ -90,8 +91,14 @@ class {
 			"inspect" : "Report how the agent is composed: agents, tools, skills, MCP, exposure, env ([--json], [--md[=FILE]], [--section=a,b])",
 			"clean"   : "Remove a project's .build/ and dist/ output",
 			"hash-password" : "Hash a password for a webui users entry (--password)",
-			"doctor"  : "Diagnose the environment and project - runtime, modules, env vars ([--json])"
+			"doctor"  : "Diagnose the environment and project - runtime, modules, env vars ([--json])",
+			"add"     : "Add to a project: add <kind> [name] - a tool today ([--force], [--dry-run], [--yes])"
 		}
+
+		// Verbs whose positional arguments are theirs (`add tool Greeter`), not a project
+		// folder. They get every positional in `_positionals`, and the project is found
+		// by --projectRoot or the current folder only.
+		argumentVerbs = [ "add" ]
 
 		// Per verb, the flags that REQUIRE a value - `--projectRoot` is
 		// universal and appended to every verb's own list below. See this
@@ -115,7 +122,8 @@ class {
 			"invoke"  : [ "message", "port" ],
 			"clean"   : [],
 			"hash-password" : [ "password" ],
-			"doctor"  : []
+			"doctor"  : [],
+			"add"     : [ "name", "agent", "function", "description", "args" ]
 		}
 	}
 
@@ -344,6 +352,9 @@ class {
 		}
 
 		options.delete( "_valuelessFlags" )
+		if ( static.argumentVerbs.contains( verbName ) ) {
+			options.delete( "_positional" )
+		}
 		options.projectRoot = resolveProjectRoot( options )
 
 		try {
@@ -430,6 +441,7 @@ class {
 	private struct function parseCliOptions( required array rawArgs ) {
 		var options = {}
 		var valueless = {}
+		var positionals = []
 
 		for ( var token in arguments.rawArgs ) {
 			if ( token.startsWith( "--!" ) ) {
@@ -463,11 +475,15 @@ class {
 					options[ body ] = true
 					valueless[ body ] = true
 				}
-			} else if ( !options.keyExists( "_positional" ) ) {
-				options[ "_positional" ] = token
+			} else {
+				if ( !options.keyExists( "_positional" ) ) {
+					options[ "_positional" ] = token
+				}
+				positionals.append( token )
 			}
 		}
 
+		options[ "_positionals" ] = positionals
 		options[ "_valuelessFlags" ] = valueless
 
 		return options

@@ -1,0 +1,87 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "add.ChangeSet", function() {
+
+			beforeEach( function() {
+				variables.root = createTempDirectory( prefix = "bxagents-changeset-" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( root ) ) {
+					directoryDelete( root, true );
+				}
+			} );
+
+			it( "writes a file, creating its folders", function() {
+				var changes = new bxagents.models.add.ChangeSet( root );
+				changes.file( "a/b/c.txt", "hello" );
+
+				var done = changes.apply();
+
+				expect( done.created ).toBe( [ "a/b/c.txt" ] );
+				expect( fileRead( root & "/a/b/c.txt" ) ).toBe( "hello" );
+			} );
+
+			it( "refuses to overwrite, writes nothing, and names the file", function() {
+				fileWrite( root & "/keep.txt", "mine" );
+				var changes = new bxagents.models.add.ChangeSet( root );
+				changes.file( "new.txt", "x" );
+				changes.file( "keep.txt", "theirs" );
+
+				expect( function() {
+					changes.apply();
+				} ).toThrow( "BxAgents.AddWouldOverwrite" );
+				expect( fileRead( root & "/keep.txt" ) ).toBe( "mine" );
+				expect( fileExists( root & "/new.txt" ) ).toBeFalse();
+			} );
+
+			it( "overwrites with force", function() {
+				fileWrite( root & "/keep.txt", "mine" );
+				var changes = new bxagents.models.add.ChangeSet( root );
+				changes.file( "keep.txt", "theirs" );
+
+				var done = changes.apply( true );
+
+				expect( done.replaced ).toBe( [ "keep.txt" ] );
+				expect( fileRead( root & "/keep.txt" ) ).toBe( "theirs" );
+			} );
+
+			it( "appends to a file, keeps what was there, and does not add the same text twice", function() {
+				fileWrite( root & "/.env", "A=1" );
+				var changes = new bxagents.models.add.ChangeSet( root );
+				changes.append( ".env", "B=2" & char( 10 ) );
+
+				changes.apply();
+				var again = new bxagents.models.add.ChangeSet( root );
+				again.append( ".env", "B=2" & char( 10 ) );
+				var second = again.apply();
+
+				expect( fileRead( root & "/.env" ) ).toBe( "A=1" & char( 10 ) & "B=2" & char( 10 ) );
+				expect( second.appended ).toBeEmpty();
+			} );
+
+			it( "shows a preview with the text, and writes nothing", function() {
+				var changes = new bxagents.models.add.ChangeSet( root );
+				changes.file( "x.txt", "line" );
+
+				expect( changes.preview() ).toInclude( "Would create x.txt" );
+				expect( changes.preview() ).toInclude( "line" );
+				expect( fileExists( root & "/x.txt" ) ).toBeFalse();
+			} );
+
+			it( "refuses a path that leaves the project", function() {
+				var changes = new bxagents.models.add.ChangeSet( root );
+
+				expect( function() {
+					changes.file( "../escape.txt", "x" );
+				} ).toThrow( "BxAgents.UnsafePath" );
+				expect( function() {
+					changes.file( "/abs.txt", "x" );
+				} ).toThrow( "BxAgents.UnsafePath" );
+			} );
+
+		} );
+	}
+
+}

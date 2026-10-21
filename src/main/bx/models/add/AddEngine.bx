@@ -1,0 +1,83 @@
+/**
+ * Runs one `add` kind end to end: ask, plan the changes, show them, write them.
+ *
+ * With a prompter the changes are shown on a review step first and can be cancelled;
+ * without one (a pipe, `--yes`, every answer given as a flag) they are written straight
+ * away. `--dry-run` shows what would be written and writes nothing. Nothing is
+ * overwritten without `--force`.
+ */
+class {
+
+	/**
+	 * @root Absolute path to the project root
+	 * @options The parsed CLI options
+	 * @prompter A prompter, or an empty string when nothing may be asked
+	 */
+	function init( required string root, struct options = {}, any prompter = "" ) {
+		variables.root = arguments.root
+		variables.options = arguments.options
+		variables.prompter = arguments.prompter
+		return this
+	}
+
+	/**
+	 * @kind A kind instance (see AddKinds)
+	 * @ctx The add context
+	 *
+	 * @return { exitCode, message }
+	 */
+	struct function run( required any kind, required struct ctx ) {
+		var answers = new "models.add.Answers@bxagents"( variables.options, variables.prompter, { name : arguments.ctx.name } )
+		var given = arguments.kind.ask( answers, arguments.ctx )
+		var changes = new "models.add.ChangeSet@bxagents"( variables.root )
+		arguments.kind.plan( given, arguments.ctx, changes )
+
+		if ( variables.options[ "dry-run" ] ?: false ) {
+			return { exitCode : 0, message : changes.preview() }
+		}
+
+		var force = variables.options.force ?: false
+		if ( isObject( variables.prompter ) ) {
+			var clashes = changes.conflicts()
+			var lines = changes.lines()
+			if ( clashes.len() && !force ) {
+				lines.append( "" )
+				lines.append( "#clashes.toList( ', ' )# already exist#clashes.len() == 1 ? 's' : ''# and would be replaced." )
+			}
+			var choice = variables.prompter.review( "Review", lines, [
+				{ value : "create", label : clashes.len() ? "Write the files, replacing the ones that exist" : "Write the files" },
+				{ value : "cancel", label : "Cancel, change nothing" }
+			] )
+			if ( choice == "cancel" ) {
+				throw( type = "BxAgents.WizardAbort", message = "wizard:cancel" )
+			}
+			force = force || clashes.len() > 0
+		}
+
+		var done = changes.apply( force )
+		var out = []
+		for ( var path in done.created ) {
+			out.append( paint( "ok", "+ " ) & "Created  " & path )
+		}
+		for ( var path in done.replaced ) {
+			out.append( paint( "warn", "~ " ) & "Replaced " & path )
+		}
+		for ( var path in done.appended ) {
+			out.append( paint( "ok", "+ " ) & "Updated  " & path )
+		}
+		var steps = arguments.kind.next( given, arguments.ctx )
+		if ( steps.len() ) {
+			out.append( "" )
+			out.append( paint( "accent", "Next" ) )
+			for ( var step in steps ) {
+				out.append( "  " & step )
+			}
+		}
+		return { exitCode : 0, message : out.toList( char( 10 ) ), answers : given, done : done }
+	}
+
+	private string function paint( required string style, required string text ) {
+		return isObject( variables.prompter ) ? variables.prompter.paint( arguments.style, arguments.text ) : arguments.text
+	}
+
+}

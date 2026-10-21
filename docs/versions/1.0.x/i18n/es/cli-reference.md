@@ -62,6 +62,9 @@ Usa siempre la forma `--flag=valor`. La forma con espacio no está soportada.
 ::: card title="new" icon="phosphor-duotone:sparkle" href="#new"
 Genera el andamiaje de un nuevo proyecto de agente.
 :::
+::: card title="add" icon="phosphor-duotone:plus-circle" href="#add"
+Añade una herramienta a un proyecto existente.
+:::
 ::: card title="build" icon="phosphor-duotone:hammer" href="#build"
 Ejecuta el pipeline de build completo.
 :::
@@ -141,6 +144,38 @@ bxAgents new my-agent --forgebox=some-package-slug
 - Solo el modo `--template` necesita `--model`; `--repo`/`--forgebox` nunca lo requieren, ya que el proyecto fuente ya define el suyo propio.
 - `--name`/`--description` se ignoran (con una advertencia en la salida) cuando se usa `--repo`/`--forgebox` - el proyecto clonado/instalado define el suyo propio.
 - El paso de conveniencia `box install` (y `--skipInstall`) solo aplican al modo `--template` - el propio `box.json` de un proyecto clonado/instalado (si es que tiene uno) se deja intacto.
+
+### `add`
+
+Añade una cosa a un proyecto que ya existe, haciendo las mismas preguntas que `new`. Hoy eso es una `tool`.
+
+```bash
+bxAgents add                        # elige qué añadir
+bxAgents add tool                   # pregunta nombre, función, descripción y argumentos
+bxAgents add tool WeatherTools --function=getWeather --description="Get the weather for a city" --args="city, days:numeric"
+bxAgents add tool Pinger --agent=researcher     # en subagents/researcher/tools/
+bxAgents add tool Pinger --dry-run              # muestra el archivo, no escribe nada
+```
+
+- Los argumentos posicionales son el tipo y el nombre, así que el proyecto se encuentra solo con `--projectRoot=<ruta>` o la carpeta actual.
+- En una terminal se pregunta lo que no se haya dado como flag, en la interfaz de pantalla completa (o con líneas numeradas con `--no-tui`). Con `--yes`, en un pipe o en CI no se pregunta nada: se usan los flags y los valores por defecto, y si falta una respuesta obligatoria se indica el flag que hay que pasar.
+- Las preguntas terminan en una revisión de los archivos que se escribirán. Cancelar, con Esc o Ctrl+C, no cambia nada.
+- **No se sobrescribe nada.** Si un archivo ya existe no se escribe ninguno y el error lo nombra; `--force` lo reemplaza.
+- `--dry-run` imprime cada archivo con su texto y no escribe nada.
+
+#### `add tool`
+
+Crea `tools/<Name>.bx` con una función `@AITool` con la forma que [documenta bx-ai](conventions/tools.md): un docblock que describe cada argumento, la anotación con la descripción que lee el modelo, y argumentos `required` tipados a partir de los cuales bx-ai construye el esquema de la herramienta.
+
+| Flag | Significado |
+|---|---|
+| `--name=<Name>` | El nombre del archivo, o el segundo posicional. Letras, dígitos y guiones bajos, empezando por una letra. |
+| `--agent=<subagent>` | De quién es la herramienta. Solo se pregunta si el proyecto tiene subagentes; `.` (el valor por defecto) es el agente raíz. |
+| `--function=<name>` | La función que llama el modelo. Por defecto, el nombre del archivo con la primera letra en minúscula. |
+| `--description=<text>` | Qué hace la herramienta. El modelo la lee para decidir cuándo llamarla. Sin ella, y sin nada que preguntar, el archivo recibe una descripción `TODO` y la salida te recuerda reemplazarla. |
+| `--args=<list>` | Separados por comas, cada uno `name` o `name:type` (`string` por defecto; también `numeric`, `boolean`, `array`, `struct`, `date` y `any`). |
+
+Una herramienta pertenece al agente en cuya carpeta está y se le asocia automáticamente. Dos archivos de herramienta de un mismo agente no pueden compartir nombre, ni siquiera en subcarpetas distintas, así que un choque se rechaza aquí en lugar de en el siguiente `build`. Comprueba el resultado con `bxAgents inspect --section=tools`.
 
 ### `build`
 

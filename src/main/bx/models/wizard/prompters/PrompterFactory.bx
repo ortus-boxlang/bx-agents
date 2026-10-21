@@ -1,0 +1,35 @@
+/**
+ * Picks the prompter a command asks its questions through: the full-screen one at a
+ * terminal that can host it, numbered lines otherwise. Shared by `new` and `add`, so the
+ * two behave the same under `--no-tui`, a pipe, CI and NO_COLOR.
+ */
+class {
+
+	/**
+	 * @return True when stdin and stdout are a terminal that can host questions
+	 */
+	boolean function isTerminal() {
+		try {
+			return createObject( "java", "ortus.boxlang.bxagents.tui.TuiScreen" ).isInteractive()
+		} catch ( any e ) {
+			return false
+		}
+	}
+
+	/**
+	 * @options The parsed CLI options; `tui` set to false asks in plain lines
+	 *
+	 * @return A TuiPrompter at a capable terminal, a PlainPrompter otherwise
+	 */
+	any function create( struct options = {} ) {
+		if ( ( arguments.options.tui ?: true ) && isTerminal() ) {
+			try {
+				return new "models.wizard.prompters.TuiPrompter@bxagents"()
+			} catch ( any e ) {
+				// the terminal would not go into raw mode: ask in plain lines rather than fail
+			}
+		}
+		return new "models.wizard.prompters.PlainPrompter@bxagents"()
+	}
+
+}

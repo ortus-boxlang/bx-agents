@@ -1,0 +1,98 @@
+/**
+ * `add` CLI verb - adds one thing to an existing project: a tool today, more kinds as
+ * they land (see models/add/AddKinds). `bxAgents add` alone opens a picker at a
+ * terminal; `bxAgents add tool Greeter` goes straight to a kind.
+ *
+ * The questions are the ones `new` asks, through the same prompters, and every one can
+ * be given as a flag so it also runs in a pipe or CI. Nothing is overwritten without
+ * `--force`, and `--dry-run` shows the files without writing them.
+ */
+class {
+
+	/**
+	 * @options {
+	 *   projectRoot (required, absolute path),
+	 *   _positionals ([ kind, name ]),
+	 *   yes, tui, force, dry-run, and each kind's own answer flags,
+	 *   _interactive / _prompter (test seams)
+	 * }
+	 *
+	 * @return { exitCode, message }
+	 */
+	struct function run( struct options = {} ) {
+		var root = trim( arguments.options.projectRoot ?: "" )
+		if ( !len( root ) ) {
+			throw( type = "BxAgents.MissingProjectRoot", message = "`add` requires a project root" )
+		}
+		if ( !new "models.build.AgentDefinitionLocator@bxagents"().exists( root ) ) {
+			throw( type = "BxAgents.NotAnAgentProject", message = "No Agent.yaml or Agent.bx found at [#root#] - run `add` inside a BX Agents project, or pass --projectRoot" )
+		}
+
+		var kinds = new "models.add.AddKinds@bxagents"()
+		var args = arguments.options._positionals ?: []
+		var factory = new "models.wizard.prompters.PrompterFactory@bxagents"()
+		var asks = !( arguments.options.yes ?: false ) && ( arguments.options._interactive ?: factory.isTerminal() )
+		var prompter = asks ? ( arguments.options._prompter ?: factory.create( arguments.options ) ) : ""
+
+		try {
+			var kindName = args.len() ? args[ 1 ] : ""
+			if ( !len( kindName ) ) {
+				if ( !isObject( prompter ) ) {
+					throw( type = "BxAgents.MissingAddKind", message = "Say what to add: bxAgents add <#kinds.names().toList( '|' )#> [name]" )
+				}
+				kindName = prompter.select( "What do you want to add?", kinds.all().map( k => { value : k.name, label : k.name, hint : k.summary } ) )
+			}
+			if ( !kinds.exists( kindName ) ) {
+				throw( type = "BxAgents.UnknownAddKind", message = "Unknown kind [#kindName#]. You can add: #kinds.names().toList( ', ' )#" )
+			}
+
+			var ctx = {
+				root    : root,
+				name    : args.len() > 1 ? args[ 2 ] : "",
+				options : arguments.options,
+				project : projectInfo( root )
+			}
+			var result = new "models.add.AddEngine@bxagents"( root, arguments.options, prompter ).run( kinds.create( kindName ), ctx )
+			closePrompter( prompter )
+			return result
+		} catch ( BxAgents.WizardAbort e ) {
+			closePrompter( prompter )
+			return { exitCode : 1, message : "Cancelled. Nothing was changed." }
+		} catch ( any e ) {
+			closePrompter( prompter )
+			rethrow
+		}
+	}
+
+	/**
+	 * What the kinds need to know about the project.
+	 *
+	 * @root Absolute path to the project root
+	 *
+	 * @return { rootName, subagents : [ folder names ], toolNames : { ".": [ names ], "<subagent>": [ names ] } }
+	 */
+	private struct function projectInfo( required string root ) {
+		var discoverer = new "models.build.ProjectDiscoverer@bxagents"()
+		var rootDiscovery = discoverer.discover( arguments.root )
+		var info = {
+			rootName  : lastSegment( arguments.root ),
+			subagents : rootDiscovery.subagents.map( s => s.name ),
+			toolNames : { "." : rootDiscovery.tools.map( t => t.name ) }
+		}
+		for ( var sub in rootDiscovery.subagents ) {
+			info.toolNames[ sub.name ] = discoverer.discover( sub.path ).tools.map( t => t.name )
+		}
+		return info
+	}
+
+	private string function lastSegment( required string path ) {
+		return arguments.path.reReplace( "[\\/]+$", "" ).listLast( "/\" )
+	}
+
+	private void function closePrompter( any prompter ) {
+		if ( isObject( arguments.prompter ) ) {
+			arguments.prompter.close()
+		}
+	}
+
+}

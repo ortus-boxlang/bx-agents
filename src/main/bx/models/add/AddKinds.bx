@@ -1,0 +1,49 @@
+/**
+ * The things `add` can add, in the order the picker lists them. Each kind is a class
+ * under models/add/kinds/ with four methods:
+ *
+ *   info()                      { name, summary }
+ *   ask( answers, ctx )         the questions, returning the answers struct
+ *   plan( answers, ctx, changes )  what to write, into a ChangeSet
+ *   next( answers, ctx )        [ text ] lines to print after, what is left to do
+ *
+ * `ctx` is { root, name, options, project : { definition, subagents, agentsWithTools } }.
+ */
+class {
+
+	function init() {
+		variables.kinds = [
+			{ name : "tool", path : "models.add.kinds.ToolKind" }
+		]
+		return this
+	}
+
+	/**
+	 * @return [ { name, summary } ] in picker order
+	 */
+	array function all() {
+		return variables.kinds.map( k => create( k.name ).info() )
+	}
+
+	/**
+	 * @return [ name ]
+	 */
+	array function names() {
+		return variables.kinds.map( k => k.name )
+	}
+
+	boolean function exists( required string name ) {
+		return names().contains( arguments.name )
+	}
+
+	/**
+	 * @name A kind's name
+	 *
+	 * @return An instance of the kind's class
+	 */
+	any function create( required string name ) {
+		var match = variables.kinds.filter( k => k.name == name )
+		return new "#match[ 1 ].path#@bxagents"()
+	}
+
+}

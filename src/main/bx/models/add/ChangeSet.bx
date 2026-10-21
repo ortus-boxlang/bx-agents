@@ -1,0 +1,145 @@
+/**
+ * What an `add` is about to do to a project, collected before anything is written so it
+ * can be shown for review, previewed with `--dry-run`, or refused as a whole.
+ *
+ * Nothing here overwrites a file unless `force` is passed: if any file a change would
+ * create already exists, none are written and the error names them. Paths are relative
+ * to the project and may not leave it.
+ */
+class {
+
+	/**
+	 * @root Absolute path to the project root
+	 */
+	function init( required string root ) {
+		variables.root = arguments.root.reReplace( "[\\/]+$", "" )
+		variables.files = []
+		variables.appends = []
+		return this
+	}
+
+	/**
+	 * Create a file.
+	 *
+	 * @path Project-relative path
+	 * @content The file's text
+	 */
+	function file( required string path, required string content ) {
+		variables.files.append( { path : safe( arguments.path ), content : arguments.content } )
+		return this
+	}
+
+	/**
+	 * Add text to the end of a file, creating it if need be. A line already present is not added twice.
+	 *
+	 * @path Project-relative path
+	 * @text The text to add
+	 * @unless Skip the append when the file already contains this text; defaults to the whole text
+	 */
+	function append( required string path, required string text, string unless = "" ) {
+		variables.appends.append( {
+			path   : safe( arguments.path ),
+			text   : arguments.text,
+			unless : len( arguments.unless ) ? arguments.unless : arguments.text
+		} )
+		return this
+	}
+
+	/**
+	 * @return [ text ] one line per change, for the review step
+	 */
+	array function lines() {
+		var out = []
+		for ( var f in variables.files ) {
+			out.append( ( exists( f.path ) ? "replace " : "create  " ) & f.path )
+		}
+		for ( var a in variables.appends ) {
+			out.append( "append  " & a.path )
+		}
+		return out
+	}
+
+	/**
+	 * @return The paths a change would create that already exist
+	 */
+	array function conflicts() {
+		return variables.files.filter( f => exists( f.path ) ).map( f => f.path )
+	}
+
+	/**
+	 * What `--dry-run` prints: every change with the text it would write.
+	 */
+	string function preview() {
+		var out = []
+		for ( var f in variables.files ) {
+			out.append( ( exists( f.path ) ? "Would replace " : "Would create " ) & f.path )
+			out.append( indent( f.content ) )
+		}
+		for ( var a in variables.appends ) {
+			out.append( "Would append to " & a.path )
+			out.append( indent( a.text ) )
+		}
+		return out.toList( char( 10 ) )
+	}
+
+	/**
+	 * @force True to overwrite files that exist
+	 *
+	 * @return { created : [ paths ], replaced : [ paths ], appended : [ paths ] }
+	 */
+	struct function apply( boolean force = false ) {
+		var clashes = conflicts()
+		if ( clashes.len() && !arguments.force ) {
+			throw(
+				type    = "BxAgents.AddWouldOverwrite",
+				message = "#clashes.toList( ', ' )# already exist#clashes.len() == 1 ? 's' : ''#. Nothing was changed. Pass --force to overwrite."
+			)
+		}
+
+		var done = { created : [], replaced : [], appended : [] }
+		for ( var f in variables.files ) {
+			var target = variables.root & "/" & f.path
+			var existed = fileExists( target )
+			directoryCreate( path = getDirectoryFromPath( target ), createPath = true, ignoreExists = true )
+			fileWrite( target, f.content )
+			if ( existed ) {
+				done.replaced.append( f.path )
+			} else {
+				done.created.append( f.path )
+			}
+		}
+		for ( var a in variables.appends ) {
+			var target = variables.root & "/" & a.path
+			var current = fileExists( target ) ? fileRead( target ) : ""
+			if ( current.find( a.unless ) ) {
+				continue
+			}
+			directoryCreate( path = getDirectoryFromPath( target ), createPath = true, ignoreExists = true )
+			fileWrite( target, current & ( len( current ) && !current.endsWith( char( 10 ) ) ? char( 10 ) : "" ) & a.text )
+			done.appended.append( a.path )
+		}
+		return done
+	}
+
+	private boolean function exists( required string path ) {
+		return fileExists( variables.root & "/" & arguments.path )
+	}
+
+	private string function indent( required string text ) {
+		return arguments.text.listToArray( char( 10 ), true ).map( line => "    " & line ).toList( char( 10 ) )
+	}
+
+	/**
+	 * A relative path that stays inside the project.
+	 *
+	 * @path The path to check
+	 */
+	private string function safe( required string path ) {
+		var p = arguments.path.replace( "\\", "/", "all" )
+		if ( p.startsWith( "/" ) || reFind( "^[A-Za-z]:", p ) || p.listToArray( "/" ).contains( ".." ) ) {
+			throw( type = "BxAgents.UnsafePath", message = "[#arguments.path#] would leave the project." )
+		}
+		return p
+	}
+
+}
