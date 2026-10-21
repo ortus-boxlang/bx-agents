@@ -22,15 +22,20 @@ class extends="testbox.system.BaseSpec" {
 				expect( catalog.provider( "nope" ) ).toBeEmpty();
 			} );
 
-			it( "only offers MCP servers that work with the bundled bx-ai", function() {
+			it( "offers the MCP servers that work with the bundled bx-ai: web servers by url, programs by command", function() {
 				var offered = catalog.mcpServers().map( s => s.id );
 
 				expect( offered ).toInclude( "github" );
-				expect( offered ).notToInclude( "git" );
-				expect( catalog.unavailableMcpServers().map( s => s.id ) ).toBe( [ "git" ] );
+				expect( offered ).toInclude( "git" );
+				expect( catalog.unavailableMcpServers() ).toBeEmpty();
 				for ( var entry in catalog.mcpServers() ) {
-					expect( entry.transport ).toBe( "http" );
-					expect( entry.url ).toMatch( "^https://" );
+					if ( entry.transport == "stdio" ) {
+						expect( entry.command ).toBeArray();
+						expect( entry.requires.program ).toBe( entry.command[ 1 ] );
+					} else {
+						expect( entry.transport ).toBe( "http" );
+						expect( entry.url ).toMatch( "^https://" );
+					}
 				}
 			} );
 
@@ -116,6 +121,28 @@ class extends="testbox.system.BaseSpec" {
 				} ).toThrow( type = "BxAgents.InvalidNewOption", regex = "without --with=files" );
 			} );
 
+			it( "turns the Git MCP server into a program entry with no key to set", function() {
+				var features = planner.toFeatures( planner.fromFlags( { model : "openai", mcp : "git" } ) );
+
+				expect( features.mcpServers ).toBe( [ { name : "git", command : [ "uvx", "mcp-server-git" ] } ] );
+				expect( features.envStubs.map( s => s.name ) ).toBe( [ "OPENAI_API_KEY" ] );
+			} );
+
+			it( "writes a program entry as a command list in Agent.yaml", function() {
+				var yaml = new bxagents.models.wizard.FeatureWriter().agentYamlLines( planner.toFeatures( planner.fromFlags( { model : "openai", mcp : "git" } ) ) ).toList( char( 10 ) );
+
+				expect( yaml ).toInclude( "command:" );
+				expect( yaml ).toInclude( "- uvx" );
+				expect( yaml ).toInclude( "- mcp-server-git" );
+				expect( yaml ).notToInclude( "url:" );
+			} );
+
+			it( "adds the account id stub for Cloudflare", function() {
+				var features = planner.toFeatures( planner.fromFlags( { model : "cloudflare/@cf/openai/gpt-oss-20b" } ) );
+
+				expect( features.envStubs.map( s => s.name ) ).toBe( [ "CLOUDFLARE_API_KEY", "CLOUDFLARE_ACCOUNT_ID" ] );
+			} );
+
 			it( "turns MCP servers into entries that read their token from the environment", function() {
 				var features = planner.toFeatures( planner.fromFlags( { model : "openai", mcp : "github,supabase" } ) );
 
@@ -127,13 +154,10 @@ class extends="testbox.system.BaseSpec" {
 				}
 			} );
 
-			it( "rejects an unknown MCP server and one that is not available yet", function() {
+			it( "rejects an unknown MCP server", function() {
 				expect( function() {
 					planner.fromFlags( { model : "openai", mcp : "nope" } );
 				} ).toThrow( type = "BxAgents.InvalidNewOption", regex = "not in the MCP catalog" );
-				expect( function() {
-					planner.fromFlags( { model : "openai", mcp : "git" } );
-				} ).toThrow( type = "BxAgents.InvalidNewOption", regex = "not available yet" );
 			} );
 
 			it( "writes a gateway and env stubs for each channel", function() {

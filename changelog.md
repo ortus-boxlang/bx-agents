@@ -159,6 +159,14 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   `.markdownlint.json`, a `.boxlang.json` listing every bx-ai setting at its default and a fuller `.gitignore`
   (`.env`, `.env.*`, build output, editor files). Existing files are never overwritten.
 - A catalog of MCP servers the wizard can add: GitHub, Stripe, Notion, Atlassian, Cloudflare and Supabase.
+- `mcpServers` entries can start a program on the agent's machine: `command: [uvx, mcp-server-git]`, with
+  `env`, `cwd`, `inheritEnv`, `maxRestarts`, `timeout`, `prefix` and `toolFilter`. The programs your agents
+  declare become bx-ai's `mcp.stdio.allowedCommands` when the app starts (a list you set yourself is kept),
+  and `doctor` warns when one is not on the PATH. The Git MCP server is now offered by the wizard.
+- Web `mcpServers` entries accept `allowedHosts` (refuses any other host before a request is sent),
+  `redirects`, `maxResponseBytes`, `handshake`, `prefix` and `toolFilter`.
+- The Cloudflare Workers AI provider (`cloudflare/<model>`) is in the wizard, with its account id stub in `.env`;
+  `cartesia` and `cloudflare` are recognised provider names.
 
 #### The chat screen
 
