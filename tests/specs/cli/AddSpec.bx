@@ -717,6 +717,166 @@ class extends="testbox.system.BaseSpec" {
 
 			} );
 
+			describe( "add gateway", function() {
+
+				private function addGateway( required string root, struct flags = {}, array positionals = [ "gateway", "slack" ] ) {
+					var options = { projectRoot : root, _positionals : positionals, yes : true };
+					options.append( flags );
+					return addVerb.run( options );
+				}
+
+				it( "writes a chat platform's gateway with the usual variable names, empty .env stubs and its setup steps", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					var result = addGateway( root );
+					var source = fileRead( root & "/gateways/slack.bx" );
+
+					expect( source ).toInclude( 'type           : "slack"' );
+					expect( source ).toInclude( 'botTokenEnvVar : "SLACK_BOT_TOKEN"' );
+					expect( source ).toInclude( 'appTokenEnvVar : "SLACK_APP_TOKEN"' );
+					expect( fileRead( root & "/.env" ) ).toInclude( "SLACK_BOT_TOKEN=xoxb-" );
+					expect( fileRead( root & "/.env" ) ).toInclude( "SLACK_APP_TOKEN=xapp-" );
+					expect( result.message ).toInclude( "Socket Mode" );
+					expect( result.message ).toInclude( "SLACK_BOT_TOKEN, SLACK_APP_TOKEN" );
+				} );
+
+				it( "uses the variable names it is given, per credential", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					addGateway( root, { env : "botTokenEnvVar=ACME_BOT,appTokenEnvVar=ACME_APP" } );
+
+					expect( fileRead( root & "/gateways/slack.bx" ) ).toInclude( 'botTokenEnvVar : "ACME_BOT"' );
+					expect( fileRead( root & "/.env" ) ).toInclude( "ACME_APP=xapp-" );
+					expect( fileRead( root & "/.env" ) ).notToInclude( "SLACK_BOT_TOKEN" );
+				} );
+
+				it( "is understood by the build and by inspect", function() {
+					var root = newTempProject( "yaml-minimal" );
+					addGateway( root, {}, [ "gateway", "telegram" ] );
+					addGateway( root, { path : "/api/chat" }, [ "gateway", "api" ] );
+
+					new bxagents.models.cli.Build().run( { projectRoot : root } );
+					var report = new bxagents.models.report.ProjectReport().build( root );
+
+					expect( report.validation.errors ).toBeEmpty();
+					expect( report.gateways.map( g => g.name ) ).toInclude( "telegram" );
+					expect( report.gateways.filter( g => g.name == "api" )[ 1 ].path ).toBe( "/api/chat" );
+					expect( report.env.map( v => v.name ) ).toInclude( "TELEGRAM_BOT_TOKEN" );
+				} );
+
+				it( "writes the busy-agent policy to Agent.yaml only when it is not the default", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					addGateway( root, { policy : "queue" }, [ "gateway", "telegram" ] );
+					expect( fileRead( root & "/Agent.yaml" ) ).notToInclude( "gatewaySession" );
+
+					addGateway( root, { policy : "steer" }, [ "gateway", "discord" ] );
+					expect( fileRead( root & "/Agent.yaml" ) ).toInclude( "gatewaySession:" & char( 10 ) & "  policy: steer" );
+					expect( new bxagents.models.report.ProjectReport().build( root ).validation.errors ).toBeEmpty();
+				} );
+
+				it( "will not rewrite a gatewaySession that is already there, and says what to set", function() {
+					var root = newTempProject( "yaml-minimal" );
+					fileAppend( root & "/Agent.yaml", char( 10 ) & "gatewaySession:" & char( 10 ) & "  policy: reject" & char( 10 ) );
+
+					expect( function() {
+						addGateway( root, { policy : "steer" }, [ "gateway", "telegram" ] );
+					} ).toThrow( "BxAgents.AgentNotEditable" );
+					expect( fileExists( root & "/gateways/telegram.bx" ) ).toBeFalse();
+				} );
+
+				it( "adds the web chat UI behind a random shared key kept in .env", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					var result = addGateway( root, { auth : "key" }, [ "gateway", "web" ] );
+
+					expect( fileRead( root & "/gateways/web.bx" ) ).toInclude( 'exposes      : "webui"' );
+					expect( fileRead( root & "/gateways/web.bx" ) ).toInclude( 'apiKeyEnvVar : "CHAT_UI_API_KEY"' );
+					expect( fileRead( root & "/.env" ) ).toMatch( "CHAT_UI_API_KEY=[0-9a-f]{64}" );
+					expect( result.message ).toInclude( "CHAT_UI_API_KEY" );
+				} );
+
+				it( "adds the web chat UI open, and says what that means", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					var result = addGateway( root, { auth : "open", path : "/talk" }, [ "gateway", "web" ] );
+
+					expect( fileRead( root & "/gateways/web.bx" ) ).notToInclude( "apiKeyEnvVar" );
+					expect( fileRead( root & "/gateways/web.bx" ) ).toInclude( 'path    : "/talk"' );
+					expect( result.message ).toInclude( "Anyone who can reach the app" );
+				} );
+
+				it( "takes web users only as name:hash from hash-password, never a password flag", function() {
+					var root = newTempProject( "yaml-minimal" );
+					var hash = new bxagents.models.cli.HashPassword().run( { password : "correct horse" } ).message;
+
+					addGateway( root, { auth : "users", users : "ada:" & hash }, [ "gateway", "web" ] );
+					var source = fileRead( root & "/gateways/web.bx" );
+
+					expect( source ).toInclude( 'username : "ada"' );
+					expect( source ).toInclude( hash );
+					expect( source ).notToInclude( "correct horse" );
+					expect( function() {
+						addGateway( root, { auth : "users", users : "bob:plaintext", name : "web2", path : "/w2" }, [ "gateway", "web" ] );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					expect( function() {
+						addGateway( root, { auth : "users", name : "web3", path : "/w3" }, [ "gateway", "web" ] );
+					} ).toThrow( "BxAgents.MissingAnswer" );
+				} );
+
+				it( "asks for users at a terminal, hides the passwords and stores only a hash", function() {
+					var root = newTempProject( "yaml-minimal" );
+					var prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [ "web", "/chat", "users", "ada", "pw1", "pw1", "Ada L", false, "create" ] );
+
+					addVerb.run( { projectRoot : root, _positionals : [ "gateway", "web" ], _prompter : prompter, _interactive : true } );
+					var source = fileRead( root & "/gateways/web.bx" );
+
+					expect( prompter.remaining() ).toBe( 0 );
+					expect( source ).toInclude( 'displayName : "Ada L"' );
+					expect( source ).toInclude( "pbkdf2$" );
+					expect( source ).notToInclude( "pw1" );
+				} );
+
+				it( "adds the HTTP API", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					addGateway( root, {}, [ "gateway", "api" ] );
+
+					expect( fileRead( root & "/gateways/api.bx" ) ).toInclude( 'exposes : "agent"' );
+					expect( fileRead( root & "/gateways/api.bx" ) ).toInclude( 'path    : "/api/chat"' );
+				} );
+
+				it( "refuses a path or a name already in use, an unknown type and a bad variable pair", function() {
+					var root = newTempProject( "yaml-minimal" );
+					addGateway( root, {}, [ "gateway", "api" ] );
+
+					expect( function() {
+						addGateway( root, { name : "api2" }, [ "gateway", "api" ] );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					expect( function() {
+						addGateway( root, { path : "/other" }, [ "gateway", "api" ] );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					expect( function() {
+						addGateway( root, {}, [ "gateway", "fax" ] );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					expect( function() {
+						addGateway( root, { env : "nonsense" }, [ "gateway", "slack" ] );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+				} );
+
+				it( "asks which gateway, the file name, whether to keep the usual variables and the busy policy", function() {
+					var root = newTempProject( "yaml-minimal" );
+					var prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [ "telegram", "telegram", true, "queue", "create" ] );
+
+					var result = addVerb.run( { projectRoot : root, _positionals : [ "gateway" ], _prompter : prompter, _interactive : true } );
+
+					expect( prompter.remaining() ).toBe( 0 );
+					expect( result.exitCode ).toBe( 0 );
+					expect( fileExists( root & "/gateways/telegram.bx" ) ).toBeTrue();
+				} );
+
+			} );
+
 			describe( "the verb", function() {
 
 				it( "refuses a folder that is not an agent project", function() {

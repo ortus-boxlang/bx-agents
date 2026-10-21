@@ -19,7 +19,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n __bxagents_needs_verb -s v -l version -d 'Show the module version'
 
     # verbs
-    complete -c $cmd -n __bxagents_needs_verb -a 'add' -d 'Add to a project: add <kind> [name] - a tool, interceptor, schedule, mcp or model'
+    complete -c $cmd -n __bxagents_needs_verb -a 'add' -d 'Add to a project: add <kind> [name] - a tool, interceptor, schedule, mcp, model or gateway'
     complete -c $cmd -n __bxagents_needs_verb -a 'build' -d 'Build a project into a generated app'
     complete -c $cmd -n __bxagents_needs_verb -a 'chat' -d 'Interactive REPL chat with a built agent'
     complete -c $cmd -n __bxagents_needs_verb -a 'clean' -d 'Remove a project\'s .build/ and dist/ output'
@@ -53,6 +53,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb add' -l no-tui
     complete -c $cmd -n '__bxagents_using_verb add' -l path -x
     complete -c $cmd -n '__bxagents_using_verb add' -l points -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l policy -x
     complete -c $cmd -n '__bxagents_using_verb add' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb add' -l prompt -x
     complete -c $cmd -n '__bxagents_using_verb add' -l provider -x
@@ -61,8 +62,10 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb add' -l temperature -x
     complete -c $cmd -n '__bxagents_using_verb add' -l timeout -x
     complete -c $cmd -n '__bxagents_using_verb add' -l tools -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l type -x
     complete -c $cmd -n '__bxagents_using_verb add' -l url -x
     complete -c $cmd -n '__bxagents_using_verb add' -l user -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l users -x
     complete -c $cmd -n '__bxagents_using_verb add' -l version -x
     complete -c $cmd -n '__bxagents_using_verb add' -l when -x
     complete -c $cmd -n '__bxagents_using_verb add' -l yes

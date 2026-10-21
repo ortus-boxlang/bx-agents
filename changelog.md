@@ -207,6 +207,10 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   (temperature, max_tokens, ...), `options`, and `apiKeyEnvVar` to read their key from a different
   environment variable. Entries are validated at build time, and the key variable is read when the
   app starts and named if it is missing.
+- `add gateway` adds a chat platform (the same catalog the wizard uses: credentials as environment
+  variable names with empty `.env` stubs, and the setup steps that happen outside the project), the web
+  chat UI (open, behind a random shared key, or with named users stored as hashes only), or the HTTP
+  API, and can set what to do with a message that arrives while the agent is answering.
 
 #### Documentation
 

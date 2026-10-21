@@ -1,0 +1,292 @@
+/**
+ * `add gateway` - one way in to the agent:
+ *
+ *   a chat platform   telegram, slack, discord, whatsapp-cloud, teams, twilio, github, email,
+ *                     signal: gateways/<name>.bx naming the environment variables that hold its
+ *                     credentials, plus an empty .env stub for each
+ *   web               the browser chat UI, open, behind a shared key, or with named users whose
+ *                     passwords are stored only as hashes
+ *   api               the agent's HTTP API (invoke, stream, batch, info)
+ *
+ * The platforms and their credentials come from the same catalog the `new` wizard uses
+ * (wizard/catalog/channels.json), so the two cannot disagree. An MCP route is added with
+ * `add mcp server`.
+ */
+class {
+
+	static {
+		POLICIES = [
+			{ value : "queue", label : "Queue it", hint : "answer after the current reply (default)" },
+			{ value : "reject", label : "Turn it away", hint : "say the agent is busy" },
+			{ value : "steer", label : "Steer the current reply", hint : "add it to the run in progress" },
+			{ value : "interrupt", label : "Interrupt", hint : "stop the current reply and answer this" }
+		]
+	}
+
+	struct function info() {
+		return { name : "gateway", summary : "A way in to the agent: a chat platform, the web chat UI or the HTTP API (gateways/<name>.bx)" }
+	}
+
+	/**
+	 * @answers An Answers
+	 * @ctx The add context
+	 *
+	 * @return { type, name, env : [ { config, name } ], channel, ... } by type
+	 */
+	struct function ask( required any answers, required struct ctx ) {
+		var args = arguments.ctx.args ?: []
+		var catalog = new "models.wizard.WizardCatalog@bxagents"()
+		var a = arguments.answers.withPresets( { name : args.len() > 1 ? args[ 2 ] : "" } )
+
+		var choices = catalog.channels().map( c => { value : c.id, label : c.name, hint : c.hint } )
+		choices.append( { value : "web", label : "The web chat UI", hint : "a chat page in the browser" } )
+		choices.append( { value : "api", label : "The HTTP API", hint : "POST /invoke, /stream, /batch and GET /info" } )
+		var values = choices.map( c => c.value )
+
+		var type = args.len() ? args[ 1 ] : ""
+		if ( !len( type ) ) {
+			type = a.select( key = "type", title = "What should reach the agent?", choices = choices, default = "telegram" )
+		} else if ( !values.contains( type ) ) {
+			throw( type = "BxAgents.InvalidAnswer", message = "[#type#] is not a gateway you can add. Use one of: #values.toList( ', ' )#" )
+		}
+
+		var taken = ( arguments.ctx.project.report.gateways ?: [] ).map( g => g.name )
+		var name = a.text(
+			key      = "name",
+			title    = "File name",
+			help     = "gateways/<name>.bx. Letters, digits, - and _.",
+			default  = type,
+			validate = ( value ) => !reFind( "^[A-Za-z][A-Za-z0-9_-]*$", value ) ? "Start with a letter; letters, digits, - and _." : ( taken.findNoCase( value ) ? "A gateway named #value# already exists." : "" )
+		)
+
+		if ( type == "web" ) {
+			return askWeb( a, arguments.ctx, name )
+		}
+		if ( type == "api" ) {
+			return { type : "api", name : name, path : askPath( a, arguments.ctx, "/api/chat" ) }
+		}
+		return askChannel( a, arguments.ctx, catalog.channel( type ), name )
+	}
+
+	/**
+	 * @answers The answers from ask()
+	 * @ctx The add context
+	 * @changes A ChangeSet
+	 */
+	void function plan( required struct answers, required struct ctx, required any changes ) {
+		var a = arguments.answers
+		var writer = new "models.wizard.FeatureWriter@bxagents"()
+		var path = "gateways/" & a.name & ".bx"
+
+		if ( a.type == "api" ) {
+			arguments.changes.file( path, writer.renderExposure( "agent", { path : a.path } ) )
+			return
+		}
+		if ( a.type == "web" ) {
+			arguments.changes.file( path, writer.renderExposure( "webui", { path : a.path, apiKeyEnvVar : a.keyVar, users : a.users } ) )
+			if ( len( a.keyVar ) ) {
+				arguments.changes.append(
+					".env",
+					char( 10 ) & "## The web chat UI asks for this key. A random one was made for you." & char( 10 ) & a.keyVar & "=" & a.key & char( 10 ),
+					a.keyVar & "="
+				)
+			}
+			return
+		}
+
+		arguments.changes.file( path, writer.renderChannelGateway( { type : a.channel.type, env : a.env } ) )
+		for ( var e in a.channel.env ) {
+			var chosen = a.env.filter( x => x.config == e.config )[ 1 ].name
+			var line = len( e.comment ?: "" ) ? "## #a.channel.name#: #e.comment##char( 10 )#" : ""
+			arguments.changes.append( ".env", char( 10 ) & line & chosen & "=" & ( e.stub ?: "" ) & char( 10 ), chosen & "=" )
+		}
+
+		if ( a.policy != "queue" ) {
+			var file = arguments.ctx.root & "/" & a.definition.file
+			var block = [ "gatewaySession:", "  policy: " & a.policy ]
+			var edit = new "models.add.YamlEditor@bxagents"().addBlock( fileRead( file ), "gatewaySession", block )
+			if ( !edit.ok ) {
+				throw(
+					type    = "BxAgents.AgentNotEditable",
+					message = "#a.definition.file# was not changed: #edit.reason#. Set policy: #a.policy# under its gatewaySession."
+				)
+			}
+			arguments.changes.edit( a.definition.file, edit.text, block.toList( char( 10 ) ) )
+		}
+	}
+
+	/**
+	 * @return [ text ] what is left to do
+	 */
+	array function next( required struct answers, required struct ctx ) {
+		var a = arguments.answers
+		if ( a.type == "api" ) {
+			return [
+				"Once the app runs: POST #a.path#/invoke, #a.path#/stream (server-sent events) and #a.path#/batch, and GET #a.path#/info.",
+				"The route has no authentication unless you set agentApi.tokenEnvVar in Agent.yaml.",
+				"Check it with: bxAgents inspect --section=gateways"
+			]
+		}
+		if ( a.type == "web" ) {
+			var out = [ "Run bxAgents build, then bxAgents serve, and open #a.path#." ]
+			if ( a.auth == "key" ) {
+				out.append( "Share #a.keyVar# (in .env) only with people who should use the chat." )
+			} else if ( a.auth == "open" ) {
+				out.append( "Anyone who can reach the app can use it. Fine on your own machine; add a key or users before it is public." )
+			}
+			out.append( "Check it with: bxAgents inspect --section=gateways" )
+			return out
+		}
+		var steps = []
+		var env = a.env.map( e => e.name ).toList( ", " )
+		steps.append( "Fill in #env# in .env." )
+		for ( var i = 1; i <= a.channel.steps.len(); i++ ) {
+			steps.append( "#i#. #a.channel.steps[ i ]#" )
+		}
+		steps.append( "Check it with: bxAgents doctor (it reports variables that are not set)" )
+		return steps
+	}
+
+	// --------------------------------------------------------------------------
+
+	private struct function askChannel( required any a, required struct ctx, required struct channel, required string name ) {
+		var catalogEnv = arguments.channel.env
+		var env = []
+		var usual = catalogEnv.map( e => e.name ).toList( ", " )
+
+		if ( arguments.a.given( "env" ) ) {
+			var given = parseEnv( arguments.a.text( key = "env", title = "Variables" ), catalogEnv )
+			env = catalogEnv.map( e => { config : e.config, name : given[ e.config ] ?: e.name } )
+		} else if ( arguments.a.interactive() && !arguments.a.confirm( key = "usual", title = "Keep the usual variable names? (#usual#)", default = true, help = "Only the names go in the gateway file; the values go in .env." ) ) {
+			for ( var e in catalogEnv ) {
+				var chosen = arguments.a.text(
+					key      = "_" & e.config,
+					title    = "Variable for #e.config.reReplace( 'EnvVar$', '' )#",
+					default  = e.name,
+					validate = ( value ) => reFind( "^[A-Z][A-Z0-9_]*$", value ) ? "" : "Capital letters, digits and underscores."
+				)
+				env.append( { config : e.config, name : chosen } )
+			}
+		} else {
+			env = catalogEnv.map( e => { config : e.config, name : e.name } )
+		}
+
+		var policy = "queue"
+		if ( arguments.a.given( "policy" ) || arguments.a.interactive() ) {
+			policy = arguments.a.select(
+				key     = "policy",
+				title   = "If a message arrives while the agent is still answering?",
+				help    = "Applies to every chat platform of this agent, and is written to Agent.yaml when it is not the default.",
+				choices = static.POLICIES,
+				default = "queue"
+			)
+		}
+
+		return {
+			type       : arguments.channel.id,
+			name       : arguments.name,
+			channel    : arguments.channel,
+			env        : env,
+			policy     : policy,
+			definition : definitionOf( arguments.ctx )
+		}
+	}
+
+	private struct function askWeb( required any a, required struct ctx, required string name ) {
+		var path = askPath( arguments.a, arguments.ctx, "/chat" )
+		var auth = arguments.a.select(
+			key     = "auth",
+			title   = "Who can use the web chat?",
+			choices = [
+				{ value : "open", label : "Anyone who can reach it", hint : "fine on your own machine" },
+				{ value : "key", label : "Anyone with a shared key", hint : "a random key goes in .env" },
+				{ value : "users", label : "Named users with passwords", hint : "each person gets their own conversations" }
+			],
+			default = "key"
+		)
+
+		var users = []
+		var keyVar = ""
+		var key = ""
+		if ( auth == "key" ) {
+			keyVar = "CHAT_UI_API_KEY"
+			key = lcase( replace( createUUID(), "-", "", "all" ) & replace( createUUID(), "-", "", "all" ) )
+		} else if ( auth == "users" ) {
+			users = collectUsers( arguments.a )
+		}
+		return { type : "web", name : arguments.name, path : path, auth : auth, keyVar : keyVar, key : key, users : users }
+	}
+
+	/**
+	 * Named users: typed at a terminal with the password hidden and stored only as a hash,
+	 * or given as --users=name:hash,... where the hash came from `bxAgents hash-password`.
+	 */
+	private array function collectUsers( required any a ) {
+		var users = []
+		if ( arguments.a.given( "users" ) ) {
+			for ( var pair in arguments.a.text( key = "users", title = "Users" ).listToArray( "," ) ) {
+				var at = pair.find( ":" )
+				var hash = at ? pair.mid( at + 1, len( pair ) ) : ""
+				if ( !at || !reFind( "^pbkdf2\$", hash ) ) {
+					throw( type = "BxAgents.InvalidAnswer", message = "--users: each user is name:hash, with the hash from `bxAgents hash-password`. A password is never taken as a flag." )
+				}
+				users.append( { username : pair.left( at - 1 ), passwordHash : hash, displayName : pair.left( at - 1 ) } )
+			}
+			return users
+		}
+		if ( !arguments.a.interactive() ) {
+			throw( type = "BxAgents.MissingAnswer", message = "Named users need a terminal to type their passwords, or --users=name:hash,... with hashes from `bxAgents hash-password`." )
+		}
+		var hasher = new "models.cli.HashPassword@bxagents"()
+		var more = true
+		while ( more ) {
+			var username = arguments.a.text( key = "_username", title = "Username", help = "Letters and numbers, no spaces.", required = true )
+			var password = ""
+			while ( true ) {
+				password = arguments.a.secret( "Password for #username#", "Stored only as a hash. Typing is hidden." )
+				if ( password == arguments.a.secret( "Type it again" ) ) {
+					break
+				}
+			}
+			var displayName = arguments.a.text( key = "_display", title = "Display name", help = "Shown in the chat.", default = username )
+			users.append( { username : username, passwordHash : hasher.run( { password : password } ).message, displayName : displayName } )
+			more = arguments.a.confirm( key = "_more", title = "Add another user?", default = false )
+		}
+		return users
+	}
+
+	private string function askPath( required any a, required struct ctx, required string default ) {
+		var paths = ( arguments.ctx.project.report.gateways ?: [] ).map( g => g.path )
+		var example = arguments.default
+		return arguments.a.text(
+			key      = "path",
+			title    = "At which path?",
+			default  = example,
+			validate = ( value ) => !reFind( "^/[A-Za-z0-9/_-]+$", value ) ? "A path such as #example#." : ( paths.contains( value ) ? "#value# is already served by another gateway entry." : "" )
+		)
+	}
+
+	/**
+	 * `--env=botTokenEnvVar=MY_TOKEN,appTokenEnvVar=MY_APP`: which variable holds which credential.
+	 */
+	private struct function parseEnv( required string text, required array catalogEnv ) {
+		var configs = arguments.catalogEnv.map( e => e.config )
+		var out = {}
+		for ( var pair in arguments.text.listToArray( "," ) ) {
+			var at = pair.find( "=" )
+			var config = at ? trim( pair.left( at - 1 ) ) : ""
+			var name = at ? trim( pair.mid( at + 1, len( pair ) ) ) : ""
+			if ( !configs.contains( config ) || !reFind( "^[A-Z][A-Z0-9_]*$", name ) ) {
+				throw( type = "BxAgents.InvalidAnswer", message = "--env: write config=NAME pairs, such as #configs[ 1 ]#=MY_VARIABLE. This gateway has: #configs.toList( ', ' )#" )
+			}
+			out[ config ] = name
+		}
+		return out
+	}
+
+	private struct function definitionOf( required struct ctx ) {
+		var located = new "models.build.AgentDefinitionLocator@bxagents"().locate( arguments.ctx.root )
+		return { kind : located.kind, file : located.path.listLast( "/\" ) }
+	}
+
+}
