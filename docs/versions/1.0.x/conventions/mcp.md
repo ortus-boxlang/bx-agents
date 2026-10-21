@@ -65,14 +65,54 @@ mcpServers:
 | `password`, `user` | Basic authentication. `password` must be an `${env.NAME}` placeholder |
 | `headers` | Extra request headers. Values can use `${env.NAME}` |
 | `timeout` | Milliseconds |
+| `allowedHosts` | The host names the server's address may have, for example `[api.example.com, "*.example.com"]`. `*.example.com` matches any subdomain, not `example.com` itself. A request to any other host is refused before anything is sent |
+| `redirects` | `false` treats a redirect answer as a failure and never follows it |
+| `maxResponseBytes` | Refuses an answer longer than this many characters |
+| `handshake` | `true` sends the MCP `initialize` handshake before the first call |
+| `prefix` | Tools are named `prefix__tool`, so two servers cannot clash |
+| `toolFilter` | A list of tool names; only these are given to the agent |
 
 Placeholders are replaced with the environment variable **when the app starts**, never at build time, so a secret stays out of the project and out of a packaged `.bxa`. A variable that is not set fails the agent at startup and names it; one that is set but empty lets the agent start, the server refuses the connection, and bx-ai logs that and carries on without that server's tools. Any other key is a build error that lists the valid ones.
 
-The entries are passed into the generated `aiAgent(mcpServers: [...])` call. **No network connection is ever attempted at build time** - reachability is a runtime concern; an unreachable server at build time is not a build error. This is for servers reached over the web. Servers that run as a local program are not supported by the bx-ai bundled with this release.
+The entries are passed into the generated `aiAgent(mcpServers: [...])` call. **No network connection is ever attempted at build time** - reachability is a runtime concern; an unreachable server at build time is not a build error. This section is for servers reached over the web; servers that run as a program on the agent's machine are next.
 
-[`bxAgents new`](../guides/new-wizard.md#mcp-servers) offers GitHub, Stripe, Notion, Atlassian, Cloudflare and Supabase and writes the entry and the `.env` stub for you.
+[`bxAgents new`](../guides/new-wizard.md#mcp-servers) offers GitHub, Stripe, Notion, Atlassian, Cloudflare, Supabase and Git and writes the entry and the `.env` stub for you.
 
 Subagents can declare their own `mcpServers` independently - each node in the agent tree gets its own resolved list.
+
+### Servers that run as a program
+
+An entry with `command` starts an MCP server as a program on the machine that runs the agent, and talks to it over the program's standard input and output:
+
+```yaml
+mcpServers:
+  - name: git
+    command: [uvx, mcp-server-git]
+    prefix: git
+    toolFilter: [git_status, git_diff, git_log]
+  - name: browser
+    command: [bxplaywright, mcp]
+    env:
+      PLAYWRIGHT_API_KEY: ${env.PLAYWRIGHT_API_KEY}
+    cwd: .
+```
+
+| Key | Meaning |
+|---|---|
+| `command` | Required. A list: the program, then its arguments. It is never run through a shell |
+| `name` | A label for the file |
+| `env` | Environment variables for the program. A variable whose name contains `KEY`, `TOKEN`, `SECRET`, `PASSWORD` or `CREDENTIAL` must be an `${env.NAME}` placeholder |
+| `cwd` | The folder the program starts in |
+| `inheritEnv` | `false` starts it with only `env`. Default `true` |
+| `maxRestarts` | How many times in a row a program that died is started again. Default 2 |
+| `timeout` | Milliseconds per request |
+| `prefix`, `toolFilter` | As for web servers |
+
+The program starts on the first call and is closed when the app stops. `command` cannot be combined with `url`, and the keys that only make sense for a web server (`token`, `headers`, `user`, `password`, `allowedHosts`, `redirects`, `maxResponseBytes`, `handshake`) are a build error on it.
+
+When the app starts, the programs your agents declare become bx-ai's `mcp.stdio.allowedCommands` setting, so the process starts only what the project declared. A list you set yourself (for example in `.boxlang.json`) is left alone and must name the programs. [`bxAgents doctor`](../cli-reference.md) warns when a program is not on the PATH.
+
+A program runs with your user's rights on the machine that hosts the agent. Read what you start, and use `toolFilter` to limit what the agent may call.
 
 ## Hosting a local server
 
@@ -126,6 +166,7 @@ class {
 
 ## Validation
 
-- A remote `mcpServers` entry (struct form) missing `url` fails validation.
-- A remote `mcpServers` entry that's neither a non-empty string nor a `{url, ...}` struct fails validation.
+- An `mcpServers` entry (struct form) needs a `url` or a `command`, not both and not neither.
+- An `mcpServers` entry that's neither a non-empty string nor a struct fails validation.
+- A `command` must be a list of non-empty words. A key for the other kind of server, an `env` secret written in the file, and a mistyped `allowedHosts`, `redirects`, `handshake`, `prefix` or `toolFilter` fail validation.
 - A `gateways/` entry with `exposes: "mcp"` and a `target` that doesn't match any discovered `mcp/*` entry fails validation.

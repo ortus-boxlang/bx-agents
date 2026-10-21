@@ -94,7 +94,7 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 | `memory` | string or struct | The agent's conversation memory. A bare string is shorthand for the type (`"cache"`); a struct is `{ type, ...config }` and is passed through to `aiMemory()` verbatim - e.g. `{ type: "cache", maxMessages: 50 }`, or with `summaryProvider`/`summaryModel`/`summaryThreshold` to make the web UI's `/compact` functional. Applies per node, so a subagent can declare its own. |
 | `checkpointer` | struct | `{ type: "cache"\|"file"\|"jdbc", ...config }`. Defaults to `{ type: "cache" }` if omitted. Always applied - without one, human-in-the-loop approval flows through any gateway other than `cli` fail outright. |
 | `gatewaySession` | struct | `{ policy, maxQueueDepth }`, both optional (default `"queue"` / `50`). Only meaningful if the project has at least one push-style [gateway](gateways/index.md#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends) entry - controls the generated `GatewaySession`'s policy for a second inbound message arriving on a thread that already has a turn in flight. `policy` must be one of `reject`/`queue`/`steer`/`interrupt`. |
-| `agentApi` | struct | `{ enabled, tokenEnvVar }`, both optional. Controls the always-on agent route at `/__bxagents`. See [The always-on agent route](#the-always-on-agent-route) below. |
+| `agentApi` | struct | `{ enabled, tokenEnvVar, tokens }`, all optional. Controls the always-on agent route at `/__bxagents`. See [The always-on agent route](#the-always-on-agent-route) below. |
 | any other key | any | Merged and available in the resolved config struct, but not interpreted by BxAgents itself. |
 
 ## The model slug
@@ -107,7 +107,7 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 | `openrouter/anthropic/claude-x` | `openrouter` | `anthropic/claude-x` |
 | `mock/mock-model` | `mock` | `mock-model` |
 
-If `model` has no `/` at all, it must be either a known core provider name or match a [`models/`](models.md) entry's name - validation rejects anything else. The recognized core providers are: `bedrock`, `claude`, `cohere`, `deepseek`, `docker`, `elevenlabs`, `gemini`, `grok`, `groq`, `huggingface`, `minimax`, `mistral`, `mock`, `ollama`, `openai`, `openai-compatible`, `openrouter`, `perplexity`, `voyage` (kept in sync with bx-ai's own `CORE_PROVIDERS`). `mock` is a real provider, useful for tests and CI - it never makes a network call.
+If `model` has no `/` at all, it must be either a known core provider name or match a [`models/`](models.md) entry's name - validation rejects anything else. The recognized core providers are: `bedrock`, `cartesia`, `claude`, `cloudflare`, `cohere`, `deepseek`, `docker`, `elevenlabs`, `gemini`, `grok`, `groq`, `huggingface`, `minimax`, `mistral`, `mock`, `ollama`, `openai`, `openai-compatible`, `openrouter`, `perplexity`, `voyage` (kept in sync with bx-ai's own `CORE_PROVIDERS`). `mock` is a real provider, useful for tests and CI - it never makes a network call.
 
 This slug-splitting convention is what a `configure()`-declared `model` string goes through - `super.init()`'s own `model` argument instead takes a real `AiModel` instance directly (`aiModel( provider: "...", params: { model: "..." } )`), since the class already speaks bx-ai's own API.
 
@@ -238,6 +238,50 @@ route exists so this module's own tooling always has an address to talk to -
 it's the service entrance, not your project's public API. A project's own
 public surface belongs in `gateways/`, at whatever paths you choose.
 
+### Run control
+
+Beside those four, a generated handler (`handlers/AgentApi.bx`) serves what a chat client needs to
+control a run. It is what `chat --server` and `chat --connect` use:
+
+```
+POST /__bxagents/events    # SSE: like /stream, plus tool and suspended frames
+POST /__bxagents/cancel    # { threadId, reason? }
+POST /__bxagents/steer     # { threadId, input }
+GET  /__bxagents/pending   # ?threadId=
+POST /__bxagents/resume    # { threadId, decision } -> SSE, like /events
+GET  /__bxagents/tools
+GET  /__bxagents/agent    # name, model, what it can do
+GET  /__bxagents/sessions   # the caller's recent conversations
+GET  /__bxagents/history    # ?conversationId= what was said in one
+POST /__bxagents/clear      # { conversationId } forget its messages
+POST /__bxagents/compact    # { conversationId } summarize the older messages
+GET  /__bxagents/notes    # the caller's notes and the agent's, with how full they are
+POST /__bxagents/notes    # { scope : "user" | "agent", text }
+POST /__bxagents/notes/update   # { scope, id, text }
+POST /__bxagents/notes/remove   # { scope, id }
+```
+
+`/events` sends the frames of `/stream` (`thread` first, `chunk` for each piece of the answer, `done` last)
+and adds:
+
+| Frame | Data |
+|---|---|
+| `tool` | `{ id, name, arguments, status, ms }`, once with `status: "running"` and once with `"ok"` and the time it took |
+| `suspended` | `{ threadId, pendingActions : [ { toolName, toolArgs } ] }` when the run waits for a human decision |
+| `error` | `{ message }` |
+
+`cancel` stops the run at its next checkpoint (before the next model call or tool call, not in the middle of
+a token). `steer` splices a message into a run in flight. `resume` takes `approve`, `approve_session` or
+`reject` and streams the rest of the turn. A run belongs to whoever started it: `pending` answers "nothing
+pending" and `resume` answers `403` to anyone else.
+
+Send a `conversationId` with `/events` to keep the turn in a conversation: the server lists it under the caller (the name of the token used, or `api` on an open route) and the agent's memory keeps its messages under the same id. `sessions`, `history`, `clear` and `compact` work on the caller's own conversations only; someone else's id is a `404`, the same as one that does not exist. They answer `404` when the server has no shared chat database, and `compact` reports `available: false` when the agent's memory has no summary model.
+
+The `notes` routes answer `404` for an agent that has no [`notes`](agent-yaml.md#notes) block. Each caller reads and changes their own user notes (the owner is the name of the token they used, or `api` on an open route) and the agent's notes. Any caller can add to either scope or edit a note; removing a note of the agent needs an `admin` token (a `403` otherwise), because it changes what every user's agent knows.
+
+These routes sit behind the same `x-bxagents-token` gate as the other four (a missing or wrong token is a
+`401`), and `agentApi.enabled: false` removes all of them.
+
 Because the path is reserved, `build` **rejects** any `gateways/` entry whose
 `path` is `/__bxagents` or sits underneath it. Two routes on one mount is a
 genuine conflict: one would silently shadow the other, and yours would be the
@@ -251,6 +295,7 @@ one that never answers.
 |---|---|---|
 | `enabled` | boolean | Default `true`. Set `false` to omit the route entirely - for a build going somewhere it has no business existing. |
 | `tokenEnvVar` | string | The **name** of an environment variable holding a shared secret. When set, every sub-route requires a matching `x-bxagents-token` request header. |
+| `tokens` | boolean | Default `false`. `true` also accepts the [access tokens](#access-tokens-for-a-deployed-agent) made with `bxAgents token create`. |
 
 ```javascript
 function configure() {
@@ -286,6 +331,34 @@ JSON body, and never reaches the agent.
     a value that isn't a valid environment-variable name, precisely so a literal
     token can't be committed here by mistake. Only the variable's name is ever
     written into generated source.
+
+### Access tokens for a deployed agent
+
+One shared secret (`tokenEnvVar`) is enough for a single caller. To let several people or machines in, each with a name you can revoke, turn on issued tokens:
+
+```yaml
+# Agent.yaml
+agentApi:
+  tokens: true
+```
+
+Make them where the agent's database is: on the server, or in the project before you pack it.
+
+```bash
+bxAgents token create --name=laptop --expires=90d
+bxAgents token create --name=ci --scope=admin
+bxAgents token list
+bxAgents token revoke --name=laptop
+```
+
+- A token is shown **once**, when it is made. Only its SHA-256 is stored, so a stolen database file cannot be used to call the agent.
+- The caller sends it in the `x-bxagents-token` header, or `bxAgents chat --connect=<url> --token=<token>` (or `BXAGENTS_TOKEN`) does.
+- The name is who is calling. A run belongs to the token that started it, and one token cannot answer another's pending approval. The scope is `chat` or `admin`.
+- Revoking takes effect on the next request, without a restart. A token can also expire (`--expires=90d`, `12h`, `2w` or a date).
+- With `tokens: true` and no `tokenEnvVar`, a server with no tokens yet refuses everyone. With both, the shared secret works as an `admin` token, so a fresh deployment can be reached before the first token exists.
+- The tokens live in the [shared chat database](web-ui.md#the-sqlite-store) (`data/chat.db`). On a deployed server run `token` with `BXAGENTS_DB` pointing at the file the app uses.
+
+Put HTTPS in front of any server a token travels to: a token on plain HTTP can be read on the wire.
 
 !!! info
     The route is bound to whatever host the [miniserver](../cli-reference.md#serve)

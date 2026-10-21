@@ -29,9 +29,11 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n __bxagents_needs_verb -a 'inspect' -d 'Report how the agent is composed: agents, tools, skills, MCP, exposure, env'
     complete -c $cmd -n __bxagents_needs_verb -a 'invoke' -d 'Send one message to a built agent, print the response, exit'
     complete -c $cmd -n __bxagents_needs_verb -a 'new' -d 'Scaffold a new agent project'
+    complete -c $cmd -n __bxagents_needs_verb -a 'notes' -d 'Read and manage the notes of an agent'
     complete -c $cmd -n __bxagents_needs_verb -a 'package' -d 'Package a built project into a .bxa'
     complete -c $cmd -n __bxagents_needs_verb -a 'serve' -d 'Serve a built project via boxlang-miniserver'
     complete -c $cmd -n __bxagents_needs_verb -a 'test' -d 'Run a project\'s own tests/specs via TestBox'
+    complete -c $cmd -n __bxagents_needs_verb -a 'token' -d 'Issue, list and revoke access tokens for a deployed agent'
     complete -c $cmd -n __bxagents_needs_verb -a 'help' -d 'Show the usage and the list of verbs'
 
     # flags and values of each verb
@@ -51,11 +53,15 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb build' -l verbose
     complete -c $cmd -n '__bxagents_using_verb build' -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb chat' -l connect -x
+    complete -c $cmd -n '__bxagents_using_verb chat' -l continue
     complete -c $cmd -n '__bxagents_using_verb chat' -l no-tui
     complete -c $cmd -n '__bxagents_using_verb chat' -l port -x
     complete -c $cmd -n '__bxagents_using_verb chat' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb chat' -l record
     complete -c $cmd -n '__bxagents_using_verb chat' -l server
+    complete -c $cmd -n '__bxagents_using_verb chat' -l session -x
+    complete -c $cmd -n '__bxagents_using_verb chat' -l token -x
+    complete -c $cmd -n '__bxagents_using_verb chat' -l user -x
     complete -c $cmd -n '__bxagents_using_verb chat' -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb clean' -l force
     complete -c $cmd -n '__bxagents_using_verb clean' -l projectRoot -x -a '(__fish_complete_directories)'
@@ -95,7 +101,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb new' -l forgebox -x
     complete -c $cmd -n '__bxagents_using_verb new' -l guard -x -a 'off flag block'
     complete -c $cmd -n '__bxagents_using_verb new' -l host -x
-    complete -c $cmd -n '__bxagents_using_verb new' -l mcp -x -a 'github stripe notion atlassian cloudflare supabase'
+    complete -c $cmd -n '__bxagents_using_verb new' -l mcp -x -a 'github stripe notion atlassian cloudflare supabase git'
     complete -c $cmd -n '__bxagents_using_verb new' -l memory -x -a 'cache file'
     complete -c $cmd -n '__bxagents_using_verb new' -l model -x
     complete -c $cmd -n '__bxagents_using_verb new' -l name -x
@@ -115,6 +121,13 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb new' -l wizard
     complete -c $cmd -n '__bxagents_using_verb new' -l yes
     complete -c $cmd -n '__bxagents_using_verb new' -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb notes' -l file -x
+    complete -c $cmd -n '__bxagents_using_verb notes' -l id -x
+    complete -c $cmd -n '__bxagents_using_verb notes' -l json
+    complete -c $cmd -n '__bxagents_using_verb notes' -l projectRoot -x -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb notes' -l scope -x -a 'user agent'
+    complete -c $cmd -n '__bxagents_using_verb notes' -l text -x
+    complete -c $cmd -n '__bxagents_using_verb notes' -l user -x
     complete -c $cmd -n '__bxagents_using_verb package' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb package' -l version -x
     complete -c $cmd -n '__bxagents_using_verb package' -a '(__fish_complete_directories)'
@@ -124,5 +137,10 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb serve' -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb test' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb test' -a '(__fish_complete_directories)'
-    complete -c $cmd -n '__bxagents_using_verb help' -a 'add build chat clean deploy doctor hash-password inspect invoke new package serve test help'
+    complete -c $cmd -n '__bxagents_using_verb token' -l expires -x
+    complete -c $cmd -n '__bxagents_using_verb token' -l json
+    complete -c $cmd -n '__bxagents_using_verb token' -l name -x
+    complete -c $cmd -n '__bxagents_using_verb token' -l projectRoot -x -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb token' -l scope -x -a 'chat admin'
+    complete -c $cmd -n '__bxagents_using_verb help' -a 'add build chat clean deploy doctor hash-password inspect invoke new notes package serve test token help'
 end

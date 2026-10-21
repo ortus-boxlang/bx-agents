@@ -159,6 +159,68 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   `.markdownlint.json`, a `.boxlang.json` listing every bx-ai setting at its default and a fuller `.gitignore`
   (`.env`, `.env.*`, build output, editor files). Existing files are never overwritten.
 - A catalog of MCP servers the wizard can add: GitHub, Stripe, Notion, Atlassian, Cloudflare and Supabase.
+- `mcpServers` entries can start a program on the agent's machine: `command: [uvx, mcp-server-git]`, with
+  `env`, `cwd`, `inheritEnv`, `maxRestarts`, `timeout`, `prefix` and `toolFilter`. The programs your agents
+  declare become bx-ai's `mcp.stdio.allowedCommands` when the app starts (a list you set yourself is kept),
+  and `doctor` warns when one is not on the PATH. The Git MCP server is now offered by the wizard.
+- Web `mcpServers` entries accept `allowedHosts` (refuses any other host before a request is sent),
+  `redirects`, `maxResponseBytes`, `handshake`, `prefix` and `toolFilter`.
+- The Cloudflare Workers AI provider (`cloudflare/<model>`) is in the wizard, with its account id stub in `.env`;
+  `cartesia` and `cloudflare` are recognised provider names.
+
+#### The shared chat database
+
+- The web chat and the terminal chat share one SQLite file, `data/chat.db` in the project (git-ignored in new
+  projects): `bxAgents serve` starts the app with `BXAGENTS_DB` pointing at it. A deployed app keeps using
+  `database.path` inside the app unless `BXAGENTS_DB` is set.
+- The schema moved out of the generated app into the module's `ChatStore` (plain SQLite, versioned,
+  forward-only, write-ahead logging, a write that meets a lock tries again for a few seconds). A database made by
+  an earlier generated app is recognised.
+
+#### Run control over HTTP
+
+- `/__bxagents` gains `events` (the `/stream` frames plus `tool` and `suspended` frames), `cancel`, `steer`,
+  `pending`, `resume` and `tools`, from a generated `handlers/AgentApi.bx`. They sit behind the same
+  `x-bxagents-token` gate as the `toAi()` routes.
+- `chat --server` and `chat --connect` use them: the same screen as the in-process chat, with tool lines, thinking,
+  Esc to stop the run on the server, steering and approvals answered in place. A server built by an older bxAgents
+  falls back to the text stream with a notice. `AgentClient` can send a token.
+
+#### Conversations in the chat
+
+- Every chat is a conversation in the shared chat database, under the user (the OS user, or the
+  token name over `--connect`), next to the web chat's own.
+- `/sessions`, `/resume`, `/clear`, `/compact` and `/info` in `chat`; `chat --continue` and
+  `chat --session=<number or id>` open an earlier conversation and show its messages.
+- Server routes `GET /sessions`, `GET /history`, `POST /clear` and `POST /compact`; `/events` takes a
+  `conversationId`. A conversation belongs to the caller that started it.
+
+#### Notes
+
+- `notes: {}` in `Agent.yaml` lets an agent keep short notes about the user and about its own work.
+  They go into the system prompt within a limit (defaults 1400 characters for the user, 2200 for the
+  agent, configurable), are read once per conversation, and are saved one row per note in the shared
+  chat database. `provider` can name a class implementing `INotesProvider` for a store of your own.
+- The agent gets `remember` and `forget` tools; `forget` stops for a person's approval by default
+  (`approveForget`).
+- `chat` has `/remember` and `/notes`, in-process and over `--connect`. `/notes` opens a notes screen (`a` add,
+  `e` edit, `d` remove, `t`/Tab switch between your notes and the agent's, `s` stats); `/notes list|add|edit|remove|stats`
+  work in place.
+  `--user` sets whose user notes; the default is the operating system user.
+- `bxAgents notes list|add|edit|remove|stats|export|import` manages them from a shell.
+- Run-control routes `GET/POST /__bxagents/notes`, `POST /notes/update` and `POST /notes/remove`;
+  removing a note of the agent needs an `admin` token.
+- The web chat has a Notes panel (about you, about the agent: add, edit, remove your own), over `GET /notes`,
+  `POST /notes/add|update|remove` under the web API. Agent notes cannot be removed from the page.
+- `token` and `notes` take their action as the first word without mistaking it for a project folder.
+
+#### Access tokens for a deployed agent
+
+- `agentApi: { tokens: true }` accepts tokens made with `bxAgents token create --name=laptop [--scope=chat|admin]
+  [--expires=90d]`, plus `token list` and `token revoke`. A token is shown once and only its SHA-256 is kept
+  (in the shared chat database); revoking works at once on a running server. The token's name is who is calling:
+  a run belongs to the token that started it. `tokenEnvVar` still works and acts as an `admin` token.
+- `chat --connect=<url> --token=<token>` (or `BXAGENTS_TOKEN`) talks to a server that wants one.
 
 #### The chat screen
 

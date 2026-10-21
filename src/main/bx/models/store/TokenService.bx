@@ -1,0 +1,159 @@
+/**
+ * Access tokens for a deployed agent, kept in the shared chat database.
+ *
+ * A token is 32 random bytes, shown once when it is made. Only its SHA-256 is stored, so a stolen database
+ * file cannot be used to call the agent. The name of a token is who is calling: runs and notes are kept under it.
+ * A token has a scope, `chat` (talk to the agent) or `admin` (also manage), may expire, and can be revoked.
+ */
+class {
+
+	static {
+		PREFIX         = "bxa_"
+		SCOPES         = [ "chat", "admin" ]
+		// a token used again within this many seconds is not written to the database again
+		TOUCH_AFTER_S  = 60
+	}
+
+	/**
+	 * @store A ChatStore, already migrated
+	 */
+	function init( required any store ) {
+		variables.store = arguments.store
+		return this
+	}
+
+	/**
+	 * Makes a token.
+	 *
+	 * @name Who it is for, for example "laptop" or "ci": letters, digits, dot, dash, underscore
+	 * @scope chat or admin
+	 * @expiresAt When it stops working, as a date; omit or leave blank for never
+	 *
+	 * @return { token, name, scope, expiresAt } - the token is only here, it cannot be read back later
+	 */
+	struct function create( required string name, string scope = "chat", any expiresAt = "" ) {
+		var name = trim( arguments.name )
+		if ( !reFind( "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", name ) ) {
+			throw( type = "BxAgents.InvalidTokenName", message = "A token name is 1 to 64 letters, digits, dots, dashes or underscores, starting with a letter or digit. Got [#name#]." )
+		}
+		if ( !static.SCOPES.containsNoCase( arguments.scope ) ) {
+			throw( type = "BxAgents.InvalidTokenScope", message = "A token scope is one of: #static.SCOPES.toList( ', ' )#. Got [#arguments.scope#]." )
+		}
+		if ( variables.store.rows( "SELECT 1 AS found FROM tokens WHERE name = :name", { name : name } ).len() ) {
+			throw( type = "BxAgents.TokenNameTaken", message = "A token named [#name#] already exists. Revoke it and pick another name, or pick another name now." )
+		}
+
+		var token = static.PREFIX & generateSecret()
+		var expires = isDate( arguments.expiresAt ) ? arguments.expiresAt : ""
+		variables.store.exec(
+			"INSERT INTO tokens ( id, name, tokenHash, scope, createdAt, expiresAt ) VALUES ( :id, :name, :hash, :scope, :now, :expires )",
+			{
+				id      : createUUID(),
+				name    : name,
+				hash    : fingerprint( token ),
+				scope   : lCase( arguments.scope ),
+				now     : { value : now(), cfsqltype : "timestamp" },
+				expires : { value : expires, cfsqltype : "timestamp", null : !isDate( expires ) }
+			}
+		)
+		return { token : token, name : name, scope : lCase( arguments.scope ), expiresAt : expires }
+	}
+
+	/**
+	 * Who a token belongs to.
+	 *
+	 * @token What a caller sent
+	 *
+	 * @return { name, scope }, or an empty struct for a token that is unknown, revoked or expired
+	 */
+	struct function authenticate( required string token ) {
+		var given = trim( arguments.token )
+		if ( !len( given ) || left( given, len( static.PREFIX ) ) != static.PREFIX ) {
+			return {}
+		}
+		var found = variables.store.rows(
+			"SELECT id, name, scope, lastUsedAt, expiresAt, revokedAt FROM tokens WHERE tokenHash = :hash",
+			{ hash : fingerprint( given ) }
+		)
+		if ( !found.len() ) {
+			return {}
+		}
+		var row = found[ 1 ]
+		if ( isDate( row.revokedAt ?: "" ) ) {
+			return {}
+		}
+		if ( isDate( row.expiresAt ?: "" ) && row.expiresAt <= now() ) {
+			return {}
+		}
+		if ( !isDate( row.lastUsedAt ?: "" ) || dateDiff( "s", row.lastUsedAt, now() ) >= static.TOUCH_AFTER_S ) {
+			try {
+				variables.store.exec( "UPDATE tokens SET lastUsedAt = :now WHERE id = :id", { now : { value : now(), cfsqltype : "timestamp" }, id : row.id } )
+			} catch ( any e ) {
+				// a missed timestamp is not worth refusing a valid caller over
+			}
+		}
+		return { name : row.name, scope : row.scope }
+	}
+
+	/**
+	 * @return One struct per token, newest first: { name, scope, createdAt, lastUsedAt, expiresAt, status : "active" | "expired" | "revoked" }. Never the token.
+	 */
+	array function list() {
+		return variables.store.rows( "SELECT name, scope, createdAt, lastUsedAt, expiresAt, revokedAt FROM tokens ORDER BY createdAt DESC, name" ).map( row => {
+			var status = isDate( row.revokedAt ?: "" ) ? "revoked" : ( isDate( row.expiresAt ?: "" ) && row.expiresAt <= now() ? "expired" : "active" )
+			return { name : row.name, scope : row.scope, createdAt : row.createdAt, lastUsedAt : row.lastUsedAt, expiresAt : row.expiresAt, status : status }
+		} )
+	}
+
+	/**
+	 * Stops a token working. The row stays, so the name cannot be reused by accident.
+	 *
+	 * @name The token's name
+	 *
+	 * @return True when a token was revoked now, false when there is none by that name or it was revoked already
+	 */
+	boolean function revoke( required string name ) {
+		var found = variables.store.rows( "SELECT revokedAt FROM tokens WHERE name = :name", { name : trim( arguments.name ) } )
+		if ( !found.len() || isDate( found[ 1 ].revokedAt ?: "" ) ) {
+			return false
+		}
+		variables.store.exec( "UPDATE tokens SET revokedAt = :now WHERE name = :name", { now : { value : now(), cfsqltype : "timestamp" }, name : trim( arguments.name ) } )
+		return true
+	}
+
+	/**
+	 * @return How long a token lasts: "90d", "12h", "30m" or "2w" from now as a date, or a date such as 2026-12-31
+	 */
+	any function expiry( required string text ) {
+		var spec = trim( arguments.text )
+		if ( !len( spec ) ) {
+			return ""
+		}
+		var match = reFindNoCase( "^([0-9]+)([mhdw])$", spec, 1, true )
+		if ( match.pos[ 1 ] > 0 ) {
+			var amount = val( spec.mid( match.pos[ 2 ], match.len[ 2 ] ) )
+			var unit = lCase( spec.mid( match.pos[ 3 ], match.len[ 3 ] ) )
+			return dateAdd( unit == "m" ? "n" : ( unit == "h" ? "h" : ( unit == "d" ? "d" : "ww" ) ), amount, now() )
+		}
+		if ( isDate( spec ) ) {
+			return parseDateTime( spec )
+		}
+		throw( type = "BxAgents.InvalidTokenExpiry", message = "An expiry is a length such as 90d, 12h, 30m or 2w, or a date such as 2026-12-31. Got [#spec#]." )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private string function generateSecret() {
+		var bytes = createObject( "java", "java.lang.reflect.Array" ).newInstance( createObject( "java", "java.lang.Byte" ).TYPE, 32 )
+		createObject( "java", "java.security.SecureRandom" ).init().nextBytes( bytes )
+		return createObject( "java", "java.util.Base64" ).getUrlEncoder().withoutPadding().encodeToString( bytes )
+	}
+
+	/**
+	 * The SHA-256 of a token. The token is random and long, so a fast hash is enough: there is nothing to guess.
+	 */
+	private string function fingerprint( required string token ) {
+		return lCase( hash( arguments.token, "SHA-256" ) )
+	}
+
+}

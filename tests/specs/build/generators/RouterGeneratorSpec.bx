@@ -53,6 +53,12 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( 'post( "/chat/api/conversations/delete" ).toHandler( "ChatUi.conversationDelete" )' );
 				expect( content ).toInclude( 'get( "/chat/api/preferences" ).toHandler( "ChatUi.preferences" )' );
 				expect( content ).toInclude( 'post( "/chat/api/preferences/set" ).toHandler( "ChatUi.preferenceSet" )' );
+				expect( content ).toInclude( 'get( "/chat/api/notes" ).toHandler( "ChatUi.notes" )' );
+				expect( content ).toInclude( 'post( "/chat/api/notes/add" ).toHandler( "ChatUi.noteAdd" )' );
+				expect( content ).toInclude( 'post( "/chat/api/notes/update" ).toHandler( "ChatUi.noteUpdate" )' );
+				expect( content ).toInclude( 'post( "/chat/api/notes/remove" ).toHandler( "ChatUi.noteRemove" )' );
+				// the specific note routes come before the list route, whose pattern also matches what follows it
+				expect( content.find( "/chat/api/notes/add" ) ).toBeLT( content.find( 'get( "/chat/api/notes"' ) );
 				expect( content ).toInclude( 'post( "/chat/api/preferences/delete" ).toHandler( "ChatUi.preferenceDelete" )' );
 				expect( content ).notToInclude( 'route( "/chat" ).toAi( "GeneratedAgent" )' );
 				expect( content ).notToInclude( 'route( "/chat/api" ).toAi( "GeneratedAgent" )' );
@@ -245,9 +251,11 @@ class extends="testbox.system.BaseSpec" {
 				// The env var NAME is emitted; the secret itself never is.
 				expect( content ).toInclude( 'headers[ "x-bxagents-token" ]' );
 
-				// Fails closed: a blank/unset env var returns false outright
-				// rather than collapsing to "" == "" and admitting everyone.
-				expect( content ).toInclude( "if ( !len( expected ) ) {" );
+				// Fails closed: a blank/unset env var never matches, and a request with no
+				// token never gets as far as the comparison, so "" == "" admits nobody.
+				expect( content ).toInclude( "if ( !len( given ) ) {" );
+				expect( content ).toInclude( "if ( len( expected ) && given == expected ) {" );
+				expect( content ).notToInclude( "TokenService" );
 
 				// RoutingService invokes the condition as condition( requestString ) -
 				// ONE argument. A ( route, params, event ) closure would blow up on
@@ -260,6 +268,70 @@ class extends="testbox.system.BaseSpec" {
 				// error page instead of a refusal.
 				expect( content ).toInclude( 'route( "/__bxagents/:subroute?" )' );
 				expect( content ).toInclude( "}, 401 )" );
+			} );
+
+			it( "adds the run-control routes beside toAi, served by handlers/AgentApi", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+				var content = fileRead( generator.generate( discovery, newAppDir() ).router );
+
+				expect( content ).toInclude( 'post( "/__bxagents/events" ).toHandler( "AgentApi.events" )' );
+				expect( content ).toInclude( 'post( "/__bxagents/cancel" ).toHandler( "AgentApi.cancel" )' );
+				expect( content ).toInclude( 'post( "/__bxagents/steer" ).toHandler( "AgentApi.steer" )' );
+				expect( content ).toInclude( 'post( "/__bxagents/resume" ).toHandler( "AgentApi.resume" )' );
+				expect( content ).toInclude( 'get( "/__bxagents/pending" ).toHandler( "AgentApi.pending" )' );
+				expect( content ).toInclude( 'get( "/__bxagents/tools" ).toHandler( "AgentApi.tools" )' );
+				expect( content ).toInclude( 'get( "/__bxagents/agent" ).toHandler( "AgentApi.about" )' );
+				expect( content ).toInclude( 'get( "/__bxagents/sessions" ).toHandler( "AgentApi.sessions" )' );
+				expect( content ).toInclude( 'get( "/__bxagents/history" ).toHandler( "AgentApi.history" )' );
+				expect( content ).toInclude( 'post( "/__bxagents/clear" ).toHandler( "AgentApi.clear" )' );
+				expect( content ).toInclude( 'post( "/__bxagents/compact" ).toHandler( "AgentApi.compact" )' );
+				expect( content ).toInclude( 'route( "/__bxagents/notes" ).toHandler( "AgentApi.notes" )' );
+				expect( content ).toInclude( 'post( "/__bxagents/notes/update" ).toHandler( "AgentApi.updateNote" )' );
+				expect( content ).toInclude( 'post( "/__bxagents/notes/remove" ).toHandler( "AgentApi.removeNote" )' );
+			} );
+
+			it( "registers the run-control routes BEFORE the 401 catch-all, or it would answer for them", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+				var content = fileRead( generator.generate(
+					discovery,
+					newAppDir(),
+					false, false, false, false, false,
+					{ tokenEnvVar : "BXAGENTS_API_TOKEN" }
+				).router );
+
+				var events = content.find( '"/__bxagents/events"' );
+				var catchAll = content.find( 'route( "/__bxagents/:subroute?" )' );
+				expect( events ).toBeGT( 0 );
+				expect( catchAll ).toBeGT( events );
+			} );
+
+			it( "gates on issued tokens alone when agentApi.tokens is on and there is no tokenEnvVar", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+				var content = fileRead( generator.generate(
+					discovery,
+					newAppDir(),
+					false, false, false, false, false,
+					{ tokens : true }
+				).router );
+
+				expect( content ).toInclude( '.withCondition(' );
+				expect( content ).toInclude( 'new "models.store.TokenService@bxagents"( new "models.store.ChatStore@bxagents"( "" ) ).authenticate( given )' );
+				expect( content ).notToInclude( "getSystemSetting" );
+				expect( content ).toInclude( 'route( "/__bxagents/:subroute?" )' );
+			} );
+
+			it( "accepts the shared secret as well as issued tokens when both are configured", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+				var content = fileRead( generator.generate(
+					discovery,
+					newAppDir(),
+					false, false, false, false, false,
+					{ tokenEnvVar : "BXAGENTS_API_TOKEN", tokens : true }
+				).router );
+
+				expect( content ).toInclude( 'getSystemSetting( "BXAGENTS_API_TOKEN", "" )' );
+				expect( content ).toInclude( "authenticate( given )" );
+				expect( content.find( "len( expected )" ) ).toBeLT( content.find( "authenticate( given )" ) );
 			} );
 
 			it( "registers no 401 fallback when the reserved route is ungated - there is nothing to turn away", function() {

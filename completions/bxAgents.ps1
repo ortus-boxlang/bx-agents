@@ -17,9 +17,11 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 		'inspect' = 'Report how the agent is composed: agents, tools, skills, MCP, exposure, env'
 		'invoke' = 'Send one message to a built agent, print the response, exit'
 		'new' = 'Scaffold a new agent project'
+		'notes' = 'Read and manage the notes of an agent'
 		'package' = 'Package a built project into a .bxa'
 		'serve' = 'Serve a built project via boxlang-miniserver'
 		'test' = 'Run a project''s own tests/specs via TestBox'
+		'token' = 'Issue, list and revoke access tokens for a deployed agent'
 		'help' = 'Show the usage and the list of verbs'
 	}
 	$options = @{
@@ -44,11 +46,15 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 		'build:positional' = 'dir'
 		'chat' = @(
 			@{ Name = 'connect'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'continue'; Value = $false; Choices = @(); Dir = $false }
 			@{ Name = 'no-tui'; Value = $false; Choices = @(); Dir = $false }
 			@{ Name = 'port'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
 			@{ Name = 'record'; Value = $false; Choices = @(); Dir = $false }
 			@{ Name = 'server'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'session'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'token'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'user'; Value = $true; Choices = @(); Dir = $false }
 		)
 		'chat:positional' = 'dir'
 		'clean' = @(
@@ -102,7 +108,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'forgebox'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'guard'; Value = $true; Choices = @('off', 'flag', 'block'); Dir = $false }
 			@{ Name = 'host'; Value = $true; Choices = @(); Dir = $false }
-			@{ Name = 'mcp'; Value = $true; Choices = @('github', 'stripe', 'notion', 'atlassian', 'cloudflare', 'supabase'); Dir = $false }
+			@{ Name = 'mcp'; Value = $true; Choices = @('github', 'stripe', 'notion', 'atlassian', 'cloudflare', 'supabase', 'git'); Dir = $false }
 			@{ Name = 'memory'; Value = $true; Choices = @('cache', 'file'); Dir = $false }
 			@{ Name = 'model'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'name'; Value = $true; Choices = @(); Dir = $false }
@@ -123,6 +129,15 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'yes'; Value = $false; Choices = @(); Dir = $false }
 		)
 		'new:positional' = 'dir'
+		'notes' = @(
+			@{ Name = 'file'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'id'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'json'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
+			@{ Name = 'scope'; Value = $true; Choices = @('user', 'agent'); Dir = $false }
+			@{ Name = 'text'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'user'; Value = $true; Choices = @(); Dir = $false }
+		)
 		'package' = @(
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
 			@{ Name = 'version'; Value = $true; Choices = @(); Dir = $false }
@@ -138,6 +153,13 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
 		)
 		'test:positional' = 'dir'
+		'token' = @(
+			@{ Name = 'expires'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'json'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'name'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
+			@{ Name = 'scope'; Value = $true; Choices = @('chat', 'admin'); Dir = $false }
+		)
 		'help' = @(
 		)
 		'help:positional' = 'verbs'

@@ -1,0 +1,152 @@
+/**
+ * The notes screen of the chat: a list of the notes of one scope with keys to work on them.
+ *
+ *   a add   e edit   d remove   t or Tab switch between your notes and the agent's   s stats   esc back
+ *
+ * It draws with the chat screen's own list and text box (chooseKeys, choose, ask) and changes notes through
+ * the same object the /notes commands use, so it works in-process and over --connect alike.
+ */
+class {
+
+	static {
+		KEYS = "aedts"
+		FOOTER = "a add   e edit   d remove   t switch   s stats   enter edit   esc back"
+		SHOWN = 70
+	}
+
+	/**
+	 * @screen The chat screen
+	 * @notes LocalNotes, RemoteNotes or NoNotes
+	 * @userId Whose notes are "your notes", for the heading
+	 * @agentName The agent whose notes are "the agent's"
+	 */
+	function init( required any screen, required any notes, required string userId, required string agentName ) {
+		variables.screen = arguments.screen
+		variables.notes = arguments.notes
+		variables.userId = arguments.userId
+		variables.agentName = arguments.agentName
+		variables.report = new "models.notes.NotesReport@bxagents"()
+		return this
+	}
+
+	/**
+	 * Runs until the user leaves with Esc.
+	 */
+	void function run() {
+		if ( !variables.notes.available() ) {
+			variables.screen.print( "warn", variables.notes.why() )
+			return
+		}
+		var scope = "user"
+		while ( true ) {
+			var rows = variables.notes.list( scope )
+			var stats = variables.notes.stats()[ scope ]
+			var picked = variables.screen.chooseKeys(
+				heading( scope, stats ),
+				usage( stats, rows.len() ),
+				choicesOf( rows ),
+				static.KEYS,
+				static.FOOTER
+			)
+			if ( isNull( picked ) ) {
+				return
+			}
+			var key = picked contains ":" ? listFirst( picked, ":" ) : "enter"
+			var id = picked contains ":" ? mid( picked, find( ":", picked ) + 1, len( picked ) ) : picked
+			switch ( key ) {
+				case "t":
+				case "tab":
+					scope = scope == "user" ? "agent" : "user"
+					break
+				case "s":
+					for ( var line in variables.report.statsLines( variables.notes.stats() ) ) {
+						variables.screen.print( "muted", line )
+					}
+					break
+				case "a":
+					add( scope )
+					break
+				case "e":
+				case "enter":
+					edit( rows, id )
+					break
+				case "d":
+					remove( rows, id )
+					break
+			}
+		}
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private void function add( required string scope ) {
+		var text = variables.screen.ask( arguments.scope == "agent" ? "New note for the agent" : "New note about you", "One line. Esc to cancel.", "" )
+		if ( isNull( text ) || !len( trim( text ) ) ) {
+			return
+		}
+		showOutcome( variables.notes.add( arguments.scope, text ), "Noted." )
+	}
+
+	private void function edit( required array rows, required string id ) {
+		var note = noteWithId( arguments.rows, arguments.id )
+		if ( note.isEmpty() ) {
+			return
+		}
+		var text = variables.screen.ask( "Edit note #note.id#", "Enter to save. Esc to cancel.", note.text )
+		if ( isNull( text ) || !len( trim( text ) ) || trim( text ) == note.text ) {
+			return
+		}
+		showOutcome( variables.notes.update( note.id, text ), "Updated." )
+	}
+
+	private void function remove( required array rows, required string id ) {
+		var note = noteWithId( arguments.rows, arguments.id )
+		if ( note.isEmpty() ) {
+			return
+		}
+		var sure = variables.screen.choose(
+			"Remove this note?",
+			[ note.text ],
+			[ { value : "no", label : "Keep it" }, { value : "yes", label : "Remove it" } ]
+		)
+		if ( isNull( sure ) || sure != "yes" ) {
+			return
+		}
+		try {
+			showOutcome( variables.notes.remove( note.id ), "Removed." )
+		} catch ( any e ) {
+			variables.screen.print( "warn", e.message )
+		}
+	}
+
+	private void function showOutcome( required struct outcome, required string done ) {
+		if ( arguments.outcome.ok ?: false ) {
+			variables.screen.print( "ok", arguments.done )
+		} else {
+			variables.screen.print( "warn", arguments.outcome.reason ?: arguments.outcome.error ?: "That did not work." )
+		}
+	}
+
+	private string function heading( required string scope, required struct stats ) {
+		return arguments.scope == "agent" ? "Notes: the agent's (#variables.agentName#)   [ your notes: t ]" : "Notes: about you (#variables.userId#)   [ the agent's: t ]"
+	}
+
+	private array function usage( required struct stats, required numeric count ) {
+		return [ "#arguments.count# note#arguments.count == 1 ? '' : 's'#, #arguments.stats.used# of #arguments.stats.limit# characters (about #variables.report.tokens( arguments.stats.used )# tokens in every conversation)" ]
+	}
+
+	private array function choicesOf( required array rows ) {
+		if ( !arguments.rows.len() ) {
+			return [ { value : "", label : "(no notes yet: press a to add one)" } ]
+		}
+		return arguments.rows.map( note => {
+			return { value : note.id, label : len( note.text ) > static.SHOWN ? left( note.text, static.SHOWN - 3 ) & "..." : note.text, hint : note.id }
+		} )
+	}
+
+	private struct function noteWithId( required array rows, required string id ) {
+		var found = arguments.rows.filter( note => note.id == id )
+		return found.len() ? found[ 1 ] : {}
+	}
+
+}

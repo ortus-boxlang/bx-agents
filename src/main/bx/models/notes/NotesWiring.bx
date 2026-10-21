@@ -1,0 +1,107 @@
+/**
+ * Connects an agent to its notes, from the `notes` block of Agent.yaml:
+ *
+ *   notes:
+ *     provider: sqlite        # built in; or a class implementing INotesProvider
+ *     user:  { limit: 1400 }  # characters in the prompt
+ *     agent: { limit: 2200 }
+ *     tool: true              # the remember and forget tools (default true)
+ *     approveForget: true     # a person approves what the agent forgets (default true)
+ *
+ * The generated agent factory calls attach() when it builds an agent.
+ */
+class {
+
+	static {
+		stores = {}
+	}
+
+	/**
+	 * @config The `notes` block
+	 * @agentName The agent's name
+	 *
+	 * @return An INotesProvider
+	 */
+	any function provider( required struct config, required string agentName ) {
+		var kind = trim( arguments.config.provider ?: "sqlite" )
+		if ( !len( kind ) || kind == "sqlite" ) {
+			return new "models.notes.SqliteNotesProvider@bxagents"(
+				store(),
+				{ user : ( arguments.config.user ?: {} ).limit ?: 1400, agent : ( arguments.config.agent ?: {} ).limit ?: 2200 }
+			)
+		}
+		var custom = new "#kind#"( arguments.config, arguments.agentName )
+		if ( !isInstanceOf( custom, "models.notes.INotesProvider@bxagents" ) ) {
+			throw( type = "BxAgents.InvalidNotesProvider", message = "The notes provider [#kind#] does not implement INotesProvider." )
+		}
+		return custom
+	}
+
+	/**
+	 * Adds the notes to an agent: the prompt block, and the tools unless they are turned off.
+	 *
+	 * @agent The AiAgent
+	 * @config The `notes` block
+	 * @agentName The agent's name
+	 *
+	 * @return The agent
+	 */
+	any function attach( required any agent, required struct config, required string agentName ) {
+		var notes = provider( arguments.config, arguments.agentName )
+		var withTools = arguments.config.tool ?: true
+		arguments.agent.withMiddleware( new "models.notes.NotesMiddleware@bxagents"( notes, arguments.agentName, withTools ) )
+		if ( withTools ) {
+			arguments.agent.withTools( new "models.notes.NotesTools@bxagents"( notes, arguments.agentName ).tools() )
+			if ( arguments.config.approveForget ?: true ) {
+				// a person approves what the agent forgets: the run pauses like for any tool that needs it
+				arguments.agent.withMiddleware( new bxModules.bxai.models.middleware.core.HumanInTheLoopMiddleware(
+					toolsRequiringApproval = [ "forget" ],
+					mode                   = "web"
+				) )
+			}
+		}
+		return arguments.agent
+	}
+
+	/**
+	 * The notes provider an agent was given by attach(), found on its middleware.
+	 *
+	 * @agent An AiAgent
+	 *
+	 * @return The INotesProvider, or null when the agent keeps no notes
+	 */
+	any function providerOf( required any agent ) {
+		for ( var middleware in ( arguments.agent.getMiddleware() ?: [] ) ) {
+			if ( isObject( middleware ) && structKeyExists( middleware, "blockFor" ) && structKeyExists( middleware, "provider" ) ) {
+				return middleware.provider()
+			}
+		}
+		return nullValue()
+	}
+
+	/**
+	 * The store the notes live in: the file named by BXAGENTS_DB when there is one (the terminal chat and a
+	 * served project), otherwise the application's default datasource (a deployed app).
+	 */
+	any function store() {
+		var file = trim( getSystemSetting( "BXAGENTS_DB", "" ) ).replace( "\", "/", "all" )
+		var key = len( file ) ? file : "default-datasource"
+		if ( !static.stores.keyExists( key ) ) {
+			lock name="bxagents-notes-store" type="exclusive" timeout="30" {
+				if ( !static.stores.keyExists( key ) ) {
+					var made = ""
+					if ( len( file ) ) {
+						directoryCreate( getDirectoryFromPath( file ), true, true )
+						made = new "models.store.ChatStore@bxagents"( { driver : "sqlite", database : file } )
+					} else {
+						made = new "models.store.ChatStore@bxagents"( "" )
+					}
+					made.migrate()
+					static.stores[ key ] = made
+				}
+			}
+		}
+		return static.stores[ key ]
+	}
+
+}

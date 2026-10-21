@@ -18,7 +18,7 @@
  * The `features` struct, every key optional:
  *   tools            [ "now@bxai", ... ]
  *   toolOptions      { bxai : { allowedPaths : [ "tmp", "cwd" ] } }
- *   mcpServers       [ { name, url, token : "${env.X}" } ]
+ *   mcpServers       [ { name, url, token : "${env.X}" } or { name, command : [ program, args... ] } ]
  *   memory           "cache" | "file"
  *   checkpointer     { type : "file" }
  *   security         { enabled : true, input : { action : "flag" } }
@@ -60,9 +60,9 @@ class {
 		}
 		if ( f.keyExists( "mcpServers" ) && f.mcpServers.len() ) {
 			lines.append( "" )
-			lines.append( "## Remote MCP servers. Credentials are read from the environment when the app starts." )
+			lines.append( "## MCP servers: web servers (url) and programs started on this machine (command). Credentials are read from the environment when the app starts." )
 			lines.append( "mcpServers:" )
-			lines.append( variables.yaml.lines( f.mcpServers, 2, [ "name", "url", "token", "headers", "timeout" ] ), true )
+			lines.append( variables.yaml.lines( f.mcpServers, 2, [ "name", "url", "command", "token", "headers", "env", "timeout" ] ), true )
 		}
 		if ( f.keyExists( "memory" ) ) {
 			lines.append( "" )

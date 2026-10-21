@@ -66,6 +66,7 @@ class {
 
 		checkProjectValidation( root, discovery, config, checks )
 		checkWebUiDependencies( discovery, checks )
+		checkMcpPrograms( config, checks )
 
 		return finish( checks, arguments.options.json ?: false )
 	}
@@ -73,6 +74,58 @@ class {
 	// --------------------------------------------------------------------------
 	// Individual checks
 	// --------------------------------------------------------------------------
+
+	/**
+	 * Every `mcpServers` entry with a `command` starts a program on this machine. A program that is not on
+	 * the PATH only fails when the agent starts and tries to use it, so it is reported here. A warning, not a
+	 * failure: the machine that runs the agent may not be this one.
+	 *
+	 * @config The resolved config from AgentConfigResolver.resolve()
+	 * @checks Accumulator array - append() any findings
+	 */
+	private void function checkMcpPrograms( required struct config, required array checks ) {
+		for ( var entry in ( arguments.config.mcpServers ?: [] ) ) {
+			if ( !isStruct( entry ) || !isArray( entry.command ?: "" ) || !entry.command.len() ) {
+				continue
+			}
+			var program = toString( entry.command[ 1 ] )
+			var label = entry.name ?: program
+			var found = findProgram( program )
+			if ( len( found ) ) {
+				arguments.checks.append( { status : "ok", message : "MCP server [#label#] starts [#program#] (#found#)" } )
+			} else {
+				arguments.checks.append( { status : "warn", message : "MCP server [#label#] starts [#program#], which is not on the PATH. Install it where the agent runs, or the server's tools will be missing." } )
+			}
+		}
+	}
+
+	/**
+	 * @program A program name, or a path
+	 *
+	 * @return The full path of the program, or "" when it cannot be found
+	 */
+	private string function findProgram( required string program ) {
+		var isWindows = lCase( createObject( "java", "java.lang.System" ).getProperty( "os.name" ) ).contains( "win" )
+		var suffixes = isWindows ? [ "", ".exe", ".cmd", ".bat", ".com" ] : [ "" ]
+		var candidates = []
+		if ( arguments.program contains "/" || arguments.program contains "\\" ) {
+			candidates = suffixes.map( suffix => arguments.program & suffix )
+		} else {
+			var separator = createObject( "java", "java.io.File" ).pathSeparator
+			for ( var folder in ( createObject( "java", "java.lang.System" ).getenv( "PATH" ) ?: "" ).listToArray( separator ) ) {
+				for ( var suffix in suffixes ) {
+					candidates.append( folder & "/" & arguments.program & suffix )
+				}
+			}
+		}
+		for ( var path in candidates ) {
+			var file = createObject( "java", "java.io.File" ).init( path )
+			if ( file.isFile() && file.canExecute() ) {
+				return file.getPath()
+			}
+		}
+		return ""
+	}
 
 	/**
 	 * Reports the running BoxLang version, and - best-effort only, since it

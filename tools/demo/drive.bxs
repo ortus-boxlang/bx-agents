@@ -1,0 +1,233 @@
+/**
+ * Runs a command in a pseudo terminal and types at it from a script, so a demo comes out the same
+ * every time. Combined with `bxAgents chat --record`, it is how a chat recording is made without a
+ * person at the keyboard.
+ *
+ *   boxlang tools/demo/drive.bxs <spec.json>
+ *
+ * The spec is JSON:
+ *
+ *   {
+ *     "command" : [ "boxlang", "module:bxagents", "chat", "--record=demo.cast" ],
+ *     "cwd"     : ".",                          optional, relative to the spec file
+ *     "env"     : { "BOXLANG_HOME" : "..." },    optional
+ *     "cols"    : 100,  "rows" : 32,
+ *     "typeMs"  : 70,                           pause between typed characters
+ *     "output"  : "terminal.cast",              optional: also save what the terminal showed
+ *     "steps"   : [
+ *       { "expect" : "enter send", "max" : 120, "then" : 1.5 },   wait for text on screen (up to "max" seconds)
+ *       { "type"   : "What time is it?" },                        type characters one by one
+ *       { "press"  : "enter" },                                   enter, tab, esc, backspace, up, down, left, right, ctrl-c, ctrl-d
+ *       { "wait"   : 2 }                                          just wait, in seconds
+ *     ]
+ *   }
+ *
+ * A pseudo terminal is something BoxLang cannot open by itself, so this uses the operating system's
+ * `script` command: the GNU/util-linux one on Linux, the BSD one on macOS. Only Linux has been tried.
+ * Windows has no `script`.
+ */
+
+function fail( required string message ) {
+	println( arguments.message )
+	java.lang.System::exit( 1 )
+}
+
+args = server.cli.parsed.positionals
+if ( args.len() < 2 ) {
+	fail( "usage: boxlang tools/demo/drive.bxs <spec.json>" )
+}
+specFile = args[ 2 ]
+if ( !fileExists( specFile ) ) {
+	fail( "No such file: #specFile#" )
+}
+specDir = getDirectoryFromPath( expandPath( specFile ) )
+spec = jsonDeserialize( fileRead( specFile ) )
+cols = spec.cols ?: 100
+rows = spec.rows ?: 32
+typeMs = spec.typeMs ?: 70
+cwd = len( spec.cwd ?: "" ) ? spec.cwd : "."
+cwd = ( cwd.startsWith( "/" ) || reFind( "^[A-Za-z]:[\\/]", cwd ) ) ? cwd : specDir & cwd
+
+keys = {
+	"enter"     : char( 13 ),
+	"tab"       : char( 9 ),
+	"esc"       : char( 27 ),
+	"backspace" : char( 127 ),
+	"ctrl-c"    : char( 3 ),
+	"ctrl-d"    : char( 4 ),
+	"up"        : char( 27 ) & "[A",
+	"down"      : char( 27 ) & "[B",
+	"right"     : char( 27 ) & "[C",
+	"left"      : char( 27 ) & "[D"
+}
+
+// ----------------------------------------------------------------------------------
+// Start the command under a pseudo terminal
+// ----------------------------------------------------------------------------------
+function quote( required string word ) {
+	return "'" & replace( arguments.word, "'", "'\''", "all" ) & "'"
+}
+
+osName = lCase( java.lang.System::getProperty( "os.name" ) )
+inner = "stty rows #rows# cols #cols#; exec " & spec.command.map( quote ).toList( " " )
+if ( osName.contains( "mac" ) || osName.contains( "bsd" ) ) {
+	wrapped = [ "script", "-q", "/dev/null", "sh", "-c", inner ]
+} else if ( osName.contains( "win" ) ) {
+	fail( "drive.bxs needs the `script` command, which Windows does not have." )
+} else {
+	wrapped = [ "script", "-qfec", inner, "/dev/null" ]
+}
+
+pb = new java.lang.ProcessBuilder( wrapped.map( w => javaCast( "string", w ) ) )
+pb.directory( createObject( "java", "java.io.File" ).init( cwd ) )
+pb.redirectErrorStream( true )
+environment = pb.environment()
+environment.remove( "JAVA_TOOL_OPTIONS" )
+environment.put( "TERM", "xterm-256color" )
+environment.put( "COLORTERM", "truecolor" )
+for ( name in ( spec.env ?: {} ) ) {
+	environment.put( javaCast( "string", name ), javaCast( "string", spec.env[ name ] ) )
+}
+
+chunks = createObject( "java", "java.util.Collections" ).synchronizedList( createObject( "java", "java.util.ArrayList" ).init() )
+started = getTickCount()
+try {
+	process = pb.start()
+} catch ( any e ) {
+	fail( "Could not start `script`: #e.message#" )
+}
+input = process.getOutputStream()
+reader = createObject( "java", "java.lang.Thread" ).init( () => {
+	var stream = process.getInputStream()
+	try {
+		var chunk = createObject( "java", "java.lang.reflect.Array" ).newInstance( createObject( "java", "java.lang.Byte" ).TYPE, 65536 )
+		while ( true ) {
+			var n = stream.read( chunk )
+			if ( n < 0 ) {
+				break
+			}
+			chunks.add( { at : getTickCount() - started, bytes : createObject( "java", "java.util.Arrays" ).copyOf( chunk, n ) } )
+		}
+	} catch ( any e ) {
+		// the process went away
+	}
+} )
+reader.setDaemon( true )
+reader.start()
+
+// ----------------------------------------------------------------------------------
+// What the terminal has shown so far, as plain text
+// ----------------------------------------------------------------------------------
+function screenText() {
+	var all = createObject( "java", "java.io.ByteArrayOutputStream" ).init()
+	var copy = chunks.toArray()
+	for ( var c in copy ) {
+		all.write( c.bytes )
+	}
+	var text = toString( all.toByteArray(), "UTF-8" )
+	// drop colors, cursor moves and titles so words split by styling still match
+	text = reReplace( text, "\x1b\][^\x07\x1b]*(\x07|\x1b\\)", "", "all" )
+	return reReplace( text, "\x1b\[[0-9;?]*[ -/]*[@-~]", "", "all" )
+}
+
+function alive() {
+	try {
+		process.exitValue()
+		return false
+	} catch ( any e ) {
+		return true
+	}
+}
+
+function send( required string text ) {
+	if ( alive() ) {
+		input.write( arguments.text.getBytes( "UTF-8" ) )
+		input.flush()
+	}
+}
+
+// ----------------------------------------------------------------------------------
+// The script
+// ----------------------------------------------------------------------------------
+for ( step in spec.steps ) {
+	if ( !alive() ) {
+		break
+	}
+	if ( structKeyExists( step, "wait" ) ) {
+		sleep( step.wait * 1000 )
+	} else if ( structKeyExists( step, "expect" ) ) {
+		deadline = getTickCount() + ( step.max ?: 60 ) * 1000
+		found = false
+		while ( getTickCount() < deadline && alive() ) {
+			if ( findNoCase( step.expect, screenText() ) ) {
+				found = true
+				break
+			}
+			sleep( 100 )
+		}
+		if ( !found && alive() ) {
+			println( "drive: did not see [#step.expect#] within #( step.max ?: 60 )# seconds, carrying on" )
+		}
+		sleep( ( step.then ?: 0 ) * 1000 )
+	} else if ( structKeyExists( step, "type" ) ) {
+		// one character at a time, by code point so an emoji is not cut in half
+		points = javaCast( "string", step.type ).codePoints().toArray()
+		for ( cp in points ) {
+			send( createObject( "java", "java.lang.String" ).valueOf( createObject( "java", "java.lang.Character" ).toChars( cp ) ) )
+			sleep( typeMs )
+		}
+	} else if ( structKeyExists( step, "press" ) ) {
+		if ( !keys.keyExists( step.press ) ) {
+			fail( "Unknown key [#step.press#]. Use one of: #keys.keyList()#" )
+		}
+		send( keys[ step.press ] )
+		sleep( step.after ?: 400 )
+	}
+}
+sleep( 1000 )
+if ( alive() ) {
+	process.destroy()
+}
+process.waitFor( 5, createObject( "java", "java.util.concurrent.TimeUnit" ).SECONDS )
+
+// ----------------------------------------------------------------------------------
+// Optionally save what the terminal showed
+// ----------------------------------------------------------------------------------
+if ( len( spec.output ?: "" ) ) {
+	target = ( spec.output.startsWith( "/" ) || reFind( "^[A-Za-z]:[\\/]", spec.output ) ) ? spec.output : specDir & spec.output
+	lines = [ jsonSerialize( { "version" : 2, "width" : cols, "height" : rows, "timestamp" : int( started / 1000 ), "title" : spec.title ?: "terminal" } ) ]
+	carry = createObject( "java", "java.io.ByteArrayOutputStream" ).init()
+	for ( c in chunks.toArray() ) {
+		// a character may be split across two reads: keep its first bytes for the next chunk
+		carry.write( c.bytes )
+		all = carry.toByteArray()
+		keep = 0
+		for ( back = 1; back <= min( 3, all.len() ); back++ ) {
+			b = all[ all.len() - back + 1 ]
+			if ( b >= 0 && back == 1 ) {
+				break
+			}
+			if ( b < -64 ) {
+				continue
+			}
+			// a lead byte: it needs 2, 3 or 4 bytes in total
+			need = b < -32 ? 2 : ( b < -16 ? 3 : 4 )
+			if ( need > back ) {
+				keep = back
+			}
+			break
+		}
+		carry.reset()
+		if ( keep ) {
+			carry.write( all, all.len() - keep, keep )
+		}
+		text = toString( createObject( "java", "java.util.Arrays" ).copyOf( all, all.len() - keep ), "UTF-8" )
+		if ( len( text ) ) {
+			lines.append( jsonSerialize( [ c.at / 1000, "o", text ] ) )
+		}
+	}
+	fileWrite( target, lines.toList( char( 10 ) ) & char( 10 ) )
+	println( "Wrote #target# (#chunks.size()# chunks)" )
+}
+println( "drive: finished after #int( ( getTickCount() - started ) / 1000 )# seconds" )
+java.lang.System::exit( 0 )
