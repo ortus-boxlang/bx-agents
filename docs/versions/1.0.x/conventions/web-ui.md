@@ -78,7 +78,7 @@ The `thread` event goes first because a response header cannot be read before th
 
 ## The generated API
 
-A `webui` entry mounts twenty actions under `<path>/api`, served by a generated `handlers/ChatUi.bx`:
+A `webui` entry mounts twenty-four actions under `<path>/api`, served by a generated `handlers/ChatUi.bx`:
 
 | Route | Purpose |
 | --- | --- |
@@ -102,6 +102,10 @@ A `webui` entry mounts twenty actions under `<path>/api`, served by a generated 
 | `GET /preferences` | This visitor's stored preferences, as `{ key: value }` |
 | `POST /preferences/set` | `{ key, value }` |
 | `POST /preferences/delete` | `{ key }` |
+| `GET /notes` | The visitor's notes and the agent's, with how full each is. `404` when the agent has no [`notes`](agent-yaml.md#notes) block |
+| `POST /notes/add` | `{ scope: "user" \| "agent", text }` |
+| `POST /notes/update` | `{ scope, id, text }` |
+| `POST /notes/remove` | `{ scope, id }` - the visitor's own notes only; a note of the agent is a `403` |
 
 Every one is scoped by ColdBox's `getUserSessionIdentifier()` as the `userId`. The first three keep `toAi()`'s exact shape and wire format.
 
@@ -371,6 +375,14 @@ Assistant replies render through a deliberately small markdown subset - fenced a
 
 !!! info
     The composer is a `textarea` - **Enter** sends, **Shift+Enter** adds a newline, and it grows to about six lines before scrolling. A turn in flight can be halted with **Stop** (an `AbortController`), which keeps whatever already streamed rather than discarding it. The transcript only auto-scrolls when you're already at the bottom, so scrolling up to re-read something mid-stream doesn't yank you back down.
+
+## Notes
+
+When the agent has a [`notes`](agent-yaml.md#notes) block, the header shows a **Notes** button. It opens a panel with two tabs, *About you* and *About the agent*, how full each is (characters of the limit, and about how many tokens that adds to every conversation), and the notes with their ids. Add, edit in place and remove work on your own notes. The page and the terminal chat share the same database, so a note added in one shows in the other.
+
+- *About you* belongs to the same identity as your conversations: your account with [`users`](#users-and-sign-in), or the shared workspace without accounts.
+- *About the agent* is shared by everyone who uses the agent, so anyone using the page may add or edit one, but the page has no Remove button for it and `/notes/remove` answers `403`. Removing a note of the agent takes an admin [token](agent-bx.md#access-tokens-for-a-deployed-agent) on the agent's own `/__bxagents/notes/remove` route, or `bxAgents notes remove --scope=agent` where the agent runs.
+- Without a `notes` block the button is not shown and the routes answer `404`: `/info`'s `capabilities.notes` says which.
 
 ## What is not here yet
 

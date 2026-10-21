@@ -78,7 +78,7 @@ El evento `thread` va primero porque una cabecera de respuesta no puede leerse a
 
 ## La API generada
 
-Una entrada `webui` monta veinte acciones bajo `<path>/api`, servidas por un `handlers/ChatUi.bx` generado:
+Una entrada `webui` monta veinticuatro acciones bajo `<path>/api`, servidas por un `handlers/ChatUi.bx` generado:
 
 | Ruta | Propósito |
 | --- | --- |
@@ -102,6 +102,10 @@ Una entrada `webui` monta veinte acciones bajo `<path>/api`, servidas por un `ha
 | `GET /preferences` | Las preferencias almacenadas de este visitante, como `{ key: value }` |
 | `POST /preferences/set` | `{ key, value }` |
 | `POST /preferences/delete` | `{ key }` |
+| `GET /notes` | Las notas del visitante y las del agente, con cuánto llena cada una. `404` si el agente no tiene bloque [`notes`](agent-yaml.md#notas) |
+| `POST /notes/add` | `{ scope: "user" \| "agent", text }` |
+| `POST /notes/update` | `{ scope, id, text }` |
+| `POST /notes/remove` | `{ scope, id }` - solo las notas propias del visitante; una nota del agente da `403` |
 
 Cada una está delimitada por el `getUserSessionIdentifier()` de ColdBox como el `userId`. Las primeras tres mantienen la forma y el formato de cable exactos de `toAi()`.
 
@@ -371,6 +375,14 @@ Las respuestas del asistente se renderizan a través de un subconjunto de markdo
 
 !!! info
     El compositor es un `textarea` - **Enter** envía, **Shift+Enter** añade una línea nueva, y crece hasta unas seis líneas antes de hacer scroll. Un turno en curso puede detenerse con **Stop** (un `AbortController`), que mantiene lo que ya se transmitió en lugar de descartarlo. El transcript solo hace auto-scroll cuando ya estás en la parte inferior, así que desplazarte hacia arriba para releer algo a mitad de stream no te jala de vuelta hacia abajo.
+
+## Notas
+
+Cuando el agente tiene un bloque [`notes`](agent-yaml.md#notas), la cabecera muestra un botón **Notes**. Abre un panel con dos pestañas, *About you* y *About the agent*, cuánto llena cada una (caracteres del límite y unos tokens aproximados que añade a cada conversación) y las notas con sus ids. Añadir, editar en el sitio y quitar funcionan con tus propias notas. La página y el chat de terminal comparten la misma base de datos, así que una nota añadida en uno aparece en el otro.
+
+- *About you* pertenece a la misma identidad que tus conversaciones: tu cuenta con [`users`](#usuarios-e-inicio-de-sesión), o el espacio compartido sin cuentas.
+- *About the agent* la comparte todo el que usa el agente: cualquiera puede añadir o editar una, pero la página no tiene botón Remove para ella y `/notes/remove` responde `403`. Quitar una nota del agente requiere un [token](agent-bx.md#tokens-de-acceso-para-un-agente-desplegado) admin en la ruta `/__bxagents/notes/remove` del agente, o `bxAgents notes remove --scope=agent` donde se ejecuta.
+- Sin bloque `notes` el botón no se muestra y las rutas responden `404`: `capabilities.notes` de `/info` lo indica.
 
 ## What is not here yet
 
