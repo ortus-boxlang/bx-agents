@@ -1,0 +1,176 @@
+/**
+ * `add subagent` - a new agent under subagents/<name>/, wired into a parent agent's
+ * `subAgents` list.
+ *
+ * A subagent is a whole agent (its own model, tools, MCP servers, memory, guard), so this
+ * kind runs the same wizard stages `new` runs rather than a shorter list of its own. The
+ * stages that only make sense for a project (shape, channels, deploy) are left out.
+ * Without a terminal every answer comes from the same flags as `new` (--model is required).
+ *
+ * The parent can be the root agent or any other subagent, which is what makes it
+ * recursive: subagents are siblings in one folder and reference each other by name.
+ * Wiring it in is an insert into the parent's Agent.yaml (see YamlEditor); a parent that
+ * is a class, or a list written in a shape that cannot be extended by inserting, is left
+ * alone and the line to add is shown instead.
+ */
+class {
+
+	static {
+		STAGES = [ "purpose", "model", "tools", "search", "files", "memory", "mcp", "guard" ]
+	}
+
+	struct function info() {
+		return { name : "subagent", summary : "A new agent under subagents/<name>/, with its own model and tools, wired into a parent" }
+	}
+
+	/**
+	 * @answers An Answers
+	 * @ctx The add context
+	 *
+	 * @return { name, parent, plan, features }
+	 */
+	struct function ask( required any answers, required struct ctx ) {
+		var args = arguments.ctx.args ?: []
+		var a = arguments.answers.withPresets( { name : args.len() ? args[ 1 ] : "" } )
+		var taken = arguments.ctx.project.subagents.duplicate()
+		taken.append( arguments.ctx.project.rootName )
+
+		var name = a.text(
+			key      = "name",
+			title    = "Subagent name",
+			help     = "Its folder under subagents/. Letters, digits, - and _.",
+			validate = ( value ) => !reFind( "^[A-Za-z][A-Za-z0-9_-]*$", value ) ? "Start with a letter; letters, digits, - and _." : ( taken.findNoCase( value ) ? "#value# is already an agent in this project." : "" )
+		)
+		var parent = askParent( a, arguments.ctx, name )
+
+		var planner = new "models.wizard.ProjectPlan@bxagents"()
+		var flags = arguments.ctx.options.duplicate()
+		flags.name = name
+
+		var plan = {}
+		if ( a.interactive() ) {
+			plan = new "models.wizard.NewWizard@bxagents"( a.prompter() ).run( flags, name, arguments.ctx.root, static.STAGES ).plan
+		} else {
+			if ( !len( trim( flags.model ?: "" ) ) ) {
+				throw( type = "BxAgents.InvalidAnswer", message = "--model is required without a terminal, for example --model=openai/gpt-5. Run `bxAgents add subagent` in a terminal to be asked." )
+			}
+			plan = planner.fromFlags( flags )
+		}
+		if ( !len( plan.model ) ) {
+			throw( type = "BxAgents.InvalidAnswer", message = "A subagent needs a model." )
+		}
+
+		return { name : name, parent : parent, plan : plan, features : planner.toFeatures( plan ), manual : "" }
+	}
+
+	/**
+	 * @answers The answers from ask()
+	 * @ctx The add context
+	 * @changes A ChangeSet
+	 */
+	void function plan( required struct answers, required struct ctx, required any changes ) {
+		var a = arguments.answers
+		var writer = new "models.wizard.FeatureWriter@bxagents"()
+		var dir = "subagents/" & a.name
+
+		arguments.changes.file( dir & "/Agent.yaml", renderAgentYaml( a, writer ) )
+		arguments.changes.file( dir & "/instructions.md", renderInstructions( a, writer ) )
+
+		for ( var stub in ( a.features.envStubs ?: [] ) ) {
+			var comment = len( stub.comment ?: "" ) ? "## #stub.comment##char( 10 )#" : ""
+			arguments.changes.append( ".env", char( 10 ) & comment & stub.name & "=" & ( stub.value ?: "" ) & char( 10 ), stub.name & "=" )
+		}
+
+		wireIntoParent( a, arguments.ctx, arguments.changes )
+	}
+
+	/**
+	 * @return [ text ] what is left to do
+	 */
+	array function next( required struct answers, required struct ctx ) {
+		var a = arguments.answers
+		var steps = []
+		if ( len( a.manual ) ) {
+			steps.append( a.manual )
+		}
+		// Merging into box.json would mean rewriting a file the developer owns, so say what to add.
+		for ( var slug in ( a.features.dependencies ?: {} ).keyArray() ) {
+			steps.append( "Add #slug# to the dependencies in box.json, then install it." )
+		}
+		for ( var stub in ( a.features.envStubs ?: [] ) ) {
+			steps.append( "Set #stub.name# in .env." )
+		}
+		steps.append( "bxAgents inspect, to see #a.name# in the agent tree" )
+		return steps
+	}
+
+	// --------------------------------------------------------------------------
+
+	private string function askParent( required any a, required struct ctx, required string name ) {
+		var choices = [ { value : ".", label : "The root agent", hint : arguments.ctx.project.agentNames[ "." ] } ]
+		for ( var sub in arguments.ctx.project.subagents ) {
+			choices.append( { value : sub, label : sub, hint : "a subagent, so this one nests under it" } )
+		}
+		if ( choices.len() > 1 ) {
+			return arguments.a.select( key = "parent", title = "Which agent delegates to it?", choices = choices, default = ".", help = "Its subAgents list gets the new name." )
+		}
+		if ( ( arguments.ctx.options.parent ?: "." ) != "." ) {
+			throw( type = "BxAgents.InvalidAnswer", message = "--parent: this project has no subagents yet, so the parent is the root agent." )
+		}
+		return "."
+	}
+
+	private string function renderAgentYaml( required struct a, required any writer ) {
+		var yaml = new "models.wizard.YamlWriter@bxagents"()
+		var plan = arguments.a.plan
+		var lines = [ "name: " & yaml.scalar( arguments.a.name ) ]
+		if ( len( plan.description ) ) {
+			lines.append( "description: " & yaml.scalar( plan.description ) )
+		}
+		lines.append( "model: " & yaml.scalar( plan.model ) )
+		lines.append( arguments.writer.agentYamlLines( arguments.a.features ), true )
+		lines.append( "" )
+		lines.append( "environments:" )
+		lines.append( "  ## `bxAgents test` builds against this override so tests need no API key." )
+		lines.append( "  test:" )
+		lines.append( "    model: mock/mock-model" )
+		return lines.toList( char( 10 ) ) & char( 10 )
+	}
+
+	private string function renderInstructions( required struct a, required any writer ) {
+		var lines = [ "## #arguments.a.name#", "", "You are #arguments.a.name#." ]
+		if ( len( arguments.a.plan.description ) ) {
+			lines.append( arguments.a.plan.description )
+		}
+		lines.append( "" )
+		var extra = arguments.writer.instructionLines( arguments.a.features )
+		if ( extra.len() ) {
+			lines.append( extra, true )
+			lines.append( "" )
+		}
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Adds the name to the parent's subAgents. A parent this cannot edit still gets the
+	 * subagent; the line to add is handed back in `manual` for next() to print.
+	 */
+	private void function wireIntoParent( required struct a, required struct ctx, required any changes ) {
+		var folder = arguments.a.parent == "." ? "" : "subagents/" & arguments.a.parent
+		var located = new "models.build.AgentDefinitionLocator@bxagents"().locate( arguments.ctx.root & ( len( folder ) ? "/" & folder : "" ) )
+		var file = ( len( folder ) ? folder & "/" : "" ) & located.path.listLast( "/\" )
+		var scalar = new "models.wizard.YamlWriter@bxagents"().scalar( arguments.a.name )
+
+		if ( located.kind != "yaml" ) {
+			arguments.a.manual = "#file# is a class, so it was not edited. Add ""#arguments.a.name#"" to the subAgents its configure() returns."
+			return
+		}
+		var edit = new "models.add.YamlEditor@bxagents"().addValue( fileRead( arguments.ctx.root & "/" & file ), "subAgents", scalar )
+		if ( !edit.ok ) {
+			arguments.a.manual = "#file# was not changed: #edit.reason#. Add #scalar# to its subAgents list."
+			return
+		}
+		arguments.changes.edit( file, edit.text, "subAgents: ... #scalar#" )
+	}
+
+}

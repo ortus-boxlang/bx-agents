@@ -65,6 +65,38 @@ class {
 	}
 
 	/**
+	 * Adds one plain value to a top-level list, whichever way the file writes that list:
+	 * missing (a block list is added), a block list, or inline on one line
+	 * (`subAgents: [ a, b ]`, which keeps its shape and any trailing comment).
+	 *
+	 * @text The YAML file's text
+	 * @key A top-level key whose value is a list
+	 * @value The new item, already a valid YAML scalar
+	 *
+	 * @return { ok : true, text } or { ok : false, reason } for a list spread over lines inside brackets, or a value that is not a list
+	 */
+	struct function addValue( required string text, required string key, required string value ) {
+		var lines = split( arguments.text )
+		var at = keyLine( lines, arguments.key )
+		if ( !at ) {
+			return addItem( arguments.text, arguments.key, [ "- " & arguments.value ] )
+		}
+		var tail = lines[ at ].reReplace( "^[^:]+:", "" ).trim()
+		if ( !len( tail ) || tail.startsWith( "##" ) ) {
+			return addItem( arguments.text, arguments.key, [ "- " & arguments.value ] )
+		}
+		var parts = reFind( "^([^:]+:\s*)\[([^\[\]]*)\](.*)$", lines[ at ], 1, true )
+		if ( !parts.pos.len() || parts.pos.len() < 4 ) {
+			return { ok : false, reason : "#arguments.key# is not a plain list (#tail#)" }
+		}
+		var head = lines[ at ].mid( parts.pos[ 2 ], parts.len[ 2 ] )
+		var inner = lines[ at ].mid( parts.pos[ 3 ], parts.len[ 3 ] ).trim()
+		var rest = lines[ at ].mid( parts.pos[ 4 ], parts.len[ 4 ] )
+		lines[ at ] = head & "[ " & ( len( inner ) ? inner & ", " : "" ) & arguments.value & " ]" & rest
+		return { ok : true, text : lines.toList( eolOf( arguments.text ) ) }
+	}
+
+	/**
 	 * @text The YAML file's text
 	 * @key The top-level key
 	 * @blockLines The key and its value, at indent 0

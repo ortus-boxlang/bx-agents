@@ -63,7 +63,7 @@ Always use the `--flag=value` form. The space-separated form is not supported.
 Scaffold a new agent project.
 :::
 ::: card title="add" icon="phosphor-duotone:plus-circle" href="#add"
-Add a tool, interceptor, schedule, MCP server, named model or gateway to an existing project.
+Add a tool, interceptor, schedule, MCP server, named model, gateway or subagent to an existing project.
 :::
 ::: card title="build" icon="phosphor-duotone:hammer" href="#build"
 Run the full build pipeline.
@@ -147,7 +147,7 @@ bxAgents new my-agent --forgebox=some-package-slug
 
 ### `add`
 
-Add one thing to a project that already exists, asking the same questions `new` asks. Today that is a `tool`, an `interceptor`, a `schedule`, an `mcp` server, a `model` or a `gateway`.
+Add one thing to a project that already exists, asking the same questions `new` asks. Today that is a `tool`, an `interceptor`, a `schedule`, an `mcp` server, a `model`, a `gateway` or a `subagent`.
 
 ```bash
 bxAgents add                        # pick what to add
@@ -309,6 +309,25 @@ The platforms are the ones the new wizard offers: `telegram`, `slack`, `discord`
 | `--users=<name:hash,...>` | `web` with `users`: each hash comes from `bxAgents hash-password`. A password is never taken as a flag; at a terminal you type it, hidden, and only its hash is stored. |
 
 After a chat platform is added, the output lists the steps that happen outside the project (creating the bot, a public address, a daemon) and which `.env` variables to fill in; `bxAgents doctor` reports any that are still not set. The HTTP API route has no authentication unless `agentApi.tokenEnvVar` is set in `Agent.yaml`.
+
+#### `add subagent`
+
+Adds a subagent: a whole agent under `subagents/<name>/` with its own model, tools, MCP servers, memory and guard, wired into a parent's `subAgents` list. At a terminal it asks the same questions as `new` (purpose, model, tools, search, files, memory, MCP, guard); the questions only a whole project needs (shape, channels, deploy) are left out.
+
+```bash
+bxAgents add subagent researcher                # asks
+bxAgents add subagent writer --model=openai/gpt-5 --description="Writes the answer"
+bxAgents add subagent checker --model=claude --parent=writer --with=search --search=brave --guard=flag
+```
+
+| Flag | Meaning |
+|---|---|
+| `--name=<name>` | The folder, or the first positional. A name any agent in the project already has is refused. |
+| `--parent=<folder>` | The agent that delegates to it: `.` for the root (the default) or the folder of another subagent, which is how they nest. |
+| `--model=<provider/model>` | Required without a terminal. |
+| `--description`, `--with`, `--search`, `--files`, `--files-dir`, `--memory`, `--mcp`, `--guard` | The same as [`new`](#new). |
+
+Writes `subagents/<name>/Agent.yaml` (with the `environments.test` mock model, so `bxAgents test` needs no key) and `instructions.md`, and adds an empty `.env` stub for each key the choices need. The name is inserted into the parent's `subAgents` without rewriting the file, so comments and order stay as they were. If the parent is a class, or its list is written in a shape that cannot be extended by inserting, nothing in it is changed and the line to add is printed. Packages a choice needs (`bx-playwright` for browsing) are named for you to add to `box.json`.
 
 ### `build`
 

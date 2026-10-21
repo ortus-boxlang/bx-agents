@@ -37,17 +37,18 @@ class {
 	 * @flags The options already given on the command line, as parsed by `new`
 	 * @suggestedName The name offered when the user just presses Enter, usually the folder name
 	 * @projectRoot Where the project will be created, for the command shown at the end
+	 * @stages The stages to run, in order; `add subagent` leaves out the ones that only make sense for a whole project (shape, channels, deploy, review). Defaults to all of them
 	 *
 	 * @return { plan, command } - the finished plan and the command that rebuilds it
 	 */
-	struct function run( struct flags = {}, string suggestedName = "", string projectRoot = "" ) {
+	struct function run( struct flags = {}, string suggestedName = "", string projectRoot = "", array stages = [] ) {
 		variables.flags = arguments.flags
 		variables.suggestedName = arguments.suggestedName
 		variables.projectRoot = arguments.projectRoot
 		variables.plan = variables.planner.fromFlags( arguments.flags )
 		// A flag-given name, model and the rest are already in the plan; the stages below
 		// only ask for what is missing, and show what was given.
-		var stages = static.STAGES
+		var stages = arguments.stages.len() ? arguments.stages : static.STAGES
 		var index = 1
 		var asked = []
 
