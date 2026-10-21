@@ -250,7 +250,14 @@
 		
 
 		
-		<h1 id="subagents"><a href="#subagents" id="subagents" name="subagents" class="anchor"></a>subagents/</h1>
+		<svg xmlns="http://www.w3.org/2000/svg" class="adm-hidden">
+<symbol id="adm-tip">
+<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="m12.3 10c2.8-.7 4.2-3.8 2.1-7.4 8.1 3.2 7.5 18.1-2.6 18.4-8.1.2-9.8-11.4-4.4-14.8.2 3.3 2.8 4.3 4.9 3.8zm-3.2 5.8c.2 1.6 2.5 1.9 3.6 1.5 2.8-1 2.5-4 2.1-5.1-.8 1.4-1.3 1.7-2.2 2s-3.7-.7-3.5 1.6z" fill="currentColor"/>
+</svg>
+</symbol>
+</svg>
+<h1 id="subagents"><a href="#subagents" id="subagents" name="subagents" class="anchor"></a>subagents/</h1>
 <p><code>subagents/</code> contiene agentes anidados, cada uno un proyecto BxAgents ordinario propio - un <code>Agent.yaml</code> + <code>instructions.md</code> (y opcionalmente sus propios <code>tools/</code>, <code>skills/</code>, etc.). El <code>tools/</code> de un subagente es solo suyo y su lista <code>tools:</code> es propia; nada se hereda ni se comparte con el padre:</p>
 <pre><code>my-agent/
 ├── Agent.yaml            # subAgents: [ researcher ]
@@ -269,6 +276,14 @@ subAgents:
 </code></pre>
 <p>La misma lista en un <code>Agent.bx</code> basado en clase (la <a href="/es/conventions/agent-bx/index.html">forma avanzada</a>) va en <code>configure()</code>, distinta del propio argumento <code>subAgents</code> de <code>super.init()</code> (que toma instancias de <code>AiAgent</code> ya construidas, no nombres). Un proyecto puede mezclar las dos formas: una raíz YAML con un subagente de clase, o al revés.</p>
 <p>En tiempo de build, el <code>addSubAgent()</code> propio de bx-ai envuelve cada instancia de subagente construida como una tool invocable en el padre automáticamente - no hay ningún paso separado de envoltura de tool que escribir tú mismo.</p>
+<div class="adm-block adm-tip">
+<div class="adm-heading">
+<svg class="adm-icon"><use xlink:href="#adm-tip" /></svg><span>Tip</span>
+</div>
+<div class="adm-body">
+<p><code>bxAgents add subagent &lt;name&gt;</code> crea la carpeta, hace las mismas preguntas que <code>new</code> para su modelo y herramientas, y lo añade al <code>subAgents</code> del padre. <code>--parent=&lt;carpeta&gt;</code> lo anida bajo otro subagente. Consulta <a href="/es/cli-reference/index.html#add-subagent"><code>add</code></a>.</p>
+</div>
+</div>
 <h2 id="namespace-plano-referencias-entre-hermanos"><a href="#namespace-plano-referencias-entre-hermanos" id="namespace-plano-referencias-entre-hermanos" name="namespace-plano-referencias-entre-hermanos" class="anchor"></a>Namespace plano, referencias entre hermanos</h2>
 <p>Cada subagente - sin importar cuán profundamente lo referencie la propia configuración de otro subagente - vive directamente bajo la carpeta <code>subagents/</code> del proyecto <strong>raíz</strong>. El propio <code>subAgents</code> declarado de un subagente referencia entradas <strong>hermanas</strong> en esa misma carpeta de nivel raíz, no una carpeta anidada bajo sí mismo. Esto mantiene simple el modelo de descubrimiento/validación: un único grafo dirigido plano sobre las subcarpetas inmediatas de <code>subagents/</code>, en lugar de un árbol que podría anidarse arbitrariamente profundo en disco.</p>
 <p>Plano en disco, un grafo en configuración, construido de abajo hacia arriba - las tres vistas del mismo proyecto:</p>
@@ -320,7 +335,7 @@ subAgents:
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/conventions/subagents.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/conventions/subagents.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Oct 21, 2026, 6&#x3a;05&#x3a;44 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20subagents%2F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fconventions%2Fsubagents%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/conventions/subagents.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/conventions/subagents.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Oct 21, 2026, 6&#x3a;25&#x3a;06 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20subagents%2F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fconventions%2Fsubagents%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 

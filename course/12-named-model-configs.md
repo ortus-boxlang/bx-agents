@@ -8,27 +8,21 @@ tags: [course, conventions, models]
 
 # Named Model Configs
 
-`models/` lets you define reusable, named model configurations as one `.bx` or `.json`
+`models/` lets you define reusable, named model configurations as one YAML or JSON
 file each, referenced from `Agent.yaml`'s `model` field by name (with no `/`, so it
 isn't mistaken for a `provider/model` slug - see [Lesson 5](05-agent-bx.md)).
 
-```javascript
-// models/summarizer.bx
-class {
-
-	function configure() {
-		return {
-			provider : "openai",
-			model    : "gpt-5-mini"
-		};
-	}
-
-}
+```yaml
+# models/summarizer.yaml
+provider: openai
+model: gpt-5-mini
+params:
+  temperature: 0.2
 ```
 
 ```yaml
 # Agent.yaml
-model: summarizer   # resolves against models/summarizer.bx
+model: summarizer   # resolves against models/summarizer.yaml
 ```
 
 ## Why bother with a named config instead of just writing the slug?
@@ -41,9 +35,9 @@ and you don't want to repeat it.
 
 ## Discovery rules
 
-- One entry per top-level `.bx` or `.json` file directly under `models/` - not
-  recursive.
-- The entry name is the file's base name (`summarizer.bx` becomes `summarizer`).
+- One entry per top-level `.yaml`, `.yml` or `.json` file directly under `models/` - not
+  recursive. (A `.bx` class returning the same struct still works.)
+- The entry name is the file's base name (`summarizer.yaml` becomes `summarizer`).
 - Dotfiles and unrecognized extensions (like a `README.md` left for your own notes)
   are ignored.
 - Two files resolving to the same name fail validation with a duplicate-name error.
@@ -59,11 +53,12 @@ surface as a confusing runtime error later.
 
 ## Try it
 
-Add a `models/fast.bx` config pointing at a smaller/cheaper model than your root
+Run `bxAgents add model fast` (or write a `models/fast.yaml`) pointing at a smaller/cheaper model than your root
 agent's default, then reference `model: "fast"` from a subagent's `Agent.yaml` - a
 natural fit for the researcher subagent from [Lesson 11](11-composing-subagents.md),
 which likely doesn't need your biggest model to do its job.
 
-Full reference: [models/](../conventions/models.md).
+Besides `provider` and `model`, an entry can carry `params` (such as `temperature`), `options`, and
+`apiKeyEnvVar` - the name of an environment variable to read its key from. Full reference: [models/](../conventions/models.md).
 
 Next: [Lesson 13 - Exposing Your Agent over HTTP and MCP](13-exposing-http-and-mcp.md)

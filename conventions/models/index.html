@@ -248,32 +248,46 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#discovery-rules">Discovery rules</a></li><li class="toc-level-2"><a href="#validation">Validation</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#what-an-entry-can-say">What an entry can say</a></li><li class="toc-level-2"><a href="#discovery-rules">Discovery rules</a></li><li class="toc-level-2"><a href="#validation">Validation</a></li></ul></details>
 		
 
 		
 		<h1 id="models"><a href="#models" id="models" name="models" class="anchor"></a>models/</h1>
-<p><code>models/</code> lets you define reusable, named model configurations as one <code>.bx</code> or <code>.json</code> file each, referenced from <code>Agent.yaml</code>'s <code>model</code> field by name (with no <code>/</code>, so it isn't mistaken for a <code>provider/model</code> slug):</p>
-<pre><code class="language-javascript">// models/summarizer.bx
-class {
-
-	function configure() {
-		return {
-			provider : &quot;openai&quot;,
-			model    : &quot;gpt-5-mini&quot;
-		};
-	}
-
-}
+<p><code>models/</code> holds reusable, named model configurations, one YAML or JSON file each: a provider, a model and the settings that go with them. An agent uses one by writing its name as <code>model</code> (with no <code>/</code>, so it isn't mistaken for a <code>provider/model</code> slug). Think <code>researcher</code>, <code>coder</code>, <code>summarizer</code>: the same configuration shared by several agents and subagents, written once.</p>
+<pre><code class="language-yaml"># models/researcher.yaml
+description: Cheap, careful model for research
+provider: openai
+model: gpt-5-mini
+params:
+  temperature: 0.2
+  max_tokens: 2000
 </code></pre>
-<pre><code class="language-yaml"># Agent.yaml - resolves against models/summarizer.bx
+<pre><code class="language-yaml"># Agent.yaml - resolves against models/researcher.yaml
 name: my-agent
-model: summarizer
+model: researcher
 </code></pre>
+<h2 id="what-an-entry-can-say"><a href="#what-an-entry-can-say" id="what-an-entry-can-say" name="what-an-entry-can-say" class="anchor"></a>What an entry can say</h2>
+<div class="bxsites-table-wrap"><table class="table">
+<thead>
+<tr><th>Key</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>provider</code></td><td>Required. A provider bx-ai knows: see <a href="/conventions/agent-bx/index.html#the-model-slug">the model slug</a>.</td></tr>
+<tr><td><code>model</code></td><td>The provider's model. Left out, the provider's own default applies.</td></tr>
+<tr><td><code>description</code></td><td>For people.</td></tr>
+<tr><td><code>apiKeyEnvVar</code></td><td>The <strong>name</strong> of an environment variable to read the key from, instead of the provider's usual one (<code>OPENAI_API_KEY</code>). Use it when two models of one provider need different keys. The key itself is never written in the file, and a missing variable stops the agent at start and names it.</td></tr>
+<tr><td><code>params</code></td><td>A mapping sent with every request: <code>temperature</code>, <code>max_tokens</code>, anything the provider takes.</td></tr>
+<tr><td><code>options</code></td><td>A mapping of bx-ai model options such as <code>timeout</code> or <code>logRequest</code>.</td></tr>
+</tbody>
+</table></div>
+<p>An unknown key, a <code>params</code> that is not a mapping, an unknown provider, and an <code>apiKey</code> written into <code>params</code> or <code>options</code> all fail <code>build</code> with the entry's name.</p>
+<p><code>bxAgents add model</code> writes one for you: see <a href="/cli-reference/index.html#add-model"><code>add</code></a>.</p>
+<p>A <code>.bx</code> class returning the same struct from <code>configure()</code> also still works, for projects that have one; YAML and JSON are what new entries use.</p>
 <h2 id="discovery-rules"><a href="#discovery-rules" id="discovery-rules" name="discovery-rules" class="anchor"></a>Discovery rules</h2>
 <ul>
-<li>One entry per top-level <code>.bx</code> or <code>.json</code> file directly under <code>models/</code> (not recursive).</li>
-<li>The entry name is the file's base name (<code>summarizer.bx</code> → <code>summarizer</code>).</li>
+<li>One entry per top-level <code>.yaml</code>, <code>.yml</code> or <code>.json</code> file directly under <code>models/</code> (not recursive), or a legacy <code>.bx</code> class.</li>
+<li>The entry name is the file's base name (<code>researcher.yaml</code> → <code>researcher</code>).</li>
+<li>A name that is also a provider (<code>openai</code>, <code>claude</code>, ...) would be read as the provider itself, so <code>add model</code> refuses it.</li>
 <li>Dotfiles and files with an unrecognized extension (like a <code>README.md</code> left in the folder for your own notes) are ignored.</li>
 <li>Two files resolving to the same name fail validation with a duplicate-name error.</li>
 </ul>
@@ -284,7 +298,7 @@ model: summarizer
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/conventions/models.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/conventions/models.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Oct 21, 2026, 6&#x3a;05&#x3a;44 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20models%2F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fconventions%2Fmodels%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/conventions/models.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/conventions/models.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Oct 21, 2026, 6&#x3a;25&#x3a;06 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20models%2F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fconventions%2Fmodels%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 
@@ -328,7 +342,7 @@ model: summarizer
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#discovery-rules">Discovery rules</a></li><li class="toc-level-2"><a href="#validation">Validation</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#what-an-entry-can-say">What an entry can say</a></li><li class="toc-level-2"><a href="#discovery-rules">Discovery rules</a></li><li class="toc-level-2"><a href="#validation">Validation</a></li></ul></nav>
 				</aside>
 			
 		</div>

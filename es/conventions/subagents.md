@@ -34,6 +34,9 @@ La misma lista en un `Agent.bx` basado en clase (la [forma avanzada](agent-bx.md
 
 En tiempo de build, el `addSubAgent()` propio de bx-ai envuelve cada instancia de subagente construida como una tool invocable en el padre automáticamente - no hay ningún paso separado de envoltura de tool que escribir tú mismo.
 
+!!! tip
+    `bxAgents add subagent <name>` crea la carpeta, hace las mismas preguntas que `new` para su modelo y herramientas, y lo añade al `subAgents` del padre. `--parent=<carpeta>` lo anida bajo otro subagente. Consulta [`add`](../cli-reference.md#add-subagent).
+
 ## Namespace plano, referencias entre hermanos
 
 Cada subagente - sin importar cuán profundamente lo referencie la propia configuración de otro subagente - vive directamente bajo la carpeta `subagents/` del proyecto **raíz**. El propio `subAgents` declarado de un subagente referencia entradas **hermanas** en esa misma carpeta de nivel raíz, no una carpeta anidada bajo sí mismo. Esto mantiene simple el modelo de descubrimiento/validación: un único grafo dirigido plano sobre las subcarpetas inmediatas de `subagents/`, en lugar de un árbol que podría anidarse arbitrariamente profundo en disco.

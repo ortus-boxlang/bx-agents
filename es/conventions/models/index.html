@@ -246,43 +246,57 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#reglas-de-descubrimiento">Reglas de descubrimiento</a></li><li class="toc-level-2"><a href="#validación">Validaci&oacute;n</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#qué-puede-decir-una-entrada">Qu&eacute; puede decir una entrada</a></li><li class="toc-level-2"><a href="#reglas-de-descubrimiento">Reglas de descubrimiento</a></li><li class="toc-level-2"><a href="#validación">Validaci&oacute;n</a></li></ul></details>
 		
 
 		
 		<h1 id="models"><a href="#models" id="models" name="models" class="anchor"></a>models/</h1>
-<p><code>models/</code> te permite definir configuraciones de modelo reutilizables y nombradas como un archivo <code>.bx</code> o <code>.json</code> cada una, referenciadas desde el campo <code>model</code> de <code>Agent.yaml</code> por nombre (sin <code>/</code>, así no se confunde con un slug <code>provider/model</code>):</p>
-<pre><code class="language-javascript">// models/summarizer.bx
-class {
-
-	function configure() {
-		return {
-			provider : &quot;openai&quot;,
-			model    : &quot;gpt-5-mini&quot;
-		};
-	}
-
-}
+<p><code>models/</code> guarda configuraciones de modelo reutilizables y nombradas, un archivo YAML o JSON cada una: un proveedor, un modelo y los ajustes que los acompañan. Un agente usa una escribiendo su nombre como <code>model</code> (sin <code>/</code>, así no se confunde con un slug <code>provider/model</code>). Piensa en <code>researcher</code>, <code>coder</code>, <code>summarizer</code>: la misma configuración compartida por varios agentes y subagentes, escrita una sola vez.</p>
+<pre><code class="language-yaml"># models/researcher.yaml
+description: Cheap, careful model for research
+provider: openai
+model: gpt-5-mini
+params:
+  temperature: 0.2
+  max_tokens: 2000
 </code></pre>
-<pre><code class="language-yaml"># Agent.yaml - se resuelve contra models/summarizer.bx
+<pre><code class="language-yaml"># Agent.yaml - se resuelve contra models/researcher.yaml
 name: my-agent
-model: summarizer
+model: researcher
 </code></pre>
+<h2 id="qué-puede-decir-una-entrada"><a href="#qué-puede-decir-una-entrada" id="qué-puede-decir-una-entrada" name="qué-puede-decir-una-entrada" class="anchor"></a>Qué puede decir una entrada</h2>
+<div class="bxsites-table-wrap"><table class="table">
+<thead>
+<tr><th>Clave</th><th>Significado</th></tr>
+</thead>
+<tbody>
+<tr><td><code>provider</code></td><td>Obligatoria. Un proveedor que bx-ai conoce: ver <a href="/es/conventions/agent-bx/index.html#the-model-slug">el slug de modelo</a>.</td></tr>
+<tr><td><code>model</code></td><td>El modelo del proveedor. Si se omite, se aplica el modelo por defecto del proveedor.</td></tr>
+<tr><td><code>description</code></td><td>Para las personas.</td></tr>
+<tr><td><code>apiKeyEnvVar</code></td><td>El <strong>nombre</strong> de una variable de entorno de la que leer la clave, en lugar de la habitual del proveedor (<code>OPENAI_API_KEY</code>). Úsala cuando dos modelos del mismo proveedor necesiten claves distintas. La clave nunca se escribe en el archivo, y si falta la variable el agente no arranca y la nombra.</td></tr>
+<tr><td><code>params</code></td><td>Un mapeo que se envía con cada petición: <code>temperature</code>, <code>max_tokens</code>, lo que acepte el proveedor.</td></tr>
+<tr><td><code>options</code></td><td>Un mapeo de opciones de modelo de bx-ai como <code>timeout</code> o <code>logRequest</code>.</td></tr>
+</tbody>
+</table></div>
+<p>Una clave desconocida, un <code>params</code> que no sea un mapeo, un proveedor desconocido y una <code>apiKey</code> escrita en <code>params</code> u <code>options</code> hacen fallar <code>build</code> con el nombre de la entrada.</p>
+<p><code>bxAgents add model</code> escribe una por ti: ver <a href="/es/cli-reference/index.html#add-model"><code>add</code></a>.</p>
+<p>Una clase <code>.bx</code> que devuelva el mismo struct desde <code>configure()</code> también sigue funcionando, para los proyectos que ya tengan una; las entradas nuevas usan YAML y JSON.</p>
 <h2 id="reglas-de-descubrimiento"><a href="#reglas-de-descubrimiento" id="reglas-de-descubrimiento" name="reglas-de-descubrimiento" class="anchor"></a>Reglas de descubrimiento</h2>
 <ul>
-<li>Una entrada por cada archivo <code>.bx</code> o <code>.json</code> de nivel superior directamente bajo <code>models/</code> (no recursivo).</li>
-<li>El nombre de la entrada es el nombre base del archivo (<code>summarizer.bx</code> → <code>summarizer</code>).</li>
+<li>Una entrada por cada archivo <code>.yaml</code>, <code>.yml</code> o <code>.json</code> de nivel superior directamente bajo <code>models/</code> (no recursivo), o una clase <code>.bx</code> heredada.</li>
+<li>El nombre de la entrada es el nombre base del archivo (<code>researcher.yaml</code> → <code>researcher</code>).</li>
+<li>Un nombre que también sea un proveedor (<code>openai</code>, <code>claude</code>, ...) se leería como el proveedor mismo, por lo que <code>add model</code> lo rechaza.</li>
 <li>Los dotfiles y los archivos con una extensión no reconocida (como un <code>README.md</code> dejado en la carpeta para tus propias notas) se ignoran.</li>
 <li>Dos archivos que resuelven al mismo nombre fallan la validación con un error de nombre duplicado.</li>
 </ul>
 <h2 id="validación"><a href="#validación" id="validación" name="validación" class="anchor"></a>Validación</h2>
-<p>Si el <code>model</code> del agente no tiene <code>/</code>, debe ser <strong>ya sea</strong> un nombre de proveedor central conocido (ver <a href="/es/conventions/agent-bx/index.html#the-model-slug">el slug de modelo</a>) <strong>o</strong> coincidir con el nombre de una entrada de <code>models/</code> - cualquier otra cosa falla la validación con un error claro de &quot;no provider and does not match any models/ entry&quot;.</p>
+<p>Si el <code>model</code> del agente no tiene <code>/</code>, debe ser <strong>ya sea</strong> un nombre de proveedor central conocido (ver <a href="/es/conventions/agent-bx/index.html#the-model-slug">el slug de modelo</a>) <strong>o</strong> coincidir con el nombre de una entrada de <code>models/</code> - cualquier otra cosa falla la validación con un error claro &quot;no provider and does not match any models/ entry&quot;.</p>
 
 	
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/conventions/models.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/conventions/models.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Oct 21, 2026, 6&#x3a;05&#x3a;44 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20models%2F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fconventions%2Fmodels%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/conventions/models.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/conventions/models.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Oct 21, 2026, 6&#x3a;25&#x3a;06 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20models%2F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fconventions%2Fmodels%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 
@@ -326,7 +340,7 @@ model: summarizer
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="En esta p&aacute;gina"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#reglas-de-descubrimiento">Reglas de descubrimiento</a></li><li class="toc-level-2"><a href="#validación">Validaci&oacute;n</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="En esta p&aacute;gina"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#qué-puede-decir-una-entrada">Qu&eacute; puede decir una entrada</a></li><li class="toc-level-2"><a href="#reglas-de-descubrimiento">Reglas de descubrimiento</a></li><li class="toc-level-2"><a href="#validación">Validaci&oacute;n</a></li></ul></nav>
 				</aside>
 			
 		</div>

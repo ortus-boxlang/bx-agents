@@ -248,11 +248,16 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#naming">Naming</a></li><li class="toc-level-2"><a href="#how-its-wired-at-runtime">How it&#x27;s wired at runtime</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#naming">Naming</a></li><li class="toc-level-2"><a href="#skills-from-the-registry">Skills from the registry</a></li><li class="toc-level-2"><a href="#how-its-wired-at-runtime">How it&#x27;s wired at runtime</a></li></ul></details>
 		
 
 		
 		<svg xmlns="http://www.w3.org/2000/svg" class="adm-hidden">
+<symbol id="adm-tip">
+<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="m12.3 10c2.8-.7 4.2-3.8 2.1-7.4 8.1 3.2 7.5 18.1-2.6 18.4-8.1.2-9.8-11.4-4.4-14.8.2 3.3 2.8 4.3 4.9 3.8zm-3.2 5.8c.2 1.6 2.5 1.9 3.6 1.5 2.8-1 2.5-4 2.1-5.1-.8 1.4-1.3 1.7-2.2 2s-3.7-.7-3.5 1.6z" fill="currentColor"/>
+</svg>
+</symbol>
 <symbol id="adm-info">
 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
 <path d="m20.5 11.8c0 4.5-3.7 8.2-8.2 8.2s-8.2-3.7-8.2-8.2 3.7-8.2 8.2-8.2 8.2 3.7 8.2 8.2zm-6.7 4c-.1-.1-.2-.2-.2-.3v-4.5c0-.1.1-.2.2-.4s.2-.3.2-.3 0-.1-.1-.1c-.1-.1-.5-.2-1.2-.4-.7-.1-1.2-.2-1.5-.2-.5 0-.7 0-.7.1s.1.3.2.6v4.7c0 .3-.1.5-.2.6-.2.2-.2.3-.2.3.1.1.5.3 1.2.4.6.1 1.2.2 1.6.2h.3c.4-.1.5-.2.5-.5.1 0 .1-.1-.1-.2zm-.9-8.6c-.7-.1-1.2-.2-1.5-.2-.2 0-.5.2-.7.4s-.3.4-.3.6c0 .1 0 .1.1.2s.6.2 1.5.4c1 .3 1.5.4 1.6.3.1 0 .2-.2.3-.5s.2-.5.2-.6v-.1c-.1-.1-.5-.3-1.2-.5z" fill="currentColor"/>
@@ -272,9 +277,19 @@ description: How to greet people warmly.
 
 Always greet the user warmly and use their name if known.
 </code></pre>
+<div class="adm-block adm-tip">
+<div class="adm-heading">
+<svg class="adm-icon"><use xlink:href="#adm-tip" /></svg><span>Tip</span>
+</div>
+<div class="adm-body">
+<p><code>bxAgents add skill &lt;name&gt;</code> creates <code>skills/&lt;name&gt;/SKILL.md</code> with the frontmatter and a body to fill in. See <a href="/cli-reference/index.html#add-skill"><code>add</code></a>.</p>
+</div>
+</div>
 <h2 id="naming"><a href="#naming" id="naming" name="naming" class="anchor"></a>Naming</h2>
 <p>The skill's name is its frontmatter <code>name:</code> if present; otherwise it falls back to the folder name (<code>greeting/</code> with no frontmatter name would be discovered as <code>greeting</code> anyway, but an explicit <code>name:</code> always wins even if it differs from the folder). Two skills resolving to the same name fail validation with a duplicate-name error.</p>
 <p>A folder without a <code>SKILL.md</code> inside it is not discovered as a skill at all - it's simply ignored (useful for scratch subfolders, assets kept alongside a skill under a different structure, etc., as long as they don't sit directly under <code>skills/</code> themselves without a <code>SKILL.md</code>).</p>
+<h2 id="skills-from-the-registry"><a href="#skills-from-the-registry" id="skills-from-the-registry" name="skills-from-the-registry" class="anchor"></a>Skills from the registry</h2>
+<p>Skills from skills.boxlang.io are installed with <code>bxAgents skills install &lt;owner/repo/skill&gt;</code>, not copied by hand. They go in <code>.agents/skills/</code> (bx-ai's own default folder), out of source control; <code>.agents/skills.lock.json</code> is committed and <code>build</code> restores from it. Both folders go into the build, and a skill in <code>skills/</code> with the same name wins. See <a href="/cli-reference/index.html#skills"><code>skills</code></a>.</p>
 <h2 id="how-its-wired-at-runtime"><a href="#how-its-wired-at-runtime" id="how-its-wired-at-runtime" name="how-its-wired-at-runtime" class="anchor"></a>How it's wired at runtime</h2>
 <p><code>skills/</code> is copied verbatim into the generated app (same wipe-then-write, dotfile-excluding copy as <a href="/conventions/tools/index.html"><code>tools/</code></a>). The generated <code>config/ColdBox.bx</code> always points bx-ai's own <code>skillsDirectory</code> module setting at <code>/skills</code>:</p>
 <pre><code class="language-javascript">moduleSettings = {
@@ -286,7 +301,7 @@ Always greet the user warmly and use their name if known.
 <svg class="adm-icon"><use xlink:href="#adm-info" /></svg><span>Info</span>
 </div>
 <div class="adm-body">
-<p>bx-ai's own default <code>skillsDirectory</code> is <code>/.agents/skills</code> - a different path than BxAgents' <code>skills/</code> convention. The generator always overrides it explicitly so your project's <code>skills/</code> folder is the one bx-ai actually loads from; you never need to set this yourself.</p>
+<p>bx-ai's own default <code>skillsDirectory</code> is <code>/.agents/skills</code> - a different path than BxAgents' <code>skills/</code> convention. The generator always overrides it explicitly so the app's <code>skills/</code> folder is the one bx-ai actually loads from. Skills installed under your project's <code>.agents/skills/</code> are copied into it at build time; you never need to set this yourself.</p>
 </div>
 </div>
 
@@ -294,7 +309,7 @@ Always greet the user warmly and use their name if known.
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/conventions/skills.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/conventions/skills.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Oct 21, 2026, 6&#x3a;05&#x3a;44 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20skills%2F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fconventions%2Fskills%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/conventions/skills.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/conventions/skills.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Oct 21, 2026, 6&#x3a;25&#x3a;06 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20skills%2F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fconventions%2Fskills%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 
@@ -338,7 +353,7 @@ Always greet the user warmly and use their name if known.
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#naming">Naming</a></li><li class="toc-level-2"><a href="#how-its-wired-at-runtime">How it&#x27;s wired at runtime</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#naming">Naming</a></li><li class="toc-level-2"><a href="#skills-from-the-registry">Skills from the registry</a></li><li class="toc-level-2"><a href="#how-its-wired-at-runtime">How it&#x27;s wired at runtime</a></li></ul></nav>
 				</aside>
 			
 		</div>

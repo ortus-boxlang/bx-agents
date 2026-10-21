@@ -34,6 +34,9 @@ The same list in a class-based `Agent.bx` (the [advanced form](agent-bx.md)) goe
 
 At build time, bx-ai's `addSubAgent()` wraps each built subagent instance as a callable tool on the parent automatically - there's no separate tool-wrapping step to write yourself.
 
+!!! tip
+    `bxAgents add subagent <name>` creates the folder, asks the same questions as `new` for its model and tools, and adds it to the parent's `subAgents`. `--parent=<folder>` nests it under another subagent. See [`add`](../cli-reference.md#add-subagent).
+
 ## Flat namespace, sibling references
 
 Every subagent - no matter how deeply another subagent's own config references it - lives directly under the **root** project's `subagents/` folder. A subagent's own declared `subAgents` names reference **sibling** entries in that same root-level folder, not a folder nested under itself. This keeps the discovery/validation model simple: one flat directed graph over `subagents/`'s immediate subfolders, rather than a tree that could nest arbitrarily deep on disk.

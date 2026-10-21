@@ -250,7 +250,14 @@
 		
 
 		
-		<h1 id="subagents"><a href="#subagents" id="subagents" name="subagents" class="anchor"></a>subagents/</h1>
+		<svg xmlns="http://www.w3.org/2000/svg" class="adm-hidden">
+<symbol id="adm-tip">
+<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="m12.3 10c2.8-.7 4.2-3.8 2.1-7.4 8.1 3.2 7.5 18.1-2.6 18.4-8.1.2-9.8-11.4-4.4-14.8.2 3.3 2.8 4.3 4.9 3.8zm-3.2 5.8c.2 1.6 2.5 1.9 3.6 1.5 2.8-1 2.5-4 2.1-5.1-.8 1.4-1.3 1.7-2.2 2s-3.7-.7-3.5 1.6z" fill="currentColor"/>
+</svg>
+</symbol>
+</svg>
+<h1 id="subagents"><a href="#subagents" id="subagents" name="subagents" class="anchor"></a>subagents/</h1>
 <p><code>subagents/</code> holds nested agents, each an ordinary BxAgents project of its own - an <code>Agent.yaml</code> + <code>instructions.md</code> (and optionally its own <code>tools/</code>, <code>skills/</code>, etc.). A subagent's <code>tools/</code> belong to it alone, and its <code>tools:</code> list is its own; neither is inherited from or shared with its parent:</p>
 <pre><code>my-agent/
 ├── Agent.yaml            # subAgents: [ researcher ]
@@ -269,6 +276,14 @@ subAgents:
 </code></pre>
 <p>The same list in a class-based <code>Agent.bx</code> (the <a href="/next/conventions/agent-bx/index.html">advanced form</a>) goes in <code>configure()</code>, distinct from <code>super.init()</code>'s own <code>subAgents</code> argument (which takes already-built <code>AiAgent</code> instances, not names). A project can mix the two forms: a YAML root with a class subagent, or the reverse.</p>
 <p>At build time, bx-ai's <code>addSubAgent()</code> wraps each built subagent instance as a callable tool on the parent automatically - there's no separate tool-wrapping step to write yourself.</p>
+<div class="adm-block adm-tip">
+<div class="adm-heading">
+<svg class="adm-icon"><use xlink:href="#adm-tip" /></svg><span>Tip</span>
+</div>
+<div class="adm-body">
+<p><code>bxAgents add subagent &lt;name&gt;</code> creates the folder, asks the same questions as <code>new</code> for its model and tools, and adds it to the parent's <code>subAgents</code>. <code>--parent=&lt;folder&gt;</code> nests it under another subagent. See <a href="/next/cli-reference/index.html#add-subagent"><code>add</code></a>.</p>
+</div>
+</div>
 <h2 id="flat-namespace-sibling-references"><a href="#flat-namespace-sibling-references" id="flat-namespace-sibling-references" name="flat-namespace-sibling-references" class="anchor"></a>Flat namespace, sibling references</h2>
 <p>Every subagent - no matter how deeply another subagent's own config references it - lives directly under the <strong>root</strong> project's <code>subagents/</code> folder. A subagent's own declared <code>subAgents</code> names reference <strong>sibling</strong> entries in that same root-level folder, not a folder nested under itself. This keeps the discovery/validation model simple: one flat directed graph over <code>subagents/</code>'s immediate subfolders, rather than a tree that could nest arbitrarily deep on disk.</p>
 <p>Flat on disk, a graph in config, built bottom-up - the three views of the same project:</p>
