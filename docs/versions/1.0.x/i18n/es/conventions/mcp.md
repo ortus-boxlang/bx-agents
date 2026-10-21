@@ -30,6 +30,9 @@ flowchart LR
 
 Nada vincula a los dos: un agente que consume servidores remotos no necesita hospedar uno, y un servidor hospedado solo es alcanzable si una entrada `gateways/` lo expone.
 
+!!! tip
+    `bxAgents add mcp client github` añade un servidor a `Agent.yaml` con su credencial como marcador de entorno, y `bxAgents add mcp server` escribe el archivo de `mcp/` y la entrada de `gateways/` que lo sirve. Ver [`add`](../cli-reference.md#add-mcp).
+
 ## Consumir servidores remotos
 
 Declarados directamente en `Agent.yaml` (no un archivo bajo `mcp/`), vía `mcpServers`:

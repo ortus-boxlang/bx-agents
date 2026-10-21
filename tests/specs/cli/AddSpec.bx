@@ -377,6 +377,233 @@ class extends="testbox.system.BaseSpec" {
 
 			} );
 
+			describe( "add mcp client", function() {
+
+				private function addMcp( required string root, struct flags = {}, array positionals = [ "mcp", "client" ] ) {
+					var options = { projectRoot : root, _positionals : positionals, yes : true };
+					options.append( flags );
+					return addVerb.run( options );
+				}
+
+				it( "adds a catalog server to Agent.yaml with its token as an environment placeholder, and a .env stub", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					var result = addMcp( root, {}, [ "mcp", "client", "github" ] );
+					var yaml = fileRead( root & "/Agent.yaml" );
+
+					expect( result.exitCode ).toBe( 0 );
+					expect( yaml ).toInclude( "mcpServers:" );
+					expect( yaml ).toInclude( "name: github" );
+					expect( yaml ).toInclude( 'url: "https://api.githubcopilot.com/mcp/"' );
+					expect( yaml ).toInclude( 'token: "${env.GITHUB_PERSONAL_ACCESS_TOKEN}"' );
+					expect( fileRead( root & "/.env" ) ).toInclude( "GITHUB_PERSONAL_ACCESS_TOKEN=" );
+					expect( result.message ).toInclude( "Read this before you let an agent use it" );
+				} );
+
+				it( "adds to an mcpServers list that exists and keeps what was there", function() {
+					var root = newTempProject( "with-mcp-credentials" );
+					var before = fileRead( root & "/Agent.yaml" );
+
+					addMcp( root, { url : "https://new.example.com/mcp", name : "fresh" } );
+					var after = fileRead( root & "/Agent.yaml" );
+
+					expect( after.find( before.rtrim() ) ).toBe( 1 );
+					expect( after ).toInclude( "name: fresh" );
+					expect( new bxagents.models.report.ProjectReport().build( root ).agent.mcpServers.map( m => m.name ) ).toInclude( "fresh" );
+				} );
+
+				it( "builds a custom server's entry from the sign-in method chosen", function() {
+					var root = newTempProject( "yaml-minimal" );
+					addMcp( root, { url : "https://a.example.com/mcp", name : "keyed", auth : "header", header : "X-Api-Key", env : "KEYED_KEY", timeout : "20000" } );
+					addMcp( root, { url : "https://b.example.com/mcp", name : "basic", auth : "basic", user : "ada", env : "BASIC_PASS" } );
+					addMcp( root, { url : "https://c.example.com/mcp", name : "open" } );
+
+					var yaml = fileRead( root & "/Agent.yaml" );
+
+					expect( yaml ).toInclude( 'X-Api-Key: "${env.KEYED_KEY}"' );
+					expect( yaml ).toInclude( "timeout: 20000" );
+					expect( yaml ).toInclude( "user: ada" );
+					expect( yaml ).toInclude( 'password: "${env.BASIC_PASS}"' );
+					expect( new bxagents.models.report.ProjectReport().build( root ).validation.errors ).toBeEmpty();
+				} );
+
+				it( "refuses an address that carries a key or a password, so Agent.yaml stays free of secrets", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					expect( function() {
+						addMcp( root, { url : "https://x.example.com/mcp?api_key=abc", name : "x" } );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					expect( function() {
+						addMcp( root, { url : "https://ada:hunter2@x.example.com/mcp", name : "x" } );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					expect( fileRead( root & "/Agent.yaml" ) ).notToInclude( "hunter2" );
+				} );
+
+				it( "refuses a server the agent already uses, by name or address", function() {
+					var root = newTempProject( "with-mcp-credentials" );
+
+					expect( function() {
+						addMcp( root, {}, [ "mcp", "client", "github" ] );
+					} ).toThrow( "BxAgents.McpExists" );
+					expect( function() {
+						addMcp( root, { url : "https://other.example.com/mcp", name : "again" } );
+					} ).toThrow( "BxAgents.McpExists" );
+				} );
+
+				it( "does not edit a class-based Agent.bx, and hands over the entry to paste", function() {
+					var root = newTempProject( "full-project" );
+					var before = fileRead( root & "/Agent.bx" );
+
+					expect( function() {
+						addMcp( root, {}, [ "mcp", "client", "github" ] );
+					} ).toThrow( "BxAgents.AgentNotEditable" );
+					expect( fileRead( root & "/Agent.bx" ) ).toBe( before );
+				} );
+
+				it( "will not guess a server when none is named and nothing can be asked", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					expect( function() {
+						addMcp( root );
+					} ).toThrow( "BxAgents.MissingAnswer" );
+				} );
+
+				it( "says a server that needs a local program is not available yet", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					expect( function() {
+						addMcp( root, {}, [ "mcp", "client", "git" ] );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+				} );
+
+				it( "writes into a subagent's own Agent.yaml with --agent", function() {
+					var root = createTempDirectory( prefix = "bxagents-cli-add-" );
+					tempDirs.append( root );
+					fileWrite( root & "/Agent.yaml", "name: top" & char( 10 ) & "model: mock/mock-model" & char( 10 ) & "subAgents: [ helper ]" & char( 10 ) );
+					fileWrite( root & "/instructions.md", "Be helpful." );
+					directoryCreate( root & "/subagents/helper" );
+					fileWrite( root & "/subagents/helper/Agent.yaml", "name: helper" & char( 10 ) & "model: mock/mock-model" & char( 10 ) );
+					fileWrite( root & "/subagents/helper/instructions.md", "Help." );
+
+					addMcp( root, { agent : "helper" }, [ "mcp", "client", "github" ] );
+
+					expect( fileRead( root & "/subagents/helper/Agent.yaml" ) ).toInclude( "name: github" );
+					expect( fileRead( root & "/Agent.yaml" ) ).notToInclude( "github" );
+				} );
+
+				it( "asks which server, how it signs in and for a name, then writes it after a review", function() {
+					var root = newTempProject( "yaml-minimal" );
+					var prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [ "custom", "https://mcp.acme.dev/mcp", "acme", "bearer", "ACME_TOKEN", "", "create" ] );
+
+					var result = addVerb.run( { projectRoot : root, _positionals : [ "mcp", "client" ], _prompter : prompter, _interactive : true } );
+
+					expect( prompter.remaining() ).toBe( 0 );
+					expect( result.exitCode ).toBe( 0 );
+					expect( fileRead( root & "/Agent.yaml" ) ).toInclude( 'token: "${env.ACME_TOKEN}"' );
+				} );
+
+				it( "asks which way when the positional does not say", function() {
+					var root = newTempProject( "yaml-minimal" );
+					var prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [ "client", "github", "", "", "create" ] );
+
+					addVerb.run( { projectRoot : root, _positionals : [ "mcp" ], _prompter : prompter, _interactive : true } );
+
+					expect( prompter.asked()[ 1 ].title ).toBe( "Which way?" );
+					expect( fileRead( root & "/Agent.yaml" ) ).toInclude( "name: github" );
+				} );
+
+			} );
+
+			describe( "add mcp server", function() {
+
+				private function projectWithTools() {
+					var root = newTempProject( "yaml-minimal" );
+					addTool( root, { description : "Weather", function : "getWeather" }, [ "tool", "Weather" ] );
+					addTool( root, { description : "Time", function : "getTime" }, [ "tool", "Clock" ] );
+					return root;
+				}
+
+				private function addServer( required string root, struct flags = {}, array positionals = [ "mcp", "server" ] ) {
+					var options = { projectRoot : root, _positionals : positionals, yes : true };
+					options.append( flags );
+					return addVerb.run( options );
+				}
+
+				it( "writes mcp/<name>.bx offering all the project's tools, and the gateways entry that serves it", function() {
+					var root = projectWithTools();
+
+					var result = addServer( root, { description : "Weather and time", cors : "*" }, [ "mcp", "server", "tools" ] );
+					var source = fileRead( root & "/mcp/tools.bx" );
+
+					expect( result.exitCode ).toBe( 0 );
+					expect( source ).toInclude( 'description : "Weather and time"' );
+					expect( source ).toInclude( 'cors        : "*"' );
+					expect( source ).toInclude( '"getWeather"' );
+					expect( source ).toInclude( '"getTime"' );
+					expect( fileRead( root & "/gateways/toolsMcp.bx" ) ).toInclude( 'target  : "tools"' );
+					expect( fileRead( root & "/gateways/toolsMcp.bx" ) ).toInclude( 'path    : "/mcp/tools"' );
+					expect( result.message ).toInclude( "no authentication of its own" );
+				} );
+
+				it( "validates and builds, and inspect shows the server and where it is served", function() {
+					var root = projectWithTools();
+					addServer( root, {}, [ "mcp", "server", "tools" ] );
+
+					new bxagents.models.cli.Build().run( { projectRoot : root } );
+					var report = new bxagents.models.report.ProjectReport().build( root );
+
+					expect( report.validation.errors ).toBeEmpty();
+					expect( report.mcpHosted[ 1 ].name ).toBe( "tools" );
+					expect( report.mcpHosted[ 1 ].tools ).toBe( [ "getTime", "getWeather" ] );
+					expect( report.gateways.filter( g => g.kind == "mcp" )[ 1 ].path ).toBe( "/mcp/tools" );
+					expect( fileRead( root & "/.build/app/Application.bx" ) ).toInclude( 'mcpServer( "tools"' );
+				} );
+
+				it( "can offer only some tools, and skip the HTTP entry", function() {
+					var root = projectWithTools();
+
+					addServer( root, { tools : "getTime", expose : false }, [ "mcp", "server", "clock" ] );
+
+					expect( fileRead( root & "/mcp/clock.bx" ) ).notToInclude( "getWeather" );
+					expect( fileExists( root & "/gateways/clockMcp.bx" ) ).toBeFalse();
+				} );
+
+				it( "refuses when the project has no tools to host, and says what to run", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					expect( function() {
+						addServer( root );
+					} ).toThrow( "BxAgents.NoToolsToHost" );
+				} );
+
+				it( "refuses a tool that is not in the project, a name in use and a path in use", function() {
+					var root = projectWithTools();
+					addServer( root, {}, [ "mcp", "server", "tools" ] );
+
+					expect( function() {
+						addServer( root, { tools : "nope" }, [ "mcp", "server", "other" ] );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					expect( function() {
+						addServer( root, {}, [ "mcp", "server", "tools" ] );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					expect( function() {
+						addServer( root, { path : "/mcp/tools" }, [ "mcp", "server", "other" ] );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+				} );
+
+				it( "asks for the name, description, version, tools, origins, whether to serve it, and the path", function() {
+					var root = projectWithTools();
+					var prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [ "helpers", "Helpers", "2.0.0", [ "getTime" ], "", true, "/mcp/helpers", "create" ] );
+
+					var result = addVerb.run( { projectRoot : root, _positionals : [ "mcp", "server" ], _prompter : prompter, _interactive : true } );
+
+					expect( prompter.remaining() ).toBe( 0 );
+					expect( result.exitCode ).toBe( 0 );
+					expect( fileRead( root & "/mcp/helpers.bx" ) ).toInclude( 'version     : "2.0.0"' );
+				} );
+
+			} );
+
 			describe( "the verb", function() {
 
 				it( "refuses a folder that is not an agent project", function() {

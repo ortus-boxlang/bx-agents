@@ -1,0 +1,128 @@
+/**
+ * Adds to an Agent.yaml without rewriting it. Nothing here parses YAML and nothing is
+ * moved: text is only ever inserted, so every comment, blank line and key order the
+ * person wrote stays exactly where it was.
+ *
+ * Two edits are enough for `add`:
+ *   - addItem():  put a new item at the end of a top-level list (`mcpServers:`)
+ *   - addBlock(): add a top-level key at the end of the file when it is not there yet
+ *
+ * When the key is written in a form that cannot be extended by inserting lines (the list
+ * inline as `mcpServers: [ a, b ]`, or a value on the same line), the edit is declined
+ * with the reason and the caller shows the text to paste instead of guessing.
+ */
+class {
+
+	/**
+	 * @text The YAML file's text
+	 * @key A top-level key whose value is a list
+	 * @itemLines The new item, at indent 0: [ "- name: x", "  url: y" ]
+	 *
+	 * @return { ok : true, text } on success; { ok : false, reason } when the key cannot be extended by inserting lines
+	 */
+	struct function addItem( required string text, required string key, required array itemLines ) {
+		var lines = split( arguments.text )
+		var at = keyLine( lines, arguments.key )
+
+		if ( !at ) {
+			return addBlock( arguments.text, arguments.key, [ arguments.key & ":" ].append( indentAll( arguments.itemLines, 2 ), true ) )
+		}
+
+		var tail = lines[ at ].reReplace( "^[^:]+:", "" ).reReplace( "\s+##.*$", "" ).trim()
+		if ( len( tail ) ) {
+			return { ok : false, reason : "#arguments.key# is written on one line (#tail#), so lines cannot be added to it" }
+		}
+
+		// The block is every following line that is blank, indented, or a list item at column 0
+		var last = at
+		var indent = ""
+		var j = at + 1
+		while ( j <= lines.len() ) {
+			var line = lines[ j ]
+			var isBlank = !len( trim( line ) )
+			var isIndented = reFind( "^\s+\S", line ) > 0
+			var isItem = reFind( "^-(\s|$)", line ) > 0
+			if ( !isBlank && !isIndented && !isItem ) {
+				break
+			}
+			if ( !isBlank && !reFind( "^\s*##", line ) ) {
+				last = j
+			}
+			if ( !len( indent ) && reFind( "^\s*-(\s|$)", line ) ) {
+				indent = line.reReplace( "^(\s*)-.*$", "\1" )
+			}
+			j++
+		}
+		if ( !len( indent ) && last == at ) {
+			indent = "  "
+		}
+
+		var added = indentAll( arguments.itemLines, len( indent ) )
+		var out = lines.slice( 1, last )
+		out.append( added, true )
+		out.append( lines.slice( last + 1 ), true )
+		return { ok : true, text : out.toList( eolOf( arguments.text ) ) }
+	}
+
+	/**
+	 * @text The YAML file's text
+	 * @key The top-level key
+	 * @blockLines The key and its value, at indent 0
+	 *
+	 * @return { ok : true, text } or { ok : false, reason } when the key already exists
+	 */
+	struct function addBlock( required string text, required string key, required array blockLines ) {
+		var lines = split( arguments.text )
+		if ( keyLine( lines, arguments.key ) ) {
+			return { ok : false, reason : "#arguments.key# is already in the file" }
+		}
+		var eol = eolOf( arguments.text )
+		var body = arguments.text
+		if ( len( body ) && !body.endsWith( char( 10 ) ) ) {
+			body &= eol
+		}
+		if ( len( trim( body ) ) ) {
+			body &= eol
+		}
+		return { ok : true, text : body & arguments.blockLines.toList( eol ) & eol }
+	}
+
+	/**
+	 * @text The YAML file's text
+	 * @key A top-level key
+	 *
+	 * @return True when the key is at column 0 (whatever follows it)
+	 */
+	boolean function hasKey( required string text, required string key ) {
+		return keyLine( split( arguments.text ), arguments.key ) > 0
+	}
+
+	private array function split( required string text ) {
+		return arguments.text.replace( char( 13 ) & char( 10 ), char( 10 ), "all" ).listToArray( char( 10 ), true )
+	}
+
+	/**
+	 * @return The file's own line ending, so an edit does not rewrite the lines it did not touch
+	 */
+	private string function eolOf( required string text ) {
+		return arguments.text.find( char( 13 ) & char( 10 ) ) ? char( 13 ) & char( 10 ) : char( 10 )
+	}
+
+	/**
+	 * @return The 1-based line the key starts on, or 0
+	 */
+	private numeric function keyLine( required array lines, required string key ) {
+		for ( var i = 1; i <= arguments.lines.len(); i++ ) {
+			if ( reFind( "^[""']?" & arguments.key & "[""']?\s*:", arguments.lines[ i ] ) ) {
+				return i
+			}
+		}
+		return 0
+	}
+
+	private array function indentAll( required array lines, required numeric spaces ) {
+		var pad = repeatString( " ", arguments.spaces )
+		return arguments.lines.map( l => len( l ) ? pad & l : l )
+	}
+
+}
