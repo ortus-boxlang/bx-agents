@@ -1,0 +1,295 @@
+/**
+ * `add schedule` - adds a task to `schedules/Scheduler.bx` that sends the agent a message
+ * on a schedule. Two questions matter: when it runs and what it asks the agent. Overlapping
+ * runs are always prevented, and ColdBox's scheduler logs each run, so neither is asked.
+ *
+ * `schedules/Scheduler.bx` is one hand-written ColdBox class, so the file is created if it
+ * is missing and otherwise the new task is put at the end of its `configure()`. If that
+ * method cannot be found the task is not guessed at: the error carries the text to paste.
+ */
+class {
+
+	struct function info() {
+		return { name : "schedule", summary : "Run the agent on a schedule (a task in schedules/Scheduler.bx)" }
+	}
+
+	/**
+	 * @answers An Answers
+	 * @ctx The add context
+	 *
+	 * @return { name, when : { kind, call, summary }, prompt, agent, binding }
+	 */
+	struct function ask( required any answers, required struct ctx ) {
+		var a = arguments.answers
+		var when = new "models.add.ScheduleWhen@bxagents"()
+
+		var phrase = ""
+		if ( a.interactive() && !a.given( "when" ) ) {
+			phrase = askWhen( a, when )
+		} else {
+			phrase = a.text(
+				key      = "when",
+				title    = "When should it run?",
+				help     = "e.g. every 15 minutes, daily 09:00, weekdays 08:30, weekly mon 09:00, monthly 1 09:00",
+				required = true,
+				validate = ( value ) => whenProblem( when, value )
+			)
+		}
+		var parsed = when.parse( phrase )
+
+		var taken = arguments.ctx.project.taskNames
+		var name = a.text(
+			key      = "name",
+			title    = "Task name",
+			help     = "How it shows up in the scheduler and its logs.",
+			default  = slug( parsed.summary ),
+			validate = ( value ) => nameProblem( value, taken )
+		)
+
+		var prompt = a.text(
+			key      = "prompt",
+			title    = "What should the agent do each time?",
+			help     = "The message it is sent, e.g. Summarize today's findings.",
+			required = true
+		)
+
+		var agent = "."
+		var choices = [ { value : ".", label : "The root agent", hint : arguments.ctx.project.agentNames[ "." ] } ]
+		for ( var sub in arguments.ctx.project.subagents ) {
+			choices.append( { value : sub, label : sub, hint : arguments.ctx.project.agentNames[ sub ] ?: sub } )
+		}
+		if ( choices.len() > 1 ) {
+			agent = a.select( key = "agent", title = "Which agent runs it?", choices = choices, default = "." )
+		} else if ( ( arguments.ctx.options.agent ?: "." ) != "." ) {
+			throw( type = "BxAgents.InvalidAnswer", message = "--agent: this project has no subagents" )
+		}
+
+		return {
+			name    : name,
+			when    : parsed,
+			prompt  : prompt,
+			agent   : agent,
+			binding : arguments.ctx.project.agentNames[ agent ]
+		}
+	}
+
+	/**
+	 * Builds the phrase from a few questions, so nobody has to remember it.
+	 *
+	 * @a An Answers that can ask
+	 * @when A ScheduleWhen
+	 *
+	 * @return A phrase ScheduleWhen.parse() accepts
+	 */
+	private string function askWhen( required any a, required any when ) {
+		var ans = arguments.a
+		var when = arguments.when
+		var kind = ans.select( key = "_kind", title = "How often?", choices = when.kinds(), default = "daily" )
+		var time = ( key ) => ans.text(
+			key      = key,
+			title    = "At what time?",
+			help     = "24 hour HH:mm, e.g. 09:00 or 17:30.",
+			default  = "09:00",
+			validate = ( value ) => reFind( "^([01]?[0-9]|2[0-3]):[0-5][0-9]$", value ) ? "" : "Use a 24 hour time like 09:00."
+		)
+
+		switch ( kind ) {
+			case "every":
+				var n = ans.text(
+					key = "_n", title = "How many?", default = "15",
+					validate = ( value ) => reFind( "^[1-9][0-9]*$", value ) ? "" : "A whole number, 1 or more."
+				)
+				var unit = ans.select( key = "_unit", title = "Of what?", choices = [ "minutes", "hours", "days" ], default = "minutes" )
+				return "every #n# #unit#"
+			case "hourly":
+				var minute = ans.text(
+					key = "_minute", title = "At which minute past the hour?", help = "0 is on the hour.", default = "0",
+					validate = ( value ) => reFind( "^[0-9]{1,2}$", value ) && int( value ) <= 59 ? "" : "A minute from 0 to 59."
+				)
+				return minute == "0" ? "hourly" : "hourly :#minute#"
+			case "weekly":
+				var day = ans.select(
+					key = "_day", title = "On which day?", default = "mon",
+					choices = [
+						{ value : "mon", label : "Monday" }, { value : "tue", label : "Tuesday" }, { value : "wed", label : "Wednesday" },
+						{ value : "thu", label : "Thursday" }, { value : "fri", label : "Friday" }, { value : "sat", label : "Saturday" },
+						{ value : "sun", label : "Sunday" }
+					]
+				)
+				return "weekly #day# #time( '_time' )#"
+			case "monthly":
+				var dom = ans.text(
+					key = "_dom", title = "On which day of the month?", help = "1 to 28.", default = "1",
+					validate = ( value ) => reFind( "^[0-9]{1,2}$", value ) && int( value ) >= 1 && int( value ) <= 28 ? "" : "A day from 1 to 28."
+				)
+				return "monthly #dom# #time( '_time' )#"
+			default:
+				return "#kind# #time( '_time' )#"
+		}
+	}
+
+	/**
+	 * @answers The answers from ask()
+	 * @ctx The add context
+	 * @changes A ChangeSet
+	 */
+	void function plan( required struct answers, required struct ctx, required any changes ) {
+		var task = renderTask( arguments.answers )
+		var path = "schedules/Scheduler.bx"
+		var file = arguments.ctx.root & "/" & path
+
+		if ( !fileExists( file ) ) {
+			arguments.changes.file( path, wrapScheduler( task ) )
+			return
+		}
+
+		var source = fileRead( file )
+		var at = insertionPoint( source )
+		if ( at == 0 ) {
+			throw(
+				type    = "BxAgents.SchedulerNotEditable",
+				message = "Could not find the end of configure() in #path#, so the task was not added. Paste this inside it:" & char( 10 ) & char( 10 ) & task
+			)
+		}
+		var before = left( source, at - 1 )
+		var kept = before.rtrim()
+		// the closing brace keeps the indentation it had, and the new task sits one blank line
+		// below the last one (right under the opening brace when configure() was empty)
+		var lastBreak = before.lastIndexOf( char( 10 ) )
+		var indent = before.mid( lastBreak + 2, len( before ) )
+		if ( indent.trim().len() ) {
+			indent = ""
+		}
+		var separator = kept.endsWith( "{" ) ? char( 10 ) : char( 10 ) & char( 10 )
+		arguments.changes.edit(
+			path,
+			kept & separator & task & char( 10 ) & indent & mid( source, at, len( source ) ),
+			task
+		)
+	}
+
+	/**
+	 * @return [ text ] what is left to do
+	 */
+	array function next( required struct answers, required struct ctx ) {
+		return [
+			"It runs #arguments.answers.when.summary# while the app is served: bxAgents build, then bxAgents serve.",
+			"The task calls getInstance( ""#arguments.answers.binding#"" ).run(), so that agent's name must stay as it is.",
+			"Check it with: bxAgents inspect --section=schedule"
+		]
+	}
+
+	// --------------------------------------------------------------------------
+
+	private string function renderTask( required struct answers ) {
+		var tab = char( 9 )
+		return [
+			tab & tab & 'task( "' & literal( arguments.answers.name ) & '" )',
+			tab & tab & tab & '.call( () => getInstance( "' & literal( arguments.answers.binding ) & '" ).run( "' & literal( arguments.answers.prompt ) & '" ) )',
+			tab & tab & tab & arguments.answers.when.call,
+			tab & tab & tab & ".withNoOverlaps()"
+		].toList( char( 10 ) )
+	}
+
+	private string function wrapScheduler( required string task ) {
+		return [
+			'class extends="coldbox.system.web.tasks.ColdBoxScheduler" {',
+			"",
+			char( 9 ) & "function configure() {",
+			arguments.task,
+			char( 9 ) & "}",
+			"",
+			"}",
+			""
+		].toList( char( 10 ) )
+	}
+
+	/**
+	 * The position of the brace that closes configure(): found by counting braces while
+	 * skipping strings and comments, so one inside a prompt does not throw it off.
+	 *
+	 * @source The scheduler's text
+	 *
+	 * @return 1-based position of that brace, or 0 when there is no configure() to put a task in
+	 */
+	private numeric function insertionPoint( required string source ) {
+		var start = reFind( "function\s+configure\s*\(", arguments.source )
+		if ( !start ) {
+			return 0
+		}
+		var open = arguments.source.find( "{", start )
+		if ( !open ) {
+			return 0
+		}
+		var depth = 0
+		var i = open
+		var n = len( arguments.source )
+		while ( i <= n ) {
+			var c = arguments.source.mid( i, 1 )
+			var pair = arguments.source.mid( i, 2 )
+			if ( pair == "//" ) {
+				var eol = arguments.source.find( char( 10 ), i )
+				i = eol ? eol : n + 1
+				continue
+			}
+			if ( pair == "/*" ) {
+				var close = arguments.source.find( "*/", i + 2 )
+				i = close ? close + 2 : n + 1
+				continue
+			}
+			if ( c == '"' || c == "'" ) {
+				i++
+				while ( i <= n && arguments.source.mid( i, 1 ) != c ) {
+					// a doubled quote is an escaped one, so it does not end the string
+					i += ( arguments.source.mid( i, 2 ) == c & c ) ? 2 : 1
+				}
+				i++
+				continue
+			}
+			if ( c == "{" ) {
+				depth++
+			} else if ( c == "}" ) {
+				depth--
+				if ( depth == 0 ) {
+					return i
+				}
+			}
+			i++
+		}
+		return 0
+	}
+
+	/**
+	 * A BoxLang string: quotes are doubled and a hash sign would start interpolation.
+	 */
+	private string function literal( required string text ) {
+		return arguments.text
+			.replace( char( 10 ), " ", "all" )
+			.replace( '"', '""', "all" )
+			.replace( char( 35 ), char( 35 ) & char( 35 ), "all" )
+	}
+
+	private string function slug( required string text ) {
+		return arguments.text.lcase().reReplace( "[^a-z0-9]+", "-", "all" ).reReplace( "^-+|-+$", "", "all" )
+	}
+
+	private string function whenProblem( required any when, required string value ) {
+		try {
+			arguments.when.parse( arguments.value )
+			return ""
+		} catch ( BxAgents.InvalidSchedule e ) {
+			return e.message
+		}
+	}
+
+	private string function nameProblem( required string value, required array taken ) {
+		if ( !reFind( "^[A-Za-z][A-Za-z0-9_-]*$", arguments.value ) ) {
+			return "[#arguments.value#] must start with a letter and use only letters, digits, - and _."
+		}
+		if ( arguments.taken.findNoCase( arguments.value ) ) {
+			return "A task named #arguments.value# already exists in schedules/Scheduler.bx."
+		}
+		return ""
+	}
+
+}

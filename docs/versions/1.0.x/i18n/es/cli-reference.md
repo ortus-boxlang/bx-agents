@@ -63,7 +63,7 @@ Usa siempre la forma `--flag=valor`. La forma con espacio no está soportada.
 Genera el andamiaje de un nuevo proyecto de agente.
 :::
 ::: card title="add" icon="phosphor-duotone:plus-circle" href="#add"
-Añade una herramienta o un interceptor a un proyecto existente.
+Añade una herramienta, un interceptor o una programación a un proyecto existente.
 :::
 ::: card title="build" icon="phosphor-duotone:hammer" href="#build"
 Ejecuta el pipeline de build completo.
@@ -147,7 +147,7 @@ bxAgents new my-agent --forgebox=some-package-slug
 
 ### `add`
 
-Añade una cosa a un proyecto que ya existe, haciendo las mismas preguntas que `new`. Hoy eso es una `tool` o un `interceptor`.
+Añade una cosa a un proyecto que ya existe, haciendo las mismas preguntas que `new`. Hoy eso es una `tool`, un `interceptor` o una `schedule`.
 
 ```bash
 bxAgents add                        # elige qué añadir
@@ -192,6 +192,39 @@ bxAgents add interceptor AiWatch --scope=runtime --points=beforeAIModelInvoke,on
 | `--scope=agent\|runtime` | `agent` (el valor por defecto) es un interceptor de ColdBox registrado en la app generada al arrancar; sus métodos reciben `( event, interceptData, rc, prc )`. `runtime` escucha los eventos que bx-ai anuncia en el runtime de BoxLang y recibe los datos del evento como único argumento; BxAgents lo copia a `.build/runtime-interceptors` pero no lo registra por ti. |
 | `--points=<list>` | Puntos de interceptación separados por comas. El selector ofrece los habituales; aquí se puede nombrar cualquier punto del núcleo de ColdBox (`agent`) o evento de bx-ai (`runtime`), y se rechaza un nombre que no sea un punto de ese ámbito. Por defecto `preProcess` (`agent`) o `beforeAIModelInvoke` (`runtime`). |
 | `--description=<text>` | Una línea para el docblock de la clase. Opcional. |
+
+#### `add schedule`
+
+Añade una tarea a `schedules/Scheduler.bx` que envía un mensaje al agente según una programación. Solo se pregunta cuándo se ejecuta y qué le dice al agente. Las ejecuciones solapadas siempre se evitan (`.withNoOverlaps()`).
+
+```bash
+bxAgents add schedule --when="weekdays 08:30" --prompt="Summarize yesterday's findings"
+bxAgents add schedule digest --when="every 15 minutes" --prompt="Check for new tickets" --agent=researcher
+bxAgents add schedule                          # pregunta cada cuánto, los detalles, un nombre y qué decir
+```
+
+| Flag | Significado |
+|---|---|
+| `--when=<phrase>` | Cuándo se ejecuta, con una de las frases de abajo. En una terminal, omítelo y se te pregunta cada cuánto y luego los detalles. |
+| `--prompt=<text>` | El mensaje que se envía al agente cada vez. |
+| `--name=<name>` | El nombre de la tarea, o el segundo posicional. Por defecto, un nombre hecho a partir de la frase. Se rechaza un nombre que ya esté en el scheduler. |
+| `--agent=<subagent>` | Qué agente la ejecuta. Solo se pregunta si el proyecto tiene subagentes; `.` (el valor por defecto) es el agente raíz. La tarea busca al agente por su `name` declarado, así que renombrar el agente obliga a editar la tarea. |
+
+| Frase | Se ejecuta |
+|---|---|
+| `every 15 minutes`, `every 2 hours`, `every 1 days` | En ese intervalo |
+| `hourly`, `hourly :15` | Cada hora, en punto o en ese minuto |
+| `daily 09:00` | Cada día a esa hora |
+| `weekdays 08:30`, `weekends 10:00` | De lunes a viernes, o sábado y domingo |
+| `weekly mon 09:00` | Una vez por semana (`mon` `tue` `wed` `thu` `fri` `sat` `sun`) |
+| `monthly 1 09:00` | Una vez al mes ese día, de 1 a 28 para que ningún mes se la salte |
+| `first-business-day 09:00`, `last-business-day 17:00` | Ese día laborable de cada mes |
+
+Las horas son `HH:mm` en formato de 24 horas, en la zona horaria del scheduler. No hay frase cron: el `ScheduledTask` de ColdBox no tiene método cron, así que para cualquier otra cosa escribe la tarea a mano con todo su DSL.
+
+- Si `schedules/Scheduler.bx` no existe, se crea. Si existe, la tarea se añade al final de `configure()` y el resto del archivo se deja como estaba.
+- Si no se encuentra `configure()`, no se cambia nada y el error incluye la tarea para pegarla.
+- Las tareas programadas se ejecutan mientras la app se sirve (`bxAgents serve`). Comprueba el resultado con `bxAgents inspect --section=schedule`.
 
 ### `build`
 
