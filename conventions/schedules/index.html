@@ -252,7 +252,14 @@
 		
 
 		
-		<h1 id="schedules"><a href="#schedules" id="schedules" name="schedules" class="anchor"></a>schedules/</h1>
+		<svg xmlns="http://www.w3.org/2000/svg" class="adm-hidden">
+<symbol id="adm-tip">
+<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="m12.3 10c2.8-.7 4.2-3.8 2.1-7.4 8.1 3.2 7.5 18.1-2.6 18.4-8.1.2-9.8-11.4-4.4-14.8.2 3.3 2.8 4.3 4.9 3.8zm-3.2 5.8c.2 1.6 2.5 1.9 3.6 1.5 2.8-1 2.5-4 2.1-5.1-.8 1.4-1.3 1.7-2.2 2s-3.7-.7-3.5 1.6z" fill="currentColor"/>
+</svg>
+</symbol>
+</svg>
+<h1 id="schedules"><a href="#schedules" id="schedules" name="schedules" class="anchor"></a>schedules/</h1>
 <p><code>schedules/Scheduler.bx</code> - if present - is a <strong>real, hand-written ColdBox scheduler class</strong>, passed through into the build untouched (a plain file copy to <code>config/Scheduler.bx</code>, no generation, no translation):</p>
 <pre><code class="language-javascript">// schedules/Scheduler.bx
 class extends=&quot;coldbox.system.web.tasks.ColdBoxScheduler&quot; {
@@ -266,7 +273,15 @@ class extends=&quot;coldbox.system.web.tasks.ColdBoxScheduler&quot; {
 
 }
 </code></pre>
-<p>There's nothing BxAgents-specific about the body of that file - it's ColdBox's own scheduler DSL, in full: <code>.cron( &quot;0 9 * * 1-5&quot; )</code>, <code>.everyWeekOn()</code>, <code>.startOn()</code>/<code>.endOn()</code>/<code>.between()</code>, <code>.when()</code>, <code>.withNoOverlaps()</code>, <code>before()</code>/<code>after()</code>/<code>onSuccess()</code>/<code>onFailure()</code> hooks, timezones - anything ColdBox's <code>ScheduledTask</code> supports, this project doesn't limit or reinterpret. (An earlier version of this convention was a <code>{ cron, action }</code> data shape translated into ColdBox's frequency-method DSL here - that translation only covered a narrow subset of cron and threw away everything else the real scheduler API offers, so it's gone. If you're migrating an old project, see below.)</p>
+<p>There's nothing BxAgents-specific about the body of that file - it's ColdBox's own scheduler DSL, in full: <code>.every( 15, &quot;minutes&quot; )</code>, <code>.everyDayAt( &quot;09:00&quot; )</code>, <code>.onWeekdays( &quot;08:30&quot; )</code>, <code>.everyWeekOn()</code>, <code>.startOn()</code>/<code>.endOn()</code>/<code>.between()</code>, <code>.when()</code>, <code>.withNoOverlaps()</code>, <code>before()</code>/<code>after()</code>/<code>onSuccess()</code>/<code>onFailure()</code> hooks, timezones - anything ColdBox's <code>ScheduledTask</code> supports, this project doesn't limit or reinterpret. (An earlier version of this convention was a <code>{ cron, action }</code> data shape translated into ColdBox's frequency-method DSL here - that translation only covered a narrow subset of cron and threw away everything else the real scheduler API offers, so it's gone. If you're migrating an old project, see below.)</p>
+<div class="adm-block adm-tip">
+<div class="adm-heading">
+<svg class="adm-icon"><use xlink:href="#adm-tip" /></svg><span>Tip</span>
+</div>
+<div class="adm-body">
+<p><code>bxAgents add schedule</code> adds a task for you: say when it runs and what to tell the agent. See <a href="/cli-reference/index.html#add-schedule"><code>add</code></a>.</p>
+</div>
+</div>
 <h2 id="retrieving-an-agent"><a href="#retrieving-an-agent" id="retrieving-an-agent" name="retrieving-an-agent" class="anchor"></a>Retrieving an agent</h2>
 <p>Every agent in the project's tree - the root project's own agent definition and every <code>subagents/*</code> entry, however deeply nested - is registered in the generated <code>config/WireBox.bx</code> under its own declared <code>name</code> (the <code>name</code> in its <code>Agent.yaml</code>, or, for a class-based <code>Agent.bx</code>, the one set via <code>super.init()</code> or a <code>configure()</code>-declared <code>name</code> overriding it). A schedule reaches whichever agent it wants with a plain <code>getInstance( &quot;TheAgentName&quot; )</code> - no BxAgents-specific lookup, just WireBox, exactly like the <code>getInstance()</code> calls elsewhere in a ColdBox app.</p>
 <pre><code class="language-yaml"># subagents/researcher/Agent.yaml
@@ -292,7 +307,7 @@ task( &quot;weekly-digest&quot; )
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/conventions/schedules.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/conventions/schedules.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Oct 21, 2026, 5&#x3a;47&#x3a;35 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20schedules%2F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fconventions%2Fschedules%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/conventions/schedules.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/conventions/schedules.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Oct 21, 2026, 6&#x3a;05&#x3a;08 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20schedules%2F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fconventions%2Fschedules%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 

@@ -24,7 +24,10 @@ class extends="coldbox.system.web.tasks.ColdBoxScheduler" {
 }
 ```
 
-No hay nada específico de BxAgents en el cuerpo de ese archivo - es el propio DSL de scheduler de ColdBox, en su totalidad: `.cron( "0 9 * * 1-5" )`, `.everyWeekOn()`, `.startOn()`/`.endOn()`/`.between()`, `.when()`, `.withNoOverlaps()`, hooks `before()`/`after()`/`onSuccess()`/`onFailure()`, zonas horarias - cualquier cosa que soporte el `ScheduledTask` de ColdBox, este proyecto no la limita ni la reinterpreta. (Una versión anterior de esta convención era una forma de datos `{ cron, action }` traducida en el DSL de método de frecuencia propio de ColdBox aquí - esa traducción solo cubría un subconjunto estrecho de cron y descartaba todo lo demás que ofrece la API real del scheduler, así que ya no existe. Si estás migrando un proyecto antiguo, ver abajo.)
+No hay nada específico de BxAgents en el cuerpo de ese archivo - es el propio DSL de scheduler de ColdBox, en su totalidad: `.every( 15, "minutes" )`, `.everyDayAt( "09:00" )`, `.onWeekdays( "08:30" )`, `.everyWeekOn()`, `.startOn()`/`.endOn()`/`.between()`, `.when()`, `.withNoOverlaps()`, hooks `before()`/`after()`/`onSuccess()`/`onFailure()`, zonas horarias - cualquier cosa que soporte el `ScheduledTask` de ColdBox, este proyecto no la limita ni la reinterpreta. (Una versión anterior de esta convención era una forma de datos `{ cron, action }` traducida en el DSL de método de frecuencia propio de ColdBox aquí - esa traducción solo cubría un subconjunto estrecho de cron y descartaba todo lo demás que ofrece la API real del scheduler, así que ya no existe. Si estás migrando un proyecto antiguo, ver abajo.)
+
+!!! tip
+    `bxAgents add schedule` añade una tarea por ti: indica cuándo se ejecuta y qué decirle al agente. Ver [`add`](../cli-reference.md#add-schedule).
 
 ## Recuperar un agente
 

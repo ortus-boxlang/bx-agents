@@ -250,7 +250,14 @@
 		
 
 		
-		<h1 id="schedules"><a href="#schedules" id="schedules" name="schedules" class="anchor"></a>schedules/</h1>
+		<svg xmlns="http://www.w3.org/2000/svg" class="adm-hidden">
+<symbol id="adm-tip">
+<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="m12.3 10c2.8-.7 4.2-3.8 2.1-7.4 8.1 3.2 7.5 18.1-2.6 18.4-8.1.2-9.8-11.4-4.4-14.8.2 3.3 2.8 4.3 4.9 3.8zm-3.2 5.8c.2 1.6 2.5 1.9 3.6 1.5 2.8-1 2.5-4 2.1-5.1-.8 1.4-1.3 1.7-2.2 2s-3.7-.7-3.5 1.6z" fill="currentColor"/>
+</svg>
+</symbol>
+</svg>
+<h1 id="schedules"><a href="#schedules" id="schedules" name="schedules" class="anchor"></a>schedules/</h1>
 <p><code>schedules/Scheduler.bx</code> - si está presente - es una <strong>clase de scheduler de ColdBox real y escrita a mano</strong>, pasada al build sin tocar (una simple copia de archivo a <code>config/Scheduler.bx</code>, sin generación, sin traducción):</p>
 <pre><code class="language-javascript">// schedules/Scheduler.bx
 class extends=&quot;coldbox.system.web.tasks.ColdBoxScheduler&quot; {
@@ -264,7 +271,15 @@ class extends=&quot;coldbox.system.web.tasks.ColdBoxScheduler&quot; {
 
 }
 </code></pre>
-<p>No hay nada específico de BxAgents en el cuerpo de ese archivo - es el propio DSL de scheduler de ColdBox, en su totalidad: <code>.cron( &quot;0 9 * * 1-5&quot; )</code>, <code>.everyWeekOn()</code>, <code>.startOn()</code>/<code>.endOn()</code>/<code>.between()</code>, <code>.when()</code>, <code>.withNoOverlaps()</code>, hooks <code>before()</code>/<code>after()</code>/<code>onSuccess()</code>/<code>onFailure()</code>, zonas horarias - cualquier cosa que soporte el <code>ScheduledTask</code> de ColdBox, este proyecto no la limita ni la reinterpreta. (Una versión anterior de esta convención era una forma de datos <code>{ cron, action }</code> traducida en el DSL de método de frecuencia propio de ColdBox aquí - esa traducción solo cubría un subconjunto estrecho de cron y descartaba todo lo demás que ofrece la API real del scheduler, así que ya no existe. Si estás migrando un proyecto antiguo, ver abajo.)</p>
+<p>No hay nada específico de BxAgents en el cuerpo de ese archivo - es el propio DSL de scheduler de ColdBox, en su totalidad: <code>.every( 15, &quot;minutes&quot; )</code>, <code>.everyDayAt( &quot;09:00&quot; )</code>, <code>.onWeekdays( &quot;08:30&quot; )</code>, <code>.everyWeekOn()</code>, <code>.startOn()</code>/<code>.endOn()</code>/<code>.between()</code>, <code>.when()</code>, <code>.withNoOverlaps()</code>, hooks <code>before()</code>/<code>after()</code>/<code>onSuccess()</code>/<code>onFailure()</code>, zonas horarias - cualquier cosa que soporte el <code>ScheduledTask</code> de ColdBox, este proyecto no la limita ni la reinterpreta. (Una versión anterior de esta convención era una forma de datos <code>{ cron, action }</code> traducida en el DSL de método de frecuencia propio de ColdBox aquí - esa traducción solo cubría un subconjunto estrecho de cron y descartaba todo lo demás que ofrece la API real del scheduler, así que ya no existe. Si estás migrando un proyecto antiguo, ver abajo.)</p>
+<div class="adm-block adm-tip">
+<div class="adm-heading">
+<svg class="adm-icon"><use xlink:href="#adm-tip" /></svg><span>Tip</span>
+</div>
+<div class="adm-body">
+<p><code>bxAgents add schedule</code> añade una tarea por ti: indica cuándo se ejecuta y qué decirle al agente. Ver <a href="/es/cli-reference/index.html#add-schedule"><code>add</code></a>.</p>
+</div>
+</div>
 <h2 id="recuperar-un-agente"><a href="#recuperar-un-agente" id="recuperar-un-agente" name="recuperar-un-agente" class="anchor"></a>Recuperar un agente</h2>
 <p>Cada agente en el árbol del proyecto - la propia definición de agente del proyecto raíz y cada entrada <code>subagents/*</code>, sin importar cuán profundamente anidada - se registra en el <code>config/WireBox.bx</code> generado bajo su propio <code>name</code> declarado (el <code>name</code> de su <code>Agent.yaml</code> o, en un <code>Agent.bx</code> basado en clase, el configurado vía <code>super.init()</code> o un <code>name</code> declarado en <code>configure()</code> que lo sobreescriba). Un schedule alcanza cualquier agente que quiera con un simple <code>getInstance( &quot;TheAgentName&quot; )</code> - sin búsqueda específica de BxAgents, solo WireBox, exactamente como las llamadas <code>getInstance()</code> en cualquier otro lugar de una app ColdBox.</p>
 <pre><code class="language-yaml"># subagents/researcher/Agent.yaml
@@ -290,7 +305,7 @@ task( &quot;weekly-digest&quot; )
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/conventions/schedules.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/conventions/schedules.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Oct 21, 2026, 5&#x3a;47&#x3a;35 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20schedules%2F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fconventions%2Fschedules%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/conventions/schedules.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/conventions/schedules.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Oct 21, 2026, 6&#x3a;05&#x3a;08 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20schedules%2F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fconventions%2Fschedules%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 
