@@ -248,7 +248,7 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#consuming-remote-servers">Consuming remote servers</a></li><li class="toc-level-2"><a href="#hosting-a-local-server">Hosting a local server</a></li><li class="toc-level-2"><a href="#exposing-a-local-server-over-http">Exposing a local server over HTTP</a></li><li class="toc-level-2"><a href="#validation">Validation</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#consuming-remote-servers">Consuming remote servers</a></li><li class="toc-level-3"><a href="#servers-that-run-as-a-program">Servers that run as a program</a></li><li class="toc-level-2"><a href="#hosting-a-local-server">Hosting a local server</a></li><li class="toc-level-2"><a href="#exposing-a-local-server-over-http">Exposing a local server over HTTP</a></li><li class="toc-level-2"><a href="#validation">Validation</a></li></ul></details>
 		
 
 		
@@ -291,23 +291,60 @@ mcpServers:
       X-Api-Key: ${env.OTHER_API_KEY}
     timeout: 20000
 </code></pre>
+<div class="bxsites-table-wrap" x-data="{ q: '' }"><input type="search" class="bxsites-table-filter" x-model="q" placeholder="Filter table..." aria-label="Filter table"><table class="table">
+<thead>
+<tr><th>Key</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>url</code></td><td>Required. The server's address</td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>name</code></td><td>A label for the file. It is not sent to the server</td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>token</code></td><td>A bearer token. Must be an <code>${env.NAME}</code> placeholder: a token written in the file is a build error</td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>password</code>, <code>user</code></td><td>Basic authentication. <code>password</code> must be an <code>${env.NAME}</code> placeholder</td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>headers</code></td><td>Extra request headers. Values can use <code>${env.NAME}</code></td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>timeout</code></td><td>Milliseconds</td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>allowedHosts</code></td><td>The host names the server's address may have, for example <code>[api.example.com, &quot;*.example.com&quot;]</code>. <code>*.example.com</code> matches any subdomain, not <code>example.com</code> itself. A request to any other host is refused before anything is sent</td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>redirects</code></td><td><code>false</code> treats a redirect answer as a failure and never follows it</td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>maxResponseBytes</code></td><td>Refuses an answer longer than this many characters</td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>handshake</code></td><td><code>true</code> sends the MCP <code>initialize</code> handshake before the first call</td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>prefix</code></td><td>Tools are named <code>prefix__tool</code>, so two servers cannot clash</td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>toolFilter</code></td><td>A list of tool names; only these are given to the agent</td></tr>
+</tbody>
+</table></div>
+<p>Placeholders are replaced with the environment variable <strong>when the app starts</strong>, never at build time, so a secret stays out of the project and out of a packaged <code>.bxa</code>. A variable that is not set fails the agent at startup and names it; one that is set but empty lets the agent start, the server refuses the connection, and bx-ai logs that and carries on without that server's tools. Any other key is a build error that lists the valid ones.</p>
+<p>The entries are passed into the generated <code>aiAgent(mcpServers: [...])</code> call. <strong>No network connection is ever attempted at build time</strong> - reachability is a runtime concern; an unreachable server at build time is not a build error. This section is for servers reached over the web; servers that run as a program on the agent's machine are next.</p>
+<p><a href="/guides/new-wizard/index.html#mcp-servers"><code>bxAgents new</code></a> offers GitHub, Stripe, Notion, Atlassian, Cloudflare, Supabase and Git and writes the entry and the <code>.env</code> stub for you.</p>
+<p>Subagents can declare their own <code>mcpServers</code> independently - each node in the agent tree gets its own resolved list.</p>
+<h3 id="servers-that-run-as-a-program"><a href="#servers-that-run-as-a-program" id="servers-that-run-as-a-program" name="servers-that-run-as-a-program" class="anchor"></a>Servers that run as a program</h3>
+<p>An entry with <code>command</code> starts an MCP server as a program on the machine that runs the agent, and talks to it over the program's standard input and output:</p>
+<pre><code class="language-yaml">mcpServers:
+  - name: git
+    command: [uvx, mcp-server-git]
+    prefix: git
+    toolFilter: [git_status, git_diff, git_log]
+  - name: browser
+    command: [bxplaywright, mcp]
+    env:
+      PLAYWRIGHT_API_KEY: ${env.PLAYWRIGHT_API_KEY}
+    cwd: .
+</code></pre>
 <div class="bxsites-table-wrap"><table class="table">
 <thead>
 <tr><th>Key</th><th>Meaning</th></tr>
 </thead>
 <tbody>
-<tr><td><code>url</code></td><td>Required. The server's address</td></tr>
-<tr><td><code>name</code></td><td>A label for the file. It is not sent to the server</td></tr>
-<tr><td><code>token</code></td><td>A bearer token. Must be an <code>${env.NAME}</code> placeholder: a token written in the file is a build error</td></tr>
-<tr><td><code>password</code>, <code>user</code></td><td>Basic authentication. <code>password</code> must be an <code>${env.NAME}</code> placeholder</td></tr>
-<tr><td><code>headers</code></td><td>Extra request headers. Values can use <code>${env.NAME}</code></td></tr>
-<tr><td><code>timeout</code></td><td>Milliseconds</td></tr>
+<tr><td><code>command</code></td><td>Required. A list: the program, then its arguments. It is never run through a shell</td></tr>
+<tr><td><code>name</code></td><td>A label for the file</td></tr>
+<tr><td><code>env</code></td><td>Environment variables for the program. A variable whose name contains <code>KEY</code>, <code>TOKEN</code>, <code>SECRET</code>, <code>PASSWORD</code> or <code>CREDENTIAL</code> must be an <code>${env.NAME}</code> placeholder</td></tr>
+<tr><td><code>cwd</code></td><td>The folder the program starts in</td></tr>
+<tr><td><code>inheritEnv</code></td><td><code>false</code> starts it with only <code>env</code>. Default <code>true</code></td></tr>
+<tr><td><code>maxRestarts</code></td><td>How many times in a row a program that died is started again. Default 2</td></tr>
+<tr><td><code>timeout</code></td><td>Milliseconds per request</td></tr>
+<tr><td><code>prefix</code>, <code>toolFilter</code></td><td>As for web servers</td></tr>
 </tbody>
 </table></div>
-<p>Placeholders are replaced with the environment variable <strong>when the app starts</strong>, never at build time, so a secret stays out of the project and out of a packaged <code>.bxa</code>. A variable that is not set fails the agent at startup and names it; one that is set but empty lets the agent start, the server refuses the connection, and bx-ai logs that and carries on without that server's tools. Any other key is a build error that lists the valid ones.</p>
-<p>The entries are passed into the generated <code>aiAgent(mcpServers: [...])</code> call. <strong>No network connection is ever attempted at build time</strong> - reachability is a runtime concern; an unreachable server at build time is not a build error. This is for servers reached over the web. Servers that run as a local program are not supported by the bx-ai bundled with this release.</p>
-<p><a href="/guides/new-wizard/index.html#mcp-servers"><code>bxAgents new</code></a> offers GitHub, Stripe, Notion, Atlassian, Cloudflare and Supabase and writes the entry and the <code>.env</code> stub for you.</p>
-<p>Subagents can declare their own <code>mcpServers</code> independently - each node in the agent tree gets its own resolved list.</p>
+<p>The program starts on the first call and is closed when the app stops. <code>command</code> cannot be combined with <code>url</code>, and the keys that only make sense for a web server (<code>token</code>, <code>headers</code>, <code>user</code>, <code>password</code>, <code>allowedHosts</code>, <code>redirects</code>, <code>maxResponseBytes</code>, <code>handshake</code>) are a build error on it.</p>
+<p>When the app starts, the programs your agents declare become bx-ai's <code>mcp.stdio.allowedCommands</code> setting, so the process starts only what the project declared. A list you set yourself (for example in <code>.boxlang.json</code>) is left alone and must name the programs. <a href="/cli-reference/index.html"><code>bxAgents doctor</code></a> warns when a program is not on the PATH.</p>
+<p>A program runs with your user's rights on the machine that hosts the agent. Read what you start, and use <code>toolFilter</code> to limit what the agent may call.</p>
 <h2 id="hosting-a-local-server"><a href="#hosting-a-local-server" id="hosting-a-local-server" name="hosting-a-local-server" class="anchor"></a>Hosting a local server</h2>
 <p>Each <code>mcp/*.bx</code> file is a local MCP server your project hosts, exposing a subset of your <code>tools/</code> as MCP tools:</p>
 <pre><code class="language-javascript">// mcp/localServer.bx
@@ -346,8 +383,9 @@ class {
 </code></pre>
 <h2 id="validation"><a href="#validation" id="validation" name="validation" class="anchor"></a>Validation</h2>
 <ul>
-<li>A remote <code>mcpServers</code> entry (struct form) missing <code>url</code> fails validation.</li>
-<li>A remote <code>mcpServers</code> entry that's neither a non-empty string nor a <code>{url, ...}</code> struct fails validation.</li>
+<li>An <code>mcpServers</code> entry (struct form) needs a <code>url</code> or a <code>command</code>, not both and not neither.</li>
+<li>An <code>mcpServers</code> entry that's neither a non-empty string nor a struct fails validation.</li>
+<li>A <code>command</code> must be a list of non-empty words. A key for the other kind of server, an <code>env</code> secret written in the file, and a mistyped <code>allowedHosts</code>, <code>redirects</code>, <code>handshake</code>, <code>prefix</code> or <code>toolFilter</code> fail validation.</li>
 <li>A <code>gateways/</code> entry with <code>exposes: &quot;mcp&quot;</code> and a <code>target</code> that doesn't match any discovered <code>mcp/*</code> entry fails validation.</li>
 </ul>
 
@@ -355,7 +393,7 @@ class {
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/conventions/mcp.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/conventions/mcp.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Oct 21, 2026, 4&#x3a;09&#x3a;23 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20mcp%2F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fconventions%2Fmcp%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/conventions/mcp.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/conventions/mcp.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Oct 21, 2026, 4&#x3a;10&#x3a;03 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20mcp%2F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fconventions%2Fmcp%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 
@@ -399,7 +437,7 @@ class {
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#consuming-remote-servers">Consuming remote servers</a></li><li class="toc-level-2"><a href="#hosting-a-local-server">Hosting a local server</a></li><li class="toc-level-2"><a href="#exposing-a-local-server-over-http">Exposing a local server over HTTP</a></li><li class="toc-level-2"><a href="#validation">Validation</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#consuming-remote-servers">Consuming remote servers</a></li><li class="toc-level-3"><a href="#servers-that-run-as-a-program">Servers that run as a program</a></li><li class="toc-level-2"><a href="#hosting-a-local-server">Hosting a local server</a></li><li class="toc-level-2"><a href="#exposing-a-local-server-over-http">Exposing a local server over HTTP</a></li><li class="toc-level-2"><a href="#validation">Validation</a></li></ul></nav>
 				</aside>
 			
 		</div>

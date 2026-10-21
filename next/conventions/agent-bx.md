@@ -107,7 +107,7 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 | `openrouter/anthropic/claude-x` | `openrouter` | `anthropic/claude-x` |
 | `mock/mock-model` | `mock` | `mock-model` |
 
-If `model` has no `/` at all, it must be either a known core provider name or match a [`models/`](models.md) entry's name - validation rejects anything else. The recognized core providers are: `bedrock`, `claude`, `cohere`, `deepseek`, `docker`, `elevenlabs`, `gemini`, `grok`, `groq`, `huggingface`, `minimax`, `mistral`, `mock`, `ollama`, `openai`, `openai-compatible`, `openrouter`, `perplexity`, `voyage` (kept in sync with bx-ai's own `CORE_PROVIDERS`). `mock` is a real provider, useful for tests and CI - it never makes a network call.
+If `model` has no `/` at all, it must be either a known core provider name or match a [`models/`](models.md) entry's name - validation rejects anything else. The recognized core providers are: `bedrock`, `cartesia`, `claude`, `cloudflare`, `cohere`, `deepseek`, `docker`, `elevenlabs`, `gemini`, `grok`, `groq`, `huggingface`, `minimax`, `mistral`, `mock`, `ollama`, `openai`, `openai-compatible`, `openrouter`, `perplexity`, `voyage` (kept in sync with bx-ai's own `CORE_PROVIDERS`). `mock` is a real provider, useful for tests and CI - it never makes a network call.
 
 This slug-splitting convention is what a `configure()`-declared `model` string goes through - `super.init()`'s own `model` argument instead takes a real `AiModel` instance directly (`aiModel( provider: "...", params: { model: "..." } )`), since the class already speaks bx-ai's own API.
 

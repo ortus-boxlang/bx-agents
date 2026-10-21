@@ -36,7 +36,7 @@ environments:
 | `tools` | list of strings | Module tools this agent gets, as `item@module` or `*@module`. See [Tools](#tools). |
 | `toolOptions` | mapping | Options for a module's tools, keyed by module name. See [Tool options](#tool-options). |
 | `subAgents` | list of strings | Names of sibling folders under the root project's `subagents/`. See [subagents/](subagents.md). |
-| `mcpServers` | list | Remote MCP servers - each entry a URL string, or a mapping with `url`, `name` and the credentials the server wants (`token`, `headers`, `timeout`). See [mcp/](mcp.md). |
+| `mcpServers` | list | MCP servers - each entry a URL string, a mapping with `url` and the credentials the server wants (`token`, `headers`, `timeout`), or a mapping with `command` for a server that runs as a program (`env`, `cwd`, `prefix`, `toolFilter`). See [mcp/](mcp.md). |
 | `security` | mapping | Forwarded verbatim into the generated app's `bxai` module settings; bx-ai's own `SecurityDirector` turns it into guardrail middleware. |
 | `memory` | string or mapping | The agent's conversation memory. A bare string is the type (`cache`); a mapping is `{ type, ...config }` and is passed through to `aiMemory()`. |
 | `checkpointer` | mapping | `{ type: cache\|file\|jdbc, ...config }`. Defaults to `{ type: cache }` if omitted. |

@@ -246,7 +246,7 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#consumir-servidores-remotos">Consumir servidores remotos</a></li><li class="toc-level-2"><a href="#hospedar-un-servidor-local">Hospedar un servidor local</a></li><li class="toc-level-2"><a href="#exponer-un-servidor-local-sobre-http">Exponer un servidor local sobre HTTP</a></li><li class="toc-level-2"><a href="#validación">Validaci&oacute;n</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#consumir-servidores-remotos">Consumir servidores remotos</a></li><li class="toc-level-3"><a href="#servidores-que-se-ejecutan-como-programa">Servidores que se ejecutan como programa</a></li><li class="toc-level-2"><a href="#hospedar-un-servidor-local">Hospedar un servidor local</a></li><li class="toc-level-2"><a href="#exponer-un-servidor-local-sobre-http">Exponer un servidor local sobre HTTP</a></li><li class="toc-level-2"><a href="#validación">Validaci&oacute;n</a></li></ul></details>
 		
 
 		
@@ -289,23 +289,60 @@ mcpServers:
       X-Api-Key: ${env.OTHER_API_KEY}
     timeout: 20000
 </code></pre>
+<div class="bxsites-table-wrap" x-data="{ q: '' }"><input type="search" class="bxsites-table-filter" x-model="q" placeholder="Filter table..." aria-label="Filter table"><table class="table">
+<thead>
+<tr><th>Clave</th><th>Significado</th></tr>
+</thead>
+<tbody>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>url</code></td><td>Requerida. La dirección del servidor</td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>name</code></td><td>Una etiqueta para el archivo. No se envía al servidor</td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>token</code></td><td>Un bearer token. Debe ser un marcador <code>${env.NAME}</code>: un token escrito en el archivo es un error de build</td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>password</code>, <code>user</code></td><td>Autenticación básica. <code>password</code> debe ser un marcador <code>${env.NAME}</code></td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>headers</code></td><td>Encabezados extra de la petición. Los valores pueden usar <code>${env.NAME}</code></td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>timeout</code></td><td>Milisegundos</td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>allowedHosts</code></td><td>Los nombres de host que puede tener la dirección del servidor, por ejemplo <code>[api.example.com, &quot;*.example.com&quot;]</code>. <code>*.example.com</code> coincide con cualquier subdominio, no con <code>example.com</code>. Una petición a cualquier otro host se rechaza antes de enviar nada</td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>redirects</code></td><td><code>false</code> trata una redirección como un fallo y nunca la sigue</td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>maxResponseBytes</code></td><td>Rechaza una respuesta más larga que este número de caracteres</td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>handshake</code></td><td><code>true</code> envía el saludo <code>initialize</code> de MCP antes de la primera llamada</td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>prefix</code></td><td>Las tools se llaman <code>prefix__tool</code>, así dos servidores no pueden chocar</td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>toolFilter</code></td><td>Una lista de nombres de tools; solo estas se entregan al agente</td></tr>
+</tbody>
+</table></div>
+<p>Los marcadores se reemplazan por la variable de entorno <strong>cuando arranca la app</strong>, nunca en tiempo de build, así que un secreto se queda fuera del proyecto y de un <code>.bxa</code> empaquetado. Una variable que no está definida hace fallar el agente al arrancar y la nombra; una definida pero vacía deja arrancar al agente, el servidor rechaza la conexión, y bx-ai lo registra y sigue sin las tools de ese servidor. Cualquier otra clave es un error de build que lista las válidas.</p>
+<p>Las entradas se pasan a la llamada <code>aiAgent(mcpServers: [...])</code> generada. <strong>Nunca se intenta ninguna conexión de red en tiempo de build</strong> - la alcanzabilidad es una preocupación de tiempo de ejecución; un servidor inalcanzable en tiempo de build no es un error de build. Esta sección es para servidores a los que se llega por la web; los servidores que se ejecutan como programa en la máquina del agente van a continuación.</p>
+<p><a href="/es/guides/new-wizard/index.html#servidores-mcp"><code>bxAgents new</code></a> ofrece GitHub, Stripe, Notion, Atlassian, Cloudflare, Supabase y Git y escribe por ti la entrada y el marcador de <code>.env</code>.</p>
+<p>Los subagentes pueden declarar sus propios <code>mcpServers</code> de forma independiente - cada nodo en el árbol de agentes obtiene su propia lista resuelta.</p>
+<h3 id="servidores-que-se-ejecutan-como-programa"><a href="#servidores-que-se-ejecutan-como-programa" id="servidores-que-se-ejecutan-como-programa" name="servidores-que-se-ejecutan-como-programa" class="anchor"></a>Servidores que se ejecutan como programa</h3>
+<p>Una entrada con <code>command</code> arranca un servidor MCP como programa en la máquina que ejecuta el agente, y habla con él por la entrada y la salida estándar del programa:</p>
+<pre><code class="language-yaml">mcpServers:
+  - name: git
+    command: [uvx, mcp-server-git]
+    prefix: git
+    toolFilter: [git_status, git_diff, git_log]
+  - name: browser
+    command: [bxplaywright, mcp]
+    env:
+      PLAYWRIGHT_API_KEY: ${env.PLAYWRIGHT_API_KEY}
+    cwd: .
+</code></pre>
 <div class="bxsites-table-wrap"><table class="table">
 <thead>
 <tr><th>Clave</th><th>Significado</th></tr>
 </thead>
 <tbody>
-<tr><td><code>url</code></td><td>Requerida. La dirección del servidor</td></tr>
-<tr><td><code>name</code></td><td>Una etiqueta para el archivo. No se envía al servidor</td></tr>
-<tr><td><code>token</code></td><td>Un bearer token. Debe ser un marcador <code>${env.NAME}</code>: un token escrito en el archivo es un error de build</td></tr>
-<tr><td><code>password</code>, <code>user</code></td><td>Autenticación básica. <code>password</code> debe ser un marcador <code>${env.NAME}</code></td></tr>
-<tr><td><code>headers</code></td><td>Encabezados extra de la petición. Los valores pueden usar <code>${env.NAME}</code></td></tr>
-<tr><td><code>timeout</code></td><td>Milisegundos</td></tr>
+<tr><td><code>command</code></td><td>Requerida. Una lista: el programa y luego sus argumentos. Nunca se ejecuta a través de un shell</td></tr>
+<tr><td><code>name</code></td><td>Una etiqueta para el archivo</td></tr>
+<tr><td><code>env</code></td><td>Variables de entorno para el programa. Una variable cuyo nombre contenga <code>KEY</code>, <code>TOKEN</code>, <code>SECRET</code>, <code>PASSWORD</code> o <code>CREDENTIAL</code> debe ser un marcador <code>${env.NAME}</code></td></tr>
+<tr><td><code>cwd</code></td><td>La carpeta en la que arranca el programa</td></tr>
+<tr><td><code>inheritEnv</code></td><td><code>false</code> lo arranca solo con <code>env</code>. Por defecto <code>true</code></td></tr>
+<tr><td><code>maxRestarts</code></td><td>Cuántas veces seguidas se vuelve a arrancar un programa que murió. Por defecto 2</td></tr>
+<tr><td><code>timeout</code></td><td>Milisegundos por petición</td></tr>
+<tr><td><code>prefix</code>, <code>toolFilter</code></td><td>Igual que en los servidores web</td></tr>
 </tbody>
 </table></div>
-<p>Los marcadores se reemplazan por la variable de entorno <strong>cuando arranca la app</strong>, nunca en tiempo de build, así que un secreto se queda fuera del proyecto y de un <code>.bxa</code> empaquetado. Una variable que no está definida hace fallar el agente al arrancar y la nombra; una definida pero vacía deja arrancar al agente, el servidor rechaza la conexión, y bx-ai lo registra y sigue sin las tools de ese servidor. Cualquier otra clave es un error de build que lista las válidas.</p>
-<p>Las entradas se pasan a la llamada <code>aiAgent(mcpServers: [...])</code> generada. <strong>Nunca se intenta ninguna conexión de red en tiempo de build</strong> - la alcanzabilidad es una preocupación de tiempo de ejecución; un servidor inalcanzable en tiempo de build no es un error de build. Esto es para servidores a los que se llega por la web. Los servidores que se ejecutan como programa local no los admite el bx-ai incluido en esta versión.</p>
-<p><a href="/es/guides/new-wizard/index.html#servidores-mcp"><code>bxAgents new</code></a> ofrece GitHub, Stripe, Notion, Atlassian, Cloudflare y Supabase y escribe por ti la entrada y el marcador de <code>.env</code>.</p>
-<p>Los subagentes pueden declarar sus propios <code>mcpServers</code> de forma independiente - cada nodo en el árbol de agentes obtiene su propia lista resuelta.</p>
+<p>El programa arranca en la primera llamada y se cierra cuando la app se detiene. <code>command</code> no se puede combinar con <code>url</code>, y las claves que solo tienen sentido para un servidor web (<code>token</code>, <code>headers</code>, <code>user</code>, <code>password</code>, <code>allowedHosts</code>, <code>redirects</code>, <code>maxResponseBytes</code>, <code>handshake</code>) son un error de build en él.</p>
+<p>Cuando arranca la app, los programas que declaran tus agentes pasan a ser el ajuste <code>mcp.stdio.allowedCommands</code> de bx-ai, así el proceso solo arranca lo que declaró el proyecto. Una lista que fijes tú (por ejemplo en <code>.boxlang.json</code>) se respeta y debe nombrar los programas. <a href="/es/cli-reference/index.html"><code>bxAgents doctor</code></a> avisa cuando un programa no está en el PATH.</p>
+<p>Un programa se ejecuta con los permisos de tu usuario en la máquina que aloja el agente. Lee lo que arrancas y usa <code>toolFilter</code> para limitar lo que el agente puede llamar.</p>
 <h2 id="hospedar-un-servidor-local"><a href="#hospedar-un-servidor-local" id="hospedar-un-servidor-local" name="hospedar-un-servidor-local" class="anchor"></a>Hospedar un servidor local</h2>
 <p>Cada archivo <code>mcp/*.bx</code> es un servidor MCP local que tu proyecto hospeda, exponiendo un subconjunto de tus <code>tools/</code> como tools MCP:</p>
 <pre><code class="language-javascript">// mcp/localServer.bx
@@ -344,8 +381,9 @@ class {
 </code></pre>
 <h2 id="validación"><a href="#validación" id="validación" name="validación" class="anchor"></a>Validación</h2>
 <ul>
-<li>Una entrada remota de <code>mcpServers</code> (forma struct) que falte <code>url</code> falla la validación.</li>
-<li>Una entrada remota de <code>mcpServers</code> que no sea ni una cadena no vacía ni un struct <code>{url, ...}</code> falla la validación.</li>
+<li>Una entrada de <code>mcpServers</code> (forma struct) necesita un <code>url</code> o un <code>command</code>, no los dos y no ninguno.</li>
+<li>Una entrada de <code>mcpServers</code> que no sea ni una cadena no vacía ni un struct falla la validación.</li>
+<li>Un <code>command</code> debe ser una lista de palabras no vacías. Una clave del otro tipo de servidor, un secreto de <code>env</code> escrito en el archivo, y un <code>allowedHosts</code>, <code>redirects</code>, <code>handshake</code>, <code>prefix</code> o <code>toolFilter</code> mal escrito fallan la validación.</li>
 <li>Una entrada <code>gateways/</code> con <code>exposes: &quot;mcp&quot;</code> y un <code>target</code> que no coincida con ninguna entrada descubierta <code>mcp/*</code> falla la validación.</li>
 </ul>
 
@@ -353,7 +391,7 @@ class {
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/conventions/mcp.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/conventions/mcp.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Oct 21, 2026, 4&#x3a;09&#x3a;23 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20mcp%2F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fconventions%2Fmcp%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/conventions/mcp.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/conventions/mcp.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Oct 21, 2026, 4&#x3a;10&#x3a;03 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20mcp%2F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fconventions%2Fmcp%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 
@@ -397,7 +435,7 @@ class {
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="En esta p&aacute;gina"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#consumir-servidores-remotos">Consumir servidores remotos</a></li><li class="toc-level-2"><a href="#hospedar-un-servidor-local">Hospedar un servidor local</a></li><li class="toc-level-2"><a href="#exponer-un-servidor-local-sobre-http">Exponer un servidor local sobre HTTP</a></li><li class="toc-level-2"><a href="#validación">Validaci&oacute;n</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="En esta p&aacute;gina"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#consumir-servidores-remotos">Consumir servidores remotos</a></li><li class="toc-level-3"><a href="#servidores-que-se-ejecutan-como-programa">Servidores que se ejecutan como programa</a></li><li class="toc-level-2"><a href="#hospedar-un-servidor-local">Hospedar un servidor local</a></li><li class="toc-level-2"><a href="#exponer-un-servidor-local-sobre-http">Exponer un servidor local sobre HTTP</a></li><li class="toc-level-2"><a href="#validación">Validaci&oacute;n</a></li></ul></nav>
 				</aside>
 			
 		</div>

@@ -36,7 +36,7 @@ environments:
 | `tools` | lista de strings | Tools de módulos que recibe este agente, como `item@module` o `*@module`. Ver [Tools](#tools). |
 | `toolOptions` | mapping | Opciones de las tools de un módulo, con el nombre del módulo como clave. Ver [Opciones de tools](#opciones-de-tools). |
 | `subAgents` | lista de strings | Nombres de carpetas hermanas bajo el `subagents/` del proyecto raíz. Ver [subagents/](subagents.md). |
-| `mcpServers` | lista | Servidores MCP remotos - cada entrada es un string de URL, o un mapa con `url`, `name` y las credenciales que pida el servidor (`token`, `headers`, `timeout`). Ver [mcp/](mcp.md). |
+| `mcpServers` | lista | Servidores MCP - cada entrada es un string de URL, un mapa con `url` y las credenciales que pida el servidor (`token`, `headers`, `timeout`), o un mapa con `command` para un servidor que se ejecuta como programa (`env`, `cwd`, `prefix`, `toolFilter`). Ver [mcp/](mcp.md). |
 | `security` | mapa | Se reenvía tal cual a los ajustes del módulo `bxai` de la app generada; el `SecurityDirector` de bx-ai lo convierte en middleware de guardarraíles. |
 | `memory` | string o mapa | La memoria de conversación del agente. Un string suelto es el tipo (`cache`); un mapa es `{ type, ...config }` y se pasa a `aiMemory()`. |
 | `checkpointer` | mapa | `{ type: cache\|file\|jdbc, ...config }`. Por defecto `{ type: cache }` si se omite. |
