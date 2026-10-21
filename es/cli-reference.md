@@ -63,7 +63,7 @@ Usa siempre la forma `--flag=valor`. La forma con espacio no está soportada.
 Genera el andamiaje de un nuevo proyecto de agente.
 :::
 ::: card title="add" icon="phosphor-duotone:plus-circle" href="#add"
-Añade una herramienta, un interceptor o una programación a un proyecto existente.
+Añade una herramienta, un interceptor, una programación o un servidor MCP a un proyecto existente.
 :::
 ::: card title="build" icon="phosphor-duotone:hammer" href="#build"
 Ejecuta el pipeline de build completo.
@@ -153,7 +153,7 @@ bxAgents new my-agent --forgebox=some-package-slug
 
 ### `add`
 
-Añade una cosa a un proyecto que ya existe, haciendo las mismas preguntas que `new`. Hoy eso es una `tool`, un `interceptor` o una `schedule`.
+Añade una cosa a un proyecto que ya existe, haciendo las mismas preguntas que `new`. Hoy eso es una `tool`, un `interceptor`, una `schedule` o un servidor `mcp`.
 
 ```bash
 bxAgents add                        # elige qué añadir
@@ -231,6 +231,43 @@ Las horas son `HH:mm` en formato de 24 horas, en la zona horaria del scheduler. 
 - Si `schedules/Scheduler.bx` no existe, se crea. Si existe, la tarea se añade al final de `configure()` y el resto del archivo se deja como estaba.
 - Si no se encuentra `configure()`, no se cambia nada y el error incluye la tarea para pegarla.
 - Las tareas programadas se ejecutan mientras la app se sirve (`bxAgents serve`). Comprueba el resultado con `bxAgents inspect --section=schedule`.
+
+#### `add mcp`
+
+Añade un servidor MCP en cualquiera de las dos direcciones: uno al que el agente **llama** (se escribe en `Agent.yaml`), o uno que el proyecto **aloja** (`mcp/<name>.bx`).
+
+```bash
+bxAgents add mcp client github                 # un servidor del catálogo que usa el asistente de new
+bxAgents add mcp client --url=https://mcp.acme.dev/mcp --name=acme --auth=bearer --env=ACME_TOKEN
+bxAgents add mcp server tools --description="My tools"
+bxAgents add mcp                                # pregunta en qué dirección
+```
+
+**`add mcp client`** añade una entrada a la lista `mcpServers:` del agente. Un nombre del catálogo (`github`, `stripe`, `notion`, `atlassian`, `cloudflare`, `supabase`) rellena la dirección y el inicio de sesión; si no, indica `--url`. Los servidores que se ejecutan como programa local no se ofrecen, porque el bx-ai incluido en esta versión solo habla con servidores web.
+
+| Flag | Significado |
+|---|---|
+| `--url=<address>` | Un servidor que no está en el catálogo. Se rechaza una dirección con usuario, contraseña o clave: el secreto va en una variable de entorno. |
+| `--name=<label>` | Una etiqueta para `Agent.yaml`; no se envía al servidor. |
+| `--auth=none\|bearer\|header\|basic` | Cómo inicia sesión. `bearer` escribe `token`, `header` escribe `headers` (nómbralo con `--header=`), `basic` escribe `user` (con `--user=`) y `password`. |
+| `--env=<NAME>` | La variable de entorno que guarda la clave o contraseña. En `Agent.yaml` solo va el nombre, como `${env.NAME}`; se añade un `NAME=` vacío a `.env` para que lo rellenes. |
+| `--timeout=<ms>` | Opcional. |
+| `--agent=<subagent>` | Qué agente lo usa; `.` (el valor por defecto) es el agente raíz. |
+
+**`add mcp server`** escribe `mcp/<name>.bx` ofreciendo las herramientas del proyecto mediante el servidor MCP de bx-ai y, salvo que lo rechaces, una entrada `gateways/<name>Mcp.bx` que lo sirve por HTTP.
+
+| Flag | Significado |
+|---|---|
+| `--name=<name>` | El nombre del archivo y del servidor. Por defecto `tools`. |
+| `--description=<text>`, `--version=<x.y.z>` | Lo que ven otros agentes. |
+| `--tools=<list>` | Qué herramientas ofrecer. Por defecto todas las del agente raíz; se rechaza un nombre que no sea una de ellas. |
+| `--cors=<origin>` | Orígenes web que pueden llamarlo desde un navegador; `*` para cualquiera. Vacío para ninguno. |
+| `--expose` / `--no-expose`, `--path=<path>` | Si se sirve por HTTP y dónde (por defecto `/mcp/<name>`). Se rechaza una ruta que ya use otra entrada de `gateways/`. |
+
+La lista de herramientas se escribe al ejecutar el comando, así que una herramienta añadida después hay que añadirla a `mcp/<name>.bx`. La ruta servida no tiene autenticación propia: mantenla fuera de redes públicas o ponla detrás de un proxy que compruebe una credencial.
+
+- `Agent.yaml` se edita solo insertando líneas, así que sus comentarios y su formato se quedan como están. Si la lista no se puede ampliar así (escrita en una línea, por ejemplo), o la definición es un `Agent.bx` basado en clase, no se cambia nada y el error incluye la entrada para pegarla.
+- Se rechaza un servidor que el agente ya usa, por nombre o dirección.
 
 ### `build`
 
