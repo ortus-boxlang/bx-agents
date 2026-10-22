@@ -14,7 +14,7 @@
  *
  *   project     { root, name, description, definition, environment }
  *   agent       the root agent node
- *   ai          { provider, model, params, options, providers, profiles, defaultProfile, slots } the default model, other providers, named profiles and the capability defaults
+ *   ai          { provider, model, params, options, providers, profiles, defaultProfile, slots, keys : [ { name, usedBy : [ text ], set } ] } the default model, other providers, named profiles, the capability defaults, and the key variables they need
  *   gateways    [ { name, file, kind, summary, path } ]
  *   mcpHosted   [ { name, file, description, tools } ]
  *   interceptors[ { name, file, scope } ]
@@ -122,6 +122,7 @@ class {
 		}
 		var deploy = deployEntries( root, envUse )
 		registerProviderEnv( agents, envUse )
+		ai[ "keys" ] = aiKeys( ai, agents )
 
 		var validation = variables.validator.validate( root, discovery, config )
 
@@ -628,6 +629,49 @@ class {
 				noteEnv( arguments.envUse, envVar, "#agent.name# model (#agent.provider#)" )
 			}
 		}
+	}
+
+	/**
+	 * The key variables the models need: each agent's provider, each profile, each capability
+	 * default. A profile or agent that names its own variable uses that one; otherwise the
+	 * provider's usual one. `mock` and keyless providers need none. Only names and whether
+	 * each is set: no value is read into the report.
+	 *
+	 * @ai The ai section
+	 * @agents Every agent node
+	 *
+	 * @return [ { name, usedBy : [ text ], set } ] in the order first needed
+	 */
+	private array function aiKeys( required struct ai, required array agents ) {
+		var uses = {}
+		var order = []
+		var note = ( name, who ) => {
+			if ( !len( name ) ) {
+				return
+			}
+			if ( !uses.keyExists( name ) ) {
+				uses[ name ] = []
+				order.append( name )
+			}
+			if ( !uses[ name ].contains( who ) ) {
+				uses[ name ].append( who )
+			}
+		}
+		for ( var agent in arguments.agents ) {
+			if ( len( agent.apiKeyEnvVar ) ) {
+				note( agent.apiKeyEnvVar, agent.name )
+			} else if ( len( agent.provider ) ) {
+				note( variables.catalog.provider( agent.provider ).envVar ?: "", agent.name )
+			}
+		}
+		for ( var profile in arguments.ai.profiles ) {
+			var own = len( profile.apiKeyEnvVar ) ? profile.apiKeyEnvVar : ( variables.catalog.provider( profile.provider ).envVar ?: "" )
+			note( own, "profile #profile.name#" )
+		}
+		for ( var slot in arguments.ai.slots ) {
+			note( variables.catalog.provider( slot.provider ).envVar ?: "", slot.slot )
+		}
+		return order.map( name => { name : name, usedBy : uses[ name ], set : len( getSystemSetting( name, "" ) ) > 0 } )
 	}
 
 	/**

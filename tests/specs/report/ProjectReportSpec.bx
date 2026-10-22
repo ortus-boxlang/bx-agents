@@ -129,6 +129,20 @@ class extends="testbox.system.BaseSpec" {
 				expect( report.env.map( v => v.name ) ).toInclude( "OPENAI_API_KEY" );
 			} );
 
+			it( "lists the key variables the models need and whether each is set, never a value", function() {
+				var nl = char( 10 );
+				var report = reporter.build( newYamlProject( "name: keyed" & nl & "model: mock/mock-model" & nl & "profiles:" & nl & "  fast:" & nl & "    provider: openai" & nl & "    apiKeyEnv: REPORT_FAST_KEY" & nl & "  slow:" & nl & "    provider: claude" & nl & "embeddings:" & nl & "  provider: gemini" & nl ) );
+
+				var names = report.ai.keys.map( k => k.name );
+
+				expect( names ).toBe( [ "REPORT_FAST_KEY", "CLAUDE_API_KEY", "GEMINI_API_KEY" ] );
+				expect( report.ai.keys[ 1 ].usedBy ).toBe( [ "profile fast" ] );
+				expect( report.ai.keys[ 3 ].usedBy ).toBe( [ "embeddings" ] );
+				for ( var k in report.ai.keys ) {
+					expect( k ).notToHaveKey( "value" );
+				}
+			} );
+
 			it( "does not list a variable for the mock provider", function() {
 				var report = reporter.build( newYamlProject( "name: mocked#char( 10 )#model: mock/mock-model#char( 10 )#" ) );
 

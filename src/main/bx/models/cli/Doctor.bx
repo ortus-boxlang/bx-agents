@@ -67,6 +67,7 @@ class {
 		checkProjectValidation( root, discovery, config, checks )
 		checkWebUiDependencies( discovery, checks )
 		checkMcpPrograms( config, checks )
+		checkModelKeys( root, checks )
 
 		return finish( checks, arguments.options.json ?: false )
 	}
@@ -74,6 +75,33 @@ class {
 	// --------------------------------------------------------------------------
 	// Individual checks
 	// --------------------------------------------------------------------------
+
+	/**
+	 * Every provider the models use needs its key variable: the default model, each profile (its own
+	 * `apiKeyEnv` or the provider's usual variable), each capability default, and each subagent. A key
+	 * that is not set only fails when a call reaches that provider, so it is reported here. A warning, not
+	 * a failure: the key may live where the agent runs rather than on this machine, and `bxAgents test`
+	 * runs every profile on the mock provider, which needs none.
+	 *
+	 * @root The project root
+	 * @checks Accumulator array - append() any findings
+	 */
+	private void function checkModelKeys( required string root, required array checks ) {
+		var keys = []
+		try {
+			keys = new "models.report.ProjectReport@bxagents"().build( arguments.root ).ai.keys
+		} catch ( any e ) {
+			return
+		}
+		for ( var key in keys ) {
+			var who = key.usedBy.toList( ", " )
+			if ( key.set ) {
+				arguments.checks.append( { status : "ok", message : "#key.name# is set (#who#)" } )
+			} else {
+				arguments.checks.append( { status : "warn", message : "#key.name# is not set in the environment (#who#). A value in the project's .env works when the app is served; doctor never reads that file." } )
+			}
+		}
+	}
 
 	/**
 	 * Every `mcpServers` entry with a `command` starts a program on this machine. A program that is not on
