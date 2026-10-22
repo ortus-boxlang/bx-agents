@@ -613,6 +613,19 @@ chat:
 
 Si el archivo no existe, ambos están activados. Una clave que el archivo no conoce, o un valor de tipo equivocado, se informa al iniciar el chat en lugar de ignorarse.
 
+#### Archivos e imágenes en el mensaje
+
+| Escribe | Hace |
+|---|---|
+| `@` | Abre una lista de los archivos bajo la carpeta donde empezaste (hasta cinco niveles; se omiten las carpetas ocultas, `node_modules`, `build`, `dist`, `target`, `out`, `venv`). Sigue escribiendo para filtrar, Arriba y Abajo para moverte, Tab o Enter para elegir uno |
+| `@ruta/al/archivo` | Un archivo de texto en el mensaje: su contenido va con el mensaje, en su propio bloque, cortado a 100.000 caracteres. Un nombre que no es un archivo se avisa y queda como texto; el mensaje se envía igualmente |
+| `@imagen.png` | Una imagen (png, jpg, gif, webp), enviada como parte de imagen del mensaje |
+| Ctrl+V | Pega una imagen del portapapeles (necesita `wl-paste` o `xclip` en Linux, `pngpaste` en macOS; Windows usa PowerShell). Una ficha en la fila de ayuda muestra cuántas esperan |
+
+Con un mensaje van como máximo 4 imágenes, de hasta 5 MB cada una. Antes de enviar nada, el chat comprueba que el perfil puede ver: pon `vision: true` en un [perfil](models.md#what-the-project-knows-about-a-model) que pueda, y una imagen enviada a uno que no puede se rechaza con un mensaje en lugar de un error oscuro del proveedor. `/context` cuenta lo adjunto. La imagen llega al modelo como partes de imagen de `AiMessage` de bx-ai, con la forma que ese proveedor espera; por ahora solo se han probado proveedores de estilo OpenAI.
+
+Con `--connect`, los archivos y las imágenes viajan en `attachments` de la petición a `/__bxagents/events`, ver [Control de ejecución](conventions/agent-bx.md#run-control). Las plataformas de chat aún no aceptan adjuntos.
+
 #### Grabar un chat
 
 `--record` guarda lo que muestra la pantalla como un archivo `.cast` de [asciicast](https://docs.asciinema.org/manual/asciicast/v2/), útil para demos e informes de errores. `--record` solo escribe `chat-AAAAMMDD-HHMMSS.cast` en la carpeta actual, y `--record=demo.cast` le da nombre. Dentro del chat, `/record` empieza una grabación (`/record demo.cast` le da nombre) y `/record stop` la termina. Mientras está activa se ve un `● rec` rojo en la línea de ayuda, y el archivo se cierra al salir.

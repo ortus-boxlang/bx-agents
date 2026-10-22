@@ -613,6 +613,19 @@ chat:
 
 A missing file means both are on. A key the file does not know, or a value of the wrong kind, is reported when the chat starts instead of being ignored.
 
+#### Files and pictures in the message
+
+| Type | Does |
+|---|---|
+| `@` | Opens a list of the files under the folder you started in (up to five levels deep; hidden folders, `node_modules`, `build`, `dist`, `target`, `out`, `venv` are skipped). Keep typing to narrow it, Up and Down to move, Tab or Enter to take one |
+| `@path/to/file` | A text file in the message: its content goes with the message, in its own block, cut at 100,000 characters. A name that is not a file is reported and stays as plain text; the message is still sent |
+| `@picture.png` | A picture (png, jpg, gif, webp), sent as an image part of the message |
+| Ctrl+V | Pastes a picture from the clipboard (needs `wl-paste` or `xclip` on Linux, `pngpaste` on macOS; Windows uses PowerShell). A chip in the hint row shows how many are waiting |
+
+At most 4 pictures go with one message, each up to 5 MB. Before anything is sent the chat checks that the profile can see: set `vision: true` on a [profile](models.md#what-the-project-knows-about-a-model) that can, and a picture sent to one that cannot is refused with a message instead of an obscure provider error. `/context` counts what is attached. The picture is passed to the model as bx-ai's `AiMessage` image parts, in the shape that provider expects; only OpenAI-style providers have been tried so far.
+
+With `--connect` the files and pictures travel in the `attachments` of the request to `/__bxagents/events`, see [Run control](conventions/agent-bx.md#run-control). Chat platforms do not take attachments yet.
+
 #### Recording a chat
 
 `--record` saves what the screen shows as an [asciicast](https://docs.asciinema.org/manual/asciicast/v2/) `.cast` file, for demos and bug reports. `--record` alone writes `chat-YYYYMMDD-HHMMSS.cast` in the current folder, and `--record=demo.cast` names the file. Inside the chat, `/record` starts a recording (`/record demo.cast` names it) and `/record stop` finishes it. A red `● rec` shows on the hint line while it is on, and the file is finished when you leave.

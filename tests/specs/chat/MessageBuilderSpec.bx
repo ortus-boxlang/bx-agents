@@ -1,0 +1,155 @@
+/**
+ * What is sent for a message with images (bx-ai's own AiMessage parts, with the limits and the model checked in
+ * one place), and the @file mentions the terminal turns into attachments.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "MessageBuilder", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-images-" );
+				// a real 1x1 PNG
+				variables.png = toBinary( "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==" );
+				fileWrite( dir & "/shot.png", png );
+				variables.builder = new bxagents.models.chat.MessageBuilder();
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "sends text alone as the text, as before", function() {
+				expect( builder.build( "hello" ) ).toBe( { ok : true, input : "hello", images : 0 } );
+			} );
+
+			it( "adds an image file as an image part of the user message, with bx-ai's own AiMessage", function() {
+				var out = builder.build( "what is this?", [ { path : dir & "/shot.png" } ] );
+
+				expect( out.ok ).toBeTrue();
+				expect( out.images ).toBe( 1 );
+				expect( out.input.role ).toBe( "user" );
+				expect( out.input.content ).toHaveLength( 2 );
+				expect( out.input.content[ 1 ] ).toBe( { type : "text", text : "what is this?" } );
+				expect( out.input.content[ 2 ].type ).toBe( "image_url" );
+				expect( out.input.content[ 2 ].image_url.url ).toStartWith( "data:image/png;base64,iVBOR" );
+			} );
+
+			it( "adds image data that came over the wire, and gives an image with no text a line of text", function() {
+				var out = builder.build( "", [ { name : "paste.png", mime : "image/png", base64 : toBase64( png ) } ] );
+
+				expect( out.ok ).toBeTrue();
+				expect( out.input.content[ 1 ].text ).toBe( "(attached image)" );
+				expect( out.input.content[ 2 ].image_url.url ).toStartWith( "data:image/png;base64," );
+			} );
+
+			it( "refuses images for a model known not to see them, and lets an unknown one through", function() {
+				var blind = builder.build( "look", [ { path : dir & "/shot.png" } ], { vision : "no" } );
+				expect( blind.ok ).toBeFalse();
+				expect( blind.reason ).toInclude( "cannot see images" );
+
+				expect( builder.build( "look", [ { path : dir & "/shot.png" } ], { vision : "" } ).ok ).toBeTrue();
+				expect( builder.build( "look", [ { path : dir & "/shot.png" } ], { vision : "yes" } ).ok ).toBeTrue();
+				// text alone is always fine
+				expect( builder.build( "hi", [], { vision : "no" } ).ok ).toBeTrue();
+			} );
+
+			it( "refuses more than four images, a file that is not there, one that is not an image, and one that is too big", function() {
+				var five = [ 1, 2, 3, 4, 5 ].map( i => { path : dir & "/shot.png" } );
+				expect( builder.build( "x", five ).reason ).toInclude( "At most 4 images" );
+
+				expect( builder.build( "x", [ { path : dir & "/missing.png" } ] ).reason ).toInclude( "There is no image file" );
+
+				fileWrite( dir & "/page.svg", "<svg/>" );
+				expect( builder.build( "x", [ { path : dir & "/page.svg" } ] ).reason ).toInclude( "is not an image type models take" );
+
+				// a sparse file over the limit, without writing five megabytes
+				var big = createObject( "java", "java.io.RandomAccessFile" ).init( dir & "/big.png", "rw" );
+				big.setLength( 5242881 );
+				big.close();
+				expect( builder.build( "x", [ { path : dir & "/big.png" } ] ).reason ).toInclude( "larger than 5 MB" );
+			} );
+
+			it( "checks data that came over the wire: the type, base64 and the size", function() {
+				expect( builder.build( "x", [ { name : "a.svg", mime : "image/svg+xml", base64 : "AAAA" } ] ).reason ).toInclude( "not an image type" );
+				expect( builder.build( "x", [ { name : "a.png", mime : "image/png", base64 : "not base64 !!" } ] ).reason ).toInclude( "not valid base64" );
+				expect( builder.build( "x", [ { name : "a.png", mime : "image/png", base64 : "" } ] ).reason ).toInclude( "not valid base64" );
+				expect( builder.build( "x", [ { name : "big.png", mime : "image/png", base64 : repeatString( "A", 7500000 ) } ] ).reason ).toInclude( "larger than 5 MB" );
+			} );
+
+			it( "names the image types by file name", function() {
+				expect( builder.typeOf( "a.PNG" ) ).toBe( "image/png" );
+				expect( builder.typeOf( "x/y.jpeg" ) ).toBe( "image/jpeg" );
+				expect( builder.typeOf( "notes.txt" ) ).toBe( "" );
+				expect( builder.typeOf( "noextension" ) ).toBe( "" );
+			} );
+
+		} );
+
+		describe( "FileMentions", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-mentions-" );
+				directoryCreate( dir & "/src" );
+				fileWrite( dir & "/src/app.bx", "class {}" );
+				fileWrite( dir & "/notes.md", "## Notes" );
+				fileWrite( dir & "/with space.txt", "spaced" );
+				fileWrite( dir & "/shot.png", toBinary( "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==" ) );
+				fileWrite( dir & "/blob.bin", toBinary( "AAECAwQFBgc=" ) );
+				variables.mentions = new bxagents.models.cli.chat.FileMentions( dir );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "finds the mentions: bare, quoted, at the start or after a space, and not in the middle of a word", function() {
+				expect( mentions.mentions( "look at @src/app.bx and @notes.md" ) ).toBe( [ "src/app.bx", "notes.md" ] );
+				expect( mentions.mentions( '@"with space.txt" please' ) ).toBe( [ "with space.txt" ] );
+				expect( mentions.mentions( "mail bob@example.com" ) ).toBeEmpty();
+				expect( mentions.mentions( "nothing here" ) ).toBeEmpty();
+			} );
+
+			it( "reads a text file as an attachment, and an image as an image", function() {
+				var found = mentions.read( "explain @src/app.bx and @shot.png" );
+
+				expect( found.files ).toHaveLength( 1 );
+				expect( found.files[ 1 ].name ).toBe( "src/app.bx" );
+				expect( found.files[ 1 ].content ).toBe( "class {}" );
+				expect( found.images ).toHaveLength( 1 );
+				expect( found.images[ 1 ].path ).toInclude( "shot.png" );
+				expect( found.problems ).toBeEmpty();
+			} );
+
+			it( "reads a file once however many times it is mentioned", function() {
+				expect( mentions.read( "@notes.md and again @notes.md" ).files ).toHaveLength( 1 );
+			} );
+
+			it( "leaves something that only looks like a mention alone, and reports a path that is not there", function() {
+				var found = mentions.read( "thanks @bob, see @src/missing.bx" );
+				expect( found.files ).toBeEmpty();
+				expect( found.problems ).toBe( [ "There is no file @src/missing.bx." ] );
+			} );
+
+			it( "says when a mention is a folder or not text", function() {
+				var found = mentions.read( "@src and @blob.bin" );
+				expect( found.problems.toList( "|" ) ).toInclude( "@src is a folder" );
+				expect( found.problems.toList( "|" ) ).toInclude( "@blob.bin is not a text file" );
+				expect( found.files ).toBeEmpty();
+			} );
+
+			it( "cuts a very long text file and says so", function() {
+				fileWrite( dir & "/long.txt", repeatString( "x", 150000 ) );
+				var found = mentions.read( "@long.txt" );
+				expect( len( found.files[ 1 ].content ) ).toBeLT( 100100 );
+				expect( found.files[ 1 ].content ).toInclude( "the file was cut at 100,000 characters" );
+			} );
+
+		} );
+	}
+
+}
