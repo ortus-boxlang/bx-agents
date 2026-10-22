@@ -19,7 +19,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n __bxagents_needs_verb -s v -l version -d 'Show the module version'
 
     # verbs
-    complete -c $cmd -n __bxagents_needs_verb -a 'add' -d 'Add to a project: add <kind> [name] - a tool, interceptor, schedule, mcp, model, gateway,...'
+    complete -c $cmd -n __bxagents_needs_verb -a 'add' -d 'Add to a project: add <kind> [name] - a tool, interceptor, schedule, mcp, gateway,...'
     complete -c $cmd -n __bxagents_needs_verb -a 'build' -d 'Build a project into a generated app'
     complete -c $cmd -n __bxagents_needs_verb -a 'chat' -d 'Interactive REPL chat with a built agent'
     complete -c $cmd -n __bxagents_needs_verb -a 'clean' -d 'Remove a project\'s .build/ and dist/ output'
@@ -39,6 +39,7 @@ for cmd in bxAgents bxagents
 
     # flags and values of each verb
     complete -c $cmd -n '__bxagents_using_verb add' -l agent -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l api-key-env -x
     complete -c $cmd -n '__bxagents_using_verb add' -l args -x
     complete -c $cmd -n '__bxagents_using_verb add' -l auth -x
     complete -c $cmd -n '__bxagents_using_verb add' -l cors -x

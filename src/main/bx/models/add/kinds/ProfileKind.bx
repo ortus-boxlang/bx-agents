@@ -1,0 +1,181 @@
+/**
+ * `add profile` - a named combination of provider, model, settings and key, kept in the
+ * `profiles:` mapping of the root Agent.yaml (bx-ai's `profiles` setting). An agent picks
+ * one with `profile: <name>`, the app can start from one with `defaultProfile: <name>`, and
+ * the chat can switch to it with /profile.
+ *
+ *   profiles:
+ *     fast:
+ *       description: Cheap and quick
+ *       provider: openai
+ *       model: gpt-5-mini
+ *       params: { temperature: 0.2 }
+ *
+ * The API key is never typed here. The provider's usual variable is used; name another
+ * with --api-key-env when two profiles of one provider need different keys.
+ */
+class {
+
+	struct function info() {
+		return { name : "profile", summary : "A named model setup: provider, model, settings and key variable (profiles: in Agent.yaml)" }
+	}
+
+	/**
+	 * @answers An Answers
+	 * @ctx The add context
+	 *
+	 * @return { name, description, provider, model, apiKeyEnv, tuning, makeDefault, providerInfo, file }
+	 */
+	struct function ask( required any answers, required struct ctx ) {
+		var args = arguments.ctx.args ?: []
+		var a = arguments.answers.withPresets( { name : args.len() ? args[ 1 ] : "" } )
+		var questions = new "models.add.AiQuestions@bxagents"()
+		var parser = new "models.build.ModelSlugParser@bxagents"()
+		var root = questions.rootYaml( arguments.ctx, "A profile" )
+		var ai = arguments.ctx.project.report.ai ?: {}
+		var taken = ( ai.profiles ?: [] ).map( p => p.name )
+
+		var name = a.text(
+			key      = "name",
+			title    = "Profile name",
+			help     = "What agents write after profile:, e.g. fast or planner.",
+			required = true,
+			validate = ( value ) => nameProblem( value, taken, parser )
+		)
+		var description = a.text( key = "description", title = "What is it for? (optional)", default = "", help = "Shown next to the name in the chat's /profile list." )
+		var provider = questions.provider( a )
+		var info = questions.info( provider )
+		var model = a.text(
+			key     = "model",
+			title   = "Which model? (optional)",
+			help    = "e.g. gpt-5-mini. Empty uses the provider's own default.",
+			default = ""
+		)
+
+		var apiKeyEnv = ""
+		if ( len( info.envVar ?: "" ) ) {
+			apiKeyEnv = a.text(
+				key      = "api-key-env",
+				title    = "A different environment variable for its key? (optional)",
+				help     = "Empty uses #info.envVar#. Name another when two profiles of this provider need different keys.",
+				default  = "",
+				validate = ( value ) => !len( value ) || reFind( "^[A-Z][A-Z0-9_]*$", value ) ? "" : "Capital letters, digits and underscores, e.g. RESEARCH_KEY."
+			)
+			if ( apiKeyEnv == info.envVar ) {
+				apiKeyEnv = ""
+			}
+		}
+
+		var tuning = questions.tuning( a )
+		var makeDefault = a.confirm( key = "default", title = "Make it the default profile?", default = false, help = "The app starts on it, and agents without a profile of their own use it." )
+
+		return {
+			name         : name,
+			description  : description,
+			provider     : provider,
+			model        : model,
+			apiKeyEnv    : apiKeyEnv,
+			tuning       : tuning,
+			makeDefault  : makeDefault,
+			providerInfo : info,
+			file         : root.file,
+			manual       : ""
+		}
+	}
+
+	/**
+	 * @answers The answers from ask()
+	 * @ctx The add context
+	 * @changes A ChangeSet
+	 */
+	void function plan( required struct answers, required struct ctx, required any changes ) {
+		var a = arguments.answers
+		var questions = new "models.add.AiQuestions@bxagents"()
+		var editor = new "models.add.YamlEditor@bxagents"()
+		var yaml = new "models.wizard.YamlWriter@bxagents"()
+		var set = questions.settings( a.tuning )
+
+		var entry = {}
+		if ( len( a.description ) ) {
+			entry[ "description" ] = a.description
+		}
+		entry[ "provider" ] = a.provider
+		if ( len( a.model ) ) {
+			entry[ "model" ] = a.model
+		}
+		if ( len( a.apiKeyEnv ) ) {
+			entry[ "apiKeyEnv" ] = a.apiKeyEnv
+		}
+		if ( set.params.count() ) {
+			entry[ "params" ] = set.params
+		}
+		if ( set.options.count() ) {
+			entry[ "options" ] = set.options
+		}
+		var lines = [ a.name & ":" ]
+		lines.append( yaml.lines( entry, 2, [ "description", "provider", "model", "apiKeyEnv", "params", "options" ] ), true )
+
+		var root = questions.rootYaml( arguments.ctx, "A profile" )
+		var edit = editor.addEntry( root.text, "profiles", lines )
+		if ( !edit.ok ) {
+			arguments.answers.manual = "#root.file# was not changed: #edit.reason#. Add this under profiles:" & char( 10 ) & lines.map( l => "  " & l ).toList( char( 10 ) )
+			return
+		}
+		var text = edit.text
+		var added = "profiles: ... " & a.name
+
+		if ( a.makeDefault ) {
+			if ( editor.hasKey( text, "defaultProfile" ) ) {
+				arguments.answers.manualDefault = "#root.file# already has a defaultProfile, so it was not changed. Set defaultProfile: #a.name# there to make this the default."
+			} else {
+				var block = editor.addBlock( text, "defaultProfile", [ "defaultProfile: " & yaml.scalar( a.name ) ] )
+				text = block.text
+				added &= char( 10 ) & "defaultProfile: " & a.name
+			}
+		}
+		arguments.changes.edit( root.file, text, added )
+
+		var keyVar = len( a.apiKeyEnv ) ? a.apiKeyEnv : ( a.providerInfo.envVar ?: "" )
+		questions.envStub( arguments.changes, keyVar, a.providerInfo )
+	}
+
+	/**
+	 * @return [ text ] what is left to do
+	 */
+	array function next( required struct answers, required struct ctx ) {
+		var a = arguments.answers
+		var out = []
+		if ( len( a.manual ?: "" ) ) {
+			out.append( a.manual )
+		}
+		if ( len( a.manualDefault ?: "" ) ) {
+			out.append( a.manualDefault )
+		}
+		if ( !len( a.manual ?: "" ) ) {
+			out.append( "Use it in an agent: profile: #a.name#" )
+		}
+		var keyVar = len( a.apiKeyEnv ) ? a.apiKeyEnv : ( a.providerInfo.envVar ?: "" )
+		out.append( new "models.add.AiQuestions@bxagents"().keySteps( keyVar, a.providerInfo ), true )
+		out.append( "bxAgents inspect --section=ai" )
+		return out
+	}
+
+	// --------------------------------------------------------------------------
+
+	private string function nameProblem( required string value, required array taken, required any parser ) {
+		if ( !reFind( "^[A-Za-z][A-Za-z0-9_-]*$", arguments.value ) ) {
+			return "[#arguments.value#] must start with a letter and use only letters, digits, - and _."
+		}
+		if ( arguments.value.lcase() == "default" ) {
+			return "default is reserved: the default is built from provider, model and params. Pick another name and set defaultProfile."
+		}
+		if ( arguments.parser.isKnownProvider( arguments.value ) ) {
+			return "[#arguments.value#] is the name of a provider, so it cannot also be a profile. Pick another name."
+		}
+		if ( arguments.taken.findNoCase( arguments.value ) ) {
+			return "A profile named #arguments.value# already exists."
+		}
+		return ""
+	}
+
+}

@@ -56,6 +56,32 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.reason ).toInclude( "one line" );
 			} );
 
+			it( "adds an entry to the end of an existing mapping at the indent it uses", function() {
+				var text = "name: a" & nl & "profiles:" & nl & "    fast:" & nl & "        provider: openai" & nl & nl & "memory: cache" & nl;
+
+				var result = editor.addEntry( text, "profiles", [ "slow:", "  provider: claude" ] );
+
+				expect( result.ok ).toBeTrue();
+				expect( result.text ).toBe( "name: a" & nl & "profiles:" & nl & "    fast:" & nl & "        provider: openai" & nl & "    slow:" & nl & "      provider: claude" & nl & nl & "memory: cache" & nl );
+			} );
+
+			it( "adds the mapping as a new block when it is not there", function() {
+				var result = editor.addEntry( "name: a" & nl, "profiles", [ "fast:", "  provider: openai" ] );
+
+				expect( result.text ).toBe( "name: a" & nl & nl & "profiles:" & nl & "  fast:" & nl & "    provider: openai" & nl );
+			} );
+
+			it( "declines a mapping written on one line and an entry that is already there", function() {
+				expect( editor.addEntry( "profiles: {}" & nl, "profiles", [ "fast:" ] ).reason ).toInclude( "one line" );
+				expect( editor.addEntry( "profiles:" & nl & "  fast:" & nl & "    provider: openai" & nl, "profiles", [ "fast:" ] ).reason ).toInclude( "already has an entry named fast" );
+			} );
+
+			it( "does not mistake a nested key for an entry", function() {
+				var text = "profiles:" & nl & "  fast:" & nl & "    provider: openai" & nl;
+
+				expect( editor.addEntry( text, "profiles", [ "provider:", "  provider: claude" ] ).ok ).toBeTrue();
+			} );
+
 			it( "declines to add a block whose key is already there", function() {
 				expect( editor.addBlock( "memory: cache" & nl, "memory", [ "memory: file" ] ).ok ).toBeFalse();
 			} );

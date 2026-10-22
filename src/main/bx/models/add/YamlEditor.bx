@@ -3,8 +3,9 @@
  * moved: text is only ever inserted, so every comment, blank line and key order the
  * person wrote stays exactly where it was.
  *
- * Two edits are enough for `add`:
+ * Three edits are enough for `add`:
  *   - addItem():  put a new item at the end of a top-level list (`mcpServers:`)
+ *   - addEntry(): put a new entry at the end of a top-level mapping (`profiles:`)
  *   - addBlock(): add a top-level key at the end of the file when it is not there yet
  *
  * When the key is written in a form that cannot be extended by inserting lines (the list
@@ -60,6 +61,61 @@ class {
 		var added = indentAll( arguments.itemLines, len( indent ) )
 		var out = lines.slice( 1, last )
 		out.append( added, true )
+		out.append( lines.slice( last + 1 ), true )
+		return { ok : true, text : out.toList( eolOf( arguments.text ) ) }
+	}
+
+	/**
+	 * Puts a new entry at the end of a top-level mapping, creating the mapping when it is
+	 * not there yet. The entry is written at the indent the mapping's other entries use.
+	 *
+	 * @text The YAML file's text
+	 * @key A top-level key whose value is a mapping
+	 * @entryLines The new entry, at indent 0: [ "fast:", "  provider: openai" ]
+	 *
+	 * @return { ok : true, text } on success; { ok : false, reason } when the mapping is written inline (`profiles: {}`) or already has an entry of that name
+	 */
+	struct function addEntry( required string text, required string key, required array entryLines ) {
+		var lines = split( arguments.text )
+		var at = keyLine( lines, arguments.key )
+		var entryKey = arguments.entryLines[ 1 ].reReplace( ":.*$", "" ).trim()
+
+		if ( !at ) {
+			return addBlock( arguments.text, arguments.key, [ arguments.key & ":" ].append( indentAll( arguments.entryLines, 2 ), true ) )
+		}
+
+		var tail = lines[ at ].reReplace( "^[^:]+:", "" ).reReplace( "\s+##.*$", "" ).trim()
+		if ( len( tail ) ) {
+			return { ok : false, reason : "#arguments.key# is written on one line (#tail#), so lines cannot be added to it" }
+		}
+
+		// The block is every following line that is blank or indented
+		var last = at
+		var indent = ""
+		var j = at + 1
+		while ( j <= lines.len() ) {
+			var line = lines[ j ]
+			var isBlank = !len( trim( line ) )
+			if ( !isBlank && !reFind( "^\s+\S", line ) ) {
+				break
+			}
+			if ( !isBlank && !reFind( "^\s*##", line ) ) {
+				last = j
+				if ( !len( indent ) ) {
+					indent = line.reReplace( "^(\s*).*$", "\1" )
+				}
+				if ( len( line ) > len( indent ) && line.left( len( indent ) ) == indent && reFind( "^[""']?" & entryKey & "[""']?\s*:", line.mid( len( indent ) + 1, len( line ) ) ) ) {
+					return { ok : false, reason : "#arguments.key# already has an entry named #entryKey#" }
+				}
+			}
+			j++
+		}
+		if ( !len( indent ) ) {
+			indent = "  "
+		}
+
+		var out = lines.slice( 1, last )
+		out.append( indentAll( arguments.entryLines, len( indent ) ), true )
 		out.append( lines.slice( last + 1 ), true )
 		return { ok : true, text : out.toList( eolOf( arguments.text ) ) }
 	}
