@@ -33,6 +33,8 @@ image:         { provider: openai, model: gpt-image-1, size: 1024x1024 }
 
 `provider`, `model` y `params` son el modelo que usa todo agente cuando no dice otra cosa. `model: openai/gpt-5` sigue funcionando como atajo de `provider: openai` más `model: gpt-5`. `params` son parámetros de la petición como `temperature` y `max_tokens`. `options` (tiempo de espera y similares) se aplican al proveedor por defecto.
 
+`contextWindow` y `vision` dicen qué puede hacer el modelo por defecto, ver [Lo que el proyecto sabe de un modelo](#lo-que-el-proyecto-sabe-de-un-modelo).
+
 ## Otros proveedores
 
 `providers` guarda `params` y `options` de un proveedor por nombre, para los que usas mediante un perfil o un subagente. `bxAgents add provider` escribe uno por ti. La clave de cada proveedor se lee de su variable de entorno habitual (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, ...); `bxAgents doctor` avisa cuando falta alguna.
@@ -47,8 +49,30 @@ Un perfil es una combinación con nombre: un proveedor, un modelo, params, optio
 | `provider`, `model` | Sobre qué se ejecuta. Un perfil sin proveedor usa el proveedor por defecto. |
 | `params`, `options` | Se superponen a los del proveedor y a los por defecto: `params` del valor por defecto, luego el proveedor, luego el perfil. |
 | `apiKeyEnv` | El **nombre** de la variable que guarda la clave. Una clave nunca se escribe en `Agent.yaml`; un perfil que la tenga se rechaza. |
+| `contextWindow`, `vision` | Lo que el proyecto sabe del modelo, ver abajo. |
 
 Un perfil no puede llamarse `default` ni como un proveedor (`openai`, `claude`, ...), porque ambos se eligen por nombre. `defaultProfile` elige qué perfil se usa cuando nada pide otro. `bxAgents add profile` escribe un perfil (y `--default` el `defaultProfile`) sin tocar el resto del archivo; consulta [`add profile`](../cli-reference.md#add-profile).
+
+## Lo que el proyecto sabe de un modelo
+
+bx-ai no tiene forma de preguntarle a un modelo cuánto puede contener ni si puede ver imágenes, así que puedes decirlo tú, en el modelo por defecto y en cada perfil:
+
+```yaml
+contextWindow: 128000      # tokens que puede contener el modelo por defecto
+vision: true               # el modelo por defecto puede ver imágenes
+profiles:
+  fast:
+    provider: openai
+    model: gpt-5-mini
+    contextWindow: 400000
+    vision: false
+```
+
+`contextWindow` es un número entero de tokens y `vision` es `true` o `false`; `build` rechaza cualquier otra cosa. Ambos son opcionales y no se adivina nada: un modelo sin entrada simplemente es desconocido. bx-ai no los lee. El chat los muestra en `/info` y `/model`, y funciones posteriores los usan (la parte de la ventana que ocupa el contexto, y rechazar una imagen para un modelo que no puede verla).
+
+## Probar un modelo
+
+`/ping` en el chat y `bxAgents models test` envían a un modelo una pregunta diminuta a través de bx-ai y dicen si respondió y cuánto tardó, de modo que una clave o un nombre de modelo equivocados salen a la luz antes que una conversación. Ver [`models`](../cli-reference.md#models) y [Modelos en el chat](../cli-reference.md#modelos-en-el-chat).
 
 ## Qué usa cada agente
 

@@ -243,6 +243,12 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
 - `bxAgents sessions list|rename|fork|delete` manages the conversations in the chat database from the shell.
 - `POST /__bxagents/sessions/rename` and `/fork` let `chat --connect` do the same on a server.
 
+- `contextWindow` and `vision` on the default model and on each profile say what the model can hold and whether it
+  can see images (bx-ai has no way to ask). They are optional and nothing is guessed; `/info` and `/model` show them.
+- `/ping [profile]` and `bxAgents models test [--profile=NAME | --all]` send a model one tiny question and say
+  whether it answered, how long it took, or the provider's own reason; `bxAgents models list` shows the models and
+  what is known about them. `POST /__bxagents/ping` does it for `chat --connect`, only for the profiles the route offers.
+
 #### The chat screen
 
 - `bxAgents chat` is now a Pi-style terminal screen that keeps your scrollback: finished turns are

@@ -13,8 +13,10 @@ class {
 	 * @agent The agent object
 	 * @sessions A SessionStore, or null when the server keeps no list of conversations
 	 * @registry The CommandRegistry; the built-in commands when not given
+	 * @offered The profiles a client may ask for (agentApi.profiles), none by default; /ping goes to no other
 	 */
-	function init( required any agent, any sessions, any registry ) {
+	function init( required any agent, any sessions, any registry, array offered = [] ) {
+		variables.offered = arguments.offered
 		variables.agent = arguments.agent
 		variables.sessions = isNull( arguments.sessions ) ? nullValue() : arguments.sessions
 		variables.registry = isNull( arguments.registry ) ? new "models.chat.commands.CommandCatalog@bxagents"().standard() : arguments.registry
@@ -41,9 +43,9 @@ class {
 	 * @return { success : true, blocks, effects, conversationId }
 	 */
 	struct function execute( required string userId, required string conversationId, required string line, string transport = "web", boolean admin = false ) {
-		var conversation = isNull( variables.sessions )
+		var conversation = ( isNull( variables.sessions )
 			? new "models.chat.ServerConversation@bxagents"( variables.agent, arguments.userId, nullValue(), arguments.conversationId )
-			: new "models.chat.ServerConversation@bxagents"( variables.agent, arguments.userId, variables.sessions, arguments.conversationId )
+			: new "models.chat.ServerConversation@bxagents"( variables.agent, arguments.userId, variables.sessions, arguments.conversationId ) ).withOfferedProfiles( variables.offered )
 		var context = new "models.chat.commands.CommandContext@bxagents"( conversation, arguments.transport, arguments.admin )
 		var reply = variables.registry.run( arguments.line, context )
 		var answer = reply.toStruct()

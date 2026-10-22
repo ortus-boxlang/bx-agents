@@ -76,6 +76,35 @@ class {
 	}
 
 	/**
+	 * @return { contextWindow, vision } of the model in use, as far as the server says: its own, or the profile chosen
+	 */
+	struct function modelFacts() {
+		var chosen = variables.profileName
+		var source = describe()
+		if ( len( chosen ) ) {
+			var found = offered().filter( p => p.name == chosen )
+			source = found.len() ? found[ 1 ] : {}
+		}
+		return { contextWindow : val( source.contextWindow ?: 0 ), vision : source.vision ?: "" }
+	}
+
+	/**
+	 * Asks the server to test a model with one tiny question.
+	 *
+	 * @profile A profile the server offers; blank for the one in use
+	 *
+	 * @return { ok, model, ms, reply } or { ok : false, model, reason }
+	 */
+	struct function ping( string profile = "" ) {
+		var target = len( trim( arguments.profile ) ) ? trim( arguments.profile ) : variables.profileName
+		try {
+			return variables.client.postJson( variables.baseUrl, "ping", { profile : target } )
+		} catch ( any e ) {
+			return { ok : false, model : len( target ) ? target : modelName(), reason : "The server could not be asked: " & e.message }
+		}
+	}
+
+	/**
 	 * A client may only use the profiles the server lists (agentApi.profiles), so there is nothing to
 	 * switch to unless it lists some.
 	 *
@@ -285,6 +314,11 @@ class {
 			[ "Tools", tools().len() ],
 			[ "Conversation", variables.conversationId ]
 		]
+		var at = 2
+		for ( var row in new "models.chat.ModelFactsLines@bxagents"().of( modelFacts() ) ) {
+			at++
+			lines.insertAt( at, row )
+		}
 		var kept = notes()
 		if ( kept.available() ) {
 			var stats = kept.stats()

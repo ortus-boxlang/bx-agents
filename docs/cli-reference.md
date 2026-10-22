@@ -109,6 +109,9 @@ Issue, list and revoke access tokens for a deployed agent.
 ::: card title="notes" icon="phosphor-duotone:note-pencil" href="#notes"
 Read and manage the notes an agent keeps.
 :::
+::: card title="models" icon="phosphor-duotone:cpu" href="#models"
+List the models a project can talk to and test that they answer.
+:::
 ::: card title="sessions" icon="phosphor-duotone:chats" href="#sessions"
 List, rename, fork and delete the conversations in the chat database.
 :::
@@ -549,7 +552,8 @@ The chat can change the model it talks to without losing the conversation: the m
 
 | Command | Does |
 |---|---|
-| `/model` | Show the model in use (`provider/model`) and its profile |
+| `/model` | Show the model in use (`provider/model`), its profile and, when the project says them, its context window and whether it can see images |
+| `/ping [profile]` | Test that the model answers, with one tiny question: it says how long it took, or why it did not (no key, a wrong model name, the service unreachable). A result is kept for 30 seconds, so a repeat is not another request |
 | `/profile` | Pick a profile from a list: its provider and model, its description, which is the default and which is in use |
 | `/profile <name>` | Switch straight to one. A profile whose provider has no key set is switched to with a warning, since the next message would fail |
 | `/default` | Go back to the app's default: the `defaultProfile`, else the provider and model at the top of `Agent.yaml` |
@@ -704,6 +708,25 @@ bxAgents notes import --file=notes.json
 - `stats` shows how full each scope is and the rough size they add to the prompt (about four characters to a token; an estimate, not a count).
 - `export` writes the notes as JSON, to `--file` or to the screen. `import` adds the notes of such a file; a note already there is skipped and one that does not fit the limit is reported.
 - Run it where the database is: in the project, or on a server with `BXAGENTS_DB` set.
+
+### `models`
+
+The models of a built project, and whether they answer.
+
+```bash
+bxAgents models list [--json]
+bxAgents models test [--profile=NAME | --all] [--json]
+```
+
+```
+default       openai/gpt-5                    context 128,000  images yes  key set
+fast          openai/gpt-5-mini               context 400,000  images no  key set
+planner       claude/claude-opus-4            context ?  images ?  key MISSING
+```
+
+- `list` shows the default model and every [profile](conventions/models.md#profiles), with what the project says about each ([`contextWindow` and `vision`](conventions/models.md#what-the-project-knows-about-a-model), `?` when it does not) and whether the profile's key is set.
+- `test` sends each model one tiny question through bx-ai and reports `ok` with the time, or `FAILED` with the provider's own message. It tests the default model, one profile with `--profile`, or all of them with `--all`, and exits `1` when any does not answer, so it can gate a deploy. It spends a few tokens per model.
+- It uses the models the project was last built with: run `bxAgents build` first.
 
 ### `sessions`
 

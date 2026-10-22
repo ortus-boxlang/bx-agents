@@ -1,0 +1,59 @@
+/**
+ * Asks a model one tiny question to find out whether it answers: the key works, the model name is right,
+ * the service is reachable. What /ping and `bxAgents models test` report.
+ *
+ * It goes through bx-ai's own aiChat() with the profile's provider, key and settings (the app's default model
+ * when no profile is named: the generated app writes it into bx-ai's settings), and touches no conversation. A result is kept for a short while per model, so a chat where anyone may type /ping cannot
+ * turn it into a stream of requests.
+ */
+class {
+
+	static {
+		REMEMBER_SECONDS = 30
+		recent = {}
+	}
+
+	/**
+	 * @profile A profile name, or "" for the app's default model
+	 *
+	 * @return { ok, ms, reply, cached } or { ok : false, ms, reason, cached }
+	 */
+	struct function ping( string profile = "" ) {
+		var key = lCase( arguments.profile )
+		var known = static.recent[ key ] ?: {}
+		if ( !known.isEmpty() && dateDiff( "s", known.at, now() ) < static.REMEMBER_SECONDS ) {
+			return duplicate( known.result ).append( { cached : true } )
+		}
+		var started = getTickCount()
+		var result = {}
+		try {
+			var options = { timeout : 20 }
+			if ( len( arguments.profile ) ) {
+				options[ "profile" ] = arguments.profile
+			}
+			var answer = aiChat( "Reply with the single word: pong", {}, options )
+			result = { ok : true, ms : getTickCount() - started, reply : left( trim( isSimpleValue( answer ) ? answer : jsonSerialize( answer ) ), 80 ), cached : false }
+		} catch ( any e ) {
+			result = { ok : false, ms : getTickCount() - started, reason : reasonOf( e.message ), cached : false }
+		}
+		static.recent[ key ] = { at : now(), result : result }
+		return result
+	}
+
+	/**
+	 * A provider's refusal reaches us as a printed struct ( message : "...", type : "...", code : "..." ); what a
+	 * person wants is the message.
+	 *
+	 * @text An exception's message
+	 *
+	 * @return The provider's own message when there is one, else the text on one line, cut short
+	 */
+	string function reasonOf( required string text ) {
+		var found = reFind( 'message\s*:\s*"([^"]*)"', arguments.text, 1, true )
+		if ( found.pos.len() > 1 && found.pos[ 2 ] > 0 ) {
+			return left( mid( arguments.text, found.pos[ 2 ], found.len[ 2 ] ), 300 )
+		}
+		return left( reReplace( trim( arguments.text ), "\s+", " ", "all" ), 300 )
+	}
+
+}

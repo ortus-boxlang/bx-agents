@@ -138,7 +138,8 @@ class {
 		for ( var name in offered ) {
 			for ( var p in all ) {
 				if ( compareNoCase( p.name, name ) == 0 ) {
-					out.append( { "name" : p.name, "description" : p.description ?: "", "provider" : p.provider, "model" : p.model ?: "", "isDefault" : p.isDefault } )
+					var facts = new "models.runtime.ModelFacts@bxagents"().of( p.name )
+					out.append( { "name" : p.name, "description" : p.description ?: "", "provider" : p.provider, "model" : p.model ?: "", "isDefault" : p.isDefault, "contextWindow" : facts.contextWindow, "vision" : facts.vision } )
 					break
 				}
 			}
@@ -303,14 +304,32 @@ class {
 			var modelId = ( modelConfig.params ?: {} ).model ?: ( modelConfig.name ?: "" )
 			modelLabel = [ modelConfig.provider ?: "", modelId ].filter( ( part ) => len( part ) ).toList( "/" )
 		}
+		var facts = new "models.runtime.ModelFacts@bxagents"().of( config.profile ?: "" )
 		event.renderData( type : "json", data : {
 			"success"      : true,
 			"name"         : config.name ?: "",
 			"description"  : config.description ?: "",
 			"model"        : modelLabel,
+			"contextWindow" : facts.contextWindow,
+			"vision"       : facts.vision,
 			"toolCount"    : config.toolCount ?: 0,
 			"capabilities" : { "events" : true, "cancel" : true, "steer" : true, "approvals" : true, "notes" : !isNull( notesProvider() ), "sessions" : !isNull( sessionStore() ), "profiles" : offeredProfiles().len() > 0, "commands" : true }
 		} )
+	}
+
+	/**
+	 * Tests a model with one tiny question: { ok, model, ms, reply } or { ok : false, model, reason }. A profile is
+	 * only used when the route offers it (agentApi.profiles); without one the server's own model is tested.
+	 *
+	 * Body: { profile? }
+	 */
+	function ping( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var body = event.getHTTPContent( json : true )
+		var conversation = new "models.chat.ServerConversation@bxagents"( agent(), callerId( event ) ).withOfferedProfiles( offeredProfiles() )
+		event.renderData( type : "json", data : outcomeAnswer( conversation.ping( body.profile ?: "" ) ) )
 	}
 
 	/**
@@ -504,7 +523,7 @@ class {
 	}
 
 	private function commandService() {
-		return new "models.chat.commands.CommandService@bxagents"( agent(), sessionStore() )
+		return new "models.chat.commands.CommandService@bxagents"( agent : agent(), sessions : sessionStore(), offered : offeredProfiles() )
 	}
 
 	/**

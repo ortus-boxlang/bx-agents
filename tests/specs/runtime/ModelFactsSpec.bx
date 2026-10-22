@@ -1,0 +1,120 @@
+/**
+ * What the project says about a model that bx-ai does not know, read back from the settings the app carries,
+ * and the tiny test /ping and `models test` send.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "ModelFacts", function() {
+
+			function facts( struct settings ) {
+				return new bxagents.models.runtime.ModelFacts( settings );
+			}
+
+			it( "reads a profile's facts, and says nothing about what is not said", function() {
+				var settings = { profiles : { fast : { contextWindow : 400000, vision : true }, plain : { provider : "openai" }, blind : { vision : false } } };
+
+				expect( facts( settings ).of( "fast" ) ).toBe( { contextWindow : 400000, vision : "yes" } );
+				expect( facts( settings ).of( "plain" ) ).toBe( { contextWindow : 0, vision : "" } );
+				expect( facts( settings ).of( "blind" ) ).toBe( { contextWindow : 0, vision : "no" } );
+				expect( facts( settings ).of( "ghost" ) ).toBe( { contextWindow : 0, vision : "" } );
+			} );
+
+			it( "reads the default model's facts from the top of Agent.yaml", function() {
+				var settings = { bxagents : { default : { contextWindow : 128000, vision : true } }, profiles : { fast : { contextWindow : 400000 } } };
+
+				expect( facts( settings ).of( "" ) ).toBe( { contextWindow : 128000, vision : "yes" } );
+				expect( facts( settings ).of( "default" ) ).toBe( { contextWindow : 128000, vision : "yes" } );
+			} );
+
+			it( "uses the defaultProfile's facts for the default model, and the top of Agent.yaml for what it leaves out", function() {
+				var settings = { defaultProfile : "fast", bxagents : { default : { contextWindow : 128000, vision : false } }, profiles : { fast : { contextWindow : 400000 } } };
+
+				expect( facts( settings ).of( "" ) ).toBe( { contextWindow : 400000, vision : "no" } );
+				expect( facts( settings ).of( "fast" ) ).toBe( { contextWindow : 400000, vision : "" } );
+			} );
+
+			it( "knows nothing when the project says nothing", function() {
+				expect( facts( {} ).of( "" ) ).toBe( { contextWindow : 0, vision : "" } );
+			} );
+
+		} );
+
+		describe( "ModelProbe and /ping on a real agent", function() {
+
+			beforeEach( function() {
+				variables.settings = getModuleInfo( "bxai" ).settings;
+				variables.saved = { profiles : settings.profiles ?: {}, defaultProfile : settings.defaultProfile ?: "", provider : settings.provider ?: "" };
+				// the default model, which is what a ping without a profile asks
+				settings.provider = "mock";
+				settings.profiles = { fast : { description : "Quick", provider : "mock", params : { model : "fast-model" } } };
+				settings.defaultProfile = "";
+				variables.agent = aiAgent( name : "helper", model : aiModel( provider : "mock" ), memory : aiMemory( "cache" ) );
+				variables.chat = new bxagents.models.chat.AgentConversation( agent, "alice" );
+			} );
+
+			afterEach( function() {
+				settings.profiles = saved.profiles;
+				settings.defaultProfile = saved.defaultProfile;
+				settings.provider = saved.provider;
+			} );
+
+			it( "pings the model in use and reports how long it took", function() {
+				var outcome = chat.ping();
+				expect( outcome.ok ).toBeTrue();
+				expect( outcome.ms ).toBeGTE( 0 );
+				expect( outcome.model ).toBe( chat.modelName() );
+				expect( len( outcome.reply ) ).toBeGT( 0 );
+			} );
+
+			it( "pings a named profile, and says which model it is", function() {
+				var outcome = chat.ping( "fast" );
+				expect( outcome.ok ).toBeTrue();
+				expect( outcome.model ).toBe( "mock/fast-model" );
+			} );
+
+			it( "names the profiles there are when asked for one that is not", function() {
+				var outcome = chat.ping( "ghost" );
+				expect( outcome.ok ).toBeFalse();
+				expect( outcome.reason ).toInclude( "There is no profile [ghost]" );
+				expect( outcome.reason ).toInclude( "fast" );
+			} );
+
+			it( "gives a provider's message, not the printed struct it arrives in", function() {
+				var probe = new bxagents.models.runtime.ModelProbe();
+				var printed = '{' & char( 10 ) & '  message : "Incorrect API key provided: sk-bad.",' & char( 10 ) & '  type : "invalid_request_error",' & char( 10 ) & '  code : "invalid_api_key"' & char( 10 ) & '}';
+				expect( probe.reasonOf( printed ) ).toBe( "Incorrect API key provided: sk-bad." );
+				expect( probe.reasonOf( "Connection  refused" & char( 10 ) & "by host" ) ).toBe( "Connection refused by host" );
+			} );
+
+			it( "does not repeat a ping it just made, and says so", function() {
+				var probe = new bxagents.models.runtime.ModelProbe();
+				var first = probe.ping( "fast" );
+				var second = probe.ping( "fast" );
+				expect( first.cached ).toBeFalse();
+				expect( second.cached ).toBeTrue();
+			} );
+
+			it( "shows the facts in /info under the model, when the project says them", function() {
+				settings.profiles.fast.contextWindow = 400000;
+				settings.profiles.fast.vision = false;
+				chat.useProfile( "fast" );
+				var rows = chat.info();
+
+				expect( rows.map( r => r[ 1 ] ).slice( 1, 4 ) ).toBe( [ "Agent", "Model", "Context", "Images" ] );
+				expect( rows[ 3 ][ 2 ] ).toBe( "400,000 tokens" );
+				expect( rows[ 4 ][ 2 ] ).toInclude( "cannot" );
+			} );
+
+			it( "only pings a profile the server offers, from a server", function() {
+				var offering = new bxagents.models.chat.ServerConversation( agent, "alice" ).withOfferedProfiles( [ "fast" ] );
+				expect( offering.ping( "fast" ).ok ).toBeTrue();
+				var other = new bxagents.models.chat.ServerConversation( agent, "alice" ).withOfferedProfiles( [] );
+				expect( other.ping( "fast" ).reason ).toBe( "That profile is not offered here." );
+				expect( other.ping().ok ).toBeTrue();
+			} );
+
+		} );
+	}
+
+}

@@ -89,6 +89,24 @@ class extends="testbox.system.BaseSpec" {
 					expect( check( { profile : "default" } ) ).toBeEmpty();
 				} );
 
+				it( "accepts contextWindow and vision on the default model and on a profile, and checks them", function() {
+					expect( check( { contextWindow : 128000, vision : true, profiles : { fast : { provider : "openai", contextWindow : 400000, vision : false } } } ) ).toBeEmpty();
+
+					var out = check( { contextWindow : "lots", vision : "maybe", profiles : { a : { contextWindow : 0 }, b : { contextWindow : 1.5 }, c : { vision : [ 1 ] } } } ).toList( "|" );
+					expect( out ).toInclude( "Agent.yaml: 'contextWindow' must be a whole number of tokens" );
+					expect( out ).toInclude( "Agent.yaml: 'vision' must be true or false" );
+					expect( out ).toInclude( "profile [a]: 'contextWindow' must be a whole number" );
+					expect( out ).toInclude( "profile [b]: 'contextWindow' must be a whole number" );
+					expect( out ).toInclude( "profile [c]: 'vision' must be true or false" );
+				} );
+
+				it( "carries the facts into the settings under bxagents, and keeps them on the profiles bx-ai ignores them in", function() {
+					var s = ai.settings( { model : "openai/gpt-5", contextWindow : 128000, vision : true, profiles : { fast : { provider : "openai", contextWindow : 400000, vision : false } } } );
+					expect( s.bxagents.default ).toBe( { contextWindow : 128000, vision : true } );
+					expect( s.profiles.fast.contextWindow ).toBe( 400000 );
+					expect( ai.settings( { model : "openai/gpt-5" } ).keyExists( "bxagents" ) ).toBeFalse();
+				} );
+
 				it( "refuses a provider and a model that name different providers", function() {
 					expect( check( { provider : "openai", model : "claude/x" } ).toList( "|" ) ).toInclude( "name different providers" );
 				} );
