@@ -526,7 +526,9 @@ Each slash command is written once, as a small class that answers with data (tex
 | [Chat platforms](conventions/gateways/index.md#commands-in-a-gateway) (Telegram, Slack, ...) | Type the command as a message. A safe set is on by default; a project can widen or switch it off |
 | A server over HTTP | `GET /__bxagents/commands` and `POST /__bxagents/command`, see [Run control](conventions/agent-bx.md#run-control) |
 
-`/name`, `/fork` and `/export` work in the terminal and in the web page (where `/export` hands the file to the browser to save, and the page has **Fork** and **Export** buttons). `/copy`, `/record`, `/profile`, `/default` and `/exit` act on your own machine or on your own session's model, so they stay in the terminal.
+`/name`, `/fork` and `/export` work in the terminal and in the web page (where `/export` hands the file to the browser to save, and the page has **Fork** and **Export** buttons). The size of the context is also always in front of you: the hint row under the message box starts with `ctx ~12.4k / 128k 9%` (just `ctx ~12.4k` when the project does not say the window), refreshed before every prompt, so after each message, `/clear`, `/compact`, `/resume` and a change to your notes. The web page shows the same in its header; click it for the breakdown. The numbers are estimates, characters divided by four (what bx-ai's `aiTokens()` does), good for seeing which part is big and not for an exact bill. The tools of MCP servers are fetched when a run starts and are not counted.
+
+`/copy`, `/record`, `/profile`, `/default` and `/exit` act on your own machine or on your own session's model, so they stay in the terminal.
 
 #### Conversations in the chat
 
@@ -543,6 +545,7 @@ Every chat is a conversation, listed in the project's [shared chat database](con
 | `/clear` | Forget this conversation's messages and keep the conversation |
 | `/compact` | Replace the older messages with a summary (needs a summary model on the agent's memory) |
 | `/info` | Agent, model, conversation, message count, notes and database |
+| `/context` | How big the context is right now and what it is made of: the system prompt, the tool definitions, the notes and this conversation's messages, each with its size, the total, and the share of the model's context window when the project [says it](conventions/models.md#what-the-project-knows-about-a-model). The largest tools are named. Worked out locally; no model is called |
 
 `--continue` opens the most recent conversation when the chat starts, and `--session=<number or id>` opens a particular one. Both show the earlier messages first. Over `--connect` the server keeps the list and the messages, under the name of your [token](conventions/agent-bx.md#access-tokens-for-a-deployed-agent); a server without a chat database says it keeps no list.
 

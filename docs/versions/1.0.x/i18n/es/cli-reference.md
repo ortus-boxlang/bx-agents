@@ -526,6 +526,8 @@ Cada comando con barra se escribe una sola vez, como una clase pequeña que resp
 | [Plataformas de chat](conventions/gateways/index.md#comandos-en-un-gateway) (Telegram, Slack, ...) | Escribe el comando como un mensaje. Hay un conjunto seguro activado por defecto; un proyecto puede ampliarlo o apagarlo |
 | Un servidor por HTTP | `GET /__bxagents/commands` y `POST /__bxagents/command`, ver [Control de ejecuciones](conventions/agent-bx.md#control-de-ejecucion) |
 
+El tamaño del contexto también está siempre a la vista: la fila de ayuda bajo la caja de mensaje empieza con `ctx ~12.4k / 128k 9%` (solo `ctx ~12.4k` cuando el proyecto no indica la ventana), y se actualiza antes de cada prompt, es decir, tras cada mensaje, `/clear`, `/compact`, `/resume` y cualquier cambio en tus notas. La página web muestra lo mismo en su encabezado; púlsalo para ver el desglose. Las cifras son estimaciones, caracteres divididos entre cuatro (lo que hace `aiTokens()` de bx-ai), útiles para ver qué parte es grande y no para una factura exacta. Las herramientas de los servidores MCP se obtienen al empezar una ejecución y no se cuentan.
+
 `/name`, `/fork` y `/export` funcionan en la terminal y en la página web (donde `/export` entrega el archivo al navegador para guardarlo, y la página tiene los botones **Fork** y **Export**). `/copy`, `/record`, `/profile`, `/default` y `/exit` actúan sobre tu propia máquina o sobre el modelo de tu propia sesión, así que se quedan en la terminal.
 
 #### Conversaciones en el chat
@@ -543,6 +545,7 @@ Cada chat es una conversación, listada en la [base de datos de chat compartida]
 | `/clear` | Olvida los mensajes de esta conversación y conserva la conversación |
 | `/compact` | Sustituye los mensajes más antiguos por un resumen (requiere un modelo de resumen en la memoria del agente) |
 | `/info` | Agente, modelo, conversación, número de mensajes, notas y base de datos |
+| `/context` | Cuánto ocupa el contexto ahora mismo y de qué se compone: el prompt del sistema, las definiciones de herramientas, las notas y los mensajes de esta conversación, cada uno con su tamaño, el total, y la parte de la ventana de contexto del modelo cuando el proyecto [la indica](conventions/models.md#lo-que-el-proyecto-sabe-de-un-modelo). Nombra las herramientas más grandes. Se calcula en local; no se llama a ningún modelo |
 
 `--continue` abre la conversación más reciente al iniciar el chat, y `--session=<número o id>` abre una concreta. Ambos muestran primero los mensajes anteriores. Con `--connect` el servidor guarda la lista y los mensajes, con el nombre de tu [token](conventions/agent-bx.md#tokens-de-acceso-para-un-agente-desplegado); un servidor sin base de datos de chat dice que no guarda lista.
 

@@ -68,7 +68,7 @@ profiles:
     vision: false
 ```
 
-`contextWindow` es un número entero de tokens y `vision` es `true` o `false`; `build` rechaza cualquier otra cosa. Ambos son opcionales y no se adivina nada: un modelo sin entrada simplemente es desconocido. bx-ai no los lee. El chat los muestra en `/info` y `/model`, y funciones posteriores los usan (la parte de la ventana que ocupa el contexto, y rechazar una imagen para un modelo que no puede verla).
+`contextWindow` es un número entero de tokens y `vision` es `true` o `false`; `build` rechaza cualquier otra cosa. Ambos son opcionales y no se adivina nada: un modelo sin entrada simplemente es desconocido. bx-ai no los lee. El chat los muestra en `/info` y `/model`, y usa `contextWindow` para la parte de la ventana que ocupa el contexto (`/context`, la barra de estado y el encabezado web). Más adelante, `vision` decidirá si se puede pegar una imagen.
 
 ## Probar un modelo
 

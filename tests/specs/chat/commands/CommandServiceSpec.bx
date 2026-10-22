@@ -205,6 +205,33 @@ class extends="testbox.system.BaseSpec" {
 
 			} );
 
+			it( "answers /context with the parts of the context and how big each is, nothing sent to a model", function() {
+				agent.run( "plan the launch", {}, { userId : "alice", conversationId : "c-1" } );
+				var answer = service.execute( "alice", "c-1", "/context" );
+
+				var table = answer.blocks[ 1 ];
+				expect( table.type ).toBe( "table" );
+				expect( table.layout ).toBe( "grid" );
+				expect( table.rows.map( r => r[ 1 ] ) ).toBe( [ "System prompt", "Tool definitions", "Notes", "Messages", "Total" ] );
+				expect( table.rows[ 4 ][ 3 ] ).toBe( "2 messages" );
+				expect( texts( answer ).filter( t => t.startsWith( "Estimates" ) ) ).toHaveLength( 1 );
+			} );
+
+			it( "says the project does not give the window when it does not, and shows the bar when it does", function() {
+				var unsized = texts( service.execute( "alice", "c-1", "/context" ) );
+				expect( unsized.filter( t => t.startsWith( "The project does not say" ) ) ).toHaveLength( 1 );
+
+				var settings = getModuleInfo( "bxai" ).settings;
+				var saved = settings.bxagents ?: {};
+				settings.bxagents = { default : { contextWindow : 1000 } };
+				try {
+					var sized = texts( service.execute( "alice", "c-1", "/context" ) );
+					expect( sized.filter( t => t.find( "% of the window" ) ) ).toHaveLength( 1 );
+				} finally {
+					settings.bxagents = saved;
+				}
+			} );
+
 			it( "works without a list of conversations", function() {
 				var bare = new bxagents.models.chat.commands.CommandService( agent );
 				expect( texts( bare.execute( "alice", "c-1", "/sessions" ) ) ).toBe( [ "No conversations yet." ] );

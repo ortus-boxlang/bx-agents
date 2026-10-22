@@ -353,6 +353,7 @@ __THEME_TOKENS__
 	.bubble.command p.ok { color: var(--fg); }
 	.bubble.command p.warn { color: var(--danger, #c0392b); }
 	.bubble.command a { color: var(--accent); }
+	button.chip { font-size: 0.75rem; padding: 0.15rem 0.5rem; color: var(--muted); font-family: var(--font-mono); }
 	.bubble.command table { border-collapse: collapse; font-family: var(--font-mono); font-size: 0.82rem; }
 	.bubble.command td { padding: 0.1rem 0.8rem 0.1rem 0; vertical-align: top; overflow-wrap: anywhere; }
 	.bubble.command td.label { color: var(--muted); white-space: nowrap; }
@@ -609,6 +610,7 @@ __CUSTOM_CSS__
 		</div>
 		<div class="actions">
 			<span class="meta" id="modelMeta"></span>
+			<button type="button" class="chip" id="contextChip" title="Estimated size of the context: system prompt, tools, notes and this conversation. Click for the breakdown" hidden></button>
 			<select id="profileSelect" title="The model for your next messages" aria-label="Model" hidden></select>
 			<button type="button" id="sidebarBtn" aria-expanded="true" aria-controls="sidebar" title="Show or hide conversations">Chats</button>
 			<button type="button" id="forkBtn" title="Copy this conversation under a new name and carry on in the copy" hidden>Fork</button>
@@ -684,6 +686,7 @@ __CUSTOM_CSS__
 	var sidebarBtn = document.getElementById( "sidebarBtn" );
 	var clearBtn = document.getElementById( "clearBtn" );
 	var forkBtn = document.getElementById( "forkBtn" );
+	var contextChipEl = document.getElementById( "contextChip" );
 	var exportBtn = document.getElementById( "exportBtn" );
 	var compactBtn = document.getElementById( "compactBtn" );
 	var sidebarEl = document.getElementById( "sidebar" );
@@ -1050,7 +1053,39 @@ __CUSTOM_CSS__
 	 * while the agent still remembers everything - so the page would look blank
 	 * and then answer follow-up questions about messages the user cannot see.
 	 */
+	/**
+	 * The size of the context, in the header: "ctx ~12.4k / 128k 9%", or without the window when the project does not
+	 * say it. Worked out on the server from the system prompt, the tool definitions, the notes and this conversation's
+	 * messages; nothing is sent to a model. Refreshed whenever any of those can have changed.
+	 */
+	function refreshContext() {
+		if ( !capabilities.context ) {
+			return;
+		}
+		apiGet( "/context?conversationId=" + encodeURIComponent( getConversationId() ) ).then( function ( report ) {
+			if ( !report || report.success !== true ) {
+				contextChipEl.hidden = true;
+				return;
+			}
+			var approx = function ( n ) { return "~" + ( n < 1000 ? n : ( n / 1000 ).toFixed( 1 ) + "k" ); };
+			var windowText = function ( n ) { return n >= 1000000 && n % 100000 === 0 ? ( n / 1000000 ) + "M" : n >= 1000 ? Math.round( n / 1000 ) + "k" : String( n ); };
+			var text = "ctx " + approx( report.total );
+			if ( report.contextWindow > 0 ) {
+				text += " / " + windowText( report.contextWindow ) + " " + report.percent + "%";
+			}
+			contextChipEl.textContent = text;
+			contextChipEl.hidden = false;
+		} );
+	}
+
+	contextChipEl.addEventListener( "click", function () {
+		if ( !isBusy ) {
+			runCommand( "/context" );
+		}
+	} );
+
 	function rehydrate() {
+		refreshContext();
 		var url = API_BASE + "/history?conversationId=" + encodeURIComponent( getConversationId() );
 		return fetch( url, { headers: authHeaders( {} ) } )
 			.then( function ( res ) { return res.ok ? res.json() : null; } )
@@ -1585,7 +1620,7 @@ __CUSTOM_CSS__
 				}
 				// a command that moves to another conversation, or empties this one, redraws the transcript
 				// first; its answer is shown after that so it is not wiped with it
-				return applyEffects( reply ).then( function () { drawReply( reply ); } );
+				return applyEffects( reply ).then( function () { drawReply( reply ); refreshContext(); } );
 			} )
 			.catch( function () { addErrorBubble( "The command could not be sent." ); } );
 	}
@@ -1814,6 +1849,7 @@ __CUSTOM_CSS__
 			// The turn moved this conversation to the top of the list, and may
 			// have just given it its title.
 			loadConversations();
+			refreshContext();
 		} );
 	} );
 
@@ -1888,6 +1924,7 @@ __CUSTOM_CSS__
 				messagesEl.textContent = "";
 				showHint( "Conversation cleared." );
 				showWelcome();
+				refreshContext();
 				return loadConversations();
 			} )
 			.catch( function () {
@@ -1910,6 +1947,7 @@ __CUSTOM_CSS__
 					return;
 				}
 				showHint( "Compacted " + payload.before + " messages down to " + payload.after + "." );
+				refreshContext();
 				return rehydrate().then( loadConversations );
 			} )
 			.catch( function () {
@@ -1988,6 +2026,7 @@ __CUSTOM_CSS__
 	}
 
 	function loadNotes() {
+		refreshContext();
 		return apiGet( "/notes" ).then( function ( payload ) {
 			if ( payload && payload.success ) {
 				notesData = payload;
