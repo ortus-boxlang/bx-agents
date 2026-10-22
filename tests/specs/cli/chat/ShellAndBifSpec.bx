@@ -1,0 +1,208 @@
+/**
+ * The chat's two ways of running something on the person's machine: `!command` (a shell command) and
+ * `#function()` (one BoxLang built-in call), and the person's own file that switches them.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "UserConfig", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-userconfig-" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function configWith( required string yaml ) {
+				fileWrite( dir & "/bxAgents.yml", yaml );
+				return new bxagents.models.cli.UserConfig( dir & "/bxAgents.yml" );
+			}
+
+			it( "turns both on when there is no file", function() {
+				var config = new bxagents.models.cli.UserConfig( dir & "/missing.yml" );
+				expect( config.chat() ).toBe( { shell : true, bifs : true } );
+				expect( config.problems() ).toBeEmpty();
+			} );
+
+			it( "reads the switches: off, a shell of your own, a list of functions", function() {
+				var config = configWith( "chat:" & char( 10 ) & "  shell: false" & char( 10 ) & "  bifs: [ ucase, listLen ]" & char( 10 ) );
+				expect( config.chat().shell ).toBeFalse();
+				expect( config.chat().bifs ).toBe( [ "ucase", "listLen" ] );
+				expect( config.problems() ).toBeEmpty();
+
+				var own = configWith( "chat:" & char( 10 ) & "  shell: bash -c" & char( 10 ) );
+				expect( own.chat().shell ).toBe( "bash -c" );
+			} );
+
+			it( "reports a key it does not know instead of ignoring it", function() {
+				var config = configWith( "chat:" & char( 10 ) & "  shel: false" & char( 10 ) & "colour: red" & char( 10 ) );
+				var out = config.problems().toList( "|" );
+				expect( out ).toInclude( "chat has an unknown key [shel]" );
+				expect( out ).toInclude( "unknown setting [colour]" );
+				// a typo leaves the default where it was
+				expect( config.chat().shell ).toBeTrue();
+			} );
+
+			it( "reports a file that is not YAML", function() {
+				var config = configWith( "chat: [unclosed" );
+				expect( config.problems()[ 1 ] ).toInclude( "is not valid YAML" );
+			} );
+
+		} );
+
+		describe( "ShellRunner", function() {
+
+			beforeEach( function() {
+				variables.posix = !createObject( "java", "java.lang.System" ).getProperty( "os.name" ).lcase().startsWith( "windows" );
+			} );
+
+			it( "runs a command and returns what it printed", function() {
+				if ( !posix ) { return; }
+				var out = new bxagents.models.cli.chat.ShellRunner().run( "echo hello && echo oops 1>&2" );
+				expect( out.ok ).toBeTrue();
+				expect( out.exitCode ).toBe( 0 );
+				// standard output and error together, in order
+				expect( out.output ).toBe( "hello" & char( 10 ) & "oops" & char( 10 ) );
+			} );
+
+			it( "says when a command failed, and keeps what it printed", function() {
+				if ( !posix ) { return; }
+				var out = new bxagents.models.cli.chat.ShellRunner().run( "echo partial; exit 3" );
+				expect( out.ok ).toBeFalse();
+				expect( out.exitCode ).toBe( 3 );
+				expect( out.output ).toInclude( "partial" );
+			} );
+
+			it( "runs in the folder it was given", function() {
+				if ( !posix ) { return; }
+				var dir = createTempDirectory( prefix = "bxagents-shell-" );
+				try {
+					var out = new bxagents.models.cli.chat.ShellRunner( "", dir ).run( "pwd" );
+					expect( trim( out.output ) ).toInclude( listLast( dir.replace( "\", "/", "all" ), "/" ) );
+				} finally {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "stops a command that runs too long", function() {
+				if ( !posix ) { return; }
+				var out = new bxagents.models.cli.chat.ShellRunner( "", "", 1 ).run( "echo started; sleep 20" );
+				expect( out.timedOut ).toBeTrue();
+				expect( out.ok ).toBeFalse();
+				expect( out.output ).toInclude( "started" );
+			} );
+
+			it( "cuts what a command prints at a limit, and says so", function() {
+				if ( !posix ) { return; }
+				var out = new bxagents.models.cli.chat.ShellRunner().run( "yes abcdefghij | head -c 100000" );
+				expect( out.truncated ).toBeTrue();
+				expect( len( out.output ) ).toBe( 20000 );
+			} );
+
+			it( "says when the shell cannot be started", function() {
+				var out = new bxagents.models.cli.chat.ShellRunner( "/no/such/shell -c" ).run( "echo hi" );
+				expect( out.ok ).toBeFalse();
+				expect( out.output ).toInclude( "Could not start the shell" );
+			} );
+
+		} );
+
+		describe( "BifCall", function() {
+
+			beforeEach( function() {
+				variables.call = new bxagents.models.cli.chat.BifCall();
+			} );
+
+			it( "runs a built-in function call with literal arguments", function() {
+				expect( call.run( "ucase( 'hello' )" ) ).toBe( { ok : true, name : "ucase", value : "HELLO" } );
+				expect( call.run( 'listLen( "a,b,c" )' ).value ).toBe( 3 );
+				expect( call.run( "arraySum( [ 1, 2, 3.5 ] )" ).value ).toBe( 6.5 );
+				expect( call.run( "structCount( { a : 1, 'b' : 2 } )" ).value ).toBe( 2 );
+				expect( call.run( "len( 'it''s' )" ).value ).toBe( 4 );
+			} );
+
+			it( "runs a call nested in another, and one with no arguments", function() {
+				expect( call.run( "ucase( left( 'hello world', 5 ) )" ).value ).toBe( "HELLO" );
+				expect( isDate( call.run( "now()" ).value ) ).toBeTrue();
+				expect( call.run( "  ucase ( 'a' )  " ).value ).toBe( "A" );
+			} );
+
+			it( "takes named arguments", function() {
+				expect( call.run( "listFirst( list: 'a-b-c', delimiter: '-' )" ).value ).toBe( "a" );
+			} );
+
+			it( "refuses what is not one built-in call: no expressions, variables, members or statements", function() {
+				for ( var bad in [ "1 + 1", "foo", "ucase", "ucase( x )", "x.y()", "ucase( 'a' ) & 'b'", "ucase( 'a' ); println( 'b' )", "a = 1", "ucase( 'a' ) ucase( 'b' )", "createObject( 'java', 'java.lang.System' ).exit( 0 )" ] ) {
+					var outcome = call.run( bad );
+					expect( outcome.ok ).toBeFalse( "[#bad#] should have been refused" );
+					expect( len( outcome.reason ) ).toBeGT( 0 );
+				}
+			} );
+
+			it( "refuses a name that is not a registered built-in before anything runs", function() {
+				var outcome = call.run( "noSuchFunction( 1 )" );
+				expect( outcome.ok ).toBeFalse();
+				expect( outcome.reason ).toInclude( "There is no built-in function [noSuchFunction]" );
+			} );
+
+			it( "refuses a call nested too deeply", function() {
+				var deep = repeatString( "ucase( ", 20 ) & "'a'" & repeatString( " )", 20 );
+				expect( call.run( deep ).ok ).toBeFalse();
+				expect( call.run( deep ).reason ).toInclude( "nested too deeply" );
+			} );
+
+			it( "runs only the functions it is allowed to, when given a list", function() {
+				var narrow = new bxagents.models.cli.chat.BifCall( [ "ucase" ] );
+				expect( narrow.run( "ucase( 'a' )" ).value ).toBe( "A" );
+				var refused = narrow.run( "lcase( 'A' )" );
+				expect( refused.ok ).toBeFalse();
+				expect( refused.reason ).toInclude( "not one of the functions you allow" );
+				// a nested call is checked too
+				expect( narrow.run( "ucase( lcase( 'A' ) )" ).ok ).toBeFalse();
+			} );
+
+			it( "says what a function threw, with its name", function() {
+				var outcome = call.run( "listGetAt( 'a,b', 9 )" );
+				expect( outcome.ok ).toBeFalse();
+				expect( outcome.reason ).toStartWith( "listGetAt:" );
+			} );
+
+		} );
+
+		describe( "Attachments", function() {
+
+			it( "waits, goes along with the next message in blocks, and is gone", function() {
+				var attachments = new bxagents.models.cli.chat.Attachments().add( "shell", "ls", "a.txt" ).add( "bif", "ucase( 'a' )", "A" );
+				expect( attachments.count() ).toBe( 2 );
+
+				var sent = attachments.compose( "what is here?" );
+				expect( sent ).toStartWith( "what is here?" );
+				expect( sent ).toInclude( "output of the command `ls`" );
+				expect( sent ).toInclude( "result of the function call `ucase( 'a' )`" );
+				expect( attachments.isEmpty() ).toBeTrue();
+				expect( attachments.compose( "again" ) ).toBe( "again" );
+			} );
+
+			it( "counts what waits in the size of the context", function() {
+				var attachments = new bxagents.models.cli.chat.Attachments();
+				var report = { parts : [ { key : "system", label : "System prompt", tokens : 100, detail : "" } ], tools : [], total : 100, contextWindow : 1000, percent : 10 };
+				expect( attachments.addTo( report ).total ).toBe( 100 );
+
+				attachments.add( "shell", "cat big", repeatString( "x", 4000 ) );
+				var counted = attachments.addTo( report );
+				expect( counted.parts.last().key ).toBe( "attached" );
+				expect( counted.parts.last().tokens ).toBe( 1000 );
+				expect( counted.total ).toBe( 1100 );
+				expect( counted.percent ).toBe( 110 );
+				// the report it was given is not changed
+				expect( report.total ).toBe( 100 );
+			} );
+
+		} );
+	}
+
+}

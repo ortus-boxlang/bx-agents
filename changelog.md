@@ -254,6 +254,11 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   message box in the terminal and a chip in the web page's header always show it: `ctx ~12.4k / 128k 9%`.
   `GET /__bxagents/context` serves it to `chat --connect`.
 
+- In the terminal chat, `!command` runs a shell command and `#function( ... )` calls one BoxLang built-in on your
+  own machine; the output goes with your next message (`!!` and `##` only show it). A call is parsed, not
+  evaluated: literal arguments and nested calls only, and only registered built-ins. Both are switched off or
+  narrowed in your own `~/.bxagents/bxAgents.yml` (`chat: shell`, `bifs`), never by a project.
+
 #### The chat screen
 
 - `bxAgents chat` is now a Pi-style terminal screen that keeps your scrollback: finished turns are

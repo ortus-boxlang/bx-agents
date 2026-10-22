@@ -17,7 +17,13 @@
  *
  * Commands start with a slash. They are not written here: each is a class of the command layer
  * (models.chat.commands) that answers with a Reply, and TerminalRenderer draws the Reply on the
- * screen. Everything else typed is a message to the agent.
+ * screen.
+ *
+ * Two more prefixes run something on the person's own machine, never on a server:
+ *   !command    a shell command; its output is shown and goes with the next message (!!command: shown only)
+ *   #function() one BoxLang built-in function call; its result likewise (##function(): shown only)
+ * They are switched on or off in the person's ~/.bxagents/bxAgents.yml (see UserConfig). Everything else
+ * typed is a message to the agent.
  */
 class {
 
@@ -25,10 +31,13 @@ class {
 	 * @session The session
 	 * @workingDirectory Where /export writes a relative file name; defaults to the current directory
 	 * @registry The CommandRegistry; the built-in commands when not given
+	 * @userConfig The person's UserConfig; ~/.bxagents/bxAgents.yml when not given
 	 */
-	function init( required any session, string workingDirectory = "", any registry ) {
+	function init( required any session, string workingDirectory = "", any registry, any userConfig ) {
 		variables.session = arguments.session
 		variables.transcript = new "models.cli.chat.Transcript@bxagents"()
+		variables.attachments = new "models.cli.chat.Attachments@bxagents"()
+		variables.userConfig = isNull( arguments.userConfig ) ? new "models.cli.UserConfig@bxagents"() : arguments.userConfig
 		variables.registry = isNull( arguments.registry ) ? new "models.chat.commands.CommandCatalog@bxagents"().standard() : arguments.registry
 		variables.workingDirectory = len( arguments.workingDirectory ) ? arguments.workingDirectory : createObject( "java", "java.lang.System" ).getProperty( "user.dir" )
 		variables.hooks = {
@@ -64,7 +73,10 @@ class {
 	 */
 	void function run( required any screen, any record = false, string resume = "" ) {
 		variables.screen = arguments.screen
-		var port = new "models.cli.chat.TerminalPort@bxagents"( arguments.screen, variables.transcript, variables.session.agentName(), variables.workingDirectory )
+		var port = new "models.cli.chat.TerminalPort@bxagents"( arguments.screen, variables.transcript, variables.session.agentName(), variables.workingDirectory, variables.attachments )
+		for ( var problem in variables.userConfig.problems() ) {
+			arguments.screen.print( "warn", problem )
+		}
 		variables.context = new "models.chat.commands.CommandContext@bxagents"( variables.session, "tui", true, port )
 		variables.renderer = new "models.cli.chat.TerminalRenderer@bxagents"( arguments.screen, variables.session, variables.transcript, ( line ) => command( line ) )
 		if ( !isBoolean( arguments.record ) || arguments.record ) {
@@ -92,6 +104,14 @@ class {
 				}
 				continue
 			}
+			if ( isShellLine( text ) ) {
+				shellLine( text )
+				continue
+			}
+			if ( isBifLine( text ) ) {
+				bifLine( text )
+				continue
+			}
 			turn( text )
 		}
 	}
@@ -105,7 +125,7 @@ class {
 	 */
 	private void function refreshStatus() {
 		try {
-			variables.screen.setStatus( new "models.chat.ContextLines@bxagents"().status( variables.session.contextReport() ) )
+			variables.screen.setStatus( new "models.chat.ContextLines@bxagents"().status( variables.attachments.addTo( variables.session.contextReport() ) ) )
 		} catch ( any e ) {
 			variables.screen.setStatus( "" )
 		}
@@ -120,6 +140,92 @@ class {
 		return variables.renderer.show( variables.registry.run( arguments.text, variables.context ) )
 	}
 
+	// ----------------------------------------------------------------------------------
+	// Running something on this machine: !command and #function()
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @return True for !command or !!command: the ! is followed at once by something to run, so "! hello" is a message
+	 */
+	private boolean function isShellLine( required string text ) {
+		return reFind( "^!!?[^\s!]", arguments.text ) > 0
+	}
+
+	/**
+	 * @return True for #name( ... ) or ##name( ... ): a hash and then a call. A message that merely starts with a hash, such as a Markdown heading, is a message.
+	 */
+	private boolean function isBifLine( required string text ) {
+		var hash = "##"
+		if ( !arguments.text.startsWith( hash ) ) {
+			return false
+		}
+		var rest = arguments.text.startsWith( hash & hash ) ? mid( arguments.text, 3, len( arguments.text ) ) : mid( arguments.text, 2, len( arguments.text ) )
+		return reFind( "^\s*[A-Za-z_][A-Za-z0-9_]*\s*\(", rest ) > 0
+	}
+
+	/**
+	 * Runs a shell command and shows what it printed. Unless it was typed with !!, the output also waits for the
+	 * next message and goes with it, so the agent can see what you saw.
+	 */
+	private void function shellLine( required string text ) {
+		var screenOnly = arguments.text.startsWith( "!!" )
+		var line = trim( mid( arguments.text, screenOnly ? 3 : 2, len( arguments.text ) ) )
+		var allowed = variables.userConfig.chat().shell
+		if ( allowed == false || allowed == "false" ) {
+			variables.screen.print( "warn", "Shell commands are switched off in #variables.userConfig.path()# (chat: shell: false)." )
+			return
+		}
+		var runner = new "models.cli.chat.ShellRunner@bxagents"( isBoolean( allowed ) ? "" : allowed, variables.workingDirectory )
+		variables.screen.print( "accent", "$ " & line )
+		var result = runner.run( line )
+		var report = result.output & ( result.truncated ? char( 10 ) & "(the output was cut at #numberFormat( len( result.output ) )# characters)" : "" )
+		report &= result.timedOut ? char( 10 ) & "(stopped: it ran longer than a minute)" : ( result.ok ? "" : char( 10 ) & "(exit code #result.exitCode#)" )
+		showOutput( report, result.ok ? "muted" : "warn" )
+		keepOrNot( screenOnly, "shell", line, report )
+	}
+
+	/**
+	 * Runs one BoxLang built-in function call and shows what it returned; kept for the next message like !command.
+	 */
+	private void function bifLine( required string text ) {
+		var hash = "##"
+		var screenOnly = arguments.text.startsWith( hash & hash )
+		var call = trim( mid( arguments.text, screenOnly ? 3 : 2, len( arguments.text ) ) )
+		var allowed = variables.userConfig.chat().bifs
+		if ( allowed == false || allowed == "false" ) {
+			variables.screen.print( "warn", "Function calls are switched off in #variables.userConfig.path()# (chat: bifs: false)." )
+			return
+		}
+		variables.screen.print( "accent", hash & " " & call )
+		var outcome = new "models.cli.chat.BifCall@bxagents"( isArray( allowed ) ? allowed : true ).run( call )
+		if ( !outcome.ok ) {
+			variables.screen.print( "warn", outcome.reason )
+			return
+		}
+		var shown = new "models.cli.chat.ValueText@bxagents"().of( outcome.value ?: nullValue() )
+		showOutput( shown, "muted" )
+		keepOrNot( screenOnly, "bif", call, shown )
+	}
+
+	private void function showOutput( required string text, required string style ) {
+		var lines = len( arguments.text ) ? arguments.text.listToArray( char( 10 ), true ) : [ "(no output)" ]
+		var most = 40
+		for ( var i = 1; i <= min( most, lines.len() ); i++ ) {
+			variables.screen.print( arguments.style, lines[ i ] )
+		}
+		if ( lines.len() > most ) {
+			variables.screen.print( "muted", "... #lines.len() - most# more lines" )
+		}
+	}
+
+	private void function keepOrNot( required boolean screenOnly, required string kind, required string label, required string text ) {
+		if ( arguments.screenOnly ) {
+			return
+		}
+		variables.attachments.add( arguments.kind, arguments.label, arguments.text )
+		variables.screen.print( "muted", "Attached to your next message." )
+	}
+
 	/**
 	 * Sends one message and shows the turn, then deals with a run that stopped for approval.
 	 */
@@ -127,7 +233,12 @@ class {
 		variables.screen.printUser( arguments.text )
 		variables.transcript.append( { role : "you", text : arguments.text } )
 
-		var result = execute( () => variables.session.send( text, variables.hooks ) )
+		var attached = variables.attachments.count()
+		var sent = variables.attachments.compose( arguments.text )
+		if ( attached ) {
+			variables.screen.print( "muted", "Sent with #attached# attachment#attached == 1 ? '' : 's'#." )
+		}
+		var result = execute( () => variables.session.send( sent, variables.hooks ) )
 		while ( result.status == "suspended" ) {
 			var decision = askApproval( result.pending )
 			result = execute( () => variables.session.resume( decision, variables.hooks ) )

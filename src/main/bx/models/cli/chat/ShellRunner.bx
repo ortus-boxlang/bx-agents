@@ -1,0 +1,86 @@
+/**
+ * Runs a shell command on the user's machine for the chat's `!command`: what they typed, in the folder they
+ * started in, with their environment. Its output (standard output and error together) comes back capped, so a
+ * command that prints a gigabyte cannot fill the screen or the next message.
+ */
+class {
+
+	static {
+		MAX_CHARS = 20000
+	}
+
+	/**
+	 * @shell The shell to use: "" for the machine's own (sh, or cmd on Windows), or a command such as "bash -c" that takes the line as its last argument
+	 * @workingDirectory Where to run it
+	 * @timeoutSeconds How long a command may run before it is stopped
+	 */
+	function init( string shell = "", string workingDirectory = "", numeric timeoutSeconds = 60 ) {
+		variables.shell = trim( arguments.shell )
+		variables.workingDirectory = arguments.workingDirectory
+		variables.timeoutSeconds = arguments.timeoutSeconds
+		return this
+	}
+
+	/**
+	 * @line The command line
+	 *
+	 * @return { ok : the exit code was 0, exitCode, output, truncated, timedOut }
+	 */
+	struct function run( required string line ) {
+		var command = createObject( "java", "java.util.ArrayList" )
+		for ( var word in shellWords() ) {
+			command.add( word )
+		}
+		command.add( arguments.line )
+		var builder = createObject( "java", "java.lang.ProcessBuilder" ).init( command )
+		builder.redirectErrorStream( true )
+		if ( len( variables.workingDirectory ) ) {
+			builder.directory( createObject( "java", "java.io.File" ).init( variables.workingDirectory ) )
+		}
+		try {
+			var process = builder.start()
+		} catch ( any e ) {
+			return { ok : false, exitCode : -1, output : "Could not start the shell: " & e.message, truncated : false, timedOut : false }
+		}
+		// the output is read while the command runs: a full pipe would otherwise stop it
+		var collected = createObject( "java", "java.lang.StringBuilder" )
+		var reader = createObject( "java", "java.io.BufferedReader" ).init( createObject( "java", "java.io.InputStreamReader" ).init( process.getInputStream(), "UTF-8" ) )
+		var drain = asyncRun( () => {
+			var line = reader.readLine()
+			while ( !isNull( line ) ) {
+				if ( collected.length() <= static.MAX_CHARS ) {
+					collected.append( line ).append( char( 10 ) )
+				}
+				line = reader.readLine()
+			}
+		} )
+		var finished = process.waitFor( variables.timeoutSeconds, createObject( "java", "java.util.concurrent.TimeUnit" ).SECONDS )
+		if ( !finished ) {
+			process.destroyForcibly()
+		}
+		try {
+			drain.get( 3, "seconds" )
+		} catch ( any e ) {
+			// output after the command is gone, or a stuck reader, is not waited for
+		}
+		var text = collected.toString()
+		var cut = len( text ) > static.MAX_CHARS
+		return {
+			ok        : finished && process.exitValue() == 0,
+			exitCode  : finished ? process.exitValue() : -1,
+			output    : cut ? left( text, static.MAX_CHARS ) : text,
+			truncated : cut,
+			timedOut  : !finished
+		}
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private array function shellWords() {
+		if ( len( variables.shell ) ) {
+			return variables.shell.listToArray( " " )
+		}
+		return createObject( "java", "java.lang.System" ).getProperty( "os.name" ).lcase().startsWith( "windows" ) ? [ "cmd", "/c" ] : [ "/bin/sh", "-c" ]
+	}
+
+}

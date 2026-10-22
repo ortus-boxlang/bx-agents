@@ -1,0 +1,100 @@
+/**
+ * The person's own settings for the chat tool, from one file on their machine: `~/.bxagents/bxAgents.yml`
+ * (`BXAGENTS_USER_CONFIG` names another file, for tests and unusual setups). It belongs to the person, not
+ * to any project, so a project can never switch these on for them.
+ *
+ *   chat:
+ *     shell: true        # `!command` runs a shell command: true, false, or the shell to use ("bash -c")
+ *     bifs: true         # `#bif( ... )` calls a BoxLang built-in function: true, false, or the names allowed
+ *
+ * A missing file means the defaults. A key it does not know is reported (`problems()`), not ignored, so a
+ * typo does not quietly leave a switch where the person thought it was.
+ */
+class {
+
+	static {
+		CHAT_KEYS = [ "shell", "bifs" ]
+	}
+
+	/**
+	 * @file The file to read; the usual one when not given
+	 */
+	function init( string file = "" ) {
+		var named = len( arguments.file ) ? arguments.file : trim( getSystemSetting( "BXAGENTS_USER_CONFIG", "" ) )
+		variables.file = len( named ) ? named : createObject( "java", "java.lang.System" ).getProperty( "user.home" ) & "/.bxagents/bxAgents.yml"
+		variables.loaded = false
+		variables.data = {}
+		variables.problems = []
+		return this
+	}
+
+	string function path() {
+		return variables.file
+	}
+
+	/**
+	 * @return { shell : true | false | "the shell", bifs : true | false | [ names ] }
+	 */
+	struct function chat() {
+		load()
+		var chat = isStruct( variables.data.chat ?: "" ) ? variables.data.chat : {}
+		return { shell : chat.shell ?: true, bifs : chat.bifs ?: true }
+	}
+
+	/**
+	 * @return What is wrong with the file, as sentences; empty when it is fine or not there
+	 */
+	array function problems() {
+		load()
+		return variables.problems
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private void function load() {
+		if ( variables.loaded ) {
+			return
+		}
+		variables.loaded = true
+		if ( !fileExists( variables.file ) ) {
+			return
+		}
+		var parsed = ""
+		try {
+			parsed = yamlDeserialize( fileRead( variables.file ) )
+		} catch ( any e ) {
+			variables.problems.append( "#variables.file# is not valid YAML: #e.message#" )
+			return
+		}
+		if ( !isStruct( parsed ) ) {
+			if ( !isSimpleValue( parsed ) || len( trim( parsed ) ) ) {
+				variables.problems.append( "#variables.file# must be a mapping with a chat: section" )
+			}
+			return
+		}
+		variables.data = parsed
+		for ( var key in parsed ) {
+			if ( lCase( key ) != "chat" ) {
+				variables.problems.append( "#variables.file# has an unknown setting [#key#]; the sections are: chat" )
+			}
+		}
+		if ( parsed.keyExists( "chat" ) ) {
+			if ( !isStruct( parsed.chat ) ) {
+				variables.problems.append( "#variables.file#: chat must be a mapping" )
+				return
+			}
+			for ( var key in parsed.chat ) {
+				if ( !static.CHAT_KEYS.containsNoCase( key ) ) {
+					variables.problems.append( "#variables.file#: chat has an unknown key [#key#]. Use: #static.CHAT_KEYS.toList( ', ' )#" )
+				}
+			}
+			if ( parsed.chat.keyExists( "shell" ) && !isSimpleValue( parsed.chat.shell ) ) {
+				variables.problems.append( "#variables.file#: chat.shell must be true, false or the shell to use" )
+			}
+			if ( parsed.chat.keyExists( "bifs" ) && !isSimpleValue( parsed.chat.bifs ) && !isArray( parsed.chat.bifs ) ) {
+				variables.problems.append( "#variables.file#: chat.bifs must be true, false or a list of function names" )
+			}
+		}
+	}
+
+}
