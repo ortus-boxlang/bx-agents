@@ -695,7 +695,7 @@ bxAgents chat --session=2                      # open one by its number in /sess
 <tr><td>Ctrl+C</td><td>Clear the box; on an empty box, leave. Ctrl+D leaves too</td></tr>
 </tbody>
 </table></div>
-<p>Type <code>/</code> for the commands: <code>/help</code>, <code>/new</code> (a fresh conversation), <code>/tools</code>, <code>/copy</code> (the last answer to the clipboard, using the OSC 52 escape most terminals honor), <code>/save [file]</code> (the conversation as Markdown), <code>/sessions</code>, <code>/resume</code>, <code>/clear</code>, <code>/compact</code> and <code>/info</code> (see below), <code>/remember &lt;text&gt;</code> and <code>/notes</code> (see below), <code>/record [file]</code> and <code>/record stop</code> (see below) and <code>/exit</code>.</p>
+<p>Type <code>/</code> for the commands: <code>/help</code>, <code>/new</code> (a fresh conversation), <code>/tools</code>, <code>/copy</code> (the last answer to the clipboard, using the OSC 52 escape most terminals honor), <code>/save [file]</code> (the conversation as Markdown), <code>/sessions</code>, <code>/resume</code>, <code>/clear</code>, <code>/compact</code> and <code>/info</code> (see below), <code>/model</code>, <code>/profile</code> and <code>/default</code> (see below), <code>/remember &lt;text&gt;</code> and <code>/notes</code> (see below), <code>/record [file]</code> and <code>/record stop</code> (see below) and <code>/exit</code>.</p>
 <h4 id="conversations-in-the-chat"><a href="#conversations-in-the-chat" id="conversations-in-the-chat" name="conversations-in-the-chat" class="anchor"></a>Conversations in the chat</h4>
 <p>Every chat is a conversation, listed in the project's <a href="/next/conventions/web-ui/index.html#the-sqlite-store">shared chat database</a> (<code>data/chat.db</code>) under your user, the same list the web chat shows. The messages themselves are kept in the agent's <a href="/next/conventions/agent-yaml/index.html#settings">memory</a>, so a conversation can be picked up again only as far as that memory lasts: the default <code>cache</code> memory is lost when the process ends, a <code>file</code> or <code>jdbc</code> memory is not.</p>
 <div class="bxsites-table-wrap"><table class="table">
@@ -712,6 +712,20 @@ bxAgents chat --session=2                      # open one by its number in /sess
 </tbody>
 </table></div>
 <p><code>--continue</code> opens the most recent conversation when the chat starts, and <code>--session=&lt;number or id&gt;</code> opens a particular one. Both show the earlier messages first. Over <code>--connect</code> the server keeps the list and the messages, under the name of your <a href="/next/conventions/agent-bx/index.html#access-tokens-for-a-deployed-agent">token</a>; a server without a chat database says it keeps no list.</p>
+<h4 id="models-in-the-chat"><a href="#models-in-the-chat" id="models-in-the-chat" name="models-in-the-chat" class="anchor"></a>Models in the chat</h4>
+<p>The chat can change the model it talks to without losing the conversation: the memory, tools, sub-agents and instructions stay, only the model is replaced. It lists the <a href="/next/conventions/models/index.html#profiles">profiles</a> of the project.</p>
+<div class="bxsites-table-wrap"><table class="table">
+<thead>
+<tr><th>Command</th><th>Does</th></tr>
+</thead>
+<tbody>
+<tr><td><code>/model</code></td><td>Show the model in use (<code>provider/model</code>) and its profile</td></tr>
+<tr><td><code>/profile</code></td><td>Pick a profile from a list: its provider and model, its description, which is the default and which is in use</td></tr>
+<tr><td><code>/profile &lt;name&gt;</code></td><td>Switch straight to one. A profile whose provider has no key set is switched to with a warning, since the next message would fail</td></tr>
+<tr><td><code>/default</code></td><td>Go back to the app's default: the <code>defaultProfile</code>, else the provider and model at the top of <code>Agent.yaml</code></td></tr>
+</tbody>
+</table></div>
+<p>A chat on <code>--connect</code> or <code>--server</code> talks to the model the server runs, so these commands say so and change nothing. There is no <code>/provider</code>: a profile already names its provider, and the providers' own settings are in <code>Agent.yaml</code> (see <a href="#add-provider"><code>add provider</code></a>).</p>
 <h4 id="notes-in-the-chat"><a href="#notes-in-the-chat" id="notes-in-the-chat" name="notes-in-the-chat" class="anchor"></a>Notes in the chat</h4>
 <p>When the agent keeps <a href="/next/conventions/agent-yaml/index.html#notes">notes</a>, the chat can show and change them:</p>
 <div class="bxsites-table-wrap"><table class="table">
@@ -919,6 +933,7 @@ bxAgents inspect --environment=production
 <li>Confirms <code>bx-ai</code> is loaded (always required).</li>
 <li>Runs the exact same discovery/resolve/validate phases <code>build</code> runs, without generating anything - every validation error/warning <code>build</code> would hit shows up here first.</li>
 <li>Checks every <code>*EnvVar</code>-suffixed config value across <code>gateways/*</code> (bot tokens, webhook secrets, IMAP credentials, web UI account passwords, API keys) against the real environment right now, and warns about any that aren't set. Nothing else checks this - <code>build</code> only checks that an env var name was <em>declared</em>, never that it's actually populated, so a missing one otherwise fails silently at runtime (a gateway that never sends, a web UI account that can't sign in).</li>
+<li>Checks the key variable of every provider the models use: the default model, each subagent, each <a href="/next/conventions/models/index.html#profiles">profile</a> (its <code>apiKeyEnv</code>, else the provider's usual variable, such as <code>OPENAI_API_KEY</code>) and each capability default. A key that is not set in the environment is a warning that names who needs it. Doctor never reads the project's <code>.env</code>, so a key kept only there is reported as not set even though it works when the app is served. <code>mock</code> needs no key, and <code>bxAgents test</code> runs every profile on <code>mock</code>.</li>
 <li>Does not check for <code>qb</code>, <code>cbsecurity</code>, <code>cbauth</code> or <code>cbmailservices</code>: they ship inside BxAgents and are copied into every built app.</li>
 <li><code>--json</code> prints the raw findings as a JSON array (<code>[{ status, message }, ...]</code>) instead of the human-readable report - useful for scripting.</li>
 <li>Exits <code>1</code> if any check failed, <code>0</code> otherwise - warnings alone don't fail it.</li>

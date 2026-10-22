@@ -494,7 +494,7 @@ In the screen:
 | Enter while the agent works | Steer it: your message is added to the run |
 | Ctrl+C | Clear the box; on an empty box, leave. Ctrl+D leaves too |
 
-Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/save [file]` (the conversation as Markdown), `/sessions`, `/resume`, `/clear`, `/compact` and `/info` (see below), `/remember <text>` and `/notes` (see below), `/record [file]` and `/record stop` (see below) and `/exit`.
+Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/save [file]` (the conversation as Markdown), `/sessions`, `/resume`, `/clear`, `/compact` and `/info` (see below), `/model`, `/profile` and `/default` (see below), `/remember <text>` and `/notes` (see below), `/record [file]` and `/record stop` (see below) and `/exit`.
 
 #### Conversations in the chat
 
@@ -510,6 +510,19 @@ Every chat is a conversation, listed in the project's [shared chat database](con
 | `/info` | Agent, model, conversation, message count, notes and database |
 
 `--continue` opens the most recent conversation when the chat starts, and `--session=<number or id>` opens a particular one. Both show the earlier messages first. Over `--connect` the server keeps the list and the messages, under the name of your [token](conventions/agent-bx.md#access-tokens-for-a-deployed-agent); a server without a chat database says it keeps no list.
+
+#### Models in the chat
+
+The chat can change the model it talks to without losing the conversation: the memory, tools, sub-agents and instructions stay, only the model is replaced. It lists the [profiles](conventions/models.md#profiles) of the project.
+
+| Command | Does |
+|---|---|
+| `/model` | Show the model in use (`provider/model`) and its profile |
+| `/profile` | Pick a profile from a list: its provider and model, its description, which is the default and which is in use |
+| `/profile <name>` | Switch straight to one. A profile whose provider has no key set is switched to with a warning, since the next message would fail |
+| `/default` | Go back to the app's default: the `defaultProfile`, else the provider and model at the top of `Agent.yaml` |
+
+A chat on `--connect` or `--server` talks to the model the server runs, so these commands say so and change nothing. There is no `/provider`: a profile already names its provider, and the providers' own settings are in `Agent.yaml` (see [`add provider`](#add-provider)).
 
 #### Notes in the chat
 
@@ -744,6 +757,7 @@ bxAgents doctor [--json]
 - Confirms `bx-ai` is loaded (always required).
 - Runs the exact same discovery/resolve/validate phases `build` runs, without generating anything - every validation error/warning `build` would hit shows up here first.
 - Checks every `*EnvVar`-suffixed config value across `gateways/*` (bot tokens, webhook secrets, IMAP credentials, web UI account passwords, API keys) against the real environment right now, and warns about any that aren't set. Nothing else checks this - `build` only checks that an env var name was *declared*, never that it's actually populated, so a missing one otherwise fails silently at runtime (a gateway that never sends, a web UI account that can't sign in).
+- Checks the key variable of every provider the models use: the default model, each subagent, each [profile](conventions/models.md#profiles) (its `apiKeyEnv`, else the provider's usual variable, such as `OPENAI_API_KEY`) and each capability default. A key that is not set in the environment is a warning that names who needs it. Doctor never reads the project's `.env`, so a key kept only there is reported as not set even though it works when the app is served. `mock` needs no key, and `bxAgents test` runs every profile on `mock`.
 - Does not check for `qb`, `cbsecurity`, `cbauth` or `cbmailservices`: they ship inside BxAgents and are copied into every built app.
 - `--json` prints the raw findings as a JSON array (`[{ status, message }, ...]`) instead of the human-readable report - useful for scripting.
 - Exits `1` if any check failed, `0` otherwise - warnings alone don't fail it.

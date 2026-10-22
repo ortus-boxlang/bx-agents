@@ -494,7 +494,7 @@ En la pantalla:
 | Enter mientras el agente trabaja | Lo dirige: tu mensaje se añade a la ejecución |
 | Ctrl+C | Limpia el cuadro; con el cuadro vacío, sale. Ctrl+D también sale |
 
-Escribe `/` para ver los comandos: `/help`, `/new` (una conversación nueva), `/tools`, `/copy` (la última respuesta al portapapeles, con la secuencia OSC 52 que honran la mayoría de terminales), `/save [archivo]` (la conversación en Markdown), `/sessions`, `/resume`, `/clear`, `/compact` e `/info` (ver abajo), `/remember <texto>` y `/notes` (ver abajo), `/record [archivo]` y `/record stop` (ver abajo) y `/exit`.
+Escribe `/` para ver los comandos: `/help`, `/new` (una conversación nueva), `/tools`, `/copy` (la última respuesta al portapapeles, con la secuencia OSC 52 que honran la mayoría de terminales), `/save [archivo]` (la conversación en Markdown), `/sessions`, `/resume`, `/clear`, `/compact` e `/info` (ver abajo), `/model`, `/profile` y `/default` (ver abajo), `/remember <texto>` y `/notes` (ver abajo), `/record [archivo]` y `/record stop` (ver abajo) y `/exit`.
 
 #### Conversaciones en el chat
 
@@ -510,6 +510,19 @@ Cada chat es una conversación, listada en la [base de datos de chat compartida]
 | `/info` | Agente, modelo, conversación, número de mensajes, notas y base de datos |
 
 `--continue` abre la conversación más reciente al iniciar el chat, y `--session=<número o id>` abre una concreta. Ambos muestran primero los mensajes anteriores. Con `--connect` el servidor guarda la lista y los mensajes, con el nombre de tu [token](conventions/agent-bx.md#tokens-de-acceso-para-un-agente-desplegado); un servidor sin base de datos de chat dice que no guarda lista.
+
+#### Modelos en el chat
+
+El chat puede cambiar el modelo con el que habla sin perder la conversación: la memoria, las herramientas, los subagentes y las instrucciones se mantienen, solo se sustituye el modelo. Lista los [perfiles](conventions/models.md#perfiles) del proyecto.
+
+| Comando | Hace |
+|---|---|
+| `/model` | Muestra el modelo en uso (`proveedor/modelo`) y su perfil |
+| `/profile` | Elige un perfil de una lista: su proveedor y modelo, su descripción, cuál es el predeterminado y cuál está en uso |
+| `/profile <nombre>` | Cambia directamente a uno. Un perfil cuyo proveedor no tiene clave definida se activa con un aviso, porque el siguiente mensaje fallaría |
+| `/default` | Vuelve al valor por defecto de la app: el `defaultProfile`, o si no el proveedor y modelo del principio de `Agent.yaml` |
+
+Un chat con `--connect` o `--server` habla con el modelo que ejecuta el servidor, así que estos comandos lo dicen y no cambian nada. No hay `/provider`: un perfil ya nombra su proveedor, y los ajustes propios de los proveedores están en `Agent.yaml` (consulta [`add provider`](#add-provider)).
 
 #### Notas en el chat
 
@@ -744,6 +757,7 @@ bxAgents doctor [--json]
 - Confirma que `bx-ai` está cargado (siempre es obligatorio).
 - Ejecuta exactamente las mismas fases de descubrimiento/resolución/validación que `build`, sin generar nada - cada error o aviso de validación que encontraría `build` aparece aquí primero.
 - Comprueba, contra el entorno real en este momento, cada valor de configuración con sufijo `*EnvVar` en `gateways/*` (tokens de bots, secretos de webhook, credenciales IMAP, contraseñas de cuentas de la interfaz web, claves de API) y avisa de los que no estén definidos. Nada más lo comprueba: `build` solo verifica que se *declaró* el nombre de una variable de entorno, nunca que esté realmente rellena, así que una variable ausente falla en silencio en tiempo de ejecución (un gateway que nunca envía, una cuenta de la interfaz web que no puede iniciar sesión).
+- Comprueba la variable de la clave de cada proveedor que usan los modelos: el modelo por defecto, cada subagente, cada [perfil](conventions/models.md#perfiles) (su `apiKeyEnv`, o si no la variable habitual del proveedor, como `OPENAI_API_KEY`) y cada valor por defecto de capacidad. Una clave que no está definida en el entorno es un aviso que nombra quién la necesita. Doctor nunca lee el `.env` del proyecto, así que una clave que solo está ahí se informa como no definida aunque funcione al servir la app. `mock` no necesita clave, y `bxAgents test` ejecuta todos los perfiles con `mock`.
 - No comprueba `qb`, `cbsecurity`, `cbauth` ni `cbmailservices`: vienen dentro de BxAgents y se copian en cada app construida.
 - `--json` imprime los hallazgos crudos como un array JSON (`[{ status, message }, ...]`) en lugar del informe legible - útil para scripting.
 - Sale con `1` si falló alguna comprobación y con `0` en caso contrario - los avisos por sí solos no lo hacen fallar.
