@@ -42,6 +42,9 @@ class extends="testbox.system.BaseSpec" {
 					},
 					postJson : ( baseUrl, route, body = {} ) => {
 						calls.append( { call : "post", route : route, body : duplicate( body ) } );
+						if ( route == "ping" ) {
+							return script.keyExists( "noList" ) ? throw( type = "BxAgents.AgentNotFound" ) : { success : true, ok : true, model : "openai/gpt-5", ms : 90, reply : "pong", asked : body.profile };
+						}
 						if ( route == "sessions/rename" ) {
 							return script.keyExists( "noList" ) ? throw( type = "BxAgents.AgentNotFound" ) : { success : true, ok : true, title : body.title };
 						}
@@ -64,6 +67,37 @@ class extends="testbox.system.BaseSpec" {
 			private function events( list ) {
 				script.events = arguments.list;
 			}
+
+			describe( "testing the model and what is known about it", function() {
+
+				it( "asks the server to ping, for the profile in use unless one is named", function() {
+					var outcome = session.ping();
+					expect( outcome.ok ).toBeTrue();
+					expect( calls.filter( c => c.call == "post" )[ 1 ] ).toBe( { call : "post", route : "ping", body : { profile : "" } } );
+
+					session.ping( "planner" );
+					expect( calls.filter( c => c.call == "post" )[ 2 ].body ).toBe( { profile : "planner" } );
+				} );
+
+				it( "says so when the server could not be asked", function() {
+					script.noList = true;
+					var outcome = session.ping();
+					expect( outcome.ok ).toBeFalse();
+					expect( outcome.reason ).toInclude( "could not be asked" );
+				} );
+
+				it( "reads the facts of the server's model from /agent and of a profile from /profiles", function() {
+					script.about = { name : "helper", model : "openai/gpt-5", contextWindow : 128000, vision : "yes" };
+					script.profiles = [ { name : "fast", provider : "openai", model : "gpt-5-mini", isDefault : false, contextWindow : 400000, vision : "no" } ];
+					var fresh = new bxagents.models.cli.chat.HttpSession( "http://h:1/", new FakeClient( fake ) );
+
+					expect( fresh.modelFacts() ).toBe( { contextWindow : 128000, vision : "yes" } );
+					fresh.useProfile( "fast" );
+					expect( fresh.modelFacts() ).toBe( { contextWindow : 400000, vision : "no" } );
+					expect( fresh.info().map( r => r[ 1 ] ) ).toInclude( "Context" );
+				} );
+
+			} );
 
 			describe( "naming and forking", function() {
 

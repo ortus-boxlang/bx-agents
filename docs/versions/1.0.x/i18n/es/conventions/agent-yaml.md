@@ -35,7 +35,8 @@ environments:
 | `params` | mapping | Parámetros de petición por defecto, como `temperature`. |
 | `options` | mapping | Opciones del proveedor por defecto, como `timeout`. |
 | `providers` | mapping | `params` y `options` por proveedor, por nombre de proveedor. |
-| `profiles` | mapping | Combinaciones con nombre de proveedor, modelo, params, options y `apiKeyEnv`. |
+| `profiles` | mapping | Combinaciones con nombre de proveedor, modelo, params, options y `apiKeyEnv`, y opcionalmente `contextWindow` y `vision`. |
+| `contextWindow`, `vision` | número, booleano | Lo que puede contener el modelo por defecto (tokens) y si puede ver imágenes. Datos opcionales para el chat; bx-ai no los lee. Ver [Modelos](models.md#lo-que-el-proyecto-sabe-de-un-modelo). |
 | `defaultProfile` | string | El perfil que se usa cuando nada pide otro. |
 | `profile` | string | El perfil que usa este agente. |
 | `embeddings`, `speech`, `transcription`, `image` | mapping | Valores por defecto de capacidades de bx-ai: `provider`, `model` y algunos ajustes cada uno. |

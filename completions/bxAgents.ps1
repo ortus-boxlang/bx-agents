@@ -16,6 +16,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 		'hash-password' = 'Hash a password for a webui users entry'
 		'inspect' = 'Report how the agent is composed: agents, tools, skills, MCP, exposure, env'
 		'invoke' = 'Send one message to a built agent, print the response, exit'
+		'models' = 'List the models a project can talk to and test that they answer'
 		'new' = 'Scaffold a new agent project'
 		'notes' = 'Read and manage the notes of an agent'
 		'package' = 'Package a built project into a .bxa'
@@ -138,6 +139,12 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'server'; Value = $false; Choices = @(); Dir = $false }
 		)
 		'invoke:positional' = 'dir'
+		'models' = @(
+			@{ Name = 'all'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'json'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'profile'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
+		)
 		'new' = @(
 			@{ Name = 'app'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'channels'; Value = $true; Choices = @('web', 'api', 'telegram', 'slack', 'discord', 'whatsapp-cloud', 'teams', 'twilio', 'github', 'email', 'signal'); Dir = $false }

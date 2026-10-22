@@ -109,6 +109,9 @@ Emite, lista y revoca tokens de acceso para un agente desplegado.
 ::: card title="notes" icon="phosphor-duotone:note-pencil" href="#notes"
 Lee y gestiona las notas que guarda un agente.
 :::
+::: card title="models" icon="phosphor-duotone:cpu" href="#models"
+Lista los modelos con los que puede hablar un proyecto y prueba que responden.
+:::
 ::: card title="sessions" icon="phosphor-duotone:chats" href="#sessions"
 Lista, renombra, bifurca y borra las conversaciones de la base de datos del chat.
 :::
@@ -549,7 +552,8 @@ El chat puede cambiar el modelo con el que habla sin perder la conversación: la
 
 | Comando | Hace |
 |---|---|
-| `/model` | Muestra el modelo en uso (`proveedor/modelo`) y su perfil |
+| `/model` | Muestra el modelo en uso (`proveedor/modelo`), su perfil y, cuando el proyecto lo dice, su ventana de contexto y si puede ver imágenes |
+| `/ping [perfil]` | Prueba que el modelo responde, con una pregunta diminuta: dice cuánto tardó, o por qué no respondió (sin clave, un nombre de modelo equivocado, el servicio inaccesible). El resultado se conserva 30 segundos, así que repetirlo no es otra petición |
 | `/profile` | Elige un perfil de una lista: su proveedor y modelo, su descripción, cuál es el predeterminado y cuál está en uso |
 | `/profile <nombre>` | Cambia directamente a uno. Un perfil cuyo proveedor no tiene clave definida se activa con un aviso, porque el siguiente mensaje fallaría |
 | `/default` | Vuelve al valor por defecto de la app: el `defaultProfile`, o si no el proveedor y modelo del principio de `Agent.yaml` |
@@ -704,6 +708,25 @@ bxAgents notes import --file=notes.json
 - `stats` muestra cuánto llena cada alcance y el tamaño aproximado que añaden al prompt (unos cuatro caracteres por token; una estimación, no un recuento).
 - `export` escribe las notas como JSON, en `--file` o en pantalla. `import` añade las notas de un archivo así; una nota que ya existe se omite y una que no cabe en el límite se informa.
 - Ejecútalo donde está la base de datos: en el proyecto, o en un servidor con `BXAGENTS_DB` definido.
+
+### `models`
+
+Los modelos de un proyecto compilado, y si responden.
+
+```bash
+bxAgents models list [--json]
+bxAgents models test [--profile=NOMBRE | --all] [--json]
+```
+
+```
+default       openai/gpt-5                    context 128,000  images yes  key set
+fast          openai/gpt-5-mini               context 400,000  images no  key set
+planner       claude/claude-opus-4            context ?  images ?  key MISSING
+```
+
+- `list` muestra el modelo por defecto y cada [perfil](conventions/models.md#perfiles), con lo que el proyecto dice de cada uno ([`contextWindow` y `vision`](conventions/models.md#lo-que-el-proyecto-sabe-de-un-modelo), `?` cuando no dice nada) y si la clave del perfil está definida.
+- `test` envía a cada modelo una pregunta diminuta a través de bx-ai e informa `ok` con el tiempo, o `FAILED` con el mensaje del propio proveedor. Prueba el modelo por defecto, un perfil con `--profile`, o todos con `--all`, y sale con `1` cuando alguno no responde, así que puede usarse como puerta antes de desplegar. Gasta unos pocos tokens por modelo.
+- Usa los modelos con los que se compiló el proyecto por última vez: ejecuta antes `bxAgents build`.
 
 ### `sessions`
 

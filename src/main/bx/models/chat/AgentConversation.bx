@@ -30,6 +30,13 @@ class {
 		return true
 	}
 
+	/**
+	 * @return Where the agent runs; the default is this process, and the other sessions say otherwise
+	 */
+	string function mode() {
+		return "in-process"
+	}
+
 	string function userId() {
 		return variables.userId
 	}
@@ -53,6 +60,39 @@ class {
 	struct function modelInfo() {
 		var model = variables.agent.getConfig().model ?: {}
 		return { model : modelName(), profile : variables.agent.getConfig().profile ?: "", provider : isStruct( model ) ? ( model.provider ?: "" ) : "" }
+	}
+
+	/**
+	 * @return { contextWindow : tokens (0 when the project does not say), vision : "yes" | "no" | "" } for the model in use
+	 */
+	struct function modelFacts() {
+		return new "models.runtime.ModelFacts@bxagents"().of( modelInfo().profile )
+	}
+
+	/**
+	 * Asks a model whether it answers, with one tiny question. No conversation is touched.
+	 *
+	 * @profile A profile name; blank for the model in use
+	 *
+	 * @return { ok, model, ms, reply } or { ok : false, model, reason }
+	 */
+	struct function ping( string profile = "" ) {
+		var asked = trim( arguments.profile )
+		var target = asked
+		var label = modelName()
+		if ( len( asked ) ) {
+			var found = profiles().filter( p => p.name == asked )
+			if ( !found.len() ) {
+				return { ok : false, model : asked, reason : "There is no profile [#asked#]. You can use: #profiles().map( p => p.name ).toList( ', ' )#" }
+			}
+			label = found[ 1 ].provider & ( len( found[ 1 ].model ) ? "/" & found[ 1 ].model : "" )
+			if ( !found[ 1 ].hasApiKey ) {
+				return { ok : false, model : label, reason : "No API key was found for #found[ 1 ].provider#, so there is nothing to test yet." }
+			}
+		} else {
+			target = modelInfo().profile == "default" ? "" : modelInfo().profile
+		}
+		return new "models.runtime.ModelProbe@bxagents"().ping( target ).append( { model : label } )
 	}
 
 	/**
@@ -283,6 +323,12 @@ class {
 			[ "Conversation", variables.conversationId ],
 			[ "Messages", variables.agent.getMemoryMessages( variables.userId, variables.conversationId ).len() ]
 		]
+		// what the project says about the model sits right under it
+		var at = 2
+		for ( var row in new "models.chat.ModelFactsLines@bxagents"().of( modelFacts() ) ) {
+			at++
+			lines.insertAt( at, row )
+		}
 		var kept = notes()
 		if ( kept.available() ) {
 			var stats = kept.stats()

@@ -1,0 +1,107 @@
+/**
+ * `models` CLI verb - the models a project can talk to, and whether they answer.
+ *
+ *   bxAgents models list [--json]
+ *   bxAgents models test [--profile=NAME | --all] [--json]
+ *
+ * `list` shows the default model and every profile with what the project says about each (context window,
+ * image support) and whether its API key is set. `test` sends each model one tiny question through bx-ai and
+ * says whether it answered and how long it took, so a wrong key or model name shows before a chat does. It tests
+ * the default model, one profile with --profile, or all of them with --all, and exits 1 when any does not answer.
+ *
+ * Both need a built project: the models are the ones the built app carries.
+ */
+class {
+
+	static {
+		ACTIONS = [ "list", "test" ]
+	}
+
+	/**
+	 * @options { projectRoot (required), _positional (the action), profile, all, json }
+	 */
+	struct function run( struct options = {} ) {
+		var projectRoot = trim( arguments.options.projectRoot ?: "" )
+		if ( !len( projectRoot ) ) {
+			throw( type = "BxAgents.MissingProjectRoot", message = "`models` requires a project root" )
+		}
+		var action = lCase( trim( arguments.options._positional ?: "" ) )
+		if ( !static.ACTIONS.contains( action ) ) {
+			throw( type = "BxAgents.UnknownModelsAction", message = "`models` needs one of: #static.ACTIONS.toList( ', ' )# - for example `bxAgents models test`." )
+		}
+		var root = projectRoot.reReplace( "[\/]+$", "" )
+		var loader = new "models.cli.support.BuiltAgent@bxagents"()
+		if ( !loader.isBuilt( root ) ) {
+			throw( type = "BxAgents.NotBuilt", message = "No build found at [#root#/.build] - run `build` first" )
+		}
+		var chat = new "models.chat.AgentConversation@bxagents"( loader.load( root ), "cli" )
+		var rows = known( chat )
+		return action == "list" ? list( rows, arguments.options.json ?: false ) : test( chat, rows, arguments.options )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @return [ { name, model, contextWindow, vision, hasApiKey, isDefault } ]: the app's default model, then the profiles
+	 */
+	private array function known( required any chat ) {
+		var facts = new "models.runtime.ModelFacts@bxagents"()
+		var rows = [ {
+			name          : "default",
+			model         : arguments.chat.modelName(),
+			contextWindow : facts.of( "" ).contextWindow,
+			vision        : facts.of( "" ).vision,
+			hasApiKey     : true,
+			isDefault     : true
+		} ]
+		for ( var p in arguments.chat.profiles() ) {
+			if ( p.name == "default" ) {
+				continue
+			}
+			var about = facts.of( p.name )
+			rows.append( {
+				name          : p.name,
+				model         : p.provider & ( len( p.model ) ? "/" & p.model : "" ),
+				contextWindow : about.contextWindow,
+				vision        : about.vision,
+				hasApiKey     : p.hasApiKey,
+				isDefault     : p.isDefault
+			} )
+		}
+		return rows
+	}
+
+	private struct function list( required array rows, required boolean asJson ) {
+		if ( arguments.asJson ) {
+			return { exitCode : 0, message : jsonSerialize( arguments.rows ) }
+		}
+		var lines = arguments.rows.map( r => left( r.name & repeatString( " ", 14 ), 14 ) & left( r.model & repeatString( " ", 32 ), 32 ) & "context " & ( r.contextWindow ? numberFormat( r.contextWindow ) : "?" ) & "  images " & ( len( r.vision ) ? r.vision : "?" ) & "  key " & ( r.hasApiKey ? "set" : "MISSING" ) )
+		return { exitCode : 0, message : lines.toList( char( 10 ) ) }
+	}
+
+	private struct function test( required any chat, required array rows, required struct options ) {
+		var wanted = trim( arguments.options.profile ?: "" )
+		var chosen = arguments.rows
+		if ( len( wanted ) ) {
+			chosen = arguments.rows.filter( r => r.name == wanted )
+			if ( !chosen.len() ) {
+				throw( type = "BxAgents.UnknownProfile", message = "There is no profile [#wanted#]. Try `bxAgents models list`." )
+			}
+		} else if ( !( arguments.options.all ?: false ) ) {
+			chosen = [ arguments.rows[ 1 ] ]
+		}
+		var results = []
+		for ( var row in chosen ) {
+			// the default model is tested through the agent's own, a profile through its name
+			var outcome = arguments.chat.ping( row.name == "default" ? "" : row.name )
+			results.append( { name : row.name, model : outcome.model, ok : outcome.ok, ms : outcome.ms ?: 0, detail : outcome.ok ? outcome.reply : outcome.reason } )
+		}
+		var failed = results.filter( r => !r.ok ).len()
+		if ( arguments.options.json ?: false ) {
+			return { exitCode : failed ? 1 : 0, message : jsonSerialize( results ) }
+		}
+		var lines = results.map( r => left( r.name & repeatString( " ", 14 ), 14 ) & left( r.model & repeatString( " ", 32 ), 32 ) & ( r.ok ? "ok       #r.ms# ms" : "FAILED   " & r.detail ) )
+		return { exitCode : failed ? 1 : 0, message : lines.toList( char( 10 ) ) }
+	}
+
+}

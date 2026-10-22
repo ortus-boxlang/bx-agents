@@ -258,6 +258,7 @@ POST /__bxagents/sessions/fork     # { conversationId, title? } copy one, messag
 GET  /__bxagents/history    # ?conversationId= what was said in one
 POST /__bxagents/clear      # { conversationId } forget its messages
 POST /__bxagents/compact    # { conversationId } summarize the older messages
+POST /__bxagents/ping       # { profile? } test a model with one tiny question: { ok, model, ms, reply } or { ok : false, model, reason }
 GET  /__bxagents/commands   # the slash commands this caller may run, [ { name, hint } ]
 POST /__bxagents/command    # { line : "/info", conversationId? } run one, answers { blocks, effects, conversationId }
 GET  /__bxagents/notes    # the caller's notes and the agent's, with how full they are

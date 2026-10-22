@@ -240,6 +240,7 @@ POST /__bxagents/sessions/fork     # { conversationId, title? } copia una, mensa
 GET  /__bxagents/history    # ?conversationId= lo que se dijo en una
 POST /__bxagents/clear      # { conversationId } olvida sus mensajes
 POST /__bxagents/compact    # { conversationId } resume los mensajes antiguos
+POST /__bxagents/ping       # { profile? } prueba un modelo con una pregunta diminuta: { ok, model, ms, reply } o { ok : false, model, reason }
 GET  /__bxagents/commands   # los comandos con barra que quien llama puede ejecutar, [ { name, hint } ]
 POST /__bxagents/command    # { line : "/info", conversationId? } ejecuta uno, responde { blocks, effects, conversationId }
 GET  /__bxagents/notes    # las notas de quien llama y las del agente, con cuánto llenan
