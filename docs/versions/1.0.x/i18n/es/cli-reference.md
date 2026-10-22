@@ -23,6 +23,17 @@ Estos se manejan antes del despacho de verbos y nunca llegan a un verbo.
 | `-h`, `--help`, `help` | Imprime el uso (cada verbo + descripción) y sale con 0. Se acepta en **cualquier** posición, así que `bxAgents clean --help` imprime el uso en lugar de ejecutar `clean`. También se imprime (sale con 1) si no se da ningún verbo en absoluto. |
 | `-v`, `--version` | Imprime `bxAgents v{version}` y sale con 0. Solo es significativo como primer token, así que nunca colisiona con `package --version=1.0.0`. |
 
+## El banner
+
+En una terminal interactiva, `bxAgents --help` y el inicio del asistente de `new` te saludan con el nombre BxAgents en letras de bloque, pintado con un degradado elegido al azar entre ocho temas (Ocean, Fire, Sunset, Purple, Mint, Gray, Forest, Gold), la misma idea que el banner de la CLI de ColdBox. Nunca se escribe a un pipe ni a un archivo.
+
+| Ajuste | Efecto |
+|---|---|
+| `NO_COLOR`, `--no-color` | La misma forma, sin color |
+| `TERM=dumb`, o una terminal más estrecha que el arte (76 columnas) | Una línea simple en su lugar |
+| `--no-banner`, o `BXAGENTS_BANNER=off` | Sin banner |
+| `BXAGENTS_BANNER_THEME=Ocean` | Fija un tema en lugar de uno aleatorio, para una grabación que salga igual siempre |
+
 ## Todo verbo acepta
 
 `--projectRoot=<path>` (o una ruta posicional simple como el primer argumento sin flag) para apuntar a un proyecto distinto del directorio actual. Precedencia: flag `--projectRoot` > primer argumento posicional > directorio de trabajo actual.

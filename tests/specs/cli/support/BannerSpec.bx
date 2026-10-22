@@ -1,0 +1,81 @@
+/**
+ * The banner: the shape of the art, the gradient themes, and when it is left out.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "Banner", function() {
+
+			beforeEach( function() {
+				variables.banner = new bxagents.models.cli.support.Banner();
+				variables.esc = char( 27 );
+			} );
+
+			it( "draws the name in six rows of one width", function() {
+				var rows = banner.art();
+
+				expect( rows ).toHaveLength( 6 );
+				expect( rows.map( r => r.len() ).reduce( ( widths, w ) => widths.append( w ), [] ).unique() ).toHaveLength( 1 );
+				expect( banner.width() ).toBeLTE( 80 );
+				expect( rows[ 1 ] ).toInclude( "██████╗" );
+			} );
+
+			it( "paints each row with its own color from the theme and resets after it", function() {
+				var lines = banner.render( theme = "Ocean" );
+				var painted = lines.filter( l => l.find( esc & "[38;5;" ) );
+
+				expect( painted ).toHaveLength( 6 );
+				expect( painted[ 1 ] ).toInclude( esc & "[38;5;81m" );
+				expect( painted[ 6 ] ).toInclude( esc & "[38;5;21m" );
+				expect( painted.every( l => l.endsWith( esc & "[0m" ) ) ).toBeTrue();
+			} );
+
+			it( "knows the same eight themes the ColdBox CLI has, and ignores the case of a name", function() {
+				expect( banner.themes() ).toBe( [ "Fire", "Forest", "Gold", "Gray", "Mint", "Ocean", "Purple", "Sunset" ] );
+				expect( banner.render( theme = "oCeAn" )[ 2 ] ).toInclude( "[38;5;81m" );
+			} );
+
+			it( "picks a theme at random when none is given, and falls back to a random one for a name it does not know", function() {
+				var seen = {};
+				for ( var i = 1; i <= 60; i++ ) {
+					seen[ banner.render()[ 2 ] ] = true;
+				}
+				expect( seen.count() ).toBeGT( 1 );
+				expect( banner.render( theme = "Nope" )[ 2 ] ).toInclude( "[38;5;" );
+			} );
+
+			it( "leaves out the color codes when asked, and keeps the shape", function() {
+				var lines = banner.render( "v1", "Ocean", false );
+
+				expect( lines.some( l => l.find( esc ) ) ).toBeFalse();
+				expect( lines ).toInclude( banner.art()[ 1 ] );
+			} );
+
+			it( "boxes the subtitle under the art, centered", function() {
+				var lines = banner.render( "v1.0.0", "Gold", false );
+				var middle = lines.filter( l => l.find( "v1.0.0" ) );
+
+				expect( middle ).toHaveLength( 1 );
+				expect( middle[ 1 ] ).toInclude( "██" );
+				expect( lines.filter( l => l.find( "▄▄▄▄" ) ) ).toHaveLength( 1 );
+				expect( lines.filter( l => l.find( "▀▀▀▀" ) ) ).toHaveLength( 1 );
+			} );
+
+			it( "falls back to one plain line on a narrow screen", function() {
+				expect( banner.render( "v1", "", true, 40 ) ).toBe( [ "bxAgents  v1" ] );
+			} );
+
+			it( "prints nothing when there is no terminal to greet", function() {
+				// the test run is not an interactive terminal
+				expect( banner.wanted() ).toBeFalse();
+				expect( banner.show( {}, "v1" ) ).toBeFalse();
+			} );
+
+			it( "is turned off by --no-banner", function() {
+				expect( banner.wanted( { banner : false } ) ).toBeFalse();
+			} );
+
+		} );
+	}
+
+}
