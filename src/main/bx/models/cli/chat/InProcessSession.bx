@@ -78,7 +78,9 @@ class {
 	array function profiles() {
 		var current = modelInfo().profile
 		var catalog = new "models.wizard.WizardCatalog@bxagents"()
-		return aiProfiles().map( p => {
+		// the default first, then the named ones by name: the order bx-ai lists them in is not promised
+		var listed = aiProfiles().sort( ( a, b ) => a.name == "default" ? -1 : ( b.name == "default" ? 1 : compareNoCase( a.name, b.name ) ) )
+		return listed.map( p => {
 			name        : p.name,
 			description : p.description ?: "",
 			provider    : p.provider,
