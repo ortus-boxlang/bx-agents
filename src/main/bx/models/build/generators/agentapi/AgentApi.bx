@@ -313,8 +313,24 @@ class {
 			"contextWindow" : facts.contextWindow,
 			"vision"       : facts.vision,
 			"toolCount"    : config.toolCount ?: 0,
-			"capabilities" : { "events" : true, "cancel" : true, "steer" : true, "approvals" : true, "notes" : !isNull( notesProvider() ), "sessions" : !isNull( sessionStore() ), "profiles" : offeredProfiles().len() > 0, "commands" : true }
+			"capabilities" : { "events" : true, "cancel" : true, "steer" : true, "approvals" : true, "notes" : !isNull( notesProvider() ), "sessions" : !isNull( sessionStore() ), "profiles" : offeredProfiles().len() > 0, "commands" : true, "context" : true }
 		} )
+	}
+
+	/**
+	 * What is in the caller's context for one conversation: the system prompt, the tool definitions, the notes and the
+	 * messages, as estimated sizes (see models.chat.ContextReport). Nothing is sent to a model.
+	 *
+	 * Query: conversationId
+	 */
+	function context( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var conversation = new "models.chat.ServerConversation@bxagents"( agent(), callerId( event ), nullValue(), rc.conversationId ?: "" )
+		var answer = conversation.contextReport()
+		answer[ "success" ] = true
+		event.renderData( type : "json", data : answer )
 	}
 
 	/**

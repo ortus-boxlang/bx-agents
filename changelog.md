@@ -249,6 +249,11 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   whether it answered, how long it took, or the provider's own reason; `bxAgents models list` shows the models and
   what is known about them. `POST /__bxagents/ping` does it for `chat --connect`, only for the profiles the route offers.
 
+- `/context` shows how big the context is and what it is made of (system prompt, tool definitions, notes, messages),
+  worked out locally, with the share of the model's window when `contextWindow` is set. The hint row under the
+  message box in the terminal and a chip in the web page's header always show it: `ctx ~12.4k / 128k 9%`.
+  `GET /__bxagents/context` serves it to `chat --connect`.
+
 #### The chat screen
 
 - `bxAgents chat` is now a Pi-style terminal screen that keeps your scrollback: finished turns are

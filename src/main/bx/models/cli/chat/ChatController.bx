@@ -5,10 +5,11 @@
  * (InProcessSession or HttpSession).
  *
  * The screen:  chooseKeys( title, lines, choices, keys, footer ), ask( title, help, initial ), readInput(), printUser( text ), print( style, text ), printMarkdown( text ),
+ *              setStatus( text ),
  *              banner( agent, model, mode ), beginTurn(), push( event ), endTurn(),
  *              cancelRequested(), takeSteer(), choose( title, lines, choices ), copy( text ), close()
  * The session: agentName(), modelName(), mode(), tools(), newThread(), notes(), sessions(), resumeSession( ref ),
- *              clear(), compact(), info(), conversationId(),
+ *              clear(), compact(), info(), conversationId(), contextReport(),
  *              modelInfo(), switchable(), profiles(), useProfile( name ), useDefault()
  *              send( text, hooks ), resume( decision, hooks ), close()
  *              notes() is an object with available(), list( scope ), add( scope, text ), update( id, text ),
@@ -76,6 +77,7 @@ class {
 			command( "/resume" & ( arguments.resume == "last" ? "" : " " & arguments.resume ) )
 		}
 		while ( true ) {
+			refreshStatus()
 			var input = variables.screen.readInput()
 			if ( isNull( input ) ) {
 				break
@@ -95,6 +97,19 @@ class {
 	}
 
 	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Puts the size of the context in the hint row under the message box, as it stands now. It changes with every
+	 * message, /clear, /compact, /resume and note, so it is worked out before each prompt. A status bar is a
+	 * convenience: when the size cannot be worked out the chat goes on without it.
+	 */
+	private void function refreshStatus() {
+		try {
+			variables.screen.setStatus( new "models.chat.ContextLines@bxagents"().status( variables.session.contextReport() ) )
+		} catch ( any e ) {
+			variables.screen.setStatus( "" )
+		}
+	}
 
 	/**
 	 * Runs a command line and shows its reply.

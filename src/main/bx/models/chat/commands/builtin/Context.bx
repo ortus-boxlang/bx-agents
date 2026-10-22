@@ -1,0 +1,37 @@
+/**
+ * /context: how big the context is right now and what it is made of. Worked out locally, no model is called.
+ */
+class extends="models.chat.commands.BaseCommand@bxagents" {
+
+	string function name() {
+		return "context"
+	}
+
+	string function hint() {
+		return "how big the context is: system prompt, tools, notes, messages"
+	}
+
+	array function transports() {
+		return [ "tui", "web" ]
+	}
+
+	any function run( required any context, required string args ) {
+		var reply = arguments.context.reply()
+		var report = arguments.context.chat().contextReport()
+		var words = new "models.chat.ContextLines@bxagents"()
+		var rows = report.parts.map( p => [ p.label, words.approx( p.tokens ), p.detail ] )
+		rows.append( [ "Total", words.approx( report.total ), report.contextWindow > 0 ? "of #numberFormat( report.contextWindow )# tokens" : "" ] )
+		reply.grid( [ { width : 18, align : "left" }, { width : 7, align : "right" }, { width : 0 } ], rows )
+		if ( report.contextWindow > 0 ) {
+			reply.text( "#words.bar( report )# #report.percent#% of the window" )
+		} else {
+			reply.text( "The project does not say this model's context window. Add contextWindow to its profile, or to the top of Agent.yaml, to see the share it takes." )
+		}
+		if ( report.tools.len() ) {
+			reply.text( "Largest tool definitions: " & report.tools.slice( 1, min( 5, report.tools.len() ) ).map( t => t.name & " " & words.approx( t.tokens ) ).toList( ", " ) )
+		}
+		reply.text( "Estimates (characters divided by four)." & ( report.mcpServers > 0 ? " The tools of #report.mcpServers# MCP server#report.mcpServers == 1 ? '' : 's'# are fetched when a run starts and are not counted." : "" ) )
+		return reply
+	}
+
+}

@@ -96,6 +96,7 @@ A `webui` entry mounts twenty-five actions under `<path>/api`, served by a gener
 | `GET /health` | Liveness |
 | `GET /info` | Agent name, model, memory/tool counts, capability flags |
 | `GET /commands` | The [slash commands](#slash-commands) the page offers, `[ { name, hint } ]` |
+| `GET /context` | What is in this visitor's context for one conversation (`?conversationId=`): `{ parts : [ { key, label, tokens, detail } ], tools : [ { name, tokens } ], total, contextWindow, percent }`. Estimates from the system prompt, tool definitions, notes and messages; no model is called |
 | `POST /command` | Run one for this visitor: `{ line : "/info", conversationId? }`, answers with the reply as data |
 | `GET /profiles` | The [profiles](models.md#profiles) the entry offers, `[]` when it lists none. See [Choosing the model](#choosing-the-model) |
 | `GET /conversations` | This visitor's conversations, newest activity first |
@@ -114,7 +115,7 @@ Every one is scoped by ColdBox's `getUserSessionIdentifier()` as the `userId`. T
 
 ### Slash commands
 
-Type `/` in the message box and a menu of commands appears (arrow keys, `Tab` to complete, `Esc` to close). They are the same commands as in [the terminal chat](../cli-reference.md#the-same-commands-in-the-web-page-and-in-chat-apps): `/help`, `/new`, `/tools`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/info`, `/remember`, `/notes`, `/name`, `/fork` and `/export`. Pressing Enter runs the line on the server with `POST /command` and draws the answer: text, a table, or buttons to pick from. `/new`, `/resume` and `/fork` move the page to the conversation they name, `/clear` reloads the transcript, and `/export [file] [--format=md|html]` hands the conversation to the browser to save (the **Fork** and **Export** buttons in the header run `/fork` and `/export`).
+Type `/` in the message box and a menu of commands appears (arrow keys, `Tab` to complete, `Esc` to close). They are the same commands as in [the terminal chat](../cli-reference.md#the-same-commands-in-the-web-page-and-in-chat-apps): `/help`, `/new`, `/tools`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/info`, `/context`, `/remember`, `/notes`, `/name`, `/fork` and `/export`. Pressing Enter runs the line on the server with `POST /command` and draws the answer: text, a table, or buttons to pick from. `/new`, `/resume` and `/fork` move the page to the conversation they name, `/clear` reloads the transcript, and `/export [file] [--format=md|html]` hands the conversation to the browser to save (the **Fork** and **Export** buttons in the header run `/fork` and `/export`).
 
 The reply is data, so any client can use it:
 
@@ -257,6 +258,7 @@ The shipped page is a real chat client, not a demo shell. It reads `GET /info` *
 | **Approvals** | A human-in-the-loop pause renders an Approve/Reject card from `GET /pending`, answered via `/resume`, which streams the continuation of the same turn |
 | **Theme** | Stored server-side in `preferences`, so it follows the identity rather than the browser. `localStorage` keeps a local copy so the choice survives a failed request |
 | **Model** | `/info`'s model name sits in the header, so it is always clear what answered |
+| **Context size** | A chip in the header, `ctx ~12.4k / 128k 9%`, from `GET /context`, refreshed after each turn, command, clear, compaction, conversation switch and change to the notes. Click it for the breakdown (`/context`). It shows the share of the window only when the model's [`contextWindow`](models.md#what-the-project-knows-about-a-model) is set |
 
 **Recovery matters more than it sounds.** The last-opened conversation is remembered in `localStorage`, but the conversations themselves live on the server. If that id no longer exists - deleted in another tab, or a fresh store - the page falls back to the newest remaining conversation instead of rehydrating into an empty screen with no active row.
 

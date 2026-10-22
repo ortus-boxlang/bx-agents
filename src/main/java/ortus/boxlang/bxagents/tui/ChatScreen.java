@@ -81,6 +81,8 @@ public final class ChatScreen implements AutoCloseable {
 	private final Queue<Map<?, ?>>			events			= new ConcurrentLinkedQueue<>();
 	private final Queue<String>				steer			= new ConcurrentLinkedQueue<>();
 	private volatile boolean				cancel;
+	/** a short note at the front of the hint row, such as the size of the context; empty for none */
+	private volatile String					status			= "";
 	private volatile boolean				turnOver;
 	private Thread							turnThread;
 
@@ -164,6 +166,14 @@ public final class ChatScreen implements AutoCloseable {
 
 	private void out( Text text ) {
 		runner.println( text );
+	}
+
+	/**
+	 * Sets the status segment of the hint row under the message box, for example {@code ctx ~12.4k / 128k 9%}.
+	 * It shows from the next time the box is drawn; an empty text removes it.
+	 */
+	public void setStatus( String text ) {
+		this.status = text == null ? "" : text;
 	}
 
 	/** Prints what the user sent. */
@@ -529,7 +539,7 @@ public final class ChatScreen implements AutoCloseable {
 		}
 		rows.add( separator() );
 		rows.addAll( composerRows() );
-		rows.add( withRecordingMark( Row.of( " enter send · alt+enter new line · ↑ history" + ( menu.isEmpty() ? "" : " · tab completes" ), theme.muted ) ) );
+		rows.add( withRecordingMark( Row.of( " " + statusPrefix() + "enter send · alt+enter new line · ↑ history" + ( menu.isEmpty() ? "" : " · tab completes" ), theme.muted ) ) );
 		return rows;
 	}
 
@@ -557,8 +567,13 @@ public final class ChatScreen implements AutoCloseable {
 		rows.addAll( composerRows() );
 		long secs = ( System.currentTimeMillis() - turnStarted ) / 1000;
 		rows.add( withRecordingMark( Row.of().add( " " + spin + " ", theme.accent ).add( cancel ? "stopping" : "working", theme.plain )
-		    .add( " " + secs + "s · esc stops · type and press enter to steer", theme.muted ) ) );
+		    .add( " " + secs + "s · esc stops · type and press enter to steer" + ( status.isEmpty() ? "" : " · " + status ), theme.muted ) ) );
 		return rows;
+	}
+
+	/** the status segment, with its separator, or nothing */
+	private String statusPrefix() {
+		return status.isEmpty() ? "" : status + " · ";
 	}
 
 	/** a red dot and "rec" at the end of a hint row while a recording is on */

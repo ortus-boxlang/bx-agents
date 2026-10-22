@@ -38,6 +38,9 @@ class extends="testbox.system.BaseSpec" {
 							}
 							return { profiles : script.profiles };
 						}
+						if ( route == "context" ) {
+							return script.keyExists( "noList" ) ? throw( type = "BxAgents.AgentRouteMissing" ) : { parts : [], tools : [], mcpServers : 0, total : 640, contextWindow : 8000, percent : 8, asked : query.conversationId };
+						}
 						throw( type = "Test.Unexpected", message = route );
 					},
 					postJson : ( baseUrl, route, body = {} ) => {
@@ -95,6 +98,23 @@ class extends="testbox.system.BaseSpec" {
 					fresh.useProfile( "fast" );
 					expect( fresh.modelFacts() ).toBe( { contextWindow : 400000, vision : "no" } );
 					expect( fresh.info().map( r => r[ 1 ] ) ).toInclude( "Context" );
+				} );
+
+			} );
+
+			describe( "the size of the context", function() {
+
+				it( "asks the server for the report of this conversation", function() {
+					var report = session.contextReport();
+					expect( report.total ).toBe( 640 );
+					expect( report.asked ).toBe( session.conversationId() );
+				} );
+
+				it( "gives an empty report when the server cannot say", function() {
+					script.noList = true;
+					var report = session.contextReport();
+					expect( report.total ).toBe( 0 );
+					expect( report.parts ).toBeEmpty();
 				} );
 
 			} );
