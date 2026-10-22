@@ -130,7 +130,7 @@ bxAgents new my-agent --repo=owner/repo-name
 bxAgents new my-agent --forgebox=some-package-slug
 ```
 
-- With no `--model`, no `--repo` and no `--forgebox`, at a terminal, `new` runs the [wizard](guides/new-wizard.md). `--no-wizard` or `--yes` turns it off, `--wizard` turns it on even with a `--model`, and `--no-tui` asks the same questions as numbered lines. A `--model` on its own never starts it, since scripts have always had to pass one. The wizard's flags (`--with`, `--search`, `--files`, `--files-dir`, `--memory`, `--mcp`, `--channels`, `--web-auth`, `--guard`, `--deploy` and the deploy details) are listed in the [wizard guide](guides/new-wizard.md#without-the-wizard); a bad value names the flag and what it accepts. They need `Agent.yaml`, so they cannot be combined with `--class`.
+- With no `--model`, no `--repo` and no `--forgebox`, at a terminal, `new` runs the [wizard](guides/new-wizard.md). `--no-wizard` or `--yes` turns it off, `--wizard` turns it on even with a `--model`, and `--no-tui` asks the same questions as numbered lines. A `--model` on its own never starts it, since scripts have always had to pass one. The wizard's flags (`--with`, `--search`, `--files`, `--files-dir`, `--temperature`, `--max-tokens`, `--timeout`, `--memory`, `--mcp`, `--channels`, `--web-auth`, `--guard`, `--deploy` and the deploy details) are listed in the [wizard guide](guides/new-wizard.md#without-the-wizard); a bad value names the flag and what it accepts. They need `Agent.yaml`, so they cannot be combined with `--class`.
 - `--template`, `--repo`, and `--forgebox` name three different project SOURCES - exactly one applies. Combining any two of them is an error.
 - **`--template` mode** (the default when no source flag is passed at all - `minimal`):
   - `--model` is **required** when no questions are asked - a `provider/model` slug (see [the model slug](conventions/agent-bx.md#the-model-slug)).
@@ -156,7 +156,7 @@ bxAgents new my-agent --forgebox=some-package-slug
 
 ### `add`
 
-Add one thing to a project that already exists, asking the same questions `new` asks. Today that is a `tool`, an `interceptor`, a `schedule`, an `mcp` server, a `gateway`, a `subagent` or a `skill`.
+Add one thing to a project that already exists, asking the same questions `new` asks. Today that is a `tool`, an `interceptor`, a `schedule`, an `mcp` server, a `gateway`, a `subagent`, a `skill`, a `profile`, a `provider` or a `capability`.
 
 ```bash
 bxAgents add                        # pick what to add
@@ -331,6 +331,62 @@ bxAgents add skill                              # asks
 | `--description=<text>` | One sentence starting "Use this skill when". The model reads it to decide whether to load the skill, so it is the part that matters. Without it a TODO is written for you to replace. |
 
 Skills are not wired to an agent: every skill in the build is available to the model. Skills from skills.boxlang.io are not added here; they are installed, not written.
+
+#### `add provider`
+
+Adds the settings every call to one provider starts from, under `providers:` in the root `Agent.yaml` (bx-ai's `providers` setting): the temperature, longest answer and timeout, whichever model or profile is used.
+
+```bash
+bxAgents add provider openai --temperature=0.2 --timeout=60
+bxAgents add provider                           # asks
+```
+
+| Flag | Meaning |
+|---|---|
+| `--provider=<id>`, or the first positional | A provider bx-ai knows. One that already has settings is refused. |
+| `--temperature`, `--max-tokens`, `--timeout` | At least one is needed. Written as `params` (`temperature`, `max_tokens`) and `options` (`timeout`). |
+
+The provider's key is never asked for: its usual variable (`OPENAI_API_KEY`) gets an empty stub in `.env`. The entry is inserted without rewriting the file, so comments and order stay. Needs an `Agent.yaml` at the root.
+
+#### `add profile`
+
+Adds a named combination of provider, model, settings and key variable under `profiles:` in the root `Agent.yaml` (bx-ai's `profiles` setting). An agent picks it with `profile: <name>`, and `defaultProfile` names the one the app starts on.
+
+```bash
+bxAgents add profile fast --provider=openai --model=gpt-5-mini --temperature=0.2 --default
+bxAgents add profile planner --provider=claude --model=claude-opus-4 --description="Thinks first"
+bxAgents add profile                            # asks
+```
+
+| Flag | Meaning |
+|---|---|
+| `--name=<name>`, or the first positional | Letters, digits, `-` and `_`, starting with a letter. `default`, a provider's name and a name already used are refused. |
+| `--description=<text>` | What it is for. |
+| `--provider=<id>`, `--model=<model>` | The provider, and a model of it. Without a model the provider's own default is used. |
+| `--api-key-env=<NAME>` | Another environment variable for its key, when two profiles of one provider need different keys. Only the name is written. |
+| `--temperature`, `--max-tokens`, `--timeout` | As for [`add provider`](#add-provider). |
+| `--default` | Also sets `defaultProfile`. An existing `defaultProfile` is never changed: the line to edit is printed instead. |
+
+Adds an empty `.env` stub for the key variable. Check the result with `bxAgents inspect --section=ai`.
+
+#### `add capability`
+
+Sets the default provider and model for one thing besides chat, in the root `Agent.yaml` with bx-ai's own names. One command for all four; it asks only the questions that capability has.
+
+```bash
+bxAgents add capability embeddings --provider=openai --model=text-embedding-3-small
+bxAgents add capability speech --provider=openai --voice=alloy --format=mp3
+bxAgents add capability                         # asks which one
+```
+
+| Capability | Keys it writes |
+|---|---|
+| `embeddings` | `provider`, `model` |
+| `speech` | `provider`, `model`, `voice`, `format` |
+| `transcription` | `provider`, `model` |
+| `image` | `provider`, `model`, `size`, `quality`, `style`, `instructions` |
+
+Every key but the provider is optional; left out, the provider's own default applies. bx-ai keeps speech and transcription on one audio provider, so the second of the two defaults to the first's provider and a different one is refused. A capability that is already set is refused: edit it in the file. The provider's key variable gets an empty stub in `.env`; the key itself is never asked for.
 
 ### `skills`
 

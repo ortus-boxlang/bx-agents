@@ -35,7 +35,7 @@ image:         { provider: openai, model: gpt-image-1, size: 1024x1024 }
 
 ## Otros proveedores
 
-`providers` guarda `params` y `options` de un proveedor por nombre, para los que usas mediante un perfil o un subagente. La clave de cada proveedor se lee de su variable de entorno habitual (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, ...); `bxAgents doctor` avisa cuando falta alguna.
+`providers` guarda `params` y `options` de un proveedor por nombre, para los que usas mediante un perfil o un subagente. `bxAgents add provider` escribe uno por ti. La clave de cada proveedor se lee de su variable de entorno habitual (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, ...); `bxAgents doctor` avisa cuando falta alguna.
 
 ## Perfiles
 
@@ -48,7 +48,7 @@ Un perfil es una combinación con nombre: un proveedor, un modelo, params, optio
 | `params`, `options` | Se superponen a los del proveedor y a los por defecto: `params` del valor por defecto, luego el proveedor, luego el perfil. |
 | `apiKeyEnv` | El **nombre** de la variable que guarda la clave. Una clave nunca se escribe en `Agent.yaml`; un perfil que la tenga se rechaza. |
 
-Un perfil no puede llamarse `default` ni como un proveedor (`openai`, `claude`, ...), porque ambos se eligen por nombre. `defaultProfile` elige qué perfil se usa cuando nada pide otro.
+Un perfil no puede llamarse `default` ni como un proveedor (`openai`, `claude`, ...), porque ambos se eligen por nombre. `defaultProfile` elige qué perfil se usa cuando nada pide otro. `bxAgents add profile` escribe un perfil (y `--default` el `defaultProfile`) sin tocar el resto del archivo; consulta [`add profile`](../cli-reference.md#add-profile).
 
 ## Qué usa cada agente
 
@@ -64,7 +64,7 @@ profile: planner
 
 ## Valores por defecto de capacidades
 
-`embeddings`, `speech`, `transcription` e `image` fijan los valores por defecto de bx-ai para `aiEmbed()`, `aiSpeak()`, `aiTranscribe()` y `aiImage()`. No admiten perfiles. bx-ai tiene un único proveedor de audio, así que `speech` y `transcription` deben nombrar el mismo.
+`embeddings`, `speech`, `transcription` e `image` fijan los valores por defecto de bx-ai para `aiEmbed()`, `aiSpeak()`, `aiTranscribe()` y `aiImage()`. No admiten perfiles. bx-ai tiene un único proveedor de audio, así que `speech` y `transcription` deben nombrar el mismo. `bxAgents add capability` escribe una; consulta [`add capability`](../cli-reference.md#add-capability).
 
 ## Validación y pruebas
 

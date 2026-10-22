@@ -334,7 +334,7 @@ bxAgents new my-agent --repo=owner/repo-name
 bxAgents new my-agent --forgebox=some-package-slug
 </code></pre>
 <ul>
-<li>With no <code>--model</code>, no <code>--repo</code> and no <code>--forgebox</code>, at a terminal, <code>new</code> runs the <a href="/next/guides/new-wizard/index.html">wizard</a>. <code>--no-wizard</code> or <code>--yes</code> turns it off, <code>--wizard</code> turns it on even with a <code>--model</code>, and <code>--no-tui</code> asks the same questions as numbered lines. A <code>--model</code> on its own never starts it, since scripts have always had to pass one. The wizard's flags (<code>--with</code>, <code>--search</code>, <code>--files</code>, <code>--files-dir</code>, <code>--memory</code>, <code>--mcp</code>, <code>--channels</code>, <code>--web-auth</code>, <code>--guard</code>, <code>--deploy</code> and the deploy details) are listed in the <a href="/next/guides/new-wizard/index.html#without-the-wizard">wizard guide</a>; a bad value names the flag and what it accepts. They need <code>Agent.yaml</code>, so they cannot be combined with <code>--class</code>.</li>
+<li>With no <code>--model</code>, no <code>--repo</code> and no <code>--forgebox</code>, at a terminal, <code>new</code> runs the <a href="/next/guides/new-wizard/index.html">wizard</a>. <code>--no-wizard</code> or <code>--yes</code> turns it off, <code>--wizard</code> turns it on even with a <code>--model</code>, and <code>--no-tui</code> asks the same questions as numbered lines. A <code>--model</code> on its own never starts it, since scripts have always had to pass one. The wizard's flags (<code>--with</code>, <code>--search</code>, <code>--files</code>, <code>--files-dir</code>, <code>--temperature</code>, <code>--max-tokens</code>, <code>--timeout</code>, <code>--memory</code>, <code>--mcp</code>, <code>--channels</code>, <code>--web-auth</code>, <code>--guard</code>, <code>--deploy</code> and the deploy details) are listed in the <a href="/next/guides/new-wizard/index.html#without-the-wizard">wizard guide</a>; a bad value names the flag and what it accepts. They need <code>Agent.yaml</code>, so they cannot be combined with <code>--class</code>.</li>
 <li><code>--template</code>, <code>--repo</code>, and <code>--forgebox</code> name three different project SOURCES - exactly one applies. Combining any two of them is an error.</li>
 <li><strong><code>--template</code> mode</strong> (the default when no source flag is passed at all - <code>minimal</code>):
 <ul>
@@ -365,7 +365,7 @@ bxAgents new my-agent --forgebox=some-package-slug
 <li>The <code>box install</code> convenience step (and <code>--skipInstall</code>) only ever apply to <code>--template</code> mode - a cloned/installed project's own <code>box.json</code> (if it has one at all) is left untouched.</li>
 </ul>
 <h3 id="add"><a href="#add" id="add" name="add" class="anchor"></a><code>add</code></h3>
-<p>Add one thing to a project that already exists, asking the same questions <code>new</code> asks. Today that is a <code>tool</code>, an <code>interceptor</code>, a <code>schedule</code>, an <code>mcp</code> server, a <code>gateway</code>, a <code>subagent</code> or a <code>skill</code>.</p>
+<p>Add one thing to a project that already exists, asking the same questions <code>new</code> asks. Today that is a <code>tool</code>, an <code>interceptor</code>, a <code>schedule</code>, an <code>mcp</code> server, a <code>gateway</code>, a <code>subagent</code>, a <code>skill</code>, a <code>profile</code>, a <code>provider</code> or a <code>capability</code>.</p>
 <pre><code class="language-bash">bxAgents add                        # pick what to add
 bxAgents add tool                   # asks for the name, function, description and arguments
 bxAgents add tool WeatherTools --function=getWeather --description=&quot;Get the weather for a city&quot; --args=&quot;city, days:numeric&quot;
@@ -542,6 +542,59 @@ bxAgents add skill                              # asks
 </tbody>
 </table></div>
 <p>Skills are not wired to an agent: every skill in the build is available to the model. Skills from skills.boxlang.io are not added here; they are installed, not written.</p>
+<h4 id="add-provider"><a href="#add-provider" id="add-provider" name="add-provider" class="anchor"></a><code>add provider</code></h4>
+<p>Adds the settings every call to one provider starts from, under <code>providers:</code> in the root <code>Agent.yaml</code> (bx-ai's <code>providers</code> setting): the temperature, longest answer and timeout, whichever model or profile is used.</p>
+<pre><code class="language-bash">bxAgents add provider openai --temperature=0.2 --timeout=60
+bxAgents add provider                           # asks
+</code></pre>
+<div class="bxsites-table-wrap"><table class="table">
+<thead>
+<tr><th>Flag</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>--provider=&lt;id&gt;</code>, or the first positional</td><td>A provider bx-ai knows. One that already has settings is refused.</td></tr>
+<tr><td><code>--temperature</code>, <code>--max-tokens</code>, <code>--timeout</code></td><td>At least one is needed. Written as <code>params</code> (<code>temperature</code>, <code>max_tokens</code>) and <code>options</code> (<code>timeout</code>).</td></tr>
+</tbody>
+</table></div>
+<p>The provider's key is never asked for: its usual variable (<code>OPENAI_API_KEY</code>) gets an empty stub in <code>.env</code>. The entry is inserted without rewriting the file, so comments and order stay. Needs an <code>Agent.yaml</code> at the root.</p>
+<h4 id="add-profile"><a href="#add-profile" id="add-profile" name="add-profile" class="anchor"></a><code>add profile</code></h4>
+<p>Adds a named combination of provider, model, settings and key variable under <code>profiles:</code> in the root <code>Agent.yaml</code> (bx-ai's <code>profiles</code> setting). An agent picks it with <code>profile: &lt;name&gt;</code>, and <code>defaultProfile</code> names the one the app starts on.</p>
+<pre><code class="language-bash">bxAgents add profile fast --provider=openai --model=gpt-5-mini --temperature=0.2 --default
+bxAgents add profile planner --provider=claude --model=claude-opus-4 --description=&quot;Thinks first&quot;
+bxAgents add profile                            # asks
+</code></pre>
+<div class="bxsites-table-wrap"><table class="table">
+<thead>
+<tr><th>Flag</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>--name=&lt;name&gt;</code>, or the first positional</td><td>Letters, digits, <code>-</code> and <code>_</code>, starting with a letter. <code>default</code>, a provider's name and a name already used are refused.</td></tr>
+<tr><td><code>--description=&lt;text&gt;</code></td><td>What it is for.</td></tr>
+<tr><td><code>--provider=&lt;id&gt;</code>, <code>--model=&lt;model&gt;</code></td><td>The provider, and a model of it. Without a model the provider's own default is used.</td></tr>
+<tr><td><code>--api-key-env=&lt;NAME&gt;</code></td><td>Another environment variable for its key, when two profiles of one provider need different keys. Only the name is written.</td></tr>
+<tr><td><code>--temperature</code>, <code>--max-tokens</code>, <code>--timeout</code></td><td>As for <a href="#add-provider"><code>add provider</code></a>.</td></tr>
+<tr><td><code>--default</code></td><td>Also sets <code>defaultProfile</code>. An existing <code>defaultProfile</code> is never changed: the line to edit is printed instead.</td></tr>
+</tbody>
+</table></div>
+<p>Adds an empty <code>.env</code> stub for the key variable. Check the result with <code>bxAgents inspect --section=ai</code>.</p>
+<h4 id="add-capability"><a href="#add-capability" id="add-capability" name="add-capability" class="anchor"></a><code>add capability</code></h4>
+<p>Sets the default provider and model for one thing besides chat, in the root <code>Agent.yaml</code> with bx-ai's own names. One command for all four; it asks only the questions that capability has.</p>
+<pre><code class="language-bash">bxAgents add capability embeddings --provider=openai --model=text-embedding-3-small
+bxAgents add capability speech --provider=openai --voice=alloy --format=mp3
+bxAgents add capability                         # asks which one
+</code></pre>
+<div class="bxsites-table-wrap"><table class="table">
+<thead>
+<tr><th>Capability</th><th>Keys it writes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>embeddings</code></td><td><code>provider</code>, <code>model</code></td></tr>
+<tr><td><code>speech</code></td><td><code>provider</code>, <code>model</code>, <code>voice</code>, <code>format</code></td></tr>
+<tr><td><code>transcription</code></td><td><code>provider</code>, <code>model</code></td></tr>
+<tr><td><code>image</code></td><td><code>provider</code>, <code>model</code>, <code>size</code>, <code>quality</code>, <code>style</code>, <code>instructions</code></td></tr>
+</tbody>
+</table></div>
+<p>Every key but the provider is optional; left out, the provider's own default applies. bx-ai keeps speech and transcription on one audio provider, so the second of the two defaults to the first's provider and a different one is refused. A capability that is already set is refused: edit it in the file. The provider's key variable gets an empty stub in <code>.env</code>; the key itself is never asked for.</p>
 <h3 id="skills"><a href="#skills" id="skills" name="skills" class="anchor"></a><code>skills</code></h3>
 <p>Skills from the registry (skills.boxlang.io), the way <code>coldbox ai skills</code> installs them. A skill of your own goes in <code>skills/</code> instead: see <a href="#add-skill"><code>add skill</code></a>.</p>
 <pre><code class="language-bash">bxAgents skills find release                    # search the registry

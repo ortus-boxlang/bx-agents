@@ -130,7 +130,7 @@ bxAgents new my-agent --repo=owner/repo-name
 bxAgents new my-agent --forgebox=some-package-slug
 ```
 
-- Sin `--model`, sin `--repo` y sin `--forgebox`, en una terminal, `new` ejecuta el [asistente](guides/new-wizard.md). `--no-wizard` o `--yes` lo desactiva, `--wizard` lo activa incluso con un `--model`, y `--no-tui` hace las mismas preguntas como líneas numeradas. Un `--model` por sí solo nunca lo inicia, porque los scripts siempre han tenido que pasar uno. Las opciones del asistente (`--with`, `--search`, `--files`, `--files-dir`, `--memory`, `--mcp`, `--channels`, `--web-auth`, `--guard`, `--deploy` y los detalles de despliegue) están en la [guía del asistente](guides/new-wizard.md#sin-el-asistente); un valor incorrecto nombra la opción y qué acepta. Necesitan `Agent.yaml`, así que no se pueden combinar con `--class`.
+- Sin `--model`, sin `--repo` y sin `--forgebox`, en una terminal, `new` ejecuta el [asistente](guides/new-wizard.md). `--no-wizard` o `--yes` lo desactiva, `--wizard` lo activa incluso con un `--model`, y `--no-tui` hace las mismas preguntas como líneas numeradas. Un `--model` por sí solo nunca lo inicia, porque los scripts siempre han tenido que pasar uno. Las opciones del asistente (`--with`, `--search`, `--files`, `--files-dir`, `--temperature`, `--max-tokens`, `--timeout`, `--memory`, `--mcp`, `--channels`, `--web-auth`, `--guard`, `--deploy` y los detalles de despliegue) están en la [guía del asistente](guides/new-wizard.md#sin-el-asistente); un valor incorrecto nombra la opción y qué acepta. Necesitan `Agent.yaml`, así que no se pueden combinar con `--class`.
 - `--template`, `--repo` y `--forgebox` nombran tres FUENTES de proyecto distintas - se aplica exactamente una. Combinar dos de ellas es un error.
 - **Modo `--template`** (el predeterminado cuando no se pasa ninguna opción de fuente - `minimal`):
   - `--model` es **requerido** cuando no se hacen preguntas - un slug `provider/model` (ver [el slug de modelo](conventions/agent-bx.md#the-model-slug)).
@@ -156,7 +156,7 @@ bxAgents new my-agent --forgebox=some-package-slug
 
 ### `add`
 
-Añade una cosa a un proyecto que ya existe, haciendo las mismas preguntas que `new`. Hoy eso es una `tool`, un `interceptor`, una `schedule`, un servidor `mcp`, un `model`, un `gateway`, un `subagent` o una `skill`.
+Añade una cosa a un proyecto que ya existe, haciendo las mismas preguntas que `new`. Hoy eso es una `tool`, un `interceptor`, una `schedule`, un servidor `mcp`, un `gateway`, un `subagent`, una `skill`, un `profile`, un `provider` o una `capability`.
 
 ```bash
 bxAgents add                        # elige qué añadir
@@ -331,6 +331,62 @@ bxAgents add skill                              # pregunta
 | `--description=<text>` | Una frase que empiece por "Use this skill when". El modelo la lee para decidir si carga la skill, así que es lo que importa. Sin ella se escribe un TODO para que lo reemplaces. |
 
 Las skills no se conectan a un agente: todas las skills del build están disponibles para el modelo. Las skills de skills.boxlang.io no se añaden aquí; se instalan, no se escriben.
+
+#### `add provider`
+
+Añade los ajustes con los que empieza cada llamada a un proveedor, bajo `providers:` en el `Agent.yaml` raíz (el ajuste `providers` de bx-ai): la temperatura, la respuesta más larga y el tiempo límite, sea cual sea el modelo o el perfil.
+
+```bash
+bxAgents add provider openai --temperature=0.2 --timeout=60
+bxAgents add provider                           # pregunta
+```
+
+| Opción | Significado |
+|---|---|
+| `--provider=<id>`, o el primer posicional | Un proveedor que bx-ai conoce. Uno que ya tiene ajustes se rechaza. |
+| `--temperature`, `--max-tokens`, `--timeout` | Hace falta al menos una. Se escriben como `params` (`temperature`, `max_tokens`) y `options` (`timeout`). |
+
+Nunca se pide la clave del proveedor: su variable habitual (`OPENAI_API_KEY`) recibe un marcador vacío en `.env`. La entrada se inserta sin reescribir el archivo, así que los comentarios y el orden se mantienen. Necesita un `Agent.yaml` en la raíz.
+
+#### `add profile`
+
+Añade una combinación con nombre de proveedor, modelo, ajustes y variable de la clave bajo `profiles:` en el `Agent.yaml` raíz (el ajuste `profiles` de bx-ai). Un agente la elige con `profile: <nombre>`, y `defaultProfile` nombra la que usa la aplicación al arrancar.
+
+```bash
+bxAgents add profile fast --provider=openai --model=gpt-5-mini --temperature=0.2 --default
+bxAgents add profile planner --provider=claude --model=claude-opus-4 --description="Thinks first"
+bxAgents add profile                            # pregunta
+```
+
+| Opción | Significado |
+|---|---|
+| `--name=<nombre>`, o el primer posicional | Letras, dígitos, `-` y `_`, empezando por una letra. Se rechazan `default`, el nombre de un proveedor y un nombre ya usado. |
+| `--description=<texto>` | Para qué sirve. |
+| `--provider=<id>`, `--model=<modelo>` | El proveedor y un modelo suyo. Sin modelo se usa el predeterminado del proveedor. |
+| `--api-key-env=<NOMBRE>` | Otra variable de entorno para su clave, cuando dos perfiles de un proveedor necesitan claves distintas. Solo se escribe el nombre. |
+| `--temperature`, `--max-tokens`, `--timeout` | Igual que en [`add provider`](#add-provider). |
+| `--default` | También define `defaultProfile`. Un `defaultProfile` existente nunca se cambia: se imprime la línea que hay que editar. |
+
+Añade un marcador `.env` vacío para la variable de la clave. Comprueba el resultado con `bxAgents inspect --section=ai`.
+
+#### `add capability`
+
+Define el proveedor y el modelo por defecto para algo que no es chat, en el `Agent.yaml` raíz con los nombres propios de bx-ai. Un solo comando para las cuatro; solo hace las preguntas que esa capacidad tiene.
+
+```bash
+bxAgents add capability embeddings --provider=openai --model=text-embedding-3-small
+bxAgents add capability speech --provider=openai --voice=alloy --format=mp3
+bxAgents add capability                         # pregunta cuál
+```
+
+| Capacidad | Claves que escribe |
+|---|---|
+| `embeddings` | `provider`, `model` |
+| `speech` | `provider`, `model`, `voice`, `format` |
+| `transcription` | `provider`, `model` |
+| `image` | `provider`, `model`, `size`, `quality`, `style`, `instructions` |
+
+Todas las claves salvo el proveedor son opcionales; si faltan, se aplica el valor del propio proveedor. bx-ai mantiene voz y transcripción en un solo proveedor de audio, así que la segunda de las dos toma por defecto el proveedor de la primera y uno distinto se rechaza. Una capacidad que ya está definida se rechaza: edítala en el archivo. La variable de la clave del proveedor recibe un marcador vacío en `.env`; la clave en sí nunca se pide.
 
 ### `skills`
 

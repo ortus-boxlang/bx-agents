@@ -272,7 +272,7 @@ image:         { provider: openai, model: gpt-image-1, size: 1024x1024 }
 <h2 id="the-default-model"><a href="#the-default-model" id="the-default-model" name="the-default-model" class="anchor"></a>The default model</h2>
 <p><code>provider</code>, <code>model</code> and <code>params</code> are the model every agent uses when it says nothing else. <code>model: openai/gpt-5</code> still works as shorthand for <code>provider: openai</code> plus <code>model: gpt-5</code>. <code>params</code> are request parameters such as <code>temperature</code> and <code>max_tokens</code>. <code>options</code> (timeout and similar) apply to the default provider.</p>
 <h2 id="other-providers"><a href="#other-providers" id="other-providers" name="other-providers" class="anchor"></a>Other providers</h2>
-<p><code>providers</code> holds <code>params</code> and <code>options</code> for a provider by name, for the ones you use through a profile or a subagent. The key for each provider is read from its usual environment variable (<code>OPENAI_API_KEY</code>, <code>ANTHROPIC_API_KEY</code>, ...); <code>bxAgents doctor</code> tells you when one is missing.</p>
+<p><code>providers</code> holds <code>params</code> and <code>options</code> for a provider by name, for the ones you use through a profile or a subagent. <code>bxAgents add provider</code> writes one for you. The key for each provider is read from its usual environment variable (<code>OPENAI_API_KEY</code>, <code>ANTHROPIC_API_KEY</code>, ...); <code>bxAgents doctor</code> tells you when one is missing.</p>
 <h2 id="profiles"><a href="#profiles" id="profiles" name="profiles" class="anchor"></a>Profiles</h2>
 <p>A profile is a named combination: a provider, a model, params, options and the name of the environment variable that holds its key. It can carry a <code>description</code>.</p>
 <div class="bxsites-table-wrap"><table class="table">
@@ -286,7 +286,7 @@ image:         { provider: openai, model: gpt-image-1, size: 1024x1024 }
 <tr><td><code>apiKeyEnv</code></td><td>The <strong>name</strong> of the variable that holds the key. A key itself is never written in <code>Agent.yaml</code>; a profile that has one is refused.</td></tr>
 </tbody>
 </table></div>
-<p>A profile cannot be named <code>default</code> or like a provider (<code>openai</code>, <code>claude</code>, ...), because both are selected by name. <code>defaultProfile</code> picks which profile is used when nothing asks for another one.</p>
+<p>A profile cannot be named <code>default</code> or like a provider (<code>openai</code>, <code>claude</code>, ...), because both are selected by name. <code>defaultProfile</code> picks which profile is used when nothing asks for another one. <code>bxAgents add profile</code> writes a profile (and <code>--default</code> the <code>defaultProfile</code>) without touching the rest of the file; see <a href="/next/cli-reference/index.html#add-profile"><code>add profile</code></a>.</p>
 <h2 id="which-agent-uses-what"><a href="#which-agent-uses-what" id="which-agent-uses-what" name="which-agent-uses-what" class="anchor"></a>Which agent uses what</h2>
 <p>An agent uses its own <code>profile:</code>, else its own <code>model:</code> (a <code>provider/model</code> slug), else the default. Every subagent inherits the root's settings, and may set its own <code>model</code> or <code>profile</code>:</p>
 <pre><code class="language-yaml"># subagents/planner/Agent.yaml
@@ -295,7 +295,7 @@ profile: planner
 </code></pre>
 <p><code>providers</code>, <code>profiles</code>, <code>defaultProfile</code>, <code>params</code> and the capability keys apply to the whole app, so they belong in the project's own <code>Agent.yaml</code>; a subagent that sets them fails validation.</p>
 <h2 id="capability-defaults"><a href="#capability-defaults" id="capability-defaults" name="capability-defaults" class="anchor"></a>Capability defaults</h2>
-<p><code>embeddings</code>, <code>speech</code>, <code>transcription</code> and <code>image</code> set bx-ai's defaults for <code>aiEmbed()</code>, <code>aiSpeak()</code>, <code>aiTranscribe()</code> and <code>aiImage()</code>. They do not take profiles. bx-ai has one audio provider, so <code>speech</code> and <code>transcription</code> must name the same one.</p>
+<p><code>embeddings</code>, <code>speech</code>, <code>transcription</code> and <code>image</code> set bx-ai's defaults for <code>aiEmbed()</code>, <code>aiSpeak()</code>, <code>aiTranscribe()</code> and <code>aiImage()</code>. They do not take profiles. bx-ai has one audio provider, so <code>speech</code> and <code>transcription</code> must name the same one. <code>bxAgents add capability</code> writes one; see <a href="/next/cli-reference/index.html#add-capability"><code>add capability</code></a>.</p>
 <h2 id="validation-and-tests"><a href="#validation-and-tests" id="validation-and-tests" name="validation-and-tests" class="anchor"></a>Validation and tests</h2>
 <p><code>bxAgents build</code> checks all of the above by bx-ai's own rules and names the file and the key. Under <code>bxAgents test</code> every profile runs on the <code>mock</code> provider, so a test never reaches the network.</p>
 <h2 id="how-it-reaches-bx-ai"><a href="#how-it-reaches-bx-ai" id="how-it-reaches-bx-ai" name="how-it-reaches-bx-ai" class="anchor"></a>How it reaches bx-ai</h2>
