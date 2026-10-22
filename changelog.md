@@ -258,6 +258,10 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   own machine; the output goes with your next message (`!!` and `##` only show it). A call is parsed, not
   evaluated: literal arguments and nested calls only, and only registered built-ins. Both are switched off or
   narrowed in your own `~/.bxagents/bxAgents.yml` (`chat: shell`, `bifs`), never by a project.
+- In the terminal chat, `@` lists the files under the folder and puts a text file's content in the message, `@picture.png`
+  or Ctrl+V sends a picture (at most 4, 5 MB each, checked against the profile's `vision` key before sending). The web
+  page has an Attach button and takes pasted and dropped pictures. `POST /__bxagents/events` and `/stream` accept
+  `attachments`. Chat platforms do not take attachments yet.
 
 #### The chat screen
 

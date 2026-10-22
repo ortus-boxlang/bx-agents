@@ -37,14 +37,19 @@ class extends="models.chat.AgentConversation@bxagents" {
 	/**
 	 * @text What the user said
 	 * @hooks { push( event ), cancelRequested(), takeSteer() }
+	 * @images [ { path } ] image files that go with the message
 	 *
 	 * @return { status : "done" | "suspended" | "cancelled" | "stopped", text, pending : [ { toolName, toolArgs } ] }
 	 */
-	struct function send( required string text, required struct hooks ) {
+	struct function send( required string text, required struct hooks, array images = [] ) {
+		var built = new "models.chat.MessageBuilder@bxagents"().build( arguments.text, arguments.images, modelFacts() )
+		if ( !built.ok ) {
+			return { status : "stopped", text : "", pending : [], reason : built.reason }
+		}
 		var state = newState()
 		variables.hooks = arguments.hooks
 		try {
-			variables.agent.stream( chunkHandler( state ), arguments.text, {}, { threadId : variables.threadId, userId : variables.userId, conversationId : variables.conversationId } )
+			variables.agent.stream( chunkHandler( state ), built.input, {}, { threadId : variables.threadId, userId : variables.userId, conversationId : variables.conversationId } )
 		} finally {
 			variables.hooks = nullValue()
 		}

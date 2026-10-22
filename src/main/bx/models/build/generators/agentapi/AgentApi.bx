@@ -178,9 +178,20 @@ class {
 			options[ "conversationId" ] = body.conversationId
 			recordTurn( callerId( event ), body.conversationId, body.input ?: "" )
 		}
+		var input = body.input ?: ""
+		if ( isArray( body.attachments ?: "" ) && body.attachments.len() ) {
+			// images: checked (how many, how big, what type, whether the model can see) and added as bx-ai message parts
+			var facts = new "models.runtime.ModelFacts@bxagents"().of( len( options.profile ?: "" ) ? options.profile : ( thisAgent.getConfig().profile ?: "" ) )
+			var built = new "models.chat.MessageBuilder@bxagents"().build( input, body.attachments.map( a => { name : a.name ?: "", mime : a.mime ?: "", base64 : a.data ?: "" } ), facts )
+			if ( !built.ok ) {
+				event.renderData( type : "json", statusCode : 400, data : { "success" : false, "error" : built.reason } )
+				return
+			}
+			input = built.input
+		}
 		event.setHTTPHeader( name : "X-Thread-Id", value : threadId )
 		return streamRun( threadId, ( onChunk ) => {
-			thisAgent.stream( onChunk, body.input ?: "", body.params ?: {}, options )
+			thisAgent.stream( onChunk, input, body.params ?: {}, options )
 		} )
 	}
 
@@ -313,7 +324,7 @@ class {
 			"contextWindow" : facts.contextWindow,
 			"vision"       : facts.vision,
 			"toolCount"    : config.toolCount ?: 0,
-			"capabilities" : { "events" : true, "cancel" : true, "steer" : true, "approvals" : true, "notes" : !isNull( notesProvider() ), "sessions" : !isNull( sessionStore() ), "profiles" : offeredProfiles().len() > 0, "commands" : true, "context" : true }
+			"capabilities" : { "events" : true, "cancel" : true, "steer" : true, "approvals" : true, "notes" : !isNull( notesProvider() ), "sessions" : !isNull( sessionStore() ), "profiles" : offeredProfiles().len() > 0, "commands" : true, "context" : true, "attachments" : true }
 		} )
 	}
 

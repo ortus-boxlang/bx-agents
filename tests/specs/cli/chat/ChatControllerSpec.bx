@@ -52,6 +52,14 @@ class extends="testbox.system.BaseSpec" {
 				s.copy = ( text ) => s.log.append( [ "copy", text ] )
 				s.statuses = []
 				s.setStatus = ( text ) => s.statuses.append( text )
+				s.imagesAllowed = [ true, "" ]
+				s.setImagesAllowed = ( allowed, reason ) => { s.imagesAllowed = [ allowed, reason ] }
+				s.pasted = []
+				s.takeImages = () => {
+					var taken = s.pasted
+					s.pasted = []
+					return taken
+				}
 				s.close = () => s.log.append( [ "close" ] )
 				return s
 			}
@@ -109,8 +117,10 @@ class extends="testbox.system.BaseSpec" {
 					return { ok : true, id : "fork-1", title : len( title ) ? title : "Fork of A title", messages : 4 }
 				}
 				q.close = () => {}
-				q.send = ( text, hooks ) => {
+				q.sentImages = []
+				q.send = ( text, hooks, images = [] ) => {
 					q.sent.append( text )
+					q.sentImages.append( images )
 					var reply = q.replies.len() ? q.replies[ 1 ] : { status : "done", text : "echo " & text, pending : [] }
 					if ( q.replies.len() ) {
 						q.replies.deleteAt( 1 )
@@ -438,6 +448,88 @@ class extends="testbox.system.BaseSpec" {
 				failing.contextReport = () => { throw( message = "no agent" ) }
 				controllerFor( broken, failing ).run( broken )
 				expect( broken.statuses[ 1 ] ).toBe( "" );
+			} );
+
+			describe( "@files and pictures", function() {
+
+				beforeEach( function() {
+					variables.dir = createTempDirectory( prefix = "bxagents-chat-files-" );
+					fileWrite( dir & "/notes.md", "the plan is to ship" );
+					fileWrite( dir & "/shot.png", toBinary( "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==" ) );
+				} );
+
+				afterEach( function() {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				} );
+
+				function chatIn( screen, session ) {
+					return new bxagents.models.cli.chat.ChatController( session, dir, nullValue(), userConfig() );
+				}
+
+				it( "sends a text file that is mentioned along with the message, and keeps the mention", function() {
+					var screen = fakeScreen( [ "summarise @notes.md" ] )
+					var session = fakeSession()
+					chatIn( screen, session ).run( screen )
+
+					expect( session.sent[ 1 ] ).toStartWith( "summarise @notes.md" );
+					expect( session.sent[ 1 ] ).toInclude( "contents of the file `notes.md`" );
+					expect( session.sent[ 1 ] ).toInclude( "the plan is to ship" );
+					expect( session.sentImages[ 1 ] ).toBeEmpty();
+					expect( screen.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] ) ).toInclude( "Sent with 1 attachment." );
+				} );
+
+				it( "sends an image that is mentioned as an image, not as text", function() {
+					var screen = fakeScreen( [ "what is in @shot.png ?" ] )
+					var session = fakeSession()
+					chatIn( screen, session ).run( screen )
+
+					expect( session.sent[ 1 ] ).toBe( "what is in @shot.png ?" );
+					expect( session.sentImages[ 1 ] ).toHaveLength( 1 );
+					expect( session.sentImages[ 1 ][ 1 ].path ).toInclude( "shot.png" );
+					expect( screen.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] ) ).toInclude( "Sent with 1 image." );
+				} );
+
+				it( "sends the pictures pasted into the box with the next message, once", function() {
+					var screen = fakeScreen( [ "look", "and now?" ] )
+					screen.pasted = [ dir & "/shot.png" ]
+					var session = fakeSession()
+					chatIn( screen, session ).run( screen )
+
+					expect( session.sentImages[ 1 ] ).toHaveLength( 1 );
+					expect( session.sentImages[ 1 ][ 1 ].path ).toBe( dir & "/shot.png" );
+					expect( session.sentImages[ 2 ] ).toBeEmpty();
+				} );
+
+				it( "warns about a path that is not there and still sends the message", function() {
+					var screen = fakeScreen( [ "see @src/missing.bx" ] )
+					var session = fakeSession()
+					chatIn( screen, session ).run( screen )
+
+					expect( screen.log.filter( e => e[ 1 ] == "print" && e[ 2 ] == "warn" ).map( e => e[ 3 ] ) ).toInclude( "There is no file @src/missing.bx." );
+					expect( session.sent ).toBe( [ "see @src/missing.bx" ] );
+				} );
+
+				it( "lets the screen paste pictures unless the model is known not to see them, and says why", function() {
+					var open = fakeScreen( [] )
+					chatIn( open, fakeSession() ).run( open )
+					expect( open.imagesAllowed[ 1 ] ).toBeTrue();
+
+					var closed = fakeScreen( [] )
+					var blind = fakeSession()
+					blind.facts = { contextWindow : 0, vision : "no" }
+					chatIn( closed, blind ).run( closed )
+					expect( closed.imagesAllowed[ 1 ] ).toBeFalse();
+					expect( closed.imagesAllowed[ 2 ] ).toInclude( "cannot see images" );
+				} );
+
+				it( "counts attachments and images together in what it says it sent", function() {
+					var screen = fakeScreen( [ "check @notes.md and @shot.png" ] )
+					chatIn( screen, fakeSession() ).run( screen )
+					expect( screen.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] ) ).toInclude( "Sent with 1 attachment and 1 image." );
+				} );
+
 			} );
 
 			describe( "!command and ##function() on this machine", function() {

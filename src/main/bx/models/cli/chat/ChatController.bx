@@ -5,13 +5,13 @@
  * (InProcessSession or HttpSession).
  *
  * The screen:  chooseKeys( title, lines, choices, keys, footer ), ask( title, help, initial ), readInput(), printUser( text ), print( style, text ), printMarkdown( text ),
- *              setStatus( text ),
+ *              setStatus( text ), setImagesAllowed( allowed, reason ), takeImages(),
  *              banner( agent, model, mode ), beginTurn(), push( event ), endTurn(),
  *              cancelRequested(), takeSteer(), choose( title, lines, choices ), copy( text ), close()
  * The session: agentName(), modelName(), mode(), tools(), newThread(), notes(), sessions(), resumeSession( ref ),
  *              clear(), compact(), info(), conversationId(), contextReport(),
  *              modelInfo(), switchable(), profiles(), useProfile( name ), useDefault()
- *              send( text, hooks ), resume( decision, hooks ), close()
+ *              send( text, hooks, images ), resume( decision, hooks ), close()
  *              notes() is an object with available(), list( scope ), add( scope, text ), update( id, text ),
  *              remove( id ), stats()
  *
@@ -22,8 +22,11 @@
  * Two more prefixes run something on the person's own machine, never on a server:
  *   !command    a shell command; its output is shown and goes with the next message (!!command: shown only)
  *   #function() one BoxLang built-in function call; its result likewise (##function(): shown only)
- * They are switched on or off in the person's ~/.bxagents/bxAgents.yml (see UserConfig). Everything else
- * typed is a message to the agent.
+ * They are switched on or off in the person's ~/.bxagents/bxAgents.yml (see UserConfig).
+ *
+ * A message can mention files with @path: a text file goes with it as a block of its content, an image as an image
+ * part (models.cli.chat.FileMentions). A picture pasted into the message box (the screen's takeImages()) goes the
+ * same way. Everything else typed is a message to the agent.
  */
 class {
 
@@ -129,6 +132,13 @@ class {
 		} catch ( any e ) {
 			variables.screen.setStatus( "" )
 		}
+		// a picture is refused at the paste, with the reason, for a model known not to see them
+		try {
+			var blind = variables.session.modelFacts().vision == "no"
+			variables.screen.setImagesAllowed( !blind, blind ? "The model in use cannot see images (vision: false for it), so the picture was not added." : "" )
+		} catch ( any e ) {
+			variables.screen.setImagesAllowed( true, "" )
+		}
 	}
 
 	/**
@@ -233,12 +243,27 @@ class {
 		variables.screen.printUser( arguments.text )
 		variables.transcript.append( { role : "you", text : arguments.text } )
 
+		// @path mentions: a text file goes along as a block, an image as an image part
+		var mentioned = new "models.cli.chat.FileMentions@bxagents"( variables.workingDirectory ).read( arguments.text )
+		for ( var problem in mentioned.problems ) {
+			variables.screen.print( "warn", problem )
+		}
+		for ( var file in mentioned.files ) {
+			variables.attachments.add( "file", file.name, file.content )
+		}
+		var images = mentioned.images
+		for ( var pasted in variables.screen.takeImages() ) {
+			images.append( { path : pasted } )
+		}
 		var attached = variables.attachments.count()
 		var sent = variables.attachments.compose( arguments.text )
-		if ( attached ) {
-			variables.screen.print( "muted", "Sent with #attached# attachment#attached == 1 ? '' : 's'#." )
+		if ( attached || images.len() ) {
+			var what = []
+			if ( attached ) { what.append( "#attached# attachment#attached == 1 ? '' : 's'#" ) }
+			if ( images.len() ) { what.append( "#images.len()# image#images.len() == 1 ? '' : 's'#" ) }
+			variables.screen.print( "muted", "Sent with " & what.toList( " and " ) & "." )
 		}
-		var result = execute( () => variables.session.send( sent, variables.hooks ) )
+		var result = execute( () => variables.session.send( sent, variables.hooks, images ) )
 		while ( result.status == "suspended" ) {
 			var decision = askApproval( result.pending )
 			result = execute( () => variables.session.resume( decision, variables.hooks ) )

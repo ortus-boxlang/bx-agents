@@ -341,15 +341,31 @@ class {
 	/**
 	 * @text What the user said
 	 * @hooks { push( event ), cancelRequested(), takeSteer() }
+	 * @images [ { path } ] image files that go with the message; sent to the server as base64
 	 *
 	 * @return { status : "done" | "suspended" | "cancelled" | "stopped", text, pending : [ { toolName, toolArgs } ], reason }
 	 */
-	struct function send( required string text, required struct hooks ) {
+	struct function send( required string text, required struct hooks, array images = [] ) {
 		if ( variables.legacy ) {
 			return sendLegacy( arguments.text, arguments.hooks )
 		}
+		// the same limits and the same check of the model as on the server, so a refusal comes before a large upload
+		var builder = new "models.chat.MessageBuilder@bxagents"()
+		if ( arguments.images.len() ) {
+			var checked = builder.build( arguments.text, arguments.images, modelFacts() )
+			if ( !checked.ok ) {
+				return { status : "stopped", text : "", pending : [], reason : checked.reason }
+			}
+		}
 		try {
 			var payload = { "input" : arguments.text, "threadId" : variables.threadId, "conversationId" : variables.conversationId }
+			if ( arguments.images.len() ) {
+				payload[ "attachments" ] = arguments.images.map( image => {
+					"name"   : listLast( image.path.replace( "\", "/", "all" ), "/" ),
+					"mime"   : builder.typeOf( image.path ),
+					"data"   : toBase64( fileReadBinary( image.path ) )
+				} )
+			}
 			if ( len( variables.profileName ) ) {
 				payload[ "options" ] = { "profile" : variables.profileName }
 			}

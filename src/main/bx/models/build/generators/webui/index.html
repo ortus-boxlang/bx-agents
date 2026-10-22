@@ -353,6 +353,13 @@ __THEME_TOKENS__
 	.bubble.command p.ok { color: var(--fg); }
 	.bubble.command p.warn { color: var(--danger, #c0392b); }
 	.bubble.command a { color: var(--accent); }
+	#attachChips { display: flex; flex-wrap: wrap; gap: 0.4rem; padding: 0 0.2rem 0.4rem; }
+	#attachChips .chip-file { display: inline-flex; align-items: center; gap: 0.4rem; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.15rem 0.4rem; font-size: 0.78rem; color: var(--muted); }
+	#attachChips img { height: 1.6rem; width: auto; border-radius: 3px; }
+	#attachChips button { padding: 0 0.3rem; background: transparent; color: var(--muted); border: none; cursor: pointer; font-size: 0.9rem; }
+	#attachBtn { background: transparent !important; color: var(--fg) !important; border: 1px solid var(--border) !important; font-weight: 400 !important; }
+	.bubble.user img.sent-image { display: block; max-height: 8rem; max-width: 100%; margin-top: 0.4rem; border-radius: 4px; }
+	form#composer.dragging { outline: 2px dashed var(--accent); }
 	button.chip { font-size: 0.75rem; padding: 0.15rem 0.5rem; color: var(--muted); font-family: var(--font-mono); }
 	.bubble.command table { border-collapse: collapse; font-family: var(--font-mono); font-size: 0.82rem; }
 	.bubble.command td { padding: 0.1rem 0.8rem 0.1rem 0; vertical-align: top; overflow-wrap: anywhere; }
@@ -633,7 +640,10 @@ __CUSTOM_CSS__
 			<div id="messages" role="log" aria-live="polite" aria-relevant="additions text" aria-label="Conversation"></div>
 			<p class="hint" id="hint" role="status"></p>
 			<ul id="slashMenu" role="listbox" aria-label="Commands" hidden></ul>
+			<div id="attachChips" hidden></div>
 			<form id="composer" autocomplete="off">
+				<input type="file" id="attachInput" multiple hidden>
+				<button type="button" id="attachBtn" title="Attach a picture or a text file (you can also paste or drop them)" hidden>Attach</button>
 				<label class="visually-hidden" for="input">Message</label>
 				<textarea id="input" rows="1" placeholder="__PLACEHOLDER__" autofocus></textarea>
 				<button type="submit" id="sendBtn">Send</button>
@@ -687,6 +697,9 @@ __CUSTOM_CSS__
 	var clearBtn = document.getElementById( "clearBtn" );
 	var forkBtn = document.getElementById( "forkBtn" );
 	var contextChipEl = document.getElementById( "contextChip" );
+	var attachBtn = document.getElementById( "attachBtn" );
+	var attachInput = document.getElementById( "attachInput" );
+	var attachChipsEl = document.getElementById( "attachChips" );
 	var exportBtn = document.getElementById( "exportBtn" );
 	var compactBtn = document.getElementById( "compactBtn" );
 	var sidebarEl = document.getElementById( "sidebar" );
@@ -702,6 +715,14 @@ __CUSTOM_CSS__
 	// worse than no button.
 	var capabilities = {};
 	var conversations = [];
+	// Pictures and text files waiting to go with the next message
+	var pendingImages = [];   // { name, mime, data (base64), url }
+	var pendingTexts = [];    // { name, content }
+	var modelSeesImages = true;
+	var MAX_IMAGES = 4;
+	var MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+	var MAX_TEXT_CHARS = 100000;
+	var IMAGE_TYPES = [ "image/png", "image/jpeg", "image/gif", "image/webp" ];
 	// The slash commands the server offers, [ { name, hint } ], from GET /commands
 	var commandList = [];
 	var isBusy = false;
@@ -789,6 +810,9 @@ __CUSTOM_CSS__
 			if ( !capabilities.conversations ) {
 				setSidebar( false );
 			}
+			// what the model is known to see: "no" means pictures are not offered at all
+			modelSeesImages = payload.vision !== "no";
+			attachBtn.hidden = !capabilities.attachments;
 			if ( capabilities.commands ) {
 				apiGet( "/commands" ).then( function ( list ) {
 					commandList = ( list && list.commands ) || [];
@@ -1098,11 +1122,17 @@ __CUSTOM_CSS__
 				clearWelcome();
 				messages.forEach( function ( message ) {
 					var content = typeof message.content === "string" ? message.content : "";
-					if ( !content.length ) {
+					var pictures = [];
+					if ( Array.isArray( message.content ) ) {
+						// a message with pictures is a list of parts: the text, and an image_url for each picture
+						content = message.content.filter( function ( part ) { return part && part.type === "text"; } ).map( function ( part ) { return part.text || ""; } ).join( "\n" );
+						pictures = message.content.filter( function ( part ) { return part && part.type === "image_url" && part.image_url && /^data:image\//.test( part.image_url.url || "" ); } ).map( function ( part ) { return part.image_url.url; } );
+					}
+					if ( !content.length && !pictures.length ) {
 						return;
 					}
 					if ( message.role === "user" ) {
-						addUserBubble( content );
+						addUserBubble( content, pictures );
 						return;
 					}
 					if ( message.role === "assistant" ) {
@@ -1234,10 +1264,17 @@ __CUSTOM_CSS__
 		} );
 	}
 
-	function addUserBubble( text ) {
+	function addUserBubble( text, imageUrls ) {
 		var el = document.createElement( "div" );
 		el.className = "bubble user";
 		el.textContent = text;
+		( imageUrls || [] ).forEach( function ( url ) {
+			var img = document.createElement( "img" );
+			img.className = "sent-image";
+			img.alt = "attached picture";
+			img.src = url;
+			el.appendChild( img );
+		} );
 		messagesEl.appendChild( el );
 		scrollToEnd( true );
 	}
@@ -1477,6 +1514,12 @@ __CUSTOM_CSS__
 			if ( res.status === 401 ) {
 				throw new Error( "Unauthorized - set the API key via the \"Key\" button, then try again. If you already did, the server's API-key environment variable may be unset: the gate refuses every request in that case." );
 			}
+			if ( res.status === 400 ) {
+				// the server explains a refusal (a model that cannot see pictures, a picture that is too big)
+				return res.json().catch( function () { return {}; } ).then( function ( body ) {
+					throw new Error( body.error || "Request failed (HTTP 400)" );
+				} );
+			}
 			if ( !res.ok || !res.body ) {
 				throw new Error( "Request failed (HTTP " + res.status + ")" );
 			}
@@ -1714,6 +1757,116 @@ __CUSTOM_CSS__
 		}
 	} );
 
+	// ---- pictures and text files ----
+	function renderAttachChips() {
+		attachChipsEl.textContent = "";
+		pendingImages.forEach( function ( image, i ) {
+			var chip = document.createElement( "span" );
+			chip.className = "chip-file";
+			var img = document.createElement( "img" );
+			img.src = image.url;
+			img.alt = "";
+			chip.appendChild( img );
+			chip.appendChild( document.createTextNode( image.name ) );
+			var remove = document.createElement( "button" );
+			remove.type = "button";
+			remove.textContent = "\u00d7";
+			remove.title = "Remove";
+			remove.addEventListener( "click", function () { pendingImages.splice( i, 1 ); renderAttachChips(); } );
+			chip.appendChild( remove );
+			attachChipsEl.appendChild( chip );
+		} );
+		pendingTexts.forEach( function ( file, i ) {
+			var chip = document.createElement( "span" );
+			chip.className = "chip-file";
+			chip.appendChild( document.createTextNode( file.name ) );
+			var remove = document.createElement( "button" );
+			remove.type = "button";
+			remove.textContent = "\u00d7";
+			remove.title = "Remove";
+			remove.addEventListener( "click", function () { pendingTexts.splice( i, 1 ); renderAttachChips(); } );
+			chip.appendChild( remove );
+			attachChipsEl.appendChild( chip );
+		} );
+		attachChipsEl.hidden = !pendingImages.length && !pendingTexts.length;
+	}
+
+	function clearPendingAttachments( revoke ) {
+		pendingImages = [];
+		pendingTexts = [];
+		renderAttachChips();
+	}
+
+	/**
+	 * Takes the files a person chose, pasted or dropped: pictures wait to be sent as attachments, and text files are
+	 * read here and go inside the message. The server checks everything again; these checks only save the upload.
+	 */
+	function addFiles( files ) {
+		Array.prototype.forEach.call( files, function ( file ) {
+			if ( IMAGE_TYPES.indexOf( file.type ) >= 0 ) {
+				if ( !modelSeesImages ) {
+					showHint( "The model in use cannot see pictures." );
+					return;
+				}
+				if ( pendingImages.length >= MAX_IMAGES ) {
+					showHint( "At most " + MAX_IMAGES + " pictures go with one message." );
+					return;
+				}
+				if ( file.size > MAX_IMAGE_BYTES ) {
+					showHint( file.name + " is larger than 5 MB." );
+					return;
+				}
+				var reader = new FileReader();
+				reader.onload = function () {
+					var url = String( reader.result );
+					pendingImages.push( { name: file.name || "pasted.png", mime: file.type, data: url.substring( url.indexOf( "," ) + 1 ), url: url } );
+					renderAttachChips();
+				};
+				reader.readAsDataURL( file );
+			} else if ( file.type.indexOf( "text/" ) === 0 || /\.(txt|md|json|ya?ml|csv|xml|html?|css|js|ts|bx|bxs|bxm|cfc|cfm|java|py|sql|sh|log|ini|toml)$/i.test( file.name ) ) {
+				var textReader = new FileReader();
+				textReader.onload = function () {
+					var content = String( textReader.result );
+					if ( content.length > MAX_TEXT_CHARS ) {
+						content = content.substring( 0, MAX_TEXT_CHARS ) + "\n(the file was cut at " + MAX_TEXT_CHARS + " characters)";
+					}
+					pendingTexts.push( { name: file.name, content: content } );
+					renderAttachChips();
+				};
+				textReader.readAsText( file );
+			} else {
+				showHint( file.name + " is not a picture or a text file." );
+			}
+		} );
+	}
+
+	attachBtn.addEventListener( "click", function () { attachInput.click(); } );
+	attachInput.addEventListener( "change", function () {
+		addFiles( attachInput.files );
+		attachInput.value = "";
+	} );
+	inputEl.addEventListener( "paste", function ( evt ) {
+		var files = evt.clipboardData && evt.clipboardData.files ? evt.clipboardData.files : [];
+		if ( capabilities.attachments && files.length ) {
+			evt.preventDefault();
+			addFiles( files );
+		}
+	} );
+	formEl.addEventListener( "dragover", function ( evt ) {
+		if ( capabilities.attachments ) {
+			evt.preventDefault();
+			formEl.classList.add( "dragging" );
+		}
+	} );
+	formEl.addEventListener( "dragleave", function () { formEl.classList.remove( "dragging" ); } );
+	formEl.addEventListener( "drop", function ( evt ) {
+		formEl.classList.remove( "dragging" );
+		if ( capabilities.attachments && evt.dataTransfer && evt.dataTransfer.files.length ) {
+			evt.preventDefault();
+			addFiles( evt.dataTransfer.files );
+		}
+	} );
+
 	// ---- the "/" menu ----
 	var slashPick = 0;
 
@@ -1806,7 +1959,14 @@ __CUSTOM_CSS__
 		}
 
 		clearWelcome();
-		addUserBubble( text );
+		// text files go along inside the message; pictures travel as attachments for the server to check and build
+		var sentImages = pendingImages.slice();
+		var sentText = text;
+		pendingTexts.forEach( function ( file ) {
+			sentText += "\n\nAttached, the contents of the file `" + file.name + "`:\n```\n" + file.content + "\n```";
+		} );
+		addUserBubble( text, sentImages.map( function ( image ) { return image.url; } ) );
+		clearPendingAttachments( false );
 		inputEl.value = "";
 		autoGrow();
 		setBusy( true );
@@ -1816,12 +1976,15 @@ __CUSTOM_CSS__
 		var turn = createTurn();
 
 		var payload = {
-			input  : text,
+			input  : sentText,
 			options: {
 				conversationId: getConversationId(),
 				threadId      : activeThreadId
 			}
 		};
+		if ( sentImages.length ) {
+			payload.attachments = sentImages.map( function ( image ) { return { name: image.name, mime: image.mime, data: image.data }; } );
+		}
 		if ( chosenProfile ) {
 			payload.options.profile = chosenProfile;
 		}
