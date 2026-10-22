@@ -259,6 +259,8 @@ The shipped page is a real chat client, not a demo shell. It reads `GET /info` *
 | **Theme** | Stored server-side in `preferences`, so it follows the identity rather than the browser. `localStorage` keeps a local copy so the choice survives a failed request |
 | **Model** | `/info`'s model name sits in the header, so it is always clear what answered |
 | **Context size** | A chip in the header, `ctx ~12.4k / 128k 9%`, from `GET /context`, refreshed after each turn, command, clear, compaction, conversation switch and change to the notes. Click it for the breakdown (`/context`). It shows the share of the window only when the model's [`contextWindow`](models.md#what-the-project-knows-about-a-model) is set |
+| **Attachments** | An **Attach** button (shown when `/info` reports `capabilities.attachments`) picks pictures and text files; you can also paste a picture or drop files on the page. Chips show what waits, each with a remove button. Pictures go as base64 `attachments` of the stream request, text files are inlined in the message. At most 4 pictures, 5 MB each; `/info` also reports `vision`, and a picture to a profile without it is refused with the reason |
+| **Shortcuts** | Enter sends, Shift+Enter adds a line. `?` alone (or `/keys`) lists them |
 
 **Recovery matters more than it sounds.** The last-opened conversation is remembered in `localStorage`, but the conversations themselves live on the server. If that id no longer exists - deleted in another tab, or a fresh store - the page falls back to the newest remaining conversation instead of rehydrating into an empty screen with no active row.
 

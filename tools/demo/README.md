@@ -58,7 +58,7 @@ boxlang tools/demo/make-demo.bxs --spec=my-demo.json
 | --- | --- |
 | `{ "expect": "text", "max": 60, "then": 2 }` | Wait until the text appears on screen (up to `max` seconds), then wait `then` more |
 | `{ "type": "hello" }` | Type the characters one at a time (`typeMs` apart) |
-| `{ "press": "enter", "after": 500 }` | Press a key: `enter`, `tab`, `esc`, `backspace`, `up`, `down`, `left`, `right`, `ctrl-c`, `ctrl-d`. `after` is a pause in milliseconds |
+| `{ "press": "enter", "after": 500 }` | Press a key: `enter`, `tab`, `esc`, `backspace`, `up`, `down`, `left`, `right`, `ctrl-a` to `ctrl-z`. `after` is a pause in milliseconds |
 | `{ "wait": 2 }` | Wait, in seconds |
 
 Match on words that are on screen when the step should run. `expect` ignores colors and cursor moves.

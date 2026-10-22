@@ -1,0 +1,107 @@
+/**
+ * Finds the `@path` mentions in what the person typed and turns the files they name into attachments: a text
+ * file becomes a block of its content, an image becomes an image part. The mention stays in the message, so the
+ * agent knows what the content is called.
+ *
+ * A mention is `@path` (no spaces) or `@"a path with spaces"`. Something that merely looks like a mention, such as
+ * `@bob`, is left alone when no such file exists; a path-looking one (it has a `/` or an extension) that does
+ * not exist is reported.
+ */
+class {
+
+	static {
+		MAX_TEXT_CHARS = 100000
+	}
+
+	/**
+	 * @workingDirectory Where a relative path starts
+	 */
+	function init( required string workingDirectory ) {
+		variables.workingDirectory = arguments.workingDirectory.replace( "\", "/", "all" )
+		return this
+	}
+
+	/**
+	 * @text What the person typed
+	 *
+	 * @return { files : [ { name, content } ], images : [ { path } ], problems : [ text ] }
+	 */
+	struct function read( required string text ) {
+		var found = { files : [], images : [], problems : [] }
+		var seen = {}
+		var typeOf = new "models.chat.MessageBuilder@bxagents"()
+		for ( var mention in mentions( arguments.text ) ) {
+			if ( seen.keyExists( mention ) ) {
+				continue
+			}
+			seen[ mention ] = true
+			var path = absolute( mention )
+			if ( directoryExists( path ) ) {
+				found.problems.append( "@#mention# is a folder; name a file in it." )
+			} else if ( !fileExists( path ) ) {
+				if ( reFind( "[/.]", mention ) ) {
+					found.problems.append( "There is no file @#mention#." )
+				}
+			} else if ( len( typeOf.typeOf( path ) ) ) {
+				found.images.append( { path : path } )
+			} else {
+				var read = textOf( path, mention )
+				if ( len( read.problem ) ) {
+					found.problems.append( read.problem )
+				} else {
+					found.files.append( { name : mention, content : read.content } )
+				}
+			}
+		}
+		return found
+	}
+
+	/**
+	 * @text What the person typed
+	 *
+	 * @return The paths mentioned, in order, without the @ and without quotes
+	 */
+	array function mentions( required string text ) {
+		var out = []
+		var pattern = '(?:^|\s)@(?:"([^"]+)"|([^\s"]+))'
+		var found = reFind( pattern, arguments.text, 1, true )
+		var from = 1
+		while ( found.pos[ 1 ] > 0 ) {
+			var quoted = found.pos.len() >= 2 && found.pos[ 2 ] > 0 ? mid( arguments.text, found.pos[ 2 ], found.len[ 2 ] ) : ""
+			var bare = found.pos.len() >= 3 && found.pos[ 3 ] > 0 ? mid( arguments.text, found.pos[ 3 ], found.len[ 3 ] ) : ""
+			out.append( len( quoted ) ? quoted : bare )
+			from = found.pos[ 1 ] + found.len[ 1 ]
+			found = reFind( pattern, arguments.text, from, true )
+		}
+		return out
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private string function absolute( required string path ) {
+		var clean = arguments.path.replace( "\", "/", "all" )
+		if ( clean.startsWith( "~/" ) ) {
+			return createObject( "java", "java.lang.System" ).getProperty( "user.home" ).replace( "\", "/", "all" ) & mid( clean, 2, len( clean ) )
+		}
+		return ( clean.startsWith( "/" ) || reFind( "^[A-Za-z]:/", clean ) ) ? clean : variables.workingDirectory & "/" & clean
+	}
+
+	/**
+	 * @return { content, problem }: the text of the file, or why it is not text
+	 */
+	private struct function textOf( required string path, required string name ) {
+		var bytes = fileReadBinary( arguments.path )
+		var sample = min( 8000, arrayLen( bytes ) )
+		for ( var i = 1; i <= sample; i++ ) {
+			if ( bytes[ i ] == 0 ) {
+				return { content : "", problem : "@#arguments.name# is not a text file." }
+			}
+		}
+		var content = fileRead( arguments.path )
+		if ( len( content ) > static.MAX_TEXT_CHARS ) {
+			content = left( content, static.MAX_TEXT_CHARS ) & char( 10 ) & "(the file was cut at #numberFormat( static.MAX_TEXT_CHARS )# characters)"
+		}
+		return { content : content, problem : "" }
+	}
+
+}

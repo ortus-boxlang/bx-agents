@@ -1,0 +1,73 @@
+/**
+ * What the person has put on the next message: the output of a `!command` or the result of a `#function()` that
+ * was not kept to the screen. It waits here until a message is sent, goes along with it, and is gone.
+ */
+class {
+
+	function init() {
+		variables.items = []
+		return this
+	}
+
+	/**
+	 * @kind "shell", "bif" or "file"
+	 * @label What was run, as typed
+	 * @text What came out
+	 */
+	function add( required string kind, required string label, required string text ) {
+		variables.items.append( { kind : arguments.kind, label : arguments.label, text : arguments.text } )
+		return this
+	}
+
+	numeric function count() {
+		return variables.items.len()
+	}
+
+	boolean function isEmpty() {
+		return variables.items.isEmpty()
+	}
+
+	/**
+	 * Puts the attachments after the message, each in its own block, and empties the list.
+	 *
+	 * @message What the person typed
+	 *
+	 * @return What to send
+	 */
+	string function compose( required string message ) {
+		if ( variables.items.isEmpty() ) {
+			return arguments.message
+		}
+		var parts = [ arguments.message ]
+		for ( var item in variables.items ) {
+			parts.append( "" )
+			parts.append( "Attached, the " & ( item.kind == "shell" ? "output of the command" : ( item.kind == "file" ? "contents of the file" : "result of the function call" ) ) & " `" & item.label & "`:" )
+			parts.append( "```" )
+			parts.append( item.text )
+			parts.append( "```" )
+		}
+		variables.items = []
+		return parts.toList( char( 10 ) )
+	}
+
+	/**
+	 * @report A ContextReport.build() result
+	 *
+	 * @return The report with the waiting attachments counted in; the report as it was when there are none
+	 */
+	struct function addTo( required struct report ) {
+		if ( variables.items.isEmpty() ) {
+			return arguments.report
+		}
+		var tokens = 0
+		for ( var item in variables.items ) {
+			tokens += len( item.text ) ? aiTokens( item.text ) : 0
+		}
+		var counted = duplicate( arguments.report )
+		counted.parts.append( { key : "attached", label : "Attached", tokens : tokens, detail : variables.items.len() & ( variables.items.len() == 1 ? " item" : " items" ) } )
+		counted.total += tokens
+		counted.percent = counted.contextWindow > 0 ? round( counted.total * 100 / counted.contextWindow ) : 0
+		return counted
+	}
+
+}

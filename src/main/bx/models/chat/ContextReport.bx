@@ -37,8 +37,20 @@ class {
 		var notes = tokensOf( notesBlock() )
 		var messages = variables.agent.getMemoryMessages( variables.userId, variables.conversationId )
 		var memory = 0
+		var images = 0
 		for ( var message in messages ) {
-			memory += tokensOf( message.content ?: "" )
+			// a message with images is a list of parts: the text counts, an image does not (what it costs depends on its size and the provider)
+			if ( isArray( message.content ?: "" ) ) {
+				for ( var part in message.content ) {
+					if ( isStruct( part ) && ( part.type ?: "text" ) == "text" ) {
+						memory += tokensOf( part.text ?: "" )
+					} else if ( isStruct( part ) ) {
+						images++
+					}
+				}
+			} else {
+				memory += tokensOf( message.content ?: "" )
+			}
 		}
 		var toolTotal = 0
 		for ( var tool in tools ) {
@@ -48,7 +60,7 @@ class {
 			{ key : "system", label : "System prompt", tokens : system, detail : "" },
 			{ key : "tools", label : "Tool definitions", tokens : toolTotal, detail : tools.len() & ( tools.len() == 1 ? " tool" : " tools" ) },
 			{ key : "notes", label : "Notes", tokens : notes, detail : "" },
-			{ key : "memory", label : "Messages", tokens : memory, detail : messages.len() & ( messages.len() == 1 ? " message" : " messages" ) }
+			{ key : "memory", label : "Messages", tokens : memory, detail : messages.len() & ( messages.len() == 1 ? " message" : " messages" ) & ( images ? ", #images# image#images == 1 ? '' : 's'# not counted" : "" ) }
 		]
 		var total = system + toolTotal + notes + memory
 		var window = variables.facts.contextWindow ?: 0

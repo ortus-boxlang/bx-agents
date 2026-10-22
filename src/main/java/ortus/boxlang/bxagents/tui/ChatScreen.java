@@ -18,7 +18,9 @@
 package ortus.boxlang.bxagents.tui;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Optional;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -77,6 +79,7 @@ public final class ChatScreen implements AutoCloseable {
 	private final ClassLoader				previousLoader;
 	private final List<Map<?, ?>>			commands;
 	private final Composer					composer		= new Composer();
+	private KeyMap							keys			= KeyMap.defaults();
 
 	private final Queue<Map<?, ?>>			events			= new ConcurrentLinkedQueue<>();
 	private final Queue<String>				steer			= new ConcurrentLinkedQueue<>();
@@ -85,6 +88,17 @@ public final class ChatScreen implements AutoCloseable {
 	private volatile String					status			= "";
 	private volatile boolean				turnOver;
 	private Thread							turnThread;
+
+	// pictures and file mentions in the message box
+	private static final int				MAX_IMAGES		= 4;
+	private final FileIndex					fileIndex		= new FileIndex( Path.of( System.getProperty( "user.dir" ) ) );
+	private final ClipboardImage			clipboard		= ClipboardImage.ofThisMachine();
+	private final List<String>				images			= new ArrayList<>();
+	private Path							pasteFolder;
+	private boolean							imagesAllowed	= true;
+	private String							imagesRefusal	= "";
+	private int								atPick;
+	private boolean							indexed;
 
 	// turn state, touched only by whichever thread is drawing
 	private final StringBuilder				segment			= new StringBuilder();
@@ -141,6 +155,28 @@ public final class ChatScreen implements AutoCloseable {
 		}
 	}
 
+	/**
+	 * Replaces the keys the screen answers to, once, before the first message is read.
+	 *
+	 * @param overrides action id to the keys, such as {@code newline -> [ "ctrl+j" ]}, from the person's own file
+	 *
+	 * @return what was wrong with the overrides, as sentences; they were left out and the defaults kept
+	 */
+	public List<String> bindKeys( Map<?, ?> overrides ) {
+		keys = KeyMap.of( overrides );
+		composer.keys( keys );
+		return keys.problems();
+	}
+
+	/** @return a row per key action: id, keys, does, place (box or run), for the /keys help */
+	public List<Map<String, String>> keyTable() {
+		return keys.table();
+	}
+
+	private static String lower( String label ) {
+		return label.toLowerCase( java.util.Locale.ROOT );
+	}
+
 	/** @return the palette, so BoxLang can paint its own output to match */
 	public Theme theme() {
 		return theme;
@@ -156,7 +192,11 @@ public final class ChatScreen implements AutoCloseable {
 	public void banner( String agent, String model, String mode ) {
 		out( Row.of().add( " bxAgents", theme.accentBold ).add( "  chat", theme.muted ).add( "   " + agent, theme.bold )
 		    .add( " · " + model + " · " + mode, theme.muted ).toLine() );
-		out( Row.of( " enter send · alt+enter new line · / commands · esc stops the agent · ctrl+c leaves", theme.muted ).toLine() );
+		out( Row
+		    .of( " " + lower( keys.first( KeyMap.Action.SUBMIT ) ) + " send · " + lower( keys.first( KeyMap.Action.NEWLINE ) )
+		        + " new line · / commands · ? keys · "
+		        + lower( keys.first( KeyMap.Action.STOP ) ) + " stops the agent · " + lower( keys.first( KeyMap.Action.CLEAR ) ) + " leaves", theme.muted )
+		    .toLine() );
 		out( Text.from( "" ) );
 	}
 
@@ -174,6 +214,23 @@ public final class ChatScreen implements AutoCloseable {
 	 */
 	public void setStatus( String text ) {
 		this.status = text == null ? "" : text;
+	}
+
+	/**
+	 * Says whether a picture may be pasted: false, with the reason to show, for a model known not to see images.
+	 */
+	public void setImagesAllowed( boolean allowed, String reason ) {
+		this.imagesAllowed	= allowed;
+		this.imagesRefusal	= reason == null ? "" : reason;
+	}
+
+	/**
+	 * Hands over the pictures pasted since the last message, as file paths, and forgets them.
+	 */
+	public List<String> takeImages() {
+		List<String> taken = new ArrayList<>( images );
+		images.clear();
+		return taken;
 	}
 
 	/** Prints what the user sent. */
@@ -256,7 +313,23 @@ public final class ChatScreen implements AutoCloseable {
 			if ( ev instanceof PasteEvent p ) {
 				composer.paste( p.text() );
 			} else if ( ev instanceof KeyEvent k ) {
-				if ( k.isKey( KeyCode.TAB ) && completeSlash() ) {
+				List<String> files = atMatches();
+				if ( !files.isEmpty() ) {
+					if ( k.isKey( KeyCode.UP ) || k.isKey( KeyCode.DOWN ) ) {
+						atPick = Math.floorMod( atPick + ( k.isKey( KeyCode.DOWN ) ? 1 : -1 ), Math.min( MAX_MENU, files.size() ) );
+						continue;
+					}
+					if ( keys.is( KeyMap.Action.COMPLETE, k ) ) {
+						composer.replaceAtMention( files.get( Math.min( atPick, files.size() - 1 ) ) );
+						atPick = 0;
+						continue;
+					}
+				}
+				if ( keys.is( KeyMap.Action.COMPLETE, k ) && completeSlash() ) {
+					continue;
+				}
+				if ( keys.is( KeyMap.Action.PASTE_IMAGE, k ) ) {
+					pasteImage();
 					continue;
 				}
 				Composer.Outcome outcome = composer.key( k );
@@ -270,6 +343,51 @@ public final class ChatScreen implements AutoCloseable {
 				}
 			}
 		}
+	}
+
+	/**
+	 * The files the {@code @} mention under the caret could mean: those whose path contains what was typed after it.
+	 * The folder is looked at once each time the box is read, when the first at sign is typed.
+	 */
+	private List<String> atMatches() {
+		String query = composer.atQuery();
+		if ( query == null ) {
+			indexed = false;
+			return List.of();
+		}
+		if ( !indexed ) {
+			fileIndex.refresh();
+			indexed = true;
+		}
+		return fileIndex.match( query, MAX_MENU );
+	}
+
+	/** Ctrl+V: adds the picture on the clipboard to the next message, or says why it cannot. */
+	private void pasteImage() {
+		if ( !imagesAllowed ) {
+			print( "warn", imagesRefusal.isEmpty() ? "The model in use cannot see images." : imagesRefusal );
+			return;
+		}
+		if ( images.size() >= MAX_IMAGES ) {
+			print( "warn", "At most " + MAX_IMAGES + " pictures go with one message." );
+			return;
+		}
+		try {
+			if ( pasteFolder == null ) {
+				pasteFolder = Files.createTempDirectory( "bxagents-paste-" );
+			}
+		} catch ( IOException e ) {
+			print( "warn", "Could not keep the picture: " + e.getMessage() );
+			return;
+		}
+		Optional<Path> saved = clipboard.save( pasteFolder );
+		if ( saved.isEmpty() ) {
+			print( "warn",
+			    "There is no picture on the clipboard, or no tool to read it (wl-paste or xclip on Linux, pngpaste on macOS). Text is pasted with your terminal's own paste." );
+			return;
+		}
+		images.add( saved.get().toString() );
+		print( "ok", "Added the picture from the clipboard (" + images.size() + " to send)." );
 	}
 
 	private boolean completeSlash() {
@@ -452,7 +570,7 @@ public final class ChatScreen implements AutoCloseable {
 			if ( ev instanceof PasteEvent p ) {
 				composer.paste( p.text() );
 			} else if ( ev instanceof KeyEvent k ) {
-				if ( k.isKey( KeyCode.ESCAPE ) || k.hasCtrl() && k.isChar( 'c' ) ) {
+				if ( keys.is( KeyMap.Action.STOP, k ) ) {
 					if ( !cancel ) {
 						cancel = true;
 						print( "warn", "Stopping after the current step." );
@@ -537,10 +655,16 @@ public final class ChatScreen implements AutoCloseable {
 			Map<?, ?> c = menu.get( i );
 			rows.add( Row.of().add( "   " + get( c, "name" ), i == 0 ? theme.selected : theme.plain ).add( "  " + get( c, "hint" ), theme.muted ) );
 		}
+		List<String> files = atMatches();
+		for ( int i = 0; i < files.size(); i++ ) {
+			rows.add( Row.of().add( "   @" + files.get( i ), i == Math.min( atPick, files.size() - 1 ) ? theme.selected : theme.plain ) );
+		}
 		rows.add( separator() );
 		rows.addAll( composerRows() );
+		String picture = images.isEmpty() ? "" : images.size() + ( images.size() == 1 ? " picture" : " pictures" ) + " attached · ";
 		rows.add( withRecordingMark(
-		    Row.of( " " + statusPrefix() + "enter send · alt+enter new line · ↑ history" + ( menu.isEmpty() ? "" : " · tab completes" ), theme.muted ) ) );
+		    Row.of( " " + statusPrefix() + picture + lower( keys.first( KeyMap.Action.SUBMIT ) ) + " send · " + lower( keys.first( KeyMap.Action.NEWLINE ) )
+		        + " new line · ? keys" + ( menu.isEmpty() && files.isEmpty() ? "" : " · tab completes" ), theme.muted ) ) );
 		return rows;
 	}
 
@@ -568,8 +692,22 @@ public final class ChatScreen implements AutoCloseable {
 		rows.addAll( composerRows() );
 		long secs = ( System.currentTimeMillis() - turnStarted ) / 1000;
 		rows.add( withRecordingMark( Row.of().add( " " + spin + " ", theme.accent ).add( cancel ? "stopping" : "working", theme.plain )
-		    .add( " " + secs + "s · esc stops · type and press enter to steer" + ( status.isEmpty() ? "" : " · " + status ), theme.muted ) ) );
+		    .add( " " + secs + "s · " + lower( keys.first( KeyMap.Action.STOP ) ) + " stops · type and press enter to steer"
+		        + ( status.isEmpty() ? "" : " · " + status ), theme.muted ) ) );
 		return rows;
+	}
+
+	/** The pictures taken off the clipboard are copies in a temporary folder; they go when the chat does. */
+	private void forgetPastedPictures() {
+		if ( pasteFolder == null ) {
+			return;
+		}
+		try ( var stream = Files.list( pasteFolder ) ) {
+			stream.forEach( f -> f.toFile().delete() );
+			Files.deleteIfExists( pasteFolder );
+		} catch ( IOException e ) {
+			// a temporary folder left behind is cleaned by the system
+		}
 	}
 
 	/** the status segment, with its separator, or nothing */
@@ -695,6 +833,7 @@ public final class ChatScreen implements AutoCloseable {
 	@Override
 	public void close() {
 		turnOver = true;
+		forgetPastedPictures();
 		try {
 			runner.close();
 		} finally {

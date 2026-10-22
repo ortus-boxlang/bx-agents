@@ -244,7 +244,8 @@ Beside those four, a generated handler (`handlers/AgentApi.bx`) serves what a ch
 control a run. It is what `chat --server` and `chat --connect` use:
 
 ```
-POST /__bxagents/events    # SSE: like /stream, plus tool and suspended frames
+POST /__bxagents/events    # SSE: like /stream, plus tool and suspended frames. Body may carry
+                           # attachments: [ { name, mime, data (base64) } ], at most 4 pictures of 5 MB
 POST /__bxagents/cancel    # { threadId, reason? }
 POST /__bxagents/steer     # { threadId, input }
 GET  /__bxagents/pending   # ?threadId=

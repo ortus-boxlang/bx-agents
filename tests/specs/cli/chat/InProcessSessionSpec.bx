@@ -40,6 +40,53 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.text ).notToBeEmpty();
 			} );
 
+			describe( "images", function() {
+
+				beforeEach( function() {
+					variables.dir = createTempDirectory( prefix = "bxagents-session-images-" );
+					fileWrite( dir & "/shot.png", toBinary( "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==" ) );
+					variables.settings = getModuleInfo( "bxai" ).settings;
+					variables.saved = settings.bxagents ?: {};
+				} );
+
+				afterEach( function() {
+					settings.bxagents = saved;
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				} );
+
+				it( "sends an image with the message as an image part, and the agent remembers it as one", function() {
+					var result = session.send( "what is this?", hooks, [ { path : dir & "/shot.png" } ] )
+
+					expect( result.status ).toBe( "done" );
+					var remembered = agent.getMemoryMessages( session.userId(), session.conversationId() ).filter( m => m.role == "user" )
+					expect( remembered ).toHaveLength( 1 );
+					expect( remembered[ 1 ].content ).toBeArray();
+					expect( remembered[ 1 ].content.filter( p => p.type == "image_url" ) ).toHaveLength( 1 );
+					// the conversation shows it as text and a marker, not as base64
+					expect( session.history()[ 1 ].text ).toBe( "what is this?" & char( 10 ) & "[image]" );
+				} );
+
+				it( "refuses an image for a model the project says cannot see, and sends nothing", function() {
+					settings.bxagents = { default : { vision : false } }
+					var before = agent.getMemoryMessages( session.userId(), session.conversationId() ).len()
+					var result = session.send( "what is this?", hooks, [ { path : dir & "/shot.png" } ] )
+
+					expect( result.status ).toBe( "stopped" );
+					expect( result.reason ).toInclude( "cannot see images" );
+					expect( agent.getMemoryMessages( session.userId(), session.conversationId() ) ).toHaveLength( before );
+				} );
+
+				it( "counts a message's images apart from its text in the size of the context", function() {
+					session.send( "what is this?", hooks, [ { path : dir & "/shot.png" } ] )
+					var memory = session.contextReport().parts.filter( p => p.key == "memory" )[ 1 ]
+					expect( memory.detail ).toInclude( "1 image not counted" );
+					expect( memory.tokens ).toBeLT( 50 );
+				} );
+
+			} );
+
 			it( "reports tool calls as running, then ok with the time it took", function() {
 				var tool = aiTool( "lookup", "lookup", ( topic ) => "found " & topic, false )
 				controls.onChunk = () => {

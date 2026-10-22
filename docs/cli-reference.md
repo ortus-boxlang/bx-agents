@@ -512,8 +512,9 @@ In the screen:
 | Esc | Stop the agent. It stops at its next step, not mid-word |
 | Enter while the agent works | Steer it: your message is added to the run |
 | Ctrl+C | Clear the box; on an empty box, leave. Ctrl+D leaves too |
+| `?` alone, or `/keys` | List the keys as they are bound now, with the action name of each |
 
-Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/export [file]` (the conversation as Markdown or HTML), `/name` and `/fork` (see below), `/sessions`, `/resume`, `/clear`, `/compact` and `/info` (see below), `/model`, `/profile` and `/default` (see below), `/remember <text>` and `/notes` (see below), `/record [file]` and `/record stop` (see below) and `/exit`.
+Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/export [file]` (the conversation as Markdown or HTML), `/name` and `/fork` (see below), `/keys` (which key does what), `/sessions`, `/resume`, `/clear`, `/compact` and `/info` (see below), `/model`, `/profile` and `/default` (see below), `/remember <text>` and `/notes` (see below), `/record [file]` and `/record stop` (see below) and `/exit`.
 
 #### The same commands in the web page and in chat apps
 
@@ -589,6 +590,47 @@ When the agent keeps [notes](conventions/agent-yaml.md#notes), the chat can show
 | Esc | Back to the chat |
 
 The heading shows how many characters of the limit are used and about how many tokens that adds to every conversation. It works in all three modes. Over `--connect` the commands use the server's notes routes, so you see the notes of that server, and removing a note of the agent needs an `admin` token. An agent without a `notes` block says how to turn them on.
+
+#### Running things on your machine from the chat
+
+Two prefixes in the message box run something on **your own machine**, never on a server, even when the chat talks to one over `--connect`:
+
+| Type | Does |
+|---|---|
+| `!command` | Runs a shell command (`sh -c`, or `cmd /c` on Windows) in the folder you started in. Its output (standard output and error together, cut at 20,000 characters, stopped after a minute) is shown, and **goes with your next message**, so the agent sees what you saw |
+| `!!command` | The same, shown on screen only |
+| `#function( arguments )` | Calls one BoxLang built-in function, such as `#dateFormat( now(), 'yyyy-mm-dd' )` or `#listLen( 'a,b,c' )`. The result is shown (a struct or array as JSON) and goes with the next message |
+| `##function( arguments )` | The same, shown on screen only |
+
+`!` must be followed at once by the command (`! hello` is a message) and `#` by a call (`# A heading` and `#hashtag` are messages). A call is **only** a call: a string (`'..'` or `".."`), number, `true`, `false`, `null`, array, struct or nested call as an argument, positional or named, and nothing else. There are no variables, operators, `.` access or statements, and a name that is not a registered built-in function is refused before anything runs. What waits for the next message shows in `/context` (as *Attached*) and in the status bar, and is gone once the message is sent.
+
+The two are yours to switch off or narrow, in a file that belongs to you and not to any project, `~/.bxagents/bxAgents.yml` (`BXAGENTS_USER_CONFIG` names another file):
+
+```yaml
+chat:
+  shell: true        # false switches ! off; or the shell to use: "bash -c", "pwsh -Command"
+  bifs: true         # false switches # off; or the functions allowed: [ dateFormat, listLen ]
+  keys:              # change the keys of an action; one key or a list. /keys shows the action names
+    newline: [ ctrl+n, alt+enter ]
+    stop: ctrl+x
+```
+
+A missing file means both are on. A key the file does not know, or a value of the wrong kind, is reported when the chat starts instead of being ignored.
+
+Keys are written as people say them: `enter`, `alt+enter`, `shift+enter`, `ctrl+j`, `esc`, `tab`, `up`, `down`, `home`, `end`, or a letter with `ctrl` or `alt`. Actions you can change: `submit`, `newline`, `historyPrevious`, `historyNext`, `clear`, `exit`, `deleteToStart`, `deleteWord`, `lineStart`, `lineEnd`, `complete`, `pasteImage` (in the message box) and `stop` (while the agent works). Moving the cursor with the arrows, Backspace and Delete are not actions. An entry that names no action, cannot be read as a key, or takes a key another action in the same place already has, is reported when the chat starts and that action keeps its default keys, so a typo never leaves you without a way to send a message. The heading and the hint row show your keys.
+
+#### Files and pictures in the message
+
+| Type | Does |
+|---|---|
+| `@` | Opens a list of the files under the folder you started in (up to five levels deep; hidden folders, `node_modules`, `build`, `dist`, `target`, `out`, `venv` are skipped). Keep typing to narrow it, Up and Down to move, Tab or Enter to take one |
+| `@path/to/file` | A text file in the message: its content goes with the message, in its own block, cut at 100,000 characters. A name that is not a file is reported and stays as plain text; the message is still sent |
+| `@picture.png` | A picture (png, jpg, gif, webp), sent as an image part of the message |
+| Ctrl+V | Pastes a picture from the clipboard (needs `wl-paste` or `xclip` on Linux, `pngpaste` on macOS; Windows uses PowerShell). A chip in the hint row shows how many are waiting |
+
+At most 4 pictures go with one message, each up to 5 MB. Before anything is sent the chat checks that the profile can see: set `vision: true` on a [profile](models.md#what-the-project-knows-about-a-model) that can, and a picture sent to one that cannot is refused with a message instead of an obscure provider error. `/context` counts what is attached. The picture is passed to the model as bx-ai's `AiMessage` image parts, in the shape that provider expects; only OpenAI-style providers have been tried so far.
+
+With `--connect` the files and pictures travel in the `attachments` of the request to `/__bxagents/events`, see [Run control](conventions/agent-bx.md#run-control). Chat platforms do not take attachments yet.
 
 #### Recording a chat
 

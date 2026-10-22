@@ -1,0 +1,33 @@
+/**
+ * What a value looks like on the chat screen and in an attachment: a simple value as it is, a struct or array as
+ * indented JSON, nothing as "(nothing)", anything else by its own text. Cut short, so one call cannot fill the screen.
+ */
+class {
+
+	static {
+		MAX_CHARS = 20000
+	}
+
+	/**
+	 * @value Whatever a built-in function returned; may be null
+	 */
+	string function of( any value ) {
+		var text = ""
+		if ( isNull( arguments.value ) ) {
+			return "(nothing)"
+		}
+		if ( isSimpleValue( arguments.value ) ) {
+			text = toString( arguments.value )
+		} else if ( isStruct( arguments.value ) || isArray( arguments.value ) || isQuery( arguments.value ) ) {
+			try {
+				text = jsonPrettify( jsonSerialize( arguments.value ) )
+			} catch ( any e ) {
+				text = toString( arguments.value )
+			}
+		} else {
+			text = toString( arguments.value )
+		}
+		return len( text ) > static.MAX_CHARS ? left( text, static.MAX_CHARS ) & char( 10 ) & "(cut at #numberFormat( static.MAX_CHARS )# characters)" : text
+	}
+
+}

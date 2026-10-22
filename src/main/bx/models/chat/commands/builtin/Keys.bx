@@ -1,0 +1,38 @@
+/**
+ * /keys: which keys do what. In the terminal chat, as they are bound now (the defaults, plus the person's own
+ * changes in ~/.bxagents/bxAgents.yml); on the web page, its fixed shortcuts. A lone ? in the message box asks
+ * the same, in both.
+ */
+class extends="models.chat.commands.BaseCommand@bxagents" {
+
+	string function name() {
+		return "keys"
+	}
+
+	string function hint() {
+		return "which keys do what (or type ?)"
+	}
+
+	array function transports() {
+		return [ "tui", "web" ]
+	}
+
+	any function run( required any context, required string args ) {
+		var reply = arguments.context.reply()
+		if ( !arguments.context.hasTerminal() ) {
+			reply.grid( [ { width : 22, align : "left" }, { width : 0 } ], [
+				[ "Enter", "Send the message" ],
+				[ "Shift+Enter", "New line in the message" ],
+				[ "/", "The commands; Tab completes the one picked, Up and Down choose, Esc closes" ],
+				[ "Stop", "The button stops the agent at its next step" ]
+			] )
+			return reply
+		}
+		var rows = arguments.context.terminal().keyRows()
+		var line = r => [ r.keys, r.id, r.does & ( r.place == "run" ? " (while the agent works)" : "" ) ]
+		reply.grid( [ { width : 28, align : "left" }, { width : 16, align : "left" }, { width : 0 } ], rows.map( line ) )
+		reply.text( "Also: a backslash then Enter adds a line, / opens the commands, @ the files, ! runs a shell command, ## calls a function. To change a key, list it under chat: keys: in ~/.bxagents/bxAgents.yml, by the action name in the middle column." )
+		return reply
+	}
+
+}

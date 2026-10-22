@@ -52,7 +52,39 @@ class extends="bxModules.bxai.models.gateway.GatewaySession" {
 		return variables.registry.menu( "gateway", true )
 	}
 
+	/**
+	 * Hands the command menu to each gateway that can show one to its users (Telegram's "/" list), once.
+	 * A gateway that cannot, or that fails, is skipped: a missing menu must never stop the bot answering.
+	 *
+	 * @return The names of the gateways that took the menu
+	 */
+	array function publishMenus() {
+		var taken = []
+		if ( !variables.commandsOn ) {
+			return taken
+		}
+		var menu = commandMenu()
+		for ( var name in variables.gateways ) {
+			var gateway = variables.gateways[ name ]
+			if ( !structKeyExists( gateway, "publishCommands" ) ) {
+				continue
+			}
+			try {
+				if ( gateway.publishCommands( menu ) ) {
+					taken.append( name )
+				}
+			} catch ( any e ) {
+				// the menu is a courtesy
+			}
+		}
+		variables.menusPublished = true
+		return taken
+	}
+
 	any function handleInbound( required GatewayMessage message, required IGateway sourceGateway ) {
+		if ( variables.commandsOn && !( variables.menusPublished ?: false ) ) {
+			publishMenus()
+		}
 		if ( variables.commandsOn && arguments.message.getType() == "message" ) {
 			var line = new "models.chat.commands.CommandLine@bxagents"( arguments.message.getText(), variables.prefix )
 			if ( line.isCommand() && !isNull( variables.registry.lookup( line.name() ) ) ) {

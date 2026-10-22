@@ -1,0 +1,87 @@
+/**
+ * Builds what is sent to the agent for one message: the text, and any images the person attached. Images
+ * are added with bx-ai's own AiMessage methods (embedImage for a file, image for data already in hand), so
+ * the message is the multipart shape bx-ai passes to a provider.
+ *
+ * One place checks the limits and the model, for every way an image arrives: a file in the terminal, a paste,
+ * the web page's upload. What is checked: how many, how big, that it is an image type a provider takes (not
+ * SVG or HTML), that the data is base64, and that the model is not known to be unable to see images.
+ */
+class {
+
+	static {
+		MAX_IMAGES      = 4
+		MAX_IMAGE_BYTES = 5242880
+		IMAGE_TYPES     = { png : "image/png", jpg : "image/jpeg", jpeg : "image/jpeg", gif : "image/gif", webp : "image/webp" }
+	}
+
+	/**
+	 * @text What the person typed
+	 * @images [ { path } ] files on this machine, or [ { name, mime, base64 } ] data that came over the wire
+	 * @facts { vision } of the model in use, from ModelFacts: "no" refuses images, anything else lets them through
+	 *
+	 * @return { ok : true, input, images : how many } where input is the text, or the user message with its image parts; or { ok : false, reason }
+	 */
+	struct function build( required string text, array images = [], struct facts = {} ) {
+		if ( !arguments.images.len() ) {
+			return { ok : true, input : arguments.text, images : 0 }
+		}
+		if ( ( arguments.facts.vision ?: "" ) == "no" ) {
+			return { ok : false, reason : "The model in use cannot see images (vision: false for it). Switch to one that can, or send the text alone." }
+		}
+		if ( arguments.images.len() > static.MAX_IMAGES ) {
+			return { ok : false, reason : "At most #static.MAX_IMAGES# images go with one message; there are #arguments.images.len()#." }
+		}
+		var message = aiMessage( len( trim( arguments.text ) ) ? arguments.text : "(attached image)" )
+		for ( var image in arguments.images ) {
+			var added = addImage( message, image )
+			if ( !added.ok ) {
+				return added
+			}
+		}
+		return { ok : true, input : message.getMessages()[ 1 ], images : arguments.images.len() }
+	}
+
+	/**
+	 * @name A file name or extension
+	 *
+	 * @return The image media type for it, "" when it is not one a provider takes
+	 */
+	string function typeOf( required string name ) {
+		return static.IMAGE_TYPES[ lCase( listLast( arguments.name, "." ) ) ] ?: ""
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private struct function addImage( required any message, required struct image ) {
+		if ( arguments.image.keyExists( "path" ) ) {
+			var path = arguments.image.path
+			if ( !fileExists( path ) ) {
+				return { ok : false, reason : "There is no image file [#path#]." }
+			}
+			if ( !len( typeOf( path ) ) ) {
+				return { ok : false, reason : "[#listLast( path.replace( '\', '/', 'all' ), '/' )#] is not an image type models take (png, jpg, gif or webp)." }
+			}
+			if ( getFileInfo( path ).size > static.MAX_IMAGE_BYTES ) {
+				return { ok : false, reason : "[#listLast( path.replace( '\', '/', 'all' ), '/' )#] is larger than #static.MAX_IMAGE_BYTES / 1048576# MB." }
+			}
+			arguments.message.embedImage( path )
+			return { ok : true }
+		}
+		var mime = lCase( arguments.image.mime ?: "" )
+		var data = arguments.image.base64 ?: ""
+		var label = len( arguments.image.name ?: "" ) ? "[#arguments.image.name#]" : "An attached image"
+		if ( !static.IMAGE_TYPES.some( ( ext, type ) => type == mime ) ) {
+			return { ok : false, reason : "#label# is not an image type models take (png, jpg, gif or webp)." }
+		}
+		if ( !len( data ) || !reFind( "^[A-Za-z0-9+/\r\n]+={0,2}$", data ) ) {
+			return { ok : false, reason : "#label# is not valid base64 data." }
+		}
+		if ( len( data ) * 3 / 4 > static.MAX_IMAGE_BYTES ) {
+			return { ok : false, reason : "#label# is larger than #static.MAX_IMAGE_BYTES / 1048576# MB." }
+		}
+		arguments.message.image( "data:#mime#;base64,#data#" )
+		return { ok : true }
+	}
+
+}

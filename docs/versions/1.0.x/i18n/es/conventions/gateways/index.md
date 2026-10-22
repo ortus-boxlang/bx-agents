@@ -265,8 +265,10 @@ gatewaySession:
 
 `build` comprueba el bloque: una clave desconocida, un prefijo que no sea un carácter o una entrada de `allow` que no sea un comando que corra en un gateway falla antes de que arranque la app. En Telegram un mensaje de grupo como `/info@tubot` se lee como `/info`.
 
+**Telegram** muestra los comandos en el menú `/` del propio bot: la primera vez que llega un mensaje, la sesión envía la lista que responde (`setMyCommands`) al gateway. Los nombres que Telegram rechazaría (cualquier cosa salvo minúsculas, dígitos y guiones bajos, o más de 32 caracteres) se omiten, y un fallo al publicar nunca impide que el bot responda.
+
 !!! info
-    Los comandos de conversación (`/new`, `/clear`, `/compact`, `/sessions`, `/resume`) no están en el conjunto por defecto: un gateway guarda una conversación por hilo de chat, y moverse entre conversaciones ahí es trabajo aparte. Los comandos tampoco aparecen todavía en el menú de comandos propio de una plataforma (la lista de Telegram, los comandos con barra de Slack); escribirlos funciona.
+    Los comandos de conversación (`/new`, `/clear`, `/compact`, `/sessions`, `/resume`) no están en el conjunto por defecto: un gateway guarda una conversación por hilo de chat, y moverse entre conversaciones ahí es trabajo aparte. Los comandos con barra propios de Slack y Discord aún no están configurados; escribirlos funciona.
 
 Qué hace en realidad cada política con un mensaje que llega mientras un turno todavía está en ejecución:
 

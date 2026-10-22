@@ -512,8 +512,9 @@ En la pantalla:
 | Esc | Detiene al agente. Se detiene en su siguiente paso, no a mitad de palabra |
 | Enter mientras el agente trabaja | Lo dirige: tu mensaje se añade a la ejecución |
 | Ctrl+C | Limpia el cuadro; con el cuadro vacío, sale. Ctrl+D también sale |
+| `?` solo, o `/keys` | Lista las teclas como están asignadas ahora, con el nombre de acción de cada una |
 
-Escribe `/` para ver los comandos: `/help`, `/new` (una conversación nueva), `/tools`, `/copy` (la última respuesta al portapapeles, con la secuencia OSC 52 que honran la mayoría de terminales), `/export [archivo]` (la conversación en Markdown o HTML), `/name` y `/fork` (ver abajo), `/sessions`, `/resume`, `/clear`, `/compact` e `/info` (ver abajo), `/model`, `/profile` y `/default` (ver abajo), `/remember <texto>` y `/notes` (ver abajo), `/record [archivo]` y `/record stop` (ver abajo) y `/exit`.
+Escribe `/` para ver los comandos: `/help`, `/new` (una conversación nueva), `/tools`, `/copy` (la última respuesta al portapapeles, con la secuencia OSC 52 que honran la mayoría de terminales), `/export [archivo]` (la conversación en Markdown o HTML), `/name` y `/fork` (ver abajo), `/keys` (qué tecla hace qué), `/sessions`, `/resume`, `/clear`, `/compact` e `/info` (ver abajo), `/model`, `/profile` y `/default` (ver abajo), `/remember <texto>` y `/notes` (ver abajo), `/record [archivo]` y `/record stop` (ver abajo) y `/exit`.
 
 #### Los mismos comandos en la página web y en las apps de chat
 
@@ -589,6 +590,47 @@ Cuando el agente guarda [notas](conventions/agent-yaml.md#notas), el chat puede 
 | Esc | Vuelve al chat |
 
 El encabezado muestra cuántos caracteres del límite se usan y cuántos tokens aproximados añade a cada conversación. Funciona en los tres modos. Con `--connect` los comandos usan las rutas de notas del servidor, así que ves las notas de ese servidor, y quitar una nota del agente requiere un token `admin`. Un agente sin bloque `notes` explica cómo activarlas.
+
+#### Ejecutar cosas en tu máquina desde el chat
+
+Dos prefijos en la caja de mensaje ejecutan algo en **tu propia máquina**, nunca en un servidor, incluso cuando el chat habla con uno por `--connect`:
+
+| Escribe | Hace |
+|---|---|
+| `!comando` | Ejecuta un comando de shell (`sh -c`, o `cmd /c` en Windows) en la carpeta donde empezaste. Su salida (salida estándar y error juntas, cortada a 20.000 caracteres, detenida a los 60 segundos) se muestra y **acompaña a tu siguiente mensaje**, para que el agente vea lo que viste tú |
+| `!!comando` | Lo mismo, solo en pantalla |
+| `#funcion( argumentos )` | Llama a una función integrada de BoxLang, como `#dateFormat( now(), 'yyyy-mm-dd' )` o `#listLen( 'a,b,c' )`. El resultado se muestra (un struct o array como JSON) y acompaña al siguiente mensaje |
+| `##funcion( argumentos )` | Lo mismo, solo en pantalla |
+
+Tras `!` debe venir el comando de inmediato (`! hola` es un mensaje) y tras `#` una llamada (`# Un título` y `#hashtag` son mensajes). Una llamada es **solo** una llamada: como argumento, una cadena (`'..'` o `".."`), un número, `true`, `false`, `null`, un array, un struct o una llamada anidada, posicional o con nombre, y nada más. No hay variables, operadores, acceso con `.` ni sentencias, y un nombre que no sea una función integrada registrada se rechaza antes de ejecutar nada. Lo que espera al siguiente mensaje aparece en `/context` (como *Attached*) y en la barra de estado, y desaparece al enviar el mensaje.
+
+Puedes apagar o acotar ambos en un archivo que es tuyo y no de ningún proyecto, `~/.bxagents/bxAgents.yml` (`BXAGENTS_USER_CONFIG` indica otro archivo):
+
+```yaml
+chat:
+  shell: true        # false apaga !; o el shell a usar: "bash -c", "pwsh -Command"
+  bifs: true         # false apaga #; o las funciones permitidas: [ dateFormat, listLen ]
+  keys:              # cambia las teclas de una acción; una tecla o una lista. /keys muestra los nombres de acción
+    newline: [ ctrl+n, alt+enter ]
+    stop: ctrl+x
+```
+
+Si el archivo no existe, ambos están activados. Una clave que el archivo no conoce, o un valor de tipo equivocado, se informa al iniciar el chat en lugar de ignorarse.
+
+Las teclas se escriben como se dicen: `enter`, `alt+enter`, `shift+enter`, `ctrl+j`, `esc`, `tab`, `up`, `down`, `home`, `end`, o una letra con `ctrl` o `alt`. Acciones que puedes cambiar: `submit`, `newline`, `historyPrevious`, `historyNext`, `clear`, `exit`, `deleteToStart`, `deleteWord`, `lineStart`, `lineEnd`, `complete`, `pasteImage` (en el cuadro de mensaje) y `stop` (mientras el agente trabaja). Mover el cursor con las flechas, Retroceso y Suprimir no son acciones. Una entrada que no nombra una acción, no se puede leer como tecla, o toma una tecla que otra acción del mismo lugar ya tiene, se avisa al iniciar el chat y esa acción conserva sus teclas por defecto, así que un error de escritura nunca te deja sin forma de enviar un mensaje. El encabezado y la fila de ayuda muestran tus teclas.
+
+#### Archivos e imágenes en el mensaje
+
+| Escribe | Hace |
+|---|---|
+| `@` | Abre una lista de los archivos bajo la carpeta donde empezaste (hasta cinco niveles; se omiten las carpetas ocultas, `node_modules`, `build`, `dist`, `target`, `out`, `venv`). Sigue escribiendo para filtrar, Arriba y Abajo para moverte, Tab o Enter para elegir uno |
+| `@ruta/al/archivo` | Un archivo de texto en el mensaje: su contenido va con el mensaje, en su propio bloque, cortado a 100.000 caracteres. Un nombre que no es un archivo se avisa y queda como texto; el mensaje se envía igualmente |
+| `@imagen.png` | Una imagen (png, jpg, gif, webp), enviada como parte de imagen del mensaje |
+| Ctrl+V | Pega una imagen del portapapeles (necesita `wl-paste` o `xclip` en Linux, `pngpaste` en macOS; Windows usa PowerShell). Una ficha en la fila de ayuda muestra cuántas esperan |
+
+Con un mensaje van como máximo 4 imágenes, de hasta 5 MB cada una. Antes de enviar nada, el chat comprueba que el perfil puede ver: pon `vision: true` en un [perfil](models.md#what-the-project-knows-about-a-model) que pueda, y una imagen enviada a uno que no puede se rechaza con un mensaje en lugar de un error oscuro del proveedor. `/context` cuenta lo adjunto. La imagen llega al modelo como partes de imagen de `AiMessage` de bx-ai, con la forma que ese proveedor espera; por ahora solo se han probado proveedores de estilo OpenAI.
+
+Con `--connect`, los archivos y las imágenes viajan en `attachments` de la petición a `/__bxagents/events`, ver [Control de ejecución](conventions/agent-bx.md#run-control). Las plataformas de chat aún no aceptan adjuntos.
 
 #### Grabar un chat
 

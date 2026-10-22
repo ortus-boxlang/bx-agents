@@ -254,6 +254,21 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   message box in the terminal and a chip in the web page's header always show it: `ctx ~12.4k / 128k 9%`.
   `GET /__bxagents/context` serves it to `chat --connect`.
 
+- In the terminal chat, `!command` runs a shell command and `#function( ... )` calls one BoxLang built-in on your
+  own machine; the output goes with your next message (`!!` and `##` only show it). A call is parsed, not
+  evaluated: literal arguments and nested calls only, and only registered built-ins. Both are switched off or
+  narrowed in your own `~/.bxagents/bxAgents.yml` (`chat: shell`, `bifs`), never by a project.
+- In the terminal chat, `@` lists the files under the folder and puts a text file's content in the message, `@picture.png`
+  or Ctrl+V sends a picture (at most 4, 5 MB each, checked against the profile's `vision` key before sending). The web
+  page has an Attach button and takes pasted and dropped pictures. `POST /__bxagents/events` and `/stream` accept
+  `attachments`. Chat platforms do not take attachments yet.
+- The keys of the terminal chat are one list now. `?` alone or `/keys` shows them, with the action name of each,
+  and `chat: keys:` in `~/.bxagents/bxAgents.yml` changes any of them (`newline`, `stop`, `submit`, ...). A key that
+  is not readable or already taken is reported at start and the action keeps its default. The web page answers
+  `/keys` and `?` with its own shortcuts.
+- In Telegram the bot's own `/` menu lists the commands the session answers (sent with `setMyCommands` when the
+  first message arrives). Names Telegram would refuse are left out; a failure never stops the bot.
+
 #### The chat screen
 
 - `bxAgents chat` is now a Pi-style terminal screen that keeps your scrollback: finished turns are

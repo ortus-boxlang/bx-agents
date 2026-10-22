@@ -76,8 +76,8 @@ class extends="testbox.system.BaseSpec" {
 
 				expect( session.resumeSession( left( first, 8 ) ).id ).toBe( first );
 				expect( session.resumeSession( "" ).ok ).toBeTrue();
-				expect( session.resumeSession( "99" ).ok ).toBeFalse();
-				expect( session.resumeSession( "99" ).reason ).toInclude( "/sessions" );
+				expect( session.resumeSession( "99999" ).ok ).toBeFalse();
+				expect( session.resumeSession( "99999" ).reason ).toInclude( "/sessions" );
 			} );
 
 			it( "does not offer another user's conversations", function() {
@@ -141,10 +141,18 @@ class extends="testbox.system.BaseSpec" {
 						{ role : "user", content : "hi" },
 						{ role : "assistant", content : "", tool_calls : [ {} ] },
 						{ role : "tool", content : "42" },
-						{ role : "assistant", content : [ { type : "text", text : "hello" }, { type : "image_url" } ] }
+						{ role : "assistant", content : [ { type : "text", text : "hello" }, { type : "unknown" } ] }
 					] );
 
 					expect( history ).toBe( [ { role : "you", text : "hi" }, { role : "agent", text : "hello" } ] );
+				} );
+
+				it( "marks a picture with [image] so a resumed conversation shows one was there", function() {
+					var history = new bxagents.models.cli.chat.MemoryHistory().of( [
+						{ role : "user", content : [ { type : "text", text : "what is this" }, { type : "image_url" } ] }
+					] );
+
+					expect( history ).toBe( [ { role : "you", text : "what is this" & char( 10 ) & "[image]" } ] );
 				} );
 			} );
 

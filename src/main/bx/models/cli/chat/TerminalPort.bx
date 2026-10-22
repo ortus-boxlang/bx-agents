@@ -10,13 +10,22 @@ class {
 	 * @transcript The Transcript of this chat
 	 * @agentName Titles a recording
 	 * @workingDirectory Where a relative file name is written
+	 * @attachments The Attachments waiting for the next message
 	 */
-	function init( required any screen, required any transcript, required string agentName, required string workingDirectory ) {
+	function init( required any screen, required any transcript, required string agentName, required string workingDirectory, required any attachments ) {
+		variables.attachments = arguments.attachments
 		variables.screen = arguments.screen
 		variables.transcript = arguments.transcript
 		variables.agentName = arguments.agentName
 		variables.workingDirectory = arguments.workingDirectory
 		return this
+	}
+
+	/**
+	 * @return [ { id, keys, does, place } ] the keys of the chat screen as they are now bound
+	 */
+	array function keyRows() {
+		return variables.screen.keyTable().map( r => { id : r.id, keys : r.keys, does : r.does, place : r.place } )
 	}
 
 	/**
@@ -29,6 +38,15 @@ class {
 		}
 		variables.screen.copy( last )
 		return true
+	}
+
+	/**
+	 * @report A ContextReport.build() result
+	 *
+	 * @return The report with what waits for the next message counted in
+	 */
+	struct function counting( required struct report ) {
+		return variables.attachments.addTo( arguments.report )
 	}
 
 	/**

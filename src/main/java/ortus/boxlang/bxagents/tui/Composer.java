@@ -46,8 +46,14 @@ final class Composer {
 	private int							historyAt;
 	private String						draft	= "";
 
+	private KeyMap						keys	= KeyMap.defaults();
+
 	Composer() {
 		lines.add( new StringBuilder() );
+	}
+
+	void keys( KeyMap keys ) {
+		this.keys = keys;
 	}
 
 	/** @return the whole text, lines joined by newlines */
@@ -92,6 +98,43 @@ final class Composer {
 		col	= lines.get( row ).length();
 	}
 
+	/**
+	 * The {@code @} mention the caret is in: an at sign that starts a word, and the letters after it up to the caret.
+	 *
+	 * @return the letters after the at sign, or null when the caret is not in a mention
+	 */
+	String atQuery() {
+		String	line	= lines.get( row ).toString();
+		int		from	= atStart( line );
+		return from < 0 ? null : line.substring( from + 1, col );
+	}
+
+	/** Replaces the mention under the caret (the at sign and its letters) with {@code @path}, quoted when it has a space. */
+	void replaceAtMention( String path ) {
+		StringBuilder	current	= lines.get( row );
+		int				from	= atStart( current.toString() );
+		if ( from < 0 ) {
+			return;
+		}
+		String mention = "@" + ( path.contains( " " ) ? "\"" + path + "\"" : path ) + " ";
+		current.replace( from, col, mention );
+		col = from + mention.length();
+	}
+
+	/** Where the at sign of the mention before the caret is, or -1. */
+	private int atStart( String line ) {
+		for ( int i = col - 1; i >= 0; i-- ) {
+			char c = line.charAt( i );
+			if ( c == ' ' || c == '"' ) {
+				return -1;
+			}
+			if ( c == '@' ) {
+				return i == 0 || line.charAt( i - 1 ) == ' ' ? i : -1;
+			}
+		}
+		return -1;
+	}
+
 	/** Remembers a sent message for Up, and empties the box. */
 	void sent() {
 		String t = text();
@@ -114,25 +157,25 @@ final class Composer {
 	}
 
 	Outcome key( KeyEvent k ) {
-		if ( k.hasCtrl() && k.isChar( 'c' ) ) {
+		if ( keys.is( KeyMap.Action.CLEAR, k ) ) {
 			if ( isEmpty() ) {
 				return Outcome.EXIT;
 			}
 			setText( "" );
 			return Outcome.CLEARED;
 		}
-		if ( k.hasCtrl() && k.isChar( 'd' ) ) {
+		if ( keys.is( KeyMap.Action.EXIT, k ) ) {
 			if ( isEmpty() ) {
 				return Outcome.EXIT;
 			}
 			deleteForward();
 			return Outcome.NONE;
 		}
-		if ( k.isKey( KeyCode.ENTER ) ) {
-			if ( k.hasAlt() || k.hasShift() ) {
-				newLine();
-				return Outcome.NONE;
-			}
+		if ( keys.is( KeyMap.Action.NEWLINE, k ) ) {
+			newLine();
+			return Outcome.NONE;
+		}
+		if ( keys.is( KeyMap.Action.SUBMIT, k ) ) {
 			StringBuilder current = lines.get( row );
 			if ( current.length() > 0 && current.charAt( current.length() - 1 ) == '\\' && col == current.length() ) {
 				current.setLength( current.length() - 1 );
@@ -142,17 +185,19 @@ final class Composer {
 			}
 			return text().isBlank() ? Outcome.NONE : Outcome.SUBMIT;
 		}
-		if ( k.hasCtrl() && k.isChar( 'j' ) ) {
-			newLine();
-		} else if ( k.hasCtrl() && k.isChar( 'u' ) ) {
+		if ( keys.is( KeyMap.Action.DELETE_TO_START, k ) ) {
 			lines.get( row ).delete( 0, col );
 			col = 0;
-		} else if ( k.hasCtrl() && k.isChar( 'w' ) ) {
+		} else if ( keys.is( KeyMap.Action.DELETE_WORD, k ) ) {
 			deleteWordBack();
-		} else if ( k.hasCtrl() && k.isChar( 'a' ) || k.isKey( KeyCode.HOME ) ) {
+		} else if ( keys.is( KeyMap.Action.LINE_START, k ) ) {
 			col = 0;
-		} else if ( k.hasCtrl() && k.isChar( 'e' ) || k.isKey( KeyCode.END ) ) {
+		} else if ( keys.is( KeyMap.Action.LINE_END, k ) ) {
 			col = lines.get( row ).length();
+		} else if ( keys.is( KeyMap.Action.HISTORY_PREVIOUS, k ) && row == 0 ) {
+			historyPrevious();
+		} else if ( keys.is( KeyMap.Action.HISTORY_NEXT, k ) && row == lines.size() - 1 ) {
+			historyNext();
 		} else if ( k.isKey( KeyCode.LEFT ) ) {
 			if ( col > 0 ) {
 				col--;
@@ -171,15 +216,11 @@ final class Composer {
 			if ( row > 0 ) {
 				row--;
 				col = Math.min( col, lines.get( row ).length() );
-			} else {
-				historyPrevious();
 			}
 		} else if ( k.isKey( KeyCode.DOWN ) ) {
 			if ( row < lines.size() - 1 ) {
 				row++;
 				col = Math.min( col, lines.get( row ).length() );
-			} else {
-				historyNext();
 			}
 		} else if ( k.isKey( KeyCode.BACKSPACE ) ) {
 			backspace();

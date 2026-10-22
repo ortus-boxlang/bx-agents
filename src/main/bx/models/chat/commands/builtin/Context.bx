@@ -18,7 +18,10 @@ class extends="models.chat.commands.BaseCommand@bxagents" {
 	any function run( required any context, required string args ) {
 		var reply = arguments.context.reply()
 		var report = arguments.context.chat().contextReport()
-		var words = new "models.chat.ContextLines@bxagents"()
+		// at the terminal, what waits for the next message (!command output, #function() results) counts too
+		if ( arguments.context.hasTerminal() ) {
+			report = arguments.context.terminal().counting( report )
+		}		var words = new "models.chat.ContextLines@bxagents"()
 		var rows = report.parts.map( p => [ p.label, words.approx( p.tokens ), p.detail ] )
 		rows.append( [ "Total", words.approx( report.total ), report.contextWindow > 0 ? "of #numberFormat( report.contextWindow )# tokens" : "" ] )
 		reply.grid( [ { width : 18, align : "left" }, { width : 7, align : "right" }, { width : 0 } ], rows )
