@@ -14,7 +14,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "asks every stage in order and ends with a plan and the command that rebuilds it", function() {
 				var wizard = wizardFor( [
 					"support-bot", "Answers customers", "minimal",
-					"claude", "",
+					"claude", "", true, "0.2", "2000", "30",
 					[ "time", "search", "files" ], "brave",
 					"pick", [ "readFile", "writeFile" ], [ "tmp", "custom" ], "/data/docs", "",
 					"file",
@@ -32,6 +32,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( prompter.remaining() ).toBe( 0 );
 				expect( plan.name ).toBe( "support-bot" );
 				expect( plan.model ).toBe( "claude" );
+				expect( plan.tuning ).toBe( { temperature : "0.2", maxTokens : "2000", timeout : "30" } );
 				expect( plan.with ).toBe( [ "time", "search", "files" ] );
 				expect( plan.search ).toBe( "brave" );
 				expect( plan.files.tools ).toBe( [ "readFile", "writeFile" ] );
@@ -51,7 +52,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "never keeps a plain password", function() {
 				var wizard = wizardFor( [
-					"bot", "", "minimal", "openai", "", [], "cache", [], [ "web" ],
+					"bot", "", "minimal", "openai", "", false, [], "cache", [], [ "web" ],
 					"users", "ada", "s3cret-pw", "s3cret-pw", "", false, "off", "none", "create"
 				] );
 
@@ -62,7 +63,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "puts a failed password confirmation back to the same question", function() {
 				var wizard = wizardFor( [
-					"bot", "", "minimal", "openai", "", [], "cache", [], [ "web" ],
+					"bot", "", "minimal", "openai", "", false, [], "cache", [], [ "web" ],
 					"users", "ada", "one", "two", "ok", "pw", "pw", "", false, "off", "none", "create"
 				] );
 
@@ -77,7 +78,7 @@ class extends="testbox.system.BaseSpec" {
 
 				var flags = {
 					name : "bot", description : "Does things", template : "minimal", model : "openai", with : "time", memory : "cache",
-					mcp : "", channels : "", guard : "off", deploy : ""
+					mcp : "", channels : "", guard : "off", deploy : "", temperature : "0.2"
 				};
 				// the stages that are not skipped by those flags: only the review
 				var plan = wizard.run( flags ).plan;
@@ -89,7 +90,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "goes back to the previous question on Esc and asks it again", function() {
 				var wizard = wizardFor( [
-					"first", "<back>", "second", "", "minimal", "openai", "", [], "cache", [], [], "off", "none", "create"
+					"first", "<back>", "second", "", "minimal", "openai", "", false, [], "cache", [], [], "off", "none", "create"
 				] );
 
 				var plan = wizard.run().plan;
@@ -101,7 +102,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "stays on the first question when there is nothing to go back to", function() {
 				var wizard = wizardFor( [
-					"<back>", "bot", "", "minimal", "openai", "", [], "cache", [], [], "off", "none", "create"
+					"<back>", "bot", "", "minimal", "openai", "", false, [], "cache", [], [], "off", "none", "create"
 				] );
 
 				expect( wizard.run().plan.name ).toBe( "bot" );
@@ -117,8 +118,8 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "starts over when the review says so", function() {
 				var wizard = wizardFor( [
-					"one", "", "minimal", "openai", "", [], "cache", [], [], "off", "none", "restart",
-					"two", "", "minimal", "openai", "", [], "cache", [], [], "off", "none", "create"
+					"one", "", "minimal", "openai", "", false, [], "cache", [], [], "off", "none", "restart",
+					"two", "", "minimal", "openai", "", false, [], "cache", [], [], "off", "none", "create"
 				] );
 
 				expect( wizard.run().plan.name ).toBe( "two" );
@@ -126,15 +127,35 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "refuses a bad name and asks again", function() {
 				var wizard = wizardFor( [
-					"1bad name", "ok", "good", "", "minimal", "openai", "", [], "cache", [], [], "off", "none", "create"
+					"1bad name", "ok", "good", "", "minimal", "openai", "", false, [], "cache", [], [], "off", "none", "create"
 				] );
 
 				expect( wizard.run().plan.name ).toBe( "good" );
 			} );
 
+			it( "asks the tuning questions again until a number is given, and leaves empty answers empty", function() {
+				var wizard = wizardFor( [
+					"bot", "", "minimal", "openai", "", true, "hot", "2.5", "0.5", "", "ten", "45",
+					[], "cache", [], [], "off", "none", "create"
+				] );
+
+				var plan = wizard.run().plan;
+
+				expect( plan.tuning ).toBe( { temperature : "0.5", maxTokens : "", timeout : "45" } );
+			} );
+
+			it( "does not ask about tuning when a flag gave it, and shows it as answered", function() {
+				var wizard = wizardFor( [ "bot", "", "minimal", "openai", "", [], "cache", [], [], "off", "none", "create" ] );
+
+				var plan = wizard.run( { temperature : "0.1" } ).plan;
+
+				expect( plan.tuning.temperature ).toBe( "0.1" );
+				expect( prompter.recorded().tuning.value ).toInclude( "from a flag" );
+			} );
+
 			it( "does not let the file tools run without a folder", function() {
 				var wizard = wizardFor( [
-					"bot", "", "minimal", "openai", "", [ "files" ],
+					"bot", "", "minimal", "openai", "", false, [ "files" ],
 					"read", [], [ "tmp" ],
 					"cache", [], [], "off", "none", "create"
 				] );
@@ -146,7 +167,7 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "offers the MCP servers that work today", function() {
-				var wizard = wizardFor( [ "bot", "", "minimal", "openai", "", [], "cache", [], [], "off", "none", "create" ] );
+				var wizard = wizardFor( [ "bot", "", "minimal", "openai", "", false, [], "cache", [], [], "off", "none", "create" ] );
 				wizard.run();
 				var mcp = prompter.asked().filter( q => q.title == "Connect any MCP servers?" )[ 1 ];
 

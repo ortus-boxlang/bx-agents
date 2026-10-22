@@ -71,7 +71,8 @@ or package as a portable `.bxa`.
 - `subagents/<name>/` - a full nested agent per folder, built leaf-first and attached to
   its parent automatically, with cycle detection at build time.
 - Models and profiles, in `Agent.yaml`: the default `provider`, `model` and `params`, other `providers`,
-  named `profiles`, and the capability defaults (see below).
+  named `profiles`, and the capability defaults (see below). `new` asks for the model's temperature, longest
+  answer and timeout (`--temperature`, `--max-tokens`, `--timeout`) and writes them as `params` and `options`.
 - `gateways/` - one entry per exposure or chat platform (see below).
 - `schedules/Scheduler.bx` - a real ColdBox scheduler class, passed through untouched, so
   the full ColdBox task DSL is available.

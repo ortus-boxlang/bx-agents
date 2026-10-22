@@ -47,6 +47,13 @@ class {
 		var flags = arguments.ctx.options.duplicate()
 		flags.name = name
 
+		// These are settings of the whole app, so they belong in the project's own Agent.yaml
+		for ( var flag in [ "temperature", "max-tokens", "timeout" ] ) {
+			if ( len( flags[ flag ] ?: "" ) ) {
+				throw( type = "BxAgents.InvalidAnswer", message = "--#flag# is a setting of the whole app, so it belongs in the project's own Agent.yaml (params and options). A subagent can set a model or a profile." )
+			}
+		}
+
 		var plan = {}
 		if ( a.interactive() ) {
 			plan = new "models.wizard.NewWizard@bxagents"( a.prompter() ).run( flags, name, arguments.ctx.root, static.STAGES ).plan

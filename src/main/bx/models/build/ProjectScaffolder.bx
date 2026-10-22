@@ -378,7 +378,17 @@ class {
 			lines.append( "description: #yamlScalar( arguments.description )#" )
 		}
 
-		lines.append( "model: #yamlScalar( arguments.model )#" )
+		// bx-ai's own terms: provider and model apart. A provider/model slug is split, a bare
+		// provider keeps its default model, anything else is written as it came
+		if ( arguments.model.find( "/" ) ) {
+			var parsed = variables.modelSlugParser.parse( arguments.model )
+			lines.append( "provider: #yamlScalar( parsed.provider )#" )
+			lines.append( "model: #yamlScalar( parsed.model )#" )
+		} else if ( variables.modelSlugParser.isKnownProvider( arguments.model ) ) {
+			lines.append( "provider: #yamlScalar( arguments.model )#" )
+		} else {
+			lines.append( "model: #yamlScalar( arguments.model )#" )
+		}
 
 		if ( arguments.subAgents.len() ) {
 			lines.append( "subAgents: [ #arguments.subAgents.map( n => yamlScalar( n ) ).toList( ", " )# ]" )

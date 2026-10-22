@@ -141,6 +141,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'forgebox'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'guard'; Value = $true; Choices = @('off', 'flag', 'block'); Dir = $false }
 			@{ Name = 'host'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'max-tokens'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'mcp'; Value = $true; Choices = @('github', 'stripe', 'notion', 'atlassian', 'cloudflare', 'supabase', 'git'); Dir = $false }
 			@{ Name = 'memory'; Value = $true; Choices = @('cache', 'file'); Dir = $false }
 			@{ Name = 'model'; Value = $true; Choices = @(); Dir = $false }
@@ -154,7 +155,9 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'repo'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'search'; Value = $true; Choices = @('http', 'brave', 'tavily', 'exa', 'google'); Dir = $false }
 			@{ Name = 'skipInstall'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'temperature'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'template'; Value = $true; Choices = @('minimal', 'webui-chat', 'slack-bot', 'telegram-bot', 'github-bot', 'mcp-server', 'scheduled', 'multi-agent'); Dir = $false }
+			@{ Name = 'timeout'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'user'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'web-auth'; Value = $true; Choices = @('open', 'key'); Dir = $false }
 			@{ Name = 'with'; Value = $true; Choices = @('time', 'fetch', 'search', 'browse', 'files', 'media'); Dir = $false }

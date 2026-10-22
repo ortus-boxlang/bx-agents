@@ -23,6 +23,7 @@ It is a full-screen UI in the teal of the BxAgents logo. Arrow keys (or `j`/`k`)
 | Name, purpose | The agent's name and a one-line description | `name`, `description` in [`Agent.yaml`](../conventions/agent-yaml.md) |
 | Shape | A single agent, a team, a scheduled agent, an MCP server | The matching [template](../agent-templates.md) |
 | Model | A provider, then optionally a model name (Enter takes the provider's default) | `model`, and a stub for the provider's `<PROVIDER>_API_KEY` in `.env` |
+| Model settings | Whether to tune the model, then the temperature (0 to 2), the longest answer in tokens and the timeout in seconds. Enter leaves one unset | [`params`](../conventions/models.md) (`temperature`, `max_tokens`) and [`options`](../conventions/models.md) (`timeout`) in `Agent.yaml` |
 | Tools | Date and time, fetch pages, search the web, browse websites, files, images and speech | A [`tools:`](../conventions/agent-yaml.md#tools) list; browsing also adds `bx-playwright` to your `box.json` |
 | Search provider | The built-in one, Brave, Tavily, Exa or Google | A key stub in `.env`, and a line in `instructions.md` telling the agent which provider to use |
 | File tools | Read only, all 19, or tool by tool, then the folders they may use | [`toolOptions.bxai.allowedPaths`](../conventions/agent-yaml.md#file-tools) |
@@ -100,6 +101,8 @@ bxAgents new support-bot --name=support-bot --model=claude --with=time,fetch,sea
 | `--with` | `time`, `fetch`, `search`, `browse`, `files`, `media` (a list) |
 | `--search` | `http`, `brave`, `tavily`, `exa`, `google` |
 | `--files`, `--files-dir` | `read`, `all` or a list of tool names; folders as `tmp`, `cwd` or absolute paths. Both are needed together |
+| `--temperature` | A number from 0 to 2 |
+| `--max-tokens`, `--timeout` | A positive whole number (tokens, seconds) |
 | `--memory` | `cache` or `file` |
 | `--mcp` | MCP server ids (a list) |
 | `--channels` | `web`, `api`, or channel ids (a list) |
