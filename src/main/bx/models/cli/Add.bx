@@ -7,6 +7,8 @@
  * be given as a flag so it also runs in a pipe or CI. Nothing is overwritten without
  * `--force`, and `--dry-run` shows the files without writing them.
  */
+import bxModules.bxagents.models.util.Strings;
+
 class {
 
 	/**
@@ -76,7 +78,7 @@ class {
 		var discoverer = new "models.build.ProjectDiscoverer@bxagents"()
 		var rootDiscovery = discoverer.discover( arguments.root )
 		var info = {
-			rootName         : lastSegment( arguments.root ),
+			rootName         : Strings::lastSegment( arguments.root ),
 			interceptorNames : rootDiscovery.interceptors.map( i => i.name ),
 			subagents        : rootDiscovery.subagents.map( s => s.name ),
 			toolNames        : { "." : rootDiscovery.tools.map( t => t.name ) },
@@ -123,7 +125,7 @@ class {
 			var config = new "models.build.AgentConfigResolver@bxagents"().resolve( projectRoot = arguments.path )
 			return new "models.build.generators.ColdBoxAppGenerator@bxagents"().resolveAgentName( config )
 		} catch ( any e ) {
-			return lastSegment( arguments.path )
+			return Strings::lastSegment( arguments.path )
 		}
 	}
 
@@ -141,10 +143,6 @@ class {
 			names.append( hit.reReplace( "task\(\s*[""']", "" ).reReplace( "[""']$", "" ) )
 		}
 		return names
-	}
-
-	private string function lastSegment( required string path ) {
-		return arguments.path.reReplace( "[\\/]+$", "" ).listLast( "/\" )
 	}
 
 	private void function closePrompter( any prompter ) {

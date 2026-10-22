@@ -35,6 +35,8 @@
  * }
  * ```
  */
+import bxModules.bxagents.models.util.Strings;
+
 class {
 
 	/**
@@ -48,22 +50,13 @@ class {
 			return { hasSchedules : false }
 		}
 
-		var appDir = normalizePath( arguments.appDir )
+		var appDir = Strings::normalizePath( arguments.appDir )
 		directoryCreate( path = appDir & "/config", createPath = true, ignoreExists = true )
 		var schedulerPath = appDir & "/config/Scheduler.bx"
 
 		fileWrite( schedulerPath, fileRead( arguments.discovery.schedulerPath ) )
 
 		return { scheduler : schedulerPath, hasSchedules : true }
-	}
-
-	/**
-	 * @path A filesystem path
-	 *
-	 * @return The path with any trailing slash(es) stripped
-	 */
-	private string function normalizePath( required string path ) {
-		return arguments.path.reReplace( "[\/]+$", "" )
 	}
 
 }

@@ -31,6 +31,8 @@
  *     skills : [ name ], mcpServers : [ { name, url, env } ], memory, checkpointer, security,
  *     gatewaySession, agentApi, classBased, children : [ node ] }
  */
+import bxModules.bxagents.models.util.EntryConfigReader;
+
 class {
 
 	/**
@@ -342,7 +344,7 @@ class {
 	}
 
 	// --------------------------------------------------------------------------
-	// Tools, MCP clients, named models
+	// Tools and MCP clients
 	// --------------------------------------------------------------------------
 
 	/**
@@ -483,7 +485,7 @@ class {
 	 * @return { name, file, kind, summary, path }
 	 */
 	private struct function gatewayInfo( required struct entry, required struct envUse ) {
-		var config = readEntryConfig( arguments.entry.path )
+		var config = EntryConfigReader::read( arguments.entry.path )
 		config = isStruct( config ) ? config : {}
 		var kind = config.exposes ?: ( config.type ?: "unknown" )
 		var summary = ""
@@ -511,7 +513,7 @@ class {
 	 * @entry A discovered mcp/ entry
 	 */
 	private struct function mcpHostedInfo( required struct entry ) {
-		var config = readEntryConfig( arguments.entry.path )
+		var config = EntryConfigReader::read( arguments.entry.path )
 		config = isStruct( config ) ? config : {}
 		return {
 			name        : arguments.entry.name,
@@ -576,7 +578,7 @@ class {
 				continue
 			}
 			var name = file.reReplace( "\.[a-z]+$", "" )
-			var config = readEntryConfig( dir & "/" & file )
+			var config = EntryConfigReader::read( dir & "/" & file )
 			config = isStruct( config ) ? config : {}
 			collectEnvKeys( config, "deploy #name#", arguments.envUse )
 			entries.append( { name : name, file : "deploy/" & file, target : config.target ?: "" } )
@@ -620,7 +622,7 @@ class {
 	 */
 	private void function registerProviderEnv( required array agents, required struct envUse ) {
 		for ( var agent in arguments.agents ) {
-			// a models/ entry that names its own key variable replaces the provider's usual one
+			// an agent whose profile names its own key variable replaces the provider's usual one
 			if ( !len( agent.provider ) || len( agent.apiKeyEnvVar ) ) {
 				continue
 			}
@@ -754,27 +756,5 @@ class {
 	// --------------------------------------------------------------------------
 	// Reading entries
 	// --------------------------------------------------------------------------
-
-	/**
-	 * Reads a gateways/, models/, mcp/ or deploy/ entry's config: a JSON file is
-	 * parsed, a `.bx` is loaded and its `configure()` called. Mirrors `doctor`.
-	 *
-	 * @path Absolute path to the entry
-	 *
-	 * @return The config, or null when it cannot be read
-	 */
-	private any function readEntryConfig( required string path ) {
-		try {
-			if ( arguments.path.endsWith( ".json" ) ) {
-				return jsonDeserialize( fileRead( arguments.path ) )
-			}
-			var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
-			return createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
-				.instantiate( arguments.path, context )
-				.configure()
-		} catch ( any e ) {
-			return null
-		}
-	}
 
 }

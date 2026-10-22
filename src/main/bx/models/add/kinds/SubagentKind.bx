@@ -13,6 +13,8 @@
  * is a class, or a list written in a shape that cannot be extended by inserting, is left
  * alone and the line to add is shown instead.
  */
+import bxModules.bxagents.models.util.NameRules;
+
 class {
 
 	static {
@@ -27,7 +29,7 @@ class {
 	 * @answers An Answers
 	 * @ctx The add context
 	 *
-	 * @return { name, parent, plan, features }
+	 * @return { name, parent, plan, profile, features }
 	 */
 	struct function ask( required any answers, required struct ctx ) {
 		var args = arguments.ctx.args ?: []
@@ -39,7 +41,7 @@ class {
 			key      = "name",
 			title    = "Subagent name",
 			help     = "Its folder under subagents/. Letters, digits, - and _.",
-			validate = ( value ) => !reFind( "^[A-Za-z][A-Za-z0-9_-]*$", value ) ? "Start with a letter; letters, digits, - and _." : ( taken.findNoCase( value ) ? "#value# is already an agent in this project." : "" )
+			validate = ( value ) => !NameRules::isValid( value ) ? "Start with a letter; letters, digits, - and _." : ( taken.findNoCase( value ) ? "#value# is already an agent in this project." : "" )
 		)
 		var parent = askParent( a, arguments.ctx, name )
 
@@ -54,20 +56,24 @@ class {
 			}
 		}
 
+		// like the main agent, it can use one of the project's profiles instead of a model of its own
+		var profile = askProfile( a, arguments.ctx )
+		var stages = static.STAGES.filter( stage => !( len( profile ) && stage == "model" ) )
+
 		var plan = {}
 		if ( a.interactive() ) {
-			plan = new "models.wizard.NewWizard@bxagents"( a.prompter() ).run( flags, name, arguments.ctx.root, static.STAGES ).plan
+			plan = new "models.wizard.NewWizard@bxagents"( a.prompter() ).run( flags, name, arguments.ctx.root, stages ).plan
 		} else {
-			if ( !len( trim( flags.model ?: "" ) ) ) {
-				throw( type = "BxAgents.InvalidAnswer", message = "--model is required without a terminal, for example --model=openai/gpt-5. Run `bxAgents add subagent` in a terminal to be asked." )
+			if ( !len( profile ) && !len( trim( flags.model ?: "" ) ) ) {
+				throw( type = "BxAgents.InvalidAnswer", message = "--model or --profile is required without a terminal, for example --model=openai/gpt-5. Run `bxAgents add subagent` in a terminal to be asked." )
 			}
 			plan = planner.fromFlags( flags )
 		}
-		if ( !len( plan.model ) ) {
-			throw( type = "BxAgents.InvalidAnswer", message = "A subagent needs a model." )
+		if ( !len( plan.model ) && !len( profile ) ) {
+			throw( type = "BxAgents.InvalidAnswer", message = "A subagent needs a model or a profile." )
 		}
 
-		return { name : name, parent : parent, plan : plan, features : planner.toFeatures( plan ), manual : "" }
+		return { name : name, parent : parent, plan : plan, profile : profile, features : planner.toFeatures( plan ), manual : "" }
 	}
 
 	/**
@@ -84,8 +90,7 @@ class {
 		arguments.changes.file( dir & "/instructions.md", renderInstructions( a, writer ) )
 
 		for ( var stub in ( a.features.envStubs ?: [] ) ) {
-			var comment = len( stub.comment ?: "" ) ? "## #stub.comment##char( 10 )#" : ""
-			arguments.changes.append( ".env", char( 10 ) & comment & stub.name & "=" & ( stub.value ?: "" ) & char( 10 ), stub.name & "=" )
+			arguments.changes.envStub( stub.name, stub.comment ?: "", stub.value ?: "" )
 		}
 
 		wireIntoParent( a, arguments.ctx, arguments.changes )
@@ -113,6 +118,27 @@ class {
 
 	// --------------------------------------------------------------------------
 
+	/**
+	 * Which of the project's profiles the subagent uses, or empty for a model of its own. Offered only when the
+	 * project has profiles; `--profile=<name>` answers it.
+	 */
+	private string function askProfile( required any a, required struct ctx ) {
+		var names = ( ( arguments.ctx.project.report.ai ?: {} ).profiles ?: [] ).map( p => p.name )
+		var given = trim( arguments.ctx.options.profile ?: "" )
+		if ( len( given ) && !names.findNoCase( given ) ) {
+			throw( type = "BxAgents.InvalidAnswer", message = "--profile: [#given#] is not a profile of this project. #names.len() ? 'Use one of: ' & names.toList( ', ' ) : 'It declares none: add one with bxAgents add profile.'#" )
+		}
+		if ( !names.len() ) {
+			return ""
+		}
+		var choices = [ { value : "none", label : "A model of its own", hint : "asked next" } ]
+		for ( var name in names ) {
+			choices.append( { value : name, label : name, hint : "a profile of this project" } )
+		}
+		var picked = arguments.a.select( key = "profile", title = "Which model does it use?", choices = choices, default = "none", help = "A profile, like the main agent can use, or a model of its own." )
+		return picked == "none" ? "" : picked
+	}
+
 	private string function askParent( required any a, required struct ctx, required string name ) {
 		var choices = [ { value : ".", label : "The root agent", hint : arguments.ctx.project.agentNames[ "." ] } ]
 		for ( var sub in arguments.ctx.project.subagents ) {
@@ -134,13 +160,20 @@ class {
 		if ( len( plan.description ) ) {
 			lines.append( "description: " & yaml.scalar( plan.description ) )
 		}
-		lines.append( "model: " & yaml.scalar( plan.model ) )
+		if ( len( arguments.a.profile ) ) {
+			lines.append( "profile: " & yaml.scalar( arguments.a.profile ) )
+		} else {
+			lines.append( "model: " & yaml.scalar( plan.model ) )
+		}
 		lines.append( arguments.writer.agentYamlLines( arguments.a.features ), true )
-		lines.append( "" )
-		lines.append( "environments:" )
-		lines.append( "  ## `bxAgents test` builds against this override so tests need no API key." )
-		lines.append( "  test:" )
-		lines.append( "    model: mock/mock-model" )
+		// `bxAgents test` runs every profile on mock, so a profile needs no override
+		if ( !len( arguments.a.profile ) ) {
+			lines.append( "" )
+			lines.append( "environments:" )
+			lines.append( "  ## `bxAgents test` builds against this override so tests need no API key." )
+			lines.append( "  test:" )
+			lines.append( "    model: mock/mock-model" )
+		}
 		return lines.toList( char( 10 ) ) & char( 10 )
 	}
 

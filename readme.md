@@ -16,7 +16,7 @@
 
 <p>&nbsp;</p>
 
-**BxAgents** is a conventions-based framework for building AI agents powered by [BoxLang AI](https://ai.boxlang.io). Built on top of [ColdBox](https://www.coldbox.org), it lets you describe an agent with a handful of files and folders - `Agent.yaml`, `instructions.md`, and whichever of `tools/`, `skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `models/`, `modules/` it actually needs - and BxAgents assembles a real, runnable ColdBox application from it **at build time**, ready to serve, chat with, or package as a portable `.bxa`.
+**BxAgents** is a conventions-based framework for building AI agents powered by [BoxLang AI](https://ai.boxlang.io). Built on top of [ColdBox](https://www.coldbox.org), it lets you describe an agent with a handful of files and folders - `Agent.yaml`, `instructions.md`, and whichever of `tools/`, `skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `modules/` it actually needs - and BxAgents assembles a real, runnable ColdBox application from it **at build time**, ready to serve, chat with, or package as a portable `.bxa`.
 
 ## Quick Start
 

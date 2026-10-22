@@ -44,6 +44,8 @@
  * A `.gitignore` is scaffolded alongside it (`.env` may later hold real
  * provider API keys, and `.build`/`dist` are pure build output).
  */
+import bxModules.bxagents.models.util.Strings;
+
 class {
 
 	property name="modelSlugParser";
@@ -235,8 +237,8 @@ class {
 			"",
 			"	function init() {",
 			"		super.init(",
-			'			name        : "#bxLiteral( arguments.name )#",',
-			'			description : "#bxLiteral( arguments.description )#",',
+			'			name        : "#Strings::bxLiteral( arguments.name )#",',
+			'			description : "#Strings::bxLiteral( arguments.description )#",',
 			"			model       : #renderModelExpression( arguments.model )#",
 			"		)",
 			"		return this",
@@ -254,7 +256,7 @@ class {
 		]
 
 		if ( arguments.subAgents.len() ) {
-			var subAgentList = arguments.subAgents.map( n => '"#bxLiteral( n )#"' ).toList( ", " )
+			var subAgentList = arguments.subAgents.map( n => '"#Strings::bxLiteral( n )#"' ).toList( ", " )
 			lines.append( "" )
 			// `subAgents` here is the list of `subagents/` FOLDER names to wire
 			// at build time - distinct from super.init()'s own `subAgents`
@@ -285,9 +287,9 @@ class {
 	private string function renderModelExpression( required string modelSlug ) {
 		if ( arguments.modelSlug.find( "/" ) ) {
 			var parsed = variables.modelSlugParser.parse( arguments.modelSlug )
-			return 'aiModel( provider : "#bxLiteral( parsed.provider )#", params : { model : "#bxLiteral( parsed.model )#" } )'
+			return 'aiModel( provider : "#Strings::bxLiteral( parsed.provider )#", params : { model : "#Strings::bxLiteral( parsed.model )#" } )'
 		}
-		return 'aiModel( provider : "#bxLiteral( arguments.modelSlug )#" )'
+		return 'aiModel( provider : "#Strings::bxLiteral( arguments.modelSlug )#" )'
 	}
 
 	/**
@@ -299,10 +301,10 @@ class {
 	private string function renderBoxJson( required string name, struct dependencies = {} ) {
 		var deps = arguments.dependencies
 		var slugs = deps.keyArray().sort( "textnocase" )
-		var dependencyLines = slugs.map( ( slug, index ) => '		"#bxLiteral( slug )#": "#bxLiteral( deps[ slug ] )#"' & ( index < slugs.len() ? "," : "" ) )
+		var dependencyLines = slugs.map( ( slug, index ) => '		"#Strings::bxLiteral( slug )#": "#Strings::bxLiteral( deps[ slug ] )#"' & ( index < slugs.len() ? "," : "" ) )
 		var lines = [
 			"{",
-			'	"name": "#bxLiteral( arguments.name )#",',
+			'	"name": "#Strings::bxLiteral( arguments.name )#",',
 			'	"version": "1.0.0",',
 			'	"private": true,',
 			slugs.len() ? '	"dependencies": {' : '	"dependencies": {},'
@@ -334,7 +336,7 @@ class {
 			'class extends="bxModules.bxagents.models.testing.BaseAgentSpec" {',
 			"",
 			"	function run() {",
-			'		describe( "#bxLiteral( arguments.name )#", function() {',
+			'		describe( "#Strings::bxLiteral( arguments.name )#", function() {',
 			"",
 			'			it( "responds to a greeting", function() {',
 			'				mockResponses( [ "Hello! How can I help you today?" ] )',
@@ -695,8 +697,8 @@ class {
 			"",
 			"	function init() {",
 			"		super.init(",
-			'			name        : "#bxLiteral( arguments.name )#",',
-			'			description : "#bxLiteral( subagentDescription( arguments.name ) )#",',
+			'			name        : "#Strings::bxLiteral( arguments.name )#",',
+			'			description : "#Strings::bxLiteral( subagentDescription( arguments.name ) )#",',
 			'			model       : aiModel( provider : "mock", params : { model : "mock-model" } )',
 			"		)",
 			"		return this",
@@ -801,7 +803,7 @@ class {
 			"",
 			"	function configure() {",
 			'		task( "example" )',
-			'			.call( () => getInstance( "#bxLiteral( arguments.name )#" ).run( "Give me a status update" ) )',
+			'			.call( () => getInstance( "#Strings::bxLiteral( arguments.name )#" ).run( "Give me a status update" ) )',
 			'			.everyDayAt( "00:00" )',
 			"	}",
 			"",
@@ -809,15 +811,6 @@ class {
 			""
 		]
 		return lines.toList( char( 10 ) )
-	}
-
-	/**
-	 * @value A raw string to embed inside a generated double-quoted BoxLang string literal
-	 *
-	 * @return value with `"` doubled and `#` doubled, so it round-trips as a literal, not an interpolation
-	 */
-	private string function bxLiteral( required string value ) {
-		return arguments.value.replace( '"', '""', "all" ).replace( "##", "####", "all" )
 	}
 
 }

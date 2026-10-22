@@ -10,6 +10,8 @@
  * dot-directories (including `.env`) are never descended into or copied,
  * even if present inside `tools/`/`skills/`.
  */
+import bxModules.bxagents.models.util.Strings;
+
 class {
 
 	/**
@@ -19,8 +21,8 @@ class {
 	 * @return { tools, skills } - absolute paths to the copied destination folders
 	 */
 	struct function copy( required string projectRoot, required string buildDir ) {
-		var root = normalizePath( arguments.projectRoot )
-		var appDir = normalizePath( arguments.buildDir )
+		var root = Strings::normalizePath( arguments.projectRoot )
+		var appDir = Strings::normalizePath( arguments.buildDir )
 
 		var toolsDest = appDir & "/tools"
 		var skillsDest = appDir & "/skills"
@@ -103,15 +105,6 @@ class {
 				fileCopy( srcPath, destPath )
 			}
 		}
-	}
-
-	/**
-	 * @path A filesystem path
-	 *
-	 * @return The path with any trailing slash(es) stripped
-	 */
-	private string function normalizePath( required string path ) {
-		return arguments.path.reReplace( "[\/]+$", "" )
 	}
 
 }

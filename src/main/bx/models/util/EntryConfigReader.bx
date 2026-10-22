@@ -1,0 +1,27 @@
+/**
+ * Reads one `gateways/`, `mcp/` or `deploy/` entry's config: a `.json` file is deserialized directly,
+ * a `.bx` file is loaded and its `configure()` invoked.
+ */
+class {
+
+	/**
+	 * @path Absolute path to the entry's `.bx` or `.json` file
+	 *
+	 * @return The entry's config struct, or null if it could not be read
+	 */
+	static any function read( required string path ) {
+		try {
+			if ( arguments.path.endsWith( ".json" ) ) {
+				return jsonDeserialize( fileRead( arguments.path ) )
+			}
+
+			var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
+			var instance = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
+				.instantiate( arguments.path, context )
+			return instance.configure()
+		} catch ( any e ) {
+			return null
+		}
+	}
+
+}

@@ -292,6 +292,8 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
 - A BxAgents banner in block letters, with a gradient picked at random from eight themes like the ColdBox CLI's, on
   `--help` and after the `new` wizard. Interactive terminals only; `NO_COLOR`, `TERM=dumb`, `--no-banner`
   and `BXAGENTS_BANNER=off` are honored, and `BXAGENTS_BANNER_THEME` pins a theme.
+- `add subagent` can use one of the project's profiles (`--profile`, or asked when the project has profiles), like the
+  main agent. `add gateway` for the web chat asks which profiles people can pick (`--profiles`).
 - The build now delivers bx-ai's settings the way bx-ai reads them. A `moduleSettings.bxai` block in
   `config/ColdBox.bx` never reached bx-ai (measured on a served app: it kept `provider: openai` and
   `skillsDirectory: /.agents/skills`), so the `skills/` override and the `security` block were silently not

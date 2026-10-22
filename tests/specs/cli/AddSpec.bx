@@ -618,6 +618,20 @@ class extends="testbox.system.BaseSpec" {
 					return addVerb.run( options );
 				}
 
+				it( "offers profiles in the web chat only when asked, and refuses one the project lacks", function() {
+					var root = newTempProject( "yaml-minimal" );
+					addVerb.run( { projectRoot : root, _positionals : [ "profile", "fast" ], yes : true, provider : "openai" } );
+
+					addGateway( root, { auth : "open", profiles : "fast,default" }, [ "gateway", "web" ] );
+
+					expect( fileRead( root & "/gateways/web.bx" ) ).toInclude( 'profiles' );
+					expect( fileRead( root & "/gateways/web.bx" ) ).toInclude( '"fast"' );
+					expect( new bxagents.models.report.ProjectReport().build( root ).validation.errors ).toBeEmpty();
+					expect( function() {
+						addGateway( root, { auth : "open", profiles : "nope", path : "/other" }, [ "gateway", "web", "second" ] );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+				} );
+
 				it( "writes a chat platform's gateway with the usual variable names, empty .env stubs and its setup steps", function() {
 					var root = newTempProject( "yaml-minimal" );
 
@@ -791,6 +805,40 @@ class extends="testbox.system.BaseSpec" {
 					expect( yaml ).toInclude( "model: mock/mock-model" );
 					expect( fileRead( root & "/subagents/writer/instructions.md" ) ).toInclude( "You are writer." );
 					expect( fileRead( root & "/Agent.yaml" ) ).toInclude( "subAgents:" & char( 10 ) & "  - writer" );
+				} );
+
+				it( "uses a profile of the project, like the main agent can, instead of a model", function() {
+					var root = newTempProject( "yaml-minimal" );
+					addVerb.run( { projectRoot : root, _positionals : [ "profile", "fast" ], yes : true, provider : "openai", model : "gpt-5-mini" } );
+
+					var result = addSub( root, { profile : "fast" } );
+					var yaml = fileRead( root & "/subagents/writer/Agent.yaml" );
+
+					expect( result.exitCode ).toBe( 0 );
+					expect( yaml ).toInclude( "profile: fast" );
+					expect( yaml ).notToInclude( "model:" );
+					expect( new bxagents.models.report.ProjectReport().build( root ).validation.errors ).toBeEmpty();
+				} );
+
+				it( "refuses a profile the project does not have, and still needs a model or a profile without a terminal", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					expect( function() {
+						addSub( root, { profile : "nope" } );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					expect( function() {
+						addSub( root );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+				} );
+
+				it( "offers the project's profiles when asking, and a model of its own is still one answer away", function() {
+					var root = newTempProject( "yaml-minimal" );
+					addVerb.run( { projectRoot : root, _positionals : [ "profile", "fast" ], yes : true, provider : "openai" } );
+					var prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [ "writer", "fast", "Writes the answer", [], "cache", [], "off", "create" ] );
+
+					addVerb.run( { projectRoot : root, _positionals : [ "subagent" ], _prompter : prompter, _interactive : true } );
+
+					expect( fileRead( root & "/subagents/writer/Agent.yaml" ) ).toInclude( "profile: fast" );
 				} );
 
 				it( "takes the same capability flags as new, and the .env stubs they need", function() {

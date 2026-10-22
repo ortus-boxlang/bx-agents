@@ -14,6 +14,10 @@
  * The API key is never typed here. The provider's usual variable is used; name another
  * with --api-key-env when two profiles of one provider need different keys.
  */
+import bxModules.bxagents.models.util.NameRules;
+
+import bxModules.bxagents.models.util.ModelTuning;
+
 class {
 
 	struct function info() {
@@ -93,7 +97,7 @@ class {
 		var questions = new "models.add.AiQuestions@bxagents"()
 		var editor = new "models.add.YamlEditor@bxagents"()
 		var yaml = new "models.wizard.YamlWriter@bxagents"()
-		var set = questions.settings( a.tuning )
+		var set = ModelTuning::settings( a.tuning )
 
 		var entry = {}
 		if ( len( a.description ) ) {
@@ -163,7 +167,7 @@ class {
 	// --------------------------------------------------------------------------
 
 	private string function nameProblem( required string value, required array taken, required any parser ) {
-		if ( !reFind( "^[A-Za-z][A-Za-z0-9_-]*$", arguments.value ) ) {
+		if ( !NameRules::isValid( arguments.value ) ) {
 			return "[#arguments.value#] must start with a letter and use only letters, digits, - and _."
 		}
 		if ( arguments.value.lcase() == "default" ) {

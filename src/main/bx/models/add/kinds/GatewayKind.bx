@@ -12,6 +12,8 @@
  * (wizard/catalog/channels.json), so the two cannot disagree. An MCP route is added with
  * `add mcp server`.
  */
+import bxModules.bxagents.models.util.NameRules;
+
 class {
 
 	static {
@@ -56,7 +58,7 @@ class {
 			title    = "File name",
 			help     = "gateways/<name>.bx. Letters, digits, - and _.",
 			default  = type,
-			validate = ( value ) => !reFind( "^[A-Za-z][A-Za-z0-9_-]*$", value ) ? "Start with a letter; letters, digits, - and _." : ( taken.findNoCase( value ) ? "A gateway named #value# already exists." : "" )
+			validate = ( value ) => !NameRules::isValid( value ) ? "Start with a letter; letters, digits, - and _." : ( taken.findNoCase( value ) ? "A gateway named #value# already exists." : "" )
 		)
 
 		if ( type == "web" ) {
@@ -83,7 +85,7 @@ class {
 			return
 		}
 		if ( a.type == "web" ) {
-			arguments.changes.file( path, writer.renderExposure( "webui", { path : a.path, apiKeyEnvVar : a.keyVar, users : a.users } ) )
+			arguments.changes.file( path, writer.renderExposure( "webui", { path : a.path, apiKeyEnvVar : a.keyVar, users : a.users, profiles : a.profiles } ) )
 			if ( len( a.keyVar ) ) {
 				arguments.changes.append(
 					".env",
@@ -97,8 +99,7 @@ class {
 		arguments.changes.file( path, writer.renderChannelGateway( { type : a.channel.type, env : a.env } ) )
 		for ( var e in a.channel.env ) {
 			var chosen = a.env.filter( x => x.config == e.config )[ 1 ].name
-			var line = len( e.comment ?: "" ) ? "## #a.channel.name#: #e.comment##char( 10 )#" : ""
-			arguments.changes.append( ".env", char( 10 ) & line & chosen & "=" & ( e.stub ?: "" ) & char( 10 ), chosen & "=" )
+			arguments.changes.envStub( chosen, len( e.comment ?: "" ) ? "#a.channel.name#: #e.comment#" : "", e.stub ?: "" )
 		}
 
 		if ( a.policy != "queue" ) {
@@ -214,7 +215,27 @@ class {
 		} else if ( auth == "users" ) {
 			users = collectUsers( arguments.a )
 		}
-		return { type : "web", name : arguments.name, path : path, auth : auth, keyVar : keyVar, key : key, users : users }
+		return { type : "web", name : arguments.name, path : path, auth : auth, keyVar : keyVar, key : key, users : users, profiles : askProfiles( arguments.a, arguments.ctx ) }
+	}
+
+	/**
+	 * The profiles the page may offer as a model picker. Asked only when the project has profiles; choosing none
+	 * keeps the page on the agent's own model (and refuses a profile named by the browser). `--profiles=a,b` answers it.
+	 */
+	private array function askProfiles( required any a, required struct ctx ) {
+		var names = ( ( arguments.ctx.project.report.ai ?: {} ).profiles ?: [] ).map( p => p.name )
+		if ( !names.len() && !arguments.a.given( "profiles" ) ) {
+			return []
+		}
+		var choices = names.map( n => { value : n, label : n, hint : "people can pick it in the chat" } )
+		return arguments.a.list(
+			key     = "profiles",
+			title   = "Which models can people pick in the chat?",
+			choices = choices,
+			default = [],
+			help    = "Profiles of this project. Choose none to keep it on the agent's own model.",
+			valid   = names.duplicate().append( "default" )
+		)
 	}
 
 	/**

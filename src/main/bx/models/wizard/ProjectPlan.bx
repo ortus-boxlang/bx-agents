@@ -18,6 +18,8 @@
  *   guard       "off" | "flag" | "block"   (prompt-injection guard)
  *   deploy      { target, registry, app, region, host, user, remotePath, destination }
  */
+import bxModules.bxagents.models.util.ModelTuning;
+
 class {
 
 	static {
@@ -285,17 +287,12 @@ class {
 			features.toolOptions = { bxai : { allowedPaths : p.files.folders } }
 		}
 
-		if ( len( p.tuning.temperature ) || len( p.tuning.maxTokens ) ) {
-			features.modelParams = {}
-			if ( len( p.tuning.temperature ) ) {
-				features.modelParams[ "temperature" ] = val( p.tuning.temperature )
-			}
-			if ( len( p.tuning.maxTokens ) ) {
-				features.modelParams[ "max_tokens" ] = int( p.tuning.maxTokens )
-			}
+		var tuned = ModelTuning::settings( p.tuning )
+		if ( tuned.params.count() ) {
+			features.modelParams = tuned.params
 		}
-		if ( len( p.tuning.timeout ) ) {
-			features.modelOptions = { timeout : int( p.tuning.timeout ) }
+		if ( tuned.options.count() ) {
+			features.modelOptions = tuned.options
 		}
 
 		if ( tools.len() ) {
@@ -450,7 +447,7 @@ class {
 		var t = { temperature : "", maxTokens : "", timeout : "" }
 		if ( len( trim( arguments.o.temperature ?: "" ) ) ) {
 			var temperature = trim( arguments.o.temperature )
-			if ( !isNumeric( temperature ) || val( temperature ) < 0 || val( temperature ) > 2 ) {
+			if ( !ModelTuning::isTemperature( temperature ) ) {
 				fail( "temperature", "[#temperature#] is not a number from 0 to 2" )
 			}
 			t.temperature = temperature
@@ -458,7 +455,7 @@ class {
 		for ( var pair in [ [ "max-tokens", "maxTokens" ], [ "timeout", "timeout" ] ] ) {
 			if ( len( trim( arguments.o[ pair[ 1 ] ] ?: "" ) ) ) {
 				var count = trim( arguments.o[ pair[ 1 ] ] )
-				if ( !reFind( "^[1-9][0-9]*$", count ) ) {
+				if ( !ModelTuning::isCount( count ) ) {
 					fail( pair[ 1 ], "[#count#] is not a whole number above zero" )
 				}
 				t[ pair[ 2 ] ] = count

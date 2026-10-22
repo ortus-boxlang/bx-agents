@@ -6,6 +6,8 @@
  * A key is never asked for. The provider's usual environment variable is used
  * (OPENAI_API_KEY, ...), and only the variable's name is ever written down.
  */
+import bxModules.bxagents.models.util.ModelTuning;
+
 class {
 
 	function init() {
@@ -60,41 +62,21 @@ class {
 				title    = "Temperature? (optional)",
 				help     = "How adventurous the answers are, 0 to 2. Empty uses the provider's default.",
 				default  = "",
-				validate = ( value ) => !len( value ) || ( isNumeric( value ) && value >= 0 && value <= 2 ) ? "" : "A number from 0 to 2."
+				validate = ( value ) => ModelTuning::temperatureProblem( value )
 			),
 			maxTokens : arguments.a.text(
 				key      = "max-tokens",
 				title    = "Longest answer, in tokens? (optional)",
 				default  = "",
-				validate = ( value ) => !len( value ) || reFind( "^[1-9][0-9]*$", value ) ? "" : "A whole number."
+				validate = ( value ) => ModelTuning::countProblem( value )
 			),
 			timeout : arguments.a.text(
 				key      = "timeout",
 				title    = "Timeout, in seconds? (optional)",
 				default  = "",
-				validate = ( value ) => !len( value ) || reFind( "^[1-9][0-9]*$", value ) ? "" : "A whole number."
+				validate = ( value ) => ModelTuning::countProblem( value )
 			)
 		}
-	}
-
-	/**
-	 * @tuning The struct tuning() returns
-	 *
-	 * @return { params, options } mappings holding only what was set
-	 */
-	struct function settings( required struct tuning ) {
-		var params = {}
-		var options = {}
-		if ( len( arguments.tuning.temperature ?: "" ) ) {
-			params[ "temperature" ] = val( arguments.tuning.temperature )
-		}
-		if ( len( arguments.tuning.maxTokens ?: "" ) ) {
-			params[ "max_tokens" ] = int( arguments.tuning.maxTokens )
-		}
-		if ( len( arguments.tuning.timeout ?: "" ) ) {
-			options[ "timeout" ] = int( arguments.tuning.timeout )
-		}
-		return { params : params, options : options }
 	}
 
 	/**
@@ -121,11 +103,9 @@ class {
 	 * @info The provider's info(), for the note above the stub
 	 */
 	void function envStub( required any changes, required string envVar, struct info = {} ) {
-		if ( !len( arguments.envVar ) ) {
-			return
+		if ( len( arguments.envVar ) ) {
+			arguments.changes.envStub( arguments.envVar, len( arguments.info.keyUrl ?: "" ) ? "#arguments.info.name# API key. Get one at #arguments.info.keyUrl#" : "" )
 		}
-		var note = len( arguments.info.keyUrl ?: "" ) ? "## #arguments.info.name# API key. Get one at #arguments.info.keyUrl##char( 10 )#" : ""
-		arguments.changes.append( ".env", char( 10 ) & note & arguments.envVar & "=" & char( 10 ), arguments.envVar & "=" )
 	}
 
 	/**
