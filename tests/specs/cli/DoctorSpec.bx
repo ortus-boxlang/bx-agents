@@ -67,7 +67,19 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "returns exit code 0 and a clean validation report for a valid project", function() {
-				var result = doctorVerb.run( { projectRoot : newTempProject( "full-project" ) } );
+				// the fixture's model needs its provider key, so it is set for the run
+				var system = createObject( "java", "java.lang.System" );
+				var had = len( getSystemSetting( "OPENAI_API_KEY", "" ) ) > 0;
+				if ( !had ) {
+					system.setProperty( "OPENAI_API_KEY", "k" );
+				}
+				try {
+					var result = doctorVerb.run( { projectRoot : newTempProject( "full-project" ) } );
+				} finally {
+					if ( !had ) {
+						system.clearProperty( "OPENAI_API_KEY" );
+					}
+				}
 
 				expect( result.exitCode ).toBe( 0 );
 				expect( result.message ).toInclude( "Everything checks out." );
@@ -95,6 +107,40 @@ class extends="testbox.system.BaseSpec" {
 				} finally {
 					createObject( "java", "java.lang.System" ).clearProperty( "MY_TELEGRAM_BOT_TOKEN" );
 				}
+			} );
+
+			it( "warns for a profile's key variable that is not set, names who needs it, and stops once it is set", function() {
+				var root = createTempDirectory( prefix = "bxagents-cli-doctor-" );
+				tempDirs.append( root );
+				var nl = char( 10 );
+				fileWrite( root & "/Agent.yaml", "name: keyed" & nl & "model: mock/mock-model" & nl & "profiles:" & nl
+					& "  fast:" & nl & "    provider: openai" & nl & "    apiKeyEnv: DOCTOR_FAST_KEY" & nl
+					& "  planner:" & nl & "    provider: claude" & nl & "    apiKeyEnv: DOCTOR_PLANNER_KEY" & nl
+					& "speech:" & nl & "  provider: mock" & nl );
+				fileWrite( root & "/instructions.md", "Be helpful." );
+
+				var before = doctorVerb.run( { projectRoot : root } );
+				expect( before.exitCode ).toBe( 0 );
+				expect( before.message ).toInclude( "[WARN] DOCTOR_FAST_KEY is not set in the environment (profile fast)" );
+				expect( before.message ).toInclude( "[WARN] DOCTOR_PLANNER_KEY is not set in the environment (profile planner)" );
+
+				createObject( "java", "java.lang.System" ).setProperty( "DOCTOR_FAST_KEY", "k" );
+				try {
+					var after = doctorVerb.run( { projectRoot : root } );
+					expect( after.message ).toInclude( "[ OK ] DOCTOR_FAST_KEY is set (profile fast)" );
+					expect( after.message ).toInclude( "DOCTOR_PLANNER_KEY is not set" );
+				} finally {
+					createObject( "java", "java.lang.System" ).clearProperty( "DOCTOR_FAST_KEY" );
+				}
+			} );
+
+			it( "asks for no key when every model is the mock provider", function() {
+				var root = createTempDirectory( prefix = "bxagents-cli-doctor-" );
+				tempDirs.append( root );
+				fileWrite( root & "/Agent.yaml", "name: mocked" & char( 10 ) & "model: mock/mock-model" & char( 10 ) );
+				fileWrite( root & "/instructions.md", "Be helpful." );
+
+				expect( doctorVerb.run( { projectRoot : root } ).message ).notToInclude( "API_KEY" );
 			} );
 
 			it( "checks the same *EnvVar only once even when several entries declare it", function() {

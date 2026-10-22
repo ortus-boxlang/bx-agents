@@ -278,6 +278,9 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   stub for the key.
 - `add capability <embeddings|speech|transcription|image>` sets that capability's default provider and model, asking
   only the questions it has, and keeps speech and transcription on one audio provider.
+- `doctor` warns when a key variable the models need is not set in the environment (default model, subagents,
+  profiles, capability defaults) and names who needs it; `inspect --section=ai` lists the same keys as set or not
+  set. Neither reads the project's `.env` or any value.
 - The build now delivers bx-ai's settings the way bx-ai reads them. A `moduleSettings.bxai` block in
   `config/ColdBox.bx` never reached bx-ai (measured on a served app: it kept `provider: openai` and
   `skillsDirectory: /.agents/skills`), so the `skills/` override and the `security` block were silently not
