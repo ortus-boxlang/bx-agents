@@ -177,6 +177,66 @@ class {
 	}
 
 	/**
+	 * @return The title in the list of conversations, "" when it has none yet or no list is kept
+	 */
+	string function conversationTitle() {
+		return keepsSessions() ? ( variables.sessions.byId( variables.userId, variables.conversationId ).title ?: "" ) : ""
+	}
+
+	/**
+	 * Names this conversation. A conversation nobody has spoken in has no row in the list yet; it gets one.
+	 *
+	 * @title The new name; cut to a line, as a title is a label
+	 *
+	 * @return { ok, title } or { ok : false, reason }
+	 */
+	struct function rename( required string title ) {
+		if ( !keepsSessions() ) {
+			return { ok : false, reason : "This chat keeps no list of conversations, so there is nothing to name." }
+		}
+		var named = variables.sessions.titleOf( arguments.title )
+		if ( !len( named ) ) {
+			return { ok : false, reason : "Give it a name: /name <new name>" }
+		}
+		if ( !variables.sessions.rename( variables.userId, variables.conversationId, named ) && !variables.sessions.touch( variables.userId, variables.conversationId, named, 0 ) ) {
+			return { ok : false, reason : "That conversation belongs to someone else." }
+		}
+		return { ok : true, title : named }
+	}
+
+	/**
+	 * Copies this whole conversation, messages and all, under a new name, and moves to the copy. The two
+	 * carry on independently from here.
+	 *
+	 * @title The name of the copy; "Fork of <this one>" when blank
+	 *
+	 * @return { ok, id, title, messages } or { ok : false, reason }
+	 */
+	struct function fork( string title = "" ) {
+		if ( !keepsSessions() ) {
+			return { ok : false, reason : "This chat keeps no list of conversations, so there is nowhere to put a copy." }
+		}
+		var copied = 0
+		var forkId = createUUID()
+		for ( var memory in variables.agent.getMemories() ) {
+			for ( var message in memory.getAll( variables.userId, variables.conversationId ) ) {
+				memory.add( message, variables.userId, forkId )
+				copied++
+			}
+		}
+		if ( !copied ) {
+			return { ok : false, reason : "There is nothing to fork yet: this conversation has no messages." }
+		}
+		var shown = len( trim( arguments.title ) ) ? arguments.title : "Fork of " & ( len( conversationTitle() ) ? conversationTitle() : "a conversation" )
+		var named = variables.sessions.titleOf( shown )
+		var count = variables.agent.getMemoryMessages( variables.userId, forkId ).len()
+		variables.sessions.touch( variables.userId, forkId, named, count )
+		variables.conversationId = forkId
+		variables.threadId = createUUID()
+		return { ok : true, id : forkId, title : named, messages : count }
+	}
+
+	/**
 	 * @return What was said in this conversation, from the agent's memory: [ { role : "you" | "agent", text } ]
 	 */
 	array function history() {

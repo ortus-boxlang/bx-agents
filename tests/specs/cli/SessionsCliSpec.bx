@@ -1,0 +1,90 @@
+/**
+ * The sessions verb: list, rename, fork and delete the conversations in a project's chat database.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "cli.Sessions", function() {
+
+			beforeEach( function() {
+				variables.verb = new bxagents.models.cli.Sessions();
+				variables.root = createTempDirectory( prefix = "bxagents-cli-sessions-" );
+				variables.usesDefaultPath = !len( getSystemSetting( "BXAGENTS_DB", "" ) );
+				if ( usesDefaultPath ) {
+					directoryCreate( root & "/data", true, true );
+					var store = bxagents.models.store.ChatStore::forFile( root & "/data/chat.db" );
+					var sessions = new bxagents.models.store.SessionStore( store );
+					sessions.touch( "alice", "c-1", "plan the launch" );
+					sleep( 1100 );
+					sessions.touch( "alice", "c-2", "write the report" );
+					sessions.touch( "bob", "c-3", "not alice's" );
+				}
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( root ) ) {
+					directoryDelete( root, true );
+				}
+			} );
+
+			function run_( required string action, struct more = {} ) {
+				return verb.run( { projectRoot : root, _positional : action, user : "alice" }.append( more ) );
+			}
+
+			it( "needs a project root, a known action and, but for list, a conversation", function() {
+				expect( function() { verb.run( {} ); } ).toThrow( "BxAgents.MissingProjectRoot" );
+				expect( function() { verb.run( { projectRoot : root } ); } ).toThrow( "BxAgents.UnknownSessionsAction" );
+				expect( function() { run_( "rename" ); } ).toThrow( "BxAgents.MissingSession" );
+			} );
+
+			it( "lists the user's conversations, newest first and numbered, or as JSON", function() {
+				if ( !usesDefaultPath ) { return; }
+
+				var lines = run_( "list" ).message.listToArray( char( 10 ) );
+				expect( lines ).toHaveLength( 2 );
+				expect( lines[ 1 ] ).toInclude( "write the report" );
+				expect( lines[ 2 ] ).toInclude( "plan the launch" );
+
+				var rows = jsonDeserialize( run_( "list", { json : true } ).message );
+				expect( rows.map( r => r.id ) ).toBe( [ "c-2", "c-1" ] );
+			} );
+
+			it( "renames a conversation picked by number or by id", function() {
+				if ( !usesDefaultPath ) { return; }
+
+				expect( run_( "rename", { session : "1", name : "Final report" } ).message ).toBe( "Renamed to [Final report]." );
+				expect( run_( "rename", { session : "c-1", name : "Launch" } ).exitCode ).toBe( 0 );
+				var titles = jsonDeserialize( run_( "list", { json : true } ).message ).map( r => r.title ).sort( "text" );
+				expect( titles ).toBe( [ "Final report", "Launch" ] );
+				expect( function() { run_( "rename", { session : "1" } ); } ).toThrow( "BxAgents.MissingSessionName" );
+			} );
+
+			it( "answers a conversation that is not there, or is somebody else's", function() {
+				if ( !usesDefaultPath ) { return; }
+
+				var gone = run_( "rename", { session : "c-3", name : "Mine" } );
+				expect( gone.exitCode ).toBe( 1 );
+				expect( gone.message ).toInclude( "There is no conversation [c-3]" );
+			} );
+
+			it( "deletes a conversation from the list, and says so when the project is not built", function() {
+				if ( !usesDefaultPath ) { return; }
+
+				var done = run_( "delete", { session : "c-1" } );
+				expect( done.exitCode ).toBe( 0 );
+				expect( done.message ).toInclude( "not built" );
+				expect( jsonDeserialize( run_( "list", { json : true } ).message ).map( r => r.id ) ).toBe( [ "c-2" ] );
+			} );
+
+			it( "needs a built project to fork, because the messages are the agent's", function() {
+				if ( !usesDefaultPath ) { return; }
+
+				var forked = run_( "fork", { session : "c-1" } );
+				expect( forked.exitCode ).toBe( 1 );
+				expect( forked.message ).toInclude( "bxAgents build" );
+			} );
+
+		} );
+	}
+
+}

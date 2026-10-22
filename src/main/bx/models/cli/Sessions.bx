@@ -1,0 +1,119 @@
+/**
+ * `sessions` CLI verb - the conversations in the project's shared chat database (`data/chat.db`, or the file
+ * named by BXAGENTS_DB), the same list `chat` and the web page show.
+ *
+ *   bxAgents sessions list [--user=NAME] [--json]
+ *   bxAgents sessions rename --session=<number or id> --name="New name" [--user=NAME]
+ *   bxAgents sessions fork --session=<number or id> [--name="Other approach"] [--user=NAME]
+ *   bxAgents sessions delete --session=<number or id> [--user=NAME]
+ *
+ * The user defaults to the operating system user. A conversation is picked by its number in `list`, or by its id
+ * or the start of it. The messages of a conversation live in the agent's memory, so `fork` (which copies them) and
+ * the clearing part of `delete` need a built project and only reach messages a memory that outlives the process
+ * keeps (file, jdbc); `list`, `rename` and the list part of `delete` only touch the database.
+ */
+class {
+
+	static {
+		ACTIONS = [ "list", "rename", "fork", "delete" ]
+	}
+
+	/**
+	 * @options { projectRoot (required), _positional (the action), session, name, user, json }
+	 */
+	struct function run( struct options = {} ) {
+		var projectRoot = trim( arguments.options.projectRoot ?: "" )
+		if ( !len( projectRoot ) ) {
+			throw( type = "BxAgents.MissingProjectRoot", message = "`sessions` requires a project root" )
+		}
+		var action = lCase( trim( arguments.options._positional ?: "" ) )
+		if ( !static.ACTIONS.contains( action ) ) {
+			throw( type = "BxAgents.UnknownSessionsAction", message = "`sessions` needs one of: #static.ACTIONS.toList( ', ' )# - for example `bxAgents sessions list`." )
+		}
+
+		var root = projectRoot.reReplace( "[\/]+$", "" )
+		var file = new "models.store.ChatStorePath@bxagents"().forProject( root )
+		directoryCreate( getDirectoryFromPath( file ), true, true )
+		var store = new "models.store.ChatStore@bxagents"( { driver : "sqlite", database : file } )
+		store.migrate()
+		var sessions = new "models.store.SessionStore@bxagents"( store )
+		var user = len( trim( arguments.options.user ?: "" ) ) ? trim( arguments.options.user ) : ( createObject( "java", "java.lang.System" ).getProperty( "user.name" ) ?: "default" )
+
+		if ( action == "list" ) {
+			return list( sessions, user, arguments.options.json ?: false )
+		}
+
+		var reference = trim( arguments.options.session ?: "" )
+		if ( !len( reference ) ) {
+			throw( type = "BxAgents.MissingSession", message = "`sessions #action#` needs --session=<number or id> (see `bxAgents sessions list`)." )
+		}
+		var found = sessions.resolve( user, reference )
+		if ( found.isEmpty() ) {
+			return { exitCode : 1, message : "There is no conversation [#reference#] for #user#. Try `bxAgents sessions list`." }
+		}
+		var name = trim( arguments.options.name ?: "" )
+
+		switch ( action ) {
+			case "rename":
+				if ( !len( name ) ) {
+					throw( type = "BxAgents.MissingSessionName", message = "`sessions rename` needs --name=<the new name>" )
+				}
+				sessions.rename( user, found.id, sessions.titleOf( name ) )
+				return { exitCode : 0, message : "Renamed to [#sessions.titleOf( name )#]." }
+			case "fork":
+				return fork( root, sessions, user, found, name )
+			case "delete":
+				return remove( root, sessions, user, found )
+		}
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private struct function list( required any sessions, required string user, required boolean asJson ) {
+		var rows = arguments.sessions.list( arguments.user, 50 )
+		if ( arguments.asJson ) {
+			return { exitCode : 0, message : jsonSerialize( rows ) }
+		}
+		if ( !rows.len() ) {
+			return { exitCode : 0, message : "No conversations yet for #arguments.user#." }
+		}
+		var lines = []
+		var number = 0
+		for ( var row in rows ) {
+			number++
+			lines.append( right( "  " & number, 3 ) & "  " & left( row.title ?: "", 60 ) & "  " & ( row.messageCount ?: 0 ) & " messages  " & dateTimeFormat( row.updatedAt, "yyyy-mm-dd HH:nn" ) & "  " & left( row.id, 8 ) )
+		}
+		return { exitCode : 0, message : lines.toList( char( 10 ) ) }
+	}
+
+	/**
+	 * Copies a conversation's messages, which needs the agent: a built project.
+	 */
+	private struct function fork( required string root, required any sessions, required string user, required struct found, required string name ) {
+		var loader = new "models.cli.support.BuiltAgent@bxagents"()
+		if ( !loader.isBuilt( arguments.root ) ) {
+			return { exitCode : 1, message : "`sessions fork` copies the messages, which the agent holds: run `bxAgents build` first." }
+		}
+		var conversation = new "models.chat.AgentConversation@bxagents"( loader.load( arguments.root ), arguments.user, arguments.sessions, arguments.found.id )
+		var outcome = conversation.fork( arguments.name )
+		return outcome.ok
+			? { exitCode : 0, message : "Forked as [#outcome.title#] (#left( outcome.id, 8 )#): #outcome.messages# messages copied." }
+			: { exitCode : 1, message : outcome.reason }
+	}
+
+	/**
+	 * Removes a conversation from the list and, when the project is built, forgets its messages too.
+	 */
+	private struct function remove( required string root, required any sessions, required string user, required struct found ) {
+		var loader = new "models.cli.support.BuiltAgent@bxagents"()
+		var cleared = loader.isBuilt( arguments.root )
+		if ( cleared ) {
+			var owner = arguments.user
+			var id = arguments.found.id
+			loader.load( arguments.root ).getMemories().each( memory => memory.clear( owner, id ) )
+		}
+		arguments.sessions.delete( arguments.user, arguments.found.id )
+		return { exitCode : 0, message : "Deleted [#arguments.found.title ?: ''#]." & ( cleared ? "" : " The project is not built, so any messages a file or jdbc memory kept for it were left." ) }
+	}
+
+}

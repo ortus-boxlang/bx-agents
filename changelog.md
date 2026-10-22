@@ -236,6 +236,13 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   reaches the model; `gatewaySession.commands` (`enabled`, `prefix`, `allow`, `admins`) narrows, widens or
   switches them off, and `build` checks it.
 
+- `/name <new name>` names a conversation and `/fork [new name]` copies the whole conversation under a new name
+  and carries on in the copy. `/export [file] [--format=md|html]` replaces `/save`: Markdown as before, or an HTML
+  page with the Markdown rendered (what you typed is escaped). In the web page `/export` downloads the file, and the
+  header has **Fork** and **Export** buttons.
+- `bxAgents sessions list|rename|fork|delete` manages the conversations in the chat database from the shell.
+- `POST /__bxagents/sessions/rename` and `/fork` let `chat --connect` do the same on a server.
+
 #### The chat screen
 
 - `bxAgents chat` is now a Pi-style terminal screen that keeps your scrollback: finished turns are

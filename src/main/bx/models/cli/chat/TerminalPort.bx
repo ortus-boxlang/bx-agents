@@ -32,23 +32,27 @@ class {
 	}
 
 	/**
-	 * @name A file name, relative to the working directory or absolute; blank picks a dated one
+	 * @return What has been said in this chat: [ { role : "you" | "agent", text } ]
+	 */
+	array function messages() {
+		return variables.transcript.entries()
+	}
+
+	/**
+	 * Writes a file for /export.
+	 *
+	 * @name A file name, relative to the working directory or absolute
+	 * @content What to write
 	 *
 	 * @return { ok : true, path } or { ok : false, reason }
 	 */
-	struct function save( required string name ) {
-		if ( variables.transcript.isEmpty() ) {
-			return { ok : false, reason : "Nothing to save yet." }
+	struct function writeFile( required string name, required string content ) {
+		var absolute = absolutePath( arguments.name )
+		try {
+			fileWrite( absolute, arguments.content )
+		} catch ( any e ) {
+			return { ok : false, reason : "Could not write #absolute#: #e.message#" }
 		}
-		var absolute = absolutePath( len( arguments.name ) ? arguments.name : "chat-#dateTimeFormat( now(), 'yyyyMMdd-HHmmss' )#.md" )
-		var lines = []
-		for ( var entry in variables.transcript.entries() ) {
-			lines.append( "**" & ( entry.role == "you" ? "You" : "Agent" ) & "**" )
-			lines.append( "" )
-			lines.append( entry.text )
-			lines.append( "" )
-		}
-		fileWrite( absolute, lines.toList( char( 10 ) ) )
 		return { ok : true, path : absolute }
 	}
 

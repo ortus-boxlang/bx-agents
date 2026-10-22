@@ -352,6 +352,7 @@ __THEME_TOKENS__
 	.bubble.command p { margin: 0 0 0.25rem; color: var(--muted); }
 	.bubble.command p.ok { color: var(--fg); }
 	.bubble.command p.warn { color: var(--danger, #c0392b); }
+	.bubble.command a { color: var(--accent); }
 	.bubble.command table { border-collapse: collapse; font-family: var(--font-mono); font-size: 0.82rem; }
 	.bubble.command td { padding: 0.1rem 0.8rem 0.1rem 0; vertical-align: top; overflow-wrap: anywhere; }
 	.bubble.command td.label { color: var(--muted); white-space: nowrap; }
@@ -610,6 +611,8 @@ __CUSTOM_CSS__
 			<span class="meta" id="modelMeta"></span>
 			<select id="profileSelect" title="The model for your next messages" aria-label="Model" hidden></select>
 			<button type="button" id="sidebarBtn" aria-expanded="true" aria-controls="sidebar" title="Show or hide conversations">Chats</button>
+			<button type="button" id="forkBtn" title="Copy this conversation under a new name and carry on in the copy" hidden>Fork</button>
+			<button type="button" id="exportBtn" title="Save this conversation as a Markdown file" hidden>Export</button>
 			<button type="button" id="clearBtn" title="Delete the messages in this conversation" hidden>Clear</button>
 			<button type="button" id="compactBtn" title="Summarize older messages, keep the recent ones" hidden>Compact</button>
 			<button type="button" id="notesBtn" title="What the agent keeps about you and about its own work" hidden>Notes</button>
@@ -680,6 +683,8 @@ __CUSTOM_CSS__
 	var themeBtn = document.getElementById( "themeBtn" );
 	var sidebarBtn = document.getElementById( "sidebarBtn" );
 	var clearBtn = document.getElementById( "clearBtn" );
+	var forkBtn = document.getElementById( "forkBtn" );
+	var exportBtn = document.getElementById( "exportBtn" );
 	var compactBtn = document.getElementById( "compactBtn" );
 	var sidebarEl = document.getElementById( "sidebar" );
 	var convListEl = document.getElementById( "convList" );
@@ -782,7 +787,12 @@ __CUSTOM_CSS__
 				setSidebar( false );
 			}
 			if ( capabilities.commands ) {
-				apiGet( "/commands" ).then( function ( list ) { commandList = ( list && list.commands ) || []; } );
+				apiGet( "/commands" ).then( function ( list ) {
+					commandList = ( list && list.commands ) || [];
+					var offered = function ( name ) { return commandList.some( function ( c ) { return c.name === name; } ); };
+					forkBtn.hidden = !offered( "/fork" );
+					exportBtn.hidden = !offered( "/export" );
+				} );
 			}
 			if ( capabilities.profiles ) {
 				return loadProfiles();
@@ -1573,8 +1583,9 @@ __CUSTOM_CSS__
 					addErrorBubble( ( reply && reply.error ) || "That command did not work." );
 					return;
 				}
-				drawReply( reply );
-				applyEffects( reply );
+				// a command that moves to another conversation, or empties this one, redraws the transcript
+				// first; its answer is shown after that so it is not wiped with it
+				return applyEffects( reply ).then( function () { drawReply( reply ); } );
 			} )
 			.catch( function () { addErrorBubble( "The command could not be sent." ); } );
 	}
@@ -1584,12 +1595,15 @@ __CUSTOM_CSS__
 		var opened = effects.filter( function ( e ) { return e.type === "conversation"; } )[ 0 ];
 		var reset = effects.some( function ( e ) { return e.type === "reset"; } );
 		if ( opened && opened.id !== getConversationId() ) {
-			selectConversation( opened.id ).then( loadConversations );
-		} else if ( reset ) {
-			rehydrate().then( loadConversations );
-		} else {
-			loadConversations();
+			// the page shows the conversation it moves to, not this one plus it
+			messagesEl.textContent = "";
+			return selectConversation( opened.id ).then( loadConversations );
 		}
+		if ( reset ) {
+			messagesEl.textContent = "";
+			return rehydrate().then( loadConversations );
+		}
+		return Promise.resolve( loadConversations() );
 	}
 
 	function drawReply( reply ) {
@@ -1614,6 +1628,18 @@ __CUSTOM_CSS__
 					table.appendChild( tr );
 				} );
 				box.appendChild( table );
+			} else if ( block.type === "file" ) {
+				// the server hands the file over; the browser saves it
+				var link = document.createElement( "a" );
+				var url = URL.createObjectURL( new Blob( [ block.text ], { type: block.mime } ) );
+				link.href = url;
+				link.download = block.name;
+				link.textContent = "Download " + block.name;
+				var holder = document.createElement( "p" );
+				holder.appendChild( link );
+				box.appendChild( holder );
+				link.click();
+				setTimeout( function () { URL.revokeObjectURL( url ); }, 60000 );
 			} else if ( block.type === "choose" ) {
 				var title = document.createElement( "p" );
 				title.textContent = block.title;
@@ -1638,6 +1664,20 @@ __CUSTOM_CSS__
 		messagesEl.appendChild( box );
 		scrollToEnd( true );
 	}
+
+	forkBtn.addEventListener( "click", function () {
+		var name = window.prompt( "Name for the copy (blank: Fork of this one)", "" );
+		if ( name === null || isBusy ) {
+			return;
+		}
+		runCommand( "/fork " + name.trim() );
+	} );
+
+	exportBtn.addEventListener( "click", function () {
+		if ( !isBusy ) {
+			runCommand( "/export" );
+		}
+	} );
 
 	// ---- the "/" menu ----
 	var slashPick = 0;

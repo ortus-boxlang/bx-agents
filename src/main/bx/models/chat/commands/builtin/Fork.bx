@@ -1,0 +1,24 @@
+class extends="models.chat.commands.BaseCommand@bxagents" {
+
+	string function name() {
+		return "fork"
+	}
+
+	string function hint() {
+		return "copy this conversation under a new name and carry on in the copy: /fork Other approach"
+	}
+
+	array function transports() {
+		return [ "tui", "web" ]
+	}
+
+	any function run( required any context, required string args ) {
+		var reply = arguments.context.reply()
+		var outcome = arguments.context.chat().fork( arguments.args )
+		if ( !outcome.ok ) {
+			return reply.warn( outcome.reason )
+		}
+		return reply.conversation( outcome.id, outcome.title ).ok( "Forked as [#outcome.title#]: #outcome.messages# messages copied. You are in the copy; the original is unchanged." )
+	}
+
+}
