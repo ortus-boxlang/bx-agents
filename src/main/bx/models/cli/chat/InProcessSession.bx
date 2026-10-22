@@ -77,12 +77,16 @@ class {
 	 */
 	array function profiles() {
 		var current = modelInfo().profile
-		return aiProfiles().map( p => {
+		var catalog = new "models.wizard.WizardCatalog@bxagents"()
+		// the default first, then the named ones by name: the order bx-ai lists them in is not promised
+		var listed = aiProfiles().sort( ( a, b ) => a.name == "default" ? -1 : ( b.name == "default" ? 1 : compareNoCase( a.name, b.name ) ) )
+		return listed.map( p => {
 			name        : p.name,
 			description : p.description ?: "",
 			provider    : p.provider,
 			model       : p.model ?: "",
-			hasApiKey   : p.hasApiKey,
+			// a provider with no key to set (mock, a local one) never lacks it
+			hasApiKey   : p.hasApiKey || !len( catalog.provider( p.provider ).envVar ?: "" ),
 			isDefault   : p.isDefault,
 			isCurrent   : p.name == current
 		} )

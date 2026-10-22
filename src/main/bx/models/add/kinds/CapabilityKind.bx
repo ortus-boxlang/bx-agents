@@ -16,6 +16,8 @@
 class {
 
 	static {
+		// the order the picker lists them in (a struct's own order is not promised)
+		ORDER = [ "embeddings", "speech", "transcription", "image" ]
 		SLOTS = {
 			embeddings    : { summary : "Turns text into vectors for search and memory", questions : [] },
 			speech        : { summary : "Text to speech", questions : [ "voice", "format" ] },
@@ -51,12 +53,12 @@ class {
 		var set = ( ai.slots ?: [] ).map( s => s.slot )
 
 		if ( !a.given( "slot" ) && !a.interactive() ) {
-			throw( type = "BxAgents.MissingAnswer", message = "Say which capability: bxAgents add capability <#static.SLOTS.keyArray().toList( '|' )#>" )
+			throw( type = "BxAgents.MissingAnswer", message = "Say which capability: bxAgents add capability <#static.ORDER.toList( '|' )#>" )
 		}
 		var slot = a.select(
 			key     = "slot",
 			title   = "Which capability?",
-			choices = static.SLOTS.keyArray().map( s => { value : s, label : s, hint : static.SLOTS[ s ].summary & ( set.contains( s ) ? " (already set)" : "" ) } ),
+			choices = static.ORDER.map( s => { value : s, label : s, hint : static.SLOTS[ s ].summary & ( set.contains( s ) ? " (already set)" : "" ) } ),
 			default = ""
 		)
 		if ( set.contains( slot ) || new "models.add.YamlEditor@bxagents"().hasKey( root.text, slot ) ) {

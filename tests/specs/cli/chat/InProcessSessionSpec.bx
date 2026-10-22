@@ -112,8 +112,8 @@ class extends="testbox.system.BaseSpec" {
 					variables.settings = getModuleInfo( "bxai" ).settings
 					variables.saved = { profiles : settings.profiles ?: {}, defaultProfile : settings.defaultProfile ?: "" }
 					settings.profiles = {
-						fast : { description : "Cheap and quick", provider : "mock", params : { model : "fast-model" } },
-						slow : { provider : "mock", params : { model : "slow-model" } }
+						slow : { provider : "mock", params : { model : "slow-model" } },
+						fast : { description : "Cheap and quick", provider : "mock", params : { model : "fast-model" } }
 					}
 					settings.defaultProfile = ""
 				} );
@@ -123,13 +123,15 @@ class extends="testbox.system.BaseSpec" {
 					settings.defaultProfile = saved.defaultProfile
 				} );
 
-				it( "lists the default first, then the named ones, with who is default and who is in use", function() {
+				it( "lists the default first, then the named ones by name whatever order they were declared in, with who is default and who is in use", function() {
 					var list = session.profiles()
 
 					expect( list.map( p => p.name ) ).toBe( [ "default", "fast", "slow" ] );
 					expect( list[ 1 ].isDefault ).toBeTrue();
 					expect( list[ 2 ].description ).toBe( "Cheap and quick" );
 					expect( list[ 2 ].model ).toBe( "fast-model" );
+					// mock has no key to set, so it is never reported as missing one
+					expect( list.every( p => p.hasApiKey ) ).toBeTrue();
 				} );
 
 				it( "switches the agent's model to a profile and keeps answering", function() {

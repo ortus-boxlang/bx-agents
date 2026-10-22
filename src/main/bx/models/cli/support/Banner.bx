@@ -1,0 +1,170 @@
+/**
+ * The BxAgents banner: the name in big block letters, painted top to bottom in a gradient that is
+ * picked at random each time (the same idea as the ColdBox CLI's banner), with an optional line
+ * under it.
+ *
+ * It is a greeting for a person at a terminal, so it is never written to a pipe or a file, and
+ * `BXAGENTS_BANNER=off` turns it off. `NO_COLOR` and `--no-color` keep the shape and drop the
+ * color; `TERM=dumb`, or output that is not UTF-8, gets one plain line, since block characters
+ * would not draw there.
+ * `BXAGENTS_BANNER_THEME=Ocean` pins a theme, which is how a recording stays the same every time.
+ */
+class {
+
+	static {
+		// 256 color codes, light to dark down the six rows
+		THEMES = {
+			Ocean  : [ 81, 75, 69, 63, 57, 21 ],
+			Fire   : [ 196, 160, 124, 88, 52, 88 ],
+			Sunset : [ 214, 208, 202, 196, 160, 124 ],
+			Purple : [ 213, 177, 141, 105, 69, 39 ],
+			Mint   : [ 158, 122, 86, 50, 44, 38 ],
+			Gray   : [ 250, 248, 245, 243, 240, 238 ],
+			Forest : [ 154, 148, 142, 106, 70, 34 ],
+			Gold   : [ 226, 220, 214, 208, 172, 136 ]
+		}
+		LETTERS = {
+			B : [ "██████╗ ", "██╔══██╗", "██████╔╝", "██╔══██╗", "██████╔╝", "╚═════╝ " ],
+			X : [ "██╗  ██╗", "╚██╗██╔╝", " ╚███╔╝ ", " ██╔██╗ ", "██╔╝ ██╗", "╚═╝  ╚═╝" ],
+			A : [ " █████╗ ", "██╔══██╗", "███████║", "██╔══██║", "██║  ██║", "╚═╝  ╚═╝" ],
+			G : [ " ██████╗ ", "██╔════╝ ", "██║  ███╗", "██║   ██║", "╚██████╔╝", " ╚═════╝ " ],
+			E : [ "███████╗", "██╔════╝", "█████╗  ", "██╔══╝  ", "███████╗", "╚══════╝" ],
+			N : [ "███╗   ██╗", "████╗  ██║", "██╔██╗ ██║", "██║╚██╗██║", "██║ ╚████║", "╚═╝  ╚═══╝" ],
+			T : [ "████████╗", "╚══██╔══╝", "   ██║   ", "   ██║   ", "   ██║   ", "   ╚═╝   " ],
+			S : [ "███████╗", "██╔════╝", "███████╗", "╚════██║", "███████║", "╚══════╝" ]
+		}
+		WORD = "BXAGENTS"
+	}
+
+	/**
+	 * @return The theme names, in the order they are listed
+	 */
+	array function themes() {
+		return static.THEMES.keyArray().sort( "textnocase" )
+	}
+
+	/**
+	 * The six rows of the name, without color.
+	 */
+	array function art() {
+		var rows = [ "", "", "", "", "", "" ]
+		var letters = static.WORD.listToArray( "" )
+		for ( var i = 1; i <= letters.len(); i++ ) {
+			for ( var r = 1; r <= 6; r++ ) {
+				rows[ r ] &= static.LETTERS[ letters[ i ] ][ r ] & ( i < letters.len() ? " " : "" )
+			}
+		}
+		return rows
+	}
+
+	/**
+	 * @return How many columns the art takes
+	 */
+	numeric function width() {
+		return art()[ 1 ].len()
+	}
+
+	/**
+	 * Builds the banner as lines.
+	 *
+	 * @subTitle A line under the art, such as the version; empty for none
+	 * @theme A theme name, or empty to pick one at random
+	 * @color False for no color codes
+	 * @columns The terminal width. Narrower than the art gets one plain line
+	 *
+	 * @return [ line ]
+	 */
+	array function render( string subTitle = "", string theme = "", boolean color = true, numeric columns = 80 ) {
+		if ( arguments.columns < width() ) {
+			return [ "bxAgents" & ( len( arguments.subTitle ) ? "  " & arguments.subTitle : "" ) ]
+		}
+		var name = len( arguments.theme ) ? chosen( arguments.theme ) : pick()
+		var gradient = static.THEMES[ name ]
+		var esc = char( 27 )
+		var out = [ "" ]
+		var rows = art()
+		for ( var r = 1; r <= rows.len(); r++ ) {
+			out.append( arguments.color ? esc & "[38;5;" & gradient[ r ] & "m" & rows[ r ] & esc & "[0m" : rows[ r ] )
+		}
+		if ( len( arguments.subTitle ) ) {
+			var block = 48
+			var inner = block - 4
+			var text = arguments.subTitle.len() > inner ? arguments.subTitle.left( inner ) : arguments.subTitle
+			var space = inner - text.len()
+			var left = int( space / 2 )
+			var indent = repeatString( " ", max( 0, int( ( width() - block ) / 2 ) ) )
+			var colored = arguments.color
+			var edge = ( line ) => colored ? esc & "[38;5;" & gradient.last() & "m" & line & esc & "[0m" : line
+			out.append( edge( indent & repeatString( "▄", block ) ) )
+			out.append( indent & "██" & repeatString( " ", left ) & text & repeatString( " ", space - left ) & "██" )
+			out.append( edge( indent & repeatString( "▀", block ) ) )
+		}
+		out.append( "" )
+		return out
+	}
+
+	/**
+	 * Prints the banner when a person is looking: an interactive terminal, and not turned off. Nothing
+	 * is printed to a pipe or a file.
+	 *
+	 * @options The verb's options; `color: false` (--no-color) drops the color
+	 * @subTitle A line under the art
+	 *
+	 * @return True when it printed
+	 */
+	boolean function show( struct options = {}, string subTitle = "" ) {
+		if ( !wanted( arguments.options ) ) {
+			return false
+		}
+		// block letters need UTF-8 on the way out; a terminal set up for something else gets the plain line
+		var dumb = getSystemSetting( "TERM", "" ) == "dumb" || !utf8()
+		var color = !dumb && ( arguments.options.color ?: true ) && !len( getSystemSetting( "NO_COLOR", "" ) )
+		for ( var line in render( arguments.subTitle, getSystemSetting( "BXAGENTS_BANNER_THEME", "" ), color, dumb ? 0 : columns() ) ) {
+			println( line )
+		}
+		return true
+	}
+
+	/**
+	 * @options The verb's options
+	 *
+	 * @return True when the banner may be printed
+	 */
+	boolean function wanted( struct options = {} ) {
+		if ( lCase( getSystemSetting( "BXAGENTS_BANNER", "" ) ) == "off" || ( arguments.options.banner ?: true ) == false ) {
+			return false
+		}
+		try {
+			return createObject( "java", "ortus.boxlang.bxagents.tui.TuiScreen" ).isInteractive()
+		} catch ( any e ) {
+			return false
+		}
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @return True when what is printed leaves the JVM as UTF-8 (stdout.encoding from Java 19, else file.encoding)
+	 */
+	private boolean function utf8() {
+		var system = createObject( "java", "java.lang.System" )
+		var encoding = system.getProperty( "stdout.encoding" ) ?: ( system.getProperty( "file.encoding" ) ?: "" )
+		return encoding.lCase().replace( "-", "" ) == "utf8"
+	}
+
+	private string function pick() {
+		var names = themes()
+		return names[ randRange( 1, names.len() ) ]
+	}
+
+	private string function chosen( required string theme ) {
+		var match = themes().filter( n => n.lCase() == theme.lCase() )
+		return match.len() ? match[ 1 ] : pick()
+	}
+
+	private numeric function columns() {
+		var value = getSystemSetting( "COLUMNS", "" )
+		return isNumeric( value ) && value > 0 ? int( value ) : 80
+	}
+
+}

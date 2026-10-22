@@ -18,13 +18,14 @@ class {
 
 	/**
 	 * @options The parsed CLI options; `tui` set to false asks in plain lines
+	 * @command The verb shown in the full-screen header
 	 *
 	 * @return A TuiPrompter at a capable terminal, a PlainPrompter otherwise
 	 */
-	any function create( struct options = {} ) {
+	any function create( struct options = {}, string command = "new" ) {
 		if ( ( arguments.options.tui ?: true ) && isTerminal() ) {
 			try {
-				return new "models.wizard.prompters.TuiPrompter@bxagents"()
+				return new "models.wizard.prompters.TuiPrompter@bxagents"( arguments.command )
 			} catch ( any e ) {
 				// the terminal would not go into raw mode: ask in plain lines rather than fail
 			}
