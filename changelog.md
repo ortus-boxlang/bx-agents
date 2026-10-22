@@ -224,6 +224,18 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   a run belongs to the token that started it. `tokenEnvVar` still works and acts as an `admin` token.
 - `chat --connect=<url> --token=<token>` (or `BXAGENTS_TOKEN`) talks to a server that wants one.
 
+#### Commands everywhere
+
+- Slash commands are written once, as small classes that answer with data (text, tables, choices) instead of
+  printing, and each place draws the answer its own way. The terminal chat now runs on them with no change in
+  what it does; the web page and chat gateways use them too.
+- Web chat and the agent's own route: type `/` for a menu; `GET /commands` and `POST /command` on both
+  `/__bxagents` and the web entry run `/help`, `/new`, `/tools`, `/sessions`, `/resume`, `/clear`, `/compact`,
+  `/model`, `/info`, `/remember` and `/notes` for the signed-in caller.
+- Chat gateways answer a safe set (`/help`, `/tools`, `/model`, `/info`, `/remember`, `/notes`) before the message
+  reaches the model; `gatewaySession.commands` (`enabled`, `prefix`, `allow`, `admins`) narrows, widens or
+  switches them off, and `build` checks it.
+
 #### The chat screen
 
 - `bxAgents chat` is now a Pi-style terminal screen that keeps your scrollback: finished turns are

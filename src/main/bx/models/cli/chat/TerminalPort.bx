@@ -1,0 +1,105 @@
+/**
+ * What the terminal chat does on the user's machine, for the commands that need it: put text on the
+ * clipboard, write the conversation to a file, record the screen. A command asks for the result and
+ * says it in its reply; it never touches the screen or the disk itself.
+ */
+class {
+
+	/**
+	 * @screen The chat screen
+	 * @transcript The Transcript of this chat
+	 * @agentName Titles a recording
+	 * @workingDirectory Where a relative file name is written
+	 */
+	function init( required any screen, required any transcript, required string agentName, required string workingDirectory ) {
+		variables.screen = arguments.screen
+		variables.transcript = arguments.transcript
+		variables.agentName = arguments.agentName
+		variables.workingDirectory = arguments.workingDirectory
+		return this
+	}
+
+	/**
+	 * @return True when there was an answer to copy
+	 */
+	boolean function copyLast() {
+		var last = variables.transcript.lastAnswer()
+		if ( !len( last ) ) {
+			return false
+		}
+		variables.screen.copy( last )
+		return true
+	}
+
+	/**
+	 * @name A file name, relative to the working directory or absolute; blank picks a dated one
+	 *
+	 * @return { ok : true, path } or { ok : false, reason }
+	 */
+	struct function save( required string name ) {
+		if ( variables.transcript.isEmpty() ) {
+			return { ok : false, reason : "Nothing to save yet." }
+		}
+		var absolute = absolutePath( len( arguments.name ) ? arguments.name : "chat-#dateTimeFormat( now(), 'yyyyMMdd-HHmmss' )#.md" )
+		var lines = []
+		for ( var entry in variables.transcript.entries() ) {
+			lines.append( "**" & ( entry.role == "you" ? "You" : "Agent" ) & "**" )
+			lines.append( "" )
+			lines.append( entry.text )
+			lines.append( "" )
+		}
+		fileWrite( absolute, lines.toList( char( 10 ) ) )
+		return { ok : true, path : absolute }
+	}
+
+	/**
+	 * /record [file] starts, /record stop finishes.
+	 *
+	 * @return { style, text }: what to tell the user
+	 */
+	struct function record( required string rest ) {
+		if ( arguments.rest.lcase() == "stop" ) {
+			return stopRecording()
+		}
+		if ( variables.screen.isRecording() ) {
+			return { style : "warn", text : "Already recording to #variables.screen.recordingFile()#. Type /record stop to finish." }
+		}
+		return startRecording( arguments.rest )
+	}
+
+	/**
+	 * Starts recording the screen. A failure is told, not thrown: the chat carries on.
+	 *
+	 * @file A file name, or empty for a dated one in the working directory
+	 *
+	 * @return { style, text }
+	 */
+	struct function startRecording( required string file ) {
+		var absolute = absolutePath( len( arguments.file ) ? arguments.file : "chat-#dateTimeFormat( now(), 'yyyyMMdd-HHmmss' )#.cast" )
+		try {
+			variables.screen.startRecording( absolute, "bxAgents chat: " & variables.agentName )
+			return { style : "ok", text : "Recording to #absolute#. Type /record stop to finish." }
+		} catch ( any e ) {
+			return { style : "warn", text : "Could not start recording: #e.message#" }
+		}
+	}
+
+	private struct function stopRecording() {
+		if ( !variables.screen.isRecording() ) {
+			return { style : "warn", text : "No recording is on." }
+		}
+		var problem = variables.screen.recordingError()
+		var file = variables.screen.stopRecording()
+		return { style : len( problem ) ? "warn" : "ok", text : len( problem ) ? "The recording stopped early (#problem#). What was captured is in #file#" : "Recording saved to #file#" }
+	}
+
+	/**
+	 * @file A file name, absolute or relative to the working directory
+	 *
+	 * @return The absolute path
+	 */
+	private string function absolutePath( required string file ) {
+		return ( arguments.file.startsWith( "/" ) || reFind( "^[A-Za-z]:[\/]", arguments.file ) ) ? arguments.file : variables.workingDirectory & "/" & arguments.file
+	}
+
+}

@@ -509,6 +509,19 @@ In the screen:
 
 Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/save [file]` (the conversation as Markdown), `/sessions`, `/resume`, `/clear`, `/compact` and `/info` (see below), `/model`, `/profile` and `/default` (see below), `/remember <text>` and `/notes` (see below), `/record [file]` and `/record stop` (see below) and `/exit`.
 
+#### The same commands in the web page and in chat apps
+
+Each slash command is written once, as a small class that answers with data (text, a table, a list to pick from), and the terminal, the web page and the chat platforms each draw that answer their own way. So `/help`, `/new`, `/tools`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/info`, `/remember` and `/notes` work in all three:
+
+| Where | How you use them |
+|---|---|
+| Terminal chat | Type `/`, as above |
+| [Web page](conventions/web-ui.md#slash-commands) | Type `/`: a menu of the commands appears, `Tab` completes one |
+| [Chat platforms](conventions/gateways/index.md#commands-in-a-gateway) (Telegram, Slack, ...) | Type the command as a message. A safe set is on by default; a project can widen or switch it off |
+| A server over HTTP | `GET /__bxagents/commands` and `POST /__bxagents/command`, see [Run control](conventions/agent-bx.md#run-control) |
+
+`/copy`, `/save`, `/record`, `/profile`, `/default` and `/exit` act on your own machine or on your own session's model, so they stay in the terminal.
+
 #### Conversations in the chat
 
 Every chat is a conversation, listed in the project's [shared chat database](conventions/web-ui.md#the-sqlite-store) (`data/chat.db`) under your user, the same list the web chat shows. The messages themselves are kept in the agent's [memory](conventions/agent-yaml.md#settings), so a conversation can be picked up again only as far as that memory lasts: the default `cache` memory is lost when the process ends, a `file` or `jdbc` memory is not.

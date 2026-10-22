@@ -48,7 +48,7 @@ environments:
 | `security` | mapping | Forwarded verbatim into the generated app's `bxai` module settings; bx-ai's own `SecurityDirector` turns it into guardrail middleware. |
 | `memory` | string or mapping | The agent's conversation memory. A bare string is the type (`cache`); a mapping is `{ type, ...config }` and is passed through to `aiMemory()`. |
 | `checkpointer` | mapping | `{ type: cache\|file\|jdbc, ...config }`. Defaults to `{ type: cache }` if omitted. |
-| `gatewaySession` | mapping | `{ policy, maxQueueDepth }`, both optional. See [Agent.bx](agent-bx.md) for the values; they are identical. |
+| `gatewaySession` | mapping | `{ policy, maxQueueDepth, commands }`, all optional. See [Agent.bx](agent-bx.md) for the values; they are identical. |
 | `agentApi` | mapping | `{ enabled, tokenEnvVar, tokens, profiles }`, all optional. See [The always-on agent route](agent-bx.md#the-always-on-agent-route). |
 | `notes` | mapping | Short notes the agent keeps about the user and its own work. `notes: {}` turns them on with the defaults. See [Notes](#notes). |
 | `environments` | mapping | Per-environment overrides. See [Environments](#environments). |

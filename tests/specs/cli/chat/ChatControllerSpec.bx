@@ -80,6 +80,7 @@ class extends="testbox.system.BaseSpec" {
 				}
 				q.useDefault = () => q.useProfile( "default" )
 				q.newThread = () => { q.newThreads++ }
+				q.conversationId = () => "conv-" & q.newThreads
 				q.close = () => {}
 				q.send = ( text, hooks ) => {
 					q.sent.append( text )
@@ -156,13 +157,13 @@ class extends="testbox.system.BaseSpec" {
 				} );
 
 				it( "offers the profiles on /profile and switches to the one picked", function() {
-					var screen = fakeScreen( [ "/profile" ], "fast" )
+					var screen = fakeScreen( [ "/profile" ], "/profile fast" )
 					var session = fakeSession()
 					controllerFor( screen, session ).run( screen )
 
 					var asked = screen.log.filter( e => e[ 1 ] == "choose" )
 					expect( asked ).toHaveLength( 1 );
-					expect( asked[ 1 ][ 4 ] ).toBe( [ "default", "fast", "planner" ] );
+					expect( asked[ 1 ][ 4 ] ).toBe( [ "/profile default", "/profile fast", "/profile planner" ] );
 					expect( session.used ).toBe( [ "fast" ] );
 					expect( screen.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] ).last() ).toInclude( "Now using fast (openai/gpt-5-mini)" );
 				} );

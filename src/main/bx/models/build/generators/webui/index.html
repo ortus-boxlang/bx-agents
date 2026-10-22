@@ -340,6 +340,48 @@ __THEME_TOKENS__
 		font-size: 0.85em;
 	}
 	.bubble.assistant a { color: var(--accent); }
+	.bubble.command {
+		align-self: flex-start;
+		max-width: 100%;
+		background: var(--panel, transparent);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: 0.5rem 0.7rem;
+		font-size: 0.88rem;
+	}
+	.bubble.command p { margin: 0 0 0.25rem; color: var(--muted); }
+	.bubble.command p.ok { color: var(--fg); }
+	.bubble.command p.warn { color: var(--danger, #c0392b); }
+	.bubble.command table { border-collapse: collapse; font-family: var(--font-mono); font-size: 0.82rem; }
+	.bubble.command td { padding: 0.1rem 0.8rem 0.1rem 0; vertical-align: top; overflow-wrap: anywhere; }
+	.bubble.command td.label { color: var(--muted); white-space: nowrap; }
+	.bubble.command .choices { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.3rem; }
+	.bubble.command .choices button {
+		background: transparent;
+		color: var(--fg);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: 0.3rem 0.6rem;
+		cursor: pointer;
+		font: inherit;
+		font-size: 0.82rem;
+	}
+	.bubble.command .choices button small { color: var(--muted); margin-left: 0.4rem; }
+	#slashMenu {
+		list-style: none;
+		margin: 0 0 0.3rem;
+		padding: 0.2rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		background: var(--input-bg);
+		max-height: 12rem;
+		overflow-y: auto;
+		font-size: 0.85rem;
+	}
+	#slashMenu li { display: flex; gap: 0.8rem; padding: 0.25rem 0.5rem; cursor: pointer; border-radius: var(--radius-sm); }
+	#slashMenu li[aria-selected="true"], #slashMenu li:hover { background: var(--border); }
+	#slashMenu .cmd { font-family: var(--font-mono); }
+	#slashMenu .tip { color: var(--muted); }
 	.hint {
 		color: var(--muted);
 		font-size: 0.8rem;
@@ -585,6 +627,7 @@ __CUSTOM_CSS__
 		<div id="main">
 			<div id="messages" role="log" aria-live="polite" aria-relevant="additions text" aria-label="Conversation"></div>
 			<p class="hint" id="hint" role="status"></p>
+			<ul id="slashMenu" role="listbox" aria-label="Commands" hidden></ul>
 			<form id="composer" autocomplete="off">
 				<label class="visually-hidden" for="input">Message</label>
 				<textarea id="input" rows="1" placeholder="__PLACEHOLDER__" autofocus></textarea>
@@ -642,6 +685,7 @@ __CUSTOM_CSS__
 	var convListEl = document.getElementById( "convList" );
 	var modelMetaEl = document.getElementById( "modelMeta" );
 	var profileSelectEl = document.getElementById( "profileSelect" );
+	var slashMenuEl = document.getElementById( "slashMenu" );
 	// The profile the person picked, "" for the agent's own model. Only ever one the server listed.
 	var chosenProfile = "";
 
@@ -650,6 +694,8 @@ __CUSTOM_CSS__
 	// worse than no button.
 	var capabilities = {};
 	var conversations = [];
+	// The slash commands the server offers, [ { name, hint } ], from GET /commands
+	var commandList = [];
 	var isBusy = false;
 
 	var activeController = null;
@@ -734,6 +780,9 @@ __CUSTOM_CSS__
 			notesBtn.hidden = !capabilities.notes;
 			if ( !capabilities.conversations ) {
 				setSidebar( false );
+			}
+			if ( capabilities.commands ) {
+				apiGet( "/commands" ).then( function ( list ) { commandList = ( list && list.commands ) || []; } );
 			}
 			if ( capabilities.profiles ) {
 				return loadProfiles();
@@ -1510,10 +1559,153 @@ __CUSTOM_CSS__
 			} );
 	}
 
+	/**
+	 * Runs a slash command on the server and draws its Reply. The Reply is data: blocks to show in order,
+	 * and effects that say what happened to the conversation (a new one started, another opened, messages gone).
+	 */
+	function runCommand( line ) {
+		clearWelcome();
+		addUserBubble( line );
+		apiPost( "/command", { line: line, conversationId: getConversationId() } )
+			.then( function ( res ) { return res.json().catch( function () { return null; } ); } )
+			.then( function ( reply ) {
+				if ( !reply || !reply.blocks ) {
+					addErrorBubble( ( reply && reply.error ) || "That command did not work." );
+					return;
+				}
+				drawReply( reply );
+				applyEffects( reply );
+			} )
+			.catch( function () { addErrorBubble( "The command could not be sent." ); } );
+	}
+
+	function applyEffects( reply ) {
+		var effects = reply.effects || [];
+		var opened = effects.filter( function ( e ) { return e.type === "conversation"; } )[ 0 ];
+		var reset = effects.some( function ( e ) { return e.type === "reset"; } );
+		if ( opened && opened.id !== getConversationId() ) {
+			selectConversation( opened.id ).then( loadConversations );
+		} else if ( reset ) {
+			rehydrate().then( loadConversations );
+		} else {
+			loadConversations();
+		}
+	}
+
+	function drawReply( reply ) {
+		var box = document.createElement( "div" );
+		box.className = "bubble command";
+		( reply.blocks || [] ).forEach( function ( block ) {
+			if ( block.type === "text" ) {
+				var p = document.createElement( "p" );
+				p.className = block.style || "muted";
+				p.textContent = block.text;
+				box.appendChild( p );
+			} else if ( block.type === "table" ) {
+				var table = document.createElement( "table" );
+				( block.rows || [] ).forEach( function ( row ) {
+					var tr = document.createElement( "tr" );
+					row.forEach( function ( cell, i ) {
+						var td = document.createElement( "td" );
+						td.textContent = String( cell );
+						if ( block.layout === "keyvalue" && i === 0 ) { td.className = "label"; }
+						tr.appendChild( td );
+					} );
+					table.appendChild( tr );
+				} );
+				box.appendChild( table );
+			} else if ( block.type === "choose" ) {
+				var title = document.createElement( "p" );
+				title.textContent = block.title;
+				box.appendChild( title );
+				var choices = document.createElement( "div" );
+				choices.className = "choices";
+				( block.options || [] ).forEach( function ( option ) {
+					var btn = document.createElement( "button" );
+					btn.type = "button";
+					btn.textContent = option.label;
+					if ( option.hint ) {
+						var small = document.createElement( "small" );
+						small.textContent = option.hint;
+						btn.appendChild( small );
+					}
+					btn.addEventListener( "click", function () { runCommand( option.line ); } );
+					choices.appendChild( btn );
+				} );
+				box.appendChild( choices );
+			}
+		} );
+		messagesEl.appendChild( box );
+		scrollToEnd( true );
+	}
+
+	// ---- the "/" menu ----
+	var slashPick = 0;
+
+	function slashMatches() {
+		var typed = inputEl.value;
+		if ( !commandList.length || typed.charAt( 0 ) !== "/" || /\s/.test( typed ) ) {
+			return [];
+		}
+		return commandList.filter( function ( c ) { return c.name.indexOf( typed.toLowerCase() ) === 0; } );
+	}
+
+	function hideSlashMenu() {
+		slashMenuEl.hidden = true;
+		slashMenuEl.textContent = "";
+	}
+
+	function showSlashMenu() {
+		var matches = slashMatches();
+		if ( !matches.length ) {
+			hideSlashMenu();
+			return;
+		}
+		slashPick = Math.min( slashPick, matches.length - 1 );
+		slashMenuEl.textContent = "";
+		matches.forEach( function ( c, i ) {
+			var li = document.createElement( "li" );
+			li.setAttribute( "role", "option" );
+			li.setAttribute( "aria-selected", i === slashPick ? "true" : "false" );
+			var name = document.createElement( "span" );
+			name.className = "cmd";
+			name.textContent = c.name;
+			var tip = document.createElement( "span" );
+			tip.className = "tip";
+			tip.textContent = c.hint;
+			li.appendChild( name );
+			li.appendChild( tip );
+			li.addEventListener( "mousedown", function ( e ) {
+				e.preventDefault();
+				inputEl.value = c.name + " ";
+				hideSlashMenu();
+				inputEl.focus();
+			} );
+			slashMenuEl.appendChild( li );
+		} );
+		slashMenuEl.hidden = false;
+	}
+
+	inputEl.addEventListener( "input", function () { slashPick = 0; showSlashMenu(); } );
+	inputEl.addEventListener( "blur", hideSlashMenu );
+
 	formEl.addEventListener( "submit", function ( evt ) {
 		evt.preventDefault();
 		var text = inputEl.value.trim();
 		if ( !text ) {
+			return;
+		}
+
+		// A slash command is run by the server and answered with a Reply, not sent to the model
+		if ( commandList.length && text.charAt( 0 ) === "/" ) {
+			if ( isBusy ) {
+				showHint( "Wait for the answer, or press Stop, before running a command." );
+				return;
+			}
+			inputEl.value = "";
+			autoGrow();
+			hideSlashMenu();
+			runCommand( text );
 			return;
 		}
 
@@ -1600,6 +1792,25 @@ __CUSTOM_CSS__
 
 	// Enter sends, Shift+Enter makes a newline - the convention every chat UI uses.
 	inputEl.addEventListener( "keydown", function ( evt ) {
+		var open = slashMatches();
+		if ( open.length && !slashMenuEl.hidden ) {
+			if ( evt.key === "ArrowDown" || evt.key === "ArrowUp" ) {
+				evt.preventDefault();
+				slashPick = ( slashPick + ( evt.key === "ArrowDown" ? 1 : open.length - 1 ) ) % open.length;
+				showSlashMenu();
+				return;
+			}
+			if ( evt.key === "Tab" ) {
+				evt.preventDefault();
+				inputEl.value = open[ slashPick ].name + " ";
+				hideSlashMenu();
+				return;
+			}
+			if ( evt.key === "Escape" ) {
+				hideSlashMenu();
+				return;
+			}
+		}
 		if ( evt.key === "Enter" && !evt.shiftKey ) {
 			evt.preventDefault();
 			formEl.requestSubmit ? formEl.requestSubmit() : formEl.dispatchEvent( new Event( "submit", { cancelable: true } ) );

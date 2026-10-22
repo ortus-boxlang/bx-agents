@@ -48,7 +48,7 @@ environments:
 | `security` | mapa | Se reenvía tal cual a los ajustes del módulo `bxai` de la app generada; el `SecurityDirector` de bx-ai lo convierte en middleware de guardarraíles. |
 | `memory` | string o mapa | La memoria de conversación del agente. Un string suelto es el tipo (`cache`); un mapa es `{ type, ...config }` y se pasa a `aiMemory()`. |
 | `checkpointer` | mapa | `{ type: cache\|file\|jdbc, ...config }`. Por defecto `{ type: cache }` si se omite. |
-| `gatewaySession` | mapa | `{ policy, maxQueueDepth }`, ambos opcionales. Ver [Agent.bx](agent-bx.md) para los valores; son idénticos. |
+| `gatewaySession` | mapa | `{ policy, maxQueueDepth, commands }`, todos opcionales. Ver [Agent.bx](agent-bx.md) para los valores; son idénticos. |
 | `agentApi` | mapa | `{ enabled, tokenEnvVar, tokens, profiles }`, todos opcionales. Ver [La ruta de agente siempre activa](agent-bx.md#la-ruta-de-agente-siempre-activa). |
 | `notes` | mapa | Notas cortas que el agente guarda sobre el usuario y sobre su propio trabajo. `notes: {}` las activa con los valores por defecto. Ver [Notas](#notas). |
 | `environments` | mapa | Sobreescrituras por entorno. Ver [Entornos](#entornos). |

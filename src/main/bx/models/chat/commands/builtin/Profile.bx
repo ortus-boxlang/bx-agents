@@ -1,0 +1,40 @@
+class extends="models.chat.commands.BaseCommand@bxagents" {
+
+	string function name() {
+		return "profile"
+	}
+
+	string function hint() {
+		return "pick the model profile for this chat: /profile, or /profile <name>"
+	}
+
+	array function transports() {
+		return [ "tui" ]
+	}
+
+	/**
+	 * /profile picks from the configured profiles; /profile <name> switches straight to one. The
+	 * conversation, its memory and the agent's tools carry on; only the model changes.
+	 */
+	any function run( required any context, required string args ) {
+		var chat = arguments.context.chat()
+		var reply = arguments.context.reply()
+		var can = chat.switchable()
+		if ( !can.ok ) {
+			return reply.warn( can.reason )
+		}
+		var profiles = chat.profiles()
+		if ( !profiles.len() ) {
+			return reply.warn( "No profiles are configured. Add one with: bxAgents add profile" )
+		}
+		if ( !len( arguments.args ) ) {
+			return reply.choose( "Which profile?", profiles.map( p => {
+				label : p.name,
+				hint  : ( p.provider & ( len( p.model ) ? "/" & p.model : "" ) ) & ( len( p.description ) ? "  " & p.description : "" ) & ( p.isDefault ? "  (default)" : "" ) & ( p.isCurrent ? "  (in use)" : "" ),
+				line  : "/profile " & p.name
+			} ) )
+		}
+		return new "models.chat.commands.builtin.SwitchReport@bxagents"().of( reply, chat.useProfile( arguments.args ) )
+	}
+
+}

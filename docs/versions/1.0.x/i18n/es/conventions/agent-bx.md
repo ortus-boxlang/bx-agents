@@ -93,7 +93,7 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 | `security` | struct | Reenviado textualmente a los ajustes del módulo `bxai` de la app generada; el propio `SecurityDirector` de bx-ai lo convierte en middleware de guardarraíles. Solo passthrough - BxAgents no tiene convención propia de guardarraíles. |
 | `memory` | string o struct | La memoria de conversación del agente. Una cadena bare es una abreviatura para el tipo (`"cache"`); un struct es `{ type, ...config }` y se pasa textualmente a `aiMemory()` - por ejemplo, `{ type: "cache", maxMessages: 50 }`, o con `summaryProvider`/`summaryModel`/`summaryThreshold` para hacer funcional el `/compact` de la interfaz web. Se aplica por nodo, así que un subagente puede declarar el suyo propio. |
 | `checkpointer` | struct | `{ type: "cache"\|"file"\|"jdbc", ...config }`. Por defecto `{ type: "cache" }` si se omite. Siempre se aplica - sin uno, los flujos de aprobación human-in-the-loop a través de cualquier gateway que no sea `cli` fallan por completo. |
-| `gatewaySession` | struct | `{ policy, maxQueueDepth }`, ambos opcionales (por defecto `"queue"` / `50`). Solo significativo si el proyecto tiene al menos una entrada de [gateway](gateways/index.md#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends) de estilo push - controla la política del `GatewaySession` generado para un segundo mensaje entrante que llega en un hilo que ya tiene un turno en curso. `policy` debe ser uno de `reject`/`queue`/`steer`/`interrupt`. |
+| `gatewaySession` | struct | `{ policy, maxQueueDepth, commands }`, todos opcionales (por defecto `"queue"` / `50`). Solo significativo si el proyecto tiene al menos una entrada de [gateway](gateways/index.md#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends) de estilo push - controla la política del `GatewaySession` generado para un segundo mensaje entrante que llega en un hilo que ya tiene un turno en curso. `policy` debe ser uno de `reject`/`queue`/`steer`/`interrupt`. |
 | `agentApi` | struct | `{ enabled, tokenEnvVar, tokens, profiles }`, todos opcionales. Controla la ruta de agente siempre activa en `/__bxagents`. Consulta [La ruta de agente siempre activa](#la-ruta-de-agente-siempre-activa) más abajo. |
 | cualquier otra clave | cualquiera | Fusionada y disponible en el struct de configuración resuelto, pero no interpretada por BxAgents mismo. |
 
@@ -238,6 +238,8 @@ GET  /__bxagents/sessions   # las conversaciones recientes de quien llama
 GET  /__bxagents/history    # ?conversationId= lo que se dijo en una
 POST /__bxagents/clear      # { conversationId } olvida sus mensajes
 POST /__bxagents/compact    # { conversationId } resume los mensajes antiguos
+GET  /__bxagents/commands   # los comandos con barra que quien llama puede ejecutar, [ { name, hint } ]
+POST /__bxagents/command    # { line : "/info", conversationId? } ejecuta uno, responde { blocks, effects, conversationId }
 GET  /__bxagents/notes    # las notas de quien llama y las del agente, con cuánto llenan
 POST /__bxagents/notes    # { scope : "user" | "agent", text }
 POST /__bxagents/notes/update   # { scope, id, text }

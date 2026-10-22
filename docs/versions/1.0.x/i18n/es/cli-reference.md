@@ -509,6 +509,19 @@ En la pantalla:
 
 Escribe `/` para ver los comandos: `/help`, `/new` (una conversación nueva), `/tools`, `/copy` (la última respuesta al portapapeles, con la secuencia OSC 52 que honran la mayoría de terminales), `/save [archivo]` (la conversación en Markdown), `/sessions`, `/resume`, `/clear`, `/compact` e `/info` (ver abajo), `/model`, `/profile` y `/default` (ver abajo), `/remember <texto>` y `/notes` (ver abajo), `/record [archivo]` y `/record stop` (ver abajo) y `/exit`.
 
+#### Los mismos comandos en la página web y en las apps de chat
+
+Cada comando con barra se escribe una sola vez, como una clase pequeña que responde con datos (texto, una tabla, una lista para elegir), y la terminal, la página web y las plataformas de chat dibujan esa respuesta a su manera. Así `/help`, `/new`, `/tools`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/info`, `/remember` y `/notes` funcionan en las tres:
+
+| Dónde | Cómo se usan |
+|---|---|
+| Chat en la terminal | Escribe `/`, como arriba |
+| [Página web](conventions/web-ui.md#comandos-con-barra) | Escribe `/`: aparece un menú con los comandos y `Tab` completa uno |
+| [Plataformas de chat](conventions/gateways/index.md#comandos-en-un-gateway) (Telegram, Slack, ...) | Escribe el comando como un mensaje. Hay un conjunto seguro activado por defecto; un proyecto puede ampliarlo o apagarlo |
+| Un servidor por HTTP | `GET /__bxagents/commands` y `POST /__bxagents/command`, ver [Control de ejecuciones](conventions/agent-bx.md#control-de-ejecucion) |
+
+`/copy`, `/save`, `/record`, `/profile`, `/default` y `/exit` actúan sobre tu propia máquina o sobre el modelo de tu propia sesión, así que se quedan en la terminal.
+
 #### Conversaciones en el chat
 
 Cada chat es una conversación, listada en la [base de datos de chat compartida](conventions/web-ui.md#el-almacén-sqlite) del proyecto (`data/chat.db`) bajo tu usuario, la misma lista que muestra el chat web. Los mensajes se guardan en la [memoria](conventions/agent-yaml.md#ajustes) del agente, así que una conversación solo se puede retomar mientras dure esa memoria: la memoria `cache` por defecto se pierde al terminar el proceso, una memoria `file` o `jdbc` no.

@@ -93,7 +93,7 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 | `security` | struct | Forwarded verbatim into the generated app's `bxai` module settings; bx-ai's own `SecurityDirector` turns it into guardrail middleware. Passthrough only - BxAgents has no own guardrails convention. |
 | `memory` | string or struct | The agent's conversation memory. A bare string is shorthand for the type (`"cache"`); a struct is `{ type, ...config }` and is passed through to `aiMemory()` verbatim - e.g. `{ type: "cache", maxMessages: 50 }`, or with `summaryProvider`/`summaryModel`/`summaryThreshold` to make the web UI's `/compact` functional. Applies per node, so a subagent can declare its own. |
 | `checkpointer` | struct | `{ type: "cache"\|"file"\|"jdbc", ...config }`. Defaults to `{ type: "cache" }` if omitted. Always applied - without one, human-in-the-loop approval flows through any gateway other than `cli` fail outright. |
-| `gatewaySession` | struct | `{ policy, maxQueueDepth }`, both optional (default `"queue"` / `50`). Only meaningful if the project has at least one push-style [gateway](gateways/index.md#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends) entry - controls the generated `GatewaySession`'s policy for a second inbound message arriving on a thread that already has a turn in flight. `policy` must be one of `reject`/`queue`/`steer`/`interrupt`. |
+| `gatewaySession` | struct | `{ policy, maxQueueDepth, commands }`, all optional (default `"queue"` / `50` / a safe set of [slash commands](gateways/index.md#commands-in-a-gateway)). Only meaningful if the project has at least one push-style [gateway](gateways/index.md#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends) entry - controls the generated `GatewaySession`'s policy for a second inbound message arriving on a thread that already has a turn in flight. `policy` must be one of `reject`/`queue`/`steer`/`interrupt`. |
 | `agentApi` | struct | `{ enabled, tokenEnvVar, tokens, profiles }`, all optional. Controls the always-on agent route at `/__bxagents`. See [The always-on agent route](#the-always-on-agent-route) below. |
 | any other key | any | Merged and available in the resolved config struct, but not interpreted by BxAgents itself. |
 
@@ -256,6 +256,8 @@ GET  /__bxagents/sessions   # the caller's recent conversations
 GET  /__bxagents/history    # ?conversationId= what was said in one
 POST /__bxagents/clear      # { conversationId } forget its messages
 POST /__bxagents/compact    # { conversationId } summarize the older messages
+GET  /__bxagents/commands   # the slash commands this caller may run, [ { name, hint } ]
+POST /__bxagents/command    # { line : "/info", conversationId? } run one, answers { blocks, effects, conversationId }
 GET  /__bxagents/notes    # the caller's notes and the agent's, with how full they are
 POST /__bxagents/notes    # { scope : "user" | "agent", text }
 POST /__bxagents/notes/update   # { scope, id, text }

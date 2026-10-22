@@ -1,0 +1,55 @@
+/**
+ * Runs a command line for a client that has no terminal: the web page, and anything that speaks
+ * HTTP. It owns the one thing a server must do that the terminal chat does not, which is to build the
+ * conversation from the request (each request names its conversation; nothing is kept between them),
+ * and leaves everything else to the command layer.
+ *
+ * The answer is plain data: { success, blocks, effects, conversationId }. A command that opens or
+ * starts another conversation says so in its effects, and conversationId is the one to carry on in.
+ */
+class {
+
+	/**
+	 * @agent The agent object
+	 * @sessions A SessionStore, or null when the server keeps no list of conversations
+	 * @registry The CommandRegistry; the built-in commands when not given
+	 */
+	function init( required any agent, any sessions, any registry ) {
+		variables.agent = arguments.agent
+		variables.sessions = isNull( arguments.sessions ) ? nullValue() : arguments.sessions
+		variables.registry = isNull( arguments.registry ) ? new "models.chat.commands.CommandCatalog@bxagents"().standard() : arguments.registry
+		return this
+	}
+
+	/**
+	 * @transport "web" or "gateway"
+	 * @admin Whether the caller may run admin commands
+	 *
+	 * @return [ { name : "/help", hint } ]
+	 */
+	array function menu( string transport = "web", boolean admin = false ) {
+		return variables.registry.menu( arguments.transport, arguments.admin )
+	}
+
+	/**
+	 * @userId Who is calling: the owner of the conversations and notes
+	 * @conversationId The conversation the line is about; blank for a new one
+	 * @line The command, with its slash
+	 * @transport "web" or "gateway"
+	 * @admin Whether the caller may run admin commands
+	 *
+	 * @return { success : true, blocks, effects, conversationId }
+	 */
+	struct function execute( required string userId, required string conversationId, required string line, string transport = "web", boolean admin = false ) {
+		var conversation = isNull( variables.sessions )
+			? new "models.chat.ServerConversation@bxagents"( variables.agent, arguments.userId, nullValue(), arguments.conversationId )
+			: new "models.chat.ServerConversation@bxagents"( variables.agent, arguments.userId, variables.sessions, arguments.conversationId )
+		var context = new "models.chat.commands.CommandContext@bxagents"( conversation, arguments.transport, arguments.admin )
+		var reply = variables.registry.run( arguments.line, context )
+		var answer = reply.toStruct()
+		answer[ "success" ] = true
+		answer[ "conversationId" ] = conversation.conversationId()
+		return answer
+	}
+
+}

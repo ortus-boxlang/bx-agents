@@ -209,18 +209,20 @@ aiGatewayRegistry().register( aiGateway( "bxModules.bxagents.models.gateways.Sig
 
 ### GatewaySession - wiring the agent to every push-style gateway
 
-Cualquier proyecto con al menos una entrada de gateway de estilo push también obtiene una sentencia de arranque generada en el `onApplicationStart()` de `Application.bx`. Construye un único `GatewaySession` de bx-ai que agrupa cada gateway de estilo push en el proyecto, vinculado al agente raíz del proyecto, y lo inicia:
+Cualquier proyecto con al menos una entrada de gateway de estilo push también obtiene una sentencia de arranque generada en el `onApplicationStart()` de `Application.bx`. Construye un único `GatewaySession` de bx-ai (nuestro `CommandGatewaySession`, que es uno con [comandos](#comandos-en-un-gateway) delante del agente) que agrupa cada gateway de estilo push en el proyecto, vinculado al agente raíz del proyecto, y lo inicia:
 
 ```javascript
 // Application.bx, onApplicationStart() (GENERADO)
 var wirebox        = application.cbController.getWireBox()
 var agent          = wirebox.getInstance( "GeneratedAgent" )
-var gatewaySession = aiGatewaySession(
+var gatewaySession = new "models.gateways.CommandGatewaySession@bxagents"(
 	agent        : agent,
 	gateways     : [ aiGatewayRegistry().get( "telegram" ) ],
 	policy       : "queue",
-	maxQueueDepth: 50
+	maxQueueDepth: 50,
+	commands     : {}
 )
+BoxAnnounce( "onGatewaySessionCreate", { session: gatewaySession } )
 gatewaySession.start()
 application.bxaiGatewaySession = gatewaySession
 ```
@@ -244,6 +246,27 @@ gatewaySession:       # ambos opcionales - estos son los valores por defecto
 
 !!! warning
     Limitación de v1: exactamente un `GatewaySession`, siempre vinculado al agente raíz del proyecto - coincide con el precedente existente de que la exposición HTTP `exposes: "agent"` también es siempre solo-de-agente-raíz. Un proyecto con subagentes todavía no puede enrutar diferentes gateways a diferentes subagentes.
+
+### Comandos en un gateway
+
+Un mensaje que es uno de los comandos con barra de la sesión lo responde BxAgents mismo y nunca llega al modelo, por el mismo gateway por el que entró. Cualquier otra cosa, incluida una palabra con barra que aquí no es un comando, va al agente como antes. Una elección (una lista para escoger) vuelve como una lista numerada con el comando que hay que escribir para cada una.
+
+Por defecto hay un conjunto seguro activado: `/help`, `/tools`, `/model`, `/info`, `/remember` y `/notes`. No necesitan una conversación propia y no cambian nada compartido. Redúcelo, amplíalo o apágalo en el mismo bloque `gatewaySession`:
+
+```yaml
+# Agent.yaml
+gatewaySession:
+  commands:
+    enabled: true            # false apaga los comandos
+    prefix: "/"              # un carácter
+    allow: [ help, info, tools, notes, remember, model ]   # el valor por defecto; cualquier comando que corra en un gateway
+    admins: [ "123456789" ]  # ids de usuario del gateway que pueden ejecutar comandos para admins
+```
+
+`build` comprueba el bloque: una clave desconocida, un prefijo que no sea un carácter o una entrada de `allow` que no sea un comando que corra en un gateway falla antes de que arranque la app. En Telegram un mensaje de grupo como `/info@tubot` se lee como `/info`.
+
+!!! info
+    Los comandos de conversación (`/new`, `/clear`, `/compact`, `/sessions`, `/resume`) no están en el conjunto por defecto: un gateway guarda una conversación por hilo de chat, y moverse entre conversaciones ahí es trabajo aparte. Los comandos tampoco aparecen todavía en el menú de comandos propio de una plataforma (la lista de Telegram, los comandos con barra de Slack); escribirlos funciona.
 
 Qué hace en realidad cada política con un mensaje que llega mientras un turno todavía está en ejecución:
 

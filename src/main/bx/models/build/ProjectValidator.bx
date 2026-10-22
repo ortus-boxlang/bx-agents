@@ -884,6 +884,47 @@ class {
 		if ( !validPolicies.contains( policy ) ) {
 			arguments.errors.append( "Agent.bx's 'gatewaySession.policy' has an invalid value [#policy#] - must be one of: #validPolicies.toList()#" )
 		}
+
+		validateGatewayCommands( sessionConfig.commands ?: {}, arguments.errors )
+	}
+
+	/**
+	 * Validates `gatewaySession.commands: { enabled, prefix, allow, admins }`, the slash commands a gateway answers itself.
+	 * An `allow` entry has to name a command that exists and runs on a gateway, so a typo fails at build time
+	 * instead of quietly leaving a command out.
+	 *
+	 * @commands The `commands` block, {} when there is none
+	 * @errors Accumulator array - append() any validation errors found
+	 */
+	private void function validateGatewayCommands( required any commands, required array errors ) {
+		if ( !isStruct( arguments.commands ) ) {
+			arguments.errors.append( "Agent.bx's 'gatewaySession.commands' must be a block with enabled, prefix, allow and admins" )
+			return
+		}
+		for ( var key in arguments.commands ) {
+			if ( ![ "enabled", "prefix", "allow", "admins" ].containsNoCase( key ) ) {
+				arguments.errors.append( "Agent.bx's 'gatewaySession.commands' has an unknown key [#key#] - use enabled, prefix, allow or admins" )
+			}
+		}
+		if ( arguments.commands.keyExists( "enabled" ) && !isBoolean( arguments.commands.enabled ) ) {
+			arguments.errors.append( "Agent.bx's 'gatewaySession.commands.enabled' must be true or false" )
+		}
+		if ( arguments.commands.keyExists( "prefix" ) && ( !isSimpleValue( arguments.commands.prefix ) || len( arguments.commands.prefix ) != 1 ) ) {
+			arguments.errors.append( "Agent.bx's 'gatewaySession.commands.prefix' must be a single character, such as /" )
+		}
+		for ( var listKey in [ "allow", "admins" ] ) {
+			if ( arguments.commands.keyExists( listKey ) && !isArray( arguments.commands[ listKey ] ) ) {
+				arguments.errors.append( "Agent.bx's 'gatewaySession.commands.#listKey#' must be a list" )
+			}
+		}
+		if ( isArray( arguments.commands.allow ?: "" ) ) {
+			var known = new "models.chat.commands.CommandCatalog@bxagents"().standard().menu( "gateway" ).map( c => mid( c.name, 2, len( c.name ) ) )
+			for ( var name in arguments.commands.allow ) {
+				if ( !known.containsNoCase( name ) ) {
+					arguments.errors.append( "Agent.bx's 'gatewaySession.commands.allow' names [#name#], which is not a command that runs on a gateway - use #known.toList( ', ' )#" )
+				}
+			}
+		}
 	}
 
 	// --------------------------------------------------------------------------

@@ -95,6 +95,8 @@ Una entrada `webui` monta veinticinco acciones bajo `<path>/api`, servidas por u
 | `GET /tools` | Las tools registradas del agente |
 | `GET /health` | Vitalidad |
 | `GET /info` | Nombre del agente, modelo, conteos de memoria/tool, flags de capacidad |
+| `GET /commands` | Los [comandos con barra](#comandos-con-barra) que ofrece la página, `[ { name, hint } ]` |
+| `POST /command` | Ejecuta uno para este visitante: `{ line : "/info", conversationId? }`, responde con la respuesta como datos |
 | `GET /profiles` | Los [perfiles](models.md#perfiles) que ofrece la entrada, `[]` si no lista ninguno. Ver [Elegir el modelo](#elegir-el-modelo) |
 | `GET /conversations` | Las conversaciones de este visitante, actividad más reciente primero |
 | `POST /conversations/create` | Inicia una - `{ title }` opcional, devuelve el `conversationId` acuñado |
@@ -109,6 +111,20 @@ Una entrada `webui` monta veinticinco acciones bajo `<path>/api`, servidas por u
 | `POST /notes/remove` | `{ scope, id }` - solo las notas propias del visitante; una nota del agente da `403` |
 
 Cada una está delimitada por el `getUserSessionIdentifier()` de ColdBox como el `userId`. Las primeras tres mantienen la forma y el formato de cable exactos de `toAi()`.
+
+### Comandos con barra
+
+Escribe `/` en la caja de mensaje y aparece un menú de comandos (flechas, `Tab` para completar, `Esc` para cerrar). Son los mismos comandos que en [el chat de la terminal](../cli-reference.md#los-mismos-comandos-en-la-pagina-web-y-en-las-apps-de-chat): `/help`, `/new`, `/tools`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/info`, `/remember` y `/notes`. Al pulsar Enter la línea se ejecuta en el servidor con `POST /command` y se dibuja la respuesta: texto, una tabla o botones para elegir. `/new` y `/resume` llevan la página a la conversación que nombran, y `/clear` recarga la transcripción.
+
+La respuesta son datos, así que cualquier cliente puede usarla:
+
+```json
+{ "success": true, "conversationId": "...",
+  "blocks": [ { "type": "table", "layout": "keyvalue", "rows": [ [ "Agent", "helper" ] ] } ],
+  "effects": [ { "type": "conversation", "id": "..." } ] }
+```
+
+Los bloques son `text`, `table`, `choose` (opciones, cada una con la línea de comando que ejecuta) y `transcript`; los efectos dicen qué le pasó a la conversación (`reset`, `conversation`). `/info` omite dónde está el archivo de la base de datos. Un comando que solo tiene sentido en tu propia máquina (`/copy`, `/save`, `/profile`) no se ofrece, y un servidor nunca cambia el modelo del agente compartido: la página elige un perfil por mensaje.
 
 `threadId` es autoritativo del servidor: tomado del request cuando se suministra, acuñado de lo contrario, y siempre reflejado de vuelta - como una cabecera de respuesta `X-Thread-Id` en `/invoke` y `/batch`, y como un evento SSE `thread` enviado *antes del primer chunk* en `/stream` (una cabecera no puede leerse antes de que el cuerpo empiece a llegar). Ese es el mismo contrato que adoptó el propio `toAi()` de ColdBox 8.1, así que un cliente escrito contra uno funciona contra el otro.
 

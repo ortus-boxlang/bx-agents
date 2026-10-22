@@ -309,7 +309,7 @@ class {
 			"description"  : config.description ?: "",
 			"model"        : modelLabel,
 			"toolCount"    : config.toolCount ?: 0,
-			"capabilities" : { "events" : true, "cancel" : true, "steer" : true, "approvals" : true, "notes" : !isNull( notesProvider() ), "sessions" : !isNull( sessionStore() ), "profiles" : offeredProfiles().len() > 0 }
+			"capabilities" : { "events" : true, "cancel" : true, "steer" : true, "approvals" : true, "notes" : !isNull( notesProvider() ), "sessions" : !isNull( sessionStore() ), "profiles" : offeredProfiles().len() > 0, "commands" : true }
 		} )
 	}
 
@@ -409,6 +409,44 @@ class {
 		}
 		var after = thisAgent.getMemoryMessages( me, conversationId ).len()
 		event.renderData( type : "json", data : { "success" : true, "available" : available, "compacted" : after < before, "before" : before, "after" : after } )
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Commands
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * The commands a client may offer, { commands : [ { name : "/help", hint } ] }: the same slash commands as the
+	 * terminal chat, the ones that make sense on a server. Admin commands are left out for a caller who is not an admin.
+	 */
+	function commands( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		event.renderData( type : "json", data : { "success" : true, "commands" : commandService().menu( "web", whoIsCalling( event ).scope == "admin" ) } )
+	}
+
+	/**
+	 * Runs one command for the caller: { success, blocks, effects, conversationId }, see models.chat.commands.Reply.
+	 *
+	 * Body: { line : "/info", conversationId? }
+	 */
+	function command( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var body = event.getHTTPContent( json : true )
+		var line = trim( body.line ?: "" )
+		if ( !new "models.chat.commands.CommandLine@bxagents"( line ).isCommand() ) {
+			event.renderData( type : "json", statusCode : 400, data : { "success" : false, "error" : "line must be a command, such as /help" } )
+			return
+		}
+		var who = whoIsCalling( event )
+		event.renderData( type : "json", data : commandService().execute( who.name, body.conversationId ?: "", line, "web", who.scope == "admin" ) )
+	}
+
+	private function commandService() {
+		return new "models.chat.commands.CommandService@bxagents"( agent(), sessionStore() )
 	}
 
 	/**

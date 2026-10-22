@@ -1,0 +1,91 @@
+/**
+ * Draws a command's Reply on the chat screen. The other half of the command layer: a command says
+ * what happened, this decides how the terminal shows it (the web page and the gateways have their own).
+ */
+class {
+
+	/**
+	 * @screen The chat screen
+	 * @session The session, for the notes screen
+	 * @transcript The Transcript of this chat
+	 * @dispatch A function taking a command line; runs it and shows its reply (used when the user picks an option)
+	 */
+	function init( required any screen, required any session, required any transcript, required function dispatch ) {
+		variables.screen = arguments.screen
+		variables.session = arguments.session
+		variables.transcript = arguments.transcript
+		variables.dispatch = arguments.dispatch
+		return this
+	}
+
+	/**
+	 * Applies the effects, then draws the blocks in order.
+	 *
+	 * @return False when the reply asks to leave the chat
+	 */
+	boolean function show( required any reply ) {
+		for ( var effect in arguments.reply.effects() ) {
+			if ( effect.type == "reset" ) {
+				variables.transcript.reset()
+			}
+		}
+		for ( var block in arguments.reply.blocks() ) {
+			draw( block )
+		}
+		return !arguments.reply.hasEffect( "quit" )
+	}
+
+	private void function draw( required struct block ) {
+		switch ( arguments.block.type ) {
+			case "text":
+				variables.screen.print( arguments.block.style, arguments.block.text )
+				break
+			case "table":
+				drawTable( arguments.block )
+				break
+			case "choose":
+				var picked = variables.screen.choose( arguments.block.title, [], arguments.block.options.map( o => { value : o.line, label : o.label, hint : o.hint ?: "" } ) ) ?: ""
+				if ( len( picked ) ) {
+					variables.dispatch( picked )
+				}
+				break
+			case "transcript":
+				for ( var entry in arguments.block.messages ) {
+					if ( entry.role == "you" ) {
+						variables.screen.printUser( entry.text )
+					} else {
+						variables.screen.printMarkdown( entry.text )
+					}
+					variables.transcript.append( entry )
+				}
+				break
+			case "screen":
+				openScreen( arguments.block.name )
+				break
+		}
+	}
+
+	private void function drawTable( required struct block ) {
+		for ( var row in arguments.block.rows ) {
+			if ( arguments.block.layout == "keyvalue" ) {
+				variables.screen.print( "muted", left( row[ 1 ] & ":" & repeatString( " ", 14 ), 14 ) & row[ 2 ] )
+				continue
+			}
+			var cells = []
+			for ( var i = 1; i <= row.len(); i++ ) {
+				var column = arguments.block.columns[ i ] ?: {}
+				var width = column.width ?: 0
+				var cell = toString( row[ i ] )
+				cells.append( !width ? cell : ( ( column.align ?: "left" ) == "right" ? right( repeatString( " ", width ) & cell, width ) : left( cell & repeatString( " ", width ), width ) ) )
+			}
+			variables.screen.print( "muted", cells.toList( "  " ) )
+		}
+	}
+
+	private void function openScreen( required string name ) {
+		if ( arguments.name == "notes" ) {
+			new "models.cli.chat.NotesMode@bxagents"( variables.screen, variables.session.notes(), variables.session.userId(), variables.session.agentName() ).run()
+		}
+	}
+
+}
