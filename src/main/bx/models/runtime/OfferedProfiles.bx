@@ -1,0 +1,54 @@
+/**
+ * The profiles a chat page or a client of the agent API may ask for. The app lists them (a `webui`
+ * gateway's `profiles`, or `agentApi.profiles`); anything not listed is refused, because a profile
+ * is a model the server pays for. Both generated handlers use this one class, so they cannot disagree.
+ */
+class {
+
+	/**
+	 * @names The profile names the app offers, in the order to list them; empty offers nothing
+	 */
+	function init( required array names ) {
+		variables.names = arguments.names
+		return this
+	}
+
+	/**
+	 * @return The offered names
+	 */
+	array function names() {
+		return variables.names
+	}
+
+	boolean function any() {
+		return variables.names.len() > 0
+	}
+
+	/**
+	 * @options The options a client sent
+	 *
+	 * @return True when they ask for no profile, or for one that is offered
+	 */
+	boolean function allows( required struct options ) {
+		var wanted = arguments.options.profile ?: ""
+		return !len( wanted ) || ( isSimpleValue( wanted ) && variables.names.containsNoCase( wanted ) )
+	}
+
+	/**
+	 * @return [ { name, description, provider, model, isDefault } ] for the offered profiles, in the order the app listed them. Never a key.
+	 */
+	array function list() {
+		var all = aiProfiles()
+		var out = []
+		for ( var name in variables.names ) {
+			for ( var p in all ) {
+				if ( compareNoCase( p.name, name ) == 0 ) {
+					out.append( { "name" : p.name, "description" : p.description ?: "", "provider" : p.provider, "model" : p.model ?: "", "isDefault" : p.isDefault } )
+					break
+				}
+			}
+		}
+		return out
+	}
+
+}

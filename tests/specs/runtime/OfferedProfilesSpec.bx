@@ -1,0 +1,56 @@
+/**
+ * The profiles a client may ask for: nothing unless the app lists them, never one that is not listed.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "runtime.OfferedProfiles", function() {
+
+			beforeEach( function() {
+				variables.settings = getModuleInfo( "bxai" ).settings;
+				variables.saved = settings.profiles ?: {};
+				settings.profiles = {
+					slow : { description : "Careful", provider : "mock", params : { model : "slow-model" } },
+					fast : { provider : "mock", params : { model : "fast-model" } },
+					secret : { provider : "mock" }
+				};
+			} );
+
+			afterEach( function() {
+				settings.profiles = saved;
+			} );
+
+			it( "offers nothing by default and refuses any profile", function() {
+				var none = new bxagents.models.runtime.OfferedProfiles( [] );
+
+				expect( none.any() ).toBeFalse();
+				expect( none.list() ).toBeEmpty();
+				expect( none.allows( { profile : "fast" } ) ).toBeFalse();
+				expect( none.allows( {} ) ).toBeTrue();
+			} );
+
+			it( "allows no profile or a listed one, whatever the case, and nothing else", function() {
+				var offered = new bxagents.models.runtime.OfferedProfiles( [ "fast", "slow" ] );
+
+				expect( offered.allows( {} ) ).toBeTrue();
+				expect( offered.allows( { profile : "" } ) ).toBeTrue();
+				expect( offered.allows( { profile : "FAST" } ) ).toBeTrue();
+				expect( offered.allows( { profile : "secret" } ) ).toBeFalse();
+				expect( offered.allows( { profile : [ "fast" ] } ) ).toBeFalse();
+			} );
+
+			it( "lists the offered profiles in the order the app wrote them, without a key or an unlisted profile", function() {
+				var list = new bxagents.models.runtime.OfferedProfiles( [ "slow", "fast" ] ).list();
+
+				expect( list.map( p => p.name ) ).toBe( [ "slow", "fast" ] );
+				expect( list[ 1 ].description ).toBe( "Careful" );
+				expect( list[ 1 ].model ).toBe( "slow-model" );
+				for ( var p in list ) {
+					expect( p.keyArray().filter( k => k.findNoCase( "key" ) ) ).toBeEmpty();
+				}
+			} );
+
+		} );
+	}
+
+}
