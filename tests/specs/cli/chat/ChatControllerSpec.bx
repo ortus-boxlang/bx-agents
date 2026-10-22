@@ -128,8 +128,13 @@ class extends="testbox.system.BaseSpec" {
 				return q
 			}
 
-			function controllerFor( screen, session ) {
-				return new bxagents.models.cli.chat.ChatController( session, getTempDirectory() )
+			// the person's own switches: both on unless a spec says otherwise
+			function userConfig( shell = true, bifs = true ) {
+				return { chat : () => { shell : shell, bifs : bifs }, problems : () => [], path : () => "~/.bxagents/bxAgents.yml" }
+			}
+
+			function controllerFor( screen, session, config ) {
+				return new bxagents.models.cli.chat.ChatController( session, getTempDirectory(), nullValue(), isNull( config ) ? userConfig() : config )
 			}
 
 			it( "shows a banner, sends a message inside a turn, and keeps the transcript", function() {
@@ -433,6 +438,138 @@ class extends="testbox.system.BaseSpec" {
 				failing.contextReport = () => { throw( message = "no agent" ) }
 				controllerFor( broken, failing ).run( broken )
 				expect( broken.statuses[ 1 ] ).toBe( "" );
+			} );
+
+			describe( "!command and ##function() on this machine", function() {
+
+				function printedBy( screen ) {
+					return screen.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] );
+				}
+
+				it( "runs a shell command, shows what it printed and sends it with the next message", function() {
+					if ( createObject( "java", "java.lang.System" ).getProperty( "os.name" ).lcase().startsWith( "windows" ) ) { return; }
+					var screen = fakeScreen( [ "!echo from the shell", "what does that say?" ] )
+					var session = fakeSession()
+					controllerFor( screen, session ).run( screen )
+
+					var shown = printedBy( screen )
+					expect( shown ).toInclude( "$ echo from the shell" );
+					expect( shown ).toInclude( "from the shell" );
+					expect( shown ).toInclude( "Attached to your next message." );
+					expect( session.sent ).toHaveLength( 1 );
+					expect( session.sent[ 1 ] ).toStartWith( "what does that say?" );
+					expect( session.sent[ 1 ] ).toInclude( "output of the command `echo from the shell`" );
+					expect( session.sent[ 1 ] ).toInclude( "from the shell" );
+					expect( shown ).toInclude( "Sent with 1 attachment." );
+				} );
+
+				it( "keeps the output off the message when typed with !!", function() {
+					if ( createObject( "java", "java.lang.System" ).getProperty( "os.name" ).lcase().startsWith( "windows" ) ) { return; }
+					var screen = fakeScreen( [ "!!echo private", "hello" ] )
+					var session = fakeSession()
+					controllerFor( screen, session ).run( screen )
+
+					expect( printedBy( screen ) ).toInclude( "private" );
+					expect( printedBy( screen ).filter( p => p.startsWith( "Attached" ) ) ).toBeEmpty();
+					expect( session.sent ).toBe( [ "hello" ] );
+				} );
+
+				it( "shows a failing command's exit code in a warning", function() {
+					if ( createObject( "java", "java.lang.System" ).getProperty( "os.name" ).lcase().startsWith( "windows" ) ) { return; }
+					var screen = fakeScreen( [ "!!echo bad; exit 4" ] )
+					controllerFor( screen, fakeSession() ).run( screen )
+					var warn = screen.log.filter( e => e[ 1 ] == "print" && e[ 2 ] == "warn" ).map( e => e[ 3 ] )
+					expect( warn ).toInclude( "(exit code 4)" );
+				} );
+
+				it( "sends a message that starts with a bang and a space, as a message", function() {
+					var screen = fakeScreen( [ "! not a command" ] )
+					var session = fakeSession()
+					controllerFor( screen, session ).run( screen )
+					expect( session.sent ).toBe( [ "! not a command" ] );
+				} );
+
+				it( "calls a BoxLang built-in function, shows the result and sends it with the next message", function() {
+					var screen = fakeScreen( [ "####ucase( 'shown only' )", "####listLen( 'a,b,c' )", "##ucase( 'kept' )", "and?" ] )
+					var session = fakeSession()
+					controllerFor( screen, session ).run( screen )
+
+					var shown = printedBy( screen )
+					expect( shown ).toInclude( "SHOWN ONLY" );
+					expect( shown ).toInclude( "3" );
+					expect( shown ).toInclude( "KEPT" );
+					expect( session.sent ).toHaveLength( 1 );
+					expect( session.sent[ 1 ] ).toInclude( "result of the function call `ucase( 'kept' )`" );
+					expect( session.sent[ 1 ] ).notToInclude( "SHOWN ONLY" );
+				} );
+
+				it( "shows structs and arrays a function returns as JSON", function() {
+					var screen = fakeScreen( [ "####listToArray( 'a,b' )" ] )
+					controllerFor( screen, fakeSession() ).run( screen )
+					var shown = printedBy( screen ).toList( "|" )
+					expect( shown ).toInclude( '"a"' );
+					expect( shown ).toInclude( '"b"' );
+				} );
+
+				it( "says why a call was refused, and sends nothing", function() {
+					var screen = fakeScreen( [ "##noSuchThing( 1 )", "##ucase( x )" ] )
+					var session = fakeSession()
+					controllerFor( screen, session ).run( screen )
+
+					expect( session.sent ).toBeEmpty();
+					var warn = screen.log.filter( e => e[ 1 ] == "print" && e[ 2 ] == "warn" ).map( e => e[ 3 ] )
+					expect( warn[ 1 ] ).toInclude( "There is no built-in function [noSuchThing]" );
+					expect( warn[ 2 ] ).toInclude( "[x] is not a value" );
+				} );
+
+				it( "sends a message that starts with a hash but is not a call, as a message", function() {
+					var screen = fakeScreen( [ "## A heading", "##hashtag", "##2 on the list" ] )
+					var session = fakeSession()
+					controllerFor( screen, session ).run( screen )
+					expect( session.sent ).toBe( [ "## A heading", "##hashtag", "##2 on the list" ] );
+				} );
+
+				it( "does nothing when the person has switched them off, and says where", function() {
+					var screen = fakeScreen( [ "!echo hi", "##ucase( 'a' )", "plain" ] )
+					var session = fakeSession()
+					controllerFor( screen, session, userConfig( false, false ) ).run( screen )
+
+					var warn = screen.log.filter( e => e[ 1 ] == "print" && e[ 2 ] == "warn" ).map( e => e[ 3 ] )
+					expect( warn[ 1 ] ).toInclude( "Shell commands are switched off in ~/.bxagents/bxAgents.yml" );
+					expect( warn[ 2 ] ).toInclude( "Function calls are switched off in ~/.bxagents/bxAgents.yml" );
+					expect( session.sent ).toBe( [ "plain" ] );
+				} );
+
+				it( "calls only the functions the person allows", function() {
+					var screen = fakeScreen( [ "####ucase( 'a' )", "####lcase( 'A' )" ] )
+					controllerFor( screen, fakeSession(), userConfig( true, [ "ucase" ] ) ).run( screen )
+					var shown = printedBy( screen )
+					expect( shown ).toInclude( "A" );
+					expect( shown.filter( p => p.find( "not one of the functions you allow" ) ) ).toHaveLength( 1 );
+				} );
+
+				it( "tells the person what is wrong with their file when the chat starts", function() {
+					var screen = fakeScreen( [] )
+					var broken = userConfig()
+					broken.problems = () => [ "~/.bxagents/bxAgents.yml: chat has an unknown key [shel]. Use: shell, bifs" ]
+					controllerFor( screen, fakeSession(), broken ).run( screen )
+					var warn = screen.log.filter( e => e[ 1 ] == "print" && e[ 2 ] == "warn" ).map( e => e[ 3 ] )
+					expect( warn[ 1 ] ).toInclude( "unknown key [shel]" );
+				} );
+
+				it( "counts what waits for the next message in /context and in the status bar", function() {
+					var screen = fakeScreen( [ "####ucase( 'a' )", "##ucase( 'attached text' )", "/context" ] )
+					var session = fakeSession()
+					session.report = { parts : [ { key : "system", label : "System prompt", tokens : 800, detail : "" } ], tools : [], mcpServers : 0, total : 800, contextWindow : 0, percent : 0 }
+					controllerFor( screen, session ).run( screen )
+
+					var shown = printedBy( screen )
+					expect( shown.filter( p => p.startsWith( "Attached" ) && p.find( "1 item" ) ) ).toHaveLength( 1 );
+					// before the attachment the bar says ~800; with it, a little more
+					expect( screen.statuses.first() ).toBe( "ctx ~800" );
+					expect( screen.statuses.last() ).notToBe( "ctx ~800" );
+				} );
+
 			} );
 
 			it( "says why a ping failed", function() {

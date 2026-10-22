@@ -590,6 +590,29 @@ Cuando el agente guarda [notas](conventions/agent-yaml.md#notas), el chat puede 
 
 El encabezado muestra cuántos caracteres del límite se usan y cuántos tokens aproximados añade a cada conversación. Funciona en los tres modos. Con `--connect` los comandos usan las rutas de notas del servidor, así que ves las notas de ese servidor, y quitar una nota del agente requiere un token `admin`. Un agente sin bloque `notes` explica cómo activarlas.
 
+#### Ejecutar cosas en tu máquina desde el chat
+
+Dos prefijos en la caja de mensaje ejecutan algo en **tu propia máquina**, nunca en un servidor, incluso cuando el chat habla con uno por `--connect`:
+
+| Escribe | Hace |
+|---|---|
+| `!comando` | Ejecuta un comando de shell (`sh -c`, o `cmd /c` en Windows) en la carpeta donde empezaste. Su salida (salida estándar y error juntas, cortada a 20.000 caracteres, detenida a los 60 segundos) se muestra y **acompaña a tu siguiente mensaje**, para que el agente vea lo que viste tú |
+| `!!comando` | Lo mismo, solo en pantalla |
+| `#funcion( argumentos )` | Llama a una función integrada de BoxLang, como `#dateFormat( now(), 'yyyy-mm-dd' )` o `#listLen( 'a,b,c' )`. El resultado se muestra (un struct o array como JSON) y acompaña al siguiente mensaje |
+| `##funcion( argumentos )` | Lo mismo, solo en pantalla |
+
+Tras `!` debe venir el comando de inmediato (`! hola` es un mensaje) y tras `#` una llamada (`# Un título` y `#hashtag` son mensajes). Una llamada es **solo** una llamada: como argumento, una cadena (`'..'` o `".."`), un número, `true`, `false`, `null`, un array, un struct o una llamada anidada, posicional o con nombre, y nada más. No hay variables, operadores, acceso con `.` ni sentencias, y un nombre que no sea una función integrada registrada se rechaza antes de ejecutar nada. Lo que espera al siguiente mensaje aparece en `/context` (como *Attached*) y en la barra de estado, y desaparece al enviar el mensaje.
+
+Puedes apagar o acotar ambos en un archivo que es tuyo y no de ningún proyecto, `~/.bxagents/bxAgents.yml` (`BXAGENTS_USER_CONFIG` indica otro archivo):
+
+```yaml
+chat:
+  shell: true        # false apaga !; o el shell a usar: "bash -c", "pwsh -Command"
+  bifs: true         # false apaga #; o las funciones permitidas: [ dateFormat, listLen ]
+```
+
+Si el archivo no existe, ambos están activados. Una clave que el archivo no conoce, o un valor de tipo equivocado, se informa al iniciar el chat en lugar de ignorarse.
+
 #### Grabar un chat
 
 `--record` guarda lo que muestra la pantalla como un archivo `.cast` de [asciicast](https://docs.asciinema.org/manual/asciicast/v2/), útil para demos e informes de errores. `--record` solo escribe `chat-AAAAMMDD-HHMMSS.cast` en la carpeta actual, y `--record=demo.cast` le da nombre. Dentro del chat, `/record` empieza una grabación (`/record demo.cast` le da nombre) y `/record stop` la termina. Mientras está activa se ve un `● rec` rojo en la línea de ayuda, y el archivo se cierra al salir.
