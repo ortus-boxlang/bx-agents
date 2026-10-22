@@ -262,6 +262,10 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   or Ctrl+V sends a picture (at most 4, 5 MB each, checked against the profile's `vision` key before sending). The web
   page has an Attach button and takes pasted and dropped pictures. `POST /__bxagents/events` and `/stream` accept
   `attachments`. Chat platforms do not take attachments yet.
+- The keys of the terminal chat are one list now. `?` alone or `/keys` shows them, with the action name of each,
+  and `chat: keys:` in `~/.bxagents/bxAgents.yml` changes any of them (`newline`, `stop`, `submit`, ...). A key that
+  is not readable or already taken is reported at start and the action keeps its default. The web page answers
+  `/keys` and `?` with its own shortcuts.
 
 #### The chat screen
 

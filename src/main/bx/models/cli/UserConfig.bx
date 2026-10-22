@@ -6,6 +6,9 @@
  *   chat:
  *     shell: true        # `!command` runs a shell command: true, false, or the shell to use ("bash -c")
  *     bifs: true         # `#bif( ... )` calls a BoxLang built-in function: true, false, or the names allowed
+ *     keys:              # replace the keys of an action; `/keys` lists the actions and their keys
+ *       newline: [ ctrl+j, alt+enter ]
+ *       stop: esc
  *
  * A missing file means the defaults. A key it does not know is reported (`problems()`), not ignored, so a
  * typo does not quietly leave a switch where the person thought it was.
@@ -13,7 +16,7 @@
 class {
 
 	static {
-		CHAT_KEYS = [ "shell", "bifs" ]
+		CHAT_KEYS = [ "shell", "bifs", "keys" ]
 	}
 
 	/**
@@ -39,6 +42,21 @@ class {
 		load()
 		var chat = isStruct( variables.data.chat ?: "" ) ? variables.data.chat : {}
 		return { shell : chat.shell ?: true, bifs : chat.bifs ?: true }
+	}
+
+	/**
+	 * @return { action : [ keys ] } the person's own keys, as written; empty for none. Whether each is sound is
+	 *         for the key map to say (ChatScreen.bindKeys).
+	 */
+	struct function keys() {
+		load()
+		var chat = isStruct( variables.data.chat ?: "" ) ? variables.data.chat : {}
+		var given = isStruct( chat.keys ?: "" ) ? chat.keys : {}
+		var out = {}
+		for ( var action in given ) {
+			out[ action ] = isArray( given[ action ] ) ? given[ action ] : ( isNull( given[ action ] ) || !len( given[ action ] ) ? [] : [ given[ action ] ] )
+		}
+		return out
 	}
 
 	/**
@@ -90,6 +108,9 @@ class {
 			}
 			if ( parsed.chat.keyExists( "shell" ) && !isSimpleValue( parsed.chat.shell ) ) {
 				variables.problems.append( "#variables.file#: chat.shell must be true, false or the shell to use" )
+			}
+			if ( parsed.chat.keyExists( "keys" ) && !isStruct( parsed.chat.keys ) ) {
+				variables.problems.append( "#variables.file#: chat.keys must be a mapping of action to key or list of keys" )
 			}
 			if ( parsed.chat.keyExists( "bifs" ) && !isSimpleValue( parsed.chat.bifs ) && !isArray( parsed.chat.bifs ) ) {
 				variables.problems.append( "#variables.file#: chat.bifs must be true, false or a list of function names" )
