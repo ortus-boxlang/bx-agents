@@ -1,13 +1,12 @@
 /**
  * Discovers a BX Agents project's convention-based source files (Build Pipeline Phase 2).
  *
- * Walks the project root and enumerates `models/`, `tools/`, `skills/`, `subagents/`,
+ * Walks the project root and enumerates `tools/`, `skills/`, `subagents/`,
  * `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `modules/` into raw
  * `{ name, path, type }` entries. This is discovery only - no validation or
  * interpretation of contents happens here (that's ProjectValidator, Phase 3).
  *
  * Conventions:
- *  - models/: one entry per top-level `.yaml`/`.yml`/`.json` file (or a legacy `.bx` class)
  *  - gateways/: one entry per top-level `.bx`/`.json` file
  *  - tools/, mcp/, interceptors/: one entry per `.bx` file (tools/ recurses,
  *    matching BX AI's own `aiToolRegistry().scan()` convention - actual tool
@@ -31,14 +30,13 @@ class {
 	/**
 	 * @projectRoot Absolute path to the project root
 	 *
-	 * @return { models, tools, skills, subagents, gateways, mcp, interceptors, modules, hasScheduler, schedulerPath } - each convention EXCEPT schedules/ is an array of { name, path, type }; schedules/ is instead the single hasScheduler/schedulerPath pair
+	 * @return { tools, skills, subagents, gateways, mcp, interceptors, modules, hasScheduler, schedulerPath } - each convention EXCEPT schedules/ is an array of { name, path, type }; schedules/ is instead the single hasScheduler/schedulerPath pair
 	 */
 	struct function discover( required string projectRoot ) {
 		var root = arguments.projectRoot.reReplace( "[\\/]+$", "" )
 		var scheduler = discoverScheduler( root )
 
 		return {
-			models        : listFiles( root & "/models", [ "bx", "json", "yaml", "yml" ], "model" ),
 			tools         : listFiles( root & "/tools", [ "bx" ], "tool", true ),
 			skills        : allSkills( root ),
 			subagents     : listSubfolders( root & "/subagents", "subagent" ),

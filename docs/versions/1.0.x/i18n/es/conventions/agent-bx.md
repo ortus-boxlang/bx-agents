@@ -86,7 +86,7 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 | Campo | Tipo | Notas |
 |---|---|---|
 | `name` | string | También se convierte en la clave de binding de `config/WireBox.bx` de este agente en tiempo de build (`getInstance( name )`) - ver [schedules/](schedules.md) - así que debe ser único en todo el proyecto (raíz + cada subagente); `build` falla si dos agentes comparten un nombre. |
-| `model` | string | Un slug `provider/model`, un nombre de proveedor bare, o un nombre que coincida con una entrada de [`models/`](models.md). Ver abajo. |
+| `model` | string | Un slug `provider/model` o un nombre de proveedor sin más. Un `profile` (ver [Modelos y perfiles](models.md)) puede sustituirlo. Ver abajo. |
 | `description` | string | Opcional. |
 | `subAgents` | array de strings | Nombres de carpetas hermanas bajo el `subagents/` del proyecto raíz. Ver [subagents/](subagents.md). |
 | `mcpServers` | array | Servidores MCP remotos - cada entrada es una cadena URL o `{ url, name }`. Ver [mcp/](mcp.md). |
@@ -107,7 +107,7 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 | `openrouter/anthropic/claude-x` | `openrouter` | `anthropic/claude-x` |
 | `mock/mock-model` | `mock` | `mock-model` |
 
-Si `model` no tiene ninguna `/` en absoluto, debe ser ya sea un nombre de proveedor central conocido o coincidir con el nombre de una entrada de [`models/`](models.md) - la validación rechaza cualquier otra cosa. Los proveedores centrales reconocidos son: `bedrock`, `cartesia`, `claude`, `cloudflare`, `cohere`, `deepseek`, `docker`, `elevenlabs`, `gemini`, `grok`, `groq`, `huggingface`, `minimax`, `mistral`, `mock`, `ollama`, `openai`, `openai-compatible`, `openrouter`, `perplexity`, `voyage` (mantenidos sincronizados con los propios `CORE_PROVIDERS` de bx-ai). `mock` es un proveedor real, útil para pruebas y CI - nunca hace una llamada de red.
+Si `model` no tiene ninguna `/` en absoluto, debe ser un nombre de proveedor central conocido (el modelo por defecto del proveedor) - la validación rechaza cualquier otra cosa. Los proveedores centrales reconocidos son: `bedrock`, `cartesia`, `claude`, `cloudflare`, `cohere`, `deepseek`, `docker`, `elevenlabs`, `gemini`, `grok`, `groq`, `huggingface`, `minimax`, `mistral`, `mock`, `ollama`, `openai`, `openai-compatible`, `openrouter`, `perplexity`, `voyage` (mantenidos sincronizados con los propios `CORE_PROVIDERS` de bx-ai). `mock` es un proveedor real, útil para pruebas y CI - nunca hace una llamada de red.
 
 Esta convención de división de slug es por la que pasa un `model` de tipo string declarado en `configure()` - el propio argumento `model` de `super.init()` en cambio toma directamente una instancia real de `AiModel` (`aiModel( provider: "...", params: { model: "..." } )`), ya que la clase ya habla la propia API de bx-ai.
 

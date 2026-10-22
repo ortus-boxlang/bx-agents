@@ -1,69 +1,35 @@
 ---
-title: "Lección 12: Configuraciones de modelo con nombre"
+title: "Lección 12: Modelos y perfiles"
 icon: phosphor-duotone:brain
-summary: Configuraciones de modelo reutilizables y con nombre, referenciadas desde Agent.yaml por su nombre.
-description: Configuraciones de modelo reutilizables y con nombre, referenciadas desde Agent.yaml por su nombre.
-tags: [course, conventions, models]
+summary: Elige el modelo por defecto, configura otros proveedores y da nombre a combinaciones como fast y planner, todo en Agent.yaml.
+description: Elige el modelo por defecto, configura otros proveedores y da nombre a combinaciones como fast y planner, todo en Agent.yaml.
+tags: [course, conventions, models, profiles]
 ---
 
-# Configuraciones de modelo con nombre
+# Modelos y perfiles
 
-`models/` te permite definir configuraciones de modelo reutilizables y con nombre, una por
-archivo YAML o JSON, referenciadas desde el campo `model` de `Agent.yaml` por su nombre (sin
-`/`, para que no se confunda con un slug `provider/model` - consulta la
-[Lección 5](05-agent-bx.md)).
+Ya eliges un modelo con un slug, `model: openai/gpt-5` ([Lección 5](05-agent-bx.md)). Cuando quieres más de un modelo en el mismo proyecto, les pones nombre: un **perfil** es un proveedor, un modelo y algunos ajustes bajo un nombre como `fast` o `planner`. Todo vive en `Agent.yaml`; nunca escribes un `boxlang.json`.
 
 ```yaml
-# models/summarizer.yaml
 provider: openai
-model: gpt-5-mini
-params:
-  temperature: 0.2
+model: gpt-5
+params: { temperature: 0.2 }
+
+profiles:
+  fast:    { description: Barato y rápido, provider: openai, model: gpt-5-mini, params: { temperature: 0 } }
+  planner: { description: Planificación cuidadosa, provider: claude, model: claude-opus-4, apiKeyEnv: ANTHROPIC_API_KEY }
 ```
 
-```yaml
-# Agent.yaml
-model: summarizer   # se resuelve contra models/summarizer.yaml
-```
+Un subagente elige uno con `profile:`; un agente que no dice nada usa el valor por defecto. Un perfil no puede llamarse `default` ni como un proveedor, y una clave nunca se escribe en el archivo: `apiKeyEnv` nombra la variable de entorno que la guarda.
 
-## ¿Por qué molestarse con una configuración con nombre en vez de escribir el slug?
+## Para qué sirve
 
-Un slug `provider/model` basta para la mayoría de los agentes - ya lo viste en la
-[Lección 5](05-agent-bx.md). Recurre a `models/` cuando la misma configuración se comparta
-entre varios agentes o subagentes (por ejemplo, un modelo más barato que usa todo tu árbol de
-`subagents/` para enrutar), o cuando la configuración lleve algo más que un nombre de
-proveedor y de modelo y no quieras repetirla.
-
-## Reglas de descubrimiento
-
-- Una entrada por archivo `.yaml`, `.yml` o `.json` de primer nivel directamente bajo `models/` - no es
-  recursivo. (Una clase `.bx` que devuelva el mismo struct sigue funcionando.)
-- El nombre de la entrada es el nombre base del archivo (`summarizer.yaml` pasa a ser
-  `summarizer`).
-- Se ignoran los archivos ocultos y las extensiones no reconocidas (como un `README.md` que
-  dejes con tus propias notas).
-- Dos archivos que resuelvan al mismo nombre fallan la validación con un error de nombre
-  duplicado.
-
-## Validación
-
-Si el `model` de `Agent.yaml` no lleva `/`, debe ser **o bien** el nombre de un proveedor
-principal conocido (`openai`, `bedrock`, `claude`, `gemini`, `mock`, y otros - consulta
-[el slug de modelo](../conventions/agent-bx.md#the-model-slug)) **o bien** coincidir con el nombre de
-una entrada de `models/`. Cualquier otra cosa falla la validación con un error claro del tipo
-"no hay proveedor y no coincide con ninguna entrada de models/" - una errata aquí se detecta
-en tiempo de `build`, y no se deja para que aparezca más tarde como un confuso error de
-ejecución.
+Un slug basta para la mayoría de los agentes. Recurre a los perfiles cuando varios agentes comparten una configuración (un modelo más barato que usan tus subagentes de enrutamiento), o cuando un modelo necesita ajustes que no quieres repetir.
 
 ## Pruébalo
 
-Ejecuta `bxAgents add model fast` (o escribe un `models/fast.yaml`) que apunte a un modelo más pequeño o barato que el
-predeterminado de tu agente raíz, y después referencia `model: "fast"` desde el `Agent.yaml`
-de un subagente - encaja de forma natural con el subagente investigador de la
-[Lección 11](11-composing-subagents.md), que probablemente no necesita tu modelo más grande
-para hacer su trabajo.
+Añade un perfil `fast` que apunte a un modelo más pequeño que el de tu agente raíz, y dale a un subagente `profile: fast`, algo natural para el investigador de la [Lección 11](11-composing-subagents.md). Ejecuta `bxAgents inspect --section=ai` para ver el valor por defecto, los proveedores y los perfiles, y de qué variable sale cada clave.
 
-Además de `provider` y `model`, una entrada puede llevar `params` (como `temperature`), `options` y
-`apiKeyEnvVar` - el nombre de una variable de entorno de la que leer su clave. Referencia completa: [models/](../conventions/models.md).
+Referencia completa: [Modelos y perfiles](../conventions/models.md).
 
 Siguiente: [Lección 13 - Exponer tu agente por HTTP y MCP](13-exposing-http-and-mcp.md)

@@ -46,7 +46,7 @@ class {
 	 * @mcpRegistrations Bare `mcpServer( ... ).registerTool( ... )` statement strings (see McpGenerator), inserted into Application.bx's onApplicationStart()
 	 * @extraStartupStatements Any other bare statement strings to insert into Application.bx's onApplicationStart(), e.g. `aiToolRegistry().scan( "tools" )` (see BuildPipeline)
 	 * @cliEnvironment Optional environment name the build was invoked with (e.g. from `--environment`), re-applied when resolving each subagent's OWN config so a subagent's environment-specific overrides match the same environment the root project was built for, rather than silently falling back to each subagent's default environment
-	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .models is used, to resolve a bare `model` value against a `models/` entry - see resolveModelReference()). Subagents have no `models/` folder of their own; every node resolves against the ROOT project's models/, matching the flat-namespace design already used for subAgents references (see docs/conventions/subagents.md)
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (no longer used for models: a node's model comes from its own config, its profile, or the root's defaults)
 	 * @hasEmailGateway Whether the project has at least one `type: "email"` gateway (see GatewayGenerator) - when true, `moduleSettings.cbmailservices` is generated so `EmailGateway`'s `MailService@cbmailservices` resolution has a real `BXMail`-protocol mailer configured. cbmailservices/bx-mail themselves are server-level module installs (see box.json `dependencies`), not something this generator installs
 	 * @hasWebUi Whether the project has a `gateways/*` entry with `exposes: "webui"` (see WebUiGenerator) - when true, session management/a datasource for the chat store are wired into config/ColdBox.bx and Application.bx
 	 * @webUiDatabase The web UI's resolved database config (`{ datasource, path }` - see WebUiGenerator) - only meaningful when `hasWebUi` is true
@@ -143,7 +143,8 @@ class {
 				databasePath       : database.path ?: ""
 			)
 		)
-		fileWrite( coldboxPath, renderColdboxConfig( appName, arguments.resolvedConfig.security ?: {}, arguments.hasEmailGateway, database.datasource ?: "" ) )
+		fileWrite( coldboxPath, renderColdboxConfig( appName, arguments.hasEmailGateway, database.datasource ?: "" ) )
+		fileWrite( appDir & "/config/bxai-settings.json", jsonSerialize( bxaiSettings( arguments.resolvedConfig ) ) )
 		fileWrite( wireboxPath, renderWireBox( agentFactory.nodes ) )
 		fileWrite( agentFactoryPath, agentFactory.source )
 
@@ -275,6 +276,9 @@ class {
 		// FIRST arg (silently becoming COLDBOX_CONFIG_FILE), breaking config
 		// loading the moment a real ColdBox boot exercised it. Confirmed
 		// against real coldbox.system.Bootstrap source this session.
+		// bx-ai's settings first: the agents are built while ColdBox loads, and a profile has to
+		// exist by then (see models/runtime/ModuleSettings)
+		lines.append( '		new "models.runtime.ModuleSettings@bxagents"().apply( "bxai", getDirectoryFromPath( getCurrentTemplatePath() ) & "config/bxai-settings.json" )' )
 		lines.append( "		application.cbBootstrap = new coldbox.system.Bootstrap(" )
 		lines.append( "			COLDBOX_CONFIG_FILE   = COLDBOX_CONFIG_MAPPING," )
 		lines.append( "			COLDBOX_APP_ROOT_PATH = COLDBOX_APP_ROOT_PATH," )
@@ -318,13 +322,12 @@ class {
 
 	/**
 	 * @appName The agent's name, stamped into ColdBox's own `coldbox.appName` setting
-	 * @security The resolved config's own `security` block, forwarded verbatim into bx-ai's `moduleSettings.bxai.security` (passthrough only - see M8.5)
 	 * @hasEmailGateway Whether to also generate `moduleSettings.cbmailservices` (see generate()'s own docblock)
 	 * @webUiDatasource The web UI's SQLite datasource name, or "" - when set, pins qb's grammar and default datasource
 	 *
 	 * @return The rendered config/ColdBox.bx source
 	 */
-	private string function renderColdboxConfig( required string appName, struct security = {}, boolean hasEmailGateway = false, string webUiDatasource = "" ) {
+	private string function renderColdboxConfig( required string appName, boolean hasEmailGateway = false, string webUiDatasource = "" ) {
 		var lines = [
 			"class {",
 			"",
@@ -353,22 +356,14 @@ class {
 		// - see renderInterceptorRegistration() and generate()'s own assembly of
 		// startupStatements.
 
-		// bx-ai's own skillsDirectory setting defaults to "/.agents/skills" - a
-		// DIFFERENT path than BX Agents' own skills/ convention (copied verbatim
-		// by ToolsSkillsCopier, M6), so it must always be pointed at "/skills"
-		// or bx-ai would never find them. security (if any) is forwarded
-		// verbatim in the same block - bx-ai's own SecurityDirector.buildGlobalMiddleware()
-		// turns it into middleware automatically (decision: passthrough only,
-		// no new guardrails/ convention folder for v1 - see the build plan's M8.5).
-		var bxaiSettings = { skillsDirectory : "/skills" }
-		if ( arguments.security.count() ) {
-			bxaiSettings[ "security" ] = arguments.security
-		}
+		// bx-ai's own settings are NOT written here: ColdBox's moduleSettings only reaches
+		// modules ColdBox loads, and bx-ai is a BoxLang module (measured, see
+		// models/runtime/ModuleSettings). They go to config/bxai-settings.json instead.
 		// Each module's settings are collected as a block of lines, then joined
 		// with commas below. Doing it this way rather than having each block
 		// decide its own trailing comma from what MIGHT follow it means adding a
 		// module can't silently produce a dangling comma or a missing one.
-		var settingBlocks = [ [ "			bxai : #renderLiteral( bxaiSettings )#" ] ]
+		var settingBlocks = []
 
 		// The `BXMail` protocol (cbmailservices' own dispatch to bx-mail's
 		// `bx:mail` component - see EmailGateway.bx / docs/conventions/gateways/email.md)
@@ -676,7 +671,7 @@ class {
 	 * @appDir Absolute path to the generated ColdBox app dir - its own `tools/` subfolder is loaded
 	 * @resolvedConfig The root project's resolved config
 	 * @cliEnvironment Optional environment name the build was invoked with, re-applied to every subagent's own config resolution
-	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .models is used)
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (not used for models)
 	 *
 	 * @return { source: the rendered agent/GeneratedAgentFactory.bx source, nodes: every agent node in the tree - see buildAgentTree() }
 	 */
@@ -785,7 +780,7 @@ class {
 	 * @resolvedConfig THIS node's own resolved config
 	 * @varName The BoxLang variable name to assign this node's built `aiAgent()` to, e.g. "agent" or "subagent_foo"
 	 * @cliEnvironment Optional environment name the build was invoked with, re-applied to every subagent's own config resolution
-	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .models is used), shared by every node
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (not used for models), shared by every node
 	 * @accessorPath The ordered list of getSubAgent() names needed to reach THIS node from the root singleton - empty for the initial (root) call
 	 * @nodeRelativePath THIS node's own directory expressed RELATIVE to the root project root - "" for the root itself, "subagents/<name>" for every subagent (flat, per the DAG model above, so it is never nested any deeper than that). Used to mirror the node into the generated app, so its instructions.md is copied to a matching place under `<appDir>/agent/` - see copyNodeInstructions()
 	 * @defaultMemory The build's own default memory `type` (e.g. "session"), used by renderMemoryExpression() when THIS node's own resolvedConfig declares no `memory` block of its own - passed through unchanged to every descendant call
@@ -1016,18 +1011,14 @@ class {
 			)
 		}
 
-		var modelSlug = arguments.resolvedConfig.model ?: ""
-		if ( !len( modelSlug ) ) {
-			throw(
-				type    = "BxAgents.MissingModel",
-				message = "Agent at [#arguments.nodePath#] has no model configured"
-			)
-		}
-
-		var parsedModel = resolveModelReference( modelSlug, arguments.discovery, arguments.nodePath )
 		var description = arguments.resolvedConfig.description ?: ""
 
-		var modelExpression = renderModelExpression( parsedModel )
+		// A profile, else the provider/model written in this node's own config, else what the
+		// root Agent.yaml set as the default (a subagent that says nothing inherits it)
+		var modelExpression = renderModelExpression( arguments.resolvedConfig )
+		if ( !len( modelExpression ) ) {
+			modelExpression = "aiModel()"
+		}
 
 		var checkpointerExpression = renderCheckpointerExpression( arguments.resolvedConfig )
 		var memoryExpression = renderMemoryExpression( arguments.resolvedConfig, arguments.defaultMemory )
@@ -1147,10 +1138,8 @@ class {
 
 		// model is optional here too - no MissingModel throw, since the class
 		// already has one from its own super.init().
-		var modelSlug = arguments.resolvedConfig.model ?: ""
-		if ( len( modelSlug ) ) {
-			var parsedModel = resolveModelReference( modelSlug, arguments.discovery, arguments.nodePath )
-			var modelExpression = renderModelExpression( parsedModel )
+		var modelExpression = renderModelExpression( arguments.resolvedConfig )
+		if ( len( modelExpression ) ) {
 			lines.append( "#arguments.varName#.setModel( #modelExpression# )" )
 		}
 
@@ -1362,93 +1351,36 @@ class {
 	// --------------------------------------------------------------------------
 
 	/**
-	 * Resolves a node's `model` value (already validated by ProjectValidator's
-	 * validateModelProvider(), a permissive check happy with ANY of the 3
-	 * shapes below) into a concrete `{ provider, model }` pair -
-	 * `model` is `""` when only a provider was given, meaning "use that
-	 * provider's own default model" (aiModel() supports omitting `params.model`
-	 * entirely - see bx-ai's aiModel.bif docblock).
+	 * What the app tells bx-ai: where the skills are, `security` (passed through, bx-ai builds the
+	 * middleware), and the provider, default params, providers, profiles and capability defaults
+	 * from the root Agent.yaml. Subagents inherit them because bx-ai's settings are global.
 	 *
-	 * A real bug this closed: this used to call `modelSlugParser.parse()`
-	 * directly with no `defaultProvider`, which only handles shape 1 below -
-	 * both a bare provider name and a `models/` entry name (shapes 2 and 3,
-	 * both explicitly validated as legal by ProjectValidator and documented
-	 * in docs/conventions/models.md) threw `BxAgents.InvalidModelSlug` here,
-	 * crashing generation on a project that had already passed validation
-	 * cleanly.
+	 * @resolvedConfig The root resolved config
 	 *
-	 *   1. "openai/gpt-5"  -> already a full provider/model slug
-	 *   2. "openai"        -> a bare CORE_PROVIDERS name, no models/ lookup needed
-	 *   3. "summarizer"    -> a models/summarizer.yaml|.json entry's OWN
-	 *                         { provider, model } struct is read and used
-	 *
-	 * @modelSlug The node's own resolvedConfig.model value
-	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .models is used)
-	 * @nodePath Absolute path to this node's own directory, for error message context
-	 *
-	 * @return { provider, model } - model is "" when only a bare provider name was given
+	 * @return The settings struct written to config/bxai-settings.json
 	 */
-	private struct function resolveModelReference( required string modelSlug, required struct discovery, required string nodePath ) {
-		if ( arguments.modelSlug.find( "/" ) ) {
-			return variables.modelSlugParser.parse( arguments.modelSlug )
+	private struct function bxaiSettings( required struct resolvedConfig ) {
+		var settings = { skillsDirectory : "/skills" }
+		settings.append( new "models.build.AiSettings@bxagents"().settings( arguments.resolvedConfig ) )
+		if ( ( arguments.resolvedConfig.security ?: {} ).count() ) {
+			settings[ "security" ] = arguments.resolvedConfig.security
 		}
-
-		if ( variables.modelSlugParser.isKnownProvider( arguments.modelSlug ) ) {
-			return { provider : arguments.modelSlug, model : "" }
-		}
-
-		var modelsEntries = arguments.discovery.models ?: []
-		var match = modelsEntries.filter( function( m ) { return m.name == modelSlug } )
-		if ( !match.len() ) {
-			throw(
-				type    = "BxAgents.InvalidModelSlug",
-				message = "Agent at [#arguments.nodePath#] has model [#arguments.modelSlug#] which is neither a known provider nor a models/ entry"
-			)
-		}
-
-		var entryConfig = readModelEntryConfig( match[ 1 ].path )
-		if ( isNull( entryConfig ) ) {
-			throw(
-				type    = "BxAgents.InvalidModelSlug",
-				message = "models/ entry [#arguments.modelSlug#] (referenced from [#arguments.nodePath#]) could not be read"
-			)
-		}
-
-		var resolved = new "models.build.NamedModels@bxagents"().resolve( entryConfig )
-		if ( !len( resolved.provider ) ) {
-			throw(
-				type    = "BxAgents.InvalidModelSlug",
-				message = "models/ entry [#arguments.modelSlug#] (referenced from [#arguments.nodePath#]) has no 'provider'"
-			)
-		}
-
-		// provider, model, and the entry's params / options / apiKeyEnvVar
-		return resolved
+		return settings
 	}
 
 	/**
-	 * The `aiModel(...)` call for a resolved model. A plain slug gives just a provider and a
-	 * model; a models/ entry also carries its params, options and API key variable.
+	 * The `aiModel(...)` call for a node: its profile, else its provider/model slug.
 	 *
-	 * @parsedModel { provider, model } or a full NamedModels.resolve() struct
+	 * @resolvedConfig The node's resolved config
 	 *
-	 * @return BoxLang source
+	 * @return BoxLang source, or an empty string when the node does not say
 	 */
-	private string function renderModelExpression( required struct parsedModel ) {
-		return new "models.build.NamedModels@bxagents"().expression(
-			arguments.parsedModel,
+	private string function renderModelExpression( required struct resolvedConfig ) {
+		return new "models.build.AiSettings@bxagents"().expression(
+			arguments.resolvedConfig,
 			( value ) => renderLiteral( value ),
 			( text ) => bxLiteral( text )
 		)
-	}
-
-	/**
-	 * @path Absolute path to a `models/*` entry's `.yaml`, `.json` or `.bx` file
-	 *
-	 * @return The entry's config struct, or null if it could not be read
-	 */
-	private any function readModelEntryConfig( required string path ) {
-		return new "models.build.NamedModels@bxagents"().read( arguments.path )
 	}
 
 	/**

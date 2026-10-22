@@ -32,7 +32,7 @@ flowchart LR
 ## Las carpetas son la API
 
 `Agent.yaml` e `instructions.md` son los únicos archivos que importan para empezar. Cualquier
-otra carpeta de convención - `tools/`, `skills/`, `subagents/`, `models/`, `gateways/`,
+otra carpeta de convención - `tools/`, `skills/`, `subagents/`, `gateways/`,
 `schedules/`, `mcp/`, `interceptors/`, `modules/` - es opcional y **solo da forma a la salida
 generada si existe y tiene contenido**. Añades convenciones a medida que realmente las
 necesitas, no por adelantado.
@@ -62,7 +62,6 @@ your-agent/
 ├── tools/
 ├── skills/
 ├── subagents/
-├── models/
 ├── gateways/
 ├── schedules/
 ├── mcp/

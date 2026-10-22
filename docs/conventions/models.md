@@ -1,56 +1,75 @@
 ---
-title: models/
+title: Models and profiles
 icon: phosphor-duotone:brain
-summary: Reusable named model configurations, referenced from Agent.yaml by name.
-description: Reusable named model configurations, referenced from Agent.yaml by name.
-tags: [conventions, models]
+summary: The default model, other providers, named profiles and the capability defaults, all in Agent.yaml.
+description: The default model, other providers, named profiles and the capability defaults, all in Agent.yaml.
+tags: [conventions, models, profiles]
 ---
 
-# models/
+# Models and profiles
 
-`models/` holds reusable, named model configurations, one YAML or JSON file each: a provider, a model and the settings that go with them. An agent uses one by writing its name as `model` (with no `/`, so it isn't mistaken for a `provider/model` slug). Think `researcher`, `coder`, `summarizer`: the same configuration shared by several agents and subagents, written once.
-
-```yaml
-# models/researcher.yaml
-description: Cheap, careful model for research
-provider: openai
-model: gpt-5-mini
-params:
-  temperature: 0.2
-  max_tokens: 2000
-```
+Which model an agent uses is written in `Agent.yaml`. The build maps it onto bx-ai's settings, so you never write a `boxlang.json` for it. The names are bx-ai's own: `provider`, `model`, `params`, `options`, `providers`, `profiles`.
 
 ```yaml
-# Agent.yaml - resolves against models/researcher.yaml
-name: my-agent
-model: researcher
+provider: openai                 # the default model
+model: gpt-5
+params: { temperature: 0.2 }
+
+providers:                       # settings for another provider
+  claude: { params: { max_tokens: 4000 }, options: { timeout: 90 } }
+
+profiles:                        # named combinations
+  fast:    { description: Cheap and quick, provider: openai, model: gpt-5-mini, params: { temperature: 0 } }
+  planner: { description: Careful planning, provider: claude, model: claude-opus-4, apiKeyEnv: ANTHROPIC_API_KEY }
+defaultProfile: fast             # optional
+
+embeddings:    { provider: openai, model: text-embedding-3-small }
+speech:        { provider: openai, model: tts-1, voice: nova }
+transcription: { provider: openai, model: whisper-1 }
+image:         { provider: openai, model: gpt-image-1, size: 1024x1024 }
 ```
 
-## What an entry can say
+## The default model
+
+`provider`, `model` and `params` are the model every agent uses when it says nothing else. `model: openai/gpt-5` still works as shorthand for `provider: openai` plus `model: gpt-5`. `params` are request parameters such as `temperature` and `max_tokens`. `options` (timeout and similar) apply to the default provider.
+
+## Other providers
+
+`providers` holds `params` and `options` for a provider by name, for the ones you use through a profile or a subagent. The key for each provider is read from its usual environment variable (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, ...); `bxAgents doctor` tells you when one is missing.
+
+## Profiles
+
+A profile is a named combination: a provider, a model, params, options and the name of the environment variable that holds its key. It can carry a `description`.
 
 | Key | Meaning |
 |---|---|
-| `provider` | Required. A provider bx-ai knows: see [the model slug](agent-bx.md#the-model-slug). |
-| `model` | The provider's model. Left out, the provider's own default applies. |
-| `description` | For people. |
-| `apiKeyEnvVar` | The **name** of an environment variable to read the key from, instead of the provider's usual one (`OPENAI_API_KEY`). Use it when two models of one provider need different keys. The key itself is never written in the file, and a missing variable stops the agent at start and names it. |
-| `params` | A mapping sent with every request: `temperature`, `max_tokens`, anything the provider takes. |
-| `options` | A mapping of bx-ai model options such as `timeout` or `logRequest`. |
+| `description` | For people and the terminal and web pickers. |
+| `provider`, `model` | What it runs on. A profile without a provider uses the default provider. |
+| `params`, `options` | Layered on top of the provider's and the default's: `params` from the default, then the provider, then the profile. |
+| `apiKeyEnv` | The **name** of the variable that holds the key. A key itself is never written in `Agent.yaml`; a profile that has one is refused. |
 
-An unknown key, a `params` that is not a mapping, an unknown provider, and an `apiKey` written into `params` or `options` all fail `build` with the entry's name.
+A profile cannot be named `default` or like a provider (`openai`, `claude`, ...), because both are selected by name. `defaultProfile` picks which profile is used when nothing asks for another one.
 
-`bxAgents add model` writes one for you: see [`add`](../cli-reference.md#add-model).
+## Which agent uses what
 
-A `.bx` class returning the same struct from `configure()` also still works, for projects that have one; YAML and JSON are what new entries use.
+An agent uses its own `profile:`, else its own `model:` (a `provider/model` slug), else the default. Every subagent inherits the root's settings, and may set its own `model` or `profile`:
 
-## Discovery rules
+```yaml
+# subagents/planner/Agent.yaml
+name: planner
+profile: planner
+```
 
-- One entry per top-level `.yaml`, `.yml` or `.json` file directly under `models/` (not recursive), or a legacy `.bx` class.
-- The entry name is the file's base name (`researcher.yaml` → `researcher`).
-- A name that is also a provider (`openai`, `claude`, ...) would be read as the provider itself, so `add model` refuses it.
-- Dotfiles and files with an unrecognized extension (like a `README.md` left in the folder for your own notes) are ignored.
-- Two files resolving to the same name fail validation with a duplicate-name error.
+`providers`, `profiles`, `defaultProfile`, `params` and the capability keys apply to the whole app, so they belong in the project's own `Agent.yaml`; a subagent that sets them fails validation.
 
-## Validation
+## Capability defaults
 
-If the agent's `model` has no `/`, it must be **either** a known core provider name (see [the model slug](agent-bx.md#the-model-slug)) **or** match a `models/` entry's name - anything else fails validation with a clear "no provider and does not match any models/ entry" error.
+`embeddings`, `speech`, `transcription` and `image` set bx-ai's defaults for `aiEmbed()`, `aiSpeak()`, `aiTranscribe()` and `aiImage()`. They do not take profiles. bx-ai has one audio provider, so `speech` and `transcription` must name the same one.
+
+## Validation and tests
+
+`bxAgents build` checks all of the above by bx-ai's own rules and names the file and the key. Under `bxAgents test` every profile runs on the `mock` provider, so a test never reaches the network.
+
+## How it reaches bx-ai
+
+The build writes the settings to `config/bxai-settings.json` in the app, and the app merges them into bx-ai's settings when it starts, before ColdBox boots and builds the agents. They travel with the app wherever it runs (`serve`, a `.bxa`, a container).

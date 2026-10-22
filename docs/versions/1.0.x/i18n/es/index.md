@@ -141,7 +141,6 @@ your-agent/
 ├── tools/             # funciones @AITool
 ├── skills/            # capacidades SKILL.md
 ├── subagents/         # árboles de agentes anidados
-├── models/            # configuraciones de modelo con nombre
 ├── gateways/          # exposición HTTP/MCP/chat
 ├── schedules/         # un scheduler ColdBox real
 ├── mcp/               # servidores MCP que alojas
