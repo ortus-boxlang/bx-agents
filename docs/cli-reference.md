@@ -494,7 +494,7 @@ In the screen:
 | Enter while the agent works | Steer it: your message is added to the run |
 | Ctrl+C | Clear the box; on an empty box, leave. Ctrl+D leaves too |
 
-Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/save [file]` (the conversation as Markdown), `/sessions`, `/resume`, `/clear`, `/compact` and `/info` (see below), `/remember <text>` and `/notes` (see below), `/record [file]` and `/record stop` (see below) and `/exit`.
+Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/save [file]` (the conversation as Markdown), `/sessions`, `/resume`, `/clear`, `/compact` and `/info` (see below), `/model`, `/profile` and `/default` (see below), `/remember <text>` and `/notes` (see below), `/record [file]` and `/record stop` (see below) and `/exit`.
 
 #### Conversations in the chat
 
@@ -510,6 +510,19 @@ Every chat is a conversation, listed in the project's [shared chat database](con
 | `/info` | Agent, model, conversation, message count, notes and database |
 
 `--continue` opens the most recent conversation when the chat starts, and `--session=<number or id>` opens a particular one. Both show the earlier messages first. Over `--connect` the server keeps the list and the messages, under the name of your [token](conventions/agent-bx.md#access-tokens-for-a-deployed-agent); a server without a chat database says it keeps no list.
+
+#### Models in the chat
+
+The chat can change the model it talks to without losing the conversation: the memory, tools, sub-agents and instructions stay, only the model is replaced. It lists the [profiles](conventions/models.md#profiles) of the project.
+
+| Command | Does |
+|---|---|
+| `/model` | Show the model in use (`provider/model`) and its profile |
+| `/profile` | Pick a profile from a list: its provider and model, its description, which is the default and which is in use |
+| `/profile <name>` | Switch straight to one. A profile whose provider has no key set is switched to with a warning, since the next message would fail |
+| `/default` | Go back to the app's default: the `defaultProfile`, else the provider and model at the top of `Agent.yaml` |
+
+A chat on `--connect` or `--server` talks to the model the server runs, so these commands say so and change nothing. There is no `/provider`: a profile already names its provider, and the providers' own settings are in `Agent.yaml` (see [`add provider`](#add-provider)).
 
 #### Notes in the chat
 

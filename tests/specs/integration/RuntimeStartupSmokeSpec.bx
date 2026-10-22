@@ -77,6 +77,29 @@ class extends="testbox.system.BaseSpec" {
 				expect( len( response ) ).toBeGT( 0 );
 			} );
 
+			it( "puts the project's profiles into bx-ai before it builds the agent, so chat and invoke see them", function() {
+				var projectRoot = createTempDirectory( prefix = "bxagents-e2e-" );
+				tempDirs.append( projectRoot );
+				var nl = char( 10 );
+				fileWrite( projectRoot & "/Agent.yaml", "name: profiled" & nl & "defaultProfile: fast" & nl & "profiles:" & nl
+					& "  fast:" & nl & "    description: Quick" & nl & "    provider: mock" & nl & "    model: fast-model" & nl );
+				fileWrite( projectRoot & "/instructions.md", "Be helpful." );
+				var settings = getModuleInfo( "bxai" ).settings;
+				var saved = { profiles : settings.profiles ?: {}, defaultProfile : settings.defaultProfile ?: "" };
+
+				try {
+					var result = pipeline.build( projectRoot );
+					var agent = loadFactory( result.appDir ).buildAgent();
+
+					expect( aiProfiles().map( p => p.name ) ).toInclude( "fast" );
+					expect( agent.getConfig().profile ).toBe( "fast" );
+					expect( agent.run( "Hello there!" ) ).notToBeEmpty();
+				} finally {
+					settings.profiles = saved.profiles;
+					settings.defaultProfile = saved.defaultProfile;
+				}
+			} );
+
 			it( "resolves a model provider's API key from an env var at runtime only - it never appears in the packaged .bxa", function() {
 				var projectRoot = newTempProject( "full-project" );
 				var envVarName = "OPENAI_API_KEY";

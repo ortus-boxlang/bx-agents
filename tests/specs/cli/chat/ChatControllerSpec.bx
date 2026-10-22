@@ -60,6 +60,25 @@ class extends="testbox.system.BaseSpec" {
 				q.modelName = () => "claude"
 				q.mode = () => "in-process"
 				q.tools = () => [ "now", "httpGet" ]
+				q.profileList = [
+					{ name : "default", description : "", provider : "openai", model : "gpt-5", hasApiKey : true, isDefault : true, isCurrent : true },
+					{ name : "fast", description : "Cheap and quick", provider : "openai", model : "gpt-5-mini", hasApiKey : true, isDefault : false, isCurrent : false },
+					{ name : "planner", description : "", provider : "claude", model : "claude-opus-4", hasApiKey : false, isDefault : false, isCurrent : false }
+				]
+				q.switchOk = true
+				q.used = []
+				q.modelInfo = () => { model : "openai/gpt-5", profile : "default", provider : "openai" }
+				q.switchable = () => q.switchOk ? { ok : true, reason : "" } : { ok : false, reason : "No switching here." }
+				q.profiles = () => q.profileList
+				q.useProfile = ( name ) => {
+					var found = q.profileList.filter( p => p.name == name )
+					if ( !found.len() ) {
+						return { ok : false, reason : "There is no profile [" & name & "]." }
+					}
+					q.used.append( name )
+					return { ok : true, profile : name, provider : found[ 1 ].provider, model : found[ 1 ].provider & "/" & found[ 1 ].model, hasApiKey : found[ 1 ].hasApiKey }
+				}
+				q.useDefault = () => q.useProfile( "default" )
 				q.newThread = () => { q.newThreads++ }
 				q.close = () => {}
 				q.send = ( text, hooks ) => {
@@ -123,6 +142,76 @@ class extends="testbox.system.BaseSpec" {
 				var printed = screen.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] )
 				expect( printed.some( p => p.startsWith( "/save" ) ) ).toBeTrue();
 				expect( printed.last() ).toInclude( "Unknown command /nope" );
+			} );
+
+			describe( "model commands", function() {
+
+				it( "shows the model in use on /model", function() {
+					var screen = fakeScreen( [ "/model" ] )
+					controllerFor( screen, fakeSession() ).run( screen )
+
+					var printed = screen.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] )
+					expect( printed[ 1 ] ).toInclude( "openai/gpt-5" );
+					expect( printed.some( p => p.startsWith( "Profile: default" ) ) ).toBeTrue();
+				} );
+
+				it( "offers the profiles on /profile and switches to the one picked", function() {
+					var screen = fakeScreen( [ "/profile" ], "fast" )
+					var session = fakeSession()
+					controllerFor( screen, session ).run( screen )
+
+					var asked = screen.log.filter( e => e[ 1 ] == "choose" )
+					expect( asked ).toHaveLength( 1 );
+					expect( asked[ 1 ][ 4 ] ).toBe( [ "default", "fast", "planner" ] );
+					expect( session.used ).toBe( [ "fast" ] );
+					expect( screen.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] ).last() ).toInclude( "Now using fast (openai/gpt-5-mini)" );
+				} );
+
+				it( "switches straight to a named profile and warns when its key is missing", function() {
+					var screen = fakeScreen( [ "/profile planner" ] )
+					var session = fakeSession()
+					controllerFor( screen, session ).run( screen )
+
+					var printed = screen.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] )
+					expect( session.used ).toBe( [ "planner" ] );
+					expect( screen.log.filter( e => e[ 1 ] == "choose" ) ).toBeEmpty();
+					expect( printed.last() ).toInclude( "No API key was found for claude" );
+				} );
+
+				it( "changes nothing when the picker is dismissed or the profile is unknown", function() {
+					var screen = fakeScreen( [ "/profile", "/profile nope" ], nullValue() )
+					var session = fakeSession()
+					controllerFor( screen, session ).run( screen )
+
+					expect( session.used ).toBeEmpty();
+					expect( screen.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] ).last() ).toInclude( "There is no profile [nope]" );
+				} );
+
+				it( "goes back to the default on /default", function() {
+					var screen = fakeScreen( [ "/default" ] )
+					var session = fakeSession()
+					controllerFor( screen, session ).run( screen )
+
+					expect( session.used ).toBe( [ "default" ] );
+				} );
+
+				it( "says why when the chat cannot switch, and when no profile is configured", function() {
+					var remote = fakeScreen( [ "/profile", "/default" ] )
+					var session = fakeSession()
+					session.switchOk = false
+					controllerFor( remote, session ).run( remote )
+
+					expect( session.used ).toBeEmpty();
+					expect( remote.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] ) ).toBe( [ "No switching here.", "No switching here." ] );
+
+					var bare = fakeScreen( [ "/profile" ] )
+					var empty = fakeSession()
+					empty.profileList = []
+					controllerFor( bare, empty ).run( bare )
+
+					expect( bare.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] ).last() ).toInclude( "bxAgents add profile" );
+				} );
+
 			} );
 
 			it( "starts a new conversation on /new and forgets the transcript", function() {
@@ -308,7 +397,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "offers its commands to the screen for the slash menu", function() {
 				var names = new bxagents.models.cli.chat.ChatController( fakeSession() ).commands().map( c => c.name )
 
-				expect( names ).toBe( [ "/help", "/new", "/tools", "/sessions", "/resume", "/clear", "/compact", "/info", "/remember", "/notes", "/copy", "/save", "/record", "/exit" ] );
+				expect( names ).toBe( [ "/help", "/new", "/tools", "/sessions", "/resume", "/clear", "/compact", "/model", "/profile", "/default", "/info", "/remember", "/notes", "/copy", "/save", "/record", "/exit" ] );
 			} );
 
 		} );

@@ -14,6 +14,12 @@
  */
 class {
 
+	static {
+		// file path + modified time -> true, so a file is merged once per process: the app applies it
+		// at start and the factory applies it again whenever a chat, an invoke or a test builds an agent
+		applied = {}
+	}
+
 	/**
 	 * @moduleName The BoxLang module, for example bxai
 	 * @file Absolute path to the JSON file of settings; a missing file changes nothing
@@ -25,8 +31,12 @@ class {
 		if ( !fileExists( arguments.file ) ) {
 			return live
 		}
-		var wanted = jsonDeserialize( fileRead( arguments.file ) )
-		merge( live, wanted )
+		var stamp = arguments.moduleName & "|" & arguments.file & "|" & getFileInfo( arguments.file ).lastModified
+		if ( static.applied.keyExists( stamp ) ) {
+			return live
+		}
+		merge( live, jsonDeserialize( fileRead( arguments.file ) ) )
+		static.applied[ stamp ] = true
 		return live
 	}
 

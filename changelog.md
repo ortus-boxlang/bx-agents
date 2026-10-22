@@ -281,6 +281,11 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
 - `doctor` warns when a key variable the models need is not set in the environment (default model, subagents,
   profiles, capability defaults) and names who needs it; `inspect --section=ai` lists the same keys as set or not
   set. Neither reads the project's `.env` or any value.
+- The terminal chat can change the model without losing the conversation: `/model` shows it, `/profile` picks a
+  profile from a list (or `/profile <name>`), and `/default` goes back to the app's default. Memory, tools and
+  instructions stay. A chat connected to a server says it cannot switch.
+- The generated agent factory now puts the project's bx-ai settings (default model, profiles, capability defaults)
+  in place before it builds an agent, so `chat`, `invoke` and tests see them, not only a served app.
 - The build now delivers bx-ai's settings the way bx-ai reads them. A `moduleSettings.bxai` block in
   `config/ColdBox.bx` never reached bx-ai (measured on a served app: it kept `provider: openai` and
   `skillsDirectory: /.agents/skills`), so the `skills/` override and the `security` block were silently not
