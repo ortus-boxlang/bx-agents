@@ -102,6 +102,9 @@ or package as a portable `.bxa`.
   human-in-the-loop approvals, steer-while-streaming, compaction, server-side theming from
   config tokens, optional API-key gating, and optional username/password sign-in via cbauth.
   Plain vanilla HTML/CSS/JS - no Node, no npm, no build step.
+  A narrated walkthrough video and screenshots of the whole page are in
+  [The web chat UI](docs/conventions/web-ui.md#walkthrough); the demo app and the bx-audio
+  voice-over pipeline that made them are in `tools/demo/webui`.
 
 #### Chat-platform gateways
 

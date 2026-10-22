@@ -52,6 +52,22 @@ The page talks to its own generated `<path>/api` route via `POST <path>/api/stre
 
 Because the whole envelope arrives, **reasoning and tool calls are already on the wire** with no extra endpoint needed: `delta.reasoning` (normalized across every provider by bx-ai) renders as a collapsed "Thinking" strip, and `delta.tool_calls` as collapsed per-call chips. Tool-call arguments stream as partial JSON fragments keyed by `index`, so the page accumulates per index rather than assuming any single chunk holds a complete call.
 
+## Walkthrough
+
+<video controls preload="metadata" poster="../assets/video/webui-walkthrough-poster.png" style="max-width:100%">
+  <source src="../assets/video/webui-walkthrough.mp4" type="video/mp4">
+  <track kind="captions" src="../assets/video/webui-walkthrough.vtt" srclang="en" label="English" default>
+</video>
+
+A minute and a half through the whole page: sign in, streaming, the model picker, a tool call, saved conversations, notes and the dark theme. The voice and the music were made with [bx-audio](https://github.com/ortus-boxlang/bx-audio), and the page is the demo app in [`tools/demo/webui`](https://github.com/ortus-boxlang/bx-agents/tree/development/tools/demo/webui), which `capture.js` there drives with Playwright. It talks to a scripted model, so every answer is the same each time.
+
+| | |
+|---|---|
+| ![Sign in with the accounts declared in `users`](../assets/webui/login.png) **Sign in.** Accounts come from [`users`](#users-and-sign-in). | ![A signed-in chat with the model picker, Chats, Clear, Notes, Key and Theme in the header](../assets/webui/home.png) **The header.** The picker shows when the entry lists [`profiles`](#choosing-the-model). |
+| ![A streamed reply with a numbered list and bold text](../assets/webui/markdown-list.png) **Streaming.** Replies render Markdown as they arrive. | ![The planner profile chosen in the picker, and the reply naming its model](../assets/webui/model-picker.png) **Model picker.** The pick is sent with each message, in the same conversation. |
+| ![A tool call shown as an open block above the reply](../assets/webui/tool-call.png) **Tools.** Each call shows its name and arguments. | ![The conversation sidebar listing two saved chats](../assets/webui/conversations.png) **Conversations.** Saved per account, and still there after a reload. |
+| ![The Notes panel with one note under About you](../assets/webui/notes.png) **Notes.** What the agent should remember, with the size it adds. | ![The page in the dark theme with the accent from the gateway entry](../assets/webui/dark-theme.png) **Theme.** Light or dark, remembered, with your `theme` accent. |
+
 ## What a streaming turn actually looks like
 
 ```mermaid
