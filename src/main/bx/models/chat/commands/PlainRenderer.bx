@@ -1,0 +1,45 @@
+/**
+ * Draws a command's answer as plain text, for places with no layout: a chat message in Telegram, Slack,
+ * WhatsApp, an SMS. Takes the answer as data ({ blocks, effects }, what CommandService returns), so it
+ * reads an answer that came over HTTP as well as one built here.
+ *
+ * A choice has no buttons here; it is a numbered list with the command to type for each.
+ */
+class {
+
+	/**
+	 * @answer { blocks, effects }
+	 *
+	 * @return The text to send
+	 */
+	string function render( required struct answer ) {
+		var lines = []
+		for ( var block in arguments.answer.blocks ) {
+			switch ( block.type ) {
+				case "text":
+					lines.append( block.text )
+					break
+				case "table":
+					for ( var row in block.rows ) {
+						lines.append( block.layout == "keyvalue" ? row[ 1 ] & ": " & row[ 2 ] : row.map( c => toString( c ) ).toList( "  " ) )
+					}
+					break
+				case "choose":
+					lines.append( block.title )
+					var number = 0
+					for ( var option in block.options ) {
+						number++
+						lines.append( "#number#. #option.label#" & ( len( option.hint ?: "" ) ? " (" & option.hint & ")" : "" ) & ": " & option.line )
+					}
+					break
+				case "transcript":
+					for ( var entry in block.messages ) {
+						lines.append( ( entry.role == "you" ? "You" : "Agent" ) & ": " & entry.text )
+					}
+					break
+			}
+		}
+		return lines.toList( char( 10 ) )
+	}
+
+}

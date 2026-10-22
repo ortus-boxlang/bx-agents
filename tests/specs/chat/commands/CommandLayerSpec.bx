@@ -1,0 +1,101 @@
+/**
+ * The command layer on its own: how a line is read, how the registry finds and guards a command,
+ * and what a Reply carries. No terminal, no web page, no agent.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "the command layer", function() {
+
+			it( "reads a command line: lower case name, the rest as arguments, no @bot", function() {
+				var line = new bxagents.models.chat.commands.CommandLine( "  /Profile fast  " );
+				expect( line.name() ).toBe( "profile" );
+				expect( line.args() ).toBe( "fast" );
+				expect( line.isCommand() ).toBeTrue();
+
+				var group = new bxagents.models.chat.commands.CommandLine( "/info@helperbot" );
+				expect( group.name() ).toBe( "info" );
+				expect( group.args() ).toBe( "" );
+
+				var many = new bxagents.models.chat.commands.CommandLine( "/notes add agent be brief" );
+				expect( many.name() ).toBe( "notes" );
+				expect( many.args() ).toBe( "add agent be brief" );
+			} );
+
+			it( "knows what is not a command", function() {
+				expect( new bxagents.models.chat.commands.CommandLine( "hello" ).isCommand() ).toBeFalse();
+				expect( new bxagents.models.chat.commands.CommandLine( "/" ).isCommand() ).toBeFalse();
+				expect( new bxagents.models.chat.commands.CommandLine( "/ info" ).isCommand() ).toBeFalse();
+				expect( new bxagents.models.chat.commands.CommandLine( "/@bot" ).isCommand() ).toBeFalse();
+			} );
+
+			it( "builds a reply of blocks and effects that is plain data", function() {
+				var reply = new bxagents.models.chat.commands.Reply()
+					.ok( "Done." )
+					.warn( "Careful." )
+					.keyValues( [ [ "Agent", "helper" ] ] )
+					.choose( "Which?", [ { label : "a", hint : "", line : "/x a" } ] )
+					.reset()
+					.conversation( "c1", "Title" );
+
+				expect( reply.blocks().map( b => b.type ) ).toBe( [ "text", "text", "table", "choose" ] );
+				expect( reply.blocks()[ 1 ] ).toBe( { type : "text", style : "ok", text : "Done." } );
+				expect( reply.hasEffect( "reset" ) ).toBeTrue();
+				expect( reply.hasEffect( "quit" ) ).toBeFalse();
+				var again = jsonDeserialize( jsonSerialize( reply.toStruct() ) );
+				expect( again.blocks ).toHaveLength( 4 );
+				expect( again.effects[ 2 ].id ).toBe( "c1" );
+			} );
+
+			describe( "the registry", function() {
+
+				beforeEach( function() {
+					variables.registry = new bxagents.models.chat.commands.CommandCatalog().standard();
+					variables.context = ( transport, admin = true ) => new bxagents.models.chat.commands.CommandContext( {}, transport, admin );
+				} );
+
+				it( "lists the built-in commands in the order the help shows them", function() {
+					expect( registry.menu( "tui" ).map( c => c.name ) ).toBe( [ "/help", "/new", "/name", "/fork", "/tools", "/sessions", "/resume", "/clear", "/compact", "/context", "/keys", "/model", "/ping", "/profile", "/default", "/info", "/remember", "/notes", "/copy", "/export", "/record", "/exit" ] );
+				} );
+
+				it( "leaves the terminal-only commands out of the web menu, and the conversation ones out of the gateway menu", function() {
+					var web = registry.menu( "web" ).map( c => c.name );
+					expect( web ).toBe( [ "/help", "/new", "/name", "/fork", "/tools", "/sessions", "/resume", "/clear", "/compact", "/context", "/keys", "/model", "/ping", "/info", "/remember", "/notes", "/export" ] );
+					expect( registry.menu( "gateway" ).map( c => c.name ) ).toBe( [ "/help", "/new", "/tools", "/sessions", "/resume", "/clear", "/compact", "/model", "/ping", "/info", "/remember", "/notes" ] );
+				} );
+
+				it( "finds a command by an alias", function() {
+					expect( registry.lookup( "quit" ).name() ).toBe( "exit" );
+					expect( registry.lookup( "EXIT" ).name() ).toBe( "exit" );
+					expect( isNull( registry.lookup( "nope" ) ) ).toBeTrue();
+				} );
+
+				it( "warns about an unknown command", function() {
+					var reply = registry.run( "/nope", context( "web" ) );
+					expect( reply.blocks()[ 1 ] ).toBe( { type : "text", style : "warn", text : "Unknown command /nope. Type /help." } );
+				} );
+
+				it( "will not run a terminal-only command on the web", function() {
+					var reply = registry.run( "/copy", context( "web" ) );
+					expect( reply.blocks()[ 1 ].style ).toBe( "warn" );
+					expect( reply.blocks()[ 1 ].text ).toInclude( "not available here" );
+				} );
+
+				it( "refuses an admin command to someone who is not one, and lets an admin run it", function() {
+					registry.register( new AdminCommand() );
+					expect( registry.run( "/secret", context( "web", false ) ).blocks()[ 1 ].text ).toBe( "/secret is for admins." );
+					expect( registry.run( "/secret", context( "web", true ) ).blocks()[ 1 ].text ).toBe( "ran" );
+					expect( registry.menu( "web", false ).map( c => c.name ) ).notToInclude( "/secret" );
+					expect( registry.menu( "web", true ).map( c => c.name ) ).toInclude( "/secret" );
+				} );
+
+				it( "will not register two commands under one name", function() {
+					expect( () => registry.register( new bxagents.models.chat.commands.builtin.Exit() ) ).toThrow( "bxagents.command" );
+				} );
+
+			} );
+
+		} );
+	}
+
+}

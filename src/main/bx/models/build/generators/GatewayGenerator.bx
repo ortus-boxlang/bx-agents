@@ -366,12 +366,17 @@ class {
 			// "server"/"url"/"form"/"cgi"/"thread") - a local variable with that
 			// exact name can collide with the live scope rather than behaving as
 			// an ordinary local, so this is deliberately named "gatewaySession".
-			"var gatewaySession = aiGatewaySession(",
+			// The command layer's session: a GatewaySession that answers slash commands itself and
+			// hands everything else to the agent (see models.gateways.CommandGatewaySession). The
+			// aiGatewaySession() BIF announces the creation to interceptors, so this does too.
+			'var gatewaySession = new "models.gateways.CommandGatewaySession@bxagents"(',
 			"	agent        : agent,",
 			"	gateways     : [ #gatewayRefs.toList( ', ' )# ],",
 			"	policy       : #renderLiteral( policy )#,",
-			"	maxQueueDepth: #maxQueueDepth#",
+			"	maxQueueDepth: #maxQueueDepth#,",
+			"	commands     : #renderLiteral( sessionConfig.commands ?: {} )#",
 			")",
+			'BoxAnnounce( "onGatewaySessionCreate", { session: gatewaySession } )',
 			"gatewaySession.start()",
 			"application.bxaiGatewaySession = gatewaySession"
 		]

@@ -224,6 +224,51 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   a run belongs to the token that started it. `tokenEnvVar` still works and acts as an `admin` token.
 - `chat --connect=<url> --token=<token>` (or `BXAGENTS_TOKEN`) talks to a server that wants one.
 
+#### Commands everywhere
+
+- Slash commands are written once, as small classes that answer with data (text, tables, choices) instead of
+  printing, and each place draws the answer its own way. The terminal chat now runs on them with no change in
+  what it does; the web page and chat gateways use them too.
+- Web chat and the agent's own route: type `/` for a menu; `GET /commands` and `POST /command` on both
+  `/__bxagents` and the web entry run `/help`, `/new`, `/tools`, `/sessions`, `/resume`, `/clear`, `/compact`,
+  `/model`, `/info`, `/remember` and `/notes` for the signed-in caller.
+- Chat gateways answer a safe set (`/help`, `/tools`, `/model`, `/info`, `/remember`, `/notes`) before the message
+  reaches the model; `gatewaySession.commands` (`enabled`, `prefix`, `allow`, `admins`) narrows, widens or
+  switches them off, and `build` checks it.
+
+- `/name <new name>` names a conversation and `/fork [new name]` copies the whole conversation under a new name
+  and carries on in the copy. `/export [file] [--format=md|html]` replaces `/save`: Markdown as before, or an HTML
+  page with the Markdown rendered (what you typed is escaped). In the web page `/export` downloads the file, and the
+  header has **Fork** and **Export** buttons.
+- `bxAgents sessions list|rename|fork|delete` manages the conversations in the chat database from the shell.
+- `POST /__bxagents/sessions/rename` and `/fork` let `chat --connect` do the same on a server.
+
+- `contextWindow` and `vision` on the default model and on each profile say what the model can hold and whether it
+  can see images (bx-ai has no way to ask). They are optional and nothing is guessed; `/info` and `/model` show them.
+- `/ping [profile]` and `bxAgents models test [--profile=NAME | --all]` send a model one tiny question and say
+  whether it answered, how long it took, or the provider's own reason; `bxAgents models list` shows the models and
+  what is known about them. `POST /__bxagents/ping` does it for `chat --connect`, only for the profiles the route offers.
+
+- `/context` shows how big the context is and what it is made of (system prompt, tool definitions, notes, messages),
+  worked out locally, with the share of the model's window when `contextWindow` is set. The hint row under the
+  message box in the terminal and a chip in the web page's header always show it: `ctx ~12.4k / 128k 9%`.
+  `GET /__bxagents/context` serves it to `chat --connect`.
+
+- In the terminal chat, `!command` runs a shell command and `#function( ... )` calls one BoxLang built-in on your
+  own machine; the output goes with your next message (`!!` and `##` only show it). A call is parsed, not
+  evaluated: literal arguments and nested calls only, and only registered built-ins. Both are switched off or
+  narrowed in your own `~/.bxagents/bxAgents.yml` (`chat: shell`, `bifs`), never by a project.
+- In the terminal chat, `@` lists the files under the folder and puts a text file's content in the message, `@picture.png`
+  or Ctrl+V sends a picture (at most 4, 5 MB each, checked against the profile's `vision` key before sending). The web
+  page has an Attach button and takes pasted and dropped pictures. `POST /__bxagents/events` and `/stream` accept
+  `attachments`. Chat platforms do not take attachments yet.
+- The keys of the terminal chat are one list now. `?` alone or `/keys` shows them, with the action name of each,
+  and `chat: keys:` in `~/.bxagents/bxAgents.yml` changes any of them (`newline`, `stop`, `submit`, ...). A key that
+  is not readable or already taken is reported at start and the action keeps its default. The web page answers
+  `/keys` and `?` with its own shortcuts.
+- In Telegram the bot's own `/` menu lists the commands the session answers (sent with `setMyCommands` when the
+  first message arrives). Names Telegram would refuse are left out; a failure never stops the bot.
+
 #### The chat screen
 
 - `bxAgents chat` is now a Pi-style terminal screen that keeps your scrollback: finished turns are

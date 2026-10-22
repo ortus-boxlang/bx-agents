@@ -1,0 +1,30 @@
+/**
+ * /help: the commands that run in this chat.
+ */
+class extends="models.chat.commands.BaseCommand@bxagents" {
+
+	/**
+	 * @registry The CommandRegistry to list
+	 */
+	function init( required any registry ) {
+		variables.registry = arguments.registry
+		return this
+	}
+
+	string function name() {
+		return "help"
+	}
+
+	string function hint() {
+		return "show these commands"
+	}
+
+	any function run( required any context, required string args ) {
+		var reply = arguments.context.reply()
+		for ( var entry in variables.registry.menu( arguments.context.transport(), arguments.context.isAdmin() ) ) {
+			reply.text( entry.name & "  " & entry.hint )
+		}
+		return reply
+	}
+
+}

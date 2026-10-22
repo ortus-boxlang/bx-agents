@@ -1,0 +1,20 @@
+class extends="models.chat.commands.BaseCommand@bxagents" {
+
+	string function name() {
+		return "clear"
+	}
+
+	string function hint() {
+		return "forget this conversation's messages, keep the conversation"
+	}
+
+	any function run( required any context, required string args ) {
+		var reply = arguments.context.reply()
+		var cleared = arguments.context.chat().clear()
+		if ( cleared.ok ?: false ) {
+			return reply.reset().ok( "Cleared. The agent no longer remembers this conversation." )
+		}
+		return reply.warn( cleared.reason ?: "Could not clear." )
+	}
+
+}

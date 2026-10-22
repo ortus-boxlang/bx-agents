@@ -1,0 +1,28 @@
+class extends="models.chat.commands.BaseCommand@bxagents" {
+
+	string function name() {
+		return "sessions"
+	}
+
+	string function hint() {
+		return "list your recent conversations"
+	}
+
+	any function run( required any context, required string args ) {
+		var reply = arguments.context.reply()
+		var recent = arguments.context.chat().sessions()
+		if ( !recent.len() ) {
+			return reply.text( "No conversations yet." )
+		}
+		var rows = []
+		var number = 0
+		for ( var row in recent ) {
+			number++
+			rows.append( [ number, left( row.title ?: "", 60 ), ( row.messageCount ?: 0 ) & " messages", dateTimeFormat( row.updatedAt, "yyyy-mm-dd HH:nn" ), left( row.id, 8 ) ] )
+		}
+		return reply
+			.grid( [ { width : 3, align : "right" }, { width : 60, align : "left" }, { width : 0 }, { width : 0 }, { width : 0 } ], rows )
+			.text( "Type /resume <number> to go back to one." )
+	}
+
+}

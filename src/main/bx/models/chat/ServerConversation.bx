@@ -1,0 +1,44 @@
+/**
+ * The conversation behind the web page and the gateways: the same questions a command asks of the
+ * terminal chat, answered on the server. Each request names the conversation it is about, so nothing
+ * is kept between requests; a command that starts or opens another conversation says so in its reply
+ * (an effect) and the client carries the new id.
+ *
+ * The agent is shared by everyone the server talks to, so its model is not changed from here: a
+ * client picks a profile per message instead (options.profile).
+ */
+class extends="models.chat.AgentConversation@bxagents" {
+
+	/**
+	 * @names The profiles a client may ask for (agentApi.profiles); none by default
+	 */
+	function withOfferedProfiles( required array names ) {
+		variables.offered = arguments.names
+		return this
+	}
+
+	/**
+	 * A ping spends a request on the server's account, so it only goes to a profile the app offers to clients,
+	 * and to the server's own model when none is named.
+	 */
+	struct function ping( string profile = "" ) {
+		var asked = trim( arguments.profile )
+		if ( len( asked ) && !( variables.offered ?: [] ).containsNoCase( asked ) ) {
+			return { ok : false, model : asked, reason : "That profile is not offered here." }
+		}
+		return super.ping( asked )
+	}
+
+	string function mode() {
+		return "server"
+	}
+
+	boolean function exposesDatabase() {
+		return false
+	}
+
+	struct function switchable() {
+		return { ok : false, reason : "The model is picked per message here, not changed for everyone." }
+	}
+
+}

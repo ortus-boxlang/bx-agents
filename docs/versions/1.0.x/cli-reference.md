@@ -109,6 +109,12 @@ Issue, list and revoke access tokens for a deployed agent.
 ::: card title="notes" icon="phosphor-duotone:note-pencil" href="#notes"
 Read and manage the notes an agent keeps.
 :::
+::: card title="models" icon="phosphor-duotone:cpu" href="#models"
+List the models a project can talk to and test that they answer.
+:::
+::: card title="sessions" icon="phosphor-duotone:chats" href="#sessions"
+List, rename, fork and delete the conversations in the chat database.
+:::
 ::: card title="inspect" icon="phosphor-duotone:magnifying-glass" href="#inspect"
 Report how the agent is composed, from its source.
 :::
@@ -506,8 +512,24 @@ In the screen:
 | Esc | Stop the agent. It stops at its next step, not mid-word |
 | Enter while the agent works | Steer it: your message is added to the run |
 | Ctrl+C | Clear the box; on an empty box, leave. Ctrl+D leaves too |
+| `?` alone, or `/keys` | List the keys as they are bound now, with the action name of each |
 
-Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/save [file]` (the conversation as Markdown), `/sessions`, `/resume`, `/clear`, `/compact` and `/info` (see below), `/model`, `/profile` and `/default` (see below), `/remember <text>` and `/notes` (see below), `/record [file]` and `/record stop` (see below) and `/exit`.
+Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/export [file]` (the conversation as Markdown or HTML), `/name` and `/fork` (see below), `/keys` (which key does what), `/sessions`, `/resume`, `/clear`, `/compact` and `/info` (see below), `/model`, `/profile` and `/default` (see below), `/remember <text>` and `/notes` (see below), `/record [file]` and `/record stop` (see below) and `/exit`.
+
+#### The same commands in the web page and in chat apps
+
+Each slash command is written once, as a small class that answers with data (text, a table, a list to pick from), and the terminal, the web page and the chat platforms each draw that answer their own way. So `/help`, `/new`, `/tools`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/info`, `/remember` and `/notes` work in all three:
+
+| Where | How you use them |
+|---|---|
+| Terminal chat | Type `/`, as above |
+| [Web page](conventions/web-ui.md#slash-commands) | Type `/`: a menu of the commands appears, `Tab` completes one |
+| [Chat platforms](conventions/gateways/index.md#commands-in-a-gateway) (Telegram, Slack, ...) | Type the command as a message. A safe set is on by default; a project can widen or switch it off |
+| A server over HTTP | `GET /__bxagents/commands` and `POST /__bxagents/command`, see [Run control](conventions/agent-bx.md#run-control) |
+
+`/name`, `/fork` and `/export` work in the terminal and in the web page (where `/export` hands the file to the browser to save, and the page has **Fork** and **Export** buttons). The size of the context is also always in front of you: the hint row under the message box starts with `ctx ~12.4k / 128k 9%` (just `ctx ~12.4k` when the project does not say the window), refreshed before every prompt, so after each message, `/clear`, `/compact`, `/resume` and a change to your notes. The web page shows the same in its header; click it for the breakdown. The numbers are estimates, characters divided by four (what bx-ai's `aiTokens()` does), good for seeing which part is big and not for an exact bill. The tools of MCP servers are fetched when a run starts and are not counted.
+
+`/copy`, `/record`, `/profile`, `/default` and `/exit` act on your own machine or on your own session's model, so they stay in the terminal.
 
 #### Conversations in the chat
 
@@ -518,9 +540,13 @@ Every chat is a conversation, listed in the project's [shared chat database](con
 | `/sessions` | List your recent conversations, numbered |
 | `/resume [number or id]` | Go back to one and show what was said; without an argument, the most recent |
 | `/new` | Start a new conversation (the old one stays in the list) |
+| `/name <new name>` | Name this conversation; a conversation nobody has spoken in yet gets its entry in the list |
+| `/fork [new name]` | Copy this whole conversation, messages and all, under a new name and carry on in the copy; the original stays as it was. Without a name the copy is called `Fork of <this one>` |
+| `/export [file] [--format=md\|html]` | Save the conversation as Markdown or as an HTML page. The file name decides the format (`.html` or `.htm` is HTML, anything else Markdown) unless `--format` says; without a name the file is dated, in the folder you started in. The HTML shows the Markdown rendered, tables included, and escapes anything you typed so it never runs when the file is opened |
 | `/clear` | Forget this conversation's messages and keep the conversation |
 | `/compact` | Replace the older messages with a summary (needs a summary model on the agent's memory) |
 | `/info` | Agent, model, conversation, message count, notes and database |
+| `/context` | How big the context is right now and what it is made of: the system prompt, the tool definitions, the notes and this conversation's messages, each with its size, the total, and the share of the model's context window when the project [says it](conventions/models.md#what-the-project-knows-about-a-model). The largest tools are named. Worked out locally; no model is called |
 
 `--continue` opens the most recent conversation when the chat starts, and `--session=<number or id>` opens a particular one. Both show the earlier messages first. Over `--connect` the server keeps the list and the messages, under the name of your [token](conventions/agent-bx.md#access-tokens-for-a-deployed-agent); a server without a chat database says it keeps no list.
 
@@ -530,7 +556,8 @@ The chat can change the model it talks to without losing the conversation: the m
 
 | Command | Does |
 |---|---|
-| `/model` | Show the model in use (`provider/model`) and its profile |
+| `/model` | Show the model in use (`provider/model`), its profile and, when the project says them, its context window and whether it can see images |
+| `/ping [profile]` | Test that the model answers, with one tiny question: it says how long it took, or why it did not (no key, a wrong model name, the service unreachable). A result is kept for 30 seconds, so a repeat is not another request |
 | `/profile` | Pick a profile from a list: its provider and model, its description, which is the default and which is in use |
 | `/profile <name>` | Switch straight to one. A profile whose provider has no key set is switched to with a warning, since the next message would fail |
 | `/default` | Go back to the app's default: the `defaultProfile`, else the provider and model at the top of `Agent.yaml` |
@@ -563,6 +590,47 @@ When the agent keeps [notes](conventions/agent-yaml.md#notes), the chat can show
 | Esc | Back to the chat |
 
 The heading shows how many characters of the limit are used and about how many tokens that adds to every conversation. It works in all three modes. Over `--connect` the commands use the server's notes routes, so you see the notes of that server, and removing a note of the agent needs an `admin` token. An agent without a `notes` block says how to turn them on.
+
+#### Running things on your machine from the chat
+
+Two prefixes in the message box run something on **your own machine**, never on a server, even when the chat talks to one over `--connect`:
+
+| Type | Does |
+|---|---|
+| `!command` | Runs a shell command (`sh -c`, or `cmd /c` on Windows) in the folder you started in. Its output (standard output and error together, cut at 20,000 characters, stopped after a minute) is shown, and **goes with your next message**, so the agent sees what you saw |
+| `!!command` | The same, shown on screen only |
+| `#function( arguments )` | Calls one BoxLang built-in function, such as `#dateFormat( now(), 'yyyy-mm-dd' )` or `#listLen( 'a,b,c' )`. The result is shown (a struct or array as JSON) and goes with the next message |
+| `##function( arguments )` | The same, shown on screen only |
+
+`!` must be followed at once by the command (`! hello` is a message) and `#` by a call (`# A heading` and `#hashtag` are messages). A call is **only** a call: a string (`'..'` or `".."`), number, `true`, `false`, `null`, array, struct or nested call as an argument, positional or named, and nothing else. There are no variables, operators, `.` access or statements, and a name that is not a registered built-in function is refused before anything runs. What waits for the next message shows in `/context` (as *Attached*) and in the status bar, and is gone once the message is sent.
+
+The two are yours to switch off or narrow, in a file that belongs to you and not to any project, `~/.bxagents/bxAgents.yml` (`BXAGENTS_USER_CONFIG` names another file):
+
+```yaml
+chat:
+  shell: true        # false switches ! off; or the shell to use: "bash -c", "pwsh -Command"
+  bifs: true         # false switches # off; or the functions allowed: [ dateFormat, listLen ]
+  keys:              # change the keys of an action; one key or a list. /keys shows the action names
+    newline: [ ctrl+n, alt+enter ]
+    stop: ctrl+x
+```
+
+A missing file means both are on. A key the file does not know, or a value of the wrong kind, is reported when the chat starts instead of being ignored.
+
+Keys are written as people say them: `enter`, `alt+enter`, `shift+enter`, `ctrl+j`, `esc`, `tab`, `up`, `down`, `home`, `end`, or a letter with `ctrl` or `alt`. Actions you can change: `submit`, `newline`, `historyPrevious`, `historyNext`, `clear`, `exit`, `deleteToStart`, `deleteWord`, `lineStart`, `lineEnd`, `complete`, `pasteImage` (in the message box) and `stop` (while the agent works). Moving the cursor with the arrows, Backspace and Delete are not actions. An entry that names no action, cannot be read as a key, or takes a key another action in the same place already has, is reported when the chat starts and that action keeps its default keys, so a typo never leaves you without a way to send a message. The heading and the hint row show your keys.
+
+#### Files and pictures in the message
+
+| Type | Does |
+|---|---|
+| `@` | Opens a list of the files under the folder you started in (up to five levels deep; hidden folders, `node_modules`, `build`, `dist`, `target`, `out`, `venv` are skipped). Keep typing to narrow it, Up and Down to move, Tab or Enter to take one |
+| `@path/to/file` | A text file in the message: its content goes with the message, in its own block, cut at 100,000 characters. A name that is not a file is reported and stays as plain text; the message is still sent |
+| `@picture.png` | A picture (png, jpg, gif, webp), sent as an image part of the message |
+| Ctrl+V | Pastes a picture from the clipboard (needs `wl-paste` or `xclip` on Linux, `pngpaste` on macOS; Windows uses PowerShell). A chip in the hint row shows how many are waiting |
+
+At most 4 pictures go with one message, each up to 5 MB. Before anything is sent the chat checks that the profile can see: set `vision: true` on a [profile](models.md#what-the-project-knows-about-a-model) that can, and a picture sent to one that cannot is refused with a message instead of an obscure provider error. `/context` counts what is attached. The picture is passed to the model as bx-ai's `AiMessage` image parts, in the shape that provider expects; only OpenAI-style providers have been tried so far.
+
+With `--connect` the files and pictures travel in the `attachments` of the request to `/__bxagents/events`, see [Run control](conventions/agent-bx.md#run-control). Chat platforms do not take attachments yet.
 
 #### Recording a chat
 
@@ -684,6 +752,40 @@ bxAgents notes import --file=notes.json
 - `--scope` is `user` (the default) or `agent`; `list` without it shows both. `--user` is whose user notes: the operating system user by default. Agent notes belong to the agent's `name`.
 - `stats` shows how full each scope is and the rough size they add to the prompt (about four characters to a token; an estimate, not a count).
 - `export` writes the notes as JSON, to `--file` or to the screen. `import` adds the notes of such a file; a note already there is skipped and one that does not fit the limit is reported.
+- Run it where the database is: in the project, or on a server with `BXAGENTS_DB` set.
+
+### `models`
+
+The models of a built project, and whether they answer.
+
+```bash
+bxAgents models list [--json]
+bxAgents models test [--profile=NAME | --all] [--json]
+```
+
+```
+default       openai/gpt-5                    context 128,000  images yes  key set
+fast          openai/gpt-5-mini               context 400,000  images no  key set
+planner       claude/claude-opus-4            context ?  images ?  key MISSING
+```
+
+- `list` shows the default model and every [profile](conventions/models.md#profiles), with what the project says about each ([`contextWindow` and `vision`](conventions/models.md#what-the-project-knows-about-a-model), `?` when it does not) and whether the profile's key is set.
+- `test` sends each model one tiny question through bx-ai and reports `ok` with the time, or `FAILED` with the provider's own message. It tests the default model, one profile with `--profile`, or all of them with `--all`, and exits `1` when any does not answer, so it can gate a deploy. It spends a few tokens per model.
+- It uses the models the project was last built with: run `bxAgents build` first.
+
+### `sessions`
+
+The conversations in the project's [shared chat database](conventions/web-ui.md#the-sqlite-store) (`data/chat.db`, or the file named by `BXAGENTS_DB`), the same list `chat` and the web page show.
+
+```bash
+bxAgents sessions list [--user=NAME] [--json]
+bxAgents sessions rename --session=<number or id> --name="New name" [--user=NAME]
+bxAgents sessions fork --session=<number or id> [--name="Other approach"] [--user=NAME]
+bxAgents sessions delete --session=<number or id> [--user=NAME]
+```
+
+- A conversation is picked by its number in `list`, or by its id or the start of it. `--user` is whose conversations: the operating system user by default.
+- `list`, `rename` and the list part of `delete` only touch the database. The messages of a conversation live in the agent's [memory](conventions/agent-yaml.md#settings), so `fork` (which copies them) needs a built project, and so does `delete` to forget them too. They reach only messages a memory that outlives the process keeps (`file`, `jdbc`): the default `cache` memory is gone when the chat ends.
 - Run it where the database is: in the project, or on a server with `BXAGENTS_DB` set.
 
 ### `inspect`

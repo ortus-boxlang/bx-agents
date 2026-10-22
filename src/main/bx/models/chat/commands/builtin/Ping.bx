@@ -1,0 +1,24 @@
+/**
+ * /ping [profile]: asks a model one tiny question to see that it answers (the key works, the model name is
+ * right, the service is reachable).
+ */
+class extends="models.chat.commands.BaseCommand@bxagents" {
+
+	string function name() {
+		return "ping"
+	}
+
+	string function hint() {
+		return "check that the model answers: /ping, or /ping <profile>"
+	}
+
+	any function run( required any context, required string args ) {
+		var reply = arguments.context.reply()
+		var outcome = arguments.context.chat().ping( arguments.args )
+		if ( !outcome.ok ) {
+			return reply.warn( "#outcome.model#: #outcome.reason#" )
+		}
+		return reply.ok( "#outcome.model# answered in #outcome.ms# ms." & ( outcome.cached ?: false ? " (a recent test, not repeated)" : "" ) )
+	}
+
+}

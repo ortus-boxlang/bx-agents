@@ -1,0 +1,30 @@
+/**
+ * The models verb: list the models a project can talk to and test that they answer. Needs a built project; the
+ * answers come from bx-ai's mock provider, so nothing leaves the machine.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "cli.Models", function() {
+
+			beforeEach( function() {
+				variables.verb = new bxagents.models.cli.Models();
+				variables.root = createTempDirectory( prefix = "bxagents-cli-models-" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( root ) ) {
+					directoryDelete( root, true );
+				}
+			} );
+
+			it( "needs a project root, a known action and a built project", function() {
+				expect( function() { verb.run( {} ); } ).toThrow( "BxAgents.MissingProjectRoot" );
+				expect( function() { verb.run( { projectRoot : root } ); } ).toThrow( "BxAgents.UnknownModelsAction" );
+				expect( function() { verb.run( { projectRoot : root, _positional : "list" } ); } ).toThrow( "BxAgents.NotBuilt" );
+			} );
+
+		} );
+	}
+
+}

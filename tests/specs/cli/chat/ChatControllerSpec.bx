@@ -50,6 +50,26 @@ class extends="testbox.system.BaseSpec" {
 					return f
 				}
 				s.copy = ( text ) => s.log.append( [ "copy", text ] )
+				s.statuses = []
+				s.setStatus = ( text ) => s.statuses.append( text )
+				s.imagesAllowed = [ true, "" ]
+				s.setImagesAllowed = ( allowed, reason ) => { s.imagesAllowed = [ allowed, reason ] }
+				s.keyOverrides = []
+				s.keyProblems = []
+				s.bindKeys = ( overrides ) => {
+					s.keyOverrides.append( overrides )
+					return s.keyProblems
+				}
+				s.keyTable = () => [
+					{ id : "submit", keys : "Enter", does : "Send the message", place : "box" },
+					{ id : "stop", keys : "Esc, Ctrl+C", does : "Stop the agent at its next step", place : "run" }
+				]
+				s.pasted = []
+				s.takeImages = () => {
+					var taken = s.pasted
+					s.pasted = []
+					return taken
+				}
 				s.close = () => s.log.append( [ "close" ] )
 				return s
 			}
@@ -80,9 +100,37 @@ class extends="testbox.system.BaseSpec" {
 				}
 				q.useDefault = () => q.useProfile( "default" )
 				q.newThread = () => { q.newThreads++ }
+				q.conversationId = () => "conv-" & q.newThreads
+				q.facts = { contextWindow : 0, vision : "" }
+				q.modelFacts = () => q.facts
+				q.pinged = []
+				q.pingAnswer = { ok : true, model : "openai/gpt-5", ms : 412, reply : "pong" }
+				q.ping = ( profile = "" ) => {
+					q.pinged.append( profile )
+					return q.pingAnswer
+				}
+				q.report = { parts : [], tools : [], mcpServers : 0, total : 1240, contextWindow : 128000, percent : 1 }
+				q.contextReport = () => q.report
+				q.conversationTitle = () => "A title"
+				q.history = () => []
+				q.renamed = []
+				q.rename = ( title ) => {
+					if ( !len( trim( title ) ) ) {
+						return { ok : false, reason : "Give it a name: /name <new name>" }
+					}
+					q.renamed.append( title )
+					return { ok : true, title : title }
+				}
+				q.forked = []
+				q.fork = ( title = "" ) => {
+					q.forked.append( title )
+					return { ok : true, id : "fork-1", title : len( title ) ? title : "Fork of A title", messages : 4 }
+				}
 				q.close = () => {}
-				q.send = ( text, hooks ) => {
+				q.sentImages = []
+				q.send = ( text, hooks, images = [] ) => {
 					q.sent.append( text )
+					q.sentImages.append( images )
 					var reply = q.replies.len() ? q.replies[ 1 ] : { status : "done", text : "echo " & text, pending : [] }
 					if ( q.replies.len() ) {
 						q.replies.deleteAt( 1 )
@@ -100,8 +148,13 @@ class extends="testbox.system.BaseSpec" {
 				return q
 			}
 
-			function controllerFor( screen, session ) {
-				return new bxagents.models.cli.chat.ChatController( session, getTempDirectory() )
+			// the person's own switches: both on unless a spec says otherwise
+			function userConfig( shell = true, bifs = true, keys = {} ) {
+				return { chat : () => { shell : shell, bifs : bifs }, keys : () => ( keys ), problems : () => [], path : () => "~/.bxagents/bxAgents.yml" }
+			}
+
+			function controllerFor( screen, session, config ) {
+				return new bxagents.models.cli.chat.ChatController( session, getTempDirectory(), nullValue(), isNull( config ) ? userConfig() : config )
 			}
 
 			it( "shows a banner, sends a message inside a turn, and keeps the transcript", function() {
@@ -140,7 +193,7 @@ class extends="testbox.system.BaseSpec" {
 				controllerFor( screen, fakeSession() ).run( screen )
 
 				var printed = screen.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] )
-				expect( printed.some( p => p.startsWith( "/save" ) ) ).toBeTrue();
+				expect( printed.some( p => p.startsWith( "/export" ) ) ).toBeTrue();
 				expect( printed.last() ).toInclude( "Unknown command /nope" );
 			} );
 
@@ -156,13 +209,13 @@ class extends="testbox.system.BaseSpec" {
 				} );
 
 				it( "offers the profiles on /profile and switches to the one picked", function() {
-					var screen = fakeScreen( [ "/profile" ], "fast" )
+					var screen = fakeScreen( [ "/profile" ], "/profile fast" )
 					var session = fakeSession()
 					controllerFor( screen, session ).run( screen )
 
 					var asked = screen.log.filter( e => e[ 1 ] == "choose" )
 					expect( asked ).toHaveLength( 1 );
-					expect( asked[ 1 ][ 4 ] ).toBe( [ "default", "fast", "planner" ] );
+					expect( asked[ 1 ][ 4 ] ).toBe( [ "/profile default", "/profile fast", "/profile planner" ] );
 					expect( session.used ).toBe( [ "fast" ] );
 					expect( screen.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] ).last() ).toInclude( "Now using fast (openai/gpt-5-mini)" );
 				} );
@@ -242,15 +295,32 @@ class extends="testbox.system.BaseSpec" {
 				expect( some.log.filter( e => e[ 1 ] == "copy" )[ 1 ][ 2 ] ).toBe( "echo hi" );
 			} );
 
-			it( "saves the conversation to a file on /save", function() {
+			it( "exports the conversation to a Markdown file on /export, and to HTML by the file name or --format", function() {
 				var dir = createTempDirectory( prefix = "bxagents-chat-" )
-				var screen = fakeScreen( [ "hi", "/save notes.md" ] )
+				var screen = fakeScreen( [ "hi <b>there</b>", "/export notes.md", "/export page.html", "/export --format=html" ] )
 				new bxagents.models.cli.chat.ChatController( fakeSession(), dir ).run( screen )
 
-				var saved = fileRead( dir & "/notes.md" )
-				expect( saved ).toInclude( "**You**" );
-				expect( saved ).toInclude( "echo hi" );
+				var markdown = fileRead( dir & "/notes.md" )
+				expect( markdown ).toInclude( "**You**" );
+				expect( markdown ).toInclude( "echo hi" );
+				expect( markdown ).toInclude( "## A title" );
+
+				var html = fileRead( dir & "/page.html" )
+				expect( html ).toInclude( "<!doctype html>" );
+				expect( html ).toInclude( "<title>A title</title>" );
+				// what a person typed is text, not markup
+				expect( html ).toInclude( "&lt;b&gt;there&lt;/b&gt;" );
+				expect( html ).notToInclude( "<b>there</b>" );
+
+				var dated = directoryList( dir, false, "name", "chat-*.html" )
+				expect( dated ).toHaveLength( 1 );
 				directoryDelete( dir, true )
+			} );
+
+			it( "tells the format that is not one", function() {
+				var screen = fakeScreen( [ "hi", "/export --format=pdf" ] )
+				controllerFor( screen, fakeSession() ).run( screen )
+				expect( screen.log.filter( e => e[ 1 ] == "print" ).last()[ 3 ] ).toInclude( "md or html" );
 			} );
 
 			it( "starts a recording on /record, in the working directory with a dated name, and stops it on /record stop", function() {
@@ -319,11 +389,349 @@ class extends="testbox.system.BaseSpec" {
 				expect( off.log.filter( e => e[ 1 ] == "record" ) ).toBeEmpty();
 			} );
 
-			it( "will not save an empty conversation", function() {
-				var screen = fakeScreen( [ "/save" ] )
+			it( "says what the project knows about the model on /model, and nothing about what it does not", function() {
+				var none = fakeScreen( [ "/model" ] )
+				controllerFor( none, fakeSession() ).run( none )
+				var printed = none.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] )
+				expect( printed.filter( p => p.startsWith( "Context" ) || p.startsWith( "Images" ) ) ).toBeEmpty();
+
+				var session = fakeSession()
+				session.facts = { contextWindow : 128000, vision : "yes" }
+				var known = fakeScreen( [ "/model" ] )
+				controllerFor( known, session ).run( known )
+				var shown = known.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] )
+				expect( shown ).toInclude( "Context: 128,000 tokens" );
+				expect( shown ).toInclude( "Images:  the model can see them" );
+			} );
+
+			it( "tests the model on /ping, and a named profile on /ping <profile>", function() {
+				var screen = fakeScreen( [ "/ping", "/ping fast" ] )
+				var session = fakeSession()
+				controllerFor( screen, session ).run( screen )
+
+				expect( session.pinged ).toBe( [ "", "fast" ] );
+				var printed = screen.log.filter( e => e[ 1 ] == "print" )
+				expect( printed[ 1 ][ 2 ] ).toBe( "ok" );
+				expect( printed[ 1 ][ 3 ] ).toBe( "openai/gpt-5 answered in 412 ms." );
+			} );
+
+			it( "prints what /context says, from the session's report", function() {
+				var screen = fakeScreen( [ "/context" ] )
+				var session = fakeSession()
+				session.report = {
+					parts : [ { key : "system", label : "System prompt", tokens : 800, detail : "" }, { key : "tools", label : "Tool definitions", tokens : 300, detail : "2 tools" } ],
+					tools : [ { name : "httpGet", tokens : 200 }, { name : "now", tokens : 100 } ],
+					mcpServers : 1, total : 1100, contextWindow : 8000, percent : 14
+				}
+				controllerFor( screen, session ).run( screen )
+
+				var printed = screen.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] )
+				expect( printed[ 1 ] ).toStartWith( "System prompt" );
+				expect( printed[ 1 ] ).toInclude( "~800" );
+				expect( printed[ 2 ] ).toInclude( "2 tools" );
+				expect( printed[ 3 ] ).toStartWith( "Total" );
+				expect( printed[ 3 ] ).toInclude( "of 8,000 tokens" );
+				expect( printed[ 4 ] ).toBe( "[##---------] 14% of the window" );
+				expect( printed[ 5 ] ).toBe( "Largest tool definitions: httpGet ~200, now ~100" );
+				expect( printed[ 6 ] ).toInclude( "1 MCP server are fetched" );
+			} );
+
+			it( "shows the size of the context in the hint row before each prompt, with the window when it is known", function() {
+				var screen = fakeScreen( [ "hello", "/clear" ] )
+				var session = fakeSession()
+				controllerFor( screen, session ).run( screen )
+
+				// once before each of the two prompts, and once before the loop ends on no input
+				expect( screen.statuses ).toHaveLength( 3 );
+				expect( screen.statuses[ 1 ] ).toBe( "ctx ~1.2k / 128k 1%" );
+			} );
+
+			it( "shows just the size when the project does not say the window, and nothing when it cannot be worked out", function() {
+				var screen = fakeScreen( [] )
+				var session = fakeSession()
+				session.report.contextWindow = 0
+				controllerFor( screen, session ).run( screen )
+				expect( screen.statuses[ 1 ] ).toBe( "ctx ~1.2k" );
+
+				var broken = fakeScreen( [] )
+				var failing = fakeSession()
+				failing.contextReport = () => { throw( message = "no agent" ) }
+				controllerFor( broken, failing ).run( broken )
+				expect( broken.statuses[ 1 ] ).toBe( "" );
+			} );
+
+			describe( "@files and pictures", function() {
+
+				beforeEach( function() {
+					variables.dir = createTempDirectory( prefix = "bxagents-chat-files-" );
+					fileWrite( dir & "/notes.md", "the plan is to ship" );
+					fileWrite( dir & "/shot.png", toBinary( "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==" ) );
+				} );
+
+				afterEach( function() {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				} );
+
+				function chatIn( screen, session ) {
+					return new bxagents.models.cli.chat.ChatController( session, dir, nullValue(), userConfig() );
+				}
+
+				it( "sends a text file that is mentioned along with the message, and keeps the mention", function() {
+					var screen = fakeScreen( [ "summarise @notes.md" ] )
+					var session = fakeSession()
+					chatIn( screen, session ).run( screen )
+
+					expect( session.sent[ 1 ] ).toStartWith( "summarise @notes.md" );
+					expect( session.sent[ 1 ] ).toInclude( "contents of the file `notes.md`" );
+					expect( session.sent[ 1 ] ).toInclude( "the plan is to ship" );
+					expect( session.sentImages[ 1 ] ).toBeEmpty();
+					expect( screen.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] ) ).toInclude( "Sent with 1 attachment." );
+				} );
+
+				it( "sends an image that is mentioned as an image, not as text", function() {
+					var screen = fakeScreen( [ "what is in @shot.png ?" ] )
+					var session = fakeSession()
+					chatIn( screen, session ).run( screen )
+
+					expect( session.sent[ 1 ] ).toBe( "what is in @shot.png ?" );
+					expect( session.sentImages[ 1 ] ).toHaveLength( 1 );
+					expect( session.sentImages[ 1 ][ 1 ].path ).toInclude( "shot.png" );
+					expect( screen.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] ) ).toInclude( "Sent with 1 image." );
+				} );
+
+				it( "sends the pictures pasted into the box with the next message, once", function() {
+					var screen = fakeScreen( [ "look", "and now?" ] )
+					screen.pasted = [ dir & "/shot.png" ]
+					var session = fakeSession()
+					chatIn( screen, session ).run( screen )
+
+					expect( session.sentImages[ 1 ] ).toHaveLength( 1 );
+					expect( session.sentImages[ 1 ][ 1 ].path ).toBe( dir & "/shot.png" );
+					expect( session.sentImages[ 2 ] ).toBeEmpty();
+				} );
+
+				it( "warns about a path that is not there and still sends the message", function() {
+					var screen = fakeScreen( [ "see @src/missing.bx" ] )
+					var session = fakeSession()
+					chatIn( screen, session ).run( screen )
+
+					expect( screen.log.filter( e => e[ 1 ] == "print" && e[ 2 ] == "warn" ).map( e => e[ 3 ] ) ).toInclude( "There is no file @src/missing.bx." );
+					expect( session.sent ).toBe( [ "see @src/missing.bx" ] );
+				} );
+
+				it( "lets the screen paste pictures unless the model is known not to see them, and says why", function() {
+					var open = fakeScreen( [] )
+					chatIn( open, fakeSession() ).run( open )
+					expect( open.imagesAllowed[ 1 ] ).toBeTrue();
+
+					var closed = fakeScreen( [] )
+					var blind = fakeSession()
+					blind.facts = { contextWindow : 0, vision : "no" }
+					chatIn( closed, blind ).run( closed )
+					expect( closed.imagesAllowed[ 1 ] ).toBeFalse();
+					expect( closed.imagesAllowed[ 2 ] ).toInclude( "cannot see images" );
+				} );
+
+				it( "counts attachments and images together in what it says it sent", function() {
+					var screen = fakeScreen( [ "check @notes.md and @shot.png" ] )
+					chatIn( screen, fakeSession() ).run( screen )
+					expect( screen.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] ) ).toInclude( "Sent with 1 attachment and 1 image." );
+				} );
+
+			} );
+
+			describe( "!command and ##function() on this machine", function() {
+
+				function printedBy( screen ) {
+					return screen.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] );
+				}
+
+				it( "runs a shell command, shows what it printed and sends it with the next message", function() {
+					if ( createObject( "java", "java.lang.System" ).getProperty( "os.name" ).lcase().startsWith( "windows" ) ) { return; }
+					var screen = fakeScreen( [ "!echo from the shell", "what does that say?" ] )
+					var session = fakeSession()
+					controllerFor( screen, session ).run( screen )
+
+					var shown = printedBy( screen )
+					expect( shown ).toInclude( "$ echo from the shell" );
+					expect( shown ).toInclude( "from the shell" );
+					expect( shown ).toInclude( "Attached to your next message." );
+					expect( session.sent ).toHaveLength( 1 );
+					expect( session.sent[ 1 ] ).toStartWith( "what does that say?" );
+					expect( session.sent[ 1 ] ).toInclude( "output of the command `echo from the shell`" );
+					expect( session.sent[ 1 ] ).toInclude( "from the shell" );
+					expect( shown ).toInclude( "Sent with 1 attachment." );
+				} );
+
+				it( "keeps the output off the message when typed with !!", function() {
+					if ( createObject( "java", "java.lang.System" ).getProperty( "os.name" ).lcase().startsWith( "windows" ) ) { return; }
+					var screen = fakeScreen( [ "!!echo private", "hello" ] )
+					var session = fakeSession()
+					controllerFor( screen, session ).run( screen )
+
+					expect( printedBy( screen ) ).toInclude( "private" );
+					expect( printedBy( screen ).filter( p => p.startsWith( "Attached" ) ) ).toBeEmpty();
+					expect( session.sent ).toBe( [ "hello" ] );
+				} );
+
+				it( "shows a failing command's exit code in a warning", function() {
+					if ( createObject( "java", "java.lang.System" ).getProperty( "os.name" ).lcase().startsWith( "windows" ) ) { return; }
+					var screen = fakeScreen( [ "!!echo bad; exit 4" ] )
+					controllerFor( screen, fakeSession() ).run( screen )
+					var warn = screen.log.filter( e => e[ 1 ] == "print" && e[ 2 ] == "warn" ).map( e => e[ 3 ] )
+					expect( warn ).toInclude( "(exit code 4)" );
+				} );
+
+				it( "sends a message that starts with a bang and a space, as a message", function() {
+					var screen = fakeScreen( [ "! not a command" ] )
+					var session = fakeSession()
+					controllerFor( screen, session ).run( screen )
+					expect( session.sent ).toBe( [ "! not a command" ] );
+				} );
+
+				it( "calls a BoxLang built-in function, shows the result and sends it with the next message", function() {
+					var screen = fakeScreen( [ "####ucase( 'shown only' )", "####listLen( 'a,b,c' )", "##ucase( 'kept' )", "and?" ] )
+					var session = fakeSession()
+					controllerFor( screen, session ).run( screen )
+
+					var shown = printedBy( screen )
+					expect( shown ).toInclude( "SHOWN ONLY" );
+					expect( shown ).toInclude( "3" );
+					expect( shown ).toInclude( "KEPT" );
+					expect( session.sent ).toHaveLength( 1 );
+					expect( session.sent[ 1 ] ).toInclude( "result of the function call `ucase( 'kept' )`" );
+					expect( session.sent[ 1 ] ).notToInclude( "SHOWN ONLY" );
+				} );
+
+				it( "shows structs and arrays a function returns as JSON", function() {
+					var screen = fakeScreen( [ "####listToArray( 'a,b' )" ] )
+					controllerFor( screen, fakeSession() ).run( screen )
+					var shown = printedBy( screen ).toList( "|" )
+					expect( shown ).toInclude( '"a"' );
+					expect( shown ).toInclude( '"b"' );
+				} );
+
+				it( "says why a call was refused, and sends nothing", function() {
+					var screen = fakeScreen( [ "##noSuchThing( 1 )", "##ucase( x )" ] )
+					var session = fakeSession()
+					controllerFor( screen, session ).run( screen )
+
+					expect( session.sent ).toBeEmpty();
+					var warn = screen.log.filter( e => e[ 1 ] == "print" && e[ 2 ] == "warn" ).map( e => e[ 3 ] )
+					expect( warn[ 1 ] ).toInclude( "There is no built-in function [noSuchThing]" );
+					expect( warn[ 2 ] ).toInclude( "[x] is not a value" );
+				} );
+
+				it( "sends a message that starts with a hash but is not a call, as a message", function() {
+					var screen = fakeScreen( [ "## A heading", "##hashtag", "##2 on the list" ] )
+					var session = fakeSession()
+					controllerFor( screen, session ).run( screen )
+					expect( session.sent ).toBe( [ "## A heading", "##hashtag", "##2 on the list" ] );
+				} );
+
+				it( "does nothing when the person has switched them off, and says where", function() {
+					var screen = fakeScreen( [ "!echo hi", "##ucase( 'a' )", "plain" ] )
+					var session = fakeSession()
+					controllerFor( screen, session, userConfig( false, false ) ).run( screen )
+
+					var warn = screen.log.filter( e => e[ 1 ] == "print" && e[ 2 ] == "warn" ).map( e => e[ 3 ] )
+					expect( warn[ 1 ] ).toInclude( "Shell commands are switched off in ~/.bxagents/bxAgents.yml" );
+					expect( warn[ 2 ] ).toInclude( "Function calls are switched off in ~/.bxagents/bxAgents.yml" );
+					expect( session.sent ).toBe( [ "plain" ] );
+				} );
+
+				it( "calls only the functions the person allows", function() {
+					var screen = fakeScreen( [ "####ucase( 'a' )", "####lcase( 'A' )" ] )
+					controllerFor( screen, fakeSession(), userConfig( true, [ "ucase" ] ) ).run( screen )
+					var shown = printedBy( screen )
+					expect( shown ).toInclude( "A" );
+					expect( shown.filter( p => p.find( "not one of the functions you allow" ) ) ).toHaveLength( 1 );
+				} );
+
+				it( "tells the person what is wrong with their file when the chat starts", function() {
+					var screen = fakeScreen( [] )
+					var broken = userConfig()
+					broken.problems = () => [ "~/.bxagents/bxAgents.yml: chat has an unknown key [shel]. Use: shell, bifs" ]
+					controllerFor( screen, fakeSession(), broken ).run( screen )
+					var warn = screen.log.filter( e => e[ 1 ] == "print" && e[ 2 ] == "warn" ).map( e => e[ 3 ] )
+					expect( warn[ 1 ] ).toInclude( "unknown key [shel]" );
+				} );
+
+				it( "hands the person's own keys to the screen and shows what it did not accept", function() {
+					var screen = fakeScreen( [] )
+					screen.keyProblems = [ "[newline]: [banana] is not a key I can read." ]
+					controllerFor( screen, fakeSession(), userConfig( true, true, { newline : [ "ctrl+n" ] } ) ).run( screen )
+					expect( screen.keyOverrides ).toBe( [ { newline : [ "ctrl+n" ] } ] );
+					var warn = screen.log.filter( e => e[ 1 ] == "print" && e[ 2 ] == "warn" ).map( e => e[ 3 ] )
+					expect( warn[ 1 ] ).toInclude( "~/.bxagents/bxAgents.yml: [newline]: [banana]" );
+				} );
+
+				it( "/keys lists the keys as bound, and a lone ? asks the same", function() {
+					var screen = fakeScreen( [ "/keys", "?" ] )
+					var session = fakeSession()
+					controllerFor( screen, session ).run( screen )
+
+					var shown = printedBy( screen )
+					expect( shown.filter( p => p.find( "Send the message" ) && p.find( "submit" ) ) ).toHaveLength( 2 );
+					expect( shown.filter( p => p.find( "Stop the agent at its next step (while the agent works)" ) ) ).toHaveLength( 2 );
+					expect( session.sent ).toBeEmpty();
+				} );
+
+				it( "counts what waits for the next message in /context and in the status bar", function() {
+					var screen = fakeScreen( [ "####ucase( 'a' )", "##ucase( 'attached text' )", "/context" ] )
+					var session = fakeSession()
+					session.report = { parts : [ { key : "system", label : "System prompt", tokens : 800, detail : "" } ], tools : [], mcpServers : 0, total : 800, contextWindow : 0, percent : 0 }
+					controllerFor( screen, session ).run( screen )
+
+					var shown = printedBy( screen )
+					expect( shown.filter( p => p.startsWith( "Attached" ) && p.find( "1 item" ) ) ).toHaveLength( 1 );
+					// before the attachment the bar says ~800; with it, a little more
+					expect( screen.statuses.first() ).toBe( "ctx ~800" );
+					expect( screen.statuses.last() ).notToBe( "ctx ~800" );
+				} );
+
+			} );
+
+			it( "says why a ping failed", function() {
+				var screen = fakeScreen( [ "/ping planner" ] )
+				var session = fakeSession()
+				session.pingAnswer = { ok : false, model : "claude/claude-opus-4", reason : "No API key was found for claude, so there is nothing to test yet." }
+				controllerFor( screen, session ).run( screen )
+
+				var printed = screen.log.filter( e => e[ 1 ] == "print" )
+				expect( printed[ 1 ][ 2 ] ).toBe( "warn" );
+				expect( printed[ 1 ][ 3 ] ).toBe( "claude/claude-opus-4: No API key was found for claude, so there is nothing to test yet." );
+			} );
+
+			it( "names the conversation on /name and says when no name was given", function() {
+				var screen = fakeScreen( [ "/name Quarterly plan", "/name" ] )
+				var session = fakeSession()
+				controllerFor( screen, session ).run( screen )
+
+				expect( session.renamed ).toBe( [ "Quarterly plan" ] );
+				var printed = screen.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] )
+				expect( printed[ 1 ] ).toBe( "Named: Quarterly plan" );
+				expect( printed[ 2 ] ).toInclude( "Give it a name" );
+			} );
+
+			it( "forks the conversation on /fork and keeps the transcript, since the copy has the same messages", function() {
+				var screen = fakeScreen( [ "hi", "/fork Other approach" ] )
+				var session = fakeSession()
+				var controller = controllerFor( screen, session )
+				controller.run( screen )
+
+				expect( session.forked ).toBe( [ "Other approach" ] );
+				expect( screen.log.filter( e => e[ 1 ] == "print" ).last()[ 3 ] ).toInclude( "Forked as [Other approach]: 4 messages copied" );
+				expect( controller.transcript() ).toHaveLength( 2 );
+			} );
+
+			it( "will not export an empty conversation", function() {
+				var screen = fakeScreen( [ "/export" ] )
 				controllerFor( screen, fakeSession() ).run( screen )
 
-				expect( screen.log.filter( e => e[ 1 ] == "print" )[ 1 ][ 3 ] ).toBe( "Nothing to save yet." );
+				expect( screen.log.filter( e => e[ 1 ] == "print" )[ 1 ][ 3 ] ).toBe( "Nothing to export yet." );
 			} );
 
 			it( "shows an error from the agent and carries on with the next message", function() {
@@ -397,7 +805,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "offers its commands to the screen for the slash menu", function() {
 				var names = new bxagents.models.cli.chat.ChatController( fakeSession() ).commands().map( c => c.name )
 
-				expect( names ).toBe( [ "/help", "/new", "/tools", "/sessions", "/resume", "/clear", "/compact", "/model", "/profile", "/default", "/info", "/remember", "/notes", "/copy", "/save", "/record", "/exit" ] );
+				expect( names ).toBe( [ "/help", "/new", "/name", "/fork", "/tools", "/sessions", "/resume", "/clear", "/compact", "/context", "/keys", "/model", "/ping", "/profile", "/default", "/info", "/remember", "/notes", "/copy", "/export", "/record", "/exit" ] );
 			} );
 
 		} );

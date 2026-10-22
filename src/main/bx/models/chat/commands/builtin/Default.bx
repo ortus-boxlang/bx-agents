@@ -1,0 +1,28 @@
+class extends="models.chat.commands.BaseCommand@bxagents" {
+
+	string function name() {
+		return "default"
+	}
+
+	string function hint() {
+		return "go back to the app's default model"
+	}
+
+	array function transports() {
+		return [ "tui" ]
+	}
+
+	/**
+	 * The app's default model: the defaultProfile, else the provider and model at the top of Agent.yaml.
+	 */
+	any function run( required any context, required string args ) {
+		var chat = arguments.context.chat()
+		var reply = arguments.context.reply()
+		var can = chat.switchable()
+		if ( !can.ok ) {
+			return reply.warn( can.reason )
+		}
+		return new "models.chat.commands.builtin.SwitchReport@bxagents"().of( reply, chat.useDefault() )
+	}
+
+}

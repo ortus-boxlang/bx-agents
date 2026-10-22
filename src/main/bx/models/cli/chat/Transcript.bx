@@ -1,0 +1,44 @@
+/**
+ * What has been said in the chat so far, as the terminal chat keeps it for /copy and /export.
+ */
+class {
+
+	function init() {
+		variables.entries = []
+		return this
+	}
+
+	/**
+	 * @entry { role : "you" | "agent", text }
+	 */
+	function append( required struct entry ) {
+		variables.entries.append( arguments.entry )
+		return this
+	}
+
+	function reset() {
+		variables.entries = []
+		return this
+	}
+
+	array function entries() {
+		return variables.entries
+	}
+
+	boolean function isEmpty() {
+		return variables.entries.isEmpty()
+	}
+
+	/**
+	 * @return The last thing the agent said, or "" when it has said nothing
+	 */
+	string function lastAnswer() {
+		for ( var i = variables.entries.len(); i >= 1; i-- ) {
+			if ( variables.entries[ i ].role == "agent" ) {
+				return variables.entries[ i ].text
+			}
+		}
+		return ""
+	}
+
+}

@@ -1,0 +1,53 @@
+/**
+ * What a command may reach while it runs, and nothing more. A command gets its conversation through
+ * `chat()`; it never sees the screen, the HTTP request or the gateway it was typed in.
+ *
+ * chat()      the conversation: names the agent, its model, tools, notes, conversations, memory.
+ *             The same calls whether the agent runs in this process, behind --connect or on a server.
+ * terminal()  only in the terminal chat: copy, export and record, which touch the user's machine
+ * transport() "tui", "web" or "gateway"
+ */
+class {
+
+	/**
+	 * @chat The conversation (AgentConversation, InProcessSession or HttpSession)
+	 * @transport "tui", "web" or "gateway"
+	 * @admin Whether the person may run admin commands
+	 * @terminal The terminal port, in the terminal chat only
+	 */
+	function init( required any chat, required string transport, boolean admin = true, any terminal ) {
+		variables.chat = arguments.chat
+		variables.transport = arguments.transport
+		variables.admin = arguments.admin
+		variables.terminal = isNull( arguments.terminal ) ? nullValue() : arguments.terminal
+		return this
+	}
+
+	any function chat() {
+		return variables.chat
+	}
+
+	string function transport() {
+		return variables.transport
+	}
+
+	boolean function isAdmin() {
+		return variables.admin
+	}
+
+	boolean function hasTerminal() {
+		return !isNull( variables.terminal )
+	}
+
+	any function terminal() {
+		return variables.terminal
+	}
+
+	/**
+	 * @return A new, empty Reply to build the answer in
+	 */
+	any function reply() {
+		return new "models.chat.commands.Reply@bxagents"()
+	}
+
+}

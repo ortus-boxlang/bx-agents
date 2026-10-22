@@ -1,0 +1,28 @@
+class extends="models.chat.commands.BaseCommand@bxagents" {
+
+	string function name() {
+		return "model"
+	}
+
+	string function hint() {
+		return "show the model in use"
+	}
+
+	any function run( required any context, required string args ) {
+		var chat = arguments.context.chat()
+		var reply = arguments.context.reply()
+		var info = chat.modelInfo()
+		reply.text( "Model:   " & ( len( info.model ?: "" ) ? info.model : "not known" ) )
+		if ( len( info.profile ?: "" ) ) {
+			reply.text( "Profile: " & info.profile )
+		}
+		for ( var line in new "models.chat.ModelFactsLines@bxagents"().of( chat.modelFacts() ) ) {
+			reply.text( left( line[ 1 ] & ":" & repeatString( " ", 9 ), 9 ) & line[ 2 ] )
+		}
+		if ( arguments.context.transport() == "tui" && chat.switchable().ok ) {
+			reply.text( "Type /profile to pick another, or /default to go back to the app's default." )
+		}
+		return reply
+	}
+
+}

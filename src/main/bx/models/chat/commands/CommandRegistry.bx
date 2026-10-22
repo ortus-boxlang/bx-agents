@@ -1,0 +1,97 @@
+/**
+ * The commands a chat has, by name. It finds the command a line asks for, checks that it may run
+ * here and for this person, and runs it. It knows nothing about any one command: the built-ins
+ * (CommandCatalog) and anything a module adds are registered the same way.
+ */
+class {
+
+	function init() {
+		variables.ordered = []
+		variables.byName = {}
+		return this
+	}
+
+	/**
+	 * @command An ICommand
+	 */
+	function register( required any command ) {
+		var names = [ arguments.command.name() ].append( arguments.command.aliases(), true )
+		for ( var name in names ) {
+			if ( variables.byName.keyExists( name ) ) {
+				throw( type : "bxagents.command", message : "Two commands are called [#name#]." )
+			}
+		}
+		variables.ordered.append( arguments.command )
+		for ( var name in names ) {
+			variables.byName[ name ] = arguments.command
+		}
+		return this
+	}
+
+	/**
+	 * @names The names of the commands to keep
+	 *
+	 * @return A new registry with only those commands, in this registry's order. The commands themselves are shared.
+	 */
+	any function only( required array names ) {
+		var kept = new "models.chat.commands.CommandRegistry@bxagents"()
+		for ( var command in variables.ordered ) {
+			if ( arguments.names.containsNoCase( command.name() ) ) {
+				kept.register( command )
+			}
+		}
+		return kept
+	}
+
+	/**
+	 * @return The command with that name or alias, or null
+	 */
+	any function lookup( required string name ) {
+		return variables.byName[ lCase( arguments.name ) ] ?: nullValue()
+	}
+
+	/**
+	 * @return The commands that run on a transport, in the order they were registered
+	 */
+	array function forTransport( required string transport ) {
+		return variables.ordered.filter( c => c.transports().containsNoCase( transport ) )
+	}
+
+	/**
+	 * @transport "tui", "web" or "gateway"
+	 * @admin Whether the person may run admin commands; the ones that need it are left out when not
+	 *
+	 * @return [ { name : "/help", hint } ] for a transport: the slash menu and the help
+	 */
+	array function menu( required string transport, boolean admin = true ) {
+		var allowed = arguments.admin
+		return forTransport( arguments.transport )
+			.filter( c => allowed || c.permission() != "admin" )
+			.map( c => { name : "/" & c.name(), hint : c.hint() } )
+	}
+
+	/**
+	 * Runs one line.
+	 *
+	 * @line What was typed, with its prefix
+	 * @context A CommandContext
+	 *
+	 * @return A Reply. A command that does not exist, does not run here or needs a person to be an admin is a warning, not an error.
+	 */
+	any function run( required string line, required any context ) {
+		var typed = new "models.chat.commands.CommandLine@bxagents"( arguments.line )
+		var command = lookup( typed.name() )
+		var reply = arguments.context.reply()
+		if ( isNull( command ) ) {
+			return reply.warn( "Unknown command /#typed.name()#. Type /help." )
+		}
+		if ( !command.transports().containsNoCase( arguments.context.transport() ) ) {
+			return reply.warn( "/#command.name()# is not available here. Type /help." )
+		}
+		if ( command.permission() == "admin" && !arguments.context.isAdmin() ) {
+			return reply.warn( "/#command.name()# is for admins." )
+		}
+		return command.run( arguments.context, typed.args() )
+	}
+
+}

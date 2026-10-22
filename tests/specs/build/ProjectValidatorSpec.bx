@@ -335,6 +335,15 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.errors.filter( e => e.findNoCase( "gatewaySession.policy" ) ).len() ).toBeGT( 0 );
 			} );
 
+			it( "rejects a bad gatewaySession.commands block: a long prefix, an unknown key, a command that is not there or does not run on a gateway", function() {
+				var errors = validateFixture( "bad-gateway-commands" ).errors.filter( e => e.findNoCase( "gatewaySession.commands" ) );
+				expect( errors.filter( e => e.findNoCase( "single character" ) ) ).toHaveLength( 1 );
+				expect( errors.filter( e => e.findNoCase( "unknown key [colour]" ) ) ).toHaveLength( 1 );
+				expect( errors.filter( e => e.findNoCase( "names [nonsense]" ) ) ).toHaveLength( 1 );
+				expect( errors.filter( e => e.findNoCase( "names [copy]" ) ) ).toHaveLength( 1 );
+				expect( errors.filter( e => e.findNoCase( "names [info]" ) ) ).toBeEmpty();
+			} );
+
 			it( "rejects an mcp-exposure gateway entry missing its required target", function() {
 				var result = validateFixture( "mcp-exposure-missing-target" );
 				expect( result.errors.filter( e => e.findNoCase( "missing a 'target'" ) ).len() ).toBeGT( 0 );

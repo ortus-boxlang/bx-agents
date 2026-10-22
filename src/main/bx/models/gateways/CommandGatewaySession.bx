@@ -1,0 +1,127 @@
+/**
+ * bx-ai's GatewaySession with commands in front of the agent. A message that is a command the
+ * session offers (/info, /help, ...) is answered by the command layer and never reaches the model;
+ * everything else goes to the agent exactly as before, so a slash that is not one of ours, in a chat
+ * where people type slashes, is still just a message.
+ *
+ * Commands are on by default and limited to a safe set that needs no conversation of its own. The
+ * agent block of a project can narrow it or widen it:
+ *
+ *   gatewaySession:
+ *     commands:
+ *       enabled: true
+ *       prefix: "/"
+ *       allow: [ help, info, tools, notes, remember, model ]
+ *       admins: [ "12345" ]            # gateway user ids that may run admin commands
+ */
+import bxModules.bxai.models.gateway.IGateway;
+import bxModules.bxai.models.gateway.contracts.GatewayMessage;
+import bxModules.bxai.models.gateway.contracts.GatewayEvent;
+
+class extends="bxModules.bxai.models.gateway.GatewaySession" {
+
+	static {
+		SAFE_COMMANDS = [ "help", "info", "tools", "model", "ping", "notes", "remember" ]
+	}
+
+	/**
+	 * @commands { enabled, prefix, allow, admins, registry }, all optional
+	 *
+	 * The other arguments are GatewaySession's own.
+	 */
+	function init( required any agent, required any gateways, string policy = "queue", numeric maxQueueDepth = 50, any checkpointer, struct commands = {} ) {
+		var own = { agent : arguments.agent, gateways : arguments.gateways, policy : arguments.policy, maxQueueDepth : arguments.maxQueueDepth }
+		if ( !isNull( arguments.checkpointer ) ) {
+			own.checkpointer = arguments.checkpointer
+		}
+		super.init( argumentCollection = own )
+
+		variables.commandsOn = arguments.commands.enabled ?: true
+		variables.prefix = arguments.commands.prefix ?: "/"
+		variables.admins = arguments.commands.admins ?: []
+		// a registry can be handed in whole (a module's own commands); otherwise the built-ins, narrowed to the allowed ones
+		variables.registry = arguments.commands.registry ?: new "models.chat.commands.CommandCatalog@bxagents"().standard().only( arguments.commands.allow ?: static.SAFE_COMMANDS )
+		variables.service = new "models.chat.commands.CommandService@bxagents"( agent : arguments.agent, registry : variables.registry )
+		return this
+	}
+
+	/**
+	 * @return The commands this session answers, [ { name, hint } ]
+	 */
+	array function commandMenu() {
+		return variables.registry.menu( "gateway", true )
+	}
+
+	/**
+	 * Hands the command menu to each gateway that can show one to its users (Telegram's "/" list), once.
+	 * A gateway that cannot, or that fails, is skipped: a missing menu must never stop the bot answering.
+	 *
+	 * @return The names of the gateways that took the menu
+	 */
+	array function publishMenus() {
+		var taken = []
+		if ( !variables.commandsOn ) {
+			return taken
+		}
+		var menu = commandMenu()
+		for ( var name in variables.gateways ) {
+			var gateway = variables.gateways[ name ]
+			if ( !structKeyExists( gateway, "publishCommands" ) ) {
+				continue
+			}
+			try {
+				if ( gateway.publishCommands( menu ) ) {
+					taken.append( name )
+				}
+			} catch ( any e ) {
+				// the menu is a courtesy
+			}
+		}
+		variables.menusPublished = true
+		return taken
+	}
+
+	any function handleInbound( required GatewayMessage message, required IGateway sourceGateway ) {
+		if ( variables.commandsOn && !( variables.menusPublished ?: false ) ) {
+			publishMenus()
+		}
+		if ( variables.commandsOn && arguments.message.getType() == "message" ) {
+			var line = new "models.chat.commands.CommandLine@bxagents"( arguments.message.getText(), variables.prefix )
+			if ( line.isCommand() && !isNull( variables.registry.lookup( line.name() ) ) ) {
+				answer( arguments.message, arguments.sourceGateway, line )
+				return nullValue()
+			}
+		}
+		return super.handleInbound( arguments.message, arguments.sourceGateway )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Runs the command and sends its answer back through the gateway the message came from. A command that
+	 * fails is told to the person, not thrown into the gateway's thread.
+	 */
+	private void function answer( required GatewayMessage message, required IGateway sourceGateway, required any line ) {
+		var context = arguments.message.getContext()
+		var who = len( context.getUserID() ) ? context.getUserID() : "gateway"
+		var text = ""
+		try {
+			var reply = variables.service.execute(
+				who,
+				resolveThreadId( arguments.message, arguments.sourceGateway ),
+				// the command layer always reads the slash
+				"/" & arguments.line.name() & " " & arguments.line.args(),
+				"gateway",
+				variables.admins.containsNoCase( who )
+			)
+			text = new "models.chat.commands.PlainRenderer@bxagents"().render( reply )
+		} catch ( any e ) {
+			text = "That command did not work: " & e.message
+		}
+		arguments.sourceGateway.deliver(
+			new GatewayEvent( type : GatewayEvent.TYPES.RESPONSE_COMPLETED, data : { content : text }, context : context ),
+			context
+		)
+	}
+
+}

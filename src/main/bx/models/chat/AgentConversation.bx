@@ -1,0 +1,354 @@
+/**
+ * A conversation with the agent object: who is talking, which model, the tools, the notes, the list of
+ * conversations, the messages in memory. Everything a command needs to know or change, and nothing
+ * about how a turn is run or shown.
+ *
+ * Two things build on it: InProcessSession (the terminal chat, which also runs turns and streams them)
+ * and ServerConversation (the web page and gateways, where the conversation is named by each request).
+ */
+class {
+
+	/**
+	 * @agent The agent object from the project's GeneratedAgentFactory
+	 * @userId Who is talking: the owner of the user notes and of the conversations. Defaults to the operating system user.
+	 * @sessions A SessionStore: the list of conversations in the shared chat database. Without one the chat keeps no list.
+	 * @conversationId The conversation to carry on in; a new one when blank
+	 */
+	function init( required any agent, string userId = "", any sessions, string conversationId = "" ) {
+		variables.agent = arguments.agent
+		variables.sessions = isNull( arguments.sessions ) ? nullValue() : arguments.sessions
+		variables.conversationId = len( arguments.conversationId ) ? arguments.conversationId : createUUID()
+		variables.userId = len( trim( arguments.userId ) ) ? trim( arguments.userId ) : createObject( "java", "java.lang.System" ).getProperty( "user.name" ) ?: "default"
+		variables.threadId = createUUID()
+		return this
+	}
+
+	/**
+	 * @return Whether /info may show where the database file is. A person at the terminal owns the machine; someone on the web does not.
+	 */
+	boolean function exposesDatabase() {
+		return true
+	}
+
+	/**
+	 * @return Where the agent runs; the default is this process, and the other sessions say otherwise
+	 */
+	string function mode() {
+		return "in-process"
+	}
+
+	string function userId() {
+		return variables.userId
+	}
+
+	string function agentName() {
+		return variables.agent.getConfig().name
+	}
+
+	string function modelName() {
+		var model = variables.agent.getConfig().model ?: {}
+		if ( !isStruct( model ) ) {
+			return toString( model )
+		}
+		var id = ( model.params ?: {} ).model ?: ""
+		return len( id ) ? ( model.provider ?: "" ) & "/" & id : ( model.provider ?: "" )
+	}
+
+	/**
+	 * @return { model : provider/model, profile : the profile in use or empty, provider }
+	 */
+	struct function modelInfo() {
+		var model = variables.agent.getConfig().model ?: {}
+		return { model : modelName(), profile : variables.agent.getConfig().profile ?: "", provider : isStruct( model ) ? ( model.provider ?: "" ) : "" }
+	}
+
+	/**
+	 * @return { contextWindow : tokens (0 when the project does not say), vision : "yes" | "no" | "" } for the model in use
+	 */
+	struct function modelFacts() {
+		return new "models.runtime.ModelFacts@bxagents"().of( modelInfo().profile )
+	}
+
+	/**
+	 * What is in the context right now: the system prompt, the tool definitions, the notes and this conversation's
+	 * messages, as estimated sizes. Nothing is sent to a model.
+	 *
+	 * @return See ContextReport.build()
+	 */
+	struct function contextReport() {
+		return new "models.chat.ContextReport@bxagents"( variables.agent, variables.userId, variables.conversationId, modelFacts() ).build()
+	}
+
+	/**
+	 * Asks a model whether it answers, with one tiny question. No conversation is touched.
+	 *
+	 * @profile A profile name; blank for the model in use
+	 *
+	 * @return { ok, model, ms, reply } or { ok : false, model, reason }
+	 */
+	struct function ping( string profile = "" ) {
+		var asked = trim( arguments.profile )
+		var target = asked
+		var label = modelName()
+		if ( len( asked ) ) {
+			var found = profiles().filter( p => p.name == asked )
+			if ( !found.len() ) {
+				return { ok : false, model : asked, reason : "There is no profile [#asked#]. You can use: #profiles().map( p => p.name ).toList( ', ' )#" }
+			}
+			label = found[ 1 ].provider & ( len( found[ 1 ].model ) ? "/" & found[ 1 ].model : "" )
+			if ( !found[ 1 ].hasApiKey ) {
+				return { ok : false, model : label, reason : "No API key was found for #found[ 1 ].provider#, so there is nothing to test yet." }
+			}
+		} else {
+			target = modelInfo().profile == "default" ? "" : modelInfo().profile
+		}
+		return new "models.runtime.ModelProbe@bxagents"().ping( target ).append( { model : label } )
+	}
+
+	/**
+	 * @return { ok : true } here: the agent runs in this process, so its model can be changed
+	 */
+	struct function switchable() {
+		return { ok : true, reason : "" }
+	}
+
+	/**
+	 * The profiles the app has: the default one first, then the named ones.
+	 *
+	 * @return [ { name, description, provider, model, hasApiKey, isDefault, isCurrent } ]
+	 */
+	array function profiles() {
+		var current = modelInfo().profile
+		var catalog = new "models.wizard.WizardCatalog@bxagents"()
+		// the default first, then the named ones by name: the order bx-ai lists them in is not promised
+		var listed = aiProfiles().sort( ( a, b ) => a.name == "default" ? -1 : ( b.name == "default" ? 1 : compareNoCase( a.name, b.name ) ) )
+		return listed.map( p => {
+			name        : p.name,
+			description : p.description ?: "",
+			provider    : p.provider,
+			model       : p.model ?: "",
+			// a provider with no key to set (mock, a local one) never lacks it
+			hasApiKey   : p.hasApiKey || !len( catalog.provider( p.provider ).envVar ?: "" ),
+			isDefault   : p.isDefault,
+			isCurrent   : p.name == current
+		} )
+	}
+
+	/**
+	 * Changes the agent's model to a profile. Its memory, tools, sub-agents and instructions stay,
+	 * so the conversation carries on.
+	 *
+	 * @name A profile name, or "default" for the one built from the app's provider and model
+	 *
+	 * @return { ok, profile, provider, model, hasApiKey } or { ok : false, reason }
+	 */
+	struct function useProfile( required string name ) {
+		var found = profiles().filter( p => p.name == name )
+		if ( !found.len() ) {
+			var names = profiles().map( p => p.name )
+			return { ok : false, reason : "There is no profile [#arguments.name#]. You can use: #names.toList( ', ' )#" }
+		}
+		variables.agent.withProfile( found[ 1 ].name )
+		return { ok : true, profile : found[ 1 ].name, provider : found[ 1 ].provider, model : modelName(), hasApiKey : found[ 1 ].hasApiKey }
+	}
+
+	/**
+	 * Changes the agent's model to the app's default: bx-ai's defaultProfile, else the provider and model at the top of Agent.yaml.
+	 */
+	struct function useDefault() {
+		return useProfile( profiles().filter( p => p.isDefault )[ 1 ].name )
+	}
+
+	/**
+	 * @return The names of the tools the agent has
+	 */
+	array function tools() {
+		return variables.agent.listTools().map( tool => isSimpleValue( tool ) ? tool : ( tool.name ?: toString( tool ) ) )
+	}
+
+	/**
+	 * @return The notes of this agent for the chat commands: LocalNotes, or NoNotes when the agent keeps none
+	 */
+	any function notes() {
+		var provider = new "models.notes.NotesWiring@bxagents"().providerOf( variables.agent )
+		if ( isNull( provider ) ) {
+			return new "models.cli.chat.NoNotes@bxagents"()
+		}
+		return new "models.cli.chat.LocalNotes@bxagents"( provider, variables.userId, agentName() )
+	}
+
+	/**
+	 * Starts a new conversation: the agent keeps its memory per thread.
+	 */
+	void function newThread() {
+		variables.threadId = createUUID()
+		variables.conversationId = createUUID()
+	}
+
+	/**
+	 * @return The id of the conversation: the key of its messages in the agent's memory and of its row in the list
+	 */
+	string function conversationId() {
+		return variables.conversationId
+	}
+
+	/**
+	 * @return True when the chat keeps a list of conversations (a shared chat database is open)
+	 */
+	boolean function keepsSessions() {
+		return !isNull( variables.sessions )
+	}
+
+	/**
+	 * @return The user's recent conversations, most recent first: [ { id, title, messageCount, updatedAt } ]
+	 */
+	array function sessions( numeric limit = 20 ) {
+		return keepsSessions() ? variables.sessions.list( variables.userId, arguments.limit ) : []
+	}
+
+	/**
+	 * Switches to another of the user's conversations.
+	 *
+	 * @reference Its number in the list, its id or the start of its id; blank for the most recent
+	 *
+	 * @return { ok, id, title, history } or { ok : false, reason }
+	 */
+	struct function resumeSession( string reference = "" ) {
+		if ( !keepsSessions() ) {
+			return { ok : false, reason : "This chat keeps no list of conversations." }
+		}
+		var found = len( trim( arguments.reference ) ) ? variables.sessions.resolve( variables.userId, arguments.reference ) : variables.sessions.latest( variables.userId )
+		if ( found.isEmpty() ) {
+			return { ok : false, reason : len( trim( arguments.reference ) ) ? "There is no conversation [#arguments.reference#]. Type /sessions to see them." : "There are no earlier conversations." }
+		}
+		variables.conversationId = found.id
+		variables.threadId = createUUID()
+		return { ok : true, id : found.id, title : found.title ?: "", history : history() }
+	}
+
+	/**
+	 * @return The title in the list of conversations, "" when it has none yet or no list is kept
+	 */
+	string function conversationTitle() {
+		return keepsSessions() ? ( variables.sessions.byId( variables.userId, variables.conversationId ).title ?: "" ) : ""
+	}
+
+	/**
+	 * Names this conversation. A conversation nobody has spoken in has no row in the list yet; it gets one.
+	 *
+	 * @title The new name; cut to a line, as a title is a label
+	 *
+	 * @return { ok, title } or { ok : false, reason }
+	 */
+	struct function rename( required string title ) {
+		if ( !keepsSessions() ) {
+			return { ok : false, reason : "This chat keeps no list of conversations, so there is nothing to name." }
+		}
+		var named = variables.sessions.titleOf( arguments.title )
+		if ( !len( named ) ) {
+			return { ok : false, reason : "Give it a name: /name <new name>" }
+		}
+		if ( !variables.sessions.rename( variables.userId, variables.conversationId, named ) && !variables.sessions.touch( variables.userId, variables.conversationId, named, 0 ) ) {
+			return { ok : false, reason : "That conversation belongs to someone else." }
+		}
+		return { ok : true, title : named }
+	}
+
+	/**
+	 * Copies this whole conversation, messages and all, under a new name, and moves to the copy. The two
+	 * carry on independently from here.
+	 *
+	 * @title The name of the copy; "Fork of <this one>" when blank
+	 *
+	 * @return { ok, id, title, messages } or { ok : false, reason }
+	 */
+	struct function fork( string title = "" ) {
+		if ( !keepsSessions() ) {
+			return { ok : false, reason : "This chat keeps no list of conversations, so there is nowhere to put a copy." }
+		}
+		var copied = 0
+		var forkId = createUUID()
+		for ( var memory in variables.agent.getMemories() ) {
+			for ( var message in memory.getAll( variables.userId, variables.conversationId ) ) {
+				memory.add( message, variables.userId, forkId )
+				copied++
+			}
+		}
+		if ( !copied ) {
+			return { ok : false, reason : "There is nothing to fork yet: this conversation has no messages." }
+		}
+		var shown = len( trim( arguments.title ) ) ? arguments.title : "Fork of " & ( len( conversationTitle() ) ? conversationTitle() : "a conversation" )
+		var named = variables.sessions.titleOf( shown )
+		var count = variables.agent.getMemoryMessages( variables.userId, forkId ).len()
+		variables.sessions.touch( variables.userId, forkId, named, count )
+		variables.conversationId = forkId
+		variables.threadId = createUUID()
+		return { ok : true, id : forkId, title : named, messages : count }
+	}
+
+	/**
+	 * @return What was said in this conversation, from the agent's memory: [ { role : "you" | "agent", text } ]
+	 */
+	array function history() {
+		return new "models.cli.chat.MemoryHistory@bxagents"().of( variables.agent.getMemoryMessages( variables.userId, variables.conversationId ) )
+	}
+
+	/**
+	 * Forgets this conversation's messages (the agent's memory of it) and keeps the conversation.
+	 */
+	struct function clear() {
+		variables.agent.getMemories().each( ( memory ) => memory.clear( variables.userId, variables.conversationId ) )
+		if ( keepsSessions() ) {
+			variables.sessions.resetCount( variables.userId, variables.conversationId )
+		}
+		return { ok : true }
+	}
+
+	/**
+	 * Replaces the older messages with a summary and keeps the most recent few.
+	 *
+	 * @return { available, compacted, before, after }; available is false when the agent's memory has no summary model
+	 */
+	struct function compact() {
+		var summarizes = variables.agent.getMemories().some( ( memory ) => len( memory.getSummaryProvider() ?: "" ) && len( memory.getSummaryModel() ?: "" ) )
+		var before = variables.agent.getMemoryMessages( variables.userId, variables.conversationId ).len()
+		if ( !summarizes ) {
+			return { available : false, compacted : false, before : before, after : before }
+		}
+		variables.agent.getMemories().each( ( memory ) => memory.summarize( {}, variables.userId, variables.conversationId ) )
+		var after = variables.agent.getMemoryMessages( variables.userId, variables.conversationId ).len()
+		return { available : true, compacted : after < before, before : before, after : after }
+	}
+
+	/**
+	 * @return [ [ label, value ] ] about this chat, in the order to show them
+	 */
+	array function info() {
+		var lines = [
+			[ "Agent", agentName() ],
+			[ "Model", modelName() ],
+			[ "Mode", mode() ],
+			[ "Tools", tools().len() ],
+			[ "User", variables.userId ],
+			[ "Conversation", variables.conversationId ],
+			[ "Messages", variables.agent.getMemoryMessages( variables.userId, variables.conversationId ).len() ]
+		]
+		// what the project says about the model sits right under it
+		var at = 2
+		for ( var row in new "models.chat.ModelFactsLines@bxagents"().of( modelFacts() ) ) {
+			at++
+			lines.insertAt( at, row )
+		}
+		var kept = notes()
+		if ( kept.available() ) {
+			var stats = kept.stats()
+			lines.append( [ "Notes", "#stats.user.count# about you (#stats.user.used#/#stats.user.limit# characters), #stats.agent.count# about the agent (#stats.agent.used#/#stats.agent.limit#)" ] )
+		}
+		var file = exposesDatabase() ? trim( getSystemSetting( "BXAGENTS_DB", "" ) ) : ""
+		if ( len( file ) ) {
+			lines.append( [ "Database", file ] )
+		}
+		return lines
+	}
+
+}

@@ -1,0 +1,338 @@
+/**
+ * The chat's `#bif( ... )`: reads and runs ONE call of a BoxLang built-in function, and nothing else. It is not an
+ * expression evaluator: there are no variables, operators, member calls or statements, and a name that is not a
+ * registered built-in is refused before anything runs.
+ *
+ *   call     name ( [ argument { , argument } ] )
+ *   argument [ name : ] value                     positional, or named
+ *   value    a string ('..' or ".."), a number, true, false, null, an array [ .. ], a struct { key : value }, or a call
+ *
+ * `#dateFormat( now(), 'yyyy-mm-dd' )`, `#listLen( 'a,b,c' )`, `#arraySum( [ 1, 2, 3 ] )` are calls; `#a + b`,
+ * `#x.y()` and `#foo( bar )` are not (`bar` is no value).
+ */
+class {
+
+	static {
+		MAX_DEPTH = 12
+	}
+
+	/**
+	 * @allowed Which built-ins may be called: true for any registered one, or a list of names
+	 */
+	function init( any allowed = true ) {
+		variables.allowed = arguments.allowed
+		return this
+	}
+
+	/**
+	 * Reads a call without running it.
+	 *
+	 * @text What follows the #, such as dateFormat( now(), 'yyyy-mm-dd' )
+	 *
+	 * @return { ok : true, name, args : [ value ], named : { name : value } } where a value is a plain value or a nested { call : true, ... }; or { ok : false, reason }
+	 */
+	struct function parse( required string text ) {
+		variables.src = trim( arguments.text )
+		variables.at = 1
+		try {
+			var call = readCall( 0 )
+			skipSpace()
+			if ( variables.at <= len( variables.src ) ) {
+				return { ok : false, reason : "Only one call is run: unexpected [#mid( variables.src, variables.at, 20 )#] after it." }
+			}
+			return call.append( { ok : true } )
+		} catch ( BxAgents.BifParse e ) {
+			return { ok : false, reason : e.message }
+		}
+	}
+
+	/**
+	 * Reads and runs a call.
+	 *
+	 * @text What follows the #
+	 *
+	 * @return { ok : true, name, value } or { ok : false, reason }
+	 */
+	struct function run( required string text ) {
+		var parsed = parse( arguments.text )
+		if ( !parsed.ok ) {
+			return parsed
+		}
+		try {
+			return { ok : true, name : parsed.name, value : invokeCall( parsed ) }
+		} catch ( any e ) {
+			return { ok : false, reason : parsed.name & ": " & e.message }
+		}
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Reading
+	// ----------------------------------------------------------------------------------
+
+	private struct function readCall( required numeric depth ) {
+		if ( arguments.depth > static.MAX_DEPTH ) {
+			fail( "That is nested too deeply." )
+		}
+		skipSpace()
+		var name = readName()
+		if ( !len( name ) ) {
+			fail( "A function name comes first, such as dateFormat( now(), 'yyyy-mm-dd' )." )
+		}
+		skipSpace()
+		if ( peek() != "(" ) {
+			fail( "[#name#] is not followed by ( : only calls are run, not expressions." )
+		}
+		if ( !isOffered( name ) ) {
+			fail( isBuiltIn( name ) ? "#name# is not one of the functions you allow in bxAgents.yml (chat.bifs)." : "There is no built-in function [#name#]. Only BoxLang's own functions can be called." )
+		}
+		variables.at++
+		var args = []
+		var named = {}
+		skipSpace()
+		if ( peek() == ")" ) {
+			variables.at++
+			return { call : true, name : name, args : args, named : named }
+		}
+		while ( true ) {
+			skipSpace()
+			var key = readNamedKey()
+			var value = readValue( arguments.depth + 1 )
+			if ( len( key ) ) {
+				named[ key ] = value
+			} else if ( named.count() ) {
+				fail( "Positional arguments come before named ones." )
+			} else {
+				args.append( value )
+			}
+			skipSpace()
+			var next = peek()
+			variables.at++
+			if ( next == ")" ) {
+				break
+			}
+			if ( next != "," ) {
+				fail( "Expected , or ) in the arguments of #name#." )
+			}
+		}
+		return { call : true, name : name, args : args, named : named }
+	}
+
+	/**
+	 * @return The name of a named argument ( `format: 'x'` ), or "" when the argument is positional; leaves the position at the value
+	 */
+	private string function readNamedKey() {
+		var start = variables.at
+		var name = readName()
+		if ( len( name ) ) {
+			skipSpace()
+			if ( peek() == ":" || ( peek() == "=" && mid( variables.src, variables.at + 1, 1 ) != "=" ) ) {
+				variables.at++
+				return name
+			}
+		}
+		variables.at = start
+		return ""
+	}
+
+	private any function readValue( required numeric depth ) {
+		skipSpace()
+		var c = peek()
+		if ( c == "'" || c == '"' ) {
+			return readString( c )
+		}
+		if ( c == "[" ) {
+			return readArray( arguments.depth )
+		}
+		if ( c == "{" ) {
+			return readStruct( arguments.depth )
+		}
+		if ( reFind( "[0-9.\-+]", c ) ) {
+			return readNumber()
+		}
+		var start = variables.at
+		var name = readName()
+		if ( !len( name ) ) {
+			fail( "Expected a value at [#mid( variables.src, variables.at, 12 )#]: a string, number, true, false, null, array, struct or call." )
+		}
+		if ( [ "true", "false" ].containsNoCase( name ) ) {
+			return name.lcase() == "true"
+		}
+		if ( name.lcase() == "null" ) {
+			return { "__bxagentsNull" : true }
+		}
+		skipSpace()
+		if ( peek() == "(" ) {
+			variables.at = start
+			return readCall( arguments.depth )
+		}
+		fail( "[#name#] is not a value. Variables and expressions are not run: use a string, number, true, false, null, array, struct or a call." )
+	}
+
+	private string function readString( required string quote ) {
+		variables.at++
+		var out = ""
+		while ( variables.at <= len( variables.src ) ) {
+			var c = mid( variables.src, variables.at, 1 )
+			if ( c == arguments.quote ) {
+				// a doubled quote inside a string is one quote
+				if ( mid( variables.src, variables.at + 1, 1 ) == arguments.quote ) {
+					out &= c
+					variables.at += 2
+					continue
+				}
+				variables.at++
+				return out
+			}
+			out &= c
+			variables.at++
+		}
+		fail( "A string is not closed." )
+	}
+
+	private numeric function readNumber() {
+		var found = reFind( "^[+\-]?[0-9]*\.?[0-9]+([eE][+\-]?[0-9]+)?", mid( variables.src, variables.at, len( variables.src ) ), 1, true )
+		if ( found.pos[ 1 ] != 1 ) {
+			fail( "[#mid( variables.src, variables.at, 10 )#] is not a number." )
+		}
+		var text = mid( variables.src, variables.at, found.len[ 1 ] )
+		variables.at += found.len[ 1 ]
+		return val( text )
+	}
+
+	private array function readArray( required numeric depth ) {
+		variables.at++
+		var items = []
+		skipSpace()
+		if ( peek() == "]" ) {
+			variables.at++
+			return items
+		}
+		while ( true ) {
+			items.append( readValue( arguments.depth + 1 ) )
+			skipSpace()
+			var next = peek()
+			variables.at++
+			if ( next == "]" ) {
+				return items
+			}
+			if ( next != "," ) {
+				fail( "Expected , or ] in an array." )
+			}
+		}
+	}
+
+	private struct function readStruct( required numeric depth ) {
+		variables.at++
+		var out = {}
+		skipSpace()
+		if ( peek() == "}" ) {
+			variables.at++
+			return out
+		}
+		while ( true ) {
+			skipSpace()
+			var key = ( peek() == "'" || peek() == '"' ) ? readString( peek() ) : readName()
+			if ( !len( key ) ) {
+				fail( "A struct key is a name or a string." )
+			}
+			skipSpace()
+			if ( peek() != ":" && peek() != "=" ) {
+				fail( "Expected : after the struct key [#key#]." )
+			}
+			variables.at++
+			out[ key ] = readValue( arguments.depth + 1 )
+			skipSpace()
+			var next = peek()
+			variables.at++
+			if ( next == "}" ) {
+				return out
+			}
+			if ( next != "," ) {
+				fail( "Expected , or } in a struct." )
+			}
+		}
+	}
+
+	private string function readName() {
+		var found = reFind( "^[A-Za-z_][A-Za-z0-9_]*", mid( variables.src, variables.at, len( variables.src ) ), 1, true )
+		if ( found.pos[ 1 ] != 1 ) {
+			return ""
+		}
+		var name = mid( variables.src, variables.at, found.len[ 1 ] )
+		variables.at += found.len[ 1 ]
+		return name
+	}
+
+	private void function skipSpace() {
+		while ( variables.at <= len( variables.src ) && reFind( "\s", mid( variables.src, variables.at, 1 ) ) ) {
+			variables.at++
+		}
+	}
+
+	private string function peek() {
+		return variables.at <= len( variables.src ) ? mid( variables.src, variables.at, 1 ) : ""
+	}
+
+	private void function fail( required string message ) {
+		throw( type = "BxAgents.BifParse", message = arguments.message )
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Running
+	// ----------------------------------------------------------------------------------
+
+	private boolean function isBuiltIn( required string name ) {
+		return getFunctionList().keyExists( arguments.name )
+	}
+
+	private boolean function isOffered( required string name ) {
+		if ( !isBuiltIn( arguments.name ) ) {
+			return false
+		}
+		return isArray( variables.allowed ) ? variables.allowed.containsNoCase( arguments.name ) : variables.allowed == true
+	}
+
+	/**
+	 * Runs a read call: nested calls first, then this one, by name through the runtime's own function service, so
+	 * nothing but a registered built-in can be reached.
+	 */
+	private any function invokeCall( required struct call ) {
+		var runtime = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance()
+		var Keys = createObject( "java", "ortus.boxlang.runtime.scopes.Key" )
+		var descriptor = runtime.getFunctionService().getGlobalFunction( Keys.of( arguments.call.name ) )
+		var context = runtime.getRuntimeContext()
+		if ( arguments.call.named.count() ) {
+			var named = createObject( "java", "java.util.LinkedHashMap" )
+			var positional = arguments.call.args
+			if ( positional.len() ) {
+				fail( "Give all the arguments by name, or none." )
+			}
+			for ( var argName in arguments.call.named ) {
+				named.put( Keys.of( argName ), resolve( arguments.call.named[ argName ] ) )
+			}
+			return descriptor.invoke( context, named, false, Keys.of( arguments.call.name ) )
+		}
+		return descriptor.invoke( context, arguments.call.args.map( a => resolve( a ) ), false, Keys.of( arguments.call.name ) )
+	}
+
+	private any function resolve( required any value ) {
+		if ( isStruct( arguments.value ) && arguments.value.keyExists( "call" ) && arguments.value.call == true && arguments.value.keyExists( "name" ) ) {
+			return invokeCall( arguments.value )
+		}
+		if ( isStruct( arguments.value ) && arguments.value.keyExists( "__bxagentsNull" ) ) {
+			return nullValue()
+		}
+		if ( isArray( arguments.value ) ) {
+			return arguments.value.map( v => resolve( v ) )
+		}
+		if ( isStruct( arguments.value ) ) {
+			var out = {}
+			for ( var key in arguments.value ) {
+				out[ key ] = resolve( arguments.value[ key ] )
+			}
+			return out
+		}
+		return arguments.value
+	}
+
+}

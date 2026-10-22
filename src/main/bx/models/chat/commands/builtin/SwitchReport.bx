@@ -1,0 +1,21 @@
+/**
+ * How /profile and /default tell what a switch did.
+ */
+class {
+
+	/**
+	 * @reply The Reply to add to
+	 * @outcome What useProfile() or useDefault() returned
+	 */
+	any function of( required any reply, required struct outcome ) {
+		if ( !( arguments.outcome.ok ?: false ) ) {
+			return arguments.reply.warn( arguments.outcome.reason ?: "Could not switch." )
+		}
+		arguments.reply.ok( "Now using #arguments.outcome.profile# (#arguments.outcome.model#). The conversation carries on." )
+		if ( !( arguments.outcome.hasApiKey ?: true ) ) {
+			arguments.reply.warn( "No API key was found for #arguments.outcome.provider#. The next message will fail until it is set." )
+		}
+		return arguments.reply
+	}
+
+}

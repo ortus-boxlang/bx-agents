@@ -1,0 +1,113 @@
+/**
+ * Turns a conversation into a file a person can keep: Markdown, or a page of HTML. The same for the
+ * terminal (which writes it to disk) and the web page (which hands it to the browser to save).
+ *
+ * The HTML is the Markdown rendered with commonmark, with the people's own HTML escaped: what someone
+ * typed into a chat is text, never markup a browser should run when the file is opened later.
+ */
+class {
+
+	static {
+		FORMATS = {
+			md   : { extension : "md", mime : "text/markdown" },
+			html : { extension : "html", mime : "text/html" }
+		}
+	}
+
+	/**
+	 * Reads what follows /export: an optional file name and an optional --format=md|html. Without a format,
+	 * the file name decides (.html or .htm is HTML, anything else Markdown).
+	 *
+	 * @args The text after the command
+	 *
+	 * @return { ok : true, file, format } (file is "" when none was given) or { ok : false, reason }
+	 */
+	struct function parse( required string args ) {
+		var format = ""
+		var words = []
+		for ( var word in listToArray( trim( arguments.args ), " " ) ) {
+			if ( word.startsWith( "--format=" ) ) {
+				format = lCase( mid( word, 10, len( word ) ) )
+				format = format == "markdown" ? "md" : format
+				if ( !static.FORMATS.keyExists( format ) ) {
+					return { ok : false, reason : "The format is md or html: /export [file] [--format=md|html]" }
+				}
+			} else {
+				words.append( word )
+			}
+		}
+		var file = words.toList( " " )
+		if ( !len( format ) ) {
+			format = reFindNoCase( "\.html?$", file ) ? "html" : "md"
+		}
+		return { ok : true, file : file, format : format }
+	}
+
+	/**
+	 * @return The file name to use when none was given: a dated one
+	 */
+	string function defaultName( required string format ) {
+		return "chat-#dateTimeFormat( now(), 'yyyyMMdd-HHmmss' )#." & static.FORMATS[ arguments.format ].extension
+	}
+
+	/**
+	 * @return The media type of a format
+	 */
+	string function mime( required string format ) {
+		return static.FORMATS[ arguments.format ].mime
+	}
+
+	/**
+	 * @messages [ { role : "you" | "agent", text } ]
+	 * @format "md" or "html"
+	 * @title What the conversation is called
+	 *
+	 * @return The file's content
+	 */
+	string function render( required array messages, required string format, string title = "" ) {
+		var markdown = toMarkdown( arguments.messages, arguments.title )
+		return arguments.format == "html" ? toHtml( markdown, arguments.title ) : markdown
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private string function toMarkdown( required array messages, required string title ) {
+		var lines = len( arguments.title ) ? [ "## " & arguments.title, "" ] : []
+		for ( var entry in arguments.messages ) {
+			lines.append( "**" & ( entry.role == "you" ? "You" : "Agent" ) & "**" )
+			lines.append( "" )
+			lines.append( entry.text )
+			lines.append( "" )
+		}
+		return lines.toList( char( 10 ) )
+	}
+
+	private string function toHtml( required string markdown, required string title ) {
+		var extensions = [ createObject( "java", "org.commonmark.ext.gfm.tables.TablesExtension" ).create() ]
+		var parser = createObject( "java", "org.commonmark.parser.Parser" ).builder().extensions( extensions ).build()
+		var renderer = createObject( "java", "org.commonmark.renderer.html.HtmlRenderer" ).builder().extensions( extensions ).escapeHtml( true ).sanitizeUrls( true ).build()
+		var body = renderer.render( parser.parse( arguments.markdown ) )
+		var name = len( arguments.title ) ? encodeForHTML( arguments.title ) : "Conversation"
+		return [
+			"<!doctype html>",
+			'<html lang="en">',
+			"<head>",
+			'<meta charset="utf-8">',
+			'<meta name="viewport" content="width=device-width, initial-scale=1">',
+			"<title>#name#</title>",
+			"<style>",
+			":root { color-scheme: light dark; }",
+			"body { font: 16px/1.55 system-ui, sans-serif; max-width: 46rem; margin: 2rem auto; padding: 0 1rem; }",
+			"pre { overflow-x: auto; padding: .7rem; border: 1px solid ##8884; border-radius: 6px; }",
+			"code { font-family: ui-monospace, monospace; }",
+			"table { border-collapse: collapse; } td, th { border: 1px solid ##8884; padding: .25rem .6rem; }",
+			"</style>",
+			"</head>",
+			"<body>",
+			body,
+			"</body>",
+			"</html>"
+		].toList( char( 10 ) )
+	}
+
+}

@@ -340,6 +340,57 @@ __THEME_TOKENS__
 		font-size: 0.85em;
 	}
 	.bubble.assistant a { color: var(--accent); }
+	.bubble.command {
+		align-self: flex-start;
+		max-width: 100%;
+		background: var(--panel, transparent);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: 0.5rem 0.7rem;
+		font-size: 0.88rem;
+	}
+	.bubble.command p { margin: 0 0 0.25rem; color: var(--muted); }
+	.bubble.command p.ok { color: var(--fg); }
+	.bubble.command p.warn { color: var(--danger, #c0392b); }
+	.bubble.command a { color: var(--accent); }
+	#attachChips { display: flex; flex-wrap: wrap; gap: 0.4rem; padding: 0 0.2rem 0.4rem; }
+	#attachChips .chip-file { display: inline-flex; align-items: center; gap: 0.4rem; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.15rem 0.4rem; font-size: 0.78rem; color: var(--muted); }
+	#attachChips img { height: 1.6rem; width: auto; border-radius: 3px; }
+	#attachChips button { padding: 0 0.3rem; background: transparent; color: var(--muted); border: none; cursor: pointer; font-size: 0.9rem; }
+	#attachBtn { background: transparent !important; color: var(--fg) !important; border: 1px solid var(--border) !important; font-weight: 400 !important; }
+	.bubble.user img.sent-image { display: block; max-height: 8rem; max-width: 100%; margin-top: 0.4rem; border-radius: 4px; }
+	form#composer.dragging { outline: 2px dashed var(--accent); }
+	button.chip { font-size: 0.75rem; padding: 0.15rem 0.5rem; color: var(--muted); font-family: var(--font-mono); }
+	.bubble.command table { border-collapse: collapse; font-family: var(--font-mono); font-size: 0.82rem; }
+	.bubble.command td { padding: 0.1rem 0.8rem 0.1rem 0; vertical-align: top; overflow-wrap: anywhere; }
+	.bubble.command td.label { color: var(--muted); white-space: nowrap; }
+	.bubble.command .choices { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.3rem; }
+	.bubble.command .choices button {
+		background: transparent;
+		color: var(--fg);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: 0.3rem 0.6rem;
+		cursor: pointer;
+		font: inherit;
+		font-size: 0.82rem;
+	}
+	.bubble.command .choices button small { color: var(--muted); margin-left: 0.4rem; }
+	#slashMenu {
+		list-style: none;
+		margin: 0 0 0.3rem;
+		padding: 0.2rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		background: var(--input-bg);
+		max-height: 12rem;
+		overflow-y: auto;
+		font-size: 0.85rem;
+	}
+	#slashMenu li { display: flex; gap: 0.8rem; padding: 0.25rem 0.5rem; cursor: pointer; border-radius: var(--radius-sm); }
+	#slashMenu li[aria-selected="true"], #slashMenu li:hover { background: var(--border); }
+	#slashMenu .cmd { font-family: var(--font-mono); }
+	#slashMenu .tip { color: var(--muted); }
 	.hint {
 		color: var(--muted);
 		font-size: 0.8rem;
@@ -566,8 +617,11 @@ __CUSTOM_CSS__
 		</div>
 		<div class="actions">
 			<span class="meta" id="modelMeta"></span>
+			<button type="button" class="chip" id="contextChip" title="Estimated size of the context: system prompt, tools, notes and this conversation. Click for the breakdown" hidden></button>
 			<select id="profileSelect" title="The model for your next messages" aria-label="Model" hidden></select>
 			<button type="button" id="sidebarBtn" aria-expanded="true" aria-controls="sidebar" title="Show or hide conversations">Chats</button>
+			<button type="button" id="forkBtn" title="Copy this conversation under a new name and carry on in the copy" hidden>Fork</button>
+			<button type="button" id="exportBtn" title="Save this conversation as a Markdown file" hidden>Export</button>
 			<button type="button" id="clearBtn" title="Delete the messages in this conversation" hidden>Clear</button>
 			<button type="button" id="compactBtn" title="Summarize older messages, keep the recent ones" hidden>Compact</button>
 			<button type="button" id="notesBtn" title="What the agent keeps about you and about its own work" hidden>Notes</button>
@@ -585,7 +639,11 @@ __CUSTOM_CSS__
 		<div id="main">
 			<div id="messages" role="log" aria-live="polite" aria-relevant="additions text" aria-label="Conversation"></div>
 			<p class="hint" id="hint" role="status"></p>
+			<ul id="slashMenu" role="listbox" aria-label="Commands" hidden></ul>
+			<div id="attachChips" hidden></div>
 			<form id="composer" autocomplete="off">
+				<input type="file" id="attachInput" multiple hidden>
+				<button type="button" id="attachBtn" title="Attach a picture or a text file (you can also paste or drop them)" hidden>Attach</button>
 				<label class="visually-hidden" for="input">Message</label>
 				<textarea id="input" rows="1" placeholder="__PLACEHOLDER__" autofocus></textarea>
 				<button type="submit" id="sendBtn">Send</button>
@@ -637,11 +695,18 @@ __CUSTOM_CSS__
 	var themeBtn = document.getElementById( "themeBtn" );
 	var sidebarBtn = document.getElementById( "sidebarBtn" );
 	var clearBtn = document.getElementById( "clearBtn" );
+	var forkBtn = document.getElementById( "forkBtn" );
+	var contextChipEl = document.getElementById( "contextChip" );
+	var attachBtn = document.getElementById( "attachBtn" );
+	var attachInput = document.getElementById( "attachInput" );
+	var attachChipsEl = document.getElementById( "attachChips" );
+	var exportBtn = document.getElementById( "exportBtn" );
 	var compactBtn = document.getElementById( "compactBtn" );
 	var sidebarEl = document.getElementById( "sidebar" );
 	var convListEl = document.getElementById( "convList" );
 	var modelMetaEl = document.getElementById( "modelMeta" );
 	var profileSelectEl = document.getElementById( "profileSelect" );
+	var slashMenuEl = document.getElementById( "slashMenu" );
 	// The profile the person picked, "" for the agent's own model. Only ever one the server listed.
 	var chosenProfile = "";
 
@@ -650,6 +715,16 @@ __CUSTOM_CSS__
 	// worse than no button.
 	var capabilities = {};
 	var conversations = [];
+	// Pictures and text files waiting to go with the next message
+	var pendingImages = [];   // { name, mime, data (base64), url }
+	var pendingTexts = [];    // { name, content }
+	var modelSeesImages = true;
+	var MAX_IMAGES = 4;
+	var MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+	var MAX_TEXT_CHARS = 100000;
+	var IMAGE_TYPES = [ "image/png", "image/jpeg", "image/gif", "image/webp" ];
+	// The slash commands the server offers, [ { name, hint } ], from GET /commands
+	var commandList = [];
 	var isBusy = false;
 
 	var activeController = null;
@@ -734,6 +809,17 @@ __CUSTOM_CSS__
 			notesBtn.hidden = !capabilities.notes;
 			if ( !capabilities.conversations ) {
 				setSidebar( false );
+			}
+			// what the model is known to see: "no" means pictures are not offered at all
+			modelSeesImages = payload.vision !== "no";
+			attachBtn.hidden = !capabilities.attachments;
+			if ( capabilities.commands ) {
+				apiGet( "/commands" ).then( function ( list ) {
+					commandList = ( list && list.commands ) || [];
+					var offered = function ( name ) { return commandList.some( function ( c ) { return c.name === name; } ); };
+					forkBtn.hidden = !offered( "/fork" );
+					exportBtn.hidden = !offered( "/export" );
+				} );
 			}
 			if ( capabilities.profiles ) {
 				return loadProfiles();
@@ -991,7 +1077,39 @@ __CUSTOM_CSS__
 	 * while the agent still remembers everything - so the page would look blank
 	 * and then answer follow-up questions about messages the user cannot see.
 	 */
+	/**
+	 * The size of the context, in the header: "ctx ~12.4k / 128k 9%", or without the window when the project does not
+	 * say it. Worked out on the server from the system prompt, the tool definitions, the notes and this conversation's
+	 * messages; nothing is sent to a model. Refreshed whenever any of those can have changed.
+	 */
+	function refreshContext() {
+		if ( !capabilities.context ) {
+			return;
+		}
+		apiGet( "/context?conversationId=" + encodeURIComponent( getConversationId() ) ).then( function ( report ) {
+			if ( !report || report.success !== true ) {
+				contextChipEl.hidden = true;
+				return;
+			}
+			var approx = function ( n ) { return "~" + ( n < 1000 ? n : ( n / 1000 ).toFixed( 1 ) + "k" ); };
+			var windowText = function ( n ) { return n >= 1000000 && n % 100000 === 0 ? ( n / 1000000 ) + "M" : n >= 1000 ? Math.round( n / 1000 ) + "k" : String( n ); };
+			var text = "ctx " + approx( report.total );
+			if ( report.contextWindow > 0 ) {
+				text += " / " + windowText( report.contextWindow ) + " " + report.percent + "%";
+			}
+			contextChipEl.textContent = text;
+			contextChipEl.hidden = false;
+		} );
+	}
+
+	contextChipEl.addEventListener( "click", function () {
+		if ( !isBusy ) {
+			runCommand( "/context" );
+		}
+	} );
+
 	function rehydrate() {
+		refreshContext();
 		var url = API_BASE + "/history?conversationId=" + encodeURIComponent( getConversationId() );
 		return fetch( url, { headers: authHeaders( {} ) } )
 			.then( function ( res ) { return res.ok ? res.json() : null; } )
@@ -1004,11 +1122,17 @@ __CUSTOM_CSS__
 				clearWelcome();
 				messages.forEach( function ( message ) {
 					var content = typeof message.content === "string" ? message.content : "";
-					if ( !content.length ) {
+					var pictures = [];
+					if ( Array.isArray( message.content ) ) {
+						// a message with pictures is a list of parts: the text, and an image_url for each picture
+						content = message.content.filter( function ( part ) { return part && part.type === "text"; } ).map( function ( part ) { return part.text || ""; } ).join( "\n" );
+						pictures = message.content.filter( function ( part ) { return part && part.type === "image_url" && part.image_url && /^data:image\//.test( part.image_url.url || "" ); } ).map( function ( part ) { return part.image_url.url; } );
+					}
+					if ( !content.length && !pictures.length ) {
 						return;
 					}
 					if ( message.role === "user" ) {
-						addUserBubble( content );
+						addUserBubble( content, pictures );
 						return;
 					}
 					if ( message.role === "assistant" ) {
@@ -1140,10 +1264,17 @@ __CUSTOM_CSS__
 		} );
 	}
 
-	function addUserBubble( text ) {
+	function addUserBubble( text, imageUrls ) {
 		var el = document.createElement( "div" );
 		el.className = "bubble user";
 		el.textContent = text;
+		( imageUrls || [] ).forEach( function ( url ) {
+			var img = document.createElement( "img" );
+			img.className = "sent-image";
+			img.alt = "attached picture";
+			img.src = url;
+			el.appendChild( img );
+		} );
 		messagesEl.appendChild( el );
 		scrollToEnd( true );
 	}
@@ -1383,6 +1514,12 @@ __CUSTOM_CSS__
 			if ( res.status === 401 ) {
 				throw new Error( "Unauthorized - set the API key via the \"Key\" button, then try again. If you already did, the server's API-key environment variable may be unset: the gate refuses every request in that case." );
 			}
+			if ( res.status === 400 ) {
+				// the server explains a refusal (a model that cannot see pictures, a picture that is too big)
+				return res.json().catch( function () { return {}; } ).then( function ( body ) {
+					throw new Error( body.error || "Request failed (HTTP 400)" );
+				} );
+			}
 			if ( !res.ok || !res.body ) {
 				throw new Error( "Request failed (HTTP " + res.status + ")" );
 			}
@@ -1510,10 +1647,298 @@ __CUSTOM_CSS__
 			} );
 	}
 
+	/**
+	 * Runs a slash command on the server and draws its Reply. The Reply is data: blocks to show in order,
+	 * and effects that say what happened to the conversation (a new one started, another opened, messages gone).
+	 */
+	function runCommand( line ) {
+		clearWelcome();
+		addUserBubble( line );
+		apiPost( "/command", { line: line, conversationId: getConversationId() } )
+			.then( function ( res ) { return res.json().catch( function () { return null; } ); } )
+			.then( function ( reply ) {
+				if ( !reply || !reply.blocks ) {
+					addErrorBubble( ( reply && reply.error ) || "That command did not work." );
+					return;
+				}
+				// a command that moves to another conversation, or empties this one, redraws the transcript
+				// first; its answer is shown after that so it is not wiped with it
+				return applyEffects( reply ).then( function () { drawReply( reply ); refreshContext(); } );
+			} )
+			.catch( function () { addErrorBubble( "The command could not be sent." ); } );
+	}
+
+	function applyEffects( reply ) {
+		var effects = reply.effects || [];
+		var opened = effects.filter( function ( e ) { return e.type === "conversation"; } )[ 0 ];
+		var reset = effects.some( function ( e ) { return e.type === "reset"; } );
+		if ( opened && opened.id !== getConversationId() ) {
+			// the page shows the conversation it moves to, not this one plus it
+			messagesEl.textContent = "";
+			return selectConversation( opened.id ).then( loadConversations );
+		}
+		if ( reset ) {
+			messagesEl.textContent = "";
+			return rehydrate().then( loadConversations );
+		}
+		return Promise.resolve( loadConversations() );
+	}
+
+	function drawReply( reply ) {
+		var box = document.createElement( "div" );
+		box.className = "bubble command";
+		( reply.blocks || [] ).forEach( function ( block ) {
+			if ( block.type === "text" ) {
+				var p = document.createElement( "p" );
+				p.className = block.style || "muted";
+				p.textContent = block.text;
+				box.appendChild( p );
+			} else if ( block.type === "table" ) {
+				var table = document.createElement( "table" );
+				( block.rows || [] ).forEach( function ( row ) {
+					var tr = document.createElement( "tr" );
+					row.forEach( function ( cell, i ) {
+						var td = document.createElement( "td" );
+						td.textContent = String( cell );
+						if ( block.layout === "keyvalue" && i === 0 ) { td.className = "label"; }
+						tr.appendChild( td );
+					} );
+					table.appendChild( tr );
+				} );
+				box.appendChild( table );
+			} else if ( block.type === "file" ) {
+				// the server hands the file over; the browser saves it
+				var link = document.createElement( "a" );
+				var url = URL.createObjectURL( new Blob( [ block.text ], { type: block.mime } ) );
+				link.href = url;
+				link.download = block.name;
+				link.textContent = "Download " + block.name;
+				var holder = document.createElement( "p" );
+				holder.appendChild( link );
+				box.appendChild( holder );
+				link.click();
+				setTimeout( function () { URL.revokeObjectURL( url ); }, 60000 );
+			} else if ( block.type === "choose" ) {
+				var title = document.createElement( "p" );
+				title.textContent = block.title;
+				box.appendChild( title );
+				var choices = document.createElement( "div" );
+				choices.className = "choices";
+				( block.options || [] ).forEach( function ( option ) {
+					var btn = document.createElement( "button" );
+					btn.type = "button";
+					btn.textContent = option.label;
+					if ( option.hint ) {
+						var small = document.createElement( "small" );
+						small.textContent = option.hint;
+						btn.appendChild( small );
+					}
+					btn.addEventListener( "click", function () { runCommand( option.line ); } );
+					choices.appendChild( btn );
+				} );
+				box.appendChild( choices );
+			}
+		} );
+		messagesEl.appendChild( box );
+		scrollToEnd( true );
+	}
+
+	forkBtn.addEventListener( "click", function () {
+		var name = window.prompt( "Name for the copy (blank: Fork of this one)", "" );
+		if ( name === null || isBusy ) {
+			return;
+		}
+		runCommand( "/fork " + name.trim() );
+	} );
+
+	exportBtn.addEventListener( "click", function () {
+		if ( !isBusy ) {
+			runCommand( "/export" );
+		}
+	} );
+
+	// ---- pictures and text files ----
+	function renderAttachChips() {
+		attachChipsEl.textContent = "";
+		pendingImages.forEach( function ( image, i ) {
+			var chip = document.createElement( "span" );
+			chip.className = "chip-file";
+			var img = document.createElement( "img" );
+			img.src = image.url;
+			img.alt = "";
+			chip.appendChild( img );
+			chip.appendChild( document.createTextNode( image.name ) );
+			var remove = document.createElement( "button" );
+			remove.type = "button";
+			remove.textContent = "\u00d7";
+			remove.title = "Remove";
+			remove.addEventListener( "click", function () { pendingImages.splice( i, 1 ); renderAttachChips(); } );
+			chip.appendChild( remove );
+			attachChipsEl.appendChild( chip );
+		} );
+		pendingTexts.forEach( function ( file, i ) {
+			var chip = document.createElement( "span" );
+			chip.className = "chip-file";
+			chip.appendChild( document.createTextNode( file.name ) );
+			var remove = document.createElement( "button" );
+			remove.type = "button";
+			remove.textContent = "\u00d7";
+			remove.title = "Remove";
+			remove.addEventListener( "click", function () { pendingTexts.splice( i, 1 ); renderAttachChips(); } );
+			chip.appendChild( remove );
+			attachChipsEl.appendChild( chip );
+		} );
+		attachChipsEl.hidden = !pendingImages.length && !pendingTexts.length;
+	}
+
+	function clearPendingAttachments( revoke ) {
+		pendingImages = [];
+		pendingTexts = [];
+		renderAttachChips();
+	}
+
+	/**
+	 * Takes the files a person chose, pasted or dropped: pictures wait to be sent as attachments, and text files are
+	 * read here and go inside the message. The server checks everything again; these checks only save the upload.
+	 */
+	function addFiles( files ) {
+		Array.prototype.forEach.call( files, function ( file ) {
+			if ( IMAGE_TYPES.indexOf( file.type ) >= 0 ) {
+				if ( !modelSeesImages ) {
+					showHint( "The model in use cannot see pictures." );
+					return;
+				}
+				if ( pendingImages.length >= MAX_IMAGES ) {
+					showHint( "At most " + MAX_IMAGES + " pictures go with one message." );
+					return;
+				}
+				if ( file.size > MAX_IMAGE_BYTES ) {
+					showHint( file.name + " is larger than 5 MB." );
+					return;
+				}
+				var reader = new FileReader();
+				reader.onload = function () {
+					var url = String( reader.result );
+					pendingImages.push( { name: file.name || "pasted.png", mime: file.type, data: url.substring( url.indexOf( "," ) + 1 ), url: url } );
+					renderAttachChips();
+				};
+				reader.readAsDataURL( file );
+			} else if ( file.type.indexOf( "text/" ) === 0 || /\.(txt|md|json|ya?ml|csv|xml|html?|css|js|ts|bx|bxs|bxm|cfc|cfm|java|py|sql|sh|log|ini|toml)$/i.test( file.name ) ) {
+				var textReader = new FileReader();
+				textReader.onload = function () {
+					var content = String( textReader.result );
+					if ( content.length > MAX_TEXT_CHARS ) {
+						content = content.substring( 0, MAX_TEXT_CHARS ) + "\n(the file was cut at " + MAX_TEXT_CHARS + " characters)";
+					}
+					pendingTexts.push( { name: file.name, content: content } );
+					renderAttachChips();
+				};
+				textReader.readAsText( file );
+			} else {
+				showHint( file.name + " is not a picture or a text file." );
+			}
+		} );
+	}
+
+	attachBtn.addEventListener( "click", function () { attachInput.click(); } );
+	attachInput.addEventListener( "change", function () {
+		addFiles( attachInput.files );
+		attachInput.value = "";
+	} );
+	inputEl.addEventListener( "paste", function ( evt ) {
+		var files = evt.clipboardData && evt.clipboardData.files ? evt.clipboardData.files : [];
+		if ( capabilities.attachments && files.length ) {
+			evt.preventDefault();
+			addFiles( files );
+		}
+	} );
+	formEl.addEventListener( "dragover", function ( evt ) {
+		if ( capabilities.attachments ) {
+			evt.preventDefault();
+			formEl.classList.add( "dragging" );
+		}
+	} );
+	formEl.addEventListener( "dragleave", function () { formEl.classList.remove( "dragging" ); } );
+	formEl.addEventListener( "drop", function ( evt ) {
+		formEl.classList.remove( "dragging" );
+		if ( capabilities.attachments && evt.dataTransfer && evt.dataTransfer.files.length ) {
+			evt.preventDefault();
+			addFiles( evt.dataTransfer.files );
+		}
+	} );
+
+	// ---- the "/" menu ----
+	var slashPick = 0;
+
+	function slashMatches() {
+		var typed = inputEl.value;
+		if ( !commandList.length || typed.charAt( 0 ) !== "/" || /\s/.test( typed ) ) {
+			return [];
+		}
+		return commandList.filter( function ( c ) { return c.name.indexOf( typed.toLowerCase() ) === 0; } );
+	}
+
+	function hideSlashMenu() {
+		slashMenuEl.hidden = true;
+		slashMenuEl.textContent = "";
+	}
+
+	function showSlashMenu() {
+		var matches = slashMatches();
+		if ( !matches.length ) {
+			hideSlashMenu();
+			return;
+		}
+		slashPick = Math.min( slashPick, matches.length - 1 );
+		slashMenuEl.textContent = "";
+		matches.forEach( function ( c, i ) {
+			var li = document.createElement( "li" );
+			li.setAttribute( "role", "option" );
+			li.setAttribute( "aria-selected", i === slashPick ? "true" : "false" );
+			var name = document.createElement( "span" );
+			name.className = "cmd";
+			name.textContent = c.name;
+			var tip = document.createElement( "span" );
+			tip.className = "tip";
+			tip.textContent = c.hint;
+			li.appendChild( name );
+			li.appendChild( tip );
+			li.addEventListener( "mousedown", function ( e ) {
+				e.preventDefault();
+				inputEl.value = c.name + " ";
+				hideSlashMenu();
+				inputEl.focus();
+			} );
+			slashMenuEl.appendChild( li );
+		} );
+		slashMenuEl.hidden = false;
+	}
+
+	inputEl.addEventListener( "input", function () { slashPick = 0; showSlashMenu(); } );
+	inputEl.addEventListener( "blur", hideSlashMenu );
+
 	formEl.addEventListener( "submit", function ( evt ) {
 		evt.preventDefault();
 		var text = inputEl.value.trim();
 		if ( !text ) {
+			return;
+		}
+
+		// a lone question mark asks which keys do what
+		if ( commandList.length && text === "?" ) {
+			text = "/keys";
+		}
+
+		// A slash command is run by the server and answered with a Reply, not sent to the model
+		if ( commandList.length && text.charAt( 0 ) === "/" ) {
+			if ( isBusy ) {
+				showHint( "Wait for the answer, or press Stop, before running a command." );
+				return;
+			}
+			inputEl.value = "";
+			autoGrow();
+			hideSlashMenu();
+			runCommand( text );
 			return;
 		}
 
@@ -1539,7 +1964,14 @@ __CUSTOM_CSS__
 		}
 
 		clearWelcome();
-		addUserBubble( text );
+		// text files go along inside the message; pictures travel as attachments for the server to check and build
+		var sentImages = pendingImages.slice();
+		var sentText = text;
+		pendingTexts.forEach( function ( file ) {
+			sentText += "\n\nAttached, the contents of the file `" + file.name + "`:\n```\n" + file.content + "\n```";
+		} );
+		addUserBubble( text, sentImages.map( function ( image ) { return image.url; } ) );
+		clearPendingAttachments( false );
 		inputEl.value = "";
 		autoGrow();
 		setBusy( true );
@@ -1549,12 +1981,15 @@ __CUSTOM_CSS__
 		var turn = createTurn();
 
 		var payload = {
-			input  : text,
+			input  : sentText,
 			options: {
 				conversationId: getConversationId(),
 				threadId      : activeThreadId
 			}
 		};
+		if ( sentImages.length ) {
+			payload.attachments = sentImages.map( function ( image ) { return { name: image.name, mime: image.mime, data: image.data }; } );
+		}
 		if ( chosenProfile ) {
 			payload.options.profile = chosenProfile;
 		}
@@ -1582,6 +2017,7 @@ __CUSTOM_CSS__
 			// The turn moved this conversation to the top of the list, and may
 			// have just given it its title.
 			loadConversations();
+			refreshContext();
 		} );
 	} );
 
@@ -1600,6 +2036,25 @@ __CUSTOM_CSS__
 
 	// Enter sends, Shift+Enter makes a newline - the convention every chat UI uses.
 	inputEl.addEventListener( "keydown", function ( evt ) {
+		var open = slashMatches();
+		if ( open.length && !slashMenuEl.hidden ) {
+			if ( evt.key === "ArrowDown" || evt.key === "ArrowUp" ) {
+				evt.preventDefault();
+				slashPick = ( slashPick + ( evt.key === "ArrowDown" ? 1 : open.length - 1 ) ) % open.length;
+				showSlashMenu();
+				return;
+			}
+			if ( evt.key === "Tab" ) {
+				evt.preventDefault();
+				inputEl.value = open[ slashPick ].name + " ";
+				hideSlashMenu();
+				return;
+			}
+			if ( evt.key === "Escape" ) {
+				hideSlashMenu();
+				return;
+			}
+		}
 		if ( evt.key === "Enter" && !evt.shiftKey ) {
 			evt.preventDefault();
 			formEl.requestSubmit ? formEl.requestSubmit() : formEl.dispatchEvent( new Event( "submit", { cancelable: true } ) );
@@ -1637,6 +2092,7 @@ __CUSTOM_CSS__
 				messagesEl.textContent = "";
 				showHint( "Conversation cleared." );
 				showWelcome();
+				refreshContext();
 				return loadConversations();
 			} )
 			.catch( function () {
@@ -1659,6 +2115,7 @@ __CUSTOM_CSS__
 					return;
 				}
 				showHint( "Compacted " + payload.before + " messages down to " + payload.after + "." );
+				refreshContext();
 				return rehydrate().then( loadConversations );
 			} )
 			.catch( function () {
@@ -1737,6 +2194,7 @@ __CUSTOM_CSS__
 	}
 
 	function loadNotes() {
+		refreshContext();
 		return apiGet( "/notes" ).then( function ( payload ) {
 			if ( payload && payload.success ) {
 				notesData = payload;

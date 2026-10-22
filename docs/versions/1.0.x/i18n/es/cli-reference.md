@@ -109,6 +109,12 @@ Emite, lista y revoca tokens de acceso para un agente desplegado.
 ::: card title="notes" icon="phosphor-duotone:note-pencil" href="#notes"
 Lee y gestiona las notas que guarda un agente.
 :::
+::: card title="models" icon="phosphor-duotone:cpu" href="#models"
+Lista los modelos con los que puede hablar un proyecto y prueba que responden.
+:::
+::: card title="sessions" icon="phosphor-duotone:chats" href="#sessions"
+Lista, renombra, bifurca y borra las conversaciones de la base de datos del chat.
+:::
 ::: card title="inspect" icon="phosphor-duotone:magnifying-glass" href="#inspect"
 Informa de cómo está compuesto el agente, a partir de su código fuente.
 :::
@@ -506,8 +512,24 @@ En la pantalla:
 | Esc | Detiene al agente. Se detiene en su siguiente paso, no a mitad de palabra |
 | Enter mientras el agente trabaja | Lo dirige: tu mensaje se añade a la ejecución |
 | Ctrl+C | Limpia el cuadro; con el cuadro vacío, sale. Ctrl+D también sale |
+| `?` solo, o `/keys` | Lista las teclas como están asignadas ahora, con el nombre de acción de cada una |
 
-Escribe `/` para ver los comandos: `/help`, `/new` (una conversación nueva), `/tools`, `/copy` (la última respuesta al portapapeles, con la secuencia OSC 52 que honran la mayoría de terminales), `/save [archivo]` (la conversación en Markdown), `/sessions`, `/resume`, `/clear`, `/compact` e `/info` (ver abajo), `/model`, `/profile` y `/default` (ver abajo), `/remember <texto>` y `/notes` (ver abajo), `/record [archivo]` y `/record stop` (ver abajo) y `/exit`.
+Escribe `/` para ver los comandos: `/help`, `/new` (una conversación nueva), `/tools`, `/copy` (la última respuesta al portapapeles, con la secuencia OSC 52 que honran la mayoría de terminales), `/export [archivo]` (la conversación en Markdown o HTML), `/name` y `/fork` (ver abajo), `/keys` (qué tecla hace qué), `/sessions`, `/resume`, `/clear`, `/compact` e `/info` (ver abajo), `/model`, `/profile` y `/default` (ver abajo), `/remember <texto>` y `/notes` (ver abajo), `/record [archivo]` y `/record stop` (ver abajo) y `/exit`.
+
+#### Los mismos comandos en la página web y en las apps de chat
+
+Cada comando con barra se escribe una sola vez, como una clase pequeña que responde con datos (texto, una tabla, una lista para elegir), y la terminal, la página web y las plataformas de chat dibujan esa respuesta a su manera. Así `/help`, `/new`, `/tools`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/info`, `/remember` y `/notes` funcionan en las tres:
+
+| Dónde | Cómo se usan |
+|---|---|
+| Chat en la terminal | Escribe `/`, como arriba |
+| [Página web](conventions/web-ui.md#comandos-con-barra) | Escribe `/`: aparece un menú con los comandos y `Tab` completa uno |
+| [Plataformas de chat](conventions/gateways/index.md#comandos-en-un-gateway) (Telegram, Slack, ...) | Escribe el comando como un mensaje. Hay un conjunto seguro activado por defecto; un proyecto puede ampliarlo o apagarlo |
+| Un servidor por HTTP | `GET /__bxagents/commands` y `POST /__bxagents/command`, ver [Control de ejecuciones](conventions/agent-bx.md#control-de-ejecucion) |
+
+El tamaño del contexto también está siempre a la vista: la fila de ayuda bajo la caja de mensaje empieza con `ctx ~12.4k / 128k 9%` (solo `ctx ~12.4k` cuando el proyecto no indica la ventana), y se actualiza antes de cada prompt, es decir, tras cada mensaje, `/clear`, `/compact`, `/resume` y cualquier cambio en tus notas. La página web muestra lo mismo en su encabezado; púlsalo para ver el desglose. Las cifras son estimaciones, caracteres divididos entre cuatro (lo que hace `aiTokens()` de bx-ai), útiles para ver qué parte es grande y no para una factura exacta. Las herramientas de los servidores MCP se obtienen al empezar una ejecución y no se cuentan.
+
+`/name`, `/fork` y `/export` funcionan en la terminal y en la página web (donde `/export` entrega el archivo al navegador para guardarlo, y la página tiene los botones **Fork** y **Export**). `/copy`, `/record`, `/profile`, `/default` y `/exit` actúan sobre tu propia máquina o sobre el modelo de tu propia sesión, así que se quedan en la terminal.
 
 #### Conversaciones en el chat
 
@@ -518,9 +540,13 @@ Cada chat es una conversación, listada en la [base de datos de chat compartida]
 | `/sessions` | Lista tus conversaciones recientes, numeradas |
 | `/resume [número o id]` | Vuelve a una y muestra lo que se dijo; sin argumento, la más reciente |
 | `/new` | Empieza una conversación nueva (la anterior sigue en la lista) |
+| `/name <nuevo nombre>` | Pone nombre a esta conversación; una conversación en la que nadie ha hablado aún obtiene su entrada en la lista |
+| `/fork [nuevo nombre]` | Copia esta conversación entera, mensajes incluidos, con un nombre nuevo y sigue en la copia; la original queda como estaba. Sin nombre, la copia se llama `Fork of <esta>` |
+| `/export [archivo] [--format=md\|html]` | Guarda la conversación como Markdown o como una página HTML. El nombre del archivo decide el formato (`.html` o `.htm` es HTML, cualquier otro Markdown) salvo que `--format` diga otra cosa; sin nombre, el archivo lleva la fecha, en la carpeta donde empezaste. El HTML muestra el Markdown ya renderizado, tablas incluidas, y escapa todo lo que escribiste para que no se ejecute al abrir el archivo |
 | `/clear` | Olvida los mensajes de esta conversación y conserva la conversación |
 | `/compact` | Sustituye los mensajes más antiguos por un resumen (requiere un modelo de resumen en la memoria del agente) |
 | `/info` | Agente, modelo, conversación, número de mensajes, notas y base de datos |
+| `/context` | Cuánto ocupa el contexto ahora mismo y de qué se compone: el prompt del sistema, las definiciones de herramientas, las notas y los mensajes de esta conversación, cada uno con su tamaño, el total, y la parte de la ventana de contexto del modelo cuando el proyecto [la indica](conventions/models.md#lo-que-el-proyecto-sabe-de-un-modelo). Nombra las herramientas más grandes. Se calcula en local; no se llama a ningún modelo |
 
 `--continue` abre la conversación más reciente al iniciar el chat, y `--session=<número o id>` abre una concreta. Ambos muestran primero los mensajes anteriores. Con `--connect` el servidor guarda la lista y los mensajes, con el nombre de tu [token](conventions/agent-bx.md#tokens-de-acceso-para-un-agente-desplegado); un servidor sin base de datos de chat dice que no guarda lista.
 
@@ -530,7 +556,8 @@ El chat puede cambiar el modelo con el que habla sin perder la conversación: la
 
 | Comando | Hace |
 |---|---|
-| `/model` | Muestra el modelo en uso (`proveedor/modelo`) y su perfil |
+| `/model` | Muestra el modelo en uso (`proveedor/modelo`), su perfil y, cuando el proyecto lo dice, su ventana de contexto y si puede ver imágenes |
+| `/ping [perfil]` | Prueba que el modelo responde, con una pregunta diminuta: dice cuánto tardó, o por qué no respondió (sin clave, un nombre de modelo equivocado, el servicio inaccesible). El resultado se conserva 30 segundos, así que repetirlo no es otra petición |
 | `/profile` | Elige un perfil de una lista: su proveedor y modelo, su descripción, cuál es el predeterminado y cuál está en uso |
 | `/profile <nombre>` | Cambia directamente a uno. Un perfil cuyo proveedor no tiene clave definida se activa con un aviso, porque el siguiente mensaje fallaría |
 | `/default` | Vuelve al valor por defecto de la app: el `defaultProfile`, o si no el proveedor y modelo del principio de `Agent.yaml` |
@@ -563,6 +590,47 @@ Cuando el agente guarda [notas](conventions/agent-yaml.md#notas), el chat puede 
 | Esc | Vuelve al chat |
 
 El encabezado muestra cuántos caracteres del límite se usan y cuántos tokens aproximados añade a cada conversación. Funciona en los tres modos. Con `--connect` los comandos usan las rutas de notas del servidor, así que ves las notas de ese servidor, y quitar una nota del agente requiere un token `admin`. Un agente sin bloque `notes` explica cómo activarlas.
+
+#### Ejecutar cosas en tu máquina desde el chat
+
+Dos prefijos en la caja de mensaje ejecutan algo en **tu propia máquina**, nunca en un servidor, incluso cuando el chat habla con uno por `--connect`:
+
+| Escribe | Hace |
+|---|---|
+| `!comando` | Ejecuta un comando de shell (`sh -c`, o `cmd /c` en Windows) en la carpeta donde empezaste. Su salida (salida estándar y error juntas, cortada a 20.000 caracteres, detenida a los 60 segundos) se muestra y **acompaña a tu siguiente mensaje**, para que el agente vea lo que viste tú |
+| `!!comando` | Lo mismo, solo en pantalla |
+| `#funcion( argumentos )` | Llama a una función integrada de BoxLang, como `#dateFormat( now(), 'yyyy-mm-dd' )` o `#listLen( 'a,b,c' )`. El resultado se muestra (un struct o array como JSON) y acompaña al siguiente mensaje |
+| `##funcion( argumentos )` | Lo mismo, solo en pantalla |
+
+Tras `!` debe venir el comando de inmediato (`! hola` es un mensaje) y tras `#` una llamada (`# Un título` y `#hashtag` son mensajes). Una llamada es **solo** una llamada: como argumento, una cadena (`'..'` o `".."`), un número, `true`, `false`, `null`, un array, un struct o una llamada anidada, posicional o con nombre, y nada más. No hay variables, operadores, acceso con `.` ni sentencias, y un nombre que no sea una función integrada registrada se rechaza antes de ejecutar nada. Lo que espera al siguiente mensaje aparece en `/context` (como *Attached*) y en la barra de estado, y desaparece al enviar el mensaje.
+
+Puedes apagar o acotar ambos en un archivo que es tuyo y no de ningún proyecto, `~/.bxagents/bxAgents.yml` (`BXAGENTS_USER_CONFIG` indica otro archivo):
+
+```yaml
+chat:
+  shell: true        # false apaga !; o el shell a usar: "bash -c", "pwsh -Command"
+  bifs: true         # false apaga #; o las funciones permitidas: [ dateFormat, listLen ]
+  keys:              # cambia las teclas de una acción; una tecla o una lista. /keys muestra los nombres de acción
+    newline: [ ctrl+n, alt+enter ]
+    stop: ctrl+x
+```
+
+Si el archivo no existe, ambos están activados. Una clave que el archivo no conoce, o un valor de tipo equivocado, se informa al iniciar el chat en lugar de ignorarse.
+
+Las teclas se escriben como se dicen: `enter`, `alt+enter`, `shift+enter`, `ctrl+j`, `esc`, `tab`, `up`, `down`, `home`, `end`, o una letra con `ctrl` o `alt`. Acciones que puedes cambiar: `submit`, `newline`, `historyPrevious`, `historyNext`, `clear`, `exit`, `deleteToStart`, `deleteWord`, `lineStart`, `lineEnd`, `complete`, `pasteImage` (en el cuadro de mensaje) y `stop` (mientras el agente trabaja). Mover el cursor con las flechas, Retroceso y Suprimir no son acciones. Una entrada que no nombra una acción, no se puede leer como tecla, o toma una tecla que otra acción del mismo lugar ya tiene, se avisa al iniciar el chat y esa acción conserva sus teclas por defecto, así que un error de escritura nunca te deja sin forma de enviar un mensaje. El encabezado y la fila de ayuda muestran tus teclas.
+
+#### Archivos e imágenes en el mensaje
+
+| Escribe | Hace |
+|---|---|
+| `@` | Abre una lista de los archivos bajo la carpeta donde empezaste (hasta cinco niveles; se omiten las carpetas ocultas, `node_modules`, `build`, `dist`, `target`, `out`, `venv`). Sigue escribiendo para filtrar, Arriba y Abajo para moverte, Tab o Enter para elegir uno |
+| `@ruta/al/archivo` | Un archivo de texto en el mensaje: su contenido va con el mensaje, en su propio bloque, cortado a 100.000 caracteres. Un nombre que no es un archivo se avisa y queda como texto; el mensaje se envía igualmente |
+| `@imagen.png` | Una imagen (png, jpg, gif, webp), enviada como parte de imagen del mensaje |
+| Ctrl+V | Pega una imagen del portapapeles (necesita `wl-paste` o `xclip` en Linux, `pngpaste` en macOS; Windows usa PowerShell). Una ficha en la fila de ayuda muestra cuántas esperan |
+
+Con un mensaje van como máximo 4 imágenes, de hasta 5 MB cada una. Antes de enviar nada, el chat comprueba que el perfil puede ver: pon `vision: true` en un [perfil](models.md#what-the-project-knows-about-a-model) que pueda, y una imagen enviada a uno que no puede se rechaza con un mensaje en lugar de un error oscuro del proveedor. `/context` cuenta lo adjunto. La imagen llega al modelo como partes de imagen de `AiMessage` de bx-ai, con la forma que ese proveedor espera; por ahora solo se han probado proveedores de estilo OpenAI.
+
+Con `--connect`, los archivos y las imágenes viajan en `attachments` de la petición a `/__bxagents/events`, ver [Control de ejecución](conventions/agent-bx.md#run-control). Las plataformas de chat aún no aceptan adjuntos.
 
 #### Grabar un chat
 
@@ -684,6 +752,40 @@ bxAgents notes import --file=notes.json
 - `--scope` es `user` (por defecto) o `agent`; `list` sin él muestra ambos. `--user` indica de quién son las notas de usuario: por defecto, el usuario del sistema operativo. Las notas del agente pertenecen al `name` del agente.
 - `stats` muestra cuánto llena cada alcance y el tamaño aproximado que añaden al prompt (unos cuatro caracteres por token; una estimación, no un recuento).
 - `export` escribe las notas como JSON, en `--file` o en pantalla. `import` añade las notas de un archivo así; una nota que ya existe se omite y una que no cabe en el límite se informa.
+- Ejecútalo donde está la base de datos: en el proyecto, o en un servidor con `BXAGENTS_DB` definido.
+
+### `models`
+
+Los modelos de un proyecto compilado, y si responden.
+
+```bash
+bxAgents models list [--json]
+bxAgents models test [--profile=NOMBRE | --all] [--json]
+```
+
+```
+default       openai/gpt-5                    context 128,000  images yes  key set
+fast          openai/gpt-5-mini               context 400,000  images no  key set
+planner       claude/claude-opus-4            context ?  images ?  key MISSING
+```
+
+- `list` muestra el modelo por defecto y cada [perfil](conventions/models.md#perfiles), con lo que el proyecto dice de cada uno ([`contextWindow` y `vision`](conventions/models.md#lo-que-el-proyecto-sabe-de-un-modelo), `?` cuando no dice nada) y si la clave del perfil está definida.
+- `test` envía a cada modelo una pregunta diminuta a través de bx-ai e informa `ok` con el tiempo, o `FAILED` con el mensaje del propio proveedor. Prueba el modelo por defecto, un perfil con `--profile`, o todos con `--all`, y sale con `1` cuando alguno no responde, así que puede usarse como puerta antes de desplegar. Gasta unos pocos tokens por modelo.
+- Usa los modelos con los que se compiló el proyecto por última vez: ejecuta antes `bxAgents build`.
+
+### `sessions`
+
+Las conversaciones de la [base de datos de chat compartida](conventions/web-ui.md#el-almacen-sqlite) del proyecto (`data/chat.db`, o el archivo indicado por `BXAGENTS_DB`), la misma lista que muestran `chat` y la página web.
+
+```bash
+bxAgents sessions list [--user=NOMBRE] [--json]
+bxAgents sessions rename --session=<número o id> --name="Nuevo nombre" [--user=NOMBRE]
+bxAgents sessions fork --session=<número o id> [--name="Otro enfoque"] [--user=NOMBRE]
+bxAgents sessions delete --session=<número o id> [--user=NOMBRE]
+```
+
+- Una conversación se elige por su número en `list`, o por su id o el comienzo de él. `--user` es de quién son las conversaciones: el usuario del sistema operativo por defecto.
+- `list`, `rename` y la parte de lista de `delete` solo tocan la base de datos. Los mensajes de una conversación viven en la [memoria](conventions/agent-yaml.md#ajustes) del agente, así que `fork` (que los copia) necesita un proyecto compilado, y `delete` también para olvidarlos. Solo alcanzan los mensajes que guarda una memoria que sobrevive al proceso (`file`, `jdbc`): la memoria `cache` por defecto desaparece al terminar el chat.
 - Ejecútalo donde está la base de datos: en el proyecto, o en un servidor con `BXAGENTS_DB` definido.
 
 ### `inspect`

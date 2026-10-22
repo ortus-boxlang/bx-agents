@@ -1,0 +1,132 @@
+/**
+ * /context: what is in the context right now, worked out locally on a real bx-ai agent (mock model), and how it is worded.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "ContextLines", function() {
+
+			beforeEach( function() {
+				variables.words = new bxagents.models.chat.ContextLines();
+			} );
+
+			it( "words sizes as estimates: a tilde, thousands as k", function() {
+				expect( words.approx( 0 ) ).toBe( "~0" );
+				expect( words.approx( 850 ) ).toBe( "~850" );
+				expect( words.approx( 1000 ) ).toBe( "~1.0k" );
+				expect( words.approx( 12440 ) ).toBe( "~12.4k" );
+			} );
+
+			it( "words the window short", function() {
+				expect( words.window( 8000 ) ).toBe( "8k" );
+				expect( words.window( 128000 ) ).toBe( "128k" );
+				expect( words.window( 200000 ) ).toBe( "200k" );
+				expect( words.window( 1000000 ) ).toBe( "1M" );
+				expect( words.window( 500 ) ).toBe( "500" );
+			} );
+
+			it( "words the status with the share of the window when the window is known, and without it when not", function() {
+				expect( words.status( { total : 12440, contextWindow : 128000, percent : 9.7 } ) ).toBe( "ctx ~12.4k / 128k 9.7%" );
+				expect( words.status( { total : 12440, contextWindow : 0, percent : 0 } ) ).toBe( "ctx ~12.4k" );
+			} );
+
+			it( "draws a bar of ten cells filled to the share", function() {
+				expect( words.bar( { percent : 0 } ) ).toBe( "[----------]" );
+				expect( words.bar( { percent : 34 } ) ).toBe( "[######-------]" );
+				expect( words.bar( { percent : 100 } ) ).toBe( "[####################]" );
+				expect( words.bar( { percent : 140 } ) ).toBe( "[####################]" );
+			} );
+
+		} );
+
+		describe( "ContextReport", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-context-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.agent = aiAgent(
+					name         : "helper",
+					model        : aiModel( provider : "mock" ),
+					memory       : aiMemory( "cache" ),
+					instructions : "Be brief and kind. " & repeatString( "Always show your working. ", 40 ),
+					tools        : [
+						aiTool( "small", "a small one", ( a ) => a, false ),
+						aiTool( "large", "a tool with a long description so its definition is bigger. " & repeatString( "It does many things. ", 30 ), ( a ) => a, false )
+					]
+				);
+				agent.withMiddleware( new bxagents.models.notes.NotesMiddleware( new bxagents.models.notes.SqliteNotesProvider( store ), "helper", true ) );
+				variables.chat = new bxagents.models.chat.AgentConversation( agent, "alice" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function part( report, key ) {
+				return report.parts.filter( p => p.key == key )[ 1 ];
+			}
+
+			it( "measures the system prompt, the tool definitions, the notes and the messages, and adds them up", function() {
+				var report = chat.contextReport();
+
+				expect( report.parts.map( p => p.key ) ).toBe( [ "system", "tools", "notes", "memory" ] );
+				expect( part( report, "system" ).tokens ).toBeGT( 200 );
+				expect( part( report, "tools" ).detail ).toBe( "2 tools" );
+				expect( part( report, "tools" ).tokens ).toBeGT( 0 );
+				expect( part( report, "memory" ).tokens ).toBe( 0 );
+				var sum = 0;
+				report.parts.each( p => sum += p.tokens );
+				expect( report.total ).toBe( sum );
+			} );
+
+			it( "lists the tools largest first", function() {
+				var names = chat.contextReport().tools.map( t => t.name );
+				expect( names[ 1 ] ).toBe( "large" );
+				expect( names ).toInclude( "small" );
+			} );
+
+			it( "counts the notes block, which the agent adds to the system message", function() {
+				var before = part( chat.contextReport(), "notes" ).tokens;
+				var provider = new bxagents.models.notes.NotesWiring().providerOf( agent );
+				provider.add( "user", "alice", "Prefers short answers and metric units " & repeatString( "and more ", 20 ) );
+				// a conversation reads the block once and keeps it, so a fresh report reads the notes as they are now
+				expect( part( chat.contextReport(), "notes" ).tokens ).toBeGT( before );
+			} );
+
+			it( "counts the messages of this conversation, and not another one's", function() {
+				agent.run( "tell me about the plan for the launch", {}, { userId : "alice", conversationId : "c-1" } );
+				var mine = new bxagents.models.chat.AgentConversation( agent, "alice", nullValue(), "c-1" ).contextReport();
+				var other = new bxagents.models.chat.AgentConversation( agent, "alice", nullValue(), "c-2" ).contextReport();
+
+				expect( part( mine, "memory" ).tokens ).toBeGT( 0 );
+				expect( part( mine, "memory" ).detail ).toBe( "2 messages" );
+				expect( part( other, "memory" ).tokens ).toBe( 0 );
+			} );
+
+			it( "gives the share of the window when the project says it, and none when it does not", function() {
+				var settings = getModuleInfo( "bxai" ).settings;
+				var saved = settings.profiles ?: {};
+				settings.profiles = { sized : { provider : "mock", contextWindow : 1000 } };
+				try {
+					var sized = new bxagents.models.chat.ContextReport( agent, "alice", "c-9", { contextWindow : 1000, vision : "" } ).build();
+					expect( sized.contextWindow ).toBe( 1000 );
+					expect( sized.percent ).toBe( round( sized.total * 100 / 1000 ) );
+				} finally {
+					settings.profiles = saved;
+				}
+				var unsized = new bxagents.models.chat.ContextReport( agent, "alice", "c-9", { contextWindow : 0, vision : "" } ).build();
+				expect( unsized.percent ).toBe( 0 );
+			} );
+
+			it( "gives the same numbers twice for the same conversation", function() {
+				var before = chat.contextReport();
+				var again = chat.contextReport();
+				expect( again.total ).toBe( before.total );
+			} );
+
+		} );
+	}
+
+}

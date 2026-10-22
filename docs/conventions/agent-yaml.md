@@ -35,7 +35,8 @@ environments:
 | `params` | mapping | Default request parameters, such as `temperature`. |
 | `options` | mapping | Default provider options, such as `timeout`. |
 | `providers` | mapping | Per provider `params` and `options`, by provider name. |
-| `profiles` | mapping | Named combinations of provider, model, params, options and `apiKeyEnv`. |
+| `profiles` | mapping | Named combinations of provider, model, params, options and `apiKeyEnv`, and optionally `contextWindow` and `vision`. |
+| `contextWindow`, `vision` | number, boolean | What the default model can hold (tokens) and whether it can see images. Optional facts for the chat; bx-ai does not read them. See [Models](models.md#what-the-project-knows-about-a-model). |
 | `defaultProfile` | string | The profile used when nothing asks for another. |
 | `profile` | string | The profile this agent uses. |
 | `embeddings`, `speech`, `transcription`, `image` | mapping | bx-ai's capability defaults: `provider`, `model` and a few settings each. |
@@ -48,7 +49,7 @@ environments:
 | `security` | mapping | Forwarded verbatim into the generated app's `bxai` module settings; bx-ai's own `SecurityDirector` turns it into guardrail middleware. |
 | `memory` | string or mapping | The agent's conversation memory. A bare string is the type (`cache`); a mapping is `{ type, ...config }` and is passed through to `aiMemory()`. |
 | `checkpointer` | mapping | `{ type: cache\|file\|jdbc, ...config }`. Defaults to `{ type: cache }` if omitted. |
-| `gatewaySession` | mapping | `{ policy, maxQueueDepth }`, both optional. See [Agent.bx](agent-bx.md) for the values; they are identical. |
+| `gatewaySession` | mapping | `{ policy, maxQueueDepth, commands }`, all optional. See [Agent.bx](agent-bx.md) for the values; they are identical. |
 | `agentApi` | mapping | `{ enabled, tokenEnvVar, tokens, profiles }`, all optional. See [The always-on agent route](agent-bx.md#the-always-on-agent-route). |
 | `notes` | mapping | Short notes the agent keeps about the user and its own work. `notes: {}` turns them on with the defaults. See [Notes](#notes). |
 | `environments` | mapping | Per-environment overrides. See [Environments](#environments). |

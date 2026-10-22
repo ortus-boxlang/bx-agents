@@ -1,0 +1,133 @@
+/**
+ * What a command answers with. A command never prints: it builds a Reply, and whoever ran it (the
+ * terminal chat, the web page, a gateway) draws it its own way.
+ *
+ * A reply is a list of blocks, shown in order, and a list of effects, things the caller does to its
+ * own state. Both are plain structs, so a reply crosses HTTP as JSON unchanged.
+ *
+ * Blocks
+ *   { type : "text", style : "muted" | "ok" | "warn", text }
+ *   { type : "table", layout : "keyvalue" | "grid", columns : [ { width, align } ], rows : [ [ cell ] ] }
+ *   { type : "choose", title, options : [ { label, hint, line } ] }   picking one runs `line`
+ *   { type : "transcript", messages : [ { role : "you" | "agent", text } ] }
+ *   { type : "screen", name }                                        a terminal-only screen, such as "notes"
+ *   { type : "file", name, mime, text }                              a file for the client to save (the web page downloads it)
+ *
+ * Effects
+ *   { type : "reset" }                                this conversation's messages are gone from the screen
+ *   { type : "conversation", id, title }              the conversation to carry on in (a client that keeps the id switches to it)
+ *   { type : "quit" }                                 leave the chat
+ */
+class {
+
+	function init() {
+		variables.blocks = []
+		variables.effects = []
+		return this
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Blocks
+	// ----------------------------------------------------------------------------------
+
+	function text( required string text, string style = "muted" ) {
+		variables.blocks.append( { type : "text", style : arguments.style, text : arguments.text } )
+		return this
+	}
+
+	function ok( required string text ) {
+		return this.text( arguments.text, "ok" )
+	}
+
+	function warn( required string text ) {
+		return this.text( arguments.text, "warn" )
+	}
+
+	/**
+	 * @rows [ [ label, value ] ]
+	 */
+	function keyValues( required array rows ) {
+		variables.blocks.append( { type : "table", layout : "keyvalue", columns : [], rows : arguments.rows } )
+		return this
+	}
+
+	/**
+	 * @columns [ { width, align : "left" | "right" } ]; a width of 0 is as wide as it needs to be
+	 * @rows [ [ cell ] ]
+	 */
+	function grid( required array columns, required array rows ) {
+		variables.blocks.append( { type : "table", layout : "grid", columns : arguments.columns, rows : arguments.rows } )
+		return this
+	}
+
+	/**
+	 * @options [ { label, hint, line } ]; line is the command line to run when the option is picked
+	 */
+	function choose( required string title, required array options ) {
+		variables.blocks.append( { type : "choose", title : arguments.title, options : arguments.options } )
+		return this
+	}
+
+	function transcript( required array messages ) {
+		variables.blocks.append( { type : "transcript", messages : arguments.messages } )
+		return this
+	}
+
+	/**
+	 * @name The file name, no path
+	 * @mime Its media type
+	 * @text Its content
+	 */
+	function file( required string name, required string mime, required string text ) {
+		variables.blocks.append( { type : "file", name : arguments.name, mime : arguments.mime, text : arguments.text } )
+		return this
+	}
+
+	function screen( required string name ) {
+		variables.blocks.append( { type : "screen", name : arguments.name } )
+		return this
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Effects
+	// ----------------------------------------------------------------------------------
+
+	function reset() {
+		variables.effects.append( { type : "reset" } )
+		return this
+	}
+
+	function conversation( required string id, string title = "" ) {
+		variables.effects.append( { type : "conversation", id : arguments.id, title : arguments.title } )
+		return this
+	}
+
+	function quit() {
+		variables.effects.append( { type : "quit" } )
+		return this
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Reading it back
+	// ----------------------------------------------------------------------------------
+
+	array function blocks() {
+		return variables.blocks
+	}
+
+	array function effects() {
+		return variables.effects
+	}
+
+	boolean function hasEffect( required string type ) {
+		return variables.effects.some( e => e.type == type )
+	}
+
+	/**
+	 * @return The plain data of the reply, for JSON: { blocks, effects }
+	 */
+	struct function toStruct() {
+		return { "blocks" : variables.blocks, "effects" : variables.effects }
+	}
+
+}

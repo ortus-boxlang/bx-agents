@@ -1,0 +1,24 @@
+class extends="models.chat.commands.BaseCommand@bxagents" {
+
+	string function name() {
+		return "resume"
+	}
+
+	string function hint() {
+		return "go back to one: /resume 2, or /resume <id> (no number: the last one)"
+	}
+
+	any function run( required any context, required string args ) {
+		var reply = arguments.context.reply()
+		var outcome = arguments.context.chat().resumeSession( arguments.args )
+		if ( !( outcome.ok ?: false ) ) {
+			return reply.warn( outcome.reason ?: "Could not open that conversation." )
+		}
+		reply.reset().conversation( outcome.id, outcome.title ?: "" ).ok( "Resumed" & ( len( outcome.title ?: "" ) ? ": " & outcome.title : "." ) )
+		if ( !outcome.history.len() ) {
+			return reply.text( "No messages were kept for it, so the agent starts without the earlier conversation." )
+		}
+		return reply.transcript( outcome.history )
+	}
+
+}

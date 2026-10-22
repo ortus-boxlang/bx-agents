@@ -1,0 +1,42 @@
+/**
+ * A typed command split into its name and the rest: `/Profile fast` is name `profile`, args `fast`.
+ * The name is lower case without the prefix, and without the `@botname` Telegram adds in a group
+ * (`/info@helperbot`), so a command reads the same on every transport.
+ */
+class {
+
+	/**
+	 * @text What was typed, starting with the prefix
+	 * @prefix The character that marks a command
+	 */
+	function init( required string text, string prefix = "/" ) {
+		var typed = trim( arguments.text )
+		var head = listFirst( typed, " " & char( 9 ) & char( 10 ) )
+		variables.args = trim( mid( typed, len( head ) + 1, len( typed ) ) )
+		head = mid( head, ( head.startsWith( arguments.prefix ) ? len( arguments.prefix ) : 0 ) + 1, len( head ) )
+		variables.name = head.startsWith( "@" ) ? "" : lCase( listFirst( head, "@" ) )
+		variables.raw = typed
+		variables.prefix = arguments.prefix
+		return this
+	}
+
+	/**
+	 * @return True when the text is a command: it starts with the prefix and has a name
+	 */
+	boolean function isCommand() {
+		return variables.raw.startsWith( variables.prefix ) && len( variables.name ) > 0
+	}
+
+	string function name() {
+		return variables.name
+	}
+
+	string function args() {
+		return variables.args
+	}
+
+	string function raw() {
+		return variables.raw
+	}
+
+}

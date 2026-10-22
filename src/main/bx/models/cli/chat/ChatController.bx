@@ -5,48 +5,43 @@
  * (InProcessSession or HttpSession).
  *
  * The screen:  chooseKeys( title, lines, choices, keys, footer ), ask( title, help, initial ), readInput(), printUser( text ), print( style, text ), printMarkdown( text ),
+ *              setStatus( text ), setImagesAllowed( allowed, reason ), takeImages(),
  *              banner( agent, model, mode ), beginTurn(), push( event ), endTurn(),
  *              cancelRequested(), takeSteer(), choose( title, lines, choices ), copy( text ), close()
  * The session: agentName(), modelName(), mode(), tools(), newThread(), notes(), sessions(), resumeSession( ref ),
- *              clear(), compact(), info(),
+ *              clear(), compact(), info(), conversationId(), contextReport(),
  *              modelInfo(), switchable(), profiles(), useProfile( name ), useDefault()
- *              send( text, hooks ), resume( decision, hooks ), close()
+ *              send( text, hooks, images ), resume( decision, hooks ), close()
  *              notes() is an object with available(), list( scope ), add( scope, text ), update( id, text ),
  *              remove( id ), stats()
  *
- * Commands start with a slash. Everything else is a message to the agent.
+ * Commands start with a slash. They are not written here: each is a class of the command layer
+ * (models.chat.commands) that answers with a Reply, and TerminalRenderer draws the Reply on the
+ * screen.
+ *
+ * Two more prefixes run something on the person's own machine, never on a server:
+ *   !command    a shell command; its output is shown and goes with the next message (!!command: shown only)
+ *   #function() one BoxLang built-in function call; its result likewise (##function(): shown only)
+ * They are switched on or off in the person's ~/.bxagents/bxAgents.yml (see UserConfig).
+ *
+ * A message can mention files with @path: a text file goes with it as a block of its content, an image as an image
+ * part (models.cli.chat.FileMentions). A picture pasted into the message box (the screen's takeImages()) goes the
+ * same way. Everything else typed is a message to the agent.
  */
 class {
 
-	static {
-		COMMANDS = [
-			{ name : "/help", hint : "show these commands" },
-			{ name : "/new", hint : "start a new conversation" },
-			{ name : "/tools", hint : "list the agent's tools" },
-			{ name : "/sessions", hint : "list your recent conversations" },
-			{ name : "/resume", hint : "go back to one: /resume 2, or /resume <id> (no number: the last one)" },
-			{ name : "/clear", hint : "forget this conversation's messages, keep the conversation" },
-			{ name : "/compact", hint : "shorten this conversation: older messages become a summary" },
-			{ name : "/model", hint : "show the model in use" },
-			{ name : "/profile", hint : "pick the model profile for this chat: /profile, or /profile <name>" },
-			{ name : "/default", hint : "go back to the app's default model" },
-			{ name : "/info", hint : "about this chat: agent, model, conversation, notes, database" },
-			{ name : "/remember", hint : "keep a note about you: /remember I prefer short answers" },
-			{ name : "/notes", hint : "open the notes screen, or: list, add [agent] <text>, edit <id> <text>, remove <id>, stats" },
-			{ name : "/copy", hint : "copy the last answer to the clipboard" },
-			{ name : "/save", hint : "save the conversation to a file: /save notes.md" },
-			{ name : "/record", hint : "record the screen as a .cast file: /record [file], /record stop" },
-			{ name : "/exit", hint : "leave the chat" }
-		]
-	}
-
 	/**
 	 * @session The session
-	 * @workingDirectory Where /save writes a relative file name; defaults to the current directory
+	 * @workingDirectory Where /export writes a relative file name; defaults to the current directory
+	 * @registry The CommandRegistry; the built-in commands when not given
+	 * @userConfig The person's UserConfig; ~/.bxagents/bxAgents.yml when not given
 	 */
-	function init( required any session, string workingDirectory = "" ) {
+	function init( required any session, string workingDirectory = "", any registry, any userConfig ) {
 		variables.session = arguments.session
-		variables.transcript = []
+		variables.transcript = new "models.cli.chat.Transcript@bxagents"()
+		variables.attachments = new "models.cli.chat.Attachments@bxagents"()
+		variables.userConfig = isNull( arguments.userConfig ) ? new "models.cli.UserConfig@bxagents"() : arguments.userConfig
+		variables.registry = isNull( arguments.registry ) ? new "models.chat.commands.CommandCatalog@bxagents"().standard() : arguments.registry
 		variables.workingDirectory = len( arguments.workingDirectory ) ? arguments.workingDirectory : createObject( "java", "java.lang.System" ).getProperty( "user.dir" )
 		variables.hooks = {
 			push            : ( event ) => variables.screen.push( event ),
@@ -61,14 +56,14 @@ class {
 	 * @return The commands, for the screen's slash menu
 	 */
 	array function commands() {
-		return static.COMMANDS
+		return variables.registry.menu( "tui" )
 	}
 
 	/**
 	 * @return [ { role : "you" | "agent", text } ] the conversation so far
 	 */
 	array function transcript() {
-		return variables.transcript
+		return variables.transcript.entries()
 	}
 
 	/**
@@ -81,15 +76,26 @@ class {
 	 */
 	void function run( required any screen, any record = false, string resume = "" ) {
 		variables.screen = arguments.screen
+		var port = new "models.cli.chat.TerminalPort@bxagents"( arguments.screen, variables.transcript, variables.session.agentName(), variables.workingDirectory, variables.attachments )
+		for ( var problem in variables.userConfig.problems() ) {
+			arguments.screen.print( "warn", problem )
+		}
+		for ( var problem in arguments.screen.bindKeys( variables.userConfig.keys() ) ) {
+			arguments.screen.print( "warn", "#variables.userConfig.path()#: " & problem )
+		}
+		variables.context = new "models.chat.commands.CommandContext@bxagents"( variables.session, "tui", true, port )
+		variables.renderer = new "models.cli.chat.TerminalRenderer@bxagents"( arguments.screen, variables.session, variables.transcript, ( line ) => command( line ) )
 		if ( !isBoolean( arguments.record ) || arguments.record ) {
-			startRecording( isBoolean( arguments.record ) ? "" : arguments.record )
+			var started = port.startRecording( isBoolean( arguments.record ) ? "" : arguments.record )
+			variables.screen.print( started.style, started.text )
 		}
 		variables.screen.banner( variables.session.agentName(), variables.session.modelName(), variables.session.mode() )
 		if ( len( arguments.resume ) ) {
 			// "last" is the most recent conversation
-			openConversation( arguments.resume == "last" ? "" : arguments.resume )
+			command( "/resume" & ( arguments.resume == "last" ? "" : " " & arguments.resume ) )
 		}
 		while ( true ) {
+			refreshStatus()
 			var input = variables.screen.readInput()
 			if ( isNull( input ) ) {
 				break
@@ -98,10 +104,22 @@ class {
 			if ( !len( text ) ) {
 				continue
 			}
+			// a lone question mark is the way to ask which keys do what
+			if ( text == "?" ) {
+				text = "/keys"
+			}
 			if ( text.startsWith( "/" ) ) {
 				if ( !command( text ) ) {
 					break
 				}
+				continue
+			}
+			if ( isShellLine( text ) ) {
+				shellLine( text )
+				continue
+			}
+			if ( isBifLine( text ) ) {
+				bifLine( text )
 				continue
 			}
 			turn( text )
@@ -111,302 +129,118 @@ class {
 	// ----------------------------------------------------------------------------------
 
 	/**
+	 * Puts the size of the context in the hint row under the message box, as it stands now. It changes with every
+	 * message, /clear, /compact, /resume and note, so it is worked out before each prompt. A status bar is a
+	 * convenience: when the size cannot be worked out the chat goes on without it.
+	 */
+	private void function refreshStatus() {
+		try {
+			variables.screen.setStatus( new "models.chat.ContextLines@bxagents"().status( variables.attachments.addTo( variables.session.contextReport() ) ) )
+		} catch ( any e ) {
+			variables.screen.setStatus( "" )
+		}
+		// a picture is refused at the paste, with the reason, for a model known not to see them
+		try {
+			var blind = variables.session.modelFacts().vision == "no"
+			variables.screen.setImagesAllowed( !blind, blind ? "The model in use cannot see images (vision: false for it), so the picture was not added." : "" )
+		} catch ( any e ) {
+			variables.screen.setImagesAllowed( true, "" )
+		}
+	}
+
+	/**
+	 * Runs a command line and shows its reply.
+	 *
 	 * @return False when the command asks to leave
 	 */
 	private boolean function command( required string text ) {
-		var name = listFirst( arguments.text, " " ).lcase()
-		var rest = trim( arguments.text.mid( len( name ) + 1, len( arguments.text ) ) )
-		switch ( name ) {
-			case "/exit":
-			case "/quit":
-				return false
-			case "/help":
-				for ( var entry in static.COMMANDS ) {
-					variables.screen.print( "muted", entry.name & "  " & entry.hint )
-				}
-				break
-			case "/new":
-				variables.session.newThread()
-				variables.transcript = []
-				variables.screen.print( "muted", "New conversation. The agent starts fresh." )
-				break
-			case "/tools":
-				var tools = variables.session.tools()
-				variables.screen.print( "muted", tools.len() ? "Tools: " & tools.toList( ", " ) : "No tool list is available in this mode." )
-				break
-			case "/sessions":
-				sessions()
-				break
-			case "/resume":
-				resumeConversation( rest )
-				break
-			case "/clear":
-				var cleared = variables.session.clear()
-				if ( cleared.ok ?: false ) {
-					variables.transcript = []
-					variables.screen.print( "ok", "Cleared. The agent no longer remembers this conversation." )
-				} else {
-					variables.screen.print( "warn", cleared.reason ?: "Could not clear." )
-				}
-				break
-			case "/compact":
-				compactConversation()
-				break
-			case "/model":
-				showModel()
-				break
-			case "/profile":
-				switchProfile( rest )
-				break
-			case "/default":
-				useDefault()
-				break
-			case "/info":
-				for ( var line in variables.session.info() ) {
-					variables.screen.print( "muted", left( line[ 1 ] & ":" & repeatString( " ", 14 ), 14 ) & line[ 2 ] )
-				}
-				break
-			case "/remember":
-				notes( "add " & rest )
-				break
-			case "/notes":
-				notes( rest )
-				break
-			case "/copy":
-				var last = lastAnswer()
-				if ( len( last ) ) {
-					variables.screen.copy( last )
-					variables.screen.print( "ok", "Copied the last answer." )
-				} else {
-					variables.screen.print( "warn", "There is no answer to copy yet." )
-				}
-				break
-			case "/save":
-				save( rest )
-				break
-			case "/record":
-				record( rest )
-				break
-			default:
-				variables.screen.print( "warn", "Unknown command #name#. Type /help." )
-		}
-		return true
+		return variables.renderer.show( variables.registry.run( arguments.text, variables.context ) )
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Running something on this machine: !command and #function()
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @return True for !command or !!command: the ! is followed at once by something to run, so "! hello" is a message
+	 */
+	private boolean function isShellLine( required string text ) {
+		return reFind( "^!!?[^\s!]", arguments.text ) > 0
 	}
 
 	/**
-	 * /model: what the chat is talking to right now.
+	 * @return True for #name( ... ) or ##name( ... ): a hash and then a call. A message that merely starts with a hash, such as a Markdown heading, is a message.
 	 */
-	private void function showModel() {
-		var info = variables.session.modelInfo()
-		variables.screen.print( "muted", "Model:   " & ( len( info.model ?: "" ) ? info.model : "not known" ) )
-		if ( len( info.profile ?: "" ) ) {
-			variables.screen.print( "muted", "Profile: " & info.profile )
+	private boolean function isBifLine( required string text ) {
+		var hash = "##"
+		if ( !arguments.text.startsWith( hash ) ) {
+			return false
 		}
-		if ( variables.session.switchable().ok ) {
-			variables.screen.print( "muted", "Type /profile to pick another, or /default to go back to the app's default." )
-		}
+		var rest = arguments.text.startsWith( hash & hash ) ? mid( arguments.text, 3, len( arguments.text ) ) : mid( arguments.text, 2, len( arguments.text ) )
+		return reFind( "^\s*[A-Za-z_][A-Za-z0-9_]*\s*\(", rest ) > 0
 	}
 
 	/**
-	 * /profile picks from the configured profiles; /profile <name> switches straight to one. The
-	 * conversation, its memory and the agent's tools carry on; only the model changes.
-	 *
-	 * @name A profile name, or empty to pick from a list
+	 * Runs a shell command and shows what it printed. Unless it was typed with !!, the output also waits for the
+	 * next message and goes with it, so the agent can see what you saw.
 	 */
-	private void function switchProfile( required string name ) {
-		var can = variables.session.switchable()
-		if ( !can.ok ) {
-			variables.screen.print( "warn", can.reason )
+	private void function shellLine( required string text ) {
+		var screenOnly = arguments.text.startsWith( "!!" )
+		var line = trim( mid( arguments.text, screenOnly ? 3 : 2, len( arguments.text ) ) )
+		var allowed = variables.userConfig.chat().shell
+		if ( allowed == false || allowed == "false" ) {
+			variables.screen.print( "warn", "Shell commands are switched off in #variables.userConfig.path()# (chat: shell: false)." )
 			return
 		}
-		var profiles = variables.session.profiles()
-		if ( !profiles.len() ) {
-			variables.screen.print( "warn", "No profiles are configured. Add one with: bxAgents add profile" )
-			return
-		}
-		var wanted = arguments.name
-		if ( !len( wanted ) ) {
-			var choices = profiles.map( p => {
-				value : p.name,
-				label : p.name,
-				hint  : ( p.provider & ( len( p.model ) ? "/" & p.model : "" ) ) & ( len( p.description ) ? "  " & p.description : "" ) & ( p.isDefault ? "  (default)" : "" ) & ( p.isCurrent ? "  (in use)" : "" )
-			} )
-			wanted = variables.screen.choose( "Which profile?", [], choices ) ?: ""
-			if ( !len( wanted ) ) {
-				return
-			}
-		}
-		reportSwitch( variables.session.useProfile( wanted ) )
+		var runner = new "models.cli.chat.ShellRunner@bxagents"( isBoolean( allowed ) ? "" : allowed, variables.workingDirectory )
+		variables.screen.print( "accent", "$ " & line )
+		var result = runner.run( line )
+		var report = result.output & ( result.truncated ? char( 10 ) & "(the output was cut at #numberFormat( len( result.output ) )# characters)" : "" )
+		report &= result.timedOut ? char( 10 ) & "(stopped: it ran longer than a minute)" : ( result.ok ? "" : char( 10 ) & "(exit code #result.exitCode#)" )
+		showOutput( report, result.ok ? "muted" : "warn" )
+		keepOrNot( screenOnly, "shell", line, report )
 	}
 
 	/**
-	 * /default goes back to the app's default model: the defaultProfile, else the provider and model at the top of Agent.yaml.
+	 * Runs one BoxLang built-in function call and shows what it returned; kept for the next message like !command.
 	 */
-	private void function useDefault() {
-		var can = variables.session.switchable()
-		if ( !can.ok ) {
-			variables.screen.print( "warn", can.reason )
+	private void function bifLine( required string text ) {
+		var hash = "##"
+		var screenOnly = arguments.text.startsWith( hash & hash )
+		var call = trim( mid( arguments.text, screenOnly ? 3 : 2, len( arguments.text ) ) )
+		var allowed = variables.userConfig.chat().bifs
+		if ( allowed == false || allowed == "false" ) {
+			variables.screen.print( "warn", "Function calls are switched off in #variables.userConfig.path()# (chat: bifs: false)." )
 			return
 		}
-		reportSwitch( variables.session.useDefault() )
-	}
-
-	private void function reportSwitch( required struct outcome ) {
-		if ( !( arguments.outcome.ok ?: false ) ) {
-			variables.screen.print( "warn", arguments.outcome.reason ?: "Could not switch." )
+		variables.screen.print( "accent", hash & " " & call )
+		var outcome = new "models.cli.chat.BifCall@bxagents"( isArray( allowed ) ? allowed : true ).run( call )
+		if ( !outcome.ok ) {
+			variables.screen.print( "warn", outcome.reason )
 			return
 		}
-		variables.screen.print( "ok", "Now using #arguments.outcome.profile# (#arguments.outcome.model#). The conversation carries on." )
-		if ( !( arguments.outcome.hasApiKey ?: true ) ) {
-			variables.screen.print( "warn", "No API key was found for #arguments.outcome.provider#. The next message will fail until it is set." )
+		var shown = new "models.cli.chat.ValueText@bxagents"().of( outcome.value ?: nullValue() )
+		showOutput( shown, "muted" )
+		keepOrNot( screenOnly, "bif", call, shown )
+	}
+
+	private void function showOutput( required string text, required string style ) {
+		var lines = len( arguments.text ) ? arguments.text.listToArray( char( 10 ), true ) : [ "(no output)" ]
+		var most = 40
+		for ( var i = 1; i <= min( most, lines.len() ); i++ ) {
+			variables.screen.print( arguments.style, lines[ i ] )
+		}
+		if ( lines.len() > most ) {
+			variables.screen.print( "muted", "... #lines.len() - most# more lines" )
 		}
 	}
 
-	/**
-	 * Opens the conversation a chat started in, when it was asked to continue one.
-	 *
-	 * @reference "" for the most recent, or a number or id
-	 */
-	private void function openConversation( required string reference ) {
-		var outcome = variables.session.resumeSession( arguments.reference )
-		if ( !( outcome.ok ?: false ) ) {
-			variables.screen.print( "warn", outcome.reason ?: "Could not open that conversation." )
+	private void function keepOrNot( required boolean screenOnly, required string kind, required string label, required string text ) {
+		if ( arguments.screenOnly ) {
 			return
 		}
-		showHistory( outcome )
-	}
-
-	/**
-	 * /resume [number or id]
-	 */
-	private void function resumeConversation( required string rest ) {
-		openConversation( arguments.rest )
-	}
-
-	/**
-	 * Shows what was said in a conversation that was just opened, and keeps it as the transcript so /save and /copy work.
-	 */
-	private void function showHistory( required struct opened ) {
-		variables.transcript = []
-		variables.screen.print( "ok", "Resumed" & ( len( arguments.opened.title ?: "" ) ? ": " & arguments.opened.title : "." ) )
-		if ( !arguments.opened.history.len() ) {
-			variables.screen.print( "muted", "No messages were kept for it, so the agent starts without the earlier conversation." )
-			return
-		}
-		for ( var entry in arguments.opened.history ) {
-			if ( entry.role == "you" ) {
-				variables.screen.printUser( entry.text )
-			} else {
-				variables.screen.printMarkdown( entry.text )
-			}
-			variables.transcript.append( entry )
-		}
-	}
-
-	/**
-	 * /sessions: the recent conversations, numbered for /resume.
-	 */
-	private void function sessions() {
-		var recent = variables.session.sessions()
-		if ( !recent.len() ) {
-			variables.screen.print( "muted", "No conversations yet." )
-			return
-		}
-		var number = 0
-		for ( var row in recent ) {
-			number++
-			variables.screen.print( "muted", right( "  " & number, 3 ) & "  " & left( row.title ?: "", 60 ) & "  " & ( row.messageCount ?: 0 ) & " messages  " & dateTimeFormat( row.updatedAt, "yyyy-mm-dd HH:nn" ) & "  " & left( row.id, 8 ) )
-		}
-		variables.screen.print( "muted", "Type /resume <number> to go back to one." )
-	}
-
-	private void function compactConversation() {
-		var outcome = variables.session.compact()
-		if ( !( outcome.available ?: false ) ) {
-			variables.screen.print( "warn", "This agent's memory has no summary model, so there is nothing to compact with. Set summaryProvider and summaryModel on its memory." )
-		} else if ( outcome.compacted ) {
-			variables.screen.print( "ok", "Compacted: #outcome.before# messages became #outcome.after#." )
-		} else {
-			variables.screen.print( "muted", "Nothing to compact: #outcome.before# messages, already short." )
-		}
-	}
-
-	/**
-	 * /notes with nothing opens the notes screen; list, add, edit, remove and stats work in place.
-	 *
-	 * @rest What follows the command
-	 */
-	private void function notes( required string rest ) {
-		var kept = variables.session.notes()
-		if ( !kept.available() ) {
-			variables.screen.print( "warn", kept.why() )
-			return
-		}
-		var report = new "models.notes.NotesReport@bxagents"()
-		var verb = lCase( listFirst( arguments.rest, " " ) )
-		var after = trim( mid( arguments.rest, len( verb ) + 1, len( arguments.rest ) ) )
-		try {
-			switch ( verb ) {
-				case "":
-					new "models.cli.chat.NotesMode@bxagents"( variables.screen, kept, variables.session.userId(), variables.session.agentName() ).run()
-					break
-				case "list":
-					var stats = kept.stats()
-					for ( var line in report.listLines( "Your notes", kept.list( "user" ), stats.user ) ) {
-						variables.screen.print( "muted", line )
-					}
-					for ( var line in report.listLines( "Agent notes", kept.list( "agent" ), stats.agent ) ) {
-						variables.screen.print( "muted", line )
-					}
-					break
-				case "stats":
-					for ( var line in report.statsLines( kept.stats() ) ) {
-						variables.screen.print( "muted", line )
-					}
-					break
-				case "add":
-					var scope = "user"
-					if ( lCase( listFirst( after, " " ) ) == "agent" ) {
-						scope = "agent"
-						after = trim( mid( after, 6, len( after ) ) )
-					}
-					if ( !len( after ) ) {
-						variables.screen.print( "warn", "Usage: /remember <text>, or /notes add [agent] <text>" )
-						break
-					}
-					showOutcome( kept.add( scope, after ), "Noted." )
-					break
-				case "edit":
-					var id = listFirst( after, " " )
-					var text = trim( mid( after, len( id ) + 1, len( after ) ) )
-					if ( !len( id ) || !len( text ) ) {
-						variables.screen.print( "warn", "Usage: /notes edit <id> <new text>" )
-						break
-					}
-					showOutcome( kept.update( id, text ), "Updated." )
-					break
-				case "remove":
-				case "delete":
-					if ( !len( after ) ) {
-						variables.screen.print( "warn", "Usage: /notes remove <id>" )
-						break
-					}
-					showOutcome( kept.remove( after ), "Removed." )
-					break
-				default:
-					variables.screen.print( "warn", "Usage: /notes [list], add [agent] <text>, edit <id> <text>, remove <id>, stats" )
-			}
-		} catch ( any e ) {
-			variables.screen.print( "warn", "Notes: " & e.message )
-		}
-	}
-
-	private void function showOutcome( required struct outcome, required string done ) {
-		if ( arguments.outcome.ok ?: false ) {
-			variables.screen.print( "ok", arguments.done )
-		} else {
-			variables.screen.print( "warn", arguments.outcome.reason ?: "That did not work." )
-		}
+		variables.attachments.add( arguments.kind, arguments.label, arguments.text )
+		variables.screen.print( "muted", "Attached to your next message." )
 	}
 
 	/**
@@ -416,7 +250,27 @@ class {
 		variables.screen.printUser( arguments.text )
 		variables.transcript.append( { role : "you", text : arguments.text } )
 
-		var result = execute( () => variables.session.send( text, variables.hooks ) )
+		// @path mentions: a text file goes along as a block, an image as an image part
+		var mentioned = new "models.cli.chat.FileMentions@bxagents"( variables.workingDirectory ).read( arguments.text )
+		for ( var problem in mentioned.problems ) {
+			variables.screen.print( "warn", problem )
+		}
+		for ( var file in mentioned.files ) {
+			variables.attachments.add( "file", file.name, file.content )
+		}
+		var images = mentioned.images
+		for ( var pasted in variables.screen.takeImages() ) {
+			images.append( { path : pasted } )
+		}
+		var attached = variables.attachments.count()
+		var sent = variables.attachments.compose( arguments.text )
+		if ( attached || images.len() ) {
+			var what = []
+			if ( attached ) { what.append( "#attached# attachment#attached == 1 ? '' : 's'#" ) }
+			if ( images.len() ) { what.append( "#images.len()# image#images.len() == 1 ? '' : 's'#" ) }
+			variables.screen.print( "muted", "Sent with " & what.toList( " and " ) & "." )
+		}
+		var result = execute( () => variables.session.send( sent, variables.hooks, images ) )
 		while ( result.status == "suspended" ) {
 			var decision = askApproval( result.pending )
 			result = execute( () => variables.session.resume( decision, variables.hooks ) )
@@ -472,85 +326,6 @@ class {
 			]
 		)
 		return isNull( decision ) ? "reject" : decision
-	}
-
-	private string function lastAnswer() {
-		for ( var i = variables.transcript.len(); i >= 1; i-- ) {
-			if ( variables.transcript[ i ].role == "agent" ) {
-				return variables.transcript[ i ].text
-			}
-		}
-		return ""
-	}
-
-	/**
-	 * @name A file name, relative to the working directory or absolute; blank picks a dated one
-	 */
-	private void function save( required string name ) {
-		if ( !variables.transcript.len() ) {
-			variables.screen.print( "warn", "Nothing to save yet." )
-			return
-		}
-		var absolute = absolutePath( len( arguments.name ) ? arguments.name : "chat-#dateTimeFormat( now(), 'yyyyMMdd-HHmmss' )#.md" )
-		var lines = []
-		for ( var entry in variables.transcript ) {
-			lines.append( "**" & ( entry.role == "you" ? "You" : "Agent" ) & "**" )
-			lines.append( "" )
-			lines.append( entry.text )
-			lines.append( "" )
-		}
-		fileWrite( absolute, lines.toList( char( 10 ) ) )
-		variables.screen.print( "ok", "Saved to #absolute#" )
-	}
-
-	/**
-	 * @file A file name, absolute or relative to the working directory
-	 *
-	 * @return The absolute path
-	 */
-	private string function absolutePath( required string file ) {
-		return ( arguments.file.startsWith( "/" ) || reFind( "^[A-Za-z]:[\/]", arguments.file ) ) ? arguments.file : variables.workingDirectory & "/" & arguments.file
-	}
-
-	/**
-	 * /record [file] starts, /record stop finishes.
-	 */
-	private void function record( required string rest ) {
-		if ( arguments.rest.lcase() == "stop" ) {
-			stopRecording()
-		} else if ( variables.screen.isRecording() ) {
-			variables.screen.print( "warn", "Already recording to #variables.screen.recordingFile()#. Type /record stop to finish." )
-		} else {
-			startRecording( arguments.rest )
-		}
-	}
-
-	/**
-	 * Starts recording the screen and says where it goes. A failure is shown, not thrown: the chat carries on.
-	 *
-	 * @file A file name, or empty for a dated one in the working directory
-	 */
-	private void function startRecording( required string file ) {
-		var absolute = absolutePath( len( arguments.file ) ? arguments.file : "chat-#dateTimeFormat( now(), 'yyyyMMdd-HHmmss' )#.cast" )
-		try {
-			variables.screen.startRecording( absolute, "bxAgents chat: " & variables.session.agentName() )
-			variables.screen.print( "ok", "Recording to #absolute#. Type /record stop to finish." )
-		} catch ( any e ) {
-			variables.screen.print( "warn", "Could not start recording: #e.message#" )
-		}
-	}
-
-	/**
-	 * Finishes the recording and says where it was saved, or that it stopped early.
-	 */
-	private void function stopRecording() {
-		if ( !variables.screen.isRecording() ) {
-			variables.screen.print( "warn", "No recording is on." )
-			return
-		}
-		var problem = variables.screen.recordingError()
-		var file = variables.screen.stopRecording()
-		variables.screen.print( len( problem ) ? "warn" : "ok", len( problem ) ? "The recording stopped early (#problem#). What was captured is in #file#" : "Recording saved to #file#" )
 	}
 
 }

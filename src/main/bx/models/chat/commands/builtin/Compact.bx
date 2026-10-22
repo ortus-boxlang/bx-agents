@@ -1,0 +1,23 @@
+class extends="models.chat.commands.BaseCommand@bxagents" {
+
+	string function name() {
+		return "compact"
+	}
+
+	string function hint() {
+		return "shorten this conversation: older messages become a summary"
+	}
+
+	any function run( required any context, required string args ) {
+		var reply = arguments.context.reply()
+		var outcome = arguments.context.chat().compact()
+		if ( !( outcome.available ?: false ) ) {
+			return reply.warn( "This agent's memory has no summary model, so there is nothing to compact with. Set summaryProvider and summaryModel on its memory." )
+		}
+		if ( outcome.compacted ) {
+			return reply.ok( "Compacted: #outcome.before# messages became #outcome.after#." )
+		}
+		return reply.text( "Nothing to compact: #outcome.before# messages, already short." )
+	}
+
+}

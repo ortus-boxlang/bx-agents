@@ -1,0 +1,33 @@
+/**
+ * Loads the agent a project's `build` generated, to use it in this process: what `chat` talks to and what
+ * `sessions fork` copies messages in.
+ */
+class {
+
+	/**
+	 * @root Absolute path to the project root, trailing slash stripped
+	 *
+	 * @return True when the project has been built
+	 */
+	boolean function isBuilt( required string root ) {
+		return fileExists( arguments.root & "/.build/app/agent/GeneratedAgentFactory.bx" )
+	}
+
+	/**
+	 * The terminal chat and the web chat open the same database file; the notes store reads this setting, so it
+	 * is pointed at the project's file unless one was already named.
+	 *
+	 * @root Absolute path to the project root, trailing slash stripped
+	 *
+	 * @return The agent object
+	 */
+	any function load( required string root ) {
+		if ( !len( trim( getSystemSetting( "BXAGENTS_DB", "" ) ) ) ) {
+			createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_DB", new "models.store.ChatStorePath@bxagents"().forProject( arguments.root ) )
+		}
+		var factoryPath = arguments.root & "/.build/app/agent/GeneratedAgentFactory.bx"
+		var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
+		return createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" ).instantiate( factoryPath, context ).buildAgent()
+	}
+
+}

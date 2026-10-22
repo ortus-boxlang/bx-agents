@@ -1,0 +1,42 @@
+class extends="models.chat.commands.BaseCommand@bxagents" {
+
+	string function name() {
+		return "export"
+	}
+
+	string function hint() {
+		return "save the conversation as Markdown or HTML: /export [file] [--format=md|html]"
+	}
+
+	array function transports() {
+		return [ "tui", "web" ]
+	}
+
+	/**
+	 * In the terminal the file is written to the user's disk; on the web the reply carries it for the browser to save.
+	 */
+	any function run( required any context, required string args ) {
+		var reply = arguments.context.reply()
+		var exporter = new "models.chat.Exporter@bxagents"()
+		var asked = exporter.parse( arguments.args )
+		if ( !asked.ok ) {
+			return reply.warn( asked.reason )
+		}
+		var chat = arguments.context.chat()
+		var messages = arguments.context.hasTerminal() ? arguments.context.terminal().messages() : chat.history()
+		if ( !messages.len() ) {
+			return reply.warn( "Nothing to export yet." )
+		}
+		var title = chat.conversationTitle()
+		var content = exporter.render( messages, asked.format, len( title ) ? title : chat.agentName() )
+		var file = len( asked.file ) ? asked.file : exporter.defaultName( asked.format )
+		if ( arguments.context.hasTerminal() ) {
+			var written = arguments.context.terminal().writeFile( file, content )
+			return written.ok ? reply.ok( "Exported to #written.path#" ) : reply.warn( written.reason )
+		}
+		// a browser is given a name, never a path
+		var plain = listLast( replace( file, "\", "/", "all" ), "/" )
+		return reply.file( plain, exporter.mime( asked.format ), content ).ok( "Exported #plain#." )
+	}
+
+}

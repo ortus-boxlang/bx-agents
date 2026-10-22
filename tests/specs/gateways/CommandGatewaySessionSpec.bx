@@ -1,0 +1,121 @@
+/**
+ * Commands in front of the agent on a gateway: a command the session offers is answered by the command
+ * layer through the gateway the message came from; anything else still reaches the agent.
+ */
+import bxModules.bxai.models.gateway.contracts.GatewayContext;
+import bxModules.bxai.models.gateway.contracts.GatewayMessage;
+
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "CommandGatewaySession", function() {
+
+			function message( required string text, string user = "u-1", string conversation = "chat-1" ) {
+				var context = new GatewayContext( gateway : "mock", conversationID : conversation, userID : user );
+				return new GatewayMessage( text : text, context : context );
+			}
+
+			function replies() {
+				return mock.getDeliveredEvents().map( e => e.getData().content );
+			}
+
+			beforeEach( function() {
+				variables.mock = aiGateway( "mock" );
+				variables.agent = aiAgent( name : "helper", model : aiModel( provider : "mock" ), memory : aiMemory( "cache" ) );
+			} );
+
+			it( "answers /help itself, with the commands it offers, and never calls the agent", function() {
+				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ] );
+				var done = session.handleInbound( message( "/help" ), mock );
+
+				expect( isNull( done ) ).toBeTrue();
+				expect( replies() ).toHaveLength( 1 );
+				expect( replies()[ 1 ] ).toInclude( "/info" );
+				expect( replies()[ 1 ] ).notToInclude( "/copy" );
+				expect( session.getActiveThreadIds() ).toBeEmpty();
+			} );
+
+			it( "hands its menu to a gateway that can show one, once, on the first message", function() {
+				var shown = [];
+				mock.publishCommands = ( menu ) => { shown.append( menu.map( c => c.name ) ); return true; };
+				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ] );
+				session.handleInbound( message( "/help" ), mock );
+				session.handleInbound( message( "/help" ), mock );
+
+				expect( shown ).toHaveLength( 1 );
+				expect( shown[ 1 ] ).toBe( [ "/help", "/tools", "/model", "/ping", "/info", "/remember", "/notes" ] );
+			} );
+
+			it( "keeps answering when a gateway fails to take the menu", function() {
+				mock.publishCommands = ( menu ) => { throw( message = "boom" ); };
+				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ] );
+				session.handleInbound( message( "/help" ), mock );
+				expect( replies() ).toHaveLength( 1 );
+			} );
+
+			it( "answers /info with the caller and the conversation", function() {
+				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ] );
+				session.handleInbound( message( "/info", "u-7", "chat-9" ), mock );
+
+				expect( replies()[ 1 ] ).toInclude( "Agent: helper" );
+				expect( replies()[ 1 ] ).toInclude( "User: u-7" );
+				expect( replies()[ 1 ] ).toInclude( "mock:chat-9" );
+			} );
+
+			it( "reads /info@botname as /info, as Telegram sends it in a group", function() {
+				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ] );
+				session.handleInbound( message( "/info@helperbot" ), mock );
+				expect( replies()[ 1 ] ).toInclude( "Agent: helper" );
+			} );
+
+			it( "passes a message that is not a command to the agent", function() {
+				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ] );
+				var done = session.handleInbound( message( "hello there" ), mock );
+
+				expect( isNull( done ) ).toBeFalse();
+				done.get();
+				expect( replies()[ 1 ] ).notToInclude( "Agent: helper" );
+			} );
+
+			it( "passes an unknown slash word to the agent instead of swallowing it", function() {
+				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ] );
+				var done = session.handleInbound( message( "/whatever you like" ), mock );
+				expect( isNull( done ) ).toBeFalse();
+				done.get();
+			} );
+
+			it( "does not offer a command outside its safe set, such as /clear", function() {
+				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ] );
+				expect( session.commandMenu().map( c => c.name ) ).toBe( [ "/help", "/tools", "/model", "/ping", "/info", "/remember", "/notes" ] );
+				var done = session.handleInbound( message( "/clear" ), mock );
+				expect( isNull( done ) ).toBeFalse();
+				done.get();
+			} );
+
+			it( "can be widened or switched off in the project's config", function() {
+				var wide = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], commands : { allow : [ "help", "clear" ] } );
+				expect( wide.commandMenu().map( c => c.name ) ).toBe( [ "/help", "/clear" ] );
+
+				var off = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ aiGateway( "mock" ) ], commands : { enabled : false } );
+				var done = off.handleInbound( message( "/help" ), mock );
+				expect( isNull( done ) ).toBeFalse();
+				done.get();
+			} );
+
+			it( "uses another prefix when configured", function() {
+				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], commands : { prefix : "!" } );
+				session.handleInbound( message( "!info" ), mock );
+				expect( replies()[ 1 ] ).toInclude( "Agent: helper" );
+			} );
+
+			it( "tells the person when a command fails, instead of throwing into the gateway", function() {
+				var registry = new bxagents.models.chat.commands.CommandRegistry().register( new BrokenCommand() );
+				var broken = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], commands : { registry : registry } );
+				broken.handleInbound( message( "/broken" ), mock );
+				expect( replies()[ 1 ] ).toBe( "That command did not work: it broke" );
+			} );
+
+		} );
+	}
+
+}

@@ -553,6 +553,36 @@ class extends="testbox.system.BaseSpec" {
 				expect( html ).toInclude( "if ( !payload.compacted )" );
 			} );
 
+			it( "runs slash commands on the server: routes, handler and a page that draws the reply", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var handler = fileRead( appDir & "/handlers/ChatUi.bx" );
+				expect( handler ).toInclude( "function commands( event, rc, prc )" );
+				expect( handler ).toInclude( "function command( event, rc, prc )" );
+				expect( handler ).toInclude( "CommandService@bxagents" );
+				// the identity is the signed-in visitor's, never the body's
+				expect( handler ).toInclude( "commandService().execute( resolveUserId()" );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( 'id="slashMenu"' );
+				expect( html ).toInclude( 'apiPost( "/command"' );
+				expect( html ).toInclude( 'apiGet( "/commands" )' );
+				expect( html ).toInclude( "function drawReply" );
+				// Fork and Export are buttons over the same commands; the page saves a file block itself
+				expect( html ).toInclude( 'id="forkBtn"' );
+				expect( html ).toInclude( 'id="exportBtn"' );
+				expect( html ).toInclude( 'runCommand( "/export" )' );
+				expect( html ).toInclude( 'block.type === "file"' );
+				// the size of the context sits in the header and is refreshed from the server's own estimate
+				expect( html ).toInclude( 'id="contextChip"' );
+				expect( html ).toInclude( 'apiGet( "/context?conversationId="' );
+				expect( handler ).toInclude( "function context( event, rc, prc )" );
+				expect( handler ).toInclude( "MessageBuilder@bxagents" );
+				expect( handler ).toInclude( '"context"       : true' );
+			} );
+
 			it( "stores the theme server-side so it follows the identity, not the browser", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
 				var appDir = newAppDir();

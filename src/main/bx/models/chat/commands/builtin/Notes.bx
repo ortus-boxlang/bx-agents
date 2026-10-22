@@ -1,0 +1,91 @@
+class extends="models.chat.commands.BaseCommand@bxagents" {
+
+	string function name() {
+		return "notes"
+	}
+
+	string function hint() {
+		return "open the notes screen, or: list, add [agent] <text>, edit <id> <text>, remove <id>, stats"
+	}
+
+	/**
+	 * With nothing after it the terminal opens the notes screen; everywhere else, and for every verb, it answers in place.
+	 */
+	any function run( required any context, required string args ) {
+		var reply = arguments.context.reply()
+		var kept = arguments.context.chat().notes()
+		if ( !kept.available() ) {
+			return reply.warn( kept.why() )
+		}
+		var report = new "models.notes.NotesReport@bxagents"()
+		var verb = lCase( listFirst( arguments.args, " " ) )
+		var after = trim( mid( arguments.args, len( verb ) + 1, len( arguments.args ) ) )
+		if ( !len( verb ) && arguments.context.transport() != "tui" ) {
+			verb = "list"
+		}
+		try {
+			switch ( verb ) {
+				case "":
+					reply.screen( "notes" )
+					break
+				case "list":
+					var stats = kept.stats()
+					for ( var line in report.listLines( "Your notes", kept.list( "user" ), stats.user ) ) {
+						reply.text( line )
+					}
+					for ( var line in report.listLines( "Agent notes", kept.list( "agent" ), stats.agent ) ) {
+						reply.text( line )
+					}
+					break
+				case "stats":
+					for ( var line in report.statsLines( kept.stats() ) ) {
+						reply.text( line )
+					}
+					break
+				case "add":
+					var scope = "user"
+					if ( lCase( listFirst( after, " " ) ) == "agent" ) {
+						scope = "agent"
+						after = trim( mid( after, 6, len( after ) ) )
+					}
+					if ( !len( after ) ) {
+						reply.warn( "Usage: /remember <text>, or /notes add [agent] <text>" )
+						break
+					}
+					outcome( reply, kept.add( scope, after ), "Noted." )
+					break
+				case "edit":
+					var id = listFirst( after, " " )
+					var text = trim( mid( after, len( id ) + 1, len( after ) ) )
+					if ( !len( id ) || !len( text ) ) {
+						reply.warn( "Usage: /notes edit <id> <new text>" )
+						break
+					}
+					outcome( reply, kept.update( id, text ), "Updated." )
+					break
+				case "remove":
+				case "delete":
+					if ( !len( after ) ) {
+						reply.warn( "Usage: /notes remove <id>" )
+						break
+					}
+					outcome( reply, kept.remove( after ), "Removed." )
+					break
+				default:
+					reply.warn( "Usage: /notes [list], add [agent] <text>, edit <id> <text>, remove <id>, stats" )
+			}
+		} catch ( any e ) {
+			reply.warn( "Notes: " & e.message )
+		}
+		return reply
+	}
+
+	private void function outcome( required any reply, required struct outcome, required string done ) {
+		if ( arguments.outcome.ok ?: false ) {
+			arguments.reply.ok( arguments.done )
+		} else {
+			arguments.reply.warn( arguments.outcome.reason ?: "That did not work." )
+		}
+	}
+
+}
