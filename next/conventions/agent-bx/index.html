@@ -360,7 +360,7 @@
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>security</code></td><td>struct</td><td>Forwarded verbatim into the generated app's <code>bxai</code> module settings; bx-ai's own <code>SecurityDirector</code> turns it into guardrail middleware. Passthrough only - BxAgents has no own guardrails convention.</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>memory</code></td><td>string or struct</td><td>The agent's conversation memory. A bare string is shorthand for the type (<code>&quot;cache&quot;</code>); a struct is <code>{ type, ...config }</code> and is passed through to <code>aiMemory()</code> verbatim - e.g. <code>{ type: &quot;cache&quot;, maxMessages: 50 }</code>, or with <code>summaryProvider</code>/<code>summaryModel</code>/<code>summaryThreshold</code> to make the web UI's <code>/compact</code> functional. Applies per node, so a subagent can declare its own.</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>checkpointer</code></td><td>struct</td><td><code>{ type: &quot;cache&quot;\|&quot;file&quot;\|&quot;jdbc&quot;, ...config }</code>. Defaults to <code>{ type: &quot;cache&quot; }</code> if omitted. Always applied - without one, human-in-the-loop approval flows through any gateway other than <code>cli</code> fail outright.</td></tr>
-<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>gatewaySession</code></td><td>struct</td><td><code>{ policy, maxQueueDepth }</code>, both optional (default <code>&quot;queue&quot;</code> / <code>50</code>). Only meaningful if the project has at least one push-style <a href="/next/conventions/gateways/index.html#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends">gateway</a> entry - controls the generated <code>GatewaySession</code>'s policy for a second inbound message arriving on a thread that already has a turn in flight. <code>policy</code> must be one of <code>reject</code>/<code>queue</code>/<code>steer</code>/<code>interrupt</code>.</td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>gatewaySession</code></td><td>struct</td><td><code>{ policy, maxQueueDepth, commands }</code>, all optional (default <code>&quot;queue&quot;</code> / <code>50</code> / a safe set of <a href="/next/conventions/gateways/index.html#commands-in-a-gateway">slash commands</a>). Only meaningful if the project has at least one push-style <a href="/next/conventions/gateways/index.html#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends">gateway</a> entry - controls the generated <code>GatewaySession</code>'s policy for a second inbound message arriving on a thread that already has a turn in flight. <code>policy</code> must be one of <code>reject</code>/<code>queue</code>/<code>steer</code>/<code>interrupt</code>.</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>agentApi</code></td><td>struct</td><td><code>{ enabled, tokenEnvVar, tokens, profiles }</code>, all optional. Controls the always-on agent route at <code>/__bxagents</code>. See <a href="#the-always-on-agent-route">The always-on agent route</a> below.</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td>any other key</td><td>any</td><td>Merged and available in the resolved config struct, but not interpreted by BxAgents itself.</td></tr>
 </tbody>
@@ -490,7 +490,8 @@ public surface belongs in <code>gateways/</code>, at whatever paths you choose.<
 <h3 id="run-control"><a href="#run-control" id="run-control" name="run-control" class="anchor"></a>Run control</h3>
 <p>Beside those four, a generated handler (<code>handlers/AgentApi.bx</code>) serves what a chat client needs to
 control a run. It is what <code>chat --server</code> and <code>chat --connect</code> use:</p>
-<pre><code>POST /__bxagents/events    # SSE: like /stream, plus tool and suspended frames
+<pre><code>POST /__bxagents/events    # SSE: like /stream, plus tool and suspended frames. Body may carry
+                           # attachments: [ { name, mime, data (base64) } ], at most 4 pictures of 5 MB
 POST /__bxagents/cancel    # { threadId, reason? }
 POST /__bxagents/steer     # { threadId, input }
 GET  /__bxagents/pending   # ?threadId=
@@ -499,9 +500,15 @@ GET  /__bxagents/tools
 GET  /__bxagents/profiles   # the profiles a client may ask for
 GET  /__bxagents/agent    # name, model, what it can do
 GET  /__bxagents/sessions   # the caller's recent conversations
+POST /__bxagents/sessions/rename   # { conversationId, title } name one
+POST /__bxagents/sessions/fork     # { conversationId, title? } copy one, messages and all
 GET  /__bxagents/history    # ?conversationId= what was said in one
 POST /__bxagents/clear      # { conversationId } forget its messages
 POST /__bxagents/compact    # { conversationId } summarize the older messages
+POST /__bxagents/ping       # { profile? } test a model with one tiny question: { ok, model, ms, reply } or { ok : false, model, reason }
+GET  /__bxagents/commands   # the slash commands this caller may run, [ { name, hint } ]
+GET  /__bxagents/context    # ?conversationId= estimated size of the context: parts, largest tools, total, share of the window
+POST /__bxagents/command    # { line : &quot;/info&quot;, conversationId? } run one, answers { blocks, effects, conversationId }
 GET  /__bxagents/notes    # the caller's notes and the agent's, with how full they are
 POST /__bxagents/notes    # { scope : &quot;user&quot; | &quot;agent&quot;, text }
 POST /__bxagents/notes/update   # { scope, id, text }

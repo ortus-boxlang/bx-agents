@@ -33,6 +33,8 @@ image:         { provider: openai, model: gpt-image-1, size: 1024x1024 }
 
 `provider`, `model` and `params` are the model every agent uses when it says nothing else. `model: openai/gpt-5` still works as shorthand for `provider: openai` plus `model: gpt-5`. `params` are request parameters such as `temperature` and `max_tokens`. `options` (timeout and similar) apply to the default provider.
 
+`contextWindow` and `vision` say what the default model can do, see [What the project knows about a model](#what-the-project-knows-about-a-model).
+
 ## Other providers
 
 `providers` holds `params` and `options` for a provider by name, for the ones you use through a profile or a subagent. `bxAgents add provider` writes one for you. The key for each provider is read from its usual environment variable (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, ...); `bxAgents doctor` tells you when one is missing.
@@ -47,8 +49,30 @@ A profile is a named combination: a provider, a model, params, options and the n
 | `provider`, `model` | What it runs on. A profile without a provider uses the default provider. |
 | `params`, `options` | Layered on top of the provider's and the default's: `params` from the default, then the provider, then the profile. |
 | `apiKeyEnv` | The **name** of the variable that holds the key. A key itself is never written in `Agent.yaml`; a profile that has one is refused. |
+| `contextWindow`, `vision` | What the project knows about the model, see below. |
 
 A profile cannot be named `default` or like a provider (`openai`, `claude`, ...), because both are selected by name. `defaultProfile` picks which profile is used when nothing asks for another one. `bxAgents add profile` writes a profile (and `--default` the `defaultProfile`) without touching the rest of the file; see [`add profile`](../cli-reference.md#add-profile).
+
+## What the project knows about a model
+
+bx-ai has no way to ask a model how much it can hold or whether it can see images, so you can say so, on the default model and on each profile:
+
+```yaml
+contextWindow: 128000      # tokens the default model can hold
+vision: true               # the default model can see images
+profiles:
+  fast:
+    provider: openai
+    model: gpt-5-mini
+    contextWindow: 400000
+    vision: false
+```
+
+`contextWindow` is a whole number of tokens and `vision` is `true` or `false`; `build` refuses anything else. Both are optional and nothing is guessed: a model with no entry is simply unknown. bx-ai does not read them. The chat shows them in `/info` and `/model`, and uses `contextWindow` for the share of the window the context takes (`/context`, the status bar and the web header). Later, `vision` decides whether an image may be pasted.
+
+## Testing a model
+
+`/ping` in the chat and `bxAgents models test` send a model one tiny question through bx-ai and say whether it answered, and how long it took, so a wrong key or model name shows up before a conversation does. See [`models`](../cli-reference.md#models) and [Models in the chat](../cli-reference.md#models-in-the-chat).
 
 ## Which agent uses what
 

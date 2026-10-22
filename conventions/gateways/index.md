@@ -210,18 +210,20 @@ aiGatewayRegistry().register( aiGateway( "bxModules.bxagents.models.gateways.Sig
 
 ### GatewaySession - wiring the agent to every push-style gateway
 
-Any project with at least one push-style gateway entry also gets a generated start-up statement in `Application.bx`'s `onApplicationStart()`. It builds a single bx-ai `GatewaySession` bundling every push-style gateway in the project, bound to the project's root agent, and starts it:
+Any project with at least one push-style gateway entry also gets a generated start-up statement in `Application.bx`'s `onApplicationStart()`. It builds a single bx-ai `GatewaySession` (our `CommandGatewaySession`, which is one with [commands](#commands-in-a-gateway) in front of the agent) bundling every push-style gateway in the project, bound to the project's root agent, and starts it:
 
 ```javascript
 // Application.bx, onApplicationStart() (GENERATED)
 var wirebox        = application.cbController.getWireBox()
 var agent          = wirebox.getInstance( "GeneratedAgent" )
-var gatewaySession = aiGatewaySession(
+var gatewaySession = new "models.gateways.CommandGatewaySession@bxagents"(
 	agent        : agent,
 	gateways     : [ aiGatewayRegistry().get( "telegram" ) ],
 	policy       : "queue",
-	maxQueueDepth: 50
+	maxQueueDepth: 50,
+	commands     : {}
 )
+BoxAnnounce( "onGatewaySessionCreate", { session: gatewaySession } )
 gatewaySession.start()
 application.bxaiGatewaySession = gatewaySession
 ```
@@ -245,6 +247,29 @@ gatewaySession:       # both optional - these are the defaults
 
 !!! warning
     v1 limitation: exactly one `GatewaySession`, always bound to the project's root agent - matches the existing precedent that `exposes: "agent"` HTTP exposure is also always root-agent-only. A project with subagents cannot yet route different gateways to different subagents.
+
+### Commands in a gateway
+
+A message that is one of the session's slash commands is answered by BxAgents itself and never reaches the model, through the same gateway it came in on. Anything else, including a slash word that is not a command here, goes to the agent as before. A choice (a list to pick from) comes back as a numbered list with the command to type for each.
+
+By default a safe set is on: `/help`, `/tools`, `/model`, `/info`, `/remember` and `/notes`. They need no conversation of their own and change nothing shared. Narrow it, widen it or switch it off in the same `gatewaySession` block:
+
+```yaml
+# Agent.yaml
+gatewaySession:
+  commands:
+    enabled: true            # false switches commands off
+    prefix: "/"              # one character
+    allow: [ help, info, tools, notes, remember, model ]   # the default; any command that runs on a gateway
+    admins: [ "123456789" ]  # gateway user ids that may run commands marked for admins
+```
+
+**Telegram** shows the commands in the bot's own `/` menu: the first time a message arrives, the session sends the list it answers (`setMyCommands`) to the gateway. Names Telegram would refuse (anything but lower case letters, digits and underscores, or over 32 characters) are left out, and a failure to publish never stops the bot answering.
+
+`build` checks the block: an unknown key, a prefix that is not one character, or an `allow` entry that is not a command that runs on a gateway fails before the app starts. In Telegram a group message such as `/info@yourbot` is read as `/info`.
+
+!!! info
+    The conversation commands (`/new`, `/clear`, `/compact`, `/sessions`, `/resume`) are not in the default set: a gateway keeps one conversation per chat thread, and moving between conversations there is separate work. Slack's and Discord's own slash commands are not set up yet; typing them works.
 
 What each policy actually does with a message that arrives while a turn is still running:
 

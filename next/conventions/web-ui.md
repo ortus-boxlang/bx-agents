@@ -95,6 +95,9 @@ A `webui` entry mounts twenty-five actions under `<path>/api`, served by a gener
 | `GET /tools` | The agent's registered tools |
 | `GET /health` | Liveness |
 | `GET /info` | Agent name, model, memory/tool counts, capability flags |
+| `GET /commands` | The [slash commands](#slash-commands) the page offers, `[ { name, hint } ]` |
+| `GET /context` | What is in this visitor's context for one conversation (`?conversationId=`): `{ parts : [ { key, label, tokens, detail } ], tools : [ { name, tokens } ], total, contextWindow, percent }`. Estimates from the system prompt, tool definitions, notes and messages; no model is called |
+| `POST /command` | Run one for this visitor: `{ line : "/info", conversationId? }`, answers with the reply as data |
 | `GET /profiles` | The [profiles](models.md#profiles) the entry offers, `[]` when it lists none. See [Choosing the model](#choosing-the-model) |
 | `GET /conversations` | This visitor's conversations, newest activity first |
 | `POST /conversations/create` | Start one - optional `{ title }`, returns the minted `conversationId` |
@@ -109,6 +112,20 @@ A `webui` entry mounts twenty-five actions under `<path>/api`, served by a gener
 | `POST /notes/remove` | `{ scope, id }` - the visitor's own notes only; a note of the agent is a `403` |
 
 Every one is scoped by ColdBox's `getUserSessionIdentifier()` as the `userId`. The first three keep `toAi()`'s exact shape and wire format.
+
+### Slash commands
+
+Type `/` in the message box and a menu of commands appears (arrow keys, `Tab` to complete, `Esc` to close). They are the same commands as in [the terminal chat](../cli-reference.md#the-same-commands-in-the-web-page-and-in-chat-apps): `/help`, `/new`, `/tools`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/info`, `/context`, `/remember`, `/notes`, `/name`, `/fork` and `/export`. Pressing Enter runs the line on the server with `POST /command` and draws the answer: text, a table, or buttons to pick from. `/new`, `/resume` and `/fork` move the page to the conversation they name, `/clear` reloads the transcript, and `/export [file] [--format=md|html]` hands the conversation to the browser to save (the **Fork** and **Export** buttons in the header run `/fork` and `/export`).
+
+The reply is data, so any client can use it:
+
+```json
+{ "success": true, "conversationId": "...",
+  "blocks": [ { "type": "table", "layout": "keyvalue", "rows": [ [ "Agent", "helper" ] ] } ],
+  "effects": [ { "type": "conversation", "id": "..." } ] }
+```
+
+Blocks are `text`, `table`, `choose` (options, each with the command line to run), `transcript` and `file` (`{ name, mime, text }`, which the page saves); effects say what happened to the conversation (`reset`, `conversation`). `/info` leaves out where the database file is. A command that only makes sense on your own machine (`/copy`, `/save`, `/profile`) is not offered, and a server never switches the shared agent's model: the page picks a profile per message instead.
 
 `threadId` is server-authoritative: taken from the request when supplied, minted otherwise, and always echoed back - as an `X-Thread-Id` response header on `/invoke` and `/batch`, and as a `thread` SSE event sent *before the first chunk* on `/stream` (a header can't be read before the body starts arriving). That's the same contract ColdBox 8.1's own `toAi()` adopted, so a client written against one works against the other.
 
@@ -241,6 +258,9 @@ The shipped page is a real chat client, not a demo shell. It reads `GET /info` *
 | **Approvals** | A human-in-the-loop pause renders an Approve/Reject card from `GET /pending`, answered via `/resume`, which streams the continuation of the same turn |
 | **Theme** | Stored server-side in `preferences`, so it follows the identity rather than the browser. `localStorage` keeps a local copy so the choice survives a failed request |
 | **Model** | `/info`'s model name sits in the header, so it is always clear what answered |
+| **Context size** | A chip in the header, `ctx ~12.4k / 128k 9%`, from `GET /context`, refreshed after each turn, command, clear, compaction, conversation switch and change to the notes. Click it for the breakdown (`/context`). It shows the share of the window only when the model's [`contextWindow`](models.md#what-the-project-knows-about-a-model) is set |
+| **Attachments** | An **Attach** button (shown when `/info` reports `capabilities.attachments`) picks pictures and text files; you can also paste a picture or drop files on the page. Chips show what waits, each with a remove button. Pictures go as base64 `attachments` of the stream request, text files are inlined in the message. At most 4 pictures, 5 MB each; `/info` also reports `vision`, and a picture to a profile without it is refused with the reason |
+| **Shortcuts** | Enter sends, Shift+Enter adds a line. `?` alone (or `/keys`) lists them |
 
 **Recovery matters more than it sounds.** The last-opened conversation is remembered in `localStorage`, but the conversations themselves live on the server. If that id no longer exists - deleted in another tab, or a fresh store - the page falls back to the newest remaining conversation instead of rehydrating into an empty screen with no active row.
 

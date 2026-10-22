@@ -246,7 +246,7 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-default-model">The default model</a></li><li class="toc-level-2"><a href="#other-providers">Other providers</a></li><li class="toc-level-2"><a href="#profiles">Profiles</a></li><li class="toc-level-2"><a href="#which-agent-uses-what">Which agent uses what</a></li><li class="toc-level-2"><a href="#capability-defaults">Capability defaults</a></li><li class="toc-level-2"><a href="#validation-and-tests">Validation and tests</a></li><li class="toc-level-2"><a href="#how-it-reaches-bx-ai">How it reaches bx-ai</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-default-model">The default model</a></li><li class="toc-level-2"><a href="#other-providers">Other providers</a></li><li class="toc-level-2"><a href="#profiles">Profiles</a></li><li class="toc-level-2"><a href="#what-the-project-knows-about-a-model">What the project knows about a model</a></li><li class="toc-level-2"><a href="#testing-a-model">Testing a model</a></li><li class="toc-level-2"><a href="#which-agent-uses-what">Which agent uses what</a></li><li class="toc-level-2"><a href="#capability-defaults">Capability defaults</a></li><li class="toc-level-2"><a href="#validation-and-tests">Validation and tests</a></li><li class="toc-level-2"><a href="#how-it-reaches-bx-ai">How it reaches bx-ai</a></li></ul></details>
 		
 
 		
@@ -271,6 +271,7 @@ image:         { provider: openai, model: gpt-image-1, size: 1024x1024 }
 </code></pre>
 <h2 id="the-default-model"><a href="#the-default-model" id="the-default-model" name="the-default-model" class="anchor"></a>The default model</h2>
 <p><code>provider</code>, <code>model</code> and <code>params</code> are the model every agent uses when it says nothing else. <code>model: openai/gpt-5</code> still works as shorthand for <code>provider: openai</code> plus <code>model: gpt-5</code>. <code>params</code> are request parameters such as <code>temperature</code> and <code>max_tokens</code>. <code>options</code> (timeout and similar) apply to the default provider.</p>
+<p><code>contextWindow</code> and <code>vision</code> say what the default model can do, see <a href="#what-the-project-knows-about-a-model">What the project knows about a model</a>.</p>
 <h2 id="other-providers"><a href="#other-providers" id="other-providers" name="other-providers" class="anchor"></a>Other providers</h2>
 <p><code>providers</code> holds <code>params</code> and <code>options</code> for a provider by name, for the ones you use through a profile or a subagent. <code>bxAgents add provider</code> writes one for you. The key for each provider is read from its usual environment variable (<code>OPENAI_API_KEY</code>, <code>ANTHROPIC_API_KEY</code>, ...); <code>bxAgents doctor</code> tells you when one is missing.</p>
 <h2 id="profiles"><a href="#profiles" id="profiles" name="profiles" class="anchor"></a>Profiles</h2>
@@ -284,9 +285,24 @@ image:         { provider: openai, model: gpt-image-1, size: 1024x1024 }
 <tr><td><code>provider</code>, <code>model</code></td><td>What it runs on. A profile without a provider uses the default provider.</td></tr>
 <tr><td><code>params</code>, <code>options</code></td><td>Layered on top of the provider's and the default's: <code>params</code> from the default, then the provider, then the profile.</td></tr>
 <tr><td><code>apiKeyEnv</code></td><td>The <strong>name</strong> of the variable that holds the key. A key itself is never written in <code>Agent.yaml</code>; a profile that has one is refused.</td></tr>
+<tr><td><code>contextWindow</code>, <code>vision</code></td><td>What the project knows about the model, see below.</td></tr>
 </tbody>
 </table></div>
 <p>A profile cannot be named <code>default</code> or like a provider (<code>openai</code>, <code>claude</code>, ...), because both are selected by name. <code>defaultProfile</code> picks which profile is used when nothing asks for another one. <code>bxAgents add profile</code> writes a profile (and <code>--default</code> the <code>defaultProfile</code>) without touching the rest of the file; see <a href="/next/cli-reference/index.html#add-profile"><code>add profile</code></a>.</p>
+<h2 id="what-the-project-knows-about-a-model"><a href="#what-the-project-knows-about-a-model" id="what-the-project-knows-about-a-model" name="what-the-project-knows-about-a-model" class="anchor"></a>What the project knows about a model</h2>
+<p>bx-ai has no way to ask a model how much it can hold or whether it can see images, so you can say so, on the default model and on each profile:</p>
+<pre><code class="language-yaml">contextWindow: 128000      # tokens the default model can hold
+vision: true               # the default model can see images
+profiles:
+  fast:
+    provider: openai
+    model: gpt-5-mini
+    contextWindow: 400000
+    vision: false
+</code></pre>
+<p><code>contextWindow</code> is a whole number of tokens and <code>vision</code> is <code>true</code> or <code>false</code>; <code>build</code> refuses anything else. Both are optional and nothing is guessed: a model with no entry is simply unknown. bx-ai does not read them. The chat shows them in <code>/info</code> and <code>/model</code>, and uses <code>contextWindow</code> for the share of the window the context takes (<code>/context</code>, the status bar and the web header). Later, <code>vision</code> decides whether an image may be pasted.</p>
+<h2 id="testing-a-model"><a href="#testing-a-model" id="testing-a-model" name="testing-a-model" class="anchor"></a>Testing a model</h2>
+<p><code>/ping</code> in the chat and <code>bxAgents models test</code> send a model one tiny question through bx-ai and say whether it answered, and how long it took, so a wrong key or model name shows up before a conversation does. See <a href="/next/cli-reference/index.html#models"><code>models</code></a> and <a href="/next/cli-reference/index.html#models-in-the-chat">Models in the chat</a>.</p>
 <h2 id="which-agent-uses-what"><a href="#which-agent-uses-what" id="which-agent-uses-what" name="which-agent-uses-what" class="anchor"></a>Which agent uses what</h2>
 <p>An agent uses its own <code>profile:</code>, else its own <code>model:</code> (a <code>provider/model</code> slug), else the default. Every subagent inherits the root's settings, and may set its own <code>model</code> or <code>profile</code>:</p>
 <pre><code class="language-yaml"># subagents/planner/Agent.yaml
@@ -349,7 +365,7 @@ profile: planner
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-default-model">The default model</a></li><li class="toc-level-2"><a href="#other-providers">Other providers</a></li><li class="toc-level-2"><a href="#profiles">Profiles</a></li><li class="toc-level-2"><a href="#which-agent-uses-what">Which agent uses what</a></li><li class="toc-level-2"><a href="#capability-defaults">Capability defaults</a></li><li class="toc-level-2"><a href="#validation-and-tests">Validation and tests</a></li><li class="toc-level-2"><a href="#how-it-reaches-bx-ai">How it reaches bx-ai</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-default-model">The default model</a></li><li class="toc-level-2"><a href="#other-providers">Other providers</a></li><li class="toc-level-2"><a href="#profiles">Profiles</a></li><li class="toc-level-2"><a href="#what-the-project-knows-about-a-model">What the project knows about a model</a></li><li class="toc-level-2"><a href="#testing-a-model">Testing a model</a></li><li class="toc-level-2"><a href="#which-agent-uses-what">Which agent uses what</a></li><li class="toc-level-2"><a href="#capability-defaults">Capability defaults</a></li><li class="toc-level-2"><a href="#validation-and-tests">Validation and tests</a></li><li class="toc-level-2"><a href="#how-it-reaches-bx-ai">How it reaches bx-ai</a></li></ul></nav>
 				</aside>
 			
 		</div>
