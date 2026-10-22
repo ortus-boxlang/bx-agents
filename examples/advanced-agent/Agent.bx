@@ -9,14 +9,17 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 		return this
 	}
 
-	// Declared here so it wins over the placeholder model set in init() above -
-	// resolves against models/fast.yaml, a build-time-only convention `super.init()`
-	// itself has no notion of. subAgents is the `subagents/` FOLDER-name list to
+	// Declared here so it wins over the placeholder model set in init() above: the agent uses
+	// the `fast` profile, a named provider + model + params that bx-ai resolves (see profiles
+	// in docs/conventions/profiles.md). subAgents is the `subagents/` FOLDER-name list to
 	// wire at build time, distinct from super.init()'s own `subAgents` argument
 	// (already-built instances).
 	function configure() {
 		return {
-			model     : "fast",
+			profiles  : {
+				fast : { description : "A small, quick model for routine work", provider : "mock", model : "mock-model" }
+			},
+			profile   : "fast",
 			subAgents : [ "researcher", "writer" ]
 		};
 	}

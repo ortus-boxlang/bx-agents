@@ -25,7 +25,7 @@ terminal (it shells out to `stty` for raw mode - it won't work piped or
 non-interactively). Type `exit` or `quit` to leave.
 
 The default mode loads the generated factory directly in this process - fastest, but
-without anything ColdBox brings (no `models/`, no scheduler, no interceptors, no
+without anything ColdBox brings (no scheduler, no interceptors, no
 gateway registry). When that matters, `--server` boots a real miniserver and drives the
 REPL over HTTP against your project's always-on agent route, and `--connect` does the
 same against a server you already have running. Both HTTP modes **stream** the reply

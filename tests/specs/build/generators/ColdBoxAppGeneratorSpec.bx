@@ -127,21 +127,39 @@ class extends="testbox.system.BaseSpec" {
 				var buildDir = newBuildDir();
 				var result = generateFor( fixtures & "/with-security", buildDir );
 
-				var content = fileRead( result.coldboxConfig );
-				expect( content ).toInclude( "moduleSettings = {" );
-				expect( content ).toInclude( "bxai :" );
-				expect( content ).toInclude( '"inputSanitizer" : true' );
-				expect( content ).toInclude( '"blockPatterns" : [ "ssn", "creditCard" ]' );
+				var settings = jsonDeserialize( fileRead( getDirectoryFromPath( result.coldboxConfig ) & "bxai-settings.json" ) );
+				expect( settings.security.inputSanitizer ).toBeTrue();
+				expect( settings.security.outputGuard.blockPatterns ).toBe( [ "ssn", "creditCard" ] );
+				// not in ColdBox's moduleSettings: that never reaches bx-ai (a BoxLang module)
+				expect( fileRead( result.coldboxConfig ) ).notToInclude( "bxai" );
 			} );
 
 			it( "always sets bxai's skillsDirectory to /skills, so bx-ai's own auto-discovery finds BX Agents' copied skills folder", function() {
 				var buildDir = newBuildDir();
 				var result = generateFor( fixtures & "/full-project", buildDir );
 
-				var content = fileRead( result.coldboxConfig );
-				expect( content ).toInclude( "moduleSettings = {" );
-				expect( content ).toInclude( '"skillsDirectory" : "/skills"' );
-				expect( content ).notToInclude( '"security"' );
+				var settings = jsonDeserialize( fileRead( getDirectoryFromPath( result.coldboxConfig ) & "bxai-settings.json" ) );
+				expect( settings.skillsDirectory ).toBe( "/skills" );
+				expect( settings.keyExists( "security" ) ).toBeFalse();
+			} );
+
+			it( "writes the project's providers, profiles and slots into bxai-settings.json and applies them before ColdBox boots", function() {
+				var root = createTempDirectory( prefix = "bxagents-gen-ai-" );
+				tempDirs.append( root );
+				fileWrite( root & "/Agent.yaml", "name: p" & char( 10 ) & "provider: mock" & char( 10 ) & "model: mock-model" & char( 10 ) & "params:" & char( 10 ) & "  temperature: 0.2" & char( 10 ) & "profiles:" & char( 10 ) & "  fast:" & char( 10 ) & "    provider: mock" & char( 10 ) & "    model: fast-model" & char( 10 ) & "defaultProfile: fast" & char( 10 ) );
+				fileWrite( root & "/instructions.md", "Be helpful." );
+				var buildDir = newBuildDir();
+				var result = generateFor( root, buildDir );
+
+				var settings = jsonDeserialize( fileRead( getDirectoryFromPath( result.coldboxConfig ) & "bxai-settings.json" ) );
+				var appSource = fileRead( result.applicationBx );
+
+				expect( settings.provider ).toBe( "mock" );
+				expect( settings.defaultParams.temperature ).toBe( 0.2 );
+				expect( settings.profiles.fast.model ).toBe( "fast-model" );
+				expect( settings.defaultProfile ).toBe( "fast" );
+				expect( appSource ).toInclude( "ModuleSettings@bxagents" );
+				expect( appSource.find( "ModuleSettings@bxagents" ) ).toBeLT( appSource.find( "new coldbox.system.Bootstrap" ) );
 			} );
 
 			it( "generates moduleSettings.cbmailservices only when hasEmailGateway is true", function() {
@@ -279,29 +297,6 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).notToInclude( 'params : { model : "" }' );
 			} );
 
-			it( "resolves a bare model value that names a models/ entry to that entry's own provider+model", function() {
-				var buildDir = newBuildDir();
-				var projectRoot = fixtures & "/models-entry-reference";
-				var config = resolver.resolve( projectRoot = projectRoot );
-				var discovery = discoverer.discover( projectRoot );
-				var result = generator.generate( projectRoot, buildDir, config, [], [], [], [], "", discovery );
-
-				var content = fileRead( result.agentFactory );
-				expect( content ).toInclude( 'provider : "openai"' );
-				expect( content ).toInclude( 'model : "gpt-5-mini"' );
-			} );
-
-			it( "fails clearly when a bare model value matches neither a core provider nor a models/ entry", function() {
-				var buildDir = newBuildDir();
-				var projectRoot = fixtures & "/bare-provider-model";
-				var config = resolver.resolve( projectRoot = projectRoot );
-				config.model = "totally-unknown-name";
-
-				expect( function() {
-					generator.generate( projectRoot, buildDir, config );
-				} ).toThrow( "BxAgents.InvalidModelSlug" );
-			} );
-
 			/**
 			 * Regression: the generated `aiAgent()` call once never passed a
 			 * `tools:` argument at all, so no agent received its own project's
@@ -412,18 +407,6 @@ class extends="testbox.system.BaseSpec" {
 				expect( factory ).notToInclude( 'resolveAppPath( "instructions.md"' );
 				// the quote is doubled and the pound sign written "##" in the generated source, or the factory would not compile or would interpolate
 				expect( factory ).toInclude( "costs ####5 per answer" );
-			} );
-
-			it( "resolves an Agent.yaml model that names a models/ entry, like the class form does", function() {
-				var buildDir = newBuildDir();
-				var projectRoot = fixtures & "/yaml-named-model";
-				var config = resolver.resolve( projectRoot = projectRoot );
-				var discovery = discoverer.discover( projectRoot );
-				var result = generator.generate( projectRoot, buildDir, config, [], [], [], [], "", discovery );
-
-				var factory = fileRead( result.agentFactory );
-				expect( factory ).toInclude( 'provider : "mock"' );
-				expect( factory ).toInclude( 'model : "mock-model"' );
 			} );
 
 			it( "lets an instructions.md win over inline Agent.yaml instructions", function() {

@@ -1,0 +1,175 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "build.AiSettings", function() {
+
+			beforeEach( function() {
+				variables.ai = new bxagents.models.build.AiSettings();
+			} );
+
+			describe( "normalize", function() {
+
+				it( "joins provider and a bare model into the provider/model slug", function() {
+					expect( ai.normalize( { provider : "openai", model : "gpt-5" } ).model ).toBe( "openai/gpt-5" );
+					expect( ai.normalize( { provider : "openai" } ).model ).toBe( "openai" );
+					expect( ai.normalize( { model : "openai/gpt-5" } ).model ).toBe( "openai/gpt-5" );
+				} );
+
+				it( "puts every profile and the provider on mock under test, and drops their key variable", function() {
+					var c = ai.normalize( {
+						environment : "test",
+						provider    : "openai",
+						model       : "gpt-5",
+						profiles    : { planner : { provider : "claude", model : "x", apiKeyEnv : "ANTHROPIC_API_KEY" } }
+					} );
+
+					expect( c.provider ).toBe( "mock" );
+					expect( c.profiles.planner.provider ).toBe( "mock" );
+					expect( c.profiles.planner.keyExists( "apiKeyEnv" ) ).toBeFalse();
+				} );
+
+				it( "leaves profiles alone outside test", function() {
+					var c = ai.normalize( { environment : "production", profiles : { planner : { provider : "claude" } } } );
+
+					expect( c.profiles.planner.provider ).toBe( "claude" );
+				} );
+
+			} );
+
+			describe( "problems", function() {
+
+				function check( required struct config, array names = [] ) {
+					return ai.problems( config, "Agent.yaml", names );
+				}
+
+				it( "accepts a complete, valid set", function() {
+					var c = {
+						provider : "openai", model : "openai/gpt-5", params : { temperature : 0.2 },
+						providers : { claude : { params : { max_tokens : 4000 }, options : { timeout : 90 } } },
+						profiles : { fast : { description : "Cheap", provider : "openai", model : "gpt-5-mini" }, planner : { provider : "claude", apiKeyEnv : "ANTHROPIC_API_KEY" } },
+						defaultProfile : "fast", profile : "planner",
+						embeddings : { provider : "openai", model : "text-embedding-3-small" },
+						speech : { provider : "openai", voice : "nova" }, transcription : { provider : "openai" },
+						image : { provider : "openai", size : "1024x1024" }
+					};
+
+					expect( check( c ) ).toBeEmpty();
+				} );
+
+				it( "refuses a profile named like a provider, like the default, or not a name", function() {
+					var out = check( { profiles : { openai : {}, default : {}, "1bad" : {}, ok : {} } } ).toList( "|" );
+
+					expect( out ).toInclude( "[openai] cannot have the same name as a provider" );
+					expect( out ).toInclude( "[default] is reserved" );
+					expect( out ).toInclude( "[1bad] is not a valid name" );
+					expect( out ).notToInclude( "[ok]" );
+				} );
+
+				it( "refuses a key written in a profile and names apiKeyEnv instead", function() {
+					var out = check( { profiles : { a : { apiKey : "sk-secret" }, b : { params : { apiKey : "sk-secret" } } } } ).toList( "|" );
+
+					expect( out ).toInclude( "writes an apiKey. Name an environment variable with apiKeyEnv" );
+					expect( out ).toInclude( "writes an apiKey in 'params'" );
+					expect( out ).notToInclude( "sk-secret" );
+				} );
+
+				it( "refuses unknown keys, wrong types, unknown providers and a key that is not a variable name", function() {
+					var out = check( { profiles : { a : { temperature : 1 }, b : { provider : "skynet" }, c : { params : "hot" }, d : { apiKeyEnv : "sk-abc def" } } } ).toList( "|" );
+
+					expect( out ).toInclude( "profile [a] has an unknown key [temperature]" );
+					expect( out ).toInclude( "unknown provider [skynet]" );
+					expect( out ).toInclude( "'params' must be a mapping" );
+					expect( out ).toInclude( "must be the NAME of an environment variable" );
+				} );
+
+				it( "checks that profile and defaultProfile name a declared profile, including the root's for a subagent", function() {
+					expect( check( { defaultProfile : "ghost" } ).toList( "|" ) ).toInclude( "defaultProfile [ghost]" );
+					expect( check( { profile : "ghost" } ).toList( "|" ) ).toInclude( "profile [ghost]" );
+					expect( check( { profile : "planner" }, [ "planner" ] ) ).toBeEmpty();
+					expect( check( { profile : "default" } ) ).toBeEmpty();
+				} );
+
+				it( "refuses a provider and a model that name different providers", function() {
+					expect( check( { provider : "openai", model : "claude/x" } ).toList( "|" ) ).toInclude( "name different providers" );
+				} );
+
+				it( "refuses speech and transcription on different providers, because bx-ai has one audio provider", function() {
+					var out = check( { speech : { provider : "openai" }, transcription : { provider : "mistral" } } ).toList( "|" );
+
+					expect( out ).toInclude( "single audio provider" );
+				} );
+
+				it( "refuses unknown slot keys and providers", function() {
+					var out = check( { image : { provider : "skynet", colour : "red" } } ).toList( "|" );
+
+					expect( out ).toInclude( "image has an unknown key [colour]" );
+					expect( out ).toInclude( "unknown provider [skynet]" );
+				} );
+
+			} );
+
+			describe( "settings", function() {
+
+				it( "maps the default, providers, profiles and slots onto bx-ai's own setting names", function() {
+					var s = ai.settings( ai.normalize( {
+						provider : "openai", model : "gpt-5", params : { temperature : 0.2 }, options : { timeout : 60 },
+						providers : { claude : { params : { max_tokens : 4000 } } },
+						profiles : { fast : { provider : "openai", model : "gpt-5-mini" } }, defaultProfile : "fast",
+						embeddings : { provider : "openai", model : "text-embedding-3-small" },
+						speech : { provider : "openai", model : "tts-1", voice : "nova", format : "mp3" },
+						transcription : { model : "whisper-1" },
+						image : { provider : "openai", model : "gpt-image-1", size : "1024x1024" }
+					} ) );
+
+					expect( s.provider ).toBe( "openai" );
+					expect( s.defaultParams ).toBe( { temperature : 0.2, model : "gpt-5" } );
+					expect( s.providers.claude.params.max_tokens ).toBe( 4000 );
+					expect( s.providers.openai.options.timeout ).toBe( 60 );
+					expect( s.profiles.fast.model ).toBe( "gpt-5-mini" );
+					expect( s.defaultProfile ).toBe( "fast" );
+					expect( s.embeddings ).toBe( { defaultProvider : "openai", defaultModel : "text-embedding-3-small" } );
+					expect( s.audio.defaultProvider ).toBe( "openai" );
+					expect( s.audio.defaultSpeechModel ).toBe( "tts-1" );
+					expect( s.audio.defaultVoice ).toBe( "nova" );
+					expect( s.audio.defaultOutputFormat ).toBe( "mp3" );
+					expect( s.audio.defaultTranscriptionModel ).toBe( "whisper-1" );
+					expect( s.image ).toBe( { defaultProvider : "openai", defaultModel : "gpt-image-1", defaultSize : "1024x1024" } );
+				} );
+
+				it( "reads a provider/model slug the same as provider and model", function() {
+					var s = ai.settings( { model : "openai/gpt-5" } );
+
+					expect( s.provider ).toBe( "openai" );
+					expect( s.defaultParams ).toBe( { model : "gpt-5" } );
+				} );
+
+				it( "says nothing when the project sets nothing, so bx-ai keeps its defaults", function() {
+					expect( ai.settings( {} ) ).toBeEmpty();
+				} );
+
+			} );
+
+			describe( "expression", function() {
+
+				var lit = ( v ) => jsonSerialize( v );
+				var bx = ( t ) => t;
+
+				it( "uses the profile when there is one", function() {
+					expect( ai.expression( { profile : "planner", model : "openai/gpt-5" }, lit, bx ) ).toBe( 'aiModel( profile : "planner" )' );
+				} );
+
+				it( "keeps the exact call every build has produced for a slug or a bare provider", function() {
+					expect( ai.expression( { model : "openai/gpt-5" }, lit, bx ) ).toBe( 'aiModel( provider : "openai", params : { model : "gpt-5" } )' );
+					expect( ai.expression( { model : "mock" }, lit, bx ) ).toBe( 'aiModel( provider : "mock" )' );
+				} );
+
+				it( "says nothing for a node that sets no model, so the caller falls back to the default", function() {
+					expect( ai.expression( {}, lit, bx ) ).toBe( "" );
+				} );
+
+			} );
+
+		} );
+	}
+
+}

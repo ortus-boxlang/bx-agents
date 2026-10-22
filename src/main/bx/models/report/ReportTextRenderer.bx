@@ -48,7 +48,7 @@ class {
 			{ name : "mcp", title : "MCP", draw : lines => drawMcp( r, lines ) },
 			{ name : "gateways", title : "Exposed through", draw : lines => drawGateways( r, lines ) },
 			{ name : "schedule", title : "Schedule", draw : lines => drawSchedule( r, lines ) },
-			{ name : "models", title : "Named models", draw : lines => drawModels( r, lines ) },
+			{ name : "ai", title : "Models", draw : lines => drawAi( r, lines ) },
 			{ name : "interceptors", title : "Interceptors", draw : lines => drawInterceptors( r, lines ) },
 			{ name : "modules", title : "Modules", draw : lines => drawModules( r, lines ) },
 			{ name : "deploy", title : "Deploy targets", draw : lines => drawDeploy( r, lines ) },
@@ -253,14 +253,30 @@ class {
 		arguments.out.append( "  " & s.file & p( "muted", s.tasks.len() ? "  " & s.tasks.toList( ", " ) : "  no task() calls found" ) )
 	}
 
-	private void function drawModels( required struct r, required array out ) {
+	private void function drawAi( required struct r, required array out ) {
+		var ai = arguments.r.ai
 		var rows = []
-		for ( var model in arguments.r.models ) {
-			var settings = model.params.len() ? model.params.toList( ", " ) : ""
-			if ( len( model.apiKeyEnvVar ) ) {
-				settings = ( len( settings ) ? settings & "; " : "" ) & "key: " & model.apiKeyEnvVar
-			}
-			rows.append( [ model.name, len( model.provider ) ? model.provider & ( len( model.model ) ? "/" & model.model : "" ) : "", settings, model.file ] )
+		if ( len( ai.provider ) ) {
+			var settings = []
+			if ( ai.params.len() ) { settings.append( "params: " & ai.params.toList( ", " ) ) }
+			if ( ai.options.len() ) { settings.append( "options: " & ai.options.toList( ", " ) ) }
+			rows.append( [ "default", "default", ai.provider & ( len( ai.model ) ? "/" & ai.model : "" ), settings.toList( "; " ) ] )
+		}
+		for ( var provider in ai.providers ) {
+			var settings = []
+			if ( provider.params.len() ) { settings.append( "params: " & provider.params.toList( ", " ) ) }
+			if ( provider.options.len() ) { settings.append( "options: " & provider.options.toList( ", " ) ) }
+			rows.append( [ provider.name, "provider", "", settings.toList( "; " ) ] )
+		}
+		for ( var profile in ai.profiles ) {
+			var settings = []
+			if ( profile.params.len() ) { settings.append( "params: " & profile.params.toList( ", " ) ) }
+			if ( len( profile.apiKeyEnvVar ) ) { settings.append( "key: " & profile.apiKeyEnvVar ) }
+			if ( len( profile.description ) ) { settings.append( profile.description ) }
+			rows.append( [ profile.name, profile.isDefault ? "profile (default)" : "profile", profile.provider & ( len( profile.model ) ? "/" & profile.model : "" ), settings.toList( "; " ) ] )
+		}
+		for ( var slot in ai.slots ) {
+			rows.append( [ slot.slot, "capability", slot.provider & ( len( slot.model ) ? "/" & slot.model : "" ), slot.detail ] )
 		}
 		table( rows, arguments.out, 2 )
 	}
@@ -335,9 +351,12 @@ class {
 		if ( n.modelSource == "none" ) {
 			return p( "muted", n.classBased ? "model set in code" : "no model" )
 		}
-		if ( n.modelSource == "named" ) {
+		if ( n.modelSource == "profile" ) {
 			var target = len( n.provider ) ? n.provider & ( len( n.modelId ) ? "/" & n.modelId : "" ) : "unreadable"
-			return n.model & p( "muted", " #variables.g.arrow# #target#" )
+			return n.profile & p( "muted", " #variables.g.arrow# #target#" )
+		}
+		if ( n.modelSource == "default" ) {
+			return n.provider & ( len( n.modelId ) ? "/" & n.modelId : "" ) & p( "muted", " (the default)" )
 		}
 		if ( n.modelSource == "provider" ) {
 			return n.provider & p( "muted", " (its default model)" )

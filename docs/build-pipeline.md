@@ -36,7 +36,7 @@ Validation is the gate: it collects **every** error rather than failing fast, an
 
 ## 2. Discover
 
-[`ProjectDiscoverer`](conventions/agent-bx.md) walks the project root and enumerates every convention folder (`models/`, `tools/`, `skills/`, `subagents/`, `gateways/`, `mcp/`, `interceptors/`, `modules/`) into raw `{ name, path, type }` entries. `schedules/` is the one exception - it's not a list of entries, just a single `hasScheduler`/`schedulerPath` pair, since it holds one real ColdBox scheduler file rather than a set of BxAgents-defined config entries. Pure discovery - no interpretation of file contents happens yet.
+[`ProjectDiscoverer`](conventions/agent-bx.md) walks the project root and enumerates every convention folder (`tools/`, `skills/`, `subagents/`, `gateways/`, `mcp/`, `interceptors/`, `modules/`) into raw `{ name, path, type }` entries. `schedules/` is the one exception - it's not a list of entries, just a single `hasScheduler`/`schedulerPath` pair, since it holds one real ColdBox scheduler file rather than a set of BxAgents-defined config entries. Pure discovery - no interpretation of file contents happens yet.
 
 ## 3. Validate
 

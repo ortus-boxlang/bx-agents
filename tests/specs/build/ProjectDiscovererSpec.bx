@@ -11,7 +11,6 @@ class extends="testbox.system.BaseSpec" {
 			it( "discovers all convention folders present in a project", function() {
 				var result = discoverer.discover( fixtures & "/full-project" );
 
-				expect( result.models.len() ).toBe( 1 );
 				expect( result.tools.len() ).toBe( 2 );
 				expect( result.skills.len() ).toBe( 2 );
 				expect( result.subagents.len() ).toBe( 1 );
@@ -26,11 +25,6 @@ class extends="testbox.system.BaseSpec" {
 			it( "ignores non-convention files (README.md) and dotfiles", function() {
 				var result = discoverer.discover( fixtures & "/full-project" );
 
-				var modelNames = result.models.map( m => m.name );
-				expect( modelNames ).notToInclude( "README" );
-				expect( modelNames ).notToInclude( ".hidden" );
-				expect( result.models.len() ).toBe( 1 );
-
 				var subagentNames = result.subagents.map( s => s.name );
 				expect( subagentNames ).notToInclude( ".hidden" );
 
@@ -41,8 +35,6 @@ class extends="testbox.system.BaseSpec" {
 			it( "returns empty arrays for absent optional folders without erroring", function() {
 				var result = discoverer.discover( fixtures & "/valid-minimal" );
 
-				expect( result.models ).toBeArray();
-				expect( result.models.len() ).toBe( 0 );
 				expect( result.tools.len() ).toBe( 0 );
 				expect( result.skills.len() ).toBe( 0 );
 				expect( result.subagents.len() ).toBe( 0 );

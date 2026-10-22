@@ -1,0 +1,33 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "runtime.ModuleSettings", function() {
+
+			beforeEach( function() {
+				variables.settings = new bxagents.models.runtime.ModuleSettings();
+			} );
+
+			it( "merges structs by key and replaces arrays and simple values", function() {
+				var target = { provider : "openai", defaultParams : { temperature : 0.5, max_tokens : 10 }, list : [ 1, 2 ], profiles : {} };
+
+				settings.merge( target, { defaultParams : { temperature : 0.2 }, list : [ 3 ], profiles : { fast : { model : "m" } }, extra : "x" } );
+
+				expect( target.provider ).toBe( "openai" );
+				expect( target.defaultParams ).toBe( { temperature : 0.2, max_tokens : 10 } );
+				expect( target.list ).toBe( [ 3 ] );
+				expect( target.profiles.fast.model ).toBe( "m" );
+				expect( target.extra ).toBe( "x" );
+			} );
+
+			it( "changes nothing for a file that is not there", function() {
+				var before = duplicate( getModuleInfo( "bxagents" ).settings );
+
+				settings.apply( "bxagents", createTempDirectory( prefix = "bxagents-none-" ) & "/missing.json" );
+
+				expect( getModuleInfo( "bxagents" ).settings ).toBe( before );
+			} );
+
+		} );
+	}
+
+}

@@ -70,7 +70,8 @@ or package as a portable `.bxa`.
   `instructions.md`.
 - `subagents/<name>/` - a full nested agent per folder, built leaf-first and attached to
   its parent automatically, with cycle detection at build time.
-- `models/` - named model configurations, referenced by name from any agent in the tree.
+- Models and profiles, in `Agent.yaml`: the default `provider`, `model` and `params`, other `providers`,
+  named `profiles`, and the capability defaults (see below).
 - `gateways/` - one entry per exposure or chat platform (see below).
 - `schedules/Scheduler.bx` - a real ColdBox scheduler class, passed through untouched, so
   the full ColdBox task DSL is available.
@@ -264,11 +265,18 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   with the sign-in as an `${env.NAME}` placeholder and an empty `.env` stub); `add mcp server` writes
   `mcp/<name>.bx` offering the project's tools through bx-ai's MCP server, plus the `gateways/` entry
   that serves it. `Agent.yaml` is edited by inserting lines only, so comments and layout stay.
-- `add model` writes a named model configuration, `models/<name>.yaml` or `.json`. Named models are
-  now YAML or JSON (a `.bx` class still works) and carry more than a provider and model: `params`
-  (temperature, max_tokens, ...), `options`, and `apiKeyEnvVar` to read their key from a different
-  environment variable. Entries are validated at build time, and the key variable is read when the
-  app starts and named if it is missing.
+- Models are configured in `Agent.yaml` with bx-ai's own names, so a project never needs a `boxlang.json`
+  for them: the default `provider`, `model`, `params` and `options`; `providers` (params and options per
+  provider); named `profiles` (provider, model, params, options and `apiKeyEnv`, the name of the variable that
+  holds the key, never the key); `defaultProfile`; `profile` on an agent or subagent; and the capability
+  defaults `embeddings`, `speech`, `transcription` and `image`. Everything is validated at build time by
+  bx-ai's rules, every profile runs on `mock` under `bxAgents test`, and subagents inherit the root's
+  settings. This replaces the short-lived `models/` folder and `add model`. Requires bx-ai 3.7.
+- The build now delivers bx-ai's settings the way bx-ai reads them. A `moduleSettings.bxai` block in
+  `config/ColdBox.bx` never reached bx-ai (measured on a served app: it kept `provider: openai` and
+  `skillsDirectory: /.agents/skills`), so the `skills/` override and the `security` block were silently not
+  applied. They are written to `config/bxai-settings.json` and merged into bx-ai's settings when the app
+  starts, before ColdBox builds the agents.
 - `add gateway` adds a chat platform (the same catalog the wizard uses: credentials as environment
   variable names with empty `.env` stubs, and the setup steps that happen outside the project), the web
   chat UI (open, behind a random shared key, or with named users stored as hashes only), or the HTTP

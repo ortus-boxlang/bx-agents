@@ -36,7 +36,6 @@ my-agent/
 ├── tools/
 ├── skills/
 ├── subagents/
-├── models/
 ├── gateways/
 ├── schedules/
 ├── mcp/
@@ -88,7 +87,7 @@ class {
 }
 ```
 
-See the [Conventions](../conventions/agent-yaml.md) section for every other folder (`skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `models/`, `modules/`).
+See the [Conventions](../conventions/agent-yaml.md) section for every other folder (`skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `modules/`).
 
 ## 3. Test it
 

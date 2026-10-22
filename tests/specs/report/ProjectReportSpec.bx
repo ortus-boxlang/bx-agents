@@ -63,7 +63,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( own.filter( t => t.name == "search" )[ 1 ].file ).toBe( "tools/nested/Search.bx" );
 			} );
 
-			it( "lists skills, gateways, hosted MCP, interceptors, named models, modules and the schedule", function() {
+			it( "lists skills, gateways, hosted MCP, interceptors, modules and the schedule", function() {
 				var report = reporter.build( newTempProject( "full-project" ) );
 
 				expect( report.agent.skills ).toInclude( "named-skill" );
@@ -72,8 +72,6 @@ class extends="testbox.system.BaseSpec" {
 				expect( report.mcpHosted.map( m => m.name ) ).toInclude( "localServer" );
 				expect( report.interceptors[ 1 ].name ).toBe( "AuditLogger" );
 				expect( report.interceptors[ 1 ].scope ).toBe( "agent" );
-				expect( report.models[ 1 ].name ).toBe( "summarizer" );
-				expect( report.models[ 1 ].provider ).toBe( "openai" );
 				expect( report.modules.map( m => m.name ) ).toInclude( "my-extra-module" );
 				expect( report.schedule.present ).toBeTrue();
 				expect( report.schedule.tasks ).toInclude( "nightly" );
@@ -102,15 +100,6 @@ class extends="testbox.system.BaseSpec" {
 				expect( report.agent.children[ 1 ].name ).toBe( "a" );
 				expect( report.agent.children[ 1 ].children[ 1 ].name ).toBe( "b" );
 				expect( report.agent.children[ 1 ].children[ 1 ].provider ).toBe( "openai" );
-			} );
-
-			it( "says how a named model resolves", function() {
-				var report = reporter.build( newYamlProject( "name: named#char( 10 )#model: fast#char( 10 )#" ) );
-
-				// no models/ entry: validation reports it, the report does not guess
-				expect( report.agent.modelSource ).toBe( "named" );
-				expect( report.agent.provider ).toBe( "" );
-				expect( report.validation.errors.len() ).toBeGT( 0 );
 			} );
 
 			it( "lists the module tools and tool option names of a yaml agent", function() {

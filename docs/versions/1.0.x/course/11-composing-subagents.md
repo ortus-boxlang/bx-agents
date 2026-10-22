@@ -85,4 +85,4 @@ to the researcher subagent - it's callable exactly like any other tool.
 
 Full reference: [subagents/](../conventions/subagents.md).
 
-Next: [Lesson 12 - Named Model Configs](12-named-model-configs.md)
+Next: [Lesson 12 - Models and Profiles](12-named-model-configs.md)

@@ -1,64 +1,35 @@
 ---
-title: "Lesson 12: Named Model Configs"
+title: "Lesson 12: Models and Profiles"
 icon: phosphor-duotone:brain
-summary: Reusable named model configurations, referenced from Agent.yaml by name.
-description: Reusable named model configurations, referenced from Agent.yaml by name.
-tags: [course, conventions, models]
+summary: Choose the default model, set up other providers and name combinations such as fast and planner, all in Agent.yaml.
+description: Choose the default model, set up other providers and name combinations such as fast and planner, all in Agent.yaml.
+tags: [course, conventions, models, profiles]
 ---
 
-# Named Model Configs
+# Models and Profiles
 
-`models/` lets you define reusable, named model configurations as one YAML or JSON
-file each, referenced from `Agent.yaml`'s `model` field by name (with no `/`, so it
-isn't mistaken for a `provider/model` slug - see [Lesson 5](05-agent-bx.md)).
+You already pick a model with a slug, `model: openai/gpt-5` ([Lesson 5](05-agent-bx.md)). When you want more than one model in the same project, you name them: a **profile** is a provider, a model and a few settings under a name such as `fast` or `planner`. Everything lives in `Agent.yaml`; you never write a `boxlang.json`.
 
 ```yaml
-# models/summarizer.yaml
 provider: openai
-model: gpt-5-mini
-params:
-  temperature: 0.2
+model: gpt-5
+params: { temperature: 0.2 }
+
+profiles:
+  fast:    { description: Cheap and quick, provider: openai, model: gpt-5-mini, params: { temperature: 0 } }
+  planner: { description: Careful planning, provider: claude, model: claude-opus-4, apiKeyEnv: ANTHROPIC_API_KEY }
 ```
 
-```yaml
-# Agent.yaml
-model: summarizer   # resolves against models/summarizer.yaml
-```
+A subagent picks one with `profile:`; an agent that says nothing uses the default. A profile cannot be named `default` or like a provider, and a key is never written in the file: `apiKeyEnv` names the environment variable that holds it.
 
-## Why bother with a named config instead of just writing the slug?
+## Why bother
 
-A `provider/model` slug is enough for most agents - you saw this already in
-[Lesson 5](05-agent-bx.md). Reach for `models/` when the same configuration is shared
-across several agents or subagents (a cheaper model your whole `subagents/` tree uses
-for routing, say), or when the config carries more than just a provider and model name
-and you don't want to repeat it.
-
-## Discovery rules
-
-- One entry per top-level `.yaml`, `.yml` or `.json` file directly under `models/` - not
-  recursive. (A `.bx` class returning the same struct still works.)
-- The entry name is the file's base name (`summarizer.yaml` becomes `summarizer`).
-- Dotfiles and unrecognized extensions (like a `README.md` left for your own notes)
-  are ignored.
-- Two files resolving to the same name fail validation with a duplicate-name error.
-
-## Validation
-
-If `Agent.yaml`'s `model` has no `/`, it must be **either** a known core provider name
-(`openai`, `bedrock`, `claude`, `gemini`, `mock`, and others - see
-[the model slug](../conventions/agent-bx.md#the-model-slug)) **or** match a `models/`
-entry's name. Anything else fails validation with a clear "no provider and does not
-match any models/ entry" error - a typo here is caught at `build` time, not left to
-surface as a confusing runtime error later.
+A slug is enough for most agents. Reach for profiles when several agents share a configuration (a cheaper model your routing subagents use), or when a model needs settings you do not want to repeat.
 
 ## Try it
 
-Run `bxAgents add model fast` (or write a `models/fast.yaml`) pointing at a smaller/cheaper model than your root
-agent's default, then reference `model: "fast"` from a subagent's `Agent.yaml` - a
-natural fit for the researcher subagent from [Lesson 11](11-composing-subagents.md),
-which likely doesn't need your biggest model to do its job.
+Add a `fast` profile that points at a smaller model than your root agent's default, then give a subagent `profile: fast`, a natural fit for the researcher from [Lesson 11](11-composing-subagents.md). Run `bxAgents inspect --section=ai` to see the default, the providers and the profiles, and which variable each key comes from.
 
-Besides `provider` and `model`, an entry can carry `params` (such as `temperature`), `options`, and
-`apiKeyEnvVar` - the name of an environment variable to read its key from. Full reference: [models/](../conventions/models.md).
+Full reference: [Models and profiles](../conventions/models.md).
 
 Next: [Lesson 13 - Exposing Your Agent over HTTP and MCP](13-exposing-http-and-mcp.md)

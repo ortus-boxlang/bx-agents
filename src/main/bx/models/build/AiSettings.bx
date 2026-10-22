@@ -1,0 +1,318 @@
+/**
+ * Turns the AI keys of an Agent.yaml into what bx-ai understands, so a project never needs a
+ * boxlang.json to choose a model.
+ *
+ *   provider, model, params, options   the default provider and model ( `model: openai/gpt-5` still works )
+ *   providers                          per provider params and options (bx-ai `providers`)
+ *   profiles, defaultProfile           named combinations (bx-ai `profiles`, `defaultProfile`)
+ *   profile                            which profile an agent uses (the agent's own, else the default)
+ *   embeddings                         bx-ai `embeddings`
+ *   speech, transcription              bx-ai `audio`
+ *   image                              bx-ai `image`
+ *
+ * The rules are bx-ai's own (ProfileResolver.validate): a profile name cannot be a provider name
+ * or "default", and a profile is a mapping of known keys. Two things are stricter here because the
+ * file is committed: a key is never written in the YAML (`apiKeyEnv` names the variable instead),
+ * and an unknown provider is an error at build time rather than a log line at start.
+ *
+ * Root settings are global to the app, so subagents inherit them; a subagent may set `profile`
+ * or its own `model`.
+ */
+class {
+
+	static {
+		AI_KEYS = [ "provider", "params", "options", "providers", "profiles", "defaultProfile", "profile", "embeddings", "speech", "transcription", "image" ]
+		PROFILE_KEYS = [ "description", "provider", "model", "params", "options", "apiKeyEnv" ]
+		SLOT_KEYS = {
+			embeddings    : [ "provider", "model" ],
+			speech        : [ "provider", "model", "voice", "format" ],
+			transcription : [ "provider", "model" ],
+			image         : [ "provider", "model", "size", "quality", "style", "instructions" ]
+		}
+		DEFAULT_PROFILE = "default"
+	}
+
+	function init() {
+		variables.parser = new "models.build.ModelSlugParser@bxagents"()
+		return this
+	}
+
+	/**
+	 * Combines `provider` and a bare `model` into the provider/model slug the rest of the build
+	 * reads, and in the `test` environment points every profile at the mock provider so a test
+	 * never reaches the network.
+	 *
+	 * @config A resolved agent config
+	 *
+	 * @return The config
+	 */
+	struct function normalize( required struct config ) {
+		var c = arguments.config
+		var provider = trim( c.provider ?: "" )
+		var model = trim( c.model ?: "" )
+		if ( len( provider ) && isSimpleValue( c.model ?: "" ) ) {
+			if ( !len( model ) ) {
+				c[ "model" ] = provider
+			} else if ( !model.find( "/" ) && !variables.parser.isKnownProvider( model ) ) {
+				c[ "model" ] = provider & "/" & model
+			}
+		}
+		if ( ( c.environment ?: "" ) == "test" ) {
+			if ( len( c.provider ?: "" ) ) {
+				c[ "provider" ] = "mock"
+			}
+		}
+		if ( ( c.environment ?: "" ) == "test" && isStruct( c.profiles ?: "" ) ) {
+			for ( var name in c.profiles ) {
+				if ( isStruct( c.profiles[ name ] ) ) {
+					c.profiles[ name ][ "provider" ] = "mock"
+					c.profiles[ name ].delete( "apiKeyEnv" )
+				}
+			}
+		}
+		return c
+	}
+
+	/**
+	 * @config A resolved config (root or subagent)
+	 * @label How to name it in a message, for example "Agent.yaml"
+	 * @profileNames The profile names the whole project declares, for `profile` references
+	 *
+	 * @return [ problems ], empty when the AI keys are fine
+	 */
+	array function problems( required struct config, required string label, array profileNames = [] ) {
+		var c = arguments.config
+		var out = []
+		var label = arguments.label
+
+		for ( var key in [ "params", "options", "providers", "profiles", "embeddings", "speech", "transcription", "image" ] ) {
+			if ( c.keyExists( key ) && !isStruct( c[ key ] ) ) {
+				out.append( "#label#: '#key#' must be a mapping" )
+			}
+		}
+		for ( var key in [ "provider", "defaultProfile", "profile" ] ) {
+			if ( c.keyExists( key ) && !isSimpleValue( c[ key ] ) ) {
+				out.append( "#label#: '#key#' must be text" )
+			}
+		}
+		if ( out.len() ) {
+			return out
+		}
+
+		if ( len( c.provider ?: "" ) ) {
+			if ( !variables.parser.isKnownProvider( c.provider ) ) {
+				out.append( "#label#: unknown provider [#c.provider#]. Use one of: #variables.parser.coreProviders().toList( ', ' )#" )
+			}
+			if ( ( c.model ?: "" ).find( "/" ) ) {
+				var slugProvider = variables.parser.parse( c.model ).provider
+				if ( slugProvider != c.provider ) {
+					out.append( "#label#: provider [#c.provider#] and model [#c.model#] name different providers" )
+				}
+			}
+		}
+
+		var providerKeys = variables.parser.coreProviders().map( p => p.lcase() )
+		for ( var p in ( c.providers ?: {} ) ) {
+			providerKeys.append( p.lcase() )
+			if ( !variables.parser.isKnownProvider( p ) ) {
+				out.append( "#label#: providers.#p# is not a provider bx-ai knows. Use one of: #variables.parser.coreProviders().toList( ', ' )#" )
+			}
+			if ( !isStruct( c.providers[ p ] ) ) {
+				out.append( "#label#: providers.#p# must be a mapping with params and options" )
+				continue
+			}
+			for ( var k in c.providers[ p ] ) {
+				if ( ![ "params", "options" ].containsNoCase( k ) ) {
+					out.append( "#label#: providers.#p# has an unknown key [#k#]. Use params and options" )
+				} else if ( !isStruct( c.providers[ p ][ k ] ) ) {
+					out.append( "#label#: providers.#p#.#k# must be a mapping" )
+				}
+			}
+		}
+
+		for ( var name in ( c.profiles ?: {} ) ) {
+			var p = c.profiles[ name ]
+			var where = "#label#: profile [#name#]"
+			if ( !reFind( "^[A-Za-z][A-Za-z0-9_-]*$", name ) ) {
+				out.append( "#where# is not a valid name. Use letters, numbers, underscores and dashes, starting with a letter" )
+			}
+			if ( name.lcase() == static.DEFAULT_PROFILE ) {
+				out.append( "#where# is reserved. The default is built from provider, model and params; pick another with defaultProfile" )
+			}
+			if ( providerKeys.contains( name.lcase() ) ) {
+				out.append( "#where# cannot have the same name as a provider" )
+			}
+			if ( !isStruct( p ) ) {
+				out.append( "#where# must be a mapping" )
+				continue
+			}
+			for ( var k in p ) {
+				if ( k == "apiKey" ) {
+					out.append( "#where# writes an apiKey. Name an environment variable with apiKeyEnv instead; a key does not belong in a committed file" )
+				} else if ( !static.PROFILE_KEYS.containsNoCase( k ) ) {
+					out.append( "#where# has an unknown key [#k#]. Valid keys: #static.PROFILE_KEYS.toList( ', ' )#" )
+				}
+			}
+			for ( var k in [ "description", "provider", "model", "apiKeyEnv" ] ) {
+				if ( p.keyExists( k ) && !isSimpleValue( p[ k ] ) ) {
+					out.append( "#where#: '#k#' must be text" )
+				}
+			}
+			for ( var k in [ "params", "options" ] ) {
+				if ( p.keyExists( k ) && !isStruct( p[ k ] ) ) {
+					out.append( "#where#: '#k#' must be a mapping" )
+				}
+			}
+			if ( len( p.provider ?: "" ) && isSimpleValue( p.provider ) && !variables.parser.isKnownProvider( p.provider ) ) {
+				out.append( "#where#: unknown provider [#p.provider#]. Use one of: #variables.parser.coreProviders().toList( ', ' )#" )
+			}
+			if ( len( p.apiKeyEnv ?: "" ) && isSimpleValue( p.apiKeyEnv ) && !reFind( "^[A-Za-z_][A-Za-z0-9_]*$", p.apiKeyEnv ) ) {
+				out.append( "#where#: 'apiKeyEnv' must be the NAME of an environment variable, not a key" )
+			}
+			for ( var section in [ "params", "options" ] ) {
+				if ( isStruct( p[ section ] ?: "" ) && p[ section ].keyExists( "apiKey" ) ) {
+					out.append( "#where# writes an apiKey in '#section#'. Name an environment variable with apiKeyEnv instead" )
+				}
+			}
+		}
+
+		var declared = ( c.profiles ?: {} ).keyArray()
+		declared.append( arguments.profileNames, true )
+		if ( len( c.defaultProfile ?: "" ) && c.defaultProfile != static.DEFAULT_PROFILE && !declared.contains( c.defaultProfile ) ) {
+			out.append( "#label#: defaultProfile [#c.defaultProfile#] is not one of the profiles: #declared.len() ? declared.toList( ', ' ) : 'none declared'#" )
+		}
+		if ( len( c.profile ?: "" ) && c.profile != static.DEFAULT_PROFILE && !declared.contains( c.profile ) ) {
+			out.append( "#label#: profile [#c.profile#] is not one of the profiles: #declared.len() ? declared.toList( ', ' ) : 'none declared'#" )
+		}
+
+		for ( var slot in static.SLOT_KEYS ) {
+			if ( !isStruct( c[ slot ] ?: "" ) ) {
+				continue
+			}
+			for ( var k in c[ slot ] ) {
+				if ( !static.SLOT_KEYS[ slot ].containsNoCase( k ) ) {
+					out.append( "#label#: #slot# has an unknown key [#k#]. Valid keys: #static.SLOT_KEYS[ slot ].toList( ', ' )#" )
+				}
+			}
+			if ( len( c[ slot ].provider ?: "" ) && !variables.parser.isKnownProvider( c[ slot ].provider ) ) {
+				out.append( "#label#: #slot# has an unknown provider [#c[ slot ].provider#]. Use one of: #variables.parser.coreProviders().toList( ', ' )#" )
+			}
+		}
+		// bx-ai has one audio provider for both
+		var speechProvider = ( c.speech ?: {} ).provider ?: ""
+		var transcriptionProvider = ( c.transcription ?: {} ).provider ?: ""
+		if ( len( speechProvider ) && len( transcriptionProvider ) && speechProvider != transcriptionProvider ) {
+			out.append( "#label#: speech uses [#speechProvider#] and transcription [#transcriptionProvider#], but bx-ai has a single audio provider. Use the same one for both" )
+		}
+		return out
+	}
+
+	/**
+	 * The bx-ai module settings the root config asks for. Only what is set is returned, so a
+	 * project that says nothing keeps bx-ai's own defaults.
+	 *
+	 * @config The root resolved config
+	 *
+	 * @return A struct to merge into moduleSettings.bxai
+	 */
+	struct function settings( required struct config ) {
+		var c = arguments.config
+		var s = {}
+		var parsed = {}
+		if ( len( c.model ?: "" ) ) {
+			if ( c.model.find( "/" ) ) {
+				parsed = variables.parser.parse( c.model )
+			} else if ( variables.parser.isKnownProvider( c.model ) ) {
+				parsed = { provider : c.model, model : "" }
+			}
+		}
+		var provider = len( c.provider ?: "" ) ? c.provider : ( parsed.provider ?: "" )
+
+		if ( len( provider ) ) {
+			s[ "provider" ] = provider
+		}
+		var params = duplicate( c.params ?: {} )
+		if ( len( parsed.model ?: "" ) ) {
+			params[ "model" ] = parsed.model
+		}
+		if ( params.count() ) {
+			s[ "defaultParams" ] = params
+		}
+
+		var providers = duplicate( c.providers ?: {} )
+		if ( ( c.options ?: {} ).count() && len( provider ) ) {
+			providers[ provider ] = providers[ provider ] ?: {}
+			providers[ provider ][ "options" ] = duplicate( c.options ).append( providers[ provider ].options ?: {} )
+		}
+		if ( providers.count() ) {
+			s[ "providers" ] = providers
+		}
+		if ( ( c.profiles ?: {} ).count() ) {
+			s[ "profiles" ] = duplicate( c.profiles )
+		}
+		if ( len( c.defaultProfile ?: "" ) ) {
+			s[ "defaultProfile" ] = c.defaultProfile
+		}
+
+		if ( isStruct( c.embeddings ?: "" ) && c.embeddings.count() ) {
+			var e = {}
+			if ( len( c.embeddings.provider ?: "" ) ) { e[ "defaultProvider" ] = c.embeddings.provider }
+			if ( len( c.embeddings.model ?: "" ) ) { e[ "defaultModel" ] = c.embeddings.model }
+			s[ "embeddings" ] = e
+		}
+
+		var audio = {}
+		var speech = c.speech ?: {}
+		var transcription = c.transcription ?: {}
+		var audioProvider = len( speech.provider ?: "" ) ? speech.provider : ( transcription.provider ?: "" )
+		if ( len( audioProvider ) ) { audio[ "defaultProvider" ] = audioProvider }
+		if ( len( speech.model ?: "" ) ) { audio[ "defaultSpeechModel" ] = speech.model }
+		if ( len( speech.voice ?: "" ) ) { audio[ "defaultVoice" ] = speech.voice }
+		if ( len( speech.format ?: "" ) ) { audio[ "defaultOutputFormat" ] = speech.format }
+		if ( len( transcription.model ?: "" ) ) { audio[ "defaultTranscriptionModel" ] = transcription.model }
+		if ( audio.count() ) {
+			s[ "audio" ] = audio
+		}
+
+		var image = {}
+		var i = c.image ?: {}
+		if ( len( i.provider ?: "" ) ) { image[ "defaultProvider" ] = i.provider }
+		if ( len( i.model ?: "" ) ) { image[ "defaultModel" ] = i.model }
+		if ( len( i.size ?: "" ) ) { image[ "defaultSize" ] = i.size }
+		if ( len( i.quality ?: "" ) ) { image[ "defaultQuality" ] = i.quality }
+		if ( len( i.style ?: "" ) ) { image[ "defaultStyle" ] = i.style }
+		if ( len( i.instructions ?: "" ) ) { image[ "defaultInstructions" ] = i.instructions }
+		if ( image.count() ) {
+			s[ "image" ] = image
+		}
+		return s
+	}
+
+	/**
+	 * The `aiModel(...)` call for an agent. A profile wins; else a provider/model slug gives the
+	 * call every build has always produced; else the default profile.
+	 *
+	 * @config The node's resolved config
+	 * @literal A function ( struct ) returning the BoxLang literal for a struct
+	 * @bx A function ( text ) escaping text for a BoxLang string
+	 *
+	 * @return BoxLang source, or an empty string when the node says nothing about its model
+	 */
+	string function expression( required struct config, required any literal, required any bx ) {
+		var c = arguments.config
+		if ( len( c.profile ?: "" ) ) {
+			return 'aiModel( profile : "#arguments.bx( c.profile )#" )'
+		}
+		var slug = c.model ?: ""
+		if ( !len( slug ) ) {
+			return ""
+		}
+		var parsed = slug.find( "/" ) ? variables.parser.parse( slug ) : { provider : slug, model : "" }
+		var parts = [ 'provider : "#arguments.bx( parsed.provider )#"' ]
+		if ( len( parsed.model ) ) {
+			parts.append( 'params : { model : "#arguments.bx( parsed.model )#" }' )
+		}
+		return "aiModel( " & parts.toList( ", " ) & " )"
+	}
+
+}

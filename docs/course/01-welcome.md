@@ -23,7 +23,6 @@ my-agent/
 ├── tools/             # @AITool functions
 ├── skills/            # SKILL.md capabilities
 ├── subagents/         # nested agent trees
-├── models/            # named model configs
 ├── gateways/           # HTTP/MCP/chat exposure
 ├── schedules/          # a real ColdBox scheduler
 ├── mcp/                # MCP servers you host
@@ -42,7 +41,7 @@ The 20 lessons follow the order you'd naturally build a real project in:
 2. **Lessons 5-8** - the required pieces: `Agent.yaml`, instructions, building, and
    running the agent from the terminal.
 3. **Lessons 9-12** - giving your agent abilities: tools, skills, subagents, and
-   named models.
+   models and profiles.
 4. **Lessons 13-16** - reaching your agent: HTTP/MCP exposure, chat platforms, the
    generated web UI, and scheduled background work.
 5. **Lessons 17-18** - hosting your own MCP servers, lifecycle interceptors, and

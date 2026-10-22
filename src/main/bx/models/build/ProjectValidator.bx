@@ -36,8 +36,7 @@ class {
 		var warnings = []
 
 		validateDuplicateNames( arguments.discovery, errors )
-		validateModelEntries( arguments.discovery, errors )
-		validateSubagents( arguments.projectRoot, arguments.discovery, errors )
+		validateSubagents( arguments.projectRoot, arguments.discovery, errors, ( arguments.resolvedConfig.profiles ?: {} ).keyArray(), len( arguments.resolvedConfig.model ?: "" ) > 0 || len( arguments.resolvedConfig.profile ?: "" ) > 0 || len( arguments.resolvedConfig.defaultProfile ?: "" ) > 0 )
 		validateModules( arguments.projectRoot, arguments.discovery, errors )
 		validateSchedules( arguments.projectRoot, arguments.discovery, warnings )
 		validateGateways( arguments.discovery, errors )
@@ -46,6 +45,7 @@ class {
 		validateTools( arguments.resolvedConfig, errors, "The project's own agent definition" )
 		validateToolOptions( arguments.resolvedConfig, errors, "The project's own agent definition" )
 		validateModelProvider( arguments.resolvedConfig, arguments.discovery, errors )
+		validateAiSettings( arguments.resolvedConfig, errors, "Agent.yaml" )
 		validateAgentApi( arguments.resolvedConfig, errors )
 		validateNotes( arguments.resolvedConfig, errors )
 
@@ -61,7 +61,7 @@ class {
 	 * @errors Accumulator array - append() any validation errors found
 	 */
 	private void function validateDuplicateNames( required struct discovery, required array errors ) {
-		for ( var category in [ "tools", "skills", "models", "subagents" ] ) {
+		for ( var category in [ "tools", "skills", "subagents" ] ) {
 			var entries = arguments.discovery[ category ] ?: []
 			for ( var dup in findDuplicateNames( entries ) ) {
 				arguments.errors.append( "Duplicate name [#dup#] found in #category#/" )
@@ -93,24 +93,6 @@ class {
 	// Named models
 	// --------------------------------------------------------------------------
 
-	/**
-	 * Every `models/` entry must read as a provider, a model and the settings that go with
-	 * them; see NamedModels for the keys. A `.bx` class entry only needs a known provider.
-	 *
-	 * @discovery The raw discovery struct from ProjectDiscoverer.discover()
-	 * @errors Accumulator array - append() any validation errors found
-	 */
-	private void function validateModelEntries( required struct discovery, required array errors ) {
-		var named = new "models.build.NamedModels@bxagents"()
-		for ( var entry in arguments.discovery.models ?: [] ) {
-			var config = named.read( entry.path )
-			arguments.errors.append(
-				named.problems( entry.name, isNull( config ) ? "" : config, entry.path.listLast( "." ).lcase() == "bx" ),
-				true
-			)
-		}
-	}
-
 	// --------------------------------------------------------------------------
 	// Circular subagent detection
 	// --------------------------------------------------------------------------
@@ -135,7 +117,7 @@ class {
 	 * @discovery The raw discovery struct from ProjectDiscoverer.discover()
 	 * @errors Accumulator array - append() any validation errors found
 	 */
-	private void function validateSubagents( required string projectRoot, required struct discovery, required array errors ) {
+	private void function validateSubagents( required string projectRoot, required struct discovery, required array errors, array rootProfileNames = [], boolean rootHasDefault = false ) {
 		var subagents = arguments.discovery.subagents ?: []
 		// "@bxagents" suffix, not a bare "AgentConfigResolver" reference - see
 		// BuildPipeline.bx's init() docblock for why.
@@ -155,7 +137,8 @@ class {
 			try {
 				var config = resolver.resolve( projectRoot = subagent.path )
 				graph[ subagent.name ] = config.subAgents ?: []
-				validateModelProvider( config, arguments.discovery, arguments.errors, "Subagent [#subagent.name#]'s Agent.bx" )
+				validateModelProvider( config, arguments.discovery, arguments.errors, "Subagent [#subagent.name#]'s Agent.bx", arguments.rootHasDefault )
+				validateAiSettings( config, arguments.errors, "Subagent [#subagent.name#]", arguments.rootProfileNames, false )
 				validateTools( config, arguments.errors, "Subagent [#subagent.name#]" )
 				validateToolOptions( config, arguments.errors, "Subagent [#subagent.name#]" )
 				recordNameOwner( nameOwners, coldboxAppGenerator.resolveAgentName( config ), "Subagent [#subagent.name#]" )
@@ -1081,17 +1064,25 @@ class {
 	 * model value on a subagent is reported clearly rather than misattributed
 	 * to the root project.
 	 */
-	private void function validateModelProvider( required struct resolvedConfig, required struct discovery, required array errors, string source = "Agent.bx's configure()" ) {
+	private void function validateModelProvider( required struct resolvedConfig, required struct discovery, required array errors, string source = "Agent.bx's configure()", boolean inheritsDefault = false ) {
 		var modelValue = arguments.resolvedConfig.model ?: ""
 
 		if ( !len( modelValue ) ) {
+			// A subagent that says nothing uses the default the root Agent.yaml sets
+			if ( arguments.inheritsDefault ) {
+				return
+			}
+			// A profile (or a default profile) supplies the model
+			if ( len( arguments.resolvedConfig.profile ?: "" ) || len( arguments.resolvedConfig.defaultProfile ?: "" ) ) {
+				return
+			}
 			// A class-based Agent.bx already HAS a model from its own super.init();
 			// requiring the config to redeclare one would defeat the point. A
 			// descriptor Agent.bx still must, since nothing else supplies it.
 			if ( arguments.resolvedConfig.classBasedAgent ?: false ) {
 				return
 			}
-			arguments.errors.append( "#arguments.source# must declare a 'model'" )
+			arguments.errors.append( "#arguments.source# must declare a 'model' (or a 'profile')" )
 			return
 		}
 
@@ -1103,16 +1094,25 @@ class {
 			return
 		}
 
-		// No slash: must either be a known provider's default model, or a named
-		// reference to a models/ entry. Subagents have no models/ folder of
-		// their own - they resolve against the ROOT project's discovery.models,
-		// matching the flat-namespace design already used for subAgents
-		// references (see docs/conventions/subagents.md) and ColdBoxAppGenerator's
-		// own generation-time model resolution.
-		var modelNames = ( arguments.discovery.models ?: [] ).map( m => m.name )
-		if ( !variables.modelSlugParser.isKnownProvider( modelValue ) && !modelNames.contains( modelValue ) ) {
-			arguments.errors.append( "#arguments.source#: model [#modelValue#] has no provider and does not match any models/ entry" )
+		if ( !variables.modelSlugParser.isKnownProvider( modelValue ) ) {
+			arguments.errors.append( "#arguments.source#: model [#modelValue#] has no provider. Write it as provider/model (for example openai/gpt-5), or set provider: and model:, or name a profile with profile:" )
 		}
+	}
+
+	/**
+	 * The AI keys of an agent: provider, model, params, providers, profiles, slots. Profiles are
+	 * project wide, so a subagent's `profile` is checked against the root's.
+	 */
+	private void function validateAiSettings( required struct config, required array errors, required string label, array profileNames = [], boolean isRoot = true ) {
+		if ( !arguments.isRoot ) {
+			// bx-ai's settings are global to the app, so these belong to the root Agent.yaml
+			for ( var key in [ "params", "options", "providers", "profiles", "defaultProfile", "embeddings", "speech", "transcription", "image" ] ) {
+				if ( arguments.config.keyExists( key ) ) {
+					arguments.errors.append( "#arguments.label#: '#key#' applies to the whole app, so it belongs in the project's own Agent.yaml. A subagent can set model or profile" )
+				}
+			}
+		}
+		arguments.errors.append( new "models.build.AiSettings@bxagents"().problems( arguments.config, arguments.label, arguments.profileNames ), true )
 	}
 
 	// --------------------------------------------------------------------------

@@ -1,0 +1,47 @@
+/**
+ * Applies a generated app's settings for a BoxLang module (bx-ai) when the app starts.
+ *
+ * Why this exists: ColdBox's `moduleSettings` in config/ColdBox.bx only reaches modules ColdBox
+ * itself loads. bx-ai is a BoxLang module, and its settings come from the runtime's
+ * boxlang.json, so a `moduleSettings.bxai` block was never read: measured on a served app,
+ * bx-ai kept provider "openai", no profiles and skillsDirectory "/.agents/skills" while the
+ * generated block said otherwise. The app has to carry its own settings, wherever it runs
+ * (serve, a .bxa, a container), so they are written to config/bxai-settings.json and merged
+ * into the live module settings before ColdBox boots and builds the agents.
+ *
+ * Structs merge by key; arrays and simple values replace, the same rule BoxLang uses for
+ * runtime settings.
+ */
+class {
+
+	/**
+	 * @moduleName The BoxLang module, for example bxai
+	 * @file Absolute path to the JSON file of settings; a missing file changes nothing
+	 *
+	 * @return The module's settings after the merge
+	 */
+	struct function apply( required string moduleName, required string file ) {
+		var live = getModuleInfo( arguments.moduleName ).settings
+		if ( !fileExists( arguments.file ) ) {
+			return live
+		}
+		var wanted = jsonDeserialize( fileRead( arguments.file ) )
+		merge( live, wanted )
+		return live
+	}
+
+	/**
+	 * @target The struct to change
+	 * @source What to put into it
+	 */
+	void function merge( required struct target, required struct source ) {
+		for ( var key in arguments.source ) {
+			if ( isStruct( arguments.source[ key ] ) && isStruct( arguments.target[ key ] ?: "" ) ) {
+				merge( arguments.target[ key ], arguments.source[ key ] )
+			} else {
+				arguments.target[ key ] = arguments.source[ key ]
+			}
+		}
+	}
+
+}

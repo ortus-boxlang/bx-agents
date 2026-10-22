@@ -14,7 +14,7 @@
  *
  *   project     { root, name, description, definition, environment }
  *   agent       the root agent node
- *   models      [ { name, file, provider, model, apiKeyEnvVar, params : [ names ] } ]   named models/ entries
+ *   ai          { provider, model, params, options, providers, profiles, defaultProfile, slots } the default model, other providers, named profiles and the capability defaults
  *   gateways    [ { name, file, kind, summary, path } ]
  *   mcpHosted   [ { name, file, description, tools } ]
  *   interceptors[ { name, file, scope } ]
@@ -54,7 +54,7 @@ class {
 	 * @return The section names
 	 */
 	array function sectionNames() {
-		return [ "agents", "tools", "skills", "mcp", "gateways", "schedule", "models", "interceptors", "modules", "deploy", "env", "checks", "build" ]
+		return [ "agents", "tools", "skills", "mcp", "gateways", "schedule", "ai", "interceptors", "modules", "deploy", "env", "checks", "build" ]
 	}
 
 	/**
@@ -102,23 +102,15 @@ class {
 		var discovery = variables.discoverer.discover( root )
 		var envUse = {}
 
+		variables.rootConfig = config
 		var rootNode = agentNode( root, root, config, discovery, arguments.cliEnvironment, [], envUse )
 		var agents = []
 		flatten( rootNode, agents )
 
-		for ( var entry in discovery.models ) {
-			var keyVar = new "models.build.NamedModels@bxagents"().resolve( new "models.build.NamedModels@bxagents"().read( entry.path ) ).apiKeyEnvVar
-			if ( len( keyVar ) ) {
-				noteEnv( envUse, keyVar, "model #entry.name#" )
-			}
-		}
+		var ai = aiInfo( config, envUse )
 		var gateways = []
 		for ( var entry in discovery.gateways ) {
 			gateways.append( gatewayInfo( entry, envUse ) )
-		}
-		var models = []
-		for ( var entry in discovery.models ) {
-			models.append( modelInfo( entry ) )
 		}
 		var mcpHosted = []
 		for ( var entry in discovery.mcp ) {
@@ -142,7 +134,7 @@ class {
 				environment : config.environment ?: ""
 			},
 			agent        : rootNode,
-			models       : models,
+			ai           : ai,
 			gateways     : gateways,
 			mcpHosted    : mcpHosted,
 			interceptors : interceptors,
@@ -187,7 +179,7 @@ class {
 		var folder = arguments.path == arguments.root ? "." : "subagents/" & arguments.path.listLast( "/\" )
 		var classBased = c.classBasedAgent ?: false
 		var modelValue = len( c.model ?: "" ) ? c.model : ( c.classAgentModel ?: "" )
-		var described = describeModel( modelValue, arguments.root )
+		var described = describeModel( modelValue, c, arguments.path == arguments.root )
 		var ownTools = []
 		for ( var entry in arguments.discovery.tools ) {
 			ownTools.append( toolInfo( entry, arguments.path ), true )
@@ -208,6 +200,7 @@ class {
 			description    : c.description ?: "",
 			model          : modelValue,
 			modelSource    : described.source,
+			profile        : described.profile,
 			provider       : described.provider,
 			modelId        : described.model,
 			apiKeyEnvVar   : described.apiKeyEnvVar,
@@ -266,24 +259,41 @@ class {
 	}
 
 	/**
-	 * @slug The agent's model value: a slug, a bare provider, or a models/ entry name
-	 * @root The project root, to look a models/ entry up in
+	 * Where an agent's model comes from: its own profile, its own provider/model, or what the
+	 * root Agent.yaml set as the default (the root's default profile, else its provider/model).
 	 *
-	 * @return { source : slug|provider|named|none, provider, model }
+	 * @slug The agent's own model value: a provider/model slug, a bare provider, or empty
+	 * @config The agent's resolved config
+	 * @isRoot True for the project's own agent
+	 *
+	 * @return { source : profile|slug|provider|default|none, profile, provider, model, apiKeyEnvVar }
 	 */
-	private struct function describeModel( required string slug, required string root ) {
-		if ( !len( arguments.slug ) ) {
-			return { source : "none", provider : "", model : "", apiKeyEnvVar : "" }
+	private struct function describeModel( required string slug, required struct config, required boolean isRoot ) {
+		var root = variables.rootConfig ?: {}
+		var profiles = root.profiles ?: {}
+		var wanted = arguments.config.profile ?: ""
+		if ( !len( wanted ) && !len( arguments.slug ) ) {
+			wanted = root.defaultProfile ?: ""
 		}
-		if ( arguments.slug.find( "/" ) ) {
-			var parsed = variables.slugParser.parse( arguments.slug )
-			return { source : "slug", provider : parsed.provider, model : parsed.model, apiKeyEnvVar : "" }
+		if ( len( wanted ) && profiles.keyExists( wanted ) && isStruct( profiles[ wanted ] ) ) {
+			var p = profiles[ wanted ]
+			return { source : len( arguments.config.profile ?: "" ) ? "profile" : "default", profile : wanted, provider : p.provider ?: ( root.provider ?: "" ), model : p.model ?: "", apiKeyEnvVar : p.apiKeyEnv ?: "" }
 		}
-		if ( variables.slugParser.isKnownProvider( arguments.slug ) ) {
-			return { source : "provider", provider : arguments.slug, model : "", apiKeyEnvVar : "" }
+		if ( len( arguments.slug ) ) {
+			if ( arguments.slug.find( "/" ) ) {
+				var parsed = variables.slugParser.parse( arguments.slug )
+				return { source : "slug", profile : "", provider : parsed.provider, model : parsed.model, apiKeyEnvVar : "" }
+			}
+			if ( variables.slugParser.isKnownProvider( arguments.slug ) ) {
+				return { source : "provider", profile : "", provider : arguments.slug, model : "", apiKeyEnvVar : "" }
+			}
 		}
-		var entry = readNamedModel( arguments.root, arguments.slug )
-		return { source : "named", provider : entry.provider ?: "", model : entry.model ?: "", apiKeyEnvVar : entry.apiKeyEnvVar ?: "" }
+		var rootSlug = root.model ?: ""
+		if ( !arguments.isRoot && len( rootSlug ) ) {
+			var inherited = rootSlug.find( "/" ) ? variables.slugParser.parse( rootSlug ) : { provider : rootSlug, model : "" }
+			return { source : "default", profile : "", provider : inherited.provider, model : inherited.model, apiKeyEnvVar : "" }
+		}
+		return { source : "none", profile : "", provider : "", model : "", apiKeyEnvVar : "" }
 	}
 
 	/**
@@ -390,37 +400,75 @@ class {
 	}
 
 	/**
-	 * @entry A discovered models/ entry
-	 */
-	private struct function modelInfo( required struct entry ) {
-		var named = new "models.build.NamedModels@bxagents"()
-		var resolved = named.resolve( named.read( arguments.entry.path ) )
-		return {
-			name         : arguments.entry.name,
-			file         : arguments.entry.path.listLast( "/\" ),
-			provider     : resolved.provider,
-			model        : resolved.model,
-			apiKeyEnvVar : resolved.apiKeyEnvVar,
-			params       : resolved.params.keyArray().sort( "textnocase" )
-		}
-	}
-
-	/**
-	 * @root The project root
-	 * @name A models/ entry name
+	 * The default model, the other providers, the named profiles and the capability defaults, as
+	 * the root Agent.yaml sets them. Environment variable names are noted for `env`; no key is
+	 * ever read.
 	 *
-	 * @return The entry's { provider, model, ... }, or an empty struct
+	 * @config The root resolved config
+	 * @envUse The shared env-var accumulator
 	 */
-	private struct function readNamedModel( required string root, required string name ) {
-		var named = new "models.build.NamedModels@bxagents"()
-		for ( var ext in named.extensions() ) {
-			var file = arguments.root & "/models/" & arguments.name & "." & ext
-			if ( fileExists( file ) ) {
-				var config = named.read( file )
-				return isNull( config ) ? {} : named.resolve( config )
-			}
+	private struct function aiInfo( required struct config, required struct envUse ) {
+		var c = arguments.config
+		var defaults = {}
+		if ( len( c.model ?: "" ) ) {
+			defaults = c.model.find( "/" ) ? variables.slugParser.parse( c.model ) : ( variables.slugParser.isKnownProvider( c.model ) ? { provider : c.model, model : "" } : {} )
 		}
-		return {}
+		var providers = []
+		for ( var name in ( c.providers ?: {} ).keyArray().sort( "textnocase" ) ) {
+			var entry = isStruct( c.providers[ name ] ) ? c.providers[ name ] : {}
+			providers.append( { name : name, params : ( entry.params ?: {} ).keyArray().sort( "textnocase" ), options : ( entry.options ?: {} ).keyArray().sort( "textnocase" ) } )
+		}
+		var profiles = []
+		for ( var name in ( c.profiles ?: {} ).keyArray().sort( "textnocase" ) ) {
+			var p = isStruct( c.profiles[ name ] ) ? c.profiles[ name ] : {}
+			var keyVar = p.apiKeyEnv ?: ""
+			var provider = p.provider ?: ( defaults.provider ?: "" )
+			if ( len( keyVar ) ) {
+				noteEnv( arguments.envUse, keyVar, "profile #name#" )
+			} else if ( len( provider ) ) {
+				var conventional = variables.catalog.provider( provider ).envVar ?: ""
+				if ( len( conventional ) ) {
+					noteEnv( arguments.envUse, conventional, "profile #name# (#provider#)" )
+				}
+			}
+			profiles.append( {
+				name         : name,
+				description  : p.description ?: "",
+				provider     : provider,
+				model        : p.model ?: "",
+				apiKeyEnvVar : keyVar,
+				params       : ( p.params ?: {} ).keyArray().sort( "textnocase" ),
+				isDefault    : ( c.defaultProfile ?: "" ) == name
+			} )
+		}
+		var slots = []
+		for ( var slot in [ "embeddings", "speech", "transcription", "image" ] ) {
+			if ( !isStruct( c[ slot ] ?: "" ) || !c[ slot ].count() ) {
+				continue
+			}
+			var s = c[ slot ]
+			var detail = []
+			for ( var k in [ "voice", "format", "size", "quality", "style" ] ) {
+				if ( len( s[ k ] ?: "" ) ) {
+					detail.append( "#k# #s[ k ]#" )
+				}
+			}
+			var slotEnv = variables.catalog.provider( s.provider ?: "" ).envVar ?: ""
+			if ( len( slotEnv ) ) {
+				noteEnv( arguments.envUse, slotEnv, "#slot# (#s.provider#)" )
+			}
+			slots.append( { slot : slot, provider : s.provider ?: "", model : s.model ?: "", detail : detail.toList( ", " ) } )
+		}
+		return {
+			provider       : defaults.provider ?: ( c.provider ?: "" ),
+			model          : defaults.model ?: "",
+			params         : ( c.params ?: {} ).keyArray().sort( "textnocase" ),
+			options        : ( c.options ?: {} ).keyArray().sort( "textnocase" ),
+			providers      : providers,
+			profiles       : profiles,
+			defaultProfile : c.defaultProfile ?: "",
+			slots          : slots
+		}
 	}
 
 	// --------------------------------------------------------------------------

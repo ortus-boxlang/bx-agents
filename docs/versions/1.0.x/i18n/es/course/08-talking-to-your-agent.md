@@ -25,7 +25,7 @@ interactiva real (invoca `stty` para el modo raw - no funcionará canalizado ni 
 interactiva). Escribe `exit` o `quit` para salir.
 
 El modo por defecto carga la factory generada directamente en este proceso - es el más
-rápido, pero sin nada de lo que aporta ColdBox (sin `models/`, sin scheduler, sin
+rápido, pero sin nada de lo que aporta ColdBox (sin scheduler, sin
 interceptores, sin registro de gateways). Cuando eso importa, `--server` arranca un
 miniserver real y conduce el REPL sobre HTTP contra la ruta de agente siempre activa de tu
 proyecto, y `--connect` hace lo mismo contra un servidor que ya tengas en marcha. Ambos
