@@ -23,14 +23,7 @@ class {
 	 * @return The provider id
 	 */
 	string function provider( required any a, string default = "openai" ) {
-		// the providers the wizard knows well first, then every other one bx-ai has
-		var choices = variables.catalog.providers().map( p => { value : p.id, label : p.name, hint : p.hint } )
-		var listed = choices.map( c => c.value )
-		for ( var other in variables.parser.coreProviders() ) {
-			if ( !listed.contains( other ) ) {
-				choices.append( { value : other, label : other, hint : other == "mock" ? "for tests: scripted answers, no network" : "" } )
-			}
-		}
+		var choices = variables.catalog.allProviders().map( p => { value : p.id, label : p.name, hint : p.hint } )
 		var provider = arguments.a.select( key = "provider", title = "Which provider?", choices = choices, default = arguments.default )
 		if ( !variables.parser.isKnownProvider( provider ) ) {
 			throw( type = "BxAgents.InvalidAnswer", message = "--provider: [#provider#] is not a provider. Use one of: #variables.parser.coreProviders().toList( ', ' )#" )

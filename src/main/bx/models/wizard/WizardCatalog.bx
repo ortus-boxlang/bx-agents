@@ -119,6 +119,22 @@ class {
 	}
 
 	/**
+	 * Every provider bx-ai has: the ones the wizard knows well first (with a name, a hint and their key), then the rest.
+	 *
+	 * @return [ { id, name, hint } ]
+	 */
+	array function allProviders() {
+		var all = providers().map( p => { id : p.id, name : p.name, hint : p.hint } )
+		var listed = all.map( p => p.id )
+		for ( var other in new "models.build.ModelSlugParser@bxagents"().coreProviders() ) {
+			if ( !listed.contains( other ) ) {
+				all.append( { id : other, name : other, hint : other == "mock" ? "for tests: scripted answers, no network" : "" } )
+			}
+		}
+		return all
+	}
+
+	/**
 	 * @id A provider id such as claude
 	 *
 	 * @return The provider entry, or an empty struct for an id the catalog does not list
