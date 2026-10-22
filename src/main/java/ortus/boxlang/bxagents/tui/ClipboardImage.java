@@ -36,7 +36,7 @@ import java.util.concurrent.TimeUnit;
  */
 final class ClipboardImage {
 
-	private static final byte[]	PNG	= { ( byte ) 0x89, 'P', 'N', 'G' };
+	private static final byte[] PNG = { ( byte ) 0x89, 'P', 'N', 'G' };
 
 	/** Runs a command and returns what it wrote to standard output; throws when it cannot be run or fails. */
 	@FunctionalInterface
@@ -45,9 +45,9 @@ final class ClipboardImage {
 		byte[] run( List<String> command ) throws IOException;
 	}
 
-	private final String				os;
+	private final String						os;
 	private final java.util.Map<String, String>	env;
-	private final Runner				runner;
+	private final Runner						runner;
 
 	ClipboardImage( String os, java.util.Map<String, String> env, Runner runner ) {
 		this.os		= os.toLowerCase( java.util.Locale.ROOT );
@@ -110,7 +110,8 @@ final class ClipboardImage {
 		} else if ( os.contains( "win" ) ) {
 			out.add( List.of( "powershell", "-NoProfile", "-Command",
 			    "Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; "
-			        + "$i = [System.Windows.Forms.Clipboard]::GetImage(); if ($i) { $i.Save('" + target + "', [System.Drawing.Imaging.ImageFormat]::Png); 'ok' } else { 'none' }" ) );
+			        + "$i = [System.Windows.Forms.Clipboard]::GetImage(); if ($i) { $i.Save('" + target
+			        + "', [System.Drawing.Imaging.ImageFormat]::Png); 'ok' } else { 'none' }" ) );
 		} else {
 			if ( env.get( "WAYLAND_DISPLAY" ) != null ) {
 				out.add( List.of( "wl-paste", "--no-newline", "--type", "image/png" ) );

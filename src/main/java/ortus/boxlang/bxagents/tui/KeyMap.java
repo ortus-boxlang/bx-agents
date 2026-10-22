@@ -193,7 +193,8 @@ public final class KeyMap {
 		for ( Object o : given ) {
 			Chord c = parse( String.valueOf( o ) );
 			if ( c == null ) {
-				problems.add( "[" + action.id + "]: [" + o + "] is not a key I can read (examples: enter, alt+enter, ctrl+j, esc, tab). It keeps " + describe( action ) + "." );
+				problems.add( "[" + action.id + "]: [" + o + "] is not a key I can read (examples: enter, alt+enter, ctrl+j, esc, tab). It keeps "
+				    + describe( action ) + "." );
 				return;
 			}
 			chords.add( c );
@@ -201,7 +202,8 @@ public final class KeyMap {
 		for ( Chord c : chords ) {
 			for ( Map.Entry<Action, List<Chord>> other : bound.entrySet() ) {
 				if ( other.getKey() != action && other.getKey().place == action.place && other.getValue().contains( c ) ) {
-					problems.add( "[" + action.id + "]: " + c.label() + " is already used by [" + other.getKey().id + "]; [" + action.id + "] keeps " + describe( action ) + "." );
+					problems.add( "[" + action.id + "]: " + c.label() + " is already used by [" + other.getKey().id + "]; [" + action.id + "] keeps "
+					    + describe( action ) + "." );
 					return;
 				}
 			}

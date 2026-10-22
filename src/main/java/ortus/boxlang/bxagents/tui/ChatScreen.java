@@ -192,8 +192,11 @@ public final class ChatScreen implements AutoCloseable {
 	public void banner( String agent, String model, String mode ) {
 		out( Row.of().add( " bxAgents", theme.accentBold ).add( "  chat", theme.muted ).add( "   " + agent, theme.bold )
 		    .add( " · " + model + " · " + mode, theme.muted ).toLine() );
-		out( Row.of( " " + lower( keys.first( KeyMap.Action.SUBMIT ) ) + " send · " + lower( keys.first( KeyMap.Action.NEWLINE ) ) + " new line · / commands · ? keys · "
-		    + lower( keys.first( KeyMap.Action.STOP ) ) + " stops the agent · " + lower( keys.first( KeyMap.Action.CLEAR ) ) + " leaves", theme.muted ).toLine() );
+		out( Row
+		    .of( " " + lower( keys.first( KeyMap.Action.SUBMIT ) ) + " send · " + lower( keys.first( KeyMap.Action.NEWLINE ) )
+		        + " new line · / commands · ? keys · "
+		        + lower( keys.first( KeyMap.Action.STOP ) ) + " stops the agent · " + lower( keys.first( KeyMap.Action.CLEAR ) ) + " leaves", theme.muted )
+		    .toLine() );
 		out( Text.from( "" ) );
 	}
 
@@ -379,7 +382,8 @@ public final class ChatScreen implements AutoCloseable {
 		}
 		Optional<Path> saved = clipboard.save( pasteFolder );
 		if ( saved.isEmpty() ) {
-			print( "warn", "There is no picture on the clipboard, or no tool to read it (wl-paste or xclip on Linux, pngpaste on macOS). Text is pasted with your terminal's own paste." );
+			print( "warn",
+			    "There is no picture on the clipboard, or no tool to read it (wl-paste or xclip on Linux, pngpaste on macOS). Text is pasted with your terminal's own paste." );
 			return;
 		}
 		images.add( saved.get().toString() );
@@ -657,8 +661,17 @@ public final class ChatScreen implements AutoCloseable {
 		}
 		rows.add( separator() );
 		rows.addAll( composerRows() );
+<<<<<<< HEAD
 		String picture = images.isEmpty() ? "" : images.size() + ( images.size() == 1 ? " picture" : " pictures" ) + " attached · ";
+<<<<<<< HEAD
 		rows.add( withRecordingMark( Row.of( " " + statusPrefix() + picture + lower( keys.first( KeyMap.Action.SUBMIT ) ) + " send · " + lower( keys.first( KeyMap.Action.NEWLINE ) ) + " new line · ? keys" + ( menu.isEmpty() && files.isEmpty() ? "" : " · tab completes" ), theme.muted ) ) );
+=======
+		rows.add( withRecordingMark( Row.of( " " + statusPrefix() + picture + "enter send · alt+enter new line · ↑ history" + ( menu.isEmpty() && files.isEmpty() ? "" : " · tab completes" ), theme.muted ) ) );
+=======
+		rows.add( withRecordingMark(
+		    Row.of( " " + statusPrefix() + "enter send · alt+enter new line · ↑ history" + ( menu.isEmpty() ? "" : " · tab completes" ), theme.muted ) ) );
+>>>>>>> code/tui-d-shell-bif
+>>>>>>> code/tui-e-attachments
 		return rows;
 	}
 
@@ -686,7 +699,8 @@ public final class ChatScreen implements AutoCloseable {
 		rows.addAll( composerRows() );
 		long secs = ( System.currentTimeMillis() - turnStarted ) / 1000;
 		rows.add( withRecordingMark( Row.of().add( " " + spin + " ", theme.accent ).add( cancel ? "stopping" : "working", theme.plain )
-		    .add( " " + secs + "s · " + lower( keys.first( KeyMap.Action.STOP ) ) + " stops · type and press enter to steer" + ( status.isEmpty() ? "" : " · " + status ), theme.muted ) ) );
+		    .add( " " + secs + "s · " + lower( keys.first( KeyMap.Action.STOP ) ) + " stops · type and press enter to steer"
+		        + ( status.isEmpty() ? "" : " · " + status ), theme.muted ) ) );
 		return rows;
 	}
 
