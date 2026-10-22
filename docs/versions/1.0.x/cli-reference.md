@@ -156,7 +156,7 @@ bxAgents new my-agent --forgebox=some-package-slug
 
 ### `add`
 
-Add one thing to a project that already exists, asking the same questions `new` asks. Today that is a `tool`, an `interceptor`, a `schedule`, an `mcp` server, a `gateway`, a `subagent`, a `skill`, a `profile` or a `provider`.
+Add one thing to a project that already exists, asking the same questions `new` asks. Today that is a `tool`, an `interceptor`, a `schedule`, an `mcp` server, a `gateway`, a `subagent`, a `skill`, a `profile`, a `provider` or a `capability`.
 
 ```bash
 bxAgents add                        # pick what to add
@@ -368,6 +368,25 @@ bxAgents add profile                            # asks
 | `--default` | Also sets `defaultProfile`. An existing `defaultProfile` is never changed: the line to edit is printed instead. |
 
 Adds an empty `.env` stub for the key variable. Check the result with `bxAgents inspect --section=ai`.
+
+#### `add capability`
+
+Sets the default provider and model for one thing besides chat, in the root `Agent.yaml` with bx-ai's own names. One command for all four; it asks only the questions that capability has.
+
+```bash
+bxAgents add capability embeddings --provider=openai --model=text-embedding-3-small
+bxAgents add capability speech --provider=openai --voice=alloy --format=mp3
+bxAgents add capability                         # asks which one
+```
+
+| Capability | Keys it writes |
+|---|---|
+| `embeddings` | `provider`, `model` |
+| `speech` | `provider`, `model`, `voice`, `format` |
+| `transcription` | `provider`, `model` |
+| `image` | `provider`, `model`, `size`, `quality`, `style`, `instructions` |
+
+Every key but the provider is optional; left out, the provider's own default applies. bx-ai keeps speech and transcription on one audio provider, so the second of the two defaults to the first's provider and a different one is refused. A capability that is already set is refused: edit it in the file. The provider's key variable gets an empty stub in `.env`; the key itself is never asked for.
 
 ### `skills`
 

@@ -276,6 +276,8 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
 - `add profile` and `add provider` write a profile (provider, model, settings, key variable, optionally the
   default) or a provider's settings into the root `Agent.yaml` by inserting lines only, with an empty `.env`
   stub for the key.
+- `add capability <embeddings|speech|transcription|image>` sets that capability's default provider and model, asking
+  only the questions it has, and keeps speech and transcription on one audio provider.
 - The build now delivers bx-ai's settings the way bx-ai reads them. A `moduleSettings.bxai` block in
   `config/ColdBox.bx` never reached bx-ai (measured on a served app: it kept `provider: openai` and
   `skillsDirectory: /.agents/skills`), so the `skills/` override and the `security` block were silently not

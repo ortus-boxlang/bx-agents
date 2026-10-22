@@ -156,7 +156,7 @@ bxAgents new my-agent --forgebox=some-package-slug
 
 ### `add`
 
-Añade una cosa a un proyecto que ya existe, haciendo las mismas preguntas que `new`. Hoy eso es una `tool`, un `interceptor`, una `schedule`, un servidor `mcp`, un `gateway`, un `subagent`, una `skill`, un `profile` o un `provider`.
+Añade una cosa a un proyecto que ya existe, haciendo las mismas preguntas que `new`. Hoy eso es una `tool`, un `interceptor`, una `schedule`, un servidor `mcp`, un `gateway`, un `subagent`, una `skill`, un `profile`, un `provider` o una `capability`.
 
 ```bash
 bxAgents add                        # elige qué añadir
@@ -368,6 +368,25 @@ bxAgents add profile                            # pregunta
 | `--default` | También define `defaultProfile`. Un `defaultProfile` existente nunca se cambia: se imprime la línea que hay que editar. |
 
 Añade un marcador `.env` vacío para la variable de la clave. Comprueba el resultado con `bxAgents inspect --section=ai`.
+
+#### `add capability`
+
+Define el proveedor y el modelo por defecto para algo que no es chat, en el `Agent.yaml` raíz con los nombres propios de bx-ai. Un solo comando para las cuatro; solo hace las preguntas que esa capacidad tiene.
+
+```bash
+bxAgents add capability embeddings --provider=openai --model=text-embedding-3-small
+bxAgents add capability speech --provider=openai --voice=alloy --format=mp3
+bxAgents add capability                         # pregunta cuál
+```
+
+| Capacidad | Claves que escribe |
+|---|---|
+| `embeddings` | `provider`, `model` |
+| `speech` | `provider`, `model`, `voice`, `format` |
+| `transcription` | `provider`, `model` |
+| `image` | `provider`, `model`, `size`, `quality`, `style`, `instructions` |
+
+Todas las claves salvo el proveedor son opcionales; si faltan, se aplica el valor del propio proveedor. bx-ai mantiene voz y transcripción en un solo proveedor de audio, así que la segunda de las dos toma por defecto el proveedor de la primera y uno distinto se rechaza. Una capacidad que ya está definida se rechaza: edítala en el archivo. La variable de la clave del proveedor recibe un marcador vacío en `.env`; la clave en sí nunca se pide.
 
 ### `skills`
 

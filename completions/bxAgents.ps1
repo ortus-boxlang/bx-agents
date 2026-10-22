@@ -43,6 +43,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'function'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'guard'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'header'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'instructions'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'max-tokens'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'mcp'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'memory'; Value = $true; Choices = @(); Dir = $false }
@@ -56,9 +57,12 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
 			@{ Name = 'prompt'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'provider'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'quality'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'scope'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'search'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'server'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'size'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'style'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'temperature'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'timeout'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'tools'; Value = $true; Choices = @(); Dir = $false }
@@ -67,6 +71,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'user'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'users'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'version'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'voice'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'when'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'with'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'yes'; Value = $false; Choices = @(); Dir = $false }

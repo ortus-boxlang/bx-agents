@@ -64,7 +64,7 @@ profile: planner
 
 ## Valores por defecto de capacidades
 
-`embeddings`, `speech`, `transcription` e `image` fijan los valores por defecto de bx-ai para `aiEmbed()`, `aiSpeak()`, `aiTranscribe()` y `aiImage()`. No admiten perfiles. bx-ai tiene un único proveedor de audio, así que `speech` y `transcription` deben nombrar el mismo.
+`embeddings`, `speech`, `transcription` e `image` fijan los valores por defecto de bx-ai para `aiEmbed()`, `aiSpeak()`, `aiTranscribe()` y `aiImage()`. No admiten perfiles. bx-ai tiene un único proveedor de audio, así que `speech` y `transcription` deben nombrar el mismo. `bxAgents add capability` escribe una; consulta [`add capability`](../cli-reference.md#add-capability).
 
 ## Validación y pruebas
 

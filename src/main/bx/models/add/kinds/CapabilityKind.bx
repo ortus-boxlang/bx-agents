@@ -1,0 +1,132 @@
+/**
+ * `add capability <slot>` - the default provider and model for one thing besides chat, set
+ * in the root Agent.yaml with bx-ai's own names. One kind for all four, asking only the
+ * questions that slot has:
+ *
+ *   embeddings      provider, model
+ *   speech          provider, model, voice, format
+ *   transcription   provider, model
+ *   image           provider, model, size, quality, style, instructions
+ *
+ * bx-ai keeps speech and transcription together as `audio`, with one provider for both, so
+ * the second of the two defaults to the provider the first uses and a different one is
+ * refused. The provider's key is never asked for: its usual variable gets an empty stub in
+ * .env, and only the name is ever written down.
+ */
+class {
+
+	static {
+		SLOTS = {
+			embeddings    : { summary : "Turns text into vectors for search and memory", questions : [] },
+			speech        : { summary : "Text to speech", questions : [ "voice", "format" ] },
+			transcription : { summary : "Speech to text", questions : [] },
+			image         : { summary : "Image generation", questions : [ "size", "quality", "style", "instructions" ] }
+		}
+		QUESTIONS = {
+			voice        : { title : "Which voice? (optional)", help : "A voice name the provider offers, e.g. alloy. Empty uses the provider's default." },
+			format       : { title : "Which audio format? (optional)", help : "e.g. mp3. Empty uses the provider's default." },
+			size         : { title : "Which image size? (optional)", help : "e.g. 1024x1024. Empty uses the provider's default." },
+			quality      : { title : "Which quality? (optional)", help : "e.g. standard or hd, as the provider names them. Empty uses its default." },
+			style        : { title : "Which style? (optional)", help : "e.g. vivid or natural, as the provider names them. Empty uses its default." },
+			instructions : { title : "Standing instructions for every image? (optional)", help : "Added to each prompt, e.g. a house style." }
+		}
+	}
+
+	struct function info() {
+		return { name : "capability", summary : "A default provider and model for embeddings, speech, transcription or images (embeddings:, speech:, ... in Agent.yaml)" }
+	}
+
+	/**
+	 * @answers An Answers
+	 * @ctx The add context
+	 *
+	 * @return { slot, entry, providerInfo, file }
+	 */
+	struct function ask( required any answers, required struct ctx ) {
+		var args = arguments.ctx.args ?: []
+		var a = arguments.answers.withPresets( args.len() ? { slot : args[ 1 ] } : {} )
+		var questions = new "models.add.AiQuestions@bxagents"()
+		var root = questions.rootYaml( arguments.ctx, "A capability" )
+		var ai = arguments.ctx.project.report.ai ?: {}
+		var set = ( ai.slots ?: [] ).map( s => s.slot )
+
+		if ( !a.given( "slot" ) && !a.interactive() ) {
+			throw( type = "BxAgents.MissingAnswer", message = "Say which capability: bxAgents add capability <#static.SLOTS.keyArray().toList( '|' )#>" )
+		}
+		var slot = a.select(
+			key     = "slot",
+			title   = "Which capability?",
+			choices = static.SLOTS.keyArray().map( s => { value : s, label : s, hint : static.SLOTS[ s ].summary & ( set.contains( s ) ? " (already set)" : "" ) } ),
+			default = ""
+		)
+		if ( set.contains( slot ) || new "models.add.YamlEditor@bxagents"().hasKey( root.text, slot ) ) {
+			throw( type = "BxAgents.InvalidAnswer", message = "#root.file# already sets #slot#. Edit it there." )
+		}
+
+		// speech and transcription share one audio provider in bx-ai
+		var sibling = slot == "speech" ? "transcription" : ( slot == "transcription" ? "speech" : "" )
+		var audioProvider = ""
+		if ( len( sibling ) ) {
+			for ( var s in ( ai.slots ?: [] ) ) {
+				if ( s.slot == sibling ) {
+					audioProvider = s.provider
+				}
+			}
+		}
+
+		var provider = questions.provider( a, len( audioProvider ) ? audioProvider : "openai" )
+		if ( len( audioProvider ) && provider != audioProvider ) {
+			throw( type = "BxAgents.InvalidAnswer", message = "--provider: #sibling# already uses #audioProvider#, and bx-ai keeps speech and transcription on one provider. Use #audioProvider#, or change #sibling# first." )
+		}
+
+		var entry = { provider : provider }
+		var model = a.text( key = "model", title = "Which model? (optional)", help = "Empty uses the provider's own default for #slot#.", default = "" )
+		if ( len( model ) ) {
+			entry[ "model" ] = model
+		}
+		for ( var q in static.SLOTS[ slot ].questions ) {
+			var answer = a.text( key = q, title = static.QUESTIONS[ q ].title, help = static.QUESTIONS[ q ].help, default = "" )
+			if ( len( answer ) ) {
+				entry[ q ] = answer
+			}
+		}
+		return { slot : slot, entry : entry, providerInfo : questions.info( provider ), file : root.file, manual : "" }
+	}
+
+	/**
+	 * @answers The answers from ask()
+	 * @ctx The add context
+	 * @changes A ChangeSet
+	 */
+	void function plan( required struct answers, required struct ctx, required any changes ) {
+		var a = arguments.answers
+		var questions = new "models.add.AiQuestions@bxagents"()
+		var order = [ "provider", "model", "voice", "format", "size", "quality", "style", "instructions" ]
+		var lines = [ a.slot & ":" ]
+		lines.append( new "models.wizard.YamlWriter@bxagents"().lines( a.entry, 2, order ), true )
+
+		var root = questions.rootYaml( arguments.ctx, "A capability" )
+		var edit = new "models.add.YamlEditor@bxagents"().addBlock( root.text, a.slot, lines )
+		if ( !edit.ok ) {
+			arguments.answers.manual = "#root.file# was not changed: #edit.reason#. Add this:" & char( 10 ) & lines.toList( char( 10 ) )
+			return
+		}
+		arguments.changes.edit( root.file, edit.text, lines.toList( char( 10 ) ) )
+		questions.envStub( arguments.changes, a.providerInfo.envVar ?: "", a.providerInfo )
+	}
+
+	/**
+	 * @return [ text ] what is left to do
+	 */
+	array function next( required struct answers, required struct ctx ) {
+		var a = arguments.answers
+		var out = []
+		if ( len( a.manual ?: "" ) ) {
+			out.append( a.manual )
+		}
+		out.append( new "models.add.AiQuestions@bxagents"().keySteps( a.providerInfo.envVar ?: "", a.providerInfo ), true )
+		out.append( "bxAgents inspect --section=ai" )
+		return out
+	}
+
+}

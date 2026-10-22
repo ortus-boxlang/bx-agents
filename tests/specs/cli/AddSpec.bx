@@ -1115,6 +1115,88 @@ class extends="testbox.system.BaseSpec" {
 
 			} );
 
+			describe( "add capability", function() {
+
+				private function addCapability( required string root, struct flags = {}, array positionals = [ "capability", "embeddings" ] ) {
+					var options = { projectRoot : root, _positionals : positionals, yes : true };
+					options.append( flags );
+					return addVerb.run( options );
+				}
+
+				it( "writes the slot with only the keys it has, and a key stub", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					var result = addCapability( root, { provider : "openai", model : "text-embedding-3-small" } );
+					var yaml = fileRead( root & "/Agent.yaml" );
+
+					expect( result.exitCode ).toBe( 0 );
+					expect( yaml ).toInclude( "embeddings:" & char( 10 ) & "  provider: openai" & char( 10 ) & "  model: text-embedding-3-small" );
+					expect( fileRead( root & "/.env" ) ).toInclude( "OPENAI_API_KEY=" );
+				} );
+
+				it( "asks the voice and format for speech and the size, quality and style for images", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					addCapability( root, { provider : "openai", voice : "alloy", format : "mp3" }, [ "capability", "speech" ] );
+					addCapability( root, { provider : "openai", size : "1024x1024", quality : "hd", style : "vivid", instructions : "Flat colors" }, [ "capability", "image" ] );
+					var yaml = fileRead( root & "/Agent.yaml" );
+
+					expect( yaml ).toInclude( "  voice: alloy" );
+					expect( yaml ).toInclude( "  format: mp3" );
+					expect( yaml ).toInclude( "  size: ""1024x1024""" );
+					expect( yaml ).toInclude( "  instructions: Flat colors" );
+				} );
+
+				it( "builds, and inspect lists the slots", function() {
+					var root = newTempProject( "yaml-minimal" );
+					addCapability( root, { provider : "openai" }, [ "capability", "speech" ] );
+					addCapability( root, { provider : "openai", model : "whisper-1" }, [ "capability", "transcription" ] );
+
+					var report = new bxagents.models.report.ProjectReport().build( root );
+
+					expect( report.validation.errors ).toBeEmpty();
+					expect( report.ai.slots.map( s => s.slot ) ).toBe( [ "speech", "transcription" ] );
+				} );
+
+				it( "keeps speech and transcription on one provider", function() {
+					var root = newTempProject( "yaml-minimal" );
+					addCapability( root, { provider : "openai" }, [ "capability", "speech" ] );
+
+					expect( function() {
+						addCapability( root, { provider : "groq" }, [ "capability", "transcription" ] );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+				} );
+
+				it( "refuses a slot that is already set, an unknown slot, and no slot without a terminal", function() {
+					var root = newTempProject( "yaml-minimal" );
+					addCapability( root, { provider : "openai" } );
+
+					expect( function() {
+						addCapability( root, { provider : "openai" } );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					expect( function() {
+						addCapability( root, { provider : "openai" }, [ "capability", "video" ] );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					expect( function() {
+						addCapability( root, { provider : "openai" }, [ "capability" ] );
+					} ).toThrow( "BxAgents.MissingAnswer" );
+				} );
+
+				it( "asks the capability, provider and its questions, for audio", function() {
+					var root = newTempProject( "yaml-minimal" );
+					addCapability( root, { provider : "groq" }, [ "capability", "speech" ] );
+					var prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [ "transcription", "groq", "whisper-large-v3", "create" ] );
+
+					var result = addVerb.run( { projectRoot : root, _positionals : [ "capability" ], _prompter : prompter, _interactive : true } );
+
+					expect( prompter.remaining() ).toBe( 0 );
+					expect( result.exitCode ).toBe( 0 );
+					expect( fileRead( root & "/Agent.yaml" ) ).toInclude( "transcription:" );
+					expect( fileRead( root & "/Agent.yaml" ) ).toInclude( "model: whisper-large-v3" );
+				} );
+
+			} );
+
 			describe( "the verb", function() {
 
 				it( "refuses a folder that is not an agent project", function() {

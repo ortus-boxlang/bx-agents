@@ -54,6 +54,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb add' -l function -x
     complete -c $cmd -n '__bxagents_using_verb add' -l guard -x
     complete -c $cmd -n '__bxagents_using_verb add' -l header -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l instructions -x
     complete -c $cmd -n '__bxagents_using_verb add' -l max-tokens -x
     complete -c $cmd -n '__bxagents_using_verb add' -l mcp -x
     complete -c $cmd -n '__bxagents_using_verb add' -l memory -x
@@ -67,9 +68,12 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb add' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb add' -l prompt -x
     complete -c $cmd -n '__bxagents_using_verb add' -l provider -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l quality -x
     complete -c $cmd -n '__bxagents_using_verb add' -l scope -x
     complete -c $cmd -n '__bxagents_using_verb add' -l search -x
     complete -c $cmd -n '__bxagents_using_verb add' -l server -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l size -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l style -x
     complete -c $cmd -n '__bxagents_using_verb add' -l temperature -x
     complete -c $cmd -n '__bxagents_using_verb add' -l timeout -x
     complete -c $cmd -n '__bxagents_using_verb add' -l tools -x
@@ -78,6 +82,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb add' -l user -x
     complete -c $cmd -n '__bxagents_using_verb add' -l users -x
     complete -c $cmd -n '__bxagents_using_verb add' -l version -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l voice -x
     complete -c $cmd -n '__bxagents_using_verb add' -l when -x
     complete -c $cmd -n '__bxagents_using_verb add' -l with -x
     complete -c $cmd -n '__bxagents_using_verb add' -l yes
