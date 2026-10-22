@@ -264,10 +264,12 @@ gatewaySession:
     admins: [ "123456789" ]  # gateway user ids that may run commands marked for admins
 ```
 
+**Telegram** shows the commands in the bot's own `/` menu: the first time a message arrives, the session sends the list it answers (`setMyCommands`) to the gateway. Names Telegram would refuse (anything but lower case letters, digits and underscores, or over 32 characters) are left out, and a failure to publish never stops the bot answering.
+
 `build` checks the block: an unknown key, a prefix that is not one character, or an `allow` entry that is not a command that runs on a gateway fails before the app starts. In Telegram a group message such as `/info@yourbot` is read as `/info`.
 
 !!! info
-    The conversation commands (`/new`, `/clear`, `/compact`, `/sessions`, `/resume`) are not in the default set: a gateway keeps one conversation per chat thread, and moving between conversations there is separate work. Commands also do not yet show up in a platform's own command menu (Telegram's list, Slack's slash commands); typing them works.
+    The conversation commands (`/new`, `/clear`, `/compact`, `/sessions`, `/resume`) are not in the default set: a gateway keeps one conversation per chat thread, and moving between conversations there is separate work. Slack's and Discord's own slash commands are not set up yet; typing them works.
 
 What each policy actually does with a message that arrives while a turn is still running:
 

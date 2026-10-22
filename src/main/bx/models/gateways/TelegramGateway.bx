@@ -381,6 +381,42 @@ class extends="ScheduledGatewayBase" {
 	 *
 	 * @return The parsed JSON response as a struct — { ok, result, description, error_code }
 	 */
+	/**
+	 * Tells Telegram which commands the bot answers, so its "/" menu offers them. Telegram only takes lower
+	 * case names of letters, digits and underscores (at most 32), a description of at most 256 characters and
+	 * at most 100 commands, so what does not fit is left out rather than failing the whole list.
+	 *
+	 * @menu [ { name, hint } ] the commands to offer; a name may start with a slash
+	 *
+	 * @return True when Telegram accepted the list
+	 */
+	boolean function publishCommands( required array menu ) {
+		var commands = commandsPayload( arguments.menu )
+		var result = callApi( "setMyCommands", { commands : commands } )
+		if ( !( result.ok ?: false ) ) {
+			logEvent( "Telegram did not take the command menu: #result.description ?: 'unknown error'#" )
+			return false
+		}
+		return true
+	}
+
+	/**
+	 * @menu [ { name, hint } ]
+	 *
+	 * @return [ { command, description } ] as setMyCommands wants it
+	 */
+	array function commandsPayload( required array menu ) {
+		var out = []
+		for ( var entry in arguments.menu ) {
+			var name = lCase( reReplace( entry.name, "^/", "" ) )
+			if ( !reFind( "^[a-z0-9_]{1,32}$", name ) || out.len() >= 100 ) {
+				continue
+			}
+			out.append( { command : name, description : left( len( entry.hint ?: "" ) ? entry.hint : name, 256 ) } )
+		}
+		return out
+	}
+
 	private struct function callApi( required string method, required struct params ) {
 		if ( !isNull( variables.apiCaller ) ) {
 			return variables.apiCaller( arguments.method, arguments.params )
