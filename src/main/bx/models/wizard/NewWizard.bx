@@ -17,7 +17,7 @@ class {
 
 	static {
 		STAGES = [
-			"name", "purpose", "shape", "model", "tools", "search", "files", "memory",
+			"name", "purpose", "shape", "model", "tuning", "tools", "search", "files", "memory",
 			"mcp", "channels", "webAccess", "guard", "deploy", "review"
 		]
 	}
@@ -146,6 +146,50 @@ class {
 		}
 		variables.prompter.record( "model", "Model", variables.plan.model )
 		return true
+	}
+
+	/**
+	 * Optional tuning of the default model: temperature, longest answer and timeout. Not a
+	 * stage of `add subagent`: these are settings of the whole app, so they belong to the
+	 * project's own Agent.yaml. Skipped when any of them arrived as a flag.
+	 */
+	function stage_tuning() {
+		if ( variables.flags.keyExists( "temperature" ) || variables.flags.keyExists( "max-tokens" ) || variables.flags.keyExists( "timeout" ) ) {
+			return showGiven( "tuning", "Model settings", variables.planner.tuningSummary( variables.plan.tuning ) )
+		}
+		variables.prompter.forget( "tuning" )
+		variables.plan.tuning = { temperature : "", maxTokens : "", timeout : "" }
+		if ( !variables.prompter.confirm( "Tune the model?", "Temperature, longest answer and timeout. Optional; press Enter to use the provider's own.", false ) ) {
+			return true
+		}
+		variables.plan.tuning.temperature = askNumber( "Temperature?", "0 to 2. Lower is steadier, higher is more varied.", function( value ) {
+			return isNumeric( value ) && val( value ) >= 0 && val( value ) <= 2
+		}, "A number from 0 to 2." )
+		variables.plan.tuning.maxTokens = askNumber( "Longest answer, in tokens?", "A whole number. Empty for the provider's own.", function( value ) {
+			return reFind( "^[1-9][0-9]*$", value ) > 0
+		}, "A whole number above zero." )
+		variables.plan.tuning.timeout = askNumber( "Timeout, in seconds?", "How long to wait for the model. Empty for the default.", function( value ) {
+			return reFind( "^[1-9][0-9]*$", value ) > 0
+		}, "A whole number above zero." )
+		var tuned = variables.planner.tuningSummary( variables.plan.tuning )
+		if ( len( tuned ) ) {
+			variables.prompter.record( "tuning", "Model settings", tuned )
+		}
+		return true
+	}
+
+	/**
+	 * Asks until the answer is empty or passes the check.
+	 */
+	private string function askNumber( required string title, required string help, required any valid, required string problem ) {
+		var help = arguments.help
+		while ( true ) {
+			var answer = trim( variables.prompter.text( arguments.title, help, "" ) )
+			if ( !len( answer ) || arguments.valid( answer ) ) {
+				return answer
+			}
+			help = arguments.problem
+		}
 	}
 
 	function stage_tools() {

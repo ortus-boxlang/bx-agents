@@ -43,6 +43,7 @@ class {
 			template    : "minimal",
 			model       : "",
 			provider    : "",
+			tuning      : { temperature : "", maxTokens : "", timeout : "" },
 			with        : [],
 			search      : "",
 			files       : { tools : "read", folders : [] },
@@ -74,6 +75,8 @@ class {
 		}
 		plan.model = trim( o.model ?: "" )
 		plan.provider = providerOf( plan.model )
+
+		plan.tuning = tuningFromFlags( o )
 
 		plan.with = list( o, "with" )
 		for ( var id in plan.with ) {
@@ -184,6 +187,15 @@ class {
 			parts.append( "--template=#p.template#" )
 		}
 		parts.append( "--model=#p.model#" )
+		if ( len( p.tuning.temperature ) ) {
+			parts.append( "--temperature=#p.tuning.temperature#" )
+		}
+		if ( len( p.tuning.maxTokens ) ) {
+			parts.append( "--max-tokens=#p.tuning.maxTokens#" )
+		}
+		if ( len( p.tuning.timeout ) ) {
+			parts.append( "--timeout=#p.tuning.timeout#" )
+		}
 		var withIds = p.with.filter( id => id != "files" || !isArray( p.files.tools ) )
 		if ( withIds.len() ) {
 			parts.append( "--with=#withIds.toList()#" )
@@ -273,6 +285,19 @@ class {
 			features.toolOptions = { bxai : { allowedPaths : p.files.folders } }
 		}
 
+		if ( len( p.tuning.temperature ) || len( p.tuning.maxTokens ) ) {
+			features.modelParams = {}
+			if ( len( p.tuning.temperature ) ) {
+				features.modelParams[ "temperature" ] = val( p.tuning.temperature )
+			}
+			if ( len( p.tuning.maxTokens ) ) {
+				features.modelParams[ "max_tokens" ] = int( p.tuning.maxTokens )
+			}
+		}
+		if ( len( p.tuning.timeout ) ) {
+			features.modelOptions = { timeout : int( p.tuning.timeout ) }
+		}
+
 		if ( tools.len() ) {
 			features.tools = tools
 		}
@@ -353,6 +378,10 @@ class {
 		if ( len( p.description ) ) {
 			rows.append( { label : "Purpose", value : p.description } )
 		}
+		var tuned = tuningSummary( p.tuning )
+		if ( len( tuned ) ) {
+			rows.append( { label : "Model settings", value : tuned } )
+		}
 		if ( p.template != "minimal" ) {
 			rows.append( { label : "Shape", value : variables.catalog.templateLabel( p.template ) } )
 		}
@@ -412,6 +441,42 @@ class {
 	}
 
 	// ----------------------------------------------------------------------------------
+
+	/**
+	 * The default model's tuning from the flags: --temperature (0 to 2), --max-tokens and --timeout
+	 * (seconds), each a positive whole number where it is a count.
+	 */
+	private struct function tuningFromFlags( required struct o ) {
+		var t = { temperature : "", maxTokens : "", timeout : "" }
+		if ( len( trim( arguments.o.temperature ?: "" ) ) ) {
+			var temperature = trim( arguments.o.temperature )
+			if ( !isNumeric( temperature ) || val( temperature ) < 0 || val( temperature ) > 2 ) {
+				fail( "temperature", "[#temperature#] is not a number from 0 to 2" )
+			}
+			t.temperature = temperature
+		}
+		for ( var pair in [ [ "max-tokens", "maxTokens" ], [ "timeout", "timeout" ] ] ) {
+			if ( len( trim( arguments.o[ pair[ 1 ] ] ?: "" ) ) ) {
+				var count = trim( arguments.o[ pair[ 1 ] ] )
+				if ( !reFind( "^[1-9][0-9]*$", count ) ) {
+					fail( pair[ 1 ], "[#count#] is not a whole number above zero" )
+				}
+				t[ pair[ 2 ] ] = count
+			}
+		}
+		return t
+	}
+
+	/**
+	 * @return The tuning as a person would say it, or an empty string when there is none
+	 */
+	string function tuningSummary( required struct tuning ) {
+		var bits = []
+		if ( len( arguments.tuning.temperature ) ) { bits.append( "temperature #arguments.tuning.temperature#" ) }
+		if ( len( arguments.tuning.maxTokens ) ) { bits.append( "up to #arguments.tuning.maxTokens# tokens" ) }
+		if ( len( arguments.tuning.timeout ) ) { bits.append( "#arguments.tuning.timeout# s timeout" ) }
+		return bits.toList( ", " )
+	}
 
 	private struct function deployFromFlags( required struct o ) {
 		var deploy = blank().deploy

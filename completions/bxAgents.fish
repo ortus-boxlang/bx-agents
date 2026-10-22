@@ -134,6 +134,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb new' -l forgebox -x
     complete -c $cmd -n '__bxagents_using_verb new' -l guard -x -a 'off flag block'
     complete -c $cmd -n '__bxagents_using_verb new' -l host -x
+    complete -c $cmd -n '__bxagents_using_verb new' -l max-tokens -x
     complete -c $cmd -n '__bxagents_using_verb new' -l mcp -x -a 'github stripe notion atlassian cloudflare supabase git'
     complete -c $cmd -n '__bxagents_using_verb new' -l memory -x -a 'cache file'
     complete -c $cmd -n '__bxagents_using_verb new' -l model -x
@@ -147,7 +148,9 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb new' -l repo -x
     complete -c $cmd -n '__bxagents_using_verb new' -l search -x -a 'http brave tavily exa google'
     complete -c $cmd -n '__bxagents_using_verb new' -l skipInstall
+    complete -c $cmd -n '__bxagents_using_verb new' -l temperature -x
     complete -c $cmd -n '__bxagents_using_verb new' -l template -x -a 'minimal webui-chat slack-bot telegram-bot github-bot mcp-server scheduled multi-agent'
+    complete -c $cmd -n '__bxagents_using_verb new' -l timeout -x
     complete -c $cmd -n '__bxagents_using_verb new' -l user -x
     complete -c $cmd -n '__bxagents_using_verb new' -l web-auth -x -a 'open key'
     complete -c $cmd -n '__bxagents_using_verb new' -l with -x -a 'time fetch search browse files media'

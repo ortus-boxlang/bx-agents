@@ -130,10 +130,22 @@ class extends="testbox.system.BaseSpec" {
 				} ).toThrow( type = "BxAgents.FeaturesNeedYaml" );
 			} );
 
+			it( "writes the model as provider and model, with its tuning, and the project builds", function() {
+				var dir = newTargetDir();
+
+				verb.run( { projectRoot : dir, model : "mock/mock-model", name : "tuned", temperature : "0.3", timeout : "30", skipInstall : true } );
+				var agent = fileRead( dir & "/Agent.yaml" );
+
+				expect( agent ).toInclude( "provider: mock" & char( 10 ) & "model: mock-model" );
+				expect( agent ).toInclude( "temperature: 0.3" );
+				expect( agent ).toInclude( "timeout: 30" );
+				expect( new bxagents.models.cli.Build().run( { projectRoot : dir } ).exitCode ).toBe( 0 );
+			} );
+
 			it( "asks questions when a terminal is attached and no model was given, then scaffolds the answers", function() {
 				var dir = newTargetDir();
 				var prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [
-					"helper", "Helps out", "minimal", "claude", "", [ "time" ], "cache", [], [ "web" ],
+					"helper", "Helps out", "minimal", "claude", "", false, [ "time" ], "cache", [], [ "web" ],
 					"key", "flag", "none", "create"
 				] );
 
@@ -142,7 +154,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.exitCode ).toBe( 0 );
 				var agent = fileRead( dir & "/Agent.yaml" );
 				expect( agent ).toInclude( "name: helper" );
-				expect( agent ).toInclude( "model: claude" );
+				expect( agent ).toInclude( "provider: claude" );
 				expect( agent ).toInclude( "- now@bxai" );
 				expect( agent ).toInclude( "enabled: true" );
 				expect( fileRead( dir & "/gateways/webui.bx" ) ).toInclude( 'apiKeyEnvVar : "CHAT_UI_API_KEY"' );
@@ -183,7 +195,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "asks even with a model when --wizard is passed, and shows the model as given", function() {
 				var dir = newTargetDir();
 				var prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [
-					"x", "minimal", [], "cache", [], [], "off", "none", "create"
+					"x", "minimal", false, [], "cache", [], [], "off", "none", "create"
 				] );
 
 				verb.run( { projectRoot : dir, model : "openai", name : "named", wizard : true, skipInstall : true, _prompter : prompter } );

@@ -121,6 +121,37 @@ class extends="testbox.system.BaseSpec" {
 				} ).toThrow( type = "BxAgents.InvalidNewOption", regex = "without --with=files" );
 			} );
 
+			it( "reads the default model's tuning, and writes it as params and options under provider and model", function() {
+				var plan = planner.fromFlags( { model : "openai/gpt-5", temperature : "0.2", "max-tokens" : "2000", timeout : "60" } );
+				var features = planner.toFeatures( plan );
+				var yaml = new bxagents.models.wizard.FeatureWriter().agentYamlLines( features ).toList( char( 10 ) );
+
+				expect( plan.tuning ).toBe( { temperature : "0.2", maxTokens : "2000", timeout : "60" } );
+				expect( features.modelParams ).toBe( { temperature : 0.2, max_tokens : 2000 } );
+				expect( features.modelOptions ).toBe( { timeout : 60 } );
+				expect( yaml ).toInclude( "params:" & char( 10 ) & "  temperature: 0.2" & char( 10 ) & "  max_tokens: 2000" );
+				expect( yaml ).toInclude( "options:" & char( 10 ) & "  timeout: 60" );
+			} );
+
+			it( "puts the tuning in the command that rebuilds the project", function() {
+				var plan = planner.fromFlags( { model : "openai", temperature : "0", "max-tokens" : "500", timeout : "20" } );
+
+				var command = planner.toCommand( plan );
+
+				expect( command ).toInclude( "--temperature=0 --max-tokens=500 --timeout=20" );
+				expect( planner.fromFlags( { model : "openai", temperature : "0", "max-tokens" : "500", timeout : "20" } ).tuning ).toBe( plan.tuning );
+			} );
+
+			it( "refuses a temperature outside 0 to 2 and counts that are not whole numbers", function() {
+				for ( var bad in [ { temperature : "3" }, { temperature : "hot" }, { "max-tokens" : "0" }, { timeout : "1.5" } ] ) {
+					var flags = { model : "openai" };
+					flags.append( bad );
+					expect( function() {
+						planner.fromFlags( flags );
+					} ).toThrow( "BxAgents.InvalidNewOption" );
+				}
+			} );
+
 			it( "turns the Git MCP server into a program entry with no key to set", function() {
 				var features = planner.toFeatures( planner.fromFlags( { model : "openai", mcp : "git" } ) );
 

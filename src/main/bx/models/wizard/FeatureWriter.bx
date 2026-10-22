@@ -29,6 +29,8 @@
  *   agentApi         { path }
  *   deploy           { id, config : { target, ... } }
  *   instructionLines [ "When you search the web, use ..." ]
+ *   modelParams      { temperature, max_tokens }   the default model's params, written under provider and model
+ *   modelOptions     { timeout }                   the default model's options
  */
 class {
 
@@ -47,6 +49,16 @@ class {
 	array function agentYamlLines( required struct features ) {
 		var lines = []
 		var f = arguments.features
+
+		// the default model's tuning sits right under provider and model
+		if ( f.keyExists( "modelParams" ) && f.modelParams.count() ) {
+			lines.append( "params:" )
+			lines.append( variables.yaml.lines( f.modelParams, 2, [ "temperature", "max_tokens" ] ), true )
+		}
+		if ( f.keyExists( "modelOptions" ) && f.modelOptions.count() ) {
+			lines.append( "options:" )
+			lines.append( variables.yaml.lines( f.modelOptions, 2 ), true )
+		}
 
 		if ( f.keyExists( "tools" ) && f.tools.len() ) {
 			lines.append( "" )
