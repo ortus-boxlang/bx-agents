@@ -14,7 +14,7 @@ from the system.
 | `VtScreen.bx` | The terminal screen `render.bxs` draws from. Its spec is `tests/specs/tools/VtScreenSpec.bx` |
 | `demos/chat.json` | The keystrokes of the default chat demo |
 | `demos/model.json` | The canned answers of the scripted model |
-| `webui/` | The web UI walkthrough video and doc screenshots: a demo app (`project/`), `narrate.bxs` and `mix.bxs` (voice and music with [bx-audio](https://github.com/ortus-boxlang/bx-audio)), `capture.js` (Playwright). See `webui/README.md` |
+| `webui/` | The web UI walkthrough video and doc screenshots: a demo app (`project/`), `narrate.py` (voice, Kokoro) and `mix.bxs` (music and mix, [bx-audio](https://github.com/ortus-boxlang/bx-audio)), `capture.js` (Playwright). See `webui/README.md` |
 
 ## What you need
 
