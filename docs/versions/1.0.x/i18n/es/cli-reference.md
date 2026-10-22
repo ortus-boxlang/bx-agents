@@ -522,7 +522,7 @@ El chat puede cambiar el modelo con el que habla sin perder la conversación: la
 | `/profile <nombre>` | Cambia directamente a uno. Un perfil cuyo proveedor no tiene clave definida se activa con un aviso, porque el siguiente mensaje fallaría |
 | `/default` | Vuelve al valor por defecto de la app: el `defaultProfile`, o si no el proveedor y modelo del principio de `Agent.yaml` |
 
-Un chat con `--connect` o `--server` habla con el modelo que ejecuta el servidor, así que estos comandos lo dicen y no cambian nada. No hay `/provider`: un perfil ya nombra su proveedor, y los ajustes propios de los proveedores están en `Agent.yaml` (consulta [`add provider`](#add-provider)).
+Un chat con `--connect` o `--server` solo puede cambiar entre los perfiles que el servidor lista en [`agentApi.profiles`](conventions/agent-bx.md#agentapi) (`GET /__bxagents/profiles`), enviados como `options.profile` con cada mensaje; un servidor que no lista ninguno lo dice y no cambia nada. No hay `/provider`: un perfil ya nombra su proveedor, y los ajustes propios de los proveedores están en `Agent.yaml` (consulta [`add provider`](#add-provider)).
 
 #### Notas en el chat
 

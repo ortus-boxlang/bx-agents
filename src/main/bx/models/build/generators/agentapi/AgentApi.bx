@@ -100,6 +100,45 @@ class {
 	}
 
 	// ----------------------------------------------------------------------------------
+	// Profiles
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * The profiles a caller may ask for with options.profile: agentApi.profiles, none by default. A profile
+	 * is a model the server pays for, so the caller never picks one the app did not list.
+	 */
+	private array function offeredProfiles() {
+		return jsonDeserialize( "__PROFILES__" )
+	}
+
+	/**
+	 * Answers 400 and returns true when the options name a profile that is not offered; the action stops.
+	 */
+	private boolean function badProfile( required any event, required struct options ) {
+		var wanted = arguments.options.profile ?: ""
+		if ( !len( wanted ) || ( isSimpleValue( wanted ) && offeredProfiles().containsNoCase( wanted ) ) ) {
+			return false
+		}
+		arguments.event.renderData( type : "json", statusCode : 400, data : { "success" : false, "error" : "profile is not offered here" } )
+		return true
+	}
+
+	/**
+	 * The profiles this route offers: { profiles : [ { name, description, provider, model, isDefault } ] }, empty when
+	 * agentApi.profiles lists none. Never a key, and never a profile that is not on the list.
+	 */
+	function profiles( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var offered = offeredProfiles()
+		var out = aiProfiles().filter( ( p ) => offered.containsNoCase( p.name ) ).map( ( p ) => {
+			return { "name" : p.name, "description" : p.description ?: "", "provider" : p.provider, "model" : p.model ?: "", "isDefault" : p.isDefault }
+		} )
+		event.renderData( type : "json", data : { "success" : true, "profiles" : out } )
+	}
+
+	// ----------------------------------------------------------------------------------
 	// Turns
 	// ----------------------------------------------------------------------------------
 
@@ -121,6 +160,9 @@ class {
 		var threadId = len( body.threadId ?: "" ) ? body.threadId : createUUID()
 		var supplied = body.options ?: {}
 		var options = isStruct( supplied ) ? duplicate( supplied ) : {}
+		if ( badProfile( event, options ) ) {
+			return
+		}
 		options[ "userId" ] = callerId( event )
 		options[ "threadId" ] = threadId
 		if ( len( body.conversationId ?: "" ) ) {
@@ -259,7 +301,7 @@ class {
 			"description"  : config.description ?: "",
 			"model"        : modelLabel,
 			"toolCount"    : config.toolCount ?: 0,
-			"capabilities" : { "events" : true, "cancel" : true, "steer" : true, "approvals" : true, "notes" : !isNull( notesProvider() ), "sessions" : !isNull( sessionStore() ) }
+			"capabilities" : { "events" : true, "cancel" : true, "steer" : true, "approvals" : true, "notes" : !isNull( notesProvider() ), "sessions" : !isNull( sessionStore() ), "profiles" : offeredProfiles().len() > 0 }
 		} )
 	}
 

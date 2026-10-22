@@ -78,7 +78,7 @@ El evento `thread` va primero porque una cabecera de respuesta no puede leerse a
 
 ## La API generada
 
-Una entrada `webui` monta veinticuatro acciones bajo `<path>/api`, servidas por un `handlers/ChatUi.bx` generado:
+Una entrada `webui` monta veinticinco acciones bajo `<path>/api`, servidas por un `handlers/ChatUi.bx` generado:
 
 | Ruta | Propósito |
 | --- | --- |
@@ -95,6 +95,7 @@ Una entrada `webui` monta veinticuatro acciones bajo `<path>/api`, servidas por 
 | `GET /tools` | Las tools registradas del agente |
 | `GET /health` | Vitalidad |
 | `GET /info` | Nombre del agente, modelo, conteos de memoria/tool, flags de capacidad |
+| `GET /profiles` | Los [perfiles](models.md#perfiles) que ofrece la entrada, `[]` si no lista ninguno. Ver [Elegir el modelo](#elegir-el-modelo) |
 | `GET /conversations` | Las conversaciones de este visitante, actividad más reciente primero |
 | `POST /conversations/create` | Inicia una - `{ title }` opcional, devuelve el `conversationId` acuñado |
 | `POST /conversations/rename` | `{ conversationId, title }` |
@@ -129,6 +130,21 @@ memory:
   summaryModel: gpt-4o-mini
   summaryThreshold: 10
 ```
+
+## Elegir el modelo
+
+Por defecto la página habla con el modelo propio del agente y no ofrece elección. Lista [perfiles](models.md#perfiles) en la entrada y la cabecera tendrá un selector de modelo:
+
+```javascript
+// gateways/chat.bx
+return { exposes : "webui", path : "/chat", profiles : [ "fast", "planner" ] };
+```
+
+- `GET /profiles` devuelve solo los perfiles listados: nombre, descripción, proveedor, modelo y cuál es el predeterminado. Nunca una clave.
+- La página envía la elección con cada mensaje como `options.profile` y la recuerda en el navegador. "Default model" no envía ninguna.
+- Una petición que nombra un perfil que no está en la lista es un `400`, lo declare o no `Agent.yaml`. Un perfil es un modelo que paga tu servidor, así que el navegador nunca elige uno que no ofreciste. Sin lista, todo `options.profile` se rechaza.
+- Cada nombre debe ser un perfil que `Agent.yaml` declara, o `default`. Las entradas de la web UI comparten un único handler, así que entradas que listan perfiles distintos son un error de build.
+- Una entrada `agent` (una ruta `toAi()`) reenvía los `params` y `options` del propio llamante, así que no tiene lista que ofrecer. La [ruta siempre activa](agent-bx.md#agentapi) tiene la suya: `agentApi.profiles`.
 
 ## Usuarios e inicio de sesión
 

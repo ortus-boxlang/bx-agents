@@ -50,6 +50,42 @@ class extends="testbox.system.BaseSpec" {
 				expect( html ).notToInclude( "__APP_TITLE__" );
 			} );
 
+			describe( "profiles", function() {
+
+				private function webUiProject( string profiles ) {
+					var dir = createTempDirectory( prefix = "bxagents-webui-profiles-" );
+					tempDirs.append( dir );
+					var nl = char( 10 );
+					fileWrite( dir & "/Agent.yaml", "name: p" & nl & "model: mock/mock-model" & nl );
+					fileWrite( dir & "/instructions.md", "Be helpful." );
+					directoryCreate( dir & "/gateways" );
+					fileWrite( dir & "/gateways/chat.bx", "class {" & nl & "	function configure() {" & nl & "		return { exposes : ""webui"", path : ""/chat""" & arguments.profiles & " };" & nl & "	}" & nl & "}" & nl );
+					return dir;
+				}
+
+				it( "offers the gateway's profiles in the handler, refuses any other, and gives the page a picker", function() {
+					var appDir = newAppDir();
+					generator.generate( discoverer.discover( webUiProject( ', profiles : [ "fast" ]' ) ), appDir );
+					var handler = fileRead( appDir & "/handlers/ChatUi.bx" );
+					var html = fileRead( appDir & "/chat/index.html" );
+
+					expect( handler ).toInclude( 'jsonDeserialize( "[""fast""]" )' );
+					expect( handler ).toInclude( "function profiles( event, rc, prc )" );
+					expect( handler.reMatch( "if \( badProfile\( event, body \) \)" ) ).toHaveLength( 3 );
+					expect( handler ).toInclude( '"profiles"      : offeredProfiles().len() > 0' );
+					expect( html ).toInclude( 'id="profileSelect"' );
+					expect( html ).toInclude( "payload.options.profile = chosenProfile" );
+				} );
+
+				it( "offers nothing by default", function() {
+					var appDir = newAppDir();
+					generator.generate( discoverer.discover( webUiProject( "" ) ), appDir );
+
+					expect( fileRead( appDir & "/handlers/ChatUi.bx" ) ).toInclude( 'jsonDeserialize( "[]" )' );
+				} );
+
+			} );
+
 			it( "generates interceptors/WebUiAuthGate.bx and returns its name when apiKeyEnvVar is set", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
 				var appDir = newAppDir();

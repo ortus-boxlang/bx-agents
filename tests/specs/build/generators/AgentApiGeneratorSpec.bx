@@ -32,12 +32,22 @@ class extends="testbox.system.BaseSpec" {
 
 				expect( result.written ).toBeTrue();
 				expect( result.path ).toBe( dir & "/handlers/AgentApi.bx" );
-				for ( var action in [ "events", "cancel", "steer", "pending", "resume", "tools", "about", "notes", "sessions", "history", "clear", "compact", "updateNote", "removeNote" ] ) {
+				for ( var action in [ "events", "cancel", "steer", "pending", "resume", "tools", "about", "notes", "sessions", "history", "clear", "compact", "updateNote", "removeNote", "profiles" ] ) {
 					expect( source ).toInclude( "function #action#( event, rc, prc )" );
 				}
 				// every action starts by checking the token (a preHandler cannot stop the action)
-				expect( source.reMatch( "if \( refused\( event \) \)" ) ).toHaveLength( 14 );
+				expect( source.reMatch( "if \( refused\( event \) \)" ) ).toHaveLength( 15 );
 				expect( source ).notToInclude( "function preHandler(" );
+			} );
+
+			it( "stamps agentApi.profiles in as the list a caller may ask for, none by default", function() {
+				var none = fileRead( generator.generate( newAppDir(), {} ).path );
+				var some = fileRead( generator.generate( newAppDir(), { profiles : [ "fast", "planner" ] } ).path );
+
+				expect( none ).toInclude( 'jsonDeserialize( "[]" )' );
+				expect( some ).toInclude( 'jsonDeserialize( "[""fast"",""planner""]" )' );
+				expect( some ).notToInclude( "__PROFILES__" );
+				expect( some ).toInclude( "if ( badProfile( event, options ) )" );
 			} );
 
 			it( "accepts issued tokens only when agentApi.tokens is on", function() {

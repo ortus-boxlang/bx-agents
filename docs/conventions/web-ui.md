@@ -78,7 +78,7 @@ The `thread` event goes first because a response header cannot be read before th
 
 ## The generated API
 
-A `webui` entry mounts twenty-four actions under `<path>/api`, served by a generated `handlers/ChatUi.bx`:
+A `webui` entry mounts twenty-five actions under `<path>/api`, served by a generated `handlers/ChatUi.bx`:
 
 | Route | Purpose |
 | --- | --- |
@@ -95,6 +95,7 @@ A `webui` entry mounts twenty-four actions under `<path>/api`, served by a gener
 | `GET /tools` | The agent's registered tools |
 | `GET /health` | Liveness |
 | `GET /info` | Agent name, model, memory/tool counts, capability flags |
+| `GET /profiles` | The [profiles](models.md#profiles) the entry offers, `[]` when it lists none. See [Choosing the model](#choosing-the-model) |
 | `GET /conversations` | This visitor's conversations, newest activity first |
 | `POST /conversations/create` | Start one - optional `{ title }`, returns the minted `conversationId` |
 | `POST /conversations/rename` | `{ conversationId, title }` |
@@ -129,6 +130,21 @@ memory:
   summaryModel: gpt-4o-mini
   summaryThreshold: 10
 ```
+
+## Choosing the model
+
+By default the page talks to the agent's own model and offers no choice. List [profiles](models.md#profiles) in the entry and the header gets a model picker:
+
+```javascript
+// gateways/chat.bx
+return { exposes : "webui", path : "/chat", profiles : [ "fast", "planner" ] };
+```
+
+- `GET /profiles` returns only the listed profiles: name, description, provider, model and which is the default. Never a key.
+- The page sends the pick with each message as `options.profile` and remembers it in the browser. "Default model" sends none.
+- A request that names any profile that is not listed is a `400`, whether or not `Agent.yaml` declares it. A profile is a model your server pays for, so the browser never chooses one you did not offer. Without a list, every `options.profile` is refused.
+- Each name must be a profile `Agent.yaml` declares, or `default`. Web UI entries share one handler, so entries that list different profiles are a build error.
+- An `agent` entry (a `toAi()` route) forwards the caller's own `params` and `options`, so it has no list to offer. The [always-on route](agent-bx.md#agentapi) has its own: `agentApi.profiles`.
 
 ## Users and sign-in
 

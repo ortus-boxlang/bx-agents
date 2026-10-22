@@ -286,6 +286,9 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   instructions stay. A chat connected to a server says it cannot switch.
 - The generated agent factory now puts the project's bx-ai settings (default model, profiles, capability defaults)
   in place before it builds an agent, so `chat`, `invoke` and tests see them, not only a served app.
+- The web chat page gets a model picker when its gateway lists `profiles`, and `chat --connect` can use `/profile` when
+  the server lists `agentApi.profiles`. Both are off by default; the choice is sent as `options.profile`, and a profile
+  that is not listed is refused with a `400`. `GET .../profiles` lists only the offered ones, never a key.
 - The build now delivers bx-ai's settings the way bx-ai reads them. A `moduleSettings.bxai` block in
   `config/ColdBox.bx` never reached bx-ai (measured on a served app: it kept `provider: openai` and
   `skillsDirectory: /.agents/skills`), so the `skills/` override and the `security` block were silently not

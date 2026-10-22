@@ -52,7 +52,8 @@ class {
 
 		var handlerDir = normalizePath( arguments.appDir ) & "/handlers"
 		directoryCreate( path : handlerDir, createPath : true, ignoreExists : true )
-		fileWrite( handlerDir & "/ChatUi.bx", renderChatHandler( users.len() > 0 ) )
+		// every entry is served by this one handler, so they offer the same profiles (the validator refuses entries that differ)
+		fileWrite( handlerDir & "/ChatUi.bx", renderChatHandler( users.len() > 0, ( entries.first().config.profiles ?: [] ).map( p => toString( p ) ) ) )
 
 		// The SQLite store. Not optional: the agent's own IAiMemory has no
 		// enumeration API - nothing answers "which conversations does this user
@@ -523,9 +524,11 @@ class {
 	 * shipped page (and any other `toAi()` client) needs no changes.
 	 *
 	 * @hasUsers Whether the `webui` entry declares `users` (see docs/conventions/web-ui.md) - when true, `resolveUserId()` reads the real signed-in account via `authenticationService@cbauth`; when false, every visitor shares one open `static.SHARED_USER_ID` space
+	 * @profiles The profile names the page may switch between (gateway `profiles`); empty offers no choice and refuses a profile named by the caller
+	 *
 	 * @return The rendered handlers/ChatUi.bx source
 	 */
-	private string function renderChatHandler( required boolean hasUsers ) {
+	private string function renderChatHandler( required boolean hasUsers, array profiles = [] ) {
 		var lines = [
 			"/**",
 			" * GENERATED FILE - produced by BX Agents' build pipeline.",
@@ -649,6 +652,43 @@ class {
 			'		return getInstance( "GeneratedAgent" )',
 			"	}",
 			"",
+			"	// -----------------------------------------------------------------",
+			"	// Profiles - the models this page may switch between",
+			"	// -----------------------------------------------------------------",
+			"",
+			"	/**",
+			"	 * The profiles the gateway's `profiles` list offers, none by default. A profile is a",
+			"	 * model the server pays for, so the browser never picks one the app did not list.",
+			"	 */",
+			"	private array function offeredProfiles() {",
+			'		return jsonDeserialize( ' & renderLiteral( jsonSerialize( arguments.profiles ) ) & ' )',
+			"	}",
+			"",
+			"	/**",
+			"	 * Answers 400 and returns true when the options name a profile that is not offered.",
+			"	 */",
+			"	private boolean function badProfile( required any event, required struct body ) {",
+			'		var options = isStruct( arguments.body.options ?: {} ) ? arguments.body.options : {}',
+			'		var wanted = options.profile ?: ""',
+			"		if ( !len( wanted ) || ( isSimpleValue( wanted ) && offeredProfiles().containsNoCase( wanted ) ) ) {",
+			"			return false",
+			"		}",
+			'		arguments.event.renderData( type: "json", statusCode: 400, data: { "error": "profile is not offered here", "success": false } )',
+			"		return true",
+			"	}",
+			"",
+			"	/**",
+			"	 * The profiles to choose from: { profiles : [ { name, description, provider, model, isDefault } ] },",
+			"	 * empty when the gateway lists none. Never a key, and never a profile that is not on the list.",
+			"	 */",
+			"	function profiles( event, rc, prc ) {",
+			"		var offered = offeredProfiles()",
+			"		var out = aiProfiles().filter( ( p ) => offered.containsNoCase( p.name ) ).map( ( p ) => {",
+			'			return { "name": p.name, "description": p.description ?: "", "provider": p.provider, "model": p.model ?: "", "isDefault": p.isDefault }',
+			"		} )",
+			'		event.renderData( type: "json", data: { "profiles": out, "success": true } )',
+			"	}",
+			"",
 			"	private function chatDb() {",
 			'		return getInstance( "ChatDb" )',
 			"	}",
@@ -690,6 +730,9 @@ class {
 			"",
 			"	function invoke( event, rc, prc ) {",
 			"		var body     = event.getHTTPContent( json: true )",
+			"		if ( badProfile( event, body ) ) {",
+			"			return",
+			"		}",
 			"		var threadId = resolveThreadId( body )",
 			"		recordTurn( body, resolveConversationId( body ) )",
 			"		var result   = agent().run(",
@@ -703,6 +746,9 @@ class {
 			"",
 			"	function stream( event, rc, prc ) {",
 			"		var body      = event.getHTTPContent( json: true )",
+			"		if ( badProfile( event, body ) ) {",
+			"			return",
+			"		}",
 			"		var thisAgent = agent()",
 			"		var threadId  = resolveThreadId( body )",
 			"		var options   = resolveOptions( body, threadId )",
@@ -735,6 +781,9 @@ class {
 			"",
 			"	function batch( event, rc, prc ) {",
 			"		var body      = event.getHTTPContent( json: true )",
+			"		if ( badProfile( event, body ) ) {",
+			"			return",
+			"		}",
 			"		var thisAgent = agent()",
 			"		var threadId  = resolveThreadId( body )",
 			"		var options   = resolveOptions( body, threadId )",
@@ -1258,7 +1307,8 @@ class {
 			'				"approvals"     : true,',
 			'				"conversations" : true,',
 			'				"preferences"   : true,',
-			'				"notes"         : !isNull( notesProvider() )',
+			'				"notes"         : !isNull( notesProvider() ),',
+			'				"profiles"      : offeredProfiles().len() > 0',
 			"			},",
 			'			"success"     : true',
 			"		} )",
