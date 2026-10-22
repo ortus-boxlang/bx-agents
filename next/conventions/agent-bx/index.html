@@ -361,7 +361,7 @@
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>memory</code></td><td>string or struct</td><td>The agent's conversation memory. A bare string is shorthand for the type (<code>&quot;cache&quot;</code>); a struct is <code>{ type, ...config }</code> and is passed through to <code>aiMemory()</code> verbatim - e.g. <code>{ type: &quot;cache&quot;, maxMessages: 50 }</code>, or with <code>summaryProvider</code>/<code>summaryModel</code>/<code>summaryThreshold</code> to make the web UI's <code>/compact</code> functional. Applies per node, so a subagent can declare its own.</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>checkpointer</code></td><td>struct</td><td><code>{ type: &quot;cache&quot;\|&quot;file&quot;\|&quot;jdbc&quot;, ...config }</code>. Defaults to <code>{ type: &quot;cache&quot; }</code> if omitted. Always applied - without one, human-in-the-loop approval flows through any gateway other than <code>cli</code> fail outright.</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>gatewaySession</code></td><td>struct</td><td><code>{ policy, maxQueueDepth }</code>, both optional (default <code>&quot;queue&quot;</code> / <code>50</code>). Only meaningful if the project has at least one push-style <a href="/next/conventions/gateways/index.html#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends">gateway</a> entry - controls the generated <code>GatewaySession</code>'s policy for a second inbound message arriving on a thread that already has a turn in flight. <code>policy</code> must be one of <code>reject</code>/<code>queue</code>/<code>steer</code>/<code>interrupt</code>.</td></tr>
-<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>agentApi</code></td><td>struct</td><td><code>{ enabled, tokenEnvVar, tokens }</code>, all optional. Controls the always-on agent route at <code>/__bxagents</code>. See <a href="#the-always-on-agent-route">The always-on agent route</a> below.</td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>agentApi</code></td><td>struct</td><td><code>{ enabled, tokenEnvVar, tokens, profiles }</code>, all optional. Controls the always-on agent route at <code>/__bxagents</code>. See <a href="#the-always-on-agent-route">The always-on agent route</a> below.</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td>any other key</td><td>any</td><td>Merged and available in the resolved config struct, but not interpreted by BxAgents itself.</td></tr>
 </tbody>
 </table></div>
@@ -496,6 +496,7 @@ POST /__bxagents/steer     # { threadId, input }
 GET  /__bxagents/pending   # ?threadId=
 POST /__bxagents/resume    # { threadId, decision } -&gt; SSE, like /events
 GET  /__bxagents/tools
+GET  /__bxagents/profiles   # the profiles a client may ask for
 GET  /__bxagents/agent    # name, model, what it can do
 GET  /__bxagents/sessions   # the caller's recent conversations
 GET  /__bxagents/history    # ?conversationId= what was said in one
@@ -540,6 +541,7 @@ one that never answers.</p>
 <tr><td><code>enabled</code></td><td>boolean</td><td>Default <code>true</code>. Set <code>false</code> to omit the route entirely - for a build going somewhere it has no business existing.</td></tr>
 <tr><td><code>tokenEnvVar</code></td><td>string</td><td>The <strong>name</strong> of an environment variable holding a shared secret. When set, every sub-route requires a matching <code>x-bxagents-token</code> request header.</td></tr>
 <tr><td><code>tokens</code></td><td>boolean</td><td>Default <code>false</code>. <code>true</code> also accepts the <a href="#access-tokens-for-a-deployed-agent">access tokens</a> made with <code>bxAgents token create</code>.</td></tr>
+<tr><td><code>profiles</code></td><td>list</td><td>Default none. The <a href="/next/conventions/models/index.html#profiles">profiles</a> a client may ask for with <code>options.profile</code> on <code>/events</code>, and what <code>GET /__bxagents/profiles</code> lists (never a key). Any other profile is a <code>400</code>, so a caller cannot pick a model you did not offer. <code>chat --connect</code> uses this list for <code>/profile</code>. Each name must be declared in <code>Agent.yaml</code>, or <code>default</code>.</td></tr>
 </tbody>
 </table></div>
 <pre><code class="language-javascript">function configure() {

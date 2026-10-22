@@ -94,7 +94,7 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 | `memory` | string or struct | The agent's conversation memory. A bare string is shorthand for the type (`"cache"`); a struct is `{ type, ...config }` and is passed through to `aiMemory()` verbatim - e.g. `{ type: "cache", maxMessages: 50 }`, or with `summaryProvider`/`summaryModel`/`summaryThreshold` to make the web UI's `/compact` functional. Applies per node, so a subagent can declare its own. |
 | `checkpointer` | struct | `{ type: "cache"\|"file"\|"jdbc", ...config }`. Defaults to `{ type: "cache" }` if omitted. Always applied - without one, human-in-the-loop approval flows through any gateway other than `cli` fail outright. |
 | `gatewaySession` | struct | `{ policy, maxQueueDepth }`, both optional (default `"queue"` / `50`). Only meaningful if the project has at least one push-style [gateway](gateways/index.md#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends) entry - controls the generated `GatewaySession`'s policy for a second inbound message arriving on a thread that already has a turn in flight. `policy` must be one of `reject`/`queue`/`steer`/`interrupt`. |
-| `agentApi` | struct | `{ enabled, tokenEnvVar, tokens }`, all optional. Controls the always-on agent route at `/__bxagents`. See [The always-on agent route](#the-always-on-agent-route) below. |
+| `agentApi` | struct | `{ enabled, tokenEnvVar, tokens, profiles }`, all optional. Controls the always-on agent route at `/__bxagents`. See [The always-on agent route](#the-always-on-agent-route) below. |
 | any other key | any | Merged and available in the resolved config struct, but not interpreted by BxAgents itself. |
 
 ## The model slug
@@ -250,6 +250,7 @@ POST /__bxagents/steer     # { threadId, input }
 GET  /__bxagents/pending   # ?threadId=
 POST /__bxagents/resume    # { threadId, decision } -> SSE, like /events
 GET  /__bxagents/tools
+GET  /__bxagents/profiles   # the profiles a client may ask for
 GET  /__bxagents/agent    # name, model, what it can do
 GET  /__bxagents/sessions   # the caller's recent conversations
 GET  /__bxagents/history    # ?conversationId= what was said in one
@@ -296,6 +297,7 @@ one that never answers.
 | `enabled` | boolean | Default `true`. Set `false` to omit the route entirely - for a build going somewhere it has no business existing. |
 | `tokenEnvVar` | string | The **name** of an environment variable holding a shared secret. When set, every sub-route requires a matching `x-bxagents-token` request header. |
 | `tokens` | boolean | Default `false`. `true` also accepts the [access tokens](#access-tokens-for-a-deployed-agent) made with `bxAgents token create`. |
+| `profiles` | list | Default none. The [profiles](models.md#profiles) a client may ask for with `options.profile` on `/events`, and what `GET /__bxagents/profiles` lists (never a key). Any other profile is a `400`, so a caller cannot pick a model you did not offer. `chat --connect` uses this list for `/profile`. Each name must be declared in `Agent.yaml`, or `default`. |
 
 ```javascript
 function configure() {

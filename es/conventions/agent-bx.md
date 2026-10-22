@@ -94,7 +94,7 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 | `memory` | string o struct | La memoria de conversación del agente. Una cadena bare es una abreviatura para el tipo (`"cache"`); un struct es `{ type, ...config }` y se pasa textualmente a `aiMemory()` - por ejemplo, `{ type: "cache", maxMessages: 50 }`, o con `summaryProvider`/`summaryModel`/`summaryThreshold` para hacer funcional el `/compact` de la interfaz web. Se aplica por nodo, así que un subagente puede declarar el suyo propio. |
 | `checkpointer` | struct | `{ type: "cache"\|"file"\|"jdbc", ...config }`. Por defecto `{ type: "cache" }` si se omite. Siempre se aplica - sin uno, los flujos de aprobación human-in-the-loop a través de cualquier gateway que no sea `cli` fallan por completo. |
 | `gatewaySession` | struct | `{ policy, maxQueueDepth }`, ambos opcionales (por defecto `"queue"` / `50`). Solo significativo si el proyecto tiene al menos una entrada de [gateway](gateways/index.md#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends) de estilo push - controla la política del `GatewaySession` generado para un segundo mensaje entrante que llega en un hilo que ya tiene un turno en curso. `policy` debe ser uno de `reject`/`queue`/`steer`/`interrupt`. |
-| `agentApi` | struct | `{ enabled, tokenEnvVar, tokens }`, todos opcionales. Controla la ruta de agente siempre activa en `/__bxagents`. Consulta [La ruta de agente siempre activa](#la-ruta-de-agente-siempre-activa) más abajo. |
+| `agentApi` | struct | `{ enabled, tokenEnvVar, tokens, profiles }`, todos opcionales. Controla la ruta de agente siempre activa en `/__bxagents`. Consulta [La ruta de agente siempre activa](#la-ruta-de-agente-siempre-activa) más abajo. |
 | cualquier otra clave | cualquiera | Fusionada y disponible en el struct de configuración resuelto, pero no interpretada por BxAgents mismo. |
 
 ## The model slug
@@ -232,6 +232,7 @@ POST /__bxagents/steer     # { threadId, input }
 GET  /__bxagents/pending   # ?threadId=
 POST /__bxagents/resume    # { threadId, decision } -> SSE, como /events
 GET  /__bxagents/tools
+GET  /__bxagents/profiles   # los perfiles que un cliente puede pedir
 GET  /__bxagents/agent    # name, model, what it can do
 GET  /__bxagents/sessions   # las conversaciones recientes de quien llama
 GET  /__bxagents/history    # ?conversationId= lo que se dijo en una
@@ -271,6 +272,7 @@ Como la ruta está reservada, `build` **rechaza** cualquier entrada de `gateways
 | `enabled` | boolean | Por defecto `true`. Ponlo a `false` para omitir la ruta por completo - para un build que va a un sitio donde no tiene por qué existir. |
 | `tokenEnvVar` | string | El **nombre** de una variable de entorno que contiene un secreto compartido. Cuando está puesto, cada sub-ruta exige una cabecera de petición `x-bxagents-token` coincidente. |
 | `tokens` | boolean | Por defecto `false`. `true` acepta además los [tokens de acceso](#tokens-de-acceso-para-un-agente-desplegado) hechos con `bxAgents token create`. |
+| `profiles` | lista | Por defecto ninguno. Los [perfiles](models.md#perfiles) que un cliente puede pedir con `options.profile` en `/events`, y lo que lista `GET /__bxagents/profiles` (nunca una clave). Cualquier otro perfil es un `400`, así que un llamante no puede elegir un modelo que no ofreciste. `chat --connect` usa esta lista para `/profile`. Cada nombre debe estar declarado en `Agent.yaml`, o ser `default`. |
 
 ```javascript
 function configure() {
