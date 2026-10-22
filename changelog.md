@@ -266,6 +266,8 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   and `chat: keys:` in `~/.bxagents/bxAgents.yml` changes any of them (`newline`, `stop`, `submit`, ...). A key that
   is not readable or already taken is reported at start and the action keeps its default. The web page answers
   `/keys` and `?` with its own shortcuts.
+- In Telegram the bot's own `/` menu lists the commands the session answers (sent with `setMyCommands` when the
+  first message arrives). Names Telegram would refuse are left out; a failure never stops the bot.
 
 #### The chat screen
 

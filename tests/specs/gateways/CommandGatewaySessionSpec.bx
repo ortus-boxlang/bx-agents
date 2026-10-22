@@ -35,6 +35,24 @@ class extends="testbox.system.BaseSpec" {
 				expect( session.getActiveThreadIds() ).toBeEmpty();
 			} );
 
+			it( "hands its menu to a gateway that can show one, once, on the first message", function() {
+				var shown = [];
+				mock.publishCommands = ( menu ) => { shown.append( menu.map( c => c.name ) ); return true; };
+				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ] );
+				session.handleInbound( message( "/help" ), mock );
+				session.handleInbound( message( "/help" ), mock );
+
+				expect( shown ).toHaveLength( 1 );
+				expect( shown[ 1 ] ).toBe( [ "/help", "/tools", "/model", "/ping", "/info", "/remember", "/notes" ] );
+			} );
+
+			it( "keeps answering when a gateway fails to take the menu", function() {
+				mock.publishCommands = ( menu ) => { throw( message = "boom" ); };
+				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ] );
+				session.handleInbound( message( "/help" ), mock );
+				expect( replies() ).toHaveLength( 1 );
+			} );
+
 			it( "answers /info with the caller and the conversation", function() {
 				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ] );
 				session.handleInbound( message( "/info", "u-7", "chat-9" ), mock );

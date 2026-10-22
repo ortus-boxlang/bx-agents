@@ -23,6 +23,26 @@ class extends="testbox.system.BaseSpec" {
 				return calls;
 			}
 
+			it( "publishes the command menu to Telegram, leaving out what Telegram would refuse", function() {
+				var calls = stubApi( {} );
+				var taken = gateway.publishCommands( [
+					{ name : "/help", hint : "what I can do" },
+					{ name : "/Info", hint : "" },
+					{ name : "/bad-name", hint : "dash" },
+					{ name : "/" & repeatString( "a", 33 ), hint : "too long" }
+				] );
+
+				expect( taken ).toBeTrue();
+				expect( calls ).toHaveLength( 1 );
+				expect( calls[ 1 ].method ).toBe( "setMyCommands" );
+				expect( calls[ 1 ].params.commands ).toBe( [ { command : "help", description : "what I can do" }, { command : "info", description : "info" } ] );
+			} );
+
+			it( "says so when Telegram does not take the menu", function() {
+				stubApi( { setMyCommands : { ok : false, description : "nope" } } );
+				expect( gateway.publishCommands( [ { name : "/help", hint : "h" } ] ) ).toBeFalse();
+			} );
+
 			it( "declares inboundMessages/outboundMessages/threads/interactiveActions/humanApproval but NOT streaming", function() {
 				var capabilities = gateway.getDeclaredCapabilities();
 				expect( capabilities ).toInclude( "inboundMessages" );
