@@ -64,7 +64,7 @@ profile: planner
 
 ## Capability defaults
 
-`embeddings`, `speech`, `transcription` and `image` set bx-ai's defaults for `aiEmbed()`, `aiSpeak()`, `aiTranscribe()` and `aiImage()`. They do not take profiles. bx-ai has one audio provider, so `speech` and `transcription` must name the same one.
+`embeddings`, `speech`, `transcription` and `image` set bx-ai's defaults for `aiEmbed()`, `aiSpeak()`, `aiTranscribe()` and `aiImage()`. They do not take profiles. bx-ai has one audio provider, so `speech` and `transcription` must name the same one. `bxAgents add capability` writes one; see [`add capability`](../cli-reference.md#add-capability).
 
 ## Validation and tests
 
