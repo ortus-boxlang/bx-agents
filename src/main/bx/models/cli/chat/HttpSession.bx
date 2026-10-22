@@ -76,6 +76,46 @@ class {
 	}
 
 	/**
+	 * @return { contextWindow, vision } of the model in use, as far as the server says: its own, or the profile chosen
+	 */
+	struct function modelFacts() {
+		var chosen = variables.profileName
+		var source = describe()
+		if ( len( chosen ) ) {
+			var found = offered().filter( p => p.name == chosen )
+			source = found.len() ? found[ 1 ] : {}
+		}
+		return { contextWindow : val( source.contextWindow ?: 0 ), vision : source.vision ?: "" }
+	}
+
+	/**
+	 * @return What is in the context right now, as the server worked it out (see ContextReport); an empty report when it cannot say
+	 */
+	struct function contextReport() {
+		try {
+			return variables.client.getJson( variables.baseUrl, "context", { conversationId : variables.conversationId } )
+		} catch ( any e ) {
+			return { parts : [], tools : [], mcpServers : 0, total : 0, contextWindow : 0, percent : 0 }
+		}
+	}
+
+	/**
+	 * Asks the server to test a model with one tiny question.
+	 *
+	 * @profile A profile the server offers; blank for the one in use
+	 *
+	 * @return { ok, model, ms, reply } or { ok : false, model, reason }
+	 */
+	struct function ping( string profile = "" ) {
+		var target = len( trim( arguments.profile ) ) ? trim( arguments.profile ) : variables.profileName
+		try {
+			return variables.client.postJson( variables.baseUrl, "ping", { profile : target } )
+		} catch ( any e ) {
+			return { ok : false, model : len( target ) ? target : modelName(), reason : "The server could not be asked: " & e.message }
+		}
+	}
+
+	/**
 	 * A client may only use the profiles the server lists (agentApi.profiles), so there is nothing to
 	 * switch to unless it lists some.
 	 *
@@ -210,6 +250,42 @@ class {
 	}
 
 	/**
+	 * @return The title in the server's list, "" when it has none yet
+	 */
+	string function conversationTitle() {
+		return sessions( 50 ).filter( row => row.id == variables.conversationId ).map( row => row.title ?: "" ).first() ?: ""
+	}
+
+	/**
+	 * @return { ok, title } or { ok : false, reason }
+	 */
+	struct function rename( required string title ) {
+		try {
+			return variables.client.postJson( variables.baseUrl, "sessions/rename", { conversationId : variables.conversationId, title : arguments.title } )
+		} catch ( any e ) {
+			return { ok : false, reason : "This server keeps no list of conversations, so there is nothing to name." }
+		}
+	}
+
+	/**
+	 * Copies the conversation on the server under a new name and moves to the copy.
+	 *
+	 * @return { ok, id, title, messages } or { ok : false, reason }
+	 */
+	struct function fork( string title = "" ) {
+		try {
+			var outcome = variables.client.postJson( variables.baseUrl, "sessions/fork", { conversationId : variables.conversationId, title : arguments.title } )
+		} catch ( any e ) {
+			return { ok : false, reason : "This server keeps no list of conversations, so there is nowhere to put a copy." }
+		}
+		if ( outcome.ok ?: false ) {
+			variables.conversationId = outcome.id
+			variables.threadId = ""
+		}
+		return outcome
+	}
+
+	/**
 	 * @return What was said in this conversation: [ { role : "you" | "agent", text } ]; empty when the server cannot say
 	 */
 	array function history() {
@@ -249,6 +325,11 @@ class {
 			[ "Tools", tools().len() ],
 			[ "Conversation", variables.conversationId ]
 		]
+		var at = 2
+		for ( var row in new "models.chat.ModelFactsLines@bxagents"().of( modelFacts() ) ) {
+			at++
+			lines.insertAt( at, row )
+		}
 		var kept = notes()
 		if ( kept.available() ) {
 			var stats = kept.stats()

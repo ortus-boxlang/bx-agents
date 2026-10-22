@@ -12,7 +12,7 @@ _bxagents_complete() {
 	fi
 	local count=${#words[@]}
 	local cur="${words[count-1]}"
-	local verbs="add build chat clean deploy doctor hash-password inspect invoke new notes package serve skills test token help"
+	local verbs="add build chat clean deploy doctor hash-password inspect invoke models new notes package serve sessions skills test token help"
 	local globals="--help -h --version -v"
 	COMPREPLY=()
 
@@ -43,6 +43,7 @@ _bxagents_complete() {
 			"hash-password --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"inspect --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"invoke --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
+			"models --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"new --channels") COMPREPLY=($(compgen -W "web api telegram slack discord whatsapp-cloud teams twilio github email signal" -- "$part")) ;;
 			"new --deploy") COMPREPLY=($(compgen -W "docker digitalocean ssh sftp ftp local" -- "$part")) ;;
 			"new --destination") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
@@ -59,6 +60,7 @@ _bxagents_complete() {
 			"notes --scope") COMPREPLY=($(compgen -W "user agent" -- "$part")) ;;
 			"package --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"serve --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
+			"sessions --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"skills --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"test --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"token --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
@@ -79,10 +81,12 @@ _bxagents_complete() {
 			hash-password) flags="--password= --projectRoot=" ;;
 			inspect) flags="--ascii --environment= --json --md --no-color --projectRoot= --section=" ;;
 			invoke) flags="--json --message= --port= --projectRoot= --server" ;;
+			models) flags="--all --json --profile= --projectRoot=" ;;
 			new) flags="--app= --channels= --class --deploy= --description= --destination= --files= --files-dir= --forgebox= --guard= --host= --max-tokens= --mcp= --memory= --model= --name= --no-tui --no-wizard --projectRoot= --region= --registry= --remote-path= --repo= --search= --skipInstall --temperature= --template= --timeout= --user= --web-auth= --with= --wizard --yes" ;;
 			notes) flags="--file= --id= --json --projectRoot= --scope= --text= --user=" ;;
 			package) flags="--projectRoot= --version=" ;;
 			serve) flags="--host= --port= --projectRoot=" ;;
+			sessions) flags="--json --name= --projectRoot= --session= --user=" ;;
 			skills) flags="--dry-run --json --limit= --projectRoot= --registry=" ;;
 			test) flags="--projectRoot=" ;;
 			token) flags="--expires= --json --name= --projectRoot= --scope=" ;;

@@ -109,6 +109,12 @@ Emite, lista y revoca tokens de acceso para un agente desplegado.
 ::: card title="notes" icon="phosphor-duotone:note-pencil" href="#notes"
 Lee y gestiona las notas que guarda un agente.
 :::
+::: card title="models" icon="phosphor-duotone:cpu" href="#models"
+Lista los modelos con los que puede hablar un proyecto y prueba que responden.
+:::
+::: card title="sessions" icon="phosphor-duotone:chats" href="#sessions"
+Lista, renombra, bifurca y borra las conversaciones de la base de datos del chat.
+:::
 ::: card title="inspect" icon="phosphor-duotone:magnifying-glass" href="#inspect"
 Informa de cómo está compuesto el agente, a partir de su código fuente.
 :::
@@ -507,7 +513,7 @@ En la pantalla:
 | Enter mientras el agente trabaja | Lo dirige: tu mensaje se añade a la ejecución |
 | Ctrl+C | Limpia el cuadro; con el cuadro vacío, sale. Ctrl+D también sale |
 
-Escribe `/` para ver los comandos: `/help`, `/new` (una conversación nueva), `/tools`, `/copy` (la última respuesta al portapapeles, con la secuencia OSC 52 que honran la mayoría de terminales), `/save [archivo]` (la conversación en Markdown), `/sessions`, `/resume`, `/clear`, `/compact` e `/info` (ver abajo), `/model`, `/profile` y `/default` (ver abajo), `/remember <texto>` y `/notes` (ver abajo), `/record [archivo]` y `/record stop` (ver abajo) y `/exit`.
+Escribe `/` para ver los comandos: `/help`, `/new` (una conversación nueva), `/tools`, `/copy` (la última respuesta al portapapeles, con la secuencia OSC 52 que honran la mayoría de terminales), `/export [archivo]` (la conversación en Markdown o HTML), `/name` y `/fork` (ver abajo), `/sessions`, `/resume`, `/clear`, `/compact` e `/info` (ver abajo), `/model`, `/profile` y `/default` (ver abajo), `/remember <texto>` y `/notes` (ver abajo), `/record [archivo]` y `/record stop` (ver abajo) y `/exit`.
 
 #### Los mismos comandos en la página web y en las apps de chat
 
@@ -520,7 +526,9 @@ Cada comando con barra se escribe una sola vez, como una clase pequeña que resp
 | [Plataformas de chat](conventions/gateways/index.md#comandos-en-un-gateway) (Telegram, Slack, ...) | Escribe el comando como un mensaje. Hay un conjunto seguro activado por defecto; un proyecto puede ampliarlo o apagarlo |
 | Un servidor por HTTP | `GET /__bxagents/commands` y `POST /__bxagents/command`, ver [Control de ejecuciones](conventions/agent-bx.md#control-de-ejecucion) |
 
-`/copy`, `/save`, `/record`, `/profile`, `/default` y `/exit` actúan sobre tu propia máquina o sobre el modelo de tu propia sesión, así que se quedan en la terminal.
+El tamaño del contexto también está siempre a la vista: la fila de ayuda bajo la caja de mensaje empieza con `ctx ~12.4k / 128k 9%` (solo `ctx ~12.4k` cuando el proyecto no indica la ventana), y se actualiza antes de cada prompt, es decir, tras cada mensaje, `/clear`, `/compact`, `/resume` y cualquier cambio en tus notas. La página web muestra lo mismo en su encabezado; púlsalo para ver el desglose. Las cifras son estimaciones, caracteres divididos entre cuatro (lo que hace `aiTokens()` de bx-ai), útiles para ver qué parte es grande y no para una factura exacta. Las herramientas de los servidores MCP se obtienen al empezar una ejecución y no se cuentan.
+
+`/name`, `/fork` y `/export` funcionan en la terminal y en la página web (donde `/export` entrega el archivo al navegador para guardarlo, y la página tiene los botones **Fork** y **Export**). `/copy`, `/record`, `/profile`, `/default` y `/exit` actúan sobre tu propia máquina o sobre el modelo de tu propia sesión, así que se quedan en la terminal.
 
 #### Conversaciones en el chat
 
@@ -531,9 +539,13 @@ Cada chat es una conversación, listada en la [base de datos de chat compartida]
 | `/sessions` | Lista tus conversaciones recientes, numeradas |
 | `/resume [número o id]` | Vuelve a una y muestra lo que se dijo; sin argumento, la más reciente |
 | `/new` | Empieza una conversación nueva (la anterior sigue en la lista) |
+| `/name <nuevo nombre>` | Pone nombre a esta conversación; una conversación en la que nadie ha hablado aún obtiene su entrada en la lista |
+| `/fork [nuevo nombre]` | Copia esta conversación entera, mensajes incluidos, con un nombre nuevo y sigue en la copia; la original queda como estaba. Sin nombre, la copia se llama `Fork of <esta>` |
+| `/export [archivo] [--format=md\|html]` | Guarda la conversación como Markdown o como una página HTML. El nombre del archivo decide el formato (`.html` o `.htm` es HTML, cualquier otro Markdown) salvo que `--format` diga otra cosa; sin nombre, el archivo lleva la fecha, en la carpeta donde empezaste. El HTML muestra el Markdown ya renderizado, tablas incluidas, y escapa todo lo que escribiste para que no se ejecute al abrir el archivo |
 | `/clear` | Olvida los mensajes de esta conversación y conserva la conversación |
 | `/compact` | Sustituye los mensajes más antiguos por un resumen (requiere un modelo de resumen en la memoria del agente) |
 | `/info` | Agente, modelo, conversación, número de mensajes, notas y base de datos |
+| `/context` | Cuánto ocupa el contexto ahora mismo y de qué se compone: el prompt del sistema, las definiciones de herramientas, las notas y los mensajes de esta conversación, cada uno con su tamaño, el total, y la parte de la ventana de contexto del modelo cuando el proyecto [la indica](conventions/models.md#lo-que-el-proyecto-sabe-de-un-modelo). Nombra las herramientas más grandes. Se calcula en local; no se llama a ningún modelo |
 
 `--continue` abre la conversación más reciente al iniciar el chat, y `--session=<número o id>` abre una concreta. Ambos muestran primero los mensajes anteriores. Con `--connect` el servidor guarda la lista y los mensajes, con el nombre de tu [token](conventions/agent-bx.md#tokens-de-acceso-para-un-agente-desplegado); un servidor sin base de datos de chat dice que no guarda lista.
 
@@ -543,7 +555,8 @@ El chat puede cambiar el modelo con el que habla sin perder la conversación: la
 
 | Comando | Hace |
 |---|---|
-| `/model` | Muestra el modelo en uso (`proveedor/modelo`) y su perfil |
+| `/model` | Muestra el modelo en uso (`proveedor/modelo`), su perfil y, cuando el proyecto lo dice, su ventana de contexto y si puede ver imágenes |
+| `/ping [perfil]` | Prueba que el modelo responde, con una pregunta diminuta: dice cuánto tardó, o por qué no respondió (sin clave, un nombre de modelo equivocado, el servicio inaccesible). El resultado se conserva 30 segundos, así que repetirlo no es otra petición |
 | `/profile` | Elige un perfil de una lista: su proveedor y modelo, su descripción, cuál es el predeterminado y cuál está en uso |
 | `/profile <nombre>` | Cambia directamente a uno. Un perfil cuyo proveedor no tiene clave definida se activa con un aviso, porque el siguiente mensaje fallaría |
 | `/default` | Vuelve al valor por defecto de la app: el `defaultProfile`, o si no el proveedor y modelo del principio de `Agent.yaml` |
@@ -697,6 +710,40 @@ bxAgents notes import --file=notes.json
 - `--scope` es `user` (por defecto) o `agent`; `list` sin él muestra ambos. `--user` indica de quién son las notas de usuario: por defecto, el usuario del sistema operativo. Las notas del agente pertenecen al `name` del agente.
 - `stats` muestra cuánto llena cada alcance y el tamaño aproximado que añaden al prompt (unos cuatro caracteres por token; una estimación, no un recuento).
 - `export` escribe las notas como JSON, en `--file` o en pantalla. `import` añade las notas de un archivo así; una nota que ya existe se omite y una que no cabe en el límite se informa.
+- Ejecútalo donde está la base de datos: en el proyecto, o en un servidor con `BXAGENTS_DB` definido.
+
+### `models`
+
+Los modelos de un proyecto compilado, y si responden.
+
+```bash
+bxAgents models list [--json]
+bxAgents models test [--profile=NOMBRE | --all] [--json]
+```
+
+```
+default       openai/gpt-5                    context 128,000  images yes  key set
+fast          openai/gpt-5-mini               context 400,000  images no  key set
+planner       claude/claude-opus-4            context ?  images ?  key MISSING
+```
+
+- `list` muestra el modelo por defecto y cada [perfil](conventions/models.md#perfiles), con lo que el proyecto dice de cada uno ([`contextWindow` y `vision`](conventions/models.md#lo-que-el-proyecto-sabe-de-un-modelo), `?` cuando no dice nada) y si la clave del perfil está definida.
+- `test` envía a cada modelo una pregunta diminuta a través de bx-ai e informa `ok` con el tiempo, o `FAILED` con el mensaje del propio proveedor. Prueba el modelo por defecto, un perfil con `--profile`, o todos con `--all`, y sale con `1` cuando alguno no responde, así que puede usarse como puerta antes de desplegar. Gasta unos pocos tokens por modelo.
+- Usa los modelos con los que se compiló el proyecto por última vez: ejecuta antes `bxAgents build`.
+
+### `sessions`
+
+Las conversaciones de la [base de datos de chat compartida](conventions/web-ui.md#el-almacen-sqlite) del proyecto (`data/chat.db`, o el archivo indicado por `BXAGENTS_DB`), la misma lista que muestran `chat` y la página web.
+
+```bash
+bxAgents sessions list [--user=NOMBRE] [--json]
+bxAgents sessions rename --session=<número o id> --name="Nuevo nombre" [--user=NOMBRE]
+bxAgents sessions fork --session=<número o id> [--name="Otro enfoque"] [--user=NOMBRE]
+bxAgents sessions delete --session=<número o id> [--user=NOMBRE]
+```
+
+- Una conversación se elige por su número en `list`, o por su id o el comienzo de él. `--user` es de quién son las conversaciones: el usuario del sistema operativo por defecto.
+- `list`, `rename` y la parte de lista de `delete` solo tocan la base de datos. Los mensajes de una conversación viven en la [memoria](conventions/agent-yaml.md#ajustes) del agente, así que `fork` (que los copia) necesita un proyecto compilado, y `delete` también para olvidarlos. Solo alcanzan los mensajes que guarda una memoria que sobrevive al proceso (`file`, `jdbc`): la memoria `cache` por defecto desaparece al terminar el chat.
 - Ejecútalo donde está la base de datos: en el proyecto, o en un servidor con `BXAGENTS_DB` definido.
 
 ### `inspect`

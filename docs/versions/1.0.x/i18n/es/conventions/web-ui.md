@@ -96,6 +96,7 @@ Una entrada `webui` monta veinticinco acciones bajo `<path>/api`, servidas por u
 | `GET /health` | Vitalidad |
 | `GET /info` | Nombre del agente, modelo, conteos de memoria/tool, flags de capacidad |
 | `GET /commands` | Los [comandos con barra](#comandos-con-barra) que ofrece la página, `[ { name, hint } ]` |
+| `GET /context` | Qué hay en el contexto de este visitante para una conversación (`?conversationId=`): `{ parts : [ { key, label, tokens, detail } ], tools : [ { name, tokens } ], total, contextWindow, percent }`. Estimaciones a partir del prompt del sistema, las definiciones de herramientas, las notas y los mensajes; no se llama a ningún modelo |
 | `POST /command` | Ejecuta uno para este visitante: `{ line : "/info", conversationId? }`, responde con la respuesta como datos |
 | `GET /profiles` | Los [perfiles](models.md#perfiles) que ofrece la entrada, `[]` si no lista ninguno. Ver [Elegir el modelo](#elegir-el-modelo) |
 | `GET /conversations` | Las conversaciones de este visitante, actividad más reciente primero |
@@ -114,7 +115,7 @@ Cada una está delimitada por el `getUserSessionIdentifier()` de ColdBox como el
 
 ### Comandos con barra
 
-Escribe `/` en la caja de mensaje y aparece un menú de comandos (flechas, `Tab` para completar, `Esc` para cerrar). Son los mismos comandos que en [el chat de la terminal](../cli-reference.md#los-mismos-comandos-en-la-pagina-web-y-en-las-apps-de-chat): `/help`, `/new`, `/tools`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/info`, `/remember` y `/notes`. Al pulsar Enter la línea se ejecuta en el servidor con `POST /command` y se dibuja la respuesta: texto, una tabla o botones para elegir. `/new` y `/resume` llevan la página a la conversación que nombran, y `/clear` recarga la transcripción.
+Escribe `/` en la caja de mensaje y aparece un menú de comandos (flechas, `Tab` para completar, `Esc` para cerrar). Son los mismos comandos que en [el chat de la terminal](../cli-reference.md#los-mismos-comandos-en-la-pagina-web-y-en-las-apps-de-chat): `/help`, `/new`, `/tools`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/info`, `/context`, `/remember`, `/notes`, `/name`, `/fork` y `/export`. Al pulsar Enter la línea se ejecuta en el servidor con `POST /command` y se dibuja la respuesta: texto, una tabla o botones para elegir. `/new`, `/resume` y `/fork` llevan la página a la conversación que nombran, `/clear` recarga la transcripción, y `/export [archivo] [--format=md|html]` entrega la conversación al navegador para guardarla (los botones **Fork** y **Export** del encabezado ejecutan `/fork` y `/export`).
 
 La respuesta son datos, así que cualquier cliente puede usarla:
 
@@ -124,7 +125,7 @@ La respuesta son datos, así que cualquier cliente puede usarla:
   "effects": [ { "type": "conversation", "id": "..." } ] }
 ```
 
-Los bloques son `text`, `table`, `choose` (opciones, cada una con la línea de comando que ejecuta) y `transcript`; los efectos dicen qué le pasó a la conversación (`reset`, `conversation`). `/info` omite dónde está el archivo de la base de datos. Un comando que solo tiene sentido en tu propia máquina (`/copy`, `/save`, `/profile`) no se ofrece, y un servidor nunca cambia el modelo del agente compartido: la página elige un perfil por mensaje.
+Los bloques son `text`, `table`, `choose` (opciones, cada una con la línea de comando que ejecuta), `transcript` y `file` (`{ name, mime, text }`, que la página guarda); los efectos dicen qué le pasó a la conversación (`reset`, `conversation`). `/info` omite dónde está el archivo de la base de datos. Un comando que solo tiene sentido en tu propia máquina (`/copy`, `/save`, `/profile`) no se ofrece, y un servidor nunca cambia el modelo del agente compartido: la página elige un perfil por mensaje.
 
 `threadId` es autoritativo del servidor: tomado del request cuando se suministra, acuñado de lo contrario, y siempre reflejado de vuelta - como una cabecera de respuesta `X-Thread-Id` en `/invoke` y `/batch`, y como un evento SSE `thread` enviado *antes del primer chunk* en `/stream` (una cabecera no puede leerse antes de que el cuerpo empiece a llegar). Ese es el mismo contrato que adoptó el propio `toAi()` de ColdBox 8.1, así que un cliente escrito contra uno funciona contra el otro.
 
@@ -257,6 +258,7 @@ La página enviada es un cliente de chat real, no una carcasa de demostración. 
 | **Aprobaciones** | Una pausa human-in-the-loop renderiza una tarjeta de Aprobar/Rechazar desde `GET /pending`, respondida vía `/resume`, que transmite la continuación del mismo turno |
 | **Tema** | Almacenado del lado del servidor en `preferences`, así que sigue a la identidad en lugar del navegador. `localStorage` mantiene una copia local para que la elección sobreviva a un request fallido |
 | **Modelo** | El nombre del modelo de `/info` se sitúa en el encabezado, así que siempre está claro qué respondió |
+| **Tamaño del contexto** | Un chip en el encabezado, `ctx ~12.4k / 128k 9%`, desde `GET /context`, actualizado tras cada turno, comando, borrado, compactación, cambio de conversación y cambio en las notas. Púlsalo para ver el desglose (`/context`). Muestra la parte de la ventana solo cuando está definido el [`contextWindow`](models.md#lo-que-el-proyecto-sabe-de-un-modelo) del modelo |
 
 **La recuperación importa más de lo que suena.** La última conversación abierta se recuerda en `localStorage`, pero las conversaciones mismas viven en el servidor. Si ese id ya no existe - eliminado en otra pestaña, o un almacén nuevo - la página recae en la conversación restante más reciente en lugar de rehidratar hacia una pantalla vacía sin fila activa.
 

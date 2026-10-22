@@ -253,10 +253,14 @@ GET  /__bxagents/tools
 GET  /__bxagents/profiles   # the profiles a client may ask for
 GET  /__bxagents/agent    # name, model, what it can do
 GET  /__bxagents/sessions   # the caller's recent conversations
+POST /__bxagents/sessions/rename   # { conversationId, title } name one
+POST /__bxagents/sessions/fork     # { conversationId, title? } copy one, messages and all
 GET  /__bxagents/history    # ?conversationId= what was said in one
 POST /__bxagents/clear      # { conversationId } forget its messages
 POST /__bxagents/compact    # { conversationId } summarize the older messages
+POST /__bxagents/ping       # { profile? } test a model with one tiny question: { ok, model, ms, reply } or { ok : false, model, reason }
 GET  /__bxagents/commands   # the slash commands this caller may run, [ { name, hint } ]
+GET  /__bxagents/context    # ?conversationId= estimated size of the context: parts, largest tools, total, share of the window
 POST /__bxagents/command    # { line : "/info", conversationId? } run one, answers { blocks, effects, conversationId }
 GET  /__bxagents/notes    # the caller's notes and the agent's, with how full they are
 POST /__bxagents/notes    # { scope : "user" | "agent", text }

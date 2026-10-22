@@ -1,0 +1,95 @@
+/**
+ * What is in the context right now, worked out locally from the same pieces the agent sends with a message:
+ * its system prompt, the definitions of its tools, the notes block, and this conversation's messages in memory.
+ * No model is called.
+ *
+ * Sizes are estimates, characters divided by four, which is what bx-ai's own aiTokens() does. A provider counts
+ * differently, so they are shown with a tilde and are good for "which part is big", not for an exact bill.
+ * What the project's MCP servers add is fetched when a run starts and is not counted here.
+ */
+class {
+
+	/**
+	 * @agent The agent object
+	 * @userId Whose conversation
+	 * @conversationId The conversation
+	 * @facts { contextWindow, vision } of the model in use, from ModelFacts
+	 */
+	function init( required any agent, required string userId, required string conversationId, required struct facts ) {
+		variables.agent = arguments.agent
+		variables.userId = arguments.userId
+		variables.conversationId = arguments.conversationId
+		variables.facts = arguments.facts
+		return this
+	}
+
+	/**
+	 * @return {
+	 *   parts : [ { key, label, tokens, detail } ] in the order they are sent,
+	 *   tools : [ { name, tokens } ] largest first,
+	 *   mcpServers : how many MCP servers the agent has (their tools are not counted),
+	 *   total, contextWindow (0 when not said), percent (0 when there is no window)
+	 * }
+	 */
+	struct function build() {
+		var tools = toolSizes()
+		var system = tokensOf( variables.agent.buildSystemMessage() )
+		var notes = tokensOf( notesBlock() )
+		var messages = variables.agent.getMemoryMessages( variables.userId, variables.conversationId )
+		var memory = 0
+		for ( var message in messages ) {
+			memory += tokensOf( message.content ?: "" )
+		}
+		var toolTotal = 0
+		for ( var tool in tools ) {
+			toolTotal += tool.tokens
+		}
+		var parts = [
+			{ key : "system", label : "System prompt", tokens : system, detail : "" },
+			{ key : "tools", label : "Tool definitions", tokens : toolTotal, detail : tools.len() & ( tools.len() == 1 ? " tool" : " tools" ) },
+			{ key : "notes", label : "Notes", tokens : notes, detail : "" },
+			{ key : "memory", label : "Messages", tokens : memory, detail : messages.len() & ( messages.len() == 1 ? " message" : " messages" ) }
+		]
+		var total = system + toolTotal + notes + memory
+		var window = variables.facts.contextWindow ?: 0
+		return {
+			parts         : parts,
+			tools         : tools,
+			mcpServers    : ( variables.agent.getConfig().mcpServers ?: [] ).len(),
+			total         : total,
+			contextWindow : window,
+			percent       : window > 0 ? round( total * 100 / window ) : 0
+		}
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @return [ { name, tokens } ] the tool definitions as they are sent, largest first
+	 */
+	private array function toolSizes() {
+		var sizes = []
+		try {
+			for ( var tool in aiToolRegistry().resolveTools( variables.agent.getTools() ) ) {
+				sizes.append( { name : tool.getName(), tokens : tokensOf( jsonSerialize( tool.getSchema() ) ) } )
+			}
+		} catch ( any e ) {
+			// a tool whose schema cannot be read is left out rather than stopping the report
+		}
+		return sizes.sort( ( a, b ) => b.tokens - a.tokens )
+	}
+
+	/**
+	 * @return The notes block the notes middleware adds to the system message, "" when the agent keeps none
+	 */
+	private string function notesBlock() {
+		var middleware = new "models.notes.NotesWiring@bxagents"().middlewareOf( variables.agent )
+		return isNull( middleware ) ? "" : middleware.render( variables.userId )
+	}
+
+	private numeric function tokensOf( required any content ) {
+		var text = isSimpleValue( arguments.content ) ? arguments.content : jsonSerialize( arguments.content )
+		return len( text ) ? aiTokens( text ) : 0
+	}
+
+}

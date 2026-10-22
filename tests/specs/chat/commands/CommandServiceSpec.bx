@@ -28,6 +28,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "offers the web commands, without the terminal-only ones", function() {
 				var names = service.menu( "web" ).map( c => c.name );
 				expect( names ).toInclude( "/info" );
+				expect( names ).toInclude( "/fork" );
 				expect( names ).notToInclude( "/copy" );
 				expect( names ).notToInclude( "/exit" );
 			} );
@@ -102,6 +103,133 @@ class extends="testbox.system.BaseSpec" {
 				var model = service.execute( "alice", "c-1", "/model" );
 				expect( texts( model )[ 1 ] ).toInclude( "Model:" );
 				expect( texts( model ).filter( t => t.startsWith( "Type /profile" ) ) ).toBeEmpty();
+			} );
+
+			describe( "naming, forking and exporting a conversation", function() {
+
+				beforeEach( function() {
+					agent.run( "plan the launch", {}, { userId : "alice", conversationId : "c-1" } );
+					sessions.touch( "alice", "c-1", "plan the launch" );
+				} );
+
+				it( "names a conversation on /name, in the list", function() {
+					var answer = service.execute( "alice", "c-1", "/name Launch plan" );
+					expect( texts( answer )[ 1 ] ).toBe( "Named: Launch plan" );
+					expect( sessions.byId( "alice", "c-1" ).title ).toBe( "Launch plan" );
+				} );
+
+				it( "gives a conversation nobody spoke in yet its row when it is named", function() {
+					var answer = service.execute( "alice", "c-new", "/name Draft" );
+					expect( texts( answer )[ 1 ] ).toBe( "Named: Draft" );
+					expect( sessions.byId( "alice", "c-new" ).title ).toBe( "Draft" );
+				} );
+
+				it( "asks for a name when /name has none, and will not rename somebody else's conversation", function() {
+					expect( texts( service.execute( "alice", "c-1", "/name" ) )[ 1 ] ).toInclude( "Give it a name" );
+					sessions.touch( "bob", "c-bob", "private" );
+					expect( texts( service.execute( "alice", "c-bob", "/name Mine now" ) )[ 1 ] ).toBe( "That conversation belongs to someone else." );
+					expect( sessions.byId( "bob", "c-bob" ).title ).toBe( "private" );
+				} );
+
+				it( "copies the whole conversation on /fork and moves to the copy, leaving the original as it was", function() {
+					var before = agent.getMemoryMessages( "alice", "c-1" ).len();
+					var answer = service.execute( "alice", "c-1", "/fork Other approach" );
+
+					expect( answer.conversationId ).notToBe( "c-1" );
+					expect( answer.effects[ 1 ] ).toBe( { type : "conversation", id : answer.conversationId, title : "Other approach" } );
+					expect( agent.getMemoryMessages( "alice", answer.conversationId ) ).toHaveLength( before );
+					expect( agent.getMemoryMessages( "alice", "c-1" ) ).toHaveLength( before );
+					expect( sessions.byId( "alice", answer.conversationId ).title ).toBe( "Other approach" );
+
+					// they carry on independently
+					agent.run( "only in the copy", {}, { userId : "alice", conversationId : answer.conversationId } );
+					expect( agent.getMemoryMessages( "alice", "c-1" ) ).toHaveLength( before );
+				} );
+
+				it( "names a fork after the original when no name is given, and has nothing to fork in an empty conversation", function() {
+					var named = service.execute( "alice", "c-1", "/fork" );
+					expect( sessions.byId( "alice", named.conversationId ).title ).toBe( "Fork of plan the launch" );
+
+					var empty = service.execute( "alice", "c-empty", "/fork" );
+					expect( texts( empty )[ 1 ] ).toInclude( "nothing to fork" );
+					expect( empty.conversationId ).toBe( "c-empty" );
+				} );
+
+				it( "hands the conversation back as a file on /export, Markdown or HTML", function() {
+					var md = service.execute( "alice", "c-1", "/export" );
+					var file = md.blocks.filter( b => b.type == "file" )[ 1 ];
+					expect( file.name ).toMatch( "^chat-\d{8}-\d{6}\.md$" );
+					expect( file.mime ).toBe( "text/markdown" );
+					expect( file.text ).toInclude( "plan the launch" );
+
+					var html = service.execute( "alice", "c-1", "/export ../../secret/talk.html" ).blocks.filter( b => b.type == "file" )[ 1 ];
+					expect( html.name ).toBe( "talk.html" );
+					expect( html.mime ).toBe( "text/html" );
+					expect( html.text ).toInclude( "<!doctype html>" );
+				} );
+
+				it( "has nothing to export in an empty conversation", function() {
+					expect( texts( service.execute( "alice", "c-empty", "/export" ) ) ).toBe( [ "Nothing to export yet." ] );
+				} );
+
+			} );
+
+			describe( "/ping", function() {
+
+				beforeEach( function() {
+					variables.settings = getModuleInfo( "bxai" ).settings;
+					variables.saved = { profiles : settings.profiles ?: {}, provider : settings.provider ?: "" };
+					settings.provider = "mock";
+					settings.profiles = { fast : { provider : "mock", params : { model : "fast-model" } }, secret : { provider : "mock", params : { model : "secret-model" } } };
+				} );
+
+				afterEach( function() {
+					settings.profiles = saved.profiles;
+					settings.provider = saved.provider;
+				} );
+
+				it( "tests the server's own model", function() {
+					expect( texts( service.execute( "alice", "c-1", "/ping" ) )[ 1 ] ).toMatch( "answered in \d+ ms" );
+				} );
+
+				it( "tests a profile the app offers, and refuses one it does not", function() {
+					var offering = new bxagents.models.chat.commands.CommandService( agent : agent, sessions : sessions, offered : [ "fast" ] );
+					var ok = offering.execute( "alice", "c-1", "/ping fast" ).blocks[ 1 ];
+					expect( ok.style ).toBe( "ok" );
+					expect( ok.text ).toInclude( "mock/fast-model answered" );
+
+					var refused = offering.execute( "alice", "c-1", "/ping secret" ).blocks[ 1 ];
+					expect( refused.style ).toBe( "warn" );
+					expect( refused.text ).toInclude( "That profile is not offered here." );
+				} );
+
+			} );
+
+			it( "answers /context with the parts of the context and how big each is, nothing sent to a model", function() {
+				agent.run( "plan the launch", {}, { userId : "alice", conversationId : "c-1" } );
+				var answer = service.execute( "alice", "c-1", "/context" );
+
+				var table = answer.blocks[ 1 ];
+				expect( table.type ).toBe( "table" );
+				expect( table.layout ).toBe( "grid" );
+				expect( table.rows.map( r => r[ 1 ] ) ).toBe( [ "System prompt", "Tool definitions", "Notes", "Messages", "Total" ] );
+				expect( table.rows[ 4 ][ 3 ] ).toBe( "2 messages" );
+				expect( texts( answer ).filter( t => t.startsWith( "Estimates" ) ) ).toHaveLength( 1 );
+			} );
+
+			it( "says the project does not give the window when it does not, and shows the bar when it does", function() {
+				var unsized = texts( service.execute( "alice", "c-1", "/context" ) );
+				expect( unsized.filter( t => t.startsWith( "The project does not say" ) ) ).toHaveLength( 1 );
+
+				var settings = getModuleInfo( "bxai" ).settings;
+				var saved = settings.bxagents ?: {};
+				settings.bxagents = { default : { contextWindow : 1000 } };
+				try {
+					var sized = texts( service.execute( "alice", "c-1", "/context" ) );
+					expect( sized.filter( t => t.find( "% of the window" ) ) ).toHaveLength( 1 );
+				} finally {
+					settings.bxagents = saved;
+				}
 			} );
 
 			it( "works without a list of conversations", function() {

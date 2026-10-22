@@ -6,6 +6,8 @@
  *   providers                          per provider params and options (bx-ai `providers`)
  *   profiles, defaultProfile           named combinations (bx-ai `profiles`, `defaultProfile`)
  *   profile                            which profile an agent uses (the agent's own, else the default)
+ *   contextWindow, vision              what the default model can hold and whether it can see images (also on each profile).
+ *                                      Facts for the chat's /context and image paste; bx-ai does not read them
  *   embeddings                         bx-ai `embeddings`
  *   speech, transcription              bx-ai `audio`
  *   image                              bx-ai `image`
@@ -23,8 +25,8 @@ import bxModules.bxagents.models.util.NameRules;
 class {
 
 	static {
-		AI_KEYS = [ "provider", "params", "options", "providers", "profiles", "defaultProfile", "profile", "embeddings", "speech", "transcription", "image" ]
-		PROFILE_KEYS = [ "description", "provider", "model", "params", "options", "apiKeyEnv" ]
+		AI_KEYS = [ "provider", "params", "options", "providers", "profiles", "defaultProfile", "profile", "contextWindow", "vision", "embeddings", "speech", "transcription", "image" ]
+		PROFILE_KEYS = [ "description", "provider", "model", "params", "options", "apiKeyEnv", "contextWindow", "vision" ]
 		SLOT_KEYS = {
 			embeddings    : [ "provider", "model" ],
 			speech        : [ "provider", "model", "voice", "format" ],
@@ -100,6 +102,7 @@ class {
 		if ( out.len() ) {
 			return out
 		}
+		out.append( factProblems( c, label ), true )
 
 		if ( len( c.provider ?: "" ) ) {
 			if ( !variables.parser.isKnownProvider( c.provider ) ) {
@@ -165,6 +168,7 @@ class {
 					out.append( "#where#: '#k#' must be a mapping" )
 				}
 			}
+			out.append( factProblems( p, where ), true )
 			if ( len( p.provider ?: "" ) && isSimpleValue( p.provider ) && !variables.parser.isKnownProvider( p.provider ) ) {
 				out.append( "#where#: unknown provider [#p.provider#]. Use one of: #variables.parser.coreProviders().toList( ', ' )#" )
 			}
@@ -255,6 +259,13 @@ class {
 		if ( len( c.defaultProfile ?: "" ) ) {
 			s[ "defaultProfile" ] = c.defaultProfile
 		}
+		// bx-ai ignores these; the chat reads them back (models.runtime.ModelFacts)
+		var facts = {}
+		if ( c.keyExists( "contextWindow" ) ) { facts[ "contextWindow" ] = int( c.contextWindow ) }
+		if ( c.keyExists( "vision" ) ) { facts[ "vision" ] = c.vision == true }
+		if ( facts.count() ) {
+			s[ "bxagents" ] = { "default" : facts }
+		}
 
 		if ( isStruct( c.embeddings ?: "" ) && c.embeddings.count() ) {
 			var e = {}
@@ -288,6 +299,26 @@ class {
 			s[ "image" ] = image
 		}
 		return s
+	}
+
+	/**
+	 * contextWindow is a whole number of tokens and vision is true or false, on the default model and on a profile.
+	 *
+	 * @facts The mapping that may carry them
+	 * @where Which one, for the message
+	 */
+	private array function factProblems( required struct facts, required string where ) {
+		var out = []
+		if ( arguments.facts.keyExists( "contextWindow" ) ) {
+			var size = arguments.facts.contextWindow
+			if ( !isSimpleValue( size ) || !isNumeric( size ) || size < 1 || int( size ) != size ) {
+				out.append( "#arguments.where#: 'contextWindow' must be a whole number of tokens, such as 128000" )
+			}
+		}
+		if ( arguments.facts.keyExists( "vision" ) && ( !isSimpleValue( arguments.facts.vision ) || !isBoolean( arguments.facts.vision ) ) ) {
+			out.append( "#arguments.where#: 'vision' must be true or false" )
+		}
+		return out
 	}
 
 	/**

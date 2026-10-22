@@ -28,10 +28,12 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n __bxagents_needs_verb -a 'hash-password' -d 'Hash a password for a webui users entry'
     complete -c $cmd -n __bxagents_needs_verb -a 'inspect' -d 'Report how the agent is composed: agents, tools, skills, MCP, exposure, env'
     complete -c $cmd -n __bxagents_needs_verb -a 'invoke' -d 'Send one message to a built agent, print the response, exit'
+    complete -c $cmd -n __bxagents_needs_verb -a 'models' -d 'List the models a project can talk to and test that they answer'
     complete -c $cmd -n __bxagents_needs_verb -a 'new' -d 'Scaffold a new agent project'
     complete -c $cmd -n __bxagents_needs_verb -a 'notes' -d 'Read and manage the notes of an agent'
     complete -c $cmd -n __bxagents_needs_verb -a 'package' -d 'Package a built project into a .bxa'
     complete -c $cmd -n __bxagents_needs_verb -a 'serve' -d 'Serve a built project via boxlang-miniserver'
+    complete -c $cmd -n __bxagents_needs_verb -a 'sessions' -d 'List, rename, fork and delete the conversations in the chat database'
     complete -c $cmd -n __bxagents_needs_verb -a 'skills' -d 'Skills from skills.boxlang.io: skills <find|install|list|update|remove>'
     complete -c $cmd -n __bxagents_needs_verb -a 'test' -d 'Run a project\'s own tests/specs via TestBox'
     complete -c $cmd -n __bxagents_needs_verb -a 'token' -d 'Issue, list and revoke access tokens for a deployed agent'
@@ -131,6 +133,10 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb invoke' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb invoke' -l server
     complete -c $cmd -n '__bxagents_using_verb invoke' -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb models' -l all
+    complete -c $cmd -n '__bxagents_using_verb models' -l json
+    complete -c $cmd -n '__bxagents_using_verb models' -l profile -x
+    complete -c $cmd -n '__bxagents_using_verb models' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb new' -l app -x
     complete -c $cmd -n '__bxagents_using_verb new' -l channels -x -a 'web api telegram slack discord whatsapp-cloud teams twilio github email signal'
     complete -c $cmd -n '__bxagents_using_verb new' -l class
@@ -179,6 +185,11 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb serve' -l port -x
     complete -c $cmd -n '__bxagents_using_verb serve' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb serve' -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb sessions' -l json
+    complete -c $cmd -n '__bxagents_using_verb sessions' -l name -x
+    complete -c $cmd -n '__bxagents_using_verb sessions' -l projectRoot -x -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb sessions' -l session -x
+    complete -c $cmd -n '__bxagents_using_verb sessions' -l user -x
     complete -c $cmd -n '__bxagents_using_verb skills' -l dry-run
     complete -c $cmd -n '__bxagents_using_verb skills' -l json
     complete -c $cmd -n '__bxagents_using_verb skills' -l limit -x
@@ -191,5 +202,5 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb token' -l name -x
     complete -c $cmd -n '__bxagents_using_verb token' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb token' -l scope -x -a 'chat admin'
-    complete -c $cmd -n '__bxagents_using_verb help' -a 'add build chat clean deploy doctor hash-password inspect invoke new notes package serve skills test token help'
+    complete -c $cmd -n '__bxagents_using_verb help' -a 'add build chat clean deploy doctor hash-password inspect invoke models new notes package serve sessions skills test token help'
 end

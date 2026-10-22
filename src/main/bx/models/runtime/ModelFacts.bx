@@ -1,0 +1,37 @@
+/**
+ * What the project says about a model that bx-ai does not know: how many tokens it can hold
+ * (`contextWindow`) and whether it can see images (`vision`). bx-ai has no API for either, so they are
+ * written in Agent.yaml, on the default model and on each profile, and read back from the settings the
+ * generated app carries (see AiSettings). The chat uses them to show how full the context is and to
+ * refuse an image for a model that cannot read one. Nothing is assumed: a model with no entry is unknown.
+ */
+class {
+
+	/**
+	 * @settings bx-ai's module settings; the live ones when not given
+	 */
+	function init( struct settings ) {
+		variables.settings = isNull( arguments.settings ) ? getModuleInfo( "bxai" ).settings : arguments.settings
+		return this
+	}
+
+	/**
+	 * @profile A profile name, or "" (or "default") for the app's default model
+	 *
+	 * @return { contextWindow : tokens, 0 when not said, vision : "yes" | "no" | "" when not said }
+	 */
+	struct function of( string profile = "" ) {
+		var name = trim( arguments.profile )
+		var asked = ( !len( name ) || name == "default" ) ? ( variables.settings.defaultProfile ?: "" ) : name
+		var fromProfile = len( asked ) && asked != "default" ? ( ( variables.settings.profiles ?: {} )[ asked ] ?: {} ) : {}
+		// the default model is the app's own provider and model, whose facts sit at the top of Agent.yaml
+		var fromDefault = ( !len( name ) || name == "default" ) ? ( ( variables.settings.bxagents ?: {} ).default ?: {} ) : {}
+		var window = val( fromProfile.contextWindow ?: ( fromDefault.contextWindow ?: 0 ) )
+		var sees = fromProfile.keyExists( "vision" ) ? fromProfile.vision : ( fromDefault.keyExists( "vision" ) ? fromDefault.vision : "" )
+		return {
+			contextWindow : window,
+			vision        : isBoolean( sees ) && len( sees ) ? ( sees ? "yes" : "no" ) : ""
+		}
+	}
+
+}

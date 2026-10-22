@@ -50,6 +50,8 @@ class extends="testbox.system.BaseSpec" {
 					return f
 				}
 				s.copy = ( text ) => s.log.append( [ "copy", text ] )
+				s.statuses = []
+				s.setStatus = ( text ) => s.statuses.append( text )
 				s.close = () => s.log.append( [ "close" ] )
 				return s
 			}
@@ -81,6 +83,31 @@ class extends="testbox.system.BaseSpec" {
 				q.useDefault = () => q.useProfile( "default" )
 				q.newThread = () => { q.newThreads++ }
 				q.conversationId = () => "conv-" & q.newThreads
+				q.facts = { contextWindow : 0, vision : "" }
+				q.modelFacts = () => q.facts
+				q.pinged = []
+				q.pingAnswer = { ok : true, model : "openai/gpt-5", ms : 412, reply : "pong" }
+				q.ping = ( profile = "" ) => {
+					q.pinged.append( profile )
+					return q.pingAnswer
+				}
+				q.report = { parts : [], tools : [], mcpServers : 0, total : 1240, contextWindow : 128000, percent : 1 }
+				q.contextReport = () => q.report
+				q.conversationTitle = () => "A title"
+				q.history = () => []
+				q.renamed = []
+				q.rename = ( title ) => {
+					if ( !len( trim( title ) ) ) {
+						return { ok : false, reason : "Give it a name: /name <new name>" }
+					}
+					q.renamed.append( title )
+					return { ok : true, title : title }
+				}
+				q.forked = []
+				q.fork = ( title = "" ) => {
+					q.forked.append( title )
+					return { ok : true, id : "fork-1", title : len( title ) ? title : "Fork of A title", messages : 4 }
+				}
 				q.close = () => {}
 				q.send = ( text, hooks ) => {
 					q.sent.append( text )
@@ -141,7 +168,7 @@ class extends="testbox.system.BaseSpec" {
 				controllerFor( screen, fakeSession() ).run( screen )
 
 				var printed = screen.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] )
-				expect( printed.some( p => p.startsWith( "/save" ) ) ).toBeTrue();
+				expect( printed.some( p => p.startsWith( "/export" ) ) ).toBeTrue();
 				expect( printed.last() ).toInclude( "Unknown command /nope" );
 			} );
 
@@ -243,15 +270,32 @@ class extends="testbox.system.BaseSpec" {
 				expect( some.log.filter( e => e[ 1 ] == "copy" )[ 1 ][ 2 ] ).toBe( "echo hi" );
 			} );
 
-			it( "saves the conversation to a file on /save", function() {
+			it( "exports the conversation to a Markdown file on /export, and to HTML by the file name or --format", function() {
 				var dir = createTempDirectory( prefix = "bxagents-chat-" )
-				var screen = fakeScreen( [ "hi", "/save notes.md" ] )
+				var screen = fakeScreen( [ "hi <b>there</b>", "/export notes.md", "/export page.html", "/export --format=html" ] )
 				new bxagents.models.cli.chat.ChatController( fakeSession(), dir ).run( screen )
 
-				var saved = fileRead( dir & "/notes.md" )
-				expect( saved ).toInclude( "**You**" );
-				expect( saved ).toInclude( "echo hi" );
+				var markdown = fileRead( dir & "/notes.md" )
+				expect( markdown ).toInclude( "**You**" );
+				expect( markdown ).toInclude( "echo hi" );
+				expect( markdown ).toInclude( "## A title" );
+
+				var html = fileRead( dir & "/page.html" )
+				expect( html ).toInclude( "<!doctype html>" );
+				expect( html ).toInclude( "<title>A title</title>" );
+				// what a person typed is text, not markup
+				expect( html ).toInclude( "&lt;b&gt;there&lt;/b&gt;" );
+				expect( html ).notToInclude( "<b>there</b>" );
+
+				var dated = directoryList( dir, false, "name", "chat-*.html" )
+				expect( dated ).toHaveLength( 1 );
 				directoryDelete( dir, true )
+			} );
+
+			it( "tells the format that is not one", function() {
+				var screen = fakeScreen( [ "hi", "/export --format=pdf" ] )
+				controllerFor( screen, fakeSession() ).run( screen )
+				expect( screen.log.filter( e => e[ 1 ] == "print" ).last()[ 3 ] ).toInclude( "md or html" );
 			} );
 
 			it( "starts a recording on /record, in the working directory with a dated name, and stops it on /record stop", function() {
@@ -320,11 +364,115 @@ class extends="testbox.system.BaseSpec" {
 				expect( off.log.filter( e => e[ 1 ] == "record" ) ).toBeEmpty();
 			} );
 
-			it( "will not save an empty conversation", function() {
-				var screen = fakeScreen( [ "/save" ] )
+			it( "says what the project knows about the model on /model, and nothing about what it does not", function() {
+				var none = fakeScreen( [ "/model" ] )
+				controllerFor( none, fakeSession() ).run( none )
+				var printed = none.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] )
+				expect( printed.filter( p => p.startsWith( "Context" ) || p.startsWith( "Images" ) ) ).toBeEmpty();
+
+				var session = fakeSession()
+				session.facts = { contextWindow : 128000, vision : "yes" }
+				var known = fakeScreen( [ "/model" ] )
+				controllerFor( known, session ).run( known )
+				var shown = known.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] )
+				expect( shown ).toInclude( "Context: 128,000 tokens" );
+				expect( shown ).toInclude( "Images:  the model can see them" );
+			} );
+
+			it( "tests the model on /ping, and a named profile on /ping <profile>", function() {
+				var screen = fakeScreen( [ "/ping", "/ping fast" ] )
+				var session = fakeSession()
+				controllerFor( screen, session ).run( screen )
+
+				expect( session.pinged ).toBe( [ "", "fast" ] );
+				var printed = screen.log.filter( e => e[ 1 ] == "print" )
+				expect( printed[ 1 ][ 2 ] ).toBe( "ok" );
+				expect( printed[ 1 ][ 3 ] ).toBe( "openai/gpt-5 answered in 412 ms." );
+			} );
+
+			it( "prints what /context says, from the session's report", function() {
+				var screen = fakeScreen( [ "/context" ] )
+				var session = fakeSession()
+				session.report = {
+					parts : [ { key : "system", label : "System prompt", tokens : 800, detail : "" }, { key : "tools", label : "Tool definitions", tokens : 300, detail : "2 tools" } ],
+					tools : [ { name : "httpGet", tokens : 200 }, { name : "now", tokens : 100 } ],
+					mcpServers : 1, total : 1100, contextWindow : 8000, percent : 14
+				}
+				controllerFor( screen, session ).run( screen )
+
+				var printed = screen.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] )
+				expect( printed[ 1 ] ).toStartWith( "System prompt" );
+				expect( printed[ 1 ] ).toInclude( "~800" );
+				expect( printed[ 2 ] ).toInclude( "2 tools" );
+				expect( printed[ 3 ] ).toStartWith( "Total" );
+				expect( printed[ 3 ] ).toInclude( "of 8,000 tokens" );
+				expect( printed[ 4 ] ).toBe( "[##---------] 14% of the window" );
+				expect( printed[ 5 ] ).toBe( "Largest tool definitions: httpGet ~200, now ~100" );
+				expect( printed[ 6 ] ).toInclude( "1 MCP server are fetched" );
+			} );
+
+			it( "shows the size of the context in the hint row before each prompt, with the window when it is known", function() {
+				var screen = fakeScreen( [ "hello", "/clear" ] )
+				var session = fakeSession()
+				controllerFor( screen, session ).run( screen )
+
+				// once before each of the two prompts, and once before the loop ends on no input
+				expect( screen.statuses ).toHaveLength( 3 );
+				expect( screen.statuses[ 1 ] ).toBe( "ctx ~1.2k / 128k 1%" );
+			} );
+
+			it( "shows just the size when the project does not say the window, and nothing when it cannot be worked out", function() {
+				var screen = fakeScreen( [] )
+				var session = fakeSession()
+				session.report.contextWindow = 0
+				controllerFor( screen, session ).run( screen )
+				expect( screen.statuses[ 1 ] ).toBe( "ctx ~1.2k" );
+
+				var broken = fakeScreen( [] )
+				var failing = fakeSession()
+				failing.contextReport = () => { throw( message = "no agent" ) }
+				controllerFor( broken, failing ).run( broken )
+				expect( broken.statuses[ 1 ] ).toBe( "" );
+			} );
+
+			it( "says why a ping failed", function() {
+				var screen = fakeScreen( [ "/ping planner" ] )
+				var session = fakeSession()
+				session.pingAnswer = { ok : false, model : "claude/claude-opus-4", reason : "No API key was found for claude, so there is nothing to test yet." }
+				controllerFor( screen, session ).run( screen )
+
+				var printed = screen.log.filter( e => e[ 1 ] == "print" )
+				expect( printed[ 1 ][ 2 ] ).toBe( "warn" );
+				expect( printed[ 1 ][ 3 ] ).toBe( "claude/claude-opus-4: No API key was found for claude, so there is nothing to test yet." );
+			} );
+
+			it( "names the conversation on /name and says when no name was given", function() {
+				var screen = fakeScreen( [ "/name Quarterly plan", "/name" ] )
+				var session = fakeSession()
+				controllerFor( screen, session ).run( screen )
+
+				expect( session.renamed ).toBe( [ "Quarterly plan" ] );
+				var printed = screen.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] )
+				expect( printed[ 1 ] ).toBe( "Named: Quarterly plan" );
+				expect( printed[ 2 ] ).toInclude( "Give it a name" );
+			} );
+
+			it( "forks the conversation on /fork and keeps the transcript, since the copy has the same messages", function() {
+				var screen = fakeScreen( [ "hi", "/fork Other approach" ] )
+				var session = fakeSession()
+				var controller = controllerFor( screen, session )
+				controller.run( screen )
+
+				expect( session.forked ).toBe( [ "Other approach" ] );
+				expect( screen.log.filter( e => e[ 1 ] == "print" ).last()[ 3 ] ).toInclude( "Forked as [Other approach]: 4 messages copied" );
+				expect( controller.transcript() ).toHaveLength( 2 );
+			} );
+
+			it( "will not export an empty conversation", function() {
+				var screen = fakeScreen( [ "/export" ] )
 				controllerFor( screen, fakeSession() ).run( screen )
 
-				expect( screen.log.filter( e => e[ 1 ] == "print" )[ 1 ][ 3 ] ).toBe( "Nothing to save yet." );
+				expect( screen.log.filter( e => e[ 1 ] == "print" )[ 1 ][ 3 ] ).toBe( "Nothing to export yet." );
 			} );
 
 			it( "shows an error from the agent and carries on with the next message", function() {
@@ -398,7 +546,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "offers its commands to the screen for the slash menu", function() {
 				var names = new bxagents.models.cli.chat.ChatController( fakeSession() ).commands().map( c => c.name )
 
-				expect( names ).toBe( [ "/help", "/new", "/tools", "/sessions", "/resume", "/clear", "/compact", "/model", "/profile", "/default", "/info", "/remember", "/notes", "/copy", "/save", "/record", "/exit" ] );
+				expect( names ).toBe( [ "/help", "/new", "/name", "/fork", "/tools", "/sessions", "/resume", "/clear", "/compact", "/context", "/model", "/ping", "/profile", "/default", "/info", "/remember", "/notes", "/copy", "/export", "/record", "/exit" ] );
 			} );
 
 		} );

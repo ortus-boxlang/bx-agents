@@ -236,6 +236,24 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   reaches the model; `gatewaySession.commands` (`enabled`, `prefix`, `allow`, `admins`) narrows, widens or
   switches them off, and `build` checks it.
 
+- `/name <new name>` names a conversation and `/fork [new name]` copies the whole conversation under a new name
+  and carries on in the copy. `/export [file] [--format=md|html]` replaces `/save`: Markdown as before, or an HTML
+  page with the Markdown rendered (what you typed is escaped). In the web page `/export` downloads the file, and the
+  header has **Fork** and **Export** buttons.
+- `bxAgents sessions list|rename|fork|delete` manages the conversations in the chat database from the shell.
+- `POST /__bxagents/sessions/rename` and `/fork` let `chat --connect` do the same on a server.
+
+- `contextWindow` and `vision` on the default model and on each profile say what the model can hold and whether it
+  can see images (bx-ai has no way to ask). They are optional and nothing is guessed; `/info` and `/model` show them.
+- `/ping [profile]` and `bxAgents models test [--profile=NAME | --all]` send a model one tiny question and say
+  whether it answered, how long it took, or the provider's own reason; `bxAgents models list` shows the models and
+  what is known about them. `POST /__bxagents/ping` does it for `chat --connect`, only for the profiles the route offers.
+
+- `/context` shows how big the context is and what it is made of (system prompt, tool definitions, notes, messages),
+  worked out locally, with the share of the model's window when `contextWindow` is set. The hint row under the
+  message box in the terminal and a chip in the web page's header always show it: `ctx ~12.4k / 128k 9%`.
+  `GET /__bxagents/context` serves it to `chat --connect`.
+
 #### The chat screen
 
 - `bxAgents chat` is now a Pi-style terminal screen that keeps your scrollback: finished turns are

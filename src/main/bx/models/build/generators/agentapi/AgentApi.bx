@@ -290,14 +290,48 @@ class {
 			var modelId = ( modelConfig.params ?: {} ).model ?: ( modelConfig.name ?: "" )
 			modelLabel = [ modelConfig.provider ?: "", modelId ].filter( ( part ) => len( part ) ).toList( "/" )
 		}
+		var facts = new "models.runtime.ModelFacts@bxagents"().of( config.profile ?: "" )
 		event.renderData( type : "json", data : {
 			"success"      : true,
 			"name"         : config.name ?: "",
 			"description"  : config.description ?: "",
 			"model"        : modelLabel,
+			"contextWindow" : facts.contextWindow,
+			"vision"       : facts.vision,
 			"toolCount"    : config.toolCount ?: 0,
-			"capabilities" : { "events" : true, "cancel" : true, "steer" : true, "approvals" : true, "notes" : !isNull( notesProvider() ), "sessions" : !isNull( sessionStore() ), "profiles" : offered().any(), "commands" : true }
+			"capabilities" : { "events" : true, "cancel" : true, "steer" : true, "approvals" : true, "notes" : !isNull( notesProvider() ), "sessions" : !isNull( sessionStore() ), "profiles" : offered().any(), "commands" : true, "context" : true }
 		} )
+	}
+
+	/**
+	 * What is in the caller's context for one conversation: the system prompt, the tool definitions, the notes and the
+	 * messages, as estimated sizes (see models.chat.ContextReport). Nothing is sent to a model.
+	 *
+	 * Query: conversationId
+	 */
+	function context( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var conversation = new "models.chat.ServerConversation@bxagents"( agent(), callerId( event ), nullValue(), rc.conversationId ?: "" )
+		var answer = conversation.contextReport()
+		answer[ "success" ] = true
+		event.renderData( type : "json", data : answer )
+	}
+
+	/**
+	 * Tests a model with one tiny question: { ok, model, ms, reply } or { ok : false, model, reason }. A profile is
+	 * only used when the route offers it (agentApi.profiles); without one the server's own model is tested.
+	 *
+	 * Body: { profile? }
+	 */
+	function ping( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var body = event.getHTTPContent( json : true )
+		var conversation = new "models.chat.ServerConversation@bxagents"( agent(), callerId( event ) ).withOfferedProfiles( offered().names() )
+		event.renderData( type : "json", data : outcomeAnswer( conversation.ping( body.profile ?: "" ) ) )
 	}
 
 	/**
@@ -333,6 +367,64 @@ class {
 			return
 		}
 		event.renderData( type : "json", data : { "success" : true, "sessions" : store.list( callerId( event ), val( rc.limit ?: 20 ) ) } )
+	}
+
+	/**
+	 * Names one of the caller's conversations; one nobody has spoken in yet gets its row. { ok, title } or { ok : false, reason }.
+	 *
+	 * Body: { conversationId, title }
+	 */
+	function renameSession( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var body = event.getHTTPContent( json : true )
+		var conversation = conversationOf( event, body.conversationId ?: "" )
+		if ( isNull( conversation ) ) {
+			return
+		}
+		event.renderData( type : "json", data : outcomeAnswer( conversation.rename( body.title ?: "" ) ) )
+	}
+
+	/**
+	 * Copies one of the caller's conversations, messages and all, under a new name.
+	 * { ok, id, title, messages } or { ok : false, reason }.
+	 *
+	 * Body: { conversationId, title? }
+	 */
+	function forkSession( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var body = event.getHTTPContent( json : true )
+		var conversation = conversationOf( event, body.conversationId ?: "" )
+		if ( isNull( conversation ) ) {
+			return
+		}
+		event.renderData( type : "json", data : outcomeAnswer( conversation.fork( body.title ?: "" ) ) )
+	}
+
+	/**
+	 * The caller's conversation to act on, or null after answering 400 or 404. The conversation need not be in the
+	 * list yet (nobody has spoken in it); an id that is somebody else's is refused when the list is written.
+	 */
+	private function conversationOf( required any event, required string conversationId ) {
+		var store = sessionStore()
+		if ( isNull( store ) ) {
+			noSessions( arguments.event )
+			return nullValue()
+		}
+		if ( !len( arguments.conversationId ) ) {
+			arguments.event.renderData( type : "json", statusCode : 400, data : { "success" : false, "error" : "conversationId is required" } )
+			return nullValue()
+		}
+		return new "models.chat.ServerConversation@bxagents"( agent(), callerId( arguments.event ), store, arguments.conversationId )
+	}
+
+	private struct function outcomeAnswer( required struct outcome ) {
+		var answer = duplicate( arguments.outcome )
+		answer[ "success" ] = arguments.outcome.ok ?: false
+		return answer
 	}
 
 	/**
@@ -433,7 +525,7 @@ class {
 	}
 
 	private function commandService() {
-		return new "models.chat.commands.CommandService@bxagents"( agent(), sessionStore() )
+		return new "models.chat.commands.CommandService@bxagents"( agent : agent(), sessions : sessionStore(), offered : offered().names() )
 	}
 
 	/**

@@ -35,7 +35,7 @@ class {
 	}
 
 	/**
-	 * @return [ { name, description, provider, model, isDefault } ] for the offered profiles, in the order the app listed them. Never a key.
+	 * @return [ { name, description, provider, model, isDefault, contextWindow, vision } ] for the offered profiles, in the order the app listed them. Never a key.
 	 */
 	array function list() {
 		var all = aiProfiles()
@@ -43,7 +43,8 @@ class {
 		for ( var name in variables.names ) {
 			for ( var p in all ) {
 				if ( compareNoCase( p.name, name ) == 0 ) {
-					out.append( { "name" : p.name, "description" : p.description ?: "", "provider" : p.provider, "model" : p.model ?: "", "isDefault" : p.isDefault } )
+					var facts = new "models.runtime.ModelFacts@bxagents"().of( p.name )
+					out.append( { "name" : p.name, "description" : p.description ?: "", "provider" : p.provider, "model" : p.model ?: "", "isDefault" : p.isDefault, "contextWindow" : facts.contextWindow, "vision" : facts.vision } )
 					break
 				}
 			}
