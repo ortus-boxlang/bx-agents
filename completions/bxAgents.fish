@@ -65,6 +65,8 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb add' -l path -x
     complete -c $cmd -n '__bxagents_using_verb add' -l points -x
     complete -c $cmd -n '__bxagents_using_verb add' -l policy -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l profile -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l profiles -x
     complete -c $cmd -n '__bxagents_using_verb add' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb add' -l prompt -x
     complete -c $cmd -n '__bxagents_using_verb add' -l provider -x

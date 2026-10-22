@@ -303,6 +303,7 @@ Las plataformas son las que ofrece el asistente de new: `telegram`, `slack`, `di
 | `--env=<config=NAME,...>` | Plataformas de chat: qué variable guarda cada credencial, por ejemplo `botTokenEnvVar=ACME_BOT`. Sin él se usan los nombres habituales (`SLACK_BOT_TOKEN`, ...). En el archivo del gateway solo van los nombres; en `.env` se añade un marcador vacío para cada uno. |
 | `--policy=queue\|reject\|steer\|interrupt` | Plataformas de chat: qué hacer con un mensaje que llega mientras el agente sigue respondiendo. Se escribe en el `gatewaySession` de Agent.yaml salvo que sea el valor por defecto, `queue`. |
 | `--path=<path>` | `web` y `api`: dónde se sirve (`/chat` y `/api/chat` por defecto). Se rechaza una ruta que otro gateway use. |
+| `--profiles=a,b` | `web`: los perfiles del proyecto que se pueden elegir en el chat (ver [Elegir el modelo](conventions/web-ui.md#elegir-el-modelo)). Solo se pregunta cuando el proyecto tiene perfiles; ninguno mantiene la página en el modelo propio del agente. |
 | `--auth=open\|key\|users` | `web`: cualquiera que pueda alcanzarlo, una clave compartida aleatoria guardada en `.env` como `CHAT_UI_API_KEY`, o usuarios con nombre. |
 | `--users=<name:hash,...>` | `web` con `users`: cada hash sale de `bxAgents hash-password`. Una contraseña nunca se acepta como flag; en una terminal la escribes, oculta, y solo se guarda su hash. |
 
@@ -322,7 +323,8 @@ bxAgents add subagent checker --model=claude --parent=writer --with=search --sea
 |---|---|
 | `--name=<name>` | La carpeta, o el primer posicional. Se rechaza un nombre que ya tenga cualquier agente del proyecto. |
 | `--parent=<carpeta>` | El agente que delega en él: `.` para la raíz (por defecto) o la carpeta de otro subagente, que es como se anidan. |
-| `--model=<provider/model>` | Obligatorio sin terminal. |
+| `--model=<provider/model>` | Obligatorio sin terminal, salvo que se dé `--profile`. |
+| `--profile=<nombre>` | Usa uno de los [perfiles](conventions/models.md#perfiles) del proyecto en lugar de un modelo, como puede hacer el agente principal con `profile:`. En una terminal, a un proyecto que tiene perfiles se le pregunta cuál usar. |
 | `--description`, `--with`, `--search`, `--files`, `--files-dir`, `--memory`, `--mcp`, `--guard` | Los mismos que en [`new`](#new). |
 
 Escribe `subagents/<name>/Agent.yaml` (con el modelo simulado de `environments.test`, para que `bxAgents test` no necesite clave) e `instructions.md`, y añade un marcador vacío en `.env` por cada clave que necesiten las opciones. El nombre se inserta en el `subAgents` del padre sin reescribir el archivo, así que los comentarios y el orden se conservan. Si el padre es una clase, o su lista está escrita de una forma que no se puede ampliar insertando, no se cambia nada en él y se imprime la línea que hay que añadir. Los paquetes que necesite una opción (`bx-playwright` para navegar) se nombran para que los añadas a `box.json`.

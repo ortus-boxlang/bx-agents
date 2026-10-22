@@ -54,6 +54,8 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'path'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'points'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'policy'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'profile'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'profiles'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
 			@{ Name = 'prompt'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'provider'; Value = $true; Choices = @(); Dir = $false }

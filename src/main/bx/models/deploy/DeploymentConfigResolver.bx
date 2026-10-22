@@ -15,6 +15,8 @@
  * project's existing "secrets stay external" rule (PackagerService's
  * redaction, AgentConfigResolver never touching provider keys).
  */
+import bxModules.bxagents.models.util.EntryConfigReader;
+
 class {
 
 	/**
@@ -60,7 +62,7 @@ class {
 			}
 			seenNames[ name ] = true
 
-			var config = readEntryConfig( path )
+			var config = EntryConfigReader::read( path )
 			if ( isNull( config ) ) {
 				errors.append( "deploy/#getFileFromPath( path )# could not be read" )
 				continue
@@ -210,30 +212,6 @@ class {
 		var registry = arguments.config.registry ?: {}
 		if ( !isStruct( registry ) || !len( registry.repository ?: "" ) ) {
 			arguments.errors.append( "deploy/#arguments.name# (#arguments.target#) is missing a 'registry.repository'" )
-		}
-	}
-
-	/**
-	 * Reads a discovered `deploy/*` entry's config: JSON files are
-	 * deserialized directly, `.bx` files are dynamically loaded and their
-	 * `configure()` invoked.
-	 *
-	 * @path Absolute path to the entry's `.bx`/`.json` file
-	 *
-	 * @return The entry's config struct, or null if it could not be read
-	 */
-	private any function readEntryConfig( required string path ) {
-		try {
-			if ( arguments.path.endsWith( ".json" ) ) {
-				return jsonDeserialize( fileRead( arguments.path ) )
-			}
-
-			var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
-			var instance = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
-				.instantiate( arguments.path, context )
-			return instance.configure()
-		} catch ( any e ) {
-			return null
 		}
 	}
 

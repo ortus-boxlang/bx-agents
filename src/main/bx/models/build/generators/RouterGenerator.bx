@@ -23,6 +23,10 @@
  * per-transport. Gating it on http left every push-only project (Telegram,
  * Slack, Discord, ...) able to PAUSE for an approval it had no route to answer.
  */
+import bxModules.bxagents.models.util.Strings;
+
+import bxModules.bxagents.models.util.EntryConfigReader;
+
 class {
 
 	/**
@@ -113,7 +117,7 @@ class {
 			lines.append( 'post( "/webhooks/github" ).toHandler( "GitHub.process" )' )
 		}
 
-		var appDir = normalizePath( arguments.appDir )
+		var appDir = Strings::normalizePath( arguments.appDir )
 		directoryCreate( path = appDir & "/config", createPath = true, ignoreExists = true )
 		var routerPath = appDir & "/config/Router.bx"
 		fileWrite( routerPath, renderRouterFile( lines ) )
@@ -220,7 +224,7 @@ class {
 		lines.append( '			return false' )
 		lines.append( '		}' )
 		if ( len( tokenEnvVar ) ) {
-			lines.append( '		var expected = getSystemSetting( "#bxLiteral( tokenEnvVar )#", "" )' )
+			lines.append( '		var expected = getSystemSetting( "#Strings::bxLiteral( tokenEnvVar )#", "" )' )
 			lines.append( '		if ( len( expected ) && given == expected ) {' )
 			lines.append( '			return true' )
 			lines.append( '		}' )
@@ -291,7 +295,7 @@ class {
 		var entries = []
 
 		for ( var gw in ( arguments.discovery.gateways ?: [] ) ) {
-			var config = readEntryConfig( gw.path )
+			var config = EntryConfigReader::read( gw.path )
 			if ( !isNull( config ) && structKeyExists( config, "exposes" ) ) {
 				entries.append( { name : gw.name, config : config } )
 			}
@@ -321,10 +325,10 @@ class {
 		// where an entry lives: a path of "/chat/" mounts at <appDir>/chat with
 		// an API_BASE of "/chat/api", and without this the router would register
 		// "/chat//api/invoke" and every request from the shell would 404.
-		var path = normalizePath( arguments.entry.config.path ?: "" )
+		var path = Strings::normalizePath( arguments.entry.config.path ?: "" )
 
 		if ( arguments.entry.config.exposes == "agent" ) {
-			return 'route( "#bxLiteral( path )#" ).toAi( "GeneratedAgent" )'
+			return 'route( "#Strings::bxLiteral( path )#" ).toAi( "GeneratedAgent" )'
 		}
 
 		if ( arguments.entry.config.exposes == "webui" ) {
@@ -340,16 +344,16 @@ class {
 			// every memory the agent holds is scoped per visitor instead of shared.
 			// handlers/ChatUi.bx (see WebUiGenerator) supplies that while keeping
 			// toAi()'s exact route shape and SSE wire format.
-			var api = bxLiteral( path ) & "/api"
+			var api = Strings::bxLiteral( path ) & "/api"
 
 			// Sign-in, only when this entry declares accounts. The form itself is
 			// the static login.html mounted beside the shell, so only its POST
 			// target and logout need routes.
 			var authRoutes = ( arguments.entry.config.users ?: [] ).len()
 				? [
-					'post( "#bxLiteral( path )#/login" ).toHandler( "ChatAuth.doLogin" )',
-					'post( "#bxLiteral( path )#/logout" ).toHandler( "ChatAuth.doLogout" )',
-					'get( "#bxLiteral( path )#/logout" ).toHandler( "ChatAuth.doLogout" )'
+					'post( "#Strings::bxLiteral( path )#/login" ).toHandler( "ChatAuth.doLogin" )',
+					'post( "#Strings::bxLiteral( path )#/logout" ).toHandler( "ChatAuth.doLogout" )',
+					'get( "#Strings::bxLiteral( path )#/logout" ).toHandler( "ChatAuth.doLogout" )'
 				]
 				: []
 
@@ -387,7 +391,7 @@ class {
 		}
 
 		var target = arguments.entry.config.target ?: ""
-		return 'route( "#bxLiteral( path )#" ).toMCP( "#bxLiteral( target )#" )'
+		return 'route( "#Strings::bxLiteral( path )#" ).toMCP( "#Strings::bxLiteral( target )#" )'
 	}
 
 	/**
@@ -413,48 +417,6 @@ class {
 		fileLines.append( "" )
 
 		return fileLines.toList( char( 10 ) )
-	}
-
-	/**
-	 * Reads a discovered `gateways/*` entry's config: JSON files are
-	 * deserialized directly, `.bx` files are dynamically loaded and their
-	 * `configure()` invoked.
-	 *
-	 * @path Absolute path to the entry's `.bx`/`.json` file
-	 *
-	 * @return The entry's config struct, or null if it could not be read
-	 */
-	private any function readEntryConfig( required string path ) {
-		try {
-			if ( arguments.path.endsWith( ".json" ) ) {
-				return jsonDeserialize( fileRead( arguments.path ) )
-			}
-
-			var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
-			var instance = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
-				.instantiate( arguments.path, context )
-			return instance.configure()
-		} catch ( any e ) {
-			return null
-		}
-	}
-
-	/**
-	 * @path A filesystem path, or an exposure entry's URL path
-	 *
-	 * @return The path with any trailing slash(es) stripped
-	 */
-	private string function normalizePath( required string path ) {
-		return arguments.path.reReplace( "[\/]+$", "" )
-	}
-
-	/**
-	 * @value A raw string to embed inside a generated double-quoted BoxLang string literal
-	 *
-	 * @return value with `"` doubled and `#` doubled, so it round-trips as a literal, not an interpolation
-	 */
-	private string function bxLiteral( required string value ) {
-		return arguments.value.replace( '"', '""', "all" ).replace( "##", "####", "all" )
 	}
 
 }

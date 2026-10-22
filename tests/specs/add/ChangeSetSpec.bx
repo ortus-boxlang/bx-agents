@@ -13,6 +13,19 @@ class extends="testbox.system.BaseSpec" {
 				}
 			} );
 
+			it( "declares an env variable with a note, once", function() {
+				var changes = new bxagents.models.add.ChangeSet( root );
+				changes.envStub( "OPENAI_API_KEY", "OpenAI API key." );
+				changes.apply();
+				var again = new bxagents.models.add.ChangeSet( root );
+				again.envStub( "OPENAI_API_KEY", "OpenAI API key." );
+				again.apply();
+
+				var env = fileRead( root & "/.env" );
+				expect( env ).toInclude( "## OpenAI API key." & char( 10 ) & "OPENAI_API_KEY=" );
+				expect( env.reMatch( "OPENAI_API_KEY=" ) ).toHaveLength( 1 );
+			} );
+
 			it( "writes a file, creating its folders", function() {
 				var changes = new bxagents.models.add.ChangeSet( root );
 				changes.file( "a/b/c.txt", "hello" );

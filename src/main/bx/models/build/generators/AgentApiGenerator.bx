@@ -5,6 +5,8 @@
  * The handler is a real BoxLang class kept in generators/agentapi/AgentApi.bx so it is compiled and
  * checked with the rest of the module; this class only stamps the token settings into a copy.
  */
+import bxModules.bxagents.models.util.Strings;
+
 class {
 
 	/**
@@ -26,7 +28,7 @@ class {
 		if ( !source.find( marker ) ) {
 			throw( type = "BxAgents.AgentApiTemplateBroken", message = "agentapi/AgentApi.bx has lost its token variable marker" )
 		}
-		source = source.replace( marker, '"' & bxLiteral( tokenVariable ) & '"' )
+		source = source.replace( marker, '"' & Strings::bxLiteral( tokenVariable ) & '"' )
 		var tokensMarker = '"__TOKENS_ENABLED__"'
 		if ( !source.find( tokensMarker ) ) {
 			throw( type = "BxAgents.AgentApiTemplateBroken", message = "agentapi/AgentApi.bx has lost its tokens marker" )
@@ -38,18 +40,11 @@ class {
 			throw( type = "BxAgents.AgentApiTemplateBroken", message = "agentapi/AgentApi.bx has lost its profiles marker" )
 		}
 		// the allow-list as JSON inside a string, parsed when the handler asks for it
-		source = source.replace( profilesMarker, '"' & bxLiteral( jsonSerialize( ( arguments.agentApi.profiles ?: [] ).map( p => toString( p ) ) ) ) & '"' )
+		source = source.replace( profilesMarker, '"' & Strings::bxLiteral( jsonSerialize( ( arguments.agentApi.profiles ?: [] ).map( p => toString( p ) ) ) ) & '"' )
 
 		var path = handlerDir & "/AgentApi.bx"
 		fileWrite( path, source )
 		return { written : true, path : path }
-	}
-
-	/**
-	 * @return The value safe inside a double-quoted BoxLang string
-	 */
-	private string function bxLiteral( required string value ) {
-		return arguments.value.replace( '"', '""', "all" ).replace( "##", "####", "all" )
 	}
 
 }

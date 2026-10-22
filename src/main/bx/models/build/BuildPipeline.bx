@@ -13,6 +13,8 @@
  * `package` CLI verb), so a fast dev loop (`build` -> inspect -> `build`
  * again) never pays the packaging cost it doesn't need.
  */
+import bxModules.bxagents.models.util.Strings;
+
 class {
 
 	/**
@@ -86,7 +88,7 @@ class {
 	 * @return { projectRoot, buildDir, appDir, manifestPath, manifest, warnings }
 	 */
 	struct function build( required string projectRoot, string cliEnvironment = "", any onProgress = function( required string message ) {} ) {
-		var root = normalizePath( arguments.projectRoot )
+		var root = Strings::normalizePath( arguments.projectRoot )
 		var buildDir = root & "/.build"
 		var appDir = buildDir & "/app"
 		var buildStart = getTickCount()
@@ -289,15 +291,6 @@ class {
 			manifest     : manifest,
 			warnings     : validation.warnings
 		}
-	}
-
-	/**
-	 * @path A filesystem path
-	 *
-	 * @return The path with any trailing slash(es) stripped
-	 */
-	private string function normalizePath( required string path ) {
-		return arguments.path.reReplace( "[\/]+$", "" )
 	}
 
 }

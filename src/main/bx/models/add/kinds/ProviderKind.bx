@@ -11,6 +11,8 @@
  * The provider's API key is never asked for. Its usual variable (OPENAI_API_KEY) gets a
  * stub in .env, and only the name is ever written down.
  */
+import bxModules.bxagents.models.util.ModelTuning;
+
 class {
 
 	struct function info() {
@@ -36,7 +38,7 @@ class {
 			throw( type = "BxAgents.InvalidAnswer", message = "#root.file# already has settings for #provider# under providers:. Edit them there." )
 		}
 		var tuning = questions.tuning( a )
-		var set = questions.settings( tuning )
+		var set = ModelTuning::settings( tuning )
 		if ( !set.params.count() && !set.options.count() ) {
 			throw( type = "BxAgents.MissingAnswer", message = "Nothing to set for #provider#. Pass at least one of --temperature, --max-tokens, --timeout." )
 		}
@@ -51,7 +53,7 @@ class {
 	void function plan( required struct answers, required struct ctx, required any changes ) {
 		var a = arguments.answers
 		var questions = new "models.add.AiQuestions@bxagents"()
-		var set = questions.settings( a.tuning )
+		var set = ModelTuning::settings( a.tuning )
 		var entry = {}
 		if ( set.params.count() ) {
 			entry[ "params" ] = set.params

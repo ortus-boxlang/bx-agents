@@ -1,0 +1,69 @@
+/**
+ * The three settings a person tunes on a model, as text from a flag or an answer: `temperature`,
+ * `maxTokens` and `timeout`. One place says what is valid and how they become bx-ai's `params` and `options`,
+ * so `new`, `add provider` and `add profile` agree.
+ */
+class {
+
+	static {
+		TEMPERATURE_PROBLEM = "A number from 0 to 2."
+		COUNT_PROBLEM = "A whole number above zero."
+	}
+
+	/**
+	 * @value A temperature as text
+	 *
+	 * @return True for a number from 0 to 2
+	 */
+	static boolean function isTemperature( required string value ) {
+		return isNumeric( arguments.value ) && val( arguments.value ) >= 0 && val( arguments.value ) <= 2
+	}
+
+	/**
+	 * @value A token count or a timeout in seconds, as text
+	 *
+	 * @return True for a whole number above zero
+	 */
+	static boolean function isCount( required string value ) {
+		return reFind( "^[1-9][0-9]*$", arguments.value ) > 0
+	}
+
+	/**
+	 * @value A temperature as text, empty for none
+	 *
+	 * @return An error message, or an empty string when it is empty or fine
+	 */
+	static string function temperatureProblem( required string value ) {
+		return !len( arguments.value ) || isTemperature( arguments.value ) ? "" : static.TEMPERATURE_PROBLEM
+	}
+
+	/**
+	 * @value A count as text, empty for none
+	 *
+	 * @return An error message, or an empty string when it is empty or fine
+	 */
+	static string function countProblem( required string value ) {
+		return !len( arguments.value ) || isCount( arguments.value ) ? "" : static.COUNT_PROBLEM
+	}
+
+	/**
+	 * @tuning { temperature, maxTokens, timeout } as text, each empty when not set
+	 *
+	 * @return { params, options } mappings holding only what was set
+	 */
+	static struct function settings( required struct tuning ) {
+		var params = {}
+		var options = {}
+		if ( len( arguments.tuning.temperature ?: "" ) ) {
+			params[ "temperature" ] = val( arguments.tuning.temperature )
+		}
+		if ( len( arguments.tuning.maxTokens ?: "" ) ) {
+			params[ "max_tokens" ] = int( arguments.tuning.maxTokens )
+		}
+		if ( len( arguments.tuning.timeout ?: "" ) ) {
+			options[ "timeout" ] = int( arguments.tuning.timeout )
+		}
+		return { params : params, options : options }
+	}
+
+}

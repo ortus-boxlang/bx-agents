@@ -25,6 +25,10 @@
  * field inside the file's own `configure()` struct - a project may still set
  * one for documentation purposes, but it's ignored here.
  */
+import bxModules.bxagents.models.util.Strings;
+
+import bxModules.bxagents.models.util.EntryConfigReader;
+
 class {
 
 	/**
@@ -49,7 +53,7 @@ class {
 			return []
 		}
 
-		var mcpDir = normalizePath( arguments.appDir ) & "/mcp"
+		var mcpDir = Strings::normalizePath( arguments.appDir ) & "/mcp"
 		directoryCreate( path = mcpDir, createPath = true, ignoreExists = true )
 
 		var registrations = []
@@ -67,7 +71,7 @@ class {
 	 * @return A bare `mcpServer(...).registerTool(...)` statement string
 	 */
 	private string function renderRegistration( required struct mcpEntry ) {
-		var config = readEntryConfig( arguments.mcpEntry.path )
+		var config = EntryConfigReader::read( arguments.mcpEntry.path )
 		if ( isNull( config ) ) {
 			throw(
 				type    = "BxAgents.InvalidMcpServer",
@@ -81,50 +85,12 @@ class {
 		var tools = config.tools ?: []
 		tools = isArray( tools ) ? tools : []
 
-		var call = 'mcpServer( "#bxLiteral( arguments.mcpEntry.name )#", "#bxLiteral( description )#", "#bxLiteral( version )#", "#bxLiteral( cors )#" )'
+		var call = 'mcpServer( "#Strings::bxLiteral( arguments.mcpEntry.name )#", "#Strings::bxLiteral( description )#", "#Strings::bxLiteral( version )#", "#Strings::bxLiteral( cors )#" )'
 		for ( var toolName in tools ) {
-			call &= char( 10 ) & '			.registerTool( aiToolRegistry().get( "#bxLiteral( toolName )#" ) )'
+			call &= char( 10 ) & '			.registerTool( aiToolRegistry().get( "#Strings::bxLiteral( toolName )#" ) )'
 		}
 
 		return call
-	}
-
-	/**
-	 * Reads a discovered `mcp/*` entry's config by dynamically loading the
-	 * `.bx` file and invoking its `configure()` (local mcp/* entries are
-	 * `.bx`-only per this convention, unlike gateways/schedules/models).
-	 *
-	 * @path Absolute path to the entry's `.bx` file
-	 *
-	 * @return The entry's config struct, or null if it could not be read
-	 */
-	private any function readEntryConfig( required string path ) {
-		try {
-			var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
-			var instance = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
-				.instantiate( arguments.path, context )
-			return instance.configure()
-		} catch ( any e ) {
-			return null
-		}
-	}
-
-	/**
-	 * @path A filesystem path
-	 *
-	 * @return The path with any trailing slash(es) stripped
-	 */
-	private string function normalizePath( required string path ) {
-		return arguments.path.reReplace( "[\/]+$", "" )
-	}
-
-	/**
-	 * @value A raw string to embed inside a generated double-quoted BoxLang string literal
-	 *
-	 * @return value with `"` doubled and `#` doubled, so it round-trips as a literal, not an interpolation
-	 */
-	private string function bxLiteral( required string value ) {
-		return arguments.value.replace( '"', '""', "all" ).replace( "##", "####", "all" )
 	}
 
 }

@@ -25,6 +25,10 @@
  * RouterGenerator already knows how to render for `exposes: "agent"` -
  * see RouterGenerator.renderExposureRoute()'s `webui` branch.
  */
+import bxModules.bxagents.models.util.Strings;
+
+import bxModules.bxagents.models.util.EntryConfigReader;
+
 class {
 
 	/**
@@ -50,7 +54,7 @@ class {
 		// before it is rendered.
 		var users = collectWebUiUsers( entries )
 
-		var handlerDir = normalizePath( arguments.appDir ) & "/handlers"
+		var handlerDir = Strings::normalizePath( arguments.appDir ) & "/handlers"
 		directoryCreate( path : handlerDir, createPath : true, ignoreExists : true )
 		// every entry is served by this one handler, so they offer the same profiles (the validator refuses entries that differ)
 		fileWrite( handlerDir & "/ChatUi.bx", renderChatHandler( users.len() > 0, ( entries.first().config.profiles ?: [] ).map( p => toString( p ) ) ) )
@@ -62,14 +66,14 @@ class {
 		// the first entry's own database config (they all share it).
 		var database = resolveDatabaseConfig( entries )
 
-		var modelDir = normalizePath( arguments.appDir ) & "/models"
+		var modelDir = Strings::normalizePath( arguments.appDir ) & "/models"
 		directoryCreate( path : modelDir, createPath : true, ignoreExists : true )
 		fileWrite( modelDir & "/ChatDb.bx", renderChatDb( database ) )
 		fileWrite( modelDir & "/PasswordHasher.bx", renderPasswordHasher() )
 		fileWrite( modelDir & "/UserService.bx", renderUserService() )
 		fileWrite( modelDir & "/User.bx", renderUser() )
 
-		var interceptorDir = normalizePath( arguments.appDir ) & "/interceptors"
+		var interceptorDir = Strings::normalizePath( arguments.appDir ) & "/interceptors"
 		directoryCreate( path : interceptorDir, createPath : true, ignoreExists : true )
 
 		// Migrates the web UI's SQLite store at boot, rather than on whichever
@@ -112,7 +116,7 @@ class {
 			loginGateName = "WebUiLoginGate"
 			fileWrite( interceptorDir & "/#loginGateName#.bx", renderLoginGate( userEntries ) )
 
-			var handlerDir = normalizePath( arguments.appDir ) & "/handlers"
+			var handlerDir = Strings::normalizePath( arguments.appDir ) & "/handlers"
 			directoryCreate( path : handlerDir, createPath : true, ignoreExists : true )
 			fileWrite( handlerDir & "/ChatAuth.bx", renderAuthHandler( userEntries.first() ) )
 		}
@@ -173,17 +177,17 @@ class {
 		var entries = []
 
 		for ( var gw in ( arguments.discovery.gateways ?: [] ) ) {
-			var config = readEntryConfig( gw.path )
+			var config = EntryConfigReader::read( gw.path )
 			if ( !isNull( config ) && ( config.exposes ?: "" ) == "webui" ) {
 				// discover() returns no projectRoot, but every gateways/* entry sits at
 				// "<root>/gateways/<name>.bx" by convention, so the root is two levels up
 				// from the entry file. Derived here rather than threaded through
 				// generate()'s signature, which BuildPipeline already calls positionally.
-				var gatewaysDir = normalizePath( getDirectoryFromPath( gw.path ) )
+				var gatewaysDir = Strings::normalizePath( getDirectoryFromPath( gw.path ) )
 				entries.append( {
 					name        : gw.name,
 					config      : config,
-					projectRoot : normalizePath( getDirectoryFromPath( gatewaysDir ) )
+					projectRoot : Strings::normalizePath( getDirectoryFromPath( gatewaysDir ) )
 				} )
 			}
 		}
@@ -219,7 +223,7 @@ class {
 		var html = fileRead( templateDir & "webui/index.html" )
 
 		var config = arguments.entry.config
-		var path = normalizePath( config.path ?: "" )
+		var path = Strings::normalizePath( config.path ?: "" )
 		var title = len( config.title ?: "" ) ? config.title : "BX Agents Chat"
 		var subtitle = config.subtitle ?: ""
 		var icon = config.icon ?: ""
@@ -254,7 +258,7 @@ class {
 		html = html.replace( "__THEME_TOKENS__", renderThemeTokens( config.theme ?: {} ), "all" )
 		html = html.replace( "__CUSTOM_CSS__", readCustomCss( arguments.entry ), "all" )
 
-		var mountDir = normalizePath( arguments.appDir ) & path
+		var mountDir = Strings::normalizePath( arguments.appDir ) & path
 		directoryCreate( path : mountDir, createPath : true, ignoreExists : true )
 		fileWrite( mountDir & "/index.html", html )
 
@@ -1492,7 +1496,7 @@ class {
 	 * @return The rendered handlers/ChatAuth.bx source
 	 */
 	private string function renderAuthHandler( required struct entry ) {
-		var base       = normalizePath( arguments.entry.config.path ?: "" )
+		var base       = Strings::normalizePath( arguments.entry.config.path ?: "" )
 		var appPath    = renderLiteral( base & "/" )
 		var loginPath  = renderLiteral( base & "/login.html" )
 		var failedPath = renderLiteral( base & "/login.html?failed=1" )
@@ -1596,7 +1600,7 @@ class {
 		]
 
 		for ( var entry in arguments.entries ) {
-			var base = normalizePath( entry.config.path ?: "" )
+			var base = Strings::normalizePath( entry.config.path ?: "" )
 			// Built as their own variables first. A #renderLiteral(...)#
 			// interpolation containing its own double-quoted string terminates
 			// the surrounding string early - a parse hazard this project has
@@ -2300,7 +2304,7 @@ class {
 		]
 
 		for ( var entry in arguments.gatedEntries ) {
-			var apiPrefix = normalizePath( entry.config.path ?: "" ) & "/api"
+			var apiPrefix = Strings::normalizePath( entry.config.path ?: "" ) & "/api"
 			var envVarName = entry.config.apiKeyEnvVar
 			lines.append( "" )
 			lines.append( "		if ( path.startsWith( #renderLiteral( apiPrefix )# ) ) {" )
@@ -2334,41 +2338,6 @@ class {
 		lines.append( "" )
 
 		return lines.toList( char( 10 ) )
-	}
-
-	/**
-	 * Reads a discovered `gateways/*` entry's config: JSON files are
-	 * deserialized directly, `.bx` files are dynamically loaded and their
-	 * `configure()` invoked. Duplicated from RouterGenerator/GatewayGenerator
-	 * rather than shared - matches this codebase's existing per-generator
-	 * self-containment convention.
-	 *
-	 * @path Absolute path to the entry's `.bx`/`.json` file
-	 *
-	 * @return The entry's config struct, or null if it could not be read
-	 */
-	private any function readEntryConfig( required string path ) {
-		try {
-			if ( arguments.path.endsWith( ".json" ) ) {
-				return jsonDeserialize( fileRead( arguments.path ) )
-			}
-
-			var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
-			var instance = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
-				.instantiate( arguments.path, context )
-			return instance.configure()
-		} catch ( any e ) {
-			return null
-		}
-	}
-
-	/**
-	 * @path A filesystem path
-	 *
-	 * @return The path with any trailing slash(es) stripped
-	 */
-	private string function normalizePath( required string path ) {
-		return arguments.path.reReplace( "[\/]+$", "" )
 	}
 
 	/**

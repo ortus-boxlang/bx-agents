@@ -20,6 +20,8 @@
  * `IAiRunnable` interface, which `AiAgent` (via `AiBaseRunnable`) already
  * implements natively.
  */
+import bxModules.bxagents.models.util.Strings;
+
 class {
 
 	property name="modelSlugParser";
@@ -71,8 +73,8 @@ class {
 		boolean webUiHasUsers = false,
 		array projectInterceptors = []
 	) {
-		var root = normalizePath( arguments.projectRoot )
-		var appDir = normalizePath( arguments.buildDir )
+		var root = Strings::normalizePath( arguments.projectRoot )
+		var appDir = Strings::normalizePath( arguments.buildDir )
 
 		directoryCreate( path = appDir, createPath = true, ignoreExists = true )
 		directoryCreate( path = appDir & "/config", createPath = true, ignoreExists = true )
@@ -201,7 +203,7 @@ class {
 		var lines = [
 			"class {",
 			"",
-			'	this.name              = "#bxLiteral( arguments.appName )#"'
+			'	this.name              = "#Strings::bxLiteral( arguments.appName )#"'
 		]
 
 		if ( arguments.sessionManagement ) {
@@ -232,11 +234,11 @@ class {
 			// confirmed directly against qb 13.1.0, not inferred.
 			lines.append( "" )
 			lines.append( "	// The web UI's SQLite store - see models/ChatDb.bx" )
-			lines.append( '	this.datasources[ "#bxLiteral( arguments.datasourceName )#" ] = {' )
+			lines.append( '	this.datasources[ "#Strings::bxLiteral( arguments.datasourceName )#" ] = {' )
 			lines.append( '		"driver"  : "sqlite",' )
 			// BXAGENTS_DB, when set, names the file: `serve` sets it so the web chat and
 			// the terminal chat share one database in the project's data/ folder
-			lines.append( '		"database": getSystemSetting( "BXAGENTS_DB", expandPath( "#bxLiteral( arguments.databasePath )#" ) )' )
+			lines.append( '		"database": getSystemSetting( "BXAGENTS_DB", expandPath( "#Strings::bxLiteral( arguments.databasePath )#" ) )' )
 			lines.append( "	}" )
 			// Also the app default. A generated app has exactly one datasource,
 			// so anything that runs a query without naming one should reach it
@@ -250,7 +252,7 @@ class {
 			// with "No default datasource defined in the application ...
 			// Registered datasources are: [<name>]"; with `this.datasource` it
 			// resolves.
-			lines.append( '	this.datasource = "#bxLiteral( arguments.datasourceName )#"' )
+			lines.append( '	this.datasource = "#Strings::bxLiteral( arguments.datasourceName )#"' )
 		}
 
 		lines.append( "" )
@@ -267,7 +269,7 @@ class {
 			// ChatDb because this is where the configured path literally is;
 			// ChatDb only ever knows the datasource NAME.
 			lines.append( "		// SQLite creates the db file, but not the directory holding it" )
-			lines.append( '		directoryCreate( getDirectoryFromPath( getSystemSetting( "BXAGENTS_DB", expandPath( "#bxLiteral( arguments.databasePath )#" ) ) ), true, true )' )
+			lines.append( '		directoryCreate( getDirectoryFromPath( getSystemSetting( "BXAGENTS_DB", expandPath( "#Strings::bxLiteral( arguments.databasePath )#" ) ) ), true, true )' )
 		}
 		// Named args deliberately, not positional - coldbox.system.Bootstrap's
 		// real init() signature is
@@ -333,7 +335,7 @@ class {
 			"",
 			"	function configure() {",
 			"		coldbox = {",
-			'			appName : "#bxLiteral( arguments.appName )#"',
+			'			appName : "#Strings::bxLiteral( arguments.appName )#"',
 			"		}"
 		]
 
@@ -385,7 +387,7 @@ class {
 			settingBlocks.append( [
 				"			qb : {",
 				'				defaultGrammar : "SQLiteGrammar@qb",',
-				'				defaultOptions : { datasource : "#bxLiteral( arguments.webUiDatasource )#" }',
+				'				defaultOptions : { datasource : "#Strings::bxLiteral( arguments.webUiDatasource )#" }',
 				"			}"
 			] )
 		}
@@ -457,7 +459,7 @@ class {
 	 * @return A single onApplicationStart() statement
 	 */
 	private string function renderInterceptorRegistration( required string interceptorName, boolean fromProject = false ) {
-		var literal = bxLiteral( arguments.interceptorName )
+		var literal = Strings::bxLiteral( arguments.interceptorName )
 		if ( arguments.fromProject ) {
 			return 'application.cbController.getInterceptorService().registerInterceptor( interceptorClass: "interceptors.#literal#", interceptorName: "#literal#" )'
 		}
@@ -603,13 +605,13 @@ class {
 		for ( var node in arguments.agentNodes ) {
 			var accessor = 'injector.getInstance( "GeneratedAgent" )'
 			for ( var hop in node.accessorPath ) {
-				accessor &= '.getSubAgent( "#bxLiteral( hop )#" )'
+				accessor &= '.getSubAgent( "#Strings::bxLiteral( hop )#" )'
 			}
 
 			lines.append( "" )
 			lines.append( "		// Lets schedules/Scheduler.bx (or anything else) resolve this" )
 			lines.append( "		// agent directly by the name its own Agent.bx declares." )
-			lines.append( '		map( "#bxLiteral( node.name )#" ).toProvider( function() {' )
+			lines.append( '		map( "#Strings::bxLiteral( node.name )#" ).toProvider( function() {' )
 			lines.append( "			return #accessor#" )
 			lines.append( "		} )" )
 		}
@@ -676,7 +678,7 @@ class {
 	 * @return { source: the rendered agent/GeneratedAgentFactory.bx source, nodes: every agent node in the tree - see buildAgentTree() }
 	 */
 	private struct function renderAgentFactory( required string projectRoot, required string appDir, required struct resolvedConfig, string cliEnvironment = "", struct discovery = {}, string defaultMemory = "" ) {
-		var built = buildAgentTree( arguments.projectRoot, arguments.projectRoot, arguments.resolvedConfig, "agent", arguments.cliEnvironment, arguments.discovery, [], arguments.defaultMemory, normalizePath( arguments.appDir ) )
+		var built = buildAgentTree( arguments.projectRoot, arguments.projectRoot, arguments.resolvedConfig, "agent", arguments.cliEnvironment, arguments.discovery, [], arguments.defaultMemory, Strings::normalizePath( arguments.appDir ) )
 		var body = built.statements.toList( char( 10 ) & char( 10 ) )
 
 		var lines = [
@@ -688,7 +690,7 @@ class {
 			"",
 			"	function buildAgent() {",
 			"		// bx-ai's settings (default model, profiles, capability defaults) have to be in place before an agent is built, whoever builds it: chat, invoke, a test or ColdBox",
-			'		new "models.runtime.ModuleSettings@bxagents"().apply( "bxai", resolveAppPath( "../config/bxai-settings.json", "#bxLiteral( normalizePath( arguments.appDir ) & "/config/bxai-settings.json" )#" ) )',
+			'		new "models.runtime.ModuleSettings@bxagents"().apply( "bxai", resolveAppPath( "../config/bxai-settings.json", "#Strings::bxLiteral( Strings::normalizePath( arguments.appDir ) & "/config/bxai-settings.json" )#" ) )',
 			body,
 			"",
 			"		return agent",
@@ -836,7 +838,7 @@ class {
 		statements.append( renderAgentStatement( arguments.varName, arguments.nodePath, arguments.resolvedConfig, subAgentVarNames, arguments.discovery, thisName, arguments.defaultMemory, arguments.appDir, arguments.nodeRelativePath ) )
 		if ( structKeyExists( arguments.resolvedConfig, "notes" ) && isStruct( arguments.resolvedConfig.notes ) ) {
 			// the notes this agent keeps: a prompt block and the remember and forget tools
-			statements.append( 'new "models.notes.NotesWiring@bxagents"().attach( #arguments.varName#, #renderLiteral( arguments.resolvedConfig.notes )#, "#bxLiteral( thisName )#" )' )
+			statements.append( 'new "models.notes.NotesWiring@bxagents"().attach( #arguments.varName#, #renderLiteral( arguments.resolvedConfig.notes )#, "#Strings::bxLiteral( thisName )#" )' )
 		}
 
 		return { statements : statements, nodes : nodes }
@@ -890,7 +892,7 @@ class {
 		rest.delete( "type" )
 		// aiMemory()'s first param is named `memory`, not `type` - all-named-args here
 		// because BoxLang doesn't allow mixing positional and named arguments in one call.
-		return 'aiMemory( memory: "#bxLiteral( type )#", config: #renderLiteral( rest )# )'
+		return 'aiMemory( memory: "#Strings::bxLiteral( type )#", config: #renderLiteral( rest )# )'
 	}
 
 	/**
@@ -930,7 +932,7 @@ class {
 
 		var rest = isStruct( declared ) ? duplicate( declared ) : {}
 		rest.delete( "type" )
-		return 'aiMemory( memory: "#bxLiteral( type )#", config: #renderLiteral( rest )# )'
+		return 'aiMemory( memory: "#Strings::bxLiteral( type )#", config: #renderLiteral( rest )# )'
 	}
 
 	/**
@@ -1003,9 +1005,9 @@ class {
 		var instructionsExpression = ""
 		if ( fileExists( instructionsPath ) ) {
 			var instructionsRelative = copyNodeInstructions( instructionsPath, arguments.appDir, arguments.nodeRelativePath )
-			instructionsExpression = 'fileRead( resolveAppPath( "#bxLiteral( instructionsRelative )#", "#bxLiteral( instructionsPath )#" ) )'
+			instructionsExpression = 'fileRead( resolveAppPath( "#Strings::bxLiteral( instructionsRelative )#", "#Strings::bxLiteral( instructionsPath )#" ) )'
 		} else if ( isSimpleValue( inlineInstructions ) && len( trim( inlineInstructions ) ) ) {
-			instructionsExpression = '"#bxLiteral( inlineInstructions )#"'
+			instructionsExpression = '"#Strings::bxLiteral( inlineInstructions )#"'
 		} else {
 			throw(
 				type    = "BxAgents.MissingInstructions",
@@ -1027,8 +1029,8 @@ class {
 
 		var lines = renderToolsLines( arguments.varName, arguments.nodePath, arguments.resolvedConfig, arguments.name, arguments.appDir, arguments.nodeRelativePath )
 		lines.append( "var #arguments.varName# = aiAgent(" )
-		lines.append( '	name : "#bxLiteral( arguments.name )#",' )
-		lines.append( '	description : "#bxLiteral( description )#",' )
+		lines.append( '	name : "#Strings::bxLiteral( arguments.name )#",' )
+		lines.append( '	description : "#Strings::bxLiteral( description )#",' )
 		lines.append( '	instructions : #instructionsExpression#,' )
 		lines.append( '	model : #modelExpression#,' )
 		lines.append( "	tools : #arguments.varName#Tools," )
@@ -1120,14 +1122,14 @@ class {
 		// whole promise of a `.bxa`. The build-time absolute path stays on as the
 		// fallback, so nothing regresses if self-location does not resolve.
 		lines.append( 'var #arguments.varName#Context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()' )
-		lines.append( 'var #arguments.varName# = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" ).instantiate( resolveAppPath( "#bxLiteral( classRelativePath )#", "#bxLiteral( classAbsolutePath )#" ), #arguments.varName#Context )' )
+		lines.append( 'var #arguments.varName# = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" ).instantiate( resolveAppPath( "#Strings::bxLiteral( classRelativePath )#", "#Strings::bxLiteral( classAbsolutePath )#" ), #arguments.varName#Context )' )
 
 		// --- identity: only what the project declared OUTSIDE the class ---
 		if ( len( arguments.resolvedConfig.name ?: "" ) ) {
-			lines.append( '#arguments.varName#.setName( "#bxLiteral( arguments.resolvedConfig.name )#" )' )
+			lines.append( '#arguments.varName#.setName( "#Strings::bxLiteral( arguments.resolvedConfig.name )#" )' )
 		}
 		if ( len( arguments.resolvedConfig.description ?: "" ) ) {
-			lines.append( '#arguments.varName#.setDescription( "#bxLiteral( arguments.resolvedConfig.description )#" )' )
+			lines.append( '#arguments.varName#.setDescription( "#Strings::bxLiteral( arguments.resolvedConfig.description )#" )' )
 		}
 
 		// instructions.md is optional here, unlike a descriptor agent - the class
@@ -1135,7 +1137,7 @@ class {
 		var instructionsPath = arguments.nodePath & "/instructions.md"
 		if ( fileExists( instructionsPath ) ) {
 			var instructionsRelative = copyNodeInstructions( instructionsPath, arguments.appDir, arguments.nodeRelativePath )
-			lines.append( '#arguments.varName#.withInstructions( fileRead( resolveAppPath( "#bxLiteral( instructionsRelative )#", "#bxLiteral( instructionsPath )#" ) ) )' )
+			lines.append( '#arguments.varName#.withInstructions( fileRead( resolveAppPath( "#Strings::bxLiteral( instructionsRelative )#", "#Strings::bxLiteral( instructionsPath )#" ) ) )' )
 		}
 
 		// model is optional here too - no MissingModel throw, since the class
@@ -1207,24 +1209,24 @@ class {
 			// the root's tools/ is copied into the app by ToolsSkillsCopier
 			ownToolsRelative = "../tools"
 			ownToolsFallback = len( arguments.appDir )
-				? normalizePath( arguments.appDir ) & "/tools"
-				: normalizePath( arguments.nodePath ) & "/tools"
+				? Strings::normalizePath( arguments.appDir ) & "/tools"
+				: Strings::normalizePath( arguments.nodePath ) & "/tools"
 		} else if ( directoryExists( arguments.nodePath & "/tools" ) ) {
 			ownToolsRelative = copyNodeTools( arguments.nodePath, arguments.appDir, arguments.nodeRelativePath )
-			ownToolsFallback = normalizePath( arguments.nodePath ) & "/tools"
+			ownToolsFallback = Strings::normalizePath( arguments.nodePath ) & "/tools"
 		}
 
 		if ( len( ownToolsRelative ) ) {
-			lines.append( 'var #arguments.varName#OwnTools = new "models.build.ToolRegistryLoader@bxagents"().load( resolveAppPath( "#bxLiteral( ownToolsRelative )#", "#bxLiteral( ownToolsFallback )#" ) )' )
+			lines.append( 'var #arguments.varName#OwnTools = new "models.build.ToolRegistryLoader@bxagents"().load( resolveAppPath( "#Strings::bxLiteral( ownToolsRelative )#", "#Strings::bxLiteral( ownToolsFallback )#" ) )' )
 		} else {
 			lines.append( "var #arguments.varName#OwnTools = []" )
 		}
 
 		var declared = arguments.resolvedConfig.tools ?: []
-		var quoted = isArray( declared ) ? declared.map( entry => '"#bxLiteral( toString( entry ) )#"' ) : []
+		var quoted = isArray( declared ) ? declared.map( entry => '"#Strings::bxLiteral( toString( entry ) )#"' ) : []
 		var toolOptions = arguments.resolvedConfig.toolOptions ?: {}
 		var toolOptionsArgument = isStruct( toolOptions ) && toolOptions.len() ? ", #renderLiteral( toolOptions )#" : ""
-		lines.append( 'var #arguments.varName#Tools = new "models.build.ToolSelector@bxagents"().select( [ #quoted.toList( ", " )# ], #arguments.varName#OwnTools, "#bxLiteral( arguments.name )#"#toolOptionsArgument# )' )
+		lines.append( 'var #arguments.varName#Tools = new "models.build.ToolSelector@bxagents"().select( [ #quoted.toList( ", " )# ], #arguments.varName#OwnTools, "#Strings::bxLiteral( arguments.name )#"#toolOptionsArgument# )' )
 
 		return lines
 	}
@@ -1247,7 +1249,7 @@ class {
 			return relative
 		}
 
-		var destination = normalizePath( arguments.appDir ) & "/agent/" & relative
+		var destination = Strings::normalizePath( arguments.appDir ) & "/agent/" & relative
 		if ( directoryExists( destination ) ) {
 			directoryDelete( destination, true )
 		}
@@ -1294,7 +1296,7 @@ class {
 			return relative
 		}
 
-		var destination = normalizePath( arguments.appDir ) & "/agent/" & relative
+		var destination = Strings::normalizePath( arguments.appDir ) & "/agent/" & relative
 		directoryCreate( path = getDirectoryFromPath( destination ), createPath = true, ignoreExists = true )
 		fileCopy( arguments.instructionsPath, destination )
 
@@ -1381,7 +1383,7 @@ class {
 		return new "models.build.AiSettings@bxagents"().expression(
 			arguments.resolvedConfig,
 			( value ) => renderLiteral( value ),
-			( text ) => bxLiteral( text )
+			( text ) => Strings::bxLiteral( text )
 		)
 	}
 
@@ -1435,18 +1437,9 @@ class {
 			return ""
 		}
 		if ( !needsResolving ) {
-			return "[ " & servers.map( item => isStruct( item ) ? renderLiteral( item ) : '"#bxLiteral( item )#"' ).toList( ", " ) & " ]"
+			return "[ " & servers.map( item => isStruct( item ) ? renderLiteral( item ) : '"#Strings::bxLiteral( item )#"' ).toList( ", " ) & " ]"
 		}
-		return 'new "models.build.McpServerResolver@bxagents"().resolve( #renderLiteral( servers )#, "mcpServers of #bxLiteral( arguments.name )#" )'
-	}
-
-	/**
-	 * @path A filesystem path
-	 *
-	 * @return The path with any trailing slash(es) stripped
-	 */
-	private string function normalizePath( required string path ) {
-		return arguments.path.reReplace( "[\/]+$", "" )
+		return 'new "models.build.McpServerResolver@bxagents"().resolve( #renderLiteral( servers )#, "mcpServers of #Strings::bxLiteral( arguments.name )#" )'
 	}
 
 	/**
@@ -1457,22 +1450,6 @@ class {
 	private string function sanitizeIdentifier( required string name ) {
 		var sanitized = arguments.name.reReplace( "[^A-Za-z0-9_]", "_", "all" )
 		return reFind( "^[0-9]", sanitized ) ? "_" & sanitized : sanitized
-	}
-
-	/**
-	 * Escapes a value for embedding as a BoxLang double-quoted string literal:
-	 * doubles `"` (quote escaping) and `#` (prevents accidental interpolation
-	 * if the generated source is later re-parsed/evaluated).
-	 *
-	 * @value A raw string to embed inside a generated double-quoted BoxLang string literal
-	 *
-	 * @return value with `"` doubled and `#` doubled
-	 */
-	private string function bxLiteral( required string value ) {
-		// Note: literal "#" is written as "##" in BoxLang source (its own
-		// escape convention), so the search/replace args below are doubled
-		// accordingly: one literal "#" is written "##", one literal "##" is "####".
-		return arguments.value.replace( '"', '""', "all" ).replace( "##", "####", "all" )
 	}
 
 	/**
@@ -1493,7 +1470,7 @@ class {
 		if ( isStruct( val ) ) {
 			var keys = val.keyArray().sort( "textnocase" )
 			var parts = keys.map( function( k ) {
-				return '"#bxLiteral( k )#" : #renderLiteral( val[ k ] )#'
+				return '"#Strings::bxLiteral( k )#" : #renderLiteral( val[ k ] )#'
 			} )
 			return "{ " & parts.toList( ", " ) & " }"
 		}
@@ -1520,7 +1497,7 @@ class {
 			return toString( val )
 		}
 
-		return '"#bxLiteral( toString( val ) )#"'
+		return '"#Strings::bxLiteral( toString( val ) )#"'
 	}
 
 }

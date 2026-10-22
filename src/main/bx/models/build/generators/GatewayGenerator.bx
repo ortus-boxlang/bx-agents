@@ -38,6 +38,10 @@
  * itself (bx-ai) is what actually dispatches an inbound message from any of
  * these gateways to the agent.
  */
+import bxModules.bxagents.models.util.Strings;
+
+import bxModules.bxagents.models.util.EntryConfigReader;
+
 class {
 
 	/**
@@ -167,7 +171,7 @@ class {
 		}
 
 		if ( hasWhatsAppCloudGateway ) {
-			var waHandlerDir = normalizePath( arguments.appDir ) & "/handlers"
+			var waHandlerDir = Strings::normalizePath( arguments.appDir ) & "/handlers"
 			directoryCreate( path = waHandlerDir, createPath = true, ignoreExists = true )
 			var waHandlerPath = waHandlerDir & "/WhatsAppCloud.bx"
 			fileWrite( waHandlerPath, renderWhatsAppCloudHandler() )
@@ -175,7 +179,7 @@ class {
 		}
 
 		if ( hasTeamsGateway ) {
-			var teamsHandlerDir = normalizePath( arguments.appDir ) & "/handlers"
+			var teamsHandlerDir = Strings::normalizePath( arguments.appDir ) & "/handlers"
 			directoryCreate( path = teamsHandlerDir, createPath = true, ignoreExists = true )
 			var teamsHandlerPath = teamsHandlerDir & "/Teams.bx"
 			fileWrite( teamsHandlerPath, renderTeamsHandler() )
@@ -183,7 +187,7 @@ class {
 		}
 
 		if ( hasTwilioGateway ) {
-			var twilioHandlerDir = normalizePath( arguments.appDir ) & "/handlers"
+			var twilioHandlerDir = Strings::normalizePath( arguments.appDir ) & "/handlers"
 			directoryCreate( path = twilioHandlerDir, createPath = true, ignoreExists = true )
 			var twilioHandlerPath = twilioHandlerDir & "/Twilio.bx"
 			fileWrite( twilioHandlerPath, renderTwilioHandler() )
@@ -191,7 +195,7 @@ class {
 		}
 
 		if ( hasGitHubGateway ) {
-			var githubHandlerDir = normalizePath( arguments.appDir ) & "/handlers"
+			var githubHandlerDir = Strings::normalizePath( arguments.appDir ) & "/handlers"
 			directoryCreate( path = githubHandlerDir, createPath = true, ignoreExists = true )
 			var githubHandlerPath = githubHandlerDir & "/GitHub.bx"
 			fileWrite( githubHandlerPath, renderGitHubHandler() )
@@ -219,7 +223,7 @@ class {
 		var entries = []
 
 		for ( var gw in ( arguments.discovery.gateways ?: [] ) ) {
-			var config = readEntryConfig( gw.path )
+			var config = EntryConfigReader::read( gw.path )
 			if ( !isNull( config ) && !structKeyExists( config, "exposes" ) ) {
 				entries.append( { name : gw.name, config : config } )
 			}
@@ -302,9 +306,9 @@ class {
 		var keys = rest.keyArray().sort( "textnocase" )
 		var parts = keys.map( function( k ) {
 			if ( envVarNames.keyExists( k ) ) {
-				return '"#bxLiteral( k )#" : getSystemSetting( #renderLiteral( envVarNames[ k ] )#, "" )'
+				return '"#Strings::bxLiteral( k )#" : getSystemSetting( #renderLiteral( envVarNames[ k ] )#, "" )'
 			}
-			return '"#bxLiteral( k )#" : #renderLiteral( rest[ k ] )#'
+			return '"#Strings::bxLiteral( k )#" : #renderLiteral( rest[ k ] )#'
 		} )
 		return "{ " & parts.toList( ", " ) & " }"
 	}
@@ -549,7 +553,7 @@ class {
 		if ( isStruct( val ) ) {
 			var keys = val.keyArray().sort( "textnocase" )
 			var parts = keys.map( function( k ) {
-				return '"#bxLiteral( k )#" : #renderLiteral( val[ k ] )#'
+				return '"#Strings::bxLiteral( k )#" : #renderLiteral( val[ k ] )#'
 			} )
 			return "{ " & parts.toList( ", " ) & " }"
 		}
@@ -576,49 +580,7 @@ class {
 			return toString( val )
 		}
 
-		return '"#bxLiteral( toString( val ) )#"'
-	}
-
-	/**
-	 * Reads a discovered `gateways/*` entry's config: JSON files are
-	 * deserialized directly, `.bx` files are dynamically loaded and their
-	 * `configure()` invoked.
-	 *
-	 * @path Absolute path to the entry's `.bx`/`.json` file
-	 *
-	 * @return The entry's config struct, or null if it could not be read
-	 */
-	private any function readEntryConfig( required string path ) {
-		try {
-			if ( arguments.path.endsWith( ".json" ) ) {
-				return jsonDeserialize( fileRead( arguments.path ) )
-			}
-
-			var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
-			var instance = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
-				.instantiate( arguments.path, context )
-			return instance.configure()
-		} catch ( any e ) {
-			return null
-		}
-	}
-
-	/**
-	 * @path A filesystem path
-	 *
-	 * @return The path with any trailing slash(es) stripped
-	 */
-	private string function normalizePath( required string path ) {
-		return arguments.path.reReplace( "[\/]+$", "" )
-	}
-
-	/**
-	 * @value A raw string to embed inside a generated double-quoted BoxLang string literal
-	 *
-	 * @return value with `"` doubled and `#` doubled, so it round-trips as a literal, not an interpolation
-	 */
-	private string function bxLiteral( required string value ) {
-		return arguments.value.replace( '"', '""', "all" ).replace( "##", "####", "all" )
+		return '"#Strings::bxLiteral( toString( val ) )#"'
 	}
 
 }

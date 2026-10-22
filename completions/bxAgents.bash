@@ -70,7 +70,7 @@ _bxagents_complete() {
 	if [[ "$cur" == -* ]]; then
 		local flags=""
 		case "$verb" in
-			add) flags="--agent= --api-key-env= --args= --auth= --cors= --description= --direction= --dry-run --env= --files= --files-dir= --force --format= --function= --guard= --header= --instructions= --max-tokens= --mcp= --memory= --model= --name= --no-tui --parent= --path= --points= --policy= --projectRoot= --prompt= --provider= --quality= --scope= --search= --server= --size= --style= --temperature= --timeout= --tools= --type= --url= --user= --users= --version= --voice= --when= --with= --yes" ;;
+			add) flags="--agent= --api-key-env= --args= --auth= --cors= --description= --direction= --dry-run --env= --files= --files-dir= --force --format= --function= --guard= --header= --instructions= --max-tokens= --mcp= --memory= --model= --name= --no-tui --parent= --path= --points= --policy= --profile= --profiles= --projectRoot= --prompt= --provider= --quality= --scope= --search= --server= --size= --style= --temperature= --timeout= --tools= --type= --url= --user= --users= --version= --voice= --when= --with= --yes" ;;
 			build) flags="--environment= --generatorVersion= --projectRoot= --verbose" ;;
 			chat) flags="--connect= --continue --no-tui --port= --projectRoot= --record --server --session= --token= --user=" ;;
 			clean) flags="--force --projectRoot=" ;;

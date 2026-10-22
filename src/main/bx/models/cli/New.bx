@@ -49,6 +49,8 @@
  * It's a silent no-op (not an error) when passed alongside `--repo`/
  * `--forgebox`, since the step never runs there anyway.
  */
+import bxModules.bxagents.models.util.Strings;
+
 class {
 
 	/**
@@ -105,7 +107,7 @@ class {
 				try {
 					var asked = new "models.wizard.NewWizard@bxagents"( prompter ).run(
 						arguments.options,
-						lastSegment( projectRoot ),
+						Strings::lastSegment( projectRoot ),
 						arguments.options._positional ?: ""
 					)
 					plan = asked.plan
@@ -128,7 +130,7 @@ class {
 			}
 
 			if ( !len( plan.name ) ) {
-				plan.name = lastSegment( projectRoot )
+				plan.name = Strings::lastSegment( projectRoot )
 				if ( !len( plan.name ) ) {
 					plan.name = "bx-agent"
 				}
@@ -200,16 +202,6 @@ class {
 	 */
 	private any function newPrompter( required struct options ) {
 		return new "models.wizard.prompters.PrompterFactory@bxagents"().create( arguments.options )
-	}
-
-	/**
-	 * @path A filesystem path
-	 *
-	 * @return Its last segment, or empty
-	 */
-	private string function lastSegment( required string path ) {
-		var segments = listToArray( arguments.path.reReplace( "[\/]+$", "" ), "/\" )
-		return segments.len() ? segments[ segments.len() ] : ""
 	}
 
 	/**

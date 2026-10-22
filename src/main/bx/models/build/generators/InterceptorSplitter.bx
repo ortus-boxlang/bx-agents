@@ -12,6 +12,8 @@
  * An interceptor class with no `@scope` annotation defaults to `"agent"`
  * (the narrower/safer default - `"runtime"` affects more than this app).
  */
+import bxModules.bxagents.models.util.Strings;
+
 class {
 
 	/**
@@ -36,8 +38,8 @@ class {
 			}
 		}
 
-		copyEntries( agentEntries, normalizePath( arguments.appDir ) & "/interceptors" )
-		copyEntries( runtimeEntries, normalizePath( arguments.runtimeDir ) )
+		copyEntries( agentEntries, Strings::normalizePath( arguments.appDir ) & "/interceptors" )
+		copyEntries( runtimeEntries, Strings::normalizePath( arguments.runtimeDir ) )
 
 		return {
 			agent   : agentEntries.map( e => { name : e.name } ),
@@ -106,15 +108,6 @@ class {
 		for ( var entry in arguments.entries ) {
 			fileCopy( entry.path, arguments.destDir & "/" & getFileFromPath( entry.path ) )
 		}
-	}
-
-	/**
-	 * @path A filesystem path
-	 *
-	 * @return The path with any trailing slash(es) stripped
-	 */
-	private string function normalizePath( required string path ) {
-		return arguments.path.reReplace( "[\/]+$", "" )
 	}
 
 }

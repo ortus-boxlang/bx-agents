@@ -25,6 +25,8 @@
  * bundled inside this module and copied into every built app, so they are
  * deliberately NOT checked here.
  */
+import bxModules.bxagents.models.util.EntryConfigReader;
+
 class {
 
 	/**
@@ -290,39 +292,12 @@ class {
 		var seenEnvVars = {}
 
 		for ( var entry in arguments.discovery.gateways ) {
-			var entryConfig = readEntryConfig( entry.path )
+			var entryConfig = EntryConfigReader::read( entry.path )
 			if ( !isStruct( entryConfig ) ) {
 				continue
 			}
 
 			collectEnvVarChecks( entryConfig, arguments.checks, seenEnvVars )
-		}
-	}
-
-	/**
-	 * Reads a discovered `gateways/*` entry's config: JSON files are
-	 * deserialized directly, `.bx` files are dynamically loaded and their
-	 * `configure()` invoked. Mirrors GatewayGenerator's own
-	 * `readEntryConfig()` - kept as its own small copy here rather than
-	 * shared, matching this project's existing pattern of small,
-	 * independently-testable per-verb/per-generator helpers.
-	 *
-	 * @path Absolute path to the entry's `.bx`/`.json` file
-	 *
-	 * @return The entry's config struct, or null if it could not be read
-	 */
-	private any function readEntryConfig( required string path ) {
-		try {
-			if ( arguments.path.endsWith( ".json" ) ) {
-				return jsonDeserialize( fileRead( arguments.path ) )
-			}
-
-			var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
-			var instance = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
-				.instantiate( arguments.path, context )
-			return instance.configure()
-		} catch ( any e ) {
-			return null
 		}
 	}
 

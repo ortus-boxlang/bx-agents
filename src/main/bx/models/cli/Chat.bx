@@ -9,7 +9,7 @@
  *     `buildAgent()` once per session. Fast - no server, no ColdBox, no
  *     WireBox - and the same factory a `serve`-launched app uses, so the
  *     agent itself never diverges. What DOES differ is everything ColdBox
- *     brings: no `models/`, no scheduler, no interceptors, no gateway
+ *     brings: no scheduler, no interceptors, no gateway
  *     registry. For a plain "talk to my agent" loop that is the right
  *     trade; when it isn't, use `--server`.
  *
@@ -32,6 +32,8 @@
  * docblock for the real bug this fixed), so the default mode needs no special
  * handling for that here.
  */
+import bxModules.bxagents.models.util.Terminal;
+
 class {
 
 	/**
@@ -96,11 +98,7 @@ class {
 		if ( ( arguments.options.tui ?: true ) == false ) {
 			return false
 		}
-		try {
-			return createObject( "java", "ortus.boxlang.bxagents.tui.TuiScreen" ).isInteractive()
-		} catch ( any e ) {
-			return false
-		}
+		return Terminal::isInteractive()
 	}
 
 	/**

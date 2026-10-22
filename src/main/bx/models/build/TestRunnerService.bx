@@ -34,6 +34,8 @@
  * codeSource trick only if no matching classpath entry is found (e.g. some
  * non-standard launch shape).
  */
+import bxModules.bxagents.models.util.Strings;
+
 class {
 
 	/**
@@ -201,22 +203,13 @@ class {
 			"results = testbox.runRaw()",
 			"jsonReporter = new testbox.system.reports.JSONReporter()",
 			"jsonReport = jsonReporter.runReport( results, testbox, {}, true )",
-			'fileWrite( "#bxLiteral( arguments.reportPath )#", jsonReport )',
+			'fileWrite( "#Strings::bxLiteral( arguments.reportPath )#", jsonReport )',
 			"totalFail = results.getTotalFail() + results.getTotalError()",
 			"if ( totalFail > 0 ) {",
 			"	cliExit( 1 )",
 			"}"
 		]
 		return lines.toList( char( 10 ) )
-	}
-
-	/**
-	 * @value A raw string to embed inside a generated double-quoted BoxLang string literal
-	 *
-	 * @return value with `"` doubled and `#` doubled, so it round-trips as a literal, not an interpolation
-	 */
-	private string function bxLiteral( required string value ) {
-		return arguments.value.replace( '"', '""', "all" ).replace( "##", "####", "all" )
 	}
 
 }

@@ -10,6 +10,8 @@
  * wizard/catalog/mcp-servers.json), so it is not offered. Credentials are never typed:
  * they are `${env.NAME}` placeholders in Agent.yaml and an empty stub in `.env`.
  */
+import bxModules.bxagents.models.util.NameRules;
+
 class {
 
 	static {
@@ -159,7 +161,7 @@ class {
 				title   = "A name for it",
 				help    = "A label for Agent.yaml; it is not sent to the server.",
 				default = len( given ) ? given : hostLabel( url ),
-				validate = ( value ) => reFind( "^[A-Za-z][A-Za-z0-9_-]*$", value ) ? "" : "Letters, digits, - and _, starting with a letter."
+				validate = ( value ) => NameRules::isValid( value ) ? "" : "Letters, digits, - and _, starting with a letter."
 			)
 			auth = arguments.a.select( key = "auth", title = "How does it sign you in?", choices = static.AUTH, default = "none" )
 		}
@@ -243,8 +245,7 @@ class {
 		arguments.changes.edit( def.file, edit.text, itemLines.toList( char( 10 ) ) )
 
 		if ( len( a.env ) ) {
-			var note = len( a.help ) ? "## #a.serverName# MCP. #a.help##char( 10 )#" : "## #a.serverName# MCP#char( 10 )#"
-			arguments.changes.append( ".env", char( 10 ) & note & a.env & "=" & char( 10 ), a.env & "=" )
+			arguments.changes.envStub( a.env, len( a.help ) ? "#a.serverName# MCP. #a.help#" : "#a.serverName# MCP" )
 		}
 	}
 
@@ -268,7 +269,7 @@ class {
 			title    = "Server name",
 			help     = "The file name: mcp/<name>.bx, and the name other agents see.",
 			default  = "tools",
-			validate = ( value ) => !reFind( "^[A-Za-z][A-Za-z0-9_-]*$", value ) ? "Letters, digits, - and _, starting with a letter." : ( taken.findNoCase( value ) ? "An MCP server named #value# already exists." : "" )
+			validate = ( value ) => !NameRules::isValid( value ) ? "Letters, digits, - and _, starting with a letter." : ( taken.findNoCase( value ) ? "An MCP server named #value# already exists." : "" )
 		)
 		var description = arguments.a.text(
 			key     = "description",

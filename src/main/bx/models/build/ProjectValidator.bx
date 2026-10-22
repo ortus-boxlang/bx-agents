@@ -6,6 +6,8 @@
  * (e.g. remote MCP server reachability is out of scope - bx-ai resolves that
  * live, at runtime).
  */
+import bxModules.bxagents.models.util.EntryConfigReader;
+
 class {
 
 	property name="modelSlugParser";
@@ -390,7 +392,7 @@ class {
 		var offeredByWebUi = {}
 
 		for ( var gateway in ( arguments.discovery.gateways ?: [] ) ) {
-			var config = readEntryConfig( gateway.path )
+			var config = EntryConfigReader::read( gateway.path )
 			if ( isNull( config ) ) {
 				arguments.errors.append( "Gateway [#gateway.name#] could not be read" )
 				continue
@@ -1167,30 +1169,5 @@ class {
 	// --------------------------------------------------------------------------
 	// Shared helpers
 	// --------------------------------------------------------------------------
-
-	/**
-	 * Reads a discovered entry's config: JSON files are deserialized directly,
-	 * `.bx` files are dynamically loaded and their configure() invoked.
-	 * Returns null (not throws) if the entry can't be read - callers report
-	 * their own contextual error message.
-	 *
-	 * @path Absolute path to the entry's `.bx`/`.json` file
-	 *
-	 * @return The entry's config struct, or null if it could not be read
-	 */
-	private any function readEntryConfig( required string path ) {
-		try {
-			if ( arguments.path.endsWith( ".json" ) ) {
-				return jsonDeserialize( fileRead( arguments.path ) )
-			}
-
-			var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
-			var instance = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
-				.instantiate( arguments.path, context )
-			return instance.configure()
-		} catch ( any e ) {
-			return null
-		}
-	}
 
 }

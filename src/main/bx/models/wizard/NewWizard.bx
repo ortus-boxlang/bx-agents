@@ -13,6 +13,8 @@
  * as empty stubs for the user to fill in. The two exceptions are made, not typed: a random
  * web access key, and a web UI password, which is stored only as a hash.
  */
+import bxModules.bxagents.models.util.ModelTuning;
+
 class {
 
 	static {
@@ -162,15 +164,9 @@ class {
 		if ( !variables.prompter.confirm( "Tune the model?", "Temperature, longest answer and timeout. Optional; press Enter to use the provider's own.", false ) ) {
 			return true
 		}
-		variables.plan.tuning.temperature = askNumber( "Temperature?", "0 to 2. Lower is steadier, higher is more varied.", function( value ) {
-			return isNumeric( value ) && val( value ) >= 0 && val( value ) <= 2
-		}, "A number from 0 to 2." )
-		variables.plan.tuning.maxTokens = askNumber( "Longest answer, in tokens?", "A whole number. Empty for the provider's own.", function( value ) {
-			return reFind( "^[1-9][0-9]*$", value ) > 0
-		}, "A whole number above zero." )
-		variables.plan.tuning.timeout = askNumber( "Timeout, in seconds?", "How long to wait for the model. Empty for the default.", function( value ) {
-			return reFind( "^[1-9][0-9]*$", value ) > 0
-		}, "A whole number above zero." )
+		variables.plan.tuning.temperature = askNumber( "Temperature?", "0 to 2. Lower is steadier, higher is more varied.", ( value ) => ModelTuning::isTemperature( value ), ModelTuning::TEMPERATURE_PROBLEM )
+		variables.plan.tuning.maxTokens = askNumber( "Longest answer, in tokens?", "A whole number. Empty for the provider's own.", ( value ) => ModelTuning::isCount( value ), ModelTuning::COUNT_PROBLEM )
+		variables.plan.tuning.timeout = askNumber( "Timeout, in seconds?", "How long to wait for the model. Empty for the default.", ( value ) => ModelTuning::isCount( value ), ModelTuning::COUNT_PROBLEM )
 		var tuned = variables.planner.tuningSummary( variables.plan.tuning )
 		if ( len( tuned ) ) {
 			variables.prompter.record( "tuning", "Model settings", tuned )

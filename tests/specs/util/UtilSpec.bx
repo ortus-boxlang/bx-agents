@@ -1,0 +1,59 @@
+/**
+ * The shared helpers the generators, validators and verbs use.
+ */
+import bxModules.bxagents.models.util.Strings;
+import bxModules.bxagents.models.util.NameRules;
+import bxModules.bxagents.models.util.ModelTuning;
+import bxModules.bxagents.models.util.EntryConfigReader;
+
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "util", function() {
+
+			it( "Strings strips trailing slashes, finds the last segment and escapes literals", function() {
+				expect( Strings::normalizePath( "/a/b//" ) ).toBe( "/a/b" );
+				expect( Strings::lastSegment( "/a/b/" ) ).toBe( "b" );
+				expect( Strings::lastSegment( "" ) ).toBe( "" );
+				expect( Strings::bxLiteral( 'say "hi"' ) ).toBe( 'say ""hi""' );
+			} );
+
+			it( "Names accepts a letter then letters, digits, - and _", function() {
+				for ( var good in [ "a", "my-agent", "Agent_2" ] ) {
+					expect( NameRules::isValid( good ) ).toBeTrue();
+				}
+				for ( var bad in [ "", "1a", "a b", "a.b", "-a" ] ) {
+					expect( NameRules::isValid( bad ) ).toBeFalse();
+				}
+			} );
+
+			it( "ModelTuning checks the numbers and builds params and options", function() {
+				expect( ModelTuning::isTemperature( "0" ) ).toBeTrue();
+				expect( ModelTuning::isTemperature( "2" ) ).toBeTrue();
+				expect( ModelTuning::isTemperature( "2.1" ) ).toBeFalse();
+				expect( ModelTuning::isTemperature( "hot" ) ).toBeFalse();
+				expect( ModelTuning::isCount( "30" ) ).toBeTrue();
+				expect( ModelTuning::isCount( "0" ) ).toBeFalse();
+				expect( ModelTuning::countProblem( "" ) ).toBe( "" );
+				expect( ModelTuning::temperatureProblem( "9" ) ).toBe( "A number from 0 to 2." );
+				expect( ModelTuning::settings( { temperature : "0.2", maxTokens : "2000", timeout : "" } ) ).toBe( { params : { temperature : 0.2, max_tokens : 2000 }, options : {} } );
+			} );
+
+			it( "EntryConfigReader reads a json entry, a class entry, and gives null for neither", function() {
+				var dir = createTempDirectory( prefix = "bxagents-entry-" );
+				try {
+					fileWrite( dir & "/a.json", '{ "exposes": "agent" }' );
+					fileWrite( dir & "/b.bx", "class {" & char( 10 ) & "	function configure() { return { exposes : ""webui"" }; }" & char( 10 ) & "}" );
+
+					expect( EntryConfigReader::read( dir & "/a.json" ).exposes ).toBe( "agent" );
+					expect( EntryConfigReader::read( dir & "/b.bx" ).exposes ).toBe( "webui" );
+					expect( isNull( EntryConfigReader::read( dir & "/missing.bx" ) ) ).toBeTrue();
+				} finally {
+					directoryDelete( dir, true );
+				}
+			} );
+
+		} );
+	}
+
+}
