@@ -539,7 +539,8 @@ public final class ChatScreen implements AutoCloseable {
 		}
 		rows.add( separator() );
 		rows.addAll( composerRows() );
-		rows.add( withRecordingMark( Row.of( " " + statusPrefix() + "enter send · alt+enter new line · ↑ history" + ( menu.isEmpty() ? "" : " · tab completes" ), theme.muted ) ) );
+		rows.add( withRecordingMark(
+		    Row.of( " " + statusPrefix() + "enter send · alt+enter new line · ↑ history" + ( menu.isEmpty() ? "" : " · tab completes" ), theme.muted ) ) );
 		return rows;
 	}
 
