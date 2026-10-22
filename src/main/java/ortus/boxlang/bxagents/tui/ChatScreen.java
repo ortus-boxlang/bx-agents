@@ -661,17 +661,10 @@ public final class ChatScreen implements AutoCloseable {
 		}
 		rows.add( separator() );
 		rows.addAll( composerRows() );
-<<<<<<< HEAD
 		String picture = images.isEmpty() ? "" : images.size() + ( images.size() == 1 ? " picture" : " pictures" ) + " attached · ";
-<<<<<<< HEAD
-		rows.add( withRecordingMark( Row.of( " " + statusPrefix() + picture + lower( keys.first( KeyMap.Action.SUBMIT ) ) + " send · " + lower( keys.first( KeyMap.Action.NEWLINE ) ) + " new line · ? keys" + ( menu.isEmpty() && files.isEmpty() ? "" : " · tab completes" ), theme.muted ) ) );
-=======
-		rows.add( withRecordingMark( Row.of( " " + statusPrefix() + picture + "enter send · alt+enter new line · ↑ history" + ( menu.isEmpty() && files.isEmpty() ? "" : " · tab completes" ), theme.muted ) ) );
-=======
 		rows.add( withRecordingMark(
-		    Row.of( " " + statusPrefix() + "enter send · alt+enter new line · ↑ history" + ( menu.isEmpty() ? "" : " · tab completes" ), theme.muted ) ) );
->>>>>>> code/tui-d-shell-bif
->>>>>>> code/tui-e-attachments
+		    Row.of( " " + statusPrefix() + picture + lower( keys.first( KeyMap.Action.SUBMIT ) ) + " send · " + lower( keys.first( KeyMap.Action.NEWLINE ) )
+		        + " new line · ? keys" + ( menu.isEmpty() && files.isEmpty() ? "" : " · tab completes" ), theme.muted ) ) );
 		return rows;
 	}
 
