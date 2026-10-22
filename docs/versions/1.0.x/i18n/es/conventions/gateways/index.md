@@ -95,7 +95,7 @@ Genera un archivo estático real `<path>/index.html` (servido directamente - no 
 
 La interfaz web es un subsistema en lugar de un simple interruptor de exposición - la lista de rutas, el almacén, las conversaciones y preferencias, el branding y la temática, y por qué no usa `toAi()` están todos en su propia página: **[La interfaz web de chat](../web-ui.md)**.
 
-**Validación:** `exposes` debe ser `agent`, `mcp`, o `webui`; `path` es requerido y debe ser único a través de cada entrada de exposición; el `target` de una exposición `mcp` es requerido y debe coincidir con el nombre de archivo de una entrada real `mcp/*`; el `apiKeyEnvVar` de `webui` es completamente opcional, sin ninguna comprobación de campo requerido (ver abajo).
+**Validación:** `exposes` debe ser `agent`, `mcp`, o `webui`; `path` es requerido y debe ser único a través de cada entrada de exposición; el `target` de una exposición `mcp` es requerido y debe coincidir con el nombre de archivo de una entrada real `mcp/*`; el `apiKeyEnvVar` de `webui` es completamente opcional, sin ninguna comprobación de campo requerido (ver abajo). Una entrada `webui` puede listar `profiles` para el selector de modelo de la página (ver [Elegir el modelo](../web-ui.md#elegir-el-modelo)); cada uno debe estar declarado en `Agent.yaml`, y ningún otro tipo de entrada puede listarlos.
 
 ## 2. Gateways de channel-adapter (`type: "mock" | "cli" | "http"`)
 

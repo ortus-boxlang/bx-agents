@@ -32,6 +32,12 @@ class extends="testbox.system.BaseSpec" {
 						calls.append( { call : "get", route : route } );
 						if ( route == "tools" ) { return { tools : script.tools }; }
 						if ( route == "agent" ) { return script.about; }
+						if ( route == "profiles" ) {
+							if ( !script.keyExists( "profiles" ) ) {
+								throw( type = "BxAgents.AgentRouteMissing", message = "404" );
+							}
+							return { profiles : script.profiles };
+						}
 						throw( type = "Test.Unexpected", message = route );
 					},
 					postJson : ( baseUrl, route, body = {} ) => {
@@ -52,6 +58,60 @@ class extends="testbox.system.BaseSpec" {
 			private function events( list ) {
 				script.events = arguments.list;
 			}
+
+			describe( "profiles", function() {
+
+				beforeEach( function() {
+					script.profiles = [
+						{ name : "fast", description : "Quick", provider : "openai", model : "gpt-5-mini", isDefault : false },
+						{ name : "planner", description : "", provider : "claude", model : "claude-opus-4", isDefault : false }
+					];
+				} );
+
+				it( "can switch only when the server lists profiles, and says how to offer them otherwise", function() {
+					expect( session.switchable().ok ).toBeTrue();
+
+					script.delete( "profiles" );
+					var older = new bxagents.models.cli.chat.HttpSession( "http://h:1/", new FakeClient( fake ) );
+
+					expect( older.switchable().ok ).toBeFalse();
+					expect( older.switchable().reason ).toInclude( "agentApi.profiles" );
+					expect( older.profiles() ).toBeEmpty();
+				} );
+
+				it( "lists what the server offers and marks the one in use", function() {
+					session.useProfile( "planner" );
+
+					var list = session.profiles();
+
+					expect( list.map( p => p.name ) ).toBe( [ "fast", "planner" ] );
+					expect( list.filter( p => p.isCurrent ).map( p => p.name ) ).toBe( [ "planner" ] );
+					expect( session.modelInfo().model ).toBe( "claude/claude-opus-4" );
+				} );
+
+				it( "sends the chosen profile with every turn until it goes back to the default", function() {
+					events( [ { type : "delta", text : "hi" } ] );
+
+					session.send( "before", hooks );
+					session.useProfile( "fast" );
+					session.send( "during", hooks );
+					session.useDefault();
+					session.send( "after", hooks );
+
+					var sent = calls.filter( c => c.call == "events" ).map( c => c.payload );
+					expect( sent[ 1 ] ).notToHaveKey( "options" );
+					expect( sent[ 2 ].options ).toBe( { profile : "fast" } );
+					expect( sent[ 3 ] ).notToHaveKey( "options" );
+				} );
+
+				it( "refuses a profile the server does not offer", function() {
+					var outcome = session.useProfile( "secret" );
+
+					expect( outcome.ok ).toBeFalse();
+					expect( outcome.reason ).toInclude( "offers: fast, planner" );
+				} );
+
+			} );
 
 			it( "describes the agent from the server, and falls back when it cannot say", function() {
 				expect( session.agentName() ).toBe( "support" );

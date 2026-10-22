@@ -39,7 +39,7 @@ class {
 		validateSubagents( arguments.projectRoot, arguments.discovery, errors, ( arguments.resolvedConfig.profiles ?: {} ).keyArray(), len( arguments.resolvedConfig.model ?: "" ) > 0 || len( arguments.resolvedConfig.profile ?: "" ) > 0 || len( arguments.resolvedConfig.defaultProfile ?: "" ) > 0 )
 		validateModules( arguments.projectRoot, arguments.discovery, errors )
 		validateSchedules( arguments.projectRoot, arguments.discovery, warnings )
-		validateGateways( arguments.discovery, errors )
+		validateGateways( arguments.discovery, errors, ( arguments.resolvedConfig.profiles ?: {} ).keyArray() )
 		validateGatewaySession( arguments.resolvedConfig, errors )
 		validateMcpServers( arguments.resolvedConfig, errors )
 		validateTools( arguments.resolvedConfig, errors, "The project's own agent definition" )
@@ -372,8 +372,9 @@ class {
 	 *
 	 * @discovery The raw discovery struct from ProjectDiscoverer.discover()
 	 * @errors Accumulator array - append() any validation errors found
+	 * @profileNames The profile names the root Agent.yaml declares, for a `profiles` list a web UI offers
 	 */
-	private void function validateGateways( required struct discovery, required array errors ) {
+	private void function validateGateways( required struct discovery, required array errors, array profileNames = [] ) {
 		var seenPaths = {}
 		var seenNames = {}
 		var validGatewayTypes = [ "mock", "cli", "http" ]
@@ -385,6 +386,8 @@ class {
 		// claiming the same one would race at seed time and the later boot order
 		// would silently decide whose password wins.
 		var seenUsernames = {}
+		// the profiles each web UI entry offers, as a comparable string: they share one handler
+		var offeredByWebUi = {}
 
 		for ( var gateway in ( arguments.discovery.gateways ?: [] ) ) {
 			var config = readEntryConfig( gateway.path )
@@ -435,7 +438,13 @@ class {
 					}
 				}
 
+				if ( config.exposes != "webui" && structKeyExists( config, "profiles" ) ) {
+					arguments.errors.append( "Gateway [#gateway.name#] lists 'profiles', which only a 'webui' entry can offer: an '#config.exposes#' route passes the caller's own options to the agent. The reserved /__bxagents route has its own list in 'agentApi.profiles'" )
+				}
+
 				if ( config.exposes == "webui" ) {
+					validateOfferedProfiles( "Gateway [#gateway.name#]", config, arguments.profileNames, arguments.errors )
+					offeredByWebUi[ isArray( config.profiles ?: "" ) ? config.profiles.map( p => toString( p ).lcase() ).sort( "text" ).toList() : "" ] = gateway.name
 					validateWebUiTheme( gateway.name, config.theme ?: {}, arguments.errors )
 					validateWebUiDatabase( gateway.name, config.database ?: {}, arguments.errors )
 					validateWebUiUsers( gateway.name, config.users ?: [], arguments.errors, seenUsernames )
@@ -461,6 +470,10 @@ class {
 					}
 				}
 			}
+		}
+
+		if ( offeredByWebUi.count() > 1 ) {
+			arguments.errors.append( "The web UI entries #offeredByWebUi.valueArray().toList( ', ' )# offer different 'profiles', but they share one handler. Give them the same list" )
 		}
 	}
 
@@ -718,11 +731,11 @@ class {
 
 		var agentApi = arguments.resolvedConfig.agentApi
 		if ( !isStruct( agentApi ) ) {
-			arguments.errors.append( "Agent.bx's 'agentApi' must be a struct of { enabled, tokenEnvVar, tokens }" )
+			arguments.errors.append( "Agent.bx's 'agentApi' must be a struct of { enabled, tokenEnvVar, tokens, profiles }" )
 			return
 		}
 
-		var validKeys = [ "enabled", "tokenEnvVar", "tokens" ]
+		var validKeys = [ "enabled", "tokenEnvVar", "tokens", "profiles" ]
 		for ( var key in agentApi ) {
 			if ( !validKeys.contains( key ) ) {
 				arguments.errors.append( "Agent.bx's 'agentApi' has an unknown key [#key#] - valid keys: #validKeys.toList( ", " )#" )
@@ -737,6 +750,8 @@ class {
 			arguments.errors.append( "Agent.bx's 'agentApi.tokens' must be a boolean" )
 		}
 
+		validateOfferedProfiles( "Agent.bx's 'agentApi'", agentApi, ( arguments.resolvedConfig.profiles ?: {} ).keyArray(), arguments.errors )
+
 		if ( structKeyExists( agentApi, "tokenEnvVar" ) ) {
 			var tokenEnvVar = agentApi.tokenEnvVar
 			if ( !isSimpleValue( tokenEnvVar ) ) {
@@ -744,6 +759,40 @@ class {
 			} else if ( len( trim( tokenEnvVar ) ) && !reFind( "^[A-Za-z_][A-Za-z0-9_]*$", trim( tokenEnvVar ) ) ) {
 				arguments.errors.append( "Agent.bx's 'agentApi.tokenEnvVar' [#tokenEnvVar#] is not a valid environment variable name - it names a variable holding the token, never the token itself" )
 			}
+		}
+	}
+
+	/**
+	 * Validates a `profiles` list on a web UI entry or on `agentApi`: the profiles a person using that
+	 * chat may switch between. Absent or empty means the chat offers no choice and a profile named
+	 * by the caller is refused.
+	 *
+	 * @where How to name the owner in a message
+	 * @config The entry or block holding the list
+	 * @profileNames The profile names the root Agent.yaml declares
+	 * @errors Accumulator array - append() any validation errors found
+	 */
+	private void function validateOfferedProfiles( required string where, required struct config, required array profileNames, required array errors ) {
+		if ( !structKeyExists( arguments.config, "profiles" ) ) {
+			return
+		}
+		var offered = arguments.config.profiles
+		if ( !isArray( offered ) ) {
+			arguments.errors.append( "#arguments.where# 'profiles' must be a list of profile names" )
+			return
+		}
+		var known = arguments.profileNames.map( n => n.lcase() )
+		known.append( "default" )
+		var seen = {}
+		for ( var name in offered ) {
+			if ( !isSimpleValue( name ) || !len( trim( name ) ) ) {
+				arguments.errors.append( "#arguments.where# 'profiles' holds an entry that is not a profile name" )
+			} else if ( !known.contains( name.lcase() ) ) {
+				arguments.errors.append( "#arguments.where# offers profile [#name#], which Agent.yaml does not declare. Declared: #arguments.profileNames.len() ? arguments.profileNames.toList( ', ' ) : 'none'#" )
+			} else if ( seen.keyExists( name.lcase() ) ) {
+				arguments.errors.append( "#arguments.where# lists the profile [#name#] more than once" )
+			}
+			seen[ isSimpleValue( name ) ? name.lcase() : "" ] = true
 		}
 	}
 

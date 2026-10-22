@@ -95,7 +95,7 @@ Generates a real static `<path>/index.html` file (served directly - no route nee
 
 The web UI is a subsystem rather than a single exposure switch - the route list, the store, conversations and preferences, branding and theming, and why it does not use `toAi()` are all on its own page: **[The web chat UI](../web-ui.md)**.
 
-**Validation:** `exposes` must be `agent`, `mcp`, or `webui`; `path` is required and must be unique across every exposure entry; an `mcp` exposure's `target` is required and must match a real `mcp/*` entry's file name; `webui`'s `apiKeyEnvVar` is entirely optional, with no required-field check (see below).
+**Validation:** `exposes` must be `agent`, `mcp`, or `webui`; `path` is required and must be unique across every exposure entry; an `mcp` exposure's `target` is required and must match a real `mcp/*` entry's file name; `webui`'s `apiKeyEnvVar` is entirely optional, with no required-field check (see below). A `webui` entry may list `profiles` for the page's model picker (see [Choosing the model](../web-ui.md#choosing-the-model)); each must be declared in `Agent.yaml`, and no other kind of entry may list them.
 
 ## 2. Channel-adapter gateways (`type: "mock" | "cli" | "http"`)
 

@@ -28,6 +28,8 @@ class {
 		variables.threadId = ""
 		variables.conversationId = createUUID()
 		variables.about = nullValue()
+		variables.profileName = ""
+		variables.offeredProfiles = nullValue()
 		variables.legacy = false
 		variables.summary = new "models.cli.chat.ToolSummary@bxagents"()
 		return this
@@ -65,28 +67,73 @@ class {
 	 * @return { model, profile, provider } as far as the server says
 	 */
 	struct function modelInfo() {
-		return { model : modelName(), profile : "", provider : "" }
+		var chosen = variables.profileName
+		if ( !len( chosen ) ) {
+			return { model : modelName(), profile : "", provider : "" }
+		}
+		var found = offered().filter( p => p.name == chosen )
+		return { model : found.len() ? found[ 1 ].provider & ( len( found[ 1 ].model ?: "" ) ? "/" & found[ 1 ].model : "" ) : chosen, profile : chosen, provider : found.len() ? found[ 1 ].provider : "" }
 	}
 
 	/**
-	 * A remote chat talks to the model the server runs. The server decides what a client may switch to.
+	 * A client may only use the profiles the server lists (agentApi.profiles), so there is nothing to
+	 * switch to unless it lists some.
 	 *
-	 * @return { ok : false, reason }
+	 * @return { ok, reason }
 	 */
 	struct function switchable() {
-		return { ok : false, reason : "This chat is connected to a server, which runs its own model. Run the chat in this project (bxAgents chat) to switch profiles." }
+		if ( offered().len() ) {
+			return { ok : true, reason : "" }
+		}
+		return { ok : false, reason : "This server does not offer a choice of models. The app lists the profiles a client may use in agentApi.profiles (Agent.yaml)." }
 	}
 
+	/**
+	 * @return [ { name, description, provider, model, hasApiKey, isDefault, isCurrent } ] the profiles the server offers
+	 */
 	array function profiles() {
-		return []
+		var chosen = variables.profileName
+		return offered().map( p => {
+			name        : p.name,
+			description : p.description ?: "",
+			provider    : p.provider ?: "",
+			model       : p.model ?: "",
+			hasApiKey   : true,
+			isDefault   : p.isDefault ?: false,
+			isCurrent   : p.name == chosen
+		} )
 	}
 
+	/**
+	 * Uses a profile the server offers for the messages that follow.
+	 *
+	 * @name A profile name
+	 *
+	 * @return { ok, profile, provider, model, hasApiKey } or { ok : false, reason }
+	 */
 	struct function useProfile( required string name ) {
-		return { ok : false, reason : switchable().reason }
+		var can = switchable()
+		if ( !can.ok ) {
+			return { ok : false, reason : can.reason }
+		}
+		var found = offered().filter( p => p.name == name )
+		if ( !found.len() ) {
+			return { ok : false, reason : "The server does not offer a profile [#arguments.name#]. It offers: #offered().map( p => p.name ).toList( ', ' )#" }
+		}
+		variables.profileName = found[ 1 ].name
+		return { ok : true, profile : found[ 1 ].name, provider : found[ 1 ].provider, model : found[ 1 ].provider & ( len( found[ 1 ].model ?: "" ) ? "/" & found[ 1 ].model : "" ), hasApiKey : true }
 	}
 
+	/**
+	 * Goes back to the server's own model for the messages that follow.
+	 */
 	struct function useDefault() {
-		return { ok : false, reason : switchable().reason }
+		var can = switchable()
+		if ( !can.ok ) {
+			return { ok : false, reason : can.reason }
+		}
+		variables.profileName = ""
+		return { ok : true, profile : "default", provider : "", model : modelName(), hasApiKey : true }
 	}
 
 	/**
@@ -221,7 +268,11 @@ class {
 			return sendLegacy( arguments.text, arguments.hooks )
 		}
 		try {
-			return runTurn( "events", { "input" : arguments.text, "threadId" : variables.threadId, "conversationId" : variables.conversationId }, arguments.hooks )
+			var payload = { "input" : arguments.text, "threadId" : variables.threadId, "conversationId" : variables.conversationId }
+			if ( len( variables.profileName ) ) {
+				payload[ "options" ] = { "profile" : variables.profileName }
+			}
+			return runTurn( "events", payload, arguments.hooks )
 		} catch ( "BxAgents.AgentRouteMissing" e ) {
 			variables.legacy = true
 			arguments.hooks.push( { type : "notice", text : "This server has no run control (it was built by an older bxAgents): showing the answer only." } )
@@ -243,6 +294,21 @@ class {
 	}
 
 	// ----------------------------------------------------------------------------------
+
+	/**
+	 * What the server lists at GET profiles, read once. A server that lists none, or an older one with no such
+	 * route, offers no choice.
+	 */
+	private array function offered() {
+		if ( isNull( variables.offeredProfiles ) ) {
+			try {
+				variables.offeredProfiles = variables.client.getJson( variables.baseUrl, "profiles" ).profiles ?: []
+			} catch ( any e ) {
+				variables.offeredProfiles = []
+			}
+		}
+		return variables.offeredProfiles
+	}
 
 	/**
 	 * Reads one stretch of a run: the events become chat events, Esc cancels, typed text steers.

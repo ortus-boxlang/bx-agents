@@ -116,6 +116,17 @@ __THEME_TOKENS__
 		text-overflow: ellipsis;
 	}
 	header .actions { flex-shrink: 0; }
+	header .actions select {
+		background: none;
+		border: 1px solid var(--border);
+		color: var(--fg);
+		border-radius: var(--radius-sm);
+		padding: 0.3rem 0.4rem;
+		margin-left: 0.4rem;
+		cursor: pointer;
+		font-size: 0.85rem;
+		max-width: 11rem;
+	}
 	header .actions button {
 		background: none;
 		border: 1px solid var(--border);
@@ -486,6 +497,7 @@ __THEME_TOKENS__
 			box-shadow: 0 0 2rem rgba( 0, 0, 0, 0.35 );
 		}
 		header .meta { display: none; }
+		header .actions select { max-width: 7rem; font-size: 0.78rem; }
 		header { padding: 0.6rem 0.75rem; gap: 0.4rem; }
 		header .actions button { padding: 0.3rem 0.45rem; margin-left: 0.2rem; font-size: 0.78rem; }
 	}
@@ -554,6 +566,7 @@ __CUSTOM_CSS__
 		</div>
 		<div class="actions">
 			<span class="meta" id="modelMeta"></span>
+			<select id="profileSelect" title="The model for your next messages" aria-label="Model" hidden></select>
 			<button type="button" id="sidebarBtn" aria-expanded="true" aria-controls="sidebar" title="Show or hide conversations">Chats</button>
 			<button type="button" id="clearBtn" title="Delete the messages in this conversation" hidden>Clear</button>
 			<button type="button" id="compactBtn" title="Summarize older messages, keep the recent ones" hidden>Compact</button>
@@ -610,6 +623,7 @@ __CUSTOM_CSS__
 	var WELCOME = "__WELCOME__";
 	var KEY_STORAGE = "bxagents_webui_api_key";
 	var THEME_STORAGE = "bxagents_webui_theme";
+	var PROFILE_STORAGE = "bxagents_webui_profile";
 	var CONVERSATION_STORAGE = "bxagents_webui_conversation";
 
 	var messagesEl = document.getElementById( "messages" );
@@ -627,6 +641,9 @@ __CUSTOM_CSS__
 	var sidebarEl = document.getElementById( "sidebar" );
 	var convListEl = document.getElementById( "convList" );
 	var modelMetaEl = document.getElementById( "modelMeta" );
+	var profileSelectEl = document.getElementById( "profileSelect" );
+	// The profile the person picked, "" for the agent's own model. Only ever one the server listed.
+	var chosenProfile = "";
 
 	// What the server says it can do, from GET /info. Read once at load and used
 	// to decide which controls exist at all - a button that would 501 or no-op is
@@ -718,8 +735,50 @@ __CUSTOM_CSS__
 			if ( !capabilities.conversations ) {
 				setSidebar( false );
 			}
+			if ( capabilities.profiles ) {
+				return loadProfiles();
+			}
 		} );
 	}
+
+	/**
+	 * Reads GET /profiles, which lists only the profiles the app chose to offer, and fills the model picker.
+	 * A choice remembered from an earlier visit is dropped when the app no longer offers it, so a stale
+	 * name is never sent.
+	 */
+	function loadProfiles() {
+		return apiGet( "/profiles" ).then( function ( payload ) {
+			var offered = payload && payload.profiles ? payload.profiles : [];
+			if ( !offered.length ) {
+				return;
+			}
+			profileSelectEl.textContent = "";
+			var own = document.createElement( "option" );
+			own.value = "";
+			own.textContent = "Default model";
+			profileSelectEl.appendChild( own );
+			offered.forEach( function ( profile ) {
+				var option = document.createElement( "option" );
+				option.value = profile.name;
+				option.textContent = profile.name + ( profile.model ? " (" + profile.model + ")" : "" );
+				option.title = profile.description || ( profile.provider + ( profile.model ? "/" + profile.model : "" ) );
+				profileSelectEl.appendChild( option );
+			} );
+			var remembered = localStorage.getItem( PROFILE_STORAGE ) || "";
+			chosenProfile = offered.some( function ( profile ) { return profile.name === remembered; } ) ? remembered : "";
+			profileSelectEl.value = chosenProfile;
+			profileSelectEl.hidden = false;
+		} );
+	}
+
+	profileSelectEl.addEventListener( "change", function () {
+		chosenProfile = profileSelectEl.value;
+		try {
+			localStorage.setItem( PROFILE_STORAGE, chosenProfile );
+		} catch ( e ) {
+			// the choice still holds for this visit
+		}
+	} );
 
 	function renderConversations() {
 		var current = getConversationId();
@@ -1496,6 +1555,9 @@ __CUSTOM_CSS__
 				threadId      : activeThreadId
 			}
 		};
+		if ( chosenProfile ) {
+			payload.options.profile = chosenProfile;
+		}
 
 		streamInto( "/stream", payload, turn ).then( function ( outcome ) {
 			turn.settle( outcome.sawContent );

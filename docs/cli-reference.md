@@ -522,7 +522,7 @@ The chat can change the model it talks to without losing the conversation: the m
 | `/profile <name>` | Switch straight to one. A profile whose provider has no key set is switched to with a warning, since the next message would fail |
 | `/default` | Go back to the app's default: the `defaultProfile`, else the provider and model at the top of `Agent.yaml` |
 
-A chat on `--connect` or `--server` talks to the model the server runs, so these commands say so and change nothing. There is no `/provider`: a profile already names its provider, and the providers' own settings are in `Agent.yaml` (see [`add provider`](#add-provider)).
+A chat on `--connect` or `--server` can switch only among the profiles the server lists in [`agentApi.profiles`](conventions/agent-bx.md#agentapi) (`GET /__bxagents/profiles`), sent as `options.profile` with each message; a server that lists none says so and changes nothing. There is no `/provider`: a profile already names its provider, and the providers' own settings are in `Agent.yaml` (see [`add provider`](#add-provider)).
 
 #### Notes in the chat
 

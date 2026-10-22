@@ -43,6 +43,75 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.errors.filter( e => e.findNoCase( "agentApi" ) ).len() ).toBe( 0 );
 			} );
 
+			describe( "offered profiles", function() {
+
+				beforeEach( function() {
+					variables.profileDirs = [];
+				} );
+
+				afterEach( function() {
+					for ( var dir in profileDirs ) {
+						if ( directoryExists( dir ) ) {
+							directoryDelete( dir, true );
+						}
+					}
+				} );
+
+				private function profiledProject( string yamlExtra = "", struct gateways = {} ) {
+					var dir = createTempDirectory( prefix = "bxagents-validate-" );
+					profileDirs.append( dir );
+					var nl = char( 10 );
+					fileWrite( dir & "/Agent.yaml", "name: offered" & nl & "model: mock/mock-model" & nl & "profiles:" & nl & "  fast:" & nl & "    provider: mock" & nl & "  slow:" & nl & "    provider: mock" & nl & yamlExtra );
+					fileWrite( dir & "/instructions.md", "Be helpful." );
+					directoryCreate( dir & "/gateways" );
+					for ( var name in gateways ) {
+						fileWrite( dir & "/gateways/#name#.bx", "class {" & nl & "	function configure() {" & nl & "		return " & gateways[ name ] & ";" & nl & "	}" & nl & "}" & nl );
+					}
+					var discovery = discoverer.discover( dir );
+					return validator.validate( dir, discovery, resolver.resolve( projectRoot = dir ) );
+				}
+
+				it( "accepts a web UI that offers declared profiles, and 'default'", function() {
+					var result = profiledProject( "", { chat : '{ exposes : "webui", path : "/chat", profiles : [ "fast", "default" ] }' } );
+
+					expect( result.errors ).toBeEmpty();
+				} );
+
+				it( "refuses a profile the project does not declare, a repeat, and a list that is not a list", function() {
+					var unknown = profiledProject( "", { chat : '{ exposes : "webui", path : "/chat", profiles : [ "nope" ] }' } );
+					var repeated = profiledProject( "", { chat : '{ exposes : "webui", path : "/chat", profiles : [ "fast", "fast" ] }' } );
+					var notList = profiledProject( "", { chat : '{ exposes : "webui", path : "/chat", profiles : "fast" }' } );
+
+					expect( unknown.errors.filter( e => e.findNoCase( "offers profile [nope]" ) ) ).toHaveLength( 1 );
+					expect( repeated.errors.filter( e => e.findNoCase( "more than once" ) ) ).toHaveLength( 1 );
+					expect( notList.errors.filter( e => e.findNoCase( "must be a list" ) ) ).toHaveLength( 1 );
+				} );
+
+				it( "refuses a list on an agent route, which passes the caller's own options", function() {
+					var result = profiledProject( "", { api : '{ exposes : "agent", path : "/api", profiles : [ "fast" ] }' } );
+
+					expect( result.errors.filter( e => e.findNoCase( "only a 'webui' entry can offer" ) ) ).toHaveLength( 1 );
+				} );
+
+				it( "refuses web UI entries that offer different lists, since they share one handler", function() {
+					var result = profiledProject( "", {
+						one : '{ exposes : "webui", path : "/one", profiles : [ "fast" ] }',
+						two : '{ exposes : "webui", path : "/two", profiles : [ "slow" ] }'
+					} );
+
+					expect( result.errors.filter( e => e.findNoCase( "offer different 'profiles'" ) ) ).toHaveLength( 1 );
+				} );
+
+				it( "validates agentApi.profiles the same way", function() {
+					var good = profiledProject( "agentApi:" & char( 10 ) & "  profiles: [ fast, slow ]" & char( 10 ) );
+					var bad = profiledProject( "agentApi:" & char( 10 ) & "  profiles: [ nope ]" & char( 10 ) );
+
+					expect( good.errors ).toBeEmpty();
+					expect( bad.errors.filter( e => e.findNoCase( "offers profile [nope]" ) ) ).toHaveLength( 1 );
+				} );
+
+			} );
+
 			it( "rejects duplicate tool names", function() {
 				var result = validateFixture( "duplicate-tool-names" );
 				expect( result.errors.filter( e => e.findNoCase( "Duplicate name" ) && e.findNoCase( "tools/" ) ).len() ).toBeGT( 0 );
