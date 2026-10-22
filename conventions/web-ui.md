@@ -59,7 +59,7 @@ Because the whole envelope arrives, **reasoning and tool calls are already on th
   <track kind="captions" src="../assets/video/webui-walkthrough.vtt" srclang="en" label="English" default>
 </video>
 
-A minute and a half through the whole page: sign in, streaming, the model picker, a tool call, saved conversations, notes and the dark theme. The voice and the music were made with [bx-audio](https://github.com/ortus-boxlang/bx-audio), and the page is the demo app in [`tools/demo/webui`](https://github.com/ortus-boxlang/bx-agents/tree/development/tools/demo/webui), which `capture.js` there drives with Playwright. It talks to a scripted model, so every answer is the same each time.
+A minute and a quarter through the whole page: sign in, streaming, the model picker, a tool call, saved conversations, notes and the dark theme. The music and the mix were made with [bx-audio](https://github.com/ortus-boxlang/bx-audio) and the voice with [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) (an Apache 2.0 model), and the page is the demo app in [`tools/demo/webui`](https://github.com/ortus-boxlang/bx-agents/tree/development/tools/demo/webui), which `capture.js` there drives with Playwright. It talks to a scripted model, so every answer is the same each time.
 
 | | |
 |---|---|
