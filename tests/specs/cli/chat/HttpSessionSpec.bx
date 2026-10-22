@@ -42,6 +42,12 @@ class extends="testbox.system.BaseSpec" {
 					},
 					postJson : ( baseUrl, route, body = {} ) => {
 						calls.append( { call : "post", route : route, body : duplicate( body ) } );
+						if ( route == "sessions/rename" ) {
+							return script.keyExists( "noList" ) ? throw( type = "BxAgents.AgentNotFound" ) : { success : true, ok : true, title : body.title };
+						}
+						if ( route == "sessions/fork" ) {
+							return script.keyExists( "noList" ) ? throw( type = "BxAgents.AgentNotFound" ) : { success : true, ok : true, id : "forked-1", title : len( body.title ) ? body.title : "Fork of x", messages : 6 };
+						}
 						return { success : true };
 					}
 				};
@@ -58,6 +64,38 @@ class extends="testbox.system.BaseSpec" {
 			private function events( list ) {
 				script.events = arguments.list;
 			}
+
+			describe( "naming and forking", function() {
+
+				it( "names the conversation on the server", function() {
+					var outcome = session.rename( "Launch plan" );
+					expect( outcome.ok ).toBeTrue();
+					expect( outcome.title ).toBe( "Launch plan" );
+					var post = calls.filter( c => c.call == "post" )[ 1 ];
+					expect( post.route ).toBe( "sessions/rename" );
+					expect( post.body ).toBe( { conversationId : session.conversationId(), title : "Launch plan" } );
+				} );
+
+				it( "forks on the server and carries on in the copy, on a new thread", function() {
+					var before = session.conversationId();
+					var outcome = session.fork( "Other approach" );
+
+					expect( outcome.ok ).toBeTrue();
+					expect( session.conversationId() ).toBe( "forked-1" );
+					expect( session.conversationId() ).notToBe( before );
+					expect( calls.filter( c => c.call == "post" )[ 1 ].body ).toBe( { conversationId : before, title : "Other approach" } );
+				} );
+
+				it( "says so when the server keeps no list of conversations, and stays where it is", function() {
+					script.noList = true;
+					var before = session.conversationId();
+
+					expect( session.rename( "x" ).reason ).toInclude( "no list of conversations" );
+					expect( session.fork( "x" ).reason ).toInclude( "no list of conversations" );
+					expect( session.conversationId() ).toBe( before );
+				} );
+
+			} );
 
 			describe( "profiles", function() {
 

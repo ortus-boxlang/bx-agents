@@ -1,0 +1,49 @@
+/**
+ * /export's two formats and how it reads its arguments.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "Exporter", function() {
+
+			beforeEach( function() {
+				variables.exporter = new bxagents.models.chat.Exporter();
+				variables.messages = [ { role : "you", text : "Show **bold** and <script>alert(1)</script>" }, { role : "agent", text : "| a | b |" & char( 10 ) & "|---|---|" & char( 10 ) & "| 1 | 2 |" } ];
+			} );
+
+			it( "reads a file name and a format flag, and lets the file name decide when there is no flag", function() {
+				expect( exporter.parse( "" ) ).toBe( { ok : true, file : "", format : "md" } );
+				expect( exporter.parse( "notes.md" ) ).toBe( { ok : true, file : "notes.md", format : "md" } );
+				expect( exporter.parse( "page.HTML" ).format ).toBe( "html" );
+				expect( exporter.parse( "page.htm" ).format ).toBe( "html" );
+				expect( exporter.parse( "--format=html" ) ).toBe( { ok : true, file : "", format : "html" } );
+				expect( exporter.parse( "notes.html --format=md" ).format ).toBe( "md" );
+				expect( exporter.parse( "--format=markdown" ).format ).toBe( "md" );
+				expect( exporter.parse( "--format=pdf" ).ok ).toBeFalse();
+			} );
+
+			it( "names a file by the date, with the format's extension", function() {
+				expect( exporter.defaultName( "md" ) ).toMatch( "^chat-\d{8}-\d{6}\.md$" );
+				expect( exporter.defaultName( "html" ) ).toMatch( "\.html$" );
+			} );
+
+			it( "writes Markdown with a heading and who said what", function() {
+				var out = exporter.render( messages, "md", "Launch" );
+				expect( out ).toStartWith( "## Launch" );
+				expect( out ).toInclude( "**You**" );
+				expect( out ).toInclude( "**Agent**" );
+			} );
+
+			it( "writes HTML that renders the Markdown, tables included, and escapes what people typed", function() {
+				var out = exporter.render( messages, "html", "Launch <b>1</b>" );
+				expect( out ).toInclude( "<title>Launch &lt;b&gt;1&lt;/b&gt;</title>" );
+				expect( out ).toInclude( "<strong>bold</strong>" );
+				expect( out ).toInclude( "<table>" );
+				expect( out ).notToInclude( "<script>" );
+				expect( out ).toInclude( "&lt;script&gt;" );
+			} );
+
+		} );
+	}
+
+}

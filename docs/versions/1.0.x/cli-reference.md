@@ -109,6 +109,9 @@ Issue, list and revoke access tokens for a deployed agent.
 ::: card title="notes" icon="phosphor-duotone:note-pencil" href="#notes"
 Read and manage the notes an agent keeps.
 :::
+::: card title="sessions" icon="phosphor-duotone:chats" href="#sessions"
+List, rename, fork and delete the conversations in the chat database.
+:::
 ::: card title="inspect" icon="phosphor-duotone:magnifying-glass" href="#inspect"
 Report how the agent is composed, from its source.
 :::
@@ -507,7 +510,7 @@ In the screen:
 | Enter while the agent works | Steer it: your message is added to the run |
 | Ctrl+C | Clear the box; on an empty box, leave. Ctrl+D leaves too |
 
-Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/save [file]` (the conversation as Markdown), `/sessions`, `/resume`, `/clear`, `/compact` and `/info` (see below), `/model`, `/profile` and `/default` (see below), `/remember <text>` and `/notes` (see below), `/record [file]` and `/record stop` (see below) and `/exit`.
+Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/export [file]` (the conversation as Markdown or HTML), `/name` and `/fork` (see below), `/sessions`, `/resume`, `/clear`, `/compact` and `/info` (see below), `/model`, `/profile` and `/default` (see below), `/remember <text>` and `/notes` (see below), `/record [file]` and `/record stop` (see below) and `/exit`.
 
 #### The same commands in the web page and in chat apps
 
@@ -520,7 +523,7 @@ Each slash command is written once, as a small class that answers with data (tex
 | [Chat platforms](conventions/gateways/index.md#commands-in-a-gateway) (Telegram, Slack, ...) | Type the command as a message. A safe set is on by default; a project can widen or switch it off |
 | A server over HTTP | `GET /__bxagents/commands` and `POST /__bxagents/command`, see [Run control](conventions/agent-bx.md#run-control) |
 
-`/copy`, `/save`, `/record`, `/profile`, `/default` and `/exit` act on your own machine or on your own session's model, so they stay in the terminal.
+`/name`, `/fork` and `/export` work in the terminal and in the web page (where `/export` hands the file to the browser to save, and the page has **Fork** and **Export** buttons). `/copy`, `/record`, `/profile`, `/default` and `/exit` act on your own machine or on your own session's model, so they stay in the terminal.
 
 #### Conversations in the chat
 
@@ -531,6 +534,9 @@ Every chat is a conversation, listed in the project's [shared chat database](con
 | `/sessions` | List your recent conversations, numbered |
 | `/resume [number or id]` | Go back to one and show what was said; without an argument, the most recent |
 | `/new` | Start a new conversation (the old one stays in the list) |
+| `/name <new name>` | Name this conversation; a conversation nobody has spoken in yet gets its entry in the list |
+| `/fork [new name]` | Copy this whole conversation, messages and all, under a new name and carry on in the copy; the original stays as it was. Without a name the copy is called `Fork of <this one>` |
+| `/export [file] [--format=md\|html]` | Save the conversation as Markdown or as an HTML page. The file name decides the format (`.html` or `.htm` is HTML, anything else Markdown) unless `--format` says; without a name the file is dated, in the folder you started in. The HTML shows the Markdown rendered, tables included, and escapes anything you typed so it never runs when the file is opened |
 | `/clear` | Forget this conversation's messages and keep the conversation |
 | `/compact` | Replace the older messages with a summary (needs a summary model on the agent's memory) |
 | `/info` | Agent, model, conversation, message count, notes and database |
@@ -697,6 +703,21 @@ bxAgents notes import --file=notes.json
 - `--scope` is `user` (the default) or `agent`; `list` without it shows both. `--user` is whose user notes: the operating system user by default. Agent notes belong to the agent's `name`.
 - `stats` shows how full each scope is and the rough size they add to the prompt (about four characters to a token; an estimate, not a count).
 - `export` writes the notes as JSON, to `--file` or to the screen. `import` adds the notes of such a file; a note already there is skipped and one that does not fit the limit is reported.
+- Run it where the database is: in the project, or on a server with `BXAGENTS_DB` set.
+
+### `sessions`
+
+The conversations in the project's [shared chat database](conventions/web-ui.md#the-sqlite-store) (`data/chat.db`, or the file named by `BXAGENTS_DB`), the same list `chat` and the web page show.
+
+```bash
+bxAgents sessions list [--user=NAME] [--json]
+bxAgents sessions rename --session=<number or id> --name="New name" [--user=NAME]
+bxAgents sessions fork --session=<number or id> [--name="Other approach"] [--user=NAME]
+bxAgents sessions delete --session=<number or id> [--user=NAME]
+```
+
+- A conversation is picked by its number in `list`, or by its id or the start of it. `--user` is whose conversations: the operating system user by default.
+- `list`, `rename` and the list part of `delete` only touch the database. The messages of a conversation live in the agent's [memory](conventions/agent-yaml.md#settings), so `fork` (which copies them) needs a built project, and so does `delete` to forget them too. They reach only messages a memory that outlives the process keeps (`file`, `jdbc`): the default `cache` memory is gone when the chat ends.
 - Run it where the database is: in the project, or on a server with `BXAGENTS_DB` set.
 
 ### `inspect`

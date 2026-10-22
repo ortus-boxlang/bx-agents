@@ -235,6 +235,8 @@ GET  /__bxagents/tools
 GET  /__bxagents/profiles   # los perfiles que un cliente puede pedir
 GET  /__bxagents/agent    # name, model, what it can do
 GET  /__bxagents/sessions   # las conversaciones recientes de quien llama
+POST /__bxagents/sessions/rename   # { conversationId, title } pone nombre a una
+POST /__bxagents/sessions/fork     # { conversationId, title? } copia una, mensajes incluidos
 GET  /__bxagents/history    # ?conversationId= lo que se dijo en una
 POST /__bxagents/clear      # { conversationId } olvida sus mensajes
 POST /__bxagents/compact    # { conversationId } resume los mensajes antiguos

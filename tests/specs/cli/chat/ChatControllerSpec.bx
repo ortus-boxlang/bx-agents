@@ -81,6 +81,21 @@ class extends="testbox.system.BaseSpec" {
 				q.useDefault = () => q.useProfile( "default" )
 				q.newThread = () => { q.newThreads++ }
 				q.conversationId = () => "conv-" & q.newThreads
+				q.conversationTitle = () => "A title"
+				q.history = () => []
+				q.renamed = []
+				q.rename = ( title ) => {
+					if ( !len( trim( title ) ) ) {
+						return { ok : false, reason : "Give it a name: /name <new name>" }
+					}
+					q.renamed.append( title )
+					return { ok : true, title : title }
+				}
+				q.forked = []
+				q.fork = ( title = "" ) => {
+					q.forked.append( title )
+					return { ok : true, id : "fork-1", title : len( title ) ? title : "Fork of A title", messages : 4 }
+				}
 				q.close = () => {}
 				q.send = ( text, hooks ) => {
 					q.sent.append( text )
@@ -141,7 +156,7 @@ class extends="testbox.system.BaseSpec" {
 				controllerFor( screen, fakeSession() ).run( screen )
 
 				var printed = screen.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] )
-				expect( printed.some( p => p.startsWith( "/save" ) ) ).toBeTrue();
+				expect( printed.some( p => p.startsWith( "/export" ) ) ).toBeTrue();
 				expect( printed.last() ).toInclude( "Unknown command /nope" );
 			} );
 
@@ -243,15 +258,32 @@ class extends="testbox.system.BaseSpec" {
 				expect( some.log.filter( e => e[ 1 ] == "copy" )[ 1 ][ 2 ] ).toBe( "echo hi" );
 			} );
 
-			it( "saves the conversation to a file on /save", function() {
+			it( "exports the conversation to a Markdown file on /export, and to HTML by the file name or --format", function() {
 				var dir = createTempDirectory( prefix = "bxagents-chat-" )
-				var screen = fakeScreen( [ "hi", "/save notes.md" ] )
+				var screen = fakeScreen( [ "hi <b>there</b>", "/export notes.md", "/export page.html", "/export --format=html" ] )
 				new bxagents.models.cli.chat.ChatController( fakeSession(), dir ).run( screen )
 
-				var saved = fileRead( dir & "/notes.md" )
-				expect( saved ).toInclude( "**You**" );
-				expect( saved ).toInclude( "echo hi" );
+				var markdown = fileRead( dir & "/notes.md" )
+				expect( markdown ).toInclude( "**You**" );
+				expect( markdown ).toInclude( "echo hi" );
+				expect( markdown ).toInclude( "## A title" );
+
+				var html = fileRead( dir & "/page.html" )
+				expect( html ).toInclude( "<!doctype html>" );
+				expect( html ).toInclude( "<title>A title</title>" );
+				// what a person typed is text, not markup
+				expect( html ).toInclude( "&lt;b&gt;there&lt;/b&gt;" );
+				expect( html ).notToInclude( "<b>there</b>" );
+
+				var dated = directoryList( dir, false, "name", "chat-*.html" )
+				expect( dated ).toHaveLength( 1 );
 				directoryDelete( dir, true )
+			} );
+
+			it( "tells the format that is not one", function() {
+				var screen = fakeScreen( [ "hi", "/export --format=pdf" ] )
+				controllerFor( screen, fakeSession() ).run( screen )
+				expect( screen.log.filter( e => e[ 1 ] == "print" ).last()[ 3 ] ).toInclude( "md or html" );
 			} );
 
 			it( "starts a recording on /record, in the working directory with a dated name, and stops it on /record stop", function() {
@@ -320,11 +352,33 @@ class extends="testbox.system.BaseSpec" {
 				expect( off.log.filter( e => e[ 1 ] == "record" ) ).toBeEmpty();
 			} );
 
-			it( "will not save an empty conversation", function() {
-				var screen = fakeScreen( [ "/save" ] )
+			it( "names the conversation on /name and says when no name was given", function() {
+				var screen = fakeScreen( [ "/name Quarterly plan", "/name" ] )
+				var session = fakeSession()
+				controllerFor( screen, session ).run( screen )
+
+				expect( session.renamed ).toBe( [ "Quarterly plan" ] );
+				var printed = screen.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] )
+				expect( printed[ 1 ] ).toBe( "Named: Quarterly plan" );
+				expect( printed[ 2 ] ).toInclude( "Give it a name" );
+			} );
+
+			it( "forks the conversation on /fork and keeps the transcript, since the copy has the same messages", function() {
+				var screen = fakeScreen( [ "hi", "/fork Other approach" ] )
+				var session = fakeSession()
+				var controller = controllerFor( screen, session )
+				controller.run( screen )
+
+				expect( session.forked ).toBe( [ "Other approach" ] );
+				expect( screen.log.filter( e => e[ 1 ] == "print" ).last()[ 3 ] ).toInclude( "Forked as [Other approach]: 4 messages copied" );
+				expect( controller.transcript() ).toHaveLength( 2 );
+			} );
+
+			it( "will not export an empty conversation", function() {
+				var screen = fakeScreen( [ "/export" ] )
 				controllerFor( screen, fakeSession() ).run( screen )
 
-				expect( screen.log.filter( e => e[ 1 ] == "print" )[ 1 ][ 3 ] ).toBe( "Nothing to save yet." );
+				expect( screen.log.filter( e => e[ 1 ] == "print" )[ 1 ][ 3 ] ).toBe( "Nothing to export yet." );
 			} );
 
 			it( "shows an error from the agent and carries on with the next message", function() {
@@ -398,7 +452,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "offers its commands to the screen for the slash menu", function() {
 				var names = new bxagents.models.cli.chat.ChatController( fakeSession() ).commands().map( c => c.name )
 
-				expect( names ).toBe( [ "/help", "/new", "/tools", "/sessions", "/resume", "/clear", "/compact", "/model", "/profile", "/default", "/info", "/remember", "/notes", "/copy", "/save", "/record", "/exit" ] );
+				expect( names ).toBe( [ "/help", "/new", "/name", "/fork", "/tools", "/sessions", "/resume", "/clear", "/compact", "/model", "/profile", "/default", "/info", "/remember", "/notes", "/copy", "/export", "/record", "/exit" ] );
 			} );
 
 		} );

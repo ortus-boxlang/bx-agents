@@ -114,7 +114,7 @@ Cada una está delimitada por el `getUserSessionIdentifier()` de ColdBox como el
 
 ### Comandos con barra
 
-Escribe `/` en la caja de mensaje y aparece un menú de comandos (flechas, `Tab` para completar, `Esc` para cerrar). Son los mismos comandos que en [el chat de la terminal](../cli-reference.md#los-mismos-comandos-en-la-pagina-web-y-en-las-apps-de-chat): `/help`, `/new`, `/tools`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/info`, `/remember` y `/notes`. Al pulsar Enter la línea se ejecuta en el servidor con `POST /command` y se dibuja la respuesta: texto, una tabla o botones para elegir. `/new` y `/resume` llevan la página a la conversación que nombran, y `/clear` recarga la transcripción.
+Escribe `/` en la caja de mensaje y aparece un menú de comandos (flechas, `Tab` para completar, `Esc` para cerrar). Son los mismos comandos que en [el chat de la terminal](../cli-reference.md#los-mismos-comandos-en-la-pagina-web-y-en-las-apps-de-chat): `/help`, `/new`, `/tools`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/info`, `/remember`, `/notes`, `/name`, `/fork` y `/export`. Al pulsar Enter la línea se ejecuta en el servidor con `POST /command` y se dibuja la respuesta: texto, una tabla o botones para elegir. `/new`, `/resume` y `/fork` llevan la página a la conversación que nombran, `/clear` recarga la transcripción, y `/export [archivo] [--format=md|html]` entrega la conversación al navegador para guardarla (los botones **Fork** y **Export** del encabezado ejecutan `/fork` y `/export`).
 
 La respuesta son datos, así que cualquier cliente puede usarla:
 
@@ -124,7 +124,7 @@ La respuesta son datos, así que cualquier cliente puede usarla:
   "effects": [ { "type": "conversation", "id": "..." } ] }
 ```
 
-Los bloques son `text`, `table`, `choose` (opciones, cada una con la línea de comando que ejecuta) y `transcript`; los efectos dicen qué le pasó a la conversación (`reset`, `conversation`). `/info` omite dónde está el archivo de la base de datos. Un comando que solo tiene sentido en tu propia máquina (`/copy`, `/save`, `/profile`) no se ofrece, y un servidor nunca cambia el modelo del agente compartido: la página elige un perfil por mensaje.
+Los bloques son `text`, `table`, `choose` (opciones, cada una con la línea de comando que ejecuta), `transcript` y `file` (`{ name, mime, text }`, que la página guarda); los efectos dicen qué le pasó a la conversación (`reset`, `conversation`). `/info` omite dónde está el archivo de la base de datos. Un comando que solo tiene sentido en tu propia máquina (`/copy`, `/save`, `/profile`) no se ofrece, y un servidor nunca cambia el modelo del agente compartido: la página elige un perfil por mensaje.
 
 `threadId` es autoritativo del servidor: tomado del request cuando se suministra, acuñado de lo contrario, y siempre reflejado de vuelta - como una cabecera de respuesta `X-Thread-Id` en `/invoke` y `/batch`, y como un evento SSE `thread` enviado *antes del primer chunk* en `/stream` (una cabecera no puede leerse antes de que el cuerpo empiece a llegar). Ese es el mismo contrato que adoptó el propio `toAi()` de ColdBox 8.1, así que un cliente escrito contra uno funciona contra el otro.
 

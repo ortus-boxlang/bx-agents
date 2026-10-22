@@ -114,7 +114,7 @@ Every one is scoped by ColdBox's `getUserSessionIdentifier()` as the `userId`. T
 
 ### Slash commands
 
-Type `/` in the message box and a menu of commands appears (arrow keys, `Tab` to complete, `Esc` to close). They are the same commands as in [the terminal chat](../cli-reference.md#the-same-commands-in-the-web-page-and-in-chat-apps): `/help`, `/new`, `/tools`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/info`, `/remember` and `/notes`. Pressing Enter runs the line on the server with `POST /command` and draws the answer: text, a table, or buttons to pick from. `/new` and `/resume` move the page to the conversation they name, `/clear` reloads the transcript.
+Type `/` in the message box and a menu of commands appears (arrow keys, `Tab` to complete, `Esc` to close). They are the same commands as in [the terminal chat](../cli-reference.md#the-same-commands-in-the-web-page-and-in-chat-apps): `/help`, `/new`, `/tools`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/info`, `/remember`, `/notes`, `/name`, `/fork` and `/export`. Pressing Enter runs the line on the server with `POST /command` and draws the answer: text, a table, or buttons to pick from. `/new`, `/resume` and `/fork` move the page to the conversation they name, `/clear` reloads the transcript, and `/export [file] [--format=md|html]` hands the conversation to the browser to save (the **Fork** and **Export** buttons in the header run `/fork` and `/export`).
 
 The reply is data, so any client can use it:
 
@@ -124,7 +124,7 @@ The reply is data, so any client can use it:
   "effects": [ { "type": "conversation", "id": "..." } ] }
 ```
 
-Blocks are `text`, `table`, `choose` (options, each with the command line to run) and `transcript`; effects say what happened to the conversation (`reset`, `conversation`). `/info` leaves out where the database file is. A command that only makes sense on your own machine (`/copy`, `/save`, `/profile`) is not offered, and a server never switches the shared agent's model: the page picks a profile per message instead.
+Blocks are `text`, `table`, `choose` (options, each with the command line to run), `transcript` and `file` (`{ name, mime, text }`, which the page saves); effects say what happened to the conversation (`reset`, `conversation`). `/info` leaves out where the database file is. A command that only makes sense on your own machine (`/copy`, `/save`, `/profile`) is not offered, and a server never switches the shared agent's model: the page picks a profile per message instead.
 
 `threadId` is server-authoritative: taken from the request when supplied, minted otherwise, and always echoed back - as an `X-Thread-Id` response header on `/invoke` and `/batch`, and as a `thread` SSE event sent *before the first chunk* on `/stream` (a header can't be read before the body starts arriving). That's the same contract ColdBox 8.1's own `toAi()` adopted, so a client written against one works against the other.
 
