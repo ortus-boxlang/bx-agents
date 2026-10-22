@@ -156,7 +156,7 @@ bxAgents new my-agent --forgebox=some-package-slug
 
 ### `add`
 
-Añade una cosa a un proyecto que ya existe, haciendo las mismas preguntas que `new`. Hoy eso es una `tool`, un `interceptor`, una `schedule`, un servidor `mcp`, un `model`, un `gateway`, un `subagent` o una `skill`.
+Añade una cosa a un proyecto que ya existe, haciendo las mismas preguntas que `new`. Hoy eso es una `tool`, un `interceptor`, una `schedule`, un servidor `mcp`, un `gateway`, un `subagent`, una `skill`, un `profile` o un `provider`.
 
 ```bash
 bxAgents add                        # elige qué añadir
@@ -331,6 +331,43 @@ bxAgents add skill                              # pregunta
 | `--description=<text>` | Una frase que empiece por "Use this skill when". El modelo la lee para decidir si carga la skill, así que es lo que importa. Sin ella se escribe un TODO para que lo reemplaces. |
 
 Las skills no se conectan a un agente: todas las skills del build están disponibles para el modelo. Las skills de skills.boxlang.io no se añaden aquí; se instalan, no se escriben.
+
+#### `add provider`
+
+Añade los ajustes con los que empieza cada llamada a un proveedor, bajo `providers:` en el `Agent.yaml` raíz (el ajuste `providers` de bx-ai): la temperatura, la respuesta más larga y el tiempo límite, sea cual sea el modelo o el perfil.
+
+```bash
+bxAgents add provider openai --temperature=0.2 --timeout=60
+bxAgents add provider                           # pregunta
+```
+
+| Opción | Significado |
+|---|---|
+| `--provider=<id>`, o el primer posicional | Un proveedor que bx-ai conoce. Uno que ya tiene ajustes se rechaza. |
+| `--temperature`, `--max-tokens`, `--timeout` | Hace falta al menos una. Se escriben como `params` (`temperature`, `max_tokens`) y `options` (`timeout`). |
+
+Nunca se pide la clave del proveedor: su variable habitual (`OPENAI_API_KEY`) recibe un marcador vacío en `.env`. La entrada se inserta sin reescribir el archivo, así que los comentarios y el orden se mantienen. Necesita un `Agent.yaml` en la raíz.
+
+#### `add profile`
+
+Añade una combinación con nombre de proveedor, modelo, ajustes y variable de la clave bajo `profiles:` en el `Agent.yaml` raíz (el ajuste `profiles` de bx-ai). Un agente la elige con `profile: <nombre>`, y `defaultProfile` nombra la que usa la aplicación al arrancar.
+
+```bash
+bxAgents add profile fast --provider=openai --model=gpt-5-mini --temperature=0.2 --default
+bxAgents add profile planner --provider=claude --model=claude-opus-4 --description="Thinks first"
+bxAgents add profile                            # pregunta
+```
+
+| Opción | Significado |
+|---|---|
+| `--name=<nombre>`, o el primer posicional | Letras, dígitos, `-` y `_`, empezando por una letra. Se rechazan `default`, el nombre de un proveedor y un nombre ya usado. |
+| `--description=<texto>` | Para qué sirve. |
+| `--provider=<id>`, `--model=<modelo>` | El proveedor y un modelo suyo. Sin modelo se usa el predeterminado del proveedor. |
+| `--api-key-env=<NOMBRE>` | Otra variable de entorno para su clave, cuando dos perfiles de un proveedor necesitan claves distintas. Solo se escribe el nombre. |
+| `--temperature`, `--max-tokens`, `--timeout` | Igual que en [`add provider`](#add-provider). |
+| `--default` | También define `defaultProfile`. Un `defaultProfile` existente nunca se cambia: se imprime la línea que hay que editar. |
+
+Añade un marcador `.env` vacío para la variable de la clave. Comprueba el resultado con `bxAgents inspect --section=ai`.
 
 ### `skills`
 

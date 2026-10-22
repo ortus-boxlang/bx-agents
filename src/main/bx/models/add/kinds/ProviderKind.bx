@@ -1,0 +1,89 @@
+/**
+ * `add provider` - settings for one provider, kept in the `providers:` mapping of the root
+ * Agent.yaml (bx-ai's `providers` setting): the temperature, longest answer and timeout that
+ * every call to that provider starts from, whichever model or profile is used.
+ *
+ *   providers:
+ *     openai:
+ *       params:  { temperature: 0.2 }
+ *       options: { timeout: 60 }
+ *
+ * The provider's API key is never asked for. Its usual variable (OPENAI_API_KEY) gets a
+ * stub in .env, and only the name is ever written down.
+ */
+class {
+
+	struct function info() {
+		return { name : "provider", summary : "Settings for one provider: its temperature, longest answer and timeout (providers: in Agent.yaml)" }
+	}
+
+	/**
+	 * @answers An Answers
+	 * @ctx The add context
+	 *
+	 * @return { provider, tuning, providerInfo, file }
+	 */
+	struct function ask( required any answers, required struct ctx ) {
+		var args = arguments.ctx.args ?: []
+		var a = arguments.answers.withPresets( args.len() ? { provider : args[ 1 ] } : {} )
+		var questions = new "models.add.AiQuestions@bxagents"()
+		var root = questions.rootYaml( arguments.ctx, "A provider" )
+		var taken = ( ( arguments.ctx.project.report.ai ?: {} ).providers ?: [] ).map( p => p.name )
+
+		var provider = questions.provider( a )
+		var written = reFind( "(?m)^\s+[""']?" & provider & "[""']?\s*:", root.text ) > 0
+		if ( taken.findNoCase( provider ) || ( written && new "models.add.YamlEditor@bxagents"().hasKey( root.text, "providers" ) ) ) {
+			throw( type = "BxAgents.InvalidAnswer", message = "#root.file# already has settings for #provider# under providers:. Edit them there." )
+		}
+		var tuning = questions.tuning( a )
+		var set = questions.settings( tuning )
+		if ( !set.params.count() && !set.options.count() ) {
+			throw( type = "BxAgents.MissingAnswer", message = "Nothing to set for #provider#. Pass at least one of --temperature, --max-tokens, --timeout." )
+		}
+		return { provider : provider, tuning : tuning, providerInfo : questions.info( provider ), file : root.file, manual : "" }
+	}
+
+	/**
+	 * @answers The answers from ask()
+	 * @ctx The add context
+	 * @changes A ChangeSet
+	 */
+	void function plan( required struct answers, required struct ctx, required any changes ) {
+		var a = arguments.answers
+		var questions = new "models.add.AiQuestions@bxagents"()
+		var set = questions.settings( a.tuning )
+		var entry = {}
+		if ( set.params.count() ) {
+			entry[ "params" ] = set.params
+		}
+		if ( set.options.count() ) {
+			entry[ "options" ] = set.options
+		}
+		var lines = [ a.provider & ":" ]
+		lines.append( new "models.wizard.YamlWriter@bxagents"().lines( entry, 2, [ "params", "options" ] ), true )
+
+		var root = questions.rootYaml( arguments.ctx, "A provider" )
+		var edit = new "models.add.YamlEditor@bxagents"().addEntry( root.text, "providers", lines )
+		if ( !edit.ok ) {
+			arguments.answers.manual = "#root.file# was not changed: #edit.reason#. Add this under providers:" & char( 10 ) & lines.map( l => "  " & l ).toList( char( 10 ) )
+			return
+		}
+		arguments.changes.edit( root.file, edit.text, "providers: ... " & a.provider )
+		questions.envStub( arguments.changes, a.providerInfo.envVar ?: "", a.providerInfo )
+	}
+
+	/**
+	 * @return [ text ] what is left to do
+	 */
+	array function next( required struct answers, required struct ctx ) {
+		var a = arguments.answers
+		var out = []
+		if ( len( a.manual ) ) {
+			out.append( a.manual )
+		}
+		out.append( new "models.add.AiQuestions@bxagents"().keySteps( a.providerInfo.envVar ?: "", a.providerInfo ), true )
+		out.append( "bxAgents inspect --section=ai" )
+		return out
+	}
+
+}

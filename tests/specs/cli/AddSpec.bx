@@ -939,6 +939,182 @@ class extends="testbox.system.BaseSpec" {
 
 			} );
 
+			describe( "add provider", function() {
+
+				private function addProvider( required string root, struct flags = {}, array positionals = [ "provider", "openai" ] ) {
+					var options = { projectRoot : root, _positionals : positionals, yes : true };
+					options.append( flags );
+					return addVerb.run( options );
+				}
+
+				it( "adds the provider's settings under providers: and a key stub to .env", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					var result = addProvider( root, { temperature : "0.2", timeout : "60" } );
+					var yaml = fileRead( root & "/Agent.yaml" );
+
+					expect( result.exitCode ).toBe( 0 );
+					expect( yaml ).toInclude( "providers:" );
+					expect( yaml ).toInclude( "  openai:" );
+					expect( yaml ).toInclude( "temperature: 0.2" );
+					expect( yaml ).toInclude( "timeout: 60" );
+					expect( fileRead( root & "/.env" ) ).toInclude( "OPENAI_API_KEY=" );
+					expect( result.message ).toInclude( "Set OPENAI_API_KEY in .env" );
+				} );
+
+				it( "builds, and bx-ai receives the settings", function() {
+					var root = newTempProject( "yaml-minimal" );
+					addProvider( root, { temperature : "0.2", "max-tokens" : "500" } );
+
+					var report = new bxagents.models.report.ProjectReport().build( root );
+
+					expect( report.validation.errors ).toBeEmpty();
+					expect( report.ai.providers.map( p => p.name ) ).toBe( [ "openai" ] );
+					expect( report.ai.providers[ 1 ].params ).toBe( [ "max_tokens", "temperature" ] );
+				} );
+
+				it( "adds a second provider beside the first and keeps the file's comments", function() {
+					var root = newTempProject( "yaml-minimal" );
+					fileAppend( root & "/Agent.yaml", char( 10 ) & "providers:" & char( 10 ) & "  ## my notes" & char( 10 ) & "  claude:" & char( 10 ) & "    params:" & char( 10 ) & "      temperature: 0.5" & char( 10 ) );
+
+					addProvider( root, { timeout : "30" } );
+					var yaml = fileRead( root & "/Agent.yaml" );
+
+					expect( yaml ).toInclude( "## my notes" );
+					expect( yaml.find( "claude:" ) ).toBeLT( yaml.find( "openai:" ) );
+				} );
+
+				it( "refuses a provider that is already set, nothing to set, and an unknown provider", function() {
+					var root = newTempProject( "yaml-minimal" );
+					addProvider( root, { temperature : "0.2" } );
+
+					expect( function() {
+						addProvider( root, { temperature : "0.3" } );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+					expect( function() {
+						addProvider( root, {}, [ "provider", "claude" ] );
+					} ).toThrow( "BxAgents.MissingAnswer" );
+					expect( function() {
+						addProvider( root, { temperature : "0.2" }, [ "provider", "nope" ] );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+				} );
+
+				it( "refuses a temperature outside 0 to 2 by flag", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					expect( function() {
+						addProvider( root, { temperature : "3" } );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+				} );
+
+				it( "asks which provider and the settings", function() {
+					var root = newTempProject( "yaml-minimal" );
+					var prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [ "groq", "0.1", "", "20", "create" ] );
+
+					var result = addVerb.run( { projectRoot : root, _positionals : [ "provider" ], _prompter : prompter, _interactive : true } );
+
+					expect( prompter.remaining() ).toBe( 0 );
+					expect( result.exitCode ).toBe( 0 );
+					expect( fileRead( root & "/Agent.yaml" ) ).toInclude( "  groq:" );
+				} );
+
+			} );
+
+			describe( "add profile", function() {
+
+				private function addProfile( required string root, struct flags = {}, array positionals = [ "profile", "fast" ] ) {
+					var options = { projectRoot : root, _positionals : positionals, yes : true };
+					options.append( flags );
+					return addVerb.run( options );
+				}
+
+				it( "adds the profile under profiles: with its provider, model and settings", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					var result = addProfile( root, { description : "Cheap and quick", provider : "openai", model : "gpt-5-mini", temperature : "0.2" } );
+					var yaml = fileRead( root & "/Agent.yaml" );
+
+					expect( result.exitCode ).toBe( 0 );
+					expect( yaml ).toInclude( "profiles:" );
+					expect( yaml ).toInclude( "  fast:" );
+					expect( yaml ).toInclude( "    description: Cheap and quick" );
+					expect( yaml ).toInclude( "    provider: openai" );
+					expect( yaml ).toInclude( "    model: gpt-5-mini" );
+					expect( result.message ).toInclude( "profile: fast" );
+				} );
+
+				it( "builds, shows in inspect, and an agent can name it", function() {
+					var root = newTempProject( "yaml-minimal" );
+					addProfile( root, { provider : "claude", model : "claude-sonnet-4-5" } );
+					fileAppend( root & "/Agent.yaml", "profile: fast" & char( 10 ) );
+
+					var report = new bxagents.models.report.ProjectReport().build( root );
+
+					expect( report.validation.errors ).toBeEmpty();
+					expect( report.ai.profiles.map( p => p.name ) ).toBe( [ "fast" ] );
+					expect( report.ai.profiles[ 1 ].provider ).toBe( "claude" );
+				} );
+
+				it( "writes defaultProfile with --default, and leaves an existing one alone", function() {
+					var root = newTempProject( "yaml-minimal" );
+					addProfile( root, { provider : "openai", default : true } );
+
+					expect( fileRead( root & "/Agent.yaml" ) ).toInclude( "defaultProfile: fast" );
+
+					var again = addProfile( root, { provider : "claude", default : true }, [ "profile", "slow" ] );
+					var yaml = fileRead( root & "/Agent.yaml" );
+
+					expect( yaml ).toInclude( "defaultProfile: fast" );
+					expect( yaml ).notToInclude( "defaultProfile: slow" );
+					expect( again.message ).toInclude( "already has a defaultProfile" );
+				} );
+
+				it( "names another environment variable for the key, and stubs it in .env", function() {
+					var root = newTempProject( "yaml-minimal" );
+
+					addProfile( root, { provider : "openai", "api-key-env" : "RESEARCH_KEY" } );
+
+					expect( fileRead( root & "/Agent.yaml" ) ).toInclude( "apiKeyEnv: RESEARCH_KEY" );
+					expect( fileRead( root & "/.env" ) ).toInclude( "RESEARCH_KEY=" );
+				} );
+
+				it( "refuses a name that is a provider, default, taken, or badly formed", function() {
+					var root = newTempProject( "yaml-minimal" );
+					addProfile( root, { provider : "openai" } );
+
+					for ( var bad in [ "openai", "default", "fast", "9lives" ] ) {
+						expect( function() {
+							addProfile( root, { provider : "openai" }, [ "profile", bad ] );
+						} ).toThrow( "BxAgents.InvalidAnswer" );
+					}
+				} );
+
+				it( "refuses a project whose root agent is a class", function() {
+					var root = newTempProject( "full-project" );
+
+					expect( function() {
+						addProfile( root, { provider : "openai" } );
+					} ).toThrow( "BxAgents.InvalidAnswer" );
+				} );
+
+				it( "asks the name, provider, model, key variable, settings and whether it is the default", function() {
+					var root = newTempProject( "yaml-minimal" );
+					var prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [
+						"planner", "Thinks first", "claude", "claude-opus-4", "", "0.3", "4000", "", true, "create"
+					] );
+
+					var result = addVerb.run( { projectRoot : root, _positionals : [ "profile" ], _prompter : prompter, _interactive : true } );
+					var yaml = fileRead( root & "/Agent.yaml" );
+
+					expect( prompter.remaining() ).toBe( 0 );
+					expect( result.exitCode ).toBe( 0 );
+					expect( yaml ).toInclude( "  planner:" );
+					expect( yaml ).toInclude( "max_tokens: 4000" );
+					expect( yaml ).toInclude( "defaultProfile: planner" );
+				} );
+
+			} );
+
 			describe( "the verb", function() {
 
 				it( "refuses a folder that is not an agent project", function() {

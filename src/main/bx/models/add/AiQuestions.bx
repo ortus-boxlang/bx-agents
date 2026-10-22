@@ -1,0 +1,150 @@
+/**
+ * The questions `add provider` and `add profile` share: which provider, and the settings
+ * that go with it (temperature, longest answer, timeout), plus how those answers become
+ * the `params` and `options` mappings of an Agent.yaml.
+ *
+ * A key is never asked for. The provider's usual environment variable is used
+ * (OPENAI_API_KEY, ...), and only the variable's name is ever written down.
+ */
+class {
+
+	function init() {
+		variables.catalog = new "models.wizard.WizardCatalog@bxagents"()
+		variables.parser = new "models.build.ModelSlugParser@bxagents"()
+		return this
+	}
+
+	/**
+	 * @a An Answers
+	 * @default The provider that is highlighted
+	 *
+	 * @return The provider id
+	 */
+	string function provider( required any a, string default = "openai" ) {
+		// the providers the wizard knows well first, then every other one bx-ai has
+		var choices = variables.catalog.providers().map( p => { value : p.id, label : p.name, hint : p.hint } )
+		var listed = choices.map( c => c.value )
+		for ( var other in variables.parser.coreProviders() ) {
+			if ( !listed.contains( other ) ) {
+				choices.append( { value : other, label : other, hint : other == "mock" ? "for tests: scripted answers, no network" : "" } )
+			}
+		}
+		var provider = arguments.a.select( key = "provider", title = "Which provider?", choices = choices, default = arguments.default )
+		if ( !variables.parser.isKnownProvider( provider ) ) {
+			throw( type = "BxAgents.InvalidAnswer", message = "--provider: [#provider#] is not a provider. Use one of: #variables.parser.coreProviders().toList( ', ' )#" )
+		}
+		return provider
+	}
+
+	/**
+	 * @provider A provider id
+	 *
+	 * @return { id, name, envVar, keyUrl, setup, extraEnv } as the wizard knows it; envVar is empty when there is no key
+	 */
+	struct function info( required string provider ) {
+		var found = variables.catalog.provider( arguments.provider )
+		return found.count() ? found : { id : arguments.provider, name : arguments.provider, envVar : "", keyUrl : "", setup : "" }
+	}
+
+	/**
+	 * Temperature, longest answer and timeout. Each is optional: empty leaves it to the provider.
+	 *
+	 * @a An Answers
+	 *
+	 * @return { temperature, maxTokens, timeout } as text, empty when not set
+	 */
+	struct function tuning( required any a ) {
+		return {
+			temperature : arguments.a.text(
+				key      = "temperature",
+				title    = "Temperature? (optional)",
+				help     = "How adventurous the answers are, 0 to 2. Empty uses the provider's default.",
+				default  = "",
+				validate = ( value ) => !len( value ) || ( isNumeric( value ) && value >= 0 && value <= 2 ) ? "" : "A number from 0 to 2."
+			),
+			maxTokens : arguments.a.text(
+				key      = "max-tokens",
+				title    = "Longest answer, in tokens? (optional)",
+				default  = "",
+				validate = ( value ) => !len( value ) || reFind( "^[1-9][0-9]*$", value ) ? "" : "A whole number."
+			),
+			timeout : arguments.a.text(
+				key      = "timeout",
+				title    = "Timeout, in seconds? (optional)",
+				default  = "",
+				validate = ( value ) => !len( value ) || reFind( "^[1-9][0-9]*$", value ) ? "" : "A whole number."
+			)
+		}
+	}
+
+	/**
+	 * @tuning The struct tuning() returns
+	 *
+	 * @return { params, options } mappings holding only what was set
+	 */
+	struct function settings( required struct tuning ) {
+		var params = {}
+		var options = {}
+		if ( len( arguments.tuning.temperature ?: "" ) ) {
+			params[ "temperature" ] = val( arguments.tuning.temperature )
+		}
+		if ( len( arguments.tuning.maxTokens ?: "" ) ) {
+			params[ "max_tokens" ] = int( arguments.tuning.maxTokens )
+		}
+		if ( len( arguments.tuning.timeout ?: "" ) ) {
+			options[ "timeout" ] = int( arguments.tuning.timeout )
+		}
+		return { params : params, options : options }
+	}
+
+	/**
+	 * The root Agent.yaml these settings are written into. Provider and profile settings
+	 * belong to the whole app, so they live in the root file and nowhere else.
+	 *
+	 * @ctx The add context
+	 * @what What is being added, for the message
+	 *
+	 * @return { file : project-relative path, text }
+	 */
+	struct function rootYaml( required struct ctx, required string what ) {
+		var located = new "models.build.AgentDefinitionLocator@bxagents"().locate( arguments.ctx.root )
+		var file = located.path.listLast( "/\" )
+		if ( located.kind != "yaml" ) {
+			throw( type = "BxAgents.InvalidAnswer", message = "#arguments.what# is written into Agent.yaml, and this project defines its root agent in #file#. Add an Agent.yaml with the settings, or write them by hand." )
+		}
+		return { file : file, text : fileRead( located.path ) }
+	}
+
+	/**
+	 * @changes A ChangeSet
+	 * @envVar The variable name
+	 * @info The provider's info(), for the note above the stub
+	 */
+	void function envStub( required any changes, required string envVar, struct info = {} ) {
+		if ( !len( arguments.envVar ) ) {
+			return
+		}
+		var note = len( arguments.info.keyUrl ?: "" ) ? "## #arguments.info.name# API key. Get one at #arguments.info.keyUrl##char( 10 )#" : ""
+		arguments.changes.append( ".env", char( 10 ) & note & arguments.envVar & "=" & char( 10 ), arguments.envVar & "=" )
+	}
+
+	/**
+	 * What to tell the person after the file changes.
+	 *
+	 * @envVar The variable the provider's key is read from
+	 * @info The provider's info()
+	 *
+	 * @return [ text ]
+	 */
+	array function keySteps( string envVar = "", struct info = {} ) {
+		var out = []
+		if ( len( arguments.envVar ) ) {
+			out.append( "Set #arguments.envVar# in .env." )
+		}
+		if ( len( arguments.info.setup ?: "" ) ) {
+			out.append( arguments.info.setup )
+		}
+		return out
+	}
+
+}

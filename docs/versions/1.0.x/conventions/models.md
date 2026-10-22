@@ -35,7 +35,7 @@ image:         { provider: openai, model: gpt-image-1, size: 1024x1024 }
 
 ## Other providers
 
-`providers` holds `params` and `options` for a provider by name, for the ones you use through a profile or a subagent. The key for each provider is read from its usual environment variable (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, ...); `bxAgents doctor` tells you when one is missing.
+`providers` holds `params` and `options` for a provider by name, for the ones you use through a profile or a subagent. `bxAgents add provider` writes one for you. The key for each provider is read from its usual environment variable (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, ...); `bxAgents doctor` tells you when one is missing.
 
 ## Profiles
 
@@ -48,7 +48,7 @@ A profile is a named combination: a provider, a model, params, options and the n
 | `params`, `options` | Layered on top of the provider's and the default's: `params` from the default, then the provider, then the profile. |
 | `apiKeyEnv` | The **name** of the variable that holds the key. A key itself is never written in `Agent.yaml`; a profile that has one is refused. |
 
-A profile cannot be named `default` or like a provider (`openai`, `claude`, ...), because both are selected by name. `defaultProfile` picks which profile is used when nothing asks for another one.
+A profile cannot be named `default` or like a provider (`openai`, `claude`, ...), because both are selected by name. `defaultProfile` picks which profile is used when nothing asks for another one. `bxAgents add profile` writes a profile (and `--default` the `defaultProfile`) without touching the rest of the file; see [`add profile`](../cli-reference.md#add-profile).
 
 ## Which agent uses what
 
