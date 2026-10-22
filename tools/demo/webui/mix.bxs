@@ -9,17 +9,28 @@ opts = server.cli.parsed.options
 outDir = opts.out ?: "out"
 sr = 44100
 lead = 0.3
+
+/**
+ * A voice at a speaking level: -17 dBFS RMS, never past -1 dBFS at the peak, at the music's sample rate and in stereo
+ */
+function leveled( c ) {
+	c = audioChannels( audioResample( audioFilter( c, "highpass", 80, 0.7071 ), sr ), 2 )
+	var info = audioInfo( c, true )
+	var gainDb = -17 - 20 * log10( max( info.rms, 0.0001 ) )
+	var peakDb = 20 * log10( max( info.peak, 0.0001 ) )
+	return audioGain( c, min( gainDb, -1 - peakDb ) )
+}
 timeline = jsonDeserialize( fileRead( outDir & "/timeline.json" ) )
 total = videoInfo( opts.video ).seconds
 
-t = audioTimeline( bpm = 78, beatsPerBar = 4, sampleRate = sr, channels = 2 )
+t = audioTimeline( bpm = 128, beatsPerBar = 4, sampleRate = sr, channels = 2 )
 music = audioFitTo( audioChannels( audioResample( audioLoad( opts.music ), sr ), 2 ), total )
 audioAdd( timeline = t, sound = music, at = 0, track = "music", gainDb = -3 )
 
 cues = []
 for ( scene in timeline ) {
 	at = scene.startMs / 1000 + lead
-	audioAdd( timeline = t, sound = audioLoad( outDir & "/" & scene.id & ".wav" ), at = at, track = "voice", gainDb = 0 )
+	audioAdd( timeline = t, sound = leveled( audioLoad( outDir & "/" & scene.id & ".wav" ) ), at = at, track = "voice", gainDb = 0 )
 	for ( cue in jsonDeserialize( fileRead( outDir & "/" & scene.id & ".json" ) ).cues ) {
 		cues.append( { start : cue.start + at, end : cue.end + at, text : cue.text } )
 	}

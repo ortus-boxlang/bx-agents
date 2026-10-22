@@ -59,7 +59,7 @@ Porque llega el envelope completo, **el razonamiento y las llamadas de tool ya e
   <track kind="captions" src="../assets/video/webui-walkthrough.vtt" srclang="en" label="English" default>
 </video>
 
-Minuto y medio por toda la página: inicio de sesión, streaming, el selector de modelo, una llamada a una herramienta, conversaciones guardadas, notas y el tema oscuro. La voz y la música se hicieron con [bx-audio](https://github.com/ortus-boxlang/bx-audio), y la página es la app de demostración de [`tools/demo/webui`](https://github.com/ortus-boxlang/bx-agents/tree/development/tools/demo/webui), que `capture.js` maneja con Playwright. La narración y los subtítulos están en inglés. Habla con un modelo con guion, así que cada respuesta es igual cada vez.
+Un minuto y cuarto por toda la página: inicio de sesión, streaming, el selector de modelo, una llamada a una herramienta, conversaciones guardadas, notas y el tema oscuro. La música y la mezcla se hicieron con [bx-audio](https://github.com/ortus-boxlang/bx-audio) y la voz con [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) (modelo Apache 2.0), y la página es la app de demostración de [`tools/demo/webui`](https://github.com/ortus-boxlang/bx-agents/tree/development/tools/demo/webui), que `capture.js` maneja con Playwright. La narración y los subtítulos están en inglés. Habla con un modelo con guion, así que cada respuesta es igual cada vez.
 
 | | |
 |---|---|
