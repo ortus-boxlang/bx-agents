@@ -8,7 +8,7 @@
  */
 opts = server.cli.parsed.options
 outDir = opts.out ?: "out"
-voice = opts.voice ?: "joe"
+voice = opts.voice ?: "en_US-ljspeech-high"
 directoryCreate( outDir, true, true )
 scenes = jsonDeserialize( fileRead( getDirectoryFromPath( getCurrentTemplatePath() ) & "scenes.json" ) )
 
@@ -20,7 +20,7 @@ function leveled( c ) {
 }
 
 for ( scene in scenes ) {
-	spoken = audioSpeakCues( text = scene.text, voice = voice, speed = 0.97, pauses = { sentence : 0.45, clause : 0.18, paragraph : 0.8 } )
+	spoken = audioSpeakCues( text = scene.text, voice = voice, speed = 0.95, pauses = { sentence : 0.45, clause : 0.18, paragraph : 0.8 } )
 	clip = audioChannels( audioResample( leveled( audioReverb( audio = audioCompress( audioFilter( spoken.audio, "highpass", 80, 0.7071 ), -22, 3, 12, 120 ), room = 0.15, damp = 0.6, mix = 0.05 ) ), 44100 ), 2 )
 	audioSave( clip, outDir & "/" & scene.id & ".wav", 24 )
 	fileWrite( outDir & "/" & scene.id & ".json", jsonSerialize( { id : scene.id, seconds : clip.getDurationSeconds(), cues : spoken.cues } ) )
