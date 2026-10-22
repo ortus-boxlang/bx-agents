@@ -355,7 +355,8 @@ public final class ChatScreen implements AutoCloseable {
 		}
 		Optional<Path> saved = clipboard.save( pasteFolder );
 		if ( saved.isEmpty() ) {
-			print( "warn", "There is no picture on the clipboard, or no tool to read it (wl-paste or xclip on Linux, pngpaste on macOS). Text is pasted with your terminal's own paste." );
+			print( "warn",
+			    "There is no picture on the clipboard, or no tool to read it (wl-paste or xclip on Linux, pngpaste on macOS). Text is pasted with your terminal's own paste." );
 			return;
 		}
 		images.add( saved.get().toString() );
@@ -633,8 +634,13 @@ public final class ChatScreen implements AutoCloseable {
 		}
 		rows.add( separator() );
 		rows.addAll( composerRows() );
+<<<<<<< HEAD
 		String picture = images.isEmpty() ? "" : images.size() + ( images.size() == 1 ? " picture" : " pictures" ) + " attached · ";
 		rows.add( withRecordingMark( Row.of( " " + statusPrefix() + picture + "enter send · alt+enter new line · ↑ history" + ( menu.isEmpty() && files.isEmpty() ? "" : " · tab completes" ), theme.muted ) ) );
+=======
+		rows.add( withRecordingMark(
+		    Row.of( " " + statusPrefix() + "enter send · alt+enter new line · ↑ history" + ( menu.isEmpty() ? "" : " · tab completes" ), theme.muted ) ) );
+>>>>>>> code/tui-d-shell-bif
 		return rows;
 	}
 

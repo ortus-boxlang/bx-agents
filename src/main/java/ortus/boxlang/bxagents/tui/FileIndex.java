@@ -35,12 +35,12 @@ import java.util.Set;
  */
 final class FileIndex {
 
-	static final int			MAX_FILES	= 5000;
-	static final int			MAX_DEPTH	= 6;
-	private static final Set<String>	SKIPPED	= Set.of( "node_modules", "build", "dist", "target", "out", "__pycache__", "venv" );
+	static final int					MAX_FILES	= 5000;
+	static final int					MAX_DEPTH	= 6;
+	private static final Set<String>	SKIPPED		= Set.of( "node_modules", "build", "dist", "target", "out", "__pycache__", "venv" );
 
-	private final Path			root;
-	private List<String>		files		= List.of();
+	private final Path					root;
+	private List<String>				files		= List.of();
 
 	FileIndex( Path root ) {
 		this.root = root;
@@ -88,7 +88,7 @@ final class FileIndex {
 	 * @return paths containing the query, ignoring case: file names that start with it first, then paths that start with it, then the rest, shorter first
 	 */
 	List<String> match( String query, int max ) {
-		String		q		= query.toLowerCase( Locale.ROOT );
+		String			q		= query.toLowerCase( Locale.ROOT );
 		List<String>	named	= new ArrayList<>();
 		List<String>	rooted	= new ArrayList<>();
 		List<String>	other	= new ArrayList<>();

@@ -137,16 +137,16 @@ class AttachmentsTest {
 	@Test
 	@DisplayName( "ClipboardImage tries wl-paste then xclip on Wayland, and takes the first PNG" )
 	void clipboardOnWayland( @TempDir Path folder ) {
-		List<List<String>> tried = new ArrayList<>();
-		ClipboardImage clip = new ClipboardImage( "Linux", Map.of( "WAYLAND_DISPLAY", "wayland-0" ), command -> {
-			tried.add( command );
-			if ( command.get( 0 ).equals( "wl-paste" ) ) {
-				return PNG;
-			}
-			throw new IOException( "not installed" );
-		} );
+		List<List<String>>	tried	= new ArrayList<>();
+		ClipboardImage		clip	= new ClipboardImage( "Linux", Map.of( "WAYLAND_DISPLAY", "wayland-0" ), command -> {
+										tried.add( command );
+										if ( command.get( 0 ).equals( "wl-paste" ) ) {
+											return PNG;
+										}
+										throw new IOException( "not installed" );
+									} );
 
-		Optional<Path> saved = clip.save( folder );
+		Optional<Path>		saved	= clip.save( folder );
 
 		assertThat( saved.isPresent() ).isTrue();
 		assertThat( tried ).hasSize( 1 );
@@ -178,8 +178,8 @@ class AttachmentsTest {
 	@Test
 	@DisplayName( "ClipboardImage picks the tool of the system: pngpaste and AppleScript on macOS, PowerShell on Windows" )
 	void clipboardPerSystem( @TempDir Path folder ) {
-		Path target = folder.resolve( "x.png" );
-		List<List<String>> mac = new ClipboardImage( "Mac OS X", Map.of(), c -> new byte[ 0 ] ).commands( target );
+		Path				target	= folder.resolve( "x.png" );
+		List<List<String>>	mac		= new ClipboardImage( "Mac OS X", Map.of(), c -> new byte[ 0 ] ).commands( target );
 		assertThat( mac.get( 0 ) ).containsExactly( "pngpaste", "-" ).inOrder();
 		assertThat( mac.get( 1 ).get( 0 ) ).isEqualTo( "osascript" );
 		assertThat( String.join( " ", mac.get( 1 ) ) ).contains( target.toString() );
