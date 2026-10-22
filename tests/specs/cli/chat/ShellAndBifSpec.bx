@@ -38,6 +38,19 @@ class extends="testbox.system.BaseSpec" {
 				expect( own.chat().shell ).toBe( "bash -c" );
 			} );
 
+			it( "reads the keys a person rebinds, one key or a list", function() {
+				var config = configWith( "chat:" & char( 10 ) & "  keys:" & char( 10 ) & "    newline: [ ctrl+n, alt+enter ]" & char( 10 ) & "    stop: ctrl+x" & char( 10 ) );
+				expect( config.keys() ).toBe( { newline : [ "ctrl+n", "alt+enter" ], stop : [ "ctrl+x" ] } );
+				expect( config.problems() ).toBeEmpty();
+				expect( new bxagents.models.cli.UserConfig( dir & "/missing.yml" ).keys() ).toBe( {} );
+			} );
+
+			it( "reports keys that is not a mapping", function() {
+				var config = configWith( "chat:" & char( 10 ) & "  keys: ctrl+n" & char( 10 ) );
+				expect( config.problems().toList( "|" ) ).toInclude( "chat.keys must be a mapping" );
+				expect( config.keys() ).toBe( {} );
+			} );
+
 			it( "reports a key it does not know instead of ignoring it", function() {
 				var config = configWith( "chat:" & char( 10 ) & "  shel: false" & char( 10 ) & "colour: red" & char( 10 ) );
 				var out = config.problems().toList( "|" );

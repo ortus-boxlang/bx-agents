@@ -46,8 +46,14 @@ final class Composer {
 	private int							historyAt;
 	private String						draft	= "";
 
+	private KeyMap						keys	= KeyMap.defaults();
+
 	Composer() {
 		lines.add( new StringBuilder() );
+	}
+
+	void keys( KeyMap keys ) {
+		this.keys = keys;
 	}
 
 	/** @return the whole text, lines joined by newlines */
@@ -151,25 +157,25 @@ final class Composer {
 	}
 
 	Outcome key( KeyEvent k ) {
-		if ( k.hasCtrl() && k.isChar( 'c' ) ) {
+		if ( keys.is( KeyMap.Action.CLEAR, k ) ) {
 			if ( isEmpty() ) {
 				return Outcome.EXIT;
 			}
 			setText( "" );
 			return Outcome.CLEARED;
 		}
-		if ( k.hasCtrl() && k.isChar( 'd' ) ) {
+		if ( keys.is( KeyMap.Action.EXIT, k ) ) {
 			if ( isEmpty() ) {
 				return Outcome.EXIT;
 			}
 			deleteForward();
 			return Outcome.NONE;
 		}
-		if ( k.isKey( KeyCode.ENTER ) ) {
-			if ( k.hasAlt() || k.hasShift() ) {
-				newLine();
-				return Outcome.NONE;
-			}
+		if ( keys.is( KeyMap.Action.NEWLINE, k ) ) {
+			newLine();
+			return Outcome.NONE;
+		}
+		if ( keys.is( KeyMap.Action.SUBMIT, k ) ) {
 			StringBuilder current = lines.get( row );
 			if ( current.length() > 0 && current.charAt( current.length() - 1 ) == '\\' && col == current.length() ) {
 				current.setLength( current.length() - 1 );
@@ -179,17 +185,19 @@ final class Composer {
 			}
 			return text().isBlank() ? Outcome.NONE : Outcome.SUBMIT;
 		}
-		if ( k.hasCtrl() && k.isChar( 'j' ) ) {
-			newLine();
-		} else if ( k.hasCtrl() && k.isChar( 'u' ) ) {
+		if ( keys.is( KeyMap.Action.DELETE_TO_START, k ) ) {
 			lines.get( row ).delete( 0, col );
 			col = 0;
-		} else if ( k.hasCtrl() && k.isChar( 'w' ) ) {
+		} else if ( keys.is( KeyMap.Action.DELETE_WORD, k ) ) {
 			deleteWordBack();
-		} else if ( k.hasCtrl() && k.isChar( 'a' ) || k.isKey( KeyCode.HOME ) ) {
+		} else if ( keys.is( KeyMap.Action.LINE_START, k ) ) {
 			col = 0;
-		} else if ( k.hasCtrl() && k.isChar( 'e' ) || k.isKey( KeyCode.END ) ) {
+		} else if ( keys.is( KeyMap.Action.LINE_END, k ) ) {
 			col = lines.get( row ).length();
+		} else if ( keys.is( KeyMap.Action.HISTORY_PREVIOUS, k ) && row == 0 ) {
+			historyPrevious();
+		} else if ( keys.is( KeyMap.Action.HISTORY_NEXT, k ) && row == lines.size() - 1 ) {
+			historyNext();
 		} else if ( k.isKey( KeyCode.LEFT ) ) {
 			if ( col > 0 ) {
 				col--;
@@ -208,15 +216,11 @@ final class Composer {
 			if ( row > 0 ) {
 				row--;
 				col = Math.min( col, lines.get( row ).length() );
-			} else {
-				historyPrevious();
 			}
 		} else if ( k.isKey( KeyCode.DOWN ) ) {
 			if ( row < lines.size() - 1 ) {
 				row++;
 				col = Math.min( col, lines.get( row ).length() );
-			} else {
-				historyNext();
 			}
 		} else if ( k.isKey( KeyCode.BACKSPACE ) ) {
 			backspace();

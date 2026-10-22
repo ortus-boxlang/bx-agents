@@ -80,6 +80,9 @@ class {
 		for ( var problem in variables.userConfig.problems() ) {
 			arguments.screen.print( "warn", problem )
 		}
+		for ( var problem in arguments.screen.bindKeys( variables.userConfig.keys() ) ) {
+			arguments.screen.print( "warn", "#variables.userConfig.path()#: " & problem )
+		}
 		variables.context = new "models.chat.commands.CommandContext@bxagents"( variables.session, "tui", true, port )
 		variables.renderer = new "models.cli.chat.TerminalRenderer@bxagents"( arguments.screen, variables.session, variables.transcript, ( line ) => command( line ) )
 		if ( !isBoolean( arguments.record ) || arguments.record ) {
@@ -100,6 +103,10 @@ class {
 			var text = trim( input )
 			if ( !len( text ) ) {
 				continue
+			}
+			// a lone question mark is the way to ask which keys do what
+			if ( text == "?" ) {
+				text = "/keys"
 			}
 			if ( text.startsWith( "/" ) ) {
 				if ( !command( text ) ) {

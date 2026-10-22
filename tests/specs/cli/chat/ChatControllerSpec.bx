@@ -54,6 +54,16 @@ class extends="testbox.system.BaseSpec" {
 				s.setStatus = ( text ) => s.statuses.append( text )
 				s.imagesAllowed = [ true, "" ]
 				s.setImagesAllowed = ( allowed, reason ) => { s.imagesAllowed = [ allowed, reason ] }
+				s.keyOverrides = []
+				s.keyProblems = []
+				s.bindKeys = ( overrides ) => {
+					s.keyOverrides.append( overrides )
+					return s.keyProblems
+				}
+				s.keyTable = () => [
+					{ id : "submit", keys : "Enter", does : "Send the message", place : "box" },
+					{ id : "stop", keys : "Esc, Ctrl+C", does : "Stop the agent at its next step", place : "run" }
+				]
 				s.pasted = []
 				s.takeImages = () => {
 					var taken = s.pasted
@@ -139,8 +149,8 @@ class extends="testbox.system.BaseSpec" {
 			}
 
 			// the person's own switches: both on unless a spec says otherwise
-			function userConfig( shell = true, bifs = true ) {
-				return { chat : () => { shell : shell, bifs : bifs }, problems : () => [], path : () => "~/.bxagents/bxAgents.yml" }
+			function userConfig( shell = true, bifs = true, keys = {} ) {
+				return { chat : () => { shell : shell, bifs : bifs }, keys : () => ( keys ), problems : () => [], path : () => "~/.bxagents/bxAgents.yml" }
 			}
 
 			function controllerFor( screen, session, config ) {
@@ -649,6 +659,26 @@ class extends="testbox.system.BaseSpec" {
 					expect( warn[ 1 ] ).toInclude( "unknown key [shel]" );
 				} );
 
+				it( "hands the person's own keys to the screen and shows what it did not accept", function() {
+					var screen = fakeScreen( [] )
+					screen.keyProblems = [ "[newline]: [banana] is not a key I can read." ]
+					controllerFor( screen, fakeSession(), userConfig( true, true, { newline : [ "ctrl+n" ] } ) ).run( screen )
+					expect( screen.keyOverrides ).toBe( [ { newline : [ "ctrl+n" ] } ] );
+					var warn = screen.log.filter( e => e[ 1 ] == "print" && e[ 2 ] == "warn" ).map( e => e[ 3 ] )
+					expect( warn[ 1 ] ).toInclude( "~/.bxagents/bxAgents.yml: [newline]: [banana]" );
+				} );
+
+				it( "/keys lists the keys as bound, and a lone ? asks the same", function() {
+					var screen = fakeScreen( [ "/keys", "?" ] )
+					var session = fakeSession()
+					controllerFor( screen, session ).run( screen )
+
+					var shown = printedBy( screen )
+					expect( shown.filter( p => p.find( "Send the message" ) && p.find( "submit" ) ) ).toHaveLength( 2 );
+					expect( shown.filter( p => p.find( "Stop the agent at its next step (while the agent works)" ) ) ).toHaveLength( 2 );
+					expect( session.sent ).toBeEmpty();
+				} );
+
 				it( "counts what waits for the next message in /context and in the status bar", function() {
 					var screen = fakeScreen( [ "####ucase( 'a' )", "##ucase( 'attached text' )", "/context" ] )
 					var session = fakeSession()
@@ -775,7 +805,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "offers its commands to the screen for the slash menu", function() {
 				var names = new bxagents.models.cli.chat.ChatController( fakeSession() ).commands().map( c => c.name )
 
-				expect( names ).toBe( [ "/help", "/new", "/name", "/fork", "/tools", "/sessions", "/resume", "/clear", "/compact", "/context", "/model", "/ping", "/profile", "/default", "/info", "/remember", "/notes", "/copy", "/export", "/record", "/exit" ] );
+				expect( names ).toBe( [ "/help", "/new", "/name", "/fork", "/tools", "/sessions", "/resume", "/clear", "/compact", "/context", "/keys", "/model", "/ping", "/profile", "/default", "/info", "/remember", "/notes", "/copy", "/export", "/record", "/exit" ] );
 			} );
 
 		} );

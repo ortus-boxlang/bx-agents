@@ -79,6 +79,7 @@ public final class ChatScreen implements AutoCloseable {
 	private final ClassLoader				previousLoader;
 	private final List<Map<?, ?>>			commands;
 	private final Composer					composer		= new Composer();
+	private KeyMap							keys			= KeyMap.defaults();
 
 	private final Queue<Map<?, ?>>			events			= new ConcurrentLinkedQueue<>();
 	private final Queue<String>				steer			= new ConcurrentLinkedQueue<>();
@@ -154,6 +155,28 @@ public final class ChatScreen implements AutoCloseable {
 		}
 	}
 
+	/**
+	 * Replaces the keys the screen answers to, once, before the first message is read.
+	 *
+	 * @param overrides action id to the keys, such as {@code newline -> [ "ctrl+j" ]}, from the person's own file
+	 *
+	 * @return what was wrong with the overrides, as sentences; they were left out and the defaults kept
+	 */
+	public List<String> bindKeys( Map<?, ?> overrides ) {
+		keys = KeyMap.of( overrides );
+		composer.keys( keys );
+		return keys.problems();
+	}
+
+	/** @return a row per key action: id, keys, does, place (box or run), for the /keys help */
+	public List<Map<String, String>> keyTable() {
+		return keys.table();
+	}
+
+	private static String lower( String label ) {
+		return label.toLowerCase( java.util.Locale.ROOT );
+	}
+
 	/** @return the palette, so BoxLang can paint its own output to match */
 	public Theme theme() {
 		return theme;
@@ -169,7 +192,11 @@ public final class ChatScreen implements AutoCloseable {
 	public void banner( String agent, String model, String mode ) {
 		out( Row.of().add( " bxAgents", theme.accentBold ).add( "  chat", theme.muted ).add( "   " + agent, theme.bold )
 		    .add( " · " + model + " · " + mode, theme.muted ).toLine() );
-		out( Row.of( " enter send · alt+enter new line · / commands · esc stops the agent · ctrl+c leaves", theme.muted ).toLine() );
+		out( Row
+		    .of( " " + lower( keys.first( KeyMap.Action.SUBMIT ) ) + " send · " + lower( keys.first( KeyMap.Action.NEWLINE ) )
+		        + " new line · / commands · ? keys · "
+		        + lower( keys.first( KeyMap.Action.STOP ) ) + " stops the agent · " + lower( keys.first( KeyMap.Action.CLEAR ) ) + " leaves", theme.muted )
+		    .toLine() );
 		out( Text.from( "" ) );
 	}
 
@@ -292,16 +319,16 @@ public final class ChatScreen implements AutoCloseable {
 						atPick = Math.floorMod( atPick + ( k.isKey( KeyCode.DOWN ) ? 1 : -1 ), Math.min( MAX_MENU, files.size() ) );
 						continue;
 					}
-					if ( k.isKey( KeyCode.TAB ) ) {
+					if ( keys.is( KeyMap.Action.COMPLETE, k ) ) {
 						composer.replaceAtMention( files.get( Math.min( atPick, files.size() - 1 ) ) );
 						atPick = 0;
 						continue;
 					}
 				}
-				if ( k.isKey( KeyCode.TAB ) && completeSlash() ) {
+				if ( keys.is( KeyMap.Action.COMPLETE, k ) && completeSlash() ) {
 					continue;
 				}
-				if ( k.hasCtrl() && k.isChar( 'v' ) ) {
+				if ( keys.is( KeyMap.Action.PASTE_IMAGE, k ) ) {
 					pasteImage();
 					continue;
 				}
@@ -543,7 +570,7 @@ public final class ChatScreen implements AutoCloseable {
 			if ( ev instanceof PasteEvent p ) {
 				composer.paste( p.text() );
 			} else if ( ev instanceof KeyEvent k ) {
-				if ( k.isKey( KeyCode.ESCAPE ) || k.hasCtrl() && k.isChar( 'c' ) ) {
+				if ( keys.is( KeyMap.Action.STOP, k ) ) {
 					if ( !cancel ) {
 						cancel = true;
 						print( "warn", "Stopping after the current step." );
@@ -635,9 +662,9 @@ public final class ChatScreen implements AutoCloseable {
 		rows.add( separator() );
 		rows.addAll( composerRows() );
 		String picture = images.isEmpty() ? "" : images.size() + ( images.size() == 1 ? " picture" : " pictures" ) + " attached · ";
-		rows.add( withRecordingMark( Row.of(
-		    " " + statusPrefix() + picture + "enter send · alt+enter new line · ↑ history" + ( menu.isEmpty() && files.isEmpty() ? "" : " · tab completes" ),
-		    theme.muted ) ) );
+		rows.add( withRecordingMark(
+		    Row.of( " " + statusPrefix() + picture + lower( keys.first( KeyMap.Action.SUBMIT ) ) + " send · " + lower( keys.first( KeyMap.Action.NEWLINE ) )
+		        + " new line · ? keys" + ( menu.isEmpty() && files.isEmpty() ? "" : " · tab completes" ), theme.muted ) ) );
 		return rows;
 	}
 
@@ -665,7 +692,8 @@ public final class ChatScreen implements AutoCloseable {
 		rows.addAll( composerRows() );
 		long secs = ( System.currentTimeMillis() - turnStarted ) / 1000;
 		rows.add( withRecordingMark( Row.of().add( " " + spin + " ", theme.accent ).add( cancel ? "stopping" : "working", theme.plain )
-		    .add( " " + secs + "s · esc stops · type and press enter to steer" + ( status.isEmpty() ? "" : " · " + status ), theme.muted ) ) );
+		    .add( " " + secs + "s · " + lower( keys.first( KeyMap.Action.STOP ) ) + " stops · type and press enter to steer"
+		        + ( status.isEmpty() ? "" : " · " + status ), theme.muted ) ) );
 		return rows;
 	}
 

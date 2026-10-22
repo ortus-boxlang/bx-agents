@@ -512,8 +512,9 @@ En la pantalla:
 | Esc | Detiene al agente. Se detiene en su siguiente paso, no a mitad de palabra |
 | Enter mientras el agente trabaja | Lo dirige: tu mensaje se añade a la ejecución |
 | Ctrl+C | Limpia el cuadro; con el cuadro vacío, sale. Ctrl+D también sale |
+| `?` solo, o `/keys` | Lista las teclas como están asignadas ahora, con el nombre de acción de cada una |
 
-Escribe `/` para ver los comandos: `/help`, `/new` (una conversación nueva), `/tools`, `/copy` (la última respuesta al portapapeles, con la secuencia OSC 52 que honran la mayoría de terminales), `/export [archivo]` (la conversación en Markdown o HTML), `/name` y `/fork` (ver abajo), `/sessions`, `/resume`, `/clear`, `/compact` e `/info` (ver abajo), `/model`, `/profile` y `/default` (ver abajo), `/remember <texto>` y `/notes` (ver abajo), `/record [archivo]` y `/record stop` (ver abajo) y `/exit`.
+Escribe `/` para ver los comandos: `/help`, `/new` (una conversación nueva), `/tools`, `/copy` (la última respuesta al portapapeles, con la secuencia OSC 52 que honran la mayoría de terminales), `/export [archivo]` (la conversación en Markdown o HTML), `/name` y `/fork` (ver abajo), `/keys` (qué tecla hace qué), `/sessions`, `/resume`, `/clear`, `/compact` e `/info` (ver abajo), `/model`, `/profile` y `/default` (ver abajo), `/remember <texto>` y `/notes` (ver abajo), `/record [archivo]` y `/record stop` (ver abajo) y `/exit`.
 
 #### Los mismos comandos en la página web y en las apps de chat
 
@@ -609,9 +610,14 @@ Puedes apagar o acotar ambos en un archivo que es tuyo y no de ningún proyecto,
 chat:
   shell: true        # false apaga !; o el shell a usar: "bash -c", "pwsh -Command"
   bifs: true         # false apaga #; o las funciones permitidas: [ dateFormat, listLen ]
+  keys:              # cambia las teclas de una acción; una tecla o una lista. /keys muestra los nombres de acción
+    newline: [ ctrl+n, alt+enter ]
+    stop: ctrl+x
 ```
 
 Si el archivo no existe, ambos están activados. Una clave que el archivo no conoce, o un valor de tipo equivocado, se informa al iniciar el chat en lugar de ignorarse.
+
+Las teclas se escriben como se dicen: `enter`, `alt+enter`, `shift+enter`, `ctrl+j`, `esc`, `tab`, `up`, `down`, `home`, `end`, o una letra con `ctrl` o `alt`. Acciones que puedes cambiar: `submit`, `newline`, `historyPrevious`, `historyNext`, `clear`, `exit`, `deleteToStart`, `deleteWord`, `lineStart`, `lineEnd`, `complete`, `pasteImage` (en el cuadro de mensaje) y `stop` (mientras el agente trabaja). Mover el cursor con las flechas, Retroceso y Suprimir no son acciones. Una entrada que no nombra una acción, no se puede leer como tecla, o toma una tecla que otra acción del mismo lugar ya tiene, se avisa al iniciar el chat y esa acción conserva sus teclas por defecto, así que un error de escritura nunca te deja sin forma de enviar un mensaje. El encabezado y la fila de ayuda muestran tus teclas.
 
 #### Archivos e imágenes en el mensaje
 
