@@ -77,12 +77,14 @@ class {
 	 */
 	array function profiles() {
 		var current = modelInfo().profile
+		var catalog = new "models.wizard.WizardCatalog@bxagents"()
 		return aiProfiles().map( p => {
 			name        : p.name,
 			description : p.description ?: "",
 			provider    : p.provider,
 			model       : p.model ?: "",
-			hasApiKey   : p.hasApiKey,
+			// a provider with no key to set (mock, a local one) never lacks it
+			hasApiKey   : p.hasApiKey || !len( catalog.provider( p.provider ).envVar ?: "" ),
 			isDefault   : p.isDefault,
 			isCurrent   : p.name == current
 		} )

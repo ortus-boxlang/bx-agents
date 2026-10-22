@@ -5,7 +5,8 @@
  *
  * It is a greeting for a person at a terminal, so it is never written to a pipe or a file, and
  * `BXAGENTS_BANNER=off` turns it off. `NO_COLOR` and `--no-color` keep the shape and drop the
- * color; `TERM=dumb` gets one plain line, since block characters may not draw there.
+ * color; `TERM=dumb`, or output that is not UTF-8, gets one plain line, since block characters
+ * would not draw there.
  * `BXAGENTS_BANNER_THEME=Ocean` pins a theme, which is how a recording stays the same every time.
  */
 class {
@@ -115,7 +116,8 @@ class {
 		if ( !wanted( arguments.options ) ) {
 			return false
 		}
-		var dumb = getSystemSetting( "TERM", "" ) == "dumb"
+		// block letters need UTF-8 on the way out; a terminal set up for something else gets the plain line
+		var dumb = getSystemSetting( "TERM", "" ) == "dumb" || !utf8()
 		var color = !dumb && ( arguments.options.color ?: true ) && !len( getSystemSetting( "NO_COLOR", "" ) )
 		for ( var line in render( arguments.subTitle, getSystemSetting( "BXAGENTS_BANNER_THEME", "" ), color, dumb ? 0 : columns() ) ) {
 			println( line )
@@ -140,6 +142,15 @@ class {
 	}
 
 	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @return True when what is printed leaves the JVM as UTF-8 (stdout.encoding from Java 19, else file.encoding)
+	 */
+	private boolean function utf8() {
+		var system = createObject( "java", "java.lang.System" )
+		var encoding = system.getProperty( "stdout.encoding" ) ?: ( system.getProperty( "file.encoding" ) ?: "" )
+		return encoding.lCase().replace( "-", "" ) == "utf8"
+	}
 
 	private string function pick() {
 		var names = themes()

@@ -25,12 +25,12 @@ These are handled before verb dispatch and never reach a verb.
 
 ## The banner
 
-At an interactive terminal, `bxAgents --help` and the start of the `new` wizard greet you with the BxAgents name in block letters, painted in a gradient picked at random from eight themes (Ocean, Fire, Sunset, Purple, Mint, Gray, Forest, Gold), the same idea as the ColdBox CLI's banner. It is never written to a pipe or a file.
+At an interactive terminal, `bxAgents --help` and the end of the `new` wizard greet you with the BxAgents name in block letters, painted in a gradient picked at random from eight themes (Ocean, Fire, Sunset, Purple, Mint, Gray, Forest, Gold), the same idea as the ColdBox CLI's banner. It is never written to a pipe or a file.
 
 | Setting | Effect |
 |---|---|
 | `NO_COLOR`, `--no-color` | Same shape, no color |
-| `TERM=dumb`, or a terminal narrower than the art (76 columns) | One plain line instead |
+| `TERM=dumb`, output that is not UTF-8, or a terminal narrower than the art (76 columns) | One plain line instead |
 | `--no-banner`, or `BXAGENTS_BANNER=off` | No banner |
 | `BXAGENTS_BANNER_THEME=Ocean` | Pin a theme instead of a random one, for a recording that comes out the same every time |
 

@@ -25,12 +25,12 @@ Estos se manejan antes del despacho de verbos y nunca llegan a un verbo.
 
 ## El banner
 
-En una terminal interactiva, `bxAgents --help` y el inicio del asistente de `new` te saludan con el nombre BxAgents en letras de bloque, pintado con un degradado elegido al azar entre ocho temas (Ocean, Fire, Sunset, Purple, Mint, Gray, Forest, Gold), la misma idea que el banner de la CLI de ColdBox. Nunca se escribe a un pipe ni a un archivo.
+En una terminal interactiva, `bxAgents --help` y el final del asistente de `new` te saludan con el nombre BxAgents en letras de bloque, pintado con un degradado elegido al azar entre ocho temas (Ocean, Fire, Sunset, Purple, Mint, Gray, Forest, Gold), la misma idea que el banner de la CLI de ColdBox. Nunca se escribe a un pipe ni a un archivo.
 
 | Ajuste | Efecto |
 |---|---|
 | `NO_COLOR`, `--no-color` | La misma forma, sin color |
-| `TERM=dumb`, o una terminal más estrecha que el arte (76 columnas) | Una línea simple en su lugar |
+| `TERM=dumb`, una salida que no es UTF-8, o una terminal más estrecha que el arte (76 columnas) | Una línea simple en su lugar |
 | `--no-banner`, o `BXAGENTS_BANNER=off` | Sin banner |
 | `BXAGENTS_BANNER_THEME=Ocean` | Fija un tema en lugar de uno aleatorio, para una grabación que salga igual siempre |
 

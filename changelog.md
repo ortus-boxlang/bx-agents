@@ -290,7 +290,7 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   the server lists `agentApi.profiles`. Both are off by default; the choice is sent as `options.profile`, and a profile
   that is not listed is refused with a `400`. `GET .../profiles` lists only the offered ones, never a key.
 - A BxAgents banner in block letters, with a gradient picked at random from eight themes like the ColdBox CLI's, on
-  `--help` and at the start of the `new` wizard. Interactive terminals only; `NO_COLOR`, `TERM=dumb`, `--no-banner`
+  `--help` and after the `new` wizard. Interactive terminals only; `NO_COLOR`, `TERM=dumb`, `--no-banner`
   and `BXAGENTS_BANNER=off` are honored, and `BXAGENTS_BANNER_THEME` pins a theme.
 - The build now delivers bx-ai's settings the way bx-ai reads them. A `moduleSettings.bxai` block in
   `config/ColdBox.bx` never reached bx-ai (measured on a served app: it kept `provider: openai` and
