@@ -62,6 +62,34 @@ class {
 	}
 
 	/**
+	 * @return { model, profile, provider } as far as the server says
+	 */
+	struct function modelInfo() {
+		return { model : modelName(), profile : "", provider : "" }
+	}
+
+	/**
+	 * A remote chat talks to the model the server runs. The server decides what a client may switch to.
+	 *
+	 * @return { ok : false, reason }
+	 */
+	struct function switchable() {
+		return { ok : false, reason : "This chat is connected to a server, which runs its own model. Run the chat in this project (bxAgents chat) to switch profiles." }
+	}
+
+	array function profiles() {
+		return []
+	}
+
+	struct function useProfile( required string name ) {
+		return { ok : false, reason : switchable().reason }
+	}
+
+	struct function useDefault() {
+		return { ok : false, reason : switchable().reason }
+	}
+
+	/**
 	 * @return The names of the tools the agent has, or an empty list when the server cannot say
 	 */
 	array function tools() {

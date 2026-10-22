@@ -9,6 +9,7 @@
  *              cancelRequested(), takeSteer(), choose( title, lines, choices ), copy( text ), close()
  * The session: agentName(), modelName(), mode(), tools(), newThread(), notes(), sessions(), resumeSession( ref ),
  *              clear(), compact(), info(),
+ *              modelInfo(), switchable(), profiles(), useProfile( name ), useDefault()
  *              send( text, hooks ), resume( decision, hooks ), close()
  *              notes() is an object with available(), list( scope ), add( scope, text ), update( id, text ),
  *              remove( id ), stats()
@@ -26,6 +27,9 @@ class {
 			{ name : "/resume", hint : "go back to one: /resume 2, or /resume <id> (no number: the last one)" },
 			{ name : "/clear", hint : "forget this conversation's messages, keep the conversation" },
 			{ name : "/compact", hint : "shorten this conversation: older messages become a summary" },
+			{ name : "/model", hint : "show the model in use" },
+			{ name : "/profile", hint : "pick the model profile for this chat: /profile, or /profile <name>" },
+			{ name : "/default", hint : "go back to the app's default model" },
 			{ name : "/info", hint : "about this chat: agent, model, conversation, notes, database" },
 			{ name : "/remember", hint : "keep a note about you: /remember I prefer short answers" },
 			{ name : "/notes", hint : "open the notes screen, or: list, add [agent] <text>, edit <id> <text>, remove <id>, stats" },
@@ -148,6 +152,15 @@ class {
 			case "/compact":
 				compactConversation()
 				break
+			case "/model":
+				showModel()
+				break
+			case "/profile":
+				switchProfile( rest )
+				break
+			case "/default":
+				useDefault()
+				break
 			case "/info":
 				for ( var line in variables.session.info() ) {
 					variables.screen.print( "muted", left( line[ 1 ] & ":" & repeatString( " ", 14 ), 14 ) & line[ 2 ] )
@@ -178,6 +191,75 @@ class {
 				variables.screen.print( "warn", "Unknown command #name#. Type /help." )
 		}
 		return true
+	}
+
+	/**
+	 * /model: what the chat is talking to right now.
+	 */
+	private void function showModel() {
+		var info = variables.session.modelInfo()
+		variables.screen.print( "muted", "Model:   " & ( len( info.model ?: "" ) ? info.model : "not known" ) )
+		if ( len( info.profile ?: "" ) ) {
+			variables.screen.print( "muted", "Profile: " & info.profile )
+		}
+		if ( variables.session.switchable().ok ) {
+			variables.screen.print( "muted", "Type /profile to pick another, or /default to go back to the app's default." )
+		}
+	}
+
+	/**
+	 * /profile picks from the configured profiles; /profile <name> switches straight to one. The
+	 * conversation, its memory and the agent's tools carry on; only the model changes.
+	 *
+	 * @name A profile name, or empty to pick from a list
+	 */
+	private void function switchProfile( required string name ) {
+		var can = variables.session.switchable()
+		if ( !can.ok ) {
+			variables.screen.print( "warn", can.reason )
+			return
+		}
+		var profiles = variables.session.profiles()
+		if ( !profiles.len() ) {
+			variables.screen.print( "warn", "No profiles are configured. Add one with: bxAgents add profile" )
+			return
+		}
+		var wanted = arguments.name
+		if ( !len( wanted ) ) {
+			var choices = profiles.map( p => {
+				value : p.name,
+				label : p.name,
+				hint  : ( p.provider & ( len( p.model ) ? "/" & p.model : "" ) ) & ( len( p.description ) ? "  " & p.description : "" ) & ( p.isDefault ? "  (default)" : "" ) & ( p.isCurrent ? "  (in use)" : "" )
+			} )
+			wanted = variables.screen.choose( "Which profile?", [], choices ) ?: ""
+			if ( !len( wanted ) ) {
+				return
+			}
+		}
+		reportSwitch( variables.session.useProfile( wanted ) )
+	}
+
+	/**
+	 * /default goes back to the app's default model: the defaultProfile, else the provider and model at the top of Agent.yaml.
+	 */
+	private void function useDefault() {
+		var can = variables.session.switchable()
+		if ( !can.ok ) {
+			variables.screen.print( "warn", can.reason )
+			return
+		}
+		reportSwitch( variables.session.useDefault() )
+	}
+
+	private void function reportSwitch( required struct outcome ) {
+		if ( !( arguments.outcome.ok ?: false ) ) {
+			variables.screen.print( "warn", arguments.outcome.reason ?: "Could not switch." )
+			return
+		}
+		variables.screen.print( "ok", "Now using #arguments.outcome.profile# (#arguments.outcome.model#). The conversation carries on." )
+		if ( !( arguments.outcome.hasApiKey ?: true ) ) {
+			variables.screen.print( "warn", "No API key was found for #arguments.outcome.provider#. The next message will fail until it is set." )
+		}
 	}
 
 	/**

@@ -48,7 +48,69 @@ class {
 
 	string function modelName() {
 		var model = variables.agent.getConfig().model ?: {}
-		return isStruct( model ) ? ( model.model ?: model.provider ?: "" ) : toString( model )
+		if ( !isStruct( model ) ) {
+			return toString( model )
+		}
+		var id = ( model.params ?: {} ).model ?: ""
+		return len( id ) ? ( model.provider ?: "" ) & "/" & id : ( model.provider ?: "" )
+	}
+
+	/**
+	 * @return { model : provider/model, profile : the profile in use or empty, provider }
+	 */
+	struct function modelInfo() {
+		var model = variables.agent.getConfig().model ?: {}
+		return { model : modelName(), profile : variables.agent.getConfig().profile ?: "", provider : isStruct( model ) ? ( model.provider ?: "" ) : "" }
+	}
+
+	/**
+	 * @return { ok : true } here: the agent runs in this process, so its model can be changed
+	 */
+	struct function switchable() {
+		return { ok : true, reason : "" }
+	}
+
+	/**
+	 * The profiles the app has: the default one first, then the named ones.
+	 *
+	 * @return [ { name, description, provider, model, hasApiKey, isDefault, isCurrent } ]
+	 */
+	array function profiles() {
+		var current = modelInfo().profile
+		return aiProfiles().map( p => {
+			name        : p.name,
+			description : p.description ?: "",
+			provider    : p.provider,
+			model       : p.model ?: "",
+			hasApiKey   : p.hasApiKey,
+			isDefault   : p.isDefault,
+			isCurrent   : p.name == current
+		} )
+	}
+
+	/**
+	 * Changes the agent's model to a profile. Its memory, tools, sub-agents and instructions stay,
+	 * so the conversation carries on.
+	 *
+	 * @name A profile name, or "default" for the one built from the app's provider and model
+	 *
+	 * @return { ok, profile, provider, model, hasApiKey } or { ok : false, reason }
+	 */
+	struct function useProfile( required string name ) {
+		var found = profiles().filter( p => p.name == name )
+		if ( !found.len() ) {
+			var names = profiles().map( p => p.name )
+			return { ok : false, reason : "There is no profile [#arguments.name#]. You can use: #names.toList( ', ' )#" }
+		}
+		variables.agent.withProfile( found[ 1 ].name )
+		return { ok : true, profile : found[ 1 ].name, provider : found[ 1 ].provider, model : modelName(), hasApiKey : found[ 1 ].hasApiKey }
+	}
+
+	/**
+	 * Changes the agent's model to the app's default: bx-ai's defaultProfile, else the provider and model at the top of Agent.yaml.
+	 */
+	struct function useDefault() {
+		return useProfile( profiles().filter( p => p.isDefault )[ 1 ].name )
 	}
 
 	string function mode() {
