@@ -52,6 +52,22 @@ La página habla con su propia ruta `<path>/api` generada vía `POST <path>/api/
 
 Porque llega el envelope completo, **el razonamiento y las llamadas de tool ya están en el cable** sin necesidad de un endpoint extra: `delta.reasoning` (normalizado a través de cada proveedor por bx-ai) se renderiza como una franja colapsada de "Pensando", y `delta.tool_calls` como chips colapsados por llamada. Los argumentos de llamada de tool se transmiten como fragmentos JSON parciales indexados por `index`, así que la página acumula por índice en lugar de asumir que cualquier chunk único contiene una llamada completa.
 
+## Recorrido
+
+<video controls preload="metadata" poster="../assets/video/webui-walkthrough-poster.png" style="max-width:100%">
+  <source src="../assets/video/webui-walkthrough.mp4" type="video/mp4">
+  <track kind="captions" src="../assets/video/webui-walkthrough.vtt" srclang="en" label="English" default>
+</video>
+
+Minuto y medio por toda la página: inicio de sesión, streaming, el selector de modelo, una llamada a una herramienta, conversaciones guardadas, notas y el tema oscuro. La voz y la música se hicieron con [bx-audio](https://github.com/ortus-boxlang/bx-audio), y la página es la app de demostración de [`tools/demo/webui`](https://github.com/ortus-boxlang/bx-agents/tree/development/tools/demo/webui), que `capture.js` maneja con Playwright. La narración y los subtítulos están en inglés. Habla con un modelo con guion, así que cada respuesta es igual cada vez.
+
+| | |
+|---|---|
+| ![Inicio de sesión con las cuentas declaradas en `users`](../assets/webui/login.png) **Inicio de sesión.** Las cuentas vienen de [`users`](#usuarios-e-inicio-de-sesión). | ![Un chat con sesión iniciada, con el selector de modelo, Chats, Clear, Notes, Key y Theme en la cabecera](../assets/webui/home.png) **La cabecera.** El selector aparece cuando la entrada lista [`profiles`](#elegir-el-modelo). |
+| ![Una respuesta en streaming con lista numerada y negritas](../assets/webui/markdown-list.png) **Streaming.** Las respuestas muestran Markdown según llegan. | ![El perfil planner elegido en el selector, y la respuesta con el nombre de su modelo](../assets/webui/model-picker.png) **Selector de modelo.** La elección se envía con cada mensaje, en la misma conversación. |
+| ![Una llamada a una herramienta mostrada como bloque abierto sobre la respuesta](../assets/webui/tool-call.png) **Herramientas.** Cada llamada muestra su nombre y argumentos. | ![La barra lateral con dos chats guardados](../assets/webui/conversations.png) **Conversaciones.** Guardadas por cuenta, y siguen ahí tras recargar. |
+| ![El panel Notes con una nota en About you](../assets/webui/notes.png) **Notas.** Lo que el agente debe recordar, con el tamaño que añade. | ![La página en tema oscuro con el acento de la entrada del gateway](../assets/webui/dark-theme.png) **Tema.** Claro u oscuro, recordado, con tu acento de `theme`. |
+
 ## Cómo se ve realmente un turno de streaming
 
 ```mermaid

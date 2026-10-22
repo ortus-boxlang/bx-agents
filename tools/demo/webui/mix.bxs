@@ -1,0 +1,37 @@
+/**
+ * Puts the voice-over and the music on the walkthrough with bx-audio: each narrated scene starts where the capture says it did
+ * (out/timeline.json), the music is cut to the picture and ducks under the voice, the mix is mastered for streaming, and captions are
+ * written next to it.
+ *
+ *   boxlang mix.bxs --out=out --music=out/music.wav --video=out/picture.mp4 --videoOut=out/walkthrough.mp4
+ */
+opts = server.cli.parsed.options
+outDir = opts.out ?: "out"
+sr = 44100
+lead = 0.3
+timeline = jsonDeserialize( fileRead( outDir & "/timeline.json" ) )
+total = videoInfo( opts.video ).seconds
+
+t = audioTimeline( bpm = 78, beatsPerBar = 4, sampleRate = sr, channels = 2 )
+music = audioFitTo( audioChannels( audioResample( audioLoad( opts.music ), sr ), 2 ), total )
+audioAdd( timeline = t, sound = music, at = 0, track = "music", gainDb = -3 )
+
+cues = []
+for ( scene in timeline ) {
+	at = scene.startMs / 1000 + lead
+	audioAdd( timeline = t, sound = audioLoad( outDir & "/" & scene.id & ".wav" ), at = at, track = "voice", gainDb = 0 )
+	for ( cue in jsonDeserialize( fileRead( outDir & "/" & scene.id & ".json" ) ).cues ) {
+		cues.append( { start : cue.start + at, end : cue.end + at, text : cue.text } )
+	}
+}
+audioTrackGain( t, "music", -6 )
+audioDuck( t, "music", "voice", -9 )
+mix = audioTrim( audioRender( timeline = t, tail = 0 ), 0, total )
+mix = audioFade( mix, 0.05, 2, "smooth" )
+mastered = audioMaster( audio = mix, target = "streaming", truePeakDb = -1 )
+loud = audioLoudness( mastered )
+println( "loudness " & numberFormat( loud.integrated, "0.0" ) & " LUFS" )
+audioSave( mastered, outDir & "/walkthrough.wav" )
+audioSubtitles( cues = cues, format = "vtt", path = outDir & "/walkthrough.vtt", offset = 0 )
+audioMux( video = opts.video, audio = mastered, output = opts.videoOut )
+println( "video: " & opts.videoOut & " (" & numberFormat( total, "0.0" ) & " s, " & cues.len() & " caption lines)" )

@@ -20,7 +20,8 @@
  * A rule matches when the user's last message contains `when` (any case); the first match wins. With
  * `tool`, the model first calls the tool whose name contains that text (if the agent has one), with the
  * arguments in `args` (an object, default none), then answers once the tool's result is back; `{tool}` in
- * the answer is replaced by that result and `{system}` by the system message the agent sent.
+ * the answer is replaced by that result, `{system}` by the system message the agent sent and `{model}` by the model
+ * name the request asked for, so two profiles on one scripted model still answer differently.
  *
  * Stop it with Ctrl+C, or POST /__stop.
  */
@@ -88,6 +89,7 @@ function plan( required struct payload ) {
 	}
 	answer = replace( answer, "{tool}", result, "all" )
 	answer = replace( answer, "{system}", system, "all" )
+	answer = replace( answer, "{model}", arguments.payload.model ?: "", "all" )
 	return { tool : tool, answer : answer, args : rule.args ?: {} }
 }
 
