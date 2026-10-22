@@ -23,7 +23,6 @@ my-agent/
 ├── tools/             # @AITool functions
 ├── skills/            # SKILL.md capabilities
 ├── subagents/         # nested agent trees
-├── models/            # named model configs
 ├── gateways/           # HTTP/MCP/chat exposure
 ├── schedules/          # a real ColdBox scheduler
 ├── mcp/                # MCP servers you host

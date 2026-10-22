@@ -30,7 +30,15 @@ environments:
 | Key | Type | Notes |
 |---|---|---|
 | `name` | string | Also becomes this agent's `config/WireBox.bx` binding key at build time, so it must be unique across the whole project (root + every subagent). |
-| `model` | string | A `provider/model` slug, a bare provider name, or the name of a [`models/`](models.md) entry. See [The model slug](agent-bx.md#the-model-slug). |
+| `model` | string | A `provider/model` slug, a bare provider name, or a model name when `provider` is set. See [The model slug](agent-bx.md#the-model-slug) and [Models and profiles](models.md). |
+| `provider` | string | The default provider, a bx-ai provider name. With `model` as a bare model name. See [Models and profiles](models.md). |
+| `params` | mapping | Default request parameters, such as `temperature`. |
+| `options` | mapping | Default provider options, such as `timeout`. |
+| `providers` | mapping | Per provider `params` and `options`, by provider name. |
+| `profiles` | mapping | Named combinations of provider, model, params, options and `apiKeyEnv`. |
+| `defaultProfile` | string | The profile used when nothing asks for another. |
+| `profile` | string | The profile this agent uses. |
+| `embeddings`, `speech`, `transcription`, `image` | mapping | bx-ai's capability defaults: `provider`, `model` and a few settings each. |
 | `description` | string | Optional. |
 | `instructions` | string | Optional inline instructions. See [Instructions](#instructions). |
 | `tools` | list of strings | Module tools this agent gets, as `item@module` or `*@module`. See [Tools](#tools). |

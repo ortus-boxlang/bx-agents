@@ -29,7 +29,6 @@ my-agent/
 ├── tools/
 ├── skills/
 ├── subagents/
-├── models/
 ├── gateways/
 ├── schedules/
 ├── mcp/

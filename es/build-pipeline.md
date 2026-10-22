@@ -36,7 +36,7 @@ La validación es la puerta: recopila **todos** los errores en lugar de fallar r
 
 ## 2. Descubrir
 
-[`ProjectDiscoverer`](conventions/agent-bx.md) recorre la raíz del proyecto y enumera cada carpeta de convención (`models/`, `tools/`, `skills/`, `subagents/`, `gateways/`, `mcp/`, `interceptors/`, `modules/`) en entradas crudas `{ name, path, type }`. `schedules/` es la única excepción - no es una lista de entradas, solo un único par `hasScheduler`/`schedulerPath`, ya que contiene un archivo real de scheduler de ColdBox en lugar de un conjunto de entradas de configuración definidas por BxAgents. Descubrimiento puro - todavía no ocurre ninguna interpretación del contenido de los archivos.
+[`ProjectDiscoverer`](conventions/agent-bx.md) recorre la raíz del proyecto y enumera cada carpeta de convención (`tools/`, `skills/`, `subagents/`, `gateways/`, `mcp/`, `interceptors/`, `modules/`) en entradas crudas `{ name, path, type }`. `schedules/` es la única excepción - no es una lista de entradas, solo un único par `hasScheduler`/`schedulerPath`, ya que contiene un archivo real de scheduler de ColdBox en lugar de un conjunto de entradas de configuración definidas por BxAgents. Descubrimiento puro - todavía no ocurre ninguna interpretación del contenido de los archivos.
 
 ## 3. Validar
 
