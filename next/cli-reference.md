@@ -304,6 +304,7 @@ The platforms are the ones the new wizard offers: `telegram`, `slack`, `discord`
 | `--policy=queue\|reject\|steer\|interrupt` | Chat platforms: what to do with a message that arrives while the agent is still answering. Written to Agent.yaml's `gatewaySession` unless it is the default `queue`. |
 | `--path=<path>` | `web` and `api`: where it is served (`/chat` and `/api/chat` by default). A path another gateway uses is refused. |
 | `--auth=open\|key\|users` | `web`: anyone who can reach it, a random shared key kept in `.env` as `CHAT_UI_API_KEY`, or named users. |
+| `--profiles=a,b` | `web`: the project's profiles people can pick in the chat (see [Choosing the model](conventions/web-ui.md#choosing-the-model)). Asked only when the project has profiles; none keeps the page on the agent's own model. |
 | `--users=<name:hash,...>` | `web` with `users`: each hash comes from `bxAgents hash-password`. A password is never taken as a flag; at a terminal you type it, hidden, and only its hash is stored. |
 
 After a chat platform is added, the output lists the steps that happen outside the project (creating the bot, a public address, a daemon) and which `.env` variables to fill in; `bxAgents doctor` reports any that are still not set. The HTTP API route has no authentication unless `agentApi.tokenEnvVar` is set in `Agent.yaml`.
@@ -322,7 +323,8 @@ bxAgents add subagent checker --model=claude --parent=writer --with=search --sea
 |---|---|
 | `--name=<name>` | The folder, or the first positional. A name any agent in the project already has is refused. |
 | `--parent=<folder>` | The agent that delegates to it: `.` for the root (the default) or the folder of another subagent, which is how they nest. |
-| `--model=<provider/model>` | Required without a terminal. |
+| `--model=<provider/model>` | Required without a terminal, unless `--profile` is given. |
+| `--profile=<name>` | Use one of the project's [profiles](conventions/models.md#profiles) instead of a model, as the main agent can with `profile:`. At a terminal, a project that has profiles is asked which to use. |
 | `--description`, `--with`, `--search`, `--files`, `--files-dir`, `--memory`, `--mcp`, `--guard` | The same as [`new`](#new). |
 
 Writes `subagents/<name>/Agent.yaml` (with the `environments.test` mock model, so `bxAgents test` needs no key) and `instructions.md`, and adds an empty `.env` stub for each key the choices need. The name is inserted into the parent's `subAgents` without rewriting the file, so comments and order stay as they were. If the parent is a class, or its list is written in a shape that cannot be extended by inserting, nothing in it is changed and the line to add is printed. Packages a choice needs (`bx-playwright` for browsing) are named for you to add to `box.json`.
