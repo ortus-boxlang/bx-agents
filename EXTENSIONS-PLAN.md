@@ -91,7 +91,8 @@ A struct option wins over a separate annotation if both are given, and a clash i
 
 ```
 extensions/ci/
-  Extension.bx            optional: settings, start/stop, register( api )
+  Extension.bx            optional: configure(), start/stop, register( api )
+  models/ci.bx            plain classes the other files can have injected
   commands/status.bx      one class per command (ICommand, as the built-ins are)
   keys/open-run.bx
   status/ci.bx
@@ -111,8 +112,8 @@ The principle: **an extension folder has the same shape as an agent project, plu
 ```
 class {
 
-	function settings() {
-		return { target : { default : "staging", type : "string" } }   // validated at build
+	function configure() {
+		variables.settings = { target : "staging" }   // defaults; Agent.yaml overrides them
 	}
 
 	function register( api ) {
@@ -200,9 +201,66 @@ Custom points: an extension can announce its own with `BoxRegisterInterceptionPo
 - `ctx.ask()`: ask the user for text, a choice or a yes/no. Works on every transport (a prompt in the terminal, a card on the web, a numbered question on a chat platform).
 - `ctx.chat()`: the conversation (sessions, notes, history, context report).
 - `ctx.transport()`, `ctx.user()`, `ctx.project()`, `ctx.admin()`.
-- `ctx.settings()`: this extension's own settings, from `extensions.<name>` in `Agent.yaml` (project) or `~/.bxagents/bxAgents.yml` (user).
-- `ctx.state()`: scratch space that lives as long as the session.
 - `ctx.log()`.
+
+An extension's own settings and helper objects do not come through `ctx`. They are injected (next section).
+
+## Settings and injection
+
+Same idea as `ModuleConfig.bx` in BoxLang and ColdBox. An extension may have a `configure()` that sets `variables.settings` to its defaults:
+
+```
+class {
+
+	function configure() {
+		variables.settings = {
+			ciUrl  : "",
+			branch : "main",
+			target : "staging"
+		}
+	}
+
+}
+```
+
+The user then declares values under the extension's name in `Agent.yaml` (project) or `~/.bxagents/bxAgents.yml` (user). Those values are merged over the defaults, and the project wins over the user file:
+
+```yaml
+extensions:
+  release:
+    ciUrl: https://ci.example.com
+    target: production
+```
+
+After that, `variables.settings` in the extension holds the merged struct. `configure()` runs once at load, before anything is registered. Like a module's `configure()`, it does no work beyond describing the extension.
+
+### Injection
+
+Every class in an extension (the `Extension.bx`, a command, a status item, a gateway) can ask for things with `property ... inject`:
+
+```
+class {
+
+	property name="settings" inject="settings";           // this extension's merged settings
+	property name="ciUrl"    inject="settings:ciUrl";     // one setting
+	property name="ci"       inject="model:CiClient";     // a class from this extension's models/ folder
+	property name="log"      inject="log";                // this extension's logger
+
+	function run( ctx, args ) {
+		return ctx.reply().ok( ci.latestRun() )
+	}
+
+}
+```
+
+| `inject=` | Gives |
+|---|---|
+| `settings` | the extension's merged settings struct |
+| `settings:key` | one setting |
+| `model:Name` | a singleton of `models/Name.bx` in the same extension |
+| `log` | a logger named after the extension |
+
+That is what the earlier "sharing state" question was for. In a folder extension each file is its own class, so a CI client built in one file could not be reached from the command and the status item. A class in `models/` is created once and injected into any file that asks, so there is no global state and no lookup call.
 
 ## Layers and where each one runs
 
@@ -226,7 +284,7 @@ Naming: `deploy` is an extension; `deploy:status` is its item named `status`. A 
 extensions:
   disable: [ ci, "deploy:status", "acme-*" ]    # extension, item, or glob
   deploy:
-    target: production                          # that extension's settings
+    target: production                          # that extension's settings (see Settings and injection)
 ```
 
 ## What Pi taught us, and where we differ
@@ -235,7 +293,7 @@ Taken from Pi:
 - A single file is a complete extension, and the factory style (`register( api )`).
 - Lifecycle with no work at load: `start` and `stop`, plus reload.
 - Event hooks that can read, change or cancel (`input`, `tool_call`, turn boundaries).
-- Settings per extension, and filters by name or glob.
+- Settings per extension (here with `configure()` and `variables.settings`, as in a module), and filters by name or glob.
 - Bundling more than UI: tools, skills, MCP servers.
 - Try one without installing it: `bxAgents chat --extension ./path`.
 
@@ -246,7 +304,7 @@ Different on purpose:
 
 ## Slices (each its own PR)
 
-1. Registry and scanner: layers, names, replacement rules, `extensions.disable` and settings, `/extensions` and `bxAgents extensions`. Commands only, in single-file and folder form, annotated and `register( api )`.
+1. Registry and scanner: layers, names, replacement rules, `extensions.disable`, `configure()` and settings, injection (`settings`, `model:`, `log`), `/extensions` and `bxAgents extensions`. Commands only, in single-file and folder form, annotated and `register( api )`.
 2. Events: `@on` for bx-ai and ColdBox points, and the chat events.
 3. Keys and status items.
 4. Prefixes and `@` sources (move `!`, `#` and `@file` onto them).
@@ -261,4 +319,6 @@ After that: `bxAgents extension install|list|remove|update`, local or `--user`, 
 
 1. A `@Key` on a method calls that method with no arguments (as with `deploy` above). A key that only runs a command line is `api.key( "ctrl+shift+d", "/deploy" )`.
 2. Annotation names are matched ignoring case, so `@command` and `@Command` both work. Capitalised (`@Command`) is the documented form.
+3. Injection: a small injector of our own for the four forms above, or the real WireBox? WireBox only exists in a generated app, not in the terminal chat, so the proposal is our own, with the same `property ... inject` syntax so it reads the same.
+4. Settings merge depth: top-level keys only, or nested structs merged key by key? Proposal: nested structs merge key by key; arrays are replaced.
 
