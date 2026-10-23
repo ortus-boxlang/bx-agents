@@ -1,0 +1,45 @@
+/**
+ * The look of the message box as /prompt sees it, backed by the real style and widget names so what the command
+ * accepts is what the chat screen accepts.
+ */
+class {
+
+	function init() {
+		var styles = createObject( "java", "ortus.boxlang.bxagents.tui.PromptStyles" )
+		var widgets = createObject( "java", "ortus.boxlang.bxagents.tui.Widgets" )
+		variables.styleList = []
+		for ( var s in styles.all() ) {
+			variables.styleList.append( { name : s.name(), description : s.description() } )
+		}
+		variables.widgetList = []
+		for ( var w in widgets.all() ) {
+			variables.widgetList.append( { name : w.name(), description : w.description(), example : w.example() } )
+		}
+		variables.state = { prompt : "bars", top : [ "agent", "folder", "user", "clock" ], bottom : [ "ctx", "profile" ] }
+		return this
+	}
+
+	struct function promptLook() {
+		return { prompt : state.prompt, top : state.top, bottom : state.bottom, styles : styleList, widgets : widgetList }
+	}
+
+	string function usePromptStyle( required string name ) {
+		var wanted = arguments.name
+		if ( !styleList.filter( s => s.name == wanted ).len() ) {
+			return "There is no prompt style '#wanted#'."
+		}
+		state.prompt = wanted
+		return ""
+	}
+
+	string function useWidgets( required string place, required array names ) {
+		for ( var name in arguments.names ) {
+			if ( !widgetList.filter( w => w.name == name ).len() ) {
+				return "There is no widget '#name#'."
+			}
+		}
+		state[ arguments.place ] = arguments.names
+		return ""
+	}
+
+}

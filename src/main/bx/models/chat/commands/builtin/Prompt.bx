@@ -1,0 +1,101 @@
+/**
+ * /prompt: how the message box looks, for this chat. Agent.yaml's `tui:` block sets what every chat starts with.
+ *
+ *   /prompt                        the style and widgets in use, and what can be chosen
+ *   /prompt box                    another style (bars, bars-hints, rule, box or panel)
+ *   /prompt top agent clock        these widgets in the top bar, in this order
+ *   /prompt top +git -clock        add and remove widgets (a + or - on every name)
+ *   /prompt bottom none            nothing at the bottom
+ *
+ * Only at the terminal: the message box is a terminal thing. The change lasts until the chat ends.
+ */
+class extends="models.chat.commands.BaseCommand@bxagents" {
+
+	string function name() {
+		return "prompt"
+	}
+
+	string function hint() {
+		return "how the message box looks: /prompt [style], /prompt top|bottom +git -clock"
+	}
+
+	array function transports() {
+		return [ "tui" ]
+	}
+
+	any function run( required any context, required string args ) {
+		var reply = arguments.context.reply()
+		if ( !arguments.context.hasTerminal() ) {
+			return reply.warn( "The prompt is a terminal thing. Set it for every chat with a tui: block in Agent.yaml." )
+		}
+		var terminal = arguments.context.terminal()
+		var words = listToArray( trim( arguments.args ), " ," ).filter( w => len( w ) )
+		if ( !words.len() ) {
+			return show( reply, terminal )
+		}
+
+		var first = lCase( words[ 1 ] )
+		var styles = terminal.promptLook().styles.map( s => s.name )
+		if ( styles.find( first ) && words.len() == 1 ) {
+			var problem = terminal.usePromptStyle( first )
+			return len( problem ) ? reply.warn( problem ) : reply.ok( "The prompt is now #first#." )
+		}
+		if ( first == "top" || first == "bottom" ) {
+			return widgets( reply, terminal, first, words.slice( 2 ) )
+		}
+		return reply.warn( "Try /prompt, /prompt box, /prompt top agent clock, /prompt top +git -clock or /prompt bottom none." )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private any function show( required any reply, required any terminal ) {
+		var look = arguments.terminal.promptLook()
+		arguments.reply.keyValues( [
+			[ "prompt", look.prompt ],
+			[ "top", names( look.top ) ],
+			[ "bottom", names( look.bottom ) ]
+		] )
+		arguments.reply.grid( [ { width : 14, align : "left" }, { width : 0 } ], look.styles.map( s => [ s.name & ( s.name == look.prompt ? " *" : "" ), s.description ] ) )
+		arguments.reply.grid( [ { width : 10, align : "left" }, { width : 20, align : "left" }, { width : 0 } ], look.widgets.map( w => [ w.name, w.example, w.description ] ) )
+		arguments.reply.text( "/prompt box · /prompt top agent clock · /prompt top +git -clock · /prompt bottom none. Changes last for this chat; Agent.yaml's tui: block sets the start." )
+		return arguments.reply
+	}
+
+	private any function widgets( required any reply, required any terminal, required string place, required array rest ) {
+		if ( !arguments.rest.len() ) {
+			return arguments.reply.warn( "Name the widgets for the #arguments.place# bar, such as /prompt #arguments.place# agent clock, or add and remove with /prompt #arguments.place# +git -clock." )
+		}
+		var changes = arguments.rest.filter( w => left( w, 1 ) == "+" || left( w, 1 ) == "-" )
+		var chosen = []
+		if ( changes.len() == arguments.rest.len() ) {
+			for ( var name in arguments.terminal.promptLook()[ arguments.place ] ) {
+				chosen.append( name )
+			}
+			for ( var change in changes ) {
+				var widget = lCase( mid( change, 2, len( change ) ) )
+				if ( left( change, 1 ) == "+" ) {
+					if ( !chosen.find( widget ) ) {
+						chosen.append( widget )
+					}
+				} else {
+					chosen = chosen.filter( n => n != widget )
+				}
+			}
+		} else if ( !changes.len() ) {
+			chosen = lCase( arguments.rest.toList( " " ) ) == "none" ? [] : arguments.rest.map( n => lCase( n ) )
+		} else {
+			return arguments.reply.warn( "Give a plain list of widgets, or put a + or - on every name, not both." )
+		}
+		var problem = arguments.terminal.useWidgets( arguments.place, chosen )
+		return len( problem ) ? arguments.reply.warn( problem ) : arguments.reply.ok( "The #arguments.place# bar now shows: #names( chosen )#." )
+	}
+
+	private string function names( required any list ) {
+		var out = []
+		for ( var name in arguments.list ) {
+			out.append( name )
+		}
+		return out.len() ? out.toList( ", " ) : "nothing"
+	}
+
+}

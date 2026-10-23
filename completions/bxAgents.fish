@@ -157,6 +157,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb new' -l no-tui
     complete -c $cmd -n '__bxagents_using_verb new' -l no-wizard
     complete -c $cmd -n '__bxagents_using_verb new' -l projectRoot -x -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb new' -l prompt -x
     complete -c $cmd -n '__bxagents_using_verb new' -l region -x
     complete -c $cmd -n '__bxagents_using_verb new' -l registry -x
     complete -c $cmd -n '__bxagents_using_verb new' -l remote-path -x
@@ -168,6 +169,8 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb new' -l timeout -x
     complete -c $cmd -n '__bxagents_using_verb new' -l user -x
     complete -c $cmd -n '__bxagents_using_verb new' -l web-auth -x -a 'open key'
+    complete -c $cmd -n '__bxagents_using_verb new' -l widgets -x
+    complete -c $cmd -n '__bxagents_using_verb new' -l widgets-bottom -x
     complete -c $cmd -n '__bxagents_using_verb new' -l with -x -a 'time fetch search browse files media'
     complete -c $cmd -n '__bxagents_using_verb new' -l wizard
     complete -c $cmd -n '__bxagents_using_verb new' -l yes

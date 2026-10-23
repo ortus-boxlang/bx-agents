@@ -29,6 +29,17 @@ or package as a portable `.bxa`.
 - Exported HTML (`/export`) is rendered by the bundled `bx-markdown` module, with raw HTML in the
   conversation escaped first.
 
+#### A better terminal chat
+
+- Tables in an answer are drawn with rounded, coloured borders, a bold header, the column alignment
+  and wrapping on a narrow terminal. Code blocks are coloured by language, including BoxLang and CFML.
+- The message box has five looks (`bars`, `bars-hints`, `rule`, `box`, `panel`) with a coloured top
+  edge that turns amber while the agent works, and small widgets in its bars: agent, profile, folder,
+  user, clock, machine, git branch, date, session, last turn and context size.
+- Choose the look in the wizard, with `--prompt`, `--widgets` and `--widgets-bottom`, in a `tui:` block
+  of `Agent.yaml`, or in the chat with `/prompt`. A new look or widget is one small class
+  (`PromptStyle`, `Widget`).
+
 #### Self-contained install
 
 - `install-bx-module bx-agents` is the only install. The module zip bundles `bx-ai`,

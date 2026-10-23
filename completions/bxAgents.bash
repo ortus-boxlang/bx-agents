@@ -83,7 +83,7 @@ _bxagents_complete() {
 			inspect) flags="--ascii --environment= --json --md --no-color --projectRoot= --section=" ;;
 			invoke) flags="--json --message= --port= --projectRoot= --server" ;;
 			models) flags="--all --json --profile= --projectRoot=" ;;
-			new) flags="--app= --channels= --class --deploy= --description= --destination= --files= --files-dir= --forgebox= --guard= --host= --max-tokens= --mcp= --memory= --model= --name= --no-tui --no-wizard --projectRoot= --region= --registry= --remote-path= --repo= --search= --skipInstall --temperature= --template= --timeout= --user= --web-auth= --with= --wizard --yes" ;;
+			new) flags="--app= --channels= --class --deploy= --description= --destination= --files= --files-dir= --forgebox= --guard= --host= --max-tokens= --mcp= --memory= --model= --name= --no-tui --no-wizard --projectRoot= --prompt= --region= --registry= --remote-path= --repo= --search= --skipInstall --temperature= --template= --timeout= --user= --web-auth= --widgets= --widgets-bottom= --with= --wizard --yes" ;;
 			notes) flags="--file= --id= --json --projectRoot= --scope= --text= --user=" ;;
 			package) flags="--projectRoot= --version=" ;;
 			serve) flags="--host= --port= --projectRoot=" ;;

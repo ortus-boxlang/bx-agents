@@ -1,0 +1,81 @@
+/**
+ * /prompt in the terminal chat: the style, and the widgets of the top and bottom.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "/prompt", function() {
+
+			beforeEach( function() {
+				variables.registry = new bxagents.models.chat.commands.CommandCatalog().standard();
+				variables.terminal = new FakeLookTerminal();
+			} );
+
+			function ask( required string line, string transport = "tui", boolean withTerminal = true ) {
+				var context = new bxagents.models.chat.commands.CommandContext( {}, arguments.transport, arguments.withTerminal, arguments.withTerminal ? terminal : javacast( "null", "" ) );
+				return registry.run( line, context );
+			}
+
+			function texts( required any reply ) {
+				return reply.blocks().filter( b => b.type == "text" ).map( b => b.text );
+			}
+
+			it( "is in the terminal's menu and not the web's", function() {
+				var command = registry.lookup( "prompt" );
+				expect( command.transports() ).toBe( [ "tui" ] );
+				expect( texts( ask( "/prompt", "web", false ) )[ 1 ] ).toInclude( "not available here" );
+			} );
+
+			it( "shows the style and widgets in use, and the choices", function() {
+				var reply = ask( "/prompt" );
+				var tables = reply.blocks().filter( b => b.type == "table" );
+
+				expect( tables[ 1 ].rows ).toBe( [ [ "prompt", "bars" ], [ "top", "agent, folder, user, clock" ], [ "bottom", "ctx, profile" ] ] );
+				expect( tables[ 2 ].rows.map( r => r[ 1 ] ) ).toInclude( "bars *" );
+				expect( tables[ 2 ].rows.map( r => r[ 1 ] ) ).toInclude( "panel" );
+				expect( tables[ 3 ].rows.map( r => r[ 1 ] ) ).toInclude( "git" );
+			} );
+
+			it( "switches the style by name", function() {
+				var reply = ask( "/prompt box" );
+
+				expect( terminal.promptLook().prompt ).toBe( "box" );
+				expect( texts( reply )[ 1 ] ).toInclude( "now box" );
+			} );
+
+			it( "sets a plain list of widgets in the order given, with spaces or commas", function() {
+				ask( "/prompt top clock, agent" );
+				expect( terminal.promptLook().top ).toBe( [ "clock", "agent" ] );
+
+				ask( "/prompt bottom ctx profile git" );
+				expect( terminal.promptLook().bottom ).toBe( [ "ctx", "profile", "git" ] );
+			} );
+
+			it( "adds and removes widgets with + and -", function() {
+				ask( "/prompt top +git -clock" );
+				expect( terminal.promptLook().top ).toBe( [ "agent", "folder", "user", "git" ] );
+
+				ask( "/prompt top +git +date" );
+				expect( terminal.promptLook().top ).toBe( [ "agent", "folder", "user", "git", "date" ] );
+			} );
+
+			it( "clears a place with none", function() {
+				var reply = ask( "/prompt bottom none" );
+
+				expect( terminal.promptLook().bottom ).toBe( [] );
+				expect( texts( reply )[ 1 ] ).toInclude( "shows: nothing" );
+			} );
+
+			it( "says what is wrong rather than changing anything", function() {
+				expect( texts( ask( "/prompt top weather" ) )[ 1 ] ).toInclude( "no widget 'weather'" );
+				expect( texts( ask( "/prompt top +git clock" ) )[ 1 ] ).toInclude( "not both" );
+				expect( texts( ask( "/prompt top" ) )[ 1 ] ).toInclude( "Name the widgets" );
+				expect( texts( ask( "/prompt fancy" ) )[ 1 ] ).toInclude( "Try /prompt" );
+				expect( terminal.promptLook().prompt ).toBe( "bars" );
+				expect( terminal.promptLook().top ).toBe( [ "agent", "folder", "user", "clock" ] );
+			} );
+
+		} );
+	}
+
+}

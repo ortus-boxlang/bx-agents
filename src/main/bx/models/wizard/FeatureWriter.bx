@@ -3,7 +3,7 @@
  * files of a scaffolded project. ProjectScaffolder writes the base project; this adds
  * what the answers asked for, and nothing the answers did not:
  *
- *   tools, toolOptions, mcpServers, memory, checkpointer, security
+ *   tools, toolOptions, mcpServers, memory, checkpointer, security, tui
  *                          -> sections of Agent.yaml (see agentYamlLines)
  *   dependencies           -> the project's own box.json
  *   envStubs               -> .env, with the value left empty for the user to fill in
@@ -83,6 +83,15 @@ class {
 		if ( f.keyExists( "checkpointer" ) ) {
 			lines.append( "checkpointer:" )
 			lines.append( variables.yaml.lines( f.checkpointer, 2 ), true )
+		}
+		if ( f.keyExists( "tui" ) ) {
+			lines.append( "" )
+			lines.append( "## How the terminal chat looks: the prompt style and the widgets in its bars. In the chat, /prompt shows the choices." )
+			lines.append( "tui:" )
+			lines.append( "  prompt: " & variables.yaml.scalar( f.tui.prompt ) )
+			lines.append( "  widgets:" )
+			lines.append( "    top: [ " & f.tui.widgets.top.map( name => variables.yaml.scalar( name ) ).toList( ", " ) & " ]" )
+			lines.append( "    bottom: [ " & f.tui.widgets.bottom.map( name => variables.yaml.scalar( name ) ).toList( ", " ) & " ]" )
 		}
 		if ( f.keyExists( "security" ) && f.security.count() ) {
 			lines.append( "" )

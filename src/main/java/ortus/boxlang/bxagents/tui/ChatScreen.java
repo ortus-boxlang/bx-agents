@@ -87,6 +87,9 @@ public final class ChatScreen implements AutoCloseable {
 	/** a short note at the front of the hint row, such as the size of the context; empty for none */
 	private volatile String					status			= "";
 	private volatile boolean				turnOver;
+	/** the look of the message box: its style and widgets; /prompt and Agent.yaml's tui: block change it */
+	private volatile PromptLook				look			= PromptLook.defaults();
+	private final WidgetContext				facts			= new WidgetContext();
 	private Thread							turnThread;
 
 	// pictures and file mentions in the message box
@@ -214,6 +217,102 @@ public final class ChatScreen implements AutoCloseable {
 	 */
 	public void setStatus( String text ) {
 		this.status = text == null ? "" : text;
+		facts.ctx = status;
+	}
+
+	// ----------------------------------------------------------------------------------
+	// The look of the message box
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Sets the look from the {@code tui:} block of Agent.yaml: a map with {@code prompt} and {@code widgets}
+	 * ({@code top} and {@code bottom} lists). What is missing keeps its default; a name that is not known is left out.
+	 */
+	public void useLook( Map<?, ?> tui ) {
+		look = PromptLook.of( tui );
+	}
+
+	/**
+	 * @return the look now in use and what can be chosen: {@code prompt}, {@code top}, {@code bottom}, {@code styles}
+	 *         (maps with name and description) and {@code widgets} (name, description and example)
+	 */
+	public Map<String, Object> promptLook() {
+		Map<String, Object>	m		= new LinkedHashMap<>();
+		PromptLook			now		= look;
+		m.put( "prompt", now.style() );
+		m.put( "top", now.top() );
+		m.put( "bottom", now.bottom() );
+		List<Map<String, String>> styles = new ArrayList<>();
+		for ( PromptStyle st : PromptStyles.all() ) {
+			styles.add( Map.of( "name", st.name(), "description", st.description() ) );
+		}
+		m.put( "styles", styles );
+		List<Map<String, String>> widgets = new ArrayList<>();
+		for ( Widget w : Widgets.all() ) {
+			widgets.add( Map.of( "name", w.name(), "description", w.description(), "example", w.example() ) );
+		}
+		m.put( "widgets", widgets );
+		return m;
+	}
+
+	/**
+	 * Switches the style, for this chat.
+	 *
+	 * @return an empty string, or what was wrong with the name
+	 */
+	public String setPromptStyle( String name ) {
+		if ( PromptStyles.get( name ) == null ) {
+			return "There is no prompt style '" + name + "'. The styles are " + String.join( ", ", PromptStyles.names() ) + ".";
+		}
+		look = look.withStyle( PromptStyles.get( name ).name() );
+		return "";
+	}
+
+	/**
+	 * Sets the widgets of one place, for this chat.
+	 *
+	 * @param place top or bottom
+	 * @param names widget names, in the order to show them
+	 *
+	 * @return an empty string, or what was wrong
+	 */
+	public String setWidgets( String place, List<?> names ) {
+		List<String> list = new ArrayList<>();
+		for ( Object n : names ) {
+			String name = String.valueOf( n ).trim().toLowerCase( java.util.Locale.ROOT );
+			if ( Widgets.get( name ) == null ) {
+				return "There is no widget '" + name + "'. The widgets are " + String.join( ", ", Widgets.names() ) + ".";
+			}
+			if ( !list.contains( name ) ) {
+				list.add( name );
+			}
+		}
+		if ( place.equals( "top" ) ) {
+			look = look.withTop( list );
+		} else if ( place.equals( "bottom" ) ) {
+			look = look.withBottom( list );
+		} else {
+			return "The places are top and bottom.";
+		}
+		return "";
+	}
+
+	/**
+	 * Tells the widgets what the chat knows: {@code agent}, {@code profile} and {@code session}. A missing entry is left as it was.
+	 */
+	public void setFacts( Map<?, ?> values ) {
+		Object v = values.get( "agent" );
+		if ( v != null ) {
+			facts.agent = String.valueOf( v );
+		}
+		v = values.get( "profile" );
+		if ( v != null ) {
+			facts.profile = String.valueOf( v );
+		}
+		v = values.get( "session" );
+		if ( v != null ) {
+			facts.session = String.valueOf( v );
+		}
 	}
 
 	/**
@@ -266,7 +365,7 @@ public final class ChatScreen implements AutoCloseable {
 		if ( markdown == null || markdown.isBlank() ) {
 			return;
 		}
-		for ( Line l : MarkdownLines.render( markdown.strip(), runner.width() - 3 ) ) {
+		for ( Line l : MarkdownLines.render( markdown.strip(), runner.width() - 3, theme ) ) {
 			out( Line.from( Span.raw( "  " ) ).append( l ) );
 		}
 		out( Text.from( "" ) );
@@ -549,6 +648,7 @@ public final class ChatScreen implements AutoCloseable {
 	/** Stops drawing, prints whatever the agent said that is still on screen, and returns the area to the message box. */
 	public void endTurn() {
 		turnOver = true;
+		facts.lastTurnMs = System.currentTimeMillis() - turnStarted;
 		try {
 			if ( turnThread != null ) {
 				turnThread.join( 3000 );
@@ -659,12 +759,9 @@ public final class ChatScreen implements AutoCloseable {
 		for ( int i = 0; i < files.size(); i++ ) {
 			rows.add( Row.of().add( "   @" + files.get( i ), i == Math.min( atPick, files.size() - 1 ) ? theme.selected : theme.plain ) );
 		}
-		rows.add( separator() );
-		rows.addAll( composerRows() );
 		String picture = images.isEmpty() ? "" : images.size() + ( images.size() == 1 ? " picture" : " pictures" ) + " attached · ";
-		rows.add( withRecordingMark(
-		    Row.of( " " + statusPrefix() + picture + lower( keys.first( KeyMap.Action.SUBMIT ) ) + " send · " + lower( keys.first( KeyMap.Action.NEWLINE ) )
-		        + " new line · ? keys" + ( menu.isEmpty() && files.isEmpty() ? "" : " · tab completes" ), theme.muted ) ) );
+		rows.addAll( promptRows( false, "you", picture + lower( keys.first( KeyMap.Action.SUBMIT ) ) + " send · " + lower( keys.first( KeyMap.Action.NEWLINE ) )
+		    + " new line · ? keys" + ( menu.isEmpty() && files.isEmpty() ? "" : " · tab completes" ) ) );
 		return rows;
 	}
 
@@ -688,12 +785,9 @@ public final class ChatScreen implements AutoCloseable {
 			}
 			rows.add( r );
 		}
-		rows.add( separator() );
-		rows.addAll( composerRows() );
 		long secs = ( System.currentTimeMillis() - turnStarted ) / 1000;
-		rows.add( withRecordingMark( Row.of().add( " " + spin + " ", theme.accent ).add( cancel ? "stopping" : "working", theme.plain )
-		    .add( " " + secs + "s · " + lower( keys.first( KeyMap.Action.STOP ) ) + " stops · type and press enter to steer"
-		        + ( status.isEmpty() ? "" : " · " + status ), theme.muted ) ) );
+		rows.addAll( promptRows( true, spin + " " + ( cancel ? "stopping" : "working" ) + " " + secs + "s",
+		    lower( keys.first( KeyMap.Action.STOP ) ) + " stops · enter steers" ) );
 		return rows;
 	}
 
@@ -710,35 +804,32 @@ public final class ChatScreen implements AutoCloseable {
 		}
 	}
 
-	/** the status segment, with its separator, or nothing */
-	private String statusPrefix() {
-		return status.isEmpty() ? "" : status + " · ";
-	}
-
-	/** a red dot and "rec" at the end of a hint row while a recording is on */
-	private Row withRecordingMark( Row row ) {
-		return tap.isRecording() ? row.add( " · ", theme.muted ).add( "● rec", theme.error ) : row;
-	}
-
-	private Row separator() {
-		return Row.of( "─".repeat( Math.max( 10, runner.width() - 1 ) ), theme.muted );
-	}
-
-	private List<Row> composerRows() {
-		List<Row>	rows	= new ArrayList<>();
+	/** the prompt, drawn in the chosen style: from its top edge to its hint line */
+	private List<Row> promptRows( boolean working, String label, String hint ) {
 		int			first	= Math.max( 0, composer.rowCount() - MAX_COMPOSER );
+		List<String> lines	= new ArrayList<>();
 		for ( int i = first; i < composer.rowCount(); i++ ) {
-			String	text	= composer.line( i );
-			Row		r		= Row.of().add( i == 0 ? " > " : "   ", theme.accentBold );
-			if ( i == composer.caretRow() ) {
-				int c = composer.caretCol();
-				r.add( text.substring( 0, c ), theme.plain ).add( "▏", theme.accent ).add( text.substring( c ), theme.plain );
-			} else {
-				r.add( text, theme.plain );
-			}
-			rows.add( r );
+			lines.add( composer.line( i ) );
 		}
-		return rows;
+		PromptLook	now		= look;
+		PromptState	state	= new PromptState( lines, composer.caretRow() - first, composer.caretCol(), working, label, widgetTexts( now.top() ),
+		    widgetTexts( now.bottom() ), hint, tap.isRecording(), Math.max( 20, runner.width() - 1 ) );
+		return PromptStyles.getOrDefault( now.style() ).rows( state, theme );
+	}
+
+	/** the text of each named widget that has something to show */
+	private List<String> widgetTexts( List<String> names ) {
+		List<String> out = new ArrayList<>();
+		for ( String name : names ) {
+			Widget w = Widgets.get( name );
+			if ( w != null ) {
+				String text = w.text( facts );
+				if ( !text.isEmpty() ) {
+					out.add( text );
+				}
+			}
+		}
+		return out;
 	}
 
 	private void draw( List<Row> rows ) {

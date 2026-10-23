@@ -16,6 +16,7 @@
  *   channels    "web", "api" and channel ids (telegram, slack, ...)
  *   web         { auth : "open" | "key" | "users", users : [ { username, passwordHash, displayName } ] }
  *   guard       "off" | "flag" | "block"   (prompt-injection guard)
+ *   look        { prompt : a prompt style, top : [ widgets ], bottom : [ widgets ] }   (how the terminal chat looks)
  *   deploy      { target, registry, app, region, host, user, remotePath, destination }
  */
 import bxModules.bxagents.models.util.ModelTuning;
@@ -54,6 +55,7 @@ class {
 			channels    : [],
 			web         : { auth : "open", users : [] },
 			guard       : "off",
+			look        : new "models.tui.TuiLook@bxagents"().defaults(),
 			deploy      : { target : "", registry : "", app : "", region : "", host : "", user : "", remotePath : "", destination : "" }
 		}
 	}
@@ -130,6 +132,8 @@ class {
 		if ( !static.MEMORY.contains( plan.memory ) ) {
 			fail( "memory", "[#plan.memory#] is not valid. Use: #static.MEMORY.toList( ', ' )#" )
 		}
+
+		plan.look = lookFromFlags( o )
 
 		plan.mcp = list( o, "mcp" )
 		for ( var id in plan.mcp ) {
@@ -211,6 +215,16 @@ class {
 		}
 		if ( p.memory != "cache" ) {
 			parts.append( "--memory=#p.memory#" )
+		}
+		var lookDefaults = new "models.tui.TuiLook@bxagents"().defaults()
+		if ( p.look.prompt != lookDefaults.prompt ) {
+			parts.append( "--prompt=#p.look.prompt#" )
+		}
+		if ( p.look.top != lookDefaults.top ) {
+			parts.append( "--widgets=#p.look.top.len() ? p.look.top.toList() : 'none'#" )
+		}
+		if ( p.look.bottom != lookDefaults.bottom ) {
+			parts.append( "--widgets-bottom=#p.look.bottom.len() ? p.look.bottom.toList() : 'none'#" )
 		}
 		if ( p.mcp.len() ) {
 			parts.append( "--mcp=#p.mcp.toList()#" )
@@ -301,6 +315,10 @@ class {
 		if ( p.memory == "file" ) {
 			features.memory = "file"
 			features.checkpointer = { type : "file" }
+		}
+		var looks = new "models.tui.TuiLook@bxagents"().defaults()
+		if ( p.look.prompt != looks.prompt || p.look.top != looks.top || p.look.bottom != looks.bottom ) {
+			features.tui = { prompt : p.look.prompt, widgets : { top : p.look.top, bottom : p.look.bottom } }
 		}
 		if ( p.guard != "off" ) {
 			features.security = { enabled : true, input : { enabled : true, action : p.guard } }
@@ -393,6 +411,10 @@ class {
 		}
 		if ( p.memory != "cache" ) {
 			rows.append( { label : "Memory", value : "saved to disk" } )
+		}
+		var shown = new "models.tui.TuiLook@bxagents"().defaults()
+		if ( p.look.prompt != shown.prompt || p.look.top != shown.top || p.look.bottom != shown.bottom ) {
+			rows.append( { label : "Chat look", value : "#p.look.prompt# prompt; top: #p.look.top.len() ? p.look.top.toList( ', ' ) : 'nothing'#; bottom: #p.look.bottom.len() ? p.look.bottom.toList( ', ' ) : 'nothing'#" } )
 		}
 		if ( p.mcp.len() ) {
 			rows.append( { label : "MCP servers", value : p.mcp.map( id => variables.catalog.mcpServer( id ).name ).toList( ", " ) } )
@@ -561,6 +583,26 @@ class {
 				break
 		}
 		return { id : d.target, config : config }
+	}
+
+	/**
+	 * --prompt=<style>, --widgets=<top widgets or none>, --widgets-bottom=<bottom widgets or none>. Anything left out
+	 * keeps its default.
+	 */
+	private struct function lookFromFlags( required struct o ) {
+		var tuiLook = new "models.tui.TuiLook@bxagents"()
+		var look = tuiLook.defaults()
+		look.prompt = lCase( trim( arguments.o.prompt ?: look.prompt ) )
+		for ( var pair in [ [ "widgets", "top" ], [ "widgets-bottom", "bottom" ] ] ) {
+			if ( len( trim( arguments.o[ pair[ 1 ] ] ?: "" ) ) ) {
+				look[ pair[ 2 ] ] = lCase( trim( arguments.o[ pair[ 1 ] ] ) ) == "none" ? [] : list( arguments.o, pair[ 1 ] ).map( n => lCase( n ) )
+			}
+		}
+		var problems = tuiLook.problems( { prompt : look.prompt, widgets : { top : look.top, bottom : look.bottom } }, "new" )
+		if ( problems.len() ) {
+			fail( problems[ 1 ].findNoCase( "tui.prompt" ) ? "prompt" : "widgets", "is not valid: " & problems[ 1 ].reReplace( "^new: ", "" ) )
+		}
+		return look
 	}
 
 	private array function list( required struct o, required string key ) {
