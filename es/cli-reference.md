@@ -115,6 +115,9 @@ Lista los modelos con los que puede hablar un proyecto y prueba que responden.
 ::: card title="sessions" icon="phosphor-duotone:chats" href="#sessions"
 Lista, renombra, bifurca y borra las conversaciones de la base de datos del chat.
 :::
+::: card title="stats" icon="phosphor-duotone:chart-bar" href="#stats"
+Lo que usaron las llamadas al modelo: tokens por modelo, proveedor, día o usuario, una vez que el proyecto activa el uso.
+:::
 ::: card title="inspect" icon="phosphor-duotone:magnifying-glass" href="#inspect"
 Informa de cómo está compuesto el agente, a partir de su código fuente.
 :::
@@ -547,6 +550,7 @@ Cada chat es una conversación, listada en la [base de datos de chat compartida]
 | `/compact` | Sustituye los mensajes más antiguos por un resumen (requiere un modelo de resumen en la memoria del agente) |
 | `/info` | Agente, modelo, conversación, número de mensajes, notas y base de datos |
 | `/context` | Cuánto ocupa el contexto ahora mismo y de qué se compone: el prompt del sistema, las definiciones de herramientas, las notas y los mensajes de esta conversación, cada uno con su tamaño, el total, y la parte de la ventana de contexto del modelo cuando el proyecto [la indica](conventions/models.md#lo-que-el-proyecto-sabe-de-un-modelo). Nombra las herramientas más grandes. Se calcula en local; no se llama a ningún modelo |
+| `/stats` | Lo que usaron las llamadas al modelo: `/stats` para los últimos 30 días por modelo, `/stats 7 --by=day` para otro periodo o agrupación. Solo en la terminal. Cuando no se registra el uso, explica cómo activarlo, y `/stats enable` escribe `usage: true` en `Agent.yaml` por ti (recompila para que surta efecto) |
 
 `--continue` abre la conversación más reciente al iniciar el chat, y `--session=<número o id>` abre una concreta. Ambos muestran primero los mensajes anteriores. Con `--connect` el servidor guarda la lista y los mensajes, con el nombre de tu [token](conventions/agent-bx.md#tokens-de-acceso-para-un-agente-desplegado); un servidor sin base de datos de chat dice que no guarda lista.
 
@@ -792,6 +796,32 @@ bxAgents sessions import --file=chat.json [--name="Nuevo nombre"] [--user=NOMBRE
 - `export` escribe una conversación en un archivo JSON con el nombre de su título (`--file` para elegirlo, `--md` para una transcripción legible en Markdown) y nunca reemplaza un archivo salvo que añadas `--force`. El archivo contiene los datos de la conversación y sus mensajes tal como los guarda la memoria del agente. Incluye todo lo que se dijo, así que guárdalo donde guardarías la conversación.
 - `import` lee ese archivo y lo añade a la lista del usuario como una conversación **nueva** (con un id nuevo, sin reemplazar ninguna), con `--name` para cambiarle el título. Un archivo que no reconoce se rechaza antes de escribir nada: debe ser una conversación exportada de una versión que este BxAgents lee, con como máximo 20.000 mensajes cuyos roles sean `user`, `assistant`, `system` o `tool`. Si se exportó desde otro agente, el mensaje lo indica.
 - Ambos leen y escriben la memoria del agente, así que necesitan un proyecto compilado y una memoria que sobreviva al proceso (`file` o `jdbc`; consulta el ajuste [memory](conventions/agent-yaml.md#ajustes)). Con `cache` la memoria está vacía cuando el programa se ha detenido, y `export` lo dice.
+
+### `stats`
+
+Lo que usaron las llamadas al modelo del proyecto, a partir del registro que guarda la app en la [base de datos de chat compartida](conventions/web-ui.md#el-almacen-sqlite) (`data/chat.db`, o el archivo indicado por `BXAGENTS_DB`).
+
+```bash
+bxAgents stats [--days=30] [--by=model|provider|day|user] [--user=NOMBRE] [--json]
+bxAgents stats --enable
+```
+
+```
+Last 30 days: 128 calls, 412,300 tokens (351,200 in, 61,100 out)
+
+By model              calls          in         out       total
+gpt-5                    90     280,000      45,000     325,000
+gpt-5-mini               38      71,200      16,100      87,300
+
+Counts only the calls whose provider reported usage.
+```
+
+- **Está desactivado salvo que lo actives.** Añade `usage: true` al `Agent.yaml` propio del proyecto (consulta [`usage`](conventions/agent-yaml.md#ajustes)) y recompila. Hasta entonces `stats` explica cómo activarlo, y `--enable` escribe esa línea por ti y te recuerda ejecutar `bxAgents build` y reiniciar un servidor en marcha.
+- Solo se guardan **recuentos**: la hora, quién preguntó, el proveedor, el modelo y los tokens de entrada y de salida. No se guarda nada de lo que se dijo, y nada sale de tu base de datos.
+- Una llamada cuenta cuando su proveedor informa del uso. El proveedor `mock` y algunas llamadas en streaming no lo hacen, así que no dejan fila, y los totales son los de las llamadas que sí.
+- `--by` agrupa las filas por modelo (por defecto), proveedor, día o usuario, con las mayores primero (las más recientes primero en `day`). `--days` es cuánto mirar atrás, contando hoy (de 1 a 3650). `--user` limita a las llamadas de un usuario. `--json` imprime el informe para un script.
+- Solo lee la base de datos, así que no necesita compilación. Ejecútalo donde está la base de datos: en el proyecto, o en un servidor con `BXAGENTS_DB` definido.
+- No calcula el coste. Los precios cambian demasiado para llevar una tabla.
 
 ### `inspect`
 
