@@ -91,7 +91,7 @@ A struct option wins over a separate annotation if both are given, and a clash i
 
 ```
 extensions/ci/
-  Extension.bx            optional: configure(), start/stop, register( api )
+  Extension.bx            optional: configure(), onLoad(), onUnload(), register( api )
   models/ci.bx            plain classes the other files can have injected
   commands/status.bx      one class per command (ICommand, as the built-ins are)
   keys/open-run.bx
@@ -124,13 +124,22 @@ class {
 		api.slot( "header", ctx => "<span>staging</span>" )
 	}
 
-	function start( ctx ) {}    // a session or server began; start timers and connections here
-	function stop( ctx ) {}     // it ended; release them here (safe to call twice)
+	function onLoad() {}        // after configure() and registration; open connections, start timers
+	function onUnload() {}      // on shutdown or /reload; release them (safe to call twice)
 
 }
 ```
 
-Load has no side effects. Anything that opens a connection or starts a timer belongs in `start()` and ends in `stop()`, as Pi requires. `/reload` stops and reloads extensions.
+An extension is a ColdBox `ModuleConfig`, in the same lifecycle:
+
+| Method | When |
+|---|---|
+| `configure()` | once, first. Sets `variables.settings`; no work |
+| `register( api )` | after `configure()`, optional: add pieces in code |
+| `onLoad()` | after everything is registered and injected. Open connections, start timers |
+| `onUnload()` | on shutdown, `/reload`, or when disabled. Release them |
+
+Method names, order and meaning match a module's `configure()`, `onLoad()` and `onUnload()`, so anyone who has written a ColdBox module already knows it. `/reload` runs `onUnload()` then loads again. An error in any of them is logged and shown in `/extensions`; that extension is skipped and the rest load.
 
 ## What an extension can add
 
@@ -291,7 +300,7 @@ extensions:
 
 Taken from Pi:
 - A single file is a complete extension, and the factory style (`register( api )`).
-- Lifecycle with no work at load: `start` and `stop`, plus reload.
+- Lifecycle with no work at load, plus reload (here named as in a ColdBox module: `configure`, `onLoad`, `onUnload`).
 - Event hooks that can read, change or cancel (`input`, `tool_call`, turn boundaries).
 - Settings per extension (here with `configure()` and `variables.settings`, as in a module), and filters by name or glob.
 - Bundling more than UI: tools, skills, MCP servers.
@@ -308,7 +317,7 @@ Different on purpose:
 2. Events: `@on` for bx-ai and ColdBox points, and the chat events.
 3. Keys and status items.
 4. Prefixes and `@` sources (move `!`, `#` and `@file` onto them).
-5. `ctx.ask()` on every transport, and `start`/`stop`/`/reload`.
+5. `ctx.ask()` on every transport, and `onLoad`/`onUnload`/`/reload`. (`configure()` ships in slice 1.)
 6. Web slots, assets and `window.bxagents`.
 7. Gateway types, CLI verbs, bundled tools and skills.
 8. Extension kit: a sample extension, testing helpers, an authoring guide (EN, mirror, ES), and `--extension ./path`.
