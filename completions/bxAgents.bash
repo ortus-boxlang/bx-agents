@@ -12,7 +12,7 @@ _bxagents_complete() {
 	fi
 	local count=${#words[@]}
 	local cur="${words[count-1]}"
-	local verbs="add build chat clean deploy doctor hash-password inspect invoke models new notes package serve sessions skills test token help"
+	local verbs="add build chat clean deploy doctor hash-password inspect invoke models new notes package serve sessions skills stats test token help"
 	local globals="--help -h --version -v"
 	COMPREPLY=()
 
@@ -62,6 +62,7 @@ _bxagents_complete() {
 			"serve --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"sessions --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"skills --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
+			"stats --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"test --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"token --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"token --scope") COMPREPLY=($(compgen -W "chat admin" -- "$part")) ;;
@@ -88,6 +89,7 @@ _bxagents_complete() {
 			serve) flags="--host= --port= --projectRoot=" ;;
 			sessions) flags="--file= --json --name= --projectRoot= --session= --user=" ;;
 			skills) flags="--dry-run --json --limit= --projectRoot= --registry=" ;;
+			stats) flags="--by= --days= --projectRoot= --user=" ;;
 			test) flags="--projectRoot=" ;;
 			token) flags="--expires= --json --name= --projectRoot= --scope=" ;;
 		esac
@@ -109,6 +111,7 @@ _bxagents_complete() {
 		new) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		package) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		serve) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
+		stats) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		test) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		help) COMPREPLY=($(compgen -W "$verbs" -- "$cur")) ;;
 	esac

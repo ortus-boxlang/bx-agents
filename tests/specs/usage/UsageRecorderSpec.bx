@@ -1,0 +1,97 @@
+/**
+ * Turning usage recording on and what the recorder writes for a model call. The listener itself is not registered
+ * here (it would stay registered for the rest of the run): the event is handed to it directly.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "usage.UsageRecorder", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-usage-recorder-" );
+				variables.file = replace( dir, "\", "/", "all" ) & "/chat.db";
+				variables.settings = getModuleInfo( "bxai" ).settings;
+				variables.savedSettings = settings.keyExists( "bxagents" ) ? duplicate( settings.bxagents ) : "none";
+				variables.savedDb = getSystemSetting( "BXAGENTS_DB", "" );
+				createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_DB", file );
+				variables.recorder = new bxagents.models.usage.UsageRecorder();
+			} );
+
+			afterEach( function() {
+				if ( isSimpleValue( savedSettings ) ) {
+					settings.delete( "bxagents" );
+				} else {
+					settings.bxagents = savedSettings;
+				}
+				if ( len( savedDb ) ) {
+					createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_DB", savedDb );
+				} else {
+					createObject( "java", "java.lang.System" ).clearProperty( "BXAGENTS_DB" );
+				}
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function rowsNow() {
+				return bxagents.models.store.ChatStore::forFile( file ).rows( "SELECT * FROM usage" );
+			}
+
+			it( "is off unless the settings turn it on", function() {
+				settings.delete( "bxagents" );
+				expect( recorder.enabled() ).toBeFalse();
+
+				settings.bxagents = { usage : false };
+				expect( recorder.enabled() ).toBeFalse();
+
+				settings.bxagents = { "default" : { contextWindow : 1000 } };
+				expect( recorder.enabled() ).toBeFalse();
+
+				settings.bxagents = { usage : true };
+				expect( recorder.enabled() ).toBeTrue();
+			} );
+
+			it( "does not start listening while it is off", function() {
+				settings.delete( "bxagents" );
+
+				recorder.start();
+
+				expect( new bxagents.models.usage.UsageRecorder().enabled() ).toBeFalse();
+			} );
+
+			it( "writes one row for a call that reported its usage", function() {
+				recorder.onAITokenCount( {
+					aiRequest        : new FakeRequest( "alice", "t-9", "openai" ),
+					provider         : "ignored",
+					model            : "gpt-5",
+					operation        : "chat",
+					promptTokens     : 12,
+					completionTokens : 8,
+					totalTokens      : 20
+				} );
+
+				var rows = rowsNow();
+				expect( rows ).toHaveLength( 1 );
+				expect( rows[ 1 ].userId ).toBe( "alice" );
+				expect( rows[ 1 ].threadId ).toBe( "t-9" );
+				expect( rows[ 1 ].provider ).toBe( "openai" );
+				expect( rows[ 1 ].model ).toBe( "gpt-5" );
+				expect( rows[ 1 ].totalTokens ).toBe( 20 );
+			} );
+
+			it( "never fails a model call when it cannot write", function() {
+				createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_DB", dir & "/no-such-folder/deeper/x/chat.db" );
+				directoryDelete( dir, true );
+				fileWrite( dir, "a file where the folder should be" );
+
+				recorder.onAITokenCount( { model : "gpt-5", promptTokens : 1, completionTokens : 1, totalTokens : 2 } );
+
+				expect( true ).toBeTrue();
+				fileDelete( dir );
+				directoryCreate( dir );
+			} );
+
+		} );
+	}
+
+}

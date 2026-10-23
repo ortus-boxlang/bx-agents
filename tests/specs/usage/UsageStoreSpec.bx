@@ -1,0 +1,127 @@
+/**
+ * The record of what each model call used, and the report built from it.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "usage.UsageStore", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-usage-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.usage = new bxagents.models.usage.UsageStore( store );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function call( string user = "alice", string provider = "openai", string model = "gpt-5", numeric prompt = 10, numeric completion = 5 ) {
+				usage.record( { userId : user, threadId : "t-1", provider : provider, model : model, promptTokens : prompt, completionTokens : completion } );
+			}
+
+			function older( required numeric daysAgo, string model = "gpt-5", numeric prompt = 100, numeric completion = 50 ) {
+				store.exec(
+					"INSERT INTO usage ( at, userId, provider, model, operation, promptTokens, completionTokens, totalTokens ) VALUES ( :at, 'alice', 'openai', :model, 'chat', :prompt, :completion, :total )",
+					{ at : dateTimeFormat( dateAdd( "d", -arguments.daysAgo, now() ), "yyyy-MM-dd HH:mm:ss" ), model : arguments.model, prompt : arguments.prompt, completion : arguments.completion, total : arguments.prompt + arguments.completion }
+				);
+			}
+
+			it( "starts with nothing recorded, and says so with the days and grouping it was asked", function() {
+				var report = usage.report( 7, "day" );
+
+				expect( report.calls ).toBe( 0 );
+				expect( report.groups ).toBeEmpty();
+				expect( usage.emptyReport( 7, "Day" ).by ).toBe( "day" );
+				expect( usage.emptyReport( 7, "day" ).days ).toBe( 7 );
+			} );
+
+			it( "records a call and adds the totals up", function() {
+				call();
+				call( model = "gpt-5-mini", prompt = 20, completion = 10 );
+
+				var report = usage.report( 30, "model" );
+
+				expect( report.calls ).toBe( 2 );
+				expect( report.promptTokens ).toBe( 30 );
+				expect( report.completionTokens ).toBe( 15 );
+				expect( report.totalTokens ).toBe( 45 );
+			} );
+
+			it( "works out the total when the provider gave only the parts", function() {
+				call( prompt = 7, completion = 3 );
+
+				expect( usage.report( 30, "model" ).totalTokens ).toBe( 10 );
+			} );
+
+			it( "groups by model, biggest first", function() {
+				call( model = "small", prompt = 1, completion = 1 );
+				call( model = "big", prompt = 50, completion = 50 );
+				call( model = "big", prompt = 50, completion = 50 );
+
+				var groups = usage.report( 30, "model" ).groups;
+
+				expect( groups.map( g => g.name ) ).toBe( [ "big", "small" ] );
+				expect( groups[ 1 ].calls ).toBe( 2 );
+				expect( groups[ 1 ].totalTokens ).toBe( 200 );
+			} );
+
+			it( "groups by provider and by user", function() {
+				call( provider = "openai", user = "alice" );
+				call( provider = "claude", user = "bob" );
+				call( provider = "claude", user = "bob" );
+
+				expect( usage.report( 30, "provider" ).groups.map( g => g.name ) ).toBe( [ "claude", "openai" ] );
+				expect( usage.report( 30, "user" ).groups.map( g => g.name ) ).toBe( [ "bob", "alice" ] );
+			} );
+
+			it( "groups by day as a date, newest first", function() {
+				call();
+				older( 2 );
+
+				var groups = usage.report( 30, "day" ).groups;
+
+				expect( groups ).toHaveLength( 2 );
+				expect( groups[ 1 ].name ).toBe( dateTimeFormat( now(), "yyyy-MM-dd" ) );
+				expect( groups[ 2 ].name ).toBe( dateTimeFormat( dateAdd( "d", -2, now() ), "yyyy-MM-dd" ) );
+			} );
+
+			it( "counts only the days asked for, today being the first", function() {
+				call();
+				older( 3 );
+				older( 40 );
+
+				expect( usage.report( 1, "model" ).calls ).toBe( 1 );
+				expect( usage.report( 5, "model" ).calls ).toBe( 2 );
+				expect( usage.report( 60, "model" ).calls ).toBe( 3 );
+			} );
+
+			it( "can be limited to one user", function() {
+				call( user = "alice" );
+				call( user = "bob" );
+
+				expect( usage.report( 30, "model", "alice" ).calls ).toBe( 1 );
+			} );
+
+			it( "names what is missing instead of leaving a blank group", function() {
+				call( model = "" );
+
+				expect( usage.report( 30, "model" ).groups[ 1 ].name ).toBe( "(none)" );
+			} );
+
+			it( "refuses a grouping it does not know", function() {
+				expect( function() { usage.report( 30, "colour" ); } ).toThrow( "BxAgents.UnknownStatsGroup" );
+			} );
+
+			it( "keeps counts only: no column holds anything that was said", function() {
+				var columns = store.rows( "PRAGMA table_info( usage )" ).map( c => c.name );
+
+				expect( columns ).toBe( [ "id", "at", "userId", "threadId", "provider", "model", "operation", "promptTokens", "completionTokens", "totalTokens" ] );
+			} );
+
+		} );
+	}
+
+}

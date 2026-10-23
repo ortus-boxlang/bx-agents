@@ -71,6 +71,12 @@ class extends="testbox.system.BaseSpec" {
 					return validator.validate( dir, discovery, resolver.resolve( projectRoot = dir ) );
 				}
 
+				it( "accepts usage: true or false, and refuses anything else", function() {
+					expect( profiledProject( "usage: true" & char( 10 ) ).errors ).toBeEmpty();
+					expect( profiledProject( "usage: false" & char( 10 ) ).errors ).toBeEmpty();
+					expect( profiledProject( "usage: often" & char( 10 ) ).errors.filter( e => e.findNoCase( "'usage' must be true or false" ) ) ).toHaveLength( 1 );
+				} );
+
 				it( "warns when a model is written next to a default profile, since the profile is the default model", function() {
 					var both = profiledProject( "defaultProfile: fast" & char( 10 ) );
 					var modelOnly = profiledProject();

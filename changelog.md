@@ -331,7 +331,9 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   holds the key, never the key); `defaultProfile`; `profile` on an agent or subagent; and the capability
   defaults `embeddings`, `speech`, `transcription` and `image`. `sessions export` writes a conversation to a JSON file (or a Markdown transcript with `--md`) and `sessions import` adds
   one back as a new conversation, refusing a file it does not recognise before it writes anything. A memory declared in
-  `Agent.yaml` is now keyed by the agent's name, so a file memory is found again on the next start. `defaultProfile` is the default model: when a
+  `Agent.yaml` is now keyed by the agent's name, so a file memory is found again on the next start. `bxAgents stats` and `/stats` show what the model calls used (tokens by model, provider, day or user), once
+  `usage: true` is in Agent.yaml: it is off by default, keeps counts only, and `stats --enable` or `/stats enable`
+  writes the line. `defaultProfile` is the default model: when a
   top-level `model` is written beside it, the profile wins and the build and `doctor` warn that the model is
   ignored. Everything is validated at build time by
   bx-ai's rules, every profile runs on `mock` under `bxAgents test`, and subagents inherit the root's

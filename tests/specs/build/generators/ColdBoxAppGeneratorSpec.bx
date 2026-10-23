@@ -390,6 +390,15 @@ class extends="testbox.system.BaseSpec" {
 				expect( fileRead( result.agentFactory ) ).notToInclude( "memory : aiMemory(" );
 			} );
 
+			it( "starts the usage recorder where an agent is built, whatever the project says (the recorder decides)", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/full-project", buildDir );
+
+				var factory = fileRead( result.agentFactory );
+				expect( factory ).toInclude( 'new "models.usage.UsageRecorder@bxagents"().start()' );
+				expect( factory.find( "ModuleSettings@bxagents" ) < factory.find( "UsageRecorder@bxagents" ) ).toBeTrue( "the settings are in place before the recorder looks at them" );
+			} );
+
 			it( "gives a declared memory a stable key, so a file memory is found again on the next start", function() {
 				var dir = createTempDirectory( prefix = "bxagents-coldbox-memory-" );
 				tempDirs.append( dir );
