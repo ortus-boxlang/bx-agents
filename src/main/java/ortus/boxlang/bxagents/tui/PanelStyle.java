@@ -28,7 +28,13 @@ import dev.tamboui.style.Style;
  */
 public final class PanelStyle extends AbstractPromptStyle {
 
-	private final PromptStyle fallback = new RuleStyle();
+	/**
+	 * What fills the panel to its right edge: a no-break space. The terminal drops the plain spaces at the end of a
+	 * line, and with them the background colour; this one stays.
+	 */
+	private static final String	FILL		= "\u00A0";
+
+	private final PromptStyle	fallback	= new RuleStyle();
 
 	public PanelStyle() {
 		super( "panel", "a tinted panel with a left bar" );
@@ -52,9 +58,9 @@ public final class PanelStyle extends AbstractPromptStyle {
 		for ( int i = 0; i < state.lines().size(); i++ ) {
 			Row row = Row.of().add( "▌", tone );
 			inputRow( row, state, i, width, tone, theme, " " + MARK + " ", theme::onPanel );
-			rows.add( row.add( " ".repeat( Math.max( 0, width - row.width() ) ), plain ) );
+			rows.add( row.add( FILL.repeat( Math.max( 0, width - row.width() ) ), plain ) );
 		}
-		rows.add( Row.of().add( "▌", tone ).add( " ".repeat( width - 1 ), plain ) );
+		rows.add( Row.of().add( "▌", tone ).add( FILL.repeat( width - 1 ), plain ) );
 		rows.add( hintRow( state, theme ) );
 		return rows;
 	}
@@ -67,6 +73,6 @@ public final class PanelStyle extends AbstractPromptStyle {
 	}
 
 	private static String pad( String s, int n ) {
-		return s.length() >= n ? s.substring( 0, n ) : s + " ".repeat( n - s.length() );
+		return s.length() >= n ? s.substring( 0, n ) : s + FILL.repeat( n - s.length() );
 	}
 }

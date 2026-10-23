@@ -152,6 +152,9 @@ class PromptStylesTest {
 		List<Row> rows = PromptStyles.get( "panel" ).rows( state( false, 76 ), COLOR );
 		for ( int i = 0; i < rows.size() - 1; i++ ) {
 			assertThat( rows.get( i ).plainText() ).startsWith( "▌" );
+			// the terminal drops plain spaces at the end of a line, and the background with them: the fill must be something else
+			assertThat( rows.get( i ).width() ).isEqualTo( 76 );
+			assertThat( rows.get( i ).plainText().endsWith( " " ) ).isFalse();
 		}
 		Theme none = new Theme( "none" );
 		assertThat( text( PromptStyles.get( "panel" ).rows( state( false, 76 ), none ) ) )
