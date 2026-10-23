@@ -118,6 +118,54 @@ class extends="testbox.system.BaseSpec" {
 				expect( replies()[ 1 ] ).toInclude( "Agent: helper" );
 			} );
 
+			it( "keeps the conversation commands off unless asked for, since they act on the chat's one conversation", function() {
+				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ] );
+				expect( session.commandMenu().map( c => c.name ) ).notToInclude( "/new" );
+				var on = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], commands : { conversation : true } );
+				expect( on.commandMenu().map( c => c.name ) ).toInclude( "/new" );
+				expect( on.commandMenu().map( c => c.name ) ).toInclude( "/sessions" );
+				expect( on.commandMenu().map( c => c.name ) ).toInclude( "/resume" );
+			} );
+
+			it( "/new moves the chat to a fresh thread and /resume brings the earlier one back", function() {
+				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], commands : { conversation : true } );
+				var first = session.resolveThreadId( message( "hello" ), mock );
+				session.handleInbound( message( "hello" ), mock ).get();
+
+				session.handleInbound( message( "/new" ), mock );
+				var second = session.resolveThreadId( message( "hello" ), mock );
+				expect( second ).notToBe( first );
+				expect( replies().filter( r => r.find( "New conversation" ) ) ).toHaveLength( 1 );
+
+				// another chat is not moved
+				expect( session.resolveThreadId( message( "hello", "u-1", "chat-2" ), mock ) ).toBe( "mock:chat-2" );
+
+				// the first conversation is on the list once it had a message
+				session.handleInbound( message( "/resume " & first ), mock );
+				expect( replies().filter( r => r.find( "Resumed" ) ) ).toHaveLength( 1 );
+				expect( session.resolveThreadId( message( "hello" ), mock ) ).toBe( first );
+			} );
+
+			it( "/sessions lists the chats the person has had here, most recent first", function() {
+				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], commands : { conversation : true } );
+				var done = session.handleInbound( message( "plan the launch" ), mock );
+				done.get();
+				session.handleInbound( message( "/new" ), mock );
+				var done2 = session.handleInbound( message( "second topic" ), mock );
+				done2.get();
+				session.handleInbound( message( "/sessions" ), mock );
+
+				var listing = replies()[ replies().len() ];
+				expect( listing ).toInclude( "plan the launch" );
+				expect( listing.find( "second topic" ) ).toBeLT( listing.find( "plan the launch" ) );
+			} );
+
+			it( "/clear and /compact act on the chat's current thread", function() {
+				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], commands : { conversation : true } );
+				session.handleInbound( message( "/clear" ), mock );
+				expect( replies()[ 1 ] ).toInclude( "Cleared" );
+			} );
+
 			it( "lists a pick-one as numbers, and a lone number right after it picks that option", function() {
 				var registry = new bxagents.models.chat.commands.CommandRegistry().register( new PickCommand() );
 				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], commands : { registry : registry } );

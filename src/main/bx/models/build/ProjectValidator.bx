@@ -893,7 +893,7 @@ class {
 	}
 
 	/**
-	 * Validates `gatewaySession.commands: { enabled, prefix, prefixes, allow, admins }`, the slash commands a gateway answers itself.
+	 * Validates `gatewaySession.commands: { enabled, prefix, prefixes, conversation, allow, admins }`, the slash commands a gateway answers itself.
 	 * An `allow` entry has to name a command that exists and runs on a gateway, so a typo fails at build time
 	 * instead of quietly leaving a command out.
 	 *
@@ -902,16 +902,19 @@ class {
 	 */
 	private void function validateGatewayCommands( required any commands, required array errors ) {
 		if ( !isStruct( arguments.commands ) ) {
-			arguments.errors.append( "Agent.bx's 'gatewaySession.commands' must be a block with enabled, prefix, prefixes, allow and admins" )
+			arguments.errors.append( "Agent.bx's 'gatewaySession.commands' must be a block with enabled, prefix, prefixes, conversation, allow and admins" )
 			return
 		}
 		for ( var key in arguments.commands ) {
-			if ( ![ "enabled", "prefix", "prefixes", "allow", "admins" ].containsNoCase( key ) ) {
-				arguments.errors.append( "Agent.bx's 'gatewaySession.commands' has an unknown key [#key#] - use enabled, prefix, prefixes, allow or admins" )
+			if ( ![ "enabled", "prefix", "prefixes", "conversation", "allow", "admins" ].containsNoCase( key ) ) {
+				arguments.errors.append( "Agent.bx's 'gatewaySession.commands' has an unknown key [#key#] - use enabled, prefix, prefixes, conversation, allow or admins" )
 			}
 		}
 		if ( arguments.commands.keyExists( "enabled" ) && !isBoolean( arguments.commands.enabled ) ) {
 			arguments.errors.append( "Agent.bx's 'gatewaySession.commands.enabled' must be true or false" )
+		}
+		if ( arguments.commands.keyExists( "conversation" ) && !isBoolean( arguments.commands.conversation ) ) {
+			arguments.errors.append( "Agent.bx's 'gatewaySession.commands.conversation' must be true or false" )
 		}
 		if ( arguments.commands.keyExists( "prefix" ) && ( !isSimpleValue( arguments.commands.prefix ) || len( arguments.commands.prefix ) != 1 ) ) {
 			arguments.errors.append( "Agent.bx's 'gatewaySession.commands.prefix' must be a single character, such as /" )

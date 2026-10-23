@@ -260,6 +260,7 @@ gatewaySession:
     enabled: true            # false apaga los comandos
     prefix: "/"              # un carácter
     prefixes: { slack: "!" } # otro prefijo de un carácter para un gateway, por nombre
+    conversation: false      # true activa también /new, /clear, /compact, /sessions y /resume
     allow: [ help, info, tools, notes, remember, model ]   # el valor por defecto; cualquier comando que corra en un gateway
     admins: [ "123456789" ]  # ids de usuario del gateway que pueden ejecutar comandos para admins
 ```
@@ -286,8 +287,14 @@ gatewaySession:
 ```
 
 
-!!! info
-    Los comandos de conversación (`/new`, `/clear`, `/compact`, `/sessions`, `/resume`) no están en el conjunto por defecto: un gateway guarda una conversación por hilo de chat, y moverse entre conversaciones ahí es trabajo aparte. 
+#### Comandos de conversación
+
+`/new`, `/clear`, `/compact`, `/sessions` y `/resume` están desactivados por defecto, porque una plataforma de chat da a cada chat una conversación compartida: en un grupo, el `/clear` de cualquiera la borra para todos. Actívalos con `conversation: true` (o lístalos en `allow`) cuando los chats sean privados o confíes en el grupo.
+
+- `/new` mueve el chat a una conversación nueva; la anterior sigue en la lista.
+- `/sessions` lista las conversaciones que la persona ha tenido en esta app, la más reciente primero, y `/resume 2` (o un id) devuelve el chat a una. La lista vive en memoria, así que dura hasta que la app se reinicia; las conversaciones en sí duran lo que dure la memoria del agente, así que un id sigue funcionando después.
+- `/clear` y `/compact` actúan sobre la conversación en la que está el chat ahora.
+- En un hilo de Slack, cada hilo tiene su propia conversación, y `/new` mueve solo ese hilo.
 
 Qué hace en realidad cada política con un mensaje que llega mientras un turno todavía está en ejecución:
 
