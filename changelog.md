@@ -276,6 +276,9 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   default `/agent`, or one per chat command) and answers only the person who typed. WhatsApp shows a pick-one as
   buttons or a list. Where there are no buttons a pick-one is a numbered list and a lone number answers it.
   `gatewaySession.commands.prefixes` sets a different command prefix per gateway.
+- `/new`, `/clear`, `/compact`, `/sessions` and `/resume` on chat platforms, switched on with
+  `gatewaySession.commands.conversation: true` (off by default: a chat shares one conversation). `/new` and `/resume`
+  move the chat to another conversation, and `/sessions` lists the ones the person has had since the app started.
 
 #### The chat screen
 

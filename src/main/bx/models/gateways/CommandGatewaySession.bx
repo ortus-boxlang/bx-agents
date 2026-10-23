@@ -12,6 +12,7 @@
  *       enabled: true
  *       prefix: "/"
  *       prefixes: { slack: "!" }       # a different prefix for one gateway, by its name
+ *       conversation: true             # also /new, /clear, /compact, /sessions and /resume
  *       allow: [ help, info, tools, notes, remember, model ]
  *       admins: [ "12345" ]            # gateway user ids that may run admin commands
  */
@@ -23,10 +24,12 @@ class extends="bxModules.bxai.models.gateway.GatewaySession" {
 
 	static {
 		SAFE_COMMANDS = [ "help", "info", "tools", "model", "ping", "notes", "remember" ]
+		// they act on the chat's one shared conversation, so they are opt-in (commands.conversation: true)
+		CONVERSATION_COMMANDS = [ "new", "clear", "compact", "sessions", "resume" ]
 	}
 
 	/**
-	 * @commands { enabled, prefix, allow, admins, registry }, all optional
+	 * @commands { enabled, prefix, prefixes, conversation, allow, admins, registry, sessions }, all optional
 	 *
 	 * The other arguments are GatewaySession's own.
 	 */
@@ -42,8 +45,12 @@ class extends="bxModules.bxai.models.gateway.GatewaySession" {
 		variables.prefixes = arguments.commands.prefixes ?: {}
 		variables.admins = arguments.commands.admins ?: []
 		// a registry can be handed in whole (a module's own commands); otherwise the built-ins, narrowed to the allowed ones
-		variables.registry = arguments.commands.registry ?: new "models.chat.commands.CommandCatalog@bxagents"().standard().only( arguments.commands.allow ?: static.SAFE_COMMANDS )
-		variables.service = new "models.chat.commands.CommandService@bxagents"( agent : arguments.agent, registry : variables.registry )
+		variables.registry = arguments.commands.registry ?: new "models.chat.commands.CommandCatalog@bxagents"().standard().only( arguments.commands.allow ?: ( ( arguments.commands.conversation ?: false ) ? static.SAFE_COMMANDS.merge( static.CONVERSATION_COMMANDS ) : static.SAFE_COMMANDS ) )
+		// the conversations each person has had here, for /sessions and /resume; a store can be handed in
+		variables.sessions = arguments.commands.sessions ?: new "models.gateways.MemorySessions@bxagents"()
+		// where each chat is now: /new and /resume move it to another thread
+		variables.threads = new "models.gateways.ChatThreads@bxagents"()
+		variables.service = new "models.chat.commands.CommandService@bxagents"( agent : arguments.agent, sessions : variables.sessions, registry : variables.registry )
 		// the choices last offered to each person in each chat, so "2" can answer a numbered list
 		variables.pendingChoices = {}
 		return this
@@ -97,10 +104,31 @@ class extends="bxModules.bxai.models.gateway.GatewaySession" {
 				return nullValue()
 			}
 		}
-		return super.handleInbound( arguments.message, arguments.sourceGateway )
+		var done = super.handleInbound( arguments.message, arguments.sourceGateway )
+		if ( variables.commandsOn && arguments.message.getType() == "message" ) {
+			// keep the conversation on the list, so /sessions shows it
+			variables.sessions.touch(
+				len( arguments.message.getContext().getUserID() ) ? arguments.message.getContext().getUserID() : "gateway",
+				resolveThreadId( arguments.message, arguments.sourceGateway ),
+				arguments.message.getText()
+			)
+		}
+		return done
+	}
+
+	/**
+	 * The thread a message belongs to: the one its chat was moved to by /new or /resume, else the platform's own.
+	 */
+	string function resolveThreadId( required GatewayMessage message, required IGateway sourceGateway ) {
+		var moved = variables.threads.current( chatKey( arguments.message.getContext() ) )
+		return len( moved ) ? moved : super.resolveThreadId( arguments.message, arguments.sourceGateway )
 	}
 
 	// ----------------------------------------------------------------------------------
+
+	private string function chatKey( required any context ) {
+		return arguments.context.getGateway() & "|" & arguments.context.getConversationID() & "|" & arguments.context.getThreadID()
+	}
 
 	/**
 	 * A reply of just a number, right after a numbered list of choices, picks that choice: "2" becomes the
@@ -164,6 +192,10 @@ class extends="bxModules.bxai.models.gateway.GatewaySession" {
 				} else {
 					variables.pendingChoices[ choiceKey( context ) ] = choose[ 1 ].options
 				}
+			}
+			// a command that moved the chat to another conversation (/new, /resume) takes its next messages there
+			if ( len( reply.conversationId ?: "" ) && reply.conversationId != resolveThreadId( arguments.message, arguments.sourceGateway ) ) {
+				variables.threads.use( chatKey( context ), reply.conversationId )
 			}
 			text = new "models.chat.commands.PlainRenderer@bxagents"().render( reply )
 			if ( reply.blocks.filter( b => b.type == "choose" ).len() ) {
