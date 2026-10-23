@@ -1,0 +1,88 @@
+/**
+ * Turns the files a person sent on a chat platform into what the agent is given: pictures become image parts
+ * (checked by the same MessageBuilder as the terminal and the web page: how many, how big, that the model can
+ * see), text files are put into the message as their own blocks, and anything else is named and left out.
+ * A gateway only has to say what is attached (see attachmentsOf() on a gateway); this decides what to do.
+ */
+class {
+
+	static {
+		MAX_TEXT_CHARS = 100000
+		TEXT_EXTENSIONS = [ "txt", "md", "markdown", "json", "yaml", "yml", "csv", "tsv", "xml", "html", "htm", "log", "bx", "bxs", "bxm", "cfc", "cfm", "js", "ts", "css", "sql", "sh", "py", "java", "ini", "toml", "properties" ]
+	}
+
+	/**
+	 * @fetcher An AttachmentFetcher; the real one when not given
+	 * @builder A MessageBuilder; the real one when not given
+	 */
+	function init( any fetcher, any builder ) {
+		variables.fetcher = isNull( arguments.fetcher ) ? new "models.gateways.support.AttachmentFetcher@bxagents"() : arguments.fetcher
+		variables.builder = isNull( arguments.builder ) ? new "models.chat.MessageBuilder@bxagents"() : arguments.builder
+		return this
+	}
+
+	/**
+	 * @text What the person typed (may be empty: a picture alone)
+	 * @attachments [ { name, mime, size, url, headers } ] from the gateway
+	 * @facts { vision } of the model in use (ModelFacts)
+	 *
+	 * @return { ok : true, input : text or the user message with image parts, notes : [ what was left out ] } or { ok : false, reason }
+	 */
+	struct function intake( required string text, required array attachments, struct facts = {} ) {
+		var images = []
+		var texts = []
+		var notes = []
+		for ( var file in arguments.attachments ) {
+			var name = len( file.name ?: "" ) ? file.name : "a file"
+			var kind = kindOf( file )
+			if ( kind == "other" ) {
+				notes.append( "#name# was not read: only pictures and text files are." )
+				continue
+			}
+			var got = variables.fetcher.fetch( file.url, file.headers ?: {} )
+			if ( !got.ok ) {
+				notes.append( "#name# could not be read: #got.reason#." )
+				continue
+			}
+			if ( kind == "image" ) {
+				images.append( { name : name, mime : len( got.mime ) && got.mime != "application/octet-stream" ? got.mime : ( file.mime ?: "" ), base64 : got.base64 } )
+			} else {
+				var content = charsetEncode( binaryDecode( got.base64, "base64" ), "utf-8" )
+				if ( len( content ) > static.MAX_TEXT_CHARS ) {
+					content = left( content, static.MAX_TEXT_CHARS ) & char( 10 ) & "(the file was cut at #numberFormat( static.MAX_TEXT_CHARS )# characters)"
+				}
+				texts.append( { name : name, content : content } )
+			}
+		}
+
+		var typed = arguments.text
+		for ( var doc in texts ) {
+			typed &= ( len( typed ) ? char( 10 ) & char( 10 ) : "" ) & "--- #doc.name# ---" & char( 10 ) & doc.content
+		}
+
+		var built = variables.builder.build( typed, images, arguments.facts )
+		if ( !built.ok ) {
+			return built
+		}
+		return { ok : true, input : built.input, notes : notes, images : images.len(), files : texts.len() }
+	}
+
+	/**
+	 * @return "image", "text" or "other" for an attachment, from its type and then its name
+	 */
+	string function kindOf( required struct file ) {
+		var mime = lCase( arguments.file.mime ?: "" )
+		if ( mime.startsWith( "image/" ) ) {
+			return len( variables.builder.typeOf( "x." & listLast( mime, "/" ) ) ) ? "image" : "other"
+		}
+		var extension = lCase( listLast( arguments.file.name ?: "", "." ) )
+		if ( mime.startsWith( "text/" ) || static.TEXT_EXTENSIONS.contains( extension ) ) {
+			return "text"
+		}
+		if ( len( variables.builder.typeOf( arguments.file.name ?: "" ) ) ) {
+			return "image"
+		}
+		return "other"
+	}
+
+}

@@ -109,6 +109,22 @@ class extends="testbox.system.BaseSpec" {
 					expect( dispatched[ 1 ].getContext().getConversationID() ).toBe( "+15551234567" )
 				} );
 
+				it( "dispatches a picture sent without text and lists its media", function() {
+					var dispatched = []
+					gateway.onMessage( function( m ) { dispatched.append( m ); } )
+
+					var url = "https://example.com/webhooks/twilio"
+					var params = { AccountSid: "AC-test-account", Body: "", From: "+15551234567", NumMedia: "1", MediaUrl0: "https://api.twilio.com/media/ME1", MediaContentType0: "image/jpeg" }
+					var result = gateway.handleWebhook( url, computeSignature( "shh-auth-token", url, params ), formEncode( params ) )
+
+					expect( result.status ).toBe( 200 )
+					expect( dispatched.len() ).toBe( 1 )
+					var files = gateway.attachmentsOf( dispatched[ 1 ] )
+					expect( files ).toHaveLength( 1 )
+					expect( files[ 1 ].url ).toBe( "https://api.twilio.com/media/ME1" )
+					expect( files[ 1 ].mime ).toBe( "image/jpeg" )
+				} );
+
 				it( "uses the publicUrl override (not the passed-in requestUrl) for signature verification when configured", function() {
 					var overridden = new bxagents.models.gateways.TwilioGateway()
 					overridden.configure( { accountSid: "AC-test-account", authToken: "shh-auth-token", from: "+15559998888", publicUrl: "https://public.example.com/webhooks/twilio" } )

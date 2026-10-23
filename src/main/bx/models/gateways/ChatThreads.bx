@@ -1,0 +1,29 @@
+/**
+ * Which conversation each chat is in right now. A chat platform gives every chat one thread, so by
+ * default a chat is in the thread its platform names. /new and /resume move a chat to another thread;
+ * this remembers where, so the next message lands there. Chats that never moved are not stored.
+ */
+class {
+
+	function init() {
+		variables.moved = createObject( "java", "java.util.concurrent.ConcurrentHashMap" ).init()
+		return this
+	}
+
+	/**
+	 * @chatKey The chat: gateway, conversation and platform thread, joined
+	 *
+	 * @return The thread the chat moved to, or "" when it is still in its own
+	 */
+	string function current( required string chatKey ) {
+		return variables.moved.get( arguments.chatKey ) ?: ""
+	}
+
+	/**
+	 * Moves the chat to a thread.
+	 */
+	void function use( required string chatKey, required string threadId ) {
+		variables.moved.put( arguments.chatKey, arguments.threadId )
+	}
+
+}

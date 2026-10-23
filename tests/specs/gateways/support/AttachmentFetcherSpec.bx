@@ -1,0 +1,51 @@
+/**
+ * Downloading a file a person sent: https only, a size limit, and a reason instead of an exception.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "AttachmentFetcher", function() {
+
+			function fetcherReturning( required struct response ) {
+				return new bxagents.models.gateways.support.AttachmentFetcher( function( url, headers ) { return response; } );
+			}
+
+			it( "returns the file as base64 with its type", function() {
+				var got = fetcherReturning( { status : 200, body : charsetDecode( "hello", "utf-8" ), mime : "text/plain; charset=utf-8" } ).fetch( "https://files.example/a.txt" );
+				expect( got.ok ).toBeTrue();
+				expect( toString( binaryDecode( got.base64, "base64" ) ) ).toBe( "hello" );
+				expect( got.mime ).toBe( "text/plain" );
+			} );
+
+			it( "passes the platform's headers along", function() {
+				var seen = {};
+				var fetcher = new bxagents.models.gateways.support.AttachmentFetcher( function( url, headers ) { seen = headers; return { status : 200, body : charsetDecode( "x", "utf-8" ), mime : "" }; } );
+				fetcher.fetch( "https://files.example/a", { "Authorization" : "Bearer t" } );
+				expect( seen ).toBe( { "Authorization" : "Bearer t" } );
+			} );
+
+			it( "refuses a link that is not https", function() {
+				var got = fetcherReturning( { status : 200, body : charsetDecode( "x", "utf-8" ), mime : "" } ).fetch( "http://files.example/a" );
+				expect( got.ok ).toBeFalse();
+				expect( got.reason ).toInclude( "https" );
+			} );
+
+			it( "reports a failed status, an empty file and one over the limit as reasons", function() {
+				expect( fetcherReturning( { status : 403, body : "", mime : "" } ).fetch( "https://f.example/a" ).reason ).toInclude( "403" );
+				expect( fetcherReturning( { status : 200, body : "", mime : "" } ).fetch( "https://f.example/a" ).reason ).toInclude( "empty" );
+				var big = fetcherReturning( { status : 200, body : charsetDecode( repeatString( "a", 20 ), "utf-8" ), mime : "" } ).fetch( "https://f.example/a", {}, 10 );
+				expect( big.ok ).toBeFalse();
+				expect( big.reason ).toInclude( "larger" );
+			} );
+
+			it( "does not throw when the download fails", function() {
+				var fetcher = new bxagents.models.gateways.support.AttachmentFetcher( function( url, headers ) { throw( message = "connection refused" ); } );
+				var got = fetcher.fetch( "https://f.example/a" );
+				expect( got.ok ).toBeFalse();
+				expect( got.reason ).toInclude( "connection refused" );
+			} );
+
+		} );
+	}
+
+}

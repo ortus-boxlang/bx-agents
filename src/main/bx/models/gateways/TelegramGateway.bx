@@ -161,7 +161,7 @@ class extends="ScheduledGatewayBase" {
 		for ( var update in ( response.result ?: [] ) ) {
 			variables.lastUpdateId = max( variables.lastUpdateId, update.update_id ?: 0 )
 
-			if ( structKeyExists( update, "message" ) && len( update.message.text ?: "" ) ) {
+			if ( structKeyExists( update, "message" ) && ( len( update.message.text ?: "" ) || hasFiles( update.message ) ) ) {
 				dispatchInbound( toGatewayMessage( update.message ) )
 			} else if ( structKeyExists( update, "callback_query" ) ) {
 				handleCallbackQuery( update.callback_query )
@@ -184,7 +184,7 @@ class extends="ScheduledGatewayBase" {
 			raw           : arguments.message
 		)
 		var gwMessage = new GatewayMessage(
-			text   : arguments.message.text ?: "",
+			text   : arguments.message.text ?: ( arguments.message.caption ?: "" ),
 			context: context,
 			raw    : arguments.message
 		)
@@ -198,6 +198,39 @@ class extends="ScheduledGatewayBase" {
 		} )
 
 		return gwMessage
+	}
+
+	private boolean function hasFiles( required struct message ) {
+		return ( arguments.message.photo ?: [] ).len() > 0 || isStruct( arguments.message.document ?: "" )
+	}
+
+	/**
+	 * The files that came with a message: its photo (the largest size within the limit) and its document.
+	 * Telegram gives a file id, so each is looked up (getFile) for the address to download it from.
+	 *
+	 * @message A GatewayMessage from this gateway
+	 *
+	 * @return [ { name, mime, size, url } ]; what Telegram will not give is left out
+	 */
+	array function attachmentsOf( required any message ) {
+		var raw = arguments.message.getRaw()
+		var found = []
+		var photos = ( raw.photo ?: [] ).filter( p => ( p.file_size ?: 0 ) <= 5242880 )
+		if ( photos.len() ) {
+			photos.sort( ( a, b ) => ( b.width ?: 0 ) - ( a.width ?: 0 ) )
+			found.append( { name : "photo.jpg", mime : "image/jpeg", size : photos[ 1 ].file_size ?: 0, fileId : photos[ 1 ].file_id } )
+		}
+		if ( isStruct( raw.document ?: "" ) && len( raw.document.file_id ?: "" ) ) {
+			found.append( { name : raw.document.file_name ?: "file", mime : raw.document.mime_type ?: "", size : raw.document.file_size ?: 0, fileId : raw.document.file_id } )
+		}
+		var out = []
+		for ( var file in found ) {
+			var located = callApi( "getFile", { file_id : file.fileId } )
+			if ( ( located.ok ?: false ) && len( located.result.file_path ?: "" ) ) {
+				out.append( { name : file.name, mime : file.mime, size : file.size, url : static.API_BASE.replace( "/bot", "/file/bot" ) & variables.botToken & "/" & located.result.file_path } )
+			}
+		}
+		return out
 	}
 
 	// verifyInbound()/parseInbound() are bx-ai's HTTP-webhook-style entrypoints.

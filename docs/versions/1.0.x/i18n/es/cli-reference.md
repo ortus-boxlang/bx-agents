@@ -786,11 +786,16 @@ bxAgents sessions list [--user=NOMBRE] [--json]
 bxAgents sessions rename --session=<número o id> --name="Nuevo nombre" [--user=NOMBRE]
 bxAgents sessions fork --session=<número o id> [--name="Otro enfoque"] [--user=NOMBRE]
 bxAgents sessions delete --session=<número o id> [--user=NOMBRE]
+bxAgents sessions export --session=<número o id> [--file=chat.json] [--md] [--force] [--user=NOMBRE]
+bxAgents sessions import --file=chat.json [--name="Nuevo nombre"] [--user=NOMBRE]
 ```
 
 - Una conversación se elige por su número en `list`, o por su id o el comienzo de él. `--user` es de quién son las conversaciones: el usuario del sistema operativo por defecto.
 - `list`, `rename` y la parte de lista de `delete` solo tocan la base de datos. Los mensajes de una conversación viven en la [memoria](conventions/agent-yaml.md#ajustes) del agente, así que `fork` (que los copia) necesita un proyecto compilado, y `delete` también para olvidarlos. Solo alcanzan los mensajes que guarda una memoria que sobrevive al proceso (`file`, `jdbc`): la memoria `cache` por defecto desaparece al terminar el chat.
 - Ejecútalo donde está la base de datos: en el proyecto, o en un servidor con `BXAGENTS_DB` definido.
+- `export` escribe una conversación en un archivo JSON con el nombre de su título (`--file` para elegirlo, `--md` para una transcripción legible en Markdown) y nunca reemplaza un archivo salvo que añadas `--force`. El archivo contiene los datos de la conversación y sus mensajes tal como los guarda la memoria del agente. Incluye todo lo que se dijo, así que guárdalo donde guardarías la conversación.
+- `import` lee ese archivo y lo añade a la lista del usuario como una conversación **nueva** (con un id nuevo, sin reemplazar ninguna), con `--name` para cambiarle el título. Un archivo que no reconoce se rechaza antes de escribir nada: debe ser una conversación exportada de una versión que este BxAgents lee, con como máximo 20.000 mensajes cuyos roles sean `user`, `assistant`, `system` o `tool`. Si se exportó desde otro agente, el mensaje lo indica.
+- Ambos leen y escriben la memoria del agente, así que necesitan un proyecto compilado y una memoria que sobreviva al proceso (`file` o `jdbc`; consulta el ajuste [memory](conventions/agent-yaml.md#ajustes)). Con `cache` la memoria está vacía cuando el programa se ha detenido, y `export` lo dice.
 
 ### `stats`
 

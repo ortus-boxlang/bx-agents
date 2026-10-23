@@ -276,6 +276,12 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   default `/agent`, or one per chat command) and answers only the person who typed. WhatsApp shows a pick-one as
   buttons or a list. Where there are no buttons a pick-one is a numbered list and a lone number answers it.
   `gatewaySession.commands.prefixes` sets a different command prefix per gateway.
+- `/new`, `/clear`, `/compact`, `/sessions` and `/resume` on chat platforms, switched on with
+  `gatewaySession.commands.conversation: true` (off by default: a chat shares one conversation). `/new` and `/resume`
+  move the chat to another conversation, and `/sessions` lists the ones the person has had since the app started.
+- Pictures and files sent on Telegram, Discord, Slack, WhatsApp and Twilio (MMS) reach the agent: pictures as image
+  parts, text files inside the message, anything else named back as not read. The same limits and vision check as the
+  terminal and the web page. `gatewaySession.attachments: false` switches it off.
 
 #### The chat screen
 
@@ -323,7 +329,9 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   for them: the default `provider`, `model`, `params` and `options`; `providers` (params and options per
   provider); named `profiles` (provider, model, params, options and `apiKeyEnv`, the name of the variable that
   holds the key, never the key); `defaultProfile`; `profile` on an agent or subagent; and the capability
-  defaults `embeddings`, `speech`, `transcription` and `image`. `bxAgents stats` and `/stats` show what the model calls used (tokens by model, provider, day or user), once
+  defaults `embeddings`, `speech`, `transcription` and `image`. `sessions export` writes a conversation to a JSON file (or a Markdown transcript with `--md`) and `sessions import` adds
+  one back as a new conversation, refusing a file it does not recognise before it writes anything. A memory declared in
+  `Agent.yaml` is now keyed by the agent's name, so a file memory is found again on the next start. `bxAgents stats` and `/stats` show what the model calls used (tokens by model, provider, day or user), once
   `usage: true` is in Agent.yaml: it is off by default, keeps counts only, and `stats --enable` or `/stats enable`
   writes the line. `defaultProfile` is the default model: when a
   top-level `model` is written beside it, the profile wins and the build and `doctor` warn that the model is

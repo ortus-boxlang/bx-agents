@@ -21,7 +21,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 		'notes' = 'Read and manage the notes of an agent'
 		'package' = 'Package a built project into a .bxa'
 		'serve' = 'Serve a built project via boxlang-miniserver'
-		'sessions' = 'List, rename, fork and delete the conversations in the chat database'
+		'sessions' = 'List, rename, fork, delete, export and import the conversations in the chat database'
 		'skills' = 'Skills from skills.boxlang.io: skills <find|install|list|update|remove>'
 		'stats' = 'What the model calls used: tokens by model, provider, day or user, once Agent.yaml says...'
 		'test' = 'Run a project''s own tests/specs via TestBox'
@@ -203,6 +203,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 		)
 		'serve:positional' = 'dir'
 		'sessions' = @(
+			@{ Name = 'file'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'json'; Value = $false; Choices = @(); Dir = $false }
 			@{ Name = 'name'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }

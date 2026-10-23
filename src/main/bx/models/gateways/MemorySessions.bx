@@ -1,0 +1,137 @@
+/**
+ * The list of conversations a chat platform keeps for /sessions and /resume, in memory. It answers the
+ * same questions as the store behind the web page (models.store.SessionStore) so the command layer uses
+ * either without knowing which, but it lives only as long as the app runs. The conversations themselves
+ * last as long as the agent's memory does, so after a restart a person can still reach one by its id.
+ */
+class {
+
+	static {
+		TITLE_LENGTH = 60
+	}
+
+	function init() {
+		variables.rows = {}
+		return this
+	}
+
+	/**
+	 * Records activity on a conversation, creating it the first time.
+	 *
+	 * @userId Whose conversation
+	 * @conversationId The conversation
+	 * @firstMessage What the user said; the first one becomes the title
+	 * @messageDelta Added to the message count (a turn is two: the question and the answer)
+	 *
+	 * @return False when the id exists and belongs to someone else
+	 */
+	boolean function touch( required string userId, required string conversationId, string firstMessage = "", numeric messageDelta = 2 ) {
+		lock name="bxagents-memory-sessions" type="exclusive" timeout="5" {
+			var existing = variables.rows[ arguments.conversationId ] ?: nullValue()
+			if ( !isNull( existing ) ) {
+				if ( existing.userId != arguments.userId ) {
+					return false
+				}
+				existing.updatedAt = now()
+				existing.messageCount += arguments.messageDelta
+				if ( !len( existing.title ) ) {
+					existing.title = titleOf( arguments.firstMessage )
+				}
+				existing.order = nextOrder()
+				return true
+			}
+			variables.rows[ arguments.conversationId ] = {
+				id           : arguments.conversationId,
+				userId       : arguments.userId,
+				title        : titleOf( arguments.firstMessage ),
+				messageCount : arguments.messageDelta,
+				createdAt    : now(),
+				updatedAt    : now(),
+				order        : nextOrder()
+			}
+		}
+		return true
+	}
+
+	/**
+	 * @return The user's conversations, most recent first: [ { id, title, messageCount, createdAt, updatedAt } ]
+	 */
+	array function list( required string userId, numeric limit = 20 ) {
+		var mine = variables.rows.reduce( ( acc, id, row ) => {
+			if ( row.userId == userId ) {
+				acc.append( row )
+			}
+			return acc
+		}, [] )
+		mine.sort( ( a, b ) => b.order - a.order )
+		return mine.slice( 1, min( int( arguments.limit ), mine.len() ) ).map( shown )
+	}
+
+	struct function byId( required string userId, required string conversationId ) {
+		var row = variables.rows[ arguments.conversationId ] ?: {}
+		return ( row.userId ?: "" ) == arguments.userId ? shown( row ) : {}
+	}
+
+	struct function latest( required string userId ) {
+		var found = list( arguments.userId, 1 )
+		return found.len() ? found[ 1 ] : {}
+	}
+
+	/**
+	 * Finds a conversation by what a person typed: its number in the list ( "2" ), or its id or the start of it.
+	 */
+	struct function resolve( required string userId, required string reference ) {
+		var ref = trim( arguments.reference )
+		if ( !len( ref ) ) {
+			return {}
+		}
+		var recent = list( arguments.userId, 50 )
+		if ( isNumeric( ref ) && ref >= 1 && ref <= recent.len() && len( ref ) < 4 ) {
+			return recent[ int( ref ) ]
+		}
+		var matches = recent.filter( row => row.id == ref || row.id.startsWith( ref ) )
+		return matches.len() == 1 ? matches[ 1 ] : {}
+	}
+
+	boolean function rename( required string userId, required string conversationId, required string title ) {
+		if ( byId( arguments.userId, arguments.conversationId ).isEmpty() ) {
+			return false
+		}
+		variables.rows[ arguments.conversationId ].title = arguments.title
+		variables.rows[ arguments.conversationId ].updatedAt = now()
+		return true
+	}
+
+	boolean function delete( required string userId, required string conversationId ) {
+		if ( byId( arguments.userId, arguments.conversationId ).isEmpty() ) {
+			return false
+		}
+		variables.rows.delete( arguments.conversationId )
+		return true
+	}
+
+	void function resetCount( required string userId, required string conversationId ) {
+		if ( !byId( arguments.userId, arguments.conversationId ).isEmpty() ) {
+			variables.rows[ arguments.conversationId ].messageCount = 0
+			variables.rows[ arguments.conversationId ].updatedAt = now()
+		}
+	}
+
+	/**
+	 * A title is a label, not a preview: one line, cut at 60 characters.
+	 */
+	string function titleOf( required string message ) {
+		var flat = reReplace( trim( arguments.message ), "[[:space:]]+", " ", "all" )
+		return len( flat ) > static.TITLE_LENGTH ? left( flat, static.TITLE_LENGTH - 3 ) & "..." : flat
+	}
+
+	private numeric function nextOrder() {
+		variables.counter = ( variables.counter ?: 0 ) + 1
+		return variables.counter
+	}
+
+	private struct function shown( required struct row ) {
+		return { id : arguments.row.id, title : arguments.row.title, messageCount : arguments.row.messageCount, createdAt : arguments.row.createdAt, updatedAt : arguments.row.updatedAt }
+	}
+
+}

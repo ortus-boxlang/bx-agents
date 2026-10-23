@@ -260,6 +260,7 @@ gatewaySession:
     enabled: true            # false apaga los comandos
     prefix: "/"              # un carácter
     prefixes: { slack: "!" } # otro prefijo de un carácter para un gateway, por nombre
+    conversation: false      # true activa también /new, /clear, /compact, /sessions y /resume
     allow: [ help, info, tools, notes, remember, model ]   # el valor por defecto; cualquier comando que corra en un gateway
     admins: [ "123456789" ]  # ids de usuario del gateway que pueden ejecutar comandos para admins
 ```
@@ -286,8 +287,29 @@ gatewaySession:
 ```
 
 
-!!! info
-    Los comandos de conversación (`/new`, `/clear`, `/compact`, `/sessions`, `/resume`) no están en el conjunto por defecto: un gateway guarda una conversación por hilo de chat, y moverse entre conversaciones ahí es trabajo aparte. 
+#### Imágenes y archivos
+
+Una imagen o un archivo enviado al bot llega al agente con el mensaje: las imágenes como partes de imagen, los archivos de texto (`.txt`, `.md`, `.json`, `.csv`, código y similares, cortados a 100.000 caracteres) dentro del mensaje. Los otros tipos se le devuelven a la persona como no leídos. Con un mensaje van como máximo 4 imágenes de 5 MB, y una imagen enviada a un perfil con `vision: false` se rechaza con ese motivo, las mismas comprobaciones que en la terminal y en la página web.
+
+| Plataforma | Qué se lee | Configuración |
+|---|---|---|
+| Telegram | Una foto (el tamaño más grande dentro de 5 MB) y un documento, con el pie como texto | Ninguna |
+| Discord | Archivos adjuntos | Ninguna |
+| Slack | Archivos compartidos en un mensaje | La app de Slack necesita el permiso `files:read` |
+| WhatsApp | Una imagen o documento, con su pie | Ninguna; el enlace del medio se descarga con el token de acceso |
+| Twilio (MMS) | Los medios enviados con el mensaje, incluso sin texto | Los enlaces son públicos salvo que la cuenta active la autenticación básica para medios; con ella activa, no se pueden leer |
+| Teams, Signal, Email, GitHub | No se leen | |
+
+Los enlaces deben ser https. Un archivo que no se puede descargar se le nombra a la persona y el resto del mensaje sigue. Se apaga con `gatewaySession.attachments: false`.
+
+#### Comandos de conversación
+
+`/new`, `/clear`, `/compact`, `/sessions` y `/resume` están desactivados por defecto, porque una plataforma de chat da a cada chat una conversación compartida: en un grupo, el `/clear` de cualquiera la borra para todos. Actívalos con `conversation: true` (o lístalos en `allow`) cuando los chats sean privados o confíes en el grupo.
+
+- `/new` mueve el chat a una conversación nueva; la anterior sigue en la lista.
+- `/sessions` lista las conversaciones que la persona ha tenido en esta app, la más reciente primero, y `/resume 2` (o un id) devuelve el chat a una. La lista vive en memoria, así que dura hasta que la app se reinicia; las conversaciones en sí duran lo que dure la memoria del agente, así que un id sigue funcionando después.
+- `/clear` y `/compact` actúan sobre la conversación en la que está el chat ahora.
+- En un hilo de Slack, cada hilo tiene su propia conversación, y `/new` mueve solo ese hilo.
 
 Qué hace en realidad cada política con un mensaje que llega mientras un turno todavía está en ejecución:
 

@@ -1,0 +1,143 @@
+/**
+ * The file a conversation is exported to and imported from: a JSON document with the conversation's details and
+ * its messages as the agent's memory holds them (role, content, timestamp), or the same as a readable Markdown
+ * transcript.
+ *
+ *   { format : "bxagents-session", version : 1, exportedAt, agent, title, createdAt, updatedAt, messages : [ { role, content, timestamp } ] }
+ *
+ * Nothing here touches a database or an agent: it builds the document, checks one that came from somewhere else,
+ * and writes the transcript. A file is data from outside, so what it may hold is limited here and not trusted later.
+ */
+class {
+
+	static {
+		FORMAT           = "bxagents-session"
+		VERSION          = 1
+		ROLES            = [ "user", "assistant", "system", "tool" ]
+		MAX_MESSAGES     = 20000
+		MAX_FILE_BYTES   = 50 * 1024 * 1024
+	}
+
+	/**
+	 * @agent The agent's name
+	 * @title The conversation's title
+	 * @messages The messages, as the memory holds them
+	 * @createdAt When the conversation started
+	 * @updatedAt When it was last used
+	 *
+	 * @return The document
+	 */
+	struct function build( required string agent, required string title, required array messages, any createdAt = "", any updatedAt = "" ) {
+		return {
+			format     : static.FORMAT,
+			version    : static.VERSION,
+			exportedAt : dateTimeFormat( now(), "yyyy-MM-dd'T'HH:mm:ss" ),
+			agent      : arguments.agent,
+			title      : arguments.title,
+			createdAt  : isDate( arguments.createdAt ) ? dateTimeFormat( arguments.createdAt, "yyyy-MM-dd'T'HH:mm:ss" ) : "",
+			updatedAt  : isDate( arguments.updatedAt ) ? dateTimeFormat( arguments.updatedAt, "yyyy-MM-dd'T'HH:mm:ss" ) : "",
+			messages   : arguments.messages
+		}
+	}
+
+	/**
+	 * @text The file's contents
+	 *
+	 * @return The document
+	 * @throws BxAgents.InvalidSessionFile when the text is not JSON, or not a document this version reads
+	 */
+	struct function parse( required string text ) {
+		if ( len( arguments.text ) > static.MAX_FILE_BYTES ) {
+			throw( type = "BxAgents.InvalidSessionFile", message = "The file is larger than #static.MAX_FILE_BYTES / 1024 / 1024# MB, which is more than a conversation should be." )
+		}
+		var data = ""
+		try {
+			data = jsonDeserialize( arguments.text )
+		} catch ( any e ) {
+			throw( type = "BxAgents.InvalidSessionFile", message = "The file is not JSON: #left( listFirst( e.message, char( 10 ) ), 120 )#" )
+		}
+		var problems = problemsWith( data )
+		if ( problems.len() ) {
+			throw( type = "BxAgents.InvalidSessionFile", message = problems[ 1 ] )
+		}
+		return data
+	}
+
+	/**
+	 * @data A document
+	 *
+	 * @return What is wrong with it, empty when it is fine
+	 */
+	array function problemsWith( required any data ) {
+		var d = arguments.data
+		if ( !isStruct( d ) ) {
+			return [ "The file is not a conversation: expected a JSON object." ]
+		}
+		if ( ( d.format ?: "" ) != static.FORMAT ) {
+			return [ "The file is not an exported conversation (its format is [#left( d.format ?: 'missing', 40 )#], not [#static.FORMAT#])." ]
+		}
+		if ( val( d.version ?: 0 ) != static.VERSION ) {
+			return [ "The file is version [#left( d.version ?: 'missing', 20 )#], and this BxAgents reads version #static.VERSION#." ]
+		}
+		if ( !isArray( d.messages ?: "" ) ) {
+			return [ "The file has no messages list." ]
+		}
+		if ( d.messages.len() > static.MAX_MESSAGES ) {
+			return [ "The file has #d.messages.len()# messages, more than the #static.MAX_MESSAGES# a conversation may have." ]
+		}
+		var position = 0
+		for ( var message in d.messages ) {
+			position++
+			if ( !isStruct( message ) ) {
+				return [ "Message #position# is not an object." ]
+			}
+			if ( !static.ROLES.contains( message.role ?: "" ) ) {
+				return [ "Message #position# has the role [#left( message.role ?: 'missing', 30 )#]; the roles are #static.ROLES.toList( ', ' )#." ]
+			}
+			if ( !isSimpleValue( message.content ?: "" ) && !isArray( message.content ?: "" ) && !isStruct( message.content ?: "" ) ) {
+				return [ "Message #position# has content that is not text." ]
+			}
+		}
+		return []
+	}
+
+	/**
+	 * @data A document
+	 *
+	 * @return The conversation as a Markdown transcript
+	 */
+	string function markdown( required struct data ) {
+		var nl = char( 10 )
+		var out = [ "## " & ( len( arguments.data.title ?: "" ) ? arguments.data.title : "Conversation" ), "" ]
+		var details = []
+		if ( len( arguments.data.agent ?: "" ) ) {
+			details.append( "Agent: " & arguments.data.agent )
+		}
+		if ( len( arguments.data.createdAt ?: "" ) ) {
+			details.append( "Started: " & arguments.data.createdAt )
+		}
+		details.append( "Exported: " & arguments.data.exportedAt )
+		out.append( details.toList( " | " ) )
+		out.append( "" )
+		for ( var message in arguments.data.messages ) {
+			var who = ( message.role ?: "" ) == "user" ? "You" : ( ( message.role ?: "" ) == "assistant" ? "Agent" : ucFirst( message.role ?: "" ) )
+			out.append( "**" & who & "**" )
+			out.append( "" )
+			out.append( isSimpleValue( message.content ?: "" ) ? message.content : jsonSerialize( message.content ) )
+			out.append( "" )
+		}
+		return out.toList( nl )
+	}
+
+	/**
+	 * @title A conversation's title
+	 *
+	 * @return A name for the file: lower case letters, digits and hyphens
+	 */
+	string function slug( required string title ) {
+		var s = lCase( reReplace( trim( arguments.title ), "[^a-zA-Z0-9]+", "-", "all" ) )
+		s = reReplace( s, "^-+|-+$", "", "all" )
+		return len( s ) ? left( s, 40 ) : "conversation"
+	}
+
+}

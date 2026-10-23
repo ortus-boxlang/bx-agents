@@ -87,7 +87,7 @@ _bxagents_complete() {
 			notes) flags="--file= --id= --json --projectRoot= --scope= --text= --user=" ;;
 			package) flags="--projectRoot= --version=" ;;
 			serve) flags="--host= --port= --projectRoot=" ;;
-			sessions) flags="--json --name= --projectRoot= --session= --user=" ;;
+			sessions) flags="--file= --json --name= --projectRoot= --session= --user=" ;;
 			skills) flags="--dry-run --json --limit= --projectRoot= --registry=" ;;
 			stats) flags="--by= --days= --projectRoot= --user=" ;;
 			test) flags="--projectRoot=" ;;

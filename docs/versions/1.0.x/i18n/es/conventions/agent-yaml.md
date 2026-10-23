@@ -47,7 +47,7 @@ environments:
 | `subAgents` | lista de strings | Nombres de carpetas hermanas bajo el `subagents/` del proyecto raíz. Ver [subagents/](subagents.md). |
 | `mcpServers` | lista | Servidores MCP - cada entrada es un string de URL, un mapa con `url` y las credenciales que pida el servidor (`token`, `headers`, `timeout`), o un mapa con `command` para un servidor que se ejecuta como programa (`env`, `cwd`, `prefix`, `toolFilter`). Ver [mcp/](mcp.md). |
 | `security` | mapa | Se reenvía tal cual a los ajustes del módulo `bxai` de la app generada; el `SecurityDirector` de bx-ai lo convierte en middleware de guardarraíles. |
-| `memory` | string o mapa | La memoria de conversación del agente. Un string suelto es el tipo (`cache`); un mapa es `{ type, ...config }` y se pasa a `aiMemory()`. |
+| `memory` | string o mapa | La memoria de conversación del agente. Un string suelto es el tipo (`cache`); un mapa es `{ type, ...config }` y se pasa a `aiMemory()`. La memoria usa como clave el nombre del agente, así que una que se guarda en disco se encuentra de nuevo en el siguiente arranque; pon `key` en el mapa para darle tú el nombre. |
 | `checkpointer` | mapa | `{ type: cache\|file\|jdbc, ...config }`. Por defecto `{ type: cache }` si se omite. |
 | `gatewaySession` | mapa | `{ policy, maxQueueDepth, commands }`, todos opcionales. Ver [Agent.bx](agent-bx.md) para los valores; son idénticos. |
 | `agentApi` | mapa | `{ enabled, tokenEnvVar, tokens, profiles }`, todos opcionales. Ver [La ruta de agente siempre activa](agent-bx.md#la-ruta-de-agente-siempre-activa). |
