@@ -71,6 +71,15 @@ class extends="testbox.system.BaseSpec" {
 					return validator.validate( dir, discovery, resolver.resolve( projectRoot = dir ) );
 				}
 
+				it( "warns when a model is written next to a default profile, since the profile is the default model", function() {
+					var both = profiledProject( "defaultProfile: fast" & char( 10 ) );
+					var modelOnly = profiledProject();
+
+					expect( both.errors ).toBeEmpty();
+					expect( both.warnings.filter( w => w.findNoCase( "model line is ignored" ) ) ).toHaveLength( 1 );
+					expect( modelOnly.warnings.filter( w => w.findNoCase( "model line is ignored" ) ) ).toBeEmpty();
+				} );
+
 				it( "accepts a web UI that offers declared profiles, and 'default'", function() {
 					var result = profiledProject( "", { chat : '{ exposes : "webui", path : "/chat", profiles : [ "fast", "default" ] }' } );
 

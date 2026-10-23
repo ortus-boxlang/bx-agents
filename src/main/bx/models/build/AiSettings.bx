@@ -322,8 +322,25 @@ class {
 	}
 
 	/**
+	 * Says so when a top-level model is written next to a defaultProfile: the profile is the default model, so the
+	 * model is not what the agent uses.
+	 *
+	 * @config The project's own (root) resolved config
+	 *
+	 * @return A sentence for a warning, or an empty string when there is nothing to say
+	 */
+	string function ignoredModelNote( required struct config ) {
+		var c = arguments.config
+		if ( !len( c.defaultProfile ?: "" ) || c.defaultProfile == static.DEFAULT_PROFILE || !len( c.model ?: "" ) || len( c.profile ?: "" ) ) {
+			return ""
+		}
+		return "Agent.yaml sets model [#c.model#] and defaultProfile [#c.defaultProfile#]. The default profile is the default model, so the agent uses [#c.defaultProfile#] and the model line is ignored. Remove one of them."
+	}
+
+	/**
 	 * The `aiModel(...)` call for an agent. A profile wins; else a provider/model slug gives the
-	 * call every build has always produced; else the default profile.
+	 * call every build has always produced; else the default profile. The project's own agent is the exception: when
+	 * the app has a defaultProfile, that profile is its model, whatever top-level model is written beside it.
 	 *
 	 * @config The node's resolved config
 	 * @literal A function ( struct ) returning the BoxLang literal for a struct
@@ -335,6 +352,11 @@ class {
 		var c = arguments.config
 		if ( len( c.profile ?: "" ) ) {
 			return 'aiModel( profile : "#arguments.bx( c.profile )#" )'
+		}
+		// the project's own agent, when the app has a default profile: that profile is the default model, so a
+		// top-level model next to it does not decide what the agent uses (see ignoredModelNote)
+		if ( len( c.defaultProfile ?: "" ) && c.defaultProfile != static.DEFAULT_PROFILE ) {
+			return 'aiModel( profile : "#arguments.bx( c.defaultProfile )#" )'
 		}
 		var slug = c.model ?: ""
 		if ( !len( slug ) ) {

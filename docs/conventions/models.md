@@ -51,7 +51,7 @@ A profile is a named combination: a provider, a model, params, options and the n
 | `apiKeyEnv` | The **name** of the variable that holds the key. A key itself is never written in `Agent.yaml`; a profile that has one is refused. |
 | `contextWindow`, `vision` | What the project knows about the model, see below. |
 
-A profile cannot be named `default` or like a provider (`openai`, `claude`, ...), because both are selected by name. `defaultProfile` picks which profile is used when nothing asks for another one. `bxAgents add profile` writes a profile (and `--default` the `defaultProfile`) without touching the rest of the file; see [`add profile`](../cli-reference.md#add-profile).
+A profile cannot be named `default` or like a provider (`openai`, `claude`, ...), because both are selected by name. `defaultProfile` picks which profile is used when nothing asks for another one: it is the default model. If the file also has a top-level `model`, the profile wins and the build and `doctor` warn that the `model` line is ignored. Without a `defaultProfile`, the top-level `provider` and `model` are the default. `bxAgents add profile` writes a profile (and `--default` the `defaultProfile`) without touching the rest of the file; see [`add profile`](../cli-reference.md#add-profile).
 
 ## What the project knows about a model
 
