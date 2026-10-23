@@ -1,5 +1,5 @@
 /**
- * The sessions verb: list, rename, fork and delete the conversations in a project's chat database.
+ * The sessions verb: list, rename, fork, delete, export and import the conversations in a project's chat database.
  */
 class extends="testbox.system.BaseSpec" {
 
@@ -74,6 +74,39 @@ class extends="testbox.system.BaseSpec" {
 				expect( done.exitCode ).toBe( 0 );
 				expect( done.message ).toInclude( "not built" );
 				expect( jsonDeserialize( run_( "list", { json : true } ).message ).map( r => r.id ) ).toBe( [ "c-2" ] );
+			} );
+
+			it( "shows the date of a conversation as year, month and day", function() {
+				if ( !usesDefaultPath ) { return; }
+
+				expect( run_( "list" ).message ).toInclude( dateTimeFormat( now(), "yyyy-MM-dd" ) );
+			} );
+
+			it( "needs a built project to export, because the messages are the agent's", function() {
+				if ( !usesDefaultPath ) { return; }
+
+				var exported = run_( "export", { session : "c-1" } );
+				expect( exported.exitCode ).toBe( 1 );
+				expect( exported.message ).toInclude( "bxAgents build" );
+				expect( function() { run_( "export" ); } ).toThrow( "BxAgents.MissingSession" );
+			} );
+
+			it( "needs a file to import, refuses one that is not there or not a conversation, and a project that is not built", function() {
+				if ( !usesDefaultPath ) { return; }
+
+				expect( function() { run_( "import" ); } ).toThrow( "BxAgents.MissingSessionFile" );
+				expect( run_( "import", { file : "nope.json" } ).message ).toInclude( "There is no file" );
+
+				fileWrite( root & "/other.json", '{"hello":"world"}' );
+				var refused = run_( "import", { file : "other.json" } );
+				expect( refused.exitCode ).toBe( 1 );
+				expect( refused.message ).toInclude( "not an exported conversation" );
+
+				var good = new bxagents.models.store.SessionFile().build( "helper", "Plan", [ { role : "user", content : "hi" } ] );
+				fileWrite( root & "/good.json", jsonSerialize( good ) );
+				var unbuilt = run_( "import", { file : "good.json" } );
+				expect( unbuilt.exitCode ).toBe( 1 );
+				expect( unbuilt.message ).toInclude( "bxAgents build" );
 			} );
 
 			it( "needs a built project to fork, because the messages are the agent's", function() {

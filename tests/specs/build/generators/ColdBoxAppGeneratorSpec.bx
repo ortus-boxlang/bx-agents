@@ -390,6 +390,31 @@ class extends="testbox.system.BaseSpec" {
 				expect( fileRead( result.agentFactory ) ).notToInclude( "memory : aiMemory(" );
 			} );
 
+			it( "gives a declared memory a stable key, so a file memory is found again on the next start", function() {
+				var dir = createTempDirectory( prefix = "bxagents-coldbox-memory-" );
+				tempDirs.append( dir );
+				var buildDir = newBuildDir();
+				fileWrite( dir & "/Agent.yaml", "name: keeper" & char( 10 ) & "model: mock/mock-model" & char( 10 ) & "memory:" & char( 10 ) & "  type: file" & char( 10 ) & "  directoryPath: ./data/memory" & char( 10 ) );
+				fileWrite( dir & "/instructions.md", "Be helpful." );
+
+				var factory = fileRead( generateFor( dir, buildDir ).agentFactory );
+
+				expect( factory ).toInclude( 'aiMemory( memory: "file", key: "keeper", config: { "directoryPath" : "./data/memory" } )' );
+			} );
+
+			it( "lets the project name the memory's key itself", function() {
+				var dir = createTempDirectory( prefix = "bxagents-coldbox-memory-" );
+				tempDirs.append( dir );
+				var buildDir = newBuildDir();
+				fileWrite( dir & "/Agent.yaml", "name: keeper" & char( 10 ) & "model: mock/mock-model" & char( 10 ) & "memory:" & char( 10 ) & "  type: file" & char( 10 ) & "  key: shared-notes" & char( 10 ) );
+				fileWrite( dir & "/instructions.md", "Be helpful." );
+
+				var factory = fileRead( generateFor( dir, buildDir ).agentFactory );
+
+				expect( factory ).toInclude( 'key: "shared-notes"' );
+				expect( factory ).notToInclude( 'key: "keeper"' );
+			} );
+
 			it( "leaves sessions off for a non-browser project, which has no browser to track", function() {
 				var buildDir = newBuildDir();
 				var result = generateFor( fixtures & "/full-project", buildDir );
