@@ -57,14 +57,14 @@ final class MarkdownLines {
 	 * @return the styled lines; the plain wrapped text if rendering fails
 	 */
 	static List<Line> render( String markdown, int width, Theme theme ) {
-		int w = Math.max( 20, width );
+		int				w		= Math.max( 20, width );
 		List<Line>		out		= new ArrayList<>();
 		StringBuilder	text	= new StringBuilder();
 		String[]		lines	= markdown.split( "\n", -1 );
 		String			fence	= "";
 		for ( int i = 0; i < lines.length; i++ ) {
-			String line = lines[ i ];
-			Matcher	f	= FENCE.matcher( line );
+			String	line	= lines[ i ];
+			Matcher	f		= FENCE.matcher( line );
 			if ( fence.isEmpty() && f.find() ) {
 				fence = f.group( 1 );
 			} else if ( !fence.isEmpty() && line.strip().startsWith( fence ) && line.strip().replace( fence.substring( 0, 1 ), "" ).isEmpty() ) {

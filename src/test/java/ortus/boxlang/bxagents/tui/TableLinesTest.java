@@ -66,7 +66,8 @@ class TableLinesTest {
 	@Test
 	@DisplayName( "a small table is drawn with rounded corners, a rule under the header, and one width throughout" )
 	void drawn() {
-		List<String> out = text( TableLines.render( table( "| Language | Where it runs |", "|---|---|", "| BoxLang | the JVM |", "| Java | the JVM |" ), 80, COLOR ) );
+		List<String> out = text(
+		    TableLines.render( table( "| Language | Where it runs |", "|---|---|", "| BoxLang | the JVM |", "| Java | the JVM |" ), 80, COLOR ) );
 		assertThat( out ).containsExactly(
 		    "╭──────────┬───────────────╮",
 		    "│ Language │ Where it runs │",
@@ -107,7 +108,8 @@ class TableLinesTest {
 	@Test
 	@DisplayName( "on a narrow screen cells wrap at spaces, every line stays the same width, and no word is lost" )
 	void wraps() {
-		List<String> out = text( TableLines.render( table( "| Topic | Notes |", "|---|---|", "| Setup | install the module then run the build and chat with it |" ), 34, COLOR ) );
+		List<String> out = text(
+		    TableLines.render( table( "| Topic | Notes |", "|---|---|", "| Setup | install the module then run the build and chat with it |" ), 34, COLOR ) );
 		for ( String line : out ) {
 			assertThat( line.length() ).isEqualTo( out.get( 0 ).length() );
 			assertThat( line.length() ).isAtMost( 34 );
@@ -128,9 +130,9 @@ class TableLinesTest {
 	@Test
 	@DisplayName( "an answer with a table gets text, the table and text again; a table in a code block is left alone" )
 	void insideAnswer() {
-		String		md		= "Before the table.\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\nAfter it.\n\n```\n| x | y |\n|---|---|\n```\n";
-		List<String> out	= text( MarkdownLines.render( md, 60, COLOR ) );
-		String		all		= String.join( "\n", out );
+		String			md	= "Before the table.\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\nAfter it.\n\n```\n| x | y |\n|---|---|\n```\n";
+		List<String>	out	= text( MarkdownLines.render( md, 60, COLOR ) );
+		String			all	= String.join( "\n", out );
 		assertThat( all ).contains( "Before the table." );
 		assertThat( all ).contains( "╭───┬───╮" );
 		assertThat( all ).contains( "│ 1 │ 2 │" );
@@ -145,8 +147,8 @@ class TableLinesTest {
 	@Test
 	@DisplayName( "a table too wide to fit is shown the way the Markdown view draws it, not lost" )
 	void fallback() {
-		String md = "| alpha | beta |\n|---|---|\n| averyveryveryveryverylongwordhere | b |\n";
-		String all = String.join( "\n", text( MarkdownLines.render( md, 24, COLOR ) ) );
+		String	md	= "| alpha | beta |\n|---|---|\n| averyveryveryveryverylongwordhere | b |\n";
+		String	all	= String.join( "\n", text( MarkdownLines.render( md, 24, COLOR ) ) );
 		assertThat( all ).contains( "alpha" );
 		assertThat( all ).doesNotContain( "╭" );
 	}

@@ -30,25 +30,25 @@ import java.util.function.Supplier;
 public final class WidgetContext {
 
 	/** the agent's name */
-	public String						agent		= "";
+	public String					agent		= "";
 	/** the profile or model in use */
-	public String						profile		= "";
+	public String					profile		= "";
 	/** the conversation's name */
-	public String						session		= "";
+	public String					session		= "";
 	/** the size of the context, as the screen's status line says it */
-	public String						ctx			= "";
+	public String					ctx			= "";
 	/** the folder the chat runs in */
-	public Path							folder		= Path.of( System.getProperty( "user.dir", "." ) );
+	public Path						folder		= Path.of( System.getProperty( "user.dir", "." ) );
 	/** the person using the machine */
-	public String						user		= System.getProperty( "user.name", "" );
+	public String					user		= System.getProperty( "user.name", "" );
 	/** the machine's name */
-	public String						host		= hostName();
+	public String					host		= hostName();
 	/** how long the last turn took, in milliseconds; negative before there has been one */
-	public long							lastTurnMs	= -1;
+	public long						lastTurnMs	= -1;
 	/** the current time; replaced in a test */
-	public Supplier<LocalDateTime>		clock		= LocalDateTime::now;
+	public Supplier<LocalDateTime>	clock		= LocalDateTime::now;
 	/** the branch of a folder, with a star when it has changes, or empty; replaced in a test */
-	public Function<Path, String>		git			= GitInfo::describe;
+	public Function<Path, String>	git			= GitInfo::describe;
 
 	private static String hostName() {
 		String h = System.getenv( "HOSTNAME" );

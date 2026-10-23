@@ -30,7 +30,7 @@ import java.util.concurrent.TimeUnit;
  */
 final class GitInfo {
 
-	private static final long					KEEP_MS	= 5000;
+	private static final long KEEP_MS = 5000;
 
 	private record Found( String text, long at ) {
 	}

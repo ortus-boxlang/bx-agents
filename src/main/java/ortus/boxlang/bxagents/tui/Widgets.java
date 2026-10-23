@@ -40,7 +40,8 @@ public final class Widgets {
 		register( AbstractWidget.of( "clock", "the time, to the minute", "14:32", c -> c.clock.get().format( DateTimeFormatter.ofPattern( "HH:mm" ) ) ) );
 		register( AbstractWidget.of( "machine", "the machine's name", "devbox", c -> c.host ) );
 		register( AbstractWidget.of( "git", "the git branch, with * for changes", "main*", c -> c.git.apply( c.folder ) ) );
-		register( AbstractWidget.of( "date", "today's date", "Fri 23 Oct", c -> c.clock.get().format( DateTimeFormatter.ofPattern( "EEE d MMM", Locale.ENGLISH ) ) ) );
+		register( AbstractWidget.of( "date", "today's date", "Fri 23 Oct",
+		    c -> c.clock.get().format( DateTimeFormatter.ofPattern( "EEE d MMM", Locale.ENGLISH ) ) ) );
 		register( AbstractWidget.of( "session", "the conversation's name", "billing questions", c -> c.session ) );
 		register( AbstractWidget.of( "elapsed", "how long the last turn took", "last turn 4.2s",
 		    c -> c.lastTurnMs < 0 ? "" : String.format( Locale.ROOT, "last turn %.1fs", c.lastTurnMs / 1000.0 ) ) );

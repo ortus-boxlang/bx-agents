@@ -31,7 +31,7 @@ import org.junit.jupiter.api.Test;
 @DisplayName( "Prompt styles" )
 class PromptStylesTest {
 
-	private static final Theme		COLOR		= new Theme( "truecolor" );
+	private static final Theme			COLOR		= new Theme( "truecolor" );
 
 	/** the styles that ship; another test registers one of its own, so the registry is not the list to loop over */
 	private static final List<String>	BUILT_IN	= List.of( "bars", "bars-hints", "rule", "box", "panel" );
@@ -153,8 +153,9 @@ class PromptStylesTest {
 		for ( int i = 0; i < rows.size() - 1; i++ ) {
 			assertThat( rows.get( i ).plainText() ).startsWith( "▌" );
 		}
-		Theme		none	= new Theme( "none" );
-		assertThat( text( PromptStyles.get( "panel" ).rows( state( false, 76 ), none ) ) ).isEqualTo( text( PromptStyles.get( "rule" ).rows( state( false, 76 ), none ) ) );
+		Theme none = new Theme( "none" );
+		assertThat( text( PromptStyles.get( "panel" ).rows( state( false, 76 ), none ) ) )
+		    .isEqualTo( text( PromptStyles.get( "rule" ).rows( state( false, 76 ), none ) ) );
 	}
 
 	@Test
@@ -191,7 +192,8 @@ class PromptStylesTest {
 	@Test
 	@DisplayName( "PromptLook: reads the style and the widgets, drops names it does not know, and an empty list stays empty" )
 	void lookFromYaml() {
-		PromptLook look = PromptLook.of( java.util.Map.of( "prompt", "Box", "widgets", java.util.Map.of( "top", List.of( "git", "nope", "git", "clock" ), "bottom", List.of() ) ) );
+		PromptLook look = PromptLook
+		    .of( java.util.Map.of( "prompt", "Box", "widgets", java.util.Map.of( "top", List.of( "git", "nope", "git", "clock" ), "bottom", List.of() ) ) );
 		assertThat( look.style() ).isEqualTo( "box" );
 		assertThat( look.top() ).containsExactly( "git", "clock" ).inOrder();
 		assertThat( look.bottom() ).isEmpty();

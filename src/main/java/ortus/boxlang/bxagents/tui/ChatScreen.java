@@ -216,8 +216,8 @@ public final class ChatScreen implements AutoCloseable {
 	 * It shows from the next time the box is drawn; an empty text removes it.
 	 */
 	public void setStatus( String text ) {
-		this.status = text == null ? "" : text;
-		facts.ctx = status;
+		this.status	= text == null ? "" : text;
+		facts.ctx	= status;
 	}
 
 	// ----------------------------------------------------------------------------------
@@ -237,8 +237,8 @@ public final class ChatScreen implements AutoCloseable {
 	 *         (maps with name and description) and {@code widgets} (name, description and example)
 	 */
 	public Map<String, Object> promptLook() {
-		Map<String, Object>	m		= new LinkedHashMap<>();
-		PromptLook			now		= look;
+		Map<String, Object>	m	= new LinkedHashMap<>();
+		PromptLook			now	= look;
 		m.put( "prompt", now.style() );
 		m.put( "top", now.top() );
 		m.put( "bottom", now.bottom() );
@@ -647,8 +647,8 @@ public final class ChatScreen implements AutoCloseable {
 
 	/** Stops drawing, prints whatever the agent said that is still on screen, and returns the area to the message box. */
 	public void endTurn() {
-		turnOver = true;
-		facts.lastTurnMs = System.currentTimeMillis() - turnStarted;
+		turnOver			= true;
+		facts.lastTurnMs	= System.currentTimeMillis() - turnStarted;
 		try {
 			if ( turnThread != null ) {
 				turnThread.join( 3000 );
@@ -806,8 +806,8 @@ public final class ChatScreen implements AutoCloseable {
 
 	/** the prompt, drawn in the chosen style: from its top edge to its hint line */
 	private List<Row> promptRows( boolean working, String label, String hint ) {
-		int			first	= Math.max( 0, composer.rowCount() - MAX_COMPOSER );
-		List<String> lines	= new ArrayList<>();
+		int				first	= Math.max( 0, composer.rowCount() - MAX_COMPOSER );
+		List<String>	lines	= new ArrayList<>();
 		for ( int i = first; i < composer.rowCount(); i++ ) {
 			lines.add( composer.line( i ) );
 		}

@@ -39,15 +39,15 @@ public final class PanelStyle extends AbstractPromptStyle {
 		if ( !theme.hasPanel() ) {
 			return fallback.rows( state, theme );
 		}
-		Style		tone	= theme.onPanel( tone( state, theme ) );
-		Style		muted	= theme.onPanel( theme.muted );
-		Style		plain	= theme.onPanel( theme.plain );
-		int			width	= state.width();
-		List<Row>	rows	= new ArrayList<>();
+		Style			tone	= theme.onPanel( tone( state, theme ) );
+		Style			muted	= theme.onPanel( theme.muted );
+		Style			plain	= theme.onPanel( theme.plain );
+		int				width	= state.width();
+		List<Row>		rows	= new ArrayList<>();
 
-		String		lead	= state.working() ? state.label() : "";
-		List<String> shown	= fit( state.top(), width - 6 - lead.length(), " · " );
-		String		head	= " " + String.join( " · ", lead.isEmpty() ? shown : prepend( lead, shown ) );
+		String			lead	= state.working() ? state.label() : "";
+		List<String>	shown	= fit( state.top(), width - 6 - lead.length(), " · " );
+		String			head	= " " + String.join( " · ", lead.isEmpty() ? shown : prepend( lead, shown ) );
 		rows.add( Row.of().add( "▌", tone ).add( pad( head, width - 1 ), muted ) );
 		for ( int i = 0; i < state.lines().size(); i++ ) {
 			Row row = Row.of().add( "▌", tone );

@@ -31,10 +31,10 @@ import dev.tamboui.style.Style;
 public abstract class AbstractPromptStyle implements PromptStyle {
 
 	/** the text before the first line of the message box */
-	protected static final String MARK = "❯";
+	protected static final String	MARK	= "❯";
 
-	private final String	name;
-	private final String	description;
+	private final String			name;
+	private final String			description;
 
 	protected AbstractPromptStyle( String name, String description ) {
 		this.name			= name;
@@ -101,11 +101,11 @@ public abstract class AbstractPromptStyle implements PromptStyle {
 	 * @param close what ends it, such as {@code ""} or {@code "╮"}
 	 */
 	protected Row topBar( PromptState state, Theme theme, String open, String close ) {
-		Style		tone	= tone( state, theme );
-		int			room	= state.width() - open.length() - close.length() - state.label().length() - 5;
-		List<String> shown	= fit( state.top(), room - 3, " · " );
-		Row			row		= Row.of().add( open, tone ).add( state.label(), tone.bold() );
-		int			used	= open.length() + state.label().length() + 1 + close.length();
+		Style			tone	= tone( state, theme );
+		int				room	= state.width() - open.length() - close.length() - state.label().length() - 5;
+		List<String>	shown	= fit( state.top(), room - 3, " · " );
+		Row				row		= Row.of().add( open, tone ).add( state.label(), tone.bold() );
+		int				used	= open.length() + state.label().length() + 1 + close.length();
 		if ( !shown.isEmpty() ) {
 			String joined = String.join( " · ", shown );
 			row.add( " · ", theme.muted ).add( joined, theme.muted );
@@ -124,9 +124,9 @@ public abstract class AbstractPromptStyle implements PromptStyle {
 	 * too narrow the last widgets drop off.
 	 */
 	protected Row hintRow( PromptState state, Theme theme ) {
-		String		left	= " " + state.hint();
-		List<String> shown	= new ArrayList<>( state.bottom() );
-		String		rec		= state.recording() ? "● rec" : "";
+		String			left	= " " + state.hint();
+		List<String>	shown	= new ArrayList<>( state.bottom() );
+		String			rec		= state.recording() ? "● rec" : "";
 		while ( !shown.isEmpty() && left.length() + 2 + rightLength( shown, rec ) > state.width() ) {
 			shown.remove( shown.size() - 1 );
 		}
@@ -146,17 +146,17 @@ public abstract class AbstractPromptStyle implements PromptStyle {
 	 * @param close what ends it, such as {@code "──"} or {@code "─╯"}
 	 */
 	protected Row hintBar( PromptState state, Theme theme, String open, String close ) {
-		Style		tone	= tone( state, theme );
-		String		left	= " " + state.hint() + " ";
-		String		rec		= state.recording() ? "● rec" : "";
-		List<String> shown	= new ArrayList<>( state.bottom() );
+		Style			tone	= tone( state, theme );
+		String			left	= " " + state.hint() + " ";
+		String			rec		= state.recording() ? "● rec" : "";
+		List<String>	shown	= new ArrayList<>( state.bottom() );
 		while ( !shown.isEmpty() && open.length() + left.length() + rightLength( shown, rec ) + 3 + close.length() > state.width() ) {
 			shown.remove( shown.size() - 1 );
 		}
-		String widgets = String.join( " · ", shown );
-		Row row = Row.of().add( open, tone ).add( left, theme.muted );
-		int	used	= open.length() + left.length() + close.length();
-		boolean right	= !widgets.isEmpty() || !rec.isEmpty();
+		String	widgets	= String.join( " · ", shown );
+		Row		row		= Row.of().add( open, tone ).add( left, theme.muted );
+		int		used	= open.length() + left.length() + close.length();
+		boolean	right	= !widgets.isEmpty() || !rec.isEmpty();
 		if ( right ) {
 			used += 2 + rightLength( shown, rec );
 		}

@@ -33,9 +33,9 @@ import java.util.Map;
 public record PromptLook( String style, List<String> top, List<String> bottom ) {
 
 	/** the widgets in the top bar when nothing says otherwise */
-	public static final List<String>	DEFAULT_TOP		= List.of( "agent", "folder", "user", "clock" );
+	public static final List<String> DEFAULT_TOP = List.of( "agent", "folder", "user", "clock" );
 	/** the widgets at the bottom when nothing says otherwise */
-	public static final List<String>	DEFAULT_BOTTOM	= List.of( "ctx", "profile" );
+	public static final List<String> DEFAULT_BOTTOM = List.of( "ctx", "profile" );
 
 	public PromptLook {
 		top		= List.copyOf( top );
@@ -53,15 +53,16 @@ public record PromptLook( String style, List<String> top, List<String> bottom ) 
 	 * @return the look, with the defaults for what is missing and unknown names dropped
 	 */
 	public static PromptLook of( Map<?, ?> tui ) {
-		PromptLook	base	= defaults();
+		PromptLook base = defaults();
 		if ( tui == null ) {
 			return base;
 		}
-		Object		prompt	= tui.get( "prompt" );
-		String		style	= prompt != null && PromptStyles.get( String.valueOf( prompt ) ) != null ? String.valueOf( prompt ).trim().toLowerCase() : base.style;
-		Object		widgets	= tui.get( "widgets" );
-		List<String> top	= base.top;
-		List<String> bottom	= base.bottom;
+		Object			prompt	= tui.get( "prompt" );
+		String			style	= prompt != null && PromptStyles.get( String.valueOf( prompt ) ) != null ? String.valueOf( prompt ).trim().toLowerCase()
+		    : base.style;
+		Object			widgets	= tui.get( "widgets" );
+		List<String>	top		= base.top;
+		List<String>	bottom	= base.bottom;
 		if ( widgets instanceof Map<?, ?> w ) {
 			top		= w.containsKey( "top" ) ? known( w.get( "top" ) ) : top;
 			bottom	= w.containsKey( "bottom" ) ? known( w.get( "bottom" ) ) : bottom;

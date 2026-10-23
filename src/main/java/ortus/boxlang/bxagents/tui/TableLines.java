@@ -60,7 +60,7 @@ final class TableLines {
 		if ( header == null || next == null || !header.contains( "|" ) || !DELIMITER.matcher( next ).matches() || !next.contains( "-" ) ) {
 			return false;
 		}
-		return cells( header ).size() == cells( next ).size() && !( cells( next ).size() == 1 && !next.contains( "|" ) );
+		return cells( header ).size() == cells( next ).size() && ! ( cells( next ).size() == 1 && !next.contains( "|" ) );
 	}
 
 	/**
@@ -71,14 +71,14 @@ final class TableLines {
 	 * @return the table as styled lines, or null when it cannot be made to fit in {@code width}
 	 */
 	static List<Line> render( List<String> lines, int width, Theme theme ) {
-		List<List<String>>	rows	= new ArrayList<>();
+		List<List<String>> rows = new ArrayList<>();
 		for ( int i = 0; i < lines.size(); i++ ) {
 			if ( i != 1 ) {
 				rows.add( cells( lines.get( i ) ) );
 			}
 		}
-		int			n		= cells( lines.get( 1 ) ).size();
-		Align[]		align	= alignments( cells( lines.get( 1 ) ) );
+		int		n		= cells( lines.get( 1 ) ).size();
+		Align[]	align	= alignments( cells( lines.get( 1 ) ) );
 		for ( List<String> r : rows ) {
 			while ( r.size() < n ) {
 				r.add( "" );
@@ -99,29 +99,29 @@ final class TableLines {
 			want[ c ]	= Math.max( 1, want[ c ] );
 			least[ c ]	= Math.max( 1, Math.min( least[ c ], want[ c ] ) );
 		}
-		int	overhead	= 3 * n + 1;
-		int	room		= width - overhead;
-		int[] w			= want.clone();
+		int		overhead	= 3 * n + 1;
+		int		room		= width - overhead;
+		int[]	w			= want.clone();
 		if ( sum( want ) > room ) {
 			if ( sum( least ) > room ) {
 				return null;
 			}
 			w = least.clone();
-			int spare = room - sum( least );
-			int grow = 0;
+			int	spare	= room - sum( least );
+			int	grow	= 0;
 			for ( int c = 0; c < n; c++ ) {
 				grow += want[ c ] - least[ c ];
 			}
 			for ( int c = 0; c < n && grow > 0; c++ ) {
-				int add = (int) Math.floor( spare * ( ( want[ c ] - least[ c ] ) / (double) grow ) );
+				int add = ( int ) Math.floor( spare * ( ( want[ c ] - least[ c ] ) / ( double ) grow ) );
 				w[ c ] += add;
 			}
 			// the rounding leaves a few cells; give them to the columns that still want more
 			int left = room - sum( w );
 			for ( int c = 0; left > 0 && c < n; c++ ) {
 				int add = Math.min( left, want[ c ] - w[ c ] );
-				w[ c ] += add;
-				left -= add;
+				w[ c ]	+= add;
+				left	-= add;
 			}
 		}
 
@@ -171,8 +171,8 @@ final class TableLines {
 				for ( Piece p : pieces ) {
 					len += p.text.length();
 				}
-				int			gap		= w[ c ] - len;
-				int			before	= align[ c ] == Align.RIGHT ? gap : align[ c ] == Align.CENTER ? gap / 2 : 0;
+				int	gap		= w[ c ] - len;
+				int	before	= align[ c ] == Align.RIGHT ? gap : align[ c ] == Align.CENTER ? gap / 2 : 0;
 				row.add( " " + " ".repeat( before ), theme.plain );
 				for ( Piece p : pieces ) {
 					row.add( p.text, p.style );
@@ -295,7 +295,8 @@ final class TableLines {
 
 	/** the cell as it will read: without the marks that make code, bold and italics */
 	private static String visible( String cell ) {
-		return INLINE.matcher( cell ).replaceAll( m -> Matcher.quoteReplacement( m.group( 1 ) != null ? m.group( 1 ) : m.group( 2 ) != null ? m.group( 2 ) : m.group( 3 ) ) );
+		return INLINE.matcher( cell )
+		    .replaceAll( m -> Matcher.quoteReplacement( m.group( 1 ) != null ? m.group( 1 ) : m.group( 2 ) != null ? m.group( 2 ) : m.group( 3 ) ) );
 	}
 
 	private static int longestWord( String text ) {

@@ -52,7 +52,8 @@ class WidgetsTest {
 	@Test
 	@DisplayName( "the registry lists the widgets and every one describes itself" )
 	void registry() {
-		assertThat( Widgets.names() ).containsExactly( "agent", "profile", "folder", "user", "clock", "machine", "git", "date", "session", "elapsed", "ctx" ).inOrder();
+		assertThat( Widgets.names() ).containsExactly( "agent", "profile", "folder", "user", "clock", "machine", "git", "date", "session", "elapsed", "ctx" )
+		    .inOrder();
 		for ( Widget w : Widgets.all() ) {
 			assertThat( w.description() ).isNotEmpty();
 			assertThat( w.example() ).isNotEmpty();
