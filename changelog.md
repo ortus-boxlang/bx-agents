@@ -19,10 +19,20 @@ or package as a portable `.bxa`.
 
 ### Added
 
+#### Markdown and syntax highlighting
+
+- The web UI renders answers as full Markdown (tables, quotes, strikethrough) with
+  `marked`, sanitized by DOMPurify, and colours code with `highlight.js`; all three are
+  inlined in the page, so it works offline. Raw HTML in an answer is escaped, images are not loaded.
+- The terminal colours code blocks too, and knows BoxLang, CFML, diff, TOML and Markdown on top of
+  TamboUI's built-in languages. The web UI and the terminal read the same BoxLang and CFML word lists.
+- Exported HTML (`/export`) is rendered by the bundled `bx-markdown` module, with raw HTML in the
+  conversation escaped first.
+
 #### Self-contained install
 
 - `install-bx-module bx-agents` is the only install. The module zip bundles `bx-ai`,
-  `bx-sqlite`, `bx-ftp`, `bx-mail` and `bx-yaml` as nested BoxLang modules
+  `bx-sqlite`, `bx-ftp`, `bx-mail`, `bx-yaml` and `bx-markdown` as nested BoxLang modules
   (BoxLang 1.17+), and a `lib/` with ColdBox, `qb`, `cbsecurity`, `cbauth` and
   `cbmailservices` that `build` copies into every generated app. A project's own
   `lib/` folder adds to or overrides them.

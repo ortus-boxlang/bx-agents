@@ -47,7 +47,7 @@ final class MarkdownLines {
 	static List<Line> render( String markdown, int width ) {
 		int w = Math.max( 20, width );
 		try {
-			MarkdownView	view	= MarkdownView.builder().source( markdown ).build();
+			MarkdownView	view	= MarkdownView.builder().source( markdown ).syntaxHighlighter( Grammars.highlighter() ).build();
 			int				h		= view.computeHeight( w );
 			if ( h <= 0 ) {
 				return List.of();

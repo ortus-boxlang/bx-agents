@@ -28,6 +28,17 @@ __FAVICON__
 		--bubble-assistant-fg: rgb(30, 30, 30);
 		--bubble-error: rgb(220, 60, 60);
 
+		/* Code colours */
+		--tok-comment: rgb(106, 115, 125);
+		--tok-keyword: rgb(167, 29, 93);
+		--tok-string: rgb(24, 128, 56);
+		--tok-number: rgb(176, 96, 0);
+		--tok-type: rgb(0, 102, 153);
+		--tok-function: rgb(110, 60, 190);
+		--tok-tag: rgb(0, 112, 112);
+		--tok-meta: rgb(120, 120, 130);
+		--tok-removed: rgb(200, 40, 40);
+
 		/* Reasoning + tools */
 		--reasoning-fg: rgb(120, 90, 180);
 		--reasoning-bg: rgb(246, 243, 252);
@@ -55,6 +66,15 @@ __FAVICON__
 		--reasoning-bg: rgb(38, 34, 48);
 		--tool-fg: rgb(120, 200, 165);
 		--tool-bg: rgb(28, 42, 37);
+		--tok-comment: rgb(130, 140, 150);
+		--tok-keyword: rgb(220, 120, 170);
+		--tok-string: rgb(130, 200, 120);
+		--tok-number: rgb(230, 160, 90);
+		--tok-type: rgb(100, 180, 220);
+		--tok-function: rgb(180, 150, 240);
+		--tok-tag: rgb(100, 200, 200);
+		--tok-meta: rgb(150, 150, 160);
+		--tok-removed: rgb(240, 110, 110);
 	}
 
 	/* Generated from the `theme` block in gateways/*.bx - overrides the defaults above. */
@@ -310,7 +330,7 @@ __THEME_TOKENS__
 	}
 	.turn:hover .copy, .turn .copy:focus { opacity: 1; }
 
-	/* Markdown produced by renderMarkdown() - a small, escape-first subset */
+	/* Markdown produced by renderMarkdown() - marked, sanitized by DOMPurify */
 	.bubble.assistant p { margin: 0 0 0.6rem; }
 	.bubble.assistant p:last-child { margin-bottom: 0; }
 	.bubble.assistant ul, .bubble.assistant ol { margin: 0 0 0.6rem; padding-left: 1.3rem; }
@@ -340,6 +360,24 @@ __THEME_TOKENS__
 		font-size: 0.85em;
 	}
 	.bubble.assistant a { color: var(--accent); }
+	.bubble.assistant table { border-collapse: collapse; margin: 0 0 0.6rem; display: block; overflow-x: auto; max-width: 100%; }
+	.bubble.assistant th, .bubble.assistant td { border: 1px solid var(--border); padding: 0.25rem 0.6rem; text-align: left; }
+	.bubble.assistant th { background: var(--surface); }
+	.bubble.assistant blockquote { margin: 0 0 0.6rem; padding-left: 0.8rem; border-left: 3px solid var(--border); color: var(--muted); }
+	.bubble.assistant hr { border: 0; border-top: 1px solid var(--border); margin: 0.6rem 0; }
+	.bubble.assistant del { opacity: 0.7; }
+	/* highlight.js tokens */
+	.bubble.assistant .hljs-comment, .bubble.assistant .hljs-quote { color: var(--tok-comment); font-style: italic; }
+	.bubble.assistant .hljs-keyword, .bubble.assistant .hljs-selector-tag, .bubble.assistant .hljs-doctag { color: var(--tok-keyword); }
+	.bubble.assistant .hljs-string, .bubble.assistant .hljs-regexp, .bubble.assistant .hljs-addition { color: var(--tok-string); }
+	.bubble.assistant .hljs-number, .bubble.assistant .hljs-literal, .bubble.assistant .hljs-symbol, .bubble.assistant .hljs-bullet { color: var(--tok-number); }
+	.bubble.assistant .hljs-type, .bubble.assistant .hljs-built_in, .bubble.assistant .hljs-class .hljs-title, .bubble.assistant .hljs-title.class_ { color: var(--tok-type); }
+	.bubble.assistant .hljs-title, .bubble.assistant .hljs-title.function_, .bubble.assistant .hljs-section { color: var(--tok-function); }
+	.bubble.assistant .hljs-attr, .bubble.assistant .hljs-attribute, .bubble.assistant .hljs-name, .bubble.assistant .hljs-tag, .bubble.assistant .hljs-variable, .bubble.assistant .hljs-template-variable { color: var(--tok-tag); }
+	.bubble.assistant .hljs-meta { color: var(--tok-meta); }
+	.bubble.assistant .hljs-deletion { color: var(--tok-removed); }
+	.bubble.assistant .hljs-emphasis { font-style: italic; }
+	.bubble.assistant .hljs-strong { font-weight: bold; }
 	.bubble.command {
 		align-self: flex-start;
 		max-width: 100%;
@@ -671,6 +709,7 @@ __CUSTOM_CSS__
 		<p class="notes-foot" id="notesFoot" role="status"></p>
 	</dialog>
 
+__MARKDOWN_SCRIPTS__
 <script>
 (function () {
 	"use strict";
@@ -1187,80 +1226,47 @@ __CUSTOM_CSS__
 	}
 
 	/**
-	 * A deliberately small markdown subset, applied ESCAPE-FIRST: the model's
-	 * text is HTML-escaped before a single tag is introduced, so no output of
-	 * the model can ever become live markup. Only the constructs below are then
-	 * re-introduced, and nothing accepts arbitrary attributes.
+	 * Markdown to HTML with marked, then through DOMPurify. The model's own HTML
+	 * is escaped, never parsed (an answer can echo anything it read), images are
+	 * not loaded (a remote one would tell its server the page was opened), and
+	 * code blocks are coloured by highlight.js, which escapes what it colours.
 	 */
+	var markdownReady = typeof marked !== "undefined" && typeof DOMPurify !== "undefined";
+
+	function escapeHtml( text ) {
+		return String( text ).replace( /&/g, "&amp;" ).replace( /</g, "&lt;" ).replace( />/g, "&gt;" ).replace( /"/g, "&quot;" );
+	}
+
+	if ( markdownReady ) {
+		marked.use( {
+			gfm: true,
+			renderer: {
+				html: function ( token ) {
+					return escapeHtml( token.text );
+				},
+				code: function ( token ) {
+					var lang = ( token.lang || "" ).trim().split( /\s+/ )[ 0 ].toLowerCase();
+					var known = typeof hljs !== "undefined" && lang && hljs.getLanguage( lang );
+					var body = known ? hljs.highlight( token.text, { language: lang, ignoreIllegals: true } ).value : escapeHtml( token.text );
+					return '<pre><code class="hljs' + ( known ? " language-" + escapeHtml( lang ) : "" ) + '">' + body + "</code></pre>";
+				}
+			}
+		} );
+		DOMPurify.addHook( "afterSanitizeAttributes", function ( node ) {
+			if ( node.tagName === "A" && node.getAttribute( "href" ) ) {
+				node.setAttribute( "target", "_blank" );
+				node.setAttribute( "rel", "noopener noreferrer" );
+			}
+		} );
+	}
+
 	function renderMarkdown( text ) {
-		var slots = [];
-
-		function stash( html ) {
-			slots.push( html );
-			return "&" + ( slots.length - 1 ) + "&";
+		if ( !markdownReady ) {
+			return "<p>" + escapeHtml( text ).replace( /\n/g, "<br>" ) + "</p>";
 		}
-
-		var out = text
-			.replace( /&/g, "&amp;" )
-			.replace( /</g, "&lt;" )
-			.replace( />/g, "&gt;" );
-
-		// Fenced code first, so nothing inside it is treated as markdown
-		out = out.replace( /```[ \t]*([\w+-]*)\n([\s\S]*?)(?:```|$)/g, function ( _m, _lang, body ) {
-			return stash( "<pre><code>" + body.replace( /\n$/, "" ) + "</code></pre>" );
-		} );
-		out = out.replace( /`([^`\n]+)`/g, function ( _m, body ) {
-			return stash( "<code>" + body + "</code>" );
-		} );
-
-		// Links: only http(s) and mailto, never javascript:
-		out = out.replace( /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)/g, function ( _m, label, href ) {
-			return stash( '<a href="' + href + '" target="_blank" rel="noopener noreferrer">' + label + "</a>" );
-		} );
-
-		out = out.replace( /\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>" );
-		out = out.replace( /(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>" );
-
-		// Block structure, line by line
-		var lines = out.split( "\n" );
-		var html = "";
-		var listType = null;
-
-		function closeList() {
-			if ( listType ) {
-				html += "</" + listType + ">";
-				listType = null;
-			}
-		}
-
-		for ( var i = 0; i < lines.length; i++ ) {
-			var line = lines[ i ];
-			var heading = line.match( /^(##?#?)\s+(.*)$/ );
-			var bullet = line.match( /^[-*+]\s+(.*)$/ );
-			var numbered = line.match( /^\d+\.\s+(.*)$/ );
-
-			if ( heading ) {
-				closeList();
-				var level = heading[ 1 ].length;
-				html += "<h" + level + ">" + heading[ 2 ] + "</h" + level + ">";
-			} else if ( bullet ) {
-				if ( listType !== "ul" ) { closeList(); html += "<ul>"; listType = "ul"; }
-				html += "<li>" + bullet[ 1 ] + "</li>";
-			} else if ( numbered ) {
-				if ( listType !== "ol" ) { closeList(); html += "<ol>"; listType = "ol"; }
-				html += "<li>" + numbered[ 1 ] + "</li>";
-			} else if ( !line.trim().length ) {
-				closeList();
-			} else {
-				closeList();
-				html += "<p>" + line + "</p>";
-			}
-		}
-		closeList();
-
-		// Put the stashed blocks back, now that no further rules will touch them
-		return html.replace( /&(\d+)&/g, function ( _m, index ) {
-			return slots[ Number( index ) ];
+		return DOMPurify.sanitize( marked.parse( text, { async: false } ), {
+			FORBID_TAGS: [ "img", "style", "form", "input", "button", "iframe", "svg", "math" ],
+			ADD_ATTR: [ "target" ]
 		} );
 	}
 
