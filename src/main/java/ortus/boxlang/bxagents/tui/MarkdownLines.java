@@ -19,6 +19,8 @@ package ortus.boxlang.bxagents.tui;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import dev.tamboui.buffer.Buffer;
 import dev.tamboui.buffer.Cell;
@@ -35,17 +37,74 @@ import dev.tamboui.text.Span;
  */
 final class MarkdownLines {
 
+	private static final Pattern FENCE = Pattern.compile( "^ {0,3}(```+|~~~+)" );
+
 	private MarkdownLines() {
 	}
 
+	/** @return the lines for a terminal whose colours are found from the environment */
+	static List<Line> render( String markdown, int width ) {
+		return render( markdown, width, Theme.detect() );
+	}
+
 	/**
+	 * Tables are cut out and drawn with borders ({@link TableLines}); everything around them is TamboUI's.
+	 *
 	 * @param markdown the text
 	 * @param width    columns the lines may use
+	 * @param theme    the palette, for the table borders
 	 *
 	 * @return the styled lines; the plain wrapped text if rendering fails
 	 */
-	static List<Line> render( String markdown, int width ) {
-		int w = Math.max( 20, width );
+	static List<Line> render( String markdown, int width, Theme theme ) {
+		int				w		= Math.max( 20, width );
+		List<Line>		out		= new ArrayList<>();
+		StringBuilder	text	= new StringBuilder();
+		String[]		lines	= markdown.split( "\n", -1 );
+		String			fence	= "";
+		for ( int i = 0; i < lines.length; i++ ) {
+			String	line	= lines[ i ];
+			Matcher	f		= FENCE.matcher( line );
+			if ( fence.isEmpty() && f.find() ) {
+				fence = f.group( 1 );
+			} else if ( !fence.isEmpty() && line.strip().startsWith( fence ) && line.strip().replace( fence.substring( 0, 1 ), "" ).isEmpty() ) {
+				fence = "";
+			} else if ( fence.isEmpty() && i + 1 < lines.length && TableLines.starts( line, lines[ i + 1 ] ) ) {
+				int end = i + 2;
+				while ( end < lines.length && !lines[ end ].isBlank() && lines[ end ].contains( "|" ) ) {
+					end++;
+				}
+				List<Line> table = TableLines.render( java.util.Arrays.asList( lines ).subList( i, end ), w, theme );
+				if ( table != null ) {
+					flush( text, w, out );
+					if ( !out.isEmpty() ) {
+						out.add( Line.from( "" ) );
+					}
+					out.addAll( table );
+					out.add( Line.from( "" ) );
+					text.setLength( 0 );
+					i = end - 1;
+					continue;
+				}
+			}
+			text.append( line ).append( '\n' );
+		}
+		flush( text, w, out );
+		while ( !out.isEmpty() && out.get( out.size() - 1 ).rawContent().isBlank() ) {
+			out.remove( out.size() - 1 );
+		}
+		return out;
+	}
+
+	private static void flush( StringBuilder text, int w, List<Line> out ) {
+		if ( !text.toString().isBlank() ) {
+			out.addAll( plain( text.toString().strip(), w ) );
+		}
+		text.setLength( 0 );
+	}
+
+	/** TamboUI's rendering of Markdown that holds no table */
+	private static List<Line> plain( String markdown, int w ) {
 		try {
 			MarkdownView	view	= MarkdownView.builder().source( markdown ).syntaxHighlighter( Grammars.highlighter() ).build();
 			int				h		= view.computeHeight( w );

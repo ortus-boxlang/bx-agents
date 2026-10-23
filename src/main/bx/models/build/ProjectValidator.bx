@@ -1221,13 +1221,16 @@ class {
 	private void function validateAiSettings( required struct config, required array errors, required string label, array profileNames = [], boolean isRoot = true ) {
 		if ( !arguments.isRoot ) {
 			// bx-ai's settings are global to the app, so these belong to the root Agent.yaml
-			for ( var key in [ "params", "options", "providers", "profiles", "defaultProfile", "embeddings", "speech", "transcription", "image", "usage" ] ) {
+			for ( var key in [ "params", "options", "providers", "profiles", "defaultProfile", "embeddings", "speech", "transcription", "image", "usage", "tui" ] ) {
 				if ( arguments.config.keyExists( key ) ) {
 					arguments.errors.append( "#arguments.label#: '#key#' applies to the whole app, so it belongs in the project's own Agent.yaml. A subagent can set model or profile" )
 				}
 			}
 		}
 		arguments.errors.append( new "models.build.AiSettings@bxagents"().problems( arguments.config, arguments.label, arguments.profileNames ), true )
+		if ( arguments.config.keyExists( "tui" ) ) {
+			arguments.errors.append( new "models.tui.TuiLook@bxagents"().problems( arguments.config.tui, arguments.label ), true )
+		}
 		if ( arguments.config.keyExists( "usage" ) && !isBoolean( arguments.config.usage ) ) {
 			arguments.errors.append( "#arguments.label#: 'usage' must be true or false (it turns on the record of tokens each model call used, for `bxAgents stats`)" )
 		}

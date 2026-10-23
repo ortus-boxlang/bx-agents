@@ -166,6 +166,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'no-tui'; Value = $false; Choices = @(); Dir = $false }
 			@{ Name = 'no-wizard'; Value = $false; Choices = @(); Dir = $false }
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
+			@{ Name = 'prompt'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'region'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'registry'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'remote-path'; Value = $true; Choices = @(); Dir = $false }
@@ -177,6 +178,8 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'timeout'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'user'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'web-auth'; Value = $true; Choices = @('open', 'key'); Dir = $false }
+			@{ Name = 'widgets'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'widgets-bottom'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'with'; Value = $true; Choices = @('time', 'fetch', 'search', 'browse', 'files', 'media'); Dir = $false }
 			@{ Name = 'wizard'; Value = $false; Choices = @(); Dir = $false }
 			@{ Name = 'yes'; Value = $false; Choices = @(); Dir = $false }

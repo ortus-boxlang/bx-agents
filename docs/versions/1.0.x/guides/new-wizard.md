@@ -32,6 +32,7 @@ It is a full-screen UI in the teal of the BxAgents logo. Arrow keys (or `j`/`k`)
 | Channels | Web chat, HTTP API, Telegram, Slack, Discord, WhatsApp, Teams, SMS, GitHub, Email, Signal | A `gateways/*.bx` file and the stubs it needs |
 | Web access | Open, a shared key, or named users with passwords | `apiKeyEnvVar` or `users` on the web chat entry |
 | Guard | Flag, block or ignore suspicious input | A [`security`](../conventions/agent-yaml.md#settings) block |
+| Look and feel | The terminal chat's prompt style (bars, bars-hints, rule, box or panel), then the widgets for the top bar and for the bottom (agent, profile, folder, user, clock, machine, git, date, session, elapsed, context size) | A [`tui:`](../conventions/agent-yaml.md#settings) block, written only when you change something |
 | Deploy | Docker, DigitalOcean, SSH, SFTP, FTP, a local folder, or later | `deploy/<target>.json` |
 
 A stage whose answer you already gave as a flag is skipped and shown as answered. A stage that does not apply (the search provider when search is off) is skipped without a word.
@@ -108,6 +109,8 @@ bxAgents new support-bot --name=support-bot --model=claude --with=time,fetch,sea
 | `--channels` | `web`, `api`, or channel ids (a list) |
 | `--web-auth` | `open` or `key`. Users need passwords, so they come from the wizard or from `gateways/webui.bx` |
 | `--guard` | `off`, `flag` or `block` |
+| `--prompt` | `bars`, `bars-hints`, `rule`, `box` or `panel` |
+| `--widgets`, `--widgets-bottom` | Widget names for the top bar and for the bottom (a list), or `none` |
 | `--deploy` | `docker`, `digitalocean`, `ssh`, `sftp`, `ftp`, `local`, with `--registry=ghcr:owner/name` (or `dockerhub:`, `docr:`), `--app`, `--region`, `--host`, `--user`, `--remote-path`, `--destination` as the target needs |
 
 A flag with a bad value stops the command and says what the flag accepts. The wizard turns on when:

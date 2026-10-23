@@ -225,6 +225,40 @@ class extends="testbox.system.BaseSpec" {
 				expect( features.security.input.action ).toBe( "block" );
 			} );
 
+			it( "reads the chat look from --prompt, --widgets and --widgets-bottom, and writes only what differs from the default", function() {
+				var plain = planner.fromFlags( { model : "openai" } );
+				expect( plain.look ).toBe( { prompt : "bars", top : [ "agent", "folder", "user", "clock" ], bottom : [ "ctx", "profile" ] } );
+				expect( planner.toFeatures( plain ) ).notToHaveKey( "tui" );
+				expect( planner.toCommand( plain, "bot" ) ).notToInclude( "--prompt" );
+				expect( planner.summary( plain ).map( r => r.label ) ).notToInclude( "Chat look" );
+
+				var set = planner.fromFlags( { model : "openai", prompt : "Box", widgets : "agent, git", "widgets-bottom" : "none" } );
+				expect( set.look ).toBe( { prompt : "box", top : [ "agent", "git" ], bottom : [] } );
+				expect( planner.toFeatures( set ).tui ).toBe( { prompt : "box", widgets : { top : [ "agent", "git" ], bottom : [] } } );
+				expect( planner.toCommand( set, "bot" ) ).toInclude( "--prompt=box --widgets=agent,git --widgets-bottom=none" );
+				expect( planner.summary( set ).map( r => r.label ) ).toInclude( "Chat look" );
+
+				// only the style given: the widgets keep their defaults
+				expect( planner.fromFlags( { model : "openai", prompt : "rule" } ).look.top ).toBe( [ "agent", "folder", "user", "clock" ] );
+			} );
+
+			it( "names the styles or the widgets that --prompt and --widgets accept", function() {
+				try {
+					planner.fromFlags( { model : "openai", prompt : "fancy" } );
+					fail( "should have thrown for the style" );
+				} catch ( BxAgents.InvalidNewOption e ) {
+					expect( e.message ).toInclude( "--prompt" );
+					expect( e.message ).toInclude( "bars, bars-hints, rule, box, panel" );
+				}
+				try {
+					planner.fromFlags( { model : "openai", widgets : "agent,weather" } );
+					fail( "should have thrown for the widget" );
+				} catch ( BxAgents.InvalidNewOption e ) {
+					expect( e.message ).toInclude( "--widgets" );
+					expect( e.message ).toInclude( "no widget 'weather'" );
+				}
+			} );
+
 			it( "builds a deploy entry per target and says what a target still needs", function() {
 				var docker = planner.toFeatures( planner.fromFlags( { model : "openai", deploy : "docker", registry : "ghcr:me/bot" } ) );
 				expect( docker.deploy.config.registry ).toBe( { type : "ghcr", repository : "me/bot" } );
@@ -271,6 +305,7 @@ class extends="testbox.system.BaseSpec" {
 					name : "support-bot", description : "Answers customers", model : "claude/claude-sonnet-5", template : "multi-agent",
 					with : "time,search,browse,files", search : "tavily", files : "readFile,listDirectory", "files-dir" : "tmp,/data/docs",
 					memory : "file", mcp : "github,notion", channels : "web,telegram", "web-auth" : "key", guard : "flag",
+					prompt : "panel", widgets : "agent,clock", "widgets-bottom" : "none",
 					deploy : "docker", registry : "ghcr:me/support"
 				};
 				var plan = planner.fromFlags( flags );

@@ -150,7 +150,7 @@ bxAgents new my-agent --repo=owner/repo-name
 bxAgents new my-agent --forgebox=some-package-slug
 ```
 
-- With no `--model`, no `--repo` and no `--forgebox`, at a terminal, `new` runs the [wizard](guides/new-wizard.md). `--no-wizard` or `--yes` turns it off, `--wizard` turns it on even with a `--model`, and `--no-tui` asks the same questions as numbered lines. A `--model` on its own never starts it, since scripts have always had to pass one. The wizard's flags (`--with`, `--search`, `--files`, `--files-dir`, `--temperature`, `--max-tokens`, `--timeout`, `--memory`, `--mcp`, `--channels`, `--web-auth`, `--guard`, `--deploy` and the deploy details) are listed in the [wizard guide](guides/new-wizard.md#without-the-wizard); a bad value names the flag and what it accepts. They need `Agent.yaml`, so they cannot be combined with `--class`.
+- With no `--model`, no `--repo` and no `--forgebox`, at a terminal, `new` runs the [wizard](guides/new-wizard.md). `--no-wizard` or `--yes` turns it off, `--wizard` turns it on even with a `--model`, and `--no-tui` asks the same questions as numbered lines. A `--model` on its own never starts it, since scripts have always had to pass one. The wizard's flags (`--with`, `--search`, `--files`, `--files-dir`, `--temperature`, `--max-tokens`, `--timeout`, `--memory`, `--mcp`, `--channels`, `--web-auth`, `--guard`, `--prompt`, `--widgets`, `--widgets-bottom`, `--deploy` and the deploy details) are listed in the [wizard guide](guides/new-wizard.md#without-the-wizard); a bad value names the flag and what it accepts. They need `Agent.yaml`, so they cannot be combined with `--class`.
 - `--template`, `--repo`, and `--forgebox` name three different project SOURCES - exactly one applies. Combining any two of them is an error.
 - **`--template` mode** (the default when no source flag is passed at all - `minimal`):
   - `--model` is **required** when no questions are asked - a `provider/model` slug (see [the model slug](conventions/agent-bx.md#the-model-slug)).
@@ -517,7 +517,7 @@ In the screen:
 | Ctrl+C | Clear the box; on an empty box, leave. Ctrl+D leaves too |
 | `?` alone, or `/keys` | List the keys as they are bound now, with the action name of each |
 
-Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/export [file]` (the conversation as Markdown or HTML), `/name` and `/fork` (see below), `/keys` (which key does what), `/sessions`, `/resume`, `/clear`, `/compact` and `/info` (see below), `/model`, `/profile` and `/default` (see below), `/remember <text>` and `/notes` (see below), `/record [file]` and `/record stop` (see below) and `/exit`.
+Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/export [file]` (the conversation as Markdown or HTML), `/name` and `/fork` (see below), `/keys` (which key does what), `/prompt` (how the message box looks, see below), `/sessions`, `/resume`, `/clear`, `/compact` and `/info` (see below), `/model`, `/profile` and `/default` (see below), `/remember <text>` and `/notes` (see below), `/record [file]` and `/record stop` (see below) and `/exit`.
 
 #### The same commands in the web page and in chat apps
 
@@ -550,9 +550,36 @@ Every chat is a conversation, listed in the project's [shared chat database](con
 | `/compact` | Replace the older messages with a summary (needs a summary model on the agent's memory) |
 | `/info` | Agent, model, conversation, message count, notes and database |
 | `/context` | How big the context is right now and what it is made of: the system prompt, the tool definitions, the notes and this conversation's messages, each with its size, the total, and the share of the model's context window when the project [says it](conventions/models.md#what-the-project-knows-about-a-model). The largest tools are named. Worked out locally; no model is called |
+| `/prompt [style]` | How the message box looks, for this chat: `/prompt` shows the choices, `/prompt box` switches style, `/prompt top +git -clock` changes the widgets. Only at the terminal |
 | `/stats` | What the model calls used: `/stats` for the last 30 days by model, `/stats 7 --by=day` for another span or grouping. Only at the terminal. When usage is not recorded it says how to turn it on, and `/stats enable` writes `usage: true` into `Agent.yaml` for you (rebuild for it to take effect) |
 
 `--continue` opens the most recent conversation when the chat starts, and `--session=<number or id>` opens a particular one. Both show the earlier messages first. Over `--connect` the server keeps the list and the messages, under the name of your [token](conventions/agent-bx.md#access-tokens-for-a-deployed-agent); a server without a chat database says it keeps no list.
+
+#### The prompt and the tables
+
+The message box has five looks, each with a top bar that carries a label and small facts (widgets), and a coloured edge: the accent colour at rest, amber while the agent works.
+
+| `prompt:` | Look |
+| --- | --- |
+| `bars` (default) | A bar above the message box and a bar below it, like Pi; the hints and the bottom widgets under the lower bar |
+| `bars-hints` | The same two bars, with the hints and the bottom widgets inside the lower one |
+| `rule` | One coloured rule above the box, and the hint row below |
+| `box` | A rounded box around the message box |
+| `panel` | A tinted panel with a thick left bar; on a terminal without colour it is drawn as `rule` |
+
+The widgets are `agent`, `profile`, `folder`, `user`, `clock`, `machine`, `git`, `date`, `session`, `elapsed` and `ctx`. They sit in the top bar (after the label) or at the bottom (on the hint row, or inside the lower bar); when the line is too narrow the last ones drop off. A widget with nothing to show, such as `git` outside a repository, is left out. By default the top bar shows `agent`, `folder`, `user` and `clock`, and the bottom shows `ctx` and `profile`.
+
+Set the start in [`Agent.yaml`](conventions/agent-yaml.md#settings) or with `bxAgents new` (`--prompt=box --widgets=agent,git --widgets-bottom=ctx`, or the "Look and feel" step of the wizard), and change it while you chat with `/prompt`: `/prompt` shows the style and widgets in use and everything on offer, `/prompt box` switches style, `/prompt top agent clock` sets the top widgets, `/prompt top +git -clock` adds and removes, and `/prompt bottom none` clears a place. A change lasts for that chat.
+
+```yaml
+tui:
+  prompt: bars
+  widgets:
+    top: [ agent, folder, user, clock ]
+    bottom: [ ctx, profile ]
+```
+
+Tables in an answer are drawn with rounded borders in the accent colour, a bold header and the column alignment of the table; cells wrap on a narrow terminal. Code blocks are coloured by language.
 
 #### Models in the chat
 
