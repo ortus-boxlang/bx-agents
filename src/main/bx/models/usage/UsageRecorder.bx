@@ -1,0 +1,88 @@
+/**
+ * Records what each model call used, when the project asks for it with `usage: true` in Agent.yaml. Off unless asked.
+ *
+ * bx-ai announces `onAITokenCount` after every call that reports usage (every provider it ships, streaming
+ * included). This listens for it and writes one row per call with UsageStore, into the same chat database the
+ * terminal chat and the web page use. It is started where an agent is built, so a served app, `chat` and `invoke` all
+ * record, and it starts once per process however many agents are built.
+ *
+ * Recording must never break a chat: a failed write is logged and the call goes on.
+ */
+class {
+
+	static {
+		started = false
+	}
+
+	/**
+	 * @return Whether the running app's settings turned usage recording on
+	 */
+	boolean function enabled() {
+		var settings = getModuleInfo( "bxai" ).settings
+		var own = settings.bxagents ?: {}
+		return isStruct( own ) && isBoolean( own.usage ?: "" ) && own.usage
+	}
+
+	/**
+	 * Starts listening, when usage is on and it is not already listening in this process.
+	 */
+	void function start() {
+		if ( static.started || !enabled() ) {
+			return
+		}
+		lock name="bxagents-usage-recorder" type="exclusive" timeout="30" {
+			if ( !static.started ) {
+				BoxRegisterInterceptor( this, [ "onAITokenCount" ] )
+				static.started = true
+			}
+		}
+	}
+
+	/**
+	 * The bx-ai event: one model call that reported its usage.
+	 *
+	 * @data { provider, model, promptTokens, completionTokens, totalTokens, aiRequest, usage, operation, timestamp }
+	 */
+	void function onAITokenCount( required struct data ) {
+		try {
+			var chatRequest = arguments.data.aiRequest ?: ""
+			var providerName = ask( chatRequest, "getProvider" )
+			if ( !len( providerName ) ) {
+				providerName = ask( arguments.data.provider ?: "", "getName" )
+			}
+			new "models.usage.UsageStore@bxagents"( new "models.notes.NotesWiring@bxagents"().store() ).record( {
+				userId           : ask( chatRequest, "getUserId" ),
+				threadId         : ask( chatRequest, "getThreadId" ),
+				provider         : providerName,
+				model            : arguments.data.model ?: "",
+				operation        : arguments.data.operation ?: "chat",
+				promptTokens     : arguments.data.promptTokens ?: 0,
+				completionTokens : arguments.data.completionTokens ?: 0,
+				totalTokens      : arguments.data.totalTokens ?: 0
+			} )
+		} catch ( any e ) {
+			writeLog( text = "Usage was not recorded: " & left( e.message, 200 ), type = "warning", file = "bxagents-usage" )
+		}
+	}
+
+	/**
+	 * Calls a getter on something the event carries, which may be missing or not have it: the answer, or nothing.
+	 *
+	 * @from The request or the provider
+	 * @method The getter's name
+	 */
+	private string function ask( required any from, required string method ) {
+		// a class instance counts as a struct here, so the guard is the call itself. (Never name a local `request`,
+		// `session`, `url` or `form`: inside a web request each one is that scope.)
+		if ( isSimpleValue( arguments.from ) ) {
+			return ""
+		}
+		try {
+			var answer = invoke( arguments.from, arguments.method )
+			return isSimpleValue( answer ) ? toString( answer ?: "" ) : ""
+		} catch ( any e ) {
+			return ""
+		}
+	}
+
+}

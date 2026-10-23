@@ -80,6 +80,25 @@ class {
 	}
 
 	/**
+	 * What the model calls used, from the record the app keeps when the project turns usage on.
+	 *
+	 * @days How many days back
+	 * @by model, provider, day or user
+	 *
+	 * @return { available : true, recording, report } or { available : false, reason }
+	 */
+	struct function usageReport( numeric days = 30, string by = "model" ) {
+		try {
+			var report = new "models.usage.UsageStore@bxagents"( new "models.notes.NotesWiring@bxagents"().store() ).report( arguments.days, arguments.by )
+			return { available : true, recording : new "models.usage.UsageRecorder@bxagents"().enabled(), report : report }
+		} catch ( "BxAgents.UnknownStatsGroup" e ) {
+			return { available : false, reason : e.message }
+		} catch ( any e ) {
+			return { available : false, reason : "Usage could not be read: " & left( e.message, 160 ) }
+		}
+	}
+
+	/**
 	 * Asks a model whether it answers, with one tiny question. No conversation is touched.
 	 *
 	 * @profile A profile name; blank for the model in use

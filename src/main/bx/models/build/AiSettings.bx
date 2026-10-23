@@ -263,8 +263,16 @@ class {
 		var facts = {}
 		if ( c.keyExists( "contextWindow" ) ) { facts[ "contextWindow" ] = int( c.contextWindow ) }
 		if ( c.keyExists( "vision" ) ) { facts[ "vision" ] = c.vision == true }
+		var own = {}
 		if ( facts.count() ) {
-			s[ "bxagents" ] = { "default" : facts }
+			own[ "default" ] = facts
+		}
+		// off unless the project turns it on: the running app records usage only when this is true (models.usage.UsageRecorder)
+		if ( isBoolean( c.usage ?: "" ) && c.usage ) {
+			own[ "usage" ] = true
+		}
+		if ( own.count() ) {
+			s[ "bxagents" ] = own
 		}
 
 		if ( isStruct( c.embeddings ?: "" ) && c.embeddings.count() ) {

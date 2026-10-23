@@ -1,0 +1,95 @@
+/**
+ * Turning usage recording on by writing the one line into Agent.yaml.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "usage.UsageSwitch", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-usage-switch-" );
+				variables.usageSwitch = new bxagents.models.usage.UsageSwitch();
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function yaml( required string text ) {
+				fileWrite( dir & "/Agent.yaml", arguments.text );
+				fileWrite( dir & "/instructions.md", "Be helpful." );
+			}
+
+			it( "adds usage: true to Agent.yaml and changes nothing else", function() {
+				var before = "name: keeper" & char( 10 ) & "model: mock/mock-model" & char( 10 ) & "tools:" & char( 10 ) & "  - now@bxai" & char( 10 );
+				yaml( before );
+
+				var done = usageSwitch.enable( dir );
+
+				expect( done.ok ).toBeTrue();
+				expect( done.changed ).toBeTrue();
+				expect( done.message ).toInclude( "bxAgents build" );
+				var text = fileRead( dir & "/Agent.yaml" );
+				expect( text ).toInclude( before );
+				expect( text ).toInclude( "usage: true" );
+				expect( usageSwitch.isOn( dir ) ).toBeTrue();
+			} );
+
+			it( "says so, and changes nothing, when it is already on", function() {
+				yaml( "name: keeper" & char( 10 ) & "model: mock/mock-model" & char( 10 ) & "usage: true ##on" & char( 10 ) );
+
+				var done = usageSwitch.enable( dir );
+
+				expect( done.ok ).toBeTrue();
+				expect( done.changed ).toBeFalse();
+				expect( done.message ).toInclude( "already on" );
+			} );
+
+			it( "turns a usage: false into true in place", function() {
+				yaml( "name: keeper" & char( 10 ) & "usage: false" & char( 10 ) & "model: mock/mock-model" & char( 10 ) );
+
+				var done = usageSwitch.enable( dir );
+
+				expect( done.changed ).toBeTrue();
+				var text = fileRead( dir & "/Agent.yaml" );
+				expect( text ).toInclude( "usage: true" );
+				expect( text ).notToInclude( "false" );
+				expect( text.listToArray( char( 10 ) ).filter( l => l.startsWith( "usage:" ) ) ).toHaveLength( 1 );
+			} );
+
+			it( "is off when the project does not say", function() {
+				yaml( "name: keeper" & char( 10 ) & "model: mock/mock-model" & char( 10 ) );
+
+				expect( usageSwitch.isOn( dir ) ).toBeFalse();
+			} );
+
+			it( "tells a class-based agent what to add, rather than editing code", function() {
+				fileWrite( dir & "/Agent.bx", "class extends='bxModules.bxai.models.runnables.AiAgent' { function configure() { return { name : 'x' }; } }" );
+
+				var done = usageSwitch.enable( dir );
+
+				expect( done.ok ).toBeFalse();
+				expect( done.changed ).toBeFalse();
+				expect( done.message ).toInclude( "usage : true" );
+			} );
+
+			it( "says there is no Agent.yaml in an empty folder", function() {
+				var done = usageSwitch.enable( dir );
+
+				expect( done.ok ).toBeFalse();
+				expect( done.message ).toInclude( "no Agent.yaml" );
+			} );
+
+			it( "explains how to turn it on, and promises counts only", function() {
+				expect( usageSwitch.howToEnable( true ) ).toInclude( "usage: true" );
+				expect( usageSwitch.howToEnable( true ) ).toInclude( "let me do it" );
+				expect( usageSwitch.howToEnable( false ) ).notToInclude( "let me do it" );
+				expect( usageSwitch.howToEnable( true ) ).toInclude( "never what was said" );
+			} );
+
+		} );
+	}
+
+}

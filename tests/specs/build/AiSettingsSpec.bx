@@ -167,6 +167,23 @@ class extends="testbox.system.BaseSpec" {
 
 			} );
 
+			describe( "usage", function() {
+
+				it( "puts usage into the app's settings only when the project turns it on", function() {
+					expect( ai.settings( { model : "openai/gpt-5", usage : true } ).bxagents.usage ).toBeTrue();
+					expect( ai.settings( { model : "openai/gpt-5", usage : false } ).keyExists( "bxagents" ) ).toBeFalse();
+					expect( ai.settings( { model : "openai/gpt-5" } ).keyExists( "bxagents" ) ).toBeFalse();
+				} );
+
+				it( "keeps the model facts beside it", function() {
+					var s = ai.settings( { model : "openai/gpt-5", contextWindow : 1000, usage : true } );
+
+					expect( s.bxagents.usage ).toBeTrue();
+					expect( s.bxagents.default.contextWindow ).toBe( 1000 );
+				} );
+
+			} );
+
 			describe( "ignoredModelNote", function() {
 
 				it( "says the model is ignored when a model and a default profile are both written", function() {

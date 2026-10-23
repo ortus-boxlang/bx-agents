@@ -131,6 +131,14 @@ class {
 					"CREATE TABLE IF NOT EXISTS notes ( id VARCHAR(64) NOT NULL PRIMARY KEY, scope VARCHAR(16) NOT NULL, owner VARCHAR(255) NOT NULL, text TEXT NOT NULL, source VARCHAR(16) NOT NULL DEFAULT 'agent', sessionId VARCHAR(64), createdAt DATETIME, updatedAt DATETIME )",
 					"CREATE INDEX IF NOT EXISTS idx_notes_owner ON notes ( scope, owner, createdAt )"
 				]
+			},
+			{
+				// what each model call used, one row per call, only when the project turns usage on (counts, never content)
+				version    : 5,
+				statements : [
+					"CREATE TABLE IF NOT EXISTS usage ( id INTEGER PRIMARY KEY AUTOINCREMENT, at DATETIME NOT NULL, userId VARCHAR(255), threadId VARCHAR(64), provider VARCHAR(64), model VARCHAR(255), operation VARCHAR(32), promptTokens INTEGER DEFAULT 0, completionTokens INTEGER DEFAULT 0, totalTokens INTEGER DEFAULT 0 )",
+					"CREATE INDEX IF NOT EXISTS idx_usage_at ON usage ( at )"
+				]
 			}
 		]
 	}

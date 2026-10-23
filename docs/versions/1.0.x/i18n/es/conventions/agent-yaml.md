@@ -52,6 +52,7 @@ environments:
 | `gatewaySession` | mapa | `{ policy, maxQueueDepth, commands }`, todos opcionales. Ver [Agent.bx](agent-bx.md) para los valores; son idénticos. |
 | `agentApi` | mapa | `{ enabled, tokenEnvVar, tokens, profiles }`, todos opcionales. Ver [La ruta de agente siempre activa](agent-bx.md#la-ruta-de-agente-siempre-activa). |
 | `notes` | mapa | Notas cortas que el agente guarda sobre el usuario y sobre su propio trabajo. `notes: {}` las activa con los valores por defecto. Ver [Notas](#notas). |
+| `usage` | booleano | Registra lo que usó cada llamada al modelo (la hora, quién, el proveedor, el modelo y los tokens), para [`bxAgents stats`](../cli-reference.md#stats) y `/stats`. **Desactivado por defecto**: pon `usage: true` para activarlo. Solo recuentos, nunca lo que se dijo. Solo en el `Agent.yaml` propio del proyecto. Recompila tras cambiarlo. |
 | `environments` | mapa | Sobreescrituras por entorno. Ver [Entornos](#entornos). |
 
 Son los mismos ajustes que devuelve el `configure()` de un `Agent.bx`, así que todo el comportamiento documentado para ellos aplica sin cambios.

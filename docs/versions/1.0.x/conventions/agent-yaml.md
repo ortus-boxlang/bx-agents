@@ -52,6 +52,7 @@ environments:
 | `gatewaySession` | mapping | `{ policy, maxQueueDepth, commands }`, all optional. See [Agent.bx](agent-bx.md) for the values; they are identical. |
 | `agentApi` | mapping | `{ enabled, tokenEnvVar, tokens, profiles }`, all optional. See [The always-on agent route](agent-bx.md#the-always-on-agent-route). |
 | `notes` | mapping | Short notes the agent keeps about the user and its own work. `notes: {}` turns them on with the defaults. See [Notes](#notes). |
+| `usage` | boolean | Records what each model call used (the time, who, the provider, the model and the tokens), for [`bxAgents stats`](../cli-reference.md#stats) and `/stats`. **Off by default**: set `usage: true` to turn it on. Counts only, never what was said. Only in the project's own `Agent.yaml`. Rebuild after changing it. |
 | `environments` | mapping | Per-environment overrides. See [Environments](#environments). |
 
 These are the same settings an `Agent.bx`'s `configure()` returns, so every behavior documented for them applies unchanged.

@@ -1,0 +1,118 @@
+/**
+ * The stats verb: what a project's model calls used, and turning the record on.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "cli.Stats", function() {
+
+			beforeEach( function() {
+				variables.verb = new bxagents.models.cli.Stats();
+				variables.root = createTempDirectory( prefix = "bxagents-cli-stats-" );
+				variables.usesDefaultPath = !len( getSystemSetting( "BXAGENTS_DB", "" ) );
+				fileWrite( root & "/Agent.yaml", "name: keeper" & char( 10 ) & "model: mock/mock-model" & char( 10 ) );
+				fileWrite( root & "/instructions.md", "Be helpful." );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( root ) ) {
+					directoryDelete( root, true );
+				}
+			} );
+
+			function run_( struct more = {} ) {
+				return verb.run( { projectRoot : root }.append( more ) );
+			}
+
+			function record( numeric count = 2 ) {
+				directoryCreate( root & "/data", true, true );
+				var usage = new bxagents.models.usage.UsageStore( bxagents.models.store.ChatStore::forFile( root & "/data/chat.db" ) );
+				for ( var i = 1; i <= count; i++ ) {
+					usage.record( { userId : "alice", provider : "openai", model : "gpt-5", promptTokens : 10, completionTokens : 5 } );
+				}
+			}
+
+			it( "needs a project root", function() {
+				expect( function() { verb.run( {} ); } ).toThrow( "BxAgents.MissingProjectRoot" );
+			} );
+
+			it( "says how to turn usage on when it is off and nothing was recorded", function() {
+				if ( !usesDefaultPath ) { return; }
+
+				var out = run_();
+
+				expect( out.exitCode ).toBe( 0 );
+				expect( out.message ).toInclude( "usage: true" );
+				expect( out.message ).toInclude( "stats --enable" );
+			} );
+
+			it( "turns usage on with --enable, and a second time says it already is", function() {
+				var first = run_( { enable : true } );
+				var second = run_( { enable : true } );
+
+				expect( first.exitCode ).toBe( 0 );
+				expect( fileRead( root & "/Agent.yaml" ) ).toInclude( "usage: true" );
+				expect( second.message ).toInclude( "already on" );
+			} );
+
+			it( "reports an empty record when usage is on and nothing has been recorded", function() {
+				if ( !usesDefaultPath ) { return; }
+				run_( { enable : true } );
+
+				expect( run_().message ).toInclude( "Nothing recorded in the last 30 days" );
+			} );
+
+			it( "reports the calls by model, and as JSON", function() {
+				if ( !usesDefaultPath ) { return; }
+				run_( { enable : true } );
+				record( 2 );
+
+				var text = run_().message;
+				expect( text ).toInclude( "2 calls, 30 tokens (20 in, 10 out)" );
+				expect( text ).toInclude( "gpt-5" );
+
+				var json = jsonDeserialize( run_( { json : true } ).message );
+				expect( json.enabled ).toBeTrue();
+				expect( json.report.calls ).toBe( 2 );
+				expect( json.report.groups[ 1 ].name ).toBe( "gpt-5" );
+			} );
+
+			it( "groups by provider, day or user when asked", function() {
+				if ( !usesDefaultPath ) { return; }
+				run_( { enable : true } );
+				record( 1 );
+
+				expect( run_( { by : "provider" } ).message ).toInclude( "openai" );
+				expect( run_( { by : "user" } ).message ).toInclude( "alice" );
+				expect( run_( { by : "day" } ).message ).toInclude( dateTimeFormat( now(), "yyyy-MM-dd" ) );
+			} );
+
+			it( "shows older calls, and says recording is off, when it was turned off after some were recorded", function() {
+				if ( !usesDefaultPath ) { return; }
+				record( 1 );
+
+				expect( run_().message ).toInclude( "Recording is off now" );
+			} );
+
+			it( "refuses a grouping or a number of days it does not know", function() {
+				if ( !usesDefaultPath ) { return; }
+				record( 1 );
+
+				expect( function() { run_( { by : "colour" } ); } ).toThrow( "BxAgents.UnknownStatsGroup" );
+				expect( function() { run_( { days : 0 } ); } ).toThrow( "BxAgents.InvalidStatsDays" );
+				expect( function() { run_( { days : 5000 } ); } ).toThrow( "BxAgents.InvalidStatsDays" );
+			} );
+
+			it( "does not need a built project: it only reads the database", function() {
+				if ( !usesDefaultPath ) { return; }
+				run_( { enable : true } );
+				record( 1 );
+
+				expect( directoryExists( root & "/.build" ) ).toBeFalse();
+				expect( run_().exitCode ).toBe( 0 );
+			} );
+
+		} );
+	}
+
+}

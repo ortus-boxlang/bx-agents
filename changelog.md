@@ -323,7 +323,9 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   for them: the default `provider`, `model`, `params` and `options`; `providers` (params and options per
   provider); named `profiles` (provider, model, params, options and `apiKeyEnv`, the name of the variable that
   holds the key, never the key); `defaultProfile`; `profile` on an agent or subagent; and the capability
-  defaults `embeddings`, `speech`, `transcription` and `image`. `defaultProfile` is the default model: when a
+  defaults `embeddings`, `speech`, `transcription` and `image`. `bxAgents stats` and `/stats` show what the model calls used (tokens by model, provider, day or user), once
+  `usage: true` is in Agent.yaml: it is off by default, keeps counts only, and `stats --enable` or `/stats enable`
+  writes the line. `defaultProfile` is the default model: when a
   top-level `model` is written beside it, the profile wins and the build and `doctor` warn that the model is
   ignored. Everything is validated at build time by
   bx-ai's rules, every profile runs on `mock` under `bxAgents test`, and subagents inherit the root's

@@ -115,6 +115,9 @@ List the models a project can talk to and test that they answer.
 ::: card title="sessions" icon="phosphor-duotone:chats" href="#sessions"
 List, rename, fork and delete the conversations in the chat database.
 :::
+::: card title="stats" icon="phosphor-duotone:chart-bar" href="#stats"
+What the model calls used: tokens by model, provider, day or user, once the project turns usage on.
+:::
 ::: card title="inspect" icon="phosphor-duotone:magnifying-glass" href="#inspect"
 Report how the agent is composed, from its source.
 :::
@@ -547,6 +550,7 @@ Every chat is a conversation, listed in the project's [shared chat database](con
 | `/compact` | Replace the older messages with a summary (needs a summary model on the agent's memory) |
 | `/info` | Agent, model, conversation, message count, notes and database |
 | `/context` | How big the context is right now and what it is made of: the system prompt, the tool definitions, the notes and this conversation's messages, each with its size, the total, and the share of the model's context window when the project [says it](conventions/models.md#what-the-project-knows-about-a-model). The largest tools are named. Worked out locally; no model is called |
+| `/stats` | What the model calls used: `/stats` for the last 30 days by model, `/stats 7 --by=day` for another span or grouping. Only at the terminal. When usage is not recorded it says how to turn it on, and `/stats enable` writes `usage: true` into `Agent.yaml` for you (rebuild for it to take effect) |
 
 `--continue` opens the most recent conversation when the chat starts, and `--session=<number or id>` opens a particular one. Both show the earlier messages first. Over `--connect` the server keeps the list and the messages, under the name of your [token](conventions/agent-bx.md#access-tokens-for-a-deployed-agent); a server without a chat database says it keeps no list.
 
@@ -787,6 +791,32 @@ bxAgents sessions delete --session=<number or id> [--user=NAME]
 - A conversation is picked by its number in `list`, or by its id or the start of it. `--user` is whose conversations: the operating system user by default.
 - `list`, `rename` and the list part of `delete` only touch the database. The messages of a conversation live in the agent's [memory](conventions/agent-yaml.md#settings), so `fork` (which copies them) needs a built project, and so does `delete` to forget them too. They reach only messages a memory that outlives the process keeps (`file`, `jdbc`): the default `cache` memory is gone when the chat ends.
 - Run it where the database is: in the project, or on a server with `BXAGENTS_DB` set.
+
+### `stats`
+
+What the project's model calls used, from the record the app keeps in the [shared chat database](conventions/web-ui.md#the-sqlite-store) (`data/chat.db`, or the file named by `BXAGENTS_DB`).
+
+```bash
+bxAgents stats [--days=30] [--by=model|provider|day|user] [--user=NAME] [--json]
+bxAgents stats --enable
+```
+
+```
+Last 30 days: 128 calls, 412,300 tokens (351,200 in, 61,100 out)
+
+By model              calls          in         out       total
+gpt-5                    90     280,000      45,000     325,000
+gpt-5-mini               38      71,200      16,100      87,300
+
+Counts only the calls whose provider reported usage.
+```
+
+- **It is off unless you turn it on.** Add `usage: true` to the project's own `Agent.yaml` (see [`usage`](conventions/agent-yaml.md#settings)) and rebuild. Until then `stats` says how to turn it on, and `--enable` writes that line for you, then reminds you to run `bxAgents build` and restart a running server.
+- Only **counts** are kept: the time, who asked, the provider, the model and the tokens in and out. Nothing that was said is stored, and nothing leaves your database.
+- A call is counted when its provider reports usage. The `mock` provider and a few streaming calls do not, so they leave no row, and the totals are of the calls that did.
+- `--by` groups the rows by model (the default), provider, day or user, with the biggest first (newest first for `day`). `--days` is how far back to look, counting today (1 to 3650). `--user` limits it to one user's calls. `--json` prints the report for a script.
+- It only reads the database, so it needs no build. Run it where the database is: in the project, or on a server with `BXAGENTS_DB` set.
+- Cost is not worked out. Prices change too often to ship a table.
 
 ### `inspect`
 
