@@ -261,6 +261,22 @@ class extends="testbox.system.BaseSpec" {
 				expect( loadColdboxPos < registerPos ).toBeTrue();
 			} );
 
+			it( "registers the gateways before the statements that look them up, such as the gateway session", function() {
+				var buildDir = newBuildDir();
+				var config = resolver.resolve( projectRoot = fixtures & "/full-project" );
+				var result = generator.generate(
+					projectRoot            = fixtures & "/full-project",
+					buildDir               = buildDir,
+					resolvedConfig         = config,
+					gatewayRegistrations   = [ 'REGISTER_MARKER()' ],
+					extraStartupStatements = [ 'SESSION_MARKER()' ]
+				);
+
+				var content = fileRead( result.applicationBx );
+				expect( content.find( "REGISTER_MARKER()" ) > 0 ).toBeTrue();
+				expect( content.find( "REGISTER_MARKER()" ) < content.find( "SESSION_MARKER()" ) ).toBeTrue( "the session looks the gateway up in the registry, so it is registered first" );
+			} );
+
 			it( "generates GeneratedAgentFactory.bx calling aiModel()+aiAgent() with resolved values", function() {
 				var buildDir = newBuildDir();
 				var result = generateFor( fixtures & "/full-project", buildDir );

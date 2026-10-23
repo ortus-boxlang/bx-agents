@@ -87,14 +87,16 @@ class {
 		var wireboxPath      = appDir & "/config/WireBox.bx"
 		var agentFactoryPath = appDir & "/agent/GeneratedAgentFactory.bx"
 
+		// Registrations first: the gateway session in the extra statements looks its gateways up in the registry
+		// (aiGatewayRegistry().get( "telegram" )), so they must be registered by then.
 		var startupStatements = []
-		for ( var statement in arguments.extraStartupStatements ) {
-			startupStatements.append( statement )
-		}
 		for ( var statement in arguments.mcpRegistrations ) {
 			startupStatements.append( statement )
 		}
 		for ( var statement in arguments.gatewayRegistrations ) {
+			startupStatements.append( statement )
+		}
+		for ( var statement in arguments.extraStartupStatements ) {
 			startupStatements.append( statement )
 		}
 		// Real, per-request interceptor registration - see renderInterceptorRegistration()'s
