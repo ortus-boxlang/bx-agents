@@ -33,7 +33,7 @@ import dev.tamboui.widgets.syntax.TokenType;
  */
 public final class Grammars {
 
-	private static RegexSyntaxHighlighter	highlighter;
+	private static RegexSyntaxHighlighter highlighter;
 
 	private Grammars() {
 	}
@@ -63,10 +63,10 @@ public final class Grammars {
 	 *         separated string. Keywords, types and scopes match whole words; CFML ignores case, BoxLang does not.
 	 */
 	public static Properties words() {
-		String	types		= "any array binary boolean date function numeric query string struct void xml";
-		String	constants	= "true false null";
-		String	scopes		= "application arguments cgi client cookie form local request server session super this url variables";
-		Properties p = new Properties();
+		String		types		= "any array binary boolean date function numeric query string struct void xml";
+		String		constants	= "true false null";
+		String		scopes		= "application arguments cgi client cookie form local request server session super this url variables";
+		Properties	p			= new Properties();
 		p.setProperty( "boxlang.keywords",
 		    "abstract assert break case catch class component continue default do else extends final finally for function if implements import in include interface new package param private property public remote required rethrow return static switch throw try var while abort exit lock thread transaction" );
 		p.setProperty( "boxlang.types", types );
