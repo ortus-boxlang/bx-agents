@@ -57,6 +57,36 @@ class {
 
 Checked on the BoxLang 1.18 runtime: this form compiles and `getMetaData()` returns each annotation with its value (`@Key( [ "ctrl+d", "alt+d" ] )` gives an array, a bare `@Status` gives an empty string).
 
+### Annotation values: simple, array or struct
+
+A BoxLang annotation value can be nothing, a simple value, an array or a struct. All four work on the 1.18 runtime (`getMetaData()` returns them as written), and every BxAgents annotation accepts all four:
+
+| Written | Means | Example |
+|---|---|---|
+| bare | defaults; the name comes from the method name | `@Command` on `function deploy()` is `/deploy` |
+| simple | the main value | `@Command( "deploy" )`, `@Key( "ctrl+shift+d" )` |
+| array | several of the main value | `@Key( [ "ctrl+d", "alt+d" ] )`, `@On( [ "beforeAIToolExecute", "afterAIToolExecute" ] )` |
+| struct | the full options | `@Command( { name : "deploy", hint : "deploy the app", admin : true, keys : [ "ctrl+d" ], transports : [ "tui", "web" ] } )` |
+
+So one annotation can say everything, and the extra annotations are only shorthand:
+
+```
+@Command( { name : "deploy", hint : "deploy the app", admin : true, keys : [ "ctrl+shift+d", "alt+d" ] } )
+function deploy( ctx, args ) { ... }
+```
+
+is the same as
+
+```
+@Command( "deploy" )
+@Hint( "deploy the app" )
+@Admin
+@Key( [ "ctrl+shift+d", "alt+d" ] )
+function deploy( ctx, args ) { ... }
+```
+
+A struct option wins over a separate annotation if both are given, and a clash is reported at startup. Struct keys per annotation are listed in the authoring guide (slice 8).
+
 ### A bigger extension: a folder
 
 ```
