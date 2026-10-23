@@ -423,7 +423,7 @@ memory:
 
 ## Reply rendering
 
-Assistant replies render through a deliberately small markdown subset - fenced and inline code, bold/italic, links, bullet and numbered lists, headings. It is applied **escape-first**: the model's text is HTML-escaped before a single tag is introduced, so no model output can become live markup, and link hrefs are allowlisted to `http(s)`/`mailto` so a `javascript:` URL is never turned into an anchor at all.
+Assistant replies render as full Markdown: headings, lists, tables, quotes, strikethrough, links and fenced code, with code coloured by language (BoxLang, CFML, Java, JavaScript, TypeScript, Python, Go, Rust, Kotlin, SQL, JSON, YAML, TOML, XML/HTML, CSS, shell, Dockerfile, diff and Markdown). The page carries its own copy of [marked](https://marked.js.org), [DOMPurify](https://github.com/cure53/DOMPurify) and [highlight.js](https://highlightjs.org), so it still works offline and loads nothing from a CDN. What the model writes is never trusted: raw HTML in an answer is escaped and shown as text, the result is sanitized, images are not loaded (a remote one would tell its server the page was opened), and a `javascript:` link is not turned into a link at all.
 
 !!! info
     The composer is a `textarea` - **Enter** sends, **Shift+Enter** adds a newline, and it grows to about six lines before scrolling. A turn in flight can be halted with **Stop** (an `AbortController`), which keeps whatever already streamed rather than discarding it. The transcript only auto-scrolls when you're already at the bottom, so scrolling up to re-read something mid-stream doesn't yank you back down.
