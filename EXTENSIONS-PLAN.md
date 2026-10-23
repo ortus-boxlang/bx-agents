@@ -22,46 +22,40 @@ This draft replaces draft 1. It folds in what we decided and what Pi (the Pi cod
 
 Everything an extension adds ends up in one registry. There are two ways to describe it, and they mix freely.
 
-1. **Annotated methods** (declarative, the simple way).
+1. **Annotated methods** (declarative, the simple way): `@Command`, `@Key`, `@Status`, `@On`, `@Prefix`, `@Source`, `@Slot`, `@Tool`.
 2. **`register( api )`** (programmatic, for anything built at load time).
 
 For a big extension, **convention folders** hold one class per piece. They are the same classes a method would describe, just split into files.
 
 ### The smallest extension: one file
 
-`extensions/deploy.bx` (or `~/.bxagents/extensions/deploy.bx`). The name is the file name.
+`extensions/deploy.bx` (or `~/.bxagents/extensions/deploy.bx`). The name is the file name. Annotations are normal BoxLang annotations, written like Java's (`@Name( value )`), on the class and on its methods. Comments are left alone.
 
 ```
-/**
- * @hint Deploy from the chat
- */
+@Description( "Deploy from the chat" )
 class {
 
-	/**
-	 * @command deploy
-	 * @key ctrl+shift+d
-	 * @hint deploy the app: /deploy staging
-	 */
+	@Command( "deploy" )
+	@Key( "ctrl+shift+d" )
+	@Hint( "deploy the app: /deploy staging" )
 	function deploy( ctx, args ) {
 		return ctx.reply().ok( "Deploying to #len( args ) ? args : 'staging'#..." )
 	}
 
-	/**
-	 * @status
-	 */
+	@Status
 	function branch( ctx ) {
 		return "branch: #ctx.project().branch()#"
 	}
 
-	/**
-	 * @on afterAIAgentRun
-	 */
+	@On( "afterAIAgentRun" )
 	function noteRun( event ) {
 		// any BoxLang interception point: bx-ai's, ColdBox's, or a chat event below
 	}
 
 }
 ```
+
+Checked on the BoxLang 1.18 runtime: this form compiles and `getMetaData()` returns each annotation with its value (`@Key( [ "ctrl+d", "alt+d" ] )` gives an array, a bare `@Status` gives an empty string).
 
 ### A bigger extension: a folder
 
@@ -208,6 +202,6 @@ After that: `bxAgents extension install|list|remove|update`, local or `--user`, 
 
 ## To settle
 
-1. Annotation style: docblock tags as above (`@command deploy`), which matches `@scope` on interceptors today. Say if you prefer another form.
-2. A `@key` on a method calls that method with no arguments (as with `deploy` above). A key that only runs a command line is `api.key( "ctrl+shift+d", "/deploy" )`.
+1. A `@Key` on a method calls that method with no arguments (as with `deploy` above). A key that only runs a command line is `api.key( "ctrl+shift+d", "/deploy" )`.
+2. Annotation names are matched ignoring case, so `@command` and `@Command` both work. Capitalised (`@Command`) is the documented form.
 3. Event names: `chat.*` for chat events. Fine, or a different prefix?
