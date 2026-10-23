@@ -123,6 +123,15 @@ class extends="testbox.system.BaseSpec" {
 				}
 			} );
 
+			it( "reports the default profile as the project's own model, even with a model written beside it", function() {
+				var nl = char( 10 );
+				var report = reporter.build( newYamlProject( "name: both" & nl & "model: mock/root-model" & nl & "profiles:" & nl & "  fast:" & nl & "    provider: mock" & nl & "    model: fast-model" & nl & "defaultProfile: fast" & nl ) );
+
+				expect( report.agent.modelSource ).toBe( "default" );
+				expect( report.agent.profile ).toBe( "fast" );
+				expect( report.agent.modelId ).toBe( "fast-model" );
+			} );
+
 			it( "adds the model provider's API key variable", function() {
 				var report = reporter.build( newYamlProject( "name: keyed#char( 10 )#model: openai/gpt-5#char( 10 )#" ) );
 

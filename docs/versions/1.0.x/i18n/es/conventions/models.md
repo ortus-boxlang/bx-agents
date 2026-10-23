@@ -51,7 +51,7 @@ Un perfil es una combinación con nombre: un proveedor, un modelo, params, optio
 | `apiKeyEnv` | El **nombre** de la variable que guarda la clave. Una clave nunca se escribe en `Agent.yaml`; un perfil que la tenga se rechaza. |
 | `contextWindow`, `vision` | Lo que el proyecto sabe del modelo, ver abajo. |
 
-Un perfil no puede llamarse `default` ni como un proveedor (`openai`, `claude`, ...), porque ambos se eligen por nombre. `defaultProfile` elige qué perfil se usa cuando nada pide otro. `bxAgents add profile` escribe un perfil (y `--default` el `defaultProfile`) sin tocar el resto del archivo; consulta [`add profile`](../cli-reference.md#add-profile).
+Un perfil no puede llamarse `default` ni como un proveedor (`openai`, `claude`, ...), porque ambos se eligen por nombre. `defaultProfile` elige qué perfil se usa cuando nada pide otro: es el modelo por defecto. Si el archivo también tiene un `model` de nivel superior, gana el perfil y la compilación y `doctor` avisan de que la línea `model` se ignora. Sin `defaultProfile`, el `provider` y el `model` de nivel superior son el valor por defecto. `bxAgents add profile` escribe un perfil (y `--default` el `defaultProfile`) sin tocar el resto del archivo; consulta [`add profile`](../cli-reference.md#add-profile).
 
 ## Lo que el proyecto sabe de un modelo
 
