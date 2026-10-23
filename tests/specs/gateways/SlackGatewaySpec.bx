@@ -103,6 +103,29 @@ class extends="testbox.system.BaseSpec" {
 				expect( dispatched[ 1 ].getContext().getThreadID() ).toBe( "111.222" );
 			} );
 
+			it( "handleSocketText() turns the umbrella slash command into a typed chat command", function() {
+				var dispatched = [];
+				gateway.onMessage( function( message ) { dispatched.append( message ); } );
+				var fakeSocket = new tests.support.FakeWebSocket();
+				gateway.handleSocketText( fakeSocket, jsonSerialize( { type: "slash_commands", envelope_id: "e1", payload: { command: "/agent", text: "model fast", user_id: "U1", channel_id: "C1", response_url: "https://hooks.slack.test/r" } } ) );
+				gateway.handleSocketText( fakeSocket, jsonSerialize( { type: "slash_commands", envelope_id: "e2", payload: { command: "/agent", text: "", user_id: "U1", channel_id: "C1", response_url: "https://hooks.slack.test/r" } } ) );
+				gateway.handleSocketText( fakeSocket, jsonSerialize( { type: "slash_commands", envelope_id: "e3", payload: { command: "/info", text: "", user_id: "U1", channel_id: "C1", response_url: "https://hooks.slack.test/r" } } ) );
+
+				expect( dispatched.map( m => m.getText() ) ).toBe( [ "/model fast", "/help", "/info" ] );
+				expect( dispatched[ 1 ].getContext().getConversationID() ).toBe( "C1" );
+			} );
+
+			it( "answers a slash command on its response_url, only for the person who typed it", function() {
+				var calls = stubApi( {} );
+				var context = new GatewayContext( gateway: "slack", conversationID: "C1", userID: "U1", raw: { command: "/agent", response_url: "https://hooks.slack.test/r" } );
+				gateway.deliver( new GatewayEvent( type: GatewayEvent.TYPES.RESPONSE_COMPLETED, data: { text: "Agent: helper" }, context: context ), context );
+
+				expect( calls ).toHaveLength( 1 );
+				expect( calls[ 1 ].method ).toBe( "response_url" );
+				expect( calls[ 1 ].params.url ).toBe( "https://hooks.slack.test/r" );
+				expect( calls[ 1 ].params.body ).toBe( { response_type: "ephemeral", text: "Agent: helper" } );
+			} );
+
 			it( "handleSocketText() ignores a message event carrying a bot_id (avoids a self-loop)", function() {
 				var dispatched = [];
 				gateway.onMessage( function( message ) { dispatched.append( message ); } );

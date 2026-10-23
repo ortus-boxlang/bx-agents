@@ -26,6 +26,9 @@ import bxModules.bxai.models.gateway.contracts.HumanInteractionDecision;
  * Config, via aiGateway( "bxModules.bxagents.models.gateways.DiscordGateway", options ):
  *   botToken  The bot token, sent as `Authorization: Bot <token>` on every REST call
  *             and inside the Identify payload
+ *   applicationId  Optional - the application id, used to register the command menu and to answer
+ *             slash commands. Discord also sends it when the bot connects, so it is only needed to
+ *             publish the menu before the first connection or to override it.
  *   intents   Optional - a numeric Gateway Intents bitmask override. Defaults to
  *             GUILDS(1) + GUILD_MESSAGES(512) + DIRECT_MESSAGES(4096) +
  *             MESSAGE_CONTENT(32768) = 37377 - enough to read message text in
@@ -591,6 +594,7 @@ class extends="ScheduledGatewayBase" {
 		switch ( arguments.type ) {
 			case "READY":
 				variables.sessionId = arguments.data.session_id ?: ""
+				variables.applicationId = toString( arguments.data.application.id ?: ( variables.applicationId ?: "" ) )
 				variables.resumeGatewayUrl = arguments.data.resume_gateway_url ?: ""
 				variables.socketConnected = true
 				logEvent( "Connected (session #variables.sessionId#)" )
@@ -660,8 +664,11 @@ class extends="ScheduledGatewayBase" {
 	 * @data An INTERACTION_CREATE dispatch's own interaction object
 	 */
 	private void function handleInteractionCreate( required struct data ) {
-		// Only component (button) interactions are HITL decisions here -
-		// slash commands (type 2) etc. are out of scope for v1.
+		// A slash command (type 2) is a chat command; a component (type 3, a button) is a HITL decision.
+		if ( ( arguments.data.type ?: 0 ) == 2 ) {
+			handleSlashCommand( arguments.data )
+			return
+		}
 		if ( ( arguments.data.type ?: 0 ) != 3 ) {
 			return
 		}
@@ -688,6 +695,100 @@ class extends="ScheduledGatewayBase" {
 			conversationId: channel,
 			decision      : arguments.data.data.custom_id ?: ""
 		} )
+	}
+
+	/**
+	 * A slash command typed in Discord, such as /info or /model fast. Discord wants an answer to the
+	 * interaction within three seconds, so it is acknowledged with "thinking" (type 5) at once and the
+	 * real answer replaces that placeholder when it is delivered (see deliver()). The message that goes
+	 * on to the session reads like typed text, "/info", so the command layer needs no Discord special case.
+	 *
+	 * @data An INTERACTION_CREATE of type 2
+	 */
+	private void function handleSlashCommand( required struct data ) {
+		restCall(
+			"POST",
+			"/interactions/#arguments.data.id ?: ''#/#arguments.data.token ?: ''#/callback",
+			{ type: 5 }
+		)
+
+		var args = ""
+		for ( var option in ( arguments.data.data.options ?: [] ) ) {
+			if ( ( option.name ?: "" ) == "args" ) {
+				args = toString( option.value ?: "" )
+			}
+		}
+
+		var channel = arguments.data.channel_id ?: ""
+		var user = ( arguments.data.member ?: {} ).user ?: ( arguments.data.user ?: {} )
+		var context = new GatewayContext(
+			gateway       : variables.name,
+			conversationID: channel,
+			userID        : user.id ?: "",
+			threadID      : "",
+			raw           : arguments.data
+		)
+		var message = new GatewayMessage(
+			text   : trim( "/" & ( arguments.data.data.name ?: "" ) & " " & args ),
+			context: context,
+			raw    : arguments.data
+		)
+
+		BoxAnnounce( "onGatewayMessageReceived", {
+			gateway       : this,
+			message       : message,
+			threadId      : channel,
+			userId        : user.id ?: "",
+			conversationId: channel
+		} )
+
+		dispatchInbound( message )
+	}
+
+	/**
+	 * Registers the commands the bot answers as Discord application commands, so typing "/" in a server
+	 * lists them. Each takes one optional text argument, "args". Discord only takes lower case names of
+	 * letters, digits, "-" and "_" (at most 32), so any other is left out, as is anything past 100.
+	 * Needs the application id: the option `applicationId`, or the one Discord sends when it connects.
+	 *
+	 * @menu [ { name, hint } ] the commands to offer; a name may start with a slash
+	 *
+	 * @return True when Discord accepted the list
+	 */
+	boolean function publishCommands( required array menu ) {
+		var appId = toString( variables.options.applicationId ?: ( variables.applicationId ?: "" ) )
+		if ( !len( appId ) ) {
+			logEvent( "No application id yet, so the command menu was not published (set 'applicationId' or connect first)" )
+			return false
+		}
+		var response = restCall( "PUT", "/applications/#appId#/commands", discordCommands( arguments.menu ) )
+		if ( !isSuccessStatus( response.status ) ) {
+			logEvent( "Discord did not take the command menu (#response.status#): #response.body.message ?: 'unknown error'#" )
+			return false
+		}
+		return true
+	}
+
+	/**
+	 * @menu [ { name, hint } ]
+	 *
+	 * @return [ application command definitions ] as Discord's bulk overwrite wants them
+	 */
+	array function discordCommands( required array menu ) {
+		var out = []
+		for ( var entry in arguments.menu ) {
+			var name = lCase( reReplace( entry.name, "^/", "" ) )
+			if ( !reFind( "^[a-z0-9_-]{1,32}$", name ) || out.len() >= 100 ) {
+				continue
+			}
+			out.append( {
+				"name"        : name,
+				"type"        : 1,
+				"description" : left( len( entry.hint ?: "" ) ? entry.hint : name, 100 ),
+				"options"     : [ { "name" : "args", "description" : "Arguments", "type" : 3, "required" : false } ]
+			} )
+		}
+		return out
 	}
 
 	// -------------------------------------------------------------------------
@@ -718,10 +819,24 @@ class extends="ScheduledGatewayBase" {
 		var chunks = variables.chunker.split( text, static.MAX_MESSAGE_LENGTH )
 		var lastResponse = {}
 
+		var interaction = arguments.context.getRaw()
+		var answersInteraction = isStruct( interaction ) && ( interaction.type ?: 0 ) == 2 && len( interaction.token ?: "" ) && len( variables.options.applicationId ?: ( variables.applicationId ?: "" ) )
+		var appId = toString( variables.options.applicationId ?: ( variables.applicationId ?: "" ) )
+
 		for ( var i = 1; i <= chunks.len(); i++ ) {
 			var body = { content: chunks[ i ] }
 			if ( i == 1 && len( replyToId ) ) {
 				body[ "message_reference" ] = { message_id: replyToId }
+			}
+			if ( answersInteraction ) {
+				// the first chunk replaces the "thinking" placeholder, later ones are follow-ups
+				lastResponse = i == 1
+					? restCall( "PATCH", "/webhooks/#appId#/#interaction.token#/messages/@original", { content: chunks[ i ] } )
+					: restCall( "POST", "/webhooks/#appId#/#interaction.token#", { content: chunks[ i ] } )
+				if ( !isSuccessStatus( lastResponse.status ) ) {
+					return GatewayDeliveryResult.failure( "Discord interaction reply failed (#lastResponse.status#): #lastResponse.body.message ?: 'unknown error'#" )
+				}
+				continue
 			}
 			lastResponse = restCall( "POST", "/channels/#channel#/messages", body )
 			if ( !isSuccessStatus( lastResponse.status ) ) {
@@ -909,7 +1024,7 @@ class extends="ScheduledGatewayBase" {
 	 *         raw status and content when there is no JSON to parse). Callers
 	 *         must gate on isSuccessStatus(), never on `>= 300`.
 	 */
-	private struct function restCall( required string httpMethod, required string path, struct body = {} ) {
+	private struct function restCall( required string httpMethod, required string path, any body = {} ) {
 		if ( !isNull( variables.apiCaller ) ) {
 			return variables.apiCaller( arguments.httpMethod, arguments.path, arguments.body )
 		}

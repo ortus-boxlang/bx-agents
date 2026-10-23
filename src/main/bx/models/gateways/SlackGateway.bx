@@ -17,6 +17,9 @@ import bxModules.bxai.models.gateway.contracts.HumanInteractionDecision;
  * Config, via aiGateway( "bxModules.bxagents.models.gateways.SlackGateway", options ):
  *   botToken  The bot token (xoxb-...), used for chat.postMessage/chat.update
  *   appToken  The app-level token (xapp-...), used only for apps.connections.open
+ *   slashCommand  Optional - the umbrella slash command (default "/agent"): "/agent model fast" runs the
+ *             chat command "/model fast". A Slack app can instead define one slash command per chat
+ *             command ("/info"); both work. Slack slash commands are set up in the Slack app, not by the API.
  *
  * Verified against Slack's real, current docs (docs.slack.dev, not the
  * stale api.slack.com mirror): `java.net.http.WebSocket.Listener`'s 7
@@ -386,6 +389,7 @@ class extends="ScheduledGatewayBase" {
 				break
 			case "slash_commands":
 				ackEnvelope( frame.envelope_id ?: "" )
+				handleSlashCommandPayload( frame.payload ?: {} )
 				break
 			case "disconnect":
 				handleDisconnectFrame( frame.reason ?: "" )
@@ -438,6 +442,50 @@ class extends="ScheduledGatewayBase" {
 			return
 		}
 		dispatchInbound( toGatewayMessage( event ) )
+	}
+
+	/**
+	 * A Slack slash command. The Slack app may define one umbrella command (default "/agent", option
+	 * `slashCommand`) whose first word names the chat command ("/agent model fast" is "/model fast", and
+	 * "/agent" alone is "/help"), or one Slack command per chat command ("/info" is "/info"). Either way
+	 * the session sees ordinary typed text, so the command layer needs no Slack special case. The answer
+	 * goes back to the `response_url` Slack sent, visible only to the person who typed the command.
+	 *
+	 * @payload A Slack "slash_commands" envelope's own payload
+	 */
+	private void function handleSlashCommandPayload( required struct payload ) {
+		var command = lCase( arguments.payload.command ?: "" )
+		var umbrella = lCase( variables.options.slashCommand ?: "/agent" )
+		var typed = trim( arguments.payload.text ?: "" )
+		var line = ""
+		if ( command == umbrella ) {
+			line = "/" & ( len( typed ) ? typed : "help" )
+		} else {
+			line = trim( command & " " & typed )
+		}
+
+		var context = new GatewayContext(
+			gateway       : variables.name,
+			conversationID: arguments.payload.channel_id ?: "",
+			userID        : arguments.payload.user_id ?: "",
+			threadID      : "",
+			raw           : arguments.payload
+		)
+		var message = new GatewayMessage(
+			text   : line,
+			context: context,
+			raw    : arguments.payload
+		)
+
+		BoxAnnounce( "onGatewayMessageReceived", {
+			gateway       : this,
+			message       : message,
+			threadId      : "",
+			userId        : arguments.payload.user_id ?: "",
+			conversationId: arguments.payload.channel_id ?: ""
+		} )
+
+		dispatchInbound( message )
 	}
 
 	/**
@@ -518,6 +566,26 @@ class extends="ScheduledGatewayBase" {
 		var threadTs = arguments.context.getThreadID()
 		var chunks = variables.chunker.split( text, static.MAX_MESSAGE_LENGTH )
 		var lastResponse = {}
+
+		// the answer to a slash command goes to the response_url, for the person who typed it
+		var raw = arguments.context.getRaw()
+		if ( isStruct( raw ) && len( raw.command ?: "" ) && len( raw.response_url ?: "" ) ) {
+			for ( var chunk in chunks ) {
+				lastResponse = postToResponseUrl( raw.response_url, { response_type: "ephemeral", text: chunk } )
+				if ( !( lastResponse.ok ?: false ) ) {
+					return GatewayDeliveryResult.failure( "Slack response_url failed: #lastResponse.error ?: 'unknown error'#" )
+				}
+			}
+			var answered = new GatewayDeliveryResult( deliveryID: arguments.event.getId() )
+			BoxAnnounce( "onGatewayMessageSent", {
+				gateway : this,
+				event   : arguments.event,
+				context : arguments.context,
+				result  : answered,
+				threadId: arguments.context.getThreadID()
+			} )
+			return answered
+		}
 
 		for ( var chunk in chunks ) {
 			var params = { channel: channel, text: chunk }
@@ -685,6 +753,31 @@ class extends="ScheduledGatewayBase" {
 	 *
 	 * @return The parsed JSON response as a struct — { ok, error, ...method-specific fields }
 	 */
+	/**
+	 * Posts to the one-off URL Slack sends with a slash command. It needs no token.
+	 *
+	 * @url The response_url
+	 * @body { response_type, text }
+	 *
+	 * @return { ok: boolean, error?: string }
+	 */
+	private struct function postToResponseUrl( required string url, required struct body ) {
+		if ( !isNull( variables.apiCaller ) ) {
+			return variables.apiCaller( "response_url", { url: arguments.url, body: arguments.body }, "" )
+		}
+		bx:http
+			url     = arguments.url
+			method  = "post"
+			result  = "apiResult"
+			charset = "utf-8"
+		{
+			bx:httpParam type="header" name="content-type" value="application/json; charset=utf-8";
+			bx:httpParam type="body" value=jsonSerialize( arguments.body );
+		}
+		var status = val( listFirst( toString( apiResult.statusCode ?: "0" ), " " ) )
+		return status >= 200 && status < 300 ? { ok: true } : { ok: false, error: "HTTP #status#" }
+	}
+
 	private struct function callApi( required string method, required struct params, required string token ) {
 		if ( !isNull( variables.apiCaller ) ) {
 			return variables.apiCaller( arguments.method, arguments.params, arguments.token )

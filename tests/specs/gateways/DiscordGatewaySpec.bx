@@ -185,6 +185,59 @@ class extends="testbox.system.BaseSpec" {
 				expect( dispatched[ 1 ].getContext().getUserID() ).toBe( "user-1" );
 			} );
 
+			it( "handleSocketText() INTERACTION_CREATE slash command acks with 'thinking' and dispatches the typed command", function() {
+				var dispatched = [];
+				gateway.onMessage( function( message ) { dispatched.append( message ); } );
+				var calls = stubApi( { "GET /gateway": { status: 200, body: { url: "wss://gateway.discord.gg/" } } } );
+				var fakeSocket = new tests.support.FakeWebSocket();
+				gateway.setSocketOpener( function( wssUrl ) { return fakeSocket; } );
+				gateway.start();
+
+				gateway.handleSocketText( fakeSocket, jsonSerialize( {
+					op: 0, t: "INTERACTION_CREATE", s: 5,
+					d : {
+						id: "i-9", token: "tok-9", type: 2, channel_id: "chan-1",
+						member: { user: { id: "user-1" } },
+						data  : { name: "model", options: [ { name: "args", value: "fast" } ] }
+					}
+				} ) );
+
+				expect( calls.filter( c => c.path == "/interactions/i-9/tok-9/callback" )[ 1 ].body.type ).toBe( 5 );
+				expect( dispatched ).toHaveLength( 1 );
+				expect( dispatched[ 1 ].getText() ).toBe( "/model fast" );
+				expect( dispatched[ 1 ].getContext().getConversationID() ).toBe( "chan-1" );
+			} );
+
+			it( "answers a slash command by editing the 'thinking' placeholder, and sends extra chunks as follow-ups", function() {
+				gateway.configure( { botToken: "bot-test-token", applicationId: "app-1" } );
+				var calls = stubApi( {} );
+				var context = new GatewayContext( gateway: "discord", conversationID: "chan-1", userID: "user-1", raw: { type: 2, token: "tok-9" } );
+				gateway.deliver( new GatewayEvent( type: GatewayEvent.TYPES.RESPONSE_COMPLETED, data: { text: "Agent: helper" }, context: context ), context );
+
+				expect( calls ).toHaveLength( 1 );
+				expect( calls[ 1 ].httpMethod ).toBe( "PATCH" );
+				expect( calls[ 1 ].path ).toBe( "/webhooks/app-1/tok-9/messages/@original" );
+				expect( calls[ 1 ].body.content ).toBe( "Agent: helper" );
+			} );
+
+			it( "publishes the command menu as application commands, leaving out names Discord refuses", function() {
+				gateway.configure( { botToken: "bot-test-token", applicationId: "app-1" } );
+				var calls = stubApi( {} );
+				var taken = gateway.publishCommands( [ { name: "/help", hint: "what I can do" }, { name: "/Bad Name", hint: "x" }, { name: "/info", hint: "" } ] );
+
+				expect( taken ).toBeTrue();
+				expect( calls[ 1 ].httpMethod ).toBe( "PUT" );
+				expect( calls[ 1 ].path ).toBe( "/applications/app-1/commands" );
+				expect( calls[ 1 ].body.map( c => c.name ) ).toBe( [ "help", "info" ] );
+				expect( calls[ 1 ].body[ 1 ].options[ 1 ].name ).toBe( "args" );
+			} );
+
+			it( "does not publish the menu until it knows the application id", function() {
+				var calls = stubApi( {} );
+				expect( gateway.publishCommands( [ { name: "/help", hint: "h" } ] ) ).toBeFalse();
+				expect( calls ).toBeEmpty();
+			} );
+
 			it( "handleSocketText() INTERACTION_CREATE (button) acks via the callback endpoint and announces the decision", function() {
 				var calls = stubApi( { "GET /gateway": { status: 200, body: { url: "wss://gateway.discord.gg/" } } } );
 				var fakeSocket = new tests.support.FakeWebSocket();

@@ -271,6 +271,11 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   `/keys` and `?` with its own shortcuts.
 - In Telegram the bot's own `/` menu lists the commands the session answers (sent with `setMyCommands` when the
   first message arrives). Names Telegram would refuse are left out; a failure never stops the bot.
+- Chat commands on the other platforms. Discord registers them as application commands and answers a slash command
+  by replacing the "thinking" placeholder. Slack takes slash commands through Socket Mode (one umbrella command,
+  default `/agent`, or one per chat command) and answers only the person who typed. WhatsApp shows a pick-one as
+  buttons or a list. Where there are no buttons a pick-one is a numbered list and a lone number answers it.
+  `gatewaySession.commands.prefixes` sets a different command prefix per gateway.
 
 #### The chat screen
 
