@@ -3,7 +3,9 @@
  * the service is reachable. What /ping and `bxAgents models test` report.
  *
  * It goes through bx-ai's own aiChat() with the profile's provider, key and settings (the app's default model
- * when no profile is named: the generated app writes it into bx-ai's settings), and touches no conversation. A result is kept for a short while per model, so a chat where anyone may type /ping cannot
+ * when no profile is named: the generated app writes it into bx-ai's settings), and touches no conversation.
+ * An agent class that sets its model in code, with aiModel(), has no profile and nothing in the settings, so its
+ * own provider and params are passed in. A result is kept for a short while per model, so a chat where anyone may type /ping cannot
  * turn it into a stream of requests.
  */
 class {
@@ -15,11 +17,12 @@ class {
 
 	/**
 	 * @profile A profile name, or "" for the app's default model
+	 * @model   The model the agent class set in code ( { provider, params } ), tested when there is no profile
 	 *
 	 * @return { ok, ms, reply, cached } or { ok : false, ms, reason, cached }
 	 */
-	struct function ping( string profile = "" ) {
-		var key = lCase( arguments.profile )
+	struct function ping( string profile = "", struct model = {} ) {
+		var key = lCase( arguments.profile ) & ( len( arguments.profile ) ? "" : "|" & ( arguments.model.provider ?: "" ) & "|" & jsonSerialize( arguments.model.params ?: {} ) )
 		var known = static.recent[ key ] ?: {}
 		if ( !known.isEmpty() && dateDiff( "s", known.at, now() ) < static.REMEMBER_SECONDS ) {
 			return duplicate( known.result ).append( { cached : true } )
@@ -28,10 +31,14 @@ class {
 		var result = {}
 		try {
 			var options = { timeout : 20 }
+			var params = {}
 			if ( len( arguments.profile ) ) {
 				options[ "profile" ] = arguments.profile
+			} else if ( len( arguments.model.provider ?: "" ) ) {
+				options[ "provider" ] = arguments.model.provider
+				params = duplicate( arguments.model.params ?: {} )
 			}
-			var answer = aiChat( "Reply with the single word: pong", {}, options )
+			var answer = aiChat( "Reply with the single word: pong", params, options )
 			result = { ok : true, ms : getTickCount() - started, reply : left( trim( isSimpleValue( answer ) ? answer : jsonSerialize( answer ) ), 80 ), cached : false }
 		} catch ( any e ) {
 			result = { ok : false, ms : getTickCount() - started, reason : reasonOf( e.message ), cached : false }

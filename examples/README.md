@@ -30,6 +30,8 @@ Each of these connects the agent to a real chat platform via a `gateways/` entry
 | [`github-gateway-agent/`](github-gateway-agent) | Webhook (`X-Hub-Signature-256`, `@mention`-gated, degraded HITL) |
 | [`signal-gateway-agent/`](signal-gateway-agent) | Server-Sent Events, against an external `signal-cli` daemon (degraded HITL) |
 
+The chat-platform examples need their platform's credentials (each README names the variables) before the app boots: a gateway refuses to start without them, and a wrong token is reported at start, not at the first message.
+
 ## Try one
 
 ```bash

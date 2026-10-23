@@ -1,0 +1,30 @@
+/**
+ * Every gateway calls its platform with bx:http. A local variable named `url` shadows the URL scope only in a
+ * script, not in a web request: there `bx:http url=url` is handed the URL scope (a struct) and fails with
+ * "Can't cast Struct to a string". The gateways start inside a request (onApplicationStart on the first hit), so
+ * Telegram, Discord and Slack failed to boot while their specs, run from a script, passed.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "the gateways' HTTP calls", function() {
+
+			it( "never keep an address in a local variable named url", function() {
+				var root = expandPath( "/bxagents/models/gateways" );
+				var offenders = [];
+				for ( var file in directoryList( path = root, recurse = true, type = "file", filter = "*.bx" ) ) {
+					var lineNumber = 0;
+					for ( var line in fileRead( file ).listToArray( char( 10 ), true ) ) {
+						lineNumber++;
+						if ( reFindNoCase( "^\s*var\s+url\s*=", line ) ) {
+							offenders.append( listLast( file, "/" ) & ":" & lineNumber );
+						}
+					}
+				}
+				expect( offenders ).toBe( [], "rename it, for example to endpoint: " & offenders.toList( ", " ) );
+			} );
+
+		} );
+	}
+
+}

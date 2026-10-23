@@ -271,8 +271,8 @@ class extends="ScheduledGatewayBase" {
 	 */
 	private boolean function pingHealthCheck() {
 		try {
-			var url = "#variables.httpUrl#/api/v1/check"
-			bx:http url=url method="get" result="healthResult" timeout="5" charset="utf-8" { }
+			var endpoint = "#variables.httpUrl#/api/v1/check"
+			bx:http url=endpoint method="get" result="healthResult" timeout="5" charset="utf-8" { }
 			return val( healthResult.statusCode ?: 0 ) == 200
 		} catch ( any e ) {
 			return false
@@ -877,9 +877,9 @@ class extends="ScheduledGatewayBase" {
 			params : arguments.params,
 			id     : "#arguments.method#_#currentTimeMillis()#"
 		}
-		var url = "#variables.httpUrl#/api/v1/rpc"
+		var endpoint = "#variables.httpUrl#/api/v1/rpc"
 
-		bx:http url=url method="post" result="rpcResult" charset="utf-8" {
+		bx:http url=endpoint method="post" result="rpcResult" charset="utf-8" {
 			bx:httpParam type="header" name="content-type" value="application/json; charset=utf-8";
 			bx:httpParam type="body" value=jsonSerialize( requestBody );
 		}
