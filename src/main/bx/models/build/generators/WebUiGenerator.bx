@@ -257,6 +257,8 @@ class {
 		html = html.replace( "__SHOW_TOOLS__", showTools ? "true" : "false", "all" )
 		html = html.replace( "__THEME_TOKENS__", renderThemeTokens( config.theme ?: {} ), "all" )
 		html = html.replace( "__CUSTOM_CSS__", readCustomCss( arguments.entry ), "all" )
+		// Last, so none of the replacements above can touch the libraries' own text (they contain "__proto__" and the like)
+		html = html.replace( "__MARKDOWN_SCRIPTS__", renderMarkdownScripts( templateDir ), "all" )
 
 		var mountDir = Strings::normalizePath( arguments.appDir ) & path
 		directoryCreate( path : mountDir, createPath : true, ignoreExists : true )
@@ -315,6 +317,29 @@ class {
 	 *
 	 * @return CSS text, or "" when nothing is themed
 	 */
+	/**
+	 * The script tags that turn an answer's Markdown into a page: marked, DOMPurify and highlight.js (bundled by
+	 * tools/webui-vendor, inlined so the UI works offline with no extra requests) and the BoxLang and CFML
+	 * grammars, built from the same word lists the terminal's highlighter reads.
+	 *
+	 * @templateDir The folder holding the webui template
+	 *
+	 * @return Script tags, ready to put in the page
+	 */
+	private string function renderMarkdownScripts( required string templateDir ) {
+		var words = {}
+		var props = createObject( "java", "ortus.boxlang.bxagents.tui.Grammars" ).words()
+		for ( var key in props.stringPropertyNames() ) {
+			words[ key ] = props.getProperty( key )
+		}
+		var vendor = arguments.templateDir & "webui/vendor/"
+		return [
+			"<script>" & fileRead( vendor & "libs.min.js" ) & "</script>",
+			"<script>" & fileRead( vendor & "bx-grammars.js" ),
+			"registerBoxLangGrammars( hljs, " & jsonSerialize( words ) & " );</script>"
+		].toList( char( 10 ) )
+	}
+
 	private string function renderThemeTokens( required struct theme ) {
 		var tokens = themeTokenMap()
 		var lightRules = []

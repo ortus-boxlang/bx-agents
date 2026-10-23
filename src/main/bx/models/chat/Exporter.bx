@@ -2,7 +2,7 @@
  * Turns a conversation into a file a person can keep: Markdown, or a page of HTML. The same for the
  * terminal (which writes it to disk) and the web page (which hands it to the browser to save).
  *
- * The HTML is the Markdown rendered with commonmark, with the people's own HTML escaped: what someone
+ * The HTML is the Markdown rendered by bx-markdown (see MarkdownHtml), with the people's own HTML escaped: what someone
  * typed into a chat is text, never markup a browser should run when the file is opened later.
  */
 class {
@@ -83,10 +83,7 @@ class {
 	}
 
 	private string function toHtml( required string markdown, required string title ) {
-		var extensions = [ createObject( "java", "org.commonmark.ext.gfm.tables.TablesExtension" ).create() ]
-		var parser = createObject( "java", "org.commonmark.parser.Parser" ).builder().extensions( extensions ).build()
-		var renderer = createObject( "java", "org.commonmark.renderer.html.HtmlRenderer" ).builder().extensions( extensions ).escapeHtml( true ).sanitizeUrls( true ).build()
-		var body = renderer.render( parser.parse( arguments.markdown ) )
+		var body = new "models.markdown.MarkdownHtml@bxagents"().toHtml( arguments.markdown )
 		var name = len( arguments.title ) ? encodeForHTML( arguments.title ) : "Conversation"
 		return [
 			"<!doctype html>",
