@@ -261,6 +261,7 @@ gatewaySession:
     enabled: true            # false switches commands off
     prefix: "/"              # one character
     prefixes: { slack: "!" } # a different one-character prefix for one gateway, by name
+    conversation: false      # true also turns on /new, /clear, /compact, /sessions and /resume
     allow: [ help, info, tools, notes, remember, model ]   # the default; any command that runs on a gateway
     admins: [ "123456789" ]  # gateway user ids that may run commands marked for admins
 ```
@@ -286,8 +287,14 @@ gatewaySession:
 
 `build` checks the block: an unknown key, a prefix that is not one character, or an `allow` entry that is not a command that runs on a gateway fails before the app starts. In Telegram a group message such as `/info@yourbot` is read as `/info`.
 
-!!! info
-    The conversation commands (`/new`, `/clear`, `/compact`, `/sessions`, `/resume`) are not in the default set: a gateway keeps one conversation per chat thread, and moving between conversations there is separate work. 
+#### Conversation commands
+
+`/new`, `/clear`, `/compact`, `/sessions` and `/resume` are off by default, because a chat platform gives every chat one shared conversation: in a group, anyone's `/clear` clears it for everyone. Turn them on with `conversation: true` (or list them in `allow`) when the chats are private or you trust the group.
+
+- `/new` moves the chat to a fresh conversation; the old one stays on the list.
+- `/sessions` lists the conversations the person has had in this app, newest first, and `/resume 2` (or an id) moves the chat back to one. The list is kept in memory, so it lasts until the app restarts; the conversations themselves last as long as the agent's memory does, so an id still works afterwards.
+- `/clear` and `/compact` act on the conversation the chat is in now.
+- In a Slack thread, each thread has its own conversation, and `/new` moves only that thread.
 
 What each policy actually does with a message that arrives while a turn is still running:
 

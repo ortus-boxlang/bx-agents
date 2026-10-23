@@ -478,6 +478,7 @@ gatewaySession:
     enabled: true            # false apaga los comandos
     prefix: &quot;/&quot;              # un carácter
     prefixes: { slack: &quot;!&quot; } # otro prefijo de un carácter para un gateway, por nombre
+    conversation: false      # true activa también /new, /clear, /compact, /sessions y /resume
     allow: [ help, info, tools, notes, remember, model ]   # el valor por defecto; cualquier comando que corra en un gateway
     admins: [ &quot;123456789&quot; ]  # ids de usuario del gateway que pueden ejecutar comandos para admins
 </code></pre>
@@ -501,14 +502,14 @@ gatewaySession:
     prefix: &quot;/&quot;
     prefixes: { slack: &quot;!&quot; }     # por nombre de gateway; un carácter cada uno
 </code></pre>
-<div class="adm-block adm-info">
-<div class="adm-heading">
-<svg class="adm-icon"><use xlink:href="#adm-info" /></svg><span>Info</span>
-</div>
-<div class="adm-body">
-<p>Los comandos de conversación (<code>/new</code>, <code>/clear</code>, <code>/compact</code>, <code>/sessions</code>, <code>/resume</code>) no están en el conjunto por defecto: un gateway guarda una conversación por hilo de chat, y moverse entre conversaciones ahí es trabajo aparte.</p>
-</div>
-</div>
+<h4 id="comandos-de-conversación"><a href="#comandos-de-conversación" id="comandos-de-conversación" name="comandos-de-conversación" class="anchor"></a>Comandos de conversación</h4>
+<p><code>/new</code>, <code>/clear</code>, <code>/compact</code>, <code>/sessions</code> y <code>/resume</code> están desactivados por defecto, porque una plataforma de chat da a cada chat una conversación compartida: en un grupo, el <code>/clear</code> de cualquiera la borra para todos. Actívalos con <code>conversation: true</code> (o lístalos en <code>allow</code>) cuando los chats sean privados o confíes en el grupo.</p>
+<ul>
+<li><code>/new</code> mueve el chat a una conversación nueva; la anterior sigue en la lista.</li>
+<li><code>/sessions</code> lista las conversaciones que la persona ha tenido en esta app, la más reciente primero, y <code>/resume 2</code> (o un id) devuelve el chat a una. La lista vive en memoria, así que dura hasta que la app se reinicia; las conversaciones en sí duran lo que dure la memoria del agente, así que un id sigue funcionando después.</li>
+<li><code>/clear</code> y <code>/compact</code> actúan sobre la conversación en la que está el chat ahora.</li>
+<li>En un hilo de Slack, cada hilo tiene su propia conversación, y <code>/new</code> mueve solo ese hilo.</li>
+</ul>
 <p>Qué hace en realidad cada política con un mensaje que llega mientras un turno todavía está en ejecución:</p>
 <pre><code class="language-mermaid">flowchart TD
     M[&quot;un mensaje llega en el hilo T&quot;] --&gt; B{&quot;¿ya hay una ejecución&lt;br/&gt;en curso en T?&quot;}
@@ -550,7 +551,7 @@ gatewaySession:
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/conventions/gateways/index.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/conventions/gateways/index.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Oct 23, 2026, 4&#x3a;39&#x3a;32 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20gateways%2F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fconventions%2Fgateways%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/conventions/gateways/index.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/conventions/gateways/index.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Oct 23, 2026, 5&#x3a;05&#x3a;43 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20gateways%2F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fconventions%2Fgateways%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 

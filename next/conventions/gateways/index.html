@@ -478,6 +478,7 @@ gatewaySession:
     enabled: true            # false switches commands off
     prefix: &quot;/&quot;              # one character
     prefixes: { slack: &quot;!&quot; } # a different one-character prefix for one gateway, by name
+    conversation: false      # true also turns on /new, /clear, /compact, /sessions and /resume
     allow: [ help, info, tools, notes, remember, model ]   # the default; any command that runs on a gateway
     admins: [ &quot;123456789&quot; ]  # gateway user ids that may run commands marked for admins
 </code></pre>
@@ -501,14 +502,14 @@ gatewaySession:
     prefixes: { slack: &quot;!&quot; }     # by gateway name; one character each
 </code></pre>
 <p><code>build</code> checks the block: an unknown key, a prefix that is not one character, or an <code>allow</code> entry that is not a command that runs on a gateway fails before the app starts. In Telegram a group message such as <code>/info@yourbot</code> is read as <code>/info</code>.</p>
-<div class="adm-block adm-info">
-<div class="adm-heading">
-<svg class="adm-icon"><use xlink:href="#adm-info" /></svg><span>Info</span>
-</div>
-<div class="adm-body">
-<p>The conversation commands (<code>/new</code>, <code>/clear</code>, <code>/compact</code>, <code>/sessions</code>, <code>/resume</code>) are not in the default set: a gateway keeps one conversation per chat thread, and moving between conversations there is separate work.</p>
-</div>
-</div>
+<h4 id="conversation-commands"><a href="#conversation-commands" id="conversation-commands" name="conversation-commands" class="anchor"></a>Conversation commands</h4>
+<p><code>/new</code>, <code>/clear</code>, <code>/compact</code>, <code>/sessions</code> and <code>/resume</code> are off by default, because a chat platform gives every chat one shared conversation: in a group, anyone's <code>/clear</code> clears it for everyone. Turn them on with <code>conversation: true</code> (or list them in <code>allow</code>) when the chats are private or you trust the group.</p>
+<ul>
+<li><code>/new</code> moves the chat to a fresh conversation; the old one stays on the list.</li>
+<li><code>/sessions</code> lists the conversations the person has had in this app, newest first, and <code>/resume 2</code> (or an id) moves the chat back to one. The list is kept in memory, so it lasts until the app restarts; the conversations themselves last as long as the agent's memory does, so an id still works afterwards.</li>
+<li><code>/clear</code> and <code>/compact</code> act on the conversation the chat is in now.</li>
+<li>In a Slack thread, each thread has its own conversation, and <code>/new</code> moves only that thread.</li>
+</ul>
 <p>What each policy actually does with a message that arrives while a turn is still running:</p>
 <pre><code class="language-mermaid">flowchart TD
     M[&quot;a message arrives on thread T&quot;] --&gt; B{&quot;is a run already&lt;br/&gt;in flight on T?&quot;}
