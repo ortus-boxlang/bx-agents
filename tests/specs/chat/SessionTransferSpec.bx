@@ -1,0 +1,88 @@
+/**
+ * Exporting a conversation and importing it again, on a real bx-ai agent with a memory kept in the process.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "a conversation's export and import", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-session-transfer-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.sessions = new bxagents.models.store.SessionStore( store );
+				variables.agent = aiAgent( name : "helper", model : aiModel( provider : "mock" ), memory : aiMemory( "cache" ) );
+				agent.run( "first question", {}, { userId : "alice", conversationId : "c-1" } );
+				agent.run( "second question", {}, { userId : "alice", conversationId : "c-1" } );
+				sessions.touch( "alice", "c-1", "Plan the launch", 4 );
+				variables.conversation = new bxagents.models.chat.AgentConversation( agent, "alice", sessions, "c-1" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "exports the messages and the details of the conversation", function() {
+				var outcome = conversation.exportSession();
+
+				expect( outcome.ok ).toBeTrue();
+				expect( outcome.data.format ).toBe( "bxagents-session" );
+				expect( outcome.data.agent ).toBe( "helper" );
+				expect( outcome.data.title ).toBe( "Plan the launch" );
+				expect( outcome.data.messages.map( m => m.content ) ).toBe( [ "first question", "Mock response", "second question", "Mock response" ] );
+			} );
+
+			it( "says there is nothing to export when the memory holds no messages for it", function() {
+				var empty = new bxagents.models.chat.AgentConversation( agent, "alice", sessions, "c-none" );
+
+				var outcome = empty.exportSession();
+
+				expect( outcome.ok ).toBeFalse();
+				expect( outcome.reason ).toInclude( "nothing to export" );
+			} );
+
+			it( "imports a document as a new conversation that is listed and holds the messages", function() {
+				var data = conversation.exportSession().data;
+				var other = new bxagents.models.chat.AgentConversation( agent, "bob", sessions );
+
+				var outcome = other.importSession( data );
+
+				expect( outcome.ok ).toBeTrue();
+				expect( outcome.messages ).toBe( 4 );
+				expect( outcome.title ).toBe( "Plan the launch" );
+				expect( outcome.id ).notToBe( "c-1" );
+				expect( agent.getMemoryMessages( "bob", outcome.id ).map( m => m.content ) ).toBe( data.messages.map( m => m.content ) );
+				expect( sessions.list( "bob", 10 ).map( r => r.id ) ).toBe( [ outcome.id ] );
+			} );
+
+			it( "never replaces the conversation it came from, and keeps the exporter's list as it was", function() {
+				var data = conversation.exportSession().data;
+
+				var outcome = new bxagents.models.chat.AgentConversation( agent, "alice", sessions ).importSession( data, "A copy" );
+
+				expect( outcome.title ).toBe( "A copy" );
+				expect( agent.getMemoryMessages( "alice", "c-1" ) ).toHaveLength( 4 );
+				expect( sessions.list( "alice", 10 ) ).toHaveLength( 2 );
+			} );
+
+			it( "keeps the imported messages out of anyone else's conversation", function() {
+				var data = conversation.exportSession().data;
+				var outcome = new bxagents.models.chat.AgentConversation( agent, "bob", sessions ).importSession( data );
+
+				expect( agent.getMemoryMessages( "alice", outcome.id ) ).toBeEmpty();
+			} );
+
+			it( "refuses to import where no list of conversations is kept", function() {
+				var data = conversation.exportSession().data;
+
+				var outcome = new bxagents.models.chat.AgentConversation( agent, "bob" ).importSession( data );
+
+				expect( outcome.ok ).toBeFalse();
+				expect( outcome.reason ).toInclude( "no list of conversations" );
+			} );
+
+		} );
+	}
+
+}

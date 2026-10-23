@@ -33,7 +33,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n __bxagents_needs_verb -a 'notes' -d 'Read and manage the notes of an agent'
     complete -c $cmd -n __bxagents_needs_verb -a 'package' -d 'Package a built project into a .bxa'
     complete -c $cmd -n __bxagents_needs_verb -a 'serve' -d 'Serve a built project via boxlang-miniserver'
-    complete -c $cmd -n __bxagents_needs_verb -a 'sessions' -d 'List, rename, fork and delete the conversations in the chat database'
+    complete -c $cmd -n __bxagents_needs_verb -a 'sessions' -d 'List, rename, fork, delete, export and import the conversations in the chat database'
     complete -c $cmd -n __bxagents_needs_verb -a 'skills' -d 'Skills from skills.boxlang.io: skills <find|install|list|update|remove>'
     complete -c $cmd -n __bxagents_needs_verb -a 'test' -d 'Run a project\'s own tests/specs via TestBox'
     complete -c $cmd -n __bxagents_needs_verb -a 'token' -d 'Issue, list and revoke access tokens for a deployed agent'
@@ -185,6 +185,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb serve' -l port -x
     complete -c $cmd -n '__bxagents_using_verb serve' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb serve' -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb sessions' -l file -x
     complete -c $cmd -n '__bxagents_using_verb sessions' -l json
     complete -c $cmd -n '__bxagents_using_verb sessions' -l name -x
     complete -c $cmd -n '__bxagents_using_verb sessions' -l projectRoot -x -a '(__fish_complete_directories)'

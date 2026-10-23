@@ -934,7 +934,13 @@ class {
 
 		var rest = isStruct( declared ) ? duplicate( declared ) : {}
 		rest.delete( "type" )
-		return 'aiMemory( memory: "#Strings::bxLiteral( type )#", config: #renderLiteral( rest )# )'
+		// A memory that outlives the process names its storage after its key, and bx-ai makes a new random key every
+		// time one is built. Without a stable one, a file memory is never found again on the next start, and
+		// `sessions export`, `fork` and a resumed chat see nothing. The agent's own name is the default.
+		var key = trim( rest.key ?: ( arguments.resolvedConfig.name ?: "" ) )
+		rest.delete( "key" )
+		var keyArgument = len( key ) ? ' key: "#Strings::bxLiteral( key )#",' : ""
+		return 'aiMemory( memory: "#Strings::bxLiteral( type )#",#keyArgument# config: #renderLiteral( rest )# )'
 	}
 
 	/**
