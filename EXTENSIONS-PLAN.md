@@ -119,7 +119,7 @@ class {
 		api.command( "deploy", { hint : "deploy", run : ( ctx, args ) => ctx.reply().ok( "ok" ) } )
 		api.key( "ctrl+shift+d", "/deploy" )
 		api.status( "ci", ctx => "ci: green" )
-		api.on( "chat.turn.end", event => { ... } )
+		api.on( "onChatTurnEnd", data => { ... } )
 		api.slot( "header", ctx => "<span>staging</span>" )
 	}
 
@@ -148,22 +148,49 @@ Load has no side effects. Anything that opens a connection or starts a timer bel
 
 ## Events and interception points
 
-`@on` and `api.on` take three kinds of name. The handler receives an `event` struct.
+**An extension class is also an interceptor.** Name a method after an interception point and it listens, with no annotation, exactly like a BoxLang or ColdBox interceptor:
 
-1. **bx-ai points** (runtime scope): `beforeAIAgentRun`, `afterAIAgentRun`, `beforeAIModelInvoke`, `afterAIModelInvoke`, `beforeAIToolExecute`, `afterAIToolExecute`, `onAIError`, `onGatewayMessageReceived` and the rest of `InterceptionPoints.BXAI`.
-2. **ColdBox points** (agent scope): `preProcess`, `postProcess`, `preEvent`, `onException` and the rest of `InterceptionPoints.COLDBOX`. These fire in the generated app.
-3. **Chat events** (new, announced by the chat on every transport):
+```
+class {
+
+	function beforeAIToolExecute( data ) {
+		// runs before any tool; data.name, data.arguments ...
+	}
+
+	function afterAIAgentRun( data ) { ... }
+
+	function onChatTurnEnd( data ) { ... }
+
+}
+```
+
+This was checked on the 1.18 runtime: `BoxRegisterInterceptor( object, "point" )` calls the method of the same name when the point is announced. The registry does this for every method whose name is a known point, so bx-ai events (`beforeAIAgentRun`, `afterAIModelInvoke`, `onAIError`, `onGatewayMessageReceived` and the rest of `InterceptionPoints.BXAI`) work with no extra code.
+
+Use `@On` when the method needs another name, or to listen to several points with one method (a bare method name can only match one point):
+
+```
+@On( [ "beforeAIToolExecute", "afterAIToolExecute" ] )
+function audit( data ) { ... }
+```
+
+Three kinds of point can be listened to, both ways:
+
+1. **bx-ai points** (runtime scope): everything in `InterceptionPoints.BXAI`. These fire wherever the agent runs, which is the terminal chat process or the served app.
+2. **ColdBox points** (agent scope): `preProcess`, `postProcess`, `preEvent`, `onException` and the rest of `InterceptionPoints.COLDBOX`. These fire only in the generated app (web page, server API, chat platforms), not in the in-process terminal chat.
+3. **Chat events** (new, announced by the chat on every transport). Their names are plain camelCase, like bx-ai's, so a method can be named after them:
 
 | Event | When | Can |
 |---|---|---|
-| `chat.session.start` / `chat.session.end` | a terminal chat opens or closes; a web conversation opens | |
-| `chat.conversation.change` | `/new`, `/resume`, `/clear`, `/fork`, `/compact` | |
-| `chat.input` | before a message is sent | change the text, add attachments, or cancel with a reason |
-| `chat.turn.start` / `chat.turn.end` | around one agent turn | |
-| `chat.command.before` / `chat.command.after` | around any command | cancel before; change the reply after |
-| `chat.reply` | before a command reply is drawn | change blocks |
+| `onChatSessionStart` / `onChatSessionEnd` | a terminal chat opens or closes; a web conversation opens | |
+| `onChatConversationChange` | `/new`, `/resume`, `/clear`, `/fork`, `/compact` | |
+| `onChatInput` | before a message is sent | change the text, add attachments, or cancel with a reason |
+| `onChatTurnStart` / `onChatTurnEnd` | around one agent turn | |
+| `onChatCommandBefore` / `onChatCommandAfter` | around any command | cancel before; change the reply after |
+| `onChatReply` | before a command reply is drawn | change blocks |
 
-The `event` struct has `data`, and the methods `cancel( reason )` and `replace( value )` where the table says it can. Handlers run in load order, so a later layer sees the earlier layer's changes. An error in a handler is logged and shown in `/extensions`; it never stops the turn.
+Chat events carry a `data` struct. Where the table says an event can change or cancel something, `data` has `data.cancel( reason )` and `data.replace( value )`. Handlers run in load order, so a later layer sees the earlier layer's changes. An error in a handler is logged and shown in `/extensions`; it never stops the turn.
+
+Custom points: an extension can announce its own with `BoxRegisterInterceptionPoints` and `BoxAnnounce`, and other extensions listen the same way.
 
 ## Context passed to extensions
 
@@ -234,4 +261,4 @@ After that: `bxAgents extension install|list|remove|update`, local or `--user`, 
 
 1. A `@Key` on a method calls that method with no arguments (as with `deploy` above). A key that only runs a command line is `api.key( "ctrl+shift+d", "/deploy" )`.
 2. Annotation names are matched ignoring case, so `@command` and `@Command` both work. Capitalised (`@Command`) is the documented form.
-3. Event names: `chat.*` for chat events. Fine, or a different prefix?
+
