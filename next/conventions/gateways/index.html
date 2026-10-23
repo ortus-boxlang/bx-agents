@@ -477,17 +477,36 @@ gatewaySession:
   commands:
     enabled: true            # false switches commands off
     prefix: &quot;/&quot;              # one character
+    prefixes: { slack: &quot;!&quot; } # a different one-character prefix for one gateway, by name
     allow: [ help, info, tools, notes, remember, model ]   # the default; any command that runs on a gateway
     admins: [ &quot;123456789&quot; ]  # gateway user ids that may run commands marked for admins
 </code></pre>
-<p><strong>Telegram</strong> shows the commands in the bot's own <code>/</code> menu: the first time a message arrives, the session sends the list it answers (<code>setMyCommands</code>) to the gateway. Names Telegram would refuse (anything but lower case letters, digits and underscores, or over 32 characters) are left out, and a failure to publish never stops the bot answering.</p>
+<p>Each platform shows the same commands its own way:</p>
+<div class="bxsites-table-wrap"><table class="table">
+<thead>
+<tr><th>Platform</th><th>How the commands appear</th></tr>
+</thead>
+<tbody>
+<tr><td>Telegram</td><td>The bot's <code>/</code> menu lists them (<code>setMyCommands</code>, sent when the first message arrives). <code>/info@yourbot</code> in a group is read as <code>/info</code></td></tr>
+<tr><td>Discord</td><td>Registered as application commands when the bot starts, so typing <code>/</code> in a server lists them; each takes one optional <code>args</code> text. Needs the application id: Discord sends it when the bot connects, or set <code>applicationId</code> on the gateway entry. The answer replaces the &quot;thinking&quot; placeholder</td></tr>
+<tr><td>Slack</td><td>Slack slash commands are created in the Slack app, not through the API. Define one umbrella command (default <code>/agent</code>, option <code>slashCommand</code>): <code>/agent model fast</code> runs <code>/model fast</code> and <code>/agent</code> alone runs <code>/help</code>. Or define one Slack command per chat command (<code>/info</code>). The answer is visible only to the person who typed it. Typed <code>/word</code> messages never reach a Slack bot, so use <code>prefixes</code> below</td></tr>
+<tr><td>WhatsApp</td><td>A &quot;pick one&quot; answer arrives as up to three buttons, or a list for four to ten; a tap runs that command</td></tr>
+<tr><td>Twilio (SMS), Signal and others</td><td>A &quot;pick one&quot; answer is a numbered list; reply with just the number. Any other message forgets the list</td></tr>
+</tbody>
+</table></div>
+<p>The prefix can differ per gateway. A Slack workspace has its own <code>/</code> commands, so give Slack another character:</p>
+<pre><code class="language-yaml">gatewaySession:
+  commands:
+    prefix: &quot;/&quot;
+    prefixes: { slack: &quot;!&quot; }     # by gateway name; one character each
+</code></pre>
 <p><code>build</code> checks the block: an unknown key, a prefix that is not one character, or an <code>allow</code> entry that is not a command that runs on a gateway fails before the app starts. In Telegram a group message such as <code>/info@yourbot</code> is read as <code>/info</code>.</p>
 <div class="adm-block adm-info">
 <div class="adm-heading">
 <svg class="adm-icon"><use xlink:href="#adm-info" /></svg><span>Info</span>
 </div>
 <div class="adm-body">
-<p>The conversation commands (<code>/new</code>, <code>/clear</code>, <code>/compact</code>, <code>/sessions</code>, <code>/resume</code>) are not in the default set: a gateway keeps one conversation per chat thread, and moving between conversations there is separate work. Slack's and Discord's own slash commands are not set up yet; typing them works.</p>
+<p>The conversation commands (<code>/new</code>, <code>/clear</code>, <code>/compact</code>, <code>/sessions</code>, <code>/resume</code>) are not in the default set: a gateway keeps one conversation per chat thread, and moving between conversations there is separate work.</p>
 </div>
 </div>
 <p>What each policy actually does with a message that arrives while a turn is still running:</p>

@@ -260,16 +260,34 @@ gatewaySession:
   commands:
     enabled: true            # false switches commands off
     prefix: "/"              # one character
+    prefixes: { slack: "!" } # a different one-character prefix for one gateway, by name
     allow: [ help, info, tools, notes, remember, model ]   # the default; any command that runs on a gateway
     admins: [ "123456789" ]  # gateway user ids that may run commands marked for admins
 ```
 
-**Telegram** shows the commands in the bot's own `/` menu: the first time a message arrives, the session sends the list it answers (`setMyCommands`) to the gateway. Names Telegram would refuse (anything but lower case letters, digits and underscores, or over 32 characters) are left out, and a failure to publish never stops the bot answering.
+Each platform shows the same commands its own way:
+
+| Platform | How the commands appear |
+|---|---|
+| Telegram | The bot's `/` menu lists them (`setMyCommands`, sent when the first message arrives). `/info@yourbot` in a group is read as `/info` |
+| Discord | Registered as application commands when the bot starts, so typing `/` in a server lists them; each takes one optional `args` text. Needs the application id: Discord sends it when the bot connects, or set `applicationId` on the gateway entry. The answer replaces the "thinking" placeholder |
+| Slack | Slack slash commands are created in the Slack app, not through the API. Define one umbrella command (default `/agent`, option `slashCommand`): `/agent model fast` runs `/model fast` and `/agent` alone runs `/help`. Or define one Slack command per chat command (`/info`). The answer is visible only to the person who typed it. Typed `/word` messages never reach a Slack bot, so use `prefixes` below |
+| WhatsApp | A "pick one" answer arrives as up to three buttons, or a list for four to ten; a tap runs that command |
+| Twilio (SMS), Signal and others | A "pick one" answer is a numbered list; reply with just the number. Any other message forgets the list |
+
+The prefix can differ per gateway. A Slack workspace has its own `/` commands, so give Slack another character:
+
+```yaml
+gatewaySession:
+  commands:
+    prefix: "/"
+    prefixes: { slack: "!" }     # by gateway name; one character each
+```
 
 `build` checks the block: an unknown key, a prefix that is not one character, or an `allow` entry that is not a command that runs on a gateway fails before the app starts. In Telegram a group message such as `/info@yourbot` is read as `/info`.
 
 !!! info
-    The conversation commands (`/new`, `/clear`, `/compact`, `/sessions`, `/resume`) are not in the default set: a gateway keeps one conversation per chat thread, and moving between conversations there is separate work. Slack's and Discord's own slash commands are not set up yet; typing them works.
+    The conversation commands (`/new`, `/clear`, `/compact`, `/sessions`, `/resume`) are not in the default set: a gateway keeps one conversation per chat thread, and moving between conversations there is separate work. 
 
 What each policy actually does with a message that arrives while a turn is still running:
 

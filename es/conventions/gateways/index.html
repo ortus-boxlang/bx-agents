@@ -477,17 +477,36 @@ gatewaySession:
   commands:
     enabled: true            # false apaga los comandos
     prefix: &quot;/&quot;              # un carácter
+    prefixes: { slack: &quot;!&quot; } # otro prefijo de un carácter para un gateway, por nombre
     allow: [ help, info, tools, notes, remember, model ]   # el valor por defecto; cualquier comando que corra en un gateway
     admins: [ &quot;123456789&quot; ]  # ids de usuario del gateway que pueden ejecutar comandos para admins
 </code></pre>
 <p><code>build</code> comprueba el bloque: una clave desconocida, un prefijo que no sea un carácter o una entrada de <code>allow</code> que no sea un comando que corra en un gateway falla antes de que arranque la app. En Telegram un mensaje de grupo como <code>/info@tubot</code> se lee como <code>/info</code>.</p>
-<p><strong>Telegram</strong> muestra los comandos en el menú <code>/</code> del propio bot: la primera vez que llega un mensaje, la sesión envía la lista que responde (<code>setMyCommands</code>) al gateway. Los nombres que Telegram rechazaría (cualquier cosa salvo minúsculas, dígitos y guiones bajos, o más de 32 caracteres) se omiten, y un fallo al publicar nunca impide que el bot responda.</p>
+<p>Cada plataforma muestra los mismos comandos a su manera:</p>
+<div class="bxsites-table-wrap"><table class="table">
+<thead>
+<tr><th>Plataforma</th><th>Cómo aparecen los comandos</th></tr>
+</thead>
+<tbody>
+<tr><td>Telegram</td><td>El menú <code>/</code> del bot los lista (<code>setMyCommands</code>, se envía cuando llega el primer mensaje). <code>/info@tubot</code> en un grupo se lee como <code>/info</code></td></tr>
+<tr><td>Discord</td><td>Se registran como comandos de aplicación al iniciar el bot, así que escribir <code>/</code> en un servidor los lista; cada uno acepta un texto opcional <code>args</code>. Necesita el id de la aplicación: Discord lo envía al conectar el bot, o pon <code>applicationId</code> en la entrada del gateway. La respuesta reemplaza el marcador &quot;pensando&quot;</td></tr>
+<tr><td>Slack</td><td>Los comandos con barra de Slack se crean en la app de Slack, no por la API. Define un comando general (por defecto <code>/agent</code>, opción <code>slashCommand</code>): <code>/agent model fast</code> ejecuta <code>/model fast</code> y <code>/agent</code> solo ejecuta <code>/help</code>. O define un comando de Slack por cada comando del chat (<code>/info</code>). La respuesta la ve solo quien lo escribió. Los mensajes <code>/palabra</code> escritos nunca llegan a un bot de Slack, así que usa <code>prefixes</code> más abajo</td></tr>
+<tr><td>WhatsApp</td><td>Una respuesta &quot;elige una&quot; llega como hasta tres botones, o una lista de cuatro a diez; al tocar una se ejecuta ese comando</td></tr>
+<tr><td>Twilio (SMS), Signal y otros</td><td>Una respuesta &quot;elige una&quot; es una lista numerada; responde solo con el número. Cualquier otro mensaje olvida la lista</td></tr>
+</tbody>
+</table></div>
+<p>El prefijo puede ser distinto por gateway. Un espacio de trabajo de Slack tiene sus propios comandos <code>/</code>, así que dale a Slack otro carácter:</p>
+<pre><code class="language-yaml">gatewaySession:
+  commands:
+    prefix: &quot;/&quot;
+    prefixes: { slack: &quot;!&quot; }     # por nombre de gateway; un carácter cada uno
+</code></pre>
 <div class="adm-block adm-info">
 <div class="adm-heading">
 <svg class="adm-icon"><use xlink:href="#adm-info" /></svg><span>Info</span>
 </div>
 <div class="adm-body">
-<p>Los comandos de conversación (<code>/new</code>, <code>/clear</code>, <code>/compact</code>, <code>/sessions</code>, <code>/resume</code>) no están en el conjunto por defecto: un gateway guarda una conversación por hilo de chat, y moverse entre conversaciones ahí es trabajo aparte. Los comandos con barra propios de Slack y Discord aún no están configurados; escribirlos funciona.</p>
+<p>Los comandos de conversación (<code>/new</code>, <code>/clear</code>, <code>/compact</code>, <code>/sessions</code>, <code>/resume</code>) no están en el conjunto por defecto: un gateway guarda una conversación por hilo de chat, y moverse entre conversaciones ahí es trabajo aparte.</p>
 </div>
 </div>
 <p>Qué hace en realidad cada política con un mensaje que llega mientras un turno todavía está en ejecución:</p>
@@ -531,7 +550,7 @@ gatewaySession:
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/conventions/gateways/index.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/conventions/gateways/index.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Oct 22, 2026, 9&#x3a;25&#x3a;35 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20gateways%2F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fconventions%2Fgateways%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/conventions/gateways/index.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/conventions/gateways/index.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Oct 23, 2026, 8&#x3a;46&#x3a;24 AM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20gateways%2F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fconventions%2Fgateways%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 
