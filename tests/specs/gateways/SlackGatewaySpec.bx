@@ -1,5 +1,6 @@
 import bxModules.bxai.models.gateway.contracts.GatewayContext;
 import bxModules.bxai.models.gateway.contracts.GatewayEvent;
+import bxModules.bxai.models.gateway.contracts.GatewayMessage;
 import bxModules.bxai.models.gateway.contracts.HumanInteractionRequest;
 
 class extends="testbox.system.BaseSpec" {
@@ -124,6 +125,20 @@ class extends="testbox.system.BaseSpec" {
 				expect( calls[ 1 ].method ).toBe( "response_url" );
 				expect( calls[ 1 ].params.url ).toBe( "https://hooks.slack.test/r" );
 				expect( calls[ 1 ].params.body ).toBe( { response_type: "ephemeral", text: "Agent: helper" } );
+			} );
+
+			it( "treats a file_share message as a person talking and lists its files with the bot token to fetch them", function() {
+				var dispatched = [];
+				gateway.onMessage( function( message ) { dispatched.append( message ); } );
+				var fakeSocket = new tests.support.FakeWebSocket();
+				var frame = { type: "events_api", envelope_id: "e9", payload: { event: { type: "message", subtype: "file_share", channel: "C1", user: "U1", ts: "1.1", text: "see this", files: [ { name: "a.png", mimetype: "image/png", size: 10, url_private_download: "https://files.slack.com/a.png" } ] } } };
+				gateway.handleSocketText( fakeSocket, jsonSerialize( frame ) );
+
+				expect( dispatched ).toHaveLength( 1 );
+				var files = gateway.attachmentsOf( dispatched[ 1 ] );
+				expect( files ).toHaveLength( 1 );
+				expect( files[ 1 ].url ).toBe( "https://files.slack.com/a.png" );
+				expect( files[ 1 ].headers.Authorization ).toBe( "Bearer xoxb-test" );
 			} );
 
 			it( "handleSocketText() ignores a message event carrying a bot_id (avoids a self-loop)", function() {

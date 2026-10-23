@@ -1,5 +1,6 @@
 import bxModules.bxai.models.gateway.contracts.GatewayContext;
 import bxModules.bxai.models.gateway.contracts.GatewayEvent;
+import bxModules.bxai.models.gateway.contracts.GatewayMessage;
 import bxModules.bxai.models.gateway.contracts.HumanInteractionRequest;
 
 class extends="testbox.system.BaseSpec" {
@@ -236,6 +237,13 @@ class extends="testbox.system.BaseSpec" {
 				var calls = stubApi( {} );
 				expect( gateway.publishCommands( [ { name: "/help", hint: "h" } ] ) ).toBeFalse();
 				expect( calls ).toBeEmpty();
+			} );
+
+			it( "lists the files attached to a message", function() {
+				var message = new GatewayMessage( text: "", context: new GatewayContext(), raw: { attachments: [ { filename: "a.png", content_type: "image/png", size: 10, url: "https://cdn.discordapp.com/a.png" } ] } );
+				var files = gateway.attachmentsOf( message );
+				expect( files ).toHaveLength( 1 );
+				expect( files[ 1 ] ).toBe( { name: "a.png", mime: "image/png", size: 10, url: "https://cdn.discordapp.com/a.png" } );
 			} );
 
 			it( "handleSocketText() INTERACTION_CREATE (button) acks via the callback endpoint and announces the decision", function() {

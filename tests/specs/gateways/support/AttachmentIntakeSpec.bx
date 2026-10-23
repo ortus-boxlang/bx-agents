@@ -1,0 +1,79 @@
+/**
+ * What the agent is given for the files that came with a chat message: pictures as image parts, text files
+ * inside the message, the rest named and left out.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "AttachmentIntake", function() {
+
+			variables.png = toBase64( charsetDecode( "not really a png but bytes", "utf-8" ) );
+
+			function intakeWith( required struct byUrl ) {
+				var fetcher = new bxagents.models.gateways.support.AttachmentFetcher( function( url, headers ) {
+					return byUrl[ url ] ?: { status : 404, body : "", mime : "" };
+				} );
+				return new bxagents.models.gateways.support.AttachmentIntake( fetcher );
+			}
+
+			function bytes( required string text ) {
+				return charsetDecode( text, "utf-8" );
+			}
+
+			it( "puts a text file into the message as its own block", function() {
+				var intake = intakeWith( { "https://f.example/notes.md" : { status : 200, body : bytes( "## Plan" ), mime : "text/markdown" } } );
+				var got = intake.intake( "summarise", [ { name : "notes.md", mime : "text/markdown", url : "https://f.example/notes.md" } ] );
+
+				expect( got.ok ).toBeTrue();
+				expect( got.files ).toBe( 1 );
+				expect( got.input ).toInclude( "summarise" );
+				expect( got.input ).toInclude( "--- notes.md ---" );
+				expect( got.input ).toInclude( "## Plan" );
+			} );
+
+			it( "turns a picture into an image part of the user message", function() {
+				var intake = intakeWith( { "https://f.example/p.png" : { status : 200, body : bytes( "pixels" ), mime : "image/png" } } );
+				var got = intake.intake( "what is this", [ { name : "p.png", mime : "image/png", url : "https://f.example/p.png" } ] );
+
+				expect( got.ok ).toBeTrue();
+				expect( got.images ).toBe( 1 );
+				expect( isStruct( got.input ) ).toBeTrue();
+				expect( got.input.role ).toBe( "user" );
+				expect( jsonSerialize( got.input ) ).toInclude( "image" );
+			} );
+
+			it( "refuses a picture for a model that cannot see", function() {
+				var intake = intakeWith( { "https://f.example/p.png" : { status : 200, body : bytes( "pixels" ), mime : "image/png" } } );
+				var got = intake.intake( "", [ { name : "p.png", mime : "image/png", url : "https://f.example/p.png" } ], { vision : "no" } );
+
+				expect( got.ok ).toBeFalse();
+				expect( got.reason ).toInclude( "cannot see" );
+			} );
+
+			it( "names what it left out: an unsupported type, a failed download", function() {
+				var intake = intakeWith( {} );
+				var got = intake.intake( "hi", [
+					{ name : "movie.mp4", mime : "video/mp4", url : "https://f.example/m" },
+					{ name : "a.txt", mime : "text/plain", url : "https://f.example/gone" }
+				] );
+
+				expect( got.ok ).toBeTrue();
+				expect( got.notes ).toHaveLength( 2 );
+				expect( got.notes[ 1 ] ).toInclude( "movie.mp4 was not read" );
+				expect( got.notes[ 2 ] ).toInclude( "a.txt could not be read" );
+				expect( got.input ).toBe( "hi" );
+			} );
+
+			it( "classifies by type first, then by extension", function() {
+				var intake = intakeWith( {} );
+				expect( intake.kindOf( { name : "x", mime : "image/webp" } ) ).toBe( "image" );
+				expect( intake.kindOf( { name : "x", mime : "image/svg+xml" } ) ).toBe( "other" );
+				expect( intake.kindOf( { name : "data.json", mime : "application/octet-stream" } ) ).toBe( "text" );
+				expect( intake.kindOf( { name : "photo.jpg", mime : "" } ) ).toBe( "image" );
+				expect( intake.kindOf( { name : "a.zip", mime : "application/zip" } ) ).toBe( "other" );
+			} );
+
+		} );
+	}
+
+}

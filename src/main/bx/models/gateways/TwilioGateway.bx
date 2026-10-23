@@ -342,7 +342,8 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 			return
 		}
 
-		if ( !len( body ) ) {
+		// a picture sent alone has no text; it still goes on (see attachmentsOf())
+		if ( !len( body ) && val( arguments.params.NumMedia ?: 0 ) == 0 ) {
 			return
 		}
 
@@ -367,6 +368,25 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		} )
 
 		dispatchInbound( message )
+	}
+
+	/**
+	 * The pictures and files of an MMS. Twilio puts them in MediaUrl0, MediaUrl1... with their types in
+	 * MediaContentType0...; the links are public unless the account turned on basic auth for media.
+	 *
+	 * @message A GatewayMessage from this gateway
+	 *
+	 * @return [ { name, mime, size, url } ]
+	 */
+	array function attachmentsOf( required any message ) {
+		var params = arguments.message.getRaw()
+		var out = []
+		for ( var i = 0; i < val( params.NumMedia ?: 0 ); i++ ) {
+			if ( len( params[ "MediaUrl#i#" ] ?: "" ) ) {
+				out.append( { name : "media#i + 1#", mime : params[ "MediaContentType#i#" ] ?: "", size : 0, url : params[ "MediaUrl#i#" ] } )
+			}
+		}
+		return out
 	}
 
 	/**

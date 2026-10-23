@@ -1,0 +1,32 @@
+import bxModules.bxai.models.gateway.contracts.GatewayContext;
+import bxModules.bxai.models.gateway.contracts.GatewayMessage;
+
+/**
+ * A message that answers getText() with what the agent should be given, and is otherwise the message it wraps.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "MultipartMessage", function() {
+
+			it( "hands the agent the message with its image parts and keeps the rest of the original", function() {
+				var context = new GatewayContext( gateway: "mock", conversationID: "c1", userID: "u1" );
+				var original = new GatewayMessage( text: "what is this", context: context, raw: { a: 1 } );
+				var input = { role: "user", content: [ { type: "text", text: "what is this" } ] };
+				var wrapped = new bxagents.models.gateways.support.MultipartMessage( original, input );
+
+				expect( wrapped.getText() ).toBe( input );
+				expect( wrapped.getId() ).toBe( original.getId() );
+				expect( wrapped.getContext().getConversationID() ).toBe( "c1" );
+				expect( wrapped.getRaw() ).toBe( { a: 1 } );
+			} );
+
+			it( "answers with the original text when the input is only text", function() {
+				var original = new GatewayMessage( text: "hello", context: new GatewayContext() );
+				expect( new bxagents.models.gateways.support.MultipartMessage( original, "hello plus a file" ).getText() ).toBe( "hello plus a file" );
+			} );
+
+		} );
+	}
+
+}

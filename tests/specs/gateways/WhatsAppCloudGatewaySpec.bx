@@ -1,5 +1,6 @@
 import bxModules.bxai.models.gateway.contracts.GatewayContext;
 import bxModules.bxai.models.gateway.contracts.GatewayEvent;
+import bxModules.bxai.models.gateway.contracts.GatewayMessage;
 import bxModules.bxai.models.gateway.contracts.HumanInteractionRequest;
 
 class extends="testbox.system.BaseSpec" {
@@ -218,6 +219,27 @@ class extends="testbox.system.BaseSpec" {
 					gateway.handleWebhook( raw, sig );
 
 					expect( dispatched.len() ).toBe( 0 );
+				} );
+
+			} );
+
+			describe( "attachmentsOf()", function() {
+
+				it( "looks the picture up on Graph and returns its short-lived address with the access token to fetch it", function() {
+					var calls = stubApi( { status: 200, body: { url: "https://lookaside.fbsbx.com/m1", mime_type: "image/jpeg", file_size: 1234 } } );
+					var message = new GatewayMessage( text: "", context: new GatewayContext(), raw: { type: "image", image: { id: "media-1", mime_type: "image/jpeg" } } );
+					var files = gateway.attachmentsOf( message );
+
+					expect( calls[ 1 ].path ).toBe( "../media-1" );
+					expect( files ).toHaveLength( 1 );
+					expect( files[ 1 ].url ).toBe( "https://lookaside.fbsbx.com/m1" );
+					expect( files[ 1 ].headers.Authorization ).toBe( "Bearer tok-test" );
+				} );
+
+				it( "leaves out a media id Graph will not give", function() {
+					stubApi( { status: 404, body: {} } );
+					var message = new GatewayMessage( text: "", context: new GatewayContext(), raw: { type: "document", document: { id: "gone" } } );
+					expect( gateway.attachmentsOf( message ) ).toBeEmpty();
 				} );
 
 			} );

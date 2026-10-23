@@ -279,6 +279,9 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
 - `/new`, `/clear`, `/compact`, `/sessions` and `/resume` on chat platforms, switched on with
   `gatewaySession.commands.conversation: true` (off by default: a chat shares one conversation). `/new` and `/resume`
   move the chat to another conversation, and `/sessions` lists the ones the person has had since the app started.
+- Pictures and files sent on Telegram, Discord, Slack, WhatsApp and Twilio (MMS) reach the agent: pictures as image
+  parts, text files inside the message, anything else named back as not read. The same limits and vision check as the
+  terminal and the web page. `gatewaySession.attachments: false` switches it off.
 
 #### The chat screen
 

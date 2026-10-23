@@ -478,6 +478,36 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 	}
 
 	/**
+	 * The picture or document that came with a message. WhatsApp gives a media id; asking Graph for it
+	 * returns a short-lived address, which is downloaded with the same access token.
+	 *
+	 * @message A GatewayMessage from this gateway
+	 *
+	 * @return [ { name, mime, size, url, headers } ]
+	 */
+	array function attachmentsOf( required any message ) {
+		var raw = arguments.message.getRaw()
+		var out = []
+		for ( var kind in [ "image", "document" ] ) {
+			var media = raw[ kind ] ?: {}
+			if ( !isStruct( media ) || !len( media.id ?: "" ) ) {
+				continue
+			}
+			var located = callApi( "../#media.id#", {}, "GET" )
+			if ( located.status >= 200 && located.status < 300 && len( located.body.url ?: "" ) ) {
+				out.append( {
+					name    : media.filename ?: ( kind == "image" ? "photo" : "file" ),
+					mime    : located.body.mime_type ?: ( media.mime_type ?: "" ),
+					size    : located.body.file_size ?: 0,
+					url     : located.body.url,
+					headers : { "Authorization" : "Bearer #variables.accessToken#" }
+				} )
+			}
+		}
+		return out
+	}
+
+	/**
 	 * @rawMessage A raw Cloud API message object
 	 * @msgType Its own lowercased "type" field
 	 */
@@ -822,21 +852,26 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 	 *
 	 * @return { status: numeric (0 when the request never completed), rawStatus: string (the raw `bx:http` statusCode), body: struct }
 	 */
-	private struct function callApi( required string path, required struct body ) {
+	private struct function callApi( required string path, required struct body, string httpMethod = "post" ) {
 		if ( !isNull( variables.apiCaller ) ) {
 			return variables.apiCaller( arguments.path, arguments.body )
 		}
 
-		var endpoint = "#static.GRAPH_API_BASE#/#variables.apiVersion#/#variables.phoneNumberId#/#arguments.path#"
+		// a path starting "../" is relative to the API version, not to the phone number (media lookups)
+		var endpoint = arguments.path.startsWith( "../" )
+			? "#static.GRAPH_API_BASE#/#variables.apiVersion#/#mid( arguments.path, 4, len( arguments.path ) )#"
+			: "#static.GRAPH_API_BASE#/#variables.apiVersion#/#variables.phoneNumberId#/#arguments.path#"
 		bx:http
 			url     = endpoint
-			method  = "post"
+			method  = arguments.httpMethod
 			result  = "apiResult"
 			charset = "utf-8"
 		{
 			bx:httpParam type="header" name="Authorization" value="Bearer #variables.accessToken#";
-			bx:httpParam type="header" name="content-type" value="application/json; charset=utf-8";
-			bx:httpParam type="body" value=jsonSerialize( arguments.body );
+			if ( arguments.httpMethod == "post" ) {
+				bx:httpParam type="header" name="content-type" value="application/json; charset=utf-8";
+				bx:httpParam type="body" value=jsonSerialize( arguments.body );
+			}
 		}
 
 		var rawStatus = toString( apiResult.statusCode ?: "0" )
