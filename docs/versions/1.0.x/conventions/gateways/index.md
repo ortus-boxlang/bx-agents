@@ -287,6 +287,21 @@ gatewaySession:
 
 `build` checks the block: an unknown key, a prefix that is not one character, or an `allow` entry that is not a command that runs on a gateway fails before the app starts. In Telegram a group message such as `/info@yourbot` is read as `/info`.
 
+#### Pictures and files
+
+A picture or file sent to the bot goes to the agent with the message: pictures as image parts, text files (`.txt`, `.md`, `.json`, `.csv`, code and the like, cut at 100,000 characters) inside the message. Other types are named back to the person as not read. At most 4 pictures of 5 MB each go with one message, and a picture sent to a profile marked `vision: false` is refused with that reason, the same checks as the terminal and the web page.
+
+| Platform | What is read | Setup |
+|---|---|---|
+| Telegram | A photo (the largest size within 5 MB) and a document, with the caption as the text | None |
+| Discord | Attachments | None |
+| Slack | Files shared in a message | The Slack app needs the `files:read` scope |
+| WhatsApp | A picture or document, with its caption | None; the media link is fetched with the access token |
+| Twilio (MMS) | Media sent with the message, even with no text | Media links are public unless the account turned on basic auth for media; with that on, they cannot be read |
+| Teams, Signal, Email, GitHub | Not read | |
+
+Links must be https. A file that cannot be downloaded is named back to the person and the rest of the message goes on. Switch it off with `gatewaySession.attachments: false`.
+
 #### Conversation commands
 
 `/new`, `/clear`, `/compact`, `/sessions` and `/resume` are off by default, because a chat platform gives every chat one shared conversation: in a group, anyone's `/clear` clears it for everyone. Turn them on with `conversation: true` (or list them in `allow`) when the chats are private or you trust the group.

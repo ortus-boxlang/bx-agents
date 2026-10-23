@@ -166,6 +166,37 @@ class extends="testbox.system.BaseSpec" {
 				expect( replies()[ 1 ] ).toInclude( "Cleared" );
 			} );
 
+			it( "gives the agent a message with its pictures, and tells the person what could not be read", function() {
+				mock.attachmentsOf = ( m ) => [ { name: "p.png", mime: "image/png", url: "https://f.example/p.png" } ];
+				var taken = [];
+				var intake = { intake : ( text, files, facts ) => { taken.append( { text: text, files: files } ); return { ok: true, input: { role: "user", content: [ { type: "text", text: text } ] }, notes: [ "movie.mp4 was not read: only pictures and text files are." ], images: 1, files: 0 }; } };
+				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], intake : intake );
+				var done = session.handleInbound( message( "what is this" ), mock );
+
+				expect( taken ).toHaveLength( 1 );
+				expect( taken[ 1 ].text ).toBe( "what is this" );
+				expect( replies()[ 1 ] ).toInclude( "movie.mp4 was not read" );
+				expect( isNull( done ) ).toBeFalse();
+			} );
+
+			it( "answers with the reason and does not ask the agent when the files are refused", function() {
+				mock.attachmentsOf = ( m ) => [ { name: "p.png", mime: "image/png", url: "https://f.example/p.png" } ];
+				var intake = { intake : ( text, files, facts ) => { return { ok: false, reason: "The model in use cannot see images." }; } };
+				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], intake : intake );
+				var done = session.handleInbound( message( "look" ), mock );
+
+				expect( isNull( done ) ).toBeTrue();
+				expect( replies() ).toBe( [ "The model in use cannot see images." ] );
+			} );
+
+			it( "ignores files when attachments are switched off", function() {
+				mock.attachmentsOf = ( m ) => { throw( message = "should not be asked" ); };
+				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], attachments : false );
+				var done = session.handleInbound( message( "hello" ), mock );
+				expect( isNull( done ) ).toBeFalse();
+				done.get();
+			} );
+
 			it( "lists a pick-one as numbers, and a lone number right after it picks that option", function() {
 				var registry = new bxagents.models.chat.commands.CommandRegistry().register( new PickCommand() );
 				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], commands : { registry : registry } );

@@ -33,13 +33,15 @@ class extends="bxModules.bxai.models.gateway.GatewaySession" {
 	 *
 	 * The other arguments are GatewaySession's own.
 	 */
-	function init( required any agent, required any gateways, string policy = "queue", numeric maxQueueDepth = 50, any checkpointer, struct commands = {} ) {
+	function init( required any agent, required any gateways, string policy = "queue", numeric maxQueueDepth = 50, any checkpointer, struct commands = {}, boolean attachments = true, any intake ) {
 		var own = { agent : arguments.agent, gateways : arguments.gateways, policy : arguments.policy, maxQueueDepth : arguments.maxQueueDepth }
 		if ( !isNull( arguments.checkpointer ) ) {
 			own.checkpointer = arguments.checkpointer
 		}
 		super.init( argumentCollection = own )
 
+		variables.attachmentsOn = arguments.attachments
+		variables.intake = isNull( arguments.intake ) ? new "models.gateways.support.AttachmentIntake@bxagents"() : arguments.intake
 		variables.commandsOn = arguments.commands.enabled ?: true
 		variables.prefix = arguments.commands.prefix ?: "/"
 		variables.prefixes = arguments.commands.prefixes ?: {}
@@ -104,16 +106,72 @@ class extends="bxModules.bxai.models.gateway.GatewaySession" {
 				return nullValue()
 			}
 		}
+		if ( variables.attachmentsOn && arguments.message.getType() == "message" ) {
+			var taken = takeAttachments( arguments.message, arguments.sourceGateway )
+			if ( taken.stop ) {
+				return nullValue()
+			}
+			arguments.message = taken.message
+		}
 		var done = super.handleInbound( arguments.message, arguments.sourceGateway )
 		if ( variables.commandsOn && arguments.message.getType() == "message" ) {
 			// keep the conversation on the list, so /sessions shows it
 			variables.sessions.touch(
 				len( arguments.message.getContext().getUserID() ) ? arguments.message.getContext().getUserID() : "gateway",
 				resolveThreadId( arguments.message, arguments.sourceGateway ),
-				arguments.message.getText()
+				isSimpleValue( arguments.message.getText() ) ? arguments.message.getText() : ""
 			)
 		}
 		return done
+	}
+
+	/**
+	 * Reads the files that came with a message, when its gateway can say what they are (attachmentsOf()), and
+	 * turns them into what the agent is given: pictures as image parts, text files in the message, the rest
+	 * named and left out. What was left out, and why, is told to the person. A message that was only a file
+	 * nothing could use stops here, since there is nothing to ask the agent.
+	 *
+	 * @return { message : the message to go on with, stop : true when it was answered here }
+	 */
+	private struct function takeAttachments( required GatewayMessage message, required IGateway sourceGateway ) {
+		var unchanged = { message : arguments.message, stop : false }
+		if ( !structKeyExists( arguments.sourceGateway, "attachmentsOf" ) ) {
+			return unchanged
+		}
+		var files = []
+		try {
+			files = arguments.sourceGateway.attachmentsOf( arguments.message )
+		} catch ( any e ) {
+			return unchanged
+		}
+		if ( !files.len() ) {
+			return unchanged
+		}
+		var facts = {}
+		try {
+			facts = new "models.runtime.ModelFacts@bxagents"().of( variables.agent.getConfig().profile ?: "" )
+		} catch ( any e ) {
+			// the model's abilities are not known; the builder lets the image through then
+		}
+		var taken = variables.intake.intake( arguments.message.getText(), files, facts )
+		if ( !taken.ok ) {
+			tell( arguments.message, arguments.sourceGateway, taken.reason )
+			return { message : arguments.message, stop : true }
+		}
+		if ( taken.notes.len() ) {
+			tell( arguments.message, arguments.sourceGateway, taken.notes.toList( char( 10 ) ) )
+		}
+		if ( !taken.images && !taken.files && !len( trim( arguments.message.getText() ) ) ) {
+			return { message : arguments.message, stop : true }
+		}
+		return { message : new "models.gateways.support.MultipartMessage@bxagents"( arguments.message, taken.input ), stop : false }
+	}
+
+	private void function tell( required GatewayMessage message, required IGateway sourceGateway, required string text ) {
+		arguments.sourceGateway.deliver(
+			new GatewayEvent( type : GatewayEvent.TYPES.RESPONSE_COMPLETED, data : { content : arguments.text }, context : arguments.message.getContext() ),
+			arguments.message.getContext()
+		)
 	}
 
 	/**

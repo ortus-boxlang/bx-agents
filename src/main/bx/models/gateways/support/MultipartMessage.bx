@@ -1,0 +1,35 @@
+/**
+ * An inbound message whose text is what the agent should be given: the message with its image parts, not
+ * just words. The gateway session hands every message to the agent through getText(), so a message that
+ * carries pictures answers with the multipart user message there and is otherwise a normal GatewayMessage.
+ */
+class extends="bxModules.bxai.models.gateway.contracts.GatewayMessage" {
+
+	/**
+	 * @original The GatewayMessage the person's message arrived as
+	 * @input The text, or the user message with its image parts (MessageBuilder.build()'s input)
+	 */
+	function init( required any original, required any input ) {
+		super.init(
+			id          : arguments.original.getId(),
+			type        : arguments.original.getType(),
+			text        : isSimpleValue( arguments.input ) ? arguments.input : arguments.original.getText(),
+			attachments : arguments.original.getAttachments(),
+			actions     : arguments.original.getActions(),
+			context     : arguments.original.getContext(),
+			createdAt   : arguments.original.getCreatedAt(),
+			metadata    : arguments.original.getMetadata(),
+			raw         : arguments.original.getRaw()
+		)
+		variables.input = arguments.input
+		return this
+	}
+
+	/**
+	 * @return What to give the agent
+	 */
+	any function getText() {
+		return variables.input
+	}
+
+}

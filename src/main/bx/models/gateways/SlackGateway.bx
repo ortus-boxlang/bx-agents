@@ -438,7 +438,8 @@ class extends="ScheduledGatewayBase" {
 		}
 		// Ignore the bot's own messages / message-subtype system events
 		// (channel_join, message_changed, etc.) to avoid a self-loop.
-		if ( len( event.bot_id ?: "" ) || len( event.subtype ?: "" ) ) {
+		// A message with files has the subtype "file_share"; that one is a person talking.
+		if ( len( event.bot_id ?: "" ) || ( len( event.subtype ?: "" ) && event.subtype != "file_share" ) ) {
 			return
 		}
 		dispatchInbound( toGatewayMessage( event ) )
@@ -486,6 +487,24 @@ class extends="ScheduledGatewayBase" {
 		} )
 
 		dispatchInbound( message )
+	}
+
+	/**
+	 * The files that came with a message. Slack keeps them behind the bot's own token, so each carries the
+	 * header to download it with (the app needs the files:read scope).
+	 *
+	 * @message A GatewayMessage from this gateway
+	 *
+	 * @return [ { name, mime, size, url, headers } ]
+	 */
+	array function attachmentsOf( required any message ) {
+		return ( arguments.message.getRaw().files ?: [] ).filter( f => len( f.url_private_download ?: "" ) ).map( f => {
+			name    : f.name ?: "file",
+			mime    : f.mimetype ?: "",
+			size    : f.size ?: 0,
+			url     : f.url_private_download,
+			headers : { "Authorization" : "Bearer #variables.botToken#" }
+		} )
 	}
 
 	/**

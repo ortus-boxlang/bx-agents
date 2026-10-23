@@ -625,6 +625,22 @@ class extends="ScheduledGatewayBase" {
 	}
 
 	/**
+	 * The files that came with a message. Discord serves them from public links.
+	 *
+	 * @message A GatewayMessage from this gateway
+	 *
+	 * @return [ { name, mime, size, url } ]
+	 */
+	array function attachmentsOf( required any message ) {
+		return ( arguments.message.getRaw().attachments ?: [] ).filter( a => len( a.url ?: "" ) ).map( a => {
+			name : a.filename ?: "file",
+			mime : a.content_type ?: "",
+			size : a.size ?: 0,
+			url  : a.url
+		} )
+	}
+
+	/**
 	 * @data A raw Discord message object (from MESSAGE_CREATE)
 	 *
 	 * @return A normalized GatewayMessage; fires onGatewayMessageReceived before returning
