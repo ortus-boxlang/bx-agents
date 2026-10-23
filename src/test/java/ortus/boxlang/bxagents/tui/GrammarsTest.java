@@ -36,10 +36,13 @@ import dev.tamboui.widgets.syntax.SyntaxTheme;
 @DisplayName( "Syntax grammars" )
 class GrammarsTest {
 
-	private static final Style PLAIN = Style.EMPTY;
-
 	private static List<Line> highlight( String language, String code ) {
-		return Grammars.highlighter().highlight( language, code, PLAIN, SyntaxTheme.DEFAULTS );
+		return Grammars.highlighter().highlight( code, language, Style.EMPTY, SyntaxTheme.DEFAULTS );
+	}
+
+	/** Whether the highlighter gave a span a colour; plain text has none. */
+	private static boolean coloured( Style style ) {
+		return style.fg().isPresent();
 	}
 
 	private static String text( List<Line> lines ) {
@@ -64,11 +67,11 @@ class GrammarsTest {
 		String		code	= "function greet( string name ) {\n\treturn uCase( \"hi\" ) // done\n}";
 		List<Line>	lines	= highlight( "boxlang", code );
 		assertThat( text( lines ) ).isEqualTo( code );
-		assertThat( styleOf( lines, "function" ) ).isNotEqualTo( PLAIN );
-		assertThat( styleOf( lines, "string" ) ).isNotEqualTo( PLAIN );
+		assertThat( coloured( styleOf( lines, "function" ) ) ).isTrue();
+		assertThat( coloured( styleOf( lines, "string" ) ) ).isTrue();
 		assertThat( styleOf( lines, "string" ) ).isNotEqualTo( styleOf( lines, "function" ) );
-		assertThat( styleOf( lines, "\"hi\"" ) ).isNotEqualTo( PLAIN );
-		assertThat( styleOf( lines, "uCase" ) ).isNotEqualTo( PLAIN );
+		assertThat( coloured( styleOf( lines, "\"hi\"" ) ) ).isTrue();
+		assertThat( coloured( styleOf( lines, "uCase" ) ) ).isTrue();
 	}
 
 	@Test
@@ -84,9 +87,9 @@ class GrammarsTest {
 		String		code	= "<cfset name = \"x\">\n<cfoutput>#name#</cfoutput>\n<!--- a note --->\nFUNCTION f() {}";
 		List<Line>	lines	= highlight( "cfml", code );
 		assertThat( text( lines ) ).isEqualTo( code );
-		assertThat( styleOf( lines, "<cfset" ) ).isNotEqualTo( PLAIN );
-		assertThat( styleOf( lines, "#name#" ) ).isNotEqualTo( PLAIN );
-		assertThat( styleOf( lines, "FUNCTION" ) ).isNotEqualTo( PLAIN );
+		assertThat( coloured( styleOf( lines, "<cfset" ) ) ).isTrue();
+		assertThat( coloured( styleOf( lines, "#name#" ) ) ).isTrue();
+		assertThat( coloured( styleOf( lines, "FUNCTION" ) ) ).isTrue();
 		assertThat( highlight( "cfc", "x" ) ).isNotNull();
 	}
 
@@ -94,7 +97,7 @@ class GrammarsTest {
 	@DisplayName( "BoxLang templates: bx: tags are tags" )
 	void bxm() {
 		List<Line> lines = highlight( "bxm", "<bx:output>#now()#</bx:output>" );
-		assertThat( styleOf( lines, "<bx:output" ) ).isNotEqualTo( PLAIN );
+		assertThat( coloured( styleOf( lines, "<bx:output" ) ) ).isTrue();
 	}
 
 	@Test
@@ -104,8 +107,8 @@ class GrammarsTest {
 		Style		added	= lines.get( 2 ).spans().get( 0 ).style();
 		Style		removed	= lines.get( 1 ).spans().get( 0 ).style();
 		Style		hunk	= lines.get( 0 ).spans().get( 0 ).style();
-		assertThat( added ).isNotEqualTo( PLAIN );
-		assertThat( removed ).isNotEqualTo( PLAIN );
+		assertThat( coloured( added ) ).isTrue();
+		assertThat( coloured( removed ) ).isTrue();
 		assertThat( added ).isNotEqualTo( removed );
 		assertThat( hunk ).isNotEqualTo( added );
 	}
@@ -113,10 +116,10 @@ class GrammarsTest {
 	@Test
 	@DisplayName( "TOML and Markdown highlight, and the built-in languages are still there" )
 	void others() {
-		assertThat( styleOf( highlight( "toml", "[server]\nport = 8080" ), "[server]" ) ).isNotEqualTo( PLAIN );
-		assertThat( styleOf( highlight( "md", "# Title" ), "# Title" ) ).isNotEqualTo( PLAIN );
-		assertThat( styleOf( highlight( "java", "int x = 1;" ), "int" ) ).isNotEqualTo( PLAIN );
-		assertThat( styleOf( highlight( "json", "{ \"a\": true }" ), "true" ) ).isNotEqualTo( PLAIN );
+		assertThat( coloured( styleOf( highlight( "toml", "[server]\nport = 8080" ), "[server]" ) ) ).isTrue();
+		assertThat( coloured( styleOf( highlight( "md", "# Title" ), "# Title" ) ) ).isTrue();
+		assertThat( coloured( styleOf( highlight( "java", "int x = 1;" ), "int" ) ) ).isTrue();
+		assertThat( coloured( styleOf( highlight( "json", "{ \"a\": true }" ), "true" ) ) ).isTrue();
 	}
 
 	@Test
