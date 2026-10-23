@@ -113,7 +113,7 @@ Read and manage the notes an agent keeps.
 List the models a project can talk to and test that they answer.
 :::
 ::: card title="sessions" icon="phosphor-duotone:chats" href="#sessions"
-List, rename, fork and delete the conversations in the chat database.
+List, rename, fork, delete, export and import the conversations in the chat database.
 :::
 ::: card title="inspect" icon="phosphor-duotone:magnifying-glass" href="#inspect"
 Report how the agent is composed, from its source.
@@ -782,11 +782,16 @@ bxAgents sessions list [--user=NAME] [--json]
 bxAgents sessions rename --session=<number or id> --name="New name" [--user=NAME]
 bxAgents sessions fork --session=<number or id> [--name="Other approach"] [--user=NAME]
 bxAgents sessions delete --session=<number or id> [--user=NAME]
+bxAgents sessions export --session=<number or id> [--file=chat.json] [--md] [--force] [--user=NAME]
+bxAgents sessions import --file=chat.json [--name="New name"] [--user=NAME]
 ```
 
 - A conversation is picked by its number in `list`, or by its id or the start of it. `--user` is whose conversations: the operating system user by default.
 - `list`, `rename` and the list part of `delete` only touch the database. The messages of a conversation live in the agent's [memory](conventions/agent-yaml.md#settings), so `fork` (which copies them) needs a built project, and so does `delete` to forget them too. They reach only messages a memory that outlives the process keeps (`file`, `jdbc`): the default `cache` memory is gone when the chat ends.
 - Run it where the database is: in the project, or on a server with `BXAGENTS_DB` set.
+- `export` writes one conversation to a JSON file named after its title (`--file` to choose, `--md` for a readable Markdown transcript instead) and never replaces a file unless you add `--force`. The file holds the conversation's details and its messages as the agent's memory holds them. It contains everything that was said, so keep it where you would keep the conversation.
+- `import` reads such a file and adds it to the user's list as a **new** conversation (a new id, never replacing one), with `--name` to retitle it. A file it does not recognise is refused before anything is written: it must be an exported conversation of a version this BxAgents reads, with at most 20,000 messages whose roles are `user`, `assistant`, `system` or `tool`. If it was exported from another agent, the message says so.
+- Both read and write the agent's memory, so they need a built project and a memory that outlives the process (`file` or `jdbc`; see the [memory](conventions/agent-yaml.md#settings) setting). With `cache` the memory is empty once the program has stopped, and `export` says so.
 
 ### `inspect`
 

@@ -47,7 +47,7 @@ environments:
 | `subAgents` | list of strings | Names of sibling folders under the root project's `subagents/`. See [subagents/](subagents.md). |
 | `mcpServers` | list | MCP servers - each entry a URL string, a mapping with `url` and the credentials the server wants (`token`, `headers`, `timeout`), or a mapping with `command` for a server that runs as a program (`env`, `cwd`, `prefix`, `toolFilter`). See [mcp/](mcp.md). |
 | `security` | mapping | Forwarded verbatim into the generated app's `bxai` module settings; bx-ai's own `SecurityDirector` turns it into guardrail middleware. |
-| `memory` | string or mapping | The agent's conversation memory. A bare string is the type (`cache`); a mapping is `{ type, ...config }` and is passed through to `aiMemory()`. |
+| `memory` | string or mapping | The agent's conversation memory. A bare string is the type (`cache`); a mapping is `{ type, ...config }` and is passed through to `aiMemory()`. A memory is keyed by the agent's name, so one that is kept on disk is found again on the next start; set `key` in the mapping to name it yourself. |
 | `checkpointer` | mapping | `{ type: cache\|file\|jdbc, ...config }`. Defaults to `{ type: cache }` if omitted. |
 | `gatewaySession` | mapping | `{ policy, maxQueueDepth, commands }`, all optional. See [Agent.bx](agent-bx.md) for the values; they are identical. |
 | `agentApi` | mapping | `{ enabled, tokenEnvVar, tokens, profiles }`, all optional. See [The always-on agent route](agent-bx.md#the-always-on-agent-route). |
