@@ -35,6 +35,16 @@ class extends="testbox.system.BaseSpec" {
 				expect( session.getActiveThreadIds() ).toBeEmpty();
 			} );
 
+			it( "reads the prefix a gateway was given instead of the session's", function() {
+				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], commands : { prefixes : { mock : "!" } } );
+				session.handleInbound( message( "!info" ), mock );
+				expect( replies()[ 1 ] ).toInclude( "Agent: helper" );
+
+				var done = session.handleInbound( message( "/info" ), mock );
+				expect( isNull( done ) ).toBeFalse();
+				done.get();
+			} );
+
 			it( "hands its menu to a gateway that can show one, once, on the first message", function() {
 				var shown = [];
 				mock.publishCommands = ( menu ) => { shown.append( menu.map( c => c.name ) ); return true; };
@@ -106,6 +116,49 @@ class extends="testbox.system.BaseSpec" {
 				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], commands : { prefix : "!" } );
 				session.handleInbound( message( "!info" ), mock );
 				expect( replies()[ 1 ] ).toInclude( "Agent: helper" );
+			} );
+
+			it( "lists a pick-one as numbers, and a lone number right after it picks that option", function() {
+				var registry = new bxagents.models.chat.commands.CommandRegistry().register( new PickCommand() );
+				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], commands : { registry : registry } );
+				session.handleInbound( message( "/pick" ), mock );
+				expect( replies()[ 1 ] ).toInclude( "1. red" );
+				expect( replies()[ 1 ] ).toInclude( "Reply with a number to pick one." );
+
+				session.handleInbound( message( "2" ), mock );
+				expect( replies()[ 2 ] ).toBe( "Picked blue" );
+			} );
+
+			it( "forgets the list after any other message, so a later number is just a message", function() {
+				var registry = new bxagents.models.chat.commands.CommandRegistry().register( new PickCommand() );
+				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], commands : { registry : registry } );
+				session.handleInbound( message( "/pick" ), mock );
+				session.handleInbound( message( "/pick red" ), mock );
+				var done = session.handleInbound( message( "2" ), mock );
+				expect( isNull( done ) ).toBeFalse();
+				done.get();
+				expect( replies() ).toHaveLength( 3 );
+			} );
+
+			it( "keeps one person's list from answering another's number", function() {
+				var registry = new bxagents.models.chat.commands.CommandRegistry().register( new PickCommand() );
+				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], commands : { registry : registry } );
+				session.handleInbound( message( "/pick", "u-1" ), mock );
+				var done = session.handleInbound( message( "1", "u-2" ), mock );
+				expect( isNull( done ) ).toBeFalse();
+				done.get();
+			} );
+
+			it( "shows a pick-one natively on a gateway that has buttons, and not as a list", function() {
+				var sent = [];
+				mock.deliverChoices = ( title, options, context ) => { sent.append( { title: title, lines: options.map( o => o.line ) } ); return true; };
+				var registry = new bxagents.models.chat.commands.CommandRegistry().register( new PickCommand() );
+				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], commands : { registry : registry } );
+				session.handleInbound( message( "/pick" ), mock );
+
+				expect( sent ).toHaveLength( 1 );
+				expect( sent[ 1 ].lines ).toBe( [ "/pick red", "/pick blue" ] );
+				expect( replies() ).toBeEmpty();
 			} );
 
 			it( "tells the person when a command fails, instead of throwing into the gateway", function() {

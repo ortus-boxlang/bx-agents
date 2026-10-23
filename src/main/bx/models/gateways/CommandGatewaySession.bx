@@ -11,6 +11,7 @@
  *     commands:
  *       enabled: true
  *       prefix: "/"
+ *       prefixes: { slack: "!" }       # a different prefix for one gateway, by its name
  *       allow: [ help, info, tools, notes, remember, model ]
  *       admins: [ "12345" ]            # gateway user ids that may run admin commands
  */
@@ -38,10 +39,13 @@ class extends="bxModules.bxai.models.gateway.GatewaySession" {
 
 		variables.commandsOn = arguments.commands.enabled ?: true
 		variables.prefix = arguments.commands.prefix ?: "/"
+		variables.prefixes = arguments.commands.prefixes ?: {}
 		variables.admins = arguments.commands.admins ?: []
 		// a registry can be handed in whole (a module's own commands); otherwise the built-ins, narrowed to the allowed ones
 		variables.registry = arguments.commands.registry ?: new "models.chat.commands.CommandCatalog@bxagents"().standard().only( arguments.commands.allow ?: static.SAFE_COMMANDS )
 		variables.service = new "models.chat.commands.CommandService@bxagents"( agent : arguments.agent, registry : variables.registry )
+		// the choices last offered to each person in each chat, so "2" can answer a numbered list
+		variables.pendingChoices = {}
 		return this
 	}
 
@@ -86,7 +90,8 @@ class extends="bxModules.bxai.models.gateway.GatewaySession" {
 			publishMenus()
 		}
 		if ( variables.commandsOn && arguments.message.getType() == "message" ) {
-			var line = new "models.chat.commands.CommandLine@bxagents"( arguments.message.getText(), variables.prefix )
+			arguments.message = answerNumberedChoice( arguments.message )
+			var line = new "models.chat.commands.CommandLine@bxagents"( arguments.message.getText(), prefixFor( arguments.message.getContext() ) )
 			if ( line.isCommand() && !isNull( variables.registry.lookup( line.name() ) ) ) {
 				answer( arguments.message, arguments.sourceGateway, line )
 				return nullValue()
@@ -96,6 +101,43 @@ class extends="bxModules.bxai.models.gateway.GatewaySession" {
 	}
 
 	// ----------------------------------------------------------------------------------
+
+	/**
+	 * A reply of just a number, right after a numbered list of choices, picks that choice: "2" becomes the
+	 * command line behind the second option. This is how platforms with no buttons (SMS, Telegram, Signal)
+	 * answer a "pick one". Anything else typed forgets the list, so a stray "2" much later is just a message.
+	 *
+	 * @message The inbound message
+	 *
+	 * @return The same message, or one whose text is the command line of the option picked
+	 */
+	private any function answerNumberedChoice( required GatewayMessage message ) {
+		var key = choiceKey( arguments.message.getContext() )
+		var options = variables.pendingChoices[ key ] ?: []
+		variables.pendingChoices.delete( key )
+		var typed = trim( arguments.message.getText() )
+		if ( options.len() && reFind( "^[0-9]{1,3}$", typed ) && val( typed ) >= 1 && val( typed ) <= options.len() ) {
+			return new GatewayMessage(
+				text   : options[ val( typed ) ].line,
+				context: arguments.message.getContext(),
+				raw    : arguments.message.getRaw()
+			)
+		}
+		return arguments.message
+	}
+
+	/**
+	 * @context The message's context
+	 *
+	 * @return The command prefix for the gateway the message came from: its own, or the session's
+	 */
+	private string function prefixFor( required any context ) {
+		return variables.prefixes[ arguments.context.getGateway() ] ?: variables.prefix
+	}
+
+	private string function choiceKey( required any context ) {
+		return arguments.context.getGateway() & "|" & arguments.context.getConversationID() & "|" & arguments.context.getUserID()
+	}
 
 	/**
 	 * Runs the command and sends its answer back through the gateway the message came from. A command that
@@ -114,14 +156,47 @@ class extends="bxModules.bxai.models.gateway.GatewaySession" {
 				"gateway",
 				variables.admins.containsNoCase( who )
 			)
+			var choose = reply.blocks.filter( b => b.type == "choose" )
+			if ( choose.len() ) {
+				// a gateway with buttons shows the first pick-one as buttons; the rest is text
+				if ( sendAsButtons( arguments.sourceGateway, choose[ 1 ], context ) ) {
+					reply.blocks = reply.blocks.filter( b => b.type != "choose" )
+				} else {
+					variables.pendingChoices[ choiceKey( context ) ] = choose[ 1 ].options
+				}
+			}
 			text = new "models.chat.commands.PlainRenderer@bxagents"().render( reply )
+			if ( reply.blocks.filter( b => b.type == "choose" ).len() ) {
+				text &= char( 10 ) & "Reply with a number to pick one."
+			}
 		} catch ( any e ) {
 			text = "That command did not work: " & e.message
+		}
+		if ( !len( text ) ) {
+			return
 		}
 		arguments.sourceGateway.deliver(
 			new GatewayEvent( type : GatewayEvent.TYPES.RESPONSE_COMPLETED, data : { content : text }, context : context ),
 			context
 		)
+	}
+
+	/**
+	 * @gateway The gateway the message came from
+	 * @choose A "choose" block of a reply: { title, options: [ { label, hint, line } ] }
+	 * @context Who to send to
+	 *
+	 * @return True when the gateway showed the choice natively (buttons, a list); false when it cannot
+	 */
+	private boolean function sendAsButtons( required any gateway, required struct choose, required any context ) {
+		if ( !structKeyExists( arguments.gateway, "deliverChoices" ) ) {
+			return false
+		}
+		try {
+			return arguments.gateway.deliverChoices( arguments.choose.title ?: "", arguments.choose.options, arguments.context )
+		} catch ( any e ) {
+			return false
+		}
 	}
 
 }
