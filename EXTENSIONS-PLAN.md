@@ -4,7 +4,7 @@ Status: slice 1 is built (PR #158): registry, layers, module-config lifecycle, s
 
 - `models/` is gone. Share an object between the files of a folder extension by creating it in `onLoad()` and calling `$inject`.
 - Settings are written `variables.settings = {...}` in `configure()`. On the 1.18 runtime a bare `settings = {...}` inside a function is local, not `variables`, so the docs and examples use the scoped form.
-- Extensions contribute **schedulers**: ColdBox scheduler classes in `schedulers/`, registered and started with ColdBox's scheduler service when the agent is served. Their merged settings are in the ColdBox setting `bxAgentsExtensionSettings`.
+- Extensions contribute **schedulers**: BoxLang scheduler classes in `schedulers/` (a `configure()` that defines tasks on the `scheduler` property). When the agent is served each is created like any extension class, given `settings` and `log` with `$inject`, wrapped in `BoxScheduler` and started in the runtime's scheduler service as `extension-<extension>-<scheduler>`.
 - `interceptors` and `customInterceptionPoints` in `configure()` are still planned for slice 2.
 - Words are written out in full: `agentContext`, `commandArguments`, `registry`.
 
@@ -21,7 +21,7 @@ An extension looks and feels like a ColdBox / BoxLang `ModuleConfig`. Installing
 | Lifecycle | `configure()`, `onLoad()`, `onUnload()`, as in a ColdBox module |
 | Settings | `configure()` sets `settings`; `Agent.yaml` / `bxAgents.yml` override them |
 | Injection | A `$inject( name, object )` method on every extension class. It puts the object in `this` and `variables`. `settings` and `log` are injected |
-| Schedulers | A folder extension's `schedulers/` classes are ColdBox schedulers, registered and started when the agent is served |
+| Schedulers | A folder extension's `schedulers/` classes are BoxLang schedulers, started in the runtime's scheduler service when the agent is served |
 | Layers | core, modules, user (`~/.bxagents/extensions/`), project (`extensions/`). A later layer wins |
 | Conflicts | An item replaces an earlier item of the same name. An extension replaces an earlier extension of the same name. Listed at startup and by `/extensions` |
 | Off switch | `extensions.disable` in `Agent.yaml`, by extension name, item name, or glob |
@@ -274,7 +274,7 @@ Custom points: an extension lists its own in `customInterceptionPoints` and anno
 ```
 extensions/ci/
   Extension.bx            the module config (section 1)
-  schedulers/Nightly.bx   a ColdBox scheduler class, registered when the agent is served
+  schedulers/Nightly.bx   a BoxLang scheduler class, started when the agent is served
   commands/status.bx      one class per command (ICommand, as the built-ins are)
   keys/open-run.bx
   status/ci.bx
