@@ -48,6 +48,15 @@ class {
 			branch : "main",
 			target : "staging"
 		};
+
+		// Interceptor classes to register, as in a module config.
+		// Each one listens by method name (section 5). Paths are relative to the extension folder.
+		interceptors = [
+			{ class : "interceptors.AuditLog", properties : { level : "info" } }
+		];
+
+		// Custom interception points this extension announces
+		customInterceptionPoints = [ "onReleaseShipped" ];
 	}
 
 	/**
@@ -115,14 +124,14 @@ So a class in `models/CiClient.bx` is available as `CiClient` in every other fil
 ```
 class {
 
-	function run( ctx, args ) {
-		return ctx.reply().ok( CiClient.latestRun( settings.branch ) )
+	function run( agentContext, commandArguments ) {
+		return agentContext.reply().ok( CiClient.latestRun( settings.branch ) )
 	}
 
 }
 ```
 
-The same method is how a test (or any code) hands an extension class a fake: `ext.$inject( "CiClient", fake )`. An extension can also call `$inject` itself from `onLoad()` to hand things between its own classes.
+The same method is how a test (or any code) hands an extension class a fake: `extension.$inject( "CiClient", fake )`. An extension can also call `$inject` itself from `onLoad()` to hand things between its own classes.
 
 ## 4. How pieces are described
 
@@ -130,7 +139,7 @@ Everything an extension adds ends up in one registry. There are three ways to de
 
 1. **Annotated methods**: `@Command`, `@Key`, `@Status`, `@On`, `@Prefix`, `@Source`, `@Slot`, `@Tool`. Normal BoxLang annotations, written like Java's, on the class and its methods. Comments are left alone.
 2. **Convention folders** (section 6): one class per piece.
-3. **Code**: an optional `register( api )` method.
+3. **Code**: an optional `register( registry )` method.
 
 ### The smallest extension: one file
 
@@ -143,13 +152,13 @@ class {
 	@Command( "deploy" )
 	@Key( "ctrl+shift+d" )
 	@Hint( "deploy the app: /deploy staging" )
-	function deploy( ctx, args ) {
-		return ctx.reply().ok( "Deploying to #len( args ) ? args : 'staging'#..." )
+	function deploy( agentContext, commandArguments ) {
+		return agentContext.reply().ok( "Deploying to #len( commandArguments ) ? commandArguments : 'staging'#..." )
 	}
 
 	@Status
-	function branch( ctx ) {
-		return "branch: #ctx.project().branch()#"
+	function branch( agentContext ) {
+		return "branch: #agentContext.project().branch()#"
 	}
 
 	@On( "afterAIAgentRun" )
@@ -177,7 +186,7 @@ So one annotation can say everything, and the extra annotations are only shortha
 
 ```
 @Command( { name : "deploy", hint : "deploy the app", admin : true, keys : [ "ctrl+shift+d", "alt+d" ] } )
-function deploy( ctx, args ) { ... }
+function deploy( agentContext, commandArguments ) { ... }
 ```
 
 is the same as
@@ -187,22 +196,22 @@ is the same as
 @Hint( "deploy the app" )
 @Admin
 @Key( [ "ctrl+shift+d", "alt+d" ] )
-function deploy( ctx, args ) { ... }
+function deploy( agentContext, commandArguments ) { ... }
 ```
 
 A struct option wins over a separate annotation if both are given, and a clash is reported at startup. Struct keys per annotation are listed in the authoring guide (slice 8).
 
-### In code: `register( api )`
+### In code: `register( registry )`
 
 For anything built at load time. Called once, after `configure()`.
 
 ```
-function register( api ) {
-	api.command( "deploy", { hint : "deploy", run : ( ctx, args ) => ctx.reply().ok( "ok" ) } )
-	api.key( "ctrl+shift+d", "/deploy" )
-	api.status( "ci", ctx => "ci: green" )
-	api.on( "onChatTurnEnd", data => { ... } )
-	api.slot( "header", ctx => "<span>staging</span>" )
+function register( registry ) {
+	registry.command( "deploy", { hint : "deploy", run : ( agentContext, commandArguments ) => agentContext.reply().ok( "ok" ) } )
+	registry.key( "ctrl+shift+d", "/deploy" )
+	registry.status( "ci", agentContext => "ci: green" )
+	registry.on( "onChatTurnEnd", data => { ... } )
+	registry.slot( "header", agentContext => "<span>staging</span>" )
 }
 ```
 
@@ -250,7 +259,7 @@ Three kinds of point can be listened to, both ways:
 
 Chat events carry a `data` struct. Where the table says an event can change or cancel something, `data` has `data.cancel( reason )` and `data.replace( value )`. Handlers run in load order, so a later layer sees the earlier layer's changes. An error in a handler is logged and shown in `/extensions`; it never stops the turn.
 
-Custom points: an extension can announce its own with `BoxRegisterInterceptionPoints` and `BoxAnnounce`, and other extensions listen the same way.
+Custom points: an extension lists its own in `customInterceptionPoints` and announces them with `BoxAnnounce`. Other extensions listen the same way. `interceptors` in `configure()` registers classes exactly as a module config does; `properties` are passed to the class.
 
 ## 6. A bigger extension: a folder
 
@@ -289,15 +298,15 @@ The principle: **an extension folder has the same shape as an agent project, plu
 
 ## 8. Context passed to commands and handlers
 
-`ctx` is a narrow, stable object (the same `CommandContext` the built-ins use, extended):
+`agentContext` is a narrow, stable object (the same `CommandContext` the built-ins use, extended):
 
-- `ctx.reply()`: build a Reply (text, table, choose, file).
-- `ctx.ask()`: ask the user for text, a choice or a yes/no. Works on every transport (a prompt in the terminal, a card on the web, a numbered question on a chat platform).
-- `ctx.chat()`: the conversation (sessions, notes, history, context report).
-- `ctx.transport()`, `ctx.user()`, `ctx.project()`, `ctx.admin()`.
-- `ctx.log()`.
+- `agentContext.reply()`: build a Reply (text, table, choose, file).
+- `agentContext.ask()`: ask the user for text, a choice or a yes/no. Works on every transport (a prompt in the terminal, a card on the web, a numbered question on a chat platform).
+- `agentContext.chat()`: the conversation (sessions, notes, history, context report).
+- `agentContext.transport()`, `agentContext.user()`, `agentContext.project()`, `agentContext.admin()`.
+- `agentContext.log()`.
 
-Settings, the logger and models are not on `ctx`; they are injected (section 3).
+Settings, the logger and models are not on `agentContext`; they are injected (section 3).
 
 ## 9. Layers and where each one runs
 
@@ -341,11 +350,11 @@ Different on purpose:
 
 ## Slices (each its own PR)
 
-1. Registry and scanner: layers, names, replacement rules, `extensions.disable`; `Extension.bx` as a module config (properties, `configure()`, settings merge, `onLoad()`, `onUnload()`); `$inject` with `settings`, `log` and `models/`; `/extensions` and `bxAgents extensions`. Commands only, in single-file and folder form, annotated and `register( api )`.
+1. Registry and scanner: layers, names, replacement rules, `extensions.disable`; `Extension.bx` as a module config (properties, `configure()`, settings merge, `onLoad()`, `onUnload()`); `$inject` with `settings`, `log` and `models/`; `/extensions` and `bxAgents extensions`. Commands only, in single-file and folder form, annotated and `register( registry )`.
 2. Events: `@On` and by-name methods for bx-ai and ColdBox points, and the chat events.
 3. Keys and status items.
 4. Prefixes and `@` sources (move `!`, `#` and `@file` onto them).
-5. `ctx.ask()` on every transport, and `/reload`.
+5. `agentContext.ask()` on every transport, and `/reload`.
 6. Web slots, assets and `window.bxagents`.
 7. Gateway types, CLI verbs, bundled tools and skills.
 8. Extension kit: a sample extension, testing helpers, an authoring guide (EN, mirror, ES), and `--extension ./path`.
@@ -354,7 +363,7 @@ After that: `bxAgents extension install|list|remove|update`, local or `--user`, 
 
 ## To settle
 
-1. A `@Key` on a method calls that method with no arguments (as with `deploy` above). A key that only runs a command line is `api.key( "ctrl+shift+d", "/deploy" )`.
+1. A `@Key` on a method calls that method with no arguments (as with `deploy` above). A key that only runs a command line is `registry.key( "ctrl+shift+d", "/deploy" )`.
 2. Annotation names are matched ignoring case, so `@command` and `@Command` both work. Capitalised (`@Command`) is the documented form.
 3. `$inject` is added to each extension class by the registry (a mixin), not written by the author, unless the class defines its own. To verify in slice 1 that BoxLang lets us add a method to a class instance; the fallback is a small base class.
 4. Settings merge: nested structs merge key by key, arrays are replaced (the default if you say nothing).
