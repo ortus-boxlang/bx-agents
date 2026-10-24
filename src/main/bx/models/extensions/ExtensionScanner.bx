@@ -1,0 +1,64 @@
+/**
+ * Finds the extensions in one folder (a layer). Two shapes count:
+ *
+ *   deploy.bx          a single file is a whole extension; its name is the file name
+ *   ci/                a folder is an extension; its name is the folder name. It may have an
+ *                      `Extension.bx` (the module config), and it has the same convention folders
+ *                      as an agent project: commands/, schedulers/ and the rest as they arrive.
+ *
+ * Hidden files and folders (a leading dot) and files that are not `.bx` are left alone. A folder with
+ * neither an `Extension.bx` nor a convention folder in it is not an extension, so a stray folder (a
+ * `.git`, a `node_modules`) never gets loaded.
+ */
+class {
+
+	static {
+		// the folders an extension may have. A folder with one of these is an extension even without an Extension.bx
+		CONVENTIONS = [ "commands", "schedulers" ]
+	}
+
+	/**
+	 * @folder A layer's folder, such as "<project>/extensions"; it need not exist
+	 * @layer "modules", "user" or "project"
+	 *
+	 * @return An array of Extension, in name order
+	 */
+	array function scan( required string folder, required string layer ) {
+		if ( !directoryExists( arguments.folder ) ) {
+			return []
+		}
+		var layer = arguments.layer
+		var found = []
+		for ( var path in directoryList( arguments.folder, false, "path", "*", "asc" ) ) {
+			var name = getFileFromPath( path )
+			if ( left( name, 1 ) == "." ) {
+				continue
+			}
+			if ( directoryExists( path ) ) {
+				var entry = folderExtension( path, name, layer )
+				if ( !isNull( entry ) ) {
+					found.append( entry )
+				}
+			} else if ( lCase( listLast( name, "." ) ) == "bx" && find( ".", name ) > 1 ) {
+				found.append( new "models.extensions.Extension@bxagents"( listFirst( name, "." ), layer, "", path ) )
+			}
+		}
+		return found
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private any function folderExtension( required string path, required string name, required string layer ) {
+		var classFile = arguments.path & "/Extension.bx"
+		if ( fileExists( classFile ) ) {
+			return new "models.extensions.Extension@bxagents"( arguments.name, arguments.layer, arguments.path, classFile )
+		}
+		for ( var convention in static.CONVENTIONS ) {
+			if ( directoryExists( arguments.path & "/" & convention ) ) {
+				return new "models.extensions.Extension@bxagents"( arguments.name, arguments.layer, arguments.path, "" )
+			}
+		}
+		return nullValue()
+	}
+
+}

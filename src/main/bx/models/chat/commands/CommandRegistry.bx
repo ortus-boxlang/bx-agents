@@ -29,6 +29,55 @@ class {
 	}
 
 	/**
+	 * Adds a command, taking over any name or alias an earlier command had. A command that loses all
+	 * its names this way is dropped, so an extension can replace a built-in outright.
+	 *
+	 * @command An ICommand
+	 *
+	 * @return The commands that were replaced (an array; empty when nothing was)
+	 */
+	array function replace( required any command ) {
+		var names = [ lCase( arguments.command.name() ) ].append( arguments.command.aliases().map( a => lCase( a ) ), true )
+		var replaced = []
+		for ( var name in names ) {
+			var earlier = variables.byName[ name ] ?: nullValue()
+			if ( !isNull( earlier ) ) {
+				if ( !replaced.contains( earlier ) ) {
+					replaced.append( earlier )
+				}
+				variables.byName.delete( name )
+			}
+		}
+		for ( var earlier in replaced ) {
+			var remaining = [ earlier.name() ].append( earlier.aliases(), true ).filter( n => variables.byName.keyExists( n ) )
+			if ( !remaining.len() ) {
+				variables.ordered = variables.ordered.filter( c => c != earlier )
+			}
+		}
+		variables.ordered.append( arguments.command )
+		for ( var name in names ) {
+			variables.byName[ name ] = arguments.command
+		}
+		return replaced
+	}
+
+	/**
+	 * Takes a command out, by the object that was registered.
+	 *
+	 * @command The ICommand to remove
+	 */
+	function remove( required any command ) {
+		var gone = arguments.command
+		variables.ordered = variables.ordered.filter( c => c != gone )
+		for ( var name in variables.byName.keyArray() ) {
+			if ( variables.byName[ name ] == gone ) {
+				variables.byName.delete( name )
+			}
+		}
+		return this
+	}
+
+	/**
 	 * @names The names of the commands to keep
 	 *
 	 * @return A new registry with only those commands, in this registry's order. The commands themselves are shared.

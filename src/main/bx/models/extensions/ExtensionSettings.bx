@@ -1,0 +1,122 @@
+/**
+ * How an extension's settings come together. An extension says its defaults in `configure()` (as a
+ * module config does), and the people who use it say their values under its name in `Agent.yaml` or in
+ * their own `~/.bxagents/bxAgents.yml`:
+ *
+ *   extensions:
+ *     release:
+ *       target: production
+ *
+ * The values are merged over the defaults, key by key through nested structs; an array or a simple value
+ * replaces whatever was there. The user's file is read first and the project's over it, so a project can
+ * set what a deployed server needs without the person's own habits getting in.
+ */
+class {
+
+	/**
+	 * @defaults What the extension's configure() set
+	 * @overrides What the people who use it wrote
+	 *
+	 * @return A new struct; neither argument is changed
+	 */
+	struct function merge( required struct defaults, required struct overrides ) {
+		var merged = duplicate( arguments.defaults )
+		for ( var key in arguments.overrides ) {
+			if ( isStruct( arguments.overrides[ key ] ) && isStruct( merged[ key ] ?: "" ) ) {
+				merged[ key ] = merge( merged[ key ], arguments.overrides[ key ] )
+			} else {
+				merged[ key ] = duplicate( arguments.overrides[ key ] )
+			}
+		}
+		return merged
+	}
+
+	/**
+	 * @sources The `extensions:` blocks to combine, weakest first (the user's file, then the project's)
+	 *
+	 * @return One block. `disable` lists are joined, everything else is merged key by key.
+	 */
+	struct function combine( required array sources ) {
+		var combined = {}
+		var disabled = []
+		for ( var source in arguments.sources ) {
+			if ( !isStruct( source ) ) {
+				continue
+			}
+			disabled.append( disableList( source ), true )
+			var rest = duplicate( source )
+			rest.delete( "disable" )
+			combined = merge( combined, rest )
+		}
+		combined[ "disable" ] = disabled
+		return combined
+	}
+
+	/**
+	 * @block An `extensions:` block
+	 *
+	 * @return The `disable` entries as an array of strings
+	 */
+	array function disableList( required struct block ) {
+		var given = arguments.block.disable ?: []
+		return ( isArray( given ) ? given : [ given ] ).filter( e => isSimpleValue( e ) && len( trim( e ) ) ).map( e => trim( e ) )
+	}
+
+	/**
+	 * @block An `extensions:` block
+	 * @name An extension's name
+	 *
+	 * @return That extension's values, or an empty struct
+	 */
+	struct function forExtension( required struct block, required string name ) {
+		for ( var key in arguments.block ) {
+			if ( lCase( key ) == lCase( arguments.name ) && isStruct( arguments.block[ key ] ) ) {
+				return arguments.block[ key ]
+			}
+		}
+		return {}
+	}
+
+	/**
+	 * @block The `extensions:` block as written
+	 * @label Words for where it is, such as "Agent.yaml"
+	 *
+	 * @return What is wrong with it, as sentences; empty when it is fine
+	 */
+	array function problems( required any block, required string label ) {
+		if ( !isStruct( arguments.block ) ) {
+			return [ "#arguments.label#: 'extensions' must be a mapping of extension name to its values, with an optional 'disable' list" ]
+		}
+		var found = []
+		for ( var key in arguments.block ) {
+			if ( lCase( key ) == "disable" ) {
+				var given = arguments.block[ key ]
+				if ( !isArray( given ) && !isSimpleValue( given ) ) {
+					found.append( "#arguments.label#: extensions.disable must be a list of extension names, items (extension:item) or globs" )
+				} else if ( isArray( given ) && given.filter( e => !isSimpleValue( e ) ).len() ) {
+					found.append( "#arguments.label#: extensions.disable must hold only names, items (extension:item) or globs" )
+				}
+			} else if ( !isStruct( arguments.block[ key ] ) ) {
+				found.append( "#arguments.label#: extensions.#key# must be a mapping of that extension's settings" )
+			}
+		}
+		return found
+	}
+
+	/**
+	 * A pattern with `*` in it matches any run of characters. Case does not matter.
+	 *
+	 * @pattern A name or a glob, such as "acme-*"
+	 * @text What to test
+	 */
+	boolean function matches( required string pattern, required string text ) {
+		var quote = createObject( "java", "java.util.regex.Pattern" )
+		var parts = arguments.pattern.listToArray( "*", true ).map( p => len( p ) ? quote.quote( p ) : "" )
+		var regex = parts.toList( ".*" )
+		if ( right( arguments.pattern, 1 ) == "*" ) {
+			regex &= ".*"
+		}
+		return reFindNoCase( "^" & regex & "$", arguments.text ) > 0
+	}
+
+}

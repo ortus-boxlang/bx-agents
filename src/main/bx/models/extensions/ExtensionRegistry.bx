@@ -1,0 +1,207 @@
+/**
+ * Every extension the chat or the served agent has, from every layer, and what they added.
+ *
+ * Layers, weakest first: `modules` (installed BoxLang modules that ship extensions), `user` (the person's
+ * `~/.bxagents/extensions`, terminal chat only) and `project` (`<project>/extensions`). A later layer wins:
+ * an extension with the same name replaces the earlier one, and a command replaces an earlier command of
+ * the same name or alias, the built-ins included. That is how a module or a project overrides the core, and
+ * it is always reported (`/extensions`), never silent.
+ *
+ * `extensions.disable` in `Agent.yaml` (or the person's file) turns things off by name or glob:
+ * `ci` is an extension, `deploy:status` an item of one, `acme-*` a glob.
+ *
+ * The registry knows nothing about any one extension; it asks the ExtensionLoader to bring each to life
+ * and puts what they added into the CommandRegistry the chat already uses.
+ */
+class {
+
+	/**
+	 * @commands The CommandRegistry the chat uses; commands from extensions are added to it
+	 * @settings The merged `extensions:` block (ExtensionSettings.combine): extension values, and `disable`
+	 */
+	function init( required any commands, struct settings = {} ) {
+		variables.commands = arguments.commands
+		variables.settings = arguments.settings
+		variables.tools = new "models.extensions.ExtensionSettings@bxagents"()
+		variables.scanner = new "models.extensions.ExtensionScanner@bxagents"()
+		variables.loader = new "models.extensions.ExtensionLoader@bxagents"( arguments.settings )
+		variables.disable = variables.tools.disableList( arguments.settings )
+		variables.layers = []
+		variables.extensions = []
+		variables.shadowed = {}
+		return this
+	}
+
+	/**
+	 * @layer "modules", "user" or "project"
+	 * @folder Where its extensions are; need not exist
+	 */
+	function addLayer( required string layer, required string folder ) {
+		variables.layers.append( { layer : arguments.layer, folder : arguments.folder } )
+		return this
+	}
+
+	/**
+	 * Scans every layer, then loads what is left after replacements and `disable`.
+	 *
+	 * @return this
+	 */
+	function load() {
+		var found = []
+		for ( var layer in variables.layers ) {
+			found.append( variables.scanner.scan( layer.folder, layer.layer ), true )
+		}
+		variables.extensions = settle( found )
+		for ( var extension in variables.extensions ) {
+			if ( extension.state() == "found" ) {
+				variables.loader.prepare( extension )
+			}
+		}
+		activate()
+		return this
+	}
+
+	/**
+	 * Unloads every loaded extension, last first, and takes its commands back out. `load()` can run again.
+	 */
+	function unload() {
+		for ( var extension in variables.extensions.reverse() ) {
+			if ( extension.isLoaded() ) {
+				variables.loader.unload( extension )
+			}
+			for ( var command in extension.commands() ) {
+				variables.commands.remove( command )
+			}
+		}
+		variables.extensions = []
+		return this
+	}
+
+	/**
+	 * @return Every Extension found, in load order, whatever became of it
+	 */
+	array function extensions() {
+		return variables.extensions
+	}
+
+	/**
+	 * @return The plain facts about each extension (Extension.describe), for `/extensions` and the CLI
+	 */
+	array function report() {
+		return variables.extensions.map( e => e.describe() )
+	}
+
+	/**
+	 * @return The schedulers of the loaded extensions: [ { extension, name, path } ]
+	 */
+	array function schedulers() {
+		var all = []
+		for ( var extension in variables.extensions ) {
+			if ( extension.isLoaded() ) {
+				for ( var scheduler in extension.schedulers() ) {
+					all.append( { extension : extension.name(), name : scheduler.name, path : scheduler.path } )
+				}
+			}
+		}
+		return all
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * A later layer's extension replaces an earlier one of the same name; `disable` turns off by name.
+	 * What is replaced stays in the list, marked, so the report can say so.
+	 */
+	private array function settle( required array found ) {
+		var chosen = {}
+		var ordered = []
+		for ( var extension in arguments.found ) {
+			var key = lCase( extension.name() )
+			if ( chosen.keyExists( key ) ) {
+				chosen[ key ].become( "replaced" ).problem( "Replaced by the extension of the same name in the #extension.layer()# layer." )
+				extension.replaces( chosen[ key ].layer() )
+			}
+			chosen[ key ] = extension
+			ordered.append( extension )
+		}
+		for ( var extension in ordered ) {
+			if ( extension.state() == "found" && disabled( extension.name() ) ) {
+				extension.become( "disabled" ).problem( "Turned off by extensions.disable." )
+			}
+		}
+		return ordered
+	}
+
+	/**
+	 * Runs `onLoad()` and registers the commands of every extension that prepared well. An extension
+	 * waits for the ones it depends on (`this.dependencies`), whatever order they were found in; one
+	 * whose dependency is missing or failed is failed too, with the reason.
+	 */
+	private void function activate() {
+		var pending = variables.extensions.filter( e => e.state() == "found" && e.hasInstance() )
+		var progress = true
+		while ( pending.len() && progress ) {
+			progress = false
+			for ( var extension in pending.map( e => e ) ) {
+				if ( unmet( extension ).len() ) {
+					continue
+				}
+				pending = pending.filter( e => e.name() != extension.name() )
+				progress = true
+				if ( variables.loader.finish( extension ) ) {
+					register( extension )
+				}
+			}
+		}
+		for ( var extension in pending ) {
+			extension.become( "failed" ).problem( "It needs the extension [#unmet( extension ).toList( '], [' )#], which is not loaded." )
+		}
+	}
+
+	private void function register( required any extension ) {
+		for ( var command in arguments.extension.commands().map( c => c ) ) {
+			if ( disabled( arguments.extension.name(), command.name() ) ) {
+				arguments.extension.dropCommand( command )
+				continue
+			}
+			for ( var other in variables.commands.replace( command ) ) {
+				arguments.extension.problem( "Its /#command.name()# replaces the command /#other.name()#" & ( structKeyExists( other, "extension" ) ? " of the extension [#other.extension()#]." : " that was built in." ) )
+			}
+		}
+	}
+
+	/**
+	 * @return The names in `this.dependencies` of extensions that are not loaded
+	 */
+	private array function unmet( required any extension ) {
+		var wanted = arguments.extension.properties().dependencies ?: []
+		var loaded = variables.extensions.filter( e => e.isLoaded() ).map( e => lCase( e.name() ) )
+		return ( isArray( wanted ) ? wanted : [ wanted ] ).filter( name => !loaded.contains( lCase( name ) ) )
+	}
+
+	/**
+	 * A plain name (`ci`) turns off the extension of that name and any item called that; `ext:item`
+	 * turns off exactly that item. Globs work in both.
+	 *
+	 * @extension The extension's name
+	 * @item The item's name, or blank to ask about the extension itself
+	 */
+	private boolean function disabled( required string extension, string item = "" ) {
+		for ( var pattern in variables.disable ) {
+			if ( find( ":", pattern ) ) {
+				if ( len( arguments.item ) && variables.tools.matches( pattern, arguments.extension & ":" & arguments.item ) ) {
+					return true
+				}
+				continue
+			}
+			if ( variables.tools.matches( pattern, arguments.extension ) ) {
+				return true
+			}
+			if ( len( arguments.item ) && variables.tools.matches( pattern, arguments.item ) ) {
+				return true
+			}
+		}
+		return false
+	}
+
+}

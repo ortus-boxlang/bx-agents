@@ -1,0 +1,108 @@
+/**
+ * Reads the annotations an extension puts on its methods. A BoxLang annotation can be written four
+ * ways and every BxAgents annotation takes all four:
+ *
+ *   @Command                       bare: the defaults
+ *   @Command( "deploy" )           simple: the main value
+ *   @Command( [ "a", "b" ] )       array: several of the main value
+ *   @Command( { name : "deploy" } ) struct: the full options
+ *
+ * Each is turned into one options struct, so the rest of the code never asks which way it was written.
+ * Names are matched ignoring case. A separate annotation can say one option as a shorthand
+ * (`@Hint( "..." )`, `@Admin`); a struct option wins over it, and the clash is reported.
+ */
+class {
+
+	/**
+	 * @annotations The annotations struct of a function or class, from getMetaData()
+	 * @name The annotation, such as "Command"
+	 *
+	 * @return Whether it is there, in any of the four forms
+	 */
+	boolean function has( required struct annotations, required string name ) {
+		return !isNull( locate( arguments.annotations, arguments.name ) )
+	}
+
+	/**
+	 * @annotations The annotations struct of a function or class
+	 * @name The annotation, such as "Command"
+	 * @mainKey The option a simple or array value means, such as "name"
+	 *
+	 * @return The options as a struct; null when the annotation is not there
+	 */
+	any function options( required struct annotations, required string name, required string mainKey ) {
+		var found = locate( arguments.annotations, arguments.name )
+		if ( isNull( found ) ) {
+			return nullValue()
+		}
+		if ( isStruct( found ) ) {
+			return found
+		}
+		if ( isArray( found ) ) {
+			return { "#arguments.mainKey#" : found }
+		}
+		if ( isSimpleValue( found ) && !len( trim( found ) ) ) {
+			return {}
+		}
+		return { "#arguments.mainKey#" : found }
+	}
+
+	/**
+	 * The value of a shorthand annotation (`@Hint( "..." )`), or its default when it is not there.
+	 * A bare shorthand (`@Admin`) means true.
+	 *
+	 * @annotations The annotations struct of a function
+	 * @name The shorthand annotation
+	 * @default What to return when it is not there; null when not given
+	 */
+	any function shorthand( required struct annotations, required string name, any default ) {
+		var found = locate( arguments.annotations, arguments.name )
+		if ( isNull( found ) ) {
+			return isNull( arguments.default ) ? nullValue() : arguments.default
+		}
+		if ( isSimpleValue( found ) && !len( trim( found ) ) ) {
+			return true
+		}
+		return found
+	}
+
+	/**
+	 * Settles one option from the three places it can come from: the struct of the main annotation,
+	 * a shorthand annotation, or the default. The struct wins; if the shorthand also says something
+	 * different, that is a problem to report.
+	 *
+	 * @options The struct from options(), or an empty struct
+	 * @key The option, such as "hint"
+	 * @annotations The annotations struct of the function
+	 * @shorthandName The shorthand annotation for it, such as "Hint"; blank when there is none
+	 * @default What it is when nobody says
+	 * @problems An array the clash is added to
+	 * @where Words for the problem, such as "deploy.deploy"
+	 */
+	any function setting( required struct options, required string key, required struct annotations, string shorthandName = "", any default = "", required array problems, string where = "" ) {
+		var fromShorthand = len( arguments.shorthandName ) ? shorthand( arguments.annotations, arguments.shorthandName ) : nullValue()
+		if ( arguments.options.keyExists( arguments.key ) ) {
+			if ( !isNull( fromShorthand ) && serialize( fromShorthand ) != serialize( arguments.options[ arguments.key ] ) ) {
+				arguments.problems.append( "#arguments.where#: @#arguments.shorthandName# and the #arguments.key# option disagree; the option wins." )
+			}
+			return arguments.options[ arguments.key ]
+		}
+		return isNull( fromShorthand ) ? arguments.default : fromShorthand
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private function locate( required struct annotations, required string name ) {
+		for ( var key in arguments.annotations ) {
+			if ( lCase( key ) == lCase( arguments.name ) ) {
+				return arguments.annotations[ key ]
+			}
+		}
+		return nullValue()
+	}
+
+	private string function serialize( required any value ) {
+		return isSimpleValue( arguments.value ) ? arguments.value : jsonSerialize( arguments.value )
+	}
+
+}

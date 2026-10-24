@@ -1,0 +1,40 @@
+/**
+ * An admin-only command. On a chat platform only the people listed in the gateway's `admins`
+ * can run it; in the terminal and the web UI it is for whoever may run admin commands there.
+ * It shows the module-config properties and the lifecycle.
+ */
+class {
+
+	this.title = "Deploy helper";
+	this.author = "Ortus Solutions, Corp";
+	this.version = "1.0.0";
+	this.description = "Plans a deployment from the chat";
+
+	function configure() {
+		variables.settings = { target : "staging", environments : [ "staging", "production" ] }
+	}
+
+	function onLoad() {
+		log.info( "ready to deploy to #settings.target# by default" )
+	}
+
+	function onUnload() {
+		log.info( "goodbye" )
+	}
+
+	@Command( "deploy" )
+	@Hint( "plan a deployment: /deploy, or /deploy <environment>" )
+	@Admin
+	function plan( agentContext, commandArguments ) {
+		var target = len( trim( commandArguments ) ) ? trim( commandArguments ) : settings.target
+		if ( !settings.environments.containsNoCase( target ) ) {
+			return agentContext.reply().warn( "[#target#] is not one of: #settings.environments.toList( ', ' )#." )
+		}
+		return agentContext.reply().keyValues( [
+			[ "Target", target ],
+			[ "Agent", agentContext.chat().agentName() ],
+			[ "Next", "run `bxAgents deploy` for the real thing" ]
+		] )
+	}
+
+}

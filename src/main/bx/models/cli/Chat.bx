@@ -111,7 +111,11 @@ class {
 	 * @return This verb's own { exitCode, message } result
 	 */
 	private struct function chatWithScreen( required any session, required struct options ) {
-		var controller = new "models.cli.chat.ChatController@bxagents"( arguments.session )
+		// the commands the chat has: the built-ins, then what the project's and the person's extensions add
+		var commands = new "models.chat.commands.CommandCatalog@bxagents"().standard()
+		var extensions = arguments.options._extensions ?: new "models.extensions.ExtensionService@bxagents"( projectRoot : trim( arguments.options.projectRoot ?: "" ), transport : "tui" )
+		extensions.install( commands )
+		var controller = new "models.cli.chat.ChatController@bxagents"( session : arguments.session, registry : commands ).withNotices( extensions.problems() )
 		var screen = arguments.options._screen ?: createObject( "java", "ortus.boxlang.bxagents.tui.ChatScreen" ).open( controller.commands() )
 		if ( !arguments.options.keyExists( "_screen" ) ) {
 			// the tui: block of Agent.yaml: the prompt style and widgets (a project without one gets the defaults)
@@ -130,6 +134,7 @@ class {
 			saved = screen.isRecording() ? screen.recordingFile() : ""
 			screen.close()
 			arguments.session.close()
+			extensions.unload()
 		}
 		return {
 			exitCode : 0,

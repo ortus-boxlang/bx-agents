@@ -49,6 +49,17 @@ class {
 			takeSteer       : () => variables.screen.takeSteer()
 		}
 		variables.screen = nullValue()
+		variables.notices = []
+		return this
+	}
+
+	/**
+	 * Lines to show as warnings when the chat opens, such as an extension that did not load.
+	 *
+	 * @notices Sentences
+	 */
+	function withNotices( required array notices ) {
+		variables.notices = arguments.notices
 		return this
 	}
 
@@ -79,6 +90,9 @@ class {
 		var port = new "models.cli.chat.TerminalPort@bxagents"( arguments.screen, variables.transcript, variables.session.agentName(), variables.workingDirectory, variables.attachments )
 		for ( var problem in variables.userConfig.problems() ) {
 			arguments.screen.print( "warn", problem )
+		}
+		for ( var notice in variables.notices ) {
+			arguments.screen.print( "warn", notice )
 		}
 		for ( var problem in arguments.screen.bindKeys( variables.userConfig.keys() ) ) {
 			arguments.screen.print( "warn", "#variables.userConfig.path()#: " & problem )

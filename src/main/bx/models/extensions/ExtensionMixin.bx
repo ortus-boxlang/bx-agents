@@ -1,0 +1,30 @@
+/**
+ * The two methods every extension class is given when it is loaded, so that handing it things (and
+ * reading back what it set) is the same call for every class, whoever wrote it:
+ *
+ *   $inject( name, object )               puts the object in the class's `this` and `variables` scopes
+ *   $inject( name, object, "variables" )  puts it in `variables` only (private)
+ *   $read( name, default )                reads a `variables` entry, such as the `settings` configure() set
+ *
+ * Assigning these two functions to an instance binds them to that instance's own scopes (checked on the
+ * 1.18 runtime), which is why they live here and are copied onto each loaded class instead of being a
+ * base class every author must extend. A class that defines its own `$inject` keeps it.
+ */
+class {
+
+	function $inject( required string name, required any object, string scope = "all" ) {
+		variables[ arguments.name ] = arguments.object
+		if ( arguments.scope == "all" ) {
+			this[ arguments.name ] = arguments.object
+		}
+		return this
+	}
+
+	function $read( required string name, any default ) {
+		if ( variables.keyExists( arguments.name ) ) {
+			return variables[ arguments.name ]
+		}
+		return isNull( arguments.default ) ? nullValue() : arguments.default
+	}
+
+}

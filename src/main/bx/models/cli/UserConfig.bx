@@ -9,6 +9,9 @@
  *     keys:              # replace the keys of an action; `/keys` lists the actions and their keys
  *       newline: [ ctrl+j, alt+enter ]
  *       stop: esc
+ *   extensions:          # values for extensions, by name, and what to turn off (see ExtensionSettings)
+ *     disable: [ roll ]
+ *     hello: { greeting: Hi }
  *
  * A missing file means the defaults. A key it does not know is reported (`problems()`), not ignored, so a
  * typo does not quietly leave a switch where the person thought it was.
@@ -60,6 +63,14 @@ class {
 	}
 
 	/**
+	 * @return The `extensions:` block as written: values per extension name, and `disable`. Empty for none.
+	 */
+	struct function extensions() {
+		load()
+		return isStruct( variables.data.extensions ?: "" ) ? variables.data.extensions : {}
+	}
+
+	/**
 	 * @return What is wrong with the file, as sentences; empty when it is fine or not there
 	 */
 	array function problems() {
@@ -86,15 +97,18 @@ class {
 		}
 		if ( !isStruct( parsed ) ) {
 			if ( !isSimpleValue( parsed ) || len( trim( parsed ) ) ) {
-				variables.problems.append( "#variables.file# must be a mapping with a chat: section" )
+				variables.problems.append( "#variables.file# must be a mapping with a chat: or extensions: section" )
 			}
 			return
 		}
 		variables.data = parsed
 		for ( var key in parsed ) {
-			if ( lCase( key ) != "chat" ) {
-				variables.problems.append( "#variables.file# has an unknown setting [#key#]; the sections are: chat" )
+			if ( ![ "chat", "extensions" ].contains( lCase( key ) ) ) {
+				variables.problems.append( "#variables.file# has an unknown setting [#key#]; the sections are: chat, extensions" )
 			}
+		}
+		if ( parsed.keyExists( "extensions" ) && !isStruct( parsed.extensions ) ) {
+			variables.problems.append( "#variables.file#: extensions must be a mapping of extension name to its values, with an optional disable list" )
 		}
 		if ( parsed.keyExists( "chat" ) ) {
 			if ( !isStruct( parsed.chat ) ) {

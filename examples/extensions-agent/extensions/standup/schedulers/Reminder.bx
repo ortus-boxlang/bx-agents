@@ -1,0 +1,22 @@
+/**
+ * A real ColdBox scheduler, the same kind as a project's schedules/Scheduler.bx. When the agent is
+ * served, the extension's schedulers are registered with ColdBox's scheduler service, so the task
+ * below runs inside the served app.
+ *
+ * The extension's merged settings (its configure() defaults with the values from Agent.yaml) are in
+ * the app setting `bxAgentsExtensionSettings`, under the extension's name.
+ */
+component {
+
+	function configure() {
+		var standup = getSetting( "bxAgentsExtensionSettings" ).standup
+
+		task( "standup-reminder" )
+			.call( () => {
+				writeLog( text : "Standup time for #standup.channel#. #standup.prompt#", log : "bxagents-extensions" )
+			} )
+			.everyDayAt( standup.at )
+			.withNoOverlaps()
+	}
+
+}

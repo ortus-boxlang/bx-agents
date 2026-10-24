@@ -1,0 +1,135 @@
+/**
+ * Puts the extensions of a chat in place: decides where to look, reads what the people said about them,
+ * and loads them into the commands the chat already has. One call for the terminal chat, the served
+ * agent and a chat platform, so each is a line long and none knows how layers or settings work.
+ *
+ *   extensions = new ExtensionService( projectRoot : root ).install( commands )
+ *
+ * Where it looks, weakest first:
+ *   modules   `extensions/` of every installed BoxLang module that has one
+ *   user      `~/.bxagents/extensions` (next to the person's bxAgents.yml). Only the terminal chat: a served
+ *             agent or a chat platform never reads a developer's home folder.
+ *   project   `<project>/extensions`
+ *
+ * What the people said: the `extensions:` block of the person's `bxAgents.yml` and, over it, the project's
+ * `Agent.yaml` (see ExtensionSettings). Whatever is wrong in either (an extension that will not load, a
+ * file that is not YAML) is returned by `problems()`; it never stops the chat from starting.
+ */
+class {
+
+	/**
+	 * @projectRoot The project's folder; blank for none
+	 * @userConfig The person's UserConfig; ~/.bxagents/bxAgents.yml when not given
+	 * @transport "tui", "web" or "gateway"; only "tui" reads the user layer
+	 * @moduleFolders The `extensions/` folders of installed modules; found from the runtime when not given
+	 * @projectSettings The project's `extensions:` block; read from Agent.yaml when not given
+	 */
+	function init( string projectRoot = "", any userConfig, string transport = "tui", array moduleFolders, struct projectSettings ) {
+		variables.projectRoot = arguments.projectRoot.reReplace( "[\\/]+$", "" )
+		variables.userConfig = isNull( arguments.userConfig ) ? new "models.cli.UserConfig@bxagents"() : arguments.userConfig
+		variables.transport = arguments.transport
+		variables.moduleFolders = isNull( arguments.moduleFolders ) ? installedModuleFolders() : arguments.moduleFolders
+		variables.projectSettings = isNull( arguments.projectSettings ) ? nullValue() : arguments.projectSettings
+		variables.registry = nullValue()
+		variables.problems = []
+		return this
+	}
+
+	/**
+	 * Loads the extensions and adds their commands to the registry.
+	 *
+	 * @commands The CommandRegistry the chat uses
+	 *
+	 * @return this
+	 */
+	function install( required any commands ) {
+		var settings = new "models.extensions.ExtensionSettings@bxagents"().combine( [ variables.userConfig.extensions(), projectBlock() ] )
+		variables.registry = new "models.extensions.ExtensionRegistry@bxagents"( arguments.commands, settings )
+		for ( var folder in variables.moduleFolders ) {
+			variables.registry.addLayer( "modules", folder )
+		}
+		if ( variables.transport == "tui" ) {
+			variables.registry.addLayer( "user", getDirectoryFromPath( variables.userConfig.path() ) & "extensions" )
+		}
+		if ( len( variables.projectRoot ) ) {
+			variables.registry.addLayer( "project", variables.projectRoot & "/extensions" )
+		}
+		variables.registry.load()
+		arguments.commands.replace( new "models.extensions.ExtensionsCommand@bxagents"( this ) )
+		return this
+	}
+
+	/**
+	 * Takes the extensions out again: `onUnload()` of each, and their commands out of the registry.
+	 */
+	function unload() {
+		if ( !isNull( variables.registry ) ) {
+			variables.registry.unload()
+		}
+		return this
+	}
+
+	/**
+	 * @return The ExtensionRegistry, once install() has run
+	 */
+	any function registry() {
+		return variables.registry
+	}
+
+	/**
+	 * @return The plain facts about each extension (see Extension.describe)
+	 */
+	array function report() {
+		return isNull( variables.registry ) ? [] : variables.registry.report()
+	}
+
+	/**
+	 * @return Sentences about what is wrong: a settings file that cannot be read, and each extension that did not load
+	 */
+	array function problems() {
+		var all = variables.problems.append( variables.userConfig.problems(), true )
+		for ( var extension in report() ) {
+			if ( extension.state == "failed" ) {
+				all.append( "Extension [#extension.name#] did not load: #extension.problems.toList( ' ' )#" )
+			}
+		}
+		return all
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private struct function projectBlock() {
+		if ( !isNull( variables.projectSettings ) ) {
+			return variables.projectSettings
+		}
+		if ( !len( variables.projectRoot ) || !new "models.build.AgentDefinitionLocator@bxagents"().exists( variables.projectRoot ) ) {
+			return {}
+		}
+		try {
+			var config = new "models.build.AgentConfigResolver@bxagents"().resolve( variables.projectRoot )
+			return isStruct( config.extensions ?: "" ) ? config.extensions : {}
+		} catch ( any e ) {
+			variables.problems.append( "Could not read the project's extensions settings: #e.message#" )
+			return {}
+		}
+	}
+
+	/**
+	 * The `extensions/` folder of every installed BoxLang module that has one.
+	 */
+	private array function installedModuleFolders() {
+		var folders = []
+		try {
+			for ( var name in getModuleList().keyArray() ) {
+				var path = getModuleInfo( name ).path ?: ""
+				if ( len( path ) && directoryExists( path & "/extensions" ) ) {
+					folders.append( path & "/extensions" )
+				}
+			}
+		} catch ( any e ) {
+			// no module service to ask: there are no module extensions then
+		}
+		return folders
+	}
+
+}

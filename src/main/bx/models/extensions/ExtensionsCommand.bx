@@ -1,0 +1,80 @@
+/**
+ * /extensions: which extensions this chat has, where each came from, whether it loaded, and what it
+ * added. `/extensions <name>` shows one in full, including what went wrong with it. It is added by the
+ * ExtensionService, so it exists exactly where extensions are loaded.
+ */
+class extends="models.chat.commands.BaseCommand@bxagents" {
+
+	/**
+	 * @service The ExtensionService that loaded them
+	 */
+	function init( required any service ) {
+		variables.service = arguments.service
+		return this
+	}
+
+	string function name() {
+		return "extensions"
+	}
+
+	string function hint() {
+		return "the extensions in this chat: /extensions, or /extensions <name> for one"
+	}
+
+	array function transports() {
+		return [ "tui", "web" ]
+	}
+
+	any function run( required any context, required string args ) {
+		var reply = arguments.context.reply()
+		var report = variables.service.report()
+		var wanted = trim( arguments.args )
+		if ( len( wanted ) ) {
+			return one( reply, report, wanted )
+		}
+		if ( !report.len() ) {
+			return reply.text( "No extensions. Add one as a file or folder in extensions/ (or ~/.bxagents/extensions for yourself)." )
+		}
+		reply.grid(
+			[ "Extension", "Layer", "State", "Adds" ],
+			report.map( e => [ e.name, e.layer, e.state, adds( e ) ] )
+		)
+		for ( var problem in variables.service.problems() ) {
+			reply.warn( problem )
+		}
+		return reply
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private any function one( required any reply, required array report, required string name ) {
+		var found = arguments.report.filter( e => lCase( e.name ) == lCase( name ) )
+		if ( !found.len() ) {
+			return arguments.reply.warn( "There is no extension called [#arguments.name#]. /extensions lists them." )
+		}
+		var extension = found[ found.len() ]
+		arguments.reply.keyValues( [
+			[ "Name", extension.name ],
+			[ "Title", extension.title ],
+			[ "Version", extension.version ],
+			[ "Author", extension.author ],
+			[ "About", extension.description ],
+			[ "Layer", extension.layer ],
+			[ "State", extension.state ],
+			[ "Path", extension.path ],
+			[ "Commands", extension.commands.toList( ", " ) ],
+			[ "Schedulers", extension.schedulers.toList( ", " ) ]
+		].filter( row => len( row[ 2 ] ) ) )
+		for ( var problem in extension.problems ) {
+			arguments.reply.warn( problem )
+		}
+		return arguments.reply
+	}
+
+	private string function adds( required struct extension ) {
+		var parts = arguments.extension.commands.map( c => c )
+		arguments.extension.schedulers.each( s => parts.append( "scheduler " & s ) )
+		return parts.toList( ", " )
+	}
+
+}

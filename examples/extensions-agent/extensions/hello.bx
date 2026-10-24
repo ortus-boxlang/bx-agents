@@ -1,0 +1,20 @@
+/**
+ * The smallest extension: one file, one command. The file name is the extension's name.
+ * The greeting is a setting: the defaults are here, and Agent.yaml (or the person's own
+ * ~/.bxagents/bxAgents.yml) can change them under `extensions: hello:`.
+ */
+@Description( "Greets the person" )
+class {
+
+	function configure() {
+		variables.settings = { greeting : "Hello" }
+	}
+
+	@Command( "hello" )
+	@Hint( "say hello: /hello <name>" )
+	function greet( agentContext, commandArguments ) {
+		var who = len( trim( commandArguments ) ) ? trim( commandArguments ) : "there"
+		return agentContext.reply().ok( "#settings.greeting#, #who#!" )
+	}
+
+}
