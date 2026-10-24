@@ -1,0 +1,59 @@
+/**
+ * Markdown to safe HTML through bx-markdown.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "MarkdownHtml", function() {
+
+			beforeEach( function() {
+				variables.html = new bxagents.models.markdown.MarkdownHtml();
+			} );
+
+			it( "renders headings, emphasis, lists, tables and code", function() {
+				var out = html.toHtml( "#### Title" & char( 10 ) & char( 10 ) & "**bold** and `code`" & char( 10 ) & char( 10 ) & "- one" & char( 10 ) & "- two" & char( 10 ) & char( 10 ) & "| a | b |" & char( 10 ) & "|---|---|" & char( 10 ) & "| 1 | 2 |" );
+				expect( out ).toInclude( ">Title</h2>" );
+				expect( out ).toInclude( "<strong>bold</strong>" );
+				expect( out ).toInclude( "<code>code</code>" );
+				expect( out ).toInclude( "<li>one</li>" );
+				expect( out ).toInclude( "<table" );
+				expect( out ).toInclude( "<td>2</td>" );
+			} );
+
+			it( "shows a tag someone typed as text, never as markup", function() {
+				var out = html.toHtml( "hi <script>alert(1)</script>" & char( 10 ) & char( 10 ) & '<div onclick="x()">raw</div>' & char( 10 ) & char( 10 ) & "<img src=x onerror=alert(1)>" );
+				expect( out ).notToInclude( "<script" );
+				expect( out ).notToInclude( "<div" );
+				expect( out ).notToInclude( "<img" );
+				expect( out ).toInclude( "&lt;script&gt;" );
+			} );
+
+			it( "leaves code spans and fenced blocks to the converter, so the tag shows once, not twice-escaped", function() {
+				var out = html.toHtml( "Use `<b>` here" & char( 10 ) & char( 10 ) & "```html" & char( 10 ) & "<p>hi</p>" & char( 10 ) & "```" & char( 10 ) & char( 10 ) & "~~~" & char( 10 ) & "<i>x</i>" & char( 10 ) & "~~~" );
+				expect( out ).toInclude( "<code>&lt;b&gt;</code>" );
+				expect( out ).toInclude( "&lt;p&gt;hi&lt;/p&gt;" );
+				expect( out ).toInclude( "&lt;i&gt;x&lt;/i&gt;" );
+				expect( out ).notToInclude( "&amp;lt;" );
+			} );
+
+			it( "escapes a tag after a code span on the same line, and one that sits between two spans", function() {
+				var out = html.toHtml( "`a` <u>x</u> `b`" );
+				expect( out ).notToInclude( "<u>" );
+				expect( out ).toInclude( "<code>a</code>" );
+				expect( out ).toInclude( "<code>b</code>" );
+			} );
+
+			it( "does not let a link run a script", function() {
+				var out = html.toHtml( "[x](javascript:alert(1))" );
+				expect( out ).notToInclude( "javascript:" );
+			} );
+
+			it( "a fence closes only on a fence of its own kind, so what follows is escaped again", function() {
+				var out = html.toHtml( "````" & char( 10 ) & "```" & char( 10 ) & "<a>" & char( 10 ) & "````" & char( 10 ) & char( 10 ) & "<b>after</b>" );
+				expect( out ).notToInclude( "<b>after" );
+			} );
+
+		} );
+	}
+
+}

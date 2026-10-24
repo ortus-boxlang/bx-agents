@@ -167,6 +167,42 @@ class extends="testbox.system.BaseSpec" {
 
 			} );
 
+			describe( "usage", function() {
+
+				it( "puts usage into the app's settings only when the project turns it on", function() {
+					expect( ai.settings( { model : "openai/gpt-5", usage : true } ).bxagents.usage ).toBeTrue();
+					expect( ai.settings( { model : "openai/gpt-5", usage : false } ).keyExists( "bxagents" ) ).toBeFalse();
+					expect( ai.settings( { model : "openai/gpt-5" } ).keyExists( "bxagents" ) ).toBeFalse();
+				} );
+
+				it( "keeps the model facts beside it", function() {
+					var s = ai.settings( { model : "openai/gpt-5", contextWindow : 1000, usage : true } );
+
+					expect( s.bxagents.usage ).toBeTrue();
+					expect( s.bxagents.default.contextWindow ).toBe( 1000 );
+				} );
+
+			} );
+
+			describe( "ignoredModelNote", function() {
+
+				it( "says the model is ignored when a model and a default profile are both written", function() {
+					var note = ai.ignoredModelNote( { model : "openai/gpt-5", defaultProfile : "fast" } );
+
+					expect( note ).toInclude( "openai/gpt-5" );
+					expect( note ).toInclude( "defaultProfile [fast]" );
+					expect( note ).toInclude( "ignored" );
+				} );
+
+				it( "says nothing when only one of them is written, or the agent has its own profile", function() {
+					expect( ai.ignoredModelNote( { model : "openai/gpt-5" } ) ).toBe( "" );
+					expect( ai.ignoredModelNote( { defaultProfile : "fast" } ) ).toBe( "" );
+					expect( ai.ignoredModelNote( { model : "openai/gpt-5", defaultProfile : "fast", profile : "planner" } ) ).toBe( "" );
+					expect( ai.ignoredModelNote( { model : "openai/gpt-5", defaultProfile : "default" } ) ).toBe( "" );
+				} );
+
+			} );
+
 			describe( "expression", function() {
 
 				var lit = ( v ) => jsonSerialize( v );
@@ -183,6 +219,19 @@ class extends="testbox.system.BaseSpec" {
 
 				it( "says nothing for a node that sets no model, so the caller falls back to the default", function() {
 					expect( ai.expression( {}, lit, bx ) ).toBe( "" );
+				} );
+
+				it( "uses the default profile for the project's own agent, whatever model is written beside it", function() {
+					expect( ai.expression( { model : "openai/gpt-5", defaultProfile : "fast" }, lit, bx ) ).toBe( 'aiModel( profile : "fast" )' );
+					expect( ai.expression( { defaultProfile : "fast" }, lit, bx ) ).toBe( 'aiModel( profile : "fast" )' );
+				} );
+
+				it( "lets an agent's own profile win over the default profile", function() {
+					expect( ai.expression( { profile : "planner", model : "openai/gpt-5", defaultProfile : "fast" }, lit, bx ) ).toBe( 'aiModel( profile : "planner" )' );
+				} );
+
+				it( "keeps the model when the default profile is the built-in default", function() {
+					expect( ai.expression( { model : "openai/gpt-5", defaultProfile : "default" }, lit, bx ) ).toBe( 'aiModel( provider : "openai", params : { model : "gpt-5" } )' );
 				} );
 
 			} );

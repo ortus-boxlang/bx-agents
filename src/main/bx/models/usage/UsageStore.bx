@@ -1,0 +1,98 @@
+/**
+ * The record of what each model call used, in the shared chat database: one row per call with the time, who, which
+ * provider and model, and the token counts the provider reported. Counts only; nothing of what was said is kept.
+ *
+ * A provider that does not report usage (the mock provider, some streaming calls) leaves no row, so the totals are of
+ * the calls that reported. `stats` says how many that was.
+ */
+class {
+
+	static {
+		GROUPS = [ "model", "provider", "day", "user" ]
+	}
+
+	/**
+	 * @store A ChatStore
+	 */
+	function init( required any store ) {
+		variables.store = arguments.store
+		return this
+	}
+
+	/**
+	 * @call { userId, threadId, provider, model, operation, promptTokens, completionTokens, totalTokens }
+	 */
+	void function record( required struct call ) {
+		var c = arguments.call
+		var prompt = val( c.promptTokens ?: 0 )
+		var completion = val( c.completionTokens ?: 0 )
+		variables.store.exec(
+			"INSERT INTO usage ( at, userId, threadId, provider, model, operation, promptTokens, completionTokens, totalTokens ) VALUES ( :at, :userId, :threadId, :provider, :model, :operation, :prompt, :completion, :total )",
+			{
+				at         : stamp( now() ),
+				userId     : left( c.userId ?: "", 255 ),
+				threadId   : left( c.threadId ?: "", 64 ),
+				provider   : left( c.provider ?: "", 64 ),
+				model      : left( c.model ?: "", 255 ),
+				operation  : left( c.operation ?: "chat", 32 ),
+				prompt     : prompt,
+				completion : completion,
+				total      : val( c.totalTokens ?: 0 ) > 0 ? val( c.totalTokens ) : prompt + completion
+			}
+		)
+	}
+
+	/**
+	 * What a report says when nothing has been recorded: no database yet, or no calls.
+	 *
+	 * @days The days asked for
+	 * @by The grouping asked for
+	 */
+	struct function emptyReport( numeric days = 30, string by = "model" ) {
+		return { days : int( arguments.days ), by : lCase( trim( arguments.by ) ), calls : 0, promptTokens : 0, completionTokens : 0, totalTokens : 0, first : "", last : "", groups : [] }
+	}
+
+	/**
+	 * @days How many days back to look, counting today
+	 * @by What to group by: model, provider, day or user
+	 * @user Only this user's calls; blank for everyone's
+	 *
+	 * @return { days, by, calls, promptTokens, completionTokens, totalTokens, first, last, groups : [ { name, calls, promptTokens, completionTokens, totalTokens } ] }
+	 */
+	struct function report( numeric days = 30, string by = "model", string user = "" ) {
+		var group = lCase( trim( arguments.by ) )
+		if ( !static.GROUPS.contains( group ) ) {
+			throw( type = "BxAgents.UnknownStatsGroup", message = "`--by` needs one of: #static.GROUPS.toList( ', ' )#." )
+		}
+		var since = dateAdd( "d", -( max( 1, int( arguments.days ) ) - 1 ), createDate( year( now() ), month( now() ), day( now() ) ) )
+		var params = { since : stamp( since ) }
+		var where = "at >= :since"
+		if ( len( trim( arguments.user ) ) ) {
+			where &= " AND userId = :user"
+			params[ "user" ] = trim( arguments.user )
+		}
+		var expression = { model : "model", provider : "provider", day : "substr( at, 1, 10 )", user : "userId" }[ group ]
+		var totals = variables.store.rows( "SELECT COUNT(*) AS calls, COALESCE( SUM( promptTokens ), 0 ) AS promptTokens, COALESCE( SUM( completionTokens ), 0 ) AS completionTokens, COALESCE( SUM( totalTokens ), 0 ) AS totalTokens, MIN( at ) AS first, MAX( at ) AS last FROM usage WHERE #where#", params )[ 1 ]
+		var groups = variables.store.rows( "SELECT #expression# AS name, COUNT(*) AS calls, SUM( promptTokens ) AS promptTokens, SUM( completionTokens ) AS completionTokens, SUM( totalTokens ) AS totalTokens FROM usage WHERE #where# GROUP BY #expression# ORDER BY #group == 'day' ? 'name DESC' : 'totalTokens DESC'# LIMIT 200", params )
+		return {
+			days             : int( arguments.days ),
+			by               : group,
+			calls            : val( totals.calls ),
+			promptTokens     : val( totals.promptTokens ),
+			completionTokens : val( totals.completionTokens ),
+			totalTokens      : val( totals.totalTokens ),
+			first            : totals.first ?: "",
+			last             : totals.last ?: "",
+			groups           : groups.map( g => { name : len( g.name ?: "" ) ? g.name : "(none)", calls : val( g.calls ), promptTokens : val( g.promptTokens ), completionTokens : val( g.completionTokens ), totalTokens : val( g.totalTokens ) } )
+		}
+	}
+
+	/**
+	 * Times are kept as plain text, year-month-day then the time, so they sort and compare as text and a day is
+	 * the first ten characters. (The database driver would otherwise keep the date's display form.)
+	 */
+	private string function stamp( required date when ) {
+		return dateTimeFormat( arguments.when, "yyyy-MM-dd HH:mm:ss" )
+	}
+
+}

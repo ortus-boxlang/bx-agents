@@ -1,0 +1,65 @@
+/**
+ * Turns usage recording on for a project by writing `usage: true` into its Agent.yaml, the one line the recorder
+ * looks for. It changes nothing else in the file. The setting is read when the app is built, so the person is told to
+ * rebuild (and restart a running server) for it to take effect.
+ *
+ * A class-based agent (Agent.bx) is code, so it is told what to add rather than edited.
+ */
+class {
+
+	static {
+		LINE = "usage: true"
+	}
+
+	/**
+	 * @projectRoot The project folder
+	 *
+	 * @return { ok, changed, message }
+	 */
+	struct function enable( required string projectRoot ) {
+		var located = new "models.build.AgentDefinitionLocator@bxagents"().locate( arguments.projectRoot )
+		if ( located.kind == "none" ) {
+			return { ok : false, changed : false, message : "There is no Agent.yaml in [#arguments.projectRoot#]." }
+		}
+		if ( located.kind == "bx" ) {
+			return { ok : false, changed : false, message : "This agent is a class, so add `usage : true` to the struct its configure() returns, then run `bxAgents build`." }
+		}
+		var text = fileRead( located.path )
+		var editor = new "models.add.YamlEditor@bxagents"()
+		if ( editor.hasKey( text, "usage" ) ) {
+			if ( reFindNoCase( "(?m)^usage:\s*(true|yes|on)\s*(##.*)?$", text ) ) {
+				return { ok : true, changed : false, message : "Usage recording is already on in Agent.yaml." }
+			}
+			var replaced = reReplaceNoCase( text, "(?m)^usage:[^\r\n]*", static.LINE, "one" )
+			fileWrite( located.path, replaced )
+			return { ok : true, changed : true, message : "Turned usage recording on in Agent.yaml. Run `bxAgents build`, and restart a running server, to start recording." }
+		}
+		var added = editor.addBlock( text, "usage", [ static.LINE ] )
+		fileWrite( located.path, added.text )
+		return { ok : true, changed : true, message : "Added `#static.LINE#` to Agent.yaml. Run `bxAgents build`, and restart a running server, to start recording." }
+	}
+
+	/**
+	 * @projectRoot The project folder
+	 *
+	 * @return True when the project's source turns usage recording on
+	 */
+	boolean function isOn( required string projectRoot ) {
+		try {
+			var config = new "models.build.AgentConfigResolver@bxagents"().resolve( projectRoot : arguments.projectRoot )
+			return isBoolean( config.usage ?: "" ) && config.usage
+		} catch ( any e ) {
+			return false
+		}
+	}
+
+	/**
+	 * What to say when there is nothing to show because recording is off.
+	 *
+	 * @canEnable Whether the person can turn it on from here (the verb and the terminal chat can)
+	 */
+	string function howToEnable( boolean canEnable = true ) {
+		return "Usage is not being recorded, so there is nothing to show. Turn it on by adding `usage: true` to Agent.yaml and rebuilding" & ( arguments.canEnable ? ", or let me do it" : "" ) & ". Only counts are kept (the time, who, the model and its tokens), never what was said."
+	}
+
+}

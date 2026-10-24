@@ -1,0 +1,116 @@
+/**
+ * The `tui:` block of Agent.yaml: how the terminal chat looks.
+ *
+ *   tui:
+ *     prompt: bars                          # bars (default), bars-hints, rule, box or panel
+ *     widgets:
+ *       top: [ agent, folder, user, clock ]  # in the top bar
+ *       bottom: [ ctx, profile ]             # at the bottom
+ *
+ * The styles and widgets are the Java classes' to name (PromptStyles and Widgets), so this checks the block against
+ * them and a new style or widget needs no change here. Nothing in the block is required: what is missing keeps its
+ * default, which the chat screen fills in.
+ */
+class {
+
+	static {
+		PLACES = [ "top", "bottom" ]
+	}
+
+	/**
+	 * @return The names of the prompt styles, in the order they are offered
+	 */
+	array function styleNames() {
+		return javaNames( createObject( "java", "ortus.boxlang.bxagents.tui.PromptStyles" ).names() )
+	}
+
+	/**
+	 * @return The names of the widgets, in the order they are offered
+	 */
+	array function widgetNames() {
+		return javaNames( createObject( "java", "ortus.boxlang.bxagents.tui.Widgets" ).names() )
+	}
+
+	/**
+	 * @return The look a project gets with no `tui:` block: { prompt, top, bottom }
+	 */
+	struct function defaults() {
+		var look = createObject( "java", "ortus.boxlang.bxagents.tui.PromptLook" ).defaults()
+		return { prompt : look.style(), top : javaNames( look.top() ), bottom : javaNames( look.bottom() ) }
+	}
+
+	/**
+	 * What is wrong with a `tui:` block.
+	 *
+	 * @tui The block, as read from Agent.yaml
+	 * @label How to name the agent in a message, such as "Agent.yaml"
+	 *
+	 * @return Sentences, empty when the block is fine
+	 */
+	array function problems( required any tui, required string label ) {
+		var out = []
+		if ( !isStruct( arguments.tui ) ) {
+			return [ "#arguments.label#: 'tui' must be a mapping (prompt:, widgets:)" ]
+		}
+		for ( var key in arguments.tui ) {
+			if ( !listFindNoCase( "prompt,widgets", key ) ) {
+				out.append( "#arguments.label#: tui has no setting '#key#'. The settings are prompt and widgets" )
+			}
+		}
+		if ( arguments.tui.keyExists( "prompt" ) ) {
+			var styles = styleNames()
+			if ( !isSimpleValue( arguments.tui.prompt ) || !styles.findNoCase( trim( arguments.tui.prompt ) ) ) {
+				out.append( "#arguments.label#: tui.prompt '#isSimpleValue( arguments.tui.prompt ) ? arguments.tui.prompt : "..."#' is not a prompt style. Choose one of: #styles.toList( ", " )#" )
+			}
+		}
+		if ( arguments.tui.keyExists( "widgets" ) ) {
+			if ( !isStruct( arguments.tui.widgets ) ) {
+				out.append( "#arguments.label#: tui.widgets must be a mapping with top: and bottom: lists" )
+			} else {
+				var widgets = widgetNames()
+				for ( var place in arguments.tui.widgets ) {
+					if ( !static.PLACES.findNoCase( place ) ) {
+						out.append( "#arguments.label#: tui.widgets has no place '#place#'. The places are top and bottom" )
+					} else if ( !isArray( arguments.tui.widgets[ place ] ) ) {
+						out.append( "#arguments.label#: tui.widgets.#place# must be a list of widget names, such as [ agent, clock ]" )
+					} else {
+						for ( var name in arguments.tui.widgets[ place ] ) {
+							if ( !isSimpleValue( name ) || !widgets.findNoCase( trim( name ) ) ) {
+								out.append( "#arguments.label#: tui.widgets.#place# has no widget '#isSimpleValue( name ) ? name : "..."#'. The widgets are: #widgets.toList( ", " )#" )
+							}
+						}
+					}
+				}
+			}
+		}
+		return out
+	}
+
+	/**
+	 * The look a project asks for, read from its Agent.yaml (or Agent.bx). A project that cannot be read, or has no
+	 * `tui:` block, gets the defaults: the chat must start either way.
+	 *
+	 * @projectRoot The project's folder
+	 *
+	 * @return The `tui` struct, possibly empty
+	 */
+	struct function forProject( required string projectRoot ) {
+		try {
+			var config = new "models.build.AgentConfigResolver@bxagents"().resolve( arguments.projectRoot )
+			return isStruct( config.tui ?: "" ) ? config.tui : {}
+		} catch ( any e ) {
+			return {}
+		}
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private array function javaNames( required any names ) {
+		var out = []
+		for ( var name in arguments.names ) {
+			out.append( name )
+		}
+		return out
+	}
+
+}

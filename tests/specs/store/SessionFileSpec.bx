@@ -1,0 +1,90 @@
+/**
+ * The file a conversation is exported to and imported from.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "store.SessionFile", function() {
+
+			beforeEach( function() {
+				variables.format = new bxagents.models.store.SessionFile();
+				variables.messages = [
+					{ role : "user", content : "hello", timestamp : "2026-10-23T10:00:00Z" },
+					{ role : "assistant", content : "hi there", timestamp : "2026-10-23T10:00:01Z" }
+				];
+			} );
+
+			it( "builds a document with the format, the version and the messages as given", function() {
+				var data = format.build( "helper", "Plan the launch", messages, createDateTime( 2026, 10, 23, 9, 5, 7 ), createDateTime( 2026, 10, 23, 10, 0, 0 ) );
+
+				expect( data.format ).toBe( "bxagents-session" );
+				expect( data.version ).toBe( 1 );
+				expect( data.agent ).toBe( "helper" );
+				expect( data.title ).toBe( "Plan the launch" );
+				expect( data.messages ).toBe( messages );
+				// month and minute, not minute and minute
+				expect( data.createdAt ).toBe( "2026-10-23T09:05:07" );
+			} );
+
+			it( "reads back what it built", function() {
+				var data = format.build( "helper", "Plan", messages );
+
+				expect( format.parse( jsonSerialize( data ) ).messages ).toHaveLength( 2 );
+			} );
+
+			it( "refuses text that is not JSON, and says so on one line", function() {
+				try {
+					format.parse( "not json" & char( 10 ) & "second line" );
+					fail( "it should have refused" );
+				} catch ( "BxAgents.InvalidSessionFile" e ) {
+					expect( e.message ).toInclude( "not JSON" );
+					expect( e.message ).notToInclude( char( 10 ) );
+				}
+			} );
+
+			it( "refuses a document that is not an exported conversation, or is another version", function() {
+				expect( format.problemsWith( [ 1 ] )[ 1 ] ).toInclude( "expected a JSON object" );
+				expect( format.problemsWith( { messages : [] } )[ 1 ] ).toInclude( "not an exported conversation" );
+				expect( format.problemsWith( { format : "bxagents-session", version : 2, messages : [] } )[ 1 ] ).toInclude( "version [2]" );
+				expect( format.problemsWith( { format : "bxagents-session", version : 1 } )[ 1 ] ).toInclude( "no messages list" );
+			} );
+
+			it( "refuses a message that is not an object, has an unknown role, or has no usable content", function() {
+				var base = { format : "bxagents-session", version : 1 };
+
+				expect( format.problemsWith( base.copy().append( { messages : [ "text" ] } ) )[ 1 ] ).toInclude( "Message 1 is not an object" );
+				expect( format.problemsWith( base.copy().append( { messages : [ { role : "hacker", content : "x" } ] } ) )[ 1 ] ).toInclude( "role [hacker]" );
+				expect( format.problemsWith( base.copy().append( { messages : [ { role : "user", content : "ok" }, { content : "x" } ] } ) )[ 1 ] ).toInclude( "Message 2" );
+			} );
+
+			it( "accepts a good document", function() {
+				expect( format.problemsWith( format.build( "helper", "Plan", messages ) ) ).toBeEmpty();
+			} );
+
+			it( "refuses more messages than a conversation should have", function() {
+				var many = [];
+				for ( var i = 1; i <= 20001; i++ ) {
+					many.append( { role : "user", content : "x" } );
+				}
+
+				expect( format.problemsWith( { format : "bxagents-session", version : 1, messages : many } )[ 1 ] ).toInclude( "more than the 20000" );
+			} );
+
+			it( "writes a Markdown transcript with who said what", function() {
+				var text = format.markdown( format.build( "helper", "Plan the launch", messages ) );
+
+				expect( text ).toInclude( "## Plan the launch" );
+				expect( text ).toInclude( "**You**" & char( 10 ) & char( 10 ) & "hello" );
+				expect( text ).toInclude( "**Agent**" & char( 10 ) & char( 10 ) & "hi there" );
+			} );
+
+			it( "makes a file name from a title", function() {
+				expect( format.slug( "Plan the launch!" ) ).toBe( "plan-the-launch" );
+				expect( format.slug( "   " ) ).toBe( "conversation" );
+				expect( len( format.slug( repeatString( "word ", 30 ) ) ) ).toBeLTE( 40 );
+			} );
+
+		} );
+	}
+
+}

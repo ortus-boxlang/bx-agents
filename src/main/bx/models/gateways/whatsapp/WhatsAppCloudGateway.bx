@@ -70,6 +70,7 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 	static {
 		GRAPH_API_BASE          = "https://graph.facebook.com"
 		MAX_MESSAGE_LENGTH      = 4096
+		COMMAND_ID_PREFIX       = "cmd:"
 		BUTTON_LABEL_LIMIT      = 20
 		INTERACTIVE_BODY_LIMIT  = 1024
 		WAMID_DEDUP_CACHE_SIZE  = 500
@@ -477,6 +478,36 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 	}
 
 	/**
+	 * The picture or document that came with a message. WhatsApp gives a media id; asking Graph for it
+	 * returns a short-lived address, which is downloaded with the same access token.
+	 *
+	 * @message A GatewayMessage from this gateway
+	 *
+	 * @return [ { name, mime, size, url, headers } ]
+	 */
+	array function attachmentsOf( required any message ) {
+		var raw = arguments.message.getRaw()
+		var out = []
+		for ( var kind in [ "image", "document" ] ) {
+			var media = raw[ kind ] ?: {}
+			if ( !isStruct( media ) || !len( media.id ?: "" ) ) {
+				continue
+			}
+			var located = callApi( "../#media.id#", {}, "GET" )
+			if ( located.status >= 200 && located.status < 300 && len( located.body.url ?: "" ) ) {
+				out.append( {
+					name    : media.filename ?: ( kind == "image" ? "photo" : "file" ),
+					mime    : located.body.mime_type ?: ( media.mime_type ?: "" ),
+					size    : located.body.file_size ?: 0,
+					url     : located.body.url,
+					headers : { "Authorization" : "Bearer #variables.accessToken#" }
+				} )
+			}
+		}
+		return out
+	}
+
+	/**
 	 * @rawMessage A raw Cloud API message object
 	 * @msgType Its own lowercased "type" field
 	 */
@@ -512,6 +543,18 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 		}
 
 		var senderId = trim( arguments.rawMessage.from ?: "" )
+
+		// A tap on a choice from a chat command (see deliverChoices()) carries the command line to run,
+		// so it goes on as typed text; any other id is a human-in-the-loop decision.
+		if ( buttonId.startsWith( static.COMMAND_ID_PREFIX ) ) {
+			dispatchInbound( toGatewayMessage(
+				{ type: "text", from: senderId, text: { body: mid( buttonId, len( static.COMMAND_ID_PREFIX ) + 1, len( buttonId ) ) }, context: arguments.rawMessage.context ?: {} },
+				{},
+				"text"
+			) )
+			return
+		}
+
 		BoxAnnounce( "onGatewayMessageReceived", {
 			gateway       : this,
 			message       : null,
@@ -606,6 +649,66 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 			return toString( arguments.responseBody.message )
 		}
 		return "unknown error"
+	}
+
+	// -------------------------------------------------------------------------
+	// Chat command choices — the same buttons and list, for "pick one" answers
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Shows a "pick one" answer from a chat command (a profile, a conversation) as up to three buttons or,
+	 * for up to ten, a list, so the person taps instead of typing the command. A tap comes back as the
+	 * command line (see handleInteractiveReply()). More than ten cannot be shown this way.
+	 *
+	 * @title What is being picked
+	 * @options [ { label, hint, line } ] line is the command to run for that choice
+	 * @context Who to send to
+	 *
+	 * @return True when the choices were sent, false when they do not fit and the caller should list them as text
+	 */
+	boolean function deliverChoices( required string title, required array options, required GatewayContext context ) {
+		if ( !arguments.options.len() || arguments.options.len() > 10 ) {
+			return false
+		}
+		var bodyText = truncate( len( arguments.title ) ? arguments.title : "Choose one", static.INTERACTIVE_BODY_LIMIT )
+		var interactive = {}
+		if ( arguments.options.len() <= 3 ) {
+			interactive = {
+				type  : "button",
+				body  : { text: bodyText },
+				action: { buttons: arguments.options.map( o => {
+					type : "reply",
+					reply: { id: truncate( static.COMMAND_ID_PREFIX & o.line, 256 ), title: truncate( o.label, static.BUTTON_LABEL_LIMIT ) }
+				} ) }
+			}
+		} else {
+			interactive = {
+				type  : "list",
+				body  : { text: bodyText },
+				action: {
+					button  : "Choose",
+					sections: [ {
+						title: "Options",
+						rows : arguments.options.map( o => {
+							var row = { id: truncate( static.COMMAND_ID_PREFIX & o.line, 200 ), title: truncate( o.label, 24 ) }
+							if ( len( o.hint ?: "" ) ) {
+								row[ "description" ] = truncate( o.hint, 72 )
+							}
+							return row
+						} )
+					} ]
+				}
+			}
+		}
+
+		var response = callApi( "messages", {
+			messaging_product: "whatsapp",
+			recipient_type   : "individual",
+			to               : arguments.context.getConversationID(),
+			type             : "interactive",
+			interactive      : interactive
+		} )
+		return response.status >= 200 && response.status < 300
 	}
 
 	// -------------------------------------------------------------------------
@@ -749,21 +852,26 @@ class extends="bxModules.bxai.models.gateway.BaseGateway" {
 	 *
 	 * @return { status: numeric (0 when the request never completed), rawStatus: string (the raw `bx:http` statusCode), body: struct }
 	 */
-	private struct function callApi( required string path, required struct body ) {
+	private struct function callApi( required string path, required struct body, string httpMethod = "post" ) {
 		if ( !isNull( variables.apiCaller ) ) {
 			return variables.apiCaller( arguments.path, arguments.body )
 		}
 
-		var url = "#static.GRAPH_API_BASE#/#variables.apiVersion#/#variables.phoneNumberId#/#arguments.path#"
+		// a path starting "../" is relative to the API version, not to the phone number (media lookups)
+		var endpoint = arguments.path.startsWith( "../" )
+			? "#static.GRAPH_API_BASE#/#variables.apiVersion#/#mid( arguments.path, 4, len( arguments.path ) )#"
+			: "#static.GRAPH_API_BASE#/#variables.apiVersion#/#variables.phoneNumberId#/#arguments.path#"
 		bx:http
-			url     = url
-			method  = "post"
+			url     = endpoint
+			method  = arguments.httpMethod
 			result  = "apiResult"
 			charset = "utf-8"
 		{
 			bx:httpParam type="header" name="Authorization" value="Bearer #variables.accessToken#";
-			bx:httpParam type="header" name="content-type" value="application/json; charset=utf-8";
-			bx:httpParam type="body" value=jsonSerialize( arguments.body );
+			if ( arguments.httpMethod == "post" ) {
+				bx:httpParam type="header" name="content-type" value="application/json; charset=utf-8";
+				bx:httpParam type="body" value=jsonSerialize( arguments.body );
+			}
 		}
 
 		var rawStatus = toString( apiResult.statusCode ?: "0" )

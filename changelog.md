@@ -19,10 +19,31 @@ or package as a portable `.bxa`.
 
 ### Added
 
+#### Markdown and syntax highlighting
+
+- The web UI renders answers as full Markdown (tables, quotes, strikethrough) with
+  `marked`, sanitized by DOMPurify, and colours code with `highlight.js`; all three are
+  inlined in the page, so it works offline. Raw HTML in an answer is escaped, images are not loaded.
+- The terminal colours code blocks too, and knows BoxLang, CFML, diff, TOML and Markdown on top of
+  TamboUI's built-in languages. The web UI and the terminal read the same BoxLang and CFML word lists.
+- Exported HTML (`/export`) is rendered by the bundled `bx-markdown` module, with raw HTML in the
+  conversation escaped first.
+
+#### A better terminal chat
+
+- Tables in an answer are drawn with rounded, coloured borders, a bold header, the column alignment
+  and wrapping on a narrow terminal. Code blocks are coloured by language, including BoxLang and CFML.
+- The message box has five looks (`bars`, `bars-hints`, `rule`, `box`, `panel`) with a coloured top
+  edge that turns amber while the agent works, and small widgets in its bars: agent, profile, folder,
+  user, clock, machine, git branch, date, session, last turn and context size.
+- Choose the look in the wizard, with `--prompt`, `--widgets` and `--widgets-bottom`, in a `tui:` block
+  of `Agent.yaml`, or in the chat with `/prompt`. A new look or widget is one small class
+  (`PromptStyle`, `Widget`).
+
 #### Self-contained install
 
 - `install-bx-module bx-agents` is the only install. The module zip bundles `bx-ai`,
-  `bx-sqlite`, `bx-ftp`, `bx-mail` and `bx-yaml` as nested BoxLang modules
+  `bx-sqlite`, `bx-ftp`, `bx-mail`, `bx-yaml` and `bx-markdown` as nested BoxLang modules
   (BoxLang 1.17+), and a `lib/` with ColdBox, `qb`, `cbsecurity`, `cbauth` and
   `cbmailservices` that `build` copies into every generated app. A project's own
   `lib/` folder adds to or overrides them.
@@ -271,6 +292,17 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   `/keys` and `?` with its own shortcuts.
 - In Telegram the bot's own `/` menu lists the commands the session answers (sent with `setMyCommands` when the
   first message arrives). Names Telegram would refuse are left out; a failure never stops the bot.
+- Chat commands on the other platforms. Discord registers them as application commands and answers a slash command
+  by replacing the "thinking" placeholder. Slack takes slash commands through Socket Mode (one umbrella command,
+  default `/agent`, or one per chat command) and answers only the person who typed. WhatsApp shows a pick-one as
+  buttons or a list. Where there are no buttons a pick-one is a numbered list and a lone number answers it.
+  `gatewaySession.commands.prefixes` sets a different command prefix per gateway.
+- `/new`, `/clear`, `/compact`, `/sessions` and `/resume` on chat platforms, switched on with
+  `gatewaySession.commands.conversation: true` (off by default: a chat shares one conversation). `/new` and `/resume`
+  move the chat to another conversation, and `/sessions` lists the ones the person has had since the app started.
+- Pictures and files sent on Telegram, Discord, Slack, WhatsApp and Twilio (MMS) reach the agent: pictures as image
+  parts, text files inside the message, anything else named back as not read. The same limits and vision check as the
+  terminal and the web page. `gatewaySession.attachments: false` switches it off.
 
 #### The chat screen
 
@@ -318,7 +350,13 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   for them: the default `provider`, `model`, `params` and `options`; `providers` (params and options per
   provider); named `profiles` (provider, model, params, options and `apiKeyEnv`, the name of the variable that
   holds the key, never the key); `defaultProfile`; `profile` on an agent or subagent; and the capability
-  defaults `embeddings`, `speech`, `transcription` and `image`. Everything is validated at build time by
+  defaults `embeddings`, `speech`, `transcription` and `image`. `sessions export` writes a conversation to a JSON file (or a Markdown transcript with `--md`) and `sessions import` adds
+  one back as a new conversation, refusing a file it does not recognise before it writes anything. A memory declared in
+  `Agent.yaml` is now keyed by the agent's name, so a file memory is found again on the next start. `bxAgents stats` and `/stats` show what the model calls used (tokens by model, provider, day or user), once
+  `usage: true` is in Agent.yaml: it is off by default, keeps counts only, and `stats --enable` or `/stats enable`
+  writes the line. `defaultProfile` is the default model: when a
+  top-level `model` is written beside it, the profile wins and the build and `doctor` warn that the model is
+  ignored. Everything is validated at build time by
   bx-ai's rules, every profile runs on `mock` under `bxAgents test`, and subagents inherit the root's
   settings. This replaces the short-lived `models/` folder and `add model`. Requires bx-ai 3.7.
 - `add profile` and `add provider` write a profile (provider, model, settings, key variable, optionally the

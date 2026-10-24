@@ -105,6 +105,27 @@ public final class Theme {
 		return !depth.equals( "none" );
 	}
 
+	/** @return true when a background can be laid under text, which the panel prompt style needs */
+	public boolean hasPanel() {
+		return depth.equals( "truecolor" ) || depth.equals( "indexed" );
+	}
+
+	/**
+	 * @param style a text style
+	 *
+	 * @return the style with the panel's background colour under it; unchanged when {@link #hasPanel()} is false
+	 */
+	public Style onPanel( Style style ) {
+		switch ( depth ) {
+			case "truecolor" :
+				return style.bg( Color.rgb( 26, 33, 43 ) );
+			case "indexed" :
+				return style.bg( Color.indexed( 235 ) );
+			default :
+				return style;
+		}
+	}
+
 	private Style color( int i ) {
 		switch ( depth ) {
 			case "truecolor" :

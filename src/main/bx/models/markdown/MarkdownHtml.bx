@@ -1,0 +1,76 @@
+/**
+ * Markdown to HTML for pages the module writes (an exported conversation). It is bx-markdown's markdown(), which
+ * passes raw HTML through, so the text is made safe first: a tag typed in the Markdown (an agent's answer can echo
+ * anything it read) is escaped and shows as text, while code spans and code blocks, which the converter already
+ * escapes, are left alone.
+ */
+class {
+
+	/**
+	 * @text The Markdown text
+	 *
+	 * @return An HTML fragment: headings, paragraphs, lists, tables, code, and nothing the text could script
+	 */
+	string function toHtml( required string text ) {
+		return markdown( escapeRawHtml( arguments.text ) )
+	}
+
+	/**
+	 * @text The Markdown text
+	 *
+	 * @return The text with every "<" outside a code span or fenced block written as &lt;
+	 */
+	string function escapeRawHtml( required string text ) {
+		var newline = char( 10 )
+		var out = []
+		var fence = ""
+		for ( var line in arguments.text.replace( char( 13 ) & char( 10 ), newline, "all" ).listToArray( newline, true ) ) {
+			var opener = reFind( "^ {0,3}(`{3,}|~{3,})", line, 1, true )
+			if ( len( fence ) ) {
+				// a closing fence is the same character, at least as long, and nothing else on the line
+				if ( reFind( "^ {0,3}" & left( fence, 1 ) & "{" & len( fence ) & ",}\s*$", line ) ) {
+					fence = ""
+				}
+				out.append( line )
+			} else if ( opener.pos[ 1 ] ) {
+				fence = mid( line, opener.pos[ 2 ], opener.len[ 2 ] )
+				out.append( line )
+			} else {
+				out.append( escapeLine( line ) )
+			}
+		}
+		return out.toList( newline )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/** Escapes the "<" in a line that is not inside a code span. */
+	private string function escapeLine( required string line ) {
+		if ( !find( "<", arguments.line ) ) {
+			return arguments.line
+		}
+		var result = ""
+		var i = 1
+		var n = len( arguments.line )
+		while ( i <= n ) {
+			var ch = mid( arguments.line, i, 1 )
+			if ( ch == "`" ) {
+				var run = reFind( "`+", arguments.line, i, true )
+				var ticks = mid( arguments.line, run.pos[ 1 ], run.len[ 1 ] )
+				var close = find( ticks, arguments.line, i + len( ticks ) )
+				if ( close ) {
+					result &= mid( arguments.line, i, close + len( ticks ) - i )
+					i = close + len( ticks )
+				} else {
+					result &= ticks
+					i += len( ticks )
+				}
+			} else {
+				result &= ch == "<" ? "&lt;" : ch
+				i++
+			}
+		}
+		return result
+	}
+
+}

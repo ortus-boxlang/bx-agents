@@ -1,5 +1,6 @@
 import bxModules.bxai.models.gateway.contracts.GatewayContext;
 import bxModules.bxai.models.gateway.contracts.GatewayEvent;
+import bxModules.bxai.models.gateway.contracts.GatewayMessage;
 import bxModules.bxai.models.gateway.contracts.HumanInteractionRequest;
 
 class extends="testbox.system.BaseSpec" {
@@ -191,6 +192,21 @@ class extends="testbox.system.BaseSpec" {
 					expect( dispatched[ 1 ].getContext().getThreadID() ).toBe( "wamid.original" );
 				} );
 
+				it( "reads a tap on a command choice as the typed command line", function() {
+					var dispatched = [];
+					gateway.onMessage( function( m ) { dispatched.append( m ); } );
+
+					var payload = singleMessagePayload( "wamid.4", "interactive", {
+						interactive: { type: "list_reply", list_reply: { id: "cmd:/profile fast", title: "fast" } }
+					} );
+					var raw = jsonSerialize( payload );
+					gateway.handleWebhook( raw, computeSignature( "shh-secret", raw ) );
+
+					expect( dispatched ).toHaveLength( 1 );
+					expect( dispatched[ 1 ].getText() ).toBe( "/profile fast" );
+					expect( dispatched[ 1 ].getContext().getConversationID() ).toBe( "15550001111" );
+				} );
+
 				it( "routes an interactive button_reply to the decision path, not ordinary message dispatch", function() {
 					var dispatched = [];
 					gateway.onMessage( function( m ) { dispatched.append( m ); } );
@@ -207,7 +223,55 @@ class extends="testbox.system.BaseSpec" {
 
 			} );
 
+			describe( "attachmentsOf()", function() {
+
+				it( "looks the picture up on Graph and returns its short-lived address with the access token to fetch it", function() {
+					var calls = stubApi( { status: 200, body: { url: "https://lookaside.fbsbx.com/m1", mime_type: "image/jpeg", file_size: 1234 } } );
+					var message = new GatewayMessage( text: "", context: new GatewayContext(), raw: { type: "image", image: { id: "media-1", mime_type: "image/jpeg" } } );
+					var files = gateway.attachmentsOf( message );
+
+					expect( calls[ 1 ].path ).toBe( "../media-1" );
+					expect( files ).toHaveLength( 1 );
+					expect( files[ 1 ].url ).toBe( "https://lookaside.fbsbx.com/m1" );
+					expect( files[ 1 ].headers.Authorization ).toBe( "Bearer tok-test" );
+				} );
+
+				it( "leaves out a media id Graph will not give", function() {
+					stubApi( { status: 404, body: {} } );
+					var message = new GatewayMessage( text: "", context: new GatewayContext(), raw: { type: "document", document: { id: "gone" } } );
+					expect( gateway.attachmentsOf( message ) ).toBeEmpty();
+				} );
+
+			} );
+
 			describe( "deliver()", function() {
+
+				it( "deliverChoices() sends up to three options as buttons carrying the command to run", function() {
+					var calls = stubApi( { status: 200, body: { messages: [ { id: "wamid.out2" } ] } } );
+					var context = new GatewayContext( conversationID: "15550001111" );
+					var sent = gateway.deliverChoices( "Pick a profile", [ { label: "fast", hint: "", line: "/profile fast" }, { label: "smart", hint: "", line: "/profile smart" } ], context );
+
+					expect( sent ).toBeTrue();
+					expect( calls[ 1 ].body.type ).toBe( "interactive" );
+					expect( calls[ 1 ].body.interactive.type ).toBe( "button" );
+					expect( calls[ 1 ].body.interactive.action.buttons[ 2 ].reply.id ).toBe( "cmd:/profile smart" );
+				} );
+
+				it( "deliverChoices() sends four to ten options as a list, and declines more than ten", function() {
+					var calls = stubApi( { status: 200, body: { messages: [ { id: "wamid.out3" } ] } } );
+					var context = new GatewayContext( conversationID: "15550001111" );
+					var options = [];
+					for ( var i = 1; i <= 5; i++ ) { options.append( { label: "p#i#", hint: "profile #i#", line: "/profile p#i#" } ); }
+
+					expect( gateway.deliverChoices( "Pick", options, context ) ).toBeTrue();
+					expect( calls[ 1 ].body.interactive.type ).toBe( "list" );
+					expect( calls[ 1 ].body.interactive.action.sections[ 1 ].rows ).toHaveLength( 5 );
+					expect( calls[ 1 ].body.interactive.action.sections[ 1 ].rows[ 1 ].description ).toBe( "profile 1" );
+
+					for ( i = 6; i <= 11; i++ ) { options.append( { label: "p#i#", hint: "", line: "/profile p#i#" } ); }
+					expect( gateway.deliverChoices( "Pick", options, context ) ).toBeFalse();
+					expect( calls ).toHaveLength( 1 );
+				} );
 
 				it( "sends a text message, including context.message_id when a threadID is present", function() {
 					var calls = stubApi( { status: 200, body: { messages: [ { id: "wamid.out1" } ] } } );

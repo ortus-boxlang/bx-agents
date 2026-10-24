@@ -87,14 +87,16 @@ class {
 		var wireboxPath      = appDir & "/config/WireBox.bx"
 		var agentFactoryPath = appDir & "/agent/GeneratedAgentFactory.bx"
 
+		// Registrations first: the gateway session in the extra statements looks its gateways up in the registry
+		// (aiGatewayRegistry().get( "telegram" )), so they must be registered by then.
 		var startupStatements = []
-		for ( var statement in arguments.extraStartupStatements ) {
-			startupStatements.append( statement )
-		}
 		for ( var statement in arguments.mcpRegistrations ) {
 			startupStatements.append( statement )
 		}
 		for ( var statement in arguments.gatewayRegistrations ) {
+			startupStatements.append( statement )
+		}
+		for ( var statement in arguments.extraStartupStatements ) {
 			startupStatements.append( statement )
 		}
 		// Real, per-request interceptor registration - see renderInterceptorRegistration()'s
@@ -691,6 +693,8 @@ class {
 			"	function buildAgent() {",
 			"		// bx-ai's settings (default model, profiles, capability defaults) have to be in place before an agent is built, whoever builds it: chat, invoke, a test or ColdBox",
 			'		new "models.runtime.ModuleSettings@bxagents"().apply( "bxai", resolveAppPath( "../config/bxai-settings.json", "#Strings::bxLiteral( Strings::normalizePath( arguments.appDir ) & "/config/bxai-settings.json" )#" ) )',
+			'		// usage recording is off unless Agent.yaml says usage: true',
+			'		new "models.usage.UsageRecorder@bxagents"().start()',
 			body,
 			"",
 			"		return agent",
@@ -932,7 +936,13 @@ class {
 
 		var rest = isStruct( declared ) ? duplicate( declared ) : {}
 		rest.delete( "type" )
-		return 'aiMemory( memory: "#Strings::bxLiteral( type )#", config: #renderLiteral( rest )# )'
+		// A memory that outlives the process names its storage after its key, and bx-ai makes a new random key every
+		// time one is built. Without a stable one, a file memory is never found again on the next start, and
+		// `sessions export`, `fork` and a resumed chat see nothing. The agent's own name is the default.
+		var key = trim( rest.key ?: ( arguments.resolvedConfig.name ?: "" ) )
+		rest.delete( "key" )
+		var keyArgument = len( key ) ? ' key: "#Strings::bxLiteral( key )#",' : ""
+		return 'aiMemory( memory: "#Strings::bxLiteral( type )#",#keyArgument# config: #renderLiteral( rest )# )'
 	}
 
 	/**

@@ -95,6 +95,13 @@ class extends="testbox.system.BaseSpec" {
 				expect( second.cached ).toBeTrue();
 			} );
 
+			it( "pings the model an agent class set in code, not bx-ai's own default", function() {
+				// bx-ai's default is a provider that needs a key; an agent that set aiModel( provider : "mock" ) must not be tested against it
+				settings.provider = "openai";
+				var outcome = chat.ping();
+				expect( outcome.ok ).toBeTrue( "the agent's own model answered: " & jsonSerialize( outcome ) );
+			} );
+
 			it( "shows the facts in /info under the model, when the project says them", function() {
 				settings.profiles.fast.contextWindow = 400000;
 				settings.profiles.fast.vision = false;

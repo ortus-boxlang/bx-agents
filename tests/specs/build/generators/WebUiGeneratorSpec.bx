@@ -243,22 +243,36 @@ class extends="testbox.system.BaseSpec" {
 				expect( html ).toInclude( "randomUUID" );
 			} );
 
-			it( "renders markdown escape-first, so model output can never become live markup", function() {
+			it( "renders markdown with marked, sanitized, with the model's own HTML escaped and no images", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
 				var appDir = newAppDir();
 				generator.generate( discovery, appDir );
 
 				var html = fileRead( appDir & "/chat/index.html" );
-				// The three escapes must precede any tag introduction
-				var escapeAt = html.find( '.replace( /&/g, "&amp;" )' );
-				var firstTagAt = html.find( "<pre><code>" );
-				expect( escapeAt ).toBeGT( 0 );
-				expect( firstTagAt ).toBeGT( escapeAt );
+				expect( html ).notToInclude( "__MARKDOWN_SCRIPTS__" );
+				// the libraries ship inside the page, so it works offline
+				expect( html ).toInclude( "globalThis.marked" );
+				expect( html ).toInclude( "DOMPurify" );
+				expect( html ).toInclude( "hljs" );
+				// raw HTML is escaped by the renderer, then the result is sanitized
+				expect( html ).toInclude( "DOMPurify.sanitize( marked.parse(" );
+				expect( html ).toInclude( "html: function ( token ) {" );
+				expect( html ).toInclude( 'FORBID_TAGS: [ "img"' );
+				expect( html ).toInclude( 'rel", "noopener noreferrer"' );
+				expect( html ).notToInclude( "https://cdn" );
+				expect( html ).notToInclude( "unpkg.com" );
+			} );
 
-				// Link hrefs are allowlisted to http(s)/mailto - never javascript:
-				expect( html ).toInclude( "https?:" );
-				expect( html ).toInclude( "mailto:" );
-				expect( html ).toInclude( 'rel="noopener noreferrer"' );
+			it( "colours BoxLang and CFML code from the same word lists as the terminal", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var html = fileRead( appDir & "/chat/index.html" );
+				expect( html ).toInclude( "registerBoxLangGrammars( hljs, {" );
+				expect( html ).toInclude( '"boxlang.keywords":"' );
+				expect( html ).toInclude( '"cfml.scopes":"' );
+				expect( html ).toInclude( "cfscript" );
 			} );
 
 			it( "ships a real composer: textarea, stop control, and accessible transcript", function() {

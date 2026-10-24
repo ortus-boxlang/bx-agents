@@ -48,6 +48,10 @@ class {
 		validateToolOptions( arguments.resolvedConfig, errors, "The project's own agent definition" )
 		validateModelProvider( arguments.resolvedConfig, arguments.discovery, errors )
 		validateAiSettings( arguments.resolvedConfig, errors, "Agent.yaml" )
+		var ignoredModel = new "models.build.AiSettings@bxagents"().ignoredModelNote( arguments.resolvedConfig )
+		if ( len( ignoredModel ) ) {
+			warnings.append( ignoredModel )
+		}
 		validateAgentApi( arguments.resolvedConfig, errors )
 		validateNotes( arguments.resolvedConfig, errors )
 
@@ -885,11 +889,15 @@ class {
 			arguments.errors.append( "Agent.bx's 'gatewaySession.policy' has an invalid value [#policy#] - must be one of: #validPolicies.toList()#" )
 		}
 
+		if ( sessionConfig.keyExists( "attachments" ) && !isBoolean( sessionConfig.attachments ) ) {
+			arguments.errors.append( "Agent.bx's 'gatewaySession.attachments' must be true or false" )
+		}
+
 		validateGatewayCommands( sessionConfig.commands ?: {}, arguments.errors )
 	}
 
 	/**
-	 * Validates `gatewaySession.commands: { enabled, prefix, allow, admins }`, the slash commands a gateway answers itself.
+	 * Validates `gatewaySession.commands: { enabled, prefix, prefixes, conversation, allow, admins }`, the slash commands a gateway answers itself.
 	 * An `allow` entry has to name a command that exists and runs on a gateway, so a typo fails at build time
 	 * instead of quietly leaving a command out.
 	 *
@@ -898,19 +906,34 @@ class {
 	 */
 	private void function validateGatewayCommands( required any commands, required array errors ) {
 		if ( !isStruct( arguments.commands ) ) {
-			arguments.errors.append( "Agent.bx's 'gatewaySession.commands' must be a block with enabled, prefix, allow and admins" )
+			arguments.errors.append( "Agent.bx's 'gatewaySession.commands' must be a block with enabled, prefix, prefixes, conversation, allow and admins" )
 			return
 		}
 		for ( var key in arguments.commands ) {
-			if ( ![ "enabled", "prefix", "allow", "admins" ].containsNoCase( key ) ) {
-				arguments.errors.append( "Agent.bx's 'gatewaySession.commands' has an unknown key [#key#] - use enabled, prefix, allow or admins" )
+			if ( ![ "enabled", "prefix", "prefixes", "conversation", "allow", "admins" ].containsNoCase( key ) ) {
+				arguments.errors.append( "Agent.bx's 'gatewaySession.commands' has an unknown key [#key#] - use enabled, prefix, prefixes, conversation, allow or admins" )
 			}
 		}
 		if ( arguments.commands.keyExists( "enabled" ) && !isBoolean( arguments.commands.enabled ) ) {
 			arguments.errors.append( "Agent.bx's 'gatewaySession.commands.enabled' must be true or false" )
 		}
+		if ( arguments.commands.keyExists( "conversation" ) && !isBoolean( arguments.commands.conversation ) ) {
+			arguments.errors.append( "Agent.bx's 'gatewaySession.commands.conversation' must be true or false" )
+		}
 		if ( arguments.commands.keyExists( "prefix" ) && ( !isSimpleValue( arguments.commands.prefix ) || len( arguments.commands.prefix ) != 1 ) ) {
 			arguments.errors.append( "Agent.bx's 'gatewaySession.commands.prefix' must be a single character, such as /" )
+		}
+		if ( arguments.commands.keyExists( "prefixes" ) ) {
+			if ( !isStruct( arguments.commands.prefixes ) ) {
+				arguments.errors.append( "Agent.bx's 'gatewaySession.commands.prefixes' must map a gateway name to a single character, such as slack: ""!""" )
+			} else {
+				for ( var gatewayName in arguments.commands.prefixes ) {
+					var one = arguments.commands.prefixes[ gatewayName ]
+					if ( !isSimpleValue( one ) || len( one ) != 1 ) {
+						arguments.errors.append( "Agent.bx's 'gatewaySession.commands.prefixes.#gatewayName#' must be a single character" )
+					}
+				}
+			}
 		}
 		for ( var listKey in [ "allow", "admins" ] ) {
 			if ( arguments.commands.keyExists( listKey ) && !isArray( arguments.commands[ listKey ] ) ) {
@@ -1198,13 +1221,19 @@ class {
 	private void function validateAiSettings( required struct config, required array errors, required string label, array profileNames = [], boolean isRoot = true ) {
 		if ( !arguments.isRoot ) {
 			// bx-ai's settings are global to the app, so these belong to the root Agent.yaml
-			for ( var key in [ "params", "options", "providers", "profiles", "defaultProfile", "embeddings", "speech", "transcription", "image" ] ) {
+			for ( var key in [ "params", "options", "providers", "profiles", "defaultProfile", "embeddings", "speech", "transcription", "image", "usage", "tui" ] ) {
 				if ( arguments.config.keyExists( key ) ) {
 					arguments.errors.append( "#arguments.label#: '#key#' applies to the whole app, so it belongs in the project's own Agent.yaml. A subagent can set model or profile" )
 				}
 			}
 		}
 		arguments.errors.append( new "models.build.AiSettings@bxagents"().problems( arguments.config, arguments.label, arguments.profileNames ), true )
+		if ( arguments.config.keyExists( "tui" ) ) {
+			arguments.errors.append( new "models.tui.TuiLook@bxagents"().problems( arguments.config.tui, arguments.label ), true )
+		}
+		if ( arguments.config.keyExists( "usage" ) && !isBoolean( arguments.config.usage ) ) {
+			arguments.errors.append( "#arguments.label#: 'usage' must be true or false (it turns on the record of tokens each model call used, for `bxAgents stats`)" )
+		}
 	}
 
 	// --------------------------------------------------------------------------

@@ -1,0 +1,95 @@
+/**
+ * /stats in the terminal chat: the numbers when usage is recorded, and how to turn it on (or doing it) when it is not.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "/stats", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-stats-command-" );
+				variables.registry = new bxagents.models.chat.commands.CommandCatalog().standard();
+				variables.report = {
+					days : 30, by : "model", calls : 3, promptTokens : 30, completionTokens : 15, totalTokens : 45, first : "", last : "",
+					groups : [ { name : "gpt-5", calls : 3, promptTokens : 30, completionTokens : 15, totalTokens : 45 } ]
+				};
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function ask( required string line, required struct answer, string transport = "tui" ) {
+				var chat = new FakeUsageChat( answer );
+				var context = new bxagents.models.chat.commands.CommandContext( chat, transport, true, new FakeTerminal( dir ) );
+				return { chat : chat, reply : registry.run( line, context ) };
+			}
+
+			function texts( required any reply ) {
+				return reply.blocks().filter( b => b.type == "text" ).map( b => b.text );
+			}
+
+			it( "is a terminal command: a web visitor or a chat platform is never shown everyone's totals", function() {
+				var command = registry.lookup( "stats" );
+
+				expect( command.transports() ).toBe( [ "tui" ] );
+				var onWeb = ask( "/stats", { available : true, recording : true, report : report }, "web" );
+				expect( texts( onWeb.reply )[ 1 ] ).toInclude( "not available here" );
+			} );
+
+			it( "shows the report when usage is recorded, for the last 30 days by model", function() {
+				var outcome = ask( "/stats", { available : true, recording : true, report : report } );
+
+				expect( outcome.chat.asked() ).toBe( [ { days : 30, by : "model" } ] );
+				expect( texts( outcome.reply )[ 1 ] ).toInclude( "3 calls, 45 tokens" );
+				expect( texts( outcome.reply )[ 1 ] ).toInclude( "gpt-5" );
+			} );
+
+			it( "takes the days and the grouping", function() {
+				var outcome = ask( "/stats 7 --by=day", { available : true, recording : true, report : report } );
+
+				expect( outcome.chat.asked() ).toBe( [ { days : 7, by : "day" } ] );
+			} );
+
+			it( "refuses what it does not understand, and a silly number of days", function() {
+				expect( texts( ask( "/stats banana", { available : true, recording : true, report : report } ).reply )[ 1 ] ).toInclude( "Try /stats" );
+				expect( texts( ask( "/stats 0", { available : true, recording : true, report : report } ).reply )[ 1 ] ).toInclude( "from 1 to 3650" );
+			} );
+
+			it( "says how to turn usage on when it is off and nothing was recorded, and offers to do it", function() {
+				var outcome = ask( "/stats", { available : true, recording : false, report : { days : 30, by : "model", calls : 0, groups : [] } } );
+				var said = texts( outcome.reply ).toList( " " );
+
+				expect( said ).toInclude( "usage: true" );
+				expect( said ).toInclude( "/stats enable" );
+				expect( said ).toInclude( "never what was said" );
+			} );
+
+			it( "shows older calls when it is off now but there are some", function() {
+				var outcome = ask( "/stats", { available : true, recording : false, report : report } );
+
+				expect( texts( outcome.reply )[ 1 ] ).toInclude( "Recording is off now" );
+			} );
+
+			it( "turns usage on for them with /stats enable, writing the line into Agent.yaml", function() {
+				fileWrite( dir & "/Agent.yaml", "name: keeper" & char( 10 ) & "model: mock/mock-model" & char( 10 ) );
+				fileWrite( dir & "/instructions.md", "Be helpful." );
+
+				var outcome = ask( "/stats enable", { available : true, recording : false, report : report } );
+
+				expect( texts( outcome.reply )[ 1 ] ).toInclude( "bxAgents build" );
+				expect( fileRead( dir & "/Agent.yaml" ) ).toInclude( "usage: true" );
+			} );
+
+			it( "says what it cannot read, such as a chat connected to a server", function() {
+				var outcome = ask( "/stats", { available : false, reason : "Usage is kept where the app runs." } );
+
+				expect( texts( outcome.reply )[ 1 ] ).toInclude( "kept where the app runs" );
+			} );
+
+		} );
+	}
+
+}

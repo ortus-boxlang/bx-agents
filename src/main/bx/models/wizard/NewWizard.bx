@@ -20,7 +20,7 @@ class {
 	static {
 		STAGES = [
 			"name", "purpose", "shape", "model", "tuning", "tools", "search", "files", "memory",
-			"mcp", "channels", "webAccess", "guard", "deploy", "review"
+			"mcp", "channels", "webAccess", "guard", "look", "deploy", "review"
 		]
 	}
 
@@ -379,6 +379,37 @@ class {
 			"Checks messages and tool results for attempts to override the agent's instructions."
 		)
 		variables.prompter.record( "guard", "Guard", variables.plan.guard )
+		return true
+	}
+
+	function stage_look() {
+		if ( variables.flags.keyExists( "prompt" ) || variables.flags.keyExists( "widgets" ) || variables.flags.keyExists( "widgets-bottom" ) ) {
+			return showGiven( "look", "Chat look", "#variables.plan.look.prompt# prompt" )
+		}
+		variables.prompter.forget( "look" )
+		var tuiLook = new "models.tui.TuiLook@bxagents"()
+		var styles = []
+		for ( var style in createObject( "java", "ortus.boxlang.bxagents.tui.PromptStyles" ).all() ) {
+			styles.append( { value : style.name(), label : style.name(), hint : style.description() } )
+		}
+		var widgets = []
+		for ( var widget in createObject( "java", "ortus.boxlang.bxagents.tui.Widgets" ).all() ) {
+			widgets.append( { name : widget.name(), hint : widget.example() & "  " & widget.description() } )
+		}
+		variables.plan.look.prompt = variables.prompter.select( "How should the terminal chat's prompt look?", styles, variables.plan.look.prompt )
+		var defaults = tuiLook.defaults()
+		for ( var place in [ "top", "bottom" ] ) {
+			var chosen = variables.plan.look[ place ]
+			var picked = variables.prompter.multiSelect(
+				"Which widgets go in the #place# bar?",
+				widgets.map( w => ( { value : w.name, label : w.name, hint : w.hint, selected : chosen.contains( w.name ) } ) ),
+				"Small facts shown in the prompt. /prompt changes them while you chat."
+			)
+			// the list comes back in the order it is shown; the default set keeps its own order, so taking the defaults writes nothing
+			var wanted = defaults[ place ]
+			variables.plan.look[ place ] = picked.len() == wanted.len() && picked.every( n => wanted.contains( n ) ) ? wanted : picked
+		}
+		variables.prompter.record( "look", "Chat look", "#variables.plan.look.prompt# prompt; top: #variables.plan.look.top.len() ? variables.plan.look.top.toList( ', ' ) : 'nothing'#" )
 		return true
 	}
 

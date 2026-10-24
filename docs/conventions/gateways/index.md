@@ -260,16 +260,56 @@ gatewaySession:
   commands:
     enabled: true            # false switches commands off
     prefix: "/"              # one character
+    prefixes: { slack: "!" } # a different one-character prefix for one gateway, by name
+    conversation: false      # true also turns on /new, /clear, /compact, /sessions and /resume
     allow: [ help, info, tools, notes, remember, model ]   # the default; any command that runs on a gateway
     admins: [ "123456789" ]  # gateway user ids that may run commands marked for admins
 ```
 
-**Telegram** shows the commands in the bot's own `/` menu: the first time a message arrives, the session sends the list it answers (`setMyCommands`) to the gateway. Names Telegram would refuse (anything but lower case letters, digits and underscores, or over 32 characters) are left out, and a failure to publish never stops the bot answering.
+Each platform shows the same commands its own way:
+
+| Platform | How the commands appear |
+|---|---|
+| Telegram | The bot's `/` menu lists them (`setMyCommands`, sent when the first message arrives). `/info@yourbot` in a group is read as `/info` |
+| Discord | Registered as application commands when the bot starts, so typing `/` in a server lists them; each takes one optional `args` text. Needs the application id: Discord sends it when the bot connects, or set `applicationId` on the gateway entry. The answer replaces the "thinking" placeholder |
+| Slack | Slack slash commands are created in the Slack app, not through the API. Define one umbrella command (default `/agent`, option `slashCommand`): `/agent model fast` runs `/model fast` and `/agent` alone runs `/help`. Or define one Slack command per chat command (`/info`). The answer is visible only to the person who typed it. Typed `/word` messages never reach a Slack bot, so use `prefixes` below |
+| WhatsApp | A "pick one" answer arrives as up to three buttons, or a list for four to ten; a tap runs that command |
+| Twilio (SMS), Signal and others | A "pick one" answer is a numbered list; reply with just the number. Any other message forgets the list |
+
+The prefix can differ per gateway. A Slack workspace has its own `/` commands, so give Slack another character:
+
+```yaml
+gatewaySession:
+  commands:
+    prefix: "/"
+    prefixes: { slack: "!" }     # by gateway name; one character each
+```
 
 `build` checks the block: an unknown key, a prefix that is not one character, or an `allow` entry that is not a command that runs on a gateway fails before the app starts. In Telegram a group message such as `/info@yourbot` is read as `/info`.
 
-!!! info
-    The conversation commands (`/new`, `/clear`, `/compact`, `/sessions`, `/resume`) are not in the default set: a gateway keeps one conversation per chat thread, and moving between conversations there is separate work. Slack's and Discord's own slash commands are not set up yet; typing them works.
+#### Pictures and files
+
+A picture or file sent to the bot goes to the agent with the message: pictures as image parts, text files (`.txt`, `.md`, `.json`, `.csv`, code and the like, cut at 100,000 characters) inside the message. Other types are named back to the person as not read. At most 4 pictures of 5 MB each go with one message, and a picture sent to a profile marked `vision: false` is refused with that reason, the same checks as the terminal and the web page.
+
+| Platform | What is read | Setup |
+|---|---|---|
+| Telegram | A photo (the largest size within 5 MB) and a document, with the caption as the text | None |
+| Discord | Attachments | None |
+| Slack | Files shared in a message | The Slack app needs the `files:read` scope |
+| WhatsApp | A picture or document, with its caption | None; the media link is fetched with the access token |
+| Twilio (MMS) | Media sent with the message, even with no text | Media links are public unless the account turned on basic auth for media; with that on, they cannot be read |
+| Teams, Signal, Email, GitHub | Not read | |
+
+Links must be https. A file that cannot be downloaded is named back to the person and the rest of the message goes on. Switch it off with `gatewaySession.attachments: false`.
+
+#### Conversation commands
+
+`/new`, `/clear`, `/compact`, `/sessions` and `/resume` are off by default, because a chat platform gives every chat one shared conversation: in a group, anyone's `/clear` clears it for everyone. Turn them on with `conversation: true` (or list them in `allow`) when the chats are private or you trust the group.
+
+- `/new` moves the chat to a fresh conversation; the old one stays on the list.
+- `/sessions` lists the conversations the person has had in this app, newest first, and `/resume 2` (or an id) moves the chat back to one. The list is kept in memory, so it lasts until the app restarts; the conversations themselves last as long as the agent's memory does, so an id still works afterwards.
+- `/clear` and `/compact` act on the conversation the chat is in now.
+- In a Slack thread, each thread has its own conversation, and `/new` moves only that thread.
 
 What each policy actually does with a message that arrives while a turn is still running:
 

@@ -113,7 +113,10 @@ Read and manage the notes an agent keeps.
 List the models a project can talk to and test that they answer.
 :::
 ::: card title="sessions" icon="phosphor-duotone:chats" href="#sessions"
-List, rename, fork and delete the conversations in the chat database.
+List, rename, fork, delete, export and import the conversations in the chat database.
+:::
+::: card title="stats" icon="phosphor-duotone:chart-bar" href="#stats"
+What the model calls used: tokens by model, provider, day or user, once the project turns usage on.
 :::
 ::: card title="inspect" icon="phosphor-duotone:magnifying-glass" href="#inspect"
 Report how the agent is composed, from its source.
@@ -147,7 +150,7 @@ bxAgents new my-agent --repo=owner/repo-name
 bxAgents new my-agent --forgebox=some-package-slug
 ```
 
-- With no `--model`, no `--repo` and no `--forgebox`, at a terminal, `new` runs the [wizard](guides/new-wizard.md). `--no-wizard` or `--yes` turns it off, `--wizard` turns it on even with a `--model`, and `--no-tui` asks the same questions as numbered lines. A `--model` on its own never starts it, since scripts have always had to pass one. The wizard's flags (`--with`, `--search`, `--files`, `--files-dir`, `--temperature`, `--max-tokens`, `--timeout`, `--memory`, `--mcp`, `--channels`, `--web-auth`, `--guard`, `--deploy` and the deploy details) are listed in the [wizard guide](guides/new-wizard.md#without-the-wizard); a bad value names the flag and what it accepts. They need `Agent.yaml`, so they cannot be combined with `--class`.
+- With no `--model`, no `--repo` and no `--forgebox`, at a terminal, `new` runs the [wizard](guides/new-wizard.md). `--no-wizard` or `--yes` turns it off, `--wizard` turns it on even with a `--model`, and `--no-tui` asks the same questions as numbered lines. A `--model` on its own never starts it, since scripts have always had to pass one. The wizard's flags (`--with`, `--search`, `--files`, `--files-dir`, `--temperature`, `--max-tokens`, `--timeout`, `--memory`, `--mcp`, `--channels`, `--web-auth`, `--guard`, `--prompt`, `--widgets`, `--widgets-bottom`, `--deploy` and the deploy details) are listed in the [wizard guide](guides/new-wizard.md#without-the-wizard); a bad value names the flag and what it accepts. They need `Agent.yaml`, so they cannot be combined with `--class`.
 - `--template`, `--repo`, and `--forgebox` name three different project SOURCES - exactly one applies. Combining any two of them is an error.
 - **`--template` mode** (the default when no source flag is passed at all - `minimal`):
   - `--model` is **required** when no questions are asked - a `provider/model` slug (see [the model slug](conventions/agent-bx.md#the-model-slug)).
@@ -514,7 +517,7 @@ In the screen:
 | Ctrl+C | Clear the box; on an empty box, leave. Ctrl+D leaves too |
 | `?` alone, or `/keys` | List the keys as they are bound now, with the action name of each |
 
-Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/export [file]` (the conversation as Markdown or HTML), `/name` and `/fork` (see below), `/keys` (which key does what), `/sessions`, `/resume`, `/clear`, `/compact` and `/info` (see below), `/model`, `/profile` and `/default` (see below), `/remember <text>` and `/notes` (see below), `/record [file]` and `/record stop` (see below) and `/exit`.
+Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/export [file]` (the conversation as Markdown or HTML), `/name` and `/fork` (see below), `/keys` (which key does what), `/prompt` (how the message box looks, see below), `/sessions`, `/resume`, `/clear`, `/compact` and `/info` (see below), `/model`, `/profile` and `/default` (see below), `/remember <text>` and `/notes` (see below), `/record [file]` and `/record stop` (see below) and `/exit`.
 
 #### The same commands in the web page and in chat apps
 
@@ -547,8 +550,36 @@ Every chat is a conversation, listed in the project's [shared chat database](con
 | `/compact` | Replace the older messages with a summary (needs a summary model on the agent's memory) |
 | `/info` | Agent, model, conversation, message count, notes and database |
 | `/context` | How big the context is right now and what it is made of: the system prompt, the tool definitions, the notes and this conversation's messages, each with its size, the total, and the share of the model's context window when the project [says it](conventions/models.md#what-the-project-knows-about-a-model). The largest tools are named. Worked out locally; no model is called |
+| `/prompt [style]` | How the message box looks, for this chat: `/prompt` shows the choices, `/prompt box` switches style, `/prompt top +git -clock` changes the widgets. Only at the terminal |
+| `/stats` | What the model calls used: `/stats` for the last 30 days by model, `/stats 7 --by=day` for another span or grouping. Only at the terminal. When usage is not recorded it says how to turn it on, and `/stats enable` writes `usage: true` into `Agent.yaml` for you (rebuild for it to take effect) |
 
 `--continue` opens the most recent conversation when the chat starts, and `--session=<number or id>` opens a particular one. Both show the earlier messages first. Over `--connect` the server keeps the list and the messages, under the name of your [token](conventions/agent-bx.md#access-tokens-for-a-deployed-agent); a server without a chat database says it keeps no list.
+
+#### The prompt and the tables
+
+The message box has five looks, each with a top bar that carries a label and small facts (widgets), and a coloured edge: the accent colour at rest, amber while the agent works.
+
+| `prompt:` | Look |
+| --- | --- |
+| `bars` (default) | A bar above the message box and a bar below it, like Pi; the hints and the bottom widgets under the lower bar |
+| `bars-hints` | The same two bars, with the hints and the bottom widgets inside the lower one |
+| `rule` | One coloured rule above the box, and the hint row below |
+| `box` | A rounded box around the message box |
+| `panel` | A tinted panel with a thick left bar; on a terminal without colour it is drawn as `rule` |
+
+The widgets are `agent`, `profile`, `folder`, `user`, `clock`, `machine`, `git`, `date`, `session`, `elapsed` and `ctx`. They sit in the top bar (after the label) or at the bottom (on the hint row, or inside the lower bar); when the line is too narrow the last ones drop off. A widget with nothing to show, such as `git` outside a repository, is left out. By default the top bar shows `agent`, `folder`, `user` and `clock`, and the bottom shows `ctx` and `profile`.
+
+Set the start in [`Agent.yaml`](conventions/agent-yaml.md#settings) or with `bxAgents new` (`--prompt=box --widgets=agent,git --widgets-bottom=ctx`, or the "Look and feel" step of the wizard), and change it while you chat with `/prompt`: `/prompt` shows the style and widgets in use and everything on offer, `/prompt box` switches style, `/prompt top agent clock` sets the top widgets, `/prompt top +git -clock` adds and removes, and `/prompt bottom none` clears a place. A change lasts for that chat.
+
+```yaml
+tui:
+  prompt: bars
+  widgets:
+    top: [ agent, folder, user, clock ]
+    bottom: [ ctx, profile ]
+```
+
+Tables in an answer are drawn with rounded borders in the accent colour, a bold header and the column alignment of the table; cells wrap on a narrow terminal. Code blocks are coloured by language.
 
 #### Models in the chat
 
@@ -645,7 +676,7 @@ agg demo.cast demo.gif               # turn it into a GIF (agg is a separate too
 The file holds the screen's output, so it shows what you typed in the message box and everything the agent printed, including tool arguments. Keystrokes themselves are not recorded. A recording started with `/record` begins at that moment, so earlier lines are not in it. It needs the terminal screen: `--no-tui` and non-interactive runs record nothing.
 
 
-The answer is shown as it streams and printed as formatted Markdown (headings, lists, code blocks) when it is complete. In the default mode each tool call is shown with its arguments and how long it took, and the model's thinking is shown while it works but never kept. A run that stops for [human approval](conventions/gateways/index.md) asks you in place: approve once, approve for the conversation, or reject. Over HTTP the screen is the same: tool lines, thinking, Esc, steering and approvals all work, through the server's [run-control routes](conventions/agent-bx.md#run-control). A server built by an older bxAgents has no run control; then you get the answer only, with a notice.
+The answer is shown as it streams and printed as formatted Markdown (headings, lists, tables, code blocks) when it is complete. Code blocks are coloured by language: BoxLang, CFML, Java, JavaScript, TypeScript, Python, Go, Rust, Kotlin, SQL, JSON, YAML, TOML, XML/HTML, CSS, shell, diff and Markdown. In the default mode each tool call is shown with its arguments and how long it took, and the model's thinking is shown while it works but never kept. A run that stops for [human approval](conventions/gateways/index.md) asks you in place: approve once, approve for the conversation, or reject. Over HTTP the screen is the same: tool lines, thinking, Esc, steering and approvals all work, through the server's [run-control routes](conventions/agent-bx.md#run-control). A server built by an older bxAgents has no run control; then you get the answer only, with a notice.
 
 Three modes, one chat:
 
@@ -782,11 +813,42 @@ bxAgents sessions list [--user=NAME] [--json]
 bxAgents sessions rename --session=<number or id> --name="New name" [--user=NAME]
 bxAgents sessions fork --session=<number or id> [--name="Other approach"] [--user=NAME]
 bxAgents sessions delete --session=<number or id> [--user=NAME]
+bxAgents sessions export --session=<number or id> [--file=chat.json] [--md] [--force] [--user=NAME]
+bxAgents sessions import --file=chat.json [--name="New name"] [--user=NAME]
 ```
 
 - A conversation is picked by its number in `list`, or by its id or the start of it. `--user` is whose conversations: the operating system user by default.
 - `list`, `rename` and the list part of `delete` only touch the database. The messages of a conversation live in the agent's [memory](conventions/agent-yaml.md#settings), so `fork` (which copies them) needs a built project, and so does `delete` to forget them too. They reach only messages a memory that outlives the process keeps (`file`, `jdbc`): the default `cache` memory is gone when the chat ends.
 - Run it where the database is: in the project, or on a server with `BXAGENTS_DB` set.
+- `export` writes one conversation to a JSON file named after its title (`--file` to choose, `--md` for a readable Markdown transcript instead) and never replaces a file unless you add `--force`. The file holds the conversation's details and its messages as the agent's memory holds them. It contains everything that was said, so keep it where you would keep the conversation.
+- `import` reads such a file and adds it to the user's list as a **new** conversation (a new id, never replacing one), with `--name` to retitle it. A file it does not recognise is refused before anything is written: it must be an exported conversation of a version this BxAgents reads, with at most 20,000 messages whose roles are `user`, `assistant`, `system` or `tool`. If it was exported from another agent, the message says so.
+- Both read and write the agent's memory, so they need a built project and a memory that outlives the process (`file` or `jdbc`; see the [memory](conventions/agent-yaml.md#settings) setting). With `cache` the memory is empty once the program has stopped, and `export` says so.
+
+### `stats`
+
+What the project's model calls used, from the record the app keeps in the [shared chat database](conventions/web-ui.md#the-sqlite-store) (`data/chat.db`, or the file named by `BXAGENTS_DB`).
+
+```bash
+bxAgents stats [--days=30] [--by=model|provider|day|user] [--user=NAME] [--json]
+bxAgents stats --enable
+```
+
+```
+Last 30 days: 128 calls, 412,300 tokens (351,200 in, 61,100 out)
+
+By model              calls          in         out       total
+gpt-5                    90     280,000      45,000     325,000
+gpt-5-mini               38      71,200      16,100      87,300
+
+Counts only the calls whose provider reported usage.
+```
+
+- **It is off unless you turn it on.** Add `usage: true` to the project's own `Agent.yaml` (see [`usage`](conventions/agent-yaml.md#settings)) and rebuild. Until then `stats` says how to turn it on, and `--enable` writes that line for you, then reminds you to run `bxAgents build` and restart a running server.
+- Only **counts** are kept: the time, who asked, the provider, the model and the tokens in and out. Nothing that was said is stored, and nothing leaves your database.
+- A call is counted when its provider reports usage. The `mock` provider and a few streaming calls do not, so they leave no row, and the totals are of the calls that did.
+- `--by` groups the rows by model (the default), provider, day or user, with the biggest first (newest first for `day`). `--days` is how far back to look, counting today (1 to 3650). `--user` limits it to one user's calls. `--json` prints the report for a script.
+- It only reads the database, so it needs no build. Run it where the database is: in the project, or on a server with `BXAGENTS_DB` set.
+- Cost is not worked out. Prices change too often to ship a table.
 
 ### `inspect`
 

@@ -445,6 +445,12 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( "maxQueueDepth: 10" );
 			} );
 
+			it( "turns attachments on unless the project switches them off", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-telegram" );
+				expect( generator.generate( discovery, newAppDir(), {} ).sessionStartupStatement ).toInclude( "attachments  : true" );
+				expect( generator.generate( discovery, newAppDir(), { gatewaySession: { attachments: false } } ).sessionStartupStatement ).toInclude( "attachments  : false" );
+			} );
+
 		} );
 	}
 

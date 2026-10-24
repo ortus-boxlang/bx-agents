@@ -129,11 +129,41 @@ class {
 	// ----------------------------------------------------------------------------------
 
 	/**
+	 * Tells the prompt's widgets what the chat knows: the agent, the profile or model, and the conversation's name.
+	 * Whatever cannot be found is left out; a widget with nothing to say is not shown.
+	 */
+	private void function refreshFacts() {
+		var facts = {}
+		try {
+			facts.agent = variables.session.agentName()
+		} catch ( any e ) {
+		}
+		try {
+			var info = variables.session.modelInfo()
+			facts.profile = len( info.profile ?: "" ) ? info.profile : ( info.model ?: "" )
+		} catch ( any e ) {
+			try {
+				facts.profile = variables.session.modelName()
+			} catch ( any e2 ) {
+			}
+		}
+		try {
+			facts.session = variables.session.conversationTitle()
+		} catch ( any e ) {
+		}
+		try {
+			variables.screen.setFacts( facts )
+		} catch ( any e ) {
+		}
+	}
+
+	/**
 	 * Puts the size of the context in the hint row under the message box, as it stands now. It changes with every
 	 * message, /clear, /compact, /resume and note, so it is worked out before each prompt. A status bar is a
 	 * convenience: when the size cannot be worked out the chat goes on without it.
 	 */
 	private void function refreshStatus() {
+		refreshFacts()
 		try {
 			variables.screen.setStatus( new "models.chat.ContextLines@bxagents"().status( variables.attachments.addTo( variables.session.contextReport() ) ) )
 		} catch ( any e ) {

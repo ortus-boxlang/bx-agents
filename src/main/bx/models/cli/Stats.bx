@@ -1,0 +1,53 @@
+/**
+ * `stats` CLI verb - what the project's model calls used, from the record the app keeps in the shared chat database
+ * (`data/chat.db`, or the file named by BXAGENTS_DB).
+ *
+ *   bxAgents stats [--days=30] [--by=model|provider|day|user] [--user=NAME] [--json]
+ *   bxAgents stats --enable
+ *
+ * Recording is off unless Agent.yaml says `usage: true`. When it is off the verb says how to turn it on, and
+ * `--enable` writes that line for you (then rebuild for it to take effect). It never needs a built project: it only
+ * reads the database. Only calls whose provider reported usage are counted.
+ */
+class {
+
+	/**
+	 * @options { projectRoot (required), days, by, user, json, enable }
+	 */
+	struct function run( struct options = {} ) {
+		var projectRoot = trim( arguments.options.projectRoot ?: "" )
+		if ( !len( projectRoot ) ) {
+			throw( type = "BxAgents.MissingProjectRoot", message = "`stats` requires a project root" )
+		}
+		var root = projectRoot.reReplace( "[\/]+$", "" )
+		var usageSwitch = new "models.usage.UsageSwitch@bxagents"()
+
+		if ( arguments.options.enable ?: false ) {
+			var done = usageSwitch.enable( root )
+			return { exitCode : done.ok ? 0 : 1, message : done.message }
+		}
+
+		var days = val( arguments.options.days ?: 30 )
+		if ( days < 1 || days > 3650 ) {
+			throw( type = "BxAgents.InvalidStatsDays", message = "`--days` needs a number from 1 to 3650." )
+		}
+		var file = new "models.store.ChatStorePath@bxagents"().forProject( root )
+		var on = usageSwitch.isOn( root )
+		var by = arguments.options.by ?: "model"
+		var report = new "models.usage.UsageStore@bxagents"( "" ).emptyReport( days, by )
+		if ( fileExists( file ) ) {
+			var store = new "models.store.ChatStore@bxagents"( { driver : "sqlite", database : file } )
+			store.migrate()
+			report = new "models.usage.UsageStore@bxagents"( store ).report( days, by, arguments.options.user ?: "" )
+		}
+
+		if ( arguments.options.json ?: false ) {
+			return { exitCode : 0, message : jsonSerialize( { enabled : on, report : report } ) }
+		}
+		if ( !on && !report.calls ) {
+			return { exitCode : 0, message : usageSwitch.howToEnable( true ) & char( 10 ) & "Run `bxAgents stats --enable` to turn it on." }
+		}
+		return { exitCode : 0, message : new "models.usage.UsageLines@bxagents"().render( report, on ) }
+	}
+
+}

@@ -80,6 +80,25 @@ class {
 	}
 
 	/**
+	 * What the model calls used, from the record the app keeps when the project turns usage on.
+	 *
+	 * @days How many days back
+	 * @by model, provider, day or user
+	 *
+	 * @return { available : true, recording, report } or { available : false, reason }
+	 */
+	struct function usageReport( numeric days = 30, string by = "model" ) {
+		try {
+			var report = new "models.usage.UsageStore@bxagents"( new "models.notes.NotesWiring@bxagents"().store() ).report( arguments.days, arguments.by )
+			return { available : true, recording : new "models.usage.UsageRecorder@bxagents"().enabled(), report : report }
+		} catch ( "BxAgents.UnknownStatsGroup" e ) {
+			return { available : false, reason : e.message }
+		} catch ( any e ) {
+			return { available : false, reason : "Usage could not be read: " & left( e.message, 160 ) }
+		}
+	}
+
+	/**
 	 * Asks a model whether it answers, with one tiny question. No conversation is touched.
 	 *
 	 * @profile A profile name; blank for the model in use
@@ -102,7 +121,9 @@ class {
 		} else {
 			target = modelInfo().profile == "default" ? "" : modelInfo().profile
 		}
-		return new "models.runtime.ModelProbe@bxagents"().ping( target ).append( { model : label } )
+		// no profile: the model the agent class set in code, when it set one
+		var inCode = !len( target ) && isStruct( variables.agent.getConfig().model ?: "" ) ? variables.agent.getConfig().model : {}
+		return new "models.runtime.ModelProbe@bxagents"().ping( target, inCode ).append( { model : label } )
 	}
 
 	/**
@@ -284,6 +305,62 @@ class {
 		variables.conversationId = forkId
 		variables.threadId = createUUID()
 		return { ok : true, id : forkId, title : named, messages : count }
+	}
+
+	/**
+	 * The conversation as an exportable document: its details and the messages as the agent's memory holds them.
+	 * Messages come from the first memory that holds any, since each memory an agent has is kept the same way.
+	 *
+	 * @return { ok, data } or { ok : false, reason }
+	 */
+	struct function exportSession() {
+		var messages = []
+		for ( var memory in variables.agent.getMemories() ) {
+			messages = memory.getAll( variables.userId, variables.conversationId )
+			if ( messages.len() ) {
+				break
+			}
+		}
+		if ( !messages.len() ) {
+			return { ok : false, reason : "There is nothing to export: this conversation has no messages in the agent's memory. A memory that is kept only while the program runs (cache) is empty once the program has stopped; use a file or jdbc memory." }
+		}
+		var row = keepsSessions() ? variables.sessions.byId( variables.userId, variables.conversationId ) : {}
+		return {
+			ok   : true,
+			data : new "models.store.SessionFile@bxagents"().build( agentName(), len( row.title ?: "" ) ? row.title : conversationTitle(), duplicate( messages ), row.createdAt ?: "", row.updatedAt ?: "" )
+		}
+	}
+
+	/**
+	 * Adds an exported conversation to the user's list as a new conversation and puts its messages in the agent's
+	 * memory. It never replaces a conversation, and the exported id is not reused. This chat switches to it.
+	 *
+	 * @data A document that SessionFile.parse() accepted
+	 * @title A title for it; blank keeps the one in the file
+	 *
+	 * @return { ok, id, title, messages } or { ok : false, reason }
+	 */
+	struct function importSession( required struct data, string title = "" ) {
+		if ( !keepsSessions() ) {
+			return { ok : false, reason : "This chat keeps no list of conversations, so there is nowhere to put the imported one." }
+		}
+		var memories = variables.agent.getMemories()
+		if ( !memories.len() ) {
+			return { ok : false, reason : "This agent has no memory, so it could not keep the imported messages." }
+		}
+		var newId = createUUID()
+		for ( var memory in memories ) {
+			for ( var message in arguments.data.messages ) {
+				memory.add( duplicate( message ), variables.userId, newId )
+			}
+		}
+		var shown = len( trim( arguments.title ) ) ? arguments.title : ( len( arguments.data.title ?: "" ) ? arguments.data.title : "Imported conversation" )
+		var named = variables.sessions.titleOf( shown )
+		var count = variables.agent.getMemoryMessages( variables.userId, newId ).len()
+		variables.sessions.touch( variables.userId, newId, named, count )
+		variables.conversationId = newId
+		variables.threadId = createUUID()
+		return { ok : true, id : newId, title : named, messages : count }
 	}
 
 	/**

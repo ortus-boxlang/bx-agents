@@ -1,0 +1,70 @@
+/**
+ * The tui: block of Agent.yaml: what it may hold, and how a project's look is found for the chat.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "TuiLook", function() {
+
+			beforeEach( function() {
+				variables.look = new bxagents.models.tui.TuiLook();
+				variables.dirs = []
+			} );
+
+			afterEach( function() {
+				for ( var dir in variables.dirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			it( "knows the styles and the widgets from the Java registries, in order", function() {
+				expect( look.styleNames().slice( 1, 5 ) ).toBe( [ "bars", "bars-hints", "rule", "box", "panel" ] );
+				expect( look.widgetNames() ).toInclude( "folder" );
+				expect( look.widgetNames() ).toInclude( "clock" );
+			} );
+
+			it( "finds nothing wrong with a good block, or with no settings at all", function() {
+				expect( look.problems( {}, "Agent.yaml" ) ).toBeEmpty();
+				expect( look.problems( { prompt : "Panel", widgets : { top : [ "agent", "clock" ], bottom : [] } }, "Agent.yaml" ) ).toBeEmpty();
+			} );
+
+			it( "names the valid choices when a style is wrong", function() {
+				var found = look.problems( { prompt : "fancy" }, "Agent.yaml" );
+				expect( found ).toHaveLength( 1 );
+				expect( found[ 1 ] ).toInclude( "Agent.yaml: tui.prompt 'fancy' is not a prompt style" );
+				expect( found[ 1 ] ).toInclude( "bars, bars-hints, rule, box, panel" );
+			} );
+
+			it( "names the valid choices when a widget or a place is wrong, and when a value has the wrong shape", function() {
+				expect( look.problems( { widgets : { top : [ "nope" ] } }, "x" )[ 1 ] ).toInclude( "no widget 'nope'" );
+				expect( look.problems( { widgets : { middle : [] } }, "x" )[ 1 ] ).toInclude( "places are top and bottom" );
+				expect( look.problems( { widgets : { top : "agent" } }, "x" )[ 1 ] ).toInclude( "must be a list" );
+				expect( look.problems( { widgets : [ "agent" ] }, "x" )[ 1 ] ).toInclude( "must be a mapping" );
+				expect( look.problems( "box", "x" )[ 1 ] ).toInclude( "'tui' must be a mapping" );
+				expect( look.problems( { colour : "red" }, "x" )[ 1 ] ).toInclude( "no setting 'colour'" );
+			} );
+
+			it( "reads a project's block, and gives an empty one when there is none or the project cannot be read", function() {
+				var nl = char( 10 );
+				var dir = createTempDirectory( prefix = "bxagents-look-" );
+				variables.dirs.append( dir );
+				fileWrite( dir & "/Agent.yaml", "name: looks" & nl & "model: mock/mock-model" & nl & "tui:" & nl & "  prompt: box" & nl & "  widgets:" & nl & "    top: [ agent, clock ]" & nl );
+				fileWrite( dir & "/instructions.md", "Be helpful." );
+				var found = look.forProject( dir );
+				expect( found.prompt ).toBe( "box" );
+				expect( found.widgets.top ).toBe( [ "agent", "clock" ] );
+
+				var plain = createTempDirectory( prefix = "bxagents-look-" );
+				variables.dirs.append( plain );
+				fileWrite( plain & "/Agent.yaml", "name: plain" & nl & "model: mock/mock-model" & nl );
+				fileWrite( plain & "/instructions.md", "Be helpful." );
+				expect( look.forProject( plain ) ).toBeEmpty();
+				expect( look.forProject( plain & "/missing" ) ).toBeEmpty();
+			} );
+
+		} );
+	}
+
+}

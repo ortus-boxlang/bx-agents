@@ -1,0 +1,47 @@
+/**
+ * Words for a usage report: the same text for the `stats` verb and the `/stats` chat command.
+ */
+class {
+
+	/**
+	 * @report UsageStore.report()'s result
+	 * @recording Whether recording is on now
+	 *
+	 * @return The report as lines of text
+	 */
+	string function render( required struct report, boolean recording = true ) {
+		var r = arguments.report
+		var nl = char( 10 )
+		if ( !r.calls ) {
+			return "Nothing recorded in the last #r.days# day#r.days == 1 ? '' : 's'#." & ( arguments.recording ? " Providers that do not report usage, such as the mock one, leave no record." : " Usage recording is off." )
+		}
+		var lines = [
+			"Last #r.days# day#r.days == 1 ? '' : 's'#: #numberFormat( r.calls )# call#r.calls == 1 ? '' : 's'#, #numberFormat( r.totalTokens )# tokens (#numberFormat( r.promptTokens )# in, #numberFormat( r.completionTokens )# out)",
+			""
+		]
+		var width = 8
+		for ( var g in r.groups ) {
+			width = max( width, len( g.name ) )
+		}
+		width = min( width, 40 )
+		lines.append( padRight( "By " & r.by, width + 2 ) & padLeft( "calls", 8 ) & padLeft( "in", 12 ) & padLeft( "out", 12 ) & padLeft( "total", 12 ) )
+		for ( var g in r.groups ) {
+			lines.append( padRight( left( g.name, width ), width + 2 ) & padLeft( numberFormat( g.calls ), 8 ) & padLeft( numberFormat( g.promptTokens ), 12 ) & padLeft( numberFormat( g.completionTokens ), 12 ) & padLeft( numberFormat( g.totalTokens ), 12 ) )
+		}
+		lines.append( "" )
+		lines.append( "Counts only the calls whose provider reported usage." & ( arguments.recording ? "" : " Recording is off now; these are older calls." ) )
+		return lines.toList( nl )
+	}
+
+	/**
+	 * left() and right() cut text; they do not pad it, so a column is padded here.
+	 */
+	private string function padRight( required string text, required numeric width ) {
+		return arguments.text & repeatString( " ", max( 0, arguments.width - len( arguments.text ) ) )
+	}
+
+	private string function padLeft( required string text, required numeric width ) {
+		return repeatString( " ", max( 0, arguments.width - len( arguments.text ) ) ) & arguments.text
+	}
+
+}

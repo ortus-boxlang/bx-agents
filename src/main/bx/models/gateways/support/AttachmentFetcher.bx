@@ -1,0 +1,75 @@
+/**
+ * Downloads one file a person sent on a chat platform. Platforms hand over a link (sometimes behind the
+ * bot's own credentials), not the bytes, so this is the one place that fetches: it only speaks https, never
+ * follows the answer beyond the size limit, and reports a failure as a reason instead of throwing, because a
+ * file that cannot be fetched must not stop the message from reaching the agent.
+ */
+class {
+
+	static {
+		MAX_BYTES = 5242880
+	}
+
+	/**
+	 * @transport function( url, headers ) -> { status, body (binary), mime } ; replaces the real HTTP call (tests)
+	 */
+	function init( any transport ) {
+		if ( !isNull( arguments.transport ) ) {
+			variables.transport = arguments.transport
+		}
+		return this
+	}
+
+	/**
+	 * @url Where the file is
+	 * @headers Headers the platform wants with the request (an Authorization header, usually)
+	 * @maxBytes The most to accept
+	 *
+	 * @return { ok : true, base64, mime, size } or { ok : false, reason }
+	 */
+	struct function fetch( required string url, struct headers = {}, numeric maxBytes = static.MAX_BYTES ) {
+		if ( !arguments.url.lCase().startsWith( "https://" ) ) {
+			return { ok : false, reason : "only https links are fetched" }
+		}
+		var response = {}
+		try {
+			response = send( arguments.url, arguments.headers )
+		} catch ( any e ) {
+			return { ok : false, reason : "the download failed: " & e.message }
+		}
+		if ( ( response.status ?: 0 ) < 200 || ( response.status ?: 0 ) >= 300 ) {
+			return { ok : false, reason : "the platform answered #response.status ?: 0# for the file" }
+		}
+		var bytes = response.body ?: ""
+		var size = isBinary( bytes ) ? arrayLen( bytes ) : len( bytes )
+		if ( !size ) {
+			return { ok : false, reason : "the file was empty" }
+		}
+		if ( size > arguments.maxBytes ) {
+			return { ok : false, reason : "the file is larger than #arguments.maxBytes / 1048576# MB" }
+		}
+		return { ok : true, base64 : isBinary( bytes ) ? toBase64( bytes ) : toBase64( charsetDecode( bytes, "utf-8" ) ), mime : lCase( listFirst( response.mime ?: "", ";" ) ), size : size }
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private struct function send( required string url, required struct headers ) {
+		if ( !isNull( variables.transport ) ) {
+			return variables.transport( arguments.url, arguments.headers )
+		}
+		bx:http
+			url          = arguments.url
+			method       = "get"
+			result       = "download"
+			getAsBinary  = "yes"
+			timeout      = 30
+		{
+			for ( var name in arguments.headers ) {
+				bx:httpParam type="header" name=name value=arguments.headers[ name ];
+			}
+		}
+		var status = val( listFirst( toString( download.statusCode ?: "0" ), " " ) )
+		return { status : status, body : download.fileContent ?: "", mime : download.mimeType ?: ( download.responseHeader[ "Content-Type" ] ?: "" ) }
+	}
+
+}

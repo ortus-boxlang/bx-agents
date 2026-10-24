@@ -113,6 +113,10 @@ class {
 	private struct function chatWithScreen( required any session, required struct options ) {
 		var controller = new "models.cli.chat.ChatController@bxagents"( arguments.session )
 		var screen = arguments.options._screen ?: createObject( "java", "ortus.boxlang.bxagents.tui.ChatScreen" ).open( controller.commands() )
+		if ( !arguments.options.keyExists( "_screen" ) ) {
+			// the tui: block of Agent.yaml: the prompt style and widgets (a project without one gets the defaults)
+			screen.useLook( new "models.tui.TuiLook@bxagents"().forProject( trim( arguments.options.projectRoot ?: "" ) ) )
+		}
 		var saved = ""
 		try {
 			// --session=<number or id> opens that conversation, --continue the most recent one

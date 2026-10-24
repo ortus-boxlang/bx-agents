@@ -11,6 +11,8 @@
  *     commands:
  *       enabled: true
  *       prefix: "/"
+ *       prefixes: { slack: "!" }       # a different prefix for one gateway, by its name
+ *       conversation: true             # also /new, /clear, /compact, /sessions and /resume
  *       allow: [ help, info, tools, notes, remember, model ]
  *       admins: [ "12345" ]            # gateway user ids that may run admin commands
  */
@@ -22,26 +24,37 @@ class extends="bxModules.bxai.models.gateway.GatewaySession" {
 
 	static {
 		SAFE_COMMANDS = [ "help", "info", "tools", "model", "ping", "notes", "remember" ]
+		// they act on the chat's one shared conversation, so they are opt-in (commands.conversation: true)
+		CONVERSATION_COMMANDS = [ "new", "clear", "compact", "sessions", "resume" ]
 	}
 
 	/**
-	 * @commands { enabled, prefix, allow, admins, registry }, all optional
+	 * @commands { enabled, prefix, prefixes, conversation, allow, admins, registry, sessions }, all optional
 	 *
 	 * The other arguments are GatewaySession's own.
 	 */
-	function init( required any agent, required any gateways, string policy = "queue", numeric maxQueueDepth = 50, any checkpointer, struct commands = {} ) {
+	function init( required any agent, required any gateways, string policy = "queue", numeric maxQueueDepth = 50, any checkpointer, struct commands = {}, boolean attachments = true, any intake ) {
 		var own = { agent : arguments.agent, gateways : arguments.gateways, policy : arguments.policy, maxQueueDepth : arguments.maxQueueDepth }
 		if ( !isNull( arguments.checkpointer ) ) {
 			own.checkpointer = arguments.checkpointer
 		}
 		super.init( argumentCollection = own )
 
+		variables.attachmentsOn = arguments.attachments
+		variables.intake = isNull( arguments.intake ) ? new "models.gateways.support.AttachmentIntake@bxagents"() : arguments.intake
 		variables.commandsOn = arguments.commands.enabled ?: true
 		variables.prefix = arguments.commands.prefix ?: "/"
+		variables.prefixes = arguments.commands.prefixes ?: {}
 		variables.admins = arguments.commands.admins ?: []
 		// a registry can be handed in whole (a module's own commands); otherwise the built-ins, narrowed to the allowed ones
-		variables.registry = arguments.commands.registry ?: new "models.chat.commands.CommandCatalog@bxagents"().standard().only( arguments.commands.allow ?: static.SAFE_COMMANDS )
-		variables.service = new "models.chat.commands.CommandService@bxagents"( agent : arguments.agent, registry : variables.registry )
+		variables.registry = arguments.commands.registry ?: new "models.chat.commands.CommandCatalog@bxagents"().standard().only( arguments.commands.allow ?: ( ( arguments.commands.conversation ?: false ) ? static.SAFE_COMMANDS.merge( static.CONVERSATION_COMMANDS ) : static.SAFE_COMMANDS ) )
+		// the conversations each person has had here, for /sessions and /resume; a store can be handed in
+		variables.sessions = arguments.commands.sessions ?: new "models.gateways.MemorySessions@bxagents"()
+		// where each chat is now: /new and /resume move it to another thread
+		variables.threads = new "models.gateways.ChatThreads@bxagents"()
+		variables.service = new "models.chat.commands.CommandService@bxagents"( agent : arguments.agent, sessions : variables.sessions, registry : variables.registry )
+		// the choices last offered to each person in each chat, so "2" can answer a numbered list
+		variables.pendingChoices = {}
 		return this
 	}
 
@@ -86,16 +99,131 @@ class extends="bxModules.bxai.models.gateway.GatewaySession" {
 			publishMenus()
 		}
 		if ( variables.commandsOn && arguments.message.getType() == "message" ) {
-			var line = new "models.chat.commands.CommandLine@bxagents"( arguments.message.getText(), variables.prefix )
+			arguments.message = answerNumberedChoice( arguments.message )
+			var line = new "models.chat.commands.CommandLine@bxagents"( arguments.message.getText(), prefixFor( arguments.message.getContext() ) )
 			if ( line.isCommand() && !isNull( variables.registry.lookup( line.name() ) ) ) {
 				answer( arguments.message, arguments.sourceGateway, line )
 				return nullValue()
 			}
 		}
-		return super.handleInbound( arguments.message, arguments.sourceGateway )
+		if ( variables.attachmentsOn && arguments.message.getType() == "message" ) {
+			var taken = takeAttachments( arguments.message, arguments.sourceGateway )
+			if ( taken.stop ) {
+				return nullValue()
+			}
+			arguments.message = taken.message
+		}
+		var done = super.handleInbound( arguments.message, arguments.sourceGateway )
+		if ( variables.commandsOn && arguments.message.getType() == "message" ) {
+			// keep the conversation on the list, so /sessions shows it
+			variables.sessions.touch(
+				len( arguments.message.getContext().getUserID() ) ? arguments.message.getContext().getUserID() : "gateway",
+				resolveThreadId( arguments.message, arguments.sourceGateway ),
+				isSimpleValue( arguments.message.getText() ) ? arguments.message.getText() : ""
+			)
+		}
+		return done
+	}
+
+	/**
+	 * Reads the files that came with a message, when its gateway can say what they are (attachmentsOf()), and
+	 * turns them into what the agent is given: pictures as image parts, text files in the message, the rest
+	 * named and left out. What was left out, and why, is told to the person. A message that was only a file
+	 * nothing could use stops here, since there is nothing to ask the agent.
+	 *
+	 * @return { message : the message to go on with, stop : true when it was answered here }
+	 */
+	private struct function takeAttachments( required GatewayMessage message, required IGateway sourceGateway ) {
+		var unchanged = { message : arguments.message, stop : false }
+		if ( !structKeyExists( arguments.sourceGateway, "attachmentsOf" ) ) {
+			return unchanged
+		}
+		var files = []
+		try {
+			files = arguments.sourceGateway.attachmentsOf( arguments.message )
+		} catch ( any e ) {
+			return unchanged
+		}
+		if ( !files.len() ) {
+			return unchanged
+		}
+		var facts = {}
+		try {
+			facts = new "models.runtime.ModelFacts@bxagents"().of( variables.agent.getConfig().profile ?: "" )
+		} catch ( any e ) {
+			// the model's abilities are not known; the builder lets the image through then
+		}
+		var taken = variables.intake.intake( arguments.message.getText(), files, facts )
+		if ( !taken.ok ) {
+			tell( arguments.message, arguments.sourceGateway, taken.reason )
+			return { message : arguments.message, stop : true }
+		}
+		if ( taken.notes.len() ) {
+			tell( arguments.message, arguments.sourceGateway, taken.notes.toList( char( 10 ) ) )
+		}
+		if ( !taken.images && !taken.files && !len( trim( arguments.message.getText() ) ) ) {
+			return { message : arguments.message, stop : true }
+		}
+		return { message : new "models.gateways.support.MultipartMessage@bxagents"( arguments.message, taken.input ), stop : false }
+	}
+
+	private void function tell( required GatewayMessage message, required IGateway sourceGateway, required string text ) {
+		arguments.sourceGateway.deliver(
+			new GatewayEvent( type : GatewayEvent.TYPES.RESPONSE_COMPLETED, data : { content : arguments.text }, context : arguments.message.getContext() ),
+			arguments.message.getContext()
+		)
+	}
+
+	/**
+	 * The thread a message belongs to: the one its chat was moved to by /new or /resume, else the platform's own.
+	 */
+	string function resolveThreadId( required GatewayMessage message, required IGateway sourceGateway ) {
+		var moved = variables.threads.current( chatKey( arguments.message.getContext() ) )
+		return len( moved ) ? moved : super.resolveThreadId( arguments.message, arguments.sourceGateway )
 	}
 
 	// ----------------------------------------------------------------------------------
+
+	private string function chatKey( required any context ) {
+		return arguments.context.getGateway() & "|" & arguments.context.getConversationID() & "|" & arguments.context.getThreadID()
+	}
+
+	/**
+	 * A reply of just a number, right after a numbered list of choices, picks that choice: "2" becomes the
+	 * command line behind the second option. This is how platforms with no buttons (SMS, Telegram, Signal)
+	 * answer a "pick one". Anything else typed forgets the list, so a stray "2" much later is just a message.
+	 *
+	 * @message The inbound message
+	 *
+	 * @return The same message, or one whose text is the command line of the option picked
+	 */
+	private any function answerNumberedChoice( required GatewayMessage message ) {
+		var key = choiceKey( arguments.message.getContext() )
+		var options = variables.pendingChoices[ key ] ?: []
+		variables.pendingChoices.delete( key )
+		var typed = trim( arguments.message.getText() )
+		if ( options.len() && reFind( "^[0-9]{1,3}$", typed ) && val( typed ) >= 1 && val( typed ) <= options.len() ) {
+			return new GatewayMessage(
+				text   : options[ val( typed ) ].line,
+				context: arguments.message.getContext(),
+				raw    : arguments.message.getRaw()
+			)
+		}
+		return arguments.message
+	}
+
+	/**
+	 * @context The message's context
+	 *
+	 * @return The command prefix for the gateway the message came from: its own, or the session's
+	 */
+	private string function prefixFor( required any context ) {
+		return variables.prefixes[ arguments.context.getGateway() ] ?: variables.prefix
+	}
+
+	private string function choiceKey( required any context ) {
+		return arguments.context.getGateway() & "|" & arguments.context.getConversationID() & "|" & arguments.context.getUserID()
+	}
 
 	/**
 	 * Runs the command and sends its answer back through the gateway the message came from. A command that
@@ -114,14 +242,51 @@ class extends="bxModules.bxai.models.gateway.GatewaySession" {
 				"gateway",
 				variables.admins.containsNoCase( who )
 			)
+			var choose = reply.blocks.filter( b => b.type == "choose" )
+			if ( choose.len() ) {
+				// a gateway with buttons shows the first pick-one as buttons; the rest is text
+				if ( sendAsButtons( arguments.sourceGateway, choose[ 1 ], context ) ) {
+					reply.blocks = reply.blocks.filter( b => b.type != "choose" )
+				} else {
+					variables.pendingChoices[ choiceKey( context ) ] = choose[ 1 ].options
+				}
+			}
+			// a command that moved the chat to another conversation (/new, /resume) takes its next messages there
+			if ( len( reply.conversationId ?: "" ) && reply.conversationId != resolveThreadId( arguments.message, arguments.sourceGateway ) ) {
+				variables.threads.use( chatKey( context ), reply.conversationId )
+			}
 			text = new "models.chat.commands.PlainRenderer@bxagents"().render( reply )
+			if ( reply.blocks.filter( b => b.type == "choose" ).len() ) {
+				text &= char( 10 ) & "Reply with a number to pick one."
+			}
 		} catch ( any e ) {
 			text = "That command did not work: " & e.message
+		}
+		if ( !len( text ) ) {
+			return
 		}
 		arguments.sourceGateway.deliver(
 			new GatewayEvent( type : GatewayEvent.TYPES.RESPONSE_COMPLETED, data : { content : text }, context : context ),
 			context
 		)
+	}
+
+	/**
+	 * @gateway The gateway the message came from
+	 * @choose A "choose" block of a reply: { title, options: [ { label, hint, line } ] }
+	 * @context Who to send to
+	 *
+	 * @return True when the gateway showed the choice natively (buttons, a list); false when it cannot
+	 */
+	private boolean function sendAsButtons( required any gateway, required struct choose, required any context ) {
+		if ( !structKeyExists( arguments.gateway, "deliverChoices" ) ) {
+			return false
+		}
+		try {
+			return arguments.gateway.deliverChoices( arguments.choose.title ?: "", arguments.choose.options, arguments.context )
+		} catch ( any e ) {
+			return false
+		}
 	}
 
 }

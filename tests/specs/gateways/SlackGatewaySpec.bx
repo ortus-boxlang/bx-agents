@@ -1,5 +1,6 @@
 import bxModules.bxai.models.gateway.contracts.GatewayContext;
 import bxModules.bxai.models.gateway.contracts.GatewayEvent;
+import bxModules.bxai.models.gateway.contracts.GatewayMessage;
 import bxModules.bxai.models.gateway.contracts.HumanInteractionRequest;
 
 class extends="testbox.system.BaseSpec" {
@@ -101,6 +102,43 @@ class extends="testbox.system.BaseSpec" {
 				expect( dispatched[ 1 ].getText() ).toBe( "hello" );
 				expect( dispatched[ 1 ].getContext().getConversationID() ).toBe( "C1" );
 				expect( dispatched[ 1 ].getContext().getThreadID() ).toBe( "111.222" );
+			} );
+
+			it( "handleSocketText() turns the umbrella slash command into a typed chat command", function() {
+				var dispatched = [];
+				gateway.onMessage( function( message ) { dispatched.append( message ); } );
+				var fakeSocket = new tests.support.FakeWebSocket();
+				gateway.handleSocketText( fakeSocket, jsonSerialize( { type: "slash_commands", envelope_id: "e1", payload: { command: "/agent", text: "model fast", user_id: "U1", channel_id: "C1", response_url: "https://hooks.slack.test/r" } } ) );
+				gateway.handleSocketText( fakeSocket, jsonSerialize( { type: "slash_commands", envelope_id: "e2", payload: { command: "/agent", text: "", user_id: "U1", channel_id: "C1", response_url: "https://hooks.slack.test/r" } } ) );
+				gateway.handleSocketText( fakeSocket, jsonSerialize( { type: "slash_commands", envelope_id: "e3", payload: { command: "/info", text: "", user_id: "U1", channel_id: "C1", response_url: "https://hooks.slack.test/r" } } ) );
+
+				expect( dispatched.map( m => m.getText() ) ).toBe( [ "/model fast", "/help", "/info" ] );
+				expect( dispatched[ 1 ].getContext().getConversationID() ).toBe( "C1" );
+			} );
+
+			it( "answers a slash command on its response_url, only for the person who typed it", function() {
+				var calls = stubApi( {} );
+				var context = new GatewayContext( gateway: "slack", conversationID: "C1", userID: "U1", raw: { command: "/agent", response_url: "https://hooks.slack.test/r" } );
+				gateway.deliver( new GatewayEvent( type: GatewayEvent.TYPES.RESPONSE_COMPLETED, data: { text: "Agent: helper" }, context: context ), context );
+
+				expect( calls ).toHaveLength( 1 );
+				expect( calls[ 1 ].method ).toBe( "response_url" );
+				expect( calls[ 1 ].params.url ).toBe( "https://hooks.slack.test/r" );
+				expect( calls[ 1 ].params.body ).toBe( { response_type: "ephemeral", text: "Agent: helper" } );
+			} );
+
+			it( "treats a file_share message as a person talking and lists its files with the bot token to fetch them", function() {
+				var dispatched = [];
+				gateway.onMessage( function( message ) { dispatched.append( message ); } );
+				var fakeSocket = new tests.support.FakeWebSocket();
+				var frame = { type: "events_api", envelope_id: "e9", payload: { event: { type: "message", subtype: "file_share", channel: "C1", user: "U1", ts: "1.1", text: "see this", files: [ { name: "a.png", mimetype: "image/png", size: 10, url_private_download: "https://files.slack.com/a.png" } ] } } };
+				gateway.handleSocketText( fakeSocket, jsonSerialize( frame ) );
+
+				expect( dispatched ).toHaveLength( 1 );
+				var files = gateway.attachmentsOf( dispatched[ 1 ] );
+				expect( files ).toHaveLength( 1 );
+				expect( files[ 1 ].url ).toBe( "https://files.slack.com/a.png" );
+				expect( files[ 1 ].headers.Authorization ).toBe( "Bearer xoxb-test" );
 			} );
 
 			it( "handleSocketText() ignores a message event carrying a bot_id (avoids a self-loop)", function() {

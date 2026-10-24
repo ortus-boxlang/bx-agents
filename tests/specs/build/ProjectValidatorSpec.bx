@@ -71,6 +71,38 @@ class extends="testbox.system.BaseSpec" {
 					return validator.validate( dir, discovery, resolver.resolve( projectRoot = dir ) );
 				}
 
+				it( "accepts usage: true or false, and refuses anything else", function() {
+					expect( profiledProject( "usage: true" & char( 10 ) ).errors ).toBeEmpty();
+					expect( profiledProject( "usage: false" & char( 10 ) ).errors ).toBeEmpty();
+					expect( profiledProject( "usage: often" & char( 10 ) ).errors.filter( e => e.findNoCase( "'usage' must be true or false" ) ) ).toHaveLength( 1 );
+				} );
+
+				it( "accepts a tui block, and says which names are valid when a style, widget or place is wrong", function() {
+					var nl = char( 10 );
+					expect( profiledProject( "tui:" & nl & "  prompt: box" & nl & "  widgets:" & nl & "    top: [ agent, git ]" & nl & "    bottom: []" & nl ).errors ).toBeEmpty();
+
+					var style = profiledProject( "tui:" & nl & "  prompt: fancy" & nl ).errors.filter( e => e.findNoCase( "tui.prompt 'fancy' is not a prompt style" ) );
+					expect( style ).toHaveLength( 1 );
+					expect( style[ 1 ] ).toInclude( "bars, bars-hints, rule, box, panel" );
+
+					var widget = profiledProject( "tui:" & nl & "  widgets:" & nl & "    top: [ agent, weather ]" & nl ).errors.filter( e => e.findNoCase( "no widget 'weather'" ) );
+					expect( widget ).toHaveLength( 1 );
+					expect( widget[ 1 ] ).toInclude( "folder" );
+
+					expect( profiledProject( "tui:" & nl & "  widgets:" & nl & "    middle: [ agent ]" & nl ).errors.filter( e => e.findNoCase( "no place 'middle'" ) ) ).toHaveLength( 1 );
+					expect( profiledProject( "tui:" & nl & "  widgets:" & nl & "    top: agent" & nl ).errors.filter( e => e.findNoCase( "must be a list of widget names" ) ) ).toHaveLength( 1 );
+					expect( profiledProject( "tui:" & nl & "  colour: red" & nl ).errors.filter( e => e.findNoCase( "no setting 'colour'" ) ) ).toHaveLength( 1 );
+				} );
+
+				it( "warns when a model is written next to a default profile, since the profile is the default model", function() {
+					var both = profiledProject( "defaultProfile: fast" & char( 10 ) );
+					var modelOnly = profiledProject();
+
+					expect( both.errors ).toBeEmpty();
+					expect( both.warnings.filter( w => w.findNoCase( "model line is ignored" ) ) ).toHaveLength( 1 );
+					expect( modelOnly.warnings.filter( w => w.findNoCase( "model line is ignored" ) ) ).toBeEmpty();
+				} );
+
 				it( "accepts a web UI that offers declared profiles, and 'default'", function() {
 					var result = profiledProject( "", { chat : '{ exposes : "webui", path : "/chat", profiles : [ "fast", "default" ] }' } );
 
@@ -337,11 +369,14 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "rejects a bad gatewaySession.commands block: a long prefix, an unknown key, a command that is not there or does not run on a gateway", function() {
 				var errors = validateFixture( "bad-gateway-commands" ).errors.filter( e => e.findNoCase( "gatewaySession.commands" ) );
-				expect( errors.filter( e => e.findNoCase( "single character" ) ) ).toHaveLength( 1 );
+				expect( errors.filter( e => e.findNoCase( "commands.prefix' must be a single character" ) ) ).toHaveLength( 1 );
 				expect( errors.filter( e => e.findNoCase( "unknown key [colour]" ) ) ).toHaveLength( 1 );
 				expect( errors.filter( e => e.findNoCase( "names [nonsense]" ) ) ).toHaveLength( 1 );
 				expect( errors.filter( e => e.findNoCase( "names [copy]" ) ) ).toHaveLength( 1 );
 				expect( errors.filter( e => e.findNoCase( "names [info]" ) ) ).toBeEmpty();
+				expect( errors.filter( e => e.findNoCase( "prefixes.slack' must be a single character" ) ) ).toHaveLength( 1 );
+				expect( errors.filter( e => e.findNoCase( "prefixes.telegram" ) ) ).toBeEmpty();
+				expect( validateFixture( "bad-gateway-commands" ).errors.filter( e => e.findNoCase( "gatewaySession.attachments' must be true or false" ) ) ).toHaveLength( 1 );
 			} );
 
 			it( "rejects an mcp-exposure gateway entry missing its required target", function() {

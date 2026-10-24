@@ -1,0 +1,64 @@
+/**
+ * /stats: what the model calls used, from the record the app keeps when Agent.yaml says `usage: true`.
+ *
+ *   /stats                       the last 30 days by model
+ *   /stats 7 --by=day            the last 7 days, by day (model, provider, day or user)
+ *   /stats enable                writes `usage: true` into Agent.yaml, for the next build
+ *
+ * Only at the terminal, where the person owns the machine and the database: the totals cover every user of the app, so
+ * a web visitor or a chat platform is never shown them. When recording is off it says how to turn it on, and
+ * `/stats enable` does it.
+ */
+class extends="models.chat.commands.BaseCommand@bxagents" {
+
+	string function name() {
+		return "stats"
+	}
+
+	string function hint() {
+		return "tokens the model calls used: /stats [days] [--by=model|provider|day|user], or /stats enable"
+	}
+
+	array function transports() {
+		return [ "tui" ]
+	}
+
+	any function run( required any context, required string args ) {
+		var reply = arguments.context.reply()
+		var usageSwitch = new "models.usage.UsageSwitch@bxagents"()
+		var words = listToArray( trim( arguments.args ), " " )
+
+		if ( words.len() && lCase( words[ 1 ] ) == "enable" ) {
+			if ( !arguments.context.hasTerminal() ) {
+				return reply.warn( "Usage is turned on in Agent.yaml: add `usage: true` and rebuild." )
+			}
+			var done = usageSwitch.enable( arguments.context.terminal().projectRoot() )
+			return done.ok ? reply.ok( done.message ) : reply.warn( done.message )
+		}
+
+		var days = 30
+		var by = "model"
+		for ( var word in words ) {
+			if ( isNumeric( word ) ) {
+				days = int( word )
+			} else if ( lCase( word ).startsWith( "--by=" ) ) {
+				by = lCase( mid( word, 6, 20 ) )
+			} else {
+				return reply.warn( "Try /stats, /stats 7, /stats --by=day or /stats enable." )
+			}
+		}
+		if ( days < 1 || days > 3650 ) {
+			return reply.warn( "The number of days is from 1 to 3650." )
+		}
+
+		var outcome = arguments.context.chat().usageReport( days, by )
+		if ( !outcome.available ) {
+			return reply.warn( outcome.reason )
+		}
+		if ( !outcome.recording && !outcome.report.calls ) {
+			return reply.text( usageSwitch.howToEnable( arguments.context.hasTerminal() ) ).text( "Type /stats enable to turn it on." )
+		}
+		return reply.text( new "models.usage.UsageLines@bxagents"().render( outcome.report, outcome.recording ) )
+	}
+
+}
