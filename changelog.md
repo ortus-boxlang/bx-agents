@@ -410,7 +410,7 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   `$inject( name, object )`, with `settings` and `log` already in place.
 - Annotated methods add chat commands: `@Command`, `@Hint`, `@Admin`, `@Alias`, `@Transports`, each written
   bare, as one value, as an array or as a struct. A folder extension can also bring command classes
-  (`commands/`) and ColdBox schedulers (`schedulers/`); a served agent registers and starts the schedulers.
+  (`commands/`) and BoxLang schedulers (`schedulers/`); a served agent starts the schedulers in the runtime's scheduler service, with the extension's `settings` and `log` injected.
 - They load from installed modules, your own `~/.bxagents/extensions/` (the terminal chat only) and the
   project's `extensions/`. A later layer wins, and what it replaces is always shown. `extensions.disable`
   turns off an extension, one of its commands, or a glob of either. `/extensions` and

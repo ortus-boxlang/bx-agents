@@ -107,31 +107,29 @@ A folder has the same shape as an agent project:
 extensions/standup/
   Extension.bx        optional: the module config (properties, configure(), onLoad(), onUnload())
   commands/           one class per command, like the built-in ones
-  schedulers/         ColdBox scheduler classes, started when the agent is served
+  schedulers/         BoxLang scheduler classes, started when the agent is served
 ```
 
 A class in `commands/` extends `models.chat.commands.BaseCommand@bxagents` and says its `name()`, `hint()`, `transports()` and `run( context, args )`. `settings` and `log` are injected into it.
 
 ## Schedulers
 
-A class in `schedulers/` is a real ColdBox scheduler, like the project's own `schedules/Scheduler.bx`. When the agent is served (`bxAgents serve`, a `.bxa`, a deployed server) it is registered with ColdBox's scheduler service and started. The extension's merged settings are in the ColdBox setting `bxAgentsExtensionSettings`, under its name, when its `configure()` runs:
+A class in `schedulers/` is a **BoxLang scheduler**: a class with a `configure()` that defines tasks through the `scheduler` property BoxLang gives it, like any other BoxLang scheduler. When the agent is served (`bxAgents serve`, a `.bxa`, a deployed server) it starts in the runtime's scheduler service. Like every class of an extension it is given `settings` (the defaults with the values from `Agent.yaml`) and `log` before `configure()` runs:
 
 ```
 class {
 
 	function configure() {
-		var standup = getSetting( "bxAgentsExtensionSettings" ).standup
-
-		task( "standup-reminder" )
-			.call( () => writeLog( text : "Standup time", log : "bxagents-extensions" ) )
-			.everyDayAt( standup.at )
+		scheduler.task( "standup-reminder" )
+			.call( () => log.info( "Standup time for #settings.channel#" ) )
+			.everyDayAt( settings.at )
 			.withNoOverlaps()
 	}
 
 }
 ```
 
-The terminal chat does not start schedulers: they belong to the served agent.
+The BoxLang scheduler lifecycle methods (`onStartup()`, `onShutdown()`, `onAnyTaskError()` and the rest) work as usual. Each scheduler is registered as `extension-<extension>-<scheduler>`, and a scheduler that fails to start is reported on its extension in `/extensions` while the others still run. The terminal chat does not start schedulers: they belong to the served agent.
 
 ## Where extensions come from
 

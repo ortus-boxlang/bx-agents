@@ -1,0 +1,79 @@
+/**
+ * Starts the schedulers extensions bring, in the BoxLang scheduler service, and stops them again.
+ *
+ * A scheduler is a BoxLang scheduler class (`schedulers/Nightly.bx` in an extension folder): a class with a
+ * `configure()` that defines tasks through the `scheduler` property BoxLang gives it,
+ *
+ *   class {
+ *       function configure() {
+ *           scheduler.task( "standup" ).call( () => ... ).everyDayAt( settings.at )
+ *       }
+ *   }
+ *
+ * like any other BoxLang scheduler. It is created the way every other class of an extension is, so it is
+ * given `settings` and `log` with `$inject` before `configure()` runs, and wrapped in BoxLang's own
+ * scheduler wrapper (the one `schedulerStart()` uses) so the runtime treats it as a scheduler of its own.
+ * Each is registered under the name `extension-<extension>-<scheduler>`.
+ */
+class {
+
+	function init() {
+		variables.names = []
+		variables.mixin = new "models.extensions.ExtensionMixin@bxagents"()
+		return this
+	}
+
+	/**
+	 * @registry The ExtensionRegistry whose loaded extensions' schedulers should run
+	 *
+	 * @return The names of the schedulers that started
+	 */
+	array function start( required any registry ) {
+		var runtime = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance()
+		var context = runtime.getRuntimeContext()
+		var loader = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
+		var service = runtime.getSchedulerService()
+		for ( var entry in arguments.registry.schedulers() ) {
+			var name = "extension-#entry.extension#-#entry.name#"
+			var owner = arguments.registry.extensions().filter( e => e.name() == entry.extension )[ 1 ]
+			try {
+				var instance = loader.instantiate( entry.path, context )
+				instance.$inject = variables.mixin.$inject
+				instance.$inject( "settings", owner.settings() ).$inject( "log", new "models.extensions.ExtensionLog@bxagents"( entry.extension ) )
+				var wrapper = createObject( "java", "ortus.boxlang.runtime.async.tasks.BoxScheduler" ).init( instance, context )
+				wrapper.configure()
+				wrapper.setSchedulerName( name )
+				service.registerAndStartScheduler( wrapper, true )
+				variables.names.append( name )
+			} catch ( any e ) {
+				owner.problem( "Its scheduler #entry.name# did not start: #e.message#" )
+			}
+		}
+		return variables.names
+	}
+
+	/**
+	 * Stops every scheduler start() started.
+	 */
+	function stop() {
+		var runtime = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance()
+		var service = runtime.getSchedulerService()
+		for ( var name in variables.names ) {
+			try {
+				service.removeScheduler( createObject( "java", "ortus.boxlang.runtime.scopes.Key" ).of( name ) )
+			} catch ( any e ) {
+				// already gone
+			}
+		}
+		variables.names = []
+		return this
+	}
+
+	/**
+	 * @return The names of the running schedulers
+	 */
+	array function names() {
+		return variables.names
+	}
+
+}

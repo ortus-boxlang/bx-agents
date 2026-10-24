@@ -6,11 +6,9 @@
  *     a server does not look in a developer's home.
  *   - puts the commands, the built-ins and the extensions', in `application.bxagentsCommands`, which the
  *     web page, the HTTP command route and the chat platforms answer with (CommandCatalog.forApplication)
- *   - registers each extension's schedulers with ColdBox's scheduler service and starts them, so a
- *     schedule an extension brings runs inside the served app like the project's own `schedules/`
- *
- * The extension's merged settings are in the ColdBox setting `bxAgentsExtensionSettings`, under the
- * extension's name, before its scheduler's `configure()` runs.
+ *   - starts each extension's BoxLang schedulers (ExtensionSchedulers) in the runtime's scheduler service,
+ *     so a schedule an extension brings runs inside the served app. They are given the extension's
+ *     merged `settings` before their `configure()` runs.
  */
 class {
 
@@ -24,11 +22,9 @@ class {
 	}
 
 	/**
-	 * @controller ColdBox's controller (application.cbController); the schedulers are registered with it
-	 *
 	 * @return this
 	 */
-	function start( required any controller ) {
+	function start() {
 		var commands = new "models.chat.commands.CommandCatalog@bxagents"().standard()
 		variables.service = new "models.extensions.ExtensionService@bxagents"(
 			projectRoot     : "",
@@ -40,21 +36,17 @@ class {
 		variables.service.install( commands )
 		application.bxagentsCommands = commands
 		application.bxagentsExtensions = variables.service
-		for ( var problem in variables.service.problems() ) {
-			arguments.controller.getLogBox().getLogger( this ).warn( problem )
-		}
-		startSchedulers( arguments.controller )
+		variables.schedulers = new "models.extensions.ExtensionSchedulers@bxagents"()
+		variables.schedulers.start( variables.service.registry() )
 		return this
 	}
 
 	/**
-	 * Unloads the extensions (`onUnload()` of each) and stops their schedulers.
+	 * Stops the schedulers and unloads the extensions (`onUnload()` of each).
 	 */
-	function stop( any controller ) {
-		if ( !isNull( arguments.controller ) ) {
-			for ( var name in variables.schedulerNames ?: [] ) {
-				arguments.controller.getSchedulerService().removeScheduler( name )
-			}
+	function stop() {
+		if ( !isNull( variables.schedulers ) ) {
+			variables.schedulers.stop()
 		}
 		if ( !isNull( variables.service ) ) {
 			variables.service.unload()
@@ -81,56 +73,6 @@ class {
 		}
 		var parsed = jsonDeserialize( fileRead( file ) )
 		return isStruct( parsed ) ? parsed : {}
-	}
-
-	private void function startSchedulers( required any controller ) {
-		variables.schedulerNames = []
-		var schedulers = variables.service.registry().schedulers()
-		if ( !schedulers.len() ) {
-			return
-		}
-		var byExtension = {}
-		for ( var extension in variables.service.registry().extensions() ) {
-			if ( extension.isLoaded() ) {
-				byExtension[ extension.name() ] = extension.settings()
-			}
-		}
-		arguments.controller.setSetting( "bxAgentsExtensionSettings", byExtension )
-		var service = arguments.controller.getSchedulerService()
-		for ( var scheduler in schedulers ) {
-			var name = "extension-#scheduler.extension#-#scheduler.name#"
-			try {
-				var loaded = service.loadScheduler( name, invocationPath( scheduler.path ) )
-				startScheduler( loaded )
-				variables.schedulerNames.append( name )
-			} catch ( any e ) {
-				arguments.controller.getLogBox().getLogger( this ).error( "The scheduler #scheduler.name# of the extension #scheduler.extension# did not start: #e.message#" )
-			}
-		}
-	}
-
-	/**
-	 * Starts one scheduler. A scheduler loaded this way inherits ColdBox's base class virtually, and its
-	 * `startup()` can finish its work and then fail the return type of the base method (seen on a real
-	 * boot: the tasks were scheduled and the scheduler reported "has started" before the cast threw), so
-	 * what counts is whether it started.
-	 */
-	private void function startScheduler( required any scheduler ) {
-		try {
-			arguments.scheduler.startup()
-		} catch ( any e ) {
-			if ( !arguments.scheduler.hasStarted() ) {
-				rethrow
-			}
-		}
-	}
-
-	/**
-	 * `<app>/extensions/standup/schedulers/Reminder.bx` is `extensions.standup.schedulers.Reminder` to WireBox
-	 */
-	private string function invocationPath( required string file ) {
-		var relative = replace( arguments.file, "\", "/", "all" ).replace( replace( variables.appDir, "\", "/", "all" ) & "/", "" )
-		return relative.reReplace( "\.bx$", "" ).replace( "/", ".", "all" )
 	}
 
 }

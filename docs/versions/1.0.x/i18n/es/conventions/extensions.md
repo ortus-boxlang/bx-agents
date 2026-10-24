@@ -107,31 +107,29 @@ Una carpeta tiene la misma forma que un proyecto de agente:
 extensions/standup/
   Extension.bx        opcional: el module config (propiedades, configure(), onLoad(), onUnload())
   commands/           una clase por comando, como los integrados
-  schedulers/         clases scheduler de ColdBox, que arrancan cuando se sirve el agente
+  schedulers/         schedulers de BoxLang, que arrancan cuando se sirve el agente
 ```
 
 Una clase en `commands/` extiende `models.chat.commands.BaseCommand@bxagents` y define `name()`, `hint()`, `transports()` y `run( context, args )`. `settings` y `log` se le inyectan.
 
 ## Schedulers
 
-Una clase en `schedulers/` es un scheduler de ColdBox real, como el `schedules/Scheduler.bx` del proyecto. Cuando se sirve el agente (`bxAgents serve`, un `.bxa`, un servidor desplegado) se registra en el servicio de schedulers de ColdBox y arranca. La configuración fusionada de la extensión está en el setting de ColdBox `bxAgentsExtensionSettings`, bajo su nombre, cuando se ejecuta su `configure()`:
+Una clase en `schedulers/` es un **scheduler de BoxLang**: una clase con un `configure()` que define tareas mediante la propiedad `scheduler` que BoxLang le da, como cualquier otro scheduler de BoxLang. Cuando se sirve el agente (`bxAgents serve`, un `.bxa`, un servidor desplegado) arranca en el servicio de schedulers del runtime. Como toda clase de una extensión, recibe `settings` (los valores por defecto con los de `Agent.yaml`) y `log` antes de que se ejecute `configure()`:
 
 ```
 class {
 
 	function configure() {
-		var standup = getSetting( "bxAgentsExtensionSettings" ).standup
-
-		task( "standup-reminder" )
-			.call( () => writeLog( text : "Hora del standup", log : "bxagents-extensions" ) )
-			.everyDayAt( standup.at )
+		scheduler.task( "standup-reminder" )
+			.call( () => log.info( "Hora del standup de #settings.channel#" ) )
+			.everyDayAt( settings.at )
 			.withNoOverlaps()
 	}
 
 }
 ```
 
-El chat de terminal no arranca schedulers: pertenecen al agente servido.
+Los métodos de ciclo de vida de los schedulers de BoxLang (`onStartup()`, `onShutdown()`, `onAnyTaskError()` y el resto) funcionan como siempre. Cada scheduler se registra como `extension-<extension>-<scheduler>`, y uno que no arranca se informa en su extensión dentro de `/extensions` mientras los demás siguen. El chat de terminal no arranca schedulers: pertenecen al agente servido.
 
 ## De dónde vienen las extensiones
 

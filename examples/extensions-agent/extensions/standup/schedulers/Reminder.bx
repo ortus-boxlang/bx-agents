@@ -1,21 +1,17 @@
 /**
- * A real ColdBox scheduler, the same kind as a project's schedules/Scheduler.bx. When the agent is
- * served, the extension's schedulers are registered with ColdBox's scheduler service, so the task
- * below runs inside the served app.
+ * A BoxLang scheduler, the same kind as any other: a class with a configure() that defines tasks through
+ * the `scheduler` property BoxLang gives it. When the agent is served, the extension's schedulers start in
+ * the runtime's scheduler service.
  *
- * The extension's merged settings (its configure() defaults with the values from Agent.yaml) are in
- * the app setting `bxAgentsExtensionSettings`, under the extension's name.
+ * Like every class of an extension it is given `settings` (the extension's defaults with the values from
+ * Agent.yaml) and `log` before configure() runs.
  */
 class {
 
 	function configure() {
-		var standup = getSetting( "bxAgentsExtensionSettings" ).standup
-
-		task( "standup-reminder" )
-			.call( () => {
-				writeLog( text : "Standup time for #standup.channel#. #standup.prompt#", log : "bxagents-extensions" )
-			} )
-			.everyDayAt( standup.at )
+		scheduler.task( "standup-reminder" )
+			.call( () => log.info( "Standup time for #settings.channel#. #settings.prompt#" ) )
+			.everyDayAt( settings.at )
 			.withNoOverlaps()
 	}
 
