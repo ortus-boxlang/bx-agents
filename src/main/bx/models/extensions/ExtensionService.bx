@@ -23,8 +23,10 @@ class {
 	 * @transport "tui", "web" or "gateway"; only "tui" reads the user layer
 	 * @moduleFolders The `extensions/` folders of installed modules; found from the runtime when not given
 	 * @projectSettings The project's `extensions:` block; read from Agent.yaml when not given
+	 * @projectFolder The project layer's folder; `<projectRoot>/extensions` when not given. A served app keeps its copy elsewhere.
 	 */
-	function init( string projectRoot = "", any userConfig, string transport = "tui", array moduleFolders, struct projectSettings ) {
+	function init( string projectRoot = "", any userConfig, string transport = "tui", array moduleFolders, struct projectSettings, string projectFolder = "" ) {
+		variables.projectFolder = len( arguments.projectFolder ) ? arguments.projectFolder.reReplace( "[\\/]+$", "" ) : ( len( arguments.projectRoot ) ? arguments.projectRoot.reReplace( "[\\/]+$", "" ) & "/extensions" : "" )
 		variables.projectRoot = arguments.projectRoot.reReplace( "[\\/]+$", "" )
 		variables.userConfig = isNull( arguments.userConfig ) ? new "models.cli.UserConfig@bxagents"() : arguments.userConfig
 		variables.transport = arguments.transport
@@ -51,8 +53,8 @@ class {
 		if ( variables.transport == "tui" ) {
 			variables.registry.addLayer( "user", getDirectoryFromPath( variables.userConfig.path() ) & "extensions" )
 		}
-		if ( len( variables.projectRoot ) ) {
-			variables.registry.addLayer( "project", variables.projectRoot & "/extensions" )
+		if ( len( variables.projectFolder ) ) {
+			variables.registry.addLayer( "project", variables.projectFolder )
 		}
 		variables.registry.load()
 		arguments.commands.replace( new "models.extensions.ExtensionsCommand@bxagents"( this ) )

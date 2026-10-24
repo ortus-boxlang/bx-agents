@@ -1,0 +1,111 @@
+/**
+ * Extensions in a served agent: the build copies the project's extensions into the app and says how the
+ * app starts them, and the app's start loads them, answers commands with them and registers their
+ * schedulers. ColdBox itself is a recording stand-in here; a real boot is the integration test's job.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "extensions in the built app", function() {
+
+			beforeEach( function() {
+				variables.tempDirs = [];
+				variables.example = expandPath( "/examples/extensions-agent" );
+			} );
+
+			afterEach( function() {
+				for ( var dir in tempDirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+				application.delete( "bxagentsCommands" );
+				application.delete( "bxagentsExtensions" );
+			} );
+
+			function projectCopy() {
+				var dir = createTempDirectory( prefix = "bxagents-extbuild-" );
+				directoryCopy( example, dir, true );
+				tempDirs.append( dir );
+				return dir;
+			}
+
+			it( "copies extensions/ into the app, writes the project's settings, and starts them from Application.bx", function() {
+				var root = projectCopy();
+				var result = new bxagents.models.build.BuildPipeline( "1.0.0" ).build( root );
+
+				expect( fileExists( result.appDir & "/extensions/hello.bx" ) ).toBeTrue();
+				expect( fileExists( result.appDir & "/extensions/standup/schedulers/Reminder.bx" ) ).toBeTrue();
+				var settings = jsonDeserialize( fileRead( result.appDir & "/config/extensions.json" ) );
+				expect( settings.hello.greeting ).toBe( "Welcome aboard" );
+				expect( settings.standup.at ).toBe( "09:30" );
+				expect( fileRead( result.appDir & "/Application.bx" ) ).toInclude( "ServedExtensions@bxagents" );
+			} );
+
+			it( "builds a project with no extensions folder exactly as before", function() {
+				var root = projectCopy();
+				directoryDelete( root & "/extensions", true );
+				var result = new bxagents.models.build.BuildPipeline( "1.0.0" ).build( root );
+
+				expect( directoryExists( result.appDir & "/extensions" ) ).toBeFalse();
+				expect( fileRead( result.appDir & "/Application.bx" ) ).notToInclude( "ServedExtensions" );
+			} );
+
+			it( "starts the built app's extensions: commands for the web and chat platforms, schedulers registered and started", function() {
+				var root = projectCopy();
+				var result = new bxagents.models.build.BuildPipeline( "1.0.0" ).build( root );
+				var controller = new FakeController();
+
+				var served = new bxagents.models.extensions.ServedExtensions( result.appDir ).start( controller );
+
+				var commands = new bxagents.models.chat.commands.CommandCatalog().forApplication();
+				var names = commands.menu( "web" ).map( c => c.name );
+				expect( names ).toInclude( "/hello" );
+				expect( names ).toInclude( "/standup" );
+				expect( names ).toInclude( "/extensions" );
+				expect( controller.registered() ).toHaveLength( 1 );
+				expect( controller.registered()[ 1 ].name ).toBe( "extension-standup-Reminder" );
+				expect( controller.registered()[ 1 ].path ).toBe( "extensions.standup.schedulers.Reminder" );
+				expect( controller.started() ).toBe( [ "extension-standup-Reminder" ] );
+				expect( controller.settings().bxAgentsExtensionSettings.standup.channel ).toBe( "team-standup" );
+				expect( controller.settings().bxAgentsExtensionSettings.standup.at ).toBe( "09:30" );
+
+				served.stop( controller );
+				expect( controller.removed() ).toBe( [ "extension-standup-Reminder" ] );
+			} );
+
+			it( "does not read the person's own extensions in a served app", function() {
+				var root = projectCopy();
+				var result = new bxagents.models.build.BuildPipeline( "1.0.0" ).build( root );
+				var home = createTempDirectory( prefix = "bxagents-home-" );
+				tempDirs.append( home );
+				directoryCreate( home & "/extensions" );
+				fileWrite( home & "/extensions/mine.bx", "class { @Command( 'mine' ) function m( agentContext ) { return 'mine' } }" );
+				fileWrite( home & "/bxAgents.yml", "extensions:
+  disable: [ hello ]
+" );
+				// the served app takes no person's file and no home folder: nothing of the above is read
+				new bxagents.models.extensions.ServedExtensions( result.appDir ).start( new FakeController() );
+				var commands = application.bxagentsCommands;
+
+				expect( isNull( commands.lookup( "mine" ) ) ).toBeTrue();
+				expect( isNull( commands.lookup( "hello" ) ) ).toBeFalse();
+			} );
+
+			it( "answers commands from the app's registry in the command service and a gateway session", function() {
+				var root = projectCopy();
+				var result = new bxagents.models.build.BuildPipeline( "1.0.0" ).build( root );
+				new bxagents.models.extensions.ServedExtensions( result.appDir ).start( new FakeController() );
+
+				var registry = new bxagents.models.chat.commands.CommandCatalog().forApplication();
+				var context = new bxagents.models.chat.commands.CommandContext( {}, "gateway", true );
+				expect( registry.run( "/hello Ada", context ).blocks()[ 1 ].text ).toBe( "Welcome aboard, Ada!" );
+				// a chat platform answers only what its gateway allows, and the allow list can name an extension's command
+				var allowed = registry.only( [ "hello", "info" ] );
+				expect( allowed.menu( "gateway" ).map( c => c.name ) ).toBe( [ "/info", "/hello" ] );
+			} );
+
+		} );
+	}
+
+}

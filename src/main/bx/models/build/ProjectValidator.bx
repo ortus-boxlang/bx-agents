@@ -42,7 +42,7 @@ class {
 		validateModules( arguments.projectRoot, arguments.discovery, errors )
 		validateSchedules( arguments.projectRoot, arguments.discovery, warnings )
 		validateGateways( arguments.discovery, errors, ( arguments.resolvedConfig.profiles ?: {} ).keyArray() )
-		validateGatewaySession( arguments.resolvedConfig, errors )
+		validateGatewaySession( arguments.resolvedConfig, errors, directoryExists( arguments.projectRoot & "/extensions" ) )
 		validateMcpServers( arguments.resolvedConfig, errors )
 		validateTools( arguments.resolvedConfig, errors, "The project's own agent definition" )
 		validateToolOptions( arguments.resolvedConfig, errors, "The project's own agent definition" )
@@ -875,8 +875,9 @@ class {
 	 *
 	 * @resolvedConfig The resolved config struct from AgentConfigResolver.resolve() - only `gatewaySession` is used
 	 * @errors Accumulator array - append() any validation errors found
+	 * @hasExtensions Whether the project has an extensions/ folder: a command it adds can be allowed, and is checked when the app starts
 	 */
-	private void function validateGatewaySession( required struct resolvedConfig, required array errors ) {
+	private void function validateGatewaySession( required struct resolvedConfig, required array errors, boolean hasExtensions = false ) {
 		if ( !structKeyExists( arguments.resolvedConfig, "gatewaySession" ) ) {
 			return
 		}
@@ -893,7 +894,7 @@ class {
 			arguments.errors.append( "Agent.bx's 'gatewaySession.attachments' must be true or false" )
 		}
 
-		validateGatewayCommands( sessionConfig.commands ?: {}, arguments.errors )
+		validateGatewayCommands( sessionConfig.commands ?: {}, arguments.errors, arguments.hasExtensions )
 	}
 
 	/**
@@ -903,8 +904,9 @@ class {
 	 *
 	 * @commands The `commands` block, {} when there is none
 	 * @errors Accumulator array - append() any validation errors found
+	 * @hasExtensions Whether the project has an extensions/ folder; the commands it adds are not known at build time, so any name is let through
 	 */
-	private void function validateGatewayCommands( required any commands, required array errors ) {
+	private void function validateGatewayCommands( required any commands, required array errors, boolean hasExtensions = false ) {
 		if ( !isStruct( arguments.commands ) ) {
 			arguments.errors.append( "Agent.bx's 'gatewaySession.commands' must be a block with enabled, prefix, prefixes, conversation, allow and admins" )
 			return
@@ -943,7 +945,7 @@ class {
 		if ( isArray( arguments.commands.allow ?: "" ) ) {
 			var known = new "models.chat.commands.CommandCatalog@bxagents"().standard().menu( "gateway" ).map( c => mid( c.name, 2, len( c.name ) ) )
 			for ( var name in arguments.commands.allow ) {
-				if ( !known.containsNoCase( name ) ) {
+				if ( !known.containsNoCase( name ) && !arguments.hasExtensions ) {
 					arguments.errors.append( "Agent.bx's 'gatewaySession.commands.allow' names [#name#], which is not a command that runs on a gateway - use #known.toList( ', ' )#" )
 				}
 			}

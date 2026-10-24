@@ -400,6 +400,24 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   `build` restores whatever the lock lists and the disk lacks. Skills in `skills/` and installed ones both go
   into the build; one of your own with the same name wins. New projects ignore `.agents/skills/`.
 
+#### Extensions
+
+- `extensions/` adds to the chat and the served agent without changing BxAgents. An extension is one `.bx`
+  file or a folder, and it reads like a ColdBox `ModuleConfig`: `configure()` sets `variables.settings`,
+  `onLoad()` and `onUnload()` are the lifecycle, and `this.title`, `this.version`, `this.dependencies` and
+  the rest are read as in a module. Values under `extensions:` in `Agent.yaml` (or your own
+  `~/.bxagents/bxAgents.yml`) are merged over the defaults, and every class of an extension has
+  `$inject( name, object )`, with `settings` and `log` already in place.
+- Annotated methods add chat commands: `@Command`, `@Hint`, `@Admin`, `@Alias`, `@Transports`, each written
+  bare, as one value, as an array or as a struct. A folder extension can also bring command classes
+  (`commands/`) and ColdBox schedulers (`schedulers/`); a served agent registers and starts the schedulers.
+- They load from installed modules, your own `~/.bxagents/extensions/` (the terminal chat only) and the
+  project's `extensions/`. A later layer wins, and what it replaces is always shown. `extensions.disable`
+  turns off an extension, one of its commands, or a glob of either. `/extensions` and
+  `bxAgents extensions` list what loaded, what each added and what went wrong.
+- `examples/extensions-agent` shows a one-file extension, one with several commands, an admin-only command
+  with a lifecycle, and a folder with a command class and a scheduler.
+
 #### Documentation
 
 - A full documentation site at [bxagents.ai](https://bxagents.ai): installation, quick start,
