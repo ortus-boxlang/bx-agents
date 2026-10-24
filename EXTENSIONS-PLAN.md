@@ -1,4 +1,12 @@
-# BxAgents extensions: plan (draft 3)
+# BxAgents extensions: plan (draft 4)
+
+Status: slice 1 is built (PR #158): registry, layers, module-config lifecycle, settings, `$inject`, commands, schedulers for the served agent, `/extensions`, `bxAgents extensions`, and `examples/extensions-agent`. Everything below the slice list still applies; what changed since draft 3 is listed here.
+
+- `models/` is gone. Share an object between the files of a folder extension by creating it in `onLoad()` and calling `$inject`.
+- Settings are written `variables.settings = {...}` in `configure()`. On the 1.18 runtime a bare `settings = {...}` inside a function is local, not `variables`, so the docs and examples use the scoped form.
+- Extensions contribute **schedulers**: ColdBox scheduler classes in `schedulers/`, registered and started with ColdBox's scheduler service when the agent is served. Their merged settings are in the ColdBox setting `bxAgentsExtensionSettings`.
+- `interceptors` and `customInterceptionPoints` in `configure()` are still planned for slice 2.
+- Words are written out in full: `agentContext`, `commandArguments`, `registry`.
 
 Goal: let people build on top of BxAgents. An extension adds commands, key bindings, status items, composer prefixes, `@` sources, web UI, gateways, CLI verbs, tools and skills, and can listen to the events and interception points the runtime already announces. It must be simple to write and powerful when needed.
 
@@ -12,7 +20,8 @@ An extension looks and feels like a ColdBox / BoxLang `ModuleConfig`. Installing
 | Shape | An extension is a class. One file is enough. A folder is available for bigger ones. The class looks like a `ModuleConfig` |
 | Lifecycle | `configure()`, `onLoad()`, `onUnload()`, as in a ColdBox module |
 | Settings | `configure()` sets `settings`; `Agent.yaml` / `bxAgents.yml` override them |
-| Injection | A `$inject( name, object )` method on every extension class. It puts the object in `this` and `variables` |
+| Injection | A `$inject( name, object )` method on every extension class. It puts the object in `this` and `variables`. `settings` and `log` are injected |
+| Schedulers | A folder extension's `schedulers/` classes are ColdBox schedulers, registered and started when the agent is served |
 | Layers | core, modules, user (`~/.bxagents/extensions/`), project (`extensions/`). A later layer wins |
 | Conflicts | An item replaces an earlier item of the same name. An extension replaces an earlier extension of the same name. Listed at startup and by `/extensions` |
 | Off switch | `extensions.disable` in `Agent.yaml`, by extension name, item name, or glob |
@@ -43,7 +52,7 @@ class {
 	 */
 	function configure() {
 		// Defaults. Agent.yaml (or bxAgents.yml) overrides them.
-		settings = {
+		variables.settings = {
 			ciUrl  : "",
 			branch : "main",
 			target : "staging"
@@ -74,7 +83,7 @@ class {
 }
 ```
 
-As in a module, `settings = {...}` in `configure()` is the variables-scope `settings`. The lifecycle:
+`variables.settings = {...}` in `configure()` holds the defaults. The lifecycle:
 
 | Method | When |
 |---|---|
@@ -117,9 +126,8 @@ The registry calls it on each class after creating it, before `onLoad()`:
 |---|---|
 | `settings` | the extension's merged settings struct |
 | `log` | a logger named after the extension |
-| the file name of each class in `models/` | a singleton of that class, created once per extension |
 
-So a class in `models/CiClient.bx` is available as `CiClient` in every other file of the extension, with no lookup call and no global state:
+To share an object between the files of an extension, create it in `onLoad()` and `$inject` it where it is needed, with no lookup call and no global state:
 
 ```
 class {
@@ -266,7 +274,7 @@ Custom points: an extension lists its own in `customInterceptionPoints` and anno
 ```
 extensions/ci/
   Extension.bx            the module config (section 1)
-  models/CiClient.bx      plain classes, injected into every other file by name
+  schedulers/Nightly.bx   a ColdBox scheduler class, registered when the agent is served
   commands/status.bx      one class per command (ICommand, as the built-ins are)
   keys/open-run.bx
   status/ci.bx
@@ -350,7 +358,7 @@ Different on purpose:
 
 ## Slices (each its own PR)
 
-1. Registry and scanner: layers, names, replacement rules, `extensions.disable`; `Extension.bx` as a module config (properties, `configure()`, settings merge, `onLoad()`, `onUnload()`); `$inject` with `settings`, `log` and `models/`; `/extensions` and `bxAgents extensions`. Commands only, in single-file and folder form, annotated and `register( registry )`.
+1. Registry and scanner: layers, names, replacement rules, `extensions.disable`; `Extension.bx` as a module config (properties, `configure()`, settings merge, `onLoad()`, `onUnload()`); `$inject` with `settings` and `log`; schedulers for the served agent; `/extensions` and `bxAgents extensions`. Commands only, in single-file and folder form, annotated and `register( registry )`.
 2. Events: `@On` and by-name methods for bx-ai and ColdBox points, and the chat events.
 3. Keys and status items.
 4. Prefixes and `@` sources (move `!`, `#` and `@file` onto them).
