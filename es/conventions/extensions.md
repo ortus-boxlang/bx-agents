@@ -8,7 +8,7 @@ tags: [conventions, extensions, commands, scheduling]
 
 # extensions/
 
-Una **extensión** añade cosas a BxAgents sin modificarlo: hoy, comandos de chat (`/deploy`, `/roll 2d6`) y tareas programadas que se ejecutan cuando el agente se sirve. Es una clase que se ve y se comporta como un `ModuleConfig` de ColdBox: tiene `configure()`, `onLoad()` y `onUnload()`, su configuración viene de `Agent.yaml` y se le entregan objetos con `$inject`.
+Una **extensión** añade cosas a BxAgents sin modificarlo: comandos de chat (`/deploy`, `/roll 2d6`), listeners de los eventos del chat y de bx-ai, y tareas programadas que se ejecutan cuando el agente se sirve. Es una clase que se ve y se comporta como un `ModuleConfig` de ColdBox: tiene `configure()`, `onLoad()` y `onUnload()`, su configuración viene de `Agent.yaml` y se le entregan objetos con `$inject`.
 
 Un archivo es una extensión completa:
 
@@ -131,6 +131,66 @@ class {
 
 Los métodos de ciclo de vida de los schedulers de BoxLang (`onStartup()`, `onShutdown()`, `onAnyTaskError()` y el resto) funcionan como siempre. Cada scheduler se registra como `extension-<extension>-<scheduler>`, y uno que no arranca se informa en su extensión dentro de `/extensions` mientras los demás siguen. El chat de terminal no arranca schedulers: pertenecen al agente servido.
 
+## Escuchar eventos
+
+Una extensión también es un interceptor. Un método con el nombre de un evento lo escucha, igual que un interceptor de BoxLang o de ColdBox:
+
+```
+class {
+
+	function onChatInput( data ) {
+		if ( data.text contains "password" ) {
+			data.cancel( "Eso parece una contraseña, así que no se envió." )
+		}
+	}
+
+	function onAIError( data ) {
+		log.warn( "el modelo falló" )
+	}
+
+}
+```
+
+Se pueden escuchar dos cosas:
+
+- **Eventos de bx-ai** (`beforeAIAgentRun`, `afterAIModelInvoke`, `onAIError`, `beforeAIToolExecute` y el resto). Se disparan donde corra el agente.
+- **Eventos del chat**, anunciados por BxAgents:
+
+| Evento | Cuándo | `data` tiene | Un listener puede |
+|---|---|---|---|
+| `onChatSessionStart` / `onChatSessionEnd` | el chat de terminal se abre o se cierra | `agent`, `transport` | |
+| `onChatInput` | antes de enviar un mensaje | `text`, `transport` | `cancel( reason )`, o `replace( nuevoTexto )` |
+| `onChatTurnStart` / `onChatTurnEnd` | alrededor de un turno del agente | `text`, `transport` (`reply`, `status` al final) | |
+| `onChatConversationChange` | `/new`, `/resume`, `/clear`, `/fork` o `/compact` cambió la conversación | `line`, `transport` | |
+| `onChatCommandBefore` | antes de cualquier comando, en todos los transportes | `line`, `name`, `arguments`, `transport` | `cancel( reason )` |
+| `onChatCommandAfter` | después de cualquier comando, en todos los transportes | `line`, `name`, `reply`, `transport` | `replace( nuevaRespuesta )` |
+
+Los eventos de sesión, entrada, turno y conversación son del chat de terminal; los dos eventos de comando se disparan igual en la terminal, la web y las plataformas de chat. Un listener que lanza una excepción se captura: nunca puede detener un turno, los listeners siguientes se ejecutan y el error aparece en `/extensions`.
+
+`@On` asocia un método con otro nombre, o con varios eventos a la vez, y admite las cuatro formas de una anotación:
+
+```
+@On( [ "beforeAIToolExecute", "afterAIToolExecute" ] )
+function toolCalled( data ) { log.info( "se ejecutó una herramienta" ) }
+```
+
+Si `@On` nombra un evento que el runtime no conoce, se informa en `/extensions` en vez de ignorarse.
+
+### `interceptors` y `customInterceptionPoints`
+
+Como en un module config, `configure()` puede nombrar clases de la carpeta de la extensión para registrar, cada una con sus propiedades, y puntos propios para anunciar:
+
+```
+function configure() {
+	variables.interceptors = [ { class : "interceptors.Audit", properties : { level : "info" } } ]
+	variables.customInterceptionPoints = [ "onAuditRecorded" ]
+}
+```
+
+`interceptors/Audit.bx` escucha con métodos que llevan el nombre del evento y recibe `settings`, `log` y `properties` inyectados. Cualquier extensión puede escuchar `onAuditRecorded`, y la dueña lo anuncia con `BoxAnnounce( "onAuditRecorded", { ... } )`. `extensions.disable` acepta `extension:method` para apagar un solo listener.
+
+Los eventos de ColdBox (`preProcess`, `postProcess` y el resto) no forman parte del chat de terminal; solo se disparan en un agente servido.
+
 ## De dónde vienen las extensiones
 
 | Capa | Carpeta | Corre en |
@@ -161,4 +221,4 @@ bxAgents extensions --json
 
 ## Todavía no
 
-Las extensiones aún no pueden escuchar eventos y puntos de interceptación, ni añadir atajos de teclado, elementos de estado, prefijos del compositor, fuentes `@`, huecos en la interfaz web, gateways, verbos de CLI, herramientas y skills. Eso viene después; el plan es `EXTENSIONS-PLAN.md` en el repositorio.
+Las extensiones aún no pueden añadir atajos de teclado, elementos de estado, prefijos del compositor, fuentes `@`, huecos en la interfaz web, gateways, verbos de CLI, herramientas y skills. Eso viene después; el plan es `EXTENSIONS-PLAN.md` en el repositorio.

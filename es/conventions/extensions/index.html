@@ -246,12 +246,12 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#la-extensión-más-pequeña">La extensi&oacute;n m&aacute;s peque&ntilde;a</a></li><li class="toc-level-2"><a href="#anotaciones">Anotaciones</a></li><li class="toc-level-2"><a href="#configuración">Configuraci&oacute;n</a></li><li class="toc-level-2"><a href="#ciclo-de-vida">Ciclo de vida</a></li><li class="toc-level-2"><a href="#inyección">Inyecci&oacute;n</a></li><li class="toc-level-2"><a href="#una-extensión-en-carpeta">Una extensi&oacute;n en carpeta</a></li><li class="toc-level-2"><a href="#schedulers">Schedulers</a></li><li class="toc-level-2"><a href="#de-dónde-vienen-las-extensiones">De d&oacute;nde vienen las extensiones</a></li><li class="toc-level-2"><a href="#desactivar-cosas">Desactivar cosas</a></li><li class="toc-level-2"><a href="#verlas">Verlas</a></li><li class="toc-level-2"><a href="#todavía-no">Todav&iacute;a no</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#la-extensión-más-pequeña">La extensi&oacute;n m&aacute;s peque&ntilde;a</a></li><li class="toc-level-2"><a href="#anotaciones">Anotaciones</a></li><li class="toc-level-2"><a href="#configuración">Configuraci&oacute;n</a></li><li class="toc-level-2"><a href="#ciclo-de-vida">Ciclo de vida</a></li><li class="toc-level-2"><a href="#inyección">Inyecci&oacute;n</a></li><li class="toc-level-2"><a href="#una-extensión-en-carpeta">Una extensi&oacute;n en carpeta</a></li><li class="toc-level-2"><a href="#schedulers">Schedulers</a></li><li class="toc-level-2"><a href="#escuchar-eventos">Escuchar eventos</a></li><li class="toc-level-3"><a href="#interceptors-y-custominterceptionpoints">interceptors y customInterceptionPoints</a></li><li class="toc-level-2"><a href="#de-dónde-vienen-las-extensiones">De d&oacute;nde vienen las extensiones</a></li><li class="toc-level-2"><a href="#desactivar-cosas">Desactivar cosas</a></li><li class="toc-level-2"><a href="#verlas">Verlas</a></li><li class="toc-level-2"><a href="#todavía-no">Todav&iacute;a no</a></li></ul></details>
 		
 
 		
 		<h1 id="extensions"><a href="#extensions" id="extensions" name="extensions" class="anchor"></a>extensions/</h1>
-<p>Una <strong>extensión</strong> añade cosas a BxAgents sin modificarlo: hoy, comandos de chat (<code>/deploy</code>, <code>/roll 2d6</code>) y tareas programadas que se ejecutan cuando el agente se sirve. Es una clase que se ve y se comporta como un <code>ModuleConfig</code> de ColdBox: tiene <code>configure()</code>, <code>onLoad()</code> y <code>onUnload()</code>, su configuración viene de <code>Agent.yaml</code> y se le entregan objetos con <code>$inject</code>.</p>
+<p>Una <strong>extensión</strong> añade cosas a BxAgents sin modificarlo: comandos de chat (<code>/deploy</code>, <code>/roll 2d6</code>), listeners de los eventos del chat y de bx-ai, y tareas programadas que se ejecutan cuando el agente se sirve. Es una clase que se ve y se comporta como un <code>ModuleConfig</code> de ColdBox: tiene <code>configure()</code>, <code>onLoad()</code> y <code>onUnload()</code>, su configuración viene de <code>Agent.yaml</code> y se le entregan objetos con <code>$inject</code>.</p>
 <p>Un archivo es una extensión completa:</p>
 <pre><code>extensions/
   hello.bx             /hello
@@ -344,6 +344,55 @@
 }
 </code></pre>
 <p>Los métodos de ciclo de vida de los schedulers de BoxLang (<code>onStartup()</code>, <code>onShutdown()</code>, <code>onAnyTaskError()</code> y el resto) funcionan como siempre. Cada scheduler se registra como <code>extension-&lt;extension&gt;-&lt;scheduler&gt;</code>, y uno que no arranca se informa en su extensión dentro de <code>/extensions</code> mientras los demás siguen. El chat de terminal no arranca schedulers: pertenecen al agente servido.</p>
+<h2 id="escuchar-eventos"><a href="#escuchar-eventos" id="escuchar-eventos" name="escuchar-eventos" class="anchor"></a>Escuchar eventos</h2>
+<p>Una extensión también es un interceptor. Un método con el nombre de un evento lo escucha, igual que un interceptor de BoxLang o de ColdBox:</p>
+<pre><code>class {
+
+	function onChatInput( data ) {
+		if ( data.text contains &quot;password&quot; ) {
+			data.cancel( &quot;Eso parece una contraseña, así que no se envió.&quot; )
+		}
+	}
+
+	function onAIError( data ) {
+		log.warn( &quot;el modelo falló&quot; )
+	}
+
+}
+</code></pre>
+<p>Se pueden escuchar dos cosas:</p>
+<ul>
+<li><strong>Eventos de bx-ai</strong> (<code>beforeAIAgentRun</code>, <code>afterAIModelInvoke</code>, <code>onAIError</code>, <code>beforeAIToolExecute</code> y el resto). Se disparan donde corra el agente.</li>
+<li><strong>Eventos del chat</strong>, anunciados por BxAgents:</li>
+</ul>
+<div class="bxsites-table-wrap"><table class="table">
+<thead>
+<tr><th>Evento</th><th>Cuándo</th><th><code>data</code> tiene</th><th>Un listener puede</th></tr>
+</thead>
+<tbody>
+<tr><td><code>onChatSessionStart</code> / <code>onChatSessionEnd</code></td><td>el chat de terminal se abre o se cierra</td><td><code>agent</code>, <code>transport</code></td><td> </td></tr>
+<tr><td><code>onChatInput</code></td><td>antes de enviar un mensaje</td><td><code>text</code>, <code>transport</code></td><td><code>cancel( reason )</code>, o <code>replace( nuevoTexto )</code></td></tr>
+<tr><td><code>onChatTurnStart</code> / <code>onChatTurnEnd</code></td><td>alrededor de un turno del agente</td><td><code>text</code>, <code>transport</code> (<code>reply</code>, <code>status</code> al final)</td><td> </td></tr>
+<tr><td><code>onChatConversationChange</code></td><td><code>/new</code>, <code>/resume</code>, <code>/clear</code>, <code>/fork</code> o <code>/compact</code> cambió la conversación</td><td><code>line</code>, <code>transport</code></td><td> </td></tr>
+<tr><td><code>onChatCommandBefore</code></td><td>antes de cualquier comando, en todos los transportes</td><td><code>line</code>, <code>name</code>, <code>arguments</code>, <code>transport</code></td><td><code>cancel( reason )</code></td></tr>
+<tr><td><code>onChatCommandAfter</code></td><td>después de cualquier comando, en todos los transportes</td><td><code>line</code>, <code>name</code>, <code>reply</code>, <code>transport</code></td><td><code>replace( nuevaRespuesta )</code></td></tr>
+</tbody>
+</table></div>
+<p>Los eventos de sesión, entrada, turno y conversación son del chat de terminal; los dos eventos de comando se disparan igual en la terminal, la web y las plataformas de chat. Un listener que lanza una excepción se captura: nunca puede detener un turno, los listeners siguientes se ejecutan y el error aparece en <code>/extensions</code>.</p>
+<p><code>@On</code> asocia un método con otro nombre, o con varios eventos a la vez, y admite las cuatro formas de una anotación:</p>
+<pre><code>@On( [ &quot;beforeAIToolExecute&quot;, &quot;afterAIToolExecute&quot; ] )
+function toolCalled( data ) { log.info( &quot;se ejecutó una herramienta&quot; ) }
+</code></pre>
+<p>Si <code>@On</code> nombra un evento que el runtime no conoce, se informa en <code>/extensions</code> en vez de ignorarse.</p>
+<h3 id="interceptors-y-custominterceptionpoints"><a href="#interceptors-y-custominterceptionpoints" id="interceptors-y-custominterceptionpoints" name="interceptors-y-custominterceptionpoints" class="anchor"></a><code>interceptors</code> y <code>customInterceptionPoints</code></h3>
+<p>Como en un module config, <code>configure()</code> puede nombrar clases de la carpeta de la extensión para registrar, cada una con sus propiedades, y puntos propios para anunciar:</p>
+<pre><code>function configure() {
+	variables.interceptors = [ { class : &quot;interceptors.Audit&quot;, properties : { level : &quot;info&quot; } } ]
+	variables.customInterceptionPoints = [ &quot;onAuditRecorded&quot; ]
+}
+</code></pre>
+<p><code>interceptors/Audit.bx</code> escucha con métodos que llevan el nombre del evento y recibe <code>settings</code>, <code>log</code> y <code>properties</code> inyectados. Cualquier extensión puede escuchar <code>onAuditRecorded</code>, y la dueña lo anuncia con <code>BoxAnnounce( &quot;onAuditRecorded&quot;, { ... } )</code>. <code>extensions.disable</code> acepta <code>extension:method</code> para apagar un solo listener.</p>
+<p>Los eventos de ColdBox (<code>preProcess</code>, <code>postProcess</code> y el resto) no forman parte del chat de terminal; solo se disparan en un agente servido.</p>
 <h2 id="de-dónde-vienen-las-extensiones"><a href="#de-dónde-vienen-las-extensiones" id="de-dónde-vienen-las-extensiones" name="de-dónde-vienen-las-extensiones" class="anchor"></a>De dónde vienen las extensiones</h2>
 <div class="bxsites-table-wrap"><table class="table">
 <thead>
@@ -367,13 +416,13 @@
 bxAgents extensions --json
 </code></pre>
 <h2 id="todavía-no"><a href="#todavía-no" id="todavía-no" name="todavía-no" class="anchor"></a>Todavía no</h2>
-<p>Las extensiones aún no pueden escuchar eventos y puntos de interceptación, ni añadir atajos de teclado, elementos de estado, prefijos del compositor, fuentes <code>@</code>, huecos en la interfaz web, gateways, verbos de CLI, herramientas y skills. Eso viene después; el plan es <code>EXTENSIONS-PLAN.md</code> en el repositorio.</p>
+<p>Las extensiones aún no pueden añadir atajos de teclado, elementos de estado, prefijos del compositor, fuentes <code>@</code>, huecos en la interfaz web, gateways, verbos de CLI, herramientas y skills. Eso viene después; el plan es <code>EXTENSIONS-PLAN.md</code> en el repositorio.</p>
 
 	
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/conventions/extensions.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/conventions/extensions.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Oct 26, 2026, 8&#x3a;53&#x3a;46 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20extensions%2F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fconventions%2Fextensions%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/conventions/extensions.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/conventions/extensions.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Oct 26, 2026, 9&#x3a;17&#x3a;46 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20extensions%2F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fconventions%2Fextensions%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 
@@ -417,7 +466,7 @@ bxAgents extensions --json
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="En esta p&aacute;gina"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#la-extensión-más-pequeña">La extensi&oacute;n m&aacute;s peque&ntilde;a</a></li><li class="toc-level-2"><a href="#anotaciones">Anotaciones</a></li><li class="toc-level-2"><a href="#configuración">Configuraci&oacute;n</a></li><li class="toc-level-2"><a href="#ciclo-de-vida">Ciclo de vida</a></li><li class="toc-level-2"><a href="#inyección">Inyecci&oacute;n</a></li><li class="toc-level-2"><a href="#una-extensión-en-carpeta">Una extensi&oacute;n en carpeta</a></li><li class="toc-level-2"><a href="#schedulers">Schedulers</a></li><li class="toc-level-2"><a href="#de-dónde-vienen-las-extensiones">De d&oacute;nde vienen las extensiones</a></li><li class="toc-level-2"><a href="#desactivar-cosas">Desactivar cosas</a></li><li class="toc-level-2"><a href="#verlas">Verlas</a></li><li class="toc-level-2"><a href="#todavía-no">Todav&iacute;a no</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="En esta p&aacute;gina"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#la-extensión-más-pequeña">La extensi&oacute;n m&aacute;s peque&ntilde;a</a></li><li class="toc-level-2"><a href="#anotaciones">Anotaciones</a></li><li class="toc-level-2"><a href="#configuración">Configuraci&oacute;n</a></li><li class="toc-level-2"><a href="#ciclo-de-vida">Ciclo de vida</a></li><li class="toc-level-2"><a href="#inyección">Inyecci&oacute;n</a></li><li class="toc-level-2"><a href="#una-extensión-en-carpeta">Una extensi&oacute;n en carpeta</a></li><li class="toc-level-2"><a href="#schedulers">Schedulers</a></li><li class="toc-level-2"><a href="#escuchar-eventos">Escuchar eventos</a></li><li class="toc-level-3"><a href="#interceptors-y-custominterceptionpoints">interceptors y customInterceptionPoints</a></li><li class="toc-level-2"><a href="#de-dónde-vienen-las-extensiones">De d&oacute;nde vienen las extensiones</a></li><li class="toc-level-2"><a href="#desactivar-cosas">Desactivar cosas</a></li><li class="toc-level-2"><a href="#verlas">Verlas</a></li><li class="toc-level-2"><a href="#todavía-no">Todav&iacute;a no</a></li></ul></nav>
 				</aside>
 			
 		</div>

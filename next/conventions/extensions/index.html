@@ -246,12 +246,12 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-smallest-extension">The smallest extension</a></li><li class="toc-level-2"><a href="#annotations">Annotations</a></li><li class="toc-level-2"><a href="#settings">Settings</a></li><li class="toc-level-2"><a href="#lifecycle">Lifecycle</a></li><li class="toc-level-2"><a href="#injection">Injection</a></li><li class="toc-level-2"><a href="#a-folder-extension">A folder extension</a></li><li class="toc-level-2"><a href="#schedulers">Schedulers</a></li><li class="toc-level-2"><a href="#where-extensions-come-from">Where extensions come from</a></li><li class="toc-level-2"><a href="#turning-things-off">Turning things off</a></li><li class="toc-level-2"><a href="#looking-at-them">Looking at them</a></li><li class="toc-level-2"><a href="#not-yet">Not yet</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-smallest-extension">The smallest extension</a></li><li class="toc-level-2"><a href="#annotations">Annotations</a></li><li class="toc-level-2"><a href="#settings">Settings</a></li><li class="toc-level-2"><a href="#lifecycle">Lifecycle</a></li><li class="toc-level-2"><a href="#injection">Injection</a></li><li class="toc-level-2"><a href="#a-folder-extension">A folder extension</a></li><li class="toc-level-2"><a href="#schedulers">Schedulers</a></li><li class="toc-level-2"><a href="#listening-to-events">Listening to events</a></li><li class="toc-level-3"><a href="#interceptors-and-custominterceptionpoints">interceptors and customInterceptionPoints</a></li><li class="toc-level-2"><a href="#where-extensions-come-from">Where extensions come from</a></li><li class="toc-level-2"><a href="#turning-things-off">Turning things off</a></li><li class="toc-level-2"><a href="#looking-at-them">Looking at them</a></li><li class="toc-level-2"><a href="#not-yet">Not yet</a></li></ul></details>
 		
 
 		
 		<h1 id="extensions"><a href="#extensions" id="extensions" name="extensions" class="anchor"></a>extensions/</h1>
-<p>An <strong>extension</strong> adds to BxAgents without changing it: chat commands today (<code>/deploy</code>, <code>/roll 2d6</code>), and schedules that run when the agent is served. It is a class that looks and behaves like a ColdBox <code>ModuleConfig</code>: it has a <code>configure()</code>, an <code>onLoad()</code> and an <code>onUnload()</code>, its settings come from <code>Agent.yaml</code>, and things are handed to it with <code>$inject</code>.</p>
+<p>An <strong>extension</strong> adds to BxAgents without changing it: chat commands (<code>/deploy</code>, <code>/roll 2d6</code>), listeners for the events of the chat and of bx-ai, and schedules that run when the agent is served. It is a class that looks and behaves like a ColdBox <code>ModuleConfig</code>: it has a <code>configure()</code>, an <code>onLoad()</code> and an <code>onUnload()</code>, its settings come from <code>Agent.yaml</code>, and things are handed to it with <code>$inject</code>.</p>
 <p>One file is a whole extension:</p>
 <pre><code>extensions/
   hello.bx             /hello
@@ -344,6 +344,55 @@
 }
 </code></pre>
 <p>The BoxLang scheduler lifecycle methods (<code>onStartup()</code>, <code>onShutdown()</code>, <code>onAnyTaskError()</code> and the rest) work as usual. Each scheduler is registered as <code>extension-&lt;extension&gt;-&lt;scheduler&gt;</code>, and a scheduler that fails to start is reported on its extension in <code>/extensions</code> while the others still run. The terminal chat does not start schedulers: they belong to the served agent.</p>
+<h2 id="listening-to-events"><a href="#listening-to-events" id="listening-to-events" name="listening-to-events" class="anchor"></a>Listening to events</h2>
+<p>An extension is also an interceptor. A method named after an event listens to it, exactly like a BoxLang or ColdBox interceptor:</p>
+<pre><code>class {
+
+	function onChatInput( data ) {
+		if ( data.text contains &quot;password&quot; ) {
+			data.cancel( &quot;That looks like a password, so it was not sent.&quot; )
+		}
+	}
+
+	function onAIError( data ) {
+		log.warn( &quot;the model failed&quot; )
+	}
+
+}
+</code></pre>
+<p>Two things can be listened to:</p>
+<ul>
+<li><strong>bx-ai events</strong> (<code>beforeAIAgentRun</code>, <code>afterAIModelInvoke</code>, <code>onAIError</code>, <code>beforeAIToolExecute</code> and the rest). They fire wherever the agent runs.</li>
+<li><strong>Chat events</strong>, announced by BxAgents:</li>
+</ul>
+<div class="bxsites-table-wrap"><table class="table">
+<thead>
+<tr><th>Event</th><th>When</th><th><code>data</code> has</th><th>A listener can</th></tr>
+</thead>
+<tbody>
+<tr><td><code>onChatSessionStart</code> / <code>onChatSessionEnd</code></td><td>the terminal chat opens or closes</td><td><code>agent</code>, <code>transport</code></td><td> </td></tr>
+<tr><td><code>onChatInput</code></td><td>before a message is sent</td><td><code>text</code>, <code>transport</code></td><td><code>cancel( reason )</code>, or <code>replace( newText )</code></td></tr>
+<tr><td><code>onChatTurnStart</code> / <code>onChatTurnEnd</code></td><td>around one turn of the agent</td><td><code>text</code>, <code>transport</code> (<code>reply</code>, <code>status</code> at the end)</td><td> </td></tr>
+<tr><td><code>onChatConversationChange</code></td><td><code>/new</code>, <code>/resume</code>, <code>/clear</code>, <code>/fork</code> or <code>/compact</code> changed the conversation</td><td><code>line</code>, <code>transport</code></td><td> </td></tr>
+<tr><td><code>onChatCommandBefore</code></td><td>before any command, on every transport</td><td><code>line</code>, <code>name</code>, <code>arguments</code>, <code>transport</code></td><td><code>cancel( reason )</code></td></tr>
+<tr><td><code>onChatCommandAfter</code></td><td>after any command, on every transport</td><td><code>line</code>, <code>name</code>, <code>reply</code>, <code>transport</code></td><td><code>replace( newReply )</code></td></tr>
+</tbody>
+</table></div>
+<p>The session, input, turn and conversation events are the terminal chat's; the two command events fire in the terminal, the web page and on chat platforms alike. A listener that throws is caught: it can never stop a turn, the listeners after it still run, and the error is shown in <code>/extensions</code>.</p>
+<p><code>@On</code> binds a method with another name, or many events at once, and takes the four forms an annotation takes:</p>
+<pre><code>@On( [ &quot;beforeAIToolExecute&quot;, &quot;afterAIToolExecute&quot; ] )
+function toolCalled( data ) { log.info( &quot;a tool ran&quot; ) }
+</code></pre>
+<p><code>@On</code> naming an event the runtime does not know is reported in <code>/extensions</code>, not ignored.</p>
+<h3 id="interceptors-and-custominterceptionpoints"><a href="#interceptors-and-custominterceptionpoints" id="interceptors-and-custominterceptionpoints" name="interceptors-and-custominterceptionpoints" class="anchor"></a><code>interceptors</code> and <code>customInterceptionPoints</code></h3>
+<p>As in a module config, <code>configure()</code> can name classes from the extension's folder to register, each with its own properties, and points of its own to announce:</p>
+<pre><code>function configure() {
+	variables.interceptors = [ { class : &quot;interceptors.Audit&quot;, properties : { level : &quot;info&quot; } } ]
+	variables.customInterceptionPoints = [ &quot;onAuditRecorded&quot; ]
+}
+</code></pre>
+<p><code>interceptors/Audit.bx</code> listens with methods named after events and has <code>settings</code>, <code>log</code> and <code>properties</code> injected. Any extension can then listen to <code>onAuditRecorded</code>, and the one that owns it announces it with <code>BoxAnnounce( &quot;onAuditRecorded&quot;, { ... } )</code>. <code>extensions.disable</code> takes <code>extension:method</code> to turn one listener off.</p>
+<p>ColdBox events (<code>preProcess</code>, <code>postProcess</code> and the rest) are not part of the terminal chat; they fire only in a served agent.</p>
 <h2 id="where-extensions-come-from"><a href="#where-extensions-come-from" id="where-extensions-come-from" name="where-extensions-come-from" class="anchor"></a>Where extensions come from</h2>
 <div class="bxsites-table-wrap"><table class="table">
 <thead>
@@ -367,7 +416,7 @@
 bxAgents extensions --json
 </code></pre>
 <h2 id="not-yet"><a href="#not-yet" id="not-yet" name="not-yet" class="anchor"></a>Not yet</h2>
-<p>Extensions cannot yet listen to events and interception points, or add key bindings, status items, composer prefixes, <code>@</code> sources, web UI slots, gateways, CLI verbs, tools and skills. Those come next; the plan is <code>EXTENSIONS-PLAN.md</code> in the repository.</p>
+<p>Extensions cannot yet add key bindings, status items, composer prefixes, <code>@</code> sources, web UI slots, gateways, CLI verbs, tools and skills. Those come next; the plan is <code>EXTENSIONS-PLAN.md</code> in the repository.</p>
 
 	
 
@@ -417,7 +466,7 @@ bxAgents extensions --json
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-smallest-extension">The smallest extension</a></li><li class="toc-level-2"><a href="#annotations">Annotations</a></li><li class="toc-level-2"><a href="#settings">Settings</a></li><li class="toc-level-2"><a href="#lifecycle">Lifecycle</a></li><li class="toc-level-2"><a href="#injection">Injection</a></li><li class="toc-level-2"><a href="#a-folder-extension">A folder extension</a></li><li class="toc-level-2"><a href="#schedulers">Schedulers</a></li><li class="toc-level-2"><a href="#where-extensions-come-from">Where extensions come from</a></li><li class="toc-level-2"><a href="#turning-things-off">Turning things off</a></li><li class="toc-level-2"><a href="#looking-at-them">Looking at them</a></li><li class="toc-level-2"><a href="#not-yet">Not yet</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-smallest-extension">The smallest extension</a></li><li class="toc-level-2"><a href="#annotations">Annotations</a></li><li class="toc-level-2"><a href="#settings">Settings</a></li><li class="toc-level-2"><a href="#lifecycle">Lifecycle</a></li><li class="toc-level-2"><a href="#injection">Injection</a></li><li class="toc-level-2"><a href="#a-folder-extension">A folder extension</a></li><li class="toc-level-2"><a href="#schedulers">Schedulers</a></li><li class="toc-level-2"><a href="#listening-to-events">Listening to events</a></li><li class="toc-level-3"><a href="#interceptors-and-custominterceptionpoints">interceptors and customInterceptionPoints</a></li><li class="toc-level-2"><a href="#where-extensions-come-from">Where extensions come from</a></li><li class="toc-level-2"><a href="#turning-things-off">Turning things off</a></li><li class="toc-level-2"><a href="#looking-at-them">Looking at them</a></li><li class="toc-level-2"><a href="#not-yet">Not yet</a></li></ul></nav>
 				</aside>
 			
 		</div>
