@@ -1,0 +1,76 @@
+/**
+ * A key an extension binds in the terminal chat. Pressing it runs the method it is on, as if the person had
+ * typed the command with nothing after it: when the method is also a command (`@Command`) the key runs
+ * that command through the command registry, so who may run it, where it runs and every listener around it are
+ * the same as typing it. A method that is not a command is called with the CommandContext and an empty text.
+ *
+ * The id is `extension:method`. It is what shows in `/keys` and what a person writes in `bxAgents.yml` to give
+ * the action other keys.
+ */
+class {
+
+	/**
+	 * @extension The extension's name
+	 * @item The method's (or `registry.key()` target's) name
+	 * @keys The keys asked for, such as [ "ctrl+g" ]
+	 * @hint What it does, for /keys
+	 * @command The name of the command it runs, or blank
+	 * @call A function( context ) that does it when there is no command; may be null
+	 */
+	function init( required string extension, required string item, required array keys, required string hint, string command = "", any call ) {
+		variables.extension = arguments.extension
+		variables.item = arguments.item
+		variables.keys = arguments.keys
+		variables.hint = arguments.hint
+		variables.command = arguments.command
+		if ( !isNull( arguments.call ) ) {
+			variables.call = arguments.call
+		}
+		return this
+	}
+
+	string function id() {
+		return variables.extension & ":" & variables.item
+	}
+
+	string function item() {
+		return variables.item
+	}
+
+	array function keys() {
+		return variables.keys
+	}
+
+	string function hint() {
+		return variables.hint
+	}
+
+	/**
+	 * @return { id, does, keys } as the screen takes it
+	 */
+	struct function describe() {
+		return { id : id(), does : variables.hint, keys : variables.keys }
+	}
+
+	/**
+	 * @context The CommandContext of the chat
+	 * @commands The CommandRegistry of the chat
+	 *
+	 * @return A Reply. A failure is a warning that names the extension; it never ends the chat.
+	 */
+	any function run( required any context, required any commands ) {
+		try {
+			if ( len( variables.command ) ) {
+				return arguments.commands.run( "/" & variables.command, arguments.context )
+			}
+			var answer = variables.call( arguments.context )
+			if ( isNull( answer ) ) {
+				return arguments.context.reply().text( "" )
+			}
+			return isSimpleValue( answer ) ? arguments.context.reply().ok( answer ) : answer
+		} catch ( any e ) {
+			return arguments.context.reply().warn( "The extension [#variables.extension#] failed on its key [#id()#]: #e.message#" )
+		}
+	}
+
+}

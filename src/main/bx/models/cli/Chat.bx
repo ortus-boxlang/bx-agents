@@ -116,6 +116,9 @@ class {
 		var extensions = arguments.options._extensions ?: new "models.extensions.ExtensionService@bxagents"( projectRoot : trim( arguments.options.projectRoot ?: "" ), transport : "tui" )
 		extensions.install( commands )
 		var controller = new "models.cli.chat.ChatController@bxagents"( session : arguments.session, registry : commands ).withNotices( extensions.problems() )
+		if ( structKeyExists( extensions, "keys" ) ) {
+			controller.withExtensions( extensions )
+		}
 		if ( structKeyExists( extensions, "events" ) ) {
 			controller.withEvents( extensions.events() )
 		}

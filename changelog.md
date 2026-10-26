@@ -421,6 +421,11 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   `onChatInput` (stop or change a message), `onChatTurnStart`/`End`, `onChatSessionStart`/`End`,
   `onChatConversationChange` and, on every transport, `onChatCommandBefore` (stop a command) and
   `onChatCommandAfter` (replace the reply). A listener that throws never stops a turn.
+- Extensions can bind keys and show status. `@Key` on a method binds keys in the terminal chat (on a
+  command method it runs the command; otherwise it calls the method), listed in `/keys` and rebindable under
+  `chat: keys:`; a key that clashes is refused with a sentence. `@Status` shows a short text next to the size
+  of the context, and as chips in the web page's header. `register( registry )` does the same, and
+  commands and listeners too, as calls.
 - `examples/extensions-agent` shows a one-file extension, one with several commands, an admin-only command
   with a lifecycle, and a folder with a command class and a scheduler.
 

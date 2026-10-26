@@ -51,6 +51,17 @@ class {
 		variables.screen = nullValue()
 		variables.notices = []
 		variables.events = nullValue()
+		variables.extensions = nullValue()
+		return this
+	}
+
+	/**
+	 * Lets extensions bind keys in the message box and show status next to the size of the context.
+	 *
+	 * @extensions The ExtensionService
+	 */
+	function withExtensions( required any extensions ) {
+		variables.extensions = arguments.extensions
 		return this
 	}
 
@@ -106,7 +117,9 @@ class {
 		for ( var notice in variables.notices ) {
 			arguments.screen.print( "warn", notice )
 		}
-		for ( var problem in arguments.screen.bindKeys( variables.userConfig.keys() ) ) {
+		var extensionKeys = isNull( variables.extensions ) ? [] : variables.extensions.keys()
+		var bound = extensionKeys.len() ? arguments.screen.bindKeys( variables.userConfig.keys(), extensionKeys ) : arguments.screen.bindKeys( variables.userConfig.keys() )
+		for ( var problem in bound ) {
 			arguments.screen.print( "warn", "#variables.userConfig.path()#: " & problem )
 		}
 		variables.context = new "models.chat.commands.CommandContext@bxagents"( variables.session, "tui", true, port )
@@ -143,6 +156,9 @@ class {
 			}
 			var text = trim( input )
 			if ( !len( text ) ) {
+				if ( !isNull( variables.extensions ) && variables.extensions.keys().len() ) {
+					pressedKey()
+				}
 				continue
 			}
 			// a lone question mark is the way to ask which keys do what
@@ -181,6 +197,30 @@ class {
 	}
 
 	/**
+	 * @return What the extensions' status items say, to follow the size of the context; blank when none do
+	 */
+	private string function extensionStatus() {
+		if ( isNull( variables.extensions ) ) {
+			return ""
+		}
+		return variables.extensions.statusLine( variables.context )
+	}
+
+	/**
+	 * Runs the action of the key an extension bound that was just pressed, and shows what it said.
+	 */
+	private void function pressedKey() {
+		var id = variables.screen.takeKey()
+		if ( isNull( id ) || !len( id ) ) {
+			return
+		}
+		var reply = variables.extensions.pressed( id, variables.context, variables.registry )
+		if ( !isNull( reply ) ) {
+			variables.renderer.show( reply )
+		}
+	}
+
+	/**
 	 * Tells the prompt's widgets what the chat knows: the agent, the profile or model, and the conversation's name.
 	 * Whatever cannot be found is left out; a widget with nothing to say is not shown.
 	 */
@@ -216,11 +256,12 @@ class {
 	 */
 	private void function refreshStatus() {
 		refreshFacts()
+		var size = ""
 		try {
-			variables.screen.setStatus( new "models.chat.ContextLines@bxagents"().status( variables.attachments.addTo( variables.session.contextReport() ) ) )
+			size = new "models.chat.ContextLines@bxagents"().status( variables.attachments.addTo( variables.session.contextReport() ) )
 		} catch ( any e ) {
-			variables.screen.setStatus( "" )
 		}
+		variables.screen.setStatus( [ size, extensionStatus() ].filter( part => len( part ) ).toList( " · " ) )
 		// a picture is refused at the paste, with the reason, for a model known not to see them
 		try {
 			var blind = variables.session.modelFacts().vision == "no"

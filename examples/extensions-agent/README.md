@@ -9,11 +9,12 @@ A project that shows what extensions can do. Everything is in `extensions/`:
 | `deploy.bx` | one file | module-config properties, `onLoad()` / `onUnload()`, an admin-only command, injected `log` |
 | `guard.bx` | one file | listening: `onChatInput` can stop or change a message, `@On` for bx-ai events |
 | `audit.bx` | one file | `onChatCommandAfter`, an event of its own (`customInterceptionPoints`), an admin command |
+| `pulse.bx` | one file | `@Key` on a command (Ctrl+G) and on a plain method, `@Status` next to the context size |
 | `freeze/` | folder | `interceptors` in `configure()`: a class with properties that stops commands |
 | `standup/` | folder | an `Extension.bx`, a command class in `commands/`, a BoxLang scheduler in `schedulers/` |
 
 ```bash
-bxAgents chat            # try /extensions, /hello, /roll 2d6, /deploy, /standup
+bxAgents chat            # try /extensions, /hello, /roll 2d6, /deploy, /standup, Ctrl+G
 bxAgents extensions      # the list, from the shell
 bxAgents serve           # the standup scheduler is registered with the served app
 ```

@@ -30,6 +30,9 @@ class {
 		variables.commands = []
 		variables.schedulers = []
 		variables.listeners = []
+		variables.keys = []
+		variables.statuses = []
+		variables.functionListeners = []
 		variables.problems = []
 		variables.replaces = []
 		variables.log = nullValue()
@@ -128,6 +131,49 @@ class {
 		return variables.commands
 	}
 
+	function addKey( required any key ) {
+		variables.keys.append( arguments.key )
+		return this
+	}
+
+	function dropKey( required any key ) {
+		var dropped = arguments.key
+		variables.keys = variables.keys.filter( k => k.id() != dropped.id() )
+		return this
+	}
+
+	array function keys() {
+		return variables.keys
+	}
+
+	function addStatus( required any status ) {
+		variables.statuses.append( arguments.status )
+		return this
+	}
+
+	function dropStatus( required any status ) {
+		var dropped = arguments.status
+		variables.statuses = variables.statuses.filter( s => s.name() != dropped.name() )
+		return this
+	}
+
+	array function statuses() {
+		return variables.statuses
+	}
+
+	/**
+	 * @point An interception point
+	 * @call A function( data ) that listens to it; asked for with registry.on() in register()
+	 */
+	function addListenerFunction( required string point, required any call ) {
+		variables.functionListeners.append( { point : arguments.point, call : arguments.call } )
+		return this
+	}
+
+	array function functionListeners() {
+		return variables.functionListeners
+	}
+
 	/**
 	 * @listeners [ { extension, method, point } ] what the extension listens to
 	 */
@@ -176,6 +222,8 @@ class {
 			commands    : variables.commands.map( c => "/" & c.name() ),
 			schedulers  : variables.schedulers.map( s => s.name ),
 			listens     : variables.listeners.map( l => l.point ).unique(),
+			keys        : variables.keys.map( k => k.id() ),
+			status      : variables.statuses.map( s => s.name() ),
 			replaces    : variables.replaces,
 			problems    : variables.problems
 		}

@@ -1,0 +1,79 @@
+/**
+ * What an extension's `register( registry )` is handed: the same things annotations describe, for when they are
+ * worked out in code.
+ *
+ *   registry.command( "deploy", { hint : "...", admin : true, run : ( agentContext, commandArguments ) => ... } )
+ *   registry.key( "ctrl+g", "/deploy" )                       a key that runs a command line
+ *   registry.key( [ "ctrl+g" ], ( agentContext ) => ... )      or any function, with a hint: { hint : "..." }
+ *   registry.status( "branch", ( agentContext ) => "main" )    a piece of status
+ *   registry.on( "onChatInput", ( data ) => ... )              a listener, for one event or an array of them
+ *
+ * Nothing here takes effect until the extension has loaded: it only records what was asked, on the Extension.
+ */
+class {
+
+	/**
+	 * @extension The Extension being loaded
+	 */
+	function init( required any extension ) {
+		variables.extension = arguments.extension
+		return this
+	}
+
+	/**
+	 * @name The command's name
+	 * @options { run (required), hint, admin, transports, aliases }
+	 */
+	function command( required string name, required struct options ) {
+		if ( !isCustomFunction( arguments.options.run ?: "" ) && !isClosure( arguments.options.run ?: "" ) ) {
+			throw( type : "bxagents.extension", message : "registry.command( '#arguments.name#' ) needs a run function in its options." )
+		}
+		if ( !reFind( "^[a-z][a-z0-9_-]*$", lCase( arguments.name ) ) ) {
+			throw( type : "bxagents.extension", message : "[#arguments.name#] is not a command name (letters, digits, - and _)." )
+		}
+		variables.extension.addCommand( new "models.extensions.ExtensionCommand@bxagents"( variables.extension.name(), new "models.extensions.FunctionCommand@bxagents"( arguments.name, arguments.options ) ) )
+		return this
+	}
+
+	/**
+	 * @keys One key or an array, such as "ctrl+g"
+	 * @target A command line ("/deploy") or a function( agentContext )
+	 * @options { hint, name }; the name is what the key is called in /keys and in the person's file (the command or "key")
+	 */
+	function key( required any keys, required any target, struct options = {} ) {
+		var asked = isArray( arguments.keys ) ? arguments.keys : [ arguments.keys ]
+		if ( isSimpleValue( arguments.target ) ) {
+			var line = trim( arguments.target )
+			if ( left( line, 1 ) != "/" ) {
+				throw( type : "bxagents.extension", message : "A key's target is a command line such as /deploy, or a function." )
+			}
+			var named = arguments.options.name ?: listFirst( mid( line, 2, len( line ) ), " " )
+			variables.extension.addKey( new "models.extensions.ExtensionKey@bxagents"( variables.extension.name(), named, asked, arguments.options.hint ?: "run #line#", listFirst( mid( line, 2, len( line ) ), " " ) ) )
+		} else {
+			var item = arguments.options.name ?: "key"
+			variables.extension.addKey( new "models.extensions.ExtensionKey@bxagents"( variables.extension.name(), item, asked, arguments.options.hint ?: "run #item#", "", arguments.target ) )
+		}
+		return this
+	}
+
+	/**
+	 * @name The item's name
+	 * @call A function( agentContext ) that returns the text to show
+	 */
+	function status( required string name, required any call ) {
+		variables.extension.addStatus( new "models.extensions.ExtensionStatus@bxagents"( variables.extension, arguments.name, arguments.call ) )
+		return this
+	}
+
+	/**
+	 * @points One interception point or an array of them
+	 * @call A function( data )
+	 */
+	function on( required any points, required any call ) {
+		for ( var point in ( isArray( arguments.points ) ? arguments.points : [ arguments.points ] ) ) {
+			variables.extension.addListenerFunction( point, arguments.call )
+		}
+		return this
+	}
+
+}

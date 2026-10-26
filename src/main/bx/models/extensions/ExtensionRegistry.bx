@@ -117,6 +117,28 @@ class {
 		return all
 	}
 
+	/**
+	 * @return The keys of the loaded extensions (ExtensionKey objects)
+	 */
+	array function keys() {
+		var all = []
+		for ( var extension in variables.extensions.filter( e => e.isLoaded() ) ) {
+			all.append( extension.keys(), true )
+		}
+		return all
+	}
+
+	/**
+	 * @return The status items of the loaded extensions (ExtensionStatus objects)
+	 */
+	array function statuses() {
+		var all = []
+		for ( var extension in variables.extensions.filter( e => e.isLoaded() ) ) {
+			all.append( extension.statuses(), true )
+		}
+		return all
+	}
+
 	// ----------------------------------------------------------------------------------
 
 	/**
@@ -179,6 +201,16 @@ class {
 			variables.loader.unload( arguments.extension )
 			arguments.extension.become( "failed" ).problem( "Could not set up its listeners: #e.message#" )
 			return
+		}
+		for ( var key in arguments.extension.keys().map( k => k ) ) {
+			if ( disabled( extensionName, key.item() ) ) {
+				arguments.extension.dropKey( key )
+			}
+		}
+		for ( var status in arguments.extension.statuses().map( s => s ) ) {
+			if ( disabled( extensionName, status.name() ) ) {
+				arguments.extension.dropStatus( status )
+			}
 		}
 		for ( var command in arguments.extension.commands().map( c => c ) ) {
 			if ( disabled( arguments.extension.name(), command.name() ) ) {

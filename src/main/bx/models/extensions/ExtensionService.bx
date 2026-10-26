@@ -86,6 +86,53 @@ class {
 	}
 
 	/**
+	 * @return The keys extensions bind, as the screen takes them: [ { id, does, keys } ]
+	 */
+	array function keys() {
+		return isNull( variables.registry ) ? [] : variables.registry.keys().map( k => k.describe() )
+	}
+
+	/**
+	 * Runs the action of a key an extension bound.
+	 *
+	 * @id The key's id, such as "release:deploy"
+	 * @context The CommandContext
+	 * @commands The CommandRegistry
+	 *
+	 * @return A Reply, or null when no extension has that id
+	 */
+	any function pressed( required string id, required any context, required any commands ) {
+		for ( var key in isNull( variables.registry ) ? [] : variables.registry.keys() ) {
+			if ( key.id() == arguments.id ) {
+				return key.run( arguments.context, arguments.commands )
+			}
+		}
+	}
+
+	/**
+	 * @context The CommandContext
+	 *
+	 * @return [ { name, text } ] for every status item that has something to show
+	 */
+	array function statusItems( required any context ) {
+		var shown = []
+		for ( var status in isNull( variables.registry ) ? [] : variables.registry.statuses() ) {
+			var text = status.text( arguments.context )
+			if ( len( text ) ) {
+				shown.append( { name : status.name(), text : text } )
+			}
+		}
+		return shown
+	}
+
+	/**
+	 * @return The status items on one line, such as "main · build ok"
+	 */
+	string function statusLine( required any context ) {
+		return statusItems( arguments.context ).map( i => i.text ).toList( " · " )
+	}
+
+	/**
 	 * @return The plain facts about each extension (see Extension.describe)
 	 */
 	array function report() {

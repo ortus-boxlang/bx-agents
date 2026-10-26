@@ -1,0 +1,33 @@
+/**
+ * A key and a piece of status. Ctrl+G runs /pulse (the key is on a command, so it is typed-command
+ * identical: same rules, same events). `@Status` puts the count of pulses next to the size of the context.
+ * The second key shows a method that is not a command: it is called with the agentContext and an empty text.
+ * `register( registry )` is the same thing written as calls, for what annotations cannot say.
+ */
+class {
+
+	function configure() {
+		variables.settings = { label : "pulse" }
+		variables.beats = 0
+	}
+
+	@Command
+	@Hint( "count a pulse" )
+	@Key( "ctrl+g" )
+	function pulse( agentContext, commandArguments ) {
+		variables.beats++
+		return agentContext.reply().ok( "#settings.label# #variables.beats#" )
+	}
+
+	@Key( { keys : [ "ctrl+y" ], hint : "reset the pulse count" } )
+	function resetPulse( agentContext, commandArguments ) {
+		variables.beats = 0
+		return agentContext.reply().ok( "#settings.label# reset" )
+	}
+
+	@Status
+	function beats( agentContext ) {
+		return variables.beats > 0 ? "#settings.label# #variables.beats#" : ""
+	}
+
+}

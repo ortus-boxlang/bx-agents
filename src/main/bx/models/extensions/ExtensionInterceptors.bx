@@ -70,6 +70,16 @@ class {
 				}
 			}
 		}
+
+		// functions the extension handed to registry.on( point, call ) in register()
+		for ( var entry in arguments.extension.functionListeners() ) {
+			if ( !known( entry.point ) ) {
+				arguments.extension.problem( "registry.on listens to [#entry.point#], which is not an interception point the runtime knows." )
+				continue
+			}
+			var call = entry.call
+			listening.append( attach( name, "registry.on", entry.point, ( data ) => call( data ), arguments.extension ) )
+		}
 		return listening
 	}
 
@@ -116,13 +126,25 @@ class {
 	private struct function listen( required string name, required any object, required string method, required string point, required any extension ) {
 		var target = arguments.object
 		var methodName = arguments.method
+		return attach( arguments.name, arguments.method, arguments.point, ( data ) => invoke( target, methodName, [ data ] ), arguments.extension )
+	}
+
+	/**
+	 * Registers one handler for one point, wrapped so a throw is a problem of the extension.
+	 *
+	 * @label What to call the handler in a problem, such as a method name
+	 * @handler A function( data )
+	 */
+	private struct function attach( required string name, required string label, required string point, required any handler, required any extension ) {
+		var handler = arguments.handler
 		var owner = arguments.extension
+		var label = arguments.label
 		var point = arguments.point
 		var adapter = ( data ) => {
 			try {
-				invoke( target, methodName, [ data ] )
+				handler( data )
 			} catch ( any e ) {
-				owner.problem( "#methodName# failed on #point#: #e.message#" )
+				owner.problem( "#label# failed on #point#: #e.message#" )
 			}
 		}
 		BoxRegisterInterceptor( adapter, arguments.point )
@@ -131,7 +153,7 @@ class {
 		var observers = variables.pool.getState( createObject( "java", "ortus.boxlang.runtime.scopes.Key" ).of( arguments.point ) ).getObservers()
 		variables.registered[ arguments.name ] = variables.registered[ arguments.name ] ?: []
 		variables.registered[ arguments.name ].append( { point : arguments.point, wrapper : observers[ observers.len() ].interceptor } )
-		return { extension : arguments.name, method : arguments.method, point : arguments.point }
+		return { extension : arguments.name, method : arguments.label, point : arguments.point }
 	}
 
 	/**

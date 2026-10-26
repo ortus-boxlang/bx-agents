@@ -1,0 +1,46 @@
+/**
+ * A piece of status an extension shows next to the size of the context: in the hint row under the terminal
+ * message box and as a chip in the web page's header. It is asked each time the box is drawn, so it is always
+ * as current as the thing it reports (a branch, a build, a queue length). An empty text shows nothing.
+ *
+ * It must be quick, and it must not throw: when it does, the item is left out and the reason is put on its
+ * extension once, so a broken item never costs the person their prompt.
+ */
+class {
+
+	/**
+	 * @extension The Extension (to put a problem on)
+	 * @name The item's name
+	 * @call A function( context ) that returns the text
+	 */
+	function init( required any extension, required string name, required any call ) {
+		variables.extension = arguments.extension
+		variables.name = arguments.name
+		variables.call = arguments.call
+		variables.complained = false
+		return this
+	}
+
+	string function name() {
+		return variables.name
+	}
+
+	/**
+	 * @context The CommandContext
+	 *
+	 * @return The text, or "" for nothing to show
+	 */
+	string function text( required any context ) {
+		try {
+			var shown = variables.call( arguments.context )
+			return isNull( shown ) || !isSimpleValue( shown ) ? "" : trim( shown )
+		} catch ( any e ) {
+			if ( !variables.complained ) {
+				variables.complained = true
+				variables.extension.problem( "Its status item #variables.name# failed: #e.message#" )
+			}
+			return ""
+		}
+	}
+
+}
