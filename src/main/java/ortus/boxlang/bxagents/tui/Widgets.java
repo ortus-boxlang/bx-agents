@@ -56,6 +56,13 @@ public final class Widgets {
 		WIDGETS.put( widget.name().toLowerCase( Locale.ROOT ), widget );
 	}
 
+	/** Takes a widget away by its name, such as one that was registered for a moment; nothing happens when there is none. */
+	public static synchronized void unregister( String name ) {
+		if ( name != null ) {
+			WIDGETS.remove( name.trim().toLowerCase( Locale.ROOT ) );
+		}
+	}
+
 	/**
 	 * @param name a widget name, in any case
 	 *
