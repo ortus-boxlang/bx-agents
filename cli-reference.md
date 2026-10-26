@@ -121,6 +121,9 @@ What the model calls used: tokens by model, provider, day or user, once the proj
 ::: card title="inspect" icon="phosphor-duotone:magnifying-glass" href="#inspect"
 Report how the agent is composed, from its source.
 :::
+::: card title="extensions" icon="phosphor-duotone:puzzle-piece" href="#extensions"
+List the extensions the chat loads, where each came from and what it added.
+:::
 ::: card title="clean" icon="phosphor-duotone:broom" href="#clean"
 Remove a project's .build/ and dist/ output.
 :::
@@ -906,6 +909,17 @@ The report has these sections, in this order. `--section` takes any of the names
 - `--json` is the report itself, not the manifest. The manifest is a plain file at `.build/manifest.json`, described in [The Manifest](manifest.md).
 - `--md=FILE` is the only thing `inspect` ever writes. A relative file is created inside the project.
 - A folder with no `Agent.yaml` or `Agent.bx` is an error.
+
+### `extensions`
+
+List the [extensions](conventions/extensions.md) the terminal chat would load for this project: the project's `extensions/`, your own `~/.bxagents/extensions/`, and the `extensions/` of installed modules. It loads them the way `chat` does, so an extension that fails to load shows up here with the reason. It never needs a built project.
+
+```bash
+bxAgents extensions [--json]
+```
+
+- One line per extension: its name, which layer it came from, whether it loaded, then the commands and schedulers it added and anything that went wrong.
+- `--json` prints `{ extensions, problems }` for scripting.
 
 ### `clean`
 

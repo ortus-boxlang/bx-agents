@@ -121,6 +121,9 @@ Lo que usaron las llamadas al modelo: tokens por modelo, proveedor, día o usuar
 ::: card title="inspect" icon="phosphor-duotone:magnifying-glass" href="#inspect"
 Informa de cómo está compuesto el agente, a partir de su código fuente.
 :::
+::: card title="extensions" icon="phosphor-duotone:puzzle-piece" href="#extensions"
+Lista las extensiones que carga el chat, de dónde viene cada una y qué añadió.
+:::
 ::: card title="clean" icon="phosphor-duotone:broom" href="#clean"
 Elimina la salida .build/ y dist/ de un proyecto.
 :::
@@ -879,6 +882,17 @@ El informe tiene estas secciones, en este orden. `--section` acepta cualquiera d
 - `--json` es el propio informe, no el manifest. El manifest es un archivo plano en `.build/manifest.json`, descrito en [El manifest](manifest.md).
 - `--md=FILE` es lo único que `inspect` escribe. Un archivo relativo se crea dentro del proyecto.
 - Una carpeta sin `Agent.yaml` ni `Agent.bx` es un error.
+
+### `extensions`
+
+Lista las [extensiones](conventions/extensions.md) que cargaría el chat de terminal para este proyecto: el `extensions/` del proyecto, tu propio `~/.bxagents/extensions/` y el `extensions/` de los módulos instalados. Las carga como lo hace `chat`, así que una extensión que falla al cargar aparece aquí con el motivo. No necesita un proyecto compilado.
+
+```bash
+bxAgents extensions [--json]
+```
+
+- Una línea por extensión: su nombre, de qué capa viene, si cargó, y luego los comandos y schedulers que añadió y cualquier problema.
+- `--json` imprime `{ extensions, problems }` para scripts.
 
 ### `clean`
 
