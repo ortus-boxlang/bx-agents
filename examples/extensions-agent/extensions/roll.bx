@@ -1,0 +1,40 @@
+/**
+ * Dice for the chat: /roll 2d6 (two six-sided dice). Shows several commands in one extension,
+ * the four ways an annotation can be written, and `$inject` used from the outside (a test can
+ * hand it a fixed random function).
+ */
+class {
+
+	function configure() {
+		variables.settings = { sides : 6, limit : 20 }
+		variables.random = ( low, high ) => randRange( low, high )
+	}
+
+	// bare annotation: the command is named after the method
+	@Command
+	@Hint( "roll dice: /roll 2d6, or /roll for one die" )
+	@Alias( [ "dice", "d" ] )
+	function roll( agentContext, commandArguments ) {
+		var spec = len( trim( commandArguments ) ) ? trim( commandArguments ) : "1d#settings.sides#"
+		if ( !reFindNoCase( "^[0-9]+d[0-9]+$", spec ) ) {
+			return agentContext.reply().warn( "Say how many dice and how many sides, like /roll 2d6." )
+		}
+		var count = listFirst( spec, "dD" )
+		var sides = listLast( spec, "dD" )
+		if ( count > settings.limit || count < 1 || sides < 2 ) {
+			return agentContext.reply().warn( "Between 1 and #settings.limit# dice, with at least 2 sides." )
+		}
+		var rolls = []
+		for ( var i = 1; i <= count; i++ ) {
+			rolls.append( random( 1, sides ) )
+		}
+		return agentContext.reply().ok( "#spec#: #rolls.toList( ' + ' )# = #rolls.sum()#" )
+	}
+
+	// struct annotation: every option in one place
+	@Command( { name : "coin", hint : "flip a coin", transports : [ "tui", "web" ] } )
+	function flip( agentContext ) {
+		return agentContext.reply().ok( random( 1, 2 ) == 1 ? "Heads" : "Tails" )
+	}
+
+}

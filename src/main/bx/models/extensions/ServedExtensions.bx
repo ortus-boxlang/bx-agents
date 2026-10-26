@@ -1,0 +1,78 @@
+/**
+ * The extensions of a served agent (`bxAgents serve`, a deployed app), started once when the app starts.
+ *
+ *   - loads the extensions the build copied into the app (`<app>/extensions`), with the settings
+ *     Agent.yaml gave them (`<app>/config/extensions.json`). The person's own folder is never read here:
+ *     a server does not look in a developer's home.
+ *   - puts the commands, the built-ins and the extensions', in `application.bxagentsCommands`, which the
+ *     web page, the HTTP command route and the chat platforms answer with (CommandCatalog.forApplication)
+ *   - starts each extension's BoxLang schedulers (ExtensionSchedulers) in the runtime's scheduler service,
+ *     so a schedule an extension brings runs inside the served app. They are given the extension's
+ *     merged `settings` before their `configure()` runs.
+ */
+class {
+
+	/**
+	 * @appDir The generated app's folder
+	 */
+	function init( required string appDir ) {
+		variables.appDir = arguments.appDir.reReplace( "[\\/]+$", "" )
+		variables.service = nullValue()
+		return this
+	}
+
+	/**
+	 * @return this
+	 */
+	function start() {
+		var commands = new "models.chat.commands.CommandCatalog@bxagents"().standard()
+		variables.service = new "models.extensions.ExtensionService@bxagents"(
+			projectRoot     : "",
+			userConfig      : new "models.cli.UserConfig@bxagents"( variables.appDir & "/config/no-user-config.yml" ),
+			transport       : "web",
+			projectSettings : settings(),
+			projectFolder   : variables.appDir & "/extensions"
+		)
+		variables.service.install( commands )
+		application.bxagentsCommands = commands
+		application.bxagentsExtensions = variables.service
+		variables.schedulers = new "models.extensions.ExtensionSchedulers@bxagents"()
+		variables.schedulers.start( variables.service.registry() )
+		return this
+	}
+
+	/**
+	 * Stops the schedulers and unloads the extensions (`onUnload()` of each).
+	 */
+	function stop() {
+		if ( !isNull( variables.schedulers ) ) {
+			variables.schedulers.stop()
+		}
+		if ( !isNull( variables.service ) ) {
+			variables.service.unload()
+		}
+		return this
+	}
+
+	/**
+	 * @return The ExtensionService, once started
+	 */
+	any function service() {
+		return variables.service
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @return The `extensions:` block the build wrote (an empty struct when there is none)
+	 */
+	private struct function settings() {
+		var file = variables.appDir & "/config/extensions.json"
+		if ( !fileExists( file ) ) {
+			return {}
+		}
+		var parsed = jsonDeserialize( fileRead( file ) )
+		return isStruct( parsed ) ? parsed : {}
+	}
+
+}

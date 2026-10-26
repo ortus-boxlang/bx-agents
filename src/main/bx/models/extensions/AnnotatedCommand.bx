@@ -1,0 +1,50 @@
+/**
+ * A command described by an annotated method of an extension class:
+ *
+ *   @Command( "deploy" )
+ *   @Hint( "deploy the app: /deploy staging" )
+ *   @Admin
+ *   function deploy( agentContext, commandArguments ) { ... }
+ *
+ * The method is called with the CommandContext (the conversation and nothing else) and the text that
+ * followed the command name.
+ */
+class extends="models.chat.commands.BaseCommand@bxagents" {
+
+	/**
+	 * @instance The extension object the method belongs to
+	 * @method The method's name
+	 * @options { name, hint, admin, transports, aliases } already settled
+	 */
+	function init( required any instance, required string method, required struct options ) {
+		variables.instance = arguments.instance
+		variables.method = arguments.method
+		variables.options = arguments.options
+		return this
+	}
+
+	string function name() {
+		return variables.options.name
+	}
+
+	array function aliases() {
+		return variables.options.aliases
+	}
+
+	string function hint() {
+		return variables.options.hint
+	}
+
+	array function transports() {
+		return variables.options.transports
+	}
+
+	string function permission() {
+		return variables.options.admin ? "admin" : "anyone"
+	}
+
+	any function run( required any context, required string args ) {
+		return invoke( variables.instance, variables.method, [ arguments.context, arguments.args ] )
+	}
+
+}

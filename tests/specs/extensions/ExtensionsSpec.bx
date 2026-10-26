@@ -1,0 +1,489 @@
+/**
+ * Extensions: how they are found, brought to life, configured, injected, turned off, and how the
+ * commands they add behave in the chat. Real extension files are loaded by the real loader; the ones in
+ * examples/extensions-agent are the documented examples, so they are tested here too.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+
+		describe( "annotations", function() {
+
+			beforeEach( function() {
+				variables.annotations = new bxagents.models.extensions.ExtensionAnnotations();
+			} );
+
+			it( "reads the four ways an annotation is written", function() {
+				var bare = annotations.options( { Command : "" }, "command", "name" );
+				var simple = annotations.options( { Command : "deploy" }, "Command", "name" );
+				var several = annotations.options( { Command : [ "a", "b" ] }, "COMMAND", "name" );
+				var full = annotations.options( { Command : { name : "deploy", admin : true } }, "Command", "name" );
+
+				expect( bare ).toBe( {} );
+				expect( simple ).toBe( { name : "deploy" } );
+				expect( several ).toBe( { name : [ "a", "b" ] } );
+				expect( full ).toBe( { name : "deploy", admin : true } );
+				expect( isNull( annotations.options( {}, "Command", "name" ) ) ).toBeTrue();
+			} );
+
+			it( "lets a struct option win over a shorthand annotation, and reports the clash", function() {
+				var problems = [];
+				var hint = annotations.setting( { hint : "from the struct" }, "hint", { Hint : "shorthand" }, "Hint", "", problems, "x.y" );
+				expect( hint ).toBe( "from the struct" );
+				expect( problems ).toHaveLength( 1 );
+				expect( problems[ 1 ] ).toInclude( "x.y" );
+
+				var same = [];
+				annotations.setting( { hint : "same" }, "hint", { Hint : "same" }, "Hint", "", same, "x.y" );
+				expect( same ).toBeEmpty();
+			} );
+
+			it( "treats a bare shorthand as true and a missing one as the default", function() {
+				expect( annotations.setting( {}, "admin", { Admin : "" }, "Admin", false, [], "x" ) ).toBeTrue();
+				expect( annotations.setting( {}, "admin", {}, "Admin", false, [], "x" ) ).toBeFalse();
+			} );
+
+		} );
+
+		describe( "settings", function() {
+
+			beforeEach( function() {
+				variables.tools = new bxagents.models.extensions.ExtensionSettings();
+			} );
+
+			it( "merges values over defaults key by key, and replaces arrays", function() {
+				var merged = tools.merge(
+					{ a : 1, nested : { x : 1, y : 2 }, list : [ 1, 2 ] },
+					{ nested : { y : 9 }, list : [ 3 ], extra : true }
+				);
+				expect( merged ).toBe( { a : 1, nested : { x : 1, y : 9 }, list : [ 3 ], extra : true } );
+			} );
+
+			it( "does not change what it is given", function() {
+				var defaults = { nested : { x : 1 } };
+				tools.merge( defaults, { nested : { x : 2 } } );
+				expect( defaults.nested.x ).toBe( 1 );
+			} );
+
+			it( "puts the project over the person and joins the disable lists", function() {
+				var combined = tools.combine( [
+					{ disable : [ "roll" ], hello : { greeting : "Hi", x : 1 } },
+					{ disable : "deploy:deploy", hello : { greeting : "Welcome" } }
+				] );
+				expect( combined.disable ).toBe( [ "roll", "deploy:deploy" ] );
+				expect( combined.hello ).toBe( { greeting : "Welcome", x : 1 } );
+			} );
+
+			it( "matches names and globs ignoring case", function() {
+				expect( tools.matches( "acme-*", "ACME-tools" ) ).toBeTrue();
+				expect( tools.matches( "*-tools", "acme-tools" ) ).toBeTrue();
+				expect( tools.matches( "a*e", "acme" ) ).toBeTrue();
+				expect( tools.matches( "acme", "acme-tools" ) ).toBeFalse();
+				expect( tools.matches( "a.c", "abc" ) ).toBeFalse();
+			} );
+
+			it( "says what is wrong with an extensions block", function() {
+				expect( tools.problems( { disable : [ "a" ], hello : { x : 1 } }, "Agent.yaml" ) ).toBeEmpty();
+				expect( tools.problems( "nope", "Agent.yaml" ) ).toHaveLength( 1 );
+				expect( tools.problems( { hello : "text" }, "Agent.yaml" )[ 1 ] ).toInclude( "extensions.hello" );
+				expect( tools.problems( { disable : { a : 1 } }, "Agent.yaml" )[ 1 ] ).toInclude( "disable" );
+			} );
+
+		} );
+
+		describe( "the registry", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-extensions-" );
+				variables.commands = new bxagents.models.chat.commands.CommandCatalog().standard();
+				variables.context = ( transport = "tui", admin = true ) => new bxagents.models.chat.commands.CommandContext( { agentName : () => "helper" }, transport, admin );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function write( required string path, required string code ) {
+				directoryCreate( getDirectoryFromPath( dir & "/" & path ), true, true );
+				fileWrite( dir & "/" & path, code );
+			}
+
+			function load( struct settings = {}, array layers = [ { layer : "project", folder : "extensions" } ] ) {
+				var registry = new bxagents.models.extensions.ExtensionRegistry( commands, settings );
+				for ( var layer in layers ) {
+					registry.addLayer( layer.layer, dir & "/" & layer.folder );
+				}
+				return registry.load();
+			}
+
+			function say( required string line, string transport = "tui", boolean admin = true ) {
+				return commands.run( line, context( transport, admin ) ).blocks().map( b => b.type == "text" ? b.text : jsonSerialize( b ) ).toList( " | " );
+			}
+
+			it( "finds a single file, a folder with an Extension.bx, and a folder with only convention folders", function() {
+				write( "extensions/solo.bx", "class { @Command function solo() { return 'solo ran' } }" );
+				write( "extensions/whole/Extension.bx", "class { this.title = 'Whole'; }" );
+				write( "extensions/bare/commands/Bare.bx", "class extends='models.chat.commands.BaseCommand@bxagents' { function name() { return 'bare' } function run( c, a ) { return 'bare ran' } }" );
+				write( "extensions/.hidden/Extension.bx", "class {}" );
+				write( "extensions/notes.txt", "not an extension" );
+				write( "extensions/random/readme.md", "not an extension either" );
+
+				var found = new bxagents.models.extensions.ExtensionScanner().scan( dir & "/extensions", "project" ).map( e => e.name() );
+
+				expect( found ).toBe( [ "bare", "solo", "whole" ] );
+			} );
+
+			it( "scans a folder that is not there as nothing", function() {
+				expect( new bxagents.models.extensions.ExtensionScanner().scan( dir & "/nope", "user" ) ).toBeEmpty();
+			} );
+
+			it( "adds the commands of a single-file extension and runs them", function() {
+				write( "extensions/solo.bx", "class { @Command( 'solo' ) @Hint( 'says hi' ) function go( agentContext, commandArguments ) { return agentContext.reply().ok( 'solo got [' & commandArguments & ']' ) } }" );
+				load();
+
+				expect( commands.lookup( "solo" ).hint() ).toBe( "says hi" );
+				expect( say( "/solo one two" ) ).toBe( "solo got [one two]" );
+				expect( commands.menu( "tui" ).map( c => c.name ) ).toInclude( "/solo" );
+			} );
+
+			it( "names a bare @Command after the method, and takes aliases, transports and admin from a struct or shorthands", function() {
+				write( "extensions/many.bx", "class {
+					@Command function ping2( agentContext ) { return 'pong' }
+					@Command( { name : 'Full', hint : 'all in one', admin : true, aliases : [ 'f' ], transports : [ 'tui' ] } ) function whole( agentContext ) { return 'whole' }
+					@Command( 'short' ) @Admin @Alias( 'sh' ) @Transports( [ 'web' ] ) function shorthand( agentContext ) { return 'short' }
+				}" );
+				load();
+
+				expect( commands.lookup( "ping2" ).permission() ).toBe( "anyone" );
+				var full = commands.lookup( "full" );
+				expect( full.name() ).toBe( "full" );
+				expect( full.aliases() ).toBe( [ "f" ] );
+				expect( full.permission() ).toBe( "admin" );
+				expect( full.transports() ).toBe( [ "tui" ] );
+				expect( commands.lookup( "f" ).name() ).toBe( "full" );
+				var short = commands.lookup( "short" );
+				expect( short.permission() ).toBe( "admin" );
+				expect( short.transports() ).toBe( [ "web" ] );
+				expect( short.aliases() ).toBe( [ "sh" ] );
+				expect( say( "/full", "web" ) ).toInclude( "not available here" );
+				expect( say( "/short", "web", false ) ).toInclude( "for admins" );
+				expect( say( "/short", "web", true ) ).toBe( "short" );
+			} );
+
+			it( "calls configure(), merges the people's values over its settings, and injects settings and log", function() {
+				write( "extensions/conf.bx", "class {
+					function configure() { variables.settings = { greeting : 'Hello', nested : { a : 1, b : 2 } } }
+					@Command( 'conf' ) function conf( agentContext ) { log.info( 'ran' ); return settings.greeting & ' ' & settings.nested.a & ' ' & settings.nested.b }
+				}" );
+				load( { conf : { greeting : "Welcome", nested : { b : 9 } } } );
+
+				expect( say( "/conf" ) ).toBe( "Welcome 1 9" );
+				var extension = commands.lookup( "conf" ).extension();
+				expect( extension ).toBe( "conf" );
+			} );
+
+			it( "lets the code under test hand an extension something with $inject, in both scopes or private only", function() {
+				write( "extensions/inj.bx", "class {
+					@Command( 'inj' ) function inj( agentContext ) { return variables.keyExists( 'tool' ) ? 'tool=' & tool : 'no tool' }
+					function onThis() { return structKeyExists( this, 'tool' ) }
+					function onThat() { return structKeyExists( this, 'secret' ) }
+				}" );
+				var registry = load();
+				var instance = registry.extensions()[ 1 ].instance();
+
+				expect( say( "/inj" ) ).toBe( "no tool" );
+				instance.$inject( "tool", "hammer" );
+				instance.$inject( "secret", "shh", "variables" );
+
+				expect( say( "/inj" ) ).toBe( "tool=hammer" );
+				expect( instance.onThis() ).toBeTrue();
+				expect( instance.onThat() ).toBeFalse();
+				expect( instance.$read( "secret" ) ).toBe( "shh" );
+			} );
+
+			it( "reads the module-config properties and runs onLoad() after everything is in place, onUnload() on unload", function() {
+				write( "extensions/life.bx", "class {
+					this.title = 'Life'; this.version = '2.1.0'; this.author = 'Me'; this.description = 'about life';
+					function configure() { variables.settings = { n : 1 } }
+					function onLoad() { log.info( 'loaded with n=' & settings.n ) }
+					function onUnload() { log.info( 'unloaded' ) }
+					@Command( 'life' ) function life( agentContext ) { return 'alive' }
+				}" );
+				var registry = load();
+				var extension = registry.extensions()[ 1 ];
+
+				expect( extension.state() ).toBe( "loaded" );
+				expect( extension.describe().title ).toBe( "Life" );
+				expect( extension.describe().version ).toBe( "2.1.0" );
+				expect( extension.describe().description ).toBe( "about life" );
+				expect( extension.logLines().map( l => l.message ) ).toBe( [ "loaded with n=1" ] );
+
+				registry.unload();
+				expect( extension.logLines().map( l => l.message ) ).toBe( [ "loaded with n=1", "unloaded" ] );
+				expect( isNull( commands.lookup( "life" ) ) ).toBeTrue();
+			} );
+
+			it( "loads again after an unload", function() {
+				write( "extensions/again.bx", "class { @Command( 'again' ) function again( agentContext ) { return 'yes' } }" );
+				var registry = load();
+				registry.unload();
+				expect( isNull( commands.lookup( "again" ) ) ).toBeTrue();
+				registry.load();
+				expect( say( "/again" ) ).toBe( "yes" );
+			} );
+
+			it( "answers a command that throws with a warning that names the extension, and the chat carries on", function() {
+				write( "extensions/boom.bx", "class { @Command( 'boom' ) function boom( agentContext ) { throw( message = 'kaboom' ) } }" );
+				load();
+
+				expect( say( "/boom" ) ).toBe( "The extension [boom] failed in /boom: kaboom" );
+				expect( say( "/help" ) ).toInclude( "boom" );
+			} );
+
+			it( "accepts a plain string or nothing from a command", function() {
+				write( "extensions/plain.bx", "class { @Command( 'text' ) function t( agentContext ) { return 'just text' } @Command( 'nothing' ) function n( agentContext ) { } }" );
+				load();
+
+				expect( say( "/text" ) ).toBe( "just text" );
+				expect( say( "/nothing" ) ).toBe( "" );
+			} );
+
+			it( "loads a command class from commands/ with settings injected", function() {
+				write( "extensions/folder/Extension.bx", "class { function configure() { variables.settings = { word : 'folder' } } }" );
+				write( "extensions/folder/commands/Say.bx", "class extends='models.chat.commands.BaseCommand@bxagents' {
+					function name() { return 'say' }
+					function run( context, args ) { return context.reply().ok( settings.word & ':' & args ) }
+				}" );
+				load( { folder : { word : "changed" } } );
+
+				expect( say( "/say hi" ) ).toBe( "changed:hi" );
+			} );
+
+			it( "lists the schedulers of a loaded extension", function() {
+				write( "extensions/timed/Extension.bx", "class {}" );
+				write( "extensions/timed/schedulers/Nightly.bx", "class { function configure() {} }" );
+				var registry = load();
+
+				expect( registry.schedulers() ).toHaveLength( 1 );
+				expect( registry.schedulers()[ 1 ].extension ).toBe( "timed" );
+				expect( registry.schedulers()[ 1 ].name ).toBe( "Nightly" );
+				expect( registry.schedulers()[ 1 ].path ).toInclude( "timed/schedulers/Nightly.bx" );
+			} );
+
+			it( "lets a later layer replace an extension of the same name, and says so", function() {
+				write( "mods/same.bx", "class { @Command( 'who' ) function w( agentContext ) { return 'module' } }" );
+				write( "extensions/same.bx", "class { @Command( 'who' ) function w( agentContext ) { return 'project' } }" );
+				var registry = load( {}, [ { layer : "modules", folder : "mods" }, { layer : "project", folder : "extensions" } ] );
+				var report = registry.report();
+
+				expect( say( "/who" ) ).toBe( "project" );
+				expect( report.map( e => e.layer & ":" & e.state ) ).toBe( [ "modules:replaced", "project:loaded" ] );
+				expect( report[ 2 ].replaces ).toBe( [ "modules" ] );
+			} );
+
+			it( "lets an extension replace a built-in command, and says so", function() {
+				write( "extensions/info.bx", "class { @Command( 'info' ) function i( agentContext ) { return 'my info' } }" );
+				var registry = load();
+
+				expect( say( "/info" ) ).toBe( "my info" );
+				expect( registry.report()[ 1 ].problems[ 1 ] ).toInclude( "built in" );
+				expect( commands.menu( "tui" ).filter( c => c.name == "/info" ) ).toHaveLength( 1 );
+			} );
+
+			it( "lets the last extension win when two add the same command, and says whose it replaced", function() {
+				write( "extensions/a.bx", "class { @Command( 'dup' ) function d( agentContext ) { return 'a' } }" );
+				write( "extensions/b.bx", "class { @Command( 'dup' ) function d( agentContext ) { return 'b' } }" );
+				var registry = load();
+
+				expect( say( "/dup" ) ).toBe( "b" );
+				expect( registry.report()[ 2 ].problems[ 1 ] ).toInclude( "extension [a]" );
+			} );
+
+			it( "turns an extension off by name or glob, and an item by extension:item", function() {
+				write( "extensions/keep.bx", "class { @Command( 'keep' ) function k( agentContext ) { return 'k' } @Command( 'skip' ) function s( agentContext ) { return 's' } }" );
+				write( "extensions/acme-one.bx", "class { @Command( 'one' ) function o( agentContext ) { return 'o' } }" );
+				write( "extensions/off.bx", "class { @Command( 'off' ) function o( agentContext ) { return 'o' } }" );
+				var registry = load( { disable : [ "off", "acme-*", "keep:skip" ] } );
+
+				expect( say( "/keep" ) ).toBe( "k" );
+				expect( isNull( commands.lookup( "skip" ) ) ).toBeTrue();
+				expect( isNull( commands.lookup( "one" ) ) ).toBeTrue();
+				expect( isNull( commands.lookup( "off" ) ) ).toBeTrue();
+				expect( registry.report().map( e => e.name & ":" & e.state ) ).toBe( [ "acme-one:disabled", "keep:loaded", "off:disabled" ] );
+			} );
+
+			it( "honours this.enabled = false", function() {
+				write( "extensions/shy.bx", "class { this.enabled = false; @Command( 'shy' ) function s( agentContext ) { return 's' } }" );
+				var registry = load();
+
+				expect( registry.report()[ 1 ].state ).toBe( "disabled" );
+				expect( isNull( commands.lookup( "shy" ) ) ).toBeTrue();
+			} );
+
+			it( "fails one extension that cannot load, with the reason, and loads the others", function() {
+				write( "extensions/broken.bx", "class { function configure() { this is not valid" );
+				write( "extensions/fine.bx", "class { @Command( 'fine' ) function f( agentContext ) { return 'fine' } }" );
+				var registry = load();
+				var report = registry.report();
+
+				expect( report.map( e => e.name & ":" & e.state ) ).toBe( [ "broken:failed", "fine:loaded" ] );
+				expect( report[ 1 ].problems[ 1 ] ).toInclude( "Could not load" );
+				expect( say( "/fine" ) ).toBe( "fine" );
+			} );
+
+			it( "fails an extension whose onLoad() throws and takes none of its commands", function() {
+				write( "extensions/late.bx", "class { function onLoad() { throw( message = 'no database' ) } @Command( 'late' ) function l( agentContext ) { return 'l' } }" );
+				var registry = load();
+
+				expect( registry.report()[ 1 ].state ).toBe( "failed" );
+				expect( registry.report()[ 1 ].problems[ 1 ] ).toInclude( "no database" );
+				expect( isNull( commands.lookup( "late" ) ) ).toBeTrue();
+			} );
+
+			it( "fails an extension whose settings are not a struct, and one with a bad command name or transport", function() {
+				write( "extensions/a-sets.bx", "class { function configure() { variables.settings = 'text' } }" );
+				write( "extensions/b-name.bx", "class { @Command( 'Bad Name' ) function x( agentContext ) { } }" );
+				write( "extensions/c-trans.bx", "class { @Command( { name : 'ok', transports : [ 'phone' ] } ) function x( agentContext ) { } }" );
+				var registry = load();
+				var report = registry.report();
+
+				expect( report.map( e => e.state ) ).toBe( [ "failed", "failed", "failed" ] );
+				expect( report[ 1 ].problems[ 1 ] ).toInclude( "settings must be a struct" );
+				expect( report[ 2 ].problems[ 1 ] ).toInclude( "not a command name" );
+				expect( report[ 3 ].problems[ 1 ] ).toInclude( "not a transport" );
+			} );
+
+			it( "loads an extension after the one it depends on, and fails it when that is missing", function() {
+				write( "extensions/a-needs.bx", "class { this.dependencies = [ 'z-base' ]; @Command( 'needs' ) function n( agentContext ) { return 'n' } }" );
+				write( "extensions/b-lonely.bx", "class { this.dependencies = [ 'ghost' ]; @Command( 'lonely' ) function n( agentContext ) { return 'n' } }" );
+				write( "extensions/z-base.bx", "class { @Command( 'base' ) function b( agentContext ) { return 'b' } }" );
+				var registry = load();
+				var report = registry.report();
+
+				expect( report.map( e => e.name & ":" & e.state ) ).toBe( [ "a-needs:loaded", "b-lonely:failed", "z-base:loaded" ] );
+				expect( report[ 2 ].problems[ 1 ] ).toInclude( "ghost" );
+			} );
+
+		} );
+
+		describe( "the extension service", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-extsvc-" );
+				fileWrite( dir & "/user.yml", "extensions:
+  disable: [ roll ]
+  hello:
+    greeting: From the person
+" );
+				variables.userConfig = new bxagents.models.cli.UserConfig( dir & "/user.yml" );
+				directoryCreate( dir & "/project/extensions", true, true );
+				directoryCreate( dir & "/.bxagents/extensions", true, true );
+				variables.example = expandPath( "/examples/extensions-agent" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "reads the person's extensions block", function() {
+				expect( userConfig.extensions().hello.greeting ).toBe( "From the person" );
+				expect( userConfig.problems() ).toBeEmpty();
+				expect( new bxagents.models.cli.UserConfig( dir & "/nothing.yml" ).extensions() ).toBe( {} );
+			} );
+
+			it( "loads the user layer in the terminal chat only", function() {
+				directoryCreate( dir & "/extensions", true, true );
+				fileWrite( dir & "/extensions/mine.bx", "class { @Command( 'mine' ) function m( agentContext ) { return 'mine' } }" );
+
+				var terminal = new bxagents.models.chat.commands.CommandCatalog().standard();
+				new bxagents.models.extensions.ExtensionService( projectRoot : dir & "/project", userConfig : userConfig, transport : "tui", moduleFolders : [], projectSettings : {} ).install( terminal );
+				var served = new bxagents.models.chat.commands.CommandCatalog().standard();
+				new bxagents.models.extensions.ExtensionService( projectRoot : dir & "/project", userConfig : userConfig, transport : "web", moduleFolders : [], projectSettings : {} ).install( served );
+
+				expect( isNull( terminal.lookup( "mine" ) ) ).toBeFalse();
+				expect( isNull( served.lookup( "mine" ) ) ).toBeTrue();
+			} );
+
+			it( "loads the example project: every example adds what it says, and the project's values beat the person's", function() {
+				var service = new bxagents.models.extensions.ExtensionService( projectRoot : example, userConfig : userConfig, transport : "web", moduleFolders : [] );
+				var commands = new bxagents.models.chat.commands.CommandCatalog().standard();
+				service.install( commands );
+				var context = new bxagents.models.chat.commands.CommandContext( { agentName : () => "helper" }, "web", true );
+				var text = ( line ) => commands.run( line, context ).blocks().map( b => b.type == "text" ? b.text : jsonSerialize( b ) ).toList( " | " );
+
+				// the person turned roll off; the project did not turn it back on
+				expect( isNull( commands.lookup( "roll" ) ) ).toBeTrue();
+				// the project's greeting wins over the person's
+				expect( text( "/hello Ada" ) ).toBe( "Welcome aboard, Ada!" );
+				expect( text( "/deploy" ) ).toInclude( "production" );
+				expect( text( "/standup" ) ).toInclude( "team-standup" );
+				expect( service.problems() ).toBeEmpty();
+				service.unload();
+			} );
+
+			it( "lists the example extensions with what each added", function() {
+				var service = new bxagents.models.extensions.ExtensionService( projectRoot : example, userConfig : new bxagents.models.cli.UserConfig( dir & "/none.yml" ), transport : "web", moduleFolders : [] );
+				service.install( new bxagents.models.chat.commands.CommandCatalog().standard() );
+				var report = service.report();
+
+				expect( report.map( e => e.name ) ).toBe( [ "deploy", "hello", "roll", "standup" ] );
+				var byName = {};
+				report.each( e => byName[ e.name ] = e );
+				expect( byName.roll.commands ).toBe( [ "/roll", "/coin" ] );
+				expect( byName.deploy.title ).toBe( "Deploy helper" );
+				expect( byName.standup.commands ).toBe( [ "/standup" ] );
+				expect( byName.standup.schedulers ).toBe( [ "Reminder" ] );
+				expect( report.map( e => e.state ).unique() ).toBe( [ "loaded" ] );
+				service.unload();
+			} );
+
+			it( "rolls dice with a fixed random function handed in, and refuses what it cannot roll", function() {
+				var service = new bxagents.models.extensions.ExtensionService( projectRoot : example, userConfig : new bxagents.models.cli.UserConfig( dir & "/none.yml" ), transport : "web", moduleFolders : [] );
+				var commands = new bxagents.models.chat.commands.CommandCatalog().standard();
+				service.install( commands );
+				var context = new bxagents.models.chat.commands.CommandContext( {}, "web", true );
+				var text = ( line ) => commands.run( line, context ).blocks().map( b => b.text ).toList( " | " );
+				service.registry().extensions().filter( e => e.name() == "roll" )[ 1 ].instance().$inject( "random", ( low, high ) => 4 );
+
+				expect( text( "/roll 3d6" ) ).toBe( "3d6: 4 + 4 + 4 = 12" );
+				expect( text( "/dice" ) ).toBe( "1d6: 4 = 4" );
+				expect( text( "/roll banana" ) ).toInclude( "like /roll 2d6" );
+				expect( text( "/roll 99d6" ) ).toInclude( "Between 1 and 20" );
+				expect( text( "/coin" ) ).toBe( "Tails" );
+				service.unload();
+			} );
+
+			it( "keeps the deploy command for admins", function() {
+				var service = new bxagents.models.extensions.ExtensionService( projectRoot : example, userConfig : new bxagents.models.cli.UserConfig( dir & "/none.yml" ), transport : "web", moduleFolders : [] );
+				var commands = new bxagents.models.chat.commands.CommandCatalog().standard();
+				service.install( commands );
+				var stranger = new bxagents.models.chat.commands.CommandContext( {}, "web", false );
+
+				expect( commands.run( "/deploy", stranger ).blocks()[ 1 ].text ).toBe( "/deploy is for admins." );
+				service.unload();
+			} );
+
+			it( "shows the extensions with /extensions, and one in full", function() {
+				var service = new bxagents.models.extensions.ExtensionService( projectRoot : example, userConfig : new bxagents.models.cli.UserConfig( dir & "/none.yml" ), transport : "web", moduleFolders : [] );
+				var commands = new bxagents.models.chat.commands.CommandCatalog().standard();
+				service.install( commands );
+				var context = new bxagents.models.chat.commands.CommandContext( {}, "web", true );
+
+				var list = commands.run( "/extensions", context ).blocks();
+				expect( list[ 1 ].type ).toBe( "table" );
+				expect( jsonSerialize( list[ 1 ] ) ).toInclude( "standup" );
+				var one = jsonSerialize( commands.run( "/extensions deploy", context ).blocks() );
+				expect( one ).toInclude( "Deploy helper" );
+				expect( commands.run( "/extensions nope", context ).blocks()[ 1 ].text ).toInclude( "no extension called" );
+				service.unload();
+			} );
+
+		} );
+
+	}
+
+}

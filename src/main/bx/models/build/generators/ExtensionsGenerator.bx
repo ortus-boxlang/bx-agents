@@ -1,0 +1,36 @@
+/**
+ * Puts a project's extensions into the built app, so the served agent has them (`bxAgents serve`, a
+ * packaged `.bxa`, a deployed server):
+ *
+ *   extensions/            copied as it is to `<app>/extensions`. Only the project's own folder: the
+ *                          person's `~/.bxagents/extensions` is for their terminal chat and never travels.
+ *   config/extensions.json the `extensions:` block of Agent.yaml (the values per extension, and `disable`),
+ *                          which the app reads at start to configure them
+ *
+ * and returns the one statement the app runs at start (ServedExtensions) to load them, put their commands
+ * where the web page and the chat platforms look, and register their schedulers.
+ */
+class {
+
+	/**
+	 * @projectRoot The project's folder
+	 * @appDir The generated app's folder
+	 * @config The project's resolved config; only `extensions` is used
+	 *
+	 * @return { hasExtensions, startupStatement } - the statement is blank for a project with no extensions folder
+	 */
+	struct function generate( required string projectRoot, required string appDir, required struct config ) {
+		var source = arguments.projectRoot & "/extensions"
+		if ( !directoryExists( source ) ) {
+			return { hasExtensions : false, startupStatement : "" }
+		}
+		directoryCopy( source, arguments.appDir & "/extensions", true )
+		directoryCreate( path = arguments.appDir & "/config", createPath = true, ignoreExists = true )
+		fileWrite( arguments.appDir & "/config/extensions.json", jsonSerialize( isStruct( arguments.config.extensions ?: "" ) ? arguments.config.extensions : {} ) )
+		return {
+			hasExtensions    : true,
+			startupStatement : 'application.bxagentsServedExtensions = new "models.extensions.ServedExtensions@bxagents"( getDirectoryFromPath( getCurrentTemplatePath() ) ).start()'
+		}
+	}
+
+}

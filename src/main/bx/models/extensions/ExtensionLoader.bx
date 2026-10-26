@@ -1,0 +1,201 @@
+/**
+ * Brings one extension to life, in the order a ColdBox module is brought to life:
+ *
+ *   1. the class is created and given `$inject` and `$read` (ExtensionMixin)
+ *   2. `configure()` runs; it sets `variables.settings` to the defaults and does no work
+ *   3. the people's values from `Agent.yaml` / `bxAgents.yml` are merged over those defaults
+ *   4. `settings` and `log` are injected, into the extension and into every class of its folder
+ *   5. its pieces are collected: annotated methods and the convention folders
+ *   6. `onLoad()` runs, last, so it can rely on everything above
+ *
+ * Nothing reaches a registry until all of it worked: a throw anywhere leaves the extension `failed`
+ * with the reason, and nothing half-registered. `unload()` is `onUnload()`, never allowed to throw out.
+ */
+class {
+
+	/**
+	 * @settings The merged `extensions:` block (ExtensionSettings.combine)
+	 */
+	function init( struct settings = {} ) {
+		variables.settings = arguments.settings
+		variables.tools = new "models.extensions.ExtensionSettings@bxagents"()
+		variables.annotations = new "models.extensions.ExtensionAnnotations@bxagents"()
+		variables.mixin = new "models.extensions.ExtensionMixin@bxagents"()
+		return this
+	}
+
+	/**
+	 * Loads what the extension is and does, up to but not including `onLoad()`. The registry decides
+	 * whether the pieces may be used (disabled items, name clashes) before `finish()` runs `onLoad()`.
+	 *
+	 * @extension An Extension in the state "found"
+	 */
+	function prepare( required any extension ) {
+		var log = new "models.extensions.ExtensionLog@bxagents"( arguments.extension.name() )
+		try {
+			var instance = len( arguments.extension.classFile() ) ? create( arguments.extension.classFile() ) : new "models.extensions.ExtensionMixin@bxagents"()
+			equip( instance )
+			if ( structKeyExists( instance, "configure" ) ) {
+				instance.configure()
+			}
+			var defaults = instance.$read( "settings", {} )
+			if ( !isStruct( defaults ) ) {
+				throw( type : "bxagents.extension", message : "settings must be a struct, and configure() set it to something else." )
+			}
+			var merged = variables.tools.merge( defaults, variables.tools.forExtension( variables.settings, arguments.extension.name() ) )
+			instance.$inject( "settings", merged ).$inject( "log", log )
+			arguments.extension.useInstance( instance, propertiesOf( instance ), merged, log )
+			if ( ( arguments.extension.properties().enabled ?: true ) == false ) {
+				arguments.extension.become( "disabled" ).problem( "It sets this.enabled = false." )
+				return arguments.extension
+			}
+			collectAnnotatedCommands( arguments.extension )
+			collectFolderCommands( arguments.extension )
+			collectSchedulers( arguments.extension )
+		} catch ( any e ) {
+			arguments.extension.become( "failed" ).problem( "Could not load: #e.message#" )
+		}
+		return arguments.extension
+	}
+
+	/**
+	 * Runs `onLoad()`, the last step. A throw there fails the extension; the registry then takes its pieces back.
+	 *
+	 * @extension A prepared Extension
+	 *
+	 * @return true when it is now loaded
+	 */
+	boolean function finish( required any extension ) {
+		try {
+			var instance = arguments.extension.instance()
+			if ( structKeyExists( instance, "onLoad" ) ) {
+				instance.onLoad()
+			}
+			arguments.extension.become( "loaded" )
+			return true
+		} catch ( any e ) {
+			arguments.extension.become( "failed" ).problem( "onLoad() failed: #e.message#" )
+			return false
+		}
+	}
+
+	/**
+	 * @extension A loaded Extension
+	 */
+	function unload( required any extension ) {
+		if ( !arguments.extension.hasInstance() ) {
+			return arguments.extension
+		}
+		try {
+			var instance = arguments.extension.instance()
+			if ( structKeyExists( instance, "onUnload" ) ) {
+				instance.onUnload()
+			}
+		} catch ( any e ) {
+			arguments.extension.problem( "onUnload() failed: #e.message#" )
+		}
+		return arguments.extension
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private any function create( required string classFile ) {
+		var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
+		return createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" ).instantiate( arguments.classFile, context )
+	}
+
+	/**
+	 * Gives the object `$inject` and `$read`, unless it already defines its own.
+	 */
+	private any function equip( required any instance ) {
+		if ( !structKeyExists( arguments.instance, "$inject" ) ) {
+			arguments.instance.$inject = variables.mixin.$inject
+		}
+		if ( !structKeyExists( arguments.instance, "$read" ) ) {
+			arguments.instance.$read = variables.mixin.$read
+		}
+		return arguments.instance
+	}
+
+	/**
+	 * The module-config properties, set on `this` (title, author, webURL, description, version, enabled, dependencies).
+	 */
+	private struct function propertiesOf( required any instance ) {
+		var found = {}
+		for ( var key in [ "title", "author", "webURL", "description", "version", "enabled", "dependencies" ] ) {
+			if ( structKeyExists( arguments.instance, key ) ) {
+				found[ key ] = arguments.instance[ key ]
+			}
+		}
+		return found
+	}
+
+	private void function collectAnnotatedCommands( required any extension ) {
+		var instance = arguments.extension.instance()
+		var found = getMetaData( instance ).functions ?: []
+		for ( var method in found ) {
+			var given = method.annotations ?: {}
+			var options = variables.annotations.options( given, "Command", "name" )
+			if ( isNull( options ) ) {
+				continue
+			}
+			var problems = []
+			var where = "#arguments.extension.name()#.#method.name#"
+			var settled = {
+				name       : lCase( trim( variables.annotations.setting( options, "name", given, "", method.name, problems, where ) ) ),
+				hint       : variables.annotations.setting( options, "hint", given, "Hint", "", problems, where ),
+				admin      : variables.annotations.setting( options, "admin", given, "Admin", false, problems, where ) == true,
+				transports : asArray( variables.annotations.setting( options, "transports", given, "Transports", [ "tui", "web", "gateway" ], problems, where ) ),
+				aliases    : asArray( variables.annotations.setting( options, "aliases", given, "Alias", [], problems, where ) ).map( a => lCase( a ) )
+			}
+			for ( var problem in problems ) {
+				arguments.extension.problem( problem )
+			}
+			var unknown = settled.transports.filter( t => ![ "tui", "web", "gateway" ].containsNoCase( t ) )
+			if ( unknown.len() ) {
+				throw( type : "bxagents.extension", message : "#where#: [#unknown.toList( ', ' )#] is not a transport. Use tui, web or gateway." )
+			}
+			if ( !reFind( "^[a-z][a-z0-9_-]*$", settled.name ) ) {
+				throw( type : "bxagents.extension", message : "#where#: [#settled.name#] is not a command name (letters, digits, - and _)." )
+			}
+			arguments.extension.addCommand( new "models.extensions.ExtensionCommand@bxagents"( arguments.extension.name(), new "models.extensions.AnnotatedCommand@bxagents"( instance, method.name, settled ) ) )
+		}
+	}
+
+	private void function collectFolderCommands( required any extension ) {
+		var folder = arguments.extension.folder()
+		if ( !len( folder ) || !directoryExists( folder & "/commands" ) ) {
+			return
+		}
+		for ( var path in directoryList( folder & "/commands", false, "path", "*.bx", "asc" ) ) {
+			var command = create( path )
+			equip( command )
+			command.$inject( "settings", arguments.extension.settings() ).$inject( "log", new "models.extensions.ExtensionLog@bxagents"( arguments.extension.name() ) )
+			for ( var needed in [ "name", "aliases", "hint", "transports", "permission", "run" ] ) {
+				if ( !structKeyExists( command, needed ) ) {
+					throw( type : "bxagents.extension", message : "#getFileFromPath( path )# is in commands/ but has no #needed#(). A command class extends models.chat.commands.BaseCommand@bxagents." )
+				}
+			}
+			arguments.extension.addCommand( new "models.extensions.ExtensionCommand@bxagents"( arguments.extension.name(), command ) )
+		}
+	}
+
+	/**
+	 * A scheduler is a BoxLang scheduler class; the served agent starts it (ExtensionSchedulers). The path is kept as
+	 * written on disk: the build copies the file into the app, the loader here never runs it.
+	 */
+	private void function collectSchedulers( required any extension ) {
+		var folder = arguments.extension.folder()
+		if ( !len( folder ) || !directoryExists( folder & "/schedulers" ) ) {
+			return
+		}
+		for ( var path in directoryList( folder & "/schedulers", false, "path", "*.bx", "asc" ) ) {
+			arguments.extension.addScheduler( { name : listFirst( getFileFromPath( path ), "." ), path : path } )
+		}
+	}
+
+	private array function asArray( required any value ) {
+		return isArray( arguments.value ) ? arguments.value : [ arguments.value ]
+	}
+
+}

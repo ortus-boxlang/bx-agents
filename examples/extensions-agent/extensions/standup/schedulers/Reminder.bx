@@ -1,0 +1,18 @@
+/**
+ * A BoxLang scheduler, the same kind as any other: a class with a configure() that defines tasks through
+ * the `scheduler` property BoxLang gives it. When the agent is served, the extension's schedulers start in
+ * the runtime's scheduler service.
+ *
+ * Like every class of an extension it is given `settings` (the extension's defaults with the values from
+ * Agent.yaml) and `log` before configure() runs.
+ */
+class {
+
+	function configure() {
+		scheduler.task( "standup-reminder" )
+			.call( () => log.info( "Standup time for #settings.channel#. #settings.prompt#" ) )
+			.everyDayAt( settings.at )
+			.withNoOverlaps()
+	}
+
+}

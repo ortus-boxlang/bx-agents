@@ -48,6 +48,7 @@ class {
 		variables.webUiGenerator = new "models.build.generators.WebUiGenerator@bxagents"()
 		variables.gatewayGenerator = new "models.build.generators.GatewayGenerator@bxagents"()
 		variables.schedulerGenerator = new "models.build.generators.SchedulerGenerator@bxagents"()
+		variables.extensionsGenerator = new "models.build.generators.ExtensionsGenerator@bxagents"()
 		variables.mcpGenerator = new "models.build.generators.McpGenerator@bxagents"()
 		return this
 	}
@@ -209,6 +210,12 @@ class {
 			chatDatabase = { datasource : "bxagents", path : "./data/chat.db" }
 		}
 		var startupStatements = toolScanStatements.duplicate()
+		// Extensions first: the gateway session and the web page answer commands with the registry this puts in place
+		var extensionsResult = variables.extensionsGenerator.generate( root, appDir, config )
+		if ( extensionsResult.hasExtensions ) {
+			arguments.onProgress( "+ Copying extensions/ into the app..." )
+			startupStatements.append( extensionsResult.startupStatement )
+		}
 		if ( len( gatewayResult.sessionStartupStatement ?: "" ) ) {
 			startupStatements.append( gatewayResult.sessionStartupStatement )
 		}

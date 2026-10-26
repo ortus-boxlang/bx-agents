@@ -1,0 +1,170 @@
+/**
+ * One extension the registry knows about: where it came from, what it is called, what it added and how
+ * far its loading got. The registry and the loader change it; everything else only reads it, mostly
+ * through `describe()`, the plain struct that `/extensions` and `bxAgents extensions` print.
+ *
+ * state is one of:
+ *   found      scanned, not loaded yet
+ *   loaded     configure() and onLoad() ran and its pieces are registered
+ *   failed     something threw while loading it; `problems` says what. The rest still load.
+ *   disabled   `extensions.disable` names it, or it sets `this.enabled = false`
+ *   replaced   an extension of the same name in a later layer took its place
+ */
+class {
+
+	/**
+	 * @name The extension's name: the file name, or the folder name
+	 * @layer "modules", "user" or "project"
+	 * @folder The extension's folder, or "" for a single file
+	 * @classFile The extension's own class file (the single file, or `Extension.bx`), or "" when a folder has none
+	 */
+	function init( required string name, required string layer, string folder = "", string classFile = "" ) {
+		variables.name = arguments.name
+		variables.layer = arguments.layer
+		variables.folder = arguments.folder
+		variables.classFile = arguments.classFile
+		variables.state = "found"
+		variables.instance = nullValue()
+		variables.settings = {}
+		variables.properties = {}
+		variables.commands = []
+		variables.schedulers = []
+		variables.problems = []
+		variables.replaces = []
+		variables.log = nullValue()
+		return this
+	}
+
+	string function name() {
+		return variables.name
+	}
+
+	string function layer() {
+		return variables.layer
+	}
+
+	string function folder() {
+		return variables.folder
+	}
+
+	string function classFile() {
+		return variables.classFile
+	}
+
+	/**
+	 * @return The folder of a folder extension; the folder a single file sits in otherwise
+	 */
+	string function home() {
+		return len( variables.folder ) ? variables.folder : getDirectoryFromPath( variables.classFile ).reReplace( "[\\/]+$", "" )
+	}
+
+	string function state() {
+		return variables.state
+	}
+
+	boolean function isLoaded() {
+		return variables.state == "loaded"
+	}
+
+	function become( required string state ) {
+		variables.state = arguments.state
+		return this
+	}
+
+	function problem( required string message ) {
+		variables.problems.append( arguments.message )
+		return this
+	}
+
+	array function problems() {
+		return variables.problems
+	}
+
+	function replaces( required string layer ) {
+		variables.replaces.append( arguments.layer )
+		return this
+	}
+
+	function hasInstance() {
+		return !isNull( variables.instance )
+	}
+
+	function instance() {
+		return variables.instance
+	}
+
+	function useInstance( required any instance, required struct properties, required struct settings, required any log ) {
+		variables.instance = arguments.instance
+		variables.properties = arguments.properties
+		variables.settings = arguments.settings
+		variables.log = arguments.log
+		return this
+	}
+
+	struct function settings() {
+		return variables.settings
+	}
+
+	/**
+	 * @return The module-config properties the class set: title, author, webURL, description, version, enabled, dependencies
+	 */
+	struct function properties() {
+		return variables.properties
+	}
+
+	function addCommand( required any command ) {
+		variables.commands.append( arguments.command )
+		return this
+	}
+
+	function dropCommand( required any command ) {
+		var dropped = arguments.command
+		variables.commands = variables.commands.filter( c => c.name() != dropped.name() )
+		return this
+	}
+
+	array function commands() {
+		return variables.commands
+	}
+
+	/**
+	 * @scheduler { name, path } a BoxLang scheduler class this extension brings for the served agent
+	 */
+	function addScheduler( required struct scheduler ) {
+		variables.schedulers.append( arguments.scheduler )
+		return this
+	}
+
+	array function schedulers() {
+		return variables.schedulers
+	}
+
+	/**
+	 * @return What the extension said through its logger, as [ { level, message } ]
+	 */
+	array function logLines() {
+		return isNull( variables.log ) ? [] : variables.log.lines()
+	}
+
+	/**
+	 * @return The plain facts, for a list on screen or JSON
+	 */
+	struct function describe() {
+		return {
+			name        : variables.name,
+			layer       : variables.layer,
+			state       : variables.state,
+			path        : len( variables.folder ) ? variables.folder : variables.classFile,
+			kind        : len( variables.folder ) ? "folder" : "file",
+			title       : variables.properties.title ?: variables.name,
+			version     : variables.properties.version ?: "",
+			author      : variables.properties.author ?: "",
+			description : variables.properties.description ?: "",
+			commands    : variables.commands.map( c => "/" & c.name() ),
+			schedulers  : variables.schedulers.map( s => s.name ),
+			replaces    : variables.replaces,
+			problems    : variables.problems
+		}
+	}
+
+}

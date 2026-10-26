@@ -1,0 +1,57 @@
+/**
+ * `extensions` CLI verb: the extensions a project's chat would load, with where each came from and
+ * what it added. It loads them the way `chat` does (so a broken one shows up here), and nothing else.
+ *
+ *   bxAgents extensions [--json]
+ *
+ * The user layer (~/.bxagents/extensions) is included: it is what the terminal chat on this machine loads.
+ */
+class {
+
+	/**
+	 * @options { projectRoot (required), json }
+	 */
+	struct function run( struct options = {} ) {
+		var projectRoot = trim( arguments.options.projectRoot ?: "" )
+		if ( !len( projectRoot ) ) {
+			throw( type = "BxAgents.MissingProjectRoot", message = "`extensions` requires a project root" )
+		}
+		var service = new "models.extensions.ExtensionService@bxagents"( projectRoot : projectRoot.reReplace( "[\/]+$", "" ) )
+		service.install( new "models.chat.commands.CommandCatalog@bxagents"().standard() )
+		var report = service.report()
+		try {
+			if ( arguments.options.json ?: false ) {
+				return { exitCode : 0, message : jsonSerialize( { extensions : report, problems : service.problems() } ) }
+			}
+			return { exitCode : 0, message : render( report, service.problems() ) }
+		} finally {
+			service.unload()
+		}
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private string function render( required array report, required array problems ) {
+		if ( !arguments.report.len() ) {
+			return "No extensions. Add one as a file or folder in extensions/ (or ~/.bxagents/extensions for yourself)."
+		}
+		var lines = []
+		for ( var extension in arguments.report ) {
+			lines.append( "#extension.name# (#extension.layer#, #extension.state#)" & ( len( extension.description ) ? " - #extension.description#" : "" ) )
+			if ( extension.commands.len() ) {
+				lines.append( "    commands:   #extension.commands.toList( ', ' )#" )
+			}
+			if ( extension.schedulers.len() ) {
+				lines.append( "    schedulers: #extension.schedulers.toList( ', ' )#" )
+			}
+			for ( var problem in extension.problems ) {
+				lines.append( "    ! #problem#" )
+			}
+		}
+		for ( var problem in arguments.problems ) {
+			lines.append( "! #problem#" )
+		}
+		return lines.toList( char( 10 ) )
+	}
+
+}
