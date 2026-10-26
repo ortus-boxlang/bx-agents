@@ -246,7 +246,7 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-smallest-extension">The smallest extension</a></li><li class="toc-level-2"><a href="#annotations">Annotations</a></li><li class="toc-level-2"><a href="#settings">Settings</a></li><li class="toc-level-2"><a href="#lifecycle">Lifecycle</a></li><li class="toc-level-2"><a href="#injection">Injection</a></li><li class="toc-level-2"><a href="#a-folder-extension">A folder extension</a></li><li class="toc-level-2"><a href="#schedulers">Schedulers</a></li><li class="toc-level-2"><a href="#listening-to-events">Listening to events</a></li><li class="toc-level-3"><a href="#interceptors-and-custominterceptionpoints">interceptors and customInterceptionPoints</a></li><li class="toc-level-2"><a href="#where-extensions-come-from">Where extensions come from</a></li><li class="toc-level-2"><a href="#turning-things-off">Turning things off</a></li><li class="toc-level-2"><a href="#looking-at-them">Looking at them</a></li><li class="toc-level-2"><a href="#not-yet">Not yet</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-smallest-extension">The smallest extension</a></li><li class="toc-level-2"><a href="#annotations">Annotations</a></li><li class="toc-level-2"><a href="#settings">Settings</a></li><li class="toc-level-2"><a href="#lifecycle">Lifecycle</a></li><li class="toc-level-2"><a href="#injection">Injection</a></li><li class="toc-level-2"><a href="#a-folder-extension">A folder extension</a></li><li class="toc-level-2"><a href="#schedulers">Schedulers</a></li><li class="toc-level-2"><a href="#listening-to-events">Listening to events</a></li><li class="toc-level-3"><a href="#interceptors-and-custominterceptionpoints">interceptors and customInterceptionPoints</a></li><li class="toc-level-2"><a href="#keys-and-status">Keys and status</a></li><li class="toc-level-2"><a href="#register-registry-">register&#x28; registry &#x29;</a></li><li class="toc-level-2"><a href="#where-extensions-come-from">Where extensions come from</a></li><li class="toc-level-2"><a href="#turning-things-off">Turning things off</a></li><li class="toc-level-2"><a href="#looking-at-them">Looking at them</a></li><li class="toc-level-2"><a href="#not-yet">Not yet</a></li></ul></details>
 		
 
 		
@@ -393,6 +393,34 @@ function toolCalled( data ) { log.info( &quot;a tool ran&quot; ) }
 </code></pre>
 <p><code>interceptors/Audit.bx</code> listens with methods named after events and has <code>settings</code>, <code>log</code> and <code>properties</code> injected. Any extension can then listen to <code>onAuditRecorded</code>, and the one that owns it announces it with <code>BoxAnnounce( &quot;onAuditRecorded&quot;, { ... } )</code>. <code>extensions.disable</code> takes <code>extension:method</code> to turn one listener off.</p>
 <p>ColdBox events (<code>preProcess</code>, <code>postProcess</code> and the rest) are not part of the terminal chat; they fire only in a served agent.</p>
+<h2 id="keys-and-status"><a href="#keys-and-status" id="keys-and-status" name="keys-and-status" class="anchor"></a>Keys and status</h2>
+<p><code>@Key</code> binds keys in the terminal chat to a method. On a command method it runs that command, with the same rules and events as typing it; on any other method it calls the method with the <code>agentContext</code> and an empty text and shows what it returns. <code>@Hint</code> (or <code>hint</code> in the struct form) says what it does.</p>
+<pre><code class="language-js">@Command
+@Hint( &quot;count a pulse&quot; )
+@Key( &quot;ctrl+g&quot; )
+function pulse( agentContext, commandArguments ) { ... }
+
+@Key( { keys : [ &quot;ctrl+y&quot;, &quot;alt+y&quot; ], hint : &quot;reset the count&quot; } )
+function resetPulse( agentContext, commandArguments ) { ... }
+</code></pre>
+<p>A key is named <code>extension:method</code> (<code>pulse:pulse</code>). <code>/keys</code> lists it with the built-in ones, and a person can give it other keys under <code>chat: keys:</code> in <code>~/.bxagents/bxAgents.yml</code>. A key a built-in action already uses, or an earlier extension holds, is refused with a sentence that says so. A typed draft stays in the box while a key runs. Keys are for the terminal chat; the web page and chat platforms have commands.</p>
+<p><code>@Status</code> is a piece of status next to the size of the context: a method that returns a short text, asked each time the box is drawn in the terminal and after each change to the conversation on the web page (small chips in the header). Return an empty string to show nothing. It must be quick; one that throws is left out and the reason is put on its extension once.</p>
+<pre><code class="language-js">@Status
+function beats( agentContext ) {
+	return variables.beats &gt; 0 ? &quot;beat #variables.beats#&quot; : &quot;&quot;
+}
+</code></pre>
+<p><code>extensions.disable</code> takes <code>extension:method</code> for a key or a status item too.</p>
+<h2 id="register-registry-"><a href="#register-registry-" id="register-registry-" name="register-registry-" class="anchor"></a><code>register( registry )</code></h2>
+<p>What annotations cannot say, because it is worked out in code, is said as calls. If the class has a <code>register( registry )</code> method it is called once, right after <code>configure()</code>:</p>
+<pre><code class="language-js">function register( registry ) {
+	registry.command( &quot;deploy&quot;, { run : ( agentContext, commandArguments ) =&gt; ..., hint : &quot;ship it&quot;, admin : true, aliases : [ &quot;ship&quot; ] } )
+	registry.key( &quot;ctrl+d&quot;, &quot;/deploy&quot;, { hint : &quot;ship it&quot; } )                    // a key that runs a command line
+	registry.key( &quot;ctrl+o&quot;, ( agentContext ) =&gt; &quot;opened&quot;, { name : &quot;open&quot;, hint : &quot;open it&quot; } )   // or any function
+	registry.status( &quot;branch&quot;, ( agentContext ) =&gt; &quot;main&quot; )
+	registry.on( &quot;onChatCommandAfter&quot;, ( data ) =&gt; ... )                         // an event, or an array of them
+}
+</code></pre>
 <h2 id="where-extensions-come-from"><a href="#where-extensions-come-from" id="where-extensions-come-from" name="where-extensions-come-from" class="anchor"></a>Where extensions come from</h2>
 <div class="bxsites-table-wrap"><table class="table">
 <thead>
@@ -416,7 +444,7 @@ function toolCalled( data ) { log.info( &quot;a tool ran&quot; ) }
 bxAgents extensions --json
 </code></pre>
 <h2 id="not-yet"><a href="#not-yet" id="not-yet" name="not-yet" class="anchor"></a>Not yet</h2>
-<p>Extensions cannot yet add key bindings, status items, composer prefixes, <code>@</code> sources, web UI slots, gateways, CLI verbs, tools and skills. Those come next; the plan is <code>EXTENSIONS-PLAN.md</code> in the repository.</p>
+<p>Extensions cannot yet add composer prefixes, <code>@</code> sources, web UI slots, gateways, CLI verbs, tools and skills. Those come next; the plan is <code>EXTENSIONS-PLAN.md</code> in the repository.</p>
 
 	
 
@@ -466,7 +494,7 @@ bxAgents extensions --json
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-smallest-extension">The smallest extension</a></li><li class="toc-level-2"><a href="#annotations">Annotations</a></li><li class="toc-level-2"><a href="#settings">Settings</a></li><li class="toc-level-2"><a href="#lifecycle">Lifecycle</a></li><li class="toc-level-2"><a href="#injection">Injection</a></li><li class="toc-level-2"><a href="#a-folder-extension">A folder extension</a></li><li class="toc-level-2"><a href="#schedulers">Schedulers</a></li><li class="toc-level-2"><a href="#listening-to-events">Listening to events</a></li><li class="toc-level-3"><a href="#interceptors-and-custominterceptionpoints">interceptors and customInterceptionPoints</a></li><li class="toc-level-2"><a href="#where-extensions-come-from">Where extensions come from</a></li><li class="toc-level-2"><a href="#turning-things-off">Turning things off</a></li><li class="toc-level-2"><a href="#looking-at-them">Looking at them</a></li><li class="toc-level-2"><a href="#not-yet">Not yet</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-smallest-extension">The smallest extension</a></li><li class="toc-level-2"><a href="#annotations">Annotations</a></li><li class="toc-level-2"><a href="#settings">Settings</a></li><li class="toc-level-2"><a href="#lifecycle">Lifecycle</a></li><li class="toc-level-2"><a href="#injection">Injection</a></li><li class="toc-level-2"><a href="#a-folder-extension">A folder extension</a></li><li class="toc-level-2"><a href="#schedulers">Schedulers</a></li><li class="toc-level-2"><a href="#listening-to-events">Listening to events</a></li><li class="toc-level-3"><a href="#interceptors-and-custominterceptionpoints">interceptors and customInterceptionPoints</a></li><li class="toc-level-2"><a href="#keys-and-status">Keys and status</a></li><li class="toc-level-2"><a href="#register-registry-">register&#x28; registry &#x29;</a></li><li class="toc-level-2"><a href="#where-extensions-come-from">Where extensions come from</a></li><li class="toc-level-2"><a href="#turning-things-off">Turning things off</a></li><li class="toc-level-2"><a href="#looking-at-them">Looking at them</a></li><li class="toc-level-2"><a href="#not-yet">Not yet</a></li></ul></nav>
 				</aside>
 			
 		</div>

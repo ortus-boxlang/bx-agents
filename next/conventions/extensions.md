@@ -191,6 +191,47 @@ function configure() {
 
 ColdBox events (`preProcess`, `postProcess` and the rest) are not part of the terminal chat; they fire only in a served agent.
 
+## Keys and status
+
+`@Key` binds keys in the terminal chat to a method. On a command method it runs that command, with the same rules and events as typing it; on any other method it calls the method with the `agentContext` and an empty text and shows what it returns. `@Hint` (or `hint` in the struct form) says what it does.
+
+```js
+@Command
+@Hint( "count a pulse" )
+@Key( "ctrl+g" )
+function pulse( agentContext, commandArguments ) { ... }
+
+@Key( { keys : [ "ctrl+y", "alt+y" ], hint : "reset the count" } )
+function resetPulse( agentContext, commandArguments ) { ... }
+```
+
+A key is named `extension:method` (`pulse:pulse`). `/keys` lists it with the built-in ones, and a person can give it other keys under `chat: keys:` in `~/.bxagents/bxAgents.yml`. A key a built-in action already uses, or an earlier extension holds, is refused with a sentence that says so. A typed draft stays in the box while a key runs. Keys are for the terminal chat; the web page and chat platforms have commands.
+
+`@Status` is a piece of status next to the size of the context: a method that returns a short text, asked each time the box is drawn in the terminal and after each change to the conversation on the web page (small chips in the header). Return an empty string to show nothing. It must be quick; one that throws is left out and the reason is put on its extension once.
+
+```js
+@Status
+function beats( agentContext ) {
+	return variables.beats > 0 ? "beat #variables.beats#" : ""
+}
+```
+
+`extensions.disable` takes `extension:method` for a key or a status item too.
+
+## `register( registry )`
+
+What annotations cannot say, because it is worked out in code, is said as calls. If the class has a `register( registry )` method it is called once, right after `configure()`:
+
+```js
+function register( registry ) {
+	registry.command( "deploy", { run : ( agentContext, commandArguments ) => ..., hint : "ship it", admin : true, aliases : [ "ship" ] } )
+	registry.key( "ctrl+d", "/deploy", { hint : "ship it" } )                    // a key that runs a command line
+	registry.key( "ctrl+o", ( agentContext ) => "opened", { name : "open", hint : "open it" } )   // or any function
+	registry.status( "branch", ( agentContext ) => "main" )
+	registry.on( "onChatCommandAfter", ( data ) => ... )                         // an event, or an array of them
+}
+```
+
 ## Where extensions come from
 
 | Layer | Folder | Runs in |
@@ -221,4 +262,4 @@ bxAgents extensions --json
 
 ## Not yet
 
-Extensions cannot yet add key bindings, status items, composer prefixes, `@` sources, web UI slots, gateways, CLI verbs, tools and skills. Those come next; the plan is `EXTENSIONS-PLAN.md` in the repository.
+Extensions cannot yet add composer prefixes, `@` sources, web UI slots, gateways, CLI verbs, tools and skills. Those come next; the plan is `EXTENSIONS-PLAN.md` in the repository.

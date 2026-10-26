@@ -191,6 +191,47 @@ function configure() {
 
 Los eventos de ColdBox (`preProcess`, `postProcess` y el resto) no forman parte del chat de terminal; solo se disparan en un agente servido.
 
+## Atajos y estado
+
+`@Key` asocia teclas del chat de terminal a un método. En un método de comando ejecuta ese comando, con las mismas reglas y eventos que escribirlo; en cualquier otro método llama al método con el `agentContext` y un texto vacío y muestra lo que devuelve. `@Hint` (o `hint` en la forma struct) dice qué hace.
+
+```js
+@Command
+@Hint( "contar un pulso" )
+@Key( "ctrl+g" )
+function pulse( agentContext, commandArguments ) { ... }
+
+@Key( { keys : [ "ctrl+y", "alt+y" ], hint : "reiniciar la cuenta" } )
+function resetPulse( agentContext, commandArguments ) { ... }
+```
+
+Un atajo se llama `extensión:método` (`pulse:pulse`). `/keys` lo lista junto a los integrados, y la persona puede darle otras teclas bajo `chat: keys:` en `~/.bxagents/bxAgents.yml`. Una tecla que ya usa una acción integrada, o que tiene una extensión anterior, se rechaza con una frase que lo dice. Un borrador escrito se queda en la caja mientras se ejecuta el atajo. Los atajos son del chat de terminal; la página web y las plataformas de chat tienen comandos.
+
+`@Status` es un dato de estado junto al tamaño del contexto: un método que devuelve un texto corto, consultado cada vez que se dibuja la caja en la terminal y tras cada cambio de la conversación en la página web (pequeñas etiquetas en la cabecera). Devuelve una cadena vacía para no mostrar nada. Debe ser rápido; el que lanza un error se omite y el motivo se anota una vez en su extensión.
+
+```js
+@Status
+function beats( agentContext ) {
+	return variables.beats > 0 ? "pulso #variables.beats#" : ""
+}
+```
+
+`extensions.disable` acepta `extensión:método` también para un atajo o un elemento de estado.
+
+## `register( registry )`
+
+Lo que las anotaciones no pueden decir, porque se calcula en código, se dice con llamadas. Si la clase tiene un método `register( registry )`, se llama una vez, justo después de `configure()`:
+
+```js
+function register( registry ) {
+	registry.command( "deploy", { run : ( agentContext, commandArguments ) => ..., hint : "publicar", admin : true, aliases : [ "ship" ] } )
+	registry.key( "ctrl+d", "/deploy", { hint : "publicar" } )                    // un atajo que ejecuta una línea de comando
+	registry.key( "ctrl+o", ( agentContext ) => "abierto", { name : "open", hint : "abrir" } )   // o cualquier función
+	registry.status( "branch", ( agentContext ) => "main" )
+	registry.on( "onChatCommandAfter", ( data ) => ... )                         // un evento, o un array de ellos
+}
+```
+
 ## De dónde vienen las extensiones
 
 | Capa | Carpeta | Corre en |
@@ -221,4 +262,4 @@ bxAgents extensions --json
 
 ## Todavía no
 
-Las extensiones aún no pueden añadir atajos de teclado, elementos de estado, prefijos del compositor, fuentes `@`, huecos en la interfaz web, gateways, verbos de CLI, herramientas y skills. Eso viene después; el plan es `EXTENSIONS-PLAN.md` en el repositorio.
+Las extensiones aún no pueden añadir prefijos del compositor, fuentes `@`, huecos en la interfaz web, gateways, verbos de CLI, herramientas y skills. Eso viene después; el plan es `EXTENSIONS-PLAN.md` en el repositorio.
