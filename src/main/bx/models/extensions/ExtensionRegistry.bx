@@ -25,6 +25,9 @@ class {
 		variables.tools = new "models.extensions.ExtensionSettings@bxagents"()
 		variables.scanner = new "models.extensions.ExtensionScanner@bxagents"()
 		variables.loader = new "models.extensions.ExtensionLoader@bxagents"( arguments.settings )
+		variables.events = new "models.extensions.ExtensionEvents@bxagents"()
+		variables.interceptors = new "models.extensions.ExtensionInterceptors@bxagents"()
+		arguments.commands.withEvents( variables.events )
 		variables.disable = variables.tools.disableList( arguments.settings )
 		variables.layers = []
 		variables.extensions = []
@@ -62,11 +65,19 @@ class {
 	}
 
 	/**
+	 * @return The ExtensionEvents: the chat events, announced to whatever the extensions listen to
+	 */
+	any function events() {
+		return variables.events
+	}
+
+	/**
 	 * Unloads every loaded extension, last first, and takes its commands back out. `load()` can run again.
 	 */
 	function unload() {
 		for ( var extension in variables.extensions.reverse() ) {
 			if ( extension.isLoaded() ) {
+				variables.interceptors.unregister( extension.name() )
 				variables.loader.unload( extension )
 			}
 			for ( var command in extension.commands() ) {
@@ -159,6 +170,16 @@ class {
 	}
 
 	private void function register( required any extension ) {
+		// what it listens to first: a listener that cannot be set up fails the extension before any command is in
+		var extensionName = arguments.extension.name()
+		try {
+			arguments.extension.useListeners( variables.interceptors.register( arguments.extension, ( item ) => !disabled( extensionName, item ) ) )
+		} catch ( any e ) {
+			variables.interceptors.unregister( extensionName )
+			variables.loader.unload( arguments.extension )
+			arguments.extension.become( "failed" ).problem( "Could not set up its listeners: #e.message#" )
+			return
+		}
 		for ( var command in arguments.extension.commands().map( c => c ) ) {
 			if ( disabled( arguments.extension.name(), command.name() ) ) {
 				arguments.extension.dropCommand( command )

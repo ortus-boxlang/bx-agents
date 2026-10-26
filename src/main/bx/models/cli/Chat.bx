@@ -116,6 +116,9 @@ class {
 		var extensions = arguments.options._extensions ?: new "models.extensions.ExtensionService@bxagents"( projectRoot : trim( arguments.options.projectRoot ?: "" ), transport : "tui" )
 		extensions.install( commands )
 		var controller = new "models.cli.chat.ChatController@bxagents"( session : arguments.session, registry : commands ).withNotices( extensions.problems() )
+		if ( structKeyExists( extensions, "events" ) ) {
+			controller.withEvents( extensions.events() )
+		}
 		var screen = arguments.options._screen ?: createObject( "java", "ortus.boxlang.bxagents.tui.ChatScreen" ).open( controller.commands() )
 		if ( !arguments.options.keyExists( "_screen" ) ) {
 			// the tui: block of Agent.yaml: the prompt style and widgets (a project without one gets the defaults)

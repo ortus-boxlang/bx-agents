@@ -72,6 +72,13 @@ class {
 	}
 
 	/**
+	 * @return The ExtensionEvents, once install() has run: the chat announces its events through it
+	 */
+	any function events() {
+		return variables.registry.events()
+	}
+
+	/**
 	 * @return The ExtensionRegistry, once install() has run
 	 */
 	any function registry() {
@@ -90,6 +97,9 @@ class {
 	 */
 	array function problems() {
 		var all = variables.problems.append( variables.userConfig.problems(), true )
+		if ( !isNull( variables.registry ) ) {
+			all.append( variables.registry.events().problems(), true )
+		}
 		for ( var extension in report() ) {
 			if ( extension.state == "failed" ) {
 				all.append( "Extension [#extension.name#] did not load: #extension.problems.toList( ' ' )#" )

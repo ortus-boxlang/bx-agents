@@ -415,6 +415,12 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   project's `extensions/`. A later layer wins, and what it replaces is always shown. `extensions.disable`
   turns off an extension, one of its commands, or a glob of either. `/extensions` and
   `bxAgents extensions` list what loaded, what each added and what went wrong.
+- An extension is also an interceptor: a method named after a bx-ai event (`onAIError`, `beforeAIToolExecute`...)
+  or a chat event listens to it, `@On` binds a method to others or to many, and `interceptors` and
+  `customInterceptionPoints` in `configure()` work as in a module config. The chat announces
+  `onChatInput` (stop or change a message), `onChatTurnStart`/`End`, `onChatSessionStart`/`End`,
+  `onChatConversationChange` and, on every transport, `onChatCommandBefore` (stop a command) and
+  `onChatCommandAfter` (replace the reply). A listener that throws never stops a turn.
 - `examples/extensions-agent` shows a one-file extension, one with several commands, an admin-only command
   with a lifecycle, and a folder with a command class and a scheduler.
 

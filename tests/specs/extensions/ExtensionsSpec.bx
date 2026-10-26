@@ -368,6 +368,241 @@ class extends="testbox.system.BaseSpec" {
 
 		} );
 
+		describe( "listening to events", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-extevents-" );
+				variables.commands = new bxagents.models.chat.commands.CommandCatalog().standard();
+				variables.context = new bxagents.models.chat.commands.CommandContext( {}, "tui", true );
+				variables.loaded = [];
+			} );
+
+			afterEach( function() {
+				for ( var registry in loaded ) {
+					registry.unload();
+				}
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function putFile( required string path, required string code ) {
+				directoryCreate( getDirectoryFromPath( dir & "/" & path ), true, true );
+				fileWrite( dir & "/" & path, code );
+			}
+
+			function startRegistry( struct settings = {} ) {
+				var registry = new bxagents.models.extensions.ExtensionRegistry( commands, settings );
+				registry.addLayer( "project", dir & "/extensions" );
+				registry.load();
+				loaded.append( registry );
+				return registry;
+			}
+
+			function typed( required string line ) {
+				return commands.run( line, context ).blocks().map( b => b.type == "text" ? b.text : jsonSerialize( b ) ).toList( " | " );
+			}
+
+			it( "lets a method named after a chat event stop a message or replace its text", function() {
+				putFile( "extensions/guard.bx", "class {
+					function onChatInput( data ) {
+						if ( data.text contains 'secret' ) { data.cancel( 'No secrets.' ); return }
+						data.replace( data.text & '!' )
+					}
+				}" );
+				var registry = startRegistry();
+
+				var stopped = registry.events().announce( "onChatInput", { text : "my secret" } );
+				var changed = registry.events().announce( "onChatInput", { text : "hello" } );
+				var untouched = registry.events().announce( "onChatTurnStart", { text : "hello" } );
+
+				expect( stopped.cancelled ).toBeTrue();
+				expect( stopped.reason ).toBe( "No secrets." );
+				expect( changed.replaced ).toBeTrue();
+				expect( changed.value ).toBe( "hello!" );
+				expect( untouched.cancelled ).toBeFalse();
+				expect( untouched.replaced ).toBeFalse();
+				expect( registry.report()[ 1 ].listens ).toBe( [ "onChatInput" ] );
+			} );
+
+			it( "lets @On bind one method to several events, in any of its forms", function() {
+				putFile( "extensions/many.bx", "class {
+					function configure() { variables.heard = [] }
+					@On( [ 'onChatTurnStart', 'onChatTurnEnd' ] ) function turned( data ) { heard.append( data.text ) }
+					@On( 'onChatSessionStart' ) function opened( data ) { heard.append( 'open' ) }
+					@On( { points : [ 'onChatSessionEnd' ] } ) function closed( data ) { heard.append( 'close' ) }
+					function seen() { return heard }
+				}" );
+				var registry = startRegistry();
+				var events = registry.events();
+
+				events.announce( "onChatSessionStart", {} );
+				events.announce( "onChatTurnStart", { text : "a" } );
+				events.announce( "onChatTurnEnd", { text : "b" } );
+				events.announce( "onChatSessionEnd", {} );
+
+				expect( registry.extensions()[ 1 ].instance().seen() ).toBe( [ "open", "a", "b", "close" ] );
+				expect( registry.report()[ 1 ].listens ).toHaveLength( 4 );
+			} );
+
+			it( "stops a command before it runs, on any transport, and shows why", function() {
+				putFile( "extensions/freeze.bx", "class {
+					function onChatCommandBefore( data ) { if ( data.name == 'info' ) { data.cancel( 'Frozen: ' & data.transport ) } }
+				}" );
+				startRegistry();
+
+				expect( typed( "/info" ) ).toBe( "Frozen: tui" );
+				expect( new bxagents.models.chat.commands.CommandContext( {}, "web", true ).transport() ).toBe( "web" );
+				expect( commands.run( "/info", new bxagents.models.chat.commands.CommandContext( {}, "web", true ) ).blocks()[ 1 ].text ).toBe( "Frozen: web" );
+			} );
+
+			it( "gives a command's reply to onChatCommandAfter, which may replace it", function() {
+				putFile( "extensions/after.bx", "class {
+					@Command( 'plain' ) function plain( agentContext ) { return agentContext.reply().ok( 'original' ) }
+					function onChatCommandAfter( data ) {
+						if ( data.name == 'plain' ) { data.replace( new 'models.chat.commands.Reply@bxagents'().ok( 'changed after ' & data.reply.blocks().len() ) ) }
+					}
+				}" );
+				startRegistry();
+
+				expect( typed( "/plain" ) ).toBe( "changed after 1" );
+			} );
+
+			it( "keeps a listener that throws from stopping anything, and says so on its extension", function() {
+				putFile( "extensions/a-bad.bx", "class { function onChatInput( data ) { throw( message = 'listener broke' ) } }" );
+				putFile( "extensions/b-good.bx", "class { function onChatInput( data ) { data.replace( 'still ran' ) } }" );
+				var registry = startRegistry();
+
+				var event = registry.events().announce( "onChatInput", { text : "x" } );
+
+				expect( event.replaced ).toBeTrue();
+				expect( event.value ).toBe( "still ran" );
+				expect( registry.report()[ 1 ].problems[ 1 ] ).toInclude( "listener broke" );
+			} );
+
+			it( "says when @On names a point the runtime does not know", function() {
+				putFile( "extensions/odd.bx", "class { @On( 'onNothingLikeThis' ) function odd( data ) { } }" );
+				var registry = startRegistry();
+
+				expect( registry.report()[ 1 ].state ).toBe( "loaded" );
+				expect( registry.report()[ 1 ].problems[ 1 ] ).toInclude( "onNothingLikeThis" );
+				expect( registry.report()[ 1 ].listens ).toBeEmpty();
+			} );
+
+			it( "stops listening when the extensions are unloaded", function() {
+				putFile( "extensions/gone.bx", "class { function onChatInput( data ) { data.cancel( 'still here' ) } }" );
+				var registry = startRegistry();
+				expect( registry.events().announce( "onChatInput", { text : "x" } ).cancelled ).toBeTrue();
+
+				registry.unload();
+
+				expect( registry.events().announce( "onChatInput", { text : "x" } ).cancelled ).toBeFalse();
+			} );
+
+			it( "lets an extension announce a point of its own, and another listen to it", function() {
+				putFile( "extensions/a-maker.bx", "class {
+					function configure() { variables.customInterceptionPoints = [ 'onThingMade' ] }
+					@Command( 'make' ) function make( agentContext ) { BoxAnnounce( 'onThingMade', { what : 'widget' } ); return 'made' }
+				}" );
+				putFile( "extensions/b-watcher.bx", "class {
+					function configure() { variables.seen = [] }
+					function onThingMade( data ) { seen.append( data.what ) }
+					function seenSoFar() { return seen }
+				}" );
+				var registry = startRegistry();
+
+				typed( "/make" );
+
+				expect( registry.extensions()[ 2 ].instance().seenSoFar() ).toBe( [ "widget" ] );
+			} );
+
+			it( "registers the classes named in interceptors, with their properties, settings and log", function() {
+				putFile( "extensions/guarded/Extension.bx", "class {
+					function configure() {
+						variables.settings = { word : 'default' }
+						variables.interceptors = [ { class : 'interceptors.Word', properties : { suffix : '?' } } ]
+					}
+				}" );
+				putFile( "extensions/guarded/interceptors/Word.bx", "class {
+					function onChatInput( data ) { data.replace( settings.word & properties.suffix ) }
+				}" );
+				var registry = startRegistry( { guarded : { word : "set" } } );
+
+				expect( registry.events().announce( "onChatInput", { text : "x" } ).value ).toBe( "set?" );
+				expect( registry.report()[ 1 ].listens ).toBe( [ "onChatInput" ] );
+			} );
+
+			it( "fails an extension whose interceptors class is not there, and takes none of its commands", function() {
+				putFile( "extensions/lost/Extension.bx", "class { function configure() { variables.interceptors = [ { class : 'interceptors.Missing' } ] } }" );
+				putFile( "extensions/lost/commands/Lost.bx", "class extends='models.chat.commands.BaseCommand@bxagents' { function name() { return 'lost' } function run( c, a ) { return 'x' } }" );
+				var registry = startRegistry();
+
+				expect( registry.report()[ 1 ].state ).toBe( "failed" );
+				expect( registry.report()[ 1 ].problems[ 1 ] ).toInclude( "Missing" );
+				expect( isNull( commands.lookup( "lost" ) ) ).toBeTrue();
+			} );
+
+			it( "turns a listener off by extension:method in extensions.disable", function() {
+				putFile( "extensions/quiet.bx", "class { function onChatInput( data ) { data.cancel( 'x' ) } function onChatTurnStart( data ) { data.cancel( 'y' ) } }" );
+				var registry = startRegistry( { disable : [ "quiet:onChatInput" ] } );
+
+				expect( registry.events().announce( "onChatInput", { text : "a" } ).cancelled ).toBeFalse();
+				expect( registry.events().announce( "onChatTurnStart", { text : "a" } ).cancelled ).toBeTrue();
+			} );
+
+			it( "tells the chat controller about the session, a message, a turn and a conversation change", function() {
+				var heard = [];
+				var events = { announce : ( name, data ) => {
+					heard.append( name & ( data.keyExists( "text" ) ? ":" & data.text : "" ) );
+					return { cancelled : name == "onChatInput" && data.text == "bad", reason : "Not that.", replaced : name == "onChatInput" && data.text == "hi", value : "hello" };
+				} };
+				var sent = [];
+				var screen = { log : [] };
+				screen.readInput = () => {
+					if ( !screen.inputs.len() ) { return nullValue(); }
+					var next = screen.inputs[ 1 ];
+					screen.inputs.deleteAt( 1 );
+					return next;
+				};
+				screen.inputs = [ "hi", "bad", "/clear" ];
+				for ( var name in [ "banner", "printUser", "print", "printMarkdown", "beginTurn", "endTurn", "push", "close", "setStatus", "setFacts", "setImagesAllowed", "copy" ] ) {
+					screen[ name ] = () => {};
+				}
+				screen.print = ( style, text ) => screen.log.append( text );
+				screen.printUser = ( text ) => sent.append( "shown:" & text );
+				screen.cancelRequested = () => false;
+				screen.takeSteer = () => nullValue();
+				screen.takeImages = () => [];
+				screen.bindKeys = ( o ) => [];
+				screen.isRecording = () => false;
+				var session = {};
+				session.agentName = () => "helper";
+				session.modelName = () => "m";
+				session.mode = () => "in-process";
+				session.send = ( text, hooks, images = [] ) => { sent.append( "sent:" & text ); return { status : "done", text : "ok", pending : [] }; };
+				session.contextReport = () => { throw( message = "none" ); };
+				session.modelFacts = () => { throw( message = "none" ); };
+				session.modelInfo = () => { throw( message = "none" ); };
+				session.conversationTitle = () => "t";
+				session.clear = () => { return { ok : true, messages : 0 }; };
+				session.conversationId = () => "c";
+				session.keepsSessions = () => false;
+				var controller = new bxagents.models.cli.chat.ChatController( session, getTempDirectory(), nullValue(), { chat : () => { shell : true, bifs : true }, keys : () => ( {} ), problems : () => [], path : () => "x.yml" } ).withEvents( events );
+
+				controller.run( screen );
+
+				expect( heard.first() ).toBe( "onChatSessionStart" );
+				expect( heard.last() ).toBe( "onChatSessionEnd" );
+				expect( heard ).toInclude( "onChatInput:hi" );
+				expect( heard ).toInclude( "onChatTurnStart:hello" );
+				expect( heard ).toInclude( "onChatTurnEnd:hello" );
+				// "hi" was replaced by "hello"; "bad" was stopped and never sent
+				expect( sent ).toBe( [ "shown:hello", "sent:hello" ] );
+				expect( screen.log ).toInclude( "Not that." );
+			} );
+
+		} );
+
 		describe( "the extension service", function() {
 
 			beforeEach( function() {
@@ -430,7 +665,7 @@ class extends="testbox.system.BaseSpec" {
 				service.install( new bxagents.models.chat.commands.CommandCatalog().standard() );
 				var report = service.report();
 
-				expect( report.map( e => e.name ) ).toBe( [ "deploy", "hello", "roll", "standup" ] );
+				expect( report.map( e => e.name ) ).toBe( [ "audit", "deploy", "freeze", "guard", "hello", "roll", "standup" ] );
 				var byName = {};
 				report.each( e => byName[ e.name ] = e );
 				expect( byName.roll.commands ).toBe( [ "/roll", "/coin" ] );
@@ -438,6 +673,10 @@ class extends="testbox.system.BaseSpec" {
 				expect( byName.standup.commands ).toBe( [ "/standup" ] );
 				expect( byName.standup.schedulers ).toBe( [ "Reminder" ] );
 				expect( report.map( e => e.state ).unique() ).toBe( [ "loaded" ] );
+				expect( byName.guard.listens ).toInclude( "onChatInput" );
+				expect( byName.freeze.listens ).toBe( [ "onChatCommandBefore" ] );
+				expect( byName.audit.listens ).toBe( [ "onChatCommandAfter" ] );
+				expect( byName.audit.commands ).toBe( [ "/audit" ] );
 				service.unload();
 			} );
 
@@ -453,7 +692,8 @@ class extends="testbox.system.BaseSpec" {
 				expect( text( "/dice" ) ).toBe( "1d6: 4 = 4" );
 				expect( text( "/roll banana" ) ).toInclude( "like /roll 2d6" );
 				expect( text( "/roll 99d6" ) ).toInclude( "Between 1 and 20" );
-				expect( text( "/coin" ) ).toBe( "Tails" );
+				// the freeze extension of the example stops /coin, as Agent.yaml lists it
+				expect( text( "/coin" ) ).toBe( "That command is frozen for now." );
 				service.unload();
 			} );
 
@@ -464,6 +704,30 @@ class extends="testbox.system.BaseSpec" {
 				var stranger = new bxagents.models.chat.commands.CommandContext( {}, "web", false );
 
 				expect( commands.run( "/deploy", stranger ).blocks()[ 1 ].text ).toBe( "/deploy is for admins." );
+				service.unload();
+			} );
+
+			it( "runs the example's listeners: guard stops a key and signs a message, audit remembers commands, freeze stops one", function() {
+				var service = new bxagents.models.extensions.ExtensionService( projectRoot : example, userConfig : new bxagents.models.cli.UserConfig( dir & "/none.yml" ), transport : "web", moduleFolders : [] );
+				var commands = new bxagents.models.chat.commands.CommandCatalog().standard();
+				service.install( commands );
+				var context = new bxagents.models.chat.commands.CommandContext( { agentName : () => "helper" }, "web", true );
+				var text = ( line ) => commands.run( line, context ).blocks().map( b => b.type == "text" ? b.text : jsonSerialize( b ) ).toList( " | " );
+
+				var key = service.events().announce( "onChatInput", { text : "use sk-abcdefghijklmnopqrstuvwx please" } );
+				var plain = service.events().announce( "onChatInput", { text : "hello" } );
+				text( "/hello Ada" );
+				var frozen = text( "/coin" );
+				var shown = text( "/audit" );
+
+				expect( key.cancelled ).toBeTrue();
+				expect( key.reason ).toInclude( "secret key" );
+				expect( plain.value ).toBe( "hello (sent from the team chat)" );
+				expect( frozen ).toBe( "That command is frozen for now." );
+				// audit saw /hello, not the frozen /coin that never ran, and leaves its own command out
+				expect( shown ).toInclude( "/hello Ada" );
+				expect( shown ).notToInclude( "/coin" );
+				expect( shown ).notToInclude( "/audit" );
 				service.unload();
 			} );
 
