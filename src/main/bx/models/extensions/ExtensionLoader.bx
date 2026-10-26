@@ -49,7 +49,12 @@ class {
 				arguments.extension.become( "disabled" ).problem( "It sets this.enabled = false." )
 				return arguments.extension
 			}
+			if ( structKeyExists( instance, "register" ) ) {
+				instance.register( new "models.extensions.ExtensionRegistration@bxagents"( arguments.extension ) )
+			}
 			collectAnnotatedCommands( arguments.extension )
+			collectAnnotatedKeys( arguments.extension )
+			collectAnnotatedStatus( arguments.extension )
 			collectFolderCommands( arguments.extension )
 			collectSchedulers( arguments.extension )
 		} catch ( any e ) {
@@ -160,6 +165,72 @@ class {
 			}
 			arguments.extension.addCommand( new "models.extensions.ExtensionCommand@bxagents"( arguments.extension.name(), new "models.extensions.AnnotatedCommand@bxagents"( instance, method.name, settled ) ) )
 		}
+	}
+
+	/**
+	 * `@Key` on a method: the keys that run it. On a `@Command` method it runs the command; on any other
+	 * method it calls it with the CommandContext and an empty text.
+	 */
+	private void function collectAnnotatedKeys( required any extension ) {
+		var instance = arguments.extension.instance()
+		for ( var method in getMetaData( instance ).functions ?: [] ) {
+			var given = method.annotations ?: {}
+			var options = variables.annotations.options( given, "Key", "keys" )
+			if ( isNull( options ) ) {
+				continue
+			}
+			var problems = []
+			var where = "#arguments.extension.name()#.#method.name#"
+			var asked = asArray( options.keys ?: [] )
+			if ( !asked.len() ) {
+				throw( type : "bxagents.extension", message : "#where#: @Key needs a key, such as @Key( ""ctrl+g"" )." )
+			}
+			var command = ""
+			var commandOptions = variables.annotations.options( given, "Command", "name" )
+			if ( !isNull( commandOptions ) ) {
+				command = lCase( trim( commandOptions.name ?: method.name ) )
+			}
+			var hint = variables.annotations.setting( options, "hint", given, "Hint", "", problems, where )
+			if ( !len( hint ) && !isNull( commandOptions ) ) {
+				hint = commandOptions.hint ?: ""
+			}
+			for ( var problem in problems ) {
+				arguments.extension.problem( problem )
+			}
+			var keyHint = len( hint ) ? hint : "run #method.name#"
+			if ( len( command ) ) {
+				arguments.extension.addKey( new "models.extensions.ExtensionKey@bxagents"( arguments.extension.name(), method.name, asked, keyHint, command ) )
+			} else {
+				arguments.extension.addKey( new "models.extensions.ExtensionKey@bxagents"( arguments.extension.name(), method.name, asked, keyHint, "", callerOf( instance, method.name, [ "" ] ) ) )
+			}
+		}
+	}
+
+	/**
+	 * `@Status` on a method: it returns the text to show; the method is called with the CommandContext.
+	 */
+	private void function collectAnnotatedStatus( required any extension ) {
+		var instance = arguments.extension.instance()
+		for ( var method in getMetaData( instance ).functions ?: [] ) {
+			var options = variables.annotations.options( method.annotations ?: {}, "Status", "name" )
+			if ( isNull( options ) ) {
+				continue
+			}
+			var name = lCase( trim( options.name ?: method.name ) )
+			arguments.extension.addStatus( new "models.extensions.ExtensionStatus@bxagents"( arguments.extension, name, callerOf( instance, method.name ) ) )
+		}
+	}
+
+	/**
+	 * A function( context ) that calls one method of an object with the context and some more arguments. It
+	 * is made here, in a call of its own, so each one keeps its own method: closures made in a loop would all
+	 * see the loop's last method.
+	 */
+	private any function callerOf( required any target, required string method, array more = [] ) {
+		var target = arguments.target
+		var method = arguments.method
+		var more = arguments.more
+		return ( context ) => invoke( target, method, [ context ].append( more, true ) )
 	}
 
 	private void function collectFolderCommands( required any extension ) {

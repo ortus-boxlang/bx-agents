@@ -146,7 +146,13 @@ public final class KeyMap {
 		NAMES_BY_CODE.putIfAbsent( code, label );
 	}
 
+	/** An action an extension adds: it runs when its key is pressed in the message box. The id is what a person writes in their file. */
+	public record Extra( String id, String does, List<String> defaults ) {
+	}
+
 	private final Map<Action, List<Chord>>	bound		= new EnumMap<>( Action.class );
+	private final Map<String, List<Chord>>	extra		= new LinkedHashMap<>();
+	private final Map<String, String>		extraDoes	= new LinkedHashMap<>();
 	private final List<String>				problems	= new ArrayList<>();
 
 	private KeyMap() {
@@ -163,6 +169,17 @@ public final class KeyMap {
 	 * @return the map with the overrides that are sound applied; what was not is in {@link #problems()}
 	 */
 	public static KeyMap of( Map<?, ?> overrides ) {
+		return of( overrides, List.of() );
+	}
+
+	/**
+	 * @param overrides action id to the keys, such as {@code newline -> [ "ctrl+j" ]}
+	 * @param extras    the actions extensions add, each with the keys it asks for. A key that a built-in action or an earlier
+	 *                  extra already uses is refused and reported; the person can give that action another key in their file.
+	 *
+	 * @return the map with the overrides that are sound applied; what was not is in {@link #problems()}
+	 */
+	public static KeyMap of( Map<?, ?> overrides, List<Extra> extras ) {
 		KeyMap map = new KeyMap();
 		for ( Action a : Action.values() ) {
 			List<Chord> chords = new ArrayList<>();
@@ -171,16 +188,95 @@ public final class KeyMap {
 			}
 			map.bound.put( a, chords );
 		}
+		for ( Extra x : extras ) {
+			map.addExtra( x );
+		}
 		for ( Map.Entry<?, ?> e : overrides.entrySet() ) {
 			String	id		= String.valueOf( e.getKey() );
 			Action	action	= Action.byId( id );
-			if ( action == null ) {
-				map.problems.add( "There is no key action [" + id + "]. The actions are: " + ids() );
-				continue;
+			if ( action != null ) {
+				map.override( action, e.getValue() );
+			} else if ( map.extra.containsKey( id ) ) {
+				map.overrideExtra( id, e.getValue() );
+			} else {
+				map.problems.add( "There is no key action [" + id + "]. The actions are: " + map.ids() );
 			}
-			map.override( action, e.getValue() );
 		}
 		return map;
+	}
+
+	private void addExtra( Extra x ) {
+		extraDoes.put( x.id(), x.does() );
+		extra.put( x.id(), new ArrayList<>() );
+		for ( String spec : x.defaults() ) {
+			Chord c = parse( spec );
+			if ( c == null ) {
+				problems.add( "[" + x.id() + "]: [" + spec + "] is not a key I can read (examples: ctrl+g, alt+d, ctrl+shift+d)." );
+				continue;
+			}
+			String clash = usedBy( c, x.id() );
+			if ( clash != null ) {
+				problems.add( "[" + x.id() + "]: " + c.label() + " is already used by [" + clash + "], so it was left out. Give [" + x.id()
+				    + "] another key under chat: keys: in your bxAgents.yml." );
+				continue;
+			}
+			extra.get( x.id() ).add( c );
+		}
+	}
+
+	private void overrideExtra( String id, Object value ) {
+		List<?>		given	= value instanceof List<?> l ? l : value == null ? List.of() : List.of( value );
+		List<Chord>	chords	= new ArrayList<>();
+		for ( Object o : given ) {
+			Chord c = parse( String.valueOf( o ) );
+			if ( c == null ) {
+				problems
+				    .add( "[" + id + "]: [" + o + "] is not a key I can read (examples: ctrl+g, alt+d, ctrl+shift+d). It keeps " + describeExtra( id ) + "." );
+				return;
+			}
+			String clash = usedBy( c, id );
+			if ( clash != null ) {
+				problems.add( "[" + id + "]: " + c.label() + " is already used by [" + clash + "]; [" + id + "] keeps " + describeExtra( id ) + "." );
+				return;
+			}
+			chords.add( c );
+		}
+		extra.put( id, chords );
+	}
+
+	/** @return the id of the action that uses the key in the message box, other than {@code except}; null when it is free */
+	private String usedBy( Chord c, String except ) {
+		for ( Map.Entry<Action, List<Chord>> other : bound.entrySet() ) {
+			if ( other.getKey().place == Place.BOX && other.getValue().contains( c ) ) {
+				return other.getKey().id;
+			}
+		}
+		for ( Map.Entry<String, List<Chord>> other : extra.entrySet() ) {
+			if ( !other.getKey().equals( except ) && other.getValue().contains( c ) ) {
+				return other.getKey();
+			}
+		}
+		return null;
+	}
+
+	private String describeExtra( String id ) {
+		List<String> labels = new ArrayList<>();
+		for ( Chord c : extra.getOrDefault( id, List.of() ) ) {
+			labels.add( c.label() );
+		}
+		return labels.isEmpty() ? "no key" : String.join( ", ", labels );
+	}
+
+	/** @return the id of the extension action the key event presses, or null when it is not one */
+	public String extension( KeyEvent k ) {
+		for ( Map.Entry<String, List<Chord>> e : extra.entrySet() ) {
+			for ( Chord c : e.getValue() ) {
+				if ( c.matches( k ) ) {
+					return e.getKey();
+				}
+			}
+		}
+		return null;
 	}
 
 	private void override( Action action, Object value ) {
@@ -205,6 +301,17 @@ public final class KeyMap {
 					problems.add( "[" + action.id + "]: " + c.label() + " is already used by [" + other.getKey().id + "]; [" + action.id + "] keeps "
 					    + describe( action ) + "." );
 					return;
+				}
+			}
+		}
+		if ( action.place == Place.BOX ) {
+			for ( Chord c : chords ) {
+				for ( Map.Entry<String, List<Chord>> other : extra.entrySet() ) {
+					if ( other.getValue().contains( c ) ) {
+						problems.add( "[" + action.id + "]: " + c.label() + " is already used by [" + other.getKey() + "]; [" + action.id + "] keeps "
+						    + describe( action ) + "." );
+						return;
+					}
 				}
 			}
 		}
@@ -253,14 +360,23 @@ public final class KeyMap {
 			row.put( "place", a.place.name().toLowerCase( Locale.ROOT ) );
 			rows.add( row );
 		}
+		for ( String id : extra.keySet() ) {
+			Map<String, String> row = new LinkedHashMap<>();
+			row.put( "id", id );
+			row.put( "keys", describeExtra( id ) );
+			row.put( "does", extraDoes.get( id ) );
+			row.put( "place", "box" );
+			rows.add( row );
+		}
 		return rows;
 	}
 
-	static String ids() {
+	String ids() {
 		List<String> ids = new ArrayList<>();
 		for ( Action a : Action.values() ) {
 			ids.add( a.id );
 		}
+		ids.addAll( extra.keySet() );
 		return String.join( ", ", ids );
 	}
 

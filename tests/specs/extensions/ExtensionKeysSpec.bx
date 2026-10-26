@@ -1,0 +1,196 @@
+/**
+ * Keys and status items from extensions: `@Key` and `@Status` on methods, the same written as calls in
+ * `register( registry )`, turned off by `extensions.disable`, and run by the chat controller.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+
+		describe( "keys and status from extensions", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-extkeys-" );
+				variables.commands = new bxagents.models.chat.commands.CommandCatalog().standard();
+				variables.loaded = [];
+			} );
+
+			afterEach( function() {
+				for ( var registry in loaded ) {
+					registry.unload();
+				}
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function put( required string name, required string code ) {
+				directoryCreate( dir & "/extensions", true, true );
+				fileWrite( dir & "/extensions/" & name, code );
+			}
+
+			function start( struct settings = {} ) {
+				var registry = new bxagents.models.extensions.ExtensionRegistry( commands, settings );
+				registry.addLayer( "project", dir & "/extensions" );
+				registry.load();
+				loaded.append( registry );
+				return registry;
+			}
+
+			function context() {
+				return new bxagents.models.chat.commands.CommandContext( { agentName : () => "helper" }, "tui", true );
+			}
+
+			it( "reads @Key from a command method and from a plain method", function() {
+				put( "keyed.bx", "class {
+					@Command @Hint( 'count' ) @Key( 'ctrl+g' )
+					function count( agentContext, commandArguments ) { return agentContext.reply().ok( 'counted' ) }
+					@Key( { keys : [ 'ctrl+y', 'alt+y' ], hint : 'reset it' } )
+					function reset( agentContext, commandArguments ) { return agentContext.reply().ok( 'reset ' & len( commandArguments ) ) }
+				}" );
+				var registry = start();
+				var keys = registry.keys();
+
+				expect( keys.map( k => k.describe() ) ).toBe( [
+					{ id : "keyed:count", does : "count", keys : [ "ctrl+g" ] },
+					{ id : "keyed:reset", does : "reset it", keys : [ "ctrl+y", "alt+y" ] }
+				] );
+				expect( keys[ 1 ].run( context(), commands ).blocks()[ 1 ].text ).toBe( "counted" );
+				expect( keys[ 2 ].run( context(), commands ).blocks()[ 1 ].text ).toBe( "reset 0" );
+			} );
+
+			it( "answers a key whose method throws with a warning, and the chat carries on", function() {
+				put( "broken.bx", "class { @Key( 'ctrl+b' ) function b( agentContext ) { throw( message = 'kaboom' ) } }" );
+				var reply = start().keys()[ 1 ].run( context(), commands );
+
+				expect( reply.blocks()[ 1 ].text ).toInclude( "[broken] failed on its key [broken:b]: kaboom" );
+			} );
+
+			it( "fails an extension whose @Key names no key", function() {
+				put( "nokey.bx", "class { @Key function k( agentContext ) {} }" );
+				var report = start().report();
+
+				expect( report[ 1 ].state ).toBe( "failed" );
+				expect( report[ 1 ].problems.toList( " " ) ).toInclude( "@Key needs a key" );
+			} );
+
+			it( "shows a status item as long as it has something to say, and leaves out one that throws", function() {
+				put( "state.bx", "class {
+					function configure() { variables.n = 0 }
+					@Status function count( agentContext ) { variables.n++; return variables.n > 1 ? 'n=' & variables.n : '' }
+					@Status( 'bad' ) function oops( agentContext ) { throw( message = 'nope' ) }
+				}" );
+				var registry = start();
+				var service = { registry : () => registry };
+				var item = ( name ) => registry.statuses().filter( s => s.name() == name )[ 1 ];
+
+				expect( item( "count" ).text( context() ) ).toBe( "" );
+				expect( item( "count" ).text( context() ) ).toBe( "n=2" );
+				expect( item( "bad" ).text( context() ) ).toBe( "" );
+				expect( item( "bad" ).text( context() ) ).toBe( "" );
+				// the reason is said once
+				expect( registry.report()[ 1 ].problems.filter( p => p.contains( "status item bad" ) ) ).toHaveLength( 1 );
+			} );
+
+			it( "lets register( registry ) add a command, a key, a status item and a listener", function() {
+				put( "calls.bx", "class {
+					function register( registry ) {
+						registry.command( 'echoit', { run : ( agentContext, commandArguments ) => agentContext.reply().ok( 'pong' ), hint : 'echo it', aliases : [ 'e' ] } )
+						registry.key( 'ctrl+p', '/echoit', { hint : 'echo from a key' } )
+						registry.key( 'ctrl+o', ( agentContext ) => 'opened', { name : 'open', hint : 'open it' } )
+						registry.status( 'ready', ( agentContext ) => 'ready' )
+						registry.on( 'onChatCommandAfter', ( data ) => { variables.seen = data.line ?: '' } )
+					}
+				}" );
+				var registry = start();
+				var keys = registry.keys();
+
+				expect( commands.lookup( "echoit" ).hint() ).toBe( "echo it" );
+				expect( commands.run( "/e", context() ).blocks()[ 1 ].text ).toBe( "pong" );
+				expect( keys.map( k => k.id() ) ).toBe( [ "calls:echoit", "calls:open" ] );
+				expect( keys[ 1 ].run( context(), commands ).blocks()[ 1 ].text ).toBe( "pong" );
+				expect( keys[ 2 ].run( context(), commands ).blocks()[ 1 ].text ).toBe( "opened" );
+				expect( registry.statuses()[ 1 ].text( context() ) ).toBe( "ready" );
+				expect( registry.report()[ 1 ].listens ).toBe( [ "onChatCommandAfter" ] );
+			} );
+
+			it( "turns a key or status item off with extension:item in extensions.disable", function() {
+				put( "two.bx", "class {
+					@Key( 'ctrl+a' ) function a( agentContext ) { return 'a' }
+					@Key( 'ctrl+b' ) function b( agentContext ) { return 'b' }
+					@Status function s( agentContext ) { return 's' }
+				}" );
+				var registry = start( { disable : [ "two:a", "two:s" ] } );
+
+				expect( registry.keys().map( k => k.id() ) ).toBe( [ "two:b" ] );
+				expect( registry.statuses() ).toBeEmpty();
+			} );
+
+			it( "runs the pulse example from the keys the service gives the screen, and shows its status", function() {
+				var example = expandPath( "/examples/extensions-agent" );
+				var service = new bxagents.models.extensions.ExtensionService( projectRoot : example, userConfig : new bxagents.models.cli.UserConfig( dir & "/none.yml" ), transport : "tui", moduleFolders : [] );
+				service.install( commands );
+				var ctx = context();
+
+				expect( service.keys().filter( k => k.id contains "pulse:" ).map( k => k.keys[ 1 ] ) ).toBe( [ "ctrl+g", "ctrl+y" ] );
+				expect( service.statusLine( ctx ) ).toBe( "" );
+				expect( service.pressed( "pulse:pulse", ctx, commands ).blocks()[ 1 ].text ).toBe( "beat 1" );
+				expect( service.pressed( "pulse:pulse", ctx, commands ).blocks()[ 1 ].text ).toBe( "beat 2" );
+				expect( service.statusLine( ctx ) ).toBe( "beat 2" );
+				service.pressed( "pulse:resetPulse", ctx, commands );
+				expect( service.statusLine( ctx ) ).toBe( "" );
+				expect( isNull( service.pressed( "nobody:nothing", ctx, commands ) ) ).toBeTrue();
+				service.unload();
+			} );
+
+			it( "hands the screen the extension keys, runs one pressed, and adds the status to the hint row", function() {
+				put( "ctl.bx", "class {
+					function configure() { variables.n = 0 }
+					@Command @Key( 'ctrl+g' ) function bump( agentContext, commandArguments ) { variables.n++; return agentContext.reply().ok( 'bumped' ) }
+					@Status function total( agentContext ) { return variables.n ? 'bumps ' & variables.n : '' }
+				}" );
+				var service = new bxagents.models.extensions.ExtensionService( projectRoot : dir, userConfig : new bxagents.models.cli.UserConfig( dir & "/none.yml" ), transport : "tui", moduleFolders : [], projectFolder : dir & "/extensions" );
+				service.install( commands );
+
+				var shown = [];
+				var statuses = [];
+				var keysGiven = [];
+				var screen = { pending : [ "", "" ] };
+				screen.readInput = () => {
+					if ( !screen.pending.len() ) { return nullValue(); }
+					screen.pending.deleteAt( 1 );
+					screen.key = screen.pending.len() ? "ctl:bump" : "";
+					return "";
+				};
+				screen.takeKey = () => { var k = screen.key; screen.key = ""; return k; };
+				for ( var name in [ "banner", "printUser", "printMarkdown", "beginTurn", "endTurn", "push", "close", "setFacts", "setImagesAllowed", "copy" ] ) {
+					screen[ name ] = () => {};
+				}
+				screen.print = ( style, text ) => shown.append( text );
+				screen.setStatus = ( text ) => statuses.append( text );
+				screen.bindKeys = ( overrides, extras = [] ) => { keysGiven.append( extras ); return []; };
+				screen.cancelRequested = () => false;
+				screen.takeSteer = () => nullValue();
+				screen.takeImages = () => [];
+				screen.isRecording = () => false;
+				var session = {
+					agentName : () => "helper", modelName : () => "m", mode : () => "in-process",
+					contextReport : () => { throw( message = "none" ); }, modelFacts : () => { throw( message = "none" ); },
+					modelInfo : () => { throw( message = "none" ); }, conversationTitle : () => "t",
+					conversationId : () => "c", keepsSessions : () => false
+				};
+				var controller = new bxagents.models.cli.chat.ChatController( session, getTempDirectory(), commands, { chat : () => { shell : true, bifs : true }, keys : () => ( {} ), problems : () => [], path : () => "x.yml" } ).withExtensions( service );
+
+				controller.run( screen );
+
+				expect( keysGiven ).toHaveLength( 1 );
+				expect( keysGiven[ 1 ][ 1 ].id ).toBe( "ctl:bump" );
+				expect( shown.toList( "|" ) ).toInclude( "bumped" );
+				expect( statuses.filter( s => s contains "bumps 1" ) ).notToBeEmpty();
+				service.unload();
+			} );
+
+		} );
+
+	}
+
+}
