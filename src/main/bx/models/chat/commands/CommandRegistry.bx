@@ -8,6 +8,17 @@ class {
 	function init() {
 		variables.ordered = []
 		variables.byName = {}
+		variables.events = nullValue()
+		return this
+	}
+
+	/**
+	 * Lets extensions listen around every command (onChatCommandBefore and onChatCommandAfter).
+	 *
+	 * @events An ExtensionEvents; none by default
+	 */
+	function withEvents( required any events ) {
+		variables.events = arguments.events
 		return this
 	}
 
@@ -84,6 +95,9 @@ class {
 	 */
 	any function only( required array names ) {
 		var kept = new "models.chat.commands.CommandRegistry@bxagents"()
+		if ( !isNull( variables.events ) ) {
+			kept.withEvents( variables.events )
+		}
 		for ( var command in variables.ordered ) {
 			if ( arguments.names.containsNoCase( command.name() ) ) {
 				kept.register( command )
@@ -125,7 +139,7 @@ class {
 	 * @line What was typed, with its prefix
 	 * @context A CommandContext
 	 *
-	 * @return A Reply. A command that does not exist, does not run here or needs a person to be an admin is a warning, not an error.
+	 * @return A Reply. A command that does not exist, does not run here or needs a person to be an admin is a warning, not an error. Extensions may stop a command before it runs, or replace its reply.
 	 */
 	any function run( required string line, required any context ) {
 		var typed = new "models.chat.commands.CommandLine@bxagents"( arguments.line )
@@ -140,7 +154,16 @@ class {
 		if ( command.permission() == "admin" && !arguments.context.isAdmin() ) {
 			return reply.warn( "/#command.name()# is for admins." )
 		}
-		return command.run( arguments.context, typed.args() )
+		if ( isNull( variables.events ) ) {
+			return command.run( arguments.context, typed.args() )
+		}
+		var before = variables.events.announce( "onChatCommandBefore", { line : arguments.line, name : typed.name(), arguments : typed.args(), transport : arguments.context.transport() } )
+		if ( before.cancelled ) {
+			return reply.warn( len( before.reason ) ? before.reason : "/#command.name()# was stopped by an extension." )
+		}
+		var answer = command.run( arguments.context, typed.args() )
+		var after = variables.events.announce( "onChatCommandAfter", { line : arguments.line, name : typed.name(), reply : answer, transport : arguments.context.transport() } )
+		return after.replaced && !isSimpleValue( after.value ) ? after.value : answer
 	}
 
 }

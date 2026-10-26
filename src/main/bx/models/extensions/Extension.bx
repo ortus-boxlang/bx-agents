@@ -29,6 +29,7 @@ class {
 		variables.properties = {}
 		variables.commands = []
 		variables.schedulers = []
+		variables.listeners = []
 		variables.problems = []
 		variables.replaces = []
 		variables.log = nullValue()
@@ -128,6 +129,18 @@ class {
 	}
 
 	/**
+	 * @listeners [ { extension, method, point } ] what the extension listens to
+	 */
+	function useListeners( required array listeners ) {
+		variables.listeners = arguments.listeners
+		return this
+	}
+
+	array function listeners() {
+		return variables.listeners
+	}
+
+	/**
 	 * @scheduler { name, path } a BoxLang scheduler class this extension brings for the served agent
 	 */
 	function addScheduler( required struct scheduler ) {
@@ -162,6 +175,7 @@ class {
 			description : variables.properties.description ?: "",
 			commands    : variables.commands.map( c => "/" & c.name() ),
 			schedulers  : variables.schedulers.map( s => s.name ),
+			listens     : variables.listeners.map( l => l.point ).unique(),
 			replaces    : variables.replaces,
 			problems    : variables.problems
 		}

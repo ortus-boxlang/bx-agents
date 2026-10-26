@@ -1,0 +1,85 @@
+/**
+ * The chat events extensions can listen to, announced through BoxLang's own interceptor service, so an
+ * extension listens to them exactly as it listens to a bx-ai event: a method named after the event.
+ *
+ *   onChatSessionStart / onChatSessionEnd     the terminal chat opens or closes
+ *   onChatConversationChange                  /new, /resume, /clear, /fork or /compact changed the conversation
+ *   onChatInput                               before a message is sent. Cancel it, or replace the text
+ *   onChatTurnStart / onChatTurnEnd           around one turn of the agent
+ *   onChatCommandBefore / onChatCommandAfter  around any command, on every transport. Cancel it before,
+ *                                             replace the reply after
+ *
+ * Every event is announced with a `data` struct. Where an event can be changed it carries the doing as
+ * functions, so a listener never reaches into anything:
+ *
+ *   data.cancel( reason )   the thing does not happen; `reason` is shown to the person
+ *   data.replace( value )   a different text (onChatInput) or reply (onChatCommandAfter) is used
+ *
+ * and the one that announced reads `cancelled`, `reason`, `replaced` and `value` afterwards. A listener
+ * that throws is caught where it is wrapped (ExtensionInterceptors), so it can neither stop a turn nor keep
+ * the listeners after it from running.
+ */
+class {
+
+	static {
+		POINTS = [
+			"onChatSessionStart", "onChatSessionEnd", "onChatConversationChange", "onChatInput",
+			"onChatTurnStart", "onChatTurnEnd", "onChatCommandBefore", "onChatCommandAfter"
+		]
+	}
+
+	function init() {
+		BoxRegisterInterceptionPoints( static.POINTS )
+		variables.problems = []
+		return this
+	}
+
+	/**
+	 * @return The names of the chat events
+	 */
+	array function points() {
+		return static.POINTS
+	}
+
+	/**
+	 * Announces an event and hands back what the listeners did to it.
+	 *
+	 * @name An event from points()
+	 * @data What happened: the keys are the event's own (text, line, name, arguments, reply, transport ...)
+	 *
+	 * @return The data, with cancelled (false), reason (""), replaced (false) and value as the listeners left them
+	 */
+	struct function announce( required string name, struct data = {} ) {
+		// the values are kept as they are (a reply is an object; a copy would be the copy a listener changed)
+		var event = {}
+		for ( var key in arguments.data ) {
+			event[ key ] = arguments.data[ key ]
+		}
+		event.cancelled = false
+		event.reason = ""
+		event.replaced = false
+		event.value = ""
+		event.cancel = ( reason = "" ) => {
+			event.cancelled = true
+			event.reason = reason
+		}
+		event.replace = ( value ) => {
+			event.replaced = true
+			event.value = value
+		}
+		try {
+			BoxAnnounce( arguments.name, event )
+		} catch ( any e ) {
+			variables.problems.append( "A listener of #arguments.name# failed: #e.message#" )
+		}
+		return event
+	}
+
+	/**
+	 * @return Sentences about listeners that failed while an event was announced
+	 */
+	array function problems() {
+		return variables.problems
+	}
+
+}

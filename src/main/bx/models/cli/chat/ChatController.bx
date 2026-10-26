@@ -50,6 +50,18 @@ class {
 		}
 		variables.screen = nullValue()
 		variables.notices = []
+		variables.events = nullValue()
+		return this
+	}
+
+	/**
+	 * Lets extensions listen to the chat: it opens and closes, a message is about to be sent (and can be
+	 * stopped or changed), a turn starts and ends, a command changes the conversation.
+	 *
+	 * @events An ExtensionEvents; none by default
+	 */
+	function withEvents( required any events ) {
+		variables.events = arguments.events
 		return this
 	}
 
@@ -104,6 +116,21 @@ class {
 			variables.screen.print( started.style, started.text )
 		}
 		variables.screen.banner( variables.session.agentName(), variables.session.modelName(), variables.session.mode() )
+		var agent = variables.session.agentName()
+		announce( "onChatSessionStart", { agent : agent, transport : "tui" } )
+		try {
+			talk( arguments.resume )
+		} finally {
+			announce( "onChatSessionEnd", { agent : agent, transport : "tui" } )
+		}
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Reads what the person types until they leave.
+	 */
+	private void function talk( required string resume ) {
 		if ( len( arguments.resume ) ) {
 			// "last" is the most recent conversation
 			command( "/resume" & ( arguments.resume == "last" ? "" : " " & arguments.resume ) )
@@ -141,6 +168,17 @@ class {
 	}
 
 	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Tells the extensions something happened and hands back what they did to it. With no extensions
+	 * listening there is nothing to ask.
+	 */
+	private struct function announce( required string name, struct data = {} ) {
+		if ( isNull( variables.events ) ) {
+			return { cancelled : false, reason : "", replaced : false, value : "" }
+		}
+		return variables.events.announce( arguments.name, arguments.data )
+	}
 
 	/**
 	 * Tells the prompt's widgets what the chat knows: the agent, the profile or model, and the conversation's name.
@@ -198,7 +236,11 @@ class {
 	 * @return False when the command asks to leave
 	 */
 	private boolean function command( required string text ) {
-		return variables.renderer.show( variables.registry.run( arguments.text, variables.context ) )
+		var reply = variables.registry.run( arguments.text, variables.context )
+		if ( reply.hasEffect( "reset" ) || reply.hasEffect( "conversation" ) ) {
+			announce( "onChatConversationChange", { line : arguments.text, transport : "tui" } )
+		}
+		return variables.renderer.show( reply )
 	}
 
 	// ----------------------------------------------------------------------------------
@@ -290,12 +332,18 @@ class {
 	/**
 	 * Sends one message and shows the turn, then deals with a run that stopped for approval.
 	 */
-	private void function turn( required string text ) {
-		variables.screen.printUser( arguments.text )
-		variables.transcript.append( { role : "you", text : arguments.text } )
+	private void function turn( required string typed ) {
+		var wanted = announce( "onChatInput", { text : arguments.typed, transport : "tui" } )
+		if ( wanted.cancelled ) {
+			variables.screen.print( "warn", len( wanted.reason ) ? wanted.reason : "An extension stopped that message." )
+			return
+		}
+		var text = wanted.replaced && isSimpleValue( wanted.value ) && len( wanted.value ) ? wanted.value : arguments.typed
+		variables.screen.printUser( text )
+		variables.transcript.append( { role : "you", text : text } )
 
 		// @path mentions: a text file goes along as a block, an image as an image part
-		var mentioned = new "models.cli.chat.FileMentions@bxagents"( variables.workingDirectory ).read( arguments.text )
+		var mentioned = new "models.cli.chat.FileMentions@bxagents"( variables.workingDirectory ).read( text )
 		for ( var problem in mentioned.problems ) {
 			variables.screen.print( "warn", problem )
 		}
@@ -307,18 +355,20 @@ class {
 			images.append( { path : pasted } )
 		}
 		var attached = variables.attachments.count()
-		var sent = variables.attachments.compose( arguments.text )
+		var sent = variables.attachments.compose( text )
 		if ( attached || images.len() ) {
 			var what = []
 			if ( attached ) { what.append( "#attached# attachment#attached == 1 ? '' : 's'#" ) }
 			if ( images.len() ) { what.append( "#images.len()# image#images.len() == 1 ? '' : 's'#" ) }
 			variables.screen.print( "muted", "Sent with " & what.toList( " and " ) & "." )
 		}
+		announce( "onChatTurnStart", { text : text, transport : "tui" } )
 		var result = execute( () => variables.session.send( sent, variables.hooks, images ) )
 		while ( result.status == "suspended" ) {
 			var decision = askApproval( result.pending )
 			result = execute( () => variables.session.resume( decision, variables.hooks ) )
 		}
+		announce( "onChatTurnEnd", { text : text, reply : result.text ?: "", status : result.status ?: "", transport : "tui" } )
 		if ( len( result.text ?: "" ) ) {
 			variables.transcript.append( { role : "agent", text : result.text } )
 		}

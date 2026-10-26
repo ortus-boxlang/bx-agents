@@ -1,0 +1,164 @@
+/**
+ * Registers what an extension listens to, in BoxLang's interceptor service, and takes it out again.
+ *
+ * An extension is an interceptor, and says so in three ways, all feeding one list:
+ *
+ *   a method named after an interception point    function onAIError( data ) { ... }
+ *   @On on any method, for another name or many   @On( [ "beforeAIToolExecute", "afterAIToolExecute" ] )
+ *   `interceptors` in configure()                  [ { class : "interceptors.Audit", properties : { level : "info" } } ]
+ *                                                  classes in the extension's folder, with their own methods
+ *
+ * `customInterceptionPoints` in configure() adds points of the extension's own, which it announces with
+ * BoxAnnounce and other extensions listen to the same way. The points that can be listened to are the ones
+ * the runtime knows: bx-ai's (beforeAIAgentRun, onAIError ...), the chat events (ExtensionEvents) and these.
+ *
+ * Each listener is wrapped, so the extension is the one named when it throws and the others still run.
+ */
+class {
+
+	static {
+		// not listeners, whatever they are called
+		LIFECYCLE = [ "configure", "onload", "onunload", "register", "init", "$inject", "$read" ]
+	}
+
+	function init() {
+		variables.annotations = new "models.extensions.ExtensionAnnotations@bxagents"()
+		variables.mixin = new "models.extensions.ExtensionMixin@bxagents"()
+		variables.pool = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getInterceptorService()
+		variables.registered = {}
+		return this
+	}
+
+	/**
+	 * @extension A loaded Extension
+	 * @allowed A function( itemName ) that says whether a listener may be registered (extensions.disable)
+	 *
+	 * @return The points it now listens to, in order
+	 */
+	array function register( required any extension, required any allowed ) {
+		var name = arguments.extension.name()
+		var instance = arguments.extension.instance()
+		var listening = []
+		BoxRegisterInterceptionPoints( asArray( instance.$read( "customInterceptionPoints", [] ) ) )
+
+		// methods of the extension itself
+		for ( var method in getMetaData( instance ).functions ?: [] ) {
+			if ( static.LIFECYCLE.contains( lCase( method.name ) ) || !arguments.allowed( method.name ) ) {
+				continue
+			}
+			var points = pointsOf( method )
+			for ( var point in points ) {
+				if ( !known( point ) ) {
+					arguments.extension.problem( "#method.name# listens to [#point#], which is not an interception point the runtime knows." )
+					continue
+				}
+				listening.append( listen( name, instance, method.name, point, arguments.extension ) )
+			}
+		}
+
+		// classes of the extension's folder
+		for ( var entry in asArray( instance.$read( "interceptors", [] ) ) ) {
+			var object = interceptorClass( arguments.extension, entry )
+			for ( var method in getMetaData( object ).functions ?: [] ) {
+				if ( static.LIFECYCLE.contains( lCase( method.name ) ) ) {
+					continue
+				}
+				for ( var point in pointsOf( method ) ) {
+					if ( known( point ) ) {
+						listening.append( listen( name, object, method.name, point, arguments.extension ) )
+					}
+				}
+			}
+		}
+		return listening
+	}
+
+	/**
+	 * Takes every listener of the extension out of the interceptor service.
+	 *
+	 * @extension The Extension's name
+	 */
+	function unregister( required string extension ) {
+		for ( var entry in variables.registered[ arguments.extension ] ?: [] ) {
+			try {
+				BoxUnregisterInterceptor( entry.wrapper, entry.point )
+			} catch ( any e ) {
+				// already gone
+			}
+		}
+		variables.registered.delete( arguments.extension )
+		return this
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * The points a method listens to: the ones in its @On (any of the four forms), else its own name when
+	 * that is a point.
+	 */
+	private array function pointsOf( required struct method ) {
+		var on = variables.annotations.options( arguments.method.annotations ?: {}, "On", "points" )
+		if ( !isNull( on ) ) {
+			return asArray( on.points ?: [ arguments.method.name ] )
+		}
+		return known( arguments.method.name ) ? [ arguments.method.name ] : []
+	}
+
+	private boolean function known( required string point ) {
+		return variables.pool.hasInterceptionPoint( createObject( "java", "ortus.boxlang.runtime.scopes.Key" ).of( arguments.point ) )
+	}
+
+	/**
+	 * Registers one wrapped method for one point.
+	 *
+	 * @return { extension, method, point }
+	 */
+	private struct function listen( required string name, required any object, required string method, required string point, required any extension ) {
+		var target = arguments.object
+		var methodName = arguments.method
+		var owner = arguments.extension
+		var point = arguments.point
+		var adapter = ( data ) => {
+			try {
+				invoke( target, methodName, [ data ] )
+			} catch ( any e ) {
+				owner.problem( "#methodName# failed on #point#: #e.message#" )
+			}
+		}
+		BoxRegisterInterceptor( adapter, arguments.point )
+		// BoxLang wraps a function in a listener of its own and keeps only that, so it is the one to take out
+		// again: it is the newest of the point's observers
+		var observers = variables.pool.getState( createObject( "java", "ortus.boxlang.runtime.scopes.Key" ).of( arguments.point ) ).getObservers()
+		variables.registered[ arguments.name ] = variables.registered[ arguments.name ] ?: []
+		variables.registered[ arguments.name ].append( { point : arguments.point, wrapper : observers[ observers.len() ].interceptor } )
+		return { extension : arguments.name, method : arguments.method, point : arguments.point }
+	}
+
+	/**
+	 * Creates one `interceptors` entry's class from the extension's folder and gives it what any class of an
+	 * extension has: settings and log, and the entry's own `properties`.
+	 */
+	private any function interceptorClass( required any extension, required any entry ) {
+		var spec = isStruct( arguments.entry ) ? arguments.entry : { class : arguments.entry }
+		var file = arguments.extension.home() & "/" & replace( spec.class, ".", "/", "all" ) & ".bx"
+		if ( !fileExists( file ) ) {
+			throw( type : "bxagents.extension", message : "The interceptor class [#spec.class#] is not at #file#." )
+		}
+		var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
+		var object = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" ).instantiate( file, context )
+		if ( !structKeyExists( object, "$inject" ) ) {
+			object.$inject = variables.mixin.$inject
+		}
+		object.$inject( "settings", arguments.extension.settings() ).$inject( "properties", spec.properties ?: {} )
+		object.$inject( "log", new "models.extensions.ExtensionLog@bxagents"( arguments.extension.name() ) )
+		if ( structKeyExists( object, "configure" ) ) {
+			object.configure()
+		}
+		return object
+	}
+
+	private array function asArray( required any value ) {
+		return isArray( arguments.value ) ? arguments.value : ( isSimpleValue( arguments.value ) && !len( arguments.value ) ? [] : [ arguments.value ] )
+	}
+
+}

@@ -19,6 +19,7 @@ class extends="testbox.system.BaseSpec" {
 						directoryDelete( dir, true );
 					}
 				}
+				application.delete( "cbController" );
 				application.delete( "bxagentsCommands" );
 				application.delete( "bxagentsExtensions" );
 			} );
@@ -95,6 +96,24 @@ class extends="testbox.system.BaseSpec" {
 				} finally {
 					served.stop();
 				}
+			} );
+
+			it( "registers the extensions with ColdBox as interceptors, and takes them out when stopped", function() {
+				var root = projectCopy();
+				var result = new bxagents.models.build.BuildPipeline( "1.0.0" ).build( root );
+				var seen = { registered : [], removed : [] };
+				var interceptors = {
+					register : ( target, name ) => seen.registered.append( name ),
+					unregister : ( name ) => seen.removed.append( name )
+				};
+				application.cbController = { getInterceptorService : () => interceptors };
+
+				var served = new bxagents.models.extensions.ServedExtensions( result.appDir ).start();
+				served.stop();
+
+				expect( seen.registered ).toInclude( "extension-audit" );
+				expect( seen.registered ).toInclude( "extension-guard" );
+				expect( seen.removed.sort( "text" ) ).toBe( seen.registered.sort( "text" ) );
 			} );
 
 			it( "does not read the person's own extensions in a served app", function() {

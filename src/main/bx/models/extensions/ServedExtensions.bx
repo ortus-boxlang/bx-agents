@@ -6,6 +6,9 @@
  *     a server does not look in a developer's home.
  *   - puts the commands, the built-ins and the extensions', in `application.bxagentsCommands`, which the
  *     web page, the HTTP command route and the chat platforms answer with (CommandCatalog.forApplication)
+ *   - registers each extension with ColdBox as an interceptor too, so a method named after a ColdBox point
+ *     (preProcess, postProcess, onException ...) listens to the requests the served app handles. The terminal
+ *     chat has no ColdBox, so these methods only run here.
  *   - starts each extension's BoxLang schedulers (ExtensionSchedulers) in the runtime's scheduler service,
  *     so a schedule an extension brings runs inside the served app. They are given the extension's
  *     merged `settings` before their `configure()` runs.
@@ -38,6 +41,7 @@ class {
 		application.bxagentsExtensions = variables.service
 		variables.schedulers = new "models.extensions.ExtensionSchedulers@bxagents"()
 		variables.schedulers.start( variables.service.registry() )
+		listenToColdBox()
 		return this
 	}
 
@@ -45,6 +49,7 @@ class {
 	 * Stops the schedulers and unloads the extensions (`onUnload()` of each).
 	 */
 	function stop() {
+		unlistenToColdBox()
 		if ( !isNull( variables.schedulers ) ) {
 			variables.schedulers.stop()
 		}
@@ -73,6 +78,43 @@ class {
 		}
 		var parsed = jsonDeserialize( fileRead( file ) )
 		return isStruct( parsed ) ? parsed : {}
+	}
+
+	/**
+	 * Registers the loaded extensions as ColdBox interceptors. ColdBox takes from each object the methods
+	 * that are named after its own points, and leaves the rest alone.
+	 */
+	private void function listenToColdBox() {
+		variables.coldboxNames = []
+		if ( !application.keyExists( "cbController" ) ) {
+			return
+		}
+		var interceptors = application.cbController.getInterceptorService()
+		for ( var extension in variables.service.registry().extensions() ) {
+			if ( !extension.isLoaded() ) {
+				continue
+			}
+			var name = "extension-" & extension.name()
+			try {
+				interceptors.register( target : extension.instance(), name : name )
+				variables.coldboxNames.append( name )
+			} catch ( any e ) {
+				extension.problem( "Its ColdBox listeners did not register: #e.message#" )
+			}
+		}
+	}
+
+	private void function unlistenToColdBox() {
+		if ( !application.keyExists( "cbController" ) ) {
+			return
+		}
+		for ( var name in variables.coldboxNames ?: [] ) {
+			try {
+				application.cbController.getInterceptorService().unregister( name )
+			} catch ( any e ) {
+				// already gone
+			}
+		}
 	}
 
 }
