@@ -310,7 +310,7 @@ class {
 			"contextWindow" : facts.contextWindow,
 			"vision"       : facts.vision,
 			"toolCount"    : config.toolCount ?: 0,
-			"capabilities" : { "events" : true, "cancel" : true, "steer" : true, "approvals" : true, "notes" : !isNull( notesProvider() ), "sessions" : !isNull( sessionStore() ), "profiles" : offered().any(), "commands" : true, "context" : true, "attachments" : true }
+			"capabilities" : { "events" : true, "cancel" : true, "steer" : true, "approvals" : true, "notes" : !isNull( notesProvider() ), "sessions" : !isNull( sessionStore() ), "profiles" : offered().any(), "commands" : true, "context" : true, "attachments" : true, "status" : new "models.extensions.ServedStatus@bxagents"().available() }
 		} )
 	}
 
@@ -328,6 +328,18 @@ class {
 		var answer = conversation.contextReport()
 		answer[ "success" ] = true
 		event.renderData( type : "json", data : answer )
+	}
+
+	/**
+	 * What the extensions' status items say for one conversation: { success, items : [ { name, text } ] }. An
+	 * item with nothing to say is left out. Query: conversationId
+	 */
+	function status( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var conversation = new "models.chat.ServerConversation@bxagents"( agent(), callerId( event ), nullValue(), rc.conversationId ?: "" )
+		event.renderData( type : "json", data : { "success" : true, "items" : new "models.extensions.ServedStatus@bxagents"().items( conversation ) } )
 	}
 
 	/**

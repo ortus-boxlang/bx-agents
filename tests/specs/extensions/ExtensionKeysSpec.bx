@@ -142,6 +142,30 @@ class extends="testbox.system.BaseSpec" {
 				service.unload();
 			} );
 
+			it( "gives the web page the status items of the served extensions, and none without extensions", function() {
+				var served = new bxagents.models.extensions.ServedStatus();
+				var had = application.keyExists( "bxagentsExtensions" ) ? application.bxagentsExtensions : nullValue();
+				application.delete( "bxagentsExtensions" );
+				try {
+					expect( served.available() ).toBeFalse();
+					expect( served.items( {} ) ).toBeEmpty();
+
+					put( "up.bx", "class { @Status function up( agentContext ) { return 'up ' & agentContext.transport() } }" );
+					var service = new bxagents.models.extensions.ExtensionService( projectRoot : dir, userConfig : new bxagents.models.cli.UserConfig( dir & "/none.yml" ), transport : "web", moduleFolders : [], projectFolder : dir & "/extensions" );
+					service.install( commands );
+					application.bxagentsExtensions = service;
+
+					expect( served.available() ).toBeTrue();
+					expect( served.items( {} ) ).toBe( [ { name : "up", text : "up web" } ] );
+					service.unload();
+				} finally {
+					application.delete( "bxagentsExtensions" );
+					if ( !isNull( had ) ) {
+						application.bxagentsExtensions = had;
+					}
+				}
+			} );
+
 			it( "hands the screen the extension keys, runs one pressed, and adds the status to the hint row", function() {
 				put( "ctl.bx", "class {
 					function configure() { variables.n = 0 }

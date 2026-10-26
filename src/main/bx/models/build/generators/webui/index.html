@@ -398,6 +398,9 @@ __THEME_TOKENS__
 	#attachBtn { background: transparent !important; color: var(--fg) !important; border: 1px solid var(--border) !important; font-weight: 400 !important; }
 	.bubble.user img.sent-image { display: block; max-height: 8rem; max-width: 100%; margin-top: 0.4rem; border-radius: 4px; }
 	form#composer.dragging { outline: 2px dashed var(--accent); }
+	#statusChips { display: inline-flex; gap: 0.35rem; }
+	#statusChips[hidden] { display: none; }
+	span.chip { font-size: 0.75rem; padding: 0.15rem 0.5rem; color: var(--muted); font-family: var(--font-mono); border: 1px solid var(--border); border-radius: var(--radius-sm); }
 	button.chip { font-size: 0.75rem; padding: 0.15rem 0.5rem; color: var(--muted); font-family: var(--font-mono); }
 	.bubble.command table { border-collapse: collapse; font-family: var(--font-mono); font-size: 0.82rem; }
 	.bubble.command td { padding: 0.1rem 0.8rem 0.1rem 0; vertical-align: top; overflow-wrap: anywhere; }
@@ -656,6 +659,7 @@ __CUSTOM_CSS__
 		<div class="actions">
 			<span class="meta" id="modelMeta"></span>
 			<button type="button" class="chip" id="contextChip" title="Estimated size of the context: system prompt, tools, notes and this conversation. Click for the breakdown" hidden></button>
+			<span id="statusChips" hidden></span>
 			<select id="profileSelect" title="The model for your next messages" aria-label="Model" hidden></select>
 			<button type="button" id="sidebarBtn" aria-expanded="true" aria-controls="sidebar" title="Show or hide conversations">Chats</button>
 			<button type="button" id="forkBtn" title="Copy this conversation under a new name and carry on in the copy" hidden>Fork</button>
@@ -736,6 +740,7 @@ __MARKDOWN_SCRIPTS__
 	var clearBtn = document.getElementById( "clearBtn" );
 	var forkBtn = document.getElementById( "forkBtn" );
 	var contextChipEl = document.getElementById( "contextChip" );
+	var statusChipsEl = document.getElementById( "statusChips" );
 	var attachBtn = document.getElementById( "attachBtn" );
 	var attachInput = document.getElementById( "attachInput" );
 	var attachChipsEl = document.getElementById( "attachChips" );
@@ -1121,7 +1126,32 @@ __MARKDOWN_SCRIPTS__
 	 * say it. Worked out on the server from the system prompt, the tool definitions, the notes and this conversation's
 	 * messages; nothing is sent to a model. Refreshed whenever any of those can have changed.
 	 */
+	/**
+	 * What the extensions' status items say, as small chips next to the context size. Each item is a short text an
+	 * extension keeps current (a branch, a build); one with nothing to say is not sent. Drawn with textContent: the
+	 * text comes from an extension, not from this page.
+	 */
+	function refreshStatus() {
+		if ( !capabilities.status ) {
+			statusChipsEl.hidden = true;
+			return;
+		}
+		apiGet( "/status?conversationId=" + encodeURIComponent( getConversationId() ) ).then( function ( answer ) {
+			statusChipsEl.textContent = "";
+			var items = ( answer && answer.success === true && answer.items ) || [];
+			items.forEach( function ( item ) {
+				var chip = document.createElement( "span" );
+				chip.className = "chip";
+				chip.title = item.name;
+				chip.textContent = item.text;
+				statusChipsEl.appendChild( chip );
+			} );
+			statusChipsEl.hidden = !items.length;
+		} );
+	}
+
 	function refreshContext() {
+		refreshStatus();
 		if ( !capabilities.context ) {
 			return;
 		}
