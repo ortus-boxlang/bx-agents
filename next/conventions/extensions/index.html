@@ -246,7 +246,7 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-smallest-extension">The smallest extension</a></li><li class="toc-level-2"><a href="#annotations">Annotations</a></li><li class="toc-level-2"><a href="#settings">Settings</a></li><li class="toc-level-2"><a href="#lifecycle">Lifecycle</a></li><li class="toc-level-2"><a href="#injection">Injection</a></li><li class="toc-level-2"><a href="#a-folder-extension">A folder extension</a></li><li class="toc-level-2"><a href="#schedulers">Schedulers</a></li><li class="toc-level-2"><a href="#listening-to-events">Listening to events</a></li><li class="toc-level-3"><a href="#interceptors-and-custominterceptionpoints">interceptors and customInterceptionPoints</a></li><li class="toc-level-2"><a href="#keys-and-status">Keys and status</a></li><li class="toc-level-2"><a href="#register-registry-">register&#x28; registry &#x29;</a></li><li class="toc-level-2"><a href="#where-extensions-come-from">Where extensions come from</a></li><li class="toc-level-2"><a href="#turning-things-off">Turning things off</a></li><li class="toc-level-2"><a href="#looking-at-them">Looking at them</a></li><li class="toc-level-2"><a href="#not-yet">Not yet</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-smallest-extension">The smallest extension</a></li><li class="toc-level-2"><a href="#annotations">Annotations</a></li><li class="toc-level-2"><a href="#settings">Settings</a></li><li class="toc-level-2"><a href="#lifecycle">Lifecycle</a></li><li class="toc-level-2"><a href="#injection">Injection</a></li><li class="toc-level-2"><a href="#a-folder-extension">A folder extension</a></li><li class="toc-level-2"><a href="#schedulers">Schedulers</a></li><li class="toc-level-2"><a href="#listening-to-events">Listening to events</a></li><li class="toc-level-3"><a href="#interceptors-and-custominterceptionpoints">interceptors and customInterceptionPoints</a></li><li class="toc-level-2"><a href="#keys-and-status">Keys and status</a></li><li class="toc-level-2"><a href="#register-registry-">register&#x28; registry &#x29;</a></li><li class="toc-level-2"><a href="#prefixes-and--sources">Prefixes and &#x40; sources</a></li><li class="toc-level-2"><a href="#where-extensions-come-from">Where extensions come from</a></li><li class="toc-level-2"><a href="#turning-things-off">Turning things off</a></li><li class="toc-level-2"><a href="#looking-at-them">Looking at them</a></li><li class="toc-level-2"><a href="#not-yet">Not yet</a></li></ul></details>
 		
 
 		
@@ -421,6 +421,37 @@ function beats( agentContext ) {
 	registry.on( &quot;onChatCommandAfter&quot;, ( data ) =&gt; ... )                         // an event, or an array of them
 }
 </code></pre>
+<h2 id="prefixes-and--sources"><a href="#prefixes-and--sources" id="prefixes-and--sources" name="prefixes-and--sources" class="anchor"></a>Prefixes and <code>@</code> sources</h2>
+<p>Both are for the terminal chat only.</p>
+<p><code>@Prefix</code> claims the start of a line in the message box. The method gets the <code>agentContext</code> and the text after the prefix. It answers one of two ways: a <code>Reply</code> (or a string) is shown and nothing is sent, and <code>{ send : &quot;text&quot; }</code> is sent to the agent as the message, after <code>onChatInput</code> has seen it.</p>
+<pre><code class="language-js">@Prefix( &quot;%&quot; )
+@Hint( &quot;ask for an explanation: % why is the sky blue&quot; )
+function explain( agentContext, text ) {
+	return { send : &quot;Explain this in one short paragraph: #text#&quot; }
+}
+
+@Prefix( &quot;=&quot; )
+function count( agentContext, text ) {
+	return agentContext.reply().ok( &quot;#text.listToArray( ' ' ).len()# words&quot; )
+}
+</code></pre>
+<p><code>/</code>, <code>!</code>, <code>#</code> and <code>@</code> are the chat's own, and a lone <code>?</code> asks for the keys; a prefix that starts with one of them, is empty or has a space is refused with a sentence. The longest prefix wins. Two extensions on one prefix are a warning and the later layer wins.</p>
+<p><code>@Source( &quot;ticket&quot; )</code> brings content along with a message the way <code>@path</code> brings a file. Write <code>@ticket:TCK-1</code> (or <code>@ticket:&quot;two words&quot;</code>) and the method is called with the <code>agentContext</code> and the query. It returns <code>{ name, content }</code>, an array of them or a string; the content goes with the message and the mention stays in it. <code>@Suggest( &quot;ticket&quot; )</code> on another method is optional: it returns the values the menu offers as the person types after the colon. It is asked on keystrokes, so it must be quick; one that throws gives no suggestions and the reason is put on its extension once. A source name can be anything that starts with a letter, since files are plain <code>@path</code>.</p>
+<pre><code class="language-js">@Source( &quot;ticket&quot; )
+function ticket( agentContext, query ) { return { name : &quot;ticket #query#&quot;, content : tickets[ query ] } }
+
+@Suggest( &quot;ticket&quot; )
+function ticketNames( agentContext, query ) { return tickets.keyArray() }
+</code></pre>
+<p>Written as calls: <code>registry.prefix( &quot;%&quot;, ( agentContext, text ) =&gt; ..., { hint : &quot;...&quot; } )</code> and <code>registry.source( &quot;ticket&quot;, ( agentContext, query ) =&gt; ..., { hint : &quot;...&quot;, suggest : ( agentContext, query ) =&gt; [ ... ] } )</code>.</p>
+<p>The person chooses the prefix or the name, by the id <code>extension:method</code>, in <code>~/.bxagents/bxAgents.yml</code>:</p>
+<pre><code class="language-yaml">chat:
+  prefixes:
+    desk:explain: &quot;?%&quot;
+  sources:
+    desk:ticket: issue
+</code></pre>
+<p>A choice that cannot be used is reported and the extension's own is kept. <code>extensions.disable</code> takes <code>extension:method</code> for these too.</p>
 <h2 id="where-extensions-come-from"><a href="#where-extensions-come-from" id="where-extensions-come-from" name="where-extensions-come-from" class="anchor"></a>Where extensions come from</h2>
 <div class="bxsites-table-wrap"><table class="table">
 <thead>
@@ -444,7 +475,7 @@ function beats( agentContext ) {
 bxAgents extensions --json
 </code></pre>
 <h2 id="not-yet"><a href="#not-yet" id="not-yet" name="not-yet" class="anchor"></a>Not yet</h2>
-<p>Extensions cannot yet add composer prefixes, <code>@</code> sources, web UI slots, gateways, CLI verbs, tools and skills. Those come next; the plan is <code>EXTENSIONS-PLAN.md</code> in the repository.</p>
+<p>Extensions cannot yet add web UI slots, gateways, CLI verbs, tools and skills. Those come next; the plan is <code>EXTENSIONS-PLAN.md</code> in the repository.</p>
 
 	
 
@@ -494,7 +525,7 @@ bxAgents extensions --json
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-smallest-extension">The smallest extension</a></li><li class="toc-level-2"><a href="#annotations">Annotations</a></li><li class="toc-level-2"><a href="#settings">Settings</a></li><li class="toc-level-2"><a href="#lifecycle">Lifecycle</a></li><li class="toc-level-2"><a href="#injection">Injection</a></li><li class="toc-level-2"><a href="#a-folder-extension">A folder extension</a></li><li class="toc-level-2"><a href="#schedulers">Schedulers</a></li><li class="toc-level-2"><a href="#listening-to-events">Listening to events</a></li><li class="toc-level-3"><a href="#interceptors-and-custominterceptionpoints">interceptors and customInterceptionPoints</a></li><li class="toc-level-2"><a href="#keys-and-status">Keys and status</a></li><li class="toc-level-2"><a href="#register-registry-">register&#x28; registry &#x29;</a></li><li class="toc-level-2"><a href="#where-extensions-come-from">Where extensions come from</a></li><li class="toc-level-2"><a href="#turning-things-off">Turning things off</a></li><li class="toc-level-2"><a href="#looking-at-them">Looking at them</a></li><li class="toc-level-2"><a href="#not-yet">Not yet</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-smallest-extension">The smallest extension</a></li><li class="toc-level-2"><a href="#annotations">Annotations</a></li><li class="toc-level-2"><a href="#settings">Settings</a></li><li class="toc-level-2"><a href="#lifecycle">Lifecycle</a></li><li class="toc-level-2"><a href="#injection">Injection</a></li><li class="toc-level-2"><a href="#a-folder-extension">A folder extension</a></li><li class="toc-level-2"><a href="#schedulers">Schedulers</a></li><li class="toc-level-2"><a href="#listening-to-events">Listening to events</a></li><li class="toc-level-3"><a href="#interceptors-and-custominterceptionpoints">interceptors and customInterceptionPoints</a></li><li class="toc-level-2"><a href="#keys-and-status">Keys and status</a></li><li class="toc-level-2"><a href="#register-registry-">register&#x28; registry &#x29;</a></li><li class="toc-level-2"><a href="#prefixes-and--sources">Prefixes and &#x40; sources</a></li><li class="toc-level-2"><a href="#where-extensions-come-from">Where extensions come from</a></li><li class="toc-level-2"><a href="#turning-things-off">Turning things off</a></li><li class="toc-level-2"><a href="#looking-at-them">Looking at them</a></li><li class="toc-level-2"><a href="#not-yet">Not yet</a></li></ul></nav>
 				</aside>
 			
 		</div>
