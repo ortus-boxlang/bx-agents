@@ -46,10 +46,36 @@ class extends="testbox.system.BaseSpec" {
 			it( "builds a project with no extensions folder exactly as before", function() {
 				var root = projectCopy();
 				directoryDelete( root & "/extensions", true );
+				// the example's loopback gateway is a type its extension brings, so it goes with it
+				fileDelete( root & "/gateways/loopback.bx" );
 				var result = new bxagents.models.build.BuildPipeline( "1.0.0" ).build( root );
 
 				expect( directoryExists( result.appDir & "/extensions" ) ).toBeFalse();
 				expect( fileRead( result.appDir & "/Application.bx" ) ).notToInclude( "ServedExtensions" );
+			} );
+
+			it( "keeps what extensions carry where it is: tools, skills, gateways and web files are not copied or merged", function() {
+				var root = projectCopy();
+				var result = new bxagents.models.build.BuildPipeline( "1.0.0" ).build( root );
+				var app = result.appDir;
+
+				// the extensions folder is in the app as it is...
+				expect( fileExists( app & "/extensions/helpdesk/tools/Tickets.bx" ) ).toBeTrue();
+				expect( fileExists( app & "/extensions/helpdesk/skills/triage/SKILL.md" ) ).toBeTrue();
+				expect( fileExists( app & "/extensions/loopback/gateways/Loopback.bx" ) ).toBeTrue();
+				expect( fileExists( app & "/extensions/panel/web/panel.js" ) ).toBeTrue();
+				// ...and nothing of it was put anywhere else
+				expect( fileExists( app & "/tools/Tickets.bx" ) ).toBeFalse();
+				expect( directoryExists( app & "/skills/triage" ) ).toBeFalse();
+				expect( directoryExists( app & "/chat/ext" ) ).toBeFalse();
+				// the factory, the page and Application.bx read them there
+				expect( fileRead( app & "/agent/GeneratedAgentFactory.bx" ) ).toInclude( "../extensions/helpdesk/tools" );
+				expect( fileRead( app & "/agent/GeneratedAgentFactory.bx" ) ).toInclude( "../extensions/helpdesk/skills" );
+				expect( fileRead( app & "/chat/index.html" ) ).toInclude( '<script src="/chat/ext/panel/panel.js"></script>' );
+				expect( fileRead( app & "/chat/index.html" ) ).toInclude( '<link rel="stylesheet" href="/chat/ext/panel/panel.css">' );
+				expect( fileRead( app & "/Application.bx" ) ).toInclude( 'ExtensionGateways@bxagents"( getDirectoryFromPath( getCurrentTemplatePath() ) ).register( "loopback"' );
+				expect( fileRead( app & "/handlers/ChatUi.bx" ) ).toInclude( "function extensionFile(" );
+				expect( fileRead( app & "/config/Router.bx" ) ).toInclude( "/chat/ext/:extension/:file-regex:(.+)" );
 			} );
 
 			function hasScheduler( required string name ) {

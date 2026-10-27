@@ -437,8 +437,13 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   project's `extensions:` settings again without leaving the chat.
 - Extensions can add to the web page. `@Slot` puts a string in the header, sidebar or composer (text, or
   markup with `html : true`), asked for in one request, `/api/slots`, behind the page's own sign-in. A folder
-  extension's `web/` folder is served with the page at `<path>/ext/<name>/`, its `*.css` and `*.js` are linked in,
+  extension's `web/` folder is served with the page at `<path>/ext/<name>/`, read from the extension itself, its `*.css` and `*.js` are linked in,
   and scripts get a small `bxagents` object (`slot`, `runCommand`, `onRefresh`, `refresh`, `conversationId`).
+- Extensions can carry tools, skills, gateway types and verbs, and the app reads them where they are, with nothing
+  copied or merged. `tools/` and `skills/` of a folder extension join the agent's tools and the global skills; a class
+  in `gateways/` is a gateway type (its `*EnvVar` options read from the environment), all kept in one
+  `GatewayTypes` registry where a built-in type cannot be replaced and a clash is a warning; `@Verb` adds a
+  `bxAgents <verb>`, listed in `bxAgents help`. `extensions.disable` takes `extension:item` for each.
 - `examples/extensions-agent` shows a one-file extension, one with several commands, an admin-only command
   with a lifecycle, and a folder with a command class and a scheduler.
 

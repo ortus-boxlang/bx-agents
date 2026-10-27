@@ -58,6 +58,7 @@ class {
 			collectAnnotatedPrefixes( arguments.extension )
 			collectAnnotatedSources( arguments.extension )
 			collectAnnotatedSlots( arguments.extension )
+			collectAnnotatedVerbs( arguments.extension )
 			collectFolderCommands( arguments.extension )
 			collectSchedulers( arguments.extension )
 		} catch ( any e ) {
@@ -283,6 +284,30 @@ class {
 			} else {
 				arguments.extension.addSource( new "models.extensions.ExtensionSource@bxagents"( arguments.extension, method.name, name, hint, reader ) )
 			}
+		}
+	}
+
+	/**
+	 * `@Verb( "release" )` on a method: a `bxAgents release` verb. The method is called with the flags as a struct.
+	 * `{ name, hint, valueOptions }` in the struct form; `@Hint` says what it does.
+	 */
+	private void function collectAnnotatedVerbs( required any extension ) {
+		var instance = arguments.extension.instance()
+		for ( var method in getMetaData( instance ).functions ?: [] ) {
+			var given = method.annotations ?: {}
+			var options = variables.annotations.options( given, "Verb", "name" )
+			if ( isNull( options ) ) {
+				continue
+			}
+			var where = "#arguments.extension.name()#.#method.name#"
+			var problems = []
+			var name = lCase( trim( options.name ?: method.name ) )
+			var hint = variables.annotations.setting( options, "hint", given, "Hint", "", problems, where )
+			for ( var problem in problems ) {
+				arguments.extension.problem( problem )
+			}
+			var valueOptions = options.valueOptions ?: []
+			arguments.extension.addVerb( new "models.extensions.ExtensionVerb@bxagents"( arguments.extension.name(), method.name, name, hint, isArray( valueOptions ) ? valueOptions : [ valueOptions ], callerOf( instance, method.name ) ) )
 		}
 	}
 

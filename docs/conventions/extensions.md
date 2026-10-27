@@ -309,7 +309,7 @@ function about( agentContext ) { return "<strong>Panel</strong><br>Use the Ping 
 
 The string is shown as text. Only a slot that says `html : true` has its string put into the page as markup; that is the author saying it is their own markup, so it must never carry what a visitor typed (use `encodeForHTML()`). An empty string shows nothing. The page asks for every slot in one request, `GET <path>/api/slots?conversationId=`, behind the same sign-in or API key as the rest of the page's API, each time it refreshes the context size. A slot that throws is left out and the reason is put on its extension once. Written as a call: `registry.slot( "header", ( agentContext ) => "...", { html : false, name : "badge" } )`. `extensions.disable` takes `extension:method` for a slot.
 
-**`web/`** is a folder inside a folder extension. The build copies it to `<path>/ext/<name>/` next to the page, so every file in it (images too) is served from there. The `*.css` and `*.js` files that sit directly in `web/` are linked into the page, in file name order: styles in the head and scripts at the end of the body. An extension turned off by name in `extensions.disable` brings nothing.
+**`web/`** is a folder inside a folder extension. The page serves every file in it (images too) at `<path>/ext/<name>/<file>`, read from the extension itself in the built app; nothing is copied next to the page. The `*.css` and `*.js` files that sit directly in `web/` are linked into the page, in file name order: styles in the head and scripts at the end of the body. An extension turned off by name in `extensions.disable` brings nothing.
 
 ```
 extensions/panel/
@@ -330,6 +330,46 @@ The page gives scripts one small object, `bxagents`:
 | `bxagents.refresh()` | asks the page to refresh now |
 | `bxagents.conversationId()` | the conversation in view |
 | `bxagents.apiBase` | the page's API path, for your own `fetch` calls |
+
+## Tools and skills
+
+A folder extension can carry its own tools and skills:
+
+```
+extensions/helpdesk/
+  Extension.bx
+  tools/Tickets.bx             a normal bx-ai tool class
+  skills/triage/SKILL.md       a normal skill folder
+```
+
+The extension stays as it is. The app reads the folders where they are (`extensions/helpdesk/tools/` in the built app) and gives the tools to the root agent as if they were in the project's own `tools/`, and adds the skills to the global skills every agent gets. Nothing is copied or merged into the project's `tools/` or `skills/`. A tool or skill of the project's own wins over an extension's of the same name, and a later extension wins over an earlier one. `extensions.disable` takes `extension:Tickets` (the tool's file name) or `extension:ticket-triage` (the skill's name) for one, or the extension's name for all of them.
+
+## Gateway types
+
+A class in an extension's `gateways/` folder is a gateway type, named after its file in lower case: `extensions/matrix/gateways/Matrix.bx` is the type `matrix`. It is an ordinary bx-ai gateway (see the built-in ones, which extend `ScheduledGatewayBase`); its `getName()` must be the same as its file, lower case, because that is the key bx-ai's gateway registry holds it under. A project then uses it like any other:
+
+```js
+// gateways/chat.bx
+class {
+	function configure() {
+		return { type : "matrix", homeserver : "https://matrix.example.org", tokenEnvVar : "MATRIX_TOKEN" };
+	}
+}
+```
+
+Every option named `<name>EnvVar` is the name of an environment variable: the gateway receives its value as `<name>` (here `token`), and it is read when the app starts, so a secret is never a literal in the build. The app builds the gateway from the extension's own class file and registers it when it starts.
+
+All the types come from one registry, `GatewayTypes`: the built-in ones, and whatever extensions bring. A built-in type cannot be replaced (an extension cannot take over `telegram`). Two extensions on one type is a warning and the later one wins. A file name that is not a usable type name (a letter, then letters, digits and `-`) is refused. `extensions.disable` takes `extension:Matrix` for one type or the extension's name for all of them. The gateway classes are read from the project's extensions only.
+
+## Command line verbs
+
+```js
+@Verb( { name : "greet", valueOptions : [ "name" ] } )
+@Hint( "say hello from the command line: bxAgents greet --name=Ada" )
+function greet( options ) { return "Hello, #options.name ?: 'there'#!" }
+```
+
+`bxAgents greet --name=Ada` finds the verb in the extensions (modules, the person's own and the project's, loaded as in the chat) when it is not one of the module's own. The method is called with the flags as a struct, as a built-in verb gets them (`--projectRoot` is always there). It returns an exit code, a message to print, `{ exitCode, message }`, or nothing. A flag that must have a value is listed in `valueOptions`, so `--name` alone is refused as it is for a built-in verb. A method that throws is an error with exit code 1 that names the extension. A built-in verb cannot be replaced, and two extensions on one verb is a warning with the later one winning. `bxAgents help` lists the verbs extensions add. They are not in the generated shell completions, which stay as they are. `registry.verb( "greet", ( options ) => ..., { hint, valueOptions } )` is the call form, and `extensions.disable` takes `extension:method`.
 
 ## Where extensions come from
 
@@ -359,6 +399,6 @@ bxAgents extensions          # the list, where each came from and what it added
 bxAgents extensions --json
 ```
 
-## Not yet
+## What stays in the project
 
-Extensions cannot yet add gateways, CLI verbs, tools and skills. Those come next.
+Tools, skills, gateway types and `web/` files are read from the project's own `extensions/` folder, which the build copies into the app as it is. An extension in an installed module or in your own `~/.bxagents/extensions` still adds commands, keys, prefixes, listeners and verbs to the chat and the command line, but it does not travel into a built app: a server never reads a developer's home folder.

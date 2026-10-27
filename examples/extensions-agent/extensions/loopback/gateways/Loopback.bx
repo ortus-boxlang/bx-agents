@@ -1,0 +1,52 @@
+import bxModules.bxai.models.gateway.IGateway;
+import bxModules.bxai.models.gateway.contracts.GatewayContext;
+import bxModules.bxai.models.gateway.contracts.GatewayEvent;
+import bxModules.bxai.models.gateway.contracts.GatewayDeliveryResult;
+
+/**
+ * A gateway type an extension brings. It is a normal bx-ai gateway, so everything a built-in one can do is open to
+ * it; this one only keeps what it is asked to deliver, to show the shape. Its file name is the type, so a project
+ * uses it with `gateways/<anything>.bx` saying `type : "loopback"`. The class names itself the same as its file.
+ *
+ * The app reads this file where it is, in `extensions/loopback/gateways/`. A `*EnvVar` option of the entry (here
+ * `noteEnvVar`) is the name of an environment variable, and arrives here as the value, never as a literal in the build.
+ */
+class extends="bxModules.bxagents.models.gateways.ScheduledGatewayBase" {
+
+	property name="note" type="string" default="";
+	property name="delivered" type="array";
+
+	function init() {
+		variables.name = "loopback"
+		variables.description = "Keeps what it is asked to deliver (an example gateway from an extension)"
+		variables.delivered = []
+		return this
+	}
+
+	/**
+	 * @options The entry's options: `note`, and `noteEnvVar` read from the environment as `note`
+	 */
+	public IGateway function configure( required any options ) {
+		super.configure( arguments.options )
+		variables.note = trim( arguments.options.note ?: "" )
+		return this
+	}
+
+	public array function getCapabilities() {
+		return [ "text" ]
+	}
+
+	public void function onConnect() {
+		logEvent( "loopback gateway connected (note: #variables.note#)" )
+	}
+
+	GatewayDeliveryResult function deliver( required GatewayEvent event, required GatewayContext context ) {
+		variables.delivered.append( toString( arguments.event.getData().text ?: "" ) )
+		return new GatewayDeliveryResult( deliveryID: arguments.event.getId() )
+	}
+
+	array function delivered() {
+		return variables.delivered
+	}
+
+}

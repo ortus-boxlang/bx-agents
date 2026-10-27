@@ -1,0 +1,426 @@
+/**
+ * What project extensions carry that the app reads where it is: gateway types (and the registry of them), tools,
+ * skills, command line verbs and the files of `web/`. Real extension files are loaded by the real loader.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+
+		describe( "gateway types", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-gwtypes-" );
+				variables.fixtures = expandPath( "/fixtures" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function put( required string path, required string code ) {
+				directoryCreate( getDirectoryFromPath( dir & "/" & path ), true, true );
+				fileWrite( dir & "/" & path, code );
+			}
+
+			it( "holds the built-in types, with what each one needs", function() {
+				var types = new bxagents.models.gateways.GatewayTypes();
+
+				expect( types.names() ).toInclude( "telegram" );
+				expect( types.names() ).toInclude( "whatsapp-cloud" );
+				expect( types.names().slice( 1, 3 ) ).toBe( [ "mock", "cli", "http" ] );
+				expect( types.pushNames() ).notToInclude( "http" );
+				expect( types.spec( "telegram" ).required ).toBe( [ "botTokenEnvVar" ] );
+				expect( types.spec( "telegram" ).class ).toBe( "bxModules.bxagents.models.gateways.TelegramGateway" );
+				expect( types.secretsFor( "http", {} ) ).toBe( { secret : "secretEnvVar" } );
+				expect( types.problems() ).toBeEmpty();
+			} );
+
+			it( "takes a type from each class in an extension's gateways/ folder, named after its file", function() {
+				put( "extensions/matrix/gateways/Matrix.bx", "class {}" );
+				put( "extensions/matrix/gateways/Hub.bx", "class {}" );
+				put( "extensions/other/Extension.bx", "class {}" );
+				var types = new bxagents.models.gateways.GatewayTypes().withExtensions( dir );
+
+				expect( types.has( "matrix" ) ).toBeTrue();
+				expect( types.has( "HUB" ) ).toBeTrue();
+				expect( types.spec( "matrix" ).source ).toBe( "extension:matrix" );
+				expect( types.spec( "matrix" ).style ).toBe( "push" );
+				expect( types.spec( "matrix" ).file ).toInclude( "extensions/matrix/gateways/Matrix.bx" );
+				expect( types.pushNames() ).toInclude( "matrix" );
+			} );
+
+			it( "leaves out what extensions.disable turns off, the extension or one of its types", function() {
+				put( "extensions/matrix/gateways/Matrix.bx", "class {}" );
+				put( "extensions/matrix/gateways/Hub.bx", "class {}" );
+				put( "extensions/acme/gateways/Chat.bx", "class {}" );
+				var types = new bxagents.models.gateways.GatewayTypes().withExtensions( dir, [ "matrix:Hub", "acme" ] );
+
+				expect( types.has( "matrix" ) ).toBeTrue();
+				expect( types.has( "hub" ) ).toBeFalse();
+				expect( types.has( "chat" ) ).toBeFalse();
+			} );
+
+			it( "does not let an extension replace a built-in type, and says so", function() {
+				put( "extensions/x/gateways/Telegram.bx", "class {}" );
+				var types = new bxagents.models.gateways.GatewayTypes().withExtensions( dir );
+
+				expect( types.spec( "telegram" ).source ).toBe( "built-in" );
+				expect( types.problems() ).toHaveLength( 1 );
+				expect( types.problems()[ 1 ] ).toInclude( "[telegram] is a built-in type and cannot be replaced" );
+			} );
+
+			it( "warns when two extensions bring one type and lets the later one win", function() {
+				put( "extensions/a/gateways/Chat.bx", "class {}" );
+				put( "extensions/b/gateways/Chat.bx", "class {}" );
+				var types = new bxagents.models.gateways.GatewayTypes().withExtensions( dir );
+
+				expect( types.spec( "chat" ).source ).toBe( "extension:b" );
+				expect( types.names().filter( n => n == "chat" ) ).toHaveLength( 1 );
+				expect( types.problems()[ 1 ] ).toInclude( "of extension:a is replaced by the one of extension:b" );
+			} );
+
+			it( "refuses a file name that is not a usable type name", function() {
+				put( "extensions/x/gateways/Bad_Name.bx", "class {}" );
+				put( "extensions/x/gateways/1st.bx", "class {}" );
+				put( "extensions/x/gateways/Good-One.bx", "class {}" );
+				var types = new bxagents.models.gateways.GatewayTypes().withExtensions( dir );
+
+				expect( types.has( "good-one" ) ).toBeTrue();
+				expect( types.has( "bad_name" ) ).toBeFalse();
+				expect( types.problems() ).toHaveLength( 2 );
+			} );
+
+			it( "reads every *EnvVar option of an extension's type from the environment, and leaves a built-in's own list alone", function() {
+				put( "extensions/m/gateways/Matrix.bx", "class {}" );
+				var types = new bxagents.models.gateways.GatewayTypes().withExtensions( dir );
+
+				expect( types.secretsFor( "matrix", { tokenEnvVar : "T", noteEnvVar : "N", EnvVar : "x", room : "r" } ) ).toBe( { token : "tokenEnvVar", note : "noteEnvVar" } );
+				expect( types.secretsFor( "telegram", { botTokenEnvVar : "T", extraEnvVar : "x" } ) ).toBe( { botToken : "botTokenEnvVar" } );
+				expect( types.secretsFor( "nothing", {} ) ).toBe( {} );
+			} );
+
+			it( "lets the validator accept an extension's type, and reject it without the extension", function() {
+				var root = dir & "/project";
+				directoryCopy( fixtures & "/gateways-telegram", root, true );
+				fileDelete( root & "/gateways/telegramChannel.bx" );
+				put( "project/gateways/loop.bx", "class { function configure() { return { type : 'loopback', noteEnvVar : 'NOTE' }; } }" );
+				var validate = () => new bxagents.models.build.ProjectValidator().validate(
+					root,
+					new bxagents.models.build.ProjectDiscoverer().discover( root ),
+					new bxagents.models.build.AgentConfigResolver().resolve( projectRoot = root )
+				);
+
+				expect( validate().errors.filter( e => e.contains( "unknown type [loopback]" ) ) ).toHaveLength( 1 );
+
+				put( "project/extensions/loopback/gateways/Loopback.bx", "class {}" );
+				expect( validate().errors ).toBeEmpty();
+			} );
+
+			it( "renders a registration that builds the extension's gateway where it is, with its secrets read from the environment", function() {
+				var root = dir & "/project";
+				directoryCopy( fixtures & "/gateways-telegram", root, true );
+				fileDelete( root & "/gateways/telegramChannel.bx" );
+				put( "project/gateways/loop.bx", "class { function configure() { return { type : 'loopback', note : 'plain', noteEnvVar : 'NOTE_ENV' }; } }" );
+				put( "project/extensions/loopback/gateways/Loopback.bx", "class {}" );
+				var types = new bxagents.models.gateways.GatewayTypes().withExtensions( root );
+				var result = new bxagents.models.build.generators.GatewayGenerator().generate(
+					new bxagents.models.build.ProjectDiscoverer().discover( root ), dir & "/app", {}, types
+				);
+
+				expect( result.registrationStatements ).toHaveLength( 1 );
+				expect( result.registrationStatements[ 1 ] ).toInclude( 'ExtensionGateways@bxagents"( getDirectoryFromPath( getCurrentTemplatePath() ) ).register( "loopback"' );
+				expect( result.registrationStatements[ 1 ] ).toInclude( 'getSystemSetting( "NOTE_ENV", "" )' );
+				expect( result.registrationStatements[ 1 ] ).notToInclude( "noteEnvVar" );
+				expect( result.hasPushGateway ).toBeTrue();
+			} );
+
+		} );
+
+		describe( "the gateway of an extension in the built app", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-extgw-" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "builds the gateway from its class file where it is, gives it the options and registers it under its name", function() {
+				directoryCreate( dir & "/extensions/loopback/gateways", true, true );
+				fileCopy( expandPath( "/examples/extensions-agent/extensions/loopback/gateways/Loopback.bx" ), dir & "/extensions/loopback/gateways/Loopback.bx" );
+				var gateway = new bxagents.models.extensions.ExtensionGateways( dir ).register( "loopback", { note : "from the test" } );
+
+				expect( gateway.getName() ).toBe( "loopback" );
+				expect( aiGatewayRegistry().has( "loopback" ) ).toBeTrue();
+				expect( aiGatewayRegistry().get( "loopback" ).getNote() ).toBe( "from the test" );
+			} );
+
+			it( "says so when no extension has the type, or when the class names itself otherwise", function() {
+				expect( () => new bxagents.models.extensions.ExtensionGateways( dir ).register( "nothing", {} ) ).toThrow( "bxagents.gateway" );
+
+				directoryCreate( dir & "/extensions/x/gateways", true, true );
+				var source = fileRead( expandPath( "/examples/extensions-agent/extensions/loopback/gateways/Loopback.bx" ) ).replace( 'variables.name = "loopback"', 'variables.name = "other"' );
+				fileWrite( dir & "/extensions/x/gateways/Loopback.bx", source );
+				var attempt = () => new bxagents.models.extensions.ExtensionGateways( dir ).register( "loopback", {} );
+				expect( attempt ).toThrow( "bxagents.gateway" );
+			} );
+
+		} );
+
+		describe( "tools and skills read in place", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-exttools-" );
+				variables.tool = ( name ) => "class { @AITool( 'does #name#' ) function #name#( x ) { return '#name#'; } }";
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "finds the tools and skills folders of the extensions that have them", function() {
+				put( "extensions/b/tools/T.bx", "x" );
+				put( "extensions/a/tools/T.bx", "x" );
+				put( "extensions/a/skills/s/SKILL.md", "x" );
+				put( "extensions/c/Extension.bx", "class {}" );
+				put( "extensions/solo.bx", "class {}" );
+				var bundles = new bxagents.models.extensions.ExtensionBundles();
+
+				expect( bundles.folders( dir, "tools" ).map( f => f.extension ) ).toBe( [ "a", "b" ] );
+				expect( bundles.folders( dir, "skills" ).map( f => f.extension ) ).toBe( [ "a" ] );
+				expect( bundles.folders( dir, "tools" )[ 1 ].relative ).toBe( "../extensions/a/tools" );
+				expect( bundles.folders( dir & "/none", "tools" ) ).toBeEmpty();
+			} );
+
+			it( "loads an extension's tools where they are, with the project's own winning, and leaves out what extensions.disable says", function() {
+				put( "app/tools/Own.bx", tool( "shared" ) );
+				put( "app/extensions/acme/tools/Both.bx", tool( "shared" ) );
+				put( "app/extensions/acme/tools/Keep.bx", tool( "keep" ) );
+				put( "app/extensions/acme/tools/Drop.bx", tool( "drop" ) );
+				put( "app/extensions/off/tools/Off.bx", tool( "off" ) );
+				var loader = new bxagents.models.build.ToolRegistryLoader();
+				var folders = [
+					{ extension : "acme", path : dir & "/app/extensions/acme/tools" },
+					{ extension : "off", path : dir & "/app/extensions/off/tools" }
+				];
+				var tools = loader.loadWithExtensions( dir & "/app/tools", folders, [ "acme:Drop", "off" ] );
+
+				expect( tools.map( t => t.getName() ).sort( "text" ) ).toBe( [ "keep", "shared" ] );
+				// the project's own `shared` is the one kept
+				expect( tools.filter( t => t.getName() == "shared" )[ 1 ].getDescription() ).toBe( "does shared" );
+				expect( loader.load( dir & "/app/extensions/acme/tools" ).map( t => t.getName() ).sort( "text" ) ).toBe( [ "drop", "keep", "shared" ] );
+			} );
+
+			it( "adds an extension's skills to the global skills once, and lets one the project has win", function() {
+				put( "ext/acme/skills/triage/SKILL.md", "---
+name: ticket-triage
+description: Sort tickets.
+---
+Sort them." );
+				put( "ext/acme/skills/other/SKILL.md", "---
+name: other-skill
+description: Something else.
+---
+Other." );
+				var folders = [ { extension : "acme", path : dir & "/ext/acme/skills" } ];
+				var before = aiGlobalSkills().len();
+				var skills = new bxagents.models.extensions.ExtensionSkills();
+
+				try {
+					expect( skills.load( folders, [ "acme:other-skill" ] ) ).toBe( [ "ticket-triage" ] );
+					expect( skills.load( folders, [ "acme:other-skill" ] ) ).toBeEmpty();
+					expect( aiGlobalSkills().len() ).toBe( before + 1 );
+					expect( skills.load( [ { extension : "acme", path : dir & "/ext/acme/skills" } ], [ "acme" ] ) ).toBeEmpty();
+				} finally {
+					var names = [ "ticket-triage", "other-skill" ];
+					var kept = aiGlobalSkills().filter( s => !names.contains( s.getName() ) );
+					aiGlobalSkills().clear();
+					aiGlobalSkills().append( kept, true );
+				}
+			} );
+
+			it( "writes the extension tools and skills into the generated factory, and nothing for a project without them", function() {
+				var fixtures = expandPath( "/fixtures" );
+				var root = dir & "/project";
+				directoryCopy( fixtures & "/valid-minimal", root, true );
+				var generate = () => {
+					var build = dir & "/build" & createUUID();
+					var config = new bxagents.models.build.AgentConfigResolver().resolve( projectRoot = root );
+					var result = new bxagents.models.build.generators.ColdBoxAppGenerator().generate( root, build, config );
+					return fileRead( result.agentFactory );
+				};
+
+				var plain = generate();
+				expect( plain ).notToInclude( "ExtensionSkills" );
+				expect( plain ).notToInclude( "loadWithExtensions" );
+
+				put( "project/extensions/acme/tools/Keep.bx", tool( "keep" ) );
+				put( "project/extensions/acme/skills/triage/SKILL.md", "x" );
+				var factory = generate();
+				expect( factory ).toInclude( 'ExtensionSkills@bxagents"().load( [ { extension : "acme", path : resolveAppPath( "../extensions/acme/skills"' );
+				expect( factory ).toInclude( 'loadWithExtensions( resolveAppPath( "../tools"' );
+				expect( factory ).toInclude( '{ extension : "acme", path : resolveAppPath( "../extensions/acme/tools"' );
+			} );
+
+		} );
+
+		describe( "verbs", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-extverbs-" );
+				variables.userFile = dir & "/user/none.yml";
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function verbsFor( array builtIn = [ "build", "serve" ], array disable = [] ) {
+				var service = new bxagents.models.extensions.ExtensionService( projectRoot : dir & "/project", userConfig : new bxagents.models.cli.UserConfig( userFile ), transport : "tui", moduleFolders : [], projectSettings : { disable : disable } );
+				var verbs = new bxagents.models.extensions.ExtensionVerbs( dir & "/project", builtIn, service );
+				return verbs;
+			}
+
+			it( "reads @Verb in its forms and runs it with the flags", function() {
+				put( "project/extensions/rel.bx", "class {
+					@Verb @Hint( 'plain' ) function release( options ) { return 7 }
+					@Verb( 'say' ) function s( options ) { return 'said ' & ( options.what ?: '' ) }
+					@Verb( { name : 'full', valueOptions : [ 'version' ] } ) function f( options ) { return { exitCode : 3, message : 'full' } }
+					@Verb( 'quiet' ) function q( options ) { }
+					@Verb( 'boom' ) function b( options ) { throw( message = 'kaboom' ) }
+				}" );
+				var verbs = verbsFor();
+
+				expect( verbs.verbs().map( v => v.name() ) ).toBe( [ "boom", "full", "quiet", "release", "say" ] );
+				expect( verbs.find( "release" ).hint() ).toBe( "plain" );
+				expect( verbs.find( "full" ).valueOptions() ).toBe( [ "version" ] );
+				expect( verbs.find( "release" ).run( {} ) ).toBe( { exitCode : 7, message : "" } );
+				expect( verbs.find( "say" ).run( { what : "hi" } ) ).toBe( { exitCode : 0, message : "said hi" } );
+				expect( verbs.find( "full" ).run( {} ) ).toBe( { exitCode : 3, message : "full" } );
+				expect( verbs.find( "quiet" ).run( {} ) ).toBe( { exitCode : 0, message : "" } );
+				expect( verbs.find( "boom" ).run( {} ).exitCode ).toBe( 1 );
+				expect( verbs.find( "boom" ).run( {} ).message ).toInclude( "[rel] failed in the verb boom: kaboom" );
+				expect( isNull( verbs.find( "nothing" ) ) ).toBeTrue();
+				verbs.service().unload();
+			} );
+
+			it( "adds a verb written as a call in register( registry )", function() {
+				put( "project/extensions/calls.bx", "class { function register( registry ) { registry.verb( 'deploy-it', ( options ) => 'ok', { hint : 'go', valueOptions : [ 'to' ] } ) } }" );
+				var verbs = verbsFor();
+
+				expect( verbs.find( "deploy-it" ).run( {} ).message ).toBe( "ok" );
+				expect( verbs.find( "deploy-it" ).valueOptions() ).toBe( [ "to" ] );
+				verbs.service().unload();
+			} );
+
+			it( "does not replace a built-in verb, warns on a clash between extensions and refuses a bad name", function() {
+				put( "project/extensions/a.bx", "class { @Verb( 'serve' ) function s( options ) { return 1 } @Verb( 'twin' ) function t( options ) { return 'a' } @Verb( 'Bad_Name' ) function b( options ) { return 1 } }" );
+				put( "project/extensions/b.bx", "class { @Verb( 'twin' ) function t( options ) { return 'b' } }" );
+				var verbs = verbsFor();
+
+				expect( verbs.verbs().map( v => v.name() ) ).toBe( [ "twin" ] );
+				expect( verbs.find( "twin" ).run( {} ).message ).toBe( "b" );
+				expect( verbs.problems().filter( p => p.contains( "built-in verb and cannot be replaced" ) ) ).toHaveLength( 1 );
+				expect( verbs.problems().filter( p => p.contains( "is replaced by the one of b:t" ) ) ).toHaveLength( 1 );
+				expect( verbs.problems().filter( p => p.contains( "[bad_name]" ) ) ).toHaveLength( 1 );
+				verbs.service().unload();
+			} );
+
+			it( "turns a verb off with extension:method in extensions.disable", function() {
+				put( "project/extensions/rel.bx", "class { @Verb( 'one' ) function a( options ) { return 1 } @Verb( 'two' ) function b( options ) { return 2 } }" );
+				var verbs = verbsFor( [], [ "rel:a" ] );
+
+				expect( verbs.verbs().map( v => v.name() ) ).toBe( [ "two" ] );
+				verbs.service().unload();
+			} );
+
+			it( "is asked for by the command line only for a verb the module does not have", function() {
+				put( "project/extensions/hello.bx", "class { @Verb( 'greet' ) function g( options ) { return 0 } @Verb( { name : 'needs', valueOptions : [ 'name' ] } ) function n( options ) { return 0 } }" );
+				var moduleConfig = new bxagents.ModuleConfig();
+
+				expect( moduleConfig.dispatch( [ "greet", "--projectRoot=" & dir & "/project" ] ) ).toBe( 0 );
+				expect( moduleConfig.dispatch( [ "needs", "--name=x", "--projectRoot=" & dir & "/project" ] ) ).toBe( 0 );
+				// a flag that must have a value is refused without one, as for a built-in verb
+				expect( moduleConfig.dispatch( [ "needs", "--name", "--projectRoot=" & dir & "/project" ] ) ).toBe( 1 );
+				expect( moduleConfig.dispatch( [ "nope", "--projectRoot=" & dir & "/project" ] ) ).toBe( 1 );
+			} );
+
+		} );
+
+		describe( "web files served from the extension", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-extweb-" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "finds a file of the extension's web/ folder, in a subfolder too", function() {
+				put( "extensions/acme/web/panel.css", "/* c */" );
+				put( "extensions/acme/web/img/logo.txt", "x" );
+				var files = new bxagents.models.extensions.ExtensionWebFiles( dir );
+
+				expect( files.find( "acme", "panel.css" ) ).toBe( dir & "/extensions/acme/web/panel.css" );
+				expect( files.find( "acme", "img/logo.txt" ) ).toBe( dir & "/extensions/acme/web/img/logo.txt" );
+			} );
+
+			it( "finds nothing for a file that is not there, a path that climbs out, a hidden file or a folder", function() {
+				put( "extensions/acme/web/panel.css", "/* c */" );
+				put( "extensions/acme/web/.secret", "x" );
+				put( "extensions/acme/Extension.bx", "class { secret = 1 }" );
+				put( "config/extensions.json", "{}" );
+				var files = new bxagents.models.extensions.ExtensionWebFiles( dir );
+
+				for ( var attempt in [ "nope.css", "../Extension.bx", "img/../../Extension.bx", ".secret", "a\b", "", "/panel.css", "img", "panel.css/" ] ) {
+					expect( files.find( "acme", attempt ) ).toBe( "" );
+				}
+				for ( var extension in [ "", "..", ".", "acme/..", "ac me", ".hidden", "nobody" ] ) {
+					expect( files.find( extension, "panel.css" ) ).toBe( "" );
+				}
+			} );
+
+			it( "serves nothing from an extension that extensions.disable turns off", function() {
+				put( "extensions/acme/web/panel.css", "/* c */" );
+				put( "extensions/other/web/o.css", "/* o */" );
+				put( "config/extensions.json", '{ "disable": [ "acme" ] }' );
+				var files = new bxagents.models.extensions.ExtensionWebFiles( dir );
+
+				expect( files.find( "acme", "panel.css" ) ).toBe( "" );
+				expect( files.find( "other", "o.css" ) ).toBe( dir & "/extensions/other/web/o.css" );
+			} );
+
+			it( "does not serve a file through a link that leads out of web/", function() {
+				put( "extensions/acme/web/panel.css", "/* c */" );
+				put( "outside.txt", "secret" );
+				try {
+					createObject( "java", "java.nio.file.Files" ).createSymbolicLink(
+						createObject( "java", "java.nio.file.Paths" ).get( dir & "/extensions/acme/web/leak.txt", [] ),
+						createObject( "java", "java.nio.file.Paths" ).get( dir & "/outside.txt", [] ),
+						[]
+					);
+				} catch ( any e ) {
+					// no symbolic links on this file system: nothing to check
+					return;
+				}
+
+				expect( new bxagents.models.extensions.ExtensionWebFiles( dir ).find( "acme", "leak.txt" ) ).toBe( "" );
+			} );
+
+		} );
+
+	}
+
+}

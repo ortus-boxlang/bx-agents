@@ -701,6 +701,11 @@ class {
 			"	}",
 			""
 		]
+		// the skills project extensions carry join bx-ai's global skills, before any agent is built
+		var skillsLine = extensionSkillsLine( arguments.projectRoot, arguments.resolvedConfig )
+		if ( len( skillsLine ) ) {
+			lines.insertAt( lines.findNoCase( "		// usage recording is off unless Agent.yaml says usage: true" ), skillsLine )
+		}
 
 		for ( var helperLine in renderResolveAppPath() ) {
 			lines.append( helperLine )
@@ -1192,6 +1197,24 @@ class {
 	}
 
 	/**
+	 * The line of the generated factory that adds the skills project extensions carry to bx-ai's global skills, read
+	 * in place from each extension's own `skills/` folder in the app. Blank when no extension has one, so a project
+	 * without them has a factory that is just as it was.
+	 *
+	 * @projectRoot The project's folder
+	 * @resolvedConfig The root's resolved config; only `extensions.disable` is used
+	 */
+	private string function extensionSkillsLine( required string projectRoot, required struct resolvedConfig ) {
+		var folders = new "models.extensions.ExtensionBundles@bxagents"().folders( arguments.projectRoot, "skills" )
+		if ( !folders.len() ) {
+			return ""
+		}
+		var literals = folders.map( f => '{ extension : "#Strings::bxLiteral( f.extension )#", path : resolveAppPath( "#Strings::bxLiteral( f.relative )#", "#Strings::bxLiteral( f.source )#" ) }' )
+		var disableLiteral = renderLiteral( new "models.extensions.ExtensionSettings@bxagents"().disableList( isStruct( arguments.resolvedConfig.extensions ?: "" ) ? arguments.resolvedConfig.extensions : {} ) )
+		return '		new "models.extensions.ExtensionSkills@bxagents"().load( [ #literals.toList( ", " )# ], #disableLiteral# )'
+	}
+
+	/**
 	 * The generated statements that decide ONE agent's tools. An agent gets its
 	 * own `tools/` folder plus whatever its `tools:` list names, resolved against
 	 * the registry when the app assembles its agents (see ToolSelector). It does
@@ -1226,7 +1249,13 @@ class {
 			ownToolsFallback = Strings::normalizePath( arguments.nodePath ) & "/tools"
 		}
 
-		if ( len( ownToolsRelative ) ) {
+		// the root agent also gets the tools its project's extensions carry, read in place from their own folders
+		var extensionTools = len( arguments.nodeRelativePath ) ? [] : new "models.extensions.ExtensionBundles@bxagents"().folders( arguments.nodePath, "tools" )
+		if ( len( ownToolsRelative ) && extensionTools.len() ) {
+			var folderLiterals = extensionTools.map( f => '{ extension : "#Strings::bxLiteral( f.extension )#", path : resolveAppPath( "#Strings::bxLiteral( f.relative )#", "#Strings::bxLiteral( f.source )#" ) }' )
+			var disableLiteral = renderLiteral( new "models.extensions.ExtensionSettings@bxagents"().disableList( isStruct( arguments.resolvedConfig.extensions ?: "" ) ? arguments.resolvedConfig.extensions : {} ) )
+			lines.append( 'var #arguments.varName#OwnTools = new "models.build.ToolRegistryLoader@bxagents"().loadWithExtensions( resolveAppPath( "#Strings::bxLiteral( ownToolsRelative )#", "#Strings::bxLiteral( ownToolsFallback )#" ), [ #folderLiterals.toList( ", " )# ], #disableLiteral# )' )
+		} else if ( len( ownToolsRelative ) ) {
 			lines.append( 'var #arguments.varName#OwnTools = new "models.build.ToolRegistryLoader@bxagents"().load( resolveAppPath( "#Strings::bxLiteral( ownToolsRelative )#", "#Strings::bxLiteral( ownToolsFallback )#" ) )' )
 		} else {
 			lines.append( "var #arguments.varName#OwnTools = []" )

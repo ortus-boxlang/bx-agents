@@ -1,25 +1,24 @@
 /**
- * Puts the `web/` folders of a project's folder extensions into the web page's mount, and says which files the page
- * should link.
+ * Says which files of the project's folder extensions the web page links. The `web/` folders themselves stay where they
+ * are: the app serves every file under `extensions/<name>/web/` as `<path>/ext/<name>/<file>` from there (see
+ * ExtensionWebFiles), so nothing is copied next to the page.
  *
- *   extensions/acme/web/panel.css, panel.js, logo.png   ->   <mount>/ext/acme/panel.css, panel.js, logo.png
+ *   extensions/acme/web/panel.css, panel.js, logo.png   ->   <path>/ext/acme/panel.css, panel.js, logo.png
  *
- * Every file under `web/` is served from `<path>/ext/<name>/`, in folders too. The `*.css` and `*.js` files that sit
- * directly in `web/` are linked into the page (styles in the head, scripts at the end of the body, in file name order),
- * so the page has the `bxagents` script object by the time they run. An extension turned off by name in
- * `extensions.disable` brings nothing. Single-file extensions have no folder, so they bring nothing here.
+ * The `*.css` and `*.js` files that sit directly in `web/` are linked into the page (styles in the head, scripts at the
+ * end of the body, in file name order), so the page has the `bxagents` script object by the time they run. An extension
+ * turned off by name in `extensions.disable` brings nothing. Single-file extensions have no folder, so they bring nothing.
  */
 class {
 
 	/**
 	 * @projectRoot The project's folder
-	 * @mountDir The folder the web page is written into (`<app>/<path>`)
 	 * @path The page's URL path, such as "/chat" or ""
 	 * @disable The `extensions.disable` entries
 	 *
-	 * @return { styles, scripts, extensions } - the HTML to put in the page, and the extensions that brought files
+	 * @return { styles, scripts, extensions } - the HTML to put in the page, and the extensions that have files
 	 */
-	struct function copy( required string projectRoot, required string mountDir, required string path, array disable = [] ) {
+	struct function links( required string projectRoot, required string path, array disable = [] ) {
 		var found = { styles : [], scripts : [], extensions : [] }
 		var source = arguments.projectRoot & "/extensions"
 		if ( !directoryExists( source ) ) {
@@ -29,10 +28,9 @@ class {
 		var names = directoryList( source, false, "name", "", "name" ).filter( name => !name.startsWith( "." ) )
 		for ( var name in names ) {
 			var web = source & "/" & name & "/web"
-			if ( !directoryExists( web ) || isDisabled( settings, arguments.disable, name ) ) {
+			if ( !directoryExists( web ) || settings.isOff( arguments.disable, name ) ) {
 				continue
 			}
-			directoryCopy( web, arguments.mountDir & "/ext/" & name, true )
 			found.extensions.append( name )
 			var base = arguments.path & "/ext/" & name & "/"
 			for ( var file in directoryList( web, false, "name", "", "name" ) ) {
@@ -58,18 +56,6 @@ class {
 			scripts    : arguments.found.scripts.toList( char( 10 ) ),
 			extensions : arguments.found.extensions
 		}
-	}
-
-	/**
-	 * Only a name or glob turns an extension off as a whole; `extension:item` entries turn off one thing of it.
-	 */
-	private boolean function isDisabled( required any settings, required array disable, required string name ) {
-		for ( var pattern in arguments.disable ) {
-			if ( !pattern.contains( ":" ) && arguments.settings.matches( pattern, arguments.name ) ) {
-				return true
-			}
-		}
-		return false
 	}
 
 }

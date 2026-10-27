@@ -8,6 +8,7 @@
  *   registry.status( "branch", ( agentContext ) => "main" )    a piece of status
  *   registry.on( "onChatInput", ( data ) => ... )              a listener, for one event or an array of them
  *   registry.prefix( "$", ( agentContext, text ) => ..., { hint : "..." } )   a prefix in the message box
+ *   registry.verb( "release", ( options ) => 0, { hint : "...", valueOptions : [ "version" ] } )   a `bxAgents release` verb
  *   registry.slot( "header", ( agentContext ) => "build ok", { html : false } )   a piece of the web page
  *   registry.source( "jira", ( agentContext, query ) => ..., { hint : "...", suggest : ( agentContext, query ) => [ ... ] } )
  *
@@ -112,6 +113,16 @@ class {
 	 */
 	function slot( required string place, required any call, struct options = {} ) {
 		variables.extension.addSlot( new "models.extensions.ExtensionSlot@bxagents"( variables.extension, arguments.options.name ?: arguments.place, arguments.place, arguments.options.html ?: false, arguments.call ) )
+		return this
+	}
+
+	/**
+	 * @name The verb, as typed after `bxAgents`
+	 * @call A function( options ) returning an exit code, a message or { exitCode, message }
+	 * @options { hint, valueOptions, item }; valueOptions are the flags that must come with a value
+	 */
+	function verb( required string name, required any call, struct options = {} ) {
+		variables.extension.addVerb( new "models.extensions.ExtensionVerb@bxagents"( variables.extension.name(), arguments.options.item ?: arguments.name, arguments.name, arguments.options.hint ?: "", arguments.options.valueOptions ?: [], arguments.call ) )
 		return this
 	}
 

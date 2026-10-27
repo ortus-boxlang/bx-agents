@@ -1,0 +1,87 @@
+/**
+ * The verbs extensions add to the command line, settled for one run. The extensions are loaded the way the terminal chat
+ * loads them (modules, the person's own and the project's), and the verbs they hold are checked against the verbs the
+ * module has: a built-in verb cannot be replaced, and two extensions on one verb is a warning with the later one winning.
+ *
+ * Loading runs `configure()` and `onLoad()` of every extension, as in the chat, so this is only done when a verb is asked
+ * for that the module does not have, or to list them in `bxAgents help`, and only when there are extensions to load
+ * (ExtensionService.mayHaveExtensions()).
+ */
+class {
+
+	/**
+	 * @projectRoot The project's folder
+	 * @builtIn The names of the verbs the module has
+	 * @service An ExtensionService; one for the project is made when not given
+	 */
+	function init( required string projectRoot, required array builtIn, any service ) {
+		variables.verbs = []
+		variables.problems = []
+		var loaded = isNull( arguments.service ) ? new "models.extensions.ExtensionService@bxagents"( projectRoot : arguments.projectRoot, transport : "tui" ) : arguments.service
+		variables.service = loaded
+		loaded.install( new "models.chat.commands.CommandCatalog@bxagents"().standard() )
+		settle( loaded.registry().verbs(), arguments.builtIn )
+		return this
+	}
+
+	/**
+	 * @return The ExtensionService the verbs came from (the caller unloads it when done)
+	 */
+	any function service() {
+		return variables.service
+	}
+
+	/**
+	 * @return The ExtensionVerb objects in use, in name order
+	 */
+	array function verbs() {
+		return variables.verbs
+	}
+
+	/**
+	 * @name A verb typed on the command line
+	 *
+	 * @return The ExtensionVerb; null when no extension has it
+	 */
+	any function find( required string name ) {
+		for ( var verb in variables.verbs ) {
+			if ( verb.name() == arguments.name ) {
+				return verb
+			}
+		}
+	}
+
+	/**
+	 * @return Sentences about verbs that were refused or replaced, and extensions that did not load
+	 */
+	array function problems() {
+		return variables.problems
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private void function settle( required array found, required array builtIn ) {
+		var byName = {}
+		for ( var verb in arguments.found ) {
+			if ( !reFind( "^[a-z][a-z0-9-]*$", verb.name() ) ) {
+				variables.problems.append( "The verb [#verb.name()#] of #verb.id()# is not used: a verb starts with a lower case letter and holds letters, digits and -." )
+				continue
+			}
+			if ( arguments.builtIn.contains( verb.name() ) ) {
+				variables.problems.append( "The verb [#verb.name()#] of #verb.id()# is not used: [#verb.name()#] is a built-in verb and cannot be replaced." )
+				continue
+			}
+			if ( byName.keyExists( verb.name() ) ) {
+				variables.problems.append( "The verb [#verb.name()#] of #byName[ verb.name() ].id()# is replaced by the one of #verb.id()#, which loaded later." )
+			}
+			byName[ verb.name() ] = verb
+		}
+		variables.verbs = byName.keyArray().sort( "textnocase" ).map( n => byName[ n ] )
+		for ( var extension in variables.service.report() ) {
+			if ( extension.state == "failed" ) {
+				variables.problems.append( "Extension [#extension.name#] did not load: #extension.problems.toList( ' ' )#" )
+			}
+		}
+	}
+
+}
