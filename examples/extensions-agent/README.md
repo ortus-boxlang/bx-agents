@@ -11,13 +11,14 @@ A project that shows what extensions can do. Everything is in `extensions/`:
 | `audit.bx` | one file | `onChatCommandAfter`, an event of its own (`customInterceptionPoints`), an admin command |
 | `pulse.bx` | one file | `@Key` on a command (Ctrl+G) and on a plain method, `@Status` next to the context size |
 | `desk.bx` | one file | `@Prefix` (send a message, or answer at once), `@Source` with `@Suggest` (`@ticket:TCK-1`), and `ask()`/`choose()`/`confirm()` in `/newticket` |
+| `panel/` | folder | `@Slot` (text, and `html : true`) and a `web/` folder: `panel.css`, `panel.js` and the page's `bxagents` script object |
 | `freeze/` | folder | `interceptors` in `configure()`: a class with properties that stops commands |
 | `standup/` | folder | an `Extension.bx`, a command class in `commands/`, a BoxLang scheduler in `schedulers/` |
 
 ```bash
 bxAgents chat            # try /extensions, /hello, /roll 2d6, /deploy, /standup, Ctrl+G
 bxAgents extensions      # the list, from the shell
-bxAgents serve           # the standup scheduler is registered with the served app
+bxAgents serve           # the standup scheduler is registered with the served app; the page is at /chat
 ```
 
 Turn something off in `Agent.yaml`: `extensions: { disable: [ roll, "deploy:status" ] }`.

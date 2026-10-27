@@ -33,6 +33,7 @@ class {
 		variables.keys = []
 		variables.prefixes = []
 		variables.sources = []
+		variables.slots = []
 		variables.statuses = []
 		variables.functionListeners = []
 		variables.problems = []
@@ -178,6 +179,28 @@ class {
 		return variables.sources
 	}
 
+	function addSlot( required any slot ) {
+		variables.slots.append( arguments.slot )
+		return this
+	}
+
+	function dropSlot( required any slot ) {
+		var dropped = arguments.slot
+		variables.slots = variables.slots.filter( s => s.id() != dropped.id() )
+		return this
+	}
+
+	array function slots() {
+		return variables.slots
+	}
+
+	/**
+	 * @return True when a folder extension has a `web/` folder: files the web page links and serves
+	 */
+	boolean function hasWebFolder() {
+		return len( variables.folder ) && directoryExists( variables.folder & "/web" )
+	}
+
 	function addStatus( required any status ) {
 		variables.statuses.append( arguments.status )
 		return this
@@ -258,6 +281,8 @@ class {
 			status      : variables.statuses.map( s => s.name() ),
 			prefixes    : variables.prefixes.map( p => p.prefix() ),
 			sources     : variables.sources.map( s => s.name() ),
+			slots       : variables.slots.map( s => s.place() ),
+			web         : hasWebFolder(),
 			replaces    : variables.replaces,
 			problems    : variables.problems
 		}

@@ -310,7 +310,7 @@ class {
 			"contextWindow" : facts.contextWindow,
 			"vision"       : facts.vision,
 			"toolCount"    : config.toolCount ?: 0,
-			"capabilities" : { "events" : true, "cancel" : true, "steer" : true, "approvals" : true, "notes" : !isNull( notesProvider() ), "sessions" : !isNull( sessionStore() ), "profiles" : offered().any(), "commands" : true, "context" : true, "attachments" : true, "status" : new "models.extensions.ServedStatus@bxagents"().available() }
+			"capabilities" : { "events" : true, "cancel" : true, "steer" : true, "approvals" : true, "notes" : !isNull( notesProvider() ), "sessions" : !isNull( sessionStore() ), "profiles" : offered().any(), "commands" : true, "context" : true, "attachments" : true, "status" : new "models.extensions.ServedStatus@bxagents"().available(), "slots" : new "models.extensions.ServedSlots@bxagents"().available() }
 		} )
 	}
 
@@ -340,6 +340,18 @@ class {
 		}
 		var conversation = new "models.chat.ServerConversation@bxagents"( agent(), callerId( event ), nullValue(), rc.conversationId ?: "" )
 		event.renderData( type : "json", data : { "success" : true, "items" : new "models.extensions.ServedStatus@bxagents"().items( conversation ) } )
+	}
+
+	/**
+	 * What the extensions' slots hold for one conversation: { success, items : [ { id, extension, place, html, text } ] }.
+	 * A slot with nothing to show is left out. Query: conversationId
+	 */
+	function slots( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var conversation = new "models.chat.ServerConversation@bxagents"( agent(), callerId( event ), nullValue(), rc.conversationId ?: "" )
+		event.renderData( type : "json", data : { "success" : true, "items" : new "models.extensions.ServedSlots@bxagents"().items( conversation ) } )
 	}
 
 	/**

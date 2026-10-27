@@ -57,6 +57,7 @@ class {
 			collectAnnotatedStatus( arguments.extension )
 			collectAnnotatedPrefixes( arguments.extension )
 			collectAnnotatedSources( arguments.extension )
+			collectAnnotatedSlots( arguments.extension )
 			collectFolderCommands( arguments.extension )
 			collectSchedulers( arguments.extension )
 		} catch ( any e ) {
@@ -281,6 +282,30 @@ class {
 				arguments.extension.addSource( new "models.extensions.ExtensionSource@bxagents"( arguments.extension, method.name, name, hint, reader, callerOfText( instance, suggesters[ lCase( name ) ] ) ) )
 			} else {
 				arguments.extension.addSource( new "models.extensions.ExtensionSource@bxagents"( arguments.extension, method.name, name, hint, reader ) )
+			}
+		}
+	}
+
+	/**
+	 * `@Slot( "header" )` on a method: it returns what to show in that place of the web page. `{ place, html }` in the
+	 * struct form; `html : true` lets the string be HTML.
+	 */
+	private void function collectAnnotatedSlots( required any extension ) {
+		var instance = arguments.extension.instance()
+		for ( var method in getMetaData( instance ).functions ?: [] ) {
+			var options = variables.annotations.options( method.annotations ?: {}, "Slot", "place" )
+			if ( isNull( options ) ) {
+				continue
+			}
+			var where = "#arguments.extension.name()#.#method.name#"
+			var asked = options.place ?: ""
+			if ( !isSimpleValue( asked ) || !len( trim( asked ) ) ) {
+				throw( type : "bxagents.extension", message : "#where#: @Slot needs a place, such as @Slot( ""header"" )." )
+			}
+			try {
+				arguments.extension.addSlot( new "models.extensions.ExtensionSlot@bxagents"( arguments.extension, method.name, trim( asked ), options.html ?: false, callerOf( instance, method.name ) ) )
+			} catch ( any e ) {
+				throw( type : "bxagents.extension", message : "#where#: #e.message#" )
 			}
 		}
 	}

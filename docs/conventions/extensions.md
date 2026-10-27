@@ -293,6 +293,44 @@ if ( agentContext.confirm( "Make the #priority# ticket?" ) ) { ... }
 
 `/reload` loads the extensions again without leaving the chat: it runs `onUnload()` of what was loaded, reads `~/.bxagents/bxAgents.yml` and the `extensions:` settings of `Agent.yaml` anew, and loads what is found, with its commands, keys, status items, prefixes, sources and listeners. An extension that fails to load is reported and left out; the others load. It is for admins and works in the terminal chat only: a served app registers schedulers and ColdBox listeners when it starts, so restart it instead.
 
+## The web page: slots and `web/`
+
+Two ways to add to the web page. Both are served with the page; the terminal chat has no page, so they are ignored there.
+
+**Slots** put a string in a named place of the page: `header` (a chip next to the context size), `sidebar` (a panel under the list of conversations) or `composer` (next to the Attach button). The method is called with the `agentContext` and returns the string:
+
+```js
+@Slot( "header" )
+function badge( agentContext ) { return variables.pings > 0 ? "#variables.pings# pings" : "" }
+
+@Slot( { place : "sidebar", html : true } )
+function about( agentContext ) { return "<strong>Panel</strong><br>Use the Ping button." }
+```
+
+The string is shown as text. Only a slot that says `html : true` has its string put into the page as markup; that is the author saying it is their own markup, so it must never carry what a visitor typed (use `encodeForHTML()`). An empty string shows nothing. The page asks for every slot in one request, `GET <path>/api/slots?conversationId=`, behind the same sign-in or API key as the rest of the page's API, each time it refreshes the context size. A slot that throws is left out and the reason is put on its extension once. Written as a call: `registry.slot( "header", ( agentContext ) => "...", { html : false, name : "badge" } )`. `extensions.disable` takes `extension:method` for a slot.
+
+**`web/`** is a folder inside a folder extension. The build copies it to `<path>/ext/<name>/` next to the page, so every file in it (images too) is served from there. The `*.css` and `*.js` files that sit directly in `web/` are linked into the page, in file name order: styles in the head and scripts at the end of the body. An extension turned off by name in `extensions.disable` brings nothing.
+
+```
+extensions/panel/
+  Extension.bx
+  web/
+    panel.css
+    panel.js
+    logo.png        served at <path>/ext/panel/logo.png
+```
+
+The page gives scripts one small object, `bxagents`:
+
+| | |
+|---|---|
+| `bxagents.slot( place )` | a box of your own in `header`, `sidebar` or `composer`, to draw into |
+| `bxagents.runCommand( "/ping" )` | runs a slash command as if it were typed |
+| `bxagents.onRefresh( fn )` | called after each change to the conversation, once the slots are drawn |
+| `bxagents.refresh()` | asks the page to refresh now |
+| `bxagents.conversationId()` | the conversation in view |
+| `bxagents.apiBase` | the page's API path, for your own `fetch` calls |
+
 ## Where extensions come from
 
 | Layer | Folder | Runs in |
@@ -323,4 +361,4 @@ bxAgents extensions --json
 
 ## Not yet
 
-Extensions cannot yet add web UI slots, gateways, CLI verbs, tools and skills. Those come next; the plan is `EXTENSIONS-PLAN.md` in the repository.
+Extensions cannot yet add gateways, CLI verbs, tools and skills. Those come next.
