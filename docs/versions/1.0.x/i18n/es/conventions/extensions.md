@@ -232,6 +232,51 @@ function register( registry ) {
 }
 ```
 
+## Prefijos y fuentes `@`
+
+Ambos son solo para el chat de terminal.
+
+`@Prefix` reclama el comienzo de una línea en la caja de mensajes. El método recibe el `agentContext` y el texto que sigue al prefijo. Responde de una de dos formas: un `Reply` (o una cadena) se muestra y no se envía nada, y `{ send : "texto" }` se envía al agente como mensaje, después de que `onChatInput` lo haya visto.
+
+```js
+@Prefix( "%" )
+@Hint( "pedir una explicación: % por qué el cielo es azul" )
+function explain( agentContext, text ) {
+	return { send : "Explica esto en un párrafo corto: #text#" }
+}
+
+@Prefix( "=" )
+function count( agentContext, text ) {
+	return agentContext.reply().ok( "#text.listToArray( ' ' ).len()# palabras" )
+}
+```
+
+`/`, `!`, `#` y `@` son del propio chat, y un `?` solo pide las teclas; un prefijo que empieza con uno de ellos, está vacío o tiene un espacio se rechaza con una frase. Gana el prefijo más largo. Dos extensiones con el mismo prefijo son un aviso y gana la capa posterior.
+
+`@Source( "ticket" )` trae contenido junto al mensaje como `@ruta` trae un archivo. Escribe `@ticket:TCK-1` (o `@ticket:"dos palabras"`) y se llama al método con el `agentContext` y la consulta. Devuelve `{ name, content }`, un array de ellos o una cadena; el contenido viaja con el mensaje y la mención se queda en él. `@Suggest( "ticket" )` en otro método es opcional: devuelve los valores que ofrece el menú mientras se escribe tras los dos puntos. Se consulta en cada tecla, así que debe ser rápido; el que lanza un error no da sugerencias y el motivo se anota una vez en su extensión. El nombre de una fuente puede ser cualquiera que empiece con una letra, ya que los archivos son `@ruta` a secas.
+
+```js
+@Source( "ticket" )
+function ticket( agentContext, query ) { return { name : "ticket #query#", content : tickets[ query ] } }
+
+@Suggest( "ticket" )
+function ticketNames( agentContext, query ) { return tickets.keyArray() }
+```
+
+Escrito como llamadas: `registry.prefix( "%", ( agentContext, text ) => ..., { hint : "..." } )` y `registry.source( "ticket", ( agentContext, query ) => ..., { hint : "...", suggest : ( agentContext, query ) => [ ... ] } )`.
+
+La persona elige el prefijo o el nombre, por el id `extensión:método`, en `~/.bxagents/bxAgents.yml`:
+
+```yaml
+chat:
+  prefixes:
+    desk:explain: "?%"
+  sources:
+    desk:ticket: issue
+```
+
+Una elección que no se puede usar se avisa y se mantiene la de la extensión. `extensions.disable` acepta `extensión:método` también para estos.
+
 ## De dónde vienen las extensiones
 
 | Capa | Carpeta | Corre en |
@@ -262,4 +307,4 @@ bxAgents extensions --json
 
 ## Todavía no
 
-Las extensiones aún no pueden añadir prefijos del compositor, fuentes `@`, huecos en la interfaz web, gateways, verbos de CLI, herramientas y skills. Eso viene después; el plan es `EXTENSIONS-PLAN.md` en el repositorio.
+Las extensiones aún no pueden añadir huecos en la interfaz web, gateways, verbos de CLI, herramientas y skills. Eso viene después; el plan es `EXTENSIONS-PLAN.md` en el repositorio.

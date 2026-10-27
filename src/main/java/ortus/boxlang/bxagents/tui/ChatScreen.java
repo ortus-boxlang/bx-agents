@@ -81,6 +81,7 @@ public final class ChatScreen implements AutoCloseable {
 	private final Composer					composer		= new Composer();
 	private KeyMap							keys			= KeyMap.defaults();
 	private String							pendingKey;
+	private AtSources						sources			= new AtSources( List.of(), ( name, query ) -> List.of() );
 
 	private final Queue<Map<?, ?>>			events			= new ConcurrentLinkedQueue<>();
 	private final Queue<String>				steer			= new ConcurrentLinkedQueue<>();
@@ -193,6 +194,17 @@ public final class ChatScreen implements AutoCloseable {
 		keys = KeyMap.of( overrides, actions );
 		composer.keys( keys );
 		return keys.problems();
+	}
+
+	/**
+	 * Lets the {@code @} menu offer extension sources: their names while one is being typed, and their own suggestions
+	 * after the colon.
+	 *
+	 * @param names     the source names in use
+	 * @param suggester asked for ( name, what follows the colon ) and returns the values to offer
+	 */
+	public void bindSources( List<String> names, java.util.function.BiFunction<String, String, List<String>> suggester ) {
+		sources = new AtSources( names, suggester );
 	}
 
 	/** @return the id of the extension action whose key was pressed since the last call, or null */
@@ -495,7 +507,8 @@ public final class ChatScreen implements AutoCloseable {
 			fileIndex.refresh();
 			indexed = true;
 		}
-		return fileIndex.match( query, MAX_MENU );
+		List<String> files = fileIndex.match( query, MAX_MENU );
+		return sources.isEmpty() ? files : sources.matches( query, files, MAX_MENU );
 	}
 
 	/** Ctrl+V: adds the picture on the clipboard to the next message, or says why it cannot. */

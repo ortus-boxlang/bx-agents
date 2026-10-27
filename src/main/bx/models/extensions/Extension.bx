@@ -31,6 +31,8 @@ class {
 		variables.schedulers = []
 		variables.listeners = []
 		variables.keys = []
+		variables.prefixes = []
+		variables.sources = []
 		variables.statuses = []
 		variables.functionListeners = []
 		variables.problems = []
@@ -146,6 +148,36 @@ class {
 		return variables.keys
 	}
 
+	function addPrefix( required any prefix ) {
+		variables.prefixes.append( arguments.prefix )
+		return this
+	}
+
+	function dropPrefix( required any prefix ) {
+		var dropped = arguments.prefix
+		variables.prefixes = variables.prefixes.filter( p => p.id() != dropped.id() )
+		return this
+	}
+
+	array function prefixes() {
+		return variables.prefixes
+	}
+
+	function addSource( required any source ) {
+		variables.sources.append( arguments.source )
+		return this
+	}
+
+	function dropSource( required any source ) {
+		var dropped = arguments.source
+		variables.sources = variables.sources.filter( s => s.id() != dropped.id() )
+		return this
+	}
+
+	array function sources() {
+		return variables.sources
+	}
+
 	function addStatus( required any status ) {
 		variables.statuses.append( arguments.status )
 		return this
@@ -224,6 +256,8 @@ class {
 			listens     : variables.listeners.map( l => l.point ).unique(),
 			keys        : variables.keys.map( k => k.id() ),
 			status      : variables.statuses.map( s => s.name() ),
+			prefixes    : variables.prefixes.map( p => p.prefix() ),
+			sources     : variables.sources.map( s => s.name() ),
 			replaces    : variables.replaces,
 			problems    : variables.problems
 		}

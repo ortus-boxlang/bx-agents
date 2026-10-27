@@ -129,6 +129,28 @@ class {
 	}
 
 	/**
+	 * @return The prefixes of the loaded extensions (ExtensionPrefix objects), in load order
+	 */
+	array function prefixes() {
+		var all = []
+		for ( var extension in variables.extensions.filter( e => e.isLoaded() ) ) {
+			all.append( extension.prefixes(), true )
+		}
+		return all
+	}
+
+	/**
+	 * @return The sources of the loaded extensions (ExtensionSource objects), in load order
+	 */
+	array function sources() {
+		var all = []
+		for ( var extension in variables.extensions.filter( e => e.isLoaded() ) ) {
+			all.append( extension.sources(), true )
+		}
+		return all
+	}
+
+	/**
 	 * @return The status items of the loaded extensions (ExtensionStatus objects)
 	 */
 	array function statuses() {
@@ -205,6 +227,16 @@ class {
 		for ( var key in arguments.extension.keys().map( k => k ) ) {
 			if ( disabled( extensionName, key.item() ) ) {
 				arguments.extension.dropKey( key )
+			}
+		}
+		for ( var prefix in arguments.extension.prefixes().map( p => p ) ) {
+			if ( disabled( extensionName, prefix.item() ) ) {
+				arguments.extension.dropPrefix( prefix )
+			}
+		}
+		for ( var source in arguments.extension.sources().map( s => s ) ) {
+			if ( disabled( extensionName, source.item() ) ) {
+				arguments.extension.dropSource( source )
 			}
 		}
 		for ( var status in arguments.extension.statuses().map( s => s ) ) {

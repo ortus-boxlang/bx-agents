@@ -1,0 +1,126 @@
+/**
+ * A source of `@name:query` mentions in the terminal message box (`@jira:ABC-12`). Where `@path` brings a file
+ * along with the message, a source brings whatever its `read` method returns: the mention stays in the message,
+ * and the content goes with it as a block, as a file does.
+ *
+ *   read( agentContext, query )     returns { name, content }, an array of them, or a string
+ *   suggest( agentContext, query )  optional; returns the names to offer in the menu as the person types
+ *
+ * The extension names a default source name; the person can choose another under `chat: sources:` in
+ * `~/.bxagents/bxAgents.yml`, keyed by the id (`extension:method`).
+ */
+class {
+
+	/**
+	 * @extension The Extension (to put a problem on)
+	 * @item The read method's (or `registry.source()` target's) name
+	 * @name The source name the extension asks for, such as "jira"
+	 * @hint What it brings, for the help
+	 * @read A function( agentContext, query )
+	 * @suggest A function( agentContext, query ) returning an array of strings, or null for no suggestions
+	 */
+	function init( required any extension, required string item, required string name, required string hint, required any read, any suggest ) {
+		variables.extension = arguments.extension
+		variables.item = arguments.item
+		variables.declared = arguments.name
+		variables.chosen = ""
+		variables.hint = arguments.hint
+		variables.read = arguments.read
+		variables.complained = false
+		if ( !isNull( arguments.suggest ) ) {
+			variables.suggest = arguments.suggest
+		}
+		return this
+	}
+
+	string function id() {
+		return variables.extension.name() & ":" & variables.item
+	}
+
+	string function extensionName() {
+		return variables.extension.name()
+	}
+
+	string function item() {
+		return variables.item
+	}
+
+	string function declared() {
+		return variables.declared
+	}
+
+	/**
+	 * @return The name in use: the person's choice, else the extension's
+	 */
+	string function name() {
+		return len( variables.chosen ) ? variables.chosen : variables.declared
+	}
+
+	function choose( required string chosen ) {
+		variables.chosen = arguments.chosen
+		return this
+	}
+
+	string function hint() {
+		return variables.hint
+	}
+
+	boolean function suggests() {
+		return variables.keyExists( "suggest" )
+	}
+
+	/**
+	 * @return { id, name, does }
+	 */
+	struct function describe() {
+		return { id : id(), name : name(), does : variables.hint }
+	}
+
+	/**
+	 * @agentContext The CommandContext of the chat
+	 * @query What follows `@name:`
+	 *
+	 * @return [ { name, content } ]. Throws with a sentence that names the extension when it cannot be read.
+	 */
+	array function read( required any agentContext, required string query ) {
+		try {
+			var answer = variables.read( arguments.agentContext, arguments.query )
+		} catch ( any e ) {
+			throw( type : "bxagents.extension", message : "The extension [#extensionName()#] failed to read @#name()#:#arguments.query#: #e.message#" )
+		}
+		if ( isNull( answer ) ) {
+			return []
+		}
+		if ( isSimpleValue( answer ) ) {
+			return [ { name : "@#name()#:#arguments.query#", content : answer } ]
+		}
+		var blocks = isArray( answer ) ? answer : [ answer ]
+		return blocks.filter( b => isStruct( b ) && structKeyExists( b, "content" ) ).map( b => { name : b.name ?: "@#name()#:#query#", content : toString( b.content ) } )
+	}
+
+	/**
+	 * Asked on keystrokes, so it must be quick. A failure gives no suggestions, and the reason is put on the
+	 * extension once.
+	 *
+	 * @agentContext The CommandContext of the chat
+	 * @query What has been typed after `@name:`
+	 *
+	 * @return [ string ]
+	 */
+	array function suggestions( required any agentContext, required string query ) {
+		if ( !suggests() ) {
+			return []
+		}
+		try {
+			var answer = variables.suggest( arguments.agentContext, arguments.query )
+			return isArray( answer ) ? answer.filter( s => isSimpleValue( s ) && len( s ) ).map( s => toString( s ) ) : []
+		} catch ( any e ) {
+			if ( !variables.complained ) {
+				variables.complained = true
+				variables.extension.problem( "Its source #name()# failed to suggest: #e.message#" )
+			}
+			return []
+		}
+	}
+
+}

@@ -1,0 +1,101 @@
+/**
+ * A prefix an extension claims in the terminal message box: a line that starts with it goes to the extension's
+ * method instead of the agent (`$ select count(*) from users`). What follows the prefix is the method's text.
+ *
+ * The method answers one of two ways:
+ *   a Reply        is shown and nothing is sent (`agentContext.reply().ok( "42 rows" )`); a plain string is shown the same way
+ *   { send : "…" } is sent to the agent as the message, as if the person had typed it
+ *
+ * The extension names a default prefix; the person can choose another under `chat: prefixes:` in
+ * `~/.bxagents/bxAgents.yml`, keyed by the id (`extension:method`).
+ */
+class {
+
+	/**
+	 * @extension The extension's name
+	 * @item The method's (or `registry.prefix()` target's) name
+	 * @prefix The prefix the extension asks for, such as "$"
+	 * @hint What it does, for /keys and the help
+	 * @call A function( agentContext, text )
+	 */
+	function init( required string extension, required string item, required string prefix, required string hint, required any call ) {
+		variables.extension = arguments.extension
+		variables.item = arguments.item
+		variables.declared = arguments.prefix
+		variables.chosen = ""
+		variables.hint = arguments.hint
+		variables.call = arguments.call
+		return this
+	}
+
+	string function id() {
+		return variables.extension & ":" & variables.item
+	}
+
+	string function extensionName() {
+		return variables.extension
+	}
+
+	string function item() {
+		return variables.item
+	}
+
+	string function declared() {
+		return variables.declared
+	}
+
+	/**
+	 * @return The prefix in use: the person's choice, else the extension's
+	 */
+	string function prefix() {
+		return len( variables.chosen ) ? variables.chosen : variables.declared
+	}
+
+	/**
+	 * @chosen The person's prefix; blank goes back to the extension's
+	 */
+	function choose( required string chosen ) {
+		variables.chosen = arguments.chosen
+		return this
+	}
+
+	string function hint() {
+		return variables.hint
+	}
+
+	/**
+	 * @return { id, prefix, does }
+	 */
+	struct function describe() {
+		return { id : id(), prefix : prefix(), does : variables.hint }
+	}
+
+	/**
+	 * @agentContext The CommandContext of the chat
+	 * @text What the person typed after the prefix, trimmed
+	 *
+	 * @return { send : true, text } to send a message, or { send : false, reply } to show a Reply. A failure is a
+	 *         warning that names the extension; it never ends the chat.
+	 */
+	struct function run( required any agentContext, required string text ) {
+		try {
+			var answer = variables.call( arguments.agentContext, arguments.text )
+			if ( isNull( answer ) ) {
+				return { send : false, reply : arguments.agentContext.reply().text( "" ) }
+			}
+			if ( isObject( answer ) ) {
+				return { send : false, reply : answer }
+			}
+			if ( isStruct( answer ) ) {
+				if ( !isSimpleValue( answer.send ?: "" ) || !len( trim( answer.send ?: "" ) ) ) {
+					throw( type : "bxagents.extension", message : "a prefix returns a Reply to show, or { send : ""text"" } to send." )
+				}
+				return { send : true, text : answer.send }
+			}
+			return { send : false, reply : arguments.agentContext.reply().ok( answer ) }
+		} catch ( any e ) {
+			return { send : false, reply : arguments.agentContext.reply().warn( "The extension [#variables.extension#] failed on its prefix [#prefix()#]: #e.message#" ) }
+		}
+	}
+
+}

@@ -9,6 +9,10 @@
  *     keys:              # replace the keys of an action; `/keys` lists the actions and their keys
  *       newline: [ ctrl+j, alt+enter ]
  *       stop: esc
+ *     prefixes:          # the prefix of an extension's prefix, by id (extension:method)
+ *       sql:run: "%"
+ *     sources:           # the name of an extension's @name:query source, by id
+ *       jira:ticket: issue
  *   extensions:          # values for extensions, by name, and what to turn off (see ExtensionSettings)
  *     disable: [ roll ]
  *     hello: { greeting: Hi }
@@ -19,7 +23,7 @@
 class {
 
 	static {
-		CHAT_KEYS = [ "shell", "bifs", "keys" ]
+		CHAT_KEYS = [ "shell", "bifs", "keys", "prefixes", "sources" ]
 	}
 
 	/**
@@ -63,6 +67,20 @@ class {
 	}
 
 	/**
+	 * @return { "extension:method" : "prefix" } the prefixes the person chose for extensions' prefixes
+	 */
+	struct function prefixes() {
+		return chosenNames( "prefixes" )
+	}
+
+	/**
+	 * @return { "extension:method" : "name" } the names the person chose for extensions' `@name:` sources
+	 */
+	struct function sources() {
+		return chosenNames( "sources" )
+	}
+
+	/**
 	 * @return The `extensions:` block as written: values per extension name, and `disable`. Empty for none.
 	 */
 	struct function extensions() {
@@ -79,6 +97,19 @@ class {
 	}
 
 	// ----------------------------------------------------------------------------------
+
+	private struct function chosenNames( required string key ) {
+		load()
+		var chat = isStruct( variables.data.chat ?: "" ) ? variables.data.chat : {}
+		var given = isStruct( chat[ arguments.key ] ?: "" ) ? chat[ arguments.key ] : {}
+		var out = {}
+		for ( var id in given ) {
+			if ( isSimpleValue( given[ id ] ) && len( trim( given[ id ] ) ) ) {
+				out[ id ] = trim( given[ id ] )
+			}
+		}
+		return out
+	}
 
 	private void function load() {
 		if ( variables.loaded ) {
@@ -125,6 +156,11 @@ class {
 			}
 			if ( parsed.chat.keyExists( "keys" ) && !isStruct( parsed.chat.keys ) ) {
 				variables.problems.append( "#variables.file#: chat.keys must be a mapping of action to key or list of keys" )
+			}
+			for ( var named in [ "prefixes", "sources" ] ) {
+				if ( parsed.chat.keyExists( named ) && !isStruct( parsed.chat[ named ] ) ) {
+					variables.problems.append( "#variables.file#: chat.#named# must be a mapping of extension:method to a name" )
+				}
 			}
 			if ( parsed.chat.keyExists( "bifs" ) && !isSimpleValue( parsed.chat.bifs ) && !isArray( parsed.chat.bifs ) ) {
 				variables.problems.append( "#variables.file#: chat.bifs must be true, false or a list of function names" )

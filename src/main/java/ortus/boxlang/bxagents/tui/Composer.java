@@ -116,7 +116,9 @@ final class Composer {
 		if ( from < 0 ) {
 			return;
 		}
-		String mention = "@" + ( path.contains( " " ) ? "\"" + path + "\"" : path ) + " ";
+		// a source's entry ( name:value ) arrives quoted already, and a bare source name ( name: ) is not finished
+		boolean	quoted	= path.contains( "\"" );
+		String	mention	= "@" + ( path.contains( " " ) && !quoted ? "\"" + path + "\"" : path ) + ( path.endsWith( ":" ) ? "" : " " );
 		current.replace( from, col, mention );
 		col = from + mention.length();
 	}
