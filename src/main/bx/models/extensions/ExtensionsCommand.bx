@@ -63,6 +63,10 @@ class extends="models.chat.commands.BaseCommand@bxagents" {
 			[ "State", extension.state ],
 			[ "Path", extension.path ],
 			[ "Commands", extension.commands.toList( ", " ) ],
+			[ "Keys", extension.keys.toList( ", " ) ],
+			[ "Status", extension.status.toList( ", " ) ],
+			[ "Prefixes", extension.prefixes.toList( ", " ) ],
+			[ "Sources", extension.sources.map( n => "@#n#:" ).toList( ", " ) ],
 			[ "Schedulers", extension.schedulers.toList( ", " ) ],
 			[ "Listens to", extension.listens.toList( ", " ) ]
 		].filter( row => len( row[ 2 ] ) ) )
@@ -74,6 +78,9 @@ class extends="models.chat.commands.BaseCommand@bxagents" {
 
 	private string function adds( required struct extension ) {
 		var parts = arguments.extension.commands.map( c => c )
+		arguments.extension.keys.each( k => parts.append( "key " & k ) )
+		arguments.extension.prefixes.each( p => parts.append( "prefix " & p ) )
+		arguments.extension.sources.each( n => parts.append( "source @" & n & ":" ) )
 		arguments.extension.schedulers.each( s => parts.append( "scheduler " & s ) )
 		arguments.extension.listens.each( l => parts.append( "listens " & l ) )
 		return parts.toList( ", " )

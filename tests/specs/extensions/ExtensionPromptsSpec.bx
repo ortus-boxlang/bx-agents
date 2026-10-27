@@ -1,0 +1,278 @@
+/**
+ * What extensions add to the terminal message box: prefixes (`% why`) and `@name:query` sources. Real extension
+ * files are loaded by the real loader; the chat controller is driven with a fake screen.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+
+		describe( "prefixes and sources from extensions", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-extprompts-" );
+				variables.commands = new bxagents.models.chat.commands.CommandCatalog().standard();
+				variables.loaded = [];
+			} );
+
+			afterEach( function() {
+				for ( var registry in loaded ) {
+					registry.unload();
+				}
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function put( required string name, required string code ) {
+				directoryCreate( dir & "/extensions", true, true );
+				fileWrite( dir & "/extensions/" & name, code );
+			}
+
+			function start( struct settings = {} ) {
+				var registry = new bxagents.models.extensions.ExtensionRegistry( commands, settings );
+				registry.addLayer( "project", dir & "/extensions" );
+				registry.load();
+				loaded.append( registry );
+				return registry;
+			}
+
+			function context() {
+				return new bxagents.models.chat.commands.CommandContext( { agentName : () => "helper" }, "tui", true );
+			}
+
+			function composerOf( registry, prefixes = {}, sources = {} ) {
+				return new bxagents.models.extensions.ExtensionComposer( registry.prefixes(), registry.sources(), prefixes, sources );
+			}
+
+			it( "reads @Prefix and runs it: a Reply is shown, { send } is sent, a string is shown, a throw is a warning", function() {
+				put( "shape.bx", "class {
+					@Prefix( '%' ) @Hint( 'explain' ) function explain( agentContext, text ) { return { send : 'Explain ' & text } }
+					@Prefix( '=' ) function sum( agentContext, text ) { return agentContext.reply().ok( 'sum ' & text ) }
+					@Prefix( '>>' ) function plain( agentContext, text ) { return 'plain ' & text }
+					@Prefix( '~' ) function boom( agentContext, text ) { throw( message = 'kaboom' ) }
+					@Prefix( '^' ) function bad( agentContext, text ) { return { nothing : true } }
+				}" );
+				var composer = composerOf( start() );
+				var run = ( line ) => composer.prefixFor( line ).run( context(), trim( mid( line, len( composer.prefixFor( line ).prefix() ) + 1, 999 ) ) );
+
+				expect( composer.prefixes().map( p => p.id & p.prefix ) ).toBe( [ "shape:explain%", "shape:sum=", "shape:plain>>", "shape:boom~", "shape:bad^" ] );
+				expect( composer.prefixes()[ 1 ].does ).toBe( "explain" );
+				expect( run( "% why" ) ).toBe( { send : true, text : "Explain why" } );
+				expect( run( "= 1+1" ).reply.blocks()[ 1 ].text ).toBe( "sum 1+1" );
+				expect( run( ">> hi" ).reply.blocks()[ 1 ].text ).toBe( "plain hi" );
+				expect( run( "~ x" ).reply.blocks()[ 1 ].text ).toInclude( "[shape] failed on its prefix [~]: kaboom" );
+				expect( run( "^ x" ).reply.blocks()[ 1 ].text ).toInclude( "returns a Reply to show" );
+				expect( isNull( composer.prefixFor( "no prefix here" ) ) ).toBeTrue();
+			} );
+
+			it( "lets the longest prefix win", function() {
+				put( "long.bx", "class {
+					@Prefix( '$' ) function one( agentContext, text ) { return 'one' }
+					@Prefix( '$$' ) function two( agentContext, text ) { return 'two' }
+				}" );
+				var composer = composerOf( start() );
+
+				expect( composer.prefixFor( "$$ x" ).item() ).toBe( "two" );
+				expect( composer.prefixFor( "$ x" ).item() ).toBe( "one" );
+			} );
+
+			it( "refuses the prefixes the chat keeps, an empty one and one with a space", function() {
+				put( "kept.bx", "class {
+					@Prefix( '!' ) function a( agentContext, text ) {}
+					@Prefix( '####x' ) function b( agentContext, text ) {}
+					@Prefix( '/' ) function c( agentContext, text ) {}
+					@Prefix( '@' ) function d( agentContext, text ) {}
+					@Prefix( '?' ) function e( agentContext, text ) {}
+					@Prefix( 'a b' ) function f( agentContext, text ) {}
+					@Prefix( '??' ) function g( agentContext, text ) {}
+				}" );
+				var registry = start();
+				var composer = composerOf( registry );
+
+				expect( registry.report()[ 1 ].problems ).toBe( [] );
+				expect( composer.prefixes().map( p => p.prefix ) ).toBe( [ "??" ] );
+				expect( composer.problems() ).toHaveLength( 6 );
+				expect( composer.problems().toList( " | " ) ).toInclude( "! is kept for the chat" );
+				expect( composer.problems().toList( " | " ) ).toInclude( "a lone ? asks for the keys" );
+			} );
+
+			it( "warns when two extensions want one prefix and lets the later win", function() {
+				put( "first.bx", "class { @Prefix( '$' ) function go( agentContext, text ) { return 'first' } }" );
+				put( "second.bx", "class { @Prefix( '$' ) function go( agentContext, text ) { return 'second' } }" );
+				var composer = composerOf( start() );
+
+				expect( composer.prefixes().map( p => p.id ) ).toBe( [ "second:go" ] );
+				expect( composer.problems() ).toHaveLength( 1 );
+				expect( composer.problems()[ 1 ] ).toInclude( "[$] of first:go is replaced by the one of second:go" );
+			} );
+
+			it( "uses the prefix and the source name the person chose, and says when their choice cannot be used", function() {
+				put( "mine.bx", "class {
+					@Prefix( '$' ) function run( agentContext, text ) { return 'ran' }
+					@Prefix( '%' ) function other( agentContext, text ) { return 'other' }
+					@Source( 'jira' ) function ticket( agentContext, query ) { return 'ticket' }
+				}" );
+				var composer = composerOf( start(), { "mine:run" : ";;", "mine:other" : "!x" }, { "mine:ticket" : "issue" } );
+
+				expect( composer.prefixes().map( p => p.prefix ) ).toBe( [ ";;", "%" ] );
+				expect( composer.sourceNames() ).toBe( [ "issue" ] );
+				expect( composer.problems() ).toHaveLength( 1 );
+				expect( composer.problems()[ 1 ] ).toInclude( "chat: prefixes: mine:other" );
+			} );
+
+			it( "reads @Source and @Suggest, and puts a failure on the extension", function() {
+				put( "desk.bx", "class {
+					@Source( 'ticket' ) @Hint( 'a ticket' ) function ticket( agentContext, query ) { return { name : 'ticket ' & query, content : 'text of ' & query } }
+					@Suggest( 'ticket' ) function ids( agentContext, query ) { return [ query & '1', query & '2' ] }
+					@Source( 'plain' ) function plain( agentContext, query ) { return 'just ' & query }
+					@Source( 'boom' ) function boom( agentContext, query ) { throw( message = 'down' ) }
+					@Source( 'many' ) function many( agentContext, query ) { return [ { name : 'a', content : 1 }, { name : 'b', content : 'two' } ] }
+				}" );
+				var composer = composerOf( start() );
+				var found = composer.read( 'see @ticket:TCK-1 and @plain:x and @boom:y and @many:z and @nothing:q and @ticket:TCK-1', context() );
+
+				expect( composer.sources().map( s => s.name ) ).toBe( [ "ticket", "plain", "boom", "many" ] );
+				expect( found.blocks.map( b => b.name & "=" & b.content ) ).toBe( [ "ticket TCK-1=text of TCK-1", "@plain:x=just x", "a=1", "b=two" ] );
+				expect( found.problems ).toHaveLength( 1 );
+				expect( found.problems[ 1 ] ).toInclude( "[desk] failed to read @boom:y: down" );
+				expect( composer.suggest( "ticket", "TCK-", context() ) ).toBe( [ "TCK-1", "TCK-2" ] );
+				expect( composer.suggest( "plain", "x", context() ) ).toBeEmpty();
+				expect( composer.suggest( "nobody", "x", context() ) ).toBeEmpty();
+				expect( composer.withoutSources( "see @ticket:TCK-1 and @src/a.bx" ) ).toBe( "see  and @src/a.bx" );
+			} );
+
+			it( "reads a quoted query with spaces, and leaves a mention that is not at the start of a word", function() {
+				put( "q.bx", "class { @Source( 'note' ) function note( agentContext, query ) { return '[' & query & ']' } }" );
+				var composer = composerOf( start() );
+				var found = composer.read( 'a @note:"two words" b mail@note:x', context() );
+
+				expect( found.blocks.map( b => b.content ) ).toBe( [ "[two words]" ] );
+			} );
+
+			it( "adds prefixes and sources written as calls in register( registry )", function() {
+				put( "calls.bx", "class {
+					function register( registry ) {
+						registry.prefix( '%', ( agentContext, text ) => { send : 'asked ' & text }, { hint : 'ask', name : 'asker' } )
+						registry.source( 'doc', ( agentContext, query ) => 'doc ' & query, { hint : 'a doc', suggest : ( agentContext, query ) => [ 'one' ] } )
+					}
+				}" );
+				var composer = composerOf( start() );
+
+				expect( composer.prefixes() ).toBe( [ { id : "calls:asker", prefix : "%", does : "ask" } ] );
+				expect( composer.sources() ).toBe( [ { id : "calls:doc", name : "doc", does : "a doc" } ] );
+				expect( composer.read( "@doc:x", context() ).blocks[ 1 ].content ).toBe( "doc x" );
+				expect( composer.suggest( "doc", "", context() ) ).toBe( [ "one" ] );
+			} );
+
+			it( "turns a prefix or source off with extension:method in extensions.disable", function() {
+				put( "two.bx", "class {
+					@Prefix( '%' ) function a( agentContext, text ) {}
+					@Prefix( '=' ) function b( agentContext, text ) {}
+					@Source( 'x' ) function x( agentContext, query ) {}
+				}" );
+				var composer = composerOf( start( { disable : [ "two:a", "two:x" ] } ) );
+
+				expect( composer.prefixes().map( p => p.id ) ).toBe( [ "two:b" ] );
+				expect( composer.sourceNames() ).toBeEmpty();
+			} );
+
+			it( "fails an extension whose @Prefix has no prefix", function() {
+				put( "none.bx", "class { @Prefix function p( agentContext, text ) {} }" );
+				var report = start().report();
+
+				expect( report[ 1 ].state ).toBe( "failed" );
+				expect( report[ 1 ].problems.toList( " " ) ).toInclude( "@Prefix needs one prefix" );
+			} );
+
+			it( "reads the person's chat: prefixes: and sources: and reports a wrong shape", function() {
+				fileWrite( dir & "/me.yml", "chat:
+  prefixes:
+    desk:explain: '?%'
+  sources:
+    desk:ticket: issue
+" );
+				var config = new bxagents.models.cli.UserConfig( dir & "/me.yml" );
+				expect( config.prefixes() ).toBe( { "desk:explain" : "?%" } );
+				expect( config.sources() ).toBe( { "desk:ticket" : "issue" } );
+				expect( config.problems() ).toBeEmpty();
+
+				fileWrite( dir & "/bad.yml", "chat:
+  prefixes: yes
+" );
+				expect( new bxagents.models.cli.UserConfig( dir & "/bad.yml" ).problems()[ 1 ] ).toInclude( "chat.prefixes must be a mapping" );
+			} );
+
+			it( "runs the desk example's prefixes and source", function() {
+				var example = expandPath( "/examples/extensions-agent" );
+				var service = new bxagents.models.extensions.ExtensionService( projectRoot : example, userConfig : new bxagents.models.cli.UserConfig( dir & "/none.yml" ), transport : "tui", moduleFolders : [] );
+				service.install( commands );
+				var composer = service.composer();
+
+				expect( composer.problems() ).toBeEmpty();
+				expect( composer.prefixFor( "% sky" ).run( context(), "sky" ).text ).toInclude( "Explain this" );
+				expect( composer.prefixFor( "= a b c" ).run( context(), "a b c" ).reply.blocks()[ 1 ].text ).toBe( "3 words, 5 characters" );
+				expect( composer.prefixFor( "=" ).run( context(), "" ).reply.blocks()[ 1 ].text ).toInclude( "Type some words" );
+				expect( composer.read( "@ticket:tck-2", context() ).blocks[ 1 ] ).toBe( { name : "ticket TCK-2", content : "Export to CSV drops rows that contain a comma." } );
+				expect( composer.suggest( "ticket", "tck-", context() ) ).toBe( [ "TCK-1", "TCK-2" ] );
+				service.unload();
+			} );
+
+			it( "lets the chat controller run a prefix, send what it says to send, and attach a source", function() {
+				put( "ctl.bx", "class {
+					@Prefix( '=' ) function sum( agentContext, text ) { return agentContext.reply().ok( 'answer ' & text ) }
+					@Prefix( '%' ) function explain( agentContext, text ) { return { send : 'Explain ' & text } }
+					@Source( 'doc' ) function doc( agentContext, query ) { return { name : 'doc ' & query, content : 'BODY OF ' & query } }
+					@Suggest( 'doc' ) function names( agentContext, query ) { return [ 'a', 'b' ] }
+				}" );
+				var service = new bxagents.models.extensions.ExtensionService( projectRoot : dir, userConfig : new bxagents.models.cli.UserConfig( dir & "/none.yml" ), transport : "tui", moduleFolders : [], projectFolder : dir & "/extensions" );
+				service.install( commands );
+
+				var shown = [];
+				var sent = [];
+				var bound = {};
+				var screen = { pending : [ "= 1+1", "% why", "read @doc:x please", "@doc:a.b is not a file" ] };
+				screen.readInput = () => {
+					if ( !screen.pending.len() ) { return nullValue(); }
+					var next = screen.pending[ 1 ];
+					screen.pending.deleteAt( 1 );
+					return next;
+				};
+				for ( var name in [ "banner", "beginTurn", "endTurn", "push", "close", "setFacts", "setImagesAllowed", "setStatus", "copy" ] ) {
+					screen[ name ] = () => {};
+				}
+				screen.print = ( style, text ) => shown.append( text );
+				screen.printUser = ( text ) => {};
+				screen.bindKeys = ( overrides ) => [];
+				screen.bindSources = ( names, suggester ) => { bound.names = names; bound.suggested = suggester( "doc", "" ); };
+				screen.cancelRequested = () => false;
+				screen.takeSteer = () => nullValue();
+				screen.takeImages = () => [];
+				screen.isRecording = () => false;
+				var session = {
+					agentName : () => "helper", modelName : () => "m", mode : () => "in-process",
+					send : ( text, hooks, images = [] ) => { sent.append( text ); return { status : "done", text : "ok", pending : [] }; },
+					contextReport : () => { throw( message = "none" ); }, modelFacts : () => { throw( message = "none" ); },
+					modelInfo : () => { throw( message = "none" ); }, conversationTitle : () => "t",
+					conversationId : () => "c", keepsSessions : () => false
+				};
+				var controller = new bxagents.models.cli.chat.ChatController( session, getTempDirectory(), commands, { chat : () => { shell : true, bifs : true }, keys : () => ( {} ), problems : () => [], path : () => "x.yml" } ).withExtensions( service );
+
+				controller.run( screen );
+
+				expect( bound.names ).toBe( [ "doc" ] );
+				expect( bound.suggested ).toBe( [ "a", "b" ] );
+				expect( shown.toList( "|" ) ).toInclude( "answer 1+1" );
+				expect( sent ).toHaveLength( 3 );
+				expect( sent[ 1 ] ).toBe( "Explain why" );
+				expect( sent[ 2 ] ).toInclude( "BODY OF x" );
+				expect( sent[ 2 ] ).toInclude( "read @doc:x please" );
+				// a source mention is not looked up as a file, so no "There is no file" warning
+				expect( shown.toList( "|" ) ).notToInclude( "There is no file" );
+				service.unload();
+			} );
+
+		} );
+
+	}
+
+}

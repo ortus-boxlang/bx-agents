@@ -1,0 +1,57 @@
+/**
+ * Three ways to shape what is typed in the terminal message box.
+ *
+ *   % why is the sky blue      @Prefix: turns the line into a longer message and sends it ({ send : "..." })
+ *   = how long is this line    @Prefix: answers at once with a Reply, nothing is sent
+ *   look at @ticket:TCK-2      @Source: the ticket's text goes along with the message, as a file does
+ *
+ * A person can give a prefix or a source another name under `chat: prefixes:` and `chat: sources:` in
+ * `~/.bxagents/bxAgents.yml`, such as `desk:explain: "?%"` or `desk:ticket: issue`. `/`, `!`, `#`, `@` and a lone `?`
+ * are the chat's own and cannot be taken.
+ */
+class {
+
+	function configure() {
+		variables.settings = {
+			tickets : {
+				"TCK-1" : "Login page shows a blank screen on Safari 17.",
+				"TCK-2" : "Export to CSV drops rows that contain a comma."
+			}
+		}
+	}
+
+	@Prefix( "%" )
+	@Hint( "ask for an explanation: % why is the sky blue" )
+	function explain( agentContext, text ) {
+		if ( !len( text ) ) {
+			return agentContext.reply().warn( "Say what to explain, like % why is the sky blue." )
+		}
+		return { send : "Explain this in one short paragraph for someone new to it: #text#" }
+	}
+
+	@Prefix( "=" )
+	@Hint( "count the words in a line: = how long is this line" )
+	function count( agentContext, text ) {
+		if ( !len( text ) ) {
+			return agentContext.reply().warn( "Type some words after the =." )
+		}
+		var words = text.listToArray( " " ).len()
+		return agentContext.reply().ok( "#words# word#words == 1 ? '' : 's'#, #len( text )# characters" )
+	}
+
+	@Source( "ticket" )
+	@Hint( "bring a ticket's text: @ticket:TCK-1" )
+	function ticket( agentContext, query ) {
+		var found = settings.tickets[ uCase( query ) ] ?: ""
+		if ( !len( found ) ) {
+			throw( message = "there is no ticket #query#" )
+		}
+		return { name : "ticket #uCase( query )#", content : found }
+	}
+
+	@Suggest( "ticket" )
+	function ticketNames( agentContext, query ) {
+		return settings.tickets.keyArray().filter( id => id.startsWith( uCase( query ) ) ).sort( "text" )
+	}
+
+}

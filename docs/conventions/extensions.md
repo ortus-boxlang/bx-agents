@@ -232,6 +232,51 @@ function register( registry ) {
 }
 ```
 
+## Prefixes and `@` sources
+
+Both are for the terminal chat only.
+
+`@Prefix` claims the start of a line in the message box. The method gets the `agentContext` and the text after the prefix. It answers one of two ways: a `Reply` (or a string) is shown and nothing is sent, and `{ send : "text" }` is sent to the agent as the message, after `onChatInput` has seen it.
+
+```js
+@Prefix( "%" )
+@Hint( "ask for an explanation: % why is the sky blue" )
+function explain( agentContext, text ) {
+	return { send : "Explain this in one short paragraph: #text#" }
+}
+
+@Prefix( "=" )
+function count( agentContext, text ) {
+	return agentContext.reply().ok( "#text.listToArray( ' ' ).len()# words" )
+}
+```
+
+`/`, `!`, `#` and `@` are the chat's own, and a lone `?` asks for the keys; a prefix that starts with one of them, is empty or has a space is refused with a sentence. The longest prefix wins. Two extensions on one prefix are a warning and the later layer wins.
+
+`@Source( "ticket" )` brings content along with a message the way `@path` brings a file. Write `@ticket:TCK-1` (or `@ticket:"two words"`) and the method is called with the `agentContext` and the query. It returns `{ name, content }`, an array of them or a string; the content goes with the message and the mention stays in it. `@Suggest( "ticket" )` on another method is optional: it returns the values the menu offers as the person types after the colon. It is asked on keystrokes, so it must be quick; one that throws gives no suggestions and the reason is put on its extension once. A source name can be anything that starts with a letter, since files are plain `@path`.
+
+```js
+@Source( "ticket" )
+function ticket( agentContext, query ) { return { name : "ticket #query#", content : tickets[ query ] } }
+
+@Suggest( "ticket" )
+function ticketNames( agentContext, query ) { return tickets.keyArray() }
+```
+
+Written as calls: `registry.prefix( "%", ( agentContext, text ) => ..., { hint : "..." } )` and `registry.source( "ticket", ( agentContext, query ) => ..., { hint : "...", suggest : ( agentContext, query ) => [ ... ] } )`.
+
+The person chooses the prefix or the name, by the id `extension:method`, in `~/.bxagents/bxAgents.yml`:
+
+```yaml
+chat:
+  prefixes:
+    desk:explain: "?%"
+  sources:
+    desk:ticket: issue
+```
+
+A choice that cannot be used is reported and the extension's own is kept. `extensions.disable` takes `extension:method` for these too.
+
 ## Where extensions come from
 
 | Layer | Folder | Runs in |
@@ -262,4 +307,4 @@ bxAgents extensions --json
 
 ## Not yet
 
-Extensions cannot yet add composer prefixes, `@` sources, web UI slots, gateways, CLI verbs, tools and skills. Those come next; the plan is `EXTENSIONS-PLAN.md` in the repository.
+Extensions cannot yet add web UI slots, gateways, CLI verbs, tools and skills. Those come next; the plan is `EXTENSIONS-PLAN.md` in the repository.

@@ -52,6 +52,7 @@ class {
 		variables.notices = []
 		variables.events = nullValue()
 		variables.extensions = nullValue()
+		variables.composer = nullValue()
 		return this
 	}
 
@@ -123,6 +124,15 @@ class {
 			arguments.screen.print( "warn", "#variables.userConfig.path()#: " & problem )
 		}
 		variables.context = new "models.chat.commands.CommandContext@bxagents"( variables.session, "tui", true, port )
+		if ( !isNull( variables.extensions ) ) {
+			variables.composer = variables.extensions.composer()
+			for ( var problem in variables.composer.problems() ) {
+				arguments.screen.print( "warn", problem )
+			}
+			if ( variables.composer.sourceNames().len() ) {
+				arguments.screen.bindSources( variables.composer.sourceNames(), ( name, query ) => variables.composer.suggest( name, query, variables.context ) )
+			}
+		}
 		variables.renderer = new "models.cli.chat.TerminalRenderer@bxagents"( arguments.screen, variables.session, variables.transcript, ( line ) => command( line ) )
 		if ( !isBoolean( arguments.record ) || arguments.record ) {
 			var started = port.startRecording( isBoolean( arguments.record ) ? "" : arguments.record )
@@ -173,6 +183,11 @@ class {
 			}
 			if ( isShellLine( text ) ) {
 				shellLine( text )
+				continue
+			}
+			var prefixed = prefixFor( text )
+			if ( !isNull( prefixed ) ) {
+				prefixedLine( prefixed, text )
 				continue
 			}
 			if ( isBifLine( text ) ) {
@@ -289,6 +304,25 @@ class {
 	// ----------------------------------------------------------------------------------
 
 	/**
+	 * @return The extension prefix the line starts with, or null
+	 */
+	private any function prefixFor( required string text ) {
+		return isNull( variables.composer ) ? nullValue() : variables.composer.prefixFor( arguments.text )
+	}
+
+	/**
+	 * Hands a line to the extension that owns its prefix: what it answers is shown, or sent as a message.
+	 */
+	private void function prefixedLine( required any prefix, required string text ) {
+		var answer = arguments.prefix.run( variables.context, trim( mid( arguments.text, len( arguments.prefix.prefix() ) + 1, len( arguments.text ) ) ) )
+		if ( answer.send ) {
+			turn( answer.text )
+		} else {
+			variables.renderer.show( answer.reply )
+		}
+	}
+
+	/**
 	 * @return True for !command or !!command: the ! is followed at once by something to run, so "! hello" is a message
 	 */
 	private boolean function isShellLine( required string text ) {
@@ -383,8 +417,21 @@ class {
 		variables.screen.printUser( text )
 		variables.transcript.append( { role : "you", text : text } )
 
+		// @name:query mentions of an extension's source go along as blocks, as a file does
+		var forFiles = text
+		if ( !isNull( variables.composer ) ) {
+			var sourced = variables.composer.read( text, variables.context )
+			for ( var problem in sourced.problems ) {
+				variables.screen.print( "warn", problem )
+			}
+			for ( var block in sourced.blocks ) {
+				variables.attachments.add( "file", block.name, block.content )
+			}
+			forFiles = variables.composer.withoutSources( text )
+		}
+
 		// @path mentions: a text file goes along as a block, an image as an image part
-		var mentioned = new "models.cli.chat.FileMentions@bxagents"( variables.workingDirectory ).read( text )
+		var mentioned = new "models.cli.chat.FileMentions@bxagents"( variables.workingDirectory ).read( forFiles )
 		for ( var problem in mentioned.problems ) {
 			variables.screen.print( "warn", problem )
 		}

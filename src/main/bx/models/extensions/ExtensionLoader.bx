@@ -55,6 +55,8 @@ class {
 			collectAnnotatedCommands( arguments.extension )
 			collectAnnotatedKeys( arguments.extension )
 			collectAnnotatedStatus( arguments.extension )
+			collectAnnotatedPrefixes( arguments.extension )
+			collectAnnotatedSources( arguments.extension )
 			collectFolderCommands( arguments.extension )
 			collectSchedulers( arguments.extension )
 		} catch ( any e ) {
@@ -219,6 +221,78 @@ class {
 			var name = lCase( trim( options.name ?: method.name ) )
 			arguments.extension.addStatus( new "models.extensions.ExtensionStatus@bxagents"( arguments.extension, name, callerOf( instance, method.name ) ) )
 		}
+	}
+
+	/**
+	 * `@Prefix` on a method: the line prefix that runs it. The method is called with the CommandContext and the
+	 * text after the prefix.
+	 */
+	private void function collectAnnotatedPrefixes( required any extension ) {
+		var instance = arguments.extension.instance()
+		for ( var method in getMetaData( instance ).functions ?: [] ) {
+			var given = method.annotations ?: {}
+			var options = variables.annotations.options( given, "Prefix", "prefix" )
+			if ( isNull( options ) ) {
+				continue
+			}
+			var where = "#arguments.extension.name()#.#method.name#"
+			var problems = []
+			var asked = options.prefix ?: ""
+			if ( !isSimpleValue( asked ) || !len( trim( asked ) ) ) {
+				throw( type : "bxagents.extension", message : "#where#: @Prefix needs one prefix, such as @Prefix( ""$"" )." )
+			}
+			var hint = variables.annotations.setting( options, "hint", given, "Hint", "starts with #asked#", problems, where )
+			for ( var problem in problems ) {
+				arguments.extension.problem( problem )
+			}
+			arguments.extension.addPrefix( new "models.extensions.ExtensionPrefix@bxagents"( arguments.extension.name(), method.name, trim( asked ), hint, callerOfText( instance, method.name ) ) )
+		}
+	}
+
+	/**
+	 * `@Source` on a method reads `@name:query`; `@Suggest( "name" )` on another method offers the names as the
+	 * person types. The method is called with the CommandContext and the query.
+	 */
+	private void function collectAnnotatedSources( required any extension ) {
+		var instance = arguments.extension.instance()
+		var methods = getMetaData( instance ).functions ?: []
+		var suggesters = {}
+		for ( var method in methods ) {
+			var suggest = variables.annotations.options( method.annotations ?: {}, "Suggest", "name" )
+			if ( !isNull( suggest ) ) {
+				suggesters[ lCase( suggest.name ?: method.name ) ] = method.name
+			}
+		}
+		for ( var method in methods ) {
+			var given = method.annotations ?: {}
+			var options = variables.annotations.options( given, "Source", "name" )
+			if ( isNull( options ) ) {
+				continue
+			}
+			var where = "#arguments.extension.name()#.#method.name#"
+			var problems = []
+			var name = trim( options.name ?: method.name )
+			var hint = variables.annotations.setting( options, "hint", given, "Hint", "brings @#name#:…", problems, where )
+			for ( var problem in problems ) {
+				arguments.extension.problem( problem )
+			}
+			var reader = callerOfText( instance, method.name )
+			if ( suggesters.keyExists( lCase( name ) ) ) {
+				arguments.extension.addSource( new "models.extensions.ExtensionSource@bxagents"( arguments.extension, method.name, name, hint, reader, callerOfText( instance, suggesters[ lCase( name ) ] ) ) )
+			} else {
+				arguments.extension.addSource( new "models.extensions.ExtensionSource@bxagents"( arguments.extension, method.name, name, hint, reader ) )
+			}
+		}
+	}
+
+	/**
+	 * A function( context, text ) that calls one method of an object with both, made in a call of its own for the
+	 * reason callerOf() is.
+	 */
+	private any function callerOfText( required any target, required string method ) {
+		var target = arguments.target
+		var method = arguments.method
+		return ( context, text ) => invoke( target, method, [ context, text ] )
 	}
 
 	/**

@@ -7,6 +7,8 @@
  *   registry.key( [ "ctrl+g" ], ( agentContext ) => ... )      or any function, with a hint: { hint : "..." }
  *   registry.status( "branch", ( agentContext ) => "main" )    a piece of status
  *   registry.on( "onChatInput", ( data ) => ... )              a listener, for one event or an array of them
+ *   registry.prefix( "$", ( agentContext, text ) => ..., { hint : "..." } )   a prefix in the message box
+ *   registry.source( "jira", ( agentContext, query ) => ..., { hint : "...", suggest : ( agentContext, query ) => [ ... ] } )
  *
  * Nothing here takes effect until the extension has loaded: it only records what was asked, on the Extension.
  */
@@ -72,6 +74,32 @@ class {
 	function on( required any points, required any call ) {
 		for ( var point in ( isArray( arguments.points ) ? arguments.points : [ arguments.points ] ) ) {
 			variables.extension.addListenerFunction( point, arguments.call )
+		}
+		return this
+	}
+
+	/**
+	 * @prefix What a line starts with, such as "$"
+	 * @call A function( agentContext, text ) returning a Reply to show or { send : "text" } to send
+	 * @options { hint, name }; the name is what it is called in the person's file (default: "prefix")
+	 */
+	function prefix( required string prefix, required any call, struct options = {} ) {
+		var item = arguments.options.name ?: "prefix"
+		variables.extension.addPrefix( new "models.extensions.ExtensionPrefix@bxagents"( variables.extension.name(), item, arguments.prefix, arguments.options.hint ?: "starts with #arguments.prefix#", arguments.call ) )
+		return this
+	}
+
+	/**
+	 * @name The source name, as in `@name:query`
+	 * @read A function( agentContext, query ) returning { name, content }, an array of them, or a string
+	 * @options { hint, suggest, item }; suggest is a function( agentContext, query ) returning an array of strings
+	 */
+	function source( required string name, required any read, struct options = {} ) {
+		var item = arguments.options.item ?: arguments.name
+		if ( structKeyExists( arguments.options, "suggest" ) ) {
+			variables.extension.addSource( new "models.extensions.ExtensionSource@bxagents"( variables.extension, item, arguments.name, arguments.options.hint ?: "brings @#arguments.name#:…", arguments.read, arguments.options.suggest ) )
+		} else {
+			variables.extension.addSource( new "models.extensions.ExtensionSource@bxagents"( variables.extension, item, arguments.name, arguments.options.hint ?: "brings @#arguments.name#:…", arguments.read ) )
 		}
 		return this
 	}

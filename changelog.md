@@ -426,6 +426,11 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   `chat: keys:`; a key that clashes is refused with a sentence. `@Status` shows a short text next to the size
   of the context, and as chips in the web page's header. `register( registry )` does the same, and
   commands and listeners too, as calls.
+- Extensions can shape the terminal message box. `@Prefix` claims the start of a line (a `Reply` is shown, or
+  `{ send : "..." }` is sent as the message), and `@Source` with an optional `@Suggest` brings content along
+  with `@name:query`, with the names offered in the `@` menu. The person picks the prefix or name under
+  `chat: prefixes:` and `chat: sources:`; `/ ! # @` and a lone `?` are the chat's own, and a clash between
+  extensions is a warning. `/extensions` now also lists keys, status items, prefixes and sources.
 - `examples/extensions-agent` shows a one-file extension, one with several commands, an admin-only command
   with a lifecycle, and a folder with a command class and a scheduler.
 
