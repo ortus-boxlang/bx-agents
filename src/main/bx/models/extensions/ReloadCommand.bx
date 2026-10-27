@@ -1,0 +1,42 @@
+/**
+ * /reload: loads the extensions again without leaving the chat, so an edit to an extension, to `extensions:` in
+ * Agent.yaml or to the person's own file takes effect now. Terminal chat only: a served app registers schedulers and
+ * ColdBox listeners when it starts, so it is restarted instead. It is for admins, as it changes what the chat can do.
+ */
+class extends="models.chat.commands.BaseCommand@bxagents" {
+
+	string function name() {
+		return "reload"
+	}
+
+	string function hint() {
+		return "load the extensions and their settings again"
+	}
+
+	array function transports() {
+		return [ "tui" ]
+	}
+
+	string function permission() {
+		return "admin"
+	}
+
+	any function run( required any context, required string args ) {
+		var reply = arguments.context.reply()
+		if ( !arguments.context.hasTerminal() ) {
+			return reply.warn( "/reload works in the terminal chat." )
+		}
+		var outcome = arguments.context.terminal().reloadExtensions()
+		if ( !outcome.reloaded ) {
+			return reply.warn( "This chat has no extensions to reload." )
+		}
+		var loaded = outcome.report.filter( e => e.state == "loaded" ).len()
+		var failed = outcome.report.filter( e => e.state == "failed" ).len()
+		reply.ok( "Reloaded: #loaded# extension#loaded == 1 ? '' : 's'# loaded" & ( failed ? ", #failed# failed" : "" ) & "." )
+		for ( var problem in outcome.problems ) {
+			reply.warn( problem )
+		}
+		return reply
+	}
+
+}

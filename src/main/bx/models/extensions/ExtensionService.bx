@@ -33,6 +33,7 @@ class {
 		variables.moduleFolders = isNull( arguments.moduleFolders ) ? installedModuleFolders() : arguments.moduleFolders
 		variables.projectSettings = isNull( arguments.projectSettings ) ? nullValue() : arguments.projectSettings
 		variables.registry = nullValue()
+		variables.commands = nullValue()
 		variables.problems = []
 		return this
 	}
@@ -45,6 +46,7 @@ class {
 	 * @return this
 	 */
 	function install( required any commands ) {
+		variables.commands = arguments.commands
 		var settings = new "models.extensions.ExtensionSettings@bxagents"().combine( [ variables.userConfig.extensions(), projectBlock() ] )
 		variables.registry = new "models.extensions.ExtensionRegistry@bxagents"( arguments.commands, settings )
 		for ( var folder in variables.moduleFolders ) {
@@ -58,7 +60,27 @@ class {
 		}
 		variables.registry.load()
 		arguments.commands.replace( new "models.extensions.ExtensionsCommand@bxagents"( this ) )
+		if ( variables.transport == "tui" ) {
+			arguments.commands.replace( new "models.extensions.ReloadCommand@bxagents"() )
+		}
 		return this
+	}
+
+	/**
+	 * Loads everything again: unloads the extensions as they are, reads the person's file and the project's
+	 * `extensions:` settings anew, and installs what is found. An extension that fails to load is reported and left
+	 * out; the others are not held back by it.
+	 *
+	 * @return this
+	 */
+	function reload() {
+		if ( isNull( variables.commands ) ) {
+			throw( type : "bxagents.extension", message : "There is nothing to reload before install()." )
+		}
+		unload()
+		variables.problems = []
+		variables.userConfig.reload()
+		return install( variables.commands )
 	}
 
 	/**
