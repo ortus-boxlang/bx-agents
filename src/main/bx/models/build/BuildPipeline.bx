@@ -148,7 +148,8 @@ class {
 		arguments.onProgress( "    agent-scope=#interceptorSplit.agent.len()#, runtime-scope=#interceptorSplit.runtime.len()#" )
 
 		arguments.onProgress( "+ Generating gateway registrations..." )
-		var gatewayResult = variables.gatewayGenerator.generate( discovery, appDir, config )
+		var gatewayTypes = new "models.gateways.GatewayTypes@bxagents"().withExtensions( root, new "models.extensions.ExtensionSettings@bxagents"().disableList( isStruct( config.extensions ?: "" ) ? config.extensions : {} ) )
+		var gatewayResult = variables.gatewayGenerator.generate( discovery, appDir, config, gatewayTypes )
 		arguments.onProgress( "    #gatewayResult.registrationStatements.len()# registration(s), httpGateway=#( gatewayResult.hasHttpGateway ? 'yes' : 'no' )#, pushGateway=#( gatewayResult.hasPushGateway ? 'yes' : 'no' )#" )
 
 		arguments.onProgress( "+ Generating local MCP server registrations..." )

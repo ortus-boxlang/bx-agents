@@ -35,8 +35,9 @@ class {
 	 *
 	 * @return The tool objects found in the folder: the agent's OWN tools, which ToolSelector attaches to that agent and no other. They are also registered in the global registry, as before, for what resolves tools by name (MCP hosting).
 	 */
-	array function load( required string toolsDir ) {
+	array function load( required string toolsDir, string extension = "", array disable = [] ) {
 		var found = []
+		var settings = new "models.extensions.ExtensionSettings@bxagents"()
 
 		if ( !directoryExists( arguments.toolsDir ) ) {
 			return found
@@ -45,11 +46,43 @@ class {
 		var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
 
 		for ( var filePath in directoryList( arguments.toolsDir, true, "path", "*.bx" ) ) {
+			// a tool an extension brings can be turned off with `extensions.disable`: `extension:ToolFileName`
+			if ( len( arguments.extension ) && settings.isOff( arguments.disable, arguments.extension, reReplace( getFileFromPath( filePath ), "\.bx$", "" ) ) ) {
+				continue
+			}
 			var instance = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" ).instantiate( filePath, context )
 			found.append( aiToolRegistry().scanClass( instance ), true )
 		}
 
 		return found
+	}
+
+	/**
+	 * The agent's own tools together with the tools that project extensions carry, each read where it is in the app.
+	 * A tool of the project's own wins over an extension's of the same name, and a later extension over an earlier one.
+	 *
+	 * @ownDir The agent's own `tools/` folder
+	 * @extensionFolders [ { extension, path } ] with the `tools/` folder of each extension
+	 * @disable The `extensions.disable` entries
+	 *
+	 * @return The tool objects, with the extensions' first
+	 */
+	array function loadWithExtensions( required string ownDir, required array extensionFolders, array disable = [] ) {
+		var byName = {}
+		var order = []
+		var all = []
+		for ( var folder in arguments.extensionFolders ) {
+			all.append( load( folder.path, folder.extension, arguments.disable ), true )
+		}
+		all.append( load( arguments.ownDir ), true )
+		for ( var tool in all ) {
+			var name = tool.getName()
+			if ( !byName.keyExists( name ) ) {
+				order.append( name )
+			}
+			byName[ name ] = tool
+		}
+		return order.map( n => byName[ n ] )
 	}
 
 }

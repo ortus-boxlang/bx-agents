@@ -1,0 +1,83 @@
+/**
+ * A command line verb an extension adds: `bxAgents <verb> [flags]`. The method is called with the flags as a struct, the
+ * same one a built-in verb gets (`--version=1.2` is `options.version`; `--projectRoot` is always there), and answers
+ *
+ *   a number                  the exit code
+ *   a string                  printed, exit code 0
+ *   { exitCode, message }     what a built-in verb returns
+ *   nothing                   exit code 0
+ *
+ * A method that throws is reported as an error with exit code 1 and the name of the extension. A flag that must have
+ * a value says so in `valueOptions`, so `--version` alone is refused as it is for a built-in verb.
+ */
+class {
+
+	/**
+	 * @extension The extension's name
+	 * @item The method's (or `registry.verb()` target's) name
+	 * @name The verb, as typed after `bxAgents`
+	 * @hint What it does, for `bxAgents help`
+	 * @valueOptions The flags that must come with a value
+	 * @call A function( options )
+	 */
+	function init( required string extension, required string item, required string name, required string hint, required array valueOptions, required any call ) {
+		variables.extension = arguments.extension
+		variables.item = arguments.item
+		variables.name = arguments.name
+		variables.hint = arguments.hint
+		variables.valueOptions = arguments.valueOptions
+		variables.call = arguments.call
+		return this
+	}
+
+	string function id() {
+		return variables.extension & ":" & variables.item
+	}
+
+	string function extensionName() {
+		return variables.extension
+	}
+
+	string function item() {
+		return variables.item
+	}
+
+	string function name() {
+		return variables.name
+	}
+
+	string function hint() {
+		return variables.hint
+	}
+
+	array function valueOptions() {
+		return variables.valueOptions
+	}
+
+	/**
+	 * @options The flags of the command line
+	 *
+	 * @return { exitCode, message }
+	 */
+	struct function run( required struct options ) {
+		try {
+			var answer = variables.call( arguments.options )
+			if ( isNull( answer ) ) {
+				return { exitCode : 0, message : "" }
+			}
+			if ( isNumeric( answer ) ) {
+				return { exitCode : int( answer ), message : "" }
+			}
+			if ( isSimpleValue( answer ) ) {
+				return { exitCode : 0, message : answer }
+			}
+			if ( isStruct( answer ) ) {
+				return { exitCode : answer.exitCode ?: 0, message : answer.message ?: "" }
+			}
+			return { exitCode : 0, message : "" }
+		} catch ( any e ) {
+			return { exitCode : 1, message : "The extension [#variables.extension#] failed in the verb #variables.name#: #e.message#" }
+		}
+	}
+
+}

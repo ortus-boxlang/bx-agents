@@ -45,62 +45,15 @@ import bxModules.bxagents.models.util.EntryConfigReader;
 class {
 
 	/**
-	 * Push-style gateway type -> the bx-ai IGateway class (living in THIS
-	 * module) aiGateway() should construct for it, via its bare-class-path
-	 * resolution fallback. Data-driven so adding a 7th push-style gateway is
-	 * one map entry, not new branching logic.
-	 */
-	static {
-		TYPE_CLASS_MAP = {
-			telegram      : "bxModules.bxagents.models.gateways.TelegramGateway",
-			slack         : "bxModules.bxagents.models.gateways.SlackGateway",
-			discord       : "bxModules.bxagents.models.gateways.DiscordGateway",
-			email         : "bxModules.bxagents.models.gateways.EmailGateway",
-			"whatsapp-cloud": "bxModules.bxagents.models.gateways.whatsapp.WhatsAppCloudGateway",
-			teams         : "bxModules.bxagents.models.gateways.TeamsGateway",
-			twilio        : "bxModules.bxagents.models.gateways.TwilioGateway",
-			github        : "bxModules.bxagents.models.gateways.GitHubGateway",
-			signal        : "bxModules.bxagents.models.gateways.SignalGateway"
-		}
-
-		// Per push-style type, the *EnvVar option keys renderSecretOptions()
-		// resolves live via getSystemSetting() instead of ever embedding a
-		// secret as a literal in generated source - same "secrets stay
-		// external" rule already enforced for the core `http` type. email's
-		// imapHost/fromAddress aren't cryptographic secrets, but the SAME
-		// env-var-driven convention is used for every one of its config
-		// values anyway - deployment-varying values never baked in.
-		SECRET_KEY_MAPS = {
-			telegram: { botToken: "botTokenEnvVar" },
-			slack   : { botToken: "botTokenEnvVar", appToken: "appTokenEnvVar" },
-			discord : { botToken: "botTokenEnvVar" },
-			email   : {
-				imapHost    : "imapHostEnvVar",
-				imapUsername: "imapUsernameEnvVar",
-				imapPassword: "imapPasswordEnvVar",
-				fromAddress : "fromAddressEnvVar"
-			},
-			"whatsapp-cloud": {
-				accessToken  : "accessTokenEnvVar",
-				phoneNumberId: "phoneNumberIdEnvVar",
-				appSecret    : "appSecretEnvVar",
-				verifyToken  : "verifyTokenEnvVar"
-			},
-			teams : { appId: "appIdEnvVar", appPassword: "appPasswordEnvVar" },
-			twilio: { accountSid: "accountSidEnvVar", authToken: "authTokenEnvVar", from: "fromEnvVar" },
-			github: { token: "tokenEnvVar", webhookSecret: "webhookSecretEnvVar", botName: "botNameEnvVar" },
-			signal: { account: "accountEnvVar" }
-		}
-	}
-
-	/**
 	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .gateways is used)
 	 * @appDir Absolute path to the generated ColdBox app dir, e.g. "<projectRoot>/.build/app" - any webhook handler this generator still needs (WhatsApp Cloud, Teams, Twilio, GitHub) is written under "<appDir>/handlers"
 	 * @resolvedConfig The root project's resolved config (AgentConfigResolver.resolve()) - only `gatewaySession` is used, to configure the generated GatewaySession's policy/maxQueueDepth
 	 *
 	 * @return { registrationStatements: [], hasHttpGateway, hasChannelGateway, hasPushGateway, hasEmailGateway, hasWhatsAppCloudGateway, whatsAppCloudHandlerPath (only if hasWhatsAppCloudGateway), hasTeamsGateway, teamsHandlerPath (only if hasTeamsGateway), sessionStartupStatement (only if hasPushGateway) - a bare onApplicationStart() statement, see renderSessionStartupStatement() }
 	 */
-	struct function generate( required struct discovery, required string appDir, struct resolvedConfig = {} ) {
+	struct function generate( required struct discovery, required string appDir, struct resolvedConfig = {}, any types ) {
+		// where the gateway types come from: the built-in ones, and what the project's extensions bring
+		var known = isNull( arguments.types ) ? new "models.gateways.GatewayTypes@bxagents"() : arguments.types
 		var channelEntries = collectChannelEntries( arguments.discovery )
 		var hasHttpGateway = false
 		var hasEmailGateway = false
@@ -144,13 +97,14 @@ class {
 			// deduplicated, since two entries of the same type would
 			// collide on the same registry slot anyway (bx-ai's registry
 			// is name-keyed, not instance-keyed - a v1 limitation).
-			if ( static.TYPE_CLASS_MAP.keyExists( type ) && !pushGatewayNames.contains( type ) ) {
+			var found = known.spec( type )
+			if ( !isNull( found ) && found.style == "push" && !pushGatewayNames.contains( type ) ) {
 				pushGatewayNames.append( type )
 			}
 		}
 
 		var result = {
-			registrationStatements  : channelEntries.map( e => renderRegistration( e ) ),
+			registrationStatements  : channelEntries.map( e => renderRegistration( e, known ) ),
 			hasHttpGateway          : hasHttpGateway,
 			// Whether the project declares ANY channel-adapter gateway at all.
 			// Distinct from hasHttpGateway on purpose: the bx-ai Gateway surface
@@ -245,33 +199,27 @@ class {
 	 *
 	 * @return A bare `aiGatewayRegistry().register( aiGateway(...) )` statement string
 	 */
-	private string function renderRegistration( required struct entry ) {
+	private string function renderRegistration( required struct entry, required any types ) {
 		var type = arguments.entry.config.type ?: ""
 		var options = duplicate( arguments.entry.config )
 		options.delete( "type" )
 
-		var nameExpression = static.TYPE_CLASS_MAP.keyExists( type )
-			? renderLiteral( static.TYPE_CLASS_MAP[ type ] )
-			: renderLiteral( type )
-
-		var secretKeyMap = secretKeyMapFor( type )
+		var found = arguments.types.spec( type )
+		var secretKeyMap = arguments.types.secretsFor( type, options )
 		var renderedOptions = secretKeyMap.count()
 			? renderSecretOptions( options, secretKeyMap )
 			: renderLiteral( options )
 
-		return "aiGatewayRegistry().register( aiGateway( #nameExpression#, #renderedOptions# ) )"
-	}
-
-	/**
-	 * @type A gateway entry's own `type` value
-	 *
-	 * @return This type's own { literalKey: envVarOptionKey } map (see SECRET_KEY_MAPS), or {} if it has none (renders as an ordinary literal instead)
-	 */
-	private struct function secretKeyMapFor( required string type ) {
-		if ( arguments.type == "http" ) {
-			return { secret: "secretEnvVar" }
+		// A type an extension brings is read where it is in the app (extensions/<name>/gateways/), when the app starts
+		if ( !isNull( found ) && found.source != "built-in" ) {
+			return 'new "models.extensions.ExtensionGateways@bxagents"( getDirectoryFromPath( getCurrentTemplatePath() ) ).register( #renderLiteral( type )#, #renderedOptions# )'
 		}
-		return static.SECRET_KEY_MAPS[ arguments.type ] ?: {}
+
+		var nameExpression = !isNull( found ) && len( found.class )
+			? renderLiteral( found.class )
+			: renderLiteral( type )
+
+		return "aiGatewayRegistry().register( aiGateway( #nameExpression#, #renderedOptions# ) )"
 	}
 
 	/**
@@ -334,7 +282,7 @@ class {
 	 * root-agent-only (see RouterGenerator). A project with subagents cannot
 	 * yet route different gateways to different subagents.
 	 *
-	 * @pushGatewayNames Every distinct push-style gateway TYPE present (see TYPE_CLASS_MAP) - these ARE the real aiGatewayRegistry() keys (== each gateway class's own fixed getName()), not the discovered gateways/* entries' own filenames
+	 * @pushGatewayNames Every distinct push-style gateway TYPE present (see GatewayTypes) - these ARE the real aiGatewayRegistry() keys (== each gateway class's own fixed getName()), not the discovered gateways/* entries' own filenames
 	 * @resolvedConfig The root project's resolved config - only `gatewaySession` ({ policy, maxQueueDepth }, both optional) is used
 	 *
 	 * A bare onApplicationStart() statement block, not an afterConfigurationLoad

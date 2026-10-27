@@ -1,0 +1,63 @@
+/**
+ * Serves the files of an extension's `web/` folder from the extension itself, in the built app
+ * (`<app>/extensions/<name>/web/`): the page links `<path>/ext/<name>/<file>` and the generated handler asks this class
+ * which file that is. Nothing is copied next to the page.
+ *
+ * What is asked for comes from the address, so it is checked before any file is touched: the extension is a plain
+ * folder name, the file is a relative path with no `..`, no hidden part and no backslash, and the file found must be
+ * inside the extension's `web/` folder once its real path is worked out. An extension turned off in `extensions.disable`
+ * serves nothing. Anything that fails a check is "not found", the same answer as a file that is not there.
+ */
+class {
+
+	/**
+	 * @appDir The built app's folder
+	 */
+	function init( required string appDir ) {
+		variables.appDir = arguments.appDir.reReplace( "[\\/]+$", "" )
+		return this
+	}
+
+	/**
+	 * @extension The extension's folder name from the address
+	 * @file The path under its `web/` folder from the address
+	 *
+	 * @return The absolute path of the file, or blank when there is nothing to serve
+	 */
+	string function find( required string extension, required string file ) {
+		if ( !reFind( "^[A-Za-z0-9][A-Za-z0-9._-]*$", arguments.extension ) || !len( arguments.file ) || arguments.file.contains( "\" ) || arguments.file.contains( char( 0 ) ) ) {
+			return ""
+		}
+		for ( var segment in arguments.file.listToArray( "/", true ) ) {
+			if ( !len( segment ) || segment.startsWith( "." ) ) {
+				return ""
+			}
+		}
+		if ( new "models.extensions.ExtensionSettings@bxagents"().isOff( disabled(), arguments.extension ) ) {
+			return ""
+		}
+		var web = variables.appDir & "/extensions/" & arguments.extension & "/web"
+		var path = web & "/" & arguments.file
+		if ( !directoryExists( web ) || !fileExists( path ) ) {
+			return ""
+		}
+		var real = createObject( "java", "java.io.File" ).init( path ).getCanonicalPath().replace( "\", "/", "all" )
+		var inside = createObject( "java", "java.io.File" ).init( web ).getCanonicalPath().replace( "\", "/", "all" ) & "/"
+		return real.startsWith( inside ) ? path : ""
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @return The `extensions.disable` entries the build wrote for the app
+	 */
+	private array function disabled() {
+		var file = variables.appDir & "/config/extensions.json"
+		if ( !fileExists( file ) ) {
+			return []
+		}
+		var parsed = jsonDeserialize( fileRead( file ) )
+		return new "models.extensions.ExtensionSettings@bxagents"().disableList( isStruct( parsed ) ? parsed : {} )
+	}
+
+}

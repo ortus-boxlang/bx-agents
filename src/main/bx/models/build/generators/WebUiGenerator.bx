@@ -262,8 +262,8 @@ class {
 
 		var mountDir = Strings::normalizePath( arguments.appDir ) & path
 		directoryCreate( path : mountDir, createPath : true, ignoreExists : true )
-		// The web/ folders of the project's folder extensions: copied beside the page, and linked into it
-		var assets = new "models.build.generators.ExtensionWebAssets@bxagents"().copy( arguments.entry.projectRoot, mountDir, path, arguments.disable )
+		// The web/ folders of the project's folder extensions are served where they are (see ExtensionWebFiles); the page links them
+		var assets = new "models.build.generators.ExtensionWebAssets@bxagents"().links( arguments.entry.projectRoot, path, arguments.disable )
 		html = html.replace( "__EXTENSION_STYLES__", assets.styles, "all" )
 		html = html.replace( "__EXTENSION_SCRIPTS__", assets.scripts, "all" )
 		fileWrite( mountDir & "/index.html", html )
@@ -1365,6 +1365,20 @@ class {
 			"	private function commandService() {",
 			'		var store = new "models.store.SessionStore@bxagents"( new "models.store.ChatStore@bxagents"( chatDb().getDatasource() ) )',
 			'		return new "models.chat.commands.CommandService@bxagents"( agent : agent(), sessions : store, offered : offered().names() )',
+			"	}",
+			"",
+			"	/**",
+			"	 * A file of an extension's web/ folder, read from the extension itself: <path>/ext/<extension>/<file>.",
+			"	 * Anything that is not a plain file inside that folder is a 404.",
+			"	 */",
+			"	function extensionFile( event, rc, prc ) {",
+			'		var appDir = getCanonicalPath( getDirectoryFromPath( getCurrentTemplatePath() ) & ".." )',
+			'		var file = new "models.extensions.ExtensionWebFiles@bxagents"( appDir ).find( rc.extension ?: "", rc.file ?: "" )',
+			"		if ( !len( file ) ) {",
+			'			event.renderData( type: "text", data: "Not found", statusCode: 404 )',
+			"			return",
+			"		}",
+			'		event.sendFile( file: file, disposition: "inline" )',
 			"	}",
 			"",
 			"	function health( event, rc, prc ) {",

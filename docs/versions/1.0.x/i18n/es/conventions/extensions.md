@@ -309,7 +309,7 @@ function about( agentContext ) { return "<strong>Panel</strong><br>Usa el botón
 
 La cadena se muestra como texto. Solo un slot que diga `html : true` tiene su cadena puesta en la página como marcado; es el autor diciendo que es su propio marcado, así que nunca debe llevar lo que escribió un visitante (usa `encodeForHTML()`). Una cadena vacía no muestra nada. La página pide todos los slots en una sola petición, `GET <path>/api/slots?conversationId=`, tras el mismo inicio de sesión o clave de API que el resto de la API de la página, cada vez que refresca el tamaño del contexto. Un slot que lanza un error se omite y el motivo se anota una vez en su extensión. Escrito como llamada: `registry.slot( "header", ( agentContext ) => "...", { html : false, name : "badge" } )`. `extensions.disable` acepta `extensión:método` para un slot.
 
-**`web/`** es una carpeta dentro de una extensión de carpeta. La compilación la copia a `<path>/ext/<nombre>/` junto a la página, así que todo archivo en ella (también imágenes) se sirve desde ahí. Los archivos `*.css` y `*.js` que están directamente en `web/` se enlazan en la página, por orden de nombre: estilos en el head y scripts al final del body. Una extensión desactivada por nombre en `extensions.disable` no aporta nada.
+**`web/`** es una carpeta dentro de una extensión de carpeta. La página sirve todo archivo en ella (también imágenes) en `<path>/ext/<nombre>/<archivo>`, leído de la propia extensión en la app compilada; no se copia nada junto a la página. Los archivos `*.css` y `*.js` que están directamente en `web/` se enlazan en la página, por orden de nombre: estilos en el head y scripts al final del body. Una extensión desactivada por nombre en `extensions.disable` no aporta nada.
 
 ```
 extensions/panel/
@@ -330,6 +330,46 @@ La página da a los scripts un objeto pequeño, `bxagents`:
 | `bxagents.refresh()` | pide a la página que refresque ya |
 | `bxagents.conversationId()` | la conversación a la vista |
 | `bxagents.apiBase` | la ruta de la API de la página, para tus propios `fetch` |
+
+## Herramientas y skills
+
+Una extensión de carpeta puede llevar sus propias herramientas y skills:
+
+```
+extensions/helpdesk/
+  Extension.bx
+  tools/Tickets.bx             una clase de herramienta de bx-ai normal
+  skills/triage/SKILL.md       una carpeta de skill normal
+```
+
+La extensión se queda como está. La app lee las carpetas donde están (`extensions/helpdesk/tools/` en la app compilada) y da las herramientas al agente raíz como si estuvieran en el `tools/` del proyecto, y añade los skills a los skills globales que recibe todo agente. No se copia ni se mezcla nada en el `tools/` o `skills/` del proyecto. Una herramienta o skill propia del proyecto gana a la de una extensión con el mismo nombre, y una extensión posterior gana a una anterior. `extensions.disable` acepta `extensión:Tickets` (el nombre de archivo de la herramienta) o `extensión:ticket-triage` (el nombre del skill) para uno, o el nombre de la extensión para todos.
+
+## Tipos de gateway
+
+Una clase en la carpeta `gateways/` de una extensión es un tipo de gateway, con el nombre de su archivo en minúsculas: `extensions/matrix/gateways/Matrix.bx` es el tipo `matrix`. Es un gateway de bx-ai normal (mira los integrados, que extienden `ScheduledGatewayBase`); su `getName()` debe ser igual que su archivo, en minúsculas, porque es la clave con la que el registro de gateways de bx-ai lo guarda. Un proyecto lo usa como cualquier otro:
+
+```js
+// gateways/chat.bx
+class {
+	function configure() {
+		return { type : "matrix", homeserver : "https://matrix.example.org", tokenEnvVar : "MATRIX_TOKEN" };
+	}
+}
+```
+
+Toda opción llamada `<nombre>EnvVar` es el nombre de una variable de entorno: el gateway recibe su valor como `<nombre>` (aquí `token`), y se lee al arrancar la app, así que un secreto nunca es un literal en la compilación. La app construye el gateway desde el archivo de clase de la propia extensión y lo registra al arrancar.
+
+Todos los tipos vienen de un registro, `GatewayTypes`: los integrados y lo que traen las extensiones. Un tipo integrado no se puede reemplazar (una extensión no puede quedarse con `telegram`). Dos extensiones con el mismo tipo son un aviso y gana la posterior. Un nombre de archivo que no sirve como tipo (una letra, luego letras, dígitos y `-`) se rechaza. `extensions.disable` acepta `extensión:Matrix` para un tipo o el nombre de la extensión para todos. Las clases de gateway se leen solo de las extensiones del proyecto.
+
+## Verbos de la línea de comandos
+
+```js
+@Verb( { name : "greet", valueOptions : [ "name" ] } )
+@Hint( "saludar desde la línea de comandos: bxAgents greet --name=Ada" )
+function greet( options ) { return "Hola, #options.name ?: 'tú'#!" }
+```
+
+`bxAgents greet --name=Ada` busca el verbo en las extensiones (módulos, las de la persona y las del proyecto, cargadas como en el chat) cuando no es uno de los del módulo. El método recibe las opciones como un struct, igual que un verbo integrado (`--projectRoot` siempre está). Devuelve un código de salida, un mensaje para imprimir, `{ exitCode, message }`, o nada. Una opción que debe llevar valor se lista en `valueOptions`, así que `--name` sola se rechaza como en un verbo integrado. Un método que lanza un error es un error con código de salida 1 que nombra la extensión. Un verbo integrado no se puede reemplazar, y dos extensiones con el mismo verbo son un aviso con la posterior ganando. `bxAgents help` lista los verbos que añaden las extensiones. No están en los autocompletados de shell generados, que no cambian. `registry.verb( "greet", ( options ) => ..., { hint, valueOptions } )` es la forma de llamada, y `extensions.disable` acepta `extensión:método`.
 
 ## De dónde vienen las extensiones
 
@@ -359,6 +399,6 @@ bxAgents extensions          # la lista, de dónde viene cada una y qué añadi�
 bxAgents extensions --json
 ```
 
-## Todavía no
+## Lo que se queda en el proyecto
 
-Las extensiones aún no pueden añadir gateways, verbos de CLI, herramientas y skills. Eso viene después.
+Las herramientas, skills, tipos de gateway y archivos de `web/` se leen de la carpeta `extensions/` del propio proyecto, que la compilación copia a la app tal cual. Una extensión en un módulo instalado o en tu `~/.bxagents/extensions` sigue añadiendo comandos, atajos, prefijos, oyentes y verbos al chat y a la línea de comandos, pero no viaja a una app compilada: un servidor nunca lee la carpeta personal de un desarrollador.

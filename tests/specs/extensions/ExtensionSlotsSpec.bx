@@ -113,22 +113,19 @@ class extends="testbox.system.BaseSpec" {
 				}
 			} );
 
-			it( "copies web/ to <mount>/ext/<name>/ and links the css and js that sit in it", function() {
+			it( "links the css and js that sit in an extension's web/ folder, and copies nothing", function() {
 				put( "acme/Extension.bx", "class {}" );
 				put( "acme/web/b.js", "// b" );
 				put( "acme/web/a.js", "// a" );
 				put( "acme/web/style.css", "/* c */" );
 				put( "acme/web/img/logo.txt", "x" );
 				put( "solo.bx", "class {}" );
-				var mount = dir & "/app/chat";
-				var assets = new bxagents.models.build.generators.ExtensionWebAssets().copy( dir, mount, "/chat" );
+				var assets = new bxagents.models.build.generators.ExtensionWebAssets().links( dir, "/chat" );
 
 				expect( assets.extensions ).toBe( [ "acme" ] );
 				expect( assets.styles ).toBe( '<link rel="stylesheet" href="/chat/ext/acme/style.css">' );
 				expect( assets.scripts ).toBe( '<script src="/chat/ext/acme/a.js"></script>' & char( 10 ) & '<script src="/chat/ext/acme/b.js"></script>' );
-				expect( fileExists( mount & "/ext/acme/style.css" ) ).toBeTrue();
-				expect( fileExists( mount & "/ext/acme/img/logo.txt" ) ).toBeTrue();
-				expect( fileExists( mount & "/ext/solo" ) ).toBeFalse();
+				expect( directoryExists( dir & "/app" ) ).toBeFalse();
 			} );
 
 			it( "brings nothing from an extension turned off by name or glob, and keeps one only an item of which is off", function() {
@@ -138,7 +135,7 @@ class extends="testbox.system.BaseSpec" {
 				put( "acme-tools/web/y.js", "//" );
 				put( "kept/Extension.bx", "class {}" );
 				put( "kept/web/z.js", "//" );
-				var assets = new bxagents.models.build.generators.ExtensionWebAssets().copy( dir, dir & "/app", "", [ "off", "acme-*", "kept:thing" ] );
+				var assets = new bxagents.models.build.generators.ExtensionWebAssets().links( dir, "", [ "off", "acme-*", "kept:thing" ] );
 
 				expect( assets.extensions ).toBe( [ "kept" ] );
 				expect( assets.scripts ).toBe( '<script src="/ext/kept/z.js"></script>' );

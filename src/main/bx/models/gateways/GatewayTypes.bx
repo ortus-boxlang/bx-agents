@@ -1,0 +1,215 @@
+/**
+ * The gateway types a project can name in `gateways/<name>.bx` with `type : "..."`, and where each one comes from.
+ * Types are registered from different places, and everything that needs to know about a type asks here:
+ *
+ *   built-in      the types bx-ai and this module ship: mock, cli and http, and the push-style ones (Telegram,
+ *                 Slack, Discord, email, WhatsApp, Teams, Twilio, GitHub and Signal)
+ *   extensions    a class in a project extension's `gateways/` folder is the type of its file name, lower case:
+ *                 `extensions/matrix/gateways/Matrix.bx` is the type `matrix`
+ *   register()    anything else that has a gateway class to offer
+ *
+ * Each type is a spec:
+ *
+ *   type      the name used in `type : "..."`
+ *   style     "core" (bx-ai builds it by name), or "push" (a class in this module or an extension, started with the
+ *             project's gateway session)
+ *   class     the bare class path for a built-in push-style type
+ *   file      the class file, for a type that comes from an extension (it is read where it is, never copied)
+ *   secrets   { optionKey : "optionKeyEnvVar" }: values read from environment variables when the app starts, so a
+ *             secret is never a literal in generated source
+ *   required  the `*EnvVar` options the entry must set
+ *   source    "built-in", or "extension:<name>"
+ *
+ * A built-in type cannot be replaced, so an extension cannot take over `telegram`. Two extensions on one type is a
+ * warning and the later one (by extension name) wins. A type that is not a usable name is refused. Everything that
+ * went wrong is in problems().
+ */
+class {
+
+	/**
+	 * @return A registry holding the built-in types
+	 */
+	function init() {
+		variables.types = {}
+		variables.order = []
+		variables.problems = []
+		registerBuiltIns()
+		return this
+	}
+
+	/**
+	 * Adds a type.
+	 *
+	 * @type The name used in `type : "..."`
+	 * @spec { style, class, file, secrets, required, source }; what is missing takes the defaults
+	 *
+	 * @return this
+	 */
+	function register( required string type, required struct spec ) {
+		var name = lCase( trim( arguments.type ) )
+		var source = arguments.spec.source ?: "extension"
+		if ( !reFind( "^[a-z][a-z0-9-]*$", name ) ) {
+			variables.problems.append( "The gateway type [#arguments.type#] of #source# is not used: a type name starts with a letter and holds letters, digits and -." )
+			return this
+		}
+		if ( variables.types.keyExists( name ) ) {
+			var existing = variables.types[ name ]
+			if ( existing.source == "built-in" ) {
+				variables.problems.append( "The gateway type [#name#] of #source# is not used: [#name#] is a built-in type and cannot be replaced." )
+				return this
+			}
+			variables.problems.append( "The gateway type [#name#] of #existing.source# is replaced by the one of #source#, which loaded later." )
+		} else {
+			variables.order.append( name )
+		}
+		variables.types[ name ] = {
+			type     : name,
+			style    : arguments.spec.style ?: "push",
+			class    : arguments.spec.class ?: "",
+			file     : arguments.spec.file ?: "",
+			secrets  : arguments.spec.secrets ?: {},
+			required : arguments.spec.required ?: [],
+			source   : source
+		}
+		return this
+	}
+
+	/**
+	 * Adds the types the project's extensions bring: one per class in `extensions/<name>/gateways/*.bx`. The
+	 * files are only looked at here; their code is not run until the app starts.
+	 *
+	 * @projectRoot The project's folder
+	 * @disable The `extensions.disable` entries: a name or glob turns an extension's types off, `extension:Type` one
+	 *
+	 * @return this
+	 */
+	function withExtensions( required string projectRoot, array disable = [] ) {
+		var folder = arguments.projectRoot & "/extensions"
+		if ( !directoryExists( folder ) ) {
+			return this
+		}
+		var settings = new "models.extensions.ExtensionSettings@bxagents"()
+		for ( var extension in directoryList( folder, false, "name", "", "name" ).filter( n => !n.startsWith( "." ) ) ) {
+			var gateways = folder & "/" & extension & "/gateways"
+			if ( !directoryExists( gateways ) || settings.isOff( arguments.disable, extension ) ) {
+				continue
+			}
+			for ( var file in directoryList( gateways, false, "name", "*.bx", "name" ) ) {
+				var base = reReplace( file, "\.bx$", "" )
+				if ( settings.isOff( arguments.disable, extension, base ) ) {
+					continue
+				}
+				register( base, { style : "push", file : gateways & "/" & file, source : "extension:" & extension } )
+			}
+		}
+		return this
+	}
+
+	boolean function has( required string type ) {
+		return variables.types.keyExists( lCase( arguments.type ) )
+	}
+
+	/**
+	 * @return The spec of a type; null for a type that is not registered
+	 */
+	any function spec( required string type ) {
+		return variables.types[ lCase( arguments.type ) ] ?: nullValue()
+	}
+
+	/**
+	 * @return Every type name, in the order registered
+	 */
+	array function names() {
+		return variables.order.map( n => n )
+	}
+
+	/**
+	 * @return The names of the types that run with the project's gateway session
+	 */
+	array function pushNames() {
+		return variables.order.filter( n => variables.types[ n ].style == "push" )
+	}
+
+	/**
+	 * What a type reads from the environment. A built-in type says so in its spec. An extension's type has no such
+	 * list that can be read without running it, so the rule is general: each option named `<key>EnvVar` is the name
+	 * of an environment variable whose value becomes `<key>`.
+	 *
+	 * @type A registered type
+	 * @options The entry's options
+	 *
+	 * @return { optionKey : "optionKeyEnvVar" }
+	 */
+	struct function secretsFor( required string type, required struct options ) {
+		var found = spec( arguments.type )
+		if ( isNull( found ) ) {
+			return {}
+		}
+		if ( arguments.type == "http" ) {
+			return { secret : "secretEnvVar" }
+		}
+		if ( found.source == "built-in" ) {
+			return found.secrets
+		}
+		var derived = {}
+		for ( var key in arguments.options ) {
+			if ( key.len() > 6 && key.endsWith( "EnvVar" ) ) {
+				derived[ left( key, len( key ) - 6 ) ] = key
+			}
+		}
+		return derived
+	}
+
+	/**
+	 * @return Sentences about what could not be registered
+	 */
+	array function problems() {
+		return variables.problems
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private void function registerBuiltIns() {
+		for ( var core in [ "mock", "cli", "http" ] ) {
+			register( core, { style : "core", source : "built-in" } )
+		}
+		var module = "bxModules.bxagents.models.gateways."
+		var pushTypes = [
+			{ type : "telegram", class : module & "TelegramGateway", secrets : { botToken : "botTokenEnvVar" }, required : [ "botTokenEnvVar" ] },
+			{ type : "slack", class : module & "SlackGateway", secrets : { botToken : "botTokenEnvVar", appToken : "appTokenEnvVar" }, required : [ "botTokenEnvVar", "appTokenEnvVar" ] },
+			{ type : "discord", class : module & "DiscordGateway", secrets : { botToken : "botTokenEnvVar" }, required : [ "botTokenEnvVar" ] },
+			{
+				type     : "email",
+				class    : module & "EmailGateway",
+				secrets  : { imapHost : "imapHostEnvVar", imapUsername : "imapUsernameEnvVar", imapPassword : "imapPasswordEnvVar", fromAddress : "fromAddressEnvVar" },
+				required : [ "imapHostEnvVar", "imapUsernameEnvVar", "imapPasswordEnvVar", "fromAddressEnvVar" ]
+			},
+			{
+				type     : "whatsapp-cloud",
+				class    : module & "whatsapp.WhatsAppCloudGateway",
+				secrets  : { accessToken : "accessTokenEnvVar", phoneNumberId : "phoneNumberIdEnvVar", appSecret : "appSecretEnvVar", verifyToken : "verifyTokenEnvVar" },
+				required : [ "accessTokenEnvVar", "phoneNumberIdEnvVar", "appSecretEnvVar", "verifyTokenEnvVar" ]
+			},
+			{ type : "teams", class : module & "TeamsGateway", secrets : { appId : "appIdEnvVar", appPassword : "appPasswordEnvVar" }, required : [ "appIdEnvVar", "appPasswordEnvVar" ] },
+			{
+				type     : "twilio",
+				class    : module & "TwilioGateway",
+				secrets  : { accountSid : "accountSidEnvVar", authToken : "authTokenEnvVar", from : "fromEnvVar" },
+				required : [ "accountSidEnvVar", "authTokenEnvVar", "fromEnvVar" ]
+			},
+			{
+				type     : "github",
+				class    : module & "GitHubGateway",
+				secrets  : { token : "tokenEnvVar", webhookSecret : "webhookSecretEnvVar", botName : "botNameEnvVar" },
+				required : [ "tokenEnvVar", "webhookSecretEnvVar", "botNameEnvVar" ]
+			},
+			{ type : "signal", class : module & "SignalGateway", secrets : { account : "accountEnvVar" }, required : [ "accountEnvVar" ] }
+		]
+		for ( var entry in pushTypes ) {
+			entry.style = "push"
+			entry.source = "built-in"
+			register( entry.type, entry )
+		}
+	}
+
+}

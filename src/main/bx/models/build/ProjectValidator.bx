@@ -41,7 +41,12 @@ class {
 		validateSubagents( arguments.projectRoot, arguments.discovery, errors, ( arguments.resolvedConfig.profiles ?: {} ).keyArray(), len( arguments.resolvedConfig.model ?: "" ) > 0 || len( arguments.resolvedConfig.profile ?: "" ) > 0 || len( arguments.resolvedConfig.defaultProfile ?: "" ) > 0 )
 		validateModules( arguments.projectRoot, arguments.discovery, errors )
 		validateSchedules( arguments.projectRoot, arguments.discovery, warnings )
-		validateGateways( arguments.discovery, errors, ( arguments.resolvedConfig.profiles ?: {} ).keyArray() )
+		// the gateway types: the built-in ones, and what the project's extensions bring
+		var types = new "models.gateways.GatewayTypes@bxagents"().withExtensions( arguments.projectRoot, new "models.extensions.ExtensionSettings@bxagents"().disableList( isStruct( arguments.resolvedConfig.extensions ?: "" ) ? arguments.resolvedConfig.extensions : {} ) )
+		for ( var problem in types.problems() ) {
+			errors.append( problem )
+		}
+		validateGateways( arguments.discovery, errors, ( arguments.resolvedConfig.profiles ?: {} ).keyArray(), types )
 		validateGatewaySession( arguments.resolvedConfig, errors, directoryExists( arguments.projectRoot & "/extensions" ) )
 		validateMcpServers( arguments.resolvedConfig, errors )
 		validateTools( arguments.resolvedConfig, errors, "The project's own agent definition" )
@@ -340,26 +345,7 @@ class {
 	// Gateways (two entry kinds - see M8 design notes)
 	// --------------------------------------------------------------------------
 
-	/**
-	 * Push-style channel-adapter type -> its own required `*EnvVar` option
-	 * keys, checked by validateGateways() below. Data-driven so adding a 7th
-	 * push-style gateway is one map entry, not new branching logic - the
-	 * core `http` type keeps its own inline check since it predates this map
-	 * and reports a more specific message.
-	 */
 	static {
-		REQUIRED_ENV_VAR_KEYS = {
-			telegram: [ "botTokenEnvVar" ],
-			slack   : [ "botTokenEnvVar", "appTokenEnvVar" ],
-			discord : [ "botTokenEnvVar" ],
-			email   : [ "imapHostEnvVar", "imapUsernameEnvVar", "imapPasswordEnvVar", "fromAddressEnvVar" ],
-			"whatsapp-cloud": [ "accessTokenEnvVar", "phoneNumberIdEnvVar", "appSecretEnvVar", "verifyTokenEnvVar" ],
-			teams   : [ "appIdEnvVar", "appPasswordEnvVar" ],
-			twilio  : [ "accountSidEnvVar", "authTokenEnvVar", "fromEnvVar" ],
-			github  : [ "tokenEnvVar", "webhookSecretEnvVar", "botNameEnvVar" ],
-			signal  : [ "accountEnvVar" ]
-		}
-
 		/**
 		 * The URI prefix reserved for this module's own always-on agent route.
 		 * RouterGenerator.RESERVED_AGENT_PATH is the source of truth - statics
@@ -374,19 +360,16 @@ class {
 	 * "agent"|"mcp"|"webui"`, plus a `path` that is well-formed - see
 	 * validateExposurePath - and unique once normalized) and channel-adapter entries (`type`,
 	 * unique `name`, `secretEnvVar` required for `http`, and each push-style
-	 * type's own required `*EnvVar` keys per REQUIRED_ENV_VAR_KEYS).
+	 * type's own required `*EnvVar` keys per its GatewayTypes spec).
 	 *
 	 * @discovery The raw discovery struct from ProjectDiscoverer.discover()
 	 * @errors Accumulator array - append() any validation errors found
 	 * @profileNames The profile names the root Agent.yaml declares, for a `profiles` list a web UI offers
 	 */
-	private void function validateGateways( required struct discovery, required array errors, array profileNames = [] ) {
+	private void function validateGateways( required struct discovery, required array errors, array profileNames = [], required any types ) {
 		var seenPaths = {}
 		var seenNames = {}
-		var validGatewayTypes = [ "mock", "cli", "http" ]
-		for ( var pushType in static.REQUIRED_ENV_VAR_KEYS.keyArray() ) {
-			validGatewayTypes.append( pushType )
-		}
+		var validGatewayTypes = arguments.types.names()
 
 		// Usernames are global to the project, not per entry: two entries
 		// claiming the same one would race at seed time and the later boot order
@@ -468,8 +451,8 @@ class {
 					arguments.errors.append( "Gateway [#gateway.name#] has an unknown type [#type#] - must be one of: #validGatewayTypes.toList()#" )
 				} else if ( type == "http" && !len( config.secretEnvVar ?: "" ) ) {
 					arguments.errors.append( "Gateway [#gateway.name#] is of type 'http' and requires a 'secretEnvVar' (the NAME of an environment variable holding the signing secret, never the secret value itself)" )
-				} else if ( static.REQUIRED_ENV_VAR_KEYS.keyExists( type ) ) {
-					for ( var requiredKey in static.REQUIRED_ENV_VAR_KEYS[ type ] ) {
+				} else if ( arguments.types.spec( type ).required.len() ) {
+					for ( var requiredKey in arguments.types.spec( type ).required ) {
 						if ( !len( config[ requiredKey ] ?: "" ) ) {
 							arguments.errors.append( "Gateway [#gateway.name#] is of type '#type#' and requires a '#requiredKey#' (the NAME of an environment variable, never the secret value itself)" )
 						}

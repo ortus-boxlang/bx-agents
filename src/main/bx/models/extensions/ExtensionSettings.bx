@@ -63,6 +63,33 @@ class {
 	}
 
 	/**
+	 * Whether `extensions.disable` turns something off: the extension as a whole by name or glob, or one of its items
+	 * as `extension:item` (which may also be a glob). A plain name also turns off an item of that name.
+	 *
+	 * @disable The `disable` entries
+	 * @extension An extension's name
+	 * @item One of its items, or blank for the extension as a whole
+	 */
+	boolean function isOff( required array disable, required string extension, string item = "" ) {
+		for ( var pattern in arguments.disable ) {
+			if ( pattern.contains( ":" ) ) {
+				if ( len( arguments.item ) && matches( pattern, arguments.extension & ":" & arguments.item ) ) {
+					return true
+				}
+				continue
+			}
+			if ( matches( pattern, arguments.extension ) ) {
+				return true
+			}
+			// a plain name also turns off an item called that, such as a command
+			if ( len( arguments.item ) && matches( pattern, arguments.item ) ) {
+				return true
+			}
+		}
+		return false
+	}
+
+	/**
 	 * @block An `extensions:` block
 	 * @name An extension's name
 	 *
