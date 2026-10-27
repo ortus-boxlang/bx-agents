@@ -160,6 +160,22 @@ class {
 	}
 
 	/**
+	 * @context The CommandContext
+	 *
+	 * @return [ { id, extension, place, html, text } ] for every slot that has something to show
+	 */
+	array function slotItems( required any context ) {
+		var shown = []
+		for ( var slot in isNull( variables.registry ) ? [] : variables.registry.slots() ) {
+			var item = slot.render( arguments.context )
+			if ( !isNull( item ) ) {
+				shown.append( item )
+			}
+		}
+		return shown
+	}
+
+	/**
 	 * @return The status items on one line, such as "main · build ok"
 	 */
 	string function statusLine( required any context ) {

@@ -435,6 +435,10 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   `choose()` and `confirm()` in the terminal chat, and an immediate "no answer" where nobody can reply, with
   `canAsk()` to check first. `/reload` (admins, terminal chat) loads the extensions, the person's file and the
   project's `extensions:` settings again without leaving the chat.
+- Extensions can add to the web page. `@Slot` puts a string in the header, sidebar or composer (text, or
+  markup with `html : true`), asked for in one request, `/api/slots`, behind the page's own sign-in. A folder
+  extension's `web/` folder is served with the page at `<path>/ext/<name>/`, its `*.css` and `*.js` are linked in,
+  and scripts get a small `bxagents` object (`slot`, `runCommand`, `onRefresh`, `refresh`, `conversationId`).
 - `examples/extensions-agent` shows a one-file extension, one with several commands, an admin-only command
   with a lifecycle, and a folder with a command class and a scheduler.
 

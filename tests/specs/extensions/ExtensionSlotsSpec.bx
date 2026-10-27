@@ -1,0 +1,176 @@
+/**
+ * Extensions in the web page: slots (a string in a named place) and the `web/` folder (files the page serves and links).
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+
+		describe( "slots and web files from extensions", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-extslots-" );
+				variables.commands = new bxagents.models.chat.commands.CommandCatalog().standard();
+				variables.loaded = [];
+			} );
+
+			afterEach( function() {
+				for ( var registry in loaded ) {
+					registry.unload();
+				}
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function put( required string name, required string code ) {
+				directoryCreate( getDirectoryFromPath( dir & "/extensions/" & name ), true, true );
+				fileWrite( dir & "/extensions/" & name, code );
+			}
+
+			function start( struct settings = {} ) {
+				var registry = new bxagents.models.extensions.ExtensionRegistry( commands, settings );
+				registry.addLayer( "project", dir & "/extensions" );
+				registry.load();
+				loaded.append( registry );
+				return registry;
+			}
+
+			function context() {
+				return new bxagents.models.chat.commands.CommandContext( {}, "web", false );
+			}
+
+			function items( registry ) {
+				return registry.slots().map( s => s.render( context() ) ).filter( i => !isNull( i ) );
+			}
+
+			it( "reads @Slot in its forms and renders text, or html when the slot says so", function() {
+				put( "ui.bx", "class {
+					@Slot( 'header' ) function a( agentContext ) { return 'build ok' }
+					@Slot( { place : 'sidebar', html : true } ) function b( agentContext ) { return '<b>3</b> waiting' }
+					@Slot( 'composer' ) function c( agentContext ) { return '' }
+				}" );
+				var registry = start();
+
+				expect( items( registry ) ).toBe( [
+					{ id : "ui:a", extension : "ui", place : "header", html : false, text : "build ok" },
+					{ id : "ui:b", extension : "ui", place : "sidebar", html : true, text : "<b>3</b> waiting" }
+				] );
+				expect( registry.report()[ 1 ].slots ).toBe( [ "header", "sidebar", "composer" ] );
+			} );
+
+			it( "leaves a slot that throws out, and says why once", function() {
+				put( "bad.bx", "class { @Slot( 'header' ) function h( agentContext ) { throw( message = 'down' ) } }" );
+				var registry = start();
+
+				expect( items( registry ) ).toBeEmpty();
+				expect( items( registry ) ).toBeEmpty();
+				expect( registry.report()[ 1 ].problems.filter( p => p.contains( "slot h failed: down" ) ) ).toHaveLength( 1 );
+			} );
+
+			it( "fails an extension whose slot has no place or a place the page does not have", function() {
+				put( "none.bx", "class { @Slot function a( agentContext ) {} }" );
+				put( "wrong.bx", "class { @Slot( 'footer' ) function a( agentContext ) {} }" );
+				var report = start().report();
+
+				expect( report.map( r => r.state ) ).toBe( [ "failed", "failed" ] );
+				expect( report[ 1 ].problems.toList( " " ) ).toInclude( "@Slot needs a place" );
+				expect( report[ 2 ].problems.toList( " " ) ).toInclude( "[footer] is not a place in the page" );
+			} );
+
+			it( "adds a slot written as a call in register( registry ), and turns one off with extension:method", function() {
+				put( "calls.bx", "class {
+					function register( registry ) {
+						registry.slot( 'header', ( agentContext ) => 'called', { name : 'badge' } )
+						registry.slot( 'sidebar', ( agentContext ) => '<i>x</i>', { html : true, name : 'side' } )
+					}
+				}" );
+				var registry = start( { disable : [ "calls:side" ] } );
+
+				expect( items( registry ).map( i => i.id & "=" & i.text ) ).toBe( [ "calls:badge=called" ] );
+			} );
+
+			it( "gives the page the slots of the served extensions, and none without extensions", function() {
+				var served = new bxagents.models.extensions.ServedSlots();
+				var had = application.keyExists( "bxagentsExtensions" ) ? application.bxagentsExtensions : nullValue();
+				application.delete( "bxagentsExtensions" );
+				try {
+					expect( served.available() ).toBeFalse();
+					expect( served.items( {} ) ).toBeEmpty();
+
+					put( "up.bx", "class { @Slot( 'header' ) function up( agentContext ) { return 'up ' & agentContext.transport() } }" );
+					var service = new bxagents.models.extensions.ExtensionService( projectRoot : dir, userConfig : new bxagents.models.cli.UserConfig( dir & "/none.yml" ), transport : "web", moduleFolders : [], projectFolder : dir & "/extensions" );
+					service.install( commands );
+					application.bxagentsExtensions = service;
+
+					expect( served.available() ).toBeTrue();
+					expect( served.items( {} ) ).toBe( [ { id : "up:up", extension : "up", place : "header", html : false, text : "up web" } ] );
+					service.unload();
+				} finally {
+					application.delete( "bxagentsExtensions" );
+					if ( !isNull( had ) ) {
+						application.bxagentsExtensions = had;
+					}
+				}
+			} );
+
+			it( "copies web/ to <mount>/ext/<name>/ and links the css and js that sit in it", function() {
+				put( "acme/Extension.bx", "class {}" );
+				put( "acme/web/b.js", "// b" );
+				put( "acme/web/a.js", "// a" );
+				put( "acme/web/style.css", "/* c */" );
+				put( "acme/web/img/logo.txt", "x" );
+				put( "solo.bx", "class {}" );
+				var mount = dir & "/app/chat";
+				var assets = new bxagents.models.build.generators.ExtensionWebAssets().copy( dir, mount, "/chat" );
+
+				expect( assets.extensions ).toBe( [ "acme" ] );
+				expect( assets.styles ).toBe( '<link rel="stylesheet" href="/chat/ext/acme/style.css">' );
+				expect( assets.scripts ).toBe( '<script src="/chat/ext/acme/a.js"></script>' & char( 10 ) & '<script src="/chat/ext/acme/b.js"></script>' );
+				expect( fileExists( mount & "/ext/acme/style.css" ) ).toBeTrue();
+				expect( fileExists( mount & "/ext/acme/img/logo.txt" ) ).toBeTrue();
+				expect( fileExists( mount & "/ext/solo" ) ).toBeFalse();
+			} );
+
+			it( "brings nothing from an extension turned off by name or glob, and keeps one only an item of which is off", function() {
+				put( "off/Extension.bx", "class {}" );
+				put( "off/web/x.js", "//" );
+				put( "acme-tools/Extension.bx", "class {}" );
+				put( "acme-tools/web/y.js", "//" );
+				put( "kept/Extension.bx", "class {}" );
+				put( "kept/web/z.js", "//" );
+				var assets = new bxagents.models.build.generators.ExtensionWebAssets().copy( dir, dir & "/app", "", [ "off", "acme-*", "kept:thing" ] );
+
+				expect( assets.extensions ).toBe( [ "kept" ] );
+				expect( assets.scripts ).toBe( '<script src="/ext/kept/z.js"></script>' );
+			} );
+
+			it( "knows when a folder extension has a web/ folder", function() {
+				put( "has/Extension.bx", "class {}" );
+				put( "has/web/a.js", "//" );
+				put( "lacks/Extension.bx", "class {}" );
+				var byName = {};
+				start().report().each( e => byName[ e.name ] = e );
+
+				expect( byName.has.web ).toBeTrue();
+				expect( byName.lacks.web ).toBeFalse();
+			} );
+
+			it( "writes the example's web files and slot placeholders into the built page", function() {
+				var example = expandPath( "/examples/extensions-agent" );
+				var service = new bxagents.models.extensions.ExtensionService( projectRoot : example, userConfig : new bxagents.models.cli.UserConfig( dir & "/none.yml" ), transport : "web", moduleFolders : [] );
+				service.install( commands );
+				var panel = service.report().filter( e => e.name == "panel" )[ 1 ];
+
+				expect( panel.slots ).toBe( [ "header", "sidebar" ] );
+				expect( panel.web ).toBeTrue();
+				expect( service.slotItems( context() ).map( i => i.text ) ).toBe( [ "<strong>panel</strong><br>Use the Ping button by the message box." ] );
+				commands.run( "/ping", context() );
+				expect( service.slotItems( context() ).map( i => i.text ) ).toBe( [ "panel: 1 ping", "<strong>panel</strong><br>Use the Ping button by the message box." ] );
+				service.unload();
+			} );
+
+		} );
+
+	}
+
+}

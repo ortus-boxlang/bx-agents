@@ -400,6 +400,11 @@ __THEME_TOKENS__
 	form#composer.dragging { outline: 2px dashed var(--accent); }
 	#statusChips { display: inline-flex; gap: 0.35rem; }
 	#statusChips[hidden] { display: none; }
+	.slot-area { display: inline-flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
+	.slot-area[hidden] { display: none; }
+	#slotHeader .slot { font-size: 0.75rem; padding: 0.15rem 0.5rem; color: var(--muted); font-family: var(--font-mono); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+	#slotSidebar { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.5rem; border-top: 1px solid var(--border); font-size: 0.85rem; }
+	#slotSidebar[hidden] { display: none; }
 	span.chip { font-size: 0.75rem; padding: 0.15rem 0.5rem; color: var(--muted); font-family: var(--font-mono); border: 1px solid var(--border); border-radius: var(--radius-sm); }
 	button.chip { font-size: 0.75rem; padding: 0.15rem 0.5rem; color: var(--muted); font-family: var(--font-mono); }
 	.bubble.command table { border-collapse: collapse; font-family: var(--font-mono); font-size: 0.82rem; }
@@ -646,6 +651,7 @@ __CUSTOM_CSS__
 	#notesForm input { flex: 1; min-width: 0; font: inherit; padding: 0.4rem; background: var(--input-bg); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius-sm); }
 	#notesPanel .notes-foot { padding: 0 0.9rem 0.8rem; font-size: 0.78rem; color: var(--muted); min-height: 1.2em; }
 </style>
+__EXTENSION_STYLES__
 </head>
 <body>
 	<header>
@@ -660,6 +666,7 @@ __CUSTOM_CSS__
 			<span class="meta" id="modelMeta"></span>
 			<button type="button" class="chip" id="contextChip" title="Estimated size of the context: system prompt, tools, notes and this conversation. Click for the breakdown" hidden></button>
 			<span id="statusChips" hidden></span>
+			<span id="slotHeader" class="slot-area" hidden></span>
 			<select id="profileSelect" title="The model for your next messages" aria-label="Model" hidden></select>
 			<button type="button" id="sidebarBtn" aria-expanded="true" aria-controls="sidebar" title="Show or hide conversations">Chats</button>
 			<button type="button" id="forkBtn" title="Copy this conversation under a new name and carry on in the copy" hidden>Fork</button>
@@ -677,6 +684,7 @@ __CUSTOM_CSS__
 				<button type="button" id="newBtn" title="Start a new conversation">+ New chat</button>
 			</div>
 			<ul id="convList"></ul>
+			<div id="slotSidebar" class="slot-area" hidden></div>
 		</aside>
 		<div id="main">
 			<div id="messages" role="log" aria-live="polite" aria-relevant="additions text" aria-label="Conversation"></div>
@@ -685,6 +693,7 @@ __CUSTOM_CSS__
 			<div id="attachChips" hidden></div>
 			<form id="composer" autocomplete="off">
 				<input type="file" id="attachInput" multiple hidden>
+				<span id="slotComposer" class="slot-area" hidden></span>
 				<button type="button" id="attachBtn" title="Attach a picture or a text file (you can also paste or drop them)" hidden>Attach</button>
 				<label class="visually-hidden" for="input">Message</label>
 				<textarea id="input" rows="1" placeholder="__PLACEHOLDER__" autofocus></textarea>
@@ -1126,6 +1135,72 @@ __MARKDOWN_SCRIPTS__
 	 * say it. Worked out on the server from the system prompt, the tool definitions, the notes and this conversation's
 	 * messages; nothing is sent to a model. Refreshed whenever any of those can have changed.
 	 */
+	var slotAreas = {
+		header: document.getElementById( "slotHeader" ),
+		sidebar: document.getElementById( "slotSidebar" ),
+		composer: document.getElementById( "slotComposer" )
+	};
+	var refreshListeners = [];
+
+	/**
+	 * What the extensions' slots hold, drawn into their places of the page. A slot's text is shown as text; only a slot
+	 * the extension marked html has its string put in as markup. Each refresh replaces the slots the server drew and
+	 * leaves what extension scripts added (bxagents.slot) alone.
+	 */
+	function refreshSlots() {
+		var drawn = function ( items ) {
+			Object.keys( slotAreas ).forEach( function ( place ) {
+				var area = slotAreas[ place ];
+				Array.prototype.slice.call( area.querySelectorAll( ".slot-server" ) ).forEach( function ( old ) { area.removeChild( old ); } );
+				items.filter( function ( item ) { return item.place === place; } ).forEach( function ( item ) {
+					var box = document.createElement( place === "sidebar" ? "div" : "span" );
+					box.className = "slot slot-server";
+					box.setAttribute( "data-extension", item.extension );
+					box.setAttribute( "data-slot", item.id );
+					if ( item.html === true ) {
+						box.innerHTML = item.text;
+					} else {
+						box.textContent = item.text;
+					}
+					area.appendChild( box );
+				} );
+				area.hidden = area.childElementCount === 0;
+			} );
+			refreshListeners.forEach( function ( listener ) {
+				try { listener(); } catch ( e ) { console.error( "bxagents.onRefresh listener failed", e ); }
+			} );
+		};
+		if ( !capabilities.slots ) {
+			drawn( [] );
+			return;
+		}
+		apiGet( "/slots?conversationId=" + encodeURIComponent( getConversationId() ) ).then( function ( answer ) {
+			drawn( ( answer && answer.success === true && answer.items ) || [] );
+		} );
+	}
+
+	/**
+	 * What scripts of extensions (their web/ folder) may use. Kept small on purpose.
+	 */
+	window.bxagents = {
+		apiBase: API_BASE,
+		conversationId: function () { return getConversationId(); },
+		runCommand: function ( line ) { return isBusy ? null : runCommand( line ); },
+		onRefresh: function ( listener ) { refreshListeners.push( listener ); },
+		refresh: function () { refreshContext(); },
+		slot: function ( place ) {
+			var area = slotAreas[ place ];
+			if ( !area ) {
+				throw new Error( "There is no place [" + place + "]. Use header, sidebar or composer." );
+			}
+			var box = document.createElement( place === "sidebar" ? "div" : "span" );
+			box.className = "slot slot-script";
+			area.appendChild( box );
+			area.hidden = false;
+			return box;
+		}
+	};
+
 	/**
 	 * What the extensions' status items say, as small chips next to the context size. Each item is a short text an
 	 * extension keeps current (a branch, a build); one with nothing to say is not sent. Drawn with textContent: the
@@ -1152,6 +1227,7 @@ __MARKDOWN_SCRIPTS__
 
 	function refreshContext() {
 		refreshStatus();
+		refreshSlots();
 		if ( !capabilities.context ) {
 			return;
 		}
@@ -2335,5 +2411,6 @@ __MARKDOWN_SCRIPTS__
 		} );
 } )();
 </script>
+__EXTENSION_SCRIPTS__
 </body>
 </html>

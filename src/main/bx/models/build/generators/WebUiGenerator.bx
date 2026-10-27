@@ -37,14 +37,14 @@ class {
 	 *
 	 * @return { hasWebUi, webUiAuthInterceptorName } - webUiAuthInterceptorName is "" when no webui entry configures an apiKeyEnvVar
 	 */
-	struct function generate( required struct discovery, required string appDir ) {
+	struct function generate( required struct discovery, required string appDir, struct config = {} ) {
 		var entries = collectWebUiEntries( arguments.discovery )
 		if ( !entries.len() ) {
 			return { hasWebUi : false, webUiAuthInterceptorName : "" }
 		}
 
 		for ( var entry in entries ) {
-			renderUiBundle( entry, arguments.appDir )
+			renderUiBundle( entry, arguments.appDir, new "models.extensions.ExtensionSettings@bxagents"().disableList( isStruct( arguments.config.extensions ?: "" ) ? arguments.config.extensions : {} ) )
 		}
 
 		// One handler serves every webui entry - the actions are identical, only
@@ -218,7 +218,7 @@ class {
 	 * @entry A webui exposure entry { name, config }, from collectWebUiEntries()
 	 * @appDir Absolute path to the generated ColdBox app dir
 	 */
-	private void function renderUiBundle( required struct entry, required string appDir ) {
+	private void function renderUiBundle( required struct entry, required string appDir, array disable = [] ) {
 		var templateDir = getDirectoryFromPath( getCurrentTemplatePath() )
 		var html = fileRead( templateDir & "webui/index.html" )
 
@@ -262,6 +262,10 @@ class {
 
 		var mountDir = Strings::normalizePath( arguments.appDir ) & path
 		directoryCreate( path : mountDir, createPath : true, ignoreExists : true )
+		// The web/ folders of the project's folder extensions: copied beside the page, and linked into it
+		var assets = new "models.build.generators.ExtensionWebAssets@bxagents"().copy( arguments.entry.projectRoot, mountDir, path, arguments.disable )
+		html = html.replace( "__EXTENSION_STYLES__", assets.styles, "all" )
+		html = html.replace( "__EXTENSION_SCRIPTS__", assets.scripts, "all" )
 		fileWrite( mountDir & "/index.html", html )
 
 		// The sign-in form ships only when the entry actually declares users -
@@ -1349,6 +1353,15 @@ class {
 			'		event.renderData( type: "json", data: { "success": true, "items": new "models.extensions.ServedStatus@bxagents"().items( conversation ) } )',
 			"	}",
 			"",
+			"	/**",
+			"	 * What the extensions' slots hold for one conversation: { success, items : [ { id, extension, place, html, text } ] }.",
+			"	 * Query: conversationId",
+			"	 */",
+			"	function slots( event, rc, prc ) {",
+			'		var conversation = new "models.chat.ServerConversation@bxagents"( agent(), resolveUserId(), nullValue(), rc.conversationId ?: "" )',
+			'		event.renderData( type: "json", data: { "success": true, "items": new "models.extensions.ServedSlots@bxagents"().items( conversation ) } )',
+			"	}",
+			"",
 			"	private function commandService() {",
 			'		var store = new "models.store.SessionStore@bxagents"( new "models.store.ChatStore@bxagents"( chatDb().getDatasource() ) )',
 			'		return new "models.chat.commands.CommandService@bxagents"( agent : agent(), sessions : store, offered : offered().names() )',
@@ -1398,7 +1411,8 @@ class {
 			'				"commands"      : true,',
 			'				"context"       : true,',
 			'				"attachments"   : true,',
-			'				"status"        : new "models.extensions.ServedStatus@bxagents"().available()',
+			'				"status"        : new "models.extensions.ServedStatus@bxagents"().available(),',
+			'				"slots"         : new "models.extensions.ServedSlots@bxagents"().available()',
 			"			},",
 			'			"success"     : true',
 			"		} )",

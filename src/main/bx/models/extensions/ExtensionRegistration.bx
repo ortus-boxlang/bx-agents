@@ -8,6 +8,7 @@
  *   registry.status( "branch", ( agentContext ) => "main" )    a piece of status
  *   registry.on( "onChatInput", ( data ) => ... )              a listener, for one event or an array of them
  *   registry.prefix( "$", ( agentContext, text ) => ..., { hint : "..." } )   a prefix in the message box
+ *   registry.slot( "header", ( agentContext ) => "build ok", { html : false } )   a piece of the web page
  *   registry.source( "jira", ( agentContext, query ) => ..., { hint : "...", suggest : ( agentContext, query ) => [ ... ] } )
  *
  * Nothing here takes effect until the extension has loaded: it only records what was asked, on the Extension.
@@ -101,6 +102,16 @@ class {
 		} else {
 			variables.extension.addSource( new "models.extensions.ExtensionSource@bxagents"( variables.extension, item, arguments.name, arguments.options.hint ?: "brings @#arguments.name#:…", arguments.read ) )
 		}
+		return this
+	}
+
+	/**
+	 * @place Where in the web page: header, sidebar or composer
+	 * @call A function( agentContext ) returning the string to show
+	 * @options { html, name }; html true puts the string in as HTML; the name is the slot's item name (default: the place)
+	 */
+	function slot( required string place, required any call, struct options = {} ) {
+		variables.extension.addSlot( new "models.extensions.ExtensionSlot@bxagents"( variables.extension, arguments.options.name ?: arguments.place, arguments.place, arguments.options.html ?: false, arguments.call ) )
 		return this
 	}
 
