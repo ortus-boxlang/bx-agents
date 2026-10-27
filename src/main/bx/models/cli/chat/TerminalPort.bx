@@ -18,7 +18,49 @@ class {
 		variables.transcript = arguments.transcript
 		variables.agentName = arguments.agentName
 		variables.workingDirectory = arguments.workingDirectory
+		variables.reloader = nullValue()
 		return this
+	}
+
+	/**
+	 * @question What to ask
+	 * @help A line of help, or blank
+	 * @initial Text to start with
+	 *
+	 * @return The text, or null for esc
+	 */
+	any function ask( required string question, string help = "", string initial = "" ) {
+		return variables.screen.ask( arguments.question, arguments.help, arguments.initial )
+	}
+
+	/**
+	 * @question What to ask
+	 * @choices Strings, or structs with value, label and hint
+	 *
+	 * @return The value picked, or null for esc
+	 */
+	any function choose( required string question, required array choices ) {
+		return variables.screen.choose( arguments.question, [], arguments.choices )
+	}
+
+	/**
+	 * @reloader A function() that reloads the extensions and returns what it found
+	 */
+	function onReload( required any reloader ) {
+		variables.reloader = arguments.reloader
+		return this
+	}
+
+	/**
+	 * Reloads the extensions of this chat.
+	 *
+	 * @return { reloaded : true, report, problems }, or { reloaded : false } when this chat has no extensions to reload
+	 */
+	struct function reloadExtensions() {
+		if ( isNull( variables.reloader ) ) {
+			return { reloaded : false }
+		}
+		return variables.reloader()
 	}
 
 	/**

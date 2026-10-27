@@ -277,6 +277,22 @@ chat:
 
 Una elección que no se puede usar se avisa y se mantiene la de la extensión. `extensions.disable` acepta `extensión:método` también para estos.
 
+## Preguntar a la persona
+
+Un comando, atajo o prefijo puede hacer una pregunta a la persona mientras se ejecuta:
+
+```js
+var title    = agentContext.ask( "¿Título del ticket?", { default : commandArguments, help : "Una frase corta." } )
+var priority = agentContext.choose( "¿Prioridad?", [ "low", "normal", { value : "high", label : "high", hint : "alguien está bloqueado" } ] )
+if ( agentContext.confirm( "¿Crear el ticket #priority#?" ) ) { ... }
+```
+
+`ask()` devuelve el texto, `choose()` devuelve el valor elegido y `confirm()` es verdadero solo con un sí. Esc da `null` (`false` en `confirm()`). Las preguntas funcionan solo en el chat de terminal. Donde nadie puede responder (la página web, las plataformas de chat, un servidor) responden al instante con `null` (`false`) en vez de esperar, y `agentContext.canAsk()` lo dice de antemano para que un comando pueda avisar.
+
+## Recargar
+
+`/reload` carga de nuevo las extensiones sin salir del chat: ejecuta `onUnload()` de lo cargado, vuelve a leer `~/.bxagents/bxAgents.yml` y los ajustes `extensions:` de `Agent.yaml`, y carga lo que encuentra, con sus comandos, atajos, elementos de estado, prefijos, fuentes y oyentes. Una extensión que no carga se avisa y se deja fuera; las demás cargan. Es para administradores y solo en el chat de terminal: una app servida registra schedulers y oyentes de ColdBox al arrancar, así que se reinicia.
+
 ## De dónde vienen las extensiones
 
 | Capa | Carpeta | Corre en |

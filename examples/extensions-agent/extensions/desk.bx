@@ -5,6 +5,9 @@
  *   = how long is this line    @Prefix: answers at once with a Reply, nothing is sent
  *   look at @ticket:TCK-2      @Source: the ticket's text goes along with the message, as a file does
  *
+ * `/newticket` asks the person questions with `agentContext.ask()`, `choose()` and `confirm()`. Those work in the
+ * terminal chat; elsewhere there is no one to ask, so they answer with nothing at once and `canAsk()` says so first.
+ *
  * A person can give a prefix or a source another name under `chat: prefixes:` and `chat: sources:` in
  * `~/.bxagents/bxAgents.yml`, such as `desk:explain: "?%"` or `desk:ticket: issue`. `/`, `!`, `#`, `@` and a lone `?`
  * are the chat's own and cannot be taken.
@@ -37,6 +40,25 @@ class {
 		}
 		var words = text.listToArray( " " ).len()
 		return agentContext.reply().ok( "#words# word#words == 1 ? '' : 's'#, #len( text )# characters" )
+	}
+
+	@Command
+	@Hint( "make a ticket: it asks for a title and a priority, then for a go-ahead" )
+	function newticket( agentContext, commandArguments ) {
+		if ( !agentContext.canAsk() ) {
+			return agentContext.reply().warn( "/newticket asks questions, so it works in the terminal chat." )
+		}
+		var title = agentContext.ask( "Title of the ticket?", { default : commandArguments, help : "A short sentence." } )
+		if ( isNull( title ) || !len( trim( title ) ) ) {
+			return agentContext.reply().warn( "No ticket made." )
+		}
+		var priority = agentContext.choose( "Priority?", [ "low", "normal", { value : "high", label : "high", hint : "someone is blocked" } ] )
+		if ( isNull( priority ) || !agentContext.confirm( "Make the #priority# ticket [#trim( title )#]?" ) ) {
+			return agentContext.reply().warn( "No ticket made." )
+		}
+		var id = "TCK-" & ( structCount( settings.tickets ) + 1 )
+		settings.tickets[ id ] = trim( title ) & " (#priority#)"
+		return agentContext.reply().ok( "Made #id#. Mention it with @ticket:#id#." )
 	}
 
 	@Source( "ticket" )

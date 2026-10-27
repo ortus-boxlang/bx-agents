@@ -431,6 +431,10 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   with `@name:query`, with the names offered in the `@` menu. The person picks the prefix or name under
   `chat: prefixes:` and `chat: sources:`; `/ ! # @` and a lone `?` are the chat's own, and a clash between
   extensions is a warning. `/extensions` now also lists keys, status items, prefixes and sources.
+- Extensions can ask the person questions while a command, key or prefix runs: `agentContext.ask()`,
+  `choose()` and `confirm()` in the terminal chat, and an immediate "no answer" where nobody can reply, with
+  `canAsk()` to check first. `/reload` (admins, terminal chat) loads the extensions, the person's file and the
+  project's `extensions:` settings again without leaving the chat.
 - `examples/extensions-agent` shows a one-file extension, one with several commands, an admin-only command
   with a lifecycle, and a folder with a command class and a scheduler.
 

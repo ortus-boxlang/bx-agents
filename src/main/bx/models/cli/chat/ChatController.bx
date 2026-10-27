@@ -53,6 +53,7 @@ class {
 		variables.events = nullValue()
 		variables.extensions = nullValue()
 		variables.composer = nullValue()
+		variables.sourcesBound = false
 		return this
 	}
 
@@ -118,19 +119,14 @@ class {
 		for ( var notice in variables.notices ) {
 			arguments.screen.print( "warn", notice )
 		}
-		var extensionKeys = isNull( variables.extensions ) ? [] : variables.extensions.keys()
-		var bound = extensionKeys.len() ? arguments.screen.bindKeys( variables.userConfig.keys(), extensionKeys ) : arguments.screen.bindKeys( variables.userConfig.keys() )
-		for ( var problem in bound ) {
-			arguments.screen.print( "warn", "#variables.userConfig.path()#: " & problem )
-		}
+		bindKeys()
 		variables.context = new "models.chat.commands.CommandContext@bxagents"( variables.session, "tui", true, port )
 		if ( !isNull( variables.extensions ) ) {
-			variables.composer = variables.extensions.composer()
-			for ( var problem in variables.composer.problems() ) {
+			for ( var problem in bindComposer() ) {
 				arguments.screen.print( "warn", problem )
 			}
-			if ( variables.composer.sourceNames().len() ) {
-				arguments.screen.bindSources( variables.composer.sourceNames(), ( name, query ) => variables.composer.suggest( name, query, variables.context ) )
+			if ( structKeyExists( variables.extensions, "reload" ) ) {
+				port.onReload( () => reloadExtensions() )
 			}
 		}
 		variables.renderer = new "models.cli.chat.TerminalRenderer@bxagents"( arguments.screen, variables.session, variables.transcript, ( line ) => command( line ) )
@@ -149,6 +145,49 @@ class {
 	}
 
 	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Gives the screen the person's keys and the keys extensions bind, and shows what is wrong with them.
+	 */
+	private void function bindKeys() {
+		var extensionKeys = isNull( variables.extensions ) ? [] : variables.extensions.keys()
+		var bound = extensionKeys.len() ? variables.screen.bindKeys( variables.userConfig.keys(), extensionKeys ) : variables.screen.bindKeys( variables.userConfig.keys() )
+		for ( var problem in bound ) {
+			variables.screen.print( "warn", "#variables.userConfig.path()#: " & problem )
+		}
+	}
+
+	/**
+	 * Takes the prefixes and sources of the extensions as they are now, and tells the screen the source names for its menu.
+	 *
+	 * @return What is wrong with them, as sentences
+	 */
+	private array function bindComposer() {
+		variables.composer = variables.extensions.composer()
+		var names = variables.composer.sourceNames()
+		if ( names.len() || variables.sourcesBound ) {
+			variables.screen.bindSources( names, ( name, query ) => variables.composer.suggest( name, query, variables.context ) )
+			variables.sourcesBound = names.len() > 0
+		}
+		return variables.composer.problems()
+	}
+
+	/**
+	 * /reload: loads the extensions again and gives the chat what they now add: events, keys, prefixes and sources.
+	 * The commands are already in the registry, as the extensions put them there.
+	 *
+	 * @return { reloaded : true, report, problems }
+	 */
+	private struct function reloadExtensions() {
+		variables.extensions.reload()
+		if ( !isNull( variables.events ) ) {
+			variables.events = variables.extensions.events()
+		}
+		var problems = variables.extensions.problems()
+		bindKeys()
+		problems.append( bindComposer(), true )
+		return { reloaded : true, report : variables.extensions.report(), problems : problems }
+	}
 
 	/**
 	 * Reads what the person types until they leave.
