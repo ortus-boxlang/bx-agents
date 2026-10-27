@@ -293,6 +293,44 @@ if ( agentContext.confirm( "¿Crear el ticket #priority#?" ) ) { ... }
 
 `/reload` carga de nuevo las extensiones sin salir del chat: ejecuta `onUnload()` de lo cargado, vuelve a leer `~/.bxagents/bxAgents.yml` y los ajustes `extensions:` de `Agent.yaml`, y carga lo que encuentra, con sus comandos, atajos, elementos de estado, prefijos, fuentes y oyentes. Una extensión que no carga se avisa y se deja fuera; las demás cargan. Es para administradores y solo en el chat de terminal: una app servida registra schedulers y oyentes de ColdBox al arrancar, así que se reinicia.
 
+## La página web: slots y `web/`
+
+Dos formas de añadir a la página web. Ambas se sirven con la página; el chat de terminal no tiene página, así que allí se ignoran.
+
+**Los slots** ponen una cadena en un lugar con nombre de la página: `header` (una etiqueta junto al tamaño del contexto), `sidebar` (un panel bajo la lista de conversaciones) o `composer` (junto al botón Attach). El método recibe el `agentContext` y devuelve la cadena:
+
+```js
+@Slot( "header" )
+function badge( agentContext ) { return variables.pings > 0 ? "#variables.pings# pings" : "" }
+
+@Slot( { place : "sidebar", html : true } )
+function about( agentContext ) { return "<strong>Panel</strong><br>Usa el botón Ping." }
+```
+
+La cadena se muestra como texto. Solo un slot que diga `html : true` tiene su cadena puesta en la página como marcado; es el autor diciendo que es su propio marcado, así que nunca debe llevar lo que escribió un visitante (usa `encodeForHTML()`). Una cadena vacía no muestra nada. La página pide todos los slots en una sola petición, `GET <path>/api/slots?conversationId=`, tras el mismo inicio de sesión o clave de API que el resto de la API de la página, cada vez que refresca el tamaño del contexto. Un slot que lanza un error se omite y el motivo se anota una vez en su extensión. Escrito como llamada: `registry.slot( "header", ( agentContext ) => "...", { html : false, name : "badge" } )`. `extensions.disable` acepta `extensión:método` para un slot.
+
+**`web/`** es una carpeta dentro de una extensión de carpeta. La compilación la copia a `<path>/ext/<nombre>/` junto a la página, así que todo archivo en ella (también imágenes) se sirve desde ahí. Los archivos `*.css` y `*.js` que están directamente en `web/` se enlazan en la página, por orden de nombre: estilos en el head y scripts al final del body. Una extensión desactivada por nombre en `extensions.disable` no aporta nada.
+
+```
+extensions/panel/
+  Extension.bx
+  web/
+    panel.css
+    panel.js
+    logo.png        se sirve en <path>/ext/panel/logo.png
+```
+
+La página da a los scripts un objeto pequeño, `bxagents`:
+
+| | |
+|---|---|
+| `bxagents.slot( place )` | una caja propia en `header`, `sidebar` o `composer`, para dibujar en ella |
+| `bxagents.runCommand( "/ping" )` | ejecuta un comando como si se hubiera escrito |
+| `bxagents.onRefresh( fn )` | se llama tras cada cambio de la conversación, una vez dibujados los slots |
+| `bxagents.refresh()` | pide a la página que refresque ya |
+| `bxagents.conversationId()` | la conversación a la vista |
+| `bxagents.apiBase` | la ruta de la API de la página, para tus propios `fetch` |
+
 ## De dónde vienen las extensiones
 
 | Capa | Carpeta | Corre en |
@@ -323,4 +361,4 @@ bxAgents extensions --json
 
 ## Todavía no
 
-Las extensiones aún no pueden añadir huecos en la interfaz web, gateways, verbos de CLI, herramientas y skills. Eso viene después; el plan es `EXTENSIONS-PLAN.md` en el repositorio.
+Las extensiones aún no pueden añadir gateways, verbos de CLI, herramientas y skills. Eso viene después.

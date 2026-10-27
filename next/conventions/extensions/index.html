@@ -246,7 +246,7 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-smallest-extension">The smallest extension</a></li><li class="toc-level-2"><a href="#annotations">Annotations</a></li><li class="toc-level-2"><a href="#settings">Settings</a></li><li class="toc-level-2"><a href="#lifecycle">Lifecycle</a></li><li class="toc-level-2"><a href="#injection">Injection</a></li><li class="toc-level-2"><a href="#a-folder-extension">A folder extension</a></li><li class="toc-level-2"><a href="#schedulers">Schedulers</a></li><li class="toc-level-2"><a href="#listening-to-events">Listening to events</a></li><li class="toc-level-3"><a href="#interceptors-and-custominterceptionpoints">interceptors and customInterceptionPoints</a></li><li class="toc-level-2"><a href="#keys-and-status">Keys and status</a></li><li class="toc-level-2"><a href="#register-registry-">register&#x28; registry &#x29;</a></li><li class="toc-level-2"><a href="#prefixes-and--sources">Prefixes and &#x40; sources</a></li><li class="toc-level-2"><a href="#asking-the-person">Asking the person</a></li><li class="toc-level-2"><a href="#reloading">Reloading</a></li><li class="toc-level-2"><a href="#where-extensions-come-from">Where extensions come from</a></li><li class="toc-level-2"><a href="#turning-things-off">Turning things off</a></li><li class="toc-level-2"><a href="#looking-at-them">Looking at them</a></li><li class="toc-level-2"><a href="#not-yet">Not yet</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-smallest-extension">The smallest extension</a></li><li class="toc-level-2"><a href="#annotations">Annotations</a></li><li class="toc-level-2"><a href="#settings">Settings</a></li><li class="toc-level-2"><a href="#lifecycle">Lifecycle</a></li><li class="toc-level-2"><a href="#injection">Injection</a></li><li class="toc-level-2"><a href="#a-folder-extension">A folder extension</a></li><li class="toc-level-2"><a href="#schedulers">Schedulers</a></li><li class="toc-level-2"><a href="#listening-to-events">Listening to events</a></li><li class="toc-level-3"><a href="#interceptors-and-custominterceptionpoints">interceptors and customInterceptionPoints</a></li><li class="toc-level-2"><a href="#keys-and-status">Keys and status</a></li><li class="toc-level-2"><a href="#register-registry-">register&#x28; registry &#x29;</a></li><li class="toc-level-2"><a href="#prefixes-and--sources">Prefixes and &#x40; sources</a></li><li class="toc-level-2"><a href="#asking-the-person">Asking the person</a></li><li class="toc-level-2"><a href="#reloading">Reloading</a></li><li class="toc-level-2"><a href="#the-web-page-slots-and-web">The web page&#x3a; slots and web&#x2f;</a></li><li class="toc-level-2"><a href="#where-extensions-come-from">Where extensions come from</a></li><li class="toc-level-2"><a href="#turning-things-off">Turning things off</a></li><li class="toc-level-2"><a href="#looking-at-them">Looking at them</a></li><li class="toc-level-2"><a href="#not-yet">Not yet</a></li></ul></details>
 		
 
 		
@@ -461,6 +461,38 @@ if ( agentContext.confirm( &quot;Make the #priority# ticket?&quot; ) ) { ... }
 <p><code>ask()</code> returns the text, <code>choose()</code> returns the value picked, and <code>confirm()</code> is true only for a yes. Esc gives <code>null</code> (<code>false</code> for <code>confirm()</code>). Questions work in the terminal chat only. Where nobody can answer (the web page, chat platforms, a server) they answer at once with <code>null</code> (<code>false</code>) instead of waiting, and <code>agentContext.canAsk()</code> tells you beforehand so a command can say so.</p>
 <h2 id="reloading"><a href="#reloading" id="reloading" name="reloading" class="anchor"></a>Reloading</h2>
 <p><code>/reload</code> loads the extensions again without leaving the chat: it runs <code>onUnload()</code> of what was loaded, reads <code>~/.bxagents/bxAgents.yml</code> and the <code>extensions:</code> settings of <code>Agent.yaml</code> anew, and loads what is found, with its commands, keys, status items, prefixes, sources and listeners. An extension that fails to load is reported and left out; the others load. It is for admins and works in the terminal chat only: a served app registers schedulers and ColdBox listeners when it starts, so restart it instead.</p>
+<h2 id="the-web-page-slots-and-web"><a href="#the-web-page-slots-and-web" id="the-web-page-slots-and-web" name="the-web-page-slots-and-web" class="anchor"></a>The web page: slots and <code>web/</code></h2>
+<p>Two ways to add to the web page. Both are served with the page; the terminal chat has no page, so they are ignored there.</p>
+<p><strong>Slots</strong> put a string in a named place of the page: <code>header</code> (a chip next to the context size), <code>sidebar</code> (a panel under the list of conversations) or <code>composer</code> (next to the Attach button). The method is called with the <code>agentContext</code> and returns the string:</p>
+<pre><code class="language-js">@Slot( &quot;header&quot; )
+function badge( agentContext ) { return variables.pings &gt; 0 ? &quot;#variables.pings# pings&quot; : &quot;&quot; }
+
+@Slot( { place : &quot;sidebar&quot;, html : true } )
+function about( agentContext ) { return &quot;&lt;strong&gt;Panel&lt;/strong&gt;&lt;br&gt;Use the Ping button.&quot; }
+</code></pre>
+<p>The string is shown as text. Only a slot that says <code>html : true</code> has its string put into the page as markup; that is the author saying it is their own markup, so it must never carry what a visitor typed (use <code>encodeForHTML()</code>). An empty string shows nothing. The page asks for every slot in one request, <code>GET &lt;path&gt;/api/slots?conversationId=</code>, behind the same sign-in or API key as the rest of the page's API, each time it refreshes the context size. A slot that throws is left out and the reason is put on its extension once. Written as a call: <code>registry.slot( &quot;header&quot;, ( agentContext ) =&gt; &quot;...&quot;, { html : false, name : &quot;badge&quot; } )</code>. <code>extensions.disable</code> takes <code>extension:method</code> for a slot.</p>
+<p><strong><code>web/</code></strong> is a folder inside a folder extension. The build copies it to <code>&lt;path&gt;/ext/&lt;name&gt;/</code> next to the page, so every file in it (images too) is served from there. The <code>*.css</code> and <code>*.js</code> files that sit directly in <code>web/</code> are linked into the page, in file name order: styles in the head and scripts at the end of the body. An extension turned off by name in <code>extensions.disable</code> brings nothing.</p>
+<pre><code>extensions/panel/
+  Extension.bx
+  web/
+    panel.css
+    panel.js
+    logo.png        served at &lt;path&gt;/ext/panel/logo.png
+</code></pre>
+<p>The page gives scripts one small object, <code>bxagents</code>:</p>
+<div class="bxsites-table-wrap"><table class="table">
+<thead>
+<tr><th> </th><th> </th></tr>
+</thead>
+<tbody>
+<tr><td><code>bxagents.slot( place )</code></td><td>a box of your own in <code>header</code>, <code>sidebar</code> or <code>composer</code>, to draw into</td></tr>
+<tr><td><code>bxagents.runCommand( &quot;/ping&quot; )</code></td><td>runs a slash command as if it were typed</td></tr>
+<tr><td><code>bxagents.onRefresh( fn )</code></td><td>called after each change to the conversation, once the slots are drawn</td></tr>
+<tr><td><code>bxagents.refresh()</code></td><td>asks the page to refresh now</td></tr>
+<tr><td><code>bxagents.conversationId()</code></td><td>the conversation in view</td></tr>
+<tr><td><code>bxagents.apiBase</code></td><td>the page's API path, for your own <code>fetch</code> calls</td></tr>
+</tbody>
+</table></div>
 <h2 id="where-extensions-come-from"><a href="#where-extensions-come-from" id="where-extensions-come-from" name="where-extensions-come-from" class="anchor"></a>Where extensions come from</h2>
 <div class="bxsites-table-wrap"><table class="table">
 <thead>
@@ -484,7 +516,7 @@ if ( agentContext.confirm( &quot;Make the #priority# ticket?&quot; ) ) { ... }
 bxAgents extensions --json
 </code></pre>
 <h2 id="not-yet"><a href="#not-yet" id="not-yet" name="not-yet" class="anchor"></a>Not yet</h2>
-<p>Extensions cannot yet add web UI slots, gateways, CLI verbs, tools and skills. Those come next; the plan is <code>EXTENSIONS-PLAN.md</code> in the repository.</p>
+<p>Extensions cannot yet add gateways, CLI verbs, tools and skills. Those come next.</p>
 
 	
 
@@ -534,7 +566,7 @@ bxAgents extensions --json
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-smallest-extension">The smallest extension</a></li><li class="toc-level-2"><a href="#annotations">Annotations</a></li><li class="toc-level-2"><a href="#settings">Settings</a></li><li class="toc-level-2"><a href="#lifecycle">Lifecycle</a></li><li class="toc-level-2"><a href="#injection">Injection</a></li><li class="toc-level-2"><a href="#a-folder-extension">A folder extension</a></li><li class="toc-level-2"><a href="#schedulers">Schedulers</a></li><li class="toc-level-2"><a href="#listening-to-events">Listening to events</a></li><li class="toc-level-3"><a href="#interceptors-and-custominterceptionpoints">interceptors and customInterceptionPoints</a></li><li class="toc-level-2"><a href="#keys-and-status">Keys and status</a></li><li class="toc-level-2"><a href="#register-registry-">register&#x28; registry &#x29;</a></li><li class="toc-level-2"><a href="#prefixes-and--sources">Prefixes and &#x40; sources</a></li><li class="toc-level-2"><a href="#asking-the-person">Asking the person</a></li><li class="toc-level-2"><a href="#reloading">Reloading</a></li><li class="toc-level-2"><a href="#where-extensions-come-from">Where extensions come from</a></li><li class="toc-level-2"><a href="#turning-things-off">Turning things off</a></li><li class="toc-level-2"><a href="#looking-at-them">Looking at them</a></li><li class="toc-level-2"><a href="#not-yet">Not yet</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-smallest-extension">The smallest extension</a></li><li class="toc-level-2"><a href="#annotations">Annotations</a></li><li class="toc-level-2"><a href="#settings">Settings</a></li><li class="toc-level-2"><a href="#lifecycle">Lifecycle</a></li><li class="toc-level-2"><a href="#injection">Injection</a></li><li class="toc-level-2"><a href="#a-folder-extension">A folder extension</a></li><li class="toc-level-2"><a href="#schedulers">Schedulers</a></li><li class="toc-level-2"><a href="#listening-to-events">Listening to events</a></li><li class="toc-level-3"><a href="#interceptors-and-custominterceptionpoints">interceptors and customInterceptionPoints</a></li><li class="toc-level-2"><a href="#keys-and-status">Keys and status</a></li><li class="toc-level-2"><a href="#register-registry-">register&#x28; registry &#x29;</a></li><li class="toc-level-2"><a href="#prefixes-and--sources">Prefixes and &#x40; sources</a></li><li class="toc-level-2"><a href="#asking-the-person">Asking the person</a></li><li class="toc-level-2"><a href="#reloading">Reloading</a></li><li class="toc-level-2"><a href="#the-web-page-slots-and-web">The web page&#x3a; slots and web&#x2f;</a></li><li class="toc-level-2"><a href="#where-extensions-come-from">Where extensions come from</a></li><li class="toc-level-2"><a href="#turning-things-off">Turning things off</a></li><li class="toc-level-2"><a href="#looking-at-them">Looking at them</a></li><li class="toc-level-2"><a href="#not-yet">Not yet</a></li></ul></nav>
 				</aside>
 			
 		</div>
