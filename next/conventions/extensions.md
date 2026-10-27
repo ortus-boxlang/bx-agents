@@ -277,6 +277,22 @@ chat:
 
 A choice that cannot be used is reported and the extension's own is kept. `extensions.disable` takes `extension:method` for these too.
 
+## Asking the person
+
+A command, key or prefix can put a question to the person while it runs:
+
+```js
+var title    = agentContext.ask( "Title of the ticket?", { default : commandArguments, help : "A short sentence." } )
+var priority = agentContext.choose( "Priority?", [ "low", "normal", { value : "high", label : "high", hint : "someone is blocked" } ] )
+if ( agentContext.confirm( "Make the #priority# ticket?" ) ) { ... }
+```
+
+`ask()` returns the text, `choose()` returns the value picked, and `confirm()` is true only for a yes. Esc gives `null` (`false` for `confirm()`). Questions work in the terminal chat only. Where nobody can answer (the web page, chat platforms, a server) they answer at once with `null` (`false`) instead of waiting, and `agentContext.canAsk()` tells you beforehand so a command can say so.
+
+## Reloading
+
+`/reload` loads the extensions again without leaving the chat: it runs `onUnload()` of what was loaded, reads `~/.bxagents/bxAgents.yml` and the `extensions:` settings of `Agent.yaml` anew, and loads what is found, with its commands, keys, status items, prefixes, sources and listeners. An extension that fails to load is reported and left out; the others load. It is for admins and works in the terminal chat only: a served app registers schedulers and ColdBox listeners when it starts, so restart it instead.
+
 ## Where extensions come from
 
 | Layer | Folder | Runs in |
