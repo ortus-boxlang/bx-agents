@@ -381,6 +381,36 @@ function greet( options ) { return "Hello, #options.name ?: 'there'#!" }
 
 A later layer wins. An extension with the same name replaces the earlier one, and a command replaces an earlier command of the same name or alias, a built-in included. Both are shown in `/extensions`; nothing is replaced silently. The build copies the project's `extensions/` into the app; a served agent never reads a developer's home folder.
 
+## Installing extensions
+
+`bxAgents extensions install` puts an extension into the project from a folder, a zip, GitHub or ForgeBox.
+
+```bash
+bxAgents extensions install ./my-ext                    # a folder
+bxAgents extensions install ./my-ext.zip                # a zip file
+bxAgents extensions install acme/tools                  # GitHub: owner/repo, or owner/repo#ref
+bxAgents extensions install https://github.com/acme/tools
+bxAgents extensions install https://example.org/ext.zip # a zip by address
+bxAgents extensions install acme-tools@1.2.0            # a ForgeBox slug, optionally with a version
+bxAgents extensions install ./my-ext --system           # for you, in ~/.bxagents/extensions
+```
+
+A folder that exists wins over `owner/repo`. To say which you mean, start with `path:`, `github:`, `forgebox:` or `url:`.
+
+An extension is code that runs when the chat or the app starts, so `install` fetches it into a temporary folder, looks at it without running anything, and shows you what it adds (commands, keys, prefixes, listeners, gateways, tools, skills, web files, verbs) and what its code mentions (files, network, processes, java). It then asks for a yes. `--yes` skips the question and is required when there is no terminal. Nothing is placed until you agree.
+
+| Command | Does |
+|---|---|
+| `install <source>` | fetch, preview, ask, place. `--name=<name>` renames it, `--force` replaces one that is there, `--system` installs for you instead of the project |
+| `install` | with no source, brings back everything `extensions.lock.json` lists |
+| `list --installed` | what was installed, where from, and whether it is `intact`, `changed` or `missing` |
+| `update [name...]` | fetches again, shows the change and asks. A source pinned to a version or ref (`#v1`, `@1.2.0`) is left alone |
+| `remove <name>` | deletes it and its lock entry. A folder you edited needs `--force` |
+
+The project keeps `extensions.lock.json` (`~/.bxagents/extensions.lock.json` with `--system`): the name, the source, the version or ref fetched, and a checksum of the files. **Commit the lock.** `bxAgents build` brings back anything in it that is missing, and refuses a package whose files no longer match their checksum. You may commit `extensions/` too; the result is the same.
+
+What `install` refuses: a zip entry with an absolute path, a `..` part or a backslash, more than 5000 files or 50 MB, a name that is not safe as a folder name, a name already there that this command did not install (unless `--force`), a BoxLang module (`ModuleConfig.bx`), and anything that is not an extension. Symbolic links and `.git` are left out. The preview is a quick read of the text, not a security review: install what you trust.
+
 ## Turning things off
 
 ```yaml
