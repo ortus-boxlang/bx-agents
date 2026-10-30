@@ -1,0 +1,492 @@
+/**
+ * Installing extensions: where a source is, fetching it safely, looking at it before anything is placed, the lock, and
+ * the verb. Folders and zips are real files; GitHub, an address and ForgeBox go through ForgeBoxClient's test seams.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+
+		describe( "installing extensions", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-extinstall-" );
+				variables.project = dir & "/project";
+				directoryCopy( expandPath( "/fixtures/valid-minimal" ), project, true );
+				variables.userFile = dir & "/home/bxAgents.yml";
+				variables.userConfig = new bxagents.models.cli.UserConfig( userFile );
+				variables.origins = new bxagents.models.extensions.ExtensionOrigin();
+				variables.archive = new bxagents.models.extensions.ExtensionArchive();
+				variables.yes = ( preview ) => true;
+				variables.no = ( preview ) => false;
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function put( required string path, required string code ) {
+				directoryCreate( getDirectoryFromPath( dir & "/" & path ), true, true );
+				fileWrite( dir & "/" & path, code );
+			}
+
+			/** a zip file from [ name, content ] pairs, written as given (so an unsafe name can be tested) */
+			function makeZip( required string file, required array entries ) {
+				directoryCreate( getDirectoryFromPath( arguments.file ), true, true );
+				var zip = createObject( "java", "java.util.zip.ZipOutputStream" ).init( createObject( "java", "java.io.FileOutputStream" ).init( arguments.file ) );
+				for ( var pair in arguments.entries ) {
+					zip.putNextEntry( createObject( "java", "java.util.zip.ZipEntry" ).init( pair[ 1 ] ) );
+					zip.write( charsetDecode( pair[ 2 ], "utf-8" ) );
+					zip.closeEntry();
+				}
+				zip.close();
+			}
+
+			function installerFor( scope = "project", fetcher ) {
+				if ( isNull( fetcher ) ) {
+					return new bxagents.models.extensions.ExtensionInstaller( projectRoot : project, scope : scope, userConfig : userConfig, workingDirectory : dir );
+				}
+				return new bxagents.models.extensions.ExtensionInstaller( projectRoot : project, scope : scope, userConfig : userConfig, fetcher : fetcher, workingDirectory : dir );
+			}
+
+			/** a ForgeBoxClient whose entries and downloads are made up */
+			function fakeClient( downloads = [], entries = {} ) {
+				var client = new bxagents.models.build.ForgeBoxClient();
+				client.setEntryCaller( ( slug ) => entries.keyExists( slug ) ? { status : 200, body : { error : false, data : entries[ slug ] } } : { status : 404, body : {} } );
+				client.setDownloadCaller( ( url, destination ) => {
+					downloads.append( url );
+					makeZip( destination, [ [ "pack-main/Extension.bx", "class { this.title = '" & url & "' }" ], [ "pack-main/commands/Hi.bx", "class {}" ] ] );
+					return { status : 200 };
+				} );
+				return new bxagents.models.extensions.ExtensionFetcher( client );
+			}
+
+			/** every key of expected is in actual with that value */
+			function subset( required struct actual, required struct expected ) {
+				for ( var key in arguments.expected ) {
+					if ( !arguments.actual.keyExists( key ) ) {
+						fail( "missing [#key#] in #jsonSerialize( arguments.actual )#" );
+					}
+					expect( arguments.actual[ key ] ).toBe( arguments.expected[ key ] );
+				}
+			}
+
+			function sample( name = "sample", extra = "" ) {
+				put( "src/#name#/Extension.bx", "class { this.title = 'Sample'; #extra# @Command function hi( agentContext ) { return 'hi' } }" );
+				put( "src/#name#/commands/Bye.bx", "class {}" );
+				return dir & "/src/" & name;
+			}
+
+			// ---- where a source is ----
+
+			it( "tells a folder, a zip, a GitHub repository, an address and a ForgeBox package apart", function() {
+				directoryCreate( dir & "/here/folder", true, true );
+				fileWrite( dir & "/here/pack.zip", "x" );
+				var parse = ( text ) => origins.parse( text, dir & "/here" );
+
+				subset( parse( "./folder" ), { kind : "directory", name : "folder" } );
+				subset( parse( "./pack.zip" ), { kind : "zip", name : "pack" } );
+				subset( parse( "acme/tools" ), { kind : "github", owner : "acme", repo : "tools", ref : "", locator : "github:acme/tools", pinned : false } );
+				subset( parse( "acme/tools##v1.2" ), { ref : "v1.2", locator : "github:acme/tools##v1.2", pinned : true } );
+				subset( parse( "https://github.com/acme/tools" ), { kind : "github", owner : "acme", repo : "tools" } );
+				expect( parse( "https://github.com/acme/tools.git" ).repo ).toBe( "tools" );
+				expect( parse( "https://github.com/acme/tools/tree/dev" ).ref ).toBe( "dev" );
+				subset( parse( "git@github.com:acme/tools.git" ), { owner : "acme", repo : "tools" } );
+				subset( parse( "https://example.org/dl/ext.zip?x=1" ), { kind : "url", name : "ext" } );
+				subset( parse( "acme-tools" ), { kind : "forgebox", slug : "acme-tools", version : "", pinned : false } );
+				subset( parse( "acme-tools@1.2.0" ), { slug : "acme-tools", version : "1.2.0", locator : "forgebox:acme-tools@1.2.0", pinned : true } );
+				expect( parse( "forgebox:folder" ).kind ).toBe( "forgebox" );
+				expect( parse( "github:acme/tools" ).kind ).toBe( "github" );
+				expect( parse( "path:./folder" ).kind ).toBe( "directory" );
+			} );
+
+			it( "lets a folder that is there win over owner/repo", function() {
+				directoryCreate( dir & "/here/acme/tools", true, true );
+
+				expect( origins.parse( "acme/tools", dir & "/here" ).kind ).toBe( "directory" );
+				expect( origins.parse( "github:acme/tools", dir & "/here" ).kind ).toBe( "github" );
+			} );
+
+			it( "says what is wrong with a source it cannot use", function() {
+				for ( var bad in [ "", "http://example.org/x.zip", "https://example.org/page", "has space", "path:./nope", "./nope.zip", "github:nonsense" ] ) {
+					expect( () => origins.parse( bad, dir ) ).toThrow( "bxagents.extension.source" );
+				}
+			} );
+
+			// ---- fetching safely ----
+
+			it( "unpacks a zip, leaves out .git, and refuses entries that climb out or are not plain paths", function() {
+				makeZip( dir & "/ok.zip", [ [ "a/Extension.bx", "class {}" ], [ "a/.git/config", "x" ], [ "a/web/p.js", "//" ] ] );
+				archive.extract( dir & "/ok.zip", dir & "/out" );
+
+				expect( fileExists( dir & "/out/a/Extension.bx" ) ).toBeTrue();
+				expect( fileExists( dir & "/out/a/web/p.js" ) ).toBeTrue();
+				expect( directoryExists( dir & "/out/a/.git" ) ).toBeFalse();
+
+				for ( var name in [ "../evil.txt", "a/../../evil.txt", "/abs.txt", "C:/win.txt", "a\b.txt" ] ) {
+					makeZip( dir & "/bad.zip", [ [ "fine.txt", "x" ], [ name, "x" ] ] );
+					expect( () => archive.extract( dir & "/bad.zip", dir & "/bad-out" ) ).toThrow( "bxagents.extension.source" );
+				}
+				expect( fileExists( dir & "/evil.txt" ) ).toBeFalse();
+			} );
+
+			it( "copies a folder without .git or links, and fingerprints the same files the same way", function() {
+				put( "from/Extension.bx", "class {}" );
+				put( "from/web/p.js", "//" );
+				put( "from/.git/config", "x" );
+				put( "secret.txt", "outside" );
+				var linked = true;
+				try {
+					createObject( "java", "java.nio.file.Files" ).createSymbolicLink( createObject( "java", "java.nio.file.Paths" ).get( dir & "/from/leak.txt", [] ), createObject( "java", "java.nio.file.Paths" ).get( dir & "/secret.txt", [] ), [] );
+				} catch ( any e ) {
+					linked = false;
+				}
+				var copied = archive.copyFolder( dir & "/from", dir & "/to" );
+
+				expect( copied ).toBe( 2 );
+				expect( directoryExists( dir & "/to/.git" ) ).toBeFalse();
+				expect( fileExists( dir & "/to/leak.txt" ) ).toBeFalse();
+				expect( archive.checksum( dir & "/to" ) ).toBe( archive.checksum( dir & "/to" ) );
+				expect( archive.checksum( dir & "/to" ) ).toMatch( "^sha256:[0-9a-f]{64}$" );
+				fileWrite( dir & "/to/web/p.js", "// changed" );
+				expect( archive.checksum( dir & "/to" ) ).notToBe( archive.checksum( dir & "/from" ) );
+			} );
+
+			it( "fetches from GitHub, an address and ForgeBox, entering the single folder a download holds", function() {
+				var downloads = [];
+				var fetcher = fakeClient( downloads, { "acme-tools" : {
+					slug : "acme-tools",
+					latestVersion : { version : "1.2.0", downloadURL : "https://dl/acme-1.2.0.zip" },
+					versions : [ { version : "1.2.0", downloadURL : "https://dl/acme-1.2.0.zip" }, { version : "1.0.0", downloadURL : "https://dl/acme-1.0.0.zip" } ]
+				} } );
+				var staging = function() { var f = dir & "/stage" & createUUID(); directoryCreate( f, true, true ); return f; };
+
+				var github = fetcher.fetch( origins.parse( "acme/tools##main", dir ), staging() );
+				var head = fetcher.fetch( origins.parse( "acme/tools", dir ), staging() );
+				var url = fetcher.fetch( origins.parse( "https://example.org/e.zip", dir ), staging() );
+				var latest = fetcher.fetch( origins.parse( "acme-tools", dir ), staging() );
+				var older = fetcher.fetch( origins.parse( "acme-tools@1.0.0", dir ), staging() );
+
+				expect( downloads ).toBe( [ "https://github.com/acme/tools/archive/main.zip", "https://github.com/acme/tools/archive/HEAD.zip", "https://example.org/e.zip", "https://dl/acme-1.2.0.zip", "https://dl/acme-1.0.0.zip" ] );
+				expect( fileExists( github.root & "/Extension.bx" ) ).toBeTrue();
+				expect( github.resolved ).toBe( "main" );
+				expect( head.resolved ).toBe( "" );
+				expect( latest.resolved ).toBe( "1.2.0" );
+				expect( older.resolved ).toBe( "1.0.0" );
+				expect( () => fetcher.fetch( origins.parse( "acme-tools@9.9.9", dir ), staging() ) ).toThrow( "bxagents.extension.source" );
+				expect( () => fetcher.fetch( origins.parse( "nobody-here", dir ), staging() ) ).toThrow();
+			} );
+
+			it( "says so when a download is not a zip", function() {
+				var client = new bxagents.models.build.ForgeBoxClient();
+				client.setDownloadCaller( ( url, destination ) => { fileWrite( destination, "<html>not found</html>" ); return { status : 200 }; } );
+				var fetcher = new bxagents.models.extensions.ExtensionFetcher( client );
+				var staging = dir & "/stage";
+				directoryCreate( staging, true, true );
+
+				expect( () => fetcher.fetch( origins.parse( "acme/tools", dir ), staging ) ).toThrow( "bxagents.extension.source" );
+			} );
+
+			// ---- looking at it ----
+
+			it( "reads what a package is and adds, without running it", function() {
+				put( "pkg/Extension.bx", "class { function register( registry ) {} @Command function a() {} @Command function b() {} @Verb( 'x' ) function c() {} function d() { fileWrite( 'x', 'y' ) ; var r = bx:http url='x'; } }" );
+				put( "pkg/gateways/Matrix.bx", "class {}" );
+				put( "pkg/web/p.js", "//" );
+				var report = new bxagents.models.extensions.ExtensionPackage().inspect( dir & "/pkg", "pkg", false );
+
+				expect( report.ok ).toBeTrue();
+				expect( report.kind ).toBe( "folder" );
+				expect( report.name ).toBe( "pkg" );
+				expect( report.adds ).toInclude( "gateways: Matrix" );
+				expect( report.adds ).toInclude( "web: 1 file(s)" );
+				expect( report.adds ).toInclude( "commands: 2" );
+				expect( report.adds ).toInclude( "command line verbs: 1" );
+				expect( report.adds ).toInclude( "more, registered in code (register())" );
+				expect( report.mentions ).toBe( [ "files", "network" ] );
+			} );
+
+			it( "takes a single class as a one-file extension named after it, a folder of conventions, and refuses anything else", function() {
+				put( "one/greet.bx", "class { @Command function g() {} }" );
+				put( "conv/tools/T.bx", "class {}" );
+				put( "nope/readme.md", "x" );
+				put( "two/a.bx", "class {}" );
+				put( "two/b.bx", "class {}" );
+				var packages = new bxagents.models.extensions.ExtensionPackage();
+
+				var one = packages.inspect( dir & "/one", "ignored", false );
+				subset( one, { ok : true, kind : "file", name : "greet" } );
+				expect( packages.inspect( dir & "/one", "renamed", true ).name ).toBe( "renamed" );
+				subset( packages.inspect( dir & "/conv", "conv", false ), { ok : true, kind : "folder" } );
+				expect( packages.inspect( dir & "/nope", "nope", false ).ok ).toBeFalse();
+				expect( packages.inspect( dir & "/two", "two", false ).ok ).toBeFalse();
+				put( "mod/ModuleConfig.bx", "class {}" );
+				expect( packages.inspect( dir & "/mod", "mod", false ).problems[ 1 ] ).toInclude( "BoxLang module" );
+			} );
+
+			it( "refuses a name that is not safe as a folder", function() {
+				put( "pkg/Extension.bx", "class {}" );
+				var packages = new bxagents.models.extensions.ExtensionPackage();
+
+				for ( var bad in [ "", "..", "a/b", ".hidden", "a..b", "with space" ] ) {
+					expect( packages.inspect( dir & "/pkg", bad, true ).ok ).toBeFalse();
+				}
+				expect( packages.inspect( dir & "/pkg", "Good_name-1.x", true ).ok ).toBeTrue();
+			} );
+
+			// ---- installing ----
+
+			it( "installs a folder into the project's extensions/, and writes the lock", function() {
+				var source = sample();
+				var installer = installerFor();
+				var seen = [];
+				var result = installer.install( source, { confirm : ( preview ) => { seen.append( preview ); return true; } } );
+
+				subset( result, { installed : true, name : "sample" } );
+				expect( fileExists( project & "/extensions/sample/Extension.bx" ) ).toBeTrue();
+				expect( fileExists( project & "/extensions/sample/commands/Bye.bx" ) ).toBeTrue();
+				expect( seen ).toHaveLength( 1 );
+				subset( seen[ 1 ], { name : "sample", scope : "project", kind : "folder", update : false, replaces : false } );
+				expect( seen[ 1 ].adds ).toInclude( "commands: Bye" );
+				var lock = jsonDeserialize( fileRead( project & "/extensions.lock.json" ) );
+				expect( lock.version ).toBe( 1 );
+				subset( lock.extensions.sample, { source : "path:" & source, kind : "folder" } );
+				expect( lock.extensions.sample.checksum ).toMatch( "^sha256:" );
+				expect( installer.installed() ).toBe( [ { name : "sample", source : "path:" & source, resolved : "", kind : "folder", state : "intact", scope : "project" } ] );
+			} );
+
+			it( "places nothing when the answer is no, and the staging folder does not stay", function() {
+				var before = directoryList( createObject( "java", "java.lang.System" ).getProperty( "java.io.tmpdir" ), false, "name", "bxagents-extension-*" ).len();
+				var result = installerFor().install( sample(), { confirm : no } );
+
+				subset( result, { installed : false, reason : "declined" } );
+				expect( directoryExists( project & "/extensions/sample" ) ).toBeFalse();
+				expect( fileExists( project & "/extensions.lock.json" ) ).toBeFalse();
+				expect( directoryList( createObject( "java", "java.lang.System" ).getProperty( "java.io.tmpdir" ), false, "name", "bxagents-extension-*" ).len() ).toBe( before );
+			} );
+
+			it( "installs a zip and a one-class extension, under the name asked for", function() {
+				makeZip( dir & "/pack.zip", [ [ "inner/Extension.bx", "class {}" ], [ "inner/tools/T.bx", "class {}" ] ] );
+				put( "single/greet.bx", "class { @Command function g() {} }" );
+				var installer = installerFor();
+
+				expect( installer.install( dir & "/pack.zip", { confirm : yes } ).name ).toBe( "pack" );
+				expect( installer.install( dir & "/single", { confirm : yes } ).name ).toBe( "greet" );
+				expect( installer.install( dir & "/single", { confirm : yes, name : "hello", force : false } ).name ).toBe( "hello" );
+				expect( fileExists( project & "/extensions/pack/Extension.bx" ) ).toBeTrue();
+				expect( fileExists( project & "/extensions/greet.bx" ) ).toBeTrue();
+				expect( fileExists( project & "/extensions/hello.bx" ) ).toBeTrue();
+				expect( installer.installed().map( e => e.name & ":" & e.kind ) ).toBe( [ "greet:file", "hello:file", "pack:folder" ] );
+			} );
+
+			it( "refuses what is already there unless it is forced, and says whose it is", function() {
+				put( "project/extensions/mine/Extension.bx", "class {}" );
+				put( "src/mine/Extension.bx", "class { this.title = 'new' }" );
+				var installer = installerFor();
+
+				expect( () => installer.install( dir & "/src/mine", { confirm : yes } ) ).toThrow( "bxagents.extension.install" );
+				try {
+					installer.install( dir & "/src/mine", { confirm : yes } );
+				} catch ( any e ) {
+					expect( e.message ).toInclude( "was not installed with this command" );
+				}
+				expect( fileRead( project & "/extensions/mine/Extension.bx" ) ).toBe( "class {}" );
+
+				var forced = installer.install( dir & "/src/mine", { confirm : ( preview ) => { return preview.replaces; }, force : true } );
+				expect( forced.installed ).toBeTrue();
+				expect( fileRead( project & "/extensions/mine/Extension.bx" ) ).toInclude( "'new'" );
+			} );
+
+			it( "does not install into a folder that is not a project, but can for this machine with the system scope", function() {
+				var stranger = new bxagents.models.extensions.ExtensionInstaller( projectRoot : dir & "/not-a-project", userConfig : userConfig );
+				expect( () => stranger.install( sample(), { confirm : yes } ) ).toThrow( "bxagents.extension.install" );
+
+				var system = new bxagents.models.extensions.ExtensionInstaller( projectRoot : dir & "/not-a-project", scope : "system", userConfig : userConfig );
+				system.install( sample( "everywhere" ), { confirm : yes } );
+				expect( fileExists( dir & "/home/extensions/everywhere/Extension.bx" ) ).toBeTrue();
+				expect( fileExists( dir & "/home/extensions.lock.json" ) ).toBeTrue();
+				expect( system.installed()[ 1 ].scope ).toBe( "system" );
+				expect( fileExists( dir & "/not-a-project/extensions.lock.json" ) ).toBeFalse();
+			} );
+
+			it( "installs from GitHub and ForgeBox, and records what was fetched", function() {
+				var fetcher = fakeClient( [], { "acme-tools" : { slug : "acme-tools", latestVersion : { version : "1.2.0", downloadURL : "https://dl/a.zip" }, versions : [] } } );
+				var installer = installerFor( "project", fetcher );
+				installer.install( "acme/pack##main", { confirm : yes } );
+				installer.install( "acme-tools", { confirm : yes } );
+				var lock = jsonDeserialize( fileRead( project & "/extensions.lock.json" ) );
+
+				subset( lock.extensions[ "acme-tools" ], { source : "forgebox:acme-tools", resolved : "1.2.0" } );
+				subset( lock.extensions.pack, { source : "github:acme/pack##main", resolved : "main" } );
+			} );
+
+			// ---- the lock ----
+
+			it( "brings back what the lock lists, and refuses a package that is not what was locked", function() {
+				var source = sample();
+				var installer = installerFor();
+				installer.install( source, { confirm : yes } );
+				directoryDelete( project & "/extensions/sample", true );
+
+				expect( installer.installed()[ 1 ].state ).toBe( "missing" );
+				expect( installerFor().restore() ).toBe( { restored : [ "sample" ], failed : [] } );
+				expect( installer.installed()[ 1 ].state ).toBe( "intact" );
+				expect( installerFor().restore() ).toBe( { restored : [], failed : [] } );
+
+				directoryDelete( project & "/extensions/sample", true );
+				fileWrite( source & "/Extension.bx", "class { this.title = 'tampered' }" );
+				var again = installerFor().restore();
+				expect( again.restored ).toBeEmpty();
+				expect( again.failed[ 1 ].reason ).toInclude( "checksum differs" );
+				expect( directoryExists( project & "/extensions/sample" ) ).toBeFalse();
+			} );
+
+			it( "restores a ForgeBox package at the version that was installed, not the latest", function() {
+				var downloads = [];
+				var entries = { "acme-tools" : { slug : "acme-tools", latestVersion : { version : "1.2.0", downloadURL : "https://dl/new.zip" }, versions : [ { version : "1.2.0", downloadURL : "https://dl/new.zip" }, { version : "1.1.0", downloadURL : "https://dl/old.zip" } ] } };
+				var installer = installerFor( "project", fakeClient( [], entries ) );
+				installer.install( "acme-tools@1.1.0", { confirm : yes } );
+				installer.install( "acme-tools", { confirm : yes, force : true, name : "latest" } );
+				directoryDelete( project & "/extensions/latest", true );
+				var seen = [];
+				var restorer = installerFor( "project", fakeClient( seen, entries ) );
+
+				expect( restorer.restore().failed ).toBeEmpty();
+				expect( seen ).toBe( [ "https://dl/new.zip" ] );
+			} );
+
+			it( "updates what is not pinned, leaves what is, and asks before replacing", function() {
+				var source = sample();
+				var installer = installerFor();
+				installer.install( source, { confirm : yes } );
+				makeZip( dir & "/pinned.zip", [ [ "p/Extension.bx", "class {}" ] ] );
+				var pinnedInstaller = installerFor( "project", fakeClient() );
+				pinnedInstaller.install( "acme/pack##v1", { confirm : yes } );
+
+				expect( installer.update( [ "sample" ], yes )[ 1 ].outcome ).toBe( "unchanged" );
+				fileWrite( source & "/Extension.bx", "class { this.title = 'v2' }" );
+				var asked = [];
+				expect( installer.update( [ "sample" ], ( preview ) => { asked.append( preview ); return false; } )[ 1 ].outcome ).toBe( "declined" );
+				expect( asked[ 1 ].update ).toBeTrue();
+				expect( fileRead( project & "/extensions/sample/Extension.bx" ) ).notToInclude( "v2" );
+				expect( installer.update( [], yes ).map( r => r.name & ":" & r.outcome ) ).toBe( [ "sample:updated" ] );
+				expect( fileRead( project & "/extensions/sample/Extension.bx" ) ).toInclude( "v2" );
+				expect( installer.installed()[ 1 ].state ).toBe( "intact" );
+				expect( installer.update( [ "nothing" ], yes )[ 1 ].outcome ).toBe( "failed" );
+			} );
+
+			it( "removes what it installed, refuses what was changed unless forced, and leaves what it did not install", function() {
+				var installer = installerFor();
+				installer.install( sample(), { confirm : yes } );
+				put( "project/extensions/handmade/Extension.bx", "class {}" );
+
+				fileWrite( project & "/extensions/sample/Extension.bx", "class { this.title = 'edited' }" );
+				expect( installer.installed()[ 1 ].state ).toBe( "changed" );
+				expect( () => installer.remove( "sample" ) ).toThrow( "bxagents.extension.install" );
+				expect( () => installer.remove( "handmade" ) ).toThrow( "bxagents.extension.install" );
+				installer.remove( "sample", true );
+
+				expect( directoryExists( project & "/extensions/sample" ) ).toBeFalse();
+				expect( directoryExists( project & "/extensions/handmade" ) ).toBeTrue();
+				expect( fileExists( project & "/extensions.lock.json" ) ).toBeFalse();
+			} );
+
+			it( "builds a project with a lock by bringing back what it lists", function() {
+				var source = sample();
+				installerFor().install( "path:" & source, { confirm : yes } );
+				directoryDelete( project & "/extensions/sample", true );
+				var progress = [];
+				new bxagents.models.build.BuildPipeline( "1.0.0" ).build( project, "", ( line ) => progress.append( line ) );
+
+				expect( directoryExists( project & "/extensions/sample" ) ).toBeTrue();
+				expect( progress.toList( "|" ) ).toInclude( "Restoring installed extensions" );
+
+				directoryDelete( project & "/extensions/sample", true );
+				fileWrite( source & "/Extension.bx", "class { this.title = 'moved' }" );
+				expect( () => new bxagents.models.build.BuildPipeline( "1.0.0" ).build( project ) ).toThrow( "BxAgents.ExtensionRestoreFailed" );
+			} );
+
+			// ---- the verb ----
+
+			it( "installs through the verb with --yes, shows what it adds, and asks first otherwise", function() {
+				var source = sample();
+				var verb = new bxagents.models.cli.Extensions();
+				var base = { projectRoot : project, _userConfig : userConfig };
+
+				var refused = "";
+				try {
+					verb.run( base.append( { _positionals : [ "install", source ], _interactive : false }, false ) );
+				} catch ( any e ) {
+					refused = e.message;
+				}
+				expect( refused ).toInclude( "run it again with --yes" );
+				expect( refused ).toInclude( "commands: Bye" );
+				expect( directoryExists( project & "/extensions/sample" ) ).toBeFalse();
+
+				var done = verb.run( { projectRoot : project, _userConfig : userConfig, _positionals : [ "install", source ], yes : true } );
+				expect( done.exitCode ).toBe( 0 );
+				expect( done.message ).toInclude( "It adds:" );
+				expect( done.message ).toInclude( "Installed sample" );
+				expect( directoryExists( project & "/extensions/sample" ) ).toBeTrue();
+			} );
+
+			it( "asks at a terminal and takes no for an answer", function() {
+				var source = sample();
+				var verb = new bxagents.models.cli.Extensions();
+				var asker = new bxagents.models.wizard.prompters.ScriptedPrompter( [ "", false ] );
+				var declined = verb.run( { projectRoot : project, _userConfig : userConfig, _positionals : [ "install", source ], _interactive : true, _prompter : asker } );
+
+				subset( declined, { exitCode : 1 } );
+				expect( declined.message ).toInclude( "Nothing was installed" );
+				expect( directoryExists( project & "/extensions/sample" ) ).toBeFalse();
+
+				var accepted = verb.run( { projectRoot : project, _userConfig : userConfig, _positionals : [ "install", source ], _interactive : true, _prompter : new bxagents.models.wizard.prompters.ScriptedPrompter( [ "", true ] ) } );
+				expect( accepted.exitCode ).toBe( 0 );
+				expect( directoryExists( project & "/extensions/sample" ) ).toBeTrue();
+			} );
+
+			it( "lists, updates, removes and restores through the verb", function() {
+				var source = sample();
+				var verb = new bxagents.models.cli.Extensions();
+				var options = ( more ) => { return { projectRoot : project, _userConfig : userConfig, yes : true }.append( more ); };
+				verb.run( options( { _positionals : [ "install", source ] } ) );
+
+				var listed = verb.run( options( { _positionals : [ "list" ], installed : true } ) );
+				expect( listed.message ).toInclude( "sample (intact) - path:" );
+				expect( jsonDeserialize( verb.run( options( { _positionals : [ "list" ], installed : true, json : true } ) ).message ).installed[ 1 ].name ).toBe( "sample" );
+				expect( verb.run( options( { _positionals : [ "update" ] } ) ).message ).toBe( "sample: unchanged" );
+
+				directoryDelete( project & "/extensions/sample", true );
+				expect( verb.run( options( { _positionals : [ "install" ] } ) ).message ).toBe( "Restored sample" );
+				expect( verb.run( options( { _positionals : [ "install" ] } ) ).message ).toInclude( "Nothing to restore" );
+				expect( verb.run( options( { _positionals : [ "remove", "sample" ] } ) ).message ).toBe( "Removed sample." );
+				expect( verb.run( options( { _positionals : [ "update" ] } ) ).message ).toBe( "Nothing is installed." );
+				expect( () => verb.run( options( { _positionals : [ "remove" ] } ) ) ).toThrow( "BxAgents.MissingName" );
+				expect( () => verb.run( options( { _positionals : [ "frobnicate" ] } ) ) ).toThrow( "BxAgents.UnknownSubcommand" );
+			} );
+
+			it( "still lists what is loaded with no subcommand, and takes a project path as before", function() {
+				var verb = new bxagents.models.cli.Extensions();
+				var viaOption = verb.run( { projectRoot : project, _positionals : [] } );
+				var viaPath = verb.run( { projectRoot : dir, _positionals : [ project ] } );
+
+				expect( viaOption.exitCode ).toBe( 0 );
+				expect( viaPath.message ).toBe( viaOption.message );
+			} );
+
+			it( "is reached from the command line with its own flags", function() {
+				var source = sample();
+				var moduleConfig = new bxagents.ModuleConfig();
+				var code = moduleConfig.dispatch( [ "extensions", "install", source, "--yes", "--name=viacli", "--projectRoot=" & project ] );
+
+				expect( code ).toBe( 0 );
+				expect( directoryExists( project & "/extensions/viacli" ) ).toBeTrue();
+				expect( moduleConfig.dispatch( [ "extensions", "install", source, "--name", "--projectRoot=" & project ] ) ).toBe( 1 );
+			} );
+
+		} );
+
+	}
+
+}

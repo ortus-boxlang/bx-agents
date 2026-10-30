@@ -381,6 +381,36 @@ function greet( options ) { return "Hola, #options.name ?: 'tú'#!" }
 
 Gana la capa posterior. Una extensión con el mismo nombre reemplaza a la anterior, y un comando reemplaza a uno anterior con el mismo nombre o alias, incluido uno integrado. Ambos casos se muestran en `/extensions`; nada se reemplaza en silencio. La compilación copia el `extensions/` del proyecto a la app; un agente servido nunca lee la carpeta personal de un desarrollador.
 
+## Instalar extensiones
+
+`bxAgents extensions install` pone una extensión en el proyecto desde una carpeta, un zip, GitHub o ForgeBox.
+
+```bash
+bxAgents extensions install ./mi-ext                    # una carpeta
+bxAgents extensions install ./mi-ext.zip                # un archivo zip
+bxAgents extensions install acme/tools                  # GitHub: owner/repo, o owner/repo#ref
+bxAgents extensions install https://github.com/acme/tools
+bxAgents extensions install https://example.org/ext.zip # un zip por dirección
+bxAgents extensions install acme-tools@1.2.0            # un slug de ForgeBox, con versión opcional
+bxAgents extensions install ./mi-ext --system           # para ti, en ~/.bxagents/extensions
+```
+
+Una carpeta que existe gana sobre `owner/repo`. Para decir cuál quieres, empieza con `path:`, `github:`, `forgebox:` o `url:`.
+
+Una extensión es código que se ejecuta cuando arranca el chat o la app, así que `install` la descarga a una carpeta temporal, la examina sin ejecutar nada y te muestra qué añade (comandos, teclas, prefijos, listeners, gateways, tools, skills, archivos web, verbos) y qué menciona su código (archivos, red, procesos, java). Luego pide un sí. `--yes` omite la pregunta y es obligatorio si no hay terminal. No se coloca nada hasta que aceptes.
+
+| Comando | Hace |
+|---|---|
+| `install <origen>` | descarga, muestra, pregunta, coloca. `--name=<nombre>` la renombra, `--force` reemplaza una existente, `--system` instala para ti en lugar del proyecto |
+| `install` | sin origen, restaura todo lo que lista `extensions.lock.json` |
+| `list --installed` | lo instalado, de dónde viene y si está `intact`, `changed` o `missing` |
+| `update [nombre...]` | descarga de nuevo, muestra el cambio y pregunta. Un origen fijado a una versión o ref (`#v1`, `@1.2.0`) se deja como está |
+| `remove <nombre>` | la borra junto con su entrada del lock. Una carpeta que editaste necesita `--force` |
+
+El proyecto guarda `extensions.lock.json` (`~/.bxagents/extensions.lock.json` con `--system`): el nombre, el origen, la versión o ref descargada y una suma de verificación de los archivos. **Haz commit del lock.** `bxAgents build` restaura lo que falte y rechaza un paquete cuyos archivos ya no coinciden con su suma. Puedes hacer commit de `extensions/` también; el resultado es el mismo.
+
+Lo que `install` rechaza: una entrada de zip con ruta absoluta, una parte `..` o una barra invertida, más de 5000 archivos o 50 MB, un nombre que no es seguro como carpeta, un nombre ya presente que este comando no instaló (salvo `--force`), un módulo de BoxLang (`ModuleConfig.bx`) y todo lo que no sea una extensión. Los enlaces simbólicos y `.git` se omiten. La vista previa es una lectura rápida del texto, no una revisión de seguridad: instala lo que te inspire confianza.
+
 ## Desactivar cosas
 
 ```yaml

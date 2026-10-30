@@ -1,0 +1,165 @@
+/**
+ * Puts the files of a zip or a folder into a new folder, safely. What arrives came from outside (a download, someone
+ * else's folder), so nothing in it is trusted to say where it goes:
+ *
+ *   - an entry whose path is absolute, has a `..` part or a backslash is refused, and so is one that would land
+ *     outside the destination once its real path is worked out
+ *   - an archive with more than MAX_FILES entries or more than MAX_BYTES of content is refused, counting the bytes as
+ *     they are written, not what the archive says about itself
+ *   - links (symbolic links) in a folder are not followed or copied
+ *   - a `.git` folder is left out
+ */
+class {
+
+	static {
+		MAX_FILES = 5000
+		MAX_BYTES = 52428800
+	}
+
+	/**
+	 * @zip The archive file
+	 * @destination A folder that is empty or not there yet
+	 *
+	 * @return The number of files written
+	 */
+	numeric function extract( required string zip, required string destination ) {
+		var files = createObject( "java", "java.nio.file.Files" )
+		var paths = createObject( "java", "java.nio.file.Paths" )
+		directoryCreate( path = arguments.destination, createPath = true, ignoreExists = true )
+		var root = createObject( "java", "java.io.File" ).init( arguments.destination ).getCanonicalPath().replace( "\", "/", "all" ).reReplace( "/+$", "" ) & "/"
+		var archive = createObject( "java", "java.util.zip.ZipFile" ).init( arguments.zip )
+		var written = 0
+		var bytes = 0
+		try {
+			var entries = archive.entries()
+			while ( entries.hasMoreElements() ) {
+				var entry = entries.nextElement()
+				var name = entry.getName()
+				if ( !safeName( name ) ) {
+					fail( "The archive has an entry that is not a plain relative path: [#name#]. It was not installed." )
+				}
+				var target = createObject( "java", "java.io.File" ).init( root & name ).getCanonicalPath().replace( "\", "/", "all" )
+				if ( !( target & ( entry.isDirectory() ? "/" : "" ) ).startsWith( root ) ) {
+					fail( "The archive has an entry that would land outside the folder: [#name#]. It was not installed." )
+				}
+				if ( name.startsWith( ".git/" ) || name == ".git" || name.contains( "/.git/" ) || name.endsWith( "/.git" ) ) {
+					continue
+				}
+				if ( entry.isDirectory() ) {
+					directoryCreate( path = target, createPath = true, ignoreExists = true )
+					continue
+				}
+				written++
+				if ( written > static.MAX_FILES ) {
+					fail( "The archive has more than #static.MAX_FILES# files. It was not installed." )
+				}
+				directoryCreate( path = getDirectoryFromPath( target ), createPath = true, ignoreExists = true )
+				var input = archive.getInputStream( entry )
+				var output = files.newOutputStream( paths.get( target, [] ), [] )
+				try {
+					var buffer = createObject( "java", "java.lang.reflect.Array" ).newInstance( createObject( "java", "java.lang.Byte" ).TYPE, 8192 )
+					var read = input.read( buffer )
+					while ( read != -1 ) {
+						bytes += read
+						if ( bytes > static.MAX_BYTES ) {
+							fail( "The archive holds more than #int( static.MAX_BYTES / 1048576 )# MB. It was not installed." )
+						}
+						output.write( buffer, 0, read )
+						read = input.read( buffer )
+					}
+				} finally {
+					output.close()
+					input.close()
+				}
+			}
+		} finally {
+			archive.close()
+		}
+		return written
+	}
+
+	/**
+	 * Copies a folder's files into a new folder, leaving out `.git` and anything that is a link.
+	 *
+	 * @source The folder to copy
+	 * @destination A folder that is empty or not there yet
+	 *
+	 * @return The number of files copied
+	 */
+	numeric function copyFolder( required string source, required string destination ) {
+		var files = createObject( "java", "java.nio.file.Files" )
+		var paths = createObject( "java", "java.nio.file.Paths" )
+		var base = createObject( "java", "java.io.File" ).init( arguments.source ).getCanonicalPath().replace( "\", "/", "all" ).reReplace( "/+$", "" )
+		directoryCreate( path = arguments.destination, createPath = true, ignoreExists = true )
+		var copied = 0
+		var bytes = 0
+		for ( var path in directoryList( base, true, "path" ) ) {
+			var normal = path.replace( "\", "/", "all" )
+			var relative = mid( normal, len( base ) + 2, len( normal ) )
+			if ( relative == ".git" || relative.startsWith( ".git/" ) || relative.contains( "/.git/" ) || files.isSymbolicLink( paths.get( normal, [] ) ) ) {
+				continue
+			}
+			var target = arguments.destination & "/" & relative
+			if ( directoryExists( normal ) ) {
+				directoryCreate( path = target, createPath = true, ignoreExists = true )
+				continue
+			}
+			// a file inside a linked folder is reached through the link, so its real path would not sit under the folder
+			if ( !createObject( "java", "java.io.File" ).init( normal ).getCanonicalPath().replace( "\", "/", "all" ).startsWith( base & "/" ) ) {
+				continue
+			}
+			copied++
+			bytes += getFileInfo( normal ).size
+			if ( copied > static.MAX_FILES || bytes > static.MAX_BYTES ) {
+				fail( "The folder holds more than #static.MAX_FILES# files or #int( static.MAX_BYTES / 1048576 )# MB. It was not installed." )
+			}
+			directoryCreate( path = getDirectoryFromPath( target ), createPath = true, ignoreExists = true )
+			fileCopy( normal, target )
+		}
+		return copied
+	}
+
+	/**
+	 * @return A fingerprint of a folder's files, their paths and their bytes, in path order: the same files give the
+	 *         same answer on any machine. For a single file, its name and bytes.
+	 */
+	string function checksum( required string folder ) {
+		var digest = createObject( "java", "java.security.MessageDigest" ).getInstance( "SHA-256" )
+		if ( fileExists( arguments.folder ) ) {
+			digest.update( charsetDecode( getFileFromPath( arguments.folder ) & char( 0 ), "utf-8" ) )
+			digest.update( fileReadBinary( arguments.folder ) )
+			return "sha256:" & lCase( binaryEncode( digest.digest(), "hex" ) )
+		}
+		var base = createObject( "java", "java.io.File" ).init( arguments.folder ).getCanonicalPath().replace( "\", "/", "all" ).reReplace( "/+$", "" )
+		var all = []
+		for ( var path in directoryList( base, true, "path" ) ) {
+			if ( fileExists( path ) ) {
+				all.append( path.replace( "\", "/", "all" ) )
+			}
+		}
+		for ( var path in all.sort( "text" ) ) {
+			digest.update( charsetDecode( mid( path, len( base ) + 2, len( path ) ) & char( 0 ), "utf-8" ) )
+			digest.update( fileReadBinary( path ) )
+		}
+		return "sha256:" & lCase( binaryEncode( digest.digest(), "hex" ) )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private boolean function safeName( required string name ) {
+		if ( !len( arguments.name ) || arguments.name.startsWith( "/" ) || arguments.name.contains( "\" ) || arguments.name.contains( char( 0 ) ) || reFind( "^[A-Za-z]:", arguments.name ) ) {
+			return false
+		}
+		for ( var part in arguments.name.listToArray( "/", true ) ) {
+			if ( part == ".." ) {
+				return false
+			}
+		}
+		return true
+	}
+
+	private void function fail( required string message ) {
+		throw( type : "bxagents.extension.source", message : arguments.message )
+	}
+
+}

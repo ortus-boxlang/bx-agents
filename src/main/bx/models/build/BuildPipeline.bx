@@ -82,6 +82,26 @@ class {
 	}
 
 	/**
+	 * Installs the extensions extensions.lock.json lists and the project lacks, so a fresh checkout builds the same
+	 * app. Each must be what was locked; if one cannot be brought back the build stops and says which and why.
+	 */
+	private void function restoreExtensions( required string root, required any onProgress ) {
+		if ( !fileExists( arguments.root & "/extensions.lock.json" ) ) {
+			return
+		}
+		var restored = new "models.extensions.ExtensionInstaller@bxagents"( projectRoot : arguments.root ).restore()
+		if ( restored.restored.len() ) {
+			arguments.onProgress( "+ Restoring installed extensions..." )
+			for ( var name in restored.restored ) {
+				arguments.onProgress( "    #name#" )
+			}
+		}
+		if ( restored.failed.len() ) {
+			throw( type : "BxAgents.ExtensionRestoreFailed", message : "Could not restore the extensions extensions.lock.json lists: " & restored.failed.map( f => "#f.name# (#f.reason#)" ).toList( "; " ) )
+		}
+	}
+
+	/**
 	 * @projectRoot Absolute path to the project root (containing Agent.bx)
 	 * @cliEnvironment Optional environment name, e.g. from a CLI flag
 	 * @onProgress Called with one human-readable line per phase/interaction as the build proceeds - defaults to a no-op, so callers that don't care (every existing caller, before `build --verbose`) pay nothing extra. Passing a closure that collects into an array (rather than printing) is how this is unit-tested - see BuildPipelineSpec.bx
@@ -95,6 +115,7 @@ class {
 		var buildStart = getTickCount()
 
 		restoreSkills( root, arguments.onProgress )
+		restoreExtensions( root, arguments.onProgress )
 
 		arguments.onProgress( "+ Resolving the agent config..." )
 		var config = variables.configResolver.resolve( projectRoot = root, cliEnvironment = arguments.cliEnvironment )

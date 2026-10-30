@@ -921,6 +921,16 @@ bxAgents extensions [--json]
 - One line per extension: its name, which layer it came from, whether it loaded, then the commands and schedulers it added and anything that went wrong.
 - `--json` prints `{ extensions, problems }` for scripting.
 
+Subcommands install, list, update and remove are described in [Installing extensions](conventions/extensions.md#installing-extensions):
+
+```bash
+bxAgents extensions install <source> [--name=<name>] [--force] [--yes] [--system]
+bxAgents extensions install                    # restore from extensions.lock.json
+bxAgents extensions list [--installed] [--json]
+bxAgents extensions update [name...] [--yes]
+bxAgents extensions remove <name> [--force] [--system]
+```
+
 ### `clean`
 
 Remove a project's `.build/` and `dist/` output.

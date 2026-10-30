@@ -1,0 +1,172 @@
+/**
+ * Reads what a person typed after `bxAgents extensions install` and says where the extension is:
+ *
+ *   ./my-ext, /abs/path, C:\ext     a local directory (copied)
+ *   ./my-ext.zip                    a local zip file
+ *   owner/repo, owner/repo#ref      a GitHub repository (its archive at a branch, tag or commit; the default branch without a ref)
+ *   https://github.com/owner/repo   the same, as a URL (also .../tree/<ref> and .git forms), or git@github.com:owner/repo.git
+ *   https://example.org/x.zip       a zip file by URL
+ *   acme-tools, acme-tools@1.2.0    a ForgeBox package, by slug
+ *
+ * A local path that exists wins over `owner/repo`, so a folder called `acme/tools` next to you is that folder. To say
+ * which it is, put `path:`, `github:`, `forgebox:` or `url:` in front.
+ *
+ * The answer is a struct:
+ *   kind      directory, zip, github, url or forgebox
+ *   locator   the same source written in full (`github:owner/repo#ref`), which is what the lock keeps
+ *   name      the extension's name unless the person gives one: the folder, file or repository name, or the slug
+ *   pinned    true when it names an exact version or ref, so `update` has nothing newer to find
+ *   plus what the kind needs: path, owner, repo, ref, url, slug, version
+ */
+class {
+
+	/**
+	 * @text What was typed
+	 * @workingDirectory Where a relative path starts
+	 *
+	 * @return The origin (see above); throws bxagents.extension.source with a sentence when it is not understood
+	 */
+	struct function parse( required string text, string workingDirectory = "" ) {
+		var typed = trim( arguments.text )
+		if ( !len( typed ) ) {
+			fail( "Say where the extension is: a folder, a .zip, a GitHub repository (owner/repo) or a ForgeBox package." )
+		}
+		var explicit = explicitKind( typed )
+		if ( len( explicit.kind ) ) {
+			return explicit.kind == "path" ? fromPath( explicit.rest, arguments.workingDirectory, true ) : byKind( explicit.kind, explicit.rest, typed )
+		}
+		if ( looksLikePath( typed ) || ( typed.contains( "/" ) && localExists( typed, arguments.workingDirectory ) ) ) {
+			return fromPath( typed, arguments.workingDirectory, true )
+		}
+		if ( reFindNoCase( "^https?://.*\.zip(\?.*)?$", typed ) ) {
+			return byUrl( typed )
+		}
+		if ( reFindNoCase( "^(git@github\.com:|https?://(www\.)?github\.com/)", typed ) ) {
+			return github( typed )
+		}
+		if ( reFindNoCase( "^https?://", typed ) ) {
+			return byUrl( typed )
+		}
+		if ( reFind( "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(##.+)?$", typed ) ) {
+			return github( typed )
+		}
+		return forgebox( typed )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private struct function explicitKind( required string typed ) {
+		for ( var kind in [ "path", "github", "forgebox", "url" ] ) {
+			if ( arguments.typed.lCase().startsWith( kind & ":" ) && !arguments.typed.lCase().startsWith( kind & "://" ) ) {
+				return { kind : kind, rest : trim( mid( arguments.typed, len( kind ) + 2, len( arguments.typed ) ) ) }
+			}
+		}
+		return { kind : "", rest : "" }
+	}
+
+	private struct function byKind( required string kind, required string rest, required string typed ) {
+		switch ( arguments.kind ) {
+			case "github":
+				return github( arguments.rest )
+			case "forgebox":
+				return forgebox( arguments.rest )
+			default:
+				return byUrl( arguments.rest )
+		}
+	}
+
+	private boolean function looksLikePath( required string typed ) {
+		return arguments.typed.startsWith( "/" ) || arguments.typed.startsWith( "./" ) || arguments.typed.startsWith( "../" ) || arguments.typed.startsWith( "~" )
+			|| arguments.typed.startsWith( ".\" ) || arguments.typed.startsWith( "..\" ) || reFind( "^[A-Za-z]:[\\/]", arguments.typed ) > 0
+			|| arguments.typed.lCase().endsWith( ".zip" ) && !reFindNoCase( "^https?://", arguments.typed )
+	}
+
+	private string function absolute( required string path, required string workingDirectory ) {
+		var home = createObject( "java", "java.lang.System" ).getProperty( "user.home" )
+		var given = arguments.path.startsWith( "~" ) ? home & mid( arguments.path, 2, len( arguments.path ) ) : arguments.path
+		var isAbsolute = given.startsWith( "/" ) || reFind( "^[A-Za-z]:[\\/]", given ) > 0
+		var joined = isAbsolute || !len( arguments.workingDirectory ) ? given : arguments.workingDirectory & "/" & given
+		return createObject( "java", "java.io.File" ).init( joined ).getCanonicalPath().replace( "\", "/", "all" ).reReplace( "/+$", "" )
+	}
+
+	private boolean function localExists( required string typed, required string workingDirectory ) {
+		var path = absolute( arguments.typed, arguments.workingDirectory )
+		return directoryExists( path ) || ( fileExists( path ) && path.lCase().endsWith( ".zip" ) )
+	}
+
+	private struct function fromPath( required string path, required string workingDirectory, required boolean mustExist ) {
+		var found = absolute( arguments.path, arguments.workingDirectory )
+		var isZip = found.lCase().endsWith( ".zip" )
+		if ( isZip ? !fileExists( found ) : !directoryExists( found ) ) {
+			fail( "There is no #isZip ? 'zip file' : 'folder'# at #found#." )
+		}
+		var base = getFileFromPath( found )
+		return {
+			kind    : isZip ? "zip" : "directory",
+			path    : found,
+			name    : isZip ? reReplace( base, "(?i)\.zip$", "" ) : base,
+			locator : "path:" & found,
+			pinned  : false
+		}
+	}
+
+	private struct function github( required string text ) {
+		var given = trim( arguments.text )
+		var owner = ""
+		var repo = ""
+		var ref = ""
+		var match = reFindNoCase( "^(?:git@github\.com:|https?://(?:www\.)?github\.com/)([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?(?:/tree/([^?##]+))?/?(?:##(.+))?$", given, 1, true )
+		if ( match.pos[ 1 ] > 0 ) {
+			owner = mid( given, match.pos[ 2 ], match.len[ 2 ] )
+			repo = mid( given, match.pos[ 3 ], match.len[ 3 ] )
+			ref = match.len.len() >= 5 && match.pos[ 5 ] > 0 ? mid( given, match.pos[ 5 ], match.len[ 5 ] ) : ( match.pos[ 4 ] > 0 ? mid( given, match.pos[ 4 ], match.len[ 4 ] ) : "" )
+		} else {
+			var short = reFind( "^([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?(?:##(.+))?$", given, 1, true )
+			if ( short.pos[ 1 ] == 0 ) {
+				fail( "[#given#] is not a GitHub repository. Write owner/repo, owner/repo##ref, or its https://github.com/ URL." )
+			}
+			owner = mid( given, short.pos[ 2 ], short.len[ 2 ] )
+			repo = mid( given, short.pos[ 3 ], short.len[ 3 ] )
+			ref = short.pos[ 4 ] > 0 ? mid( given, short.pos[ 4 ], short.len[ 4 ] ) : ""
+		}
+		if ( !reFind( "^[A-Za-z0-9_.\/-]*$", ref ) || ref.contains( ".." ) ) {
+			fail( "[#ref#] is not a branch, tag or commit name that can be fetched." )
+		}
+		return {
+			kind    : "github",
+			owner   : owner,
+			repo    : repo,
+			ref     : ref,
+			name    : repo,
+			locator : "github:#owner#/#repo#" & ( len( ref ) ? "##" & ref : "" ),
+			pinned  : len( ref ) > 0
+		}
+	}
+
+	private struct function byUrl( required string url ) {
+		var given = trim( arguments.url )
+		if ( !reFindNoCase( "^https://", given ) ) {
+			fail( "Only https:// addresses are fetched; [#given#] is not one." )
+		}
+		var file = getFileFromPath( listFirst( reReplace( given, "^https://[^/]+", "" ), "?##" ) )
+		if ( !file.lCase().endsWith( ".zip" ) ) {
+			fail( "[#given#] does not end in .zip. An address is fetched as a zip file; for a repository write owner/repo." )
+		}
+		return { kind : "url", url : given, name : reReplace( file, "(?i)\.zip$", "" ), locator : "url:" & given, pinned : false }
+	}
+
+	private struct function forgebox( required string text ) {
+		var given = trim( arguments.text )
+		var slug = listFirst( given, "@" )
+		var version = find( "@", given ) ? listRest( given, "@" ) : ""
+		if ( !reFind( "^[A-Za-z0-9][A-Za-z0-9_.-]*$", slug ) || ( len( version ) && !reFind( "^[A-Za-z0-9][A-Za-z0-9_.+-]*$", version ) ) ) {
+			fail( "[#given#] is not something to install. Write a folder, a .zip, a GitHub repository (owner/repo), or a ForgeBox package (slug or slug@version)." )
+		}
+		return { kind : "forgebox", slug : slug, version : version, name : slug, locator : "forgebox:" & slug & ( len( version ) ? "@" & version : "" ), pinned : len( version ) > 0 }
+	}
+
+	private void function fail( required string message ) {
+		throw( type : "bxagents.extension.source", message : arguments.message )
+	}
+
+}

@@ -444,6 +444,7 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   in `gateways/` is a gateway type (its `*EnvVar` options read from the environment), all kept in one
   `GatewayTypes` registry where a built-in type cannot be replaced and a clash is a warning; `@Verb` adds a
   `bxAgents <verb>`, listed in `bxAgents help`. `extensions.disable` takes `extension:item` for each.
+- Extensions can be installed. `bxAgents extensions install` takes a folder, a zip, GitHub (`owner/repo[#ref]`), a zip address or a ForgeBox slug, shows what the extension adds and asks first (`--yes` to skip), and records it in `extensions.lock.json`. `install` alone, and `bxAgents build`, restore what the lock lists and refuse files that no longer match their checksum. `list --installed`, `update` and `remove` manage them, and `--system` installs for you in `~/.bxagents/extensions`.
 - `examples/extensions-agent` shows a one-file extension, one with several commands, an admin-only command
   with a lifecycle, and a folder with a command class and a scheduler.
 

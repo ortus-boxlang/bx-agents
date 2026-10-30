@@ -1,0 +1,110 @@
+/**
+ * Brings an extension from where it is (see ExtensionOrigin) into a folder of its own to be looked at, without putting it
+ * anywhere that matters yet. The caller checks what arrived and only then places it.
+ *
+ *   directory   its files are copied
+ *   zip         unpacked safely (see ExtensionArchive)
+ *   github      the repository's archive at the ref: https://github.com/<owner>/<repo>/archive/<ref>.zip (HEAD when no ref)
+ *   url         the zip at the address
+ *   forgebox    the package's zip: the latest version, or the one asked for (ForgeBoxClient, the class the rest of
+ *               BxAgents already uses for ForgeBox)
+ *
+ * A downloaded archive that holds a single folder (as GitHub's does) is entered, so the extension's own files are
+ * at the top of what is returned.
+ */
+class {
+
+	/**
+	 * @forgeBox A ForgeBoxClient, which also does the downloads; a new one when not given
+	 */
+	function init( any forgeBox ) {
+		variables.forgeBox = isNull( arguments.forgeBox ) ? new "models.build.ForgeBoxClient@bxagents"() : arguments.forgeBox
+		variables.archive = new "models.extensions.ExtensionArchive@bxagents"()
+		return this
+	}
+
+	/**
+	 * @origin A struct from ExtensionOrigin.parse()
+	 * @staging A folder to work in; it is not cleaned up here
+	 *
+	 * @return { root : the folder holding the extension's files, resolved : the version or ref that was fetched, "" if unknown }
+	 */
+	struct function fetch( required struct origin, required string staging ) {
+		var content = arguments.staging & "/content"
+		var resolved = ""
+		switch ( arguments.origin.kind ) {
+			case "directory":
+				variables.archive.copyFolder( arguments.origin.path, content )
+				break
+			case "zip":
+				variables.archive.extract( arguments.origin.path, content )
+				break
+			case "github":
+				var ref = len( arguments.origin.ref ) ? arguments.origin.ref : "HEAD"
+				download( "https://github.com/#arguments.origin.owner#/#arguments.origin.repo#/archive/#ref#.zip", arguments.staging, content, "the GitHub repository #arguments.origin.owner#/#arguments.origin.repo#" & ( len( arguments.origin.ref ) ? " at #arguments.origin.ref#" : "" ) )
+				resolved = arguments.origin.ref
+				break
+			case "url":
+				download( arguments.origin.url, arguments.staging, content, arguments.origin.url )
+				break
+			default:
+				resolved = fetchForgeBox( arguments.origin, arguments.staging, content )
+		}
+		return { root : enter( content ), resolved : resolved }
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private string function fetchForgeBox( required struct origin, required string staging, required string content ) {
+		var entry = variables.forgeBox.getEntry( arguments.origin.slug )
+		var url = ""
+		var version = ""
+		if ( len( arguments.origin.version ) ) {
+			for ( var candidate in entry.versions ?: [] ) {
+				if ( ( candidate.version ?: "" ) == arguments.origin.version && len( candidate.downloadURL ?: "" ) ) {
+					url = candidate.downloadURL
+					version = candidate.version
+				}
+			}
+			if ( !len( url ) ) {
+				var known = ( entry.versions ?: [] ).map( v => v.version ?: "" ).filter( v => len( v ) ).slice( 1, 8 )
+				throw( type : "bxagents.extension.source", message : "ForgeBox has no version [#arguments.origin.version#] of [#arguments.origin.slug#]." & ( known.len() ? " It has: #known.toList( ', ' )#." : "" ) )
+			}
+		} else {
+			url = variables.forgeBox.resolveDownloadUrl( entry )
+			version = ( entry.latestVersion ?: {} ).version ?: ""
+		}
+		download( url, arguments.staging, arguments.content, "the ForgeBox package #arguments.origin.slug#" )
+		return version
+	}
+
+	private void function download( required string url, required string staging, required string content, required string what ) {
+		var file = arguments.staging & "/download.zip"
+		directoryCreate( path = arguments.staging, createPath = true, ignoreExists = true )
+		try {
+			variables.forgeBox.downloadZip( arguments.url, file )
+		} catch ( any e ) {
+			throw( type : "bxagents.extension.source", message : "Could not fetch #arguments.what#: #e.message#" )
+		}
+		if ( !fileExists( file ) || !isZipFile( file ) ) {
+			throw( type : "bxagents.extension.source", message : "What came from #arguments.what# is not a zip file." )
+		}
+		variables.archive.extract( file, arguments.content )
+	}
+
+	/**
+	 * @return The folder inside when the content is one folder and nothing else, else the content itself
+	 */
+	private string function enter( required string content ) {
+		var entries = directoryList( arguments.content, false, "path" )
+		if ( entries.len() == 1 && directoryExists( entries[ 1 ] ) && !isConvention( getFileFromPath( entries[ 1 ] ) ) ) {
+			return entries[ 1 ].replace( "\", "/", "all" )
+		}
+		return arguments.content
+	}
+
+	private boolean function isConvention( required string name ) {
+		return [ "commands", "schedulers", "gateways", "tools", "skills", "web" ].contains( arguments.name )
+	}
+
+}

@@ -1,0 +1,135 @@
+/**
+ * Looks at a folder that was fetched and says whether it is an extension, what it is called, and what it would add. It
+ * only reads: no extension code is run, so it is safe to ask before anything is installed. The answer is a struct:
+ *
+ *   ok        false when it cannot be installed; problems says why
+ *   problems  sentences
+ *   kind      "folder" (an Extension.bx, or a folder of commands, schedulers, gateways, tools, skills or web files) or "file" (one class)
+ *   name      what it will be called: the name asked for, else the file's name for a single class, else the origin's
+ *   entry     the folder or the file to place
+ *   adds      lines for the person to read: what the files say it adds
+ *   mentions  what its code mentions that deserves a look: network, files, processes, java
+ *   files     how many files, and bytes how big
+ */
+class {
+
+	static {
+		CONVENTIONS = [ "commands", "schedulers", "gateways", "tools", "skills", "web" ]
+		ANNOTATIONS = {
+			"@Command"  : "commands",
+			"@Verb"     : "command line verbs",
+			"@Key"      : "keys",
+			"@Status"   : "status items",
+			"@Prefix"   : "prefixes",
+			"@Source"   : "@ sources",
+			"@Slot"     : "web page slots",
+			"@On"       : "event listeners"
+		}
+		MENTIONS = {
+			"network"   : [ "bx:http", "http(", "httpGet", "webSocket" ],
+			"files"     : [ "fileWrite(", "fileDelete(", "fileMove(", "fileCopy(", "directoryDelete(", "directoryCopy(" ],
+			"processes" : [ "execute(", "bx:execute", "ProcessBuilder", "Runtime.getRuntime" ],
+			"java"      : [ "createObject( ""java""", "createObject(""java""", "import java:" ]
+		}
+	}
+
+	/**
+	 * @root The folder that was fetched
+	 * @nameHint The name asked for with --name, or what the origin suggests; blank when neither
+	 * @explicitName True when the person chose the name
+	 */
+	struct function inspect( required string root, string nameHint = "", boolean explicitName = false ) {
+		var report = { ok : true, problems : [], kind : "", name : "", entry : "", adds : [], mentions : [], files : 0, bytes : 0 }
+		var all = directoryList( arguments.root, true, "path" ).filter( p => fileExists( p ) )
+		report.files = all.len()
+		for ( var path in all ) {
+			report.bytes += getFileInfo( path ).size
+		}
+		var isFolder = fileExists( arguments.root & "/Extension.bx" ) || static.CONVENTIONS.filter( c => directoryExists( root & "/" & c ) ).len() > 0
+		var classes = directoryList( arguments.root, false, "name", "*.bx" )
+		if ( fileExists( arguments.root & "/ModuleConfig.bx" ) ) {
+			report.ok = false
+			report.problems.append( "This is a BoxLang module (it has a ModuleConfig.bx), not an extension. Install it with `install-bx-module`." )
+			return report
+		}
+		if ( isFolder ) {
+			report.kind = "folder"
+			report.entry = arguments.root
+			report.name = arguments.nameHint
+		} else if ( classes.len() == 1 ) {
+			report.kind = "file"
+			report.entry = arguments.root & "/" & classes[ 1 ]
+			report.name = arguments.explicitName ? arguments.nameHint : reReplace( classes[ 1 ], "\.bx$", "" )
+		} else {
+			report.ok = false
+			report.problems.append( "This is not an extension: it has no Extension.bx, none of the folders an extension uses (#static.CONVENTIONS.toList( ', ' )#), and not a single .bx class." )
+			return report
+		}
+		var nameProblem = nameProblemOf( report.name )
+		if ( len( nameProblem ) ) {
+			report.ok = false
+			report.problems.append( nameProblem )
+		}
+		describe( report, arguments.root, all )
+		return report
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private string function nameProblemOf( required string name ) {
+		if ( !len( arguments.name ) ) {
+			return "The extension needs a name: add --name=<name>."
+		}
+		if ( !reFind( "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$", arguments.name ) || arguments.name.contains( ".." ) ) {
+			return "[#arguments.name#] cannot be an extension's name: use letters, digits, - _ and ., starting with a letter or digit. Give it another with --name=<name>."
+		}
+		return ""
+	}
+
+	private void function describe( required struct report, required string root, required array all ) {
+		var base = arguments.root.replace( "\", "/", "all" )
+		for ( var convention in static.CONVENTIONS ) {
+			var folder = base & "/" & convention
+			if ( !directoryExists( folder ) ) {
+				continue
+			}
+			var items = convention == "web"
+				? [ directoryList( folder, true, "path" ).filter( p => fileExists( p ) ).len() & " file(s)" ]
+				: directoryList( folder, false, "name" ).filter( n => !n.startsWith( "." ) ).map( n => reReplace( n, "\.bx$", "" ) )
+			arguments.report.adds.append( "#convention#: #items.toList( ', ' )#" )
+		}
+		var counts = {}
+		var mentions = {}
+		var registers = false
+		for ( var path in arguments.all ) {
+			if ( !path.lCase().endsWith( ".bx" ) || getFileInfo( path ).size > 1048576 ) {
+				continue
+			}
+			var text = fileRead( path )
+			for ( var annotation in static.ANNOTATIONS ) {
+				var found = reMatch( "(?i)" & annotation & "\b", text ).len()
+				if ( found ) {
+					counts[ static.ANNOTATIONS[ annotation ] ] = ( counts[ static.ANNOTATIONS[ annotation ] ] ?: 0 ) + found
+				}
+			}
+			if ( reFind( "function\s+register\s*\(", text ) ) {
+				registers = true
+			}
+			for ( var kind in static.MENTIONS ) {
+				for ( var needle in static.MENTIONS[ kind ] ) {
+					if ( text.contains( needle ) ) {
+						mentions[ kind ] = true
+					}
+				}
+			}
+		}
+		for ( var label in counts.keyArray().sort( "text" ) ) {
+			arguments.report.adds.append( "#label#: #counts[ label ]#" )
+		}
+		if ( registers ) {
+			arguments.report.adds.append( "more, registered in code (register())" )
+		}
+		arguments.report.mentions = mentions.keyArray().sort( "text" )
+	}
+
+}
