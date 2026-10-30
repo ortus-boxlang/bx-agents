@@ -1,0 +1,316 @@
+/**
+ * Installs extensions from a folder, a zip, a GitHub repository, an address or ForgeBox, and keeps track of what it
+ * installed. It does the steps; the verb (models.cli.Extensions) asks the person.
+ *
+ *   plan( source )      fetch it into a staging folder, look at it, and say what it would do. Nothing is placed.
+ *   install( source )   plan, ask `confirm( preview )`, then place it and write the lock
+ *   restore()           bring back what the lock lists and the disk lacks, checking each against its checksum
+ *   update( names )     fetch what is not pinned again, and replace what changed (after `confirm( preview )`)
+ *   remove( name )      take away what was installed, and its lock entry
+ *   installed()         what the lock lists and whether it is still as it was installed
+ *
+ * Two scopes: the project's own `extensions/` (with `extensions.lock.json` beside Agent.yaml), which travels with the
+ * project and into the build, and the system scope (`--system`) in `~/.bxagents`, for the terminal chat on this machine.
+ *
+ * An installed extension is code that runs when the chat starts. So an install shows what a package says it adds,
+ * and what its code mentions that deserves a look, before it is placed, and only a yes places it.
+ */
+class {
+
+	/**
+	 * @projectRoot The project's folder (used by the project scope)
+	 * @scope "project" or "system"
+	 * @userConfig The person's UserConfig, whose folder is the system scope; ~/.bxagents/bxAgents.yml when not given
+	 * @fetcher An ExtensionFetcher; a new one when not given
+	 * @workingDirectory Where a relative path the person typed starts; the project's folder when not given
+	 */
+	function init( required string projectRoot, string scope = "project", any userConfig, any fetcher, string workingDirectory = "" ) {
+		if ( ![ "project", "system" ].contains( arguments.scope ) ) {
+			throw( type : "bxagents.extension.install", message : "The scope is project or system, not [#arguments.scope#]." )
+		}
+		variables.scope = arguments.scope
+		variables.projectRoot = arguments.projectRoot.reReplace( "[\\/]+$", "" )
+		variables.workingDirectory = len( arguments.workingDirectory ) ? arguments.workingDirectory : variables.projectRoot
+		variables.fetcher = isNull( arguments.fetcher ) ? new "models.extensions.ExtensionFetcher@bxagents"() : arguments.fetcher
+		variables.archive = new "models.extensions.ExtensionArchive@bxagents"()
+		variables.packages = new "models.extensions.ExtensionPackage@bxagents"()
+		variables.origins = new "models.extensions.ExtensionOrigin@bxagents"()
+		var home = getDirectoryFromPath( ( isNull( arguments.userConfig ) ? new "models.cli.UserConfig@bxagents"() : arguments.userConfig ).path() ).reReplace( "[\\/]+$", "" )
+		variables.folder = arguments.scope == "system" ? home & "/extensions" : variables.projectRoot & "/extensions"
+		variables.lock = new "models.extensions.ExtensionLock@bxagents"( arguments.scope == "system" ? home & "/extensions.lock.json" : variables.projectRoot & "/extensions.lock.json" )
+		return this
+	}
+
+	string function folder() {
+		return variables.folder
+	}
+
+	string function lockFile() {
+		return variables.lock.path()
+	}
+
+	/**
+	 * Fetches and looks at an extension without placing it.
+	 *
+	 * @source What the person typed
+	 * @options { name }
+	 *
+	 * @return { preview, staging, origin, fetched, package, target }; the caller must call discard( plan ) when done
+	 */
+	struct function plan( required string source, struct options = {} ) {
+		requireProject()
+		var origin = variables.origins.parse( arguments.source, variables.workingDirectory )
+		return planOrigin( origin, arguments.options.name ?: "", arguments.options.force ?: false )
+	}
+
+	/**
+	 * @source What the person typed
+	 * @options { name, force, confirm : function( preview ) returning true to place it }
+	 *
+	 * @return { installed, name, reason (when not), preview }
+	 */
+	struct function install( required string source, struct options = {} ) {
+		var made = plan( arguments.source, arguments.options )
+		try {
+			var decline = ( preview ) => false
+			return place( made, arguments.options.confirm ?: decline, arguments.options.force ?: false )
+		} finally {
+			discard( made )
+		}
+	}
+
+	/**
+	 * Brings back what the lock lists and the disk lacks. What comes back must be what was locked: a package that
+	 * has changed since is not installed, and `update` is how to take the new one.
+	 *
+	 * @return { restored : [ name ], failed : [ { name, reason } ] }
+	 */
+	struct function restore() {
+		var result = { restored : [], failed : [] }
+		for ( var name in variables.lock.names() ) {
+			if ( present( name ) ) {
+				continue
+			}
+			var entry = variables.lock.get( name )
+			var made = nullValue()
+			try {
+				// a ForgeBox package comes back at the version that was installed
+				var locator = entry.source.startsWith( "forgebox:" ) && !entry.source.contains( "@" ) && len( entry.resolved ) ? entry.source & "@" & entry.resolved : entry.source
+				made = planOrigin( variables.origins.parse( locator, variables.workingDirectory ), name, true )
+				if ( made.checksum != entry.checksum ) {
+					result.failed.append( { name : name, reason : "What is there now is not what was locked (its checksum differs). Take the new one with: bxAgents extensions update #name#" } )
+					continue
+				}
+				placeFiles( made )
+				result.restored.append( name )
+			} catch ( any e ) {
+				result.failed.append( { name : name, reason : e.message } )
+			} finally {
+				if ( !isNull( made ) ) {
+					discard( made )
+				}
+			}
+		}
+		return result
+	}
+
+	/**
+	 * @names The extensions to update; all the unpinned ones when empty
+	 * @confirm function( preview ) returning true to replace
+	 *
+	 * @return [ { name, outcome : "updated"|"unchanged"|"pinned"|"declined"|"failed", reason } ]
+	 */
+	array function update( array names = [], any confirm = ( preview ) => false ) {
+		var results = []
+		var wanted = arguments.names.len() ? arguments.names : variables.lock.names()
+		for ( var name in wanted ) {
+			if ( !variables.lock.has( name ) ) {
+				results.append( { name : name, outcome : "failed", reason : "#name# was not installed with bxAgents extensions install." } )
+				continue
+			}
+			var entry = variables.lock.get( name )
+			var origin = variables.origins.parse( entry.source, variables.workingDirectory )
+			if ( origin.pinned ) {
+				results.append( { name : name, outcome : "pinned", reason : "It is pinned to #entry.source#." } )
+				continue
+			}
+			var made = nullValue()
+			try {
+				made = planOrigin( origin, name, true )
+				if ( made.checksum == entry.checksum ) {
+					results.append( { name : name, outcome : "unchanged", reason : "" } )
+					continue
+				}
+				made.preview.update = true
+				if ( !arguments.confirm( made.preview ) ) {
+					results.append( { name : name, outcome : "declined", reason : "" } )
+					continue
+				}
+				placeFiles( made )
+				variables.lock.set( name, lockEntry( made ) ).save()
+				results.append( { name : name, outcome : "updated", reason : "" } )
+			} catch ( any e ) {
+				results.append( { name : name, outcome : "failed", reason : e.message } )
+			} finally {
+				if ( !isNull( made ) ) {
+					discard( made )
+				}
+			}
+		}
+		return results
+	}
+
+	/**
+	 * @name An installed extension
+	 * @force Remove it even though it was changed after it was installed
+	 */
+	function remove( required string name, boolean force = false ) {
+		if ( !variables.lock.has( arguments.name ) ) {
+			throw( type : "bxagents.extension.install", message : "#arguments.name# was not installed with bxAgents extensions install, so it is not removed here. Delete its folder yourself if you meant to." )
+		}
+		var entry = variables.lock.get( arguments.name )
+		var target = targetOf( arguments.name, entry.kind )
+		if ( present( arguments.name ) && !arguments.force && variables.archive.checksum( target ) != entry.checksum ) {
+			throw( type : "bxagents.extension.install", message : "#arguments.name# was changed after it was installed, so it was not removed. Remove it anyway with --force." )
+		}
+		if ( entry.kind == "file" ? fileExists( target ) : directoryExists( target ) ) {
+			entry.kind == "file" ? fileDelete( target ) : directoryDelete( target, true )
+		}
+		variables.lock.remove( arguments.name ).save()
+		return this
+	}
+
+	/**
+	 * @return [ { name, source, resolved, kind, state : "intact"|"changed"|"missing", scope } ]
+	 */
+	array function installed() {
+		return variables.lock.names().map( name => {
+			var entry = variables.lock.get( name )
+			var target = targetOf( name, entry.kind )
+			var there = entry.kind == "file" ? fileExists( target ) : directoryExists( target )
+			return {
+				name     : name,
+				source   : entry.source,
+				resolved : entry.resolved,
+				kind     : entry.kind,
+				state    : !there ? "missing" : ( variables.archive.checksum( target ) == entry.checksum ? "intact" : "changed" ),
+				scope    : variables.scope
+			}
+		} )
+	}
+
+	/**
+	 * Deletes a plan's staging folder.
+	 */
+	function discard( required struct plan ) {
+		if ( directoryExists( arguments.plan.staging ) ) {
+			directoryDelete( arguments.plan.staging, true )
+		}
+		return this
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private void function requireProject() {
+		if ( variables.scope == "project" && !new "models.build.AgentDefinitionLocator@bxagents"().exists( variables.projectRoot ) ) {
+			throw( type : "bxagents.extension.install", message : "There is no Agent.yaml or Agent.bx in #variables.projectRoot#, so there is no project to install into. Run this in a project, pass --projectRoot=<path>, or install for this machine with --system." )
+		}
+	}
+
+	private struct function planOrigin( required struct origin, string nameHint = "", boolean force = false ) {
+		var staging = createObject( "java", "java.nio.file.Files" ).createTempDirectory( "bxagents-extension-" ).toString()
+		var made = { staging : staging }
+		try {
+			made.origin = arguments.origin
+			made.fetched = variables.fetcher.fetch( arguments.origin, staging )
+			var explicit = len( arguments.nameHint ) > 0
+			made.package = variables.packages.inspect( made.fetched.root, explicit ? arguments.nameHint : arguments.origin.name, explicit )
+			if ( !made.package.ok ) {
+				throw( type : "bxagents.extension.install", message : made.package.problems.toList( " " ) )
+			}
+			made.name = made.package.name
+			made.target = targetOf( made.name, made.package.kind )
+			made.clash = clashOf( made.name ) 
+			if ( len( made.clash ) && !arguments.force ) {
+				throw( type : "bxagents.extension.install", message : "#made.clash# Install over it with --force, or choose another name with --name=<name>." )
+			}
+			made.checksum = variables.archive.checksum( made.package.entry )
+			made.preview = {
+				name     : made.name,
+				source   : arguments.origin.locator,
+				resolved : made.fetched.resolved,
+				scope    : variables.scope,
+				into     : made.target,
+				kind     : made.package.kind,
+				adds     : made.package.adds,
+				mentions : made.package.mentions,
+				files    : made.package.files,
+				bytes    : made.package.bytes,
+				update   : false,
+				replaces : len( made.clash ) > 0
+			}
+		} catch ( any e ) {
+			directoryDelete( staging, true )
+			rethrow
+		}
+		return made
+	}
+
+	private struct function place( required struct made, required any confirm, boolean force = false ) {
+		if ( !arguments.confirm( arguments.made.preview ) ) {
+			return { installed : false, name : arguments.made.name, reason : "declined", preview : arguments.made.preview }
+		}
+		placeFiles( arguments.made )
+		variables.lock.set( arguments.made.name, lockEntry( arguments.made ) ).save()
+		return { installed : true, name : arguments.made.name, reason : "", preview : arguments.made.preview }
+	}
+
+	/**
+	 * Puts the fetched files at the target, replacing what was there.
+	 */
+	private void function placeFiles( required struct made ) {
+		var target = arguments.made.target
+		directoryCreate( path = variables.folder, createPath = true, ignoreExists = true )
+		for ( var old in [ variables.folder & "/" & arguments.made.name, variables.folder & "/" & arguments.made.name & ".bx" ] ) {
+			if ( directoryExists( old ) ) {
+				directoryDelete( old, true )
+			} else if ( fileExists( old ) ) {
+				fileDelete( old )
+			}
+		}
+		if ( arguments.made.package.kind == "file" ) {
+			fileCopy( arguments.made.package.entry, target )
+		} else {
+			variables.archive.copyFolder( arguments.made.package.entry, target )
+		}
+	}
+
+	private struct function lockEntry( required struct made ) {
+		return { source : arguments.made.origin.locator, resolved : arguments.made.fetched.resolved, kind : arguments.made.package.kind, checksum : arguments.made.checksum }
+	}
+
+	private string function targetOf( required string name, required string kind ) {
+		return variables.folder & "/" & arguments.name & ( arguments.kind == "file" ? ".bx" : "" )
+	}
+
+	private boolean function present( required string name ) {
+		var entry = variables.lock.get( arguments.name )
+		var target = targetOf( arguments.name, entry.kind )
+		return entry.kind == "file" ? fileExists( target ) : directoryExists( target )
+	}
+
+	/**
+	 * @return A sentence when something is already at the name, else blank
+	 */
+	private string function clashOf( required string name ) {
+		var folderPath = variables.folder & "/" & arguments.name
+		var filePath = folderPath & ".bx"
+		if ( directoryExists( folderPath ) || fileExists( filePath ) ) {
+			return variables.lock.has( arguments.name )
+				? "#arguments.name# is already installed."
+				: "#arguments.name# is already in #variables.folder#, and was not installed with this command."
+		}
+		return ""
+	}
+
+}

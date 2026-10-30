@@ -13,7 +13,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 		'clean' = 'Remove a project''s .build/ and dist/ output'
 		'deploy' = 'Deploy to a target'
 		'doctor' = 'Diagnose the environment and project - runtime, modules, env vars'
-		'extensions' = 'List the extensions the chat loads, where each came from and what it added'
+		'extensions' = 'The extensions the chat loads, and installing more: extensions...'
 		'hash-password' = 'Hash a password for a webui users entry'
 		'inspect' = 'Report how the agent is composed: agents, tools, skills, MCP, exposure, env'
 		'invoke' = 'Send one message to a built agent, print the response, exit'
@@ -120,9 +120,14 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 		)
 		'doctor:positional' = 'dir'
 		'extensions' = @(
+			@{ Name = 'force'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'installed'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'json'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'name'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
+			@{ Name = 'system'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'yes'; Value = $false; Choices = @(); Dir = $false }
 		)
-		'extensions:positional' = 'dir'
 		'hash-password' = @(
 			@{ Name = 'password'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
