@@ -8,6 +8,8 @@
  * inside the extension's `web/` folder once its real path is worked out. An extension turned off in `extensions.disable`
  * serves nothing. Anything that fails a check is "not found", the same answer as a file that is not there.
  */
+import bxModules.bxagents.models.util.Paths;
+import bxModules.bxagents.models.util.NameRules;
 class {
 
 	/**
@@ -25,7 +27,7 @@ class {
 	 * @return The absolute path of the file, or blank when there is nothing to serve
 	 */
 	string function find( required string extension, required string file ) {
-		if ( !reFind( "^[A-Za-z0-9][A-Za-z0-9._-]*$", arguments.extension ) || !len( arguments.file ) || arguments.file.contains( "\" ) || arguments.file.contains( char( 0 ) ) ) {
+		if ( !NameRules::isSafeFolder( arguments.extension ) || !len( arguments.file ) || arguments.file.contains( "\" ) || arguments.file.contains( char( 0 ) ) ) {
 			return ""
 		}
 		for ( var segment in arguments.file.listToArray( "/", true ) ) {
@@ -41,9 +43,7 @@ class {
 		if ( !directoryExists( web ) || !fileExists( path ) ) {
 			return ""
 		}
-		var real = createObject( "java", "java.io.File" ).init( path ).getCanonicalPath().replace( "\", "/", "all" )
-		var inside = createObject( "java", "java.io.File" ).init( web ).getCanonicalPath().replace( "\", "/", "all" ) & "/"
-		return real.startsWith( inside ) ? path : ""
+		return Paths::isInside( path, web ) ? path : ""
 	}
 
 	// ----------------------------------------------------------------------------------

@@ -48,6 +48,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'guard'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'header'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'instructions'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'layout'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'max-tokens'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'mcp'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'memory'; Value = $true; Choices = @(); Dir = $false }
