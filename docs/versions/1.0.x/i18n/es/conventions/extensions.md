@@ -381,6 +381,16 @@ function greet( options ) { return "Hola, #options.name ?: 'tú'#!" }
 
 Gana la capa posterior. Una extensión con el mismo nombre reemplaza a la anterior, y un comando reemplaza a uno anterior con el mismo nombre o alias, incluido uno integrado. Ambos casos se muestran en `/extensions`; nada se reemplaza en silencio. La compilación copia el `extensions/` del proyecto a la app; un agente servido nunca lee la carpeta personal de un desarrollador.
 
+## Empezar una
+
+```bash
+bxAgents add extension standup                       # pregunta qué debe traer
+bxAgents add extension standup --with=command,key    # o dilo con flags, para un pipe o CI
+bxAgents add extension standup --with=command,tool --description="Standup diario"
+```
+
+`add extension` escribe `extensions/<nombre>.bx`, o `extensions/<nombre>/` con un `Extension.bx` cuando algo necesita un archivo propio, con código de partida y un `TODO` donde completar. `--with` acepta `command`, `key`, `status`, `prefix`, `source`, `slot`, `verb`, `listener` (métodos de la misma clase) y `scheduler`, `gateway`, `tool`, `skill`, `web` (archivos, así que la extensión es una carpeta). `--layout=file|folder` elige la forma cuando puede ser cualquiera. No se sobrescribe nada sin `--force`, y `--dry-run` muestra los archivos. Es tuya: haz commit con el proyecto. Pruébala con `bxAgents chat` y `/reload`.
+
 ## Instalar extensiones
 
 `bxAgents extensions install` pone una extensión en el proyecto desde una carpeta, un zip, GitHub o ForgeBox.
@@ -388,6 +398,7 @@ Gana la capa posterior. Una extensión con el mismo nombre reemplaza a la anteri
 ```bash
 bxAgents extensions install ./mi-ext                    # una carpeta
 bxAgents extensions install ./mi-ext.zip                # un archivo zip
+bxAgents extensions install ./greet.bx                   # una extensión de una sola clase
 bxAgents extensions install acme/tools                  # GitHub: owner/repo, o owner/repo#ref
 bxAgents extensions install https://github.com/acme/tools
 bxAgents extensions install https://example.org/ext.zip # un zip por dirección
@@ -407,7 +418,9 @@ Una extensión es código que se ejecuta cuando arranca el chat o la app, así q
 | `update [nombre...]` | descarga de nuevo, muestra el cambio y pregunta. Un origen fijado a una versión o ref (`#v1`, `@1.2.0`) se deja como está |
 | `remove <nombre>` | la borra junto con su entrada del lock. Una carpeta que editaste necesita `--force` |
 
-El proyecto guarda `extensions.lock.json` (`~/.bxagents/extensions.lock.json` con `--system`): el nombre, el origen, la versión o ref descargada y una suma de verificación de los archivos. **Haz commit del lock.** `bxAgents build` restaura lo que falte y rechaza un paquete cuyos archivos ya no coinciden con su suma. Puedes hacer commit de `extensions/` también; el resultado es el mismo.
+El proyecto guarda `extensions.lock.json` (`~/.bxagents/extensions.lock.json` con `--system`): el nombre, el origen, la versión o ref descargada y una suma de verificación de los archivos. **Haz commit del lock.** `bxAgents build` restaura lo que falte y rechaza un paquete cuyos archivos ya no coinciden con su suma. Las extensiones instaladas no van en el commit (ver abajo), y el build las restaura desde el lock.
+
+Una extensión instalada se mantiene fuera del control de versiones con una línea por extensión en el `.gitignore` del proyecto (`/extensions/acme-tools/`, o `/extensions/acme.bx`), que se añade con `install` y se quita con `remove`, solo si el proyecto tiene `.gitignore`. Una extensión que escribiste tú en la misma carpeta sigue en el commit. Haz commit de `extensions.lock.json`: es lo que trae de vuelta el resto.
 
 Lo que `install` rechaza: una entrada de zip con ruta absoluta, una parte `..` o una barra invertida, más de 5000 archivos o 50 MB, un nombre que no es seguro como carpeta, un nombre ya presente que este comando no instaló (salvo `--force`), un módulo de BoxLang (`ModuleConfig.bx`) y todo lo que no sea una extensión. Los enlaces simbólicos y `.git` se omiten. La vista previa es una lectura rápida del texto, no una revisión de seguridad: instala lo que te inspire confianza.
 

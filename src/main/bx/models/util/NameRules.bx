@@ -13,4 +13,19 @@ class {
 		return reFind( "^[A-Za-z][A-Za-z0-9_-]*$", arguments.name ) > 0
 	}
 
+	/**
+	 * What a folder or file name that comes from outside (an installed skill or extension) may look like: it starts
+	 * with a letter or digit, then uses letters, digits, `.`, `_` and `-`, with no `..` in it.
+	 *
+	 * @name A candidate name
+	 * @max The longest it may be
+	 *
+	 * @return True when it is safe to use as a folder name
+	 */
+	static boolean function isSafeFolder( required string name, numeric max = 100 ) {
+		return len( arguments.name ) <= arguments.max
+			&& reFind( "^[A-Za-z0-9][A-Za-z0-9._-]*$", arguments.name ) > 0
+			&& !arguments.name.contains( ".." )
+	}
+
 }

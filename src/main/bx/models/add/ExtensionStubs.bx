@@ -1,0 +1,218 @@
+/**
+ * The starting code `add extension` writes, one piece per thing an extension can bring. A piece is either a method for the
+ * extension's own class (a command, a key, a status item, ...) or a file of its own in one of the convention folders
+ * (a scheduler, a gateway, a tool, a skill, web files). Nothing here runs the extension; it is text.
+ */
+class {
+
+	static {
+		// feature : { label, hint, kind : "method" | "file" }
+		CATALOG = [
+			{ value : "command",   label : "a command",         hint : "/name, in the chat on every transport", kind : "method" },
+			{ value : "key",       label : "a key",             hint : "a shortcut in the terminal chat", kind : "method" },
+			{ value : "status",    label : "a status item",     hint : "a short text next to the context size", kind : "method" },
+			{ value : "prefix",    label : "a prefix",          hint : "a character that turns the message box line into something else", kind : "method" },
+			{ value : "source",    label : "an @ source",       hint : "@name:query brings content along with a message", kind : "method" },
+			{ value : "slot",      label : "a web page slot",   hint : "text or markup in the page header, sidebar or composer", kind : "method" },
+			{ value : "verb",      label : "a command line verb", hint : "bxAgents name, run from the shell", kind : "method" },
+			{ value : "listener",  label : "an event listener",  hint : "runs on a chat or bx-ai event, and can change or stop it", kind : "method" },
+			{ value : "scheduler", label : "a scheduler",       hint : "schedulers/<Name>.bx, started when the agent is served", kind : "file" },
+			{ value : "gateway",   label : "a gateway type",    hint : "gateways/<name>.bx, a way to reach the agent from a platform", kind : "file" },
+			{ value : "tool",      label : "a tool",            hint : "tools/<Name>.bx, for the agent to call", kind : "file" },
+			{ value : "skill",     label : "a skill",           hint : "skills/<name>/SKILL.md, instructions the model loads when needed", kind : "file" },
+			{ value : "web",       label : "web page files",    hint : "web/<name>.js and .css, served with the page", kind : "file" }
+		]
+	}
+
+	/**
+	 * @return [ { value, label, hint, kind } ] in the order they are offered
+	 */
+	static array function features() {
+		return static.CATALOG
+	}
+
+	/**
+	 * @return [ value ]
+	 */
+	static array function names() {
+		return static.CATALOG.map( f => f.value )
+	}
+
+	/**
+	 * @return The feature names that need a file of their own, so the extension has to be a folder
+	 */
+	static array function fileFeatures() {
+		return static.CATALOG.filter( f => f.kind == "file" ).map( f => f.value )
+	}
+
+	/**
+	 * @name The extension's name
+	 * @features Which features to include
+	 * @description One line for the class's docblock
+	 *
+	 * @return The text of the extension's class
+	 */
+	static string function extensionClass( required string name, required array features, string description = "" ) {
+		var tab = char( 9 )
+		var lines = [ "/**" ]
+		lines.append( " * " & ( len( arguments.description ) ? arguments.description : "TODO: say what " & arguments.name & " is for." ) )
+		lines.append( " *" )
+		lines.append( " * Everything below is a starting point. Settings are the defaults here; Agent.yaml (or your own" )
+		lines.append( " * ~/.bxagents/bxAgents.yml) can change them under `extensions: " & arguments.name & ":`." )
+		lines.append( " */" )
+		lines.append( "class {" )
+		lines.append( "" )
+		lines.append( tab & "function configure() {" )
+		lines.append( tab & tab & "variables.settings = { }" )
+		lines.append( tab & "}" )
+		for ( var feature in arguments.features ) {
+			if ( !fileFeatures().contains( feature ) ) {
+				lines.append( "" )
+				lines.append( method( feature, arguments.name ).listToArray( char( 10 ), true ).map( l => len( l ) ? tab & l : l ).toList( char( 10 ) ) )
+			}
+		}
+		lines.append( "" )
+		lines.append( "}" )
+		return lines.toList( char( 10 ) ) & char( 10 )
+	}
+
+	/**
+	 * @feature A file feature: scheduler, gateway, tool, skill or web
+	 * @name The extension's name
+	 *
+	 * @return [ { path : relative to the extension's folder, content } ]
+	 */
+	static array function files( required string feature, required string name ) {
+		switch ( arguments.feature ) {
+			case "scheduler":
+				return [ { path : "schedulers/" & title( arguments.name ) & ".bx", content : scheduler( arguments.name ) } ]
+			case "gateway":
+				return [ { path : "gateways/" & arguments.name & ".bx", content : gateway( arguments.name ) } ]
+			case "tool":
+				return [ { path : "tools/" & title( arguments.name ) & ".bx", content : tool( arguments.name ) } ]
+			case "skill":
+				return [ { path : "skills/" & arguments.name & "/SKILL.md", content : skill( arguments.name ) } ]
+			case "web":
+				return [
+					{ path : "web/" & arguments.name & ".js", content : "// Served with the page and linked into it. The page gives scripts a small `bxagents` object (slot, runCommand, onRefresh)." & char( 10 ) },
+					{ path : "web/" & arguments.name & ".css", content : "/* Served with the page and linked into it. */" & char( 10 ) }
+				]
+		}
+		return []
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @return A class-safe name for a file: letters and digits, first letter up, so "my-ext" is "MyExt"
+	 */
+	static string function title( required string name ) {
+		return arguments.name.listToArray( "-_." ).map( p => uCase( left( p, 1 ) ) & mid( p, 2, len( p ) ) ).toList( "" )
+	}
+
+	private static string function method( required string feature, required string name ) {
+		switch ( arguments.feature ) {
+			case "command":
+				return '@Command( "#arguments.name#" )' & char( 10 ) &
+					'@Hint( "TODO: say what it does: /#arguments.name#" )' & char( 10 ) &
+					'function runCommand( agentContext, commandArguments ) {' & char( 10 ) &
+					char( 9 ) & 'return agentContext.reply().ok( "#arguments.name# ran with [##trim( commandArguments )##]" )' & char( 10 ) &
+					'}'
+			case "key":
+				return '@Key( { keys : [ "ctrl+k" ], hint : "TODO: say what the key does" } )' & char( 10 ) &
+					'function pressKey( agentContext, commandArguments ) {' & char( 10 ) &
+					char( 9 ) & 'return agentContext.reply().ok( "key pressed" )' & char( 10 ) &
+					'}'
+			case "status":
+				return '@Status' & char( 10 ) &
+					'function showStatus( agentContext ) {' & char( 10 ) &
+					char( 9 ) & '// a short text, or "" to show nothing' & char( 10 ) &
+					char( 9 ) & 'return ""' & char( 10 ) &
+					'}'
+			case "prefix":
+				return '@Prefix( "%" )' & char( 10 ) &
+					'@Hint( "TODO: say what the prefix does: % some text" )' & char( 10 ) &
+					'function expand( agentContext, text ) {' & char( 10 ) &
+					char( 9 ) & '// { send : "..." } sends this message instead; a Reply answers at once and sends nothing' & char( 10 ) &
+					char( 9 ) & 'return { send : text }' & char( 10 ) &
+					'}'
+			case "source":
+				return '@Source( "#arguments.name#" )' & char( 10 ) &
+					'@Hint( "TODO: say what it brings: @#arguments.name#:query" )' & char( 10 ) &
+					'function find( agentContext, query ) {' & char( 10 ) &
+					char( 9 ) & '// { name, content } goes along with the message, the way a file does' & char( 10 ) &
+					char( 9 ) & 'return { name : "#arguments.name# ##query##", content : "TODO" }' & char( 10 ) &
+					'}'
+			case "slot":
+				return '@Slot( "header" )' & char( 10 ) &
+					'function showSlot( agentContext ) {' & char( 10 ) &
+					char( 9 ) & '// shown as text; { place : "sidebar", html : true } in the annotation is for markup you wrote yourself' & char( 10 ) &
+					char( 9 ) & 'return ""' & char( 10 ) &
+					'}'
+			case "verb":
+				return '@Verb( { name : "#arguments.name#", valueOptions : [ "name" ] } )' & char( 10 ) &
+					'@Hint( "TODO: say what it does: bxAgents #arguments.name# --name=Ada" )' & char( 10 ) &
+					'function runVerb( options ) {' & char( 10 ) &
+					char( 9 ) & 'return "#arguments.name#: ##options.name ?: ''nobody''##"' & char( 10 ) &
+					'}'
+			case "listener":
+				return '// a method named after an event listens to it; onChatInput runs before a message is sent' & char( 10 ) &
+					'function onChatInput( data ) {' & char( 10 ) &
+					char( 9 ) & '// data.cancel( "why" ) stops the message, data.replace( "text" ) sends this text instead' & char( 10 ) &
+					'}'
+		}
+		return ""
+	}
+
+	private static string function scheduler( required string name ) {
+		return "/**" & char( 10 ) &
+			" * A BoxLang scheduler. It starts when the agent is served; `settings` and `log` are given before configure() runs." & char( 10 ) &
+			" */" & char( 10 ) &
+			"class {" & char( 10 ) & char( 10 ) &
+			char( 9 ) & "function configure() {" & char( 10 ) &
+			char( 9 ) & char( 9 ) & 'scheduler.task( "#arguments.name#" )' & char( 10 ) &
+			char( 9 ) & char( 9 ) & char( 9 ) & '.call( () => log.info( "#arguments.name# ran" ) )' & char( 10 ) &
+			char( 9 ) & char( 9 ) & char( 9 ) & '.everyDayAt( "09:00" )' & char( 10 ) &
+			char( 9 ) & char( 9 ) & char( 9 ) & '.withNoOverlaps()' & char( 10 ) &
+			char( 9 ) & "}" & char( 10 ) & char( 10 ) & "}" & char( 10 )
+	}
+
+	private static string function gateway( required string name ) {
+		return "import bxModules.bxai.models.gateway.IGateway;" & char( 10 ) &
+			"" & char( 10 ) &
+			"/**" & char( 10 ) &
+			" * A gateway type. Its file name is the type: a project uses it with `gateways/<anything>.bx` saying `type : ""#arguments.name#""`." & char( 10 ) &
+			" * TODO: extend the base that fits (see the loopback gateway in examples/extensions-agent) and fill in the methods." & char( 10 ) &
+			" */" & char( 10 ) &
+			"class extends=""bxModules.bxagents.models.gateways.ScheduledGatewayBase"" {" & char( 10 ) & char( 10 ) &
+			char( 9 ) & "function init() {" & char( 10 ) &
+			char( 9 ) & char( 9 ) & 'variables.name = "#arguments.name#"' & char( 10 ) &
+			char( 9 ) & char( 9 ) & 'variables.description = "TODO: say what it connects to"' & char( 10 ) &
+			char( 9 ) & char( 9 ) & "return this" & char( 10 ) &
+			char( 9 ) & "}" & char( 10 ) & char( 10 ) &
+			char( 9 ) & "public IGateway function configure( required any options ) {" & char( 10 ) &
+			char( 9 ) & char( 9 ) & "super.configure( arguments.options )" & char( 10 ) &
+			char( 9 ) & char( 9 ) & "return this" & char( 10 ) &
+			char( 9 ) & "}" & char( 10 ) & char( 10 ) &
+			char( 9 ) & "public array function getCapabilities() {" & char( 10 ) &
+			char( 9 ) & char( 9 ) & 'return [ "text" ]' & char( 10 ) &
+			char( 9 ) & "}" & char( 10 ) & char( 10 ) & "}" & char( 10 )
+	}
+
+	private static string function tool( required string name ) {
+		return "/**" & char( 10 ) &
+			" * Tools this extension carries. The app gives them to the agent as if they were in the project's own `tools/`." & char( 10 ) &
+			" */" & char( 10 ) &
+			"class {" & char( 10 ) & char( 10 ) &
+			char( 9 ) & '@AITool( "TODO: say what the tool does and when the model should call it." )' & char( 10 ) &
+			char( 9 ) & "function lookup( query ) {" & char( 10 ) &
+			char( 9 ) & char( 9 ) & 'return "TODO: answer for [##arguments.query##]"' & char( 10 ) &
+			char( 9 ) & "}" & char( 10 ) & char( 10 ) & "}" & char( 10 )
+	}
+
+	private static string function skill( required string name ) {
+		return "---" & char( 10 ) & "name: " & arguments.name & char( 10 ) & "description: TODO: Use this skill when ..." & char( 10 ) & "---" & char( 10 ) & char( 10 ) &
+			"## " & arguments.name & char( 10 ) & char( 10 ) & "Say when this applies and what to do." & char( 10 )
+	}
+
+}

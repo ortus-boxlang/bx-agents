@@ -1,0 +1,63 @@
+/**
+ * A lock file kept in step with what was installed: `{ "version": 1, "<section>": { name: { ... } } }`, written with its
+ * names in order so a diff shows only what changed. Shared by the skills lock and the extensions lock, which differ only
+ * in the section's name, what an entry holds and the message for a file that cannot be read.
+ */
+class {
+
+	/**
+	 * @file The lock file's path; it need not exist
+	 * @section The key the entries are under, such as "skills"
+	 * @invalidType The error type for a file that is not valid JSON
+	 * @invalidHint What to do about it, added after the reason
+	 */
+	function init( required string file, required string section, required string invalidType, string invalidHint = "" ) {
+		variables.file = arguments.file
+		variables.section = arguments.section
+		variables.invalidType = arguments.invalidType
+		variables.invalidHint = arguments.invalidHint
+		return this
+	}
+
+	/**
+	 * @return The file's path
+	 */
+	string function path() {
+		return variables.file
+	}
+
+	/**
+	 * @return The entries by name; empty when there is no file or it has none
+	 */
+	struct function read() {
+		if ( !fileExists( variables.file ) ) {
+			return {}
+		}
+		try {
+			var parsed = jsonDeserialize( fileRead( variables.file ) )
+		} catch ( any e ) {
+			throw( type = variables.invalidType, message = "#getFileFromPath( variables.file )# is not valid JSON (#e.message#). #variables.invalidHint#" )
+		}
+		return isStruct( parsed ) && isStruct( parsed[ variables.section ] ?: "" ) ? parsed[ variables.section ] : {}
+	}
+
+	/**
+	 * @entries The entries by name
+	 * @removeWhenEmpty True to delete the file instead of writing one with nothing in it
+	 */
+	void function write( required struct entries, boolean removeWhenEmpty = false ) {
+		if ( arguments.removeWhenEmpty && !arguments.entries.count() ) {
+			if ( fileExists( variables.file ) ) {
+				fileDelete( variables.file )
+			}
+			return
+		}
+		var ordered = {}
+		for ( var name in arguments.entries.keyArray().sort( "textnocase" ) ) {
+			ordered[ name ] = arguments.entries[ name ]
+		}
+		directoryCreate( path = getDirectoryFromPath( variables.file ), createPath = true, ignoreExists = true )
+		fileWrite( variables.file, new "models.wizard.FeatureWriter@bxagents"().prettyJson( { version : 1, "#variables.section#" : ordered } ) & char( 10 ) )
+	}
+
+}

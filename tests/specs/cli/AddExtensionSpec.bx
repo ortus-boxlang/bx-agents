@@ -1,0 +1,121 @@
+/**
+ * `add extension`: what it writes loads as an extension and brings what was asked for.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+
+		describe( "add extension", function() {
+
+			beforeEach( function() {
+				variables.root = createTempDirectory( prefix = "bxagents-addext-" );
+				directoryCopy( expandPath( "/fixtures/valid-minimal" ), root, true );
+				variables.addVerb = new bxagents.models.cli.Add();
+				variables.loaded = [];
+			} );
+
+			afterEach( function() {
+				for ( var registry in loaded ) {
+					registry.unload();
+				}
+				if ( directoryExists( root ) ) {
+					directoryDelete( root, true );
+				}
+			} );
+
+			function add( struct flags = {}, array positionals = [ "extension", "demo" ] ) {
+				return addVerb.run( { projectRoot : root, _positionals : positionals, yes : true }.append( flags ) );
+			}
+
+			/** the extension as the chat loads it */
+			function loadIt( name ) {
+				var registry = new bxagents.models.extensions.ExtensionRegistry( new bxagents.models.chat.commands.CommandCatalog().standard(), {} );
+				registry.addLayer( "project", root & "/extensions" );
+				registry.load();
+				loaded.append( registry );
+				return registry.report().filter( e => e.name == name )[ 1 ];
+			}
+
+			it( "writes a one-file command that loads", function() {
+				var result = add();
+				var report = loadIt( "demo" );
+
+				expect( result.exitCode ).toBe( 0 );
+				expect( result.message ).toInclude( "extensions/demo.bx" );
+				expect( fileExists( root & "/extensions/demo.bx" ) ).toBeTrue();
+				expect( report.state ).toBe( "loaded" );
+				expect( report.kind ).toBe( "file" );
+				expect( report.commands ).toBe( [ "/demo" ] );
+				expect( report.problems ).toBeEmpty();
+			} );
+
+			it( "writes every method feature into one class, and it loads with each of them", function() {
+				add( { with : "command,key,status,prefix,source,slot,verb,listener" } );
+				var report = loadIt( "demo" );
+
+				expect( report.state ).toBe( "loaded" );
+				expect( report.problems ).toBeEmpty();
+				expect( report.commands ).toBe( [ "/demo" ] );
+				expect( report.keys ).toHaveLength( 1 );
+				expect( report.status ).toHaveLength( 1 );
+				expect( report.prefixes ).toBe( [ "%" ] );
+				expect( report.sources ).toBe( [ "demo" ] );
+				expect( report.slots ).toBe( [ "header" ] );
+				expect( report.verbs ).toBe( [ "demo" ] );
+				expect( report.listens ).toBe( [ "onChatInput" ] );
+			} );
+
+			it( "makes a folder when something needs a file of its own, and writes the files", function() {
+				add( { with : "command,scheduler,gateway,tool,skill,web" } );
+				var report = loadIt( "demo" );
+
+				for ( var path in [ "Extension.bx", "schedulers/Demo.bx", "gateways/demo.bx", "tools/Demo.bx", "skills/demo/SKILL.md", "web/demo.js", "web/demo.css" ] ) {
+					expect( fileExists( root & "/extensions/demo/" & path ) ).toBeTrue( path );
+				}
+				expect( report.state ).toBe( "loaded" );
+				expect( report.kind ).toBe( "folder" );
+				expect( report.schedulers ).toBe( [ "Demo" ] );
+				expect( report.web ).toBeTrue();
+				expect( report.problems ).toBeEmpty();
+			} );
+
+			it( "makes a folder of a single command when asked for", function() {
+				add( { layout : "folder" } );
+
+				expect( fileExists( root & "/extensions/demo/Extension.bx" ) ).toBeTrue();
+				expect( loadIt( "demo" ).commands ).toBe( [ "/demo" ] );
+			} );
+
+			it( "puts the description in the class docblock", function() {
+				add( { description : "Counts words" } );
+
+				expect( fileRead( root & "/extensions/demo.bx" ) ).toInclude( "Counts words" );
+			} );
+
+			it( "builds the project with the extension in it", function() {
+				add( { with : "command,tool", name : "demo" } );
+				new bxagents.models.cli.Build().run( { projectRoot : root } );
+
+				expect( new bxagents.models.report.ProjectReport().build( root ).validation.errors ).toBeEmpty();
+			} );
+
+			it( "refuses a name that is taken, a name that is not safe, and a file feature in a single file", function() {
+				add();
+				expect( () => add() ).toThrow();
+				expect( () => add( {}, [ "extension", "a b" ] ) ).toThrow();
+				expect( () => add( { with : "tool", layout : "file" }, [ "extension", "other" ] ) ).toThrow( "BxAgents.InvalidAnswer" );
+				expect( () => add( { with : "nonsense" }, [ "extension", "other" ] ) ).toThrow( "BxAgents.InvalidAnswer" );
+			} );
+
+			it( "shows the files and writes nothing for --dry-run", function() {
+				var result = add( { "dry-run" : true } );
+
+				expect( result.message ).toInclude( "extensions/demo.bx" );
+				expect( fileExists( root & "/extensions/demo.bx" ) ).toBeFalse();
+			} );
+
+		} );
+
+	}
+
+}

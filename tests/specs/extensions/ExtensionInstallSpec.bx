@@ -87,6 +87,8 @@ class extends="testbox.system.BaseSpec" {
 
 				subset( parse( "./folder" ), { kind : "directory", name : "folder" } );
 				subset( parse( "./pack.zip" ), { kind : "zip", name : "pack" } );
+				fileWrite( dir & "/here/greet.bx", "class {}" );
+				subset( parse( "./greet.bx" ), { kind : "file", name : "greet" } );
 				subset( parse( "acme/tools" ), { kind : "github", owner : "acme", repo : "tools", ref : "", locator : "github:acme/tools", pinned : false } );
 				subset( parse( "acme/tools##v1.2" ), { ref : "v1.2", locator : "github:acme/tools##v1.2", pinned : true } );
 				subset( parse( "https://github.com/acme/tools" ), { kind : "github", owner : "acme", repo : "tools" } );
@@ -319,6 +321,44 @@ class extends="testbox.system.BaseSpec" {
 
 				subset( lock.extensions[ "acme-tools" ], { source : "forgebox:acme-tools", resolved : "1.2.0" } );
 				subset( lock.extensions.pack, { source : "github:acme/pack##main", resolved : "main" } );
+			} );
+
+			it( "keeps what it installed out of .gitignore'd source control, one line each, and takes the line back on remove", function() {
+				fileWrite( project & "/.gitignore", ".env" & char( 10 ) );
+				put( "single/greet.bx", "class { @Command function g() {} }" );
+				var installer = installerFor();
+				installer.install( sample(), { confirm : yes } );
+				installer.install( dir & "/single", { confirm : yes } );
+				var lines = () => fileRead( project & "/.gitignore" ).listToArray( char( 10 ) );
+
+				expect( lines() ).toInclude( ".env" );
+				expect( lines() ).toInclude( "/extensions/sample/" );
+				expect( lines() ).toInclude( "/extensions/greet.bx" );
+				installer.install( sample(), { confirm : yes, force : true } );
+				expect( lines().filter( l => l == "/extensions/sample/" ) ).toHaveLength( 1 );
+
+				installer.remove( "sample" );
+				expect( lines() ).notToInclude( "/extensions/sample/" );
+				expect( lines() ).toInclude( "/extensions/greet.bx" );
+			} );
+
+			it( "leaves .gitignore alone for the system scope and for a project without one", function() {
+				installerFor().install( sample(), { confirm : yes } );
+				expect( fileExists( project & "/.gitignore" ) ).toBeFalse();
+
+				fileWrite( project & "/.gitignore", ".env" & char( 10 ) );
+				installerFor( "system" ).install( sample( "everywhere" ), { confirm : yes } );
+				expect( fileRead( project & "/.gitignore" ) ).notToInclude( "everywhere" );
+			} );
+
+			it( "installs the example extensions as they are, a folder and a single file", function() {
+				var examples = createObject( "java", "java.io.File" ).init( getDirectoryFromPath( getCurrentTemplatePath() ) & "../../../examples/extensions-agent/extensions" ).getCanonicalPath();
+				var installer = installerFor();
+
+				expect( installer.install( examples & "/standup", { confirm : yes } ).installed ).toBeTrue();
+				expect( installer.install( examples & "/hello.bx", { confirm : yes } ).installed ).toBeTrue();
+				expect( installer.installed().map( e => e.name & ":" & e.state ) ).toBe( [ "hello:intact", "standup:intact" ] );
+				expect( fileExists( project & "/extensions/standup/schedulers/Reminder.bx" ) ).toBeTrue();
 			} );
 
 			// ---- the lock ----

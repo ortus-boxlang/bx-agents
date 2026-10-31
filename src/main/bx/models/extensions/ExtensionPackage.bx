@@ -11,10 +11,11 @@
  *   mentions  what its code mentions that deserves a look: network, files, processes, java
  *   files     how many files, and bytes how big
  */
+import bxModules.bxagents.models.extensions.ExtensionConventions;
+import bxModules.bxagents.models.util.NameRules;
 class {
 
 	static {
-		CONVENTIONS = [ "commands", "schedulers", "gateways", "tools", "skills", "web" ]
 		ANNOTATIONS = {
 			"@Command"  : "commands",
 			"@Verb"     : "command line verbs",
@@ -45,7 +46,7 @@ class {
 		for ( var path in all ) {
 			report.bytes += getFileInfo( path ).size
 		}
-		var isFolder = fileExists( arguments.root & "/Extension.bx" ) || static.CONVENTIONS.filter( c => directoryExists( root & "/" & c ) ).len() > 0
+		var isFolder = ExtensionConventions::isExtensionFolder( arguments.root )
 		var classes = directoryList( arguments.root, false, "name", "*.bx" )
 		if ( fileExists( arguments.root & "/ModuleConfig.bx" ) ) {
 			report.ok = false
@@ -62,7 +63,7 @@ class {
 			report.name = arguments.explicitName ? arguments.nameHint : reReplace( classes[ 1 ], "\.bx$", "" )
 		} else {
 			report.ok = false
-			report.problems.append( "This is not an extension: it has no Extension.bx, none of the folders an extension uses (#static.CONVENTIONS.toList( ', ' )#), and not a single .bx class." )
+			report.problems.append( "This is not an extension: it has no Extension.bx, none of the folders an extension uses (#ExtensionConventions::names().toList( ', ' )#), and not a single .bx class." )
 			return report
 		}
 		var nameProblem = nameProblemOf( report.name )
@@ -80,7 +81,7 @@ class {
 		if ( !len( arguments.name ) ) {
 			return "The extension needs a name: add --name=<name>."
 		}
-		if ( !reFind( "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$", arguments.name ) || arguments.name.contains( ".." ) ) {
+		if ( !NameRules::isSafeFolder( arguments.name ) ) {
 			return "[#arguments.name#] cannot be an extension's name: use letters, digits, - _ and ., starting with a letter or digit. Give it another with --name=<name>."
 		}
 		return ""
@@ -88,11 +89,8 @@ class {
 
 	private void function describe( required struct report, required string root, required array all ) {
 		var base = arguments.root.replace( "\", "/", "all" )
-		for ( var convention in static.CONVENTIONS ) {
+		for ( var convention in ExtensionConventions::foldersIn( base ) ) {
 			var folder = base & "/" & convention
-			if ( !directoryExists( folder ) ) {
-				continue
-			}
 			var items = convention == "web"
 				? [ directoryList( folder, true, "path" ).filter( p => fileExists( p ) ).len() & " file(s)" ]
 				: directoryList( folder, false, "name" ).filter( n => !n.startsWith( "." ) ).map( n => reReplace( n, "\.bx$", "" ) )

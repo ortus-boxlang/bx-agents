@@ -59,6 +59,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb add' -l guard -x
     complete -c $cmd -n '__bxagents_using_verb add' -l header -x
     complete -c $cmd -n '__bxagents_using_verb add' -l instructions -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l layout -x
     complete -c $cmd -n '__bxagents_using_verb add' -l max-tokens -x
     complete -c $cmd -n '__bxagents_using_verb add' -l mcp -x
     complete -c $cmd -n '__bxagents_using_verb add' -l memory -x

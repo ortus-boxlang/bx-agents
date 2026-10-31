@@ -179,7 +179,7 @@ bxAgents new my-agent --forgebox=some-package-slug
 
 ### `add`
 
-Add one thing to a project that already exists, asking the same questions `new` asks. Today that is a `tool`, an `interceptor`, a `schedule`, an `mcp` server, a `gateway`, a `subagent`, a `skill`, a `profile`, a `provider` or a `capability`.
+Add one thing to a project that already exists, asking the same questions `new` asks. Today that is a `tool`, an `interceptor`, a `schedule`, an `mcp` server, a `gateway`, a `subagent`, a `skill`, a `profile`, a `provider`, a `capability` or an `extension`.
 
 ```bash
 bxAgents add                        # pick what to add
@@ -412,6 +412,22 @@ bxAgents add capability                         # asks which one
 | `image` | `provider`, `model`, `size`, `quality`, `style`, `instructions` |
 
 Every key but the provider is optional; left out, the provider's own default applies. bx-ai keeps speech and transcription on one audio provider, so the second of the two defaults to the first's provider and a different one is refused. A capability that is already set is refused: edit it in the file. The provider's key variable gets an empty stub in `.env`; the key itself is never asked for.
+
+#### `add extension`
+
+Creates an extension of your own in `extensions/`: one file for a few methods, or a folder when it carries a scheduler, gateway, tool, skill or web files. See [Starting one](conventions/extensions.md#starting-one).
+
+```bash
+bxAgents add extension standup
+bxAgents add extension standup --with=command,key --description="Daily standup"
+bxAgents add extension standup --with=command,scheduler        # a folder, with schedulers/Standup.bx
+```
+
+| Flag | Meaning |
+|---|---|
+| `--with` | What it brings, comma separated: `command`, `key`, `status`, `prefix`, `source`, `slot`, `verb`, `listener`, `scheduler`, `gateway`, `tool`, `skill`, `web`. Default `command`. |
+| `--layout` | `file` or `folder`. A folder is the only choice when `--with` has a `scheduler`, `gateway`, `tool`, `skill` or `web`. |
+| `--description` | One line for the class's docblock. |
 
 ### `skills`
 

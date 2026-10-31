@@ -381,6 +381,16 @@ function greet( options ) { return "Hello, #options.name ?: 'there'#!" }
 
 A later layer wins. An extension with the same name replaces the earlier one, and a command replaces an earlier command of the same name or alias, a built-in included. Both are shown in `/extensions`; nothing is replaced silently. The build copies the project's `extensions/` into the app; a served agent never reads a developer's home folder.
 
+## Starting one
+
+```bash
+bxAgents add extension standup                       # asks what it should bring
+bxAgents add extension standup --with=command,key    # or say so, for a pipe or CI
+bxAgents add extension standup --with=command,tool --description="Daily standup"
+```
+
+`add extension` writes `extensions/<name>.bx`, or `extensions/<name>/` with an `Extension.bx` when something needs a file of its own, with working stubs and a `TODO` where you fill in. `--with` takes any of `command`, `key`, `status`, `prefix`, `source`, `slot`, `verb`, `listener` (methods of the one class) and `scheduler`, `gateway`, `tool`, `skill`, `web` (files, so the extension is a folder). `--layout=file|folder` picks the shape when it can be either. Nothing is overwritten without `--force`, and `--dry-run` shows the files. It is yours: commit it with the project. Try it with `bxAgents chat` and `/reload`.
+
 ## Installing extensions
 
 `bxAgents extensions install` puts an extension into the project from a folder, a zip, GitHub or ForgeBox.
@@ -388,6 +398,7 @@ A later layer wins. An extension with the same name replaces the earlier one, an
 ```bash
 bxAgents extensions install ./my-ext                    # a folder
 bxAgents extensions install ./my-ext.zip                # a zip file
+bxAgents extensions install ./greet.bx                   # a one-class extension
 bxAgents extensions install acme/tools                  # GitHub: owner/repo, or owner/repo#ref
 bxAgents extensions install https://github.com/acme/tools
 bxAgents extensions install https://example.org/ext.zip # a zip by address
@@ -407,7 +418,9 @@ An extension is code that runs when the chat or the app starts, so `install` fet
 | `update [name...]` | fetches again, shows the change and asks. A source pinned to a version or ref (`#v1`, `@1.2.0`) is left alone |
 | `remove <name>` | deletes it and its lock entry. A folder you edited needs `--force` |
 
-The project keeps `extensions.lock.json` (`~/.bxagents/extensions.lock.json` with `--system`): the name, the source, the version or ref fetched, and a checksum of the files. **Commit the lock.** `bxAgents build` brings back anything in it that is missing, and refuses a package whose files no longer match their checksum. You may commit `extensions/` too; the result is the same.
+The project keeps `extensions.lock.json` (`~/.bxagents/extensions.lock.json` with `--system`): the name, the source, the version or ref fetched, and a checksum of the files. **Commit the lock.** `bxAgents build` brings back anything in it that is missing, and refuses a package whose files no longer match their checksum. Installed extensions are not committed (see below), and the build restores them from the lock.
+
+An installed extension is kept out of source control with one line per extension in the project's `.gitignore` (`/extensions/acme-tools/`, or `/extensions/acme.bx`), added on `install` and taken out on `remove`, only when the project has a `.gitignore`. An extension you wrote yourself in the same folder is still committed. Commit `extensions.lock.json`: it is what brings the rest back.
 
 What `install` refuses: a zip entry with an absolute path, a `..` part or a backslash, more than 5000 files or 50 MB, a name that is not safe as a folder name, a name already there that this command did not install (unless `--force`), a BoxLang module (`ModuleConfig.bx`), and anything that is not an extension. Symbolic links and `.git` are left out. The preview is a quick read of the text, not a security review: install what you trust.
 

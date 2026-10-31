@@ -445,6 +445,7 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   `GatewayTypes` registry where a built-in type cannot be replaced and a clash is a warning; `@Verb` adds a
   `bxAgents <verb>`, listed in `bxAgents help`. `extensions.disable` takes `extension:item` for each.
 - Extensions can be installed. `bxAgents extensions install` takes a folder, a zip, GitHub (`owner/repo[#ref]`), a zip address or a ForgeBox slug, shows what the extension adds and asks first (`--yes` to skip), and records it in `extensions.lock.json`. `install` alone, and `bxAgents build`, restore what the lock lists and refuse files that no longer match their checksum. `list --installed`, `update` and `remove` manage them, and `--system` installs for you in `~/.bxagents/extensions`.
+- `bxAgents add extension <name>` starts an extension of your own: it asks what to bring (a command, key, status item, prefix, `@` source, web slot, verb, listener, or a scheduler, gateway, tool, skill or web files) and writes working stubs, as one file or a folder. Installed extensions are kept out of source control with a `.gitignore` line each, taken out again on `remove`, and the lock is what brings them back.
 - `examples/extensions-agent` shows a one-file extension, one with several commands, an admin-only command
   with a lifecycle, and a folder with a command class and a scheduler.
 

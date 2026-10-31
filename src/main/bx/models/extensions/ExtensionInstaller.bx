@@ -177,6 +177,7 @@ class {
 			entry.kind == "file" ? fileDelete( target ) : directoryDelete( target, true )
 		}
 		variables.lock.remove( arguments.name ).save()
+		ignore( arguments.name, entry.kind, false )
 		return this
 	}
 
@@ -262,6 +263,7 @@ class {
 		}
 		placeFiles( arguments.made )
 		variables.lock.set( arguments.made.name, lockEntry( arguments.made ) ).save()
+		ignore( arguments.made.name, arguments.made.package.kind, true )
 		return { installed : true, name : arguments.made.name, reason : "", preview : arguments.made.preview }
 	}
 
@@ -282,6 +284,24 @@ class {
 			fileCopy( arguments.made.package.entry, target )
 		} else {
 			variables.archive.copyFolder( arguments.made.package.entry, target )
+		}
+	}
+
+	/**
+	 * What is installed is restored from the lock, so it stays out of source control (the lock is committed). Only the
+	 * project's own `.gitignore` is touched, one line per installed extension, so an extension written by hand in the same
+	 * folder is still committed.
+	 */
+	private void function ignore( required string name, required string kind, required boolean add ) {
+		if ( variables.scope != "project" ) {
+			return
+		}
+		var gitIgnore = new "models.util.GitIgnore@bxagents"( variables.projectRoot & "/.gitignore" )
+		var line = "/extensions/" & arguments.name & ( arguments.kind == "file" ? ".bx" : "/" )
+		if ( arguments.add ) {
+			gitIgnore.add( line, "extensions installed with bxAgents extensions install, restored at build time from extensions.lock.json" )
+		} else {
+			gitIgnore.remove( line )
 		}
 	}
 

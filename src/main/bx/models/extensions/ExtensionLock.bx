@@ -18,23 +18,13 @@ class {
 	 * @file The lock file's path; it need not exist
 	 */
 	function init( required string file ) {
-		variables.file = arguments.file
-		variables.entries = {}
-		if ( fileExists( arguments.file ) ) {
-			try {
-				var parsed = jsonDeserialize( fileRead( arguments.file ) )
-			} catch ( any e ) {
-				throw( type : "bxagents.extension.lock", message : "#getFileFromPath( arguments.file )# is not valid JSON (#e.message#). Fix it or delete it, then run: bxAgents extensions install <source>" )
-			}
-			if ( isStruct( parsed ) && isStruct( parsed.extensions ?: "" ) ) {
-				variables.entries = parsed.extensions
-			}
-		}
+		variables.lockFile = new "models.util.LockFile@bxagents"( arguments.file, "extensions", "bxagents.extension.lock", "Fix it or delete it, then run: bxAgents extensions install <source>" )
+		variables.entries = variables.lockFile.read()
 		return this
 	}
 
 	string function path() {
-		return variables.file
+		return variables.lockFile.path()
 	}
 
 	array function names() {
@@ -68,21 +58,10 @@ class {
 	}
 
 	/**
-	 * Writes the file, keys in order so a diff shows only what changed. With nothing in it the file is removed.
+	 * Writes the file. With nothing in it the file is removed.
 	 */
 	function save() {
-		if ( !variables.entries.count() ) {
-			if ( fileExists( variables.file ) ) {
-				fileDelete( variables.file )
-			}
-			return this
-		}
-		var ordered = {}
-		for ( var name in names() ) {
-			ordered[ name ] = variables.entries[ name ]
-		}
-		directoryCreate( path = getDirectoryFromPath( variables.file ), createPath = true, ignoreExists = true )
-		fileWrite( variables.file, new "models.wizard.FeatureWriter@bxagents"().prettyJson( { version : 1, extensions : ordered } ) & char( 10 ) )
+		variables.lockFile.write( variables.entries, true )
 		return this
 	}
 

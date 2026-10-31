@@ -1,0 +1,71 @@
+/**
+ * Keeps a project's `.gitignore` in step with what is installed into it. It only ever adds or removes whole lines it was
+ * asked about, and does nothing when the project has no `.gitignore` (it does not start one).
+ */
+class {
+
+	/**
+	 * @file The `.gitignore` path; it need not exist
+	 */
+	function init( required string file ) {
+		variables.file = arguments.file
+		return this
+	}
+
+	/**
+	 * @line A pattern, such as "/extensions/acme/"
+	 *
+	 * @return True when the file already says it, with or without its slashes
+	 */
+	boolean function has( required string line ) {
+		if ( !fileExists( variables.file ) ) {
+			return false
+		}
+		var wanted = bare( arguments.line )
+		return fileRead( variables.file ).listToArray( char( 10 ) ).some( l => bare( l ) == wanted )
+	}
+
+	/**
+	 * @line A pattern to add
+	 * @comment A `##` note written above it the first time the file does not already have it
+	 *
+	 * @return True when the line was added
+	 */
+	boolean function add( required string line, string comment = "" ) {
+		if ( !fileExists( variables.file ) || has( arguments.line ) ) {
+			return false
+		}
+		var text = fileRead( variables.file )
+		var note = len( arguments.comment ) ? "## " & arguments.comment : ""
+		var body = text.reReplace( "\s+$", "" )
+		if ( len( note ) && text.contains( note ) ) {
+			fileWrite( variables.file, body & char( 10 ) & arguments.line & char( 10 ) )
+		} else {
+			fileWrite( variables.file, body & char( 10 ) & char( 10 ) & ( len( note ) ? note & char( 10 ) : "" ) & arguments.line & char( 10 ) )
+		}
+		return true
+	}
+
+	/**
+	 * @line A pattern to take out, with or without its leading slash
+	 *
+	 * @return True when a line was removed
+	 */
+	boolean function remove( required string line ) {
+		if ( !has( arguments.line ) ) {
+			return false
+		}
+		var wanted = bare( arguments.line )
+		var kept = fileRead( variables.file ).listToArray( char( 10 ), true ).filter( l => bare( l ) != wanted )
+		fileWrite( variables.file, kept.toList( char( 10 ) ) )
+		return true
+	}
+
+	/**
+	 * @return The pattern without a leading or trailing slash, so `/a/`, `a/` and `a` are the same line
+	 */
+	private string function bare( required string line ) {
+		return trim( arguments.line ).reReplace( "^/|/$", "", "all" )
+	}
+
+}
