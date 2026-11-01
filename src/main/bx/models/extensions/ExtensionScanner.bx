@@ -3,14 +3,14 @@
  *
  *   deploy.bx          a single file is a whole extension; its name is the file name
  *   ci/                a folder is an extension; its name is the folder name. It may have an
- *                      `Extension.bx` (the module config), and it has the same convention folders
- *                      as an agent project: commands/, schedulers/ and the rest as they arrive.
+ *                      `Extension.bx` (the module config), which is what makes it an extension, and it
+ *                      may have the same convention folders as an agent project: commands/, schedulers/
+ *                      and the rest.
  *
  * Hidden files and folders (a leading dot) and files that are not `.bx` are left alone. A folder with
- * neither an `Extension.bx` nor a convention folder in it is not an extension, so a stray folder (a
+ * no `Extension.bx` in it is not an extension, so a stray folder (a
  * `.git`, a `node_modules`) never gets loaded.
  */
-import bxModules.bxagents.models.extensions.ExtensionConventions;
 class {
 
 	/**
@@ -48,9 +48,6 @@ class {
 		var classFile = arguments.path & "/Extension.bx"
 		if ( fileExists( classFile ) ) {
 			return new "models.extensions.Extension@bxagents"( arguments.name, arguments.layer, arguments.path, classFile )
-		}
-		if ( ExtensionConventions::foldersIn( arguments.path ).len() ) {
-			return new "models.extensions.Extension@bxagents"( arguments.name, arguments.layer, arguments.path, "" )
 		}
 		return nullValue()
 	}

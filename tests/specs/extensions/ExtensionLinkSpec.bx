@@ -60,6 +60,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "links a one-class file and a folder under a name of your choosing", function() {
 				put( "work/greet.bx", "class { @Command function greet( agentContext, commandArguments ) { return agentContext.reply().ok( 'hi' ) } }" );
+				put( "work/big/Extension.bx", "class {}" );
 				put( "work/big/tools/T.bx", "class {}" );
 				linker.link( "./work/greet.bx" );
 				linker.link( "./work/big", "bigger" );
@@ -100,11 +101,12 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "refuses a source that is not an extension on this machine", function() {
 				put( "work/plain/readme.md", "x" );
+				put( "work/tools-only/tools/T.bx", "class {}" );
 				put( "work/mod/ModuleConfig.bx", "class {}" );
 				put( "work/mod/commands/C.bx", "class {}" );
 				put( "work/pack.zip", "x" );
 
-				for ( var bad in [ "./work/plain", "./work/mod", "./work/pack.zip", "./work/missing", "acme/tools", "" ] ) {
+				for ( var bad in [ "./work/plain", "./work/tools-only", "./work/mod", "./work/pack.zip", "./work/missing", "acme/tools", "" ] ) {
 					expect( () => linker.link( bad ) ).toThrow( "bxagents.extension.link" );
 				}
 				put( "work/ok/Extension.bx", "class {}" );
