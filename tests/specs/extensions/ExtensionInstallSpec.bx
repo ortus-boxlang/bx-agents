@@ -43,6 +43,23 @@ class extends="testbox.system.BaseSpec" {
 				zip.close();
 			}
 
+			/** a zip of `count` files of `size` bytes each, written in chunks so a large one is cheap to make */
+			function makeBigZip( required string file, required numeric count, required numeric size ) {
+				var zip = createObject( "java", "java.util.zip.ZipOutputStream" ).init( createObject( "java", "java.io.FileOutputStream" ).init( arguments.file ) );
+				var chunk = createObject( "java", "java.lang.reflect.Array" ).newInstance( createObject( "java", "java.lang.Byte" ).TYPE, 65536 );
+				for ( var i = 1; i <= arguments.count; i++ ) {
+					zip.putNextEntry( createObject( "java", "java.util.zip.ZipEntry" ).init( "pack/Extension.bx" & ( i == 1 ? "" : "." & i ) ) );
+					var left = arguments.size;
+					while ( left > 0 ) {
+						var n = min( left, 65536 );
+						zip.write( chunk, 0, n );
+						left -= n;
+					}
+					zip.closeEntry();
+				}
+				zip.close();
+			}
+
 			function installerFor( scope = "project", fetcher ) {
 				if ( isNull( fetcher ) ) {
 					return new bxagents.models.extensions.ExtensionInstaller( projectRoot : project, scope : scope, userConfig : userConfig, workingDirectory : dir );
@@ -131,6 +148,25 @@ class extends="testbox.system.BaseSpec" {
 					expect( () => archive.extract( dir & "/bad.zip", dir & "/bad-out" ) ).toThrow( "bxagents.extension.source" );
 				}
 				expect( fileExists( dir & "/evil.txt" ) ).toBeFalse();
+			} );
+
+			it( "refuses a zip with too many files, and one that unpacks to too much, counting what is written", function() {
+				makeBigZip( dir & "/many.zip", 5001, 1 );
+				makeBigZip( dir & "/huge.zip", 2, 27 * 1048576 );
+
+				expect( () => archive.extract( dir & "/many.zip", dir & "/many-out" ) ).toThrow( "bxagents.extension.source" );
+				expect( () => archive.extract( dir & "/huge.zip", dir & "/huge-out" ) ).toThrow( "bxagents.extension.source" );
+				makeBigZip( dir & "/fine.zip", 3, 1000 );
+				expect( archive.extract( dir & "/fine.zip", dir & "/fine-out" ) ).toBe( 3 );
+			} );
+
+			it( "installs nothing from a zip that is too big, and leaves no staging folder", function() {
+				makeBigZip( dir & "/huge.zip", 2, 27 * 1048576 );
+				var before = directoryList( createObject( "java", "java.lang.System" ).getProperty( "java.io.tmpdir" ), false, "name", "bxagents-extension-*" ).len();
+
+				expect( () => installerFor().install( dir & "/huge.zip", { confirm : yes } ) ).toThrow( "bxagents.extension.source" );
+				expect( directoryExists( project & "/extensions" ) ).toBeFalse();
+				expect( directoryList( createObject( "java", "java.lang.System" ).getProperty( "java.io.tmpdir" ), false, "name", "bxagents-extension-*" ).len() ).toBe( before );
 			} );
 
 			it( "copies a folder without .git or links, and fingerprints the same files the same way", function() {

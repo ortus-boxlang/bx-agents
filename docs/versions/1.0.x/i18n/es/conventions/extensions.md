@@ -424,6 +424,16 @@ Una extensión instalada se mantiene fuera del control de versiones con una lín
 
 Lo que `install` rechaza: una entrada de zip con ruta absoluta, una parte `..` o una barra invertida, más de 5000 archivos o 50 MB, un nombre que no es seguro como carpeta, un nombre ya presente que este comando no instaló (salvo `--force`), un módulo de BoxLang (`ModuleConfig.bx`) y todo lo que no sea una extensión. Los enlaces simbólicos y `.git` se omiten. La vista previa es una lectura rápida del texto, no una revisión de seguridad: instala lo que te inspire confianza.
 
+## Trabajar en una: enlazarla
+
+```bash
+bxAgents extensions link ./mi-ext                 # ~/.bxagents/extensions/mi-ext -> ./mi-ext
+bxAgents extensions link ./greet.bx --name=hi     # una extensión de una sola clase, con otro nombre
+bxAgents extensions unlink mi-ext                 # quita el enlace, nunca la carpeta
+```
+
+`link` crea un enlace simbólico en tu propia carpeta de extensiones, así que el chat de terminal de esta máquina carga la extensión desde donde la editas, y `/reload` recoge un cambio sin instalar nada de nuevo. No hay vista previa ni lock: el código es tuyo, y un enlace es una ruta de esta máquina, así que no se restaura en otra. Una carpeta o archivo real en ese lugar nunca se reemplaza, un nombre instalado con `install --system` debe quitarse primero, y `--force` solo apunta un enlace existente a otro sitio. `list --installed --system` muestra los enlaces junto a lo instalado, como `linked` o `broken` (el destino desapareció). Como un enlace es para ti, no forma parte de un proyecto ni viaja a una app compilada: para eso pon la extensión en el `extensions/` del proyecto (o hazle `install`).
+
 ## Desactivar cosas
 
 ```yaml

@@ -74,7 +74,7 @@ Usa siempre la forma `--flag=valor`. La forma con espacio no está soportada.
 Genera el andamiaje de un nuevo proyecto de agente.
 :::
 ::: card title="add" icon="phosphor-duotone:plus-circle" href="#add"
-Añade una herramienta, un interceptor, una programación, un servidor MCP, un gateway, un subagente o una skill a un proyecto existente.
+Añade una herramienta, un interceptor, una programación, un servidor MCP, un gateway, un subagente, una skill, una extensión y más a un proyecto existente.
 :::
 ::: card title="skills" icon="phosphor-duotone:graduation-cap" href="#skills"
 Busca, instala, actualiza y elimina skills de skills.boxlang.io.
@@ -122,7 +122,7 @@ Lo que usaron las llamadas al modelo: tokens por modelo, proveedor, día o usuar
 Informa de cómo está compuesto el agente, a partir de su código fuente.
 :::
 ::: card title="extensions" icon="phosphor-duotone:puzzle-piece" href="#extensions"
-Lista las extensiones que carga el chat, de dónde viene cada una y qué añadió.
+Lista las extensiones que carga el chat, e instala, actualiza, quita o enlaza más.
 :::
 ::: card title="clean" icon="phosphor-duotone:broom" href="#clean"
 Elimina la salida .build/ y dist/ de un proyecto.
@@ -910,7 +910,7 @@ bxAgents extensions [--json]
 - Una línea por extensión: su nombre, de qué capa viene, si cargó, y luego los comandos y schedulers que añadió y cualquier problema.
 - `--json` imprime `{ extensions, problems }` para scripts.
 
-Los subcomandos install, list, update y remove se describen en [Instalar extensiones](conventions/extensions.md#instalar-extensiones):
+Los subcomandos install, list, update y remove se describen en [Instalar extensiones](conventions/extensions.md#instalar-extensiones), y link y unlink en [Trabajar en una](conventions/extensions.md#trabajar-en-una-enlazarla):
 
 ```bash
 bxAgents extensions install <origen> [--name=<nombre>] [--force] [--yes] [--system]
@@ -918,6 +918,8 @@ bxAgents extensions install                    # restaurar desde extensions.lock
 bxAgents extensions list [--installed] [--json]
 bxAgents extensions update [nombre...] [--yes]
 bxAgents extensions remove <nombre> [--force] [--system]
+bxAgents extensions link <carpeta-o-.bx> [--name=<nombre>] [--force]   # para ti, en ~/.bxagents/extensions
+bxAgents extensions unlink <nombre>
 ```
 
 ### `clean`

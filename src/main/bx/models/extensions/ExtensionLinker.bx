@@ -1,0 +1,139 @@
+/**
+ * Links an extension you are working on into your own extensions folder (`~/.bxagents/extensions`), so the terminal chat
+ * on this machine loads it from where it is and an edit shows after `/reload`, with nothing to install again.
+ *
+ *   link( source )      make `~/.bxagents/extensions/<name>` a symbolic link to a folder, or `<name>.bx` to a one-class file
+ *   unlink( name )      remove the link; what it pointed at is never touched
+ *   linked()            the links there are, and whether each still points at something
+ *
+ * There is no preview and no lock: the code is yours, and a link is a path on this machine, so there is nothing to bring
+ * back on another one. A real folder or file in that place is never replaced, only a link.
+ */
+import bxModules.bxagents.models.extensions.ExtensionConventions;
+import bxModules.bxagents.models.util.NameRules;
+class {
+
+	/**
+	 * @userConfig The person's UserConfig, whose folder holds `extensions/`; ~/.bxagents/bxAgents.yml when not given
+	 * @workingDirectory Where a relative path the person typed starts
+	 */
+	function init( any userConfig, string workingDirectory = "" ) {
+		var home = getDirectoryFromPath( ( isNull( arguments.userConfig ) ? new "models.cli.UserConfig@bxagents"() : arguments.userConfig ).path() ).reReplace( "[\\/]+$", "" )
+		variables.folder = home & "/extensions"
+		variables.lockedNames = new "models.extensions.ExtensionLock@bxagents"( home & "/extensions.lock.json" )
+		variables.workingDirectory = len( arguments.workingDirectory ) ? arguments.workingDirectory : getSystemSetting( "user.dir", "." )
+		variables.files = createObject( "java", "java.nio.file.Files" )
+		variables.nio = createObject( "java", "java.nio.file.Paths" )
+		return this
+	}
+
+	string function folder() {
+		return variables.folder
+	}
+
+	/**
+	 * @source A folder or a `.bx` file on this machine, as typed
+	 * @name What to call it; the folder's or file's own name when not given
+	 * @force Point an existing link somewhere else
+	 *
+	 * @return { name, link, target }
+	 */
+	struct function link( required string source, string name = "", boolean force = false ) {
+		try {
+			var origin = new "models.extensions.ExtensionOrigin@bxagents"().parse( arguments.source, variables.workingDirectory )
+		} catch ( "bxagents.extension.source" e ) {
+			fail( e.message )
+		}
+		if ( ![ "directory", "file" ].contains( origin.kind ) ) {
+			fail( "link takes a folder or a .bx file on this machine, not [#arguments.source#]. To get a copy of a zip, a repository or a ForgeBox package, use install." )
+		}
+		if ( origin.kind == "directory" ) {
+			if ( fileExists( origin.path & "/ModuleConfig.bx" ) ) {
+				fail( "#origin.path# is a BoxLang module (it has a ModuleConfig.bx), not an extension." )
+			}
+			if ( !ExtensionConventions::isExtensionFolder( origin.path ) ) {
+				fail( "#origin.path# is not an extension: it has no Extension.bx and none of the folders an extension uses (#ExtensionConventions::names().toList( ', ' )#)." )
+			}
+		}
+		var name = len( arguments.name ) ? arguments.name : origin.name
+		if ( !NameRules::isSafeFolder( name ) ) {
+			fail( "[#name#] cannot be an extension's name: use letters, digits, - _ and ., starting with a letter or digit. Give it another with --name=<name>." )
+		}
+		var link = variables.folder & "/" & name & ( origin.kind == "file" ? ".bx" : "" )
+		var other = variables.folder & "/" & name & ( origin.kind == "file" ? "" : ".bx" )
+		if ( variables.lockedNames.has( name ) ) {
+			fail( "#name# was installed with bxAgents extensions install --system. Remove it first (bxAgents extensions remove #name# --system), or link it under another name with --name=<name>." )
+		}
+		for ( var existing in [ link, other ] ) {
+			if ( ( directoryExists( existing ) || fileExists( existing ) || isLink( existing ) ) && !isLink( existing ) ) {
+				fail( "#existing# is already there and is not a link, so it is left alone. Choose another name with --name=<name>." )
+			}
+		}
+		if ( isLink( link ) && !arguments.force ) {
+			fail( "#name# is already linked to #targetOf( link )#. Point it at this one instead with --force." )
+		}
+		directoryCreate( path = variables.folder, createPath = true, ignoreExists = true )
+		if ( isLink( other ) ) {
+			variables.files.delete( variables.nio.get( other, [] ) )
+		}
+		if ( isLink( link ) ) {
+			variables.files.delete( variables.nio.get( link, [] ) )
+		}
+		try {
+			variables.files.createSymbolicLink( variables.nio.get( link, [] ), variables.nio.get( origin.path, [] ), [] )
+		} catch ( any e ) {
+			fail( "Could not make the link #link#: #e.message#. A link needs the system to allow symbolic links (on Windows, developer mode or an administrator)." )
+		}
+		return { name : name, link : link, target : origin.path }
+	}
+
+	/**
+	 * @name A linked extension's name
+	 */
+	function unlink( required string name ) {
+		for ( var candidate in [ variables.folder & "/" & arguments.name, variables.folder & "/" & arguments.name & ".bx" ] ) {
+			if ( isLink( candidate ) ) {
+				variables.files.delete( variables.nio.get( candidate, [] ) )
+				return this
+			}
+		}
+		fail( "#arguments.name# is not a link in #variables.folder#, so it is not removed here. Links are made with bxAgents extensions link." )
+	}
+
+	/**
+	 * @return [ { name, link, target, state : "linked"|"broken" } ] in name order
+	 */
+	array function linked() {
+		if ( !directoryExists( variables.folder ) ) {
+			return []
+		}
+		var found = []
+		for ( var path in directoryList( variables.folder, false, "path", "*", "asc" ) ) {
+			if ( isLink( path ) ) {
+				var base = getFileFromPath( path )
+				found.append( {
+					name   : reReplace( base, "\.bx$", "" ),
+					link   : path.replace( "\", "/", "all" ),
+					target : targetOf( path ),
+					state  : directoryExists( path ) || fileExists( path ) ? "linked" : "broken"
+				} )
+			}
+		}
+		return found.sort( ( a, b ) => compareNoCase( a.name, b.name ) )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private boolean function isLink( required string path ) {
+		return variables.files.isSymbolicLink( variables.nio.get( arguments.path, [] ) )
+	}
+
+	private string function targetOf( required string path ) {
+		return variables.files.readSymbolicLink( variables.nio.get( arguments.path, [] ) ).toString().replace( "\", "/", "all" )
+	}
+
+	private void function fail( required string message ) {
+		throw( type : "bxagents.extension.link", message : arguments.message )
+	}
+
+}
