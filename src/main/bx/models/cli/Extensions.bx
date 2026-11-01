@@ -7,6 +7,8 @@
  *   bxAgents extensions install                      restore what extensions.lock.json lists and the disk lacks
  *   bxAgents extensions update [name...] [--yes]     fetch what is not pinned again and replace what changed
  *   bxAgents extensions remove <name> [--system] [--force]
+ *   bxAgents extensions link <folder-or-.bx> [--name=] [--force]   link one you are working on into ~/.bxagents/extensions
+ *   bxAgents extensions unlink <name>                              take the link away, never what it points at
  *
  * A source is a folder, a .zip, a GitHub repository (owner/repo, owner/repo#ref or its URL), a .zip address or a
  * ForgeBox package (slug or slug@version); see ExtensionOrigin. They go in the project's extensions/ folder, or with
@@ -18,7 +20,7 @@
 class {
 
 	static {
-		SUBCOMMANDS = [ "list", "install", "update", "remove" ]
+		SUBCOMMANDS = [ "list", "install", "update", "remove", "link", "unlink" ]
 	}
 
 	/**
@@ -50,6 +52,10 @@ class {
 				return doUpdate( projectRoot, args.slice( 2 ), arguments.options )
 			case "remove":
 				return doRemove( projectRoot, args.slice( 2 ), arguments.options )
+			case "link":
+				return doLink( args.slice( 2 ), arguments.options )
+			case "unlink":
+				return doUnlink( args.slice( 2 ), arguments.options )
 			case "list":
 				if ( arguments.options.installed ?: false ) {
 					return doInstalled( projectRoot, arguments.options )
@@ -233,15 +239,42 @@ class {
 		return { exitCode : 0, message : "Removed #arguments.args[ 1 ]#." }
 	}
 
+	// ----------------------------------------------------------------------------------
+	// Linking, for the extension you are working on
+	// ----------------------------------------------------------------------------------
+
+	private any function linkerFor( required struct options ) {
+		return new "models.extensions.ExtensionLinker@bxagents"( userConfig : arguments.options._userConfig ?: new "models.cli.UserConfig@bxagents"() )
+	}
+
+	private struct function doLink( required array args, required struct options ) {
+		if ( !arguments.args.len() ) {
+			throw( type = "BxAgents.MissingSource", message = "Say what to link: bxAgents extensions link <folder-or-.bx file>" )
+		}
+		var made = linkerFor( arguments.options ).link( arguments.args[ 1 ], arguments.options.name ?: "", arguments.options.force ?: false )
+		return { exitCode : 0, message : "Linked #made.name#: #made.link# -> #made.target#. It loads in the terminal chat on this machine; use /reload after an edit." }
+	}
+
+	private struct function doUnlink( required array args, required struct options ) {
+		if ( !arguments.args.len() ) {
+			throw( type = "BxAgents.MissingName", message = "Say which one: bxAgents extensions unlink <name>" )
+		}
+		linkerFor( arguments.options ).unlink( arguments.args[ 1 ] )
+		return { exitCode : 0, message : "Unlinked #arguments.args[ 1 ]#. What it pointed at is untouched." }
+	}
+
 	private struct function doInstalled( required string projectRoot, required struct options ) {
 		var found = installerFor( arguments.projectRoot, arguments.options ).installed()
+		var links = arguments.options.system ?: false ? linkerFor( arguments.options ).linked() : []
 		if ( arguments.options.json ?: false ) {
-			return { exitCode : 0, message : jsonSerialize( { installed : found } ) }
+			return { exitCode : 0, message : jsonSerialize( { installed : found, linked : links } ) }
 		}
-		if ( !found.len() ) {
+		var lines = found.map( e => "#e.name# (#e.state#) - #e.source#" & ( len( e.resolved ) ? " #e.resolved#" : "" ) )
+		lines.append( links.map( l => "#l.name# (#l.state#) - #l.target#" ), true )
+		if ( !lines.len() ) {
 			return { exitCode : 0, message : "Nothing was installed with bxAgents extensions install." }
 		}
-		return { exitCode : 0, message : found.map( e => "#e.name# (#e.state#) - #e.source#" & ( len( e.resolved ) ? " #e.resolved#" : "" ) ).toList( char( 10 ) ) }
+		return { exitCode : 0, message : lines.toList( char( 10 ) ) }
 	}
 
 }

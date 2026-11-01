@@ -74,7 +74,7 @@ Always use the `--flag=value` form. The space-separated form is not supported.
 Scaffold a new agent project.
 :::
 ::: card title="add" icon="phosphor-duotone:plus-circle" href="#add"
-Add a tool, interceptor, schedule, MCP server, gateway, subagent or skill to an existing project.
+Add a tool, interceptor, schedule, MCP server, gateway, subagent, skill, extension and more to an existing project.
 :::
 ::: card title="skills" icon="phosphor-duotone:graduation-cap" href="#skills"
 Find, install, update and remove skills from skills.boxlang.io.
@@ -122,7 +122,7 @@ What the model calls used: tokens by model, provider, day or user, once the proj
 Report how the agent is composed, from its source.
 :::
 ::: card title="extensions" icon="phosphor-duotone:puzzle-piece" href="#extensions"
-List the extensions the chat loads, where each came from and what it added.
+List the extensions the chat loads, and install, update, remove or link more.
 :::
 ::: card title="clean" icon="phosphor-duotone:broom" href="#clean"
 Remove a project's .build/ and dist/ output.
@@ -937,7 +937,7 @@ bxAgents extensions [--json]
 - One line per extension: its name, which layer it came from, whether it loaded, then the commands and schedulers it added and anything that went wrong.
 - `--json` prints `{ extensions, problems }` for scripting.
 
-Subcommands install, list, update and remove are described in [Installing extensions](conventions/extensions.md#installing-extensions):
+Subcommands install, list, update and remove are described in [Installing extensions](conventions/extensions.md#installing-extensions), link and unlink in [Working on one](conventions/extensions.md#working-on-one-link-it):
 
 ```bash
 bxAgents extensions install <source> [--name=<name>] [--force] [--yes] [--system]
@@ -945,6 +945,8 @@ bxAgents extensions install                    # restore from extensions.lock.js
 bxAgents extensions list [--installed] [--json]
 bxAgents extensions update [name...] [--yes]
 bxAgents extensions remove <name> [--force] [--system]
+bxAgents extensions link <folder-or-.bx> [--name=<name>] [--force]   # for you, in ~/.bxagents/extensions
+bxAgents extensions unlink <name>
 ```
 
 ### `clean`

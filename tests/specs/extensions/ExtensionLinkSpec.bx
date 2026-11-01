@@ -1,0 +1,148 @@
+/**
+ * `extensions link` and `unlink`: a folder you are working on, linked into ~/.bxagents/extensions so the terminal chat
+ * loads it from where it is.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+
+		describe( "linking extensions", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-link-" );
+				variables.userConfig = new bxagents.models.cli.UserConfig( dir & "/home/bxAgents.yml" );
+				variables.linker = new bxagents.models.extensions.ExtensionLinker( userConfig : userConfig, workingDirectory : dir );
+				variables.loaded = [];
+			} );
+
+			afterEach( function() {
+				for ( var registry in loaded ) {
+					registry.unload();
+				}
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function put( required string path, required string code ) {
+				directoryCreate( getDirectoryFromPath( dir & "/" & path ), true, true );
+				fileWrite( dir & "/" & path, code );
+			}
+
+			function isLink( path ) {
+				return createObject( "java", "java.nio.file.Files" ).isSymbolicLink( createObject( "java", "java.nio.file.Paths" ).get( path, [] ) );
+			}
+
+			function loadUserLayer() {
+				var registry = new bxagents.models.extensions.ExtensionRegistry( new bxagents.models.chat.commands.CommandCatalog().standard(), {} );
+				registry.addLayer( "user", linker.folder() );
+				registry.load();
+				loaded.append( registry );
+				return registry.report();
+			}
+
+			it( "links a folder, which the chat then loads from where it is", function() {
+				put( "work/ci/Extension.bx", "class { @Command( 'ci' ) function run( agentContext, commandArguments ) { return agentContext.reply().ok( 'one' ) } }" );
+				var made = linker.link( "./work/ci" );
+				var report = loadUserLayer();
+
+				expect( made.name ).toBe( "ci" );
+				expect( isLink( dir & "/home/extensions/ci" ) ).toBeTrue();
+				expect( report ).toHaveLength( 1 );
+				expect( report[ 1 ].state ).toBe( "loaded" );
+				expect( report[ 1 ].commands ).toBe( [ "/ci" ] );
+				expect( linker.linked()[ 1 ].state ).toBe( "linked" );
+
+				// an edit shows the next time the extensions are loaded, with nothing installed again
+				fileWrite( dir & "/work/ci/Extension.bx", "class { @Command( 'ci2' ) function run( agentContext, commandArguments ) { return agentContext.reply().ok( 'two' ) } }" );
+				expect( loadUserLayer()[ 1 ].commands ).toBe( [ "/ci2" ] );
+			} );
+
+			it( "links a one-class file and a folder under a name of your choosing", function() {
+				put( "work/greet.bx", "class { @Command function greet( agentContext, commandArguments ) { return agentContext.reply().ok( 'hi' ) } }" );
+				put( "work/big/tools/T.bx", "class {}" );
+				linker.link( "./work/greet.bx" );
+				linker.link( "./work/big", "bigger" );
+
+				expect( isLink( dir & "/home/extensions/greet.bx" ) ).toBeTrue();
+				expect( isLink( dir & "/home/extensions/bigger" ) ).toBeTrue();
+				expect( linker.linked().map( l => l.name ) ).toBe( [ "bigger", "greet" ] );
+				expect( loadUserLayer().map( e => e.name ).sort( "text" ) ).toBe( [ "bigger", "greet" ] );
+			} );
+
+			it( "unlinks without touching what it pointed at", function() {
+				put( "work/ci/Extension.bx", "class {}" );
+				linker.link( "./work/ci" );
+				linker.unlink( "ci" );
+
+				expect( isLink( dir & "/home/extensions/ci" ) ).toBeFalse();
+				expect( fileExists( dir & "/work/ci/Extension.bx" ) ).toBeTrue();
+				expect( linker.linked() ).toBeEmpty();
+				expect( () => linker.unlink( "ci" ) ).toThrow( "bxagents.extension.link" );
+			} );
+
+			it( "points an existing link elsewhere only with force, and never replaces a real folder", function() {
+				put( "work/ci/Extension.bx", "class {}" );
+				put( "other/ci/Extension.bx", "class {}" );
+				linker.link( "./work/ci" );
+
+				expect( () => linker.link( "./other/ci" ) ).toThrow( "bxagents.extension.link" );
+				linker.link( "./other/ci", "", true );
+				expect( linker.linked()[ 1 ].target ).toInclude( "/other/ci" );
+
+				put( "home/extensions/real/Extension.bx", "class { this.title = 'mine' }" );
+				put( "work/real/Extension.bx", "class {}" );
+				expect( () => linker.link( "./work/real", "", true ) ).toThrow( "bxagents.extension.link" );
+				expect( isLink( dir & "/home/extensions/real" ) ).toBeFalse();
+				expect( () => linker.unlink( "real" ) ).toThrow( "bxagents.extension.link" );
+				expect( fileExists( dir & "/home/extensions/real/Extension.bx" ) ).toBeTrue();
+			} );
+
+			it( "refuses a source that is not an extension on this machine", function() {
+				put( "work/plain/readme.md", "x" );
+				put( "work/mod/ModuleConfig.bx", "class {}" );
+				put( "work/mod/commands/C.bx", "class {}" );
+				put( "work/pack.zip", "x" );
+
+				for ( var bad in [ "./work/plain", "./work/mod", "./work/pack.zip", "./work/missing", "acme/tools", "" ] ) {
+					expect( () => linker.link( bad ) ).toThrow( "bxagents.extension.link" );
+				}
+				put( "work/ok/Extension.bx", "class {}" );
+				expect( () => linker.link( "./work/ok", "a b" ) ).toThrow( "bxagents.extension.link" );
+			} );
+
+			it( "refuses a name that was installed with install --system", function() {
+				put( "work/ci/Extension.bx", "class {}" );
+				new bxagents.models.extensions.ExtensionInstaller( projectRoot : dir, scope : "system", userConfig : userConfig, workingDirectory : dir ).install( dir & "/work/ci", { confirm : ( preview ) => true } );
+
+				expect( () => linker.link( "./work/ci" ) ).toThrow( "bxagents.extension.link" );
+			} );
+
+			it( "reports a link whose target went away as broken", function() {
+				put( "work/ci/Extension.bx", "class {}" );
+				linker.link( "./work/ci" );
+				directoryDelete( dir & "/work/ci", true );
+
+				expect( linker.linked()[ 1 ].state ).toBe( "broken" );
+				linker.unlink( "ci" );
+				expect( linker.linked() ).toBeEmpty();
+			} );
+
+			it( "works through the verb, and the system list shows links beside installs", function() {
+				put( "work/ci/Extension.bx", "class {}" );
+				var verb = new bxagents.models.cli.Extensions();
+				var options = ( more ) => { return { projectRoot : dir, _userConfig : userConfig }.append( more ); };
+
+				expect( verb.run( options( { _positionals : [ "link", dir & "/work/ci" ] } ) ).message ).toInclude( "Linked ci" );
+				expect( verb.run( options( { _positionals : [ "list" ], installed : true, system : true } ) ).message ).toInclude( "ci (linked)" );
+				expect( jsonDeserialize( verb.run( options( { _positionals : [ "list" ], installed : true, system : true, json : true } ) ).message ).linked[ 1 ].name ).toBe( "ci" );
+				expect( verb.run( options( { _positionals : [ "unlink", "ci" ] } ) ).message ).toInclude( "Unlinked ci" );
+				expect( () => verb.run( options( { _positionals : [ "link" ] } ) ) ).toThrow( "BxAgents.MissingSource" );
+				expect( () => verb.run( options( { _positionals : [ "unlink" ] } ) ) ).toThrow( "BxAgents.MissingName" );
+			} );
+
+		} );
+
+	}
+
+}
