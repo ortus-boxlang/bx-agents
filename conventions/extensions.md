@@ -424,6 +424,16 @@ An installed extension is kept out of source control with one line per extension
 
 What `install` refuses: a zip entry with an absolute path, a `..` part or a backslash, more than 5000 files or 50 MB, a name that is not safe as a folder name, a name already there that this command did not install (unless `--force`), a BoxLang module (`ModuleConfig.bx`), and anything that is not an extension. Symbolic links and `.git` are left out. The preview is a quick read of the text, not a security review: install what you trust.
 
+## Working on one: link it
+
+```bash
+bxAgents extensions link ./my-ext                 # ~/.bxagents/extensions/my-ext -> ./my-ext
+bxAgents extensions link ./greet.bx --name=hi     # a one-class extension, under another name
+bxAgents extensions unlink my-ext                 # takes the link away, never the folder
+```
+
+`link` makes a symbolic link in your own extensions folder, so the terminal chat on this machine loads the extension from where you are editing it, and `/reload` picks up a change with nothing to install again. There is no preview and no lock: the code is yours, and a link is a path on this machine, so it is not brought back on another one. A real folder or file in that place is never replaced, a name installed with `install --system` has to be removed first, and `--force` only points an existing link somewhere else. `list --installed --system` shows links beside installs, as `linked` or `broken` (the target went away). Because a link is for you, it is not part of a project and does not travel into a built app: put the extension in the project's `extensions/` (or `install` it) for that.
+
 ## Turning things off
 
 ```yaml
