@@ -382,7 +382,7 @@ bxAgents new my-agent --forgebox=some-package-slug
 <li>The <code>box install</code> convenience step (and <code>--skipInstall</code>) only ever apply to <code>--template</code> mode - a cloned/installed project's own <code>box.json</code> (if it has one at all) is left untouched.</li>
 </ul>
 <h3 id="add"><a href="#add" id="add" name="add" class="anchor"></a><code>add</code></h3>
-<p>Add one thing to a project that already exists, asking the same questions <code>new</code> asks. Today that is a <code>tool</code>, an <code>interceptor</code>, a <code>schedule</code>, an <code>mcp</code> server, a <code>gateway</code>, a <code>subagent</code>, a <code>skill</code>, a <code>profile</code>, a <code>provider</code> or a <code>capability</code>.</p>
+<p>Add one thing to a project that already exists, asking the same questions <code>new</code> asks. Today that is a <code>tool</code>, an <code>interceptor</code>, a <code>schedule</code>, an <code>mcp</code> server, a <code>gateway</code>, a <code>subagent</code>, a <code>skill</code>, a <code>profile</code>, a <code>provider</code>, a <code>capability</code> or an <code>extension</code>.</p>
 <pre><code class="language-bash">bxAgents add                        # pick what to add
 bxAgents add tool                   # asks for the name, function, description and arguments
 bxAgents add tool WeatherTools --function=getWeather --description=&quot;Get the weather for a city&quot; --args=&quot;city, days:numeric&quot;
@@ -614,6 +614,22 @@ bxAgents add capability                         # asks which one
 </tbody>
 </table></div>
 <p>Every key but the provider is optional; left out, the provider's own default applies. bx-ai keeps speech and transcription on one audio provider, so the second of the two defaults to the first's provider and a different one is refused. A capability that is already set is refused: edit it in the file. The provider's key variable gets an empty stub in <code>.env</code>; the key itself is never asked for.</p>
+<h4 id="add-extension"><a href="#add-extension" id="add-extension" name="add-extension" class="anchor"></a><code>add extension</code></h4>
+<p>Creates an extension of your own in <code>extensions/</code>: one file for a few methods, or a folder when it carries a scheduler, gateway, tool, skill or web files. See <a href="/next/conventions/extensions/index.html#starting-one">Starting one</a>.</p>
+<pre><code class="language-bash">bxAgents add extension standup
+bxAgents add extension standup --with=command,key --description=&quot;Daily standup&quot;
+bxAgents add extension standup --with=command,scheduler        # a folder, with schedulers/Standup.bx
+</code></pre>
+<div class="bxsites-table-wrap"><table class="table">
+<thead>
+<tr><th>Flag</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>--with</code></td><td>What it brings, comma separated: <code>command</code>, <code>key</code>, <code>status</code>, <code>prefix</code>, <code>source</code>, <code>slot</code>, <code>verb</code>, <code>listener</code>, <code>scheduler</code>, <code>gateway</code>, <code>tool</code>, <code>skill</code>, <code>web</code>. Default <code>command</code>.</td></tr>
+<tr><td><code>--layout</code></td><td><code>file</code> or <code>folder</code>. A folder is the only choice when <code>--with</code> has a <code>scheduler</code>, <code>gateway</code>, <code>tool</code>, <code>skill</code> or <code>web</code>.</td></tr>
+<tr><td><code>--description</code></td><td>One line for the class's docblock.</td></tr>
+</tbody>
+</table></div>
 <h3 id="skills"><a href="#skills" id="skills" name="skills" class="anchor"></a><code>skills</code></h3>
 <p>Skills from the registry (skills.boxlang.io), the way <code>coldbox ai skills</code> installs them. A skill of your own goes in <code>skills/</code> instead: see <a href="#add-skill"><code>add skill</code></a>.</p>
 <pre><code class="language-bash">bxAgents skills find release                    # search the registry
