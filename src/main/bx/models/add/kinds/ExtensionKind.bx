@@ -1,0 +1,100 @@
+import bxModules.bxagents.models.add.ExtensionStubs;
+import bxModules.bxagents.models.util.NameRules;
+
+/**
+ * `add extension` - a starting point for an extension of your own in the project's `extensions/`. It asks what the
+ * extension should bring and writes working stubs for each: a command, a key, a status item, a prefix, an @ source,
+ * a web page slot, a command line verb, an event listener, and the files a folder extension carries (a scheduler, a
+ * gateway type, a tool, a skill, web files).
+ *
+ * One thing in a single class is a one-file extension (`extensions/<name>.bx`); anything that needs a file of its own
+ * makes it a folder (`extensions/<name>/Extension.bx` plus the convention folders). Extensions of your own are
+ * committed with the project, unlike ones from `bxAgents extensions install`, which are restored from the lock.
+ */
+class {
+
+	struct function info() {
+		return { name : "extension", summary : "An extension of your own (extensions/<name>.bx or a folder): commands, keys, prefixes, sources, slots, verbs, listeners, tools and more" }
+	}
+
+	/**
+	 * @answers An Answers
+	 * @ctx The add context
+	 *
+	 * @return { name, features, layout, description }
+	 */
+	struct function ask( required any answers, required struct ctx ) {
+		var a = arguments.answers.withPresets( { name : arguments.ctx.args.len() ? arguments.ctx.args[ 1 ] : "" } )
+		var root = arguments.ctx.root
+
+		var name = a.text(
+			key      = "name",
+			title    = "Extension name",
+			help     = "Its file or folder under extensions/, e.g. standup. Letters, digits, - _ and .",
+			required = true,
+			validate = ( value ) => !NameRules::isSafeFolder( value ) ? "Letters, digits, - _ and ., starting with a letter or digit." : ( directoryExists( root & "/extensions/" & value ) || fileExists( root & "/extensions/" & value & ".bx" ) ? "An extension named #value# already exists." : "" )
+		)
+		var features = a.list(
+			key     = "with",
+			title   = "What should it bring?",
+			choices = ExtensionStubs::features(),
+			default = [ "command" ],
+			help    = "Space ticks one. Name them with --with=command,key,..."
+		)
+		if ( !features.len() ) {
+			throw( type = "BxAgents.InvalidAnswer", message = "--with: pick at least one of: #ExtensionStubs::names().toList( ', ' )#" )
+		}
+		var needsFolder = features.some( f => ExtensionStubs::fileFeatures().contains( f ) )
+		var layout = needsFolder ? "folder" : a.select(
+			key     = "layout",
+			title   = "One file or a folder?",
+			choices = [
+				{ value : "file", label : "One file", hint : "extensions/#name#.bx" },
+				{ value : "folder", label : "A folder", hint : "extensions/#name#/Extension.bx, room to grow" }
+			],
+			default = "file"
+		)
+		if ( needsFolder && ( arguments.ctx.options.layout ?: "folder" ) == "file" ) {
+			throw( type = "BxAgents.InvalidAnswer", message = "--layout=file: #features.filter( f => ExtensionStubs::fileFeatures().contains( f ) ).toList( ', ' )# needs a file of its own, so the extension has to be a folder." )
+		}
+		var description = a.text(
+			key     = "description",
+			title   = "What is it for? (optional)",
+			help    = "One line, written into the class's docblock.",
+			default = ""
+		)
+		return { name : name, features : features, layout : layout, description : description }
+	}
+
+	/**
+	 * @answers The answers from ask()
+	 * @ctx The add context
+	 * @changes A ChangeSet
+	 */
+	void function plan( required struct answers, required struct ctx, required any changes ) {
+		var name = arguments.answers.name
+		var code = ExtensionStubs::extensionClass( name, arguments.answers.features, arguments.answers.description )
+		if ( arguments.answers.layout == "file" ) {
+			arguments.changes.file( "extensions/" & name & ".bx", code )
+			return
+		}
+		arguments.changes.file( "extensions/" & name & "/Extension.bx", code )
+		for ( var feature in arguments.answers.features ) {
+			for ( var f in ExtensionStubs::files( feature, name ) ) {
+				arguments.changes.file( "extensions/" & name & "/" & f.path, f.content )
+			}
+		}
+	}
+
+	/**
+	 * @return [ text ] what is left to do
+	 */
+	array function next( required struct answers, required struct ctx ) {
+		return [
+			"Fill in the TODOs in extensions/#arguments.answers.name##arguments.answers.layout == 'file' ? '.bx' : '/'#.",
+			"Try it: bxAgents chat (and /reload after a change). Check it with: bxAgents extensions",
+			"It is yours, so commit it. To share it, zip the folder or push it to GitHub: others use bxAgents extensions install."
+		]
+	}
+
+}

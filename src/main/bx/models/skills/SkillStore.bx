@@ -12,6 +12,7 @@
  * disk can be checked against both the lock (edited since install?) and the registry
  * (newer upstream?).
  */
+import bxModules.bxagents.models.util.NameRules;
 class {
 
 	/**
@@ -34,20 +35,7 @@ class {
 	 * @return { version, skills : { name : { source, skill, path, sha } } }, empty when there is no lock
 	 */
 	struct function readLock( required string root ) {
-		var path = arguments.root & "/" & lockFile()
-		var lock = { version : 1, skills : {} }
-		if ( !fileExists( path ) ) {
-			return lock
-		}
-		try {
-			var parsed = jsonDeserialize( fileRead( path ) )
-		} catch ( any e ) {
-			throw( type = "BxAgents.InvalidSkillLock", message = "#lockFile()# is not valid JSON (#e.message#). Fix it or delete it and run: bxAgents skills install" )
-		}
-		if ( isStruct( parsed ) && isStruct( parsed.skills ?: "" ) ) {
-			lock.skills = parsed.skills
-		}
-		return lock
+		return { version : 1, skills : lockFileOf( arguments.root ).read() }
 	}
 
 	/**
@@ -55,11 +43,11 @@ class {
 	 * @lock A struct from readLock()
 	 */
 	void function writeLock( required string root, required struct lock ) {
-		var path = arguments.root & "/" & lockFile()
-		// prettyJson writes the keys in order, so a diff shows only what changed
-		var out = { version : 1, skills : arguments.lock.skills }
-		directoryCreate( path = getDirectoryFromPath( path ), createPath = true, ignoreExists = true )
-		fileWrite( path, new "models.wizard.FeatureWriter@bxagents"().prettyJson( out ) & char( 10 ) )
+		lockFileOf( arguments.root ).write( arguments.lock.skills )
+	}
+
+	private any function lockFileOf( required string root ) {
+		return new "models.util.LockFile@bxagents"( arguments.root & "/" & lockFile(), "skills", "BxAgents.InvalidSkillLock", "Fix it or delete it and run: bxAgents skills install" )
 	}
 
 	/**
@@ -68,7 +56,7 @@ class {
 	 * @return An empty string when the name is a safe folder name, else the reason it is not
 	 */
 	string function nameProblem( required string name ) {
-		if ( !reFind( "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$", arguments.name ) || arguments.name.find( ".." ) ) {
+		if ( !NameRules::isSafeFolder( arguments.name ) ) {
 			return "[#arguments.name#] is not a name that is safe to use as a folder"
 		}
 		return ""
@@ -164,17 +152,12 @@ class {
 	 * @return True when the line was added
 	 */
 	boolean function ignoreInstalled( required string root ) {
-		var path = arguments.root & "/.gitignore"
-		if ( !fileExists( path ) ) {
+		var gitIgnore = new "models.util.GitIgnore@bxagents"( arguments.root & "/.gitignore" )
+		// a broader line (.agents/) already covers it
+		if ( gitIgnore.has( ".agents" ) || gitIgnore.has( ".agents/skills" ) ) {
 			return false
 		}
-		var text = fileRead( path )
-		if ( reFind( "(?m)^/?\.agents/(skills/?)?\s*$", text ) ) {
-			return false
-		}
-		var body = text.reReplace( "\s+$", "" )
-		fileWrite( path, body & char( 10 ) & char( 10 ) & "## skills installed from skills.boxlang.io, restored at build time from .agents/skills.lock.json" & char( 10 ) & ".agents/skills/" & char( 10 ) )
-		return true
+		return gitIgnore.add( ".agents/skills/", "skills installed from skills.boxlang.io, restored at build time from .agents/skills.lock.json" )
 	}
 
 }

@@ -10,12 +10,8 @@
  * neither an `Extension.bx` nor a convention folder in it is not an extension, so a stray folder (a
  * `.git`, a `node_modules`) never gets loaded.
  */
+import bxModules.bxagents.models.extensions.ExtensionConventions;
 class {
-
-	static {
-		// the folders an extension may have. A folder with one of these is an extension even without an Extension.bx
-		CONVENTIONS = [ "commands", "schedulers", "gateways", "tools", "skills", "web" ]
-	}
 
 	/**
 	 * @folder A layer's folder, such as "<project>/extensions"; it need not exist
@@ -53,10 +49,8 @@ class {
 		if ( fileExists( classFile ) ) {
 			return new "models.extensions.Extension@bxagents"( arguments.name, arguments.layer, arguments.path, classFile )
 		}
-		for ( var convention in static.CONVENTIONS ) {
-			if ( directoryExists( arguments.path & "/" & convention ) ) {
-				return new "models.extensions.Extension@bxagents"( arguments.name, arguments.layer, arguments.path, "" )
-			}
+		if ( ExtensionConventions::foldersIn( arguments.path ).len() ) {
+			return new "models.extensions.Extension@bxagents"( arguments.name, arguments.layer, arguments.path, "" )
 		}
 		return nullValue()
 	}

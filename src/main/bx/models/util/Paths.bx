@@ -1,0 +1,25 @@
+/**
+ * Path questions that come up whenever files from outside are placed on disk.
+ */
+class {
+
+	/**
+	 * @path A path, of any style
+	 *
+	 * @return The real path (links and `..` resolved), with forward slashes and no trailing slash
+	 */
+	static string function canonical( required string path ) {
+		return createObject( "java", "java.io.File" ).init( arguments.path ).getCanonicalPath().replace( "\", "/", "all" ).reReplace( "/+$", "" )
+	}
+
+	/**
+	 * @path A path
+	 * @folder A folder
+	 *
+	 * @return True when the real path of `path` is inside `folder`, not the folder itself and not reached by a link or `..`
+	 */
+	static boolean function isInside( required string path, required string folder ) {
+		return canonical( arguments.path ).startsWith( canonical( arguments.folder ) & "/" )
+	}
+
+}

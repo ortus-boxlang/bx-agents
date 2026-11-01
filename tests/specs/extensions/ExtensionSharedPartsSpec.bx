@@ -1,0 +1,110 @@
+/**
+ * The small pieces the skills and the extensions share: safe folder names, real paths, the convention folders, the lock
+ * file and the .gitignore.
+ */
+import bxModules.bxagents.models.util.NameRules;
+import bxModules.bxagents.models.util.Paths;
+import bxModules.bxagents.models.extensions.ExtensionConventions;
+
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+
+		describe( "shared parts", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-shared-" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "accepts names that are safe as a folder and refuses the rest", function() {
+				for ( var good in [ "a", "acme-tools", "Tools_2", "v1.2.0", "0abc" ] ) {
+					expect( NameRules::isSafeFolder( good ) ).toBeTrue( good );
+				}
+				for ( var bad in [ "", ".hidden", "-x", "a b", "a/b", "a\b", "a..b", ".." ] ) {
+					expect( NameRules::isSafeFolder( bad ) ).toBeFalse( bad );
+				}
+				expect( NameRules::isSafeFolder( repeatString( "a", 100 ) ) ).toBeTrue();
+				expect( NameRules::isSafeFolder( repeatString( "a", 101 ) ) ).toBeFalse();
+				expect( NameRules::isSafeFolder( repeatString( "a", 64 ), 63 ) ).toBeFalse();
+			} );
+
+			it( "works out real paths and what is inside a folder", function() {
+				directoryCreate( dir & "/in/deep", true, true );
+				fileWrite( dir & "/in/deep/f.txt", "x" );
+				fileWrite( dir & "/out.txt", "x" );
+
+				expect( Paths::canonical( dir & "/in/" ) ).toBe( Paths::canonical( dir & "/in" ) );
+				expect( Paths::canonical( dir & "/in/deep/.." ) ).toBe( Paths::canonical( dir & "/in" ) );
+				expect( Paths::isInside( dir & "/in/deep/f.txt", dir & "/in" ) ).toBeTrue();
+				expect( Paths::isInside( dir & "/in/../out.txt", dir & "/in" ) ).toBeFalse();
+				expect( Paths::isInside( dir & "/in", dir & "/in" ) ).toBeFalse();
+				expect( Paths::isInside( dir & "/inside", dir & "/in" ) ).toBeFalse();
+			} );
+
+			it( "knows the folders an extension may have", function() {
+				directoryCreate( dir & "/a/tools", true, true );
+				directoryCreate( dir & "/b/.git", true, true );
+				fileWrite( dir & "/c.bx", "x" );
+				directoryCreate( dir & "/c", true, true );
+				fileWrite( dir & "/c/Extension.bx", "class {}" );
+
+				expect( ExtensionConventions::names() ).toInclude( "web" );
+				expect( ExtensionConventions::isConvention( "commands" ) ).toBeTrue();
+				expect( ExtensionConventions::isConvention( "node_modules" ) ).toBeFalse();
+				expect( ExtensionConventions::foldersIn( dir & "/a" ) ).toBe( [ "tools" ] );
+				expect( ExtensionConventions::isExtensionFolder( dir & "/a" ) ).toBeTrue();
+				expect( ExtensionConventions::isExtensionFolder( dir & "/b" ) ).toBeFalse();
+				expect( ExtensionConventions::isExtensionFolder( dir & "/c" ) ).toBeTrue();
+			} );
+
+			it( "writes a lock with its names in order, reads it back, and says what is wrong with a damaged one", function() {
+				var lock = new bxagents.models.util.LockFile( dir & "/x.lock.json", "things", "Test.BadLock", "Delete it." );
+
+				expect( lock.read() ).toBeEmpty();
+				lock.write( { zed : { v : 1 }, Alpha : { v : 2 } } );
+				var text = fileRead( dir & "/x.lock.json" );
+				expect( text.find( "Alpha" ) ).toBeLT( text.find( "zed" ) );
+				expect( lock.read().zed.v ).toBe( 1 );
+				expect( jsonDeserialize( text ).version ).toBe( 1 );
+
+				lock.write( {}, true );
+				expect( fileExists( dir & "/x.lock.json" ) ).toBeFalse();
+				lock.write( {} );
+				expect( fileExists( dir & "/x.lock.json" ) ).toBeTrue();
+
+				fileWrite( dir & "/x.lock.json", "{ nope" );
+				expect( () => lock.read() ).toThrow( "Test.BadLock" );
+			} );
+
+			it( "adds and removes .gitignore lines, once, and never starts a .gitignore", function() {
+				var ignore = new bxagents.models.util.GitIgnore( dir & "/.gitignore" );
+
+				expect( ignore.add( "/a/" ) ).toBeFalse();
+				expect( fileExists( dir & "/.gitignore" ) ).toBeFalse();
+
+				fileWrite( dir & "/.gitignore", ".env" & char( 10 ) );
+				expect( ignore.add( "/a/", "note" ) ).toBeTrue();
+				expect( ignore.add( "a/", "note" ) ).toBeFalse();
+				expect( ignore.add( "/b.bx", "note" ) ).toBeTrue();
+				var lines = fileRead( dir & "/.gitignore" ).listToArray( char( 10 ) );
+				expect( lines ).toInclude( ".env" );
+				expect( lines ).toInclude( "/a/" );
+				expect( lines.filter( l => l.contains( "note" ) ) ).toHaveLength( 1 );
+
+				expect( ignore.remove( "/a/" ) ).toBeTrue();
+				expect( ignore.remove( "/a/" ) ).toBeFalse();
+				expect( ignore.has( "/b.bx" ) ).toBeTrue();
+				expect( fileRead( dir & "/.gitignore" ).listToArray( char( 10 ) ) ).notToInclude( "/a/" );
+			} );
+
+		} );
+
+	}
+
+}

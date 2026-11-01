@@ -3,6 +3,7 @@
  *
  *   ./my-ext, /abs/path, C:\ext     a local directory (copied)
  *   ./my-ext.zip                    a local zip file
+ *   ./greet.bx                      a local one-class extension (copied)
  *   owner/repo, owner/repo#ref      a GitHub repository (its archive at a branch, tag or commit; the default branch without a ref)
  *   https://github.com/owner/repo   the same, as a URL (also .../tree/<ref> and .git forms), or git@github.com:owner/repo.git
  *   https://example.org/x.zip       a zip file by URL
@@ -18,6 +19,7 @@
  *   pinned    true when it names an exact version or ref, so `update` has nothing newer to find
  *   plus what the kind needs: path, owner, repo, ref, url, slug, version
  */
+import bxModules.bxagents.models.util.Paths;
 class {
 
 	/**
@@ -78,7 +80,7 @@ class {
 	private boolean function looksLikePath( required string typed ) {
 		return arguments.typed.startsWith( "/" ) || arguments.typed.startsWith( "./" ) || arguments.typed.startsWith( "../" ) || arguments.typed.startsWith( "~" )
 			|| arguments.typed.startsWith( ".\" ) || arguments.typed.startsWith( "..\" ) || reFind( "^[A-Za-z]:[\\/]", arguments.typed ) > 0
-			|| arguments.typed.lCase().endsWith( ".zip" ) && !reFindNoCase( "^https?://", arguments.typed )
+			|| reFindNoCase( "\.(zip|bx)$", arguments.typed ) && !reFindNoCase( "^https?://", arguments.typed )
 	}
 
 	private string function absolute( required string path, required string workingDirectory ) {
@@ -86,25 +88,26 @@ class {
 		var given = arguments.path.startsWith( "~" ) ? home & mid( arguments.path, 2, len( arguments.path ) ) : arguments.path
 		var isAbsolute = given.startsWith( "/" ) || reFind( "^[A-Za-z]:[\\/]", given ) > 0
 		var joined = isAbsolute || !len( arguments.workingDirectory ) ? given : arguments.workingDirectory & "/" & given
-		return createObject( "java", "java.io.File" ).init( joined ).getCanonicalPath().replace( "\", "/", "all" ).reReplace( "/+$", "" )
+		return Paths::canonical( joined )
 	}
 
 	private boolean function localExists( required string typed, required string workingDirectory ) {
 		var path = absolute( arguments.typed, arguments.workingDirectory )
-		return directoryExists( path ) || ( fileExists( path ) && path.lCase().endsWith( ".zip" ) )
+		return directoryExists( path ) || ( fileExists( path ) && reFindNoCase( "\.(zip|bx)$", path ) > 0 )
 	}
 
 	private struct function fromPath( required string path, required string workingDirectory, required boolean mustExist ) {
 		var found = absolute( arguments.path, arguments.workingDirectory )
 		var isZip = found.lCase().endsWith( ".zip" )
-		if ( isZip ? !fileExists( found ) : !directoryExists( found ) ) {
-			fail( "There is no #isZip ? 'zip file' : 'folder'# at #found#." )
+		var isClass = found.lCase().endsWith( ".bx" )
+		if ( isZip || isClass ? !fileExists( found ) : !directoryExists( found ) ) {
+			fail( "There is no #isZip ? 'zip file' : ( isClass ? 'file' : 'folder' )# at #found#." )
 		}
 		var base = getFileFromPath( found )
 		return {
-			kind    : isZip ? "zip" : "directory",
+			kind    : isZip ? "zip" : ( isClass ? "file" : "directory" ),
 			path    : found,
-			name    : isZip ? reReplace( base, "(?i)\.zip$", "" ) : base,
+			name    : reReplace( base, "(?i)\.(zip|bx)$", "" ),
 			locator : "path:" & found,
 			pinned  : false
 		}

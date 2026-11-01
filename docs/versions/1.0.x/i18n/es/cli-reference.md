@@ -179,7 +179,7 @@ bxAgents new my-agent --forgebox=some-package-slug
 
 ### `add`
 
-Añade una cosa a un proyecto que ya existe, haciendo las mismas preguntas que `new`. Hoy eso es una `tool`, un `interceptor`, una `schedule`, un servidor `mcp`, un `gateway`, un `subagent`, una `skill`, un `profile`, un `provider` o una `capability`.
+Añade una cosa a un proyecto que ya existe, haciendo las mismas preguntas que `new`. Hoy eso es una `tool`, un `interceptor`, una `schedule`, un servidor `mcp`, un `gateway`, un `subagent`, una `skill`, un `profile`, un `provider`, una `capability` o una `extension`.
 
 ```bash
 bxAgents add                        # elige qué añadir
@@ -412,6 +412,22 @@ bxAgents add capability                         # pregunta cuál
 | `image` | `provider`, `model`, `size`, `quality`, `style`, `instructions` |
 
 Todas las claves salvo el proveedor son opcionales; si faltan, se aplica el valor del propio proveedor. bx-ai mantiene voz y transcripción en un solo proveedor de audio, así que la segunda de las dos toma por defecto el proveedor de la primera y uno distinto se rechaza. Una capacidad que ya está definida se rechaza: edítala en el archivo. La variable de la clave del proveedor recibe un marcador vacío en `.env`; la clave en sí nunca se pide.
+
+#### `add extension`
+
+Crea una extensión propia en `extensions/`: un archivo para unos pocos métodos, o una carpeta cuando lleva un scheduler, gateway, tool, skill o archivos web. Ver [Empezar una](conventions/extensions.md#empezar-una).
+
+```bash
+bxAgents add extension standup
+bxAgents add extension standup --with=command,key --description="Standup diario"
+bxAgents add extension standup --with=command,scheduler        # una carpeta, con schedulers/Standup.bx
+```
+
+| Flag | Significado |
+|---|---|
+| `--with` | Qué trae, separado por comas: `command`, `key`, `status`, `prefix`, `source`, `slot`, `verb`, `listener`, `scheduler`, `gateway`, `tool`, `skill`, `web`. Por defecto `command`. |
+| `--layout` | `file` o `folder`. Una carpeta es la única opción si `--with` incluye `scheduler`, `gateway`, `tool`, `skill` o `web`. |
+| `--description` | Una línea para el docblock de la clase. |
 
 ### `skills`
 

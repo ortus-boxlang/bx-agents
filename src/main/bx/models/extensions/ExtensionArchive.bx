@@ -9,6 +9,7 @@
  *   - links (symbolic links) in a folder are not followed or copied
  *   - a `.git` folder is left out
  */
+import bxModules.bxagents.models.util.Paths;
 class {
 
 	static {
@@ -24,9 +25,9 @@ class {
 	 */
 	numeric function extract( required string zip, required string destination ) {
 		var files = createObject( "java", "java.nio.file.Files" )
-		var paths = createObject( "java", "java.nio.file.Paths" )
+		var nio = createObject( "java", "java.nio.file.Paths" )
 		directoryCreate( path = arguments.destination, createPath = true, ignoreExists = true )
-		var root = createObject( "java", "java.io.File" ).init( arguments.destination ).getCanonicalPath().replace( "\", "/", "all" ).reReplace( "/+$", "" ) & "/"
+		var root = Paths::canonical( arguments.destination ) & "/"
 		var archive = createObject( "java", "java.util.zip.ZipFile" ).init( arguments.zip )
 		var written = 0
 		var bytes = 0
@@ -38,7 +39,7 @@ class {
 				if ( !safeName( name ) ) {
 					fail( "The archive has an entry that is not a plain relative path: [#name#]. It was not installed." )
 				}
-				var target = createObject( "java", "java.io.File" ).init( root & name ).getCanonicalPath().replace( "\", "/", "all" )
+				var target = Paths::canonical( root & name )
 				if ( !( target & ( entry.isDirectory() ? "/" : "" ) ).startsWith( root ) ) {
 					fail( "The archive has an entry that would land outside the folder: [#name#]. It was not installed." )
 				}
@@ -55,7 +56,7 @@ class {
 				}
 				directoryCreate( path = getDirectoryFromPath( target ), createPath = true, ignoreExists = true )
 				var input = archive.getInputStream( entry )
-				var output = files.newOutputStream( paths.get( target, [] ), [] )
+				var output = files.newOutputStream( nio.get( target, [] ), [] )
 				try {
 					var buffer = createObject( "java", "java.lang.reflect.Array" ).newInstance( createObject( "java", "java.lang.Byte" ).TYPE, 8192 )
 					var read = input.read( buffer )
@@ -88,15 +89,15 @@ class {
 	 */
 	numeric function copyFolder( required string source, required string destination ) {
 		var files = createObject( "java", "java.nio.file.Files" )
-		var paths = createObject( "java", "java.nio.file.Paths" )
-		var base = createObject( "java", "java.io.File" ).init( arguments.source ).getCanonicalPath().replace( "\", "/", "all" ).reReplace( "/+$", "" )
+		var nio = createObject( "java", "java.nio.file.Paths" )
+		var base = Paths::canonical( arguments.source )
 		directoryCreate( path = arguments.destination, createPath = true, ignoreExists = true )
 		var copied = 0
 		var bytes = 0
 		for ( var path in directoryList( base, true, "path" ) ) {
 			var normal = path.replace( "\", "/", "all" )
 			var relative = mid( normal, len( base ) + 2, len( normal ) )
-			if ( relative == ".git" || relative.startsWith( ".git/" ) || relative.contains( "/.git/" ) || files.isSymbolicLink( paths.get( normal, [] ) ) ) {
+			if ( relative == ".git" || relative.startsWith( ".git/" ) || relative.contains( "/.git/" ) || files.isSymbolicLink( nio.get( normal, [] ) ) ) {
 				continue
 			}
 			var target = arguments.destination & "/" & relative
@@ -105,7 +106,7 @@ class {
 				continue
 			}
 			// a file inside a linked folder is reached through the link, so its real path would not sit under the folder
-			if ( !createObject( "java", "java.io.File" ).init( normal ).getCanonicalPath().replace( "\", "/", "all" ).startsWith( base & "/" ) ) {
+			if ( !Paths::isInside( normal, base ) ) {
 				continue
 			}
 			copied++
@@ -130,7 +131,7 @@ class {
 			digest.update( fileReadBinary( arguments.folder ) )
 			return "sha256:" & lCase( binaryEncode( digest.digest(), "hex" ) )
 		}
-		var base = createObject( "java", "java.io.File" ).init( arguments.folder ).getCanonicalPath().replace( "\", "/", "all" ).reReplace( "/+$", "" )
+		var base = Paths::canonical( arguments.folder )
 		var all = []
 		for ( var path in directoryList( base, true, "path" ) ) {
 			if ( fileExists( path ) ) {

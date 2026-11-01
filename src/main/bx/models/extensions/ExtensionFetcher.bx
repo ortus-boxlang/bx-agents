@@ -3,6 +3,7 @@
  * anywhere that matters yet. The caller checks what arrived and only then places it.
  *
  *   directory   its files are copied
+ *   file        a one-class extension, copied
  *   zip         unpacked safely (see ExtensionArchive)
  *   github      the repository's archive at the ref: https://github.com/<owner>/<repo>/archive/<ref>.zip (HEAD when no ref)
  *   url         the zip at the address
@@ -12,6 +13,7 @@
  * A downloaded archive that holds a single folder (as GitHub's does) is entered, so the extension's own files are
  * at the top of what is returned.
  */
+import bxModules.bxagents.models.extensions.ExtensionConventions;
 class {
 
 	/**
@@ -35,6 +37,10 @@ class {
 		switch ( arguments.origin.kind ) {
 			case "directory":
 				variables.archive.copyFolder( arguments.origin.path, content )
+				break
+			case "file":
+				directoryCreate( path = content, createPath = true, ignoreExists = true )
+				fileCopy( arguments.origin.path, content & "/" & getFileFromPath( arguments.origin.path ) )
 				break
 			case "zip":
 				variables.archive.extract( arguments.origin.path, content )
@@ -97,14 +103,10 @@ class {
 	 */
 	private string function enter( required string content ) {
 		var entries = directoryList( arguments.content, false, "path" )
-		if ( entries.len() == 1 && directoryExists( entries[ 1 ] ) && !isConvention( getFileFromPath( entries[ 1 ] ) ) ) {
+		if ( entries.len() == 1 && directoryExists( entries[ 1 ] ) && !ExtensionConventions::isConvention( getFileFromPath( entries[ 1 ] ) ) ) {
 			return entries[ 1 ].replace( "\", "/", "all" )
 		}
 		return arguments.content
-	}
-
-	private boolean function isConvention( required string name ) {
-		return [ "commands", "schedulers", "gateways", "tools", "skills", "web" ].contains( arguments.name )
 	}
 
 }

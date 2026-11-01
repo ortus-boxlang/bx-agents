@@ -1,0 +1,45 @@
+/**
+ * The folders an extension may have. A folder with one of these is an extension even without an `Extension.bx`, and a
+ * folder with none of them (a `.git`, a `node_modules`) is not one.
+ */
+class {
+
+	static {
+		FOLDERS = [ "commands", "schedulers", "gateways", "tools", "skills", "web" ]
+	}
+
+	/**
+	 * @return The convention folder names
+	 */
+	static array function names() {
+		return static.FOLDERS
+	}
+
+	/**
+	 * @name A folder name
+	 *
+	 * @return True when it is one of the convention folders
+	 */
+	static boolean function isConvention( required string name ) {
+		return static.FOLDERS.contains( arguments.name )
+	}
+
+	/**
+	 * @folder An extension's folder
+	 *
+	 * @return The convention folders it has
+	 */
+	static array function foldersIn( required string folder ) {
+		return static.FOLDERS.filter( name => directoryExists( folder & "/" & name ) )
+	}
+
+	/**
+	 * @folder A folder
+	 *
+	 * @return True when it has an `Extension.bx` or any convention folder
+	 */
+	static boolean function isExtensionFolder( required string folder ) {
+		return fileExists( arguments.folder & "/Extension.bx" ) || foldersIn( arguments.folder ).len() > 0
+	}
+
+}

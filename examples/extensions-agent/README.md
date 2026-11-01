@@ -25,3 +25,11 @@ bxAgents serve           # the standup scheduler is registered with the served a
 ```
 
 Turn something off in `Agent.yaml`: `extensions: { disable: [ roll, "deploy:status" ] }`.
+
+Start one of your own with `bxAgents add extension <name>` (it asks what to bring), or put another project's extension to
+work with `bxAgents extensions install`. Any folder here installs as it is, into another project or for yourself:
+
+```bash
+bxAgents extensions install ./examples/extensions-agent/extensions/standup --projectRoot=../my-agent
+bxAgents extensions install ./examples/extensions-agent/extensions/hello.bx --system   # for you, in ~/.bxagents/extensions
+```
