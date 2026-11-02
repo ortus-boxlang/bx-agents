@@ -122,17 +122,18 @@ class extends="testbox.system.BaseSpec" {
 				return commands.run( line, context( transport, admin ) ).blocks().map( b => b.type == "text" ? b.text : jsonSerialize( b ) ).toList( " | " );
 			}
 
-			it( "finds a single file, a folder with an Extension.bx, and a folder with only convention folders", function() {
+			it( "finds a single file and a folder with an Extension.bx, and nothing else", function() {
 				write( "extensions/solo.bx", "class { @Command function solo() { return 'solo ran' } }" );
 				write( "extensions/whole/Extension.bx", "class { this.title = 'Whole'; }" );
 				write( "extensions/bare/commands/Bare.bx", "class extends='models.chat.commands.BaseCommand@bxagents' { function name() { return 'bare' } function run( c, a ) { return 'bare ran' } }" );
+				write( "extensions/gits/tools/T.bx", "class {}" );
 				write( "extensions/.hidden/Extension.bx", "class {}" );
 				write( "extensions/notes.txt", "not an extension" );
 				write( "extensions/random/readme.md", "not an extension either" );
 
 				var found = new bxagents.models.extensions.ExtensionScanner().scan( dir & "/extensions", "project" ).map( e => e.name() );
 
-				expect( found ).toBe( [ "bare", "solo", "whole" ] );
+				expect( found ).toBe( [ "solo", "whole" ] );
 			} );
 
 			it( "scans a folder that is not there as nothing", function() {

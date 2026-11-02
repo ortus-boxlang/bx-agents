@@ -245,9 +245,11 @@ class extends="testbox.system.BaseSpec" {
 				expect( report.mentions ).toBe( [ "files", "network" ] );
 			} );
 
-			it( "takes a single class as a one-file extension named after it, a folder of conventions, and refuses anything else", function() {
+			it( "takes a single class as a one-file extension named after it, a folder with an Extension.bx, and refuses anything else", function() {
 				put( "one/greet.bx", "class { @Command function g() {} }" );
+				put( "conv/Extension.bx", "class {}" );
 				put( "conv/tools/T.bx", "class {}" );
+				put( "bare/tools/T.bx", "class {}" );
 				put( "nope/readme.md", "x" );
 				put( "two/a.bx", "class {}" );
 				put( "two/b.bx", "class {}" );
@@ -258,6 +260,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( packages.inspect( dir & "/one", "renamed", true ).name ).toBe( "renamed" );
 				subset( packages.inspect( dir & "/conv", "conv", false ), { ok : true, kind : "folder" } );
 				expect( packages.inspect( dir & "/nope", "nope", false ).ok ).toBeFalse();
+				expect( packages.inspect( dir & "/bare", "bare", false ).ok ).toBeFalse();
 				expect( packages.inspect( dir & "/two", "two", false ).ok ).toBeFalse();
 				put( "mod/ModuleConfig.bx", "class {}" );
 				expect( packages.inspect( dir & "/mod", "mod", false ).problems[ 1 ] ).toInclude( "BoxLang module" );

@@ -105,7 +105,7 @@ A folder has the same shape as an agent project:
 
 ```
 extensions/standup/
-  Extension.bx        optional: the module config (properties, configure(), onLoad(), onUnload())
+  Extension.bx        required: it is what makes the folder an extension (the module config: properties, configure(), onLoad(), onUnload())
   commands/           one class per command, like the built-in ones
   schedulers/         BoxLang scheduler classes, started when the agent is served
 ```

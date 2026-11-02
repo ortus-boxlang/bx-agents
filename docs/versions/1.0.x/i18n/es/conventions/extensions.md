@@ -105,7 +105,7 @@ Una carpeta tiene la misma forma que un proyecto de agente:
 
 ```
 extensions/standup/
-  Extension.bx        opcional: el module config (propiedades, configure(), onLoad(), onUnload())
+  Extension.bx        obligatorio: es lo que hace de la carpeta una extensión (el module config: propiedades, configure(), onLoad(), onUnload())
   commands/           una clase por comando, como los integrados
   schedulers/         schedulers de BoxLang, que arrancan cuando se sirve el agente
 ```
