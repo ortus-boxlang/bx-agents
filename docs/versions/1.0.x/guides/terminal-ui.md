@@ -10,6 +10,13 @@ tags: [guides, cli, tui]
 
 Two commands draw a full terminal screen: [`bxAgents chat`](../cli-reference.md#chat), where you talk to your agent, and [`bxAgents new`](new-wizard.md), where you answer questions and get a project. This page is the tour. Every command and flag is in the [CLI reference](../cli-reference.md); every slash command is in [Slash commands](slash-commands.md); a guided first session is in [Chat walkthroughs](chat-walkthrough.md).
 
+<video controls preload="metadata" poster="../assets/video/chat-terminal-poster.png" style="max-width:100%">
+  <source src="../assets/video/chat-terminal.mp4" type="video/mp4">
+  <source src="../assets/video/chat-terminal.webm" type="video/webm">
+</video>
+
+*A chat session: slash commands, a tool call and a formatted answer. The answers in these recordings come from a scripted demo model, so they are canned. Everything else is the real screen.*
+
 ## Start a chat
 
 ```bash
@@ -36,6 +43,10 @@ Finished turns are printed as ordinary terminal text, so **your scrollback, sear
 - **Approvals.** When a run stops for a [human-in-the-loop](../conventions/gateways/index.md) decision, the screen asks in place: approve once, approve for the conversation, or reject.
 - **The hint row** under the box lists the keys and starts with the size of the context, such as `ctx ~12.4k / 128k 9%`. It is an estimate (characters divided by four), refreshed before every prompt.
 
+![The terminal chat after two answers, with the message box open for a new command](../assets/tui/chat-answer.png)
+
+*Finished turns are ordinary terminal text. The answer is formatted Markdown, with the tool call above it and the message box below.*
+
 ## Keys
 
 | Key | Does |
@@ -52,6 +63,10 @@ Finished turns are printed as ordinary terminal text, so **your scrollback, sear
 | Esc | While the agent works, stop it at its next step (not mid-word) |
 | Enter while the agent works | **Steer**: your message is added to the run |
 | `?` alone, or `/keys` | Show the keys as bound right now |
+
+![The output of /keys, listing every key with its action name](../assets/tui/chat-keys.png)
+
+*`/keys` lists every key, the action name to use in `bxAgents.yml`, and what it does.*
 
 ### Change a key
 
@@ -91,6 +106,10 @@ chat:
   shell: false                       # or a shell: "bash -c", "pwsh -Command"
   bifs: [ dateFormat, listLen ]      # or false to switch # off
 ```
+
+![The output of /context and a conversation being renamed](../assets/tui/chat-context.png)
+
+*`/context` shows what the context is made of. It is worked out locally, no model is called.*
 
 Details and limits: [CLI reference](../cli-reference.md#files-and-pictures-in-the-message).
 

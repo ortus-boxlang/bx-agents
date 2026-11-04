@@ -511,6 +511,8 @@ bxAgents serve [--port=8080] [--host=127.0.0.1]
 
 ### `chat`
 
+![The terminal chat](assets/tui/chat-answer.png)
+
 New to it? Start with [the terminal UI](guides/terminal-ui.md), the [walkthroughs](guides/chat-walkthrough.md) and the [slash command list](guides/slash-commands.md). This section is the reference.
 
 A chat with the built agent, in a terminal screen that keeps your scrollback: finished turns are printed as ordinary terminal text (select, search and scroll them as usual) and only the message box and the answer being written are redrawn. `--no-tui` (and any terminal that is not interactive) uses a plain line-by-line REPL instead, built on BoxLang's own `MiniConsole`.

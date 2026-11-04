@@ -16,6 +16,17 @@ bxAgents new my-agent
 
 It is a full-screen UI in the teal of the BxAgents logo. Arrow keys (or `j`/`k`) move, Space ticks, Enter confirms, **Esc goes back one question**, **Ctrl+C cancels** and creates nothing. Answers you have given collapse to one line each above the current question.
 
+<video controls preload="metadata" poster="../assets/video/wizard-poster.png" style="max-width:100%">
+  <source src="../assets/video/wizard.mp4" type="video/mp4">
+  <source src="../assets/video/wizard.webm" type="video/webm">
+</video>
+
+*The whole wizard in one run: a single agent on OpenAI with web search, memory saved to disk and a web chat.*
+
+![The wizard's second question](../assets/tui/wizard-name.png)
+
+*Answers you have given collapse to one line each above the question.*
+
 ## What it asks
 
 | Stage | What you choose | What it writes |
@@ -36,6 +47,14 @@ It is a full-screen UI in the teal of the BxAgents logo. Arrow keys (or `j`/`k`)
 | Deploy | Docker, DigitalOcean, SSH, SFTP, FTP, a local folder, or later | `deploy/<target>.json` |
 
 A stage whose answer you already gave as a flag is skipped and shown as answered. A stage that does not apply (the search provider when search is off) is skipped without a word.
+
+![The search provider question](../assets/tui/wizard-search.png)
+
+*A stage appears only when an earlier answer needs it: ticking web search asks which provider.*
+
+![The question for the top bar widgets](../assets/tui/wizard-widgets.png)
+
+*The look-and-feel stage previews each widget with a sample value.*
 
 ## File tools never get the whole disk
 
@@ -85,6 +104,11 @@ mcpServers:
 Picking a high-risk server shows what it can do before you continue. **Git** runs as a program on your machine (`uvx mcp-server-git`), so it needs [uv](https://docs.astral.sh/uv/) installed where the agent runs, and it works in the folder you start the agent from. The wizard writes it as a `command` entry; see [programs as MCP servers](../conventions/mcp.md#servers-that-run-as-a-program).
 
 ## After it is created
+
+![The final screen after the project is created](../assets/tui/wizard-done.png)
+
+*The last screen: where the project is, what to do next, and the command that repeats it without questions.*
+
 
 `new` runs `box install` (skip it with `--skipInstall`), then prints what is left: the keys to fill in, how to chat, test, serve and deploy, and, for each channel you chose, the setup that happens outside the project. For WhatsApp that means the Meta app, the verify token and a public address; for Slack, Socket Mode and two tokens; for Signal, a running `signal-cli`. The same steps live on each [gateway page](../conventions/gateways/index.md).
 

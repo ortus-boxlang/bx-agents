@@ -13,6 +13,8 @@ from the system.
 | `render.bxs` | Turns an asciicast (`.cast`) into a GIF and an MP4 |
 | `VtScreen.bx` | The terminal screen `render.bxs` draws from. Its spec is `tests/specs/tools/VtScreenSpec.bx` |
 | `demos/chat.json` | The keystrokes of the default chat demo |
+| `demos/chat-tour.json` | The keystrokes of the chat tour: `/keys`, `/prompt`, `/context`, `/name`, `/fork`, `/sessions` |
+| `demos/wizard.json` | The keystrokes of the `bxAgents new` wizard: a single agent on OpenAI with web search, saved memory and a web chat |
 | `demos/model.json` | The canned answers of the scripted model |
 | `webui/` | The web UI walkthrough video and doc screenshots: a demo app (`project/`), `narrate.py` (voice, Kokoro) and `mix.bxs` (music and mix, [bx-audio](https://github.com/ortus-boxlang/bx-audio)), `capture.js` (Playwright). See `webui/README.md` |
 
@@ -92,3 +94,22 @@ covers box drawing, spinners and check marks on most systems.
   a complete VT100, so a program that draws on the alternate screen with unusual sequences may not render right.
 - `drive.bxs` passes the command's arguments through the JVM, which mangles non-ASCII characters in a command line
   when the locale is not UTF-8 (set `LANG=C.UTF-8`). Typed text is not affected.
+
+## The chat tour and the wizard
+
+The tour is the same kit with another spec: `boxlang tools/demo/make-demo.bxs --spec=tools/demo/demos/chat-tour.json`.
+
+The wizard has no scripted model to start, so `make-demo.bxs` does not drive it. Run it under `drive.bxs` and render the cast it saves. Put the command in a copy of the spec (the first line is the command, then the working folder, then `output` for the cast):
+
+```json
+{ "command": [ "boxlang", "module:bxagents", "new", "support-bot", "--skipInstall" ],
+  "cwd": "wizard-out", "output": "/abs/path/wizard-out/session.cast",
+  "cols": 100, "rows": 32, "typeMs": 70, "steps": [ "...the steps of demos/wizard.json..." ] }
+```
+
+```bash
+boxlang tools/demo/drive.bxs wizard-spec.json
+boxlang tools/demo/render.bxs /abs/path/wizard-out/session.cast /abs/path/wizard-out
+```
+
+`render.bxs` takes **absolute** paths: a relative one is resolved against the script's folder. Render one recording at a time; two renders at once sharing one `BOXLANG_HOME` crashed with `Color parameter outside of expected range`, and the same recording rendered fine alone.

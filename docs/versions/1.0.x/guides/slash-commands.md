@@ -1,8 +1,8 @@
 ---
 title: "Slash commands"
 icon: phosphor-duotone:command
-summary: "All 24 chat commands: what each does, where it works (terminal, web page, chat platforms) and an example."
-description: "All 24 chat commands: what each does, where it works (terminal, web page, chat platforms) and an example."
+summary: "All 26 chat commands: what each does, where it works (terminal, web page, chat platforms) and an example."
+description: "All 26 chat commands: what each does, where it works (terminal, web page, chat platforms) and an example."
 tags: [guides, cli, tui, reference]
 ---
 
@@ -11,6 +11,10 @@ tags: [guides, cli, tui, reference]
 Type `/` in the terminal chat or the [web chat](../conventions/web-ui.md#slash-commands) to see the commands. Each one is written once, as a small class that answers with data, and every surface draws that answer its own way. In [chat platforms](../conventions/gateways/index.md#commands-in-a-gateway) type the command as a message; the default prefix is `/` and a gateway can change it.
 
 **Where** is `T` terminal, `W` web page, `G` chat platforms. A command marked `G` still needs to be in the gateway's `allow` list; the default list is `help`, `info`, `tools`, `notes`, `remember` and `model`.
+
+![/sessions after naming and forking a conversation](../assets/tui/chat-sessions.png)
+
+*`/name`, `/fork` and `/sessions` in a real chat.*
 
 ## Conversations
 
@@ -64,14 +68,16 @@ Over `--connect` or `--server`, `/profile` can only switch among the profiles th
 
 ## Your terminal
 
-These act on your own machine or your own session, so they stay in the terminal.
+These act on your own machine or your own session, so they stay in the terminal (`/extensions` also works in the web page).
 
 | Command | Where | Does | Example |
 |---|---|---|---|
+| `/extensions [name]` | T W | List the extensions the chat loads and what each added; with a name, one in detail | `/extensions` |
+| `/reload` | T | Load the extensions and their settings again. Admin only | `/reload` |
 | `/prompt [style]` | T | Show or change the message box look for this chat | `/prompt box`, `/prompt top +git -clock` |
 | `/copy` | T | Copy the last answer to the clipboard (OSC 52, honoured by most terminals) | `/copy` |
 | `/record [file]`, `/record stop` | T | Record the screen as a `.cast` file | `/record demo.cast` |
 
 ## Add your own
 
-An [extension](../conventions/extensions.md) adds commands such as `/deploy` or `/roll 2d6` to the chat, and [a first extension](first-extension.md) walks through one. The commands over HTTP are `GET /__bxagents/commands` and `POST /__bxagents/command`, see [Run control](../conventions/agent-bx.md#run-control).
+`/extensions` and `/reload` come with the [extension](../conventions/extensions.md) support. An extension adds commands such as `/deploy` or `/roll 2d6` to the chat, and [a first extension](first-extension.md) walks through one. The commands over HTTP are `GET /__bxagents/commands` and `POST /__bxagents/command`, see [Run control](../conventions/agent-bx.md#run-control).
