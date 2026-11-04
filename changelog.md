@@ -456,6 +456,7 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   with a lifecycle, and a folder with a command class and a scheduler.
 
 - The web chat page has a new look. Buttons are Phosphor icons (a small sprite is built into the page, no CDN), the composer is one card with the field above its tools, a lightning button opens the `/` commands menu, the conversation is a centered column with flat assistant replies, and the accent color now drives the tints, icons and focus glow. With no `icon` configured the header shows a robot. Extension scripts get `bxagents.icon( name )` and the page's new CSS variables.
+- The web chat page has an Appearance panel (palette icon in the header). A visitor picks light, dark or system, an accent color from presets or a hex value (with a contrast check), the text size and the density, saved in their browser. The operator's `theme` stays the default.
 
 #### Documentation
 

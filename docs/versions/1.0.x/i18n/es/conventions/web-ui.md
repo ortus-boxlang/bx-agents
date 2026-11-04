@@ -397,6 +397,19 @@ Para cualquier cosa que los tokens no cubran - fuentes personalizadas, layout, r
     **`apiKeyEnvVar` es una compuerta simple y activable - no un sistema de inicio de sesión completo.** Sin configurar, `<path>/api/*` está completamente abierto (bien para desarrollo local, no para un despliegue público). Configúralo, y un interceptor `preProcess` generado (`interceptors/WebUiAuthGate.bx`) requiere que cada request bajo `<path>/api/*` lleve una cabecera `X-API-Key` que coincida, comparada vía `java.security.MessageDigest.isEqual()` - la misma disciplina de comparación en tiempo constante que ya usa la propia comprobación de firma de cada gateway de webhook. **El shell estático mismo (`<path>/index.html`) deliberadamente NO está protegido** - solo `<path>/api/*` lo está - porque la navegación de página simple de un navegador no puede enviar una cabecera personalizada, así que proteger el shell haría inalcanzable, sin la clave ya en mano, la misma página que te pide la clave. El propio JS de la página pide la clave (un botón "Key", almacenado en `localStorage`) y la envía en cada llamada de API que hace de ahí en adelante. Una petición rechazada con `401` muestra un mensaje que te indica configurar o corregir la clave con ese botón, en lugar de un fallo genérico.
 
 
+## Apariencia
+
+El icono de paleta de la cabecera abre el panel **Apariencia**, donde cada visitante elige, solo para este navegador:
+
+| Ajuste | Opciones |
+|---|---|
+| Modo | Sistema, Claro u Oscuro (la misma elección que el botón Theme, y sigue a la cuenta cuando la página tiene preferencias) |
+| Color de acento | El acento del propio gateway (la muestra **Default**), ocho colores predefinidos o cualquier valor hexadecimal. El panel muestra el contraste del texto de los botones y avisa por debajo de 4,5 : 1 |
+| Tamaño de texto | Pequeño, Medio o Grande |
+| Densidad | Cómoda o Compacta |
+
+La elección se guarda en el navegador (`localStorage`, clave `bxagents_webui_appearance`) y **Reset to defaults** la borra. Nunca cambia lo que el operador escribió en `theme`: eso sigue siendo el punto de partida de todos. Un acento elegido también ajusta `--accent-fg` a blanco o casi negro, el que se lea mejor, y los tintes y el brillo de foco lo siguen. Los scripts y estilos de extensiones pueden apoyarse en `--accent`, `--accent-fg`, `--accent-soft`, `--accent-ink`, `--ring`, `--bg`, `--fg`, `--muted`, `--border` y `--surface`, y así siguen también la elección del visitante.
+
 ## Identidad de conversación
 
 **Cada memoria que un agente mantiene está indexada por `(userId, conversationId)`** - y un agente puede mantener varias a la vez (`memories` de `AiAgent` es un array; `loadMemoryMessages()` itera sobre todas ellas con el mismo par). `AiAgent.run()`/`.stream()` recaen en `""` para ambos cuando nada los suministra, así que la identidad del lado del servidor tiene que salir de algún sitio.

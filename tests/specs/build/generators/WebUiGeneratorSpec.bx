@@ -553,6 +553,25 @@ class extends="testbox.system.BaseSpec" {
 				expect( html ).notToInclude( "sendBtn.disabled = busy" );
 			} );
 
+			describe( "appearance", function() {
+
+				it( "has a panel for mode, accent, text size and density, kept in the browser", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+					var html = fileRead( appDir & "/chat/index.html" );
+
+					expect( html ).toInclude( 'id="appearanceBtn"' );
+					expect( html ).toInclude( 'id="appearancePanel"' );
+					expect( html ).toInclude( "bxagents_webui_appearance" );
+					expect( html ).toInclude( "function applyAppearance" );
+					expect( html ).toInclude( "function contrastRatio" );
+					// the operator's accent is only replaced while the visitor has picked one
+					expect( html ).toInclude( 'removeProperty( "--accent" )' );
+				} );
+
+			} );
+
 			describe( "icons", function() {
 
 				it( "inlines the Phosphor sprite, and every icon the page names is in it", function() {

@@ -399,6 +399,19 @@ For anything the tokens don't cover - custom fonts, layout, per-element rules - 
     **`apiKeyEnvVar` is a simple, toggleable gate - not a full login system.** Left unset, `<path>/api/*` is wide open (fine for local dev, not for a public deployment). Set it, and a generated `preProcess` interceptor (`interceptors/WebUiAuthGate.bx`) requires every request under `<path>/api/*` to carry a matching `X-API-Key` header, compared via `java.security.MessageDigest.isEqual()` - the same constant-time-compare discipline every webhook gateway's own signature check already uses. **The static shell itself (`<path>/index.html`) is deliberately NOT gated** - only `<path>/api/*` is - because a browser's plain page navigation can't send a custom header, so gating the shell would make the very page that prompts you for the key unreachable without it already. The page's own JS asks for the key (a "Key" button, stored in `localStorage`) and sends it on every API call it makes from then on. A request rejected with `401` shows a message telling you to set or correct the key with that button, instead of a generic failure.
 
 
+## Appearance
+
+The palette icon in the header opens the **Appearance** panel, where a visitor picks, for this browser only:
+
+| Setting | Choices |
+|---|---|
+| Mode | System, Light or Dark (the same choice as the Theme button, and it follows the account when the page has preferences) |
+| Accent color | The gateway's own accent (the **Default** swatch), eight presets, or any hex value. The panel shows the contrast of the button text on it and warns under 4.5 : 1 |
+| Text size | Small, Medium or Large |
+| Density | Comfortable or Compact |
+
+The choice is stored in the browser (`localStorage`, key `bxagents_webui_appearance`) and **Reset to defaults** clears it. It never changes what the operator wrote in `theme`: that stays the default every visitor starts from. A picked accent also sets `--accent-fg` to white or near black, whichever reads better, and the tints and focus glow follow it. Extension scripts and styles can rely on `--accent`, `--accent-fg`, `--accent-soft`, `--accent-ink`, `--ring`, `--bg`, `--fg`, `--muted`, `--border` and `--surface` and so follow the visitor's choice too.
+
 ## Conversation identity
 
 **Every memory an agent holds is keyed by `(userId, conversationId)`** - and an agent can hold several at once (`AiAgent`'s `memories` is an array; `loadMemoryMessages()` iterates all of them with the same pair). `AiAgent.run()`/`.stream()` fall back to `""` for both when nothing supplies them, so a server-side identity has to come from somewhere.
