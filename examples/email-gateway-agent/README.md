@@ -24,5 +24,5 @@ bxAgents serve
 `EmailGateway` polls IMAP for unseen mail every 60 seconds (configurable via `pollIntervalSeconds`). Send the mailbox an email - the reply comes back threaded via `In-Reply-To`/`References`.
 
 {% hint style="warning" %}
-Human-in-the-loop is **degraded** here - there's no button/component surface in email, so approval requests arrive as plain text asking you to reply with a decision keyword, correlated via a `[bxagents:<requestID>]` tag in the Subject line rather than `In-Reply-To`. See [Email - server-level dependencies, and degraded threading/HITL](../../docs/conventions/gateways/email.md).
+Human-in-the-loop is **degraded** here - there's no button/component surface in email, so approval requests arrive as plain text asking you to reply with a decision keyword, correlated via a `[bxagents:<requestID>]` tag in the Subject line rather than `In-Reply-To`. See [Email - bundled dependencies, and degraded threading/HITL](../../docs/conventions/gateways/email.md).
 {% endhint %}

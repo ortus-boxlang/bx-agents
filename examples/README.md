@@ -12,7 +12,8 @@ Real, buildable BxAgents projects, each demonstrating one feature area. Every ex
 | [`mcp-agent/`](mcp-agent) | Hosting a local MCP server that re-exposes a tool via `mcp/`. |
 | [`multi-agent-team/`](multi-agent-team) | A root agent delegating to two `subagents/`. |
 | [`webui-agent/`](webui-agent) | The v1 web chat UI, via a `gateways/` entry with `exposes: "webui"`. |
-| [`advanced-agent/`](advanced-agent) | A composite example: named `models/`, `subagents/`, `tools/`, `skills/`, a hosted `mcp/` server, dual `gateways/` exposure, a `schedules/` task, and an `interceptors/` entry, all in one project. |
+| [`advanced-agent/`](advanced-agent) | A composite example: a named model profile, `subagents/`, `tools/`, `skills/`, a hosted `mcp/` server, dual `gateways/` exposure, a `schedules/` task, and an `interceptors/` entry, all in one project. |
+| [`extensions-agent/`](extensions-agent) | Extensions of every shape under `extensions/`: commands, verbs, listeners, a gateway type, tools and skills an extension carries, a scheduler and web page assets. |
 
 ### Push-style chat-platform gateways
 

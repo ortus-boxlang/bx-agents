@@ -39,5 +39,5 @@ curl -X POST http://localhost:8080/webhooks/whatsapp-cloud \
 ```
 
 {% hint style="warning" %}
-v1 scope is WhatsApp DMs only (no group messages), and media isn't downloaded - only a caption if present. See [WhatsApp Business Cloud API](../../docs/conventions/gateways/whatsapp-cloud.md).
+v1 scope is WhatsApp DMs only (no group messages). A picture or document is read; video, audio and stickers aren't downloaded - only a caption if present. See [WhatsApp Business Cloud API](../../docs/conventions/gateways/whatsapp-cloud.md).
 {% endhint %}
