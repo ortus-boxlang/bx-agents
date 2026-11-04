@@ -10,7 +10,7 @@ tags: [guides, cli, tui, reference]
 
 Type `/` in the terminal chat or the [web chat](../conventions/web-ui.md#slash-commands) to see the commands. Each one is written once, as a small class that answers with data, and every surface draws that answer its own way. In [chat platforms](../conventions/gateways/index.md#commands-in-a-gateway) type the command as a message; the default prefix is `/` and a gateway can change it.
 
-**Where** is `T` terminal, `W` web page, `G` chat platforms. A command marked `G` still needs to be in the gateway's `allow` list; the default list is `help`, `info`, `tools`, `notes`, `remember` and `model`.
+**Where** is `T` terminal, `W` web page, `G` chat platforms. A command marked `G` still needs to be in the gateway's `allow` list; the default list is `help`, `info`, `tools`, `model`, `ping`, `notes` and `remember`.
 
 ![/sessions after naming and forking a conversation](../assets/tui/chat-sessions.png)
 

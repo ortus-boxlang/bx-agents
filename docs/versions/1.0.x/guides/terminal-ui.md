@@ -10,9 +10,9 @@ tags: [guides, cli, tui]
 
 Two commands draw a full terminal screen: [`bxAgents chat`](../cli-reference.md#chat), where you talk to your agent, and [`bxAgents new`](new-wizard.md), where you answer questions and get a project. This page is the tour. Every command and flag is in the [CLI reference](../cli-reference.md); every slash command is in [Slash commands](slash-commands.md); a guided first session is in [Chat walkthroughs](chat-walkthrough.md).
 
-<video controls preload="metadata" poster="../assets/video/chat-terminal-poster.png" style="max-width:100%">
-  <source src="../assets/video/chat-terminal.mp4" type="video/mp4">
-  <source src="../assets/video/chat-terminal.webm" type="video/webm">
+<video controls preload="metadata" poster="/assets/video/chat-terminal-poster.png" style="max-width:100%">
+  <source src="/assets/video/chat-terminal.mp4" type="video/mp4">
+  <source src="/assets/video/chat-terminal.webm" type="video/webm">
 </video>
 
 *A chat session: slash commands, a tool call and a formatted answer. The answers in these recordings come from a scripted demo model, so they are canned. Everything else is the real screen.*
@@ -59,7 +59,7 @@ Finished turns are printed as ordinary terminal text, so **your scrollback, sear
 | Ctrl+U, Ctrl+W | Delete to the start of the line, delete the word before the cursor |
 | Ctrl+V | Add the picture on the clipboard |
 | Ctrl+C | Clear the box. On an empty box, leave. While the agent works, stop it |
-| Ctrl+D | Leave, on an empty box |
+| Ctrl+D | Leave, on an empty box (otherwise delete the character under the cursor) |
 | Esc | While the agent works, stop it at its next step (not mid-word) |
 | Enter while the agent works | **Steer**: your message is added to the run |
 | `?` alone, or `/keys` | Show the keys as bound right now |
@@ -93,7 +93,7 @@ A `/` at the start of the box opens a menu of commands. Keep typing to narrow it
 |---|---|
 | `@` | Lists the files under the folder you started in. Keep typing to narrow it |
 | `@path/to/file` | Sends a text file's content with the message |
-| `@picture.png` | Sends a picture (png, jpg, gif, webp) as an image part. Up to 4 per message, 5 MB each. The profile needs `vision: true` |
+| `@picture.png` | Sends a picture (png, jpg, gif, webp) as an image part. Up to 4 per message, 5 MB each. Refused when the profile says `vision: false` |
 | `!command` | Runs a shell command **on your machine**; its output goes with your next message so the agent sees what you saw |
 | `!!command` | Same, shown on screen only |
 | `#function( args )` | Calls one BoxLang built-in, such as `#dateFormat( now(), 'yyyy-mm-dd' )`; the result goes with your next message |
@@ -123,7 +123,7 @@ Five styles, each with a top bar that carries a label and small facts (widgets):
 | `bars-hints` | The same two bars, hints and bottom widgets inside the lower one |
 | `rule` | One coloured rule above, hints below |
 | `box` | A rounded box |
-| `panel` | A tinted panel with a thick left bar. Drawn as `rule` without colour |
+| `panel` | A tinted panel with a thick left bar. Drawn as `rule` without 256 or true colour |
 
 Widgets: `agent`, `profile`, `folder`, `user`, `clock`, `machine`, `git`, `date`, `session`, `elapsed`, `ctx`. A widget with nothing to show (`git` outside a repository) is left out, and the last ones drop off when the line is too narrow.
 
@@ -162,5 +162,5 @@ Or change it for one chat: `/prompt box`, `/prompt top +git -clock`, `/prompt bo
 | A key does nothing | Run `/keys` to see what is bound, and rebind in `bxAgents.yml` if your terminal keeps that key for itself |
 | Colours look wrong | Set `COLORTERM=truecolor`, or `NO_COLOR=1` to switch colour off |
 | `--connect` says 401 | The server wants a token: `--token=<token>` or `BXAGENTS_TOKEN` |
-| A picture is refused | The profile does not set `vision: true` |
+| A picture is refused | The profile sets `vision: false`, or the file is not png, jpg, gif or webp, or is over 5 MB |
 | `/export` writes to an unexpected place | Without a name the file is dated and written to the folder you started in |

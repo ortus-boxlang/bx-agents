@@ -10,9 +10,9 @@ tags: [guides, cli, tui, walkthrough]
 
 Five short sessions, each about two minutes. They assume an agent you have already built; if you have not, start with the [quick start](../getting-started/quick-start.md). Every key and command used here is listed in [The terminal UI](terminal-ui.md) and [Slash commands](slash-commands.md).
 
-<video controls preload="metadata" poster="../assets/video/chat-tour-poster.png" style="max-width:100%">
-  <source src="../assets/video/chat-tour.mp4" type="video/mp4">
-  <source src="../assets/video/chat-tour.webm" type="video/webm">
+<video controls preload="metadata" poster="/assets/video/chat-tour-poster.png" style="max-width:100%">
+  <source src="/assets/video/chat-tour.mp4" type="video/mp4">
+  <source src="/assets/video/chat-tour.webm" type="video/webm">
 </video>
 
 *The keys, prompt styles, context, name, fork and sessions in one run. The answers in these recordings come from a scripted demo model, so they are canned. Everything else is the real screen.*
@@ -71,16 +71,16 @@ Needs a [`notes`](../conventions/agent-yaml.md#notes) block in `Agent.yaml`.
 ## 5. Show it a file or a picture
 
 1. Type `@` and a list of files under your folder opens. Keep typing to narrow it; **Tab** takes one. The file's content goes with your message.
-2. `@diagram.png` sends a picture. The profile needs `vision: true`, or the chat refuses it with a message instead of a provider error.
+2. `@diagram.png` sends a picture. A profile that sets `vision: false` makes the chat refuse it with a message instead of a provider error.
 3. **Ctrl+V** pastes a picture from the clipboard.
 4. `!git diff --stat` runs a command on your machine and sends what it printed along with your next message. `!!` shows it without sending.
 5. `/context` shows what is attached and how big the context is.
 
 ## The wizard in the same style
 
-<video controls preload="metadata" poster="../assets/video/wizard-poster.png" style="max-width:100%">
-  <source src="../assets/video/wizard.mp4" type="video/mp4">
-  <source src="../assets/video/wizard.webm" type="video/webm">
+<video controls preload="metadata" poster="/assets/video/wizard-poster.png" style="max-width:100%">
+  <source src="/assets/video/wizard.mp4" type="video/mp4">
+  <source src="/assets/video/wizard.webm" type="video/webm">
 </video>
 
 *The `new` wizard from the name to the finished project.*
