@@ -330,6 +330,9 @@ The page gives scripts one small object, `bxagents`:
 | `bxagents.refresh()` | asks the page to refresh now |
 | `bxagents.conversationId()` | the conversation in view |
 | `bxagents.apiBase` | the page's API path, for your own `fetch` calls |
+| `bxagents.icon( "robot" )` | markup for one of the page's [Phosphor icons](https://phosphoricons.com), sized by the text around it. The names are in `tools/webui-vendor/icons.json` |
+
+Your CSS can use the page's variables so it follows light, dark and the accent: `--bg`, `--surface`, `--fg`, `--muted`, `--border`, `--accent`, `--accent-fg`, `--accent-soft` (a light tint of the accent), `--accent-ink` (the accent as text or an icon), `--ring` (a focus glow), `--radius` and `--font`.
 
 ## Tools and skills
 

@@ -366,7 +366,7 @@ Every key below is optional - the entry works with just `exposes` and `path`.
 | --- | --- |
 | `title` | Browser title and header heading |
 | `subtitle` | Small line under the heading |
-| `icon` | An emoji (rendered into an inline-SVG favicon **and** the header) or an image URL/path (`/logo.svg`, `https://…`, `data:image/…`) |
+| `icon` | An emoji (rendered into an inline-SVG favicon **and** the header) or an image URL/path (`/logo.svg`, `https://…`, `data:image/…`). With none, the header shows a robot |
 | `welcome` | Empty-state message shown before the first turn |
 | `placeholder` | Composer input placeholder |
 | `footer` | Small note under the composer - disclaimers, links |
@@ -375,7 +375,7 @@ Every key below is optional - the entry works with just `exposes` and `path`.
 | `theme` | Design tokens - see below |
 | `themeFile` | Path to a CSS override, relative to the project root. Default `resources/webui/theme.css` |
 
-`theme` maps directly onto the page's CSS custom properties: `accent`, `accentFg`, `bg`, `fg`, `muted`, `border`, `surface`, `inputBg`, `bubbleUser`, `bubbleUserFg`, `bubbleAssistant`, `bubbleAssistantFg`, `bubbleError`, `reasoningFg`, `reasoningBg`, `toolFg`, `toolBg`, `radius`, `radiusSm`, `font`, `fontMono`, `fontSize`, `maxWidth`. A nested `theme.dark` block overrides any of the same tokens for dark mode. An unknown token **fails the build** rather than being silently ignored, so a typo surfaces immediately instead of leaving you wondering why your brand color never showed up.
+`theme` maps directly onto the page's CSS custom properties: `accent`, `accentFg`, `bg`, `fg`, `muted`, `border`, `surface`, `inputBg`, `bubbleUser`, `bubbleUserFg`, `bubbleAssistant`, `bubbleAssistantFg`, `bubbleError`, `reasoningFg`, `reasoningBg`, `toolFg`, `toolBg`, `radius`, `radiusSm`, `font`, `fontMono`, `fontSize`, `maxWidth`. `accent` also drives the page's tints and icon color (`--accent-soft`, `--accent-ink` and the focus glow are worked out from it), so one color is enough to brand the page. A nested `theme.dark` block overrides any of the same tokens for dark mode. An unknown token **fails the build** rather than being silently ignored, so a typo surfaces immediately instead of leaving you wondering why your brand color never showed up.
 
 ![The same page and conversation with the Theme toggle switched to dark - theme.dark's accent/accentFg tokens carry over, everything else is the same generated CSS](../assets/webui-chat-dark.png)
 

@@ -330,6 +330,9 @@ La página da a los scripts un objeto pequeño, `bxagents`:
 | `bxagents.refresh()` | pide a la página que refresque ya |
 | `bxagents.conversationId()` | la conversación a la vista |
 | `bxagents.apiBase` | la ruta de la API de la página, para tus propios `fetch` |
+| `bxagents.icon( "robot" )` | el código de uno de los [iconos Phosphor](https://phosphoricons.com) de la página, del tamaño del texto que lo rodea. Los nombres están en `tools/webui-vendor/icons.json` |
+
+Tu CSS puede usar las variables de la página para seguir el claro, el oscuro y el acento: `--bg`, `--surface`, `--fg`, `--muted`, `--border`, `--accent`, `--accent-fg`, `--accent-soft` (un tono claro del acento), `--accent-ink` (el acento como texto o icono), `--ring` (un brillo de foco), `--radius` y `--font`.
 
 ## Herramientas y skills
 
