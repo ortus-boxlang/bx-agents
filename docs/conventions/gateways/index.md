@@ -113,7 +113,7 @@ class {
 }
 ```
 
-`secretEnvVar` names an environment variable holding the signing secret - **never the secret value itself**. Generates, in `Application.bx`'s `onApplicationStart()`:
+`secretEnvVar` names an environment variable holding the signing secret - **never the secret value itself**. Generates, in the generated base `Application`'s `onApplicationStart()`:
 
 ```javascript
 aiGatewayRegistry().register( aiGateway( "http", { secret : getSystemSetting( "SLACK_WEBHOOK_SECRET", "" ) } ) )
@@ -210,10 +210,10 @@ aiGatewayRegistry().register( aiGateway( "bxModules.bxagents.models.gateways.Sig
 
 ### GatewaySession - wiring the agent to every push-style gateway
 
-Any project with at least one push-style gateway entry also gets a generated start-up statement in `Application.bx`'s `onApplicationStart()`. It builds a single bx-ai `GatewaySession` (our `CommandGatewaySession`, which is one with [commands](#commands-in-a-gateway) in front of the agent) bundling every push-style gateway in the project, bound to the project's root agent, and starts it:
+Any project with at least one push-style gateway entry also gets a generated start-up statement in the generated base `Application`'s `onApplicationStart()`. It builds a single bx-ai `GatewaySession` (our `CommandGatewaySession`, which is one with [commands](#commands-in-a-gateway) in front of the agent) bundling every push-style gateway in the project, bound to the project's root agent, and starts it:
 
 ```javascript
-// Application.bx, onApplicationStart() (GENERATED)
+// bxagents/Application.bx, onApplicationStart() (GENERATED)
 var wirebox        = application.cbController.getWireBox()
 var agent          = wirebox.getInstance( "GeneratedAgent" )
 var gatewaySession = new "models.gateways.CommandGatewaySession@bxagents"(
@@ -338,7 +338,7 @@ flowchart TD
 
 ### How a push-style gateway stays connected: the shared ColdBox Scheduler
 
-Rather than a new background-loop primitive, push-style gateways reach the app's own live ColdBox scheduler singleton (`appScheduler@coldbox` - the same one a hand-written `schedules/Scheduler.bx`, if the project has one, runs under) and register their own named task(s) into it dynamically - a recurring long-poll task for Telegram, for example. **One shared scheduler, every push-style gateway registering its own tasks into it** - never one scheduler per gateway, and never in conflict with a project's own cron jobs.
+Rather than a new background-loop primitive, push-style gateways reach the app's own live ColdBox scheduler singleton (`appScheduler@coldbox`; a project's own [`schedules/`](../schedules.md) are BoxLang schedulers and run separately) and register their own named task(s) into it dynamically - a recurring long-poll task for Telegram, for example. **One shared scheduler, every push-style gateway registering its own tasks into it** - never one scheduler per gateway, and never in conflict with a project's own schedules.
 
 ### Logging
 

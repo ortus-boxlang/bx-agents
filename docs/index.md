@@ -136,13 +136,14 @@ Your convention tree, and the plain ColdBox application `build` turns it into.
 ::: column
 ```
 your-agent/
+├── Application.bx     # your settings and hooks
 ├── Agent.yaml         # name, model, description
 ├── instructions.md    # the system prompt
 ├── tools/             # @AITool functions
 ├── skills/            # SKILL.md capabilities
 ├── subagents/         # nested agent trees
 ├── gateways/          # HTTP/MCP/chat exposure
-├── schedules/         # a real ColdBox scheduler
+├── schedules/         # BoxLang schedulers
 ├── mcp/               # MCP servers you host
 ├── interceptors/      # lifecycle hooks
 └── modules/           # module dependencies
@@ -152,11 +153,14 @@ your-agent/
 ```
 .build/app/
 ├── Application.bx
+├── bxagents/
+│   ├── Application.bx
+│   └── Scheduler.bx
 ├── config/
 │   ├── ColdBox.bx
 │   ├── WireBox.bx
-│   ├── Router.bx
-│   └── Scheduler.bx
+│   └── Router.bx
+├── schedules/
 ├── agent/
 │   └── GeneratedAgentFactory.bx
 ├── tools/  skills/  mcp/

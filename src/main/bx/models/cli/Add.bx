@@ -114,7 +114,7 @@ class {
 
 	/**
 	 * The name an agent is registered under in WireBox, which is what a scheduler's
-	 * getInstance() needs: its declared `name`, not its folder.
+	 * agent( name ) needs: its declared `name`, not its folder.
 	 *
 	 * @path The agent's folder
 	 *
@@ -132,15 +132,14 @@ class {
 	/**
 	 * @discovery The root discovery
 	 *
-	 * @return The names of the task( "..." ) calls already in schedules/Scheduler.bx
+	 * @return The names of the task( "..." ) calls already in schedules/*.bx
 	 */
 	private array function taskNames( required struct discovery ) {
 		var names = []
-		if ( !arguments.discovery.hasScheduler ) {
-			return names
-		}
-		for ( var hit in reMatch( "task\(\s*[""']([^""']+)[""']", fileRead( arguments.discovery.schedulerPath ) ) ) {
-			names.append( hit.reReplace( "task\(\s*[""']", "" ).reReplace( "[""']$", "" ) )
+		for ( var entry in arguments.discovery.schedules ?: [] ) {
+			for ( var hit in reMatch( "task\(\s*[""']([^""']+)[""']", fileRead( entry.path, "UTF-8" ) ) ) {
+				names.append( hit.reReplace( "task\(\s*[""']", "" ).reReplace( "[""']$", "" ) )
+			}
 		}
 		return names
 	}

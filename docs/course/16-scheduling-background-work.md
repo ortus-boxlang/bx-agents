@@ -1,70 +1,71 @@
 ---
 title: "Lesson 16: Scheduling Background Work"
 icon: phosphor-duotone:clock-countdown
-summary: schedules/Scheduler.bx - a real, hand-written ColdBox scheduler, passed through untouched.
-description: schedules/Scheduler.bx - a real, hand-written ColdBox scheduler, passed through untouched.
+summary: schedules/*.bx - BoxLang schedulers, one file each, with cron syntax.
+description: schedules/*.bx - BoxLang schedulers, one file each, with cron syntax.
 tags: [course, conventions, scheduling]
 ---
 
 # Scheduling Background Work
 
-`schedules/Scheduler.bx` - if present - is a **real, hand-written ColdBox scheduler
-class**, passed through into the build untouched: a plain file copy to
-`config/Scheduler.bx`, no generation, no translation.
+Every `schedules/*.bx` is a **BoxLang scheduler**: a plain class whose `configure()`
+builds tasks. There is no ColdBox in it and nothing to extend - the build adds the
+base class that gives it `task()`, `run()` and `agent()`.
 
 ```javascript
-// schedules/Scheduler.bx
-class extends="coldbox.system.web.tasks.ColdBoxScheduler" {
+// schedules/Nightly.bx
+class {
 
 	function configure() {
 		task( "nightly" )
-			.call( () => getInstance( "my-agent" ).run( "cleanup" ) )
-			.everyDayAt( "00:00" )
+			.cron( "0 0 * * *" )
+			.call( () => run( "cleanup" ) )
 			.withNoOverlaps()
 	}
 
 }
 ```
 
-There's nothing BxAgents-specific about the body of that file - it's ColdBox's own
-scheduler DSL, in full: `.every( 15, "minutes" )`, `.everyDayAt( "09:00" )`, `.onWeekdays( "08:30" )`, `.everyWeekOn()`, `.startOn()`/
-`.endOn()`/`.between()`, `.when()`, `.withNoOverlaps()`, lifecycle hooks, timezones -
-anything ColdBox's `ScheduledTask` supports.
+`.cron()` takes five fields (`minute hour day-of-month month day-of-week`) or six, with
+seconds in front. BoxLang's other task methods work too: `.every( 15, "minutes" )`,
+`.everyDayAt( "09:00" )`, `.onWeekdays( "08:30" )`, `.startOn()`/`.endOn()`, `.when()`,
+`.withNoOverlaps()`, lifecycle hooks, timezones.
 
 ## Retrieving your agent
 
-Every agent in your project's tree - the root project and every `subagents/*` entry -
-is registered in the generated `config/WireBox.bx` under its own declared `name` (see
-[Lesson 11](11-composing-subagents.md)). A schedule reaches whichever agent it wants
-with a plain `getInstance( "TheAgentName" )` - no BxAgents-specific lookup, just
-WireBox.
+`run( ... )` sends a message to the **default agent**, the root agent your
+`Agent.yaml` defines. `agent( "TheAgentName" )` gets any other agent in the tree by the
+`name` its definition declares (see [Lesson 11](11-composing-subagents.md)):
 
 ```javascript
 task( "weekly-digest" )
-	.call( () => getInstance( "ResearchBot" ).run( "summarize this week's findings" ) )
-	.everyWeekOn( 1, "08:00" )
+	.cron( "0 8 * * MON" )
+	.call( () => agent( "ResearchBot" ).run( "summarize this week's findings" ) )
 ```
+
+## Many schedulers
+
+Each file is its own scheduler, so group tasks however you like: one file per job, or
+related tasks together. BoxLang starts them with the app and stops them with it, so they
+run while the app is served.
 
 ## Validation
 
-`build` only ever looks for exactly one file: `schedules/Scheduler.bx`. Anything else
-in `schedules/` is ignored, and `build` emits a **warning** (not an error) if
-`schedules/` exists but has no `Scheduler.bx` in it - so a schedule that quietly
-stopped running is at least visible. Beyond that, it's real code: a syntax error or a
-bad `getInstance()` name surfaces when the generated app actually boots (`serve`), not
-at `build` validation time.
+`build` checks that each file name is a valid class name (`MyJob.bx`, not `my-job.bx`),
+that a scheduler does not extend ColdBox's scheduler any more, and warns about a file in
+`schedules/` that is not a `.bx` file. The body is real code: a syntax error or a bad
+agent name surfaces when the app starts (`serve`), not at `build`.
 
 ## Try it
 
-Add a `schedules/Scheduler.bx` that calls your root agent once a day, then build and
-inspect the generated `.build/app/config/Scheduler.bx` - you'll see your file copied
-through byte-for-byte.
-
 ```bash
+bxAgents add schedule --when="weekdays 08:30" --prompt="Summarize yesterday's findings"
 bxAgents build --verbose
+bxAgents inspect --section=schedule
 ```
 
-The verbose output tells you whether a `schedules/Scheduler.bx` was found.
+`add schedule` writes `schedules/<Name>.bx`; `inspect` lists each scheduler with its
+tasks, cron and agent.
 
 Full reference: [schedules/](../conventions/schedules.md).
 

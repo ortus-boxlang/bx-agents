@@ -95,8 +95,12 @@ or package as a portable `.bxa`.
   named `profiles`, and the capability defaults (see below). `new` asks for the model's temperature, longest
   answer and timeout (`--temperature`, `--max-tokens`, `--timeout`) and writes them as `params` and `options`.
 - `gateways/` - one entry per exposure or chat platform (see below).
-- `schedules/Scheduler.bx` - a real ColdBox scheduler class, passed through untouched, so
-  the full ColdBox task DSL is available.
+- `schedules/*.bx` - BoxLang schedulers, one file each: a plain class whose `configure()` builds tasks
+  with BoxLang's task DSL and `.cron()`. The build gives each the base class that provides `task()`,
+  `run()` (the default agent) and `agent( name )`, and BoxLang starts them with the served app.
+- `Application.bx` at the project root, yours to edit: it extends a class every build generates
+  (`bxagents/Application.bx`, the ColdBox, agent, gateway, interceptor and scheduler wiring), so a setting
+  or a hook added there wins and `super` reaches the wiring. A project without one gets one that only extends the base.
 - `mcp/` - host a local MCP server that re-exposes a project's own tools.
 - `interceptors/` - ColdBox interceptors, split by `@scope` into agent-scope (registered with the generated app) and runtime-scope
   (copied out for you to load).
@@ -338,10 +342,10 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   shape, into the root agent or a subagent (`--agent`).
 - `add interceptor` scaffolds `interceptors/<Name>.bx` with a method per interception point and the
   `@scope` the build splits on: ColdBox's core points for `agent`, bx-ai's events for `runtime`.
-- `add schedule` adds a task to `schedules/Scheduler.bx` from two answers, when and what to tell the
-  agent (`every 15 minutes`, `daily 09:00`, `weekly mon 09:00`, ...), creating the file if there is
-  none and otherwise adding at the end of `configure()`. There is no cron phrase: ColdBox's
-  `ScheduledTask` has none.
+- `add schedule` writes `schedules/<Name>.bx` from three answers, when, what to tell the agent and which
+  agent (`--agent`). The phrases (`every 15 minutes`, `daily 09:00`, `weekly mon 09:00`, ...) become a
+  `.cron()` call wherever cron can say it, and a raw cron expression (five fields, or six with seconds)
+  is accepted and checked by BoxLang's own parser.
 - `add mcp client` adds a remote MCP server to an agent's `mcpServers:` (a catalog name or `--url`,
   with the sign-in as an `${env.NAME}` placeholder and an empty `.env` stub); `add mcp server` writes
   `mcp/<name>.bx` offering the project's tools through bx-ai's MCP server, plus the `gateways/` entry

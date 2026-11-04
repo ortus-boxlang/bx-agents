@@ -33,7 +33,7 @@
  * Also closes two of the three RuntimeStartupSmokeSpec.bx `xit()`s that were
  * originally deferred for "needs coldbox-platform" reasons (which stopped
  * being true the moment this file's harness - a real ColdBox/miniserver
- * boot - existed): schedules/* registering with a live ColdBox Scheduler,
+ * boot - existed): schedules/* registering with a live scheduler,
  * and chat's direct-load path being behaviorally equivalent to WireBox's
  * singleton. See those tests below, and RuntimeStartupSmokeSpec.bx's own
  * updated notes on all three.
@@ -102,34 +102,46 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			/**
-			 * Confirms `schedules/Scheduler.bx` is passed through into a REAL,
-			 * live ColdBox Scheduler under a real boot - not just that the file
-			 * got copied to config/Scheduler.bx (SchedulerGeneratorSpec.bx
-			 * already covers that). ColdBox's SchedulerService always registers
-			 * the app's config/Scheduler.bx-derived scheduler under the fixed
-			 * name "appScheduler@coldbox" (confirmed against real ColdBox
-			 * source - coldbox/system/web/services/SchedulerService.cfc's
-			 * loadGlobalScheduler()) - hasTask() there proves the "heartbeat"
-			 * task (src/test/resources/fixtures/e2e-coldbox-route/schedules/Scheduler.bx,
-			 * a real ColdBoxScheduler subclass, `everyMinute()`) is actually
-			 * registered and live, not merely present as source text. Doesn't
-			 * wait out a real fire (the coarsest interval a ColdBox scheduler
-			 * can express, short of `.cron()`, is a minute) - that would add a
-			 * real ~60s+ tax to every CI run for marginal extra proof once the
-			 * task is confirmed live and registered here.
+			 * A schedules/*.bx file is a BoxLang scheduler, registered through `this.schedulers` in the
+			 * generated base Application, and its task reaches the project's default agent. Proven by
+			 * letting it fire: src/test/resources/fixtures/e2e-coldbox-route/schedules/Heartbeat.bx
+			 * runs every second (a six-field cron) and stores what `run()` got back from the root agent
+			 * (mock provider) in `application.heartbeat`. Reading that back shows every link: the
+			 * scheduler was copied and given its base class, BoxLang started it with the app, the cron
+			 * fired, and `run()` found the agent through the running ColdBox's WireBox.
 			 */
-			it( "registers the schedules/Scheduler.bx task with a live ColdBox Scheduler", function() {
-				var schedulerService = controller.getSchedulerService();
-				var appScheduler = schedulerService.getSchedulers()[ "appScheduler@coldbox" ];
+			it( "fires a schedules/*.bx task and the task gets an answer from the default agent", function() {
+				var waited = 0;
+				while ( !application.keyExists( "heartbeat" ) && waited < 20000 ) {
+					sleep( 250 );
+					waited += 250;
+				}
 
-				expect( appScheduler.hasTask( "heartbeat" ) ).toBeTrue();
+				expect( application.keyExists( "heartbeat" ) ).toBeTrue( "the heartbeat task never fired" );
+				expect( len( application.heartbeat ) ).toBeGT( 0 );
+			} );
+
+			/**
+			 * The scheduler is live in BoxLang's own SchedulerService (not ColdBox's), under the app.
+			 */
+			it( "registers the schedules/*.bx scheduler with BoxLang's SchedulerService", function() {
+				var service = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getSchedulerService();
+				var keys = createObject( "java", "ortus.boxlang.runtime.scopes.Key" );
+				var found = false;
+				for ( var name in service.getSchedulerNames() ) {
+					if ( service.getScheduler( keys.of( name ) ).hasTask( "heartbeat" ) ) {
+						found = true;
+					}
+				}
+
+				expect( found ).toBeTrue();
 			} );
 
 			/**
 			 * The actual point of registering every agent by its own declared
 			 * `name` in config/WireBox.bx (see ColdBoxAppGenerator.
-			 * renderWireBox()): schedules/Scheduler.bx's `.call()` closure
-			 * above calls `getInstance( "e2e-coldbox-route-agent" )` directly,
+			 * renderWireBox()): a scheduler's `agent( name )`
+			 * looks the agent up directly,
 			 * by the name this fixture's own Agent.bx declares - not the fixed
 			 * "GeneratedAgent" root alias. Proven here against a REAL WireBox
 			 * container, independent of waiting for the schedule to actually

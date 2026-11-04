@@ -31,6 +31,7 @@ This creates:
 
 ```
 my-agent/
+├── Application.bx
 ├── Agent.yaml
 ├── instructions.md
 ├── tools/
@@ -47,7 +48,7 @@ my-agent/
         └── AgentSpec.bx
 ```
 
-Plus a `.env` (with `BOXLANG_HOME=.build/runtime`; put your provider API keys there too) and a `.gitignore`. BoxLang loads the `.env` from the project root itself.
+Plus a root [`Application.bx`](../conventions/application-bx.md) that extends the class every build generates (add your own settings and hooks there), a `.env` (with `BOXLANG_HOME=.build/runtime`; put your provider API keys there too) and a `.gitignore`. BoxLang loads the `.env` from the project root itself.
 
 This is the `minimal` starter - the default when `--template` is omitted. `new` can also scaffold one of 7 other built-in starters (`--template=webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent`), each adding a bit of pre-wired content (a gateway, a scheduler) on top of the same skeleton, or skip scaffolding entirely and create the project from an existing GitHub repo (`--repo=owner/repo`) or a ForgeBox package (`--forgebox=<slug>`) instead - see the [CLI Reference](../cli-reference.md#new) for the full list and how each one works. The agent is defined by an `Agent.yaml` by default; pass `--class` to scaffold the advanced, class-based `Agent.bx` instead (see [Agent.bx](../conventions/agent-bx.md)).
 

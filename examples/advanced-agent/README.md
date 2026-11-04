@@ -10,7 +10,7 @@ single project to show they compose cleanly:
 - `skills/citation-style/` - a Claude Agent Skill the subagents' instructions reference.
 - `mcp/localServer.bx` - a hosted local MCP server re-exposing the root agent's own tools.
 - `gateways/expose.bx` + `gateways/exposeMcp.bx` - the root agent AND the local MCP server, both exposed over HTTP at the same time.
-- `schedules/Scheduler.bx` - a nightly task that wakes the root agent by its declared name.
+- `schedules/NightlyDigest.bx` - a BoxLang scheduler whose nightly task wakes the root agent with `run()`.
 - `interceptors/AuditLogger.bx` - an agent-scoped ColdBox lifecycle interceptor.
 
 ```bash

@@ -18,7 +18,7 @@
  *   gateways    [ { name, file, kind, summary, path } ]
  *   mcpHosted   [ { name, file, description, tools } ]
  *   interceptors[ { name, file, scope } ]
- *   schedule    { present, file, tasks : [ name ] }
+ *   schedule    { present, schedulers : [ { name, file, tasks : [ { name, when, agent } ] } ] }
  *   modules     [ { name } ]
  *   deploy      [ { name, file, target } ]
  *   env         [ { name, usedBy : [ text ], set } ]
@@ -541,23 +541,64 @@ class {
 	}
 
 	/**
+	 * One entry per `schedules/*.bx`: its tasks, read from the source (the report never loads the class).
+	 *
 	 * @root The project root
 	 * @discovery The root discovery
 	 *
-	 * @return { present, file, tasks : [ names ] } - task names read from `task( "name" )` calls
+	 * @return { present, schedulers : [ { name, file, tasks : [ { name, when, agent } ] } ] }
 	 */
 	private struct function scheduleInfo( required string root, required struct discovery ) {
-		if ( !arguments.discovery.hasScheduler ) {
-			return { present : false, file : "", tasks : [] }
+		var schedulers = []
+		for ( var entry in arguments.discovery.schedules ?: [] ) {
+			schedulers.append( {
+				name  : entry.name,
+				file  : "schedules/" & getFileFromPath( entry.path ),
+				tasks : scheduleTasks( entry.path )
+			} )
 		}
+		return { present : schedulers.len() > 0, schedulers : schedulers }
+	}
+
+	/**
+	 * Each `task( "name" )` call with what follows it up to the next one: the cron expression when it has a
+	 * `.cron( "..." )` (otherwise the frequency method it calls, e.g. `everyDayAt`) and the agent it names with
+	 * `agent( "Name" )` ("default" when it calls `run()` or names none).
+	 *
+	 * @path The scheduler file
+	 *
+	 * @return [ { name, when, agent } ]
+	 */
+	private array function scheduleTasks( required string path ) {
 		var tasks = []
 		try {
-			for ( var hit in reMatch( "task\(\s*[""']([^""']+)[""']", fileRead( arguments.discovery.schedulerPath ) ) ) {
-				tasks.append( hit.reReplace( "task\(\s*[""']", "" ).reReplace( "[""']$", "" ) )
+			var source = fileRead( arguments.path, "UTF-8" )
+			var pattern = "task\(\s*[""']([^""']+)[""']"
+			var starts = []
+			var position = 1
+			while ( true ) {
+				var hit = reFind( pattern, source, position, true )
+				if ( !hit.pos[ 1 ] ) {
+					break
+				}
+				starts.append( { at : hit.pos[ 1 ], name : source.mid( hit.pos[ 2 ], hit.len[ 2 ] ) } )
+				position = hit.pos[ 1 ] + hit.len[ 1 ]
+			}
+			for ( var i = 1; i <= starts.len(); i++ ) {
+				var chunkEnd = i < starts.len() ? starts[ i + 1 ].at - 1 : len( source )
+				var chunk = source.mid( starts[ i ].at, chunkEnd - starts[ i ].at + 1 )
+				var cron = reFind( "\.cron\(\s*[""']([^""']+)[""']", chunk, 1, true )
+				var frequency = reFind( "\.(every[A-Za-z]*|on[A-Z][A-Za-z]*|daily|hourly|weekly|monthly)\(", chunk, 1, true )
+				var agentHit = reFind( "agent\(\s*[""']([^""']+)[""']", chunk, 1, true )
+				tasks.append( {
+					name  : starts[ i ].name,
+					when  : cron.pos[ 1 ] ? chunk.mid( cron.pos[ 2 ], cron.len[ 2 ] ) : ( frequency.pos[ 1 ] ? chunk.mid( frequency.pos[ 2 ], frequency.len[ 2 ] ) : "" ),
+					agent : agentHit.pos[ 1 ] ? chunk.mid( agentHit.pos[ 2 ], agentHit.len[ 2 ] ) : "default"
+				} )
 			}
 		} catch ( any e ) {
 		}
-		return { present : true, file : "schedules/Scheduler.bx", tasks : tasks }
+		return tasks
 	}
 
 	/**

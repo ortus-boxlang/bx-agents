@@ -84,11 +84,11 @@ Subagents are built **leaf-first** (bottom-up): if `A` declares `subAgents: ["B"
 - A missing `Agent.yaml`/`Agent.bx` inside a discovered `subagents/*` folder is reported as its own validation error, and so is a folder holding both (`BxAgents.AmbiguousAgentDefinition`) - a folder holds one definition.
 - Every node's own DECLARED `name` (root + every subagent's own definition) must be unique across the whole project - see below.
 
-## Retrieving an agent from `schedules/Scheduler.bx`
+## Retrieving an agent from `schedules/`
 
 Two different names are in play, and they're not interchangeable:
 
 - The **folder name** under `subagents/` (`researcher` above) is what `subAgents: [ "..." ]` references - it's purely a build-time wiring concern.
-- The subagent's own **declared `name`** (its agent definition's `name` field, e.g. `"ResearchBot"`) is what you retrieve it by at runtime - every agent in the tree (root + every subagent) is registered in `config/WireBox.bx` under this name, so [`schedules/Scheduler.bx`](schedules.md) (or any other WireBox-aware code) reaches it with a plain `getInstance( "ResearchBot" )`.
+- The subagent's own **declared `name`** (its agent definition's `name` field, e.g. `"ResearchBot"`) is what you retrieve it by at runtime - every agent in the tree (root + every subagent) is registered in `config/WireBox.bx` under this name, so a [`schedules/`](schedules.md) scheduler reaches it with `agent( "ResearchBot" )` (and any other WireBox-aware code with a plain `getInstance( "ResearchBot" )`).
 
 These two names can differ, and often will - the folder name is an implementation detail, the declared `name` is the one that matters everywhere else (prompts, WireBox retrieval). Because it's now also a WireBox binding key, `build` fails validation if two agents in the tree - however deeply nested - end up with the same declared `name`, including two that both leave it unset and silently share the `"BxAi"` default.

@@ -29,31 +29,65 @@ class extends="testbox.system.BaseSpec" {
 				return generator.generate( discovery, newAppDir() );
 			}
 
-			it( "copies schedules/Scheduler.bx verbatim to config/Scheduler.bx", function() {
+			it( "copies each schedules/*.bx into the app as schedules/<Name>.bx", function() {
 				var result = generateFor( "full-project" );
 
-				expect( result.hasSchedules ).toBeTrue();
-				expect( fileExists( result.scheduler ) ).toBeTrue();
-
-				var sourcePath = expandPath( "/fixtures/full-project/schedules/Scheduler.bx" );
-				expect( fileRead( result.scheduler ) ).toBe( fileRead( sourcePath ) );
+				expect( result.schedulers ).toHaveLength( 1 );
+				expect( result.schedulers[ 1 ].name ).toBe( "Nightly" );
+				expect( result.schedulers[ 1 ].classPath ).toBe( "schedules.Nightly" );
+				expect( fileExists( result.schedulers[ 1 ].path ) ).toBeTrue();
+				expect( result.schedulers[ 1 ].path ).toMatch( "schedules[\\/]Nightly\.bx$" );
 			} );
 
-			it( "writes real ColdBox scheduler source unchanged - no BX Agents-specific translation", function() {
+			it( "gives a scheduler that names no parent the generated base class", function() {
 				var result = generateFor( "full-project" );
-				var content = fileRead( result.scheduler );
+				var content = fileRead( result.schedulers[ 1 ].path );
 
-				expect( content ).toInclude( 'extends="coldbox.system.web.tasks.ColdBoxScheduler"' );
+				expect( content ).toInclude( 'class extends="bxagents.Scheduler" {' );
 				expect( content ).toInclude( 'task( "nightly" )' );
-				expect( content ).toInclude( 'getInstance( "full-project-agent" ).run( "cleanup" )' );
-				expect( content ).toInclude( 'everyDayAt( "00:00" )' );
+				expect( content ).toInclude( '.cron( "0 0 * * *" )' );
+				expect( content ).toInclude( '.call( () => run( "cleanup" ) )' );
 			} );
 
-			it( "writes no Scheduler.bx when the project has no schedules/Scheduler.bx", function() {
-				var result = generateFor( "valid-minimal" );
+			it( "leaves a scheduler that already names a parent alone", function() {
+				var source = 'class extends="bxagents.Scheduler" {' & char( 10 ) & "}" & char( 10 );
+				expect( generator.withBase( source, "A" ) ).toBe( source );
 
-				expect( result.hasSchedules ).toBeFalse();
-				expect( result.keyExists( "scheduler" ) ).toBeFalse();
+				var other = 'class extends="my.BaseScheduler" {' & char( 10 ) & "}" & char( 10 );
+				expect( generator.withBase( other, "B" ) ).toBe( other );
+			} );
+
+			it( "adds the base after the class keyword whatever follows it, and keeps comments and annotations", function() {
+				var plain = generator.withBase( "// a nightly job" & char( 10 ) & "class {" & char( 10 ) & "}" & char( 10 ), "A" );
+				expect( plain ).toBe( "// a nightly job" & char( 10 ) & 'class extends="bxagents.Scheduler" {' & char( 10 ) & "}" & char( 10 ) );
+
+				var attributed = generator.withBase( "/**" & char( 10 ) & " * this class runs nightly" & char( 10 ) & " */" & char( 10 ) & '@singleton' & char( 10 ) & 'class foo="bar" {' & char( 10 ) & "}", "B" );
+				expect( attributed ).toInclude( ' * this class runs nightly' );
+				expect( attributed ).toInclude( '@singleton' & char( 10 ) & 'class extends="bxagents.Scheduler" foo="bar" {' );
+			} );
+
+			it( "refuses a file that has no class declaration, naming the file", function() {
+				expect( function() {
+					generator.withBase( "task( 'x' )", "Broken" );
+				} ).toThrow( "BxAgents.InvalidScheduler" );
+			} );
+
+			it( "lists the class path of every scheduler for the base Application to register", function() {
+				var discovery = discoverer.discover( fixtures & "/full-project" );
+
+				expect( generator.classPaths( discovery ) ).toBe( [ "schedules.Nightly" ] );
+				expect( generator.classPaths( discoverer.discover( fixtures & "/valid-minimal" ) ) ).toBe( [] );
+			} );
+
+			it( "writes nothing when the project has no schedules, and clears what an earlier build left", function() {
+				var appDir = newAppDir();
+				directoryCreate( appDir & "/schedules", true );
+				fileWrite( appDir & "/schedules/Stale.bx", "class {}" );
+
+				var result = generator.generate( discoverer.discover( fixtures & "/valid-minimal" ), appDir );
+
+				expect( result.schedulers ).toBe( [] );
+				expect( directoryExists( appDir & "/schedules" ) ).toBeFalse();
 			} );
 
 		} );

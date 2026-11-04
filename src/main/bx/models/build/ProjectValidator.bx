@@ -40,7 +40,7 @@ class {
 		validateDuplicateNames( arguments.discovery, errors )
 		validateSubagents( arguments.projectRoot, arguments.discovery, errors, ( arguments.resolvedConfig.profiles ?: {} ).keyArray(), len( arguments.resolvedConfig.model ?: "" ) > 0 || len( arguments.resolvedConfig.profile ?: "" ) > 0 || len( arguments.resolvedConfig.defaultProfile ?: "" ) > 0 )
 		validateModules( arguments.projectRoot, arguments.discovery, errors )
-		validateSchedules( arguments.projectRoot, arguments.discovery, warnings )
+		validateSchedules( arguments.projectRoot, arguments.discovery, errors, warnings )
 		validateGateways( arguments.discovery, errors, ( arguments.resolvedConfig.profiles ?: {} ).keyArray() )
 		validateGatewaySession( arguments.resolvedConfig, errors )
 		validateMcpServers( arguments.resolvedConfig, errors )
@@ -311,28 +311,36 @@ class {
 	// --------------------------------------------------------------------------
 
 	/**
-	 * `schedules/Scheduler.bx` is real, hand-written ColdBox code passed
-	 * through into the build untouched (see SchedulerGenerator) - there's no
-	 * `{cron, action}` data shape left to validate. The one thing worth
-	 * catching here: a `schedules/` folder that exists but has no
-	 * `Scheduler.bx` in it (e.g. a leftover file from before this project
-	 * moved off its old `{cron, action}` convention) is silently ignored by
-	 * discovery - `hasScheduler` is simply false, and no error surfaces
-	 * anywhere else. Warn here instead, so a schedule that quietly stopped
-	 * running is at least visible at build time.
+	 * Every `schedules/*.bx` is a BoxLang scheduler class (see SchedulerGenerator). Three things are checked
+	 * here, because each would otherwise only fail when the app starts:
+	 *  - the file name becomes the class name (`schedules.<Name>`), so it must be an identifier
+	 *  - a class that extends ColdBox's scheduler is a leftover from before schedulers became plain BoxLang
+	 *  - a file that is not a `.bx` file is not discovered, so say so rather than let a schedule quietly not run
 	 *
 	 * @projectRoot Absolute path to the project root
 	 * @discovery The raw discovery struct from ProjectDiscoverer.discover()
+	 * @errors Accumulator array - append() any validation errors found
 	 * @warnings Accumulator array - append() any validation warnings found
 	 */
-	private void function validateSchedules( required string projectRoot, required struct discovery, required array warnings ) {
-		var schedulesDir = arguments.projectRoot & "/schedules"
-		if ( arguments.discovery.hasScheduler ?: false ) {
-			return
+	private void function validateSchedules( required string projectRoot, required struct discovery, required array errors, required array warnings ) {
+		for ( var entry in arguments.discovery.schedules ?: [] ) {
+			if ( !reFind( "^[A-Za-z_][A-Za-z0-9_]*$", entry.name ) ) {
+				arguments.errors.append( "schedules/#entry.name#.bx: the file name becomes the class name, so use letters, digits and underscores only, starting with a letter or underscore" )
+				continue
+			}
+			if ( reFindNoCase( "extends\s*=\s*[""']coldbox\.system\.web\.tasks\.ColdBoxScheduler", fileRead( entry.path, "UTF-8" ) ) ) {
+				arguments.errors.append( "schedules/#entry.name#.bx extends ColdBox's scheduler. A scheduler is now a plain BoxLang class: remove the extends and keep task( ... ).cron( ... ).call( ... ) - see docs/conventions/schedules.md" )
+			}
 		}
 
-		if ( directoryExists( schedulesDir ) && directoryList( schedulesDir, false, "query" ).recordCount > 0 ) {
-			arguments.warnings.append( "schedules/ exists but has no Scheduler.bx - it's ignored. Add a schedules/Scheduler.bx (a real ColdBox scheduler class) - see docs/conventions/schedules.md" )
+		var schedulesDir = arguments.projectRoot & "/schedules"
+		if ( !directoryExists( schedulesDir ) ) {
+			return
+		}
+		var ignored = directoryList( schedulesDir, false, "name", "*", "asc", "file" )
+			.filter( name => !name.startsWith( "." ) && listLast( name, "." ).lcase() != "bx" )
+		if ( ignored.len() ) {
+			arguments.warnings.append( "schedules/ holds files that are not .bx files, which are ignored: #ignored.toList( ', ' )#" )
 		}
 	}
 

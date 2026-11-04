@@ -7,27 +7,58 @@ class extends="testbox.system.BaseSpec" {
 				variables.when = new bxagents.models.add.ScheduleWhen();
 			} );
 
-			it( "turns each phrase into the ColdBox scheduled-task call", function() {
+			it( "turns each phrase into a cron expression wherever cron can say it", function() {
 				var cases = {
-					"every 15 minutes"         : '.every( 15, "minutes" )',
-					"every 1 hour"             : '.every( 1, "hours" )',
+					"every 15 minutes"        : "*/15 * * * *",
+					"every 1 minute"          : "* * * * *",
+					"every 1 hour"            : "0 * * * *",
+					"every 2 hours"           : "0 */2 * * *",
+					"every 1 days"            : "0 0 * * *",
+					"hourly"                  : "0 * * * *",
+					"hourly :15"              : "15 * * * *",
+					"daily 09:00"             : "0 9 * * *",
+					"daily 9:05"              : "5 9 * * *",
+					"daily 00:00"             : "0 0 * * *",
+					"weekdays 08:30"          : "30 8 * * 1-5",
+					"weekends 10:00"          : "0 10 * * 0,6",
+					"weekly mon 09:00"        : "0 9 * * MON",
+					"weekly Sunday 18:30"     : "30 18 * * SUN",
+					"monthly 1 09:00"         : "0 9 1 * *",
+					"monthly 28 23:59"        : "59 23 28 * *"
+				};
+
+				for ( var phrase in cases ) {
+					var parsed = when.parse( phrase );
+					expect( parsed.cron ).toBe( cases[ phrase ], "for [#phrase#]" );
+					expect( parsed.call ).toBe( '.cron( "#cases[ phrase ]#" )', "for [#phrase#]" );
+				}
+			} );
+
+			it( "keeps the task's own method where cron cannot say it", function() {
+				var cases = {
+					"every 90 minutes"         : '.every( 90, "minutes" )',
+					"every 7 minutes"          : '.every( 7, "minutes" )',
+					"every 5 hours"            : '.every( 5, "hours" )',
 					"every 2 days"             : '.every( 2, "days" )',
-					"hourly"                   : ".everyHour()",
-					"hourly :15"               : ".everyHourAt( 15 )",
-					"daily 09:00"              : '.everyDayAt( "09:00" )',
-					"daily 9:05"               : '.everyDayAt( "09:05" )',
-					"weekdays 08:30"           : '.onWeekdays( "08:30" )',
-					"weekends 10:00"           : '.onWeekends( "10:00" )',
-					"weekly mon 09:00"         : '.everyWeekOn( 1, "09:00" )',
-					"weekly Sunday 18:30"      : '.everyWeekOn( 7, "18:30" )',
-					"monthly 1 09:00"          : '.everyMonthOn( 1, "09:00" )',
 					"first-business-day 09:00" : '.onFirstBusinessDayOfTheMonth( "09:00" )',
 					"last-business-day 17:00"  : '.onLastBusinessDayOfTheMonth( "17:00" )'
 				};
 
 				for ( var phrase in cases ) {
-					expect( when.parse( phrase ).call ).toBe( cases[ phrase ], "for [#phrase#]" );
+					var parsed = when.parse( phrase );
+					expect( parsed.cron ).toBe( "", "for [#phrase#]" );
+					expect( parsed.call ).toBe( cases[ phrase ], "for [#phrase#]" );
 				}
+			} );
+
+			it( "accepts a cron expression as it is, five fields or six with seconds", function() {
+				var parsed = when.parse( "0 9 * * 1-5" );
+				expect( parsed.kind ).toBe( "cron" );
+				expect( parsed.call ).toBe( '.cron( "0 9 * * 1-5" )' );
+				expect( parsed.summary ).toBe( "on the cron schedule 0 9 * * 1-5" );
+
+				expect( when.parse( "  */10   * * * *  " ).cron ).toBe( "*/10 * * * *" );
+				expect( when.parse( "0 30 8 * * MON-FRI" ).call ).toBe( '.cron( "0 30 8 * * MON-FRI" )' );
 			} );
 
 			it( "says each in plain words", function() {
@@ -38,21 +69,36 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "ignores case and extra spaces", function() {
-				expect( when.parse( "  DAILY   09:00 " ).call ).toBe( '.everyDayAt( "09:00" )' );
+				expect( when.parse( "  DAILY   09:00 " ).call ).toBe( '.cron( "0 9 * * *" )' );
 			} );
 
-			it( "only emits methods ColdBox's ScheduledTask really has", function() {
-				var source = fileRead( expandPath( "/coldbox" ) & "/system/async/tasks/ScheduledTask.cfc" );
-				var phrases = [ "every 5 minutes", "hourly", "hourly :5", "daily 09:00", "weekdays 09:00", "weekends 09:00", "weekly mon 09:00", "monthly 2 09:00", "first-business-day 09:00", "last-business-day 09:00" ];
+			it( "only emits cron BoxLang's own parser reads", function() {
+				var parser = createObject( "java", "ortus.boxlang.runtime.async.CronExpression" );
+				var phrases = [ "every 5 minutes", "every 2 hours", "every 1 days", "hourly", "hourly :5", "daily 09:00", "weekdays 09:00", "weekends 09:00", "weekly mon 09:00", "weekly sun 09:00", "monthly 2 09:00" ];
+
+				for ( var phrase in phrases ) {
+					var cron = when.parse( phrase ).cron;
+					expect( len( cron ) ).toBeGT( 0, "no cron for [#phrase#]" );
+					// parse() throws on anything it cannot read
+					parser.parse( cron );
+				}
+			} );
+
+			it( "only emits methods BoxLang's ScheduledTask really has", function() {
+				var names = {};
+				for ( var method in createObject( "java", "ortus.boxlang.runtime.async.tasks.ScheduledTask" ).getClass().getMethods() ) {
+					names[ method.getName() ] = true;
+				}
+				var phrases = [ "every 5 minutes", "every 7 minutes", "every 90 minutes", "every 2 days", "hourly", "daily 09:00", "weekly mon 09:00", "first-business-day 09:00", "last-business-day 09:00", "0 9 * * 1-5" ];
 
 				for ( var phrase in phrases ) {
 					var method = when.parse( phrase ).call.reReplace( "^\.", "" ).reReplace( "\(.*$", "" );
-					expect( source ).toInclude( "function " & method & "(", "ScheduledTask has no #method#()" );
+					expect( names.keyExists( method ) ).toBeTrue( "ScheduledTask has no #method#()" );
 				}
 			} );
 
 			it( "rejects what it cannot read, with an example", function() {
-				var bad = [ "", "cron 0 9 * * *", "sometimes", "every minutes", "every 0 minutes", "every 5 fortnights", "hourly :99", "daily", "daily 25:00", "daily 9am", "weekly noday 09:00", "weekly mon", "monthly 31 09:00", "monthly 0 09:00" ];
+				var bad = [ "", "cron 0 9 * * *", "99 * * * *", "0 9 * *", "sometimes", "every minutes", "every 0 minutes", "every 5 fortnights", "hourly :99", "daily", "daily 25:00", "daily 9am", "weekly noday 09:00", "weekly mon", "monthly 31 09:00", "monthly 0 09:00" ];
 
 				for ( var phrase in bad ) {
 					var accepted = true;

@@ -199,22 +199,23 @@ class {
 
 ### `scheduled`
 
-Adds a real, hand-written ColdBox scheduler calling the agent on a timer:
+Adds a [BoxLang scheduler](conventions/schedules.md) calling the agent on a cron schedule:
 
 ```javascript
-// schedules/Scheduler.bx
-class extends="coldbox.system.web.tasks.ColdBoxScheduler" {
+// schedules/Example.bx
+class {
 
 	function configure() {
 		task( "example" )
-			.call( () => getInstance( "my-agent" ).run( "Give me a status update" ) )
-			.everyDayAt( "00:00" )
+			.cron( "0 0 * * *" )
+			.call( () => run( "Give me a status update" ) )
+			.withNoOverlaps()
 	}
 
 }
 ```
 
-(`getInstance(...)`'s argument is always the scaffolded agent's own `name`, so it resolves the correct WireBox binding key.) This is real [`schedules/`](conventions/schedules.md) content, not a placeholder - edit `configure()` directly to add/change tasks using ColdBox's own scheduler DSL (`everyMinute()`, `everyHourAt()`, `cron(...)`, etc.).
+(`run()` sends the message to the project's default agent, the root agent. The build gives the class its helpers, so there is no `extends`.) This is real [`schedules/`](conventions/schedules.md) content, not a placeholder - edit `configure()` to add or change tasks with BoxLang's task DSL (`cron(...)`, `every(...)`, `everyDayAt(...)`, etc.), or add more files.
 
 ### `multi-agent`
 
