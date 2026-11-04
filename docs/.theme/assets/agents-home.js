@@ -55,9 +55,10 @@
 		skills: { k: "Skills", h: "Model-selected guidance", p: "A SKILL.md folder is offered to the model on demand. It is separate from the always-on instructions.", g: [["skills/", "one folder per skill"]] },
 		subagents: { k: "Sub-agents", h: "Agents all the way down", p: "Each folder holds the same convention tree as its parent. A team of specialists is just more folders, built leaf-first.", g: [["agent/GeneratedAgentFactory.bx", "nested agents attached"]] },
 		gateways: { k: "Gateways", h: "HTTP, MCP and chat", p: "Expose the agent as a REST API, a web chat UI, or a webhook for a chat platform. Each file is one entry point.", g: [["config/Router.bx", "routes mounted"], ["handlers/", "request handlers"]] },
-		schedules: { k: "Schedules", h: "A real ColdBox scheduler", p: "Run the agent on a timetable. The build emits a scheduler, not a wrapper around one.", g: [["config/Scheduler.bx", "your tasks"]] },
+		schedules: { k: "Schedules", h: "BoxLang schedulers, with cron", p: "Run the agent on a timetable. Each file is a plain BoxLang scheduler; the build gives it run() and agent(), and BoxLang starts it with the app.", g: [["schedules/", "one scheduler per file"], ["bxagents/Scheduler.bx", "run(), agent(), task()"]] },
 		mcp: { k: "MCP", h: "Host MCP servers", p: "Publish tools to any MCP client from the same project.", g: [["mcp/", "servers you host"]] },
-		interceptors: { k: "Interceptors", h: "Lifecycle hooks", p: "React to what the agent does without touching the agent itself.", g: [["interceptors/", "your hooks"]] }
+		interceptors: { k: "Interceptors", h: "Lifecycle hooks", p: "React to what the agent does without touching the agent itself.", g: [["interceptors/", "your hooks"]] },
+		application: { k: "Your application", h: "Application.bx is yours", p: "Settings and lifecycle hooks live in your own file. It extends a class every build generates, so you override a hook and call super.", g: [["bxagents/Application.bx", "the generated wiring"]] }
 	};
 	var tabs = $$(".bxa-tree button"), out = $("#out");
 	function show(k, anim) {
@@ -156,7 +157,7 @@
 			[14, "14-connecting-chat-platforms", "Connecting Chat Platforms", "Channel adapter gateways: nine chat platforms plus http, cli and mock, all one GatewaySession."],
 			[15, "15-the-generated-web-chat-ui", "The Generated Web Chat UI", "A complete browser chat client: sidebar, streaming, approvals, SQLite store."]]],
 		["Beyond chat", "Run on its own", [
-			[16, "16-scheduling-background-work", "Scheduling Background Work", "schedules/Scheduler.bx, a real hand written ColdBox scheduler, passed through untouched."],
+			[16, "16-scheduling-background-work", "Scheduling Background Work", "schedules/*.bx, BoxLang schedulers with cron syntax, one file each."],
 			[17, "17-hosting-mcp-servers", "Hosting and Consuming MCP Servers", "MCP in both directions: consume remote servers from Agent.yaml, host your own under mcp/."],
 			[18, "18-interceptors-and-modules", "Interceptors and Module Dependencies", "ColdBox lifecycle hooks scoped by @scope, and BoxLang module dependencies under modules/."]]],
 		["Ship it", "Test and deploy", [
