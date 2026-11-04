@@ -651,7 +651,7 @@ Las teclas se escriben como se dicen: `enter`, `alt+enter`, `shift+enter`, `ctrl
 | `@imagen.png` | Una imagen (png, jpg, gif, webp), enviada como parte de imagen del mensaje |
 | Ctrl+V | Pega una imagen del portapapeles (necesita `wl-paste` o `xclip` en Linux, `pngpaste` en macOS; Windows usa PowerShell). Una ficha en la fila de ayuda muestra cuántas esperan |
 
-Con un mensaje van como máximo 4 imágenes, de hasta 5 MB cada una. Antes de enviar nada, el chat comprueba que el perfil puede ver: pon `vision: true` en un [perfil](models.md#what-the-project-knows-about-a-model) que pueda, y una imagen enviada a uno que no puede se rechaza con un mensaje en lugar de un error oscuro del proveedor. `/context` cuenta lo adjunto. La imagen llega al modelo como partes de imagen de `AiMessage` de bx-ai, con la forma que ese proveedor espera; por ahora solo se han probado proveedores de estilo OpenAI.
+Con un mensaje van como máximo 4 imágenes, de hasta 5 MB cada una. Antes de enviar nada, el chat comprueba que el perfil puede ver: pon `vision: true` en un [perfil](models.md#lo-que-el-proyecto-sabe-de-un-modelo) que pueda, y una imagen enviada a uno que no puede se rechaza con un mensaje en lugar de un error oscuro del proveedor. `/context` cuenta lo adjunto. La imagen llega al modelo como partes de imagen de `AiMessage` de bx-ai, con la forma que ese proveedor espera; por ahora solo se han probado proveedores de estilo OpenAI.
 
 Con `--connect`, los archivos y las imágenes viajan en `attachments` de la petición a `/__bxagents/events`, ver [Control de ejecución](conventions/agent-bx.md#run-control). Las plataformas de chat aún no aceptan adjuntos.
 

@@ -5,50 +5,90 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sign in &middot; __TITLE__</title>
 <style>
+	/* The same tokens as the chat page, so the `theme` of the gateway entry brands the sign-in too */
 	:root {
 		color-scheme: light dark;
-		--bg: #f6f7f9; --fg: #16181d; --card: #ffffff;
-		--line: #d8dbe2; --accent: #2f6fed; --accent-fg: #ffffff;
-		--err-bg: #fdecec; --err-fg: #8a1c1c;
+		--bg: rgb(246, 247, 249);
+		--fg: rgb(16, 24, 40);
+		--muted: rgb(91, 102, 121);
+		--border: rgb(228, 231, 236);
+		--surface: rgb(255, 255, 255);
+		--input-bg: rgb(255, 255, 255);
+		--accent: rgb(59, 91, 219);
+		--accent-fg: rgb(255, 255, 255);
+		--accent-soft: color-mix(in srgb, var(--accent) 12%, var(--surface));
+		--accent-ink: color-mix(in srgb, var(--accent) 80%, black);
+		--ring: color-mix(in srgb, var(--accent) 35%, transparent);
+		--err-bg: rgb(253, 236, 236);
+		--err-fg: rgb(138, 28, 28);
 	}
-	@media ( prefers-color-scheme: dark ) {
-		:root {
-			--bg: #16181d; --fg: #e8eaf0; --card: #1e2128;
-			--line: #333845; --err-bg: #3a1d1d; --err-fg: #ffb4b4;
-		}
+	:root[data-theme="dark"] {
+		--bg: rgb(14, 17, 22);
+		--fg: rgb(230, 233, 239);
+		--muted: rgb(154, 164, 181);
+		--border: rgb(38, 45, 58);
+		--surface: rgb(18, 22, 29);
+		--input-bg: rgb(23, 28, 37);
+		--accent-soft: color-mix(in srgb, var(--accent) 22%, var(--surface));
+		--accent-ink: color-mix(in srgb, var(--accent) 55%, white);
+		--err-bg: rgb(58, 29, 29);
+		--err-fg: rgb(255, 180, 180);
 	}
+__THEME_TOKENS__
 	* { box-sizing: border-box }
 	body {
 		margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 1rem;
 		background: var( --bg ); color: var( --fg );
-		font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+		font: 16px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 	}
 	form {
-		background: var( --card ); border: 1px solid var( --line );
-		border-radius: 12px; padding: 2rem; width: min( 22rem, 100% );
+		background: var( --surface ); border: 1px solid var( --border );
+		border-radius: 18px; padding: 2rem; width: min( 24rem, 100% );
+		box-shadow: 0 1px 2px rgba( 16, 24, 40, .06 ), 0 12px 32px rgba( 16, 24, 40, .08 );
 	}
-	h1 { margin: 0 0 1.5rem; font-size: 1.25rem }
-	label { display: block; margin: 0 0 .35rem; font-size: .875rem }
+	.mark {
+		display: grid; place-items: center; width: 3rem; height: 3rem; margin: 0 0 1rem;
+		border-radius: 12px; background: var( --accent-soft ); color: var( --accent-ink );
+	}
+	.mark svg { width: 1.7rem; height: 1.7rem; fill: currentColor }
+	h1 { margin: 0 0 1.5rem; font-size: 1.3rem }
+	label { display: block; margin: 0 0 .35rem; font-size: .875rem; font-weight: 500 }
 	input {
-		width: 100%; padding: .6rem; margin: 0 0 1.25rem;
-		border: 1px solid var( --line ); border-radius: 6px;
-		background: var( --bg ); color: var( --fg ); font: inherit;
+		width: 100%; padding: .65rem .75rem; margin: 0 0 1.25rem;
+		border: 1px solid var( --border ); border-radius: 10px;
+		background: var( --input-bg ); color: var( --fg ); font: inherit;
 	}
+	input:focus-visible { outline: 0; border-color: var( --accent ); box-shadow: 0 0 0 3px var( --ring ) }
 	button {
-		width: 100%; padding: .7rem; border: 0; border-radius: 6px;
+		width: 100%; padding: .75rem; border: 0; border-radius: 12px;
 		background: var( --accent ); color: var( --accent-fg );
 		font: inherit; font-weight: 600; cursor: pointer;
 	}
 	button:hover { filter: brightness( 1.08 ) }
+	button:focus-visible { outline: 2px solid var( --accent ); outline-offset: 2px }
 	.err {
-		margin: 0 0 1.25rem; padding: .65rem .75rem; border-radius: 6px;
+		margin: 0 0 1.25rem; padding: .65rem .75rem; border-radius: 10px;
 		background: var( --err-bg ); color: var( --err-fg ); font-size: .875rem;
 	}
 	@media ( prefers-reduced-motion: reduce ) { * { transition: none !important } }
 </style>
+<script>
+	// follow the choice made on the chat page, else the system's
+	( function () {
+		var theme = null;
+		try { theme = localStorage.getItem( "bxagents_webui_theme" ); } catch ( e ) {}
+		if ( !theme && window.matchMedia && window.matchMedia( "(prefers-color-scheme: dark)" ).matches ) {
+			theme = "dark";
+		}
+		if ( theme === "dark" || theme === "light" ) {
+			document.documentElement.setAttribute( "data-theme", theme );
+		}
+	} )();
+</script>
 </head>
 <body>
 	<form method="post" action="__LOGIN_ACTION__">
+		<span class="mark" aria-hidden="true"><svg viewBox="0 0 256 256"><path d="M200,48H136V16a8,8,0,0,0-16,0V48H56A32,32,0,0,0,24,80V192a32,32,0,0,0,32,32H200a32,32,0,0,0,32-32V80A32,32,0,0,0,200,48Zm16,144a16,16,0,0,1-16,16H56a16,16,0,0,1-16-16V80A16,16,0,0,1,56,64H200a16,16,0,0,1,16,16Zm-52-56H92a28,28,0,0,0,0,56h72a28,28,0,0,0,0-56Zm-24,16v24H116V152ZM80,164a12,12,0,0,1,12-12h8v24H92A12,12,0,0,1,80,164Zm84,12h-8V152h8a12,12,0,0,1,0,24ZM72,108a12,12,0,1,1,12,12A12,12,0,0,1,72,108Zm88,0a12,12,0,1,1,12,12A12,12,0,0,1,160,108Z"/></svg></span>
 		<h1>__TITLE__</h1>
 
 		<!--

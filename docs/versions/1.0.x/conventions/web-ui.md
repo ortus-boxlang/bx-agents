@@ -59,14 +59,15 @@ Because the whole envelope arrives, **reasoning and tool calls are already on th
   <track kind="captions" src="/assets/video/webui-walkthrough.vtt" srclang="en" label="English" default>
 </video>
 
-A minute and a quarter through the whole page: sign in, streaming, the model picker, a tool call, saved conversations, notes and the dark theme. The music and the mix were made with [bx-audio](https://github.com/ortus-boxlang/bx-audio) and the voice with [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) (an Apache 2.0 model), and the page is the demo app in [`tools/demo/webui`](https://github.com/ortus-boxlang/bx-agents/tree/development/tools/demo/webui), which `capture.js` there drives with Playwright. It talks to a scripted model, so every answer is the same each time.
+A minute and a half through the whole page: sign in, streaming, the model picker, a tool call, the context ring and its breakdown, the `/` command menu, saved conversations, notes and the dark theme. The voice was made with [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) (an Apache 2.0 model), and the page is the demo app in [`tools/demo/webui`](https://github.com/ortus-boxlang/bx-agents/tree/development/tools/demo/webui), which `capture.js` there drives with Playwright. It talks to a scripted model, so every answer is the same each time.
 
 | | |
 |---|---|
-| ![Sign in with the accounts declared in `users`](../assets/webui/login.png) **Sign in.** Accounts come from [`users`](#users-and-sign-in). | ![A signed-in chat with the model picker, Chats, Clear, Notes, Key and Theme in the header](../assets/webui/home.png) **The header.** The picker shows when the entry lists [`profiles`](#choosing-the-model). |
+| ![Sign in with the accounts declared in `users`](../assets/webui/login.png) **Sign in.** Accounts come from [`users`](#users-and-sign-in). | ![A signed-in chat with the model picker, the context ring and icon buttons for Chats, Fork, Export, Clear, Notes, Key and Theme in the header](../assets/webui/home.png) **The header.** Icon buttons with tooltips. The picker shows when the entry lists [`profiles`](#choosing-the-model). |
 | ![A streamed reply with a numbered list and bold text](../assets/webui/markdown-list.png) **Streaming.** Replies render Markdown as they arrive. | ![The planner profile chosen in the picker, and the reply naming its model](../assets/webui/model-picker.png) **Model picker.** The pick is sent with each message, in the same conversation. |
 | ![A tool call shown as an open block above the reply](../assets/webui/tool-call.png) **Tools.** Each call shows its name and arguments. | ![The conversation sidebar listing two saved chats](../assets/webui/conversations.png) **Conversations.** Saved per account, and still there after a reload. |
 | ![The Notes panel with one note under About you](../assets/webui/notes.png) **Notes.** What the agent should remember, with the size it adds. | ![The page in the dark theme with the accent from the gateway entry](../assets/webui/dark-theme.png) **Theme.** Light or dark, remembered, with your `theme` accent. |
+| ![The context panel listing what fills the model's window](../assets/webui/context-panel.png) **Context.** The ring fills as the conversation grows; click it for the breakdown. | ![The command menu opened by typing a slash](../assets/webui/commands-menu.png) **Commands.** Type `/` for the menu. |
 
 ## What a streaming turn actually looks like
 

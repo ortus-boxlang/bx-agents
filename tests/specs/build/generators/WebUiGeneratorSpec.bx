@@ -1025,6 +1025,17 @@ class extends="testbox.system.BaseSpec" {
 				expect( src ).toInclude( 'path.startsWith( "/chat/api/health" )' );
 			} );
 
+			it( "gives the sign-in page the same theme tokens and mark as the chat page", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui-users" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var login = fileRead( appDir & "/chat/login.html" );
+				expect( login ).notToInclude( "__THEME_TOKENS__" );
+				expect( login ).toInclude( "--accent-soft" );
+				expect( login ).toInclude( 'class="mark"' );
+			} );
+
 			it( "never writes a password into generated source, only env var names and hashes", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-webui-users" );
 				var appDir = newAppDir();
