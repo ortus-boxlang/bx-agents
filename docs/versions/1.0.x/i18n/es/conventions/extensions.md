@@ -1,0 +1,457 @@
+---
+title: extensions/
+icon: phosphor-duotone:puzzle-piece
+summary: Añade comandos y tareas programadas al chat y al agente servido, en un archivo o una carpeta, con configuración.
+description: Añade comandos y tareas programadas al chat y al agente servido, en un archivo o una carpeta, con configuración.
+tags: [conventions, extensions, commands, scheduling]
+---
+
+# extensions/
+
+Una **extensión** añade cosas a BxAgents sin modificarlo: comandos de chat (`/deploy`, `/roll 2d6`), listeners de los eventos del chat y de bx-ai, y tareas programadas que se ejecutan cuando el agente se sirve. Es una clase que se ve y se comporta como un `ModuleConfig` de ColdBox: tiene `configure()`, `onLoad()` y `onUnload()`, su configuración viene de `Agent.yaml` y se le entregan objetos con `$inject`.
+
+Un archivo es una extensión completa:
+
+```
+extensions/
+  hello.bx             /hello
+  roll.bx              /roll, /coin
+  standup/             una carpeta también es una extensión
+    Extension.bx
+    commands/Standup.bx
+    schedulers/Reminder.bx
+```
+
+Un proyecto funcional con todo esto es [`examples/extensions-agent`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/extensions-agent).
+
+## La extensión más pequeña
+
+`extensions/hello.bx`. El nombre del archivo es el nombre de la extensión.
+
+```
+class {
+
+	function configure() {
+		variables.settings = { greeting : "Hola" }
+	}
+
+	@Command( "hello" )
+	@Hint( "saluda: /hello <nombre>" )
+	function greet( agentContext, commandArguments ) {
+		return agentContext.reply().ok( "#settings.greeting#, #commandArguments#!" )
+	}
+
+}
+```
+
+Ejecuta `bxAgents chat` y escribe `/hello Ada`. `/extensions` muestra lo que está cargado.
+
+Un método de comando recibe el `agentContext` (la conversación y nada más; el mismo objeto que reciben los comandos integrados) y el texto que sigue al nombre del comando. Devuelve un `Reply` (`agentContext.reply().ok( "..." )`, `.warn()`, `.keyValues()`, `.grid()`, `.choose()`) o simplemente una cadena. Si lanza una excepción, la persona ve un aviso con el nombre de la extensión y el chat continúa.
+
+## Anotaciones
+
+Las anotaciones son anotaciones normales de BoxLang sobre un método. Cada una se puede escribir de cuatro maneras, y todas las anotaciones de BxAgents aceptan las cuatro:
+
+| Escrita | Significa | Ejemplo |
+|---|---|---|
+| sin valor | valores por defecto; el nombre sale del método | `@Command` sobre `function roll()` es `/roll` |
+| simple | el valor principal | `@Command( "deploy" )` |
+| arreglo | varios | `@Alias( [ "dice", "d" ] )` |
+| struct | todas las opciones | `@Command( { name : "deploy", hint : "planifica", admin : true, aliases : [ "ship" ], transports : [ "tui", "web" ] } )` |
+
+Las anotaciones abreviadas dicen una opción cada una: `@Hint( "..." )`, `@Admin`, `@Alias( ... )`, `@Transports( [ "tui", "web" ] )`. Una opción del struct gana a una abreviada, y el conflicto se muestra en `/extensions`. Los nombres de anotación no distinguen mayúsculas.
+
+`transports` indica dónde corre el comando: `tui` (el chat de terminal), `web` (la página web y la ruta HTTP de comandos) y `gateway` (plataformas de chat). Por defecto son las tres. Una plataforma de chat solo responde a los comandos que su gateway permite (`gatewaySession.commands.allow`), y un comando con `@Admin` solo lo ejecutan los administradores indicados allí.
+
+## Configuración
+
+La extensión dice sus valores por defecto en `configure()`, igual que un módulo:
+
+```
+function configure() {
+	variables.settings = { target : "staging", environments : [ "staging", "production" ] }
+}
+```
+
+Quienes la usan los cambian bajo el nombre de la extensión en `Agent.yaml`:
+
+```yaml
+extensions:
+  deploy:
+    target: production
+```
+
+Una persona puede poner sus propios valores en `~/.bxagents/bxAgents.yml` (mismo bloque `extensions:`); los del proyecto ganan a los suyos. Los structs anidados se fusionan clave por clave; los arreglos y los valores simples reemplazan. Dentro de la extensión, `settings` es el struct fusionado.
+
+## Ciclo de vida
+
+| Método | Cuándo |
+|---|---|
+| `configure()` | una vez, primero. Define `variables.settings`. Sin trabajo aquí |
+| `onLoad()` | tras fusionar la configuración e inyectar todo. Abre conexiones, inicia temporizadores |
+| `onUnload()` | cuando termina el chat o el servidor. Libéralos |
+
+`this.title`, `this.author`, `this.webURL`, `this.description`, `this.version` y `this.enabled` se leen como en un módulo, y `this.dependencies = [ "otra-extension" ]` carga primero esa extensión. Una extensión que falla al cargar aparece como fallida en `/extensions` con el motivo; las demás se cargan igual.
+
+## Inyección
+
+Toda clase de una extensión tiene `$inject( name, object )`. Pone el objeto en los ámbitos `this` y `variables`. Solo privado: `$inject( name, object, "variables" )`. `$read( name )` lee desde fuera una entrada de `variables`.
+
+BxAgents inyecta dos cosas antes de `onLoad()`: `settings` y `log` (`log.info( "..." )`, `.warn()`, `.error()`; lo que una extensión registra también aparece en `/extensions`). Para compartir un objeto entre los archivos de una extensión, créalo en `onLoad()` y hazle `$inject` donde haga falta. La misma llamada sirve a una prueba para entregar un doble a una extensión.
+
+## Una extensión en carpeta
+
+Una carpeta tiene la misma forma que un proyecto de agente:
+
+```
+extensions/standup/
+  Extension.bx        obligatorio: es lo que hace de la carpeta una extensión (el module config: propiedades, configure(), onLoad(), onUnload())
+  commands/           una clase por comando, como los integrados
+  schedulers/         schedulers de BoxLang, que arrancan cuando se sirve el agente
+```
+
+Una clase en `commands/` extiende `models.chat.commands.BaseCommand@bxagents` y define `name()`, `hint()`, `transports()` y `run( context, args )`. `settings` y `log` se le inyectan.
+
+## Schedulers
+
+Una clase en `schedulers/` es un **scheduler de BoxLang**: una clase con un `configure()` que define tareas mediante la propiedad `scheduler` que BoxLang le da, como cualquier otro scheduler de BoxLang. Cuando se sirve el agente (`bxAgents serve`, un `.bxa`, un servidor desplegado) arranca en el servicio de schedulers del runtime. Como toda clase de una extensión, recibe `settings` (los valores por defecto con los de `Agent.yaml`) y `log` antes de que se ejecute `configure()`:
+
+```
+class {
+
+	function configure() {
+		scheduler.task( "standup-reminder" )
+			.call( () => log.info( "Hora del standup de #settings.channel#" ) )
+			.everyDayAt( settings.at )
+			.withNoOverlaps()
+	}
+
+}
+```
+
+Los métodos de ciclo de vida de los schedulers de BoxLang (`onStartup()`, `onShutdown()`, `onAnyTaskError()` y el resto) funcionan como siempre. Cada scheduler se registra como `extension-<extension>-<scheduler>`, y uno que no arranca se informa en su extensión dentro de `/extensions` mientras los demás siguen. El chat de terminal no arranca schedulers: pertenecen al agente servido.
+
+## Escuchar eventos
+
+Una extensión también es un interceptor. Un método con el nombre de un evento lo escucha, igual que un interceptor de BoxLang o de ColdBox:
+
+```
+class {
+
+	function onChatInput( data ) {
+		if ( data.text contains "password" ) {
+			data.cancel( "Eso parece una contraseña, así que no se envió." )
+		}
+	}
+
+	function onAIError( data ) {
+		log.warn( "el modelo falló" )
+	}
+
+}
+```
+
+Se pueden escuchar dos cosas:
+
+- **Eventos de bx-ai** (`beforeAIAgentRun`, `afterAIModelInvoke`, `onAIError`, `beforeAIToolExecute` y el resto). Se disparan donde corra el agente.
+- **Eventos del chat**, anunciados por BxAgents:
+
+| Evento | Cuándo | `data` tiene | Un listener puede |
+|---|---|---|---|
+| `onChatSessionStart` / `onChatSessionEnd` | el chat de terminal se abre o se cierra | `agent`, `transport` | |
+| `onChatInput` | antes de enviar un mensaje | `text`, `transport` | `cancel( reason )`, o `replace( nuevoTexto )` |
+| `onChatTurnStart` / `onChatTurnEnd` | alrededor de un turno del agente | `text`, `transport` (`reply`, `status` al final) | |
+| `onChatConversationChange` | `/new`, `/resume`, `/clear`, `/fork` o `/compact` cambió la conversación | `line`, `transport` | |
+| `onChatCommandBefore` | antes de cualquier comando, en todos los transportes | `line`, `name`, `arguments`, `transport` | `cancel( reason )` |
+| `onChatCommandAfter` | después de cualquier comando, en todos los transportes | `line`, `name`, `reply`, `transport` | `replace( nuevaRespuesta )` |
+
+Los eventos de sesión, entrada, turno y conversación son del chat de terminal; los dos eventos de comando se disparan igual en la terminal, la web y las plataformas de chat. Un listener que lanza una excepción se captura: nunca puede detener un turno, los listeners siguientes se ejecutan y el error aparece en `/extensions`.
+
+`@On` asocia un método con otro nombre, o con varios eventos a la vez, y admite las cuatro formas de una anotación:
+
+```
+@On( [ "beforeAIToolExecute", "afterAIToolExecute" ] )
+function toolCalled( data ) { log.info( "se ejecutó una herramienta" ) }
+```
+
+Si `@On` nombra un evento que el runtime no conoce, se informa en `/extensions` en vez de ignorarse.
+
+### `interceptors` y `customInterceptionPoints`
+
+Como en un module config, `configure()` puede nombrar clases de la carpeta de la extensión para registrar, cada una con sus propiedades, y puntos propios para anunciar:
+
+```
+function configure() {
+	variables.interceptors = [ { class : "interceptors.Audit", properties : { level : "info" } } ]
+	variables.customInterceptionPoints = [ "onAuditRecorded" ]
+}
+```
+
+`interceptors/Audit.bx` escucha con métodos que llevan el nombre del evento y recibe `settings`, `log` y `properties` inyectados. Cualquier extensión puede escuchar `onAuditRecorded`, y la dueña lo anuncia con `BoxAnnounce( "onAuditRecorded", { ... } )`. `extensions.disable` acepta `extension:method` para apagar un solo listener.
+
+Los eventos de ColdBox (`preProcess`, `postProcess` y el resto) no forman parte del chat de terminal; solo se disparan en un agente servido.
+
+## Atajos y estado
+
+`@Key` asocia teclas del chat de terminal a un método. En un método de comando ejecuta ese comando, con las mismas reglas y eventos que escribirlo; en cualquier otro método llama al método con el `agentContext` y un texto vacío y muestra lo que devuelve. `@Hint` (o `hint` en la forma struct) dice qué hace.
+
+```js
+@Command
+@Hint( "contar un pulso" )
+@Key( "ctrl+g" )
+function pulse( agentContext, commandArguments ) { ... }
+
+@Key( { keys : [ "ctrl+y", "alt+y" ], hint : "reiniciar la cuenta" } )
+function resetPulse( agentContext, commandArguments ) { ... }
+```
+
+Un atajo se llama `extensión:método` (`pulse:pulse`). `/keys` lo lista junto a los integrados, y la persona puede darle otras teclas bajo `chat: keys:` en `~/.bxagents/bxAgents.yml`. Una tecla que ya usa una acción integrada, o que tiene una extensión anterior, se rechaza con una frase que lo dice. Un borrador escrito se queda en la caja mientras se ejecuta el atajo. Los atajos son del chat de terminal; la página web y las plataformas de chat tienen comandos.
+
+`@Status` es un dato de estado junto al tamaño del contexto: un método que devuelve un texto corto, consultado cada vez que se dibuja la caja en la terminal y tras cada cambio de la conversación en la página web (pequeñas etiquetas en la cabecera). Devuelve una cadena vacía para no mostrar nada. Debe ser rápido; el que lanza un error se omite y el motivo se anota una vez en su extensión.
+
+```js
+@Status
+function beats( agentContext ) {
+	return variables.beats > 0 ? "pulso #variables.beats#" : ""
+}
+```
+
+`extensions.disable` acepta `extensión:método` también para un atajo o un elemento de estado.
+
+## `register( registry )`
+
+Lo que las anotaciones no pueden decir, porque se calcula en código, se dice con llamadas. Si la clase tiene un método `register( registry )`, se llama una vez, justo después de `configure()`:
+
+```js
+function register( registry ) {
+	registry.command( "deploy", { run : ( agentContext, commandArguments ) => ..., hint : "publicar", admin : true, aliases : [ "ship" ] } )
+	registry.key( "ctrl+d", "/deploy", { hint : "publicar" } )                    // un atajo que ejecuta una línea de comando
+	registry.key( "ctrl+o", ( agentContext ) => "abierto", { name : "open", hint : "abrir" } )   // o cualquier función
+	registry.status( "branch", ( agentContext ) => "main" )
+	registry.on( "onChatCommandAfter", ( data ) => ... )                         // un evento, o un array de ellos
+}
+```
+
+## Prefijos y fuentes `@`
+
+Ambos son solo para el chat de terminal.
+
+`@Prefix` reclama el comienzo de una línea en la caja de mensajes. El método recibe el `agentContext` y el texto que sigue al prefijo. Responde de una de dos formas: un `Reply` (o una cadena) se muestra y no se envía nada, y `{ send : "texto" }` se envía al agente como mensaje, después de que `onChatInput` lo haya visto.
+
+```js
+@Prefix( "%" )
+@Hint( "pedir una explicación: % por qué el cielo es azul" )
+function explain( agentContext, text ) {
+	return { send : "Explica esto en un párrafo corto: #text#" }
+}
+
+@Prefix( "=" )
+function count( agentContext, text ) {
+	return agentContext.reply().ok( "#text.listToArray( ' ' ).len()# palabras" )
+}
+```
+
+`/`, `!`, `#` y `@` son del propio chat, y un `?` solo pide las teclas; un prefijo que empieza con uno de ellos, está vacío o tiene un espacio se rechaza con una frase. Gana el prefijo más largo. Dos extensiones con el mismo prefijo son un aviso y gana la capa posterior.
+
+`@Source( "ticket" )` trae contenido junto al mensaje como `@ruta` trae un archivo. Escribe `@ticket:TCK-1` (o `@ticket:"dos palabras"`) y se llama al método con el `agentContext` y la consulta. Devuelve `{ name, content }`, un array de ellos o una cadena; el contenido viaja con el mensaje y la mención se queda en él. `@Suggest( "ticket" )` en otro método es opcional: devuelve los valores que ofrece el menú mientras se escribe tras los dos puntos. Se consulta en cada tecla, así que debe ser rápido; el que lanza un error no da sugerencias y el motivo se anota una vez en su extensión. El nombre de una fuente puede ser cualquiera que empiece con una letra, ya que los archivos son `@ruta` a secas.
+
+```js
+@Source( "ticket" )
+function ticket( agentContext, query ) { return { name : "ticket #query#", content : tickets[ query ] } }
+
+@Suggest( "ticket" )
+function ticketNames( agentContext, query ) { return tickets.keyArray() }
+```
+
+Escrito como llamadas: `registry.prefix( "%", ( agentContext, text ) => ..., { hint : "..." } )` y `registry.source( "ticket", ( agentContext, query ) => ..., { hint : "...", suggest : ( agentContext, query ) => [ ... ] } )`.
+
+La persona elige el prefijo o el nombre, por el id `extensión:método`, en `~/.bxagents/bxAgents.yml`:
+
+```yaml
+chat:
+  prefixes:
+    desk:explain: "?%"
+  sources:
+    desk:ticket: issue
+```
+
+Una elección que no se puede usar se avisa y se mantiene la de la extensión. `extensions.disable` acepta `extensión:método` también para estos.
+
+## Preguntar a la persona
+
+Un comando, atajo o prefijo puede hacer una pregunta a la persona mientras se ejecuta:
+
+```js
+var title    = agentContext.ask( "¿Título del ticket?", { default : commandArguments, help : "Una frase corta." } )
+var priority = agentContext.choose( "¿Prioridad?", [ "low", "normal", { value : "high", label : "high", hint : "alguien está bloqueado" } ] )
+if ( agentContext.confirm( "¿Crear el ticket #priority#?" ) ) { ... }
+```
+
+`ask()` devuelve el texto, `choose()` devuelve el valor elegido y `confirm()` es verdadero solo con un sí. Esc da `null` (`false` en `confirm()`). Las preguntas funcionan solo en el chat de terminal. Donde nadie puede responder (la página web, las plataformas de chat, un servidor) responden al instante con `null` (`false`) en vez de esperar, y `agentContext.canAsk()` lo dice de antemano para que un comando pueda avisar.
+
+## Recargar
+
+`/reload` carga de nuevo las extensiones sin salir del chat: ejecuta `onUnload()` de lo cargado, vuelve a leer `~/.bxagents/bxAgents.yml` y los ajustes `extensions:` de `Agent.yaml`, y carga lo que encuentra, con sus comandos, atajos, elementos de estado, prefijos, fuentes y oyentes. Una extensión que no carga se avisa y se deja fuera; las demás cargan. Es para administradores y solo en el chat de terminal: una app servida registra schedulers y oyentes de ColdBox al arrancar, así que se reinicia.
+
+## La página web: slots y `web/`
+
+Dos formas de añadir a la página web. Ambas se sirven con la página; el chat de terminal no tiene página, así que allí se ignoran.
+
+**Los slots** ponen una cadena en un lugar con nombre de la página: `header` (una etiqueta junto al tamaño del contexto), `sidebar` (un panel bajo la lista de conversaciones) o `composer` (junto al botón Attach). El método recibe el `agentContext` y devuelve la cadena:
+
+```js
+@Slot( "header" )
+function badge( agentContext ) { return variables.pings > 0 ? "#variables.pings# pings" : "" }
+
+@Slot( { place : "sidebar", html : true } )
+function about( agentContext ) { return "<strong>Panel</strong><br>Usa el botón Ping." }
+```
+
+La cadena se muestra como texto. Solo un slot que diga `html : true` tiene su cadena puesta en la página como marcado; es el autor diciendo que es su propio marcado, así que nunca debe llevar lo que escribió un visitante (usa `encodeForHTML()`). Una cadena vacía no muestra nada. La página pide todos los slots en una sola petición, `GET <path>/api/slots?conversationId=`, tras el mismo inicio de sesión o clave de API que el resto de la API de la página, cada vez que refresca el tamaño del contexto. Un slot que lanza un error se omite y el motivo se anota una vez en su extensión. Escrito como llamada: `registry.slot( "header", ( agentContext ) => "...", { html : false, name : "badge" } )`. `extensions.disable` acepta `extensión:método` para un slot.
+
+**`web/`** es una carpeta dentro de una extensión de carpeta. La página sirve todo archivo en ella (también imágenes) en `<path>/ext/<nombre>/<archivo>`, leído de la propia extensión en la app compilada; no se copia nada junto a la página. Los archivos `*.css` y `*.js` que están directamente en `web/` se enlazan en la página, por orden de nombre: estilos en el head y scripts al final del body. Una extensión desactivada por nombre en `extensions.disable` no aporta nada.
+
+```
+extensions/panel/
+  Extension.bx
+  web/
+    panel.css
+    panel.js
+    logo.png        se sirve en <path>/ext/panel/logo.png
+```
+
+La página da a los scripts un objeto pequeño, `bxagents`:
+
+| | |
+|---|---|
+| `bxagents.slot( place )` | una caja propia en `header`, `sidebar` o `composer`, para dibujar en ella |
+| `bxagents.runCommand( "/ping" )` | ejecuta un comando como si se hubiera escrito |
+| `bxagents.onRefresh( fn )` | se llama tras cada cambio de la conversación, una vez dibujados los slots |
+| `bxagents.refresh()` | pide a la página que refresque ya |
+| `bxagents.conversationId()` | la conversación a la vista |
+| `bxagents.apiBase` | la ruta de la API de la página, para tus propios `fetch` |
+
+## Herramientas y skills
+
+Una extensión de carpeta puede llevar sus propias herramientas y skills:
+
+```
+extensions/helpdesk/
+  Extension.bx
+  tools/Tickets.bx             una clase de herramienta de bx-ai normal
+  skills/triage/SKILL.md       una carpeta de skill normal
+```
+
+La extensión se queda como está. La app lee las carpetas donde están (`extensions/helpdesk/tools/` en la app compilada) y da las herramientas al agente raíz como si estuvieran en el `tools/` del proyecto, y añade los skills a los skills globales que recibe todo agente. No se copia ni se mezcla nada en el `tools/` o `skills/` del proyecto. Una herramienta o skill propia del proyecto gana a la de una extensión con el mismo nombre, y una extensión posterior gana a una anterior. `extensions.disable` acepta `extensión:Tickets` (el nombre de archivo de la herramienta) o `extensión:ticket-triage` (el nombre del skill) para uno, o el nombre de la extensión para todos.
+
+## Tipos de gateway
+
+Una clase en la carpeta `gateways/` de una extensión es un tipo de gateway, con el nombre de su archivo en minúsculas: `extensions/matrix/gateways/Matrix.bx` es el tipo `matrix`. Es un gateway de bx-ai normal (mira los integrados, que extienden `ScheduledGatewayBase`); su `getName()` debe ser igual que su archivo, en minúsculas, porque es la clave con la que el registro de gateways de bx-ai lo guarda. Un proyecto lo usa como cualquier otro:
+
+```js
+// gateways/chat.bx
+class {
+	function configure() {
+		return { type : "matrix", homeserver : "https://matrix.example.org", tokenEnvVar : "MATRIX_TOKEN" };
+	}
+}
+```
+
+Toda opción llamada `<nombre>EnvVar` es el nombre de una variable de entorno: el gateway recibe su valor como `<nombre>` (aquí `token`), y se lee al arrancar la app, así que un secreto nunca es un literal en la compilación. La app construye el gateway desde el archivo de clase de la propia extensión y lo registra al arrancar.
+
+Todos los tipos vienen de un registro, `GatewayTypes`: los integrados y lo que traen las extensiones. Un tipo integrado no se puede reemplazar (una extensión no puede quedarse con `telegram`). Dos extensiones con el mismo tipo son un aviso y gana la posterior. Un nombre de archivo que no sirve como tipo (una letra, luego letras, dígitos y `-`) se rechaza. `extensions.disable` acepta `extensión:Matrix` para un tipo o el nombre de la extensión para todos. Las clases de gateway se leen solo de las extensiones del proyecto.
+
+## Verbos de la línea de comandos
+
+```js
+@Verb( { name : "greet", valueOptions : [ "name" ] } )
+@Hint( "saludar desde la línea de comandos: bxAgents greet --name=Ada" )
+function greet( options ) { return "Hola, #options.name ?: 'tú'#!" }
+```
+
+`bxAgents greet --name=Ada` busca el verbo en las extensiones (módulos, las de la persona y las del proyecto, cargadas como en el chat) cuando no es uno de los del módulo. El método recibe las opciones como un struct, igual que un verbo integrado (`--projectRoot` siempre está). Devuelve un código de salida, un mensaje para imprimir, `{ exitCode, message }`, o nada. Una opción que debe llevar valor se lista en `valueOptions`, así que `--name` sola se rechaza como en un verbo integrado. Un método que lanza un error es un error con código de salida 1 que nombra la extensión. Un verbo integrado no se puede reemplazar, y dos extensiones con el mismo verbo son un aviso con la posterior ganando. `bxAgents help` lista los verbos que añaden las extensiones. No están en los autocompletados de shell generados, que no cambian. `registry.verb( "greet", ( options ) => ..., { hint, valueOptions } )` es la forma de llamada, y `extensions.disable` acepta `extensión:método`.
+
+## De dónde vienen las extensiones
+
+| Capa | Carpeta | Corre en |
+|---|---|---|
+| modules | `extensions/` de un módulo de BoxLang instalado | donde esté instalado el módulo |
+| user | `~/.bxagents/extensions/` | solo el chat de terminal de esa máquina |
+| project | `<proyecto>/extensions/` | el chat de terminal, la web, las plataformas de chat y el servidor |
+
+Gana la capa posterior. Una extensión con el mismo nombre reemplaza a la anterior, y un comando reemplaza a uno anterior con el mismo nombre o alias, incluido uno integrado. Ambos casos se muestran en `/extensions`; nada se reemplaza en silencio. La compilación copia el `extensions/` del proyecto a la app; un agente servido nunca lee la carpeta personal de un desarrollador.
+
+## Empezar una
+
+```bash
+bxAgents add extension standup                       # pregunta qué debe traer
+bxAgents add extension standup --with=command,key    # o dilo con flags, para un pipe o CI
+bxAgents add extension standup --with=command,tool --description="Standup diario"
+```
+
+`add extension` escribe `extensions/<nombre>.bx`, o `extensions/<nombre>/` con un `Extension.bx` cuando algo necesita un archivo propio, con código de partida y un `TODO` donde completar. `--with` acepta `command`, `key`, `status`, `prefix`, `source`, `slot`, `verb`, `listener` (métodos de la misma clase) y `scheduler`, `gateway`, `tool`, `skill`, `web` (archivos, así que la extensión es una carpeta). `--layout=file|folder` elige la forma cuando puede ser cualquiera. No se sobrescribe nada sin `--force`, y `--dry-run` muestra los archivos. Es tuya: haz commit con el proyecto. Pruébala con `bxAgents chat` y `/reload`.
+
+## Instalar extensiones
+
+`bxAgents extensions install` pone una extensión en el proyecto desde una carpeta, un zip, GitHub o ForgeBox.
+
+```bash
+bxAgents extensions install ./mi-ext                    # una carpeta
+bxAgents extensions install ./mi-ext.zip                # un archivo zip
+bxAgents extensions install ./greet.bx                   # una extensión de una sola clase
+bxAgents extensions install acme/tools                  # GitHub: owner/repo, o owner/repo#ref
+bxAgents extensions install https://github.com/acme/tools
+bxAgents extensions install https://example.org/ext.zip # un zip por dirección
+bxAgents extensions install acme-tools@1.2.0            # un slug de ForgeBox, con versión opcional
+bxAgents extensions install ./mi-ext --system           # para ti, en ~/.bxagents/extensions
+```
+
+Una carpeta que existe gana sobre `owner/repo`. Para decir cuál quieres, empieza con `path:`, `github:`, `forgebox:` o `url:`.
+
+Una extensión es código que se ejecuta cuando arranca el chat o la app, así que `install` la descarga a una carpeta temporal, la examina sin ejecutar nada y te muestra qué añade (comandos, teclas, prefijos, listeners, gateways, tools, skills, archivos web, verbos) y qué menciona su código (archivos, red, procesos, java). Luego pide un sí. `--yes` omite la pregunta y es obligatorio si no hay terminal. No se coloca nada hasta que aceptes.
+
+| Comando | Hace |
+|---|---|
+| `install <origen>` | descarga, muestra, pregunta, coloca. `--name=<nombre>` la renombra, `--force` reemplaza una existente, `--system` instala para ti en lugar del proyecto |
+| `install` | sin origen, restaura todo lo que lista `extensions.lock.json` |
+| `list --installed` | lo instalado, de dónde viene y si está `intact`, `changed` o `missing` |
+| `update [nombre...]` | descarga de nuevo, muestra el cambio y pregunta. Un origen fijado a una versión o ref (`#v1`, `@1.2.0`) se deja como está |
+| `remove <nombre>` | la borra junto con su entrada del lock. Una carpeta que editaste necesita `--force` |
+
+El proyecto guarda `extensions.lock.json` (`~/.bxagents/extensions.lock.json` con `--system`): el nombre, el origen, la versión o ref descargada y una suma de verificación de los archivos. **Haz commit del lock.** `bxAgents build` restaura lo que falte y rechaza un paquete cuyos archivos ya no coinciden con su suma. Las extensiones instaladas no van en el commit (ver abajo), y el build las restaura desde el lock.
+
+Una extensión instalada se mantiene fuera del control de versiones con una línea por extensión en el `.gitignore` del proyecto (`/extensions/acme-tools/`, o `/extensions/acme.bx`), que se añade con `install` y se quita con `remove`, solo si el proyecto tiene `.gitignore`. Una extensión que escribiste tú en la misma carpeta sigue en el commit. Haz commit de `extensions.lock.json`: es lo que trae de vuelta el resto.
+
+Lo que `install` rechaza: una entrada de zip con ruta absoluta, una parte `..` o una barra invertida, más de 5000 archivos o 50 MB, un nombre que no es seguro como carpeta, un nombre ya presente que este comando no instaló (salvo `--force`), un módulo de BoxLang (`ModuleConfig.bx`) y todo lo que no sea una extensión. Los enlaces simbólicos y `.git` se omiten. La vista previa es una lectura rápida del texto, no una revisión de seguridad: instala lo que te inspire confianza.
+
+## Trabajar en una: enlazarla
+
+```bash
+bxAgents extensions link ./mi-ext                 # ~/.bxagents/extensions/mi-ext -> ./mi-ext
+bxAgents extensions link ./greet.bx --name=hi     # una extensión de una sola clase, con otro nombre
+bxAgents extensions unlink mi-ext                 # quita el enlace, nunca la carpeta
+```
+
+`link` crea un enlace simbólico en tu propia carpeta de extensiones, así que el chat de terminal de esta máquina carga la extensión desde donde la editas, y `/reload` recoge un cambio sin instalar nada de nuevo. No hay vista previa ni lock: el código es tuyo, y un enlace es una ruta de esta máquina, así que no se restaura en otra. Una carpeta o archivo real en ese lugar nunca se reemplaza, un nombre instalado con `install --system` debe quitarse primero, y `--force` solo apunta un enlace existente a otro sitio. `list --installed --system` muestra los enlaces junto a lo instalado, como `linked` o `broken` (el destino desapareció). Como un enlace es para ti, no forma parte de un proyecto ni viaja a una app compilada: para eso pon la extensión en el `extensions/` del proyecto (o hazle `install`).
+
+## Desactivar cosas
+
+```yaml
+extensions:
+  disable: [ roll, "deploy:deploy", "acme-*" ]
+```
+
+Un nombre simple desactiva la extensión con ese nombre (y cualquier comando que se llame así); `extension:item` desactiva un solo comando; `*` coincide con cualquier secuencia de caracteres. Tanto `Agent.yaml` como `~/.bxagents/bxAgents.yml` lo aceptan.
+
+## Verlas
+
+`/extensions` en el chat, o desde la terminal:
+
+```bash
+bxAgents extensions          # la lista, de dónde viene cada una y qué añadió
+bxAgents extensions --json
+```
+
+## Lo que se queda en el proyecto
+
+Las herramientas, skills, tipos de gateway y archivos de `web/` se leen de la carpeta `extensions/` del propio proyecto, que la compilación copia a la app tal cual. Una extensión en un módulo instalado o en tu `~/.bxagents/extensions` sigue añadiendo comandos, atajos, prefijos, oyentes y verbos al chat y a la línea de comandos, pero no viaja a una app compilada: un servidor nunca lee la carpeta personal de un desarrollador.

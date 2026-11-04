@@ -22,10 +22,10 @@ Every path lands on the same thing: a directory containing an agent definition (
 
 ## The 8 built-in `--template` starters
 
-Every template starts from the exact same base skeleton - `Agent.yaml`, `instructions.md`, every empty [convention folder](conventions/agent-bx.md), a ready-to-run [`tests/`](conventions/testing.md) folder, a `.env` (declaring `BOXLANG_HOME=.build/runtime`, with room for your API keys) and a `.gitignore` - then layers a small, specific amount of pre-wired content on top. Add `--class` to any `--template` to get the class-based `Agent.bx` form of the root definition (and of the subagents the `multi-agent` template scaffolds) instead of `Agent.yaml`; everything else is unchanged. None of them need a validator change: each one's extra content reuses a config shape [`ProjectValidator`](conventions/agent-bx.md) already accepts, so a scaffolded project of any template validates cleanly by construction.
+Every template starts from the exact same base skeleton - `Agent.yaml`, `instructions.md`, every empty [convention folder](conventions/agent-bx.md), a ready-to-run [`tests/`](conventions/testing.md) folder, a `.env` (declaring `BOXLANG_HOME=.build/runtime`, with room for your API keys), a `.gitignore` and the standard dotfiles - then layers a small, specific amount of pre-wired content on top. Add `--class` to any `--template` to get the class-based `Agent.bx` form of the root definition (and of the subagents the `multi-agent` template scaffolds) instead of `Agent.yaml`; everything else is unchanged. None of them need a validator change: each one's extra content reuses a config shape [`ProjectValidator`](conventions/agent-bx.md) already accepts, so a scaffolded project of any template validates cleanly by construction.
 
 ::: cards
-::: card title="minimal" icon="phosphor-duotone:seedling" href="#minimal"
+::: card title="minimal" icon="phosphor-duotone:plant" href="#minimal"
 The bare skeleton. Nothing extra.
 :::
 ::: card title="webui-chat" icon="phosphor-duotone:chat-circle-dots" href="#webui-chat"
@@ -224,7 +224,8 @@ The one template that changes the root `Agent.yaml` itself, rather than only add
 ```yaml
 # Agent.yaml
 name: my-agent
-model: openai/gpt-5
+provider: openai
+model: gpt-5
 subAgents: [ researcher, writer ]
 
 environments:

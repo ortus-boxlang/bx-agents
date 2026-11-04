@@ -63,7 +63,7 @@ class {
 	this.dependencies = [];
 
 	static {
-		subcommandVerbs = [ "token", "notes", "sessions", "models", "add", "skills" ]
+		subcommandVerbs = [ "token", "notes", "sessions", "models", "add", "skills", "extensions" ]
 
 		verbs = {
 			"new"     : "models.cli.New",
@@ -84,7 +84,8 @@ class {
 			"models"  : "models.cli.Models",
 			"doctor"  : "models.cli.Doctor",
 			"add"     : "models.cli.Add",
-			"skills"  : "models.cli.Skills"
+			"skills"  : "models.cli.Skills",
+			"extensions" : "models.cli.Extensions"
 		}
 
 		verbDescriptions = {
@@ -105,8 +106,9 @@ class {
 			"sessions": "List, rename, fork, delete, export and import the conversations in the chat database (list, rename, fork, delete, export, import)",
 			"models"  : "List the models a project can talk to and test that they answer (list, test [--profile=NAME | --all])",
 			"doctor"  : "Diagnose the environment and project - runtime, modules, env vars ([--json])",
-			"add"     : "Add to a project: add <kind> [name] - a tool, interceptor, schedule, mcp, gateway, subagent, skill, profile, provider or capability ([--force], [--dry-run], [--yes])",
-			"skills"  : "Skills from skills.boxlang.io: skills <find|install|list|update|remove> ([--registry=URL], [--limit=N], [--dry-run], [--json])"
+			"add"     : "Add to a project: add <kind> [name] - a tool, interceptor, schedule, mcp, gateway, subagent, skill, profile, provider, capability or extension ([--force], [--dry-run], [--yes])",
+			"skills"  : "Skills from skills.boxlang.io: skills <find|install|list|update|remove> ([--registry=URL], [--limit=N], [--dry-run], [--json])",
+			"extensions" : "The extensions the chat loads, and installing more: extensions <list|install|update|remove|link|unlink> (install takes a folder, .zip, owner/repo, URL or ForgeBox slug; link puts a folder you are working on in ~/.bxagents/extensions; [--name], [--system], [--force], [--yes], [--json])"
 		}
 
 		// Per verb, the flags that REQUIRE a value - `--projectRoot` is
@@ -137,7 +139,8 @@ class {
 			"stats"   : [ "days", "by", "user" ],
 			"models"  : [ "profile" ],
 			"doctor"  : [],
-			"add"     : [ "name", "agent", "function", "description", "args", "scope", "points", "when", "prompt", "server", "url", "auth", "header", "user", "env", "timeout", "version", "cors", "tools", "path", "direction", "provider", "model", "format", "temperature", "max-tokens", "api-key-env", "voice", "size", "quality", "style", "instructions", "users", "policy", "type", "parent", "profile", "profiles", "with", "search", "files", "files-dir", "memory", "mcp", "guard" ],
+			"extensions" : [ "name" ],
+			"add"     : [ "name", "agent", "function", "description", "args", "scope", "points", "when", "prompt", "server", "url", "auth", "header", "user", "env", "timeout", "version", "cors", "tools", "path", "direction", "provider", "model", "format", "temperature", "max-tokens", "api-key-env", "voice", "size", "quality", "style", "instructions", "users", "policy", "type", "parent", "profile", "profiles", "with", "search", "files", "files-dir", "memory", "mcp", "guard", "layout" ],
 			"skills"  : [ "registry", "limit" ]
 		}
 	}
@@ -342,6 +345,11 @@ class {
 		var verbName = firstToken
 
 		if ( !static.verbs.keyExists( verbName ) ) {
+			// a verb an extension adds: the extensions are loaded only now, for a verb the module does not have
+			var fromExtension = runExtensionVerb( verbName, arguments.args )
+			if ( fromExtension.found ) {
+				return fromExtension.exitCode
+			}
 			println( "Unknown verb [#verbName#]." )
 			println( "" )
 			printUsage( static.verbs, static.verbDescriptions )
@@ -388,6 +396,74 @@ class {
 	}
 
 	/**
+	 * Runs a verb that an extension adds, when there is one of that name. Loads the extensions as the terminal chat
+	 * does (modules, the person's own and the project's), so it is only asked for a verb the module does not have.
+	 *
+	 * @verbName The verb typed
+	 * @args The raw CLI argv, module name and dispatch token excluded
+	 *
+	 * @return { found, exitCode }; found is false when no extension has the verb
+	 */
+	private struct function runExtensionVerb( required string verbName, required array args ) {
+		var rawVerbArgs = []
+		for ( var i = 2; i <= arrayLen( arguments.args ); i++ ) {
+			rawVerbArgs.append( arguments.args[ i ] )
+		}
+		var options = parseCliOptions( rawVerbArgs )
+		var root = resolveProjectRoot( options, false )
+		var service = new "models.extensions.ExtensionService"( projectRoot : root, transport : "tui" )
+		if ( !service.mayHaveExtensions() ) {
+			return { found : false, exitCode : 1 }
+		}
+		try {
+			var verbs = new "models.extensions.ExtensionVerbs"( root, static.verbs.keyArray(), service )
+			var verb = verbs.find( arguments.verbName )
+			if ( isNull( verb ) ) {
+				return { found : false, exitCode : 1 }
+			}
+			for ( var flag in [ "projectRoot" ].append( verb.valueOptions(), true ) ) {
+				if ( options._valuelessFlags.keyExists( flag ) ) {
+					println( "Error: --#flag# requires a value - write it as `--#flag#=<value>`." )
+					return { found : true, exitCode : 1 }
+				}
+			}
+			options.delete( "_valuelessFlags" )
+			options.projectRoot = root
+			var result = verb.run( options )
+			if ( len( result.message ) ) {
+				println( result.message )
+			}
+			return { found : true, exitCode : result.exitCode }
+		} catch ( any e ) {
+			println( "Error: #e.message#" )
+			return { found : true, exitCode : 1 }
+		} finally {
+			service.unload()
+		}
+	}
+
+	/**
+	 * The lines of `bxAgents help` for the verbs extensions add. Nothing when there are no extensions, and never an error:
+	 * a broken extension must not take the help away.
+	 *
+	 * @return [ "  name  hint" ] in name order
+	 */
+	private array function extensionVerbLines() {
+		var lines = []
+		try {
+			var service = new "models.extensions.ExtensionService"( projectRoot : resolveProjectRoot( {} ), transport : "tui" )
+			if ( service.mayHaveExtensions() ) {
+				var verbs = new "models.extensions.ExtensionVerbs"( resolveProjectRoot( {} ), static.verbs.keyArray(), service )
+				lines = verbs.verbs().map( v => "  #v.name().lJustify( 9 )# #v.hint()# (extension #v.extensionName()#)" )
+				service.unload()
+			}
+		} catch ( any e ) {
+			// no extensions to show
+		}
+		return lines
+	}
+
+	/**
 	 * Prints the `--help`/no-verb/unknown-verb usage text: module identity,
 	 * one line per verb (sorted alphabetically) with its description, and the
 	 * two global flags handled before verb dispatch. Prints line-by-line
@@ -416,6 +492,15 @@ class {
 
 		for ( var verbName in arguments.verbs.keyArray().sort( "textnocase" ) ) {
 			println( "  #verbName.lJustify( 9 )# #arguments.verbDescriptions[ verbName ] ?: ''#" )
+		}
+
+		var fromExtensions = extensionVerbLines()
+		if ( fromExtensions.len() ) {
+			println( "" )
+			println( "Verbs from extensions:" )
+			for ( var line in fromExtensions ) {
+				println( line )
+			}
 		}
 
 		println( "" )

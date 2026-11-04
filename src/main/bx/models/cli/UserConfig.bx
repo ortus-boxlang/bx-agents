@@ -9,6 +9,13 @@
  *     keys:              # replace the keys of an action; `/keys` lists the actions and their keys
  *       newline: [ ctrl+j, alt+enter ]
  *       stop: esc
+ *     prefixes:          # the prefix of an extension's prefix, by id (extension:method)
+ *       sql:run: "%"
+ *     sources:           # the name of an extension's @name:query source, by id
+ *       jira:ticket: issue
+ *   extensions:          # values for extensions, by name, and what to turn off (see ExtensionSettings)
+ *     disable: [ roll ]
+ *     hello: { greeting: Hi }
  *
  * A missing file means the defaults. A key it does not know is reported (`problems()`), not ignored, so a
  * typo does not quietly leave a switch where the person thought it was.
@@ -16,7 +23,7 @@
 class {
 
 	static {
-		CHAT_KEYS = [ "shell", "bifs", "keys" ]
+		CHAT_KEYS = [ "shell", "bifs", "keys", "prefixes", "sources" ]
 	}
 
 	/**
@@ -25,6 +32,16 @@ class {
 	function init( string file = "" ) {
 		var named = len( arguments.file ) ? arguments.file : trim( getSystemSetting( "BXAGENTS_USER_CONFIG", "" ) )
 		variables.file = len( named ) ? named : createObject( "java", "java.lang.System" ).getProperty( "user.home" ) & "/.bxagents/bxAgents.yml"
+		variables.loaded = false
+		variables.data = {}
+		variables.problems = []
+		return this
+	}
+
+	/**
+	 * Forgets what was read, so the next question reads the file again.
+	 */
+	function reload() {
 		variables.loaded = false
 		variables.data = {}
 		variables.problems = []
@@ -60,6 +77,28 @@ class {
 	}
 
 	/**
+	 * @return { "extension:method" : "prefix" } the prefixes the person chose for extensions' prefixes
+	 */
+	struct function prefixes() {
+		return chosenNames( "prefixes" )
+	}
+
+	/**
+	 * @return { "extension:method" : "name" } the names the person chose for extensions' `@name:` sources
+	 */
+	struct function sources() {
+		return chosenNames( "sources" )
+	}
+
+	/**
+	 * @return The `extensions:` block as written: values per extension name, and `disable`. Empty for none.
+	 */
+	struct function extensions() {
+		load()
+		return isStruct( variables.data.extensions ?: "" ) ? variables.data.extensions : {}
+	}
+
+	/**
 	 * @return What is wrong with the file, as sentences; empty when it is fine or not there
 	 */
 	array function problems() {
@@ -68,6 +107,19 @@ class {
 	}
 
 	// ----------------------------------------------------------------------------------
+
+	private struct function chosenNames( required string key ) {
+		load()
+		var chat = isStruct( variables.data.chat ?: "" ) ? variables.data.chat : {}
+		var given = isStruct( chat[ arguments.key ] ?: "" ) ? chat[ arguments.key ] : {}
+		var out = {}
+		for ( var id in given ) {
+			if ( isSimpleValue( given[ id ] ) && len( trim( given[ id ] ) ) ) {
+				out[ id ] = trim( given[ id ] )
+			}
+		}
+		return out
+	}
 
 	private void function load() {
 		if ( variables.loaded ) {
@@ -86,15 +138,18 @@ class {
 		}
 		if ( !isStruct( parsed ) ) {
 			if ( !isSimpleValue( parsed ) || len( trim( parsed ) ) ) {
-				variables.problems.append( "#variables.file# must be a mapping with a chat: section" )
+				variables.problems.append( "#variables.file# must be a mapping with a chat: or extensions: section" )
 			}
 			return
 		}
 		variables.data = parsed
 		for ( var key in parsed ) {
-			if ( lCase( key ) != "chat" ) {
-				variables.problems.append( "#variables.file# has an unknown setting [#key#]; the sections are: chat" )
+			if ( ![ "chat", "extensions" ].contains( lCase( key ) ) ) {
+				variables.problems.append( "#variables.file# has an unknown setting [#key#]; the sections are: chat, extensions" )
 			}
+		}
+		if ( parsed.keyExists( "extensions" ) && !isStruct( parsed.extensions ) ) {
+			variables.problems.append( "#variables.file#: extensions must be a mapping of extension name to its values, with an optional disable list" )
 		}
 		if ( parsed.keyExists( "chat" ) ) {
 			if ( !isStruct( parsed.chat ) ) {
@@ -111,6 +166,11 @@ class {
 			}
 			if ( parsed.chat.keyExists( "keys" ) && !isStruct( parsed.chat.keys ) ) {
 				variables.problems.append( "#variables.file#: chat.keys must be a mapping of action to key or list of keys" )
+			}
+			for ( var named in [ "prefixes", "sources" ] ) {
+				if ( parsed.chat.keyExists( named ) && !isStruct( parsed.chat[ named ] ) ) {
+					variables.problems.append( "#variables.file#: chat.#named# must be a mapping of extension:method to a name" )
+				}
 			}
 			if ( parsed.chat.keyExists( "bifs" ) && !isSimpleValue( parsed.chat.bifs ) && !isArray( parsed.chat.bifs ) ) {
 				variables.problems.append( "#variables.file#: chat.bifs must be true, false or a list of function names" )

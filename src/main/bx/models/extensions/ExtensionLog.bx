@@ -1,0 +1,48 @@
+/**
+ * The logger an extension is given (`log`). It keeps what was said so `/extensions` can show it, and
+ * passes it on to the BoxLang log so it also reaches wherever logs go. Logging never throws: a logger
+ * that breaks an extension would be worse than no logger.
+ */
+class {
+
+	/**
+	 * @extension The extension's name, put in front of every line
+	 */
+	function init( required string extension ) {
+		variables.extension = arguments.extension
+		variables.lines = []
+		return this
+	}
+
+	function info( required string message ) {
+		return write( "information", arguments.message )
+	}
+
+	function warn( required string message ) {
+		return write( "warning", arguments.message )
+	}
+
+	function error( required string message ) {
+		return write( "error", arguments.message )
+	}
+
+	/**
+	 * @return [ { level, message } ] in the order said
+	 */
+	array function lines() {
+		return variables.lines
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private function write( required string level, required string message ) {
+		variables.lines.append( { level : arguments.level, message : arguments.message } )
+		try {
+			writeLog( text : "[#variables.extension#] #arguments.message#", type : arguments.level, log : "bxagents-extensions" )
+		} catch ( any e ) {
+			// nowhere to log to: the lines are still kept above
+		}
+		return this
+	}
+
+}

@@ -54,6 +54,7 @@ environments:
 | `notes` | mapping | Short notes the agent keeps about the user and its own work. `notes: {}` turns them on with the defaults. See [Notes](#notes). |
 | `usage` | boolean | Records what each model call used (the time, who, the provider, the model and the tokens), for [`bxAgents stats`](../cli-reference.md#stats) and `/stats`. **Off by default**: set `usage: true` to turn it on. Counts only, never what was said. Only in the project's own `Agent.yaml`. Rebuild after changing it. |
 | `tui` | mapping | How the terminal chat looks: `{ prompt, widgets: { top, bottom } }`, all optional. `prompt` is `bars` (default), `bars-hints`, `rule`, `box` or `panel`; `widgets` list what goes in the top bar and at the bottom (`agent`, `profile`, `folder`, `user`, `clock`, `machine`, `git`, `date`, `session`, `elapsed`, `ctx`). A wrong name is refused and the valid ones are listed. Only in the project's own `Agent.yaml`. See [The prompt and the tables](../cli-reference.md#the-prompt-and-the-tables). |
+| `extensions` | mapping | Values for the project's [extensions](extensions.md), by extension name, and what to turn off: `{ disable: [ roll, "deploy:deploy" ], deploy: { target: production } }`. Each extension's block is merged over the defaults its `configure()` sets. Only in the project's own `Agent.yaml`. |
 | `environments` | mapping | Per-environment overrides. See [Environments](#environments). |
 
 These are the same settings an `Agent.bx`'s `configure()` returns, so every behavior documented for them applies unchanged.

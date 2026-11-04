@@ -46,8 +46,8 @@ class extends="bxModules.bxai.models.gateway.GatewaySession" {
 		variables.prefix = arguments.commands.prefix ?: "/"
 		variables.prefixes = arguments.commands.prefixes ?: {}
 		variables.admins = arguments.commands.admins ?: []
-		// a registry can be handed in whole (a module's own commands); otherwise the built-ins, narrowed to the allowed ones
-		variables.registry = arguments.commands.registry ?: new "models.chat.commands.CommandCatalog@bxagents"().standard().only( arguments.commands.allow ?: ( ( arguments.commands.conversation ?: false ) ? static.SAFE_COMMANDS.merge( static.CONVERSATION_COMMANDS ) : static.SAFE_COMMANDS ) )
+		// a registry can be handed in whole (a module's own commands); otherwise the app's commands (the built-ins and its extensions'), narrowed to the allowed ones
+		variables.registry = arguments.commands.registry ?: new "models.chat.commands.CommandCatalog@bxagents"().forApplication().only( arguments.commands.allow ?: ( ( arguments.commands.conversation ?: false ) ? static.SAFE_COMMANDS.merge( static.CONVERSATION_COMMANDS ) : static.SAFE_COMMANDS ) )
 		// the conversations each person has had here, for /sessions and /resume; a store can be handed in
 		variables.sessions = arguments.commands.sessions ?: new "models.gateways.MemorySessions@bxagents"()
 		// where each chat is now: /new and /resume move it to another thread

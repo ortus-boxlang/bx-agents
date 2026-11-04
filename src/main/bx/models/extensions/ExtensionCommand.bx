@@ -1,0 +1,61 @@
+/**
+ * A command an extension added, as the chat sees it. It answers every question an ICommand is asked by
+ * passing it to the extension's own command, and does one thing more: when the extension's code throws,
+ * the person gets a warning that names the extension, and the chat carries on. A command written by
+ * someone else must never be able to end a conversation.
+ *
+ * A command may return a Reply or just a string (shown as a plain answer); returning nothing is an
+ * empty answer.
+ */
+class implements="models.chat.commands.ICommand@bxagents" {
+
+	/**
+	 * @extension The extension's name
+	 * @command The extension's own command (anything with the ICommand methods)
+	 */
+	function init( required string extension, required any command ) {
+		variables.extension = arguments.extension
+		variables.command = arguments.command
+		return this
+	}
+
+	string function extension() {
+		return variables.extension
+	}
+
+	string function name() {
+		return lCase( variables.command.name() )
+	}
+
+	array function aliases() {
+		return variables.command.aliases().map( a => lCase( a ) )
+	}
+
+	string function hint() {
+		return variables.command.hint()
+	}
+
+	array function transports() {
+		return variables.command.transports()
+	}
+
+	string function permission() {
+		return variables.command.permission()
+	}
+
+	any function run( required any context, required string args ) {
+		try {
+			var answer = variables.command.run( arguments.context, arguments.args )
+		} catch ( any e ) {
+			return arguments.context.reply().warn( "The extension [#variables.extension#] failed in /#name()#: #e.message#" )
+		}
+		if ( isNull( answer ) ) {
+			return arguments.context.reply().text( "" )
+		}
+		if ( isSimpleValue( answer ) ) {
+			return arguments.context.reply().ok( answer )
+		}
+		return answer
+	}
+
+}

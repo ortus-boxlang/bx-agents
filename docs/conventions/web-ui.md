@@ -54,9 +54,9 @@ Because the whole envelope arrives, **reasoning and tool calls are already on th
 
 ## Walkthrough
 
-<video controls preload="metadata" poster="../assets/video/webui-walkthrough-poster.png" style="max-width:100%">
-  <source src="../assets/video/webui-walkthrough.mp4" type="video/mp4">
-  <track kind="captions" src="../assets/video/webui-walkthrough.vtt" srclang="en" label="English" default>
+<video controls preload="metadata" poster="/assets/video/webui-walkthrough-poster.png" style="max-width:100%">
+  <source src="/assets/video/webui-walkthrough.mp4" type="video/mp4">
+  <track kind="captions" src="/assets/video/webui-walkthrough.vtt" srclang="en" label="English" default>
 </video>
 
 A minute and a quarter through the whole page: sign in, streaming, the model picker, a tool call, saved conversations, notes and the dark theme. The music and the mix were made with [bx-audio](https://github.com/ortus-boxlang/bx-audio) and the voice with [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) (an Apache 2.0 model), and the page is the demo app in [`tools/demo/webui`](https://github.com/ortus-boxlang/bx-agents/tree/development/tools/demo/webui), which `capture.js` there drives with Playwright. It talks to a scripted model, so every answer is the same each time.
@@ -94,7 +94,7 @@ The `thread` event goes first because a response header cannot be read before th
 
 ## The generated API
 
-A `webui` entry mounts twenty-five actions under `<path>/api`, served by a generated `handlers/ChatUi.bx`:
+A `webui` entry mounts twenty-nine actions under `<path>/api`, served by a generated `handlers/ChatUi.bx`:
 
 | Route | Purpose |
 | --- | --- |
@@ -114,6 +114,8 @@ A `webui` entry mounts twenty-five actions under `<path>/api`, served by a gener
 | `GET /commands` | The [slash commands](#slash-commands) the page offers, `[ { name, hint } ]` |
 | `GET /context` | What is in this visitor's context for one conversation (`?conversationId=`): `{ parts : [ { key, label, tokens, detail } ], tools : [ { name, tokens } ], total, contextWindow, percent }`. Estimates from the system prompt, tool definitions, notes and messages; no model is called |
 | `POST /command` | Run one for this visitor: `{ line : "/info", conversationId? }`, answers with the reply as data |
+| `GET /status` | What the [extensions'](extensions.md#keys-and-status) status items say for one conversation (`?conversationId=`): `{ items : [ { name, text } ] }` |
+| `GET /slots` | What the [extensions'](extensions.md#the-web-page-slots-and-web) slots hold (`?conversationId=`): `{ items : [ { id, extension, place, html, text } ] }` |
 | `GET /profiles` | The [profiles](models.md#profiles) the entry offers, `[]` when it lists none. See [Choosing the model](#choosing-the-model) |
 | `GET /conversations` | This visitor's conversations, newest activity first |
 | `POST /conversations/create` | Start one - optional `{ title }`, returns the minted `conversationId` |
@@ -131,7 +133,7 @@ Every one is scoped by ColdBox's `getUserSessionIdentifier()` as the `userId`. T
 
 ### Slash commands
 
-Type `/` in the message box and a menu of commands appears (arrow keys, `Tab` to complete, `Esc` to close). They are the same commands as in [the terminal chat](../cli-reference.md#the-same-commands-in-the-web-page-and-in-chat-apps): `/help`, `/new`, `/tools`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/info`, `/context`, `/remember`, `/notes`, `/name`, `/fork` and `/export`. Pressing Enter runs the line on the server with `POST /command` and draws the answer: text, a table, or buttons to pick from. `/new`, `/resume` and `/fork` move the page to the conversation they name, `/clear` reloads the transcript, and `/export [file] [--format=md|html]` hands the conversation to the browser to save (the **Fork** and **Export** buttons in the header run `/fork` and `/export`).
+Type `/` in the message box and a menu of commands appears (arrow keys, `Tab` to complete, `Esc` to close). They are the same commands as in [the terminal chat](../cli-reference.md#the-same-commands-in-the-web-page-and-in-chat-apps): `/help`, `/new`, `/tools`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/info`, `/context`, `/remember`, `/notes`, `/name`, `/fork`, `/export`, `/ping` and `/keys`. Pressing Enter runs the line on the server with `POST /command` and draws the answer: text, a table, or buttons to pick from. `/new`, `/resume` and `/fork` move the page to the conversation they name, `/clear` reloads the transcript, and `/export [file] [--format=md|html]` hands the conversation to the browser to save (the **Fork** and **Export** buttons in the header run `/fork` and `/export`).
 
 The reply is data, so any client can use it:
 
@@ -141,7 +143,7 @@ The reply is data, so any client can use it:
   "effects": [ { "type": "conversation", "id": "..." } ] }
 ```
 
-Blocks are `text`, `table`, `choose` (options, each with the command line to run), `transcript` and `file` (`{ name, mime, text }`, which the page saves); effects say what happened to the conversation (`reset`, `conversation`). `/info` leaves out where the database file is. A command that only makes sense on your own machine (`/copy`, `/save`, `/profile`) is not offered, and a server never switches the shared agent's model: the page picks a profile per message instead.
+Blocks are `text`, `table`, `choose` (options, each with the command line to run), `transcript` and `file` (`{ name, mime, text }`, which the page saves); effects say what happened to the conversation (`reset`, `conversation`). `/info` leaves out where the database file is. A command that only makes sense on your own machine (`/copy`, `/record`, `/profile`) is not offered, and a server never switches the shared agent's model: the page picks a profile per message instead.
 
 `threadId` is server-authoritative: taken from the request when supplied, minted otherwise, and always echoed back - as an `X-Thread-Id` response header on `/invoke` and `/batch`, and as a `thread` SSE event sent *before the first chunk* on `/stream` (a header can't be read before the body starts arriving). That's the same contract ColdBox 8.1's own `toAi()` adopted, so a client written against one works against the other.
 
@@ -326,7 +328,7 @@ An absolute `database.path` **fails the build**: it's resolved with `expandPath(
 
 **One file for the web chat and the terminal chat.** On a developer's machine, `bxAgents serve` starts the app with the environment variable `BXAGENTS_DB` set to `data/chat.db` in the project folder, and `bxAgents chat` opens the same file. The generated app uses `BXAGENTS_DB` when it is set and `database.path` otherwise, so a deployed app keeps its file inside the app unless you set `BXAGENTS_DB` there too (for example to a mounted volume). New projects git-ignore `data/chat.db*`. The file is in WAL mode, so the terminal chat and a running server can use it at the same time.
 
-**Schema is versioned and forward-only.** `ChatStore.migrate()` (called by `ChatDb.migrate()`) records what it has applied in a `bxagents_schema_version` table and applies only what's newer, so booting against an existing store is a no-op. v1 creates `conversations` and `preferences`; v2 adds `users`. Evolve it by adding a step to the store's migration list - never by editing a migration that has shipped, because **SQLite cannot modify or drop a column**. A database made by an earlier version of the generated app is recognised and left as it is.
+**Schema is versioned and forward-only.** `ChatStore.migrate()` (called by `ChatDb.migrate()`) records what it has applied in a `bxagents_schema_version` table and applies only what's newer, so booting against an existing store is a no-op. v1 creates `conversations` and `preferences`; v2 adds `users`, v3 `tokens`, v4 `notes` and v5 `usage`. Evolve it by adding a step to the store's migration list - never by editing a migration that has shipped, because **SQLite cannot modify or drop a column**. A database made by an earlier version of the generated app is recognised and left as it is.
 
 !!! warning
     **Two things here are counter-intuitive, and both were established the hard way against a real ColdBox boot rather than read off a docs page.**
@@ -442,7 +444,6 @@ The page is complete against its own API - every route it needs exists and is ex
 
 | Missing | Note |
 | --- | --- |
-| Attachments / image input | The composer is text-only. bx-ai itself handles images, so this is a UI gap, not a capability one |
 | Retry / regenerate | A failed turn has to be re-sent by hand |
 | Edit and resend | No editing a message already sent |
-| Token / cost display | Nothing surfaces usage, though the provider returns it |
+| Token / cost display | The page shows none. `usage: true` in `Agent.yaml` records tokens for `bxAgents stats`, and `/stats` shows them in the terminal chat only |

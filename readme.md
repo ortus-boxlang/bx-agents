@@ -16,7 +16,7 @@
 
 <p>&nbsp;</p>
 
-**BxAgents** is a conventions-based framework for building AI agents powered by [BoxLang AI](https://ai.boxlang.io). Built on top of [ColdBox](https://www.coldbox.org), it lets you describe an agent with a handful of files and folders - `Agent.yaml`, `instructions.md`, and whichever of `tools/`, `skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `modules/` it actually needs - and BxAgents assembles a real, runnable ColdBox application from it **at build time**, ready to serve, chat with, or package as a portable `.bxa`.
+**BxAgents** is a conventions-based framework for building AI agents powered by [BoxLang AI](https://ai.boxlang.io). Stop wiring tools, memory, chat UIs, Slack bots and schedulers by hand: describe an agent with a handful of files and folders - `Agent.yaml`, `instructions.md`, and whichever of `tools/`, `skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `modules/` it actually needs - and BxAgents assembles a full MVC application from it **at build time** (REST API, web chat, chat platforms and scheduled jobs included), ready to serve, chat with, or package as a portable `.bxa`.
 
 ## Quick Start
 
@@ -33,6 +33,18 @@ bxAgents chat       # or: bxAgents serve --port=8080
 ```
 
 `new` doesn't only scaffold a blank agent: pick one of 8 built-in `--template`s (a Slack bot, a scheduled agent, a multi-agent team, ...), clone an existing GitHub repo (`--repo=owner/repo`, via a bundled JGit client - no `git` binary required), or install a ForgeBox package (`--forgebox=<slug>`, talking to ForgeBox's REST API directly - no `box` CLI required) - see [Agent Templates](docs/agent-templates.md).
+
+## See it
+
+The terminal chat (the answers here come from a scripted demo model):
+
+![bxAgents chat in a terminal: slash commands, a tool call and a formatted answer](docs/assets/tui/chat-terminal.gif)
+
+The `new` wizard, from the name to a finished project:
+
+![bxAgents new: the wizard asking what the agent should do](docs/assets/tui/wizard.gif)
+
+There is a guide to [the terminal UI](docs/guides/terminal-ui.md), the [slash commands](docs/guides/slash-commands.md) and some [walkthroughs](docs/guides/chat-walkthrough.md).
 
 ## Documentation & Examples
 

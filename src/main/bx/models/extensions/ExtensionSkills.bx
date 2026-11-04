@@ -1,0 +1,40 @@
+/**
+ * Puts the skills of extensions in bx-ai's list of global skills, from the extension's own `skills/` folder, where it
+ * is in the app. bx-ai reads one skills folder (the project's `skills/`); the others are added to the same list, which
+ * every agent is given. A skill of the project's own with the same name wins, and a skill is only added once however
+ * often this runs. `extensions.disable` takes `extension:skill` to leave one out, or the extension's name for all.
+ */
+class {
+
+	/**
+	 * @folders [ { extension, path } ] with the skills folder of each extension, as an absolute path
+	 * @disable The `extensions.disable` entries
+	 *
+	 * @return The names of the skills that were added
+	 */
+	array function load( required array folders, array disable = [] ) {
+		var added = []
+		var settings = new "models.extensions.ExtensionSettings@bxagents"()
+		var global = aiGlobalSkills()
+		var known = {}
+		for ( var skill in global ) {
+			known[ lCase( skill.getName() ) ] = true
+		}
+		for ( var folder in arguments.folders ) {
+			if ( !directoryExists( folder.path ) || settings.isOff( arguments.disable, folder.extension ) ) {
+				continue
+			}
+			for ( var skill in bxModules.bxai.models.skills.AiSkill::fromDirectory( folder.path ) ) {
+				var name = skill.getName()
+				if ( known.keyExists( lCase( name ) ) || settings.isOff( arguments.disable, folder.extension, name ) ) {
+					continue
+				}
+				global.append( skill )
+				known[ lCase( name ) ] = true
+				added.append( name )
+			}
+		}
+		return added
+	}
+
+}

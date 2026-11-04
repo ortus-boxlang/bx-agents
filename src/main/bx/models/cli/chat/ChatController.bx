@@ -49,6 +49,42 @@ class {
 			takeSteer       : () => variables.screen.takeSteer()
 		}
 		variables.screen = nullValue()
+		variables.notices = []
+		variables.events = nullValue()
+		variables.extensions = nullValue()
+		variables.composer = nullValue()
+		variables.sourcesBound = false
+		return this
+	}
+
+	/**
+	 * Lets extensions bind keys in the message box and show status next to the size of the context.
+	 *
+	 * @extensions The ExtensionService
+	 */
+	function withExtensions( required any extensions ) {
+		variables.extensions = arguments.extensions
+		return this
+	}
+
+	/**
+	 * Lets extensions listen to the chat: it opens and closes, a message is about to be sent (and can be
+	 * stopped or changed), a turn starts and ends, a command changes the conversation.
+	 *
+	 * @events An ExtensionEvents; none by default
+	 */
+	function withEvents( required any events ) {
+		variables.events = arguments.events
+		return this
+	}
+
+	/**
+	 * Lines to show as warnings when the chat opens, such as an extension that did not load.
+	 *
+	 * @notices Sentences
+	 */
+	function withNotices( required array notices ) {
+		variables.notices = arguments.notices
 		return this
 	}
 
@@ -80,16 +116,83 @@ class {
 		for ( var problem in variables.userConfig.problems() ) {
 			arguments.screen.print( "warn", problem )
 		}
-		for ( var problem in arguments.screen.bindKeys( variables.userConfig.keys() ) ) {
-			arguments.screen.print( "warn", "#variables.userConfig.path()#: " & problem )
+		for ( var notice in variables.notices ) {
+			arguments.screen.print( "warn", notice )
 		}
+		bindKeys()
 		variables.context = new "models.chat.commands.CommandContext@bxagents"( variables.session, "tui", true, port )
+		if ( !isNull( variables.extensions ) ) {
+			for ( var problem in bindComposer() ) {
+				arguments.screen.print( "warn", problem )
+			}
+			if ( structKeyExists( variables.extensions, "reload" ) ) {
+				port.onReload( () => reloadExtensions() )
+			}
+		}
 		variables.renderer = new "models.cli.chat.TerminalRenderer@bxagents"( arguments.screen, variables.session, variables.transcript, ( line ) => command( line ) )
 		if ( !isBoolean( arguments.record ) || arguments.record ) {
 			var started = port.startRecording( isBoolean( arguments.record ) ? "" : arguments.record )
 			variables.screen.print( started.style, started.text )
 		}
 		variables.screen.banner( variables.session.agentName(), variables.session.modelName(), variables.session.mode() )
+		var agent = variables.session.agentName()
+		announce( "onChatSessionStart", { agent : agent, transport : "tui" } )
+		try {
+			talk( arguments.resume )
+		} finally {
+			announce( "onChatSessionEnd", { agent : agent, transport : "tui" } )
+		}
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Gives the screen the person's keys and the keys extensions bind, and shows what is wrong with them.
+	 */
+	private void function bindKeys() {
+		var extensionKeys = isNull( variables.extensions ) ? [] : variables.extensions.keys()
+		var bound = extensionKeys.len() ? variables.screen.bindKeys( variables.userConfig.keys(), extensionKeys ) : variables.screen.bindKeys( variables.userConfig.keys() )
+		for ( var problem in bound ) {
+			variables.screen.print( "warn", "#variables.userConfig.path()#: " & problem )
+		}
+	}
+
+	/**
+	 * Takes the prefixes and sources of the extensions as they are now, and tells the screen the source names for its menu.
+	 *
+	 * @return What is wrong with them, as sentences
+	 */
+	private array function bindComposer() {
+		variables.composer = variables.extensions.composer()
+		var names = variables.composer.sourceNames()
+		if ( names.len() || variables.sourcesBound ) {
+			variables.screen.bindSources( names, ( name, query ) => variables.composer.suggest( name, query, variables.context ) )
+			variables.sourcesBound = names.len() > 0
+		}
+		return variables.composer.problems()
+	}
+
+	/**
+	 * /reload: loads the extensions again and gives the chat what they now add: events, keys, prefixes and sources.
+	 * The commands are already in the registry, as the extensions put them there.
+	 *
+	 * @return { reloaded : true, report, problems }
+	 */
+	private struct function reloadExtensions() {
+		variables.extensions.reload()
+		if ( !isNull( variables.events ) ) {
+			variables.events = variables.extensions.events()
+		}
+		var problems = variables.extensions.problems()
+		bindKeys()
+		problems.append( bindComposer(), true )
+		return { reloaded : true, report : variables.extensions.report(), problems : problems }
+	}
+
+	/**
+	 * Reads what the person types until they leave.
+	 */
+	private void function talk( required string resume ) {
 		if ( len( arguments.resume ) ) {
 			// "last" is the most recent conversation
 			command( "/resume" & ( arguments.resume == "last" ? "" : " " & arguments.resume ) )
@@ -102,6 +205,9 @@ class {
 			}
 			var text = trim( input )
 			if ( !len( text ) ) {
+				if ( !isNull( variables.extensions ) && variables.extensions.keys().len() ) {
+					pressedKey()
+				}
 				continue
 			}
 			// a lone question mark is the way to ask which keys do what
@@ -118,6 +224,11 @@ class {
 				shellLine( text )
 				continue
 			}
+			var prefixed = prefixFor( text )
+			if ( !isNull( prefixed ) ) {
+				prefixedLine( prefixed, text )
+				continue
+			}
 			if ( isBifLine( text ) ) {
 				bifLine( text )
 				continue
@@ -127,6 +238,41 @@ class {
 	}
 
 	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Tells the extensions something happened and hands back what they did to it. With no extensions
+	 * listening there is nothing to ask.
+	 */
+	private struct function announce( required string name, struct data = {} ) {
+		if ( isNull( variables.events ) ) {
+			return { cancelled : false, reason : "", replaced : false, value : "" }
+		}
+		return variables.events.announce( arguments.name, arguments.data )
+	}
+
+	/**
+	 * @return What the extensions' status items say, to follow the size of the context; blank when none do
+	 */
+	private string function extensionStatus() {
+		if ( isNull( variables.extensions ) ) {
+			return ""
+		}
+		return variables.extensions.statusLine( variables.context )
+	}
+
+	/**
+	 * Runs the action of the key an extension bound that was just pressed, and shows what it said.
+	 */
+	private void function pressedKey() {
+		var id = variables.screen.takeKey()
+		if ( isNull( id ) || !len( id ) ) {
+			return
+		}
+		var reply = variables.extensions.pressed( id, variables.context, variables.registry )
+		if ( !isNull( reply ) ) {
+			variables.renderer.show( reply )
+		}
+	}
 
 	/**
 	 * Tells the prompt's widgets what the chat knows: the agent, the profile or model, and the conversation's name.
@@ -164,11 +310,12 @@ class {
 	 */
 	private void function refreshStatus() {
 		refreshFacts()
+		var size = ""
 		try {
-			variables.screen.setStatus( new "models.chat.ContextLines@bxagents"().status( variables.attachments.addTo( variables.session.contextReport() ) ) )
+			size = new "models.chat.ContextLines@bxagents"().status( variables.attachments.addTo( variables.session.contextReport() ) )
 		} catch ( any e ) {
-			variables.screen.setStatus( "" )
 		}
+		variables.screen.setStatus( [ size, extensionStatus() ].filter( part => len( part ) ).toList( " · " ) )
 		// a picture is refused at the paste, with the reason, for a model known not to see them
 		try {
 			var blind = variables.session.modelFacts().vision == "no"
@@ -184,12 +331,35 @@ class {
 	 * @return False when the command asks to leave
 	 */
 	private boolean function command( required string text ) {
-		return variables.renderer.show( variables.registry.run( arguments.text, variables.context ) )
+		var reply = variables.registry.run( arguments.text, variables.context )
+		if ( reply.hasEffect( "reset" ) || reply.hasEffect( "conversation" ) ) {
+			announce( "onChatConversationChange", { line : arguments.text, transport : "tui" } )
+		}
+		return variables.renderer.show( reply )
 	}
 
 	// ----------------------------------------------------------------------------------
 	// Running something on this machine: !command and #function()
 	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @return The extension prefix the line starts with, or null
+	 */
+	private any function prefixFor( required string text ) {
+		return isNull( variables.composer ) ? nullValue() : variables.composer.prefixFor( arguments.text )
+	}
+
+	/**
+	 * Hands a line to the extension that owns its prefix: what it answers is shown, or sent as a message.
+	 */
+	private void function prefixedLine( required any prefix, required string text ) {
+		var answer = arguments.prefix.run( variables.context, trim( mid( arguments.text, len( arguments.prefix.prefix() ) + 1, len( arguments.text ) ) ) )
+		if ( answer.send ) {
+			turn( answer.text )
+		} else {
+			variables.renderer.show( answer.reply )
+		}
+	}
 
 	/**
 	 * @return True for !command or !!command: the ! is followed at once by something to run, so "! hello" is a message
@@ -276,12 +446,31 @@ class {
 	/**
 	 * Sends one message and shows the turn, then deals with a run that stopped for approval.
 	 */
-	private void function turn( required string text ) {
-		variables.screen.printUser( arguments.text )
-		variables.transcript.append( { role : "you", text : arguments.text } )
+	private void function turn( required string typed ) {
+		var wanted = announce( "onChatInput", { text : arguments.typed, transport : "tui" } )
+		if ( wanted.cancelled ) {
+			variables.screen.print( "warn", len( wanted.reason ) ? wanted.reason : "An extension stopped that message." )
+			return
+		}
+		var text = wanted.replaced && isSimpleValue( wanted.value ) && len( wanted.value ) ? wanted.value : arguments.typed
+		variables.screen.printUser( text )
+		variables.transcript.append( { role : "you", text : text } )
+
+		// @name:query mentions of an extension's source go along as blocks, as a file does
+		var forFiles = text
+		if ( !isNull( variables.composer ) ) {
+			var sourced = variables.composer.read( text, variables.context )
+			for ( var problem in sourced.problems ) {
+				variables.screen.print( "warn", problem )
+			}
+			for ( var block in sourced.blocks ) {
+				variables.attachments.add( "file", block.name, block.content )
+			}
+			forFiles = variables.composer.withoutSources( text )
+		}
 
 		// @path mentions: a text file goes along as a block, an image as an image part
-		var mentioned = new "models.cli.chat.FileMentions@bxagents"( variables.workingDirectory ).read( arguments.text )
+		var mentioned = new "models.cli.chat.FileMentions@bxagents"( variables.workingDirectory ).read( forFiles )
 		for ( var problem in mentioned.problems ) {
 			variables.screen.print( "warn", problem )
 		}
@@ -293,18 +482,20 @@ class {
 			images.append( { path : pasted } )
 		}
 		var attached = variables.attachments.count()
-		var sent = variables.attachments.compose( arguments.text )
+		var sent = variables.attachments.compose( text )
 		if ( attached || images.len() ) {
 			var what = []
 			if ( attached ) { what.append( "#attached# attachment#attached == 1 ? '' : 's'#" ) }
 			if ( images.len() ) { what.append( "#images.len()# image#images.len() == 1 ? '' : 's'#" ) }
 			variables.screen.print( "muted", "Sent with " & what.toList( " and " ) & "." )
 		}
+		announce( "onChatTurnStart", { text : text, transport : "tui" } )
 		var result = execute( () => variables.session.send( sent, variables.hooks, images ) )
 		while ( result.status == "suspended" ) {
 			var decision = askApproval( result.pending )
 			result = execute( () => variables.session.resume( decision, variables.hooks ) )
 		}
+		announce( "onChatTurnEnd", { text : text, reply : result.text ?: "", status : result.status ?: "", transport : "tui" } )
 		if ( len( result.text ?: "" ) ) {
 			variables.transcript.append( { role : "agent", text : result.text } )
 		}

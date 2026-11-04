@@ -1,0 +1,74 @@
+/**
+ * A piece of the web page an extension fills: a named place in it (`header`, `sidebar` or `composer`) and a method that
+ * says what to show there. The page asks for every slot in one request, at the moments it refreshes the context size and
+ * the status chips, so what shows is as current as the thing it reports.
+ *
+ * The method is called with the CommandContext and returns a string. It is shown as text. Only a slot that says
+ * `html : true` has its string put into the page as HTML; that is the extension author's own markup, so it must not
+ * carry what a visitor typed. An empty string shows nothing. It must be quick, and it must not throw: when it does the
+ * slot is left out and the reason is put on its extension once.
+ */
+class {
+
+	static {
+		PLACES = [ "header", "sidebar", "composer" ]
+	}
+
+	/**
+	 * @extension The Extension (to put a problem on)
+	 * @item The method's (or `registry.slot()` target's) name
+	 * @place Where in the page: header, sidebar or composer
+	 * @html True when the string is HTML
+	 * @call A function( agentContext ) that returns the string
+	 */
+	function init( required any extension, required string item, required string place, required boolean html, required any call ) {
+		if ( !static.PLACES.containsNoCase( arguments.place ) ) {
+			throw( type : "bxagents.extension", message : "[#arguments.place#] is not a place in the page. Use: #static.PLACES.toList( ', ' )#." )
+		}
+		variables.extension = arguments.extension
+		variables.item = arguments.item
+		variables.place = lCase( arguments.place )
+		variables.html = arguments.html
+		variables.call = arguments.call
+		variables.complained = false
+		return this
+	}
+
+	string function id() {
+		return variables.extension.name() & ":" & variables.item
+	}
+
+	string function item() {
+		return variables.item
+	}
+
+	string function place() {
+		return variables.place
+	}
+
+	boolean function isHtml() {
+		return variables.html
+	}
+
+	/**
+	 * @agentContext The CommandContext of the page's request
+	 *
+	 * @return { id, extension, place, html, text }, or null when there is nothing to show
+	 */
+	any function render( required any agentContext ) {
+		try {
+			var shown = variables.call( arguments.agentContext )
+			if ( isNull( shown ) || !isSimpleValue( shown ) || !len( trim( shown ) ) ) {
+				return nullValue()
+			}
+			return { id : id(), extension : variables.extension.name(), place : variables.place, html : variables.html, text : toString( shown ) }
+		} catch ( any e ) {
+			if ( !variables.complained ) {
+				variables.complained = true
+				variables.extension.problem( "Its slot #variables.item# failed: #e.message#" )
+			}
+			return nullValue()
+		}
+	}
+
+}

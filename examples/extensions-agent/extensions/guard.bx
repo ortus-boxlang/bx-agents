@@ -1,0 +1,38 @@
+/**
+ * Listens to the chat. An extension is an interceptor: a method named after an event listens to it, and
+ * @On gives another method one or many events.
+ *
+ * onChatInput runs before a message is sent. A listener can stop it, or change the text:
+ *   data.cancel( "why" )     the message is not sent, and the person is told why
+ *   data.replace( "text" )   this text is sent instead
+ */
+class {
+
+	function configure() {
+		variables.settings = {
+			// a message that looks like one of these is not sent
+			secrets : [ "sk-[A-Za-z0-9]{20,}", "AKIA[0-9A-Z]{16}" ],
+			// text added to the end of every message; blank for none
+			signature : ""
+		}
+	}
+
+	function onChatInput( data ) {
+		for ( var pattern in settings.secrets ) {
+			if ( reFind( pattern, data.text ) ) {
+				data.cancel( "That looks like a secret key, so it was not sent." )
+				return
+			}
+		}
+		if ( len( settings.signature ) ) {
+			data.replace( data.text & " " & settings.signature )
+		}
+	}
+
+	// bx-ai's own events work the same way: here one method for two of them
+	@On( [ "beforeAIToolExecute", "afterAIToolExecute" ] )
+	function toolCalled( data ) {
+		log.info( "a tool ran" )
+	}
+
+}

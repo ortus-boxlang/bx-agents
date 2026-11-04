@@ -74,7 +74,7 @@ Usa siempre la forma `--flag=valor`. La forma con espacio no está soportada.
 Genera el andamiaje de un nuevo proyecto de agente.
 :::
 ::: card title="add" icon="phosphor-duotone:plus-circle" href="#add"
-Añade una herramienta, un interceptor, una programación, un servidor MCP, un gateway, un subagente o una skill a un proyecto existente.
+Añade una herramienta, un interceptor, una programación, un servidor MCP, un gateway, un subagente, una skill, una extensión y más a un proyecto existente.
 :::
 ::: card title="skills" icon="phosphor-duotone:graduation-cap" href="#skills"
 Busca, instala, actualiza y elimina skills de skills.boxlang.io.
@@ -120,6 +120,9 @@ Lo que usaron las llamadas al modelo: tokens por modelo, proveedor, día o usuar
 :::
 ::: card title="inspect" icon="phosphor-duotone:magnifying-glass" href="#inspect"
 Informa de cómo está compuesto el agente, a partir de su código fuente.
+:::
+::: card title="extensions" icon="phosphor-duotone:puzzle-piece" href="#extensions"
+Lista las extensiones que carga el chat, e instala, actualiza, quita o enlaza más.
 :::
 ::: card title="clean" icon="phosphor-duotone:broom" href="#clean"
 Elimina la salida .build/ y dist/ de un proyecto.
@@ -176,7 +179,7 @@ bxAgents new my-agent --forgebox=some-package-slug
 
 ### `add`
 
-Añade una cosa a un proyecto que ya existe, haciendo las mismas preguntas que `new`. Hoy eso es una `tool`, un `interceptor`, una `schedule`, un servidor `mcp`, un `gateway`, un `subagent`, una `skill`, un `profile`, un `provider` o una `capability`.
+Añade una cosa a un proyecto que ya existe, haciendo las mismas preguntas que `new`. Hoy eso es una `tool`, un `interceptor`, una `schedule`, un servidor `mcp`, un `gateway`, un `subagent`, una `skill`, un `profile`, un `provider`, una `capability` o una `extension`.
 
 ```bash
 bxAgents add                        # elige qué añadir
@@ -409,6 +412,22 @@ bxAgents add capability                         # pregunta cuál
 | `image` | `provider`, `model`, `size`, `quality`, `style`, `instructions` |
 
 Todas las claves salvo el proveedor son opcionales; si faltan, se aplica el valor del propio proveedor. bx-ai mantiene voz y transcripción en un solo proveedor de audio, así que la segunda de las dos toma por defecto el proveedor de la primera y uno distinto se rechaza. Una capacidad que ya está definida se rechaza: edítala en el archivo. La variable de la clave del proveedor recibe un marcador vacío en `.env`; la clave en sí nunca se pide.
+
+#### `add extension`
+
+Crea una extensión propia en `extensions/`: un archivo para unos pocos métodos, o una carpeta cuando lleva un scheduler, gateway, tool, skill o archivos web. Ver [Empezar una](conventions/extensions.md#empezar-una).
+
+```bash
+bxAgents add extension standup
+bxAgents add extension standup --with=command,key --description="Standup diario"
+bxAgents add extension standup --with=command,scheduler        # una carpeta, con schedulers/Standup.bx
+```
+
+| Flag | Significado |
+|---|---|
+| `--with` | Qué trae, separado por comas: `command`, `key`, `status`, `prefix`, `source`, `slot`, `verb`, `listener`, `scheduler`, `gateway`, `tool`, `skill`, `web`. Por defecto `command`. |
+| `--layout` | `file` o `folder`. Una carpeta es la única opción si `--with` incluye `scheduler`, `gateway`, `tool`, `skill` o `web`. |
+| `--description` | Una línea para el docblock de la clase. |
 
 ### `skills`
 
@@ -879,6 +898,29 @@ El informe tiene estas secciones, en este orden. `--section` acepta cualquiera d
 - `--json` es el propio informe, no el manifest. El manifest es un archivo plano en `.build/manifest.json`, descrito en [El manifest](manifest.md).
 - `--md=FILE` es lo único que `inspect` escribe. Un archivo relativo se crea dentro del proyecto.
 - Una carpeta sin `Agent.yaml` ni `Agent.bx` es un error.
+
+### `extensions`
+
+Lista las [extensiones](conventions/extensions.md) que cargaría el chat de terminal para este proyecto: el `extensions/` del proyecto, tu propio `~/.bxagents/extensions/` y el `extensions/` de los módulos instalados. Las carga como lo hace `chat`, así que una extensión que falla al cargar aparece aquí con el motivo. No necesita un proyecto compilado.
+
+```bash
+bxAgents extensions [--json]
+```
+
+- Una línea por extensión: su nombre, de qué capa viene, si cargó, y luego los comandos y schedulers que añadió y cualquier problema.
+- `--json` imprime `{ extensions, problems }` para scripts.
+
+Los subcomandos install, list, update y remove se describen en [Instalar extensiones](conventions/extensions.md#instalar-extensiones), y link y unlink en [Trabajar en una](conventions/extensions.md#trabajar-en-una-enlazarla):
+
+```bash
+bxAgents extensions install <origen> [--name=<nombre>] [--force] [--yes] [--system]
+bxAgents extensions install                    # restaurar desde extensions.lock.json
+bxAgents extensions list [--installed] [--json]
+bxAgents extensions update [nombre...] [--yes]
+bxAgents extensions remove <nombre> [--force] [--system]
+bxAgents extensions link <carpeta-o-.bx> [--name=<nombre>] [--force]   # para ti, en ~/.bxagents/extensions
+bxAgents extensions unlink <nombre>
+```
 
 ### `clean`
 

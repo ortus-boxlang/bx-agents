@@ -1,0 +1,42 @@
+/**
+ * Keeps the last commands that were run, and shows them with /audit. One class listens and answers, so
+ * what it remembers is just a variable.
+ *
+ * It also announces an event of its own (customInterceptionPoints), which other extensions can listen to.
+ */
+class {
+
+	function configure() {
+		variables.settings = { keep : 20 }
+		variables.customInterceptionPoints = [ "onAuditRecorded" ]
+		variables.recent = []
+	}
+
+	// after every command, on every transport; the reply can be read here (data.reply) or replaced (data.replace)
+	function onChatCommandAfter( data ) {
+		if ( data.name == "audit" ) {
+			return
+		}
+		recent.append( { line : data.line, transport : data.transport } )
+		if ( recent.len() > settings.keep ) {
+			recent.deleteAt( 1 )
+		}
+		BoxAnnounce( "onAuditRecorded", { line : data.line } )
+	}
+
+	// ColdBox events (preProcess, postProcess, onException ...) fire in the served agent, for each request it handles
+	function preProcess( event, data, rc, prc ) {
+		log.info( "request: #event.getCurrentEvent()#" )
+	}
+
+	@Command( "audit" )
+	@Hint( "the last commands that were run" )
+	@Admin
+	function show( agentContext, commandArguments ) {
+		if ( !recent.len() ) {
+			return agentContext.reply().text( "No commands yet." )
+		}
+		return agentContext.reply().grid( [ "Command", "Where" ], recent.map( r => [ r.line, r.transport ] ) )
+	}
+
+}

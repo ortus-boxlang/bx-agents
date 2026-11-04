@@ -1,0 +1,41 @@
+/**
+ * A command an extension adds in code, with `registry.command( name, { run : function( agentContext, commandArguments ) } )`,
+ * as an annotated method adds one on a class.
+ */
+class extends="models.chat.commands.BaseCommand@bxagents" {
+
+	/**
+	 * @name The command's name
+	 * @options { run (required), hint, admin, transports, aliases }
+	 */
+	function init( required string name, required struct options ) {
+		variables.name = lCase( arguments.name )
+		variables.options = arguments.options
+		return this
+	}
+
+	string function name() {
+		return variables.name
+	}
+
+	array function aliases() {
+		return ( variables.options.aliases ?: [] ).map( a => lCase( a ) )
+	}
+
+	string function hint() {
+		return variables.options.hint ?: ""
+	}
+
+	array function transports() {
+		return variables.options.transports ?: [ "tui", "web", "gateway" ]
+	}
+
+	string function permission() {
+		return ( variables.options.admin ?: false ) == true ? "admin" : "anyone"
+	}
+
+	any function run( required any context, required string args ) {
+		return variables.options.run( arguments.context, arguments.args )
+	}
+
+}

@@ -404,6 +404,57 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
   `build` restores whatever the lock lists and the disk lacks. Skills in `skills/` and installed ones both go
   into the build; one of your own with the same name wins. New projects ignore `.agents/skills/`.
 
+#### Extensions
+
+- `extensions/` adds to the chat and the served agent without changing BxAgents. An extension is one `.bx`
+  file or a folder, and it reads like a ColdBox `ModuleConfig`: `configure()` sets `variables.settings`,
+  `onLoad()` and `onUnload()` are the lifecycle, and `this.title`, `this.version`, `this.dependencies` and
+  the rest are read as in a module. Values under `extensions:` in `Agent.yaml` (or your own
+  `~/.bxagents/bxAgents.yml`) are merged over the defaults, and every class of an extension has
+  `$inject( name, object )`, with `settings` and `log` already in place.
+- Annotated methods add chat commands: `@Command`, `@Hint`, `@Admin`, `@Alias`, `@Transports`, each written
+  bare, as one value, as an array or as a struct. A folder extension can also bring command classes
+  (`commands/`) and BoxLang schedulers (`schedulers/`); a served agent starts the schedulers in the runtime's scheduler service, with the extension's `settings` and `log` injected.
+- They load from installed modules, your own `~/.bxagents/extensions/` (the terminal chat only) and the
+  project's `extensions/`. A later layer wins, and what it replaces is always shown. `extensions.disable`
+  turns off an extension, one of its commands, or a glob of either. `/extensions` and
+  `bxAgents extensions` list what loaded, what each added and what went wrong.
+- An extension is also an interceptor: a method named after a bx-ai event (`onAIError`, `beforeAIToolExecute`...)
+  or a chat event listens to it, `@On` binds a method to others or to many, and `interceptors` and
+  `customInterceptionPoints` in `configure()` work as in a module config. The chat announces
+  `onChatInput` (stop or change a message), `onChatTurnStart`/`End`, `onChatSessionStart`/`End`,
+  `onChatConversationChange` and, on every transport, `onChatCommandBefore` (stop a command) and
+  `onChatCommandAfter` (replace the reply). A listener that throws never stops a turn.
+- Extensions can bind keys and show status. `@Key` on a method binds keys in the terminal chat (on a
+  command method it runs the command; otherwise it calls the method), listed in `/keys` and rebindable under
+  `chat: keys:`; a key that clashes is refused with a sentence. `@Status` shows a short text next to the size
+  of the context, and as chips in the web page's header. `register( registry )` does the same, and
+  commands and listeners too, as calls.
+- Extensions can shape the terminal message box. `@Prefix` claims the start of a line (a `Reply` is shown, or
+  `{ send : "..." }` is sent as the message), and `@Source` with an optional `@Suggest` brings content along
+  with `@name:query`, with the names offered in the `@` menu. The person picks the prefix or name under
+  `chat: prefixes:` and `chat: sources:`; `/ ! # @` and a lone `?` are the chat's own, and a clash between
+  extensions is a warning. `/extensions` now also lists keys, status items, prefixes and sources.
+- Extensions can ask the person questions while a command, key or prefix runs: `agentContext.ask()`,
+  `choose()` and `confirm()` in the terminal chat, and an immediate "no answer" where nobody can reply, with
+  `canAsk()` to check first. `/reload` (admins, terminal chat) loads the extensions, the person's file and the
+  project's `extensions:` settings again without leaving the chat.
+- Extensions can add to the web page. `@Slot` puts a string in the header, sidebar or composer (text, or
+  markup with `html : true`), asked for in one request, `/api/slots`, behind the page's own sign-in. A folder
+  extension's `web/` folder is served with the page at `<path>/ext/<name>/`, read from the extension itself, its `*.css` and `*.js` are linked in,
+  and scripts get a small `bxagents` object (`slot`, `runCommand`, `onRefresh`, `refresh`, `conversationId`).
+- Extensions can carry tools, skills, gateway types and verbs, and the app reads them where they are, with nothing
+  copied or merged. `tools/` and `skills/` of a folder extension join the agent's tools and the global skills; a class
+  in `gateways/` is a gateway type (its `*EnvVar` options read from the environment), all kept in one
+  `GatewayTypes` registry where a built-in type cannot be replaced and a clash is a warning; `@Verb` adds a
+  `bxAgents <verb>`, listed in `bxAgents help`. `extensions.disable` takes `extension:item` for each.
+- Extensions can be installed. `bxAgents extensions install` takes a folder, a zip, GitHub (`owner/repo[#ref]`), a zip address or a ForgeBox slug, shows what the extension adds and asks first (`--yes` to skip), and records it in `extensions.lock.json`. `install` alone, and `bxAgents build`, restore what the lock lists and refuse files that no longer match their checksum. `list --installed`, `update` and `remove` manage them, and `--system` installs for you in `~/.bxagents/extensions`.
+- `bxAgents add extension <name>` starts an extension of your own: it asks what to bring (a command, key, status item, prefix, `@` source, web slot, verb, listener, or a scheduler, gateway, tool, skill or web files) and writes working stubs, as one file or a folder. Installed extensions are kept out of source control with a `.gitignore` line each, taken out again on `remove`, and the lock is what brings them back.
+- `bxAgents extensions link <folder-or-.bx>` links an extension you are working on into `~/.bxagents/extensions`, so the terminal chat loads it from where it is and `/reload` picks up an edit; `unlink` takes the link away and never what it points at. `list --installed --system` shows links beside installs.
+- A folder is an extension because it has an `Extension.bx`. A folder with only `commands/`, `tools/` and the like is no longer loaded, installed or linked, so a repository that merely has a `tools/` folder is not mistaken for one. A single `name.bx` file is still an extension. `examples/extensions-agent/extensions/loopback` got its `Extension.bx`.
+- `examples/extensions-agent` shows a one-file extension, one with several commands, an admin-only command
+  with a lifecycle, and a folder with a command class and a scheduler.
+
 #### Documentation
 
 - A full documentation site at [bxagents.ai](https://bxagents.ai): installation, quick start,

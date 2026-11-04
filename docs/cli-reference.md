@@ -30,7 +30,7 @@ At an interactive terminal, `bxAgents --help` and the end of the `new` wizard gr
 | Setting | Effect |
 |---|---|
 | `NO_COLOR`, `--no-color` | Same shape, no color |
-| `TERM=dumb`, output that is not UTF-8, or a terminal narrower than the art (76 columns) | One plain line instead |
+| `TERM=dumb`, output that is not UTF-8, or a terminal narrower than the art (75 columns) | One plain line instead |
 | `--no-banner`, or `BXAGENTS_BANNER=off` | No banner |
 | `BXAGENTS_BANNER_THEME=Ocean` | Pin a theme instead of a random one, for a recording that comes out the same every time |
 
@@ -74,7 +74,7 @@ Always use the `--flag=value` form. The space-separated form is not supported.
 Scaffold a new agent project.
 :::
 ::: card title="add" icon="phosphor-duotone:plus-circle" href="#add"
-Add a tool, interceptor, schedule, MCP server, gateway, subagent or skill to an existing project.
+Add a tool, interceptor, schedule, MCP server, gateway, subagent, skill, extension and more to an existing project.
 :::
 ::: card title="skills" icon="phosphor-duotone:graduation-cap" href="#skills"
 Find, install, update and remove skills from skills.boxlang.io.
@@ -121,6 +121,9 @@ What the model calls used: tokens by model, provider, day or user, once the proj
 ::: card title="inspect" icon="phosphor-duotone:magnifying-glass" href="#inspect"
 Report how the agent is composed, from its source.
 :::
+::: card title="extensions" icon="phosphor-duotone:puzzle-piece" href="#extensions"
+List the extensions the chat loads, and install, update, remove or link more.
+:::
 ::: card title="clean" icon="phosphor-duotone:broom" href="#clean"
 Remove a project's .build/ and dist/ output.
 :::
@@ -156,7 +159,7 @@ bxAgents new my-agent --forgebox=some-package-slug
   - `--model` is **required** when no questions are asked - a `provider/model` slug (see [the model slug](conventions/agent-bx.md#the-model-slug)).
   - `--name` defaults to the target directory's own basename.
   - Refuses to run if the target already contains an `Agent.yaml` or an `Agent.bx`.
-  - Creates [`Agent.yaml`](conventions/agent-yaml.md), `instructions.md`, a root [`Application.bx`](conventions/application-bx.md) (extends the class every build generates; never overwritten), every convention folder (empty), a root [`box.json`](conventions/box-json.md) (`testbox` as a development dependency, installed into `lib/testbox`), a ready-to-run [`tests/`](conventions/testing.md) folder (`tests/specs/AgentSpec.bx`), a `.env` declaring `BOXLANG_HOME=.build/runtime` (matching `serve`'s own scoped runtime home), a `.gitignore` (`.env`, `.build/`, `dist/`, `lib/`, `boxlang_modules/`, editor files), and the standard dotfiles `.editorconfig`, `.gitattributes`, `.bxlint.json`, `.markdownlint.json` and a `.boxlang.json` listing every bx-ai setting at its default (the BoxLang runtime reads it when run from the project root; edit the values there). Never overwrites a file that already exists. BoxLang and `boxlang-miniserver` load a `.env` from the project root themselves, so the file also works for your API keys; BxAgents never reads, copies or packages it.
+  - Creates [`Agent.yaml`](conventions/agent-yaml.md), `instructions.md`, a root [`Application.bx`](conventions/application-bx.md) (extends the class every build generates; never overwritten), every convention folder (empty), a root [`box.json`](conventions/box-json.md) (`testbox` as a development dependency, installed into `lib/testbox`), a ready-to-run [`tests/`](conventions/testing.md) folder (`tests/specs/AgentSpec.bx`), a `.env` declaring `BOXLANG_HOME=.build/runtime` (matching `serve`'s own scoped runtime home), a `.gitignore` (`.env` and `.env.*`, `.build/`, `dist/`, `data/chat.db*`, `lib/`, `boxlang_modules/`, `.agents/skills/`, editor files), and the standard dotfiles `.editorconfig`, `.gitattributes`, `.bxlint.json`, `.markdownlint.json` and a `.boxlang.json` listing every bx-ai setting at its default (the BoxLang runtime reads it when run from the project root; edit the values there). Never overwrites a file that already exists. BoxLang and `boxlang-miniserver` load a `.env` from the project root themselves, so the file also works for your API keys; BxAgents never reads, copies or packages it.
   - `--class` (a bare boolean flag, like the others described above) writes the class-based [`Agent.bx`](conventions/agent-bx.md) instead of the default `Agent.yaml`, for agents whose definition needs code (hooks, dynamic instructions). It applies to the root and to any subagents a template scaffolds, and only to `--template` mode - not to `--repo`/`--forgebox`.
   - `--template` picks one of 8 built-in starters, each layering a bit of pre-wired content on top of the base skeleton above (see [Agent Templates](agent-templates.md) for every generated file in full, plus how `--repo`/`--forgebox` sources work and how to publish your own):
     - `minimal` - the bare skeleton, nothing extra.
@@ -176,7 +179,7 @@ bxAgents new my-agent --forgebox=some-package-slug
 
 ### `add`
 
-Add one thing to a project that already exists, asking the same questions `new` asks. Today that is a `tool`, an `interceptor`, a `schedule`, an `mcp` server, a `gateway`, a `subagent`, a `skill`, a `profile`, a `provider` or a `capability`.
+Add one thing to a project that already exists, asking the same questions `new` asks. Today that is a `tool`, an `interceptor`, a `schedule`, an `mcp` server, a `gateway`, a `subagent`, a `skill`, a `profile`, a `provider`, a `capability` or an `extension`.
 
 ```bash
 bxAgents add                        # pick what to add
@@ -189,7 +192,7 @@ bxAgents add tool Pinger --dry-run              # show the file, write nothing
 - The positional arguments are the kind and the name, so the project is found by `--projectRoot=<path>` or the current folder only.
 - At a terminal, whatever is not given as a flag is asked, in the full-screen UI (or numbered lines with `--no-tui`). With `--yes`, in a pipe or in CI nothing is asked: flags and defaults are used, and a required answer that is missing names the flag to pass.
 - Questions end on a review of the files that will be written. Cancelling, with Esc or Ctrl+C, changes nothing.
-- **Nothing is overwritten.** If a file already exists none are written and the error names it; `--force` replaces it.
+- **Nothing is overwritten.** If a file already exists none are written and the error names it; `--force` replaces it. At a terminal the review offers to replace instead.
 - `--dry-run` prints each file with its text and writes nothing.
 
 #### `add tool`
@@ -260,13 +263,13 @@ Times are 24 hour `HH:mm` in the scheduler's timezone.
 Adds an MCP server in either direction: one the agent **calls** (written into `Agent.yaml`), or one the project **hosts** (`mcp/<name>.bx`).
 
 ```bash
-bxAgents add mcp client github                 # a server from the catalog the new wizard uses
+bxAgents add mcp client github                 # a server from the catalog the new wizard uses (or --direction=client)
 bxAgents add mcp client --url=https://mcp.acme.dev/mcp --name=acme --auth=bearer --env=ACME_TOKEN
 bxAgents add mcp server tools --description="My tools"
 bxAgents add mcp                                # asks which way
 ```
 
-**`add mcp client`** adds an entry to the agent's `mcpServers:` list. A name from the catalog (`github`, `stripe`, `notion`, `atlassian`, `cloudflare`, `supabase`, `git`) fills in the address and the sign-in, or for a server that runs as a program on this machine (`git`) the `command` to start it and what it needs on the PATH; otherwise give `--url`.
+**`add mcp client`** adds an entry to the agent's `mcpServers:` list. A name from the catalog (`github`, `stripe`, `notion`, `atlassian`, `cloudflare`, `supabase`, `git`) fills in the address and the sign-in, or for a server that runs as a program on this machine (`git`) the `command` to start it and what it needs on the PATH; otherwise give `--url`. Without a terminal, name the server as the positional or give `--url`.
 
 | Flag | Meaning |
 |---|---|
@@ -301,7 +304,7 @@ bxAgents add gateway telegram                   # polls Telegram, no public addr
 bxAgents add gateway slack --env=botTokenEnvVar=ACME_BOT,appTokenEnvVar=ACME_APP --policy=steer
 bxAgents add gateway web --auth=key             # the browser chat page, behind a random shared key
 bxAgents add gateway api --path=/api/chat
-bxAgents add gateway                            # asks which
+bxAgents add gateway                            # asks which (or --type=<kind>)
 ```
 
 The platforms are the ones the new wizard offers: `telegram`, `slack`, `discord`, `whatsapp-cloud`, `teams`, `twilio`, `github`, `email` and `signal`.
@@ -312,7 +315,7 @@ The platforms are the ones the new wizard offers: `telegram`, `slack`, `discord`
 | `--env=<config=NAME,...>` | Chat platforms: which variable holds which credential, for example `botTokenEnvVar=ACME_BOT`. Without it the usual names are used (`SLACK_BOT_TOKEN`, ...). Only names go in the gateway file; an empty stub for each goes in `.env`. |
 | `--policy=queue\|reject\|steer\|interrupt` | Chat platforms: what to do with a message that arrives while the agent is still answering. Written to Agent.yaml's `gatewaySession` unless it is the default `queue`. |
 | `--path=<path>` | `web` and `api`: where it is served (`/chat` and `/api/chat` by default). A path another gateway uses is refused. |
-| `--auth=open\|key\|users` | `web`: anyone who can reach it, a random shared key kept in `.env` as `CHAT_UI_API_KEY`, or named users. |
+| `--auth=open\|key\|users` | `web`: anyone who can reach it, a random shared key kept in `.env` as `CHAT_UI_API_KEY`, or named users. Default `key`. |
 | `--profiles=a,b` | `web`: the project's profiles people can pick in the chat (see [Choosing the model](conventions/web-ui.md#choosing-the-model)). Asked only when the project has profiles; none keeps the page on the agent's own model. |
 | `--users=<name:hash,...>` | `web` with `users`: each hash comes from `bxAgents hash-password`. A password is never taken as a flag; at a terminal you type it, hidden, and only its hash is stored. |
 
@@ -336,7 +339,7 @@ bxAgents add subagent checker --model=claude --parent=writer --with=search --sea
 | `--profile=<name>` | Use one of the project's [profiles](conventions/models.md#profiles) instead of a model, as the main agent can with `profile:`. At a terminal, a project that has profiles is asked which to use. |
 | `--description`, `--with`, `--search`, `--files`, `--files-dir`, `--memory`, `--mcp`, `--guard` | The same as [`new`](#new). |
 
-Writes `subagents/<name>/Agent.yaml` (with the `environments.test` mock model, so `bxAgents test` needs no key) and `instructions.md`, and adds an empty `.env` stub for each key the choices need. The name is inserted into the parent's `subAgents` without rewriting the file, so comments and order stay as they were. If the parent is a class, or its list is written in a shape that cannot be extended by inserting, nothing in it is changed and the line to add is printed. Packages a choice needs (`bx-playwright` for browsing) are named for you to add to `box.json`.
+Writes `subagents/<name>/Agent.yaml` (with the `environments.test` mock model, so `bxAgents test` needs no key) and `instructions.md`, and adds an empty `.env` stub for each key the choices need. The name is inserted into the parent's `subAgents` without rewriting the file, so comments and order stay as they were. If the parent is a class, or its list is written in a shape that cannot be extended by inserting, nothing in it is changed and the line to add is printed. Packages a choice needs (`bx-playwright` for browsing) are named for you to add to `box.json`. `--temperature`, `--max-tokens` and `--timeout` are refused here: they are settings of the whole app, so they go in the project's own `Agent.yaml`.
 
 #### `add skill`
 
@@ -365,7 +368,7 @@ bxAgents add provider                           # asks
 
 | Flag | Meaning |
 |---|---|
-| `--provider=<id>`, or the first positional | A provider bx-ai knows. One that already has settings is refused. |
+| `--provider=<id>`, or the first positional | A provider bx-ai knows (`openai` when nothing is asked and none is given). One that already has settings is refused. |
 | `--temperature`, `--max-tokens`, `--timeout` | At least one is needed. Written as `params` (`temperature`, `max_tokens`) and `options` (`timeout`). |
 
 The provider's key is never asked for: its usual variable (`OPENAI_API_KEY`) gets an empty stub in `.env`. The entry is inserted without rewriting the file, so comments and order stay. Needs an `Agent.yaml` at the root.
@@ -408,7 +411,24 @@ bxAgents add capability                         # asks which one
 | `transcription` | `provider`, `model` |
 | `image` | `provider`, `model`, `size`, `quality`, `style`, `instructions` |
 
-Every key but the provider is optional; left out, the provider's own default applies. bx-ai keeps speech and transcription on one audio provider, so the second of the two defaults to the first's provider and a different one is refused. A capability that is already set is refused: edit it in the file. The provider's key variable gets an empty stub in `.env`; the key itself is never asked for.
+The flags are `--slot` (or the first positional), `--provider` and one for each key in the table, such as `--model` and `--voice`. Every key but the provider is optional; left out, the provider's own default applies. bx-ai keeps speech and transcription on one audio provider, so the second of the two defaults to the first's provider and a different one is refused. A capability that is already set is refused: edit it in the file. The provider's key variable gets an empty stub in `.env`; the key itself is never asked for.
+
+#### `add extension`
+
+Creates an extension of your own in `extensions/`: one file for a few methods, or a folder when it carries a scheduler, gateway, tool, skill or web files. See [Starting one](conventions/extensions.md#starting-one).
+
+```bash
+bxAgents add extension standup
+bxAgents add extension standup --with=command,key --description="Daily standup"
+bxAgents add extension standup --with=command,scheduler        # a folder, with schedulers/Standup.bx
+```
+
+| Flag | Meaning |
+|---|---|
+| `--name` | The file or folder name, or the first positional. Letters, digits, `-`, `_` and `.`. |
+| `--with` | What it brings, comma separated: `command`, `key`, `status`, `prefix`, `source`, `slot`, `verb`, `listener`, `scheduler`, `gateway`, `tool`, `skill`, `web`. Default `command`. |
+| `--layout` | `file` or `folder`. A folder is the only choice when `--with` has a `scheduler`, `gateway`, `tool`, `skill` or `web`. |
+| `--description` | One line for the class's docblock. |
 
 ### `skills`
 
@@ -492,6 +512,10 @@ bxAgents serve [--port=8080] [--host=127.0.0.1]
 
 ### `chat`
 
+![The terminal chat](assets/tui/chat-answer.png)
+
+New to it? Start with [the terminal UI](guides/terminal-ui.md), the [walkthroughs](guides/chat-walkthrough.md) and the [slash command list](guides/slash-commands.md). This section is the reference.
+
 A chat with the built agent, in a terminal screen that keeps your scrollback: finished turns are printed as ordinary terminal text (select, search and scroll them as usual) and only the message box and the answer being written are redrawn. `--no-tui` (and any terminal that is not interactive) uses a plain line-by-line REPL instead, built on BoxLang's own `MiniConsole`.
 
 ```bash
@@ -510,24 +534,24 @@ In the screen:
 | Key | Does |
 |---|---|
 | Enter | Send the message |
-| Alt+Enter, Ctrl+J, or `\` then Enter | New line in the message |
+| Alt+Enter, Shift+Enter, Ctrl+J, or `\` then Enter | New line in the message |
 | Up / Down | Earlier messages (from the first or last line of the box) |
 | Esc | Stop the agent. It stops at its next step, not mid-word |
 | Enter while the agent works | Steer it: your message is added to the run |
-| Ctrl+C | Clear the box; on an empty box, leave. Ctrl+D leaves too |
+| Ctrl+C | Clear the box; on an empty box, leave; while the agent works, stop it. Ctrl+D leaves on an empty box |
 | `?` alone, or `/keys` | List the keys as they are bound now, with the action name of each |
 
 Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/export [file]` (the conversation as Markdown or HTML), `/name` and `/fork` (see below), `/keys` (which key does what), `/prompt` (how the message box looks, see below), `/sessions`, `/resume`, `/clear`, `/compact` and `/info` (see below), `/model`, `/profile` and `/default` (see below), `/remember <text>` and `/notes` (see below), `/record [file]` and `/record stop` (see below) and `/exit`.
 
 #### The same commands in the web page and in chat apps
 
-Each slash command is written once, as a small class that answers with data (text, a table, a list to pick from), and the terminal, the web page and the chat platforms each draw that answer their own way. So `/help`, `/new`, `/tools`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/info`, `/remember` and `/notes` work in all three:
+Each slash command is written once, as a small class that answers with data (text, a table, a list to pick from), and the terminal, the web page and the chat platforms each draw that answer their own way. So `/help`, `/new`, `/tools`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/ping`, `/info`, `/remember` and `/notes` work in all three:
 
 | Where | How you use them |
 |---|---|
 | Terminal chat | Type `/`, as above |
 | [Web page](conventions/web-ui.md#slash-commands) | Type `/`: a menu of the commands appears, `Tab` completes one |
-| [Chat platforms](conventions/gateways/index.md#commands-in-a-gateway) (Telegram, Slack, ...) | Type the command as a message. A safe set is on by default; a project can widen or switch it off |
+| [Chat platforms](conventions/gateways/index.md#commands-in-a-gateway) (Telegram, Slack, ...) | Type the command as a message. A safe set is on by default (`help`, `info`, `tools`, `model`, `ping`, `notes`, `remember`); a project can widen or switch it off |
 | A server over HTTP | `GET /__bxagents/commands` and `POST /__bxagents/command`, see [Run control](conventions/agent-bx.md#run-control) |
 
 `/name`, `/fork` and `/export` work in the terminal and in the web page (where `/export` hands the file to the browser to save, and the page has **Fork** and **Export** buttons). The size of the context is also always in front of you: the hint row under the message box starts with `ctx ~12.4k / 128k 9%` (just `ctx ~12.4k` when the project does not say the window), refreshed before every prompt, so after each message, `/clear`, `/compact`, `/resume` and a change to your notes. The web page shows the same in its header; click it for the breakdown. The numbers are estimates, characters divided by four (what bx-ai's `aiTokens()` does), good for seeing which part is big and not for an exact bill. The tools of MCP servers are fetched when a run starts and are not counted.
@@ -565,7 +589,7 @@ The message box has five looks, each with a top bar that carries a label and sma
 | `bars-hints` | The same two bars, with the hints and the bottom widgets inside the lower one |
 | `rule` | One coloured rule above the box, and the hint row below |
 | `box` | A rounded box around the message box |
-| `panel` | A tinted panel with a thick left bar; on a terminal without colour it is drawn as `rule` |
+| `panel` | A tinted panel with a thick left bar; on a terminal without 256 or true colour (16 colours or none) it is drawn as `rule` |
 
 The widgets are `agent`, `profile`, `folder`, `user`, `clock`, `machine`, `git`, `date`, `session`, `elapsed` and `ctx`. They sit in the top bar (after the label) or at the bottom (on the hint row, or inside the lower bar); when the line is too narrow the last ones drop off. A widget with nothing to show, such as `git` outside a repository, is left out. By default the top bar shows `agent`, `folder`, `user` and `clock`, and the bottom shows `ctx` and `profile`.
 
@@ -654,12 +678,12 @@ Keys are written as people say them: `enter`, `alt+enter`, `shift+enter`, `ctrl+
 
 | Type | Does |
 |---|---|
-| `@` | Opens a list of the files under the folder you started in (up to five levels deep; hidden folders, `node_modules`, `build`, `dist`, `target`, `out`, `venv` are skipped). Keep typing to narrow it, Up and Down to move, Tab or Enter to take one |
+| `@` | Opens a list of the files under the folder you started in (up to five levels deep; hidden folders, `node_modules`, `build`, `dist`, `target`, `out`, `__pycache__`, `venv` are skipped). Keep typing to narrow it, Up and Down to move, Tab or Enter to take one |
 | `@path/to/file` | A text file in the message: its content goes with the message, in its own block, cut at 100,000 characters. A name that is not a file is reported and stays as plain text; the message is still sent |
 | `@picture.png` | A picture (png, jpg, gif, webp), sent as an image part of the message |
 | Ctrl+V | Pastes a picture from the clipboard (needs `wl-paste` or `xclip` on Linux, `pngpaste` on macOS; Windows uses PowerShell). A chip in the hint row shows how many are waiting |
 
-At most 4 pictures go with one message, each up to 5 MB. Before anything is sent the chat checks that the profile can see: set `vision: true` on a [profile](models.md#what-the-project-knows-about-a-model) that can, and a picture sent to one that cannot is refused with a message instead of an obscure provider error. `/context` counts what is attached. The picture is passed to the model as bx-ai's `AiMessage` image parts, in the shape that provider expects; only OpenAI-style providers have been tried so far.
+At most 4 pictures go with one message, each up to 5 MB. Before anything is sent the chat checks the model: set `vision: false` on a [profile](conventions/models.md#what-the-project-knows-about-a-model) that cannot see, and a picture sent to it is refused with a message instead of an obscure provider error. When `vision` is not set the picture goes through. `/context` counts what is attached. The picture is passed to the model as bx-ai's `AiMessage` image parts, in the shape that provider expects; only OpenAI-style providers have been tried so far.
 
 With `--connect` the files and pictures travel in the `attachments` of the request to `/__bxagents/events`, see [Run control](conventions/agent-bx.md#run-control). Chat platforms do not take attachments yet.
 
@@ -782,7 +806,7 @@ bxAgents notes import --file=notes.json
 
 - `--scope` is `user` (the default) or `agent`; `list` without it shows both. `--user` is whose user notes: the operating system user by default. Agent notes belong to the agent's `name`.
 - `stats` shows how full each scope is and the rough size they add to the prompt (about four characters to a token; an estimate, not a count).
-- `export` writes the notes as JSON, to `--file` or to the screen. `import` adds the notes of such a file; a note already there is skipped and one that does not fit the limit is reported.
+- `export` writes the notes as JSON, to `--file` or to the screen. `import` adds the notes of such a file; a note already there is not added twice and one that does not fit the limit is reported (the command then exits `1`).
 - Run it where the database is: in the project, or on a server with `BXAGENTS_DB` set.
 
 ### `models`
@@ -907,6 +931,29 @@ The report has these sections, in this order. `--section` takes any of the names
 - `--md=FILE` is the only thing `inspect` ever writes. A relative file is created inside the project.
 - A folder with no `Agent.yaml` or `Agent.bx` is an error.
 
+### `extensions`
+
+List the [extensions](conventions/extensions.md) the terminal chat would load for this project: the project's `extensions/`, your own `~/.bxagents/extensions/`, and the `extensions/` of installed modules. It loads them the way `chat` does, so an extension that fails to load shows up here with the reason. It never needs a built project.
+
+```bash
+bxAgents extensions [--json]
+```
+
+- One line per extension: its name, which layer it came from, whether it loaded, then the commands and schedulers it added and anything that went wrong.
+- `--json` prints `{ extensions, problems }` for scripting.
+
+Subcommands install, list, update and remove are described in [Installing extensions](conventions/extensions.md#installing-extensions), link and unlink in [Working on one](conventions/extensions.md#working-on-one-link-it):
+
+```bash
+bxAgents extensions install <source> [--name=<name>] [--force] [--yes] [--system]
+bxAgents extensions install                    # restore from extensions.lock.json
+bxAgents extensions list [--installed] [--json]
+bxAgents extensions update [name...] [--yes]
+bxAgents extensions remove <name> [--force] [--system]
+bxAgents extensions link <folder-or-.bx> [--name=<name>] [--force]   # for you, in ~/.bxagents/extensions
+bxAgents extensions unlink <name>
+```
+
 ### `clean`
 
 Remove a project's `.build/` and `dist/` output.
@@ -935,6 +982,7 @@ bxAgents doctor [--json]
 - Runs the exact same discovery/resolve/validate phases `build` runs, without generating anything - every validation error/warning `build` would hit shows up here first.
 - Checks every `*EnvVar`-suffixed config value across `gateways/*` (bot tokens, webhook secrets, IMAP credentials, web UI account passwords, API keys) against the real environment right now, and warns about any that aren't set. Nothing else checks this - `build` only checks that an env var name was *declared*, never that it's actually populated, so a missing one otherwise fails silently at runtime (a gateway that never sends, a web UI account that can't sign in).
 - Checks the key variable of every provider the models use: the default model, each subagent, each [profile](conventions/models.md#profiles) (its `apiKeyEnv`, else the provider's usual variable, such as `OPENAI_API_KEY`) and each capability default. A key that is not set in the environment is a warning that names who needs it. Doctor never reads the project's `.env`, so a key kept only there is reported as not set even though it works when the app is served. `mock` needs no key, and `bxAgents test` runs every profile on `mock`.
+- Checks that every MCP server the agent starts as a program on this machine (a `command:` entry, such as the catalog's `git`) is on the `PATH`; a missing one is a warning.
 - Does not check for `qb`, `cbsecurity`, `cbauth` or `cbmailservices`: they ship inside BxAgents and are copied into every built app.
 - `--json` prints the raw findings as a JSON array (`[{ status, message }, ...]`) instead of the human-readable report - useful for scripting.
 - Exits `1` if any check failed, `0` otherwise - warnings alone don't fail it.

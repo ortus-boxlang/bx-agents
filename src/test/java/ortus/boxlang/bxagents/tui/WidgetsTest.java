@@ -111,6 +111,11 @@ class WidgetsTest {
 	@DisplayName( "a registered widget can be used by name" )
 	void custom() {
 		Widgets.register( AbstractWidget.of( "shout-test", "the agent, loud", "DEMO", c -> c.agent.toUpperCase() ) );
-		assertThat( text( "shout-test" ) ).isEqualTo( "DEMO-ASSISTANT" );
+		try {
+			assertThat( text( "shout-test" ) ).isEqualTo( "DEMO-ASSISTANT" );
+		} finally {
+			// the registry is shared by every test in the run, and registry() lists exactly the built-in ones
+			Widgets.unregister( "shout-test" );
+		}
 	}
 }

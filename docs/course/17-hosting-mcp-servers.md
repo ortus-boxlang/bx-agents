@@ -56,7 +56,7 @@ class {
 			description : "Internal tools MCP server",
 			version     : "1.0.0",
 			cors        : "*",             // optional
-			tools       : [ "sayHello" ]   // names of tools already under tools/
+			tools       : [ "sayHello" ]   // function names of @AITool tools already under tools/
 		};
 	}
 }
@@ -87,7 +87,7 @@ class {
 ## Try it
 
 Host the `GetTime` tool you wrote in [Lesson 9](09-giving-your-agent-tools.md) as its
-own MCP server, expose it at `/mcp/tools`, build, and `serve` - it's now reachable by
+own MCP server (`tools: [ "currentTime" ]`, the tool's function name), expose it at `/mcp/tools`, build, and `serve` - it's now reachable by
 any outside MCP client, independent of your agent's own chat interface.
 
 Full reference: [mcp/](../conventions/mcp.md).

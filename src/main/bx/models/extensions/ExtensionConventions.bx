@@ -1,0 +1,37 @@
+/**
+ * What makes a folder an extension: its `Extension.bx`. A folder without one (a `.git`, a `node_modules`, a repository
+ * that merely has a `tools/` folder) is not an extension, whatever else is in it. The folders an extension may carry are
+ * listed here too, for the pieces that read them.
+ */
+class {
+
+	static {
+		FOLDERS = [ "commands", "schedulers", "gateways", "tools", "skills", "web" ]
+	}
+
+	/**
+	 * @return The convention folder names
+	 */
+	static array function names() {
+		return static.FOLDERS
+	}
+
+	/**
+	 * @folder An extension's folder
+	 *
+	 * @return The convention folders it has
+	 */
+	static array function foldersIn( required string folder ) {
+		return static.FOLDERS.filter( name => directoryExists( folder & "/" & name ) )
+	}
+
+	/**
+	 * @folder A folder
+	 *
+	 * @return True when it has an `Extension.bx`, the file that makes a folder an extension
+	 */
+	static boolean function isExtensionFolder( required string folder ) {
+		return fileExists( arguments.folder & "/Extension.bx" )
+	}
+
+}

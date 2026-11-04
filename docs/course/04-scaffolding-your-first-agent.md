@@ -15,8 +15,10 @@ scaffold your first project:
 bxAgents new my-agent --model=openai/gpt-5
 ```
 
-`--model` is **required** - a `provider/model` slug (you'll see exactly how this gets
-parsed in [Lesson 5](05-agent-bx.md)). `--name` and `--description` are optional;
+`--model` is a `provider/model` slug (you'll see exactly how this gets
+parsed in [Lesson 5](05-agent-bx.md)). Pass it for a script-friendly run: without
+`--model`, at a terminal, `new` asks you questions instead (see [`new` wizard](../guides/new-wizard.md)).
+`--name` and `--description` are optional;
 `--name` defaults to the target directory's own name. `new` refuses to run if the
 target already contains an `Agent.yaml` or `Agent.bx`.
 
@@ -25,6 +27,7 @@ target already contains an `Agent.yaml` or `Agent.bx`.
 ```
 my-agent/
 ├── Agent.yaml
+├── box.json
 ├── instructions.md
 ├── tools/
 ├── skills/
@@ -35,14 +38,14 @@ my-agent/
 ├── interceptors/
 ├── modules/
 └── tests/
-    ├── box.json
     └── specs/
         └── AgentSpec.bx
 ```
 
 Plus a `.env` declaring `BOXLANG_HOME=.build/runtime` (matching `serve`'s own scoped
-runtime home) and a `.gitignore` (`.build/`, `dist/`, `.env`) - `new` never overwrites
-either if they already exist. BoxLang loads the `.env` from the project root itself, so
+runtime home), a `.gitignore` (it ignores `.build/`, `dist/`, `.env` and `lib/`, among others)
+and a few dotfiles (`.boxlang.json`, `.editorconfig`, `.bxlint.json`, `.gitattributes`,
+`.markdownlint.json`) - `new` never overwrites them if they already exist. BoxLang loads the `.env` from the project root itself, so
 this is also the place for your provider API keys.
 
 Every convention folder is created **empty**. You add files to the ones your agent
@@ -57,7 +60,8 @@ the generated app.
 # Your agent. Most agents need nothing more than this file and instructions.md.
 # For code in the definition (hooks, dynamic instructions), scaffold with --class.
 name: my-agent
-model: openai/gpt-5
+provider: openai
+model: gpt-5
 
 environments:
   # `bxAgents test` builds against this override by default (see
@@ -73,7 +77,7 @@ If you need code in the definition, pass `--class` and `new` scaffolds a class-b
 
 ## The test suite runs itself
 
-`new` also runs `box install` in the scaffolded project root (its `box.json` lists TestBox), so `bxAgents test`
+`new` also runs `box install` in the scaffolded project root (its `box.json` lists TestBox, installed into `lib/testbox`), so `bxAgents test`
 ([Lesson 19](19-testing-your-agent.md)) works immediately with no separate step. This
 is best-effort - if `box` isn't on `PATH` or the install fails, `new` still succeeds
 and just tells you to run it yourself. Pass `--skipInstall` to opt out entirely.

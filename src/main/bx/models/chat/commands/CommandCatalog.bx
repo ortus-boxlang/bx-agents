@@ -4,6 +4,23 @@
 class {
 
 	/**
+	 * The commands a served agent answers with: the registry the app built at startup (the built-ins and
+	 * what its extensions added, see ServedExtensions), or just the built-ins when the app has none.
+	 *
+	 * @return A CommandRegistry
+	 */
+	function forApplication() {
+		try {
+			if ( application.keyExists( "bxagentsCommands" ) ) {
+				return application.bxagentsCommands
+			}
+		} catch ( any e ) {
+			// no application scope here (a script, a test): the built-ins
+		}
+		return standard()
+	}
+
+	/**
 	 * @return A CommandRegistry with every built-in command
 	 */
 	function standard() {

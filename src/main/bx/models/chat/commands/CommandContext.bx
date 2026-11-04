@@ -5,6 +5,7 @@
  * chat()      the conversation: names the agent, its model, tools, notes, conversations, memory.
  *             The same calls whether the agent runs in this process, behind --connect or on a server.
  * terminal()  only in the terminal chat: copy, export and record, which touch the user's machine
+ * ask()       only in the terminal chat: put a question to the person (see below)
  * transport() "tui", "web" or "gateway"
  */
 class {
@@ -41,6 +42,54 @@ class {
 
 	any function terminal() {
 		return variables.terminal
+	}
+
+	/**
+	 * @return True when a question can be put to the person: only in the terminal chat. On the web page and chat
+	 *         platforms ask(), confirm() and choose() answer at once with "no answer".
+	 */
+	boolean function canAsk() {
+		return hasTerminal()
+	}
+
+	/**
+	 * Asks the person for a line of text.
+	 *
+	 * @question What to ask
+	 * @options { default : "text to start with", help : "a line of help" }
+	 *
+	 * @return The text, or null when there is no one to ask or they pressed esc
+	 */
+	any function ask( required string question, struct options = {} ) {
+		if ( !canAsk() ) {
+			return nullValue()
+		}
+		return variables.terminal.ask( arguments.question, arguments.options.help ?: "", arguments.options.default ?: "" )
+	}
+
+	/**
+	 * @question What to ask
+	 *
+	 * @return True only when the person said yes; false for no, esc, or no one to ask
+	 */
+	boolean function confirm( required string question ) {
+		if ( !canAsk() ) {
+			return false
+		}
+		return variables.terminal.choose( arguments.question, [ { value : "yes", label : "Yes" }, { value : "no", label : "No" } ] ) == "yes"
+	}
+
+	/**
+	 * @question What to ask
+	 * @choices Strings, or structs with value, label and hint
+	 *
+	 * @return The value picked, or null when there is no one to ask or they pressed esc
+	 */
+	any function choose( required string question, required array choices ) {
+		if ( !canAsk() ) {
+			return nullValue()
+		}
+		return variables.terminal.choose( arguments.question, arguments.choices )
 	}
 
 	/**

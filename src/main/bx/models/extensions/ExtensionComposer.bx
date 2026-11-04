@@ -1,0 +1,214 @@
+/**
+ * What extensions add to the terminal message box: prefixes (`$ select 1`) and `@name:query` sources
+ * (`@jira:ABC-12`). It settles the names, so the chat only asks it questions:
+ *
+ *   - the person's `chat: prefixes:` and `chat: sources:` choices (keyed by `extension:method`) replace what the
+ *     extension asked for
+ *   - a prefix that is empty, has a space in it, or starts with a character the chat keeps for itself
+ *     (`/ ! # @`, or a lone `?`) is refused with a sentence
+ *   - two extensions on the same prefix or source name are a warning, and the later one (the later layer) wins
+ *
+ * Everything that is wrong is in problems(); the chat shows them when it opens.
+ */
+class {
+
+	/**
+	 * @prefixes ExtensionPrefix objects, in load order
+	 * @sources ExtensionSource objects, in load order
+	 * @chosenPrefixes { "extension:method" : "prefix" } from the person's file
+	 * @chosenSources { "extension:method" : "name" } from the person's file
+	 */
+	function init( array prefixes = [], array sources = [], struct chosenPrefixes = {}, struct chosenSources = {} ) {
+		variables.problems = []
+		variables.prefixes = []
+		variables.sources = []
+		settle( arguments.prefixes, arguments.chosenPrefixes, "prefix", variables.prefixes )
+		settle( arguments.sources, arguments.chosenSources, "source", variables.sources )
+		return this
+	}
+
+	array function problems() {
+		return variables.problems
+	}
+
+	/**
+	 * @return The prefixes in use, as { id, prefix, does }
+	 */
+	array function prefixes() {
+		return variables.prefixes.map( p => p.describe() )
+	}
+
+	/**
+	 * @return The sources in use, as { id, name, does }
+	 */
+	array function sources() {
+		return variables.sources.map( s => s.describe() )
+	}
+
+	/**
+	 * @return The source names in use, for the screen's menu
+	 */
+	array function sourceNames() {
+		return variables.sources.map( s => s.name() )
+	}
+
+	boolean function isEmpty() {
+		return !variables.prefixes.len() && !variables.sources.len()
+	}
+
+	/**
+	 * @text What the person typed
+	 *
+	 * @return The ExtensionPrefix the line starts with (the longest prefix wins), or null
+	 */
+	any function prefixFor( required string text ) {
+		var best = nullValue()
+		for ( var candidate in variables.prefixes ) {
+			if ( arguments.text.startsWith( candidate.prefix() ) && ( isNull( best ) || len( candidate.prefix() ) > len( best.prefix() ) ) ) {
+				best = candidate
+			}
+		}
+		return best
+	}
+
+	/**
+	 * @text What the person typed
+	 *
+	 * @return The text without any `@name:query` of a known source, for what reads `@path` mentions
+	 */
+	string function withoutSources( required string text ) {
+		var pattern = pattern()
+		return len( pattern ) ? reReplace( arguments.text, pattern, "", "all" ) : arguments.text
+	}
+
+	/**
+	 * @text What the person typed
+	 * @agentContext The CommandContext of the chat
+	 *
+	 * @return { blocks : [ { name, content } ], problems : [ sentence ] } for every `@name:query` of a known source
+	 */
+	struct function read( required string text, required any agentContext ) {
+		var found = { blocks : [], problems : [] }
+		var pattern = pattern()
+		if ( !len( pattern ) ) {
+			return found
+		}
+		var seen = {}
+		for ( var token in reMatchNoCase( pattern, arguments.text ) ) {
+			var mention = trim( token )
+			if ( seen.keyExists( mention ) ) {
+				continue
+			}
+			seen[ mention ] = true
+			var name = listFirst( mid( mention, 2, len( mention ) ), ":" )
+			var query = mid( mention, len( name ) + 3, len( mention ) )
+			if ( query.startsWith( """" ) && query.endsWith( """" ) && len( query ) > 1 ) {
+				query = mid( query, 2, len( query ) - 2 )
+			}
+			var source = sourceNamed( name )
+			try {
+				found.blocks.append( source.read( arguments.agentContext, query ), true )
+			} catch ( any e ) {
+				found.problems.append( e.message )
+			}
+		}
+		return found
+	}
+
+	/**
+	 * @name A source name
+	 * @query What has been typed after `@name:`
+	 * @agentContext The CommandContext of the chat
+	 *
+	 * @return The names the source offers; none for a name that is not a source
+	 */
+	array function suggest( required string name, required string query, required any agentContext ) {
+		var source = sourceNamed( arguments.name )
+		return isNull( source ) ? [] : source.suggestions( arguments.agentContext, arguments.query )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private any function sourceNamed( required string name ) {
+		for ( var source in variables.sources ) {
+			if ( lCase( source.name() ) == lCase( arguments.name ) ) {
+				return source
+			}
+		}
+	}
+
+	/**
+	 * @return The regular expression for a mention of any known source, or blank when there are none
+	 */
+	private string function pattern() {
+		if ( !variables.sources.len() ) {
+			return ""
+		}
+		var names = variables.sources.map( s => createObject( "java", "java.util.regex.Pattern" ).quote( s.name() ) )
+		return "(?<!\S)@(" & names.toList( "|" ) & "):(""[^""]*""|\S+)"
+	}
+
+	/**
+	 * Applies the person's choices, refuses what cannot be used, and keeps the later of two on one name.
+	 *
+	 * @kind "prefix" or "source"
+	 * @into The array to fill
+	 */
+	private void function settle( required array items, required struct chosen, required string kind, required array into ) {
+		var byName = {}
+		var accepted = []
+		var plural = arguments.kind == "prefix" ? "prefixes" : "sources"
+		for ( var item in arguments.items ) {
+			var theirs = trim( arguments.chosen[ item.id() ] ?: "" )
+			var wanted = item.declared()
+			if ( len( theirs ) ) {
+				var why = refusal( theirs, arguments.kind )
+				if ( len( why ) ) {
+					variables.problems.append( "chat: #plural#: #item.id()#: #why#, so [#wanted#] is used." )
+				} else {
+					item.choose( theirs )
+					wanted = theirs
+				}
+			}
+			var refused = refusal( wanted, arguments.kind )
+			if ( len( refused ) ) {
+				variables.problems.append( "The #arguments.kind# [#wanted#] of #item.id()# is not used: #refused#." )
+				continue
+			}
+			var key = lCase( wanted )
+			if ( byName.keyExists( key ) ) {
+				variables.problems.append( "The #arguments.kind# [#wanted#] of #byName[ key ].id()# is replaced by the one of #item.id()#, which loaded later." )
+			}
+			byName[ key ] = item
+			accepted.append( { key : key, item : item } )
+		}
+		// the last one on a name wins; the others are left out
+		for ( var entry in accepted ) {
+			if ( byName[ entry.key ].id() == entry.item.id() ) {
+				arguments.into.append( entry.item )
+			}
+		}
+	}
+
+	/**
+	 * @return Why a prefix or source name cannot be used, or blank when it can
+	 */
+	private string function refusal( required string wanted, required string kind ) {
+		if ( arguments.kind == "source" ) {
+			return reFind( "^[A-Za-z][A-Za-z0-9_-]*$", arguments.wanted ) ? "" : "a source name starts with a letter and holds letters, digits, - and _"
+		}
+		if ( !len( arguments.wanted ) || reFind( "\s", arguments.wanted ) ) {
+			return "a prefix cannot be empty or hold a space"
+		}
+		if ( arguments.wanted == "?" ) {
+			return "a lone ? asks for the keys"
+		}
+		for ( var reserved in [ "/", "!", "##", "@" ] ) {
+			if ( arguments.wanted.startsWith( reserved ) ) {
+				return "#reserved# is kept for the chat"
+			}
+		}
+		return ""
+	}
+
+}

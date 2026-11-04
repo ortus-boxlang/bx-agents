@@ -172,7 +172,7 @@
 </head>
 <body
 	class="bxsites-home bxa-home" data-base="#variables.basePath#"
-	x-data="{ dark: document.documentElement.getAttribute( 'data-theme' ) === 'dark' }"
+	x-data="{ menu: false, dark: document.documentElement.getAttribute( 'data-theme' ) === 'dark' }" @keydown.escape.window="menu = false"
 	x-init="$watch( 'dark', v => { document.documentElement.setAttribute( 'data-theme', v ? 'dark' : 'light' ); localStorage.setItem( 'bxsites-theme', v ? 'dark' : 'light' ) } )">
 
 		<header class="bxa-top"><div class="bxa-wrap">
@@ -182,14 +182,17 @@
   <div class="bxa-searchwrap"><bx:if variables.searchEnabled><bx:include template="#variables.themeDir#/search.bxm"></bx:if></div>
   <bx:if len( variables.repoUrl )><a class="bxa-gh" href="#bxsitesUrlAttr( variables.repoUrl )#" target="_blank" rel="noopener noreferrer"><i class="ph-duotone ph-github-logo" style="font-size:1.1rem"></i><span>GitHub</span></a></bx:if>
   <button type="button" class="bxa-icon-btn" @click="dark = !dark" aria-label="#encodeForHTML( variables.strings.toggleDarkMode )#"><span x-show="!dark"><i class="ph-duotone ph-moon"></i></span><span x-show="dark" x-cloak><i class="ph-duotone ph-sun"></i></span></button>
-</div></header>
+  <button type="button" class="bxa-icon-btn bxa-menu-btn" @click="menu = !menu" :aria-expanded="menu ? 'true' : 'false'" aria-controls="bxa-mobile-nav" aria-label="Menu"><span x-show="!menu"><i class="ph-duotone ph-list"></i></span><span x-show="menu" x-cloak><i class="ph-duotone ph-x"></i></span></button>
+</div>
+  <nav class="bxa-mobile" id="bxa-mobile-nav" aria-label="Primary mobile" x-show="menu" x-cloak @click="menu = false"><a href="##start">Quick start</a><a href="##watch">Watch</a><a href="##reach">Gateways</a><a href="##starters">Starters</a><a href="##course">Course</a><a href="#variables.basePath#getting-started/installation/">Docs</a><a href="#variables.basePath#cli-reference/">CLI reference</a></nav>
+</header>
 
 <main class="bxa-main-content" id="top">
 <section class="bxa-hero"><div class="bxa-bgring" aria-hidden="true"><i></i></div><div class="bxa-glow" aria-hidden="true"></div><div class="bxa-wrap">
   <div>
-    <span class="bxa-eyebrow">Conventions-based agent framework for BoxLang</span>
+    <span class="bxa-eyebrow">AI agents without the plumbing</span>
     <h1 style="margin-top:16px">Build AI agents by <span class="bxa-grad">convention</span>.</h1>
-    <p class="bxa-lede">Describe an agent with files and folders. <code>bxAgents build</code> assembles a real, runnable ColdBox application from them, once, before anything boots.</p>
+    <p class="bxa-lede">Stop wiring tools, memory, chat UIs, Slack bots and schedulers by hand. Describe your agent with files and folders and <code>bxAgents build</code> hands you a full MVC application: REST API, web chat, channels and jobs included.</p>
     <div class="bxa-cta">
       <a class="bxa-btn bxa-btn-primary" href="##start">Get started <i class="ph-duotone ph-arrow-up-right"></i></a>
       <a class="bxa-btn bxa-btn-ghost" href="##how">See how it works</a>
@@ -219,7 +222,7 @@
         <h3 id="o-h">Agent.yaml is the agent</h3>
         <p id="o-p">A name, a model and any settings you need, in plain YAML. Need code? Use a class-based <code>Agent.bx</code> instead.</p>
         <div class="bxa-gen" id="o-g"></div>
-        <div class="bxa-running"><span class="bxa-dot"></span><span>plain ColdBox app, no scanning at boot</span></div>
+        <div class="bxa-running"><span class="bxa-dot"></span><span>a full MVC app, no scanning at boot</span></div>
       </div>
     </div>
   </div></div>
@@ -227,10 +230,10 @@
 
 <section style="padding-top:0"><div class="bxa-wrap">
   <div class="bxa-pillars">
-    <div class="bxa-pillar bxa-gc bxa-rv"><span class="bxa-ico"><i class="ph-duotone ph-folders"></i></span><h3>Conventions first</h3><p>Convention over configuration for faster development.</p></div>
-    <div class="bxa-pillar bxa-gc bxa-rv"><span class="bxa-ico"><i class="ph-duotone ph-puzzle-piece"></i></span><h3>Pluggable and extensible</h3><p>Swap models, tools, memory and more with ease.</p></div>
-    <div class="bxa-pillar bxa-gc bxa-rv"><span class="bxa-ico"><i class="ph-duotone ph-brain"></i></span><h3>Powerful agents</h3><p>Agents that reason, act, and collaborate effectively.</p></div>
-    <div class="bxa-pillar bxa-gc bxa-rv"><span class="bxa-ico"><i class="ph-duotone ph-shield-check"></i></span><h3>Production ready</h3><p>Built for performance, reliability, and real-world applications.</p></div>
+    <div class="bxa-pillar bxa-gc bxa-rv"><span class="bxa-ico"><i class="ph-duotone ph-folders"></i></span><h3>No boilerplate</h3><p>Put a file in a folder and it is wired in. Nothing to register, nothing to glue.</p></div>
+    <div class="bxa-pillar bxa-gc bxa-rv"><span class="bxa-ico"><i class="ph-duotone ph-puzzle-piece"></i></span><h3>No lock-in</h3><p>Change the model, the tools or the memory with one line, not a rewrite.</p></div>
+    <div class="bxa-pillar bxa-gc bxa-rv"><span class="bxa-ico"><i class="ph-duotone ph-brain"></i></span><h3>Agents that do the work</h3><p>Call your code, use skills, hand off to sub-agents and run on a schedule.</p></div>
+    <div class="bxa-pillar bxa-gc bxa-rv"><span class="bxa-ico"><i class="ph-duotone ph-shield-check"></i></span><h3>Safe to ship</h3><p>Approvals for risky actions, access tokens, secrets kept out of the code, and tests built in.</p></div>
   </div>
 </div></section>
 
@@ -250,7 +253,7 @@ bxAgents serve --port=8080</code><button class="bxa-copy" data-copy="bxAgents ch
 </div></section>
 
 <section id="watch"><div class="bxa-wrap">
-  <div class="bxa-head bxa-rv"><span class="bxa-eyebrow">Watch it work</span><h2>Real runs, recorded.</h2><p>Every clip is a real session against a real served agent. The model is the mock provider the examples ship with, so each answer is "Mock response" and no model was called.</p></div>
+  <div class="bxa-head bxa-rv"><span class="bxa-eyebrow">Watch it work</span><h2>Real runs, recorded.</h2><p>Every clip is a real session, not a mock-up. No model was called: the web clips use the mock provider the examples ship with, and the terminal clips use a scripted demo model, so the answers are canned.</p></div>
   <div class="bxa-vplayer bxa-rv">
     <div class="bxa-vtabs" role="tablist" aria-label="Walkthrough videos" id="vtabs"></div>
     <div class="bxa-vstage">
@@ -290,17 +293,17 @@ Serving [<span class="bxa-t-h">/work/support-bot/.build/app</span>] on <span cla
 </div></section>
 
 <section class="bxa-band"><div class="bxa-wrap">
-  <div class="bxa-head bxa-rv"><span class="bxa-eyebrow">Assembled at build time</span><h2>Discovery happens once, not on every boot.</h2><p>Most agent frameworks wire tools, skills, routes and schedules together at request time. BxAgents does the work in <code>bxAgents build</code> and ships an ordinary app.</p></div>
+  <div class="bxa-head bxa-rv"><span class="bxa-eyebrow">Assembled at build time</span><h2>Fast to start, easy to debug.</h2><p>Most agent frameworks wire tools, skills, routes and schedules together every time they start. BxAgents does that once in <code>bxAgents build</code> and ships an ordinary app, so what runs is plain code you can read.</p></div>
   <div class="bxa-pipe bxa-rv">
     <div class="bxa-step"><i></i><h3>Discover</h3><p>Walk the convention folders that exist and have content.</p></div>
     <div class="bxa-step"><i></i><h3>Validate</h3><p>Reject bad config before anything runs.</p></div>
     <div class="bxa-step"><i></i><h3>Manifest</h3><p>Record what was found in <code>manifest.json</code>.</p></div>
     <div class="bxa-step"><i></i><h3>Generate</h3><p>Write config, handlers, router and scheduler.</p></div>
-    <div class="bxa-step"><i></i><h3>Run</h3><p>Boot <code>.build/app</code> like any ColdBox app, or ship a <code>.bxa</code>.</p></div>
+    <div class="bxa-step"><i></i><h3>Run</h3><p>Start <code>.build/app</code> like any web app, or ship a <code>.bxa</code>.</p></div>
   </div>
   <div class="bxa-versus bxa-rv">
     <div class="bxa-vs"><h3>Wired at request time</h3><p>Convention scanning and file walking on every boot, and build work deferred into the request path.</p></div>
-    <div class="bxa-vs bxa-win"><h3>Wired at build time</h3><p>No scanning at startup. Starting the agent is booting a plain ColdBox application.</p></div>
+    <div class="bxa-vs bxa-win"><h3>Wired at build time</h3><p>No scanning at startup. Starting the agent is starting an ordinary web application.</p></div>
   </div>
 </div></section>
 
@@ -385,7 +388,7 @@ Serving [<span class="bxa-t-h">/work/support-bot/.build/app</span>] on <span cla
 </div></section>
 
 <section id="cli"><div class="bxa-wrap">
-  <div class="bxa-head bxa-rv"><span class="bxa-eyebrow">The CLI</span><h2>Fourteen verbs, one executable.</h2><p>Tab completion for bash, fish and PowerShell ships with the module.</p></div>
+  <div class="bxa-head bxa-rv"><span class="bxa-eyebrow">The CLI</span><h2>Twenty verbs, one executable.</h2><p>Tab completion for bash, fish and PowerShell ships with the module.</p></div>
   <div class="bxa-vgrid">
     <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##new"><i class="ph-duotone ph-hand-waving"></i><b>new</b><small>Scaffold a project</small></a>
     <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##add"><i class="ph-duotone ph-plus-circle"></i><b>add</b><small>Add a tool</small></a>
@@ -400,6 +403,12 @@ Serving [<span class="bxa-t-h">/work/support-bot/.build/app</span>] on <span cla
     <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##inspect"><i class="ph-duotone ph-magnifying-glass"></i><b>inspect</b><small>How it is composed</small></a>
     <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##clean"><i class="ph-duotone ph-broom"></i><b>clean</b><small>Remove build output</small></a>
     <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##hash-password"><i class="ph-duotone ph-key"></i><b>hash-password</b><small>Web UI users</small></a>
+    <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##token"><i class="ph-duotone ph-identification-card"></i><b>token</b><small>Access tokens</small></a>
+    <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##notes"><i class="ph-duotone ph-note-pencil"></i><b>notes</b><small>What the agent keeps</small></a>
+    <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##models"><i class="ph-duotone ph-cpu"></i><b>models</b><small>List and test models</small></a>
+    <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##sessions"><i class="ph-duotone ph-chats"></i><b>sessions</b><small>Your conversations</small></a>
+    <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##stats"><i class="ph-duotone ph-chart-bar"></i><b>stats</b><small>Token usage</small></a>
+    <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##extensions"><i class="ph-duotone ph-puzzle-piece"></i><b>extensions</b><small>Add commands</small></a>
     <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##doctor"><i class="ph-duotone ph-stethoscope"></i><b>doctor</b><small>Diagnose the setup</small></a>
   </div>
 </div></section>
@@ -455,7 +464,7 @@ Serving [<span class="bxa-t-h">/work/support-bot/.build/app</span>] on <span cla
 <footer class="bxa-footer"><div class="bxa-wrap bxa-foot-top">
   <div class="bxa-foot-brand">
     <a class="bxa-brand" href="#variables.basePath#"><img class="bxa-dark" src="#variables.basePath#assets/bxagents-logo-full-dark.svg" alt="BxAgents"><img class="bxa-light" src="#variables.basePath#assets/bxagents-logo-full-light.svg" alt="BxAgents"></a>
-    <p>Build AI agents by convention, on BoxLang and ColdBox.</p>
+    <p>AI agents without the plumbing. Built on BoxLang.</p>
     <bx:if variables.socialLinks.len() gt 0><div class="bxa-social">#renderSocialLinks( variables.socialLinks )#</div></bx:if>
   </div>
   <div class="bxa-foot-col"><h4>Learn</h4>

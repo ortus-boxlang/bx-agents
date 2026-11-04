@@ -80,6 +80,8 @@ public final class ChatScreen implements AutoCloseable {
 	private final List<Map<?, ?>>			commands;
 	private final Composer					composer		= new Composer();
 	private KeyMap							keys			= KeyMap.defaults();
+	private String							pendingKey;
+	private AtSources						sources			= new AtSources( List.of(), ( name, query ) -> List.of() );
 
 	private final Queue<Map<?, ?>>			events			= new ConcurrentLinkedQueue<>();
 	private final Queue<String>				steer			= new ConcurrentLinkedQueue<>();
@@ -166,9 +168,50 @@ public final class ChatScreen implements AutoCloseable {
 	 * @return what was wrong with the overrides, as sentences; they were left out and the defaults kept
 	 */
 	public List<String> bindKeys( Map<?, ?> overrides ) {
-		keys = KeyMap.of( overrides );
+		return bindKeys( overrides, List.of() );
+	}
+
+	/**
+	 * Like {@link #bindKeys(Map)}, and adds the actions extensions bring.
+	 *
+	 * @param extras each a map with {@code id}, {@code does} and {@code keys} (a list of keys, such as {@code ctrl+g}). Pressing one of
+	 *               its keys in the message box makes {@link #readInput()} return an empty message and {@link #takeKey()} return its id.
+	 */
+	public List<String> bindKeys( Map<?, ?> overrides, List<? extends Map<?, ?>> extras ) {
+		List<KeyMap.Extra> actions = new java.util.ArrayList<>();
+		for ( Map<?, ?> x : extras ) {
+			List<String>	defaults	= new java.util.ArrayList<>();
+			Object			given		= x.get( "keys" );
+			if ( given instanceof List<?> l ) {
+				for ( Object o : l ) {
+					defaults.add( String.valueOf( o ) );
+				}
+			} else if ( given != null ) {
+				defaults.add( String.valueOf( given ) );
+			}
+			actions.add( new KeyMap.Extra( String.valueOf( x.get( "id" ) ), String.valueOf( x.get( "does" ) ), defaults ) );
+		}
+		keys = KeyMap.of( overrides, actions );
 		composer.keys( keys );
 		return keys.problems();
+	}
+
+	/**
+	 * Lets the {@code @} menu offer extension sources: their names while one is being typed, and their own suggestions
+	 * after the colon.
+	 *
+	 * @param names     the source names in use
+	 * @param suggester asked for ( name, what follows the colon ) and returns the values to offer
+	 */
+	public void bindSources( List<String> names, java.util.function.BiFunction<String, String, List<String>> suggester ) {
+		sources = new AtSources( names, suggester );
+	}
+
+	/** @return the id of the extension action whose key was pressed since the last call, or null */
+	public String takeKey() {
+		String taken = pendingKey;
+		pendingKey = null;
+		return taken;
 	}
 
 	/** @return a row per key action: id, keys, does, place (box or run), for the /keys help */
@@ -431,6 +474,12 @@ public final class ChatScreen implements AutoCloseable {
 					pasteImage();
 					continue;
 				}
+				String action = keys.extension( k );
+				if ( action != null ) {
+					// what is typed stays in the box; the caller runs the action and reads again
+					pendingKey = action;
+					return "";
+				}
 				Composer.Outcome outcome = composer.key( k );
 				if ( outcome == Composer.Outcome.EXIT ) {
 					return null;
@@ -458,7 +507,8 @@ public final class ChatScreen implements AutoCloseable {
 			fileIndex.refresh();
 			indexed = true;
 		}
-		return fileIndex.match( query, MAX_MENU );
+		List<String> files = fileIndex.match( query, MAX_MENU );
+		return sources.isEmpty() ? files : sources.matches( query, files, MAX_MENU );
 	}
 
 	/** Ctrl+V: adds the picture on the clipboard to the next message, or says why it cannot. */

@@ -12,7 +12,7 @@ _bxagents_complete() {
 	fi
 	local count=${#words[@]}
 	local cur="${words[count-1]}"
-	local verbs="add build chat clean deploy doctor hash-password inspect invoke models new notes package serve sessions skills stats test token help"
+	local verbs="add build chat clean deploy doctor extensions hash-password inspect invoke models new notes package serve sessions skills stats test token help"
 	local globals="--help -h --version -v"
 	COMPREPLY=()
 
@@ -40,6 +40,7 @@ _bxagents_complete() {
 			"deploy --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"deploy --target") COMPREPLY=($(compgen -W "digitalocean docker ftp local sftp ssh" -- "$part")) ;;
 			"doctor --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
+			"extensions --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"hash-password --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"inspect --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"invoke --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
@@ -73,12 +74,13 @@ _bxagents_complete() {
 	if [[ "$cur" == -* ]]; then
 		local flags=""
 		case "$verb" in
-			add) flags="--agent= --api-key-env= --args= --auth= --cors= --description= --direction= --dry-run --env= --files= --files-dir= --force --format= --function= --guard= --header= --instructions= --max-tokens= --mcp= --memory= --model= --name= --no-tui --parent= --path= --points= --policy= --profile= --profiles= --projectRoot= --prompt= --provider= --quality= --scope= --search= --server= --size= --style= --temperature= --timeout= --tools= --type= --url= --user= --users= --version= --voice= --when= --with= --yes" ;;
+			add) flags="--agent= --api-key-env= --args= --auth= --cors= --description= --direction= --dry-run --env= --files= --files-dir= --force --format= --function= --guard= --header= --instructions= --layout= --max-tokens= --mcp= --memory= --model= --name= --no-tui --parent= --path= --points= --policy= --profile= --profiles= --projectRoot= --prompt= --provider= --quality= --scope= --search= --server= --size= --style= --temperature= --timeout= --tools= --type= --url= --user= --users= --version= --voice= --when= --with= --yes" ;;
 			build) flags="--environment= --generatorVersion= --projectRoot= --verbose" ;;
 			chat) flags="--connect= --continue --no-tui --port= --projectRoot= --record --server --session= --token= --user=" ;;
 			clean) flags="--force --projectRoot=" ;;
 			deploy) flags="--destination= --name= --projectRoot= --target=" ;;
 			doctor) flags="--json --projectRoot=" ;;
+			extensions) flags="--force --installed --json --name= --projectRoot= --system --yes" ;;
 			hash-password) flags="--password= --projectRoot=" ;;
 			inspect) flags="--ascii --environment= --json --md --no-color --projectRoot= --section=" ;;
 			invoke) flags="--json --message= --port= --projectRoot= --server" ;;

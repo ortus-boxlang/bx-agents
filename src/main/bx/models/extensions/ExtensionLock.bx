@@ -1,0 +1,68 @@
+/**
+ * `extensions.lock.json`: what `bxAgents extensions install` put in place, and what it was, so a fresh checkout gets
+ * the same extensions back and a change to an installed folder is noticed. It is meant to be committed.
+ *
+ *   {
+ *     "version": 1,
+ *     "extensions": {
+ *       "acme-tools": { "source": "forgebox:acme-tools", "resolved": "1.2.0", "kind": "folder", "checksum": "sha256:..." }
+ *     }
+ *   }
+ *
+ * `source` is the origin written in full, `resolved` the version or ref that was fetched, `kind` whether it is a folder or a
+ * single class, and `checksum` a fingerprint of the files as they were installed.
+ */
+class {
+
+	/**
+	 * @file The lock file's path; it need not exist
+	 */
+	function init( required string file ) {
+		variables.lockFile = new "models.util.LockFile@bxagents"( arguments.file, "extensions", "bxagents.extension.lock", "Fix it or delete it, then run: bxAgents extensions install <source>" )
+		variables.entries = variables.lockFile.read()
+		return this
+	}
+
+	string function path() {
+		return variables.lockFile.path()
+	}
+
+	array function names() {
+		return variables.entries.keyArray().sort( "textnocase" )
+	}
+
+	boolean function has( required string name ) {
+		return variables.entries.keyExists( arguments.name )
+	}
+
+	struct function get( required string name ) {
+		return variables.entries[ arguments.name ]
+	}
+
+	/**
+	 * @entry { source, resolved, kind, checksum }
+	 */
+	function set( required string name, required struct entry ) {
+		variables.entries[ arguments.name ] = {
+			source   : arguments.entry.source,
+			resolved : arguments.entry.resolved ?: "",
+			kind     : arguments.entry.kind,
+			checksum : arguments.entry.checksum
+		}
+		return this
+	}
+
+	function remove( required string name ) {
+		variables.entries.delete( arguments.name )
+		return this
+	}
+
+	/**
+	 * Writes the file. With nothing in it the file is removed.
+	 */
+	function save() {
+		variables.lockFile.write( variables.entries, true )
+		return this
+	}
+
+}

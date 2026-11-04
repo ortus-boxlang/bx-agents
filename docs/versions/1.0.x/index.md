@@ -205,7 +205,7 @@ into the request path.
 ::: cards
 ::: card title="Chat platforms" icon="phosphor-duotone:plugs-connected" href="conventions/gateways/index.md"
 Nine push-style gateways - Telegram, Slack, Discord, Email, WhatsApp Cloud, Teams, Twilio,
-GitHub and Signal - coordinated by one session with `queue` / `steer` / `interrupt` policies.
+GitHub and Signal - coordinated by one session with `reject` / `queue` / `steer` / `interrupt` policies.
 :::
 ::: card title="HTTP and MCP" icon="phosphor-duotone:stack" href="conventions/mcp.md"
 Expose the agent over HTTP routes, or host local MCP servers from `mcp/` so other clients

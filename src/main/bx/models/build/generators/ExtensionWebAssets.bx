@@ -1,0 +1,61 @@
+/**
+ * Says which files of the project's folder extensions the web page links. The `web/` folders themselves stay where they
+ * are: the app serves every file under `extensions/<name>/web/` as `<path>/ext/<name>/<file>` from there (see
+ * ExtensionWebFiles), so nothing is copied next to the page.
+ *
+ *   extensions/acme/web/panel.css, panel.js, logo.png   ->   <path>/ext/acme/panel.css, panel.js, logo.png
+ *
+ * The `*.css` and `*.js` files that sit directly in `web/` are linked into the page (styles in the head, scripts at the
+ * end of the body, in file name order), so the page has the `bxagents` script object by the time they run. An extension
+ * turned off by name in `extensions.disable` brings nothing. Single-file extensions have no folder, so they bring nothing.
+ */
+class {
+
+	/**
+	 * @projectRoot The project's folder
+	 * @path The page's URL path, such as "/chat" or ""
+	 * @disable The `extensions.disable` entries
+	 *
+	 * @return { styles, scripts, extensions } - the HTML to put in the page, and the extensions that have files
+	 */
+	struct function links( required string projectRoot, required string path, array disable = [] ) {
+		var found = { styles : [], scripts : [], extensions : [] }
+		var source = arguments.projectRoot & "/extensions"
+		if ( !directoryExists( source ) ) {
+			return finish( found )
+		}
+		var settings = new "models.extensions.ExtensionSettings@bxagents"()
+		var names = directoryList( source, false, "name", "", "name" ).filter( name => !name.startsWith( "." ) )
+		for ( var name in names ) {
+			var web = source & "/" & name & "/web"
+			if ( !directoryExists( web ) || settings.isOff( arguments.disable, name ) ) {
+				continue
+			}
+			found.extensions.append( name )
+			var base = arguments.path & "/ext/" & name & "/"
+			for ( var file in directoryList( web, false, "name", "", "name" ) ) {
+				if ( !fileExists( web & "/" & file ) ) {
+					continue
+				}
+				var href = encodeForHTML( base & file )
+				if ( file.lCase().endsWith( ".css" ) ) {
+					found.styles.append( '<link rel="stylesheet" href="#href#">' )
+				} else if ( file.lCase().endsWith( ".js" ) ) {
+					found.scripts.append( '<script src="#href#"></script>' )
+				}
+			}
+		}
+		return finish( found )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private struct function finish( required struct found ) {
+		return {
+			styles     : arguments.found.styles.toList( char( 10 ) ),
+			scripts    : arguments.found.scripts.toList( char( 10 ) ),
+			extensions : arguments.found.extensions
+		}
+	}
+
+}

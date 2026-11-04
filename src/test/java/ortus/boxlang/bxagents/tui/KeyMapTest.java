@@ -104,4 +104,49 @@ class KeyMapTest {
 		assertThat( KeyMap.defaults().table() ).hasSize( Action.values().length );
 		assertThat( KeyMap.defaults().table().get( 0 ) ).containsEntry( "id", "submit" );
 	}
+
+	@Test
+	@DisplayName( "an extension's action answers to its key, appears in the table, and can be given another key" )
+	void extensionActions() {
+		List<KeyMap.Extra>	extras	= List.of( new KeyMap.Extra( "deploy:plan", "plan a deployment", List.of( "ctrl+g" ) ) );
+		KeyMap				map		= KeyMap.of( Map.of(), extras );
+		assertThat( map.problems() ).isEmpty();
+		assertThat( map.extension( KeyEvent.ofChar( 'g', KeyModifiers.CTRL ) ) ).isEqualTo( "deploy:plan" );
+		assertThat( map.extension( KeyEvent.ofChar( 'x', KeyModifiers.CTRL ) ) ).isNull();
+		assertThat( map.table().get( map.table().size() - 1 ) ).containsEntry( "id", "deploy:plan" );
+		assertThat( map.table().get( map.table().size() - 1 ) ).containsEntry( "keys", "Ctrl+G" );
+
+		KeyMap moved = KeyMap.of( Map.of( "deploy:plan", List.of( "alt+p" ) ), extras );
+		assertThat( moved.problems() ).isEmpty();
+		assertThat( moved.extension( KeyEvent.ofChar( 'g', KeyModifiers.CTRL ) ) ).isNull();
+		assertThat( moved.extension( KeyEvent.ofChar( 'p', KeyModifiers.ALT ) ) ).isEqualTo( "deploy:plan" );
+	}
+
+	@Test
+	@DisplayName( "an extension cannot take a key a built-in action has, or one another extension has, and says so" )
+	void extensionClashes() {
+		List<KeyMap.Extra>	extras	= List.of(
+		    new KeyMap.Extra( "one", "first", List.of( "ctrl+j", "ctrl+g" ) ),
+		    new KeyMap.Extra( "two", "second", List.of( "ctrl+g" ) ) );
+		KeyMap				map		= KeyMap.of( Map.of(), extras );
+
+		// ctrl+j is the new-line key, so one keeps ctrl+g only; two asked for the same ctrl+g and got none
+		assertThat( map.problems() ).hasSize( 2 );
+		assertThat( map.problems().get( 0 ) ).contains( "[one]" );
+		assertThat( map.problems().get( 0 ) ).contains( "newline" );
+		assertThat( map.problems().get( 1 ) ).contains( "[two]" );
+		assertThat( map.extension( KeyEvent.ofChar( 'g', KeyModifiers.CTRL ) ) ).isEqualTo( "one" );
+		assertThat( map.is( Action.NEWLINE, KeyEvent.ofChar( 'j', KeyModifiers.CTRL ) ) ).isTrue();
+		assertThat( map.extension( KeyEvent.ofChar( 'j', KeyModifiers.CTRL ) ) ).isNull();
+	}
+
+	@Test
+	@DisplayName( "a person cannot give a built-in action a key an extension already has" )
+	void builtInAgainstExtension() {
+		KeyMap map = KeyMap.of( Map.of( "newline", List.of( "ctrl+g" ) ), List.of( new KeyMap.Extra( "one", "first", List.of( "ctrl+g" ) ) ) );
+		assertThat( map.problems() ).hasSize( 1 );
+		assertThat( map.problems().get( 0 ) ).contains( "[one]" );
+		assertThat( map.is( Action.NEWLINE, KeyEvent.ofChar( 'j', KeyModifiers.CTRL ) ) ).isTrue();
+	}
+
 }

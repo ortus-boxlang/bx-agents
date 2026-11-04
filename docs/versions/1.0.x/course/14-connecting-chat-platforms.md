@@ -15,10 +15,6 @@ REST exposure you built in [Lesson 13](13-exposing-http-and-mcp.md).
 
 ## Two request-driven types: `mock` and `cli`
 
-```javascript
-// gateways/slack.bx  (http type, shown for shape - see below)
-```
-
 `mock` is test-only. `cli` is bx-ai's own built-in human-in-the-loop **approval**
 channel - a blocking stdin/stdout prompt, and what `HumanInTheLoopMiddleware` attaches
 by default when no gateway is specified.

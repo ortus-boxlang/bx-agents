@@ -20,13 +20,15 @@ information.
 
 > An explicitly declared convention wins; otherwise the class is in charge.
 
-So this project's generated factory is just:
+So the agent part of this project's generated factory is just:
 
 ```javascript
 var agentContext = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
-var agent = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" ).instantiate( "/absolute/path/to/agent/classes/agentClass.bx", agentContext )
-agent.withTools( aiToolRegistry().getAll() )
-agent.withCheckpointer( aiMemory( memory: "cache", config: {} ) )
+var agent = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" ).instantiate( resolveAppPath( "classes/agentClass.bx", "/absolute/path/to/agent/classes/agentClass.bx" ), agentContext )
+var agentOwnTools = new "models.build.ToolRegistryLoader@bxagents"().load( resolveAppPath( "../tools", "/absolute/path/to/tools" ) )
+var agentTools = new "models.build.ToolSelector@bxagents"().select( [  ], agentOwnTools, "class-based-agent" )
+agent.withTools( agentTools )
+agent.withCheckpointer( aiMemory( memory: "cache", config: {  } ) )
 ```
 
 Nothing is imposed on the identity the class set. `tools/` is still attached -

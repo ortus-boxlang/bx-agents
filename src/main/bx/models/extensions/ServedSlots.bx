@@ -1,0 +1,30 @@
+/**
+ * The slots of a served agent's extensions, for the web page. The page asks for them as it asks for the status chips:
+ * after each change to the conversation. Each is asked with a web CommandContext.
+ */
+class {
+
+	/**
+	 * @return True when the served app has extensions and at least one of them has a slot
+	 */
+	boolean function available() {
+		try {
+			return application.keyExists( "bxagentsExtensions" ) && application.bxagentsExtensions.registry().slots().len() > 0
+		} catch ( any e ) {
+			return false
+		}
+	}
+
+	/**
+	 * @conversation The caller's conversation (ServerConversation)
+	 *
+	 * @return [ { id, extension, place, html, text } ] for every slot that has something to show, in extension order
+	 */
+	array function items( required any conversation ) {
+		if ( !available() ) {
+			return []
+		}
+		return application.bxagentsExtensions.slotItems( new "models.chat.commands.CommandContext@bxagents"( arguments.conversation, "web", false ) )
+	}
+
+}

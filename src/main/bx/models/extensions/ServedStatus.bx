@@ -1,0 +1,31 @@
+/**
+ * The status items of a served agent's extensions, for the web page's header. The page asks for them as it asks for
+ * the size of the context: after each change to the conversation. They are the same items the terminal shows
+ * next to the context size (`@Status` or `registry.status()`), asked with a web CommandContext.
+ */
+class {
+
+	/**
+	 * @return True when the served app has extensions and at least one of them has a status item
+	 */
+	boolean function available() {
+		try {
+			return application.keyExists( "bxagentsExtensions" ) && application.bxagentsExtensions.registry().statuses().len() > 0
+		} catch ( any e ) {
+			return false
+		}
+	}
+
+	/**
+	 * @conversation The caller's conversation (ServerConversation)
+	 *
+	 * @return [ { name, text } ] for each item that has something to show, in extension order
+	 */
+	array function items( required any conversation ) {
+		if ( !available() ) {
+			return []
+		}
+		return application.bxagentsExtensions.statusItems( new "models.chat.commands.CommandContext@bxagents"( arguments.conversation, "web", false ) )
+	}
+
+}

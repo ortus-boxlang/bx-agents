@@ -25,6 +25,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n __bxagents_needs_verb -a 'clean' -d 'Remove a project\'s .build/ and dist/ output'
     complete -c $cmd -n __bxagents_needs_verb -a 'deploy' -d 'Deploy to a target'
     complete -c $cmd -n __bxagents_needs_verb -a 'doctor' -d 'Diagnose the environment and project - runtime, modules, env vars'
+    complete -c $cmd -n __bxagents_needs_verb -a 'extensions' -d 'The extensions the chat loads, and installing more: extensions...'
     complete -c $cmd -n __bxagents_needs_verb -a 'hash-password' -d 'Hash a password for a webui users entry'
     complete -c $cmd -n __bxagents_needs_verb -a 'inspect' -d 'Report how the agent is composed: agents, tools, skills, MCP, exposure, env'
     complete -c $cmd -n __bxagents_needs_verb -a 'invoke' -d 'Send one message to a built agent, print the response, exit'
@@ -58,6 +59,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb add' -l guard -x
     complete -c $cmd -n '__bxagents_using_verb add' -l header -x
     complete -c $cmd -n '__bxagents_using_verb add' -l instructions -x
+    complete -c $cmd -n '__bxagents_using_verb add' -l layout -x
     complete -c $cmd -n '__bxagents_using_verb add' -l max-tokens -x
     complete -c $cmd -n '__bxagents_using_verb add' -l mcp -x
     complete -c $cmd -n '__bxagents_using_verb add' -l memory -x
@@ -118,6 +120,13 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb doctor' -l json
     complete -c $cmd -n '__bxagents_using_verb doctor' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb doctor' -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb extensions' -l force
+    complete -c $cmd -n '__bxagents_using_verb extensions' -l installed
+    complete -c $cmd -n '__bxagents_using_verb extensions' -l json
+    complete -c $cmd -n '__bxagents_using_verb extensions' -l name -x
+    complete -c $cmd -n '__bxagents_using_verb extensions' -l projectRoot -x -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb extensions' -l system
+    complete -c $cmd -n '__bxagents_using_verb extensions' -l yes
     complete -c $cmd -n '__bxagents_using_verb hash-password' -l password -x
     complete -c $cmd -n '__bxagents_using_verb hash-password' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb inspect' -l ascii
@@ -212,5 +221,5 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb token' -l name -x
     complete -c $cmd -n '__bxagents_using_verb token' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb token' -l scope -x -a 'chat admin'
-    complete -c $cmd -n '__bxagents_using_verb help' -a 'add build chat clean deploy doctor hash-password inspect invoke models new notes package serve sessions skills stats test token help'
+    complete -c $cmd -n '__bxagents_using_verb help' -a 'add build chat clean deploy doctor extensions hash-password inspect invoke models new notes package serve sessions skills stats test token help'
 end

@@ -1,0 +1,36 @@
+/**
+ * Finds the folders of tools and skills that project extensions carry (`extensions/<name>/tools/` and
+ * `extensions/<name>/skills/`), so the generated app can read them where they are. Nothing is copied or merged:
+ * the extension stays as its author wrote it, and the app asks the extension's own folder.
+ *
+ * The build copies the project's whole `extensions/` folder into the app as it is (ExtensionsGenerator), so a packaged
+ * app has them; `relative` is where a folder is from the generated agent factory, and `source` is where it is in the
+ * project, for the factory to fall back on.
+ */
+class {
+
+	/**
+	 * @projectRoot The project's folder
+	 * @kind "tools" or "skills"
+	 *
+	 * @return [ { extension, relative, source } ] in extension name order; empty when no extension has the folder
+	 */
+	array function folders( required string projectRoot, required string kind ) {
+		var found = []
+		var base = arguments.projectRoot & "/extensions"
+		if ( !directoryExists( base ) ) {
+			return found
+		}
+		for ( var extension in directoryList( base, false, "name", "", "name" ).filter( n => !n.startsWith( "." ) ) ) {
+			if ( directoryExists( base & "/" & extension & "/" & arguments.kind ) ) {
+				found.append( {
+					extension : extension,
+					relative  : "../extensions/" & extension & "/" & arguments.kind,
+					source    : base & "/" & extension & "/" & arguments.kind
+				} )
+			}
+		}
+		return found
+	}
+
+}

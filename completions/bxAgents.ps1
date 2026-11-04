@@ -13,6 +13,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 		'clean' = 'Remove a project''s .build/ and dist/ output'
 		'deploy' = 'Deploy to a target'
 		'doctor' = 'Diagnose the environment and project - runtime, modules, env vars'
+		'extensions' = 'The extensions the chat loads, and installing more: extensions...'
 		'hash-password' = 'Hash a password for a webui users entry'
 		'inspect' = 'Report how the agent is composed: agents, tools, skills, MCP, exposure, env'
 		'invoke' = 'Send one message to a built agent, print the response, exit'
@@ -47,6 +48,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'guard'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'header'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'instructions'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'layout'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'max-tokens'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'mcp'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'memory'; Value = $true; Choices = @(); Dir = $false }
@@ -118,6 +120,15 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
 		)
 		'doctor:positional' = 'dir'
+		'extensions' = @(
+			@{ Name = 'force'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'installed'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'json'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'name'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
+			@{ Name = 'system'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'yes'; Value = $false; Choices = @(); Dir = $false }
+		)
 		'hash-password' = @(
 			@{ Name = 'password'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }

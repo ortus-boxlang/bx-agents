@@ -1,0 +1,396 @@
+/**
+ * Brings one extension to life, in the order a ColdBox module is brought to life:
+ *
+ *   1. the class is created and given `$inject` and `$read` (ExtensionMixin)
+ *   2. `configure()` runs; it sets `variables.settings` to the defaults and does no work
+ *   3. the people's values from `Agent.yaml` / `bxAgents.yml` are merged over those defaults
+ *   4. `settings` and `log` are injected, into the extension and into every class of its folder
+ *   5. its pieces are collected: annotated methods and the convention folders
+ *   6. `onLoad()` runs, last, so it can rely on everything above
+ *
+ * Nothing reaches a registry until all of it worked: a throw anywhere leaves the extension `failed`
+ * with the reason, and nothing half-registered. `unload()` is `onUnload()`, never allowed to throw out.
+ */
+class {
+
+	/**
+	 * @settings The merged `extensions:` block (ExtensionSettings.combine)
+	 */
+	function init( struct settings = {} ) {
+		variables.settings = arguments.settings
+		variables.tools = new "models.extensions.ExtensionSettings@bxagents"()
+		variables.annotations = new "models.extensions.ExtensionAnnotations@bxagents"()
+		variables.mixin = new "models.extensions.ExtensionMixin@bxagents"()
+		return this
+	}
+
+	/**
+	 * Loads what the extension is and does, up to but not including `onLoad()`. The registry decides
+	 * whether the pieces may be used (disabled items, name clashes) before `finish()` runs `onLoad()`.
+	 *
+	 * @extension An Extension in the state "found"
+	 */
+	function prepare( required any extension ) {
+		var log = new "models.extensions.ExtensionLog@bxagents"( arguments.extension.name() )
+		try {
+			var instance = len( arguments.extension.classFile() ) ? create( arguments.extension.classFile() ) : new "models.extensions.ExtensionMixin@bxagents"()
+			equip( instance )
+			if ( structKeyExists( instance, "configure" ) ) {
+				instance.configure()
+			}
+			var defaults = instance.$read( "settings", {} )
+			if ( !isStruct( defaults ) ) {
+				throw( type : "bxagents.extension", message : "settings must be a struct, and configure() set it to something else." )
+			}
+			var merged = variables.tools.merge( defaults, variables.tools.forExtension( variables.settings, arguments.extension.name() ) )
+			instance.$inject( "settings", merged ).$inject( "log", log )
+			arguments.extension.useInstance( instance, propertiesOf( instance ), merged, log )
+			if ( ( arguments.extension.properties().enabled ?: true ) == false ) {
+				arguments.extension.become( "disabled" ).problem( "It sets this.enabled = false." )
+				return arguments.extension
+			}
+			if ( structKeyExists( instance, "register" ) ) {
+				instance.register( new "models.extensions.ExtensionRegistration@bxagents"( arguments.extension ) )
+			}
+			collectAnnotatedCommands( arguments.extension )
+			collectAnnotatedKeys( arguments.extension )
+			collectAnnotatedStatus( arguments.extension )
+			collectAnnotatedPrefixes( arguments.extension )
+			collectAnnotatedSources( arguments.extension )
+			collectAnnotatedSlots( arguments.extension )
+			collectAnnotatedVerbs( arguments.extension )
+			collectFolderCommands( arguments.extension )
+			collectSchedulers( arguments.extension )
+		} catch ( any e ) {
+			arguments.extension.become( "failed" ).problem( "Could not load: #e.message#" )
+		}
+		return arguments.extension
+	}
+
+	/**
+	 * Runs `onLoad()`, the last step. A throw there fails the extension; the registry then takes its pieces back.
+	 *
+	 * @extension A prepared Extension
+	 *
+	 * @return true when it is now loaded
+	 */
+	boolean function finish( required any extension ) {
+		try {
+			var instance = arguments.extension.instance()
+			if ( structKeyExists( instance, "onLoad" ) ) {
+				instance.onLoad()
+			}
+			arguments.extension.become( "loaded" )
+			return true
+		} catch ( any e ) {
+			arguments.extension.become( "failed" ).problem( "onLoad() failed: #e.message#" )
+			return false
+		}
+	}
+
+	/**
+	 * @extension A loaded Extension
+	 */
+	function unload( required any extension ) {
+		if ( !arguments.extension.hasInstance() ) {
+			return arguments.extension
+		}
+		try {
+			var instance = arguments.extension.instance()
+			if ( structKeyExists( instance, "onUnload" ) ) {
+				instance.onUnload()
+			}
+		} catch ( any e ) {
+			arguments.extension.problem( "onUnload() failed: #e.message#" )
+		}
+		return arguments.extension
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private any function create( required string classFile ) {
+		var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
+		return createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" ).instantiate( arguments.classFile, context )
+	}
+
+	/**
+	 * Gives the object `$inject` and `$read`, unless it already defines its own.
+	 */
+	private any function equip( required any instance ) {
+		if ( !structKeyExists( arguments.instance, "$inject" ) ) {
+			arguments.instance.$inject = variables.mixin.$inject
+		}
+		if ( !structKeyExists( arguments.instance, "$read" ) ) {
+			arguments.instance.$read = variables.mixin.$read
+		}
+		return arguments.instance
+	}
+
+	/**
+	 * The module-config properties, set on `this` (title, author, webURL, description, version, enabled, dependencies).
+	 */
+	private struct function propertiesOf( required any instance ) {
+		var found = {}
+		for ( var key in [ "title", "author", "webURL", "description", "version", "enabled", "dependencies" ] ) {
+			if ( structKeyExists( arguments.instance, key ) ) {
+				found[ key ] = arguments.instance[ key ]
+			}
+		}
+		return found
+	}
+
+	private void function collectAnnotatedCommands( required any extension ) {
+		var instance = arguments.extension.instance()
+		var found = getMetaData( instance ).functions ?: []
+		for ( var method in found ) {
+			var given = method.annotations ?: {}
+			var options = variables.annotations.options( given, "Command", "name" )
+			if ( isNull( options ) ) {
+				continue
+			}
+			var problems = []
+			var where = "#arguments.extension.name()#.#method.name#"
+			var settled = {
+				name       : lCase( trim( variables.annotations.setting( options, "name", given, "", method.name, problems, where ) ) ),
+				hint       : variables.annotations.setting( options, "hint", given, "Hint", "", problems, where ),
+				admin      : variables.annotations.setting( options, "admin", given, "Admin", false, problems, where ) == true,
+				transports : asArray( variables.annotations.setting( options, "transports", given, "Transports", [ "tui", "web", "gateway" ], problems, where ) ),
+				aliases    : asArray( variables.annotations.setting( options, "aliases", given, "Alias", [], problems, where ) ).map( a => lCase( a ) )
+			}
+			for ( var problem in problems ) {
+				arguments.extension.problem( problem )
+			}
+			var unknown = settled.transports.filter( t => ![ "tui", "web", "gateway" ].containsNoCase( t ) )
+			if ( unknown.len() ) {
+				throw( type : "bxagents.extension", message : "#where#: [#unknown.toList( ', ' )#] is not a transport. Use tui, web or gateway." )
+			}
+			if ( !reFind( "^[a-z][a-z0-9_-]*$", settled.name ) ) {
+				throw( type : "bxagents.extension", message : "#where#: [#settled.name#] is not a command name (letters, digits, - and _)." )
+			}
+			arguments.extension.addCommand( new "models.extensions.ExtensionCommand@bxagents"( arguments.extension.name(), new "models.extensions.AnnotatedCommand@bxagents"( instance, method.name, settled ) ) )
+		}
+	}
+
+	/**
+	 * `@Key` on a method: the keys that run it. On a `@Command` method it runs the command; on any other
+	 * method it calls it with the CommandContext and an empty text.
+	 */
+	private void function collectAnnotatedKeys( required any extension ) {
+		var instance = arguments.extension.instance()
+		for ( var method in getMetaData( instance ).functions ?: [] ) {
+			var given = method.annotations ?: {}
+			var options = variables.annotations.options( given, "Key", "keys" )
+			if ( isNull( options ) ) {
+				continue
+			}
+			var problems = []
+			var where = "#arguments.extension.name()#.#method.name#"
+			var asked = asArray( options.keys ?: [] )
+			if ( !asked.len() ) {
+				throw( type : "bxagents.extension", message : "#where#: @Key needs a key, such as @Key( ""ctrl+g"" )." )
+			}
+			var command = ""
+			var commandOptions = variables.annotations.options( given, "Command", "name" )
+			if ( !isNull( commandOptions ) ) {
+				command = lCase( trim( commandOptions.name ?: method.name ) )
+			}
+			var hint = variables.annotations.setting( options, "hint", given, "Hint", "", problems, where )
+			if ( !len( hint ) && !isNull( commandOptions ) ) {
+				hint = commandOptions.hint ?: ""
+			}
+			for ( var problem in problems ) {
+				arguments.extension.problem( problem )
+			}
+			var keyHint = len( hint ) ? hint : "run #method.name#"
+			if ( len( command ) ) {
+				arguments.extension.addKey( new "models.extensions.ExtensionKey@bxagents"( arguments.extension.name(), method.name, asked, keyHint, command ) )
+			} else {
+				arguments.extension.addKey( new "models.extensions.ExtensionKey@bxagents"( arguments.extension.name(), method.name, asked, keyHint, "", callerOf( instance, method.name, [ "" ] ) ) )
+			}
+		}
+	}
+
+	/**
+	 * `@Status` on a method: it returns the text to show; the method is called with the CommandContext.
+	 */
+	private void function collectAnnotatedStatus( required any extension ) {
+		var instance = arguments.extension.instance()
+		for ( var method in getMetaData( instance ).functions ?: [] ) {
+			var options = variables.annotations.options( method.annotations ?: {}, "Status", "name" )
+			if ( isNull( options ) ) {
+				continue
+			}
+			var name = lCase( trim( options.name ?: method.name ) )
+			arguments.extension.addStatus( new "models.extensions.ExtensionStatus@bxagents"( arguments.extension, name, callerOf( instance, method.name ) ) )
+		}
+	}
+
+	/**
+	 * `@Prefix` on a method: the line prefix that runs it. The method is called with the CommandContext and the
+	 * text after the prefix.
+	 */
+	private void function collectAnnotatedPrefixes( required any extension ) {
+		var instance = arguments.extension.instance()
+		for ( var method in getMetaData( instance ).functions ?: [] ) {
+			var given = method.annotations ?: {}
+			var options = variables.annotations.options( given, "Prefix", "prefix" )
+			if ( isNull( options ) ) {
+				continue
+			}
+			var where = "#arguments.extension.name()#.#method.name#"
+			var problems = []
+			var asked = options.prefix ?: ""
+			if ( !isSimpleValue( asked ) || !len( trim( asked ) ) ) {
+				throw( type : "bxagents.extension", message : "#where#: @Prefix needs one prefix, such as @Prefix( ""$"" )." )
+			}
+			var hint = variables.annotations.setting( options, "hint", given, "Hint", "starts with #asked#", problems, where )
+			for ( var problem in problems ) {
+				arguments.extension.problem( problem )
+			}
+			arguments.extension.addPrefix( new "models.extensions.ExtensionPrefix@bxagents"( arguments.extension.name(), method.name, trim( asked ), hint, callerOfText( instance, method.name ) ) )
+		}
+	}
+
+	/**
+	 * `@Source` on a method reads `@name:query`; `@Suggest( "name" )` on another method offers the names as the
+	 * person types. The method is called with the CommandContext and the query.
+	 */
+	private void function collectAnnotatedSources( required any extension ) {
+		var instance = arguments.extension.instance()
+		var methods = getMetaData( instance ).functions ?: []
+		var suggesters = {}
+		for ( var method in methods ) {
+			var suggest = variables.annotations.options( method.annotations ?: {}, "Suggest", "name" )
+			if ( !isNull( suggest ) ) {
+				suggesters[ lCase( suggest.name ?: method.name ) ] = method.name
+			}
+		}
+		for ( var method in methods ) {
+			var given = method.annotations ?: {}
+			var options = variables.annotations.options( given, "Source", "name" )
+			if ( isNull( options ) ) {
+				continue
+			}
+			var where = "#arguments.extension.name()#.#method.name#"
+			var problems = []
+			var name = trim( options.name ?: method.name )
+			var hint = variables.annotations.setting( options, "hint", given, "Hint", "brings @#name#:…", problems, where )
+			for ( var problem in problems ) {
+				arguments.extension.problem( problem )
+			}
+			var reader = callerOfText( instance, method.name )
+			if ( suggesters.keyExists( lCase( name ) ) ) {
+				arguments.extension.addSource( new "models.extensions.ExtensionSource@bxagents"( arguments.extension, method.name, name, hint, reader, callerOfText( instance, suggesters[ lCase( name ) ] ) ) )
+			} else {
+				arguments.extension.addSource( new "models.extensions.ExtensionSource@bxagents"( arguments.extension, method.name, name, hint, reader ) )
+			}
+		}
+	}
+
+	/**
+	 * `@Verb( "release" )` on a method: a `bxAgents release` verb. The method is called with the flags as a struct.
+	 * `{ name, hint, valueOptions }` in the struct form; `@Hint` says what it does.
+	 */
+	private void function collectAnnotatedVerbs( required any extension ) {
+		var instance = arguments.extension.instance()
+		for ( var method in getMetaData( instance ).functions ?: [] ) {
+			var given = method.annotations ?: {}
+			var options = variables.annotations.options( given, "Verb", "name" )
+			if ( isNull( options ) ) {
+				continue
+			}
+			var where = "#arguments.extension.name()#.#method.name#"
+			var problems = []
+			var name = lCase( trim( options.name ?: method.name ) )
+			var hint = variables.annotations.setting( options, "hint", given, "Hint", "", problems, where )
+			for ( var problem in problems ) {
+				arguments.extension.problem( problem )
+			}
+			var valueOptions = options.valueOptions ?: []
+			arguments.extension.addVerb( new "models.extensions.ExtensionVerb@bxagents"( arguments.extension.name(), method.name, name, hint, isArray( valueOptions ) ? valueOptions : [ valueOptions ], callerOf( instance, method.name ) ) )
+		}
+	}
+
+	/**
+	 * `@Slot( "header" )` on a method: it returns what to show in that place of the web page. `{ place, html }` in the
+	 * struct form; `html : true` lets the string be HTML.
+	 */
+	private void function collectAnnotatedSlots( required any extension ) {
+		var instance = arguments.extension.instance()
+		for ( var method in getMetaData( instance ).functions ?: [] ) {
+			var options = variables.annotations.options( method.annotations ?: {}, "Slot", "place" )
+			if ( isNull( options ) ) {
+				continue
+			}
+			var where = "#arguments.extension.name()#.#method.name#"
+			var asked = options.place ?: ""
+			if ( !isSimpleValue( asked ) || !len( trim( asked ) ) ) {
+				throw( type : "bxagents.extension", message : "#where#: @Slot needs a place, such as @Slot( ""header"" )." )
+			}
+			try {
+				arguments.extension.addSlot( new "models.extensions.ExtensionSlot@bxagents"( arguments.extension, method.name, trim( asked ), options.html ?: false, callerOf( instance, method.name ) ) )
+			} catch ( any e ) {
+				throw( type : "bxagents.extension", message : "#where#: #e.message#" )
+			}
+		}
+	}
+
+	/**
+	 * A function( context, text ) that calls one method of an object with both, made in a call of its own for the
+	 * reason callerOf() is.
+	 */
+	private any function callerOfText( required any target, required string method ) {
+		var target = arguments.target
+		var method = arguments.method
+		return ( context, text ) => invoke( target, method, [ context, text ] )
+	}
+
+	/**
+	 * A function( context ) that calls one method of an object with the context and some more arguments. It
+	 * is made here, in a call of its own, so each one keeps its own method: closures made in a loop would all
+	 * see the loop's last method.
+	 */
+	private any function callerOf( required any target, required string method, array more = [] ) {
+		var target = arguments.target
+		var method = arguments.method
+		var more = arguments.more
+		return ( context ) => invoke( target, method, [ context ].append( more, true ) )
+	}
+
+	private void function collectFolderCommands( required any extension ) {
+		var folder = arguments.extension.folder()
+		if ( !len( folder ) || !directoryExists( folder & "/commands" ) ) {
+			return
+		}
+		for ( var path in directoryList( folder & "/commands", false, "path", "*.bx", "asc" ) ) {
+			var command = create( path )
+			equip( command )
+			command.$inject( "settings", arguments.extension.settings() ).$inject( "log", new "models.extensions.ExtensionLog@bxagents"( arguments.extension.name() ) )
+			for ( var needed in [ "name", "aliases", "hint", "transports", "permission", "run" ] ) {
+				if ( !structKeyExists( command, needed ) ) {
+					throw( type : "bxagents.extension", message : "#getFileFromPath( path )# is in commands/ but has no #needed#(). A command class extends models.chat.commands.BaseCommand@bxagents." )
+				}
+			}
+			arguments.extension.addCommand( new "models.extensions.ExtensionCommand@bxagents"( arguments.extension.name(), command ) )
+		}
+	}
+
+	/**
+	 * A scheduler is a BoxLang scheduler class; the served agent starts it (ExtensionSchedulers). The path is kept as
+	 * written on disk: the build copies the file into the app, the loader here never runs it.
+	 */
+	private void function collectSchedulers( required any extension ) {
+		var folder = arguments.extension.folder()
+		if ( !len( folder ) || !directoryExists( folder & "/schedulers" ) ) {
+			return
+		}
+		for ( var path in directoryList( folder & "/schedulers", false, "path", "*.bx", "asc" ) ) {
+			arguments.extension.addScheduler( { name : listFirst( getFileFromPath( path ), "." ), path : path } )
+		}
+	}
+
+	private array function asArray( required any value ) {
+		return isArray( arguments.value ) ? arguments.value : [ arguments.value ]
+	}
+
+}

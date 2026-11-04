@@ -1,0 +1,249 @@
+/**
+ * Asking the person a question from a command (`agentContext.ask()`, `confirm()`, `choose()`), and loading the
+ * extensions again without leaving the chat (`/reload`).
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+
+		describe( "asking from a command", function() {
+
+			it( "answers at once with no answer where nobody can be asked", function() {
+				var context = new bxagents.models.chat.commands.CommandContext( {}, "web", true );
+
+				expect( context.canAsk() ).toBeFalse();
+				expect( isNull( context.ask( "Name?" ) ) ).toBeTrue();
+				expect( context.confirm( "Sure?" ) ).toBeFalse();
+				expect( isNull( context.choose( "Which?", [ "a", "b" ] ) ) ).toBeTrue();
+			} );
+
+			it( "puts the question to the terminal port when there is one", function() {
+				var asked = [];
+				var terminal = {
+					ask : ( question, help, initial ) => { asked.append( "ask:#question#|#help#|#initial#" ); return "Ada"; },
+					choose : ( question, choices ) => { asked.append( "choose:#question#|#choices.len()#" ); return question == "Sure?" ? "yes" : "b"; }
+				};
+				var context = new bxagents.models.chat.commands.CommandContext( {}, "tui", true, terminal );
+
+				expect( context.canAsk() ).toBeTrue();
+				expect( context.ask( "Name?", { default : "x", help : "short" } ) ).toBe( "Ada" );
+				expect( context.confirm( "Sure?" ) ).toBeTrue();
+				expect( context.choose( "Which?", [ "a", "b" ] ) ).toBe( "b" );
+				expect( asked ).toBe( [ "ask:Name?|short|x", "choose:Sure?|2", "choose:Which?|2" ] );
+			} );
+
+			it( "counts esc as no for confirm and as no answer for the others", function() {
+				var terminal = { ask : ( q, h, i ) => nullValue(), choose : ( q, c ) => nullValue() };
+				var context = new bxagents.models.chat.commands.CommandContext( {}, "tui", true, terminal );
+
+				expect( isNull( context.ask( "Name?" ) ) ).toBeTrue();
+				expect( context.confirm( "Sure?" ) ).toBeFalse();
+				expect( isNull( context.choose( "Which?", [ "a" ] ) ) ).toBeTrue();
+			} );
+
+			it( "lets the terminal port hand the question to the screen", function() {
+				var seen = [];
+				var screen = {
+					ask : ( title, help, initial ) => { seen.append( "ask:#title#:#help#:#initial#" ); return "text"; },
+					choose : ( title, lines, choices ) => { seen.append( "choose:#title#:#lines.len()#:#choices.len()#" ); return "a"; }
+				};
+				var port = new bxagents.models.cli.chat.TerminalPort( screen, {}, "helper", getTempDirectory(), {} );
+
+				expect( port.ask( "Q?", "h", "i" ) ).toBe( "text" );
+				expect( port.choose( "P?", [ "a", "b", "c" ] ) ).toBe( "a" );
+				expect( seen ).toBe( [ "ask:Q?:h:i", "choose:P?:0:3" ] );
+				expect( port.reloadExtensions() ).toBe( { reloaded : false } );
+			} );
+
+		} );
+
+		describe( "reloading extensions", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-extreload-" );
+				variables.commands = new bxagents.models.chat.commands.CommandCatalog().standard();
+				variables.services = [];
+			} );
+
+			afterEach( function() {
+				for ( var service in services ) {
+					service.unload();
+				}
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function put( required string name, required string code ) {
+				directoryCreate( dir & "/extensions", true, true );
+				fileWrite( dir & "/extensions/" & name, code );
+			}
+
+			function serviceFor( string transport = "tui" ) {
+				var service = new bxagents.models.extensions.ExtensionService( projectRoot : dir, userConfig : new bxagents.models.cli.UserConfig( dir & "/user/none.yml" ), transport : transport, moduleFolders : [], projectFolder : dir & "/extensions" );
+				service.install( commands );
+				services.append( service );
+				return service;
+			}
+
+			function say( line, transport = "tui", admin = true ) {
+				var context = new bxagents.models.chat.commands.CommandContext( {}, transport, admin );
+				return commands.run( line, context ).blocks().map( b => b.type == "text" ? b.text : jsonSerialize( b ) ).toList( " | " );
+			}
+
+			it( "picks up an edited extension, a new one and a removed one", function() {
+				put( "edited.bx", "class { @Command( 'edited' ) function e( agentContext ) { return 'first' } }" );
+				put( "gone.bx", "class { @Command( 'gone' ) function g( agentContext ) { return 'here' } }" );
+				var service = serviceFor();
+				expect( say( "/edited" ) ).toBe( "first" );
+				expect( say( "/gone" ) ).toBe( "here" );
+
+				sleep( 1100 );
+				put( "edited.bx", "class { @Command( 'edited' ) function e( agentContext ) { return 'second' } }" );
+				put( "fresh.bx", "class { @Command( 'fresh' ) function f( agentContext ) { return 'new' } }" );
+				fileDelete( dir & "/extensions/gone.bx" );
+				service.reload();
+
+				expect( say( "/edited" ) ).toBe( "second" );
+				expect( say( "/fresh" ) ).toBe( "new" );
+				expect( isNull( commands.lookup( "gone" ) ) ).toBeTrue();
+				expect( service.report().map( e => e.name ) ).toBe( [ "edited", "fresh" ] );
+			} );
+
+			it( "runs onUnload() of the old one and onLoad() of the new, and registers nothing twice", function() {
+				put( "life.bx", "class {
+					function onLoad() { application.reloadLog = ( application.reloadLog ?: [] ).append( 'load' ) }
+					function onUnload() { application.reloadLog = ( application.reloadLog ?: [] ).append( 'unload' ) }
+					@Command( 'life' ) function l( agentContext ) { return 'ok' }
+					@Prefix( '%' ) function p( agentContext, text ) { return 'p' }
+					@Key( 'ctrl+g' ) function k( agentContext ) { return 'k' }
+				}" );
+				application.reloadLog = [];
+				var service = serviceFor();
+				service.reload();
+
+				expect( application.reloadLog ).toBe( [ "load", "unload", "load" ] );
+				expect( commands.menu( "tui" ).filter( c => c.name == "/life" ) ).toHaveLength( 1 );
+				expect( service.composer().prefixes() ).toHaveLength( 1 );
+				expect( service.keys() ).toHaveLength( 1 );
+				application.delete( "reloadLog" );
+			} );
+
+			it( "reads the person's file and the project's settings again", function() {
+				put( "greet.bx", "class { function configure() { variables.settings = { word : 'hi' } } @Command( 'greet' ) function g( agentContext ) { return settings.word } }" );
+				fileWrite( dir & "/Agent.yaml", "name: p
+description: p
+model: mock/mock-model
+extensions:
+  greet:
+    word: one
+" );
+				var service = serviceFor();
+				expect( say( "/greet" ) ).toBe( "one" );
+
+				fileWrite( dir & "/Agent.yaml", "name: p
+description: p
+model: mock/mock-model
+extensions:
+  greet:
+    word: two
+" );
+				service.reload();
+
+				expect( say( "/greet" ) ).toBe( "two" );
+			} );
+
+			it( "reports an extension that fails to load on reload and keeps the others", function() {
+				put( "fine.bx", "class { @Command( 'fine' ) function f( agentContext ) { return 'fine' } }" );
+				var service = serviceFor();
+				put( "broken.bx", "class { @Command( 'broken' ) function b( agentContext ) { throw( message = 'x' ) } function configure() { throw( message = 'cannot configure' ) } }" );
+				service.reload();
+
+				expect( say( "/fine" ) ).toBe( "fine" );
+				expect( service.problems().toList( " " ) ).toInclude( "Extension [broken] did not load" );
+			} );
+
+			it( "has /reload in the terminal chat only, and for admins", function() {
+				serviceFor( "tui" );
+				expect( commands.lookup( "reload" ).permission() ).toBe( "admin" );
+				expect( commands.lookup( "reload" ).transports() ).toBe( [ "tui" ] );
+				expect( say( "/reload", "tui", false ) ).toBe( "/reload is for admins." );
+
+				var served = new bxagents.models.chat.commands.CommandCatalog().standard();
+				new bxagents.models.extensions.ExtensionService( projectRoot : dir, userConfig : new bxagents.models.cli.UserConfig( dir & "/none.yml" ), transport : "web", moduleFolders : [], projectFolder : dir & "/extensions" ).install( served );
+				expect( isNull( served.lookup( "reload" ) ) ).toBeTrue();
+			} );
+
+			it( "lets /reload in the chat load again and hand the screen the new keys and sources", function() {
+				put( "live.bx", "class { @Command( 'live' ) function l( agentContext ) { return 'v1' } }" );
+				var service = serviceFor();
+				var shown = [];
+				var keyCalls = [];
+				var sourceCalls = [];
+				var screen = { pending : [ "/live", "/reload", "/live", "/reload" ] };
+				screen.readInput = () => {
+					if ( !screen.pending.len() ) { return nullValue(); }
+					var next = screen.pending[ 1 ];
+					screen.pending.deleteAt( 1 );
+					if ( next == "/reload" && screen.pending.len() == 2 ) {
+						sleep( 1100 );
+						put( "live.bx", "class { @Command( 'live' ) function l( agentContext ) { return 'v2' } @Key( 'ctrl+g' ) function k( agentContext ) { return 'k' } @Source( 'doc' ) function d( agentContext, query ) { return 'd' } }" );
+					}
+					return next;
+				};
+				for ( var name in [ "banner", "printUser", "printMarkdown", "beginTurn", "endTurn", "push", "close", "setFacts", "setImagesAllowed", "setStatus", "copy" ] ) {
+					screen[ name ] = () => {};
+				}
+				screen.print = ( style, text ) => shown.append( text );
+				screen.bindKeys = ( overrides, extras = [] ) => { keyCalls.append( extras.len() ); return []; };
+				screen.bindSources = ( names, suggester ) => { sourceCalls.append( names.len() ); };
+				screen.takeKey = () => "";
+				screen.cancelRequested = () => false;
+				screen.takeSteer = () => nullValue();
+				screen.takeImages = () => [];
+				screen.isRecording = () => false;
+				screen.renderReply = () => {};
+				var session = {
+					agentName : () => "helper", modelName : () => "m", mode : () => "in-process",
+					contextReport : () => { throw( message = "none" ); }, modelFacts : () => { throw( message = "none" ); },
+					modelInfo : () => { throw( message = "none" ); }, conversationTitle : () => "t",
+					conversationId : () => "c", keepsSessions : () => false
+				};
+				var controller = new bxagents.models.cli.chat.ChatController( session, getTempDirectory(), commands, { chat : () => { shell : true, bifs : true }, keys : () => ( {} ), problems : () => [], path : () => "x.yml" } ).withExtensions( service );
+
+				controller.run( screen );
+
+				var text = shown.toList( "|" );
+				expect( text ).toInclude( "v1" );
+				expect( text ).toInclude( "v2" );
+				expect( text ).toInclude( "Reloaded: 1 extension loaded." );
+				// the keys were handed over at the start (none) and after the reload (one); the sources only once there was one
+				expect( keyCalls ).toBe( [ 0, 1, 1 ] );
+				expect( sourceCalls ).toBe( [ 1, 1 ] );
+			} );
+
+			it( "runs the /newticket example: it asks, and makes the ticket only after a yes", function() {
+				var example = expandPath( "/examples/extensions-agent" );
+				var service = new bxagents.models.extensions.ExtensionService( projectRoot : example, userConfig : new bxagents.models.cli.UserConfig( dir & "/none.yml" ), transport : "tui", moduleFolders : [] );
+				service.install( commands );
+				services.append( service );
+				var answers = [ "Fix the login", "high", "yes" ];
+				var terminal = {
+					ask : ( q, h, i ) => "Fix the login",
+					choose : ( q, c ) => answers[ q.startsWith( "Priority" ) ? 2 : 3 ]
+				};
+				var asked = new bxagents.models.chat.commands.CommandContext( {}, "tui", true, terminal );
+				var refused = new bxagents.models.chat.commands.CommandContext( {}, "tui", true, { ask : ( q, h, i ) => "x", choose : ( q, c ) => q.startsWith( "Priority" ) ? "low" : "no" } );
+				var nobody = new bxagents.models.chat.commands.CommandContext( {}, "web", true );
+
+				expect( commands.run( "/newticket", asked ).blocks()[ 1 ].text ).toBe( "Made TCK-3. Mention it with @ticket:TCK-3." );
+				expect( commands.run( "/newticket", refused ).blocks()[ 1 ].text ).toBe( "No ticket made." );
+				expect( commands.run( "/newticket", nobody ).blocks()[ 1 ].text ).toInclude( "works in the terminal chat" );
+				expect( service.composer().read( "@ticket:tck-3", asked ).blocks[ 1 ].content ).toBe( "Fix the login (high)" );
+			} );
+
+		} );
+
+	}
+
+}

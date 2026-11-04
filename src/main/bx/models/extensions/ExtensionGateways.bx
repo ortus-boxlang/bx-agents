@@ -1,0 +1,65 @@
+/**
+ * Starts up the gateway types extensions bring, where the extension is: a class in `extensions/<name>/gateways/` of the
+ * built app is read in place, so the extension is kept as its author wrote it. For each entry of the project whose
+ * `type` is one of them, the generated app asks this class to build the gateway from the class file, give it the entry's
+ * options and put it in bx-ai's gateway registry, where the project's gateway session finds it by name.
+ *
+ * A gateway class is an ordinary bx-ai gateway (see `ScheduledGatewayBase`). It must name itself the same as its file,
+ * lower case: `Matrix.bx` says `variables.name = "matrix"`, because that is the key the registry holds it under.
+ */
+class {
+
+	/**
+	 * @appDir The built app's folder
+	 */
+	function init( required string appDir ) {
+		variables.appDir = arguments.appDir.reReplace( "[\\/]+$", "" )
+		return this
+	}
+
+	/**
+	 * @type The gateway type, the lower case name of the class file
+	 * @options The entry's options, with its `*EnvVar` values already read from the environment
+	 *
+	 * @return The gateway that was registered
+	 */
+	any function register( required string type, required struct options ) {
+		var file = fileFor( arguments.type )
+		if ( !len( file ) ) {
+			throw( type : "bxagents.gateway", message : "No extension has a gateway type [#arguments.type#]: there is no gateways/#arguments.type#.bx in any extensions/ folder of the app." )
+		}
+		var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()
+		var gateway = createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" ).instantiate( file, context )
+		if ( lCase( gateway.getName() ) != lCase( arguments.type ) ) {
+			throw( type : "bxagents.gateway", message : "The gateway class #file# calls itself [#gateway.getName()#], and the registry holds it under that name. Name it [#arguments.type#], as its file is." )
+		}
+		gateway.configure( arguments.options )
+		aiGatewayRegistry().register( gateway )
+		return gateway
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @return The class file of a gateway type, or blank. The extension that comes last by name wins, as at build time.
+	 */
+	private string function fileFor( required string type ) {
+		var found = ""
+		var folder = variables.appDir & "/extensions"
+		if ( !directoryExists( folder ) ) {
+			return found
+		}
+		for ( var extension in directoryList( folder, false, "name", "", "name" ).filter( n => !n.startsWith( "." ) ) ) {
+			if ( !directoryExists( folder & "/" & extension & "/gateways" ) ) {
+				continue
+			}
+			for ( var file in directoryList( folder & "/" & extension & "/gateways", false, "name", "*.bx", "name" ) ) {
+				if ( lCase( reReplace( file, "\.bx$", "" ) ) == lCase( arguments.type ) ) {
+					found = folder & "/" & extension & "/gateways/" & file
+				}
+			}
+		}
+		return found
+	}
+
+}
