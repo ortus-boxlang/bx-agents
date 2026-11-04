@@ -40,7 +40,7 @@ class extends="testbox.system.BaseSpec" {
 				var settings = jsonDeserialize( fileRead( result.appDir & "/config/extensions.json" ) );
 				expect( settings.hello.greeting ).toBe( "Welcome aboard" );
 				expect( settings.standup.at ).toBe( "09:30" );
-				expect( fileRead( result.appDir & "/Application.bx" ) ).toInclude( "ServedExtensions@bxagents" );
+				expect( fileRead( result.appDir & "/bxagents/Application.bx" ) ).toInclude( "ServedExtensions@bxagents" );
 			} );
 
 			it( "builds a project with no extensions folder exactly as before", function() {
@@ -51,7 +51,7 @@ class extends="testbox.system.BaseSpec" {
 				var result = new bxagents.models.build.BuildPipeline( "1.0.0" ).build( root );
 
 				expect( directoryExists( result.appDir & "/extensions" ) ).toBeFalse();
-				expect( fileRead( result.appDir & "/Application.bx" ) ).notToInclude( "ServedExtensions" );
+				expect( fileRead( result.appDir & "/bxagents/Application.bx" ) ).notToInclude( "ServedExtensions" );
 			} );
 
 			it( "keeps what extensions carry where it is: tools, skills, gateways and web files are not copied or merged", function() {
@@ -73,7 +73,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( fileRead( app & "/agent/GeneratedAgentFactory.bx" ) ).toInclude( "../extensions/helpdesk/skills" );
 				expect( fileRead( app & "/chat/index.html" ) ).toInclude( '<script src="/chat/ext/panel/panel.js"></script>' );
 				expect( fileRead( app & "/chat/index.html" ) ).toInclude( '<link rel="stylesheet" href="/chat/ext/panel/panel.css">' );
-				expect( fileRead( app & "/Application.bx" ) ).toInclude( 'ExtensionGateways@bxagents"( getDirectoryFromPath( getCurrentTemplatePath() ) ).register( "loopback"' );
+				expect( fileRead( app & "/bxagents/Application.bx" ) ).toInclude( 'ExtensionGateways@bxagents"( appPath( "" ) ).register( "loopback"' );
 				expect( fileRead( app & "/handlers/ChatUi.bx" ) ).toInclude( "function extensionFile(" );
 				expect( fileRead( app & "/config/Router.bx" ) ).toInclude( "/chat/ext/:extension/:file-regex:(.+)" );
 			} );

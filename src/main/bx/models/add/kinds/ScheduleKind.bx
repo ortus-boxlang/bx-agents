@@ -1,18 +1,17 @@
 /**
- * `add schedule` - adds a task to `schedules/Scheduler.bx` that sends the agent a message
- * on a schedule. Two questions matter: when it runs and what it asks the agent. Overlapping
- * runs are always prevented, and ColdBox's scheduler logs each run, so neither is asked.
+ * `add schedule` - adds a scheduler to `schedules/` that sends an agent a message on a schedule. Three
+ * questions matter: when it runs, what it asks the agent and which agent. Overlapping runs are always
+ * prevented, so that is not asked.
  *
- * `schedules/Scheduler.bx` is one hand-written ColdBox class, so the file is created if it
- * is missing and otherwise the new task is put at the end of its `configure()`. If that
- * method cannot be found the task is not guessed at: the error carries the text to paste.
+ * Every schedule is its own BoxLang scheduler file, `schedules/<Name>.bx` (see SchedulerGenerator), so adding
+ * one never edits another file: an existing file of that name is a conflict, and `--force` replaces it.
  */
 import bxModules.bxagents.models.util.NameRules;
 
 class {
 
 	struct function info() {
-		return { name : "schedule", summary : "Run the agent on a schedule (a task in schedules/Scheduler.bx)" }
+		return { name : "schedule", summary : "Run an agent on a schedule (a scheduler file in schedules/)" }
 	}
 
 	/**
@@ -32,7 +31,7 @@ class {
 			phrase = a.text(
 				key      = "when",
 				title    = "When should it run?",
-				help     = "e.g. every 15 minutes, daily 09:00, weekdays 08:30, weekly mon 09:00, monthly 1 09:00",
+				help     = "e.g. every 15 minutes, daily 09:00, weekdays 08:30, weekly mon 09:00, monthly 1 09:00, or a cron expression like 0 9 * * 1-5",
 				required = true,
 				validate = ( value ) => whenProblem( when, value )
 			)
@@ -125,6 +124,12 @@ class {
 					validate = ( value ) => reFind( "^[0-9]{1,2}$", value ) && int( value ) >= 1 && int( value ) <= 28 ? "" : "A day from 1 to 28."
 				)
 				return "monthly #dom# #time( '_time' )#"
+			case "cron":
+				return ans.text(
+					key = "_cron", title = "Cron expression", help = "minute hour day-of-month month day-of-week, e.g. 0 9 * * 1-5. A sixth field in front adds seconds.",
+					required = true,
+					validate = ( value ) => whenProblem( when, value )
+				)
 			default:
 				return "#kind# #time( '_time' )#"
 		}
@@ -136,129 +141,49 @@ class {
 	 * @changes A ChangeSet
 	 */
 	void function plan( required struct answers, required struct ctx, required any changes ) {
-		var task = renderTask( arguments.answers )
-		var path = "schedules/Scheduler.bx"
-		var file = arguments.ctx.root & "/" & path
-
-		if ( !fileExists( file ) ) {
-			arguments.changes.file( path, wrapScheduler( task ) )
-			return
-		}
-
-		var source = fileRead( file )
-		var at = insertionPoint( source )
-		if ( at == 0 ) {
-			throw(
-				type    = "BxAgents.SchedulerNotEditable",
-				message = "Could not find the end of configure() in #path#, so the task was not added. Paste this inside it:" & char( 10 ) & char( 10 ) & task
-			)
-		}
-		var before = left( source, at - 1 )
-		var kept = before.rtrim()
-		// the closing brace keeps the indentation it had, and the new task sits one blank line
-		// below the last one (right under the opening brace when configure() was empty)
-		var lastBreak = before.lastIndexOf( char( 10 ) )
-		var indent = before.mid( lastBreak + 2, len( before ) )
-		if ( indent.trim().len() ) {
-			indent = ""
-		}
-		var separator = kept.endsWith( "{" ) ? char( 10 ) : char( 10 ) & char( 10 )
-		arguments.changes.edit(
-			path,
-			kept & separator & task & char( 10 ) & indent & mid( source, at, len( source ) ),
-			task
-		)
+		arguments.changes.file( "schedules/" & fileName( arguments.answers.name ) & ".bx", renderScheduler( arguments.answers ) )
 	}
 
 	/**
 	 * @return [ text ] what is left to do
 	 */
 	array function next( required struct answers, required struct ctx ) {
+		var runs = arguments.answers.agent == "." ? "the root agent" : "the agent named #arguments.answers.binding#"
 		return [
 			"It runs #arguments.answers.when.summary# while the app is served: bxAgents build, then bxAgents serve.",
-			"The task calls getInstance( ""#arguments.answers.binding#"" ).run(), so that agent's name must stay as it is.",
+			"It sends #runs# a message, so that agent's name must stay as it is.",
 			"Check it with: bxAgents inspect --section=schedule"
 		]
 	}
 
 	// --------------------------------------------------------------------------
 
-	private string function renderTask( required struct answers ) {
-		var tab = char( 9 )
-		return [
-			tab & tab & 'task( "' & literal( arguments.answers.name ) & '" )',
-			tab & tab & tab & '.call( () => getInstance( "' & literal( arguments.answers.binding ) & '" ).run( "' & literal( arguments.answers.prompt ) & '" ) )',
-			tab & tab & tab & arguments.answers.when.call,
-			tab & tab & tab & ".withNoOverlaps()"
-		].toList( char( 10 ) )
+	/**
+	 * @name The task name, e.g. daily-digest
+	 *
+	 * @return The scheduler's file name without extension, e.g. DailyDigest: it becomes the class name
+	 */
+	private string function fileName( required string name ) {
+		return arguments.name.listToArray( "-_" ).map( part => ucase( left( part, 1 ) ) & mid( part, 2, len( part ) ) ).toList( "" )
 	}
 
-	private string function wrapScheduler( required string task ) {
+	private string function renderScheduler( required struct answers ) {
+		var tab = char( 9 )
+		// the root agent is the default agent; any other is asked for by the name it declares
+		var target = arguments.answers.agent == "." ? "run(" : 'agent( "' & literal( arguments.answers.binding ) & '" ).run('
 		return [
-			'class extends="coldbox.system.web.tasks.ColdBoxScheduler" {',
+			"class {",
 			"",
-			char( 9 ) & "function configure() {",
-			arguments.task,
-			char( 9 ) & "}",
+			tab & "function configure() {",
+			tab & tab & 'task( "' & literal( arguments.answers.name ) & '" )',
+			tab & tab & tab & arguments.answers.when.call,
+			tab & tab & tab & ".call( () => " & target & ' "' & literal( arguments.answers.prompt ) & '" ) )',
+			tab & tab & tab & ".withNoOverlaps()",
+			tab & "}",
 			"",
 			"}",
 			""
 		].toList( char( 10 ) )
-	}
-
-	/**
-	 * The position of the brace that closes configure(): found by counting braces while
-	 * skipping strings and comments, so one inside a prompt does not throw it off.
-	 *
-	 * @source The scheduler's text
-	 *
-	 * @return 1-based position of that brace, or 0 when there is no configure() to put a task in
-	 */
-	private numeric function insertionPoint( required string source ) {
-		var start = reFind( "function\s+configure\s*\(", arguments.source )
-		if ( !start ) {
-			return 0
-		}
-		var open = arguments.source.find( "{", start )
-		if ( !open ) {
-			return 0
-		}
-		var depth = 0
-		var i = open
-		var n = len( arguments.source )
-		while ( i <= n ) {
-			var c = arguments.source.mid( i, 1 )
-			var pair = arguments.source.mid( i, 2 )
-			if ( pair == "//" ) {
-				var eol = arguments.source.find( char( 10 ), i )
-				i = eol ? eol : n + 1
-				continue
-			}
-			if ( pair == "/*" ) {
-				var close = arguments.source.find( "*/", i + 2 )
-				i = close ? close + 2 : n + 1
-				continue
-			}
-			if ( c == '"' || c == "'" ) {
-				i++
-				while ( i <= n && arguments.source.mid( i, 1 ) != c ) {
-					// a doubled quote is an escaped one, so it does not end the string
-					i += ( arguments.source.mid( i, 2 ) == c & c ) ? 2 : 1
-				}
-				i++
-				continue
-			}
-			if ( c == "{" ) {
-				depth++
-			} else if ( c == "}" ) {
-				depth--
-				if ( depth == 0 ) {
-					return i
-				}
-			}
-			i++
-		}
-		return 0
 	}
 
 	/**
@@ -289,7 +214,7 @@ class {
 			return "[#arguments.value#] must start with a letter and use only letters, digits, - and _."
 		}
 		if ( arguments.taken.findNoCase( arguments.value ) ) {
-			return "A task named #arguments.value# already exists in schedules/Scheduler.bx."
+			return "A task named #arguments.value# already exists in schedules/."
 		}
 		return ""
 	}

@@ -57,6 +57,7 @@ on the right:
 ::: column
 ```
 your-agent/
+├── Application.bx
 ├── Agent.yaml
 ├── instructions.md
 ├── tools/
@@ -73,11 +74,14 @@ your-agent/
 ```
 .build/app/
 ├── Application.bx
+├── bxagents/
+│   ├── Application.bx
+│   └── Scheduler.bx
 ├── config/
 │   ├── ColdBox.bx
 │   ├── WireBox.bx
-│   ├── Router.bx
-│   └── Scheduler.bx
+│   └── Router.bx
+├── schedules/
 ├── agent/
 │   └── GeneratedAgentFactory.bx
 ├── tools/  skills/  mcp/

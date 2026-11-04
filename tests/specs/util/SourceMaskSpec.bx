@@ -1,0 +1,52 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "util.SourceMask", function() {
+
+			beforeEach( function() {
+				variables.mask = new bxagents.models.util.SourceMask();
+			} );
+
+			it( "keeps the length and the line breaks, so a position in the result is a position in the source", function() {
+				var source = "a = 1 // note" & char( 10 ) & "/* block" & char( 10 ) & "more */ b = ""text""" & char( 10 );
+				var masked = mask.code( source );
+
+				expect( len( masked ) ).toBe( len( source ) );
+				expect( masked.listToArray( char( 10 ) ) ).toHaveLength( source.listToArray( char( 10 ) ).len() );
+			} );
+
+			it( "blanks line comments and block comments", function() {
+				var masked = mask.code( "keep // class {" & char( 10 ) & "/* class { */ also keep" );
+
+				expect( masked ).toInclude( "keep" );
+				expect( masked ).toInclude( "also keep" );
+				expect( masked ).notToInclude( "class" );
+			} );
+
+			it( "blanks the inside of strings but keeps the quotes", function() {
+				var masked = mask.code( 'agent( "ResearchBot" ) run( ''Ask agent( x )'' )' );
+
+				expect( masked ).toInclude( 'agent( "' );
+				expect( masked ).notToInclude( "ResearchBot" );
+				expect( masked ).notToInclude( "Ask" );
+				expect( masked ).toInclude( "run(" );
+			} );
+
+			it( "treats a doubled quote as part of the string, not its end", function() {
+				var masked = mask.code( 'x = "say ""class {"" now" class {' );
+
+				// only the real one is left
+				expect( masked.find( "class" ) ).toBeGT( 20 );
+				expect( masked.reMatch( "class" ) ).toHaveLength( 1 );
+			} );
+
+			it( "does not start a comment inside a string", function() {
+				var masked = mask.code( 'url = "http://example.com" real = 1' );
+
+				expect( masked ).toInclude( "real = 1" );
+			} );
+
+		} );
+	}
+
+}

@@ -18,9 +18,7 @@
  *    own `Agent.bx` + `instructions.md` convention); the entry name here is
  *    always the folder name (a subagent's *declared* name/subAgents list is
  *    only known once its own Agent.bx is loaded, in a later phase)
- *  - schedules/: unlike every other convention folder, this holds ONE real
- *    ColdBox scheduler class - `schedules/Scheduler.bx`, passed through into
- *    the build untouched (see SchedulerGenerator) - not a list of entries
+ *  - schedules/: one entry per `.bx` file, each a BoxLang scheduler class (see SchedulerGenerator)
  *  - modules/: one entry per immediate subfolder
  *
  * Dotfiles and files with no recognized extension (e.g. README.md) are ignored.
@@ -30,35 +28,20 @@ class {
 	/**
 	 * @projectRoot Absolute path to the project root
 	 *
-	 * @return { tools, skills, subagents, gateways, mcp, interceptors, modules, hasScheduler, schedulerPath } - each convention EXCEPT schedules/ is an array of { name, path, type }; schedules/ is instead the single hasScheduler/schedulerPath pair
+	 * @return { tools, skills, subagents, gateways, schedules, mcp, interceptors, modules } - each an array of { name, path, type }
 	 */
 	struct function discover( required string projectRoot ) {
 		var root = arguments.projectRoot.reReplace( "[\\/]+$", "" )
-		var scheduler = discoverScheduler( root )
 
 		return {
 			tools         : listFiles( root & "/tools", [ "bx" ], "tool", true ),
 			skills        : allSkills( root ),
 			subagents     : listSubfolders( root & "/subagents", "subagent" ),
 			gateways      : listFiles( root & "/gateways", [ "bx", "json" ], "gateway" ),
+			schedules     : listFiles( root & "/schedules", [ "bx" ], "schedule" ),
 			mcp           : listFiles( root & "/mcp", [ "bx" ], "mcp" ),
 			interceptors  : listFiles( root & "/interceptors", [ "bx" ], "interceptor" ),
-			modules       : listSubfolders( root & "/modules", "module" ),
-			hasScheduler  : scheduler.hasScheduler,
-			schedulerPath : scheduler.schedulerPath
-		}
-	}
-
-	/**
-	 * @root Absolute path to the project root
-	 *
-	 * @return { hasScheduler: boolean, schedulerPath: string } - schedulerPath is "" when hasScheduler is false
-	 */
-	private struct function discoverScheduler( required string root ) {
-		var schedulerPath = arguments.root & "/schedules/Scheduler.bx"
-		return {
-			hasScheduler  : fileExists( schedulerPath ),
-			schedulerPath : fileExists( schedulerPath ) ? schedulerPath : ""
+			modules       : listSubfolders( root & "/modules", "module" )
 		}
 	}
 

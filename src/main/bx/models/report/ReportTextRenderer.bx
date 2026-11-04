@@ -249,8 +249,16 @@ class {
 		if ( !arguments.r.schedule.present ) {
 			return
 		}
-		var s = arguments.r.schedule
-		arguments.out.append( "  " & s.file & p( "muted", s.tasks.len() ? "  " & s.tasks.toList( ", " ) : "  no task() calls found" ) )
+		var rows = []
+		for ( var scheduler in arguments.r.schedule.schedulers ) {
+			if ( !scheduler.tasks.len() ) {
+				rows.append( [ scheduler.file, p( "muted", "no task() calls found" ), "", "" ] )
+			}
+			for ( var task in scheduler.tasks ) {
+				rows.append( [ scheduler.file, task.name, task.when, task.agent ] )
+			}
+		}
+		table( rows, arguments.out, 2 )
 	}
 
 	private void function drawAi( required struct r, required array out ) {

@@ -275,7 +275,7 @@ class extends="testbox.system.BaseSpec" {
 
 				expect( result.template ).toBe( "minimal" );
 				expect( fileExists( dir & "/gateways/webui.bx" ) ).toBeFalse();
-				expect( fileExists( dir & "/schedules/Scheduler.bx" ) ).toBeFalse();
+				expect( directoryList( dir & "/schedules" ) ).toHaveLength( 0 );
 			} );
 
 			it( "rejects an unrecognized --template", function() {
@@ -361,15 +361,32 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( 'target  : "exampleServer"' );
 			} );
 
-			it( "the scheduled template adds a real schedules/Scheduler.bx calling the scaffolded agent by name", function() {
+			it( "the scheduled template adds a BoxLang scheduler that runs the default agent on a cron schedule", function() {
 				var dir = newTargetDir();
 				scaffolder.scaffold( dir, "my-agent", "openai/gpt-5", "", "scheduled" );
 
-				var path = dir & "/schedules/Scheduler.bx";
+				var path = dir & "/schedules/Example.bx";
 				expect( fileExists( path ) ).toBeTrue();
 				var content = fileRead( path );
-				expect( content ).toInclude( 'extends="coldbox.system.web.tasks.ColdBoxScheduler"' );
-				expect( content ).toInclude( 'getInstance( "my-agent" )' );
+				// no extends: the build gives it the base class that provides task() and run()
+				expect( content ).notToInclude( "extends" );
+				expect( content ).toInclude( 'task( "example" )' );
+				expect( content ).toInclude( '.cron( "0 0 * * *" )' );
+				expect( content ).toInclude( '.call( () => run( "Give me a status update" ) )' );
+			} );
+
+			it( "writes a root Application.bx that extends the generated base, and never overwrites one", function() {
+				var dir = newTargetDir();
+				var result = scaffolder.scaffold( dir, "my-agent", "openai/gpt-5" );
+
+				expect( result.application ).toBe( dir & "/Application.bx" );
+				expect( fileRead( result.application ) ).toInclude( 'class extends="bxagents.Application" {' );
+
+				var otherDir = newTargetDir();
+				directoryCreate( otherDir, true );
+				fileWrite( otherDir & "/Application.bx", "class { this.mine = true }" );
+				scaffolder.scaffold( otherDir, "my-agent", "openai/gpt-5" );
+				expect( fileRead( otherDir & "/Application.bx" ) ).toBe( "class { this.mine = true }" );
 			} );
 
 			it( "the multi-agent template declares subAgents in the root Agent.yaml and scaffolds two real subagent folders", function() {

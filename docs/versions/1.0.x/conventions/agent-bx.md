@@ -85,7 +85,7 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 
 | Field | Type | Notes |
 |---|---|---|
-| `name` | string | Also becomes this agent's `config/WireBox.bx` binding key at build time (`getInstance( name )`) - see [schedules/](schedules.md) - so it must be unique across the whole project (root + every subagent); `build` fails if two agents share a name. |
+| `name` | string | Also becomes this agent's `config/WireBox.bx` binding key at build time (`getInstance( name )`, or `agent( name )` in a scheduler) - see [schedules/](schedules.md) - so it must be unique across the whole project (root + every subagent); `build` fails if two agents share a name. |
 | `model` | string | A `provider/model` slug or a bare provider name. A `profile` (see [Models and profiles](models.md)) can stand in for it. See below. |
 | `description` | string | Optional. |
 | `subAgents` | array of strings | Names of sibling folders under the root project's `subagents/`. See [subagents/](subagents.md). |

@@ -1,0 +1,76 @@
+/**
+ * Finds code in BoxLang source without being fooled by what is inside a comment or a string.
+ *
+ * `code()` returns the source with the inside of every comment and string literal blanked out, same
+ * length and same line breaks, so a position found in the result is the same position in the original.
+ * A search for `class {` or `agent(` that runs on the result matches only real code; the text of a
+ * string argument is then read from the original at that position.
+ */
+class {
+
+	/**
+	 * @source BoxLang source
+	 *
+	 * @return The source with `// ...` and `/* ... *` + `/` comments blanked (line breaks kept) and the
+	 *         inside of `"..."` and `'...'` strings blanked (the quotes kept). A doubled quote inside a
+	 *         string is an escaped quote, not the end of it.
+	 */
+	static string function code( required string source ) {
+		var text = arguments.source
+		var n = len( text )
+		var out = createObject( "java", "java.lang.StringBuilder" ).init( text )
+		var i = 1
+
+		while ( i <= n ) {
+			var c = text.mid( i, 1 )
+			var pair = text.mid( i, 2 )
+
+			if ( pair == "//" ) {
+				while ( i <= n && text.mid( i, 1 ) != char( 10 ) ) {
+					out.setCharAt( javaCast( "int", i - 1 ), javaCast( "char", " " ) )
+					i++
+				}
+				continue
+			}
+
+			if ( pair == "/*" ) {
+				var close = text.find( "*/", i + 2 )
+				var stop = close ? close + 1 : n
+				while ( i <= stop ) {
+					if ( text.mid( i, 1 ) != char( 10 ) && text.mid( i, 1 ) != char( 13 ) ) {
+						out.setCharAt( javaCast( "int", i - 1 ), javaCast( "char", " " ) )
+					}
+					i++
+				}
+				continue
+			}
+
+			if ( c == '"' || c == "'" ) {
+				i++
+				while ( i <= n ) {
+					if ( text.mid( i, 2 ) == c & c ) {
+						// a doubled quote is an escaped one
+						out.setCharAt( javaCast( "int", i - 1 ), javaCast( "char", " " ) )
+						out.setCharAt( javaCast( "int", i ), javaCast( "char", " " ) )
+						i += 2
+						continue
+					}
+					if ( text.mid( i, 1 ) == c ) {
+						break
+					}
+					if ( text.mid( i, 1 ) != char( 10 ) && text.mid( i, 1 ) != char( 13 ) ) {
+						out.setCharAt( javaCast( "int", i - 1 ), javaCast( "char", " " ) )
+					}
+					i++
+				}
+				i++
+				continue
+			}
+
+			i++
+		}
+
+		return out.toString()
+	}
+
+}

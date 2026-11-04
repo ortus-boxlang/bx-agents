@@ -1,16 +1,20 @@
 name: Pull Requests
 
+# One run per change. This used to listen to `push` (every branch but the
+# protected ones) AND `pull_request`, so each push to a branch with an open PR
+# started everything twice. `pull_request` covers the PR; a branch with no PR
+# yet can be run by hand with workflow_dispatch.
 on:
-  push:
-    branches-ignore:
-      - "main"
-      - "master"
-      - "development"
-      - "releases/v*"
   pull_request:
     branches:
       - "releases/v*"
       - development
+  workflow_dispatch:
+
+# A newer push to the same PR replaces the run still going for the older one.
+concurrency:
+  group: pull-requests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   tests:

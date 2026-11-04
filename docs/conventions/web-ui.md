@@ -298,12 +298,12 @@ The reason is a real gap, not a preference: **bx-ai's `IAiMemory` has no enumera
 | [`qb`](https://github.com/coldbox-modules/qb) | QueryBuilder for the reads and writes of `ChatDb` |
 | `ChatStore` | In the BxAgents module, shared with the terminal chat. Owns the tables and their versions, in plain SQLite SQL |
 | `models/ChatDb.bx` | Generated. Hands out query builders; its `migrate()` calls `ChatStore` |
-| A start-up statement in `Application.bx` | Generated. Builds `ChatDb` at boot so migration runs then, not on whichever request touches the database first |
+| A start-up statement in the generated base `Application` | Generated. Builds `ChatDb` at boot so migration runs then, not on whichever request touches the database first |
 
-The datasource is registered in `Application.bx` and the grammar is pinned in `config/ColdBox.bx`:
+The datasource is registered in the generated base `Application` (`bxagents/Application.bx`) and the grammar is pinned in `config/ColdBox.bx`:
 
 ```javascript
-// Application.bx (generated)
+// bxagents/Application.bx (generated)
 this.datasources[ "bxagents" ] = {
 	"driver"  : "sqlite",
 	"database": expandPath( "./data/chat.db" )
@@ -409,7 +409,7 @@ The generated `handlers/ChatUi.bx` supplies it in one method, `resolveUserId()`,
 
 Either way the id is derived on the server and never taken from the request body, so a caller cannot name themselves someone else. `conversationId` still comes from the client, and that's deliberate: it distinguishes several conversations belonging to the *same* identity - it's what the **New** button rotates. It is not the isolation boundary; the `userId` is.
 
-A project with a `webui` exposure also gets **session management on** in the generated `Application.bx` - `this.sessionManagement = true`, `this.setClientCookies = true`, a 60-minute `sessionTimeout` - because the sign-in is session-backed. Cookies are load-bearing there: no cookie, no session. A project with no `webui` keeps sessions off - an API/gateway-only app has no browser to track, and a session there is overhead plus a cookie nobody asked for.
+A project with a `webui` exposure also gets **session management on** in the generated base `Application` - `this.sessionManagement = true`, `this.setClientCookies = true`, a 60-minute `sessionTimeout` - because the sign-in is session-backed. Cookies are load-bearing there: no cookie, no session. A project with no `webui` keeps sessions off - an API/gateway-only app has no browser to track, and a session there is overhead plus a cookie nobody asked for.
 
 !!! info
     **Why not `toAi()` for the webui?** ColdBox 8.1's `toAi()` lets a **caller-supplied `userId` win** over the server-derived one, which is right for a trusted server-to-server caller but wrong for a browser sitting behind one shared API key, where anyone could name themselves anyone and read another visitor's memory. The generated handler derives the identity server-side *only*, and never looks at `body.userId`. It keeps `toAi()`'s exact route shape (`/invoke`, `/stream`, `/batch`, `/info`), its SSE wire format, and its `X-Thread-Id`/`thread`-event echo, so it stays a drop-in. The other exposure kinds (`exposes: "agent"`) still use `toAi()` unchanged - server-to-server is the case its precedence is built for.

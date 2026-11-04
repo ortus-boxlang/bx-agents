@@ -159,7 +159,7 @@ bxAgents new my-agent --forgebox=some-package-slug
   - `--model` is **required** when no questions are asked - a `provider/model` slug (see [the model slug](conventions/agent-bx.md#the-model-slug)).
   - `--name` defaults to the target directory's own basename.
   - Refuses to run if the target already contains an `Agent.yaml` or an `Agent.bx`.
-  - Creates [`Agent.yaml`](conventions/agent-yaml.md), `instructions.md`, every convention folder (empty), a root [`box.json`](conventions/box-json.md) (`testbox` as a development dependency, installed into `lib/testbox`), a ready-to-run [`tests/`](conventions/testing.md) folder (`tests/specs/AgentSpec.bx`), a `.env` declaring `BOXLANG_HOME=.build/runtime` (matching `serve`'s own scoped runtime home), a `.gitignore` (`.env` and `.env.*`, `.build/`, `dist/`, `data/chat.db*`, `lib/`, `boxlang_modules/`, `.agents/skills/`, editor files), and the standard dotfiles `.editorconfig`, `.gitattributes`, `.bxlint.json`, `.markdownlint.json` and a `.boxlang.json` listing every bx-ai setting at its default (the BoxLang runtime reads it when run from the project root; edit the values there). Never overwrites a file that already exists. BoxLang and `boxlang-miniserver` load a `.env` from the project root themselves, so the file also works for your API keys; BxAgents never reads, copies or packages it.
+  - Creates [`Agent.yaml`](conventions/agent-yaml.md), `instructions.md`, a root [`Application.bx`](conventions/application-bx.md) (extends the class every build generates; never overwritten), every convention folder (empty), a root [`box.json`](conventions/box-json.md) (`testbox` as a development dependency, installed into `lib/testbox`), a ready-to-run [`tests/`](conventions/testing.md) folder (`tests/specs/AgentSpec.bx`), a `.env` declaring `BOXLANG_HOME=.build/runtime` (matching `serve`'s own scoped runtime home), a `.gitignore` (`.env` and `.env.*`, `.build/`, `dist/`, `data/chat.db*`, `lib/`, `boxlang_modules/`, `.agents/skills/`, editor files), and the standard dotfiles `.editorconfig`, `.gitattributes`, `.bxlint.json`, `.markdownlint.json` and a `.boxlang.json` listing every bx-ai setting at its default (the BoxLang runtime reads it when run from the project root; edit the values there). Never overwrites a file that already exists. BoxLang and `boxlang-miniserver` load a `.env` from the project root themselves, so the file also works for your API keys; BxAgents never reads, copies or packages it.
   - `--class` (a bare boolean flag, like the others described above) writes the class-based [`Agent.bx`](conventions/agent-bx.md) instead of the default `Agent.yaml`, for agents whose definition needs code (hooks, dynamic instructions). It applies to the root and to any subagents a template scaffolds, and only to `--template` mode - not to `--repo`/`--forgebox`.
   - `--template` picks one of 8 built-in starters, each layering a bit of pre-wired content on top of the base skeleton above (see [Agent Templates](agent-templates.md) for every generated file in full, plus how `--repo`/`--forgebox` sources work and how to publish your own):
     - `minimal` - the bare skeleton, nothing extra.
@@ -168,7 +168,7 @@ bxAgents new my-agent --forgebox=some-package-slug
     - `telegram-bot` - adds a `gateways/telegram.bx` channel adapter, plus a matching `TELEGRAM_BOT_TOKEN` stub line in `.env`.
     - `github-bot` - adds a `gateways/github.bx` channel adapter, plus matching `GITHUB_TOKEN`/`GITHUB_WEBHOOK_SECRET`/`GITHUB_BOT_NAME` stub lines in `.env`.
     - `mcp-server` - adds an example `mcp/exampleServer.bx` tool server and a `gateways/mcpExpose.bx` entry exposing it as an MCP server at `/mcp`.
-    - `scheduled` - adds a real [`schedules/Scheduler.bx`](conventions/schedules.md) calling the agent on a daily timer.
+        - `scheduled` - adds a [`schedules/Example.bx`](conventions/schedules.md) scheduler calling the agent on a daily cron schedule.
     - `multi-agent` - adds a `subAgents` list to the root `Agent.yaml` declaring two [subagents](conventions/subagents.md) (`researcher`, `writer`), each scaffolded as its own real `subagents/<name>/Agent.yaml` + `instructions.md`.
   - Also runs `box install` in the new project root, so `bxAgents test` works immediately with no separate install step. This is best-effort: if `box` isn't on `PATH` or the install fails, `new` still succeeds - the message just tells you to run it yourself. Pass `--skipInstall` to opt out of this step entirely.
 - **`--repo` mode** (`--repo=owner/repo-name` or a full URL): clones the repo via a bundled [JGit](https://www.eclipse.org/jgit/) dependency - no `git` binary needs to be installed. Always clones shallow (depth 1) and always strips the resulting `.git` folder afterward, so the new project starts with a clean history rather than staying tied to the template repo's own remote. Refuses to run into a directory that already exists and is non-empty, and fails clearly if no `Agent.yaml` or `Agent.bx` is found in the cloned repo.
@@ -227,36 +227,36 @@ bxAgents add interceptor AiWatch --scope=runtime --points=beforeAIModelInvoke,on
 
 #### `add schedule`
 
-Adds a task to `schedules/Scheduler.bx` that sends the agent a message on a schedule. Only two things are asked: when it runs and what it says to the agent. Overlapping runs are always prevented (`.withNoOverlaps()`).
+Adds a [scheduler](conventions/schedules.md) to `schedules/` that sends an agent a message on a schedule. Three things are asked: when it runs, what it says to the agent, and which agent. Overlapping runs are always prevented (`.withNoOverlaps()`). Each schedule is its own file, `schedules/<Name>.bx`, so adding one never edits another.
 
 ```bash
 bxAgents add schedule --when="weekdays 08:30" --prompt="Summarize yesterday's findings"
-bxAgents add schedule digest --when="every 15 minutes" --prompt="Check for new tickets" --agent=researcher
+bxAgents add schedule digest --when="0 9 * * 1-5" --prompt="Check for new tickets" --agent=researcher
 bxAgents add schedule                          # asks how often, the details, a name, and what to say
 ```
 
 | Flag | Meaning |
 |---|---|
-| `--when=<phrase>` | When it runs, in one of the phrases below. At a terminal, leave it out and you are asked how often, then the details. |
+| `--when=<phrase or cron>` | When it runs: one of the phrases below, or a cron expression. At a terminal, leave it out and you are asked how often, then the details. |
 | `--prompt=<text>` | The message sent to the agent each time. |
-| `--name=<name>` | The task's name, or the second positional. Defaults to a name made from the phrase. A name already in the scheduler is refused. |
-| `--agent=<subagent>` | Which agent runs it. Asked only when the project has subagents; `.` (the default) is the root agent. The task looks the agent up by its declared `name`, so renaming the agent means editing the task. |
+| `--name=<name>` | The task's name, or the second positional. It also names the file: `daily-digest` writes `schedules/DailyDigest.bx`. Defaults to a name made from the phrase. A task name already used in `schedules/` is refused. |
+| `--agent=<subagent>` | Which agent runs it. Asked only when the project has subagents; `.` (the default) is the root agent, which the file calls with `run()`. Another agent is called with `agent( "name" ).run()` by its declared `name`, so renaming the agent means editing the file. |
 
-| Phrase | Runs |
-|---|---|
-| `every 15 minutes`, `every 2 hours`, `every 1 days` | At that interval |
-| `hourly`, `hourly :15` | Every hour, on the hour or at that minute |
-| `daily 09:00` | Every day at that time |
-| `weekdays 08:30`, `weekends 10:00` | Monday to Friday, or Saturday and Sunday |
-| `weekly mon 09:00` | Once a week (`mon` `tue` `wed` `thu` `fri` `sat` `sun`) |
-| `monthly 1 09:00` | Once a month on that day, 1 to 28 so that no month skips it |
-| `first-business-day 09:00`, `last-business-day 17:00` | On that business day of each month |
+| Phrase | Runs | Written as |
+|---|---|---|
+| `every 15 minutes`, `every 2 hours`, `every 1 days` | At that interval | `.cron( "*/15 * * * *" )` where the step divides the hour or day evenly, otherwise `.every( n, "unit" )` |
+| `hourly`, `hourly :15` | Every hour, on the hour or at that minute | `.cron( "0 * * * *" )`, `.cron( "15 * * * *" )` |
+| `daily 09:00` | Every day at that time | `.cron( "0 9 * * *" )` |
+| `weekdays 08:30`, `weekends 10:00` | Monday to Friday, or Saturday and Sunday | `.cron( "30 8 * * 1-5" )`, `.cron( "0 10 * * 0,6" )` |
+| `weekly mon 09:00` | Once a week (`mon` `tue` `wed` `thu` `fri` `sat` `sun`) | `.cron( "0 9 * * MON" )` |
+| `monthly 1 09:00` | Once a month on that day, 1 to 28 so that no month skips it | `.cron( "0 9 1 * *" )` |
+| `first-business-day 09:00`, `last-business-day 17:00` | On that business day of each month | `.onFirstBusinessDayOfTheMonth( "09:00" )` (cron cannot say it) |
+| `0 9 * * 1-5`, `0 30 8 * * MON-FRI` | Any cron expression: five fields, or six with seconds in front | `.cron( "..." )`, checked by BoxLang's own parser |
 
-Times are 24 hour `HH:mm` in the scheduler's timezone. There is no cron phrase: ColdBox's `ScheduledTask` has no cron method, so for anything else write the task by hand with its full DSL.
+Times are 24 hour `HH:mm` in the scheduler's timezone.
 
-- If `schedules/Scheduler.bx` does not exist it is created. If it does, the task is added at the end of `configure()` and the rest of the file is left as it was.
-- If `configure()` cannot be found, nothing is changed and the error carries the task to paste in.
-- Scheduled tasks run while the app is served (`bxAgents serve`). Check the result with `bxAgents inspect --section=schedule`.
+- An existing file of the same name is a conflict and nothing is written; `--force` replaces it.
+- Schedulers run while the app is served (`bxAgents serve`). Check the result with `bxAgents inspect --section=schedule`.
 
 #### `add mcp`
 
@@ -479,7 +479,7 @@ bxAgents build [--environment=production] [--verbose] [--generatorVersion=1.0.0]
 
 Writes `.build/app/` and `.build/manifest.json`. Fails with every collected validation error if the project is invalid.
 
-- `--verbose` prints one line per build phase live as it runs - what got resolved/discovered/validated, per-phase counts (models, tools, gateways, warnings, etc.), which agents ended up registered in `config/WireBox.bx` and under which names, whether a `schedules/Scheduler.bx` was found, and a final `Build completed in Xms` timing line. Useful for debugging a slow or unexpectedly-behaving build. Silent otherwise - `--verbose` costs nothing when not passed.
+- `--verbose` prints one line per build phase live as it runs - what got resolved/discovered/validated, per-phase counts (models, tools, gateways, warnings, etc.), which agents ended up registered in `config/WireBox.bx` and under which names, how many `schedules/*.bx` schedulers were found, and a final `Build completed in Xms` timing line. Useful for debugging a slow or unexpectedly-behaving build. Silent otherwise - `--verbose` costs nothing when not passed.
 - `--generatorVersion` overrides the string stamped into `manifest.json`'s `generator.version` (see [The Manifest](manifest.md)) - defaults to `"dev"` when omitted. Exists for tooling that builds against a specific released version of this module and wants that recorded in the manifest, rather than the local dev default.
 
 ### `test`
@@ -916,7 +916,7 @@ The report has these sections, in this order. `--section` takes any of the names
 | `skills` | The skills each agent has. |
 | `mcp` | The MCP servers each agent uses (URLs are shown without a user name or query string, and with the environment variables they need) and the MCP servers the project hosts. |
 | `gateways` | Every `gateways/` entry: its kind (`agent`, `mcp`, `webui` with its auth mode, or a chat platform) and path. |
-| `schedule` | `schedules/Scheduler.bx` and the names of its `task()` calls. |
+| `schedule` | Each `schedules/*.bx` scheduler with its tasks: name, cron (or the frequency method), and the agent it runs (`default` for the root agent). |
 | `ai` | The default model, the other providers, the named [profiles](conventions/models.md) with where each key comes from, and the capability defaults. |
 | `interceptors`, `modules`, `deploy` | Interceptors with their scope, declared modules, and `deploy/` entries with their target. |
 | `env` | Every environment variable the project reads: gateway credentials, MCP tokens, each model provider's API key, `agentApi.tokenEnvVar`. |

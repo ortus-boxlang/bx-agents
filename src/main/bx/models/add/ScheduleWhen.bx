@@ -1,7 +1,8 @@
 /**
- * Turns "when should it run" into a ColdBox scheduled-task chain, from a few plain
- * phrases rather than a cron expression (ColdBox's ScheduledTask has no cron method;
- * checked against coldbox 8.3's async/tasks/ScheduledTask.cfc).
+ * Turns "when should it run" into a BoxLang scheduled-task call, from a few plain phrases
+ * or from a cron expression. Wherever cron can say it exactly the call is `.cron( "..." )`;
+ * the few things it cannot say (business days, a step that does not divide the hour or the
+ * day) stay as the task's own methods.
  *
  *   every 15 minutes | every 2 hours | every 1 days
  *   hourly | hourly :15           on the hour, or at that minute
@@ -10,6 +11,9 @@
  *   weekly mon 09:00              mon tue wed thu fri sat sun (or the full name)
  *   monthly 1 09:00               day 1-28, so no month skips it
  *   first-business-day 09:00 | last-business-day 17:00
+ *
+ *   0 9 * * 1-5 | 0 0 9 * * MON-FRI
+ *                               a cron expression, 5 fields or 6 with seconds, as BoxLang reads it
  *
  * Times are 24 hour HH:mm in the scheduler's timezone.
  */
@@ -25,7 +29,8 @@ class {
 			{ value : "weekly", label : "Once a week", hint : "weekly mon 09:00" },
 			{ value : "monthly", label : "Once a month", hint : "monthly 1 09:00" },
 			{ value : "first-business-day", label : "First business day of the month", hint : "first-business-day 09:00" },
-			{ value : "last-business-day", label : "Last business day of the month", hint : "last-business-day 17:00" }
+			{ value : "last-business-day", label : "Last business day of the month", hint : "last-business-day 17:00" },
+			{ value : "cron", label : "A cron expression", hint : "0 9 * * 1-5" }
 		]
 		DAYS = { mon : 1, tue : 2, wed : 3, thu : 4, fri : 5, sat : 6, sun : 7 }
 		DAY_NAMES = { mon : "Monday", tue : "Tuesday", wed : "Wednesday", thu : "Thursday", fri : "Friday", sat : "Saturday", sun : "Sunday" }
@@ -40,9 +45,9 @@ class {
 	}
 
 	/**
-	 * @text A phrase from the list above
+	 * @text A phrase from the list above, or a cron expression
 	 *
-	 * @return { kind, call : the chain method call, summary : how to say it to a person }
+	 * @return { kind, cron : the expression, or "" when cron cannot say it, call : the task call, summary : how to say it to a person }
 	 *
 	 * @throws BxAgents.InvalidSchedule with what was wrong and an example
 	 */
@@ -52,6 +57,10 @@ class {
 			fail( "Say when it runs." )
 		}
 		var kind = words[ 1 ]
+
+		if ( looksLikeCron( words ) ) {
+			return fromCron( trim( arguments.text ).reReplace( "\s+", " ", "all" ) )
+		}
 
 		switch ( kind ) {
 			case "every":
@@ -63,30 +72,46 @@ class {
 					fail( "[#words[ 3 ]#] is not a unit here. Use minutes, hours or days." )
 				}
 				var n = int( words[ 2 ] )
-				return {
+				var every = {
 					kind    : "every",
+					cron    : "",
 					call    : '.every( #n#, "#unit#" )',
 					summary : "every #n == 1 ? unit.reReplace( 's$', '' ) : n & ' ' & unit#"
 				}
+				// cron can say it only when the step divides the hour or the day evenly; 90 minutes cannot be a cron step
+				if ( unit == "minutes" && n < 60 && 60 % n == 0 ) {
+					every.cron = n == 1 ? "* * * * *" : "*/#n# * * * *"
+				} else if ( unit == "hours" && n < 24 && 24 % n == 0 ) {
+					every.cron = n == 1 ? "0 * * * *" : "0 */#n# * * *"
+				} else if ( unit == "days" && n == 1 ) {
+					every.cron = "0 0 * * *"
+				}
+				return withCron( every )
 			case "hourly":
 				if ( words.len() == 1 ) {
-					return { kind : "hourly", call : ".everyHour()", summary : "every hour" }
+					return withCron( { kind : "hourly", cron : "0 * * * *", call : ".everyHour()", summary : "every hour" } )
 				}
 				var minute = words[ 2 ].reReplace( "^:", "" )
 				if ( words.len() != 2 || !reFind( "^[0-9]{1,2}$", minute ) || int( minute ) > 59 ) {
 					fail( "[#arguments.text#] is not 'hourly' or 'hourly :MM' (MM 0-59)." )
 				}
-				return { kind : "hourly", call : ".everyHourAt( #int( minute )# )", summary : "every hour at :#numberFormat( int( minute ), '00' )#" }
+				return withCron( {
+					kind    : "hourly",
+					cron    : "#int( minute )# * * * *",
+					call    : ".everyHourAt( #int( minute )# )",
+					summary : "every hour at :#numberFormat( int( minute ), '00' )#"
+				} )
 			case "daily":
-				return timed( words, 2, arguments.text, "daily", ( t ) => '.everyDayAt( "#t#" )', ( t ) => "every day at #t#" )
+				return timed( words, 2, arguments.text, "daily", ( t ) => '.everyDayAt( "#t#" )', ( t ) => "every day at #t#", ( t ) => "#cronTime( t )# * * *" )
 			case "weekdays":
-				return timed( words, 2, arguments.text, "weekdays", ( t ) => '.onWeekdays( "#t#" )', ( t ) => "Monday to Friday at #t#" )
+				return timed( words, 2, arguments.text, "weekdays", ( t ) => '.onWeekdays( "#t#" )', ( t ) => "Monday to Friday at #t#", ( t ) => "#cronTime( t )# * * 1-5" )
 			case "weekends":
-				return timed( words, 2, arguments.text, "weekends", ( t ) => '.onWeekends( "#t#" )', ( t ) => "Saturday and Sunday at #t#" )
+				return timed( words, 2, arguments.text, "weekends", ( t ) => '.onWeekends( "#t#" )', ( t ) => "Saturday and Sunday at #t#", ( t ) => "#cronTime( t )# * * 0,6" )
 			case "first-business-day":
-				return timed( words, 2, arguments.text, kind, ( t ) => '.onFirstBusinessDayOfTheMonth( "#t#" )', ( t ) => "the first business day of each month at #t#" )
+				// no cron expression says "the first weekday of the month", so this stays the task's own method
+				return timed( words, 2, arguments.text, kind, ( t ) => '.onFirstBusinessDayOfTheMonth( "#t#" )', ( t ) => "the first business day of each month at #t#", ( t ) => "" )
 			case "last-business-day":
-				return timed( words, 2, arguments.text, kind, ( t ) => '.onLastBusinessDayOfTheMonth( "#t#" )', ( t ) => "the last business day of each month at #t#" )
+				return timed( words, 2, arguments.text, kind, ( t ) => '.onLastBusinessDayOfTheMonth( "#t#" )', ( t ) => "the last business day of each month at #t#", ( t ) => "" )
 			case "weekly":
 				if ( words.len() != 3 ) {
 					fail( "[#arguments.text#] is not 'weekly <day> HH:mm', e.g. weekly mon 09:00." )
@@ -96,36 +121,97 @@ class {
 					fail( "[#words[ 2 ]#] is not a day. Use mon, tue, wed, thu, fri, sat or sun." )
 				}
 				var weeklyTime = checkTime( words[ 3 ] )
-				return {
+				return withCron( {
 					kind    : "weekly",
+					cron    : "#cronTime( weeklyTime )# * * #ucase( day )#",
 					call    : '.everyWeekOn( #static.DAYS[ day ]#, "#weeklyTime#" )',
 					summary : "every #static.DAY_NAMES[ day ]# at #weeklyTime#"
-				}
+				} )
 			case "monthly":
 				if ( words.len() != 3 || !reFind( "^[0-9]{1,2}$", words[ 2 ] ) || int( words[ 2 ] ) < 1 || int( words[ 2 ] ) > 28 ) {
 					fail( "[#arguments.text#] is not 'monthly <day 1-28> HH:mm', e.g. monthly 1 09:00. Days 29-31 are left out so no month skips the run." )
 				}
 				var monthlyTime = checkTime( words[ 3 ] )
-				return {
+				return withCron( {
 					kind    : "monthly",
+					cron    : "#cronTime( monthlyTime )# #int( words[ 2 ] )# * *",
 					call    : '.everyMonthOn( #int( words[ 2 ] )#, "#monthlyTime#" )',
 					summary : "on day #int( words[ 2 ] )# of each month at #monthlyTime#"
-				}
+				} )
 		}
 
-		fail( "[#words[ 1 ]#] is not a schedule. Use one of: #static.KINDS.map( k => k.value ).toList( ', ' )#." )
+		fail( "[#words[ 1 ]#] is not a schedule. Use one of: #static.KINDS.map( k => k.value ).toList( ', ' )#, or a cron expression like 0 9 * * 1-5." )
+	}
+
+	/**
+	 * Where cron can say it, the call is `.cron( "..." )`.
+	 *
+	 * @when { kind, cron, call, summary }
+	 *
+	 * @return The same struct, with call set to the cron call when there is an expression
+	 */
+	private struct function withCron( required struct when ) {
+		if ( len( arguments.when.cron ) ) {
+			arguments.when.call = '.cron( "#arguments.when.cron#" )'
+		}
+		return arguments.when
+	}
+
+	/**
+	 * @words The phrase, split
+	 *
+	 * @return True when it is 5 or 6 fields made only of what a cron field is made of, and does not start with a word this class knows
+	 */
+	private boolean function looksLikeCron( required array words ) {
+		if ( arguments.words.len() < 5 || arguments.words.len() > 7 ) {
+			return false
+		}
+		if ( static.KINDS.some( k => k.value == words[ 1 ] ) ) {
+			return false
+		}
+		return arguments.words.every( w => reFind( "^[0-9a-z*/,?\-]+$", w ) )
+	}
+
+	/**
+	 * Lets BoxLang's own parser say whether the expression is one it will run.
+	 *
+	 * @expression The cron expression
+	 */
+	private struct function fromCron( required string expression ) {
+		try {
+			createObject( "java", "ortus.boxlang.runtime.async.CronExpression" ).parse( arguments.expression )
+		} catch ( any e ) {
+			fail( "[#arguments.expression#] is not a cron expression BoxLang can read: #e.message#. Example: 0 9 * * 1-5 (minute hour day-of-month month day-of-week)." )
+		}
+		return {
+			kind    : "cron",
+			cron    : arguments.expression,
+			call    : '.cron( "#arguments.expression#" )',
+			summary : "on the cron schedule #arguments.expression#"
+		}
+	}
+
+	/**
+	 * @time HH:mm
+	 *
+	 * @return "minute hour" for a cron expression, without leading zeros
+	 */
+	private string function cronTime( required string time ) {
+		var parts = arguments.time.listToArray( ":" )
+		return "#int( parts[ 2 ] )# #int( parts[ 1 ] )#"
 	}
 
 	/**
 	 * @words The phrase, split
 	 * @at Where the time is
+	 * @cron Builds the cron expression from the time; returns "" when cron cannot say it
 	 */
-	private struct function timed( required array words, required numeric at, required string text, required string kind, required any call, required any say ) {
+	private struct function timed( required array words, required numeric at, required string text, required string kind, required any call, required any say, required any cron ) {
 		if ( arguments.words.len() != arguments.at ) {
 			fail( "[#arguments.text#] is not '#arguments.kind# HH:mm', e.g. #arguments.kind# 09:00." )
 		}
 		var time = checkTime( arguments.words[ arguments.at ] )
-		return { kind : arguments.kind, call : arguments.call( time ), summary : arguments.say( time ) }
+		return withCron( { kind : arguments.kind, cron : arguments.cron( time ), call : arguments.call( time ), summary : arguments.say( time ) } )
 	}
 
 	/**

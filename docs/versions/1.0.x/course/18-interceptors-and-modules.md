@@ -77,7 +77,7 @@ declared dependencies.
 Add an `interceptors/RequestLogger.bx` with an explicit `@scope agent` annotation that
 logs every incoming request via `writeLog()`, rebuild, and check
 `.build/app/interceptors/` for the copy plus its registration in
-`.build/app/Application.bx`.
+`.build/app/bxagents/Application.bx`.
 
 Full reference: [interceptors/](../conventions/interceptors.md), [modules/](../conventions/modules.md).
 

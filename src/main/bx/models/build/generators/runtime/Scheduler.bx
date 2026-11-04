@@ -1,0 +1,98 @@
+/**
+ * The base class of every `schedules/*.bx` scheduler. The build copies this file into the generated app as
+ * `bxagents/Scheduler.bx` and adds `extends="bxagents.Scheduler"` to each scheduler class that does not name
+ * a parent of its own, so a scheduler file is just:
+ *
+ * ```javascript
+ * class {
+ *     function configure() {
+ *         task( "cleanup" )
+ *             .cron( "0 0 * * *" )
+ *             .call( () => run( "clean up old tickets" ) )
+ *     }
+ * }
+ * ```
+ *
+ * It is a plain BoxLang class because BoxLang wraps a scheduler class and injects a `scheduler` object into it
+ * (`BaseScheduler` is Java and cannot be extended from BoxLang). Everything the scheduler needs from the running
+ * app is reached lazily, when a task fires, so `configure()` can run before ColdBox has finished booting.
+ *
+ * What you get:
+ *  - `task( name )`           the BoxLang task builder: `.cron()`, `.every()`, `.call()`, `.withNoOverlaps()` ...
+ *  - `run( input, ... )`      sends a message to the project's default agent (the root agent)
+ *  - `agent( name )`          the agent registered under that name (any agent in the project tree)
+ *  - `defaultAgent()`         the root agent
+ *  - `getInstance( dsl )`     WireBox's getInstance(), for anything else the app registered
+ *  - `controller()`           the running ColdBox controller
+ */
+class {
+
+	/**
+	 * The BoxLang task builder of this scheduler.
+	 *
+	 * @name The task name, unique within this scheduler
+	 *
+	 * @return A task to chain `.cron()` / `.every...()` / `.call()` on
+	 */
+	function task( required string name ) {
+		return variables.scheduler.task( arguments.name )
+	}
+
+	/**
+	 * Sends a message to the project's default agent: the root agent, the one `Agent.yaml` or `Agent.bx` defines.
+	 * The arguments are the agent's own `run()` arguments.
+	 *
+	 * @input The message (or messages) to send
+	 * @params Parameters for the run
+	 * @options Options for the run
+	 *
+	 * @return What the agent answered
+	 */
+	function run( required any input, struct params = {}, struct options = {} ) {
+		return defaultAgent().run( argumentCollection = arguments )
+	}
+
+	/**
+	 * @return The project's default agent (the root agent)
+	 */
+	function defaultAgent() {
+		return getInstance( "GeneratedAgent" )
+	}
+
+	/**
+	 * Any agent in the project tree, root or subagent at any depth, by the name its own definition declares.
+	 *
+	 * @name The agent's declared name. Empty gives the default agent.
+	 *
+	 * @return The agent
+	 */
+	function agent( string name = "" ) {
+		if ( !len( arguments.name ) ) {
+			return defaultAgent()
+		}
+		return getInstance( arguments.name )
+	}
+
+	/**
+	 * @dsl A WireBox mapping name or DSL string
+	 *
+	 * @return The object WireBox resolves it to
+	 */
+	function getInstance( required string dsl ) {
+		return controller().getWireBox().getInstance( arguments.dsl )
+	}
+
+	/**
+	 * @return The running ColdBox controller
+	 */
+	function controller() {
+		if ( !application.keyExists( "cbController" ) ) {
+			throw(
+				type    = "BxAgents.SchedulerNotReady",
+				message = "A scheduled task ran before the app finished starting: ColdBox is not loaded yet"
+			)
+		}
+		return application.cbController
+	}
+
+}

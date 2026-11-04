@@ -74,7 +74,34 @@ class extends="testbox.system.BaseSpec" {
 				expect( report.interceptors[ 1 ].scope ).toBe( "agent" );
 				expect( report.modules.map( m => m.name ) ).toInclude( "my-extra-module" );
 				expect( report.schedule.present ).toBeTrue();
-				expect( report.schedule.tasks ).toInclude( "nightly" );
+				expect( report.schedule.schedulers ).toHaveLength( 1 );
+				expect( report.schedule.schedulers[ 1 ].file ).toBe( "schedules/Nightly.bx" );
+				expect( report.schedule.schedulers[ 1 ].tasks ).toHaveLength( 1 );
+				expect( report.schedule.schedulers[ 1 ].tasks[ 1 ].name ).toBe( "nightly" );
+				expect( report.schedule.schedulers[ 1 ].tasks[ 1 ].when ).toBe( "0 0 * * *" );
+				expect( report.schedule.schedulers[ 1 ].tasks[ 1 ].agent ).toBe( "default" );
+			} );
+
+			it( "reports the agent a task calls, not an agent( ... ) that only appears in a prompt or a comment", function() {
+				var root = newTempProject( "valid-minimal" );
+				directoryCreate( root & "/schedules" );
+				fileWrite( root & "/schedules/Mixed.bx", [
+					"class {",
+					"	function configure() {",
+					"		// agent( ""Wrong"" ) is not what runs",
+					"		task( ""default-one"" ).cron( ""0 9 * * *"" ).call( () => run( 'Ask agent(""ResearchBot"") for a summary' ) )",
+					"		task( ""named-one"" ).cron( ""0 10 * * *"" ).call( () => agent( ""Reporter"" ).run( ""go"" ) )",
+					"	}",
+					"}"
+				].toList( char( 10 ) ) );
+
+				var tasks = reporter.build( root ).schedule.schedulers[ 1 ].tasks;
+				expect( tasks ).toHaveLength( 2 );
+				expect( tasks[ 1 ].name ).toBe( "default-one" );
+				expect( tasks[ 1 ].agent ).toBe( "default" );
+				expect( tasks[ 2 ].name ).toBe( "named-one" );
+				expect( tasks[ 2 ].agent ).toBe( "Reporter" );
+				expect( tasks[ 2 ].when ).toBe( "0 10 * * *" );
 			} );
 
 			it( "reads an interceptor's scope from either form the splitter accepts", function() {

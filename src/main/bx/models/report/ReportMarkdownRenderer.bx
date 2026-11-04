@@ -157,10 +157,19 @@ class {
 	}
 
 	private void function drawSchedule( required struct r, required array out ) {
-		if ( arguments.r.schedule.present ) {
-			var s = arguments.r.schedule
-			arguments.out.append( "`#s.file#`" & ( s.tasks.len() ? ": #s.tasks.map( t => '`' & t & '`' ).toList( ', ' )#" : "" ) )
+		if ( !arguments.r.schedule.present ) {
+			return
 		}
+		var rows = []
+		for ( var scheduler in arguments.r.schedule.schedulers ) {
+			if ( !scheduler.tasks.len() ) {
+				rows.append( [ "`#scheduler.file#`", "no task() calls found", "", "" ] )
+			}
+			for ( var task in scheduler.tasks ) {
+				rows.append( [ "`#scheduler.file#`", "`#task.name#`", len( task.when ) ? "`#task.when#`" : "", task.agent ] )
+			}
+		}
+		table( [ "File", "Task", "When", "Agent" ], rows, arguments.out )
 	}
 
 	private void function drawAi( required struct r, required array out ) {

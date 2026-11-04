@@ -1,62 +1,98 @@
 /**
- * Passes a project's own `schedules/Scheduler.bx` through into the build
- * (Build Pipeline Phase 5) as `config/Scheduler.bx` - a plain file copy, no
- * generation, no translation.
+ * Copies a project's `schedules/*.bx` into the generated app (Build Pipeline Phase 5) as `schedules/<Name>.bx`.
  *
- * `schedules/Scheduler.bx` is a REAL, hand-written ColdBox scheduler class
- * (`extends="coldbox.system.web.tasks.ColdBoxScheduler"`), using ColdBox's
- * own full `task()`/`.cron()`/`.everyDayAt()`/`.withNoOverlaps()`/`.when()`/
- * `.startOn()`/`.endOn()`/etc. DSL directly - not a BX Agents-specific
- * `{cron, action}` config shape. This project used to translate a narrow
- * `{cron, action}` convention into ColdBox's frequency-method DSL here, but
- * that meant re-inventing (and, worse, only PARTIALLY re-inventing - lists,
- * ranges, step values, and day-of-month-AND-day-of-week combined cron
- * expressions had no translation) a scheduler ColdBox already has a real,
- * complete API for. Removing the translation layer means a schedule can use
- * anything ColdBox's scheduler supports, with nothing left for this project
- * to keep in sync with it.
+ * Every file is one BoxLang scheduler: a plain class with a `configure()` that builds tasks, using BoxLang's own
+ * task DSL (`.cron()`, `.every...()`, `.withNoOverlaps()`, `.call()` ...). There is no ColdBox in a scheduler.
+ * The generated base `Application.bx` lists the copied classes in `this.schedulers`, so BoxLang starts them with
+ * the app and shuts them down with it (see ColdBoxAppGenerator).
  *
- * Each agent in the tree (root + every subagent, recursively) is registered
- * in the generated `config/WireBox.bx` under its OWN declared `name` from
- * its `Agent.bx` (see `ColdBoxAppGenerator.renderWireBox()`), so a schedule
- * reaches whichever agent it wants via a plain `getInstance( "TheAgentName" )` -
- * exactly like any other WireBox-aware ColdBox code, no BX Agents-specific
- * lookup needed:
+ * A scheduler gets its helpers (`task()`, `run()`, `agent()` ... see runtime/Scheduler.bx) by inheritance. The
+ * developer does not have to write the `extends`: the copy adds `extends="bxagents.Scheduler"` to a class
+ * that names no parent of its own, so a scheduler file is just `class { function configure() { ... } }`.
  *
  * ```javascript
- * // schedules/Scheduler.bx
- * component extends="coldbox.system.web.tasks.ColdBoxScheduler" {
+ * // schedules/Nightly.bx
+ * class {
  *     function configure() {
- *         task( "nightly" )
- *             .call( () => getInstance( "SupportBot" ).run( "cleanup" ) )
- *             .everyDayAt( "00:00" )
- *             .withNoOverlaps()
+ *         task( "cleanup" )
+ *             .cron( "0 0 * * *" )
+ *             .call( () => run( "clean up old tickets" ) )
  *     }
  * }
  * ```
  */
+import bxModules.bxagents.models.util.SourceMask;
 import bxModules.bxagents.models.util.Strings;
 
 class {
 
 	/**
-	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .hasScheduler is used)
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .schedules is used)
+	 *
+	 * @return The class path of each scheduler, relative to the app, e.g. [ "schedules.Nightly" ]
+	 */
+	array function classPaths( required struct discovery ) {
+		return ( arguments.discovery.schedules ?: [] ).map( e => "schedules." & e.name )
+	}
+
+	/**
+	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .schedules is used)
 	 * @appDir Absolute path to the generated ColdBox app dir, e.g. "<projectRoot>/.build/app"
 	 *
-	 * @return { hasSchedules: boolean, scheduler: the written config/Scheduler.bx path, only present when hasSchedules is true }
+	 * @return { schedulers : [ { name, classPath, path } ] } - what was written, in the order it was discovered
 	 */
 	struct function generate( required struct discovery, required string appDir ) {
-		if ( !( arguments.discovery.hasScheduler ?: false ) ) {
-			return { hasSchedules : false }
+		var schedulesDir = Strings::normalizePath( arguments.appDir ) & "/schedules"
+
+		// Matches the rest of the build: wipe stale output, never merge into it
+		if ( directoryExists( schedulesDir ) ) {
+			directoryDelete( schedulesDir, true )
 		}
 
-		var appDir = Strings::normalizePath( arguments.appDir )
-		directoryCreate( path = appDir & "/config", createPath = true, ignoreExists = true )
-		var schedulerPath = appDir & "/config/Scheduler.bx"
+		var entries = arguments.discovery.schedules ?: []
+		if ( !entries.len() ) {
+			return { schedulers : [] }
+		}
 
-		fileWrite( schedulerPath, fileRead( arguments.discovery.schedulerPath ) )
+		directoryCreate( path = schedulesDir, createPath = true, ignoreExists = true )
 
-		return { scheduler : schedulerPath, hasSchedules : true }
+		var written = []
+		for ( var entry in entries ) {
+			var target = schedulesDir & "/" & entry.name & ".bx"
+			fileWrite( target, withBase( fileRead( entry.path, "UTF-8" ), entry.name ) )
+			written.append( { name : entry.name, classPath : "schedules." & entry.name, path : target } )
+		}
+
+		return { schedulers : written }
+	}
+
+	/**
+	 * Adds `extends="bxagents.Scheduler"` to the scheduler class unless it already names a parent. The class
+	 * declaration is found in the code only, so a `class {` shown in a comment or a string is left alone.
+	 *
+	 * @source The scheduler file's source
+	 * @name The scheduler's file name without extension, used in the error message
+	 *
+	 * @return The source to copy into the app
+	 */
+	string function withBase( required string source, required string name ) {
+		var code = SourceMask::code( arguments.source )
+		var declaration = reFind( "(?m)^[ \t]*class\b", code, 1, true )
+		if ( !declaration.pos[ 1 ] ) {
+			throw(
+				type    = "BxAgents.InvalidScheduler",
+				message = "schedules/#arguments.name#.bx has no class declaration. A scheduler is a class: class { function configure() { ... } }"
+			)
+		}
+
+		var afterKeyword = declaration.pos[ 1 ] + declaration.len[ 1 ]
+		var opening = code.find( "{", afterKeyword )
+		var header = opening ? code.mid( afterKeyword, opening - afterKeyword ) : ""
+		if ( reFindNoCase( "\bextends\s*=", header ) ) {
+			return arguments.source
+		}
+
+		return arguments.source.left( afterKeyword - 1 ) & ' extends="bxagents.Scheduler"' & arguments.source.mid( afterKeyword, len( arguments.source ) )
 	}
 
 }

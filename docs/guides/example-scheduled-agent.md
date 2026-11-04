@@ -1,14 +1,14 @@
 ---
 title: "Example: A Scheduled Agent"
 icon: phosphor-duotone:alarm
-summary: Wake an agent on a real ColdBox cron schedule, no separate cron daemon needed.
-description: Wake an agent on a real ColdBox cron schedule, no separate cron daemon needed.
+summary: Wake an agent on a cron schedule, no separate cron daemon needed.
+description: Wake an agent on a cron schedule, no separate cron daemon needed.
 tags: [guides, examples, schedules]
 ---
 
 # Example: A Scheduled Agent
 
-[`examples/scheduled-agent/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/scheduled-agent) wakes an agent nightly via a real, hand-written ColdBox scheduler class under `schedules/` - proof that [Schedules](../conventions/schedules.md) are not a BxAgents-invented DSL, but real ColdBox code passed through the build untouched.
+[`examples/scheduled-agent/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/scheduled-agent) wakes an agent nightly with a BoxLang scheduler under `schedules/` - plain [Schedules](../conventions/schedules.md) code with BoxLang's own task DSL and cron syntax.
 
 ## The project
 
@@ -17,7 +17,7 @@ scheduled-agent/
 ├── Agent.yaml
 ├── instructions.md
 └── schedules/
-    └── Scheduler.bx
+    └── Nightly.bx
 ```
 
 `Agent.yaml` is the same shape as every other example - nothing special is needed on the agent side to be schedule-driven:
@@ -30,24 +30,24 @@ model: mock/mock-model
 
 ## The scheduler
 
-`schedules/Scheduler.bx` extends ColdBox's own `ColdBoxScheduler` and uses its real fluent task DSL:
+`schedules/Nightly.bx` is a plain class. The build adds the base class that provides `task()` and `run()`:
 
 ```javascript
-class extends="coldbox.system.web.tasks.ColdBoxScheduler" {
+class {
 
 	function configure() {
 		task( "nightly" )
-			.call( () => getInstance( "scheduled-agent" ).run( "cleanup" ) )
-			.everyDayAt( "00:00" )
+			.cron( "0 0 * * *" )
+			.call( () => run( "cleanup" ) )
 			.withNoOverlaps()
 	}
 
 }
 ```
 
-Because `build` copies this file into the generated app essentially as-is (see [`schedules/`](../conventions/schedules.md)), the full ColdBox scheduler DSL is available - `everyDayAt()`, `everyMinute()`, `withNoOverlaps()`, `onFailure()`, and everything else ColdBox's own scheduler supports, not a subset BxAgents reimplements.
+The full BoxLang task DSL is available - `cron()`, `every()`, `everyDayAt()`, `withNoOverlaps()`, `onFailure()` and the rest, not a subset BxAgents reimplements (see [`schedules/`](../conventions/schedules.md)).
 
-`getInstance( "scheduled-agent" )` resolves by this project's own `Agent.yaml`-declared `name` - every agent in a project's tree is registered under its own name in WireBox, not just the root, which is what makes this line work without any extra wiring.
+`run( "cleanup" )` sends the message to the project's default agent, the root agent. To reach a subagent, use `agent( "TheAgentName" ).run( ... )`: every agent in a project's tree is registered under its own declared `name`.
 
 ## Instructions for the scheduled prompt
 
@@ -62,7 +62,7 @@ what a cleanup pass would involve for a typical project.
 
 ## Build and run
 
-Unlike `chat` (which never boots ColdBox at all), the scheduler only actually fires under a real ColdBox boot, so this one needs `serve`, not `chat`:
+Unlike `chat` (which never boots ColdBox at all), schedulers only start with the served app, so this one needs `serve`, not `chat`:
 
 ```bash
 cd examples/scheduled-agent
@@ -70,13 +70,13 @@ bxAgents build
 bxAgents serve
 ```
 
-The `nightly` task fires automatically once `serve` is running - no separate cron daemon, no OS-level `cron` entry. ColdBox's own in-process scheduler thread drives it, on the schedule declared in `Scheduler.bx`.
+The `nightly` task fires automatically once `serve` is running - no separate cron daemon, no OS-level `cron` entry. BoxLang's own scheduler drives it, on the schedule declared in `Nightly.bx`.
 
 !!! info
-    `build` cannot meaningfully validate the *contents* of `Scheduler.bx` beyond checking that the file exists - a typo in a `getInstance()` call or a reference to an agent name that doesn't exist will pass `build` cleanly and only surface once the generated app actually boots.
+    `build` checks the scheduler's file name and that it is a class, but not the *contents* of `configure()` - a typo in an `agent()` call or a reference to an agent name that doesn't exist will pass `build` cleanly and only surface once the generated app actually boots.
 
 ## Where to go next
 
-- [Schedules](../conventions/schedules.md) for the full scheduler DSL and where the generated `config/Scheduler.bx` lands in the build output.
+- [Schedules](../conventions/schedules.md) for the helpers a scheduler gets and the cron syntax.
 - [Example: A Minimal Agent](example-minimal-agent.md) if you haven't seen the base project shape yet.
 - [Example: Building a Web Chat Agent](example-web-chat-agent.md) for an agent reachable interactively instead of on a timer.

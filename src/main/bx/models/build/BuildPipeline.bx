@@ -130,7 +130,7 @@ class {
 		arguments.onProgress( "+ Discovering project source..." )
 		var discovery = variables.discoverer.discover( root )
 		arguments.onProgress(
-			"    tools=#discovery.tools.len()#, skills=#discovery.skills.len()#, subagents=#discovery.subagents.len()#, gateways=#discovery.gateways.len()#, scheduler=#( discovery.hasScheduler ? 'yes' : 'no' )#, mcp=#discovery.mcp.len()#, interceptors=#discovery.interceptors.len()#, modules=#discovery.modules.len()#"
+			"    tools=#discovery.tools.len()#, skills=#discovery.skills.len()#, subagents=#discovery.subagents.len()#, gateways=#discovery.gateways.len()#, schedules=#discovery.schedules.len()#, mcp=#discovery.mcp.len()#, interceptors=#discovery.interceptors.len()#, modules=#discovery.modules.len()#"
 		)
 
 		arguments.onProgress( "+ Validating project..." )
@@ -273,7 +273,11 @@ class {
 			// { datasource, path } for the web UI's SQLite store - drives both
 			// this.datasources in Application.bx and moduleSettings.qb
 			webUiDatabase         = chatDatabase,
-			webUiHasUsers         = webUiResult.webUiHasUsers ?: false
+			webUiHasUsers         = webUiResult.webUiHasUsers ?: false,
+			// Registered through this.schedulers in the generated base Application
+			schedulerClasses      = variables.schedulerGenerator.classPaths( discovery ),
+			// The developer's own Application.bx, copied as it is; absent, the app gets one that only extends the base
+			userApplicationPath   = fileExists( root & "/Application.bx" ) ? root & "/Application.bx" : ""
 		)
 		var agentNames = coldboxResult.agentNodes.map( function( n ) { return n.name } )
 		arguments.onProgress( "    agents registered in WireBox (getInstance-able by name): #agentNames.toList( ', ' )#" )
@@ -297,12 +301,12 @@ class {
 			arguments.onProgress( "    ! this BX Agents install has no bundled lib/ (source checkout?) - ColdBox and its modules must already be resolvable" )
 		}
 
-		if ( discovery.hasScheduler ?: false ) {
-			arguments.onProgress( "+ Copying schedules/Scheduler.bx..." )
+		var schedulerResult = variables.schedulerGenerator.generate( discovery, appDir )
+		if ( schedulerResult.schedulers.len() ) {
+			arguments.onProgress( "+ Copying schedules/ (#schedulerResult.schedulers.map( s => s.name ).toList( ', ' )#)..." )
 		} else {
-			arguments.onProgress( "+ No schedules/Scheduler.bx found - skipping scheduler" )
+			arguments.onProgress( "+ No schedules/*.bx found - skipping schedulers" )
 		}
-		variables.schedulerGenerator.generate( discovery, appDir )
 
 		arguments.onProgress( "+ Normalizing and writing the manifest..." )
 		var manifest = variables.manifestNormalizer.normalize( root, discovery, config )

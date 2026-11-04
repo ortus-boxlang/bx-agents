@@ -97,7 +97,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( joined ).toInclude( "Generating core ColdBox app skeleton" );
 				expect( joined ).toInclude( "agents registered in WireBox" );
 				expect( joined ).toInclude( "full-project-agent" );
-				expect( joined ).toInclude( "Copying schedules/Scheduler.bx" );
+				expect( joined ).toInclude( "Copying schedules/ (Nightly)" );
 				expect( joined ).toInclude( "Build completed in" );
 
 				// "Resolving..." must be reported before "Discovering...", which
@@ -132,6 +132,53 @@ class extends="testbox.system.BaseSpec" {
 				expect( routerContent ).toInclude( 'route( "/api/chat" ).toAi( "GeneratedAgent" )' );
 			} );
 
+			it( "builds a project's schedulers into the app, registered by the base Application and extending the scheduler base", function() {
+				var projectRoot = newTempProject( "full-project" );
+				var result = pipeline.build( projectRoot );
+
+				var scheduler = fileRead( result.appDir & "/schedules/Nightly.bx" );
+				expect( scheduler ).toInclude( 'class extends="bxagents.Scheduler" {' );
+				expect( scheduler ).toInclude( '.cron( "0 0 * * *" )' );
+				expect( fileExists( result.appDir & "/bxagents/Scheduler.bx" ) ).toBeTrue();
+				expect( fileRead( result.appDir & "/bxagents/Application.bx" ) ).toInclude( '"schedules.Nightly"' );
+				// the old ColdBox scheduler path is gone
+				expect( fileExists( result.appDir & "/config/Scheduler.bx" ) ).toBeFalse();
+			} );
+
+			it( "tracks every scheduler in the manifest", function() {
+				var projectRoot = newTempProject( "full-project" );
+				var result = pipeline.build( projectRoot );
+
+				var schedules = result.manifest.files.filter( f => f.category == "schedules" );
+				expect( schedules ).toHaveLength( 1 );
+				expect( schedules[ 1 ].name ).toBe( "Nightly" );
+				expect( schedules[ 1 ].path ).toBe( "schedules/Nightly.bx" );
+			} );
+
+			it( "copies the project's own root Application.bx into the app as it is, and generates one when there is none", function() {
+				var projectRoot = newTempProject( "full-project" );
+				var own = 'class extends="bxagents.Application" {' & char( 10 ) & "	// mine" & char( 10 ) & "}" & char( 10 );
+				fileWrite( projectRoot & "/Application.bx", own );
+
+				var result = pipeline.build( projectRoot );
+				expect( fileRead( result.appDir & "/Application.bx" ) ).toBe( own );
+
+				fileDelete( projectRoot & "/Application.bx" );
+				var rebuilt = pipeline.build( projectRoot );
+				expect( fileRead( rebuilt.appDir & "/Application.bx" ) ).toInclude( 'class extends="bxagents.Application" {' );
+				expect( fileRead( rebuilt.appDir & "/Application.bx" ) ).notToInclude( "mine" );
+			} );
+
+			it( "wipes a scheduler the project no longer has on rebuild", function() {
+				var projectRoot = newTempProject( "full-project" );
+				pipeline.build( projectRoot );
+				fileDelete( projectRoot & "/schedules/Nightly.bx" );
+
+				var rebuilt = pipeline.build( projectRoot );
+				expect( fileExists( rebuilt.appDir & "/schedules/Nightly.bx" ) ).toBeFalse();
+				expect( fileRead( rebuilt.appDir & "/bxagents/Application.bx" ) ).notToInclude( "this.schedulers" );
+			} );
+
 			it( "puts a project's agent-scope interceptor where the generated Application.bx looks it up", function() {
 				var projectRoot = newTempProject( "full-project" );
 				var result = pipeline.build( projectRoot );
@@ -139,7 +186,7 @@ class extends="testbox.system.BaseSpec" {
 				// Registered through ColdBox's class registration, which WireBox resolves to
 				// <appDir>/interceptors/AuditLogger.bx. One folder deeper and the app fails to start
 				// with "Instance not found" (measured by booting examples/advanced-agent).
-				expect( fileRead( result.appDir & "/Application.bx" ) ).toInclude( 'registerInterceptor( interceptorClass: "interceptors.AuditLogger", interceptorName: "AuditLogger" )' );
+				expect( fileRead( result.appDir & "/bxagents/Application.bx" ) ).toInclude( 'registerInterceptor( interceptorClass: "interceptors.AuditLogger", interceptorName: "AuditLogger" )' );
 				expect( fileExists( result.appDir & "/interceptors/AuditLogger.bx" ) ).toBeTrue();
 				expect( directoryExists( result.appDir & "/interceptors/interceptors" ) ).toBeFalse();
 			} );
@@ -150,7 +197,7 @@ class extends="testbox.system.BaseSpec" {
 
 				// `@scope agent` is also WireBox's own scope annotation: getInstance() on such a class
 				// died with "The key [agent] was not found in the struct" on a real boot.
-				expect( fileRead( result.appDir & "/Application.bx" ) ).notToInclude( 'getInstance( "interceptors.AuditLogger" )' );
+				expect( fileRead( result.appDir & "/bxagents/Application.bx" ) ).notToInclude( 'getInstance( "interceptors.AuditLogger" )' );
 			} );
 
 			it( "generates the v1 web chat UI and wires its auth-gate interceptor into config/ColdBox.bx end-to-end", function() {
@@ -167,7 +214,7 @@ class extends="testbox.system.BaseSpec" {
 				// Registered from Application.bx's onApplicationStart(), not a
 				// config/ColdBox.bx `interceptors = [...]` entry - that array
 				// never reaches ColdBox's InterceptorService on a real boot.
-				var applicationContent = fileRead( result.appDir & "/Application.bx" );
+				var applicationContent = fileRead( result.appDir & "/bxagents/Application.bx" );
 				expect( applicationContent ).toInclude( 'getWireBox().getInstance( "interceptors.WebUiAuthGate" )' );
 				expect( applicationContent ).toInclude( 'getInterceptorService().register(' );
 			} );
@@ -175,11 +222,11 @@ class extends="testbox.system.BaseSpec" {
 			it( 'calls aiToolRegistry().scan("tools") at startup only when the project declares tools', function() {
 				var withTools = newTempProject( "full-project" );
 				var withToolsResult = pipeline.build( withTools );
-				expect( fileRead( withToolsResult.appDir & "/Application.bx" ) ).toInclude( 'aiToolRegistry().scan( "tools" )' );
+				expect( fileRead( withToolsResult.appDir & "/bxagents/Application.bx" ) ).toInclude( 'aiToolRegistry().scan( "tools" )' );
 
 				var withoutTools = newTempProject( "valid-minimal" );
 				var withoutToolsResult = pipeline.build( withoutTools );
-				expect( fileRead( withoutToolsResult.appDir & "/Application.bx" ) ).notToInclude( "aiToolRegistry().scan(" );
+				expect( fileRead( withoutToolsResult.appDir & "/bxagents/Application.bx" ) ).notToInclude( "aiToolRegistry().scan(" );
 			} );
 
 			it( "throws BxAgents.BuildValidationFailed and produces no .build/app for an invalid project", function() {
@@ -206,7 +253,7 @@ class extends="testbox.system.BaseSpec" {
 				var projectRoot = newTempProject( "gateways-mixed" );
 				var result = pipeline.build( projectRoot );
 
-				var content = fileRead( result.appDir & "/Application.bx" );
+				var content = fileRead( result.appDir & "/bxagents/Application.bx" );
 				expect( content ).toInclude( 'aiGatewayRegistry().register( aiGateway( "http"' );
 				expect( content ).toInclude( 'aiGatewayRegistry().register( aiGateway( "mock"' );
 				expect( content ).toInclude( "mcpServer(" );
