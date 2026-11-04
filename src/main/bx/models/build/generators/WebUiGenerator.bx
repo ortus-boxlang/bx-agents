@@ -259,6 +259,7 @@ class {
 		html = html.replace( "__CUSTOM_CSS__", readCustomCss( arguments.entry ), "all" )
 		// Last, so none of the replacements above can touch the libraries' own text (they contain "__proto__" and the like)
 		html = html.replace( "__MARKDOWN_SCRIPTS__", renderMarkdownScripts( templateDir ), "all" )
+		html = html.replace( "__ICON_SPRITE__", fileRead( templateDir & "webui/vendor/icons.svg" ), "all" )
 
 		var mountDir = Strings::normalizePath( arguments.appDir ) & path
 		directoryCreate( path : mountDir, createPath : true, ignoreExists : true )
@@ -274,6 +275,7 @@ class {
 			var login = fileRead( templateDir & "webui/login.html" )
 			login = login.replace( "__TITLE__", encodeForHTML( config.title ?: "Chat" ), "all" )
 			login = login.replace( "__LOGIN_ACTION__", path & "/login", "all" )
+			login = login.replace( "__THEME_TOKENS__", renderThemeTokens( config.theme ?: {} ), "all" )
 			fileWrite( mountDir & "/login.html", login )
 		}
 	}
@@ -477,11 +479,11 @@ class {
 	/**
 	 * @icon The entry's `icon` config
 	 *
-	 * @return The header brand mark markup, or "" when no icon is configured
+	 * @return The header brand mark markup: the configured emoji or image, else a robot
 	 */
 	private string function renderHeaderIcon( required string icon ) {
 		if ( !len( arguments.icon ) ) {
-			return ""
+			return '<span class="icon"><svg class="i" aria-hidden="true"><use href="##i-robot"/></svg></span>'
 		}
 
 		if ( isIconUrl( arguments.icon ) ) {

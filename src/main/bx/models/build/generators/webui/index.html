@@ -10,22 +10,26 @@ __FAVICON__
 		color-scheme: light dark;
 
 		/* Surfaces */
-		--bg: rgb(255, 255, 255);
-		--fg: rgb(30, 30, 30);
-		--muted: rgb(110, 110, 110);
-		--border: rgb(225, 225, 225);
-		--surface: rgb(248, 248, 250);
-		--input-bg: rgb(250, 250, 250);
+		--bg: rgb(246, 247, 249);
+		--fg: rgb(16, 24, 40);
+		--muted: rgb(91, 102, 121);
+		--border: rgb(228, 231, 236);
+		--surface: rgb(255, 255, 255);
+		--input-bg: rgb(255, 255, 255);
 
 		/* Brand */
-		--accent: rgb(30, 100, 220);
+		--accent: rgb(59, 91, 219);
 		--accent-fg: rgb(255, 255, 255);
+		/* Derived from the accent, so one colour themes the whole page */
+		--accent-soft: color-mix(in srgb, var(--accent) 12%, var(--surface));
+		--accent-ink: color-mix(in srgb, var(--accent) 80%, black);
+		--ring: color-mix(in srgb, var(--accent) 35%, transparent);
 
 		/* Bubbles */
 		--bubble-user: var(--accent);
 		--bubble-user-fg: var(--accent-fg);
-		--bubble-assistant: rgb(240, 240, 242);
-		--bubble-assistant-fg: rgb(30, 30, 30);
+		--bubble-assistant: transparent;
+		--bubble-assistant-fg: var(--fg);
 		--bubble-error: rgb(220, 60, 60);
 
 		/* Code colours */
@@ -46,22 +50,22 @@ __FAVICON__
 		--tool-bg: rgb(238, 248, 243);
 
 		/* Shape + type */
-		--radius: 14px;
+		--radius: 16px;
 		--radius-sm: 8px;
 		--font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 		--font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 		--font-size: 0.95rem;
-		--max-width: 75%;
+		--max-width: 80%;
 	}
 	:root[data-theme="dark"] {
-		--bg: rgb(24, 24, 27);
-		--fg: rgb(235, 235, 238);
-		--muted: rgb(150, 150, 158);
-		--border: rgb(55, 55, 60);
-		--surface: rgb(32, 32, 36);
-		--input-bg: rgb(32, 32, 36);
-		--bubble-assistant: rgb(42, 42, 47);
-		--bubble-assistant-fg: rgb(235, 235, 238);
+		--bg: rgb(14, 17, 22);
+		--fg: rgb(230, 233, 239);
+		--muted: rgb(154, 164, 181);
+		--border: rgb(38, 45, 58);
+		--surface: rgb(18, 22, 29);
+		--input-bg: rgb(23, 28, 37);
+		--accent-soft: color-mix(in srgb, var(--accent) 22%, var(--surface));
+		--accent-ink: color-mix(in srgb, var(--accent) 55%, white);
 		--reasoning-fg: rgb(180, 158, 230);
 		--reasoning-bg: rgb(38, 34, 48);
 		--tool-fg: rgb(120, 200, 165);
@@ -81,6 +85,55 @@ __FAVICON__
 __THEME_TOKENS__
 
 	* { box-sizing: border-box; }
+	/* Phosphor icons come from the sprite at the top of the page and are sized by the text around them */
+	.i { width: 1.25em; height: 1.25em; fill: currentColor; flex: none; vertical-align: -0.2em; }
+	:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+	/* The context gauge: a ring that fills as the context does (see refreshContext) */
+	header .actions button.ctx-ring { display: inline-grid; place-items: center; width: 2.5rem; height: 2.5rem; padding: 0; background: transparent; border: 0; border-radius: 10px; cursor: pointer; }
+	header .actions button.ctx-ring:hover { background: var(--accent-soft); }
+	.ctx-ring .ring { width: 1.6rem; height: 1.6rem; transform: rotate(-90deg); }
+	.ctx-ring circle { fill: none; stroke-width: 4; }
+	.ctx-ring .track { stroke: var(--border); }
+	.ctx-ring .fill { stroke: var(--accent); stroke-linecap: round; transition: stroke-dasharray 0.4s ease; }
+	.ctx-ring.warn .fill { stroke: rgb(217, 119, 6); }
+	.ctx-ring.danger .fill { stroke: var(--bubble-error); }
+	.ctx-ring.unknown .track { stroke-dasharray: 3 4; }
+	#contextPanel {
+		position: fixed;
+		z-index: 30;
+		width: min(24rem, 94vw);
+		max-height: 80vh;
+		overflow-y: auto;
+		padding: 1rem;
+		background: var(--surface);
+		color: var(--fg);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		box-shadow: 0 16px 40px rgba(16, 24, 40, 0.18);
+	}
+	#contextPanel[hidden] { display: none; }
+	#contextPanel .ctx-head { display: flex; align-items: center; justify-content: space-between; }
+	#contextPanel h2 { margin: 0; font-size: 1rem; }
+	#contextPanel .ctx-total { margin: 0.6rem 0 0.4rem; font-size: 0.9rem; color: var(--muted); }
+	#contextPanel .ctx-total strong { color: var(--fg); font-size: 1.15rem; }
+	#contextPanel .ctx-meter, #contextPanel .ctx-bar { height: 0.4rem; border-radius: 99px; background: var(--border); overflow: hidden; }
+	#contextPanel .ctx-meter { height: 0.55rem; margin-bottom: 0.9rem; }
+	#contextPanel .ctx-meter span, #contextPanel .ctx-bar i { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
+	#contextPanel .ctx-meter.warn span { background: rgb(217, 119, 6); }
+	#contextPanel .ctx-meter.danger span { background: var(--bubble-error); }
+	#contextPanel ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.7rem; }
+	#contextPanel li .ctx-row { display: flex; justify-content: space-between; gap: 0.5rem; font-size: 0.88rem; margin-bottom: 0.25rem; }
+	#contextPanel li small { color: var(--muted); margin-left: 0.4rem; }
+	#contextPanel .tok { font-family: var(--font-mono); font-size: 0.82rem; color: var(--muted); }
+	#contextPanel details { margin-top: 0.9rem; font-size: 0.88rem; }
+	#contextPanel details summary { cursor: pointer; color: var(--accent-ink); }
+	#contextPanel details ul { gap: 0.3rem; margin-top: 0.5rem; }
+	#contextPanel details li { display: flex; justify-content: space-between; gap: 0.5rem; font-family: var(--font-mono); font-size: 0.8rem; }
+	#contextPanel .ctx-actions { margin-top: 1rem; display: flex; justify-content: flex-end; }
+	#contextPanel .ctx-actions button { display: inline-flex; align-items: center; gap: 0.4rem; background: var(--accent-soft); color: var(--accent-ink); border: 0; border-radius: 10px; padding: 0.5rem 0.8rem; font: inherit; font-size: 0.85rem; cursor: pointer; }
+	#contextPanel .ctx-close { display: inline-grid; place-items: center; width: 2rem; height: 2rem; background: none; border: 0; color: var(--muted); border-radius: 8px; cursor: pointer; font-size: 1rem; }
+	/* display:inline-grid on the icon buttons must not defeat the hidden attribute */
+	button[hidden] { display: none !important; }
 	html, body { height: 100%; margin: 0; }
 	body {
 		display: flex;
@@ -95,7 +148,9 @@ __THEME_TOKENS__
 		align-items: center;
 		justify-content: space-between;
 		gap: 0.75rem;
-		padding: 0.75rem 1rem;
+		padding: 0.5rem 1rem;
+		min-height: 4rem;
+		background: var(--surface);
 		border-bottom: 1px solid var(--border);
 		flex-shrink: 0;
 	}
@@ -108,19 +163,28 @@ __THEME_TOKENS__
 	/* Without min-width:0 the title block never shrinks below its text, so on a
 	   phone it ran underneath the buttons instead of truncating. */
 	header .brand > div { min-width: 0; }
+	header .icon { flex: none; }
 	header .icon {
-		font-size: 1.35rem;
+		display: grid;
+		place-items: center;
+		width: 2.25rem;
+		height: 2.25rem;
+		border-radius: 10px;
+		background: var(--accent-soft);
+		color: var(--accent-ink);
+		font-size: 1.2rem;
 		line-height: 1;
 		flex-shrink: 0;
 	}
 	header .icon img {
-		width: 1.6rem;
-		height: 1.6rem;
-		border-radius: var(--radius-sm);
+		width: 100%;
+		height: 100%;
+		border-radius: inherit;
+		object-fit: cover;
 		display: block;
 	}
 	header h1 {
-		font-size: 1rem;
+		font-size: 1.05rem;
 		font-weight: 600;
 		margin: 0;
 		white-space: nowrap;
@@ -135,35 +199,43 @@ __THEME_TOKENS__
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
-	header .actions { flex-shrink: 0; }
+	header .actions { flex-shrink: 0; display: flex; align-items: center; gap: 0.25rem; }
 	header .actions select {
-		background: none;
+		background: var(--surface);
 		border: 1px solid var(--border);
 		color: var(--fg);
-		border-radius: var(--radius-sm);
-		padding: 0.3rem 0.4rem;
-		margin-left: 0.4rem;
+		border-radius: 999px;
+		padding: 0.3rem 0.7rem;
+		margin-right: 0.35rem;
 		cursor: pointer;
-		font-size: 0.85rem;
+		font-family: var(--font-mono);
+		font-size: 0.8rem;
 		max-width: 11rem;
 	}
-	header .actions button {
-		background: none;
-		border: 1px solid var(--border);
-		color: var(--fg);
-		border-radius: var(--radius-sm);
-		padding: 0.35rem 0.6rem;
-		margin-left: 0.4rem;
+	/* Icon buttons: a 40px target, the name in aria-label and title */
+	header .actions button, .ib {
+		display: inline-grid;
+		place-items: center;
+		width: 2.5rem;
+		height: 2.5rem;
+		padding: 0;
+		background: transparent;
+		border: 0;
+		color: var(--muted);
+		border-radius: 10px;
 		cursor: pointer;
-		font-size: 0.85rem;
+		font-size: 1.25rem;
 	}
+	header .actions button:hover, .ib:hover { background: var(--accent-soft); color: var(--accent-ink); }
+	header .actions button.chip { width: auto; height: auto; font-size: 0.78rem; padding: 0.2rem 0.65rem; border-radius: 999px; background: var(--accent-soft); color: var(--accent-ink); }
 	#messages {
 		flex: 1;
 		overflow-y: auto;
-		padding: 1rem;
+		/* the conversation is a centred column no wider than 48rem */
+		padding: 1.5rem max(1rem, calc((100% - 48rem) / 2));
 		display: flex;
 		flex-direction: column;
-		gap: 0.6rem;
+		gap: 1.1rem;
 	}
 	.welcome {
 		margin: auto;
@@ -180,9 +252,9 @@ __THEME_TOKENS__
 		align-self: flex-start;
 	}
 	.bubble {
-		padding: 0.55rem 0.85rem;
+		padding: 0.6rem 1rem;
 		border-radius: var(--radius);
-		line-height: 1.4;
+		line-height: 1.5;
 		white-space: pre-wrap;
 		word-wrap: break-word;
 	}
@@ -196,6 +268,7 @@ __THEME_TOKENS__
 	.bubble.assistant {
 		background: var(--bubble-assistant);
 		color: var(--bubble-assistant-fg);
+		padding: 0.15rem 0.25rem;
 		border-bottom-left-radius: 4px;
 		/* Assistant replies are rendered as markdown blocks, so the pre-wrap that
 		   preserves raw newlines elsewhere would double every paragraph gap. */
@@ -265,44 +338,61 @@ __THEME_TOKENS__
 	}
 
 	form#composer {
-		display: flex;
-		gap: 0.5rem;
-		padding: 0.75rem 1rem;
-		border-top: 1px solid var(--border);
+		display: grid;
+		grid-template-columns: auto auto auto 1fr auto auto;
+		grid-template-areas:
+			"field field field field field field"
+			"slot attach commands . stop send";
+		align-items: center;
+		gap: 0.25rem;
+		width: min(100% - 2rem, 48rem);
+		margin: 0 auto 0.5rem;
+		padding: 0.6rem 0.6rem 0.5rem 1rem;
+		background: var(--input-bg);
+		border: 1px solid var(--border);
+		border-radius: calc(var(--radius) + 4px);
+		box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 8px 24px rgba(16, 24, 40, 0.06);
 		flex-shrink: 0;
 	}
+	form#composer:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
 	#composer textarea {
-		flex: 1;
-		padding: 0.6rem 0.75rem;
-		border-radius: var(--radius-sm);
-		border: 1px solid var(--border);
-		background: var(--input-bg);
+		grid-area: field;
+		padding: 0.25rem 0;
+		border: 0;
+		outline: 0;
+		background: transparent;
 		color: var(--fg);
 		font-size: var(--font-size);
 		font-family: var(--font);
-		line-height: 1.4;
+		line-height: 1.5;
 		resize: none;
 		overflow-y: auto;
 		max-height: 9rem;
 	}
+	#slotComposer { grid-area: slot; }
+	#attachBtn { grid-area: attach; }
+	#commandsBtn { grid-area: commands; }
+	#stopBtn { grid-area: stop; color: var(--bubble-error) !important; }
+	#sendBtn { grid-area: send; }
 	#composer button {
-		padding: 0.6rem 1.1rem;
-		border-radius: var(--radius-sm);
+		display: inline-grid;
+		place-items: center;
+		width: 2.5rem;
+		height: 2.5rem;
+		padding: 0;
+		border-radius: 10px;
 		border: none;
-		background: var(--accent);
-		color: var(--accent-fg);
-		font-weight: 600;
+		background: transparent;
+		color: var(--muted);
+		font-size: 1.25rem;
 		cursor: pointer;
-		align-self: flex-end;
 	}
+	#composer button:hover { background: var(--accent-soft); color: var(--accent-ink); }
+	#composer button#sendBtn { width: 2.75rem; height: 2.75rem; border-radius: 12px; background: var(--accent); color: var(--accent-fg); }
+	#composer button#sendBtn:hover { background: var(--accent); filter: brightness(1.1); }
 	#composer button:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
-	}
-	#stopBtn {
-		background: transparent;
-		border: 1px solid var(--border);
-		color: var(--fg);
 	}
 	.visually-hidden {
 		position: absolute;
@@ -319,15 +409,20 @@ __THEME_TOKENS__
 	/* Copy affordance on an assistant reply */
 	.turn .copy {
 		align-self: flex-start;
+		display: inline-grid;
+		place-items: center;
+		width: 2rem;
+		height: 2rem;
 		background: none;
 		border: none;
+		border-radius: 8px;
 		color: var(--muted);
-		font-size: 0.75rem;
-		padding: 0.1rem 0.2rem;
+		font-size: 1rem;
 		cursor: pointer;
 		opacity: 0;
 		transition: opacity 0.12s;
 	}
+	.turn .copy:hover { background: var(--accent-soft); color: var(--accent-ink); }
 	.turn:hover .copy, .turn .copy:focus { opacity: 1; }
 
 	/* Markdown produced by renderMarkdown() - marked, sanitized by DOMPurify */
@@ -395,7 +490,6 @@ __THEME_TOKENS__
 	#attachChips .chip-file { display: inline-flex; align-items: center; gap: 0.4rem; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.15rem 0.4rem; font-size: 0.78rem; color: var(--muted); }
 	#attachChips img { height: 1.6rem; width: auto; border-radius: 3px; }
 	#attachChips button { padding: 0 0.3rem; background: transparent; color: var(--muted); border: none; cursor: pointer; font-size: 0.9rem; }
-	#attachBtn { background: transparent !important; color: var(--fg) !important; border: 1px solid var(--border) !important; font-weight: 400 !important; }
 	.bubble.user img.sent-image { display: block; max-height: 8rem; max-width: 100%; margin-top: 0.4rem; border-radius: 4px; }
 	form#composer.dragging { outline: 2px dashed var(--accent); }
 	#statusChips { display: inline-flex; gap: 0.35rem; }
@@ -405,8 +499,20 @@ __THEME_TOKENS__
 	#slotHeader .slot { font-size: 0.75rem; padding: 0.15rem 0.5rem; color: var(--muted); font-family: var(--font-mono); border: 1px solid var(--border); border-radius: var(--radius-sm); }
 	#slotSidebar { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.5rem; border-top: 1px solid var(--border); font-size: 0.85rem; }
 	#slotSidebar[hidden] { display: none; }
-	span.chip { font-size: 0.75rem; padding: 0.15rem 0.5rem; color: var(--muted); font-family: var(--font-mono); border: 1px solid var(--border); border-radius: var(--radius-sm); }
-	button.chip { font-size: 0.75rem; padding: 0.15rem 0.5rem; color: var(--muted); font-family: var(--font-mono); }
+	span.chip, button.chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		font-size: 0.78rem;
+		padding: 0.2rem 0.65rem;
+		color: var(--accent-ink);
+		background: var(--accent-soft);
+		font-family: var(--font);
+		font-weight: 500;
+		border: 0;
+		border-radius: 999px;
+	}
+	button.chip { cursor: pointer; }
 	.bubble.command table { border-collapse: collapse; font-family: var(--font-mono); font-size: 0.82rem; }
 	.bubble.command td { padding: 0.1rem 0.8rem 0.1rem 0; vertical-align: top; overflow-wrap: anywhere; }
 	.bubble.command td.label { color: var(--muted); white-space: nowrap; }
@@ -424,17 +530,19 @@ __THEME_TOKENS__
 	.bubble.command .choices button small { color: var(--muted); margin-left: 0.4rem; }
 	#slashMenu {
 		list-style: none;
-		margin: 0 0 0.3rem;
-		padding: 0.2rem;
+		width: min(100% - 2rem, 48rem);
+		margin: 0 auto 0.4rem;
+		padding: 0.35rem;
 		border: 1px solid var(--border);
-		border-radius: var(--radius-sm);
+		border-radius: calc(var(--radius) - 2px);
 		background: var(--input-bg);
-		max-height: 12rem;
+		box-shadow: 0 12px 32px rgba(16, 24, 40, 0.16);
+		max-height: 14rem;
 		overflow-y: auto;
-		font-size: 0.85rem;
+		font-size: 0.88rem;
 	}
-	#slashMenu li { display: flex; gap: 0.8rem; padding: 0.25rem 0.5rem; cursor: pointer; border-radius: var(--radius-sm); }
-	#slashMenu li[aria-selected="true"], #slashMenu li:hover { background: var(--border); }
+	#slashMenu li { display: flex; align-items: baseline; gap: 0.8rem; padding: 0.4rem 0.6rem; cursor: pointer; border-radius: 10px; }
+	#slashMenu li[aria-selected="true"], #slashMenu li:hover { background: var(--accent-soft); }
 	#slashMenu .cmd { font-family: var(--font-mono); }
 	#slashMenu .tip { color: var(--muted); }
 	.hint {
@@ -496,7 +604,7 @@ __THEME_TOKENS__
 		min-width: 0;
 	}
 	#sidebar {
-		width: 15rem;
+		width: 17.5rem;
 		flex-shrink: 0;
 		border-right: 1px solid var(--border);
 		background: var(--surface);
@@ -506,21 +614,26 @@ __THEME_TOKENS__
 	}
 	#sidebar[hidden] { display: none; }
 	#sidebar .sidebar-head {
-		padding: 0.6rem;
-		border-bottom: 1px solid var(--border);
+		padding: 1rem 1rem 0.5rem;
 		flex-shrink: 0;
 	}
 	#sidebar .sidebar-head button {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.5rem;
 		width: 100%;
+		height: 2.75rem;
 		background: var(--accent);
 		color: var(--accent-fg);
 		border: none;
-		border-radius: var(--radius-sm);
-		padding: 0.45rem 0.6rem;
+		border-radius: 12px;
 		cursor: pointer;
-		font-size: 0.85rem;
+		font-size: 0.95rem;
+		font-weight: 500;
 		font-family: inherit;
 	}
+	#sidebar .sidebar-head button:hover { filter: brightness(1.1); }
 	#convList {
 		list-style: none;
 		margin: 0;
@@ -532,22 +645,23 @@ __THEME_TOKENS__
 		display: flex;
 		align-items: center;
 		gap: 0.25rem;
-		border-radius: var(--radius-sm);
+		border-radius: 10px;
 		margin-bottom: 0.15rem;
 	}
-	#convList li.active { background: var(--bubble-assistant); }
+	#convList li:hover { background: var(--bg); }
+	#convList li.active { background: var(--accent-soft); color: var(--accent-ink); }
 	#convList .pick {
 		flex: 1;
 		min-width: 0;
 		text-align: left;
 		background: none;
 		border: none;
-		color: var(--fg);
+		color: inherit;
 		font-family: inherit;
-		font-size: 0.85rem;
-		padding: 0.45rem 0.5rem;
+		font-size: 0.9rem;
+		padding: 0.55rem 0.7rem;
 		cursor: pointer;
-		border-radius: var(--radius-sm);
+		border-radius: 10px;
 	}
 	#convList .pick .name {
 		display: block;
@@ -560,14 +674,19 @@ __THEME_TOKENS__
 		font-size: 0.7rem;
 		color: var(--muted);
 	}
+	#convList .row-actions { display: flex; opacity: 0; transition: opacity 0.12s; }
+	#convList li:hover .row-actions, #convList li:focus-within .row-actions { opacity: 1; }
 	#convList .row-actions button {
+		display: inline-grid;
+		place-items: center;
+		width: 2rem;
+		height: 2rem;
 		background: none;
 		border: none;
 		color: var(--muted);
 		cursor: pointer;
-		font-size: 0.8rem;
-		padding: 0.2rem 0.3rem;
-		border-radius: var(--radius-sm);
+		font-size: 1rem;
+		border-radius: 8px;
 	}
 	#convList .row-actions button:hover { color: var(--fg); }
 	#convList .empty {
@@ -595,8 +714,10 @@ __THEME_TOKENS__
 		}
 		header .meta { display: none; }
 		header .actions select { max-width: 7rem; font-size: 0.78rem; }
-		header { padding: 0.6rem 0.75rem; gap: 0.4rem; }
-		header .actions button { padding: 0.3rem 0.45rem; margin-left: 0.2rem; font-size: 0.78rem; }
+		header { flex-wrap: wrap; padding: 0.4rem 0.5rem; min-height: 0; gap: 0.1rem 0.5rem; }
+		header .brand { flex: 1; }
+		header .actions { flex: 1 0 100%; justify-content: space-between; }
+		header .actions button { width: 2.25rem; }
 	}
 	@media ( prefers-reduced-motion: reduce ) {
 		* { animation: none !important; transition: none !important; }
@@ -654,6 +775,7 @@ __CUSTOM_CSS__
 __EXTENSION_STYLES__
 </head>
 <body>
+__ICON_SPRITE__
 	<header>
 		<div class="brand">
 			__APP_ICON__
@@ -664,24 +786,27 @@ __EXTENSION_STYLES__
 		</div>
 		<div class="actions">
 			<span class="meta" id="modelMeta"></span>
-			<button type="button" class="chip" id="contextChip" title="Estimated size of the context: system prompt, tools, notes and this conversation. Click for the breakdown" hidden></button>
+			<button type="button" class="ctx-ring" id="contextChip" aria-haspopup="dialog" aria-expanded="false" aria-controls="contextPanel" aria-label="Context" title="Context: what is sent to the model. Click for the breakdown" hidden>
+				<svg class="ring" viewBox="0 0 36 36" aria-hidden="true"><circle class="track" cx="18" cy="18" r="14"/><circle class="fill" cx="18" cy="18" r="14" pathLength="100" stroke-dasharray="0 100"/></svg>
+			</button>
 			<span id="statusChips" hidden></span>
 			<span id="slotHeader" class="slot-area" hidden></span>
 			<select id="profileSelect" title="The model for your next messages" aria-label="Model" hidden></select>
-			<button type="button" id="sidebarBtn" aria-expanded="true" aria-controls="sidebar" title="Show or hide conversations">Chats</button>
-			<button type="button" id="forkBtn" title="Copy this conversation under a new name and carry on in the copy" hidden>Fork</button>
-			<button type="button" id="exportBtn" title="Save this conversation as a Markdown file" hidden>Export</button>
-			<button type="button" id="clearBtn" title="Delete the messages in this conversation" hidden>Clear</button>
-			<button type="button" id="compactBtn" title="Summarize older messages, keep the recent ones" hidden>Compact</button>
-			<button type="button" id="notesBtn" title="What the agent keeps about you and about its own work" hidden>Notes</button>
-			<button type="button" id="keyBtn" title="Set the API key this page sends as X-API-Key">Key</button>
-			<button type="button" id="themeBtn" title="Toggle dark/light">Theme</button>
+			<button type="button" id="sidebarBtn" title="Show or hide conversations" aria-label="Chats" aria-expanded="true" aria-controls="sidebar"><svg class="i" aria-hidden="true"><use href="#i-sidebar-simple"/></svg></button>
+			<button type="button" id="forkBtn" title="Copy this conversation under a new name and carry on in the copy" aria-label="Fork" hidden><svg class="i" aria-hidden="true"><use href="#i-git-fork"/></svg></button>
+			<button type="button" id="exportBtn" title="Save this conversation as a Markdown file" aria-label="Export" hidden><svg class="i" aria-hidden="true"><use href="#i-download-simple"/></svg></button>
+			<button type="button" id="clearBtn" title="Delete the messages in this conversation" aria-label="Clear" hidden><svg class="i" aria-hidden="true"><use href="#i-broom"/></svg></button>
+			<button type="button" id="compactBtn" title="Summarize older messages, keep the recent ones" aria-label="Compact" hidden><svg class="i" aria-hidden="true"><use href="#i-arrows-in-line-vertical"/></svg></button>
+			<button type="button" id="notesBtn" title="What the agent keeps about you and about its own work" aria-label="Notes" hidden><svg class="i" aria-hidden="true"><use href="#i-notebook"/></svg></button>
+			<button type="button" id="keyBtn" title="Set the API key this page sends as X-API-Key" aria-label="API key"><svg class="i" aria-hidden="true"><use href="#i-key"/></svg></button>
+			<button type="button" id="themeBtn" title="Switch between light and dark" aria-label="Theme"><svg class="i" aria-hidden="true"><use href="#i-sun"/></svg></button>
 		</div>
 	</header>
+	<div id="contextPanel" role="dialog" aria-label="Context" hidden></div>
 	<div class="shell">
 		<aside id="sidebar" aria-label="Conversations">
 			<div class="sidebar-head">
-				<button type="button" id="newBtn" title="Start a new conversation">+ New chat</button>
+				<button type="button" id="newBtn" title="Start a new conversation"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg> New chat</button>
 			</div>
 			<ul id="convList"></ul>
 			<div id="slotSidebar" class="slot-area" hidden></div>
@@ -694,11 +819,12 @@ __EXTENSION_STYLES__
 			<form id="composer" autocomplete="off">
 				<input type="file" id="attachInput" multiple hidden>
 				<span id="slotComposer" class="slot-area" hidden></span>
-				<button type="button" id="attachBtn" title="Attach a picture or a text file (you can also paste or drop them)" hidden>Attach</button>
+				<button type="button" id="attachBtn" title="Attach a picture or a text file (you can also paste or drop them)" aria-label="Attach" hidden><svg class="i" aria-hidden="true"><use href="#i-paperclip"/></svg></button>
+				<button type="button" id="commandsBtn" title="Commands: type / to search them" aria-label="Commands" hidden><svg class="i" aria-hidden="true"><use href="#i-lightning"/></svg></button>
 				<label class="visually-hidden" for="input">Message</label>
 				<textarea id="input" rows="1" placeholder="__PLACEHOLDER__" autofocus></textarea>
-				<button type="submit" id="sendBtn">Send</button>
-				<button type="button" id="stopBtn" hidden>Stop</button>
+				<button type="submit" id="sendBtn" aria-label="Send"><svg class="i" aria-hidden="true"><use href="#i-arrow-up"/></svg></button>
+				<button type="button" id="stopBtn" aria-label="Stop" title="Stop the agent" hidden><svg class="i" aria-hidden="true"><use href="#i-stop"/></svg></button>
 			</form>
 			__FOOTER__
 		</div>
@@ -707,7 +833,7 @@ __EXTENSION_STYLES__
 	<dialog id="notesPanel" aria-labelledby="notesTitle">
 		<div class="notes-head">
 			<h2 id="notesTitle">Notes</h2>
-			<button type="button" id="notesClose">Close</button>
+			<button type="button" id="notesClose" aria-label="Close" title="Close"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>
 		</div>
 		<div class="notes-tabs" role="tablist">
 			<button type="button" role="tab" id="notesTabUser" aria-selected="true">About you</button>
@@ -778,6 +904,15 @@ __MARKDOWN_SCRIPTS__
 	var IMAGE_TYPES = [ "image/png", "image/jpeg", "image/gif", "image/webp" ];
 	// The slash commands the server offers, [ { name, hint } ], from GET /commands
 	var commandList = [];
+	var commandsBtn = document.getElementById( "commandsBtn" );
+
+	/**
+	 * Markup for one of the bundled Phosphor icons (see the sprite at the top of the page), sized by its surroundings.
+	 * Also given to extension scripts as bxagents.icon.
+	 */
+	function icon( name ) {
+		return '<svg class="i" aria-hidden="true"><use href="#i-' + String( name ).replace( /[^a-z0-9-]/g, "" ) + '"/></svg>';
+	}
 	var isBusy = false;
 
 	var activeController = null;
@@ -866,6 +1001,7 @@ __MARKDOWN_SCRIPTS__
 			// what the model is known to see: "no" means pictures are not offered at all
 			modelSeesImages = payload.vision !== "no";
 			attachBtn.hidden = !capabilities.attachments;
+			commandsBtn.hidden = !capabilities.commands;
 			if ( capabilities.commands ) {
 				apiGet( "/commands" ).then( function ( list ) {
 					commandList = ( list && list.commands ) || [];
@@ -965,7 +1101,8 @@ __MARKDOWN_SCRIPTS__
 			var renameBtn = document.createElement( "button" );
 			renameBtn.type = "button";
 			renameBtn.title = "Rename";
-			renameBtn.textContent = "\u270e";
+			renameBtn.setAttribute( "aria-label", "Rename" );
+			renameBtn.innerHTML = icon( "pencil-simple" );
 			renameBtn.addEventListener( "click", function () {
 				var next = window.prompt( "Rename this conversation", conv.title || "" );
 				if ( next === null || !next.trim() ) {
@@ -979,7 +1116,8 @@ __MARKDOWN_SCRIPTS__
 			var delBtn = document.createElement( "button" );
 			delBtn.type = "button";
 			delBtn.title = "Delete";
-			delBtn.textContent = "\u00d7";
+			delBtn.setAttribute( "aria-label", "Delete" );
+			delBtn.innerHTML = icon( "trash" );
 			delBtn.addEventListener( "click", function () {
 				if ( !window.confirm( "Delete this conversation and its messages?" ) ) {
 					return;
@@ -1075,6 +1213,10 @@ __MARKDOWN_SCRIPTS__
 		} else {
 			document.documentElement.removeAttribute( "data-theme" );
 		}
+		// the button offers the other theme
+		var dark = document.documentElement.getAttribute( "data-theme" ) === "dark";
+		themeBtn.innerHTML = icon( dark ? "sun" : "moon" );
+		themeBtn.setAttribute( "aria-label", dark ? "Switch to light theme" : "Switch to dark theme" );
 	}
 
 	applyTheme( localStorage.getItem( THEME_STORAGE ) );
@@ -1184,6 +1326,7 @@ __MARKDOWN_SCRIPTS__
 	 */
 	window.bxagents = {
 		apiBase: API_BASE,
+		icon: icon,
 		conversationId: function () { return getConversationId(); },
 		runCommand: function ( line ) { return isBusy ? null : runCommand( line ); },
 		onRefresh: function ( listener ) { refreshListeners.push( listener ); },
@@ -1225,6 +1368,163 @@ __MARKDOWN_SCRIPTS__
 		} );
 	}
 
+	var contextReport = null;
+	var contextPanelEl = document.getElementById( "contextPanel" );
+
+	function approx( n ) {
+		return "~" + ( n < 1000 ? n : ( n / 1000 ).toFixed( 1 ).replace( /\.0$/, "" ) + "k" );
+	}
+
+	function windowText( n ) {
+		return n >= 1000000 && n % 100000 === 0 ? ( n / 1000000 ) + "M" : n >= 1000 ? Math.round( n / 1000 ) + "k" : String( n );
+	}
+
+	/** "ok", "warn" at 70 percent of the window, "danger" at 90; "unknown" when the model's window is not known. */
+	function contextLevel( report ) {
+		if ( !( report.contextWindow > 0 ) ) {
+			return "unknown";
+		}
+		return report.percent >= 90 ? "danger" : report.percent >= 70 ? "warn" : "ok";
+	}
+
+	function contextSummary( report ) {
+		return report.contextWindow > 0
+			? approx( report.total ) + " of " + windowText( report.contextWindow ) + " tokens (" + report.percent + "%)"
+			: approx( report.total ) + " tokens (this model's window is not known)";
+	}
+
+	/** The gauge in the header: the ring fills with the share of the window used. */
+	function drawContextRing( report ) {
+		var level = contextLevel( report );
+		contextChipEl.className = "ctx-ring" + ( level === "ok" ? "" : " " + level );
+		contextChipEl.querySelector( ".fill" ).setAttribute( "stroke-dasharray", ( level === "unknown" ? 0 : Math.max( 2, Math.min( 100, report.percent ) ) ) + " 100" );
+		var text = "Context: " + contextSummary( report ) + ". Click for the breakdown";
+		contextChipEl.title = text;
+		contextChipEl.setAttribute( "aria-label", text );
+	}
+
+	function contextRow( label, detail, tokens, share ) {
+		var li = document.createElement( "li" );
+		var row = document.createElement( "div" );
+		row.className = "ctx-row";
+		var name = document.createElement( "span" );
+		name.textContent = label;
+		if ( detail ) {
+			var small = document.createElement( "small" );
+			small.textContent = detail;
+			name.appendChild( small );
+		}
+		var count = document.createElement( "span" );
+		count.className = "tok";
+		count.textContent = approx( tokens );
+		row.appendChild( name );
+		row.appendChild( count );
+		var bar = document.createElement( "div" );
+		bar.className = "ctx-bar";
+		var fill = document.createElement( "i" );
+		fill.style.width = Math.max( 1, Math.round( share * 100 ) ) + "%";
+		bar.appendChild( fill );
+		li.appendChild( row );
+		li.appendChild( bar );
+		return li;
+	}
+
+	/** The breakdown: drawn with textContent throughout, since tool names come from the project. */
+	function drawContextPanel( report ) {
+		contextPanelEl.textContent = "";
+		var head = document.createElement( "div" );
+		head.className = "ctx-head";
+		var title = document.createElement( "h2" );
+		title.textContent = "Context";
+		var close = document.createElement( "button" );
+		close.type = "button";
+		close.className = "ctx-close";
+		close.title = "Close";
+		close.setAttribute( "aria-label", "Close" );
+		close.innerHTML = icon( "x" );
+		close.addEventListener( "click", closeContextPanel );
+		head.appendChild( title );
+		head.appendChild( close );
+		contextPanelEl.appendChild( head );
+
+		var total = document.createElement( "p" );
+		total.className = "ctx-total";
+		var strong = document.createElement( "strong" );
+		strong.textContent = approx( report.total );
+		total.appendChild( strong );
+		total.appendChild( document.createTextNode( report.contextWindow > 0
+			? " of " + windowText( report.contextWindow ) + " tokens, " + report.percent + "%"
+			: " tokens (this model's window is not known)" ) );
+		contextPanelEl.appendChild( total );
+
+		if ( report.contextWindow > 0 ) {
+			var meter = document.createElement( "div" );
+			meter.className = "ctx-meter" + ( contextLevel( report ) === "ok" ? "" : " " + contextLevel( report ) );
+			var meterFill = document.createElement( "span" );
+			meterFill.style.width = Math.max( 1, Math.min( 100, report.percent ) ) + "%";
+			meter.appendChild( meterFill );
+			contextPanelEl.appendChild( meter );
+		}
+
+		var list = document.createElement( "ul" );
+		( report.parts || [] ).forEach( function ( part ) {
+			list.appendChild( contextRow( part.label, part.detail, part.tokens, report.total > 0 ? part.tokens / report.total : 0 ) );
+		} );
+		contextPanelEl.appendChild( list );
+
+		var tools = report.tools || [];
+		if ( tools.length ) {
+			var details = document.createElement( "details" );
+			var summary = document.createElement( "summary" );
+			summary.textContent = "Tools (" + tools.length + ")";
+			details.appendChild( summary );
+			var toolList = document.createElement( "ul" );
+			tools.forEach( function ( tool ) {
+				var li = document.createElement( "li" );
+				var name = document.createElement( "span" );
+				name.textContent = tool.name;
+				var count = document.createElement( "span" );
+				count.textContent = approx( tool.tokens );
+				li.appendChild( name );
+				li.appendChild( count );
+				toolList.appendChild( li );
+			} );
+			details.appendChild( toolList );
+			contextPanelEl.appendChild( details );
+		}
+
+		if ( !compactBtn.hidden ) {
+			var actions = document.createElement( "div" );
+			actions.className = "ctx-actions";
+			var compact = document.createElement( "button" );
+			compact.type = "button";
+			compact.innerHTML = icon( "arrows-in-line-vertical" ) + " Compact this conversation";
+			compact.addEventListener( "click", function () {
+				closeContextPanel();
+				compactBtn.click();
+			} );
+			actions.appendChild( compact );
+			contextPanelEl.appendChild( actions );
+		}
+	}
+
+	function openContextPanel() {
+		if ( !contextReport ) {
+			return;
+		}
+		drawContextPanel( contextReport );
+		var box = contextChipEl.getBoundingClientRect();
+		contextPanelEl.style.top = ( box.bottom + 8 ) + "px";
+		contextPanelEl.style.right = Math.max( 8, window.innerWidth - box.right ) + "px";
+		contextPanelEl.hidden = false;
+		contextChipEl.setAttribute( "aria-expanded", "true" );
+	}
+
+	function closeContextPanel() {
+		contextPanelEl.hidden = true;
+		contextChipEl.setAttribute( "aria-expanded", "false" );
+	}
+
 	function refreshContext() {
 		refreshStatus();
 		refreshSlots();
@@ -1234,22 +1534,36 @@ __MARKDOWN_SCRIPTS__
 		apiGet( "/context?conversationId=" + encodeURIComponent( getConversationId() ) ).then( function ( report ) {
 			if ( !report || report.success !== true ) {
 				contextChipEl.hidden = true;
+				contextReport = null;
+				closeContextPanel();
 				return;
 			}
-			var approx = function ( n ) { return "~" + ( n < 1000 ? n : ( n / 1000 ).toFixed( 1 ) + "k" ); };
-			var windowText = function ( n ) { return n >= 1000000 && n % 100000 === 0 ? ( n / 1000000 ) + "M" : n >= 1000 ? Math.round( n / 1000 ) + "k" : String( n ); };
-			var text = "ctx " + approx( report.total );
-			if ( report.contextWindow > 0 ) {
-				text += " / " + windowText( report.contextWindow ) + " " + report.percent + "%";
-			}
-			contextChipEl.textContent = text;
+			contextReport = report;
+			drawContextRing( report );
 			contextChipEl.hidden = false;
+			if ( !contextPanelEl.hidden ) {
+				drawContextPanel( report );
+			}
 		} );
 	}
 
-	contextChipEl.addEventListener( "click", function () {
-		if ( !isBusy ) {
-			runCommand( "/context" );
+	contextChipEl.addEventListener( "click", function ( evt ) {
+		evt.stopPropagation();
+		if ( contextPanelEl.hidden ) {
+			openContextPanel();
+		} else {
+			closeContextPanel();
+		}
+	} );
+	document.addEventListener( "click", function ( evt ) {
+		if ( !contextPanelEl.hidden && !contextPanelEl.contains( evt.target ) ) {
+			closeContextPanel();
+		}
+	} );
+	document.addEventListener( "keydown", function ( evt ) {
+		if ( evt.key === "Escape" && !contextPanelEl.hidden ) {
+			closeContextPanel();
+			contextChipEl.focus();
 		}
 	} );
 
@@ -1499,11 +1813,13 @@ __MARKDOWN_SCRIPTS__
 				var copyBtn = document.createElement( "button" );
 				copyBtn.type = "button";
 				copyBtn.className = "copy";
-				copyBtn.textContent = "Copy";
+				copyBtn.title = "Copy answer";
+				copyBtn.setAttribute( "aria-label", "Copy answer" );
+				copyBtn.innerHTML = icon( "copy" );
 				copyBtn.addEventListener( "click", function () {
 					navigator.clipboard.writeText( answer ).then( function () {
-						copyBtn.textContent = "Copied";
-						setTimeout( function () { copyBtn.textContent = "Copy"; }, 1200 );
+						copyBtn.innerHTML = icon( "check" );
+						setTimeout( function () { copyBtn.innerHTML = icon( "copy" ); }, 1200 );
 					} );
 				} );
 				root.appendChild( copyBtn );
@@ -1522,10 +1838,10 @@ __MARKDOWN_SCRIPTS__
 	 */
 	function setBusy( busy ) {
 		isBusy = busy;
-		sendBtn.textContent = busy ? "Steer" : "Send";
+		sendBtn.setAttribute( "aria-label", busy ? "Steer" : "Send" );
 		sendBtn.title = busy
-			? "Add a message to the turn already running"
-			: "";
+			? "Steer: add a message to the turn already running"
+			: "Send";
 		stopBtn.hidden = !busy;
 	}
 
@@ -1953,6 +2269,12 @@ __MARKDOWN_SCRIPTS__
 	}
 
 	attachBtn.addEventListener( "click", function () { attachInput.click(); } );
+	commandsBtn.addEventListener( "click", function () {
+		inputEl.value = "/";
+		inputEl.focus();
+		slashPick = 0;
+		showSlashMenu();
+	} );
 	attachInput.addEventListener( "change", function () {
 		addFiles( attachInput.files );
 		attachInput.value = "";
@@ -2027,7 +2349,7 @@ __MARKDOWN_SCRIPTS__
 	}
 
 	inputEl.addEventListener( "input", function () { slashPick = 0; showSlashMenu(); } );
-	inputEl.addEventListener( "blur", hideSlashMenu );
+	inputEl.addEventListener( "blur", function () { setTimeout( hideSlashMenu, 120 ); } );
 
 	formEl.addEventListener( "submit", function ( evt ) {
 		evt.preventDefault();

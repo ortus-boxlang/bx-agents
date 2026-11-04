@@ -455,6 +455,8 @@ Tab completion for bash, fish and PowerShell, generated from the CLI's own verb 
 - `examples/extensions-agent` shows a one-file extension, one with several commands, an admin-only command
   with a lifecycle, and a folder with a command class and a scheduler.
 
+- The web chat page has a new look. Buttons are Phosphor icons (a small sprite is built into the page, no CDN), the composer is one card with the field above its tools, a lightning button opens the `/` commands menu, the conversation is a centered column with flat assistant replies, and the accent color now drives the tints, icons and focus glow. With no `icon` configured the header shows a robot. Extension scripts get `bxagents.icon( name )` and the page's new CSS variables.
+
 #### Documentation
 
 - A full documentation site at [bxagents.ai](https://bxagents.ai): installation, quick start,

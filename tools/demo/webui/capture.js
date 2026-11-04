@@ -73,6 +73,21 @@ const sleep = ms => new Promise( r => setTimeout( r, ms ) );
 			await sleep( 600 );
 			await shot( "tool-call" );
 		},
+		async context() {
+			await p.click( "#contextChip" );
+			await sleep( 900 );
+			await shot( "context-panel" );
+			await sleep( 2500 );
+			await p.keyboard.press( "Escape" );
+		},
+		async commands() {
+			await p.click( "#commandsBtn" );
+			await sleep( 900 );
+			await shot( "commands-menu" );
+			await sleep( 2000 );
+			await p.fill( "#input", "" );
+			await p.click( "#messages" );
+		},
 		async history() {
 			await p.click( "#newBtn" );
 			await sleep( 800 );

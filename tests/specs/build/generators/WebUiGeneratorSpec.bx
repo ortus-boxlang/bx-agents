@@ -547,10 +547,83 @@ class extends="testbox.system.BaseSpec" {
 				var html = fileRead( appDir & "/chat/index.html" );
 				expect( html ).toInclude( "if ( isBusy && activeThreadId )" );
 				expect( html ).toInclude( 'apiPost( "/steer"' );
-				expect( html ).toInclude( 'sendBtn.textContent = busy ? "Steer" : "Send"' );
+				expect( html ).toInclude( 'sendBtn.setAttribute( "aria-label", busy ? "Steer" : "Send" )' );
 				// isBusy must be a real variable - a disabled button could not be
 				// clicked to steer
 				expect( html ).notToInclude( "sendBtn.disabled = busy" );
+			} );
+
+			describe( "icons", function() {
+
+				it( "inlines the Phosphor sprite, and every icon the page names is in it", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+					var html = fileRead( appDir & "/chat/index.html" );
+
+					expect( html ).notToInclude( "__ICON_SPRITE__" );
+					expect( html ).toInclude( "Phosphor Icons" );
+					var defined = {};
+					for ( var match in reMatch( 'id="i-([a-z0-9-]+)"', html ) ) {
+						defined[ reReplace( match, '^id="i-|"$', "", "all" ) ] = true;
+					}
+					expect( defined.count() ).toBeGT( 20 );
+					var used = {};
+					for ( var match in reMatch( 'href="##i-([a-z0-9-]+)"', html ) ) {
+						used[ reReplace( match, '^href="##i-|"$', "", "all" ) ] = true;
+					}
+					for ( var match in reMatch( 'icon\( "([a-z0-9-]+)" \)', html ) ) {
+						used[ reReplace( match, '^icon\( "|" \)$', "", "all" ) ] = true;
+					}
+					expect( used.count() ).toBeGT( 10 );
+					for ( var name in used ) {
+						expect( defined.keyExists( name ) ).toBeTrue( "the page uses the icon [#name#] but the sprite has no such symbol" );
+					}
+				} );
+
+				it( "labels every icon-only button, so it has a name for a screen reader", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+					var html = fileRead( appDir & "/chat/index.html" );
+
+					for ( var id in [ "sidebarBtn", "forkBtn", "exportBtn", "clearBtn", "compactBtn", "notesBtn", "keyBtn", "themeBtn", "attachBtn", "commandsBtn", "sendBtn", "stopBtn", "notesClose" ] ) {
+						var tag = reMatch( '<button[^>]*id="#id#"[^>]*>', html );
+						expect( tag ).toHaveLength( 1, id );
+						expect( tag[ 1 ] ).toInclude( "aria-label=", "#id# has no aria-label" );
+					}
+				} );
+
+				it( "shows the context as a ring that fills, and opens the breakdown when it is clicked", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+					var html = fileRead( appDir & "/chat/index.html" );
+
+					expect( html ).toInclude( 'id="contextChip"' );
+					expect( html ).toInclude( 'aria-haspopup="dialog"' );
+					expect( html ).toInclude( 'id="contextPanel"' );
+					expect( html ).toInclude( 'class="fill"' );
+					expect( html ).toInclude( "function drawContextRing" );
+					expect( html ).toInclude( "function drawContextPanel" );
+					// the breakdown is drawn from the /context report, not by typing /context into the conversation
+					expect( html ).notToInclude( 'runCommand( "/context" )' );
+				} );
+
+				it( "shows a robot as the brand mark when no icon is configured", function() {
+					var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+					var dir = createTempDirectory( prefix = "bxagents-webui-icon-" );
+					tempDirs.append( dir );
+					directoryCopy( fixtures & "/gateways-webui", dir, true );
+					var gateway = dir & "/gateways/chatUi.bx";
+					var withoutIcon = fileRead( gateway ).reReplace( "icon\s*:\s*""[^""]*""\s*,?", "", "all" );
+					fileWrite( gateway, withoutIcon );
+					var appDir = newAppDir();
+					generator.generate( discoverer.discover( dir ), appDir );
+
+					expect( fileRead( appDir & "/chat/index.html" ) ).toInclude( '<span class="icon"><svg class="i" aria-hidden="true"><use href="##i-robot"/></svg></span>' );
+				} );
+
 			} );
 
 			it( "exposes Clear and Compact, and reports what compaction actually did", function() {
@@ -950,6 +1023,17 @@ class extends="testbox.system.BaseSpec" {
 
 				var src = fileRead( appDir & "/interceptors/WebUiLoginGate.bx" );
 				expect( src ).toInclude( 'path.startsWith( "/chat/api/health" )' );
+			} );
+
+			it( "gives the sign-in page the same theme tokens and mark as the chat page", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui-users" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var login = fileRead( appDir & "/chat/login.html" );
+				expect( login ).notToInclude( "__THEME_TOKENS__" );
+				expect( login ).toInclude( "--accent-soft" );
+				expect( login ).toInclude( 'class="mark"' );
 			} );
 
 			it( "never writes a password into generated source, only env var names and hashes", function() {

@@ -59,14 +59,15 @@ Because the whole envelope arrives, **reasoning and tool calls are already on th
   <track kind="captions" src="/assets/video/webui-walkthrough.vtt" srclang="en" label="English" default>
 </video>
 
-A minute and a quarter through the whole page: sign in, streaming, the model picker, a tool call, saved conversations, notes and the dark theme. The music and the mix were made with [bx-audio](https://github.com/ortus-boxlang/bx-audio) and the voice with [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) (an Apache 2.0 model), and the page is the demo app in [`tools/demo/webui`](https://github.com/ortus-boxlang/bx-agents/tree/development/tools/demo/webui), which `capture.js` there drives with Playwright. It talks to a scripted model, so every answer is the same each time.
+A minute and a half through the whole page: sign in, streaming, the model picker, a tool call, the context ring and its breakdown, the `/` command menu, saved conversations, notes and the dark theme. The music and the mix were made with [bx-audio](https://github.com/ortus-boxlang/bx-audio) and the voice with [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) (an Apache 2.0 model), and the page is the demo app in [`tools/demo/webui`](https://github.com/ortus-boxlang/bx-agents/tree/development/tools/demo/webui), which `capture.js` there drives with Playwright. It talks to a scripted model, so every answer is the same each time.
 
 | | |
 |---|---|
-| ![Sign in with the accounts declared in `users`](../assets/webui/login.png) **Sign in.** Accounts come from [`users`](#users-and-sign-in). | ![A signed-in chat with the model picker, Chats, Clear, Notes, Key and Theme in the header](../assets/webui/home.png) **The header.** The picker shows when the entry lists [`profiles`](#choosing-the-model). |
+| ![Sign in with the accounts declared in `users`](../assets/webui/login.png) **Sign in.** Accounts come from [`users`](#users-and-sign-in). | ![A signed-in chat with the model picker, the context ring and icon buttons for Chats, Fork, Export, Clear, Notes, Key and Theme in the header](../assets/webui/home.png) **The header.** Icon buttons with tooltips. The picker shows when the entry lists [`profiles`](#choosing-the-model). |
 | ![A streamed reply with a numbered list and bold text](../assets/webui/markdown-list.png) **Streaming.** Replies render Markdown as they arrive. | ![The planner profile chosen in the picker, and the reply naming its model](../assets/webui/model-picker.png) **Model picker.** The pick is sent with each message, in the same conversation. |
 | ![A tool call shown as an open block above the reply](../assets/webui/tool-call.png) **Tools.** Each call shows its name and arguments. | ![The conversation sidebar listing two saved chats](../assets/webui/conversations.png) **Conversations.** Saved per account, and still there after a reload. |
 | ![The Notes panel with one note under About you](../assets/webui/notes.png) **Notes.** What the agent should remember, with the size it adds. | ![The page in the dark theme with the accent from the gateway entry](../assets/webui/dark-theme.png) **Theme.** Light or dark, remembered, with your `theme` accent. |
+| ![The context panel listing what fills the model's window](../assets/webui/context-panel.png) **Context.** The ring fills as the conversation grows; click it for the breakdown. | ![The command menu opened by typing a slash](../assets/webui/commands-menu.png) **Commands.** Type `/` for the menu. |
 
 ## What a streaming turn actually looks like
 
@@ -276,7 +277,7 @@ The shipped page is a real chat client, not a demo shell. It reads `GET /info` *
 | **Approvals** | A human-in-the-loop pause renders an Approve/Reject card from `GET /pending`, answered via `/resume`, which streams the continuation of the same turn |
 | **Theme** | Stored server-side in `preferences`, so it follows the identity rather than the browser. `localStorage` keeps a local copy so the choice survives a failed request |
 | **Model** | `/info`'s model name sits in the header, so it is always clear what answered |
-| **Context size** | A chip in the header, `ctx ~12.4k / 128k 9%`, from `GET /context`, refreshed after each turn, command, clear, compaction, conversation switch and change to the notes. Click it for the breakdown (`/context`). It shows the share of the window only when the model's [`contextWindow`](models.md#what-the-project-knows-about-a-model) is set |
+| **Context size** | A ring in the header that fills as the context does (amber from 70 percent, red from 90), from `GET /context`, refreshed after each turn, command, clear, compaction, conversation switch and change to the notes. Click it for the breakdown: the total, each part with its share (system prompt, tool definitions, notes, messages), the tools, and a button to compact the conversation. The ring fills only when the model's [`contextWindow`](models.md#what-the-project-knows-about-a-model) is set; without it the panel still shows the sizes |
 | **Attachments** | An **Attach** button (shown when `/info` reports `capabilities.attachments`) picks pictures and text files; you can also paste a picture or drop files on the page. Chips show what waits, each with a remove button. Pictures go as base64 `attachments` of the stream request, text files are inlined in the message. At most 4 pictures, 5 MB each; `/info` also reports `vision`, and a picture to a profile without it is refused with the reason |
 | **Shortcuts** | Enter sends, Shift+Enter adds a line. `?` alone (or `/keys`) lists them |
 
@@ -366,7 +367,7 @@ Every key below is optional - the entry works with just `exposes` and `path`.
 | --- | --- |
 | `title` | Browser title and header heading |
 | `subtitle` | Small line under the heading |
-| `icon` | An emoji (rendered into an inline-SVG favicon **and** the header) or an image URL/path (`/logo.svg`, `https://…`, `data:image/…`) |
+| `icon` | An emoji (rendered into an inline-SVG favicon **and** the header) or an image URL/path (`/logo.svg`, `https://…`, `data:image/…`). With none, the header shows a robot |
 | `welcome` | Empty-state message shown before the first turn |
 | `placeholder` | Composer input placeholder |
 | `footer` | Small note under the composer - disclaimers, links |
@@ -375,7 +376,7 @@ Every key below is optional - the entry works with just `exposes` and `path`.
 | `theme` | Design tokens - see below |
 | `themeFile` | Path to a CSS override, relative to the project root. Default `resources/webui/theme.css` |
 
-`theme` maps directly onto the page's CSS custom properties: `accent`, `accentFg`, `bg`, `fg`, `muted`, `border`, `surface`, `inputBg`, `bubbleUser`, `bubbleUserFg`, `bubbleAssistant`, `bubbleAssistantFg`, `bubbleError`, `reasoningFg`, `reasoningBg`, `toolFg`, `toolBg`, `radius`, `radiusSm`, `font`, `fontMono`, `fontSize`, `maxWidth`. A nested `theme.dark` block overrides any of the same tokens for dark mode. An unknown token **fails the build** rather than being silently ignored, so a typo surfaces immediately instead of leaving you wondering why your brand color never showed up.
+`theme` maps directly onto the page's CSS custom properties: `accent`, `accentFg`, `bg`, `fg`, `muted`, `border`, `surface`, `inputBg`, `bubbleUser`, `bubbleUserFg`, `bubbleAssistant`, `bubbleAssistantFg`, `bubbleError`, `reasoningFg`, `reasoningBg`, `toolFg`, `toolBg`, `radius`, `radiusSm`, `font`, `fontMono`, `fontSize`, `maxWidth`. `accent` also drives the page's tints and icon color (`--accent-soft`, `--accent-ink` and the focus glow are worked out from it), so one color is enough to brand the page. A nested `theme.dark` block overrides any of the same tokens for dark mode. An unknown token **fails the build** rather than being silently ignored, so a typo surfaces immediately instead of leaving you wondering why your brand color never showed up.
 
 ![The same page and conversation with the Theme toggle switched to dark - theme.dark's accent/accentFg tokens carry over, everything else is the same generated CSS](../assets/webui-chat-dark.png)
 
