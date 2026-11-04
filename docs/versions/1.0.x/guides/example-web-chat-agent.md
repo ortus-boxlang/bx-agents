@@ -18,8 +18,11 @@ This is the one example in this guide series with real screenshots, because it's
 webui-agent/
 ├── Agent.yaml
 ├── instructions.md
-└── gateways/
-    └── chat.bx
+├── gateways/
+│   └── chat.bx
+└── resources/
+    └── webui/
+        └── theme.css
 ```
 
 `Agent.yaml` is the same shape as every other example:

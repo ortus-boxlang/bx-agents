@@ -40,12 +40,10 @@ Skills from skills.boxlang.io are installed with `bxAgents skills install <owner
 
 ## How it's wired at runtime
 
-`skills/` is copied verbatim into the generated app (same wipe-then-write, dotfile-excluding copy as [`tools/`](tools.md)). The generated `config/ColdBox.bx` always points bx-ai's own `skillsDirectory` module setting at `/skills`:
+`skills/` is copied verbatim into the generated app (same wipe-then-write, dotfile-excluding copy as [`tools/`](tools.md)). The generated app always points bx-ai's own `skillsDirectory` module setting at `/skills`. It is written to `config/bxai-settings.json` (not `config/ColdBox.bx`, because ColdBox's `moduleSettings` does not reach bx-ai, a BoxLang module) and applied when the app starts:
 
-```javascript
-moduleSettings = {
-	bxai : { skillsDirectory : "/skills" }
-}
+```json
+{ "skillsDirectory": "/skills" }
 ```
 
 !!! info

@@ -84,11 +84,11 @@ name: planner
 profile: planner
 ```
 
-`providers`, `profiles`, `defaultProfile`, `params` and the capability keys apply to the whole app, so they belong in the project's own `Agent.yaml`; a subagent that sets them fails validation.
+`providers`, `profiles`, `defaultProfile`, `params`, `options` and the capability keys apply to the whole app, so they belong in the project's own `Agent.yaml`; a subagent that sets them fails validation.
 
 ## Capability defaults
 
-`embeddings`, `speech`, `transcription` and `image` set bx-ai's defaults for `aiEmbed()`, `aiSpeak()`, `aiTranscribe()` and `aiImage()`. They do not take profiles. bx-ai has one audio provider, so `speech` and `transcription` must name the same one. `bxAgents add capability` writes one; see [`add capability`](../cli-reference.md#add-capability).
+`embeddings`, `speech`, `transcription` and `image` set bx-ai's defaults for `aiEmbed()`, `aiSpeak()`, `aiTranscribe()` and `aiImage()`. They do not take profiles. Each takes `provider` and `model`; `speech` also `voice` and `format`, and `image` also `size`, `quality`, `style` and `instructions`. Any other key fails `build`. bx-ai has one audio provider, so `speech` and `transcription` must name the same one. `bxAgents add capability` writes one; see [`add capability`](../cli-reference.md#add-capability).
 
 ## Validation and tests
 

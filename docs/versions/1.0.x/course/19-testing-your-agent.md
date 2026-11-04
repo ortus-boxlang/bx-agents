@@ -97,7 +97,7 @@ expect( agent ).notToHaveCalledTool( "getStockPrice" )
 ## Try it
 
 Write a spec that scripts a tool call for the `GetTime` tool from
-[Lesson 9](09-giving-your-agent-tools.md), and assert `toHaveCalledTool( "now" )`.
+[Lesson 9](09-giving-your-agent-tools.md), and assert `toHaveCalledTool( "currentTime" )`.
 
 ```bash
 bxAgents test
