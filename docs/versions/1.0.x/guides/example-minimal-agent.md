@@ -1,6 +1,6 @@
 ---
 title: "Example: A Minimal Agent"
-icon: phosphor-duotone:seedling
+icon: phosphor-duotone:plant
 summary: Build the smallest complete BxAgents project - one agent, one tool, one skill.
 description: Build the smallest complete BxAgents project - one agent, one tool, one skill.
 tags: [guides, examples, tools, skills]
