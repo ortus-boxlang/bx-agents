@@ -1381,7 +1381,7 @@ __MARKDOWN_SCRIPTS__
 			'<div class="ap-head"><h2>Appearance</h2><button type="button" class="ctx-close" id="appearanceClose" aria-label="Close">' + icon( "x" ) + "</button></div>"
 			+ "<h3>Mode</h3>" + segmented( "Mode", [ [ "system", "System" ], [ "light", "Light" ], [ "dark", "Dark" ] ], currentMode() )
 			+ "<h3>Accent color</h3>" + '<div class="swatches" id="apSwatches">' + swatches + "</div>"
-			+ '<div class="hex"><label for="apHex" class="contrast">Hex</label><input id="apHex" value="' + ( accent || "" ) + '" placeholder="' + ( shown || "#3b5bdb" ) + '" maxlength="7" spellcheck="false" autocomplete="off" aria-label="Accent color as hex">'
+			+ '<div class="hex"><label for="apHex" class="contrast">Hex</label><input id="apHex" maxlength="7" spellcheck="false" autocomplete="off" aria-label="Accent color as hex">'
 			+ '<span class="contrast' + ( ratio && ratio < 4.5 ? " low" : "" ) + '" id="apContrast" aria-live="polite">' + ( ratio ? ratio.toFixed( 1 ) + " : 1 on buttons" + ( ratio < 4.5 ? ", low" : "" ) : "" ) + "</span></div>"
 			+ "<h3>Text size</h3>" + segmented( "Text size", [ [ "small", "Small" ], [ "medium", "Medium" ], [ "large", "Large" ] ], appearance.size )
 			+ "<h3>Density</h3>" + segmented( "Density", [ [ "comfortable", "Comfortable" ], [ "compact", "Compact" ] ], appearance.density )
@@ -1394,6 +1394,9 @@ __MARKDOWN_SCRIPTS__
 			b.addEventListener( "click", function () { appearance.accent = b.getAttribute( "data-accent" ); commitAppearance(); } );
 		} );
 		var hex = document.getElementById( "apHex" );
+		// set as properties, never spliced into the markup
+		hex.value = accent || "";
+		hex.placeholder = shown || "#3b5bdb";
 		hex.addEventListener( "change", function () {
 			var v = normalizeHex( hex.value );
 			if ( hex.value.trim() === "" ) {
