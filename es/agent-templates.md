@@ -25,7 +25,7 @@ Los tres caminos acaban en lo mismo: un directorio que contiene una definición 
 Todas las plantillas parten exactamente del mismo esqueleto base - `Agent.yaml`, `instructions.md`, todas las [carpetas de convención](conventions/agent-bx.md) vacías, una carpeta [`tests/`](conventions/testing.md) lista para ejecutar, un `.env` (que declara `BOXLANG_HOME=.build/runtime` y deja sitio para tus claves de API) y un `.gitignore` - y encima añaden una cantidad pequeña y concreta de contenido ya cableado. Añade `--class` a cualquier `--template` para obtener la forma `Agent.bx` basada en clase de la definición raíz (y de los subagentes que genera la plantilla `multi-agent`) en lugar de `Agent.yaml`; todo lo demás queda igual. Ninguna necesita cambios en el validador: el contenido extra de cada una reutiliza una forma de configuración que [`ProjectValidator`](conventions/agent-bx.md) ya acepta, así que un proyecto creado con cualquier plantilla valida limpiamente por construcción.
 
 ::: cards
-::: card title="minimal" icon="phosphor-duotone:seedling" href="#minimal"
+::: card title="minimal" icon="phosphor-duotone:plant" href="#minimal"
 El esqueleto pelado. Nada extra.
 :::
 ::: card title="webui-chat" icon="phosphor-duotone:chat-circle-dots" href="#webui-chat"

@@ -511,6 +511,8 @@ bxAgents serve [--port=8080] [--host=127.0.0.1]
 
 ### `chat`
 
+New to it? Start with [the terminal UI](guides/terminal-ui.md), the [walkthroughs](guides/chat-walkthrough.md) and the [slash command list](guides/slash-commands.md). This section is the reference.
+
 A chat with the built agent, in a terminal screen that keeps your scrollback: finished turns are printed as ordinary terminal text (select, search and scroll them as usual) and only the message box and the answer being written are redrawn. `--no-tui` (and any terminal that is not interactive) uses a plain line-by-line REPL instead, built on BoxLang's own `MiniConsole`.
 
 ```bash
@@ -533,7 +535,7 @@ In the screen:
 | Up / Down | Earlier messages (from the first or last line of the box) |
 | Esc | Stop the agent. It stops at its next step, not mid-word |
 | Enter while the agent works | Steer it: your message is added to the run |
-| Ctrl+C | Clear the box; on an empty box, leave. Ctrl+D leaves too |
+| Ctrl+C | Clear the box; on an empty box, leave; while the agent works, stop it. Ctrl+D leaves too |
 | `?` alone, or `/keys` | List the keys as they are bound now, with the action name of each |
 
 Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/export [file]` (the conversation as Markdown or HTML), `/name` and `/fork` (see below), `/keys` (which key does what), `/prompt` (how the message box looks, see below), `/sessions`, `/resume`, `/clear`, `/compact` and `/info` (see below), `/model`, `/profile` and `/default` (see below), `/remember <text>` and `/notes` (see below), `/record [file]` and `/record stop` (see below) and `/exit`.
