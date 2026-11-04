@@ -16,7 +16,20 @@
 
 <p>&nbsp;</p>
 
-**BxAgents** is a conventions-based framework for building AI agents powered by [BoxLang AI](https://ai.boxlang.io). Stop wiring tools, memory, chat UIs, Slack bots and schedulers by hand: describe an agent with a handful of files and folders - `Agent.yaml`, `instructions.md`, and whichever of `tools/`, `skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `modules/` it actually needs - and BxAgents assembles a full MVC application from it **at build time** (REST API, web chat, chat platforms and scheduled jobs included), ready to serve, chat with, or package as a portable `.bxa`.
+**BxAgents** is a conventions-based framework for building AI agents your team can ship, powered by [BoxLang AI](https://ai.boxlang.io). It is built for BoxLang and ColdBox developers, and for any team that wants agents as ordinary code it can read. Skip the glue code for tools, memory, chat UIs, Slack bots and schedulers: describe an agent with a handful of files and folders - `Agent.yaml`, `instructions.md`, and whichever of `tools/`, `skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `modules/` it actually needs - and BxAgents assembles a full MVC application from it **at build time** (REST API, web chat, chat platforms and scheduled jobs included), ready to serve, chat with, or package as a portable `.bxa`.
+
+## What you can build
+
+Pick the problem, write one file.
+
+| You need to | You write | You get |
+|---|---|---|
+| Answer people where they are | [`gateways/slack.bx`](docs/conventions/gateways/index.md) | A Slack bot over Socket Mode (also Telegram, Discord, Teams, WhatsApp, Twilio SMS, GitHub, Signal and email) |
+| Run a job every morning | [`schedules/Digest.bx`](docs/conventions/schedules.md) | A task with `.cron()` that calls `run()`, started with the app, no cron daemon |
+| Let other systems call it | [`gateways/expose.bx`](docs/conventions/gateways/index.md) | A REST API under a path you choose, or an MCP server |
+| Keep a human in the loop | a tool that needs approval | The run waits for approve or reject, in the terminal, the [web chat](docs/conventions/web-ui.md) or a chat gateway |
+| Test without spending tokens | [`tests/specs/AgentSpec.bx`](docs/conventions/testing.md) | `mockResponses()` and agent matchers: specs run in CI with no API key and no network |
+| Ship it anywhere | `bxAgents package` | A portable `.bxa` and [deploy targets](docs/conventions/deploy.md): local, SSH, FTP, SFTP, Docker, DigitalOcean |
 
 ## Quick Start
 
