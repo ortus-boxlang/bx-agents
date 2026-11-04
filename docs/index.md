@@ -26,6 +26,20 @@ real, runnable ColdBox application out of it.
 
 ![A terminal session: bxAgents new scaffolds a project, bxAgents build assembles a ColdBox app, bxAgents inspect prints the agent, model and environment, and bxAgents serve starts it on http://127.0.0.1:8080](assets/cli-quickstart.svg)
 
+## What you can build
+
+Pick the problem, write one file. Most of these have a working example in
+[`examples/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples).
+
+| You need to | You write | You get |
+|---|---|---|
+| Answer people where they are | [`gateways/slack.bx`](conventions/gateways/index.md) | A Slack bot over Socket Mode (also Telegram, Discord, Teams, WhatsApp, Twilio SMS, GitHub, Signal and email) |
+| Run a job every morning | [`schedules/Digest.bx`](conventions/schedules.md) | A task with `.cron()` that calls `run()`, started with the app, no cron daemon |
+| Let other systems call it | [`gateways/expose.bx`](conventions/gateways/index.md) | A REST API under a path you choose, or an MCP server |
+| Keep a human in the loop | a tool that needs approval | The run waits for approve or reject, in the terminal, the [web chat](conventions/web-ui.md) or a chat gateway |
+| Test without spending tokens | [`tests/specs/AgentSpec.bx`](conventions/testing.md) | `mockResponses()` and agent matchers: specs run in CI with no API key and no network |
+| Ship it anywhere | `bxAgents package` | A portable `.bxa` and [deploy targets](conventions/deploy.md): local, SSH, FTP, SFTP, Docker, DigitalOcean |
+
 ::: cards
 ::: card title="Assembled at build time" icon="phosphor-duotone:gear-six" href="build-pipeline.md"
 Discovery, validation and code generation run **once**, not on every boot. What you run

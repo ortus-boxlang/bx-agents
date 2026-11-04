@@ -277,12 +277,12 @@
 	/* walkthrough videos: real recordings */
 	var VIDEOS = [
 		{ id: "quickstart", tab: "Quick start", title: "From nothing to a running agent", text: "Scaffold a project from the web chat starter, build it, inspect the manifest and serve it.", cmd: "bxAgents new, build, inspect, serve" },
-		{ id: "chat-desktop", tab: "Web chat", title: "The generated chat UI", text: "A reply streams in live, a second turn follows, then the theme toggle and a new chat. Every answer is the mock provider's \"Mock response\".", cmd: "exposes: \"webui\"" },
+		{ id: "chat-desktop", tab: "Web chat", title: "A chat UI you did not have to build", text: "A reply streams in live, a second turn follows, then the theme toggle and a new chat. Every answer is the mock provider's \"Mock response\".", cmd: "exposes: \"webui\"" },
 		{ id: "chat-terminal", tab: "Terminal chat", title: "Chat with the agent in your terminal", text: "Streaming answers, a tool call, formatted Markdown and the slash commands. The answers come from a scripted demo model.", cmd: "bxAgents chat" },
 		{ id: "chat-tour", tab: "Chat tour", title: "Keys, prompt styles and conversations", text: "List the keys, change the prompt look, check the context, name and fork a conversation, then list them. The answers come from a scripted demo model.", cmd: "/keys /prompt /context /fork /sessions" },
 		{ id: "wizard", tab: "The wizard", title: "Answer questions, get an agent", text: "bxAgents new asks what the agent should do and writes the project to match. The last screen prints the one-line command that repeats it.", cmd: "bxAgents new" },
 		{ id: "chat-mobile", tab: "On a phone", title: "The same chat on a phone", text: "The same generated page at 390 pixels wide. The sidebar starts closed so the composer stays in reach.", cmd: "exposes: \"webui\"" },
-		{ id: "http-gateway", tab: "HTTP API", title: "An agent behind a REST API", text: "One gateway file, then curl against the invoke, info and streaming routes.", cmd: "exposes: \"agent\"" },
+		{ id: "http-gateway", tab: "HTTP API", title: "An API for your other systems, from one file", text: "One gateway file, then curl against the invoke, info and streaming routes.", cmd: "exposes: \"agent\"" },
 		{ id: "starters", tab: "Starters", title: "Three starters, side by side", text: "Scaffold slack-bot, multi-agent and mcp-server projects and list what each one contains.", cmd: "bxAgents new --template=<name>" },
 		{ id: "mcp", tab: "MCP", title: "Serving MCP tools", text: "A served project answers MCP JSON-RPC: list the tools, then call one over HTTP.", cmd: "exposes: \"mcp\"" }
 	];
