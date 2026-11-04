@@ -47,6 +47,7 @@ That is a complete agent. `bxAgents new` scaffolds this shape for you (see
 | `gatewaySession` | How chat gateways queue sessions (see [Lesson 14](14-connecting-chat-platforms.md)). |
 | `agentApi` | The always-on agent route. |
 | `environments` | Per-environment overrides (see below). |
+| `provider`, `params`, `options`, `providers`, `profiles`, `notes`, `usage`, `tui`, `extensions`, and more | Further settings, all listed in the [Agent.yaml](../conventions/agent-yaml.md) reference. |
 
 An **unknown key is an error** that lists the valid ones, so a typo such as `modle:`
 can never quietly do nothing. Wrong types and empty values are errors too.

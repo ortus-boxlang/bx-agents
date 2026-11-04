@@ -89,7 +89,7 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 | `model` | string | A `provider/model` slug or a bare provider name. A `profile` (see [Models and profiles](models.md)) can stand in for it. See below. |
 | `description` | string | Optional. |
 | `subAgents` | array of strings | Names of sibling folders under the root project's `subagents/`. See [subagents/](subagents.md). |
-| `mcpServers` | array | Remote MCP servers - each entry a URL string or `{ url, name }`. See [mcp/](mcp.md). |
+| `mcpServers` | array | MCP servers - each entry a URL string, or a mapping with `url` (or `command`), `name` and the credentials the server wants. See [mcp/](mcp.md). |
 | `security` | struct | Forwarded verbatim into the generated app's `bxai` module settings; bx-ai's own `SecurityDirector` turns it into guardrail middleware. Passthrough only - BxAgents has no own guardrails convention. |
 | `memory` | string or struct | The agent's conversation memory. A bare string is shorthand for the type (`"cache"`); a struct is `{ type, ...config }` and is passed through to `aiMemory()` verbatim - e.g. `{ type: "cache", maxMessages: 50 }`, or with `summaryProvider`/`summaryModel`/`summaryThreshold` to make the web UI's `/compact` functional. Applies per node, so a subagent can declare its own. |
 | `checkpointer` | struct | `{ type: "cache"\|"file"\|"jdbc", ...config }`. Defaults to `{ type: "cache" }` if omitted. Always applied - without one, human-in-the-loop approval flows through any gateway other than `cli` fail outright. |
@@ -262,6 +262,8 @@ POST /__bxagents/compact    # { conversationId } summarize the older messages
 POST /__bxagents/ping       # { profile? } test a model with one tiny question: { ok, model, ms, reply } or { ok : false, model, reason }
 GET  /__bxagents/commands   # the slash commands this caller may run, [ { name, hint } ]
 GET  /__bxagents/context    # ?conversationId= estimated size of the context: parts, largest tools, total, share of the window
+GET  /__bxagents/status     # ?conversationId= what the extensions' status items say: { items : [ { name, text } ] }
+GET  /__bxagents/slots      # ?conversationId= what the extensions' slots hold: { items : [ { id, extension, place, html, text } ] }
 POST /__bxagents/command    # { line : "/info", conversationId? } run one, answers { blocks, effects, conversationId }
 GET  /__bxagents/notes    # the caller's notes and the agent's, with how full they are
 POST /__bxagents/notes    # { scope : "user" | "agent", text }
