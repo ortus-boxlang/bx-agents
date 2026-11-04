@@ -69,7 +69,7 @@ anything is generated. A diamond (two parents sharing one descendant) is fine.
   purely a build-time wiring concern.
 - The subagent's own **declared `name`** (its definition's `name` field) is what you
   retrieve it by at runtime - every agent in the tree is registered in
-  `config/WireBox.bx` under this name, so [`schedules/Scheduler.bx`](../conventions/schedules.md)
+  `config/WireBox.bx` under this name, so a [`schedules/`](../conventions/schedules.md) scheduler
   (or anything else WireBox-aware) reaches it with `getInstance( "TheAgentName" )`.
 
 These two names can differ, and often will. Because `name` is now also a WireBox
