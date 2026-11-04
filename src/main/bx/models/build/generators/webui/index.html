@@ -88,6 +88,50 @@ __THEME_TOKENS__
 	/* Phosphor icons come from the sprite at the top of the page and are sized by the text around them */
 	.i { width: 1.25em; height: 1.25em; fill: currentColor; flex: none; vertical-align: -0.2em; }
 	:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+	/* The context gauge: a ring that fills as the context does (see refreshContext) */
+	header .actions button.ctx-ring { display: inline-grid; place-items: center; width: 2.5rem; height: 2.5rem; padding: 0; background: transparent; border: 0; border-radius: 10px; cursor: pointer; }
+	header .actions button.ctx-ring:hover { background: var(--accent-soft); }
+	.ctx-ring .ring { width: 1.6rem; height: 1.6rem; transform: rotate(-90deg); }
+	.ctx-ring circle { fill: none; stroke-width: 4; }
+	.ctx-ring .track { stroke: var(--border); }
+	.ctx-ring .fill { stroke: var(--accent); stroke-linecap: round; transition: stroke-dasharray 0.4s ease; }
+	.ctx-ring.warn .fill { stroke: rgb(217, 119, 6); }
+	.ctx-ring.danger .fill { stroke: var(--bubble-error); }
+	.ctx-ring.unknown .track { stroke-dasharray: 3 4; }
+	#contextPanel {
+		position: fixed;
+		z-index: 30;
+		width: min(24rem, 94vw);
+		max-height: 80vh;
+		overflow-y: auto;
+		padding: 1rem;
+		background: var(--surface);
+		color: var(--fg);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		box-shadow: 0 16px 40px rgba(16, 24, 40, 0.18);
+	}
+	#contextPanel[hidden] { display: none; }
+	#contextPanel .ctx-head { display: flex; align-items: center; justify-content: space-between; }
+	#contextPanel h2 { margin: 0; font-size: 1rem; }
+	#contextPanel .ctx-total { margin: 0.6rem 0 0.4rem; font-size: 0.9rem; color: var(--muted); }
+	#contextPanel .ctx-total strong { color: var(--fg); font-size: 1.15rem; }
+	#contextPanel .ctx-meter, #contextPanel .ctx-bar { height: 0.4rem; border-radius: 99px; background: var(--border); overflow: hidden; }
+	#contextPanel .ctx-meter { height: 0.55rem; margin-bottom: 0.9rem; }
+	#contextPanel .ctx-meter span, #contextPanel .ctx-bar i { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
+	#contextPanel .ctx-meter.warn span { background: rgb(217, 119, 6); }
+	#contextPanel .ctx-meter.danger span { background: var(--bubble-error); }
+	#contextPanel ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.7rem; }
+	#contextPanel li .ctx-row { display: flex; justify-content: space-between; gap: 0.5rem; font-size: 0.88rem; margin-bottom: 0.25rem; }
+	#contextPanel li small { color: var(--muted); margin-left: 0.4rem; }
+	#contextPanel .tok { font-family: var(--font-mono); font-size: 0.82rem; color: var(--muted); }
+	#contextPanel details { margin-top: 0.9rem; font-size: 0.88rem; }
+	#contextPanel details summary { cursor: pointer; color: var(--accent-ink); }
+	#contextPanel details ul { gap: 0.3rem; margin-top: 0.5rem; }
+	#contextPanel details li { display: flex; justify-content: space-between; gap: 0.5rem; font-family: var(--font-mono); font-size: 0.8rem; }
+	#contextPanel .ctx-actions { margin-top: 1rem; display: flex; justify-content: flex-end; }
+	#contextPanel .ctx-actions button { display: inline-flex; align-items: center; gap: 0.4rem; background: var(--accent-soft); color: var(--accent-ink); border: 0; border-radius: 10px; padding: 0.5rem 0.8rem; font: inherit; font-size: 0.85rem; cursor: pointer; }
+	#contextPanel .ctx-close { display: inline-grid; place-items: center; width: 2rem; height: 2rem; background: none; border: 0; color: var(--muted); border-radius: 8px; cursor: pointer; font-size: 1rem; }
 	/* display:inline-grid on the icon buttons must not defeat the hidden attribute */
 	button[hidden] { display: none !important; }
 	html, body { height: 100%; margin: 0; }
@@ -742,7 +786,9 @@ __ICON_SPRITE__
 		</div>
 		<div class="actions">
 			<span class="meta" id="modelMeta"></span>
-			<button type="button" class="chip" id="contextChip" title="Estimated size of the context: system prompt, tools, notes and this conversation. Click for the breakdown" hidden></button>
+			<button type="button" class="ctx-ring" id="contextChip" aria-haspopup="dialog" aria-expanded="false" aria-controls="contextPanel" aria-label="Context" title="Context: what is sent to the model. Click for the breakdown" hidden>
+				<svg class="ring" viewBox="0 0 36 36" aria-hidden="true"><circle class="track" cx="18" cy="18" r="14"/><circle class="fill" cx="18" cy="18" r="14" pathLength="100" stroke-dasharray="0 100"/></svg>
+			</button>
 			<span id="statusChips" hidden></span>
 			<span id="slotHeader" class="slot-area" hidden></span>
 			<select id="profileSelect" title="The model for your next messages" aria-label="Model" hidden></select>
@@ -756,6 +802,7 @@ __ICON_SPRITE__
 			<button type="button" id="themeBtn" title="Switch between light and dark" aria-label="Theme"><svg class="i" aria-hidden="true"><use href="#i-sun"/></svg></button>
 		</div>
 	</header>
+	<div id="contextPanel" role="dialog" aria-label="Context" hidden></div>
 	<div class="shell">
 		<aside id="sidebar" aria-label="Conversations">
 			<div class="sidebar-head">
@@ -1321,6 +1368,163 @@ __MARKDOWN_SCRIPTS__
 		} );
 	}
 
+	var contextReport = null;
+	var contextPanelEl = document.getElementById( "contextPanel" );
+
+	function approx( n ) {
+		return "~" + ( n < 1000 ? n : ( n / 1000 ).toFixed( 1 ).replace( /\.0$/, "" ) + "k" );
+	}
+
+	function windowText( n ) {
+		return n >= 1000000 && n % 100000 === 0 ? ( n / 1000000 ) + "M" : n >= 1000 ? Math.round( n / 1000 ) + "k" : String( n );
+	}
+
+	/** "ok", "warn" at 70 percent of the window, "danger" at 90; "unknown" when the model's window is not known. */
+	function contextLevel( report ) {
+		if ( !( report.contextWindow > 0 ) ) {
+			return "unknown";
+		}
+		return report.percent >= 90 ? "danger" : report.percent >= 70 ? "warn" : "ok";
+	}
+
+	function contextSummary( report ) {
+		return report.contextWindow > 0
+			? approx( report.total ) + " of " + windowText( report.contextWindow ) + " tokens (" + report.percent + "%)"
+			: approx( report.total ) + " tokens (this model's window is not known)";
+	}
+
+	/** The gauge in the header: the ring fills with the share of the window used. */
+	function drawContextRing( report ) {
+		var level = contextLevel( report );
+		contextChipEl.className = "ctx-ring" + ( level === "ok" ? "" : " " + level );
+		contextChipEl.querySelector( ".fill" ).setAttribute( "stroke-dasharray", ( level === "unknown" ? 0 : Math.max( 2, Math.min( 100, report.percent ) ) ) + " 100" );
+		var text = "Context: " + contextSummary( report ) + ". Click for the breakdown";
+		contextChipEl.title = text;
+		contextChipEl.setAttribute( "aria-label", text );
+	}
+
+	function contextRow( label, detail, tokens, share ) {
+		var li = document.createElement( "li" );
+		var row = document.createElement( "div" );
+		row.className = "ctx-row";
+		var name = document.createElement( "span" );
+		name.textContent = label;
+		if ( detail ) {
+			var small = document.createElement( "small" );
+			small.textContent = detail;
+			name.appendChild( small );
+		}
+		var count = document.createElement( "span" );
+		count.className = "tok";
+		count.textContent = approx( tokens );
+		row.appendChild( name );
+		row.appendChild( count );
+		var bar = document.createElement( "div" );
+		bar.className = "ctx-bar";
+		var fill = document.createElement( "i" );
+		fill.style.width = Math.max( 1, Math.round( share * 100 ) ) + "%";
+		bar.appendChild( fill );
+		li.appendChild( row );
+		li.appendChild( bar );
+		return li;
+	}
+
+	/** The breakdown: drawn with textContent throughout, since tool names come from the project. */
+	function drawContextPanel( report ) {
+		contextPanelEl.textContent = "";
+		var head = document.createElement( "div" );
+		head.className = "ctx-head";
+		var title = document.createElement( "h2" );
+		title.textContent = "Context";
+		var close = document.createElement( "button" );
+		close.type = "button";
+		close.className = "ctx-close";
+		close.title = "Close";
+		close.setAttribute( "aria-label", "Close" );
+		close.innerHTML = icon( "x" );
+		close.addEventListener( "click", closeContextPanel );
+		head.appendChild( title );
+		head.appendChild( close );
+		contextPanelEl.appendChild( head );
+
+		var total = document.createElement( "p" );
+		total.className = "ctx-total";
+		var strong = document.createElement( "strong" );
+		strong.textContent = approx( report.total );
+		total.appendChild( strong );
+		total.appendChild( document.createTextNode( report.contextWindow > 0
+			? " of " + windowText( report.contextWindow ) + " tokens, " + report.percent + "%"
+			: " tokens (this model's window is not known)" ) );
+		contextPanelEl.appendChild( total );
+
+		if ( report.contextWindow > 0 ) {
+			var meter = document.createElement( "div" );
+			meter.className = "ctx-meter" + ( contextLevel( report ) === "ok" ? "" : " " + contextLevel( report ) );
+			var meterFill = document.createElement( "span" );
+			meterFill.style.width = Math.max( 1, Math.min( 100, report.percent ) ) + "%";
+			meter.appendChild( meterFill );
+			contextPanelEl.appendChild( meter );
+		}
+
+		var list = document.createElement( "ul" );
+		( report.parts || [] ).forEach( function ( part ) {
+			list.appendChild( contextRow( part.label, part.detail, part.tokens, report.total > 0 ? part.tokens / report.total : 0 ) );
+		} );
+		contextPanelEl.appendChild( list );
+
+		var tools = report.tools || [];
+		if ( tools.length ) {
+			var details = document.createElement( "details" );
+			var summary = document.createElement( "summary" );
+			summary.textContent = "Tools (" + tools.length + ")";
+			details.appendChild( summary );
+			var toolList = document.createElement( "ul" );
+			tools.forEach( function ( tool ) {
+				var li = document.createElement( "li" );
+				var name = document.createElement( "span" );
+				name.textContent = tool.name;
+				var count = document.createElement( "span" );
+				count.textContent = approx( tool.tokens );
+				li.appendChild( name );
+				li.appendChild( count );
+				toolList.appendChild( li );
+			} );
+			details.appendChild( toolList );
+			contextPanelEl.appendChild( details );
+		}
+
+		if ( !compactBtn.hidden ) {
+			var actions = document.createElement( "div" );
+			actions.className = "ctx-actions";
+			var compact = document.createElement( "button" );
+			compact.type = "button";
+			compact.innerHTML = icon( "arrows-in-line-vertical" ) + " Compact this conversation";
+			compact.addEventListener( "click", function () {
+				closeContextPanel();
+				compactBtn.click();
+			} );
+			actions.appendChild( compact );
+			contextPanelEl.appendChild( actions );
+		}
+	}
+
+	function openContextPanel() {
+		if ( !contextReport ) {
+			return;
+		}
+		drawContextPanel( contextReport );
+		var box = contextChipEl.getBoundingClientRect();
+		contextPanelEl.style.top = ( box.bottom + 8 ) + "px";
+		contextPanelEl.style.right = Math.max( 8, window.innerWidth - box.right ) + "px";
+		contextPanelEl.hidden = false;
+		contextChipEl.setAttribute( "aria-expanded", "true" );
+	}
+
+	function closeContextPanel() {
+		contextPanelEl.hidden = true;
+		contextChipEl.setAttribute( "aria-expanded", "false" );
+	}
+
 	function refreshContext() {
 		refreshStatus();
 		refreshSlots();
@@ -1330,22 +1534,36 @@ __MARKDOWN_SCRIPTS__
 		apiGet( "/context?conversationId=" + encodeURIComponent( getConversationId() ) ).then( function ( report ) {
 			if ( !report || report.success !== true ) {
 				contextChipEl.hidden = true;
+				contextReport = null;
+				closeContextPanel();
 				return;
 			}
-			var approx = function ( n ) { return "~" + ( n < 1000 ? n : ( n / 1000 ).toFixed( 1 ) + "k" ); };
-			var windowText = function ( n ) { return n >= 1000000 && n % 100000 === 0 ? ( n / 1000000 ) + "M" : n >= 1000 ? Math.round( n / 1000 ) + "k" : String( n ); };
-			var text = "ctx " + approx( report.total );
-			if ( report.contextWindow > 0 ) {
-				text += " / " + windowText( report.contextWindow ) + " " + report.percent + "%";
-			}
-			contextChipEl.textContent = text;
+			contextReport = report;
+			drawContextRing( report );
 			contextChipEl.hidden = false;
+			if ( !contextPanelEl.hidden ) {
+				drawContextPanel( report );
+			}
 		} );
 	}
 
-	contextChipEl.addEventListener( "click", function () {
-		if ( !isBusy ) {
-			runCommand( "/context" );
+	contextChipEl.addEventListener( "click", function ( evt ) {
+		evt.stopPropagation();
+		if ( contextPanelEl.hidden ) {
+			openContextPanel();
+		} else {
+			closeContextPanel();
+		}
+	} );
+	document.addEventListener( "click", function ( evt ) {
+		if ( !contextPanelEl.hidden && !contextPanelEl.contains( evt.target ) ) {
+			closeContextPanel();
+		}
+	} );
+	document.addEventListener( "keydown", function ( evt ) {
+		if ( evt.key === "Escape" && !contextPanelEl.hidden ) {
+			closeContextPanel();
+			contextChipEl.focus();
 		}
 	} );
 

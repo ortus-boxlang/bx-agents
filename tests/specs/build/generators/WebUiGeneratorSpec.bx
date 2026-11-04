@@ -594,6 +594,22 @@ class extends="testbox.system.BaseSpec" {
 					}
 				} );
 
+				it( "shows the context as a ring that fills, and opens the breakdown when it is clicked", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+					var html = fileRead( appDir & "/chat/index.html" );
+
+					expect( html ).toInclude( 'id="contextChip"' );
+					expect( html ).toInclude( 'aria-haspopup="dialog"' );
+					expect( html ).toInclude( 'id="contextPanel"' );
+					expect( html ).toInclude( 'class="fill"' );
+					expect( html ).toInclude( "function drawContextRing" );
+					expect( html ).toInclude( "function drawContextPanel" );
+					// the breakdown is drawn from the /context report, not by typing /context into the conversation
+					expect( html ).notToInclude( 'runCommand( "/context" )' );
+				} );
+
 				it( "shows a robot as the brand mark when no icon is configured", function() {
 					var discovery = discoverer.discover( fixtures & "/valid-minimal" );
 					var dir = createTempDirectory( prefix = "bxagents-webui-icon-" );
