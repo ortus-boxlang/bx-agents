@@ -43,8 +43,8 @@ flowchart TD
    and more. If any errors were collected, the build throws here - `.build/app` is
    never written or touched.
 4. **Generate** - only reached once validation is clean. Interceptors, gateways, MCP,
-   the router, the web UI (if any), the core app skeleton, a verbatim copy of
-   `tools/`/`skills/`, and the scheduler, in that order.
+   the router, the agent API handler, the web UI (if any), the core app skeleton, a verbatim copy of
+   `tools/`/`skills/`, the bundled ColdBox libraries, and the scheduler, in that order.
 5. **Normalize + write the manifest** - produces the canonical `.build/manifest.json`.
 
 ## If your project fails validation

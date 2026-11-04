@@ -20,9 +20,10 @@ bxAgents chat --server [--port=<port>]         # full app, own throwaway server
 bxAgents chat --connect=http://127.0.0.1:8080  # full app, server you already run
 ```
 
-Uses BoxLang's own `MiniConsole` for line reading. Requires a real interactive
-terminal (it shells out to `stty` for raw mode - it won't work piped or
-non-interactively). Type `exit` or `quit` to leave.
+At a terminal this draws the full-screen chat described in [The terminal UI](../guides/terminal-ui.md);
+type `/exit` (or `/quit`) to leave. Add `--no-tui`, or run without a terminal, for the plain
+line-by-line prompt (BoxLang's own `MiniConsole`, which shells out to `stty` for raw mode and so
+needs a real interactive terminal); there, type `exit` or `quit`.
 
 The default mode loads the generated factory directly in this process - fastest, but
 without anything ColdBox brings (no scheduler, no interceptors, no

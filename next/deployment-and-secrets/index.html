@@ -257,7 +257,7 @@
     B --&gt;|&quot;bxAgents package&quot;| A[&quot;dist/name-version.bxa&lt;br/&gt;+ .sha256 + redacted manifest.json&quot;]
     A --&gt;|&quot;bxAgents deploy&quot;| T[&quot;a target:&lt;br/&gt;local / ssh / ftp / sftp&lt;br/&gt;docker / digitalocean&quot;]
     T --&gt; RUN[&quot;boxlang-miniserver runs the unzipped app&quot;]
-    ENV[&quot;environment variables&lt;br/&gt;OPENAI_API_KEY, ANTHROPIC_API_KEY,&lt;br/&gt;every *EnvVar a gateway names&quot;] --&gt;|&quot;read at RUNTIME by bx-ai&quot;| RUN
+    ENV[&quot;environment variables&lt;br/&gt;OPENAI_API_KEY, CLAUDE_API_KEY,&lt;br/&gt;every *EnvVar a gateway names&quot;] --&gt;|&quot;read at RUNTIME by bx-ai&quot;| RUN
 
     style A fill:#eaf6ec,stroke:#155724
     style ENV fill:#fff3cd,stroke:#856404
@@ -277,7 +277,7 @@
 <p>The <code>.bxa</code> is <strong>relocatable</strong>: it carries every file the agent reads at runtime (including each agent node's own <code>instructions.md</code>, copied into <code>agent/</code> at build time), and the generated <code>agent/GeneratedAgentFactory.bx</code> resolves those paths relative to its own location on disk rather than the absolute paths of the machine that built it. So a <code>.bxa</code> built on CI runs unchanged when unzipped anywhere else - which also means a <code>.bxaignore</code> broad enough to match <code>*.md</code> will strip the agent's own instructions out of the artifact.</p>
 <p><code>package</code> requires a prior <code>build</code> (it reads <code>.build/manifest.json</code>) and refuses to run - producing no <code>.bxa</code> - if <code>manifestVersion</code> is unset or malformed.</p>
 <h2 id="excluding-files-bxaignore"><a href="#excluding-files-bxaignore" id="excluding-files-bxaignore" name="excluding-files-bxaignore" class="anchor"></a>Excluding files: <code>.bxaignore</code></h2>
-<p>An optional <code>.bxaignore</code> at the project root, one glob pattern per line (<code>#</code>-prefixed lines are comments), excludes matching paths from the packaged <code>.bxa</code>:</p>
+<p>An optional <code>.bxaignore</code> at the project root, one glob pattern per line (<code>#</code>-prefixed lines are comments), excludes matching paths from the packaged <code>.bxa</code>. Patterns are matched against paths inside the built app (<code>.build/app</code>): a pattern with no <code>/</code> matches at any depth, one with a <code>/</code> is anchored at the app's root, a trailing <code>/</code> names a folder and everything under it, and <code>*</code> also crosses <code>/</code>.</p>
 <pre><code># .bxaignore
 *.log
 scratch/
@@ -289,7 +289,7 @@ scratch/
 </code></pre>
 <p>This guards against a future field - or a caller passing a richer struct into <code>package</code> some other way - accidentally leaking a value, even though today's manifest never puts one there to begin with.</p>
 <h2 id="where-real-secrets-live"><a href="#where-real-secrets-live" id="where-real-secrets-live" name="where-real-secrets-live" class="anchor"></a>Where real secrets live</h2>
-<p>BxAgents never resolves, stores, or embeds provider API keys, tokens, or passwords anywhere in a build or package. That's entirely bx-ai's job, at <strong>runtime</strong>: it reads them from the process environment following its own <code>&lt;PROVIDER&gt;_API_KEY</code>-style convention (e.g. <code>OPENAI_API_KEY</code>, <code>ANTHROPIC_API_KEY</code>). Set them however you normally manage secrets for a deployed process - an OS environment variable or your platform's secret manager. For local development, BoxLang and <code>boxlang-miniserver</code> both load a <code>.env</code> from the project root themselves, so <code>bxAgents new</code>'s <code>.env</code> is the easy place for them; BxAgents never reads, copies or embeds it, and it is never committed (the scaffolded <code>.gitignore</code> covers it) or packaged. A deployed <code>.bxa</code> has no <code>.env</code>, so give that process real environment variables.</p>
+<p>BxAgents never resolves, stores, or embeds provider API keys, tokens, or passwords anywhere in a build or package. That's entirely bx-ai's job, at <strong>runtime</strong>: it reads them from the process environment following its own <code>&lt;PROVIDER&gt;_API_KEY</code>-style convention (e.g. <code>OPENAI_API_KEY</code>, <code>CLAUDE_API_KEY</code>). Set them however you normally manage secrets for a deployed process - an OS environment variable or your platform's secret manager. For local development, BoxLang and <code>boxlang-miniserver</code> both load a <code>.env</code> from the project root themselves, so <code>bxAgents new</code>'s <code>.env</code> is the easy place for them; BxAgents never reads, copies or embeds it, and it is never committed (the scaffolded <code>.gitignore</code> covers it) or packaged. A deployed <code>.bxa</code> has no <code>.env</code>, so give that process real environment variables.</p>
 <pre><code class="language-bash">export OPENAI_API_KEY=sk-...
 bxAgents serve
 </code></pre>

@@ -304,9 +304,9 @@ data: [DONE]
 </div>
 <p>Because the whole envelope arrives, <strong>reasoning and tool calls are already on the wire</strong> with no extra endpoint needed: <code>delta.reasoning</code> (normalized across every provider by bx-ai) renders as a collapsed &quot;Thinking&quot; strip, and <code>delta.tool_calls</code> as collapsed per-call chips. Tool-call arguments stream as partial JSON fragments keyed by <code>index</code>, so the page accumulates per index rather than assuming any single chunk holds a complete call.</p>
 <h2 id="walkthrough"><a href="#walkthrough" id="walkthrough" name="walkthrough" class="anchor"></a>Walkthrough</h2>
-<video controls preload="metadata" poster="../assets/video/webui-walkthrough-poster.png" style="max-width:100%">
-  <source src="../assets/video/webui-walkthrough.mp4" type="video/mp4">
-  <track kind="captions" src="../assets/video/webui-walkthrough.vtt" srclang="en" label="English" default>
+<video controls preload="metadata" poster="/assets/video/webui-walkthrough-poster.png" style="max-width:100%">
+  <source src="/assets/video/webui-walkthrough.mp4" type="video/mp4">
+  <track kind="captions" src="/assets/video/webui-walkthrough.vtt" srclang="en" label="English" default>
 </video>
 <p>A minute and a quarter through the whole page: sign in, streaming, the model picker, a tool call, saved conversations, notes and the dark theme. The music and the mix were made with <a href="https://github.com/ortus-boxlang/bx-audio">bx-audio</a> and the voice with <a href="https://github.com/thewh1teagle/kokoro-onnx">Kokoro</a> (an Apache 2.0 model), and the page is the demo app in <a href="https://github.com/ortus-boxlang/bx-agents/tree/development/tools/demo/webui"><code>tools/demo/webui</code></a>, which <code>capture.js</code> there drives with Playwright. It talks to a scripted model, so every answer is the same each time.</p>
 <div class="bxsites-table-wrap"><table class="table">
@@ -341,7 +341,7 @@ data: [DONE]
 </code></pre>
 <p>The <code>thread</code> event goes first because a response header cannot be read before the body starts arriving, and the page needs that <code>threadId</code> to be able to <code>POST /cancel</code> mid-turn.</p>
 <h2 id="the-generated-api"><a href="#the-generated-api" id="the-generated-api" name="the-generated-api" class="anchor"></a>The generated API</h2>
-<p>A <code>webui</code> entry mounts twenty-five actions under <code>&lt;path&gt;/api</code>, served by a generated <code>handlers/ChatUi.bx</code>:</p>
+<p>A <code>webui</code> entry mounts twenty-nine actions under <code>&lt;path&gt;/api</code>, served by a generated <code>handlers/ChatUi.bx</code>:</p>
 <div class="bxsites-table-wrap" x-data="{ q: '' }"><input type="search" class="bxsites-table-filter" x-model="q" placeholder="Filter table..." aria-label="Filter table"><table class="table">
 <thead>
 <tr><th>Route</th><th>Purpose</th></tr>
@@ -363,6 +363,8 @@ data: [DONE]
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>GET /commands</code></td><td>The <a href="#slash-commands">slash commands</a> the page offers, <code>[ { name, hint } ]</code></td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>GET /context</code></td><td>What is in this visitor's context for one conversation (<code>?conversationId=</code>): <code>{ parts : [ { key, label, tokens, detail } ], tools : [ { name, tokens } ], total, contextWindow, percent }</code>. Estimates from the system prompt, tool definitions, notes and messages; no model is called</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>POST /command</code></td><td>Run one for this visitor: <code>{ line : &quot;/info&quot;, conversationId? }</code>, answers with the reply as data</td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>GET /status</code></td><td>What the <a href="/next/conventions/extensions/index.html#keys-and-status">extensions'</a> status items say for one conversation (<code>?conversationId=</code>): <code>{ items : [ { name, text } ] }</code></td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>GET /slots</code></td><td>What the <a href="/next/conventions/extensions/index.html#the-web-page-slots-and-web">extensions'</a> slots hold (<code>?conversationId=</code>): <code>{ items : [ { id, extension, place, html, text } ] }</code></td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>GET /profiles</code></td><td>The <a href="/next/conventions/models/index.html#profiles">profiles</a> the entry offers, <code>[]</code> when it lists none. See <a href="#choosing-the-model">Choosing the model</a></td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>GET /conversations</code></td><td>This visitor's conversations, newest activity first</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>POST /conversations/create</code></td><td>Start one - optional <code>{ title }</code>, returns the minted <code>conversationId</code></td></tr>
@@ -379,13 +381,13 @@ data: [DONE]
 </table></div>
 <p>Every one is scoped by ColdBox's <code>getUserSessionIdentifier()</code> as the <code>userId</code>. The first three keep <code>toAi()</code>'s exact shape and wire format.</p>
 <h3 id="slash-commands"><a href="#slash-commands" id="slash-commands" name="slash-commands" class="anchor"></a>Slash commands</h3>
-<p>Type <code>/</code> in the message box and a menu of commands appears (arrow keys, <code>Tab</code> to complete, <code>Esc</code> to close). They are the same commands as in <a href="/next/cli-reference/index.html#the-same-commands-in-the-web-page-and-in-chat-apps">the terminal chat</a>: <code>/help</code>, <code>/new</code>, <code>/tools</code>, <code>/sessions</code>, <code>/resume</code>, <code>/clear</code>, <code>/compact</code>, <code>/model</code>, <code>/info</code>, <code>/context</code>, <code>/remember</code>, <code>/notes</code>, <code>/name</code>, <code>/fork</code> and <code>/export</code>. Pressing Enter runs the line on the server with <code>POST /command</code> and draws the answer: text, a table, or buttons to pick from. <code>/new</code>, <code>/resume</code> and <code>/fork</code> move the page to the conversation they name, <code>/clear</code> reloads the transcript, and <code>/export [file] [--format=md|html]</code> hands the conversation to the browser to save (the <strong>Fork</strong> and <strong>Export</strong> buttons in the header run <code>/fork</code> and <code>/export</code>).</p>
+<p>Type <code>/</code> in the message box and a menu of commands appears (arrow keys, <code>Tab</code> to complete, <code>Esc</code> to close). They are the same commands as in <a href="/next/cli-reference/index.html#the-same-commands-in-the-web-page-and-in-chat-apps">the terminal chat</a>: <code>/help</code>, <code>/new</code>, <code>/tools</code>, <code>/sessions</code>, <code>/resume</code>, <code>/clear</code>, <code>/compact</code>, <code>/model</code>, <code>/info</code>, <code>/context</code>, <code>/remember</code>, <code>/notes</code>, <code>/name</code>, <code>/fork</code>, <code>/export</code>, <code>/ping</code> and <code>/keys</code>. Pressing Enter runs the line on the server with <code>POST /command</code> and draws the answer: text, a table, or buttons to pick from. <code>/new</code>, <code>/resume</code> and <code>/fork</code> move the page to the conversation they name, <code>/clear</code> reloads the transcript, and <code>/export [file] [--format=md|html]</code> hands the conversation to the browser to save (the <strong>Fork</strong> and <strong>Export</strong> buttons in the header run <code>/fork</code> and <code>/export</code>).</p>
 <p>The reply is data, so any client can use it:</p>
 <pre><code class="language-json">{ &quot;success&quot;: true, &quot;conversationId&quot;: &quot;...&quot;,
   &quot;blocks&quot;: [ { &quot;type&quot;: &quot;table&quot;, &quot;layout&quot;: &quot;keyvalue&quot;, &quot;rows&quot;: [ [ &quot;Agent&quot;, &quot;helper&quot; ] ] } ],
   &quot;effects&quot;: [ { &quot;type&quot;: &quot;conversation&quot;, &quot;id&quot;: &quot;...&quot; } ] }
 </code></pre>
-<p>Blocks are <code>text</code>, <code>table</code>, <code>choose</code> (options, each with the command line to run), <code>transcript</code> and <code>file</code> (<code>{ name, mime, text }</code>, which the page saves); effects say what happened to the conversation (<code>reset</code>, <code>conversation</code>). <code>/info</code> leaves out where the database file is. A command that only makes sense on your own machine (<code>/copy</code>, <code>/save</code>, <code>/profile</code>) is not offered, and a server never switches the shared agent's model: the page picks a profile per message instead.</p>
+<p>Blocks are <code>text</code>, <code>table</code>, <code>choose</code> (options, each with the command line to run), <code>transcript</code> and <code>file</code> (<code>{ name, mime, text }</code>, which the page saves); effects say what happened to the conversation (<code>reset</code>, <code>conversation</code>). <code>/info</code> leaves out where the database file is. A command that only makes sense on your own machine (<code>/copy</code>, <code>/record</code>, <code>/profile</code>) is not offered, and a server never switches the shared agent's model: the page picks a profile per message instead.</p>
 <p><code>threadId</code> is server-authoritative: taken from the request when supplied, minted otherwise, and always echoed back - as an <code>X-Thread-Id</code> response header on <code>/invoke</code> and <code>/batch</code>, and as a <code>thread</code> SSE event sent <em>before the first chunk</em> on <code>/stream</code> (a header can't be read before the body starts arriving). That's the same contract ColdBox 8.1's own <code>toAi()</code> adopted, so a client written against one works against the other.</p>
 <div class="adm-block adm-warning">
 <div class="adm-heading">
@@ -561,7 +563,7 @@ qb : {
 </table></div>
 <p>An absolute <code>database.path</code> <strong>fails the build</strong>: it's resolved with <code>expandPath()</code> inside the generated app, so an absolute path silently escapes the app directory and breaks a packaged <code>.bxa</code> deploy.</p>
 <p><strong>One file for the web chat and the terminal chat.</strong> On a developer's machine, <code>bxAgents serve</code> starts the app with the environment variable <code>BXAGENTS_DB</code> set to <code>data/chat.db</code> in the project folder, and <code>bxAgents chat</code> opens the same file. The generated app uses <code>BXAGENTS_DB</code> when it is set and <code>database.path</code> otherwise, so a deployed app keeps its file inside the app unless you set <code>BXAGENTS_DB</code> there too (for example to a mounted volume). New projects git-ignore <code>data/chat.db*</code>. The file is in WAL mode, so the terminal chat and a running server can use it at the same time.</p>
-<p><strong>Schema is versioned and forward-only.</strong> <code>ChatStore.migrate()</code> (called by <code>ChatDb.migrate()</code>) records what it has applied in a <code>bxagents_schema_version</code> table and applies only what's newer, so booting against an existing store is a no-op. v1 creates <code>conversations</code> and <code>preferences</code>; v2 adds <code>users</code>. Evolve it by adding a step to the store's migration list - never by editing a migration that has shipped, because <strong>SQLite cannot modify or drop a column</strong>. A database made by an earlier version of the generated app is recognised and left as it is.</p>
+<p><strong>Schema is versioned and forward-only.</strong> <code>ChatStore.migrate()</code> (called by <code>ChatDb.migrate()</code>) records what it has applied in a <code>bxagents_schema_version</code> table and applies only what's newer, so booting against an existing store is a no-op. v1 creates <code>conversations</code> and <code>preferences</code>; v2 adds <code>users</code>, v3 <code>tokens</code>, v4 <code>notes</code> and v5 <code>usage</code>. Evolve it by adding a step to the store's migration list - never by editing a migration that has shipped, because <strong>SQLite cannot modify or drop a column</strong>. A database made by an earlier version of the generated app is recognised and left as it is.</p>
 <div class="adm-block adm-warning">
 <div class="adm-heading">
 <svg class="adm-icon"><use xlink:href="#adm-warning" /></svg><span>Warning</span>
@@ -682,10 +684,9 @@ memory:
 <tr><th>Missing</th><th>Note</th></tr>
 </thead>
 <tbody>
-<tr><td>Attachments / image input</td><td>The composer is text-only. bx-ai itself handles images, so this is a UI gap, not a capability one</td></tr>
 <tr><td>Retry / regenerate</td><td>A failed turn has to be re-sent by hand</td></tr>
 <tr><td>Edit and resend</td><td>No editing a message already sent</td></tr>
-<tr><td>Token / cost display</td><td>Nothing surfaces usage, though the provider returns it</td></tr>
+<tr><td>Token / cost display</td><td>The page shows none. <code>usage: true</code> in <code>Agent.yaml</code> records tokens for <code>bxAgents stats</code>, and <code>/stats</code> shows them in the terminal chat only</td></tr>
 </tbody>
 </table></div>
 

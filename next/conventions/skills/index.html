@@ -289,10 +289,8 @@ Always greet the user warmly and use their name if known.
 <h2 id="skills-from-the-registry"><a href="#skills-from-the-registry" id="skills-from-the-registry" name="skills-from-the-registry" class="anchor"></a>Skills from the registry</h2>
 <p>Skills from skills.boxlang.io are installed with <code>bxAgents skills install &lt;owner/repo/skill&gt;</code>, not copied by hand. They go in <code>.agents/skills/</code> (bx-ai's own default folder), out of source control; <code>.agents/skills.lock.json</code> is committed and <code>build</code> restores from it. Both folders go into the build, and a skill in <code>skills/</code> with the same name wins. See <a href="/next/cli-reference/index.html#skills"><code>skills</code></a>.</p>
 <h2 id="how-its-wired-at-runtime"><a href="#how-its-wired-at-runtime" id="how-its-wired-at-runtime" name="how-its-wired-at-runtime" class="anchor"></a>How it's wired at runtime</h2>
-<p><code>skills/</code> is copied verbatim into the generated app (same wipe-then-write, dotfile-excluding copy as <a href="/next/conventions/tools/index.html"><code>tools/</code></a>). The generated <code>config/ColdBox.bx</code> always points bx-ai's own <code>skillsDirectory</code> module setting at <code>/skills</code>:</p>
-<pre><code class="language-javascript">moduleSettings = {
-	bxai : { skillsDirectory : &quot;/skills&quot; }
-}
+<p><code>skills/</code> is copied verbatim into the generated app (same wipe-then-write, dotfile-excluding copy as <a href="/next/conventions/tools/index.html"><code>tools/</code></a>). The generated app always points bx-ai's own <code>skillsDirectory</code> module setting at <code>/skills</code>. It is written to <code>config/bxai-settings.json</code> (not <code>config/ColdBox.bx</code>, because ColdBox's <code>moduleSettings</code> does not reach bx-ai, a BoxLang module) and applied when the app starts:</p>
+<pre><code class="language-json">{ &quot;skillsDirectory&quot;: &quot;/skills&quot; }
 </code></pre>
 <div class="adm-block adm-info">
 <div class="adm-heading">

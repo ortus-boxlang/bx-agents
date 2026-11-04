@@ -2,7 +2,7 @@
 title: deploy/
 icon: phosphor-duotone:cloud-arrow-up
 summary: "One entry per deployment target: local, ssh, ftp, sftp, docker, digitalocean."
-description: "One entry per deployment target: local, ssh, ftp, docker, digitalocean."
+description: "One entry per deployment target: local, ssh, ftp, sftp, docker, digitalocean."
 tags: [conventions, deployment]
 ---
 
@@ -121,8 +121,9 @@ Deploys to a [DigitalOcean App Platform](https://www.digitalocean.com/products/a
 	region        : "nyc",   // optional, defaults to "nyc"
 	registry      : { type : "docr", repository : "myorg/my-agent" },   // "namespace/repo" form
 	httpPort      : 8080,   // optional, defaults to 8080
-	instanceSize  : "apps-s-1vcpu-1gb",   // optional
+	instanceSize  : "apps-s-1vcpu-1gb",   // optional, defaults to "apps-s-1vcpu-1gb"
 	instanceCount : 1,   // optional, defaults to 1
+	tag           : "1.0.0",   // optional, image tag, defaults to "latest"
 	envs          : [ { key : "OPENAI_API_KEY", scope : "RUN_TIME", type : "SECRET" } ]   // optional
 }
 ```

@@ -269,9 +269,10 @@ class {
 <p>BxAgents doesn't scan or interpret <code>@AITool</code> annotations itself at build time - it
 just discovers one entry per <code>.bx</code> file (for name-collision checking) and copies the
 whole <code>tools/</code> folder <strong>verbatim</strong> into the generated app. At startup, the generated
-app calls bx-ai's own scanner (<code>aiToolRegistry().scan( &quot;tools&quot; )</code>), which does the real
-reflection work. This statement is only emitted at all if your project actually has a
-<code>tools/</code> folder with files in it.</p>
+app calls bx-ai's own scanner (<code>aiToolRegistry().scan( &quot;tools&quot; )</code>), which registers the tools
+by name, and the agent factory loads each agent's own <code>tools/</code> folder through bx-ai, which
+does the real reflection work. The scan statement is only emitted at all if your project
+actually has a <code>tools/</code> folder with files in it.</p>
 <h2 id="whose-tools-are-they"><a href="#whose-tools-are-they" id="whose-tools-are-they" name="whose-tools-are-they" class="anchor"></a>Whose tools are they?</h2>
 <p>An agent gets its own <code>tools/</code> folder and nothing else: a root agent's tools are not
 given to its subagents, and the other way round. Tools that <em>modules</em> register with
@@ -299,8 +300,8 @@ previous build.</p>
 class {
 
 	@AITool( &quot;Get the current server time.&quot; )
-	function now() {
-		return dateTimeFormat( now(), &quot;yyyy-mm-dd HH:nn:ss&quot; );
+	function currentTime() {
+		return dateTimeFormat( now(), &quot;yyyy-MM-dd HH:mm:ss&quot; );
 	}
 
 }

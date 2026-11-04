@@ -282,7 +282,7 @@
 </thead>
 <tbody>
 <tr><td><code>NO_COLOR</code>, <code>--no-color</code></td><td>Same shape, no color</td></tr>
-<tr><td><code>TERM=dumb</code>, output that is not UTF-8, or a terminal narrower than the art (76 columns)</td><td>One plain line instead</td></tr>
+<tr><td><code>TERM=dumb</code>, output that is not UTF-8, or a terminal narrower than the art (75 columns)</td><td>One plain line instead</td></tr>
 <tr><td><code>--no-banner</code>, or <code>BXAGENTS_BANNER=off</code></td><td>No banner</td></tr>
 <tr><td><code>BXAGENTS_BANNER_THEME=Ocean</code></td><td>Pin a theme instead of a random one, for a recording that comes out the same every time</td></tr>
 </tbody>
@@ -360,7 +360,7 @@ bxAgents new my-agent --forgebox=some-package-slug
 <li><code>--model</code> is <strong>required</strong> when no questions are asked - a <code>provider/model</code> slug (see <a href="/conventions/agent-bx/index.html#the-model-slug">the model slug</a>).</li>
 <li><code>--name</code> defaults to the target directory's own basename.</li>
 <li>Refuses to run if the target already contains an <code>Agent.yaml</code> or an <code>Agent.bx</code>.</li>
-<li>Creates <a href="/conventions/agent-yaml/index.html"><code>Agent.yaml</code></a>, <code>instructions.md</code>, every convention folder (empty), a root <a href="/conventions/box-json/index.html"><code>box.json</code></a> (<code>testbox</code> as a development dependency, installed into <code>lib/testbox</code>), a ready-to-run <a href="/conventions/testing/index.html"><code>tests/</code></a> folder (<code>tests/specs/AgentSpec.bx</code>), a <code>.env</code> declaring <code>BOXLANG_HOME=.build/runtime</code> (matching <code>serve</code>'s own scoped runtime home), a <code>.gitignore</code> (<code>.env</code>, <code>.build/</code>, <code>dist/</code>, <code>lib/</code>, <code>boxlang_modules/</code>, editor files), and the standard dotfiles <code>.editorconfig</code>, <code>.gitattributes</code>, <code>.bxlint.json</code>, <code>.markdownlint.json</code> and a <code>.boxlang.json</code> listing every bx-ai setting at its default (the BoxLang runtime reads it when run from the project root; edit the values there). Never overwrites a file that already exists. BoxLang and <code>boxlang-miniserver</code> load a <code>.env</code> from the project root themselves, so the file also works for your API keys; BxAgents never reads, copies or packages it.</li>
+<li>Creates <a href="/conventions/agent-yaml/index.html"><code>Agent.yaml</code></a>, <code>instructions.md</code>, every convention folder (empty), a root <a href="/conventions/box-json/index.html"><code>box.json</code></a> (<code>testbox</code> as a development dependency, installed into <code>lib/testbox</code>), a ready-to-run <a href="/conventions/testing/index.html"><code>tests/</code></a> folder (<code>tests/specs/AgentSpec.bx</code>), a <code>.env</code> declaring <code>BOXLANG_HOME=.build/runtime</code> (matching <code>serve</code>'s own scoped runtime home), a <code>.gitignore</code> (<code>.env</code> and <code>.env.*</code>, <code>.build/</code>, <code>dist/</code>, <code>data/chat.db*</code>, <code>lib/</code>, <code>boxlang_modules/</code>, <code>.agents/skills/</code>, editor files), and the standard dotfiles <code>.editorconfig</code>, <code>.gitattributes</code>, <code>.bxlint.json</code>, <code>.markdownlint.json</code> and a <code>.boxlang.json</code> listing every bx-ai setting at its default (the BoxLang runtime reads it when run from the project root; edit the values there). Never overwrites a file that already exists. BoxLang and <code>boxlang-miniserver</code> load a <code>.env</code> from the project root themselves, so the file also works for your API keys; BxAgents never reads, copies or packages it.</li>
 <li><code>--class</code> (a bare boolean flag, like the others described above) writes the class-based <a href="/conventions/agent-bx/index.html"><code>Agent.bx</code></a> instead of the default <code>Agent.yaml</code>, for agents whose definition needs code (hooks, dynamic instructions). It applies to the root and to any subagents a template scaffolds, and only to <code>--template</code> mode - not to <code>--repo</code>/<code>--forgebox</code>.</li>
 <li><code>--template</code> picks one of 8 built-in starters, each layering a bit of pre-wired content on top of the base skeleton above (see <a href="/agent-templates/index.html">Agent Templates</a> for every generated file in full, plus how <code>--repo</code>/<code>--forgebox</code> sources work and how to publish your own):
 <ul>
@@ -395,7 +395,7 @@ bxAgents add tool Pinger --dry-run              # show the file, write nothing
 <li>The positional arguments are the kind and the name, so the project is found by <code>--projectRoot=&lt;path&gt;</code> or the current folder only.</li>
 <li>At a terminal, whatever is not given as a flag is asked, in the full-screen UI (or numbered lines with <code>--no-tui</code>). With <code>--yes</code>, in a pipe or in CI nothing is asked: flags and defaults are used, and a required answer that is missing names the flag to pass.</li>
 <li>Questions end on a review of the files that will be written. Cancelling, with Esc or Ctrl+C, changes nothing.</li>
-<li><strong>Nothing is overwritten.</strong> If a file already exists none are written and the error names it; <code>--force</code> replaces it.</li>
+<li><strong>Nothing is overwritten.</strong> If a file already exists none are written and the error names it; <code>--force</code> replaces it. At a terminal the review offers to replace instead.</li>
 <li><code>--dry-run</code> prints each file with its text and writes nothing.</li>
 </ul>
 <h4 id="add-tool"><a href="#add-tool" id="add-tool" name="add-tool" class="anchor"></a><code>add tool</code></h4>
@@ -468,12 +468,12 @@ bxAgents add schedule                          # asks how often, the details, a 
 </ul>
 <h4 id="add-mcp"><a href="#add-mcp" id="add-mcp" name="add-mcp" class="anchor"></a><code>add mcp</code></h4>
 <p>Adds an MCP server in either direction: one the agent <strong>calls</strong> (written into <code>Agent.yaml</code>), or one the project <strong>hosts</strong> (<code>mcp/&lt;name&gt;.bx</code>).</p>
-<pre><code class="language-bash">bxAgents add mcp client github                 # a server from the catalog the new wizard uses
+<pre><code class="language-bash">bxAgents add mcp client github                 # a server from the catalog the new wizard uses (or --direction=client)
 bxAgents add mcp client --url=https://mcp.acme.dev/mcp --name=acme --auth=bearer --env=ACME_TOKEN
 bxAgents add mcp server tools --description=&quot;My tools&quot;
 bxAgents add mcp                                # asks which way
 </code></pre>
-<p><strong><code>add mcp client</code></strong> adds an entry to the agent's <code>mcpServers:</code> list. A name from the catalog (<code>github</code>, <code>stripe</code>, <code>notion</code>, <code>atlassian</code>, <code>cloudflare</code>, <code>supabase</code>, <code>git</code>) fills in the address and the sign-in, or for a server that runs as a program on this machine (<code>git</code>) the <code>command</code> to start it and what it needs on the PATH; otherwise give <code>--url</code>.</p>
+<p><strong><code>add mcp client</code></strong> adds an entry to the agent's <code>mcpServers:</code> list. A name from the catalog (<code>github</code>, <code>stripe</code>, <code>notion</code>, <code>atlassian</code>, <code>cloudflare</code>, <code>supabase</code>, <code>git</code>) fills in the address and the sign-in, or for a server that runs as a program on this machine (<code>git</code>) the <code>command</code> to start it and what it needs on the PATH; otherwise give <code>--url</code>. Without a terminal, name the server as the positional or give <code>--url</code>.</p>
 <div class="bxsites-table-wrap"><table class="table">
 <thead>
 <tr><th>Flag</th><th>Meaning</th></tr>
@@ -511,7 +511,7 @@ bxAgents add mcp                                # asks which way
 bxAgents add gateway slack --env=botTokenEnvVar=ACME_BOT,appTokenEnvVar=ACME_APP --policy=steer
 bxAgents add gateway web --auth=key             # the browser chat page, behind a random shared key
 bxAgents add gateway api --path=/api/chat
-bxAgents add gateway                            # asks which
+bxAgents add gateway                            # asks which (or --type=&lt;kind&gt;)
 </code></pre>
 <p>The platforms are the ones the new wizard offers: <code>telegram</code>, <code>slack</code>, <code>discord</code>, <code>whatsapp-cloud</code>, <code>teams</code>, <code>twilio</code>, <code>github</code>, <code>email</code> and <code>signal</code>.</p>
 <div class="bxsites-table-wrap"><table class="table">
@@ -523,7 +523,7 @@ bxAgents add gateway                            # asks which
 <tr><td><code>--env=&lt;config=NAME,...&gt;</code></td><td>Chat platforms: which variable holds which credential, for example <code>botTokenEnvVar=ACME_BOT</code>. Without it the usual names are used (<code>SLACK_BOT_TOKEN</code>, ...). Only names go in the gateway file; an empty stub for each goes in <code>.env</code>.</td></tr>
 <tr><td><code>--policy=queue\|reject\|steer\|interrupt</code></td><td>Chat platforms: what to do with a message that arrives while the agent is still answering. Written to Agent.yaml's <code>gatewaySession</code> unless it is the default <code>queue</code>.</td></tr>
 <tr><td><code>--path=&lt;path&gt;</code></td><td><code>web</code> and <code>api</code>: where it is served (<code>/chat</code> and <code>/api/chat</code> by default). A path another gateway uses is refused.</td></tr>
-<tr><td><code>--auth=open\|key\|users</code></td><td><code>web</code>: anyone who can reach it, a random shared key kept in <code>.env</code> as <code>CHAT_UI_API_KEY</code>, or named users.</td></tr>
+<tr><td><code>--auth=open\|key\|users</code></td><td><code>web</code>: anyone who can reach it, a random shared key kept in <code>.env</code> as <code>CHAT_UI_API_KEY</code>, or named users. Default <code>key</code>.</td></tr>
 <tr><td><code>--profiles=a,b</code></td><td><code>web</code>: the project's profiles people can pick in the chat (see <a href="/conventions/web-ui/index.html#choosing-the-model">Choosing the model</a>). Asked only when the project has profiles; none keeps the page on the agent's own model.</td></tr>
 <tr><td><code>--users=&lt;name:hash,...&gt;</code></td><td><code>web</code> with <code>users</code>: each hash comes from <code>bxAgents hash-password</code>. A password is never taken as a flag; at a terminal you type it, hidden, and only its hash is stored.</td></tr>
 </tbody>
@@ -547,7 +547,7 @@ bxAgents add subagent checker --model=claude --parent=writer --with=search --sea
 <tr><td><code>--description</code>, <code>--with</code>, <code>--search</code>, <code>--files</code>, <code>--files-dir</code>, <code>--memory</code>, <code>--mcp</code>, <code>--guard</code></td><td>The same as <a href="#new"><code>new</code></a>.</td></tr>
 </tbody>
 </table></div>
-<p>Writes <code>subagents/&lt;name&gt;/Agent.yaml</code> (with the <code>environments.test</code> mock model, so <code>bxAgents test</code> needs no key) and <code>instructions.md</code>, and adds an empty <code>.env</code> stub for each key the choices need. The name is inserted into the parent's <code>subAgents</code> without rewriting the file, so comments and order stay as they were. If the parent is a class, or its list is written in a shape that cannot be extended by inserting, nothing in it is changed and the line to add is printed. Packages a choice needs (<code>bx-playwright</code> for browsing) are named for you to add to <code>box.json</code>.</p>
+<p>Writes <code>subagents/&lt;name&gt;/Agent.yaml</code> (with the <code>environments.test</code> mock model, so <code>bxAgents test</code> needs no key) and <code>instructions.md</code>, and adds an empty <code>.env</code> stub for each key the choices need. The name is inserted into the parent's <code>subAgents</code> without rewriting the file, so comments and order stay as they were. If the parent is a class, or its list is written in a shape that cannot be extended by inserting, nothing in it is changed and the line to add is printed. Packages a choice needs (<code>bx-playwright</code> for browsing) are named for you to add to <code>box.json</code>. <code>--temperature</code>, <code>--max-tokens</code> and <code>--timeout</code> are refused here: they are settings of the whole app, so they go in the project's own <code>Agent.yaml</code>.</p>
 <h4 id="add-skill"><a href="#add-skill" id="add-skill" name="add-skill" class="anchor"></a><code>add skill</code></h4>
 <p>Adds a custom skill of your own: <code>skills/&lt;name&gt;/SKILL.md</code>, in the Claude Agent Skills shape. It goes into source control with the project and into every build.</p>
 <pre><code class="language-bash">bxAgents add skill release-notes --description=&quot;Use this skill when writing release notes&quot;
@@ -573,7 +573,7 @@ bxAgents add provider                           # asks
 <tr><th>Flag</th><th>Meaning</th></tr>
 </thead>
 <tbody>
-<tr><td><code>--provider=&lt;id&gt;</code>, or the first positional</td><td>A provider bx-ai knows. One that already has settings is refused.</td></tr>
+<tr><td><code>--provider=&lt;id&gt;</code>, or the first positional</td><td>A provider bx-ai knows (<code>openai</code> when nothing is asked and none is given). One that already has settings is refused.</td></tr>
 <tr><td><code>--temperature</code>, <code>--max-tokens</code>, <code>--timeout</code></td><td>At least one is needed. Written as <code>params</code> (<code>temperature</code>, <code>max_tokens</code>) and <code>options</code> (<code>timeout</code>).</td></tr>
 </tbody>
 </table></div>
@@ -615,7 +615,7 @@ bxAgents add capability                         # asks which one
 <tr><td><code>image</code></td><td><code>provider</code>, <code>model</code>, <code>size</code>, <code>quality</code>, <code>style</code>, <code>instructions</code></td></tr>
 </tbody>
 </table></div>
-<p>Every key but the provider is optional; left out, the provider's own default applies. bx-ai keeps speech and transcription on one audio provider, so the second of the two defaults to the first's provider and a different one is refused. A capability that is already set is refused: edit it in the file. The provider's key variable gets an empty stub in <code>.env</code>; the key itself is never asked for.</p>
+<p>The flags are <code>--slot</code> (or the first positional), <code>--provider</code> and one for each key in the table, such as <code>--model</code> and <code>--voice</code>. Every key but the provider is optional; left out, the provider's own default applies. bx-ai keeps speech and transcription on one audio provider, so the second of the two defaults to the first's provider and a different one is refused. A capability that is already set is refused: edit it in the file. The provider's key variable gets an empty stub in <code>.env</code>; the key itself is never asked for.</p>
 <h4 id="add-extension"><a href="#add-extension" id="add-extension" name="add-extension" class="anchor"></a><code>add extension</code></h4>
 <p>Creates an extension of your own in <code>extensions/</code>: one file for a few methods, or a folder when it carries a scheduler, gateway, tool, skill or web files. See <a href="/conventions/extensions/index.html#starting-one">Starting one</a>.</p>
 <pre><code class="language-bash">bxAgents add extension standup
@@ -627,6 +627,7 @@ bxAgents add extension standup --with=command,scheduler        # a folder, with 
 <tr><th>Flag</th><th>Meaning</th></tr>
 </thead>
 <tbody>
+<tr><td><code>--name</code></td><td>The file or folder name, or the first positional. Letters, digits, <code>-</code>, <code>_</code> and <code>.</code>.</td></tr>
 <tr><td><code>--with</code></td><td>What it brings, comma separated: <code>command</code>, <code>key</code>, <code>status</code>, <code>prefix</code>, <code>source</code>, <code>slot</code>, <code>verb</code>, <code>listener</code>, <code>scheduler</code>, <code>gateway</code>, <code>tool</code>, <code>skill</code>, <code>web</code>. Default <code>command</code>.</td></tr>
 <tr><td><code>--layout</code></td><td><code>file</code> or <code>folder</code>. A folder is the only choice when <code>--with</code> has a <code>scheduler</code>, <code>gateway</code>, <code>tool</code>, <code>skill</code> or <code>web</code>.</td></tr>
 <tr><td><code>--description</code></td><td>One line for the class's docblock.</td></tr>
@@ -708,6 +709,7 @@ bxAgents skills remove &lt;name&gt;
 <li>Scopes the server's own BoxLang runtime home to <code>.build/runtime</code> (via <code>serverHome</code>) rather than the shared <code>~/.boxlang</code> default, so each project's compiled-class cache and config overrides are isolated - and <code>clean</code> sweeps it for free, since it already wipes <code>.build</code> wholesale. <code>invoke --server</code> gets this too, since it reuses <code>serve</code> internally. This does <strong>not</strong> extend to <code>chat</code>/<code>build</code>/<code>test</code>/default <code>invoke</code>.</li>
 </ul>
 <h3 id="chat"><a href="#chat" id="chat" name="chat" class="anchor"></a><code>chat</code></h3>
+<p><picture><source type="image/webp" srcset="/assets/tui/chat-answer-400w.e2bb3e0b.webp 400w, /assets/tui/chat-answer-800w.e2bb3e0b.webp 800w, /assets/tui/chat-answer-1028w.e2bb3e0b.webp 1028w" sizes="(min-width: 800px) 800px, 100vw"><img src="/assets/tui/chat-answer.png" srcset="/assets/tui/chat-answer-400w.e2bb3e0b.png 400w, /assets/tui/chat-answer-800w.e2bb3e0b.png 800w" sizes="(min-width: 800px) 800px, 100vw"  alt="The terminal chat" /></picture></p>
 <p>New to it? Start with <a href="/guides/terminal-ui/index.html">the terminal UI</a>, the <a href="/guides/chat-walkthrough/index.html">walkthroughs</a> and the <a href="/guides/slash-commands/index.html">slash command list</a>. This section is the reference.</p>
 <p>A chat with the built agent, in a terminal screen that keeps your scrollback: finished turns are printed as ordinary terminal text (select, search and scroll them as usual) and only the message box and the answer being written are redrawn. <code>--no-tui</code> (and any terminal that is not interactive) uses a plain line-by-line REPL instead, built on BoxLang's own <code>MiniConsole</code>.</p>
 <pre><code class="language-bash">bxAgents chat                                  # fast, in-process
@@ -726,17 +728,17 @@ bxAgents chat --session=2                      # open one by its number in /sess
 </thead>
 <tbody>
 <tr><td>Enter</td><td>Send the message</td></tr>
-<tr><td>Alt+Enter, Ctrl+J, or <code>\</code> then Enter</td><td>New line in the message</td></tr>
+<tr><td>Alt+Enter, Shift+Enter, Ctrl+J, or <code>\</code> then Enter</td><td>New line in the message</td></tr>
 <tr><td>Up / Down</td><td>Earlier messages (from the first or last line of the box)</td></tr>
 <tr><td>Esc</td><td>Stop the agent. It stops at its next step, not mid-word</td></tr>
 <tr><td>Enter while the agent works</td><td>Steer it: your message is added to the run</td></tr>
-<tr><td>Ctrl+C</td><td>Clear the box; on an empty box, leave; while the agent works, stop it. Ctrl+D leaves too</td></tr>
+<tr><td>Ctrl+C</td><td>Clear the box; on an empty box, leave; while the agent works, stop it. Ctrl+D leaves on an empty box</td></tr>
 <tr><td><code>?</code> alone, or <code>/keys</code></td><td>List the keys as they are bound now, with the action name of each</td></tr>
 </tbody>
 </table></div>
 <p>Type <code>/</code> for the commands: <code>/help</code>, <code>/new</code> (a fresh conversation), <code>/tools</code>, <code>/copy</code> (the last answer to the clipboard, using the OSC 52 escape most terminals honor), <code>/export [file]</code> (the conversation as Markdown or HTML), <code>/name</code> and <code>/fork</code> (see below), <code>/keys</code> (which key does what), <code>/prompt</code> (how the message box looks, see below), <code>/sessions</code>, <code>/resume</code>, <code>/clear</code>, <code>/compact</code> and <code>/info</code> (see below), <code>/model</code>, <code>/profile</code> and <code>/default</code> (see below), <code>/remember &lt;text&gt;</code> and <code>/notes</code> (see below), <code>/record [file]</code> and <code>/record stop</code> (see below) and <code>/exit</code>.</p>
 <h4 id="the-same-commands-in-the-web-page-and-in-chat-apps"><a href="#the-same-commands-in-the-web-page-and-in-chat-apps" id="the-same-commands-in-the-web-page-and-in-chat-apps" name="the-same-commands-in-the-web-page-and-in-chat-apps" class="anchor"></a>The same commands in the web page and in chat apps</h4>
-<p>Each slash command is written once, as a small class that answers with data (text, a table, a list to pick from), and the terminal, the web page and the chat platforms each draw that answer their own way. So <code>/help</code>, <code>/new</code>, <code>/tools</code>, <code>/sessions</code>, <code>/resume</code>, <code>/clear</code>, <code>/compact</code>, <code>/model</code>, <code>/info</code>, <code>/remember</code> and <code>/notes</code> work in all three:</p>
+<p>Each slash command is written once, as a small class that answers with data (text, a table, a list to pick from), and the terminal, the web page and the chat platforms each draw that answer their own way. So <code>/help</code>, <code>/new</code>, <code>/tools</code>, <code>/sessions</code>, <code>/resume</code>, <code>/clear</code>, <code>/compact</code>, <code>/model</code>, <code>/ping</code>, <code>/info</code>, <code>/remember</code> and <code>/notes</code> work in all three:</p>
 <div class="bxsites-table-wrap"><table class="table">
 <thead>
 <tr><th>Where</th><th>How you use them</th></tr>
@@ -744,7 +746,7 @@ bxAgents chat --session=2                      # open one by its number in /sess
 <tbody>
 <tr><td>Terminal chat</td><td>Type <code>/</code>, as above</td></tr>
 <tr><td><a href="/conventions/web-ui/index.html#slash-commands">Web page</a></td><td>Type <code>/</code>: a menu of the commands appears, <code>Tab</code> completes one</td></tr>
-<tr><td><a href="/conventions/gateways/index.html#commands-in-a-gateway">Chat platforms</a> (Telegram, Slack, ...)</td><td>Type the command as a message. A safe set is on by default; a project can widen or switch it off</td></tr>
+<tr><td><a href="/conventions/gateways/index.html#commands-in-a-gateway">Chat platforms</a> (Telegram, Slack, ...)</td><td>Type the command as a message. A safe set is on by default (<code>help</code>, <code>info</code>, <code>tools</code>, <code>model</code>, <code>ping</code>, <code>notes</code>, <code>remember</code>); a project can widen or switch it off</td></tr>
 <tr><td>A server over HTTP</td><td><code>GET /__bxagents/commands</code> and <code>POST /__bxagents/command</code>, see <a href="/conventions/agent-bx/index.html#run-control">Run control</a></td></tr>
 </tbody>
 </table></div>
@@ -783,7 +785,7 @@ bxAgents chat --session=2                      # open one by its number in /sess
 <tr><td><code>bars-hints</code></td><td>The same two bars, with the hints and the bottom widgets inside the lower one</td></tr>
 <tr><td><code>rule</code></td><td>One coloured rule above the box, and the hint row below</td></tr>
 <tr><td><code>box</code></td><td>A rounded box around the message box</td></tr>
-<tr><td><code>panel</code></td><td>A tinted panel with a thick left bar; on a terminal without colour it is drawn as <code>rule</code></td></tr>
+<tr><td><code>panel</code></td><td>A tinted panel with a thick left bar; on a terminal without 256 or true colour (16 colours or none) it is drawn as <code>rule</code></td></tr>
 </tbody>
 </table></div>
 <p>The widgets are <code>agent</code>, <code>profile</code>, <code>folder</code>, <code>user</code>, <code>clock</code>, <code>machine</code>, <code>git</code>, <code>date</code>, <code>session</code>, <code>elapsed</code> and <code>ctx</code>. They sit in the top bar (after the label) or at the bottom (on the hint row, or inside the lower bar); when the line is too narrow the last ones drop off. A widget with nothing to show, such as <code>git</code> outside a repository, is left out. By default the top bar shows <code>agent</code>, <code>folder</code>, <code>user</code> and <code>clock</code>, and the bottom shows <code>ctx</code> and <code>profile</code>.</p>
@@ -871,13 +873,13 @@ bxAgents chat --session=2                      # open one by its number in /sess
 <tr><th>Type</th><th>Does</th></tr>
 </thead>
 <tbody>
-<tr><td><code>@</code></td><td>Opens a list of the files under the folder you started in (up to five levels deep; hidden folders, <code>node_modules</code>, <code>build</code>, <code>dist</code>, <code>target</code>, <code>out</code>, <code>venv</code> are skipped). Keep typing to narrow it, Up and Down to move, Tab or Enter to take one</td></tr>
+<tr><td><code>@</code></td><td>Opens a list of the files under the folder you started in (up to five levels deep; hidden folders, <code>node_modules</code>, <code>build</code>, <code>dist</code>, <code>target</code>, <code>out</code>, <code>__pycache__</code>, <code>venv</code> are skipped). Keep typing to narrow it, Up and Down to move, Tab or Enter to take one</td></tr>
 <tr><td><code>@path/to/file</code></td><td>A text file in the message: its content goes with the message, in its own block, cut at 100,000 characters. A name that is not a file is reported and stays as plain text; the message is still sent</td></tr>
 <tr><td><code>@picture.png</code></td><td>A picture (png, jpg, gif, webp), sent as an image part of the message</td></tr>
 <tr><td>Ctrl+V</td><td>Pastes a picture from the clipboard (needs <code>wl-paste</code> or <code>xclip</code> on Linux, <code>pngpaste</code> on macOS; Windows uses PowerShell). A chip in the hint row shows how many are waiting</td></tr>
 </tbody>
 </table></div>
-<p>At most 4 pictures go with one message, each up to 5 MB. Before anything is sent the chat checks that the profile can see: set <code>vision: true</code> on a <a href="/models/index.html#what-the-project-knows-about-a-model">profile</a> that can, and a picture sent to one that cannot is refused with a message instead of an obscure provider error. <code>/context</code> counts what is attached. The picture is passed to the model as bx-ai's <code>AiMessage</code> image parts, in the shape that provider expects; only OpenAI-style providers have been tried so far.</p>
+<p>At most 4 pictures go with one message, each up to 5 MB. Before anything is sent the chat checks the model: set <code>vision: false</code> on a <a href="/conventions/models/index.html#what-the-project-knows-about-a-model">profile</a> that cannot see, and a picture sent to it is refused with a message instead of an obscure provider error. When <code>vision</code> is not set the picture goes through. <code>/context</code> counts what is attached. The picture is passed to the model as bx-ai's <code>AiMessage</code> image parts, in the shape that provider expects; only OpenAI-style providers have been tried so far.</p>
 <p>With <code>--connect</code> the files and pictures travel in the <code>attachments</code> of the request to <code>/__bxagents/events</code>, see <a href="/conventions/agent-bx/index.html#run-control">Run control</a>. Chat platforms do not take attachments yet.</p>
 <h4 id="recording-a-chat"><a href="#recording-a-chat" id="recording-a-chat" name="recording-a-chat" class="anchor"></a>Recording a chat</h4>
 <p><code>--record</code> saves what the screen shows as an <a href="https://docs.asciinema.org/manual/asciicast/v2/">asciicast</a> <code>.cast</code> file, for demos and bug reports. <code>--record</code> alone writes <code>chat-YYYYMMDD-HHMMSS.cast</code> in the current folder, and <code>--record=demo.cast</code> names the file. Inside the chat, <code>/record</code> starts a recording (<code>/record demo.cast</code> names it) and <code>/record stop</code> finishes it. A red <code>● rec</code> shows on the hint line while it is on, and the file is finished when you leave.</p>
@@ -977,7 +979,7 @@ bxAgents notes import --file=notes.json
 <ul>
 <li><code>--scope</code> is <code>user</code> (the default) or <code>agent</code>; <code>list</code> without it shows both. <code>--user</code> is whose user notes: the operating system user by default. Agent notes belong to the agent's <code>name</code>.</li>
 <li><code>stats</code> shows how full each scope is and the rough size they add to the prompt (about four characters to a token; an estimate, not a count).</li>
-<li><code>export</code> writes the notes as JSON, to <code>--file</code> or to the screen. <code>import</code> adds the notes of such a file; a note already there is skipped and one that does not fit the limit is reported.</li>
+<li><code>export</code> writes the notes as JSON, to <code>--file</code> or to the screen. <code>import</code> adds the notes of such a file; a note already there is not added twice and one that does not fit the limit is reported (the command then exits <code>1</code>).</li>
 <li>Run it where the database is: in the project, or on a server with <code>BXAGENTS_DB</code> set.</li>
 </ul>
 <h3 id="models"><a href="#models" id="models" name="models" class="anchor"></a><code>models</code></h3>
@@ -1125,6 +1127,7 @@ bxAgents extensions unlink &lt;name&gt;
 <li>Runs the exact same discovery/resolve/validate phases <code>build</code> runs, without generating anything - every validation error/warning <code>build</code> would hit shows up here first.</li>
 <li>Checks every <code>*EnvVar</code>-suffixed config value across <code>gateways/*</code> (bot tokens, webhook secrets, IMAP credentials, web UI account passwords, API keys) against the real environment right now, and warns about any that aren't set. Nothing else checks this - <code>build</code> only checks that an env var name was <em>declared</em>, never that it's actually populated, so a missing one otherwise fails silently at runtime (a gateway that never sends, a web UI account that can't sign in).</li>
 <li>Checks the key variable of every provider the models use: the default model, each subagent, each <a href="/conventions/models/index.html#profiles">profile</a> (its <code>apiKeyEnv</code>, else the provider's usual variable, such as <code>OPENAI_API_KEY</code>) and each capability default. A key that is not set in the environment is a warning that names who needs it. Doctor never reads the project's <code>.env</code>, so a key kept only there is reported as not set even though it works when the app is served. <code>mock</code> needs no key, and <code>bxAgents test</code> runs every profile on <code>mock</code>.</li>
+<li>Checks that every MCP server the agent starts as a program on this machine (a <code>command:</code> entry, such as the catalog's <code>git</code>) is on the <code>PATH</code>; a missing one is a warning.</li>
 <li>Does not check for <code>qb</code>, <code>cbsecurity</code>, <code>cbauth</code> or <code>cbmailservices</code>: they ship inside BxAgents and are copied into every built app.</li>
 <li><code>--json</code> prints the raw findings as a JSON array (<code>[{ status, message }, ...]</code>) instead of the human-readable report - useful for scripting.</li>
 <li>Exits <code>1</code> if any check failed, <code>0</code> otherwise - warnings alone don't fail it.</li>
@@ -1134,7 +1137,7 @@ bxAgents extensions unlink &lt;name&gt;
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/cli-reference.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/cli-reference.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Nov 4, 2026, 1&#x3a;52&#x3a;43 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20CLI%20Reference&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fcli-reference%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/cli-reference.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/cli-reference.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Nov 4, 2026, 6&#x3a;03&#x3a;38 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20CLI%20Reference&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fcli-reference%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 

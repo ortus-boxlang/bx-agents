@@ -252,6 +252,11 @@
 		
 		<h1 id="the-terminal-ui"><a href="#the-terminal-ui" id="the-terminal-ui" name="the-terminal-ui" class="anchor"></a>The terminal UI</h1>
 <p>Two commands draw a full terminal screen: <a href="/next/cli-reference/index.html#chat"><code>bxAgents chat</code></a>, where you talk to your agent, and <a href="/next/guides/new-wizard/index.html"><code>bxAgents new</code></a>, where you answer questions and get a project. This page is the tour. Every command and flag is in the <a href="/next/cli-reference/index.html">CLI reference</a>; every slash command is in <a href="/next/guides/slash-commands/index.html">Slash commands</a>; a guided first session is in <a href="/next/guides/chat-walkthrough/index.html">Chat walkthroughs</a>.</p>
+<video controls preload="metadata" poster="/assets/video/chat-terminal-poster.png" style="max-width:100%">
+  <source src="/assets/video/chat-terminal.mp4" type="video/mp4">
+  <source src="/assets/video/chat-terminal.webm" type="video/webm">
+</video>
+<p><em>A chat session: slash commands, a tool call and a formatted answer. The answers in these recordings come from a scripted demo model, so they are canned. Everything else is the real screen.</em></p>
 <h2 id="start-a-chat"><a href="#start-a-chat" id="start-a-chat" name="start-a-chat" class="anchor"></a>Start a chat</h2>
 <pre><code class="language-bash">bxAgents build          # chat needs a built agent (not with --connect)
 bxAgents chat
@@ -277,6 +282,8 @@ bxAgents chat
 <li><strong>Approvals.</strong> When a run stops for a <a href="/next/conventions/gateways/index.html">human-in-the-loop</a> decision, the screen asks in place: approve once, approve for the conversation, or reject.</li>
 <li><strong>The hint row</strong> under the box lists the keys and starts with the size of the context, such as <code>ctx ~12.4k / 128k 9%</code>. It is an estimate (characters divided by four), refreshed before every prompt.</li>
 </ul>
+<p><picture><source type="image/webp" srcset="/next/assets/tui/chat-answer-400w.e2bb3e0b.webp 400w, /next/assets/tui/chat-answer-800w.e2bb3e0b.webp 800w, /next/assets/tui/chat-answer-1028w.e2bb3e0b.webp 1028w" sizes="(min-width: 800px) 800px, 100vw"><img src="/next/assets/tui/chat-answer.png" srcset="/next/assets/tui/chat-answer-400w.e2bb3e0b.png 400w, /next/assets/tui/chat-answer-800w.e2bb3e0b.png 800w" sizes="(min-width: 800px) 800px, 100vw"  alt="The terminal chat after two answers, with the message box open for a new command" /></picture></p>
+<p><em>Finished turns are ordinary terminal text. The answer is formatted Markdown, with the tool call above it and the message box below.</em></p>
 <h2 id="keys"><a href="#keys" id="keys" name="keys" class="anchor"></a>Keys</h2>
 <div class="bxsites-table-wrap" x-data="{ q: '' }"><input type="search" class="bxsites-table-filter" x-model="q" placeholder="Filter table..." aria-label="Filter table"><table class="table">
 <thead>
@@ -291,12 +298,14 @@ bxAgents chat
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td>Ctrl+U, Ctrl+W</td><td>Delete to the start of the line, delete the word before the cursor</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td>Ctrl+V</td><td>Add the picture on the clipboard</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td>Ctrl+C</td><td>Clear the box. On an empty box, leave. While the agent works, stop it</td></tr>
-<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td>Ctrl+D</td><td>Leave, on an empty box</td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td>Ctrl+D</td><td>Leave, on an empty box (otherwise delete the character under the cursor)</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td>Esc</td><td>While the agent works, stop it at its next step (not mid-word)</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td>Enter while the agent works</td><td><strong>Steer</strong>: your message is added to the run</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>?</code> alone, or <code>/keys</code></td><td>Show the keys as bound right now</td></tr>
 </tbody>
 </table></div>
+<p><picture><source type="image/webp" srcset="/next/assets/tui/chat-keys-400w.14032981.webp 400w, /next/assets/tui/chat-keys-800w.14032981.webp 800w, /next/assets/tui/chat-keys-1028w.14032981.webp 1028w" sizes="(min-width: 800px) 800px, 100vw"><img src="/next/assets/tui/chat-keys.png" srcset="/next/assets/tui/chat-keys-400w.14032981.png 400w, /next/assets/tui/chat-keys-800w.14032981.png 800w" sizes="(min-width: 800px) 800px, 100vw"  alt="The output of /keys, listing every key with its action name" /></picture></p>
+<p><em><code>/keys</code> lists every key, the action name to use in <code>bxAgents.yml</code>, and what it does.</em></p>
 <h3 id="change-a-key"><a href="#change-a-key" id="change-a-key" name="change-a-key" class="anchor"></a>Change a key</h3>
 <p>Keys live in a file that belongs to you, not to any project: <code>~/.bxagents/bxAgents.yml</code> (set <code>BXAGENTS_USER_CONFIG</code> to use another file).</p>
 <pre><code class="language-yaml">chat:
@@ -316,7 +325,7 @@ bxAgents chat
 <tbody>
 <tr><td><code>@</code></td><td>Lists the files under the folder you started in. Keep typing to narrow it</td></tr>
 <tr><td><code>@path/to/file</code></td><td>Sends a text file's content with the message</td></tr>
-<tr><td><code>@picture.png</code></td><td>Sends a picture (png, jpg, gif, webp) as an image part. Up to 4 per message, 5 MB each. The profile needs <code>vision: true</code></td></tr>
+<tr><td><code>@picture.png</code></td><td>Sends a picture (png, jpg, gif, webp) as an image part. Up to 4 per message, 5 MB each. Refused when the profile says <code>vision: false</code></td></tr>
 <tr><td><code>!command</code></td><td>Runs a shell command <strong>on your machine</strong>; its output goes with your next message so the agent sees what you saw</td></tr>
 <tr><td><code>!!command</code></td><td>Same, shown on screen only</td></tr>
 <tr><td><code>#function( args )</code></td><td>Calls one BoxLang built-in, such as <code>#dateFormat( now(), 'yyyy-mm-dd' )</code>; the result goes with your next message</td></tr>
@@ -328,6 +337,8 @@ bxAgents chat
   shell: false                       # or a shell: &quot;bash -c&quot;, &quot;pwsh -Command&quot;
   bifs: [ dateFormat, listLen ]      # or false to switch # off
 </code></pre>
+<p><picture><source type="image/webp" srcset="/next/assets/tui/chat-context-400w.75b02a9e.webp 400w, /next/assets/tui/chat-context-800w.75b02a9e.webp 800w, /next/assets/tui/chat-context-1028w.75b02a9e.webp 1028w" sizes="(min-width: 800px) 800px, 100vw"><img src="/next/assets/tui/chat-context.png" srcset="/next/assets/tui/chat-context-400w.75b02a9e.png 400w, /next/assets/tui/chat-context-800w.75b02a9e.png 800w" sizes="(min-width: 800px) 800px, 100vw"  alt="The output of /context and a conversation being renamed" /></picture></p>
+<p><em><code>/context</code> shows what the context is made of. It is worked out locally, no model is called.</em></p>
 <p>Details and limits: <a href="/next/cli-reference/index.html#files-and-pictures-in-the-message">CLI reference</a>.</p>
 <h2 id="the-look-of-the-message-box"><a href="#the-look-of-the-message-box" id="the-look-of-the-message-box" name="the-look-of-the-message-box" class="anchor"></a>The look of the message box</h2>
 <p>Five styles, each with a top bar that carries a label and small facts (widgets):</p>
@@ -340,7 +351,7 @@ bxAgents chat
 <tr><td><code>bars-hints</code></td><td>The same two bars, hints and bottom widgets inside the lower one</td></tr>
 <tr><td><code>rule</code></td><td>One coloured rule above, hints below</td></tr>
 <tr><td><code>box</code></td><td>A rounded box</td></tr>
-<tr><td><code>panel</code></td><td>A tinted panel with a thick left bar. Drawn as <code>rule</code> without colour</td></tr>
+<tr><td><code>panel</code></td><td>A tinted panel with a thick left bar. Drawn as <code>rule</code> without 256 or true colour</td></tr>
 </tbody>
 </table></div>
 <p>Widgets: <code>agent</code>, <code>profile</code>, <code>folder</code>, <code>user</code>, <code>clock</code>, <code>machine</code>, <code>git</code>, <code>date</code>, <code>session</code>, <code>elapsed</code>, <code>ctx</code>. A widget with nothing to show (<code>git</code> outside a repository) is left out, and the last ones drop off when the line is too narrow.</p>
@@ -373,7 +384,7 @@ bxAgents chat
 <tr><td>A key does nothing</td><td>Run <code>/keys</code> to see what is bound, and rebind in <code>bxAgents.yml</code> if your terminal keeps that key for itself</td></tr>
 <tr><td>Colours look wrong</td><td>Set <code>COLORTERM=truecolor</code>, or <code>NO_COLOR=1</code> to switch colour off</td></tr>
 <tr><td><code>--connect</code> says 401</td><td>The server wants a token: <code>--token=&lt;token&gt;</code> or <code>BXAGENTS_TOKEN</code></td></tr>
-<tr><td>A picture is refused</td><td>The profile does not set <code>vision: true</code></td></tr>
+<tr><td>A picture is refused</td><td>The profile sets <code>vision: false</code>, or the file is not png, jpg, gif or webp, or is over 5 MB</td></tr>
 <tr><td><code>/export</code> writes to an unexpected place</td><td>Without a name the file is dated and written to the folder you started in</td></tr>
 </tbody>
 </table></div>
