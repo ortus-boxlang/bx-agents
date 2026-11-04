@@ -262,6 +262,28 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.errors.filter( e => e.findNoCase( "schedules/my-job.bx" ) ).len() ).toBe( 1 );
 			} );
 
+			it( "errors on a file name with an extra dot, which would make the same class as another file", function() {
+				var root = newProject( "valid-minimal" );
+				directoryCreate( root & "/schedules" );
+				fileWrite( root & "/schedules/Nightly.bx", "class {" & char( 10 ) & "}" & char( 10 ) );
+				fileWrite( root & "/schedules/Nightly.backup.bx", "class {" & char( 10 ) & "}" & char( 10 ) );
+
+				var result = validateRoot( root );
+				var hits = result.errors.filter( e => e.findNoCase( "Nightly.backup.bx" ) );
+				expect( hits ).toHaveLength( 1 );
+				expect( hits[ 1 ] ).toInclude( "no dots or dashes" );
+			} );
+
+			it( "errors on two files that make the same class when only the case differs", function() {
+				var root = newProject( "valid-minimal" );
+				directoryCreate( root & "/schedules" );
+				fileWrite( root & "/schedules/Nightly.bx", "class {" & char( 10 ) & "}" & char( 10 ) );
+				fileWrite( root & "/schedules/nightly.bx", "class {" & char( 10 ) & "}" & char( 10 ) );
+
+				var result = validateRoot( root );
+				expect( result.errors.filter( e => e.findNoCase( "make the same scheduler class" ) ) ).toHaveLength( 1 );
+			} );
+
 			it( "errors on a scheduler left over from ColdBox's scheduler, saying what to do", function() {
 				var root = newProject( "valid-minimal" );
 				directoryCreate( root & "/schedules" );

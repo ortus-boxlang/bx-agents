@@ -328,13 +328,22 @@ class {
 	 * @warnings Accumulator array - append() any validation warnings found
 	 */
 	private void function validateSchedules( required string projectRoot, required struct discovery, required array errors, required array warnings ) {
+		var classNames = {}
 		for ( var entry in arguments.discovery.schedules ?: [] ) {
-			if ( !reFind( "^[A-Za-z_][A-Za-z0-9_]*$", entry.name ) ) {
-				arguments.errors.append( "schedules/#entry.name#.bx: the file name becomes the class name, so use letters, digits and underscores only, starting with a letter or underscore" )
+			// the whole file name, not the part before the first dot: Nightly.backup.bx is not Nightly.bx
+			var file = getFileFromPath( entry.path )
+			if ( !reFind( "^[A-Za-z_][A-Za-z0-9_]*\.bx$", file ) ) {
+				arguments.errors.append( "schedules/#file#: the file name becomes the class name, so use letters, digits and underscores only, starting with a letter or underscore, then .bx (no dots or dashes in the name)" )
 				continue
 			}
+			var key = lcase( entry.name )
+			if ( classNames.keyExists( key ) ) {
+				arguments.errors.append( "schedules/#file# and schedules/#classNames[ key ]# make the same scheduler class: rename one" )
+				continue
+			}
+			classNames[ key ] = file
 			if ( reFindNoCase( "extends\s*=\s*[""']coldbox\.system\.web\.tasks\.ColdBoxScheduler", fileRead( entry.path, "UTF-8" ) ) ) {
-				arguments.errors.append( "schedules/#entry.name#.bx extends ColdBox's scheduler. A scheduler is now a plain BoxLang class: remove the extends and keep task( ... ).cron( ... ).call( ... ) - see docs/conventions/schedules.md" )
+				arguments.errors.append( "schedules/#file# extends ColdBox's scheduler. A scheduler is now a plain BoxLang class: remove the extends and keep task( ... ).cron( ... ).call( ... ) - see docs/conventions/schedules.md" )
 			}
 		}
 

@@ -32,6 +32,7 @@
  *     gatewaySession, agentApi, classBased, children : [ node ] }
  */
 import bxModules.bxagents.models.util.EntryConfigReader;
+import bxModules.bxagents.models.util.SourceMask;
 
 class {
 
@@ -565,6 +566,9 @@ class {
 	 * `.cron( "..." )` (otherwise the frequency method it calls, e.g. `everyDayAt`) and the agent it names with
 	 * `agent( "Name" )` ("default" when it calls `run()` or names none).
 	 *
+	 * The calls are looked for in the code only, with comments and strings blanked, so a prompt that happens to
+	 * contain `agent( "X" )` does not change what is reported. The text of an argument is read from the file itself.
+	 *
 	 * @path The scheduler file
 	 *
 	 * @return [ { name, when, agent } ]
@@ -573,32 +577,48 @@ class {
 		var tasks = []
 		try {
 			var source = fileRead( arguments.path, "UTF-8" )
-			var pattern = "task\(\s*[""']([^""']+)[""']"
+			var code = SourceMask::code( source )
 			var starts = []
 			var position = 1
 			while ( true ) {
-				var hit = reFind( pattern, source, position, true )
+				var hit = reFind( "task\(\s*[""']", code, position, true )
 				if ( !hit.pos[ 1 ] ) {
 					break
 				}
-				starts.append( { at : hit.pos[ 1 ], name : source.mid( hit.pos[ 2 ], hit.len[ 2 ] ) } )
+				starts.append( { at : hit.pos[ 1 ], name : stringArgument( code, source, hit ) } )
 				position = hit.pos[ 1 ] + hit.len[ 1 ]
 			}
 			for ( var i = 1; i <= starts.len(); i++ ) {
 				var chunkEnd = i < starts.len() ? starts[ i + 1 ].at - 1 : len( source )
-				var chunk = source.mid( starts[ i ].at, chunkEnd - starts[ i ].at + 1 )
-				var cron = reFind( "\.cron\(\s*[""']([^""']+)[""']", chunk, 1, true )
-				var frequency = reFind( "\.(every[A-Za-z]*|on[A-Z][A-Za-z]*|daily|hourly|weekly|monthly)\(", chunk, 1, true )
-				var agentHit = reFind( "agent\(\s*[""']([^""']+)[""']", chunk, 1, true )
+				var codeChunk = code.mid( starts[ i ].at, chunkEnd - starts[ i ].at + 1 )
+				var cron = reFind( "\.cron\(\s*[""']", code, starts[ i ].at, true )
+				var frequency = reFind( "\.(every[A-Za-z]*|on[A-Z][A-Za-z]*|daily|hourly|weekly|monthly)\(", codeChunk, 1, true )
+				var agentHit = reFind( "\bagent\(\s*[""']", code, starts[ i ].at, true )
 				tasks.append( {
 					name  : starts[ i ].name,
-					when  : cron.pos[ 1 ] ? chunk.mid( cron.pos[ 2 ], cron.len[ 2 ] ) : ( frequency.pos[ 1 ] ? chunk.mid( frequency.pos[ 2 ], frequency.len[ 2 ] ) : "" ),
-					agent : agentHit.pos[ 1 ] ? chunk.mid( agentHit.pos[ 2 ], agentHit.len[ 2 ] ) : "default"
+					when  : cron.pos[ 1 ] && cron.pos[ 1 ] <= chunkEnd ? stringArgument( code, source, cron ) : ( frequency.pos[ 1 ] ? codeChunk.mid( frequency.pos[ 2 ], frequency.len[ 2 ] ) : "" ),
+					agent : agentHit.pos[ 1 ] && agentHit.pos[ 1 ] <= chunkEnd ? stringArgument( code, source, agentHit ) : "default"
 				} )
 			}
 		} catch ( any e ) {
 		}
 		return tasks
+	}
+
+	/**
+	 * The text of the string literal a call pattern ended on the opening quote of.
+	 *
+	 * @code The source with comments and strings blanked
+	 * @source The source itself
+	 * @hit What reFind( ..., true ) returned for a pattern that ends on the opening quote
+	 *
+	 * @return What is between that quote and its match, read from the source
+	 */
+	private string function stringArgument( required string code, required string source, required struct hit ) {
+		var quoteAt = arguments.hit.pos[ 1 ] + arguments.hit.len[ 1 ] - 1
+		var quote = arguments.source.mid( quoteAt, 1 )
+		var closeAt = arguments.source.find( quote, quoteAt + 1 )
+		return closeAt ? arguments.source.mid( quoteAt + 1, closeAt - quoteAt - 1 ) : ""
 	}
 
 	/**

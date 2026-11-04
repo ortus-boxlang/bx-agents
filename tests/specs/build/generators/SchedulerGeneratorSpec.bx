@@ -66,6 +66,22 @@ class extends="testbox.system.BaseSpec" {
 				expect( attributed ).toInclude( '@singleton' & char( 10 ) & 'class extends="bxagents.Scheduler" foo="bar" {' );
 			} );
 
+			it( "puts the base on the real class, not on a class shown in a comment or a string", function() {
+				var block = "/*" & char( 10 ) & "class {" & char( 10 ) & "	function configure() {}" & char( 10 ) & "}" & char( 10 ) & "*/" & char( 10 ) & "class {" & char( 10 ) & "}" & char( 10 );
+				var out = generator.withBase( block, "A" );
+				expect( out ).toInclude( "/*" & char( 10 ) & "class {" & char( 10 ) );
+				expect( out ).toInclude( "*/" & char( 10 ) & 'class extends="bxagents.Scheduler" {' );
+
+				var line = "// class {" & char( 10 ) & 'note = "class {"' & char( 10 ) & "class {" & char( 10 ) & "}" & char( 10 );
+				expect( generator.withBase( line, "B" ) ).toInclude( 'class extends="bxagents.Scheduler" {' & char( 10 ) & "}" );
+				expect( generator.withBase( line, "B" ).reMatch( "bxagents.Scheduler" ) ).toHaveLength( 1 );
+			} );
+
+			it( "does not mistake an extends in a comment for the class naming a parent", function() {
+				var source = "class { // extends=""other.Base""" & char( 10 ) & "}" & char( 10 );
+				expect( generator.withBase( source, "C" ) ).toInclude( 'class extends="bxagents.Scheduler" {' );
+			} );
+
 			it( "refuses a file that has no class declaration, naming the file", function() {
 				expect( function() {
 					generator.withBase( "task( 'x' )", "Broken" );

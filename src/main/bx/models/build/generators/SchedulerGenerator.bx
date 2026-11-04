@@ -21,6 +21,7 @@
  * }
  * ```
  */
+import bxModules.bxagents.models.util.SourceMask;
 import bxModules.bxagents.models.util.Strings;
 
 class {
@@ -66,7 +67,8 @@ class {
 	}
 
 	/**
-	 * Adds `extends="bxagents.Scheduler"` to the scheduler class unless it already names a parent.
+	 * Adds `extends="bxagents.Scheduler"` to the scheduler class unless it already names a parent. The class
+	 * declaration is found in the code only, so a `class {` shown in a comment or a string is left alone.
 	 *
 	 * @source The scheduler file's source
 	 * @name The scheduler's file name without extension, used in the error message
@@ -74,7 +76,8 @@ class {
 	 * @return The source to copy into the app
 	 */
 	string function withBase( required string source, required string name ) {
-		var declaration = reFind( "(?m)^[ \t]*class\b", arguments.source, 1, true )
+		var code = SourceMask::code( arguments.source )
+		var declaration = reFind( "(?m)^[ \t]*class\b", code, 1, true )
 		if ( !declaration.pos[ 1 ] ) {
 			throw(
 				type    = "BxAgents.InvalidScheduler",
@@ -83,8 +86,8 @@ class {
 		}
 
 		var afterKeyword = declaration.pos[ 1 ] + declaration.len[ 1 ]
-		var opening = arguments.source.find( "{", afterKeyword )
-		var header = opening ? arguments.source.mid( afterKeyword, opening - afterKeyword ) : ""
+		var opening = code.find( "{", afterKeyword )
+		var header = opening ? code.mid( afterKeyword, opening - afterKeyword ) : ""
 		if ( reFindNoCase( "\bextends\s*=", header ) ) {
 			return arguments.source
 		}
