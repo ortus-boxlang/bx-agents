@@ -1,6 +1,6 @@
 ---
 title: "Ejemplo: un agente mínimo"
-icon: phosphor-duotone:seedling
+icon: phosphor-duotone:plant
 summary: Construye el proyecto BxAgents completo más pequeño posible - un agente, una tool, una skill.
 description: Construye el proyecto BxAgents completo más pequeño posible - un agente, una tool, una skill.
 tags: [guides, examples, tools, skills]
