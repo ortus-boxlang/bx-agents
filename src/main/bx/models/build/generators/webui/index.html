@@ -132,6 +132,35 @@ __THEME_TOKENS__
 	#contextPanel .ctx-actions { margin-top: 1rem; display: flex; justify-content: flex-end; }
 	#contextPanel .ctx-actions button { display: inline-flex; align-items: center; gap: 0.4rem; background: var(--accent-soft); color: var(--accent-ink); border: 0; border-radius: 10px; padding: 0.5rem 0.8rem; font: inherit; font-size: 0.85rem; cursor: pointer; }
 	#contextPanel .ctx-close { display: inline-grid; place-items: center; width: 2rem; height: 2rem; background: none; border: 0; color: var(--muted); border-radius: 8px; cursor: pointer; font-size: 1rem; }
+	/* Appearance panel: the visitor's mode, accent, text size and density, kept in this browser */
+	#appearancePanel {
+		position: fixed; z-index: 30; width: min(21rem, 94vw); max-height: 85vh; overflow-y: auto; padding: 1rem;
+		background: var(--surface); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius);
+		box-shadow: 0 16px 40px rgba(16, 24, 40, 0.18);
+	}
+	#appearancePanel[hidden] { display: none; }
+	#appearancePanel .ap-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.4rem; }
+	#appearancePanel h2 { margin: 0; font-size: 1rem; }
+	#appearancePanel h3 { margin: 0.9rem 0 0.4rem; font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+	#appearancePanel .seg { display: flex; gap: 0.25rem; padding: 0.2rem; background: var(--border); border-radius: 10px; }
+	#appearancePanel .seg button { flex: 1; border: 0; border-radius: 8px; padding: 0.4rem 0.3rem; font: inherit; font-size: 0.85rem; background: none; color: var(--muted); cursor: pointer; }
+	#appearancePanel .seg button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 2px rgba(16, 24, 40, 0.15); }
+	#appearancePanel .swatches { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+	#appearancePanel .swatches button { width: 1.7rem; height: 1.7rem; border-radius: 50%; border: 2px solid transparent; background: var(--sw); cursor: pointer; display: inline-grid; place-items: center; color: #fff; padding: 0; }
+	#appearancePanel .swatches button[aria-pressed="true"] { border-color: var(--fg); box-shadow: 0 0 0 2px var(--surface) inset; }
+	#appearancePanel .swatches button.default-sw { background: var(--surface); border: 2px dashed var(--muted); color: var(--muted); font-size: 0.7rem; }
+	#appearancePanel .swatches button.default-sw[aria-pressed="true"] { border: 2px solid var(--fg); }
+	#appearancePanel .hex { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.6rem; }
+	#appearancePanel .hex input { width: 6.5rem; padding: 0.35rem 0.5rem; border: 1px solid var(--border); border-radius: 8px; background: var(--input-bg); color: var(--fg); font: inherit; font-family: var(--font-mono); font-size: 0.85rem; }
+	#appearancePanel .hex input[aria-invalid="true"] { border-color: var(--bubble-error); }
+	#appearancePanel .contrast { font-size: 0.8rem; color: var(--muted); }
+	#appearancePanel .contrast.low { color: var(--bubble-error); }
+	#appearancePanel .ctx-close { display: inline-grid; place-items: center; width: 2rem; height: 2rem; background: none; border: 0; color: var(--muted); border-radius: 8px; cursor: pointer; font-size: 1rem; }
+	#appearancePanel .ap-actions { margin-top: 1rem; display: flex; justify-content: flex-end; }
+	#appearancePanel .ap-actions button { background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 10px; padding: 0.4rem 0.8rem; font: inherit; font-size: 0.85rem; cursor: pointer; }
+	:root[data-density="compact"] #messages { gap: 0.6rem; padding-top: 1rem; padding-bottom: 1rem; }
+	:root[data-density="compact"] .bubble { padding: 0.35rem 0.75rem; line-height: 1.4; }
+	:root[data-density="compact"] #convList li { padding-top: 0.15rem; padding-bottom: 0.15rem; }
 	/* display:inline-grid on the icon buttons must not defeat the hidden attribute */
 	button[hidden] { display: none !important; }
 	html, body { height: 100%; margin: 0; }
@@ -799,10 +828,12 @@ __ICON_SPRITE__
 			<button type="button" id="compactBtn" title="Summarize older messages, keep the recent ones" aria-label="Compact" hidden><svg class="i" aria-hidden="true"><use href="#i-arrows-in-line-vertical"/></svg></button>
 			<button type="button" id="notesBtn" title="What the agent keeps about you and about its own work" aria-label="Notes" hidden><svg class="i" aria-hidden="true"><use href="#i-notebook"/></svg></button>
 			<button type="button" id="keyBtn" title="Set the API key this page sends as X-API-Key" aria-label="API key"><svg class="i" aria-hidden="true"><use href="#i-key"/></svg></button>
+			<button type="button" id="appearanceBtn" title="Mode, accent color, text size and density" aria-label="Appearance" aria-haspopup="dialog" aria-expanded="false" aria-controls="appearancePanel"><svg class="i" aria-hidden="true"><use href="#i-palette"/></svg></button>
 			<button type="button" id="themeBtn" title="Switch between light and dark" aria-label="Theme"><svg class="i" aria-hidden="true"><use href="#i-sun"/></svg></button>
 		</div>
 	</header>
 	<div id="contextPanel" role="dialog" aria-label="Context" hidden></div>
+	<div id="appearancePanel" role="dialog" aria-label="Appearance" hidden></div>
 	<div class="shell">
 		<aside id="sidebar" aria-label="Conversations">
 			<div class="sidebar-head">
@@ -1234,6 +1265,214 @@ __MARKDOWN_SCRIPTS__
 			apiPost( "/preferences/set", { key: "theme", value: next } ).catch( function () {} );
 		}
 	} );
+
+
+	/**
+	 * Appearance: what a visitor can change without the operator. Mode, accent, text size and density live in this browser
+	 * (localStorage), the operator's `theme` stays the default and "Default" goes back to it.
+	 */
+	var APPEARANCE_STORAGE = "bxagents_webui_appearance";
+	var ACCENT_PRESETS = [
+		[ "Blue", "#3b5bdb" ], [ "Teal", "#0f9d8a" ], [ "Green", "#2f9e44" ], [ "Amber", "#d9730d" ],
+		[ "Red", "#e03131" ], [ "Pink", "#d6336c" ], [ "Violet", "#7048e8" ], [ "Slate", "#475569" ]
+	];
+	var TEXT_SIZES = { small : "0.85rem", medium : "", large : "1.05rem" };
+	var appearanceBtn = document.getElementById( "appearanceBtn" );
+	var appearancePanelEl = document.getElementById( "appearancePanel" );
+	var appearance = { accent : "", size : "medium", density : "comfortable" };
+
+	function loadAppearance() {
+		try {
+			var saved = JSON.parse( localStorage.getItem( APPEARANCE_STORAGE ) || "{}" );
+			if ( saved && typeof saved === "object" ) {
+				appearance.accent = /^#[0-9a-f]{6}$/i.test( saved.accent || "" ) ? saved.accent.toLowerCase() : "";
+				appearance.size = TEXT_SIZES.hasOwnProperty( saved.size ) ? saved.size : "medium";
+				appearance.density = saved.density === "compact" ? "compact" : "comfortable";
+			}
+		} catch ( e ) {}
+	}
+
+	function saveAppearance() {
+		try { localStorage.setItem( APPEARANCE_STORAGE, JSON.stringify( appearance ) ); } catch ( e ) {}
+	}
+
+	/** WCAG relative luminance of a #rrggbb color */
+	function luminance( hex ) {
+		var channels = [ 1, 3, 5 ].map( function ( at ) {
+			var c = parseInt( hex.substr( at, 2 ), 16 ) / 255;
+			return c <= 0.03928 ? c / 12.92 : Math.pow( ( c + 0.055 ) / 1.055, 2.4 );
+		} );
+		return 0.2126 * channels[ 0 ] + 0.7152 * channels[ 1 ] + 0.0722 * channels[ 2 ];
+	}
+
+	function contrastRatio( a, b ) {
+		var hi = Math.max( luminance( a ), luminance( b ) );
+		var lo = Math.min( luminance( a ), luminance( b ) );
+		return ( hi + 0.05 ) / ( lo + 0.05 );
+	}
+
+	/** Text on the accent: white, or near black when that reads better */
+	function accentForeground( accent ) {
+		return contrastRatio( accent, "#ffffff" ) >= contrastRatio( accent, "#101828" ) ? "#ffffff" : "#101828";
+	}
+
+	function normalizeHex( value ) {
+		var v = String( value ).trim().replace( /^#/, "" );
+		if ( /^[0-9a-f]{3}$/i.test( v ) ) {
+			v = v.replace( /(.)/g, "$1$1" );
+		}
+		return /^[0-9a-f]{6}$/i.test( v ) ? "#" + v.toLowerCase() : "";
+	}
+
+	function applyAppearance() {
+		var root = document.documentElement;
+		if ( appearance.accent ) {
+			root.style.setProperty( "--accent", appearance.accent );
+			root.style.setProperty( "--accent-fg", accentForeground( appearance.accent ) );
+		} else {
+			root.style.removeProperty( "--accent" );
+			root.style.removeProperty( "--accent-fg" );
+		}
+		if ( TEXT_SIZES[ appearance.size ] ) {
+			root.style.setProperty( "--font-size", TEXT_SIZES[ appearance.size ] );
+		} else {
+			root.style.removeProperty( "--font-size" );
+		}
+		if ( appearance.density === "compact" ) {
+			root.setAttribute( "data-density", "compact" );
+		} else {
+			root.removeAttribute( "data-density" );
+		}
+	}
+
+	/** Light, dark, or the system's, from the same place the theme button uses */
+	function currentMode() {
+		var stored = localStorage.getItem( THEME_STORAGE );
+		return stored === "dark" || stored === "light" ? stored : "system";
+	}
+
+	function setMode( mode ) {
+		if ( mode === "system" ) {
+			localStorage.removeItem( THEME_STORAGE );
+		} else {
+			localStorage.setItem( THEME_STORAGE, mode );
+		}
+		applyTheme( mode === "system" ? null : mode );
+		if ( capabilities.preferences !== false ) {
+			apiPost( "/preferences/set", { key: "theme", value: mode } ).catch( function () {} );
+		}
+	}
+
+	function segmented( label, options, selected ) {
+		return '<div class="seg" role="group" aria-label="' + label + '">' + options.map( function ( o ) {
+			return '<button type="button" data-value="' + o[ 0 ] + '" aria-pressed="' + ( o[ 0 ] === selected ) + '">' + o[ 1 ] + "</button>";
+		} ).join( "" ) + "</div>";
+	}
+
+	function drawAppearancePanel() {
+		var accent = appearance.accent;
+		var swatches = '<button type="button" class="default-sw" data-accent="" aria-label="Default accent" title="Default" aria-pressed="' + ( !accent ) + '">' + icon( "arrow-counter-clockwise" ) + "</button>"
+			+ ACCENT_PRESETS.map( function ( p ) {
+				return '<button type="button" data-accent="' + p[ 1 ] + '" style="--sw:' + p[ 1 ] + '" aria-label="' + p[ 0 ] + '" title="' + p[ 0 ] + '" aria-pressed="' + ( accent === p[ 1 ] ) + '">' + ( accent === p[ 1 ] ? icon( "check" ) : "" ) + "</button>";
+			} ).join( "" );
+		var shown = accent || normalizeHex( rgbToHex( getComputedStyle( document.documentElement ).getPropertyValue( "--accent" ) ) );
+		var ratio = shown ? contrastRatio( shown, accentForeground( shown ) ) : 0;
+		appearancePanelEl.innerHTML =
+			'<div class="ap-head"><h2>Appearance</h2><button type="button" class="ctx-close" id="appearanceClose" aria-label="Close">' + icon( "x" ) + "</button></div>"
+			+ "<h3>Mode</h3>" + segmented( "Mode", [ [ "system", "System" ], [ "light", "Light" ], [ "dark", "Dark" ] ], currentMode() )
+			+ "<h3>Accent color</h3>" + '<div class="swatches" id="apSwatches">' + swatches + "</div>"
+			+ '<div class="hex"><label for="apHex" class="contrast">Hex</label><input id="apHex" maxlength="7" spellcheck="false" autocomplete="off" aria-label="Accent color as hex">'
+			+ '<span class="contrast' + ( ratio && ratio < 4.5 ? " low" : "" ) + '" id="apContrast" aria-live="polite">' + ( ratio ? ratio.toFixed( 1 ) + " : 1 on buttons" + ( ratio < 4.5 ? ", low" : "" ) : "" ) + "</span></div>"
+			+ "<h3>Text size</h3>" + segmented( "Text size", [ [ "small", "Small" ], [ "medium", "Medium" ], [ "large", "Large" ] ], appearance.size )
+			+ "<h3>Density</h3>" + segmented( "Density", [ [ "comfortable", "Comfortable" ], [ "compact", "Compact" ] ], appearance.density )
+			+ '<div class="ap-actions"><button type="button" id="apReset">Reset to defaults</button></div>';
+		var groups = appearancePanelEl.querySelectorAll( ".seg" );
+		wireSegment( groups[ 0 ], setMode );
+		wireSegment( groups[ 1 ], function ( v ) { appearance.size = v; } );
+		wireSegment( groups[ 2 ], function ( v ) { appearance.density = v; } );
+		appearancePanelEl.querySelectorAll( "#apSwatches button" ).forEach( function ( b ) {
+			b.addEventListener( "click", function () { appearance.accent = b.getAttribute( "data-accent" ); commitAppearance(); } );
+		} );
+		var hex = document.getElementById( "apHex" );
+		// set as properties, never spliced into the markup
+		hex.value = accent || "";
+		hex.placeholder = shown || "#3b5bdb";
+		hex.addEventListener( "change", function () {
+			var v = normalizeHex( hex.value );
+			if ( hex.value.trim() === "" ) {
+				appearance.accent = "";
+			} else if ( v ) {
+				appearance.accent = v;
+			} else {
+				hex.setAttribute( "aria-invalid", "true" );
+				return;
+			}
+			commitAppearance();
+		} );
+		document.getElementById( "appearanceClose" ).addEventListener( "click", closeAppearancePanel );
+		document.getElementById( "apReset" ).addEventListener( "click", function () {
+			appearance = { accent : "", size : "medium", density : "comfortable" };
+			setMode( "system" );
+			commitAppearance();
+		} );
+	}
+
+	function wireSegment( group, onPick ) {
+		group.querySelectorAll( "button" ).forEach( function ( b ) {
+			b.addEventListener( "click", function () {
+				onPick( b.getAttribute( "data-value" ) );
+				commitAppearance();
+			} );
+		} );
+	}
+
+	function commitAppearance() {
+		saveAppearance();
+		applyAppearance();
+		drawAppearancePanel();
+	}
+
+	/** "rgb(59, 91, 219)" or "#3b5bdb" or "3b5bdb" from a computed custom property, as #rrggbb */
+	function rgbToHex( value ) {
+		var m = String( value ).match( /rgba?\(\s*(\d+)[ ,]+(\d+)[ ,]+(\d+)/ );
+		if ( m ) {
+			return "#" + [ m[ 1 ], m[ 2 ], m[ 3 ] ].map( function ( n ) { return ( "0" + parseInt( n, 10 ).toString( 16 ) ).slice( -2 ); } ).join( "" );
+		}
+		return String( value ).trim();
+	}
+
+	function openAppearancePanel() {
+		drawAppearancePanel();
+		var box = appearanceBtn.getBoundingClientRect();
+		appearancePanelEl.style.top = ( box.bottom + 8 ) + "px";
+		appearancePanelEl.style.right = Math.max( 8, window.innerWidth - box.right ) + "px";
+		appearancePanelEl.hidden = false;
+		appearanceBtn.setAttribute( "aria-expanded", "true" );
+	}
+
+	function closeAppearancePanel() {
+		appearancePanelEl.hidden = true;
+		appearanceBtn.setAttribute( "aria-expanded", "false" );
+	}
+
+	appearanceBtn.addEventListener( "click", function ( evt ) {
+		evt.stopPropagation();
+		if ( appearancePanelEl.hidden ) { openAppearancePanel(); } else { closeAppearancePanel(); }
+	} );
+	document.addEventListener( "click", function ( evt ) {
+		// a click on a control the panel just redrew has left the page by now: that is still a click inside
+		if ( !appearancePanelEl.hidden && evt.target.isConnected && !appearancePanelEl.contains( evt.target ) ) {
+			closeAppearancePanel();
+		}
+	} );
+	document.addEventListener( "keydown", function ( evt ) {
+		if ( evt.key === "Escape" && !appearancePanelEl.hidden ) {
+			closeAppearancePanel();
+			appearanceBtn.focus();
+		}
+	} );
+	loadAppearance();
+	applyAppearance();
 
 	/**
 	 * Server-stored preferences win over the local copy: they follow the identity
