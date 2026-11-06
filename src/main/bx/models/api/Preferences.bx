@@ -2,6 +2,8 @@
  * What a person has set for themselves on this server (the page's theme, say), kept by the person, not the
  * browser, so it follows them from one device to the next. Values are text.
  */
+import bxModules.bxagents.models.api.Outcome;
+
 class {
 
 	/**
@@ -31,14 +33,14 @@ class {
 	any function set( required string key, any value = "" ) {
 		var named = trim( arguments.key )
 		if ( !len( named ) ) {
-			return new Outcome( ok = false, code = "bad_request", reason = "key is required" )
+			return Outcome::failed( "bad_request", "key is required" )
 		}
 		variables.store.exec(
 			"INSERT INTO preferences ( userId, prefKey, prefValue, updatedAt ) VALUES ( :userId, :key, :value, :now )
 			 ON CONFLICT ( userId, prefKey ) DO UPDATE SET prefValue = excluded.prefValue, updatedAt = excluded.updatedAt",
 			{ userId : variables.userId, key : named, value : toString( arguments.value ), now : { value : now(), cfsqltype : "timestamp" } }
 		)
-		return new Outcome( ok = true, data = { "saved" : true } )
+		return Outcome::done( { "saved" : true } )
 	}
 
 	/**
@@ -47,10 +49,10 @@ class {
 	any function delete( required string key ) {
 		var named = trim( arguments.key )
 		if ( !len( named ) ) {
-			return new Outcome( ok = false, code = "bad_request", reason = "key is required" )
+			return Outcome::failed( "bad_request", "key is required" )
 		}
 		variables.store.exec( "DELETE FROM preferences WHERE userId = :userId AND prefKey = :key", { userId : variables.userId, key : named } )
-		return new Outcome( ok = true, data = { "deleted" : true } )
+		return Outcome::done( { "deleted" : true } )
 	}
 
 }

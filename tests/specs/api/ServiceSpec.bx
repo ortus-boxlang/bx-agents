@@ -61,8 +61,8 @@ class extends="testbox.system.BaseSpec" {
 					service.conversations().create( ada.via( "terminal" ), "two" );
 					service.conversations().create( bob, "not ada's" );
 
-					expect( service.conversations().list( ada ).data().conversations ).toHaveLength( 2 );
-					expect( service.conversations().list( ada, 50, "terminal" ).data().conversations.map( ( c ) => c.title ) ).toBe( [ "two" ] );
+					expect( service.conversations().list( ada ).data().sessions ).toHaveLength( 2 );
+					expect( service.conversations().list( ada, 50, "terminal" ).data().sessions.map( ( c ) => c.title ) ).toBe( [ "two" ] );
 				} );
 
 				it( "deletes the row and the agent's messages for it", function() {
@@ -93,6 +93,12 @@ class extends="testbox.system.BaseSpec" {
 					expect( conversation.mode() ).toBe( "server" );
 				} );
 
+				it( "gives an open server one local user, whichever surface asks", function() {
+					expect( service.localCaller( "web" ).id() ).toBe( "local" );
+					expect( service.localCaller( "terminal" ).source() ).toBe( "terminal" );
+					expect( service.localCaller().isAdmin() ).toBeTrue();
+				} );
+
 				it( "says who the caller is, and which agent", function() {
 					var who = service.whoami( ada ).data();
 
@@ -112,7 +118,7 @@ class extends="testbox.system.BaseSpec" {
 				it( "runs a turn through the same list it shows", function() {
 					service.turns().stream( ada, { input : "hello there", conversationId : "c-9" }, function() {} );
 
-					expect( service.conversations().list( ada ).data().conversations.map( ( c ) => c.id ) ).toBe( [ "c-9" ] );
+					expect( service.conversations().list( ada ).data().sessions.map( ( c ) => c.id ) ).toBe( [ "c-9" ] );
 				} );
 
 			} );

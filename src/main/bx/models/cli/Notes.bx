@@ -13,6 +13,8 @@
  * The scope defaults to the notes about the user, the user to the operating system user. The notes of the
  * agent belong to the agent's name in Agent.yaml. Limits come from the agent's `notes` block.
  */
+import bxModules.bxagents.models.api.Caller;
+
 class {
 
 	static {
@@ -40,7 +42,7 @@ class {
 
 		var config = notesConfig( root )
 		var provider = new "models.notes.SqliteNotesProvider@bxagents"( store, { user : ( config.user ?: {} ).limit ?: 1400, agent : ( config.agent ?: {} ).limit ?: 2200 } )
-		var user = len( trim( arguments.options.user ?: "" ) ) ? trim( arguments.options.user ) : ( createObject( "java", "java.lang.System" ).getProperty( "user.name" ) ?: "default" )
+		var user = len( trim( arguments.options.user ?: "" ) ) ? trim( arguments.options.user ) : Caller::localId()
 		var agentName = agentNameOf( root )
 
 		var scope = lCase( trim( arguments.options.scope ?: "user" ) )

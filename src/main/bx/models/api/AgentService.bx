@@ -11,6 +11,10 @@
  *
  * A call answers an Outcome and never picks an HTTP status; ApiEdge does that, in one place.
  */
+import bxModules.bxagents.models.api.Caller as CallerType;
+
+import bxModules.bxagents.models.api.Outcome;
+
 class {
 
 	/**
@@ -77,12 +81,67 @@ class {
 	}
 
 	/**
+	 * @source The surface the call came in on
+	 *
+	 * @return The one user of a server that is open on this machine
+	 */
+	any function localCaller( string source = "api" ) {
+		return CallerType::localUser( arguments.source )
+	}
+
+	/**
+	 * @caller The Caller
+	 *
+	 * @return The notes the agent keeps for the caller and about its job
+	 */
+	any function notes( required any caller ) {
+		return new Notes( variables.agent, arguments.caller )
+	}
+
+	/**
+	 * Who the agent is, for a client's banner: name, a short model label and what it can do.
+	 *
+	 * @caller The Caller
+	 *
+	 * @return An Outcome
+	 */
+	any function about( required any caller ) {
+		var config = variables.agent.getConfig()
+		// AiAgent.getConfig().model is the AiModel's whole config struct; a client wants provider/model
+		var modelConfig = config.model ?: {}
+		var modelLabel = modelConfig
+		if ( isStruct( modelConfig ) ) {
+			var modelId = ( modelConfig.params ?: {} ).model ?: ( modelConfig.name ?: "" )
+			modelLabel = [ modelConfig.provider ?: "", modelId ].filter( ( part ) => len( part ) ).toList( "/" )
+		}
+		var facts = new "models.runtime.ModelFacts@bxagents"().of( config.profile ?: "" )
+		return Outcome::done( {
+			"name"          : config.name ?: "",
+			"description"   : config.description ?: "",
+			"model"         : modelLabel,
+			"contextWindow" : facts.contextWindow,
+			"vision"        : facts.vision,
+			"toolCount"     : config.toolCount ?: 0,
+			"capabilities"  : {
+				"events"      : true, "cancel" : true, "steer" : true, "approvals" : true, "attachments" : true,
+				"notes"       : notes( arguments.caller ).keeps(),
+				"sessions"    : keepsSessions(),
+				"profiles"    : variables.offered.any(),
+				"commands"    : true,
+				"context"     : true,
+				"status"      : new "models.extensions.ServedStatus@bxagents"().available(),
+				"slots"       : new "models.extensions.ServedSlots@bxagents"().available()
+			}
+		} )
+	}
+
+	/**
 	 * @return An Outcome: the caller as the server sees it, and the agent's name
 	 */
 	any function whoami( required any caller ) {
 		var shown = arguments.caller.toStruct()
 		shown[ "agent" ] = variables.agent.getConfig().name ?: ""
-		return new Outcome( ok = true, data = shown )
+		return Outcome::done( shown )
 	}
 
 }

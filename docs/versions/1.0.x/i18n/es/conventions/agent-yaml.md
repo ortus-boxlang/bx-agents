@@ -157,7 +157,7 @@ Cómo funciona:
 
 - Los dos alcances entran en el prompt del sistema como listas cortas, de la más antigua a la más reciente, dentro de sus límites. Se leen una vez por conversación, así que el prompt no cambia de un turno a otro (la caché de prompts del proveedor sigue funcionando) y una nota guardada ahora aparece desde la siguiente conversación.
 - Una nota es una línea de 500 caracteres como máximo. Nada se descarta en silencio: una nota que no cabe en el límite se rechaza, y se le dice al agente cuánto llenas están las notas para que reemplace u olvide una más antigua.
-- **Quién es un usuario**: en `bxAgents chat` es el usuario del sistema operativo (`--user=NOMBRE` lo cambia); en un servidor es el nombre del [token de acceso](agent-bx.md#tokens-de-acceso-para-un-agente-desplegado) que usó quien llama, o `api` cuando la ruta está abierta. El alcance del agente pertenece al `name` del agente.
+- **Quién es un usuario**: es el nombre del [token de acceso](agent-bx.md#tokens-de-acceso-para-un-agente-desplegado) que usó quien llama, o `local` cuando la ruta está abierta. `local` es también quien eres en `bxAgents chat` (`--user=NOMBRE` lo cambia), así que el terminal, la página web y la API comparten un mismo conjunto de conversaciones y notas en un servidor abierto. El alcance del agente pertenece al `name` del agente.
 - El chat de terminal, el chat web y el servidor comparten un archivo, `data/chat.db` (ver [el almacén SQLite](web-ui.md#el-almacén-sqlite)).
 
 Gestiónalas tú con `/remember` y `/notes` en [`chat`](../cli-reference.md#chat), con [`bxAgents notes`](../cli-reference.md#notes) desde una shell, o por HTTP con las [rutas de control de ejecución](agent-bx.md#control-de-ejecución).

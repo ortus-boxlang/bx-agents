@@ -18,6 +18,8 @@
  * without --force. `import` reads such a file and adds it to the user's list as a new conversation: it never replaces
  * one, and a file it does not recognise is refused before anything is written.
  */
+import bxModules.bxagents.models.api.Caller;
+
 class {
 
 	static {
@@ -43,7 +45,7 @@ class {
 		var store = new "models.store.ChatStore@bxagents"( { driver : "sqlite", database : file } )
 		store.migrate()
 		var sessions = new "models.store.SessionStore@bxagents"( store )
-		var user = len( trim( arguments.options.user ?: "" ) ) ? trim( arguments.options.user ) : ( createObject( "java", "java.lang.System" ).getProperty( "user.name" ) ?: "default" )
+		var user = len( trim( arguments.options.user ?: "" ) ) ? trim( arguments.options.user ) : Caller::localId()
 
 		if ( action == "list" ) {
 			return list( sessions, user, arguments.options.json ?: false )

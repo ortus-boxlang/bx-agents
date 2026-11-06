@@ -19,7 +19,22 @@ class {
 		return new Outcome( ok = false, code = arguments.code, reason = arguments.reason )
 	}
 
-	function init( required boolean ok, string code = "", string reason = "", any data = {} ) {
+	/**
+	 * For the answers older code gives as { ok, reason, ... }.
+	 *
+	 * @result What was answered
+	 * @code The failure code when it did not work
+	 *
+	 * @return A worked Outcome carrying the whole result, or a failed one with its reason
+	 */
+	static any function fromResult( required struct result, string code = "bad_request" ) {
+		if ( arguments.result.ok ?: false ) {
+			return new Outcome( ok = true, data = arguments.result )
+		}
+		return new Outcome( ok = false, code = arguments.code, reason = arguments.result.reason ?: "" )
+	}
+
+	function init( boolean ok = false, string code = "", string reason = "", any data = {} ) {
 		variables.worked = arguments.ok
 		variables.failureCode = arguments.code
 		variables.failureReason = arguments.reason

@@ -12,8 +12,10 @@
  * Frames: thread { threadId }, chunk <what the model sent>, tool { id, name, arguments, status, ms },
  * suspended { threadId, pendingActions }, error { message }, done "[DONE]".
  *
- * A request is { input, conversationId?, threadId?, params?, options?, attachments? }.
+ * A request is { input, conversationId?, threadId?, params?, options?, attachments?, images? }.
  */
+import bxModules.bxagents.models.api.Outcome;
+
 class {
 
 	/**
@@ -45,7 +47,7 @@ class {
 		var supplied = arguments.request.options ?: {}
 		var options = isStruct( supplied ) ? duplicate( supplied ) : {}
 		if ( !profileAllowed( options ) ) {
-			return new Outcome( ok = false, code = "bad_profile", reason = "profile is not offered here" )
+			return Outcome::failed( "bad_profile", "profile is not offered here" )
 		}
 		options[ "userId" ] = arguments.caller.id()
 		options[ "threadId" ] = threadId
@@ -56,13 +58,20 @@ class {
 			options[ "conversationId" ] = conversationId
 		}
 
+		// pictures arrive as files on this machine (images: [ { path } ], the terminal) or as data over the wire
+		// (attachments: [ { name, mime, data } ]); MessageBuilder checks and builds both
+		var images = isArray( arguments.request.images ?: "" ) ? duplicate( arguments.request.images ) : []
 		var attachments = arguments.request.attachments ?: []
-		if ( isArray( attachments ) && attachments.len() ) {
+		if ( isArray( attachments ) ) {
+			for ( var a in attachments ) {
+				images.append( { name : a.name ?: "", mime : a.mime ?: "", base64 : a.data ?: "" } )
+			}
+		}
+		if ( images.len() ) {
 			var facts = new "models.runtime.ModelFacts@bxagents"().of( len( options.profile ?: "" ) ? options.profile : ( variables.agent.getConfig().profile ?: "" ) )
-			var images = attachments.map( ( a ) => { name : a.name ?: "", mime : a.mime ?: "", base64 : a.data ?: "" } )
 			var built = new "models.chat.MessageBuilder@bxagents"().build( input, images, facts )
 			if ( !built.ok ) {
-				return new Outcome( ok = false, code = "bad_attachment", reason = built.reason )
+				return Outcome::failed( "bad_attachment", built.reason )
 			}
 			input = built.input
 		}
@@ -74,7 +83,7 @@ class {
 
 		var thisAgent = variables.agent
 		var params = arguments.request.params ?: {}
-		return new Outcome( ok = true, data = {
+		return Outcome::done( {
 			threadId : threadId,
 			work     : ( onChunk ) => thisAgent.stream( onChunk, input, params, options ),
 			run      : () => thisAgent.run( input, params, options )
@@ -93,13 +102,13 @@ class {
 	any function prepareResume( required any caller, required string threadId, required struct request ) {
 		var decision = arguments.request.decision ?: ""
 		if ( !len( arguments.threadId ) || !len( decision ) ) {
-			return new Outcome( ok = false, code = "bad_request", reason = "threadId and decision are required" )
+			return Outcome::failed( "bad_request", "threadId and decision are required" )
 		}
 		var checkpointer = variables.agent.getCheckpointer()
 		if ( !isNull( checkpointer ) ) {
 			var state = checkpointer.loadState( arguments.threadId )
 			if ( !state.isEmpty() && ownerOf( state ) != arguments.caller.id() ) {
-				return new Outcome( ok = false, code = "not_your_run", reason = "This run belongs to another caller" )
+				return Outcome::failed( "not_your_run", "This run belongs to another caller" )
 			}
 		}
 		var thisAgent = variables.agent
@@ -107,7 +116,7 @@ class {
 		var decidedBy = arguments.caller.id()
 		var edited = arguments.request.editedData ?: {}
 		var reason = arguments.request.reason ?: ""
-		return new Outcome( ok = true, data = {
+		return Outcome::done( {
 			threadId : threadId,
 			work     : ( onChunk ) => thisAgent.resumeStream( onChunk, decision, threadId, edited, decidedBy, reason )
 		} )
@@ -128,7 +137,7 @@ class {
 			return prepared
 		}
 		execute( prepared.data(), arguments.onFrame, arguments.isOpen ?: nullValue() )
-		return new Outcome( ok = true, data = { threadId : prepared.data().threadId } )
+		return Outcome::done( { threadId : prepared.data().threadId } )
 	}
 
 	/**
@@ -140,7 +149,7 @@ class {
 			return prepared
 		}
 		execute( prepared.data(), arguments.onFrame, arguments.isOpen ?: nullValue() )
-		return new Outcome( ok = true, data = { threadId : arguments.threadId } )
+		return Outcome::done( { threadId : arguments.threadId } )
 	}
 
 	/**
@@ -154,7 +163,7 @@ class {
 			return prepared
 		}
 		var turn = prepared.data()
-		return new Outcome( ok = true, data = { output : turn.run(), threadId : turn.threadId } )
+		return Outcome::done( { output : turn.run(), threadId : turn.threadId } )
 	}
 
 	/**
@@ -165,7 +174,7 @@ class {
 	any function batch( required any caller, required struct request ) {
 		var inputs = arguments.request.inputs ?: []
 		if ( !isArray( inputs ) || !inputs.len() ) {
-			return new Outcome( ok = false, code = "bad_request", reason = "inputs must be a list with at least one item" )
+			return Outcome::failed( "bad_request", "inputs must be a list with at least one item" )
 		}
 		var threadId = len( arguments.request.threadId ?: "" ) ? arguments.request.threadId : createUUID()
 		var outputs = []
@@ -181,7 +190,7 @@ class {
 				outputs.append( { "error" : one.reason(), "success" : false } )
 			}
 		}
-		return new Outcome( ok = true, data = { outputs : outputs, threadId : threadId } )
+		return Outcome::done( { outputs : outputs, threadId : threadId } )
 	}
 
 	/**
@@ -258,9 +267,9 @@ class {
 	 */
 	any function cancel( required any caller, required string threadId, string reason = "Cancelled by the user." ) {
 		if ( !len( arguments.threadId ) ) {
-			return new Outcome( ok = false, code = "bad_request", reason = "threadId is required" )
+			return Outcome::failed( "bad_request", "threadId is required" )
 		}
-		return new Outcome( ok = true, data = { "cancelled" : variables.agent.cancelRun( arguments.threadId, arguments.reason ) } )
+		return Outcome::done( { "cancelled" : variables.agent.cancelRun( arguments.threadId, arguments.reason ) } )
 	}
 
 	/**
@@ -268,9 +277,9 @@ class {
 	 */
 	any function steer( required any caller, required string threadId, required string input ) {
 		if ( !len( arguments.threadId ) || !len( arguments.input ) ) {
-			return new Outcome( ok = false, code = "bad_request", reason = "threadId and input are required" )
+			return Outcome::failed( "bad_request", "threadId and input are required" )
 		}
-		return new Outcome( ok = true, data = { "steered" : variables.agent.steerRun( arguments.threadId, arguments.input ) } )
+		return Outcome::done( { "steered" : variables.agent.steerRun( arguments.threadId, arguments.input ) } )
 	}
 
 	/**
@@ -280,17 +289,17 @@ class {
 	 */
 	any function pending( required any caller, required string threadId ) {
 		if ( !len( arguments.threadId ) ) {
-			return new Outcome( ok = false, code = "bad_request", reason = "threadId is required" )
+			return Outcome::failed( "bad_request", "threadId is required" )
 		}
 		var checkpointer = variables.agent.getCheckpointer()
 		if ( isNull( checkpointer ) ) {
-			return new Outcome( ok = true, data = { "pending" : false } )
+			return Outcome::done( { "pending" : false } )
 		}
 		var state = checkpointer.loadState( arguments.threadId )
 		if ( !state.isEmpty() && ownerOf( state ) != arguments.caller.id() ) {
-			return new Outcome( ok = true, data = { "pending" : false } )
+			return Outcome::done( { "pending" : false } )
 		}
-		return new Outcome( ok = true, data = {
+		return Outcome::done( {
 			"pending"        : !state.isEmpty(),
 			"pendingActions" : state.suspendData.pendingActions ?: [],
 			"threadId"       : arguments.threadId
