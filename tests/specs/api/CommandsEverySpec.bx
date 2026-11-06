@@ -1,0 +1,73 @@
+/**
+ * Every slash command a server offers, run for real through the AgentService against an agent on the mock
+ * provider. It also fails when a command is added to the server's menu without a line here, so a new command
+ * cannot go in untried.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "every server command", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-commands-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.agent = aiAgent( name : "helper", model : aiModel( provider : "mock" ) );
+				variables.service = new bxagents.models.api.AgentService( agent, store );
+				// the line to type for each command: the web menu, and what each is given to work on
+				variables.lines = {
+					"/help"     : "/help",
+					"/new"      : "/new",
+					"/name"     : "/name Quarterly plan",
+					"/fork"     : "/fork Other approach",
+					"/tools"    : "/tools",
+					"/sessions" : "/sessions",
+					"/resume"   : "/resume",
+					"/clear"    : "/clear",
+					"/compact"  : "/compact",
+					"/context"  : "/context",
+					"/keys"     : "/keys",
+					"/model"    : "/model",
+					"/ping"     : "/ping",
+					"/info"     : "/info",
+					"/remember" : "/remember I prefer short answers",
+					"/notes"    : "/notes list",
+					"/export"   : "/export --format=md"
+				};
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "has a line for every command in the menu, for an admin and for anyone else", function() {
+				var offered = service.commands().menu( "web", true ).map( ( c ) => c.name );
+
+				expect( offered.filter( ( n ) => !lines.keyExists( n ) ) ).toBeEmpty( "add a line for the new command(s) above" );
+				expect( service.commands().menu( "web", false ).map( ( c ) => c.name ).filter( ( n ) => !lines.keyExists( n ) ) ).toBeEmpty();
+				expect( service.commands().menu( "gateway", true ).map( ( c ) => c.name ).filter( ( n ) => !lines.keyExists( n ) ) ).toBeEmpty();
+			} );
+
+			it( "runs each one and answers with blocks, never an error", function() {
+				for ( var command in service.commands().menu( "web", true ).map( ( c ) => c.name ) ) {
+					var reply = service.commands().execute( "ada", "c-" & createUUID(), lines[ command ], "web", true );
+
+					expect( reply.success ).toBeTrue( command & " did not answer" );
+					expect( reply.blocks ).toBeArray( command & " gave no blocks" );
+					expect( reply.blocks ).notToBeEmpty( command & " said nothing" );
+					expect( reply.conversationId ).notToBeEmpty( command & " lost the conversation" );
+				}
+			} );
+
+			it( "says unknown for a command that does not exist, rather than failing", function() {
+				var reply = service.commands().execute( "ada", "", "/nonsense", "web", true );
+
+				expect( reply.success ).toBeTrue();
+				expect( jsonSerialize( reply.blocks ) ).toInclude( "nonsense" );
+			} );
+
+		} );
+	}
+
+}

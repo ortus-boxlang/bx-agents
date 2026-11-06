@@ -250,6 +250,21 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.hasRoutes ).toBeFalse();
 			} );
 
+			it( "routes the conversation, preference, export and whoami actions, the specific paths before the ones that would match them", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+				var content = fileRead( generator.generate( discovery, newAppDir() ).router );
+
+				// one route lists (GET) and starts (POST), so a GET can never land on the creating action
+				expect( content ).toInclude( 'route( "/__bxagents/sessions" ).toHandler( "AgentApi.sessions" )' );
+				expect( content ).notToInclude( "createSession" );
+				expect( content ).toInclude( 'post( "/__bxagents/sessions/delete" ).toHandler( "AgentApi.deleteSession" )' );
+				expect( content ).toInclude( 'get( "/__bxagents/export" ).toHandler( "AgentApi.export" )' );
+				expect( content ).toInclude( 'get( "/__bxagents/whoami" ).toHandler( "AgentApi.whoami" )' );
+				expect( content ).toInclude( 'get( "/__bxagents/preferences" ).toHandler( "AgentApi.preferences" )' );
+				expect( content.find( "sessions/delete" ) ).toBeLT( content.find( 'route( "/__bxagents/sessions" )' ) );
+				expect( content.find( "preferences/set" ) ).toBeLT( content.find( 'get( "/__bxagents/preferences" )' ) );
+			} );
+
 			it( "puts every route of an API that needs a token behind route middleware", function() {
 				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
 				var content = fileRead( generator.generate(
@@ -322,11 +337,11 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( 'get( "/__bxagents/pending" ).toHandler( "AgentApi.pending" )' );
 				expect( content ).toInclude( 'get( "/__bxagents/tools" ).toHandler( "AgentApi.tools" )' );
 				expect( content ).toInclude( 'get( "/__bxagents/agent" ).toHandler( "AgentApi.about" )' );
-				expect( content ).toInclude( 'get( "/__bxagents/sessions" ).toHandler( "AgentApi.sessions" )' );
+				expect( content ).toInclude( 'route( "/__bxagents/sessions" ).toHandler( "AgentApi.sessions" )' );
 				expect( content ).toInclude( 'post( "/__bxagents/sessions/rename" ).toHandler( "AgentApi.renameSession" )' );
 				expect( content ).toInclude( 'post( "/__bxagents/sessions/fork" ).toHandler( "AgentApi.forkSession" )' );
 				// the specific routes come before the list route, which would otherwise match what follows it
-				expect( content.find( "sessions/rename" ) ).toBeLT( content.find( 'get( "/__bxagents/sessions" )' ) );
+				expect( content.find( "sessions/rename" ) ).toBeLT( content.find( 'route( "/__bxagents/sessions" )' ) );
 				expect( content ).toInclude( 'get( "/__bxagents/history" ).toHandler( "AgentApi.history" )' );
 				expect( content ).toInclude( 'post( "/__bxagents/clear" ).toHandler( "AgentApi.clear" )' );
 				expect( content ).toInclude( 'post( "/__bxagents/compact" ).toHandler( "AgentApi.compact" )' );

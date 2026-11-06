@@ -90,6 +90,36 @@ class {
 	}
 
 	/**
+	 * A conversation as a file a person can keep.
+	 *
+	 * @caller The Caller
+	 * @conversationId The conversation; it must be the caller's
+	 * @format md or html
+	 *
+	 * @return An Outcome: { file, mime, content }, or bad_request, not_found
+	 */
+	any function exportOf( required any caller, required string conversationId, string format = "md" ) {
+		if ( !keepsSessions() ) {
+			return Outcome::failed( "not_found", "This server keeps no list of conversations" )
+		}
+		var exporter = new "models.chat.Exporter@bxagents"()
+		var parsed = exporter.parse( "--format=" & arguments.format )
+		if ( !parsed.ok ) {
+			return Outcome::failed( "bad_request", parsed.reason )
+		}
+		var opened = conversations().open( arguments.caller, arguments.conversationId )
+		if ( !opened.succeeded() ) {
+			return opened
+		}
+		var title = variables.sessions.byId( arguments.caller.id(), arguments.conversationId ).title ?: ""
+		return Outcome::done( {
+			file    : exporter.defaultName( parsed.format ),
+			mime    : exporter.mime( parsed.format ),
+			content : exporter.render( conversation( arguments.caller, arguments.conversationId ).history(), parsed.format, title )
+		} )
+	}
+
+	/**
 	 * @caller The Caller
 	 *
 	 * @return The notes the agent keeps for the caller and about its job

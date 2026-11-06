@@ -255,9 +255,16 @@ POST /__bxagents/resume    # { threadId, decision } -> SSE, like /events
 GET  /__bxagents/tools
 GET  /__bxagents/profiles   # the profiles a client may ask for
 GET  /__bxagents/agent    # name, model, what it can do
-GET  /__bxagents/sessions   # the caller's recent conversations
+GET  /__bxagents/sessions   # the caller's recent conversations (?source=terminal for those that started there)
+POST /__bxagents/sessions   # { title? } start one: { conversationId }
 POST /__bxagents/sessions/rename   # { conversationId, title } name one
 POST /__bxagents/sessions/fork     # { conversationId, title? } copy one, messages and all
+POST /__bxagents/sessions/delete   # { conversationId } its row and the agent's messages for it
+GET  /__bxagents/export    # ?conversationId=&format=md|html the conversation as a file to save
+GET  /__bxagents/whoami    # who the server takes the caller to be: { id, name, scope, source, agent }
+GET  /__bxagents/preferences          # what the caller has set: { preferences : { key : value } }
+POST /__bxagents/preferences/set      # { key, value }
+POST /__bxagents/preferences/delete   # { key }
 GET  /__bxagents/history    # ?conversationId= what was said in one
 POST /__bxagents/clear      # { conversationId } forget its messages
 POST /__bxagents/compact    # { conversationId } summarize the older messages
