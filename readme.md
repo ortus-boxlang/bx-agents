@@ -26,9 +26,10 @@ Pick the problem, write one file.
 |---|---|---|
 | Answer people where they are | [`gateways/slack.bx`](docs/conventions/gateways/index.md) | A Slack bot over Socket Mode (also Telegram, Discord, Teams, WhatsApp, Twilio SMS, GitHub, Signal and email) |
 | Run a job every morning | [`schedules/Digest.bx`](docs/conventions/schedules.md) | A task with `.cron()` that calls `run()`, started with the app, no cron daemon |
-| Let other systems call it | [`gateways/expose.bx`](docs/conventions/gateways/index.md) | A REST API under a path you choose, or an MCP server |
+| Let other systems call it | [`agentApi` in `Agent.yaml`](docs/guides/agent-api.md) | One HTTP API at `/__bxagents` with an OpenAPI document and a BoxLang client, open on your machine or behind tokens; plus [`gateways/expose.bx`](docs/conventions/gateways/index.md) for a REST path of your choosing, or an MCP server |
 | Keep a human in the loop | a tool that needs approval | The run waits for approve or reject, in the terminal, the [web chat](docs/conventions/web-ui.md) or a chat gateway |
 | Connect it to your accounts | [`vault: {}`](docs/conventions/vault.md) | API keys and logins sealed in the database, typed in a hidden box and never shown to the model; each person can keep their own |
+| Add your own commands | [`extensions/hello.bx`](docs/conventions/extensions.md) | A chat command, key, status item or listener, in the terminal chat, the web page and chat platforms |
 | Test without spending tokens | [`tests/specs/AgentSpec.bx`](docs/conventions/testing.md) | `mockResponses()` and agent matchers: specs run in CI with no API key and no network |
 | Ship it anywhere | `bxAgents package` | A portable `.bxa` and [deploy targets](docs/conventions/deploy.md): local, SSH, FTP, SFTP, Docker, DigitalOcean |
 
@@ -37,20 +38,20 @@ Pick the problem, write one file.
 ```bash
 install-bx-module bx-agents      # bundles bx-ai and everything else; see docs/getting-started/installation.md
 
-bxAgents new my-agent --model=openai/gpt-5
+bxAgents new my-agent --model=openai/gpt-5   # or just `bxAgents new my-agent` at a terminal, and it asks
 cd my-agent
-# edit instructions.md, add tools/, skills/, etc.
+# edit instructions.md; add tools, skills, gateways with `bxAgents add <kind>` or by hand
 
 bxAgents build      # assembles a real ColdBox app under .build/app
 bxAgents doctor     # sanity-check the runtime + your project before build/serve surprise you
-bxAgents chat       # or: bxAgents serve --port=8080
+bxAgents chat       # a full-screen terminal chat; or: bxAgents serve --port=8080
 ```
 
-`new` doesn't only scaffold a blank agent: pick one of 8 built-in `--template`s (a Slack bot, a scheduled agent, a multi-agent team, ...), clone an existing GitHub repo (`--repo=owner/repo`, via a bundled JGit client - no `git` binary required), or install a ForgeBox package (`--forgebox=<slug>`, talking to ForgeBox's REST API directly - no `box` CLI required) - see [Agent Templates](docs/agent-templates.md).
+`new` at a terminal asks what the agent should do (model, tools, MCP servers, channels, access, deploy target) and writes the project to match; secrets go in `.env` as empty stubs. A template is a preset you build on, not a limit. `new` doesn't only scaffold a blank agent: pick one of 8 built-in `--template`s (a Slack bot, a scheduled agent, a multi-agent team, ...), clone an existing GitHub repo (`--repo=owner/repo`, via a bundled JGit client - no `git` binary required), or install a ForgeBox package (`--forgebox=<slug>`, talking to ForgeBox's REST API directly - no `box` CLI required) - see [Agent Templates](docs/agent-templates.md).
 
 ## See it
 
-The terminal chat (the answers here come from a scripted demo model):
+The terminal chat, with sessions, notes, `@file` and picture attachments, slash commands and a context meter (the answers here come from a scripted demo model). `bxAgents chat --server` starts its own server and `--connect=<url> --token=<token>` talks to a deployed one:
 
 ![bxAgents chat in a terminal: slash commands, a tool call and a formatted answer](docs/assets/tui/chat-terminal.gif)
 
@@ -58,7 +59,7 @@ The `new` wizard, from the name to a finished project:
 
 ![bxAgents new: the wizard asking what the agent should do](docs/assets/tui/wizard.gif)
 
-There is a guide to [the terminal UI](docs/guides/terminal-ui.md), the [slash commands](docs/guides/slash-commands.md) and some [walkthroughs](docs/guides/chat-walkthrough.md).
+There is a guide to [the terminal UI](docs/guides/terminal-ui.md), the [slash commands](docs/guides/slash-commands.md), some [walkthroughs](docs/guides/chat-walkthrough.md), and one on [calling your agent from code](docs/guides/agent-api.md).
 
 ## Documentation & Examples
 

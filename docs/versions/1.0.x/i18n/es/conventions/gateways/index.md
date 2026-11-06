@@ -20,7 +20,7 @@ flowchart TD
     Q -->|"no - tiene una clave 'type' en su lugar"| C["CHANNEL ADAPTER<br/>una conexión a una plataforma de chat"]
     E --> E1["exposes: agent<br/>cuatro rutas de la API del agente"]
     E --> E2["exposes: mcp<br/>route().toMCP()"]
-    E --> E3["exposes: webui<br/>index.html generado + /api"]
+    E --> E3["exposes: webui<br/>index.html generado"]
     C --> C1["mock / cli / http<br/>impulsado por pull: algo nos llama a NOSOTROS"]
     C --> C2["telegram, slack, discord, email, whatsapp-cloud,<br/>teams, twilio, github, signal<br/>estilo push: mantiene su propia conexión"]
     C2 --> S["un GatewaySession<br/>vinculado al agente raíz"]
@@ -72,7 +72,7 @@ class {
 
 Genera `route( "/mcp/tools" ).toMCP( "local-server" )`.
 
-**Expón la interfaz web de chat v1:**
+**Expón la interfaz web de chat:**
 
 ```javascript
 // gateways/chat.bx
@@ -300,16 +300,28 @@ Los enlaces deben ser https. Un archivo que no se puede descargar se le nombra a
 
 #### De quién es la conversación
 
-Los chats de cada persona son suyos. Al agente se le dice quién escribe (la plataforma y su id allí, `slack:U123`) y qué conversación es, así que la memoria del agente, `/notes` y `/remember`, y la lista de conversaciones se mantienen separadas por persona. La conversación es el chat, más su hilo cuando la plataforma los tiene (un tema de foro de Telegram, un hilo de Slack), así que cada tema guarda su propia memoria. Dos personas en el mismo canal no comparten memoria, ni tampoco dos chats en dos plataformas. Las conversaciones se guardan en la misma base de datos SQLite que la de la página web y la terminal (un proyecto con gateways de chat obtiene `data/chat.db`, igual que uno con página web), marcadas con la plataforma donde empezaron (`source`). Pertenecen al id propio de la persona, así que no aparecen en la lista del usuario abierto `local`.
+Los chats de cada persona son suyos. Al agente se le dice quién escribe (la plataforma y su id allí, `slack:U123`) y qué conversación es, así que la memoria del agente, `/notes` y `/remember`, y la lista de conversaciones se mantienen separadas por persona. El id de la conversación es el nombre del gateway, el chat y, cuando la plataforma lo da, un hilo: `slack:C0123:1700000000.0001`. Dos personas en el mismo canal no comparten memoria, ni tampoco dos chats en dos plataformas. Las conversaciones se guardan en la misma base de datos SQLite que la de la página web y la terminal (un proyecto con gateways de chat obtiene `data/chat.db`, igual que uno con página web), marcadas con la plataforma donde empezaron (`source`). Pertenecen al id propio de la persona, así que no aparecen en la lista del usuario abierto `local`.
+
+| Plataforma | La persona | El chat | La parte del hilo |
+|---|---|---|---|
+| Telegram | El id de usuario | El id del chat | Ninguna: una conversación por chat |
+| Slack | El id de usuario | El canal | La marca de tiempo del hilo, o la del propio mensaje cuando no está en un hilo, así que un mensaje fuera de un hilo inicia su propia conversación |
+| Discord | El id del autor | El canal | El id del mensaje al que se responde, ninguno para un mensaje simple |
+| WhatsApp | El número del remitente | El remitente | El id del mensaje citado, si lo hay |
+| Twilio (SMS) | El número del remitente | El remitente | Ninguna |
+| Signal | El remitente | El remitente | El id del mensaje citado, si lo hay |
+| Teams | El id del remitente | El id de conversación propio de Teams | El `replyToId` de la actividad |
+| GitHub | El login de quien comenta | `repo:owner/repo:issue:N` (o la forma del comentario de revisión) | Ninguna |
+| Email | La dirección del remitente | La dirección del remitente | El hilo del correo |
 
 #### Comandos de conversación
 
 `/new`, `/clear`, `/compact`, `/sessions` y `/resume` están desactivados por defecto, porque la mayoría de los chats son una conversación larga y es fácil teclear un `/clear` por error. Solo actúan sobre la conversación de quien escribe. Actívalos con `conversation: true` (o lístalos en `allow`).
 
-- `/new` mueve el chat a una conversación nueva; la anterior sigue en la lista.
+- `/new` mueve el chat a una conversación nueva; la anterior sigue en la lista. Adónde se movió un chat se guarda solo en memoria, así que tras reiniciar la app el chat vuelve a su propia conversación hasta que se mueva de nuevo.
 - `/sessions` lista las conversaciones que la persona ha tenido en esta app, la más reciente primero, y `/resume 2` (o un id) devuelve el chat a una. La lista está en la base de datos de chat compartida, así que sobrevive a los reinicios; los mensajes duran lo que dure la memoria del agente.
 - `/clear` y `/compact` actúan sobre la conversación en la que está el chat ahora.
-- En un hilo de Slack, cada hilo tiene su propia conversación, y `/new` mueve solo ese hilo.
+- En Slack cada hilo tiene su propia conversación, y `/new` mueve solo ese hilo.
 
 Qué hace en realidad cada política con un mensaje que llega mientras un turno todavía está en ejecución:
 

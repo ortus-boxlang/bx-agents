@@ -22,7 +22,7 @@ Es una interfaz de pantalla completa en el verde azulado del logo de BxAgents. L
 |---|---|---|
 | Nombre, propósito | El nombre del agente y una descripción de una línea | `name`, `description` en [`Agent.yaml`](../conventions/agent-yaml.md) |
 | Forma | Un agente, un equipo, un agente programado, un servidor MCP | La [plantilla](../agent-templates.md) correspondiente |
-| Modelo | Un proveedor y, opcionalmente, un nombre de modelo (Enter toma el predeterminado del proveedor) | `model`, y un marcador para `<PROVEEDOR>_API_KEY` en `.env` |
+| Modelo | Un proveedor y, opcionalmente, un nombre de modelo (Enter toma el predeterminado del proveedor). **Otro proveedor** te deja escribir `provider/model` tú mismo | `model`, y un marcador para `<PROVEEDOR>_API_KEY` en `.env` |
 | Ajustes del modelo | Si quieres ajustar el modelo; luego la temperatura (0 a 2), la respuesta más larga en tokens y el tiempo límite en segundos. Enter deja uno sin definir | [`params`](../conventions/models.md) (`temperature`, `max_tokens`) y [`options`](../conventions/models.md) (`timeout`) en `Agent.yaml` |
 | Tools | Fecha y hora, traer páginas, buscar en la web, navegar sitios, archivos, imágenes y voz | Una lista [`tools:`](../conventions/agent-yaml.md#tools); navegar también añade `bx-playwright` a tu `box.json` |
 | Buscador | El integrado, Brave, Tavily, Exa o Google | Un marcador de clave en `.env` y una línea en `instructions.md` que indica al agente qué proveedor usar |
@@ -33,6 +33,7 @@ Es una interfaz de pantalla completa en el verde azulado del logo de BxAgents. L
 | Acceso web | Abierto, una clave compartida o usuarios con contraseña | `apiKeyEnvVar` o `users` en la entrada del chat web |
 | Protección | Marcar, bloquear o ignorar entradas sospechosas | Un bloque [`security`](../conventions/agent-yaml.md#ajustes) |
 | Despliegue | Docker, DigitalOcean, SSH, SFTP, FTP, una carpeta local, o más tarde | `deploy/<destino>.json` |
+| Revisión | Un resumen de cada respuesta y el comando de una línea que la repite. Elige **Create the project**, **Start over** o **Cancel** | Nada hasta que crees |
 
 Una etapa cuya respuesta ya diste como opción se omite y se muestra como respondida. Una etapa que no aplica (el buscador cuando la búsqueda está desactivada) se omite sin avisar.
 

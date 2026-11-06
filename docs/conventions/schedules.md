@@ -86,6 +86,7 @@ model: openai/gpt-5
 `build` checks, because each would otherwise only fail when the app starts:
 
 - the file name becomes the class name (`schedules.<Name>`), so it must be letters, digits and underscores, starting with a letter or underscore. `my-job.bx` is refused; `MyJob.bx` is fine;
+- two files that would make the same scheduler class are refused: rename one;
 - a scheduler that extends `coldbox.system.web.tasks.ColdBoxScheduler` is refused, with what to change;
 - a file in `schedules/` that is not a `.bx` file is ignored, with a warning so a schedule that quietly stopped running is visible.
 

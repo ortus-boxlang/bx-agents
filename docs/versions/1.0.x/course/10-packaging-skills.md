@@ -42,6 +42,22 @@ A folder without a `SKILL.md` inside it isn't discovered as a skill at all - it'
 simply ignored, which is handy for scratch subfolders or assets kept alongside a skill
 under a different structure.
 
+## Starting one, and installing one
+
+`bxAgents add skill code-review` writes `skills/code-review/SKILL.md` with the frontmatter and
+a body to fill in. Skills other people published are installed from skills.boxlang.io:
+
+```bash
+bxAgents skills find review
+bxAgents skills install <owner/repo/skill>
+bxAgents skills list
+```
+
+Installed skills go into `.agents/skills/` (kept out of source control) and are recorded in
+`.agents/skills.lock.json`, which you commit; `build` restores whatever the lock lists and the
+disk lacks. Skills in `skills/` and installed ones both go into the build, and one of your own
+with the same name wins. `skills update` and `skills remove` do what they say.
+
 ## How it's wired at runtime
 
 `skills/` is copied verbatim into the generated app, the same wipe-then-write,
@@ -77,7 +93,8 @@ the exact line and explain the risk, don't just say "looks fine" or "consider
 improving this."
 ```
 
-Rebuild and try asking your agent to review a snippet of code.
+Rebuild and try asking your agent to review a snippet of code. (Or scaffold the file with
+`bxAgents add skill code-review`.)
 
 Full reference: [skills/](../conventions/skills.md).
 

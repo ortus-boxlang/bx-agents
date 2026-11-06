@@ -39,6 +39,13 @@ mcpServers:
     name: other
 ```
 
+A server can need a sign-in: write it as a `${env.NAME}` placeholder (`token: "${env.GITHUB_PERSONAL_ACCESS_TOKEN}"`),
+never the secret itself. An entry can also start a program on the agent's machine
+(`command: [uvx, mcp-server-git]`) instead of a web address, and `toolFilter` limits which tools the
+agent gets. `bxAgents add mcp client` writes such an entry for you (a catalog name such as GitHub
+or Notion, or `--url`), with an empty stub for the key in `.env`; the [`new` wizard](../guides/new-wizard.md)
+offers the same catalog. See [mcp/](../conventions/mcp.md) for every option.
+
 **No network connection is ever attempted at build time** - reachability is a runtime
 concern, so an unreachable server at build time is not a build error. Subagents can
 declare their own `mcpServers` independently.
@@ -90,6 +97,7 @@ Host the `GetTime` tool you wrote in [Lesson 9](09-giving-your-agent-tools.md) a
 own MCP server (`tools: [ "currentTime" ]`, the tool's function name), expose it at `/mcp/tools`, build, and `serve` - it's now reachable by
 any outside MCP client, independent of your agent's own chat interface.
 
-Full reference: [mcp/](../conventions/mcp.md).
+`bxAgents add mcp server` writes the `mcp/` file and the `gateways/` entry for you. Full
+reference: [mcp/](../conventions/mcp.md).
 
 Next: [Lesson 18 - Interceptors and Module Dependencies](18-interceptors-and-modules.md)

@@ -1,18 +1,19 @@
 ---
 title: "Chat walkthroughs"
 icon: phosphor-duotone:path
-summary: "Five short sessions in the terminal chat: a first conversation, picking one up again, switching models, notes, and files and pictures."
-description: "Five short sessions in the terminal chat: a first conversation, picking one up again, switching models, notes, and files and pictures."
+summary: "Six short sessions in the terminal chat: a first conversation, picking one up again, switching models, notes, files and pictures, and making the chat your own."
+description: "Six short sessions in the terminal chat: a first conversation, picking one up again, switching models, notes, files and pictures, and making the chat your own."
 tags: [guides, cli, tui, walkthrough]
 ---
 
 # Chat walkthroughs
 
-Five short sessions, each about two minutes. They assume an agent you have already built; if you have not, start with the [quick start](../getting-started/quick-start.md). Every key and command used here is listed in [The terminal UI](terminal-ui.md) and [Slash commands](slash-commands.md).
+Six short sessions, each about two minutes. They assume an agent you have already built; if you have not, start with the [quick start](../getting-started/quick-start.md). Every key and command used here is listed in [The terminal UI](terminal-ui.md) and [Slash commands](slash-commands.md).
 
-<video controls preload="metadata" poster="/assets/video/chat-tour-poster.png" style="max-width:100%">
-  <source src="/assets/video/chat-tour.mp4" type="video/mp4">
-  <source src="/assets/video/chat-tour.webm" type="video/webm">
+<video controls preload="metadata" poster="/assets/video/terminal-tour-poster.png" style="max-width:100%">
+  <source src="/assets/video/terminal-tour.mp4" type="video/mp4">
+  <source src="/assets/video/terminal-tour.webm" type="video/webm">
+  <track kind="captions" src="/assets/video/terminal-tour.vtt" srclang="en" label="English" default>
 </video>
 
 *The keys, prompt styles, context, name, fork and sessions in one run. The answers in these recordings come from a scripted demo model, so they are canned. Everything else is the real screen.*
@@ -28,7 +29,8 @@ bxAgents chat
 2. Press **Alt+Enter** for a second line before sending.
 3. Type `/` and look at the menu, or `?` for the keys. Type `/tools` to see what the agent can call.
 4. Press **Esc** while the agent is working to stop it at its next step. Type while it works to **steer** it: your message is added to the run.
-5. `/exit`, or **Ctrl+C** on an empty box, to leave.
+5. `/copy` puts the last answer on the clipboard.
+6. `/exit`, or **Ctrl+C** on an empty box, to leave.
 
 Scroll up afterwards: the conversation is ordinary terminal text.
 
@@ -74,7 +76,15 @@ Needs a [`notes`](../conventions/agent-yaml.md#notes) block in `Agent.yaml`.
 2. `@diagram.png` sends a picture. A profile that sets `vision: false` makes the chat refuse it with a message instead of a provider error.
 3. **Ctrl+V** pastes a picture from the clipboard.
 4. `!git diff --stat` runs a command on your machine and sends what it printed along with your next message. `!!` shows it without sending.
-5. `/context` shows what is attached and how big the context is.
+5. `/context` shows how big the context is and what it is made of: system prompt, tool definitions, notes and messages. The output of a `!command` waiting for your next message counts too.
+
+## 6. Make the chat your own
+
+1. `/prompt` shows the message box looks and widgets. `/prompt box` changes the look and `/prompt top +git -clock` changes the top bar, for this chat only. To set it for the project, use a [`tui:` block](terminal-ui.md#the-look-of-the-message-box) in `Agent.yaml`.
+2. `?` alone, or `/keys`, lists every key with its action name. To change one, put it in `~/.bxagents/bxAgents.yml`: `chat:` then `keys:` then, for example, `newline: ctrl+n`. See [Change a key](terminal-ui.md#change-a-key).
+3. `/extensions` lists what the [extensions](first-extension.md) added: commands, keys and more. After you edit one, `/reload` loads it again without leaving the chat.
+4. `/record demo.cast` starts saving the screen as an asciicast file, and `/record stop` ends it. Or start with `bxAgents chat --record=demo.cast`.
+5. `/stats` shows the tokens the model calls used, once `usage: true` is set in `Agent.yaml`. `/stats enable` writes that line for you.
 
 ## The wizard in the same style
 

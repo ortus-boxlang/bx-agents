@@ -59,6 +59,8 @@ environments:
 
 Un `Agent.bx` basado en clase expresa el mismo override como un método `test()` que devuelve `{ model : "mock/mock-model" }`.
 
+En el entorno `test`, cada [perfil](models.md#perfiles) también apunta al proveedor `mock`, así que un proyecto con perfiles tampoco necesita clave.
+
 Esto significa que tus pruebas no necesitan **ni clave de API ni acceso a red** desde el principio - la misma convención de proveedor `mock` usada en toda la propia suite de pruebas de BxAgents. Edita este override si quieres que un spec se ejecute contra un proveedor real en su lugar (necesitarás una clave de API real disponible en el entorno que ejecuta las pruebas).
 
 ### `mockResponses( responses )`

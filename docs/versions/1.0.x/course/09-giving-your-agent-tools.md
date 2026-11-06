@@ -80,6 +80,7 @@ class {
 }
 ```
 
+Or let `bxAgents add tool GetTime --function=currentTime` scaffold the file with a typed `@AITool` function for you.
 Rebuild and chat with it:
 
 ```bash

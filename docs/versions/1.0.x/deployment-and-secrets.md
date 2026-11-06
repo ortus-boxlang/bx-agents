@@ -75,6 +75,20 @@ export OPENAI_API_KEY=sk-...
 bxAgents serve
 ```
 
+## Variables BxAgents reads itself
+
+None of these holds a provider secret. `BXAGENTS_TOKEN` is the one credential, and it is only ever read from the environment of the machine you type on.
+
+| Variable | Used by | Effect |
+|---|---|---|
+| `BX_AGENTS_ENV` | `build` | The active environment when `--environment` is not given (default `development`). See [Environments](conventions/agent-yaml.md#environments). |
+| `BXAGENTS_DB` | the app, `chat`, `token`, `notes`, `sessions`, `stats` | The chat database file. `serve` sets it to `data/chat.db` in the project; a deployed app uses `database.path` inside the app unless it is set. See [the SQLite store](conventions/web-ui.md#the-sqlite-store). |
+| `BXAGENTS_TOKEN` | `chat --connect` | The token to send, instead of `--token`. |
+| `BXAGENTS_USER_CONFIG` | `chat`, `extensions` | Another file in place of `~/.bxagents/bxAgents.yml`. |
+| `BXAGENTS_SKILLS_URL` | `skills` | Another skills registry, instead of `--registry`. |
+| `BXAGENTS_BANNER`, `BXAGENTS_BANNER_THEME` | `--help`, `new` | `off` hides the banner; a theme name pins its colors. |
+| `BXAGENTS_` plus a name | `deploy` | The only prefix a `deploy/` entry may name for a password or passphrase (`passwordEnvVar`, `passphraseEnvVar`). |
+
 ## Secrets people hand to a running agent
 
 Environment variables are for what you deploy with. For a key or login that a person hands to a **running** agent (an API key for Gmail, a ticket system, a customer's own token), use [the vault](conventions/vault.md): values are sealed in the chat database, added from the terminal chat, the web page or `bxAgents vault`, and read by the runtime at the moment a tool or MCP server needs one. They are never part of a build, a package or the manifest. Set `BXAGENTS_VAULT_KEY` in the environment of the deployed process so the key does not sit beside the database.

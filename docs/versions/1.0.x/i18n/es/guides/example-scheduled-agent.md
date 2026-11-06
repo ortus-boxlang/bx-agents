@@ -62,7 +62,7 @@ what a cleanup pass would involve for a typical project.
 
 ## Construir y ejecutar
 
-A diferencia de `chat` (que nunca llega a arrancar ColdBox), el scheduler solo se dispara de verdad bajo un arranque real de ColdBox, así que este ejemplo necesita `serve`, no `chat`:
+A diferencia de un simple `bxAgents chat` (que carga el agente en el proceso del chat y nunca arranca ColdBox), los schedulers solo arrancan con la app servida, así que este ejemplo necesita `serve`. `bxAgents chat --server` también arranca la app, como un servidor local desechable, y conversa con ella:
 
 ```bash
 cd examples/scheduled-agent
@@ -71,6 +71,8 @@ bxAgents serve
 ```
 
 La tarea `nightly` se dispara automáticamente en cuanto `serve` está en marcha - sin ningún demonio cron aparte, sin ninguna entrada `cron` a nivel de sistema operativo. Lo mueve el propio hilo de scheduler en proceso de ColdBox, con la programación declarada en `Scheduler.bx`.
+
+Para añadir otra programación a tu propio proyecto, ejecuta `bxAgents add schedule`. Pregunta cuándo (por ejemplo `daily 09:00` o `every 15 minutes`), qué decirle al agente y a qué agente, y escribe `schedules/<Name>.bx`. `bxAgents inspect` lista las programaciones de un proyecto.
 
 !!! info
     `build` no puede validar de forma significativa el *contenido* de `Scheduler.bx` más allá de comprobar que el archivo existe - una errata en una llamada a `getInstance()` o una referencia a un nombre de agente que no existe pasarán `build` limpiamente y solo saldrán a la luz cuando la aplicación generada arranque de verdad.

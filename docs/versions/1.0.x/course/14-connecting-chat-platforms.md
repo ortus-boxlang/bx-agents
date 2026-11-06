@@ -95,6 +95,42 @@ gatewaySession:
     agent - a project with subagents can't yet route different gateways to different
     subagents.
 
+## Every person has their own conversation
+
+The agent is told who is writing (the platform and their id there, such as `slack:U123`) and
+which conversation it is: the chat, plus its thread when the platform has them (a Telegram forum
+topic, a Slack thread). So memory, `/notes`, `/remember` and the conversation list are kept apart
+per person and per thread. Two people in one channel do not share a memory, and neither do two
+chats on two platforms. The list is stored in the same `data/chat.db` the web page uses, marked
+with the platform it started on; an admin can see it with `GET /__bxagents/sessions?all=1`.
+
+## Commands in a chat
+
+A message that is a slash command is answered by BxAgents and never reaches the model. A safe set
+is on by default: `/help`, `/tools`, `/model`, `/info`, `/ping`, `/remember` and `/notes`. The
+conversation commands (`/new`, `/clear`, `/compact`, `/sessions`, `/resume`) are off, because most
+chats are one long conversation; turn them on with `conversation: true`. Each platform shows the
+commands its own way (Telegram's `/` menu, Discord application commands, Slack slash commands,
+buttons on WhatsApp, a numbered list on SMS).
+
+```yaml
+gatewaySession:
+  commands:
+    conversation: true       # also /new, /clear, /compact, /sessions, /resume
+    prefixes: { slack: "!" } # a different one-character prefix for one gateway
+```
+
+Pictures and text files sent on Telegram, Discord, Slack, WhatsApp and Twilio MMS reach the agent
+with the message (`gatewaySession.attachments: false` switches that off).
+
+## Adding a platform, or your own
+
+`bxAgents add gateway` adds a platform the way the `new` wizard does: it writes the
+`gateways/` file, an empty `.env` line for each credential and the setup steps that happen
+outside the project (a bot token, a public address). `bxAgents doctor` reports credentials that
+are still not set. If a platform is not in the list, an [extension](18-interceptors-and-modules.md)
+can bring a new gateway type.
+
 ## Try it
 
 If you have a disposable Telegram bot token, add a `gateways/telegramChannel.bx` entry,

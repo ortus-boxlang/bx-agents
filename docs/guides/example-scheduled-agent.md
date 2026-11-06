@@ -62,7 +62,7 @@ what a cleanup pass would involve for a typical project.
 
 ## Build and run
 
-Unlike `chat` (which never boots ColdBox at all), schedulers only start with the served app, so this one needs `serve`, not `chat`:
+Unlike a plain `bxAgents chat` (which loads the agent in the chat process and never boots ColdBox), schedulers only start with the served app, so this one needs `serve`. `bxAgents chat --server` also starts the app, as a throwaway local server, and chats with it:
 
 ```bash
 cd examples/scheduled-agent
@@ -71,6 +71,8 @@ bxAgents serve
 ```
 
 The `nightly` task fires automatically once `serve` is running - no separate cron daemon, no OS-level `cron` entry. BoxLang's own scheduler drives it, on the schedule declared in `Nightly.bx`.
+
+To add another schedule to your own project, run `bxAgents add schedule`. It asks when (for example `daily 09:00` or `every 15 minutes`), what to tell the agent and which agent, and writes `schedules/<Name>.bx`. `bxAgents inspect` lists the schedules a project has.
 
 !!! info
     `build` checks the scheduler's file name and that it is a class, but not the *contents* of `configure()` - a typo in an `agent()` call or a reference to an agent name that doesn't exist will pass `build` cleanly and only surface once the generated app actually boots.

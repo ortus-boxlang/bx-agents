@@ -216,6 +216,7 @@
         <button role="tab" aria-selected="false" data-k="schedules"><i class="ph-duotone ph-clock-countdown"></i>schedules/</button>
         <button role="tab" aria-selected="false" data-k="mcp"><i class="ph-duotone ph-cloud-arrow-up"></i>mcp/</button>
         <button role="tab" aria-selected="false" data-k="interceptors"><i class="ph-duotone ph-lightning"></i>interceptors/</button>
+        <button role="tab" aria-selected="false" data-k="extensions"><i class="ph-duotone ph-puzzle-piece"></i>extensions/</button>
         <button role="tab" aria-selected="false" data-k="application"><i class="ph-duotone ph-gear-six"></i>Application.bx</button>
       </div>
       <div class="bxa-out" role="tabpanel" aria-live="polite" id="out">
@@ -315,8 +316,56 @@ bxAgents serve --port=8080</code><button class="bxa-copy" data-copy="bxAgents ch
   <div class="bxa-result bxa-rv"><span class="bxa-dot"></span><span>Then open <b>http://127.0.0.1:8080</b>. Bound to localhost only.</span></div>
 </div></section>
 
+<section id="api" class="bxa-band"><div class="bxa-wrap">
+  <div class="bxa-head bxa-rv"><span class="bxa-eyebrow">One API</span><h2>The page, the terminal and your code all use the same one.</h2><p>Every built agent serves an HTTP API at <code>/__bxagents</code>. Anything you can do in the chat page or the terminal, a program can do too. Open on your own machine, locked down when you share it.</p></div>
+  <div class="bxa-solves">
+    <article class="bxa-solve bxa-gc bxa-rv">
+      <span class="bxa-ico"><i class="ph-duotone ph-lock-key"></i></span>
+      <h3>Open, or behind tokens</h3>
+      <p>Open by default on localhost, with a loud warning if you bind it to every interface. Add a shared secret or named access tokens, and an admin can make and revoke tokens over the API.</p>
+      <div class="bxa-flow"><code>agentApi: tokens: true</code><i class="ph-duotone ph-arrow-right" aria-hidden="true"></i><span>A caller needs an x-bxagents-token</span></div>
+      <div class="bxa-solve-links"><a href="#variables.basePath#guides/agent-api/">The API guide</a></div>
+    </article>
+    <article class="bxa-solve bxa-gc bxa-rv">
+      <span class="bxa-ico"><i class="ph-duotone ph-shield-check"></i></span>
+      <h3>Guarded by cbSecurity</h3>
+      <p>Limit who can call by address and how often. The guards are cbSecurity route middleware, in front of every route, whether the API is open or not.</p>
+      <div class="bxa-flow"><code>allowedIPs, rateLimit</code><i class="ph-duotone ph-arrow-right" aria-hidden="true"></i><span>403 outside the list, 429 over the limit</span></div>
+      <div class="bxa-solve-links"><a href="#variables.basePath#conventions/agent-bx/">agentApi settings</a></div>
+    </article>
+    <article class="bxa-solve bxa-gc bxa-rv">
+      <span class="bxa-ico"><i class="ph-duotone ph-file-code"></i></span>
+      <h3>Describes itself</h3>
+      <p>The server hands out an OpenAPI 3 document of the routes it really has, with the request and answer shapes and the stream frames. Feed it to a client generator or Swagger UI.</p>
+      <div class="bxa-flow"><code>GET /__bxagents/openapi</code><i class="ph-duotone ph-arrow-right" aria-hidden="true"></i><span>One document, made from the same list as the routes</span></div>
+      <div class="bxa-solve-links"><a href="#variables.basePath#guides/agent-api/">OpenAPI</a></div>
+    </article>
+    <article class="bxa-solve bxa-gc bxa-rv">
+      <span class="bxa-ico"><i class="ph-duotone ph-plugs-connected"></i></span>
+      <h3>Call it from BoxLang</h3>
+      <p>A documented client with one method for every route: invoke, stream, run control, conversations, notes, commands and tokens.</p>
+      <div class="bxa-flow"><code>new AgentApiClient( url, token )</code><i class="ph-duotone ph-arrow-right" aria-hidden="true"></i><span>client.invoke( "Hello" )</span></div>
+      <div class="bxa-solve-links"><a href="#variables.basePath#guides/agent-api/">The client</a><a href="https://github.com/ortus-boxlang/bx-agents/tree/development/examples/api-agent" target="_blank" rel="noopener noreferrer">Example</a></div>
+    </article>
+    <article class="bxa-solve bxa-gc bxa-rv">
+      <span class="bxa-ico"><i class="ph-duotone ph-terminal-window"></i></span>
+      <h3>A full screen chat in your terminal</h3>
+      <p>Keys you can rebind, slash commands, saved sessions you can resume, fork and export, notes the agent keeps, files and pictures with @, a context gauge, and recording.</p>
+      <div class="bxa-flow"><code>bxAgents chat</code><i class="ph-duotone ph-arrow-right" aria-hidden="true"></i><span>Or --connect to a server that is already running</span></div>
+      <div class="bxa-solve-links"><a href="#variables.basePath#guides/terminal-ui/">Terminal UI</a><a href="#variables.basePath#guides/slash-commands/">Slash commands</a></div>
+    </article>
+    <article class="bxa-solve bxa-gc bxa-rv">
+      <span class="bxa-ico"><i class="ph-duotone ph-puzzle-piece"></i></span>
+      <h3>Extend it with a file</h3>
+      <p>Extensions add slash commands, keys, status items, page slots, CLI verbs, tools and gateway types, and install from a folder, a zip, GitHub or ForgeBox.</p>
+      <div class="bxa-flow"><code>extensions/audit.bx</code><i class="ph-duotone ph-arrow-right" aria-hidden="true"></i><span>A new command in every place the agent chats</span></div>
+      <div class="bxa-solve-links"><a href="#variables.basePath#conventions/extensions/">Extensions</a><a href="#variables.basePath#guides/first-extension/">First extension</a></div>
+    </article>
+  </div>
+</div></section>
+
 <section id="watch"><div class="bxa-wrap">
-  <div class="bxa-head bxa-rv"><span class="bxa-eyebrow">Watch it work</span><h2>Real runs, recorded.</h2><p>Every clip is a real session, not a mock-up. No model was called: the web clips use the mock provider the examples ship with, and the terminal clips use a scripted demo model, so the answers are canned.</p></div>
+  <div class="bxa-head bxa-rv"><span class="bxa-eyebrow">Watch it work</span><h2>Take the tour. Real runs, recorded.</h2><p>Every clip is a real session, not a mock-up. The three tours are narrated: press the speaker on the player to hear them, and captions are on. No model was called: the clips use the mock provider the examples ship with or a scripted demo model, so the answers are canned.</p></div>
   <div class="bxa-vplayer bxa-rv">
     <div class="bxa-vtabs" role="tablist" aria-label="Walkthrough videos" id="vtabs"></div>
     <div class="bxa-vstage">
@@ -454,12 +503,12 @@ Serving [<span class="bxa-t-h">/work/support-bot/.build/app</span>] on <span cla
   <div class="bxa-head bxa-rv"><span class="bxa-eyebrow">The CLI</span><h2>Twenty verbs, one executable.</h2><p>Tab completion for bash, fish and PowerShell ships with the module.</p></div>
   <div class="bxa-vgrid">
     <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##new"><i class="ph-duotone ph-hand-waving"></i><b>new</b><small>Scaffold a project</small></a>
-    <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##add"><i class="ph-duotone ph-plus-circle"></i><b>add</b><small>Add a tool</small></a>
+    <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##add"><i class="ph-duotone ph-plus-circle"></i><b>add</b><small>Add a piece</small></a>
     <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##skills"><i class="ph-duotone ph-graduation-cap"></i><b>skills</b><small>From the registry</small></a>
     <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##build"><i class="ph-duotone ph-hammer"></i><b>build</b><small>Assemble the app</small></a>
     <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##test"><i class="ph-duotone ph-flask"></i><b>test</b><small>Run TestBox specs</small></a>
     <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##serve"><i class="ph-duotone ph-lightning"></i><b>serve</b><small>boxlang-miniserver</small></a>
-    <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##chat"><i class="ph-duotone ph-chat-circle-dots"></i><b>chat</b><small>Interactive REPL</small></a>
+    <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##chat"><i class="ph-duotone ph-chat-circle-dots"></i><b>chat</b><small>Full screen chat</small></a>
     <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##invoke"><i class="ph-duotone ph-paper-plane-tilt"></i><b>invoke</b><small>One message, one reply</small></a>
     <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##package"><i class="ph-duotone ph-package"></i><b>package</b><small>Build a .bxa</small></a>
     <a class="bxa-verb bxa-gc bxa-rv" href="#variables.basePath#cli-reference/##deploy"><i class="ph-duotone ph-rocket-launch"></i><b>deploy</b><small>Ship to a target</small></a>

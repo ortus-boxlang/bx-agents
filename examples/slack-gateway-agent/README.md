@@ -9,6 +9,7 @@ At [api.slack.com/apps](https://api.slack.com/apps), create an app "from scratch
 1. **Socket Mode** - enable it, generate an app-level token with the `connections:write` scope (`xapp-...`) → `SLACK_APP_TOKEN`.
 2. **OAuth & Permissions** - add the `chat:write` bot scope, install the app to your workspace, copy the Bot User OAuth Token (`xoxb-...`) → `SLACK_BOT_TOKEN`.
 3. **Event Subscriptions** - enable it and subscribe to the `message.im` (and/or `message.channels`) bot event, so the app actually receives message events over the socket.
+4. Optional: a **Slash Commands** entry (an umbrella `/agent` runs the chat commands, for example `/agent model fast`) and the `files:read` scope so the agent can read files people share.
 
 ## 2. Configure and run
 
@@ -20,6 +21,8 @@ bxAgents serve
 ```
 
 `SlackGateway` opens the Socket Mode connection as soon as `GatewaySession` starts. DM the bot (or mention it in a channel it's in) - replies stream back token-by-token via a placeholder message + `chat.update`.
+
+Each person, and each Slack thread, has a conversation of their own, kept apart in memory, notes and the conversation list. See [Whose conversation it is](../../docs/conventions/gateways/index.md#whose-conversation-it-is).
 
 {% hint style="info" %}
 Like every other persistent-connection gateway in this directory, there's no `curl`-able entrypoint here - message the app for real in Slack to see it work.

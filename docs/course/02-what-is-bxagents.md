@@ -33,7 +33,7 @@ flowchart LR
 
 `Agent.yaml` and `instructions.md` are the only files that matter to get started. Every
 other convention folder - `tools/`, `skills/`, `subagents/`, `gateways/`,
-`schedules/`, `mcp/`, `interceptors/`, `modules/` - is optional and **only shapes the
+`schedules/`, `mcp/`, `interceptors/`, `extensions/`, `modules/` - is optional and **only shapes the
 generated output if it exists and has content in it**. You add conventions as you
 actually need them, not up front.
 

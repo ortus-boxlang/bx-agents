@@ -85,7 +85,26 @@ A typo never leaves you stuck. An unknown action, an unreadable key, or a key an
 
 ## Commands: type `/`
 
-A `/` at the start of the box opens a menu of commands. Keep typing to narrow it, Tab or Enter to take one. All of them are listed in [Slash commands](slash-commands.md); the ones you will use first are `/help`, `/new`, `/sessions`, `/resume`, `/model` and `/exit`.
+A `/` at the start of the box opens a menu of commands. Keep typing to narrow it, Tab or Enter to take one. All of them are listed in [Slash commands](slash-commands.md); the ones you will use first are `/help`, `/new`, `/sessions`, `/resume`, `/context`, `/model` and `/exit`. `/stats` shows the tokens the model calls used, once `usage: true` is set in `Agent.yaml`.
+
+## Conversations
+
+Every chat is a conversation, kept in the project's shared chat database next to the web page's own.
+
+| Do | How |
+|---|---|
+| Start where you left off | `bxAgents chat --continue`, or `--session=<number or id>` |
+| See the list | `/sessions` (numbered, newest first) |
+| Go back to one | `/resume 2`; with no number, the most recent |
+| Name or copy one | `/name Quarterly plan`, `/fork Other approach` |
+| Save one | `/export plan.html` (or `.md`); `--format=md\|html` overrides the file name |
+| Start a clean one | `/new`, or `/clear` to empty this one |
+
+From a shell, `bxAgents sessions list|rename|fork|delete` does the same. A step by step run is in [Chat walkthroughs](chat-walkthrough.md#2-pick-a-conversation-up-again).
+
+## Extensions
+
+Extensions in the project's `extensions/` folder, in your own `~/.bxagents/extensions/` and in installed modules add commands, keys and status text to this screen. `/extensions` lists what loaded and what went wrong; `/reload` loads them again after an edit (admins, which you are in your own terminal). Keys an extension adds show in `/keys` and can be rebound under `chat: keys:` like any other. See [Write your first extension](first-extension.md).
 
 ## Files, pictures and your own machine
 

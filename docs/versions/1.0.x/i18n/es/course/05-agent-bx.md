@@ -44,9 +44,10 @@ Eso es un agente completo. `bxAgents new` crea esta forma por ti (consulta la
 | `subAgents` | Nombres de carpetas hermanas bajo `subagents/` (consulta la [Lección 11](11-composing-subagents.md)). |
 | `mcpServers` | Servidores MCP remotos que el agente puede llamar (consulta la [Lección 17](17-hosting-mcp-servers.md)). |
 | `security`, `memory`, `checkpointer` | Guardrails, memoria de conversación y estado de humano-en-el-bucle. |
-| `gatewaySession` | Cómo los gateways de chat ponen en cola las sesiones (consulta la [Lección 14](14-connecting-chat-platforms.md)). |
-| `agentApi` | La ruta de agente siempre activa. |
+| `gatewaySession` | Cómo los gateways de chat ponen en cola los mensajes, qué comandos de barra responden y si leen adjuntos (consulta la [Lección 14](14-connecting-chat-platforms.md)). |
+| `agentApi` | La API de agente siempre activa: quién puede llamarla (tokens, direcciones permitidas, límite de frecuencia) y dónde se sirve (consulta la [Lección 13](13-exposing-http-and-mcp.md)). |
 | `environments` | Sobrescrituras por entorno (ver abajo). |
+| `provider`, `params`, `options`, `providers`, `profiles`, `notes` (notas cortas que guarda el agente), `usage` (registra los recuentos de tokens para `bxAgents stats`), `tui` (el aspecto del chat de terminal), `extensions` y más | Más ajustes, todos listados en la referencia de [Agent.yaml](../conventions/agent-yaml.md). |
 
 Una **clave desconocida es un error** que lista las válidas, así que un error tipográfico
 como `modle:` nunca puede no hacer nada en silencio. Los tipos incorrectos y los valores

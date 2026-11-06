@@ -41,6 +41,22 @@ Una carpeta sin un `SKILL.md` dentro no se descubre como skill en absoluto - sim
 ignora, lo cual resulta práctico para subcarpetas de trabajo o para recursos guardados junto a
 una skill con otra estructura.
 
+## Crear una, e instalar una
+
+`bxAgents add skill code-review` escribe `skills/code-review/SKILL.md` con el frontmatter y un
+cuerpo para rellenar. Las skills que publicó otra gente se instalan desde skills.boxlang.io:
+
+```bash
+bxAgents skills find review
+bxAgents skills install <owner/repo/skill>
+bxAgents skills list
+```
+
+Las skills instaladas van a `.agents/skills/` (fuera del control de código) y se registran en
+`.agents/skills.lock.json`, que sí versionas; `build` restaura lo que el lock lista y falta en
+disco. Las skills de `skills/` y las instaladas van ambas al build, y una tuya con el mismo
+nombre gana. `skills update` y `skills remove` hacen lo que dicen.
+
 ## Cómo se cablea en tiempo de ejecución
 
 `skills/` se copia literalmente a la aplicación generada, con la misma copia de
@@ -77,7 +93,8 @@ the exact line and explain the risk, don't just say "looks fine" or "consider
 improving this."
 ```
 
-Reconstruye y prueba a pedirle a tu agente que revise un fragmento de código.
+Reconstruye y prueba a pedirle a tu agente que revise un fragmento de código. (O crea el archivo con
+`bxAgents add skill code-review`.)
 
 Referencia completa: [skills/](../conventions/skills.md).
 

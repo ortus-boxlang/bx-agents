@@ -24,14 +24,16 @@ my-agent/
 ├── skills/            # SKILL.md capabilities
 ├── subagents/         # nested agent trees
 ├── gateways/           # HTTP/MCP/chat exposure
-├── schedules/          # a real ColdBox scheduler
+├── schedules/          # BoxLang schedulers
 ├── mcp/                # MCP servers you host
 ├── interceptors/        # lifecycle hooks
+├── extensions/         # chat commands, keys and more
 └── modules/            # module dependencies
 ```
 
 Todas las carpetas de arriba son opcionales excepto `Agent.yaml`. Añade las que tu agente
-realmente necesite; el resto pueden quedarse vacías o simplemente no existir.
+realmente necesite; el resto pueden quedarse vacías o simplemente no existir. (`bxAgents new` crea
+todas las carpetas excepto `extensions/`, que aparece al ejecutar `bxAgents add extension`.)
 
 ## Cómo está organizado este curso
 
@@ -39,13 +41,13 @@ Las 20 lecciones siguen el orden en el que construirías de forma natural un pro
 
 1. **Lecciones 1-4** - orientación, instalación, y tu primer proyecto creado con el andamiaje.
 2. **Lecciones 5-8** - las piezas obligatorias: `Agent.yaml`, las instrucciones, construir, y
-   ejecutar el agente desde la terminal.
+   chatear con el agente en la terminal.
 3. **Lecciones 9-12** - dar capacidades a tu agente: tools, skills, subagentes y modelos
    con nombre.
-4. **Lecciones 13-16** - alcanzar tu agente: exposición HTTP/MCP, plataformas de chat, la
-   UI web generada, y el trabajo programado en segundo plano.
+4. **Lecciones 13-16** - alcanzar tu agente: la API HTTP y sus tokens, exposición MCP,
+   plataformas de chat, la UI web generada, y el trabajo programado en segundo plano.
 5. **Lecciones 17-18** - alojar tus propios servidores MCP, interceptores de ciclo de vida,
-   y dependencias de módulos.
+   extensiones y dependencias de módulos.
 6. **Lecciones 19-20** - probarlo de verdad, y después empaquetar y desplegar lo construido.
 
 ## Qué necesitas

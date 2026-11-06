@@ -54,12 +54,13 @@ Porque llega el envelope completo, **el razonamiento y las llamadas de tool ya e
 
 ## Recorrido
 
-<video controls preload="metadata" poster="/assets/video/webui-walkthrough-poster.png" style="max-width:100%">
-  <source src="/assets/video/webui-walkthrough.mp4" type="video/mp4">
-  <track kind="captions" src="/assets/video/webui-walkthrough.vtt" srclang="en" label="English" default>
+<video controls preload="metadata" poster="/assets/video/web-tour-poster.png" style="max-width:100%">
+  <source src="/assets/video/web-tour.mp4" type="video/mp4">
+  <source src="/assets/video/web-tour.webm" type="video/webm">
+  <track kind="captions" src="/assets/video/web-tour.vtt" srclang="en" label="English" default>
 </video>
 
-Un minuto y medio por toda la página: inicio de sesión, streaming, el selector de modelo, una llamada a una herramienta, el anillo de contexto y su desglose, el menú de comandos con `/`, conversaciones guardadas, notas y el tema oscuro. La música y la mezcla se hicieron con [bx-audio](https://github.com/ortus-boxlang/bx-audio) y la voz con [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) (modelo Apache 2.0), y la página es la app de demostración de [`tools/demo/webui`](https://github.com/ortus-boxlang/bx-agents/tree/development/tools/demo/webui), que `capture.js` maneja con Playwright. La narración y los subtítulos están en inglés. Habla con un modelo con guion, así que cada respuesta es igual cada vez.
+Un minuto y medio por toda la página: el formulario de contraseña, las sugerencias, una respuesta con formato, una llamada a una herramienta, un bloque de código con su botón Copy, el menú Settings, el modo oscuro, las notas y el panel de tokens de acceso. La voz es [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) (modelo Apache 2.0), y las respuestas de la página vienen de un modelo de demostración con guion, así que son fijas. Los subtítulos están activados.
 
 | | |
 |---|---|
@@ -68,6 +69,9 @@ Un minuto y medio por toda la página: inicio de sesión, streaming, el selector
 | ![Una llamada a una herramienta mostrada como bloque abierto sobre la respuesta](../assets/webui/tool-call.png) **Herramientas.** Cada llamada muestra su nombre y argumentos. | ![La barra lateral con dos chats guardados](../assets/webui/conversations.png) **Conversaciones.** Guardadas por cuenta, y siguen ahí tras recargar. |
 | ![El panel Notes con una nota en About you](../assets/webui/notes.png) **Notas.** Lo que el agente debe recordar, con el tamaño que añade. | ![La página en tema oscuro con el acento de la entrada del gateway](../assets/webui/dark-theme.png) **Tema.** Claro u oscuro, recordado, con tu acento de `theme`. |
 | ![El panel de contexto con lo que llena la ventana del modelo](../assets/webui/context-panel.png) **Contexto.** El anillo se llena según crece la conversación; pulsa para ver el desglose. | ![El menú de comandos al escribir una barra](../assets/webui/commands-menu.png) **Comandos.** Escribe `/` para ver el menú. |
+| ![La conversación vacía con el mensaje de bienvenida y tres botones de sugerencia](../assets/webui/empty-suggestions.png) **Sugerencias.** Una conversación vacía puede ofrecer `suggestions` que se envían con un clic. | ![Un bloque de código con su lenguaje y un botón Copy](../assets/webui/code-block.png) **Código.** Cada bloque muestra su lenguaje y copia el código mismo. |
+| ![El menú Ajustes abierto, con los grupos Conversación, Tú y Servidor](../assets/webui/settings-menu.png) **Ajustes.** Un engranaje reúne las acciones de la conversación, tus notas, la apariencia y lo del servidor. | ![El panel Apariencia con modo, colores de acento, tamaño de texto y densidad](../assets/webui/appearance.png) **Apariencia.** Modo, acento, tamaño de texto y densidad, guardados en este navegador. |
+| ![El panel de tokens de acceso con un token nuevo mostrado una vez](../assets/webui/tokens-panel.png) **Tokens de acceso.** Un admin crea y revoca tokens con nombre; el secreto se muestra una vez. | |
 
 ## Cómo se ve realmente un turno de streaming
 
@@ -101,8 +105,8 @@ Cada llamada lleva tres cabeceras:
 
 | Cabecera | Para qué |
 | --- | --- |
-| `x-bxagents-source: web` | Marca las conversaciones que inicia la página, para distinguirlas de las de la terminal y los gateways (`bxAgents sessions list --source=web`, o `?source=` en la API) |
-| `x-bxagents-token` | La contraseña del formulario del botón de la llave, cuando hay una (ver [Proteger la API](#proteger-la-api)) |
+| `x-bxagents-source: web` | Marca las conversaciones que inicia la página, para que el filtro `?source=` de la API (`GET /__bxagents/sessions?source=web`) las distinga de las de la terminal y los gateways |
+| `x-bxagents-token` | La contraseña escrita en el formulario **Password** (se abre desde **Password** en el menú Settings, o solo cuando el servidor responde `401`), cuando hay una (ver [Proteger la API](#proteger-la-api)) |
 | `x-bxagents-csrf: 1` | Se envía en cada petición. Una petición hecha con la cookie de sesión que cambia algo debe llevarla, para que otro sitio no pueda hacer que tu navegador lo haga |
 
 La identidad es la de la API: sin `users` la página es el único usuario abierto `local`, compartido con el chat de terminal de esa máquina, y con `users` es la cuenta que inició sesión.
@@ -338,13 +342,24 @@ Estas son para lo que existe el almacén SQLite, y ambas están delimitadas por 
 
 ## Branding y temática
 
-Cada clave de abajo es opcional - la entrada funciona con solo `exposes` y `path`.
+La entrada necesita solo `exposes` y `path`. Todas las demás claves son opcionales. Estas no tienen que ver con el aspecto y se describen en otras partes de esta página:
+
+| Clave | Qué hace |
+| --- | --- |
+| `exposes` | `"webui"`. |
+| `path` | Dónde se sirve la página, por ejemplo `/chat`. Segmentos simples desde la raíz, único entre las entradas de `gateways/`, y no bajo la ruta de la API del agente. |
+| `apiKeyEnvVar` | El nombre de la variable que guarda el secreto compartido de la API, ver [Proteger la API](#proteger-la-api). |
+| `users` | Cuentas con nombre, ver [Usuarios e inicio de sesión](#usuarios-e-inicio-de-sesión). |
+| `profiles` | Los perfiles que las personas pueden elegir, ver [Elegir el modelo](#elegir-el-modelo). |
+| `database` | `{ datasource, path }`, ver [El almacén SQLite](#el-almacén-sqlite). |
+
+Estas claves dan marca a la página:
 
 | Clave | Qué hace |
 | --- | --- |
 | `title` | Título del navegador y encabezado del header |
 | `subtitle` | Línea pequeña bajo el encabezado |
-| `icon` | Un emoji (renderizado en un favicon inline-SVG **y** el header) o una URL/ruta de imagen (`/logo.svg`, `https://…`, `data:image/…`) O `phosphor:<nombre>` para un icono del conjunto de la propia página (`phosphor:lightning`, `phosphor:robot`, `phosphor:chat-circle-text`, ...), usado en la cabecera y la pestaña; un nombre que el conjunto no tiene se muestra como texto. |
+| `icon` | Un emoji (renderizado en un favicon inline-SVG **y** el header) o una URL/ruta de imagen (`/logo.svg`, `https://…`, `data:image/…`). Con ninguno, el encabezado muestra un robot. O `phosphor:<nombre>` para un icono del conjunto de la propia página (`phosphor:lightning`, `phosphor:robot`, `phosphor:chat-circle-text`, ...), usado en la cabecera y la pestaña; un nombre que el conjunto no tiene se muestra como texto. |
 | `welcome` | Mensaje de estado vacío mostrado antes del primer turno |
 | `suggestions` | Hasta cuatro textos cortos mostrados como botones bajo el mensaje de bienvenida en una conversación vacía. Un clic lo envía. |
 | `placeholder` | Placeholder del input del compositor |

@@ -2,6 +2,8 @@
 
 An agent reachable over real email via a push-style `gateways/` entry (`type: "email"`) - a scheduled IMAP poll for inbound, an SMTP send (via ColdBox's `cbmailservices`) for outbound.
 
+Each person has a conversation of their own: memory, `/notes` and the conversation list are kept apart per person. See [Whose conversation it is](../../docs/conventions/gateways/index.md#whose-conversation-it-is).
+
 ## 1. No extra installs
 
 `email` needs `bx-mail` and `cbmailservices`; both ship inside BxAgents, so there is nothing to install beyond `bx-agents` itself.

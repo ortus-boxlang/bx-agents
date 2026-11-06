@@ -2,6 +2,8 @@
 
 An agent reachable over Signal DM via a push-style `gateways/` entry (`type: "signal"`) - a genuinely different transport shape from every other push-style gateway in this directory: **Server-Sent Events**, held open via `java.net.http.HttpClient`'s async API against a locally-run [`signal-cli`](https://github.com/AsamK/signal-cli) daemon, rather than a webhook, poll, or websocket.
 
+Each person has a conversation of their own: memory, `/notes` and the conversation list are kept apart per person. See [Whose conversation it is](../../docs/conventions/gateways/index.md#whose-conversation-it-is).
+
 ## 1. There is no official Signal bot API
 
 `SignalGateway` doesn't talk to Signal's own servers directly - it talks entirely to `signal-cli` running in its own HTTP daemon mode, a real, manually-managed prerequisite outside this project's control (the same relationship `email-gateway-agent` has with a real IMAP/SMTP server):

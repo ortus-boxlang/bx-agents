@@ -8,7 +8,7 @@ tags: [guides, examples, tools, skills]
 
 # Example: A Minimal Agent
 
-The smallest complete BxAgents project is [`examples/minimal-agent/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/minimal-agent) - three files that show the whole shape of a project: an `Agent.yaml`, instructions, one [tool](../conventions/tools.md), and one [skill](../conventions/skills.md). Every other example in this guide series builds on exactly this shape.
+The smallest complete BxAgents project is [`examples/minimal-agent/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/minimal-agent) - a few files that show the whole shape of a project: an `Agent.yaml`, instructions, one [tool](../conventions/tools.md), and one [skill](../conventions/skills.md). Every other example in this guide series builds on exactly this shape.
 
 ## The project
 
@@ -81,13 +81,13 @@ bxAgents build
 bxAgents chat
 ```
 
-`build` assembles everything above into a plain ColdBox application under `.build/app` (see [The Build Pipeline](../build-pipeline.md)); `chat` boots the generated agent in-process and drops you into a terminal REPL against it. Try:
+`build` assembles everything above into a plain ColdBox application under `.build/app` (see [The Build Pipeline](../build-pipeline.md)); `chat` loads the generated agent in-process and opens the [terminal chat](terminal-ui.md). Type `/` to see the commands, and `/tools` to see that `sayHello` is there. Try:
 
 ```
-> My name is Ada.
+My name is Ada.
 ```
 
-The model should reach for the `sayHello` tool and reply warmly, per the skill's guidance - both from a single sentence of instructions plus a two-line tool and a two-line skill.
+The model should reach for the `sayHello` tool and reply warmly, per the skill's guidance - both from a single sentence of instructions plus a small tool and a one-line skill. With the `mock` model this example ships with, the reply is a fixed one: set a real `provider/model` in `Agent.yaml` to see the tool called. `bxAgents inspect` lists the agent, its tool and its skill without a build.
 
 ## Where to go next
 
