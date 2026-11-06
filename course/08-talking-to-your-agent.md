@@ -60,12 +60,6 @@ Requires a prior `build` and requires `boxlang-miniserver` on `PATH` (see
 `.build/app`, scoped to its own `.build/runtime` BoxLang home so each project's
 compiled-class cache stays isolated.
 
-!!! warning
-    The **very first** request to a freshly booted app's `toAi()` route can
-    transiently fail - a genuine ColdBox/WireBox lazy-injection race, not a BxAgents
-    bug. It succeeds reliably after that. Send a warm-up request before relying on a
-    freshly deployed route under load.
-
 ## Testing without a real API key
 
 Every one of these needs a real model to talk to a real provider - but you don't need

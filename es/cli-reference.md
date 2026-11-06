@@ -519,6 +519,7 @@ bxAgents chat --no-tui                         # REPL simple línea por línea
 bxAgents chat --server [--port=<puerto>]       # aplicación completa, servidor propio desechable
 bxAgents chat --connect=http://127.0.0.1:8080  # aplicación completa, servidor que ya tienes en marcha
 bxAgents chat --connect=https://agent.example.com --token=<token>   # un servidor que pide uno
+bxAgents chat --connect=https://agent.example.com --api-path=/agent-api   # un servidor que sirve su API en otra ruta (agentApi.path)
 bxAgents chat --user=alice                     # de quién son las notas y conversaciones (por defecto: `local`, el único usuario de un servidor abierto)
 bxAgents chat --continue                       # abre la conversación más reciente, con su historial
 bxAgents chat --session=2                      # abre una por su número en /sessions, o por id

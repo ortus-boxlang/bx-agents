@@ -94,7 +94,7 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 | `memory` | string or struct | The agent's conversation memory. A bare string is shorthand for the type (`"cache"`); a struct is `{ type, ...config }` and is passed through to `aiMemory()` verbatim - e.g. `{ type: "cache", maxMessages: 50 }`, or with `summaryProvider`/`summaryModel`/`summaryThreshold` to make the web UI's `/compact` functional. Applies per node, so a subagent can declare its own. |
 | `checkpointer` | struct | `{ type: "cache"\|"file"\|"jdbc", ...config }`. Defaults to `{ type: "cache" }` if omitted. Always applied - without one, human-in-the-loop approval flows through any gateway other than `cli` fail outright. |
 | `gatewaySession` | struct | `{ policy, maxQueueDepth, commands }`, all optional (default `"queue"` / `50` / a safe set of [slash commands](gateways/index.md#commands-in-a-gateway)). Only meaningful if the project has at least one push-style [gateway](gateways/index.md#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends) entry - controls the generated `GatewaySession`'s policy for a second inbound message arriving on a thread that already has a turn in flight. `policy` must be one of `reject`/`queue`/`steer`/`interrupt`. |
-| `agentApi` | struct | `{ enabled, tokenEnvVar, tokens, profiles }`, all optional. Controls the always-on agent route at `/__bxagents`. See [The always-on agent route](#the-always-on-agent-route) below. |
+| `agentApi` | struct | `{ enabled, access, tokenEnvVar, tokens, profiles, path, allowedIPs, rateLimit, manageTokens }`, all optional. Controls the always-on agent route, at `/__bxagents` unless `path` moves it. See [The always-on agent route](#the-always-on-agent-route) below. |
 | any other key | any | Merged and available in the resolved config struct, but not interpreted by BxAgents itself. |
 
 ## The model slug
@@ -240,6 +240,8 @@ route exists so this module's own tooling always has an address to talk to -
 it's the service entrance, not your project's public API. A project's own
 public surface belongs in `gateways/`, at whatever paths you choose.
 
+A route reached with a verb it does not take (a `GET` to `/invoke`) answers `405` with the usual JSON body, `{ "success": false, "error": "...", "code": "method_not_allowed" }`, not an error page.
+
 ### Run control
 
 Beside those four, a generated handler (`handlers/AgentApi.bx`) serves what a chat client needs to
@@ -255,7 +257,7 @@ POST /__bxagents/resume    # { threadId, decision } -> SSE, like /events
 GET  /__bxagents/tools
 GET  /__bxagents/profiles   # the profiles a client may ask for
 GET  /__bxagents/agent    # name, model, what it can do
-GET  /__bxagents/sessions   # the caller's recent conversations (?source=terminal for those that started there)
+GET  /__bxagents/sessions   # the caller's recent conversations (?source=terminal for those that started there; ?all=1 lists everyone's, with whose each is, for an admin)
 POST /__bxagents/sessions   # { title? } start one: { conversationId }
 POST /__bxagents/sessions/rename   # { conversationId, title } name one
 POST /__bxagents/sessions/fork     # { conversationId, title? } copy one, messages and all
@@ -332,6 +334,10 @@ one that never answers.
 | `access` | `open` or `token` | Whether callers must prove who they are. Left out, it follows the next two keys: a `tokenEnvVar` or `tokens: true` means `token`, nothing means `open`. `open` with either of those set, or `token` with neither, is a build error. |
 | `tokenEnvVar` | string | The **name** of an environment variable holding a shared secret. When set, every route requires a matching `x-bxagents-token` request header. |
 | `tokens` | boolean | Default `false`. `true` also accepts the [access tokens](#access-tokens-for-a-deployed-agent) made with `bxAgents token create`. |
+| `path` | string | Default `/__bxagents`. Where the whole API is served, e.g. `/agent-api`: a rooted path of plain segments (letters, digits, `_`, `-`, `~`). Everything on this page that says `/__bxagents` means this path. A `gateways/` entry may not sit on it. The web page, `serve` and `chat --server` follow it by themselves; `chat --connect` to a server that moved it needs `--api-path=/agent-api`. |
+| `allowedIPs` | list | Default none (anyone). The addresses and networks that may call at all, e.g. `[ "10.0.0.0/8", "203.0.113.7", "::1" ]`. It is cbSecurity's own `AllowedIPs` route middleware in front of every route, so anyone else gets `403` (`{ "error": true, "messages": [ "Your IP address is not allowed" ] }`) before any token is looked at. It checks the address of the connection, never a `X-Forwarded-For` header the client chooses; behind a reverse proxy every caller has the proxy's address unless you set cbSecurity's `middleware.trustedProxies`. `/health` stays open. |
+| `rateLimit` | struct | Default none. `{ requests, perSeconds }`: at most `requests` calls from one address in each window of `perSeconds` seconds. It is cbSecurity's own `Throttle` route middleware, one counter for the whole API, kept in CacheBox. Over the limit answers `429` with a `Retry-After` header; every answer carries `X-RateLimit-Limit` and `X-RateLimit-Remaining`. |
+| `manageTokens` | boolean | Default `false`. `true` lets an admin make, list and revoke [access tokens](#access-tokens-for-a-deployed-agent) over the API (`GET`/`POST /__bxagents/tokens`, `POST /__bxagents/tokens/revoke`) and shows a **Tokens** panel in the web page. Needs `tokens: true` and a token API; a `chat` token gets `403`. The secret of a new token is in the answer to the create call and nowhere else. Off, the routes do not exist and tokens are made only with `bxAgents token create`. |
 | `profiles` | list | Default none. The [profiles](models.md#profiles) a client may ask for with `options.profile` on `/events`, and what `GET /__bxagents/profiles` lists (never a key). Any other profile is a `400`, so a caller cannot pick a model you did not offer. `chat --connect` uses this list for `/profile`. Each name must be declared in `Agent.yaml`, or `default`. |
 
 ```javascript
@@ -357,6 +363,10 @@ function production() {
 	};
 }
 ```
+
+### Who may stop a run
+
+`POST /cancel` and `POST /steer` take a `threadId`, which is not a secret (the first frame of every stream carries it). A run can only be stopped or steered by the caller who started it: anyone else gets `403` with `code: "not_your_run"`. A run no caller here started (one a chat platform's gateway runs) can only be touched by an `admin`; anyone else is told `cancelled: false`, the same answer an unknown thread id gets.
 
 ### Open or token
 

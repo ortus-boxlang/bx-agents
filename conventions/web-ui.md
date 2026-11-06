@@ -63,7 +63,7 @@ A minute and a half through the whole page: sign in, streaming, the model picker
 
 | | |
 |---|---|
-| ![Sign in with the accounts declared in `users`](../assets/webui/login.png) **Sign in.** Accounts come from [`users`](#users-and-sign-in). | ![A signed-in chat with the model picker, the context ring and icon buttons for Chats, Fork, Export, Clear, Notes, Key and Theme in the header](../assets/webui/home.png) **The header.** Icon buttons with tooltips. The picker shows when the entry lists [`profiles`](#choosing-the-model). |
+| ![Sign in with the accounts declared in `users`](../assets/webui/login.png) **Sign in.** Accounts come from [`users`](#users-and-sign-in). | ![A signed-in chat with the model picker, the context ring, the Chats button and the Settings gear in the header](../assets/webui/home.png) **The header.** Chats, the context ring and a **Settings** gear; everything else is in the Settings menu. The picker shows when the entry lists [`profiles`](#choosing-the-model). |
 | ![A streamed reply with a numbered list and bold text](../assets/webui/markdown-list.png) **Streaming.** Replies render Markdown as they arrive. | ![The planner profile chosen in the picker, and the reply naming its model](../assets/webui/model-picker.png) **Model picker.** The pick is sent with each message, in the same conversation. |
 | ![A tool call shown as an open block above the reply](../assets/webui/tool-call.png) **Tools.** Each call shows its name and arguments. | ![The conversation sidebar listing two saved chats](../assets/webui/conversations.png) **Conversations.** Saved per account, and still there after a reload. |
 | ![The Notes panel with one note under About you](../assets/webui/notes.png) **Notes.** What the agent should remember, with the size it adds. | ![The page in the dark theme with the accent from the gateway entry](../assets/webui/dark-theme.png) **Theme.** Light or dark, remembered, with your `theme` accent. |
@@ -102,14 +102,14 @@ Each call carries three headers:
 | Header | Why |
 | --- | --- |
 | `x-bxagents-source: web` | Marks conversations the page starts, so `bxAgents sessions list --source=web` and the API's `?source=` filter can tell them from terminal and gateway ones |
-| `x-bxagents-token` | The token from the **Key** button, when one is set (see [Securing the API](#securing-the-api)) |
+| `x-bxagents-token` | The password from the key button's form, when one is set (see [Securing the API](#securing-the-api)) |
 | `x-bxagents-csrf: 1` | Sent on every request. A request made with the sign-in cookie that changes something must carry it, so another site cannot make your browser do it |
 
 Identity is the API's: with no `users` the page is the one open `local` user, shared with the terminal chat on the same machine, and with `users` it is the signed-in account.
 
 ### Slash commands
 
-Type `/` in the message box and a menu of commands appears (arrow keys, `Tab` to complete, `Esc` to close). They are the same commands as in [the terminal chat](../cli-reference.md#the-same-commands-in-the-web-page-and-in-chat-apps): `/help`, `/new`, `/tools`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/info`, `/context`, `/remember`, `/notes`, `/name`, `/fork`, `/export`, `/ping` and `/keys`. Pressing Enter runs the line on the server with `POST /command` and draws the answer: text, a table, or buttons to pick from. `/new`, `/resume` and `/fork` move the page to the conversation they name, `/clear` reloads the transcript, and `/export [file] [--format=md|html]` hands the conversation to the browser to save (the **Fork** and **Export** buttons in the header run `/fork` and `/export`).
+Type `/` in the message box and a menu of commands appears (arrow keys, `Tab` to complete, `Esc` to close). They are the same commands as in [the terminal chat](../cli-reference.md#the-same-commands-in-the-web-page-and-in-chat-apps): `/help`, `/new`, `/tools`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/info`, `/context`, `/remember`, `/notes`, `/name`, `/fork`, `/export`, `/ping` and `/keys`. Pressing Enter runs the line on the server with `POST /command` and draws the answer: text, a table, or buttons to pick from. `/new`, `/resume` and `/fork` move the page to the conversation they name, `/clear` reloads the transcript, and `/export [file] [--format=md|html]` hands the conversation to the browser to save (**Fork this conversation** and **Export** in the Settings menu run `/fork` and `/export`).
 
 The reply is data, so any client can use it:
 
@@ -342,8 +342,9 @@ Every key below is optional - the entry works with just `exposes` and `path`.
 | --- | --- |
 | `title` | Browser title and header heading |
 | `subtitle` | Small line under the heading |
-| `icon` | An emoji (rendered into an inline-SVG favicon **and** the header) or an image URL/path (`/logo.svg`, `https://…`, `data:image/…`). With none, the header shows a robot |
+| `icon` | An emoji (rendered into an inline-SVG favicon **and** the header) or an image URL/path (`/logo.svg`, `https://…`, `data:image/…`). With none, the header shows a robot Or `phosphor:<name>` for an icon from the page's own set (`phosphor:lightning`, `phosphor:robot`, `phosphor:chat-circle-text`, ...), used for the header and the tab; a name the set does not have is shown as plain text. |
 | `welcome` | Empty-state message shown before the first turn |
+| `suggestions` | Up to four short texts shown as buttons under the welcome message on an empty conversation. One click sends it. |
 | `placeholder` | Composer input placeholder |
 | `footer` | Small note under the composer - disclaimers, links |
 | `showReasoning` | Show the "Thinking" strip. Default `true` |
@@ -370,17 +371,22 @@ theme: {
 
 For anything the tokens don't cover - custom fonts, layout, per-element rules - drop a `resources/webui/theme.css` into the project. It's inlined **last** into the page's `<style>`, so it beats both the shipped defaults and the `theme` tokens; and being a real `.css` file, ordinary `#rrggbb` hex works there normally. (A literal `</style` in that file fails the build, since it would terminate the page's style block early.)
 
+
+
+## Securing the API
+
 !!! warning
-    **`apiKeyEnvVar` is a shared secret, not a login system.** It is the same thing as the agent API's `agentApi.tokenEnvVar` (a name in `Agent.yaml` wins if both are set). Left unset, the API is open (fine on your own machine, not for a public deployment; `serve` warns when an open API listens on every interface). Set it, and every call to `/__bxagents` must carry a matching `x-bxagents-token` header, compared in constant time. **The static shell (`<path>/index.html`) is not gated**, because a browser's plain page navigation can't send a custom header; the page's own JS asks for the token (the **Key** button, stored in `localStorage`) and sends it on every call. A `401` shows a message telling you to set or correct the token. For several people use [issued tokens](agent-bx.md#access-tokens-for-a-deployed-agent) or `users`.
+    **`apiKeyEnvVar` is a shared secret, not a login system.** It is the same thing as the agent API's `agentApi.tokenEnvVar` (a name in `Agent.yaml` wins if both are set). Left unset, the API is open (fine on your own machine, not for a public deployment; `serve` warns when an open API listens on every interface). Set it, and every call to `/__bxagents` must carry a matching `x-bxagents-token` header, compared in constant time. **The static shell (`<path>/index.html`) is not gated**, because a browser's plain page navigation can't send a custom header; the page asks for it in a form: a **Password** box that opens by itself when the server answers `401` and again from **Password** in the Settings menu. The password is kept in `localStorage` and sent on every call; a wrong one shows "That password was not accepted." For several people use [issued tokens](agent-bx.md#access-tokens-for-a-deployed-agent) or `users`.
 
+## Settings and appearance
 
-## Appearance
+The header keeps only what you use every minute: the **Chats** button, the context ring, the model picker and a **Settings** gear. The gear opens one menu, in three groups: **Conversation** (Fork this conversation, Export as Markdown, Clear messages, Compact older messages), **You** (Notes, Appearance, Dark or Light theme) and **Server** (Password, Access tokens). An item shows only where the server offers it, and a group with nothing in it is left out.
 
-The palette icon in the header opens the **Appearance** panel, where a visitor picks, for this browser only:
+**Settings**, then **Appearance**, opens the panel where a visitor picks, for this browser only:
 
 | Setting | Choices |
 |---|---|
-| Mode | System, Light or Dark (the same choice as the Theme button, and it follows the account when the page has preferences) |
+| Mode | System, Light or Dark (the same choice as the **Dark theme** or **Light theme** item, and it follows the account when the page has preferences) |
 | Accent color | The gateway's own accent (the **Default** swatch), eight presets, or any hex value. The panel shows the contrast of the button text on it and warns under 4.5 : 1 |
 | Text size | Small, Medium or Large |
 | Density | Comfortable or Compact |
@@ -422,7 +428,7 @@ Assistant replies render as full Markdown: headings, lists, tables, quotes, stri
 
 ## Notes
 
-When the agent has a [`notes`](agent-yaml.md#notes) block, the header shows a **Notes** button. It opens a panel with two tabs, *About you* and *About the agent*, how full each is (characters of the limit, and about how many tokens that adds to every conversation), and the notes with their ids. Add, edit in place and remove work on your own notes. The page and the terminal chat share the same database, so a note added in one shows in the other.
+When the agent has a [`notes`](agent-yaml.md#notes) block, the Settings menu has a **Notes** item. It opens a panel with two tabs, *About you* and *About the agent*, how full each is (characters of the limit, and about how many tokens that adds to every conversation), and the notes with their ids. Add, edit in place and remove work on your own notes. The page and the terminal chat share the same database, so a note added in one shows in the other.
 
 - *About you* belongs to the same identity as your conversations: your account with [`users`](#users-and-sign-in), or the shared workspace without accounts.
 - *About the agent* is shared by everyone who uses the agent, so anyone using the page may add or edit one, but the page has no Remove button for it and `/notes/remove` answers `403`. Removing a note of the agent takes an admin [token](agent-bx.md#access-tokens-for-a-deployed-agent) on the agent's own `/__bxagents/notes/remove` route, or `bxAgents notes remove --scope=agent` where the agent runs.
