@@ -1,0 +1,57 @@
+/**
+ * Whether the agent API asks callers to prove who they are: the one answer every part of the build and the server
+ * shares (the router, the handler, the validator, the startup warning).
+ *
+ *   open   nobody is asked; everyone is the one `local` user
+ *   token  a caller needs the shared secret (`tokenEnvVar`) or an issued token (`tokens: true`)
+ *
+ * `agentApi.access` says which. Left out, it follows what is set: a `tokenEnvVar` or `tokens: true` means token,
+ * nothing means open, as before.
+ */
+class {
+
+	/**
+	 * @agentApi The `agentApi` block of the agent's config
+	 *
+	 * @return "open" or "token"
+	 */
+	static string function of( struct agentApi = {} ) {
+		var said = lCase( trim( arguments.agentApi.access ?: "" ) )
+		if ( listFind( "open,token", said ) ) {
+			return said
+		}
+		return hasCredentials( arguments.agentApi ) ? "token" : "open"
+	}
+
+	/**
+	 * @return True when a shared secret or issued tokens are set up
+	 */
+	static boolean function hasCredentials( struct agentApi = {} ) {
+		return len( trim( arguments.agentApi.tokenEnvVar ?: "" ) ) > 0 || ( arguments.agentApi.tokens ?: false ) == true
+	}
+
+	/**
+	 * What is wrong with the `access` setting, in words for the person who wrote it.
+	 *
+	 * @agentApi The `agentApi` block
+	 *
+	 * @return A list of messages; empty when the setting is fine or absent
+	 */
+	static array function problems( struct agentApi = {} ) {
+		if ( !arguments.agentApi.keyExists( "access" ) ) {
+			return []
+		}
+		var said = isSimpleValue( arguments.agentApi.access ) ? lCase( trim( arguments.agentApi.access ) ) : ""
+		if ( !listFind( "open,token", said ) ) {
+			return [ "Agent.bx's 'agentApi.access' must be open or token" ]
+		}
+		if ( said == "open" && hasCredentials( arguments.agentApi ) ) {
+			return [ "Agent.bx's 'agentApi.access' is open, but 'tokenEnvVar' or 'tokens' asks callers for a token. Remove one or the other" ]
+		}
+		if ( said == "token" && !hasCredentials( arguments.agentApi ) ) {
+			return [ "Agent.bx's 'agentApi.access' is token, but nothing says which token: set 'tokenEnvVar' (a shared secret) or 'tokens: true' (tokens from `bxAgents token create`)" ]
+		}
+		return []
+	}
+
+}

@@ -1,0 +1,94 @@
+/**
+ * Decides who a request is, from what it carries: the shared secret (`agentApi.tokenEnvVar`) or a token made by
+ * `bxAgents token create` (`agentApi.tokens`). It knows nothing of HTTP beyond the header values it is given,
+ * so the route middleware, a spec and a gateway can all use it.
+ *
+ * A caller that proves nothing is not let in: a missing, wrong, expired or revoked token answers null.
+ */
+import bxModules.bxagents.models.api.Outcome;
+
+class {
+
+	/**
+	 * @tokenEnvVar The NAME of the environment variable that holds the shared secret; blank for none
+	 * @tokens True when issued tokens are accepted
+	 * @tokenService A TokenService; the app's shared chat database when omitted
+	 */
+	function init( string tokenEnvVar = "", boolean tokens = false, any tokenService ) {
+		variables.tokenEnvVar = trim( arguments.tokenEnvVar )
+		variables.tokens = arguments.tokens
+		variables.tokenService = arguments.tokenService ?: nullValue()
+		return this
+	}
+
+	/**
+	 * @headers The request's headers
+	 * @source The surface the call came in on, when the request does not say
+	 *
+	 * @return The Caller, or null when the request proves nothing
+	 */
+	any function authenticate( required struct headers, string source = "api" ) {
+		var given = arguments.headers[ "x-bxagents-token" ] ?: ""
+		if ( !len( given ) ) {
+			return nullValue()
+		}
+		var surface = sourceOf( arguments.headers, arguments.source )
+		if ( len( variables.tokenEnvVar ) ) {
+			var expected = getSystemSetting( variables.tokenEnvVar, "" )
+			if ( len( expected ) && createObject( "java", "java.security.MessageDigest" ).isEqual( given.getBytes( "UTF-8" ), expected.getBytes( "UTF-8" ) ) ) {
+				return new Caller( id = "admin", scope = "admin", source = surface )
+			}
+		}
+		if ( variables.tokens ) {
+			var who = issuedTokens().authenticate( given )
+			if ( !who.isEmpty() ) {
+				return new Caller( id = who.name, scope = who.scope, source = surface )
+			}
+		}
+		return nullValue()
+	}
+
+	/**
+	 * The route middleware: names the caller on the request, or answers 401 and stops the action.
+	 *
+	 * @event The ColdBox request context
+	 *
+	 * @return True when the request was refused (ColdBox then runs no more middleware for the route)
+	 */
+	boolean function guard( required any event ) {
+		var caller = authenticate( getHTTPRequestData( false ).headers )
+		if ( !isNull( caller ) ) {
+			arguments.event.setPrivateValue( "bxagentsCaller", caller )
+			return false
+		}
+		var edge = new ApiEdge()
+		var refusal = refusal()
+		// noExecution() stops the action: returning true alone only ends the remaining middleware
+		arguments.event.renderData( type = "json", statusCode = edge.statusFor( refusal ), data = edge.bodyFor( refusal ) ).noExecution()
+		return true
+	}
+
+	/**
+	 * @return What a caller who proved nothing is told: the Outcome the route middleware and the handler both answer with
+	 */
+	any function refusal() {
+		return Outcome::failed( "unauthorized", "Missing or invalid x-bxagents-token header" )
+	}
+
+	/**
+	 * The surface a client says it is (x-bxagents-source), a plain lower case name; the default when it says none.
+	 */
+	string function sourceOf( required struct headers, string fallback = "api" ) {
+		var said = lCase( arguments.headers[ "x-bxagents-source" ] ?: "" )
+		return reFind( "^[a-z0-9][a-z0-9_-]{0,31}$", said ) ? said : arguments.fallback
+	}
+
+	// the app's default datasource is the shared chat database
+	private any function issuedTokens() {
+		if ( isNull( variables.tokenService ) ) {
+			variables.tokenService = new "models.store.TokenService@bxagents"( new "models.store.ChatStore@bxagents"( "" ) )
+		}
+		return variables.tokenService
+	}
+
+}

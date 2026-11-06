@@ -1,11 +1,14 @@
 /**
- * Writes `handlers/AgentApi.bx` into the generated app: the run-control actions beside ColdBox's toAi()
- * routes on the always-on /__bxagents path (see RouterGenerator, which registers the routes that call it).
+ * Writes `handlers/AgentApi.bx` into the generated app: every action of the agent API
+ * on the always-on /__bxagents path (see RouterGenerator, which registers the routes that call it).
  *
  * The handler is a real BoxLang class kept in generators/agentapi/AgentApi.bx so it is compiled and
- * checked with the rest of the module; this class only stamps the token settings into a copy.
+ * checked with the rest of the module; this class only stamps the access mode and the offered profiles into a copy. Who may call is decided
+ * before the handler runs, by the route middleware (see RouterGenerator and models.api.Authenticator).
  */
 import bxModules.bxagents.models.util.Strings;
+import bxModules.bxagents.models.api.AccessMode;
+import bxModules.bxagents.models.api.ExposureWarning;
 
 class {
 
@@ -16,24 +19,24 @@ class {
 	 * @return { written : boolean, path : string } - written is false when `agentApi.enabled` is false
 	 */
 	struct function generate( required string appDir, struct agentApi = {} ) {
+		// what `serve` needs to know about the API without reading the handler: see models.api.ExposureWarning
+		directoryCreate( path = arguments.appDir.reReplace( "[\/]+$", "" ) & "/config", createPath = true, ignoreExists = true )
+		fileWrite(
+			arguments.appDir.reReplace( "[\/]+$", "" ) & "/" & ExposureWarning::fileName(),
+			jsonSerialize( { "enabled" : arguments.agentApi.enabled ?: true, "access" : AccessMode::of( arguments.agentApi ) } )
+		)
 		if ( !( arguments.agentApi.enabled ?: true ) ) {
 			return { written : false, path : "" }
 		}
 		var handlerDir = arguments.appDir.reReplace( "[\/]+$", "" ) & "/handlers"
 		directoryCreate( path = handlerDir, createPath = true, ignoreExists = true )
 
-		var tokenVariable = trim( arguments.agentApi.tokenEnvVar ?: "" )
 		var source = fileRead( getDirectoryFromPath( getCurrentTemplatePath() ) & "agentapi/AgentApi.bx", "UTF-8" )
-		var marker = '"__TOKEN_ENV_VAR__"'
-		if ( !source.find( marker ) ) {
-			throw( type = "BxAgents.AgentApiTemplateBroken", message = "agentapi/AgentApi.bx has lost its token variable marker" )
+		var accessMarker = '"__ACCESS__"'
+		if ( !source.find( accessMarker ) ) {
+			throw( type = "BxAgents.AgentApiTemplateBroken", message = "agentapi/AgentApi.bx has lost its access marker" )
 		}
-		source = source.replace( marker, '"' & Strings::bxLiteral( tokenVariable ) & '"' )
-		var tokensMarker = '"__TOKENS_ENABLED__"'
-		if ( !source.find( tokensMarker ) ) {
-			throw( type = "BxAgents.AgentApiTemplateBroken", message = "agentapi/AgentApi.bx has lost its tokens marker" )
-		}
-		source = source.replace( tokensMarker, '"' & ( ( arguments.agentApi.tokens ?: false ) ? "true" : "false" ) & '"' )
+		source = source.replace( accessMarker, '"' & AccessMode::of( arguments.agentApi ) & '"' )
 
 		var profilesMarker = '"__PROFILES__"'
 		if ( !source.find( profilesMarker ) ) {

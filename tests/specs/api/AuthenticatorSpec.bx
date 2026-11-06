@@ -1,0 +1,104 @@
+import bxModules.bxagents.models.api.AccessMode;
+
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "api.AccessMode", function() {
+
+			it( "is open with nothing set, and token when a secret or issued tokens are set", function() {
+				expect( AccessMode::of( {} ) ).toBe( "open" );
+				expect( AccessMode::of( { tokenEnvVar : "AGENT_TOKEN" } ) ).toBe( "token" );
+				expect( AccessMode::of( { tokens : true } ) ).toBe( "token" );
+				expect( AccessMode::of( { tokens : false, tokenEnvVar : " " } ) ).toBe( "open" );
+			} );
+
+			it( "lets access say it outright", function() {
+				expect( AccessMode::of( { access : "open" } ) ).toBe( "open" );
+				expect( AccessMode::of( { access : "TOKEN", tokens : true } ) ).toBe( "token" );
+			} );
+
+			it( "finds a setting that contradicts itself", function() {
+				expect( AccessMode::problems( {} ) ).toBeEmpty();
+				expect( AccessMode::problems( { access : "open" } ) ).toBeEmpty();
+				expect( AccessMode::problems( { access : "token", tokens : true } ) ).toBeEmpty();
+				expect( AccessMode::problems( { access : "closed" } )[ 1 ] ).toInclude( "open or token" );
+				expect( AccessMode::problems( { access : "open", tokens : true } )[ 1 ] ).toInclude( "Remove one or the other" );
+				expect( AccessMode::problems( { access : "token" } )[ 1 ] ).toInclude( "which token" );
+			} );
+
+		} );
+
+		describe( "api.Authenticator", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-auth-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.tokens = new bxagents.models.store.TokenService( store );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "lets nobody in who sends no token", function() {
+				var auth = new bxagents.models.api.Authenticator( tokens = true, tokenService = tokens );
+
+				expect( isNull( auth.authenticate( {} ) ) ).toBeTrue();
+			} );
+
+			it( "lets an issued token in as its owner, with its scope, and the surface it says", function() {
+				var made = tokens.create( "laptop", "chat" );
+				var auth = new bxagents.models.api.Authenticator( tokens = true, tokenService = tokens );
+
+				var who = auth.authenticate( { "x-bxagents-token" : made.token, "x-bxagents-source" : "terminal" } );
+				expect( who.id() ).toBe( "laptop" );
+				expect( who.isAdmin() ).toBeFalse();
+				expect( who.source() ).toBe( "terminal" );
+			} );
+
+			it( "refuses a made-up, a revoked and an expired token", function() {
+				var auth = new bxagents.models.api.Authenticator( tokens = true, tokenService = tokens );
+				var made = tokens.create( "gone" );
+				tokens.revoke( "gone" );
+
+				expect( isNull( auth.authenticate( { "x-bxagents-token" : "bxa_nope" } ) ) ).toBeTrue();
+				expect( isNull( auth.authenticate( { "x-bxagents-token" : made.token } ) ) ).toBeTrue();
+			} );
+
+			it( "does not look at issued tokens when they are not turned on", function() {
+				var made = tokens.create( "laptop" );
+				var auth = new bxagents.models.api.Authenticator( tokenEnvVar = "", tokens = false, tokenService = tokens );
+
+				expect( isNull( auth.authenticate( { "x-bxagents-token" : made.token } ) ) ).toBeTrue();
+			} );
+
+			it( "takes the shared secret from the environment variable, and never when it is unset", function() {
+				var auth = new bxagents.models.api.Authenticator( tokenEnvVar = "BXAGENTS_SPEC_UNSET_VARIABLE" );
+
+				expect( isNull( auth.authenticate( { "x-bxagents-token" : "" } ) ) ).toBeTrue();
+				// an unset variable matches nothing, not even an empty guess
+				expect( isNull( auth.authenticate( { "x-bxagents-token" : "anything" } ) ) ).toBeTrue();
+			} );
+
+			it( "compares the shared secret in constant time", function() {
+				var source = fileRead( expandPath( "/bxagents/models/api/Authenticator.bx" ) );
+
+				expect( source ).toInclude( "MessageDigest" );
+				expect( source ).toInclude( "isEqual(" );
+				// an unset or blank variable matches nothing
+				expect( source ).toInclude( "len( expected ) &&" );
+			} );
+
+			it( "ignores a surface name that is not a plain name", function() {
+				var made = tokens.create( "laptop" );
+				var auth = new bxagents.models.api.Authenticator( tokens = true, tokenService = tokens );
+
+				expect( auth.authenticate( { "x-bxagents-token" : made.token, "x-bxagents-source" : "Web Page!" } ).source() ).toBe( "api" );
+			} );
+
+		} );
+	}
+
+}

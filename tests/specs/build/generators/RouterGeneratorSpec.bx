@@ -24,12 +24,16 @@ class extends="testbox.system.BaseSpec" {
 				return dir & "/app";
 			}
 
-			it( 'emits one route(path).toAi("GeneratedAgent") per agent-exposure entry', function() {
+			it( "emits the four turn routes, served by handlers/AgentApi, per agent-exposure entry", function() {
 				var discovery = discoverer.discover( fixtures & "/full-project" );
 				var result = generator.generate( discovery, newAppDir() );
 
 				var content = fileRead( result.router );
-				expect( content ).toInclude( 'route( "/api/chat" ).toAi( "GeneratedAgent" )' );
+				expect( content ).toInclude( 'post( "/api/chat/invoke" ).toHandler( "AgentApi.invoke" )' );
+				expect( content ).toInclude( 'post( "/api/chat/stream" ).toHandler( "AgentApi.stream" )' );
+				expect( content ).toInclude( 'post( "/api/chat/batch" ).toHandler( "AgentApi.batch" )' );
+				expect( content ).toInclude( 'get( "/api/chat/info" ).toHandler( "AgentApi.info" )' );
+				expect( content ).notToInclude( ".toAi(" );
 			} );
 
 			it( 'routes a webui entry to its own ChatUi handler, not toAi(), so userId comes from the session', function() {
@@ -73,7 +77,11 @@ class extends="testbox.system.BaseSpec" {
 
 				var content = fileRead( result.router );
 				expect( content ).toInclude( 'route( "/mcp/tools" ).toMCP( "toolServer" )' );
-				expect( content ).toInclude( 'route( "/api/chat" ).toAi( "GeneratedAgent" )' );
+				expect( content ).toInclude( 'post( "/api/chat/invoke" ).toHandler( "AgentApi.invoke" )' );
+				expect( content ).toInclude( 'post( "/api/chat/stream" ).toHandler( "AgentApi.stream" )' );
+				expect( content ).toInclude( 'post( "/api/chat/batch" ).toHandler( "AgentApi.batch" )' );
+				expect( content ).toInclude( 'get( "/api/chat/info" ).toHandler( "AgentApi.info" )' );
+				expect( content ).notToInclude( ".toAi(" );
 			} );
 
 			it( "orders exposure routes deterministically by path", function() {
@@ -213,15 +221,19 @@ class extends="testbox.system.BaseSpec" {
 				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
 				var result = generator.generate( discovery, newAppDir() );
 
-				expect( fileRead( result.router ) ).toInclude( 'route( "/__bxagents" ).toAi( "GeneratedAgent" )' );
+				expect( fileRead( result.router ) ).toInclude( 'post( "/__bxagents/invoke" ).toHandler( "AgentApi.invoke" )' );
 			} );
 
 			it( "emits the reserved route ALONGSIDE a project's own exposures, not instead of them", function() {
 				var discovery = discoverer.discover( fixtures & "/full-project" );
 				var content = fileRead( generator.generate( discovery, newAppDir() ).router );
 
-				expect( content ).toInclude( 'route( "/__bxagents" ).toAi( "GeneratedAgent" )' );
-				expect( content ).toInclude( 'route( "/api/chat" ).toAi( "GeneratedAgent" )' );
+				expect( content ).toInclude( 'post( "/__bxagents/invoke" ).toHandler( "AgentApi.invoke" )' );
+				expect( content ).toInclude( 'post( "/api/chat/invoke" ).toHandler( "AgentApi.invoke" )' );
+				expect( content ).toInclude( 'post( "/api/chat/stream" ).toHandler( "AgentApi.stream" )' );
+				expect( content ).toInclude( 'post( "/api/chat/batch" ).toHandler( "AgentApi.batch" )' );
+				expect( content ).toInclude( 'get( "/api/chat/info" ).toHandler( "AgentApi.info" )' );
+				expect( content ).notToInclude( ".toAi(" );
 			} );
 
 			it( "omits the reserved route entirely when agentApi.enabled is false", function() {
@@ -238,7 +250,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.hasRoutes ).toBeFalse();
 			} );
 
-			it( "gates the reserved route behind a fail-closed withCondition when agentApi.tokenEnvVar is set", function() {
+			it( "puts every route of an API that needs a token behind route middleware", function() {
 				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
 				var content = fileRead( generator.generate(
 					discovery,
@@ -247,33 +259,59 @@ class extends="testbox.system.BaseSpec" {
 					{ tokenEnvVar : "BXAGENTS_API_TOKEN" }
 				).router );
 
-				expect( content ).toInclude( 'route( "/__bxagents" )' );
-				expect( content ).toInclude( '.withCondition(' );
-				expect( content ).toInclude( 'getSystemSetting( "BXAGENTS_API_TOKEN", "" )' );
-
-				// The env var NAME is emitted; the secret itself never is.
-				expect( content ).toInclude( 'headers[ "x-bxagents-token" ]' );
-
-				// Fails closed: a blank/unset env var never matches, and a request with no
-				// token never gets as far as the comparison, so "" == "" admits nobody.
-				expect( content ).toInclude( "if ( !len( given ) ) {" );
-				expect( content ).toInclude( "if ( len( expected ) && given == expected ) {" );
-				expect( content ).notToInclude( "TokenService" );
-
-				// RoutingService invokes the condition as condition( requestString ) -
-				// ONE argument. A ( route, params, event ) closure would blow up on
-				// an event that is never passed.
-				expect( content ).toInclude( ".withCondition( ( requestString ) =>" );
-
-				// A refused request must land on a deliberate 401, not fall
-				// through to ColdBox's default main.index event - which a
-				// generated app never defines, so that path renders a 500
-				// error page instead of a refusal.
-				expect( content ).toInclude( 'route( "/__bxagents/:subroute?" )' );
-				expect( content ).toInclude( "}, 401 )" );
+				// the gate asks the Authenticator, and names the variable, never the secret
+				expect( content ).toInclude( 'var auth = ( event, rc, prc ) => new "models.api.Authenticator@bxagents"( "BXAGENTS_API_TOKEN", false ).guard( event )' );
+				expect( content ).toInclude( 'post( "/__bxagents/invoke" ).middleware( auth ).toHandler( "AgentApi.invoke" )' );
+				expect( content ).toInclude( 'post( "/__bxagents/stream" ).middleware( auth ).toHandler( "AgentApi.stream" )' );
+				expect( content ).toInclude( 'post( "/__bxagents/events" ).middleware( auth ).toHandler( "AgentApi.events" )' );
+				expect( content ).toInclude( 'route( "/__bxagents/notes" ).middleware( auth ).toHandler( "AgentApi.notes" )' );
+				// every route of the API has it, none is left out
+				var routes = content.listToArray( char( 10 ) ).filter( ( line ) => line.find( '( "/__bxagents' ) );
+				expect( routes.len() ).toBeGT( 20 );
+				expect( routes.filter( ( r ) => !r.find( ".middleware( auth )" ) ) ).toBeEmpty();
+				// the old gate and its catch-all are gone: the middleware answers 401 itself
+				expect( content ).notToInclude( "withCondition" );
+				expect( content ).notToInclude( ":subroute?" );
+				expect( content ).notToInclude( ".toAi(" );
 			} );
 
-			it( "adds the run-control routes beside toAi, served by handlers/AgentApi", function() {
+			it( "gates the agent routes a gateway exposes by the same switch", function() {
+				var discovery = discoverer.discover( fixtures & "/full-project" );
+				var content = fileRead( generator.generate(
+					discovery,
+					newAppDir(),
+					false, false, false, false, false,
+					{ tokens : true }
+				).router );
+
+				expect( content ).toInclude( 'post( "/api/chat/invoke" ).middleware( auth ).toHandler( "AgentApi.invoke" )' );
+				expect( content ).toInclude( 'get( "/api/chat/info" ).middleware( auth ).toHandler( "AgentApi.info" )' );
+			} );
+
+			it( "defines the gate before the first route that uses it", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+				var content = fileRead( generator.generate( discovery, newAppDir(), false, false, false, false, false, { tokens : true } ).router );
+
+				expect( content.find( "var auth =" ) ).toBeGT( 0 );
+				expect( content.find( "var auth =" ) ).toBeLT( content.find( ".middleware( auth )" ) );
+			} );
+
+			it( "puts no gate on an open API, even with agentApi.access spelled out", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+				var content = fileRead( generator.generate( discovery, newAppDir(), false, false, false, false, false, { access : "open" } ).router );
+
+				expect( content ).notToInclude( "middleware" );
+				expect( content ).notToInclude( "auth" );
+			} );
+
+			it( "gates on access: token with issued tokens alone", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+				var content = fileRead( generator.generate( discovery, newAppDir(), false, false, false, false, false, { access : "token", tokens : true } ).router );
+
+				expect( content ).toInclude( 'Authenticator@bxagents"( "", true ).guard( event )' );
+			} );
+
+			it( "adds the run-control routes beside the turn routes, served by handlers/AgentApi", function() {
 				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
 				var content = fileRead( generator.generate( discovery, newAppDir() ).router );
 
@@ -299,58 +337,6 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( 'route( "/__bxagents/notes" ).toHandler( "AgentApi.notes" )' );
 				expect( content ).toInclude( 'post( "/__bxagents/notes/update" ).toHandler( "AgentApi.updateNote" )' );
 				expect( content ).toInclude( 'post( "/__bxagents/notes/remove" ).toHandler( "AgentApi.removeNote" )' );
-			} );
-
-			it( "registers the run-control routes BEFORE the 401 catch-all, or it would answer for them", function() {
-				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
-				var content = fileRead( generator.generate(
-					discovery,
-					newAppDir(),
-					false, false, false, false, false,
-					{ tokenEnvVar : "BXAGENTS_API_TOKEN" }
-				).router );
-
-				var events = content.find( '"/__bxagents/events"' );
-				var catchAll = content.find( 'route( "/__bxagents/:subroute?" )' );
-				expect( events ).toBeGT( 0 );
-				expect( catchAll ).toBeGT( events );
-			} );
-
-			it( "gates on issued tokens alone when agentApi.tokens is on and there is no tokenEnvVar", function() {
-				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
-				var content = fileRead( generator.generate(
-					discovery,
-					newAppDir(),
-					false, false, false, false, false,
-					{ tokens : true }
-				).router );
-
-				expect( content ).toInclude( '.withCondition(' );
-				expect( content ).toInclude( 'new "models.store.TokenService@bxagents"( new "models.store.ChatStore@bxagents"( "" ) ).authenticate( given )' );
-				expect( content ).notToInclude( "getSystemSetting" );
-				expect( content ).toInclude( 'route( "/__bxagents/:subroute?" )' );
-			} );
-
-			it( "accepts the shared secret as well as issued tokens when both are configured", function() {
-				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
-				var content = fileRead( generator.generate(
-					discovery,
-					newAppDir(),
-					false, false, false, false, false,
-					{ tokenEnvVar : "BXAGENTS_API_TOKEN", tokens : true }
-				).router );
-
-				expect( content ).toInclude( 'getSystemSetting( "BXAGENTS_API_TOKEN", "" )' );
-				expect( content ).toInclude( "authenticate( given )" );
-				expect( content.find( "len( expected )" ) ).toBeLT( content.find( "authenticate( given )" ) );
-			} );
-
-			it( "registers no 401 fallback when the reserved route is ungated - there is nothing to turn away", function() {
-				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
-				var content = fileRead( generator.generate( discovery, newAppDir() ).router );
-
-				expect( content ).notToInclude( ":subroute?" );
-				expect( content ).notToInclude( "401" );
 			} );
 
 		} );

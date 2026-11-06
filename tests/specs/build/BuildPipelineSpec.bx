@@ -122,14 +122,14 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.appDir ).notToBeNull();
 			} );
 
-			it( 'wires an agent-exposure gateway to route(path).toAi("GeneratedAgent") without any adapter subclass', function() {
+			it( 'wires an agent-exposure gateway to the agent API routes without any adapter subclass', function() {
 				var projectRoot = newTempProject( "full-project" );
 				var result = pipeline.build( projectRoot );
 
 				expect( fileExists( result.appDir & "/agent/GeneratedAgentRunnable.bx" ) ).toBeFalse();
 
 				var routerContent = fileRead( result.appDir & "/config/Router.bx" );
-				expect( routerContent ).toInclude( 'route( "/api/chat" ).toAi( "GeneratedAgent" )' );
+				expect( routerContent ).toInclude( 'post( "/api/chat/invoke" ).toHandler( "AgentApi.invoke" )' );
 			} );
 
 			it( "builds a project's schedulers into the app, registered by the base Application and extending the scheduler base", function() {

@@ -132,9 +132,13 @@ class {
 
 		var process = createObject( "java", "ortus.boxlang.bxagents.build.MiniServerLauncher" ).launch( executable, configPath, true, environment )
 
+		// an open API that other machines can reach is said out loud, once, at the start
+		var warning = new "models.api.ExposureWarning@bxagents"().of( appDir, host, port )
+
 		return {
 			exitCode   : 0,
-			message    : "Serving [#appDir#] on http://#host#:#port# - bound to #boundTo#",
+			message    : "Serving [#appDir#] on http://#host#:#port# - bound to #boundTo#" & ( len( warning ) ? char( 10 ) & warning : "" ),
+			warning    : warning,
 			process    : process,
 			configPath : configPath,
 			host       : host,

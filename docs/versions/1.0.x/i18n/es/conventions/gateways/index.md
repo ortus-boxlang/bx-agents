@@ -18,7 +18,7 @@ flowchart TD
     F["un archivo bajo gateways/"] --> Q{"¿configure() devuelve<br/>una clave 'exposes'?"}
     Q -->|"sí"| E["EXPOSICIÓN<br/>una ruta hacia tu agente"]
     Q -->|"no - tiene una clave 'type' en su lugar"| C["CHANNEL ADAPTER<br/>una conexión a una plataforma de chat"]
-    E --> E1["exposes: agent<br/>route().toAi()"]
+    E --> E1["exposes: agent<br/>cuatro rutas de la API del agente"]
     E --> E2["exposes: mcp<br/>route().toMCP()"]
     E --> E3["exposes: webui<br/>index.html generado + /api"]
     C --> C1["mock / cli / http<br/>impulsado por pull: algo nos llama a NOSOTROS"]
@@ -52,13 +52,9 @@ class {
 }
 ```
 
-Genera, en `config/Router.bx`:
+Genera, en `config/Router.bx`, cuatro rutas servidas por el handler propio de la API del agente (`handlers/AgentApi.bx`, el mismo de la [ruta reservada `/__bxagents`](../agent-bx.md#la-ruta-de-agente-siempre-activa)): `POST /api/chat/invoke`, `POST /api/chat/stream` (SSE), `POST /api/chat/batch`, `GET /api/chat/info`. La ruta desnuda `/api/chat` en sí no es enrutable.
 
-```javascript
-route( "/api/chat" ).toAi( "GeneratedAgent" )
-```
-
-que auto-registra **cuatro** subrutas: `POST /api/chat/invoke`, `POST /api/chat/stream` (SSE), `POST /api/chat/batch`, `GET /api/chat/info`. La ruta desnuda `/api/chat` en sí no es enrutable.
+Siguen el mismo interruptor [`agentApi.access`](../agent-bx.md#abierta-o-con-token) que la ruta reservada: con `token`, una petición necesita el secreto compartido o un token emitido en `x-bxagents-token`, y recibe `401` sin él.
 
 **Expón un servidor MCP local** (ver [mcp/](../mcp.md)):
 

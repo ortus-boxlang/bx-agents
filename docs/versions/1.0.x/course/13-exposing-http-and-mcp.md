@@ -36,10 +36,10 @@ class {
 }
 ```
 
-Generates, in `config/Router.bx`: `route( "/api/chat" ).toAi( "GeneratedAgent" )` -
-which auto-registers **four** sub-routes: `POST /api/chat/invoke`,
-`POST /api/chat/stream` (SSE), `POST /api/chat/batch`, `GET /api/chat/info`. The bare
-`/api/chat` path itself is not routable.
+Generates, in `config/Router.bx`, four routes served by the agent API's handler:
+`POST /api/chat/invoke`, `POST /api/chat/stream` (SSE), `POST /api/chat/batch`,
+`GET /api/chat/info`. The bare `/api/chat` path itself is not routable. With
+`agentApi.access: token` they need a token, like the rest of the agent API.
 
 ## Exposing a local MCP server
 
