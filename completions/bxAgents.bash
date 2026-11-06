@@ -12,7 +12,7 @@ _bxagents_complete() {
 	fi
 	local count=${#words[@]}
 	local cur="${words[count-1]}"
-	local verbs="add build chat clean deploy doctor extensions hash-password inspect invoke models new notes package serve sessions skills stats test token help"
+	local verbs="add build chat clean deploy doctor extensions hash-password inspect invoke models new notes package serve sessions skills stats test token vault help"
 	local globals="--help -h --version -v"
 	COMPREPLY=()
 
@@ -67,6 +67,7 @@ _bxagents_complete() {
 			"test --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"token --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"token --scope") COMPREPLY=($(compgen -W "chat admin" -- "$part")) ;;
+			"vault --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 		esac
 		return 0
 	fi
@@ -94,6 +95,7 @@ _bxagents_complete() {
 			stats) flags="--by= --days= --projectRoot= --user=" ;;
 			test) flags="--projectRoot=" ;;
 			token) flags="--expires= --json --name= --projectRoot= --scope=" ;;
+			vault) flags="--description= --hosts= --limit= --name= --projectRoot= --scope= --user=" ;;
 		esac
 		COMPREPLY=($(compgen -W "$flags $globals" -- "$cur"))
 		if (( ${#COMPREPLY[@]} == 1 )) && [[ "${COMPREPLY[0]}" == *= ]]; then
@@ -115,6 +117,7 @@ _bxagents_complete() {
 		serve) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		stats) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		test) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
+		vault) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		help) COMPREPLY=($(compgen -W "$verbs" -- "$cur")) ;;
 	esac
 	return 0
