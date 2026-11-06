@@ -235,9 +235,16 @@ POST /__bxagents/resume    # { threadId, decision } -> SSE, como /events
 GET  /__bxagents/tools
 GET  /__bxagents/profiles   # los perfiles que un cliente puede pedir
 GET  /__bxagents/agent    # name, model, what it can do
-GET  /__bxagents/sessions   # las conversaciones recientes de quien llama
+GET  /__bxagents/sessions   # las conversaciones recientes de quien llama (?source=terminal para las que empezaron ahí)
+POST /__bxagents/sessions   # { title? } empieza una: { conversationId }
 POST /__bxagents/sessions/rename   # { conversationId, title } pone nombre a una
 POST /__bxagents/sessions/fork     # { conversationId, title? } copia una, mensajes incluidos
+POST /__bxagents/sessions/delete   # { conversationId } su fila y los mensajes del agente para ella
+GET  /__bxagents/export    # ?conversationId=&format=md|html la conversación como archivo para guardar
+GET  /__bxagents/whoami    # quién cree el servidor que es quien llama: { id, name, scope, source, agent }
+GET  /__bxagents/preferences          # lo que quien llama ha puesto: { preferences : { clave : valor } }
+POST /__bxagents/preferences/set      # { key, value }
+POST /__bxagents/preferences/delete   # { key }
 GET  /__bxagents/history    # ?conversationId= lo que se dijo en una
 POST /__bxagents/clear      # { conversationId } olvida sus mensajes
 POST /__bxagents/compact    # { conversationId } resume los mensajes antiguos

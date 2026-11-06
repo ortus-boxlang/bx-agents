@@ -429,17 +429,26 @@ class {
 	// ----------------------------------------------------------------------------------
 
 	/**
-	 * The caller's recent conversations, most recent first: { sessions : [ { id, title, messageCount, source, updatedAt } ] }.
-	 * 404 when this server keeps no conversation list (no shared chat database).
-	 *
+	 * GET: the caller's recent conversations, most recent first: { sessions : [ { id, title, messageCount, source, updatedAt } ] }.
 	 * Query: limit?, source?
+	 * POST: starts a conversation, { conversationId }; the id is made here, never taken from the caller. Body: { title? }
+	 *
+	 * 404 when this server keeps no conversation list (no shared chat database).
 	 */
 	function sessions( event, rc, prc ) {
 		if ( refused( event ) ) {
 			return
 		}
 		var all = service().conversations()
-		answer( event, isNull( all ) ? noSessions() : all.list( callerOf( event ), val( rc.limit ?: 20 ), rc.source ?: "" ) )
+		if ( isNull( all ) ) {
+			answer( event, noSessions() )
+			return
+		}
+		if ( event.getHTTPMethod() == "POST" ) {
+			answer( event, all.create( callerOf( event ), event.getHTTPContent( json : true ).title ?: "" ) )
+			return
+		}
+		answer( event, all.list( callerOf( event ), val( rc.limit ?: 20 ), rc.source ?: "" ) )
 	}
 
 	/**
@@ -523,6 +532,86 @@ class {
 			return
 		}
 		answer( event, done( conversation.compact() ) )
+	}
+
+	/**
+	 * Deletes one of the caller's conversations, its row and the agent's messages for it. Body: { conversationId }
+	 */
+	function deleteSession( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var all = service().conversations()
+		answer( event, isNull( all ) ? noSessions() : all.delete( callerOf( event ), event.getHTTPContent( json : true ).conversationId ?: "" ) )
+	}
+
+	/**
+	 * One of the caller's conversations as a file to save. Query: conversationId, format (md or html, md by default)
+	 */
+	function export( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var exported = service().exportOf( callerOf( event ), rc.conversationId ?: "", rc.format ?: "md" )
+		if ( !exported.succeeded() ) {
+			answer( event, exported )
+			return
+		}
+		var file = exported.data()
+		event.setHTTPHeader( name : "Content-Disposition", value : 'attachment; filename="#file.file#"' )
+		event.renderData( type : "text", data : file.content, contentType : file.mime & "; charset=utf-8" )
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Who and what is set
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Who the server takes the caller to be: { id, name, scope, source, agent }.
+	 */
+	function whoami( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().whoami( callerOf( event ) ) )
+	}
+
+	/**
+	 * What the caller has set for themselves, as { preferences : { key : value } }. 404 when this server keeps no shared database.
+	 */
+	function preferences( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var kept = service().preferences( callerOf( event ) )
+		answer( event, isNull( kept ) ? noPreferences() : done( { "preferences" : kept.all() } ) )
+	}
+
+	/**
+	 * Body: { key, value }
+	 */
+	function setPreference( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var kept = service().preferences( callerOf( event ) )
+		var body = event.getHTTPContent( json : true )
+		answer( event, isNull( kept ) ? noPreferences() : kept.set( body.key ?: "", body.value ?: "" ) )
+	}
+
+	/**
+	 * Body: { key }
+	 */
+	function deletePreference( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var kept = service().preferences( callerOf( event ) )
+		answer( event, isNull( kept ) ? noPreferences() : kept.delete( event.getHTTPContent( json : true ).key ?: "" ) )
+	}
+
+	private function noPreferences() {
+		return failed( "not_found", "This server keeps no preferences" )
 	}
 
 	// ----------------------------------------------------------------------------------

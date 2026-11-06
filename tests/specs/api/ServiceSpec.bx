@@ -93,6 +93,27 @@ class extends="testbox.system.BaseSpec" {
 					expect( conversation.mode() ).toBe( "server" );
 				} );
 
+				it( "exports one of the caller's conversations as Markdown or as a page of HTML, with the text escaped", function() {
+					var id = service.conversations().create( ada, "Plan" ).data().conversationId;
+
+					var md = service.exportOf( ada, id, "md" ).data();
+					expect( md.file ).toMatch( "^chat-.*[.]md$" );
+					expect( md.mime ).toBe( "text/markdown" );
+					expect( md.content ).toInclude( "## Plan" );
+					expect( md.content ).toInclude( "**You**" );
+
+					var html = service.exportOf( ada, id, "html" ).data();
+					expect( html.mime ).toBe( "text/html" );
+					expect( html.content ).notToInclude( "<b>there</b>" );
+				} );
+
+				it( "refuses to export a format it does not have, and somebody else's conversation", function() {
+					var id = service.conversations().create( bob, "bob's" ).data().conversationId;
+
+					expect( service.exportOf( ada, id, "md" ).code() ).toBe( "not_found" );
+					expect( service.exportOf( bob, id, "pdf" ).code() ).toBe( "bad_request" );
+				} );
+
 				it( "gives an open server one local user, whichever surface asks", function() {
 					expect( service.localCaller( "web" ).id() ).toBe( "local" );
 					expect( service.localCaller( "terminal" ).source() ).toBe( "terminal" );
