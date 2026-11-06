@@ -113,3 +113,7 @@ boxlang tools/demo/render.bxs /abs/path/wizard-out/session.cast /abs/path/wizard
 ```
 
 `render.bxs` takes **absolute** paths: a relative one is resolved against the script's folder. Render one recording at a time; two renders at once sharing one `BOXLANG_HOME` crashed with `Color parameter outside of expected range`, and the same recording rendered fine alone.
+
+## Narration voice for tutorials
+
+Tutorial videos use one voice: Kokoro `af_heart` (American English, female, speed 1.0). It is written down in `narration/voice.json`, and `narration/narrate.py` turns a narration file (scene name to text) into one wav per scene, so every tutorial sounds the same. `narration/example-api-tour.json` is the script of the agent API video.
