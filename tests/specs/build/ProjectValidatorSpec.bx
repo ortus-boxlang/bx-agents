@@ -174,10 +174,12 @@ class extends="testbox.system.BaseSpec" {
 					var ok = profiledProject( "agentApi:" & nl & "  allowedIPs: [ 10.0.0.0/8, 203.0.113.7 ]" & nl & "  rateLimit:" & nl & "    requests: 60" & nl & "    perSeconds: 60" & nl );
 					var badIp = profiledProject( "agentApi:" & nl & "  allowedIPs: [ example.com ]" & nl );
 					var badLimit = profiledProject( "agentApi:" & nl & "  rateLimit:" & nl & "    requests: 0" & nl & "    perSeconds: 60" & nl );
+					var byCaller = profiledProject( "agentApi:" & nl & "  rateLimit:" & nl & "    requests: 5" & nl & "    perSeconds: 60" & nl & "    by: caller" & nl );
 
 					expect( ok.errors ).toBeEmpty();
 					expect( badIp.errors.filter( e => e.findNoCase( "allowedIPs" ) ) ).toHaveLength( 1 );
 					expect( badLimit.errors.filter( e => e.findNoCase( "rateLimit.requests" ) ) ).toHaveLength( 1 );
+					expect( byCaller.errors.filter( e => e.findNoCase( "unknown key [by]" ) ) ).toHaveLength( 1 );
 				} );
 
 				it( "lets agentApi.manageTokens on only with issued tokens and a token access", function() {

@@ -1,0 +1,45 @@
+import bxModules.bxagents.models.api.Guards;
+
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "api.Guards", function() {
+
+			it( "asks for no middleware when the agent sets no guard", function() {
+				expect( Guards::any( {} ) ).toBeFalse();
+				expect( Guards::middleware( {} ) ).toBeEmpty();
+				expect( Guards::meta( {} ) ).toBeEmpty();
+				expect( Guards::any( { allowedIPs : [], rateLimit : {} } ) ).toBeFalse();
+			} );
+
+			it( "names cbSecurity's AllowedIPs and Throttle, addresses first, with the meta each one reads", function() {
+				var api = { allowedIPs : [ "10.0.0.0/8", " 203.0.113.7 " ], rateLimit : { requests : 30, perSeconds : 60 } };
+
+				expect( Guards::middleware( api ) ).toBe( [ "AllowedIPs@cbsecurity", "Throttle@cbsecurity" ] );
+				var meta = Guards::meta( api );
+				expect( meta.allowedIps ).toBe( "10.0.0.0/8,203.0.113.7" );
+				expect( meta.throttle.maxAttempts ).toBe( 30 );
+				expect( meta.throttle.decaySeconds ).toBe( 60 );
+				// one counter for the whole API, by address
+				expect( meta.throttle.name ).toBe( Guards::counterName() );
+				expect( meta.throttle.by ).toBe( "ip" );
+			} );
+
+			it( "accepts addresses and networks and refuses host names and bad prefixes", function() {
+				expect( Guards::problems( { allowedIPs : [ "10.0.0.0/8", "203.0.113.7", "::1", "fd00::/8" ] } ) ).toBeEmpty();
+				expect( Guards::problems( { allowedIPs : [ "example.com" ] } ) ).toHaveLength( 1 );
+				expect( Guards::problems( { allowedIPs : [ "10.0.0.0/33" ] } ) ).toHaveLength( 1 );
+				expect( Guards::problems( { allowedIPs : "10.0.0.1" } ) ).toHaveLength( 1 );
+			} );
+
+			it( "wants whole numbers for the limit and knows no 'by' (callers are counted by address)", function() {
+				expect( Guards::problems( { rateLimit : { requests : 5, perSeconds : 60 } } ) ).toBeEmpty();
+				expect( Guards::problems( { rateLimit : { requests : 0, perSeconds : 60 } } ) ).toHaveLength( 1 );
+				expect( Guards::problems( { rateLimit : { requests : 5, perSeconds : 60, by : "caller" } } ) ).toHaveLength( 1 );
+				expect( Guards::problems( { rateLimit : "lots" } ) ).toHaveLength( 1 );
+			} );
+
+		} );
+	}
+
+}

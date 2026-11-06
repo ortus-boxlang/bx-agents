@@ -113,7 +113,7 @@ Todo error es `{ "success": false, "error": "texto para personas", "code": "codi
 | 404 | `not_found`, `no_notes` |
 | 405 | `method_not_allowed` |
 | 409 | `busy` (ya hay una ejecución en esa conversación) |
-| 429 | `rate_limited`, con una cabecera `Retry-After` |
+| 429 | `rate_limited` de una comprobación de token; la guarda `rateLimit` (Throttle de cbSecurity) responde `{ "error": true, "messages": [...] }` con una cabecera `Retry-After` |
 
 ## El documento OpenAPI
 

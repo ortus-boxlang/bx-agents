@@ -12,8 +12,7 @@ import bxModules.bxagents.models.api.AccessMode;
 import bxModules.bxagents.models.build.AgentApiConfig;
 
 import bxModules.bxagents.models.api.ApiPath;
-import bxModules.bxagents.models.api.IpAllowList;
-import bxModules.bxagents.models.api.RateLimit;
+import bxModules.bxagents.models.api.Guards;
 
 class {
 
@@ -763,12 +762,7 @@ class {
 			}
 		}
 
-		if ( structKeyExists( agentApi, "allowedIPs" ) ) {
-			arguments.errors.append( IpAllowList::problems( agentApi.allowedIPs ), true )
-		}
-		if ( structKeyExists( agentApi, "rateLimit" ) && !( isStruct( agentApi.rateLimit ) && agentApi.rateLimit.isEmpty() ) ) {
-			arguments.errors.append( RateLimit::problems( agentApi.rateLimit ), true )
-		}
+		arguments.errors.append( Guards::problems( agentApi ), true )
 
 		if ( structKeyExists( agentApi, "path" ) ) {
 			arguments.errors.append( ApiPath::problems( agentApi.path ), true )
