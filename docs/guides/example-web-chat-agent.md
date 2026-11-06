@@ -44,7 +44,7 @@ class {
 		return {
 			exposes     : "webui",
 			path        : "/chat",
-			apiKeyEnvVar: "CHAT_UI_API_KEY",   // optional - omit entirely to leave the UI's /chat/api/* route open (dev-mode)
+			apiKeyEnvVar: "CHAT_UI_API_KEY",   // optional - omit entirely to leave the agent API open (dev-mode)
 
 			// ---------------------------------------------------------------
 			// Branding
@@ -109,9 +109,9 @@ The page is responsive with no separate mobile build - at a narrow viewport, the
 
 ![The same page at a narrow viewport - the transcript keeps the full width, the sidebar overlays instead of squeezing it](../assets/webui-chat-mobile.png)
 
-## The optional API key gate
+## The optional API key
 
-This example ships `apiKeyEnvVar` **set**, so `/chat/api/*` requires a matching `X-API-Key` header - the static shell (`/chat/index.html`) itself stays reachable regardless, since a browser's plain page navigation can't send a custom header, and the shell is exactly what prompts you for the key:
+This example ships `apiKeyEnvVar` **set**. It is the agent API's shared secret, so every call to `/__bxagents` must carry a matching `x-bxagents-token` header - the static shell (`/chat/index.html`) itself stays reachable regardless, since a browser's plain page navigation can't send a custom header, and the shell is exactly what prompts you for the key:
 
 ```bash
 export CHAT_UI_API_KEY="a-real-secret"
@@ -121,13 +121,13 @@ bxAgents serve --port=8080
 
 The page loads fine either way, but sending a message without first setting the matching key via the page's **Key** button gets a 401 - click **Key**, paste `a-real-secret`, and it works for the rest of the browser session (stored in `localStorage`). Delete the `apiKeyEnvVar` line entirely to leave the UI open instead (fine for local dev, never for a public deployment).
 
-## Why not just `toAi()`?
+## One API for the page, the terminal and the gateways
 
-`path: "/chat"` controls both where the static shell is served and where its own dedicated API lives (`/chat/api`, backed by a generated `handlers/ChatUi.bx`) - it reuses `toAi()`'s exact route shape and wire format for `invoke`/`stream`/`batch`, but derives the visitor's identity **server-side only**, rather than trusting a caller-supplied `userId` the way `toAi()` does. That distinction matters specifically because a browser page sits behind one shared API key (or none at all) - see [Conversation identity](../conventions/web-ui.md#conversation-identity) for the full reasoning.
+`path: "/chat"` is only where the static shell is served. The page calls the agent API at `/__bxagents`, which derives the visitor's identity **server-side only**, rather than trusting a caller-supplied `userId` the way ColdBox's `toAi()` does, and which the terminal chat and the gateways use too. See [Conversation identity](../conventions/web-ui.md#conversation-identity) for the full reasoning.
 
 ## What's proven, and what isn't
 
-The generator output itself - the static shell, the templated placeholders, the optional auth interceptor, its registration from `Application.bx` - is proven by real generator specs and confirmed to compile and instantiate. Over real HTTP, `runColdBoxIntegrationTests.bxs` proves `/chat/api/health` and, further, the shared-preferences round trip (`/chat/api/preferences/set` + `/chat/api/preferences`) between two independent callers. The screenshots above were captured from the real generated template and this project's real config, not a hand-built mockup - but do at least one real `bxAgents serve` + browser check of your own theme/branding choices before depending on them in production.
+The generator output itself - the static shell, the templated placeholders, the sign-in pieces when there are accounts, its registration from `Application.bx` - is proven by real generator specs and confirmed to compile and instantiate. Over real HTTP, `runColdBoxIntegrationTests.bxs` proves `/__bxagents/health` and, further, the shared-preferences round trip (`/__bxagents/preferences/set` + `/__bxagents/preferences`) between two independent callers. The screenshots above were captured from the real generated template and this project's real config, not a hand-built mockup - but do at least one real `bxAgents serve` + browser check of your own theme/branding choices before depending on them in production.
 
 ## Where to go next
 

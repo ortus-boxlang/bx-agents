@@ -41,7 +41,7 @@ class {
 		return {
 			exposes     : "webui",
 			path        : "/chat",
-			apiKeyEnvVar: "CHAT_UI_API_KEY",   // optional - omit entirely to leave the UI's /chat/api/* route open (dev-mode)
+			apiKeyEnvVar: "CHAT_UI_API_KEY",   // optional - the agent API's shared secret - omit entirely to leave the API open (dev-mode)
 
 			// ---------------------------------------------------------------
 			// Branding
@@ -108,7 +108,7 @@ La página es responsive sin ningún build móvil aparte - en un viewport estrec
 
 ## La protección opcional por clave de API
 
-Este ejemplo viene con `apiKeyEnvVar` **definido**, así que `/chat/api/*` exige una cabecera `X-API-Key` que coincida - el propio armazón estático (`/chat/index.html`) sigue siendo accesible en cualquier caso, ya que la navegación normal de una página en el navegador no puede enviar una cabecera personalizada, y ese armazón es precisamente lo que te pide la clave:
+Este ejemplo viene con `apiKeyEnvVar` **definido**. Es el secreto compartido de la API del agente, así que cada llamada a `/__bxagents` exige una cabecera `x-bxagents-token` que coincida - el propio armazón estático (`/chat/index.html`) sigue siendo accesible en cualquier caso, ya que la navegación normal de una página en el navegador no puede enviar una cabecera personalizada, y ese armazón es precisamente lo que te pide la clave:
 
 ```bash
 export CHAT_UI_API_KEY="a-real-secret"
@@ -118,13 +118,13 @@ bxAgents serve --port=8080
 
 La página carga bien en ambos casos, pero enviar un mensaje sin haber configurado antes la clave correspondiente con el botón **Key** de la página devuelve un 401 - pulsa **Key**, pega `a-real-secret`, y funcionará durante el resto de la sesión del navegador (se guarda en `localStorage`). Elimina por completo la línea `apiKeyEnvVar` para dejar la UI abierta (aceptable en desarrollo local, nunca en un despliegue público).
 
-## ¿Por qué no simplemente `toAi()`?
+## Una sola API para la página, la terminal y los gateways
 
-`path: "/chat"` controla tanto dónde se sirve el armazón estático como dónde vive su propia API dedicada (`/chat/api`, respaldada por un `handlers/ChatUi.bx` generado) - reutiliza exactamente la forma de rutas y el formato de datos de `toAi()` para `invoke`/`stream`/`batch`, pero deriva la identidad del visitante **solo en el servidor**, en lugar de fiarse de un `userId` proporcionado por quien llama, como hace `toAi()`. Esa distinción importa precisamente porque una página de navegador vive tras una única clave de API compartida (o ninguna) - consulta [Identidad de conversación](../conventions/web-ui.md#identidad-de-conversación) para el razonamiento completo.
+`path: "/chat"` es solo el lugar donde se sirve el armazón estático. La página llama a la API del agente en `/__bxagents`, que deriva la identidad del visitante **solo en el servidor**, en lugar de fiarse de un `userId` proporcionado por quien llama, como hace `toAi()`, y que usan también el chat de terminal y los gateways. Consulta [Identidad de conversación](../conventions/web-ui.md#identidad-de-conversación) para el razonamiento completo.
 
 ## Qué está probado, y qué no
 
-La salida del generador en sí - el armazón estático, los marcadores de plantilla, el interceptor de autenticación opcional, su registro desde `Application.bx` - está demostrada con specs reales del generador, y se ha confirmado que compila e instancia. Sobre HTTP real, `runColdBoxIntegrationTests.bxs` demuestra `/chat/api/health` y, además, el viaje de ida y vuelta de preferencias compartidas (`/chat/api/preferences/set` + `/chat/api/preferences`) entre dos llamantes independientes. Las capturas de arriba se tomaron de la plantilla generada real y de la configuración real de este proyecto, no de un mockup hecho a mano - pero haz al menos una comprobación real con `bxAgents serve` y un navegador de tus propias decisiones de tema y marca antes de depender de ellas en producción.
+La salida del generador en sí - el armazón estático, los marcadores de plantilla, las piezas de inicio de sesión cuando hay cuentas, su registro desde `Application.bx` - está demostrada con specs reales del generador, y se ha confirmado que compila e instancia. Sobre HTTP real, `runColdBoxIntegrationTests.bxs` demuestra `/__bxagents/health` y, además, el viaje de ida y vuelta de preferencias compartidas (`/__bxagents/preferences/set` + `/__bxagents/preferences`) entre dos llamantes independientes. Las capturas de arriba se tomaron de la plantilla generada real y de la configuración real de este proyecto, no de un mockup hecho a mano - pero haz al menos una comprobación real con `bxAgents serve` y un navegador de tus propias decisiones de tema y marca antes de depender de ellas en producción.
 
 ## Dónde ir a continuación
 

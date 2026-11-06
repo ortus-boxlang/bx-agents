@@ -87,9 +87,9 @@ class {
 }
 ```
 
-Generates a real static `<path>/index.html` file (served directly - no route needed for it) plus its own dedicated API under a fixed `<path>/api` prefix, so it never collides with the shell's own files. That API is a generated `handlers/ChatUi.bx` rather than `toAi()`, and the entry also brings a generated SQLite store with it.
+Generates a real static `<path>/index.html` file (served directly - no route needed for it) and the page calls the [agent API](../agent-bx.md#the-always-on-agent-route) at `/__bxagents`, the same one the terminal chat uses, so the entry adds no API of its own. It does bring the shared SQLite store with it.
 
-The web UI is a subsystem rather than a single exposure switch - the route list, the store, conversations and preferences, branding and theming, and why it does not use `toAi()` are all on its own page: **[The web chat UI](../web-ui.md)**.
+The web UI is a subsystem rather than a single exposure switch - the store, conversations and preferences, branding and theming, sign-in and how the page uses the agent API are all on its own page: **[The web chat UI](../web-ui.md)**.
 
 **Validation:** `exposes` must be `agent`, `mcp`, or `webui`; `path` is required and must be unique across every exposure entry; an `mcp` exposure's `target` is required and must match a real `mcp/*` entry's file name; `webui`'s `apiKeyEnvVar` is entirely optional, with no required-field check (see below). A `webui` entry may list `profiles` for the page's model picker (see [Choosing the model](../web-ui.md#choosing-the-model)); each must be declared in `Agent.yaml`, and no other kind of entry may list them.
 
