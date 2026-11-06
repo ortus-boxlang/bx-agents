@@ -217,6 +217,15 @@ class extends="testbox.system.BaseSpec" {
 				expect( fileRead( result.appDir & "/config/Router.bx" ) ).toInclude( "CHAT_API_KEY" );
 			} );
 
+			it( "gives a project with chat gateways the shared chat database, migrated at start", function() {
+				var projectRoot = newTempProject( "gateways-telegram" );
+				var result = pipeline.build( projectRoot );
+				var appSource = fileRead( result.appDir & "/bxagents/Application.bx" );
+
+				expect( appSource ).toInclude( 'ChatStore@bxagents"( "" ).migrate()' );
+				expect( appSource ).toInclude( "data/chat.db" );
+			} );
+
 			it( 'calls aiToolRegistry().scan("tools") at startup only when the project declares tools', function() {
 				var withTools = newTempProject( "full-project" );
 				var withToolsResult = pipeline.build( withTools );

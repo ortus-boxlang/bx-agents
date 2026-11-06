@@ -225,11 +225,11 @@ class {
 		// per-request behavior (account seeding, warming the web UI's store,
 		// starting push gateways), or because an interceptor here was already
 		// proven dead on this stack (the seeder; see the comment above).
-		// Issued tokens live in the shared chat database. Without a web UI there is no store yet, so the
-		// app gets the default one, migrated at start.
+		// Without a web UI there is no store yet, so the app gets the default one, migrated at start.
 		var chatDatabase = webUiResult.webUiDatabase ?: {}
-		var needsTokenStore = ( effectiveAgentApi.tokens ?: false ) && ( effectiveAgentApi.enabled ?: true )
-		if ( needsTokenStore && chatDatabase.isEmpty() ) {
+		// Issued tokens and the chats of gateways both live there
+		var needsStore = ( ( effectiveAgentApi.tokens ?: false ) && ( effectiveAgentApi.enabled ?: true ) ) || len( gatewayResult.sessionStartupStatement ?: "" )
+		if ( needsStore && chatDatabase.isEmpty() ) {
 			chatDatabase = { datasource : "bxagents", path : "./data/chat.db" }
 		}
 		var startupStatements = toolScanStatements.duplicate()
@@ -249,7 +249,7 @@ class {
 		if ( len( webUiResult.webUiSeedStatement ?: "" ) ) {
 			startupStatements.append( webUiResult.webUiSeedStatement )
 		}
-		if ( needsTokenStore && !len( webUiResult.webUiWarmStatement ?: "" ) ) {
+		if ( needsStore && !len( webUiResult.webUiWarmStatement ?: "" ) ) {
 			startupStatements.append( 'new "models.store.ChatStore@bxagents"( "" ).migrate()' )
 		}
 

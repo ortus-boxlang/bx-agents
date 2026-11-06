@@ -298,12 +298,16 @@ Una imagen o un archivo enviado al bot llega al agente con el mensaje: las imág
 
 Los enlaces deben ser https. Un archivo que no se puede descargar se le nombra a la persona y el resto del mensaje sigue. Se apaga con `gatewaySession.attachments: false`.
 
+#### De quién es la conversación
+
+Los chats de cada persona son suyos. Al agente se le dice quién escribe (la plataforma y su id allí, `slack:U123`) y qué conversación es, así que la memoria del agente, `/notes` y `/remember`, y la lista de conversaciones se mantienen separadas por persona. La conversación es el chat, más su hilo cuando la plataforma los tiene (un tema de foro de Telegram, un hilo de Slack), así que cada tema guarda su propia memoria. Dos personas en el mismo canal no comparten memoria, ni tampoco dos chats en dos plataformas. Las conversaciones se guardan en la misma base de datos SQLite que la de la página web y la terminal (un proyecto con gateways de chat obtiene `data/chat.db`, igual que uno con página web), marcadas con la plataforma donde empezaron (`source`). Pertenecen al id propio de la persona, así que no aparecen en la lista del usuario abierto `local`.
+
 #### Comandos de conversación
 
-`/new`, `/clear`, `/compact`, `/sessions` y `/resume` están desactivados por defecto, porque una plataforma de chat da a cada chat una conversación compartida: en un grupo, el `/clear` de cualquiera la borra para todos. Actívalos con `conversation: true` (o lístalos en `allow`) cuando los chats sean privados o confíes en el grupo.
+`/new`, `/clear`, `/compact`, `/sessions` y `/resume` están desactivados por defecto, porque la mayoría de los chats son una conversación larga y es fácil teclear un `/clear` por error. Solo actúan sobre la conversación de quien escribe. Actívalos con `conversation: true` (o lístalos en `allow`).
 
 - `/new` mueve el chat a una conversación nueva; la anterior sigue en la lista.
-- `/sessions` lista las conversaciones que la persona ha tenido en esta app, la más reciente primero, y `/resume 2` (o un id) devuelve el chat a una. La lista vive en memoria, así que dura hasta que la app se reinicia; las conversaciones en sí duran lo que dure la memoria del agente, así que un id sigue funcionando después.
+- `/sessions` lista las conversaciones que la persona ha tenido en esta app, la más reciente primero, y `/resume 2` (o un id) devuelve el chat a una. La lista está en la base de datos de chat compartida, así que sobrevive a los reinicios; los mensajes duran lo que dure la memoria del agente.
 - `/clear` y `/compact` actúan sobre la conversación en la que está el chat ahora.
 - En un hilo de Slack, cada hilo tiene su propia conversación, y `/new` mueve solo ese hilo.
 

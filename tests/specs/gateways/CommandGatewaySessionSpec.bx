@@ -22,10 +22,52 @@ class extends="testbox.system.BaseSpec" {
 			beforeEach( function() {
 				variables.mock = aiGateway( "mock" );
 				variables.agent = aiAgent( name : "helper", model : aiModel( provider : "mock" ), memory : aiMemory( "cache" ) );
+				variables.dir = createTempDirectory( prefix = "bxagents-gateway-session-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "keeps each person's chats apart: the agent's memory is keyed by person and thread, not shared", function() {
+				var session = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ] );
+				session.handleInbound( message( "hello from ada", "ada", "chat-a" ), mock ).get();
+				session.handleInbound( message( "hello from bob", "bob", "chat-b" ), mock ).get();
+
+				expect( agent.getMemoryMessages( "mock:ada", "mock:chat-a" ) ).toHaveLength( 2 );
+				expect( agent.getMemoryMessages( "mock:bob", "mock:chat-b" ) ).toHaveLength( 2 );
+				expect( agent.getMemoryMessages( "mock:ada", "mock:chat-b" ) ).toBeEmpty();
+				// nothing lands in the one shared bucket bx-ai would have used
+				expect( agent.getMemoryMessages( "", "" ) ).toBeEmpty();
+			} );
+
+			it( "makes a platform thread its own conversation, and leaves the run's thread id as bx-ai names it", function() {
+				var session = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ] );
+				var inTopic = new GatewayMessage( text : "in a topic", context : new GatewayContext( gateway : "mock", conversationID : "chat-a", userID : "ada", threadID : "topic-1" ) );
+				session.handleInbound( inTopic, mock ).get();
+
+				expect( session.resolveConversationId( inTopic, mock ) ).toBe( "mock:chat-a:topic-1" );
+				expect( session.resolveThreadId( inTopic, mock ) ).toBe( "topic-1" );
+				expect( agent.getMemoryMessages( "mock:ada", "mock:chat-a:topic-1" ) ).toHaveLength( 2 );
+				expect( agent.getMemoryMessages( "mock:ada", "topic-1" ) ).toBeEmpty();
+			} );
+
+			it( "puts the chat on the shared conversation list, marked with the platform", function() {
+				var session = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ] );
+				session.handleInbound( message( "plan the launch", "ada", "chat-a" ), mock ).get();
+
+				var listed = new bxagents.models.store.SessionStore( store ).list( "mock:ada", 10 );
+				expect( listed ).toHaveLength( 1 );
+				expect( listed[ 1 ].title ).toInclude( "plan the launch" );
+				expect( listed[ 1 ].source ).toBe( "mock" );
+				expect( new bxagents.models.store.SessionStore( store ).list( "mock:bob", 10 ) ).toBeEmpty();
 			} );
 
 			it( "answers /help itself, with the commands it offers, and never calls the agent", function() {
-				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ] );
+				var session = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ] );
 				var done = session.handleInbound( message( "/help" ), mock );
 
 				expect( isNull( done ) ).toBeTrue();
@@ -36,7 +78,7 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "reads the prefix a gateway was given instead of the session's", function() {
-				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], commands : { prefixes : { mock : "!" } } );
+				var session = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ], commands : { prefixes : { mock : "!" } } );
 				session.handleInbound( message( "!info" ), mock );
 				expect( replies()[ 1 ] ).toInclude( "Agent: helper" );
 
@@ -48,7 +90,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "hands its menu to a gateway that can show one, once, on the first message", function() {
 				var shown = [];
 				mock.publishCommands = ( menu ) => { shown.append( menu.map( c => c.name ) ); return true; };
-				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ] );
+				var session = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ] );
 				session.handleInbound( message( "/help" ), mock );
 				session.handleInbound( message( "/help" ), mock );
 
@@ -58,28 +100,28 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "keeps answering when a gateway fails to take the menu", function() {
 				mock.publishCommands = ( menu ) => { throw( message = "boom" ); };
-				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ] );
+				var session = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ] );
 				session.handleInbound( message( "/help" ), mock );
 				expect( replies() ).toHaveLength( 1 );
 			} );
 
 			it( "answers /info with the caller and the conversation", function() {
-				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ] );
+				var session = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ] );
 				session.handleInbound( message( "/info", "u-7", "chat-9" ), mock );
 
 				expect( replies()[ 1 ] ).toInclude( "Agent: helper" );
-				expect( replies()[ 1 ] ).toInclude( "User: u-7" );
+				expect( replies()[ 1 ] ).toInclude( "User: mock:u-7" );
 				expect( replies()[ 1 ] ).toInclude( "mock:chat-9" );
 			} );
 
 			it( "reads /info@botname as /info, as Telegram sends it in a group", function() {
-				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ] );
+				var session = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ] );
 				session.handleInbound( message( "/info@helperbot" ), mock );
 				expect( replies()[ 1 ] ).toInclude( "Agent: helper" );
 			} );
 
 			it( "passes a message that is not a command to the agent", function() {
-				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ] );
+				var session = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ] );
 				var done = session.handleInbound( message( "hello there" ), mock );
 
 				expect( isNull( done ) ).toBeFalse();
@@ -88,14 +130,14 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "passes an unknown slash word to the agent instead of swallowing it", function() {
-				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ] );
+				var session = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ] );
 				var done = session.handleInbound( message( "/whatever you like" ), mock );
 				expect( isNull( done ) ).toBeFalse();
 				done.get();
 			} );
 
 			it( "does not offer a command outside its safe set, such as /clear", function() {
-				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ] );
+				var session = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ] );
 				expect( session.commandMenu().map( c => c.name ) ).toBe( [ "/help", "/tools", "/model", "/ping", "/info", "/remember", "/notes" ] );
 				var done = session.handleInbound( message( "/clear" ), mock );
 				expect( isNull( done ) ).toBeFalse();
@@ -103,51 +145,51 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "can be widened or switched off in the project's config", function() {
-				var wide = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], commands : { allow : [ "help", "clear" ] } );
+				var wide = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ], commands : { allow : [ "help", "clear" ] } );
 				expect( wide.commandMenu().map( c => c.name ) ).toBe( [ "/help", "/clear" ] );
 
-				var off = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ aiGateway( "mock" ) ], commands : { enabled : false } );
+				var off = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ aiGateway( "mock" ) ], commands : { enabled : false } );
 				var done = off.handleInbound( message( "/help" ), mock );
 				expect( isNull( done ) ).toBeFalse();
 				done.get();
 			} );
 
 			it( "uses another prefix when configured", function() {
-				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], commands : { prefix : "!" } );
+				var session = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ], commands : { prefix : "!" } );
 				session.handleInbound( message( "!info" ), mock );
 				expect( replies()[ 1 ] ).toInclude( "Agent: helper" );
 			} );
 
 			it( "keeps the conversation commands off unless asked for, since they act on the chat's one conversation", function() {
-				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ] );
+				var session = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ] );
 				expect( session.commandMenu().map( c => c.name ) ).notToInclude( "/new" );
-				var on = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], commands : { conversation : true } );
+				var on = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ], commands : { conversation : true } );
 				expect( on.commandMenu().map( c => c.name ) ).toInclude( "/new" );
 				expect( on.commandMenu().map( c => c.name ) ).toInclude( "/sessions" );
 				expect( on.commandMenu().map( c => c.name ) ).toInclude( "/resume" );
 			} );
 
 			it( "/new moves the chat to a fresh thread and /resume brings the earlier one back", function() {
-				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], commands : { conversation : true } );
-				var first = session.resolveThreadId( message( "hello" ), mock );
+				var session = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ], commands : { conversation : true } );
+				var first = session.resolveConversationId( message( "hello" ), mock );
 				session.handleInbound( message( "hello" ), mock ).get();
 
 				session.handleInbound( message( "/new" ), mock );
-				var second = session.resolveThreadId( message( "hello" ), mock );
+				var second = session.resolveConversationId( message( "hello" ), mock );
 				expect( second ).notToBe( first );
 				expect( replies().filter( r => r.find( "New conversation" ) ) ).toHaveLength( 1 );
 
 				// another chat is not moved
-				expect( session.resolveThreadId( message( "hello", "u-1", "chat-2" ), mock ) ).toBe( "mock:chat-2" );
+				expect( session.resolveConversationId( message( "hello", "u-1", "chat-2" ), mock ) ).toBe( "mock:chat-2" );
 
 				// the first conversation is on the list once it had a message
 				session.handleInbound( message( "/resume " & first ), mock );
 				expect( replies().filter( r => r.find( "Resumed" ) ) ).toHaveLength( 1 );
-				expect( session.resolveThreadId( message( "hello" ), mock ) ).toBe( first );
+				expect( session.resolveConversationId( message( "hello" ), mock ) ).toBe( first );
 			} );
 
 			it( "/sessions lists the chats the person has had here, most recent first", function() {
-				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], commands : { conversation : true } );
+				var session = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ], commands : { conversation : true } );
 				var done = session.handleInbound( message( "plan the launch" ), mock );
 				done.get();
 				session.handleInbound( message( "/new" ), mock );
@@ -161,7 +203,7 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "/clear and /compact act on the chat's current thread", function() {
-				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], commands : { conversation : true } );
+				var session = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ], commands : { conversation : true } );
 				session.handleInbound( message( "/clear" ), mock );
 				expect( replies()[ 1 ] ).toInclude( "Cleared" );
 			} );
@@ -170,7 +212,7 @@ class extends="testbox.system.BaseSpec" {
 				mock.attachmentsOf = ( m ) => [ { name: "p.png", mime: "image/png", url: "https://f.example/p.png" } ];
 				var taken = [];
 				var intake = { intake : ( text, files, facts ) => { taken.append( { text: text, files: files } ); return { ok: true, input: { role: "user", content: [ { type: "text", text: text } ] }, notes: [ "movie.mp4 was not read: only pictures and text files are." ], images: 1, files: 0 }; } };
-				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], intake : intake );
+				var session = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ], intake : intake );
 				var done = session.handleInbound( message( "what is this" ), mock );
 
 				expect( taken ).toHaveLength( 1 );
@@ -182,7 +224,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "answers with the reason and does not ask the agent when the files are refused", function() {
 				mock.attachmentsOf = ( m ) => [ { name: "p.png", mime: "image/png", url: "https://f.example/p.png" } ];
 				var intake = { intake : ( text, files, facts ) => { return { ok: false, reason: "The model in use cannot see images." }; } };
-				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], intake : intake );
+				var session = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ], intake : intake );
 				var done = session.handleInbound( message( "look" ), mock );
 
 				expect( isNull( done ) ).toBeTrue();
@@ -191,7 +233,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "ignores files when attachments are switched off", function() {
 				mock.attachmentsOf = ( m ) => { throw( message = "should not be asked" ); };
-				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], attachments : false );
+				var session = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ], attachments : false );
 				var done = session.handleInbound( message( "hello" ), mock );
 				expect( isNull( done ) ).toBeFalse();
 				done.get();
@@ -199,7 +241,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "lists a pick-one as numbers, and a lone number right after it picks that option", function() {
 				var registry = new bxagents.models.chat.commands.CommandRegistry().register( new PickCommand() );
-				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], commands : { registry : registry } );
+				var session = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ], commands : { registry : registry } );
 				session.handleInbound( message( "/pick" ), mock );
 				expect( replies()[ 1 ] ).toInclude( "1. red" );
 				expect( replies()[ 1 ] ).toInclude( "Reply with a number to pick one." );
@@ -210,7 +252,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "forgets the list after any other message, so a later number is just a message", function() {
 				var registry = new bxagents.models.chat.commands.CommandRegistry().register( new PickCommand() );
-				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], commands : { registry : registry } );
+				var session = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ], commands : { registry : registry } );
 				session.handleInbound( message( "/pick" ), mock );
 				session.handleInbound( message( "/pick red" ), mock );
 				var done = session.handleInbound( message( "2" ), mock );
@@ -221,7 +263,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "keeps one person's list from answering another's number", function() {
 				var registry = new bxagents.models.chat.commands.CommandRegistry().register( new PickCommand() );
-				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], commands : { registry : registry } );
+				var session = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ], commands : { registry : registry } );
 				session.handleInbound( message( "/pick", "u-1" ), mock );
 				var done = session.handleInbound( message( "1", "u-2" ), mock );
 				expect( isNull( done ) ).toBeFalse();
@@ -232,7 +274,7 @@ class extends="testbox.system.BaseSpec" {
 				var sent = [];
 				mock.deliverChoices = ( title, options, context ) => { sent.append( { title: title, lines: options.map( o => o.line ) } ); return true; };
 				var registry = new bxagents.models.chat.commands.CommandRegistry().register( new PickCommand() );
-				var session = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], commands : { registry : registry } );
+				var session = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ], commands : { registry : registry } );
 				session.handleInbound( message( "/pick" ), mock );
 
 				expect( sent ).toHaveLength( 1 );
@@ -242,7 +284,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "tells the person when a command fails, instead of throwing into the gateway", function() {
 				var registry = new bxagents.models.chat.commands.CommandRegistry().register( new BrokenCommand() );
-				var broken = new bxagents.models.gateways.CommandGatewaySession( agent : agent, gateways : [ mock ], commands : { registry : registry } );
+				var broken = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ], commands : { registry : registry } );
 				broken.handleInbound( message( "/broken" ), mock );
 				expect( replies()[ 1 ] ).toBe( "That command did not work: it broke" );
 			} );
