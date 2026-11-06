@@ -19,6 +19,7 @@ class {
 		variables.state = {};
 		variables.seen = {};
 		variables.cancelled = [];
+		variables.clearedMemory = [];
 		return this;
 	}
 
@@ -67,6 +68,13 @@ class {
 		variables.seen = { decision : arguments.decision, threadId : arguments.threadId, decidedBy : arguments.decidedBy };
 		arguments.onChunk( "resumed" );
 	}
+
+	function getMemories() {
+		var cleared = variables.clearedMemory;
+		return [ { clear : ( userId, conversationId ) => cleared.append( arguments.userId & "/" & arguments.conversationId ) } ];
+	}
+
+	function clearedMemory() { return variables.clearedMemory; }
 
 	function cancelRun( threadId, reason ) { variables.cancelled.append( arguments.threadId ); return true; }
 	function steerRun( threadId, input ) { return true; }

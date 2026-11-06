@@ -1,0 +1,62 @@
+/**
+ * The list of a caller's conversations, and starting and deleting them. What happens inside one conversation
+ * (history, rename, fork, compact, export) is AgentConversation's.
+ */
+class {
+
+	/**
+	 * @agent The built agent, whose memory holds the messages
+	 * @sessions A SessionStore
+	 */
+	function init( required any agent, required any sessions ) {
+		variables.agent = arguments.agent
+		variables.sessions = arguments.sessions
+		return this
+	}
+
+	/**
+	 * @caller The Caller
+	 * @limit How many, newest first
+	 * @source Only those that started there (`web`, `terminal`, `api`, a gateway's platform); all when blank
+	 *
+	 * @return An Outcome: { conversations : [ { id, title, messageCount, source, createdAt, updatedAt } ] }
+	 */
+	any function list( required any caller, numeric limit = 50, string source = "" ) {
+		return new Outcome( ok = true, data = { "conversations" : variables.sessions.list( arguments.caller.id(), arguments.limit, arguments.source ) } )
+	}
+
+	/**
+	 * Starts a conversation and gives its id. The id is made here, never taken from the client: one the client
+	 * chose could collide with a conversation that exists.
+	 *
+	 * @caller The Caller; the conversation records the surface it came in on
+	 * @title What to call it; the first message names it when blank
+	 *
+	 * @return An Outcome: { conversationId }
+	 */
+	any function create( required any caller, string title = "" ) {
+		var id = createUUID()
+		variables.sessions.touch( arguments.caller.id(), id, trim( arguments.title ), 0, arguments.caller.source() )
+		return new Outcome( ok = true, data = { "conversationId" : id } )
+	}
+
+	/**
+	 * Deletes a conversation for real: its row and the messages the agent still holds for it. Dropping only the
+	 * row would leave it out of sight but in the model's context the moment the id was used again.
+	 *
+	 * @return An Outcome: done, or not_found (it does not exist or is not the caller's: the same answer)
+	 */
+	any function delete( required any caller, required string conversationId ) {
+		if ( !len( arguments.conversationId ) ) {
+			return new Outcome( ok = false, code = "bad_request", reason = "conversationId is required" )
+		}
+		if ( !variables.sessions.delete( arguments.caller.id(), arguments.conversationId ) ) {
+			return new Outcome( ok = false, code = "not_found", reason = "There is no such conversation" )
+		}
+		var userId = arguments.caller.id()
+		var id = arguments.conversationId
+		variables.agent.getMemories().each( ( memory ) => memory.clear( userId, id ) )
+		return new Outcome( ok = true, data = { "deleted" : true } )
+	}
+
+}

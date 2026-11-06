@@ -1,0 +1,123 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "api.AgentService and what it hands out", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-service-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.agent = new FakeAgent();
+				variables.service = new bxagents.models.api.AgentService( agent, store );
+				variables.ada = new bxagents.models.api.Caller( id = "ada", source = "web" );
+				variables.bob = new bxagents.models.api.Caller( id = "bob", source = "terminal" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			describe( "Preferences", function() {
+
+				it( "keeps what a person sets, only for that person", function() {
+					service.preferences( ada ).set( "theme", "dark" );
+					service.preferences( bob ).set( "theme", "light" );
+
+					expect( service.preferences( ada ).all() ).toBe( { theme : "dark" } );
+					expect( service.preferences( bob ).all() ).toBe( { theme : "light" } );
+				} );
+
+				it( "changes a value in place and deletes it", function() {
+					var prefs = service.preferences( ada );
+					prefs.set( "theme", "dark" );
+					prefs.set( "theme", "light" );
+					expect( prefs.all().theme ).toBe( "light" );
+
+					prefs.delete( "theme" );
+					expect( prefs.all() ).toBe( {} );
+				} );
+
+				it( "needs a key", function() {
+					expect( service.preferences( ada ).set( " ", "x" ).code() ).toBe( "bad_request" );
+					expect( service.preferences( ada ).delete( "" ).code() ).toBe( "bad_request" );
+				} );
+
+			} );
+
+			describe( "Conversations", function() {
+
+				it( "starts a conversation under the caller, with the surface it came from", function() {
+					var made = service.conversations().create( ada, "Planning" );
+
+					var row = service.sessions().byId( "ada", made.data().conversationId );
+					expect( row.title ).toBe( "Planning" );
+					expect( row.source ).toBe( "web" );
+					expect( row.messageCount ).toBe( 0 );
+				} );
+
+				it( "lists only the caller's, and can filter by where they started", function() {
+					service.conversations().create( ada, "one" );
+					service.conversations().create( ada.via( "terminal" ), "two" );
+					service.conversations().create( bob, "not ada's" );
+
+					expect( service.conversations().list( ada ).data().conversations ).toHaveLength( 2 );
+					expect( service.conversations().list( ada, 50, "terminal" ).data().conversations.map( ( c ) => c.title ) ).toBe( [ "two" ] );
+				} );
+
+				it( "deletes the row and the agent's messages for it", function() {
+					var id = service.conversations().create( ada, "x" ).data().conversationId;
+
+					expect( service.conversations().delete( ada, id ).succeeded() ).toBeTrue();
+					expect( service.sessions().byId( "ada", id ) ).toBe( {} );
+					expect( agent.clearedMemory() ).toBe( [ "ada/" & id ] );
+				} );
+
+				it( "answers not_found for a conversation that is somebody else's, as for one that does not exist", function() {
+					var id = service.conversations().create( bob, "bob's" ).data().conversationId;
+
+					expect( service.conversations().delete( ada, id ).code() ).toBe( "not_found" );
+					expect( service.conversations().delete( ada, "nope" ).code() ).toBe( "not_found" );
+					expect( service.sessions().byId( "bob", id ).title ).toBe( "bob's" );
+				} );
+
+			} );
+
+			describe( "AgentService", function() {
+
+				it( "hands out a conversation for the caller", function() {
+					var conversation = service.conversation( ada, "c-1" );
+
+					expect( conversation.userId() ).toBe( "ada" );
+					expect( conversation.conversationId() ).toBe( "c-1" );
+					expect( conversation.mode() ).toBe( "server" );
+				} );
+
+				it( "says who the caller is, and which agent", function() {
+					var who = service.whoami( ada ).data();
+
+					expect( who.id ).toBe( "ada" );
+					expect( who.source ).toBe( "web" );
+					expect( who.agent ).toBe( "fake" );
+				} );
+
+				it( "has no conversation list or preferences when the app keeps no database", function() {
+					var bare = new bxagents.models.api.AgentService( agent );
+
+					expect( bare.keepsSessions() ).toBeFalse();
+					expect( isNull( bare.conversations() ) ).toBeTrue();
+					expect( isNull( bare.preferences( ada ) ) ).toBeTrue();
+				} );
+
+				it( "runs a turn through the same list it shows", function() {
+					service.turns().stream( ada, { input : "hello there", conversationId : "c-9" }, function() {} );
+
+					expect( service.conversations().list( ada ).data().conversations.map( ( c ) => c.id ) ).toBe( [ "c-9" ] );
+				} );
+
+			} );
+
+		} );
+	}
+
+}
