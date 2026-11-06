@@ -1,0 +1,390 @@
+/**
+ * A BoxLang client for the agent API: call a running agent from your own code, with the same routes the web page and
+ * the terminal use.
+ *
+ * ```
+ * client = new bxModules.bxagents.models.api.AgentApiClient( url = "http://127.0.0.1:8080", token = getSystemSetting( "AGENT_TOKEN", "" ) )
+ *
+ * answer = client.invoke( "Summarize today's tickets" )
+ * println( answer.output )
+ *
+ * client.stream( "Write a haiku", ( piece ) => print( piece ), conversationId = answer.threadId )
+ * ```
+ *
+ * Every method answers the parsed JSON of the route (a struct with `success`), or for the streams a struct of what the
+ * run produced. A bad request comes back as `{ success : false, error, code }`; a refused token, a missing route and a
+ * server that fails are thrown:
+ *
+ *   BxAgents.AgentApiUnauthorized   the server wants a token this client did not send, or a wrong one
+ *   BxAgents.AgentRouteMissing      the server has no such route (an older server, or tokens not managed over the API)
+ *   BxAgents.AgentStreamFailed      the server answered some other failure
+ *
+ * Which methods exist follows ApiContract: a spec fails when a route has no method here.
+ */
+import bxModules.bxagents.models.cli.support.AgentClient;
+
+class {
+
+	/**
+	 * @url The server root, for example "http://127.0.0.1:8080"
+	 * @token The shared secret or an access token; blank when the server is open
+	 * @path Where the server serves its API when it is not "/__bxagents" (agentApi.path)
+	 * @source What to call this program: kept with each conversation it starts, and shown in lists. A plain name.
+	 * @timeout Seconds to wait for an answer; a stream may run this long between the first and the last frame
+	 */
+	function init( required string url, string token = "", string path = "", string source = "api", numeric timeout = 120 ) {
+		variables.url = arguments.url.reReplace( "[\/]+$", "" )
+		variables.timeout = arguments.timeout
+		variables.http = new AgentClient().withSource( arguments.source )
+		if ( len( trim( arguments.token ) ) ) {
+			variables.http.withToken( arguments.token )
+		}
+		if ( len( trim( arguments.path ) ) ) {
+			variables.http.withPath( arguments.path )
+		}
+		return this
+	}
+
+	// ---- Turns -------------------------------------------------------------------
+
+	/**
+	 * One whole turn.
+	 *
+	 * @input What to say to the agent
+	 * @conversationId Carries on a conversation; blank starts a new one
+	 * @options Per request options, for example { profile : "quick" } (a profile the server offers)
+	 *
+	 * @return { success, output, threadId }
+	 */
+	struct function invoke( required string input, string conversationId = "", struct options = {} ) {
+		return post( "invoke", turn( arguments.input, arguments.conversationId, arguments.options ), variables.timeout )
+	}
+
+	/**
+	 * One turn as a stream of text.
+	 *
+	 * @input What to say
+	 * @onChunk Called with each piece of text as it arrives; optional
+	 * @conversationId Carries on a conversation; blank starts a new one
+	 * @options As invoke()
+	 *
+	 * @return { output, threadId, suspended, pending, error }
+	 */
+	struct function stream( required string input, any onChunk, string conversationId = "", struct options = {} ) {
+		var sink = arguments.onChunk ?: nullValue()
+		var onEvent = ( event ) => {
+			if ( !isNull( sink ) && ( event.type ?: "" ) == "delta" ) {
+				sink( event.text )
+			}
+		}
+		return variables.http.events( variables.url, "stream", turn( arguments.input, arguments.conversationId, arguments.options ), variables.timeout, onEvent )
+	}
+
+	/**
+	 * One turn as the full event stream: text, tool calls, a pause for approval, an error.
+	 *
+	 * @input What to say
+	 * @onEvent Called with each event: { type : "thread" | "delta" | "reasoning" | "tool" | "suspended" | "error", ... }; "delta" has the text
+	 * @conversationId Carries on a conversation; blank starts a new one
+	 * @options As invoke()
+	 *
+	 * @return { output, threadId, suspended, pending, error }; when `suspended` is true, answer with resume()
+	 */
+	struct function events( required string input, any onEvent, string conversationId = "", struct options = {} ) {
+		return variables.http.events(
+			variables.url,
+			"events",
+			turn( arguments.input, arguments.conversationId, arguments.options ),
+			variables.timeout,
+			arguments.onEvent ?: nullValue()
+		)
+	}
+
+	/**
+	 * Several inputs, one after another, in one conversation.
+	 *
+	 * @inputs An array of strings
+	 *
+	 * @return { success, outputs, threadId }
+	 */
+	struct function batch( required array inputs, string conversationId = "", struct options = {} ) {
+		var body = { "inputs" : arguments.inputs, "options" : arguments.options }
+		if ( len( arguments.conversationId ) ) {
+			body[ "conversationId" ] = arguments.conversationId
+		}
+		return post( "batch", body, variables.timeout )
+	}
+
+	/**
+	 * Carries on a run that paused for approval.
+	 *
+	 * @threadId The run's id, from the answer that was suspended
+	 * @decision approve, reject or edit
+	 * @onEvent As events(); optional
+	 * @editedData The changed arguments, for `edit`
+	 * @reason Why, for `reject`
+	 *
+	 * @return As events()
+	 */
+	struct function resume( required string threadId, required string decision, any onEvent, struct editedData = {}, string reason = "" ) {
+		var body = { "threadId" : arguments.threadId, "decision" : arguments.decision }
+		if ( !arguments.editedData.isEmpty() ) {
+			body[ "editedData" ] = arguments.editedData
+		}
+		if ( len( arguments.reason ) ) {
+			body[ "reason" ] = arguments.reason
+		}
+		return variables.http.events( variables.url, "resume", body, variables.timeout, arguments.onEvent ?: nullValue() )
+	}
+
+	/** Stops a run. Only the caller who started it may, or an admin. */
+	struct function cancel( required string threadId, string reason = "" ) {
+		return post( "cancel", { "threadId" : arguments.threadId, "reason" : arguments.reason } )
+	}
+
+	/** Adds a message to a run that is going. */
+	struct function steer( required string threadId, required string input ) {
+		return post( "steer", { "threadId" : arguments.threadId, "input" : arguments.input } )
+	}
+
+	/** What a paused run waits to have approved. */
+	struct function pending( required string threadId ) {
+		return get( "pending", { threadId : arguments.threadId } )
+	}
+
+	// ---- About the agent -----------------------------------------------------------
+
+	/** What is served: name, model and routes. */
+	struct function info() {
+		return get( "info" )
+	}
+
+	/** The agent in full, with what this server can do (`capabilities`). */
+	struct function about() {
+		return get( "agent" )
+	}
+
+	/** The tools the agent has. */
+	struct function tools() {
+		return get( "tools" )
+	}
+
+	/** The models this server lets a caller ask for with options.profile. */
+	struct function profiles() {
+		return get( "profiles" )
+	}
+
+	/** Is the server up. Needs no token. */
+	struct function health() {
+		return get( "health" )
+	}
+
+	/** Who the server takes this client to be: { id, scope, source }. */
+	struct function whoami() {
+		return get( "whoami" )
+	}
+
+	/** Asks a model for one word, to see that it answers. */
+	struct function ping( string profile = "" ) {
+		return post( "ping", len( arguments.profile ) ? { "profile" : arguments.profile } : {} )
+	}
+
+	/** What the next turn would send, by part, against the model's window. */
+	struct function context( string conversationId = "" ) {
+		return get( "context", withConversation( arguments.conversationId ) )
+	}
+
+	/** The status items that extensions show. */
+	struct function status( string conversationId = "" ) {
+		return get( "status", withConversation( arguments.conversationId ) )
+	}
+
+	/** What extensions put in the page's slots. */
+	struct function slots( string conversationId = "" ) {
+		return get( "slots", withConversation( arguments.conversationId ) )
+	}
+
+	/** This API as an OpenAPI 3 document. */
+	struct function openapi() {
+		return get( "openapi" )
+	}
+
+	// ---- Commands -------------------------------------------------------------------
+
+	/** The slash commands this caller may run. */
+	struct function commands() {
+		return get( "commands" )
+	}
+
+	/**
+	 * Runs a slash command.
+	 *
+	 * @line The whole line, for example "/context"
+	 */
+	struct function command( required string line, string conversationId = "" ) {
+		var body = { "line" : arguments.line }
+		if ( len( arguments.conversationId ) ) {
+			body[ "conversationId" ] = arguments.conversationId
+		}
+		return post( "command", body )
+	}
+
+	// ---- Conversations ----------------------------------------------------------------
+
+	/**
+	 * The caller's conversations, newest first.
+	 *
+	 * @source Only the ones started from this surface
+	 * @all An admin only: everyone's, with whose each is
+	 */
+	struct function sessions( numeric limit = 20, string source = "", boolean all = false ) {
+		var query = { limit : arguments.limit }
+		if ( len( arguments.source ) ) {
+			query[ "source" ] = arguments.source
+		}
+		if ( arguments.all ) {
+			query[ "all" ] = 1
+		}
+		return get( "sessions", query )
+	}
+
+	/** Starts a conversation. */
+	struct function createSession( string title = "" ) {
+		return post( "sessions", len( arguments.title ) ? { "title" : arguments.title } : {} )
+	}
+
+	/** Names a conversation. */
+	struct function renameSession( required string conversationId, required string title ) {
+		return post( "sessions/rename", { "conversationId" : arguments.conversationId, "title" : arguments.title } )
+	}
+
+	/** Copies a conversation under a new name. */
+	struct function forkSession( required string conversationId, string title = "" ) {
+		return post( "sessions/fork", { "conversationId" : arguments.conversationId, "title" : arguments.title } )
+	}
+
+	/** Deletes a conversation and its messages. */
+	struct function deleteSession( required string conversationId ) {
+		return post( "sessions/delete", { "conversationId" : arguments.conversationId } )
+	}
+
+	/** The messages of a conversation, as [ { role, text } ]. */
+	struct function history( required string conversationId ) {
+		return get( "history", withConversation( arguments.conversationId ) )
+	}
+
+	/**
+	 * A conversation as a file.
+	 *
+	 * @format md or html
+	 *
+	 * @return The file's text
+	 */
+	string function export( required string conversationId, string format = "md" ) {
+		return variables.http.getText( variables.url, "export", { conversationId : arguments.conversationId, format : arguments.format } )
+	}
+
+	/** Deletes the messages of a conversation and keeps the conversation. */
+	struct function clear( string conversationId = "" ) {
+		return post( "clear", len( arguments.conversationId ) ? { "conversationId" : arguments.conversationId } : {} )
+	}
+
+	/** Summarizes older messages and keeps the recent ones. */
+	struct function compact( string conversationId = "", numeric keepRecent = 0 ) {
+		var body = {}
+		if ( len( arguments.conversationId ) ) {
+			body[ "conversationId" ] = arguments.conversationId
+		}
+		if ( arguments.keepRecent > 0 ) {
+			body[ "keepRecent" ] = arguments.keepRecent
+		}
+		return post( "compact", body )
+	}
+
+	// ---- Notes and preferences -----------------------------------------------------------
+
+	/** The notes about the caller and about the agent's own work. */
+	struct function notes() {
+		return get( "notes" )
+	}
+
+	/**
+	 * @scope user (about the caller) or agent (about the agent's work, shared by everyone)
+	 */
+	struct function addNote( required string scope, required string text ) {
+		return post( "notes", { "scope" : arguments.scope, "text" : arguments.text } )
+	}
+
+	struct function updateNote( required string scope, required string id, required string text ) {
+		return post( "notes/update", { "scope" : arguments.scope, "id" : arguments.id, "text" : arguments.text } )
+	}
+
+	/** A note of the agent takes an admin. */
+	struct function removeNote( required string scope, required string id ) {
+		return post( "notes/remove", { "scope" : arguments.scope, "id" : arguments.id } )
+	}
+
+	/** The caller's settings. */
+	struct function preferences() {
+		return get( "preferences" )
+	}
+
+	struct function setPreference( required string key, required string value ) {
+		return post( "preferences/set", { "key" : arguments.key, "value" : arguments.value } )
+	}
+
+	struct function deletePreference( required string key ) {
+		return post( "preferences/delete", { "key" : arguments.key } )
+	}
+
+	// ---- Access tokens (an admin, on a server with agentApi.manageTokens) -------------------
+
+	/** The access tokens, never a secret. */
+	struct function tokens() {
+		return get( "tokens" )
+	}
+
+	/**
+	 * Makes an access token. The secret is in this answer and nowhere else.
+	 *
+	 * @scope chat or admin
+	 * @expires How long it lasts ("90d"), or blank for never
+	 *
+	 * @return { success, token, name, scope, expiresAt }
+	 */
+	struct function createToken( required string name, string scope = "chat", string expires = "" ) {
+		return post( "tokens", { "name" : arguments.name, "scope" : arguments.scope, "expires" : arguments.expires } )
+	}
+
+	/** Stops a token working. */
+	struct function revokeToken( required string name ) {
+		return post( "tokens/revoke", { "name" : arguments.name } )
+	}
+
+	// ---- inside ------------------------------------------------------------------------------
+
+	private struct function get( required string route, struct query = {} ) {
+		return variables.http.getJson( variables.url, arguments.route, arguments.query, 30 )
+	}
+
+	private struct function post( required string route, required struct body, numeric timeout = 30 ) {
+		return variables.http.postJson( variables.url, arguments.route, arguments.body, arguments.timeout )
+	}
+
+	/** The body every turn route takes: only what was given is sent */
+	private struct function turn( required string input, string conversationId, struct options ) {
+		var body = { "input" : arguments.input }
+		if ( len( arguments.conversationId ?: "" ) ) {
+			body[ "conversationId" ] = arguments.conversationId
+		}
+		if ( !( arguments.options ?: {} ).isEmpty() ) {
+			body[ "options" ] = arguments.options
+		}
+		return body
+	}
+
+	private struct function withConversation( required string conversationId ) {
+		return len( arguments.conversationId ) ? { conversationId : arguments.conversationId } : {}
+	}
+
+}

@@ -1,0 +1,133 @@
+import bxModules.bxagents.models.api.ApiContract;
+
+/**
+ * AgentApiClient against a small server in this process: what it sends (path, token, source, bodies) and what it
+ * hands back, and that no route of the contract is left without a method.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "api.AgentApiClient", function() {
+
+			beforeEach( function() {
+				variables.seen = { paths : [], methods : [], tokens : [], sources : [], bodies : [] };
+				variables.reply = { status : 200, frames : [], body : "{""success"":true}", type : "application/json" };
+				variables.httpServer = createObject( "java", "com.sun.net.httpserver.HttpServer" ).create(
+					createObject( "java", "java.net.InetSocketAddress" ).init( "127.0.0.1", 0 ), 0
+				);
+				httpServer.createContext( "/", ( exchange ) => {
+					seen.paths.append( exchange.getRequestURI().toString() );
+					seen.methods.append( exchange.getRequestMethod() );
+					seen.tokens.append( exchange.getRequestHeaders().getFirst( "x-bxagents-token" ) ?: "" );
+					seen.sources.append( exchange.getRequestHeaders().getFirst( "x-bxagents-source" ) ?: "" );
+					seen.bodies.append( toString( exchange.getRequestBody().readAllBytes(), "UTF-8" ) );
+					var out = exchange.getResponseBody();
+					if ( reply.frames.len() ) {
+						exchange.getResponseHeaders().add( "Content-Type", "text/event-stream" );
+						exchange.sendResponseHeaders( reply.status, 0 );
+						for ( var frame in reply.frames ) {
+							out.write( ( frame & char( 10 ) & char( 10 ) ).getBytes( "UTF-8" ) );
+							out.flush();
+						}
+					} else {
+						var bytes = reply.body.getBytes( "UTF-8" );
+						exchange.getResponseHeaders().add( "Content-Type", reply.type );
+						exchange.sendResponseHeaders( reply.status, bytes.len() );
+						out.write( bytes );
+					}
+					out.close();
+				} );
+				httpServer.start();
+				variables.base = "http://127.0.0.1:" & httpServer.getAddress().getPort();
+				variables.client = new bxagents.models.api.AgentApiClient( url = base & "/", token = "secret", path = "/agent-api", source = "script" );
+			} );
+
+			afterEach( function() {
+				httpServer.stop( 0 );
+			} );
+
+			private function frame( eventName, data ) {
+				return "event: " & eventName & char( 10 ) & "data: " & ( isSimpleValue( data ) ? data : jsonSerialize( data ) );
+			}
+
+			it( "has a method for every route of the contract, so a new route cannot go without one", function() {
+				var source = fileRead( expandPath( "/bxagents/models/api/AgentApiClient.bx" ) );
+				for ( var action in ApiContract::actions( { manageTokens : true } ) ) {
+					expect( source ).toMatch( "function #action#\(", "no client method for the route #action#" );
+				}
+			} );
+
+			it( "sends the token, the source and the body to the path it was given, and returns the parsed answer", function() {
+				reply.body = '{"success":true,"output":"hello","threadId":"t-1"}';
+
+				var answer = client.invoke( "hi", "c-1", { profile : "quick" } );
+
+				expect( answer.output ).toBe( "hello" );
+				expect( seen.paths[ 1 ] ).toBe( "/agent-api/invoke" );
+				expect( seen.methods[ 1 ] ).toBe( "POST" );
+				expect( seen.tokens[ 1 ] ).toBe( "secret" );
+				expect( seen.sources[ 1 ] ).toBe( "script" );
+				expect( jsonDeserialize( seen.bodies[ 1 ] ) ).toBe( { input : "hi", conversationId : "c-1", options : { profile : "quick" } } );
+			} );
+
+			it( "sends only what it was given: no conversation, no options", function() {
+				client.invoke( "hi" );
+
+				expect( jsonDeserialize( seen.bodies[ 1 ] ) ).toBe( { input : "hi" } );
+			} );
+
+			it( "passes the text of a stream to the callback as it arrives and returns the whole", function() {
+				reply.frames = [
+					frame( "thread", { threadId : "t-9" } ),
+					frame( "chunk", { choices : [ { delta : { content : "Hel" } } ] } ),
+					frame( "chunk", { choices : [ { delta : { content : "lo" } } ] } ),
+					frame( "done", "[DONE]" )
+				];
+				var pieces = [];
+
+				var result = client.stream( "hi", ( text ) => pieces.append( text ) );
+
+				expect( pieces ).toBe( [ "Hel", "lo" ] );
+				expect( result.output ).toBe( "Hello" );
+				expect( result.threadId ).toBe( "t-9" );
+				expect( seen.paths[ 1 ] ).toBe( "/agent-api/stream" );
+			} );
+
+			it( "asks for conversations with the filters it was given, and for everyone's only when it says all", function() {
+				client.sessions( 5, "web", true );
+
+				expect( seen.paths[ 1 ] ).toInclude( "/agent-api/sessions?" );
+				expect( seen.paths[ 1 ] ).toInclude( "limit=5" );
+				expect( seen.paths[ 1 ] ).toInclude( "source=web" );
+				expect( seen.paths[ 1 ] ).toInclude( "all=1" );
+			} );
+
+			it( "reads an export as text", function() {
+				reply.body = "## chat";
+				reply.type = "text/markdown";
+
+				expect( client.export( "c-1" ) ).toBe( "## chat" );
+				expect( seen.paths[ 1 ] ).toInclude( "/agent-api/export?" );
+			} );
+
+			it( "hands back a request the server found wrong, and throws a refused token", function() {
+				reply.status = 400;
+				reply.body = '{"success":false,"error":"no title","code":"bad_request"}';
+				expect( client.renameSession( "c-1", "" ).code ).toBe( "bad_request" );
+
+				reply.status = 401;
+				expect( () => client.whoami() ).toThrow( "BxAgents.AgentApiUnauthorized" );
+			} );
+
+			it( "makes and revokes tokens through the token routes", function() {
+				client.createToken( "ci", "chat", "30d" );
+				client.revokeToken( "ci" );
+
+				expect( seen.paths ).toBe( [ "/agent-api/tokens", "/agent-api/tokens/revoke" ] );
+				expect( jsonDeserialize( seen.bodies[ 1 ] ) ).toBe( { name : "ci", scope : "chat", expires : "30d" } );
+			} );
+
+		} );
+	}
+
+}
