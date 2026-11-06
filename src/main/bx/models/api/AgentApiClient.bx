@@ -324,6 +324,36 @@ class {
 		return post( "notes/remove", { "scope" : arguments.scope, "id" : arguments.id } )
 	}
 
+	// ---- Vault ---------------------------------------------------------------------------
+
+	/** The secrets the caller can use, by name: never a value. */
+	struct function vault() {
+		return get( "vault" )
+	}
+
+	/**
+	 * Stores a secret. The value goes in once and is never returned.
+	 *
+	 * @scope user (the caller's own) or agent (shared; an admin)
+	 * @fields { description, hosts }
+	 */
+	struct function addSecret( required string scope, required string name, required string value, struct fields = {} ) {
+		var body = { "scope" : arguments.scope, "name" : arguments.name, "value" : arguments.value }
+		body.append( arguments.fields )
+		return post( "vault", body )
+	}
+
+	/** @changes { value, description, hosts }, any of them */
+	struct function updateVault( required string scope, required string name, required struct changes ) {
+		var body = { "scope" : arguments.scope, "name" : arguments.name }
+		body.append( arguments.changes )
+		return post( "vault/update", body )
+	}
+
+	struct function removeVault( required string scope, required string name ) {
+		return post( "vault/remove", { "scope" : arguments.scope, "name" : arguments.name } )
+	}
+
 	/** The caller's settings. */
 	struct function preferences() {
 		return get( "preferences" )

@@ -46,6 +46,32 @@ class {
 	}
 
 	/**
+	 * The vault of a store already in hand (what the Agent API has), with the key beside the store's file.
+	 *
+	 * @store A ChatStore
+	 *
+	 * @return A VaultService
+	 */
+	any function serviceFor( required any store ) {
+		var source = arguments.store.datasource()
+		if ( isStruct( source ) && len( source.database ?: "" ) ) {
+			return service( source.database )
+		}
+		return service()
+	}
+
+	/**
+	 * @return True when this app has a chat database for a vault to live in
+	 */
+	boolean function available() {
+		try {
+			return len( variables.pinned ?: "" ) > 0 || len( appDatabaseFile() ) > 0
+		} catch ( any e ) {
+			return false
+		}
+	}
+
+	/**
 	 * Adds the vault tools to an agent, from the `vault` block of Agent.yaml:
 	 *
 	 *   vault:

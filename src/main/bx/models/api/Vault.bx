@@ -1,0 +1,111 @@
+/**
+ * The secrets of the agent, for a client to manage: the caller's own and the agent's shared ones. A person adds,
+ * changes and removes their own; the agent's need an admin. An answer carries names, descriptions and hosts, and
+ * never a value: a value goes in, once, and cannot be read back.
+ */
+import bxModules.bxagents.models.api.Outcome;
+
+class {
+
+	/**
+	 * @service The VaultService
+	 * @caller The Caller
+	 */
+	function init( required any service, required any caller ) {
+		variables.vault = arguments.service
+		variables.caller = arguments.caller
+		return this
+	}
+
+	/**
+	 * @return An Outcome: { admin, user : the caller's id, status : { keySource, secrets }, secrets : [ { name, scope, owner, description, hosts, ... } ] }
+	 */
+	any function all() {
+		var status = variables.vault.status()
+		return Outcome::done( {
+			"admin"   : variables.caller.isAdmin(),
+			"user"    : variables.caller.id(),
+			"status"  : { "keySource" : status.keySource, "secrets" : status.secrets, "wrongKey" : status.wrongKey },
+			"secrets" : variables.vault.list( variables.caller.id() )
+		} )
+	}
+
+	/**
+	 * @scope `user` (the caller's own) or `agent` (shared, an admin)
+	 * @name The secret's name
+	 * @value The secret. Sent once, never returned
+	 * @fields { description, hosts }
+	 *
+	 * @return An Outcome: the new secret's metadata, bad_request, forbidden or conflict (it exists)
+	 */
+	any function add( required string scope, required string name, required string value, struct fields = {} ) {
+		return guarded( arguments.scope, "add", ( target ) => {
+			var meta = variables.vault.add( name, value, optionsOf( target, fields ) )
+			return Outcome::done( meta )
+		} )
+	}
+
+	/**
+	 * Changes what is given. A value, when given, replaces the old one.
+	 *
+	 * @changes { value, description, hosts }
+	 *
+	 * @return An Outcome: the secret's metadata, bad_request, forbidden or not_found
+	 */
+	any function update( required string scope, required string name, required struct changes ) {
+		return guarded( arguments.scope, "edit", ( target ) => {
+			return Outcome::done( variables.vault.update( name, changes, optionsOf( target, {} ) ) )
+		} )
+	}
+
+	/**
+	 * @return An Outcome: done, bad_request, forbidden or not_found
+	 */
+	any function remove( required string scope, required string name ) {
+		return guarded( arguments.scope, "remove", ( target ) => {
+			return variables.vault.remove( name, optionsOf( target, {} ) )
+				? Outcome::done( { "ok" : true } )
+				: Outcome::failed( "not_found", "There is no #target.scope# secret named [#name#]" )
+		} )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Checks the scope and who may touch it, runs the change, and turns the vault's errors into answers.
+	 */
+	private any function guarded( required string scope, required string action, required any change ) {
+		var named = listFindNoCase( "user,agent", arguments.scope ) ? lCase( arguments.scope ) : ""
+		if ( !len( named ) ) {
+			return Outcome::failed( "bad_request", "scope must be user or agent" )
+		}
+		if ( named == "agent" && !variables.caller.isAdmin() ) {
+			return Outcome::failed( "forbidden", "The agent's secrets need an admin" )
+		}
+		var target = { scope : named, owner : named == "user" ? variables.caller.id() : "" }
+		try {
+			return arguments.change( target )
+		} catch ( "BxAgents.VaultSecretExists" e ) {
+			return Outcome::failed( "conflict", e.message )
+		} catch ( "BxAgents.VaultSecretMissing" e ) {
+			return Outcome::failed( "not_found", e.message )
+		} catch ( any e ) {
+			if ( e.type.startsWith( "BxAgents.Vault" ) || e.type.startsWith( "BxAgents.InvalidVault" ) ) {
+				return Outcome::failed( "bad_request", e.message )
+			}
+			rethrow
+		}
+	}
+
+	private struct function optionsOf( required struct target, required struct fields ) {
+		var options = { scope : arguments.target.scope, owner : arguments.target.owner, actor : variables.caller.id(), via : variables.caller.source() }
+		if ( arguments.fields.keyExists( "description" ) ) {
+			options[ "description" ] = arguments.fields.description
+		}
+		if ( arguments.fields.keyExists( "hosts" ) ) {
+			options[ "hosts" ] = arguments.fields.hosts
+		}
+		return options
+	}
+
+}
