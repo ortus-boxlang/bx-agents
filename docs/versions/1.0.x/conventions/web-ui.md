@@ -54,12 +54,13 @@ Because the whole envelope arrives, **reasoning and tool calls are already on th
 
 ## Walkthrough
 
-<video controls preload="metadata" poster="/assets/video/webui-walkthrough-poster.png" style="max-width:100%">
-  <source src="/assets/video/webui-walkthrough.mp4" type="video/mp4">
-  <track kind="captions" src="/assets/video/webui-walkthrough.vtt" srclang="en" label="English" default>
+<video controls preload="metadata" poster="/assets/video/web-tour-poster.png" style="max-width:100%">
+  <source src="/assets/video/web-tour.mp4" type="video/mp4">
+  <source src="/assets/video/web-tour.webm" type="video/webm">
+  <track kind="captions" src="/assets/video/web-tour.vtt" srclang="en" label="English" default>
 </video>
 
-A minute and a half through the whole page: sign in, streaming, the model picker, a tool call, the context ring and its breakdown, the `/` command menu, saved conversations, notes and the dark theme. The music and the mix were made with [bx-audio](https://github.com/ortus-boxlang/bx-audio) and the voice with [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) (an Apache 2.0 model), and the page is the demo app in [`tools/demo/webui`](https://github.com/ortus-boxlang/bx-agents/tree/development/tools/demo/webui), which `capture.js` there drives with Playwright. It talks to a scripted model, so every answer is the same each time.
+A minute and a half through the whole page: the password form, suggestions, a formatted answer, a tool call, a code block with its Copy button, the Settings menu, dark mode, notes and the access tokens panel. The voice is [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) (an Apache 2.0 model), and the page's answers come from a scripted demo model, so they are canned. Captions are on.
 
 | | |
 |---|---|
@@ -68,6 +69,9 @@ A minute and a half through the whole page: sign in, streaming, the model picker
 | ![A tool call shown as an open block above the reply](../assets/webui/tool-call.png) **Tools.** Each call shows its name and arguments. | ![The conversation sidebar listing two saved chats](../assets/webui/conversations.png) **Conversations.** Saved per account, and still there after a reload. |
 | ![The Notes panel with one note under About you](../assets/webui/notes.png) **Notes.** What the agent should remember, with the size it adds. | ![The page in the dark theme with the accent from the gateway entry](../assets/webui/dark-theme.png) **Theme.** Light or dark, remembered, with your `theme` accent. |
 | ![The context panel listing what fills the model's window](../assets/webui/context-panel.png) **Context.** The ring fills as the conversation grows; click it for the breakdown. | ![The command menu opened by typing a slash](../assets/webui/commands-menu.png) **Commands.** Type `/` for the menu. |
+| ![The empty conversation with the welcome message and three suggestion buttons](../assets/webui/empty-suggestions.png) **Suggestions.** An empty conversation can offer [`suggestions`](#branding-and-theming) that send with one click. | ![A code block with its language and a Copy button](../assets/webui/code-block.png) **Code.** Each block shows its language and copies the code itself. |
+| ![The Settings menu open, with Conversation, You and Server groups](../assets/webui/settings-menu.png) **Settings.** One gear holds the conversation actions, your notes, appearance and the server items. | ![The Appearance panel with mode, accent colors, text size and density](../assets/webui/appearance.png) **Appearance.** Mode, accent, text size and density, kept in this browser. |
+| ![The Access tokens panel with a new token shown once](../assets/webui/tokens-panel.png) **Access tokens.** An admin makes and revokes named tokens; the secret is shown once. | |
 
 ## What a streaming turn actually looks like
 
@@ -101,8 +105,8 @@ Each call carries three headers:
 
 | Header | Why |
 | --- | --- |
-| `x-bxagents-source: web` | Marks conversations the page starts, so `bxAgents sessions list --source=web` and the API's `?source=` filter can tell them from terminal and gateway ones |
-| `x-bxagents-token` | The password from the key button's form, when one is set (see [Securing the API](#securing-the-api)) |
+| `x-bxagents-source: web` | Marks conversations the page starts, so the API's `?source=` filter (`GET /__bxagents/sessions?source=web`) can tell them from terminal and gateway ones |
+| `x-bxagents-token` | The password typed in the **Password** form (opened from **Password** in the Settings menu, or by itself when the server answers `401`), when one is set (see [Securing the API](#securing-the-api)) |
 | `x-bxagents-csrf: 1` | Sent on every request. A request made with the sign-in cookie that changes something must carry it, so another site cannot make your browser do it |
 
 Identity is the API's: with no `users` the page is the one open `local` user, shared with the terminal chat on the same machine, and with `users` it is the signed-in account.
@@ -336,13 +340,24 @@ These are what the SQLite store exists for, and both are scoped by the same serv
 
 ## Branding and theming
 
-Every key below is optional - the entry works with just `exposes` and `path`.
+The entry needs only `exposes` and `path`. All the other keys are optional. These are not about looks and are described elsewhere on this page:
+
+| Key | What it does |
+| --- | --- |
+| `exposes` | `"webui"`. |
+| `path` | Where the page is served, for example `/chat`. Rooted, plain segments, unique among the `gateways/` entries, and not under the agent API's path. |
+| `apiKeyEnvVar` | The name of the variable holding the API's shared secret, see [Securing the API](#securing-the-api). |
+| `users` | Named accounts, see [Users and sign-in](#users-and-sign-in). |
+| `profiles` | The profiles people may pick, see [Choosing the model](#choosing-the-model). |
+| `database` | `{ datasource, path }`, see [The SQLite store](#the-sqlite-store). |
+
+These keys brand the page:
 
 | Key | What it does |
 | --- | --- |
 | `title` | Browser title and header heading |
 | `subtitle` | Small line under the heading |
-| `icon` | An emoji (rendered into an inline-SVG favicon **and** the header) or an image URL/path (`/logo.svg`, `https://…`, `data:image/…`). With none, the header shows a robot Or `phosphor:<name>` for an icon from the page's own set (`phosphor:lightning`, `phosphor:robot`, `phosphor:chat-circle-text`, ...), used for the header and the tab; a name the set does not have is shown as plain text. |
+| `icon` | An emoji (rendered into an inline-SVG favicon **and** the header) or an image URL/path (`/logo.svg`, `https://…`, `data:image/…`). With none, the header shows a robot. Or `phosphor:<name>` for an icon from the page's own set (`phosphor:lightning`, `phosphor:robot`, `phosphor:chat-circle-text`, ...), used for the header and the tab; a name the set does not have is shown as plain text. |
 | `welcome` | Empty-state message shown before the first turn |
 | `suggestions` | Up to four short texts shown as buttons under the welcome message on an empty conversation. One click sends it. |
 | `placeholder` | Composer input placeholder |

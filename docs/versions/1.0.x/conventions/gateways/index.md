@@ -20,7 +20,7 @@ flowchart TD
     Q -->|"no - it has a 'type' key instead"| C["CHANNEL ADAPTER<br/>a connection to a chat platform"]
     E --> E1["exposes: agent<br/>four routes of the agent API"]
     E --> E2["exposes: mcp<br/>route().toMCP()"]
-    E --> E3["exposes: webui<br/>generated index.html + /api"]
+    E --> E3["exposes: webui<br/>generated index.html"]
     C --> C1["mock / cli / http<br/>pull-driven: something calls US"]
     C --> C2["telegram, slack, discord, email, whatsapp-cloud,<br/>teams, twilio, github, signal<br/>push-style: holds its own connection"]
     C2 --> S["one GatewaySession<br/>bound to the root agent"]
@@ -72,7 +72,7 @@ class {
 
 Generates `route( "/mcp/tools" ).toMCP( "local-server" )`.
 
-**Expose the v1 web chat UI:**
+**Expose the web chat UI:**
 
 ```javascript
 // gateways/chat.bx
@@ -301,16 +301,28 @@ Links must be https. A file that cannot be downloaded is named back to the perso
 
 #### Whose conversation it is
 
-Each person's chats are their own. The agent is told who is writing (the platform and their id there, `slack:U123`) and which conversation it is, so the agent's memory, `/notes` and `/remember`, and the conversation list are kept apart per person. The conversation is the chat, plus its thread when the platform has them (a Telegram forum topic, a Slack thread), so each topic keeps its own memory. Two people in the same channel do not share a memory, and neither do two chats on two platforms. The conversations are stored in the same SQLite database as the web page's and the terminal's (a project with chat gateways gets `data/chat.db`, like one with a web page), marked with the platform they started on (`source`). They belong to the person's own id, so they do not appear in the list of the open `local` user.
+Each person's chats are their own. The agent is told who is writing (the platform and their id there, `slack:U123`) and which conversation it is, so the agent's memory, `/notes` and `/remember`, and the conversation list are kept apart per person. The conversation id is the gateway's name, the chat and, when the platform gives one, a thread: `slack:C0123:1700000000.0001`. Two people in the same channel do not share a memory, and neither do two chats on two platforms. The conversations are stored in the same SQLite database as the web page's and the terminal's (a project with chat gateways gets `data/chat.db`, like one with a web page), marked with the platform they started on (`source`). They belong to the person's own id, so they do not appear in the list of the open `local` user.
+
+| Platform | The person | The chat | The thread part |
+|---|---|---|---|
+| Telegram | The user id | The chat id | None: one conversation per chat |
+| Slack | The user id | The channel | The thread's timestamp, or the message's own timestamp when it is not in a thread, so a message outside a thread starts a conversation of its own |
+| Discord | The author's id | The channel | The id of the message being replied to, none for a plain message |
+| WhatsApp | The sender's number | The sender | The id of the message quoted, if any |
+| Twilio (SMS) | The sender's number | The sender | None |
+| Signal | The sender | The sender | The id of the message quoted, if any |
+| Teams | The sender's id | Teams' own conversation id | The `replyToId` of the activity |
+| GitHub | The commenter's login | `repo:owner/repo:issue:N` (or the review comment form) | None |
+| Email | The sender's address | The sender's address | The mail thread |
 
 #### Conversation commands
 
 `/new`, `/clear`, `/compact`, `/sessions` and `/resume` are off by default, because most chats are one long conversation and a stray `/clear` is easy to type. They only ever act on the sender's own conversation. Turn them on with `conversation: true` (or list them in `allow`).
 
-- `/new` moves the chat to a fresh conversation; the old one stays on the list.
+- `/new` moves the chat to a fresh conversation; the old one stays on the list. Where a chat was moved to is kept in memory only, so after the app restarts the chat is back in its own conversation until it moves again.
 - `/sessions` lists the conversations the person has had in this app, newest first, and `/resume 2` (or an id) moves the chat back to one. The list is in the shared chat database, so it lasts across restarts; the messages last as long as the agent's memory does.
 - `/clear` and `/compact` act on the conversation the chat is in now.
-- In a Slack thread, each thread has its own conversation, and `/new` moves only that thread.
+- In Slack each thread has its own conversation, and `/new` moves only that thread.
 
 What each policy actually does with a message that arrives while a turn is still running:
 

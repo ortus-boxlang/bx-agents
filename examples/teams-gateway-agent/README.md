@@ -2,6 +2,8 @@
 
 An agent reachable over Microsoft Teams via a push-style `gateways/` entry (`type: "teams"`) - webhook-driven like `whatsapp-cloud-gateway-agent`, using the Bot Framework Activity protocol. Generates a single `POST /webhooks/teams` route.
 
+Each person has a conversation of their own: memory, `/notes` and the conversation list are kept apart per person. See [Whose conversation it is](../../docs/conventions/gateways/index.md#whose-conversation-it-is).
+
 ## 1. Register a bot with the Bot Framework
 
 At the [Azure Portal](https://portal.azure.com), create an **Azure Bot** resource (or a plain Entra ID app registration + manual Bot Framework registration):

@@ -1,13 +1,13 @@
 # http-gateway-agent
 
-An agent exposed over HTTP via a `gateways/` exposure entry, generating a real `route("/api/chat").toAi("GeneratedAgent")` in `config/Router.bx`.
+An agent exposed over HTTP via a `gateways/` exposure entry, generating the agent API's four turn routes under `/api/chat` in `config/Router.bx`, served by the generated `handlers/AgentApi.bx` (the same handler as the always-on `/__bxagents` route, behind the same access switch).
 
 ```bash
 bxAgents build
 bxAgents serve --port=8080
 ```
 
-`toAi()` auto-registers four routes:
+The four routes are `invoke`, `stream`, `batch` and `info`:
 
 ```bash
 curl -X POST http://localhost:8080/api/chat/invoke \
@@ -19,8 +19,12 @@ curl -X POST http://localhost:8080/api/chat/invoke \
 curl http://localhost:8080/api/chat/info
 ```
 
-{% hint style="warning" %}
-The very first request to a freshly booted app's `toAi()` route can transiently fail. Send a warm-up request first.
-{% endhint %}
+```bash
+curl -X POST http://localhost:8080/api/chat/stream \
+  -H "Content-Type: application/json" \
+  -d '{"input":"What is the weather in Paris?"}'
+```
+
+`stream` answers server-sent events (`thread`, `chunk`, `done`). The route set is documented in [Call your agent from code](../../docs/guides/agent-api.md).
 
 See [gateways/](../../docs/conventions/gateways/index.md).

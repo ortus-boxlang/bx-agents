@@ -80,6 +80,7 @@ class {
 }
 ```
 
+O deja que `bxAgents add tool GetTime --function=currentTime` cree el archivo con una función `@AITool` tipada.
 Reconstruye y chatea con él:
 
 ```bash

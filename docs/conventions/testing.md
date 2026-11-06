@@ -59,6 +59,8 @@ environments:
 
 A class-based `Agent.bx` expresses the same override as a `test()` method returning `{ model : "mock/mock-model" }`.
 
+In the `test` environment every [profile](models.md#profiles) is pointed at the `mock` provider too, so a project with profiles needs no key either.
+
 This means your tests need **no API key and no network access** out of the box - the same `mock` provider convention used throughout BxAgents' own test suite. Edit this override if you want a spec to run against a real provider instead (you'll need a real API key available in the environment running the tests).
 
 ### `mockResponses( responses )`

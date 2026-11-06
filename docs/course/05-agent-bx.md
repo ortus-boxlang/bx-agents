@@ -44,10 +44,10 @@ That is a complete agent. `bxAgents new` scaffolds this shape for you (see
 | `subAgents` | Names of sibling folders under `subagents/` (see [Lesson 11](11-composing-subagents.md)). |
 | `mcpServers` | Remote MCP servers the agent can call (see [Lesson 17](17-hosting-mcp-servers.md)). |
 | `security`, `memory`, `checkpointer` | Guardrails, conversation memory and human-in-the-loop state. |
-| `gatewaySession` | How chat gateways queue sessions (see [Lesson 14](14-connecting-chat-platforms.md)). |
-| `agentApi` | The always-on agent route. |
+| `gatewaySession` | How chat gateways queue messages, which slash commands they answer and whether they read attachments (see [Lesson 14](14-connecting-chat-platforms.md)). |
+| `agentApi` | The always-on agent API: who may call it (tokens, allowed addresses, rate limit) and where it is served (see [Lesson 13](13-exposing-http-and-mcp.md)). |
 | `environments` | Per-environment overrides (see below). |
-| `provider`, `params`, `options`, `providers`, `profiles`, `notes`, `usage`, `tui`, `extensions`, and more | Further settings, all listed in the [Agent.yaml](../conventions/agent-yaml.md) reference. |
+| `provider`, `params`, `options`, `providers`, `profiles`, `notes` (short notes the agent keeps), `usage` (record token counts for `bxAgents stats`), `tui` (the look of the terminal chat), `extensions`, and more | Further settings, all listed in the [Agent.yaml](../conventions/agent-yaml.md) reference. |
 
 An **unknown key is an error** that lists the valid ones, so a typo such as `modle:`
 can never quietly do nothing. Wrong types and empty values are errors too.

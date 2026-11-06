@@ -16,8 +16,4 @@ curl -X POST http://localhost:8080/api/chat/invoke \
   -d '{"input":"Greet Ada"}'
 ```
 
-{% hint style="warning" %}
-The very first request to a freshly booted app's `toAi()` route can transiently fail. Send a warm-up request first.
-{% endhint %}
-
 See [tools/](../../docs/conventions/tools.md) and [gateways/](../../docs/conventions/gateways/index.md).

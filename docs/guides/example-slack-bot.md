@@ -66,6 +66,7 @@ At [api.slack.com/apps](https://api.slack.com/apps), create an app "from scratch
 1. **Socket Mode** - enable it, generate an app-level token with the `connections:write` scope (`xapp-...`) → this becomes `SLACK_APP_TOKEN`.
 2. **OAuth & Permissions** - add the `chat:write` bot scope, install the app to your workspace, copy the Bot User OAuth Token (`xoxb-...`) → this becomes `SLACK_BOT_TOKEN`.
 3. **Event Subscriptions** - enable it and subscribe to the `message.im` (and/or `message.channels`) bot event, so the app actually receives message events over the socket.
+4. Optional: **Slash Commands** for the chat commands, and the `files:read` scope to let the agent read files people share (see below).
 
 ## 2. Configure and run
 
@@ -81,6 +82,22 @@ DM the bot, or mention it in a channel it's in. Replies stream back token-by-tok
 
 !!! info
     There's no `curl`-able entrypoint for this one - message the app for real in Slack to see it work. This is true of every persistent-connection gateway (Telegram's long-poll, Slack/Discord's websockets); only the webhook-driven platforms (WhatsApp Cloud, Teams, Twilio, GitHub) generate a route you can hit locally with a hand-computed signature - each of those examples' own README shows how.
+
+## What people can do in the chat
+
+- **Everyone has their own conversation.** The agent is told who is writing (`slack:U123`) and which conversation it is: the channel, plus the thread when there is one. Two people in the same channel do not share a memory, and each Slack thread keeps its own. Conversations are stored in `data/chat.db`, marked with `source` Slack.
+- **Commands.** By default the bot answers `/help`, `/tools`, `/model`, `/info`, `/ping`, `/remember` and `/notes` itself, without calling the model. Slack keeps typed `/word` messages for its own commands, so a bot never receives them. Either create a slash command in the Slack app (an umbrella `/agent`, so `/agent model fast` runs `/model fast`, or one per command) and the answer is shown only to the person who typed it, or set another prefix in `Agent.yaml`:
+
+```yaml
+gatewaySession:
+  commands:
+    prefixes: { slack: "!" }     # then type !help
+    conversation: true           # also turns on /new, /clear, /compact, /sessions and /resume
+```
+
+- **Files.** A text file or a picture shared in a message goes to the agent with it. This needs the `files:read` scope on the Slack app.
+
+See [Commands in a gateway](../conventions/gateways/index.md#commands-in-a-gateway) for every option.
 
 ## What's proven, and what isn't
 
