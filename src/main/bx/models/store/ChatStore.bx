@@ -139,6 +139,14 @@ class {
 					"CREATE TABLE IF NOT EXISTS usage ( id INTEGER PRIMARY KEY AUTOINCREMENT, at DATETIME NOT NULL, userId VARCHAR(255), threadId VARCHAR(64), provider VARCHAR(64), model VARCHAR(255), operation VARCHAR(32), promptTokens INTEGER DEFAULT 0, completionTokens INTEGER DEFAULT 0, totalTokens INTEGER DEFAULT 0 )",
 					"CREATE INDEX IF NOT EXISTS idx_usage_at ON usage ( at )"
 				]
+			},
+			{
+				// where a conversation started: web, terminal, api or a gateway's platform. Rows from before this
+				// version stay blank: nobody recorded where they came from.
+				version    : 6,
+				statements : [
+					"ALTER TABLE conversations ADD COLUMN source VARCHAR(32) NOT NULL DEFAULT ''"
+				]
 			}
 		]
 	}

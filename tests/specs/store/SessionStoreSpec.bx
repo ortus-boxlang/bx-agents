@@ -25,6 +25,22 @@ class extends="testbox.system.BaseSpec" {
 				expect( row.messageCount ).toBe( 2 );
 			} );
 
+			it( "records where a conversation started, keeps it, and lists by it", function() {
+				sessions.touch( "alice", "w1", "from the page", 2, "web" );
+				sessions.touch( "alice", "t1", "from the terminal", 2, "terminal" );
+				sessions.touch( "alice", "w1", "later", 2, "api" );
+
+				expect( sessions.byId( "alice", "w1" ).source ).toBe( "web" );
+				expect( sessions.list( "alice", 20, "terminal" ).map( ( r ) => r.id ) ).toBe( [ "t1" ] );
+				expect( sessions.list( "alice", 20 ) ).toHaveLength( 2 );
+			} );
+
+			it( "leaves the source blank when nobody said where it started", function() {
+				sessions.touch( "alice", "c9", "hello" );
+
+				expect( sessions.byId( "alice", "c9" ).source ).toBe( "" );
+			} );
+
 			it( "counts later turns and keeps the first title", function() {
 				sessions.touch( "alice", "c1", "first" );
 				sessions.touch( "alice", "c1", "second" );

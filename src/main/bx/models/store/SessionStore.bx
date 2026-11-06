@@ -30,10 +30,11 @@ class {
 	 * @conversationId The conversation
 	 * @firstMessage What the user said; the first one becomes the title
 	 * @messageDelta Added to the message count (a turn is two: the question and the answer)
+	 * @source Where it started (`web`, `terminal`, `api`, a gateway's platform); kept from the first call, never changed after
 	 *
 	 * @return False when the id exists and belongs to someone else
 	 */
-	boolean function touch( required string userId, required string conversationId, string firstMessage = "", numeric messageDelta = 2 ) {
+	boolean function touch( required string userId, required string conversationId, string firstMessage = "", numeric messageDelta = 2, string source = "" ) {
 		var owner = variables.store.rows( "SELECT userId, title, messageCount FROM conversations WHERE id = :id", { id : arguments.conversationId } )
 		if ( owner.len() ) {
 			if ( owner[ 1 ].userId != arguments.userId ) {
@@ -52,12 +53,13 @@ class {
 			return true
 		}
 		variables.store.exec(
-			"INSERT INTO conversations ( id, userId, title, messageCount, createdAt, updatedAt ) VALUES ( :id, :userId, :title, :count, :now, :now )",
+			"INSERT INTO conversations ( id, userId, title, messageCount, source, createdAt, updatedAt ) VALUES ( :id, :userId, :title, :count, :source, :now, :now )",
 			{
 				id     : arguments.conversationId,
 				userId : arguments.userId,
 				title  : titleOf( arguments.firstMessage ),
 				count  : arguments.messageDelta,
+				source : arguments.source,
 				now    : { value : now(), cfsqltype : "timestamp" }
 			}
 		)
@@ -65,12 +67,20 @@ class {
 	}
 
 	/**
-	 * @return The user's conversations, most recent first: [ { id, title, messageCount, createdAt, updatedAt } ]
+	 * @source Only the conversations that started there (`web`, `terminal`, `api`, a gateway's platform); all when blank
+	 *
+	 * @return The user's conversations, most recent first: [ { id, title, messageCount, source, createdAt, updatedAt } ]
 	 */
-	array function list( required string userId, numeric limit = 20 ) {
+	array function list( required string userId, numeric limit = 20, string source = "" ) {
+		var params = { userId : arguments.userId }
+		var only = ""
+		if ( len( arguments.source ) ) {
+			only = " AND source = :source"
+			params[ "source" ] = arguments.source
+		}
 		return variables.store.rows(
-			"SELECT id, title, messageCount, createdAt, updatedAt FROM conversations WHERE userId = :userId ORDER BY updatedAt DESC, rowid DESC LIMIT #int( arguments.limit )#",
-			{ userId : arguments.userId }
+			"SELECT id, title, messageCount, source, createdAt, updatedAt FROM conversations WHERE userId = :userId#only# ORDER BY updatedAt DESC, rowid DESC LIMIT #int( arguments.limit )#",
+			params
 		)
 	}
 
@@ -79,7 +89,7 @@ class {
 	 */
 	struct function byId( required string userId, required string conversationId ) {
 		var found = variables.store.rows(
-			"SELECT id, title, messageCount, createdAt, updatedAt FROM conversations WHERE id = :id AND userId = :userId",
+			"SELECT id, title, messageCount, source, createdAt, updatedAt FROM conversations WHERE id = :id AND userId = :userId",
 			{ id : arguments.conversationId, userId : arguments.userId }
 		)
 		return found.len() ? found[ 1 ] : {}
