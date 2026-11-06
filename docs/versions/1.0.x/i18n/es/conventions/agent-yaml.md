@@ -35,7 +35,7 @@ environments:
 | `params` | mapping | Parámetros de petición por defecto, como `temperature`. |
 | `options` | mapping | Opciones del proveedor por defecto, como `timeout`. |
 | `providers` | mapping | `params` y `options` por proveedor, por nombre de proveedor. |
-| `profiles` | mapping | Combinaciones con nombre de proveedor, modelo, params, options y `apiKeyEnv`, y opcionalmente `contextWindow` y `vision`. |
+| `profiles` | mapping | Combinaciones con nombre. Cada perfil acepta `description`, `provider`, `model`, `params`, `options`, `apiKeyEnv` (el nombre de la variable que guarda la clave, nunca la clave) y opcionalmente `contextWindow` y `vision`. Ver [Modelos y perfiles](models.md#perfiles). |
 | `contextWindow`, `vision` | número, booleano | Lo que puede contener el modelo por defecto (tokens) y si puede ver imágenes. Datos opcionales para el chat; bx-ai no los lee. Ver [Modelos](models.md#lo-que-el-proyecto-sabe-de-un-modelo). |
 | `defaultProfile` | string | El perfil que se usa cuando nada pide otro. |
 | `profile` | string | El perfil que usa este agente. |
@@ -49,8 +49,8 @@ environments:
 | `security` | mapa | Se reenvía tal cual a los ajustes del módulo `bxai` de la app generada; el `SecurityDirector` de bx-ai lo convierte en middleware de guardarraíles. |
 | `memory` | string o mapa | La memoria de conversación del agente. Un string suelto es el tipo (`cache`); un mapa es `{ type, ...config }` y se pasa a `aiMemory()`. La memoria usa como clave el nombre del agente, así que una que se guarda en disco se encuentra de nuevo en el siguiente arranque; pon `key` en el mapa para darle tú el nombre. |
 | `checkpointer` | mapa | `{ type: cache\|file\|jdbc, ...config }`. Por defecto `{ type: cache }` si se omite. |
-| `gatewaySession` | mapa | `{ policy, maxQueueDepth, commands }`, todos opcionales. Ver [Agent.bx](agent-bx.md) para los valores; son idénticos. |
-| `agentApi` | mapa | `{ enabled, tokenEnvVar, tokens, profiles }`, todos opcionales. Ver [La ruta de agente siempre activa](agent-bx.md#la-ruta-de-agente-siempre-activa). |
+| `gatewaySession` | mapa | `{ policy, maxQueueDepth, attachments, commands }`, todos opcionales. `policy` es `queue` (por defecto), `reject`, `steer` o `interrupt`. `attachments: false` desactiva las imágenes y archivos enviados en apps de chat. `commands` es `{ enabled, prefix, prefixes, conversation, allow, admins }`. Ver [Gateways](gateways/index.md#comandos-en-un-gateway). |
+| `agentApi` | mapa | `{ enabled, access, tokenEnvVar, tokens, profiles, path, allowedIPs, rateLimit, manageTokens }`, todos opcionales. `enabled` es `true` por defecto, `access` es `open` (o `token` cuando se define `tokenEnvVar` o `tokens`), `tokens` y `manageTokens` son `false`, y `path` es `/__bxagents`. Ver [`agentApi`](agent-bx.md#agentapi) para cada clave. |
 | `notes` | mapa | Notas cortas que el agente guarda sobre el usuario y sobre su propio trabajo. `notes: {}` las activa con los valores por defecto. Ver [Notas](#notas). |
 | `usage` | booleano | Registra lo que usó cada llamada al modelo (la hora, quién, el proveedor, el modelo y los tokens), para [`bxAgents stats`](../cli-reference.md#stats) y `/stats`. **Desactivado por defecto**: pon `usage: true` para activarlo. Solo recuentos, nunca lo que se dijo. Solo en el `Agent.yaml` propio del proyecto. Recompila tras cambiarlo. |
 | `extensions` | mapa | Valores de las [extensiones](extensions.md) del proyecto, por nombre de extensión, y qué desactivar: `{ disable: [ roll, "deploy:deploy" ], deploy: { target: production } }`. El bloque de cada extensión se fusiona sobre los valores por defecto que define su `configure()`. Solo en el `Agent.yaml` del propio proyecto. |
@@ -59,7 +59,7 @@ environments:
 Son los mismos ajustes que devuelve el `configure()` de un `Agent.bx`, así que todo el comportamiento documentado para ellos aplica sin cambios.
 
 !!! warning
-    Una **clave desconocida es un error**, y el mensaje lista las válidas. Un error de tipeo como `modle:` de otro modo no haría nada, en silencio. Los ajustes que llegan en versiones posteriores (por ejemplo `mcp`) se rechazan igual hasta que existan, en lugar de ignorarse en silencio. Todo lo de forma libre pertenece a un `Agent.bx`.
+    Una **clave desconocida es un error**, y el mensaje lista las válidas. Un error de tipeo como `modle:` de otro modo no haría nada, en silencio. Todo lo de forma libre pertenece a un `Agent.bx`.
 
 Un valor del tipo equivocado (un texto donde va una lista, por ejemplo) y un valor vacío (`model:` sin nada detrás) también son errores.
 
@@ -148,8 +148,8 @@ notes:
 | Clave | Por defecto | Notas |
 |---|---|---|
 | `provider` | `sqlite` | `sqlite` guarda una fila por nota en la [base de datos de chat compartida](web-ui.md#el-almacén-sqlite). Cualquier otro valor es el nombre de una clase que implementa `INotesProvider` y se crea con `( config, agentName )`, para un servicio de notas propio. |
-| `user.limit` | 1400 | Caracteres de notas sobre el usuario. Cada usuario tiene las suyas. |
-| `agent.limit` | 2200 | Caracteres de notas sobre el trabajo del agente. Compartidas por todos los que hablan con él. |
+| `user.limit` | 1400 | Caracteres de notas sobre el usuario, un número entero de 100 a 20000. Cada usuario tiene las suyas. |
+| `agent.limit` | 2200 | Caracteres de notas sobre el trabajo del agente, un número entero de 100 a 20000. Compartidas por todos los que hablan con él. |
 | `tool` | `true` | `remember` (guardar o reemplazar una nota) y `forget` (quitar una). Sin ellas, las notas son de solo lectura para el agente y las gestiona una persona. |
 | `approveForget` | `true` | Una ejecución que quiere `forget` se detiene para [aprobación](../cli-reference.md#chat), como cualquier tool que la necesite. Guardar una nota no necesita ninguna. |
 

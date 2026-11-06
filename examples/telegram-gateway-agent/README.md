@@ -2,6 +2,9 @@
 
 An agent reachable as a real Telegram bot via a push-style `gateways/` entry (`type: "telegram"`). Unlike `http-gateway-agent`, nothing here is driven by an inbound HTTP request - `TelegramGateway` holds its own connection to Telegram (a scheduled long-poll against `getUpdates`) and pushes inbound messages to the agent as they arrive.
 
+Each person has a conversation of their own: memory, `/notes` and the conversation list are kept apart per person, and each forum topic has its own. See [Whose conversation it is](../../docs/conventions/gateways/index.md#whose-conversation-it-is).
+The bot's own `/` menu lists the chat commands (`/help`, `/info`, `/tools`, ...); see [Commands in a gateway](../../docs/conventions/gateways/index.md#commands-in-a-gateway).
+
 ## 1. Get a bot token
 
 Message [@BotFather](https://t.me/BotFather) on Telegram, run `/newbot`, and follow the prompts. You'll get back a token that looks like `123456789:AAH...`.

@@ -98,10 +98,10 @@ bxAgents build
 bxAgents chat
 ```
 
-Pregunta algo que claramente necesite ambos roles, por ejemplo `Give me three facts about the BoxLang language, then turn them into a short paragraph.` Un modelo real normalmente llamaría primero a `researcher`, luego a `writer`, y después compondría la respuesta final - el proveedor `mock` con el que viene este ejemplo no delega realmente (devuelve una respuesta fija sin llamadas a tools), así que cambia a un slug `provider/model` real (consulta [El slug del modelo](../conventions/agent-bx.md#the-model-slug)) para ver la delegación de verdad.
+Pregunta algo que claramente necesite ambos roles, por ejemplo `Give me three facts about the BoxLang language, then turn them into a short paragraph.` Un modelo real normalmente llamaría primero a `researcher`, luego a `writer`, y después compondría la respuesta final - el proveedor `mock` con el que viene este ejemplo no delega realmente (devuelve una respuesta fija sin llamadas a tools), así que cambia a un slug `provider/model` real (consulta [El slug del modelo](../conventions/agent-bx.md#the-model-slug)) para ver la delegación de verdad. `bxAgents inspect` imprime el árbol del agente y los subagentes, con el modelo y las tools de cada uno, antes de hacer build.
 
 ## Dónde ir a continuación
 
 - [Ejemplo: un agente mínimo](example-minimal-agent.md) si aún no has visto la forma base de un proyecto.
 - [Subagentes](../conventions/subagents.md) para la detección de ciclos, los árboles de subagentes anidados, y las tools/skills por subagente.
-- [Ejemplo: construir un bot de Slack](example-slack-bot.md) para ver un agente parecido accesible desde una plataforma de chat real en lugar del REPL `chat`.
+- [Ejemplo: construir un bot de Slack](example-slack-bot.md) para ver un agente parecido accesible desde una plataforma de chat real en lugar del chat de terminal.

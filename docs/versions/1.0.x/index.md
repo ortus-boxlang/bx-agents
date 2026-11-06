@@ -35,8 +35,9 @@ Pick the problem, write one file. Most of these have a working example in
 |---|---|---|
 | Answer people where they are | [`gateways/slack.bx`](conventions/gateways/index.md) | A Slack bot over Socket Mode (also Telegram, Discord, Teams, WhatsApp, Twilio SMS, GitHub, Signal and email) |
 | Run a job every morning | [`schedules/Digest.bx`](conventions/schedules.md) | A task with `.cron()` that calls `run()`, started with the app, no cron daemon |
-| Let other systems call it | [`gateways/expose.bx`](conventions/gateways/index.md) | A REST API under a path you choose, or an MCP server |
+| Let other systems call it | [`agentApi` in `Agent.yaml`](guides/agent-api.md) | One HTTP API at `/__bxagents` with an OpenAPI document and a BoxLang client, open on your machine or behind tokens; plus [`gateways/expose.bx`](conventions/gateways/index.md) for a REST path of your choosing, or an MCP server |
 | Keep a human in the loop | a tool that needs approval | The run waits for approve or reject, in the terminal, the [web chat](conventions/web-ui.md) or a chat gateway |
+| Add your own commands | [`extensions/hello.bx`](conventions/extensions.md) | A chat command, key, status item or listener, in the terminal chat, the web page and chat platforms |
 | Test without spending tokens | [`tests/specs/AgentSpec.bx`](conventions/testing.md) | `mockResponses()` and agent matchers: specs run in CI with no API key and no network |
 | Ship it anywhere | `bxAgents package` | A portable `.bxa` and [deploy targets](conventions/deploy.md): local, SSH, FTP, SFTP, Docker, DigitalOcean |
 
@@ -63,7 +64,11 @@ Telegram, Slack, Discord, Email, WhatsApp, Teams, Twilio, GitHub and Signal, plu
 :::
 ::: card title="A web chat UI, generated" icon="phosphor-duotone:globe-hemisphere-west" href="conventions/web-ui.md"
 Ask for it in a `gateways/` entry and the build produces a themeable, streaming chat front end with
-session history.
+session history, notes, a Settings menu and slash commands.
+:::
+::: card title="A full-screen terminal chat" icon="phosphor-duotone:terminal-window" href="guides/terminal-ui.md"
+`bxAgents chat` keeps your scrollback and has sessions, notes, `@file` and picture attachments,
+slash commands, a context meter and recording. It can start its own server or connect to a deployed one.
 :::
 :::
 
@@ -104,7 +109,9 @@ bxAgents serve --port=8080
 
 ## Start from something, not nothing
 
-`new` doesn't only scaffold a blank agent - pick one of 8 built-in templates, clone an
+At a terminal, `new` asks what the agent should do and writes the project to match
+([the wizard](guides/new-wizard.md)); `add <kind>` adds a tool, skill, gateway or other piece later. A
+template is a preset you build on, not a limit: pick one of 8 built-in templates, clone an
 existing GitHub repo, or install a ForgeBox package instead.
 
 ::: cards
@@ -126,7 +133,8 @@ publish your own.
 ## A chat UI you didn't have to build
 
 Set `exposes: "webui"` on a gateway and the build emits a complete front end - conversation
-history, streaming replies, light/dark theming and a mobile layout - wired to your agent.
+history, streaming replies, notes, a Settings menu (appearance, password, access tokens),
+light/dark theming and a mobile layout - wired to your agent through the same HTTP API your own code can call.
 
 ![The generated web chat UI: a conversation sidebar on the left, a multi-turn transcript in the centre, and a themed header and message composer](assets/webui-chat-light.png)
 
@@ -220,10 +228,11 @@ into the request path.
 ::: card title="Chat platforms" icon="phosphor-duotone:plugs-connected" href="conventions/gateways/index.md"
 Nine push-style gateways - Telegram, Slack, Discord, Email, WhatsApp Cloud, Teams, Twilio,
 GitHub and Signal - coordinated by one session with `reject` / `queue` / `steer` / `interrupt` policies.
+Each person and each thread has their own conversation, and slash commands work there too.
 :::
-::: card title="HTTP and MCP" icon="phosphor-duotone:stack" href="conventions/mcp.md"
-Expose the agent over HTTP routes, or host local MCP servers from `mcp/` so other clients
-can call your tools.
+::: card title="HTTP and MCP" icon="phosphor-duotone:stack" href="guides/agent-api.md"
+Every agent serves an HTTP API with an OpenAPI document, open on your machine or behind tokens,
+`allowedIPs` and a rate limit. Host local MCP servers from `mcp/` so other clients can call your tools.
 :::
 ::: card title="Ship it" icon="phosphor-duotone:package" href="deployment-and-secrets.md"
 Package a portable `.bxa` and deploy it with `local`, `ssh`, `docker`, `digitalocean`,

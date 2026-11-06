@@ -31,8 +31,4 @@ curl -X POST http://localhost:8080/mcp/tools \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"getStockQuote","arguments":{"ticker":"BXL"}}}'
 ```
 
-{% hint style="warning" %}
-The very first request to a freshly booted app's `toAi()` route can transiently fail. Send a warm-up request first.
-{% endhint %}
-
 See [models/](../../docs/conventions/models.md), [subagents/](../../docs/conventions/subagents.md), [skills/](../../docs/conventions/skills.md), [mcp/](../../docs/conventions/mcp.md), [gateways/](../../docs/conventions/gateways/index.md), [schedules/](../../docs/conventions/schedules.md), and [interceptors/](../../docs/conventions/interceptors.md).

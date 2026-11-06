@@ -2,6 +2,8 @@
 
 An agent reachable over SMS via a push-style `gateways/` entry (`type: "twilio"`) - webhook-driven like WhatsApp Cloud/Teams, generating a single `POST /webhooks/twilio` route. Inbound is form-urlencoded, not JSON, and signed with a genuinely different scheme (`X-Twilio-Signature`: HMAC-SHA1, base64) than every other webhook gateway in this repo.
 
+Each person has a conversation of their own: memory, `/notes` and the conversation list are kept apart per person. See [Whose conversation it is](../../docs/conventions/gateways/index.md#whose-conversation-it-is).
+
 ## 1. Get a Twilio number
 
 At the [Twilio Console](https://console.twilio.com), buy (or use a free trial) phone number with SMS capability. From the Console you'll need:

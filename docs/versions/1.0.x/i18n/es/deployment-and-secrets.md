@@ -75,6 +75,20 @@ export OPENAI_API_KEY=sk-...
 bxAgents serve
 ```
 
+## Variables que BxAgents lee por sí mismo
+
+Ninguna contiene un secreto de proveedor. `BXAGENTS_TOKEN` es la única credencial, y solo se lee del entorno de la máquina en la que escribes.
+
+| Variable | La usa | Efecto |
+|---|---|---|
+| `BX_AGENTS_ENV` | `build` | El entorno activo cuando no se indica `--environment` (por defecto `development`). Ver [Entornos](conventions/agent-yaml.md#entornos). |
+| `BXAGENTS_DB` | la app, `chat`, `token`, `notes`, `sessions`, `stats` | El archivo de la base de datos de chat. `serve` lo fija en `data/chat.db` dentro del proyecto; una app desplegada usa `database.path` dentro de la app salvo que esté definida. Ver [el almacén SQLite](conventions/web-ui.md#el-almacén-sqlite). |
+| `BXAGENTS_TOKEN` | `chat --connect` | El token a enviar, en lugar de `--token`. |
+| `BXAGENTS_USER_CONFIG` | `chat`, `extensions` | Otro archivo en lugar de `~/.bxagents/bxAgents.yml`. |
+| `BXAGENTS_SKILLS_URL` | `skills` | Otro registro de skills, en lugar de `--registry`. |
+| `BXAGENTS_BANNER`, `BXAGENTS_BANNER_THEME` | `--help`, `new` | `off` oculta el banner; el nombre de un tema fija sus colores. |
+| `BXAGENTS_` más un nombre | `deploy` | El único prefijo que una entrada de `deploy/` puede nombrar para una contraseña o frase de paso (`passwordEnvVar`, `passphraseEnvVar`). |
+
 ## Desplegando
 
 ```bash

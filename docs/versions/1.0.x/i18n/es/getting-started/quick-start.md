@@ -16,7 +16,7 @@ Esto recorre el ciclo de vida completo de un proyecto BxAgents: generar el andam
 bxAgents new my-agent
 ```
 
-En una terminal esto pregunta qué debe hacer el agente (su modelo, tools, servidores MCP, canales, cómo llega la gente a él, dónde se despliega) y escribe el proyecto a la medida; ver [el asistente de new](../guides/new-wizard.md). Para omitir las preguntas, pasa un modelo:
+En una terminal esto pregunta qué debe hacer el agente (su modelo, tools, servidores MCP, canales, cómo llega la gente a él, dónde se despliega) y escribe el proyecto a la medida; ver [el asistente de new](../guides/new-wizard.md). Termina imprimiendo el comando de una línea que construye el mismo proyecto sin preguntas. Para omitir las preguntas, pasa un modelo:
 
 ```bash
 bxAgents new my-agent --model=openai/gpt-5
@@ -44,9 +44,9 @@ my-agent/
         └── AgentSpec.bx
 ```
 
-Más un `.env` (con `BOXLANG_HOME=.build/runtime`; pon ahí también las claves de API de tu proveedor) y un `.gitignore`. BoxLang carga por sí mismo el `.env` desde la raíz del proyecto.
+Más un `.env` (con `BOXLANG_HOME=.build/runtime`; los secretos viven aquí, así que pon ahí las claves de API de tu proveedor y mantenlo fuera del control de código) y un `.gitignore`. BoxLang carga por sí mismo el `.env` desde la raíz del proyecto.
 
-Este es el starter `minimal` - el predeterminado cuando se omite `--template`. `new` también puede generar uno de otros 7 starters incorporados (`--template=webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent`), cada uno añadiendo un poco de contenido preconfigurado (un gateway, un scheduler) sobre el mismo esqueleto, o saltarse el andamiaje por completo y crear el proyecto a partir de un repositorio de GitHub existente (`--repo=owner/repo`) o un paquete de ForgeBox (`--forgebox=<slug>`) en su lugar - ver la [Referencia de la CLI](../cli-reference.md#new) para la lista completa y cómo funciona cada uno. El agente se define por defecto con un `Agent.yaml`; pasa `--class` para generar en su lugar el `Agent.bx` avanzado basado en clase (ver [Agent.bx](../conventions/agent-bx.md)).
+Este es el starter `minimal` - el predeterminado cuando se omite `--template`. Una plantilla es un preajuste: el asistente (y flags como `--with`, `--channels` y `--deploy`) añaden tools, canales y un destino de despliegue encima. `new` también puede generar uno de otros 7 starters incorporados (`--template=webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent`), cada uno añadiendo un poco de contenido preconfigurado (un gateway, un scheduler) sobre el mismo esqueleto, o saltarse el andamiaje por completo y crear el proyecto a partir de un repositorio de GitHub existente (`--repo=owner/repo`) o un paquete de ForgeBox (`--forgebox=<slug>`) en su lugar - ver la [Referencia de la CLI](../cli-reference.md#new) para la lista completa y cómo funciona cada uno. El agente se define por defecto con un `Agent.yaml`; pasa `--class` para generar en su lugar el `Agent.bx` avanzado basado en clase (ver [Agent.bx](../conventions/agent-bx.md)).
 
 `Agent.yaml` se ve así (`--description` añade una línea `description:`):
 
@@ -84,7 +84,7 @@ class {
 }
 ```
 
-Ver la sección de [Convenciones](../conventions/agent-yaml.md) para cada otra carpeta (`skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `modules/`).
+Ver la sección de [Convenciones](../conventions/agent-yaml.md) para cada otra carpeta (`skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `modules/`). No tienes que escribirlas a mano: `bxAgents add <kind>` (`tool`, `skill`, `subagent`, `gateway`, `schedule`, `interceptor`, `mcp`, `profile`, `provider`, `capability`, `extension`) hace unas cuantas preguntas y escribe los archivos, y `--dry-run` los muestra antes.
 
 ## 3. Pruébalo
 
@@ -115,17 +115,22 @@ Dos formas de hablar con el agente construido - ambas cargan exactamente el mism
 bxAgents chat
 ```
 
+En una terminal es un chat a pantalla completa que conserva tu scrollback: las respuestas llegan en streaming como Markdown con formato, las llamadas a tools se muestran mientras se ejecutan, Esc detiene al agente, y escribir `/` lista los comandos (`/sessions`, `/resume`, `/name`, `/fork`, `/export`, `/notes`, `/context` y más). Escribe `@` para adjuntar un archivo, o `@picture.png` para enviar una imagen. Las conversaciones se listan en `data/chat.db` (los mensajes duran lo mismo que la memoria del agente), así que `bxAgents chat --continue` puede retomar donde lo dejaste. Ver [la interfaz de terminal](../guides/terminal-ui.md) y [Comandos de barra](../guides/slash-commands.md). Para chatear contra la aplicación completa (schedulers, interceptores, gateways), usa `bxAgents chat --server`, o `--connect=<url>` para un servidor que ya está en marcha (añade `--token=<token>` si lo pide).
+
 **Sobre HTTP**, vía un proceso real de [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver):
 
 ```bash
 bxAgents serve --port=8080
 ```
 
-Si tu proyecto tiene una entrada `gateways/*` con `{ exposes: "agent", path: "/api/chat" }`, el agente ahora es alcanzable en `POST http://localhost:8080/api/chat/invoke` (y `/stream`, `/batch`, `/info` - ver [gateways/](../conventions/gateways/index.md)).
+Todo agente servido tiene una API HTTP en `/__bxagents` (abierta en tu propia máquina, tras tokens cuando la compartes), y la página web, el chat de terminal y las plataformas de chat la usan. Ver [Llama a tu agente desde código](../guides/agent-api.md).
+
+Si tu proyecto además tiene una entrada `gateways/*` con `{ exposes: "agent", path: "/api/chat" }`, el agente es alcanzable en `POST http://localhost:8080/api/chat/invoke` (y `/stream`, `/batch`, `/info` - ver [gateways/](../conventions/gateways/index.md)). Una entrada `exposes: "webui"` añade la página de chat del navegador.
 
 ## 6. Inspecciona, empaqueta, despliega
 
 ```bash
+bxAgents doctor               # runtime, módulos, comprobaciones del proyecto y variables de entorno sin definir
 bxAgents inspect              # cómo está compuesto el agente: agentes, herramientas, variables, comprobaciones
 bxAgents package --version=1.0.0   # escribe dist/my-agent-1.0.0.bxa + .sha256
 bxAgents deploy --destination=/path/to/somewhere   # copia el .bxa más nuevo allí

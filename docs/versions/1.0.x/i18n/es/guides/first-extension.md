@@ -13,10 +13,10 @@ Una [extensión](../conventions/extensions.md) añade cosas al chat y a la app s
 ## 1. Empezarla
 
 ```bash
-bxAgents add extension standup --with=command,key --description="Standup diario"
+bxAgents add extension standup --with=command,key --layout=file --description="Standup diario"
 ```
 
-Eso escribe `extensions/standup.bx`: una clase con un comando `/standup` y una tecla, cada uno con un `TODO` por completar. Sin `--with`, en una terminal pregunta qué traer. Si marcas un scheduler, gateway, tool, skill o archivos web, crea una carpeta (`extensions/standup/Extension.bx` más esos archivos).
+Eso escribe `extensions/standup.bx`: una clase con un comando `/standup` y una tecla, cada uno con un `TODO` por completar. Sin `--with` o `--layout`, en una terminal pregunta (qué traer, y un archivo o una carpeta). Si marcas un scheduler, gateway, tool, skill o archivos web, crea una carpeta (`extensions/standup/Extension.bx` más esos archivos).
 
 ## 2. Probarla
 
@@ -24,11 +24,11 @@ Eso escribe `extensions/standup.bx`: una clase con un comando `/standup` y una t
 bxAgents chat
 ```
 
-Escribe `/extensions` para verla cargada y luego `/standup`. Un problema en el archivo aparece ahí con su motivo, así que un error de escritura nunca queda en silencio.
+Escribe `/extensions` para verla cargada y luego `/standup`. Un problema en el archivo aparece ahí con su motivo, así que un error de escritura nunca queda en silencio. Desde un shell, `bxAgents extensions` imprime la misma lista.
 
 ## 3. Cambiarla en caliente
 
-Edita el comando en `extensions/standup.bx` y escribe `/reload` en el mismo chat. El cambio entra sin reiniciar. Un ajuste va en `configure()`:
+Edita el comando en `extensions/standup.bx` y escribe `/reload` en el mismo chat. El cambio entra sin reiniciar. `/reload` es para administradores; en tu propio chat de terminal lo eres. Un ajuste va en `configure()`:
 
 ```boxlang
 function configure() {

@@ -10,6 +10,14 @@ tags: [guides, api, tokens, client]
 
 Every built agent serves one HTTP API at `/__bxagents`. The web chat page, the terminal chat and the gateways use the same one, so anything they do, your program can do. This guide is the tour; every route, with its request and answer, is in the [OpenAPI document](#the-openapi-document) the server hands out, and the settings are in [agentApi](../conventions/agent-bx.md#the-always-on-agent-route).
 
+<video controls preload="metadata" poster="/assets/video/api-tour-poster.png" style="max-width:100%">
+  <source src="/assets/video/api-tour.mp4" type="video/mp4">
+  <source src="/assets/video/api-tour.webm" type="video/webm">
+  <track kind="captions" src="/assets/video/api-tour.vtt" srclang="en" label="English" default>
+</video>
+
+*Two and a half minutes: open mode and its startup warning, token mode, the guards, the BoxLang client, the OpenAPI document, the web page, the terminal chat and gateway sessions. The agent answers are canned (the mock provider), and the gateway part runs the gateway session tests.*
+
 The project in [`examples/api-agent/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/api-agent) runs everything below.
 
 ## Open or behind a token

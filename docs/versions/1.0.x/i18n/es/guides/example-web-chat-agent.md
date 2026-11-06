@@ -10,7 +10,7 @@ tags: [guides, examples, web-ui]
 
 [`examples/webui-agent/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/webui-agent) genera una página de chat completa y tematizada para un agente a partir de una sola entrada `gateways/*` con `exposes: "webui"` - la [UI web de chat v1](../conventions/web-ui.md). Sin código de front end que escribir, sin Node/npm en el build, sin un paso de despliegue aparte para una SPA - la página es un archivo real que BxAgents escribe dentro de la aplicación generada.
 
-Este es el único ejemplo de esta serie de guías con capturas de pantalla reales, porque es el único tipo de ejemplo de BxAgents cuya salida es efectivamente una página de navegador - las imágenes de abajo son la salida real del generador para este mismo proyecto, renderizada y capturada directamente (no son un mockup), así que lo que ves es lo que produce realmente `bxAgents build && serve`.
+Este es el único ejemplo de esta serie de guías con capturas de pantalla reales, porque es el único tipo de ejemplo de BxAgents cuya salida es efectivamente una página de navegador - las imágenes de abajo muestran el diseño actual de la página, capturado de una app de demostración (título "Acme Assistant", acento azul), así que el título, el eslogan y los colores difieren de la configuración de este ejemplo. La página es la misma: solo la marca viene del archivo del gateway.
 
 ## El proyecto
 
@@ -48,7 +48,7 @@ class {
 			// ---------------------------------------------------------------
 			title      : "Acme Support",
 			subtitle   : "Orders, returns and shipping",
-			icon       : "🛟",                 // an emoji, or an image URL/path ("/logo.svg", "https://...")
+			icon       : "🛟",                 // an emoji, an image URL/path ("/logo.svg", "https://..."), or "phosphor:<name>" ("phosphor:lightning")
 			welcome    : "Hi! Ask me about an order, a return, or shipping times.",
 			placeholder: "Ask about your order...",
 			footer     : "Answers are generated and may be wrong - check anything important.",
@@ -80,6 +80,12 @@ class {
 }
 ```
 
+Otras claves de marca que puedes añadir: `suggestions` (hasta cuatro textos cortos, mostrados como botones bajo el mensaje de bienvenida en una conversación vacía; un clic lo envía) e `icon: "phosphor:<name>"` para un icono del conjunto propio de la página. Sin `icon`, el encabezado muestra un robot.
+
+```javascript
+suggestions: [ "Where is my order?", "How do I return something?" ],
+```
+
 Los colores se escriben como hexadecimal pelado, sin `#` inicial (`"0f766e"`, no `"#0f766e"`) - BoxLang inicia la interpolación de cadenas al encontrar una almohadilla tanto en cadenas con comillas simples como dobles, así que una literal tendría que duplicarse para que siquiera se parsee. El hexadecimal pelado evita todo eso; consulta el comentario del propio archivo para el razonamiento completo, y [La UI web de chat](../conventions/web-ui.md) para todo lo que los tokens de tema no cubran (eso va en `resources/webui/theme.css`, que se incrusta el último y gana).
 
 ## Construir y ejecutar
@@ -90,21 +96,35 @@ bxAgents build
 bxAgents serve --port=8080
 ```
 
-Abre **http://localhost:8080/chat/index.html**. Esta es la página generada real para la configuración `chat.bx` de este proyecto que aparece arriba - barra lateral de conversaciones a la izquierda, transcript con streaming en el centro, encabezado y compositor tematizados:
+Abre **http://localhost:8080/chat/index.html**. Verás la barra lateral de conversaciones a la izquierda, el transcript con streaming en el centro, y un encabezado y un compositor con los colores de tu `theme`:
 
 ![La UI web de chat generada: una barra lateral de conversaciones, un transcript de varios turnos, y un encabezado/compositor con marca](../assets/webui-chat-light.png)
 
 ### Modo oscuro
 
-Las sobrescrituras de `theme.dark` (`accent`/`accentFg`) se aplican automáticamente cuando el propio interruptor de tema de la página cambia a oscuro - todo lo demás es el mismo CSS generado, solo que con otros tokens:
+Las sobrescrituras de `theme.dark` (`accent`/`accentFg`) se aplican automáticamente cuando la página cambia a oscuro, desde **Settings** o siguiendo el sistema - todo lo demás es el mismo CSS generado, solo que con otros tokens:
 
-![La misma página y conversación con el interruptor Theme cambiado a oscuro - los tokens accent/accentFg de theme.dark se trasladan, el resto es el mismo CSS generado](../assets/webui-chat-dark.png)
+![La misma página y conversación en el tema oscuro - los tokens accent/accentFg de theme.dark se trasladan, el resto es el mismo CSS generado](../assets/webui-chat-dark.png)
 
 ### Pantallas estrechas
 
 La página es responsive sin ningún build móvil aparte - en un viewport estrecho, el transcript conserva todo su ancho y la barra lateral de conversaciones pasa a superponerse en lugar de comprimir el contenido:
 
 ![La misma página en un viewport estrecho - el transcript conserva todo el ancho, la barra lateral se superpone en lugar de exprimirlo](../assets/webui-chat-mobile.png)
+
+## El encabezado y el menú Settings
+
+El encabezado conserva lo que usas cada minuto: **Chats** (muestra u oculta la barra lateral), el anillo de contexto (púlsalo para ver qué se envía al modelo), el selector de modelo (solo cuando el gateway lista `profiles`) y un engranaje **Settings**. El engranaje abre un menú con tres grupos. Un elemento que el servidor no ofrece, y un grupo sin nada dentro, se omiten.
+
+| Grupo | Elementos |
+|---|---|
+| **Conversation** | Bifurcar esta conversación, Exportar como Markdown, Borrar mensajes, Compactar mensajes antiguos |
+| **You** | Notes (cuando el agente tiene un bloque `notes`), Appearance (modo, color de acento, tamaño de texto, densidad, guardados en tu navegador), tema oscuro o claro |
+| **Server** | Contraseña, Tokens de acceso |
+
+![El menú Settings abierto, con los grupos Conversation, You y Server](../assets/webui/settings-menu.png)
+
+En el cuadro de mensaje, el clip adjunta una imagen o un archivo de texto (también puedes pegarlos o soltarlos), el botón del rayo abre el menú de comandos `/` y la flecha envía. Mientras el agente trabaja, la flecha dirige la ejecución y aparece un botón de parar.
 
 ## La protección opcional por clave de API
 
@@ -116,7 +136,13 @@ bxAgents build
 bxAgents serve --port=8080
 ```
 
-La página carga bien en ambos casos, pero enviar un mensaje sin haber configurado antes la clave correspondiente con el botón **Key** de la página devuelve un 401 y la página abre su caja **Contraseña** - escribe `a-real-secret`, y funcionará durante el resto de la sesión del navegador (se guarda en `localStorage`). Elimina por completo la línea `apiKeyEnvVar` para dejar la UI abierta (aceptable en desarrollo local, nunca en un despliegue público).
+La página carga bien en ambos casos, pero enviar un mensaje sin la clave correspondiente devuelve un 401 y la página abre sola su formulario **Contraseña** - escribe `a-real-secret` y elige **Save**. Una contraseña incorrecta muestra "That password was not accepted". El formulario también está en **Settings**, **Contraseña**, donde **Forget it** borra el valor guardado. La contraseña se guarda en el `localStorage` del navegador hasta que la olvides. Elimina por completo la línea `apiKeyEnvVar` para dejar la UI abierta (aceptable en desarrollo local, nunca en un despliegue público).
+
+## Tokens de acceso para administradores
+
+Con `agentApi: { tokens: true, manageTokens: true }` en `Agent.yaml`, quien llama con un token `admin` ve **Settings**, **Tokens de acceso**. El panel lista los tokens, crea uno (un nombre, un alcance `chat` o `admin` y cuánto dura, por ejemplo `90d`), muestra el secreto una sola vez para que lo copies y revoca tokens. `manageTokens` está desactivado por defecto y un token `chat` recibe `403`. Lo mismo desde un shell es `bxAgents token create|list|revoke`.
+
+![El panel de tokens de acceso: la lista de tokens, un secreto nuevo mostrado una vez y el formulario de creación](../assets/webui/tokens-panel.png)
 
 ## Una sola API para la página, la terminal y los gateways
 
@@ -124,7 +150,7 @@ La página carga bien en ambos casos, pero enviar un mensaje sin haber configura
 
 ## Qué está probado, y qué no
 
-La salida del generador en sí - el armazón estático, los marcadores de plantilla, las piezas de inicio de sesión cuando hay cuentas, su registro desde `Application.bx` - está demostrada con specs reales del generador, y se ha confirmado que compila e instancia. Sobre HTTP real, `runColdBoxIntegrationTests.bxs` demuestra `/__bxagents/health` y, además, el viaje de ida y vuelta de preferencias compartidas (`/__bxagents/preferences/set` + `/__bxagents/preferences`) entre dos llamantes independientes. Las capturas de arriba se tomaron de la plantilla generada real y de la configuración real de este proyecto, no de un mockup hecho a mano - pero haz al menos una comprobación real con `bxAgents serve` y un navegador de tus propias decisiones de tema y marca antes de depender de ellas en producción.
+La salida del generador en sí - el armazón estático, los marcadores de plantilla, las piezas de inicio de sesión cuando hay cuentas, su registro desde `Application.bx` - está demostrada con specs reales del generador, y se ha confirmado que compila e instancia. Sobre HTTP real, `runColdBoxIntegrationTests.bxs` demuestra `/__bxagents/health` y, además, el viaje de ida y vuelta de preferencias compartidas (`/__bxagents/preferences/set` + `/__bxagents/preferences`) entre dos llamantes independientes. Las capturas de arriba se tomaron de la página generada real, no de un mockup hecho a mano - pero haz al menos una comprobación real con `bxAgents serve` y un navegador de tus propias decisiones de tema y marca antes de depender de ellas en producción.
 
 ## Dónde ir a continuación
 

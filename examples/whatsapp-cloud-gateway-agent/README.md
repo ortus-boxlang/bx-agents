@@ -2,6 +2,9 @@
 
 An agent reachable over WhatsApp via a push-style `gateways/` entry (`type: "whatsapp-cloud"`) - the first **webhook-driven** shape in this directory: Meta calls *this app*, over a public HTTP endpoint, rather than the gateway holding its own outbound connection. Generates `GET`/`POST /webhooks/whatsapp-cloud` routes automatically.
 
+Each person has a conversation of their own: memory, `/notes` and the conversation list are kept apart per person. See [Whose conversation it is](../../docs/conventions/gateways/index.md#whose-conversation-it-is).
+The chat commands work here too; a pick-one answer arrives as buttons or a list. See [Commands in a gateway](../../docs/conventions/gateways/index.md#commands-in-a-gateway).
+
 ## 1. Create a Meta app + WhatsApp product
 
 At [developers.facebook.com](https://developers.facebook.com/apps), create an app, add the **WhatsApp** product, and from its API Setup page grab:

@@ -39,6 +39,13 @@ mcpServers:
     name: other
 ```
 
+Un servidor puede necesitar inicio de sesión: escríbelo como un marcador `${env.NAME}` (`token: "${env.GITHUB_PERSONAL_ACCESS_TOKEN}"`),
+nunca el secreto en sí. Una entrada también puede arrancar un programa en la máquina del agente
+(`command: [uvx, mcp-server-git]`) en lugar de una dirección web, y `toolFilter` limita qué tools
+recibe el agente. `bxAgents add mcp client` escribe una entrada así por ti (un nombre del catálogo, como GitHub
+o Notion, o `--url`), con un marcador vacío para la clave en `.env`; el [asistente de `new`](../guides/new-wizard.md)
+ofrece el mismo catálogo. Consulta [mcp/](../conventions/mcp.md) para ver cada opción.
+
 **Nunca se intenta ninguna conexión de red en tiempo de build** - la accesibilidad es una
 cuestión de tiempo de ejecución, así que un servidor inalcanzable durante el build no es un
 error de build. Los subagentes pueden declarar sus propios `mcpServers` de forma independiente.
@@ -91,6 +98,7 @@ su propio servidor MCP, exponla en `/mcp/tools`, construye y ejecuta `serve` - a
 accesible para cualquier cliente MCP externo, con independencia de la interfaz de chat de tu
 propio agente.
 
-Referencia completa: [mcp/](../conventions/mcp.md).
+`bxAgents add mcp server` escribe por ti el archivo de `mcp/` y la entrada de `gateways/`. Referencia
+completa: [mcp/](../conventions/mcp.md).
 
 Siguiente: [Lección 18 - Interceptores y dependencias de módulos](18-interceptors-and-modules.md)

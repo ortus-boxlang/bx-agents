@@ -32,8 +32,8 @@ Cada `build` escribe `.build/manifest.json` - el propio registro de BxAgents de 
 |---|---|
 | `manifestVersion` | Marca semver para el propio esquema del manifest (actualmente `1.0.0`) - `package` se niega a ejecutarse si esto no está definido o está malformado. |
 | `generator.name` / `generator.version` | Siempre `"bx-agents"` / la cadena de versión estampada en el build: `dev` salvo que `bxAgents build --generatorVersion=...` indique otra cosa. |
-| `agent` | Solo campos seguros y estructurales (`name`, `description`, `model`, `environment`) - **nunca** secretos. Los secretos nunca se leen en el manifest en absoluto; los resuelve el propio bx-ai, en vivo, en tiempo de ejecución. |
-| `files` | Una entrada por cada elemento de carpeta de convención descubierto, ordenado por categoría y luego por ruta para un orden determinista - independiente del orden de listado del sistema de archivos. |
+| `agent` | Solo campos seguros y estructurales (`name`, `description`, `model`, `environment`) - **nunca** secretos. Para un `Agent.bx` basado en clase que los define en código, `name`, `description` y `model` se leen de la clase. Los secretos nunca se leen en el manifest en absoluto; los resuelve el propio bx-ai, en vivo, en tiempo de ejecución. |
+| `files` | Una entrada por cada elemento de carpeta de convención descubierto, cada una `{ category, name, path, hash }`. Las categorías son `tools`, `skills` (las tuyas y las instaladas desde el registro), `subagents`, `gateways`, `schedules` (una por archivo de scheduler), `mcp`, `interceptors` y `modules`. Ordenado por categoría y luego por ruta para un orden determinista - independiente del orden de listado del sistema de archivos. |
 
 ## Hashes de contenido
 

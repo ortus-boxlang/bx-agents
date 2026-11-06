@@ -24,14 +24,16 @@ my-agent/
 ├── skills/            # SKILL.md capabilities
 ├── subagents/         # nested agent trees
 ├── gateways/           # HTTP/MCP/chat exposure
-├── schedules/          # a real ColdBox scheduler
+├── schedules/          # BoxLang schedulers
 ├── mcp/                # MCP servers you host
 ├── interceptors/        # lifecycle hooks
+├── extensions/         # chat commands, keys and more
 └── modules/            # module dependencies
 ```
 
 Every folder above is optional except `Agent.yaml`. Add the ones your agent actually
-needs; the rest can stay empty or simply not exist.
+needs; the rest can stay empty or simply not exist. (`bxAgents new` creates every folder except
+`extensions/`, which appears when you run `bxAgents add extension`.)
 
 ## How this course is organized
 
@@ -39,13 +41,13 @@ The 20 lessons follow the order you'd naturally build a real project in:
 
 1. **Lessons 1-4** - orientation, install, and your first scaffolded project.
 2. **Lessons 5-8** - the required pieces: `Agent.yaml`, instructions, building, and
-   running the agent from the terminal.
+   chatting with the agent in the terminal.
 3. **Lessons 9-12** - giving your agent abilities: tools, skills, subagents, and
    models and profiles.
-4. **Lessons 13-16** - reaching your agent: HTTP/MCP exposure, chat platforms, the
-   generated web UI, and scheduled background work.
-5. **Lessons 17-18** - hosting your own MCP servers, lifecycle interceptors, and
-   module dependencies.
+4. **Lessons 13-16** - reaching your agent: the HTTP API and its tokens, MCP exposure,
+   chat platforms, the generated web UI, and scheduled background work.
+5. **Lessons 17-18** - hosting your own MCP servers, lifecycle interceptors,
+   extensions and module dependencies.
 6. **Lessons 19-20** - testing for real, then packaging and deploying what you built.
 
 ## What you need

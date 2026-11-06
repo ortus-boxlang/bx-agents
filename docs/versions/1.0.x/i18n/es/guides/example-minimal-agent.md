@@ -8,7 +8,7 @@ tags: [guides, examples, tools, skills]
 
 # Ejemplo: un agente mínimo
 
-El proyecto BxAgents completo más pequeño es [`examples/minimal-agent/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/minimal-agent) - tres archivos que muestran la forma completa de un proyecto: un `Agent.yaml`, unas instrucciones, una [tool](../conventions/tools.md) y una [skill](../conventions/skills.md). Todos los demás ejemplos de esta serie de guías parten exactamente de esta forma.
+El proyecto BxAgents completo más pequeño es [`examples/minimal-agent/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/minimal-agent) - unos pocos archivos que muestran la forma completa de un proyecto: un `Agent.yaml`, unas instrucciones, una [tool](../conventions/tools.md) y una [skill](../conventions/skills.md). Todos los demás ejemplos de esta serie de guías parten exactamente de esta forma.
 
 ## El proyecto
 
@@ -81,13 +81,13 @@ bxAgents build
 bxAgents chat
 ```
 
-`build` ensambla todo lo anterior en una aplicación ColdBox normal bajo `.build/app` (consulta [El pipeline de build](../build-pipeline.md)); `chat` arranca el agente generado en el mismo proceso y te deja en un REPL de terminal contra él. Prueba con:
+`build` ensambla todo lo anterior en una aplicación ColdBox normal bajo `.build/app` (consulta [El pipeline de build](../build-pipeline.md)); `chat` carga el agente generado en el mismo proceso y abre el [chat de terminal](terminal-ui.md). Escribe `/` para ver los comandos y `/tools` para ver que `sayHello` está ahí. Prueba con:
 
 ```
-> My name is Ada.
+My name is Ada.
 ```
 
-El modelo debería recurrir a la tool `sayHello` y responder con calidez, siguiendo la orientación de la skill - todo ello a partir de una sola frase de instrucciones más una tool de dos líneas y una skill de dos líneas.
+El modelo debería recurrir a la tool `sayHello` y responder con calidez, siguiendo la orientación de la skill - todo ello a partir de una sola frase de instrucciones más una tool pequeña y una skill de una línea. Con el modelo `mock` con el que viene este ejemplo, la respuesta es fija: define un `provider/model` real en `Agent.yaml` para ver la tool llamada. `bxAgents inspect` lista el agente, su tool y su skill sin hacer build.
 
 ## Dónde ir a continuación
 

@@ -32,8 +32,8 @@ experiencia previa con BoxLang ni ColdBox, aunque ayuda.
 
 ## Qué habrás construido al llegar a la Lección 20
 
-Un agente con sus propias tools y una skill empaquetada, accesible desde la CLI, desde una UI
-de chat en el navegador y desde una API HTTP, con una suite de pruebas que se ejecuta sin
+Un agente con sus propias tools y una skill empaquetada, accesible desde un chat de terminal a pantalla completa,
+una UI de chat en el navegador, una API HTTP y plataformas de chat, con una suite de pruebas que se ejecuta sin
 ninguna clave de API, y un `.bxa` empaquetado listo para desplegar.
 
 ¿Listo? Empieza con la [Lección 1: Bienvenido a BxAgents](01-welcome.md).

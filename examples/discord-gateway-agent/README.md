@@ -2,6 +2,9 @@
 
 An agent reachable as a real Discord bot via a push-style `gateways/` entry (`type: "discord"`), over Discord's real **Gateway API** - a persistent websocket with mandatory client-driven heartbeats, not the alternative HTTP Interactions webhook mode.
 
+Each person has a conversation of their own: memory, `/notes` and the conversation list are kept apart per person. See [Whose conversation it is](../../docs/conventions/gateways/index.md#whose-conversation-it-is).
+The chat commands are registered as Discord application commands when the bot starts; see [Commands in a gateway](../../docs/conventions/gateways/index.md#commands-in-a-gateway).
+
 ## 1. Create a Discord application
 
 At the [Discord Developer Portal](https://discord.com/developers/applications), create a New Application, then under **Bot**:

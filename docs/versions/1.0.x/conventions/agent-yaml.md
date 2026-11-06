@@ -35,7 +35,7 @@ environments:
 | `params` | mapping | Default request parameters, such as `temperature`. |
 | `options` | mapping | Default provider options, such as `timeout`. |
 | `providers` | mapping | Per provider `params` and `options`, by provider name. |
-| `profiles` | mapping | Named combinations of provider, model, params, options and `apiKeyEnv`, and optionally `contextWindow` and `vision`. |
+| `profiles` | mapping | Named combinations. Each profile takes `description`, `provider`, `model`, `params`, `options`, `apiKeyEnv` (the name of the variable that holds the key, never the key) and optionally `contextWindow` and `vision`. See [Models and profiles](models.md#profiles). |
 | `contextWindow`, `vision` | number, boolean | What the default model can hold (tokens) and whether it can see images. Optional facts for the chat; bx-ai does not read them. See [Models](models.md#what-the-project-knows-about-a-model). |
 | `defaultProfile` | string | The profile used when nothing asks for another. |
 | `profile` | string | The profile this agent uses. |
@@ -49,8 +49,8 @@ environments:
 | `security` | mapping | Forwarded verbatim into the generated app's `bxai` module settings; bx-ai's own `SecurityDirector` turns it into guardrail middleware. |
 | `memory` | string or mapping | The agent's conversation memory. A bare string is the type (`cache`); a mapping is `{ type, ...config }` and is passed through to `aiMemory()`. A memory is keyed by the agent's name, so one that is kept on disk is found again on the next start; set `key` in the mapping to name it yourself. |
 | `checkpointer` | mapping | `{ type: cache\|file\|jdbc, ...config }`. Defaults to `{ type: cache }` if omitted. |
-| `gatewaySession` | mapping | `{ policy, maxQueueDepth, commands }`, all optional. See [Agent.bx](agent-bx.md) for the values; they are identical. |
-| `agentApi` | mapping | `{ enabled, tokenEnvVar, tokens, profiles }`, all optional. See [The always-on agent route](agent-bx.md#the-always-on-agent-route). |
+| `gatewaySession` | mapping | `{ policy, maxQueueDepth, attachments, commands }`, all optional. `policy` is `queue` (default), `reject`, `steer` or `interrupt`. `attachments: false` switches off pictures and files sent in chat apps. `commands` is `{ enabled, prefix, prefixes, conversation, allow, admins }`. See [Gateways](gateways/index.md#commands-in-a-gateway). |
+| `agentApi` | mapping | `{ enabled, access, tokenEnvVar, tokens, profiles, path, allowedIPs, rateLimit, manageTokens }`, all optional. `enabled` defaults to `true`, `access` to `open` (or `token` when `tokenEnvVar` or `tokens` is set), `tokens` and `manageTokens` to `false`, `path` to `/__bxagents`. See [`agentApi`](agent-bx.md#agentapi) for each key. |
 | `notes` | mapping | Short notes the agent keeps about the user and its own work. `notes: {}` turns them on with the defaults. See [Notes](#notes). |
 | `usage` | boolean | Records what each model call used (the time, who, the provider, the model and the tokens), for [`bxAgents stats`](../cli-reference.md#stats) and `/stats`. **Off by default**: set `usage: true` to turn it on. Counts only, never what was said. Only in the project's own `Agent.yaml`. Rebuild after changing it. |
 | `tui` | mapping | How the terminal chat looks: `{ prompt, widgets: { top, bottom } }`, all optional. `prompt` is `bars` (default), `bars-hints`, `rule`, `box` or `panel`; `widgets` list what goes in the top bar and at the bottom (`agent`, `profile`, `folder`, `user`, `clock`, `machine`, `git`, `date`, `session`, `elapsed`, `ctx`). A wrong name is refused and the valid ones are listed. Only in the project's own `Agent.yaml`. See [The prompt and the tables](../cli-reference.md#the-prompt-and-the-tables). |
@@ -60,7 +60,7 @@ environments:
 These are the same settings an `Agent.bx`'s `configure()` returns, so every behavior documented for them applies unchanged.
 
 !!! warning
-    An **unknown key is an error**, and the message lists the valid ones. A typo such as `modle:` would otherwise do nothing, quietly. Settings that arrive in later releases (for example `mcp`) are rejected the same way until they exist, rather than being silently ignored. Anything free-form belongs in an `Agent.bx`.
+    An **unknown key is an error**, and the message lists the valid ones. A typo such as `modle:` would otherwise do nothing, quietly. Anything free-form belongs in an `Agent.bx`.
 
 A value of the wrong type (a text where a list belongs, say) and an empty value (`model:` with nothing after it) are errors too.
 
@@ -148,8 +148,8 @@ notes:
 | Key | Default | Notes |
 |---|---|---|
 | `provider` | `sqlite` | `sqlite` keeps one row per note in the [shared chat database](web-ui.md#the-sqlite-store). Any other value is the name of a class that implements `INotesProvider` and is created with `( config, agentName )`, for a notes service of your own. |
-| `user.limit` | 1400 | Characters of notes about the user. Each user has their own. |
-| `agent.limit` | 2200 | Characters of notes about the agent's work. Shared by everyone who talks to it. |
+| `user.limit` | 1400 | Characters of notes about the user, a whole number from 100 to 20000. Each user has their own. |
+| `agent.limit` | 2200 | Characters of notes about the agent's work, a whole number from 100 to 20000. Shared by everyone who talks to it. |
 | `tool` | `true` | `remember` (save or replace a note) and `forget` (remove one). Without them the notes are read-only for the agent and a person manages them. |
 | `approveForget` | `true` | A run that wants to `forget` stops for [approval](../cli-reference.md#chat), like any tool that needs it. Saving a note needs none. |
 
