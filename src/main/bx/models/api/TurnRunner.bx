@@ -16,6 +16,8 @@
  */
 import bxModules.bxagents.models.api.Outcome;
 
+import bxModules.bxagents.models.api.RunOwners;
+
 class {
 
 	/**
@@ -85,6 +87,7 @@ class {
 		var params = arguments.request.params ?: {}
 		return Outcome::done( {
 			threadId : threadId,
+			owner    : arguments.caller.id(),
 			work     : ( onChunk ) => thisAgent.stream( onChunk, input, params, options ),
 			run      : () => thisAgent.run( input, params, options )
 		} )
@@ -163,10 +166,13 @@ class {
 			return prepared
 		}
 		var turn = prepared.data()
+		RunOwners::claim( turn.threadId, turn.owner ?: "" )
 		try {
 			return Outcome::done( { output : turn.run(), threadId : turn.threadId } )
 		} catch ( any e ) {
 			return Outcome::failed( "internal", e.message )
+		} finally {
+			RunOwners::release( turn.threadId )
 		}
 	}
 
@@ -212,6 +218,7 @@ class {
 		}
 		var threadId = arguments.turn.threadId
 		var work = arguments.turn.work
+		RunOwners::claim( threadId, arguments.turn.owner ?: "" )
 		var calls = {}
 		var counter = { value : 0 }
 		send( "thread", { "threadId" : threadId } )
@@ -259,6 +266,7 @@ class {
 			}
 		} finally {
 			BoxUnregisterInterceptor( interceptor )
+			RunOwners::release( threadId )
 		}
 	}
 
@@ -273,6 +281,13 @@ class {
 		if ( !len( arguments.threadId ) ) {
 			return Outcome::failed( "bad_request", "threadId is required" )
 		}
+		var may = control( arguments.caller, arguments.threadId )
+		if ( may == "no" ) {
+			return Outcome::failed( "not_your_run", "This run belongs to another caller" )
+		}
+		if ( may == "unknown" ) {
+			return Outcome::done( { "cancelled" : false } )
+		}
 		return Outcome::done( { "cancelled" : variables.agent.cancelRun( arguments.threadId, arguments.reason ) } )
 	}
 
@@ -283,7 +298,29 @@ class {
 		if ( !len( arguments.threadId ) || !len( arguments.input ) ) {
 			return Outcome::failed( "bad_request", "threadId and input are required" )
 		}
+		var may = control( arguments.caller, arguments.threadId )
+		if ( may == "no" ) {
+			return Outcome::failed( "not_your_run", "This run belongs to another caller" )
+		}
+		if ( may == "unknown" ) {
+			return Outcome::done( { "steered" : false } )
+		}
 		return Outcome::done( { "steered" : variables.agent.steerRun( arguments.threadId, arguments.input ) } )
+	}
+
+	/**
+	 * A run can only be stopped or steered by who started it. For a run nobody here is known to have started (a chat
+	 * platform's, which bx-ai runs itself) only an admin may; anyone else is told nothing happened, which is also what
+	 * an unknown thread id gets.
+	 *
+	 * @return "yes" to go ahead, "no" for a run that is another caller's, "unknown" for a run with no known owner
+	 */
+	private string function control( required any caller, required string threadId ) {
+		var owner = RunOwners::of( arguments.threadId )
+		if ( len( owner ) ) {
+			return owner == arguments.caller.id() ? "yes" : "no"
+		}
+		return arguments.caller.isAdmin() ? "yes" : "unknown"
 	}
 
 	/**

@@ -130,6 +130,14 @@ class {
 		answer( arguments.event, new "models.api.Outcome@bxagents"().fromResult( arguments.result ) )
 	}
 
+	/**
+	 * ColdBox calls this when a route is reached with a verb it does not take (a GET to a route that is POST only). It
+	 * would otherwise answer with an HTML error page; every answer of this API is JSON.
+	 */
+	function onInvalidHTTPMethod( event, rc, prc, faultAction = "", eventArguments = {} ) {
+		answer( event, failed( "method_not_allowed", "That route does not take " & event.getHTTPMethod() ) )
+	}
+
 	private function noSessions() {
 		return failed( "not_found", "This server keeps no list of conversations" )
 	}

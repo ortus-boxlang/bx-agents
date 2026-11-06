@@ -44,6 +44,22 @@ class extends="testbox.system.BaseSpec" {
 				expect( source ).notToInclude( "BoxRegisterInterceptor" );
 			} );
 
+			it( "writes down where the API is served, for serve and the terminal to read", function() {
+				var dir = newAppDir();
+				generator.generate( dir, { path : "/agent-api" } );
+				expect( jsonDeserialize( fileRead( dir & "/config/agentapi.json" ) ).path ).toBe( "/agent-api" );
+
+				var plain = newAppDir();
+				generator.generate( plain, {} );
+				expect( jsonDeserialize( fileRead( plain & "/config/agentapi.json" ) ).path ).toBe( "/__bxagents" );
+			} );
+
+			it( "answers a verb a route does not take with JSON, not an error page", function() {
+				var source = fileRead( generator.generate( newAppDir(), {} ).path );
+				expect( source ).toInclude( "function onInvalidHTTPMethod(" );
+				expect( source ).toInclude( 'failed( "method_not_allowed"' );
+			} );
+
 			it( "stamps agentApi.profiles in as the list a caller may ask for, none by default", function() {
 				var none = fileRead( generator.generate( newAppDir(), {} ).path );
 				var some = fileRead( generator.generate( newAppDir(), { profiles : [ "fast", "planner" ] } ).path );

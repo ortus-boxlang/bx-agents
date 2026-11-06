@@ -106,6 +106,16 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( 'route( "/gateways" ).toAiGateway()' );
 			} );
 
+			it( "serves the whole agent API on agentApi.path when one is set, and nowhere else", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+				var content = fileRead( generator.generate( discovery, newAppDir(), false, false, false, false, false, { path : "/agent-api" } ).router );
+
+				expect( content ).toInclude( 'post( "/agent-api/invoke" )' );
+				expect( content ).toInclude( 'post( "/agent-api/events" )' );
+				expect( content ).toInclude( 'route( "/agent-api/sessions" )' );
+				expect( content ).notToInclude( "/__bxagents" );
+			} );
+
 			it( "emits the WhatsApp Cloud GET/POST webhook routes when hasWhatsAppCloudGateway is true", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
 				var result = generator.generate( discovery, newAppDir(), false, true );

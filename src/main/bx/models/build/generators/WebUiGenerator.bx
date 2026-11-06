@@ -30,6 +30,7 @@ import bxModules.bxagents.models.util.Strings;
 import bxModules.bxagents.models.util.EntryConfigReader;
 
 import bxModules.bxagents.models.api.ApiPath;
+import bxModules.bxagents.models.build.AgentApiConfig;
 
 class {
 
@@ -45,8 +46,11 @@ class {
 			return { hasWebUi : false, webUiAuthInterceptorName : "" }
 		}
 
+		// where the page's calls go: the agent API's path, as the build sees it
+		var apiBase = ApiPath::of( AgentApiConfig::effective( arguments.config.agentApi ?: {}, arguments.discovery ) )
+
 		for ( var entry in entries ) {
-			renderUiBundle( entry, arguments.appDir, new "models.extensions.ExtensionSettings@bxagents"().disableList( isStruct( arguments.config.extensions ?: "" ) ? arguments.config.extensions : {} ) )
+			renderUiBundle( entry, arguments.appDir, new "models.extensions.ExtensionSettings@bxagents"().disableList( isStruct( arguments.config.extensions ?: "" ) ? arguments.config.extensions : {} ), apiBase )
 		}
 
 		// Accounts decide whether a sign-in is wired in, so they are resolved first. The page itself calls the agent API
@@ -95,7 +99,7 @@ class {
 			seedStatement = 'try { application.cbController.getWireBox().getInstance( "UserSeeder" ).seed() } catch ( any e ) { writeLog( text : "Web UI account seeding failed: " & e.message, type : "error", file : "webui-auth" ) }'
 
 			loginGateName = "WebUiLoginGate"
-			fileWrite( interceptorDir & "/#loginGateName#.bx", renderLoginGate( userEntries ) )
+			fileWrite( interceptorDir & "/#loginGateName#.bx", renderLoginGate( userEntries, apiBase ) )
 
 			var handlerDir = Strings::normalizePath( arguments.appDir ) & "/handlers"
 			directoryCreate( path : handlerDir, createPath : true, ignoreExists : true )
@@ -198,7 +202,7 @@ class {
 	 * @entry A webui exposure entry { name, config }, from collectWebUiEntries()
 	 * @appDir Absolute path to the generated ColdBox app dir
 	 */
-	private void function renderUiBundle( required struct entry, required string appDir, array disable = [] ) {
+	private void function renderUiBundle( required struct entry, required string appDir, array disable = [], string apiBase = ApiPath::default() ) {
 		var templateDir = getDirectoryFromPath( getCurrentTemplatePath() )
 		var html = fileRead( templateDir & "webui/index.html" )
 
@@ -217,7 +221,7 @@ class {
 		var showReasoning = isNull( config.showReasoning ?: javacast( "null", "" ) ) ? true : !!config.showReasoning
 		var showTools = isNull( config.showToolCalls ?: javacast( "null", "" ) ) ? true : !!config.showToolCalls
 
-		html = html.replace( "__API_BASE__", ApiPath::reserved(), "all" )
+		html = html.replace( "__API_BASE__", arguments.apiBase, "all" )
 		// where a visitor without a sign-in is sent: only an entry with accounts has a form to send them to
 		html = html.replace( "__LOGIN_URL__", ( config.users ?: [] ).len() ? path & "/login.html" : "", "all" )
 		html = html.replace( "__APP_TITLE__", escapeHtml( title ), "all" )
@@ -759,7 +763,7 @@ class {
 	 *
 	 * @return The rendered interceptors/WebUiLoginGate.bx source
 	 */
-	private string function renderLoginGate( required array entries ) {
+	private string function renderLoginGate( required array entries, string apiBase = ApiPath::default() ) {
 		var lines = [
 			"/**",
 			" * GENERATED FILE - produced by BX Agents' build pipeline.",
@@ -788,7 +792,7 @@ class {
 			var basePath   = renderLiteral( base )
 			var loginPath  = renderLiteral( base & "/login" )
 			var logoutPath = renderLiteral( base & "/logout" )
-			var agentApi   = renderLiteral( ApiPath::reserved() )
+			var agentApi   = renderLiteral( arguments.apiBase )
 
 			lines.append( "" )
 			lines.append( "		if ( path.startsWith( #basePath# ) ) {" )

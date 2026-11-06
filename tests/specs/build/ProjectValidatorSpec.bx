@@ -36,7 +36,7 @@ class extends="testbox.system.BaseSpec" {
 				var result = validateFixture( "reserved-gateway-path" );
 				var reserved = result.errors.filter( e => e.findNoCase( "__bxagents" ) );
 				expect( reserved.len() ).toBeGT( 0 );
-				expect( reserved[ 1 ] ).toInclude( "reserves" );
+				expect( reserved[ 1 ] ).toInclude( "where the agent API is served" );
 			} );
 
 			it( "rejects a malformed agentApi block - unknown key, non-boolean enabled, and a tokenEnvVar that is a secret rather than a variable name", function() {
@@ -153,6 +153,20 @@ class extends="testbox.system.BaseSpec" {
 
 					expect( off.errors.filter( e => e.findNoCase( "cannot run without it" ) ) ).toHaveLength( 1 );
 					expect( offNoPage.errors ).toBeEmpty();
+				} );
+
+				it( "checks agentApi.path, and keeps a gateway entry off it", function() {
+					var nl = char( 10 );
+					var ok = profiledProject( "agentApi:" & nl & "  path: /agent-api" & nl );
+					var bad = profiledProject( "agentApi:" & nl & "  path: agent-api" & nl );
+					var taken = profiledProject( "agentApi:" & nl & "  path: /agent-api" & nl, { chat : '{ exposes : "webui", path : "/agent-api/chat" }' } );
+					var freed = profiledProject( "agentApi:" & nl & "  path: /agent-api" & nl, { chat : '{ exposes : "webui", path : "/__bxagents/chat" }' } );
+
+					expect( ok.errors ).toBeEmpty();
+					expect( bad.errors.filter( e => e.findNoCase( "agentApi.path" ) ) ).toHaveLength( 1 );
+					expect( taken.errors.filter( e => e.findNoCase( "where the agent API is served" ) ) ).toHaveLength( 1 );
+					// the default path is only reserved while it is the API's
+					expect( freed.errors ).toBeEmpty();
 				} );
 
 				it( "checks agentApi.access against what is set for tokens", function() {

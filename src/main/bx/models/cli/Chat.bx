@@ -42,7 +42,7 @@ class {
 	 * @options { projectRoot (required, absolute path) }
 	 */
 	/**
-	 * @options { projectRoot (required, absolute path), server (optional boolean - boot a throwaway miniserver and chat over real HTTP), connect (optional - the base URL of an already-running server, e.g. "http://127.0.0.1:8080"), token (optional - the access token for a server that wants one; BXAGENTS_TOKEN in the environment does the same) }
+	 * @options { projectRoot (required, absolute path), server (optional boolean - boot a throwaway miniserver and chat over real HTTP), connect (optional - the base URL of an already-running server, e.g. "http://127.0.0.1:8080"), token (optional - the access token for a server that wants one; BXAGENTS_TOKEN in the environment does the same), api-path (optional - where the server serves its API when it is not the default) }
 	 */
 	struct function run( struct options = {} ) {
 		var projectRoot = trim( arguments.options.projectRoot ?: "" )
@@ -270,6 +270,11 @@ class {
 		var token = trim( arguments.options.token ?: getSystemSetting( "BXAGENTS_TOKEN", "" ) )
 		if ( len( token ) ) {
 			client.withToken( token )
+		}
+		// a server that serves its API somewhere else than the default (agentApi.path): --api-path=/where
+		var apiPath = trim( arguments.options[ "api-path" ] ?: arguments.options.apiPath ?: "" )
+		if ( len( apiPath ) ) {
+			client.withPath( apiPath )
 		}
 
 		if ( wantsScreen( arguments.options ) ) {

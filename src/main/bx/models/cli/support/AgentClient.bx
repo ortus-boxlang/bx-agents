@@ -25,6 +25,19 @@ class {
 
 	function init() {
 		variables.token = ""
+		variables.apiPath = ApiPath::default()
+		return this
+	}
+
+	/**
+	 * Where the server serves its API, when it is not the default (agentApi.path in its config).
+	 *
+	 * @path The API path, e.g. "/agent-api"
+	 *
+	 * @return This client
+	 */
+	function withPath( required string path ) {
+		variables.apiPath = ApiPath::of( { path : arguments.path } )
 		return this
 	}
 
@@ -45,10 +58,10 @@ class {
 	 * @baseUrl A server root, e.g. "http://127.0.0.1:8080" - a trailing slash is tolerated
 	 * @subRoute Which `toAi()` sub-route to address; defaults to "invoke"
 	 *
-	 * @return The full URL of that sub-route on the reserved agent path
+	 * @return The full URL of that sub-route on the agent API's path
 	 */
 	string function agentUrl( required string baseUrl, string subRoute = "invoke" ) {
-		return arguments.baseUrl.reReplace( "[\/]+$", "" ) & ApiPath::reserved() & "/" & arguments.subRoute
+		return arguments.baseUrl.reReplace( "[\/]+$", "" ) & variables.apiPath & "/" & arguments.subRoute
 	}
 
 	/**
@@ -161,6 +174,9 @@ class {
 			port        : resolved,
 			host        : host
 		} )
+
+		// a server this client started serves the project's own API path, which the build wrote down
+		variables.apiPath = ApiPath::fromBuild( arguments.projectRoot.reReplace( "[\/]+$", "" ) & "/.build/app" )
 
 		return {
 			process : serveResult.process,

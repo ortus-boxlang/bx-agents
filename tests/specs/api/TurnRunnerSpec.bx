@@ -157,13 +157,46 @@ class extends="testbox.system.BaseSpec" {
 				expect( runner().pending( new bxagents.models.api.Caller( id = "bob" ), "t-1" ).data().pending ).toBeTrue();
 			} );
 
-			it( "cancels and steers by thread", function() {
+			it( "cancels and steers a run by thread, for the caller who started it", function() {
 				var r = runner();
+				bxagents.models.api.RunOwners::claim( "t-1", "ada" );
 
 				expect( r.cancel( caller, "t-1" ).data().cancelled ).toBeTrue();
 				expect( agent.cancelled() ).toBe( [ "t-1" ] );
 				expect( r.steer( caller, "t-1", "also this" ).data().steered ).toBeTrue();
 				expect( r.cancel( caller, "" ).code() ).toBe( "bad_request" );
+				bxagents.models.api.RunOwners::release( "t-1" );
+			} );
+
+			it( "refuses to cancel or steer somebody else's run, and leaves it running", function() {
+				var r = runner();
+				var bob = new bxagents.models.api.Caller( id = "bob" );
+				bxagents.models.api.RunOwners::claim( "t-2", "ada" );
+
+				expect( r.cancel( bob, "t-2" ).code() ).toBe( "not_your_run" );
+				expect( r.steer( bob, "t-2", "hijack" ).code() ).toBe( "not_your_run" );
+				expect( agent.cancelled() ).toBeEmpty();
+				bxagents.models.api.RunOwners::release( "t-2" );
+			} );
+
+			it( "lets only an admin touch a run with no known owner, and tells anyone else nothing happened", function() {
+				var r = runner();
+				var admin = new bxagents.models.api.Caller( id = "root", scope = "admin" );
+
+				expect( r.cancel( caller, "t-3" ).data().cancelled ).toBeFalse();
+				expect( agent.cancelled() ).toBeEmpty();
+				expect( r.cancel( admin, "t-3" ).data().cancelled ).toBeTrue();
+			} );
+
+			it( "knows who owns a run while it is going, and forgets it after", function() {
+				runner().stream( caller, { input : "hi", threadId : "t-4" }, function( name, data ) {
+					if ( name == "chunk" ) {
+						variables.ownerDuring = bxagents.models.api.RunOwners::of( "t-4" );
+					}
+				} );
+
+				expect( ownerDuring ).toBe( "ada" );
+				expect( bxagents.models.api.RunOwners::of( "t-4" ) ).toBe( "" );
 			} );
 
 		} );

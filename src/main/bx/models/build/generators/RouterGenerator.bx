@@ -209,9 +209,9 @@ class {
 			"// so this module's own tooling (chat --server, invoke --server) always has",
 			"// an address. A project's own public API belongs in gateways/ instead."
 		]
-		lines.append( turnRoutes( ApiPath::reserved(), gated ), true )
+		lines.append( turnRoutes( ApiPath::of( arguments.agentApi ), gated ), true )
 		lines.append( "" )
-		lines.append( renderRunControlRoutes( gated ), true )
+		lines.append( renderRunControlRoutes( gated, ApiPath::of( arguments.agentApi ) ), true )
 		return lines
 	}
 
@@ -220,11 +220,12 @@ class {
 	 * trip, conversations, notes and commands. All served by handlers/AgentApi.bx (see AgentApiGenerator).
 	 *
 	 * @gated True when they go through `auth`
+	 * @apiBase The path the API is served on
 	 *
 	 * @return The route statement lines
 	 */
-	private array function renderRunControlRoutes( required boolean gated ) {
-		var base = ApiPath::reserved()
+	private array function renderRunControlRoutes( required boolean gated, required string apiBase ) {
+		var base = arguments.apiBase
 		var g = arguments.gated
 		return [
 			"// Run control - the same path, served by handlers/AgentApi.bx",
