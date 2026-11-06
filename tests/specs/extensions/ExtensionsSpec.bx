@@ -149,6 +149,17 @@ class extends="testbox.system.BaseSpec" {
 				expect( commands.menu( "tui" ).map( c => c.name ) ).toInclude( "/solo" );
 			} );
 
+			it( "names the extension in the menu entry of its command, and leaves a built-in's blank", function() {
+				write( "extensions/solo.bx", "class { @Command( 'solo' ) function go( agentContext, commandArguments ) { return 'x' } }" );
+				load();
+				var menu = commands.menu( "tui" );
+
+				expect( menu.filter( c => c.name == "/solo" )[ 1 ].extension ).toBe( "solo" );
+				expect( menu.filter( c => c.name == "/info" )[ 1 ].extension ).toBe( "" );
+				expect( commands.extensionOf( commands.lookup( "info" ) ) ).toBe( "" );
+				expect( commands.extensionOf( commands.lookup( "solo" ) ) ).toBe( "solo" );
+			} );
+
 			it( "names a bare @Command after the method, and takes aliases, transports and admin from a struct or shorthands", function() {
 				write( "extensions/many.bx", "class {
 					@Command function ping2( agentContext ) { return 'pong' }

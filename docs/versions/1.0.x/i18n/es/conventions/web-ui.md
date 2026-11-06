@@ -344,8 +344,9 @@ Cada clave de abajo es opcional - la entrada funciona con solo `exposes` y `path
 | --- | --- |
 | `title` | Título del navegador y encabezado del header |
 | `subtitle` | Línea pequeña bajo el encabezado |
-| `icon` | Un emoji (renderizado en un favicon inline-SVG **y** el header) o una URL/ruta de imagen (`/logo.svg`, `https://…`, `data:image/…`) |
+| `icon` | Un emoji (renderizado en un favicon inline-SVG **y** el header) o una URL/ruta de imagen (`/logo.svg`, `https://…`, `data:image/…`) O `phosphor:<nombre>` para un icono del conjunto de la propia página (`phosphor:lightning`, `phosphor:robot`, `phosphor:chat-circle-text`, ...), usado en la cabecera y la pestaña; un nombre que el conjunto no tiene se muestra como texto. |
 | `welcome` | Mensaje de estado vacío mostrado antes del primer turno |
+| `suggestions` | Hasta cuatro textos cortos mostrados como botones bajo el mensaje de bienvenida en una conversación vacía. Un clic lo envía. |
 | `placeholder` | Placeholder del input del compositor |
 | `footer` | Nota pequeña bajo el compositor - descargos de responsabilidad, enlaces |
 | `showReasoning` | Muestra la franja de "Thinking". Por defecto `true` |

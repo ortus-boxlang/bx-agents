@@ -342,8 +342,9 @@ Every key below is optional - the entry works with just `exposes` and `path`.
 | --- | --- |
 | `title` | Browser title and header heading |
 | `subtitle` | Small line under the heading |
-| `icon` | An emoji (rendered into an inline-SVG favicon **and** the header) or an image URL/path (`/logo.svg`, `https://…`, `data:image/…`). With none, the header shows a robot |
+| `icon` | An emoji (rendered into an inline-SVG favicon **and** the header) or an image URL/path (`/logo.svg`, `https://…`, `data:image/…`). With none, the header shows a robot Or `phosphor:<name>` for an icon from the page's own set (`phosphor:lightning`, `phosphor:robot`, `phosphor:chat-circle-text`, ...), used for the header and the tab; a name the set does not have is shown as plain text. |
 | `welcome` | Empty-state message shown before the first turn |
+| `suggestions` | Up to four short texts shown as buttons under the welcome message on an empty conversation. One click sends it. |
 | `placeholder` | Composer input placeholder |
 | `footer` | Small note under the composer - disclaimers, links |
 | `showReasoning` | Show the "Thinking" strip. Default `true` |

@@ -124,13 +124,23 @@ class {
 	 * @transport "tui", "web" or "gateway"
 	 * @admin Whether the person may run admin commands; the ones that need it are left out when not
 	 *
-	 * @return [ { name : "/help", hint } ] for a transport: the slash menu and the help
+	 * @return [ { name : "/help", hint, extension } ] for a transport: the slash menu and the help. `extension` is the name of the
+	 *         extension that added the command, blank for a built-in.
 	 */
 	array function menu( required string transport, boolean admin = true ) {
 		var allowed = arguments.admin
 		return forTransport( arguments.transport )
 			.filter( c => allowed || c.permission() != "admin" )
-			.map( c => { name : "/" & c.name(), hint : c.hint() } )
+			.map( c => { name : "/" & c.name(), hint : c.hint(), extension : extensionOf( c ) } )
+	}
+
+	/**
+	 * @command An ICommand
+	 *
+	 * @return The name of the extension that added it, or blank for a built-in
+	 */
+	string function extensionOf( required any command ) {
+		return structKeyExists( arguments.command, "extension" ) ? arguments.command.extension() : ""
 	}
 
 	/**

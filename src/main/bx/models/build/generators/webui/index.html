@@ -273,6 +273,13 @@ __THEME_TOKENS__
 		color: var(--muted);
 		line-height: 1.5;
 	}
+	.welcome p { margin: 0 0 0.9rem; }
+	.welcome .suggestions { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; }
+	.welcome .suggestions button {
+		padding: 0.45rem 0.9rem; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--fg);
+		font: inherit; font-size: 0.88rem; cursor: pointer;
+	}
+	.welcome .suggestions button:hover { border-color: var(--accent); color: var(--accent-ink); background: var(--accent-soft); }
 	.turn {
 		display: flex;
 		flex-direction: column;
@@ -360,11 +367,17 @@ __THEME_TOKENS__
 		background: var(--tool-bg);
 		color: var(--tool-fg);
 	}
+	details.trace .preview { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.6; font-family: var(--font-mono); font-size: 0.72rem; }
 	details.trace .status {
 		margin-left: auto;
-		font-size: 0.75rem;
-		opacity: 0.75;
+		font-size: 0.72rem;
+		padding: 0.05rem 0.5rem;
+		border-radius: 999px;
+		background: var(--border);
 	}
+	details.trace .status.running { color: var(--accent-ink); background: var(--accent-soft); animation: toolPulse 1.2s ease-in-out infinite; }
+	details.trace .status.done { color: var(--muted); }
+	@keyframes toolPulse { 50% { opacity: 0.5; } }
 
 	form#composer {
 		display: grid;
@@ -469,13 +482,18 @@ __THEME_TOKENS__
 		border-radius: 4px;
 		padding: 0.08em 0.32em;
 	}
+	.bubble.assistant .codeblock { margin: 0 0 0.6rem; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); overflow: hidden; }
+	.bubble.assistant .codehead { display: flex; align-items: center; justify-content: space-between; padding: 0.2rem 0.4rem 0.2rem 0.75rem; border-bottom: 1px solid var(--border); font-size: 0.75rem; color: var(--muted); }
+	.bubble.assistant .codehead .lang { font-family: var(--font-mono); }
+	.bubble.assistant .codehead button { border: 0; background: none; color: var(--muted); font: inherit; font-size: 0.75rem; padding: 0.2rem 0.5rem; border-radius: 6px; cursor: pointer; }
+	.bubble.assistant .codehead button:hover { background: var(--accent-soft); color: var(--accent-ink); }
 	.bubble.assistant pre {
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-sm);
+		background: none;
+		border: 0;
+		border-radius: 0;
 		padding: 0.6rem 0.75rem;
 		overflow-x: auto;
-		margin: 0 0 0.6rem;
+		margin: 0;
 	}
 	.bubble.assistant pre code {
 		background: none;
@@ -574,6 +592,9 @@ __THEME_TOKENS__
 	#slashMenu li[aria-selected="true"], #slashMenu li:hover { background: var(--accent-soft); }
 	#slashMenu .cmd { font-family: var(--font-mono); }
 	#slashMenu .tip { color: var(--muted); }
+	#slashMenu .ext-badge { margin-left: auto; }
+	.ext-badge { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.05rem 0.55rem; border-radius: 999px; background: var(--accent-soft); color: var(--accent-ink); font-size: 0.72rem; }
+	.bubble.command > .ext-badge { margin-bottom: 0.4rem; }
 	.hint {
 		color: var(--muted);
 		font-size: 0.8rem;
@@ -982,6 +1003,7 @@ __MARKDOWN_SCRIPTS__
 	var SHOW_REASONING = __SHOW_REASONING__;
 	var SHOW_TOOLS = __SHOW_TOOLS__;
 	var WELCOME = "__WELCOME__";
+	var SUGGESTIONS = JSON.parse( "__SUGGESTIONS__" );
 	var KEY_STORAGE = "bxagents_webui_api_key";
 	var THEME_STORAGE = "bxagents_webui_theme";
 	var PROFILE_STORAGE = "bxagents_webui_profile";
@@ -1992,13 +2014,33 @@ __MARKDOWN_SCRIPTS__
 	}
 
 	function showWelcome() {
-		if ( !WELCOME.length ) {
+		if ( !WELCOME.length && !SUGGESTIONS.length ) {
 			return;
 		}
 		var el = document.createElement( "div" );
 		el.className = "welcome";
 		el.id = "welcome";
-		el.textContent = WELCOME;
+		if ( WELCOME.length ) {
+			var text = document.createElement( "p" );
+			text.textContent = WELCOME;
+			el.appendChild( text );
+		}
+		if ( SUGGESTIONS.length ) {
+			var chips = document.createElement( "div" );
+			chips.className = "suggestions";
+			SUGGESTIONS.forEach( function ( suggestion ) {
+				var chip = document.createElement( "button" );
+				chip.type = "button";
+				chip.textContent = suggestion;
+				// one click sends it, as typing it and pressing Enter would
+				chip.addEventListener( "click", function () {
+					inputEl.value = suggestion;
+					formEl.requestSubmit();
+				} );
+				chips.appendChild( chip );
+			} );
+			el.appendChild( chips );
+		}
 		messagesEl.appendChild( el );
 	}
 
@@ -2047,7 +2089,8 @@ __MARKDOWN_SCRIPTS__
 					var lang = ( token.lang || "" ).trim().split( /\s+/ )[ 0 ].toLowerCase();
 					var known = typeof hljs !== "undefined" && lang && hljs.getLanguage( lang );
 					var body = known ? hljs.highlight( token.text, { language: lang, ignoreIllegals: true } ).value : escapeHtml( token.text );
-					return '<pre><code class="hljs' + ( known ? " language-" + escapeHtml( lang ) : "" ) + '">' + body + "</code></pre>";
+					return '<div class="codeblock"><div class="codehead"><span class="lang">' + escapeHtml( lang || "text" ) + '</span><button type="button" class="copy-code">Copy</button></div>'
+						+ '<pre><code class="hljs' + ( known ? " language-" + escapeHtml( lang ) : "" ) + '">' + body + "</code></pre></div>";
 				}
 			}
 		} );
@@ -2155,17 +2198,20 @@ __MARKDOWN_SCRIPTS__
 					var summary = document.createElement( "summary" );
 					var label = document.createElement( "span" );
 					label.textContent = name || "tool";
+					var preview = document.createElement( "span" );
+					preview.className = "preview";
 					var status = document.createElement( "span" );
-					status.className = "status";
-					status.textContent = "calling…";
+					status.className = "status running";
+					status.textContent = "running…";
 					summary.appendChild( label );
+					summary.appendChild( preview );
 					summary.appendChild( status );
 					el.appendChild( summary );
 					var body = document.createElement( "div" );
 					body.className = "body";
 					el.appendChild( body );
 					root.insertBefore( el, bubble );
-					entry = { el: el, label: label, status: status, body: body, args: "" };
+					entry = { el: el, label: label, preview: preview, status: status, body: body, args: "" };
 					toolEls[ index ] = entry;
 				}
 				if ( name && name.length ) {
@@ -2174,13 +2220,15 @@ __MARKDOWN_SCRIPTS__
 				if ( argsFragment && argsFragment.length ) {
 					entry.args += argsFragment;
 					entry.body.textContent = entry.args;
+					entry.preview.textContent = entry.args.length > 60 ? entry.args.slice( 0, 60 ) + "…" : entry.args;
 				}
 				scrollToEnd();
 			},
 			settle: function ( sawContent ) {
 				bubble.classList.remove( "pending" );
 				Object.keys( toolEls ).forEach( function ( key ) {
-					toolEls[ key ].status.textContent = "called";
+					toolEls[ key ].status.className = "status done";
+					toolEls[ key ].status.textContent = "done";
 				} );
 				if ( !sawContent && !answer.length ) {
 					bubble.textContent = "(no response)";
@@ -2497,6 +2545,13 @@ __MARKDOWN_SCRIPTS__
 	function drawReply( reply ) {
 		var box = document.createElement( "div" );
 		box.className = "bubble command";
+		if ( reply.extension ) {
+			var badge = document.createElement( "span" );
+			badge.className = "ext-badge";
+			badge.innerHTML = icon( "puzzle-piece" );
+			badge.appendChild( document.createTextNode( " " + reply.extension ) );
+			box.appendChild( badge );
+		}
 		( reply.blocks || [] ).forEach( function ( block ) {
 			if ( block.type === "text" ) {
 				var p = document.createElement( "p" );
@@ -2719,6 +2774,12 @@ __MARKDOWN_SCRIPTS__
 			tip.textContent = c.hint;
 			li.appendChild( name );
 			li.appendChild( tip );
+			if ( c.extension ) {
+				var from = document.createElement( "span" );
+				from.className = "ext-badge";
+				from.textContent = c.extension;
+				li.appendChild( from );
+			}
 			li.addEventListener( "mousedown", function ( e ) {
 				e.preventDefault();
 				inputEl.value = c.name + " ";
@@ -2936,6 +2997,19 @@ __MARKDOWN_SCRIPTS__
 			.catch( function () {
 				showHint( "Compaction failed." );
 			} );
+	} );
+
+	// ---- Code blocks: Copy puts the code, not the rendered words, on the clipboard ----
+	messagesEl.addEventListener( "click", function ( evt ) {
+		var button = evt.target.closest( "button.copy-code" );
+		if ( !button || !navigator.clipboard ) {
+			return;
+		}
+		var code = button.closest( ".codeblock" ).querySelector( "pre code" );
+		navigator.clipboard.writeText( code.textContent ).then( function () {
+			button.textContent = "Copied";
+			setTimeout( function () { button.textContent = "Copy"; }, 1200 );
+		} );
 	} );
 
 	// ---- Settings menu ----------------------------------------------------------

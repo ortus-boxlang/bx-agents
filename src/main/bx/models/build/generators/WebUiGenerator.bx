@@ -239,6 +239,7 @@ class {
 			"all"
 		)
 		html = html.replace( "__WELCOME__", escapeJs( welcome ), "all" )
+		html = html.replace( "__SUGGESTIONS__", escapeJs( jsonSerialize( suggestionsOf( config ) ) ), "all" )
 		html = html.replace( "__SHOW_REASONING__", showReasoning ? "true" : "false", "all" )
 		html = html.replace( "__SHOW_TOOLS__", showTools ? "true" : "false", "all" )
 		html = html.replace( "__THEME_TOKENS__", renderThemeTokens( config.theme ?: {} ), "all" )
@@ -451,6 +452,14 @@ class {
 			return '<link rel="icon" href="' & escapeHtml( arguments.icon ) & '">'
 		}
 
+		var named = phosphorName( arguments.icon )
+		if ( len( named ) ) {
+			// the same drawing the header shows, from the page's own icon set
+			var drawing = iconSymbols()[ named ]
+			var vector = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="##3b5bdb">' & drawing & "</svg>"
+			return '<link rel="icon" href="data:image/svg+xml,' & urlEncodedFormat( vector ) & '">'
+		}
+
 		// Emoji favicons have no image file to ship: render the glyph into an
 		// inline SVG data URI, which keeps the page self-contained. The glyph is
 		// percent-encoded rather than dropped in raw - it is almost always
@@ -474,6 +483,11 @@ class {
 
 		if ( isIconUrl( arguments.icon ) ) {
 			return '<span class="icon"><img src="' & escapeHtml( arguments.icon ) & '" alt=""></span>'
+		}
+
+		var named = phosphorName( arguments.icon )
+		if ( len( named ) ) {
+			return '<span class="icon"><svg class="i" aria-hidden="true"><use href="##i-' & named & '"/></svg></span>'
 		}
 
 		return '<span class="icon">' & escapeHtml( arguments.icon ) & "</span>"
@@ -1267,6 +1281,57 @@ class {
 	 */
 	private string function renderLiteral( required string value ) {
 		return '"' & arguments.value.replace( '"', '""', "all" ).replace( "##", "####", "all" ) & '"'
+	}
+
+
+	/**
+	 * @icon The entry's `icon` config
+	 *
+	 * @return The icon's name when it is written `phosphor:<name>` and the page's icon set has it, else blank (so an emoji, a URL
+	 *         or a name the set does not have are not taken for one)
+	 */
+	private string function phosphorName( required string icon ) {
+		var written = trim( arguments.icon )
+		if ( !written.lCase().startsWith( "phosphor:" ) ) {
+			return ""
+		}
+		var named = lCase( trim( written.mid( 10, written.len() ) ) )
+		return iconSymbols().keyExists( named ) ? named : ""
+	}
+
+	/**
+	 * @return The drawings of the page's icon set, by name: the inside of each <symbol> of webui/vendor/icons.svg
+	 */
+	private struct function iconSymbols() {
+		if ( !variables.keyExists( "symbols" ) ) {
+			var found = {}
+			var sprite = fileRead( getDirectoryFromPath( getCurrentTemplatePath() ) & "webui/vendor/icons.svg" )
+			for ( var match in sprite.reMatch( '<symbol id="i-[a-z0-9-]+"[^>]*>.*?</symbol>' ) ) {
+				var name = match.reReplace( '^<symbol id="i-([a-z0-9-]+)".*$', "\1" )
+				found[ name ] = match.reReplace( "^<symbol[^>]*>(.*)</symbol>$", "\1" )
+			}
+			variables.symbols = found
+		}
+		return variables.symbols
+	}
+
+	/**
+	 * @config The entry's config
+	 *
+	 * @return The `suggestions` as at most four short texts: what the empty page offers to send with one click
+	 */
+	private array function suggestionsOf( required struct config ) {
+		var given = arguments.config.suggestions ?: []
+		if ( !isArray( given ) ) {
+			return []
+		}
+		var kept = []
+		for ( var suggestion in given ) {
+			if ( isSimpleValue( suggestion ) && len( trim( suggestion ) ) && kept.len() < 4 ) {
+				kept.append( left( trim( suggestion ), 120 ) )
+			}
+		}
+		return kept
 	}
 
 }

@@ -490,6 +490,26 @@ class extends="testbox.system.BaseSpec" {
 					}
 				} );
 
+				it( "offers up to four suggestions on the empty page, from the entry's suggestions", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var dir = newAppDir();
+					generator.generate( discovery, dir );
+					var page = fileRead( dir & "/chat/index.html" );
+					expect( page ).toInclude( 'var SUGGESTIONS = JSON.parse( "[]" )' );
+					expect( page ).toInclude( 'chips.className = "suggestions"' );
+				} );
+
+				it( "draws a code block with its language and a Copy button, and a tool card with a status", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var dir = newAppDir();
+					generator.generate( discovery, dir );
+					var page = fileRead( dir & "/chat/index.html" );
+					expect( page ).toInclude( 'class="copy-code"' );
+					expect( page ).toInclude( 'class="codehead"' );
+					expect( page ).toInclude( 'status.className = "status running"' );
+					expect( page ).toInclude( 'className = "ext-badge"' );
+				} );
+
 				it( "has a panel for access tokens that shows only when the server offers them, and shows a secret once", function() {
 					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
 					var appDir = newAppDir();
@@ -531,6 +551,28 @@ class extends="testbox.system.BaseSpec" {
 					expect( html ).toInclude( "function drawContextPanel" );
 					// the breakdown is drawn from the /context report, not by typing /context into the conversation
 					expect( html ).notToInclude( 'runCommand( "/context" )' );
+				} );
+
+				it( "takes a phosphor:<name> icon from the page's own icon set, for the header and the tab, and ignores a name it does not have", function() {
+					var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+					var dir = createTempDirectory( prefix = "bxagents-webui-icon-" );
+					tempDirs.append( dir );
+					directoryCopy( fixtures & "/gateways-webui", dir, true );
+					var gateway = dir & "/gateways/chatUi.bx";
+					var written = fileRead( gateway );
+					fileWrite( gateway, written.replace( "path        : ""/chat"",", "path : ""/chat"", icon : ""phosphor:lightning"", suggestions : [ ""What can you do?"", ""Summarize my notes"" ]," ) );
+					var appDir = newAppDir();
+					generator.generate( discoverer.discover( dir ), appDir );
+					var html = fileRead( appDir & "/chat/index.html" );
+
+					expect( html ).toInclude( '<span class="icon"><svg class="i" aria-hidden="true"><use href="##i-lightning"/></svg></span>' );
+					expect( html ).toInclude( 'rel="icon" href="data:image/svg+xml,' );
+					expect( html ).toInclude( 'JSON.parse( "[\"What can you do?\",\"Summarize my notes\"]" )' );
+
+					fileWrite( gateway, written.replace( "path        : ""/chat"",", "path : ""/chat"", icon : ""phosphor:nope""," ) );
+					var other = newAppDir();
+					generator.generate( discoverer.discover( dir ), other );
+					expect( fileRead( other & "/chat/index.html" ) ).toInclude( "phosphor:nope" );
 				} );
 
 				it( "shows a robot as the brand mark when no icon is configured", function() {
