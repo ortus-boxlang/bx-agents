@@ -18,7 +18,7 @@ flowchart TD
     F["a file under gateways/"] --> Q{"does configure() return<br/>an 'exposes' key?"}
     Q -->|"yes"| E["EXPOSURE<br/>a route into your agent"]
     Q -->|"no - it has a 'type' key instead"| C["CHANNEL ADAPTER<br/>a connection to a chat platform"]
-    E --> E1["exposes: agent<br/>route().toAi()"]
+    E --> E1["exposes: agent<br/>four routes of the agent API"]
     E --> E2["exposes: mcp<br/>route().toMCP()"]
     E --> E3["exposes: webui<br/>generated index.html + /api"]
     C --> C1["mock / cli / http<br/>pull-driven: something calls US"]
@@ -52,13 +52,9 @@ class {
 }
 ```
 
-Generates, in `config/Router.bx`:
+Generates, in `config/Router.bx`, four routes served by the agent API's own handler (`handlers/AgentApi.bx`, the same one as the [reserved `/__bxagents` route](../agent-bx.md#the-always-on-agent-route)): `POST /api/chat/invoke`, `POST /api/chat/stream` (SSE), `POST /api/chat/batch`, `GET /api/chat/info`. The bare `/api/chat` path itself is not routable.
 
-```javascript
-route( "/api/chat" ).toAi( "GeneratedAgent" )
-```
-
-which auto-registers **four** sub-routes: `POST /api/chat/invoke`, `POST /api/chat/stream` (SSE), `POST /api/chat/batch`, `GET /api/chat/info`. The bare `/api/chat` path itself is not routable.
+They follow the same [`agentApi.access`](../agent-bx.md#open-or-token) switch as the reserved route: with `token`, a request needs the shared secret or an issued token in `x-bxagents-token`, and is answered `401` without one.
 
 **Expose a local MCP server** (see [mcp/](../mcp.md)):
 

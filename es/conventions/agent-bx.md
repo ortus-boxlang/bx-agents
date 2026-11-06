@@ -218,7 +218,7 @@ POST /__bxagents/batch
 GET  /__bxagents/info
 ```
 
-Estas son las cuatro sub-rutas que registra el propio terminador `toAi()` de ColdBox. La ruta existe para que el tooling de este módulo siempre tenga una dirección con la que hablar - es la entrada de servicio, no la API pública de tu proyecto. La superficie pública propia de un proyecto va en `gateways/`, en las rutas que elijas.
+Responden con la forma que da el terminador `toAi()` de ColdBox, pero son rutas del handler propio de la API del agente, así que el mismo [ajuste de acceso](#agentapi) las cubre a ellas y a todas las demás. (El middleware de rutas de ColdBox no alcanza las rutas de `toAi()`, por eso no se usan.) La ruta existe para que el tooling de este módulo siempre tenga una dirección con la que hablar - es la entrada de servicio, no la API pública de tu proyecto. La superficie pública propia de un proyecto va en `gateways/`, en las rutas que elijas.
 
 ### Control de ejecución
 
@@ -235,9 +235,16 @@ POST /__bxagents/resume    # { threadId, decision } -> SSE, como /events
 GET  /__bxagents/tools
 GET  /__bxagents/profiles   # los perfiles que un cliente puede pedir
 GET  /__bxagents/agent    # name, model, what it can do
-GET  /__bxagents/sessions   # las conversaciones recientes de quien llama
+GET  /__bxagents/sessions   # las conversaciones recientes de quien llama (?source=terminal para las que empezaron ahí)
+POST /__bxagents/sessions   # { title? } empieza una: { conversationId }
 POST /__bxagents/sessions/rename   # { conversationId, title } pone nombre a una
 POST /__bxagents/sessions/fork     # { conversationId, title? } copia una, mensajes incluidos
+POST /__bxagents/sessions/delete   # { conversationId } su fila y los mensajes del agente para ella
+GET  /__bxagents/export    # ?conversationId=&format=md|html la conversación como archivo para guardar
+GET  /__bxagents/whoami    # quién cree el servidor que es quien llama: { id, name, scope, source, agent }
+GET  /__bxagents/preferences          # lo que quien llama ha puesto: { preferences : { clave : valor } }
+POST /__bxagents/preferences/set      # { key, value }
+POST /__bxagents/preferences/delete   # { key }
 GET  /__bxagents/history    # ?conversationId= lo que se dijo en una
 POST /__bxagents/clear      # { conversationId } olvida sus mensajes
 POST /__bxagents/compact    # { conversationId } resume los mensajes antiguos
@@ -293,7 +300,8 @@ Como la ruta está reservada, `build` **rechaza** cualquier entrada de `gateways
 | Clave | Tipo | Notas |
 |---|---|---|
 | `enabled` | boolean | Por defecto `true`. Ponlo a `false` para omitir la ruta por completo - para un build que va a un sitio donde no tiene por qué existir. |
-| `tokenEnvVar` | string | El **nombre** de una variable de entorno que contiene un secreto compartido. Cuando está puesto, cada sub-ruta exige una cabecera de petición `x-bxagents-token` coincidente. |
+| `access` | `open` o `token` | Si quien llama debe demostrar quién es. Si se omite, sigue a las dos claves siguientes: un `tokenEnvVar` o `tokens: true` significa `token`, nada significa `open`. `open` con alguna de ellas, o `token` sin ninguna, es un error de build. |
+| `tokenEnvVar` | string | El **nombre** de una variable de entorno que contiene un secreto compartido. Cuando está puesto, cada ruta exige una cabecera de petición `x-bxagents-token` coincidente. |
 | `tokens` | boolean | Por defecto `false`. `true` acepta además los [tokens de acceso](#tokens-de-acceso-para-un-agente-desplegado) hechos con `bxAgents token create`. |
 | `profiles` | lista | Por defecto ninguno. Los [perfiles](models.md#perfiles) que un cliente puede pedir con `options.profile` en `/events`, y lo que lista `GET /__bxagents/profiles` (nunca una clave). Cualquier otro perfil es un `400`, así que un llamante no puede elegir un modelo que no ofreciste. `chat --connect` usa esta lista para `/profile`. Cada nombre debe estar declarado en `Agent.yaml`, o ser `default`. |
 
@@ -318,6 +326,16 @@ function production() {
 	};
 }
 ```
+
+### Abierta o con token
+
+`access: open` (el valor por defecto cuando nada más está puesto) no pregunta nada a nadie: todos son el único usuario `local`. Está pensada para tu propia máquina. Cuando a `serve` se le dice que escuche en una dirección que otras máquinas pueden alcanzar (`--host=0.0.0.0`, por ejemplo) y la API está abierta, imprime un aviso al arrancar:
+
+```
+WARNING: the agent API is open and this server listens on every network interface (port 8080). Anyone who can reach it can chat with the agent, use its tools and read its conversations. Set agentApi.access to token ...
+```
+
+`access: token` pone cada ruta de la API tras una sola comprobación, hecha antes de que corra ninguna acción, por middleware de rutas de ColdBox. Eso incluye `invoke`, `stream`, `batch` e `info`, y las mismas cuatro rutas de cualquier [gateway que exponga el agente](gateways/index.md) (`exposes: "agent"`), que siguen este único interruptor. Una petición que no lleva ni el secreto compartido ni un token emitido recibe `401` y nunca llega al agente.
 
 La verja **falla cerrada**: si la variable nombrada está sin definir o vacía en tiempo de ejecución, no coincide nada - nunca degenera en comparar `""` con `""` y dejar pasar a todo el mundo. Una petición sin un token válido recibe un `401` con un pequeño cuerpo JSON, y nunca llega al agente.
 

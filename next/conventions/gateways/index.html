@@ -281,7 +281,7 @@
     F[&quot;a file under gateways/&quot;] --&gt; Q{&quot;does configure() return&lt;br/&gt;an 'exposes' key?&quot;}
     Q --&gt;|&quot;yes&quot;| E[&quot;EXPOSURE&lt;br/&gt;a route into your agent&quot;]
     Q --&gt;|&quot;no - it has a 'type' key instead&quot;| C[&quot;CHANNEL ADAPTER&lt;br/&gt;a connection to a chat platform&quot;]
-    E --&gt; E1[&quot;exposes: agent&lt;br/&gt;route().toAi()&quot;]
+    E --&gt; E1[&quot;exposes: agent&lt;br/&gt;four routes of the agent API&quot;]
     E --&gt; E2[&quot;exposes: mcp&lt;br/&gt;route().toMCP()&quot;]
     E --&gt; E3[&quot;exposes: webui&lt;br/&gt;generated index.html + /api&quot;]
     C --&gt; C1[&quot;mock / cli / http&lt;br/&gt;pull-driven: something calls US&quot;]
@@ -314,10 +314,8 @@ class {
 
 }
 </code></pre>
-<p>Generates, in <code>config/Router.bx</code>:</p>
-<pre><code class="language-javascript">route( &quot;/api/chat&quot; ).toAi( &quot;GeneratedAgent&quot; )
-</code></pre>
-<p>which auto-registers <strong>four</strong> sub-routes: <code>POST /api/chat/invoke</code>, <code>POST /api/chat/stream</code> (SSE), <code>POST /api/chat/batch</code>, <code>GET /api/chat/info</code>. The bare <code>/api/chat</code> path itself is not routable.</p>
+<p>Generates, in <code>config/Router.bx</code>, four routes served by the agent API's own handler (<code>handlers/AgentApi.bx</code>, the same one as the <a href="/next/conventions/agent-bx/index.html#the-always-on-agent-route">reserved <code>/__bxagents</code> route</a>): <code>POST /api/chat/invoke</code>, <code>POST /api/chat/stream</code> (SSE), <code>POST /api/chat/batch</code>, <code>GET /api/chat/info</code>. The bare <code>/api/chat</code> path itself is not routable.</p>
+<p>They follow the same <a href="/next/conventions/agent-bx/index.html#open-or-token"><code>agentApi.access</code></a> switch as the reserved route: with <code>token</code>, a request needs the shared secret or an issued token in <code>x-bxagents-token</code>, and is answered <code>401</code> without one.</p>
 <p><strong>Expose a local MCP server</strong> (see <a href="/next/conventions/mcp/index.html">mcp/</a>):</p>
 <pre><code class="language-javascript">class {
 	function configure() {

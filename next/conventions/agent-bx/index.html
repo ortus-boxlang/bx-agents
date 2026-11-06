@@ -246,7 +246,7 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#what-the-build-layers-on-top-of-the-class">What the build layers on top of the class</a></li><li class="toc-level-2"><a href="#configure-optional---overriding-what-the-class-set">configure&#x28;&#x29; &#x28;optional&#x29; - overriding what the class set</a></li><li class="toc-level-2"><a href="#the-model-slug">The model slug</a></li><li class="toc-level-2"><a href="#environment-overrides">Environment overrides</a></li><li class="toc-level-3"><a href="#detectenvironment">detectEnvironment&#x28;&#x29;</a></li><li class="toc-level-2"><a href="#merge-semantics">Merge semantics</a></li><li class="toc-level-2"><a href="#the-always-on-agent-route">The always-on agent route</a></li><li class="toc-level-3"><a href="#run-control">Run control</a></li><li class="toc-level-3"><a href="#answers-errors-and-who-is-calling">Answers, errors and who is calling</a></li><li class="toc-level-3"><a href="#agentapi">agentApi</a></li><li class="toc-level-3"><a href="#access-tokens-for-a-deployed-agent">Access tokens for a deployed agent</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#what-the-build-layers-on-top-of-the-class">What the build layers on top of the class</a></li><li class="toc-level-2"><a href="#configure-optional---overriding-what-the-class-set">configure&#x28;&#x29; &#x28;optional&#x29; - overriding what the class set</a></li><li class="toc-level-2"><a href="#the-model-slug">The model slug</a></li><li class="toc-level-2"><a href="#environment-overrides">Environment overrides</a></li><li class="toc-level-3"><a href="#detectenvironment">detectEnvironment&#x28;&#x29;</a></li><li class="toc-level-2"><a href="#merge-semantics">Merge semantics</a></li><li class="toc-level-2"><a href="#the-always-on-agent-route">The always-on agent route</a></li><li class="toc-level-3"><a href="#run-control">Run control</a></li><li class="toc-level-3"><a href="#answers-errors-and-who-is-calling">Answers, errors and who is calling</a></li><li class="toc-level-3"><a href="#agentapi">agentApi</a></li><li class="toc-level-3"><a href="#open-or-token">Open or token</a></li><li class="toc-level-3"><a href="#access-tokens-for-a-deployed-agent">Access tokens for a deployed agent</a></li></ul></details>
 		
 
 		
@@ -483,7 +483,9 @@ POST /__bxagents/stream    # SSE
 POST /__bxagents/batch
 GET  /__bxagents/info
 </code></pre>
-<p>These are the four sub-routes ColdBox's own <code>toAi()</code> terminator registers. The
+<p>They answer in the shape ColdBox's <code>toAi()</code> terminator gives, but they are routes of the agent API's own handler,
+so the same <a href="#agentapi">access setting</a> covers them and every other route. (ColdBox route middleware does not
+reach <code>toAi()</code>'s routes, which is why they are not used.) The
 route exists so this module's own tooling always has an address to talk to -
 it's the service entrance, not your project's public API. A project's own
 public surface belongs in <code>gateways/</code>, at whatever paths you choose.</p>
@@ -499,9 +501,16 @@ POST /__bxagents/resume    # { threadId, decision } -&gt; SSE, like /events
 GET  /__bxagents/tools
 GET  /__bxagents/profiles   # the profiles a client may ask for
 GET  /__bxagents/agent    # name, model, what it can do
-GET  /__bxagents/sessions   # the caller's recent conversations
+GET  /__bxagents/sessions   # the caller's recent conversations (?source=terminal for those that started there)
+POST /__bxagents/sessions   # { title? } start one: { conversationId }
 POST /__bxagents/sessions/rename   # { conversationId, title } name one
 POST /__bxagents/sessions/fork     # { conversationId, title? } copy one, messages and all
+POST /__bxagents/sessions/delete   # { conversationId } its row and the agent's messages for it
+GET  /__bxagents/export    # ?conversationId=&amp;format=md|html the conversation as a file to save
+GET  /__bxagents/whoami    # who the server takes the caller to be: { id, name, scope, source, agent }
+GET  /__bxagents/preferences          # what the caller has set: { preferences : { key : value } }
+POST /__bxagents/preferences/set      # { key, value }
+POST /__bxagents/preferences/delete   # { key }
 GET  /__bxagents/history    # ?conversationId= what was said in one
 POST /__bxagents/clear      # { conversationId } forget its messages
 POST /__bxagents/compact    # { conversationId } summarize the older messages
@@ -565,7 +574,8 @@ one that never answers.</p>
 </thead>
 <tbody>
 <tr><td><code>enabled</code></td><td>boolean</td><td>Default <code>true</code>. Set <code>false</code> to omit the route entirely - for a build going somewhere it has no business existing.</td></tr>
-<tr><td><code>tokenEnvVar</code></td><td>string</td><td>The <strong>name</strong> of an environment variable holding a shared secret. When set, every sub-route requires a matching <code>x-bxagents-token</code> request header.</td></tr>
+<tr><td><code>access</code></td><td><code>open</code> or <code>token</code></td><td>Whether callers must prove who they are. Left out, it follows the next two keys: a <code>tokenEnvVar</code> or <code>tokens: true</code> means <code>token</code>, nothing means <code>open</code>. <code>open</code> with either of those set, or <code>token</code> with neither, is a build error.</td></tr>
+<tr><td><code>tokenEnvVar</code></td><td>string</td><td>The <strong>name</strong> of an environment variable holding a shared secret. When set, every route requires a matching <code>x-bxagents-token</code> request header.</td></tr>
 <tr><td><code>tokens</code></td><td>boolean</td><td>Default <code>false</code>. <code>true</code> also accepts the <a href="#access-tokens-for-a-deployed-agent">access tokens</a> made with <code>bxAgents token create</code>.</td></tr>
 <tr><td><code>profiles</code></td><td>list</td><td>Default none. The <a href="/next/conventions/models/index.html#profiles">profiles</a> a client may ask for with <code>options.profile</code> on <code>/events</code>, and what <code>GET /__bxagents/profiles</code> lists (never a key). Any other profile is a <code>400</code>, so a caller cannot pick a model you did not offer. <code>chat --connect</code> uses this list for <code>/profile</code>. Each name must be declared in <code>Agent.yaml</code>, or <code>default</code>.</td></tr>
 </tbody>
@@ -589,10 +599,15 @@ project can leave the route open locally and require a token in production:</p>
 	};
 }
 </code></pre>
+<h3 id="open-or-token"><a href="#open-or-token" id="open-or-token" name="open-or-token" class="anchor"></a>Open or token</h3>
+<p><code>access: open</code> (the default when nothing else is set) asks nobody anything: everyone is the one <code>local</code> user. It is meant for your own machine. When <code>serve</code> is told to listen on an address other machines can reach (<code>--host=0.0.0.0</code>, say) and the API is open, it prints a warning at start:</p>
+<pre><code>WARNING: the agent API is open and this server listens on every network interface (port 8080). Anyone who can reach it can chat with the agent, use its tools and read its conversations. Set agentApi.access to token ...
+</code></pre>
+<p><code>access: token</code> puts every route of the API behind one check, made before any action runs, by ColdBox route middleware. That includes <code>invoke</code>, <code>stream</code>, <code>batch</code> and <code>info</code>, and the same four routes of any <a href="/next/conventions/gateways/index.html">gateway that exposes the agent</a> (<code>exposes: &quot;agent&quot;</code>), which follow this one switch. A request that carries neither the shared secret nor an issued token is answered <code>401</code> and never reaches the agent.</p>
 <p>The gate <strong>fails closed</strong>: if the named variable is unset or blank at runtime,
 nothing matches - it never degenerates into comparing <code>&quot;&quot;</code> to <code>&quot;&quot;</code> and letting
 every caller through. A request without a valid token gets a <code>401</code> with a small
-JSON body, and never reaches the agent.</p>
+JSON body (<code>code: unauthorized</code>), and never reaches the agent.</p>
 <div class="adm-block adm-warning">
 <div class="adm-heading">
 <svg class="adm-icon"><use xlink:href="#adm-warning" /></svg><span>Warning</span>
@@ -685,7 +700,7 @@ you do, and for any built <code>.bxa</code> artifact you deploy.</p>
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#what-the-build-layers-on-top-of-the-class">What the build layers on top of the class</a></li><li class="toc-level-2"><a href="#configure-optional---overriding-what-the-class-set">configure&#x28;&#x29; &#x28;optional&#x29; - overriding what the class set</a></li><li class="toc-level-2"><a href="#the-model-slug">The model slug</a></li><li class="toc-level-2"><a href="#environment-overrides">Environment overrides</a></li><li class="toc-level-3"><a href="#detectenvironment">detectEnvironment&#x28;&#x29;</a></li><li class="toc-level-2"><a href="#merge-semantics">Merge semantics</a></li><li class="toc-level-2"><a href="#the-always-on-agent-route">The always-on agent route</a></li><li class="toc-level-3"><a href="#run-control">Run control</a></li><li class="toc-level-3"><a href="#answers-errors-and-who-is-calling">Answers, errors and who is calling</a></li><li class="toc-level-3"><a href="#agentapi">agentApi</a></li><li class="toc-level-3"><a href="#access-tokens-for-a-deployed-agent">Access tokens for a deployed agent</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#what-the-build-layers-on-top-of-the-class">What the build layers on top of the class</a></li><li class="toc-level-2"><a href="#configure-optional---overriding-what-the-class-set">configure&#x28;&#x29; &#x28;optional&#x29; - overriding what the class set</a></li><li class="toc-level-2"><a href="#the-model-slug">The model slug</a></li><li class="toc-level-2"><a href="#environment-overrides">Environment overrides</a></li><li class="toc-level-3"><a href="#detectenvironment">detectEnvironment&#x28;&#x29;</a></li><li class="toc-level-2"><a href="#merge-semantics">Merge semantics</a></li><li class="toc-level-2"><a href="#the-always-on-agent-route">The always-on agent route</a></li><li class="toc-level-3"><a href="#run-control">Run control</a></li><li class="toc-level-3"><a href="#answers-errors-and-who-is-calling">Answers, errors and who is calling</a></li><li class="toc-level-3"><a href="#agentapi">agentApi</a></li><li class="toc-level-3"><a href="#open-or-token">Open or token</a></li><li class="toc-level-3"><a href="#access-tokens-for-a-deployed-agent">Access tokens for a deployed agent</a></li></ul></nav>
 				</aside>
 			
 		</div>
