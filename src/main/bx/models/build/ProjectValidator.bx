@@ -52,7 +52,11 @@ class {
 		for ( var problem in types.problems() ) {
 			errors.append( problem )
 		}
-		var apiBase = ApiPath::of( isStruct( arguments.resolvedConfig.agentApi ?: "" ) ? AgentApiConfig::effective( arguments.resolvedConfig.agentApi, arguments.discovery ) : {} )
+		// a path that is not a valid one is reported where agentApi is checked; here the default stands in for it
+		var apiBase = ApiPath::default()
+		if ( isStruct( arguments.resolvedConfig.agentApi ?: "" ) && !ApiPath::problems( arguments.resolvedConfig.agentApi.path ?: ApiPath::default() ).len() ) {
+			apiBase = ApiPath::of( AgentApiConfig::effective( arguments.resolvedConfig.agentApi, arguments.discovery ) )
+		}
 		validateGateways( arguments.discovery, errors, ( arguments.resolvedConfig.profiles ?: {} ).keyArray(), types, apiBase )
 		validateGatewaySession( arguments.resolvedConfig, errors, directoryExists( arguments.projectRoot & "/extensions" ) )
 		validateMcpServers( arguments.resolvedConfig, errors )

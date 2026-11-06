@@ -188,6 +188,35 @@ class extends="testbox.system.BaseSpec" {
 				expect( r.cancel( admin, "t-3" ).data().cancelled ).toBeTrue();
 			} );
 
+			it( "lets an admin cancel and steer a run that somebody else started", function() {
+				var r = runner();
+				var admin = new bxagents.models.api.Caller( id = "root", scope = "admin" );
+				bxagents.models.api.RunOwners::claim( "t-5", "ada" );
+
+				expect( r.cancel( admin, "t-5" ).data().cancelled ).toBeTrue();
+				expect( r.steer( admin, "t-5", "stop that" ).data().steered ).toBeTrue();
+				bxagents.models.api.RunOwners::release( "t-5" );
+			} );
+
+			it( "does not let a second caller take over a run by naming its thread id", function() {
+				var bob = new bxagents.models.api.Caller( id = "bob" );
+				bxagents.models.api.RunOwners::claim( "t-6", "ada" );
+
+				expect( runner().prepareTurn( bob, { input : "hi", threadId : "t-6" } ).code() ).toBe( "not_your_run" );
+				// the owner may carry on, and the claim does not move
+				expect( runner().prepareTurn( caller, { input : "hi", threadId : "t-6" } ).succeeded() ).toBeTrue();
+				expect( bxagents.models.api.RunOwners::claim( "t-6", "bob" ) ).toBeFalse();
+				expect( bxagents.models.api.RunOwners::of( "t-6" ) ).toBe( "ada" );
+				bxagents.models.api.RunOwners::release( "t-6" );
+			} );
+
+			it( "names the caller as owner of a resumed run, so it can be cancelled while it goes on", function() {
+				agent.withState( { options : { userId : "ada" }, suspendData : {} } );
+				var turn = runner().prepareResume( caller, "t-7", { decision : "approve" } ).data();
+
+				expect( turn.owner ).toBe( "ada" );
+			} );
+
 			it( "knows who owns a run while it is going, and forgets it after", function() {
 				runner().stream( caller, { input : "hi", threadId : "t-4" }, function( name, data ) {
 					if ( name == "chunk" ) {

@@ -46,6 +46,11 @@ class {
 	 */
 	any function prepareTurn( required any caller, required struct request ) {
 		var threadId = len( arguments.request.threadId ?: "" ) ? arguments.request.threadId : createUUID()
+		// a thread id is not a secret: it must not let a caller start a turn on a run that is somebody else's
+		var running = RunOwners::of( threadId )
+		if ( len( running ) && running != arguments.caller.id() ) {
+			return Outcome::failed( "not_your_run", "This run belongs to another caller" )
+		}
 		var supplied = arguments.request.options ?: {}
 		var options = isStruct( supplied ) ? duplicate( supplied ) : {}
 		if ( !profileAllowed( options ) ) {
@@ -121,6 +126,7 @@ class {
 		var reason = arguments.request.reason ?: ""
 		return Outcome::done( {
 			threadId : threadId,
+			owner    : decidedBy,
 			work     : ( onChunk ) => thisAgent.resumeStream( onChunk, decision, threadId, edited, decidedBy, reason )
 		} )
 	}
@@ -166,13 +172,15 @@ class {
 			return prepared
 		}
 		var turn = prepared.data()
-		RunOwners::claim( turn.threadId, turn.owner ?: "" )
+		var recorded = RunOwners::claim( turn.threadId, turn.owner ?: "" )
 		try {
 			return Outcome::done( { output : turn.run(), threadId : turn.threadId } )
 		} catch ( any e ) {
 			return Outcome::failed( "internal", e.message )
 		} finally {
-			RunOwners::release( turn.threadId )
+			if ( recorded ) {
+				RunOwners::release( turn.threadId )
+			}
 		}
 	}
 
@@ -218,7 +226,7 @@ class {
 		}
 		var threadId = arguments.turn.threadId
 		var work = arguments.turn.work
-		RunOwners::claim( threadId, arguments.turn.owner ?: "" )
+		var recorded = RunOwners::claim( threadId, arguments.turn.owner ?: "" )
 		var calls = {}
 		var counter = { value : 0 }
 		send( "thread", { "threadId" : threadId } )
@@ -266,7 +274,9 @@ class {
 			}
 		} finally {
 			BoxUnregisterInterceptor( interceptor )
-			RunOwners::release( threadId )
+			if ( recorded ) {
+				RunOwners::release( threadId )
+			}
 		}
 	}
 
@@ -309,18 +319,21 @@ class {
 	}
 
 	/**
-	 * A run can only be stopped or steered by who started it. For a run nobody here is known to have started (a chat
-	 * platform's, which bx-ai runs itself) only an admin may; anyone else is told nothing happened, which is also what
-	 * an unknown thread id gets.
+	 * A run can only be stopped or steered by who started it, or by an admin. For a run nobody here is known to have
+	 * started (a chat platform's, which bx-ai runs itself) only an admin may; anyone else is told nothing happened,
+	 * which is also what an unknown thread id gets.
 	 *
 	 * @return "yes" to go ahead, "no" for a run that is another caller's, "unknown" for a run with no known owner
 	 */
 	private string function control( required any caller, required string threadId ) {
+		if ( arguments.caller.isAdmin() ) {
+			return "yes"
+		}
 		var owner = RunOwners::of( arguments.threadId )
 		if ( len( owner ) ) {
 			return owner == arguments.caller.id() ? "yes" : "no"
 		}
-		return arguments.caller.isAdmin() ? "yes" : "unknown"
+		return "unknown"
 	}
 
 	/**

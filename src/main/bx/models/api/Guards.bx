@@ -104,6 +104,10 @@ class {
 		if ( !reFind( "^[0-9a-fA-F:.]+$", literal ) || ( !literal.find( ":" ) && !v4 ) ) {
 			return false
 		}
+		// every part of a dotted address is 0 to 255: anything else would be taken for a host name and looked up
+		if ( !literal.find( ":" ) && literal.listToArray( "." ).some( ( part ) => val( part ) > 255 ) ) {
+			return false
+		}
 		var bits = literal.find( ":" ) ? 128 : 32
 		try {
 			createObject( "java", "java.net.InetAddress" ).getByName( literal )

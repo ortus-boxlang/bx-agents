@@ -19,13 +19,18 @@ class {
 	}
 
 	/**
+	 * Notes who started a run, unless the run is already noted: a second caller naming the same thread id does not take it over.
+	 *
 	 * @threadId The run
 	 * @ownerId Who started it
+	 *
+	 * @return True when this call noted it, so this call is the one to forget it when the run ends
 	 */
-	static void function claim( required string threadId, required string ownerId ) {
-		if ( len( arguments.threadId ) && len( arguments.ownerId ) ) {
-			RunOwners::table().put( arguments.threadId, arguments.ownerId )
+	static boolean function claim( required string threadId, required string ownerId ) {
+		if ( !len( arguments.threadId ) || !len( arguments.ownerId ) ) {
+			return false
 		}
+		return isNull( RunOwners::table().putIfAbsent( arguments.threadId, arguments.ownerId ) )
 	}
 
 	/**
