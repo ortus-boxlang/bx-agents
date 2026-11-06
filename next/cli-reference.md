@@ -815,6 +815,26 @@ bxAgents notes import --file=notes.json
 - `export` writes the notes as JSON, to `--file` or to the screen. `import` adds the notes of such a file; a note already there is not added twice and one that does not fit the limit is reported (the command then exits `1`).
 - Run it where the database is: in the project, or on a server with `BXAGENTS_DB` set.
 
+### `vault`
+
+The secrets an agent uses at run time, sealed in the project's [shared chat database](conventions/web-ui.md#the-sqlite-store) (`data/chat.db`, or the file named by `BXAGENTS_DB`). See [the vault](conventions/vault.md).
+
+```bash
+bxAgents vault list [--scope=agent|user|all] [--user=NAME] [--json]
+bxAgents vault add --name=GMAIL_TOKEN [--user=NAME] [--description=TEXT] [--hosts=a.com,*.b.com] [--stdin]
+bxAgents vault edit --name=GMAIL_TOKEN [--user=NAME] [--description=TEXT] [--hosts=...] [--value] [--stdin]
+bxAgents vault remove --name=GMAIL_TOKEN [--user=NAME] [--yes]
+bxAgents vault status [--json]
+bxAgents vault audit [--limit=N] [--json]
+bxAgents vault key
+```
+
+- A value is **never a flag**. `add` and `edit` ask for it hidden at a terminal, or read it from a pipe with `--stdin` (`op read ... | bxAgents vault add --name=X --stdin`). Nothing here prints a value, and one cannot be shown again after it is saved.
+- Without `--user` a secret is the agent's (shared). With `--user=NAME` it is that person's own.
+- `edit` changes only what is given; `--value` (or `--stdin`) replaces the value.
+- `status` says where the key comes from and warns when it is the key file beside the database. `audit` lists who added, used, was refused and removed what, without values.
+- `key` prints a new random key to put in `BXAGENTS_VAULT_KEY`. It does not touch the database.
+
 ### `models`
 
 The models of a built project, and whether they answer.
