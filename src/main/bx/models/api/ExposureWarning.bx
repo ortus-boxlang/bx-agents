@@ -1,0 +1,49 @@
+/**
+ * What `serve` says when the agent API is open and the server can be reached from other machines. An open API
+ * (agentApi.access: open) lets anyone who can reach the port chat with the agent, use its tools and read its
+ * conversations, which is fine on this machine and a mistake on a network.
+ *
+ * It reads `config/agentapi.json`, which the build writes next to the router (see AgentApiGenerator).
+ */
+class {
+
+	/** The file the build writes: { enabled, access } */
+	static string function fileName() {
+		return "config/agentapi.json"
+	}
+
+	/**
+	 * @host What the server is bound to
+	 *
+	 * @return True for an address only this machine can reach
+	 */
+	static boolean function isLoopback( required string host ) {
+		var named = lCase( trim( arguments.host ) )
+		return named == "localhost" || named == "::1" || named == "[::1]" || reFind( "^127\.\d+\.\d+\.\d+$", named ) > 0
+	}
+
+	/**
+	 * @appDir The built app folder
+	 * @host What the server is bound to
+	 * @port The port it listens on
+	 *
+	 * @return The warning, or "" when there is nothing to warn about
+	 */
+	string function of( required string appDir, required string host, required numeric port ) {
+		if ( ExposureWarning::isLoopback( arguments.host ) ) {
+			return ""
+		}
+		var file = arguments.appDir & "/" & ExposureWarning::fileName()
+		if ( !fileExists( file ) ) {
+			return ""
+		}
+		var settings = jsonDeserialize( fileRead( file ) )
+		if ( !( settings.enabled ?: true ) || ( settings.access ?: "open" ) != "open" ) {
+			return ""
+		}
+		var where = arguments.host == "0.0.0.0" ? "every network interface" : arguments.host
+		return "WARNING: the agent API is open and this server listens on #where# (port #arguments.port#). Anyone who can reach it can chat with the agent, use its tools and read its conversations. "
+			& "Set agentApi.access to token (with tokenEnvVar or tokens: true) in Agent.yaml, or serve on 127.0.0.1."
+	}
+
+}

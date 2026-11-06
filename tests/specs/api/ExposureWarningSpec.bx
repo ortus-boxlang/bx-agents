@@ -1,0 +1,77 @@
+import bxModules.bxagents.models.api.ExposureWarning;
+
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "api.ExposureWarning", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-warn-" );
+				directoryCreate( dir & "/config" );
+				variables.warn = new bxagents.models.api.ExposureWarning();
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function settings( struct data ) {
+				fileWrite( dir & "/config/agentapi.json", jsonSerialize( data ) );
+			}
+
+			it( "knows which addresses only this machine can reach", function() {
+				expect( ExposureWarning::isLoopback( "127.0.0.1" ) ).toBeTrue();
+				expect( ExposureWarning::isLoopback( "localhost" ) ).toBeTrue();
+				expect( ExposureWarning::isLoopback( "::1" ) ).toBeTrue();
+				expect( ExposureWarning::isLoopback( "0.0.0.0" ) ).toBeFalse();
+				expect( ExposureWarning::isLoopback( "192.168.1.20" ) ).toBeFalse();
+			} );
+
+			it( "says nothing on this machine, open or not", function() {
+				settings( { enabled : true, access : "open" } );
+
+				expect( warn.of( dir, "127.0.0.1", 8080 ) ).toBe( "" );
+			} );
+
+			it( "warns when an open API listens on every interface, and says how to fix it", function() {
+				settings( { enabled : true, access : "open" } );
+
+				var said = warn.of( dir, "0.0.0.0", 8080 );
+				expect( said ).toInclude( "WARNING" );
+				expect( said ).toInclude( "every network interface" );
+				expect( said ).toInclude( "agentApi.access" );
+			} );
+
+			it( "warns for a named address too", function() {
+				settings( { enabled : true, access : "open" } );
+
+				expect( warn.of( dir, "192.168.1.20", 9000 ) ).toInclude( "192.168.1.20" );
+			} );
+
+			it( "says nothing when the API needs a token or is switched off", function() {
+				settings( { enabled : true, access : "token" } );
+				expect( warn.of( dir, "0.0.0.0", 8080 ) ).toBe( "" );
+
+				settings( { enabled : false, access : "open" } );
+				expect( warn.of( dir, "0.0.0.0", 8080 ) ).toBe( "" );
+			} );
+
+			it( "says nothing for a build that wrote no settings", function() {
+				expect( warn.of( dir, "0.0.0.0", 8080 ) ).toBe( "" );
+			} );
+
+			it( "is written by the build, with the access mode it decided", function() {
+				var gen = new bxagents.models.build.generators.AgentApiGenerator();
+				gen.generate( dir, { tokens : true } );
+				expect( jsonDeserialize( fileRead( dir & "/config/agentapi.json" ) ).access ).toBe( "token" );
+
+				gen.generate( dir, { enabled : false } );
+				expect( jsonDeserialize( fileRead( dir & "/config/agentapi.json" ) ).enabled ).toBeFalse();
+			} );
+
+		} );
+	}
+
+}

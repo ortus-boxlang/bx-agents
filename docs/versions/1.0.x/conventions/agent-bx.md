@@ -233,7 +233,9 @@ POST /__bxagents/batch
 GET  /__bxagents/info
 ```
 
-These are the four sub-routes ColdBox's own `toAi()` terminator registers. The
+They answer in the shape ColdBox's `toAi()` terminator gives, but they are routes of the agent API's own handler,
+so the same [access setting](#agentapi) covers them and every other route. (ColdBox route middleware does not
+reach `toAi()`'s routes, which is why they are not used.) The
 route exists so this module's own tooling always has an address to talk to -
 it's the service entrance, not your project's public API. A project's own
 public surface belongs in `gateways/`, at whatever paths you choose.
@@ -320,7 +322,8 @@ one that never answers.
 | Key | Type | Notes |
 |---|---|---|
 | `enabled` | boolean | Default `true`. Set `false` to omit the route entirely - for a build going somewhere it has no business existing. |
-| `tokenEnvVar` | string | The **name** of an environment variable holding a shared secret. When set, every sub-route requires a matching `x-bxagents-token` request header. |
+| `access` | `open` or `token` | Whether callers must prove who they are. Left out, it follows the next two keys: a `tokenEnvVar` or `tokens: true` means `token`, nothing means `open`. `open` with either of those set, or `token` with neither, is a build error. |
+| `tokenEnvVar` | string | The **name** of an environment variable holding a shared secret. When set, every route requires a matching `x-bxagents-token` request header. |
 | `tokens` | boolean | Default `false`. `true` also accepts the [access tokens](#access-tokens-for-a-deployed-agent) made with `bxAgents token create`. |
 | `profiles` | list | Default none. The [profiles](models.md#profiles) a client may ask for with `options.profile` on `/events`, and what `GET /__bxagents/profiles` lists (never a key). Any other profile is a `400`, so a caller cannot pick a model you did not offer. `chat --connect` uses this list for `/profile`. Each name must be declared in `Agent.yaml`, or `default`. |
 
@@ -348,10 +351,20 @@ function production() {
 }
 ```
 
+### Open or token
+
+`access: open` (the default when nothing else is set) asks nobody anything: everyone is the one `local` user. It is meant for your own machine. When `serve` is told to listen on an address other machines can reach (`--host=0.0.0.0`, say) and the API is open, it prints a warning at start:
+
+```
+WARNING: the agent API is open and this server listens on every network interface (port 8080). Anyone who can reach it can chat with the agent, use its tools and read its conversations. Set agentApi.access to token ...
+```
+
+`access: token` puts every route of the API behind one check, made before any action runs, by ColdBox route middleware. That includes `invoke`, `stream`, `batch` and `info`, and the same four routes of any [gateway that exposes the agent](gateways/index.md) (`exposes: "agent"`), which follow this one switch. A request that carries neither the shared secret nor an issued token is answered `401` and never reaches the agent.
+
 The gate **fails closed**: if the named variable is unset or blank at runtime,
 nothing matches - it never degenerates into comparing `""` to `""` and letting
 every caller through. A request without a valid token gets a `401` with a small
-JSON body, and never reaches the agent.
+JSON body (`code: unauthorized`), and never reaches the agent.
 
 !!! warning
     `tokenEnvVar` names a **variable**, never the secret itself. `build` rejects

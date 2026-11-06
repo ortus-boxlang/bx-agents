@@ -146,6 +146,21 @@ class extends="testbox.system.BaseSpec" {
 					expect( result.errors.filter( e => e.findNoCase( "offer different 'profiles'" ) ) ).toHaveLength( 1 );
 				} );
 
+				it( "checks agentApi.access against what is set for tokens", function() {
+					var nl = char( 10 );
+					var ok = profiledProject( "agentApi:" & nl & "  access: token" & nl & "  tokens: true" & nl );
+					var openOk = profiledProject( "agentApi:" & nl & "  access: open" & nl );
+					var contradicts = profiledProject( "agentApi:" & nl & "  access: open" & nl & "  tokens: true" & nl );
+					var nothing = profiledProject( "agentApi:" & nl & "  access: token" & nl );
+					var unknown = profiledProject( "agentApi:" & nl & "  access: closed" & nl );
+
+					expect( ok.errors ).toBeEmpty();
+					expect( openOk.errors ).toBeEmpty();
+					expect( contradicts.errors.filter( e => e.findNoCase( "Remove one or the other" ) ) ).toHaveLength( 1 );
+					expect( nothing.errors.filter( e => e.findNoCase( "which token" ) ) ).toHaveLength( 1 );
+					expect( unknown.errors.filter( e => e.findNoCase( "open or token" ) ) ).toHaveLength( 1 );
+				} );
+
 				it( "validates agentApi.profiles the same way", function() {
 					var good = profiledProject( "agentApi:" & char( 10 ) & "  profiles: [ fast, slow ]" & char( 10 ) );
 					var bad = profiledProject( "agentApi:" & char( 10 ) & "  profiles: [ nope ]" & char( 10 ) );

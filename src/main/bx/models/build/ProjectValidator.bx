@@ -8,6 +8,8 @@
  */
 import bxModules.bxagents.models.util.EntryConfigReader;
 
+import bxModules.bxagents.models.api.AccessMode;
+
 class {
 
 	property name="modelSlugParser";
@@ -737,11 +739,11 @@ class {
 
 		var agentApi = arguments.resolvedConfig.agentApi
 		if ( !isStruct( agentApi ) ) {
-			arguments.errors.append( "Agent.bx's 'agentApi' must be a struct of { enabled, tokenEnvVar, tokens, profiles }" )
+			arguments.errors.append( "Agent.bx's 'agentApi' must be a struct of { enabled, access, tokenEnvVar, tokens, profiles }" )
 			return
 		}
 
-		var validKeys = [ "enabled", "tokenEnvVar", "tokens", "profiles" ]
+		var validKeys = [ "enabled", "access", "tokenEnvVar", "tokens", "profiles" ]
 		for ( var key in agentApi ) {
 			if ( !validKeys.contains( key ) ) {
 				arguments.errors.append( "Agent.bx's 'agentApi' has an unknown key [#key#] - valid keys: #validKeys.toList( ", " )#" )
@@ -755,6 +757,8 @@ class {
 		if ( structKeyExists( agentApi, "tokens" ) && !isBoolean( agentApi.tokens ) ) {
 			arguments.errors.append( "Agent.bx's 'agentApi.tokens' must be a boolean" )
 		}
+
+		arguments.errors.append( AccessMode::problems( agentApi ), true )
 
 		validateOfferedProfiles( "Agent.bx's 'agentApi'", agentApi, ( arguments.resolvedConfig.profiles ?: {} ).keyArray(), arguments.errors )
 

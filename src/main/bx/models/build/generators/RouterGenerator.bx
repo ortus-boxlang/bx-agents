@@ -26,6 +26,7 @@
 import bxModules.bxagents.models.util.Strings;
 
 import bxModules.bxagents.models.util.EntryConfigReader;
+import bxModules.bxagents.models.api.AccessMode;
 
 class {
 
@@ -58,13 +59,15 @@ class {
 		var exposureEntries = collectExposureEntries( arguments.discovery )
 		var lines = []
 
+		var gated = AccessMode::of( arguments.agentApi ) == "token"
+		lines.append( renderAuthGate( arguments.agentApi ), true )
 		lines.append( renderReservedAgentRoute( arguments.agentApi ), true )
 
 		for ( var entry in exposureEntries ) {
 			if ( lines.len() ) {
 				lines.append( "" )
 			}
-			lines.append( renderExposureRoute( entry ) )
+			lines.append( renderExposureRoute( entry, gated ) )
 		}
 
 		if ( arguments.hasChannelGateway ) {
@@ -137,161 +140,130 @@ class {
 	}
 
 	/**
-	 * Renders the RESERVED agent route - `route( "/__bxagents" ).toAi( ... )` -
-	 * emitted on EVERY build regardless of what the project declares under
-	 * `gateways/`, so this module's own tooling always has an address to talk
-	 * to. Without it, `invoke --server` (and anything else that needs to reach
-	 * a built agent over HTTP) fails outright on any project that never
-	 * declared an `exposes: "agent"` entry - which is every scaffolded
-	 * template.
+	 * The gate every agent API route passes first, when the API needs a token (agentApi.access): ColdBox route
+	 * middleware that asks models.api.Authenticator who is calling. It names the caller on the request, or answers 401
+	 * itself and stops the action. An open API has no gate.
 	 *
-	 * This is deliberately NOT a substitute for a project's own
-	 * `exposes: "agent"` entry: that one is the user's public API, at a path
-	 * they choose. This one is the toolchain's service entrance, at a fixed
-	 * reserved path a user's own entry can never collide with (ProjectValidator
-	 * rejects any gateways/* path under the same prefix).
+	 * @agentApi The root project's `agentApi` config
 	 *
-	 * `agentApi.enabled` (default TRUE) turns it off entirely - for a build
-	 * destined somewhere the endpoint has no business existing. Because it
-	 * reads from `configure()`, an `Agent.bx` can scope that per environment
-	 * with a `production()` override, using the mechanism that already exists.
+	 * @return The statement lines that define `auth`; none when the API is open
+	 */
+	private array function renderAuthGate( required struct agentApi ) {
+		if ( AccessMode::of( arguments.agentApi ) != "token" ) {
+			return []
+		}
+		var tokenEnvVar = trim( arguments.agentApi.tokenEnvVar ?: "" )
+		var tokens = ( arguments.agentApi.tokens ?: false ) ? "true" : "false"
+		return [
+			"// Who may call: a request carries the shared secret (#len( tokenEnvVar ) ? tokenEnvVar : 'none set'#) or an issued token (#tokens#).",
+			"// A request that carries neither is answered 401 before any action runs; the secret itself is read from the",
+			"// environment when a request comes in and is never written here.",
+			'var auth = ( event, rc, prc ) => new "models.api.Authenticator@bxagents"( "#Strings::bxLiteral( tokenEnvVar )#", #tokens# ).guard( event )',
+			""
+		]
+	}
+
+	/**
+	 * The route to one action of the agent API handler, behind the gate when the API needs a token.
 	 *
-	 * `agentApi.tokenEnvVar` names an environment variable holding a shared
-	 * secret; when set, every sub-route is gated behind ColdBox's own
-	 * `withCondition()` route modifier (inherited by all four sub-routes -
-	 * confirmed against the real `toAi()` source), which compares an
-	 * `x-bxagents-token` request header against it. The condition FAILS CLOSED
-	 * on purpose: an unset/blank env var returns false outright, rather than
-	 * degenerating into `"" == ""` and letting every caller through - which is
-	 * exactly the trap a naive equality check falls into. A failing condition
-	 * makes ColdBox skip the route entirely - which, on its own, would drop the
-	 * request through to ColdBox's default `main.index` event. A generated app
-	 * defines no such handler, so that path produces a 500 ERROR PAGE, not a
-	 * clean refusal (confirmed by real HTTP request, not assumed - it is what
-	 * the first working version of this actually did). So a second route is
-	 * registered immediately after, catching everything the condition turned
-	 * away and answering a deliberate 401 with a small JSON body. That does
-	 * confirm the endpoint exists, which a 404 would not - but leaking a
-	 * ColdBox error page is strictly worse than admitting an endpoint is
-	 * there, and it also stops the refusal path depending on whether the
-	 * project happens to define a `main.index`.
+	 * @verb get or post; empty for a path that answers both
+	 * @path The full path
+	 * @action The AgentApi action
+	 * @gated True when the route goes through `auth`
+	 */
+	private string function handlerRoute( required string verb, required string path, required string action, required boolean gated ) {
+		var start = len( arguments.verb ) ? '#arguments.verb#( "#Strings::bxLiteral( arguments.path )#" )' : 'route( "#Strings::bxLiteral( arguments.path )#" )'
+		return start & ( arguments.gated ? ".middleware( auth )" : "" ) & '.toHandler( "AgentApi.#arguments.action#" )'
+	}
+
+	/**
+	 * The four routes every place that serves the agent has: one whole turn, many, a stream, and what is served.
 	 *
-	 * The condition closure takes ONE argument, the routed request string:
-	 * RoutingService invokes it as `condition( requestString )` (confirmed in
-	 * `RoutingService.cfc`'s own match loop), NOT with the
-	 * `( route, params, event )` signature ColdBox's `Router.cfc` docblocks
-	 * show. So the header is read with `getHTTPRequestData( false ).headers` -
-	 * the same BIF `Router.cfc` itself uses to read request headers - rather
-	 * than off an `event` that is never passed. Header lookup is
-	 * case-insensitive because BoxLang struct keys are.
+	 * @base The path they sit under
+	 * @gated True when they go through `auth`
+	 */
+	private array function turnRoutes( required string base, required boolean gated ) {
+		return [
+			handlerRoute( "post", arguments.base & "/invoke", "invoke", arguments.gated ),
+			handlerRoute( "post", arguments.base & "/stream", "stream", arguments.gated ),
+			handlerRoute( "post", arguments.base & "/batch", "batch", arguments.gated ),
+			handlerRoute( "get", arguments.base & "/info", "info", arguments.gated )
+		]
+	}
+
+	/**
+	 * Renders the RESERVED agent route: the whole agent API at /__bxagents, emitted on EVERY build regardless of what
+	 * the project declares under `gateways/`, so this module's own tooling always has an address to talk to. Without it,
+	 * `invoke --server` (and anything else that needs to reach a built agent over HTTP) fails outright on any project
+	 * that never declared a public one.
 	 *
-	 * @agentApi The root project's `agentApi` config - `{ enabled, tokenEnvVar }`, both optional
+	 * `agentApi.enabled` (default TRUE) turns it off entirely - for a build destined somewhere the endpoint has no
+	 * business existing. Because it reads from `configure()`, an `Agent.bx` can scope that per environment with a
+	 * `production()` override, using the mechanism that already exists.
 	 *
-	 * @return The route's own statement line(s) - an empty array when `agentApi.enabled` is false
+	 * Every route is our own handler route (handlers/AgentApi.bx), never ColdBox's toAi(): route middleware does not
+	 * cover toAi()'s routes (a real run showed `stream` answering with no token at all), so a gate on them would have
+	 * been a hole. See renderAuthGate().
+	 *
+	 * @agentApi The root project's `agentApi` config - `{ enabled, access, tokenEnvVar, tokens }`, all optional
+	 *
+	 * @return The route's own statement lines - an empty array when `agentApi.enabled` is false
 	 */
 	private array function renderReservedAgentRoute( required struct agentApi ) {
 		if ( !( arguments.agentApi.enabled ?: true ) ) {
 			return []
 		}
-
-		var tokenEnvVar = trim( arguments.agentApi.tokenEnvVar ?: "" )
-		var issuedTokens = arguments.agentApi.tokens ?: false
-
+		var gated = AccessMode::of( arguments.agentApi ) == "token"
 		var lines = [
 			"// The reserved agent route - always present, whatever gateways/ declares,",
 			"// so this module's own tooling (chat --server, invoke --server) always has",
 			"// an address. A project's own public API belongs in gateways/ instead."
 		]
-
-		if ( !len( tokenEnvVar ) && !issuedTokens ) {
-			lines.append( 'route( "#static.RESERVED_AGENT_PATH#" ).toAi( "GeneratedAgent" )' )
-			lines.append( "" )
-			lines.append( renderRunControlRoutes(), true )
-			return lines
-		}
-
-		if ( len( tokenEnvVar ) ) {
-			lines.append( "// Gated on #tokenEnvVar#: an unset or blank value matches nothing," )
-			lines.append( "// so this fails closed rather than letting every caller through." )
-		}
-		if ( issuedTokens ) {
-			lines.append( "// Tokens made by `bxAgents token create` are accepted too (see models/store/TokenService)." )
-		}
-		lines.append( 'route( "#static.RESERVED_AGENT_PATH#" )' )
-		lines.append( '	.withCondition( ( requestString ) => {' )
-		lines.append( '		var given = getHTTPRequestData( false ).headers[ "x-bxagents-token" ] ?: ""' )
-		lines.append( '		if ( !len( given ) ) {' )
-		lines.append( '			return false' )
-		lines.append( '		}' )
-		if ( len( tokenEnvVar ) ) {
-			lines.append( '		var expected = getSystemSetting( "#Strings::bxLiteral( tokenEnvVar )#", "" )' )
-			lines.append( '		if ( len( expected ) && given == expected ) {' )
-			lines.append( '			return true' )
-			lines.append( '		}' )
-		}
-		if ( issuedTokens ) {
-			lines.append( '		return !new "models.store.TokenService@bxagents"( new "models.store.ChatStore@bxagents"( "" ) ).authenticate( given ).isEmpty()' )
-		} else {
-			lines.append( '		return false' )
-		}
-		lines.append( '	} )' )
-		lines.append( '	.toAi( "GeneratedAgent" )' )
+		lines.append( turnRoutes( static.RESERVED_AGENT_PATH, gated ), true )
 		lines.append( "" )
-		// Before the catch-all below, or it would answer 401 for these too. They are gated by the
-		// handler itself (handlers/AgentApi.bx), with the same variable and header.
-		lines.append( renderRunControlRoutes(), true )
-		lines.append( "" )
-		lines.append( "// Registered AFTER the gated route, so it only ever catches what the" )
-		lines.append( "// condition above turned away. Without it a refused request falls" )
-		lines.append( "// through to ColdBox's default main.index event, which a generated app" )
-		lines.append( "// does not define - producing a 500 error page instead of an answer." )
-		lines.append( "// RoutingService renders whatever this returns as JSON, with the" )
-		lines.append( "// route's own status code, so the closure just returns the body." )
-		lines.append( 'route( "#static.RESERVED_AGENT_PATH#/:subroute?" )' )
-		lines.append( '	.toResponse( ( event, rc, prc ) => {' )
-		lines.append( '		return { "success" : false, "error" : "Missing or invalid x-bxagents-token header" }' )
-		lines.append( '	}, 401 )' )
-
+		lines.append( renderRunControlRoutes( gated ), true )
 		return lines
 	}
 
 	/**
-	 * The run-control routes beside toAi()'s four: the rich event stream, stopping and steering a run,
-	 * and the approval round trip. They are served by handlers/AgentApi.bx (see AgentApiGenerator), which
-	 * checks the same token itself.
+	 * The routes beside the four turn routes: the rich event stream, stopping and steering a run, the approval round
+	 * trip, conversations, notes and commands. All served by handlers/AgentApi.bx (see AgentApiGenerator).
+	 *
+	 * @gated True when they go through `auth`
 	 *
 	 * @return The route statement lines
 	 */
-	private array function renderRunControlRoutes() {
+	private array function renderRunControlRoutes( required boolean gated ) {
 		var base = static.RESERVED_AGENT_PATH
+		var g = arguments.gated
 		return [
 			"// Run control - the same path, served by handlers/AgentApi.bx",
-			'post( "#base#/events" ).toHandler( "AgentApi.events" )',
-			'post( "#base#/cancel" ).toHandler( "AgentApi.cancel" )',
-			'post( "#base#/steer" ).toHandler( "AgentApi.steer" )',
-			'post( "#base#/resume" ).toHandler( "AgentApi.resume" )',
-			'get( "#base#/pending" ).toHandler( "AgentApi.pending" )',
-			'get( "#base#/tools" ).toHandler( "AgentApi.tools" )',
-			'get( "#base#/agent" ).toHandler( "AgentApi.about" )',
-			'get( "#base#/profiles" ).toHandler( "AgentApi.profiles" )',
+			handlerRoute( "post", base & "/events", "events", g ),
+			handlerRoute( "post", base & "/cancel", "cancel", g ),
+			handlerRoute( "post", base & "/steer", "steer", g ),
+			handlerRoute( "post", base & "/resume", "resume", g ),
+			handlerRoute( "get", base & "/pending", "pending", g ),
+			handlerRoute( "get", base & "/tools", "tools", g ),
+			handlerRoute( "get", base & "/agent", "about", g ),
+			handlerRoute( "get", base & "/profiles", "profiles", g ),
 			// the specific routes first: a pattern also matches what follows it
-			'post( "#base#/sessions/rename" ).toHandler( "AgentApi.renameSession" )',
-			'post( "#base#/sessions/fork" ).toHandler( "AgentApi.forkSession" )',
-			'get( "#base#/sessions" ).toHandler( "AgentApi.sessions" )',
-			'get( "#base#/history" ).toHandler( "AgentApi.history" )',
-			'post( "#base#/clear" ).toHandler( "AgentApi.clear" )',
-			'post( "#base#/compact" ).toHandler( "AgentApi.compact" )',
-			'post( "#base#/ping" ).toHandler( "AgentApi.ping" )',
-			'get( "#base#/context" ).toHandler( "AgentApi.context" )',
-			'get( "#base#/status" ).toHandler( "AgentApi.status" )',
-			'get( "#base#/slots" ).toHandler( "AgentApi.slots" )',
-			'get( "#base#/commands" ).toHandler( "AgentApi.commands" )',
-			'post( "#base#/command" ).toHandler( "AgentApi.command" )',
-			'post( "#base#/notes/update" ).toHandler( "AgentApi.updateNote" )',
-			'post( "#base#/notes/remove" ).toHandler( "AgentApi.removeNote" )',
+			handlerRoute( "post", base & "/sessions/rename", "renameSession", g ),
+			handlerRoute( "post", base & "/sessions/fork", "forkSession", g ),
+			handlerRoute( "get", base & "/sessions", "sessions", g ),
+			handlerRoute( "get", base & "/history", "history", g ),
+			handlerRoute( "post", base & "/clear", "clear", g ),
+			handlerRoute( "post", base & "/compact", "compact", g ),
+			handlerRoute( "post", base & "/ping", "ping", g ),
+			handlerRoute( "get", base & "/context", "context", g ),
+			handlerRoute( "get", base & "/status", "status", g ),
+			handlerRoute( "get", base & "/slots", "slots", g ),
+			handlerRoute( "get", base & "/commands", "commands", g ),
+			handlerRoute( "post", base & "/command", "command", g ),
+			handlerRoute( "post", base & "/notes/update", "updateNote", g ),
+			handlerRoute( "post", base & "/notes/remove", "removeNote", g ),
 			// one route for the list (GET) and for adding (POST): the handler tells them apart, as a pattern also
 			// matches what follows it and ColdBox does not keep a GET route from answering a POST
-			'route( "#base#/notes" ).toHandler( "AgentApi.notes" )'
+			handlerRoute( "", base & "/notes", "notes", g )
 		]
 	}
 
@@ -325,10 +297,11 @@ class {
 
 	/**
 	 * @entry An exposure entry { name, config }, from collectExposureEntries()
+	 * @gated True when the agent API needs a token: the agent routes go through `auth`
 	 *
 	 * @return A bare `route(...).toAi(...)` or `route(...).toMCP(...)` statement string
 	 */
-	private string function renderExposureRoute( required struct entry ) {
+	private string function renderExposureRoute( required struct entry, required boolean gated ) {
 		// Normalized exactly as WebUiGenerator normalizes the same value when it
 		// mounts the chat shell, so the two generators can never disagree about
 		// where an entry lives: a path of "/chat/" mounts at <appDir>/chat with
@@ -337,7 +310,8 @@ class {
 		var path = Strings::normalizePath( arguments.entry.config.path ?: "" )
 
 		if ( arguments.entry.config.exposes == "agent" ) {
-			return 'route( "#Strings::bxLiteral( path )#" ).toAi( "GeneratedAgent" )'
+			// the same four routes as the reserved path, from the same handler, behind the same gate
+			return turnRoutes( path, arguments.gated ).toList( char( 10 ) & char( 9 ) & char( 9 ) )
 		}
 
 		if ( arguments.entry.config.exposes == "webui" ) {

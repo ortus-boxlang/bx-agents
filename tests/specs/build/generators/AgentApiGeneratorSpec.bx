@@ -32,11 +32,11 @@ class extends="testbox.system.BaseSpec" {
 
 				expect( result.written ).toBeTrue();
 				expect( result.path ).toBe( dir & "/handlers/AgentApi.bx" );
-				for ( var action in [ "events", "cancel", "steer", "pending", "resume", "tools", "about", "notes", "sessions", "history", "clear", "compact", "updateNote", "removeNote", "profiles", "commands", "command", "renameSession", "forkSession", "ping", "context", "status", "slots" ] ) {
+				for ( var action in [ "invoke", "stream", "batch", "info", "events", "cancel", "steer", "pending", "resume", "tools", "about", "notes", "sessions", "history", "clear", "compact", "updateNote", "removeNote", "profiles", "commands", "command", "renameSession", "forkSession", "ping", "context", "status", "slots" ] ) {
 					expect( source ).toInclude( "function #action#( event, rc, prc )" );
 				}
 				// every action starts by checking the token (a preHandler cannot stop the action)
-				expect( source.reMatch( "if \( refused\( event \) \)" ) ).toHaveLength( 23 );
+				expect( source.reMatch( "if \( refused\( event \) \)" ) ).toHaveLength( 27 );
 				expect( source ).notToInclude( "function preHandler(" );
 				// the work is the service's: the handler holds no copy of the turn, picture or conversation logic
 				expect( source ).toInclude( "models.api.AgentService@bxagents" );
@@ -55,31 +55,19 @@ class extends="testbox.system.BaseSpec" {
 				expect( some ).toInclude( "OfferedProfiles@bxagents" );
 			} );
 
-			it( "accepts issued tokens only when agentApi.tokens is on", function() {
-				var off = fileRead( generator.generate( newAppDir(), {} ).path );
-				var on = fileRead( generator.generate( newAppDir(), { tokens : true } ).path );
-
-				expect( off ).toInclude( '"false" == "true"' );
-				expect( on ).toInclude( '"true" == "true"' );
-				expect( on ).toInclude( 'new "models.store.TokenService@bxagents"' );
+			it( "stamps the access mode in: open unless a secret or issued tokens are set, or access says so", function() {
+				expect( fileRead( generator.generate( newAppDir(), {} ).path ) ).toInclude( 'return "open"' );
+				expect( fileRead( generator.generate( newAppDir(), { tokens : true } ).path ) ).toInclude( 'return "token"' );
+				expect( fileRead( generator.generate( newAppDir(), { tokenEnvVar : "MY_AGENT_TOKEN" } ).path ) ).toInclude( 'return "token"' );
+				expect( fileRead( generator.generate( newAppDir(), { access : "open" } ).path ) ).toInclude( 'return "open"' );
 			} );
 
-			it( "leaves the route ungated when no token variable is configured", function() {
-				var source = fileRead( generator.generate( newAppDir(), {} ).path );
+			it( "does not carry the token variable or any token check: the route middleware decides who may call", function() {
+				var source = fileRead( generator.generate( newAppDir(), { tokenEnvVar : "MY_AGENT_TOKEN", tokens : true } ).path );
 
-				expect( source ).toInclude( 'return ""' );
-				expect( source ).notToInclude( "__TOKEN_ENV_VAR__" );
-			} );
-
-			it( "names the token variable and compares it in constant time", function() {
-				var source = fileRead( generator.generate( newAppDir(), { tokenEnvVar : "MY_AGENT_TOKEN" } ).path );
-
-				expect( source ).toInclude( 'return "MY_AGENT_TOKEN"' );
-				expect( source ).toInclude( "MessageDigest" );
-				expect( source ).toInclude( "isEqual(" );
-				// an unset or blank variable matches nothing, and a request with no token is refused
-				expect( source ).toInclude( "if ( len( expected ) && createObject" );
-				expect( source ).toInclude( "if ( !len( given ) ) {" );
+				expect( source ).notToInclude( "MY_AGENT_TOKEN" );
+				expect( source ).notToInclude( "__ACCESS__" );
+				expect( source ).notToInclude( "TokenService" );
 			} );
 
 			it( "writes nothing when agentApi.enabled is false", function() {

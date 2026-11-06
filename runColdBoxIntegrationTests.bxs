@@ -595,7 +595,7 @@ if ( !len( expectedToken ) ) {
 				message = "GET /__bxagents/tools with the right token was not served (HTTP #rcAllowed.status_code#): #left( rcAllowed.fileContent ?: '', 300 )#"
 			)
 		}
-		for ( rcPath in [ "/__bxagents/tools", "/__bxagents/pending?threadId=x" ] ) {
+		for ( rcPath in [ "/__bxagents/tools", "/__bxagents/pending?threadId=x", "/__bxagents/info" ] ) {
 			for ( rcToken in [ "", expectedToken & "-wrong" ] ) {
 				bx:http url="http://127.0.0.1:#tokenPort##rcPath#" method="GET" result="rcDenied" timeout=30 {
 					bx:httpparam type="header" name="x-bxagents-token" value=rcToken;
@@ -618,6 +618,21 @@ if ( !len( expectedToken ) ) {
 				message = "POST /__bxagents/events with no token should be a 401, got HTTP #rcDeniedEvents.status_code#: #left( rcDeniedEvents.fileContent ?: '', 300 )#"
 			)
 		}
+		// ColdBox route middleware does not reach toAi()'s routes: a first version of this gate left /stream open. Every
+		// turn route is the API's own handler now, so the stream and the batch must be refused too.
+		for ( turnPath in [ "/__bxagents/stream", "/__bxagents/batch", "/__bxagents/invoke" ] ) {
+			bx:http url="http://127.0.0.1:#tokenPort##turnPath#" method="POST" result="turnDenied" timeout=30 {
+				bx:httpparam type="header" name="Content-Type" value="application/json";
+				bx:httpparam type="body" value='{"input":"hi","inputs":["hi"]}';
+			}
+			if ( turnDenied.status_code != 401 ) {
+				throw(
+					type    = "BxAgents.TurnRouteTokenGateFailedOpen",
+					message = "POST #turnPath# with no token should be a 401, got HTTP #turnDenied.status_code#: #left( turnDenied.fileContent ?: '', 300 )#"
+				)
+			}
+		}
+		println( "+ Confirmed: invoke, stream and batch are refused without a token too" )
 		println( "+ Confirmed: the run-control routes sit behind the same token gate (401 without or with a wrong token)" )
 
 		// Negative cases. A failing withCondition makes ColdBox skip the

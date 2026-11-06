@@ -2,20 +2,17 @@
  * GENERATED FILE - produced by BX Agents' build pipeline.
  * Do not edit by hand; rebuilding your project overwrites this file.
  *
- * Run control for the agent's always-on route, /__bxagents. ColdBox's toAi() gives that route
- * invoke, stream, batch and info; this handler sits beside them with what a chat client needs on
- * top: a stream that also reports tool calls and pauses for approval (events), stopping a run
- * (cancel), steering a run (steer), the approval round trip (pending, resume), conversations,
- * notes and commands.
+ * Every action of the agent API, on the always-on route /__bxagents and on the path of any gateway that
+ * exposes the agent: a whole turn (invoke), many (batch), a stream (stream), a stream that also reports tool
+ * calls and pauses for approval (events), stopping a run (cancel), steering a run (steer), the approval round
+ * trip (pending, resume), conversations, notes and commands.
  *
  * Each action only reads the request, asks the AgentService (models.api) and sends what it answers; the
  * work itself is written once, there, for the web page, the terminal and the gateways alike.
  *
- * Every action is behind the same token gate as the toAi routes. The x-bxagents-token header is
- * compared with the environment variable named by agentApi.tokenEnvVar (an unset or blank variable
- * matches nothing), and, when agentApi.tokens is on, with the tokens made by `bxAgents token create`.
- * A route with neither is open, and everyone is the one `local` user. The name of the token that was
- * used is who is calling.
+ * Who may call is decided before an action runs: with agentApi.access token the route middleware
+ * (models.api.Authenticator) names the caller from the x-bxagents-token header or answers 401, and an
+ * open API makes everyone the one `local` user.
  */
 class {
 
@@ -25,77 +22,36 @@ class {
 
 	/**
 	 * Every action starts with this: it answers 401 and returns true when the caller is not allowed, so the
-	 * action stops. (A preHandler cannot do it: ColdBox runs the action anyway after event.noExecution().)
+	 * action stops. When the API needs a token the route middleware has already refused a caller who has none,
+	 * so this is the second lock on the same door.
 	 */
 	private boolean function refused( required any event ) {
 		if ( !isNull( callerOf( arguments.event ) ) ) {
 			return false
 		}
-		answer( arguments.event, failed( "unauthorized", "Missing or invalid x-bxagents-token header" ) )
+		answer( arguments.event, new "models.api.Authenticator@bxagents"().refusal() )
 		return true
 	}
 
 	/**
-	 * The environment variable that holds the shared token, "" when there is none.
+	 * "open" (everyone is the one local user) or "token" (the route middleware names the caller), from agentApi.access.
 	 */
-	private string function tokenVariable() {
-		return "__TOKEN_ENV_VAR__"
+	private string function accessMode() {
+		return "__ACCESS__"
 	}
 
 	/**
-	 * Whether tokens made by `bxAgents token create` are accepted.
-	 */
-	private boolean function tokensEnabled() {
-		return "__TOKENS_ENABLED__" == "true"
-	}
-
-	/**
-	 * Who is calling, once per request: a Caller, or null for a caller who may not.
-	 *
-	 *   no tokenEnvVar and no tokens   open: everyone is the one `local` user
-	 *   the tokenEnvVar secret         "admin"
-	 *   an issued token                the name and scope it was made with
-	 *
-	 * The surface the call came in on (web, terminal, api) is a label the client sends in x-bxagents-source.
+	 * Who is calling: the Caller the route middleware put on the request, or on an open API the one local user.
+	 * Null when the API needs a token and nobody named one.
 	 */
 	private function callerOf( required any event ) {
-		var known = arguments.event.getPrivateValue( "bxagentsCaller", nullValue() )
-		if ( !isNull( known ) ) {
-			return known
+		if ( arguments.event.privateValueExists( "bxagentsCaller" ) ) {
+			return arguments.event.getPrivateValue( "bxagentsCaller" )
 		}
-		var found = lookUpCaller( sourceOf() )
-		if ( !isNull( found ) ) {
-			arguments.event.setPrivateValue( "bxagentsCaller", found )
-		}
-		return found ?: nullValue()
-	}
-
-	private string function sourceOf() {
-		var given = lCase( getHTTPRequestData( false ).headers[ "x-bxagents-source" ] ?: "" )
-		return reFind( "^[a-z0-9][a-z0-9_-]{0,31}$", given ) ? given : "api"
-	}
-
-	private function lookUpCaller( required string source ) {
-		var variableName = tokenVariable()
-		if ( !len( variableName ) && !tokensEnabled() ) {
-			return service().localCaller( arguments.source )
-		}
-		var given = getHTTPRequestData( false ).headers[ "x-bxagents-token" ] ?: ""
-		if ( !len( given ) ) {
-			return nullValue()
-		}
-		if ( len( variableName ) ) {
-			var expected = getSystemSetting( variableName, "" )
-			if ( len( expected ) && createObject( "java", "java.security.MessageDigest" ).isEqual( given.getBytes( "UTF-8" ), expected.getBytes( "UTF-8" ) ) ) {
-				return new "models.api.Caller@bxagents"( id = "admin", scope = "admin", source = arguments.source )
-			}
-		}
-		if ( tokensEnabled() ) {
-			// the app's default datasource is the shared chat database
-			var who = new "models.store.TokenService@bxagents"( new "models.store.ChatStore@bxagents"( "" ) ).authenticate( given )
-			if ( !who.isEmpty() ) {
-				return new "models.api.Caller@bxagents"( id = who.name, scope = who.scope, source = arguments.source )
-			}
+		if ( accessMode() == "open" ) {
+			var everyone = service().localCaller( new "models.api.Authenticator@bxagents"().sourceOf( getHTTPRequestData( false ).headers ) )
+			arguments.event.setPrivateValue( "bxagentsCaller", everyone )
+			return everyone
 		}
 		return nullValue()
 	}
@@ -296,7 +252,72 @@ class {
 	// ----------------------------------------------------------------------------------
 
 	/**
-	 * Streams one turn. The frames are thread, chunk, done and:
+	 * One whole turn: { output, threadId, success }. Body: { input, threadId?, conversationId?, params?, options?, attachments? }
+	 */
+	function invoke( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var answered = service().turns().run( callerOf( event ), event.getHTTPContent( json : true ) )
+		if ( answered.succeeded() ) {
+			event.setHTTPHeader( name : "X-Thread-Id", value : answered.data().threadId )
+		}
+		answer( event, answered )
+	}
+
+	/**
+	 * Many turns on one thread: { outputs : [ { output, success } | { error, success : false } ], threadId }.
+	 * Body: { inputs : [ ... ], params?, options? }
+	 */
+	function batch( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().turns().batch( callerOf( event ), event.getHTTPContent( json : true ) ) )
+	}
+
+	/**
+	 * One turn as a stream of the frames thread, chunk and done (and error). The same body as invoke. Use events
+	 * for a stream that also reports tool calls and pauses for approval.
+	 */
+	function stream( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var prepared = service().turns().prepareTurn( callerOf( event ), event.getHTTPContent( json : true ) )
+		if ( !prepared.succeeded() ) {
+			answer( event, prepared )
+			return
+		}
+		event.setHTTPHeader( name : "X-Thread-Id", value : prepared.data().threadId )
+		return streamTurn( prepared.data(), [ "thread", "chunk", "done", "error" ] )
+	}
+
+	/**
+	 * What is served here: { name, description, pattern, endpoints }.
+	 */
+	function info( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var config = agent().getConfig()
+		// ColdBox gives the routed path without its leading slash
+		var pattern = "/" & reReplace( event.getCurrentRoutedURL(), "(^/+|/info/?$)", "", "all" )
+		answer( event, done( {
+			"name"        : config.name ?: "",
+			"description" : config.description ?: "",
+			"pattern"     : pattern,
+			"endpoints"   : [
+				{ "verb" : "POST", "path" : pattern & "/invoke", "description" : "Synchronous execution" },
+				{ "verb" : "POST", "path" : pattern & "/stream", "description" : "Streaming SSE execution" },
+				{ "verb" : "POST", "path" : pattern & "/batch", "description" : "Batch execution" },
+				{ "verb" : "GET", "path" : pattern & "/info", "description" : "Endpoint metadata" }
+			]
+		} ) )
+	}
+
+	/**
+	 * Streams one turn with everything it does. The frames are thread, chunk, done and:
 	 *
 	 *   tool       { id, name, arguments, status : "running" | "ok", ms }
 	 *   suspended  { threadId, pendingActions : [ { toolName, toolArgs } ] } when the run waits for a human
@@ -377,13 +398,23 @@ class {
 	 * Opens the event stream and runs a prepared turn in it. The runner makes the frames; this only sends them.
 	 *
 	 * @turn What the TurnRunner prepared
+	 * @only The frame names to send; every frame when empty
 	 */
-	private string function streamTurn( required struct turn ) {
+	private string function streamTurn( required struct turn, array only = [] ) {
 		var runner = service().turns()
 		var prepared = arguments.turn
+		var wanted = arguments.only
 		SSE(
 			callback : ( emitter ) => {
-				runner.execute( prepared, ( name, data ) => emitter.send( data, name ), () => !emitter.isClosed() )
+				runner.execute(
+					prepared,
+					( name, data ) => {
+						if ( !wanted.len() || wanted.contains( name ) ) {
+							emitter.send( data, name )
+						}
+					},
+					() => !emitter.isClosed()
+				)
 				if ( !emitter.isClosed() ) {
 					emitter.close()
 				}

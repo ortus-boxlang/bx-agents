@@ -36,10 +36,10 @@ class {
 }
 ```
 
-Genera, en `config/Router.bx`: `route( "/api/chat" ).toAi( "GeneratedAgent" )` - que registra
-automáticamente **cuatro** subrutas: `POST /api/chat/invoke`, `POST /api/chat/stream` (SSE),
-`POST /api/chat/batch` y `GET /api/chat/info`. La ruta `/api/chat` pelada no es enrutable por
-sí misma.
+Genera, en `config/Router.bx`, cuatro rutas servidas por el handler de la API del agente:
+`POST /api/chat/invoke`, `POST /api/chat/stream` (SSE), `POST /api/chat/batch` y
+`GET /api/chat/info`. La ruta `/api/chat` pelada no es enrutable por sí misma. Con
+`agentApi.access: token` necesitan un token, como el resto de la API del agente.
 
 ## Exponer un servidor MCP local
 
