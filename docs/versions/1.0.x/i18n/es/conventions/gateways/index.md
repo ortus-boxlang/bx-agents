@@ -300,7 +300,7 @@ Los enlaces deben ser https. Un archivo que no se puede descargar se le nombra a
 
 #### De quién es la conversación
 
-Los chats de cada persona son suyos. Al agente se le dice quién escribe (la plataforma y su id allí, `slack:U123`) y el hilo, así que la memoria del agente, `/notes` y `/remember`, y la lista de conversaciones se mantienen separadas por persona. Dos personas en el mismo canal no comparten memoria, ni tampoco dos chats en dos plataformas. Las conversaciones se guardan en la misma base de datos SQLite que la de la página web y la terminal (un proyecto con gateways de chat obtiene `data/chat.db`, igual que uno con página web), marcadas con la plataforma donde empezaron (`source`). Pertenecen al id propio de la persona, así que no aparecen en la lista del usuario abierto `local`.
+Los chats de cada persona son suyos. Al agente se le dice quién escribe (la plataforma y su id allí, `slack:U123`) y qué conversación es, así que la memoria del agente, `/notes` y `/remember`, y la lista de conversaciones se mantienen separadas por persona. La conversación es el chat, más su hilo cuando la plataforma los tiene (un tema de foro de Telegram, un hilo de Slack), así que cada tema guarda su propia memoria. Dos personas en el mismo canal no comparten memoria, ni tampoco dos chats en dos plataformas. Las conversaciones se guardan en la misma base de datos SQLite que la de la página web y la terminal (un proyecto con gateways de chat obtiene `data/chat.db`, igual que uno con página web), marcadas con la plataforma donde empezaron (`source`). Pertenecen al id propio de la persona, así que no aparecen en la lista del usuario abierto `local`.
 
 #### Comandos de conversación
 

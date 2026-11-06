@@ -301,7 +301,7 @@ Links must be https. A file that cannot be downloaded is named back to the perso
 
 #### Whose conversation it is
 
-Each person's chats are their own. The agent is told who is writing (the platform and their id there, `slack:U123`) and the thread, so the agent's memory, `/notes` and `/remember`, and the conversation list are kept apart per person. Two people in the same channel do not share a memory, and neither do two chats on two platforms. The conversations are stored in the same SQLite database as the web page's and the terminal's (a project with chat gateways gets `data/chat.db`, like one with a web page), marked with the platform they started on (`source`). They belong to the person's own id, so they do not appear in the list of the open `local` user.
+Each person's chats are their own. The agent is told who is writing (the platform and their id there, `slack:U123`) and which conversation it is, so the agent's memory, `/notes` and `/remember`, and the conversation list are kept apart per person. The conversation is the chat, plus its thread when the platform has them (a Telegram forum topic, a Slack thread), so each topic keeps its own memory. Two people in the same channel do not share a memory, and neither do two chats on two platforms. The conversations are stored in the same SQLite database as the web page's and the terminal's (a project with chat gateways gets `data/chat.db`, like one with a web page), marked with the platform they started on (`source`). They belong to the person's own id, so they do not appear in the list of the open `local` user.
 
 #### Conversation commands
 
