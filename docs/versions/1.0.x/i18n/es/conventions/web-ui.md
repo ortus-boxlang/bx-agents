@@ -379,9 +379,12 @@ Para cualquier cosa que los tokens no cubran - fuentes personalizadas, layout, r
 !!! warning
     **`apiKeyEnvVar` es un secreto compartido, no un sistema de inicio de sesión.** Es lo mismo que `agentApi.tokenEnvVar` de la API del agente (si ambos están, gana el nombre de `Agent.yaml`). Sin configurar, la API está abierta (bien en tu propia máquina, no para un despliegue público; `serve` avisa cuando una API abierta escucha en todas las interfaces). Configúralo, y cada llamada a `/__bxagents` debe llevar una cabecera `x-bxagents-token` que coincida, comparada en tiempo constante. **El shell estático (`<path>/index.html`) no está protegido**, porque la navegación de página simple de un navegador no puede enviar una cabecera personalizada; la página lo pide en un formulario: una caja **Contraseña** que se abre sola cuando el servidor responde `401` y de nuevo desde el botón de la llave arriba. La contraseña se guarda en `localStorage` y se envía en cada llamada; una incorrecta muestra "That password was not accepted." Para varias personas usa [tokens emitidos](agent-bx.md#tokens-de-acceso-para-un-agente-desplegado) o `users`.
 
-## Apariencia
+## Ajustes y apariencia
 
-El icono de paleta de la cabecera abre el panel **Apariencia**, donde cada visitante elige, solo para este navegador:
+La cabecera conserva solo lo que usas cada minuto: el botón **Chats**, el anillo de contexto, el selector de modelo y un engranaje de **Ajustes**. El engranaje abre un menú en tres grupos: **Conversación** (Bifurcar esta conversación, Exportar como Markdown, Borrar mensajes, Compactar mensajes antiguos), **Tú** (Notas, Apariencia, tema oscuro o claro) y **Servidor** (Contraseña, Tokens de acceso). Un elemento solo aparece donde el servidor lo ofrece, y un grupo vacío se omite.
+
+
+**Ajustes**, y luego **Apariencia**, abre el panel donde cada visitante elige, solo para este navegador:
 
 | Ajuste | Opciones |
 |---|---|
