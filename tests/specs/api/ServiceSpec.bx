@@ -65,6 +65,14 @@ class extends="testbox.system.BaseSpec" {
 					expect( service.conversations().list( ada, 50, "terminal" ).data().sessions.map( ( c ) => c.title ) ).toBe( [ "two" ] );
 				} );
 
+				it( "lists times as ISO 8601 text, not date objects", function() {
+					service.conversations().create( ada, "timed" );
+
+					var first = service.conversations().list( ada ).data().sessions[ 1 ];
+					expect( first.createdAt ).toMatch( "^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$" );
+					expect( first.updatedAt ).toMatch( "^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$" );
+				} );
+
 				it( "deletes the row and the agent's messages for it", function() {
 					var id = service.conversations().create( ada, "x" ).data().conversationId;
 
