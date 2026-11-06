@@ -1,0 +1,54 @@
+/**
+ * Who started each run that is going right now, so that stopping or steering a run can be refused to anyone else.
+ *
+ * A run is addressed by its thread id, and a thread id is not a secret (it is sent to the client in the first frame and
+ * can be seen in logs), so knowing one must not be enough to cancel somebody's run. The record lives in the application
+ * scope because every request makes its own service: the request that cancels is not the request that started the run.
+ * A run is recorded when it starts and forgotten when it ends.
+ */
+class {
+
+	/** @return The map of thread id to owner id, made on first use */
+	private static any function table() {
+		lock name="bxagents-run-owners" type="exclusive" timeout="5" {
+			if ( !application.keyExists( "bxagentsRunOwners" ) ) {
+				application[ "bxagentsRunOwners" ] = createObject( "java", "java.util.concurrent.ConcurrentHashMap" ).init()
+			}
+		}
+		return application.bxagentsRunOwners
+	}
+
+	/**
+	 * Notes who started a run, unless the run is already noted: a second caller naming the same thread id does not take it over.
+	 *
+	 * @threadId The run
+	 * @ownerId Who started it
+	 *
+	 * @return True when this call noted it, so this call is the one to forget it when the run ends
+	 */
+	static boolean function claim( required string threadId, required string ownerId ) {
+		if ( !len( arguments.threadId ) || !len( arguments.ownerId ) ) {
+			return false
+		}
+		return isNull( RunOwners::table().putIfAbsent( arguments.threadId, arguments.ownerId ) )
+	}
+
+	/**
+	 * @threadId The run
+	 */
+	static void function release( required string threadId ) {
+		if ( len( arguments.threadId ) ) {
+			RunOwners::table().remove( arguments.threadId )
+		}
+	}
+
+	/**
+	 * @threadId The run
+	 *
+	 * @return Who started it, or "" when it is not known to be running here (it ended, or a gateway started it)
+	 */
+	static string function of( required string threadId ) {
+		return len( arguments.threadId ) ? ( RunOwners::table().get( arguments.threadId ) ?: "" ) : ""
+	}
+
+}

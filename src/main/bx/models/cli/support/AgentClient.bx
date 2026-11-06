@@ -25,6 +25,24 @@ class {
 
 	function init() {
 		variables.token = ""
+		variables.source = "terminal"
+		variables.apiPath = ApiPath::default()
+		return this
+	}
+
+	/**
+	 * Where the server serves its API, when it is not the default (agentApi.path in its config).
+	 *
+	 * @path The API path, e.g. "/agent-api"
+	 *
+	 * @return This client
+	 */
+	function withPath( required string path ) {
+		var problems = ApiPath::problems( arguments.path )
+		if ( problems.len() ) {
+			throw( type = "BxAgents.InvalidApiPath", message = "The API path [#arguments.path#] must start with '/' and have only segments of letters, digits, '_', '-' or '~' (for example ""/agent-api"")" )
+		}
+		variables.apiPath = ApiPath::of( { path : arguments.path } )
 		return this
 	}
 
@@ -42,13 +60,26 @@ class {
 	}
 
 	/**
+	 * Says where requests come from, in the x-bxagents-source header: the server keeps it with each conversation the
+	 * caller starts, so a list can be told by surface. "terminal" unless a program says otherwise.
+	 *
+	 * @source A plain name: letters, digits, dot, dash, underscore
+	 *
+	 * @return This client
+	 */
+	function withSource( required string source ) {
+		variables.source = trim( arguments.source )
+		return this
+	}
+
+	/**
 	 * @baseUrl A server root, e.g. "http://127.0.0.1:8080" - a trailing slash is tolerated
 	 * @subRoute Which `toAi()` sub-route to address; defaults to "invoke"
 	 *
-	 * @return The full URL of that sub-route on the reserved agent path
+	 * @return The full URL of that sub-route on the agent API's path
 	 */
 	string function agentUrl( required string baseUrl, string subRoute = "invoke" ) {
-		return arguments.baseUrl.reReplace( "[\/]+$", "" ) & ApiPath::reserved() & "/" & arguments.subRoute
+		return arguments.baseUrl.reReplace( "[\/]+$", "" ) & variables.apiPath & "/" & arguments.subRoute
 	}
 
 	/**
@@ -161,6 +192,9 @@ class {
 			port        : resolved,
 			host        : host
 		} )
+
+		// a server this client started serves the project's own API path, which the build wrote down
+		variables.apiPath = ApiPath::fromBuild( arguments.projectRoot.reReplace( "[\/]+$", "" ) & "/.build/app" )
 
 		return {
 			process : serveResult.process,
@@ -435,20 +469,47 @@ class {
 	 * @return The parsed JSON body
 	 */
 	struct function getJson( required string baseUrl, required string route, struct query = {}, numeric timeoutSeconds = 15 ) {
+		var url = queryUrl( arguments.baseUrl, arguments.route, arguments.query )
+		return parseJson( getRaw( url, arguments.timeoutSeconds ), url )
+	}
+
+	/**
+	 * A GET that answers a file or text: an export.
+	 *
+	 * @baseUrl The server root
+	 * @route The sub-route on the reserved path, for example "export"
+	 * @query Query string values
+	 *
+	 * @return The body as text
+	 */
+	string function getText( required string baseUrl, required string route, struct query = {}, numeric timeoutSeconds = 15 ) {
+		var url = queryUrl( arguments.baseUrl, arguments.route, arguments.query )
+		var httpResult = getRaw( url, arguments.timeoutSeconds )
+		if ( ( httpResult.status_code ?: 0 ) == 400 ) {
+			// the reason, as the server states it
+			throw( type = "BxAgents.AgentBadRequest", message = httpResult.fileContent ?: "" )
+		}
+		checkStatus( httpResult.status_code ?: 0, url )
+		return httpResult.fileContent
+	}
+
+	private string function queryUrl( required string baseUrl, required string route, required struct query ) {
 		var url = agentUrl( arguments.baseUrl, arguments.route )
 		var pairs = []
 		for ( var key in arguments.query ) {
 			pairs.append( urlEncodedFormat( key ) & "=" & urlEncodedFormat( arguments.query[ key ] ) )
 		}
-		if ( pairs.len() ) {
-			url &= "?" & pairs.toList( "&" )
-		}
+		return pairs.len() ? url & "?" & pairs.toList( "&" ) : url
+	}
+
+	private any function getRaw( required string url, required numeric timeoutSeconds ) {
+		var url = arguments.url
 		bx:http url=url method="GET" result="httpResult" timeout=arguments.timeoutSeconds {
 			for ( var headerName in clientHeaders() ) {
 				bx:httpparam type="header" name=headerName value=clientHeaders()[ headerName ];
 			}
 		}
-		return parseJson( httpResult, url )
+		return httpResult
 	}
 
 	/**
@@ -610,7 +671,7 @@ class {
 	 * What every request says about who is asking: the token when there is one, and that this is the terminal.
 	 */
 	private struct function clientHeaders() {
-		var headers = { "x-bxagents-source" : "terminal" }
+		var headers = { "x-bxagents-source" : variables.source }
 		if ( len( variables.token ) ) {
 			headers[ "x-bxagents-token" ] = variables.token
 		}

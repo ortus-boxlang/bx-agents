@@ -116,7 +116,7 @@ bxAgents build
 bxAgents serve --port=8080
 ```
 
-La página carga bien en ambos casos, pero enviar un mensaje sin haber configurado antes la clave correspondiente con el botón **Key** de la página devuelve un 401 - pulsa **Key**, pega `a-real-secret`, y funcionará durante el resto de la sesión del navegador (se guarda en `localStorage`). Elimina por completo la línea `apiKeyEnvVar` para dejar la UI abierta (aceptable en desarrollo local, nunca en un despliegue público).
+La página carga bien en ambos casos, pero enviar un mensaje sin haber configurado antes la clave correspondiente con el botón **Key** de la página devuelve un 401 y la página abre su caja **Contraseña** - escribe `a-real-secret`, y funcionará durante el resto de la sesión del navegador (se guarda en `localStorage`). Elimina por completo la línea `apiKeyEnvVar` para dejar la UI abierta (aceptable en desarrollo local, nunca en un despliegue público).
 
 ## Una sola API para la página, la terminal y los gateways
 

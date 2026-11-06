@@ -1,0 +1,165 @@
+/**
+ * The agent API as an OpenAPI 3 document, made from ApiContract. Served at `GET <path>/openapi.json` so a client
+ * generator, an API tool or a person can read what the server takes and gives without reading this module.
+ *
+ * The stream frames are described in the `x-frames` extension of each stream route, as OpenAPI has no way to say
+ * "server-sent events with these named frames".
+ */
+import bxModules.bxagents.models.api.ApiContract;
+
+class {
+
+	/**
+	 * @name The agent's name
+	 * @options { manageTokens } as ApiContract::operations()
+	 */
+	function init( string name = "agent", struct options = {} ) {
+		variables.name = arguments.name
+		variables.options = arguments.options
+		return this
+	}
+
+	/**
+	 * @apiBase The path the API is served on, the prefix of every route
+	 * @access open or token
+	 *
+	 * @return The document, as a struct
+	 */
+	struct function build( required string apiBase, string access = "open" ) {
+		var paths = [:]
+		for ( var op in ApiContract::operations( variables.options ) ) {
+			var item = [:]
+			for ( var verb in op.methods ) {
+				item[ verb ] = operationOf( op, op.methods[ verb ], arguments.access )
+			}
+			paths[ arguments.apiBase & op.path ] = item
+		}
+		var doc = [
+			"openapi"    : "3.0.3",
+			"info"       : { "title" : "#variables.name# agent API", "version" : "1.0.0", "description" : "The HTTP API of a bxAgents agent. Every route is under #arguments.apiBase#." },
+			"paths"      : paths,
+			"components" : {
+				"schemas" : {
+					"Error" : {
+						"type" : "object",
+						"required" : [ "success", "error", "code" ],
+						"properties" : { "success" : { "type" : "boolean", "enum" : [ false ] }, "error" : { "type" : "string" }, "code" : { "type" : "string" } }
+					},
+					"Frames" : framesSchema()
+				}
+			}
+		]
+		if ( arguments.access == "token" ) {
+			doc[ "components" ][ "securitySchemes" ] = { "token" : { "type" : "apiKey", "in" : "header", "name" : "x-bxagents-token", "description" : "The shared secret or an issued access token" } }
+			doc[ "security" ] = [ { "token" : [] } ]
+		}
+		return doc
+	}
+
+	// ---------------------------------------------------------------------------
+
+	private struct function operationOf( required struct op, required struct method, required string access ) {
+		var made = [
+			"operationId" : arguments.op.action & ( structCount( arguments.op.methods ) > 1 ? ucFirst( methodNameOf( arguments.method, arguments.op ) ) : "" ),
+			"tags"        : [ arguments.op.tag ],
+			"summary"     : arguments.method.summary,
+			"responses"   : responsesOf( arguments.method.returns ?: "json" )
+		]
+		if ( arguments.method.keyExists( "query" ) ) {
+			var query = arguments.method.query
+			made[ "parameters" ] = query.keyArray().map( ( field ) => {
+				return {
+					"name"     : field,
+					"in"       : "query",
+					"required" : !query[ field ].endsWith( "?" ),
+					"schema"   : typeOf( query[ field ] )
+				}
+			} )
+		}
+		if ( arguments.method.keyExists( "body" ) ) {
+			made[ "requestBody" ] = {
+				"required" : true,
+				"content"  : { "application/json" : { "schema" : objectOf( arguments.method.body ) } }
+			}
+		}
+		if ( arguments.op.open ) {
+			made[ "security" ] = []
+		}
+		if ( ( arguments.method.returns ?: "" ) == "sse" ) {
+			made[ "x-frames" ] = ApiContract::frames().map( ( frame ) => frame.name )
+		}
+		return made
+	}
+
+	/** The verb a method entry sits under, to tell the operations of one path apart */
+	private string function methodNameOf( required struct method, required struct op ) {
+		for ( var verb in arguments.op.methods ) {
+			if ( arguments.op.methods[ verb ].summary == arguments.method.summary ) {
+				return verb
+			}
+		}
+		return ""
+	}
+
+	private struct function responsesOf( required string returns ) {
+		var failures = {
+			"400" : errorResponse( "The request is not valid" ),
+			"401" : errorResponse( "No token, or one that is not accepted" ),
+			"403" : errorResponse( "Not allowed for this caller" ),
+			"404" : errorResponse( "There is no such thing for this caller" ),
+			"429" : errorResponse( "Too many requests; see Retry-After" )
+		}
+		var ok = {
+			"json" : { "description" : "The answer, with success true", "content" : { "application/json" : { "schema" : { "type" : "object", "properties" : { "success" : { "type" : "boolean" } } } } } },
+			"sse"  : { "description" : "A stream of frames (see x-frames and components.schemas.Frames)", "content" : { "text/event-stream" : { "schema" : { "$ref" : "##/components/schemas/Frames" } } } },
+			"file" : { "description" : "A file to save", "content" : { "application/octet-stream" : { "schema" : { "type" : "string", "format" : "binary" } } } }
+		}[ arguments.returns ]
+		var all = [ "200" : ok ]
+		failures.each( ( code, value ) => all[ code ] = value )
+		return all
+	}
+
+	private struct function errorResponse( required string description ) {
+		return { "description" : arguments.description, "content" : { "application/json" : { "schema" : { "$ref" : "##/components/schemas/Error" } } } }
+	}
+
+	/** An object schema for a field list: `name : "string?"` is an optional string */
+	private struct function objectOf( required struct fields ) {
+		var properties = [:]
+		var required = []
+		for ( var field in arguments.fields ) {
+			properties[ field ] = typeOf( arguments.fields[ field ] )
+			if ( !arguments.fields[ field ].endsWith( "?" ) ) {
+				required.append( field )
+			}
+		}
+		var schema = { "type" : "object", "properties" : properties }
+		if ( required.len() ) {
+			schema[ "required" ] = required
+		}
+		return schema
+	}
+
+	private struct function typeOf( required string written ) {
+		var name = arguments.written.reReplace( "\?$", "" )
+		var schema = { "type" : name }
+		if ( name == "array" ) {
+			schema[ "items" ] = {}
+		}
+		return schema
+	}
+
+	/** One schema for the stream: each frame, with its name and what it carries */
+	private struct function framesSchema() {
+		return {
+			"description" : "Each frame is `event: <name>` then `data: <json>`. The frames, in the order a client sees them.",
+			"oneOf" : ApiContract::frames().map( ( frame ) => {
+				var schema = objectOf( frame.fields )
+				schema[ "title" ] = frame.name
+				schema[ "description" ] = frame.summary
+				return schema
+			} )
+		}
+	}
+
+}

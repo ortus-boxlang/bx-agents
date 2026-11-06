@@ -1,0 +1,103 @@
+/**
+ * Issued access tokens, over the API: the same list, create and revoke the `bxAgents token` verb has, for an admin
+ * caller. It is only reachable when the agent's config turns it on (`agentApi.manageTokens`), because whoever holds an
+ * admin token can make more of them.
+ *
+ * Every answer is an Outcome. The secret of a new token is in the answer to `create` and nowhere else: the store keeps
+ * only a fingerprint, so it cannot be read back.
+ */
+import bxModules.bxagents.models.api.Outcome;
+
+class {
+
+	/**
+	 * @service A TokenService
+	 */
+	function init( required any service ) {
+		variables.service = arguments.service
+		return this
+	}
+
+	/**
+	 * @caller The Caller; it must be an admin
+	 *
+	 * @return An Outcome: { tokens : [ { name, scope, status, createdAt, lastUsedAt, expiresAt } ] }, newest first, never a secret
+	 */
+	any function list( required any caller ) {
+		var refused = adminOnly( arguments.caller )
+		if ( !isNull( refused ) ) {
+			return refused
+		}
+		return Outcome::done( { "tokens" : variables.service.list().map( row => {
+			return {
+				"name"       : row.name,
+				"scope"      : row.scope,
+				"status"     : row.status,
+				"createdAt"  : stamped( row.createdAt ),
+				"lastUsedAt" : stamped( row.lastUsedAt ?: "" ),
+				"expiresAt"  : stamped( row.expiresAt ?: "" )
+			}
+		} ) } )
+	}
+
+	/**
+	 * @caller The Caller; it must be an admin
+	 * @name What to call it: letters, digits, dot, dash, underscore
+	 * @scope chat or admin
+	 * @expires How long it lasts ("90d", "12h", "2w") or a date; blank for never
+	 *
+	 * @return An Outcome: { token, name, scope, expiresAt } with the secret, or bad_request / conflict / forbidden
+	 */
+	any function create( required any caller, required string name, string scope = "chat", string expires = "" ) {
+		var refused = adminOnly( arguments.caller )
+		if ( !isNull( refused ) ) {
+			return refused
+		}
+		try {
+			var made = variables.service.create( arguments.name, len( arguments.scope ) ? arguments.scope : "chat", variables.service.expiry( arguments.expires ) )
+			return Outcome::done( { "token" : made.token, "name" : made.name, "scope" : made.scope, "expiresAt" : stamped( made.expiresAt ?: "" ) } )
+		} catch ( any e ) {
+			if ( e.type == "BxAgents.TokenNameTaken" ) {
+				return Outcome::failed( "conflict", e.message )
+			}
+			if ( e.type.startsWith( "BxAgents.InvalidToken" ) ) {
+				return Outcome::failed( "bad_request", e.message )
+			}
+			rethrow
+		}
+	}
+
+	/**
+	 * @caller The Caller; it must be an admin
+	 * @name The token's name
+	 *
+	 * @return An Outcome: { revoked : true }, or not_found when there is no such token or it is revoked already
+	 */
+	any function revoke( required any caller, required string name ) {
+		var refused = adminOnly( arguments.caller )
+		if ( !isNull( refused ) ) {
+			return refused
+		}
+		if ( !len( trim( arguments.name ) ) ) {
+			return Outcome::failed( "bad_request", "name is required" )
+		}
+		return variables.service.revoke( arguments.name )
+			? Outcome::done( { "revoked" : true } )
+			: Outcome::failed( "not_found", "There is no active token named [#trim( arguments.name )#]" )
+	}
+
+	/**
+	 * @return A forbidden Outcome for anyone who is not an admin, else null
+	 */
+	private any function adminOnly( required any caller ) {
+		return arguments.caller.isAdmin() ? nullValue() : Outcome::failed( "forbidden", "Only an admin may manage tokens" )
+	}
+
+	/**
+	 * @return A date as ISO 8601 text, or "" when there is none
+	 */
+	private string function stamped( any value ) {
+		return isDate( arguments.value ?: "" ) ? dateTimeFormat( arguments.value, "yyyy-MM-dd'T'HH:mm:ss" ) : ""
+	}
+
+}

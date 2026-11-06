@@ -11,6 +11,12 @@ class extends="testbox.system.BaseSpec" {
 				expect( client.agentUrl( "http://127.0.0.1:8080" ) ).toBe( "http://127.0.0.1:8080/__bxagents/invoke" );
 			} );
 
+			it( "refuses an API path that would make a broken address", function() {
+				expect( () => new bxagents.models.cli.support.AgentClient().withPath( "agent-api" ) ).toThrow( "BxAgents.InvalidApiPath" );
+				expect( () => new bxagents.models.cli.support.AgentClient().withPath( "/" ) ).toThrow( "BxAgents.InvalidApiPath" );
+				expect( new bxagents.models.cli.support.AgentClient().withPath( "/agent-api" ).agentUrl( "http://x:1" ) ).toBe( "http://x:1/agent-api/invoke" );
+			} );
+
 			it( "tolerates a trailing slash on the base URL rather than producing a double slash", function() {
 				// A doubled separator ("...//invoke") does not match the route
 				// that was actually registered, so it would 404 - and someone
@@ -20,6 +26,8 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "can address the other toAi() sub-routes on the same reserved path", function() {
 				expect( client.agentUrl( "http://h:1", "stream" ) ).toBe( "http://h:1/__bxagents/stream" );
+				// a server that serves its API somewhere else
+				expect( new bxagents.models.cli.support.AgentClient().withPath( "/agent-api/" ).agentUrl( "http://h:1", "stream" ) ).toBe( "http://h:1/agent-api/stream" );
 				expect( client.agentUrl( "http://h:1", "info" ) ).toBe( "http://h:1/__bxagents/info" );
 			} );
 

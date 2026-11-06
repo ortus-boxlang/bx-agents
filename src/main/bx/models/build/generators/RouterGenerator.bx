@@ -27,8 +27,10 @@ import bxModules.bxagents.models.util.Strings;
 
 import bxModules.bxagents.models.util.EntryConfigReader;
 import bxModules.bxagents.models.api.AccessMode;
+import bxModules.bxagents.models.api.Guards;
 
 import bxModules.bxagents.models.api.ApiPath;
+import bxModules.bxagents.models.api.ApiContract;
 
 class {
 
@@ -48,7 +50,7 @@ class {
 		var exposureEntries = collectExposureEntries( arguments.discovery )
 		var lines = []
 
-		var gated = AccessMode::of( arguments.agentApi ) == "token"
+		var gated = AccessMode::gated( arguments.agentApi )
 		lines.append( renderAuthGate( arguments.agentApi ), true )
 		lines.append( renderReservedAgentRoute( arguments.agentApi ), true )
 
@@ -129,28 +131,40 @@ class {
 	}
 
 	/**
-	 * The gate every agent API route passes first, when the API needs a token (agentApi.access): ColdBox route
-	 * middleware that asks models.api.Authenticator who is calling. It names the caller on the request, or answers 401
-	 * itself and stops the action. An open API has no gate.
+	 * The gate every agent API route passes first, when the API needs a token or keeps some addresses out or limits its
+	 * use: a list of ColdBox route middleware, `gate`, and the route meta they read, `gateMeta`.
+	 *
+	 * The address list and the rate limit are cbSecurity's own middleware (`AllowedIPs@cbsecurity`, `Throttle@cbsecurity`,
+	 * see models.api.Guards). The token check, `auth`, asks models.api.Authenticator who is calling: it names the caller
+	 * on the request, or answers 401 and stops the action. An open API has no `auth`, only the guards it asked for.
 	 *
 	 * @agentApi The root project's `agentApi` config
 	 *
-	 * @return The statement lines that define `auth`; none when the API is open
+	 * @return The statement lines that define `gate` and `gateMeta`; none when nothing guards the API
 	 */
 	private array function renderAuthGate( required struct agentApi ) {
-		if ( AccessMode::of( arguments.agentApi ) != "token" ) {
+		if ( !AccessMode::gated( arguments.agentApi ) ) {
 			return []
 		}
-		var tokenEnvVar = trim( arguments.agentApi.tokenEnvVar ?: "" )
-		var tokens = ( arguments.agentApi.tokens ?: false ) ? "true" : "false"
-		var accounts = ( arguments.agentApi.webAccounts ?: false ) ? "true" : "false"
-		return [
-			"// Who may call: a request carries the shared secret (#len( tokenEnvVar ) ? tokenEnvVar : 'none set'#), an issued token (#tokens#) or the page's own sign-in (#accounts#).",
-			"// A request that carries neither is answered 401 before any action runs; the secret itself is read from the",
-			"// environment when a request comes in and is never written here.",
-			'var auth = ( event, rc, prc ) => new "models.api.Authenticator@bxagents"( "#Strings::bxLiteral( tokenEnvVar )#", #tokens#, #accounts# ).guard( event )',
-			""
-		]
+		var lines = []
+		var chain = Guards::middleware( arguments.agentApi ).map( name => '"#name#"' )
+		if ( AccessMode::of( arguments.agentApi ) == "token" ) {
+			var tokenEnvVar = trim( arguments.agentApi.tokenEnvVar ?: "" )
+			var tokens = ( arguments.agentApi.tokens ?: false ) ? "true" : "false"
+			var accounts = ( arguments.agentApi.webAccounts ?: false ) ? "true" : "false"
+			lines.append( "// Who may call: a request carries the shared secret (#len( tokenEnvVar ) ? tokenEnvVar : 'none set'#), an issued token (#tokens#) or the page's own sign-in (#accounts#)." )
+			lines.append( "// A request that carries neither is answered 401 before any action runs; the secret itself is read from the" )
+			lines.append( "// environment when a request comes in and is never written here." )
+			lines.append( 'var auth = ( event, rc, prc ) => new "models.api.Authenticator@bxagents"( tokenEnvVar : "#Strings::bxLiteral( tokenEnvVar )#", tokens : #tokens#, accounts : #accounts# ).guard( event )' )
+			chain.append( "auth" )
+		}
+		if ( Guards::any( arguments.agentApi ) ) {
+			lines.append( "// Which addresses may call (allowedIPs) and how often (rateLimit) are cbSecurity middleware, run before the token check." )
+		}
+		lines.append( "var gate = [ #chain.toList( ', ' )# ]" )
+		lines.append( 'var gateMeta = jsonDeserialize( "#Strings::bxLiteral( jsonSerialize( Guards::meta( arguments.agentApi ) ) )#" )' )
+		lines.append( "" )
+		return lines
 	}
 
 	/**
@@ -159,26 +173,40 @@ class {
 	 * @verb get or post; empty for a path that answers both
 	 * @path The full path
 	 * @action The AgentApi action
-	 * @gated True when the route goes through `auth`
+	 * @gated True when the route goes through `gate`
 	 */
 	private string function handlerRoute( required string verb, required string path, required string action, required boolean gated ) {
 		var start = len( arguments.verb ) ? '#arguments.verb#( "#Strings::bxLiteral( arguments.path )#" )' : 'route( "#Strings::bxLiteral( arguments.path )#" )'
-		return start & ( arguments.gated ? ".middleware( auth )" : "" ) & '.toHandler( "AgentApi.#arguments.action#" )'
+		return start & ( arguments.gated ? ".middleware( gate ).meta( gateMeta )" : "" ) & '.toHandler( "AgentApi.#arguments.action#" )'
 	}
 
 	/**
 	 * The four routes every place that serves the agent has: one whole turn, many, a stream, and what is served.
 	 *
 	 * @base The path they sit under
-	 * @gated True when they go through `auth`
+	 * @gated True when they go through `gate`
 	 */
 	private array function turnRoutes( required string base, required boolean gated ) {
-		return [
-			handlerRoute( "post", arguments.base & "/invoke", "invoke", arguments.gated ),
-			handlerRoute( "post", arguments.base & "/stream", "stream", arguments.gated ),
-			handlerRoute( "post", arguments.base & "/batch", "batch", arguments.gated ),
-			handlerRoute( "get", arguments.base & "/info", "info", arguments.gated )
-		]
+		return contractRoutes( arguments.base, arguments.gated, {}, [ "invoke", "stream", "batch", "info" ] )
+	}
+
+	/**
+	 * The routes of ApiContract, in its order, for the actions asked for (all when none are named). A route that takes
+	 * one verb is written with it; one that takes several (a list and a make) is written for any verb, and the handler
+	 * tells them apart. A route the contract marks open is never behind the gate.
+	 *
+	 * @base The path they sit under
+	 * @gated True when the routes go through `gate`
+	 * @options As ApiContract::operations()
+	 * @only The actions to write; empty for every one
+	 */
+	private array function contractRoutes( required string base, required boolean gated, struct options = {}, array only = [] ) {
+		var base = arguments.base
+		var gated = arguments.gated
+		var only = arguments.only
+		return ApiContract::operations( arguments.options )
+			.filter( ( op ) => !only.len() || only.contains( op.action ) )
+			.map( ( op ) => handlerRoute( op.methods.count() == 1 ? op.methods.keyArray()[ 1 ] : "", base & op.path, op.action, gated && !op.open ) )
 	}
 
 	/**
@@ -203,15 +231,15 @@ class {
 		if ( !( arguments.agentApi.enabled ?: true ) ) {
 			return []
 		}
-		var gated = AccessMode::of( arguments.agentApi ) == "token"
+		var gated = AccessMode::gated( arguments.agentApi )
 		var lines = [
 			"// The reserved agent route - always present, whatever gateways/ declares,",
 			"// so this module's own tooling (chat --server, invoke --server) always has",
 			"// an address. A project's own public API belongs in gateways/ instead."
 		]
-		lines.append( turnRoutes( ApiPath::reserved(), gated ), true )
+		lines.append( turnRoutes( ApiPath::of( arguments.agentApi ), gated ), true )
 		lines.append( "" )
-		lines.append( renderRunControlRoutes( gated ), true )
+		lines.append( renderRunControlRoutes( gated, ApiPath::of( arguments.agentApi ), ( arguments.agentApi.manageTokens ?: false ) == true ), true )
 		return lines
 	}
 
@@ -219,51 +247,18 @@ class {
 	 * The routes beside the four turn routes: the rich event stream, stopping and steering a run, the approval round
 	 * trip, conversations, notes and commands. All served by handlers/AgentApi.bx (see AgentApiGenerator).
 	 *
-	 * @gated True when they go through `auth`
+	 * @gated True when they go through `gate`
+	 * @apiBase The path the API is served on
+	 * @manageTokens True when an admin may manage access tokens over the API (agentApi.manageTokens)
 	 *
 	 * @return The route statement lines
 	 */
-	private array function renderRunControlRoutes( required boolean gated ) {
-		var base = ApiPath::reserved()
-		var g = arguments.gated
-		return [
-			"// Run control - the same path, served by handlers/AgentApi.bx",
-			handlerRoute( "post", base & "/events", "events", g ),
-			handlerRoute( "post", base & "/cancel", "cancel", g ),
-			handlerRoute( "post", base & "/steer", "steer", g ),
-			handlerRoute( "post", base & "/resume", "resume", g ),
-			handlerRoute( "get", base & "/pending", "pending", g ),
-			handlerRoute( "get", base & "/tools", "tools", g ),
-			handlerRoute( "get", base & "/agent", "about", g ),
-			// liveness: open to anyone, whatever the access, and says nothing else
-			handlerRoute( "get", base & "/health", "health", false ),
-			handlerRoute( "get", base & "/profiles", "profiles", g ),
-			// the specific routes first: a pattern also matches what follows it
-			handlerRoute( "post", base & "/sessions/rename", "renameSession", g ),
-			handlerRoute( "post", base & "/sessions/fork", "forkSession", g ),
-			handlerRoute( "post", base & "/sessions/delete", "deleteSession", g ),
-			// one route for the list (GET) and for starting one (POST), like notes: the handler tells them apart
-			handlerRoute( "", base & "/sessions", "sessions", g ),
-			handlerRoute( "get", base & "/export", "export", g ),
-			handlerRoute( "get", base & "/whoami", "whoami", g ),
-			handlerRoute( "post", base & "/preferences/set", "setPreference", g ),
-			handlerRoute( "post", base & "/preferences/delete", "deletePreference", g ),
-			handlerRoute( "get", base & "/preferences", "preferences", g ),
-			handlerRoute( "get", base & "/history", "history", g ),
-			handlerRoute( "post", base & "/clear", "clear", g ),
-			handlerRoute( "post", base & "/compact", "compact", g ),
-			handlerRoute( "post", base & "/ping", "ping", g ),
-			handlerRoute( "get", base & "/context", "context", g ),
-			handlerRoute( "get", base & "/status", "status", g ),
-			handlerRoute( "get", base & "/slots", "slots", g ),
-			handlerRoute( "get", base & "/commands", "commands", g ),
-			handlerRoute( "post", base & "/command", "command", g ),
-			handlerRoute( "post", base & "/notes/update", "updateNote", g ),
-			handlerRoute( "post", base & "/notes/remove", "removeNote", g ),
-			// one route for the list (GET) and for adding (POST): the handler tells them apart, as a pattern also
-			// matches what follows it and ColdBox does not keep a GET route from answering a POST
-			handlerRoute( "", base & "/notes", "notes", g )
-		]
+	private array function renderRunControlRoutes( required boolean gated, required string apiBase, boolean manageTokens = false ) {
+		var rest = ApiContract::actions( { manageTokens : arguments.manageTokens } ).filter( ( action ) => ![ "invoke", "stream", "batch", "info" ].contains( action ) )
+		return [ "// Run control, conversations, notes and the rest - the same path, served by handlers/AgentApi.bx" ].append(
+			contractRoutes( arguments.apiBase, arguments.gated, { manageTokens : arguments.manageTokens }, rest ),
+			true
+		)
 	}
 
 	/**
@@ -296,7 +291,7 @@ class {
 
 	/**
 	 * @entry An exposure entry { name, config }, from collectExposureEntries()
-	 * @gated True when the agent API needs a token: the agent routes go through `auth`
+	 * @gated True when the agent API needs a token: the agent routes go through `gate`
 	 *
 	 * @return A bare `route(...).toAi(...)` or `route(...).toMCP(...)` statement string
 	 */

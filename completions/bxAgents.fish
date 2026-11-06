@@ -98,6 +98,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb build' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb build' -l verbose
     complete -c $cmd -n '__bxagents_using_verb build' -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb chat' -l api-path -x
     complete -c $cmd -n '__bxagents_using_verb chat' -l connect -x
     complete -c $cmd -n '__bxagents_using_verb chat' -l continue
     complete -c $cmd -n '__bxagents_using_verb chat' -l no-tui

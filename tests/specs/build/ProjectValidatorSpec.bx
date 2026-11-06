@@ -36,7 +36,7 @@ class extends="testbox.system.BaseSpec" {
 				var result = validateFixture( "reserved-gateway-path" );
 				var reserved = result.errors.filter( e => e.findNoCase( "__bxagents" ) );
 				expect( reserved.len() ).toBeGT( 0 );
-				expect( reserved[ 1 ] ).toInclude( "reserves" );
+				expect( reserved[ 1 ] ).toInclude( "where the agent API is served" );
 			} );
 
 			it( "rejects a malformed agentApi block - unknown key, non-boolean enabled, and a tokenEnvVar that is a secret rather than a variable name", function() {
@@ -153,6 +153,55 @@ class extends="testbox.system.BaseSpec" {
 
 					expect( off.errors.filter( e => e.findNoCase( "cannot run without it" ) ) ).toHaveLength( 1 );
 					expect( offNoPage.errors ).toBeEmpty();
+				} );
+
+				it( "checks agentApi.path, and keeps a gateway entry off it", function() {
+					var nl = char( 10 );
+					var ok = profiledProject( "agentApi:" & nl & "  path: /agent-api" & nl );
+					var bad = profiledProject( "agentApi:" & nl & "  path: agent-api" & nl );
+					var taken = profiledProject( "agentApi:" & nl & "  path: /agent-api" & nl, { chat : '{ exposes : "webui", path : "/agent-api/chat" }' } );
+					var freed = profiledProject( "agentApi:" & nl & "  path: /agent-api" & nl, { chat : '{ exposes : "webui", path : "/__bxagents/chat" }' } );
+
+					expect( ok.errors ).toBeEmpty();
+					expect( bad.errors.filter( e => e.findNoCase( "agentApi.path" ) ) ).toHaveLength( 1 );
+					expect( taken.errors.filter( e => e.findNoCase( "where the agent API is served" ) ) ).toHaveLength( 1 );
+					// the default path is only reserved while it is the API's
+					expect( freed.errors ).toBeEmpty();
+				} );
+
+				it( "checks agentApi.allowedIPs and agentApi.rateLimit", function() {
+					var nl = char( 10 );
+					var ok = profiledProject( "agentApi:" & nl & "  allowedIPs: [ 10.0.0.0/8, 203.0.113.7 ]" & nl & "  rateLimit:" & nl & "    requests: 60" & nl & "    perSeconds: 60" & nl );
+					var badIp = profiledProject( "agentApi:" & nl & "  allowedIPs: [ example.com ]" & nl );
+					var badLimit = profiledProject( "agentApi:" & nl & "  rateLimit:" & nl & "    requests: 0" & nl & "    perSeconds: 60" & nl );
+					var byCaller = profiledProject( "agentApi:" & nl & "  rateLimit:" & nl & "    requests: 5" & nl & "    perSeconds: 60" & nl & "    by: caller" & nl );
+
+					expect( ok.errors ).toBeEmpty();
+					expect( badIp.errors.filter( e => e.findNoCase( "allowedIPs" ) ) ).toHaveLength( 1 );
+					expect( badLimit.errors.filter( e => e.findNoCase( "rateLimit.requests" ) ) ).toHaveLength( 1 );
+					expect( byCaller.errors.filter( e => e.findNoCase( "unknown key [by]" ) ) ).toHaveLength( 1 );
+				} );
+
+				it( "lets agentApi.manageTokens on only with issued tokens and a token access", function() {
+					var nl = char( 10 );
+					var ok = profiledProject( "agentApi:" & nl & "  tokens: true" & nl & "  manageTokens: true" & nl );
+					var noTokens = profiledProject( "agentApi:" & nl & "  tokenEnvVar: MY_TOKEN" & nl & "  manageTokens: true" & nl );
+					var open = profiledProject( "agentApi:" & nl & "  access: open" & nl & "  manageTokens: true" & nl );
+					var off = profiledProject( "agentApi:" & nl & "  manageTokens: false" & nl );
+					var notBoolean = profiledProject( "agentApi:" & nl & "  manageTokens: maybe" & nl );
+
+					expect( ok.errors ).toBeEmpty();
+					expect( off.errors ).toBeEmpty();
+					expect( noTokens.errors.filter( e => e.findNoCase( "manageTokens" ) ) ).toHaveLength( 1 );
+					expect( open.errors.filter( e => e.findNoCase( "manageTokens" ) ) ).toHaveLength( 1 );
+					expect( notBoolean.errors.filter( e => e.findNoCase( "manageTokens" ) ) ).toHaveLength( 1 );
+				} );
+
+				it( "reports an agentApi.path that is not text, instead of failing on it", function() {
+					var nl = char( 10 );
+					var result = profiledProject( "agentApi:" & nl & "  path: [ /a ]" & nl );
+
+					expect( result.errors.filter( e => e.findNoCase( "agentApi.path" ) ) ).toHaveLength( 1 );
 				} );
 
 				it( "checks agentApi.access against what is set for tokens", function() {

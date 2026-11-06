@@ -12,6 +12,7 @@ import bxModules.bxagents.models.api.AccessMode;
 import bxModules.bxagents.models.build.AgentApiConfig;
 
 import bxModules.bxagents.models.api.ApiPath;
+import bxModules.bxagents.models.api.Guards;
 
 class {
 
@@ -51,7 +52,12 @@ class {
 		for ( var problem in types.problems() ) {
 			errors.append( problem )
 		}
-		validateGateways( arguments.discovery, errors, ( arguments.resolvedConfig.profiles ?: {} ).keyArray(), types )
+		// a path that is not a valid one is reported where agentApi is checked; here the default stands in for it
+		var apiBase = ApiPath::default()
+		if ( isStruct( arguments.resolvedConfig.agentApi ?: "" ) && !ApiPath::problems( arguments.resolvedConfig.agentApi.path ?: ApiPath::default() ).len() ) {
+			apiBase = ApiPath::of( AgentApiConfig::effective( arguments.resolvedConfig.agentApi, arguments.discovery ) )
+		}
+		validateGateways( arguments.discovery, errors, ( arguments.resolvedConfig.profiles ?: {} ).keyArray(), types, apiBase )
 		validateGatewaySession( arguments.resolvedConfig, errors, directoryExists( arguments.projectRoot & "/extensions" ) )
 		validateMcpServers( arguments.resolvedConfig, errors )
 		validateTools( arguments.resolvedConfig, errors, "The project's own agent definition" )
@@ -379,7 +385,7 @@ class {
 	 * @errors Accumulator array - append() any validation errors found
 	 * @profileNames The profile names the root Agent.yaml declares, for a `profiles` list a web UI offers
 	 */
-	private void function validateGateways( required struct discovery, required array errors, array profileNames = [], required any types ) {
+	private void function validateGateways( required struct discovery, required array errors, array profileNames = [], required any types, string apiBase = ApiPath::default() ) {
 		var seenPaths = {}
 		var seenNames = {}
 		var validGatewayTypes = arguments.types.names()
@@ -409,7 +415,7 @@ class {
 					arguments.errors.append( "Gateway [#gateway.name#] has a 'path' that is not a string - it must be a URL path like ""/chat""" )
 				} else if ( !len( path ) ) {
 					arguments.errors.append( "Gateway [#gateway.name#] is missing a 'path'" )
-				} else if ( validateExposurePath( gateway.name, path, arguments.errors ) ) {
+				} else if ( validateExposurePath( gateway.name, path, arguments.errors, arguments.apiBase ) ) {
 					// Uniqueness is checked on the NORMALIZED value: "/chat" and
 					// "/chat/" are the same mount to every consumer (both
 					// RouterGenerator and WebUiGenerator strip the trailing
@@ -504,7 +510,7 @@ class {
 	 *
 	 * @return true when the path is safe for every generator to consume
 	 */
-	private boolean function validateExposurePath( required string gatewayName, required string path, required array errors ) {
+	private boolean function validateExposurePath( required string gatewayName, required string path, required array errors, string apiBase = ApiPath::default() ) {
 		if ( !arguments.path.startsWith( "/" ) ) {
 			arguments.errors.append( "Gateway [#arguments.gatewayName#] has a 'path' [#arguments.path#] that does not start with '/' - an exposure path is a rooted URL route, and for a 'webui' entry it is also the directory the UI is mounted in under the generated app, so a bare ""chat"" would write that UI beside the app instead of inside it (e.g. ""/chat"")" )
 			return false
@@ -532,8 +538,8 @@ class {
 		// an exposure claiming the same mount would be silently shadowed - it
 		// would look declared and never answer.
 		var normalized = normalizeExposurePath( arguments.path )
-		if ( normalized == ApiPath::reserved() || normalized.startsWith( ApiPath::reserved() & "/" ) ) {
-			arguments.errors.append( "Gateway [#arguments.gatewayName#] has a 'path' [#arguments.path#] under [#ApiPath::reserved()#], which BX Agents reserves for its own always-on agent route - pick a path outside it" )
+		if ( normalized == arguments.apiBase || normalized.startsWith( arguments.apiBase & "/" ) ) {
+			arguments.errors.append( "Gateway [#arguments.gatewayName#] has a 'path' [#arguments.path#] under [#arguments.apiBase#], which is where the agent API is served (agentApi.path; BX Agents' always-on agent route) - pick a path outside it" )
 			return false
 		}
 
@@ -733,7 +739,7 @@ class {
 
 		var agentApi = arguments.resolvedConfig.agentApi
 		if ( !isStruct( agentApi ) ) {
-			arguments.errors.append( "Agent.bx's 'agentApi' must be a struct of { enabled, access, tokenEnvVar, tokens, profiles }" )
+			arguments.errors.append( "Agent.bx's 'agentApi' must be a struct of { enabled, access, tokenEnvVar, tokens, profiles, path, allowedIPs, rateLimit, manageTokens }" )
 			return
 		}
 
@@ -741,7 +747,7 @@ class {
 			arguments.errors.append( "Agent.bx's 'agentApi.enabled' is false, but a gateways/ entry exposes the web UI: the page is a client of the agent API and cannot run without it" )
 		}
 
-		var validKeys = [ "enabled", "access", "tokenEnvVar", "tokens", "profiles" ]
+		var validKeys = [ "enabled", "access", "tokenEnvVar", "tokens", "profiles", "path", "allowedIPs", "rateLimit", "manageTokens" ]
 		for ( var key in agentApi ) {
 			if ( !validKeys.contains( key ) ) {
 				arguments.errors.append( "Agent.bx's 'agentApi' has an unknown key [#key#] - valid keys: #validKeys.toList( ", " )#" )
@@ -750,6 +756,20 @@ class {
 
 		if ( structKeyExists( agentApi, "enabled" ) && !isBoolean( agentApi.enabled ) ) {
 			arguments.errors.append( "Agent.bx's 'agentApi.enabled' must be a boolean" )
+		}
+
+		if ( structKeyExists( agentApi, "manageTokens" ) ) {
+			if ( !isBoolean( agentApi.manageTokens ) ) {
+				arguments.errors.append( "Agent.bx's 'agentApi.manageTokens' must be a boolean" )
+			} else if ( agentApi.manageTokens && !( ( agentApi.tokens ?: false ) == true && AccessMode::of( AgentApiConfig::effective( agentApi, arguments.discovery ) ) == "token" ) ) {
+				arguments.errors.append( "Agent.bx's 'agentApi.manageTokens' needs 'agentApi.tokens: true' and a token access (an API that asks for no token would let anyone make one)" )
+			}
+		}
+
+		arguments.errors.append( Guards::problems( agentApi ), true )
+
+		if ( structKeyExists( agentApi, "path" ) ) {
+			arguments.errors.append( ApiPath::problems( agentApi.path ), true )
 		}
 
 		if ( structKeyExists( agentApi, "tokens" ) && !isBoolean( agentApi.tokens ) ) {

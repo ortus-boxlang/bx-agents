@@ -1,0 +1,64 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "api.Tokens", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-tokens-api-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.tokens = new bxagents.models.api.Tokens( new bxagents.models.store.TokenService( store ) );
+				variables.admin = new bxagents.models.api.Caller( id = "root", scope = "admin" );
+				variables.chat = new bxagents.models.api.Caller( id = "ada", scope = "chat" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "makes a token for an admin and gives the secret once", function() {
+				var made = tokens.create( admin, "laptop", "chat", "90d" );
+
+				expect( made.succeeded() ).toBeTrue();
+				expect( made.data().token ).toMatch( "^bxa_" );
+				expect( made.data().scope ).toBe( "chat" );
+				expect( made.data().expiresAt ).toMatch( "^\d{4}-\d{2}-\d{2}T" );
+
+				var listed = tokens.list( admin ).data().tokens;
+				expect( listed ).toHaveLength( 1 );
+				expect( listed[ 1 ].name ).toBe( "laptop" );
+				expect( listed[ 1 ].status ).toBe( "active" );
+				expect( listed[ 1 ].keyExists( "token" ) ).toBeFalse();
+				expect( jsonSerialize( listed ) ).notToInclude( made.data().token );
+			} );
+
+			it( "refuses everyone who is not an admin", function() {
+				expect( tokens.list( chat ).code() ).toBe( "forbidden" );
+				expect( tokens.create( chat, "x" ).code() ).toBe( "forbidden" );
+				expect( tokens.revoke( chat, "x" ).code() ).toBe( "forbidden" );
+			} );
+
+			it( "says what is wrong with a name, a scope, an expiry and a name already taken", function() {
+				expect( tokens.create( admin, "has spaces" ).code() ).toBe( "bad_request" );
+				expect( tokens.create( admin, "ok", "root" ).code() ).toBe( "bad_request" );
+				expect( tokens.create( admin, "ok", "chat", "soon" ).code() ).toBe( "bad_request" );
+
+				tokens.create( admin, "ci", "admin" );
+				expect( tokens.create( admin, "ci" ).code() ).toBe( "conflict" );
+			} );
+
+			it( "revokes a token, once", function() {
+				tokens.create( admin, "laptop" );
+
+				expect( tokens.revoke( admin, "laptop" ).data().revoked ).toBeTrue();
+				expect( tokens.list( admin ).data().tokens[ 1 ].status ).toBe( "revoked" );
+				expect( tokens.revoke( admin, "laptop" ).code() ).toBe( "not_found" );
+				expect( tokens.revoke( admin, "nobody" ).code() ).toBe( "not_found" );
+				expect( tokens.revoke( admin, "" ).code() ).toBe( "bad_request" );
+			} );
+
+		} );
+	}
+
+}

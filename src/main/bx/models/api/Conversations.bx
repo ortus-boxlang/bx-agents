@@ -20,11 +20,17 @@ class {
 	 * @caller The Caller
 	 * @limit How many, newest first
 	 * @source Only those that started there (`web`, `terminal`, `api`, a gateway's platform); all when blank
+	 * @all True to list everyone's, for an admin: each row then also says whose it is (`userId`)
 	 *
-	 * @return An Outcome: { sessions : [ { id, title, messageCount, source, createdAt, updatedAt } ] }
+	 * @return An Outcome: { sessions : [ { id, title, messageCount, source, createdAt, updatedAt } ] }, or forbidden
 	 */
-	any function list( required any caller, numeric limit = 50, string source = "" ) {
-		var rows = variables.sessions.list( arguments.caller.id(), arguments.limit, arguments.source )
+	any function list( required any caller, numeric limit = 50, string source = "", boolean all = false ) {
+		if ( arguments.all && !arguments.caller.isAdmin() ) {
+			return Outcome::failed( "forbidden", "Only an admin may list everyone's conversations" )
+		}
+		var rows = arguments.all
+			? variables.sessions.listAll( arguments.limit, arguments.source )
+			: variables.sessions.list( arguments.caller.id(), arguments.limit, arguments.source )
 		return Outcome::done( { "sessions" : rows.map( row => stamped( row ) ) } )
 	}
 

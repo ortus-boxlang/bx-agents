@@ -70,7 +70,7 @@ class {
 	private function service() {
 		// once per request: the probe for the shared database is a query
 		if ( !request.keyExists( "bxagentsService" ) ) {
-			request[ "bxagentsService" ] = new "models.api.AgentService@bxagents"( agent(), sharedStore(), offered() )
+			request[ "bxagentsService" ] = new "models.api.AgentService@bxagents"( agent(), sharedStore(), offered(), { manageTokens : manageTokens() } )
 		}
 		return request.bxagentsService
 	}
@@ -86,6 +86,18 @@ class {
 		} catch ( any e ) {
 			return nullValue()
 		}
+	}
+
+	/** Where this build serves the API, as agentApi.path (or the default) set it */
+	private string function apiPath() {
+		return "__API_PATH__"
+	}
+
+	/**
+	 * Whether an admin may manage access tokens over this API (agentApi.manageTokens), as the build stamped it in.
+	 */
+	private boolean function manageTokens() {
+		return "__MANAGE_TOKENS__" == "true"
 	}
 
 	/**
@@ -130,6 +142,14 @@ class {
 		answer( arguments.event, new "models.api.Outcome@bxagents"().fromResult( arguments.result ) )
 	}
 
+	/**
+	 * ColdBox calls this when a route is reached with a verb it does not take (a GET to a route that is POST only). It
+	 * would otherwise answer with an HTML error page; every answer of this API is JSON.
+	 */
+	function onInvalidHTTPMethod( event, rc, prc, faultAction = "", eventArguments = {} ) {
+		answer( event, failed( "method_not_allowed", "That route does not take " & event.getHTTPMethod() ) )
+	}
+
 	private function noSessions() {
 		return failed( "not_found", "This server keeps no list of conversations" )
 	}
@@ -171,6 +191,17 @@ class {
 			return
 		}
 		answer( event, done( { "profiles" : offered().list() } ) )
+	}
+
+	/**
+	 * This API described as an OpenAPI 3 document: every route, what it takes and gives, and the frames of a stream.
+	 * Sent as the document itself, not wrapped in an answer, so a tool that reads OpenAPI can be pointed at it.
+	 */
+	function openapi( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		event.renderData( type : "json", data : service().apiDocument( apiPath(), accessMode() ) )
 	}
 
 	/**
@@ -470,7 +501,7 @@ class {
 			answer( event, all.create( callerOf( event ), event.getHTTPContent( json : true ).title ?: "" ) )
 			return
 		}
-		answer( event, all.list( callerOf( event ), val( rc.limit ?: 20 ), rc.source ?: "" ) )
+		answer( event, all.list( callerOf( event ), val( rc.limit ?: 20 ), rc.source ?: "", isBoolean( rc.all ?: "" ) && rc.all ) )
 	}
 
 	/**
@@ -689,6 +720,44 @@ class {
 			return
 		}
 		answer( event, kept.all() )
+	}
+
+	/**
+	 * Access tokens, for an admin, when the server's config allows it (agentApi.manageTokens): GET lists them (never a
+	 * secret), POST makes one and answers with its secret, this once.
+	 *
+	 * Body of POST: { name, scope?, expires? }
+	 */
+	function tokens( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var kept = service().tokens()
+		if ( isNull( kept ) ) {
+			answer( event, failed( "not_found", "This server does not manage tokens over the API" ) )
+			return
+		}
+		if ( event.getHTTPMethod() == "POST" ) {
+			var body = event.getHTTPContent( json : true )
+			answer( event, kept.create( callerOf( event ), body.name ?: "", body.scope ?: "chat", body.expires ?: "" ) )
+			return
+		}
+		answer( event, kept.list( callerOf( event ) ) )
+	}
+
+	/**
+	 * Stops a token working. Body: { name }
+	 */
+	function revokeToken( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var kept = service().tokens()
+		if ( isNull( kept ) ) {
+			answer( event, failed( "not_found", "This server does not manage tokens over the API" ) )
+			return
+		}
+		answer( event, kept.revoke( callerOf( event ), event.getHTTPContent( json : true ).name ?: "" ) )
 	}
 
 	/**

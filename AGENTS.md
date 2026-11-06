@@ -81,3 +81,7 @@ The one thing to know: **SSE frames are terminated by a blank line, and the web 
 
 - Relevant BoxLang development skills live under `.agents/skills`. Use them when the task involves module development, BIFs, components, interceptors, logging, async tasks, or runtime architecture.
 - When a task is specifically about custom instructions, prompts, agents, or skills, prefer the agent-customization workflow and keep AGENTS.md focused on workspace-wide rules only.
+
+## Tutorial and demo videos
+
+Narrate every tutorial or demo video with the same voice: Kokoro `af_heart` (American English, female, speed 1.0). The settings are in `tools/demo/narration/voice.json` and `tools/demo/narration/narrate.py` makes the audio from a narration file. Do not switch voices between videos.

@@ -14,6 +14,7 @@
 import bxModules.bxagents.models.api.Caller as CallerType;
 
 import bxModules.bxagents.models.api.Outcome;
+import bxModules.bxagents.models.api.OpenApiDocument;
 
 class {
 
@@ -22,7 +23,8 @@ class {
 	 * @store A ChatStore, or null when the app keeps no shared database (then there is no conversation list or preferences)
 	 * @offered An OfferedProfiles: which profiles a client may ask for
 	 */
-	function init( required any agent, any store, any offered ) {
+	function init( required any agent, any store, any offered, struct options = {} ) {
+		variables.manageTokens = arguments.options.manageTokens ?: false
 		variables.agent = arguments.agent
 		variables.store = arguments.store ?: nullValue()
 		variables.offered = arguments.offered ?: new "models.runtime.OfferedProfiles@bxagents"( [] )
@@ -35,8 +37,34 @@ class {
 		return !isNull( variables.sessions )
 	}
 
+	/**
+	 * Whether this server lets an admin manage access tokens over the API (agentApi.manageTokens) and has the database
+	 * they live in.
+	 */
+	boolean function keepsTokens() {
+		return variables.manageTokens && !isNull( variables.store )
+	}
+
+	/**
+	 * @return Token management for an admin caller, or null when the server does not offer it
+	 */
+	any function tokens() {
+		return keepsTokens() ? new Tokens( new "models.store.TokenService@bxagents"( variables.store ) ) : nullValue()
+	}
+
 	any function agent() {
 		return variables.agent
+	}
+
+	/**
+	 * @apiBase The path the API is served on
+	 * @access open or token
+	 *
+	 * @return The OpenAPI 3 document of this server's API (a struct, not an Outcome): the routes it really has, so
+	 *         the token routes are in it only when this server offers them
+	 */
+	struct function apiDocument( required string apiBase, string access = "open" ) {
+		return new OpenApiDocument( variables.agent.getConfig().name ?: "agent", { manageTokens : variables.manageTokens } ).build( arguments.apiBase, arguments.access )
 	}
 
 	/** @return The SessionStore, or null */
@@ -163,6 +191,7 @@ class {
 				"conversations" : keepsSessions(),
 				"preferences"   : keepsSessions(),
 				"profiles"      : variables.offered.any(),
+				"tokens"        : keepsTokens() && arguments.caller.isAdmin(),
 				"status"        : new "models.extensions.ServedStatus@bxagents"().available(),
 				"slots"         : new "models.extensions.ServedSlots@bxagents"().available()
 			}

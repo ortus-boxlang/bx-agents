@@ -8,6 +8,8 @@
  * `agentApi.access` says which. Left out, it follows what is set: a `tokenEnvVar`, `tokens: true` or a web page with
  * accounts (`users`) means token, nothing means open, as before.
  */
+import bxModules.bxagents.models.api.Guards;
+
 class {
 
 	/**
@@ -21,6 +23,16 @@ class {
 			return said
 		}
 		return hasCredentials( arguments.agentApi ) ? "token" : "open"
+	}
+
+	/**
+	 * @agentApi The `agentApi` block of the agent's config
+	 *
+	 * @return True when every route goes through the gate: the API wants a token, or it keeps some addresses out or
+	 *         limits how often it is used
+	 */
+	static boolean function gated( struct agentApi = {} ) {
+		return AccessMode::of( arguments.agentApi ) == "token" || Guards::any( arguments.agentApi )
 	}
 
 	/**

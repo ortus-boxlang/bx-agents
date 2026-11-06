@@ -94,7 +94,7 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 | `memory` | string o struct | La memoria de conversación del agente. Una cadena bare es una abreviatura para el tipo (`"cache"`); un struct es `{ type, ...config }` y se pasa textualmente a `aiMemory()` - por ejemplo, `{ type: "cache", maxMessages: 50 }`, o con `summaryProvider`/`summaryModel`/`summaryThreshold` para hacer funcional el `/compact` de la interfaz web. Se aplica por nodo, así que un subagente puede declarar el suyo propio. |
 | `checkpointer` | struct | `{ type: "cache"\|"file"\|"jdbc", ...config }`. Por defecto `{ type: "cache" }` si se omite. Siempre se aplica - sin uno, los flujos de aprobación human-in-the-loop a través de cualquier gateway que no sea `cli` fallan por completo. |
 | `gatewaySession` | struct | `{ policy, maxQueueDepth, commands }`, todos opcionales (por defecto `"queue"` / `50`). Solo significativo si el proyecto tiene al menos una entrada de [gateway](gateways/index.md#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends) de estilo push - controla la política del `GatewaySession` generado para un segundo mensaje entrante que llega en un hilo que ya tiene un turno en curso. `policy` debe ser uno de `reject`/`queue`/`steer`/`interrupt`. |
-| `agentApi` | struct | `{ enabled, tokenEnvVar, tokens, profiles }`, todos opcionales. Controla la ruta de agente siempre activa en `/__bxagents`. Consulta [La ruta de agente siempre activa](#la-ruta-de-agente-siempre-activa) más abajo. |
+| `agentApi` | struct | `{ enabled, access, tokenEnvVar, tokens, profiles, path, allowedIPs, rateLimit, manageTokens }`, todos opcionales. Controla la ruta de agente siempre activa, en `/__bxagents` salvo que `path` la mueva. Consulta [La ruta de agente siempre activa](#la-ruta-de-agente-siempre-activa) más abajo. |
 | cualquier otra clave | cualquiera | Fusionada y disponible en el struct de configuración resuelto, pero no interpretada por BxAgents mismo. |
 
 ## The model slug
@@ -220,6 +220,8 @@ GET  /__bxagents/info
 
 Responden con la forma que da el terminador `toAi()` de ColdBox, pero son rutas del handler propio de la API del agente, así que el mismo [ajuste de acceso](#agentapi) las cubre a ellas y a todas las demás. (El middleware de rutas de ColdBox no alcanza las rutas de `toAi()`, por eso no se usan.) La ruta existe para que el tooling de este módulo siempre tenga una dirección con la que hablar - es la entrada de servicio, no la API pública de tu proyecto. La superficie pública propia de un proyecto va en `gateways/`, en las rutas que elijas.
 
+Una ruta a la que se llega con un verbo que no acepta (un `GET` a `/invoke`) responde `405` con el cuerpo JSON de siempre, `{ "success": false, "error": "...", "code": "method_not_allowed" }`, no una página de error.
+
 ### Control de ejecución
 
 Junto a esas cuatro, un handler generado (`handlers/AgentApi.bx`) sirve lo que un cliente de chat necesita para
@@ -235,7 +237,7 @@ POST /__bxagents/resume    # { threadId, decision } -> SSE, como /events
 GET  /__bxagents/tools
 GET  /__bxagents/profiles   # los perfiles que un cliente puede pedir
 GET  /__bxagents/agent    # name, model, what it can do
-GET  /__bxagents/sessions   # las conversaciones recientes de quien llama (?source=terminal para las que empezaron ahí)
+GET  /__bxagents/sessions   # las conversaciones recientes de quien llama (?source=terminal para las que empezaron ahí; ?all=1 lista las de todos, con de quién es cada una, para un admin)
 POST /__bxagents/sessions   # { title? } empieza una: { conversationId }
 POST /__bxagents/sessions/rename   # { conversationId, title } pone nombre a una
 POST /__bxagents/sessions/fork     # { conversationId, title? } copia una, mensajes incluidos
@@ -303,6 +305,10 @@ Como la ruta está reservada, `build` **rechaza** cualquier entrada de `gateways
 | `access` | `open` o `token` | Si quien llama debe demostrar quién es. Si se omite, sigue a las dos claves siguientes: un `tokenEnvVar` o `tokens: true` significa `token`, nada significa `open`. `open` con alguna de ellas, o `token` sin ninguna, es un error de build. |
 | `tokenEnvVar` | string | El **nombre** de una variable de entorno que contiene un secreto compartido. Cuando está puesto, cada ruta exige una cabecera de petición `x-bxagents-token` coincidente. |
 | `tokens` | boolean | Por defecto `false`. `true` acepta además los [tokens de acceso](#tokens-de-acceso-para-un-agente-desplegado) hechos con `bxAgents token create`. |
+| `path` | texto | Por defecto `/__bxagents`. Dónde se sirve toda la API, p. ej. `/agent-api`: una ruta con raíz y segmentos simples (letras, dígitos, `_`, `-`, `~`). Todo lo que esta página llama `/__bxagents` significa esta ruta. Una entrada de `gateways/` no puede estar sobre ella. La página web, `serve` y `chat --server` la siguen solos; `chat --connect` a un servidor que la movió necesita `--api-path=/agent-api`. |
+| `allowedIPs` | lista | Por defecto ninguna (cualquiera). Las direcciones y redes que pueden llamar, p. ej. `[ "10.0.0.0/8", "203.0.113.7", "::1" ]`. Es el middleware de ruta `AllowedIPs` de cbSecurity delante de cada ruta, así que cualquier otra dirección recibe `403` (`{ "error": true, "messages": [ "Your IP address is not allowed" ] }`) antes de mirar ningún token. Comprueba la dirección de la conexión, nunca una cabecera `X-Forwarded-For` que elige el cliente; detrás de un proxy inverso todos tienen la dirección del proxy salvo que configures `middleware.trustedProxies` de cbSecurity. `/health` sigue abierto. |
+| `rateLimit` | struct | Por defecto ninguno. `{ requests, perSeconds }`: como máximo `requests` llamadas desde una misma dirección en cada ventana de `perSeconds` segundos. Es el middleware de ruta `Throttle` de cbSecurity, un solo contador para toda la API, guardado en CacheBox. Pasarse responde `429` con una cabecera `Retry-After`; cada respuesta lleva `X-RateLimit-Limit` y `X-RateLimit-Remaining`. |
+| `manageTokens` | boolean | Por defecto `false`. `true` permite a un admin crear, listar y revocar [tokens de acceso](#tokens-de-acceso-para-un-agente-desplegado) por la API (`GET`/`POST /__bxagents/tokens`, `POST /__bxagents/tokens/revoke`) y muestra un panel **Tokens** en la página web. Requiere `tokens: true` y una API con token; un token `chat` recibe `403`. El secreto de un token nuevo solo está en la respuesta de la creación. Desactivado, las rutas no existen y los tokens se crean solo con `bxAgents token create`. |
 | `profiles` | lista | Por defecto ninguno. Los [perfiles](models.md#perfiles) que un cliente puede pedir con `options.profile` en `/events`, y lo que lista `GET /__bxagents/profiles` (nunca una clave). Cualquier otro perfil es un `400`, así que un llamante no puede elegir un modelo que no ofreciste. `chat --connect` usa esta lista para `/profile`. Cada nombre debe estar declarado en `Agent.yaml`, o ser `default`. |
 
 ```javascript
@@ -326,6 +332,10 @@ function production() {
 	};
 }
 ```
+
+### Quién puede detener una ejecución
+
+`POST /cancel` y `POST /steer` reciben un `threadId`, que no es un secreto (el primer frame de cada stream lo lleva). Una ejecución solo la puede detener o dirigir quien la inició: cualquier otro recibe `403` con `code: "not_your_run"`. Una ejecución que ningún llamante de aquí inició (la que corre el gateway de una plataforma de chat) solo la puede tocar un `admin`; a cualquier otro se le dice `cancelled: false`, la misma respuesta que recibe un id de hilo desconocido.
 
 ### Abierta o con token
 

@@ -119,7 +119,7 @@ bxAgents build
 bxAgents serve --port=8080
 ```
 
-The page loads fine either way, but sending a message without first setting the matching key via the page's **Key** button gets a 401 - click **Key**, paste `a-real-secret`, and it works for the rest of the browser session (stored in `localStorage`). Delete the `apiKeyEnvVar` line entirely to leave the UI open instead (fine for local dev, never for a public deployment).
+The page loads fine either way, but sending a message without first setting the matching key via the page's **Key** button gets a 401 and the page opens its **Password** box - type `a-real-secret`, and it works for the rest of the browser session (stored in `localStorage`). Delete the `apiKeyEnvVar` line entirely to leave the UI open instead (fine for local dev, never for a public deployment).
 
 ## One API for the page, the terminal and the gateways
 

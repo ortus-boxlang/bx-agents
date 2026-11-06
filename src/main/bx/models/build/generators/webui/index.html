@@ -273,6 +273,13 @@ __THEME_TOKENS__
 		color: var(--muted);
 		line-height: 1.5;
 	}
+	.welcome p { margin: 0 0 0.9rem; }
+	.welcome .suggestions { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; }
+	.welcome .suggestions button {
+		padding: 0.45rem 0.9rem; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--fg);
+		font: inherit; font-size: 0.88rem; cursor: pointer;
+	}
+	.welcome .suggestions button:hover { border-color: var(--accent); color: var(--accent-ink); background: var(--accent-soft); }
 	.turn {
 		display: flex;
 		flex-direction: column;
@@ -360,11 +367,17 @@ __THEME_TOKENS__
 		background: var(--tool-bg);
 		color: var(--tool-fg);
 	}
+	details.trace .preview { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.6; font-family: var(--font-mono); font-size: 0.72rem; }
 	details.trace .status {
 		margin-left: auto;
-		font-size: 0.75rem;
-		opacity: 0.75;
+		font-size: 0.72rem;
+		padding: 0.05rem 0.5rem;
+		border-radius: 999px;
+		background: var(--border);
 	}
+	details.trace .status.running { color: var(--accent-ink); background: var(--accent-soft); animation: toolPulse 1.2s ease-in-out infinite; }
+	details.trace .status.done { color: var(--muted); }
+	@keyframes toolPulse { 50% { opacity: 0.5; } }
 
 	form#composer {
 		display: grid;
@@ -469,13 +482,18 @@ __THEME_TOKENS__
 		border-radius: 4px;
 		padding: 0.08em 0.32em;
 	}
+	.bubble.assistant .codeblock { margin: 0 0 0.6rem; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); overflow: hidden; }
+	.bubble.assistant .codehead { display: flex; align-items: center; justify-content: space-between; padding: 0.2rem 0.4rem 0.2rem 0.75rem; border-bottom: 1px solid var(--border); font-size: 0.75rem; color: var(--muted); }
+	.bubble.assistant .codehead .lang { font-family: var(--font-mono); }
+	.bubble.assistant .codehead button { border: 0; background: none; color: var(--muted); font: inherit; font-size: 0.75rem; padding: 0.2rem 0.5rem; border-radius: 6px; cursor: pointer; }
+	.bubble.assistant .codehead button:hover { background: var(--accent-soft); color: var(--accent-ink); }
 	.bubble.assistant pre {
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-sm);
+		background: none;
+		border: 0;
+		border-radius: 0;
 		padding: 0.6rem 0.75rem;
 		overflow-x: auto;
-		margin: 0 0 0.6rem;
+		margin: 0;
 	}
 	.bubble.assistant pre code {
 		background: none;
@@ -574,6 +592,9 @@ __THEME_TOKENS__
 	#slashMenu li[aria-selected="true"], #slashMenu li:hover { background: var(--accent-soft); }
 	#slashMenu .cmd { font-family: var(--font-mono); }
 	#slashMenu .tip { color: var(--muted); }
+	#slashMenu .ext-badge { margin-left: auto; }
+	.ext-badge { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.05rem 0.55rem; border-radius: 999px; background: var(--accent-soft); color: var(--accent-ink); font-size: 0.72rem; }
+	.bubble.command > .ext-badge { margin-bottom: 0.4rem; }
 	.hint {
 		color: var(--muted);
 		font-size: 0.8rem;
@@ -755,8 +776,43 @@ __THEME_TOKENS__
 	/* Project override: resources/webui/theme.css, inlined last so it always wins. */
 __CUSTOM_CSS__
 
+	/* Password: the one shared secret a server may ask for */
+	#keyPanel {
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		background: var(--bg);
+		color: var(--fg);
+		padding: 1rem;
+		width: min(24rem, 94vw);
+		font-family: inherit;
+	}
+	#keyPanel::backdrop { background: rgba(0, 0, 0, 0.35); }
+	#keyPanel h2 { font-size: 1rem; margin: 0 0 0.4rem; }
+	#keyPanel p { margin: 0 0 0.7rem; font-size: 0.85rem; color: var(--muted); }
+	#keyPanel input { width: 100%; box-sizing: border-box; font: inherit; padding: 0.45rem; background: var(--input-bg); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+	#keyPanel .key-error { color: var(--danger, #b42318); min-height: 1.1rem; margin: 0.4rem 0 0; font-size: 0.82rem; }
+	#keyPanel .key-actions { display: flex; gap: 0.4rem; justify-content: flex-end; margin-top: 0.7rem; }
+	#keyPanel button { background: transparent; color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.35rem 0.8rem; cursor: pointer; font: inherit; font-size: 0.85rem; }
+	#keyPanel button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+
+	/* Settings: one menu for everything that is not the chat itself */
+	#settingsPanel {
+		position: fixed; z-index: 30; top: 3.4rem; right: 0.6rem; width: min(17rem, 94vw); max-height: 85vh; overflow-y: auto; padding: 0.4rem;
+		background: var(--surface); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius);
+		box-shadow: 0 16px 40px rgba(16, 24, 40, 0.18);
+	}
+	#settingsPanel[hidden] { display: none; }
+	#settingsPanel .group + .group { margin-top: 0.3rem; padding-top: 0.3rem; border-top: 1px solid var(--border); }
+	#settingsPanel h3 { margin: 0.3rem 0.6rem 0.2rem; font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+	#settingsPanel button {
+		display: flex; align-items: center; gap: 0.6rem; width: 100%; height: auto; padding: 0.5rem 0.6rem; border: 0; border-radius: 8px;
+		background: none; color: var(--fg); font: inherit; font-size: 0.9rem; text-align: left; cursor: pointer;
+	}
+	#settingsPanel button:hover { background: var(--accent-soft); color: var(--accent-ink); }
+	#settingsPanel button[hidden] { display: none; }
+
 	/* Notes: the short things the agent keeps about you and about its own work */
-	#notesPanel {
+	#notesPanel, #tokensPanel {
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
 		background: var(--bg);
@@ -766,8 +822,8 @@ __CUSTOM_CSS__
 		max-height: 80vh;
 		font-family: inherit;
 	}
-	#notesPanel::backdrop { background: rgba(0, 0, 0, 0.35); }
-	#notesPanel .notes-head {
+	#notesPanel::backdrop, #tokensPanel::backdrop { background: rgba(0, 0, 0, 0.35); }
+	#notesPanel .notes-head, #tokensPanel .notes-head {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
@@ -775,8 +831,8 @@ __CUSTOM_CSS__
 		padding: 0.7rem 0.9rem;
 		border-bottom: 1px solid var(--border);
 	}
-	#notesPanel h2 { font-size: 1rem; margin: 0; }
-	#notesPanel button {
+	#notesPanel h2, #tokensPanel h2 { font-size: 1rem; margin: 0; }
+	#notesPanel button, #tokensPanel button {
 		background: transparent;
 		color: var(--fg);
 		border: 1px solid var(--border);
@@ -786,7 +842,7 @@ __CUSTOM_CSS__
 		font: inherit;
 		font-size: 0.82rem;
 	}
-	#notesPanel button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+	#notesPanel button.primary, #tokensPanel button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 	#notesPanel button[aria-selected="true"] { border-color: var(--accent); color: var(--accent); }
 	#notesPanel .notes-tabs { display: flex; gap: 0.4rem; padding: 0.6rem 0.9rem 0; }
 	#notesPanel .notes-usage { padding: 0.5rem 0.9rem 0; font-size: 0.8rem; color: var(--muted); }
@@ -799,7 +855,17 @@ __CUSTOM_CSS__
 	#notesList .notes-empty { color: var(--muted); border: none; }
 	#notesForm { display: flex; gap: 0.4rem; padding: 0 0.9rem 0.7rem; }
 	#notesForm input { flex: 1; min-width: 0; font: inherit; padding: 0.4rem; background: var(--input-bg); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius-sm); }
-	#notesPanel .notes-foot { padding: 0 0.9rem 0.8rem; font-size: 0.78rem; color: var(--muted); min-height: 1.2em; }
+	#tokensList { list-style: none; margin: 0; padding: 0.5rem 0.9rem; overflow-y: auto; max-height: 36vh; }
+	#tokensList li { display: flex; gap: 0.5rem; align-items: center; padding: 0.4rem 0; border-bottom: 1px solid var(--border); }
+	#tokensList .token-name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 0.9rem; }
+	#tokensList .token-meta { color: var(--muted); font-size: 0.75rem; }
+	#tokensList .tokens-empty { color: var(--muted); border: none; }
+	#tokensForm { display: flex; flex-wrap: wrap; gap: 0.4rem; padding: 0 0.9rem 0.7rem; }
+	#tokensForm input, #tokensForm select { font: inherit; padding: 0.4rem; background: var(--input-bg); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius-sm); min-width: 0; }
+	#tokensForm input { flex: 1; }
+	#tokenSecret { margin: 0 0.9rem 0.7rem; padding: 0.6rem; border: 1px solid var(--accent); border-radius: var(--radius-sm); font-size: 0.82rem; }
+	#tokenSecret code { display: block; margin: 0.3rem 0; overflow-wrap: anywhere; font-family: var(--font-mono); }
+	#notesPanel .notes-foot, #tokensPanel .notes-foot { padding: 0 0.9rem 0.8rem; font-size: 0.78rem; color: var(--muted); min-height: 1.2em; }
 </style>
 __EXTENSION_STYLES__
 </head>
@@ -822,18 +888,31 @@ __ICON_SPRITE__
 			<span id="slotHeader" class="slot-area" hidden></span>
 			<select id="profileSelect" title="The model for your next messages" aria-label="Model" hidden></select>
 			<button type="button" id="sidebarBtn" title="Show or hide conversations" aria-label="Chats" aria-expanded="true" aria-controls="sidebar"><svg class="i" aria-hidden="true"><use href="#i-sidebar-simple"/></svg></button>
-			<button type="button" id="forkBtn" title="Copy this conversation under a new name and carry on in the copy" aria-label="Fork" hidden><svg class="i" aria-hidden="true"><use href="#i-git-fork"/></svg></button>
-			<button type="button" id="exportBtn" title="Save this conversation as a Markdown file" aria-label="Export" hidden><svg class="i" aria-hidden="true"><use href="#i-download-simple"/></svg></button>
-			<button type="button" id="clearBtn" title="Delete the messages in this conversation" aria-label="Clear" hidden><svg class="i" aria-hidden="true"><use href="#i-broom"/></svg></button>
-			<button type="button" id="compactBtn" title="Summarize older messages, keep the recent ones" aria-label="Compact" hidden><svg class="i" aria-hidden="true"><use href="#i-arrows-in-line-vertical"/></svg></button>
-			<button type="button" id="notesBtn" title="What the agent keeps about you and about its own work" aria-label="Notes" hidden><svg class="i" aria-hidden="true"><use href="#i-notebook"/></svg></button>
-			<button type="button" id="keyBtn" title="Set the token this page sends as x-bxagents-token" aria-label="API key"><svg class="i" aria-hidden="true"><use href="#i-key"/></svg></button>
-			<button type="button" id="appearanceBtn" title="Mode, accent color, text size and density" aria-label="Appearance" aria-haspopup="dialog" aria-expanded="false" aria-controls="appearancePanel"><svg class="i" aria-hidden="true"><use href="#i-palette"/></svg></button>
-			<button type="button" id="themeBtn" title="Switch between light and dark" aria-label="Theme"><svg class="i" aria-hidden="true"><use href="#i-sun"/></svg></button>
+			<button type="button" id="settingsBtn" title="Settings" aria-label="Settings" aria-haspopup="menu" aria-expanded="false" aria-controls="settingsPanel"><svg class="i" aria-hidden="true"><use href="#i-gear"/></svg></button>
 		</div>
 	</header>
 	<div id="contextPanel" role="dialog" aria-label="Context" hidden></div>
 	<div id="appearancePanel" role="dialog" aria-label="Appearance" hidden></div>
+	<div id="settingsPanel" role="menu" aria-label="Settings" hidden>
+		<div class="group" data-group="Conversation">
+			<h3>Conversation</h3>
+			<button type="button" id="forkBtn" role="menuitem" title="Copy this conversation under a new name and carry on in the copy" aria-label="Fork" hidden><svg class="i" aria-hidden="true"><use href="#i-git-fork"/></svg><span class="label">Fork this conversation</span></button>
+			<button type="button" id="exportBtn" role="menuitem" title="Save this conversation as a Markdown file" aria-label="Export" hidden><svg class="i" aria-hidden="true"><use href="#i-download-simple"/></svg><span class="label">Export as Markdown</span></button>
+			<button type="button" id="clearBtn" role="menuitem" title="Delete the messages in this conversation" aria-label="Clear" hidden><svg class="i" aria-hidden="true"><use href="#i-broom"/></svg><span class="label">Clear messages</span></button>
+			<button type="button" id="compactBtn" role="menuitem" title="Summarize older messages, keep the recent ones" aria-label="Compact" hidden><svg class="i" aria-hidden="true"><use href="#i-arrows-in-line-vertical"/></svg><span class="label">Compact older messages</span></button>
+		</div>
+		<div class="group" data-group="You">
+			<h3>You</h3>
+			<button type="button" id="notesBtn" role="menuitem" title="What the agent keeps about you and about its own work" aria-label="Notes" hidden><svg class="i" aria-hidden="true"><use href="#i-notebook"/></svg><span class="label">Notes</span></button>
+			<button type="button" id="appearanceBtn" role="menuitem" title="Mode, accent color, text size and density" aria-label="Appearance" aria-haspopup="dialog" aria-expanded="false" aria-controls="appearancePanel"><svg class="i" aria-hidden="true"><use href="#i-palette"/></svg><span class="label">Appearance</span></button>
+			<button type="button" id="themeBtn" role="menuitem" title="Switch between light and dark" aria-label="Theme"><svg class="i" aria-hidden="true"><use href="#i-sun"/></svg><span class="label">Dark theme</span></button>
+		</div>
+		<div class="group" data-group="Server">
+			<h3>Server</h3>
+			<button type="button" id="keyBtn" role="menuitem" title="Password for this server" aria-label="Password"><svg class="i" aria-hidden="true"><use href="#i-key"/></svg><span class="label">Password</span></button>
+			<button type="button" id="tokensBtn" role="menuitem" title="Access tokens for this server" aria-label="Tokens" aria-haspopup="dialog" hidden><svg class="i" aria-hidden="true"><use href="#i-terminal-window"/></svg><span class="label">Access tokens</span></button>
+		</div>
+	</div>
 	<div class="shell">
 		<aside id="sidebar" aria-label="Conversations">
 			<div class="sidebar-head">
@@ -861,6 +940,20 @@ __ICON_SPRITE__
 		</div>
 	</div>
 
+	<dialog id="keyPanel" aria-labelledby="keyTitle">
+		<form id="keyForm" method="dialog" autocomplete="off">
+			<h2 id="keyTitle">Password</h2>
+			<p id="keyHelp">This server asks for a password. It is kept in this browser and sent with every request.</p>
+			<input id="keyInput" type="password" autocomplete="current-password" aria-labelledby="keyTitle" aria-describedby="keyHelp keyError" spellcheck="false">
+			<p class="key-error" id="keyError" role="alert"></p>
+			<div class="key-actions">
+				<button type="button" id="keyForget">Forget it</button>
+				<button type="button" id="keyCancel">Cancel</button>
+				<button type="submit" class="primary" id="keySave">Save</button>
+			</div>
+		</form>
+	</dialog>
+
 	<dialog id="notesPanel" aria-labelledby="notesTitle">
 		<div class="notes-head">
 			<h2 id="notesTitle">Notes</h2>
@@ -879,6 +972,26 @@ __ICON_SPRITE__
 		<p class="notes-foot" id="notesFoot" role="status"></p>
 	</dialog>
 
+	<dialog id="tokensPanel" aria-labelledby="tokensTitle">
+		<div class="notes-head">
+			<h2 id="tokensTitle">Access tokens</h2>
+			<button type="button" id="tokensClose" aria-label="Close" title="Close"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>
+		</div>
+		<ul id="tokensList"></ul>
+		<div id="tokenSecret" role="status" hidden>
+			<strong>Copy this token now. It is not shown again.</strong>
+			<code id="tokenSecretText"></code>
+			<button type="button" id="tokenCopy"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg> Copy</button>
+		</div>
+		<form id="tokensForm" autocomplete="off">
+			<input id="tokenName" maxlength="64" placeholder="Name" aria-label="Token name" required>
+			<select id="tokenScope" aria-label="Scope"><option value="chat">chat</option><option value="admin">admin</option></select>
+			<input id="tokenExpires" maxlength="20" placeholder="Lasts (90d)" aria-label="Expires">
+			<button type="submit" class="primary">Create</button>
+		</form>
+		<p class="notes-foot" id="tokensFoot" role="status"></p>
+	</dialog>
+
 __MARKDOWN_SCRIPTS__
 <script>
 (function () {
@@ -890,6 +1003,7 @@ __MARKDOWN_SCRIPTS__
 	var SHOW_REASONING = __SHOW_REASONING__;
 	var SHOW_TOOLS = __SHOW_TOOLS__;
 	var WELCOME = "__WELCOME__";
+	var SUGGESTIONS = JSON.parse( "__SUGGESTIONS__" );
 	var KEY_STORAGE = "bxagents_webui_api_key";
 	var THEME_STORAGE = "bxagents_webui_theme";
 	var PROFILE_STORAGE = "bxagents_webui_profile";
@@ -1012,6 +1126,10 @@ __MARKDOWN_SCRIPTS__
 			window.location.href = LOGIN_URL;
 			return true;
 		}
+		// a server with a shared password and a page that has none (or a wrong one): ask for it, once
+		if ( res.status === 401 && !LOGIN_URL ) {
+			askForPassword( getApiKey() ? "That password was not accepted." : "" );
+		}
 		return false;
 	}
 
@@ -1040,6 +1158,7 @@ __MARKDOWN_SCRIPTS__
 			compactBtn.hidden = !capabilities.compact;
 			sidebarBtn.hidden = !capabilities.conversations;
 			notesBtn.hidden = !capabilities.notes;
+			tokensBtn.hidden = !capabilities.tokens;
 			if ( !capabilities.conversations ) {
 				setSidebar( false );
 			}
@@ -1245,12 +1364,41 @@ __MARKDOWN_SCRIPTS__
 		}
 	}
 
-	keyBtn.addEventListener( "click", function () {
-		var next = window.prompt( "Token (sent as x-bxagents-token on every request to " + API_BASE + "). Leave blank to clear.", getApiKey() );
-		if ( next !== null ) {
-			setApiKey( next.trim() );
+	var keyPanel = document.getElementById( "keyPanel" );
+	var keyInput = document.getElementById( "keyInput" );
+	var keyError = document.getElementById( "keyError" );
+	var askedForPassword = false;
+
+	/**
+	 * Opens the password form. When the server refused a call it opens by itself, but only once per page load, so a
+	 * wrong password does not bring it back after every request.
+	 *
+	 * @param problem What to say above the box, when something was refused
+	 */
+	function askForPassword( problem ) {
+		if ( keyPanel.open || ( problem !== undefined && askedForPassword ) ) {
+			return;
 		}
+		askedForPassword = true;
+		keyError.textContent = problem || "";
+		keyInput.value = "";
+		keyPanel.showModal();
+		keyInput.focus();
+	}
+
+	keyBtn.addEventListener( "click", function () { askForPassword(); } );
+
+	document.getElementById( "keyForm" ).addEventListener( "submit", function () {
+		setApiKey( keyInput.value.trim() );
+		keyPanel.close();
+		window.location.reload();
 	} );
+	document.getElementById( "keyForget" ).addEventListener( "click", function () {
+		setApiKey( "" );
+		keyPanel.close();
+		window.location.reload();
+	} );
+	document.getElementById( "keyCancel" ).addEventListener( "click", function () { keyPanel.close(); } );
 
 	function applyTheme( theme ) {
 		if ( theme === "dark" || theme === "light" ) {
@@ -1260,7 +1408,7 @@ __MARKDOWN_SCRIPTS__
 		}
 		// the button offers the other theme
 		var dark = document.documentElement.getAttribute( "data-theme" ) === "dark";
-		themeBtn.innerHTML = icon( dark ? "sun" : "moon" );
+		themeBtn.innerHTML = icon( dark ? "sun" : "moon" ) + '<span class="label">' + ( dark ? "Light theme" : "Dark theme" ) + "</span>";
 		themeBtn.setAttribute( "aria-label", dark ? "Switch to light theme" : "Switch to dark theme" );
 	}
 
@@ -1292,6 +1440,7 @@ __MARKDOWN_SCRIPTS__
 	];
 	var TEXT_SIZES = { small : "0.85rem", medium : "", large : "1.05rem" };
 	var appearanceBtn = document.getElementById( "appearanceBtn" );
+	var settingsBtn = document.getElementById( "settingsBtn" );
 	var appearancePanelEl = document.getElementById( "appearancePanel" );
 	var appearance = { accent : "", size : "medium", density : "comfortable" };
 
@@ -1457,7 +1606,7 @@ __MARKDOWN_SCRIPTS__
 
 	function openAppearancePanel() {
 		drawAppearancePanel();
-		var box = appearanceBtn.getBoundingClientRect();
+		var box = settingsBtn.getBoundingClientRect();
 		appearancePanelEl.style.top = ( box.bottom + 8 ) + "px";
 		appearancePanelEl.style.right = Math.max( 8, window.innerWidth - box.right ) + "px";
 		appearancePanelEl.hidden = false;
@@ -1865,13 +2014,33 @@ __MARKDOWN_SCRIPTS__
 	}
 
 	function showWelcome() {
-		if ( !WELCOME.length ) {
+		if ( !WELCOME.length && !SUGGESTIONS.length ) {
 			return;
 		}
 		var el = document.createElement( "div" );
 		el.className = "welcome";
 		el.id = "welcome";
-		el.textContent = WELCOME;
+		if ( WELCOME.length ) {
+			var text = document.createElement( "p" );
+			text.textContent = WELCOME;
+			el.appendChild( text );
+		}
+		if ( SUGGESTIONS.length ) {
+			var chips = document.createElement( "div" );
+			chips.className = "suggestions";
+			SUGGESTIONS.forEach( function ( suggestion ) {
+				var chip = document.createElement( "button" );
+				chip.type = "button";
+				chip.textContent = suggestion;
+				// one click sends it, as typing it and pressing Enter would
+				chip.addEventListener( "click", function () {
+					inputEl.value = suggestion;
+					formEl.requestSubmit();
+				} );
+				chips.appendChild( chip );
+			} );
+			el.appendChild( chips );
+		}
 		messagesEl.appendChild( el );
 	}
 
@@ -1920,7 +2089,8 @@ __MARKDOWN_SCRIPTS__
 					var lang = ( token.lang || "" ).trim().split( /\s+/ )[ 0 ].toLowerCase();
 					var known = typeof hljs !== "undefined" && lang && hljs.getLanguage( lang );
 					var body = known ? hljs.highlight( token.text, { language: lang, ignoreIllegals: true } ).value : escapeHtml( token.text );
-					return '<pre><code class="hljs' + ( known ? " language-" + escapeHtml( lang ) : "" ) + '">' + body + "</code></pre>";
+					return '<div class="codeblock"><div class="codehead"><span class="lang">' + escapeHtml( lang || "text" ) + '</span><button type="button" class="copy-code">Copy</button></div>'
+						+ '<pre><code class="hljs' + ( known ? " language-" + escapeHtml( lang ) : "" ) + '">' + body + "</code></pre></div>";
 				}
 			}
 		} );
@@ -2028,17 +2198,20 @@ __MARKDOWN_SCRIPTS__
 					var summary = document.createElement( "summary" );
 					var label = document.createElement( "span" );
 					label.textContent = name || "tool";
+					var preview = document.createElement( "span" );
+					preview.className = "preview";
 					var status = document.createElement( "span" );
-					status.className = "status";
-					status.textContent = "calling…";
+					status.className = "status running";
+					status.textContent = "running…";
 					summary.appendChild( label );
+					summary.appendChild( preview );
 					summary.appendChild( status );
 					el.appendChild( summary );
 					var body = document.createElement( "div" );
 					body.className = "body";
 					el.appendChild( body );
 					root.insertBefore( el, bubble );
-					entry = { el: el, label: label, status: status, body: body, args: "" };
+					entry = { el: el, label: label, preview: preview, status: status, body: body, args: "" };
 					toolEls[ index ] = entry;
 				}
 				if ( name && name.length ) {
@@ -2047,13 +2220,15 @@ __MARKDOWN_SCRIPTS__
 				if ( argsFragment && argsFragment.length ) {
 					entry.args += argsFragment;
 					entry.body.textContent = entry.args;
+					entry.preview.textContent = entry.args.length > 60 ? entry.args.slice( 0, 60 ) + "…" : entry.args;
 				}
 				scrollToEnd();
 			},
 			settle: function ( sawContent ) {
 				bubble.classList.remove( "pending" );
 				Object.keys( toolEls ).forEach( function ( key ) {
-					toolEls[ key ].status.textContent = "called";
+					toolEls[ key ].status.className = "status done";
+					toolEls[ key ].status.textContent = "done";
 				} );
 				if ( !sawContent && !answer.length ) {
 					bubble.textContent = "(no response)";
@@ -2195,7 +2370,7 @@ __MARKDOWN_SCRIPTS__
 				throw new Error( "Signing in..." );
 			}
 			if ( res.status === 401 ) {
-				throw new Error( "Unauthorized - set the token via the \"Key\" button, then try again. If you already did, the server's token environment variable may be unset: the gate refuses every request in that case." );
+				throw new Error( "Unauthorized - this server asks for a password: use the key button at the top. If you already did, check it; if the server has no password set, it refuses everyone." );
 			}
 			if ( res.status === 400 ) {
 				// the server explains a refusal (a model that cannot see pictures, a picture that is too big)
@@ -2370,6 +2545,13 @@ __MARKDOWN_SCRIPTS__
 	function drawReply( reply ) {
 		var box = document.createElement( "div" );
 		box.className = "bubble command";
+		if ( reply.extension ) {
+			var badge = document.createElement( "span" );
+			badge.className = "ext-badge";
+			badge.innerHTML = icon( "puzzle-piece" );
+			badge.appendChild( document.createTextNode( " " + reply.extension ) );
+			box.appendChild( badge );
+		}
 		( reply.blocks || [] ).forEach( function ( block ) {
 			if ( block.type === "text" ) {
 				var p = document.createElement( "p" );
@@ -2592,6 +2774,12 @@ __MARKDOWN_SCRIPTS__
 			tip.textContent = c.hint;
 			li.appendChild( name );
 			li.appendChild( tip );
+			if ( c.extension ) {
+				var from = document.createElement( "span" );
+				from.className = "ext-badge";
+				from.textContent = c.extension;
+				li.appendChild( from );
+			}
 			li.addEventListener( "mousedown", function ( e ) {
 				e.preventDefault();
 				inputEl.value = c.name + " ";
@@ -2809,6 +2997,161 @@ __MARKDOWN_SCRIPTS__
 			.catch( function () {
 				showHint( "Compaction failed." );
 			} );
+	} );
+
+	// ---- Code blocks: Copy puts the code, not the rendered words, on the clipboard ----
+	messagesEl.addEventListener( "click", function ( evt ) {
+		var button = evt.target.closest( "button.copy-code" );
+		if ( !button || !navigator.clipboard ) {
+			return;
+		}
+		var code = button.closest( ".codeblock" ).querySelector( "pre code" );
+		navigator.clipboard.writeText( code.textContent ).then( function () {
+			button.textContent = "Copied";
+			setTimeout( function () { button.textContent = "Copy"; }, 1200 );
+		} );
+	} );
+
+	// ---- Settings menu ----------------------------------------------------------
+	var settingsPanel = document.getElementById( "settingsPanel" );
+
+	function closeSettings() {
+		settingsPanel.hidden = true;
+		settingsBtn.setAttribute( "aria-expanded", "false" );
+	}
+
+	function openSettings() {
+		// a group with nothing to offer on this server leaves no heading behind
+		settingsPanel.querySelectorAll( ".group" ).forEach( function ( group ) {
+			group.hidden = !group.querySelector( "button:not([hidden])" );
+		} );
+		settingsPanel.hidden = false;
+		settingsBtn.setAttribute( "aria-expanded", "true" );
+	}
+
+	settingsBtn.addEventListener( "click", function ( evt ) {
+		evt.stopPropagation();
+		if ( settingsPanel.hidden ) { openSettings(); } else { closeSettings(); }
+	} );
+	// choosing an item closes the menu; the item's own handler still runs
+	settingsPanel.addEventListener( "click", function ( evt ) {
+		if ( evt.target.closest( "button" ) ) { closeSettings(); }
+	} );
+	document.addEventListener( "click", function ( evt ) {
+		if ( !settingsPanel.hidden && evt.target.isConnected && !settingsPanel.contains( evt.target ) ) { closeSettings(); }
+	} );
+	document.addEventListener( "keydown", function ( evt ) {
+		if ( evt.key === "Escape" && !settingsPanel.hidden ) { closeSettings(); settingsBtn.focus(); }
+	} );
+
+	// ---- Access tokens (an admin, when the server turns agentApi.manageTokens on) ----
+	var tokensBtn = document.getElementById( "tokensBtn" );
+	var tokensPanel = document.getElementById( "tokensPanel" );
+	var tokensList = document.getElementById( "tokensList" );
+	var tokensFoot = document.getElementById( "tokensFoot" );
+	var tokenSecret = document.getElementById( "tokenSecret" );
+
+	function tokensSay( text ) {
+		tokensFoot.textContent = text || "";
+	}
+
+	function tokensFail( res, fallback ) {
+		return res.json().then( function ( body ) {
+			tokensSay( ( body && ( body.reason || body.error ) ) || fallback );
+		} ).catch( function () { tokensSay( fallback ); } );
+	}
+
+	function dayOf( stamp ) {
+		return stamp ? String( stamp ).slice( 0, 10 ) : "";
+	}
+
+	function renderTokens( tokens ) {
+		tokensList.textContent = "";
+		if ( !tokens.length ) {
+			var none = document.createElement( "li" );
+			none.className = "tokens-empty";
+			none.textContent = "No tokens yet.";
+			tokensList.appendChild( none );
+		}
+		tokens.forEach( function ( token ) {
+			var li = document.createElement( "li" );
+			var name = document.createElement( "span" );
+			name.className = "token-name";
+			name.textContent = token.name;
+			var meta = document.createElement( "span" );
+			meta.className = "token-meta";
+			meta.textContent = token.scope + ( token.status !== "active" ? ", " + token.status : "" )
+				+ ( token.expiresAt ? ", until " + dayOf( token.expiresAt ) : "" )
+				+ ( token.lastUsedAt ? ", used " + dayOf( token.lastUsedAt ) : ", never used" );
+			li.appendChild( name );
+			li.appendChild( meta );
+			if ( token.status === "active" ) {
+				var revoke = document.createElement( "button" );
+				revoke.type = "button";
+				revoke.textContent = "Revoke";
+				revoke.setAttribute( "aria-label", "Revoke " + token.name );
+				revoke.addEventListener( "click", function () {
+					apiPost( "/tokens/revoke", { name: token.name } ).then( function ( res ) {
+						if ( res.ok ) {
+							tokensSay( "Revoked " + token.name + "." );
+							return loadTokens();
+						}
+						return tokensFail( res, "Could not revoke the token." );
+					} );
+				} );
+				li.appendChild( revoke );
+			}
+			tokensList.appendChild( li );
+		} );
+	}
+
+	function loadTokens() {
+		return apiGet( "/tokens" ).then( function ( payload ) {
+			if ( payload && payload.success ) {
+				renderTokens( payload.tokens || [] );
+			} else {
+				tokensSay( "Could not load the tokens." );
+			}
+		} );
+	}
+
+	tokensBtn.addEventListener( "click", function () {
+		tokensSay( "" );
+		tokenSecret.hidden = true;
+		tokensPanel.showModal();
+		loadTokens();
+	} );
+	document.getElementById( "tokensClose" ).addEventListener( "click", function () {
+		document.getElementById( "tokenSecretText" ).textContent = "";
+		tokensPanel.close();
+	} );
+	document.getElementById( "tokenCopy" ).addEventListener( "click", function () {
+		var secret = document.getElementById( "tokenSecretText" ).textContent;
+		if ( navigator.clipboard ) {
+			navigator.clipboard.writeText( secret ).then( function () { tokensSay( "Copied." ); } );
+		}
+	} );
+	document.getElementById( "tokensForm" ).addEventListener( "submit", function ( e ) {
+		e.preventDefault();
+		var nameEl = document.getElementById( "tokenName" );
+		var expiresEl = document.getElementById( "tokenExpires" );
+		apiPost( "/tokens", {
+			name   : nameEl.value.trim(),
+			scope  : document.getElementById( "tokenScope" ).value,
+			expires: expiresEl.value.trim()
+		} ).then( function ( res ) {
+			if ( !res.ok ) {
+				return tokensFail( res, "Could not create the token." );
+			}
+			return res.json().then( function ( made ) {
+				document.getElementById( "tokenSecretText" ).textContent = made.token;
+				tokenSecret.hidden = false;
+				nameEl.value = "";
+				expiresEl.value = "";
+				tokensSay( "Created " + made.name + "." );
+				return loadTokens();
+			} );
+		} );
 	} );
 
 	// ---- Notes -----------------------------------------------------------------

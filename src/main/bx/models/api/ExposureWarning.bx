@@ -7,7 +7,7 @@
  */
 class {
 
-	/** The file the build writes: { enabled, access } */
+	/** The file the build writes: { enabled, access, path, restricted } */
 	static string function fileName() {
 		return "config/agentapi.json"
 	}
@@ -38,7 +38,8 @@ class {
 			return ""
 		}
 		var settings = jsonDeserialize( fileRead( file ) )
-		if ( !( settings.enabled ?: true ) || ( settings.access ?: "open" ) != "open" ) {
+		// an API that only some addresses may call is not open to the network, whatever its access says
+		if ( !( settings.enabled ?: true ) || ( settings.access ?: "open" ) != "open" || ( settings.restricted ?: false ) ) {
 			return ""
 		}
 		var where = arguments.host == "0.0.0.0" ? "every network interface" : arguments.host

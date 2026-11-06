@@ -67,6 +67,27 @@ class {
 	}
 
 	/**
+	 * Every conversation on the server, whoever owns it, most recent first. For an admin's overview only: every other
+	 * read here is scoped to one user.
+	 *
+	 * @source Only the conversations that started there; all when blank
+	 *
+	 * @return [ { id, userId, title, messageCount, source, createdAt, updatedAt } ]
+	 */
+	array function listAll( numeric limit = 50, string source = "" ) {
+		var params = {}
+		var only = ""
+		if ( len( arguments.source ) ) {
+			only = " WHERE source = :source"
+			params[ "source" ] = arguments.source
+		}
+		return variables.store.rows(
+			"SELECT id, userId, title, messageCount, source, createdAt, updatedAt FROM conversations#only# ORDER BY updatedAt DESC, rowid DESC LIMIT #int( arguments.limit )#",
+			params
+		)
+	}
+
+	/**
 	 * @source Only the conversations that started there (`web`, `terminal`, `api`, a gateway's platform); all when blank
 	 *
 	 * @return The user's conversations, most recent first: [ { id, title, messageCount, source, createdAt, updatedAt } ]

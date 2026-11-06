@@ -1,0 +1,139 @@
+/**
+ * The two guards of the agent API that are not about who you are: which addresses may call (`agentApi.allowedIPs`) and
+ * how often (`agentApi.rateLimit`). They are not written here. They are cbSecurity's own route middleware,
+ * `AllowedIPs@cbsecurity` and `Throttle@cbsecurity`, put in front of every route of the API by the router the build
+ * writes; this class says which of them an agent asks for, with the route meta each one reads, and checks the settings.
+ *
+ * cbSecurity looks at the address of the connection (behind a reverse proxy set its `middleware.trustedProxies`) and
+ * counts a throttle in CacheBox, so the counts are shared by every request of the server.
+ */
+class {
+
+	/** The one counter every route of the API shares, so the limit is for the API and not for each route */
+	static string function counterName() {
+		return "bxagents-api"
+	}
+
+	/**
+	 * @agentApi The `agentApi` block of the agent's config
+	 *
+	 * @return True when the API keeps some addresses out or limits how often it is used
+	 */
+	static boolean function any( struct agentApi = {} ) {
+		return Guards::hasAddresses( arguments.agentApi ) || Guards::hasLimit( arguments.agentApi )
+	}
+
+	static boolean function hasAddresses( struct agentApi = {} ) {
+		return isArray( arguments.agentApi.allowedIPs ?: "" ) && arguments.agentApi.allowedIPs.len() > 0
+	}
+
+	static boolean function hasLimit( struct agentApi = {} ) {
+		return isStruct( arguments.agentApi.rateLimit ?: "" ) && !arguments.agentApi.rateLimit.isEmpty()
+	}
+
+	/**
+	 * @return The cbSecurity middleware to run before the token check, in order
+	 */
+	static array function middleware( struct agentApi = {} ) {
+		var names = []
+		if ( Guards::hasAddresses( arguments.agentApi ) ) {
+			names.append( "AllowedIPs@cbsecurity" )
+		}
+		if ( Guards::hasLimit( arguments.agentApi ) ) {
+			names.append( "Throttle@cbsecurity" )
+		}
+		return names
+	}
+
+	/**
+	 * @return The route meta those middleware read: `allowedIps` for AllowedIPs, `throttle` for Throttle
+	 */
+	static struct function meta( struct agentApi = {} ) {
+		var made = {}
+		if ( Guards::hasAddresses( arguments.agentApi ) ) {
+			made[ "allowedIps" ] = arguments.agentApi.allowedIPs.map( ( ip ) => trim( toString( ip ) ) ).toList()
+		}
+		if ( Guards::hasLimit( arguments.agentApi ) ) {
+			made[ "throttle" ] = {
+				"maxAttempts"  : int( arguments.agentApi.rateLimit.requests ),
+				"decaySeconds" : int( arguments.agentApi.rateLimit.perSeconds ),
+				"by"           : "ip",
+				"name"         : Guards::counterName()
+			}
+		}
+		return made
+	}
+
+	/**
+	 * @agentApi The `agentApi` block
+	 *
+	 * @return What is wrong with allowedIPs and rateLimit, as sentences; empty when they are fine
+	 */
+	static array function problems( struct agentApi = {} ) {
+		var found = []
+		if ( arguments.agentApi.keyExists( "allowedIPs" ) ) {
+			found.append( Guards::addressProblems( arguments.agentApi.allowedIPs ), true )
+		}
+		if ( arguments.agentApi.keyExists( "rateLimit" ) && !( isStruct( arguments.agentApi.rateLimit ) && arguments.agentApi.rateLimit.isEmpty() ) ) {
+			found.append( Guards::limitProblems( arguments.agentApi.rateLimit ), true )
+		}
+		return found
+	}
+
+	private static array function addressProblems( required any list ) {
+		if ( !isArray( arguments.list ) ) {
+			return [ "Agent.bx's 'agentApi.allowedIPs' must be a list of addresses or networks (e.g. [ ""10.0.0.0/8"", ""203.0.113.7"" ])" ]
+		}
+		var found = []
+		for ( var entry in arguments.list ) {
+			if ( !isSimpleValue( entry ) || !Guards::isAddressOrNetwork( toString( entry ) ) ) {
+				found.append( "Agent.bx's 'agentApi.allowedIPs' has [#isSimpleValue( entry ) ? entry : 'a non-text entry'#], which is not an IP address or a network like 10.0.0.0/8" )
+			}
+		}
+		return found
+	}
+
+	/** A literal IPv4 or IPv6 address, or one with a /prefix; a host name is never looked up */
+	private static boolean function isAddressOrNetwork( required string text ) {
+		var parts = trim( arguments.text ).listToArray( "/", true )
+		if ( !parts.len() || parts.len() > 2 ) {
+			return false
+		}
+		var literal = parts[ 1 ].reReplace( "^\[|\]$", "", "all" )
+		var v4 = reFind( "^[0-9]{1,3}(\.[0-9]{1,3}){3}$", literal )
+		if ( !reFind( "^[0-9a-fA-F:.]+$", literal ) || ( !literal.find( ":" ) && !v4 ) ) {
+			return false
+		}
+		// every part of a dotted address is 0 to 255: anything else would be taken for a host name and looked up
+		if ( !literal.find( ":" ) && literal.listToArray( "." ).some( ( part ) => val( part ) > 255 ) ) {
+			return false
+		}
+		var bits = literal.find( ":" ) ? 128 : 32
+		try {
+			createObject( "java", "java.net.InetAddress" ).getByName( literal )
+		} catch ( any e ) {
+			return false
+		}
+		return parts.len() == 1 || ( reFind( "^[0-9]{1,3}$", parts[ 2 ] ) && val( parts[ 2 ] ) <= bits )
+	}
+
+	private static array function limitProblems( required any config ) {
+		if ( !isStruct( arguments.config ) ) {
+			return [ "Agent.bx's 'agentApi.rateLimit' must be a struct of { requests, perSeconds }" ]
+		}
+		var found = []
+		for ( var key in arguments.config ) {
+			if ( !listFindNoCase( "requests,perSeconds", key ) ) {
+				found.append( "Agent.bx's 'agentApi.rateLimit' has an unknown key [#key#] - valid keys: requests, perSeconds (callers are counted by address)" )
+			}
+		}
+		for ( var key in [ "requests", "perSeconds" ] ) {
+			var value = arguments.config[ key ] ?: ""
+			if ( !isNumeric( value ) || value < 1 || int( value ) != value ) {
+				found.append( "Agent.bx's 'agentApi.rateLimit.#key#' must be a whole number of at least 1" )
+			}
+		}
+		return found
+	}
+
+}

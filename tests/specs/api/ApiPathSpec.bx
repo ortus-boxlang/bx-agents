@@ -1,0 +1,41 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "api.ApiPath", function() {
+
+			it( "is /__bxagents unless agentApi.path says otherwise", function() {
+				expect( bxagents.models.api.ApiPath::of( {} ) ).toBe( "/__bxagents" );
+				expect( bxagents.models.api.ApiPath::of( { path : "" } ) ).toBe( "/__bxagents" );
+				expect( bxagents.models.api.ApiPath::of( { path : "/agent-api" } ) ).toBe( "/agent-api" );
+			} );
+
+			it( "drops a trailing slash", function() {
+				expect( bxagents.models.api.ApiPath::of( { path : "/agent-api/" } ) ).toBe( "/agent-api" );
+			} );
+
+			it( "accepts rooted paths of plain segments and refuses the rest", function() {
+				expect( bxagents.models.api.ApiPath::problems( "/agent-api" ) ).toBeEmpty();
+				expect( bxagents.models.api.ApiPath::problems( "/v1/agent" ) ).toBeEmpty();
+				expect( bxagents.models.api.ApiPath::problems( "agent" ) ).toHaveLength( 1 );
+				expect( bxagents.models.api.ApiPath::problems( "/" ) ).toHaveLength( 1 );
+				expect( bxagents.models.api.ApiPath::problems( "/a//b" ) ).toHaveLength( 1 );
+				expect( bxagents.models.api.ApiPath::problems( "/a b" ) ).toHaveLength( 1 );
+				expect( bxagents.models.api.ApiPath::problems( "/../x" ) ).toHaveLength( 1 );
+				expect( bxagents.models.api.ApiPath::problems( "" ) ).toHaveLength( 1 );
+				expect( bxagents.models.api.ApiPath::problems( { a : 1 } ) ).toHaveLength( 1 );
+			} );
+
+			it( "reads the path a build wrote down, and the default when there is none", function() {
+				var dir = createTempDirectory( prefix = "bxagents-apipath-" );
+				expect( bxagents.models.api.ApiPath::fromBuild( dir ) ).toBe( "/__bxagents" );
+
+				directoryCreate( dir & "/config" );
+				fileWrite( dir & "/config/agentapi.json", '{"enabled":true,"access":"open","path":"/agent-api"}' );
+				expect( bxagents.models.api.ApiPath::fromBuild( dir ) ).toBe( "/agent-api" );
+				directoryDelete( dir, true );
+			} );
+
+		} );
+	}
+
+}

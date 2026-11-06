@@ -1,0 +1,95 @@
+import bxModules.bxagents.models.api.ApiContract;
+
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "api.ApiContract and api.OpenApiDocument", function() {
+
+			beforeEach( function() {
+				variables.handlerSource = fileRead( expandPath( "/bxagents/models/build/generators/agentapi/AgentApi.bx" ) );
+				variables.doc = new bxagents.models.api.OpenApiDocument( "demo", { manageTokens : true } ).build( "/__bxagents", "token" );
+			} );
+
+			it( "has a handler action for every route of the contract, with the token routes too", function() {
+				for ( var action in ApiContract::actions( { manageTokens : true } ) ) {
+					expect( handlerSource ).toInclude( "function #action#( event, rc, prc )", "no action #action#" );
+				}
+			} );
+
+			it( "has a route in the contract for every action the handler answers to, bar the page's own file route", function() {
+				var routed = ApiContract::actions( { manageTokens : true } );
+				var found = handlerSource.reMatch( "\n\tfunction (\w+)\( event, rc, prc \)" ).map( ( line ) => line.reReplace( "^\s*function (\w+).*", "\1" ) );
+
+				expect( found.filter( ( name ) => name != "extensionFile" && !routed.contains( name ) ) ).toBeEmpty();
+			} );
+
+			it( "gives each route its own action and path, so a route is never written twice", function() {
+				var ops = ApiContract::operations( { manageTokens : true } );
+
+				expect( ops.map( ( op ) => op.action ).toList().listRemoveDuplicates().listLen() ).toBe( ops.len() );
+				expect( ops.map( ( op ) => op.path ).toList().listRemoveDuplicates().listLen() ).toBe( ops.len() );
+			} );
+
+			it( "puts a route before the longer routes that start the same, as the router needs", function() {
+				var paths = ApiContract::operations( { manageTokens : true } ).map( ( op ) => op.path );
+
+				for ( var i = 1; i <= paths.len(); i++ ) {
+					for ( var j = 1; j < i; j++ ) {
+						expect( paths[ i ].startsWith( paths[ j ] & "/" ) ).toBeFalse( "#paths[ j ]# comes before #paths[ i ]#, which sits under it" );
+					}
+				}
+			} );
+
+			it( "is an OpenAPI 3 document with the API's routes under its path", function() {
+				expect( doc.openapi ).toMatch( "^3\." );
+				expect( doc.paths.keyExists( "/__bxagents/invoke" ) ).toBeTrue();
+				expect( doc.paths[ "/__bxagents/invoke" ].post.requestBody.content[ "application/json" ].schema.required ).toBe( [ "input" ] );
+				expect( doc.paths[ "/__bxagents/sessions" ].keyList().listSort( "text" ) ).toBe( "get,post" );
+				var parameter = doc.paths[ "/__bxagents/pending" ].get.parameters[ 1 ];
+				expect( parameter.name ).toBe( "threadId" );
+				expect( parameter.required ).toBeTrue();
+			} );
+
+			it( "describes the stream frames and marks the routes that send them", function() {
+				var frames = doc.components.schemas.Frames.oneOf.map( ( frame ) => frame.title );
+
+				expect( frames ).toBe( [ "thread", "chunk", "tool", "suspended", "error", "done" ] );
+				expect( doc.paths[ "/__bxagents/events" ].post[ "x-frames" ] ).toBe( frames );
+				expect( doc.paths[ "/__bxagents/events" ].post.responses[ "200" ].content.keyExists( "text/event-stream" ) ).toBeTrue();
+				expect( doc.paths[ "/__bxagents/invoke" ].post.keyExists( "x-frames" ) ).toBeFalse();
+			} );
+
+			it( "asks for the token header on a token API, and leaves liveness open", function() {
+				expect( doc.components.securitySchemes.token.name ).toBe( "x-bxagents-token" );
+				expect( doc.security ).toBe( [ { token : [] } ] );
+				expect( doc.paths[ "/__bxagents/health" ].get.security ).toBe( [] );
+
+				var open = new bxagents.models.api.OpenApiDocument( "demo" ).build( "/agent-api", "open" );
+				expect( open.keyExists( "security" ) ).toBeFalse();
+				expect( open.paths.keyExists( "/agent-api/invoke" ) ).toBeTrue();
+			} );
+
+			it( "lists the token routes only for a server that offers them", function() {
+				var without = new bxagents.models.api.OpenApiDocument( "demo" ).build( "/__bxagents" );
+
+				expect( doc.paths.keyExists( "/__bxagents/tokens" ) ).toBeTrue();
+				expect( without.paths.keyExists( "/__bxagents/tokens" ) ).toBeFalse();
+				expect( without.paths.keyExists( "/__bxagents/openapi" ) ).toBeTrue();
+			} );
+
+			it( "gives every operation its own id and an error shape for the failures", function() {
+				var ids = [];
+				for ( var path in doc.paths ) {
+					for ( var verb in doc.paths[ path ] ) {
+						ids.append( doc.paths[ path ][ verb ].operationId );
+						expect( doc.paths[ path ][ verb ].responses.keyExists( "401" ) ).toBeTrue();
+					}
+				}
+				expect( ids.toList().listRemoveDuplicates().listLen() ).toBe( ids.len() );
+				expect( doc.components.schemas.Error.required ).toBe( [ "success", "error", "code" ] );
+			} );
+
+		} );
+	}
+
+}

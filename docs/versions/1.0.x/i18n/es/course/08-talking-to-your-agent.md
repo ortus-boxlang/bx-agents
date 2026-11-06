@@ -60,12 +60,6 @@ Requiere un `build` previo y requiere `boxlang-miniserver` en el `PATH` (consult
 `.build/app`, acotado a su propio directorio BoxLang `.build/runtime` para que la caché de
 clases compiladas de cada proyecto quede aislada.
 
-!!! warning
-    La **primera** petición a la ruta `toAi()` de una aplicación recién arrancada puede
-    fallar de forma transitoria - es una carrera genuina de inyección perezosa de
-    ColdBox/WireBox, no un fallo de BxAgents. Después funciona de forma fiable. Envía una
-    petición de calentamiento antes de depender de una ruta recién desplegada bajo carga.
-
 ## Probar sin una clave de API real
 
 Todas estas formas necesitan un modelo real para hablar con un proveedor real - pero todavía
