@@ -885,6 +885,8 @@ __MARKDOWN_SCRIPTS__
 	"use strict";
 
 	var API_BASE = "__API_BASE__";
+	// the sign-in form, when this page has accounts; blank otherwise
+	var LOGIN_URL = "__LOGIN_URL__";
 	var SHOW_REASONING = __SHOW_REASONING__;
 	var SHOW_TOOLS = __SHOW_TOOLS__;
 	var WELCOME = "__WELCOME__";
@@ -1001,9 +1003,21 @@ __MARKDOWN_SCRIPTS__
 		return rehydrate();
 	}
 
+	/**
+	 * A 401 from a page that has accounts and no token means the visitor is not signed in: send them to the form.
+	 * Reports whether it did, so a caller can stop.
+	 */
+	function sentToSignIn( res ) {
+		if ( res.status === 401 && LOGIN_URL && !getApiKey() ) {
+			window.location.href = LOGIN_URL;
+			return true;
+		}
+		return false;
+	}
+
 	function apiGet( path ) {
 		return fetch( API_BASE + path, { headers: authHeaders( {} ) } )
-			.then( function ( res ) { return res.ok ? res.json() : null; } )
+			.then( function ( res ) { return sentToSignIn( res ) || !res.ok ? null : res.json(); } )
 			.catch( function () { return null; } );
 	}
 
@@ -1505,7 +1519,7 @@ __MARKDOWN_SCRIPTS__
 			method : "POST",
 			headers: authHeaders( { "Content-Type": "application/json" } ),
 			body   : JSON.stringify( body || {} )
-		} );
+		} ).then( function ( res ) { sentToSignIn( res ); return res; } );
 	}
 
 	/**
@@ -2177,6 +2191,9 @@ __MARKDOWN_SCRIPTS__
 			signal: activeController.signal,
 			body: JSON.stringify( payload )
 		} ).then( function ( res ) {
+			if ( sentToSignIn( res ) ) {
+				throw new Error( "Signing in..." );
+			}
 			if ( res.status === 401 ) {
 				throw new Error( "Unauthorized - set the token via the \"Key\" button, then try again. If you already did, the server's token environment variable may be unset: the gate refuses every request in that case." );
 			}

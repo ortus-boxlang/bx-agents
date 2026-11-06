@@ -683,6 +683,16 @@ class extends="testbox.system.BaseSpec" {
 				expect( gate ).notToInclude( "Not signed in" );
 			} );
 
+			it( "sends a visitor without a sign-in to the form, and only when there are accounts", function() {
+				var withUsers = newAppDir();
+				generator.generate( discoverer.discover( fixtures & "/gateways-webui-users" ), withUsers );
+				var without = newAppDir();
+				generator.generate( discoverer.discover( fixtures & "/gateways-webui" ), without );
+
+				expect( fileRead( withUsers & "/chat/index.html" ) ).toInclude( 'var LOGIN_URL = "/chat/login.html";' );
+				expect( fileRead( without & "/chat/index.html" ) ).toInclude( 'var LOGIN_URL = "";' );
+			} );
+
 			it( "gives the sign-in page the same theme tokens and mark as the chat page", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-webui-users" );
 				var appDir = newAppDir();
