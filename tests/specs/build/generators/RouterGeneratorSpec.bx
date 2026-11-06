@@ -131,6 +131,16 @@ class extends="testbox.system.BaseSpec" {
 				expect( guarded ).toInclude( 'get( "/__bxagents/health" ).toHandler' );
 			} );
 
+			it( "adds the token routes only when agentApi.manageTokens is on, behind the gate", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+				var withoutThem = fileRead( generator.generate( discovery, newAppDir(), false, false, false, false, false, { tokens : true } ).router );
+				var withThem = fileRead( generator.generate( discovery, newAppDir(), false, false, false, false, false, { tokens : true, manageTokens : true } ).router );
+
+				expect( withoutThem ).notToInclude( "/tokens" );
+				expect( withThem ).toInclude( 'post( "/__bxagents/tokens/revoke" ).middleware( auth ).toHandler( "AgentApi.revokeToken" )' );
+				expect( withThem ).toInclude( 'route( "/__bxagents/tokens" ).middleware( auth ).toHandler( "AgentApi.tokens" )' );
+			} );
+
 			it( "emits the WhatsApp Cloud GET/POST webhook routes when hasWhatsAppCloudGateway is true", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
 				var result = generator.generate( discovery, newAppDir(), false, true );

@@ -70,7 +70,7 @@ class {
 	private function service() {
 		// once per request: the probe for the shared database is a query
 		if ( !request.keyExists( "bxagentsService" ) ) {
-			request[ "bxagentsService" ] = new "models.api.AgentService@bxagents"( agent(), sharedStore(), offered() )
+			request[ "bxagentsService" ] = new "models.api.AgentService@bxagents"( agent(), sharedStore(), offered(), { manageTokens : manageTokens() } )
 		}
 		return request.bxagentsService
 	}
@@ -92,6 +92,13 @@ class {
 	 * The profiles a caller may ask for with options.profile: agentApi.profiles, none by default. A profile
 	 * is a model the server pays for, so the caller never picks one the app did not list.
 	 */
+	/**
+	 * Whether an admin may manage access tokens over this API (agentApi.manageTokens), as the build stamped it in.
+	 */
+	private boolean function manageTokens() {
+		return "__MANAGE_TOKENS__" == "true"
+	}
+
 	private function offered() {
 		return new "models.runtime.OfferedProfiles@bxagents"( jsonDeserialize( "__PROFILES__" ) )
 	}
@@ -697,6 +704,44 @@ class {
 			return
 		}
 		answer( event, kept.all() )
+	}
+
+	/**
+	 * Access tokens, for an admin, when the server's config allows it (agentApi.manageTokens): GET lists them (never a
+	 * secret), POST makes one and answers with its secret, this once.
+	 *
+	 * Body of POST: { name, scope?, expires? }
+	 */
+	function tokens( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var kept = service().tokens()
+		if ( isNull( kept ) ) {
+			answer( event, failed( "not_found", "This server does not manage tokens over the API" ) )
+			return
+		}
+		if ( event.getHTTPMethod() == "POST" ) {
+			var body = event.getHTTPContent( json : true )
+			answer( event, kept.create( callerOf( event ), body.name ?: "", body.scope ?: "chat", body.expires ?: "" ) )
+			return
+		}
+		answer( event, kept.list( callerOf( event ) ) )
+	}
+
+	/**
+	 * Stops a token working. Body: { name }
+	 */
+	function revokeToken( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var kept = service().tokens()
+		if ( isNull( kept ) ) {
+			answer( event, failed( "not_found", "This server does not manage tokens over the API" ) )
+			return
+		}
+		answer( event, kept.revoke( callerOf( event ), event.getHTTPContent( json : true ).name ?: "" ) )
 	}
 
 	/**

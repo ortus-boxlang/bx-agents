@@ -32,16 +32,25 @@ class extends="testbox.system.BaseSpec" {
 
 				expect( result.written ).toBeTrue();
 				expect( result.path ).toBe( dir & "/handlers/AgentApi.bx" );
-				for ( var action in [ "invoke", "stream", "batch", "info", "health", "events", "cancel", "steer", "pending", "resume", "tools", "about", "notes", "sessions", "history", "clear", "compact", "updateNote", "removeNote", "profiles", "commands", "command", "renameSession", "forkSession", "deleteSession", "export", "whoami", "preferences", "setPreference", "deletePreference", "ping", "context", "status", "slots" ] ) {
+				for ( var action in [ "invoke", "stream", "batch", "info", "health", "events", "cancel", "steer", "pending", "resume", "tools", "about", "notes", "sessions", "history", "clear", "compact", "updateNote", "removeNote", "profiles", "commands", "command", "renameSession", "forkSession", "deleteSession", "export", "whoami", "preferences", "setPreference", "deletePreference", "tokens", "revokeToken", "ping", "context", "status", "slots" ] ) {
 					expect( source ).toInclude( "function #action#( event, rc, prc )" );
 				}
 				// every action starts by checking the token (a preHandler cannot stop the action)
-				expect( source.reMatch( "if \( refused\( event \) \)" ) ).toHaveLength( 33 );
+				expect( source.reMatch( "if \( refused\( event \) \)" ) ).toHaveLength( 35 );
 				expect( source ).notToInclude( "function preHandler(" );
 				// the work is the service's: the handler holds no copy of the turn, picture or conversation logic
 				expect( source ).toInclude( "models.api.AgentService@bxagents" );
 				expect( source ).notToInclude( "MessageBuilder@bxagents" );
 				expect( source ).notToInclude( "BoxRegisterInterceptor" );
+			} );
+
+			it( "stamps whether an admin may manage tokens over the API, off by default", function() {
+				var off = fileRead( generator.generate( newAppDir(), {} ).path );
+				var on = fileRead( generator.generate( newAppDir(), { manageTokens : true } ).path );
+
+				expect( off ).notToInclude( "__MANAGE_TOKENS__" );
+				expect( off ).toInclude( '"false" == "true"' );
+				expect( on ).toInclude( '"true" == "true"' );
 			} );
 
 			it( "writes down where the API is served, for serve and the terminal to read", function() {

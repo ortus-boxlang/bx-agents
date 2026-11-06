@@ -736,7 +736,7 @@ class {
 
 		var agentApi = arguments.resolvedConfig.agentApi
 		if ( !isStruct( agentApi ) ) {
-			arguments.errors.append( "Agent.bx's 'agentApi' must be a struct of { enabled, access, tokenEnvVar, tokens, profiles, path, allowedIPs, rateLimit }" )
+			arguments.errors.append( "Agent.bx's 'agentApi' must be a struct of { enabled, access, tokenEnvVar, tokens, profiles, path, allowedIPs, rateLimit, manageTokens }" )
 			return
 		}
 
@@ -744,7 +744,7 @@ class {
 			arguments.errors.append( "Agent.bx's 'agentApi.enabled' is false, but a gateways/ entry exposes the web UI: the page is a client of the agent API and cannot run without it" )
 		}
 
-		var validKeys = [ "enabled", "access", "tokenEnvVar", "tokens", "profiles", "path", "allowedIPs", "rateLimit" ]
+		var validKeys = [ "enabled", "access", "tokenEnvVar", "tokens", "profiles", "path", "allowedIPs", "rateLimit", "manageTokens" ]
 		for ( var key in agentApi ) {
 			if ( !validKeys.contains( key ) ) {
 				arguments.errors.append( "Agent.bx's 'agentApi' has an unknown key [#key#] - valid keys: #validKeys.toList( ", " )#" )
@@ -753,6 +753,14 @@ class {
 
 		if ( structKeyExists( agentApi, "enabled" ) && !isBoolean( agentApi.enabled ) ) {
 			arguments.errors.append( "Agent.bx's 'agentApi.enabled' must be a boolean" )
+		}
+
+		if ( structKeyExists( agentApi, "manageTokens" ) ) {
+			if ( !isBoolean( agentApi.manageTokens ) ) {
+				arguments.errors.append( "Agent.bx's 'agentApi.manageTokens' must be a boolean" )
+			} else if ( agentApi.manageTokens && !( ( agentApi.tokens ?: false ) == true && AccessMode::of( AgentApiConfig::effective( agentApi, arguments.discovery ) ) == "token" ) ) {
+				arguments.errors.append( "Agent.bx's 'agentApi.manageTokens' needs 'agentApi.tokens: true' and a token access (an API that asks for no token would let anyone make one)" )
+			}
 		}
 
 		if ( structKeyExists( agentApi, "allowedIPs" ) ) {

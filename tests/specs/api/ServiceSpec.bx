@@ -106,6 +106,17 @@ class extends="testbox.system.BaseSpec" {
 
 			describe( "AgentService", function() {
 
+				it( "offers token management only to an admin, on a server that allows it", function() {
+					var root = new bxagents.models.api.Caller( id = "root", scope = "admin" );
+					var allowing = new bxagents.models.api.AgentService( agent = agent, store = store, options = { manageTokens : true } );
+
+					expect( service.about( root ).data().capabilities.tokens ).toBeFalse();
+					expect( isNull( service.tokens() ) ).toBeTrue();
+					expect( allowing.about( root ).data().capabilities.tokens ).toBeTrue();
+					expect( allowing.about( ada ).data().capabilities.tokens ).toBeFalse();
+					expect( isNull( allowing.tokens() ) ).toBeFalse();
+				} );
+
 				it( "hands out a conversation for the caller", function() {
 					var conversation = service.conversation( ada, "c-1" );
 

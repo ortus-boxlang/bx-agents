@@ -39,6 +39,12 @@ class {
 		}
 		source = source.replace( accessMarker, '"' & AccessMode::of( arguments.agentApi ) & '"' )
 
+		var manageMarker = '"__MANAGE_TOKENS__"'
+		if ( !source.find( manageMarker ) ) {
+			throw( type = "BxAgents.AgentApiTemplateBroken", message = "agentapi/AgentApi.bx has lost its manage-tokens marker" )
+		}
+		source = source.replace( manageMarker, '"' & ( ( arguments.agentApi.manageTokens ?: false ) == true ? "true" : "false" ) & '"' )
+
 		var profilesMarker = '"__PROFILES__"'
 		if ( !source.find( profilesMarker ) ) {
 			throw( type = "BxAgents.AgentApiTemplateBroken", message = "agentapi/AgentApi.bx has lost its profiles marker" )

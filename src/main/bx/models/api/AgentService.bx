@@ -22,7 +22,8 @@ class {
 	 * @store A ChatStore, or null when the app keeps no shared database (then there is no conversation list or preferences)
 	 * @offered An OfferedProfiles: which profiles a client may ask for
 	 */
-	function init( required any agent, any store, any offered ) {
+	function init( required any agent, any store, any offered, struct options = {} ) {
+		variables.manageTokens = arguments.options.manageTokens ?: false
 		variables.agent = arguments.agent
 		variables.store = arguments.store ?: nullValue()
 		variables.offered = arguments.offered ?: new "models.runtime.OfferedProfiles@bxagents"( [] )
@@ -33,6 +34,21 @@ class {
 	/** @return True when the app has a shared database: conversation list, preferences */
 	boolean function keepsSessions() {
 		return !isNull( variables.sessions )
+	}
+
+	/**
+	 * Whether this server lets an admin manage access tokens over the API (agentApi.manageTokens) and has the database
+	 * they live in.
+	 */
+	boolean function keepsTokens() {
+		return variables.manageTokens && !isNull( variables.store )
+	}
+
+	/**
+	 * @return Token management for an admin caller, or null when the server does not offer it
+	 */
+	any function tokens() {
+		return keepsTokens() ? new Tokens( new "models.store.TokenService@bxagents"( variables.store ) ) : nullValue()
 	}
 
 	any function agent() {
@@ -163,6 +179,7 @@ class {
 				"conversations" : keepsSessions(),
 				"preferences"   : keepsSessions(),
 				"profiles"      : variables.offered.any(),
+				"tokens"        : keepsTokens() && arguments.caller.isAdmin(),
 				"status"        : new "models.extensions.ServedStatus@bxagents"().available(),
 				"slots"         : new "models.extensions.ServedSlots@bxagents"().available()
 			}

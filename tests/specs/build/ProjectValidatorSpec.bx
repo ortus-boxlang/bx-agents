@@ -180,6 +180,21 @@ class extends="testbox.system.BaseSpec" {
 					expect( badLimit.errors.filter( e => e.findNoCase( "rateLimit.requests" ) ) ).toHaveLength( 1 );
 				} );
 
+				it( "lets agentApi.manageTokens on only with issued tokens and a token access", function() {
+					var nl = char( 10 );
+					var ok = profiledProject( "agentApi:" & nl & "  tokens: true" & nl & "  manageTokens: true" & nl );
+					var noTokens = profiledProject( "agentApi:" & nl & "  tokenEnvVar: MY_TOKEN" & nl & "  manageTokens: true" & nl );
+					var open = profiledProject( "agentApi:" & nl & "  access: open" & nl & "  manageTokens: true" & nl );
+					var off = profiledProject( "agentApi:" & nl & "  manageTokens: false" & nl );
+					var notBoolean = profiledProject( "agentApi:" & nl & "  manageTokens: maybe" & nl );
+
+					expect( ok.errors ).toBeEmpty();
+					expect( off.errors ).toBeEmpty();
+					expect( noTokens.errors.filter( e => e.findNoCase( "manageTokens" ) ) ).toHaveLength( 1 );
+					expect( open.errors.filter( e => e.findNoCase( "manageTokens" ) ) ).toHaveLength( 1 );
+					expect( notBoolean.errors.filter( e => e.findNoCase( "manageTokens" ) ) ).toHaveLength( 1 );
+				} );
+
 				it( "checks agentApi.access against what is set for tokens", function() {
 					var nl = char( 10 );
 					var ok = profiledProject( "agentApi:" & nl & "  access: token" & nl & "  tokens: true" & nl );

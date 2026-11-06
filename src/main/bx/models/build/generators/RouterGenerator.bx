@@ -216,7 +216,7 @@ class {
 		]
 		lines.append( turnRoutes( ApiPath::of( arguments.agentApi ), gated ), true )
 		lines.append( "" )
-		lines.append( renderRunControlRoutes( gated, ApiPath::of( arguments.agentApi ) ), true )
+		lines.append( renderRunControlRoutes( gated, ApiPath::of( arguments.agentApi ), ( arguments.agentApi.manageTokens ?: false ) == true ), true )
 		return lines
 	}
 
@@ -226,13 +226,14 @@ class {
 	 *
 	 * @gated True when they go through `auth`
 	 * @apiBase The path the API is served on
+	 * @manageTokens True when an admin may manage access tokens over the API (agentApi.manageTokens)
 	 *
 	 * @return The route statement lines
 	 */
-	private array function renderRunControlRoutes( required boolean gated, required string apiBase ) {
+	private array function renderRunControlRoutes( required boolean gated, required string apiBase, boolean manageTokens = false ) {
 		var base = arguments.apiBase
 		var g = arguments.gated
-		return [
+		var routes = [
 			"// Run control - the same path, served by handlers/AgentApi.bx",
 			handlerRoute( "post", base & "/events", "events", g ),
 			handlerRoute( "post", base & "/cancel", "cancel", g ),
@@ -270,6 +271,12 @@ class {
 			// matches what follows it and ColdBox does not keep a GET route from answering a POST
 			handlerRoute( "", base & "/notes", "notes", g )
 		]
+		if ( arguments.manageTokens ) {
+			// the specific route first, then the list (GET) and the making of one (POST) on one route, like notes
+			routes.append( handlerRoute( "post", base & "/tokens/revoke", "revokeToken", g ) )
+			routes.append( handlerRoute( "", base & "/tokens", "tokens", g ) )
+		}
+		return routes
 	}
 
 	/**
