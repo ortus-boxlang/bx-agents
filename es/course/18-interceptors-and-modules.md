@@ -8,8 +8,9 @@ tags: [course, conventions, interceptors, modules]
 
 # Interceptores y dependencias de módulos
 
-Dos convenciones más pequeñas e independientes completan el cuadro: hooks de ciclo de vida
-dentro de la aplicación ColdBox generada, y las dependencias de módulos de BoxLang que se declaran.
+Tres convenciones más pequeñas e independientes completan el cuadro: hooks de ciclo de vida
+dentro de la aplicación ColdBox generada, extensiones para el chat y el agente servido, y las
+dependencias de módulos de BoxLang que se declaran.
 
 ## `interceptors/` - hooks de ciclo de vida de ColdBox
 
@@ -40,9 +41,42 @@ Un interceptor sin ningún `@scope` toma por defecto `agent` - la opción más e
 ya que el ámbito `runtime` tiene efectos más allá de una sola aplicación. Un valor de `@scope`
 que no sea `agent` ni `runtime` hace fallar el build con un error claro.
 
-Ya has visto interceptores **generados** sin haber escrito ninguno tú - las compuertas de
-clave de API y de inicio de sesión de la UI web de la [Lección 15](15-the-generated-web-chat-ui.md)
-se registran exactamente así, solo que escritas por BxAgents en vez de por ti.
+Ya has visto un interceptor **generado** sin haber escrito ninguno tú - cuando listas
+`users` en el chat web ([Lección 15](15-the-generated-web-chat-ui.md)), su compuerta de inicio de
+sesión se registra exactamente así, solo que escrita por BxAgents en vez de por ti.
+
+## `extensions/` - añadir al chat y al agente servido
+
+Un interceptor reacciona a la petición de ColdBox. Una **extensión** añade a BxAgents mismo, sin
+cambiarlo. Un archivo `.bx` es una extensión completa: se lee como un `ModuleConfig` de ColdBox (un
+`configure()`, un `onLoad()`), y los métodos anotados se convierten en comandos de chat.
+
+```javascript
+// extensions/hello.bx
+class {
+
+	@Command( "hello" )
+	@Hint( "say hello: /hello <name>" )
+	function greet( agentContext, commandArguments ) {
+		return agentContext.reply().ok( "Hello, #commandArguments#!" )
+	}
+
+}
+```
+
+Ejecuta `bxAgents chat` y escribe `/hello Ada`; `/extensions` lista lo que se cargó. El mismo comando
+funciona en la página web y, si se permite, en las plataformas de chat. Una carpeta con un
+`Extension.bx` puede traer más: teclas (`@Key`), elementos de estado (`@Status`), fuentes `@` y
+prefijos de mensaje para la terminal, huecos en la página web, listeners de eventos de chat y de
+bx-ai, schedulers, tools, skills, un nuevo tipo de gateway o un verbo de `bxAgents`. Los valores de
+una extensión van bajo `extensions:` en `Agent.yaml`.
+
+Empieza una con `bxAgents add extension standup`, que pregunta qué traer y escribe stubs que
+funcionan. Instala la de otra persona con `bxAgents extensions install <carpeta, zip, owner/repo,
+dirección o slug de ForgeBox>`: muestra lo que añade la extensión y pregunta antes, y la registra en
+`extensions.lock.json`, que sí versionas. `bxAgents extensions link <carpeta>` enlaza una en la que
+estás trabajando, y `/reload` recoge tus ediciones. Consulta la referencia de
+[`extensions/`](../conventions/extensions.md) y la guía [Escribe tu primera extensión](../guides/first-extension.md).
 
 ## `modules/` - dependencias de módulos de BoxLang
 
@@ -75,7 +109,7 @@ una carpeta de módulo que no lo tenga se asume que no declara dependencias.
 
 ## Pruébalo
 
-Añade un `interceptors/RequestLogger.bx` con una anotación explícita `@scope agent` que
+Prueba `bxAgents add extension hello --with=command` y `/hello` en el chat. Después añade un `interceptors/RequestLogger.bx` con una anotación explícita `@scope agent` que
 registre cada petición entrante mediante `writeLog()`, reconstruye, y comprueba
 `.build/app/interceptors/` para ver la copia, más su registro en
 `.build/app/Application.bx`.

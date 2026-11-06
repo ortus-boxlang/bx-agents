@@ -100,6 +100,44 @@ gatewaySession:
     proyecto - un proyecto con subagentes todavía no puede enrutar gateways distintos a
     subagentes distintos.
 
+## Cada persona tiene su propia conversación
+
+Al agente se le dice quién escribe (la plataforma y su id allí, como `slack:U123`) y de qué
+conversación se trata: el chat, más su hilo cuando la plataforma los tiene (un tema de foro de
+Telegram, un hilo de Slack). Así la memoria, `/notes`, `/remember` y la lista de conversaciones se
+mantienen separadas por persona y por hilo. Dos personas en un canal no comparten memoria, ni
+tampoco dos chats en dos plataformas. La lista se guarda en el mismo `data/chat.db` que usa la
+página web, marcada con la plataforma en la que empezó; un admin puede verla con
+`GET /__bxagents/sessions?all=1`.
+
+## Comandos en un chat
+
+Un mensaje que es un comando de barra lo responde BxAgents y nunca llega al modelo. Un conjunto
+seguro viene activado por defecto: `/help`, `/tools`, `/model`, `/info`, `/ping`, `/remember` y
+`/notes`. Los comandos de conversación (`/new`, `/clear`, `/compact`, `/sessions`, `/resume`) están
+desactivados, porque la mayoría de los chats son una sola conversación larga; actívalos con
+`conversation: true`. Cada plataforma muestra los comandos a su manera (el menú `/` de Telegram, los
+comandos de aplicación de Discord, los comandos de barra de Slack, botones en WhatsApp, una lista
+numerada en SMS).
+
+```yaml
+gatewaySession:
+  commands:
+    conversation: true       # also /new, /clear, /compact, /sessions, /resume
+    prefixes: { slack: "!" } # a different one-character prefix for one gateway
+```
+
+Las imágenes y los archivos de texto enviados por Telegram, Discord, Slack, WhatsApp y Twilio MMS
+llegan al agente junto con el mensaje (`gatewaySession.attachments: false` lo desactiva).
+
+## Añadir una plataforma, o la tuya
+
+`bxAgents add gateway` añade una plataforma como lo hace el asistente de `new`: escribe el archivo
+de `gateways/`, una línea vacía de `.env` por cada credencial y los pasos de configuración que
+ocurren fuera del proyecto (un token de bot, una dirección pública). `bxAgents doctor` informa de las
+credenciales que siguen sin definir. Si una plataforma no está en la lista, una
+[extensión](18-interceptors-and-modules.md) puede traer un nuevo tipo de gateway.
+
 ## Pruébalo
 
 Si tienes a mano un token de bot de Telegram que puedas desechar, añade una entrada

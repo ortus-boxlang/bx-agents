@@ -283,7 +283,7 @@
     Q --&gt;|&quot;no - it has a 'type' key instead&quot;| C[&quot;CHANNEL ADAPTER&lt;br/&gt;a connection to a chat platform&quot;]
     E --&gt; E1[&quot;exposes: agent&lt;br/&gt;four routes of the agent API&quot;]
     E --&gt; E2[&quot;exposes: mcp&lt;br/&gt;route().toMCP()&quot;]
-    E --&gt; E3[&quot;exposes: webui&lt;br/&gt;generated index.html + /api&quot;]
+    E --&gt; E3[&quot;exposes: webui&lt;br/&gt;generated index.html&quot;]
     C --&gt; C1[&quot;mock / cli / http&lt;br/&gt;pull-driven: something calls US&quot;]
     C --&gt; C2[&quot;telegram, slack, discord, email, whatsapp-cloud,&lt;br/&gt;teams, twilio, github, signal&lt;br/&gt;push-style: holds its own connection&quot;]
     C2 --&gt; S[&quot;one GatewaySession&lt;br/&gt;bound to the root agent&quot;]
@@ -328,7 +328,7 @@ class {
 }
 </code></pre>
 <p>Generates <code>route( &quot;/mcp/tools&quot; ).toMCP( &quot;local-server&quot; )</code>.</p>
-<p><strong>Expose the v1 web chat UI:</strong></p>
+<p><strong>Expose the web chat UI:</strong></p>
 <pre><code class="language-javascript">// gateways/chat.bx
 class {
 	function configure() {
@@ -518,14 +518,30 @@ gatewaySession:
 </table></div>
 <p>Links must be https. A file that cannot be downloaded is named back to the person and the rest of the message goes on. Switch it off with <code>gatewaySession.attachments: false</code>.</p>
 <h4 id="whose-conversation-it-is"><a href="#whose-conversation-it-is" id="whose-conversation-it-is" name="whose-conversation-it-is" class="anchor"></a>Whose conversation it is</h4>
-<p>Each person's chats are their own. The agent is told who is writing (the platform and their id there, <code>slack:U123</code>) and which conversation it is, so the agent's memory, <code>/notes</code> and <code>/remember</code>, and the conversation list are kept apart per person. The conversation is the chat, plus its thread when the platform has them (a Telegram forum topic, a Slack thread), so each topic keeps its own memory. Two people in the same channel do not share a memory, and neither do two chats on two platforms. The conversations are stored in the same SQLite database as the web page's and the terminal's (a project with chat gateways gets <code>data/chat.db</code>, like one with a web page), marked with the platform they started on (<code>source</code>). They belong to the person's own id, so they do not appear in the list of the open <code>local</code> user.</p>
+<p>Each person's chats are their own. The agent is told who is writing (the platform and their id there, <code>slack:U123</code>) and which conversation it is, so the agent's memory, <code>/notes</code> and <code>/remember</code>, and the conversation list are kept apart per person. The conversation id is the gateway's name, the chat and, when the platform gives one, a thread: <code>slack:C0123:1700000000.0001</code>. Two people in the same channel do not share a memory, and neither do two chats on two platforms. The conversations are stored in the same SQLite database as the web page's and the terminal's (a project with chat gateways gets <code>data/chat.db</code>, like one with a web page), marked with the platform they started on (<code>source</code>). They belong to the person's own id, so they do not appear in the list of the open <code>local</code> user.</p>
+<div class="bxsites-table-wrap"><table class="table">
+<thead>
+<tr><th>Platform</th><th>The person</th><th>The chat</th><th>The thread part</th></tr>
+</thead>
+<tbody>
+<tr><td>Telegram</td><td>The user id</td><td>The chat id</td><td>None: one conversation per chat</td></tr>
+<tr><td>Slack</td><td>The user id</td><td>The channel</td><td>The thread's timestamp, or the message's own timestamp when it is not in a thread, so a message outside a thread starts a conversation of its own</td></tr>
+<tr><td>Discord</td><td>The author's id</td><td>The channel</td><td>The id of the message being replied to, none for a plain message</td></tr>
+<tr><td>WhatsApp</td><td>The sender's number</td><td>The sender</td><td>The id of the message quoted, if any</td></tr>
+<tr><td>Twilio (SMS)</td><td>The sender's number</td><td>The sender</td><td>None</td></tr>
+<tr><td>Signal</td><td>The sender</td><td>The sender</td><td>The id of the message quoted, if any</td></tr>
+<tr><td>Teams</td><td>The sender's id</td><td>Teams' own conversation id</td><td>The <code>replyToId</code> of the activity</td></tr>
+<tr><td>GitHub</td><td>The commenter's login</td><td><code>repo:owner/repo:issue:N</code> (or the review comment form)</td><td>None</td></tr>
+<tr><td>Email</td><td>The sender's address</td><td>The sender's address</td><td>The mail thread</td></tr>
+</tbody>
+</table></div>
 <h4 id="conversation-commands"><a href="#conversation-commands" id="conversation-commands" name="conversation-commands" class="anchor"></a>Conversation commands</h4>
 <p><code>/new</code>, <code>/clear</code>, <code>/compact</code>, <code>/sessions</code> and <code>/resume</code> are off by default, because most chats are one long conversation and a stray <code>/clear</code> is easy to type. They only ever act on the sender's own conversation. Turn them on with <code>conversation: true</code> (or list them in <code>allow</code>).</p>
 <ul>
-<li><code>/new</code> moves the chat to a fresh conversation; the old one stays on the list.</li>
+<li><code>/new</code> moves the chat to a fresh conversation; the old one stays on the list. Where a chat was moved to is kept in memory only, so after the app restarts the chat is back in its own conversation until it moves again.</li>
 <li><code>/sessions</code> lists the conversations the person has had in this app, newest first, and <code>/resume 2</code> (or an id) moves the chat back to one. The list is in the shared chat database, so it lasts across restarts; the messages last as long as the agent's memory does.</li>
 <li><code>/clear</code> and <code>/compact</code> act on the conversation the chat is in now.</li>
-<li>In a Slack thread, each thread has its own conversation, and <code>/new</code> moves only that thread.</li>
+<li>In Slack each thread has its own conversation, and <code>/new</code> moves only that thread.</li>
 </ul>
 <p>What each policy actually does with a message that arrives while a turn is still running:</p>
 <pre><code class="language-mermaid">flowchart TD

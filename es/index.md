@@ -48,7 +48,11 @@ Telegram, Slack, Discord, Email, WhatsApp, Teams, Twilio, GitHub y Signal, adem�
 :::
 ::: card title="Una UI web de chat, generada" icon="phosphor-duotone:globe-hemisphere-west" href="conventions/web-ui.md"
 Pídela en una entrada de `gateways/` y el build produce un front end de chat con streaming, tematizable y
-con historial de sesión.
+con historial de sesión, notas, un menú Settings y comandos de barra.
+:::
+::: card title="Un chat de terminal a pantalla completa" icon="phosphor-duotone:terminal-window" href="guides/terminal-ui.md"
+`bxAgents chat` conserva tu scrollback y tiene sesiones, notas, adjuntos de `@archivo` e imágenes,
+comandos de barra, un medidor de contexto y grabación. Puede arrancar su propio servidor o conectarse a uno desplegado.
 :::
 :::
 
@@ -89,7 +93,9 @@ bxAgents serve --port=8080
 
 ## Empieza desde algo, no desde cero
 
-`new` no solo crea el andamiaje de un agente vacío - elige una de las 8 plantillas
+En una terminal, `new` pregunta qué debe hacer el agente y escribe el proyecto a la medida
+([el asistente](guides/new-wizard.md)); `add <kind>` añade después una tool, skill, gateway u otra pieza. Una
+plantilla es un preajuste sobre el que construyes, no un límite: elige una de las 8 plantillas
 integradas, clona un repositorio de GitHub existente, o instala un paquete de ForgeBox.
 
 ::: cards
@@ -111,8 +117,9 @@ generado, y cómo publicar las tuyas.
 ## Una UI de chat que no tuviste que construir
 
 Pon `exposes: "webui"` en un gateway y el build emite un front end completo - historial de
-conversaciones, respuestas en streaming, temas claro/oscuro y una disposición móvil -
-conectado a tu agente.
+conversaciones, respuestas en streaming, notas, un menú Settings (apariencia, contraseña, tokens de acceso),
+temas claro/oscuro y una disposición móvil -
+conectado a tu agente a través de la misma API HTTP que puede llamar tu propio código.
 
 ![La UI web de chat generada: una barra lateral de conversaciones a la izquierda, un transcript de varios turnos en el centro, y un encabezado y compositor de mensajes con marca](assets/webui-chat-light.png)
 
@@ -203,9 +210,11 @@ dinámico de archivos, sin trabajo de build diferido al camino de la petición.
 ::: card title="Plataformas de chat" icon="phosphor-duotone:plugs-connected" href="conventions/gateways/index.md"
 Nueve gateways de tipo push - Telegram, Slack, Discord, Email, WhatsApp Cloud, Teams, Twilio,
 GitHub y Signal - coordinados por una sola sesión con políticas `queue` / `steer` / `interrupt`.
+Cada persona y cada hilo tienen su propia conversación, y los comandos de barra también funcionan allí.
 :::
-::: card title="HTTP y MCP" icon="phosphor-duotone:stack" href="conventions/mcp.md"
-Expón el agente mediante rutas HTTP, o aloja servidores MCP locales desde `mcp/` para que
+::: card title="HTTP y MCP" icon="phosphor-duotone:stack" href="guides/agent-api.md"
+Todo agente sirve una API HTTP con un documento OpenAPI, abierta en tu máquina o tras tokens,
+`allowedIPs` y un límite de frecuencia. Aloja servidores MCP locales desde `mcp/` para que
 otros clientes puedan llamar a tus tools.
 :::
 ::: card title="Publícalo" icon="phosphor-duotone:package" href="deployment-and-secrets.md"

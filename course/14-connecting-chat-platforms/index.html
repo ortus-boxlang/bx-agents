@@ -250,7 +250,7 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#two-request-driven-types-mock-and-cli">Two request-driven types&#x3a; mock and cli</a></li><li class="toc-level-2"><a href="#http---your-own-webhook-endpoint">http - your own webhook endpoint</a></li><li class="toc-level-2"><a href="#nine-push-style-platforms">Nine push-style platforms</a></li><li class="toc-level-2"><a href="#one-gatewaysession-ties-them-together">One GatewaySession ties them together</a></li><li class="toc-level-2"><a href="#try-it">Try it</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#two-request-driven-types-mock-and-cli">Two request-driven types&#x3a; mock and cli</a></li><li class="toc-level-2"><a href="#http---your-own-webhook-endpoint">http - your own webhook endpoint</a></li><li class="toc-level-2"><a href="#nine-push-style-platforms">Nine push-style platforms</a></li><li class="toc-level-2"><a href="#one-gatewaysession-ties-them-together">One GatewaySession ties them together</a></li><li class="toc-level-2"><a href="#every-person-has-their-own-conversation">Every person has their own conversation</a></li><li class="toc-level-2"><a href="#commands-in-a-chat">Commands in a chat</a></li><li class="toc-level-2"><a href="#adding-a-platform-or-your-own">Adding a platform, or your own</a></li><li class="toc-level-2"><a href="#try-it">Try it</a></li></ul></details>
 		
 
 		
@@ -335,6 +335,33 @@ agent - a project with subagents can't yet route different gateways to different
 subagents.</p>
 </div>
 </div>
+<h2 id="every-person-has-their-own-conversation"><a href="#every-person-has-their-own-conversation" id="every-person-has-their-own-conversation" name="every-person-has-their-own-conversation" class="anchor"></a>Every person has their own conversation</h2>
+<p>The agent is told who is writing (the platform and their id there, such as <code>slack:U123</code>) and
+which conversation it is: the chat, plus its thread when the platform has them (a Telegram forum
+topic, a Slack thread). So memory, <code>/notes</code>, <code>/remember</code> and the conversation list are kept apart
+per person and per thread. Two people in one channel do not share a memory, and neither do two
+chats on two platforms. The list is stored in the same <code>data/chat.db</code> the web page uses, marked
+with the platform it started on; an admin can see it with <code>GET /__bxagents/sessions?all=1</code>.</p>
+<h2 id="commands-in-a-chat"><a href="#commands-in-a-chat" id="commands-in-a-chat" name="commands-in-a-chat" class="anchor"></a>Commands in a chat</h2>
+<p>A message that is a slash command is answered by BxAgents and never reaches the model. A safe set
+is on by default: <code>/help</code>, <code>/tools</code>, <code>/model</code>, <code>/info</code>, <code>/ping</code>, <code>/remember</code> and <code>/notes</code>. The
+conversation commands (<code>/new</code>, <code>/clear</code>, <code>/compact</code>, <code>/sessions</code>, <code>/resume</code>) are off, because most
+chats are one long conversation; turn them on with <code>conversation: true</code>. Each platform shows the
+commands its own way (Telegram's <code>/</code> menu, Discord application commands, Slack slash commands,
+buttons on WhatsApp, a numbered list on SMS).</p>
+<pre><code class="language-yaml">gatewaySession:
+  commands:
+    conversation: true       # also /new, /clear, /compact, /sessions, /resume
+    prefixes: { slack: &quot;!&quot; } # a different one-character prefix for one gateway
+</code></pre>
+<p>Pictures and text files sent on Telegram, Discord, Slack, WhatsApp and Twilio MMS reach the agent
+with the message (<code>gatewaySession.attachments: false</code> switches that off).</p>
+<h2 id="adding-a-platform-or-your-own"><a href="#adding-a-platform-or-your-own" id="adding-a-platform-or-your-own" name="adding-a-platform-or-your-own" class="anchor"></a>Adding a platform, or your own</h2>
+<p><code>bxAgents add gateway</code> adds a platform the way the <code>new</code> wizard does: it writes the
+<code>gateways/</code> file, an empty <code>.env</code> line for each credential and the setup steps that happen
+outside the project (a bot token, a public address). <code>bxAgents doctor</code> reports credentials that
+are still not set. If a platform is not in the list, an <a href="/course/18-interceptors-and-modules/index.html">extension</a>
+can bring a new gateway type.</p>
 <h2 id="try-it"><a href="#try-it" id="try-it" name="try-it" class="anchor"></a>Try it</h2>
 <p>If you have a disposable Telegram bot token, add a <code>gateways/telegramChannel.bx</code> entry,
 export <code>TELEGRAM_BOT_TOKEN</code>, and <code>bxAgents serve</code> - message your bot and watch it
@@ -347,7 +374,7 @@ reference below; the shape is consistent across all nine.</p>
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/course/14-connecting-chat-platforms.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/course/14-connecting-chat-platforms.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Nov 6, 2026, 4&#x3a;00&#x3a;25 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Lesson%2014%3A%20Connecting%20Chat%20Platforms&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fcourse%2F14-connecting-chat-platforms%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/course/14-connecting-chat-platforms.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/course/14-connecting-chat-platforms.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Nov 6, 2026, 8&#x3a;44&#x3a;45 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Lesson%2014%3A%20Connecting%20Chat%20Platforms&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fcourse%2F14-connecting-chat-platforms%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 
@@ -402,7 +429,7 @@ reference below; the shape is consistent across all nine.</p>
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#two-request-driven-types-mock-and-cli">Two request-driven types&#x3a; mock and cli</a></li><li class="toc-level-2"><a href="#http---your-own-webhook-endpoint">http - your own webhook endpoint</a></li><li class="toc-level-2"><a href="#nine-push-style-platforms">Nine push-style platforms</a></li><li class="toc-level-2"><a href="#one-gatewaysession-ties-them-together">One GatewaySession ties them together</a></li><li class="toc-level-2"><a href="#try-it">Try it</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#two-request-driven-types-mock-and-cli">Two request-driven types&#x3a; mock and cli</a></li><li class="toc-level-2"><a href="#http---your-own-webhook-endpoint">http - your own webhook endpoint</a></li><li class="toc-level-2"><a href="#nine-push-style-platforms">Nine push-style platforms</a></li><li class="toc-level-2"><a href="#one-gatewaysession-ties-them-together">One GatewaySession ties them together</a></li><li class="toc-level-2"><a href="#every-person-has-their-own-conversation">Every person has their own conversation</a></li><li class="toc-level-2"><a href="#commands-in-a-chat">Commands in a chat</a></li><li class="toc-level-2"><a href="#adding-a-platform-or-your-own">Adding a platform, or your own</a></li><li class="toc-level-2"><a href="#try-it">Try it</a></li></ul></nav>
 				</aside>
 			
 		</div>

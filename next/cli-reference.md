@@ -273,6 +273,7 @@ bxAgents add mcp                                # asks which way
 
 | Flag | Meaning |
 |---|---|
+| `--server=<name>` | A catalog server by name, instead of the positional. |
 | `--url=<address>` | A server not in the catalog. An address with a user name, password or key in it is refused: the secret belongs in an environment variable. |
 | `--name=<label>` | A label for `Agent.yaml`; it is not sent to the server. |
 | `--auth=none\|bearer\|header\|basic` | How it signs you in. `bearer` writes `token`, `header` writes `headers` (name it with `--header=`), `basic` writes `user` (with `--user=`) and `password`. |
@@ -669,6 +670,10 @@ chat:
   keys:              # change the keys of an action; one key or a list. /keys shows the action names
     newline: [ ctrl+n, alt+enter ]
     stop: ctrl+x
+  prefixes: { desk:explain: "?%" }   # the prefix of an extension's prefix, by id (extension:method)
+  sources: { desk:ticket: issue }    # the name of an extension's @name:query source, by id
+extensions:                          # values for extensions, and what to turn off
+  disable: [ roll ]
 ```
 
 A missing file means both are on. A key the file does not know, or a value of the wrong kind, is reported when the chat starts instead of being ignored.

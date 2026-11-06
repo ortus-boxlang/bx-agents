@@ -248,7 +248,7 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#chat---an-interactive-repl">chat - an interactive REPL</a></li><li class="toc-level-2"><a href="#invoke---one-non-interactive-turn">invoke - one non-interactive turn</a></li><li class="toc-level-2"><a href="#serve---a-real-http-server">serve - a real HTTP server</a></li><li class="toc-level-2"><a href="#testing-without-a-real-api-key">Testing without a real API key</a></li><li class="toc-level-2"><a href="#try-it">Try it</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#chat---a-full-screen-terminal-chat">chat - a full-screen terminal chat</a></li><li class="toc-level-2"><a href="#invoke---one-non-interactive-turn">invoke - one non-interactive turn</a></li><li class="toc-level-2"><a href="#serve---a-real-http-server">serve - a real HTTP server</a></li><li class="toc-level-2"><a href="#testing-without-a-real-api-key">Testing without a real API key</a></li><li class="toc-level-2"><a href="#try-it">Try it</a></li></ul></details>
 		
 
 		
@@ -256,31 +256,55 @@
 <p>Once you've built your project (<a href="/next/course/07-building-your-agent/index.html">Lesson 7</a>), there are
 three ways to run it - all load the exact same <code>GeneratedAgentFactory.bx</code> and build
 the exact same agent tree, so they never diverge from each other.</p>
-<h2 id="chat---an-interactive-repl"><a href="#chat---an-interactive-repl" id="chat---an-interactive-repl" name="chat---an-interactive-repl" class="anchor"></a><code>chat</code> - an interactive REPL</h2>
+<h2 id="chat---a-full-screen-terminal-chat"><a href="#chat---a-full-screen-terminal-chat" id="chat---a-full-screen-terminal-chat" name="chat---a-full-screen-terminal-chat" class="anchor"></a><code>chat</code> - a full-screen terminal chat</h2>
 <pre><code class="language-bash">bxAgents chat                                  # fast, in-process
 bxAgents chat --server [--port=&lt;port&gt;]         # full app, own throwaway server
 bxAgents chat --connect=http://127.0.0.1:8080  # full app, server you already run
+bxAgents chat --connect=https://agent.example.com --token=&lt;token&gt;   # a server that wants a token
 </code></pre>
-<p>At a terminal this draws the full-screen chat described in <a href="/next/guides/terminal-ui/index.html">The terminal UI</a>;
-type <code>/exit</code> (or <code>/quit</code>) to leave. Add <code>--no-tui</code>, or run without a terminal, for the plain
-line-by-line prompt (BoxLang's own <code>MiniConsole</code>, which shells out to <code>stty</code> for raw mode and so
-needs a real interactive terminal); there, type <code>exit</code> or <code>quit</code>.</p>
+<p>At a terminal this draws a full-screen chat, not a bare prompt (the tour is in
+<a href="/next/guides/terminal-ui/index.html">The terminal UI</a>). Finished turns are ordinary terminal text, so
+your scrollback and search keep working. Answers stream in as formatted Markdown, tool calls
+show their arguments and how long they took, and a run that needs approval asks in place.
+Add <code>--no-tui</code>, or run without a terminal, for the plain line-by-line prompt.</p>
+<p>What you can do in it:</p>
+<ul>
+<li><strong>Keys.</strong> Enter sends, Alt+Enter adds a line, Up and Down walk your history, Esc stops the
+agent, and a message typed while it works steers it. <code>?</code> or <code>/keys</code> lists every key, and you
+can rebind them in <code>~/.bxagents/bxAgents.yml</code>.</li>
+<li><strong>Slash commands.</strong> Type <code>/</code> for a menu: <code>/help</code>, <code>/tools</code>, <code>/model</code>, <code>/info</code> and more. Every
+command is listed in <a href="/next/guides/slash-commands/index.html">Slash commands</a>.</li>
+<li><strong>Sessions.</strong> Every chat is a conversation kept in <code>data/chat.db</code>, the same list the web chat
+shows. <code>/sessions</code> lists them, <code>/resume</code> goes back to one, <code>/new</code> starts another, <code>/name</code> names
+it, <code>/fork</code> copies it and carries on in the copy, and <code>/export</code> saves it as Markdown or HTML.
+<code>bxAgents chat --continue</code> reopens the latest one. The messages themselves last as long as the
+agent's memory does, so use a <code>file</code> memory if you want them after a restart.</li>
+<li><strong>Notes.</strong> With a <code>notes:</code> block in <code>Agent.yaml</code>, <code>/remember &lt;text&gt;</code> and <code>/notes</code> keep short
+notes about you that the agent reads at the start of each conversation.</li>
+<li><strong>Context.</strong> The hint row under the box shows how much of the model's window is used, such as
+<code>ctx ~12.4k / 128k 9%</code>. <code>/context</code> shows what it is made of.</li>
+<li><strong>Files and pictures.</strong> <code>@</code> lists files, and <code>@notes.md</code> puts a text file's content in your
+message. <code>@picture.png</code> or Ctrl+V sends a picture (refused when the profile says <code>vision: false</code>).</li>
+<li><strong>Recording.</strong> <code>bxAgents chat --record=demo.cast</code>, or <code>/record</code> inside the chat, saves the screen
+as an asciicast file for demos.</li>
+</ul>
 <p>The default mode loads the generated factory directly in this process - fastest, but
 without anything ColdBox brings (no scheduler, no interceptors, no
 gateway registry). When that matters, <code>--server</code> boots a real miniserver and drives the
-REPL over HTTP against your project's always-on agent route, and <code>--connect</code> does the
+chat over HTTP against your project's agent API, and <code>--connect</code> does the
 same against a server you already have running. Both HTTP modes <strong>stream</strong> the reply
-token by token and carry the server's <code>threadId</code> across turns, so a session is one
-conversation rather than a series of unrelated first messages.</p>
+token by token and carry the conversation across turns. If the server keeps its API
+somewhere else (<code>agentApi.path</code>), add <code>--api-path=/where</code>. If it wants a token
+(<a href="/next/course/13-exposing-http-and-mcp/index.html">Lesson 13</a>), pass <code>--token=&lt;token&gt;</code> or set <code>BXAGENTS_TOKEN</code>.</p>
 <h2 id="invoke---one-non-interactive-turn"><a href="#invoke---one-non-interactive-turn" id="invoke---one-non-interactive-turn" name="invoke---one-non-interactive-turn" class="anchor"></a><code>invoke</code> - one non-interactive turn</h2>
 <pre><code class="language-bash">bxAgents invoke --message=&quot;What's the weather in Boston?&quot; [--json]
 </code></pre>
 <p>Exists for scripting and CI, where <code>chat</code>'s TTY requirement is a hard blocker. By
 default this loads the generated factory in-process, the same path <code>chat</code> uses
-internally, just without the REPL loop - no <code>serve</code> prerequisite at all. <code>--json</code>
+internally, just without the chat screen - no <code>serve</code> prerequisite at all. <code>--json</code>
 prints <code>{&quot;response&quot;: &quot;...&quot;}</code> instead of plain text.</p>
 <p>Add <code>--server</code> to instead launch a real, throwaway <code>boxlang-miniserver</code> process and
-send the message as a genuine HTTP request to your project's always-on agent route -
+send the message as a genuine HTTP request to your project's agent API -
 no <code>gateways/</code> entry needed (those come in <a href="/next/course/13-exposing-http-and-mcp/index.html">Lesson 13</a>). Like
 <code>serve</code>, it needs <code>boxlang-miniserver</code> on <code>PATH</code>.</p>
 <h2 id="serve---a-real-http-server"><a href="#serve---a-real-http-server" id="serve---a-real-http-server" name="serve---a-real-http-server" class="anchor"></a><code>serve</code> - a real HTTP server</h2>
@@ -292,7 +316,8 @@ no <code>gateways/</code> entry needed (those come in <a href="/next/course/13-e
 compiled-class cache stays isolated.</p>
 <h2 id="testing-without-a-real-api-key"><a href="#testing-without-a-real-api-key" id="testing-without-a-real-api-key" name="testing-without-a-real-api-key" class="anchor"></a>Testing without a real API key</h2>
 <p>Every one of these needs a real model to talk to a real provider - but you don't need
-one yet. Add a <code>test</code> environment override to <code>Agent.yaml</code> (covered fully in
+one yet. (<code>bxAgents models test</code> later sends each model one tiny question, so a wrong key or
+model name shows before a chat does.) Add a <code>test</code> environment override to <code>Agent.yaml</code> (covered fully in
 <a href="/next/course/19-testing-your-agent/index.html">Lesson 19</a>):</p>
 <pre><code class="language-yaml">environments:
   test:
@@ -369,7 +394,7 @@ just haven't given it anything to <em>do</em> yet. That starts next lesson.</p>
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#chat---an-interactive-repl">chat - an interactive REPL</a></li><li class="toc-level-2"><a href="#invoke---one-non-interactive-turn">invoke - one non-interactive turn</a></li><li class="toc-level-2"><a href="#serve---a-real-http-server">serve - a real HTTP server</a></li><li class="toc-level-2"><a href="#testing-without-a-real-api-key">Testing without a real API key</a></li><li class="toc-level-2"><a href="#try-it">Try it</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#chat---a-full-screen-terminal-chat">chat - a full-screen terminal chat</a></li><li class="toc-level-2"><a href="#invoke---one-non-interactive-turn">invoke - one non-interactive turn</a></li><li class="toc-level-2"><a href="#serve---a-real-http-server">serve - a real HTTP server</a></li><li class="toc-level-2"><a href="#testing-without-a-real-api-key">Testing without a real API key</a></li><li class="toc-level-2"><a href="#try-it">Try it</a></li></ul></nav>
 				</aside>
 			
 		</div>

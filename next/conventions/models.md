@@ -68,7 +68,7 @@ profiles:
     vision: false
 ```
 
-`contextWindow` is a whole number of tokens and `vision` is `true` or `false`; `build` refuses anything else. Both are optional and nothing is guessed: a model with no entry is simply unknown. bx-ai does not read them. The chat shows them in `/info` and `/model`, and uses `contextWindow` for the share of the window the context takes (`/context`, the status bar and the web header). Later, `vision` decides whether an image may be pasted.
+`contextWindow` is a whole number of tokens and `vision` is `true` or `false`; `build` refuses anything else. Both are optional and nothing is guessed: a model with no entry is simply unknown. bx-ai does not read them. The chat shows them in `/info` and `/model`, and uses `contextWindow` for the share of the window the context takes (`/context`, the status bar and the web header). `vision: false` makes the chat refuse a picture before it is sent, with a message instead of a provider error; when `vision` is not set the picture goes through.
 
 ## Testing a model
 

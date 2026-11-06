@@ -12,7 +12,7 @@ BxAgents es un módulo de BoxLang. Necesita dos cosas en la máquina que lo ejec
 
 1. Un runtime de [BoxLang](https://www.boxlang.io).
 2. BxAgents, que incluye todo lo demás que necesita (`bx-ai`, `bx-sqlite`, `bx-ftp`,
-   `bx-mail`, `bx-yaml` y ColdBox con sus módulos para las apps que
+   `bx-mail`, `bx-yaml`, `bx-markdown` y ColdBox con sus módulos para las apps que
    genera). Hace falta BoxLang **1.18.0 o posterior**.
 
 ::: stepper
@@ -35,8 +35,9 @@ bxAgents --version
 bxAgents --help
 ```
 
-`--help` lista los 16 verbos (`new`, `add`, `build`, `test`, `serve`, `chat`, `invoke`,
-`package`, `deploy`, `inspect`, `clean`, `hash-password`, `token`, `notes`, `doctor`, `skills`) con un resumen de una
+`--help` lista los 20 verbos (`new`, `add`, `build`, `test`, `serve`, `chat`, `invoke`,
+`package`, `deploy`, `inspect`, `clean`, `hash-password`, `token`, `notes`, `doctor`, `skills`,
+`models`, `sessions`, `stats`, `extensions`) con un resumen de una
 línea de cada uno. Usarás la mayoría en este curso.
 :::
 :::
@@ -65,7 +66,9 @@ Este curso usa la forma corta `bxAgents <verbo>` en todo momento.
   en el `PATH`.
 
 Ninguno hace falta para seguir con `build`, `chat` a secas, `test`, `package`,
-`inspect`, `clean` o `new`.
+`inspect`, `clean`, `new` o `doctor`. Tras instalar, `bxAgents doctor` dentro de un proyecto
+comprueba la versión de BoxLang, si `bx-ai` está cargado, si el proyecto valida y qué
+variables de entorno que necesita no están definidas.
 
 Consulta [Instalación](../getting-started/installation.md) para la página de referencia completa.
 

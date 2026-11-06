@@ -1,83 +1,83 @@
 ---
-title: "Slash commands"
+title: "Comandos con barra"
 icon: phosphor-duotone:command
-summary: "All 26 chat commands: what each does, where it works (terminal, web page, chat platforms) and an example."
-description: "All 26 chat commands: what each does, where it works (terminal, web page, chat platforms) and an example."
+summary: "Los 26 comandos del chat: qué hace cada uno, dónde funciona (terminal, página web, plataformas de chat) y un ejemplo."
+description: "Los 26 comandos del chat: qué hace cada uno, dónde funciona (terminal, página web, plataformas de chat) y un ejemplo."
 tags: [guides, cli, tui, reference]
 ---
 
-# Slash commands
+# Comandos con barra
 
-Type `/` in the terminal chat or the [web chat](../conventions/web-ui.md#slash-commands) to see the commands. Each one is written once, as a small class that answers with data, and every surface draws that answer its own way. In [chat platforms](../conventions/gateways/index.md#commands-in-a-gateway) type the command as a message; the default prefix is `/` and a gateway can change it.
+Escribe `/` en el chat de terminal o en el [chat web](../conventions/web-ui.md#comandos-con-barra) para ver los comandos. Cada uno se escribe una sola vez, como una clase pequeña que responde con datos, y cada superficie dibuja esa respuesta a su manera. En las [plataformas de chat](../conventions/gateways/index.md#comandos-en-un-gateway) escribe el comando como un mensaje; el prefijo por defecto es `/` y un gateway puede cambiarlo.
 
-**Where** is `T` terminal, `W` web page, `G` chat platforms. A command marked `G` still needs to be in the gateway's `allow` list; the default list is `help`, `info`, `tools`, `model`, `ping`, `notes` and `remember`.
+**Dónde** es `T` terminal, `W` página web, `G` plataformas de chat. Un comando marcado con `G` aún debe estar en la lista `allow` del gateway; la lista por defecto es `help`, `info`, `tools`, `model`, `ping`, `notes` y `remember`.
 
-![/sessions after naming and forking a conversation](../assets/tui/chat-sessions.png)
+![/sessions tras poner nombre y bifurcar una conversación](../assets/tui/chat-sessions.png)
 
-*`/name`, `/fork` and `/sessions` in a real chat.*
+*`/name`, `/fork` y `/sessions` en un chat real.*
 
-## Conversations
+## Conversaciones
 
-| Command | Where | Does | Example |
+| Comando | Dónde | Hace | Ejemplo |
 |---|---|---|---|
-| `/new` | T W G | Start a new conversation. The old one stays in the list | `/new` |
-| `/sessions` | T W G | List your recent conversations, numbered | `/sessions` |
-| `/resume [number or id]` | T W G | Go back to one and show what was said. No argument: the most recent | `/resume 2` |
-| `/name <name>` | T W | Name this conversation | `/name Quarterly plan` |
-| `/fork [name]` | T W | Copy this conversation, messages and all, and carry on in the copy | `/fork Other approach` |
-| `/clear` | T W G | Forget this conversation's messages, keep the conversation | `/clear` |
-| `/compact` | T W G | Replace older messages with a summary. Needs a summary model on the agent's memory | `/compact` |
-| `/export [file] [--format=md\|html]` | T W | Save the conversation. The file name decides the format unless `--format` says | `/export plan.html` |
-| `/exit` (alias `/quit`) | T | Leave the chat | `/exit` |
+| `/new` | T W G | Empieza una conversación nueva. La anterior sigue en la lista | `/new` |
+| `/sessions` | T W G | Lista tus conversaciones recientes, numeradas | `/sessions` |
+| `/resume [número o id]` | T W G | Vuelve a una y muestra lo que se dijo. Sin argumento: la más reciente | `/resume 2` |
+| `/name <nombre>` | T W | Pone nombre a esta conversación | `/name Quarterly plan` |
+| `/fork [nombre]` | T W | Copia esta conversación, con todos sus mensajes, y sigue en la copia | `/fork Other approach` |
+| `/clear` | T W G | Olvida los mensajes de esta conversación, conserva la conversación | `/clear` |
+| `/compact` | T W G | Sustituye los mensajes antiguos por un resumen. Necesita un modelo de resumen en la memoria del agente | `/compact` |
+| `/export [archivo] [--format=md\|html]` | T W | Guarda la conversación. El nombre del archivo decide el formato salvo que `--format` diga otro | `/export plan.html` |
+| `/exit` (alias `/quit`) | T | Sale del chat | `/exit` |
 
-On a gateway, `/new`, `/clear`, `/compact`, `/sessions` and `/resume` are off until the gateway sets `commands.conversation: true`.
+En un gateway, `/new`, `/clear`, `/compact`, `/sessions` y `/resume` están desactivados hasta que el gateway defina `commands.conversation: true`.
 
-## Know what is going on
+## Saber qué está pasando
 
-| Command | Where | Does | Example |
+| Comando | Dónde | Hace | Ejemplo |
 |---|---|---|---|
-| `/help` | T W G | List the commands you can run here | `/help` |
-| `/info` | T W G | Agent, model, conversation, message count, notes and database | `/info` |
-| `/tools` | T W G | List the agent's tools | `/tools` |
-| `/context` | T W | How big the context is and what it is made of. Worked out locally, no model call | `/context` |
-| `/stats [days] [--by=model\|provider\|day\|user]` | T | Tokens the model calls used. `/stats enable` turns usage recording on | `/stats 7 --by=day` |
-| `/keys` | T W | Which key does what, with the action name of each. `?` alone does the same | `/keys` |
+| `/help` | T W G | Lista los comandos que puedes ejecutar aquí | `/help` |
+| `/info` | T W G | Agente, modelo, conversación, número de mensajes, notas y base de datos | `/info` |
+| `/tools` | T W G | Lista las tools del agente | `/tools` |
+| `/context` | T W | Qué tamaño tiene el contexto y de qué se compone. Se calcula en local, sin llamar al modelo | `/context` |
+| `/stats [días] [--by=model\|provider\|day\|user]` | T | Tokens que usaron las llamadas al modelo. `/stats enable` activa el registro de uso | `/stats 7 --by=day` |
+| `/keys` | T W | Qué tecla hace qué, con el nombre de la acción de cada una. `?` solo hace lo mismo | `/keys` |
 
-## Models
+## Modelos
 
-| Command | Where | Does | Example |
+| Comando | Dónde | Hace | Ejemplo |
 |---|---|---|---|
-| `/model` | T W G | Show the model in use, its profile, context window and vision support | `/model` |
-| `/profile [name]` | T | Pick a [profile](../conventions/models.md#profiles) from a list, or switch straight to one. The conversation is kept | `/profile fast` |
-| `/default` | T | Go back to the app's default model | `/default` |
-| `/ping [profile]` | T W G | Test that the model answers, with one tiny question. Says how long it took, or why it did not | `/ping fast` |
+| `/model` | T W G | Muestra el modelo en uso, su perfil, la ventana de contexto y el soporte de imágenes | `/model` |
+| `/profile [nombre]` | T | Elige un [perfil](../conventions/models.md#perfiles) de una lista, o cambia directo a uno. La conversación se conserva | `/profile fast` |
+| `/default` | T | Vuelve al modelo por defecto de la app | `/default` |
+| `/ping [perfil]` | T W G | Comprueba que el modelo responde, con una pregunta mínima. Indica cuánto tardó, o por qué no lo hizo | `/ping fast` |
 
-Over `--connect` or `--server`, `/profile` can only switch among the profiles the server lists in [`agentApi.profiles`](../conventions/agent-bx.md#agentapi).
+Con `--connect` o `--server`, `/profile` solo puede cambiar entre los perfiles que el servidor lista en [`agentApi.profiles`](../conventions/agent-bx.md#agentapi).
 
-## Notes
+## Notas
 
-| Command | Where | Does | Example |
+| Comando | Dónde | Hace | Ejemplo |
 |---|---|---|---|
-| `/remember <text>` | T W G | Keep a note about you | `/remember I prefer short answers` |
-| `/notes` | T W G | Open the notes screen (terminal) | `/notes` |
-| `/notes list` | T W G | Print your notes and the agent's, with how full each is | `/notes list` |
-| `/notes add [agent] <text>` | T W G | Add a note about you, or with `agent` about the agent's work | `/notes add agent Use metric units` |
-| `/notes edit <id> <text>` | T W G | Change a note; the id is the short code in the list | `/notes edit a3f New text` |
-| `/notes remove <id>` | T W G | Remove a note. Removing the agent's needs an `admin` token over `--connect` | `/notes remove a3f` |
-| `/notes stats` | T W G | Characters used against the limit, and the rough tokens they add | `/notes stats` |
+| `/remember <texto>` | T W G | Guarda una nota sobre ti | `/remember I prefer short answers` |
+| `/notes` | T W G | Abre la pantalla de notas (terminal) | `/notes` |
+| `/notes list` | T W G | Imprime tus notas y las del agente, con lo llena que está cada lista | `/notes list` |
+| `/notes add [agent] <texto>` | T W G | Añade una nota sobre ti, o con `agent` sobre el trabajo del agente | `/notes add agent Use metric units` |
+| `/notes edit <id> <texto>` | T W G | Cambia una nota; el id es el código corto de la lista | `/notes edit a3f New text` |
+| `/notes remove <id>` | T W G | Elimina una nota. Eliminar una del agente necesita un token `admin` con `--connect` | `/notes remove a3f` |
+| `/notes stats` | T W G | Caracteres usados frente al límite, y los tokens aproximados que añaden | `/notes stats` |
 
-## Your terminal
+## Tu terminal
 
-These act on your own machine or your own session, so they stay in the terminal (`/extensions` also works in the web page).
+Estos actúan sobre tu propia máquina o tu propia sesión, así que se quedan en la terminal (`/extensions` también funciona en la página web).
 
-| Command | Where | Does | Example |
+| Comando | Dónde | Hace | Ejemplo |
 |---|---|---|---|
-| `/extensions [name]` | T W | List the extensions the chat loads and what each added; with a name, one in detail | `/extensions` |
-| `/reload` | T | Load the extensions and their settings again. Admin only | `/reload` |
-| `/prompt [style]` | T | Show or change the message box look for this chat | `/prompt box`, `/prompt top +git -clock` |
-| `/copy` | T | Copy the last answer to the clipboard (OSC 52, honoured by most terminals) | `/copy` |
-| `/record [file]`, `/record stop` | T | Record the screen as a `.cast` file | `/record demo.cast` |
+| `/extensions [nombre]` | T W | Lista las extensiones que carga el chat y lo que añadió cada una; con un nombre, una en detalle | `/extensions` |
+| `/reload` | T | Carga de nuevo las extensiones y sus ajustes. Solo administradores | `/reload` |
+| `/prompt [estilo]` | T | Muestra o cambia el aspecto del cuadro de mensaje para este chat | `/prompt box`, `/prompt top +git -clock` |
+| `/copy` | T | Copia la última respuesta al portapapeles (OSC 52, respetado por la mayoría de las terminales) | `/copy` |
+| `/record [archivo]`, `/record stop` | T | Graba la pantalla como un archivo `.cast` | `/record demo.cast` |
 
-## Add your own
+## Añadir los tuyos
 
-`/extensions` and `/reload` come with the [extension](../conventions/extensions.md) support. An extension adds commands such as `/deploy` or `/roll 2d6` to the chat, and [a first extension](first-extension.md) walks through one. The commands over HTTP are `GET /__bxagents/commands` and `POST /__bxagents/command`, see [Run control](../conventions/agent-bx.md#run-control).
+`/extensions` y `/reload` vienen con el soporte de [extensiones](../conventions/extensions.md). Una extensión añade al chat comandos como `/deploy` o `/roll 2d6`, y [una primera extensión](first-extension.md) recorre una. Los comandos por HTTP son `GET /__bxagents/commands` y `POST /__bxagents/command`, consulta [Control de ejecución](../conventions/agent-bx.md#control-de-ejecución).

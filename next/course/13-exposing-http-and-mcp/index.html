@@ -248,7 +248,7 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#exposing-the-agent-itself">Exposing the agent itself</a></li><li class="toc-level-2"><a href="#exposing-a-local-mcp-server">Exposing a local MCP server</a></li><li class="toc-level-2"><a href="#exposing-the-web-chat-ui">Exposing the web chat UI</a></li><li class="toc-level-2"><a href="#validation">Validation</a></li><li class="toc-level-2"><a href="#try-it">Try it</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#exposing-the-agent-itself">Exposing the agent itself</a></li><li class="toc-level-2"><a href="#exposing-a-local-mcp-server">Exposing a local MCP server</a></li><li class="toc-level-2"><a href="#exposing-the-web-chat-ui">Exposing the web chat UI</a></li><li class="toc-level-2"><a href="#the-agent-api-that-is-always-there">The agent API that is always there</a></li><li class="toc-level-2"><a href="#validation">Validation</a></li><li class="toc-level-2"><a href="#try-it">Try it</a></li></ul></details>
 		
 
 		
@@ -277,8 +277,9 @@ class {
 </code></pre>
 <p>Generates, in <code>config/Router.bx</code>, four routes served by the agent API's handler:
 <code>POST /api/chat/invoke</code>, <code>POST /api/chat/stream</code> (SSE), <code>POST /api/chat/batch</code>,
-<code>GET /api/chat/info</code>. The bare <code>/api/chat</code> path itself is not routable. With
-<code>agentApi.access: token</code> they need a token, like the rest of the agent API.</p>
+<code>GET /api/chat/info</code>. The bare <code>/api/chat</code> path itself is not routable. This is a plain
+entry point under a path of your choosing; with <code>agentApi.access: token</code> it needs a token like
+the rest of the agent API.</p>
 <h2 id="exposing-a-local-mcp-server"><a href="#exposing-a-local-mcp-server" id="exposing-a-local-mcp-server" name="exposing-a-local-mcp-server" class="anchor"></a>Exposing a local MCP server</h2>
 <pre><code class="language-javascript">class {
 	function configure() {
@@ -303,6 +304,39 @@ class {
 }
 </code></pre>
 <p>This one is big enough to earn its own lesson - see <a href="/next/course/15-the-generated-web-chat-ui/index.html">Lesson 15</a>.</p>
+<h2 id="the-agent-api-that-is-always-there"><a href="#the-agent-api-that-is-always-there" id="the-agent-api-that-is-always-there" name="the-agent-api-that-is-always-there" class="anchor"></a>The agent API that is always there</h2>
+<p>Every built agent also serves one HTTP API at <code>/__bxagents</code>, with no <code>gateways/</code> entry at all.
+The web page, the terminal chat (<code>chat --server</code> and <code>--connect</code>) and the chat platforms use it
+too, so anything they do, your program can do: run a turn (<code>invoke</code>, <code>stream</code>, <code>events</code>), stop or
+steer a run, answer an approval, list and fork conversations, keep notes, run slash commands. It
+describes itself: <code>GET /__bxagents/openapi</code> returns an OpenAPI document of the routes your server
+really has. A BoxLang client, <code>bxModules.bxagents.models.api.AgentApiClient</code>, has one method per
+route. The tour, with curl and BoxLang examples, is in <a href="/next/guides/agent-api/index.html">Call your agent from code</a>.</p>
+<p>Who may call it is set under <code>agentApi</code> in <code>Agent.yaml</code>:</p>
+<ul>
+<li><strong>Open</strong> (the default): anyone who can reach the port, all as one user, <code>local</code>. Fine on your
+own machine. <code>bxAgents serve</code> listens on <code>127.0.0.1</code> by default and warns if an open API
+listens on an address other machines can reach.</li>
+<li><strong>Behind tokens</strong>: callers send an <code>x-bxagents-token</code> header. <code>tokenEnvVar: MY_SECRET</code> names an
+environment variable holding one shared secret (it acts as an admin). <code>tokens: true</code> also accepts
+tokens made per person or program with <code>bxAgents token create --name=laptop</code> (<code>--scope=chat</code> or
+<code>admin</code>, <code>--expires=90d</code>). A token is shown once and only a hash is kept, so <code>token revoke</code> works at
+once on a running server.</li>
+<li><strong>Guards</strong>: <code>allowedIPs</code> lets only listed addresses and networks in at all, and <code>rateLimit: { requests, perSeconds }</code> caps calls per address. Both work open or closed.</li>
+<li><strong>Managing tokens over the API</strong>: <code>manageTokens: true</code> (with <code>tokens: true</code>) lets an admin make
+and revoke tokens remotely, and shows a <strong>Tokens</strong> panel in the web page.</li>
+<li><strong>Moving it</strong>: <code>path: /agent-api</code> serves the whole API somewhere else.</li>
+</ul>
+<pre><code class="language-yaml">agentApi:
+  tokenEnvVar: AGENT_ADMIN_TOKEN   # the NAME of an environment variable
+  tokens: true
+  allowedIPs: [ &quot;10.0.0.0/8&quot; ]
+  rateLimit: { requests: 60, perSeconds: 60 }
+</code></pre>
+<pre><code class="language-bash">bxAgents token create --name=laptop --expires=90d
+bxAgents chat --connect=https://agent.example.com --token=&lt;the token&gt;
+</code></pre>
+<p>Full list of settings: <a href="/next/conventions/agent-bx/index.html#the-always-on-agent-route">Agent.bx</a>.</p>
 <h2 id="validation"><a href="#validation" id="validation" name="validation" class="anchor"></a>Validation</h2>
 <p><code>exposes</code> must be <code>agent</code>, <code>mcp</code>, or <code>webui</code>; <code>path</code> is required and must be unique
 across every exposure entry; an <code>mcp</code> exposure's <code>target</code> must match a real <code>mcp/*</code>
@@ -379,7 +413,7 @@ you having to manage the server process yourself.)</p>
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#exposing-the-agent-itself">Exposing the agent itself</a></li><li class="toc-level-2"><a href="#exposing-a-local-mcp-server">Exposing a local MCP server</a></li><li class="toc-level-2"><a href="#exposing-the-web-chat-ui">Exposing the web chat UI</a></li><li class="toc-level-2"><a href="#validation">Validation</a></li><li class="toc-level-2"><a href="#try-it">Try it</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#exposing-the-agent-itself">Exposing the agent itself</a></li><li class="toc-level-2"><a href="#exposing-a-local-mcp-server">Exposing a local MCP server</a></li><li class="toc-level-2"><a href="#exposing-the-web-chat-ui">Exposing the web chat UI</a></li><li class="toc-level-2"><a href="#the-agent-api-that-is-always-there">The agent API that is always there</a></li><li class="toc-level-2"><a href="#validation">Validation</a></li><li class="toc-level-2"><a href="#try-it">Try it</a></li></ul></nav>
 				</aside>
 			
 		</div>

@@ -248,7 +248,7 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#what-gets-created">What gets created</a></li><li class="toc-level-2"><a href="#agentyaml-looks-like-this">Agent.yaml looks like this</a></li><li class="toc-level-2"><a href="#the-test-suite-runs-itself">The test suite runs itself</a></li><li class="toc-level-2"><a href="#try-it">Try it</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-wizard">The wizard</a></li><li class="toc-level-2"><a href="#what-gets-created">What gets created</a></li><li class="toc-level-2"><a href="#agentyaml-looks-like-this">Agent.yaml looks like this</a></li><li class="toc-level-2"><a href="#the-test-suite-runs-itself">The test suite runs itself</a></li><li class="toc-level-2"><a href="#try-it">Try it</a></li></ul></details>
 		
 
 		
@@ -263,6 +263,15 @@ parsed in <a href="/next/course/05-agent-bx/index.html">Lesson 5</a>). Pass it f
 <code>--name</code> and <code>--description</code> are optional;
 <code>--name</code> defaults to the target directory's own name. <code>new</code> refuses to run if the
 target already contains an <code>Agent.yaml</code> or <code>Agent.bx</code>.</p>
+<h2 id="the-wizard"><a href="#the-wizard" id="the-wizard" name="the-wizard" class="anchor"></a>The wizard</h2>
+<p>At a terminal, <code>bxAgents new my-agent</code> (no <code>--model</code>) opens a full-screen wizard. It asks what
+the agent should do: its model, tools, memory, MCP servers, channels (web chat, Slack, Telegram
+and so on), how people sign in, and where it deploys. Esc goes back one question and Ctrl+C
+creates nothing. One question picks a template, the shape the project starts from, and
+your other answers are added on top of it: a template is a preset, not a limit. The last screen
+prints the one-line command that builds the same project without questions, so a script can
+repeat it. Pass <code>--model</code> (or <code>--no-wizard</code>) to skip the questions. See the
+<a href="/next/guides/new-wizard/index.html"><code>new</code> wizard</a> for every question and flag.</p>
 <h2 id="what-gets-created"><a href="#what-gets-created" id="what-gets-created" name="what-gets-created" class="anchor"></a>What gets created</h2>
 <pre><code>my-agent/
 ├── Agent.yaml
@@ -281,10 +290,11 @@ target already contains an <code>Agent.yaml</code> or <code>Agent.bx</code>.</p>
         └── AgentSpec.bx
 </code></pre>
 <p>Plus a <code>.env</code> declaring <code>BOXLANG_HOME=.build/runtime</code> (matching <code>serve</code>'s own scoped
-runtime home), a <code>.gitignore</code> (it ignores <code>.build/</code>, <code>dist/</code>, <code>.env</code> and <code>lib/</code>, among others)
+runtime home), a <code>.gitignore</code> (it ignores <code>.build/</code>, <code>dist/</code>, <code>.env</code>, <code>lib/</code> and <code>data/chat.db*</code>, among others)
 and a few dotfiles (<code>.boxlang.json</code>, <code>.editorconfig</code>, <code>.bxlint.json</code>, <code>.gitattributes</code>,
 <code>.markdownlint.json</code>) - <code>new</code> never overwrites them if they already exist. BoxLang loads the <code>.env</code> from the project root itself, so
-this is also the place for your provider API keys.</p>
+this is where secrets live: the wizard and <code>add</code> write an empty line for each key your choices
+need (a provider key, a bot token), and the files that use it hold only the variable's name.</p>
 <p>Every convention folder is created <strong>empty</strong>. You add files to the ones your agent
 actually needs and leave the rest alone - an empty <code>tools/</code> folder has zero effect on
 the generated app.</p>
@@ -316,8 +326,10 @@ and just tells you to run it yourself. Pass <code>--skipInstall</code> to opt ou
 cd my-agent
 ls
 </code></pre>
-<p>You now have a real, if minimal, BxAgents project. The next four lessons walk through
-what's actually required to run it.</p>
+<p>You now have a real, if minimal, BxAgents project. Later you can add to it without editing
+files by hand: <code>bxAgents add tool</code>, <code>add skill</code>, <code>add subagent</code>, <code>add gateway</code>, <code>add schedule</code> and
+the other <code>add</code> kinds ask a few questions and write the files for you (<code>--dry-run</code> shows them
+first). The next four lessons walk through what's actually required to run it.</p>
 <p>Next: <a href="/next/course/05-agent-bx/index.html">Lesson 5 - The Agent Definition: Agent.yaml</a></p>
 
 	
@@ -379,7 +391,7 @@ what's actually required to run it.</p>
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#what-gets-created">What gets created</a></li><li class="toc-level-2"><a href="#agentyaml-looks-like-this">Agent.yaml looks like this</a></li><li class="toc-level-2"><a href="#the-test-suite-runs-itself">The test suite runs itself</a></li><li class="toc-level-2"><a href="#try-it">Try it</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-wizard">The wizard</a></li><li class="toc-level-2"><a href="#what-gets-created">What gets created</a></li><li class="toc-level-2"><a href="#agentyaml-looks-like-this">Agent.yaml looks like this</a></li><li class="toc-level-2"><a href="#the-test-suite-runs-itself">The test suite runs itself</a></li><li class="toc-level-2"><a href="#try-it">Try it</a></li></ul></nav>
 				</aside>
 			
 		</div>

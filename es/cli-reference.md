@@ -273,6 +273,7 @@ bxAgents add mcp                                # pregunta en qué dirección
 
 | Flag | Significado |
 |---|---|
+| `--server=<name>` | Un servidor del catálogo por nombre, en lugar del posicional. |
 | `--url=<address>` | Un servidor que no está en el catálogo. Se rechaza una dirección con usuario, contraseña o clave: el secreto va en una variable de entorno. |
 | `--name=<label>` | Una etiqueta para `Agent.yaml`; no se envía al servidor. |
 | `--auth=none\|bearer\|header\|basic` | Cómo inicia sesión. `bearer` escribe `token`, `header` escribe `headers` (nómbralo con `--header=`), `basic` escribe `user` (con `--user=`) y `password`. |
@@ -637,6 +638,10 @@ chat:
   keys:              # cambia las teclas de una acción; una tecla o una lista. /keys muestra los nombres de acción
     newline: [ ctrl+n, alt+enter ]
     stop: ctrl+x
+  prefixes: { desk:explain: "?%" }   # el prefijo de un prefix de una extensión, por id (extensión:método)
+  sources: { desk:ticket: issue }    # el nombre del source @nombre:consulta de una extensión, por id
+extensions:                          # valores para extensiones, y qué desactivar
+  disable: [ roll ]
 ```
 
 Si el archivo no existe, ambos están activados. Una clave que el archivo no conoce, o un valor de tipo equivocado, se informa al iniciar el chat en lugar de ignorarse.
@@ -652,7 +657,7 @@ Las teclas se escriben como se dicen: `enter`, `alt+enter`, `shift+enter`, `ctrl
 | `@imagen.png` | Una imagen (png, jpg, gif, webp), enviada como parte de imagen del mensaje |
 | Ctrl+V | Pega una imagen del portapapeles (necesita `wl-paste` o `xclip` en Linux, `pngpaste` en macOS; Windows usa PowerShell). Una ficha en la fila de ayuda muestra cuántas esperan |
 
-Con un mensaje van como máximo 4 imágenes, de hasta 5 MB cada una. Antes de enviar nada, el chat comprueba que el perfil puede ver: pon `vision: true` en un [perfil](models.md#lo-que-el-proyecto-sabe-de-un-modelo) que pueda, y una imagen enviada a uno que no puede se rechaza con un mensaje en lugar de un error oscuro del proveedor. `/context` cuenta lo adjunto. La imagen llega al modelo como partes de imagen de `AiMessage` de bx-ai, con la forma que ese proveedor espera; por ahora solo se han probado proveedores de estilo OpenAI.
+Con un mensaje van como máximo 4 imágenes, de hasta 5 MB cada una. Antes de enviar nada, el chat comprueba que el perfil puede ver: pon `vision: true` en un [perfil](conventions/models.md#lo-que-el-proyecto-sabe-de-un-modelo) que pueda, y una imagen enviada a uno que no puede se rechaza con un mensaje en lugar de un error oscuro del proveedor. `/context` cuenta lo adjunto. La imagen llega al modelo como partes de imagen de `AiMessage` de bx-ai, con la forma que ese proveedor espera; por ahora solo se han probado proveedores de estilo OpenAI.
 
 Con `--connect`, los archivos y las imágenes viajan en `attachments` de la petición a `/__bxagents/events`, ver [Control de ejecución](conventions/agent-bx.md#run-control). Las plataformas de chat aún no aceptan adjuntos.
 

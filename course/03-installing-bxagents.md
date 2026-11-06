@@ -12,7 +12,7 @@ BxAgents is a BoxLang module. It needs two things on the machine that runs it:
 
 1. A [BoxLang](https://www.boxlang.io) runtime.
 2. BxAgents itself, which bundles everything else it needs (`bx-ai`, `bx-sqlite`,
-   `bx-ftp`, `bx-mail`, `bx-yaml`, and ColdBox with its modules for the
+   `bx-ftp`, `bx-mail`, `bx-yaml`, `bx-markdown`, and ColdBox with its modules for the
    apps it generates). BoxLang **1.18.0 or later** is required.
 
 ::: stepper
@@ -35,7 +35,7 @@ bxAgents --version
 bxAgents --help
 ```
 
-`--help` lists all 19 verbs (`new`, `add`, `build`, `test`, `serve`, `chat`, `invoke`,
+`--help` lists all 20 verbs (`new`, `add`, `build`, `test`, `serve`, `chat`, `invoke`,
 `package`, `deploy`, `inspect`, `clean`, `hash-password`, `token`, `notes`, `doctor`, `skills`,
 `models`, `sessions`, `stats`, `extensions`) with a one-line summary of each. You'll use most of them in this course.
 :::
@@ -65,7 +65,9 @@ This course uses the short `bxAgents <verb>` form throughout.
   binary on `PATH`.
 
 None of them is required to follow along with `build`, plain `chat`, `test`, `package`,
-`inspect`, `clean` or `new`.
+`inspect`, `clean`, `new` or `doctor`. After installing, `bxAgents doctor` inside a project
+checks the BoxLang version, whether `bx-ai` is loaded, whether the project validates and
+which environment variables it needs are not set.
 
 See [Installation](../getting-started/installation.md) for the full reference page.
 

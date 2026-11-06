@@ -246,7 +246,7 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#packaging">Packaging</a></li><li class="toc-level-2"><a href="#excluding-files-bxaignore">Excluding files&#x3a; .bxaignore</a></li><li class="toc-level-2"><a href="#secret-redaction">Secret redaction</a></li><li class="toc-level-2"><a href="#where-real-secrets-live">Where real secrets live</a></li><li class="toc-level-2"><a href="#deploying">Deploying</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#packaging">Packaging</a></li><li class="toc-level-2"><a href="#excluding-files-bxaignore">Excluding files&#x3a; .bxaignore</a></li><li class="toc-level-2"><a href="#secret-redaction">Secret redaction</a></li><li class="toc-level-2"><a href="#where-real-secrets-live">Where real secrets live</a></li><li class="toc-level-2"><a href="#variables-bxagents-reads-itself">Variables BxAgents reads itself</a></li><li class="toc-level-2"><a href="#deploying">Deploying</a></li></ul></details>
 		
 
 		
@@ -293,6 +293,22 @@ scratch/
 <pre><code class="language-bash">export OPENAI_API_KEY=sk-...
 bxAgents serve
 </code></pre>
+<h2 id="variables-bxagents-reads-itself"><a href="#variables-bxagents-reads-itself" id="variables-bxagents-reads-itself" name="variables-bxagents-reads-itself" class="anchor"></a>Variables BxAgents reads itself</h2>
+<p>None of these holds a provider secret. <code>BXAGENTS_TOKEN</code> is the one credential, and it is only ever read from the environment of the machine you type on.</p>
+<div class="bxsites-table-wrap"><table class="table">
+<thead>
+<tr><th>Variable</th><th>Used by</th><th>Effect</th></tr>
+</thead>
+<tbody>
+<tr><td><code>BX_AGENTS_ENV</code></td><td><code>build</code></td><td>The active environment when <code>--environment</code> is not given (default <code>development</code>). See <a href="/next/conventions/agent-yaml/index.html#environments">Environments</a>.</td></tr>
+<tr><td><code>BXAGENTS_DB</code></td><td>the app, <code>chat</code>, <code>token</code>, <code>notes</code>, <code>sessions</code>, <code>stats</code></td><td>The chat database file. <code>serve</code> sets it to <code>data/chat.db</code> in the project; a deployed app uses <code>database.path</code> inside the app unless it is set. See <a href="/next/conventions/web-ui/index.html#the-sqlite-store">the SQLite store</a>.</td></tr>
+<tr><td><code>BXAGENTS_TOKEN</code></td><td><code>chat --connect</code></td><td>The token to send, instead of <code>--token</code>.</td></tr>
+<tr><td><code>BXAGENTS_USER_CONFIG</code></td><td><code>chat</code>, <code>extensions</code></td><td>Another file in place of <code>~/.bxagents/bxAgents.yml</code>.</td></tr>
+<tr><td><code>BXAGENTS_SKILLS_URL</code></td><td><code>skills</code></td><td>Another skills registry, instead of <code>--registry</code>.</td></tr>
+<tr><td><code>BXAGENTS_BANNER</code>, <code>BXAGENTS_BANNER_THEME</code></td><td><code>--help</code>, <code>new</code></td><td><code>off</code> hides the banner; a theme name pins its colors.</td></tr>
+<tr><td><code>BXAGENTS_</code> plus a name</td><td><code>deploy</code></td><td>The only prefix a <code>deploy/</code> entry may name for a password or passphrase (<code>passwordEnvVar</code>, <code>passphraseEnvVar</code>).</td></tr>
+</tbody>
+</table></div>
 <h2 id="deploying"><a href="#deploying" id="deploying" name="deploying" class="anchor"></a>Deploying</h2>
 <pre><code class="language-bash">bxAgents deploy --destination=/path/to/somewhere   # local, flag-only shorthand
 bxAgents deploy --name=production                  # any target, via deploy/production.bx
@@ -349,7 +365,7 @@ bxAgents deploy --name=production                  # any target, via deploy/prod
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#packaging">Packaging</a></li><li class="toc-level-2"><a href="#excluding-files-bxaignore">Excluding files&#x3a; .bxaignore</a></li><li class="toc-level-2"><a href="#secret-redaction">Secret redaction</a></li><li class="toc-level-2"><a href="#where-real-secrets-live">Where real secrets live</a></li><li class="toc-level-2"><a href="#deploying">Deploying</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#packaging">Packaging</a></li><li class="toc-level-2"><a href="#excluding-files-bxaignore">Excluding files&#x3a; .bxaignore</a></li><li class="toc-level-2"><a href="#secret-redaction">Secret redaction</a></li><li class="toc-level-2"><a href="#where-real-secrets-live">Where real secrets live</a></li><li class="toc-level-2"><a href="#variables-bxagents-reads-itself">Variables BxAgents reads itself</a></li><li class="toc-level-2"><a href="#deploying">Deploying</a></li></ul></nav>
 				</aside>
 			
 		</div>

@@ -250,13 +250,14 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#interceptors---coldbox-lifecycle-hooks">interceptors&#x2f; - ColdBox lifecycle hooks</a></li><li class="toc-level-2"><a href="#modules---boxlang-module-dependencies">modules&#x2f; - BoxLang module dependencies</a></li><li class="toc-level-2"><a href="#try-it">Try it</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#interceptors---coldbox-lifecycle-hooks">interceptors&#x2f; - ColdBox lifecycle hooks</a></li><li class="toc-level-2"><a href="#extensions---add-to-the-chat-and-the-served-agent">extensions&#x2f; - add to the chat and the served agent</a></li><li class="toc-level-2"><a href="#modules---boxlang-module-dependencies">modules&#x2f; - BoxLang module dependencies</a></li><li class="toc-level-2"><a href="#try-it">Try it</a></li></ul></details>
 		
 
 		
 		<h1 id="interceptors-and-module-dependencies"><a href="#interceptors-and-module-dependencies" id="interceptors-and-module-dependencies" name="interceptors-and-module-dependencies" class="anchor"></a>Interceptors and Module Dependencies</h1>
-<p>Two smaller, independent conventions round out the picture: lifecycle hooks into the
-generated ColdBox app, and declared BoxLang module dependencies.</p>
+<p>Three smaller, independent conventions round out the picture: lifecycle hooks into the
+generated ColdBox app, extensions for the chat and the served agent, and declared BoxLang
+module dependencies.</p>
 <h2 id="interceptors---coldbox-lifecycle-hooks"><a href="#interceptors---coldbox-lifecycle-hooks" id="interceptors---coldbox-lifecycle-hooks" name="interceptors---coldbox-lifecycle-hooks" class="anchor"></a><code>interceptors/</code> - ColdBox lifecycle hooks</h2>
 <p><code>interceptors/*.bx</code> are ColdBox interceptors (<code>preProcess</code>, <code>postProcess</code>, and other
 lifecycle hook points), scoped via an <code>@scope</code> annotation on the class itself:</p>
@@ -284,9 +285,34 @@ class {
 <p>An interceptor with no <code>@scope</code> at all defaults to <code>agent</code> - the narrower, safer
 choice, since <code>runtime</code> scope has effects beyond one app. An <code>@scope</code> value that isn't
 <code>agent</code> or <code>runtime</code> fails the build with a clear error.</p>
-<p>You've already seen <strong>generated</strong> interceptors without writing one yourself - the web
-UI's API-key and login gates from <a href="/course/15-the-generated-web-chat-ui/index.html">Lesson 15</a> are
+<p>You've already seen a <strong>generated</strong> interceptor without writing one yourself - when you list
+<code>users</code> on the web chat (<a href="/course/15-the-generated-web-chat-ui/index.html">Lesson 15</a>), its sign-in gate is
 registered exactly this way, just written by BxAgents instead of by you.</p>
+<h2 id="extensions---add-to-the-chat-and-the-served-agent"><a href="#extensions---add-to-the-chat-and-the-served-agent" id="extensions---add-to-the-chat-and-the-served-agent" name="extensions---add-to-the-chat-and-the-served-agent" class="anchor"></a><code>extensions/</code> - add to the chat and the served agent</h2>
+<p>An interceptor reacts to the ColdBox request. An <strong>extension</strong> adds to BxAgents itself, without
+changing it. One <code>.bx</code> file is a whole extension: it reads like a ColdBox <code>ModuleConfig</code> (a
+<code>configure()</code>, an <code>onLoad()</code>), and annotated methods become chat commands.</p>
+<pre><code class="language-javascript">// extensions/hello.bx
+class {
+
+	@Command( &quot;hello&quot; )
+	@Hint( &quot;say hello: /hello &lt;name&gt;&quot; )
+	function greet( agentContext, commandArguments ) {
+		return agentContext.reply().ok( &quot;Hello, #commandArguments#!&quot; )
+	}
+
+}
+</code></pre>
+<p>Run <code>bxAgents chat</code> and type <code>/hello Ada</code>; <code>/extensions</code> lists what loaded. The same command runs
+in the web page and, if allowed, on chat platforms. A folder with an <code>Extension.bx</code> can bring more:
+keys (<code>@Key</code>), status items (<code>@Status</code>), <code>@</code> sources and message prefixes for the terminal, web
+page slots, listeners for chat and bx-ai events, schedulers, tools, skills, a new gateway type or
+a <code>bxAgents</code> verb. Values for an extension go under <code>extensions:</code> in <code>Agent.yaml</code>.</p>
+<p>Start one with <code>bxAgents add extension standup</code>, which asks what to bring and writes working
+stubs. Install someone else's with <code>bxAgents extensions install &lt;folder, zip, owner/repo, address or ForgeBox slug&gt;</code>: it shows what the extension adds and asks first, and records it in
+<code>extensions.lock.json</code>, which you commit. <code>bxAgents extensions link &lt;folder&gt;</code> links one you are
+working on, and <code>/reload</code> picks up your edits. See the <a href="/conventions/extensions/index.html"><code>extensions/</code></a>
+reference and the guide <a href="/guides/first-extension/index.html">Your first extension</a>.</p>
 <h2 id="modules---boxlang-module-dependencies"><a href="#modules---boxlang-module-dependencies" id="modules---boxlang-module-dependencies" name="modules---boxlang-module-dependencies" class="anchor"></a><code>modules/</code> - BoxLang module dependencies</h2>
 <p><code>modules/</code> holds BoxLang module dependencies your agent declares - one immediate
 subfolder per module, discovered by folder name (not recursive):</p>
@@ -309,7 +335,7 @@ full cycle path reported, no code generation until the graph is acyclic. A
 <code>module.json</code> is entirely optional - a module folder with none is assumed to have no
 declared dependencies.</p>
 <h2 id="try-it"><a href="#try-it" id="try-it" name="try-it" class="anchor"></a>Try it</h2>
-<p>Add an <code>interceptors/RequestLogger.bx</code> with an explicit <code>@scope agent</code> annotation that
+<p>Try <code>bxAgents add extension hello --with=command</code> and <code>/hello</code> in the chat. Then add an <code>interceptors/RequestLogger.bx</code> with an explicit <code>@scope agent</code> annotation that
 logs every incoming request via <code>writeLog()</code>, rebuild, and check
 <code>.build/app/interceptors/</code> for the copy plus its registration in
 <code>.build/app/bxagents/Application.bx</code>.</p>
@@ -320,7 +346,7 @@ logs every incoming request via <code>writeLog()</code>, rebuild, and check
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/course/18-interceptors-and-modules.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/course/18-interceptors-and-modules.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Nov 6, 2026, 4&#x3a;00&#x3a;25 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Lesson%2018%3A%20Interceptors%20and%20Module%20Dependencies&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fcourse%2F18-interceptors-and-modules%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/course/18-interceptors-and-modules.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/course/18-interceptors-and-modules.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Nov 6, 2026, 8&#x3a;44&#x3a;45 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Lesson%2018%3A%20Interceptors%20and%20Module%20Dependencies&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fcourse%2F18-interceptors-and-modules%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 
@@ -375,7 +401,7 @@ logs every incoming request via <code>writeLog()</code>, rebuild, and check
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#interceptors---coldbox-lifecycle-hooks">interceptors&#x2f; - ColdBox lifecycle hooks</a></li><li class="toc-level-2"><a href="#modules---boxlang-module-dependencies">modules&#x2f; - BoxLang module dependencies</a></li><li class="toc-level-2"><a href="#try-it">Try it</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#interceptors---coldbox-lifecycle-hooks">interceptors&#x2f; - ColdBox lifecycle hooks</a></li><li class="toc-level-2"><a href="#extensions---add-to-the-chat-and-the-served-agent">extensions&#x2f; - add to the chat and the served agent</a></li><li class="toc-level-2"><a href="#modules---boxlang-module-dependencies">modules&#x2f; - BoxLang module dependencies</a></li><li class="toc-level-2"><a href="#try-it">Try it</a></li></ul></nav>
 				</aside>
 			
 		</div>

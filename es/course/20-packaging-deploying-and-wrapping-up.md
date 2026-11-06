@@ -95,14 +95,42 @@ bxAgents clean
 
 Elimina solo `.build/` y `dist/` - tus convenciones fuente no se tocan nunca.
 
+## Ejecutarlo para otras personas
+
+Un agente desplegado ya no está en tu propia máquina, así que decide quién puede llamarlo. La API
+del agente está abierta por defecto, lo cual es correcto en un portátil e incorrecto en internet.
+Antes de desplegar, define `agentApi` en `Agent.yaml` ([Lección 13](13-exposing-http-and-mcp.md)):
+un secreto compartido en una variable de entorno, `tokens: true` para tokens por persona, y
+`allowedIPs` o `rateLimit` donde encajen. Ejecuta `token` donde está la base de datos del agente (en
+el servidor), crea uno para cada persona o programa, y habla con el despliegue desde tu propia terminal:
+
+```bash
+bxAgents token create --name=laptop --expires=90d
+bxAgents chat --connect=https://agent.example.com --token=<the token>
+```
+
+Las conversaciones, notas y tokens viven en un único archivo SQLite, `data/chat.db` (una app
+desplegada usa `database.path` dentro de la app salvo que `BXAGENTS_DB` nombre otro archivo).
+`bxAgents sessions list` y `bxAgents notes list` lo leen desde una shell, y `bxAgents stats` muestra
+lo que usaron las llamadas al modelo cuando `usage: true` está definido.
+
 ## Todos los verbos, en un solo sitio
 
 A lo largo de este curso has usado `new`, `build`, `test`, `chat`, `invoke`, `serve`,
-`package`, `deploy`, `inspect`, `clean` y `hash-password`. Merece la pena conocer dos más: `add`,
-que añade una herramienta a un proyecto que ya existe, y `doctor`, al
-que recurrirás cuando algo *no* funcione - comprueba tu versión de BoxLang, si `bx-ai` está
-cargado, si se encuentra la definición del agente (`Agent.yaml` o `Agent.bx`) y si el proyecto valida, sin necesitar un `build` previo.
-Consulta la [Referencia de la CLI](../cli-reference.md) para cada flag de cada uno de ellos.
+`package`, `deploy`, `inspect`, `clean` y `hash-password`. El resto, todos en la
+[Referencia de la CLI](../cli-reference.md):
+
+- `add` añade una pieza a un proyecto que ya existe: una tool, skill, subagente, gateway,
+  schedule, interceptor, cliente o servidor MCP, perfil, proveedor, capacidad o extensión.
+- `doctor` es al que recurrirás cuando algo *no* funcione - comprueba tu versión de BoxLang, si
+  `bx-ai` está cargado, si el proyecto valida y qué variables de entorno no están definidas, sin
+  necesitar un `build` previo.
+- `models` lista los modelos con los que el proyecto puede hablar y comprueba que responden
+  (`models test`).
+- `token`, `notes`, `sessions` y `stats` gestionan los tokens de acceso, las notas que guarda el
+  agente, las conversaciones guardadas y los recuentos de uso.
+- `skills` instala skills desde skills.boxlang.io, y `extensions` lista, instala y enlaza
+  extensiones.
 
 ## Hacia dónde seguir desde aquí
 

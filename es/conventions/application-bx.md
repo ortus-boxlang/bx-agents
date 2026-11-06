@@ -1,14 +1,14 @@
 ---
 title: Application.bx
 icon: phosphor-duotone:gear-six
-summary: Your own root Application.bx, extending the class every build generates.
-description: Your own root Application.bx, extending the class every build generates.
+summary: "Tu propio Application.bx raíz, que extiende la clase que genera cada build."
+description: "Tu propio Application.bx raíz, que extiende la clase que genera cada build."
 tags: [conventions, configuration]
 ---
 
 # Application.bx
 
-A project has its own `Application.bx` at its root. It is the file the runtime loads, so the settings and lifecycle hooks of your app live here. It **extends** a class BxAgents generates on every build, which holds the wiring:
+Un proyecto tiene su propio `Application.bx` en la raíz. Es el archivo que carga el runtime, así que los ajustes y los hooks de ciclo de vida de tu app viven aquí. **Extiende** una clase que BxAgents genera en cada build, que contiene el cableado:
 
 ```javascript
 // Application.bx
@@ -17,22 +17,22 @@ class extends="bxagents.Application" {
 }
 ```
 
-`bxAgents new` writes this file. Build copies it into the generated app as it is. A project without one gets exactly this file generated, so older projects keep building.
+`bxAgents new` escribe este archivo. El build lo copia tal cual a la app generada. Un proyecto que no tenga uno recibe exactamente este archivo generado, así que los proyectos antiguos siguen compilando.
 
-## What the generated base does
+## Qué hace la base generada
 
-On every build `bxagents/Application.bx` is written into `.build/app/` and sets up:
+En cada build se escribe `bxagents/Application.bx` en `.build/app/` y se configura:
 
-- the app `name`, sessions (on when there is a web UI) and the web UI's database;
-- ColdBox, started from `onApplicationStart()`, with the bx-ai settings applied first;
-- tools, MCP servers, gateways and [interceptors](interceptors.md), registered at startup;
-- `this.schedulers`, listing the project's [schedules/](schedules.md).
+- el `name` de la app, las sesiones (activadas cuando hay una interfaz web) y la base de datos de la interfaz web;
+- ColdBox, iniciado desde `onApplicationStart()`, con los ajustes de bx-ai aplicados primero;
+- las tools, los servidores MCP, los gateways y los [interceptores](interceptors.md), registrados al arrancar;
+- `this.schedulers`, con la lista de los [schedules/](schedules.md) del proyecto.
 
-It starts with a comment saying it is generated. Do not edit it: the next build overwrites it.
+Empieza con un comentario que indica que está generado. No lo edites: el siguiente build lo sobrescribe.
 
-## Override a hook, or add a setting
+## Sobrescribir un hook o añadir un ajuste
 
-Your class loads after the base's, so a setting you assign wins, and a method you define replaces the base's. To add to a hook instead of replacing it, call `super`:
+Tu clase se carga después de la base, así que un ajuste que asignes gana, y un método que definas reemplaza el de la base. Para añadir algo a un hook en lugar de reemplazarlo, llama a `super`:
 
 ```javascript
 // Application.bx
@@ -50,14 +50,14 @@ class extends="bxagents.Application" {
 ```
 
 !!! warning
-    Replacing `onApplicationStart()` or `onRequestStart()` without calling `super` removes the wiring above (ColdBox never starts). Always call the `super` method unless that is what you mean.
+    Reemplazar `onApplicationStart()` o `onRequestStart()` sin llamar a `super` elimina el cableado anterior (ColdBox nunca arranca). Llama siempre al método `super`, salvo que eso sea lo que quieres.
 
-## The `bxagents` mapping
+## El mapeo `bxagents`
 
-`bxagents.Application` and `bxagents.Scheduler` resolve to the `bxagents/` folder inside the built app, so the files they extend are copied with it and nothing depends on the module being installed where the app runs. Runtime helpers that the built app needs live there.
+`bxagents.Application` y `bxagents.Scheduler` se resuelven a la carpeta `bxagents/` dentro de la app construida, así que los archivos que extienden se copian con ella y nada depende de que el módulo esté instalado donde se ejecuta la app. Los helpers de runtime que necesita la app construida viven ahí.
 
-The folder exists after a build. Before the first `bxAgents build`, an IDE cannot follow `bxagents.Application`; the class itself is not in your project.
+La carpeta existe después de un build. Antes del primer `bxAgents build`, un IDE no puede seguir `bxagents.Application`; la clase en sí no está en tu proyecto.
 
-## Paths
+## Rutas
 
-The base lives one folder down, so it resolves paths from the app folder, not from its own location. If you write code in `Application.bx` that reads a file, use `expandPath( "/..." )` from the app root.
+La base vive una carpeta más abajo, así que resuelve las rutas desde la carpeta de la app, no desde su propia ubicación. Si escribes código en `Application.bx` que lee un archivo, usa `expandPath( "/..." )` desde la raíz de la app.

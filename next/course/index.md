@@ -31,8 +31,8 @@ BoxLang or ColdBox experience is assumed, though it helps.
 
 ## What you'll have built by Lesson 20
 
-An agent with its own tools and a packaged skill, reachable from the CLI, a browser chat
-UI, and an HTTP API, with a test suite that runs with no API key, and a packaged `.bxa`
+An agent with its own tools and a packaged skill, reachable from a full-screen terminal chat,
+a browser chat UI, an HTTP API and chat platforms, with a test suite that runs with no API key, and a packaged `.bxa`
 ready to deploy.
 
 Ready? Start with [Lesson 1: Welcome to BxAgents](01-welcome.md).

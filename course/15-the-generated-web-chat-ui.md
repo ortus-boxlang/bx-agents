@@ -48,6 +48,35 @@ same page for real.
 - **Reasoning + tool calls** - collapsed disclosures fed straight off the streamed
   response.
 - **Approvals** - a human-in-the-loop pause renders an Approve/Reject card.
+- **Rendered answers** - full Markdown, with code blocks that show their language and have a
+  **Copy** button, and tool cards with a status chip and a one-line preview of the arguments.
+- **Slash commands** - type `/` for a menu (or press the lightning button): `/new`, `/sessions`,
+  `/fork`, `/export`, `/context` and more, the same ones as in the terminal. Commands an
+  [extension](18-interceptors-and-modules.md) adds show the extension's name as a badge.
+- **Suggestions** - set up to four `suggestions` on the entry and the empty conversation shows
+  them as buttons that send on one click.
+- **Pictures** - an Attach button, paste and drop send pictures with a message (refused when the
+  model's profile says `vision: false`).
+- **Context ring** - the header shows how much of the model's window is used; click it for the
+  breakdown.
+- **Model picker** - when the entry lists `profiles`, visitors can choose one per message.
+
+### The Settings menu
+
+The header keeps only what you use every minute: the **Chats** button, the context ring, the model
+picker and a **Settings** gear. The gear opens one menu in three groups. An item the server does
+not offer, and a group with nothing in it, is left out.
+
+| Group | Items |
+|---|---|
+| Conversation | Fork this conversation, Export as Markdown, Clear messages, Compact older messages |
+| You | Notes (what the agent keeps about you and about its own work), Appearance, light or dark theme |
+| Server | Password, Access tokens |
+
+**Appearance** lets each visitor pick light, dark or system, an accent color, the text size and the
+density, saved in their own browser. It never changes your `theme`, which stays the default.
+**Access tokens** lists, creates and revokes tokens for admins, when the server sets
+`agentApi.manageTokens: true` ([Lesson 13](13-exposing-http-and-mcp.md)).
 
 ## Without accounts: one shared workspace
 
@@ -90,16 +119,19 @@ theme: {
     Write hex colors bare, with no leading `#` - BoxLang begins string interpolation
     at `#` in both quote styles, so the generator adds it back for you.
 
-`title`, `subtitle`, `icon`, `welcome`, `placeholder` and `footer` are also available,
-plus a `themeFile` for anything the tokens don't cover.
+`title`, `subtitle`, `icon`, `welcome`, `placeholder`, `footer` and `suggestions` are also
+available, plus a `themeFile` for anything the tokens don't cover. `icon` can be an emoji, an
+image address or `phosphor:<name>` (a Phosphor icon built into the page).
 
 ## Securing it
 
 `apiKeyEnvVar` is the agent API's shared secret - not a full login system. Left unset,
 the API is open (fine for local dev). Set it, and every call to `/__bxagents` must carry
 a matching `x-bxagents-token` header. The static shell itself is deliberately **not**
-gated, since a browser's plain page navigation can't send a custom header. For people
-with their own sign-in, list `users`.
+gated, since a browser's plain page navigation can't send a custom header: the page asks for the
+secret in a **Password** form that opens by itself when the server answers `401`, and says when
+the password was not accepted. For several people, use issued tokens or list `users`
+([Lesson 13](13-exposing-http-and-mcp.md) covers tokens, `allowedIPs` and `rateLimit`).
 
 ## Try it
 
