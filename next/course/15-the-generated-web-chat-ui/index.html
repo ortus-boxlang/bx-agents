@@ -279,8 +279,8 @@ class {
 	}
 }
 </code></pre>
-<p>This generates a static <code>&lt;path&gt;/index.html</code> (served directly, no route needed) plus a
-dedicated API under <code>&lt;path&gt;/api</code>. The page is dependency-free vanilla HTML/CSS/JS,
+<p>This generates a static <code>&lt;path&gt;/index.html</code> (served directly, no route needed) that calls the agent API
+at <code>/__bxagents</code>. The page is dependency-free vanilla HTML/CSS/JS,
 pre-built and vendored inside BxAgents itself - <code>bxAgents build</code> never runs <code>npm install</code>, and a generated project never needs Node installed at all.</p>
 <p><picture><source type="image/webp" srcset="/next/assets/webui-chat-light-400w.af9728b6.webp 400w, /next/assets/webui-chat-light-800w.af9728b6.webp 800w, /next/assets/webui-chat-light-1200w.af9728b6.webp 1200w, /next/assets/webui-chat-light-1440w.af9728b6.webp 1440w" sizes="(min-width: 800px) 800px, 100vw"><img src="/next/assets/webui-chat-light.png" srcset="/next/assets/webui-chat-light-400w.af9728b6.png 400w, /next/assets/webui-chat-light-800w.af9728b6.png 800w, /next/assets/webui-chat-light-1200w.af9728b6.png 1200w" sizes="(min-width: 800px) 800px, 100vw"  alt="The generated web chat UI, branded and populated with an example conversation" /></picture></p>
 <p>That's the real, unmodified generated page - this one branded with
@@ -342,11 +342,11 @@ at <code>#</code> in both quote styles, so the generator adds it back for you.</
 <p><code>title</code>, <code>subtitle</code>, <code>icon</code>, <code>welcome</code>, <code>placeholder</code> and <code>footer</code> are also available,
 plus a <code>themeFile</code> for anything the tokens don't cover.</p>
 <h2 id="securing-it"><a href="#securing-it" id="securing-it" name="securing-it" class="anchor"></a>Securing it</h2>
-<p><code>apiKeyEnvVar</code> is a simple, toggleable gate - not a full login system. Left unset,
-<code>&lt;path&gt;/api/*</code> is wide open (fine for local dev). Set it, and every request under
-<code>&lt;path&gt;/api/*</code> must carry a matching <code>X-API-Key</code> header. The static shell itself is
-deliberately <strong>not</strong> gated, since a browser's plain page navigation can't send a
-custom header.</p>
+<p><code>apiKeyEnvVar</code> is the agent API's shared secret - not a full login system. Left unset,
+the API is open (fine for local dev). Set it, and every call to <code>/__bxagents</code> must carry
+a matching <code>x-bxagents-token</code> header. The static shell itself is deliberately <strong>not</strong>
+gated, since a browser's plain page navigation can't send a custom header. For people
+with their own sign-in, list <code>users</code>.</p>
 <h2 id="try-it"><a href="#try-it" id="try-it" name="try-it" class="anchor"></a>Try it</h2>
 <pre><code class="language-bash">bxAgents build
 bxAgents serve --port=8080

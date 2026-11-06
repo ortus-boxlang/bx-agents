@@ -280,8 +280,8 @@ class {
 	}
 }
 </code></pre>
-<p>Esto genera un <code>&lt;path&gt;/index.html</code> estático (servido directamente, sin necesidad de ruta) más
-una API dedicada bajo <code>&lt;path&gt;/api</code>. La página es HTML/CSS/JS puro y sin dependencias,
+<p>Esto genera un <code>&lt;path&gt;/index.html</code> estático (servido directamente, sin necesidad de ruta) que
+llama a la API del agente en <code>/__bxagents</code>. La página es HTML/CSS/JS puro y sin dependencias,
 precompilado e incluido dentro del propio BxAgents - <code>bxAgents build</code> nunca ejecuta
 <code>npm install</code>, y un proyecto generado no necesita tener Node instalado en absoluto.</p>
 <p><picture><source type="image/webp" srcset="/es/assets/webui-chat-light-400w.af9728b6.webp 400w, /es/assets/webui-chat-light-800w.af9728b6.webp 800w, /es/assets/webui-chat-light-1200w.af9728b6.webp 1200w, /es/assets/webui-chat-light-1440w.af9728b6.webp 1440w" sizes="(min-width: 800px) 800px, 100vw"><img src="/es/assets/webui-chat-light.png" srcset="/es/assets/webui-chat-light-400w.af9728b6.png 400w, /es/assets/webui-chat-light-800w.af9728b6.png 800w, /es/assets/webui-chat-light-1200w.af9728b6.png 1200w" sizes="(min-width: 800px) 800px, 100vw"  alt="La UI web de chat generada, con marca propia y con una conversación de ejemplo" /></picture></p>
@@ -345,11 +345,12 @@ generador lo vuelve a añadir por ti.</p>
 <p>También están disponibles <code>title</code>, <code>subtitle</code>, <code>icon</code>, <code>welcome</code>, <code>placeholder</code> y <code>footer</code>,
 además de un <code>themeFile</code> para todo lo que los tokens no cubran.</p>
 <h2 id="protegerla"><a href="#protegerla" id="protegerla" name="protegerla" class="anchor"></a>Protegerla</h2>
-<p><code>apiKeyEnvVar</code> es una protección sencilla y conmutable - no un sistema de login completo. Si
-no se define, <code>&lt;path&gt;/api/*</code> queda completamente abierto (aceptable en desarrollo local). Si
-lo defines, cada petición bajo <code>&lt;path&gt;/api/*</code> debe llevar una cabecera <code>X-API-Key</code> que
-coincida. El armazón estático en sí <strong>no</strong> está protegido deliberadamente, ya que la
-navegación normal de una página en el navegador no puede enviar una cabecera personalizada.</p>
+<p><code>apiKeyEnvVar</code> es el secreto compartido de la API del agente - no un sistema de login completo. Si
+no se define, la API queda abierta (aceptable en desarrollo local). Si lo defines, cada
+llamada a <code>/__bxagents</code> debe llevar una cabecera <code>x-bxagents-token</code> que coincida. El armazón
+estático en sí <strong>no</strong> está protegido deliberadamente, ya que la navegación normal de una página
+en el navegador no puede enviar una cabecera personalizada. Para personas con su propio login,
+lista <code>users</code>.</p>
 <h2 id="pruébalo"><a href="#pruébalo" id="pruébalo" name="pruébalo" class="anchor"></a>Pruébalo</h2>
 <pre><code class="language-bash">bxAgents build
 bxAgents serve --port=8080
@@ -363,7 +364,7 @@ has ido añadiendo tools, skills y subagentes desde la <a href="/es/course/09-gi
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/course/15-the-generated-web-chat-ui.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/course/15-the-generated-web-chat-ui.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Nov 6, 2026, 2&#x3a;14&#x3a;50 AM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Lecci%C3%B3n%2015%3A%20La%20UI%20web%20de%20chat%20generada&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fcourse%2F15-the-generated-web-chat-ui%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/course/15-the-generated-web-chat-ui.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/course/15-the-generated-web-chat-ui.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Nov 6, 2026, 3&#x3a;17&#x3a;49 AM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Lecci%C3%B3n%2015%3A%20La%20UI%20web%20de%20chat%20generada&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fcourse%2F15-the-generated-web-chat-ui%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 

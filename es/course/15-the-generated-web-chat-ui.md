@@ -26,8 +26,8 @@ class {
 }
 ```
 
-Esto genera un `<path>/index.html` estático (servido directamente, sin necesidad de ruta) más
-una API dedicada bajo `<path>/api`. La página es HTML/CSS/JS puro y sin dependencias,
+Esto genera un `<path>/index.html` estático (servido directamente, sin necesidad de ruta) que
+llama a la API del agente en `/__bxagents`. La página es HTML/CSS/JS puro y sin dependencias,
 precompilado e incluido dentro del propio BxAgents - `bxAgents build` nunca ejecuta
 `npm install`, y un proyecto generado no necesita tener Node instalado en absoluto.
 
@@ -97,11 +97,12 @@ además de un `themeFile` para todo lo que los tokens no cubran.
 
 ## Protegerla
 
-`apiKeyEnvVar` es una protección sencilla y conmutable - no un sistema de login completo. Si
-no se define, `<path>/api/*` queda completamente abierto (aceptable en desarrollo local). Si
-lo defines, cada petición bajo `<path>/api/*` debe llevar una cabecera `X-API-Key` que
-coincida. El armazón estático en sí **no** está protegido deliberadamente, ya que la
-navegación normal de una página en el navegador no puede enviar una cabecera personalizada.
+`apiKeyEnvVar` es el secreto compartido de la API del agente - no un sistema de login completo. Si
+no se define, la API queda abierta (aceptable en desarrollo local). Si lo defines, cada
+llamada a `/__bxagents` debe llevar una cabecera `x-bxagents-token` que coincida. El armazón
+estático en sí **no** está protegido deliberadamente, ya que la navegación normal de una página
+en el navegador no puede enviar una cabecera personalizada. Para personas con su propio login,
+lista `users`.
 
 ## Pruébalo
 
