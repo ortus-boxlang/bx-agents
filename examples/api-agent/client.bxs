@@ -1,0 +1,45 @@
+/**
+ * Calls the agent from BoxLang with AgentApiClient: one turn, a streamed turn, the conversation list, and an access
+ * token made and revoked over the API.
+ *
+ * Start the agent first, in another terminal:
+ *
+ *     export TOKEN_FOR_ADMIN=change-me
+ *     bxAgents build && bxAgents serve
+ *
+ * then, from this folder:
+ *
+ *     export TOKEN_FOR_ADMIN=change-me
+ *     boxlang client.bxs
+ *
+ * AGENT_URL names another server (default http://127.0.0.1:8080).
+ */
+import bxModules.bxagents.models.api.AgentApiClient;
+
+url = getSystemSetting( "AGENT_URL", "http://127.0.0.1:8080" );
+client = new AgentApiClient(
+	url    = url,
+	token  = getSystemSetting( "TOKEN_FOR_ADMIN" ),
+	source = "api-agent-example"
+);
+
+println( "Server is up: " & client.health().status );
+println( "Calling as:   " & client.whoami().id );
+
+// 1. one whole turn
+first = client.invoke( "In one sentence, what can you do?" );
+println( "Answer:       " & first.output );
+
+// 2. a streamed turn in the same conversation, written as it arrives
+print( "Streamed:     " );
+client.stream( "Say it again, shorter.", ( text ) => print( text ), first.threadId );
+println( "" );
+
+// 3. what the server remembers of this caller
+println( "Conversations: " & client.sessions( 5 ).sessions.len() );
+
+// 4. an access token for another program, made over the API and given up again
+made = client.createToken( name = "example-script", scope = "chat", expires = "1d" );
+println( "New token:    " & made.token.left( 8 ) & "... (shown once, keep it somewhere safe)" );
+client.revokeToken( "example-script" );
+println( "Revoked it." );

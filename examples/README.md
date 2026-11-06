@@ -14,6 +14,7 @@ Real, buildable BxAgents projects, each demonstrating one feature area. Every ex
 | [`webui-agent/`](webui-agent) | The v1 web chat UI, via a `gateways/` entry with `exposes: "webui"`. |
 | [`advanced-agent/`](advanced-agent) | A composite example: a named model profile, `subagents/`, `tools/`, `skills/`, a hosted `mcp/` server, dual `gateways/` exposure, a `schedules/` task, and an `interceptors/` entry, all in one project. |
 | [`extensions-agent/`](extensions-agent) | Extensions of every shape under `extensions/`: commands, verbs, listeners, a gateway type, tools and skills an extension carries, a scheduler and web page assets. |
+| [`api-agent/`](api-agent) | An agent that programs call over its HTTP API: access tokens (managed over the API), a BoxLang client script, and the OpenAPI document. |
 
 ### Push-style chat-platform gateways
 
