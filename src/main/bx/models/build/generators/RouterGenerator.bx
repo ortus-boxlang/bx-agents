@@ -303,9 +303,9 @@ class {
 	private string function renderExposureRoute( required struct entry, required boolean gated ) {
 		// Normalized exactly as WebUiGenerator normalizes the same value when it
 		// mounts the chat shell, so the two generators can never disagree about
-		// where an entry lives: a path of "/chat/" mounts at <appDir>/chat with
-		// an API_BASE of "/chat/api", and without this the router would register
-		// "/chat//api/invoke" and every request from the shell would 404.
+		// where an entry lives: a path of "/chat/" mounts at <appDir>/chat, and
+		// without this the router would register "/chat//login" and every
+		// sign-in from the shell would 404.
 		var path = Strings::normalizePath( arguments.entry.config.path ?: "" )
 
 		if ( arguments.entry.config.exposes == "agent" ) {
@@ -314,20 +314,9 @@ class {
 		}
 
 		if ( arguments.entry.config.exposes == "webui" ) {
-			// The static chat shell itself (<path>/index.html) is a real file
-			// under the app's own webroot - see WebUiGenerator - so it's served
-			// directly, no route needed. Only the API needs routes, at a fixed
-			// "/api" suffix so they never collide with the shell's own files.
-			//
-			// Deliberately NOT toAi(): its actions forward body.options to the
-			// runnable verbatim, so a userId could only ever come from the caller.
-			// The web UI needs a SERVER-side identity - ColdBox's own
-			// getUserSessionIdentifier() - so that
-			// every memory the agent holds is scoped per visitor instead of shared.
-			// handlers/ChatUi.bx (see WebUiGenerator) supplies that while keeping
-			// toAi()'s exact route shape and SSE wire format.
-			var api = Strings::bxLiteral( path ) & "/api"
-
+			// The static chat shell itself (<path>/index.html) is a real file under the app's own webroot - see WebUiGenerator -
+			// so it is served directly. What it calls is the agent API at the reserved path (see ApiPath), the same one the
+			// terminal and the gateways use, so the only routes here are the extension files and the sign-in.
 			// Sign-in, only when this entry declares accounts. The form itself is
 			// the static login.html mounted beside the shell, so only its POST
 			// target and logout need routes.
@@ -341,41 +330,7 @@ class {
 
 			return [
 				// the files of an extension's web/ folder, read from the extension itself
-				'get( "#Strings::bxLiteral( path )#/ext/:extension/:file-regex:(.+)" ).toHandler( "ChatUi.extensionFile" )',
-				'post( "#api#/invoke" ).toHandler( "ChatUi.invoke" )',
-				'post( "#api#/stream" ).toHandler( "ChatUi.stream" )',
-				'post( "#api#/batch" ).toHandler( "ChatUi.batch" )',
-				'post( "#api#/cancel" ).toHandler( "ChatUi.cancel" )',
-				'post( "#api#/steer" ).toHandler( "ChatUi.steer" )',
-				'post( "#api#/clear" ).toHandler( "ChatUi.clear" )',
-				'post( "#api#/compact" ).toHandler( "ChatUi.compact" )',
-				'post( "#api#/resume" ).toHandler( "ChatUi.resume" )',
-				'post( "#api#/conversations/create" ).toHandler( "ChatUi.conversationCreate" )',
-				'post( "#api#/conversations/rename" ).toHandler( "ChatUi.conversationRename" )',
-				'post( "#api#/conversations/delete" ).toHandler( "ChatUi.conversationDelete" )',
-				// the specific note routes first: a pattern also matches what follows it
-				'post( "#api#/notes/add" ).toHandler( "ChatUi.noteAdd" )',
-				'post( "#api#/notes/update" ).toHandler( "ChatUi.noteUpdate" )',
-				'post( "#api#/notes/remove" ).toHandler( "ChatUi.noteRemove" )',
-				'get( "#api#/notes" ).toHandler( "ChatUi.notes" )',
-				'post( "#api#/preferences/set" ).toHandler( "ChatUi.preferenceSet" )',
-				'post( "#api#/preferences/delete" ).toHandler( "ChatUi.preferenceDelete" )',
-				'get( "#api#/pending" ).toHandler( "ChatUi.pending" )',
-				'get( "#api#/tools" ).toHandler( "ChatUi.tools" )',
-				'get( "#api#/history" ).toHandler( "ChatUi.history" )',
-				'get( "#api#/conversations" ).toHandler( "ChatUi.conversations" )',
-				'get( "#api#/preferences" ).toHandler( "ChatUi.preferences" )',
-				'get( "#api#/health" ).toHandler( "ChatUi.health" )',
-				'get( "#api#/profiles" ).toHandler( "ChatUi.profiles" )',
-				'get( "#api#/info" ).toHandler( "ChatUi.info" )',
-				'get( "#api#/context" ).toHandler( "ChatUi.context" )',
-				'get( "#api#/status" ).toHandler( "ChatUi.status" )',
-				'get( "#api#/slots" ).toHandler( "ChatUi.slots" )',
-				'get( "#api#/commands" ).toHandler( "ChatUi.commands" )',
-				'post( "#api#/command" ).toHandler( "ChatUi.command" )'
-			// renderRouterFile() indents the FIRST line of whatever comes back;
-			// the continuation lines have to carry that same two-tab body indent
-			// themselves or the generated Router.bx comes out ragged.
+				'get( "#Strings::bxLiteral( path )#/ext/:extension/:file-regex:(.+)" ).toHandler( "AgentApi.extensionFile" )'
 			].append( authRoutes, true ).toList( char( 10 ) & char( 9 ) & char( 9 ) )
 		}
 

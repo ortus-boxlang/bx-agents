@@ -182,6 +182,20 @@ class {
 	}
 
 	/**
+	 * A file of an extension's web/ folder, read from the extension itself: <page path>/ext/<extension>/<file>. The page links these,
+	 * so like the page's own files they are not behind the sign-in. Anything that is not a plain file inside that folder is a 404.
+	 */
+	function extensionFile( event, rc, prc ) {
+		var appDir = getCanonicalPath( getDirectoryFromPath( getCurrentTemplatePath() ) & ".." )
+		var file = new "models.extensions.ExtensionWebFiles@bxagents"( appDir ).find( rc.extension ?: "", rc.file ?: "" )
+		if ( !len( file ) ) {
+			event.renderData( type: "text", data: "Not found", statusCode: 404 )
+			return
+		}
+		event.sendFile( file: file, disposition: "inline" )
+	}
+
+	/**
 	 * Who the agent is, for a client's banner: name, a short model label and what it can do.
 	 */
 	function about( event, rc, prc ) {

@@ -737,6 +737,10 @@ class {
 			return
 		}
 
+		if ( ( agentApi.enabled ?: true ) === false && AgentApiConfig::hasWebUi( arguments.discovery ) ) {
+			arguments.errors.append( "Agent.bx's 'agentApi.enabled' is false, but a gateways/ entry exposes the web UI: the page is a client of the agent API and cannot run without it" )
+		}
+
 		var validKeys = [ "enabled", "access", "tokenEnvVar", "tokens", "profiles" ]
 		for ( var key in agentApi ) {
 			if ( !validKeys.contains( key ) ) {

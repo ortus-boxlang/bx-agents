@@ -1,0 +1,44 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "AgentApiConfig", function() {
+
+			beforeEach( function() {
+				variables.discoverer = new bxagents.models.build.ProjectDiscoverer();
+				variables.fixtures = expandPath( "/fixtures" );
+			} );
+
+			it( "leaves the block alone when no web UI entry exists", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+				var effective = bxagents.models.build.AgentApiConfig::effective( { access : "open" }, discovery );
+
+				expect( effective.access ).toBe( "open" );
+				expect( effective.webAccounts ).toBeFalse();
+				expect( bxagents.models.build.AgentApiConfig::hasWebUi( discovery ) ).toBeFalse();
+			} );
+
+			it( "takes the page's apiKeyEnvVar as the API's secret when the agent names none", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var effective = bxagents.models.build.AgentApiConfig::effective( {}, discovery );
+
+				expect( bxagents.models.build.AgentApiConfig::hasWebUi( discovery ) ).toBeTrue();
+				expect( effective.tokenEnvVar ).toBe( "CHAT_API_KEY" );
+			} );
+
+			it( "keeps the agent's own tokenEnvVar over the page's", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var effective = bxagents.models.build.AgentApiConfig::effective( { tokenEnvVar : "MY_TOKEN" }, discovery );
+
+				expect( effective.tokenEnvVar ).toBe( "MY_TOKEN" );
+			} );
+
+			it( "marks the API as having web accounts when the page lists users", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui-users" );
+
+				expect( bxagents.models.build.AgentApiConfig::effective( {}, discovery ).webAccounts ).toBeTrue();
+			} );
+
+		} );
+	}
+
+}

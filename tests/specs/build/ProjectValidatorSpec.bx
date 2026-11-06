@@ -146,6 +146,15 @@ class extends="testbox.system.BaseSpec" {
 					expect( result.errors.filter( e => e.findNoCase( "offer different 'profiles'" ) ) ).toHaveLength( 1 );
 				} );
 
+				it( "refuses a web UI entry while the agent API is off: the page is a client of it", function() {
+					var nl = char( 10 );
+					var off = profiledProject( "agentApi:" & nl & "  enabled: false" & nl, { chat : '{ exposes : "webui", path : "/chat" }' } );
+					var offNoPage = profiledProject( "agentApi:" & nl & "  enabled: false" & nl );
+
+					expect( off.errors.filter( e => e.findNoCase( "cannot run without it" ) ) ).toHaveLength( 1 );
+					expect( offNoPage.errors ).toBeEmpty();
+				} );
+
 				it( "checks agentApi.access against what is set for tokens", function() {
 					var nl = char( 10 );
 					var ok = profiledProject( "agentApi:" & nl & "  access: token" & nl & "  tokens: true" & nl );

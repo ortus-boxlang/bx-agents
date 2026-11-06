@@ -191,7 +191,7 @@ class {
 
 		arguments.onProgress( "+ Generating the web chat UI (if any gateways/* entry exposes it)..." )
 		var webUiResult = variables.webUiGenerator.generate( discovery, appDir, config )
-		arguments.onProgress( "    webui=#( webUiResult.hasWebUi ? 'yes' : 'no' )#, apiKeyGate=#( len( webUiResult.webUiAuthInterceptorName ?: '' ) ? 'yes' : 'no' )#, signIn=#( webUiResult.webUiHasUsers ?: false ? 'yes' : 'no' )#, database=#( webUiResult.webUiDatabase.datasource ?: '-' )#" )
+		arguments.onProgress( "    webui=#( webUiResult.hasWebUi ? 'yes' : 'no' )#, signIn=#( webUiResult.webUiHasUsers ?: false ? 'yes' : 'no' )#, database=#( webUiResult.webUiDatabase.datasource ?: '-' )#" )
 
 		var toolScanStatements = []
 		if ( discovery.tools.len() ) {
@@ -210,13 +210,10 @@ class {
 		// real boot on this stack (confirmed directly - the same
 		// getPropertyMixin()-based config reflection gap already documented for
 		// `coldbox.identifierProvider`, generalized), so both the web UI's own
-		// login/API-key gates and any project-declared interceptor were dead
+		// login gate and any project-declared interceptor were dead
 		// code.
 		var agentInterceptorNames = interceptorSplit.agent.map( function( e ) { return e.name } )
 		var projectInterceptorNames = agentInterceptorNames.duplicate()
-		if ( len( webUiResult.webUiAuthInterceptorName ?: "" ) ) {
-			agentInterceptorNames.append( webUiResult.webUiAuthInterceptorName )
-		}
 		// Requires a signed-in user. Registered last so the store exists and the
 		// accounts are seeded before anything can be gated against them.
 		if ( len( webUiResult.webUiLoginGateName ?: "" ) ) {
