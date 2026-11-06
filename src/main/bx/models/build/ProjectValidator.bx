@@ -9,7 +9,9 @@
 import bxModules.bxagents.models.util.EntryConfigReader;
 
 import bxModules.bxagents.models.api.AccessMode;
-import bxModules.bxagents.models.build.WebAccounts;
+import bxModules.bxagents.models.build.AgentApiConfig;
+
+import bxModules.bxagents.models.api.ApiPath;
 
 class {
 
@@ -365,15 +367,6 @@ class {
 	// Gateways (two entry kinds - see M8 design notes)
 	// --------------------------------------------------------------------------
 
-	static {
-		/**
-		 * The URI prefix reserved for this module's own always-on agent route.
-		 * RouterGenerator.RESERVED_AGENT_PATH is the source of truth - statics
-		 * are per-class in BoxLang, so the value is duplicated here rather than
-		 * shared. Keep the two in step.
-		 */
-		RESERVED_AGENT_PATH = "/__bxagents"
-	}
 
 	/**
 	 * Validates both `gateways/*` entry kinds: exposure entries (`exposes:
@@ -539,8 +532,8 @@ class {
 		// an exposure claiming the same mount would be silently shadowed - it
 		// would look declared and never answer.
 		var normalized = normalizeExposurePath( arguments.path )
-		if ( normalized == static.RESERVED_AGENT_PATH || normalized.startsWith( static.RESERVED_AGENT_PATH & "/" ) ) {
-			arguments.errors.append( "Gateway [#arguments.gatewayName#] has a 'path' [#arguments.path#] under [#static.RESERVED_AGENT_PATH#], which BX Agents reserves for its own always-on agent route - pick a path outside it" )
+		if ( normalized == ApiPath::reserved() || normalized.startsWith( ApiPath::reserved() & "/" ) ) {
+			arguments.errors.append( "Gateway [#arguments.gatewayName#] has a 'path' [#arguments.path#] under [#ApiPath::reserved()#], which BX Agents reserves for its own always-on agent route - pick a path outside it" )
 			return false
 		}
 
@@ -759,7 +752,7 @@ class {
 			arguments.errors.append( "Agent.bx's 'agentApi.tokens' must be a boolean" )
 		}
 
-		arguments.errors.append( AccessMode::problems( WebAccounts::effective( agentApi, arguments.discovery ) ), true )
+		arguments.errors.append( AccessMode::problems( AgentApiConfig::effective( agentApi, arguments.discovery ) ), true )
 
 		validateOfferedProfiles( "Agent.bx's 'agentApi'", agentApi, ( arguments.resolvedConfig.profiles ?: {} ).keyArray(), arguments.errors )
 

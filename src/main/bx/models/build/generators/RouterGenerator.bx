@@ -28,20 +28,9 @@ import bxModules.bxagents.models.util.Strings;
 import bxModules.bxagents.models.util.EntryConfigReader;
 import bxModules.bxagents.models.api.AccessMode;
 
-class {
+import bxModules.bxagents.models.api.ApiPath;
 
-	/**
-	 * The reserved base path the always-on agent route mounts at - see
-	 * renderReservedAgentRoute(). `toAi()` appends its own four sub-routes to
-	 * it (`/invoke`, `/stream`, `/batch`, `/info`).
-	 *
-	 * The `__` prefix is what makes it reserved: ProjectValidator rejects any
-	 * `gateways/*` entry whose own path falls under it, so a user's public API
-	 * and this module's tooling channel can never collide.
-	 */
-	static {
-		RESERVED_AGENT_PATH = "/__bxagents"
-	}
+class {
 
 	/**
 	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .gateways is used)
@@ -220,7 +209,7 @@ class {
 			"// so this module's own tooling (chat --server, invoke --server) always has",
 			"// an address. A project's own public API belongs in gateways/ instead."
 		]
-		lines.append( turnRoutes( static.RESERVED_AGENT_PATH, gated ), true )
+		lines.append( turnRoutes( ApiPath::reserved(), gated ), true )
 		lines.append( "" )
 		lines.append( renderRunControlRoutes( gated ), true )
 		return lines
@@ -235,7 +224,7 @@ class {
 	 * @return The route statement lines
 	 */
 	private array function renderRunControlRoutes( required boolean gated ) {
-		var base = static.RESERVED_AGENT_PATH
+		var base = ApiPath::reserved()
 		var g = arguments.gated
 		return [
 			"// Run control - the same path, served by handlers/AgentApi.bx",

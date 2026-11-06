@@ -19,18 +19,9 @@
  * so neither verb has to hunt for a user-declared `exposes: "agent"` entry, or
  * refuse to run when the project has none.
  */
-class {
+import bxModules.bxagents.models.api.ApiPath;
 
-	/**
-	 * The reserved base path the generated router always mounts the agent at.
-	 *
-	 * RouterGenerator.RESERVED_AGENT_PATH is the source of truth - statics are
-	 * per-class in BoxLang, so the value is duplicated here rather than shared.
-	 * Keep the two in step.
-	 */
-	static {
-		RESERVED_AGENT_PATH = "/__bxagents"
-	}
+class {
 
 	function init() {
 		variables.token = ""
@@ -57,7 +48,7 @@ class {
 	 * @return The full URL of that sub-route on the reserved agent path
 	 */
 	string function agentUrl( required string baseUrl, string subRoute = "invoke" ) {
-		return arguments.baseUrl.reReplace( "[\/]+$", "" ) & static.RESERVED_AGENT_PATH & "/" & arguments.subRoute
+		return arguments.baseUrl.reReplace( "[\/]+$", "" ) & ApiPath::reserved() & "/" & arguments.subRoute
 	}
 
 	/**

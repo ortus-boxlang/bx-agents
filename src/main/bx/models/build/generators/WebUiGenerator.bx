@@ -29,6 +29,8 @@ import bxModules.bxagents.models.util.Strings;
 
 import bxModules.bxagents.models.util.EntryConfigReader;
 
+import bxModules.bxagents.models.api.ApiPath;
+
 class {
 
 	/**
@@ -237,7 +239,7 @@ class {
 		var showReasoning = isNull( config.showReasoning ?: javacast( "null", "" ) ) ? true : !!config.showReasoning
 		var showTools = isNull( config.showToolCalls ?: javacast( "null", "" ) ) ? true : !!config.showToolCalls
 
-		html = html.replace( "__API_BASE__", path & "/api", "all" )
+		html = html.replace( "__API_BASE__", ApiPath::reserved(), "all" )
 		html = html.replace( "__APP_TITLE__", escapeHtml( title ), "all" )
 		html = html.replace( "__PLACEHOLDER__", escapeHtml( placeholder ), "all" )
 		html = html.replace( "__FAVICON__", renderFavicon( icon ), "all" )
@@ -1716,7 +1718,7 @@ class {
 			var basePath   = renderLiteral( base )
 			var loginPath  = renderLiteral( base & "/login" )
 			var logoutPath = renderLiteral( base & "/logout" )
-			var apiPath    = renderLiteral( base & "/api" )
+			var apiRoute   = renderLiteral( base & "/api" )
 			var healthPath = renderLiteral( base & "/api/health" )
 
 			lines.append( "" )
@@ -1729,7 +1731,7 @@ class {
 			lines.append( "				return" )
 			lines.append( "			}" )
 			lines.append( "			if ( !auth.isLoggedIn() ) {" )
-			lines.append( "				if ( path.startsWith( #apiPath# ) ) {" )
+			lines.append( "				if ( path.startsWith( #apiRoute# ) ) {" )
 			lines.append( "					event" )
 			lines.append( "						.renderData(" )
 			lines.append( '							type       = "json",' )

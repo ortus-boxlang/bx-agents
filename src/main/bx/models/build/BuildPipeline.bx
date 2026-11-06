@@ -15,7 +15,7 @@
  */
 import bxModules.bxagents.models.util.Strings;
 
-import bxModules.bxagents.models.build.WebAccounts;
+import bxModules.bxagents.models.build.AgentApiConfig;
 
 class {
 
@@ -180,7 +180,7 @@ class {
 		arguments.onProgress( "    #mcpResult.registrations.len()# registration(s)" )
 
 		// the agent API as the build sees it: a web page with accounts closes it (see models.api.AccessMode)
-		var effectiveAgentApi = WebAccounts::effective( config.agentApi ?: {}, discovery )
+		var effectiveAgentApi = AgentApiConfig::effective( config.agentApi ?: {}, discovery )
 
 		arguments.onProgress( "+ Generating config/Router.bx..." )
 		variables.routerGenerator.generate( discovery, appDir, gatewayResult.hasChannelGateway ?: false, gatewayResult.hasWhatsAppCloudGateway ?: false, gatewayResult.hasTeamsGateway ?: false, gatewayResult.hasTwilioGateway ?: false, gatewayResult.hasGitHubGateway ?: false, effectiveAgentApi )
@@ -231,8 +231,7 @@ class {
 		// Issued tokens live in the shared chat database. Without a web UI there is no store yet, so the
 		// app gets the default one, migrated at start.
 		var chatDatabase = webUiResult.webUiDatabase ?: {}
-		var agentApiConfig = effectiveAgentApi
-		var needsTokenStore = ( agentApiConfig.tokens ?: false ) && ( agentApiConfig.enabled ?: true )
+		var needsTokenStore = ( effectiveAgentApi.tokens ?: false ) && ( effectiveAgentApi.enabled ?: true )
 		if ( needsTokenStore && chatDatabase.isEmpty() ) {
 			chatDatabase = { datasource : "bxagents", path : "./data/chat.db" }
 		}
