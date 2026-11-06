@@ -25,7 +25,7 @@ class {
 	 * @return The entries ready for bx-ai's withMCPServers()
 	 */
 	array function resolve( required array servers, string label = "mcpServers" ) {
-		var resolved = variables.placeholders.resolvePlaceholders( arguments.servers, arguments.label )
+		var resolved = arguments.servers.map( entry => variables.placeholders.resolvePlaceholders( entry, label, { host : hostOf( entry ) } ) )
 		var executables = []
 		for ( var entry in resolved ) {
 			if ( !isStruct( entry ) ) {
@@ -41,6 +41,20 @@ class {
 		}
 		allowCommands( executables )
 		return resolved
+	}
+
+	/**
+	 * @entry One mcpServers entry
+	 *
+	 * @return The host its URL points to, or blank for a program (stdio) or a bare string that is not a URL
+	 */
+	private string function hostOf( required any entry ) {
+		var url = isStruct( arguments.entry ) ? ( arguments.entry.url ?: "" ) : ( isSimpleValue( arguments.entry ) ? arguments.entry : "" )
+		try {
+			return len( url ) ? lCase( createObject( "java", "java.net.URI" ).create( url ).getHost() ?: "" ) : ""
+		} catch ( any e ) {
+			return ""
+		}
 	}
 
 	/**

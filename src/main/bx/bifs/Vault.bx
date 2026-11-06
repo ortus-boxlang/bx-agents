@@ -1,0 +1,29 @@
+/**
+ * `vault( "NAME" )` for a tool's code: the value of a secret from the agent's vault.
+ *
+ * ```javascript
+ * @AITool( "Reads the newest mail." )
+ * function inbox() {
+ *     var token = vault( "GMAIL_TOKEN", arguments, "gmail.googleapis.com" )
+ *     // ... call the API with it. Never return the token to the model.
+ * }
+ * ```
+ *
+ * Pass the tool's own `arguments` (it carries the run) so the person's own secret is found before the agent's.
+ * Without it only the agent's secrets are found. Pass the host the value is about to be sent to, so a secret that
+ * names its hosts is refused anywhere else.
+ */
+@BoxBIF( "vault" )
+class {
+
+	/**
+	 * @name The secret's name
+	 * @context The tool's `arguments` struct, or a chat request. Blank for the agent's secrets only
+	 * @host The host the value will be sent to
+	 */
+	function invoke( required string name, any context = "", string host = "" ) {
+		var wiring = new "models.vault.VaultWiring@bxagents"()
+		return wiring.service().resolve( arguments.name, { user : wiring.userOf( arguments.context ), host : arguments.host, via : "tool" } )
+	}
+
+}
