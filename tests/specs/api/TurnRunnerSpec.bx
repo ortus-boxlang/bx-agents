@@ -1,0 +1,172 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "api.TurnRunner", function() {
+
+			beforeEach( function() {
+				variables.agent = new FakeAgent();
+				variables.caller = new bxagents.models.api.Caller( id = "ada", source = "web" );
+				variables.frames = [];
+				variables.collect = function( name, data ) { frames.append( { name : name, data : data } ); };
+			} );
+
+			function runner( any offered ) {
+				var dir = createTempDirectory( prefix = "bxagents-turns-" );
+				variables.sessions = new bxagents.models.store.SessionStore( bxagents.models.store.ChatStore::forFile( dir & "/chat.db" ) );
+				return new bxagents.models.api.TurnRunner( agent, sessions, arguments.offered ?: nullValue() );
+			}
+
+			function names() {
+				return frames.map( ( f ) => f.name );
+			}
+
+			it( "sends thread, then each chunk, then done", function() {
+				var outcome = runner().stream( caller, { input : "hi" }, collect );
+
+				expect( outcome.succeeded() ).toBeTrue();
+				expect( names() ).toBe( [ "thread", "chunk", "chunk", "done" ] );
+				expect( frames[ 1 ].data.threadId ).toBe( outcome.data().threadId );
+				expect( frames[ 4 ].data ).toBe( "[DONE]" );
+			} );
+
+			it( "hands the agent the caller, the thread and the conversation", function() {
+				runner().stream( caller, { input : "hi", threadId : "t-1", conversationId : "c-1" }, collect );
+
+				expect( agent.seen().options.userId ).toBe( "ada" );
+				expect( agent.seen().options.threadId ).toBe( "t-1" );
+				expect( agent.seen().options.conversationId ).toBe( "c-1" );
+			} );
+
+			it( "notes the turn in the conversation list under the caller and where it came from", function() {
+				var r = runner();
+				r.stream( caller, { input : "where is my order", conversationId : "c-1" }, collect );
+
+				var row = sessions.byId( "ada", "c-1" );
+				expect( row.title ).toBe( "where is my order" );
+				expect( row.source ).toBe( "web" );
+			} );
+
+			it( "notes nothing when there is no conversation id or the turn is refused", function() {
+				var r = runner();
+				r.stream( caller, { input : "hi" }, collect );
+				r.stream( caller, { input : "hi", conversationId : "c-2", options : { profile : "pricey" } }, collect );
+
+				expect( sessions.list( "ada" ) ).toHaveLength( 0 );
+			} );
+
+			it( "refuses a profile that is not offered, before anything is sent", function() {
+				var outcome = runner().stream( caller, { input : "hi", options : { profile : "pricey" } }, collect );
+
+				expect( outcome.succeeded() ).toBeFalse();
+				expect( outcome.code() ).toBe( "bad_profile" );
+				expect( frames ).toHaveLength( 0 );
+			} );
+
+			it( "lets an offered profile through", function() {
+				var offered = new bxagents.models.runtime.OfferedProfiles( [ "fast" ] );
+				var outcome = runner( offered ).stream( caller, { input : "hi", options : { profile : "fast" } }, collect );
+
+				expect( outcome.succeeded() ).toBeTrue();
+				expect( agent.seen().options.profile ).toBe( "fast" );
+			} );
+
+			it( "sends a tool frame when a call starts and again when it finishes, and ignores other runs", function() {
+				agent.withToolCalls( [ { name : "now", args : { zone : "UTC", _chatRequest : "plumbing" } } ] );
+				runner().stream( caller, { input : "hi", threadId : "t-9" }, collect );
+
+				var tools = frames.filter( ( f ) => f.name == "tool" );
+				expect( tools ).toHaveLength( 2 );
+				expect( tools[ 1 ].data.status ).toBe( "running" );
+				expect( tools[ 2 ].data.status ).toBe( "ok" );
+				expect( tools[ 2 ].data.id ).toBe( tools[ 1 ].data.id );
+				expect( tools[ 1 ].data.arguments ).toBe( { zone : "UTC" } );
+				expect( tools[ 2 ].data.ms ).toBe( 7 );
+			} );
+
+			it( "pairs finished calls with started ones in the order they started", function() {
+				agent.withToolCalls( [ { name : "now" }, { name : "now" } ] );
+				runner().stream( caller, { input : "hi" }, collect );
+
+				var tools = frames.filter( ( f ) => f.name == "tool" );
+				expect( tools.map( ( f ) => f.data.status & ":" & f.data.id ) ).toBe(
+					[ "running:now##1", "ok:now##1", "running:now##2", "ok:now##2" ]
+				);
+			} );
+
+			it( "says suspended, with what is waiting, when a run stops for a human", function() {
+				agent.suspending();
+				runner().stream( caller, { input : "hi" }, collect );
+
+				var stopped = frames.filter( ( f ) => f.name == "suspended" );
+				expect( stopped ).toHaveLength( 1 );
+				expect( stopped[ 1 ].data.pendingActions[ 1 ].toolName ).toBe( "delete" );
+			} );
+
+			it( "sends an error frame, and no done, when the model fails", function() {
+				agent.failing();
+				runner().stream( caller, { input : "hi" }, collect );
+
+				expect( names() ).toBe( [ "thread", "error" ] );
+				expect( frames[ 2 ].data.message ).toBe( "model failed" );
+			} );
+
+			it( "stops sending once the client has gone", function() {
+				var gone = { value : false };
+				var seenFrames = [];
+				runner().stream( caller, { input : "hi" }, function( name, data ) { seenFrames.append( name ); gone.value = ( name == "thread" ); }, function() { return !gone.value; } );
+
+				expect( seenFrames ).toBe( [ "thread" ] );
+			} );
+
+			it( "runs a whole turn and answers with the output and the thread", function() {
+				var outcome = runner().run( caller, { input : "hi" } );
+
+				expect( outcome.data().output ).toBe( "answer to hi" );
+				expect( len( outcome.data().threadId ) ).toBeGT( 0 );
+			} );
+
+			it( "runs a batch, one thread for all", function() {
+				var outcome = runner().batch( caller, { inputs : [ "a", "b" ] } );
+
+				expect( outcome.data().outputs.map( ( o ) => o.output ) ).toBe( [ "answer to a", "answer to b" ] );
+				expect( runner().batch( caller, { inputs : [] } ).code() ).toBe( "bad_request" );
+			} );
+
+			it( "refuses to resume a run another caller started, and resumes one that is its own", function() {
+				agent.withState( { options : { userId : "bob" }, suspendData : { pendingActions : [] } } );
+				var r = runner();
+				var refused = r.resume( caller, "t-1", { decision : "approve" }, collect );
+				expect( refused.code() ).toBe( "not_your_run" );
+
+				agent.withState( { options : { userId : "ada" }, suspendData : { pendingActions : [] } } );
+				var allowed = r.resume( caller, "t-1", { decision : "approve" }, collect );
+				expect( allowed.succeeded() ).toBeTrue();
+				expect( agent.seen().decidedBy ).toBe( "ada" );
+				expect( names() ).toBe( [ "thread", "chunk", "done" ] );
+			} );
+
+			it( "needs a thread and a decision to resume", function() {
+				expect( runner().resume( caller, "", { decision : "approve" }, collect ).code() ).toBe( "bad_request" );
+				expect( runner().resume( caller, "t-1", {}, collect ).code() ).toBe( "bad_request" );
+			} );
+
+			it( "says nothing is pending to anyone but the owner, so a thread id cannot be probed", function() {
+				agent.withState( { options : { userId : "bob" }, suspendData : { pendingActions : [ { toolName : "x" } ] } } );
+
+				expect( runner().pending( caller, "t-1" ).data().pending ).toBeFalse();
+				expect( runner().pending( new bxagents.models.api.Caller( id = "bob" ), "t-1" ).data().pending ).toBeTrue();
+			} );
+
+			it( "cancels and steers by thread", function() {
+				var r = runner();
+
+				expect( r.cancel( caller, "t-1" ).data().cancelled ).toBeTrue();
+				expect( agent.cancelled() ).toBe( [ "t-1" ] );
+				expect( r.steer( caller, "t-1", "also this" ).data().steered ).toBeTrue();
+				expect( r.cancel( caller, "" ).code() ).toBe( "bad_request" );
+			} );
+
+		} );
+	}
+
+}
