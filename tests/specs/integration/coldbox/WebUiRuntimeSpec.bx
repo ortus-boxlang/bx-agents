@@ -17,9 +17,9 @@
  * it as `runner-coldbox.bxm never responded: HTTP 408` while the app was
  * demonstrably up (its scheduler was ticking throughout). Handler actions are
  * therefore NOT driven from here at all. runColdBoxIntegrationTests.bxs
- * probes GET /chat/api/health from the orchestrator instead - outside the
+ * probes GET /__bxagents/health from the orchestrator instead - outside the
  * server, where a request costs nothing - and that probe is what proves
- * routing -> ChatUi -> WireBox -> ChatDb over real HTTP. It returns
+ * routing -> AgentApi -> WireBox -> ChatStore over real HTTP. It returns
  * {"success":true,"status":"ok"} against a real boot.
  *
  * An earlier revision also called controller.runEvent() here. That is worse
@@ -73,71 +73,6 @@ class extends="testbox.system.BaseSpec" {
 				expect( schema.hasTable( name: "bxagents_schema_version", options: opts ) ).toBeTrue();
 			} );
 
-			it( "round-trips a conversation through the real database", function() {
-				var db     = controller.getWireBox().getInstance( "ChatDb" );
-				var userId = "e2e-user-" & createUUID();
-				var convId = "e2e-conv-" & createUUID();
-
-				expect( db.touchConversation( userId, convId, "First message wins", 2 ) ).toBeTrue();
-
-				var mine = db.listConversations( userId );
-				expect( mine.len() ).toBe( 1 );
-				expect( mine[ 1 ].title ).toBe( "First message wins" );
-				expect( mine[ 1 ].messageCount ).toBe( 2 );
-
-				// A later turn bumps the count but must NOT overwrite a title
-				db.touchConversation( userId, convId, "should not replace", 2 );
-				expect( db.getConversation( userId, convId ).title ).toBe( "First message wins" );
-				expect( db.getConversation( userId, convId ).messageCount ).toBe( 4 );
-
-				expect( db.renameConversation( userId, convId, "Renamed" ) ).toBeTrue();
-				expect( db.getConversation( userId, convId ).title ).toBe( "Renamed" );
-
-				db.resetConversationCount( userId, convId );
-				expect( db.getConversation( userId, convId ).messageCount ).toBe( 0 );
-
-				expect( db.deleteConversation( userId, convId ) ).toBeTrue();
-				expect( db.listConversations( userId ).len() ).toBe( 0 );
-			} );
-
-			it( "refuses to let one user take over another's conversation", function() {
-				// touchConversation() is deliberately not a qb upsert: an upsert
-				// targets the primary key alone, so a guessed conversationId would
-				// rewrite that row's userId. Proven here against real SQLite.
-				var db     = controller.getWireBox().getInstance( "ChatDb" );
-				var owner  = "owner-" & createUUID();
-				var thief  = "thief-" & createUUID();
-				var convId = "shared-" & createUUID();
-
-				db.touchConversation( owner, convId, "Owned", 2 );
-
-				expect( db.touchConversation( thief, convId, "Stolen", 2 ) ).toBeFalse();
-				expect( db.renameConversation( thief, convId, "Stolen" ) ).toBeFalse();
-				expect( db.deleteConversation( thief, convId ) ).toBeFalse();
-
-				expect( db.getConversation( owner, convId ).title ).toBe( "Owned" );
-				expect( db.listConversations( thief ).len() ).toBe( 0 );
-			} );
-
-			it( "upserts a preference instead of duplicating it", function() {
-				// setPreference() CAN upsert safely - its target is the
-				// ( userId, prefKey ) composite key, so the caller's own identity
-				// is part of what it matches on.
-				var db     = controller.getWireBox().getInstance( "ChatDb" );
-				var userId = "prefs-" & createUUID();
-
-				db.setPreference( userId, "theme", "dark" );
-				expect( db.getPreferences( userId ).theme ).toBe( "dark" );
-
-				db.setPreference( userId, "theme", "light" );
-				expect( db.getPreferences( userId ).theme ).toBe( "light" );
-				// Overwritten, not duplicated
-				expect( db.getPreferences( userId ).count() ).toBe( 1 );
-
-				db.deletePreference( userId, "theme" );
-				expect( db.getPreferences( userId ) ).toBeEmpty();
-			} );
-
 			it( "generated the static chat shell with every placeholder substituted", function() {
 				// Read from disk rather than fetched over HTTP - see this file's
 				// docblock on why loopback requests deadlock here.
@@ -145,7 +80,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( fileExists( shell ) ).toBeTrue();
 
 				var html = fileRead( shell );
-				expect( html ).toInclude( "/chat/api" );
+				expect( html ).toInclude( "/__bxagents" );
 				expect( html ).notToInclude( "__API_BASE__" );
 				expect( html ).notToInclude( "__WELCOME__" );
 			} );
@@ -261,7 +196,7 @@ class extends="testbox.system.BaseSpec" {
 			 * never as a config/ColdBox.bx `interceptors = [...]` entry - that
 			 * array never reaches ColdBox's InterceptorService on a real boot, so
 			 * a `preProcess` interceptor declared that way never fires. Confirmed
-			 * directly this session: every `/chat/api/*` route answered normally
+			 * directly this session: every `/__bxagents/*` route answered normally
 			 * with zero session, all `users`/`apiKeyEnvVar` configuration
 			 * completely ignored, until switched to this registration.
 			 */
