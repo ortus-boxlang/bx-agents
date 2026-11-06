@@ -25,7 +25,7 @@ class {
 }
 ```
 
-Eso genera un `<path>/index.html` estático (servido directamente - no se necesita ruta) más una API dedicada bajo `<path>/api`, respaldada por un `handlers/ChatUi.bx` y `models/ChatDb.bx` generados.
+Eso genera un `<path>/index.html` estático (servido directamente - no se necesita ruta) La página es cliente de la [API del agente](agent-bx.md#la-ruta-de-agente-siempre-activa) en `/__bxagents`, la misma que usan el chat de terminal y los gateways, así que no hay una segunda API bajo `<path>`. La API del agente debe seguir activa (`agentApi.enabled: false` con una entrada `webui` es un error de build).
 
 ![La interfaz web de chat generada: una barra lateral de conversaciones, un transcript de varios turnos, y un encabezado/compositor con marca](../assets/webui-chat-light.png)
 
@@ -35,7 +35,7 @@ La interfaz es HTML/CSS/JS vainilla sin dependencias - sin Bootstrap, AlpineJS n
 
 Esa restricción es sobre el build, no sobre el alcance. La página es un cliente completo: barra lateral de conversación, streaming con razonamiento y llamadas de tool, aprobaciones, compactación, temática del lado del servidor. Lo que realmente todavía falta se lista bajo [What is not here yet](#what-is-not-here-yet).
 
-La página habla con su propia ruta `<path>/api` generada vía `POST <path>/api/stream` (`Accept: text/event-stream`), usando `fetch()` + un lector manual de `ReadableStream` - no el `EventSource` del navegador, que no puede hacer `POST` ni configurar cabeceras personalizadas, ambas necesarias aquí.
+La página habla con la API del agente en `/__bxagents` vía `POST /__bxagents/stream` (`Accept: text/event-stream`), usando `fetch()` + un lector manual de `ReadableStream` - no el `EventSource` del navegador, que no puede hacer `POST` ni configurar cabeceras personalizadas, ambas necesarias aquí.
 
 !!! warning
     **`toAi()` reenvía cada chunk de bx-ai textualmente - no lo envuelve.** La [documentación de AI Routing](https://coldbox.ortusbooks.com/the-basics/routing/routing-dsl/ai-routing) de ColdBox muestra el stream como líneas `data: {"token":"..."}`, pero su propio código fuente (`Router.cfc`, la subruta de stream de `toAi()`) hace `emitter.send( chunk, "chunk" )` - así que cada frame lleva el **envelope normalizado completo de bx-ai**:
@@ -75,11 +75,11 @@ Un minuto y medio por toda la página: inicio de sesión, streaming, el selector
 sequenceDiagram
     autonumber
     participant B as navegador (index.html generado)
-    participant H as handlers/ChatUi.bx
+    participant H as handlers/AgentApi.bx
     participant A as el agente
-    participant D as models/ChatDb.bx (SQLite)
+    participant D as el almacén compartido (SQLite)
 
-    B->>H: POST /chat/api/stream, Accept: text/event-stream
+    B->>H: POST /__bxagents/stream, Accept: text/event-stream
     H->>D: resuelve la conversación para esta sesión
     H->>A: agent.stream( ... )
     H-->>B: event: thread - el threadId, enviado ANTES del primer chunk
@@ -93,42 +93,19 @@ sequenceDiagram
 
 El evento `thread` va primero porque una cabecera de respuesta no puede leerse antes de que el cuerpo empiece a llegar, y la página necesita ese `threadId` para poder hacer `POST /cancel` a mitad de turno.
 
-## La API generada
+## La API que llama la página
 
-Una entrada `webui` monta veinticinco acciones bajo `<path>/api`, servidas por un `handlers/ChatUi.bx` generado:
+La página no tiene una API propia. Todo lo que hace pasa por las rutas de la API del agente, documentadas en [La ruta del agente siempre activa](agent-bx.md#la-ruta-de-agente-siempre-activa): turnos (`/stream`, `/cancel`, `/steer`, `/resume`, `/pending`), conversaciones (`/sessions`, `/history`, `/clear`, `/compact`, `/export`), `/preferences`, `/notes`, `/commands` y `/command`, y las rutas de capacidades (`/agent`, `/context`, `/status`, `/slots`, `/profiles`, `/tools`). Todo lo que la página puede hacer, un script puede hacerlo con las mismas llamadas.
 
-| Ruta | Propósito |
+Cada llamada lleva tres cabeceras:
+
+| Cabecera | Para qué |
 | --- | --- |
-| `POST /invoke` | Un turno síncrono |
-| `POST /stream` | Turno SSE (lo que usa la página) |
-| `POST /batch` | Ejecuta un array `inputs[]` |
-| `POST /cancel` | Detiene una ejecución en curso - `{ threadId, reason? }` |
-| `POST /steer` | Empalma un mensaje en un turno en ejecución - `{ threadId, input }` |
-| `POST /clear` | Limpia la conversación de este visitante |
-| `POST /compact` | Resume los mensajes más antiguos de este visitante, mantiene los recientes - `{ keepRecent }` opcional |
-| `GET /history` | Los mensajes almacenados de este visitante, para rehidratar el transcript |
-| `POST /resume` | Responde una aprobación pendiente y transmite la continuación - `{ threadId, decision, editedData?, reason? }` |
-| `GET /pending` | Qué está esperando una ejecución suspendida - `?threadId=` |
-| `GET /tools` | Las tools registradas del agente |
-| `GET /health` | Vitalidad |
-| `GET /info` | Nombre del agente, modelo, conteos de memoria/tool, flags de capacidad |
-| `GET /commands` | Los [comandos con barra](#comandos-con-barra) que ofrece la página, `[ { name, hint } ]` |
-| `GET /context` | Qué hay en el contexto de este visitante para una conversación (`?conversationId=`): `{ parts : [ { key, label, tokens, detail } ], tools : [ { name, tokens } ], total, contextWindow, percent }`. Estimaciones a partir del prompt del sistema, las definiciones de herramientas, las notas y los mensajes; no se llama a ningún modelo |
-| `POST /command` | Ejecuta uno para este visitante: `{ line : "/info", conversationId? }`, responde con la respuesta como datos |
-| `GET /profiles` | Los [perfiles](models.md#perfiles) que ofrece la entrada, `[]` si no lista ninguno. Ver [Elegir el modelo](#elegir-el-modelo) |
-| `GET /conversations` | Las conversaciones de este visitante, actividad más reciente primero |
-| `POST /conversations/create` | Inicia una - `{ title }` opcional, devuelve el `conversationId` acuñado |
-| `POST /conversations/rename` | `{ conversationId, title }` |
-| `POST /conversations/delete` | `{ conversationId }` - elimina la fila **y** los mensajes del agente para ella |
-| `GET /preferences` | Las preferencias almacenadas de este visitante, como `{ key: value }` |
-| `POST /preferences/set` | `{ key, value }` |
-| `POST /preferences/delete` | `{ key }` |
-| `GET /notes` | Las notas del visitante y las del agente, con cuánto llena cada una. `404` si el agente no tiene bloque [`notes`](agent-yaml.md#notas) |
-| `POST /notes/add` | `{ scope: "user" \| "agent", text }` |
-| `POST /notes/update` | `{ scope, id, text }` |
-| `POST /notes/remove` | `{ scope, id }` - solo las notas propias del visitante; una nota del agente da `403` |
+| `x-bxagents-source: web` | Marca las conversaciones que inicia la página, para distinguirlas de las de la terminal y los gateways (`bxAgents sessions list --source=web`, o `?source=` en la API) |
+| `x-bxagents-token` | El token del botón **Key**, cuando hay uno (ver [Proteger la API](#proteger-la-api)) |
+| `x-bxagents-csrf: 1` | Se envía en cada petición. Una petición hecha con la cookie de sesión que cambia algo debe llevarla, para que otro sitio no pueda hacer que tu navegador lo haga |
 
-Cada una está delimitada por el `getUserSessionIdentifier()` de ColdBox como el `userId`. Las primeras tres mantienen la forma y el formato de cable exactos de `toAi()`.
+La identidad es la de la API: sin `users` la página es el único usuario abierto `local`, compartido con el chat de terminal de esa máquina, y con `users` es la cuenta que inició sesión.
 
 ### Comandos con barra
 
@@ -218,7 +195,9 @@ bxAgents hash-password --password="<tu-contraseña>"
 
 ### Qué cambia el inicio de sesión
 
-Todo lo delimitado por usuario se re-indexa a la cuenta real. El `handlers/ChatUi.bx` generado resuelve la identidad desde cbsecurity (que envuelve cbauth) directamente, en un método (`resolveUserId()`), y la memoria del agente, el índice de conversaciones, las preferencias y la propiedad de ejecuciones pendientes todas se indexan por su valor de retorno.
+Todo lo delimitado por usuario se re-indexa a la cuenta real. La API del agente lee la cuenta que inició sesión desde cbsecurity (que envuelve cbauth) en un solo lugar (`models/api/Authenticator`), y la memoria del agente, el índice de conversaciones, las preferencias y la propiedad de ejecuciones pendientes se indexan por el id que entrega.
+
+Las cuentas también cierran la API: con `users`, una petición a `/__bxagents` necesita la cookie de sesión o un token, diga lo que diga `agentApi.access`. Una página con cuentas nunca debe estar delante de una API que cualquiera pueda llamar. Un visitante sin sesión es enviado a `<path>/login.html`.
 
 Lee cbsecurity en lugar del ajuste `identifierProvider` de ColdBox deliberadamente: un closure declarado en el struct de configuración `coldbox` nunca llega a `configSettings` - verificado en un arranque real, tanto en la forma literal documentada como como asignación posterior - así que cualquier cosa que dependiera de ese ajuste estaba silenciosamente obteniendo un id de sesión en su lugar.
 
@@ -257,7 +236,7 @@ Cuando el agente se pausa para aprobación, el stream emite un chunk `middleware
 
 ## Historial y recarga
 
-El transcript vive en el DOM; la conversación vive en la memoria del agente. Sin rehidratación una recarga muestra una pantalla vacía mientras el agente sigue recordando todo - así que la página se vería en blanco y luego respondería preguntas de seguimiento sobre mensajes que el usuario no puede ver. Al cargar, la página por lo tanto llama a `GET <path>/api/history` y reproduce los mensajes almacenados (markdown y todo), recayendo en el mensaje de bienvenida cuando la conversación está vacía o el fetch falla.
+El transcript vive en el DOM; la conversación vive en la memoria del agente. Sin rehidratación una recarga muestra una pantalla vacía mientras el agente sigue recordando todo - así que la página se vería en blanco y luego respondería preguntas de seguimiento sobre mensajes que el usuario no puede ver. Al cargar, la página por lo tanto llama a `GET /__bxagents/history` y reproduce los mensajes almacenados (markdown y todo), recayendo en el mensaje de bienvenida cuando la conversación está vacía o el fetch falla.
 
 **New** inicia un `conversationId` nuevo. No elimina nada - la conversación previa permanece en el servidor bajo su propio id y aparece en la barra lateral, que es para lo que existe la tabla de conversaciones.
 
@@ -294,9 +273,9 @@ La razón es un vacío real, no una preferencia: **el `IAiMemory` de bx-ai no ti
 | Pieza | Qué es |
 | --- | --- |
 | `bx-sqlite` | El driver JDBC, incluido con BxAgents como módulo anidado |
-| [`qb`](https://github.com/coldbox-modules/qb) | QueryBuilder para las lecturas y escrituras de `ChatDb` |
+| [`qb`](https://github.com/coldbox-modules/qb) | QueryBuilder para las cuentas de inicio de sesión de `ChatDb` |
 | `ChatStore` | En el módulo BxAgents, compartido con el chat de terminal. Posee las tablas y sus versiones, en SQL de SQLite simple |
-| `models/ChatDb.bx` | Generado. Entrega query builders; su `migrate()` llama a `ChatStore` |
+| `models/ChatDb.bx` | Generado, solo las cuentas de inicio de sesión. Entrega query builders; su `migrate()` llama a `ChatStore` |
 | Una sentencia de arranque en `Application.bx` | Generado. Construye `ChatDb` en el arranque para que la migración se ejecute entonces, no en cualquier request que toque primero la base de datos |
 
 El datasource se registra en `Application.bx` y la gramática se fija en `config/ColdBox.bx`:
@@ -393,9 +372,12 @@ theme: {
 
 Para cualquier cosa que los tokens no cubran - fuentes personalizadas, layout, reglas por elemento - coloca un `resources/webui/theme.css` en el proyecto. Se incrusta **al final** en el `<style>` de la página, así que le gana tanto a los valores por defecto enviados como a los tokens de `theme`; y siendo un archivo `.css` real, el hex `#rrggbb` ordinario funciona ahí normalmente. (Un `</style` literal en ese archivo falla el build, ya que terminaría prematuramente el bloque de estilo de la página.)
 
-!!! warning
-    **`apiKeyEnvVar` es una compuerta simple y activable - no un sistema de inicio de sesión completo.** Sin configurar, `<path>/api/*` está completamente abierto (bien para desarrollo local, no para un despliegue público). Configúralo, y un interceptor `preProcess` generado (`interceptors/WebUiAuthGate.bx`) requiere que cada request bajo `<path>/api/*` lleve una cabecera `X-API-Key` que coincida, comparada vía `java.security.MessageDigest.isEqual()` - la misma disciplina de comparación en tiempo constante que ya usa la propia comprobación de firma de cada gateway de webhook. **El shell estático mismo (`<path>/index.html`) deliberadamente NO está protegido** - solo `<path>/api/*` lo está - porque la navegación de página simple de un navegador no puede enviar una cabecera personalizada, así que proteger el shell haría inalcanzable, sin la clave ya en mano, la misma página que te pide la clave. El propio JS de la página pide la clave (un botón "Key", almacenado en `localStorage`) y la envía en cada llamada de API que hace de ahí en adelante. Una petición rechazada con `401` muestra un mensaje que te indica configurar o corregir la clave con ese botón, en lugar de un fallo genérico.
 
+
+## Proteger la API
+
+!!! warning
+    **`apiKeyEnvVar` es un secreto compartido, no un sistema de inicio de sesión.** Es lo mismo que `agentApi.tokenEnvVar` de la API del agente (si ambos están, gana el nombre de `Agent.yaml`). Sin configurar, la API está abierta (bien en tu propia máquina, no para un despliegue público; `serve` avisa cuando una API abierta escucha en todas las interfaces). Configúralo, y cada llamada a `/__bxagents` debe llevar una cabecera `x-bxagents-token` que coincida, comparada en tiempo constante. **El shell estático (`<path>/index.html`) no está protegido**, porque la navegación de página simple de un navegador no puede enviar una cabecera personalizada; el JS de la página pide el token (el botón **Key**, guardado en `localStorage`) y lo envía en cada llamada. Un `401` muestra un mensaje que indica configurar o corregir el token. Para varias personas usa [tokens emitidos](agent-bx.md#tokens-de-acceso-para-un-agente-desplegado) o `users`.
 
 ## Apariencia
 
@@ -414,17 +396,18 @@ La elección se guarda en el navegador (`localStorage`, clave `bxagents_webui_ap
 
 **Cada memoria que un agente mantiene está indexada por `(userId, conversationId)`** - y un agente puede mantener varias a la vez (`memories` de `AiAgent` es un array; `loadMemoryMessages()` itera sobre todas ellas con el mismo par). `AiAgent.run()`/`.stream()` recaen en `""` para ambos cuando nada los suministra, así que la identidad del lado del servidor tiene que salir de algún sitio.
 
-El `handlers/ChatUi.bx` generado la suministra en un único método, `resolveUserId()`, en **las tres formas de ejecutor** - `invoke`, `stream` y `batch`:
+La API del agente la suministra en cada ruta de turno (`invoke`, `stream`, `events`, `batch`):
 
-- **Sin `users` declarados:** un id compartido fijo (`public`). La interfaz es un único espacio de trabajo abierto, como se describe en [Usuarios e inicio de sesión](#usuarios-e-inicio-de-sesión).
-- **Con `users` declarados:** el id de la cuenta con sesión iniciada, leído de cbsecurity (que envuelve a cbauth). Una petición sin sesión recae en el id compartido, que la compuerta de inicio de sesión mantiene inalcanzable para una entrada protegida.
+- **Sin `users` y una API abierta:** el único usuario `local`, como se describe en [Usuarios e inicio de sesión](#usuarios-e-inicio-de-sesión).
+- **Un secreto compartido:** `admin`. **Un token emitido:** el nombre del token.
+- **Con `users` declarados:** el id de la cuenta con sesión iniciada, leído de cbsecurity (que envuelve a cbauth). Una petición sin sesión se rechaza con un `401`.
 
 En ambos casos el id se deriva en el servidor y nunca se toma del cuerpo de la petición, así que un llamador no puede hacerse pasar por otro. `conversationId` todavía viene del cliente, y eso es deliberado: distingue varias conversaciones pertenecientes a la *misma* identidad - es lo que rota el botón **New**. No es el límite de aislamiento; el `userId` lo es.
 
 Un proyecto con una exposición `webui` también obtiene la **gestión de sesión activada** en el `Application.bx` generado - `this.sessionManagement = true`, `this.setClientCookies = true`, un `sessionTimeout` de 60 minutos - porque el inicio de sesión se apoya en la sesión. Ahí las cookies son fundamentales: sin cookie, sin sesión. Un proyecto sin `webui` mantiene las sesiones desactivadas - una app solo de API/gateway no tiene navegador que rastrear, y una sesión ahí es overhead más una cookie que nadie pidió.
 
 !!! info
-    **¿Por qué no `toAi()` para la webui?** El `toAi()` de ColdBox 8.1 deja que **un `userId` suministrado por el llamador gane** sobre el derivado del servidor, lo cual es correcto para un llamador de confianza servidor-a-servidor pero incorrecto para un navegador sentado detrás de una única clave de API compartida, donde cualquiera podría nombrarse a sí mismo como cualquier otro y leer la memoria de otro visitante. El handler generado deriva la identidad únicamente del lado del servidor, y nunca mira `body.userId`. Mantiene la forma de ruta exacta de `toAi()` (`/invoke`, `/stream`, `/batch`, `/info`), su formato de cable SSE, y su reflejo de evento `X-Thread-Id`/`thread`, así que sigue siendo un reemplazo directo. Los otros tipos de exposición (`exposes: "agent"`) todavía usan `toAi()` sin cambios - servidor-a-servidor es el caso para el que está construida su precedencia.
+    **¿Por qué no `toAi()`?** El `toAi()` de ColdBox 8.1 deja que **un `userId` suministrado por el llamador gane** sobre el derivado del servidor, y el middleware de rutas de ColdBox no alcanza sus rutas. El handler propio de la API del agente deriva la identidad únicamente del lado del servidor, nunca mira `body.userId`, y está detrás de una sola compuerta.
 
 Ningún tipo de memoria se fuerza. Elige uno (o varios) por agente con una clave `memory` en `Agent.yaml`, la misma forma que `checkpointer`:
 

@@ -7,12 +7,12 @@ bxAgents build
 bxAgents serve --port=8080
 ```
 
-Open **http://localhost:8080/chat/index.html** in a browser and start chatting - replies stream in token-by-token via a generated `/chat/api/stream` SSE route.
+Open **http://localhost:8080/chat/index.html** in a browser and start chatting - replies stream in token-by-token via the agent API's `/__bxagents/stream` SSE route.
 
 ## How it's wired
 
-- `path: "/chat"` controls both where the static shell is served (`/chat/index.html`, a real file - no ColdBox route needed for it) and where its dedicated API lives (`/chat/api`, backed by a generated `handlers/ChatUi.bx` - **not** `route().toAi()`). It keeps `toAi()`'s exact route shape and wire format for its `invoke`/`stream`/`batch` actions, but derives the visitor's identity server-side only rather than trusting a caller-supplied `userId` the way `toAi()` does - see [Why not `toAi()` for the webui?](../../docs/conventions/web-ui.md) for why that distinction matters for a browser sitting behind one shared API key.
-- `apiKeyEnvVar` is **optional** - a simple, toggleable gate, not a full login system. This example ships it **set** (`CHAT_UI_API_KEY`), so `/chat/api/*` requires a matching `X-API-Key` header - the shell itself (`/chat/index.html`) stays reachable regardless, since a browser's plain page navigation can't send a custom header, and the shell is exactly what prompts you for the key in the first place. Delete the `apiKeyEnvVar` line entirely to leave the UI open instead (fine for local dev, not for a public deployment).
+- `path: "/chat"` is where the static shell is served (`/chat/index.html`, a real file - no ColdBox route needed for it). The page itself calls the agent API at `/__bxagents`, the same one the terminal chat and the gateways use, which derives the visitor's identity server-side only rather than trusting a caller-supplied `userId` the way `toAi()` does - see [Conversation identity](../../docs/conventions/web-ui.md#conversation-identity).
+- `apiKeyEnvVar` is **optional** - it is the agent API's shared secret, not a full login system. This example ships it **set** (`CHAT_UI_API_KEY`), so every call to `/__bxagents` requires a matching `x-bxagents-token` header - the shell itself (`/chat/index.html`) stays reachable regardless, since a browser's plain page navigation can't send a custom header, and the shell is exactly what prompts you for the token in the first place. Delete the `apiKeyEnvVar` line entirely to leave the UI open instead (fine for local dev, not for a public deployment).
 
 ```bash
 export CHAT_UI_API_KEY="a-real-secret"

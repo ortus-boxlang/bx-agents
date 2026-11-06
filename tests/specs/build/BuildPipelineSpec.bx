@@ -200,23 +200,21 @@ class extends="testbox.system.BaseSpec" {
 				expect( fileRead( result.appDir & "/bxagents/Application.bx" ) ).notToInclude( 'getInstance( "interceptors.AuditLogger" )' );
 			} );
 
-			it( "generates the v1 web chat UI and wires its auth-gate interceptor into config/ColdBox.bx end-to-end", function() {
+			it( "generates the web chat UI on the agent API: no handler or key gate of its own", function() {
 				var projectRoot = newTempProject( "gateways-webui" );
 				var result = pipeline.build( projectRoot );
 
 				expect( fileExists( result.appDir & "/chat/index.html" ) ).toBeTrue();
-				expect( fileExists( result.appDir & "/interceptors/WebUiAuthGate.bx" ) ).toBeTrue();
+				expect( fileExists( result.appDir & "/interceptors/WebUiAuthGate.bx" ) ).toBeFalse();
+				expect( fileExists( result.appDir & "/handlers/ChatUi.bx" ) ).toBeFalse();
+				expect( fileExists( result.appDir & "/handlers/AgentApi.bx" ) ).toBeTrue();
 
 				var routerContent = fileRead( result.appDir & "/config/Router.bx" );
-				expect( routerContent ).toInclude( 'post( "/chat/api/stream" ).toHandler( "ChatUi.stream" )' );
-				expect( fileExists( result.appDir & "/handlers/ChatUi.bx" ) ).toBeTrue();
+				expect( routerContent ).toInclude( 'post( "/__bxagents/stream" )' );
+				expect( routerContent ).toInclude( "AgentApi.extensionFile" );
 
-				// Registered from Application.bx's onApplicationStart(), not a
-				// config/ColdBox.bx `interceptors = [...]` entry - that array
-				// never reaches ColdBox's InterceptorService on a real boot.
-				var applicationContent = fileRead( result.appDir & "/bxagents/Application.bx" );
-				expect( applicationContent ).toInclude( 'getWireBox().getInstance( "interceptors.WebUiAuthGate" )' );
-				expect( applicationContent ).toInclude( 'getInterceptorService().register(' );
+				// the entry's apiKeyEnvVar is the API's secret now
+				expect( fileRead( result.appDir & "/config/Router.bx" ) ).toInclude( "CHAT_API_KEY" );
 			} );
 
 			it( 'calls aiToolRegistry().scan("tools") at startup only when the project declares tools', function() {

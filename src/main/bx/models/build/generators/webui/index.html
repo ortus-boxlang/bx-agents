@@ -827,7 +827,7 @@ __ICON_SPRITE__
 			<button type="button" id="clearBtn" title="Delete the messages in this conversation" aria-label="Clear" hidden><svg class="i" aria-hidden="true"><use href="#i-broom"/></svg></button>
 			<button type="button" id="compactBtn" title="Summarize older messages, keep the recent ones" aria-label="Compact" hidden><svg class="i" aria-hidden="true"><use href="#i-arrows-in-line-vertical"/></svg></button>
 			<button type="button" id="notesBtn" title="What the agent keeps about you and about its own work" aria-label="Notes" hidden><svg class="i" aria-hidden="true"><use href="#i-notebook"/></svg></button>
-			<button type="button" id="keyBtn" title="Set the API key this page sends as X-API-Key" aria-label="API key"><svg class="i" aria-hidden="true"><use href="#i-key"/></svg></button>
+			<button type="button" id="keyBtn" title="Set the token this page sends as x-bxagents-token" aria-label="API key"><svg class="i" aria-hidden="true"><use href="#i-key"/></svg></button>
 			<button type="button" id="appearanceBtn" title="Mode, accent color, text size and density" aria-label="Appearance" aria-haspopup="dialog" aria-expanded="false" aria-controls="appearancePanel"><svg class="i" aria-hidden="true"><use href="#i-palette"/></svg></button>
 			<button type="button" id="themeBtn" title="Switch between light and dark" aria-label="Theme"><svg class="i" aria-hidden="true"><use href="#i-sun"/></svg></button>
 		</div>
@@ -885,6 +885,8 @@ __MARKDOWN_SCRIPTS__
 	"use strict";
 
 	var API_BASE = "__API_BASE__";
+	// the sign-in form, when this page has accounts; blank otherwise
+	var LOGIN_URL = "__LOGIN_URL__";
 	var SHOW_REASONING = __SHOW_REASONING__;
 	var SHOW_TOOLS = __SHOW_TOOLS__;
 	var WELCOME = "__WELCOME__";
@@ -920,7 +922,7 @@ __MARKDOWN_SCRIPTS__
 	// The profile the person picked, "" for the agent's own model. Only ever one the server listed.
 	var chosenProfile = "";
 
-	// What the server says it can do, from GET /info. Read once at load and used
+	// What the server says it can do, from GET /agent. Read once at load and used
 	// to decide which controls exist at all - a button that would 501 or no-op is
 	// worse than no button.
 	var capabilities = {};
@@ -1001,20 +1003,32 @@ __MARKDOWN_SCRIPTS__
 		return rehydrate();
 	}
 
+	/**
+	 * A 401 from a page that has accounts and no token means the visitor is not signed in: send them to the form.
+	 * Reports whether it did, so a caller can stop.
+	 */
+	function sentToSignIn( res ) {
+		if ( res.status === 401 && LOGIN_URL && !getApiKey() ) {
+			window.location.href = LOGIN_URL;
+			return true;
+		}
+		return false;
+	}
+
 	function apiGet( path ) {
 		return fetch( API_BASE + path, { headers: authHeaders( {} ) } )
-			.then( function ( res ) { return res.ok ? res.json() : null; } )
+			.then( function ( res ) { return sentToSignIn( res ) || !res.ok ? null : res.json(); } )
 			.catch( function () { return null; } );
 	}
 
 	/**
-	 * Reads GET /info once and shapes the page to it: the model name in the
+	 * Reads GET /agent once and shapes the page to it: the model name in the
 	 * header, and a control only where the server says the capability exists.
 	 * capabilities.compact in particular is false whenever no summary model is
 	 * configured, in which case the button would do nothing at all.
 	 */
 	function loadInfo() {
-		return apiGet( "/info" ).then( function ( payload ) {
+		return apiGet( "/agent" ).then( function ( payload ) {
 			if ( !payload ) {
 				return;
 			}
@@ -1139,7 +1153,7 @@ __MARKDOWN_SCRIPTS__
 				if ( next === null || !next.trim() ) {
 					return;
 				}
-				apiPost( "/conversations/rename", { conversationId: conv.id, title: next.trim() } )
+				apiPost( "/sessions/rename", { conversationId: conv.id, title: next.trim() } )
 					.then( loadConversations );
 			} );
 			actions.appendChild( renameBtn );
@@ -1153,7 +1167,7 @@ __MARKDOWN_SCRIPTS__
 				if ( !window.confirm( "Delete this conversation and its messages?" ) ) {
 					return;
 				}
-				apiPost( "/conversations/delete", { conversationId: conv.id } ).then( function () {
+				apiPost( "/sessions/delete", { conversationId: conv.id } ).then( function () {
 					return loadConversations();
 				} ).then( function () {
 					// Deleting the open chat leaves nothing shown - move to the
@@ -1178,8 +1192,8 @@ __MARKDOWN_SCRIPTS__
 		if ( capabilities.conversations === false ) {
 			return Promise.resolve();
 		}
-		return apiGet( "/conversations" ).then( function ( payload ) {
-			conversations = ( payload && payload.conversations ) || [];
+		return apiGet( "/sessions?limit=100" ).then( function ( payload ) {
+			conversations = ( payload && payload.sessions ) || [];
 			renderConversations();
 		} );
 	}
@@ -1189,7 +1203,7 @@ __MARKDOWN_SCRIPTS__
 	 * server so it cannot collide with one that already exists.
 	 */
 	function startConversation() {
-		return apiPost( "/conversations/create", {} )
+		return apiPost( "/sessions", {} )
 			.then( function ( res ) { return res.ok ? res.json() : null; } )
 			.then( function ( payload ) {
 				var id = ( payload && payload.conversationId ) || newConversationId();
@@ -1232,7 +1246,7 @@ __MARKDOWN_SCRIPTS__
 	}
 
 	keyBtn.addEventListener( "click", function () {
-		var next = window.prompt( "API key (sent as X-API-Key on every request to " + API_BASE + "). Leave blank to clear.", getApiKey() );
+		var next = window.prompt( "Token (sent as x-bxagents-token on every request to " + API_BASE + "). Leave blank to clear.", getApiKey() );
 		if ( next !== null ) {
 			setApiKey( next.trim() );
 		}
@@ -1492,8 +1506,11 @@ __MARKDOWN_SCRIPTS__
 		var headers = extra || {};
 		var key = getApiKey();
 		if ( key ) {
-			headers[ "X-API-Key" ] = key;
+			headers[ "x-bxagents-token" ] = key;
 		}
+		// who is asking: this page (a label), and that a script of the page made the request (a form from another site cannot add this)
+		headers[ "x-bxagents-source" ] = "web";
+		headers[ "x-bxagents-csrf" ] = "1";
 		return headers;
 	}
 
@@ -1502,7 +1519,7 @@ __MARKDOWN_SCRIPTS__
 			method : "POST",
 			headers: authHeaders( { "Content-Type": "application/json" } ),
 			body   : JSON.stringify( body || {} )
-		} );
+		} ).then( function ( res ) { sentToSignIn( res ); return res; } );
 	}
 
 	/**
@@ -1819,21 +1836,17 @@ __MARKDOWN_SCRIPTS__
 				}
 				clearWelcome();
 				messages.forEach( function ( message ) {
-					var content = typeof message.content === "string" ? message.content : "";
-					var pictures = [];
-					if ( Array.isArray( message.content ) ) {
-						// a message with pictures is a list of parts: the text, and an image_url for each picture
-						content = message.content.filter( function ( part ) { return part && part.type === "text"; } ).map( function ( part ) { return part.text || ""; } ).join( "\n" );
-						pictures = message.content.filter( function ( part ) { return part && part.type === "image_url" && part.image_url && /^data:image\//.test( part.image_url.url || "" ); } ).map( function ( part ) { return part.image_url.url; } );
-					}
+					// the API answers { role: "you" | "agent", body: the words, images: the pictures as data: addresses }
+					var content = message.body || "";
+					var pictures = message.images || [];
 					if ( !content.length && !pictures.length ) {
 						return;
 					}
-					if ( message.role === "user" ) {
+					if ( message.role === "you" ) {
 						addUserBubble( content, pictures );
 						return;
 					}
-					if ( message.role === "assistant" ) {
+					if ( message.role === "agent" ) {
 						var el = document.createElement( "div" );
 						el.className = "bubble assistant";
 						el.innerHTML = renderMarkdown( content );
@@ -2178,8 +2191,11 @@ __MARKDOWN_SCRIPTS__
 			signal: activeController.signal,
 			body: JSON.stringify( payload )
 		} ).then( function ( res ) {
+			if ( sentToSignIn( res ) ) {
+				throw new Error( "Signing in..." );
+			}
 			if ( res.status === 401 ) {
-				throw new Error( "Unauthorized - set the API key via the \"Key\" button, then try again. If you already did, the server's API-key environment variable may be unset: the gate refuses every request in that case." );
+				throw new Error( "Unauthorized - set the token via the \"Key\" button, then try again. If you already did, the server's token environment variable may be unset: the gate refuses every request in that case." );
 			}
 			if ( res.status === 400 ) {
 				// the server explains a refusal (a model that cannot see pictures, a picture that is too big)
@@ -2654,11 +2670,10 @@ __MARKDOWN_SCRIPTS__
 		var turn = createTurn();
 
 		var payload = {
-			input  : sentText,
-			options: {
-				conversationId: getConversationId(),
-				threadId      : activeThreadId
-			}
+			input         : sentText,
+			conversationId: getConversationId(),
+			threadId      : activeThreadId,
+			options       : {}
 		};
 		if ( sentImages.length ) {
 			payload.attachments = sentImages.map( function ( image ) { return { name: image.name, mime: image.mime, data: image.data }; } );
@@ -2760,7 +2775,7 @@ __MARKDOWN_SCRIPTS__
 		if ( !window.confirm( "Delete the messages in this conversation? The conversation itself stays." ) ) {
 			return;
 		}
-		apiPost( "/clear", { options: { conversationId: getConversationId() } } )
+		apiPost( "/clear", { conversationId: getConversationId() } )
 			.then( function () {
 				messagesEl.textContent = "";
 				showHint( "Conversation cleared." );
@@ -2775,7 +2790,7 @@ __MARKDOWN_SCRIPTS__
 
 	compactBtn.addEventListener( "click", function () {
 		showHint( "Compacting..." );
-		apiPost( "/compact", { options: { conversationId: getConversationId() } } )
+		apiPost( "/compact", { conversationId: getConversationId() } )
 			.then( function ( res ) { return res.ok ? res.json() : null; } )
 			.then( function ( payload ) {
 				if ( !payload ) {
@@ -2943,7 +2958,7 @@ __MARKDOWN_SCRIPTS__
 		if ( !text ) {
 			return;
 		}
-		apiPost( "/notes/add", { scope: notesScope, text: text } ).then( function ( res ) {
+		apiPost( "/notes", { scope: notesScope, text: text } ).then( function ( res ) {
 			if ( res.ok ) {
 				notesInput.value = "";
 				notesSay( "Noted." );

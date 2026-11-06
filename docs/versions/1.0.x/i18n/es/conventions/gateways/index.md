@@ -87,7 +87,7 @@ class {
 }
 ```
 
-Genera un archivo estático real `<path>/index.html` (servido directamente - no se necesita ruta para él) más su propia API dedicada bajo un prefijo fijo `<path>/api`, así que nunca colisiona con los propios archivos del shell. Esa API es un `handlers/ChatUi.bx` generado en lugar de `toAi()`, y la entrada también trae consigo un almacén SQLite generado.
+Genera un archivo estático real `<path>/index.html` (servido directamente - no se necesita ruta para él) y la página llama a la [API del agente](../agent-bx.md#la-ruta-de-agente-siempre-activa) en `/__bxagents`, la misma que usa el chat de terminal, así que la entrada no añade una API propia. Sí trae consigo el almacén SQLite compartido.
 
 La interfaz web es un subsistema en lugar de un simple interruptor de exposición - la lista de rutas, el almacén, las conversaciones y preferencias, el branding y la temática, y por qué no usa `toAi()` están todos en su propia página: **[La interfaz web de chat](../web-ui.md)**.
 

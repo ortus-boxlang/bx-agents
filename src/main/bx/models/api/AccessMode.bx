@@ -5,8 +5,8 @@
  *   open   nobody is asked; everyone is the one `local` user
  *   token  a caller needs the shared secret (`tokenEnvVar`) or an issued token (`tokens: true`)
  *
- * `agentApi.access` says which. Left out, it follows what is set: a `tokenEnvVar` or `tokens: true` means token,
- * nothing means open, as before.
+ * `agentApi.access` says which. Left out, it follows what is set: a `tokenEnvVar`, `tokens: true` or a web page with
+ * accounts (`users`) means token, nothing means open, as before.
  */
 class {
 
@@ -24,10 +24,11 @@ class {
 	}
 
 	/**
-	 * @return True when a shared secret or issued tokens are set up
+	 * @return True when a shared secret, issued tokens or a page's own accounts (`webAccounts`, set by the build when a
+	 *         web UI entry lists `users`) are set up
 	 */
 	static boolean function hasCredentials( struct agentApi = {} ) {
-		return len( trim( arguments.agentApi.tokenEnvVar ?: "" ) ) > 0 || ( arguments.agentApi.tokens ?: false ) == true
+		return len( trim( arguments.agentApi.tokenEnvVar ?: "" ) ) > 0 || ( arguments.agentApi.tokens ?: false ) == true || ( arguments.agentApi.webAccounts ?: false ) == true
 	}
 
 	/**
@@ -46,7 +47,7 @@ class {
 			return [ "Agent.bx's 'agentApi.access' must be open or token" ]
 		}
 		if ( said == "open" && hasCredentials( arguments.agentApi ) ) {
-			return [ "Agent.bx's 'agentApi.access' is open, but 'tokenEnvVar' or 'tokens' asks callers for a token. Remove one or the other" ]
+			return [ "Agent.bx's 'agentApi.access' is open, but 'tokenEnvVar', 'tokens' or a web UI with 'users' asks callers to sign in. Remove one or the other" ]
 		}
 		if ( said == "token" && !hasCredentials( arguments.agentApi ) ) {
 			return [ "Agent.bx's 'agentApi.access' is token, but nothing says which token: set 'tokenEnvVar' (a shared secret) or 'tokens: true' (tokens from `bxAgents token create`)" ]

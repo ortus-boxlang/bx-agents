@@ -15,6 +15,8 @@
  */
 import bxModules.bxagents.models.util.Strings;
 
+import bxModules.bxagents.models.build.AgentApiConfig;
+
 class {
 
 	/**
@@ -177,16 +179,19 @@ class {
 		var mcpResult = variables.mcpGenerator.generate( discovery, appDir )
 		arguments.onProgress( "    #mcpResult.registrations.len()# registration(s)" )
 
+		// the agent API as the build sees it: a web page with accounts closes it (see models.api.AccessMode)
+		var effectiveAgentApi = AgentApiConfig::effective( config.agentApi ?: {}, discovery )
+
 		arguments.onProgress( "+ Generating config/Router.bx..." )
-		variables.routerGenerator.generate( discovery, appDir, gatewayResult.hasChannelGateway ?: false, gatewayResult.hasWhatsAppCloudGateway ?: false, gatewayResult.hasTeamsGateway ?: false, gatewayResult.hasTwilioGateway ?: false, gatewayResult.hasGitHubGateway ?: false, config.agentApi ?: {} )
+		variables.routerGenerator.generate( discovery, appDir, gatewayResult.hasChannelGateway ?: false, gatewayResult.hasWhatsAppCloudGateway ?: false, gatewayResult.hasTeamsGateway ?: false, gatewayResult.hasTwilioGateway ?: false, gatewayResult.hasGitHubGateway ?: false, effectiveAgentApi )
 
 		arguments.onProgress( "+ Generating the agent API run control (handlers/AgentApi.bx)..." )
-		var agentApiResult = variables.agentApiGenerator.generate( appDir, config.agentApi ?: {} )
+		var agentApiResult = variables.agentApiGenerator.generate( appDir, effectiveAgentApi )
 		arguments.onProgress( "    #agentApiResult.written ? 'written' : 'off (agentApi.enabled is false)'#" )
 
 		arguments.onProgress( "+ Generating the web chat UI (if any gateways/* entry exposes it)..." )
 		var webUiResult = variables.webUiGenerator.generate( discovery, appDir, config )
-		arguments.onProgress( "    webui=#( webUiResult.hasWebUi ? 'yes' : 'no' )#, apiKeyGate=#( len( webUiResult.webUiAuthInterceptorName ?: '' ) ? 'yes' : 'no' )#, signIn=#( webUiResult.webUiHasUsers ?: false ? 'yes' : 'no' )#, database=#( webUiResult.webUiDatabase.datasource ?: '-' )#" )
+		arguments.onProgress( "    webui=#( webUiResult.hasWebUi ? 'yes' : 'no' )#, signIn=#( webUiResult.webUiHasUsers ?: false ? 'yes' : 'no' )#, database=#( webUiResult.webUiDatabase.datasource ?: '-' )#" )
 
 		var toolScanStatements = []
 		if ( discovery.tools.len() ) {
@@ -205,13 +210,10 @@ class {
 		// real boot on this stack (confirmed directly - the same
 		// getPropertyMixin()-based config reflection gap already documented for
 		// `coldbox.identifierProvider`, generalized), so both the web UI's own
-		// login/API-key gates and any project-declared interceptor were dead
+		// login gate and any project-declared interceptor were dead
 		// code.
 		var agentInterceptorNames = interceptorSplit.agent.map( function( e ) { return e.name } )
 		var projectInterceptorNames = agentInterceptorNames.duplicate()
-		if ( len( webUiResult.webUiAuthInterceptorName ?: "" ) ) {
-			agentInterceptorNames.append( webUiResult.webUiAuthInterceptorName )
-		}
 		// Requires a signed-in user. Registered last so the store exists and the
 		// accounts are seeded before anything can be gated against them.
 		if ( len( webUiResult.webUiLoginGateName ?: "" ) ) {
@@ -226,8 +228,7 @@ class {
 		// Issued tokens live in the shared chat database. Without a web UI there is no store yet, so the
 		// app gets the default one, migrated at start.
 		var chatDatabase = webUiResult.webUiDatabase ?: {}
-		var agentApiConfig = config.agentApi ?: {}
-		var needsTokenStore = ( agentApiConfig.tokens ?: false ) && ( agentApiConfig.enabled ?: true )
+		var needsTokenStore = ( effectiveAgentApi.tokens ?: false ) && ( effectiveAgentApi.enabled ?: true )
 		if ( needsTokenStore && chatDatabase.isEmpty() ) {
 			chatDatabase = { datasource : "bxagents", path : "./data/chat.db" }
 		}

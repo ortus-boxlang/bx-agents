@@ -91,7 +91,12 @@ fileWrite( miniServerConfigPath, jsonSerialize( {
 	healthCheck     : true
 } ) )
 
-process = createObject( "java", "ortus.boxlang.bxagents.build.MiniServerLauncher" ).launch( jarPath, miniServerConfigPath, false )
+// The fixture lists web accounts (secureChat), and accounts close the agent API to callers without a sign-in or a token,
+// so the calls below carry the fixture's shared secret.
+coldboxToken = "e2e-coldbox-secret"
+coldboxEnv = createObject( "java", "java.util.HashMap" ).init()
+coldboxEnv.put( "E2E_COLDBOX_API_TOKEN", coldboxToken )
+process = createObject( "java", "ortus.boxlang.bxagents.build.MiniServerLauncher" ).launch( jarPath, miniServerConfigPath, false, coldboxEnv )
 
 try {
 	// ------------------------------------------------------------------
@@ -109,13 +114,13 @@ try {
 	// Be honest about how much it proves, because it was overstated here
 	// before: the generated health() action renders a literal
 	// { status: "ok", success: true } and touches nothing else. So a 200
-	// proves ColdBox booted and routing reaches the generated ChatUi handler
+	// proves ColdBox booted and routing reaches the generated agent API handler
 	// over real HTTP - and NOT that WireBox, ChatDb or SQLite work. That
 	// distinction is not academic: a run in CI returned 200 here while
 	// models/ChatDb.bx could not even compile. The specs below are what
 	// actually cover the store.
 	// ------------------------------------------------------------------
-	healthUrl     = "http://127.0.0.1:#port#/chat/api/health"
+	healthUrl     = "http://127.0.0.1:#port#/__bxagents/health"
 	probeDeadline = getTickCount() + 60000
 	probeStatus   = 0
 	probeDetail   = "no response"
@@ -133,7 +138,7 @@ try {
 		}
 		sleep( 1000 )
 	}
-	println( "+ App probe GET /chat/api/health -> status=#probeStatus#" )
+	println( "+ App probe GET /__bxagents/health -> status=#probeStatus#" )
 	println( "  body: #probeDetail#" )
 
 	// Now that it is proven to work, treat it as real coverage rather than
@@ -143,7 +148,7 @@ try {
 	if ( probeStatus != 200 ) {
 		throw(
 			type    = "BxAgents.WebUiProbeFailed",
-			message = "The generated app did not serve GET /chat/api/health (status #probeStatus#): #probeDetail#"
+			message = "The generated app did not serve GET /__bxagents/health (status #probeStatus#): #probeDetail#"
 		)
 	}
 
@@ -255,6 +260,7 @@ try {
 	//    routes under load.
 	// ------------------------------------------------------------------
 	bx:http url="http://127.0.0.1:#port#/api/chat/invoke" method="POST" result="routeResult" timeout=30 {
+		bx:httpparam type="header" name="x-bxagents-token" value=coldboxToken;
 		bx:httpparam type="header" name="Content-Type" value="application/json";
 		bx:httpparam type="body" value='{"input":"Hello there!"}';
 	}
@@ -280,6 +286,7 @@ try {
 	// the time this runs.
 	// ------------------------------------------------------------------
 	bx:http url="http://127.0.0.1:#port#/__bxagents/invoke" method="POST" result="reservedResult" timeout=30 {
+		bx:httpparam type="header" name="x-bxagents-token" value=coldboxToken;
 		bx:httpparam type="header" name="Content-Type" value="application/json";
 		bx:httpparam type="body" value='{"input":"Hello there!"}';
 	}
@@ -311,7 +318,7 @@ try {
 	// as well if the whole body were buffered and parsed at the end, which is
 	// exactly the failure this feature exists to avoid.
 	// ------------------------------------------------------------------
-	streamClient = new bxagents.models.cli.support.AgentClient()
+	streamClient = new bxagents.models.cli.support.AgentClient().withToken( coldboxToken )
 	streamDeltas = []
 	streamResult = streamClient.stream(
 		baseUrl : "http://127.0.0.1:#port#",
@@ -346,7 +353,7 @@ try {
 	// calls no tool, so here it proves the frames the chat client depends on:
 	// thread first, chunks, done last). The others answer their input checks.
 	// ------------------------------------------------------------------
-	bx:http url="http://127.0.0.1:#port#/__bxagents/tools" method="GET" result="rcTools" timeout=30 {}
+	bx:http url="http://127.0.0.1:#port#/__bxagents/tools" method="GET" result="rcTools" timeout=30 { bx:httpparam type="header" name="x-bxagents-token" value=coldboxToken; }
 	if ( rcTools.status_code != 200 || !rcTools.fileContent.findNoCase( '"success":true' ) ) {
 		throw(
 			type    = "BxAgents.RunControlToolsFailed",
@@ -354,7 +361,7 @@ try {
 		)
 	}
 
-	bx:http url="http://127.0.0.1:#port#/__bxagents/agent" method="GET" result="rcAbout" timeout=30 {}
+	bx:http url="http://127.0.0.1:#port#/__bxagents/agent" method="GET" result="rcAbout" timeout=30 { bx:httpparam type="header" name="x-bxagents-token" value=coldboxToken; }
 	if ( rcAbout.status_code != 200 || !rcAbout.fileContent.findNoCase( '"name"' ) || !rcAbout.fileContent.findNoCase( '"capabilities"' ) ) {
 		throw(
 			type    = "BxAgents.RunControlAgentFailed",
@@ -363,6 +370,7 @@ try {
 	}
 
 	bx:http url="http://127.0.0.1:#port#/__bxagents/events" method="POST" result="rcEvents" timeout=60 {
+		bx:httpparam type="header" name="x-bxagents-token" value=coldboxToken;
 		bx:httpparam type="header" name="Content-Type" value="application/json";
 		bx:httpparam type="header" name="Accept" value="text/event-stream";
 		bx:httpparam type="body" value='{"input":"Hello there!"}';
@@ -383,6 +391,7 @@ try {
 		{ verb : "GET", path : "/__bxagents/pending", body : "" }
 	] ) {
 		bx:http url="http://127.0.0.1:#port##rcCheck.path#" method=rcCheck.verb result="rcAnswer" timeout=30 {
+			bx:httpparam type="header" name="x-bxagents-token" value=coldboxToken;
 			bx:httpparam type="header" name="Content-Type" value="application/json";
 			if ( len( rcCheck.body ) ) {
 				bx:httpparam type="body" value=rcCheck.body;
@@ -396,7 +405,7 @@ try {
 		}
 	}
 
-	bx:http url="http://127.0.0.1:#port#/__bxagents/pending?threadId=no-such-thread" method="GET" result="rcPending" timeout=30 {}
+	bx:http url="http://127.0.0.1:#port#/__bxagents/pending?threadId=no-such-thread" method="GET" result="rcPending" timeout=30 { bx:httpparam type="header" name="x-bxagents-token" value=coldboxToken; }
 	if ( rcPending.status_code != 200 || !rcPending.fileContent.findNoCase( '"pending":false' ) ) {
 		throw(
 			type    = "BxAgents.RunControlPendingFailed",
@@ -406,18 +415,16 @@ try {
 	println( "+ Confirmed: run control answers on /__bxagents - events streams [#rcNames.toList()#], and cancel, steer, resume and pending check their input" )
 
 	// ------------------------------------------------------------------
-	// 5. An open web UI is ONE shared workspace, over real HTTP.
+	// 5. Callers that share the API secret share ONE workspace, over real HTTP.
 	//
-	// /chat declares no accounts, so everything in it is shared on purpose:
-	// whoever can reach the UI sees every conversation and preference in it.
-	// Two SEPARATE HTTP calls - different sessions, no shared cookie - must
-	// therefore see the same data.
+	// The secret names one identity (admin), so everything saved under it is shared on purpose. Two SEPARATE HTTP calls
+	// - different sessions, no shared cookie - must therefore see the same data.
 	//
-	// This has to run out here rather than in the TestBox specs: those all
-	// execute inside ONE request to the runner page, and the whole point is
-	// two independent callers.
+	// This has to run out here rather than in the TestBox specs: those all execute inside ONE request to the runner
+	// page, and the whole point is two independent callers.
 	// ------------------------------------------------------------------
-	bx:http url="http://127.0.0.1:#port#/chat/api/preferences/set" method="POST" result="prefSet" timeout=30 {
+	bx:http url="http://127.0.0.1:#port#/__bxagents/preferences/set" method="POST" result="prefSet" timeout=30 {
+		bx:httpparam type="header" name="x-bxagents-token" value=coldboxToken;
 		bx:httpparam type="header" name="Content-Type" value="application/json";
 		bx:httpparam type="body" value='{"key":"theme","value":"dark"}';
 	}
@@ -430,17 +437,17 @@ try {
 		)
 	}
 
-	bx:http url="http://127.0.0.1:#port#/chat/api/preferences" method="GET" result="prefRead" timeout=30 {}
+	bx:http url="http://127.0.0.1:#port#/__bxagents/preferences" method="GET" result="prefRead" timeout=30 { bx:httpparam type="header" name="x-bxagents-token" value=coldboxToken; }
 	if ( prefRead.status_code != 200 || !prefRead.fileContent.findNoCase( "dark" ) ) {
 		throw(
 			type    = "BxAgents.SharedWorkspaceNotShared",
-			message = "A second, independent caller did not see the open UI's shared preference - an accountless web UI is supposed to be ONE workspace."
+			message = "A second, independent caller did not see the shared preference - callers with the same secret are supposed to share ONE workspace."
 				& " write -> HTTP #prefSet.status_code# #left( prefSet.fileContent ?: '', 300 )#"
 				& " | read -> HTTP #prefRead.status_code# #left( prefRead.fileContent ?: '', 300 )#"
 		)
 	}
 
-	println( "+ Confirmed: an accountless web UI is one shared workspace across independent callers" )
+	println( "+ Confirmed: callers with the shared secret see one workspace across independent requests" )
 
 	// ------------------------------------------------------------------
 	// 5b. The bx-ai Gateway surface is mounted for a NON-http gateway.

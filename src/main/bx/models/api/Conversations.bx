@@ -24,7 +24,22 @@ class {
 	 * @return An Outcome: { sessions : [ { id, title, messageCount, source, createdAt, updatedAt } ] }
 	 */
 	any function list( required any caller, numeric limit = 50, string source = "" ) {
-		return Outcome::done( { "sessions" : variables.sessions.list( arguments.caller.id(), arguments.limit, arguments.source ) } )
+		var rows = variables.sessions.list( arguments.caller.id(), arguments.limit, arguments.source )
+		return Outcome::done( { "sessions" : rows.map( row => stamped( row ) ) } )
+	}
+
+	/**
+	 * A copy of a stored row with its two times written as ISO 8601, as a client reads them, rather than as the date
+	 * object the database gave.
+	 */
+	private struct function stamped( required struct row ) {
+		var copy = duplicate( arguments.row )
+		for ( var key in [ "createdAt", "updatedAt" ] ) {
+			if ( isDate( copy[ key ] ?: "" ) ) {
+				copy[ key ] = dateTimeFormat( copy[ key ], "yyyy-MM-dd'T'HH:mm:ss" )
+			}
+		}
+		return copy
 	}
 
 	/**

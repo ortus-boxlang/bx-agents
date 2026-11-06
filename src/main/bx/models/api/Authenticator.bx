@@ -6,17 +6,20 @@
  * A caller that proves nothing is not let in: a missing, wrong, expired or revoked token answers null.
  */
 import bxModules.bxagents.models.api.Outcome;
+import bxModules.bxagents.models.api.Caller;
 
 class {
 
 	/**
 	 * @tokenEnvVar The NAME of the environment variable that holds the shared secret; blank for none
 	 * @tokens True when issued tokens are accepted
+	 * @accounts True when the web page's own sign-in (cbSecurity, from `users`) is accepted too
 	 * @tokenService A TokenService; the app's shared chat database when omitted
 	 */
-	function init( string tokenEnvVar = "", boolean tokens = false, any tokenService ) {
+	function init( string tokenEnvVar = "", boolean tokens = false, boolean accounts = false, any tokenService ) {
 		variables.tokenEnvVar = trim( arguments.tokenEnvVar )
 		variables.tokens = arguments.tokens
+		variables.accounts = arguments.accounts
 		variables.tokenService = arguments.tokenService ?: nullValue()
 		return this
 	}
@@ -51,20 +54,56 @@ class {
 	/**
 	 * The route middleware: names the caller on the request, or answers 401 and stops the action.
 	 *
+	 * A token (the header) is checked first. A page that signed in with an account is let in too, but a browser
+	 * sends its cookie to any site that asks, so a request that changes something and carries only the cookie must
+	 * also carry the header x-bxagents-csrf (a page's own script can set it; another site's form cannot).
+	 *
 	 * @event The ColdBox request context
+	 * @headers The request's headers; the real ones when omitted
 	 *
 	 * @return True when the request was refused (ColdBox then runs no more middleware for the route)
 	 */
-	boolean function guard( required any event ) {
-		var caller = authenticate( getHTTPRequestData( false ).headers )
-		if ( !isNull( caller ) ) {
-			arguments.event.setPrivateValue( "bxagentsCaller", caller )
-			return false
+	boolean function guard( required any event, struct headers = getHTTPRequestData( false ).headers ) {
+		var found = authenticate( arguments.headers )
+		var viaCookie = false
+		if ( isNull( found ) && variables.accounts ) {
+			found = signedIn( arguments.event, arguments.headers )
+			viaCookie = !isNull( found )
 		}
+		if ( isNull( found ) ) {
+			return refuse( arguments.event, refusal() )
+		}
+		if ( viaCookie && !listFindNoCase( "GET,HEAD,OPTIONS", arguments.event.getHTTPMethod() ) && !len( arguments.headers[ "x-bxagents-csrf" ] ?: "" ) ) {
+			return refuse( arguments.event, Outcome::failed( "csrf", "A page that is signed in must send the x-bxagents-csrf header with a request that changes something" ) )
+		}
+		arguments.event.setPrivateValue( "bxagentsCaller", found )
+		return false
+	}
+
+	/**
+	 * @return The Caller of a page that is signed in with an account, or null
+	 */
+	private any function signedIn( required any event, required struct headers ) {
+		try {
+			var security = arguments.event.getController().getWireBox().getInstance( "cbSecurity@cbSecurity" )
+			if ( security.isLoggedIn() ) {
+				return Caller::fromAccount( security.getUser().getId() ).via( sourceOf( arguments.headers, "web" ) )
+			}
+		} catch ( any e ) {
+			// no accounts in this app: not signed in
+		}
+		return nullValue()
+	}
+
+	/**
+	 * Answers the refusal as JSON with the status its code means and stops the action.
+	 *
+	 * @return True, always: the request was refused
+	 */
+	private boolean function refuse( required any event, required any refusal ) {
 		var edge = new ApiEdge()
-		var refusal = refusal()
 		// noExecution() stops the action: returning true alone only ends the remaining middleware
-		arguments.event.renderData( type = "json", statusCode = edge.statusFor( refusal ), data = edge.bodyFor( refusal ) ).noExecution()
+		arguments.event.renderData( type = "json", statusCode = edge.statusFor( arguments.refusal ), data = edge.bodyFor( arguments.refusal ) ).noExecution()
 		return true
 	}
 

@@ -25,8 +25,8 @@ class {
 }
 ```
 
-This generates a static `<path>/index.html` (served directly, no route needed) plus a
-dedicated API under `<path>/api`. The page is dependency-free vanilla HTML/CSS/JS,
+This generates a static `<path>/index.html` (served directly, no route needed) that calls the agent API
+at `/__bxagents`. The page is dependency-free vanilla HTML/CSS/JS,
 pre-built and vendored inside BxAgents itself - `bxAgents build` never runs `npm
 install`, and a generated project never needs Node installed at all.
 
@@ -95,11 +95,11 @@ plus a `themeFile` for anything the tokens don't cover.
 
 ## Securing it
 
-`apiKeyEnvVar` is a simple, toggleable gate - not a full login system. Left unset,
-`<path>/api/*` is wide open (fine for local dev). Set it, and every request under
-`<path>/api/*` must carry a matching `X-API-Key` header. The static shell itself is
-deliberately **not** gated, since a browser's plain page navigation can't send a
-custom header.
+`apiKeyEnvVar` is the agent API's shared secret - not a full login system. Left unset,
+the API is open (fine for local dev). Set it, and every call to `/__bxagents` must carry
+a matching `x-bxagents-token` header. The static shell itself is deliberately **not**
+gated, since a browser's plain page navigation can't send a custom header. For people
+with their own sign-in, list `users`.
 
 ## Try it
 

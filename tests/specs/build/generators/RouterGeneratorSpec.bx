@@ -36,39 +36,16 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).notToInclude( ".toAi(" );
 			} );
 
-			it( 'routes a webui entry to its own ChatUi handler, not toAi(), so userId comes from the session', function() {
+			it( "routes a webui entry to the extension files and nothing else: the page calls the agent API", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
 				var result = generator.generate( discovery, newAppDir() );
 
 				var content = fileRead( result.router );
-				// Deliberately NOT toAi(). ColdBox 8.1's toAi() now derives context
-				// itself, but lets a caller-supplied userId WIN over the session -
-				// right for a trusted server-to-server caller, wrong for a browser
-				// behind one shared API key. ChatUi derives it server-side only.
-				expect( content ).toInclude( 'post( "/chat/api/stream" ).toHandler( "ChatUi.stream" )' );
-				expect( content ).toInclude( 'post( "/chat/api/invoke" ).toHandler( "ChatUi.invoke" )' );
-				expect( content ).toInclude( 'post( "/chat/api/batch" ).toHandler( "ChatUi.batch" )' );
-				expect( content ).toInclude( 'get( "/chat/api/info" ).toHandler( "ChatUi.info" )' );
-				expect( content ).toInclude( 'get( "/chat/api/commands" ).toHandler( "ChatUi.commands" )' );
-				expect( content ).toInclude( 'get( "/chat/api/context" ).toHandler( "ChatUi.context" )' );
-				expect( content ).toInclude( 'post( "/chat/api/command" ).toHandler( "ChatUi.command" )' );
-
-				// Conversations and preferences, both backed by the SQLite store
-				expect( content ).toInclude( 'get( "/chat/api/conversations" ).toHandler( "ChatUi.conversations" )' );
-				expect( content ).toInclude( 'post( "/chat/api/conversations/create" ).toHandler( "ChatUi.conversationCreate" )' );
-				expect( content ).toInclude( 'post( "/chat/api/conversations/rename" ).toHandler( "ChatUi.conversationRename" )' );
-				expect( content ).toInclude( 'post( "/chat/api/conversations/delete" ).toHandler( "ChatUi.conversationDelete" )' );
-				expect( content ).toInclude( 'get( "/chat/api/preferences" ).toHandler( "ChatUi.preferences" )' );
-				expect( content ).toInclude( 'post( "/chat/api/preferences/set" ).toHandler( "ChatUi.preferenceSet" )' );
-				expect( content ).toInclude( 'get( "/chat/api/notes" ).toHandler( "ChatUi.notes" )' );
-				expect( content ).toInclude( 'post( "/chat/api/notes/add" ).toHandler( "ChatUi.noteAdd" )' );
-				expect( content ).toInclude( 'post( "/chat/api/notes/update" ).toHandler( "ChatUi.noteUpdate" )' );
-				expect( content ).toInclude( 'post( "/chat/api/notes/remove" ).toHandler( "ChatUi.noteRemove" )' );
-				// the specific note routes come before the list route, whose pattern also matches what follows it
-				expect( content.find( "/chat/api/notes/add" ) ).toBeLT( content.find( 'get( "/chat/api/notes"' ) );
-				expect( content ).toInclude( 'post( "/chat/api/preferences/delete" ).toHandler( "ChatUi.preferenceDelete" )' );
+				expect( content ).toInclude( 'get( "/chat/ext/:extension/:file-regex:(.+)" ).toHandler( "AgentApi.extensionFile" )' );
+				// the page's own calls go to the reserved path, behind the one gate, so no second set of routes exists
+				expect( content ).notToInclude( "ChatUi" );
+				expect( content ).notToInclude( "/chat/api" );
 				expect( content ).notToInclude( 'route( "/chat" ).toAi( "GeneratedAgent" )' );
-				expect( content ).notToInclude( 'route( "/chat/api" ).toAi( "GeneratedAgent" )' );
 			} );
 
 			it( "emits one route(path).toMCP(target) per mcp-exposure entry", function() {
@@ -275,7 +252,7 @@ class extends="testbox.system.BaseSpec" {
 				).router );
 
 				// the gate asks the Authenticator, and names the variable, never the secret
-				expect( content ).toInclude( 'var auth = ( event, rc, prc ) => new "models.api.Authenticator@bxagents"( "BXAGENTS_API_TOKEN", false ).guard( event )' );
+				expect( content ).toInclude( 'var auth = ( event, rc, prc ) => new "models.api.Authenticator@bxagents"( "BXAGENTS_API_TOKEN", false, false ).guard( event )' );
 				expect( content ).toInclude( 'post( "/__bxagents/invoke" ).middleware( auth ).toHandler( "AgentApi.invoke" )' );
 				expect( content ).toInclude( 'post( "/__bxagents/stream" ).middleware( auth ).toHandler( "AgentApi.stream" )' );
 				expect( content ).toInclude( 'post( "/__bxagents/events" ).middleware( auth ).toHandler( "AgentApi.events" )' );
@@ -283,7 +260,8 @@ class extends="testbox.system.BaseSpec" {
 				// every route of the API has it, none is left out
 				var routes = content.listToArray( char( 10 ) ).filter( ( line ) => line.find( '( "/__bxagents' ) );
 				expect( routes.len() ).toBeGT( 20 );
-				expect( routes.filter( ( r ) => !r.find( ".middleware( auth )" ) ) ).toBeEmpty();
+				// health is the one route that is open to anyone: it says only that the server is up
+				expect( routes.filter( ( r ) => !r.find( ".middleware( auth )" ) ).map( ( r ) => reReplace( r, "^[[:space:]]+", "" ) ) ).toBe( [ 'get( "/__bxagents/health" ).toHandler( "AgentApi.health" )' ] );
 				// the old gate and its catch-all are gone: the middleware answers 401 itself
 				expect( content ).notToInclude( "withCondition" );
 				expect( content ).notToInclude( ":subroute?" );
@@ -319,11 +297,19 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).notToInclude( "auth" );
 			} );
 
+			it( "closes the API behind the page's sign-in when the web UI lists users, and tells the gate to accept it", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+				var content = fileRead( generator.generate( discovery, newAppDir(), false, false, false, false, false, { webAccounts : true } ).router );
+
+				expect( content ).toInclude( 'Authenticator@bxagents"( "", false, true ).guard( event )' );
+				expect( content ).toInclude( 'post( "/__bxagents/events" ).middleware( auth )' );
+			} );
+
 			it( "gates on access: token with issued tokens alone", function() {
 				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
 				var content = fileRead( generator.generate( discovery, newAppDir(), false, false, false, false, false, { access : "token", tokens : true } ).router );
 
-				expect( content ).toInclude( 'Authenticator@bxagents"( "", true ).guard( event )' );
+				expect( content ).toInclude( 'Authenticator@bxagents"( "", true, false ).guard( event )' );
 			} );
 
 			it( "adds the run-control routes beside the turn routes, served by handlers/AgentApi", function() {

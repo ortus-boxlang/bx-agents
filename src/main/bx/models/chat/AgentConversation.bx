@@ -391,12 +391,19 @@ class {
 	}
 
 	/**
+	 * @return True when the agent's memory has a summary model, so compacting does something; without one the button would only look broken
+	 */
+	boolean function canCompact() {
+		return variables.agent.getMemories().some( ( memory ) => len( memory.getSummaryProvider() ?: "" ) && len( memory.getSummaryModel() ?: "" ) )
+	}
+
+	/**
 	 * Replaces the older messages with a summary and keeps the most recent few.
 	 *
 	 * @return { available, compacted, before, after }; available is false when the agent's memory has no summary model
 	 */
 	struct function compact() {
-		var summarizes = variables.agent.getMemories().some( ( memory ) => len( memory.getSummaryProvider() ?: "" ) && len( memory.getSummaryModel() ?: "" ) )
+		var summarizes = canCompact()
 		var before = variables.agent.getMemoryMessages( variables.userId, variables.conversationId ).len()
 		if ( !summarizes ) {
 			return { available : false, compacted : false, before : before, after : before }

@@ -1,0 +1,11 @@
+bundle = server.system.environment.BUNDLE
+tb = new testbox.system.TestBox( bundles = bundle )
+r = tb.runRaw()
+println( "Pass: " & r.getTotalPass() & " Fail: " & r.getTotalFail() & " Error: " & r.getTotalError() )
+function walk( suites ) {
+	for ( var s in suites ) {
+		for ( var sp in ( s.specStats ?: [] ) ) { if ( sp.status != "Passed" ) { println( "  FAIL " & sp.name & " -> " & left( ( sp.failMessage ?: "" ) & ( sp.error.message ?: "" ), 300 ) ) } }
+		walk( s.suiteStats ?: [] )
+	}
+}
+for ( b in r.getBundleStats() ) { walk( b.suiteStats ?: [] ) }
