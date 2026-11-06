@@ -812,7 +812,7 @@ __CUSTOM_CSS__
 	#settingsPanel button[hidden] { display: none; }
 
 	/* Notes: the short things the agent keeps about you and about its own work */
-	#notesPanel, #tokensPanel {
+	#notesPanel, #tokensPanel, #vaultPanel {
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
 		background: var(--bg);
@@ -822,8 +822,8 @@ __CUSTOM_CSS__
 		max-height: 80vh;
 		font-family: inherit;
 	}
-	#notesPanel::backdrop, #tokensPanel::backdrop { background: rgba(0, 0, 0, 0.35); }
-	#notesPanel .notes-head, #tokensPanel .notes-head {
+	#notesPanel::backdrop, #tokensPanel::backdrop, #vaultPanel::backdrop { background: rgba(0, 0, 0, 0.35); }
+	#notesPanel .notes-head, #tokensPanel .notes-head, #vaultPanel .notes-head {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
@@ -831,8 +831,8 @@ __CUSTOM_CSS__
 		padding: 0.7rem 0.9rem;
 		border-bottom: 1px solid var(--border);
 	}
-	#notesPanel h2, #tokensPanel h2 { font-size: 1rem; margin: 0; }
-	#notesPanel button, #tokensPanel button {
+	#notesPanel h2, #tokensPanel h2, #vaultPanel h2 { font-size: 1rem; margin: 0; }
+	#notesPanel button, #tokensPanel button, #vaultPanel button {
 		background: transparent;
 		color: var(--fg);
 		border: 1px solid var(--border);
@@ -842,9 +842,9 @@ __CUSTOM_CSS__
 		font: inherit;
 		font-size: 0.82rem;
 	}
-	#notesPanel button.primary, #tokensPanel button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
-	#notesPanel button[aria-selected="true"] { border-color: var(--accent); color: var(--accent); }
-	#notesPanel .notes-tabs { display: flex; gap: 0.4rem; padding: 0.6rem 0.9rem 0; }
+	#notesPanel button.primary, #tokensPanel button.primary, #vaultPanel button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+	#notesPanel button[aria-selected="true"], #vaultPanel button[aria-selected="true"] { border-color: var(--accent); color: var(--accent); }
+	#notesPanel .notes-tabs, #vaultPanel .notes-tabs { display: flex; gap: 0.4rem; padding: 0.6rem 0.9rem 0; }
 	#notesPanel .notes-usage { padding: 0.5rem 0.9rem 0; font-size: 0.8rem; color: var(--muted); }
 	#notesPanel progress { width: 100%; height: 0.5rem; margin-top: 0.25rem; accent-color: var(--accent); }
 	#notesList { list-style: none; margin: 0; padding: 0.5rem 0.9rem; overflow-y: auto; max-height: 40vh; }
@@ -865,7 +865,22 @@ __CUSTOM_CSS__
 	#tokensForm input { flex: 1; }
 	#tokenSecret { margin: 0 0.9rem 0.7rem; padding: 0.6rem; border: 1px solid var(--accent); border-radius: var(--radius-sm); font-size: 0.82rem; }
 	#tokenSecret code { display: block; margin: 0.3rem 0; overflow-wrap: anywhere; font-family: var(--font-mono); }
-	#notesPanel .notes-foot, #tokensPanel .notes-foot { padding: 0 0.9rem 0.8rem; font-size: 0.78rem; color: var(--muted); min-height: 1.2em; }
+	#notesPanel .notes-foot, #tokensPanel .notes-foot, #vaultPanel .notes-foot { padding: 0 0.9rem 0.8rem; font-size: 0.78rem; color: var(--muted); min-height: 1.2em; }
+	/* Vault: the secrets the agent uses. A value goes in once and is never shown again. */
+	#vaultPanel .notes-usage { padding: 0.5rem 0.9rem 0; font-size: 0.8rem; color: var(--muted); }
+	#vaultAsk { margin: 0.6rem 0.9rem 0; padding: 0.6rem 0.7rem; border: 1px solid var(--accent); border-radius: var(--radius-sm); font-size: 0.85rem; }
+	#vaultList { list-style: none; margin: 0; padding: 0.5rem 0.9rem; overflow-y: auto; max-height: 34vh; }
+	#vaultList li { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; padding: 0.45rem 0; border-bottom: 1px solid var(--border); }
+	#vaultList .secret-main { flex: 1; min-width: 12rem; }
+	#vaultList .secret-name { font-family: var(--font-mono); font-size: 0.85rem; overflow-wrap: anywhere; }
+	#vaultList .secret-meta { color: var(--muted); font-size: 0.75rem; overflow-wrap: anywhere; }
+	#vaultList .vault-empty { color: var(--muted); border: none; }
+	#vaultList li form { display: flex; flex-direction: column; gap: 0.35rem; flex: 1 1 100%; }
+	#vaultForm { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; padding: 0.3rem 0.9rem 0.7rem; }
+	#vaultForm .wide { grid-column: 1 / -1; }
+	#vaultForm input, #vaultList li form input { font: inherit; padding: 0.4rem; background: var(--input-bg); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius-sm); min-width: 0; }
+	#vaultForm button { grid-column: 1 / -1; justify-self: end; }
+	#vaultForm[hidden] { display: none; }
 </style>
 __EXTENSION_STYLES__
 </head>
@@ -904,6 +919,7 @@ __ICON_SPRITE__
 		<div class="group" data-group="You">
 			<h3>You</h3>
 			<button type="button" id="notesBtn" role="menuitem" title="What the agent keeps about you and about its own work" aria-label="Notes" hidden><svg class="i" aria-hidden="true"><use href="#i-notebook"/></svg><span class="label">Notes</span></button>
+			<button type="button" id="vaultBtn" role="menuitem" title="Secrets the agent can use, such as API keys. Values are sealed and never shown again" aria-label="Vault" aria-haspopup="dialog" hidden><svg class="i" aria-hidden="true"><use href="#i-key"/></svg><span class="label">Vault</span></button>
 			<button type="button" id="appearanceBtn" role="menuitem" title="Mode, accent color, text size and density" aria-label="Appearance" aria-haspopup="dialog" aria-expanded="false" aria-controls="appearancePanel"><svg class="i" aria-hidden="true"><use href="#i-palette"/></svg><span class="label">Appearance</span></button>
 			<button type="button" id="themeBtn" role="menuitem" title="Switch between light and dark" aria-label="Theme"><svg class="i" aria-hidden="true"><use href="#i-sun"/></svg><span class="label">Dark theme</span></button>
 		</div>
@@ -970,6 +986,28 @@ __ICON_SPRITE__
 			<button type="submit" class="primary">Add</button>
 		</form>
 		<p class="notes-foot" id="notesFoot" role="status"></p>
+	</dialog>
+
+	<dialog id="vaultPanel" aria-labelledby="vaultTitle">
+		<div class="notes-head">
+			<h2 id="vaultTitle">Vault</h2>
+			<button type="button" id="vaultClose" aria-label="Close" title="Close"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>
+		</div>
+		<div class="notes-tabs" role="tablist">
+			<button type="button" role="tab" id="vaultTabUser" aria-selected="true">Yours</button>
+			<button type="button" role="tab" id="vaultTabAgent" aria-selected="false">The agent's</button>
+		</div>
+		<div id="vaultAsk" role="status" hidden></div>
+		<div class="notes-usage" id="vaultUsage"></div>
+		<ul id="vaultList"></ul>
+		<form id="vaultForm" autocomplete="off">
+			<input id="vaultName" class="wide" maxlength="64" placeholder="Name, for example GMAIL_TOKEN" aria-label="Secret name" pattern="[A-Za-z][A-Za-z0-9_]*" required>
+			<input id="vaultValue" class="wide" type="password" autocomplete="new-password" spellcheck="false" placeholder="Value (hidden, never shown again)" aria-label="Secret value" required>
+			<input id="vaultAbout" placeholder="What it is for" aria-label="What it is for" maxlength="500">
+			<input id="vaultHosts" placeholder="Hosts it may go to (a.com, *.b.com)" aria-label="Hosts it may be sent to">
+			<button type="submit" class="primary">Save secret</button>
+		</form>
+		<p class="notes-foot" id="vaultFoot" role="status"></p>
 	</dialog>
 
 	<dialog id="tokensPanel" aria-labelledby="tokensTitle">
@@ -1158,6 +1196,7 @@ __MARKDOWN_SCRIPTS__
 			compactBtn.hidden = !capabilities.compact;
 			sidebarBtn.hidden = !capabilities.conversations;
 			notesBtn.hidden = !capabilities.notes;
+			vaultBtn.hidden = !capabilities.vault;
 			tokensBtn.hidden = !capabilities.tokens;
 			if ( !capabilities.conversations ) {
 				setSidebar( false );
@@ -2398,6 +2437,7 @@ __MARKDOWN_SCRIPTS__
 				},
 				onToolCall: function ( index, name, args ) {
 					turn.upsertToolCall( index, name, args );
+					noteVaultCall( index, name, args );
 				},
 				onNotice: function () {
 					// A suspension carries no detail on the wire - remember it and
@@ -2870,8 +2910,10 @@ __MARKDOWN_SCRIPTS__
 			payload.options.profile = chosenProfile;
 		}
 
+		vaultCalls = {};
 		streamInto( "/stream", payload, turn ).then( function ( outcome ) {
 			turn.settle( outcome.sawContent );
+			offerVaultRequest();
 			if ( outcome.suspended ) {
 				return offerApproval( turn, activeThreadId );
 			}
@@ -3308,6 +3350,270 @@ __MARKDOWN_SCRIPTS__
 				return loadNotes();
 			}
 			return notesFail( res, "Could not add the note." );
+		} );
+	} );
+
+	// ---- Vault -----------------------------------------------------------------
+	// A secret is typed here, sent once, and never comes back: the list shows names, what each is for and where
+	// it may go. The agent can ask for one (the vault_request tool); the request opens this panel on that name,
+	// so the value never passes through the conversation.
+	var vaultBtn = document.getElementById( "vaultBtn" );
+	var vaultPanel = document.getElementById( "vaultPanel" );
+	var vaultList = document.getElementById( "vaultList" );
+	var vaultFoot = document.getElementById( "vaultFoot" );
+	var vaultUsage = document.getElementById( "vaultUsage" );
+	var vaultAskBox = document.getElementById( "vaultAsk" );
+	var vaultForm = document.getElementById( "vaultForm" );
+	var vaultScope = "user";
+	var vaultData = null;
+	var vaultCalls = {};
+	var vaultRequest = null;
+
+	function vaultSay( text ) {
+		vaultFoot.textContent = text || "";
+	}
+
+	function vaultFail( res, fallback ) {
+		return res.json().then( function ( body ) {
+			vaultSay( ( body && ( body.reason || body.error ) ) || fallback );
+		} ).catch( function () { vaultSay( fallback ); } );
+	}
+
+	function canWriteVault() {
+		return vaultScope === "user" || ( vaultData && vaultData.admin );
+	}
+
+	function renderVault() {
+		if ( !vaultData ) {
+			return;
+		}
+		document.getElementById( "vaultTabUser" ).setAttribute( "aria-selected", String( vaultScope === "user" ) );
+		document.getElementById( "vaultTabAgent" ).setAttribute( "aria-selected", String( vaultScope === "agent" ) );
+		var rows = ( vaultData.secrets || [] ).filter( function ( s ) { return s.scope === vaultScope; } );
+		vaultUsage.textContent = rows.length + ( rows.length === 1 ? " secret. " : " secrets. " ) + "Values are sealed and never shown."
+			+ ( vaultData.status && vaultData.status.keySource === "file" ? " The key is a file beside the database: set BXAGENTS_VAULT_KEY for more protection." : "" );
+		vaultList.textContent = "";
+		if ( !rows.length ) {
+			var none = document.createElement( "li" );
+			none.className = "vault-empty";
+			none.textContent = "No secrets yet.";
+			vaultList.appendChild( none );
+		}
+		rows.forEach( function ( secret ) {
+			var li = document.createElement( "li" );
+			var main = document.createElement( "div" );
+			main.className = "secret-main";
+			var name = document.createElement( "div" );
+			name.className = "secret-name";
+			name.textContent = secret.name;
+			var meta = document.createElement( "div" );
+			meta.className = "secret-meta";
+			var used = secret.lastUsedAt ? "used " + String( secret.lastUsedAt ).slice( 0, 10 ) : "never used";
+			meta.textContent = ( secret.description ? secret.description + " · " : "" )
+				+ ( secret.hosts && secret.hosts.length ? secret.hosts.join( ", " ) : "any host" ) + " · " + used;
+			main.appendChild( name );
+			main.appendChild( meta );
+			li.appendChild( main );
+			if ( canWriteVault() ) {
+				var edit = document.createElement( "button" );
+				edit.type = "button";
+				edit.textContent = "Edit";
+				edit.addEventListener( "click", function () { editSecret( li, secret ); } );
+				var del = document.createElement( "button" );
+				del.type = "button";
+				del.textContent = "Remove";
+				del.addEventListener( "click", function () { removeSecret( secret ); } );
+				li.appendChild( edit );
+				li.appendChild( del );
+			}
+			vaultList.appendChild( li );
+		} );
+		vaultForm.hidden = !canWriteVault();
+		if ( !canWriteVault() ) {
+			vaultSay( "The agent's secrets are shared by everyone. Changing them takes an admin token." );
+		}
+		renderVaultAsk();
+	}
+
+	function renderVaultAsk() {
+		if ( !vaultRequest ) {
+			vaultAskBox.hidden = true;
+			return;
+		}
+		vaultAskBox.hidden = false;
+		vaultAskBox.textContent = "";
+		var strong = document.createElement( "strong" );
+		strong.textContent = "The agent asked for " + vaultRequest.name + ". ";
+		vaultAskBox.appendChild( strong );
+		vaultAskBox.appendChild( document.createTextNode( ( vaultRequest.why || "" ) + " Type it below; it is not sent through the chat." ) );
+	}
+
+	function loadVault() {
+		return apiGet( "/vault" ).then( function ( payload ) {
+			if ( payload && payload.success ) {
+				vaultData = payload;
+				renderVault();
+			} else {
+				vaultSay( "Could not load the vault." );
+			}
+		} );
+	}
+
+	function editSecret( li, secret ) {
+		li.textContent = "";
+		var form = document.createElement( "form" );
+		form.autocomplete = "off";
+		var title = document.createElement( "div" );
+		title.className = "secret-name";
+		title.textContent = secret.name;
+		var value = document.createElement( "input" );
+		value.type = "password";
+		value.autocomplete = "new-password";
+		value.placeholder = "New value (leave empty to keep the current one)";
+		value.setAttribute( "aria-label", "New value" );
+		var about = document.createElement( "input" );
+		about.value = secret.description || "";
+		about.placeholder = "What it is for";
+		about.setAttribute( "aria-label", "What it is for" );
+		var hosts = document.createElement( "input" );
+		hosts.value = ( secret.hosts || [] ).join( ", " );
+		hosts.placeholder = "Hosts it may go to";
+		hosts.setAttribute( "aria-label", "Hosts" );
+		var row = document.createElement( "div" );
+		row.style.display = "flex";
+		row.style.gap = "0.4rem";
+		var save = document.createElement( "button" );
+		save.type = "submit";
+		save.className = "primary";
+		save.textContent = "Save";
+		var cancel = document.createElement( "button" );
+		cancel.type = "button";
+		cancel.textContent = "Cancel";
+		cancel.addEventListener( "click", renderVault );
+		row.appendChild( save );
+		row.appendChild( cancel );
+		[ title, value, about, hosts, row ].forEach( function ( el ) { form.appendChild( el ); } );
+		form.addEventListener( "submit", function ( e ) {
+			e.preventDefault();
+			var changes = { scope: vaultScope, name: secret.name, description: about.value.trim(), hosts: hosts.value.split( "," ).map( function ( h ) { return h.trim(); } ).filter( Boolean ) };
+			if ( value.value ) {
+				changes.value = value.value;
+			}
+			value.value = "";
+			apiPost( "/vault/update", changes ).then( function ( res ) {
+				if ( res.ok ) {
+					vaultSay( "Saved." );
+					return loadVault();
+				}
+				return vaultFail( res, "Could not save the secret." );
+			} );
+		} );
+		li.appendChild( form );
+		value.focus();
+	}
+
+	function removeSecret( secret ) {
+		if ( !window.confirm( "Remove " + secret.name + "?\n\nAnything that uses it will stop working." ) ) {
+			return;
+		}
+		apiPost( "/vault/remove", { scope: vaultScope, name: secret.name } ).then( function ( res ) {
+			if ( res.ok ) {
+				vaultSay( "Removed." );
+				return loadVault();
+			}
+			return vaultFail( res, "Could not remove the secret." );
+		} );
+	}
+
+	function openVault() {
+		vaultSay( "" );
+		if ( !vaultPanel.open ) {
+			vaultPanel.showModal();
+		}
+		return loadVault();
+	}
+
+	/**
+	 * The agent's vault_request tool calls arrive as streamed fragments. Collect them by index; once the turn ends
+	 * offerVaultRequest() reads what was asked for.
+	 */
+	function noteVaultCall( index, name, args ) {
+		var call = vaultCalls[ index ] || ( vaultCalls[ index ] = { name: "", args: "" } );
+		if ( name && name.length ) {
+			call.name = name;
+		}
+		call.args += args || "";
+	}
+
+	function offerVaultRequest() {
+		var found = null;
+		Object.keys( vaultCalls ).forEach( function ( key ) {
+			var call = vaultCalls[ key ];
+			if ( call.name !== "vault_request" ) {
+				return;
+			}
+			try {
+				var parsed = JSON.parse( call.args );
+				if ( parsed && /^[A-Za-z][A-Za-z0-9_]*$/.test( parsed.name || "" ) ) {
+					found = { name: parsed.name, why: parsed.why || "", scope: parsed.scope === "agent" ? "agent" : "user" };
+				}
+			} catch ( e ) {
+				// an unfinished or malformed call asks for nothing
+			}
+		} );
+		vaultCalls = {};
+		if ( !found || !capabilities.vault ) {
+			return;
+		}
+		vaultRequest = found;
+		vaultScope = found.scope;
+		openVault().then( function () {
+			if ( vaultData && found.scope === "agent" && !vaultData.admin ) {
+				vaultScope = "user";
+				renderVault();
+				vaultSay( "The agent asked for a shared secret. Only an admin can add it." );
+			}
+			document.getElementById( "vaultName" ).value = found.name;
+			document.getElementById( "vaultValue" ).focus();
+		} );
+	}
+
+	vaultBtn.addEventListener( "click", function () { vaultRequest = null; openVault(); } );
+	document.getElementById( "vaultClose" ).addEventListener( "click", function () {
+		document.getElementById( "vaultValue" ).value = "";
+		vaultRequest = null;
+		vaultPanel.close();
+	} );
+	vaultPanel.addEventListener( "close", function () { document.getElementById( "vaultValue" ).value = ""; } );
+	document.getElementById( "vaultTabUser" ).addEventListener( "click", function () { vaultScope = "user"; vaultSay( "" ); renderVault(); } );
+	document.getElementById( "vaultTabAgent" ).addEventListener( "click", function () { vaultScope = "agent"; vaultSay( "" ); renderVault(); } );
+	vaultForm.addEventListener( "submit", function ( e ) {
+		e.preventDefault();
+		var nameEl = document.getElementById( "vaultName" );
+		var valueEl = document.getElementById( "vaultValue" );
+		var body = {
+			scope      : vaultScope,
+			name       : nameEl.value.trim(),
+			value      : valueEl.value,
+			description: document.getElementById( "vaultAbout" ).value.trim(),
+			hosts      : document.getElementById( "vaultHosts" ).value.split( "," ).map( function ( h ) { return h.trim(); } ).filter( Boolean )
+		};
+		// the value leaves the box at once: nothing keeps it after this request
+		valueEl.value = "";
+		apiPost( "/vault", body ).then( function ( res ) {
+			if ( res.ok ) {
+				nameEl.value = "";
+				document.getElementById( "vaultAbout" ).value = "";
+				document.getElementById( "vaultHosts" ).value = "";
+				var answered = vaultRequest;
+				vaultRequest = null;
+				vaultSay( "Saved " + body.name + ". It cannot be shown again." );
+				if ( answered && answered.name === body.name ) {
+					showHint( body.name + " saved. Tell the agent to carry on." );
+				}
+				return loadVault();
+			}
+			return vaultFail( res, "Could not save the secret." );
 		} );
 	} );
 
