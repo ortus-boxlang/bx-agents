@@ -490,6 +490,19 @@ class extends="testbox.system.BaseSpec" {
 					}
 				} );
 
+				it( "has a panel for access tokens that shows only when the server offers them, and shows a secret once", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+					var html = fileRead( appDir & "/chat/index.html" );
+
+					expect( html ).toInclude( 'id="tokensPanel"' );
+					expect( reMatch( '<button[^>]*id="tokensBtn"[^>]*>', html )[ 1 ] ).toInclude( "aria-label=" );
+					expect( html ).toInclude( "tokensBtn.hidden = !capabilities.tokens" );
+					expect( html ).toInclude( 'apiPost( "/tokens/revoke"' );
+					expect( html ).toInclude( "Copy this token now. It is not shown again." );
+				} );
+
 				it( "asks for a shared password in the page, not in a browser prompt, and opens by itself when refused", function() {
 					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
 					var appDir = newAppDir();

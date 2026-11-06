@@ -775,7 +775,7 @@ __CUSTOM_CSS__
 	#keyPanel button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 
 	/* Notes: the short things the agent keeps about you and about its own work */
-	#notesPanel {
+	#notesPanel, #tokensPanel {
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
 		background: var(--bg);
@@ -785,8 +785,8 @@ __CUSTOM_CSS__
 		max-height: 80vh;
 		font-family: inherit;
 	}
-	#notesPanel::backdrop { background: rgba(0, 0, 0, 0.35); }
-	#notesPanel .notes-head {
+	#notesPanel::backdrop, #tokensPanel::backdrop { background: rgba(0, 0, 0, 0.35); }
+	#notesPanel .notes-head, #tokensPanel .notes-head {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
@@ -794,8 +794,8 @@ __CUSTOM_CSS__
 		padding: 0.7rem 0.9rem;
 		border-bottom: 1px solid var(--border);
 	}
-	#notesPanel h2 { font-size: 1rem; margin: 0; }
-	#notesPanel button {
+	#notesPanel h2, #tokensPanel h2 { font-size: 1rem; margin: 0; }
+	#notesPanel button, #tokensPanel button {
 		background: transparent;
 		color: var(--fg);
 		border: 1px solid var(--border);
@@ -805,7 +805,7 @@ __CUSTOM_CSS__
 		font: inherit;
 		font-size: 0.82rem;
 	}
-	#notesPanel button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+	#notesPanel button.primary, #tokensPanel button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 	#notesPanel button[aria-selected="true"] { border-color: var(--accent); color: var(--accent); }
 	#notesPanel .notes-tabs { display: flex; gap: 0.4rem; padding: 0.6rem 0.9rem 0; }
 	#notesPanel .notes-usage { padding: 0.5rem 0.9rem 0; font-size: 0.8rem; color: var(--muted); }
@@ -818,7 +818,17 @@ __CUSTOM_CSS__
 	#notesList .notes-empty { color: var(--muted); border: none; }
 	#notesForm { display: flex; gap: 0.4rem; padding: 0 0.9rem 0.7rem; }
 	#notesForm input { flex: 1; min-width: 0; font: inherit; padding: 0.4rem; background: var(--input-bg); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius-sm); }
-	#notesPanel .notes-foot { padding: 0 0.9rem 0.8rem; font-size: 0.78rem; color: var(--muted); min-height: 1.2em; }
+	#tokensList { list-style: none; margin: 0; padding: 0.5rem 0.9rem; overflow-y: auto; max-height: 36vh; }
+	#tokensList li { display: flex; gap: 0.5rem; align-items: center; padding: 0.4rem 0; border-bottom: 1px solid var(--border); }
+	#tokensList .token-name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 0.9rem; }
+	#tokensList .token-meta { color: var(--muted); font-size: 0.75rem; }
+	#tokensList .tokens-empty { color: var(--muted); border: none; }
+	#tokensForm { display: flex; flex-wrap: wrap; gap: 0.4rem; padding: 0 0.9rem 0.7rem; }
+	#tokensForm input, #tokensForm select { font: inherit; padding: 0.4rem; background: var(--input-bg); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius-sm); min-width: 0; }
+	#tokensForm input { flex: 1; }
+	#tokenSecret { margin: 0 0.9rem 0.7rem; padding: 0.6rem; border: 1px solid var(--accent); border-radius: var(--radius-sm); font-size: 0.82rem; }
+	#tokenSecret code { display: block; margin: 0.3rem 0; overflow-wrap: anywhere; font-family: var(--font-mono); }
+	#notesPanel .notes-foot, #tokensPanel .notes-foot { padding: 0 0.9rem 0.8rem; font-size: 0.78rem; color: var(--muted); min-height: 1.2em; }
 </style>
 __EXTENSION_STYLES__
 </head>
@@ -846,6 +856,7 @@ __ICON_SPRITE__
 			<button type="button" id="clearBtn" title="Delete the messages in this conversation" aria-label="Clear" hidden><svg class="i" aria-hidden="true"><use href="#i-broom"/></svg></button>
 			<button type="button" id="compactBtn" title="Summarize older messages, keep the recent ones" aria-label="Compact" hidden><svg class="i" aria-hidden="true"><use href="#i-arrows-in-line-vertical"/></svg></button>
 			<button type="button" id="notesBtn" title="What the agent keeps about you and about its own work" aria-label="Notes" hidden><svg class="i" aria-hidden="true"><use href="#i-notebook"/></svg></button>
+			<button type="button" id="tokensBtn" title="Access tokens for this server" aria-label="Tokens" aria-haspopup="dialog" hidden><svg class="i" aria-hidden="true"><use href="#i-terminal-window"/></svg></button>
 			<button type="button" id="keyBtn" title="Password for this server" aria-label="Password"><svg class="i" aria-hidden="true"><use href="#i-key"/></svg></button>
 			<button type="button" id="appearanceBtn" title="Mode, accent color, text size and density" aria-label="Appearance" aria-haspopup="dialog" aria-expanded="false" aria-controls="appearancePanel"><svg class="i" aria-hidden="true"><use href="#i-palette"/></svg></button>
 			<button type="button" id="themeBtn" title="Switch between light and dark" aria-label="Theme"><svg class="i" aria-hidden="true"><use href="#i-sun"/></svg></button>
@@ -910,6 +921,26 @@ __ICON_SPRITE__
 			<button type="submit" class="primary">Add</button>
 		</form>
 		<p class="notes-foot" id="notesFoot" role="status"></p>
+	</dialog>
+
+	<dialog id="tokensPanel" aria-labelledby="tokensTitle">
+		<div class="notes-head">
+			<h2 id="tokensTitle">Access tokens</h2>
+			<button type="button" id="tokensClose" aria-label="Close" title="Close"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>
+		</div>
+		<ul id="tokensList"></ul>
+		<div id="tokenSecret" role="status" hidden>
+			<strong>Copy this token now. It is not shown again.</strong>
+			<code id="tokenSecretText"></code>
+			<button type="button" id="tokenCopy"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg> Copy</button>
+		</div>
+		<form id="tokensForm" autocomplete="off">
+			<input id="tokenName" maxlength="64" placeholder="Name" aria-label="Token name" required>
+			<select id="tokenScope" aria-label="Scope"><option value="chat">chat</option><option value="admin">admin</option></select>
+			<input id="tokenExpires" maxlength="20" placeholder="Lasts (90d)" aria-label="Expires">
+			<button type="submit" class="primary">Create</button>
+		</form>
+		<p class="notes-foot" id="tokensFoot" role="status"></p>
 	</dialog>
 
 __MARKDOWN_SCRIPTS__
@@ -1077,6 +1108,7 @@ __MARKDOWN_SCRIPTS__
 			compactBtn.hidden = !capabilities.compact;
 			sidebarBtn.hidden = !capabilities.conversations;
 			notesBtn.hidden = !capabilities.notes;
+			tokensBtn.hidden = !capabilities.tokens;
 			if ( !capabilities.conversations ) {
 				setSidebar( false );
 			}
@@ -2875,6 +2907,116 @@ __MARKDOWN_SCRIPTS__
 			.catch( function () {
 				showHint( "Compaction failed." );
 			} );
+	} );
+
+	// ---- Access tokens (an admin, when the server turns agentApi.manageTokens on) ----
+	var tokensBtn = document.getElementById( "tokensBtn" );
+	var tokensPanel = document.getElementById( "tokensPanel" );
+	var tokensList = document.getElementById( "tokensList" );
+	var tokensFoot = document.getElementById( "tokensFoot" );
+	var tokenSecret = document.getElementById( "tokenSecret" );
+
+	function tokensSay( text ) {
+		tokensFoot.textContent = text || "";
+	}
+
+	function tokensFail( res, fallback ) {
+		return res.json().then( function ( body ) {
+			tokensSay( ( body && ( body.reason || body.error ) ) || fallback );
+		} ).catch( function () { tokensSay( fallback ); } );
+	}
+
+	function dayOf( stamp ) {
+		return stamp ? String( stamp ).slice( 0, 10 ) : "";
+	}
+
+	function renderTokens( tokens ) {
+		tokensList.textContent = "";
+		if ( !tokens.length ) {
+			var none = document.createElement( "li" );
+			none.className = "tokens-empty";
+			none.textContent = "No tokens yet.";
+			tokensList.appendChild( none );
+		}
+		tokens.forEach( function ( token ) {
+			var li = document.createElement( "li" );
+			var name = document.createElement( "span" );
+			name.className = "token-name";
+			name.textContent = token.name;
+			var meta = document.createElement( "span" );
+			meta.className = "token-meta";
+			meta.textContent = token.scope + ( token.status !== "active" ? ", " + token.status : "" )
+				+ ( token.expiresAt ? ", until " + dayOf( token.expiresAt ) : "" )
+				+ ( token.lastUsedAt ? ", used " + dayOf( token.lastUsedAt ) : ", never used" );
+			li.appendChild( name );
+			li.appendChild( meta );
+			if ( token.status === "active" ) {
+				var revoke = document.createElement( "button" );
+				revoke.type = "button";
+				revoke.textContent = "Revoke";
+				revoke.setAttribute( "aria-label", "Revoke " + token.name );
+				revoke.addEventListener( "click", function () {
+					apiPost( "/tokens/revoke", { name: token.name } ).then( function ( res ) {
+						if ( res.ok ) {
+							tokensSay( "Revoked " + token.name + "." );
+							return loadTokens();
+						}
+						return tokensFail( res, "Could not revoke the token." );
+					} );
+				} );
+				li.appendChild( revoke );
+			}
+			tokensList.appendChild( li );
+		} );
+	}
+
+	function loadTokens() {
+		return apiGet( "/tokens" ).then( function ( payload ) {
+			if ( payload && payload.success ) {
+				renderTokens( payload.tokens || [] );
+			} else {
+				tokensSay( "Could not load the tokens." );
+			}
+		} );
+	}
+
+	tokensBtn.addEventListener( "click", function () {
+		tokensSay( "" );
+		tokenSecret.hidden = true;
+		tokensPanel.showModal();
+		loadTokens();
+	} );
+	document.getElementById( "tokensClose" ).addEventListener( "click", function () {
+		document.getElementById( "tokenSecretText" ).textContent = "";
+		tokensPanel.close();
+	} );
+	document.getElementById( "tokenCopy" ).addEventListener( "click", function () {
+		var secret = document.getElementById( "tokenSecretText" ).textContent;
+		if ( navigator.clipboard ) {
+			navigator.clipboard.writeText( secret ).then( function () { tokensSay( "Copied." ); } );
+		}
+	} );
+	document.getElementById( "tokensForm" ).addEventListener( "submit", function ( e ) {
+		e.preventDefault();
+		var nameEl = document.getElementById( "tokenName" );
+		var expiresEl = document.getElementById( "tokenExpires" );
+		apiPost( "/tokens", {
+			name   : nameEl.value.trim(),
+			scope  : document.getElementById( "tokenScope" ).value,
+			expires: expiresEl.value.trim()
+		} ).then( function ( res ) {
+			if ( !res.ok ) {
+				return tokensFail( res, "Could not create the token." );
+			}
+			return res.json().then( function ( made ) {
+				document.getElementById( "tokenSecretText" ).textContent = made.token;
+				tokenSecret.hidden = false;
+				nameEl.value = "";
+				expiresEl.value = "";
+				tokensSay( "Created " + made.name + "." );
+				return loadTokens();
+			} );
+		} );
 	} );
 
 	// ---- Notes -----------------------------------------------------------------
