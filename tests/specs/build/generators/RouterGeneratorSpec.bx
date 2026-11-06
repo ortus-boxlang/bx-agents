@@ -116,6 +116,21 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).notToInclude( "/__bxagents" );
 			} );
 
+			it( "puts the gate in front of an open API that keeps addresses out or limits use, and passes the settings to it", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+				var open = fileRead( generator.generate( discovery, newAppDir() ).router );
+				var guarded = fileRead( generator.generate( discovery, newAppDir(), false, false, false, false, false, { allowedIPs : [ "10.0.0.0/8" ], rateLimit : { requests : 30, perSeconds : 60 } } ).router );
+
+				expect( open ).notToInclude( "var auth" );
+				expect( open ).notToInclude( ".middleware( auth )" );
+				expect( guarded ).toInclude( "var auth" );
+				expect( guarded ).toInclude( 'post( "/__bxagents/invoke" ).middleware( auth )' );
+				expect( guarded ).toInclude( "10.0.0.0/8" );
+				expect( guarded ).toInclude( "open : true" );
+				// ... but the health probe stays open to anyone
+				expect( guarded ).toInclude( 'get( "/__bxagents/health" ).toHandler' );
+			} );
+
 			it( "emits the WhatsApp Cloud GET/POST webhook routes when hasWhatsAppCloudGateway is true", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
 				var result = generator.generate( discovery, newAppDir(), false, true );
@@ -262,7 +277,7 @@ class extends="testbox.system.BaseSpec" {
 				).router );
 
 				// the gate asks the Authenticator, and names the variable, never the secret
-				expect( content ).toInclude( 'var auth = ( event, rc, prc ) => new "models.api.Authenticator@bxagents"( "BXAGENTS_API_TOKEN", false, false ).guard( event )' );
+				expect( content ).toInclude( 'var auth = ( event, rc, prc ) => new "models.api.Authenticator@bxagents"( tokenEnvVar : "BXAGENTS_API_TOKEN", tokens : false, accounts : false,' );
 				expect( content ).toInclude( 'post( "/__bxagents/invoke" ).middleware( auth ).toHandler( "AgentApi.invoke" )' );
 				expect( content ).toInclude( 'post( "/__bxagents/stream" ).middleware( auth ).toHandler( "AgentApi.stream" )' );
 				expect( content ).toInclude( 'post( "/__bxagents/events" ).middleware( auth ).toHandler( "AgentApi.events" )' );
@@ -311,7 +326,7 @@ class extends="testbox.system.BaseSpec" {
 				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
 				var content = fileRead( generator.generate( discovery, newAppDir(), false, false, false, false, false, { webAccounts : true } ).router );
 
-				expect( content ).toInclude( 'Authenticator@bxagents"( "", false, true ).guard( event )' );
+				expect( content ).toInclude( 'Authenticator@bxagents"( tokenEnvVar : "", tokens : false, accounts : true,' );
 				expect( content ).toInclude( 'post( "/__bxagents/events" ).middleware( auth )' );
 			} );
 
@@ -319,7 +334,7 @@ class extends="testbox.system.BaseSpec" {
 				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
 				var content = fileRead( generator.generate( discovery, newAppDir(), false, false, false, false, false, { access : "token", tokens : true } ).router );
 
-				expect( content ).toInclude( 'Authenticator@bxagents"( "", true, false ).guard( event )' );
+				expect( content ).toInclude( 'Authenticator@bxagents"( tokenEnvVar : "", tokens : true, accounts : false,' );
 			} );
 
 			it( "adds the run-control routes beside the turn routes, served by handlers/AgentApi", function() {

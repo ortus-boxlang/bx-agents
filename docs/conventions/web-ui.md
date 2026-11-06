@@ -102,7 +102,7 @@ Each call carries three headers:
 | Header | Why |
 | --- | --- |
 | `x-bxagents-source: web` | Marks conversations the page starts, so `bxAgents sessions list --source=web` and the API's `?source=` filter can tell them from terminal and gateway ones |
-| `x-bxagents-token` | The token from the **Key** button, when one is set (see [Securing the API](#securing-the-api)) |
+| `x-bxagents-token` | The password from the key button's form, when one is set (see [Securing the API](#securing-the-api)) |
 | `x-bxagents-csrf: 1` | Sent on every request. A request made with the sign-in cookie that changes something must carry it, so another site cannot make your browser do it |
 
 Identity is the API's: with no `users` the page is the one open `local` user, shared with the terminal chat on the same machine, and with `users` it is the signed-in account.
@@ -375,7 +375,7 @@ For anything the tokens don't cover - custom fonts, layout, per-element rules - 
 ## Securing the API
 
 !!! warning
-    **`apiKeyEnvVar` is a shared secret, not a login system.** It is the same thing as the agent API's `agentApi.tokenEnvVar` (a name in `Agent.yaml` wins if both are set). Left unset, the API is open (fine on your own machine, not for a public deployment; `serve` warns when an open API listens on every interface). Set it, and every call to `/__bxagents` must carry a matching `x-bxagents-token` header, compared in constant time. **The static shell (`<path>/index.html`) is not gated**, because a browser's plain page navigation can't send a custom header; the page's own JS asks for the token (the **Key** button, stored in `localStorage`) and sends it on every call. A `401` shows a message telling you to set or correct the token. For several people use [issued tokens](agent-bx.md#access-tokens-for-a-deployed-agent) or `users`.
+    **`apiKeyEnvVar` is a shared secret, not a login system.** It is the same thing as the agent API's `agentApi.tokenEnvVar` (a name in `Agent.yaml` wins if both are set). Left unset, the API is open (fine on your own machine, not for a public deployment; `serve` warns when an open API listens on every interface). Set it, and every call to `/__bxagents` must carry a matching `x-bxagents-token` header, compared in constant time. **The static shell (`<path>/index.html`) is not gated**, because a browser's plain page navigation can't send a custom header; the page asks for it in a form: a **Password** box that opens by itself when the server answers `401` and again from the key button at the top. The password is kept in `localStorage` and sent on every call; a wrong one shows "That password was not accepted." For several people use [issued tokens](agent-bx.md#access-tokens-for-a-deployed-agent) or `users`.
 
 ## Appearance
 

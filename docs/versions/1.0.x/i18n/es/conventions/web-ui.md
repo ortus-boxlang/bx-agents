@@ -102,7 +102,7 @@ Cada llamada lleva tres cabeceras:
 | Cabecera | Para qué |
 | --- | --- |
 | `x-bxagents-source: web` | Marca las conversaciones que inicia la página, para distinguirlas de las de la terminal y los gateways (`bxAgents sessions list --source=web`, o `?source=` en la API) |
-| `x-bxagents-token` | El token del botón **Key**, cuando hay uno (ver [Proteger la API](#proteger-la-api)) |
+| `x-bxagents-token` | La contraseña del formulario del botón de la llave, cuando hay una (ver [Proteger la API](#proteger-la-api)) |
 | `x-bxagents-csrf: 1` | Se envía en cada petición. Una petición hecha con la cookie de sesión que cambia algo debe llevarla, para que otro sitio no pueda hacer que tu navegador lo haga |
 
 La identidad es la de la API: sin `users` la página es el único usuario abierto `local`, compartido con el chat de terminal de esa máquina, y con `users` es la cuenta que inició sesión.
@@ -377,7 +377,7 @@ Para cualquier cosa que los tokens no cubran - fuentes personalizadas, layout, r
 ## Proteger la API
 
 !!! warning
-    **`apiKeyEnvVar` es un secreto compartido, no un sistema de inicio de sesión.** Es lo mismo que `agentApi.tokenEnvVar` de la API del agente (si ambos están, gana el nombre de `Agent.yaml`). Sin configurar, la API está abierta (bien en tu propia máquina, no para un despliegue público; `serve` avisa cuando una API abierta escucha en todas las interfaces). Configúralo, y cada llamada a `/__bxagents` debe llevar una cabecera `x-bxagents-token` que coincida, comparada en tiempo constante. **El shell estático (`<path>/index.html`) no está protegido**, porque la navegación de página simple de un navegador no puede enviar una cabecera personalizada; el JS de la página pide el token (el botón **Key**, guardado en `localStorage`) y lo envía en cada llamada. Un `401` muestra un mensaje que indica configurar o corregir el token. Para varias personas usa [tokens emitidos](agent-bx.md#tokens-de-acceso-para-un-agente-desplegado) o `users`.
+    **`apiKeyEnvVar` es un secreto compartido, no un sistema de inicio de sesión.** Es lo mismo que `agentApi.tokenEnvVar` de la API del agente (si ambos están, gana el nombre de `Agent.yaml`). Sin configurar, la API está abierta (bien en tu propia máquina, no para un despliegue público; `serve` avisa cuando una API abierta escucha en todas las interfaces). Configúralo, y cada llamada a `/__bxagents` debe llevar una cabecera `x-bxagents-token` que coincida, comparada en tiempo constante. **El shell estático (`<path>/index.html`) no está protegido**, porque la navegación de página simple de un navegador no puede enviar una cabecera personalizada; la página lo pide en un formulario: una caja **Contraseña** que se abre sola cuando el servidor responde `401` y de nuevo desde el botón de la llave arriba. La contraseña se guarda en `localStorage` y se envía en cada llamada; una incorrecta muestra "That password was not accepted." Para varias personas usa [tokens emitidos](agent-bx.md#tokens-de-acceso-para-un-agente-desplegado) o `users`.
 
 ## Apariencia
 

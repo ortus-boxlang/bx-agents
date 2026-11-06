@@ -1,0 +1,80 @@
+/**
+ * How often one caller may use the agent API (`agentApi.rateLimit`): at most `requests` in each window of `perSeconds`.
+ * A fixed window per key, counted in the application scope so every request of the server shares it. It is a brake
+ * on a runaway script or a leaked token, not a billing meter: it forgets everything when the server restarts.
+ */
+class {
+
+	/** @return The counters, made on first use: key to { start, count } */
+	private static any function table() {
+		lock name="bxagents-rate-limit" type="exclusive" timeout="5" {
+			if ( !application.keyExists( "bxagentsRateLimit" ) ) {
+				application[ "bxagentsRateLimit" ] = createObject( "java", "java.util.concurrent.ConcurrentHashMap" ).init()
+			}
+		}
+		return application.bxagentsRateLimit
+	}
+
+	/**
+	 * Counts one call.
+	 *
+	 * @key Who is being counted
+	 * @requests How many calls a window allows
+	 * @perSeconds How long a window is
+	 * @now The time in milliseconds; the clock when omitted
+	 *
+	 * @return { allowed, retryAfter } where retryAfter is the seconds until the window ends (0 when allowed)
+	 */
+	static struct function hit( required string key, required numeric requests, required numeric perSeconds, numeric now = getTickCount() ) {
+		var counters = RateLimit::table()
+		var windowMs = arguments.perSeconds * 1000
+		var result = { allowed : true, retryAfter : 0 }
+		lock name="bxagents-rate-limit-hit" type="exclusive" timeout="5" {
+			if ( counters.size() > 10000 ) {
+				for ( var stale in counters.keySet().toArray() ) {
+					if ( arguments.now - counters.get( stale ).start >= windowMs ) {
+						counters.remove( stale )
+					}
+				}
+			}
+			var seen = counters.get( arguments.key )
+			if ( isNull( seen ) || arguments.now - seen.start >= windowMs ) {
+				seen = { start : arguments.now, count : 0 }
+				counters.put( arguments.key, seen )
+			}
+			seen.count++
+			if ( seen.count > arguments.requests ) {
+				result = { allowed : false, retryAfter : max( 1, ceiling( ( windowMs - ( arguments.now - seen.start ) ) / 1000 ) ) }
+			}
+		}
+		return result
+	}
+
+	/**
+	 * @config The configured value of `agentApi.rateLimit`
+	 *
+	 * @return What is wrong with it, as sentences; empty when it is fine
+	 */
+	static array function problems( required any config ) {
+		if ( !isStruct( arguments.config ) ) {
+			return [ "Agent.bx's 'agentApi.rateLimit' must be a struct of { requests, perSeconds, by }" ]
+		}
+		var found = []
+		for ( var key in arguments.config ) {
+			if ( !listFindNoCase( "requests,perSeconds,by", key ) ) {
+				found.append( "Agent.bx's 'agentApi.rateLimit' has an unknown key [#key#] - valid keys: requests, perSeconds, by" )
+			}
+		}
+		for ( var key in [ "requests", "perSeconds" ] ) {
+			var value = arguments.config[ key ] ?: ""
+			if ( !isNumeric( value ) || value < 1 || int( value ) != value ) {
+				found.append( "Agent.bx's 'agentApi.rateLimit.#key#' must be a whole number of at least 1" )
+			}
+		}
+		if ( arguments.config.keyExists( "by" ) && !listFindNoCase( "caller,ip", toString( arguments.config.by ) ) ) {
+			found.append( "Agent.bx's 'agentApi.rateLimit.by' must be caller or ip" )
+		}
+		return found
+	}
+
+}

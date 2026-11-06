@@ -133,6 +133,44 @@ class extends="testbox.system.BaseSpec" {
 					expect( auth.guard( withHeader, { "x-bxagents-csrf" : "1" } ) ).toBeFalse();
 				} );
 
+				it( "keeps out an address that is not on agentApi.allowedIPs, before it asks for a token", function() {
+					var auth = new bxagents.models.api.Authenticator( tokens = true, tokenService = tokens, allowedIPs = [ "10.0.0.0/8", "203.0.113.7" ] );
+					var made = tokens.create( "laptop" );
+
+					var outside = new FakeEvent( "POST" );
+					expect( auth.guard( outside, { "x-bxagents-token" : made.token }, "198.51.100.9" ) ).toBeTrue();
+					expect( outside.rendered().statusCode ).toBe( 403 );
+					expect( outside.rendered().data.code ).toBe( "forbidden" );
+
+					expect( auth.guard( new FakeEvent( "POST" ), { "x-bxagents-token" : made.token }, "10.4.5.6" ) ).toBeFalse();
+					expect( auth.guard( new FakeEvent( "POST" ), { "x-bxagents-token" : made.token }, "203.0.113.7" ) ).toBeFalse();
+				} );
+
+				it( "counts a caller against agentApi.rateLimit and answers 429 with Retry-After once it is over", function() {
+					var auth = new bxagents.models.api.Authenticator( tokens = true, tokenService = tokens, rateLimit = { requests : 2, perSeconds : 60 } );
+					var made = tokens.create( "limited-" & createUUID().left( 8 ) );
+					var headers = { "x-bxagents-token" : made.token };
+
+					expect( auth.guard( new FakeEvent( "POST" ), headers, "1.1.1.1" ) ).toBeFalse();
+					expect( auth.guard( new FakeEvent( "POST" ), headers, "1.1.1.1" ) ).toBeFalse();
+					var third = new FakeEvent( "POST" );
+					expect( auth.guard( third, headers, "1.1.1.1" ) ).toBeTrue();
+					expect( third.rendered().statusCode ).toBe( 429 );
+					expect( third.rendered().data.code ).toBe( "rate_limited" );
+					expect( val( third.header( "Retry-After" ) ) ).toBeGTE( 1 );
+				} );
+
+				it( "on an open API only keeps the addresses and the limit, and asks nobody for a token", function() {
+					var auth = new bxagents.models.api.Authenticator( open = true, allowedIPs = [ "127.0.0.1" ], rateLimit = { requests : 1, perSeconds : 60 } );
+					var address = "127.0.0.1";
+
+					var first = new FakeEvent();
+					expect( auth.guard( first, {}, address ) ).toBeFalse();
+					expect( first.privateValueExists( "bxagentsCaller" ) ).toBeFalse();
+					expect( auth.guard( new FakeEvent(), {}, address ) ).toBeTrue();
+					expect( auth.guard( new FakeEvent(), {}, "8.8.8.8" ) ).toBeTrue();
+				} );
+
 				it( "refuses a page that is not signed in", function() {
 					var auth = new bxagents.models.api.Authenticator( accounts = true, tokenService = tokens );
 

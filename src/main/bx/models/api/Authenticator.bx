@@ -15,12 +15,18 @@ class {
 	 * @tokens True when issued tokens are accepted
 	 * @accounts True when the web page's own sign-in (cbSecurity, from `users`) is accepted too
 	 * @tokenService A TokenService; the app's shared chat database when omitted
+	 * @allowedIPs The addresses and networks that may call at all (agentApi.allowedIPs); empty lets everyone in
+	 * @rateLimit { requests, perSeconds, by } (agentApi.rateLimit); empty means no limit
+	 * @open True when the API asks nobody to prove who they are: the gate then only keeps the addresses and the limit
 	 */
-	function init( string tokenEnvVar = "", boolean tokens = false, boolean accounts = false, any tokenService ) {
+	function init( string tokenEnvVar = "", boolean tokens = false, boolean accounts = false, any tokenService, array allowedIPs = [], struct rateLimit = {}, boolean open = false ) {
 		variables.tokenEnvVar = trim( arguments.tokenEnvVar )
 		variables.tokens = arguments.tokens
 		variables.accounts = arguments.accounts
 		variables.tokenService = arguments.tokenService ?: nullValue()
+		variables.allowed = new IpAllowList( arguments.allowedIPs )
+		variables.rateLimit = arguments.rateLimit
+		variables.open = arguments.open
 		return this
 	}
 
@@ -58,12 +64,22 @@ class {
 	 * sends its cookie to any site that asks, so a request that changes something and carries only the cookie must
 	 * also carry the header x-bxagents-csrf (a page's own script can set it; another site's form cannot).
 	 *
+	 * Before any of that, the address is checked against agentApi.allowedIPs (403), and after it the caller is counted
+	 * against agentApi.rateLimit (429 with Retry-After).
+	 *
 	 * @event The ColdBox request context
 	 * @headers The request's headers; the real ones when omitted
+	 * @remoteAddress The address of the connection; the real one when omitted
 	 *
 	 * @return True when the request was refused (ColdBox then runs no more middleware for the route)
 	 */
-	boolean function guard( required any event, struct headers = getHTTPRequestData( false ).headers ) {
+	boolean function guard( required any event, struct headers = getHTTPRequestData( false ).headers, string remoteAddress = cgi.remote_addr ?: "" ) {
+		if ( !variables.allowed.allows( arguments.remoteAddress ) ) {
+			return refuse( arguments.event, Outcome::failed( "forbidden", "This address may not use the agent API" ) )
+		}
+		if ( variables.open ) {
+			return tooMany( arguments.event, arguments.remoteAddress, arguments.remoteAddress )
+		}
 		var found = authenticate( arguments.headers )
 		var viaCookie = false
 		if ( isNull( found ) && variables.accounts ) {
@@ -77,7 +93,25 @@ class {
 			return refuse( arguments.event, Outcome::failed( "csrf", "A page that is signed in must send the x-bxagents-csrf header with a request that changes something" ) )
 		}
 		arguments.event.setPrivateValue( "bxagentsCaller", found )
-		return false
+		return tooMany( arguments.event, found.id(), arguments.remoteAddress )
+	}
+
+	/**
+	 * Counts the call against agentApi.rateLimit, by who is calling (or by address, with `by: ip` and for an open API).
+	 *
+	 * @return True when the call was over the limit and refused
+	 */
+	private boolean function tooMany( required any event, required string callerId, required string address ) {
+		if ( !variables.rateLimit.keyExists( "requests" ) ) {
+			return false
+		}
+		var by = lCase( variables.rateLimit.by ?: "caller" ) == "ip" || variables.open ? "ip:" & arguments.address : "caller:" & arguments.callerId
+		var counted = RateLimit::hit( by, variables.rateLimit.requests, variables.rateLimit.perSeconds )
+		if ( counted.allowed ) {
+			return false
+		}
+		arguments.event.setHTTPHeader( name = "Retry-After", value = counted.retryAfter )
+		return refuse( arguments.event, Outcome::failed( "rate_limited", "Too many requests; try again in #counted.retryAfter# seconds" ) )
 	}
 
 	/**

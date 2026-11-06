@@ -755,6 +755,25 @@ __THEME_TOKENS__
 	/* Project override: resources/webui/theme.css, inlined last so it always wins. */
 __CUSTOM_CSS__
 
+	/* Password: the one shared secret a server may ask for */
+	#keyPanel {
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		background: var(--bg);
+		color: var(--fg);
+		padding: 1rem;
+		width: min(24rem, 94vw);
+		font-family: inherit;
+	}
+	#keyPanel::backdrop { background: rgba(0, 0, 0, 0.35); }
+	#keyPanel h2 { font-size: 1rem; margin: 0 0 0.4rem; }
+	#keyPanel p { margin: 0 0 0.7rem; font-size: 0.85rem; color: var(--muted); }
+	#keyPanel input { width: 100%; box-sizing: border-box; font: inherit; padding: 0.45rem; background: var(--input-bg); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+	#keyPanel .key-error { color: var(--danger, #b42318); min-height: 1.1rem; margin: 0.4rem 0 0; font-size: 0.82rem; }
+	#keyPanel .key-actions { display: flex; gap: 0.4rem; justify-content: flex-end; margin-top: 0.7rem; }
+	#keyPanel button { background: transparent; color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.35rem 0.8rem; cursor: pointer; font: inherit; font-size: 0.85rem; }
+	#keyPanel button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+
 	/* Notes: the short things the agent keeps about you and about its own work */
 	#notesPanel {
 		border: 1px solid var(--border);
@@ -827,7 +846,7 @@ __ICON_SPRITE__
 			<button type="button" id="clearBtn" title="Delete the messages in this conversation" aria-label="Clear" hidden><svg class="i" aria-hidden="true"><use href="#i-broom"/></svg></button>
 			<button type="button" id="compactBtn" title="Summarize older messages, keep the recent ones" aria-label="Compact" hidden><svg class="i" aria-hidden="true"><use href="#i-arrows-in-line-vertical"/></svg></button>
 			<button type="button" id="notesBtn" title="What the agent keeps about you and about its own work" aria-label="Notes" hidden><svg class="i" aria-hidden="true"><use href="#i-notebook"/></svg></button>
-			<button type="button" id="keyBtn" title="Set the token this page sends as x-bxagents-token" aria-label="API key"><svg class="i" aria-hidden="true"><use href="#i-key"/></svg></button>
+			<button type="button" id="keyBtn" title="Password for this server" aria-label="Password"><svg class="i" aria-hidden="true"><use href="#i-key"/></svg></button>
 			<button type="button" id="appearanceBtn" title="Mode, accent color, text size and density" aria-label="Appearance" aria-haspopup="dialog" aria-expanded="false" aria-controls="appearancePanel"><svg class="i" aria-hidden="true"><use href="#i-palette"/></svg></button>
 			<button type="button" id="themeBtn" title="Switch between light and dark" aria-label="Theme"><svg class="i" aria-hidden="true"><use href="#i-sun"/></svg></button>
 		</div>
@@ -860,6 +879,20 @@ __ICON_SPRITE__
 			__FOOTER__
 		</div>
 	</div>
+
+	<dialog id="keyPanel" aria-labelledby="keyTitle">
+		<form id="keyForm" method="dialog" autocomplete="off">
+			<h2 id="keyTitle">Password</h2>
+			<p id="keyHelp">This server asks for a password. It is kept in this browser and sent with every request.</p>
+			<input id="keyInput" type="password" autocomplete="current-password" aria-labelledby="keyTitle" aria-describedby="keyHelp keyError" spellcheck="false">
+			<p class="key-error" id="keyError" role="alert"></p>
+			<div class="key-actions">
+				<button type="button" id="keyForget">Forget it</button>
+				<button type="button" id="keyCancel">Cancel</button>
+				<button type="submit" class="primary" id="keySave">Save</button>
+			</div>
+		</form>
+	</dialog>
 
 	<dialog id="notesPanel" aria-labelledby="notesTitle">
 		<div class="notes-head">
@@ -1011,6 +1044,10 @@ __MARKDOWN_SCRIPTS__
 		if ( res.status === 401 && LOGIN_URL && !getApiKey() ) {
 			window.location.href = LOGIN_URL;
 			return true;
+		}
+		// a server with a shared password and a page that has none (or a wrong one): ask for it, once
+		if ( res.status === 401 && !LOGIN_URL ) {
+			askForPassword( getApiKey() ? "That password was not accepted." : "" );
 		}
 		return false;
 	}
@@ -1245,12 +1282,41 @@ __MARKDOWN_SCRIPTS__
 		}
 	}
 
-	keyBtn.addEventListener( "click", function () {
-		var next = window.prompt( "Token (sent as x-bxagents-token on every request to " + API_BASE + "). Leave blank to clear.", getApiKey() );
-		if ( next !== null ) {
-			setApiKey( next.trim() );
+	var keyPanel = document.getElementById( "keyPanel" );
+	var keyInput = document.getElementById( "keyInput" );
+	var keyError = document.getElementById( "keyError" );
+	var askedForPassword = false;
+
+	/**
+	 * Opens the password form. When the server refused a call it opens by itself, but only once per page load, so a
+	 * wrong password does not bring it back after every request.
+	 *
+	 * @param problem What to say above the box, when something was refused
+	 */
+	function askForPassword( problem ) {
+		if ( keyPanel.open || ( problem !== undefined && askedForPassword ) ) {
+			return;
 		}
+		askedForPassword = true;
+		keyError.textContent = problem || "";
+		keyInput.value = "";
+		keyPanel.showModal();
+		keyInput.focus();
+	}
+
+	keyBtn.addEventListener( "click", function () { askForPassword(); } );
+
+	document.getElementById( "keyForm" ).addEventListener( "submit", function () {
+		setApiKey( keyInput.value.trim() );
+		keyPanel.close();
+		window.location.reload();
 	} );
+	document.getElementById( "keyForget" ).addEventListener( "click", function () {
+		setApiKey( "" );
+		keyPanel.close();
+		window.location.reload();
+	} );
+	document.getElementById( "keyCancel" ).addEventListener( "click", function () { keyPanel.close(); } );
 
 	function applyTheme( theme ) {
 		if ( theme === "dark" || theme === "light" ) {
@@ -2195,7 +2261,7 @@ __MARKDOWN_SCRIPTS__
 				throw new Error( "Signing in..." );
 			}
 			if ( res.status === 401 ) {
-				throw new Error( "Unauthorized - set the token via the \"Key\" button, then try again. If you already did, the server's token environment variable may be unset: the gate refuses every request in that case." );
+				throw new Error( "Unauthorized - this server asks for a password: use the key button at the top. If you already did, check it; if the server has no password set, it refuses everyone." );
 			}
 			if ( res.status === 400 ) {
 				// the server explains a refusal (a model that cannot see pictures, a picture that is too big)

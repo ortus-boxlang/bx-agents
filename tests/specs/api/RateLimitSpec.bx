@@ -1,0 +1,47 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "api.RateLimit", function() {
+
+			it( "allows the requests a window gives and refuses the next, saying when to come back", function() {
+				var key = "spec-" & createUUID();
+				var clock = 1000000;
+
+				expect( bxagents.models.api.RateLimit::hit( key, 2, 60, clock ).allowed ).toBeTrue();
+				expect( bxagents.models.api.RateLimit::hit( key, 2, 60, clock + 1000 ).allowed ).toBeTrue();
+				var over = bxagents.models.api.RateLimit::hit( key, 2, 60, clock + 10000 );
+				expect( over.allowed ).toBeFalse();
+				expect( over.retryAfter ).toBe( 50 );
+			} );
+
+			it( "starts a new window when the old one is over", function() {
+				var key = "spec-" & createUUID();
+				bxagents.models.api.RateLimit::hit( key, 1, 10, 0 );
+
+				expect( bxagents.models.api.RateLimit::hit( key, 1, 10, 5000 ).allowed ).toBeFalse();
+				expect( bxagents.models.api.RateLimit::hit( key, 1, 10, 10000 ).allowed ).toBeTrue();
+			} );
+
+			it( "counts each key on its own", function() {
+				var one = "spec-" & createUUID();
+				var two = "spec-" & createUUID();
+				bxagents.models.api.RateLimit::hit( one, 1, 60, 0 );
+
+				expect( bxagents.models.api.RateLimit::hit( one, 1, 60, 1 ).allowed ).toBeFalse();
+				expect( bxagents.models.api.RateLimit::hit( two, 1, 60, 1 ).allowed ).toBeTrue();
+			} );
+
+			it( "says what is wrong with a configured limit", function() {
+				expect( bxagents.models.api.RateLimit::problems( { requests : 60, perSeconds : 60 } ) ).toBeEmpty();
+				expect( bxagents.models.api.RateLimit::problems( { requests : 60, perSeconds : 60, by : "ip" } ) ).toBeEmpty();
+				expect( bxagents.models.api.RateLimit::problems( { requests : 0, perSeconds : 60 } ) ).toHaveLength( 1 );
+				expect( bxagents.models.api.RateLimit::problems( { requests : 5 } ) ).toHaveLength( 1 );
+				expect( bxagents.models.api.RateLimit::problems( { requests : 5, perSeconds : 60, by : "everyone" } ) ).toHaveLength( 1 );
+				expect( bxagents.models.api.RateLimit::problems( { requests : 5, perSeconds : 60, burst : 3 } ) ).toHaveLength( 1 );
+				expect( bxagents.models.api.RateLimit::problems( "fast" ) ).toHaveLength( 1 );
+			} );
+
+		} );
+	}
+
+}

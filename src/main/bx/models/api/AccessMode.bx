@@ -24,6 +24,18 @@ class {
 	}
 
 	/**
+	 * @agentApi The `agentApi` block of the agent's config
+	 *
+	 * @return True when every route goes through the gate: the API wants a token, or it keeps some addresses out or
+	 *         limits how often it is used
+	 */
+	static boolean function gated( struct agentApi = {} ) {
+		return AccessMode::of( arguments.agentApi ) == "token"
+			|| ( isArray( arguments.agentApi.allowedIPs ?: "" ) && arguments.agentApi.allowedIPs.len() > 0 )
+			|| ( isStruct( arguments.agentApi.rateLimit ?: "" ) && !arguments.agentApi.rateLimit.isEmpty() )
+	}
+
+	/**
 	 * @return True when a shared secret, issued tokens or a page's own accounts (`webAccounts`, set by the build when a
 	 *         web UI entry lists `users`) are set up
 	 */

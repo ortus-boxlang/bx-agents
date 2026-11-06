@@ -12,6 +12,8 @@ import bxModules.bxagents.models.api.AccessMode;
 import bxModules.bxagents.models.build.AgentApiConfig;
 
 import bxModules.bxagents.models.api.ApiPath;
+import bxModules.bxagents.models.api.IpAllowList;
+import bxModules.bxagents.models.api.RateLimit;
 
 class {
 
@@ -734,7 +736,7 @@ class {
 
 		var agentApi = arguments.resolvedConfig.agentApi
 		if ( !isStruct( agentApi ) ) {
-			arguments.errors.append( "Agent.bx's 'agentApi' must be a struct of { enabled, access, tokenEnvVar, tokens, profiles, path }" )
+			arguments.errors.append( "Agent.bx's 'agentApi' must be a struct of { enabled, access, tokenEnvVar, tokens, profiles, path, allowedIPs, rateLimit }" )
 			return
 		}
 
@@ -742,7 +744,7 @@ class {
 			arguments.errors.append( "Agent.bx's 'agentApi.enabled' is false, but a gateways/ entry exposes the web UI: the page is a client of the agent API and cannot run without it" )
 		}
 
-		var validKeys = [ "enabled", "access", "tokenEnvVar", "tokens", "profiles", "path" ]
+		var validKeys = [ "enabled", "access", "tokenEnvVar", "tokens", "profiles", "path", "allowedIPs", "rateLimit" ]
 		for ( var key in agentApi ) {
 			if ( !validKeys.contains( key ) ) {
 				arguments.errors.append( "Agent.bx's 'agentApi' has an unknown key [#key#] - valid keys: #validKeys.toList( ", " )#" )
@@ -751,6 +753,13 @@ class {
 
 		if ( structKeyExists( agentApi, "enabled" ) && !isBoolean( agentApi.enabled ) ) {
 			arguments.errors.append( "Agent.bx's 'agentApi.enabled' must be a boolean" )
+		}
+
+		if ( structKeyExists( agentApi, "allowedIPs" ) ) {
+			arguments.errors.append( IpAllowList::problems( agentApi.allowedIPs ), true )
+		}
+		if ( structKeyExists( agentApi, "rateLimit" ) && !( isStruct( agentApi.rateLimit ) && agentApi.rateLimit.isEmpty() ) ) {
+			arguments.errors.append( RateLimit::problems( agentApi.rateLimit ), true )
 		}
 
 		if ( structKeyExists( agentApi, "path" ) ) {

@@ -490,6 +490,20 @@ class extends="testbox.system.BaseSpec" {
 					}
 				} );
 
+				it( "asks for a shared password in the page, not in a browser prompt, and opens by itself when refused", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+					var html = fileRead( appDir & "/chat/index.html" );
+
+					expect( html ).toInclude( 'id="keyPanel"' );
+					expect( html ).toInclude( 'type="password"' );
+					expect( html ).notToInclude( "Token (sent as" );
+					expect( html ).toInclude( "askForPassword(" );
+					// a page with accounts goes to the sign-in form instead
+					expect( html ).toInclude( "window.location.href = LOGIN_URL" );
+				} );
+
 				it( "shows the context as a ring that fills, and opens the breakdown when it is clicked", function() {
 					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
 					var appDir = newAppDir();

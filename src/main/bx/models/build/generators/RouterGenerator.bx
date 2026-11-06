@@ -48,7 +48,7 @@ class {
 		var exposureEntries = collectExposureEntries( arguments.discovery )
 		var lines = []
 
-		var gated = AccessMode::of( arguments.agentApi ) == "token"
+		var gated = AccessMode::gated( arguments.agentApi )
 		lines.append( renderAuthGate( arguments.agentApi ), true )
 		lines.append( renderReservedAgentRoute( arguments.agentApi ), true )
 
@@ -138,17 +138,22 @@ class {
 	 * @return The statement lines that define `auth`; none when the API is open
 	 */
 	private array function renderAuthGate( required struct agentApi ) {
-		if ( AccessMode::of( arguments.agentApi ) != "token" ) {
+		if ( !AccessMode::gated( arguments.agentApi ) ) {
 			return []
 		}
 		var tokenEnvVar = trim( arguments.agentApi.tokenEnvVar ?: "" )
 		var tokens = ( arguments.agentApi.tokens ?: false ) ? "true" : "false"
 		var accounts = ( arguments.agentApi.webAccounts ?: false ) ? "true" : "false"
+		var open = AccessMode::of( arguments.agentApi ) == "open" ? "true" : "false"
+		// the two lists as JSON inside strings, parsed when a request comes in
+		var allowed = Strings::bxLiteral( jsonSerialize( ( arguments.agentApi.allowedIPs ?: [] ).map( ip => toString( ip ) ) ) )
+		var limit = Strings::bxLiteral( jsonSerialize( isStruct( arguments.agentApi.rateLimit ?: {} ) ? ( arguments.agentApi.rateLimit ?: {} ) : {} ) )
 		return [
 			"// Who may call: a request carries the shared secret (#len( tokenEnvVar ) ? tokenEnvVar : 'none set'#), an issued token (#tokens#) or the page's own sign-in (#accounts#).",
 			"// A request that carries neither is answered 401 before any action runs; the secret itself is read from the",
 			"// environment when a request comes in and is never written here.",
-			'var auth = ( event, rc, prc ) => new "models.api.Authenticator@bxagents"( "#Strings::bxLiteral( tokenEnvVar )#", #tokens#, #accounts# ).guard( event )',
+			"// Which addresses may call (allowedIPs) and how often (rateLimit) are checked here too; an open API has only those.",
+			'var auth = ( event, rc, prc ) => new "models.api.Authenticator@bxagents"( tokenEnvVar : "#Strings::bxLiteral( tokenEnvVar )#", tokens : #tokens#, accounts : #accounts#, allowedIPs : jsonDeserialize( "#allowed#" ), rateLimit : jsonDeserialize( "#limit#" ), open : #open# ).guard( event )',
 			""
 		]
 	}
@@ -203,7 +208,7 @@ class {
 		if ( !( arguments.agentApi.enabled ?: true ) ) {
 			return []
 		}
-		var gated = AccessMode::of( arguments.agentApi ) == "token"
+		var gated = AccessMode::gated( arguments.agentApi )
 		var lines = [
 			"// The reserved agent route - always present, whatever gateways/ declares,",
 			"// so this module's own tooling (chat --server, invoke --server) always has",
