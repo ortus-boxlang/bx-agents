@@ -257,7 +257,7 @@ POST /__bxagents/resume    # { threadId, decision } -> SSE, like /events
 GET  /__bxagents/tools
 GET  /__bxagents/profiles   # the profiles a client may ask for
 GET  /__bxagents/agent    # name, model, what it can do
-GET  /__bxagents/sessions   # the caller's recent conversations (?source=terminal for those that started there)
+GET  /__bxagents/sessions   # the caller's recent conversations (?source=terminal for those that started there; ?all=1 lists everyone's, with whose each is, for an admin)
 POST /__bxagents/sessions   # { title? } start one: { conversationId }
 POST /__bxagents/sessions/rename   # { conversationId, title } name one
 POST /__bxagents/sessions/fork     # { conversationId, title? } copy one, messages and all

@@ -65,6 +65,19 @@ class extends="testbox.system.BaseSpec" {
 					expect( service.conversations().list( ada, 50, "terminal" ).data().sessions.map( ( c ) => c.title ) ).toBe( [ "two" ] );
 				} );
 
+				it( "lets an admin list everyone's conversations, with whose they are, and refuses anyone else", function() {
+					service.conversations().create( ada, "ada's" );
+					service.conversations().create( bob, "bob's" );
+					var admin = new bxagents.models.api.Caller( id = "root", scope = "admin" );
+
+					var everyone = service.conversations().list( admin, 50, "", true ).data().sessions;
+					expect( everyone ).toHaveLength( 2 );
+					expect( everyone.map( ( c ) => c.userId ).sort( "text" ) ).toBe( [ "ada", "bob" ] );
+					expect( service.conversations().list( ada, 50, "", true ).code() ).toBe( "forbidden" );
+					// an ordinary list is still only the caller's own
+					expect( service.conversations().list( ada ).data().sessions ).toHaveLength( 1 );
+				} );
+
 				it( "lists times as ISO 8601 text, not date objects", function() {
 					service.conversations().create( ada, "timed" );
 
