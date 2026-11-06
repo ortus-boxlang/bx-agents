@@ -1,0 +1,82 @@
+/**
+ * A stand-in for a built agent: it sends what it is told to, announces tool calls the way bx-ai does, and
+ * remembers what it was asked.
+ */
+class {
+
+	property name="chunks" default="";
+	property name="toolCalls" default="";
+	property name="fails" default="false";
+	property name="suspend" default="false";
+	property name="state" default="";
+	property name="seen" default="";
+
+	function init() {
+		variables.chunks = [ "Hel", "lo" ];
+		variables.toolCalls = [];
+		variables.fails = false;
+		variables.suspend = false;
+		variables.state = {};
+		variables.seen = {};
+		variables.cancelled = [];
+		variables.clearedMemory = [];
+		return this;
+	}
+
+	function withChunks( required array chunks ) { variables.chunks = arguments.chunks; return this; }
+	function withToolCalls( required array calls ) { variables.toolCalls = arguments.calls; return this; }
+	function failing() { variables.fails = true; return this; }
+	function suspending() { variables.suspend = true; return this; }
+	function withState( required struct state ) { variables.state = arguments.state; return this; }
+	function seen() { return variables.seen; }
+	function cancelled() { return variables.cancelled; }
+
+	function getConfig() { return { name : "fake", profile : "" }; }
+
+	function getCheckpointer() {
+		var held = variables.state;
+		return { loadState : ( id ) => held };
+	}
+
+	function run( input, params = {}, options = {} ) {
+		variables.seen = { input : arguments.input, params : arguments.params, options : arguments.options };
+		return "answer to " & ( isSimpleValue( arguments.input ) ? arguments.input : "message" );
+	}
+
+	function stream( onChunk, input, params = {}, options = {} ) {
+		variables.seen = { input : arguments.input, params : arguments.params, options : arguments.options };
+		var threadId = arguments.options.threadId ?: "";
+		var asked = { getThreadId : () => threadId };
+		for ( var call in variables.toolCalls ) {
+			BoxAnnounce( "beforeAIToolExecute", { name : call.name, arguments : call.args ?: {}, chatRequest : asked } );
+			BoxAnnounce( "afterAIToolExecute", { name : call.name, arguments : call.args ?: {}, results : "ok", executionTime : 7, chatRequest : asked } );
+		}
+		// a call made by another run must never reach this one's frames
+		BoxAnnounce( "beforeAIToolExecute", { name : "other", arguments : {}, chatRequest : { getThreadId : () => "someone-else" } } );
+		if ( variables.fails ) {
+			throw( type = "Fake.Boom", message = "model failed" );
+		}
+		for ( var piece in variables.chunks ) {
+			arguments.onChunk( piece );
+		}
+		if ( variables.suspend ) {
+			arguments.onChunk( { type : "middleware_stop", result : { isSuspended : () => true, getData : () => { pendingActions : [ { toolName : "delete", toolArgs : {} } ] } } } );
+		}
+	}
+
+	function resumeStream( onChunk, decision, threadId, editedData, decidedBy, reason ) {
+		variables.seen = { decision : arguments.decision, threadId : arguments.threadId, decidedBy : arguments.decidedBy };
+		arguments.onChunk( "resumed" );
+	}
+
+	function getMemories() {
+		var cleared = variables.clearedMemory;
+		return [ { clear : ( userId, conversationId ) => cleared.append( arguments.userId & "/" & arguments.conversationId ) } ];
+	}
+
+	function clearedMemory() { return variables.clearedMemory; }
+
+	function cancelRun( threadId, reason ) { variables.cancelled.append( arguments.threadId ); return true; }
+	function steerRun( threadId, input ) { return true; }
+
+}

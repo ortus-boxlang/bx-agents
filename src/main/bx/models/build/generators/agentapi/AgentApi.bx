@@ -5,12 +5,17 @@
  * Run control for the agent's always-on route, /__bxagents. ColdBox's toAi() gives that route
  * invoke, stream, batch and info; this handler sits beside them with what a chat client needs on
  * top: a stream that also reports tool calls and pauses for approval (events), stopping a run
- * (cancel), steering a run (steer), and the approval round trip (pending, resume), plus tools.
+ * (cancel), steering a run (steer), the approval round trip (pending, resume), conversations,
+ * notes and commands.
+ *
+ * Each action only reads the request, asks the AgentService (models.api) and sends what it answers; the
+ * work itself is written once, there, for the web page, the terminal and the gateways alike.
  *
  * Every action is behind the same token gate as the toAi routes. The x-bxagents-token header is
  * compared with the environment variable named by agentApi.tokenEnvVar (an unset or blank variable
  * matches nothing), and, when agentApi.tokens is on, with the tokens made by `bxAgents token create`.
- * A route with neither is open. The name of the token that was used is who is calling.
+ * A route with neither is open, and everyone is the one `local` user. The name of the token that was
+ * used is who is calling.
  */
 class {
 
@@ -23,10 +28,10 @@ class {
 	 * action stops. (A preHandler cannot do it: ColdBox runs the action anyway after event.noExecution().)
 	 */
 	private boolean function refused( required any event ) {
-		if ( !whoIsCalling( arguments.event ).isEmpty() ) {
+		if ( !isNull( callerOf( arguments.event ) ) ) {
 			return false
 		}
-		arguments.event.renderData( type : "json", statusCode : 401, data : { "success" : false, "error" : "Missing or invalid x-bxagents-token header" } )
+		answer( arguments.event, failed( "unauthorized", "Missing or invalid x-bxagents-token header" ) )
 		return true
 	}
 
@@ -45,63 +50,87 @@ class {
 	}
 
 	/**
-	 * Who is calling, once per request: { name, scope }, or an empty struct for a caller who may not.
+	 * Who is calling, once per request: a Caller, or null for a caller who may not.
 	 *
-	 *   no tokenEnvVar and no tokens   open: everyone is "api"
+	 *   no tokenEnvVar and no tokens   open: everyone is the one `local` user
 	 *   the tokenEnvVar secret         "admin"
 	 *   an issued token                the name and scope it was made with
+	 *
+	 * The surface the call came in on (web, terminal, api) is a label the client sends in x-bxagents-source.
 	 */
-	private struct function whoIsCalling( required any event ) {
-		var known = arguments.event.getPrivateValue( "bxagentsCaller", {} )
-		if ( !known.isEmpty() ) {
+	private function callerOf( required any event ) {
+		var known = arguments.event.getPrivateValue( "bxagentsCaller", nullValue() )
+		if ( !isNull( known ) ) {
 			return known
 		}
-		var found = lookUpCaller()
-		if ( !found.isEmpty() ) {
+		var found = lookUpCaller( sourceOf() )
+		if ( !isNull( found ) ) {
 			arguments.event.setPrivateValue( "bxagentsCaller", found )
 		}
-		return found
+		return found ?: nullValue()
 	}
 
-	private struct function lookUpCaller() {
+	private string function sourceOf() {
+		var given = lCase( getHTTPRequestData( false ).headers[ "x-bxagents-source" ] ?: "" )
+		return reFind( "^[a-z0-9][a-z0-9_-]{0,31}$", given ) ? given : "api"
+	}
+
+	private function lookUpCaller( required string source ) {
 		var variableName = tokenVariable()
 		if ( !len( variableName ) && !tokensEnabled() ) {
-			return { name : "api", scope : "admin" }
+			return service().localCaller( arguments.source )
 		}
 		var given = getHTTPRequestData( false ).headers[ "x-bxagents-token" ] ?: ""
 		if ( !len( given ) ) {
-			return {}
+			return nullValue()
 		}
 		if ( len( variableName ) ) {
 			var expected = getSystemSetting( variableName, "" )
 			if ( len( expected ) && createObject( "java", "java.security.MessageDigest" ).isEqual( given.getBytes( "UTF-8" ), expected.getBytes( "UTF-8" ) ) ) {
-				return { name : "admin", scope : "admin" }
+				return new "models.api.Caller@bxagents"( id = "admin", scope = "admin", source = arguments.source )
 			}
 		}
 		if ( tokensEnabled() ) {
 			// the app's default datasource is the shared chat database
 			var who = new "models.store.TokenService@bxagents"( new "models.store.ChatStore@bxagents"( "" ) ).authenticate( given )
 			if ( !who.isEmpty() ) {
-				return who
+				return new "models.api.Caller@bxagents"( id = who.name, scope = who.scope, source = arguments.source )
 			}
 		}
-		return {}
+		return nullValue()
 	}
 
-	/**
-	 * The identity a run is stored under: the name of the token that was used.
-	 */
-	private string function callerId( required any event ) {
-		return whoIsCalling( arguments.event ).name
-	}
+	// ----------------------------------------------------------------------------------
+	// The service, and answering
+	// ----------------------------------------------------------------------------------
 
 	private function agent() {
 		return getInstance( "GeneratedAgent" )
 	}
 
-	// ----------------------------------------------------------------------------------
-	// Profiles
-	// ----------------------------------------------------------------------------------
+	/**
+	 * The one service behind every action: turns, conversations, notes, preferences and commands.
+	 */
+	private function service() {
+		// once per request: the probe for the shared database is a query
+		if ( !request.keyExists( "bxagentsService" ) ) {
+			request[ "bxagentsService" ] = new "models.api.AgentService@bxagents"( agent(), sharedStore(), offered() )
+		}
+		return request.bxagentsService
+	}
+
+	/**
+	 * The shared chat database, or null when the server has none (then there is no conversation list).
+	 */
+	private function sharedStore() {
+		try {
+			var store = new "models.store.ChatStore@bxagents"( "" )
+			store.rows( "SELECT 1 AS found FROM conversations LIMIT 1" )
+			return store
+		} catch ( any e ) {
+			return nullValue()
+		}
+	}
 
 	/**
 	 * The profiles a caller may ask for with options.profile: agentApi.profiles, none by default. A profile
@@ -112,15 +141,70 @@ class {
 	}
 
 	/**
-	 * Answers 400 and returns true when the options name a profile that is not offered; the action stops.
+	 * @data What the call produced
+	 *
+	 * @return A worked Outcome
 	 */
-	private boolean function badProfile( required any event, required struct options ) {
-		if ( offered().allows( arguments.options ) ) {
-			return false
-		}
-		arguments.event.renderData( type : "json", statusCode : 400, data : { "success" : false, "error" : "profile is not offered here" } )
-		return true
+	private function done( any data = {} ) {
+		return new "models.api.Outcome@bxagents"( ok = true, data = arguments.data )
 	}
+
+	/**
+	 * @code A name from ApiEdge's list, such as `not_found`
+	 * @reason What to tell the person
+	 *
+	 * @return A failed Outcome
+	 */
+	private function failed( required string code, string reason = "" ) {
+		return new "models.api.Outcome@bxagents"( ok = false, code = arguments.code, reason = arguments.reason )
+	}
+
+	/**
+	 * Sends an Outcome: its data with success, or the code and reason with the status the code means.
+	 */
+	private void function answer( required any event, required any outcome ) {
+		var edge = new "models.api.ApiEdge@bxagents"()
+		arguments.event.renderData( type : "json", statusCode : edge.statusFor( arguments.outcome ), data : edge.bodyFor( arguments.outcome ) )
+	}
+
+	/**
+	 * Sends what an AgentConversation answers, { ok, reason? ... }: the answer with success, 400 and the reason when it did not work.
+	 */
+	private void function answerResult( required any event, required struct result ) {
+		answer( arguments.event, new "models.api.Outcome@bxagents"().fromResult( arguments.result ) )
+	}
+
+	private function noSessions() {
+		return failed( "not_found", "This server keeps no list of conversations" )
+	}
+
+	/**
+	 * The caller's conversation to act on, or null after answering 400 or 404. With mustExist the conversation has to be in
+	 * the list already (reading it); without, one nobody has spoken in yet will do (naming it, copying it).
+	 */
+	private function conversationOf( required any event, required string conversationId, boolean mustExist = true ) {
+		var all = service().conversations()
+		if ( isNull( all ) ) {
+			answer( arguments.event, noSessions() )
+			return nullValue()
+		}
+		var caller = callerOf( arguments.event )
+		if ( arguments.mustExist ) {
+			var opened = all.open( caller, arguments.conversationId )
+			if ( !opened.succeeded() ) {
+				answer( arguments.event, opened )
+				return nullValue()
+			}
+		} else if ( !len( arguments.conversationId ) ) {
+			answer( arguments.event, failed( "bad_request", "conversationId is required" ) )
+			return nullValue()
+		}
+		return service().conversation( caller, arguments.conversationId )
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Profiles and the agent
+	// ----------------------------------------------------------------------------------
 
 	/**
 	 * The profiles this route offers: { profiles : [ { name, description, provider, model, isDefault } ] }, empty when
@@ -130,160 +214,7 @@ class {
 		if ( refused( event ) ) {
 			return
 		}
-		event.renderData( type : "json", data : { "success" : true, "profiles" : offered().list() } )
-	}
-
-	// ----------------------------------------------------------------------------------
-	// Turns
-	// ----------------------------------------------------------------------------------
-
-	/**
-	 * Streams one turn. The same frames as /stream (thread, chunk, done), plus:
-	 *
-	 *   tool       { id, name, arguments, status : "running" | "ok", ms }
-	 *   suspended  { threadId, pendingActions : [ { toolName, toolArgs } ] } when the run waits for a human
-	 *   error      { message }
-	 *
-	 * Body: { input, threadId?, conversationId?, params?, options? }
-	 */
-	function events( event, rc, prc ) {
-		if ( refused( event ) ) {
-			return
-		}
-		var body = event.getHTTPContent( json : true )
-		var thisAgent = agent()
-		var threadId = len( body.threadId ?: "" ) ? body.threadId : createUUID()
-		var supplied = body.options ?: {}
-		var options = isStruct( supplied ) ? duplicate( supplied ) : {}
-		if ( badProfile( event, options ) ) {
-			return
-		}
-		options[ "userId" ] = callerId( event )
-		options[ "threadId" ] = threadId
-		if ( len( body.conversationId ?: "" ) ) {
-			options[ "conversationId" ] = body.conversationId
-			recordTurn( callerId( event ), body.conversationId, body.input ?: "" )
-		}
-		var input = body.input ?: ""
-		if ( isArray( body.attachments ?: "" ) && body.attachments.len() ) {
-			// images: checked (how many, how big, what type, whether the model can see) and added as bx-ai message parts
-			var facts = new "models.runtime.ModelFacts@bxagents"().of( len( options.profile ?: "" ) ? options.profile : ( thisAgent.getConfig().profile ?: "" ) )
-			var built = new "models.chat.MessageBuilder@bxagents"().build( input, body.attachments.map( a => { name : a.name ?: "", mime : a.mime ?: "", base64 : a.data ?: "" } ), facts )
-			if ( !built.ok ) {
-				event.renderData( type : "json", statusCode : 400, data : { "success" : false, "error" : built.reason } )
-				return
-			}
-			input = built.input
-		}
-		event.setHTTPHeader( name : "X-Thread-Id", value : threadId )
-		return streamRun( threadId, ( onChunk ) => {
-			thisAgent.stream( onChunk, input, body.params ?: {}, options )
-		} )
-	}
-
-	/**
-	 * Stops a run at its next checkpoint (before the next model call or tool call).
-	 *
-	 * Body: { threadId, reason? }
-	 */
-	function cancel( event, rc, prc ) {
-		if ( refused( event ) ) {
-			return
-		}
-		var body = event.getHTTPContent( json : true )
-		var threadId = body.threadId ?: ""
-		if ( !len( threadId ) ) {
-			event.renderData( type : "json", statusCode : 400, data : { "success" : false, "error" : "threadId is required" } )
-			return
-		}
-		event.renderData( type : "json", data : {
-			"success"   : true,
-			"cancelled" : agent().cancelRun( threadId, body.reason ?: "Cancelled by the user." )
-		} )
-	}
-
-	/**
-	 * Splices a message into a run in flight, without stopping and restarting it.
-	 *
-	 * Body: { threadId, input }
-	 */
-	function steer( event, rc, prc ) {
-		if ( refused( event ) ) {
-			return
-		}
-		var body = event.getHTTPContent( json : true )
-		var threadId = body.threadId ?: ""
-		var input = body.input ?: ""
-		if ( !len( threadId ) || !len( input ) ) {
-			event.renderData( type : "json", statusCode : 400, data : { "success" : false, "error" : "threadId and input are required" } )
-			return
-		}
-		event.renderData( type : "json", data : { "success" : true, "steered" : agent().steerRun( threadId, input ) } )
-	}
-
-	/**
-	 * What a run that stopped for approval is waiting on, without consuming the checkpoint.
-	 *
-	 * Query: threadId
-	 */
-	function pending( event, rc, prc ) {
-		if ( refused( event ) ) {
-			return
-		}
-		var threadId = rc.threadId ?: ""
-		if ( !len( threadId ) ) {
-			event.renderData( type : "json", statusCode : 400, data : { "success" : false, "error" : "threadId is required" } )
-			return
-		}
-		var checkpointer = agent().getCheckpointer()
-		if ( isNull( checkpointer ) ) {
-			event.renderData( type : "json", data : { "success" : true, "pending" : false } )
-			return
-		}
-		var state = checkpointer.loadState( threadId )
-		// A run belongs to whoever started it. Answered as though nothing is pending, so the route
-		// cannot be used to find out whether a threadId exists.
-		if ( !state.isEmpty() && ownerOf( state ) != callerId( event ) ) {
-			event.renderData( type : "json", data : { "success" : true, "pending" : false } )
-			return
-		}
-		event.renderData( type : "json", data : {
-			"success"        : true,
-			"pending"        : !state.isEmpty(),
-			"pendingActions" : state.suspendData.pendingActions ?: [],
-			"threadId"       : threadId
-		} )
-	}
-
-	/**
-	 * Answers an approval and streams the rest of the turn, in the same frames as events.
-	 *
-	 * Body: { threadId, decision : "approve" | "approve_session" | "reject", editedData?, reason? }
-	 */
-	function resume( event, rc, prc ) {
-		if ( refused( event ) ) {
-			return
-		}
-		var body = event.getHTTPContent( json : true )
-		var threadId = body.threadId ?: ""
-		var decision = body.decision ?: ""
-		if ( !len( threadId ) || !len( decision ) ) {
-			event.renderData( type : "json", statusCode : 400, data : { "success" : false, "error" : "threadId and decision are required" } )
-			return
-		}
-		var thisAgent = agent()
-		var checkpointer = thisAgent.getCheckpointer()
-		if ( !isNull( checkpointer ) ) {
-			var state = checkpointer.loadState( threadId )
-			if ( !state.isEmpty() && ownerOf( state ) != callerId( event ) ) {
-				event.renderData( type : "json", statusCode : 403, data : { "success" : false, "error" : "This run belongs to another caller" } )
-				return
-			}
-		}
-		var decidedBy = callerId( event )
-		return streamRun( threadId, ( onChunk ) => {
-			thisAgent.resumeStream( onChunk, decision, threadId, body.editedData ?: {}, decidedBy, body.reason ?: "" )
-		} )
+		answer( event, done( { "profiles" : offered().list() } ) )
 	}
 
 	/**
@@ -293,25 +224,18 @@ class {
 		if ( refused( event ) ) {
 			return
 		}
-		var config = agent().getConfig()
-		// AiAgent.getConfig().model is the AiModel's whole config struct; a client wants provider/model
-		var modelConfig = config.model ?: {}
-		var modelLabel = modelConfig
-		if ( isStruct( modelConfig ) ) {
-			var modelId = ( modelConfig.params ?: {} ).model ?: ( modelConfig.name ?: "" )
-			modelLabel = [ modelConfig.provider ?: "", modelId ].filter( ( part ) => len( part ) ).toList( "/" )
+		answer( event, service().about( callerOf( event ) ) )
+	}
+
+	/**
+	 * The names of the tools the agent has.
+	 */
+	function tools( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
 		}
-		var facts = new "models.runtime.ModelFacts@bxagents"().of( config.profile ?: "" )
-		event.renderData( type : "json", data : {
-			"success"      : true,
-			"name"         : config.name ?: "",
-			"description"  : config.description ?: "",
-			"model"        : modelLabel,
-			"contextWindow" : facts.contextWindow,
-			"vision"       : facts.vision,
-			"toolCount"    : config.toolCount ?: 0,
-			"capabilities" : { "events" : true, "cancel" : true, "steer" : true, "approvals" : true, "notes" : !isNull( notesProvider() ), "sessions" : !isNull( sessionStore() ), "profiles" : offered().any(), "commands" : true, "context" : true, "attachments" : true, "status" : new "models.extensions.ServedStatus@bxagents"().available(), "slots" : new "models.extensions.ServedSlots@bxagents"().available() }
-		} )
+		var config = agent().getConfig()
+		answer( event, done( { "tools" : config.tools ?: [], "count" : config.toolCount ?: 0 } ) )
 	}
 
 	/**
@@ -324,34 +248,31 @@ class {
 		if ( refused( event ) ) {
 			return
 		}
-		var conversation = new "models.chat.ServerConversation@bxagents"( agent(), callerId( event ), nullValue(), rc.conversationId ?: "" )
-		var answer = conversation.contextReport()
-		answer[ "success" ] = true
-		event.renderData( type : "json", data : answer )
+		answer( event, done( service().conversation( callerOf( event ), rc.conversationId ?: "" ).contextReport() ) )
 	}
 
 	/**
-	 * What the extensions' status items say for one conversation: { success, items : [ { name, text } ] }. An
+	 * What the extensions' status items say for one conversation: { items : [ { name, text } ] }. An
 	 * item with nothing to say is left out. Query: conversationId
 	 */
 	function status( event, rc, prc ) {
 		if ( refused( event ) ) {
 			return
 		}
-		var conversation = new "models.chat.ServerConversation@bxagents"( agent(), callerId( event ), nullValue(), rc.conversationId ?: "" )
-		event.renderData( type : "json", data : { "success" : true, "items" : new "models.extensions.ServedStatus@bxagents"().items( conversation ) } )
+		var conversation = service().conversation( callerOf( event ), rc.conversationId ?: "" )
+		answer( event, done( { "items" : new "models.extensions.ServedStatus@bxagents"().items( conversation ) } ) )
 	}
 
 	/**
-	 * What the extensions' slots hold for one conversation: { success, items : [ { id, extension, place, html, text } ] }.
+	 * What the extensions' slots hold for one conversation: { items : [ { id, extension, place, html, text } ] }.
 	 * A slot with nothing to show is left out. Query: conversationId
 	 */
 	function slots( event, rc, prc ) {
 		if ( refused( event ) ) {
 			return
 		}
-		var conversation = new "models.chat.ServerConversation@bxagents"( agent(), callerId( event ), nullValue(), rc.conversationId ?: "" )
-		event.renderData( type : "json", data : { "success" : true, "items" : new "models.extensions.ServedSlots@bxagents"().items( conversation ) } )
+		var conversation = service().conversation( callerOf( event ), rc.conversationId ?: "" )
+		answer( event, done( { "items" : new "models.extensions.ServedSlots@bxagents"().items( conversation ) } ) )
 	}
 
 	/**
@@ -365,23 +286,111 @@ class {
 			return
 		}
 		var body = event.getHTTPContent( json : true )
-		var conversation = new "models.chat.ServerConversation@bxagents"( agent(), callerId( event ) ).withOfferedProfiles( offered().names() )
-		event.renderData( type : "json", data : outcomeAnswer( conversation.ping( body.profile ?: "" ) ) )
+		var result = service().conversation( callerOf( event ) ).ping( body.profile ?: "" )
+		result[ "success" ] = result.ok ?: false
+		event.renderData( type : "json", data : result )
 	}
 
+	// ----------------------------------------------------------------------------------
+	// Turns
+	// ----------------------------------------------------------------------------------
+
 	/**
-	 * The names of the tools the agent has.
+	 * Streams one turn. The frames are thread, chunk, done and:
+	 *
+	 *   tool       { id, name, arguments, status : "running" | "ok", ms }
+	 *   suspended  { threadId, pendingActions : [ { toolName, toolArgs } ] } when the run waits for a human
+	 *   error      { message }
+	 *
+	 * Body: { input, threadId?, conversationId?, params?, options?, attachments? }
 	 */
-	function tools( event, rc, prc ) {
+	function events( event, rc, prc ) {
 		if ( refused( event ) ) {
 			return
 		}
-		var config = agent().getConfig()
-		event.renderData( type : "json", data : {
-			"success" : true,
-			"tools"   : config.tools ?: [],
-			"count"   : config.toolCount ?: 0
-		} )
+		var prepared = service().turns().prepareTurn( callerOf( event ), event.getHTTPContent( json : true ) )
+		if ( !prepared.succeeded() ) {
+			answer( event, prepared )
+			return
+		}
+		event.setHTTPHeader( name : "X-Thread-Id", value : prepared.data().threadId )
+		return streamTurn( prepared.data() )
+	}
+
+	/**
+	 * Stops a run at its next checkpoint (before the next model call or tool call).
+	 *
+	 * Body: { threadId, reason? }
+	 */
+	function cancel( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var body = event.getHTTPContent( json : true )
+		answer( event, service().turns().cancel( callerOf( event ), body.threadId ?: "", body.reason ?: "Cancelled by the user." ) )
+	}
+
+	/**
+	 * Splices a message into a run in flight, without stopping and restarting it.
+	 *
+	 * Body: { threadId, input }
+	 */
+	function steer( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var body = event.getHTTPContent( json : true )
+		answer( event, service().turns().steer( callerOf( event ), body.threadId ?: "", body.input ?: "" ) )
+	}
+
+	/**
+	 * What a run that stopped for approval is waiting on, without consuming the checkpoint.
+	 *
+	 * Query: threadId
+	 */
+	function pending( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().turns().pending( callerOf( event ), rc.threadId ?: "" ) )
+	}
+
+	/**
+	 * Answers an approval and streams the rest of the turn, in the same frames as events.
+	 *
+	 * Body: { threadId, decision : "approve" | "approve_session" | "reject", editedData?, reason? }
+	 */
+	function resume( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var body = event.getHTTPContent( json : true )
+		var prepared = service().turns().prepareResume( callerOf( event ), body.threadId ?: "", body )
+		if ( !prepared.succeeded() ) {
+			answer( event, prepared )
+			return
+		}
+		return streamTurn( prepared.data() )
+	}
+
+	/**
+	 * Opens the event stream and runs a prepared turn in it. The runner makes the frames; this only sends them.
+	 *
+	 * @turn What the TurnRunner prepared
+	 */
+	private string function streamTurn( required struct turn ) {
+		var runner = service().turns()
+		var prepared = arguments.turn
+		SSE(
+			callback : ( emitter ) => {
+				runner.execute( prepared, ( name, data ) => emitter.send( data, name ), () => !emitter.isClosed() )
+				if ( !emitter.isClosed() ) {
+					emitter.close()
+				}
+			},
+			keepAliveInterval : 30000
+		)
+		return ""
 	}
 
 	// ----------------------------------------------------------------------------------
@@ -389,19 +398,17 @@ class {
 	// ----------------------------------------------------------------------------------
 
 	/**
-	 * The caller's recent conversations, most recent first: { sessions : [ { id, title, messageCount, updatedAt } ] }.
+	 * The caller's recent conversations, most recent first: { sessions : [ { id, title, messageCount, source, updatedAt } ] }.
 	 * 404 when this server keeps no conversation list (no shared chat database).
+	 *
+	 * Query: limit?, source?
 	 */
 	function sessions( event, rc, prc ) {
 		if ( refused( event ) ) {
 			return
 		}
-		var store = sessionStore()
-		if ( isNull( store ) ) {
-			noSessions( event )
-			return
-		}
-		event.renderData( type : "json", data : { "success" : true, "sessions" : store.list( callerId( event ), val( rc.limit ?: 20 ) ) } )
+		var all = service().conversations()
+		answer( event, isNull( all ) ? noSessions() : all.list( callerOf( event ), val( rc.limit ?: 20 ), rc.source ?: "" ) )
 	}
 
 	/**
@@ -414,11 +421,11 @@ class {
 			return
 		}
 		var body = event.getHTTPContent( json : true )
-		var conversation = conversationOf( event, body.conversationId ?: "" )
+		var conversation = conversationOf( event, body.conversationId ?: "", false )
 		if ( isNull( conversation ) ) {
 			return
 		}
-		event.renderData( type : "json", data : outcomeAnswer( conversation.rename( body.title ?: "" ) ) )
+		answerResult( event, conversation.rename( body.title ?: "" ) )
 	}
 
 	/**
@@ -432,34 +439,11 @@ class {
 			return
 		}
 		var body = event.getHTTPContent( json : true )
-		var conversation = conversationOf( event, body.conversationId ?: "" )
+		var conversation = conversationOf( event, body.conversationId ?: "", false )
 		if ( isNull( conversation ) ) {
 			return
 		}
-		event.renderData( type : "json", data : outcomeAnswer( conversation.fork( body.title ?: "" ) ) )
-	}
-
-	/**
-	 * The caller's conversation to act on, or null after answering 400 or 404. The conversation need not be in the
-	 * list yet (nobody has spoken in it); an id that is somebody else's is refused when the list is written.
-	 */
-	private function conversationOf( required any event, required string conversationId ) {
-		var store = sessionStore()
-		if ( isNull( store ) ) {
-			noSessions( arguments.event )
-			return nullValue()
-		}
-		if ( !len( arguments.conversationId ) ) {
-			arguments.event.renderData( type : "json", statusCode : 400, data : { "success" : false, "error" : "conversationId is required" } )
-			return nullValue()
-		}
-		return new "models.chat.ServerConversation@bxagents"( agent(), callerId( arguments.event ), store, arguments.conversationId )
-	}
-
-	private struct function outcomeAnswer( required struct outcome ) {
-		var answer = duplicate( arguments.outcome )
-		answer[ "success" ] = arguments.outcome.ok ?: false
-		return answer
+		answerResult( event, conversation.fork( body.title ?: "" ) )
 	}
 
 	/**
@@ -471,15 +455,11 @@ class {
 		if ( refused( event ) ) {
 			return
 		}
-		var conversationId = ownConversation( event, rc.conversationId ?: "" )
-		if ( !len( conversationId ) ) {
+		var conversation = conversationOf( event, rc.conversationId ?: "" )
+		if ( isNull( conversation ) ) {
 			return
 		}
-		event.renderData( type : "json", data : {
-			"success"        : true,
-			"conversationId" : conversationId,
-			"messages"       : new "models.cli.chat.MemoryHistory@bxagents"().of( agent().getMemoryMessages( callerId( event ), conversationId ) )
-		} )
+		answer( event, done( { "conversationId" : rc.conversationId, "messages" : conversation.history() } ) )
 	}
 
 	/**
@@ -491,14 +471,11 @@ class {
 		if ( refused( event ) ) {
 			return
 		}
-		var conversationId = ownConversation( event, event.getHTTPContent( json : true ).conversationId ?: "" )
-		if ( !len( conversationId ) ) {
+		var conversation = conversationOf( event, event.getHTTPContent( json : true ).conversationId ?: "" )
+		if ( isNull( conversation ) ) {
 			return
 		}
-		var me = callerId( event )
-		agent().getMemories().each( ( memory ) => memory.clear( me, conversationId ) )
-		sessionStore().resetCount( me, conversationId )
-		event.renderData( type : "json", data : { "success" : true, "ok" : true } )
+		answer( event, done( conversation.clear() ) )
 	}
 
 	/**
@@ -510,19 +487,11 @@ class {
 		if ( refused( event ) ) {
 			return
 		}
-		var conversationId = ownConversation( event, event.getHTTPContent( json : true ).conversationId ?: "" )
-		if ( !len( conversationId ) ) {
+		var conversation = conversationOf( event, event.getHTTPContent( json : true ).conversationId ?: "" )
+		if ( isNull( conversation ) ) {
 			return
 		}
-		var me = callerId( event )
-		var thisAgent = agent()
-		var before = thisAgent.getMemoryMessages( me, conversationId ).len()
-		var available = thisAgent.getMemories().some( ( memory ) => len( memory.getSummaryProvider() ?: "" ) && len( memory.getSummaryModel() ?: "" ) )
-		if ( available ) {
-			thisAgent.getMemories().each( ( memory ) => memory.summarize( {}, me, conversationId ) )
-		}
-		var after = thisAgent.getMemoryMessages( me, conversationId ).len()
-		event.renderData( type : "json", data : { "success" : true, "available" : available, "compacted" : after < before, "before" : before, "after" : after } )
+		answer( event, done( conversation.compact() ) )
 	}
 
 	// ----------------------------------------------------------------------------------
@@ -537,7 +506,7 @@ class {
 		if ( refused( event ) ) {
 			return
 		}
-		event.renderData( type : "json", data : { "success" : true, "commands" : commandService().menu( "web", whoIsCalling( event ).scope == "admin" ) } )
+		answer( event, done( { "commands" : service().commands().menu( "web", callerOf( event ).isAdmin() ) } ) )
 	}
 
 	/**
@@ -552,67 +521,11 @@ class {
 		var body = event.getHTTPContent( json : true )
 		var line = trim( body.line ?: "" )
 		if ( !new "models.chat.commands.CommandLine@bxagents"( line ).isCommand() ) {
-			event.renderData( type : "json", statusCode : 400, data : { "success" : false, "error" : "line must be a command, such as /help" } )
+			answer( event, failed( "bad_request", "line must be a command, such as /help" ) )
 			return
 		}
-		var who = whoIsCalling( event )
-		event.renderData( type : "json", data : commandService().execute( who.name, body.conversationId ?: "", line, "web", who.scope == "admin" ) )
-	}
-
-	private function commandService() {
-		return new "models.chat.commands.CommandService@bxagents"( agent : agent(), sessions : sessionStore(), offered : offered().names() )
-	}
-
-	/**
-	 * The conversation list, or null when the server has no shared chat database.
-	 */
-	private function sessionStore() {
-		try {
-			var store = new "models.store.ChatStore@bxagents"( "" )
-			store.rows( "SELECT 1 AS found FROM conversations LIMIT 1" )
-			return new "models.store.SessionStore@bxagents"( store )
-		} catch ( any e ) {
-			return nullValue()
-		}
-	}
-
-	private void function noSessions( required any event ) {
-		arguments.event.renderData( type : "json", statusCode : 404, data : { "success" : false, "error" : "This server keeps no list of conversations" } )
-	}
-
-	/**
-	 * A conversation the caller owns, or "" after answering 404 (it does not exist, or is somebody else's:
-	 * the same answer, so an id cannot be used to find out).
-	 */
-	private string function ownConversation( required any event, required string conversationId ) {
-		var store = sessionStore()
-		if ( isNull( store ) ) {
-			noSessions( arguments.event )
-			return ""
-		}
-		if ( !len( arguments.conversationId ) ) {
-			arguments.event.renderData( type : "json", statusCode : 400, data : { "success" : false, "error" : "conversationId is required" } )
-			return ""
-		}
-		if ( store.byId( callerId( arguments.event ), arguments.conversationId ).isEmpty() ) {
-			arguments.event.renderData( type : "json", statusCode : 404, data : { "success" : false, "error" : "There is no such conversation" } )
-			return ""
-		}
-		return arguments.conversationId
-	}
-
-	/**
-	 * Notes the turn in the conversation list. A list that cannot be written must not stop the turn.
-	 */
-	private void function recordTurn( required string userId, required string conversationId, required string input ) {
-		try {
-			var store = sessionStore()
-			if ( !isNull( store ) ) {
-				store.touch( arguments.userId, arguments.conversationId, arguments.input )
-			}
-		} catch ( any e ) {
-			// the turn goes on without a list
-		}
+		var caller = callerOf( event )
+		event.renderData( type : "json", data : service().commands().execute( caller.id(), body.conversationId ?: "", line, "web", caller.isAdmin() ) )
 	}
 
 	// ----------------------------------------------------------------------------------
@@ -621,48 +534,19 @@ class {
 
 	/**
 	 * GET: the notes of the agent and of the caller, { provider, user : { owner, notes, stats }, agent : { ... } }.
-	 * POST: adds a note, see addNote. 404 when the agent keeps no notes.
+	 * POST: adds a note, { scope : "user" | "agent", text }. 404 when the agent keeps no notes.
 	 */
 	function notes( event, rc, prc ) {
 		if ( refused( event ) ) {
 			return
 		}
+		var kept = service().notes( callerOf( event ) )
 		if ( event.getHTTPMethod() == "POST" ) {
-			return addNote( event )
-		}
-		var kept = notesProvider()
-		if ( isNull( kept ) ) {
-			noNotes( event )
+			var body = event.getHTTPContent( json : true )
+			answer( event, kept.add( body.scope ?: "user", body.text ?: "" ) )
 			return
 		}
-		var me = callerId( event )
-		var agentName = agent().getConfig().name ?: ""
-		event.renderData( type : "json", data : {
-			"success"  : true,
-			"provider" : "sqlite",
-			"admin"    : whoIsCalling( event ).scope == "admin",
-			"user"     : { "owner" : me, "notes" : kept.list( "user", me ), "stats" : kept.stats( "user", me ) },
-			"agent"    : { "owner" : agentName, "notes" : kept.list( "agent", agentName ), "stats" : kept.stats( "agent", agentName ) }
-		} )
-	}
-
-	/**
-	 * Body: { scope : "user" | "agent", text }. Any caller adds to their own notes and to the agent's.
-	 */
-	private function addNote( required any event ) {
-		var kept = notesProvider()
-		if ( isNull( kept ) ) {
-			noNotes( event )
-			return
-		}
-		var body = event.getHTTPContent( json : true )
-		var scope = noteScope( body.scope ?: "user" )
-		if ( !len( scope ) || !len( trim( body.text ?: "" ) ) ) {
-			event.renderData( type : "json", statusCode : 400, data : { "success" : false, "error" : "scope (user or agent) and text are required" } )
-			return
-		}
-		var outcome = kept.add( scope, noteOwner( event, scope ), body.text, "web" )
-		event.renderData( type : "json", statusCode : ( outcome.ok ?: false ) ? 200 : 409, data : noteAnswer( outcome ) )
+		answer( event, kept.all() )
 	}
 
 	/**
@@ -672,19 +556,8 @@ class {
 		if ( refused( event ) ) {
 			return
 		}
-		var kept = notesProvider()
-		if ( isNull( kept ) ) {
-			noNotes( event )
-			return
-		}
 		var body = event.getHTTPContent( json : true )
-		var scope = noteScope( body.scope ?: "" )
-		if ( !len( scope ) || !len( body.id ?: "" ) || !len( trim( body.text ?: "" ) ) ) {
-			event.renderData( type : "json", statusCode : 400, data : { "success" : false, "error" : "scope, id and text are required" } )
-			return
-		}
-		var outcome = kept.replace( scope, noteOwner( event, scope ), body.id, body.text )
-		event.renderData( type : "json", statusCode : ( outcome.ok ?: false ) ? 200 : 409, data : noteAnswer( outcome ) )
+		answer( event, service().notes( callerOf( event ) ).update( body.scope ?: "", body.id ?: "", body.text ?: "" ) )
 	}
 
 	/**
@@ -694,169 +567,8 @@ class {
 		if ( refused( event ) ) {
 			return
 		}
-		var kept = notesProvider()
-		if ( isNull( kept ) ) {
-			noNotes( event )
-			return
-		}
 		var body = event.getHTTPContent( json : true )
-		var scope = noteScope( body.scope ?: "" )
-		if ( !len( scope ) || !len( body.id ?: "" ) ) {
-			event.renderData( type : "json", statusCode : 400, data : { "success" : false, "error" : "scope and id are required" } )
-			return
-		}
-		if ( scope == "agent" && whoIsCalling( event ).scope != "admin" ) {
-			event.renderData( type : "json", statusCode : 403, data : { "success" : false, "error" : "Removing a note of the agent needs an admin token" } )
-			return
-		}
-		var removed = kept.remove( scope, noteOwner( event, scope ), body.id )
-		event.renderData( type : "json", statusCode : removed ? 200 : 404, data : { "success" : removed, "ok" : removed, "reason" : removed ? "" : "There is no note with id [#body.id#]" } )
-	}
-
-	/**
-	 * The agent's notes provider, or null when it keeps none.
-	 */
-	private function notesProvider() {
-		return new "models.notes.NotesWiring@bxagents"().providerOf( agent() )
-	}
-
-	private void function noNotes( required any event ) {
-		arguments.event.renderData( type : "json", statusCode : 404, data : { "success" : false, "error" : "This agent keeps no notes" } )
-	}
-
-	private string function noteScope( required any scope ) {
-		return listFindNoCase( "user,agent", arguments.scope ) ? lCase( arguments.scope ) : ""
-	}
-
-	/**
-	 * Whose notes a scope means for this caller: the caller's own, or the agent's.
-	 */
-	private string function noteOwner( required any event, required string scope ) {
-		return arguments.scope == "agent" ? ( agent().getConfig().name ?: "" ) : callerId( arguments.event )
-	}
-
-	private struct function noteAnswer( required struct outcome ) {
-		var answer = duplicate( arguments.outcome )
-		answer[ "success" ] = arguments.outcome.ok ?: false
-		return answer
-	}
-
-	// ----------------------------------------------------------------------------------
-	// Streaming
-	// ----------------------------------------------------------------------------------
-
-	/**
-	 * Opens the event stream and runs the work in it.
-	 *
-	 * @threadId The conversation thread, sent first so a client that let the server pick it has it
-	 * @run A function taking the chunk handler; it does the agent call
-	 */
-	private string function streamRun( required string threadId, required function run ) {
-		var threadId = arguments.threadId
-		var work = arguments.run
-		SSE(
-			callback : ( emitter ) => {
-				var calls = {}
-				var counter = { value : 0 }
-				emitter.send( { "threadId" : threadId }, "thread" )
-
-				// bx-ai announces every tool call in the process. Only this thread's are sent on.
-				var interceptor = BoxRegisterInterceptor( ( data ) => {
-					if ( emitter.isClosed() || !belongsToThread( data, threadId ) ) {
-						return
-					}
-					var name = data.name
-					var shown = visibleArguments( data.arguments ?: {} )
-					if ( data.keyExists( "results" ) ) {
-						var open = calls[ name ] ?: []
-						var finished = open.len() ? open.first() : name
-						if ( open.len() ) {
-							open.deleteAt( 1 )
-						}
-						emitter.send( { "id" : finished, "name" : name, "arguments" : shown, "status" : "ok", "ms" : data.executionTime ?: 0 }, "tool" )
-						return
-					}
-					counter.value++
-					var started = name & "##" & counter.value
-					calls[ name ] = calls[ name ] ?: []
-					calls[ name ].append( started )
-					emitter.send( { "id" : started, "name" : name, "arguments" : shown, "status" : "running", "ms" : 0 }, "tool" )
-				}, [ "beforeAIToolExecute", "afterAIToolExecute" ] )
-
-				try {
-					work( ( chunk ) => {
-						if ( emitter.isClosed() ) {
-							return
-						}
-						emitter.send( chunk, "chunk" )
-						// the sentinel for a run that stops on a human decision
-						if ( isStruct( chunk ) && ( chunk.type ?: "" ) == "middleware_stop" ) {
-							var actions = []
-							try {
-								if ( chunk.result.isSuspended() ) {
-									actions = chunk.result.getData().pendingActions ?: []
-								}
-							} catch ( any ignored ) {
-								// the details stay available from /pending
-							}
-							emitter.send( { "threadId" : threadId, "pendingActions" : actions }, "suspended" )
-						}
-					} )
-					if ( !emitter.isClosed() ) {
-						emitter.send( "[DONE]", "done" )
-						emitter.close()
-					}
-				} catch ( any e ) {
-					if ( !emitter.isClosed() ) {
-						emitter.send( { "message" : e.message }, "error" )
-						emitter.close()
-					}
-				} finally {
-					BoxUnregisterInterceptor( interceptor )
-				}
-			},
-			keepAliveInterval : 30000
-		)
-		return ""
-	}
-
-	/**
-	 * @data A beforeAIToolExecute or afterAIToolExecute announcement
-	 *
-	 * @return True when the tool call belongs to the run on this thread
-	 */
-	private boolean function belongsToThread( required struct data, required string threadId ) {
-		var chatRequest = arguments.data.chatRequest ?: nullValue()
-		if ( isNull( chatRequest ) ) {
-			return false
-		}
-		return chatRequest.getThreadId() == arguments.threadId
-	}
-
-	/**
-	 * bx-ai passes the whole chat request to tools as `_chatRequest`; names starting with an underscore are its
-	 * plumbing, not something the model asked for.
-	 */
-	private struct function visibleArguments( required any args ) {
-		var shown = {}
-		if ( isStruct( arguments.args ) ) {
-			for ( var key in arguments.args ) {
-				if ( left( key, 1 ) != "_" ) {
-					shown[ key ] = arguments.args[ key ]
-				}
-			}
-		}
-		return shown
-	}
-
-	/**
-	 * The identity a suspended run was started under, kept in the checkpoint by the agent.
-	 */
-	private string function ownerOf( required struct state ) {
-		if ( !structKeyExists( arguments.state, "options" ) || !isStruct( arguments.state.options ) ) {
-			return ""
-		}
-		return arguments.state.options.userId ?: ""
+		answer( event, service().notes( callerOf( event ) ).remove( body.scope ?: "", body.id ?: "" ) )
 	}
 
 }

@@ -524,7 +524,7 @@ bxAgents chat --no-tui                         # plain line-by-line REPL
 bxAgents chat --server [--port=<port>]         # full app, own throwaway server
 bxAgents chat --connect=http://127.0.0.1:8080  # full app, server you already run
 bxAgents chat --connect=https://agent.example.com --token=<token>   # a server that wants one
-bxAgents chat --user=alice                     # whose notes and conversations (default: your OS user)
+bxAgents chat --user=alice                     # whose notes and conversations (default: `local`, the one user of an open server)
 bxAgents chat --continue                       # open the most recent conversation, with its history
 bxAgents chat --session=2                      # open one by its number in /sessions, or by id
 ```
@@ -804,7 +804,7 @@ bxAgents notes export [--file=notes.json]
 bxAgents notes import --file=notes.json
 ```
 
-- `--scope` is `user` (the default) or `agent`; `list` without it shows both. `--user` is whose user notes: the operating system user by default. Agent notes belong to the agent's `name`.
+- `--scope` is `user` (the default) or `agent`; `list` without it shows both. `--user` is whose user notes: `local` by default, the one user an open server has. Agent notes belong to the agent's `name`.
 - `stats` shows how full each scope is and the rough size they add to the prompt (about four characters to a token; an estimate, not a count).
 - `export` writes the notes as JSON, to `--file` or to the screen. `import` adds the notes of such a file; a note already there is not added twice and one that does not fit the limit is reported (the command then exits `1`).
 - Run it where the database is: in the project, or on a server with `BXAGENTS_DB` set.
@@ -841,7 +841,7 @@ bxAgents sessions export --session=<number or id> [--file=chat.json] [--md] [--f
 bxAgents sessions import --file=chat.json [--name="New name"] [--user=NAME]
 ```
 
-- A conversation is picked by its number in `list`, or by its id or the start of it. `--user` is whose conversations: the operating system user by default.
+- A conversation is picked by its number in `list`, or by its id or the start of it. `--user` is whose conversations: `local` by default, the one user an open server has.
 - `list`, `rename` and the list part of `delete` only touch the database. The messages of a conversation live in the agent's [memory](conventions/agent-yaml.md#settings), so `fork` (which copies them) needs a built project, and so does `delete` to forget them too. They reach only messages a memory that outlives the process keeps (`file`, `jdbc`): the default `cache` memory is gone when the chat ends.
 - Run it where the database is: in the project, or on a server with `BXAGENTS_DB` set.
 - `export` writes one conversation to a JSON file named after its title (`--file` to choose, `--md` for a readable Markdown transcript instead) and never replaces a file unless you add `--force`. The file holds the conversation's details and its messages as the agent's memory holds them. It contains everything that was said, so keep it where you would keep the conversation.

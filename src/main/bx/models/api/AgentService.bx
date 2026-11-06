@@ -1,0 +1,147 @@
+/**
+ * The one thing a client of the agent holds: the web page's routes, the terminal chat and the gateways all ask
+ * it, so each thing the agent can do is written once.
+ *
+ *   service.turns()                       run a turn, stream its frames, cancel, steer, resume
+ *   service.conversations()               list, start and delete conversations
+ *   service.conversation( caller, id )    one conversation: history, rename, fork, compact, export, notes
+ *   service.preferences( caller )         what a person has set for themselves
+ *   service.commands()                    the slash commands
+ *   service.whoami( caller )              who the server takes the caller to be
+ *
+ * A call answers an Outcome and never picks an HTTP status; ApiEdge does that, in one place.
+ */
+import bxModules.bxagents.models.api.Caller as CallerType;
+
+import bxModules.bxagents.models.api.Outcome;
+
+class {
+
+	/**
+	 * @agent The built agent
+	 * @store A ChatStore, or null when the app keeps no shared database (then there is no conversation list or preferences)
+	 * @offered An OfferedProfiles: which profiles a client may ask for
+	 */
+	function init( required any agent, any store, any offered ) {
+		variables.agent = arguments.agent
+		variables.store = arguments.store ?: nullValue()
+		variables.offered = arguments.offered ?: new "models.runtime.OfferedProfiles@bxagents"( [] )
+		variables.sessions = isNull( variables.store ) ? nullValue() : new "models.store.SessionStore@bxagents"( variables.store )
+		return this
+	}
+
+	/** @return True when the app has a shared database: conversation list, preferences */
+	boolean function keepsSessions() {
+		return !isNull( variables.sessions )
+	}
+
+	any function agent() {
+		return variables.agent
+	}
+
+	/** @return The SessionStore, or null */
+	any function sessions() {
+		return variables.sessions ?: nullValue()
+	}
+
+	any function turns() {
+		return new TurnRunner( variables.agent, variables.sessions ?: nullValue(), variables.offered )
+	}
+
+	/**
+	 * @return The Conversations, or null when the app keeps no list
+	 */
+	any function conversations() {
+		return keepsSessions() ? new Conversations( variables.agent, variables.sessions ) : nullValue()
+	}
+
+	/**
+	 * @caller The Caller
+	 * @conversationId The conversation; a new one when blank
+	 *
+	 * @return An AgentConversation for the caller. The model is picked per message here, not changed for everyone.
+	 */
+	any function conversation( required any caller, string conversationId = "" ) {
+		return new "models.chat.ServerConversation@bxagents"( variables.agent, arguments.caller.id(), variables.sessions ?: nullValue(), arguments.conversationId )
+			.withOfferedProfiles( variables.offered.names() )
+	}
+
+	/**
+	 * @return A Preferences for the caller, or null when the app keeps no shared database
+	 */
+	any function preferences( required any caller ) {
+		return isNull( variables.store ) ? nullValue() : new Preferences( variables.store, arguments.caller.id() )
+	}
+
+	/**
+	 * @return The one CommandService for this agent
+	 */
+	any function commands() {
+		return new "models.chat.commands.CommandService@bxagents"( agent = variables.agent, sessions = variables.sessions ?: nullValue(), offered = variables.offered.names() )
+	}
+
+	/**
+	 * @source The surface the call came in on
+	 *
+	 * @return The one user of a server that is open on this machine
+	 */
+	any function localCaller( string source = "api" ) {
+		return CallerType::localUser( arguments.source )
+	}
+
+	/**
+	 * @caller The Caller
+	 *
+	 * @return The notes the agent keeps for the caller and about its job
+	 */
+	any function notes( required any caller ) {
+		return new Notes( variables.agent, arguments.caller )
+	}
+
+	/**
+	 * Who the agent is, for a client's banner: name, a short model label and what it can do.
+	 *
+	 * @caller The Caller
+	 *
+	 * @return An Outcome
+	 */
+	any function about( required any caller ) {
+		var config = variables.agent.getConfig()
+		// AiAgent.getConfig().model is the AiModel's whole config struct; a client wants provider/model
+		var modelConfig = config.model ?: {}
+		var modelLabel = modelConfig
+		if ( isStruct( modelConfig ) ) {
+			var modelId = ( modelConfig.params ?: {} ).model ?: ( modelConfig.name ?: "" )
+			modelLabel = [ modelConfig.provider ?: "", modelId ].filter( ( part ) => len( part ) ).toList( "/" )
+		}
+		var facts = new "models.runtime.ModelFacts@bxagents"().of( config.profile ?: "" )
+		return Outcome::done( {
+			"name"          : config.name ?: "",
+			"description"   : config.description ?: "",
+			"model"         : modelLabel,
+			"contextWindow" : facts.contextWindow,
+			"vision"        : facts.vision,
+			"toolCount"     : config.toolCount ?: 0,
+			"capabilities"  : {
+				"events"      : true, "cancel" : true, "steer" : true, "approvals" : true, "attachments" : true,
+				"notes"       : notes( arguments.caller ).keeps(),
+				"sessions"    : keepsSessions(),
+				"profiles"    : variables.offered.any(),
+				"commands"    : true,
+				"context"     : true,
+				"status"      : new "models.extensions.ServedStatus@bxagents"().available(),
+				"slots"       : new "models.extensions.ServedSlots@bxagents"().available()
+			}
+		} )
+	}
+
+	/**
+	 * @return An Outcome: the caller as the server sees it, and the agent's name
+	 */
+	any function whoami( required any caller ) {
+		var shown = arguments.caller.toStruct()
+		shown[ "agent" ] = variables.agent.getConfig().name ?: ""
+		return Outcome::done( shown )
+	}
+
+}

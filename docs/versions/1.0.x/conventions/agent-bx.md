@@ -285,12 +285,28 @@ a token). `steer` splices a message into a run in flight. `resume` takes `approv
 `reject` and streams the rest of the turn. A run belongs to whoever started it: `pending` answers "nothing
 pending" and `resume` answers `403` to anyone else.
 
-Send a `conversationId` with `/events` to keep the turn in a conversation: the server lists it under the caller (the name of the token used, or `api` on an open route) and the agent's memory keeps its messages under the same id. `sessions`, `history`, `clear` and `compact` work on the caller's own conversations only; someone else's id is a `404`, the same as one that does not exist. They answer `404` when the server has no shared chat database, and `compact` reports `available: false` when the agent's memory has no summary model.
+Send a `conversationId` with `/events` to keep the turn in a conversation: the server lists it under the caller (the name of the token used, or `local` on an open route) and the agent's memory keeps its messages under the same id. `sessions`, `history`, `clear` and `compact` work on the caller's own conversations only; someone else's id is a `404`, the same as one that does not exist. They answer `404` when the server has no shared chat database, and `compact` reports `available: false` when the agent's memory has no summary model.
 
-The `notes` routes answer `404` for an agent that has no [`notes`](agent-yaml.md#notes) block. Each caller reads and changes their own user notes (the owner is the name of the token they used, or `api` on an open route) and the agent's notes. Any caller can add to either scope or edit a note; removing a note of the agent needs an `admin` token (a `403` otherwise), because it changes what every user's agent knows.
+The `notes` routes answer `404` for an agent that has no [`notes`](agent-yaml.md#notes) block. Each caller reads and changes their own user notes (the owner is the name of the token they used, or `local` on an open route) and the agent's notes. Any caller can add to either scope or edit a note; removing a note of the agent needs an `admin` token (a `403` otherwise), because it changes what every user's agent knows.
 
 These routes sit behind the same `x-bxagents-token` gate as the other four (a missing or wrong token is a
 `401`), and `agentApi.enabled: false` removes all of them.
+
+### Answers, errors and who is calling
+
+Every answer is JSON with `success`. A failure is `{ "success": false, "error": "text for people", "code": "machine_code" }` with the status the code means:
+
+| Status | Codes |
+|---|---|
+| 400 | `bad_request`, `bad_profile`, `bad_attachment` |
+| 401 | `unauthorized` |
+| 403 | `forbidden`, `csrf`, `not_your_run` |
+| 404 | `not_found`, `no_notes` |
+| 409 | `busy`, `conflict` |
+| 429 | `rate_limited` |
+| 500 | `internal` |
+
+On a route that is open, everyone is the one user `local`, on every surface, so the terminal chat, the web page and a script share conversations and notes. A caller can say which surface it is with the `x-bxagents-source` header (`web`, `terminal`, or any plain lower case name; `api` when it sends none). The conversation list records it: `GET /__bxagents/sessions` returns a `source` for each conversation, and `?source=terminal` lists only those. Conversations that were made before this was recorded have a blank source.
 
 Because the path is reserved, `build` **rejects** any `gateways/` entry whose
 `path` is `/__bxagents` or sits underneath it. Two routes on one mount is a

@@ -1,0 +1,118 @@
+/**
+ * The short notes an agent keeps: the caller's own, and the agent's about its job. Any caller adds to and edits
+ * either; a person removes their own notes, and removing the agent's needs an admin.
+ */
+import bxModules.bxagents.models.api.Outcome;
+
+class {
+
+	/**
+	 * @agent The built agent
+	 * @caller The Caller
+	 */
+	function init( required any agent, required any caller ) {
+		variables.agent = arguments.agent
+		variables.caller = arguments.caller
+		variables.kept = new "models.notes.NotesWiring@bxagents"().providerOf( arguments.agent )
+		return this
+	}
+
+	/** @return True when the agent keeps notes at all (it has a `notes` block) */
+	boolean function keeps() {
+		return !isNull( variables.kept )
+	}
+
+	/**
+	 * @return An Outcome: { provider, admin, user : { owner, notes, stats }, agent : { owner, notes, stats } }, or no_notes
+	 */
+	any function all() {
+		if ( !keeps() ) {
+			return none()
+		}
+		var me = variables.caller.id()
+		var agentName = agentOwner()
+		return Outcome::done( {
+			"provider" : "sqlite",
+			"admin"    : variables.caller.isAdmin(),
+			"user"     : { "owner" : me, "notes" : variables.kept.list( "user", me ), "stats" : variables.kept.stats( "user", me ) },
+			"agent"    : { "owner" : agentName, "notes" : variables.kept.list( "agent", agentName ), "stats" : variables.kept.stats( "agent", agentName ) }
+		} )
+	}
+
+	/**
+	 * @scope `user` or `agent`
+	 * @text What to remember
+	 *
+	 * @return An Outcome: the added note's result, bad_request, no_notes, or conflict (a limit was reached)
+	 */
+	any function add( required string scope, required string text ) {
+		if ( !keeps() ) {
+			return none()
+		}
+		var named = scopeOf( arguments.scope )
+		if ( !len( named ) || !len( trim( arguments.text ) ) ) {
+			return Outcome::failed( "bad_request", "scope (user or agent) and text are required" )
+		}
+		return answerOf( variables.kept.add( named, ownerOf( named ), arguments.text, variables.caller.source() ) )
+	}
+
+	/**
+	 * @return An Outcome: the edited note's result, bad_request, no_notes, or conflict
+	 */
+	any function update( required string scope, required string id, required string text ) {
+		if ( !keeps() ) {
+			return none()
+		}
+		var named = scopeOf( arguments.scope )
+		if ( !len( named ) || !len( arguments.id ) || !len( trim( arguments.text ) ) ) {
+			return Outcome::failed( "bad_request", "scope, id and text are required" )
+		}
+		return answerOf( variables.kept.replace( named, ownerOf( named ), arguments.id, arguments.text ) )
+	}
+
+	/**
+	 * @return An Outcome: done, bad_request, no_notes, forbidden (an agent note and the caller is not an admin) or not_found
+	 */
+	any function remove( required string scope, required string id ) {
+		if ( !keeps() ) {
+			return none()
+		}
+		var named = scopeOf( arguments.scope )
+		if ( !len( named ) || !len( arguments.id ) ) {
+			return Outcome::failed( "bad_request", "scope and id are required" )
+		}
+		if ( named == "agent" && !variables.caller.isAdmin() ) {
+			return Outcome::failed( "forbidden", "Removing a note of the agent needs an admin token" )
+		}
+		if ( !variables.kept.remove( named, ownerOf( named ), arguments.id ) ) {
+			return Outcome::failed( "not_found", "There is no note with id [#arguments.id#]" )
+		}
+		return Outcome::done( { "ok" : true } )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private any function none() {
+		return Outcome::failed( "no_notes", "This agent keeps no notes" )
+	}
+
+	private string function scopeOf( required any scope ) {
+		return listFindNoCase( "user,agent", arguments.scope ) ? lCase( arguments.scope ) : ""
+	}
+
+	private string function agentOwner() {
+		return variables.agent.getConfig().name ?: ""
+	}
+
+	/**
+	 * Whose notes a scope means for this caller: their own, or the agent's.
+	 */
+	private string function ownerOf( required string scope ) {
+		return arguments.scope == "agent" ? agentOwner() : variables.caller.id()
+	}
+
+	private any function answerOf( required struct result ) {
+		return Outcome::fromResult( arguments.result, "conflict" )
+	}
+
+}

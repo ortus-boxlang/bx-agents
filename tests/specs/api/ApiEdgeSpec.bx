@@ -1,0 +1,69 @@
+import bxModules.bxagents.models.api.Outcome;
+
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "api.ApiEdge", function() {
+
+			beforeEach( function() {
+				variables.edge = new bxagents.models.api.ApiEdge();
+			} );
+
+			it( "gives every listed code the status the contract says", function() {
+				expect( edge.statusOf( "bad_request" ) ).toBe( 400 );
+				expect( edge.statusOf( "unauthorized" ) ).toBe( 401 );
+				expect( edge.statusOf( "not_your_run" ) ).toBe( 403 );
+				expect( edge.statusOf( "not_found" ) ).toBe( 404 );
+				expect( edge.statusOf( "busy" ) ).toBe( 409 );
+				expect( edge.statusOf( "rate_limited" ) ).toBe( 429 );
+			} );
+
+			it( "answers 500 for a code it does not know, so a typo is never taken for a success or a client error", function() {
+				expect( edge.statusOf( "nope" ) ).toBe( 500 );
+			} );
+
+			it( "sends the data with success on a worked call", function() {
+				var answer = new bxagents.models.api.Outcome( ok = true, data = { "tools" : [], "count" : 0 } );
+
+				expect( edge.statusFor( answer ) ).toBe( 200 );
+				expect( edge.bodyFor( answer ) ).toBe( { "tools" : [], "count" : 0, "success" : true } );
+			} );
+
+			it( "wraps data that is not a struct", function() {
+				var body = edge.bodyFor( new bxagents.models.api.Outcome( ok = true, data = [ 1, 2 ] ) );
+
+				expect( body.data ).toBe( [ 1, 2 ] );
+				expect( body.success ).toBeTrue();
+			} );
+
+			it( "sends the code and the reason on a failed call, and never the data", function() {
+				var answer = new bxagents.models.api.Outcome( ok = false, code = "not_found", reason = "No such conversation", data = { "secret" : 1 } );
+
+				expect( edge.statusFor( answer ) ).toBe( 404 );
+				expect( edge.bodyFor( answer ) ).toBe( { "success" : false, "error" : "No such conversation", "code" : "not_found" } );
+			} );
+
+			it( "builds outcomes with done and failed", function() {
+				expect( edge.statusFor( Outcome::done( { "x" : 1 } ) ) ).toBe( 200 );
+				expect( edge.statusFor( Outcome::failed( "forbidden", "No" ) ) ).toBe( 403 );
+			} );
+
+			it( "reads the { ok, reason } answers older code gives", function() {
+				expect( edge.statusFor( Outcome::fromResult( { ok : true, title : "x" } ) ) ).toBe( 200 );
+				expect( edge.bodyFor( Outcome::fromResult( { ok : true, title : "x" } ) ).title ).toBe( "x" );
+
+				var failed = Outcome::fromResult( { ok : false, reason : "No such thing" }, "conflict" );
+				expect( edge.statusFor( failed ) ).toBe( 409 );
+				expect( edge.bodyFor( failed ).error ).toBe( "No such thing" );
+			} );
+
+			it( "falls back to the code when there is no reason", function() {
+				var body = edge.bodyFor( new bxagents.models.api.Outcome( ok = false, code = "busy" ) );
+
+				expect( body.error ).toBe( "busy" );
+			} );
+
+		} );
+	}
+
+}

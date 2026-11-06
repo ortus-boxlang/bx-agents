@@ -6,11 +6,13 @@
  * Two things build on it: InProcessSession (the terminal chat, which also runs turns and streams them)
  * and ServerConversation (the web page and gateways, where the conversation is named by each request).
  */
+import bxModules.bxagents.models.api.Caller;
+
 class {
 
 	/**
 	 * @agent The agent object from the project's GeneratedAgentFactory
-	 * @userId Who is talking: the owner of the user notes and of the conversations. Defaults to the operating system user.
+	 * @userId Who is talking: the owner of the user notes and of the conversations. Defaults to `local`, the one user of a server that is open on this machine, so the terminal, the web page and the API share notes and conversations.
 	 * @sessions A SessionStore: the list of conversations in the shared chat database. Without one the chat keeps no list.
 	 * @conversationId The conversation to carry on in; a new one when blank
 	 */
@@ -18,7 +20,7 @@ class {
 		variables.agent = arguments.agent
 		variables.sessions = isNull( arguments.sessions ) ? nullValue() : arguments.sessions
 		variables.conversationId = len( arguments.conversationId ) ? arguments.conversationId : createUUID()
-		variables.userId = len( trim( arguments.userId ) ) ? trim( arguments.userId ) : createObject( "java", "java.lang.System" ).getProperty( "user.name" ) ?: "default"
+		variables.userId = len( trim( arguments.userId ) ) ? trim( arguments.userId ) : Caller::localId()
 		variables.threadId = createUUID()
 		return this
 	}
@@ -35,6 +37,13 @@ class {
 	 */
 	string function mode() {
 		return "in-process"
+	}
+
+	/**
+	 * @return The thread the next turn runs on: what bx-ai keys a run by, so a client can cancel or steer it
+	 */
+	string function threadId() {
+		return variables.threadId
 	}
 
 	string function userId() {

@@ -1,0 +1,58 @@
+/**
+ * What a person has set for themselves on this server (the page's theme, say), kept by the person, not the
+ * browser, so it follows them from one device to the next. Values are text.
+ */
+import bxModules.bxagents.models.api.Outcome;
+
+class {
+
+	/**
+	 * @store A ChatStore
+	 * @userId Whose preferences
+	 */
+	function init( required any store, required string userId ) {
+		variables.store = arguments.store
+		variables.userId = arguments.userId
+		return this
+	}
+
+	/**
+	 * @return Every preference as { key : value }
+	 */
+	struct function all() {
+		var found = {}
+		for ( var row in variables.store.rows( "SELECT prefKey, prefValue FROM preferences WHERE userId = :userId", { userId : variables.userId } ) ) {
+			found[ row.prefKey ] = row.prefValue ?: ""
+		}
+		return found
+	}
+
+	/**
+	 * @return An Outcome: done( { saved } ), or bad_request without a key
+	 */
+	any function set( required string key, any value = "" ) {
+		var named = trim( arguments.key )
+		if ( !len( named ) ) {
+			return Outcome::failed( "bad_request", "key is required" )
+		}
+		variables.store.exec(
+			"INSERT INTO preferences ( userId, prefKey, prefValue, updatedAt ) VALUES ( :userId, :key, :value, :now )
+			 ON CONFLICT ( userId, prefKey ) DO UPDATE SET prefValue = excluded.prefValue, updatedAt = excluded.updatedAt",
+			{ userId : variables.userId, key : named, value : toString( arguments.value ), now : { value : now(), cfsqltype : "timestamp" } }
+		)
+		return Outcome::done( { "saved" : true } )
+	}
+
+	/**
+	 * @return An Outcome: done( { deleted } ), or bad_request without a key
+	 */
+	any function delete( required string key ) {
+		var named = trim( arguments.key )
+		if ( !len( named ) ) {
+			return Outcome::failed( "bad_request", "key is required" )
+		}
+		variables.store.exec( "DELETE FROM preferences WHERE userId = :userId AND prefKey = :key", { userId : variables.userId, key : named } )
+		return Outcome::done( { "deleted" : true } )
+	}
+
+}

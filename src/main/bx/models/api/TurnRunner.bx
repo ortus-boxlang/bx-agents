@@ -1,0 +1,378 @@
+/**
+ * Runs the agent's turns for any surface and reports what happens as frames, so the web page, the terminal and an
+ * HTTP client all see the same thing. It holds the one copy of the work that used to be written in each place:
+ * checking the profile and the pictures, noting the turn in the conversation list, pairing tool calls with their
+ * answers, and telling a run that waits for a human from one that is done.
+ *
+ * A turn is started in two steps, so an HTTP edge can still answer 400 before it opens a stream:
+ *
+ *   prepared = runner.prepareTurn( caller, request )   an Outcome; its data is the turn
+ *   runner.execute( prepared.data(), onFrame )         runs it and calls onFrame( name, data )
+ *
+ * Frames: thread { threadId }, chunk <what the model sent>, tool { id, name, arguments, status, ms },
+ * suspended { threadId, pendingActions }, error { message }, done "[DONE]".
+ *
+ * A request is { input, conversationId?, threadId?, params?, options?, attachments?, images? }.
+ */
+import bxModules.bxagents.models.api.Outcome;
+
+class {
+
+	/**
+	 * @agent The built agent (a bx-ai AiAgent)
+	 * @sessions A SessionStore, or null when the app keeps no conversation list
+	 * @offered An OfferedProfiles: which profiles a request may ask for; null allows none beyond the default
+	 */
+	function init( required any agent, any sessions, any offered ) {
+		variables.agent = arguments.agent
+		variables.sessions = arguments.sessions ?: nullValue()
+		variables.offered = arguments.offered ?: nullValue()
+		return this
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Starting a turn
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Checks a request and readies the turn, without running anything.
+	 *
+	 * @caller The Caller
+	 * @request { input, conversationId?, threadId?, params?, options?, attachments? }
+	 *
+	 * @return An Outcome: the turn { threadId, work } or bad_profile / bad_attachment
+	 */
+	any function prepareTurn( required any caller, required struct request ) {
+		var threadId = len( arguments.request.threadId ?: "" ) ? arguments.request.threadId : createUUID()
+		var supplied = arguments.request.options ?: {}
+		var options = isStruct( supplied ) ? duplicate( supplied ) : {}
+		if ( !profileAllowed( options ) ) {
+			return Outcome::failed( "bad_profile", "profile is not offered here" )
+		}
+		options[ "userId" ] = arguments.caller.id()
+		options[ "threadId" ] = threadId
+
+		var input = arguments.request.input ?: ""
+		var conversationId = arguments.request.conversationId ?: ""
+		if ( len( conversationId ) ) {
+			options[ "conversationId" ] = conversationId
+		}
+
+		// pictures arrive as files on this machine (images: [ { path } ], the terminal) or as data over the wire
+		// (attachments: [ { name, mime, data } ]); MessageBuilder checks and builds both
+		var images = isArray( arguments.request.images ?: "" ) ? duplicate( arguments.request.images ) : []
+		var attachments = arguments.request.attachments ?: []
+		if ( isArray( attachments ) ) {
+			for ( var a in attachments ) {
+				images.append( { name : a.name ?: "", mime : a.mime ?: "", base64 : a.data ?: "" } )
+			}
+		}
+		if ( images.len() ) {
+			var facts = new "models.runtime.ModelFacts@bxagents"().of( len( options.profile ?: "" ) ? options.profile : ( variables.agent.getConfig().profile ?: "" ) )
+			var built = new "models.chat.MessageBuilder@bxagents"().build( input, images, facts )
+			if ( !built.ok ) {
+				return Outcome::failed( "bad_attachment", built.reason )
+			}
+			input = built.input
+		}
+
+		// only a turn that will run is noted in the list
+		if ( len( conversationId ) ) {
+			noteTurn( arguments.caller, conversationId, arguments.request.input ?: "" )
+		}
+
+		var thisAgent = variables.agent
+		var params = arguments.request.params ?: {}
+		return Outcome::done( {
+			threadId : threadId,
+			work     : ( onChunk ) => thisAgent.stream( onChunk, input, params, options ),
+			run      : () => thisAgent.run( input, params, options )
+		} )
+	}
+
+	/**
+	 * Readies the answer to an approval that stopped a run.
+	 *
+	 * @caller The Caller; it must be who started the run
+	 * @threadId The run
+	 * @request { decision : approve | approve_session | reject, editedData?, reason? }
+	 *
+	 * @return An Outcome: the turn { threadId, work }, bad_request or not_your_run
+	 */
+	any function prepareResume( required any caller, required string threadId, required struct request ) {
+		var decision = arguments.request.decision ?: ""
+		if ( !len( arguments.threadId ) || !len( decision ) ) {
+			return Outcome::failed( "bad_request", "threadId and decision are required" )
+		}
+		var checkpointer = variables.agent.getCheckpointer()
+		if ( !isNull( checkpointer ) ) {
+			var state = checkpointer.loadState( arguments.threadId )
+			if ( !state.isEmpty() && ownerOf( state ) != arguments.caller.id() ) {
+				return Outcome::failed( "not_your_run", "This run belongs to another caller" )
+			}
+		}
+		var thisAgent = variables.agent
+		var threadId = arguments.threadId
+		var decidedBy = arguments.caller.id()
+		var edited = arguments.request.editedData ?: {}
+		var reason = arguments.request.reason ?: ""
+		return Outcome::done( {
+			threadId : threadId,
+			work     : ( onChunk ) => thisAgent.resumeStream( onChunk, decision, threadId, edited, decidedBy, reason )
+		} )
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Running it
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Prepares a turn and runs it.
+	 *
+	 * @return An Outcome: the refusal from prepareTurn, or done( { threadId } ) once the frames have all been sent
+	 */
+	any function stream( required any caller, required struct request, required function onFrame, function isOpen ) {
+		var prepared = prepareTurn( arguments.caller, arguments.request )
+		if ( !prepared.succeeded() ) {
+			return prepared
+		}
+		execute( prepared.data(), arguments.onFrame, arguments.isOpen ?: nullValue() )
+		return Outcome::done( { threadId : prepared.data().threadId } )
+	}
+
+	/**
+	 * Prepares the answer to an approval and runs the rest of the turn.
+	 */
+	any function resume( required any caller, required string threadId, required struct request, required function onFrame, function isOpen ) {
+		var prepared = prepareResume( arguments.caller, arguments.threadId, arguments.request )
+		if ( !prepared.succeeded() ) {
+			return prepared
+		}
+		execute( prepared.data(), arguments.onFrame, arguments.isOpen ?: nullValue() )
+		return Outcome::done( { threadId : arguments.threadId } )
+	}
+
+	/**
+	 * One whole turn without frames.
+	 *
+	 * @return An Outcome: { output, threadId }, or the refusal from prepareTurn
+	 */
+	any function run( required any caller, required struct request ) {
+		var prepared = prepareTurn( arguments.caller, arguments.request )
+		if ( !prepared.succeeded() ) {
+			return prepared
+		}
+		var turn = prepared.data()
+		return Outcome::done( { output : turn.run(), threadId : turn.threadId } )
+	}
+
+	/**
+	 * @request { inputs : [ ... ], params?, options?, conversationId?, threadId? }
+	 *
+	 * @return An Outcome: { outputs : [ { output, success } or { error, success : false } ], threadId }
+	 */
+	any function batch( required any caller, required struct request ) {
+		var inputs = arguments.request.inputs ?: []
+		if ( !isArray( inputs ) || !inputs.len() ) {
+			return Outcome::failed( "bad_request", "inputs must be a list with at least one item" )
+		}
+		var threadId = len( arguments.request.threadId ?: "" ) ? arguments.request.threadId : createUUID()
+		var outputs = []
+		for ( var item in inputs ) {
+			var single = duplicate( arguments.request )
+			single.delete( "inputs" )
+			single[ "input" ] = item
+			single[ "threadId" ] = threadId
+			var one = run( arguments.caller, single )
+			if ( one.succeeded() ) {
+				outputs.append( { "output" : one.data().output, "success" : true } )
+			} else {
+				outputs.append( { "error" : one.reason(), "success" : false } )
+			}
+		}
+		return Outcome::done( { outputs : outputs, threadId : threadId } )
+	}
+
+	/**
+	 * Runs a prepared turn, sending frames as it goes.
+	 *
+	 * @turn What prepareTurn or prepareResume answered
+	 * @onFrame Called as onFrame( name, data )
+	 * @isOpen Called before each frame; false stops sending (the client went away). Always open when omitted
+	 */
+	void function execute( required struct turn, required function onFrame, function isOpen ) {
+		var send = arguments.onFrame
+		var open = () => true
+		if ( !isNull( arguments.isOpen ) ) {
+			open = arguments.isOpen
+		}
+		var threadId = arguments.turn.threadId
+		var work = arguments.turn.work
+		var calls = {}
+		var counter = { value : 0 }
+		send( "thread", { "threadId" : threadId } )
+
+		// bx-ai announces every tool call in the process. Only this thread's are sent on.
+		var interceptor = BoxRegisterInterceptor( ( data ) => {
+			if ( !open() || !belongsToThread( data, threadId ) ) {
+				return
+			}
+			var name = data.name
+			var shown = visibleArguments( data.arguments ?: {} )
+			if ( data.keyExists( "results" ) ) {
+				var waiting = calls[ name ] ?: []
+				var finished = waiting.len() ? waiting.first() : name
+				if ( waiting.len() ) {
+					waiting.deleteAt( 1 )
+				}
+				send( "tool", { "id" : finished, "name" : name, "arguments" : shown, "status" : "ok", "ms" : data.executionTime ?: 0 } )
+				return
+			}
+			counter.value++
+			var started = name & "##" & counter.value
+			calls[ name ] = calls[ name ] ?: []
+			calls[ name ].append( started )
+			send( "tool", { "id" : started, "name" : name, "arguments" : shown, "status" : "running", "ms" : 0 } )
+		}, [ "beforeAIToolExecute", "afterAIToolExecute" ] )
+
+		try {
+			work( ( chunk ) => {
+				if ( !open() ) {
+					return
+				}
+				send( "chunk", chunk )
+				// the sentinel for a run that stops on a human decision
+				if ( isStruct( chunk ) && ( chunk.type ?: "" ) == "middleware_stop" ) {
+					send( "suspended", { "threadId" : threadId, "pendingActions" : pendingActionsOf( chunk ) } )
+				}
+			} )
+			if ( open() ) {
+				send( "done", "[DONE]" )
+			}
+		} catch ( any e ) {
+			if ( open() ) {
+				send( "error", { "message" : e.message } )
+			}
+		} finally {
+			BoxUnregisterInterceptor( interceptor )
+		}
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Controlling a run
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Stops a run at its next checkpoint (before the next model call or tool call).
+	 */
+	any function cancel( required any caller, required string threadId, string reason = "Cancelled by the user." ) {
+		if ( !len( arguments.threadId ) ) {
+			return Outcome::failed( "bad_request", "threadId is required" )
+		}
+		return Outcome::done( { "cancelled" : variables.agent.cancelRun( arguments.threadId, arguments.reason ) } )
+	}
+
+	/**
+	 * Splices a message into a run in flight.
+	 */
+	any function steer( required any caller, required string threadId, required string input ) {
+		if ( !len( arguments.threadId ) || !len( arguments.input ) ) {
+			return Outcome::failed( "bad_request", "threadId and input are required" )
+		}
+		return Outcome::done( { "steered" : variables.agent.steerRun( arguments.threadId, arguments.input ) } )
+	}
+
+	/**
+	 * What a run that stopped for approval is waiting on, without consuming the checkpoint. A run belongs to who
+	 * started it; for anyone else this answers as though nothing is pending, so it cannot be used to find out
+	 * whether a threadId exists.
+	 */
+	any function pending( required any caller, required string threadId ) {
+		if ( !len( arguments.threadId ) ) {
+			return Outcome::failed( "bad_request", "threadId is required" )
+		}
+		var checkpointer = variables.agent.getCheckpointer()
+		if ( isNull( checkpointer ) ) {
+			return Outcome::done( { "pending" : false } )
+		}
+		var state = checkpointer.loadState( arguments.threadId )
+		if ( !state.isEmpty() && ownerOf( state ) != arguments.caller.id() ) {
+			return Outcome::done( { "pending" : false } )
+		}
+		return Outcome::done( {
+			"pending"        : !state.isEmpty(),
+			"pendingActions" : state.suspendData.pendingActions ?: [],
+			"threadId"       : arguments.threadId
+		} )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private boolean function profileAllowed( required struct options ) {
+		return isNull( variables.offered ) ? !len( arguments.options.profile ?: "" ) : variables.offered.allows( arguments.options )
+	}
+
+	/**
+	 * Notes the turn in the conversation list. A list that cannot be written must not stop the turn.
+	 */
+	private void function noteTurn( required any caller, required string conversationId, required string input ) {
+		try {
+			if ( !isNull( variables.sessions ) ) {
+				variables.sessions.touch( arguments.caller.id(), arguments.conversationId, arguments.input, 2, arguments.caller.source() )
+			}
+		} catch ( any e ) {
+			// the turn goes on without a list
+		}
+	}
+
+	private array function pendingActionsOf( required struct chunk ) {
+		try {
+			if ( arguments.chunk.result.isSuspended() ) {
+				return arguments.chunk.result.getData().pendingActions ?: []
+			}
+		} catch ( any ignored ) {
+			// the details stay available from pending()
+		}
+		return []
+	}
+
+	/**
+	 * @data A beforeAIToolExecute or afterAIToolExecute announcement
+	 *
+	 * @return True when the tool call belongs to the run on this thread
+	 */
+	private boolean function belongsToThread( required struct data, required string threadId ) {
+		var chatRequest = arguments.data.chatRequest ?: nullValue()
+		if ( isNull( chatRequest ) ) {
+			return false
+		}
+		return chatRequest.getThreadId() == arguments.threadId
+	}
+
+	/**
+	 * bx-ai passes the whole chat request to tools as `_chatRequest`; names starting with an underscore are its
+	 * plumbing, not something the model asked for.
+	 */
+	private struct function visibleArguments( required any args ) {
+		var shown = {}
+		if ( isStruct( arguments.args ) ) {
+			for ( var key in arguments.args ) {
+				if ( left( key, 1 ) != "_" ) {
+					shown[ key ] = arguments.args[ key ]
+				}
+			}
+		}
+		return shown
+	}
+
+	/**
+	 * The identity a suspended run was started under, kept in the checkpoint by the agent.
+	 */
+	private string function ownerOf( required struct state ) {
+		if ( !structKeyExists( arguments.state, "options" ) || !isStruct( arguments.state.options ) ) {
+			return ""
+		}
+		return arguments.state.options.userId ?: ""
+	}
+
+}

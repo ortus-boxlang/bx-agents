@@ -102,8 +102,8 @@ class {
 			try {
 				bx:http url=url method="POST" result="httpResult" timeout=10 {
 					bx:httpparam type="header" name="Content-Type" value="application/json";
-					if ( len( variables.token ) ) {
-						bx:httpparam type="header" name="x-bxagents-token" value=variables.token;
+					for ( var headerName in clientHeaders() ) {
+						bx:httpparam type="header" name=headerName value=clientHeaders()[ headerName ];
 					}
 					bx:httpparam type="body" value="#body#";
 				}
@@ -255,8 +255,8 @@ class {
 			.post()
 			.header( "Content-Type", "application/json" )
 			.header( "Accept", "text/event-stream" )
-		if ( len( variables.token ) ) {
-			call = call.header( "x-bxagents-token", variables.token )
+		for ( var headerName in clientHeaders() ) {
+			call = call.header( headerName, clientHeaders()[ headerName ] )
 		}
 		var httpResult = call
 			.jsonBody( jsonSerialize( payload ) )
@@ -409,8 +409,8 @@ class {
 			.post()
 			.header( "Content-Type", "application/json" )
 			.header( "Accept", "text/event-stream" )
-		if ( len( variables.token ) ) {
-			call = call.header( "x-bxagents-token", variables.token )
+		for ( var headerName in clientHeaders() ) {
+			call = call.header( headerName, clientHeaders()[ headerName ] )
 		}
 		var httpResult = call
 			.jsonBody( jsonSerialize( arguments.payload ) )
@@ -453,8 +453,8 @@ class {
 			url &= "?" & pairs.toList( "&" )
 		}
 		bx:http url=url method="GET" result="httpResult" timeout=arguments.timeoutSeconds {
-			if ( len( variables.token ) ) {
-				bx:httpparam type="header" name="x-bxagents-token" value=variables.token;
+			for ( var headerName in clientHeaders() ) {
+				bx:httpparam type="header" name=headerName value=clientHeaders()[ headerName ];
 			}
 		}
 		return parseJson( httpResult, url )
@@ -474,8 +474,8 @@ class {
 		var json = jsonSerialize( arguments.body )
 		bx:http url=url method="POST" result="httpResult" timeout=arguments.timeoutSeconds {
 			bx:httpparam type="header" name="Content-Type" value="application/json";
-			if ( len( variables.token ) ) {
-				bx:httpparam type="header" name="x-bxagents-token" value=variables.token;
+			for ( var headerName in clientHeaders() ) {
+				bx:httpparam type="header" name=headerName value=clientHeaders()[ headerName ];
 			}
 			bx:httpparam type="body" value=json;
 		}
@@ -613,6 +613,17 @@ class {
 		var port = socket.getLocalPort()
 		socket.close()
 		return port
+	}
+
+	/**
+	 * What every request says about who is asking: the token when there is one, and that this is the terminal.
+	 */
+	private struct function clientHeaders() {
+		var headers = { "x-bxagents-source" : "terminal" }
+		if ( len( variables.token ) ) {
+			headers[ "x-bxagents-token" ] = variables.token
+		}
+		return headers
 	}
 
 }

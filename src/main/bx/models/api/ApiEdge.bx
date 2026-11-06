@@ -1,0 +1,64 @@
+/**
+ * The one place a service Outcome becomes an HTTP answer: which status a code means, and what the body looks like.
+ * A handler never chooses a status of its own.
+ *
+ *   worked:  the data with `success: true` (data that is not a struct is sent as `data`)
+ *   failed:  { success: false, error: <reason>, code: <code> }
+ */
+class {
+
+	/** The codes a client can rely on, and the status each one means */
+	static function statuses() {
+		return {
+			"bad_request"    : 400,
+			"bad_profile"    : 400,
+			"bad_attachment" : 400,
+			"unauthorized"   : 401,
+			"forbidden"      : 403,
+			"csrf"           : 403,
+			"not_your_run"   : 403,
+			"not_found"      : 404,
+			"no_notes"       : 404,
+			"busy"           : 409,
+			"conflict"       : 409,
+			"rate_limited"   : 429,
+			"internal"       : 500
+		}
+	}
+
+	/**
+	 * @code A failure code
+	 *
+	 * @return The HTTP status; 500 for a code nobody listed, so a typo never reads as a success or a client error
+	 */
+	numeric function statusOf( required string code ) {
+		var all = statuses()
+		return all[ arguments.code ] ?: 500
+	}
+
+	/**
+	 * @outcome A service Outcome
+	 *
+	 * @return The status to send
+	 */
+	numeric function statusFor( required any outcome ) {
+		return arguments.outcome.succeeded() ? 200 : statusOf( arguments.outcome.code() )
+	}
+
+	/**
+	 * @outcome A service Outcome
+	 *
+	 * @return The JSON body to send
+	 */
+	struct function bodyFor( required any outcome ) {
+		if ( !arguments.outcome.succeeded() ) {
+			var reason = len( arguments.outcome.reason() ) ? arguments.outcome.reason() : arguments.outcome.code()
+			return { "success" : false, "error" : reason, "code" : arguments.outcome.code() }
+		}
+		var data = arguments.outcome.data()
+		var body = isStruct( data ) ? duplicate( data ) : { "data" : data }
+		body[ "success" ] = true
+		return body
+	}
+
+}
