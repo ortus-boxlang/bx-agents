@@ -657,7 +657,8 @@ public final class ChatScreen implements AutoCloseable {
 	}
 
 	private String ask( String title, String help, String initial, boolean secret ) {
-		TextPrompt prompt = new TextPrompt( theme, title, help, "", secret, secret ? "A secret needs a value, or press esc." : "Type something, or press esc.", initial );
+		TextPrompt prompt = new TextPrompt( theme, title, help, "", secret, secret ? "A secret needs a value, or press esc." : "Type something, or press esc.",
+		    initial );
 		try {
 			while ( !prompt.isDone() ) {
 				List<Row> rows = new ArrayList<>( prompt.render( runner.width() - 2, 6 ) );

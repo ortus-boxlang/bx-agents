@@ -42,7 +42,7 @@ class extends="testbox.system.BaseSpec" {
 				try {
 					selector.resolvePlaceholders( "${vault.NOPE}", "mcpServers of root" );
 				} catch ( any e ) {
-					expect( e.message ).toInclude( "bxAgents vault add NOPE" );
+					expect( e.message ).toInclude( "bxAgents vault add --name=NOPE" );
 					expect( e.message ).toInclude( "mcpServers of root" );
 				}
 			} );
@@ -60,6 +60,11 @@ class extends="testbox.system.BaseSpec" {
 
 				var ok = resolver.resolve( [ { url : "https://api.example.com/mcp", token : "${vault.TOKEN}" } ] );
 				expect( ok[ 1 ].token ).toBe( "t" );
+				// the use is recorded against the server's host and the label of the config that asked
+				var use = vault.audit()[ 1 ];
+				expect( use.action ).toBe( "use" );
+				expect( use.host ).toBe( "api.example.com" );
+				expect( use.via ).toBe( "mcpServers" );
 
 				expect( function() {
 					resolver.resolve( [ { url : "https://evil.test/mcp", token : "${vault.TOKEN}" } ] );
