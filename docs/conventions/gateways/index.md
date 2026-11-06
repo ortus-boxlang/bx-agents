@@ -299,12 +299,16 @@ A picture or file sent to the bot goes to the agent with the message: pictures a
 
 Links must be https. A file that cannot be downloaded is named back to the person and the rest of the message goes on. Switch it off with `gatewaySession.attachments: false`.
 
+#### Whose conversation it is
+
+Each person's chats are their own. The agent is told who is writing (the platform and their id there, `slack:U123`) and the thread, so the agent's memory, `/notes` and `/remember`, and the conversation list are kept apart per person. Two people in the same channel do not share a memory, and neither do two chats on two platforms. The conversations are stored in the same SQLite database as the web page's and the terminal's (a project with chat gateways gets `data/chat.db`, like one with a web page), marked with the platform they started on (`source`). They belong to the person's own id, so they do not appear in the list of the open `local` user.
+
 #### Conversation commands
 
-`/new`, `/clear`, `/compact`, `/sessions` and `/resume` are off by default, because a chat platform gives every chat one shared conversation: in a group, anyone's `/clear` clears it for everyone. Turn them on with `conversation: true` (or list them in `allow`) when the chats are private or you trust the group.
+`/new`, `/clear`, `/compact`, `/sessions` and `/resume` are off by default, because most chats are one long conversation and a stray `/clear` is easy to type. They only ever act on the sender's own conversation. Turn them on with `conversation: true` (or list them in `allow`).
 
 - `/new` moves the chat to a fresh conversation; the old one stays on the list.
-- `/sessions` lists the conversations the person has had in this app, newest first, and `/resume 2` (or an id) moves the chat back to one. The list is kept in memory, so it lasts until the app restarts; the conversations themselves last as long as the agent's memory does, so an id still works afterwards.
+- `/sessions` lists the conversations the person has had in this app, newest first, and `/resume 2` (or an id) moves the chat back to one. The list is in the shared chat database, so it lasts across restarts; the messages last as long as the agent's memory does.
 - `/clear` and `/compact` act on the conversation the chat is in now.
 - In a Slack thread, each thread has its own conversation, and `/new` moves only that thread.
 
