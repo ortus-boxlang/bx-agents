@@ -275,7 +275,7 @@ class extends="testbox.system.BaseSpec" {
 				).router );
 
 				// the gate asks the Authenticator, and names the variable, never the secret
-				expect( content ).toInclude( 'var auth = ( event, rc, prc ) => new "models.api.Authenticator@bxagents"( "BXAGENTS_API_TOKEN", false ).guard( event )' );
+				expect( content ).toInclude( 'var auth = ( event, rc, prc ) => new "models.api.Authenticator@bxagents"( "BXAGENTS_API_TOKEN", false, false ).guard( event )' );
 				expect( content ).toInclude( 'post( "/__bxagents/invoke" ).middleware( auth ).toHandler( "AgentApi.invoke" )' );
 				expect( content ).toInclude( 'post( "/__bxagents/stream" ).middleware( auth ).toHandler( "AgentApi.stream" )' );
 				expect( content ).toInclude( 'post( "/__bxagents/events" ).middleware( auth ).toHandler( "AgentApi.events" )' );
@@ -320,11 +320,19 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).notToInclude( "auth" );
 			} );
 
+			it( "closes the API behind the page's sign-in when the web UI lists users, and tells the gate to accept it", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+				var content = fileRead( generator.generate( discovery, newAppDir(), false, false, false, false, false, { webAccounts : true } ).router );
+
+				expect( content ).toInclude( 'Authenticator@bxagents"( "", false, true ).guard( event )' );
+				expect( content ).toInclude( 'post( "/__bxagents/events" ).middleware( auth )' );
+			} );
+
 			it( "gates on access: token with issued tokens alone", function() {
 				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
 				var content = fileRead( generator.generate( discovery, newAppDir(), false, false, false, false, false, { access : "token", tokens : true } ).router );
 
-				expect( content ).toInclude( 'Authenticator@bxagents"( "", true ).guard( event )' );
+				expect( content ).toInclude( 'Authenticator@bxagents"( "", true, false ).guard( event )' );
 			} );
 
 			it( "adds the run-control routes beside the turn routes, served by handlers/AgentApi", function() {

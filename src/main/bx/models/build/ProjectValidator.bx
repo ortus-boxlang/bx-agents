@@ -9,6 +9,7 @@
 import bxModules.bxagents.models.util.EntryConfigReader;
 
 import bxModules.bxagents.models.api.AccessMode;
+import bxModules.bxagents.models.build.WebAccounts;
 
 class {
 
@@ -59,7 +60,7 @@ class {
 		if ( len( ignoredModel ) ) {
 			warnings.append( ignoredModel )
 		}
-		validateAgentApi( arguments.resolvedConfig, errors )
+		validateAgentApi( arguments.resolvedConfig, arguments.discovery, errors )
 		validateNotes( arguments.resolvedConfig, errors )
 
 		return { errors : errors, warnings : warnings }
@@ -732,7 +733,7 @@ class {
 	 * @resolvedConfig The resolved config struct from AgentConfigResolver.resolve() - only `agentApi` is used
 	 * @errors Accumulator array - append() any validation errors found
 	 */
-	private void function validateAgentApi( required struct resolvedConfig, required array errors ) {
+	private void function validateAgentApi( required struct resolvedConfig, required struct discovery, required array errors ) {
 		if ( !structKeyExists( arguments.resolvedConfig, "agentApi" ) ) {
 			return
 		}
@@ -758,7 +759,7 @@ class {
 			arguments.errors.append( "Agent.bx's 'agentApi.tokens' must be a boolean" )
 		}
 
-		arguments.errors.append( AccessMode::problems( agentApi ), true )
+		arguments.errors.append( AccessMode::problems( WebAccounts::effective( agentApi, arguments.discovery ) ), true )
 
 		validateOfferedProfiles( "Agent.bx's 'agentApi'", agentApi, ( arguments.resolvedConfig.profiles ?: {} ).keyArray(), arguments.errors )
 

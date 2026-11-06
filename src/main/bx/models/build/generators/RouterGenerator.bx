@@ -154,11 +154,12 @@ class {
 		}
 		var tokenEnvVar = trim( arguments.agentApi.tokenEnvVar ?: "" )
 		var tokens = ( arguments.agentApi.tokens ?: false ) ? "true" : "false"
+		var accounts = ( arguments.agentApi.webAccounts ?: false ) ? "true" : "false"
 		return [
-			"// Who may call: a request carries the shared secret (#len( tokenEnvVar ) ? tokenEnvVar : 'none set'#) or an issued token (#tokens#).",
+			"// Who may call: a request carries the shared secret (#len( tokenEnvVar ) ? tokenEnvVar : 'none set'#), an issued token (#tokens#) or the page's own sign-in (#accounts#).",
 			"// A request that carries neither is answered 401 before any action runs; the secret itself is read from the",
 			"// environment when a request comes in and is never written here.",
-			'var auth = ( event, rc, prc ) => new "models.api.Authenticator@bxagents"( "#Strings::bxLiteral( tokenEnvVar )#", #tokens# ).guard( event )',
+			'var auth = ( event, rc, prc ) => new "models.api.Authenticator@bxagents"( "#Strings::bxLiteral( tokenEnvVar )#", #tokens#, #accounts# ).guard( event )',
 			""
 		]
 	}

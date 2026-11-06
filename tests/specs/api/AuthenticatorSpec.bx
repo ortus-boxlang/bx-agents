@@ -91,6 +91,62 @@ class extends="testbox.system.BaseSpec" {
 				expect( source ).toInclude( "len( expected ) &&" );
 			} );
 
+			describe( "the middleware", function() {
+
+				it( "refuses a request that proves nothing with a 401, and stops the action", function() {
+					var event = new FakeEvent();
+					var auth = new bxagents.models.api.Authenticator( tokens = true, tokenService = tokens );
+
+					expect( auth.guard( event, {} ) ).toBeTrue();
+					expect( event.stopped() ).toBeTrue();
+					expect( event.rendered().statusCode ).toBe( 401 );
+					expect( event.rendered().data.code ).toBe( "unauthorized" );
+				} );
+
+				it( "names the caller on the request for a good token, and needs no csrf header for it", function() {
+					var event = new FakeEvent( "POST" );
+					var made = tokens.create( "laptop" );
+					var auth = new bxagents.models.api.Authenticator( tokens = true, tokenService = tokens );
+
+					expect( auth.guard( event, { "x-bxagents-token" : made.token } ) ).toBeFalse();
+					expect( event.caller().id() ).toBe( "laptop" );
+				} );
+
+				it( "lets a page that is signed in read, as the web user, with its account as the caller", function() {
+					var event = new FakeEvent( "GET", true, "ada-id" );
+					var auth = new bxagents.models.api.Authenticator( accounts = true, tokenService = tokens );
+
+					expect( auth.guard( event, {} ) ).toBeFalse();
+					expect( event.caller().id() ).toBe( "ada-id" );
+					expect( event.caller().source() ).toBe( "web" );
+				} );
+
+				it( "wants the csrf header from a signed-in page that changes something, and refuses a form from another site", function() {
+					var auth = new bxagents.models.api.Authenticator( accounts = true, tokenService = tokens );
+
+					var without = new FakeEvent( "POST", true );
+					expect( auth.guard( without, {} ) ).toBeTrue();
+					expect( without.rendered().statusCode ).toBe( 403 );
+					expect( without.rendered().data.code ).toBe( "csrf" );
+
+					var withHeader = new FakeEvent( "POST", true );
+					expect( auth.guard( withHeader, { "x-bxagents-csrf" : "1" } ) ).toBeFalse();
+				} );
+
+				it( "refuses a page that is not signed in", function() {
+					var auth = new bxagents.models.api.Authenticator( accounts = true, tokenService = tokens );
+
+					expect( auth.guard( new FakeEvent( "GET", false ), {} ) ).toBeTrue();
+				} );
+
+				it( "ignores the page's sign-in when the API does not take accounts", function() {
+					var auth = new bxagents.models.api.Authenticator( accounts = false, tokenService = tokens );
+
+					expect( auth.guard( new FakeEvent( "GET", true ), {} ) ).toBeTrue();
+				} );
+
+			} );
+
 			it( "ignores a surface name that is not a plain name", function() {
 				var made = tokens.create( "laptop" );
 				var auth = new bxagents.models.api.Authenticator( tokens = true, tokenService = tokens );

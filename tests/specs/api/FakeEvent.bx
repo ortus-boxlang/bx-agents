@@ -1,0 +1,37 @@
+/**
+ * A stand-in for ColdBox's request context, with what the route middleware touches: the method, the private values,
+ * the cbSecurity of the app, and renderData().noExecution().
+ */
+class {
+
+	function init( string method = "GET", boolean signedIn = false, string userId = "u1" ) {
+		variables.method = arguments.method;
+		variables.values = {};
+		variables.rendered = {};
+		variables.stopped = false;
+		var security = {
+			isLoggedIn : () => signedIn,
+			getUser    : () => { getId : () => userId }
+		};
+		variables.controller = { getWireBox : () => { getInstance : ( name ) => security } };
+		return this;
+	}
+
+	function getHTTPMethod() { return variables.method; }
+	function getController() { return variables.controller; }
+	function setPrivateValue( name, value ) { variables.values[ arguments.name ] = arguments.value; }
+	function privateValueExists( name ) { return variables.values.keyExists( arguments.name ); }
+	function getPrivateValue( name ) { return variables.values[ arguments.name ]; }
+
+	function renderData() {
+		variables.rendered = duplicate( arguments );
+		return this;
+	}
+
+	function noExecution() { variables.stopped = true; return this; }
+
+	function rendered() { return variables.rendered; }
+	function stopped() { return variables.stopped; }
+	function caller() { return variables.values[ "bxagentsCaller" ] ?: nullValue(); }
+
+}
