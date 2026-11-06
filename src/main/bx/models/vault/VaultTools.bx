@@ -1,0 +1,73 @@
+/**
+ * The two tools an agent gets to work with secrets, and what they leave out on purpose:
+ *
+ * - `vault_list` shows the names and descriptions of the secrets the person can use. Never a value.
+ * - `vault_request` asks the person to add a secret. It takes a name and a reason, never a value, and stores
+ *   nothing: the chat or web UI sees the call and opens a private form, so a secret never travels through the
+ *   conversation, the model, the memory or the logs.
+ *
+ * There is no tool that reads, sends or changes a value: the runtime reads one itself when a tool or an MCP
+ * server needs it.
+ */
+class {
+
+	/**
+	 * @wiring A VaultWiring
+	 * @agentName The agent's name, for the audit trail
+	 */
+	function init( required any wiring, required string agentName ) {
+		variables.wiring = arguments.wiring
+		variables.agentName = arguments.agentName
+		return this
+	}
+
+	/**
+	 * @return [ vault_list, vault_request ] as bx-ai tools, not entered in the global tool registry
+	 */
+	array function tools() {
+		var wiring = variables.wiring
+		var agentName = variables.agentName
+
+		var list = aiTool(
+			"vault_list",
+			"List the secrets you can use, by name, with what each is for and which hosts it may be sent to. You never see a value. A tool or server that needs a secret reads it itself.",
+			() => {
+				var user = wiring.userOf( arguments )
+				return wiring.service().list( user ).map( secret => {
+					return { name : secret.name, scope : secret.scope, description : secret.description, hosts : secret.hosts }
+				} )
+			},
+			false
+		)
+
+		var askTool = aiTool(
+			"vault_request",
+			"Ask the person to add a secret you need, such as an API key or a login. Give its name (letters, digits, underscore) and say why. You never receive the value and must never ask the person to type or paste it into the chat: they enter it in a private form that opens for them. When they tell you it is added, carry on.",
+			( required string name, required string why, string scope = "user" ) => {
+				var user = wiring.userOf( arguments )
+				var wanted = lCase( trim( arguments.scope ) )
+				if ( ![ "user", "agent" ].contains( wanted ) ) {
+					return { ok : false, reason : "scope must be user or agent." }
+				}
+				if ( wanted == "user" && !len( user ) ) {
+					wanted = "agent"
+				}
+				try {
+					var outcome = wiring.service().request( arguments.name, { scope : wanted, owner : user, actor : user, via : "vault_request:" & agentName } )
+				} catch ( any e ) {
+					return { ok : false, reason : e.message }
+				}
+				return outcome.stored
+					? { ok : true, status : "already_stored", message : "#outcome.name# is already in the vault. Use it." }
+					: { ok : true, status : "requested", message : "The person has been asked to add #outcome.name# in a private form. Tell them what it is for, wait for them to say it is added, and do not ask them to type it here." }
+			},
+			false
+		)
+		askTool.describeArg( "name", "The secret's name, for example GMAIL_TOKEN." )
+		askTool.describeArg( "why", "One short line telling the person what it is for." )
+		askTool.describeArg( "scope", "user for the person's own secret, agent for one everyone shares. Default user." )
+
+		return [ list, askTool ]
+	}
+
+}

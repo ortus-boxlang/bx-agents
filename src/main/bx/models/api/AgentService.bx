@@ -157,6 +157,15 @@ class {
 	}
 
 	/**
+	 * @caller The Caller
+	 *
+	 * @return The secrets the caller can manage: their own and, for an admin, the agent's
+	 */
+	any function vault( required any caller ) {
+		return new Vault( new "models.vault.VaultWiring@bxagents"().serviceFor( variables.store ), arguments.caller )
+	}
+
+	/**
 	 * Who the agent is, for a client's banner: name, a short model label and what it can do.
 	 *
 	 * @caller The Caller
@@ -188,6 +197,7 @@ class {
 				"commands"      : true, "context" : true,
 				"compact"       : conversation( arguments.caller ).canCompact(),
 				"notes"         : notes( arguments.caller ).keeps(),
+				"vault"         : keepsSessions(),
 				"conversations" : keepsSessions(),
 				"preferences"   : keepsSessions(),
 				"profiles"      : variables.offered.any(),

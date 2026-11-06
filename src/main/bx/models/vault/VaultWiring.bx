@@ -1,0 +1,142 @@
+/**
+ * Gives the running app its vault, from the chat database it already uses.
+ *
+ * The built app, the `vault` CLI verb and the chat each ask here, so they all open the same sealed rows with the
+ * same key. The key file (when no key is set in the environment) lives in the folder of the database file.
+ *
+ * Who is asking comes from the run: `userOf()` reads the name a run was started under from a tool's arguments
+ * (bx-ai passes `_chatRequest` to every tool) or from a chat request itself. A run with no name gets the agent's
+ * secrets only.
+ */
+class {
+
+	static {
+		cache = {}
+	}
+
+	/**
+	 * Makes service() with no file use this one, for code that wires a vault to a known file (tests, the CLI).
+	 *
+	 * @databaseFile The SQLite file
+	 *
+	 * @return This
+	 */
+	any function pin( required string databaseFile ) {
+		variables.pinned = arguments.databaseFile
+		return this
+	}
+
+	/**
+	 * @databaseFile The SQLite file. Leave blank inside the built app: BXAGENTS_DB, or the app's own datasource, names it
+	 *
+	 * @return A VaultService, the same one for the same file
+	 */
+	any function service( string databaseFile = "" ) {
+		var explicit = len( arguments.databaseFile ) ? arguments.databaseFile : ( variables.pinned ?: "" )
+		var file = len( explicit ) ? explicit : appDatabaseFile()
+		file = file.replace( "\", "/", "all" )
+		if ( !static.cache.keyExists( file ) ) {
+			// Always the file itself, an inline datasource: it is the same database the app's own datasource opens
+			// (SQLite in WAL mode lets both connections work), and it needs no datasource to be registered here.
+			var store = new "models.store.ChatStore@bxagents"( { driver : "sqlite", database : file } )
+			store.migrate()
+			static.cache[ file ] = new "models.vault.VaultService@bxagents"( store, new "models.vault.VaultKey@bxagents"( getDirectoryFromPath( file ) ) )
+		}
+		return static.cache[ file ]
+	}
+
+	/**
+	 * The vault of a store already in hand (what the Agent API has), with the key beside the store's file.
+	 *
+	 * @store A ChatStore
+	 *
+	 * @return A VaultService
+	 */
+	any function serviceFor( required any store ) {
+		var source = arguments.store.datasource()
+		if ( isStruct( source ) && len( source.database ?: "" ) ) {
+			return service( source.database )
+		}
+		return service()
+	}
+
+	/**
+	 * @return True when this app has a chat database for a vault to live in
+	 */
+	boolean function available() {
+		try {
+			return len( variables.pinned ?: "" ) > 0 || len( appDatabaseFile() ) > 0
+		} catch ( any e ) {
+			return false
+		}
+	}
+
+	/**
+	 * Adds the vault tools to an agent, from the `vault` block of Agent.yaml:
+	 *
+	 *   vault:
+	 *     tools: true      # vault_list and vault_request (default true)
+	 *
+	 * The generated agent factory calls this when it builds an agent.
+	 *
+	 * @agent The AiAgent
+	 * @config The `vault` block
+	 * @agentName The agent's name
+	 *
+	 * @return The agent
+	 */
+	any function attach( required any agent, required struct config, required string agentName ) {
+		if ( arguments.config.tools ?: true ) {
+			arguments.agent.withTools( new "models.vault.VaultTools@bxagents"( this, arguments.agentName ).tools() )
+		}
+		// whatever a tool hands back, a secret in it never reaches the model
+		arguments.agent.withMiddleware( new "models.vault.VaultMiddleware@bxagents"( service() ) )
+		return arguments.agent
+	}
+
+	/**
+	 * The name a run was started under.
+	 *
+	 * @context A tool's `arguments` struct, an AiChatRequest, or blank
+	 *
+	 * @return The user's name, or blank when the run has none
+	 */
+	string function userOf( any context = "" ) {
+		// not named `request`: that is a reserved scope
+		var source = arguments.context
+		if ( !isObject( source ) && isStruct( source ) && source.keyExists( "_chatRequest" ) ) {
+			source = source._chatRequest
+		}
+		if ( isObject( source ) ) {
+			try {
+				return trim( source.getUserId() ?: "" )
+			} catch ( any e ) {
+				return ""
+			}
+		}
+		return ""
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * The database file of the built app: BXAGENTS_DB when set, else the app's default datasource.
+	 */
+	private string function appDatabaseFile() {
+		var named = trim( getSystemSetting( "BXAGENTS_DB", "" ) )
+		if ( len( named ) ) {
+			return named
+		}
+		try {
+			var sources = getApplicationMetadata().datasources ?: {}
+			var chosen = getApplicationMetadata().datasource ?: ""
+			if ( isSimpleValue( chosen ) && sources.keyExists( chosen ) ) {
+				return sources[ chosen ].database
+			}
+		} catch ( any e ) {
+			// no application metadata: handled below
+		}
+		throw( type = "BxAgents.VaultNoDatabase", message = "The vault could not find the chat database. Set BXAGENTS_DB to its file." )
+	}
+
+}

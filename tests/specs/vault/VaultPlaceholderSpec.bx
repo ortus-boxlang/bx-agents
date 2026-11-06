@@ -1,0 +1,122 @@
+/**
+ * ${vault.NAME} in Agent.yaml and the wiring tool code uses to find a secret.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "${vault.NAME}", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-vaultph-" );
+				variables.wiring = new bxagents.models.vault.VaultWiring();
+				variables.vault = wiring.service( dir & "/chat.db" );
+				variables.selector = new bxagents.models.build.ToolSelector( {}, vault );
+				variables.resolver = new bxagents.models.build.McpServerResolver( selector );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "puts the agent's secret where the placeholder is, in any nested value", function() {
+				vault.add( "GMAIL_TOKEN", "tok-123" );
+
+				var out = selector.resolvePlaceholders( { headers : { Authorization : "Bearer ${vault.GMAIL_TOKEN}" }, list : [ "${vault.GMAIL_TOKEN}!" ] }, "toolOptions [x]" );
+
+				expect( out.headers.Authorization ).toBe( "Bearer tok-123" );
+				expect( out.list[ 1 ] ).toBe( "tok-123!" );
+			} );
+
+			it( "leaves ${env.NAME} alone and handles both in one value", function() {
+				vault.add( "A", "va" );
+
+				expect( selector.resolvePlaceholders( "${vault.A}-${env.BXAGENTS_VAULT_TEST_DEFAULT:d}", "o" ) ).toBe( "va-d" );
+			} );
+
+			it( "says which secret is missing and how to add it", function() {
+				expect( function() {
+					selector.resolvePlaceholders( "${vault.NOPE}", "mcpServers of root" );
+				} ).toThrow( "BxAgents.MissingVaultSecret" );
+				try {
+					selector.resolvePlaceholders( "${vault.NOPE}", "mcpServers of root" );
+				} catch ( any e ) {
+					expect( e.message ).toInclude( "bxAgents vault add --name=NOPE" );
+					expect( e.message ).toInclude( "mcpServers of root" );
+				}
+			} );
+
+			it( "does not use a person's own secret at startup", function() {
+				vault.add( "GMAIL_TOKEN", "alices", { scope : "user", owner : "alice" } );
+
+				expect( function() {
+					selector.resolvePlaceholders( "${vault.GMAIL_TOKEN}", "mcpServers of root" );
+				} ).toThrow( "BxAgents.MissingVaultSecret" );
+			} );
+
+			it( "sends an MCP secret only to the host its URL names", function() {
+				vault.add( "TOKEN", "t", { hosts : [ "api.example.com" ] } );
+
+				var ok = resolver.resolve( [ { url : "https://api.example.com/mcp", token : "${vault.TOKEN}" } ] );
+				expect( ok[ 1 ].token ).toBe( "t" );
+				// the use is recorded against the server's host and the label of the config that asked
+				var use = vault.audit()[ 1 ];
+				expect( use.action ).toBe( "use" );
+				expect( use.host ).toBe( "api.example.com" );
+				expect( use.via ).toBe( "mcpServers" );
+
+				expect( function() {
+					resolver.resolve( [ { url : "https://evil.test/mcp", token : "${vault.TOKEN}" } ] );
+				} ).toThrow( "BxAgents.MissingVaultSecret" );
+				expect( function() {
+					resolver.resolve( [ { command : [ "uvx", "x" ], env : { T : "${vault.TOKEN}" } } ] );
+				} ).toThrow( "BxAgents.MissingVaultSecret" );
+			} );
+
+			it( "never writes a value into what it was given", function() {
+				vault.add( "TOKEN", "t" );
+				var servers = [ { url : "https://a.test/mcp", token : "${vault.TOKEN}" } ];
+
+				resolver.resolve( servers );
+
+				expect( servers[ 1 ].token ).toBe( "${vault.TOKEN}" );
+			} );
+
+		} );
+
+		describe( "VaultWiring", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-vaultw-" );
+				variables.wiring = new bxagents.models.vault.VaultWiring();
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "gives the same vault for the same file and keeps the key beside it", function() {
+				var one = wiring.service( dir & "/chat.db" );
+				var two = wiring.service( dir & "/chat.db" );
+				one.add( "A", "1" );
+
+				expect( two.resolve( "A" ) ).toBe( "1" );
+				expect( fileExists( dir & "/vault.key" ) ).toBeTrue();
+			} );
+
+			it( "reads the user from a tool's arguments or from a request, and blank otherwise", function() {
+				var fake = new tests.support.FakeChatRequest( "alice" );
+
+				expect( wiring.userOf( { _chatRequest : fake, q : "x" } ) ).toBe( "alice" );
+				expect( wiring.userOf( fake ) ).toBe( "alice" );
+				expect( wiring.userOf( { q : "x" } ) ).toBe( "" );
+				expect( wiring.userOf() ).toBe( "" );
+			} );
+
+		} );
+	}
+
+}

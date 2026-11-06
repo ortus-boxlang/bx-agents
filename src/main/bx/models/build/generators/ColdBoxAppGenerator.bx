@@ -133,7 +133,8 @@ class {
 		// An agent that keeps notes needs the shared chat database even in a project with no web UI (and no
 		// issued tokens): it gets the default datasource, migrated at start.
 		var database = arguments.webUiDatabase
-		if ( agentFactory.source.find( "NotesWiring@bxagents" ) ) {
+		// A vault (its tools, or a ${vault.NAME} in the config) lives in the same database.
+		if ( agentFactory.source.find( "NotesWiring@bxagents" ) || agentFactory.source.find( "VaultWiring@bxagents" ) || agentFactory.source.find( "${vault." ) ) {
 			if ( database.isEmpty() ) {
 				database = { datasource : "bxagents", path : "./data/chat.db" }
 			}
@@ -902,6 +903,11 @@ class {
 		if ( structKeyExists( arguments.resolvedConfig, "notes" ) && isStruct( arguments.resolvedConfig.notes ) ) {
 			// the notes this agent keeps: a prompt block and the remember and forget tools
 			statements.append( 'new "models.notes.NotesWiring@bxagents"().attach( #arguments.varName#, #renderLiteral( arguments.resolvedConfig.notes )#, "#Strings::bxLiteral( thisName )#" )' )
+		}
+
+		if ( structKeyExists( arguments.resolvedConfig, "vault" ) && isStruct( arguments.resolvedConfig.vault ) ) {
+			// the vault tools: vault_list and vault_request (never a value)
+			statements.append( 'new "models.vault.VaultWiring@bxagents"().attach( #arguments.varName#, #renderLiteral( arguments.resolvedConfig.vault )#, "#Strings::bxLiteral( thisName )#" )' )
 		}
 
 		return { statements : statements, nodes : nodes }

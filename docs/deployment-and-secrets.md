@@ -89,6 +89,10 @@ None of these holds a provider secret. `BXAGENTS_TOKEN` is the one credential, a
 | `BXAGENTS_BANNER`, `BXAGENTS_BANNER_THEME` | `--help`, `new` | `off` hides the banner; a theme name pins its colors. |
 | `BXAGENTS_` plus a name | `deploy` | The only prefix a `deploy/` entry may name for a password or passphrase (`passwordEnvVar`, `passphraseEnvVar`). |
 
+## Secrets people hand to a running agent
+
+Environment variables are for what you deploy with. For a key or login that a person hands to a **running** agent (an API key for Gmail, a ticket system, a customer's own token), use [the vault](conventions/vault.md): values are sealed in the chat database, added from the terminal chat, the web page or `bxAgents vault`, and read by the runtime at the moment a tool or MCP server needs one. They are never part of a build, a package or the manifest. Set `BXAGENTS_VAULT_KEY` in the environment of the deployed process so the key does not sit beside the database.
+
 ## Deploying
 
 ```bash

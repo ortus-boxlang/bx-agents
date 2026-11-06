@@ -1,0 +1,136 @@
+/**
+ * `bxAgents vault`: add, list, edit, remove, status, audit and key, with no value ever on a flag or in output.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	private struct function runVerb( required string action, struct extra = {} ) {
+		var options = { projectRoot : variables.vaultDir, _positional : arguments.action };
+		options.append( arguments.extra );
+		return new bxagents.models.cli.Vault().run( options );
+	}
+
+	private any function openVault() {
+		return new bxagents.models.vault.VaultWiring().service( variables.vaultDir & "/data/chat.db" );
+	}
+
+	function run() {
+		describe( "the vault verb", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-vaultcli-" );
+				variables.vaultDir = dir;
+				// another spec can leave BXAGENTS_DB set; the verb must open this spec's own folder
+				var javaSystem = createObject( "java", "java.lang.System" );
+				variables.savedDb = javaSystem.getProperty( "BXAGENTS_DB" );
+				javaSystem.clearProperty( "BXAGENTS_DB" );
+			} );
+
+			afterEach( function() {
+				if ( !isNull( savedDb ) ) {
+					createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_DB", savedDb );
+				}
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+
+			it( "adds a secret from a hidden prompt, and never prints the value", function() {
+				var prompter = new bxagents.models.wizard.prompters.ScriptedPrompter( [ "ya29.hidden-value" ] );
+				var made = runVerb( "add", { name : "GMAIL_TOKEN", prompter : prompter, description : "reads mail", hosts : "gmail.googleapis.com, www.googleapis.com" } );
+
+				expect( made.exitCode ).toBe( 0 );
+				expect( made.message ).toInclude( "GMAIL_TOKEN" );
+				expect( made.message ).notToInclude( "hidden-value" );
+				var listed = runVerb( "list" );
+				expect( listed.message ).toInclude( "GMAIL_TOKEN" );
+				expect( listed.message ).toInclude( "gmail.googleapis.com,www.googleapis.com" );
+				expect( listed.message ).notToInclude( "hidden-value" );
+				expect( runVerb( "list", { json : true } ).message ).notToInclude( "hidden-value" );
+			} );
+
+			it( "takes a piped value with --stdin and trims the final newline", function() {
+				runVerb( "add", { name : "API_KEY", stdinText : "abc-123" & char( 10 ) } );
+
+				var vault = openVault();
+				expect( vault.resolve( "API_KEY" ) ).toBe( "abc-123" );
+			} );
+
+			it( "keeps a person's own secret apart from the agent's", function() {
+				runVerb( "add", { name : "T", stdinText : "agents" } );
+				runVerb( "add", { name : "T", user : "alice", stdinText : "alices" } );
+
+				var vault = openVault();
+				expect( vault.resolve( "T", { user : "alice" } ) ).toBe( "alices" );
+				expect( vault.resolve( "T" ) ).toBe( "agents" );
+				expect( runVerb( "list", { scope : "user" } ).message ).toInclude( "alice" );
+				expect( runVerb( "list", { scope : "agent" } ).message ).notToInclude( "alice" );
+			} );
+
+			it( "refuses a second add and a missing name", function() {
+				runVerb( "add", { name : "T", stdinText : "1" } );
+
+				expect( function() { runVerb( "add", { name : "T", stdinText : "2" } ); } ).toThrow( "BxAgents.VaultSecretExists" );
+				expect( function() { runVerb( "add", { stdinText : "2" } ); } ).toThrow( "BxAgents.MissingVaultOption" );
+			} );
+
+			it( "edits only what it is told to, and replaces the value from a prompt", function() {
+				runVerb( "add", { name : "T", stdinText : "old", description : "first" } );
+
+				runVerb( "edit", { name : "T", description : "second" } );
+				var vault = openVault();
+				expect( vault.resolve( "T" ) ).toBe( "old" );
+				expect( vault.list()[ 1 ].description ).toBe( "second" );
+
+				runVerb( "edit", { name : "T", value : true, stdinText : "new" } );
+				expect( vault.resolve( "T" ) ).toBe( "new" );
+			} );
+
+			it( "removes with --yes, asks first without it, and says when there is nothing", function() {
+				runVerb( "add", { name : "T", stdinText : "1" } );
+
+				var no = runVerb( "remove", { name : "T", prompter : new bxagents.models.wizard.prompters.ScriptedPrompter( [ false ] ) } );
+				expect( no.exitCode ).toBe( 1 );
+				expect( runVerb( "list" ).message ).toInclude( "T" );
+
+				expect( runVerb( "remove", { name : "T", yes : true } ).exitCode ).toBe( 0 );
+				expect( runVerb( "remove", { name : "T", yes : true } ).exitCode ).toBe( 1 );
+				expect( runVerb( "list" ).message ).toInclude( "No secrets yet" );
+			} );
+
+			it( "status says where the key comes from and warns about a key file", function() {
+				runVerb( "add", { name : "T", stdinText : "1" } );
+
+				var status = runVerb( "status" );
+				expect( status.message ).toInclude( "Secrets:  1" );
+				expect( status.message ).toInclude( "key file" );
+				expect( status.message ).toInclude( "BXAGENTS_VAULT_KEY" );
+				expect( jsonDeserialize( runVerb( "status", { json : true } ).message ).keySource ).toBe( "file" );
+			} );
+
+			it( "audit lists what happened without values", function() {
+				runVerb( "add", { name : "T", stdinText : "value-9" } );
+				runVerb( "remove", { name : "T", yes : true } );
+
+				var text = runVerb( "audit" ).message;
+				expect( text ).toInclude( "add" );
+				expect( text ).toInclude( "remove" );
+				expect( text ).notToInclude( "value-9" );
+			} );
+
+			it( "key makes a usable key and does not touch the database", function() {
+				var made = runVerb( "key" );
+
+				expect( arrayLen( toBinary( made.key ) ) ).toBe( 32 );
+				expect( made.message ).toInclude( "BXAGENTS_VAULT_KEY=" & made.key );
+				expect( fileExists( variables.vaultDir & "/data/chat.db" ) ).toBeFalse();
+			} );
+
+			it( "rejects an unknown action", function() {
+				expect( function() { runVerb( "show" ); } ).toThrow( "BxAgents.UnknownVaultAction" );
+			} );
+
+		} );
+	}
+
+}

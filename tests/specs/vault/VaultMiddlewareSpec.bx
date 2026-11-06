@@ -1,0 +1,51 @@
+/**
+ * What a tool hands back is scrubbed of every vault value before the model sees it.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "VaultMiddleware", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-vaultmw-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.vault = new bxagents.models.vault.VaultService( store, new bxagents.models.vault.VaultKey( dir ) );
+				variables.middleware = new bxagents.models.vault.VaultMiddleware( vault );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "replaces every secret in a tool result, the agent's and anyone's", function() {
+				vault.add( "SHARED", "shared-token-123" );
+				vault.add( "MINE", "alices-token-456", { scope : "user", owner : "alice" } );
+
+				var out = middleware.wrapToolCall( {}, () => "GET failed: Authorization: Bearer shared-token-123 and alices-token-456 twice alices-token-456" );
+
+				expect( out ).toBe( "GET failed: Authorization: Bearer [secret] and [secret] twice [secret]" );
+			} );
+
+			it( "leaves a result with no secret exactly as it was", function() {
+				vault.add( "SHARED", "shared-token-123" );
+
+				expect( middleware.wrapToolCall( {}, () => "3 new messages" ) ).toBe( "3 new messages" );
+			} );
+
+			it( "does not blank ordinary words for a very short secret", function() {
+				vault.add( "PIN", "1234" );
+
+				expect( middleware.wrapToolCall( {}, () => "code 1234 here" ) ).toBe( "code 1234 here" );
+			} );
+
+			it( "passes through what is not text, and works with an empty vault", function() {
+				expect( middleware.wrapToolCall( {}, () => { return { a : 1 }; } ) ).toBe( { a : 1 } );
+				expect( middleware.wrapToolCall( {}, () => "anything" ) ).toBe( "anything" );
+			} );
+
+		} );
+	}
+
+}

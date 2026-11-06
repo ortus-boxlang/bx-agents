@@ -96,6 +96,16 @@ class {
 				summary : "The slash commands this caller may run", returns : "json" } } ),
 			ApiContract::route( "/command", "command", "Commands", { post : {
 				summary : "Runs one slash command", body : { line : "string", conversationId : "string?" }, returns : "json" } } ),
+			ApiContract::route( "/vault/update", "updateVault", "Vault", { post : {
+				summary : "Changes a secret: its value, description or hosts. The value is never returned",
+				body : { scope : "string", name : "string", value : "string?", description : "string?", hosts : "array?" }, returns : "json" } } ),
+			ApiContract::route( "/vault/remove", "removeVault", "Vault", { post : {
+				summary : "Removes a secret. One of the agent's takes an admin", body : { scope : "string", name : "string" }, returns : "json" } } ),
+			ApiContract::route( "/vault", "vault", "Vault", {
+				get : { summary : "The secrets the caller can use, by name, never a value: their own and the agent's", returns : "json" },
+				post : {
+					summary : "Stores a secret. The value goes in once and cannot be read back. One of the agent's takes an admin",
+					body : { scope : "string", name : "string", value : "string", description : "string?", hosts : "array?" }, returns : "json" } } ),
 			ApiContract::route( "/notes/update", "updateNote", "Notes", { post : {
 				summary : "Changes a note", body : { scope : "string", id : "string", text : "string" }, returns : "json" } } ),
 			ApiContract::route( "/notes/remove", "removeNote", "Notes", { post : {

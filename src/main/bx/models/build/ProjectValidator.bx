@@ -70,6 +70,7 @@ class {
 		}
 		validateAgentApi( arguments.resolvedConfig, arguments.discovery, errors )
 		validateNotes( arguments.resolvedConfig, errors )
+		validateVault( arguments.resolvedConfig, errors )
 
 		return { errors : errors, warnings : warnings }
 	}
@@ -889,6 +890,35 @@ class {
 	}
 
 	/**
+	 * Validates the optional `vault` block. Present (even empty) gives the agent the vault_list and vault_request
+	 * tools; absent leaves them out. Using ${vault.NAME} in the config needs no block.
+	 *
+	 *   vault:
+	 *     tools: true      # vault_list and vault_request (default true)
+	 *
+	 * @resolvedConfig The resolved config struct from AgentConfigResolver.resolve() - only `vault` is used
+	 * @errors Accumulator array - append() any validation errors found
+	 */
+	private void function validateVault( required struct resolvedConfig, required array errors ) {
+		if ( !structKeyExists( arguments.resolvedConfig, "vault" ) ) {
+			return
+		}
+		var vault = arguments.resolvedConfig.vault
+		if ( !isStruct( vault ) ) {
+			arguments.errors.append( "Agent.bx's 'vault' must be a struct such as { tools: true }" )
+			return
+		}
+		for ( var key in vault ) {
+			if ( key != "tools" ) {
+				arguments.errors.append( "Agent.bx's 'vault' has an unknown key [#key#] - the only key is tools" )
+			}
+		}
+		if ( structKeyExists( vault, "tools" ) && !isBoolean( vault.tools ) ) {
+			arguments.errors.append( "Agent.bx's 'vault.tools' must be true or false" )
+		}
+	}
+
+	/**
 	 * Validates the optional `gatewaySession: { policy, maxQueueDepth }` block
 	 * on the root Agent.bx's configure() return struct, mirroring bx-ai's own
 	 * GatewaySession.VALID_POLICIES exactly, so a bad value fails loudly at
@@ -1133,8 +1163,8 @@ class {
 	private void function validateWebMcpServer( required struct entry, required string label, required array errors ) {
 		var entry = arguments.entry
 		for ( var secretKey in [ "token", "password" ] ) {
-			if ( entry.keyExists( secretKey ) && !( isSimpleValue( entry[ secretKey ] ) && find( "${env.", entry[ secretKey ] ) ) ) {
-				arguments.errors.append( "#arguments.label# writes its [#secretKey#] in the file. Name an environment variable instead, for example #secretKey#: ${env.MY_#ucase( secretKey )#}" )
+			if ( entry.keyExists( secretKey ) && !( isSimpleValue( entry[ secretKey ] ) && ( find( "${env.", entry[ secretKey ] ) || find( "${vault.", entry[ secretKey ] ) ) ) ) {
+				arguments.errors.append( "#arguments.label# writes its [#secretKey#] in the file. Name an environment variable or a vault secret instead, for example #secretKey#: ${env.MY_#ucase( secretKey )#} or #secretKey#: ${vault.MY_#ucase( secretKey )#}" )
 			}
 		}
 		if ( entry.keyExists( "headers" ) && !isStruct( entry.headers ) ) {
@@ -1172,7 +1202,7 @@ class {
 					var value = entry.env[ name ]
 					if ( !isSimpleValue( value ) ) {
 						arguments.errors.append( "#arguments.label#'s env [#name#] must be text" )
-					} else if ( reFindNoCase( "(KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)", name ) && len( value ) && !find( "${env.", value ) ) {
+					} else if ( reFindNoCase( "(KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)", name ) && len( value ) && !find( "${env.", value ) && !find( "${vault.", value ) ) {
 						arguments.errors.append( "#arguments.label# writes its env [#name#] in the file. Name an environment variable instead, for example #name#: ${env.#name#}" )
 					}
 				}

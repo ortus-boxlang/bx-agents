@@ -25,7 +25,12 @@ class {
 	 * @return The entries ready for bx-ai's withMCPServers()
 	 */
 	array function resolve( required array servers, string label = "mcpServers" ) {
-		var resolved = variables.placeholders.resolvePlaceholders( arguments.servers, arguments.label )
+		var resolved = []
+		// not named `server`: that is a reserved scope
+		for ( var listed in arguments.servers ) {
+			// each entry on its own, so a secret limited to hosts is checked against THIS server's address
+			resolved.append( variables.placeholders.resolvePlaceholders( listed, arguments.label, { host : hostOf( listed ) } ) )
+		}
 		var executables = []
 		for ( var entry in resolved ) {
 			if ( !isStruct( entry ) ) {
@@ -41,6 +46,21 @@ class {
 		}
 		allowCommands( executables )
 		return resolved
+	}
+
+	/**
+	 * @entry One mcpServers entry
+	 *
+	 * @return The host its URL points to, or blank for a program (stdio) or a bare string that is not a URL
+	 */
+	private string function hostOf( required any entry ) {
+		// not named `url`: that is a reserved scope in a web request
+		var address = isStruct( arguments.entry ) ? ( arguments.entry.url ?: "" ) : ( isSimpleValue( arguments.entry ) ? arguments.entry : "" )
+		try {
+			return len( address ) ? lCase( createObject( "java", "java.net.URI" ).create( address ).getHost() ?: "" ) : ""
+		} catch ( any e ) {
+			return ""
+		}
 	}
 
 	/**

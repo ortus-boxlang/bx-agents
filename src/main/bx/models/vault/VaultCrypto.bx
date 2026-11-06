@@ -1,0 +1,83 @@
+/**
+ * Seals and opens one secret value with AES-256-GCM.
+ *
+ * A sealed value is base64 of a fresh 12-byte random nonce followed by the ciphertext and its 16-byte tag.
+ * The `context` (scope, owner and name of the row) is authenticated but not stored in the value, so a sealed
+ * value copied onto another row fails to open: moving ciphertext around in the database does not hand one
+ * person another person's secret.
+ */
+class {
+
+	static {
+		ALGORITHM = "AES/GCM/NoPadding"
+		NONCE_LEN = 12
+		TAG_BITS  = 128
+		KEY_LEN   = 32
+	}
+
+	/**
+	 * @key The 32 key bytes (a Java byte[])
+	 */
+	function init( required any key ) {
+		if ( arrayLen( arguments.key ) != static.KEY_LEN ) {
+			throw( type = "BxAgents.InvalidVaultKey", message = "The vault key must be #static.KEY_LEN# bytes." )
+		}
+		variables.keySpec = createObject( "java", "javax.crypto.spec.SecretKeySpec" ).init( arguments.key, "AES" )
+		variables.random  = createObject( "java", "java.security.SecureRandom" ).init()
+		return this
+	}
+
+	/**
+	 * @plain The secret
+	 * @context What the value belongs to; it must be the same again to open it
+	 *
+	 * @return The sealed value as text
+	 */
+	string function seal( required string plain, string context = "" ) {
+		var nonce = static.newBytes( static.NONCE_LEN )
+		variables.random.nextBytes( nonce )
+		var cipher = createObject( "java", "javax.crypto.Cipher" ).getInstance( static.ALGORITHM )
+		cipher.init( 1, variables.keySpec, createObject( "java", "javax.crypto.spec.GCMParameterSpec" ).init( static.TAG_BITS, nonce ) )
+		cipher.updateAAD( arguments.context.getBytes( "UTF-8" ) )
+		var sealed = cipher.doFinal( arguments.plain.getBytes( "UTF-8" ) )
+		var joined = createObject( "java", "java.nio.ByteBuffer" ).allocate( static.NONCE_LEN + arrayLen( sealed ) ).put( nonce ).put( sealed ).array()
+		return toBase64( joined )
+	}
+
+	/**
+	 * @sealed What seal() returned
+	 * @context The same context it was sealed with
+	 *
+	 * @return The secret
+	 */
+	string function open( required string sealed, string context = "" ) {
+		try {
+			var raw = toBinary( arguments.sealed )
+			if ( arrayLen( raw ) <= static.NONCE_LEN ) {
+				throw( type = "BxAgents.VaultCorrupt", message = "short" )
+			}
+			var buffer = createObject( "java", "java.nio.ByteBuffer" ).wrap( raw )
+			var nonce = static.newBytes( static.NONCE_LEN )
+			buffer.get( nonce )
+			var body = static.newBytes( arrayLen( raw ) - static.NONCE_LEN )
+			buffer.get( body )
+			var cipher = createObject( "java", "javax.crypto.Cipher" ).getInstance( static.ALGORITHM )
+			cipher.init( 2, variables.keySpec, createObject( "java", "javax.crypto.spec.GCMParameterSpec" ).init( static.TAG_BITS, nonce ) )
+			cipher.updateAAD( arguments.context.getBytes( "UTF-8" ) )
+			return createObject( "java", "java.lang.String" ).init( cipher.doFinal( body ), "UTF-8" )
+		} catch ( any e ) {
+			throw(
+				type    = "BxAgents.VaultCannotOpen",
+				message = "A vault value could not be opened. The vault key is not the one it was sealed with, or the stored value was changed."
+			)
+		}
+	}
+
+	/**
+	 * @return A zeroed Java byte[] of the given length
+	 */
+	static any function newBytes( required numeric length ) {
+		return createObject( "java", "java.lang.reflect.Array" ).newInstance( createObject( "java", "java.lang.Byte" ).TYPE, arguments.length )
+	}
+
+}

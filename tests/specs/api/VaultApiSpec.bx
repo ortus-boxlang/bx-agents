@@ -1,0 +1,95 @@
+/**
+ * The vault as a client sees it through the Agent API: a person manages their own secrets, an admin the agent's,
+ * and no answer ever carries a value.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "api.Vault", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-vaultapi-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.service = new bxagents.models.api.AgentService( new FakeAgent(), store );
+				variables.ada = new bxagents.models.api.Caller( id = "ada", source = "web" );
+				variables.bob = new bxagents.models.api.Caller( id = "bob", source = "web" );
+				variables.root = new bxagents.models.api.Caller( id = "ops", scope = "admin", source = "api" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "lets a person add, list, change and remove their own secret", function() {
+				var added = service.vault( ada ).add( "user", "GMAIL_TOKEN", "ya29.private-value", { description : "inbox", hosts : [ "gmail.googleapis.com" ] } );
+				expect( added.succeeded() ).toBeTrue();
+				expect( added.data().name ).toBe( "GMAIL_TOKEN" );
+
+				var all = service.vault( ada ).all().data();
+				expect( all.user ).toBe( "ada" );
+				expect( all.secrets ).toHaveLength( 1 );
+				expect( all.secrets[ 1 ].hosts ).toBe( [ "gmail.googleapis.com" ] );
+				expect( all.status.keySource ).toBe( "file" );
+
+				var changed = service.vault( ada ).update( "user", "GMAIL_TOKEN", { description : "mail", value : "ya29.newer" } );
+				expect( changed.succeeded() ).toBeTrue();
+				expect( service.vault( ada ).all().data().secrets[ 1 ].description ).toBe( "mail" );
+
+				expect( service.vault( ada ).remove( "user", "GMAIL_TOKEN" ).succeeded() ).toBeTrue();
+				expect( service.vault( ada ).all().data().secrets ).toBeEmpty();
+			} );
+
+			it( "never puts a value in an answer", function() {
+				service.vault( ada ).add( "user", "TOKEN", "super-private-value" );
+				service.vault( root ).add( "agent", "SHARED", "shared-private-value" );
+
+				var seen = [
+					service.vault( ada ).all(),
+					service.vault( ada ).update( "user", "TOKEN", { description : "x" } ),
+					service.vault( root ).all()
+				].map( o => jsonSerialize( o.data() ) ).toList( " " );
+
+				expect( seen ).notToInclude( "private-value" );
+			} );
+
+			it( "keeps a person's secrets from everyone else", function() {
+				service.vault( ada ).add( "user", "MINE", "1" );
+				service.vault( root ).add( "agent", "SHARED", "2" );
+
+				expect( service.vault( bob ).all().data().secrets.map( s => s.name ) ).toBe( [ "SHARED" ] );
+				expect( service.vault( bob ).update( "user", "MINE", { description : "stolen" } ).code() ).toBe( "not_found" );
+				expect( service.vault( bob ).remove( "user", "MINE" ).code() ).toBe( "not_found" );
+				expect( service.vault( ada ).all().data().secrets ).toHaveLength( 2 );
+			} );
+
+			it( "needs an admin for the agent's secrets", function() {
+				var refused = service.vault( ada ).add( "agent", "SHARED", "1" );
+				expect( refused.code() ).toBe( "forbidden" );
+				expect( service.vault( ada ).remove( "agent", "SHARED" ).code() ).toBe( "forbidden" );
+
+				expect( service.vault( root ).add( "agent", "SHARED", "1" ).succeeded() ).toBeTrue();
+				expect( service.vault( ada ).update( "agent", "SHARED", { value : "2" } ).code() ).toBe( "forbidden" );
+				expect( service.vault( root ).remove( "agent", "SHARED" ).succeeded() ).toBeTrue();
+			} );
+
+			it( "answers with a code a client can act on", function() {
+				service.vault( ada ).add( "user", "T", "1" );
+
+				expect( service.vault( ada ).add( "user", "T", "2" ).code() ).toBe( "conflict" );
+				expect( service.vault( ada ).add( "user", "bad name", "2" ).code() ).toBe( "bad_request" );
+				expect( service.vault( ada ).add( "user", "E", "" ).code() ).toBe( "bad_request" );
+				expect( service.vault( ada ).add( "world", "E", "x" ).code() ).toBe( "bad_request" );
+				expect( service.vault( ada ).update( "user", "NOPE", { value : "x" } ).code() ).toBe( "not_found" );
+				expect( service.vault( ada ).remove( "user", "NOPE" ).code() ).toBe( "not_found" );
+			} );
+
+			it( "is part of what the agent says it can do", function() {
+				expect( service.about( ada ).data().capabilities.vault ).toBeTrue();
+			} );
+
+		} );
+	}
+
+}

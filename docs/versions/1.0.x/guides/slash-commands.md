@@ -60,6 +60,7 @@ Over `--connect` or `--server`, `/profile` can only switch among the profiles th
 |---|---|---|---|
 | `/remember <text>` | T W G | Keep a note about you | `/remember I prefer short answers` |
 | `/notes` | T W G | Open the notes screen (terminal) | `/notes` |
+| `/vault` | T W G | Open the vault screen (terminal), or list the secret names. A value is never typed in a command | `/vault` |
 | `/notes list` | T W G | Print your notes and the agent's, with how full each is | `/notes list` |
 | `/notes add [agent] <text>` | T W G | Add a note about you, or with `agent` about the agent's work | `/notes add agent Use metric units` |
 | `/notes edit <id> <text>` | T W G | Change a note; the id is the short code in the list | `/notes edit a3f New text` |

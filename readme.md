@@ -28,6 +28,7 @@ Pick the problem, write one file.
 | Run a job every morning | [`schedules/Digest.bx`](docs/conventions/schedules.md) | A task with `.cron()` that calls `run()`, started with the app, no cron daemon |
 | Let other systems call it | [`agentApi` in `Agent.yaml`](docs/guides/agent-api.md) | One HTTP API at `/__bxagents` with an OpenAPI document and a BoxLang client, open on your machine or behind tokens; plus [`gateways/expose.bx`](docs/conventions/gateways/index.md) for a REST path of your choosing, or an MCP server |
 | Keep a human in the loop | a tool that needs approval | The run waits for approve or reject, in the terminal, the [web chat](docs/conventions/web-ui.md) or a chat gateway |
+| Connect it to your accounts | [`vault: {}`](docs/conventions/vault.md) | API keys and logins sealed in the database, typed in a hidden box and never shown to the model; each person can keep their own |
 | Add your own commands | [`extensions/hello.bx`](docs/conventions/extensions.md) | A chat command, key, status item or listener, in the terminal chat, the web page and chat platforms |
 | Test without spending tokens | [`tests/specs/AgentSpec.bx`](docs/conventions/testing.md) | `mockResponses()` and agent matchers: specs run in CI with no API key and no network |
 | Ship it anywhere | `bxAgents package` | A portable `.bxa` and [deploy targets](docs/conventions/deploy.md): local, SSH, FTP, SFTP, Docker, DigitalOcean |

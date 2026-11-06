@@ -1,0 +1,412 @@
+/**
+ * The vault: named secrets an agent uses at run time, kept sealed in the chat database.
+ *
+ * A secret has a scope. `agent` is shared by everyone who talks to the agent and is managed by an admin;
+ * `user` belongs to one person (the owner is their name) and only they can use it. Asking for a name finds the
+ * caller's own secret first, then the agent's. A secret can name the hosts it may be sent to; anything else
+ * is refused.
+ *
+ * The model never gets a value from here. It sees names and descriptions (list), and the runtime asks for the
+ * value (resolve) at the moment a tool or an MCP server needs it. Every add, change, removal and use is written
+ * to an audit table that holds names, never values.
+ *
+ * ```javascript
+ * vault = new VaultService( store, new VaultKey( dataDir ) )
+ * vault.add( "GMAIL_TOKEN", "ya29...", { scope : "user", owner : "alice", hosts : [ "gmail.googleapis.com" ] } )
+ * vault.resolve( "GMAIL_TOKEN", { user : "alice", host : "gmail.googleapis.com" } )
+ * ```
+ */
+class {
+
+	static {
+		SCOPES = [ "agent", "user" ]
+	}
+
+	/**
+	 * @store A ChatStore, already migrated
+	 * @keys A VaultKey
+	 */
+	function init( required any store, required any keys ) {
+		variables.store = arguments.store
+		variables.keys = arguments.keys
+		variables.crypto = ""
+		variables.keyId = ""
+		variables.keySource = ""
+		return this
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Writing
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Stores a new secret.
+	 *
+	 * @name Letters, digits and underscores, starting with a letter: it is what `${vault.NAME}` and `vault( "NAME" )` use
+	 * @value The secret
+	 * @options { scope : agent|user, owner : the user's name for scope user, description, hosts : [], actor : who is doing it, via : where from }
+	 *
+	 * @return The secret's metadata, without the value
+	 */
+	struct function add( required string name, required string value, struct options = {} ) {
+		var target = target( arguments.name, arguments.options )
+		if ( !len( arguments.value ) ) {
+			throw( type = "BxAgents.VaultEmptyValue", message = "A secret needs a value." )
+		}
+		if ( !isNull( lookup( target ) ) ) {
+			throw( type = "BxAgents.VaultSecretExists", message = "A #target.scope# secret named [#target.name#] already exists#target.scope == 'user' ? ' for ' & target.owner : ''#. Edit it to change it." )
+		}
+		var actor = arguments.options.actor ?: target.owner
+		variables.store.exec(
+			"INSERT INTO vault_secrets ( id, scope, owner, name, description, hosts, sealed, keyId, createdBy, createdAt, updatedAt ) VALUES ( :id, :scope, :owner, :name, :description, :hosts, :sealed, :keyId, :createdBy, :now, :now )",
+			{
+				id          : createUUID(),
+				scope       : target.scope,
+				owner       : target.owner,
+				name        : target.name,
+				description : left( trim( arguments.options.description ?: "" ), 500 ),
+				hosts       : jsonSerialize( cleanHosts( arguments.options.hosts ?: [] ) ),
+				sealed      : seal( arguments.value, target ),
+				keyId       : currentKeyId(),
+				createdBy   : actor,
+				now         : { value : now(), cfsqltype : "timestamp" }
+			}
+		)
+		record( "add", target, { actor : actor, via : arguments.options.via ?: "" } )
+		return describe( lookup( target ) )
+	}
+
+	/**
+	 * Changes a secret. Only what is given changes; the old value is never shown.
+	 *
+	 * @name The secret
+	 * @changes { value, description, hosts }, any of them
+	 * @options { scope, owner, actor, via }
+	 *
+	 * @return The secret's metadata, without the value
+	 */
+	struct function update( required string name, required struct changes, struct options = {} ) {
+		var target = target( arguments.name, arguments.options )
+		var existing = lookup( target )
+		if ( isNull( existing ) ) {
+			throw( type = "BxAgents.VaultSecretMissing", message = missingMessage( target ) )
+		}
+		var sets = [ "updatedAt = :now" ]
+		var params = { id : existing.id, now : { value : now(), cfsqltype : "timestamp" } }
+		if ( arguments.changes.keyExists( "value" ) ) {
+			if ( !len( arguments.changes.value ) ) {
+				throw( type = "BxAgents.VaultEmptyValue", message = "A secret needs a value." )
+			}
+			sets.append( "sealed = :sealed" )
+			sets.append( "keyId = :keyId" )
+			params[ "sealed" ] = seal( arguments.changes.value, target )
+			params[ "keyId" ] = currentKeyId()
+		}
+		if ( arguments.changes.keyExists( "description" ) ) {
+			sets.append( "description = :description" )
+			params[ "description" ] = left( trim( arguments.changes.description ), 500 )
+		}
+		if ( arguments.changes.keyExists( "hosts" ) ) {
+			sets.append( "hosts = :hosts" )
+			params[ "hosts" ] = jsonSerialize( cleanHosts( arguments.changes.hosts ) )
+		}
+		variables.store.exec( "UPDATE vault_secrets SET #sets.toList( ', ' )# WHERE id = :id", params )
+		record( "edit", target, { actor : arguments.options.actor ?: target.owner, via : arguments.options.via ?: "" } )
+		return describe( lookup( target ) )
+	}
+
+	/**
+	 * Stores a secret, or replaces the value of one that exists. What `vault_request` and a form use.
+	 */
+	struct function set( required string name, required string value, struct options = {} ) {
+		var target = target( arguments.name, arguments.options )
+		if ( isNull( lookup( target ) ) ) {
+			return add( arguments.name, arguments.value, arguments.options )
+		}
+		var changes = { value : arguments.value }
+		if ( arguments.options.keyExists( "description" ) ) {
+			changes[ "description" ] = arguments.options.description
+		}
+		if ( arguments.options.keyExists( "hosts" ) ) {
+			changes[ "hosts" ] = arguments.options.hosts
+		}
+		return update( arguments.name, changes, arguments.options )
+	}
+
+	/**
+	 * Notes that the agent asked a person to add a secret. Stores nothing: the person adds it themselves, in a form
+	 * that never goes through the chat.
+	 *
+	 * @options { scope, owner, actor, via }
+	 *
+	 * @return { name, scope, owner, stored : whether the caller already has it }
+	 */
+	struct function request( required string name, struct options = {} ) {
+		var target = target( arguments.name, arguments.options )
+		var stored = !isNull( lookupFor( target.name, target.owner ) )
+		record( "request", target, { actor : arguments.options.actor ?: target.owner, via : arguments.options.via ?: "", ok : !stored } )
+		return { name : target.name, scope : target.scope, owner : target.owner, stored : stored }
+	}
+
+	/**
+	 * @return True when a secret was removed
+	 */
+	boolean function remove( required string name, struct options = {} ) {
+		var target = target( arguments.name, arguments.options )
+		var existing = lookup( target )
+		if ( isNull( existing ) ) {
+			return false
+		}
+		variables.store.exec( "DELETE FROM vault_secrets WHERE id = :id", { id : existing.id } )
+		record( "remove", target, { actor : arguments.options.actor ?: target.owner, via : arguments.options.via ?: "" } )
+		return true
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Reading
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * The secrets a person can see: their own and the agent's. Metadata only, never a value.
+	 *
+	 * @user Whose secrets to include with the agent's; blank for the agent's only
+	 * @options { scope : agent|user to narrow to one scope }
+	 *
+	 * @return [ { name, scope, owner, description, hosts, createdAt, updatedAt, lastUsedAt, createdBy } ]
+	 */
+	array function list( string user = "", struct options = {} ) {
+		var where = [ "scope = 'agent'" ]
+		var params = {}
+		if ( len( arguments.user ) ) {
+			where.append( "( scope = 'user' AND owner = :user )" )
+			params[ "user" ] = arguments.user
+		}
+		var found = variables.store.rows(
+			"SELECT * FROM vault_secrets WHERE ( #where.toList( ' OR ' )# ) ORDER BY name, scope DESC",
+			params
+		).map( row => describe( row ) )
+		var only = arguments.options.scope ?: ""
+		if ( len( only ) ) {
+			found = found.filter( row => row.scope == only )
+		}
+		return found
+	}
+
+	/**
+	 * Every secret of every user, for an admin. Metadata only.
+	 */
+	array function listAll() {
+		return variables.store.rows( "SELECT * FROM vault_secrets ORDER BY scope, owner, name" ).map( row => describe( row ) )
+	}
+
+	/**
+	 * @return True when the caller would find a secret of that name (their own, or the agent's)
+	 */
+	boolean function has( required string name, string user = "" ) {
+		return !isNull( lookupFor( arguments.name, arguments.user ) )
+	}
+
+	/**
+	 * The value of a secret, for the runtime to put in a request. Never returned to the model.
+	 *
+	 * @name The secret
+	 * @options { user : who is asking, host : where it is about to be sent, via : tool or server asking }
+	 *
+	 * @return The value
+	 */
+	string function resolve( required string name, struct options = {} ) {
+		var user = arguments.options.user ?: ""
+		var host = lCase( arguments.options.host ?: "" )
+		var via = arguments.options.via ?: ""
+		var row = lookupFor( arguments.name, user )
+		if ( isNull( row ) ) {
+			var missing = { scope : len( user ) ? "user" : "agent", owner : user, name : arguments.name }
+			record( "use", missing, { actor : user, via : via, host : host, ok : false } )
+			throw( type = "BxAgents.VaultSecretMissing", message = missingMessage( missing, user ) )
+		}
+		var allowed = jsonDeserialize( row.hosts )
+		if ( allowed.len() && ( !len( host ) || !hostAllowed( allowed, host ) ) ) {
+			record( "use", row, { actor : user, via : via, host : host, ok : false } )
+			throw(
+				type    = "BxAgents.VaultHostDenied",
+				message = "The secret [#row.name#] may only be sent to #allowed.toList( ', ' )#, not to #len( host ) ? host : 'an unnamed host'#."
+			)
+		}
+		var value = openRow( row )
+		variables.store.exec( "UPDATE vault_secrets SET lastUsedAt = :now WHERE id = :id", { id : row.id, now : { value : now(), cfsqltype : "timestamp" } } )
+		record( "use", row, { actor : user, via : via, host : host } )
+		return value
+	}
+
+	/**
+	 * Every value in the vault, opened, so output can be scrubbed of them. For the runtime only.
+	 *
+	 * @return An array of value strings, longest first
+	 */
+	array function values() {
+		var out = []
+		for ( var row in variables.store.rows( "SELECT * FROM vault_secrets" ) ) {
+			try {
+				out.append( openRow( row ) )
+			} catch ( any e ) {
+				// a row sealed with another key cannot be opened here, and so cannot leak from here
+			}
+		}
+		return out.sort( ( a, b ) => len( b ) - len( a ) )
+	}
+
+	/**
+	 * @return { keySource : env|file|none, keyId, secrets : count, wrongKey : count of rows another key sealed }
+	 */
+	struct function status() {
+		var keySource = variables.keys.source()
+		var count = variables.store.rows( "SELECT COUNT(*) AS n FROM vault_secrets" )[ 1 ].n
+		var out = { keySource : keySource, keyId : "", secrets : count, wrongKey : 0 }
+		if ( keySource != "none" ) {
+			out.keyId = loadKey( false ).keyId
+			out.wrongKey = variables.store.rows( "SELECT COUNT(*) AS n FROM vault_secrets WHERE keyId <> :id", { id : out.keyId } )[ 1 ].n
+		}
+		return out
+	}
+
+	/**
+	 * @return The latest audit rows, newest first. Names and who, never values.
+	 */
+	array function audit( numeric limit = 100 ) {
+		return variables.store.rows( "SELECT * FROM vault_audit ORDER BY id DESC LIMIT :n", { n : { value : int( arguments.limit ), cfsqltype : "integer" } } )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private struct function target( required string name, struct options = {} ) {
+		var name = trim( arguments.name )
+		if ( !reFind( "^[A-Za-z][A-Za-z0-9_]{0,63}$", name ) ) {
+			throw( type = "BxAgents.InvalidVaultName", message = "A secret name is 1 to 64 letters, digits or underscores, starting with a letter. Got [#name#]." )
+		}
+		var scope = lCase( arguments.options.scope ?: "agent" )
+		if ( !static.SCOPES.contains( scope ) ) {
+			throw( type = "BxAgents.InvalidVaultScope", message = "A secret scope is one of: #static.SCOPES.toList( ', ' )#. Got [#scope#]." )
+		}
+		var owner = scope == "user" ? trim( arguments.options.owner ?: "" ) : ""
+		if ( scope == "user" && !len( owner ) ) {
+			throw( type = "BxAgents.VaultNeedsUser", message = "A user secret belongs to a named user, and this caller has no name. Use an agent secret, or sign in with a named token." )
+		}
+		return { scope : scope, owner : owner, name : name }
+	}
+
+	private any function lookup( required struct target ) {
+		var found = variables.store.rows(
+			"SELECT * FROM vault_secrets WHERE scope = :scope AND owner = :owner AND name = :name",
+			{ scope : arguments.target.scope, owner : arguments.target.owner, name : arguments.target.name }
+		)
+		return found.len() ? found[ 1 ] : javaCast( "null", "" )
+	}
+
+	/**
+	 * The caller's own secret, else the agent's.
+	 */
+	private any function lookupFor( required string name, string user = "" ) {
+		if ( len( arguments.user ) ) {
+			var own = lookup( { scope : "user", owner : arguments.user, name : arguments.name } )
+			if ( !isNull( own ) ) {
+				return own
+			}
+		}
+		return lookup( { scope : "agent", owner : "", name : arguments.name } )
+	}
+
+	private string function context( required struct target ) {
+		return arguments.target.scope & "|" & arguments.target.owner & "|" & arguments.target.name
+	}
+
+	private string function seal( required string value, required struct target ) {
+		loadKey( true )
+		return variables.crypto.seal( arguments.value, context( arguments.target ) )
+	}
+
+	private string function openRow( required struct row ) {
+		var key = loadKey( false )
+		if ( arguments.row.keyId != key.keyId ) {
+			throw(
+				type    = "BxAgents.VaultWrongKey",
+				message = "The secret [#arguments.row.name#] was sealed with another vault key (#arguments.row.keyId#, this one is #key.keyId#). Set #variables.keys.variableName()# to the key it was sealed with."
+			)
+		}
+		return variables.crypto.open( arguments.row.sealed, context( arguments.row ) )
+	}
+
+	private string function currentKeyId() {
+		return loadKey( true ).keyId
+	}
+
+	/**
+	 * Loads the key once. A key file is made only while the vault is empty.
+	 */
+	private struct function loadKey( required boolean forWriting ) {
+		if ( !isObject( variables.crypto ) ) {
+			var empty = variables.store.rows( "SELECT COUNT(*) AS n FROM vault_secrets" )[ 1 ].n == 0
+			var key = variables.keys.load( allowCreate = empty )
+			variables.crypto = new VaultCrypto( key.bytes )
+			variables.keyId = key.id
+			variables.keySource = key.source
+		}
+		return { keyId : variables.keyId, source : variables.keySource }
+	}
+
+	private void function record( required string action, required struct target, struct extra = {} ) {
+		variables.store.exec(
+			"INSERT INTO vault_audit ( at, action, scope, owner, name, actor, via, host, ok ) VALUES ( :at, :action, :scope, :owner, :name, :actor, :via, :host, :ok )",
+			{
+				at     : { value : now(), cfsqltype : "timestamp" },
+				action : arguments.action,
+				scope  : arguments.target.scope,
+				owner  : arguments.target.owner,
+				name   : arguments.target.name,
+				actor  : arguments.extra.actor ?: "",
+				via    : arguments.extra.via ?: "",
+				host   : arguments.extra.host ?: "",
+				ok     : { value : ( arguments.extra.ok ?: true ) ? 1 : 0, cfsqltype : "integer" }
+			}
+		)
+	}
+
+	private struct function describe( required struct row ) {
+		return {
+			name        : arguments.row.name,
+			scope       : arguments.row.scope,
+			owner       : arguments.row.owner,
+			description : arguments.row.description,
+			hosts       : jsonDeserialize( arguments.row.hosts ),
+			createdBy   : arguments.row.createdBy,
+			createdAt   : arguments.row.createdAt,
+			updatedAt   : arguments.row.updatedAt,
+			lastUsedAt  : arguments.row.lastUsedAt ?: ""
+		}
+	}
+
+	private string function missingMessage( required struct target, string user = "" ) {
+		var where = len( arguments.user ) ? "for #arguments.user# or for the agent" : "for the agent"
+		return "No secret named [#arguments.target.name#] #where#. Ask the user to add it."
+	}
+
+	private array function cleanHosts( required any hosts ) {
+		var list = isArray( arguments.hosts ) ? arguments.hosts : listToArray( arguments.hosts, "," )
+		return list.map( h => lCase( trim( toString( h ) ) ) ).filter( h => len( h ) )
+	}
+
+	/**
+	 * "*.example.com" matches any subdomain of example.com, not example.com itself.
+	 */
+	private boolean function hostAllowed( required array allowed, required string host ) {
+		for ( var pattern in arguments.allowed ) {
+			if ( pattern == arguments.host ) {
+				return true
+			}
+			if ( left( pattern, 2 ) == "*." && arguments.host.endsWith( mid( pattern, 2, len( pattern ) ) ) ) {
+				return true
+			}
+		}
+		return false
+	}
+
+}

@@ -1,0 +1,56 @@
+/**
+ * A tool written the way a project writes one, an @AITool method on a class, reads the secret of the person who
+ * is asking (found through the `_chatRequest` bx-ai passes every tool), else the agent's, and only for its hosts.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "vault() inside an @AITool class", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-vaultclass-" );
+				var javaSystem = createObject( "java", "java.lang.System" );
+				variables.savedDb = javaSystem.getProperty( "BXAGENTS_DB" );
+				javaSystem.setProperty( "BXAGENTS_DB", dir & "/chat.db" );
+				variables.vault = new bxagents.models.vault.VaultWiring().service();
+				vault.add( "MAIL_TOKEN", "agent-level-token-xx", { hosts : [ "mail.example.com" ] } );
+				vault.add( "MAIL_TOKEN", "alice", { scope : "user", owner : "alice", hosts : [ "mail.example.com" ] } );
+				variables.registry = aiToolRegistry();
+				registry.scan( new tests.support.MailerTool(), "vaultspec" );
+				variables.tool = registry.get( "inbox@vaultspec" );
+			} );
+
+			afterEach( function() {
+				var javaSystem = createObject( "java", "java.lang.System" );
+				if ( isNull( savedDb ) ) {
+					javaSystem.clearProperty( "BXAGENTS_DB" );
+				} else {
+					javaSystem.setProperty( "BXAGENTS_DB", savedDb );
+				}
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			private function requestFor( userId ) {
+				return new bxModules.bxai.models.requests.AiChatRequest( new bxModules.bxai.models.runnables.AiMessage(), {}, { userId : userId } );
+			}
+
+			it( "gets the asking person's own secret, and the agent's for anyone without one", function() {
+				expect( tool.invoke( { query : "x" }, requestFor( "alice" ) ) ).toBe( "token-length:5" );
+				expect( tool.invoke( { query : "x" }, requestFor( "bob" ) ) ).toBe( "token-length:20" );
+				expect( tool.invoke( { query : "x" }, requestFor( "" ) ) ).toBe( "token-length:20" );
+			} );
+
+			it( "is refused when the secret does not allow the host the tool names", function() {
+				vault.update( "MAIL_TOKEN", { hosts : [ "other.example.com" ] } );
+
+				expect( function() {
+					tool.invoke( { query : "x" }, requestFor( "bob" ) );
+				} ).toThrow();
+			} );
+
+		} );
+	}
+
+}

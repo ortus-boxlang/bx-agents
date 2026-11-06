@@ -1,0 +1,48 @@
+/**
+ * Keeps a secret out of what comes back from a tool. A tool that reads a secret to call an API should never return
+ * it, but one that echoes a request, an error or a header would put it in front of the model, and from there in the
+ * conversation, the memory and the logs. Every value in the vault is scrubbed from each tool result before the model
+ * sees it.
+ *
+ * Values shorter than MIN_LENGTH are left alone: a four letter "secret" would blank out ordinary words.
+ */
+class extends="bxModules.bxai.models.middleware.BaseAiMiddleware" {
+
+	static {
+		MIN_LENGTH = 6
+		MASK       = "[secret]"
+	}
+
+	/**
+	 * @service The VaultService whose values are scrubbed
+	 */
+	function init( required any service ) {
+		variables.name = "vault"
+		variables.description = "Scrubs vault secrets from tool results"
+		variables.service = arguments.service
+		return this
+	}
+
+	any function wrapToolCall( required struct context, required function handler ) {
+		return scrub( arguments.handler() )
+	}
+
+	/**
+	 * @text What a tool returned
+	 *
+	 * @return The same text with every vault value replaced by [secret]; anything that is not text is returned as it is
+	 */
+	any function scrub( any text ) {
+		if ( isNull( arguments.text ) || !isSimpleValue( arguments.text ) || !len( arguments.text ) ) {
+			return isNull( arguments.text ) ? "" : arguments.text
+		}
+		var out = arguments.text
+		for ( var value in variables.service.values() ) {
+			if ( len( value ) >= static.MIN_LENGTH ) {
+				out = out.replace( value, static.MASK, "all" )
+			}
+		}
+		return out
+	}
+
+}

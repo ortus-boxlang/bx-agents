@@ -1,0 +1,88 @@
+/**
+ * vault_list and vault_request, called the way bx-ai calls them: with the chat request of the run.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "VaultTools", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-vaulttools-" );
+				variables.wiring = new bxagents.models.vault.VaultWiring().pin( dir & "/chat.db" );
+				variables.vault = wiring.service();
+				variables.tools = new bxagents.models.vault.VaultTools( wiring, "helper" ).tools();
+				variables.list = tools[ 1 ];
+				variables.requestTool = tools[ 2 ];
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			private function requestFor( userId ) {
+				return new bxModules.bxai.models.requests.AiChatRequest( new bxModules.bxai.models.runnables.AiMessage(), {}, { userId : userId, threadId : "t-1" } );
+			}
+
+			private function call( tool, args, userId = "alice" ) {
+				return jsonDeserialize( tool.invoke( args, requestFor( userId ) ) );
+			}
+
+			it( "are named vault_list and vault_request, and neither takes a value", function() {
+				expect( list.getName() ).toBe( "vault_list" );
+				expect( requestTool.getName() ).toBe( "vault_request" );
+				var properties = requestTool.getSchema().function.parameters.properties.keyArray().sort( "text" );
+				expect( properties ).toBe( [ "name", "scope", "why" ] );
+				expect( requestTool.getSchema().function.parameters.required ).toBe( [ "name", "why" ] );
+			} );
+
+			it( "vault_list shows the person's secrets and the agent's, never a value", function() {
+				vault.add( "SHARED", "shared-secret-value", { description : "for everyone" } );
+				vault.add( "MINE", "alice-secret-value", { scope : "user", owner : "alice", description : "inbox" } );
+				vault.add( "BOBS", "bob-secret-value", { scope : "user", owner : "bob" } );
+
+				var raw = list.invoke( {}, requestFor( "alice" ) );
+				var answer = jsonDeserialize( raw );
+
+				expect( answer.map( s => s.name ).sort( "text" ) ).toBe( [ "MINE", "SHARED" ] );
+				expect( raw ).notToInclude( "secret-value" );
+				expect( raw ).notToInclude( "BOBS" );
+			} );
+
+			it( "vault_request asks for a secret, stores nothing and records the request", function() {
+				var answer = call( requestTool, { name : "GMAIL_TOKEN", why : "read your inbox" } );
+
+				expect( answer.ok ).toBeTrue();
+				expect( answer.status ).toBe( "requested" );
+				expect( answer.message ).toInclude( "private form" );
+				expect( vault.listAll() ).toBeEmpty();
+				var row = vault.audit()[ 1 ];
+				expect( row.action ).toBe( "request" );
+				expect( row.owner ).toBe( "alice" );
+				expect( row.via ).toBe( "vault_request:helper" );
+			} );
+
+			it( "vault_request says when the secret is already there", function() {
+				vault.add( "GMAIL_TOKEN", "x", { scope : "user", owner : "alice" } );
+
+				expect( call( requestTool, { name : "GMAIL_TOKEN", why : "inbox" } ).status ).toBe( "already_stored" );
+				expect( call( requestTool, { name : "GMAIL_TOKEN", why : "inbox" }, "bob" ).status ).toBe( "requested" );
+			} );
+
+			it( "vault_request asks for an agent secret when the run has no name", function() {
+				var answer = call( requestTool, { name : "API_KEY", why: "calls the API" }, "" );
+
+				expect( answer.status ).toBe( "requested" );
+				expect( vault.audit()[ 1 ].scope ).toBe( "agent" );
+			} );
+
+			it( "vault_request refuses a bad name or scope without throwing at the model", function() {
+				expect( call( requestTool, { name : "bad name", why : "x" } ).ok ).toBeFalse();
+				expect( call( requestTool, { name : "OK", why : "x", scope : "world" } ).ok ).toBeFalse();
+			} );
+
+		} );
+	}
+
+}

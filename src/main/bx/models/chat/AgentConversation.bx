@@ -208,6 +208,17 @@ class {
 	}
 
 	/**
+	 * @return The vault of this agent for the chat commands: LocalVault, or NoVault when there is no database to keep one in
+	 */
+	any function vault() {
+		var wiring = new "models.vault.VaultWiring@bxagents"()
+		if ( !wiring.available() ) {
+			return new "models.cli.chat.NoVault@bxagents"()
+		}
+		return new "models.cli.chat.LocalVault@bxagents"( wiring.service(), variables.userId )
+	}
+
+	/**
 	 * Starts a new conversation: the agent keeps its memory per thread.
 	 */
 	void function newThread() {

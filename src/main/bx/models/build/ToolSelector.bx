@@ -29,9 +29,11 @@ class {
 
 	/**
 	 * @adapters Extra or replacement module adapters by module name, for tests (see ToolModules)
+	 * @vault The VaultService that ${vault.NAME} reads; the app's own vault when omitted (tests pass one)
 	 */
-	function init( struct adapters = {} ) {
+	function init( struct adapters = {}, any vault ) {
 		variables.modules = new "models.build.ToolModules@bxagents"( arguments.adapters )
+		variables.vault = isNull( arguments.vault ) ? "" : arguments.vault
 		return this
 	}
 
@@ -210,18 +212,18 @@ class {
 	 *
 	 * @return The same shape with the placeholders replaced
 	 */
-	any function resolvePlaceholders( required any value, string module = "" ) {
+	any function resolvePlaceholders( required any value, string module = "", struct context = {} ) {
 		var input = arguments.value
 		var owner = arguments.module
 		if ( isStruct( input ) ) {
 			var result = {}
 			for ( var key in input ) {
-				result[ key ] = resolvePlaceholders( input[ key ], owner )
+				result[ key ] = resolvePlaceholders( input[ key ], owner, arguments.context )
 			}
 			return result
 		}
 		if ( isArray( input ) ) {
-			return input.map( item => resolvePlaceholders( item, owner ) )
+			return input.map( item => resolvePlaceholders( item, owner, context ) )
 		}
 		if ( !isSimpleValue( input ) || isNumeric( input ) || isBoolean( input ) ) {
 			return input
@@ -245,7 +247,45 @@ class {
 			text = before & found & after
 			match = reFind( "\$\{env\.([A-Za-z0-9_]+)(:([^}]*))?\}", text, match.pos[ 1 ] + len( found ), true )
 		}
-		return text
+		return resolveVault( text, owner, arguments.context )
+	}
+
+	/**
+	 * Replace ${vault.NAME} with the agent's secret of that name. Resolved when the app starts, like ${env.NAME}, so a
+	 * value is never in the project, the build or the manifest. Only the agent's secrets can be used here: the
+	 * app starts once for everyone, so a person's own secret has no one to belong to yet. A secret that names
+	 * its hosts is sent only to the host in `context.host` (the MCP server's address).
+	 *
+	 * @text A simple value
+	 * @owner What the value belongs to, for messages
+	 * @context { host } where the value is going
+	 */
+	private any function vaultService() {
+		return isObject( variables.vault ) ? variables.vault : new "models.vault.VaultWiring@bxagents"().service()
+	}
+
+	private string function resolveVault( required string text, required string owner, struct context = {} ) {
+		var pattern = "\$\{vault\.([A-Za-z][A-Za-z0-9_]*)\}"
+		var out = arguments.text
+		var match = reFind( pattern, out, 1, true )
+		while ( match.pos[ 1 ] > 0 ) {
+			var name = out.mid( match.pos[ 2 ], match.len[ 2 ] )
+			var value = ""
+			try {
+				value = vaultService().resolve( name, { host : arguments.context.host ?: "", via : arguments.owner } )
+			} catch ( any e ) {
+				throw(
+					type    = "BxAgents.MissingVaultSecret",
+					message = "#find( ' ', arguments.owner ) ? arguments.owner : 'toolOptions [' & arguments.owner & ']'# uses ${vault.#name#}: #e.message# Only the agent's own secrets can be used in Agent.yaml. Add it with `bxAgents vault add --name=#name#`."
+				)
+			}
+			var before = match.pos[ 1 ] > 1 ? out.left( match.pos[ 1 ] - 1 ) : ""
+			var afterStart = match.pos[ 1 ] + match.len[ 1 ]
+			var after = afterStart <= len( out ) ? out.mid( afterStart, len( out ) - afterStart + 1 ) : ""
+			out = before & value & after
+			match = reFind( pattern, out, match.pos[ 1 ] + len( value ), true )
+		}
+		return out
 	}
 
 	/**

@@ -640,7 +640,25 @@ public final class ChatScreen implements AutoCloseable {
 	 * @return the text, or null for Esc
 	 */
 	public String ask( String title, String help, String initial ) {
-		TextPrompt prompt = new TextPrompt( theme, title, help, "", false, "Type something, or press esc.", initial );
+		return ask( title, help, initial, false );
+	}
+
+	/**
+	 * Asks for a secret in a box that shows bullets, never the text. For a vault value: it is not drawn, kept in
+	 * a history or echoed anywhere.
+	 *
+	 * @param title the question
+	 * @param help  a line of help, or blank
+	 *
+	 * @return the text, or null for Esc
+	 */
+	public String askSecret( String title, String help ) {
+		return ask( title, help, "", true );
+	}
+
+	private String ask( String title, String help, String initial, boolean secret ) {
+		TextPrompt prompt = new TextPrompt( theme, title, help, "", secret, secret ? "A secret needs a value, or press esc." : "Type something, or press esc.",
+		    initial );
 		try {
 			while ( !prompt.isDone() ) {
 				List<Row> rows = new ArrayList<>( prompt.render( runner.width() - 2, 6 ) );

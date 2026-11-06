@@ -581,6 +581,23 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.errors.filter( e => e.findNoCase( "notes" ) ) ).toBeEmpty();
 			} );
 
+			it( "rejects a vault block with an unknown key or a bad flag", function() {
+				var text = validateFixture( "bad-vault" ).errors.filter( e => e.findNoCase( "vault" ) ).toList( char( 10 ) );
+
+				expect( text ).toInclude( "'vault' has an unknown key [colour]" );
+				expect( text ).toInclude( "'vault.tools' must be true or false" );
+			} );
+
+			it( "accepts a vault block, and a vault placeholder with no block", function() {
+				for ( var fixture in [ "with-vault", "with-vault-placeholder" ] ) {
+					var projectRoot = expandPath( "/fixtures/" & fixture );
+					var result = validator.validate( projectRoot, discoverer.discover( projectRoot ), resolver.resolve( projectRoot = projectRoot ) );
+
+					// the token written as ${vault.NAME} is not "a token in the file"
+					expect( result.errors.filter( e => e.findNoCase( "vault" ) || e.findNoCase( "writes its" ) ) ).toBeEmpty();
+				}
+			} );
+
 			it( "rejects a model that names no provider and no profile", function() {
 				var result = validateFixture( "missing-model-reference" );
 				expect( result.errors.filter( e => e.findNoCase( "has no provider" ) ).len() ).toBeGT( 0 );

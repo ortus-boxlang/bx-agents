@@ -722,6 +722,67 @@ class {
 		answer( event, kept.all() )
 	}
 
+	// ----------------------------------------------------------------------------------
+	// Vault
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * GET: the secrets the caller can use, { admin, user, status, secrets : [ { name, scope, owner, description, hosts } ] }.
+	 * POST: stores one, { scope : "user" | "agent", name, value, description?, hosts? }. The value is never in an answer.
+	 */
+	function vault( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		if ( !service().keepsSessions() ) {
+			answer( event, failed( "not_found", "This server keeps no database, so it has no vault" ) )
+			return
+		}
+		var kept = service().vault( callerOf( event ) )
+		if ( event.getHTTPMethod() == "POST" ) {
+			var body = event.getHTTPContent( json : true )
+			answer( event, kept.add( body.scope ?: "user", body.name ?: "", body.value ?: "", body ) )
+			return
+		}
+		answer( event, kept.all() )
+	}
+
+	/**
+	 * Body: { scope, name, value?, description?, hosts? }. Only what is sent changes.
+	 */
+	function updateVault( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		if ( !service().keepsSessions() ) {
+			answer( event, failed( "not_found", "This server keeps no database, so it has no vault" ) )
+			return
+		}
+		var body = event.getHTTPContent( json : true )
+		var changes = {}
+		for ( var key in [ "value", "description", "hosts" ] ) {
+			if ( body.keyExists( key ) ) {
+				changes[ key ] = body[ key ]
+			}
+		}
+		answer( event, service().vault( callerOf( event ) ).update( body.scope ?: "user", body.name ?: "", changes ) )
+	}
+
+	/**
+	 * Body: { scope, name }. Removing one of the agent's secrets needs an admin caller.
+	 */
+	function removeVault( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		if ( !service().keepsSessions() ) {
+			answer( event, failed( "not_found", "This server keeps no database, so it has no vault" ) )
+			return
+		}
+		var body = event.getHTTPContent( json : true )
+		answer( event, service().vault( callerOf( event ) ).remove( body.scope ?: "user", body.name ?: "" ) )
+	}
+
 	/**
 	 * Access tokens, for an admin, when the server's config allows it (agentApi.manageTokens): GET lists them (never a
 	 * secret), POST makes one and answers with its secret, this once.
