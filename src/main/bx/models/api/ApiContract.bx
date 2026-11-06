@@ -1,0 +1,151 @@
+/**
+ * The agent API, written down once: every route, the verbs it takes, what it reads and what it answers.
+ *
+ * Three things are made from this list and so cannot drift apart: the routes the build writes (RouterGenerator), the
+ * OpenAPI document the server hands out at `GET <path>/openapi` (OpenApiDocument; ColdBox takes a trailing `.json` as the format, so `openapi.json` is the same route) and the specs that check the
+ * handler has an action for each route and no route is missing from the list.
+ *
+ * The order is the order of the routes: a pattern also matches what follows it, so `sessions/rename` comes before
+ * `sessions`.
+ *
+ * A field is written `name : "type"`; a type ending in `?` is optional. Types: string, integer, boolean, object, array.
+ */
+class {
+
+	/**
+	 * @options { manageTokens : true } adds the token routes
+	 *
+	 * @return An array of { path, action, tag, open, methods : { get|post : { summary, body, query, returns } } }.
+	 *         `returns` is json, sse (the frames of frames()) or file; `open` is true for a route that needs no token
+	 *         even on a closed API.
+	 */
+	static array function operations( struct options = {} ) {
+		var turn = { input : "string", conversationId : "string?", threadId : "string?", options : "object?", attachments : "array?" }
+		var list = [
+			ApiContract::route( "/invoke", "invoke", "Turns", { post : {
+				summary : "One whole turn: the agent's answer once it is done", body : turn, returns : "json" } } ),
+			ApiContract::route( "/stream", "stream", "Turns", { post : {
+				summary : "One turn as a stream of thread, chunk and done frames (the small subset of events)", body : turn, returns : "sse" } } ),
+			ApiContract::route( "/batch", "batch", "Turns", { post : {
+				summary : "Several inputs, one after another, in one conversation",
+				body : { inputs : "array", conversationId : "string?", threadId : "string?", options : "object?" }, returns : "json" } } ),
+			ApiContract::route( "/info", "info", "About the agent", { get : {
+				summary : "What is served: name, model and the routes of the agent", returns : "json" } } ),
+			ApiContract::route( "/events", "events", "Turns", { post : {
+				summary : "One turn as the full stream: thread, chunk, tool, suspended, error and done frames", body : turn, returns : "sse" } } ),
+			ApiContract::route( "/cancel", "cancel", "Runs", { post : {
+				summary : "Stops a run. Only the caller who started it, or an admin",
+				body : { threadId : "string", reason : "string?" }, returns : "json" } } ),
+			ApiContract::route( "/steer", "steer", "Runs", { post : {
+				summary : "Adds a message to a run that is going",
+				body : { threadId : "string", input : "string" }, returns : "json" } } ),
+			ApiContract::route( "/resume", "resume", "Runs", { post : {
+				summary : "Carries on a run that paused for approval, as a stream",
+				body : { threadId : "string", decision : "string?", editedData : "object?", reason : "string?" }, returns : "sse" } } ),
+			ApiContract::route( "/pending", "pending", "Runs", { get : {
+				summary : "What a paused run is waiting to have approved", query : { threadId : "string" }, returns : "json" } } ),
+			ApiContract::route( "/tools", "tools", "About the agent", { get : { summary : "The tools the agent has", returns : "json" } } ),
+			ApiContract::route( "/agent", "about", "About the agent", { get : {
+				summary : "The agent in full: model, window, tools and what this server can do (capabilities)", returns : "json" } } ),
+			ApiContract::route( "/health", "health", "About the agent", { get : {
+				summary : "Is the server up. Needs no token and says nothing else", returns : "json" } }, true ),
+			ApiContract::route( "/profiles", "profiles", "About the agent", { get : {
+				summary : "The models a caller may ask for with options.profile", returns : "json" } } ),
+			ApiContract::route( "/sessions/rename", "renameSession", "Conversations", { post : {
+				summary : "Names one of the caller's conversations",
+				body : { conversationId : "string", title : "string" }, returns : "json" } } ),
+			ApiContract::route( "/sessions/fork", "forkSession", "Conversations", { post : {
+				summary : "Copies a conversation under a new name",
+				body : { conversationId : "string", title : "string?" }, returns : "json" } } ),
+			ApiContract::route( "/sessions/delete", "deleteSession", "Conversations", { post : {
+				summary : "Deletes a conversation and its messages", body : { conversationId : "string" }, returns : "json" } } ),
+			ApiContract::route( "/sessions", "sessions", "Conversations", {
+				get : {
+					summary : "The caller's conversations, newest first. An admin may add all=1 for everyone's",
+					query : { limit : "integer?", source : "string?", all : "boolean?" }, returns : "json" },
+				post : { summary : "Starts a conversation", body : { title : "string?" }, returns : "json" } } ),
+			ApiContract::route( "/export", "export", "Conversations", { get : {
+				summary : "One conversation as a file, Markdown or a page of HTML",
+				query : { conversationId : "string", format : "string?" }, returns : "file" } } ),
+			ApiContract::route( "/whoami", "whoami", "About the agent", { get : {
+				summary : "Who the server takes the caller to be: id, scope and where the call came from", returns : "json" } } ),
+			ApiContract::route( "/preferences/set", "setPreference", "Preferences", { post : {
+				summary : "Keeps one setting of the caller", body : { key : "string", value : "string" }, returns : "json" } } ),
+			ApiContract::route( "/preferences/delete", "deletePreference", "Preferences", { post : {
+				summary : "Forgets one setting of the caller", body : { key : "string" }, returns : "json" } } ),
+			ApiContract::route( "/preferences", "preferences", "Preferences", { get : {
+				summary : "The caller's settings", returns : "json" } } ),
+			ApiContract::route( "/history", "history", "Conversations", { get : {
+				summary : "The messages of one conversation", query : { conversationId : "string" }, returns : "json" } } ),
+			ApiContract::route( "/clear", "clear", "Conversations", { post : {
+				summary : "Deletes the messages of a conversation, keeps the conversation",
+				body : { conversationId : "string?" }, returns : "json" } } ),
+			ApiContract::route( "/compact", "compact", "Conversations", { post : {
+				summary : "Summarizes the older messages and keeps the recent ones",
+				body : { conversationId : "string?", keepRecent : "integer?" }, returns : "json" } } ),
+			ApiContract::route( "/ping", "ping", "About the agent", { post : {
+				summary : "Asks a model for one word to see that it answers", body : { profile : "string?" }, returns : "json" } } ),
+			ApiContract::route( "/context", "context", "About the agent", { get : {
+				summary : "What the next turn would send, by part, against the model's window",
+				query : { conversationId : "string?" }, returns : "json" } } ),
+			ApiContract::route( "/status", "status", "About the agent", { get : {
+				summary : "The status items extensions show", query : { conversationId : "string?" }, returns : "json" } } ),
+			ApiContract::route( "/slots", "slots", "About the agent", { get : {
+				summary : "What extensions put in the page's slots", query : { conversationId : "string?" }, returns : "json" } } ),
+			ApiContract::route( "/commands", "commands", "Commands", { get : {
+				summary : "The slash commands this caller may run", returns : "json" } } ),
+			ApiContract::route( "/command", "command", "Commands", { post : {
+				summary : "Runs one slash command", body : { line : "string", conversationId : "string?" }, returns : "json" } } ),
+			ApiContract::route( "/notes/update", "updateNote", "Notes", { post : {
+				summary : "Changes a note", body : { scope : "string", id : "string", text : "string" }, returns : "json" } } ),
+			ApiContract::route( "/notes/remove", "removeNote", "Notes", { post : {
+				summary : "Removes a note. A note of the agent takes an admin", body : { scope : "string", id : "string" }, returns : "json" } } ),
+			ApiContract::route( "/notes", "notes", "Notes", {
+				get : { summary : "The notes about the caller and about the agent's own work", returns : "json" },
+				post : { summary : "Adds a note", body : { scope : "string", text : "string" }, returns : "json" } } )
+		]
+		if ( arguments.options.manageTokens ?: false ) {
+			list.append( ApiContract::route( "/tokens/revoke", "revokeToken", "Tokens", { post : {
+				summary : "Stops a token working. Admin only", body : { name : "string" }, returns : "json" } } ) )
+			list.append( ApiContract::route( "/tokens", "tokens", "Tokens", {
+				get : { summary : "The access tokens, never a secret. Admin only", returns : "json" },
+				post : {
+					summary : "Makes an access token. The secret is in this answer and nowhere else. Admin only",
+					body : { name : "string", scope : "string?", expires : "string?" }, returns : "json" } } ) )
+		}
+		list.append( ApiContract::route( "/openapi", "openapi", "About the agent", { get : {
+			summary : "This description of the API, as an OpenAPI 3 document", returns : "json" } } ) )
+		return list
+	}
+
+	/**
+	 * The frames of a stream, in the order a client sees them. Each is `event: <name>` then `data: <json>`.
+	 *
+	 * @return An array of { name, summary, fields : { name : "type" } }; a frame with no fields carries its text as it is
+	 */
+	static array function frames() {
+		return [
+			{ name : "thread", summary : "First frame: the id of this run, for cancel, steer and resume", fields : { threadId : "string" } },
+			{ name : "chunk", summary : "A piece of what the model is saying: text, or a JSON object for a typed piece", fields : {} },
+			{ name : "tool", summary : "A tool call started (status running) or finished (status ok); events only", fields : { id : "string", name : "string", arguments : "object", status : "string", ms : "integer" } },
+			{ name : "suspended", summary : "The run paused for approval; answer with resume; events only", fields : { threadId : "string", pendingActions : "array" } },
+			{ name : "error", summary : "The run failed", fields : { message : "string" } },
+			{ name : "done", summary : "Last frame, with the text [DONE]", fields : {} }
+		]
+	}
+
+	/**
+	 * @options As operations()
+	 *
+	 * @return The handler action of each route, in route order
+	 */
+	static array function actions( struct options = {} ) {
+		return ApiContract::operations( arguments.options ).map( ( op ) => op.action )
+	}
+
+	/** One entry of operations() */
+	static struct function route( required string path, required string action, required string tag, required struct methods, boolean open = false ) {
+		return { "path" : arguments.path, "action" : arguments.action, "tag" : arguments.tag, "methods" : arguments.methods, "open" : arguments.open }
+	}
+
+}

@@ -29,6 +29,7 @@ import bxModules.bxagents.models.util.EntryConfigReader;
 import bxModules.bxagents.models.api.AccessMode;
 
 import bxModules.bxagents.models.api.ApiPath;
+import bxModules.bxagents.models.api.ApiContract;
 
 class {
 
@@ -178,12 +179,26 @@ class {
 	 * @gated True when they go through `auth`
 	 */
 	private array function turnRoutes( required string base, required boolean gated ) {
-		return [
-			handlerRoute( "post", arguments.base & "/invoke", "invoke", arguments.gated ),
-			handlerRoute( "post", arguments.base & "/stream", "stream", arguments.gated ),
-			handlerRoute( "post", arguments.base & "/batch", "batch", arguments.gated ),
-			handlerRoute( "get", arguments.base & "/info", "info", arguments.gated )
-		]
+		return contractRoutes( arguments.base, arguments.gated, {}, [ "invoke", "stream", "batch", "info" ] )
+	}
+
+	/**
+	 * The routes of ApiContract, in its order, for the actions asked for (all when none are named). A route that takes
+	 * one verb is written with it; one that takes several (a list and a make) is written for any verb, and the handler
+	 * tells them apart. A route the contract marks open is never behind the gate.
+	 *
+	 * @base The path they sit under
+	 * @gated True when the routes go through `auth`
+	 * @options As ApiContract::operations()
+	 * @only The actions to write; empty for every one
+	 */
+	private array function contractRoutes( required string base, required boolean gated, struct options = {}, array only = [] ) {
+		var base = arguments.base
+		var gated = arguments.gated
+		var only = arguments.only
+		return ApiContract::operations( arguments.options )
+			.filter( ( op ) => !only.len() || only.contains( op.action ) )
+			.map( ( op ) => handlerRoute( op.methods.count() == 1 ? op.methods.keyArray()[ 1 ] : "", base & op.path, op.action, gated && !op.open ) )
 	}
 
 	/**
@@ -231,52 +246,11 @@ class {
 	 * @return The route statement lines
 	 */
 	private array function renderRunControlRoutes( required boolean gated, required string apiBase, boolean manageTokens = false ) {
-		var base = arguments.apiBase
-		var g = arguments.gated
-		var routes = [
-			"// Run control - the same path, served by handlers/AgentApi.bx",
-			handlerRoute( "post", base & "/events", "events", g ),
-			handlerRoute( "post", base & "/cancel", "cancel", g ),
-			handlerRoute( "post", base & "/steer", "steer", g ),
-			handlerRoute( "post", base & "/resume", "resume", g ),
-			handlerRoute( "get", base & "/pending", "pending", g ),
-			handlerRoute( "get", base & "/tools", "tools", g ),
-			handlerRoute( "get", base & "/agent", "about", g ),
-			// liveness: open to anyone, whatever the access, and says nothing else
-			handlerRoute( "get", base & "/health", "health", false ),
-			handlerRoute( "get", base & "/profiles", "profiles", g ),
-			// the specific routes first: a pattern also matches what follows it
-			handlerRoute( "post", base & "/sessions/rename", "renameSession", g ),
-			handlerRoute( "post", base & "/sessions/fork", "forkSession", g ),
-			handlerRoute( "post", base & "/sessions/delete", "deleteSession", g ),
-			// one route for the list (GET) and for starting one (POST), like notes: the handler tells them apart
-			handlerRoute( "", base & "/sessions", "sessions", g ),
-			handlerRoute( "get", base & "/export", "export", g ),
-			handlerRoute( "get", base & "/whoami", "whoami", g ),
-			handlerRoute( "post", base & "/preferences/set", "setPreference", g ),
-			handlerRoute( "post", base & "/preferences/delete", "deletePreference", g ),
-			handlerRoute( "get", base & "/preferences", "preferences", g ),
-			handlerRoute( "get", base & "/history", "history", g ),
-			handlerRoute( "post", base & "/clear", "clear", g ),
-			handlerRoute( "post", base & "/compact", "compact", g ),
-			handlerRoute( "post", base & "/ping", "ping", g ),
-			handlerRoute( "get", base & "/context", "context", g ),
-			handlerRoute( "get", base & "/status", "status", g ),
-			handlerRoute( "get", base & "/slots", "slots", g ),
-			handlerRoute( "get", base & "/commands", "commands", g ),
-			handlerRoute( "post", base & "/command", "command", g ),
-			handlerRoute( "post", base & "/notes/update", "updateNote", g ),
-			handlerRoute( "post", base & "/notes/remove", "removeNote", g ),
-			// one route for the list (GET) and for adding (POST): the handler tells them apart, as a pattern also
-			// matches what follows it and ColdBox does not keep a GET route from answering a POST
-			handlerRoute( "", base & "/notes", "notes", g )
-		]
-		if ( arguments.manageTokens ) {
-			// the specific route first, then the list (GET) and the making of one (POST) on one route, like notes
-			routes.append( handlerRoute( "post", base & "/tokens/revoke", "revokeToken", g ) )
-			routes.append( handlerRoute( "", base & "/tokens", "tokens", g ) )
-		}
-		return routes
+		var rest = ApiContract::actions( { manageTokens : arguments.manageTokens } ).filter( ( action ) => ![ "invoke", "stream", "batch", "info" ].contains( action ) )
+		return [ "// Run control, conversations, notes and the rest - the same path, served by handlers/AgentApi.bx" ].append(
+			contractRoutes( arguments.apiBase, arguments.gated, { manageTokens : arguments.manageTokens }, rest ),
+			true
+		)
 	}
 
 	/**

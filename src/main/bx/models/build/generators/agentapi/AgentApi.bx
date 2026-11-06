@@ -95,6 +95,11 @@ class {
 	/**
 	 * Whether an admin may manage access tokens over this API (agentApi.manageTokens), as the build stamped it in.
 	 */
+	/** Where this build serves the API, as agentApi.path (or the default) set it */
+	private string function apiPath() {
+		return "__API_PATH__"
+	}
+
 	private boolean function manageTokens() {
 		return "__MANAGE_TOKENS__" == "true"
 	}
@@ -186,6 +191,17 @@ class {
 			return
 		}
 		answer( event, done( { "profiles" : offered().list() } ) )
+	}
+
+	/**
+	 * This API described as an OpenAPI 3 document: every route, what it takes and gives, and the frames of a stream.
+	 * Sent as the document itself, not wrapped in an answer, so a tool that reads OpenAPI can be pointed at it.
+	 */
+	function openapi( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		event.renderData( type : "json", data : service().apiDocument( apiPath(), accessMode() ) )
 	}
 
 	/**

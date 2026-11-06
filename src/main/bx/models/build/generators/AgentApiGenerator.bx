@@ -33,28 +33,30 @@ class {
 		directoryCreate( path = handlerDir, createPath = true, ignoreExists = true )
 
 		var source = fileRead( getDirectoryFromPath( getCurrentTemplatePath() ) & "agentapi/AgentApi.bx", "UTF-8" )
-		var accessMarker = '"__ACCESS__"'
-		if ( !source.find( accessMarker ) ) {
-			throw( type = "BxAgents.AgentApiTemplateBroken", message = "agentapi/AgentApi.bx has lost its access marker" )
-		}
-		source = source.replace( accessMarker, '"' & AccessMode::of( arguments.agentApi ) & '"' )
-
-		var manageMarker = '"__MANAGE_TOKENS__"'
-		if ( !source.find( manageMarker ) ) {
-			throw( type = "BxAgents.AgentApiTemplateBroken", message = "agentapi/AgentApi.bx has lost its manage-tokens marker" )
-		}
-		source = source.replace( manageMarker, '"' & ( ( arguments.agentApi.manageTokens ?: false ) == true ? "true" : "false" ) & '"' )
-
-		var profilesMarker = '"__PROFILES__"'
-		if ( !source.find( profilesMarker ) ) {
-			throw( type = "BxAgents.AgentApiTemplateBroken", message = "agentapi/AgentApi.bx has lost its profiles marker" )
-		}
+		source = stamp( source, "__ACCESS__", AccessMode::of( arguments.agentApi ) )
+		source = stamp( source, "__API_PATH__", ApiPath::of( arguments.agentApi ) )
+		source = stamp( source, "__MANAGE_TOKENS__", ( arguments.agentApi.manageTokens ?: false ) == true ? "true" : "false" )
 		// the allow-list as JSON inside a string, parsed when the handler asks for it
-		source = source.replace( profilesMarker, '"' & Strings::bxLiteral( jsonSerialize( ( arguments.agentApi.profiles ?: [] ).map( p => toString( p ) ) ) ) & '"' )
+		source = stamp( source, "__PROFILES__", Strings::bxLiteral( jsonSerialize( ( arguments.agentApi.profiles ?: [] ).map( p => toString( p ) ) ) ) )
 
 		var path = handlerDir & "/AgentApi.bx"
 		fileWrite( path, source )
 		return { written : true, path : path }
+	}
+
+	/**
+	 * Puts a setting into the handler, in the one place its template keeps a quoted marker for it.
+	 *
+	 * @source The template
+	 * @marker The marker's name, kept in the template as "name"
+	 * @value What goes between the quotes, already safe for a string
+	 */
+	private string function stamp( required string source, required string marker, required string value ) {
+		var quoted = '"#arguments.marker#"'
+		if ( !arguments.source.find( quoted ) ) {
+			throw( type = "BxAgents.AgentApiTemplateBroken", message = "agentapi/AgentApi.bx has lost its #arguments.marker# marker" )
+		}
+		return arguments.source.replace( quoted, '"' & arguments.value & '"' )
 	}
 
 }
