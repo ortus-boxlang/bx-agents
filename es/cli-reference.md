@@ -519,7 +519,7 @@ bxAgents chat --no-tui                         # REPL simple línea por línea
 bxAgents chat --server [--port=<puerto>]       # aplicación completa, servidor propio desechable
 bxAgents chat --connect=http://127.0.0.1:8080  # aplicación completa, servidor que ya tienes en marcha
 bxAgents chat --connect=https://agent.example.com --token=<token>   # un servidor que pide uno
-bxAgents chat --user=alice                     # de quién son las notas y conversaciones (por defecto: tu usuario del SO)
+bxAgents chat --user=alice                     # de quién son las notas y conversaciones (por defecto: `local`, el único usuario de un servidor abierto)
 bxAgents chat --continue                       # abre la conversación más reciente, con su historial
 bxAgents chat --session=2                      # abre una por su número en /sessions, o por id
 ```
@@ -772,7 +772,7 @@ bxAgents notes export [--file=notes.json]
 bxAgents notes import --file=notes.json
 ```
 
-- `--scope` es `user` (por defecto) o `agent`; `list` sin él muestra ambos. `--user` indica de quién son las notas de usuario: por defecto, el usuario del sistema operativo. Las notas del agente pertenecen al `name` del agente.
+- `--scope` es `user` (por defecto) o `agent`; `list` sin él muestra ambos. `--user` indica de quién son las notas de usuario: por defecto `local`, el único usuario de un servidor abierto. Las notas del agente pertenecen al `name` del agente.
 - `stats` muestra cuánto llena cada alcance y el tamaño aproximado que añaden al prompt (unos cuatro caracteres por token; una estimación, no un recuento).
 - `export` escribe las notas como JSON, en `--file` o en pantalla. `import` añade las notas de un archivo así; una nota que ya existe se omite y una que no cabe en el límite se informa.
 - Ejecútalo donde está la base de datos: en el proyecto, o en un servidor con `BXAGENTS_DB` definido.
@@ -809,7 +809,7 @@ bxAgents sessions export --session=<número o id> [--file=chat.json] [--md] [--f
 bxAgents sessions import --file=chat.json [--name="Nuevo nombre"] [--user=NOMBRE]
 ```
 
-- Una conversación se elige por su número en `list`, o por su id o el comienzo de él. `--user` es de quién son las conversaciones: el usuario del sistema operativo por defecto.
+- Una conversación se elige por su número en `list`, o por su id o el comienzo de él. `--user` es de quién son las conversaciones: `local` por defecto, el único usuario de un servidor abierto.
 - `list`, `rename` y la parte de lista de `delete` solo tocan la base de datos. Los mensajes de una conversación viven en la [memoria](conventions/agent-yaml.md#ajustes) del agente, así que `fork` (que los copia) necesita un proyecto compilado, y `delete` también para olvidarlos. Solo alcanzan los mensajes que guarda una memoria que sobrevive al proceso (`file`, `jdbc`): la memoria `cache` por defecto desaparece al terminar el chat.
 - Ejecútalo donde está la base de datos: en el proyecto, o en un servidor con `BXAGENTS_DB` definido.
 - `export` escribe una conversación en un archivo JSON con el nombre de su título (`--file` para elegirlo, `--md` para una transcripción legible en Markdown) y nunca reemplaza un archivo salvo que añadas `--force`. El archivo contiene los datos de la conversación y sus mensajes tal como los guarda la memoria del agente. Incluye todo lo que se dijo, así que guárdalo donde guardarías la conversación.

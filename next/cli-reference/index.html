@@ -718,7 +718,7 @@ bxAgents chat --no-tui                         # plain line-by-line REPL
 bxAgents chat --server [--port=&lt;port&gt;]         # full app, own throwaway server
 bxAgents chat --connect=http://127.0.0.1:8080  # full app, server you already run
 bxAgents chat --connect=https://agent.example.com --token=&lt;token&gt;   # a server that wants one
-bxAgents chat --user=alice                     # whose notes and conversations (default: your OS user)
+bxAgents chat --user=alice                     # whose notes and conversations (default: `local`, the one user of an open server)
 bxAgents chat --continue                       # open the most recent conversation, with its history
 bxAgents chat --session=2                      # open one by its number in /sessions, or by id
 </code></pre>
@@ -978,7 +978,7 @@ bxAgents notes export [--file=notes.json]
 bxAgents notes import --file=notes.json
 </code></pre>
 <ul>
-<li><code>--scope</code> is <code>user</code> (the default) or <code>agent</code>; <code>list</code> without it shows both. <code>--user</code> is whose user notes: the operating system user by default. Agent notes belong to the agent's <code>name</code>.</li>
+<li><code>--scope</code> is <code>user</code> (the default) or <code>agent</code>; <code>list</code> without it shows both. <code>--user</code> is whose user notes: <code>local</code> by default, the one user an open server has. Agent notes belong to the agent's <code>name</code>.</li>
 <li><code>stats</code> shows how full each scope is and the rough size they add to the prompt (about four characters to a token; an estimate, not a count).</li>
 <li><code>export</code> writes the notes as JSON, to <code>--file</code> or to the screen. <code>import</code> adds the notes of such a file; a note already there is not added twice and one that does not fit the limit is reported (the command then exits <code>1</code>).</li>
 <li>Run it where the database is: in the project, or on a server with <code>BXAGENTS_DB</code> set.</li>
@@ -1007,7 +1007,7 @@ bxAgents sessions export --session=&lt;number or id&gt; [--file=chat.json] [--md
 bxAgents sessions import --file=chat.json [--name=&quot;New name&quot;] [--user=NAME]
 </code></pre>
 <ul>
-<li>A conversation is picked by its number in <code>list</code>, or by its id or the start of it. <code>--user</code> is whose conversations: the operating system user by default.</li>
+<li>A conversation is picked by its number in <code>list</code>, or by its id or the start of it. <code>--user</code> is whose conversations: <code>local</code> by default, the one user an open server has.</li>
 <li><code>list</code>, <code>rename</code> and the list part of <code>delete</code> only touch the database. The messages of a conversation live in the agent's <a href="/next/conventions/agent-yaml/index.html#settings">memory</a>, so <code>fork</code> (which copies them) needs a built project, and so does <code>delete</code> to forget them too. They reach only messages a memory that outlives the process keeps (<code>file</code>, <code>jdbc</code>): the default <code>cache</code> memory is gone when the chat ends.</li>
 <li>Run it where the database is: in the project, or on a server with <code>BXAGENTS_DB</code> set.</li>
 <li><code>export</code> writes one conversation to a JSON file named after its title (<code>--file</code> to choose, <code>--md</code> for a readable Markdown transcript instead) and never replaces a file unless you add <code>--force</code>. The file holds the conversation's details and its messages as the agent's memory holds them. It contains everything that was said, so keep it where you would keep the conversation.</li>

@@ -262,11 +262,27 @@ y añade:
 
 `cancel` detiene la ejecución en su siguiente punto de control (antes de la siguiente llamada al modelo o a una tool, no a mitad de un token). `steer` inserta un mensaje en una ejecución en curso. `resume` acepta `approve`, `approve_session` o `reject` y transmite el resto del turno. Una ejecución pertenece a quien la inició: `pending` responde "nada pendiente" y `resume` responde `403` a cualquier otro.
 
-Envía un `conversationId` con `/events` para guardar el turno en una conversación: el servidor la lista a nombre de quien llama (el nombre del token usado, o `api` en una ruta abierta) y la memoria del agente guarda sus mensajes con el mismo id. `sessions`, `history`, `clear` y `compact` trabajan solo con las conversaciones de quien llama; el id de otra persona da `404`, igual que uno que no existe. Responden `404` cuando el servidor no tiene base de datos de chat compartida, y `compact` informa `available: false` cuando la memoria del agente no tiene modelo de resumen.
+Envía un `conversationId` con `/events` para guardar el turno en una conversación: el servidor la lista a nombre de quien llama (el nombre del token usado, o `local` en una ruta abierta) y la memoria del agente guarda sus mensajes con el mismo id. `sessions`, `history`, `clear` y `compact` trabajan solo con las conversaciones de quien llama; el id de otra persona da `404`, igual que uno que no existe. Responden `404` cuando el servidor no tiene base de datos de chat compartida, y `compact` informa `available: false` cuando la memoria del agente no tiene modelo de resumen.
 
-Las rutas `notes` responden `404` en un agente sin bloque [`notes`](agent-yaml.md#notas). Cada quien lee y cambia sus propias notas de usuario (el propietario es el nombre del token que usó, o `api` en una ruta abierta) y las del agente. Cualquiera puede añadir a ambos alcances o editar una nota; quitar una nota del agente requiere un token `admin` (si no, `403`), porque cambia lo que sabe el agente de todos los usuarios.
+Las rutas `notes` responden `404` en un agente sin bloque [`notes`](agent-yaml.md#notas). Cada quien lee y cambia sus propias notas de usuario (el propietario es el nombre del token que usó, o `local` en una ruta abierta) y las del agente. Cualquiera puede añadir a ambos alcances o editar una nota; quitar una nota del agente requiere un token `admin` (si no, `403`), porque cambia lo que sabe el agente de todos los usuarios.
 
 Estas rutas están detrás de la misma compuerta `x-bxagents-token` que las otras cuatro (un token ausente o incorrecto es un `401`), y `agentApi.enabled: false` las elimina todas.
+
+### Respuestas, errores y quién llama
+
+Toda respuesta es JSON con `success`. Un fallo es `{ "success": false, "error": "texto para personas", "code": "codigo_maquina" }` con el estado que significa el código:
+
+| Estado | Códigos |
+|---|---|
+| 400 | `bad_request`, `bad_profile`, `bad_attachment` |
+| 401 | `unauthorized` |
+| 403 | `forbidden`, `csrf`, `not_your_run` |
+| 404 | `not_found`, `no_notes` |
+| 409 | `busy`, `conflict` |
+| 429 | `rate_limited` |
+| 500 | `internal` |
+
+En una ruta abierta, todos son el único usuario `local`, en cualquier superficie, así que el chat del terminal, la página web y un script comparten conversaciones y notas. Quien llama puede decir qué superficie es con la cabecera `x-bxagents-source` (`web`, `terminal` o cualquier nombre simple en minúsculas; `api` si no envía ninguna). La lista de conversaciones lo registra: `GET /__bxagents/sessions` devuelve un `source` por conversación, y `?source=terminal` lista solo esas. Las conversaciones hechas antes de que se registrara tienen el origen en blanco.
 
 Como la ruta está reservada, `build` **rechaza** cualquier entrada de `gateways/` cuyo `path` sea `/__bxagents` o cuelgue por debajo. Dos rutas en un mismo punto de montaje son un conflicto real: una eclipsaría silenciosamente a la otra, y la tuya sería la que nunca responde.
 
