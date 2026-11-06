@@ -57,7 +57,10 @@ class extends="testbox.system.BaseSpec" {
 				var history = session.history();
 
 				expect( history.len() ).toBeGTE( 2 );
-				expect( history[ 1 ] ).toBe( { role : "you", text : "hello there" } );
+				expect( history[ 1 ].role ).toBe( "you" );
+				expect( history[ 1 ].text ).toBe( "hello there" );
+				expect( history[ 1 ].body ).toBe( "hello there" );
+				expect( history[ 1 ].images ).toBeEmpty();
 				expect( history[ 2 ].role ).toBe( "agent" );
 			} );
 
@@ -144,7 +147,7 @@ class extends="testbox.system.BaseSpec" {
 						{ role : "assistant", content : [ { type : "text", text : "hello" }, { type : "unknown" } ] }
 					] );
 
-					expect( history ).toBe( [ { role : "you", text : "hi" }, { role : "agent", text : "hello" } ] );
+					expect( history.map( ( m ) => m.role & ":" & m.text ) ).toBe( [ "you:hi", "agent:hello" ] );
 				} );
 
 				it( "marks a picture with [image] so a resumed conversation shows one was there", function() {
@@ -152,7 +155,10 @@ class extends="testbox.system.BaseSpec" {
 						{ role : "user", content : [ { type : "text", text : "what is this" }, { type : "image_url" } ] }
 					] );
 
-					expect( history ).toBe( [ { role : "you", text : "what is this" & char( 10 ) & "[image]" } ] );
+					expect( history[ 1 ].text ).toBe( "what is this" & char( 10 ) & "[image]" );
+					// for a page: the words alone, and a picture that is not data stays out
+					expect( history[ 1 ].body ).toBe( "what is this" );
+					expect( history[ 1 ].images ).toBeEmpty();
 				} );
 			} );
 

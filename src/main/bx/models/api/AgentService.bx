@@ -152,15 +152,19 @@ class {
 			"contextWindow" : facts.contextWindow,
 			"vision"        : facts.vision,
 			"toolCount"     : config.toolCount ?: 0,
+			"memoryCount"   : config.memoryCount ?: 0,
+			"subAgents"     : ( config.subAgents ?: [] ).map( ( sub ) => sub.name ?: "" ),
 			"capabilities"  : {
-				"events"      : true, "cancel" : true, "steer" : true, "approvals" : true, "attachments" : true,
-				"notes"       : notes( arguments.caller ).keeps(),
-				"sessions"    : keepsSessions(),
-				"profiles"    : variables.offered.any(),
-				"commands"    : true,
-				"context"     : true,
-				"status"      : new "models.extensions.ServedStatus@bxagents"().available(),
-				"slots"       : new "models.extensions.ServedSlots@bxagents"().available()
+				"streaming"     : true, "reasoning" : true, "toolCalls" : true, "history" : true,
+				"events"        : true, "cancel" : true, "steer" : true, "approvals" : true, "attachments" : true,
+				"commands"      : true, "context" : true,
+				"compact"       : conversation( arguments.caller ).canCompact(),
+				"notes"         : notes( arguments.caller ).keeps(),
+				"conversations" : keepsSessions(),
+				"preferences"   : keepsSessions(),
+				"profiles"      : variables.offered.any(),
+				"status"        : new "models.extensions.ServedStatus@bxagents"().available(),
+				"slots"         : new "models.extensions.ServedSlots@bxagents"().available()
 			}
 		} )
 	}

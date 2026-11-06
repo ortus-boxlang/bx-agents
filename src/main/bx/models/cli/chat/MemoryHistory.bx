@@ -8,7 +8,8 @@ class {
 	/**
 	 * @messages bx-ai memory messages: [ { role, content } ]
 	 *
-	 * @return [ { role : "you" | "agent", text } ] in order
+	 * @return [ { role : "you" | "agent", text, body, images } ] in order. `text` is what to print in a terminal (a picture
+	 *         shows as [image]); `body` is the words alone and `images` the pictures that came with it as data: addresses, for a page.
 	 */
 	array function of( required array messages ) {
 		var out = []
@@ -24,9 +25,49 @@ class {
 			if ( !len( text ) ) {
 				continue
 			}
-			out.append( { role : role == "user" ? "you" : "agent", text : text } )
+			out.append( { role : role == "user" ? "you" : "agent", text : text, body : wordsOf( message.content ?: "" ), images : picturesOf( message.content ?: "" ) } )
 		}
 		return out
+	}
+
+	/**
+	 * @content A string, or a list of parts
+	 *
+	 * @return The words of a message without the marker a picture leaves in `text`
+	 */
+	private string function wordsOf( required any content ) {
+		if ( isSimpleValue( arguments.content ) ) {
+			return trim( arguments.content )
+		}
+		var pieces = []
+		if ( isArray( arguments.content ) ) {
+			for ( var part in arguments.content ) {
+				if ( isSimpleValue( part ) ) {
+					pieces.append( part )
+				} else if ( isStruct( part ) && ( part.type ?: "text" ) == "text" ) {
+					pieces.append( part.text ?: "" )
+				}
+			}
+		}
+		return trim( pieces.toList( char( 10 ) ) )
+	}
+
+	/**
+	 * @return The pictures of a message that were sent as data: addresses (a picture that is a link elsewhere is left out)
+	 */
+	private array function picturesOf( required any content ) {
+		var found = []
+		if ( isArray( arguments.content ) ) {
+			for ( var part in arguments.content ) {
+				if ( isStruct( part ) && ( part.type ?: "" ) == "image_url" ) {
+					var address = ( part.image_url ?: {} ).url ?: ""
+					if ( reFindNoCase( "^data:image/", address ) ) {
+						found.append( address )
+					}
+				}
+			}
+		}
+		return found
 	}
 
 	/**
