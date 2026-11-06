@@ -15,21 +15,55 @@ class {
 	}
 
 	/**
+	 * Makes service() with no file use this one, for code that wires a vault to a known file (tests, the CLI).
+	 *
+	 * @databaseFile The SQLite file
+	 *
+	 * @return This
+	 */
+	any function pin( required string databaseFile ) {
+		variables.pinned = arguments.databaseFile
+		return this
+	}
+
+	/**
 	 * @databaseFile The SQLite file. Leave blank inside the built app: BXAGENTS_DB, or the app's own datasource, names it
 	 *
 	 * @return A VaultService, the same one for the same file
 	 */
 	any function service( string databaseFile = "" ) {
-		var file = len( arguments.databaseFile ) ? arguments.databaseFile : appDatabaseFile()
+		var explicit = len( arguments.databaseFile ) ? arguments.databaseFile : ( variables.pinned ?: "" )
+		var file = len( explicit ) ? explicit : appDatabaseFile()
 		file = file.replace( "\", "/", "all" )
 		if ( !static.cache.keyExists( file ) ) {
-			var store = len( arguments.databaseFile )
+			var store = len( explicit )
 				? new "models.store.ChatStore@bxagents"( { driver : "sqlite", database : file } )
 				: new "models.store.ChatStore@bxagents"( "" )
 			store.migrate()
 			static.cache[ file ] = new "models.vault.VaultService@bxagents"( store, new "models.vault.VaultKey@bxagents"( getDirectoryFromPath( file ) ) )
 		}
 		return static.cache[ file ]
+	}
+
+	/**
+	 * Adds the vault tools to an agent, from the `vault` block of Agent.yaml:
+	 *
+	 *   vault:
+	 *     tools: true      # vault_list and vault_request (default true)
+	 *
+	 * The generated agent factory calls this when it builds an agent.
+	 *
+	 * @agent The AiAgent
+	 * @config The `vault` block
+	 * @agentName The agent's name
+	 *
+	 * @return The agent
+	 */
+	any function attach( required any agent, required struct config, required string agentName ) {
+		if ( arguments.config.tools ?: true ) {
+			arguments.agent.withTools( new "models.vault.VaultTools@bxagents"( this, arguments.agentName ).tools() )
+		}
+		return arguments.agent
 	}
 
 	/**

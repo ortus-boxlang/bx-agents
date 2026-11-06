@@ -134,6 +134,21 @@ class {
 	}
 
 	/**
+	 * Notes that the agent asked a person to add a secret. Stores nothing: the person adds it themselves, in a form
+	 * that never goes through the chat.
+	 *
+	 * @options { scope, owner, actor, via }
+	 *
+	 * @return { name, scope, owner, stored : whether the caller already has it }
+	 */
+	struct function request( required string name, struct options = {} ) {
+		var target = target( arguments.name, arguments.options )
+		var stored = !isNull( lookupFor( target.name, target.owner ) )
+		record( "request", target, { actor : arguments.options.actor ?: target.owner, via : arguments.options.via ?: "", ok : !stored } )
+		return { name : target.name, scope : target.scope, owner : target.owner, stored : stored }
+	}
+
+	/**
 	 * @return True when a secret was removed
 	 */
 	boolean function remove( required string name, struct options = {} ) {

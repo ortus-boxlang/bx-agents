@@ -70,6 +70,7 @@ class {
 		}
 		validateAgentApi( arguments.resolvedConfig, arguments.discovery, errors )
 		validateNotes( arguments.resolvedConfig, errors )
+		validateVault( arguments.resolvedConfig, errors )
 
 		return { errors : errors, warnings : warnings }
 	}
@@ -885,6 +886,35 @@ class {
 			if ( structKeyExists( notes, flag ) && !isBoolean( notes[ flag ] ) ) {
 				arguments.errors.append( "Agent.bx's 'notes.#flag#' must be true or false" )
 			}
+		}
+	}
+
+	/**
+	 * Validates the optional `vault` block. Present (even empty) gives the agent the vault_list and vault_request
+	 * tools; absent leaves them out. Using ${vault.NAME} in the config needs no block.
+	 *
+	 *   vault:
+	 *     tools: true      # vault_list and vault_request (default true)
+	 *
+	 * @resolvedConfig The resolved config struct from AgentConfigResolver.resolve() - only `vault` is used
+	 * @errors Accumulator array - append() any validation errors found
+	 */
+	private void function validateVault( required struct resolvedConfig, required array errors ) {
+		if ( !structKeyExists( arguments.resolvedConfig, "vault" ) ) {
+			return
+		}
+		var vault = arguments.resolvedConfig.vault
+		if ( !isStruct( vault ) ) {
+			arguments.errors.append( "Agent.bx's 'vault' must be a struct such as { tools: true }" )
+			return
+		}
+		for ( var key in vault ) {
+			if ( key != "tools" ) {
+				arguments.errors.append( "Agent.bx's 'vault' has an unknown key [#key#] - the only key is tools" )
+			}
+		}
+		if ( structKeyExists( vault, "tools" ) && !isBoolean( vault.tools ) ) {
+			arguments.errors.append( "Agent.bx's 'vault.tools' must be true or false" )
 		}
 	}
 
