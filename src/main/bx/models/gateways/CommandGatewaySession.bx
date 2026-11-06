@@ -15,6 +15,10 @@
  *       conversation: true             # also /new, /clear, /compact, /sessions and /resume
  *       allow: [ help, info, tools, notes, remember, model ]
  *       admins: [ "12345" ]            # gateway user ids that may run admin commands
+ *
+ * Each person's chats are their own: the agent is given the person (`slack:U123`, the platform and the user id
+ * there) and the thread, so memory, notes and the conversation list are kept apart, and the conversations are in
+ * the same list the web page and the terminal show, marked with the platform they started on.
  */
 import bxModules.bxai.models.gateway.IGateway;
 import bxModules.bxai.models.gateway.contracts.GatewayMessage;
@@ -33,7 +37,7 @@ class extends="bxModules.bxai.models.gateway.GatewaySession" {
 	 *
 	 * The other arguments are GatewaySession's own.
 	 */
-	function init( required any agent, required any gateways, string policy = "queue", numeric maxQueueDepth = 50, any checkpointer, struct commands = {}, boolean attachments = true, any intake ) {
+	function init( required any agent, required any gateways, string policy = "queue", numeric maxQueueDepth = 50, any checkpointer, struct commands = {}, boolean attachments = true, any intake, any store ) {
 		var own = { agent : arguments.agent, gateways : arguments.gateways, policy : arguments.policy, maxQueueDepth : arguments.maxQueueDepth }
 		if ( !isNull( arguments.checkpointer ) ) {
 			own.checkpointer = arguments.checkpointer
@@ -48,8 +52,8 @@ class extends="bxModules.bxai.models.gateway.GatewaySession" {
 		variables.admins = arguments.commands.admins ?: []
 		// a registry can be handed in whole (a module's own commands); otherwise the app's commands (the built-ins and its extensions'), narrowed to the allowed ones
 		variables.registry = arguments.commands.registry ?: new "models.chat.commands.CommandCatalog@bxagents"().forApplication().only( arguments.commands.allow ?: ( ( arguments.commands.conversation ?: false ) ? static.SAFE_COMMANDS.merge( static.CONVERSATION_COMMANDS ) : static.SAFE_COMMANDS ) )
-		// the conversations each person has had here, for /sessions and /resume; a store can be handed in
-		variables.sessions = arguments.commands.sessions ?: new "models.gateways.MemorySessions@bxagents"()
+		// the conversations, for /sessions and /resume: the shared chat database, the same list the web page and the terminal show
+		variables.sessions = arguments.commands.sessions ?: new "models.store.SessionStore@bxagents"( isNull( arguments.store ) ? new "models.store.ChatStore@bxagents"( "" ) : arguments.store )
 		// where each chat is now: /new and /resume move it to another thread
 		variables.threads = new "models.gateways.ChatThreads@bxagents"()
 		variables.service = new "models.chat.commands.CommandService@bxagents"( agent : arguments.agent, sessions : variables.sessions, registry : variables.registry )
@@ -117,9 +121,11 @@ class extends="bxModules.bxai.models.gateway.GatewaySession" {
 		if ( variables.commandsOn && arguments.message.getType() == "message" ) {
 			// keep the conversation on the list, so /sessions shows it
 			variables.sessions.touch(
-				len( arguments.message.getContext().getUserID() ) ? arguments.message.getContext().getUserID() : "gateway",
+				personOf( arguments.message.getContext() ),
 				resolveThreadId( arguments.message, arguments.sourceGateway ),
-				isSimpleValue( arguments.message.getText() ) ? arguments.message.getText() : ""
+				isSimpleValue( arguments.message.getText() ) ? arguments.message.getText() : "",
+				2,
+				arguments.message.getContext().getGateway()
 			)
 		}
 		return done
@@ -184,6 +190,54 @@ class extends="bxModules.bxai.models.gateway.GatewaySession" {
 
 	// ----------------------------------------------------------------------------------
 
+	/**
+	 * bx-ai's own turn, with one difference: the agent is told whose conversation it is. bx-ai runs a turn with only
+	 * the thread id, which puts every chat on every platform in one memory bucket; the agent's memory is keyed by
+	 * ( user, conversation ), so each turn here names both, and the conversation list can find the messages again.
+	 * Everything else is bx-ai's, line for line.
+	 */
+	private void function dispatchTurnSync( required GatewayMessage message, required IGateway sourceGateway, required string threadId ) {
+		var context           = arguments.message.getContext()
+		var supportsStreaming = arguments.sourceGateway.supports( "streaming" )
+		var accumulated       = ""
+
+		if ( supportsStreaming ) {
+			deliverStreamEvent( arguments.sourceGateway, context, GatewayEvent.TYPES.RESPONSE_STARTED, "" )
+		}
+
+		variables.agent.stream(
+			( chunk ) => {
+				var text = extractChunkText( chunk )
+				if ( len( text ) ) {
+					accumulated &= text
+					if ( supportsStreaming ) {
+						deliverStreamEvent( arguments.sourceGateway, context, GatewayEvent.TYPES.RESPONSE_DELTA, text )
+					}
+				}
+			},
+			arguments.message.getText(),
+			{},
+			{ threadId : arguments.threadId, userId : personOf( context ), conversationId : arguments.threadId }
+		)
+
+		if ( supportsStreaming ) {
+			deliverStreamEvent( arguments.sourceGateway, context, GatewayEvent.TYPES.RESPONSE_COMPLETED, accumulated )
+		} else {
+			arguments.sourceGateway.deliver(
+				new GatewayEvent( type : GatewayEvent.TYPES.RESPONSE_COMPLETED, data : { content : accumulated }, context : context ),
+				context
+			)
+		}
+	}
+
+	/**
+	 * @return Who a message is from, as the conversation list, the notes and the agent's memory know them: the platform and the user there, `slack:U123`
+	 */
+	private string function personOf( required any context ) {
+		var user = len( arguments.context.getUserID() ) ? arguments.context.getUserID() : arguments.context.getConversationID()
+		return arguments.context.getGateway() & ":" & user
+	}
+
 	private string function chatKey( required any context ) {
 		return arguments.context.getGateway() & "|" & arguments.context.getConversationID() & "|" & arguments.context.getThreadID()
 	}
@@ -231,7 +285,7 @@ class extends="bxModules.bxai.models.gateway.GatewaySession" {
 	 */
 	private void function answer( required GatewayMessage message, required IGateway sourceGateway, required any line ) {
 		var context = arguments.message.getContext()
-		var who = len( context.getUserID() ) ? context.getUserID() : "gateway"
+		var who = personOf( context )
 		var text = ""
 		try {
 			var reply = variables.service.execute(
@@ -240,7 +294,7 @@ class extends="bxModules.bxai.models.gateway.GatewaySession" {
 				// the command layer always reads the slash
 				"/" & arguments.line.name() & " " & arguments.line.args(),
 				"gateway",
-				variables.admins.containsNoCase( who )
+				variables.admins.containsNoCase( context.getUserID() )
 			)
 			var choose = reply.blocks.filter( b => b.type == "choose" )
 			if ( choose.len() ) {
