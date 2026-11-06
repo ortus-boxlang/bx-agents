@@ -1,0 +1,105 @@
+/**
+ * Who is calling the agent, the same shape on every surface: the web page, the terminal, an HTTP client and a
+ * gateway. A conversation, a run and a note belong to the caller's id, so one person is the same person
+ * wherever they come in from.
+ *
+ *   id      what ownership is keyed on (`local`, a token's name, an account id, `slack:U123`)
+ *   name    what to show for the caller
+ *   scope   `chat` (own conversations and runs) or `admin` (also what the app's operator may do)
+ *   source  which surface the call came in on: `web`, `terminal`, `api`, or a gateway's platform name
+ */
+class {
+
+	/** What a caller with no credentials is, on a server open on this machine: one user shared by every surface */
+	static string function localId() {
+		return "local"
+	}
+
+	/**
+	 * @source The surface the call came in on
+	 *
+	 * @return The one user an open server on this machine has, with the operator's scope
+	 */
+	static any function localUser( string source = "api" ) {
+		return new Caller( id = Caller::localId(), name = "local", scope = "admin", source = arguments.source )
+	}
+
+	/**
+	 * @name The token's name, which is who is calling
+	 * @scope `chat` or `admin`
+	 */
+	static any function fromToken( required string name, string scope = "chat" ) {
+		return new Caller( id = arguments.name, name = arguments.name, scope = arguments.scope, source = "api" )
+	}
+
+	/**
+	 * @id The signed-in account's id
+	 * @scope `chat` unless the account is an operator
+	 */
+	static any function fromAccount( required string id, string name = "", string scope = "chat" ) {
+		return new Caller( id = arguments.id, name = len( arguments.name ) ? arguments.name : arguments.id, scope = arguments.scope, source = "web" )
+	}
+
+	/**
+	 * @platform The platform's name, such as `slack` or `telegram`
+	 * @userId The platform's own id for the person
+	 */
+	static any function fromGateway( required string platform, required string userId ) {
+		return new Caller( id = arguments.platform & ":" & arguments.userId, name = arguments.userId, scope = "chat", source = arguments.platform )
+	}
+
+	/**
+	 * @id What ownership is keyed on; never empty
+	 * @name What to show; the id when blank
+	 * @scope `chat` or `admin`
+	 * @source The surface: lower case letters, digits, `-` and `_`
+	 */
+	function init( required string id, string name = "", string scope = "chat", string source = "api" ) {
+		if ( !len( trim( arguments.id ) ) ) {
+			throw( type = "BxAgents.InvalidCaller", message = "A caller needs an id" )
+		}
+		if ( !listFindNoCase( "chat,admin", arguments.scope ) ) {
+			throw( type = "BxAgents.InvalidCaller", message = "A caller's scope is chat or admin, not [#arguments.scope#]" )
+		}
+		if ( !reFind( "^[a-z0-9][a-z0-9_-]{0,31}$", arguments.source ) ) {
+			throw( type = "BxAgents.InvalidCaller", message = "A caller's source is lower case letters, digits, - and _, up to 32, not [#arguments.source#]" )
+		}
+		variables.callerId = arguments.id
+		variables.callerName = len( arguments.name ) ? arguments.name : arguments.id
+		variables.callerScope = lCase( arguments.scope )
+		variables.callerSource = arguments.source
+		return this
+	}
+
+	string function id() {
+		return variables.callerId
+	}
+
+	string function name() {
+		return variables.callerName
+	}
+
+	string function scope() {
+		return variables.callerScope
+	}
+
+	string function source() {
+		return variables.callerSource
+	}
+
+	boolean function isAdmin() {
+		return variables.callerScope == "admin"
+	}
+
+	/**
+	 * @return The same caller, coming in on another surface
+	 */
+	any function via( required string source ) {
+		return new Caller( id = variables.callerId, name = variables.callerName, scope = variables.callerScope, source = arguments.source )
+	}
+
+	struct function toStruct() {
+		return { "id" : variables.callerId, "name" : variables.callerName, "scope" : variables.callerScope, "source" : variables.callerSource }
+	}
+
+}

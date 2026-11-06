@@ -1,0 +1,48 @@
+import bxModules.bxagents.models.api.Caller;
+
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "api.Caller", function() {
+
+			it( "is one shared user on an open server, whichever surface it comes in on", function() {
+				var web = new bxagents.models.api.Caller( id = "local", scope = "admin", source = "web" );
+				var tui = web.via( "terminal" );
+
+				expect( tui.id() ).toBe( web.id() );
+				expect( tui.source() ).toBe( "terminal" );
+				expect( tui.isAdmin() ).toBeTrue();
+			} );
+
+			it( "names a token's owner by the token and keeps its scope", function() {
+				var c = new bxagents.models.api.Caller( id = "ci", scope = "chat", source = "api" );
+
+				expect( c.name() ).toBe( "ci" );
+				expect( c.isAdmin() ).toBeFalse();
+			} );
+
+			it( "refuses an empty id, an unknown scope and a source that is not a plain name", function() {
+				expect( function() { new bxagents.models.api.Caller( id = " " ); } ).toThrow( "BxAgents.InvalidCaller" );
+				expect( function() { new bxagents.models.api.Caller( id = "a", scope = "root" ); } ).toThrow( "BxAgents.InvalidCaller" );
+				expect( function() { new bxagents.models.api.Caller( id = "a", source = "Web Page" ); } ).toThrow( "BxAgents.InvalidCaller" );
+			} );
+
+			it( "builds the caller each surface has", function() {
+				expect( Caller::localUser( "terminal" ).toStruct() ).toBe( { "id" : "local", "name" : "local", "scope" : "admin", "source" : "terminal" } );
+				expect( Caller::fromToken( "ci", "chat" ).id() ).toBe( "ci" );
+				expect( Caller::fromAccount( "ada" ).source() ).toBe( "web" );
+				expect( Caller::fromGateway( "slack", "U123" ).id() ).toBe( "slack:U123" );
+				expect( Caller::fromGateway( "slack", "U123" ).source() ).toBe( "slack" );
+			} );
+
+			it( "reports itself without anything secret", function() {
+				var data = new bxagents.models.api.Caller( id = "ada", name = "Ada", scope = "chat", source = "web" ).toStruct();
+
+				expect( data.keyList().listSort( "text" ) ).toBe( "id,name,scope,source" );
+				expect( data.name ).toBe( "Ada" );
+			} );
+
+		} );
+	}
+
+}

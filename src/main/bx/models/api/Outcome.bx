@@ -1,0 +1,46 @@
+/**
+ * What a service call answers: it worked, with data, or it did not, with a code a client can act on and a
+ * reason a person can read. The service never picks an HTTP status; ApiEdge turns the code into one, in one place.
+ */
+class {
+
+	/**
+	 * @data What the call produced
+	 */
+	static any function done( any data = {} ) {
+		return new Outcome( ok = true, data = arguments.data )
+	}
+
+	/**
+	 * @code A name from ApiEdge's list, such as `not_found` or `forbidden`
+	 * @reason What to tell the person
+	 */
+	static any function failed( required string code, string reason = "" ) {
+		return new Outcome( ok = false, code = arguments.code, reason = arguments.reason )
+	}
+
+	function init( required boolean ok, string code = "", string reason = "", any data = {} ) {
+		variables.worked = arguments.ok
+		variables.failureCode = arguments.code
+		variables.failureReason = arguments.reason
+		variables.payload = arguments.data
+		return this
+	}
+
+	boolean function succeeded() {
+		return variables.worked
+	}
+
+	string function code() {
+		return variables.failureCode
+	}
+
+	string function reason() {
+		return variables.failureReason
+	}
+
+	any function data() {
+		return variables.payload
+	}
+
+}
