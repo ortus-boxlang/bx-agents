@@ -1,0 +1,177 @@
+/**
+ * The vault screen: a list with keys to add, edit, remove and switch scope, driven by a scripted screen that
+ * answers each list and each question in turn. A value is only ever asked for in the hidden box.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "VaultMode", function() {
+
+			function scripted( required array picks, array answers = [], array secrets = [], array choices = [] ) {
+				var s = { picks : picks.duplicate(), answers : answers.duplicate(), secrets : secrets.duplicate(), choices : choices.duplicate(), shown : [], printed : [], asked : [], askedSecret : [] }
+				s.chooseKeys = ( title, lines, shownChoices, keys, footer ) => {
+					s.shown.append( { title : title, lines : lines, choices : shownChoices, keys : keys, footer : footer } );
+					if ( !s.picks.len() ) {
+						return nullValue();
+					}
+					var next = s.picks[ 1 ];
+					s.picks.deleteAt( 1 );
+					return next;
+				};
+				s.ask = ( title, help, initial ) => {
+					s.asked.append( { title : title, initial : initial } );
+					if ( !s.answers.len() ) {
+						return nullValue();
+					}
+					var next = s.answers[ 1 ];
+					s.answers.deleteAt( 1 );
+					return next;
+				};
+				s.askSecret = ( title, help ) => {
+					s.askedSecret.append( title );
+					if ( !s.secrets.len() ) {
+						return nullValue();
+					}
+					var next = s.secrets[ 1 ];
+					s.secrets.deleteAt( 1 );
+					return next;
+				};
+				s.choose = ( title, lines, shownChoices ) => {
+					if ( !s.choices.len() ) {
+						return nullValue();
+					}
+					var next = s.choices[ 1 ];
+					s.choices.deleteAt( 1 );
+					return next;
+				};
+				s.print = ( style, text ) => s.printed.append( style & ": " & text );
+				return s;
+			}
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-vaultmode-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.service = new bxagents.models.vault.VaultService( store, new bxagents.models.vault.VaultKey( dir ) );
+				variables.vault = new bxagents.models.cli.chat.LocalVault( service, "alice" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function open( required any screen ) {
+				new bxagents.models.cli.chat.VaultMode( screen, vault, "alice", "helper" ).run();
+			}
+
+			it( "lists the person's secrets with what each is for and where it may go, never a value", function() {
+				service.add( "GMAIL_TOKEN", "ya29.hidden", { scope : "user", owner : "alice", description : "inbox", hosts : [ "gmail.googleapis.com" ] } );
+				service.add( "SHARED", "agent-hidden" );
+				var screen = scripted( [] );
+
+				open( screen );
+
+				expect( screen.shown ).toHaveLength( 1 );
+				expect( screen.shown[ 1 ].title ).toInclude( "your secrets (alice)" );
+				expect( screen.shown[ 1 ].choices ).toHaveLength( 1 );
+				expect( screen.shown[ 1 ].choices[ 1 ].value ).toBe( "user:GMAIL_TOKEN" );
+				expect( screen.shown[ 1 ].choices[ 1 ].hint ).toInclude( "gmail.googleapis.com" );
+				expect( jsonSerialize( screen.shown ) ).notToInclude( "hidden" );
+			} );
+
+			it( "tab switches to the agent's secrets", function() {
+				service.add( "SHARED", "1" );
+				var screen = scripted( [ "tab:" ] );
+
+				open( screen );
+
+				expect( screen.shown ).toHaveLength( 2 );
+				expect( screen.shown[ 2 ].title ).toInclude( "the agent's secrets (helper)" );
+				expect( screen.shown[ 2 ].choices[ 1 ].value ).toBe( "agent:SHARED" );
+			} );
+
+			it( "adds a secret: the name in a text box, the value only in the hidden box", function() {
+				var screen = scripted( [ "a:" ], [ "API_KEY", "calls the API", "api.example.com" ], [ "typed-secret" ] );
+
+				open( screen );
+
+				expect( screen.askedSecret ).toHaveLength( 1 );
+				expect( screen.asked.map( q => q.title ).toList( " " ) ).notToInclude( "typed-secret" );
+				expect( service.resolve( "API_KEY", { user : "alice", host : "api.example.com" } ) ).toBe( "typed-secret" );
+				var made = service.list( "alice" )[ 1 ];
+				expect( made.scope ).toBe( "user" );
+				expect( made.description ).toBe( "calls the API" );
+				expect( screen.printed.toList( " " ) ).toInclude( "cannot be shown again" );
+				expect( screen.printed.toList( " " ) ).notToInclude( "typed-secret" );
+			} );
+
+			it( "adds an agent secret from the agent's list", function() {
+				var screen = scripted( [ "tab:", "a:" ], [ "SHARED", "", "" ], [ "v" ] );
+
+				open( screen );
+
+				expect( service.list().map( s => s.name ) ).toBe( [ "SHARED" ] );
+			} );
+
+			it( "does not save when the value box is cancelled", function() {
+				var screen = scripted( [ "a:" ], [ "API_KEY" ], [] );
+
+				open( screen );
+
+				expect( service.listAll() ).toBeEmpty();
+			} );
+
+			it( "replaces a value from the hidden box, and keeps the rest", function() {
+				service.add( "T", "old", { scope : "user", owner : "alice", description : "keep me" } );
+				var screen = scripted( [ "e:user:T" ], [], [ "new" ], [ "value" ] );
+
+				open( screen );
+
+				expect( service.resolve( "T", { user : "alice" } ) ).toBe( "new" );
+				expect( service.list( "alice" )[ 1 ].description ).toBe( "keep me" );
+			} );
+
+			it( "changes the description and the hosts without touching the value", function() {
+				service.add( "T", "keep", { scope : "user", owner : "alice" } );
+
+				open( scripted( [ "enter:user:T" ], [ "now it reads mail" ], [], [ "description" ] ) );
+				open( scripted( [ "e:user:T" ], [ "a.example.com, b.example.com" ], [], [ "hosts" ] ) );
+
+				var secret = service.list( "alice" )[ 1 ];
+				expect( secret.description ).toBe( "now it reads mail" );
+				expect( secret.hosts ).toBe( [ "a.example.com", "b.example.com" ] );
+				expect( service.resolve( "T", { user : "alice", host : "b.example.com" } ) ).toBe( "keep" );
+			} );
+
+			it( "removes only after a yes", function() {
+				service.add( "T", "1", { scope : "user", owner : "alice" } );
+
+				open( scripted( [ "d:user:T" ], [], [], [ "no" ] ) );
+				expect( service.listAll() ).toHaveLength( 1 );
+
+				open( scripted( [ "d:user:T" ], [], [], [ "yes" ] ) );
+				expect( service.listAll() ).toBeEmpty();
+			} );
+
+			it( "says why when a change is refused", function() {
+				service.add( "T", "1", { scope : "user", owner : "alice" } );
+				var screen = scripted( [ "a:" ], [ "T", "", "" ], [ "2" ] );
+
+				open( screen );
+
+				expect( screen.printed.toList( " " ) ).toInclude( "already exists" );
+			} );
+
+			it( "says so when there is no vault", function() {
+				var screen = scripted( [] );
+
+				new bxagents.models.cli.chat.VaultMode( screen, new bxagents.models.cli.chat.NoVault(), "alice", "helper" ).run();
+
+				expect( screen.printed.toList( " " ) ).toInclude( "no database" );
+			} );
+
+		} );
+	}
+
+}

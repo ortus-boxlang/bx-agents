@@ -1,0 +1,65 @@
+/**
+ * The vault of the agent on a server, for the chat commands and the vault screen, through the server's /vault
+ * routes. The server decides what the token may do: a person's own secrets, and the agent's only for an admin.
+ */
+class {
+
+	/**
+	 * @baseUrl The server root
+	 * @client An AgentClient
+	 */
+	function init( required string baseUrl, required any client ) {
+		variables.baseUrl = arguments.baseUrl
+		variables.client = arguments.client
+		return this
+	}
+
+	/** True when the server has a vault for this agent. */
+	boolean function available() {
+		try {
+			return snapshot().success ?: false
+		} catch ( any e ) {
+			return false
+		}
+	}
+
+	string function why() {
+		return "This server has no vault for the agent (or does not support it)."
+	}
+
+	array function list() {
+		return snapshot().secrets ?: []
+	}
+
+	struct function status() {
+		return snapshot().status ?: {}
+	}
+
+	struct function add( required string scope, required string name, required string value, struct fields = {} ) {
+		var body = { scope : arguments.scope, name : arguments.name, value : arguments.value }
+		body.append( arguments.fields )
+		return outcome( variables.client.postJson( variables.baseUrl, "vault", body ) )
+	}
+
+	struct function update( required string scope, required string name, required struct changes ) {
+		var body = { scope : arguments.scope, name : arguments.name }
+		body.append( arguments.changes )
+		return outcome( variables.client.postJson( variables.baseUrl, "vault/update", body ) )
+	}
+
+	struct function remove( required string scope, required string name ) {
+		return outcome( variables.client.postJson( variables.baseUrl, "vault/remove", { scope : arguments.scope, name : arguments.name } ) )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private struct function snapshot() {
+		return variables.client.getJson( variables.baseUrl, "vault" )
+	}
+
+	/** The server answers { success } or { success : false, error, code }; the screen reads { ok, reason }. */
+	private struct function outcome( required struct answer ) {
+		return ( arguments.answer.success ?: false ) ? { ok : true } : { ok : false, reason : arguments.answer.error ?: "That did not work." }
+	}
+
+}

@@ -36,9 +36,9 @@ class {
 		var file = len( explicit ) ? explicit : appDatabaseFile()
 		file = file.replace( "\", "/", "all" )
 		if ( !static.cache.keyExists( file ) ) {
-			var store = len( explicit )
-				? new "models.store.ChatStore@bxagents"( { driver : "sqlite", database : file } )
-				: new "models.store.ChatStore@bxagents"( "" )
+			// Always the file itself, an inline datasource: it is the same database the app's own datasource opens
+			// (SQLite in WAL mode lets both connections work), and it needs no datasource to be registered here.
+			var store = new "models.store.ChatStore@bxagents"( { driver : "sqlite", database : file } )
 			store.migrate()
 			static.cache[ file ] = new "models.vault.VaultService@bxagents"( store, new "models.vault.VaultKey@bxagents"( getDirectoryFromPath( file ) ) )
 		}

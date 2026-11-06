@@ -1,0 +1,77 @@
+/**
+ * The vault of the agent in this process, for the chat commands and the vault screen: one user, who at the
+ * terminal is also the operator, so they manage their own secrets and the agent's.
+ */
+class {
+
+	/**
+	 * @service A VaultService
+	 * @userId Whose own secrets these are
+	 */
+	function init( required any service, required string userId ) {
+		variables.service = arguments.service
+		variables.userId = arguments.userId
+		return this
+	}
+
+	boolean function available() {
+		return true
+	}
+
+	string function why() {
+		return ""
+	}
+
+	/** @return [ { name, scope, owner, description, hosts, lastUsedAt, ... } ] the user's and the agent's, never a value */
+	array function list() {
+		return variables.service.list( variables.userId )
+	}
+
+	struct function status() {
+		return variables.service.status()
+	}
+
+	/** @fields { description, hosts } */
+	struct function add( required string scope, required string name, required string value, struct fields = {} ) {
+		return guard( () => {
+			variables.service.add( name, value, optionsOf( scope, fields ) )
+			return { ok : true }
+		} )
+	}
+
+	/** @changes { value, description, hosts }, any of them */
+	struct function update( required string scope, required string name, required struct changes ) {
+		return guard( () => {
+			variables.service.update( name, changes, optionsOf( scope, {} ) )
+			return { ok : true }
+		} )
+	}
+
+	struct function remove( required string scope, required string name ) {
+		return guard( () => {
+			return variables.service.remove( name, optionsOf( scope, {} ) )
+				? { ok : true }
+				: { ok : false, reason : "There is no #scope# secret named [#name#]." }
+		} )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private struct function optionsOf( required string scope, required struct fields ) {
+		var options = { scope : arguments.scope, owner : arguments.scope == "user" ? variables.userId : "", actor : variables.userId, via : "terminal" }
+		options.append( arguments.fields.filter( ( key ) => listFindNoCase( "description,hosts", key ) ) )
+		return options
+	}
+
+	private struct function guard( required any action ) {
+		try {
+			return arguments.action()
+		} catch ( any e ) {
+			if ( e.type.startsWith( "BxAgents." ) ) {
+				return { ok : false, reason : e.message }
+			}
+			rethrow
+		}
+	}
+
+}

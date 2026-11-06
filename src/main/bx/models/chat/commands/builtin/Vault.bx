@@ -1,0 +1,53 @@
+class extends="models.chat.commands.BaseCommand@bxagents" {
+
+	string function name() {
+		return "vault"
+	}
+
+	string function hint() {
+		return "open the vault screen, or: list, status. A value is never typed in a command"
+	}
+
+	/**
+	 * With nothing after it the terminal opens the vault screen, where a secret is added, changed and removed in a
+	 * hidden box. Everywhere else it only lists names: a command line is kept in a history, so a value never goes in one.
+	 */
+	any function run( required any context, required string args ) {
+		var reply = arguments.context.reply()
+		var kept = arguments.context.chat().vault()
+		if ( !kept.available() ) {
+			return reply.warn( kept.why() )
+		}
+		var verb = lCase( listFirst( arguments.args, " " ) )
+		if ( !len( verb ) && arguments.context.transport() != "tui" ) {
+			verb = "list"
+		}
+		try {
+			switch ( verb ) {
+				case "":
+					reply.screen( "vault" )
+					break
+				case "list":
+					var rows = kept.list()
+					if ( !rows.len() ) {
+						reply.text( "No secrets yet." & ( arguments.context.transport() == "tui" ? " Type /vault to add one." : " Add one in the vault page, or with `bxAgents vault add`." ) )
+						break
+					}
+					for ( var secret in rows ) {
+						reply.text( "#secret.name#  (#secret.scope#)  #secret.hosts.len() ? secret.hosts.toList( ',' ) : 'any host'#  #secret.description#" )
+					}
+					break
+				case "status":
+					var state = kept.status()
+					reply.text( "#state.secrets ?: 0# secret(s). Key: #state.keySource ?: 'unknown'#." )
+					break
+				default:
+					reply.warn( "Usage: /vault (opens the screen), /vault list, /vault status. A value is never typed in a command: use the screen." )
+			}
+		} catch ( any e ) {
+			reply.warn( "Vault: " & e.message )
+		}
+		return reply
+	}
+
+}

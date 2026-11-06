@@ -1,0 +1,196 @@
+/**
+ * The vault screen of the chat: the secrets the person can use, with keys to work on them.
+ *
+ *   a add   e edit   d remove   t switch between your secrets and the agent's   esc back
+ *
+ * A value is typed in a box that shows bullets, is sent once, and cannot be shown again: the screen lists names,
+ * what each is for, the hosts it may go to and when it was last used. It works through the same object the /vault
+ * command uses, so it runs in-process and over --connect alike.
+ */
+class {
+
+	static {
+		KEYS   = "aedt"
+		FOOTER = "a add   e edit   d remove   t switch   enter edit   esc back"
+	}
+
+	/**
+	 * @screen The chat screen
+	 * @vault LocalVault, RemoteVault or NoVault
+	 * @userId Who "your secrets" belong to, for the heading
+	 * @agentName The agent whose secrets are "the agent's"
+	 */
+	function init( required any screen, required any vault, required string userId, required string agentName ) {
+		variables.screen = arguments.screen
+		variables.vault = arguments.vault
+		variables.userId = arguments.userId
+		variables.agentName = arguments.agentName
+		return this
+	}
+
+	/**
+	 * Runs until the user leaves with Esc.
+	 */
+	void function run() {
+		if ( !variables.vault.available() ) {
+			variables.screen.print( "warn", variables.vault.why() )
+			return
+		}
+		var scope = "user"
+		while ( true ) {
+			var rows = variables.vault.list().filter( secret => secret.scope == scope )
+			var picked = variables.screen.chooseKeys(
+				heading( scope ),
+				usage( rows.len() ),
+				choicesOf( rows, scope ),
+				static.KEYS,
+				static.FOOTER
+			)
+			if ( isNull( picked ) ) {
+				return
+			}
+			var parsed = parse( picked )
+			switch ( parsed.key ) {
+				case "t":
+				case "tab":
+					scope = scope == "user" ? "agent" : "user"
+					break
+				case "a":
+					add( scope )
+					break
+				case "e":
+				case "enter":
+					edit( rows, parsed.name )
+					break
+				case "d":
+					remove( rows, parsed.name )
+					break
+			}
+		}
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private void function add( required string scope ) {
+		var name = variables.screen.ask( arguments.scope == "agent" ? "Name of the agent's secret" : "Name of your secret", "Letters, digits and underscores, for example GMAIL_TOKEN. Esc to cancel.", "" )
+		if ( isNull( name ) || !len( trim( name ) ) ) {
+			return
+		}
+		var value = variables.screen.askSecret( "Value of #trim( name )#", "Typed hidden and never shown again. Esc to cancel." )
+		if ( isNull( value ) || !len( value ) ) {
+			return
+		}
+		var about = variables.screen.ask( "What is it for?", "One line, so you remember. Enter to skip.", "" )
+		var hosts = variables.screen.ask( "Hosts it may be sent to", "Comma separated, for example api.example.com or *.example.com. Blank allows any host.", "" )
+		var fields = {}
+		if ( !isNull( about ) && len( trim( about ) ) ) {
+			fields[ "description" ] = trim( about )
+		}
+		if ( !isNull( hosts ) && len( trim( hosts ) ) ) {
+			fields[ "hosts" ] = hosts
+		}
+		showOutcome( variables.vault.add( arguments.scope, trim( name ), value, fields ), "Saved #trim( name )#. It cannot be shown again." )
+	}
+
+	private void function edit( required array rows, required string name ) {
+		var secret = secretNamed( arguments.rows, arguments.name )
+		if ( secret.isEmpty() ) {
+			return
+		}
+		var what = variables.screen.choose( "Change #secret.name#", [], [
+			{ value : "value", label : "Replace the value", hint : "typed hidden" },
+			{ value : "description", label : "Change what it is for", hint : secret.description },
+			{ value : "hosts", label : "Change the hosts it may go to", hint : secret.hosts.len() ? secret.hosts.toList( "," ) : "any" }
+		] )
+		if ( isNull( what ) ) {
+			return
+		}
+		switch ( what ) {
+			case "value":
+				var value = variables.screen.askSecret( "New value of #secret.name#", "Typed hidden and never shown again. Esc to cancel." )
+				if ( isNull( value ) || !len( value ) ) {
+					return
+				}
+				showOutcome( variables.vault.update( secret.scope, secret.name, { value : value } ), "Replaced the value of #secret.name#." )
+				break
+			case "description":
+				var about = variables.screen.ask( "What is #secret.name# for?", "Enter to save. Esc to cancel.", secret.description )
+				if ( isNull( about ) ) {
+					return
+				}
+				showOutcome( variables.vault.update( secret.scope, secret.name, { description : trim( about ) } ), "Updated." )
+				break
+			case "hosts":
+				var hosts = variables.screen.ask( "Hosts #secret.name# may be sent to", "Comma separated. Blank allows any host.", secret.hosts.toList( "," ) )
+				if ( isNull( hosts ) ) {
+					return
+				}
+				showOutcome( variables.vault.update( secret.scope, secret.name, { hosts : trim( hosts ) } ), "Updated." )
+				break
+		}
+	}
+
+	private void function remove( required array rows, required string name ) {
+		var secret = secretNamed( arguments.rows, arguments.name )
+		if ( secret.isEmpty() ) {
+			return
+		}
+		var sure = variables.screen.choose(
+			"Remove #secret.name#?",
+			[ "Anything that uses it will stop working." ],
+			[ { value : "no", label : "Keep it" }, { value : "yes", label : "Remove it" } ]
+		)
+		if ( isNull( sure ) || sure != "yes" ) {
+			return
+		}
+		showOutcome( variables.vault.remove( secret.scope, secret.name ), "Removed #secret.name#." )
+	}
+
+	private void function showOutcome( required struct outcome, required string done ) {
+		if ( arguments.outcome.ok ?: false ) {
+			variables.screen.print( "ok", arguments.done )
+		} else {
+			variables.screen.print( "warn", arguments.outcome.reason ?: "That did not work." )
+		}
+	}
+
+	/**
+	 * A choice is "scope:name"; a key press adds "letter:" in front.
+	 */
+	private struct function parse( required string picked ) {
+		var first = listFirst( arguments.picked, ":" )
+		if ( arguments.picked contains ":" && ( first == "tab" || ( len( first ) == 1 && static.KEYS contains first ) ) ) {
+			return { key : first, name : listLast( arguments.picked, ":" ) }
+		}
+		return { key : "enter", name : listLast( arguments.picked, ":" ) }
+	}
+
+	private string function heading( required string scope ) {
+		return arguments.scope == "agent" ? "Vault: the agent's secrets (#variables.agentName#)   [ yours: t ]" : "Vault: your secrets (#variables.userId#)   [ the agent's: t ]"
+	}
+
+	private array function usage( required numeric count ) {
+		return [ "#arguments.count# secret#arguments.count == 1 ? '' : 's'#. Values are sealed and never shown." ]
+	}
+
+	private array function choicesOf( required array rows, required string scope ) {
+		if ( !arguments.rows.len() ) {
+			return [ { value : "", label : "(no secrets yet: press a to add one)" } ]
+		}
+		return arguments.rows.map( secret => {
+			var used = isDate( secret.lastUsedAt ?: "" ) ? "used " & dateTimeFormat( secret.lastUsedAt, "yyyy-MM-dd" ) : "never used"
+			var where = secret.hosts.len() ? secret.hosts.toList( "," ) : "any host"
+			return {
+				value : scope & ":" & secret.name,
+				label : secret.name & ( len( secret.description ) ? "  " & secret.description : "" ),
+				hint  : where & ", " & used
+			}
+		} )
+	}
+
+	private struct function secretNamed( required array rows, required string name ) {
+		var found = arguments.rows.filter( secret => secret.name == name )
+		return found.len() ? found[ 1 ] : {}
+	}
+
+}
