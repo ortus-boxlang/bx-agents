@@ -1,0 +1,111 @@
+/**
+ * The vault's key and the sealing of one value.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "VaultCrypto", function() {
+
+			beforeEach( function() {
+				var key = new bxagents.models.vault.VaultKey( getTempDirectory() ).generate();
+				variables.crypto = new bxagents.models.vault.VaultCrypto( toBinary( key ) );
+			} );
+
+			it( "opens what it sealed, with the same context", function() {
+				var sealed = crypto.seal( "s3cret-é-値", "user|alice|GMAIL" );
+
+				expect( crypto.open( sealed, "user|alice|GMAIL" ) ).toBe( "s3cret-é-値" );
+			} );
+
+			it( "never shows the value in what it seals, and seals the same value differently each time", function() {
+				var one = crypto.seal( "hunter2", "x" );
+				var two = crypto.seal( "hunter2", "x" );
+
+				expect( one ).notToInclude( "hunter2" );
+				expect( one ).notToBe( two );
+			} );
+
+			it( "refuses a value moved onto another row", function() {
+				var sealed = crypto.seal( "alice-token", "user|alice|GMAIL" );
+
+				expect( function() {
+					crypto.open( sealed, "user|bob|GMAIL" );
+				} ).toThrow( "BxAgents.VaultCannotOpen" );
+			} );
+
+			it( "refuses a value sealed with another key, or changed", function() {
+				var other = new bxagents.models.vault.VaultCrypto( toBinary( new bxagents.models.vault.VaultKey( getTempDirectory() ).generate() ) );
+				var sealed = crypto.seal( "v", "c" );
+
+				expect( function() {
+					other.open( sealed, "c" );
+				} ).toThrow( "BxAgents.VaultCannotOpen" );
+				expect( function() {
+					crypto.open( left( sealed, len( sealed ) - 6 ) & "AAAAAA", "c" );
+				} ).toThrow( "BxAgents.VaultCannotOpen" );
+				expect( function() {
+					crypto.open( "not base64 at all", "c" );
+				} ).toThrow( "BxAgents.VaultCannotOpen" );
+			} );
+
+			it( "wants a 32 byte key", function() {
+				expect( function() {
+					new bxagents.models.vault.VaultCrypto( toBinary( toBase64( "short" ) ) );
+				} ).toThrow( "BxAgents.InvalidVaultKey" );
+			} );
+
+		} );
+
+		describe( "VaultKey", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-vaultkey-" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "makes a key file on first use, and reads the same key afterwards", function() {
+				var keys = new bxagents.models.vault.VaultKey( dir );
+
+				expect( keys.source() ).toBe( "none" );
+				var first = keys.load();
+				expect( first.source ).toBe( "file" );
+				expect( first.id ).toMatch( "^[0-9a-f]{8}$" );
+				expect( fileExists( dir & "/vault.key" ) ).toBeTrue();
+				expect( keys.source() ).toBe( "file" );
+				expect( keys.load().id ).toBe( first.id );
+			} );
+
+			it( "keeps the key file readable by its owner only", function() {
+				new bxagents.models.vault.VaultKey( dir ).load();
+				if ( server.os.name contains "Windows" ) {
+					return;
+				}
+				var mode = createObject( "java", "java.nio.file.Files" ).getPosixFilePermissions( createObject( "java", "java.nio.file.Paths" ).get( dir & "/vault.key", [] ) ).toString();
+
+				expect( mode ).toInclude( "OWNER_READ" );
+				expect( mode ).notToInclude( "GROUP" );
+				expect( mode ).notToInclude( "OTHERS" );
+			} );
+
+			it( "does not make a new key when secrets exist and the file is gone", function() {
+				expect( function() {
+					new bxagents.models.vault.VaultKey( dir ).load( allowCreate = false );
+				} ).toThrow( "BxAgents.VaultKeyMissing" );
+				expect( fileExists( dir & "/vault.key" ) ).toBeFalse();
+			} );
+
+			it( "makes a key that can be used as BXAGENTS_VAULT_KEY", function() {
+				var generated = new bxagents.models.vault.VaultKey( dir ).generate();
+
+				expect( arrayLen( toBinary( generated ) ) ).toBe( 32 );
+			} );
+
+		} );
+	}
+
+}

@@ -1,0 +1,133 @@
+/**
+ * Where the vault's master key comes from.
+ *
+ * 1. `BXAGENTS_VAULT_KEY` in the environment wins. It is 32 random bytes as base64 (make one with
+ *    `bxAgents vault key`), or any passphrase, which is hashed with SHA-256 to 32 bytes.
+ * 2. Without it, a key is made on first use and kept in `vault.key` next to the database, readable only by
+ *    its owner. It is easy to start with, but it sits beside the data it protects: anyone who copies the
+ *    data folder gets both. `status()` says which one is in use, so the docs and the CLI can say so.
+ *
+ * A key file is never made when the database already holds secrets and the file is gone: that would hide a
+ * lost key behind a new one, and every secret would then fail to open.
+ */
+import bxModules.bxagents.models.vault.VaultCrypto;
+
+class {
+
+	static {
+		ENVIRONMENT_VARIABLE = "BXAGENTS_VAULT_KEY"
+		FILE_NAME            = "vault.key"
+	}
+
+	/**
+	 * @directory The folder that holds the database, and so the key file
+	 */
+	function init( required string directory ) {
+		variables.directory = arguments.directory.replace( "\", "/", "all" ).reReplace( "/+$", "" )
+		return this
+	}
+
+	/**
+	 * @return The variable name, for messages
+	 */
+	string function variableName() {
+		return static.ENVIRONMENT_VARIABLE
+	}
+
+	/**
+	 * @return The absolute path of the key file
+	 */
+	string function filePath() {
+		return variables.directory & "/" & static.FILE_NAME
+	}
+
+	/**
+	 * Which source the key comes from, without making anything.
+	 *
+	 * @return env, file or none
+	 */
+	string function source() {
+		if ( len( environmentValue() ) ) {
+			return "env"
+		}
+		return fileExists( filePath() ) ? "file" : "none"
+	}
+
+	/**
+	 * @allowCreate Whether a key file may be made when there is none. False once the database holds secrets.
+	 *
+	 * @return { bytes, id, source }: the 32 key bytes, a short fingerprint saved on every row, and where it came from
+	 */
+	struct function load( boolean allowCreate = true ) {
+		var configured = environmentValue()
+		if ( len( configured ) ) {
+			var bytes = fromEnvironment( configured )
+			return { bytes : bytes, id : fingerprint( bytes ), source : "env" }
+		}
+		if ( !fileExists( filePath() ) ) {
+			if ( !arguments.allowCreate ) {
+				throw(
+					type    = "BxAgents.VaultKeyMissing",
+					message = "The vault holds secrets but its key is missing. Set #static.ENVIRONMENT_VARIABLE# to the key they were sealed with, or restore #filePath()#. A new key is not made, because every stored secret would then fail to open."
+				)
+			}
+			makeFile()
+		}
+		var bytes = toBinary( trim( fileRead( filePath(), "UTF-8" ) ) )
+		if ( arrayLen( bytes ) != 32 ) {
+			throw( type = "BxAgents.InvalidVaultKey", message = "#filePath()# is not a 32 byte key." )
+		}
+		return { bytes : bytes, id : fingerprint( bytes ), source : "file" }
+	}
+
+	/**
+	 * @return A new random key, as base64, to put in BXAGENTS_VAULT_KEY
+	 */
+	string function generate() {
+		var bytes = VaultCrypto::newBytes( 32 )
+		createObject( "java", "java.security.SecureRandom" ).init().nextBytes( bytes )
+		return toBase64( bytes )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private string function environmentValue() {
+		return trim( getSystemSetting( static.ENVIRONMENT_VARIABLE, "" ) )
+	}
+
+	private any function fromEnvironment( required string value ) {
+		try {
+			var decoded = toBinary( arguments.value )
+			if ( arrayLen( decoded ) == 32 ) {
+				return decoded
+			}
+		} catch ( any e ) {
+			// not base64: it is a passphrase
+		}
+		return createObject( "java", "java.security.MessageDigest" ).getInstance( "SHA-256" ).digest( arguments.value.getBytes( "UTF-8" ) )
+	}
+
+	private string function fingerprint( required any bytes ) {
+		var digest = createObject( "java", "java.security.MessageDigest" ).getInstance( "SHA-256" ).digest( arguments.bytes )
+		return left( lCase( binaryEncode( digest, "hex" ) ), 8 )
+	}
+
+	/**
+	 * Writes a new key file that only its owner can read. Where the file system has no owner-only mode
+	 * (Windows) the file is made the ordinary way.
+	 */
+	private void function makeFile() {
+		directoryCreate( variables.directory, true, true )
+		var bytes = VaultCrypto::newBytes( 32 )
+		createObject( "java", "java.security.SecureRandom" ).init().nextBytes( bytes )
+		var path =createObject( "java", "java.nio.file.Paths" ).get( filePath(), [] )
+		fileWrite( filePath(), toBase64( bytes ), "UTF-8" )
+		try {
+			var permissions = createObject( "java", "java.nio.file.attribute.PosixFilePermissions" ).fromString( "rw-------" )
+			createObject( "java", "java.nio.file.Files" ).setPosixFilePermissions( path, permissions )
+		} catch ( any e ) {
+			// no POSIX permissions on this file system
+		}
+	}
+
+}

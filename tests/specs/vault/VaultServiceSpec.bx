@@ -1,0 +1,211 @@
+/**
+ * The vault: scope, who can see what, host limits, the audit trail and what never leaves.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "VaultService", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-vault-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.keys = new bxagents.models.vault.VaultKey( dir );
+				variables.vault = new bxagents.models.vault.VaultService( store, keys );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "stores a secret sealed, and gives back only metadata", function() {
+				var made = vault.add( "GMAIL_TOKEN", "ya29.super-secret", { description : "reads the inbox", hosts : [ "gmail.googleapis.com" ] } );
+
+				expect( made.name ).toBe( "GMAIL_TOKEN" );
+				expect( made.scope ).toBe( "agent" );
+				expect( made.hosts ).toBe( [ "gmail.googleapis.com" ] );
+				expect( jsonSerialize( made ) ).notToInclude( "super-secret" );
+				expect( jsonSerialize( store.rows( "SELECT * FROM vault_secrets" ) ) ).notToInclude( "super-secret" );
+				expect( jsonSerialize( vault.list() ) ).notToInclude( "super-secret" );
+			} );
+
+			it( "opens a stored secret for the runtime", function() {
+				vault.add( "API_KEY", "abc-123" );
+
+				expect( vault.resolve( "API_KEY" ) ).toBe( "abc-123" );
+			} );
+
+			it( "refuses a bad name, an empty value and a second add", function() {
+				expect( function() { vault.add( "bad name", "x" ); } ).toThrow( "BxAgents.InvalidVaultName" );
+				expect( function() { vault.add( "OK", "" ); } ).toThrow( "BxAgents.VaultEmptyValue" );
+				vault.add( "OK", "x" );
+				expect( function() { vault.add( "OK", "y" ); } ).toThrow( "BxAgents.VaultSecretExists" );
+			} );
+
+			it( "edits the value, the description and the hosts, each on its own", function() {
+				vault.add( "TOKEN", "old", { description : "first", hosts = [ "a.example.com" ] } );
+
+				vault.update( "TOKEN", { value : "new" } );
+				expect( vault.resolve( "TOKEN", { host : "a.example.com" } ) ).toBe( "new" );
+				expect( vault.list()[ 1 ].description ).toBe( "first" );
+
+				vault.update( "TOKEN", { description : "second", hosts : [ "b.example.com" ] } );
+				expect( vault.list()[ 1 ].description ).toBe( "second" );
+				expect( vault.list()[ 1 ].hosts ).toBe( [ "b.example.com" ] );
+				expect( vault.resolve( "TOKEN", { host : "b.example.com" } ) ).toBe( "new" );
+			} );
+
+			it( "set() adds when new and replaces the value when it exists", function() {
+				vault.set( "TOKEN", "one" );
+				vault.set( "TOKEN", "two" );
+
+				expect( vault.list() ).toHaveLength( 1 );
+				expect( vault.resolve( "TOKEN" ) ).toBe( "two" );
+			} );
+
+			it( "removes a secret and says whether there was one", function() {
+				vault.add( "TOKEN", "x" );
+
+				expect( vault.remove( "TOKEN" ) ).toBeTrue();
+				expect( vault.remove( "TOKEN" ) ).toBeFalse();
+				expect( vault.has( "TOKEN" ) ).toBeFalse();
+			} );
+
+			describe( "scope", function() {
+
+				it( "finds a person's own secret before the agent's", function() {
+					vault.add( "GMAIL_TOKEN", "shared" );
+					vault.add( "GMAIL_TOKEN", "alices", { scope : "user", owner : "alice" } );
+
+					expect( vault.resolve( "GMAIL_TOKEN", { user : "alice" } ) ).toBe( "alices" );
+					expect( vault.resolve( "GMAIL_TOKEN", { user : "bob" } ) ).toBe( "shared" );
+					expect( vault.resolve( "GMAIL_TOKEN" ) ).toBe( "shared" );
+				} );
+
+				it( "never gives one person another person's secret", function() {
+					vault.add( "GMAIL_TOKEN", "alices", { scope : "user", owner : "alice" } );
+
+					expect( function() { vault.resolve( "GMAIL_TOKEN", { user : "bob" } ); } ).toThrow( "BxAgents.VaultSecretMissing" );
+					expect( function() { vault.resolve( "GMAIL_TOKEN" ); } ).toThrow( "BxAgents.VaultSecretMissing" );
+					expect( vault.has( "GMAIL_TOKEN", "bob" ) ).toBeFalse();
+					expect( vault.has( "GMAIL_TOKEN", "alice" ) ).toBeTrue();
+				} );
+
+				it( "lists a person's secrets with the agent's, and only those", function() {
+					vault.add( "SHARED", "1" );
+					vault.add( "ALICE", "2", { scope : "user", owner : "alice" } );
+					vault.add( "BOB", "3", { scope : "user", owner : "bob" } );
+
+					var names = vault.list( "alice" ).map( s => s.name ).sort( "text" );
+					expect( names ).toBe( [ "ALICE", "SHARED" ] );
+					expect( vault.list().map( s => s.name ) ).toBe( [ "SHARED" ] );
+					expect( vault.listAll() ).toHaveLength( 3 );
+				} );
+
+				it( "needs a name for a user secret", function() {
+					expect( function() { vault.add( "X", "1", { scope : "user" } ); } ).toThrow( "BxAgents.VaultNeedsUser" );
+				} );
+
+				it( "refuses a sealed value moved from one user to another", function() {
+					vault.add( "TOKEN", "alices", { scope : "user", owner : "alice" } );
+					vault.add( "TOKEN", "bobs", { scope : "user", owner : "bob" } );
+					var alices = store.rows( "SELECT sealed FROM vault_secrets WHERE owner = 'alice'" )[ 1 ].sealed;
+					store.exec( "UPDATE vault_secrets SET sealed = :s WHERE owner = 'bob'", { s : alices } );
+
+					expect( function() { vault.resolve( "TOKEN", { user : "bob" } ); } ).toThrow( "BxAgents.VaultCannotOpen" );
+				} );
+
+			} );
+
+			describe( "hosts", function() {
+
+				it( "sends a secret only where it is allowed", function() {
+					vault.add( "TOKEN", "t", { hosts : [ "api.example.com", "*.corp.example" ] } );
+
+					expect( vault.resolve( "TOKEN", { host : "api.example.com" } ) ).toBe( "t" );
+					expect( vault.resolve( "TOKEN", { host : "mail.corp.example" } ) ).toBe( "t" );
+					expect( function() { vault.resolve( "TOKEN", { host : "evil.test" } ); } ).toThrow( "BxAgents.VaultHostDenied" );
+					expect( function() { vault.resolve( "TOKEN", { host : "corp.example" } ); } ).toThrow( "BxAgents.VaultHostDenied" );
+					expect( function() { vault.resolve( "TOKEN" ); } ).toThrow( "BxAgents.VaultHostDenied" );
+				} );
+
+				it( "sends a secret with no host limit anywhere", function() {
+					vault.add( "TOKEN", "t" );
+
+					expect( vault.resolve( "TOKEN", { host : "anything.test" } ) ).toBe( "t" );
+				} );
+
+			} );
+
+			describe( "audit", function() {
+
+				it( "records who added, used, was refused and removed, and never a value", function() {
+					vault.add( "TOKEN", "the-value", { hosts : [ "ok.test" ], actor : "admin" } );
+					vault.resolve( "TOKEN", { user : "alice", host : "ok.test", via : "GmailTool" } );
+					try { vault.resolve( "TOKEN", { user : "alice", host : "bad.test" } ); } catch ( any e ) {}
+					vault.remove( "TOKEN", { actor : "admin" } );
+
+					var rows = vault.audit();
+					expect( rows.map( r => r.action ) ).toBe( [ "remove", "use", "use", "add" ] );
+					expect( rows[ 2 ].ok ).toBe( 0 );
+					expect( rows[ 3 ].via ).toBe( "GmailTool" );
+					expect( rows[ 3 ].host ).toBe( "ok.test" );
+					expect( jsonSerialize( rows ) ).notToInclude( "the-value" );
+				} );
+
+				it( "notes when a secret was last used", function() {
+					vault.add( "TOKEN", "t" );
+					expect( vault.list()[ 1 ].lastUsedAt ).toBe( "" );
+
+					vault.resolve( "TOKEN" );
+
+					expect( vault.list()[ 1 ].lastUsedAt ).notToBe( "" );
+				} );
+
+			} );
+
+			describe( "keys", function() {
+
+				it( "lists every value so output can be scrubbed, longest first", function() {
+					vault.add( "A", "short" );
+					vault.add( "B", "a-much-longer-secret" );
+
+					expect( vault.values() ).toBe( [ "a-much-longer-secret", "short" ] );
+				} );
+
+				it( "reports where the key comes from and does not make a key until it must", function() {
+					expect( vault.status().keySource ).toBe( "none" );
+					expect( fileExists( dir & "/vault.key" ) ).toBeFalse();
+
+					vault.add( "A", "1" );
+
+					expect( vault.status().keySource ).toBe( "file" );
+					expect( vault.status().secrets ).toBe( 1 );
+					expect( vault.status().wrongKey ).toBe( 0 );
+				} );
+
+				it( "does not make a new key when secrets exist and the key file is gone", function() {
+					vault.add( "A", "1" );
+					fileDelete( dir & "/vault.key" );
+					var fresh = new bxagents.models.vault.VaultService( store, new bxagents.models.vault.VaultKey( dir ) );
+
+					expect( function() { fresh.resolve( "A" ); } ).toThrow( "BxAgents.VaultKeyMissing" );
+					expect( fileExists( dir & "/vault.key" ) ).toBeFalse();
+				} );
+
+				it( "says plainly when a secret was sealed with another key", function() {
+					vault.add( "A", "1" );
+					store.exec( "UPDATE vault_secrets SET keyId = 'deadbeef'" );
+					var fresh = new bxagents.models.vault.VaultService( store, new bxagents.models.vault.VaultKey( dir ) );
+
+					expect( function() { fresh.resolve( "A" ); } ).toThrow( "BxAgents.VaultWrongKey" );
+					expect( fresh.status().wrongKey ).toBe( 1 );
+				} );
+
+			} );
+
+		} );
+	}
+
+}
