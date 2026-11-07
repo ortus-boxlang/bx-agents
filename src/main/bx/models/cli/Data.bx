@@ -1,0 +1,53 @@
+/**
+ * `data` CLI verb: where the agent keeps everything, how big each part is, and the volumes it may use.
+ *
+ *   bxAgents data [--json]
+ */
+import bxModules.bxagents.models.util.ByteSize;
+
+class {
+
+	/**
+	 * @options { projectRoot (required), json }
+	 */
+	struct function run( struct options = {} ) {
+		var root = trim( arguments.options.projectRoot ?: "" )
+		if ( !len( root ) ) {
+			throw( type = "BxAgents.MissingProjectRoot", message = "`data` requires a project root" )
+		}
+		var found = new "models.data.ProjectData@bxagents"().of( root.reReplace( "[\/]+$", "" ) )
+		var info = found.home.describe()
+		var volumes = found.volumes.listing()
+		if ( arguments.options.json ?: false ) {
+			info[ "volumes" ] = volumes
+			return { exitCode : 0, message : jsonSerialize( info ) }
+		}
+		var nl = char( 10 )
+		var lines = [
+			"Data home: #info.home#  (#sourceText( info.source )#)",
+			"Database:  #info.database#",
+			""
+		]
+		for ( var item in info.items ) {
+			lines.append( "  " & left( item.name & repeatString( " ", 10 ), 10 ) & right( repeatString( " ", 9 ) & ByteSize::format( item.bytes ), 9 ) & "   #item.files# #item.files == 1 ? 'file' : 'files'#" )
+		}
+		lines.append( "" )
+		lines.append( "Volumes:" )
+		for ( var volume in volumes ) {
+			lines.append( "  " & left( volume.name & repeatString( " ", 12 ), 12 ) & left( ( volume.mode == "rw" ? "read and write" : "read only" ) & repeatString( " ", 16 ), 16 ) & volume.description )
+		}
+		return { exitCode : 0, message : lines.toList( nl ) }
+	}
+
+	private string function sourceText( required string source ) {
+		switch ( arguments.source ) {
+			case "environment":
+				return "from BXAGENTS_HOME"
+			case "setting":
+				return "from data.home in Agent.yaml"
+			default:
+				return "the default: set BXAGENTS_HOME or data.home to keep it outside the app"
+		}
+	}
+
+}

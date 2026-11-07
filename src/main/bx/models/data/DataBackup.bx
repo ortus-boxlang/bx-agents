@@ -1,0 +1,254 @@
+/**
+ * Backs up the data home to one zip, and puts a backup back.
+ *
+ * A backup holds the chat database, the `files/` folder and the `skills/` folder, with a small `backup.json` that says
+ * what it is. It leaves out `backups/` (a backup of the backups) and the volumes, which are folders of the person's
+ * own that this program does not own.
+ *
+ * The database is copied with SQLite's own `VACUUM INTO`, so the copy is whole and consistent even while a server is
+ * writing to the file.
+ */
+class {
+
+	static {
+		MANIFEST = "backup.json"
+		DATABASE = "chat.db"
+		FOLDERS  = [ "files", "skills" ]
+		FORMAT   = 1
+	}
+
+	/**
+	 * @dataHome The DataHome to back up or restore into
+	 */
+	function init( required any dataHome ) {
+		variables.home = arguments.dataHome
+		return this
+	}
+
+	/**
+	 * @to The zip to write. Leave blank for backup-<date>-<time>.zip in the home's backups/ folder
+	 *
+	 * @return { file, bytes, entries : how many files went in }
+	 */
+	struct function create( string to = "" ) {
+		variables.home.ensure()
+		var target = len( trim( arguments.to ) ) ? variables.home.locate( arguments.to ) : variables.home.folder( "backups" ) & "/backup-" & dateTimeFormat( now(), "yyyyMMdd-HHmmss" ) & ".zip"
+		directoryCreate( path = getDirectoryFromPath( target ), createPath = true, ignoreExists = true )
+		if ( fileExists( target ) ) {
+			throw( type = "BxAgents.BackupExists", message = "There is already a file at [#target#]. Choose another name with --to." )
+		}
+
+		var copy = target & ".database.tmp"
+		var haveDatabase = copyDatabase( copy )
+		var count = 0
+		var out = createObject( "java", "java.util.zip.ZipOutputStream" ).init( createObject( "java", "java.io.FileOutputStream" ).init( target ) )
+		try {
+			addText( out, static.MANIFEST, jsonSerialize( {
+				"format"   : static.FORMAT,
+				"madeAt"   : dateTimeFormat( now(), "yyyy-MM-dd'T'HH:mm:ss" ),
+				"database" : haveDatabase,
+				"folders"  : static.FOLDERS
+			} ) )
+			if ( haveDatabase ) {
+				addFile( out, static.DATABASE, copy )
+				count++
+			}
+			for ( var folder in static.FOLDERS ) {
+				var root = variables.home.folder( folder )
+				if ( !directoryExists( root ) ) {
+					continue
+				}
+				for ( var file in directoryList( path = root, recurse = true, listInfo = "array", type = "file" ) ) {
+					addFile( out, folder & "/" & relativeTo( root, file ), file )
+					count++
+				}
+			}
+		} finally {
+			out.close()
+			if ( fileExists( copy ) ) {
+				fileDelete( copy )
+			}
+		}
+		return { file : target, bytes : createObject( "java", "java.io.File" ).init( target ).length(), entries : count }
+	}
+
+	/**
+	 * Replaces the database, `files/` and `skills/` of the home with the ones in a backup. What was there is kept beside
+	 * it as `<name>.before-restore`, for one restore.
+	 *
+	 * @file The backup zip
+	 * @force Restore even though the database looks to be in use
+	 *
+	 * @return { restored : the parts put back, kept : the names of what was set aside }
+	 */
+	struct function restore( required string file, boolean force = false ) {
+		var source = variables.home.locate( arguments.file )
+		if ( !fileExists( source ) ) {
+			throw( type = "BxAgents.BackupNotFound", message = "There is no backup at [#source#]." )
+		}
+		var zip = createObject( "java", "java.util.zip.ZipFile" ).init( source )
+		try {
+			var names = check( zip )
+			if ( !arguments.force && inUse() ) {
+				throw( type = "BxAgents.DataInUse", message = "The data looks to be in use: a server or a chat has the database open. Stop it and run restore again, or pass --force if you are sure it is not." )
+			}
+			variables.home.ensure()
+			var kept = []
+			var restored = []
+
+			var database = variables.home.database()
+			if ( names.contains( static.DATABASE ) ) {
+				setAside( database, kept )
+				for ( var extra in [ database & "-wal", database & "-shm" ] ) {
+					if ( fileExists( extra ) ) {
+						fileDelete( extra )
+					}
+				}
+				unpack( zip, static.DATABASE, database )
+				restored.append( static.DATABASE )
+			}
+			for ( var folder in static.FOLDERS ) {
+				var inFolder = folder
+				if ( !names.some( function( entry ) {
+					return entry.startsWith( inFolder & "/" )
+				} ) ) {
+					continue
+				}
+				var root = variables.home.folder( folder )
+				setAside( root, kept )
+				directoryCreate( path = root, createPath = true, ignoreExists = true )
+				for ( var name in names ) {
+					if ( name.startsWith( folder & "/" ) && !name.endsWith( "/" ) ) {
+						unpack( zip, name, variables.home.path() & "/" & name )
+					}
+				}
+				restored.append( folder & "/" )
+			}
+		} finally {
+			zip.close()
+		}
+		return { restored : restored, kept : kept }
+	}
+
+	/**
+	 * @return True when the database looks to be open in another process: SQLite leaves its -wal and -shm files while one is
+	 */
+	boolean function inUse() {
+		var database = variables.home.database()
+		for ( var extra in [ database & "-wal", database & "-shm" ] ) {
+			if ( fileExists( extra ) && createObject( "java", "java.io.File" ).init( extra ).length() > 0 ) {
+				return true
+			}
+		}
+		return false
+	}
+
+	// ---------------------------------------------------------------------------
+
+	/**
+	 * Copies the database whole, with VACUUM INTO.
+	 *
+	 * @to The file to make
+	 *
+	 * @return True when there was a database to copy
+	 */
+	private boolean function copyDatabase( required string to ) {
+		var database = variables.home.database()
+		if ( !fileExists( database ) ) {
+			return false
+		}
+		if ( fileExists( arguments.to ) ) {
+			fileDelete( arguments.to )
+		}
+		var store = new "models.store.ChatStore@bxagents"( { driver : "sqlite", database : database } )
+		store.exec( "VACUUM INTO '" & arguments.to.replace( "'", "''", "all" ) & "'" )
+		return true
+	}
+
+	/**
+	 * Checks a backup is one of ours and safe to open, and says what is in it.
+	 *
+	 * @return The names of the entries
+	 */
+	private array function check( required any zip ) {
+		var names = []
+		var entries = arguments.zip.entries()
+		while ( entries.hasMoreElements() ) {
+			names.append( entries.nextElement().getName() )
+		}
+		if ( !names.contains( static.MANIFEST ) ) {
+			throw( type = "BxAgents.NotABackup", message = "That file is not a bxAgents backup: it has no #static.MANIFEST#." )
+		}
+		for ( var name in names ) {
+			var unsafe = name.startsWith( "/" ) || name.find( ".." ) > 0 || name.find( "\" ) > 0 || reFind( "^[A-Za-z]:", name )
+			var known = name == static.MANIFEST || name == static.DATABASE || startsInFolder( name )
+			if ( unsafe || !known ) {
+				throw( type = "BxAgents.NotABackup", message = "The backup holds an entry it should not: [#name#]. It was not restored." )
+			}
+		}
+		return names
+	}
+
+	/**
+	 * @return True when an entry is inside files/ or skills/
+	 */
+	private boolean function startsInFolder( required string name ) {
+		for ( var folder in static.FOLDERS ) {
+			if ( arguments.name.startsWith( folder & "/" ) ) {
+				return true
+			}
+		}
+		return false
+	}
+
+	/**
+	 * Moves a file or folder to <name>.before-restore, replacing an earlier one.
+	 */
+	private void function setAside( required string path, required array kept ) {
+		var aside = arguments.path & ".before-restore"
+		if ( directoryExists( aside ) ) {
+			directoryDelete( aside, true )
+		}
+		if ( fileExists( aside ) ) {
+			fileDelete( aside )
+		}
+		if ( fileExists( arguments.path ) ) {
+			fileMove( arguments.path, aside )
+			arguments.kept.append( getFileFromPath( aside ) )
+		} else if ( directoryExists( arguments.path ) ) {
+			directoryRename( arguments.path, aside )
+			arguments.kept.append( getFileFromPath( aside ) )
+		}
+	}
+
+	private void function unpack( required any zip, required string name, required string to ) {
+		directoryCreate( path = getDirectoryFromPath( arguments.to ), createPath = true, ignoreExists = true )
+		var stream = arguments.zip.getInputStream( arguments.zip.getEntry( arguments.name ) )
+		try {
+			createObject( "java", "java.nio.file.Files" ).copy( stream, createObject( "java", "java.io.File" ).init( arguments.to ).toPath(), [] )
+		} finally {
+			stream.close()
+		}
+	}
+
+	private void function addText( required any out, required string name, required string text ) {
+		arguments.out.putNextEntry( createObject( "java", "java.util.zip.ZipEntry" ).init( arguments.name ) )
+		arguments.out.write( arguments.text.getBytes( "UTF-8" ) )
+		arguments.out.closeEntry()
+	}
+
+	private void function addFile( required any out, required string name, required string path ) {
+		arguments.out.putNextEntry( createObject( "java", "java.util.zip.ZipEntry" ).init( arguments.name ) )
+		createObject( "java", "java.nio.file.Files" ).copy( createObject( "java", "java.io.File" ).init( arguments.path ).toPath(), arguments.out )
+		arguments.out.closeEntry()
+	}
+
+	/**
+	 * @return A path below a folder, relative to it, with forward slashes
+	 */
+	private string function relativeTo( required string root, required string file ) {
+		var base = arguments.root.replace( "\", "/", "all" ).reReplace( "/+$", "" ) & "/"
+		return arguments.file.replace( "\", "/", "all" ).replace( base, "" )
+	}
+
+}

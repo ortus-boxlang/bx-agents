@@ -1,0 +1,39 @@
+/**
+ * What a project's Agent.yaml says about where its data lives: the `data` and `volumes` settings, read once and turned
+ * into the objects the commands use. A file that cannot be read gives the defaults, since the build is what reports
+ * a broken file.
+ */
+class {
+
+	/**
+	 * @projectRoot The project folder
+	 *
+	 * @return The settings in the project's Agent.yaml, or an empty struct when there are none or it cannot be read
+	 */
+	struct function settingsOf( required string projectRoot ) {
+		var file = arguments.projectRoot.replace( "\", "/", "all" ).reReplace( "/+$", "" ) & "/Agent.yaml"
+		if ( !fileExists( file ) ) {
+			return {}
+		}
+		try {
+			return new "models.build.AgentYamlLoader@bxagents"().load( file ).config
+		} catch ( any e ) {
+			return {}
+		}
+	}
+
+	/**
+	 * @projectRoot The project folder
+	 * @home A folder to use in place of `data.home` and the environment, for `restore --home`. Leave out to use the project's
+	 *
+	 * @return { home : DataHome, volumes : Volumes }
+	 */
+	struct function of( required string projectRoot, string home ) {
+		var settings = settingsOf( arguments.projectRoot )
+		var dataHome = isNull( arguments.home )
+			? new "models.data.DataHome@bxagents"( projectRoot : arguments.projectRoot, configured : ( settings.data ?: {} ).home ?: "" )
+			: new "models.data.DataHome@bxagents"( projectRoot : arguments.projectRoot, configured : arguments.home, environment : {} )
+		return { home : dataHome, volumes : new "models.data.Volumes@bxagents"( settings.volumes ?: {}, dataHome ) }
+	}
+
+}

@@ -54,17 +54,7 @@ class {
 	 * @projectRoot The project folder
 	 */
 	static function forProject( required string projectRoot ) {
-		var configured = ""
-		var file = arguments.projectRoot.replace( "\", "/", "all" ).reReplace( "/+$", "" ) & "/Agent.yaml"
-		if ( fileExists( file ) ) {
-			try {
-				var loaded = new "models.build.AgentYamlLoader@bxagents"().load( file )
-				configured = ( loaded.config.data ?: {} ).home ?: ""
-			} catch ( any e ) {
-				// A file that cannot be read is reported by the build; the default home is still right to use here
-			}
-		}
-		return new "models.data.DataHome@bxagents"( projectRoot : arguments.projectRoot, configured : configured )
+		return new "models.data.ProjectData@bxagents"().of( arguments.projectRoot ).home
 	}
 
 	/**
