@@ -186,7 +186,11 @@ class {
 		variables.routerGenerator.generate( discovery, appDir, gatewayResult.hasChannelGateway ?: false, gatewayResult.hasWhatsAppCloudGateway ?: false, gatewayResult.hasTeamsGateway ?: false, gatewayResult.hasTwilioGateway ?: false, gatewayResult.hasGitHubGateway ?: false, effectiveAgentApi )
 
 		arguments.onProgress( "+ Generating the agent API run control (handlers/AgentApi.bx)..." )
-		var agentApiResult = variables.agentApiGenerator.generate( appDir, effectiveAgentApi )
+		var agentApiResult = variables.agentApiGenerator.generate( appDir, effectiveAgentApi, {
+			agentName : config.name ?: "",
+			dataHome  : ( isStruct( config.data ?: "" ) ? config.data : {} ).home ?: "",
+			volumes   : isStruct( config.volumes ?: "" ) ? config.volumes : {}
+		} )
 		arguments.onProgress( "    #agentApiResult.written ? 'written' : 'off (agentApi.enabled is false)'#" )
 
 		arguments.onProgress( "+ Generating the web chat UI (if any gateways/* entry exposes it)..." )

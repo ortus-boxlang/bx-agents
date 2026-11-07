@@ -8,6 +8,8 @@
  *   service.preferences( caller )         what a person has set for themselves
  *   service.commands()                    the slash commands
  *   service.whoami( caller )              who the server takes the caller to be
+ *   service.volumes( caller )             the folders the agent may use, by name
+ *   service.data( caller )                where the agent keeps everything (admin only)
  *
  * A call answers an Outcome and never picks an HTTP status; ApiEdge does that, in one place.
  */
@@ -25,6 +27,8 @@ class {
 	 */
 	function init( required any agent, any store, any offered, struct options = {} ) {
 		variables.manageTokens = arguments.options.manageTokens ?: false
+		// an AppData: the data home and volumes of the app; without one the volume list is empty and there is no data report
+		variables.appData = arguments.options.data ?: nullValue()
 		variables.agent = arguments.agent
 		variables.store = arguments.store ?: nullValue()
 		variables.offered = arguments.offered ?: new "models.runtime.OfferedProfiles@bxagents"( [] )
@@ -90,8 +94,9 @@ class {
 	 * @return An AgentConversation for the caller. The model is picked per message here, not changed for everyone.
 	 */
 	any function conversation( required any caller, string conversationId = "" ) {
-		return new "models.chat.ServerConversation@bxagents"( variables.agent, arguments.caller.id(), variables.sessions ?: nullValue(), arguments.conversationId )
+		var found = new "models.chat.ServerConversation@bxagents"( variables.agent, arguments.caller.id(), variables.sessions ?: nullValue(), arguments.conversationId )
 			.withOfferedProfiles( variables.offered.names() )
+		return isNull( variables.appData ) ? found : found.withData( variables.appData )
 	}
 
 	/**
@@ -105,7 +110,7 @@ class {
 	 * @return The one CommandService for this agent
 	 */
 	any function commands() {
-		return new "models.chat.commands.CommandService@bxagents"( agent = variables.agent, sessions = variables.sessions ?: nullValue(), offered = variables.offered.names() )
+		return new "models.chat.commands.CommandService@bxagents"( agent = variables.agent, sessions = variables.sessions ?: nullValue(), offered = variables.offered.names(), data = variables.appData ?: nullValue() )
 	}
 
 	/**
@@ -215,6 +220,28 @@ class {
 		var shown = arguments.caller.toStruct()
 		shown[ "agent" ] = variables.agent.getConfig().name ?: ""
 		return Outcome::done( shown )
+	}
+
+	/**
+	 * @return An Outcome: { volumes : [ { name, mode, description } ] }, never a folder on the machine
+	 */
+	any function volumes( required any caller ) {
+		return Outcome::done( { "volumes" : isNull( variables.appData ) ? [] : variables.appData.listing() } )
+	}
+
+	/**
+	 * Where the agent keeps everything and how big each part is. It shows folders on the machine, so only an admin gets it.
+	 *
+	 * @return An Outcome: the AppData report, or forbidden / not_found
+	 */
+	any function data( required any caller ) {
+		if ( !arguments.caller.isAdmin() ) {
+			return Outcome::failed( "forbidden", "Only an admin may see where the agent keeps its data" )
+		}
+		if ( isNull( variables.appData ) ) {
+			return Outcome::failed( "not_found", "This server does not know its data home" )
+		}
+		return Outcome::done( variables.appData.report() )
 	}
 
 }

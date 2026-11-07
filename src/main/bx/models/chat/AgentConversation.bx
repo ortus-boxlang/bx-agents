@@ -190,6 +190,23 @@ class {
 	}
 
 	/**
+	 * @data An AppData: the data home and volumes of the app this agent was built from
+	 *
+	 * @return This conversation, now able to say what the agent may reach
+	 */
+	function withData( required any data ) {
+		variables.data = arguments.data
+		return this
+	}
+
+	/**
+	 * @return The volumes the agent's file tools may use, as [ { name, mode, description } ] and never a folder on the machine; empty when this conversation does not know them
+	 */
+	array function volumes() {
+		return isNull( variables.data ) ? [] : variables.data.listing()
+	}
+
+	/**
 	 * @return The names of the tools the agent has
 	 */
 	array function tools() {

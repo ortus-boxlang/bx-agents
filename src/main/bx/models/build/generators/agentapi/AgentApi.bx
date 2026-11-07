@@ -70,7 +70,7 @@ class {
 	private function service() {
 		// once per request: the probe for the shared database is a query
 		if ( !request.keyExists( "bxagentsService" ) ) {
-			request[ "bxagentsService" ] = new "models.api.AgentService@bxagents"( agent(), sharedStore(), offered(), { manageTokens : manageTokens() } )
+			request[ "bxagentsService" ] = new "models.api.AgentService@bxagents"( agent(), sharedStore(), offered(), { manageTokens : manageTokens(), data : appData() } )
 		}
 		return request.bxagentsService
 	}
@@ -86,6 +86,14 @@ class {
 		} catch ( any e ) {
 			return nullValue()
 		}
+	}
+
+	/**
+	 * The data home and volumes the build stamped in, as an AppData. The home is worked out here, where the app runs.
+	 */
+	private function appData() {
+		var home = new "models.data.DataHome@bxagents"( projectRoot : expandPath( "/" ), configured : "__DATA_HOME__", agentName : "__AGENT_NAME__" )
+		return new "models.data.AppData@bxagents"( home, new "models.data.Volumes@bxagents"( jsonDeserialize( "__VOLUMES__" ), home ) )
 	}
 
 	/** Where this build serves the API, as agentApi.path (or the default) set it */
@@ -627,6 +635,26 @@ class {
 			return
 		}
 		answer( event, service().whoami( callerOf( event ) ) )
+	}
+
+	/**
+	 * The folders the agent may use, as { volumes : [ { name, mode, description } ] }. Never a folder on the machine.
+	 */
+	function volumes( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().volumes( callerOf( event ) ) )
+	}
+
+	/**
+	 * Where the agent keeps everything and where each volume is. Admin only.
+	 */
+	function data( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().data( callerOf( event ) ) )
 	}
 
 	/**

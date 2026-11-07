@@ -216,6 +216,19 @@ class {
 	}
 
 	/**
+	 * Whether the home can be written, without making anything: the nearest folder that exists must allow writing.
+	 *
+	 * @return True when the home exists and can be written, or does not exist yet and could be made
+	 */
+	boolean function writableWithoutMaking() {
+		var probe = createObject( "java", "java.io.File" ).init( path() )
+		while ( !isNull( probe ) && !probe.exists() ) {
+			probe = probe.getParentFile()
+		}
+		return !isNull( probe ) && probe.isDirectory() && probe.canWrite()
+	}
+
+	/**
 	 * @return { home, source, database, items : [ { name, bytes, files } ] }: the sizes `bxAgents data` and the web page show
 	 */
 	struct function describe() {

@@ -1,0 +1,47 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "AppData", function() {
+
+			beforeEach( function() {
+				variables.root = getTempDirectory() & "bxa-appdata-" & createUUID()
+				directoryCreate( variables.root & "/notes", true )
+				variables.home = new bxagents.models.data.DataHome( projectRoot : variables.root, configured : variables.root & "/home", environment : {}, userHome : "/home/someone" )
+				variables.data = new bxagents.models.data.AppData( variables.home, new bxagents.models.data.Volumes( { notes : { path : variables.root & "/notes", mode : "rw", description : "My notes" } }, variables.home ) )
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( variables.root ) ) {
+					directoryDelete( variables.root, true )
+				}
+			} );
+
+			it( "lists volumes by name, mode and description with no folder on the machine", function() {
+				var listing = variables.data.listing()
+				expect( listing.map( v => v.name ) ).toBe( [ "files", "notes" ] )
+				expect( listing[ 2 ] ).toBe( { name : "notes", mode : "rw", description : "My notes" } )
+			} );
+
+			it( "reports the home, its sizes and the folder of each volume", function() {
+				var report = variables.data.report()
+				expect( report.home ).toBe( variables.root.replace( "\\", "/", "all" ) & "/home" )
+				expect( report.volumes[ 2 ].path ).toBe( variables.root.replace( "\\", "/", "all" ) & "/notes" )
+				expect( report.items.map( i => i.name ) ).toBe( [ "chat.db", "files/", "skills/", "backups/" ] )
+			} );
+
+			it( "makes nothing on disk when it reports", function() {
+				variables.data.report()
+				expect( directoryExists( variables.root & "/home" ) ).toBeFalse()
+			} );
+
+			it( "is built from a project folder", function() {
+				fileWrite( variables.root & "/Agent.yaml", "name: demo" & char( 10 ) & "data:" & char( 10 ) & "  home: ./state" & char( 10 ) & "volumes:" & char( 10 ) & "  notes:" & char( 10 ) & "    path: ./notes" & char( 10 ) )
+				var found = new bxagents.models.data.ProjectData().appDataOf( variables.root )
+				expect( found.listing().map( v => v.name ) ).toBe( [ "files", "notes" ] )
+				expect( found.home().path() ).toBe( variables.root.replace( "\\", "/", "all" ) & "/state" )
+			} );
+
+		} );
+	}
+
+}

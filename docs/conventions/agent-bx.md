@@ -270,6 +270,8 @@ POST /__bxagents/sessions/fork     # { conversationId, title? } copy one, messag
 POST /__bxagents/sessions/delete   # { conversationId } its row and the agent's messages for it
 GET  /__bxagents/export    # ?conversationId=&format=md|html the conversation as a file to save
 GET  /__bxagents/whoami    # who the server takes the caller to be: { id, name, scope, source, agent }
+GET  /__bxagents/volumes   # the folders the agent may use: { volumes: [ { name, mode, description } ] }, never a path on the machine
+GET  /__bxagents/data      # where the agent keeps everything and where each volume is (admin only)
 GET  /__bxagents/preferences          # what the caller has set: { preferences : { key : value } }
 POST /__bxagents/preferences/set      # { key, value }
 POST /__bxagents/preferences/delete   # { key }

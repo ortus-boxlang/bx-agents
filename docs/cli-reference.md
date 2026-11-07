@@ -543,11 +543,11 @@ In the screen:
 | Ctrl+C | Clear the box; on an empty box, leave; while the agent works, stop it. Ctrl+D leaves on an empty box |
 | `?` alone, or `/keys` | List the keys as they are bound now, with the action name of each |
 
-Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/export [file]` (the conversation as Markdown or HTML), `/name` and `/fork` (see below), `/keys` (which key does what), `/prompt` (how the message box looks, see below), `/sessions`, `/resume`, `/clear`, `/compact` and `/info` (see below), `/model`, `/profile` and `/default` (see below), `/remember <text>` and `/notes` (see below), `/record [file]` and `/record stop` (see below) and `/exit`.
+Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/volumes` (the folders the agent may use), `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/export [file]` (the conversation as Markdown or HTML), `/name` and `/fork` (see below), `/keys` (which key does what), `/prompt` (how the message box looks, see below), `/sessions`, `/resume`, `/clear`, `/compact` and `/info` (see below), `/model`, `/profile` and `/default` (see below), `/remember <text>` and `/notes` (see below), `/record [file]` and `/record stop` (see below) and `/exit`.
 
 #### The same commands in the web page and in chat apps
 
-Each slash command is written once, as a small class that answers with data (text, a table, a list to pick from), and the terminal, the web page and the chat platforms each draw that answer their own way. So `/help`, `/new`, `/tools`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/ping`, `/info`, `/remember` and `/notes` work in all three:
+Each slash command is written once, as a small class that answers with data (text, a table, a list to pick from), and the terminal, the web page and the chat platforms each draw that answer their own way. So `/help`, `/new`, `/tools`, `/volumes`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/ping`, `/info`, `/remember` and `/notes` work in all three:
 
 | Where | How you use them |
 |---|---|

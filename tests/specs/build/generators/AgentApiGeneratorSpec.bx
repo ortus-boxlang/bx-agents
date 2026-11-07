@@ -32,16 +32,32 @@ class extends="testbox.system.BaseSpec" {
 
 				expect( result.written ).toBeTrue();
 				expect( result.path ).toBe( dir & "/handlers/AgentApi.bx" );
-				for ( var action in [ "invoke", "stream", "batch", "info", "health", "events", "cancel", "steer", "pending", "resume", "tools", "about", "notes", "sessions", "history", "clear", "compact", "updateNote", "removeNote", "vault", "updateVault", "removeVault", "profiles", "commands", "command", "renameSession", "forkSession", "deleteSession", "export", "whoami", "preferences", "setPreference", "deletePreference", "tokens", "revokeToken", "openapi", "ping", "context", "status", "slots" ] ) {
+				for ( var action in [ "invoke", "stream", "batch", "info", "health", "events", "cancel", "steer", "pending", "resume", "tools", "about", "notes", "sessions", "history", "clear", "compact", "updateNote", "removeNote", "vault", "updateVault", "removeVault", "profiles", "commands", "command", "renameSession", "forkSession", "deleteSession", "export", "whoami", "preferences", "setPreference", "deletePreference", "tokens", "revokeToken", "openapi", "ping", "context", "status", "slots", "volumes", "data" ] ) {
 					expect( source ).toInclude( "function #action#( event, rc, prc )" );
 				}
 				// every action starts by checking the token (a preHandler cannot stop the action)
-				expect( source.reMatch( "if \( refused\( event \) \)" ) ).toHaveLength( 39 );
+				expect( source.reMatch( "if \( refused\( event \) \)" ) ).toHaveLength( 41 );
 				expect( source ).notToInclude( "function preHandler(" );
 				// the work is the service's: the handler holds no copy of the turn, picture or conversation logic
 				expect( source ).toInclude( "models.api.AgentService@bxagents" );
 				expect( source ).notToInclude( "MessageBuilder@bxagents" );
 				expect( source ).notToInclude( "BoxRegisterInterceptor" );
+			} );
+
+			it( "stamps the agent's name, data home and volumes in, for the volume list and the data report", function() {
+				var dir = newAppDir();
+				var source = fileRead( generator.generate( dir, {}, {
+					agentName : "nanobox",
+					dataHome  : "~/.nanobox",
+					volumes   : { notes : { path : "~/Notes", mode : "rw", description : "My ##notes" } }
+				} ).path );
+
+				expect( source ).notToInclude( "__DATA_HOME__" );
+				expect( source ).notToInclude( "__AGENT_NAME__" );
+				expect( source ).notToInclude( "__VOLUMES__" );
+				expect( source ).toInclude( 'configured : "~/.nanobox"' );
+				expect( source ).toInclude( 'agentName : "nanobox"' );
+				expect( source ).toInclude( "~/Notes" );
 			} );
 
 			it( "stamps whether an admin may manage tokens over the API, off by default", function() {

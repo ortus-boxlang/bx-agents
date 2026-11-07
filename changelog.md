@@ -28,6 +28,7 @@ or package as a portable `.bxa`.
 - **Volumes**: `volumes:` in `Agent.yaml` names host folders, read only or read and write. The file
   tools take `volume:path`, refuse full paths, `..` and symbolic links that leave a volume, and
   name volumes in results and errors.
+- `/volumes` in chat (terminal, web page, chat apps), `GET /volumes` and an admin-only `GET /data` on the agent API, `volumes()` and `data()` on `AgentApiClient`, and a data home check in `doctor`.
 - `bxAgents data`, `bxAgents backup` and `bxAgents restore`. A backup is one zip; the database is
   copied with `VACUUM INTO`; a restore keeps what was there as `.before-restore`.
 

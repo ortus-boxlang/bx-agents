@@ -160,6 +160,60 @@ class extends="testbox.system.BaseSpec" {
 					expect( who.agent ).toBe( "fake" );
 				} );
 
+				describe( "volumes and the data report", function() {
+
+					beforeEach( function() {
+						variables.home = new bxagents.models.data.DataHome( projectRoot : dir, configured : dir & "/home", environment : {}, userHome : "/home/someone" );
+						variables.shared = new bxagents.models.api.AgentService( agent, store, nullValue(), {
+							data : new bxagents.models.data.AppData( home, new bxagents.models.data.Volumes( { notes : { path : dir, mode : "rw", description : "My notes" } }, home ) )
+						} );
+						variables.admin = new bxagents.models.api.Caller( id = "root", scope = "admin" );
+					} );
+
+					it( "lists the volumes by name and mode, never a folder on the machine", function() {
+						var listed = shared.volumes( ada ).data().volumes;
+
+						expect( listed.map( v => v.name ) ).toBe( [ "files", "notes" ] );
+						expect( listed[ 2 ].mode ).toBe( "rw" );
+						expect( listed[ 2 ].description ).toBe( "My notes" );
+						expect( jsonSerialize( listed ) ).notToInclude( dir.replace( "\", "/", "all" ) );
+					} );
+
+					it( "lists no volumes when the app does not know them", function() {
+						expect( service.volumes( ada ).data().volumes ).toBeEmpty();
+					} );
+
+					it( "shows the data report, with folders, to an admin", function() {
+						var report = shared.data( admin ).data();
+
+						expect( report.home ).toBe( dir.replace( "\", "/", "all" ) & "/home" );
+						expect( report.items.map( i => i.name ) ).toInclude( "chat.db" );
+						expect( report.volumes.map( v => v.name ) ).toBe( [ "files", "notes" ] );
+						expect( report.volumes[ 2 ].path ).toInclude( "bxagents-service-" );
+					} );
+
+					it( "refuses the data report to anyone else", function() {
+						var refused = shared.data( ada );
+
+						expect( refused.succeeded() ).toBeFalse();
+						expect( refused.code() ).toBe( "forbidden" );
+					} );
+
+					it( "says it is not found when the app does not know its data home", function() {
+						expect( service.data( admin ).code() ).toBe( "not_found" );
+					} );
+
+					it( "lets a conversation and the commands list the volumes", function() {
+						expect( shared.conversation( ada ).volumes().map( v => v.name ) ).toBe( [ "files", "notes" ] );
+
+						var reply = shared.commands().execute( "ada", "c-" & createUUID(), "/volumes", "web", false );
+						expect( jsonSerialize( reply.blocks ) ).toInclude( "notes" );
+						expect( jsonSerialize( reply.blocks ) ).toInclude( "read and write" );
+						expect( jsonSerialize( reply.blocks ) ).notToInclude( dir.replace( "\", "/", "all" ) );
+					} );
+
+				} );
+
 				it( "has no conversation list or preferences when the app keeps no database", function() {
 					var bare = new bxagents.models.api.AgentService( agent );
 
