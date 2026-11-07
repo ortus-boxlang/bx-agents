@@ -186,7 +186,7 @@ class {
 		variables.routerGenerator.generate( discovery, appDir, gatewayResult.hasChannelGateway ?: false, gatewayResult.hasWhatsAppCloudGateway ?: false, gatewayResult.hasTeamsGateway ?: false, gatewayResult.hasTwilioGateway ?: false, gatewayResult.hasGitHubGateway ?: false, effectiveAgentApi )
 
 		arguments.onProgress( "+ Generating the agent API run control (handlers/AgentApi.bx)..." )
-		var agentApiResult = variables.agentApiGenerator.generate( appDir, effectiveAgentApi )
+		var agentApiResult = variables.agentApiGenerator.generate( appDir, effectiveAgentApi, oauthServersOf( config ) )
 		arguments.onProgress( "    #agentApiResult.written ? 'written' : 'off (agentApi.enabled is false)'#" )
 
 		arguments.onProgress( "+ Generating the web chat UI (if any gateways/* entry exposes it)..." )
@@ -325,6 +325,29 @@ class {
 			manifest     : manifest,
 			warnings     : validation.warnings
 		}
+	}
+
+
+	/**
+	 * The `mcpServers` entries, of the agent and of its sub-agents, that ask people to sign in (they have an `oauth` key).
+	 *
+	 * @config A resolved agent config
+	 *
+	 * @return The entries as written, placeholders and all, for the connect routes
+	 */
+	private array function oauthServersOf( required struct config ) {
+		var found = []
+		for ( var entry in ( arguments.config.mcpServers ?: [] ) ) {
+			if ( isStruct( entry ) && entry.keyExists( "oauth" ) ) {
+				found.append( entry )
+			}
+		}
+		for ( var sub in ( arguments.config.subAgents ?: [] ) ) {
+			if ( isStruct( sub ) ) {
+				found.append( oauthServersOf( sub ), true )
+			}
+		}
+		return found
 	}
 
 }

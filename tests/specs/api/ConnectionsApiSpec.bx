@@ -1,0 +1,118 @@
+/**
+ * The connect answers of the agent API: the caller's own sign ins, never a token, never somebody else's.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	/**
+	 * Listing, starting, finishing and removing a sign in as a caller.
+	 */
+	function run() {
+		describe( "Connections (agent API)", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-connapi-" );
+				variables.wiring = new bxagents.models.vault.VaultWiring().pin( dir & "/chat.db" );
+				variables.made = {};
+				variables.service = new bxagents.models.connect.ConnectionService(
+					[ { name : "mail", url : "https://mail.example.com/mcp", oauth : { scopes : [ "mail.read" ] } } ],
+					{
+						wiring        : wiring,
+						clientFactory : function( resolved ) {
+							made[ resolved.name ] = new tests.support.FakeOAuthClient( resolved );
+							return made[ resolved.name ];
+						}
+					}
+				);
+				variables.alice = new bxagents.models.api.Caller( id = "alice", name = "alice", scope = "chat", source = "web" );
+				variables.bob = new bxagents.models.api.Caller( id = "bob", name = "bob", scope = "chat", source = "web" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "lists the servers for the caller, with who they are and what is missing", function() {
+				var answer = new bxagents.models.api.Connections( service, alice ).all();
+
+				expect( answer.succeeded() ).toBeTrue();
+				expect( answer.data().user ).toBe( "alice" );
+				expect( answer.data().servers[ 1 ].name ).toBe( "mail" );
+				expect( answer.data().servers[ 1 ].connected ).toBeFalse();
+				expect( answer.data().missing ).toBe( [ "mail" ] );
+			} );
+
+			it( "starts a sign in for the caller and gives the address, nothing else", function() {
+				var answer = new bxagents.models.api.Connections( service, alice ).start( "mail" );
+
+				expect( answer.succeeded() ).toBeTrue();
+				expect( answer.data().authorizationUrl ).toInclude( "https://auth.example.com/authorize" );
+				expect( answer.data().keyExists( "state" ) ).toBeFalse();
+				expect( made.mail.startedFor() ).toBe( "alice" );
+			} );
+
+			it( "connects the person who started it, from the state alone", function() {
+				new bxagents.models.api.Connections( service, alice ).start( "mail" );
+
+				var done = new bxagents.models.api.Connections( service, bob ).complete( "code", made.mail.lastState() );
+
+				expect( done.succeeded() ).toBeTrue();
+				expect( done.data().subject ).toBe( "alice" );
+				expect( new bxagents.models.api.Connections( service, alice ).all().data().servers[ 1 ].connected ).toBeTrue();
+				expect( new bxagents.models.api.Connections( service, bob ).all().data().servers[ 1 ].connected ).toBeFalse();
+			} );
+
+			it( "answers bad_request for a state nobody made, and not_found for a server nobody has", function() {
+				var forged = new bxagents.models.api.Connections( service, alice ).complete( "code", "forged" );
+				var unknown = new bxagents.models.api.Connections( service, alice ).start( "nope" );
+
+				expect( forged.succeeded() ).toBeFalse();
+				expect( forged.code() ).toBe( "bad_request" );
+				expect( unknown.code() ).toBe( "not_found" );
+			} );
+
+			it( "removes only the caller's own sign in", function() {
+				new bxagents.models.api.Connections( service, alice ).start( "mail" );
+				service.complete( "c", made.mail.lastState() );
+				new bxagents.models.api.Connections( service, bob ).start( "mail" );
+				service.complete( "c", made.mail.lastState() );
+
+				new bxagents.models.api.Connections( service, alice ).remove( "mail" );
+
+				expect( service.list( "alice" )[ 1 ].connected ).toBeFalse();
+				expect( service.list( "bob" )[ 1 ].connected ).toBeTrue();
+			} );
+
+			it( "never carries a token in what it answers", function() {
+				var started = new bxagents.models.api.Connections( service, alice ).start( "mail" );
+				var listed = new bxagents.models.api.Connections( service, alice ).all();
+
+				expect( jsonSerialize( started.data() ) ).notToInclude( "token" );
+				expect( jsonSerialize( listed.data() ) ).notToInclude( "token" );
+			} );
+
+		} );
+
+		describe( "CallbackPage", function() {
+
+			it( "says which server is connected, safely", function() {
+				var page = new bxagents.models.connect.CallbackPage().connected( "<b>mail</b>" );
+
+				expect( page ).toInclude( "Connected" );
+				expect( page ).toInclude( "&lt;b&gt;mail&lt;/b&gt;" );
+				expect( page ).notToInclude( "<b>mail</b>" );
+			} );
+
+			it( "shows why not, safely", function() {
+				var page = new bxagents.models.connect.CallbackPage().refused( "access_denied <script>x</script>" );
+
+				expect( page ).toInclude( "Not connected" );
+				expect( page ).toInclude( "access_denied &lt;script&gt;" );
+				expect( page ).notToInclude( "<script>x" );
+			} );
+
+		} );
+	}
+
+}

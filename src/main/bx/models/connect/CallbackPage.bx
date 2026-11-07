@@ -1,0 +1,46 @@
+/**
+ * The small page a person sees when a provider sends them back after they sign in: connected, or why not. It carries
+ * what the provider or the sign in said, escaped, and nothing else; no token is ever on it.
+ */
+class {
+
+	/**
+	 * @name The server they connected to
+	 *
+	 * @return A page of HTML
+	 */
+	string function connected( required string name ) {
+		return page( "Connected", "You are connected to <strong>" & escape( arguments.name ) & "</strong>. You can close this tab and go back to the chat." )
+	}
+
+	/**
+	 * @reason What went wrong, as the provider or the sign in said it
+	 *
+	 * @return A page of HTML
+	 */
+	string function refused( required string reason ) {
+		return page( "Not connected", escape( arguments.reason ) & "<br><br>Go back to the chat and start the sign in again." )
+	}
+
+	/**
+	 * @title The heading
+	 * @body  The sentence, already safe HTML
+	 *
+	 * @return The whole page
+	 */
+	private string function page( required string title, required string body ) {
+		return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>' & arguments.title & '</title>'
+			& '<style>:root{color-scheme:light dark}body{font:16px/1.5 system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;padding:16px}main{max-width:28rem}h1{font-size:1.4rem}</style></head>'
+			& '<body><main><h1>' & arguments.title & '</h1><p>' & arguments.body & '</p></main></body></html>'
+	}
+
+	/**
+	 * @text Any text
+	 *
+	 * @return The text safe to put in HTML
+	 */
+	private string function escape( required string text ) {
+		return arguments.text.replace( "&", "&amp;", "all" ).replace( "<", "&lt;", "all" ).replace( ">", "&gt;", "all" ).replace( '"', "&quot;", "all" )
+	}
+
+}

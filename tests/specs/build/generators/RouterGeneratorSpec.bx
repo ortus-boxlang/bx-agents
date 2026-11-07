@@ -304,8 +304,8 @@ class extends="testbox.system.BaseSpec" {
 				// every route of the API has it, none is left out
 				var routes = content.listToArray( char( 10 ) ).filter( ( line ) => line.find( '( "/__bxagents' ) );
 				expect( routes.len() ).toBeGT( 20 );
-				// health is the one route that is open to anyone: it says only that the server is up
-				expect( routes.filter( ( r ) => !r.find( ".middleware( gate ).meta( gateMeta )" ) ).map( ( r ) => reReplace( r, "^[[:space:]]+", "" ) ) ).toBe( [ 'get( "/__bxagents/health" ).toHandler( "AgentApi.health" )' ] );
+				// health and the sign in callback are the routes open to anyone: health says only that the server is up, and the callback is the provider's redirect, which a single use state vouches for
+				expect( routes.filter( ( r ) => !r.find( ".middleware( gate ).meta( gateMeta )" ) ).map( ( r ) => reReplace( r, "^[[:space:]]+", "" ) ) ).toBe( [ 'get( "/__bxagents/health" ).toHandler( "AgentApi.health" )', 'get( "/__bxagents/connect/callback" ).toHandler( "AgentApi.connectCallback" )' ] );
 				// the old gate and its catch-all are gone: the middleware answers 401 itself
 				expect( content ).notToInclude( "withCondition" );
 				expect( content ).notToInclude( ":subroute?" );
