@@ -21,7 +21,7 @@ class {
 
 	/**
 	 * @entries The `mcpServers` entries that have an `oauth` key, as written in Agent.yaml (placeholders not yet replaced)
-	 * @options { apiPath : where the agent API is served, wiring : a VaultWiring, clientFactory : ( entry ) => client, redirectUri : replaces the callback of every entry }
+	 * @options { apiPath : where the agent API is served, wiring : a VaultWiring, agent : the agent that gets the tools of a server once somebody has signed in, clientFactory : ( entry ) => client, redirectUri : replaces the callback of every entry }
 	 */
 	function init( required array entries, struct options = {} ) {
 		variables.entries = []
@@ -130,6 +130,8 @@ class {
 		for ( var entry in variables.entries ) {
 			try {
 				var done = clientFor( entry.name ).completeAuthorization( arguments.code, arguments.state, arguments.issuer )
+				rememberForDiscovery( entry, done.subject )
+				refresh()
 				return { "name" : entry.name, "subject" : done.subject, "scope" : done.scope ?: "" }
 			} catch ( any e ) {
 				if ( e.type != "MCPOAuthInvalidState" ) {
@@ -139,6 +141,45 @@ class {
 			}
 		}
 		throw( type = "MCPOAuthInvalidState", message = len( lastError ) ? lastError : "This sign in is not known here. It may have been used or it may have expired. Start it again." )
+	}
+
+	/**
+	 * Gives the agent the tools of every server it could not list yet, now that somebody has signed in. A server the agent
+	 * already has is left alone, so calling this again does nothing.
+	 *
+	 * @return How many servers were added
+	 */
+	numeric function refresh() {
+		if ( !isObject( variables.options.agent ?: "" ) ) {
+			return 0
+		}
+		var agent = variables.options.agent
+		var added = 0
+		var have = []
+		for ( var listed in agent.listMCPServers() ) {
+			have.append( listed.url )
+		}
+		for ( var entry in variables.entries ) {
+			var resolved = resolve( entry )
+			if ( have.contains( resolved.url ) ) {
+				continue
+			}
+			try {
+				if ( !clientFor( entry.name ).isAuthorized( discoverySubject( resolved ) ) ) {
+					continue
+				}
+				// the address first and the rest as the options, which is how bx-ai takes an HTTP server given to it later
+				var options = duplicate( resolved )
+				options.delete( "name" )
+				options.delete( "url" )
+				agent.withMCPServer( resolved.url, options )
+				added += 1
+			} catch ( any e ) {
+				// the agent carries on without the tools, and the next sign in tries again
+				writeLog( text = "Could not add the tools of [#entry.name#] to the agent after a sign in: #e.message#", type = "error", log = "ai" )
+			}
+		}
+		return added
 	}
 
 	/**
@@ -152,6 +193,24 @@ class {
 	}
 
 	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @entry One entry
+	 * @subject The person who signed in
+	 */
+	private void function rememberForDiscovery( required struct entry, required string subject ) {
+		var resolved = resolve( arguments.entry )
+		resolved.oauth.store.set( "discover:" & resolved.url, { "subject" : arguments.subject } )
+	}
+
+	/**
+	 * @resolved A resolved entry
+	 *
+	 * @return The person whose tokens list a server's tools
+	 */
+	private string function discoverySubject( required struct resolved ) {
+		return arguments.resolved.oauth.discoverySubject()
+	}
 
 	/**
 	 * @name The server's name

@@ -108,6 +108,61 @@ class extends="testbox.system.BaseSpec" {
 				} ).toThrow( "BxAgents.UnknownConnection" );
 			} );
 
+			describe( "tools of a server the agent could not list at start", function() {
+
+				beforeEach( function() {
+					variables.agent = new tests.support.FakeAgent();
+					variables.withAgent = new bxagents.models.connect.ConnectionService(
+						[ { name : "mail", url : "https://mail.example.com/mcp", oauth : { scopes : [ "mail.read" ] } } ],
+						{
+							wiring        : wiring,
+							agent         : agent,
+							clientFactory : function( resolved ) {
+								if ( !made.keyExists( resolved.name ) ) {
+									made[ resolved.name ] = new tests.support.FakeOAuthClient( resolved );
+								}
+								return made[ resolved.name ];
+							}
+						}
+					);
+				} );
+
+				it( "adds the server to the agent once somebody has signed in, with that person as the one who lists its tools", function() {
+					expect( withAgent.refresh() ).toBe( 0 );
+
+					withAgent.start( "mail", "alice" );
+					withAgent.complete( "code", made.mail.lastState() );
+
+					expect( agent.added() ).toHaveLength( 1 );
+					expect( agent.added()[ 1 ].url ).toBe( "https://mail.example.com/mcp" );
+					// a call with nobody behind it (listing the tools) is made as the person who signed in last
+					expect( agent.added()[ 1 ].oauth.discoverySubject() ).toBe( "alice" );
+				} );
+
+				it( "does not add a server the agent already has", function() {
+					variables.agent = new tests.support.FakeAgent( [ "https://mail.example.com/mcp" ] );
+					variables.withAgent = new bxagents.models.connect.ConnectionService(
+						[ { name : "mail", url : "https://mail.example.com/mcp", oauth : { scopes : [ "mail.read" ] } } ],
+						{ wiring : wiring, agent : agent, clientFactory : function( resolved ) { made[ resolved.name ] = new tests.support.FakeOAuthClient( resolved ); return made[ resolved.name ]; } }
+					);
+
+					withAgent.start( "mail", "alice" );
+					withAgent.complete( "code", made.mail.lastState() );
+
+					expect( agent.added() ).toBeEmpty();
+				} );
+
+				it( "makes every call for a person with that person's tokens", function() {
+					withAgent.start( "mail", "alice" );
+					withAgent.complete( "code", made.mail.lastState() );
+					var subject = agent.added()[ 1 ].oauth.subject;
+
+					expect( subject( { chatRequest : new tests.support.FakeChatRequest( "bob" ) } ) ).toBe( "bob" );
+					expect( subject( { chatRequest : new tests.support.FakeChatRequest( "" ) } ) ).toBe( "default" );
+				} );
+
+			} );
+
 			it( "gives each client the vault token store, the callback and a client id from the vault", function() {
 				wiring.service().add( "MAIL_CLIENT_ID", "cid-7" );
 				var withVault = new bxagents.models.connect.ConnectionService(

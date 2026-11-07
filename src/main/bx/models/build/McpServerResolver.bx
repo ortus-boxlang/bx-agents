@@ -45,7 +45,7 @@ class {
 				entry.delete( "allowedHosts" )
 			}
 			if ( entry.keyExists( "oauth" ) ) {
-				entry[ "oauth" ] = oauthOf( entry.oauth, arguments.context )
+				entry[ "oauth" ] = oauthOf( entry.oauth, entry.url ?: "", arguments.context )
 			}
 			if ( entry.keyExists( "command" ) ) {
 				executables.append( executableOf( entry.command ) )
@@ -104,11 +104,12 @@ class {
 	 * Fills in the OAuth options bx-ai needs and a project cannot write.
 	 *
 	 * @oauth `true`, or the entry's `oauth` struct ( { scopes, clientId, clientSecret, clientMetadataUrl, clientName, redirectUri } )
+	 * @address The server's address, which the person who last signed in to it is remembered under
 	 * @context { apiPath, wiring }
 	 *
 	 * @return The struct for bx-ai's `oauth` option: the entry's own keys, plus the vault `store`, a `subject` function and a `redirectUri`
 	 */
-	private struct function oauthOf( required any oauth, struct context = {} ) {
+	private struct function oauthOf( required any oauth, required string address, struct context = {} ) {
 		var options = isStruct( arguments.oauth ) ? duplicate( arguments.oauth ) : {}
 		var wiring = arguments.context.wiring ?: new "models.vault.VaultWiring@bxagents"()
 		if ( !options.keyExists( "store" ) ) {
@@ -117,6 +118,9 @@ class {
 		if ( !options.keyExists( "subject" ) ) {
 			options[ "subject" ] = subjectFunction( wiring )
 		}
+		if ( !options.keyExists( "discoverySubject" ) ) {
+			options[ "discoverySubject" ] = discoveryFunction( options.store, arguments.address )
+		}
 		if ( !len( options.redirectUri ?: "" ) ) {
 			options[ "redirectUri" ] = callbackAddress( arguments.context.apiPath ?: "/__bxagents" )
 		}
@@ -124,14 +128,33 @@ class {
 	}
 
 	/**
+	 * Whose tokens a call made for a person uses: that person's, "default" when the run has no name.
+	 *
 	 * @wiring A VaultWiring
 	 *
-	 * @return A function ( context ) => text: the person a call is made for, "default" when the run has no name
+	 * @return A function ( context ) => text
 	 */
 	private function function subjectFunction( required any wiring ) {
 		return ( context ) => {
 			var who = wiring.userOf( isStruct( context ) ? ( context.chatRequest ?: "" ) : "" )
 			return len( who ) ? who : "default"
+		}
+	}
+
+	/**
+	 * Whose tokens a call with nobody behind it uses: the agent finding out which tools a server has, when it starts
+	 * or when a server is added. The list of tools is the server's and the same for everyone, so the person who signed
+	 * in to it last will do; somebody has to be signed in to ask for it. What each call then does, it does as the
+	 * person who made it.
+	 *
+	 * @store The token store, where ConnectionService remembered the last person to sign in
+	 * @address The server's address
+	 *
+	 * @return A function () => text
+	 */
+	private function function discoveryFunction( required any store, required string address ) {
+		return () => {
+			return store.get( "discover:" & address ).subject ?: "default"
 		}
 	}
 
