@@ -1,0 +1,204 @@
+/**
+ * The fake OAuth MCP server in tools/demo: it has to behave like a real one, because other specs and the demos rely on it.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	/**
+	 * Sends one request.
+	 *
+	 * @verb GET or POST
+	 * @address The address
+	 * @body The body, for a POST
+	 * @headers Request headers
+	 *
+	 * @return { status, body, headers : a struct of the first value of each }
+	 */
+	private struct function call( required string verb, required string address, string body = "", struct headers = {} ) {
+		var builder = createObject( "java", "java.net.http.HttpRequest" ).newBuilder( createObject( "java", "java.net.URI" ).create( arguments.address ) )
+		for ( var name in arguments.headers ) {
+			builder.header( name, arguments.headers[ name ] )
+		}
+		if ( arguments.verb == "POST" ) {
+			builder.POST( createObject( "java", "java.net.http.HttpRequest$BodyPublishers" ).ofString( arguments.body ) )
+		} else {
+			builder.GET()
+		}
+		var answer = createObject( "java", "java.net.http.HttpClient" ).newHttpClient().send( builder.build(), createObject( "java", "java.net.http.HttpResponse$BodyHandlers" ).ofString() )
+		var sent = {}
+		for ( var key in answer.headers().map().keySet() ) {
+			sent[ key ] = answer.headers().map().get( key ).get( 0 )
+		}
+		return { status : answer.statusCode(), body : answer.body(), headers : sent }
+	}
+
+	/**
+	 * @verifier A PKCE code verifier
+	 *
+	 * @return Its S256 challenge
+	 */
+	private string function challengeOf( required string verifier ) {
+		var digest = createObject( "java", "java.security.MessageDigest" ).getInstance( "SHA-256" ).digest( arguments.verifier.getBytes( "UTF-8" ) )
+		return createObject( "java", "java.util.Base64" ).getUrlEncoder().withoutPadding().encodeToString( digest )
+	}
+
+	/**
+	 * Signs a person in by hand: the authorization request, the code, the exchange.
+	 *
+	 * @verifier The PKCE verifier to use
+	 *
+	 * @return The token answer, parsed
+	 */
+	private struct function signIn( required string verifier ) {
+		var authorize = mail.origin() & "/authorize?response_type=code&client_id=demo&redirect_uri=http%3A%2F%2F127.0.0.1%3A1%2Fcb&state=s-1&code_challenge=" & challengeOf( arguments.verifier ) & "&code_challenge_method=S256&scope=mail.read"
+		var back = mail.approve( authorize )
+		var code = listLast( listFirst( listRest( back, "?" ), "&" ), "=" )
+		var answer = call( "POST", mail.origin() & "/token", "grant_type=authorization_code&code=" & code & "&code_verifier=" & arguments.verifier & "&client_id=demo", { "Content-Type" : "application/x-www-form-urlencoded" } )
+		return { status : answer.status, data : jsonDeserialize( answer.body ), code : code }
+	}
+
+	/**
+	 * Metadata, registration, the sign in page, the code exchange with PKCE, refreshing, and bx-ai's client against it.
+	 */
+	function run() {
+		describe( "tools/demo/FakeOAuthMcp", function() {
+
+			beforeEach( function() {
+				variables.mail = new tools.demo.FakeOAuthMcp().start();
+			} );
+
+			afterEach( function() {
+				mail.stop();
+			} );
+
+			it( "says which authorization server protects the MCP server, and that it wants PKCE S256", function() {
+				var resource = jsonDeserialize( call( "GET", mail.origin() & "/.well-known/oauth-protected-resource" ).body );
+				var metadata = jsonDeserialize( call( "GET", mail.origin() & "/.well-known/oauth-authorization-server" ).body );
+
+				expect( resource.resource ).toBe( mail.mcpUrl() );
+				expect( resource.authorization_servers ).toBe( [ mail.origin() ] );
+				expect( metadata.issuer ).toBe( mail.origin() );
+				expect( metadata.code_challenge_methods_supported ).toBe( [ "S256" ] );
+				expect( metadata.authorization_response_iss_parameter_supported ).toBeTrue();
+			} );
+
+			it( "answers 401 with a pointer to its metadata when there is no good token", function() {
+				var none = call( "POST", mail.mcpUrl(), "{}" );
+				var wrong = call( "POST", mail.mcpUrl(), "{}", { "Authorization" : "Bearer nope" } );
+
+				expect( none.status ).toBe( 401 );
+				expect( none.headers[ "www-authenticate" ] ).toInclude( "resource_metadata=""" & mail.origin() & "/.well-known/oauth-protected-resource""" );
+				expect( wrong.status ).toBe( 401 );
+			} );
+
+			it( "registers a client and remembers what was asked", function() {
+				var made = call( "POST", mail.origin() & "/register", '{"redirect_uris":["http://127.0.0.1:5000/callback"]}', { "Content-Type" : "application/json" } );
+				var body = jsonDeserialize( made.body );
+
+				expect( made.status ).toBe( 201 );
+				expect( body.client_id ).toMatch( "^demo-" );
+				expect( body.redirect_uris ).toBe( [ "http://127.0.0.1:5000/callback" ] );
+				expect( mail.registrations() ).toHaveLength( 1 );
+			} );
+
+			it( "shows a sign in page with an Allow and a Deny link", function() {
+				var page = call( "GET", mail.origin() & "/authorize?response_type=code&redirect_uri=http%3A%2F%2F127.0.0.1%3A1%2Fcb&state=s-1&code_challenge=x&code_challenge_method=S256&scope=mail.read" );
+
+				expect( page.status ).toBe( 200 );
+				expect( page.body ).toInclude( ">Allow<" );
+				expect( page.body ).toInclude( ">Deny<" );
+				expect( page.body ).toInclude( "code=" );
+				expect( page.body ).toInclude( "error=access_denied" );
+			} );
+
+			it( "sends the browser back with the code, the state and the issuer", function() {
+				var back = mail.approve( mail.origin() & "/authorize?redirect_uri=http%3A%2F%2F127.0.0.1%3A1%2Fcb&state=abc&code_challenge=x" );
+
+				expect( back ).toMatch( "^http://127\.0\.0\.1:1/cb\?code=[0-9a-f]+&state=abc&iss=" );
+				expect( mail.approve( mail.origin() & "/authorize?redirect_uri=http%3A%2F%2F127.0.0.1%3A1%2Fcb&state=abc", true ) ).toBe( "http://127.0.0.1:1/cb?error=access_denied&state=abc" );
+			} );
+
+			it( "trades the code for tokens only with the right PKCE verifier, and only once", function() {
+				var good = signIn( "verifier-one-is-long-enough-to-be-fine-0123456789" );
+
+				expect( good.status ).toBe( 200 );
+				expect( good.data.access_token ).toMatch( "^at_" );
+				expect( good.data.refresh_token ).toMatch( "^rt_" );
+
+				var again = call( "POST", mail.origin() & "/token", "grant_type=authorization_code&code=" & good.code & "&code_verifier=verifier-one-is-long-enough-to-be-fine-0123456789", { "Content-Type" : "application/x-www-form-urlencoded" } );
+				expect( again.status ).toBe( 400 );
+
+				var authorize = mail.origin() & "/authorize?redirect_uri=http%3A%2F%2F127.0.0.1%3A1%2Fcb&state=s&code_challenge=" & challengeOf( "right-verifier-right-verifier-right-verifier-1" );
+				var code = listLast( listFirst( listRest( mail.approve( authorize ), "?" ), "&" ), "=" );
+				var wrong = call( "POST", mail.origin() & "/token", "grant_type=authorization_code&code=" & code & "&code_verifier=another-verifier-another-verifier-another-1", { "Content-Type" : "application/x-www-form-urlencoded" } );
+				expect( wrong.status ).toBe( 400 );
+			} );
+
+			it( "records the form fields of each token request, so a body that never arrived is seen", function() {
+				signIn( "verifier-two-is-long-enough-to-be-fine-0123456789" );
+				call( "POST", mail.origin() & "/token", "", { "Content-Type" : "application/x-www-form-urlencoded" } );
+
+				var log = mail.tokenRequests();
+				expect( log ).toHaveLength( 2 );
+				expect( log[ 1 ].ok ).toBeTrue();
+				expect( log[ 1 ].fields ).toInclude( "code_verifier" );
+				expect( log[ 2 ].fields ).toBeEmpty();
+				expect( log[ 2 ].ok ).toBeFalse();
+			} );
+
+			it( "lets a good token use the MCP server and lists one tool", function() {
+				var tokens = signIn( "verifier-three-is-long-enough-to-be-fine-012345678" ).data;
+				var headers = { "Authorization" : "Bearer " & tokens.access_token, "Content-Type" : "application/json" };
+
+				var tools = jsonDeserialize( call( "POST", mail.mcpUrl(), '{"jsonrpc":"2.0","id":1,"method":"tools/list"}', headers ).body );
+				var inbox = jsonDeserialize( call( "POST", mail.mcpUrl(), '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"inbox"}}', headers ).body );
+
+				expect( tools.result.tools ).toHaveLength( 1 );
+				expect( tools.result.tools[ 1 ].name ).toBe( "inbox" );
+				expect( inbox.result.content[ 1 ].text ).toInclude( "Lunch on Friday" );
+				expect( call( "POST", mail.mcpUrl(), '{"jsonrpc":"2.0","method":"notifications/initialized"}', headers ).status ).toBe( 202 );
+			} );
+
+			it( "refreshes, and stops accepting a revoked access token or a revoked refresh token", function() {
+				var tokens = signIn( "verifier-four-is-long-enough-to-be-fine-01234567" ).data;
+				var json = { "Content-Type" : "application/json", "Authorization" : "Bearer " & tokens.access_token };
+
+				mail.revokeAccessTokens();
+				expect( call( "POST", mail.mcpUrl(), '{"jsonrpc":"2.0","id":1,"method":"tools/list"}', json ).status ).toBe( 401 );
+
+				var form = { "Content-Type" : "application/x-www-form-urlencoded" };
+				var renewed = call( "POST", mail.origin() & "/token", "grant_type=refresh_token&refresh_token=" & tokens.refresh_token, form );
+				expect( renewed.status ).toBe( 200 );
+				expect( jsonDeserialize( renewed.body ).access_token ).toMatch( "^at_" );
+				expect( mail.activeAccessTokens() ).toBe( 1 );
+
+				mail.revokeRefreshTokens();
+				expect( call( "POST", mail.origin() & "/token", "grant_type=refresh_token&refresh_token=" & tokens.refresh_token, form ).status ).toBe( 400 );
+			} );
+
+			it( "answers 404 for a path it does not have", function() {
+				expect( call( "GET", mail.origin() & "/nope" ).status ).toBe( 404 );
+			} );
+
+			it( "lets bx-ai's own client sign in against it, end to end", function() {
+				var mcpClient = MCP( mail.mcpUrl() ).withOAuth( { redirectUri : "http://127.0.0.1:9/callback", store : "cache" } );
+
+				expect( mcpClient.isAuthorized( "alice" ) ).toBeFalse();
+				var started = mcpClient.startAuthorization( "alice" );
+				var back = mail.approve( started.authorizationUrl );
+				var query = {};
+				for ( var part in listToArray( listRest( back, "?" ), "&" ) ) {
+					query[ listFirst( part, "=" ) ] = urlDecode( listRest( part, "=" ) );
+				}
+				var done = mcpClient.completeAuthorization( query.code, query.state, query.iss ?: "" );
+
+				expect( done.subject ).toBe( "alice" );
+				expect( mcpClient.isAuthorized( "alice" ) ).toBeTrue();
+				// the form fields of the token request did arrive
+				expect( mail.tokenRequests()[ 1 ].fields ).toInclude( "code_verifier" );
+				expect( mail.tokenRequests()[ 1 ].ok ).toBeTrue();
+			} );
+
+		} );
+	}
+
+}

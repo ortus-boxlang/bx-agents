@@ -1,0 +1,380 @@
+/**
+ * A fake mail service for demos and specs: one origin that is both an MCP server and the OAuth authorization server
+ * that protects it, the way the MCP authorization specification describes. Nothing here is a real service. Nothing is
+ * kept after it stops.
+ *
+ *   /mcp                                         the MCP server (JSON-RPC over POST): one tool, `inbox`
+ *   /.well-known/oauth-protected-resource        says which authorization server protects /mcp (RFC 9728)
+ *   /.well-known/oauth-authorization-server      that server's metadata (RFC 8414), PKCE S256 only
+ *   /register                                    dynamic client registration (RFC 7591)
+ *   /authorize                                   a page with an Allow and a Deny link, standing in for the sign in
+ *   /token                                       the code exchange and the refresh; checks the PKCE verifier
+ *
+ * A call to /mcp with no good token is answered 401 with the `WWW-Authenticate` header that points to the metadata.
+ * The redirect back carries `code`, `state` and `iss` (RFC 9207).
+ *
+ * ```
+ * mail = new FakeOAuthMcp( 9300 ).start()
+ * mail.mcpUrl()                    // http://127.0.0.1:9300/mcp
+ * callback = mail.approve( authorizationUrl )   // the address the browser would be sent back to, with the code
+ * mail.stop()
+ * ```
+ *
+ * Run it on its own with `boxlang tools/demo/fake-oauth-mcp.bxs [--port=9300]`.
+ */
+class implements="java:com.sun.net.httpserver.HttpHandler" {
+
+	/**
+	 * @port The port to listen on, 0 for any free one
+	 */
+	function init( numeric port = 0 ) {
+		variables.wantedPort = arguments.port
+		variables.httpServer = ""
+		variables.boundPort = 0
+		variables.codes = createObject( "java", "java.util.concurrent.ConcurrentHashMap" ).init()
+		variables.accessTokens = createObject( "java", "java.util.concurrent.ConcurrentHashMap" ).init()
+		variables.refreshTokens = createObject( "java", "java.util.concurrent.ConcurrentHashMap" ).init()
+		variables.tokenLog = []
+		variables.registrationLog = []
+		return this
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Running it
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Starts listening on 127.0.0.1.
+	 *
+	 * @return This
+	 */
+	function start() {
+		var address = createObject( "java", "java.net.InetSocketAddress" ).init( createObject( "java", "java.net.InetAddress" ).getByName( "127.0.0.1" ), variables.wantedPort )
+		variables.httpServer = createObject( "java", "com.sun.net.httpserver.HttpServer" ).create( address, 0 )
+		variables.httpServer.createContext( "/", this )
+		variables.httpServer.start()
+		variables.boundPort = variables.httpServer.getAddress().getPort()
+		return this
+	}
+
+	/**
+	 * Stops listening.
+	 */
+	void function stop() {
+		if ( isObject( variables.httpServer ) ) {
+			variables.httpServer.stop( 0 )
+			variables.httpServer = ""
+		}
+	}
+
+	/** @return The port it listens on */
+	numeric function port() {
+		return variables.boundPort
+	}
+
+	/** @return http://127.0.0.1:PORT, which is also the issuer */
+	string function origin() {
+		return "http://127.0.0.1:" & variables.boundPort
+	}
+
+	/** @return The address of the MCP server */
+	string function mcpUrl() {
+		return origin() & "/mcp"
+	}
+
+	// ----------------------------------------------------------------------------------
+	// For specs
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Plays the person at the sign in page without a browser: makes the code and returns the address the browser would
+	 * be sent back to.
+	 *
+	 * @authorizationUrl The address bx-ai gave to send the person to
+	 * @deny True to refuse instead, as the Deny link does
+	 *
+	 * @return The redirect address, with code, state and iss (or error and state)
+	 */
+	string function approve( required string authorizationUrl, boolean deny = false ) {
+		var query = parseQuery( listRest( arguments.authorizationUrl, "?" ) )
+		return redirectFor( query, arguments.deny )
+	}
+
+	/**
+	 * @return The token requests it received, in order: [ { grant_type, fields : the names of the form fields that arrived, ok } ]
+	 */
+	array function tokenRequests() {
+		return variables.tokenLog
+	}
+
+	/**
+	 * @return The clients registered, in order: [ { client_id, redirect_uris } ]
+	 */
+	array function registrations() {
+		return variables.registrationLog
+	}
+
+	/**
+	 * Makes every access token stop working, so the next call is answered 401 and a refresh is needed.
+	 */
+	void function revokeAccessTokens() {
+		variables.accessTokens.clear()
+	}
+
+	/**
+	 * Makes every refresh token stop working, so a refresh is refused.
+	 */
+	void function revokeRefreshTokens() {
+		variables.refreshTokens.clear()
+	}
+
+	/**
+	 * @return How many access tokens are good at the moment
+	 */
+	numeric function activeAccessTokens() {
+		return variables.accessTokens.size()
+	}
+
+	// ----------------------------------------------------------------------------------
+	// The HTTP handler. The handlers are named handleX because `mcp` and `register` are also names of functions bx-ai
+	// and BoxLang provide: a private method called mcp() would not be the one that runs.
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Answers one request. Called by the JDK server, on its own thread.
+	 *
+	 * @exchange The com.sun.net.httpserver.HttpExchange
+	 */
+	void function handle( required any exchange ) {
+		try {
+			var path = arguments.exchange.getRequestURI().getPath()
+			var verb = arguments.exchange.getRequestMethod()
+			var rawQuery = arguments.exchange.getRequestURI().getRawQuery() ?: ""
+			if ( verb == "GET" && left( path, 47 ) == "/.well-known/oauth-protected-resource" ) {
+				return reply( arguments.exchange, 200, { "resource" : mcpUrl(), "authorization_servers" : [ origin() ] } )
+			}
+			if ( verb == "GET" && left( path, 41 ) == "/.well-known/oauth-authorization-server" ) {
+				return reply( arguments.exchange, 200, metadata() )
+			}
+			if ( verb == "GET" && path == "/authorize" ) {
+				return signInPage( arguments.exchange, parseQuery( rawQuery ) )
+			}
+			if ( verb == "POST" && path == "/register" ) {
+				return handleRegister( arguments.exchange )
+			}
+			if ( verb == "POST" && path == "/token" ) {
+				return handleToken( arguments.exchange )
+			}
+			if ( verb == "POST" && path == "/mcp" ) {
+				return handleMcp( arguments.exchange )
+			}
+			reply( arguments.exchange, 404, { "error" : "not found" } )
+		} catch ( any e ) {
+			reply( arguments.exchange, 500, { "error" : e.message } )
+		} finally {
+			arguments.exchange.close()
+		}
+	}
+
+	/**
+	 * @return The authorization server metadata
+	 */
+	private struct function metadata() {
+		return {
+			"issuer"                                        : origin(),
+			"authorization_endpoint"                        : origin() & "/authorize",
+			"token_endpoint"                                : origin() & "/token",
+			"registration_endpoint"                         : origin() & "/register",
+			"code_challenge_methods_supported"              : [ "S256" ],
+			"grant_types_supported"                         : [ "authorization_code", "refresh_token" ],
+			"response_types_supported"                      : [ "code" ],
+			"authorization_response_iss_parameter_supported" : true,
+			"scopes_supported"                              : [ "mail.read" ]
+		}
+	}
+
+	/**
+	 * Dynamic client registration.
+	 *
+	 * @exchange The exchange
+	 */
+	private void function handleRegister( required any exchange ) {
+		var body = jsonDeserialize( bodyOf( arguments.exchange ) )
+		var made = { "client_id" : "demo-" & lCase( left( replace( createUUID(), "-", "", "all" ), 8 ) ), "redirect_uris" : body.redirect_uris ?: [], "token_endpoint_auth_method" : "none" }
+		variables.registrationLog.append( made )
+		reply( arguments.exchange, 201, made )
+	}
+
+	/**
+	 * The page standing in for the provider's sign in: an Allow and a Deny link.
+	 *
+	 * @exchange The exchange
+	 * @query The authorization request
+	 */
+	private void function signInPage( required any exchange, required struct query ) {
+		var allow = redirectFor( arguments.query, false )
+		var deny = redirectFor( arguments.query, true )
+		var scopeText = escape( arguments.query.scope ?: "mail.read" )
+		var page = '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign in to Demo Mail</title>'
+			& '<style>body{font:16px/1.5 system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;background:##f4f6fb;color:##1a2233}'
+			& 'main{background:##fff;padding:2rem;border-radius:12px;box-shadow:0 4px 24px ##0002;max-width:24rem}h1{font-size:1.25rem;margin:0 0 .5rem}'
+			& 'a.b{display:inline-block;padding:.6rem 1.2rem;border-radius:8px;text-decoration:none;margin-right:.5rem}.ok{background:##2563eb;color:##fff}.no{border:1px solid ##c5ccdb;color:##1a2233}</style>'
+			& '<main><h1>Demo Mail wants access</h1><p><strong>BX Agents</strong> asks to read your mail (' & scopeText & ').</p>'
+			& '<p><a class="b ok" href="' & escape( allow ) & '">Allow</a><a class="b no" href="' & escape( deny ) & '">Deny</a></p></main>'
+		reply( arguments.exchange, 200, page, "text/html; charset=utf-8" )
+	}
+
+	/**
+	 * The address the browser is sent back to, and (when allowed) the code it carries.
+	 *
+	 * @query The authorization request
+	 * @deny True for the Deny link
+	 */
+	private string function redirectFor( required struct query, required boolean deny ) {
+		var back = arguments.query.redirect_uri ?: ""
+		var joiner = find( "?", back ) ? "&" : "?"
+		if ( arguments.deny ) {
+			return back & joiner & "error=access_denied&state=" & encode( arguments.query.state ?: "" )
+		}
+		var code = lCase( replace( createUUID(), "-", "", "all" ) )
+		variables.codes.put( code, { "challenge" : arguments.query.code_challenge ?: "", "scope" : arguments.query.scope ?: "mail.read" } )
+		return back & joiner & "code=" & code & "&state=" & encode( arguments.query.state ?: "" ) & "&iss=" & encode( origin() )
+	}
+
+	/**
+	 * The token endpoint: the code exchange (checks the PKCE verifier) and the refresh.
+	 *
+	 * @exchange The exchange
+	 */
+	private void function handleToken( required any exchange ) {
+		var fields = parseQuery( bodyOf( arguments.exchange ) )
+		variables.tokenLog.append( { "grant_type" : fields.grant_type ?: "", "fields" : fields.keyArray().sort( "text" ), "ok" : false } )
+		var logged = variables.tokenLog.last()
+		if ( ( fields.grant_type ?: "" ) == "authorization_code" ) {
+			var found = variables.codes.remove( fields.code ?: "" )
+			if ( isNull( found ) || challengeOf( fields.code_verifier ?: "" ) != found.challenge ) {
+				return reply( arguments.exchange, 400, { "error" : "invalid_grant" } )
+			}
+			var access = "at_" & lCase( left( replace( createUUID(), "-", "", "all" ), 16 ) )
+			var refresh = "rt_" & lCase( left( replace( createUUID(), "-", "", "all" ), 16 ) )
+			variables.accessTokens.put( access, true )
+			variables.refreshTokens.put( refresh, true )
+			logged.ok = true
+			return reply( arguments.exchange, 200, { "access_token" : access, "refresh_token" : refresh, "expires_in" : 3600, "token_type" : "Bearer", "scope" : found.scope } )
+		}
+		if ( ( fields.grant_type ?: "" ) == "refresh_token" && variables.refreshTokens.containsKey( fields.refresh_token ?: "" ) ) {
+			var renewed = "at_" & lCase( left( replace( createUUID(), "-", "", "all" ), 16 ) )
+			variables.accessTokens.put( renewed, true )
+			logged.ok = true
+			return reply( arguments.exchange, 200, { "access_token" : renewed, "expires_in" : 3600, "token_type" : "Bearer" } )
+		}
+		reply( arguments.exchange, 400, { "error" : "invalid_grant" } )
+	}
+
+	/**
+	 * The MCP server: needs a good bearer token.
+	 *
+	 * @exchange The exchange
+	 */
+	private void function handleMcp( required any exchange ) {
+		var auth = arguments.exchange.getRequestHeaders().getFirst( "Authorization" ) ?: ""
+		if ( left( auth, 7 ) != "Bearer " || !variables.accessTokens.containsKey( mid( auth, 8, len( auth ) ) ) ) {
+			return reply( arguments.exchange, 401, { "error" : "unauthorized" }, "application/json", { "WWW-Authenticate" : 'Bearer resource_metadata="' & origin() & '/.well-known/oauth-protected-resource"' } )
+		}
+		var message = jsonDeserialize( bodyOf( arguments.exchange ) )
+		var method = message.method ?: ""
+		if ( !len( method ) || left( method, 14 ) == "notifications/" ) {
+			arguments.exchange.sendResponseHeaders( 202, -1 )
+			return
+		}
+		var result = {}
+		switch ( method ) {
+			case "initialize":
+				result = { "protocolVersion" : "2025-06-18", "capabilities" : { "tools" : {} }, "serverInfo" : { "name" : "demo-mail", "version" : "1.0" } }
+				break
+			case "tools/list":
+				result = { "tools" : [ { "name" : "inbox", "description" : "List the newest messages in the signed in person's inbox", "inputSchema" : { "type" : "object", "properties" : {} } } ] }
+				break
+			case "tools/call":
+				result = { "content" : [ { "type" : "text", "text" : "1. Ada: Lunch on Friday?" & char( 10 ) & "2. Grace: Compiler notes attached" } ] }
+				break
+		}
+		reply( arguments.exchange, 200, { "jsonrpc" : "2.0", "id" : message.id ?: nullValue(), "result" : result } )
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Small helpers
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Sends an answer.
+	 *
+	 * @exchange The exchange
+	 * @status The HTTP status
+	 * @body A struct (sent as JSON) or text
+	 * @contentType The Content-Type
+	 * @headers More headers
+	 */
+	private void function reply( required any exchange, required numeric status, required any body, string contentType = "application/json", struct headers = {} ) {
+		var text = isSimpleValue( arguments.body ) ? arguments.body : jsonSerialize( arguments.body )
+		var bytes = text.getBytes( "UTF-8" )
+		arguments.exchange.getResponseHeaders().set( "Content-Type", arguments.contentType )
+		for ( var name in arguments.headers ) {
+			arguments.exchange.getResponseHeaders().set( name, arguments.headers[ name ] )
+		}
+		arguments.exchange.sendResponseHeaders( arguments.status, bytes.len() )
+		arguments.exchange.getResponseBody().write( bytes )
+	}
+
+	/**
+	 * @exchange The exchange
+	 *
+	 * @return The request body as text
+	 */
+	private string function bodyOf( required any exchange ) {
+		return createObject( "java", "java.lang.String" ).init( arguments.exchange.getRequestBody().readAllBytes(), "UTF-8" )
+	}
+
+	/**
+	 * @text A query string or a form body
+	 *
+	 * @return Its pairs, decoded
+	 */
+	private struct function parseQuery( required string text ) {
+		var pairs = {}
+		for ( var part in listToArray( arguments.text, "&" ) ) {
+			var name = urlDecode( listFirst( part, "=" ) )
+			pairs[ name ] = find( "=", part ) ? urlDecode( listRest( part, "=" ) ) : ""
+		}
+		return pairs
+	}
+
+	/**
+	 * @verifier The PKCE code verifier
+	 *
+	 * @return Its S256 challenge: base64url of the SHA-256, no padding
+	 */
+	private string function challengeOf( required string verifier ) {
+		var digest = createObject( "java", "java.security.MessageDigest" ).getInstance( "SHA-256" ).digest( arguments.verifier.getBytes( "UTF-8" ) )
+		return createObject( "java", "java.util.Base64" ).getUrlEncoder().withoutPadding().encodeToString( digest )
+	}
+
+	/**
+	 * @value Any text
+	 *
+	 * @return The text percent-encoded for a query string
+	 */
+	private string function encode( required string value ) {
+		return replace( urlEncodedFormat( arguments.value ), "+", "%20", "all" )
+	}
+
+	/**
+	 * @text Any text
+	 *
+	 * @return The text safe to put in HTML
+	 */
+	private string function escape( required string text ) {
+		return arguments.text.replace( "&", "&amp;", "all" ).replace( "<", "&lt;", "all" ).replace( ">", "&gt;", "all" ).replace( '"', "&quot;", "all" )
+	}
+
+}
