@@ -150,6 +150,10 @@ A different kind of channel adapter from `mock`/`cli`/`http` above: instead of b
 - **Server-Sent Events (SSE)** (Signal, against a locally-run `signal-cli` daemon): a long-lived, one-way streaming HTTP connection the gateway holds open, reading events as they're pushed down the same response body. See its own subsection below.
 
 
+### Signing in to a service from a chat platform
+
+A person talking to the agent through any of these can send `/connect` to see the services that ask them to sign in and `/connect NAME` to get a link that works once. The link goes to the server's public address, so set `BXAGENTS_PUBLIC_URL`. See [connect](../connect.md#trying-it-on-a-chat-platform), which walks through it with a Telegram bot.
+
 ## The nine push-style platforms
 
 Each platform gets its own page: its `gateways/*.bx` config shape, what's required, and

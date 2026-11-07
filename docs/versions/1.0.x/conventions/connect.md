@@ -59,6 +59,18 @@ Each way asks the same questions of the same place, so they never disagree about
 
 When a person has not signed in to a service, the agent is told which one and how to connect, in one short line, so it can say so instead of "I cannot read your mail". The tools of a service appear in the same running agent once somebody has signed in; there is no restart.
 
+## Trying it on a chat platform
+
+A person reaches the agent from Telegram, Slack and the other [gateways](gateways/index.md), and `/connect` works there too. The browser is the part to plan for: the provider sends it back to **your server**, so the server needs an address the person's browser can open. On your own machine, give it one with a tunnel.
+
+1. **A gateway.** For Telegram, `gateways/telegramChannel.bx` with `type: "telegram"` and `botTokenEnvVar: "TELEGRAM_BOT_TOKEN"` (see [Telegram](gateways/telegram.md)). Make the bot with @BotFather and `export TELEGRAM_BOT_TOKEN=...`.
+2. **A service that asks people to sign in**, with `oauth` on its `mcpServers` entry as above.
+3. **A public address.** Start a tunnel to the port you serve on, `export BXAGENTS_PUBLIC_URL=https://your-tunnel.example.com`, and register `https://your-tunnel.example.com/__bxagents/connect/callback` with the provider.
+4. **Build and serve:** `bxAgents build` then `bxAgents serve`.
+5. **In the chat with the bot:** send `/connect`, then `/connect mail`. The bot answers with an address that works once, for ten minutes. Open it in a browser, allow access, and send `/connect` again: the service is *connected*.
+
+The person is the platform's own id for them (a Telegram user id, a Slack member id). Their tokens are kept under it, so each person on the platform signs in once. Send `/connect` in a private chat with the bot, not in a group: anyone in a group can open a link posted there.
+
 ## Where the browser comes back to
 
 After the person signs in, the provider sends their browser to an address you register with it.
