@@ -71,6 +71,11 @@ class {
 
 	// ----------------------------------------------------------------------------------
 
+	/**
+	 * Ask for a name, the value in the hidden box, what it is for and its hosts, then save it.
+	 *
+	 * @scope user or agent
+	 */
 	private void function add( required string scope ) {
 		var name = variables.screen.ask( arguments.scope == "agent" ? "Name of the agent's secret" : "Name of your secret", "Letters, digits and underscores, for example GMAIL_TOKEN. Esc to cancel.", "" )
 		if ( isNull( name ) || !len( trim( name ) ) ) {
@@ -92,6 +97,12 @@ class {
 		showOutcome( variables.vault.add( arguments.scope, trim( name ), value, fields ), "Saved #trim( name )#. It cannot be shown again." )
 	}
 
+	/**
+	 * Ask what to change about a secret (value, description or hosts) and change it.
+	 *
+	 * @rows The secrets on screen
+	 * @name The name of the one picked
+	 */
 	private void function edit( required array rows, required string name ) {
 		var secret = secretNamed( arguments.rows, arguments.name )
 		if ( secret.isEmpty() ) {
@@ -130,6 +141,12 @@ class {
 		}
 	}
 
+	/**
+	 * Remove a secret after a yes.
+	 *
+	 * @rows The secrets on screen
+	 * @name The name of the one picked
+	 */
 	private void function remove( required array rows, required string name ) {
 		var secret = secretNamed( arguments.rows, arguments.name )
 		if ( secret.isEmpty() ) {
@@ -146,6 +163,12 @@ class {
 		showOutcome( variables.vault.remove( secret.scope, secret.name ), "Removed #secret.name#." )
 	}
 
+	/**
+	 * Print the result of a change: the message when it worked, the reason when it did not.
+	 *
+	 * @outcome { ok, reason }
+	 * @done    What to say on success
+	 */
 	private void function showOutcome( required struct outcome, required string done ) {
 		if ( arguments.outcome.ok ?: false ) {
 			variables.screen.print( "ok", arguments.done )
@@ -165,14 +188,32 @@ class {
 		return { key : "enter", name : listLast( arguments.picked, ":" ) }
 	}
 
+	/**
+	 * @scope user or agent
+	 *
+	 * @return The title of the list, naming whose secrets are shown and how to switch
+	 */
 	private string function heading( required string scope ) {
 		return arguments.scope == "agent" ? "Vault: the agent's secrets (#variables.agentName#)   [ yours: t ]" : "Vault: your secrets (#variables.userId#)   [ the agent's: t ]"
 	}
 
+	/**
+	 * @count How many secrets are on screen
+	 *
+	 * @return The line under the title
+	 */
 	private array function usage( required numeric count ) {
 		return [ "#arguments.count# secret#arguments.count == 1 ? '' : 's'#. Values are sealed and never shown." ]
 	}
 
+	/**
+	 * Turn the secrets into the rows of the list, each with its purpose, hosts and when it was last used.
+	 *
+	 * @rows  The secrets of one scope
+	 * @scope user or agent
+	 *
+	 * @return The choices, or one that says there are none
+	 */
 	private array function choicesOf( required array rows, required string scope ) {
 		if ( !arguments.rows.len() ) {
 			return [ { value : "", label : "(no secrets yet: press a to add one)" } ]
@@ -188,6 +229,14 @@ class {
 		} )
 	}
 
+	/**
+	 * Find a secret on screen by name.
+	 *
+	 * @rows The secrets on screen
+	 * @name The name
+	 *
+	 * @return The secret, or an empty struct
+	 */
 	private struct function secretNamed( required array rows, required string name ) {
 		var found = arguments.rows.filter( secret => secret.name == name )
 		return found.len() ? found[ 1 ] : {}

@@ -63,6 +63,14 @@ class {
 
 	// ----------------------------------------------------------------------------------
 
+	/**
+	 * Show the secrets, as a table or as JSON.
+	 *
+	 * @vault   The VaultService
+	 * @options The parsed options: scope, user, json
+	 *
+	 * @return { exitCode, message }
+	 */
 	private struct function list( required any vault, required struct options ) {
 		var scope = lCase( trim( arguments.options.scope ?: "all" ) )
 		var rows = arguments.vault.listAll()
@@ -91,6 +99,15 @@ class {
 		return { exitCode : 0, message : lines.toList( char( 10 ) ) }
 	}
 
+	/**
+	 * Save a new secret. The value is typed hidden or piped, never a flag.
+	 *
+	 * @vault   The VaultService
+	 * @options The parsed options: name, scope, user, description, hosts, stdin
+	 * @who     Who is doing it, for the audit
+	 *
+	 * @return { exitCode, message }
+	 */
 	private struct function add( required any vault, required struct options, required string who ) {
 		var name = required( arguments.options, "name", "`vault add` needs --name=<SECRET_NAME>, for example --name=GMAIL_TOKEN" )
 		var target = targetOf( arguments.options )
@@ -106,6 +123,15 @@ class {
 		return { exitCode : 0, message : "Saved #target.scope# secret [#made.name#]#target.scope == 'user' ? ' for ' & target.owner : ''#. It is sealed and cannot be shown again." }
 	}
 
+	/**
+	 * Change a secret: its description, its hosts and, when asked, its value. Only what is given changes.
+	 *
+	 * @vault   The VaultService
+	 * @options The parsed options: name, scope, user, description, hosts, value, stdin
+	 * @who     Who is doing it, for the audit
+	 *
+	 * @return { exitCode, message }
+	 */
 	private struct function edit( required any vault, required struct options, required string who ) {
 		var name = required( arguments.options, "name", "`vault edit` needs --name=<SECRET_NAME>" )
 		var target = targetOf( arguments.options )
@@ -123,6 +149,15 @@ class {
 		return { exitCode : 0, message : "Updated #target.scope# secret [#name#]: #changes.keyArray().sort( 'text' ).toList( ', ' )#." }
 	}
 
+	/**
+	 * Remove a secret, after asking unless --yes is given.
+	 *
+	 * @vault   The VaultService
+	 * @options The parsed options: name, scope, user, yes
+	 * @who     Who is doing it, for the audit
+	 *
+	 * @return { exitCode, message }
+	 */
 	private struct function remove( required any vault, required struct options, required string who ) {
 		var name = required( arguments.options, "name", "`vault remove` needs --name=<SECRET_NAME>" )
 		var target = targetOf( arguments.options )
@@ -139,6 +174,15 @@ class {
 			: { exitCode : 1, message : "There is no #target.scope# secret named [#name#]. See `bxAgents vault list`." }
 	}
 
+	/**
+	 * Say where the key comes from, how many secrets there are and whether any cannot be opened with this key.
+	 *
+	 * @vault   The VaultService
+	 * @options The parsed options: json
+	 * @file    The database file, for the report
+	 *
+	 * @return { exitCode, message }
+	 */
 	private struct function status( required any vault, required struct options, required string file ) {
 		var state = arguments.vault.status()
 		state[ "database" ] = arguments.file
@@ -162,6 +206,14 @@ class {
 		return { exitCode : state.wrongKey > 0 ? 1 : 0, message : lines.toList( char( 10 ) ) }
 	}
 
+	/**
+	 * List the latest audit rows: who added, used, was refused and removed what. Never a value.
+	 *
+	 * @vault   The VaultService
+	 * @options The parsed options: limit, json
+	 *
+	 * @return { exitCode, message }
+	 */
 	private struct function audit( required any vault, required struct options ) {
 		var rows = arguments.vault.audit( isNumeric( arguments.options.limit ?: "" ) ? arguments.options.limit : 50 )
 		if ( arguments.options.json ?: false ) {
@@ -180,6 +232,13 @@ class {
 		return { exitCode : 0, message : lines.toList( char( 10 ) ) }
 	}
 
+	/**
+	 * Make a new random key to put in BXAGENTS_VAULT_KEY. Does not touch the database.
+	 *
+	 * @projectRoot The project folder
+	 *
+	 * @return { exitCode, message, key }
+	 */
 	private struct function keyAction( required string projectRoot ) {
 		var key = new "models.vault.VaultKey@bxagents"( arguments.projectRoot ).generate()
 		return { exitCode : 0, message : "A new vault key. Keep it somewhere safe, and set it where the agent runs:#char( 10 )##char( 10 )#  BXAGENTS_VAULT_KEY=#key##char( 10 )##char( 10 )#It cannot be recovered if you lose it, and secrets sealed with another key will not open.", key : key }
@@ -223,6 +282,17 @@ class {
 		return { scope : scope, owner : scope == "user" ? user : "" }
 	}
 
+	/**
+	 * Read a required option.
+	 *
+	 * @options The parsed options
+	 * @key     The option's name
+	 * @message What to say when it is missing
+	 *
+	 * @return The trimmed value
+	 *
+	 * @throws BxAgents.MissingVaultOption when it is missing
+	 */
 	private string function required( required struct options, required string key, required string message ) {
 		var value = trim( arguments.options[ arguments.key ] ?: "" )
 		if ( !len( value ) ) {
@@ -231,6 +301,13 @@ class {
 		return value
 	}
 
+	/**
+	 * A secret as the JSON output shows it: names and dates, never a value.
+	 *
+	 * @row A secret's metadata
+	 *
+	 * @return The struct to print
+	 */
 	private struct function publicRow( required struct row ) {
 		return {
 			name        : arguments.row.name,
@@ -244,10 +321,25 @@ class {
 		}
 	}
 
+	/**
+	 * Format a date for the output.
+	 *
+	 * @value A date, or anything else
+	 *
+	 * @return yyyy-MM-dd HH:mm, or an empty string when it is not a date
+	 */
 	private string function stamp( any value ) {
 		return isDate( arguments.value ?: "" ) ? dateTimeFormat( arguments.value, "yyyy-MM-dd HH:mm" ) : ""
 	}
 
+	/**
+	 * Pad text to a column width. Text that is longer keeps all of its characters and gets one space after it.
+	 *
+	 * @text  The text
+	 * @width The column width
+	 *
+	 * @return The padded text
+	 */
 	private string function pad( required string text, required numeric width ) {
 		// a value longer than its column keeps all of its text and one space after it
 		return len( arguments.text ) >= arguments.width ? arguments.text & " " : left( arguments.text & repeatString( " ", arguments.width ), arguments.width )
