@@ -117,6 +117,29 @@ options:
 
 The connect step in every surface asks for them. A value becomes part of the client's address or headers, so it is per person like the credential.
 
+## Local programs (stdio)
+
+An agent can use any number of MCP servers that run as programs on its own machine: Git, a file system server, a database, anything local. What it uses is the designer's choice, so the catalog treats them as a first class kind next to web servers.
+
+```yaml
+id: git
+transport: stdio
+command: [ uvx, mcp-server-git ]
+requires:
+  program: uvx
+  help: Install uv so the agent can start this server.
+options:
+  - key: repository
+    label: Repository folder
+    required: false
+```
+
+- **No sign in.** Connecting a local connector means enabling it and filling its options (a folder, a path). Its states are *Available*, *Ready* (the program is found) and *Needs program* (it is not, with the `help` text).
+- **One process, shared.** It is started once for the agent, on the machine the agent runs on. It does not get a client per person, because there is no credential to isolate. The docs say so.
+- **Options matter more here.** A file system server needs the folders it may touch. Options become arguments or environment values of the command, never shell text.
+- **Same controls.** `only`, `exclude`, `override`, the tool switches and the 100 tool warning all apply.
+- **Open, by design.** `mcpServers` with `command` still works for anything the catalog does not list. The first release keeps to the 7 entries; more local servers (a file system one is the obvious next) join through the same pull request flow once verified.
+
 ## Tools
 
 Connecting a connector can add many tools, so the person using it decides which ones the agent may use.
@@ -162,7 +185,7 @@ CI rules (schema and safety only):
 
 ## Tasks
 
-1. **Verify and fix the data.** Re-check the 7 entries against provider docs (URL, auth, options, scopes, risk, env var). Atlassian is OAuth first and ships verified. Decide which others can offer OAuth now that Connect exists. Fix the schema.
+1. **Verify and fix the data.** Re-check the 7 entries against provider docs (URL, auth, options, scopes, risk, env var). Atlassian is OAuth first and ships verified. Decide which others can offer OAuth now that Connect exists. Fix the schema so it covers both web and local program connectors.
 2. **Move the data.** `catalog/connectors/*.yaml`, a loader, a validator and `bxAgents connectors check`; CI job; the wizard and `add` read from it. `--mcp` keeps working.
 3. **Spike: per-person clients.** Build `ConnectorClients`, wrap a connector's tools so a call goes to the caller's client, and prove with the fake server that two people never see each other's token or session. A bx-ai pull request only if the wrapping cannot be done from bx-agents.
 4. **Build support.** `connectors:` key: only, exclude, override, none; errors; expansion into `mcpServers`; dormant until a credential exists; specs and a fixture.
