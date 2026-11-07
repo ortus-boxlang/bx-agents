@@ -12,6 +12,14 @@ An agent that connects to Gmail, a ticket system or any API needs a key or a log
 
 Environment variables stay as they are, and are still the place for provider keys such as `OPENAI_API_KEY`. The vault is for the secrets people hand to a running agent: they change, they differ per person, and they should not need a redeploy.
 
+<video controls preload="metadata" poster="/assets/video/vault-poster.png" style="max-width:100%">
+  <source src="/assets/video/vault.mp4" type="video/mp4">
+  <source src="/assets/video/vault.webm" type="video/webm">
+  <track kind="captions" src="/assets/video/vault.vtt" srclang="en" label="English" default>
+</video>
+
+The agent's request is scripted; the secret that is saved is real.
+
 ## Two scopes
 
 | Scope | Belongs to | Who manages it |
