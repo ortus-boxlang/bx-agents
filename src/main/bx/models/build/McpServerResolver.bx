@@ -7,6 +7,9 @@
  *   that is not listed is refused before anything is sent.
  * - The programs the stdio servers start are added to bx-ai's `mcp.stdio.allowedCommands` setting, so the
  *   process runs only what the project declared. A setting someone already filled in is left alone.
+ * - `oauth` (a web server that asks each person to sign in) gets what bx-ai's OAuth needs and the project cannot
+ *   write: the vault token store, so tokens are sealed in the chat database, the person the run belongs to as the
+ *   `subject`, and the callback address of the agent API unless the entry names its own `redirectUri`.
  */
 class {
 
@@ -21,10 +24,11 @@ class {
 	/**
 	 * @servers The entries: a URL string, a web server struct or a stdio struct ( { command, env, ... } )
 	 * @label What the list belongs to, for messages
+	 * @context { apiPath : where the agent API is served; vault : a VaultWiring (tests) }
 	 *
 	 * @return The entries ready for bx-ai's withMCPServers()
 	 */
-	array function resolve( required array servers, string label = "mcpServers" ) {
+	array function resolve( required array servers, string label = "mcpServers", struct context = {} ) {
 		var resolved = []
 		// not named `server`: that is a reserved scope
 		for ( var listed in arguments.servers ) {
@@ -39,6 +43,9 @@ class {
 			if ( entry.keyExists( "allowedHosts" ) ) {
 				entry[ "urlGuard" ] = hostGuard( entry.allowedHosts )
 				entry.delete( "allowedHosts" )
+			}
+			if ( entry.keyExists( "oauth" ) ) {
+				entry[ "oauth" ] = oauthOf( entry.oauth, entry.url ?: "", arguments.context )
 			}
 			if ( entry.keyExists( "command" ) ) {
 				executables.append( executableOf( entry.command ) )
@@ -90,6 +97,75 @@ class {
 			}
 			return false
 		}
+	}
+
+
+	/**
+	 * Fills in the OAuth options bx-ai needs and a project cannot write.
+	 *
+	 * @oauth `true`, or the entry's `oauth` struct ( { scopes, clientId, clientSecret, clientMetadataUrl, clientName, redirectUri } )
+	 * @address The server's address, which the person who last signed in to it is remembered under
+	 * @context { apiPath, wiring }
+	 *
+	 * @return The struct for bx-ai's `oauth` option: the entry's own keys, plus the vault `store`, a `subject` function and a `redirectUri`
+	 */
+	private struct function oauthOf( required any oauth, required string address, struct context = {} ) {
+		var options = isStruct( arguments.oauth ) ? duplicate( arguments.oauth ) : {}
+		var wiring = arguments.context.wiring ?: new "models.vault.VaultWiring@bxagents"()
+		if ( !options.keyExists( "store" ) ) {
+			options[ "store" ] = wiring.tokenStore()
+		}
+		if ( !options.keyExists( "subject" ) ) {
+			options[ "subject" ] = subjectFunction( wiring )
+		}
+		if ( !options.keyExists( "discoverySubject" ) ) {
+			options[ "discoverySubject" ] = discoveryFunction( options.store, arguments.address )
+		}
+		if ( !len( options.redirectUri ?: "" ) ) {
+			options[ "redirectUri" ] = callbackAddress( arguments.context.apiPath ?: "/__bxagents" )
+		}
+		return options
+	}
+
+	/**
+	 * Whose tokens a call made for a person uses: that person's, "default" when the run has no name.
+	 *
+	 * @wiring A VaultWiring
+	 *
+	 * @return A function ( context ) => text
+	 */
+	private function function subjectFunction( required any wiring ) {
+		return ( context ) => {
+			var who = wiring.userOf( isStruct( context ) ? ( context.chatRequest ?: "" ) : "" )
+			return len( who ) ? who : "default"
+		}
+	}
+
+	/**
+	 * Whose tokens a call with nobody behind it uses: the agent finding out which tools a server has, when it starts
+	 * or when a server is added. The list of tools is the server's and the same for everyone, so the person who signed
+	 * in to it last will do; somebody has to be signed in to ask for it. What each call then does, it does as the
+	 * person who made it.
+	 *
+	 * @store The token store, where ConnectionService remembered the last person to sign in
+	 * @address The server's address
+	 *
+	 * @return A function () => text
+	 */
+	private function function discoveryFunction( required any store, required string address ) {
+		return () => {
+			return store.get( "discover:" & address ).subject ?: "default"
+		}
+	}
+
+	/**
+	 * @apiPath Where the agent API is served
+	 *
+	 * @return The address the provider sends the person back to: BXAGENTS_PUBLIC_URL, the API path and /connect/callback; blank when the app has no public address set
+	 */
+	private string function callbackAddress( required string apiPath ) {
+		var base = trim( getSystemSetting( "BXAGENTS_PUBLIC_URL", "" ) ).reReplace( "/+$", "" )
+		return len( base ) ? base & arguments.apiPath & "/connect/callback" : ""
 	}
 
 	// ----------------------------------------------------------------------------------

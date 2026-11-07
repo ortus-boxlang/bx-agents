@@ -540,6 +540,25 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.errors.filter( e => e.findNoCase( "mcpServers" ) ) ).toBeEmpty();
 			} );
 
+			it( "accepts an oauth server with a name, scopes and a client from the vault", function() {
+				var projectRoot = expandPath( "/fixtures/with-mcp-oauth" );
+				var result = validator.validate( projectRoot, discoverer.discover( projectRoot ), resolver.resolve( projectRoot = projectRoot ) );
+
+				expect( result.errors.filter( e => e.findNoCase( "mcpServers" ) ) ).toBeEmpty();
+			} );
+
+			it( "rejects an oauth server with no name, a fixed credential, unknown keys, a secret in the file or a bad address", function() {
+				var text = validateFixture( "bad-mcp-oauth" ).errors.filter( e => e.findNoCase( "mcpServers" ) ).toList( char( 10 ) );
+
+				expect( text ).toInclude( "needs a 'name'" );
+				expect( text ).toInclude( "both 'oauth' and 'token'" );
+				expect( text ).toInclude( "unknown key [scope]" );
+				expect( text ).toInclude( "'scopes' must be a list" );
+				expect( text ).toInclude( "writes its oauth 'clientSecret' in the file" );
+				expect( text ).toInclude( "'redirectUri' must be an address" );
+				expect( text ).toInclude( "'oauth' must be true or a mapping" );
+			} );
+
 			it( "rejects stdio and web mcpServers entries that are mixed up, mistyped or leak a secret", function() {
 				var text = validateFixture( "bad-mcp-stdio" ).errors.filter( e => e.findNoCase( "mcpServers" ) ).toList( char( 10 ) );
 

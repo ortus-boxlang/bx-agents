@@ -835,6 +835,24 @@ bxAgents vault key
 - `status` says where the key comes from and warns when it is the key file beside the database. `audit` lists who added, used, was refused and removed what, without values.
 - `key` prints a new random key to put in `BXAGENTS_VAULT_KEY`. It does not touch the database.
 
+### `connect`
+
+Sign in to the services of a project that ask each person to sign in (an `mcpServers` entry with an `oauth` key). See [connect](conventions/connect.md).
+
+```bash
+bxAgents connect
+bxAgents connect mail [--port=8765] [--no-open] [--timeout=300]
+bxAgents connect mail --remove
+bxAgents connect [--user=NAME] [--json]
+```
+
+![bxAgents connect mail: the address, the wait, then connected](assets/tui/connect-cli.png)
+
+- Without a name it lists the services and whether you are connected (`--json` for a script).
+- With a name it prints an address and opens your browser, waits for the redirect on `127.0.0.1` (a free port, or `--port`), and finishes the sign in. `--no-open` only prints. `--timeout` is the seconds to wait, 300 by default.
+- `--remove` forgets your sign in. `--user` is whose: `local` by default, the one user an open server has.
+- Tokens are sealed in the project's chat database. Run it where the database is: in the project, or on a server with `BXAGENTS_DB` set.
+
 ### `models`
 
 The models of a built project, and whether they answer.

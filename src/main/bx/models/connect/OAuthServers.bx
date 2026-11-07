@@ -1,0 +1,27 @@
+/**
+ * Finds the MCP servers that ask each person to sign in: the `mcpServers` entries of an agent, and of its sub-agents,
+ * that have an `oauth` key.
+ */
+class {
+
+	/**
+	 * @config A resolved agent config
+	 *
+	 * @return The entries as written in Agent.yaml, placeholders and all
+	 */
+	static array function of( required struct config ) {
+		var found = []
+		for ( var entry in ( arguments.config.mcpServers ?: [] ) ) {
+			if ( isStruct( entry ) && entry.keyExists( "oauth" ) ) {
+				found.append( entry )
+			}
+		}
+		for ( var sub in ( arguments.config.subAgents ?: [] ) ) {
+			if ( isStruct( sub ) ) {
+				found.append( OAuthServers::of( sub ), true )
+			}
+		}
+		return found
+	}
+
+}

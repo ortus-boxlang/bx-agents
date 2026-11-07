@@ -324,6 +324,48 @@ class {
 		return post( "notes/remove", { "scope" : arguments.scope, "id" : arguments.id } )
 	}
 
+	// ---- Connections ---------------------------------------------------------------------
+
+	/** The servers that ask people to sign in, and which the caller has connected. */
+	struct function connections() {
+		return get( "connect" )
+	}
+
+	/**
+	 * Starts a sign in for the caller.
+	 *
+	 * @name The server's name
+	 *
+	 * @return { name, authorizationUrl }
+	 */
+	struct function connect( required string name ) {
+		return post( "connect", { "name" : arguments.name } )
+	}
+
+	/**
+	 * Forgets the caller's sign in to one server.
+	 *
+	 * @name The server's name
+	 */
+	struct function removeConnection( required string name ) {
+		return post( "connect/remove", { "name" : arguments.name } )
+	}
+
+	/**
+	 * What a provider's redirect would do, for a program that catches the redirect itself and hands it on. Public.
+	 *
+	 * @code   The code
+	 * @state  The state
+	 * @issuer The iss, when the provider sent one
+	 */
+	struct function connectCallback( required string code, required string state, string issuer = "" ) {
+		var query = { "code" : arguments.code, "state" : arguments.state }
+		if ( len( arguments.issuer ) ) {
+			query[ "iss" ] = arguments.issuer
+		}
+		return get( "connect/callback", query )
+	}
+
 	// ---- Vault ---------------------------------------------------------------------------
 
 	/** The secrets the caller can use, by name: never a value. */

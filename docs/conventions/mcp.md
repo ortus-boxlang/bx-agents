@@ -68,6 +68,7 @@ mcpServers:
 | `password`, `user` | Basic authentication. `password` must be an `${env.NAME}` placeholder |
 | `headers` | Extra request headers. Values can use `${env.NAME}` |
 | `timeout` | Milliseconds |
+| `oauth` | The server asks each person to sign in (mail, a calendar). `oauth: true` or a mapping. Needs a `name`. See [connect](connect.md) |
 | `allowedHosts` | The host names the server's address may have, for example `[api.example.com, "*.example.com"]`. `*.example.com` matches any subdomain, not `example.com` itself. A request to any other host is refused before anything is sent |
 | `redirects` | `false` treats a redirect answer as a failure and never follows it |
 | `maxResponseBytes` | Refuses an answer longer than this many characters |

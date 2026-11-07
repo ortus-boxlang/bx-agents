@@ -1,0 +1,162 @@
+/**
+ * The connections of the chat: the /connect command over a local project, a server, and nothing to connect to.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	/**
+	 * A command context for /connect over the given connections.
+	 *
+	 * @connections A LocalConnections, RemoteConnections or NoConnections
+	 *
+	 * @return The context
+	 */
+	private any function contextFor( required any connections ) {
+		var chat = { connections : function() { return connections; } };
+		return new bxagents.models.chat.commands.CommandContext( chat, "tui" );
+	}
+
+	/**
+	 * Listing, starting and removing, and what the person is told.
+	 */
+	function run() {
+		describe( "/connect and the chat's connections", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-chatconn-" );
+				variables.wiring = new bxagents.models.vault.VaultWiring().pin( dir & "/chat.db" );
+				variables.made = {};
+				variables.entries = [ { name : "mail", url : "https://mail.example.com/mcp", oauth : { scopes : [ "mail.read" ] } } ];
+				variables.here = new bxagents.models.cli.chat.LocalConnections(
+					entries,
+					wiring,
+					"alice",
+					{
+						clientFactory : function( resolved ) {
+							if ( !made.keyExists( resolved.name ) ) {
+								made[ resolved.name ] = new tests.support.FakeOAuthClient( resolved );
+							}
+							return made[ resolved.name ];
+						},
+						receive       : function( listener ) {
+							return { code : "c", state : made.mail.lastState() };
+						}
+					}
+				);
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "says there is nothing to connect to when no server asks people to sign in", function() {
+				var none = new bxagents.models.cli.chat.NoConnections();
+
+				expect( none.available() ).toBeFalse();
+				expect( none.why() ).toInclude( "oauth: true" );
+			} );
+
+			it( "lists the servers for the person", function() {
+				expect( here.available() ).toBeTrue();
+				var rows = here.list();
+
+				expect( rows ).toHaveLength( 1 );
+				expect( rows[ 1 ].name ).toBe( "mail" );
+				expect( rows[ 1 ].connected ).toBeFalse();
+			} );
+
+			it( "starts a sign in at once and finishes it in the background", function() {
+				var started = here.start( "mail" );
+
+				expect( started.ok ).toBeTrue();
+				expect( started.authorizationUrl ).toInclude( "https://auth.example.com/authorize" );
+				expect( started.waits ).toBeTrue();
+
+				// the browser "comes back" on the background task; give it a moment
+				for ( var tries = 1; tries <= 50 && !here.list()[ 1 ].connected; tries++ ) {
+					sleep( 100 );
+				}
+				expect( here.list()[ 1 ].connected ).toBeTrue();
+			} );
+
+			it( "disconnects", function() {
+				here.start( "mail" );
+				for ( var tries = 1; tries <= 50 && !here.list()[ 1 ].connected; tries++ ) {
+					sleep( 100 );
+				}
+
+				expect( here.remove( "mail" ).ok ).toBeTrue();
+				expect( here.list()[ 1 ].connected ).toBeFalse();
+			} );
+
+			it( "says which names there are for one that does not exist", function() {
+				var started = here.start( "nope" );
+
+				expect( started.ok ).toBeFalse();
+				expect( started.reason ).toInclude( "mail" );
+			} );
+
+			it( "lists, signs in and disconnects through the /connect command", function() {
+				var cmd = new bxagents.models.chat.commands.builtin.Connect( new bxagents.models.chat.commands.CommandRegistry() );
+
+				var listed = cmd.run( contextFor( here ), "" );
+				expect( jsonSerialize( listed.blocks() ) ).toInclude( "not connected" );
+
+				var started = cmd.run( contextFor( here ), "mail" );
+				expect( jsonSerialize( started.blocks() ) ).toInclude( "https://auth.example.com/authorize" );
+			} );
+
+			describe( "for a person who reaches the agent through the server", function() {
+
+				beforeEach( function() {
+					variables.agent = new tests.support.FakeAgent();
+					new bxagents.models.connect.ConnectionWiring().attach( agent, entries, "/__bxagents" );
+					variables.service = new bxagents.models.connect.ConnectionWiring().serviceOf( agent );
+				} );
+
+				it( "finds the agent's connections from the agent", function() {
+					expect( isNull( service ) ).toBeFalse();
+					expect( service.hasServers() ).toBeTrue();
+					expect( isNull( new bxagents.models.connect.ConnectionWiring().serviceOf( new tests.support.FakeAgent() ) ) ).toBeTrue();
+				} );
+
+				it( "says nothing to connect to for an agent whose servers do not ask people to sign in", function() {
+					var plain = new bxagents.models.chat.ServerConversation( new tests.support.FakeAgent(), "U123" );
+
+					expect( plain.connections().available() ).toBeFalse();
+				} );
+
+				it( "lists for that person and gives a one time address from /connect on a chat platform", function() {
+					var conversation = new bxagents.models.chat.ServerConversation( agent, "U123" );
+					var served = conversation.connections();
+
+					expect( served.available() ).toBeTrue();
+					expect( served.list()[ 1 ].connected ).toBeFalse();
+				} );
+
+				it( "tells a gateway person the link is theirs alone", function() {
+					var cmd = new bxagents.models.chat.commands.builtin.Connect( new bxagents.models.chat.commands.CommandRegistry() );
+					var context = new bxagents.models.chat.commands.CommandContext( { connections : function() { return new bxagents.models.cli.chat.ServedConnections( new bxagents.models.connect.ConnectionService( entries, { wiring : wiring, clientFactory : function( resolved ) { return new tests.support.FakeOAuthClient( resolved ); } } ), "U123" ); } }, "gateway" );
+
+					var out = jsonSerialize( cmd.run( context, "mail" ).blocks() );
+
+					expect( out ).toInclude( "https://auth.example.com/authorize" );
+					expect( out ).toInclude( "for you alone" );
+					expect( out ).toInclude( "do not share it" );
+				} );
+
+			} );
+
+			it( "tells the person when there is nothing to connect to", function() {
+				var cmd = new bxagents.models.chat.commands.builtin.Connect( new bxagents.models.chat.commands.CommandRegistry() );
+
+				var out = cmd.run( contextFor( new bxagents.models.cli.chat.NoConnections() ), "" );
+
+				expect( jsonSerialize( out.blocks() ) ).toInclude( "No MCP server" );
+			} );
+
+		} );
+	}
+
+}

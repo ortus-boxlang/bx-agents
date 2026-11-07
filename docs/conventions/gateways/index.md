@@ -150,6 +150,10 @@ A different kind of channel adapter from `mock`/`cli`/`http` above: instead of b
 - **Server-Sent Events (SSE)** (Signal, against a locally-run `signal-cli` daemon): a long-lived, one-way streaming HTTP connection the gateway holds open, reading events as they're pushed down the same response body. See its own subsection below.
 
 
+### Signing in to a service from a chat platform
+
+A person talking to the agent through any of these can send `/connect` to see the services that ask them to sign in and `/connect NAME` to get a link that works once. The link goes to the server's public address, so set `BXAGENTS_PUBLIC_URL`. See [connect](../connect.md#trying-it-on-a-chat-platform), which walks through it with a Telegram bot.
+
 ## The nine push-style platforms
 
 Each platform gets its own page: its `gateways/*.bx` config shape, what's required, and
@@ -249,7 +253,7 @@ gatewaySession:       # both optional - these are the defaults
 
 A message that is one of the session's slash commands is answered by BxAgents itself and never reaches the model, through the same gateway it came in on. Anything else, including a slash word that is not a command here, goes to the agent as before. A choice (a list to pick from) comes back as a numbered list with the command to type for each.
 
-By default a safe set is on: `/help`, `/tools`, `/model`, `/info`, `/ping`, `/remember` and `/notes`. They need no conversation of their own and change nothing shared. Narrow it, widen it or switch it off in the same `gatewaySession` block:
+By default a safe set is on: `/help`, `/tools`, `/model`, `/info`, `/ping`, `/remember`, `/notes` and `/connect`. They need no conversation of their own and change nothing shared (`/connect` only gives the person who sends it a link to sign in to a service: see [connect](../connect.md#trying-it-on-a-chat-platform)). Narrow it, widen it or switch it off in the same `gatewaySession` block:
 
 ```yaml
 # Agent.yaml
@@ -259,7 +263,7 @@ gatewaySession:
     prefix: "/"              # one character
     prefixes: { slack: "!" } # a different one-character prefix for one gateway, by name
     conversation: false      # true also turns on /new, /clear, /compact, /sessions and /resume
-    allow: [ help, info, tools, notes, remember, model, ping ]   # the default; any command that runs on a gateway
+    allow: [ help, info, tools, notes, remember, model, ping, connect ]   # the default; any command that runs on a gateway
     admins: [ "123456789" ]  # gateway user ids that may run commands marked for admins
 ```
 
