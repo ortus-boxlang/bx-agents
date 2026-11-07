@@ -581,6 +581,17 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.errors.filter( e => e.findNoCase( "notes" ) ) ).toBeEmpty();
 			} );
 
+			it( "rejects volumes with the reserved name and a bad mode", function() {
+				var text = validateFixture( "bad-volumes" ).errors.filter( e => e.findNoCase( "volumes" ) ).toList( char( 10 ) );
+
+				expect( text ).toInclude( "already has" );
+				expect( text ).toInclude( "must be ro" );
+			} );
+
+			it( "accepts volumes with a path, a mode and a description", function() {
+				expect( validateFixture( "with-volumes" ).errors.filter( e => e.findNoCase( "'volumes" ) ) ).toBeEmpty();
+			} );
+
 			it( "rejects a data block with an unknown key", function() {
 				var text = validateFixture( "bad-data" ).errors.filter( e => e.findNoCase( "'data'" ) ).toList( char( 10 ) );
 

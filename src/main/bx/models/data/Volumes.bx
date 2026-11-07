@@ -1,0 +1,287 @@
+/**
+ * The host folders an agent may use, each under a name.
+ *
+ * ```yaml
+ * volumes:
+ *   notes:
+ *     path: ~/Notes
+ *     mode: rw            # rw or ro (the default)
+ *     description: My notes
+ * ```
+ *
+ * Every agent also has `files`: the `files/` folder of its data home, always read and write.
+ *
+ * The agent only ever sees the name. It writes a path as `volume:path`, for example `notes:todo.md`, and a path with no
+ * volume is in `files`. A full path on the machine is refused, and so is anything that climbs out of its volume (a `..`,
+ * or a symbolic link that leads outside), so a volume is a real fence and not a naming convention.
+ *
+ * Volumes are fixed when the app starts. Nothing here, and nothing the agent can call, adds one.
+ */
+class {
+
+	static {
+		MODES      = [ "ro", "rw" ]
+		IMPLICIT   = "files"
+		KEYS       = [ "path", "mode", "description" ]
+		NAME_RULE  = "^[a-z0-9][a-z0-9-]{0,31}$"
+		MAXIMUM    = 32
+		MAX_ABOUT  = 200
+	}
+
+	/**
+	 * @declared The `volumes` setting as written in `Agent.yaml`: { name : { path, mode, description } }
+	 * @dataHome The DataHome that gives `files`, and that `~` and relative paths are worked out from
+	 */
+	function init( required struct declared, required any dataHome ) {
+		variables.home = arguments.dataHome
+		variables.list = [ {
+			name        : static.IMPLICIT,
+			path        : variables.home.folder( "files" ),
+			mode        : "rw",
+			description : "What the agent writes. Kept in its data home.",
+			implicit    : true
+		} ]
+		for ( var name in arguments.declared ) {
+			var item = arguments.declared[ name ]
+			variables.list.append( {
+				name        : name,
+				path        : variables.home.locate( item.path ),
+				mode        : lCase( item.mode ?: "ro" ),
+				description : trim( item.description ?: "" ),
+				implicit    : false
+			} )
+		}
+		return this
+	}
+
+	/**
+	 * Checks what can be checked from the file alone, with no folder looked at.
+	 *
+	 * @declared The `volumes` setting as written in `Agent.yaml`
+	 *
+	 * @return One message per problem; empty when the setting is fine
+	 */
+	static array function problems( required any declared ) {
+		if ( !isStruct( arguments.declared ) ) {
+			return [ "'volumes' must be a mapping of name to { path, mode, description }" ]
+		}
+		var problems = []
+		if ( arguments.declared.count() > static.MAXIMUM ) {
+			problems.append( "'volumes' has #arguments.declared.count()# entries. The most is #static.MAXIMUM#" )
+		}
+		for ( var name in arguments.declared ) {
+			var label = "'volumes.#name#'"
+			if ( !reFind( static.NAME_RULE, name ) ) {
+				problems.append( "#label# is not a name. Use lowercase letters, digits and dashes, 1 to 32 characters, starting with a letter or digit" )
+			}
+			if ( name == static.IMPLICIT ) {
+				problems.append( "#label# is the volume every agent already has: its files in the data home. Pick another name" )
+			}
+			var item = arguments.declared[ name ]
+			if ( !isStruct( item ) ) {
+				problems.append( "#label# must be a mapping with a path, for example { path: ~/Notes, mode: rw }" )
+				continue
+			}
+			for ( var key in item ) {
+				if ( !static.KEYS.contains( key ) ) {
+					problems.append( "#label# has an unknown key [#key#]. Valid keys: #static.KEYS.toList( ', ' )#" )
+				}
+			}
+			if ( !isSimpleValue( item.path ?: "" ) || !len( trim( item.path ?: "" ) ) ) {
+				problems.append( "#label# needs a path: an absolute folder, one that starts with ~, or one relative to the project" )
+			} else if ( static.isRefusedPath( item.path ) ) {
+				problems.append( "#label# path [#item.path#] is too wide: it is the whole disk or the whole home folder. Name a folder inside it" )
+			}
+			if ( item.keyExists( "mode" ) && !static.MODES.contains( lCase( toString( item.mode ) ) ) ) {
+				problems.append( "#label# mode [#item.mode#] must be ro (read only) or rw (read and write)" )
+			}
+			if ( item.keyExists( "description" ) && ( !isSimpleValue( item.description ) || len( item.description ) > static.MAX_ABOUT ) ) {
+				problems.append( "#label# description must be text of at most #static.MAX_ABOUT# characters" )
+			}
+		}
+		return problems
+	}
+
+	/**
+	 * Checks the folders on this machine, when the app starts.
+	 *
+	 * @return One message per problem; empty when every folder is there
+	 */
+	array function startupProblems() {
+		var problems = []
+		var home = canonical( variables.home.path() )
+		for ( var volume in variables.list ) {
+			if ( volume.implicit ) {
+				continue
+			}
+			if ( !directoryExists( volume.path ) ) {
+				problems.append( "Volume [#volume.name#] points at a folder that does not exist: #volume.path#" )
+			} else if ( canonical( volume.path ) == home ) {
+				problems.append( "Volume [#volume.name#] is the data home itself. Its files are already in the `files` volume" )
+			}
+		}
+		return problems
+	}
+
+	/**
+	 * @return Every volume, `files` first: { name, path, mode, description, implicit }
+	 */
+	array function all() {
+		return variables.list
+	}
+
+	/**
+	 * @name A volume name
+	 *
+	 * @return True when there is a volume by that name
+	 */
+	boolean function has( required string name ) {
+		var wanted = arguments.name
+		return variables.list.some( v => v.name == wanted )
+	}
+
+	/**
+	 * @access any for every volume, or write for the ones the agent may change
+	 *
+	 * @return The absolute folders
+	 */
+	array function folders( string access = "any" ) {
+		var wanted = arguments.access
+		return variables.list.filter( v => wanted == "any" || v.mode == "rw" ).map( v => v.path )
+	}
+
+	/**
+	 * What the agent is told and what a page shows: the names, never a path on the machine.
+	 *
+	 * @return [ { name, mode, description } ]
+	 */
+	array function listing() {
+		return variables.list.map( function( v ) {
+			return { name : v.name, mode : v.mode, description : v.description }
+		} )
+	}
+
+	/**
+	 * The lines that go into the agent's instructions, so it knows what it has and how to write a path.
+	 *
+	 * @return Text, or blank when there is nothing to say
+	 */
+	string function guidance() {
+		var nl = char( 10 )
+		var lines = [ "You can use these volumes with the file tools. Write a path as volume:path, for example #variables.list.len() > 1 ? variables.list[ 2 ].name : static.IMPLICIT#:todo.md. A path with no volume is in #static.IMPLICIT#." ]
+		for ( var volume in variables.list ) {
+			lines.append( "- #volume.name# (#volume.mode == 'rw' ? 'read and write' : 'read only'#)#len( volume.description ) ? ': ' & volume.description : ''#" )
+		}
+		return lines.toList( nl )
+	}
+
+	/**
+	 * Works out where a path written by the agent is, and refuses a path that is not inside a volume.
+	 *
+	 * @spec volume:path, or just a path inside `files`
+	 * @write True when the path is about to be changed, so a read only volume is refused
+	 *
+	 * @return { volume, path : the absolute path, mode }
+	 */
+	struct function resolve( required string spec, boolean write = false ) {
+		var text = trim( arguments.spec ).replace( "\", "/", "all" )
+		var name = static.IMPLICIT
+		var relative = text
+		var parts = reFind( "^([A-Za-z0-9-]+):(.*)$", text, 1, true )
+		if ( parts.pos[ 1 ] > 0 ) {
+			var prefix = lCase( text.mid( parts.pos[ 2 ], parts.len[ 2 ] ) )
+			var rest = text.mid( parts.pos[ 3 ], parts.len[ 3 ] )
+			if ( has( prefix ) ) {
+				name = prefix
+				relative = rest
+			} else if ( !( prefix.len() == 1 && rest.startsWith( "/" ) ) ) {
+				refuse( "UnknownVolume", "There is no volume named [#prefix#]. The volumes are: #variables.list.map( v => v.name ).toList( ', ' )#." )
+			}
+		}
+		if ( relative.startsWith( "/" ) || reFind( "^[A-Za-z]:/", relative ) || relative.find( char( 0 ) ) ) {
+			refuse( "FullPath", "Write the path as volume:path, for example #static.IMPLICIT#:notes.txt. A full path on the machine is not accepted." )
+		}
+		if ( relative.listToArray( "/" ).some( segment => segment == ".." ) ) {
+			refuse( "OutsideVolume", "The path [#arguments.spec#] goes out of its volume." )
+		}
+		var volume = volumeNamed( name )
+		if ( arguments.write && volume.mode != "rw" ) {
+			refuse( "ReadOnlyVolume", "The volume [#name#] is read only." )
+		}
+		var root = canonical( volume.path )
+		var target = canonical( relative.len() ? volume.path & "/" & relative : volume.path )
+		if ( target != root && !target.startsWith( root & "/" ) ) {
+			refuse( "OutsideVolume", "The path [#arguments.spec#] goes out of its volume." )
+		}
+		return { volume : name, path : target, mode : volume.mode }
+	}
+
+	/**
+	 * Replaces the real folders in a result (or an error message) with volume names, so the agent never sees where
+	 * a volume is on the machine.
+	 *
+	 * @value Text, or a struct or array holding text
+	 *
+	 * @return The same shape, with `volume:path` where a real path was
+	 */
+	any function present( required any value ) {
+		if ( isSimpleValue( arguments.value ) ) {
+			return presentText( toString( arguments.value ) )
+		}
+		if ( isArray( arguments.value ) ) {
+			return arguments.value.map( item => present( item ) )
+		}
+		if ( isStruct( arguments.value ) ) {
+			var out = [:]
+			for ( var key in arguments.value ) {
+				out[ key ] = present( arguments.value[ key ] )
+			}
+			return out
+		}
+		return arguments.value
+	}
+
+	// ---------------------------------------------------------------------------
+
+	private string function presentText( required string text ) {
+		var out = arguments.text
+		// the longest folder first, so a volume inside another is named by its own name
+		for ( var volume in variables.list.sort( ( a, b ) => len( b.path ) - len( a.path ) ) ) {
+			var roots = [ volume.path, canonical( volume.path ) ].filter( ( r, i, seen ) => seen.find( r ) == i )
+			for ( var root in roots ) {
+				out = out.replace( root & "/", volume.name & ":", "all" )
+				out = out.replace( root, volume.name & ":", "all" )
+			}
+		}
+		return out
+	}
+
+	private struct function volumeNamed( required string name ) {
+		for ( var volume in variables.list ) {
+			if ( volume.name == arguments.name ) {
+				return volume
+			}
+		}
+		throw( type = "BxAgents.Volume.UnknownVolume", message = "There is no volume named [#arguments.name#]." )
+	}
+
+	/**
+	 * @return The path as the disk really has it: symbolic links followed, `.` and `..` worked out
+	 */
+	private string function canonical( required string path ) {
+		return createObject( "java", "java.io.File" ).init( arguments.path ).getCanonicalPath().replace( "\", "/", "all" ).reReplace( "/+$", "" )
+	}
+
+	private void function refuse( required string kind, required string message ) {
+		throw( type = "BxAgents.Volume.#arguments.kind#", message = arguments.message )
+	}
+
+	/**
+	 * @return True for the root of a disk or the user's whole home folder
+	 */
+	static boolean function isRefusedPath( required string path ) {
+		var value = trim( arguments.path ).replace( "\", "/", "all" ).reReplace( "/+$", "" )
+		return value == "" || value == "~" || reFind( "^[A-Za-z]:$", value ) > 0
+	}
+
+}
