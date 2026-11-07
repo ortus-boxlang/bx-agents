@@ -1,0 +1,76 @@
+/**
+ * Stands in for bx-ai's MCPHttpClient in the specs: the same OAuth methods, with the sign in kept in memory.
+ */
+class {
+
+	/**
+	 * @resolved The entry as the agent gets it ( name, url, oauth )
+	 */
+	function init( required struct resolved ) {
+		variables.resolved = arguments.resolved
+		variables.flows = {}
+		variables.signedIn = {}
+		variables.latest = ""
+		variables.latestSubject = ""
+		return this
+	}
+
+	/**
+	 * @subject The person
+	 *
+	 * @return { authorizationUrl, state }
+	 */
+	struct function startAuthorization( string subject = "default" ) {
+		variables.latest = createUUID()
+		variables.latestSubject = arguments.subject
+		variables.flows[ variables.latest ] = arguments.subject
+		return { "authorizationUrl" : "https://auth.example.com/authorize?state=" & variables.latest, "state" : variables.latest }
+	}
+
+	/**
+	 * @code   The code
+	 * @state  The state
+	 * @issuer The iss
+	 *
+	 * @return { subject, scope, expiresAt }
+	 */
+	struct function completeAuthorization( required string code, required string state, string issuer = "" ) {
+		if ( !variables.flows.keyExists( arguments.state ) ) {
+			throw( type = "MCPOAuthInvalidState", message = "Unknown state" )
+		}
+		var subject = variables.flows[ arguments.state ]
+		variables.flows.delete( arguments.state )
+		variables.signedIn[ subject ] = true
+		return { "subject" : subject, "scope" : "mail.read", "expiresAt" : "" }
+	}
+
+	/**
+	 * @subject The person
+	 */
+	boolean function isAuthorized( string subject = "default" ) {
+		return variables.signedIn.keyExists( arguments.subject )
+	}
+
+	/**
+	 * @subject The person
+	 */
+	function revokeAuthorization( string subject = "default" ) {
+		variables.signedIn.delete( arguments.subject )
+		return this
+	}
+
+	/**
+	 * @return The state of the sign in started last
+	 */
+	string function lastState() {
+		return variables.latest
+	}
+
+	/**
+	 * @return The person the last sign in was started for
+	 */
+	string function startedFor() {
+		return variables.latestSubject
+	}
+
+}
