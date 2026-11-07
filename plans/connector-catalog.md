@@ -1,6 +1,6 @@
 # Plan: the connector catalog
 
-Status: for review. No code in this pull request.
+Status: approved plan. No code in this pull request. Implementation waits for the update in flight to merge first.
 
 ## What and why
 
@@ -196,11 +196,13 @@ CI rules (schema and safety only):
 9. **Home page and tour.** Catalog section, a connectors tile, a Connections tab update, screenshots and the narrated video re-recorded with `af_heart`.
 10. **Changelog,** including the connect and MCP OAuth entries that are missing today, and a note on `discoverySubject` in the connect page.
 
-## Open questions
+## Decisions on the last questions
 
-1. Does a personal token apply to that person only? Proposed: yes.
-2. Name of the key: `connectors` (proposed).
-3. Who may set `runAs`? Proposed: the schedule's author, and it must name a person who exists.
+- A personal token applies to that person only.
+- The key is `connectors`.
+- `runAs` is set by the schedule's author and must name a person who exists.
+
+No open questions remain. Implementation starts after the other update in flight is merged.
 
 ## Atlassian, checked on 2026-11-07
 
