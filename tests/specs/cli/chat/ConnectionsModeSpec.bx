@@ -107,6 +107,47 @@ class extends="testbox.system.BaseSpec" {
 				expect( jsonSerialize( started.blocks() ) ).toInclude( "https://auth.example.com/authorize" );
 			} );
 
+			describe( "for a person who reaches the agent through the server", function() {
+
+				beforeEach( function() {
+					variables.agent = new tests.support.FakeAgent();
+					new bxagents.models.connect.ConnectionWiring().attach( agent, entries, "/__bxagents" );
+					variables.service = new bxagents.models.connect.ConnectionWiring().serviceOf( agent );
+				} );
+
+				it( "finds the agent's connections from the agent", function() {
+					expect( isNull( service ) ).toBeFalse();
+					expect( service.hasServers() ).toBeTrue();
+					expect( isNull( new bxagents.models.connect.ConnectionWiring().serviceOf( new tests.support.FakeAgent() ) ) ).toBeTrue();
+				} );
+
+				it( "says nothing to connect to for an agent whose servers do not ask people to sign in", function() {
+					var plain = new bxagents.models.chat.ServerConversation( new tests.support.FakeAgent(), "U123" );
+
+					expect( plain.connections().available() ).toBeFalse();
+				} );
+
+				it( "lists for that person and gives a one time address from /connect on a chat platform", function() {
+					var conversation = new bxagents.models.chat.ServerConversation( agent, "U123" );
+					var served = conversation.connections();
+
+					expect( served.available() ).toBeTrue();
+					expect( served.list()[ 1 ].connected ).toBeFalse();
+				} );
+
+				it( "tells a gateway person the link is theirs alone", function() {
+					var cmd = new bxagents.models.chat.commands.builtin.Connect( new bxagents.models.chat.commands.CommandRegistry() );
+					var context = new bxagents.models.chat.commands.CommandContext( { connections : function() { return new bxagents.models.cli.chat.ServedConnections( new bxagents.models.connect.ConnectionService( entries, { wiring : wiring, clientFactory : function( resolved ) { return new tests.support.FakeOAuthClient( resolved ); } } ), "U123" ); } }, "gateway" );
+
+					var out = jsonSerialize( cmd.run( context, "mail" ).blocks() );
+
+					expect( out ).toInclude( "https://auth.example.com/authorize" );
+					expect( out ).toInclude( "for you alone" );
+					expect( out ).toInclude( "do not share it" );
+				} );
+
+			} );
+
 			it( "tells the person when there is nothing to connect to", function() {
 				var cmd = new bxagents.models.chat.commands.builtin.Connect( new bxagents.models.chat.commands.CommandRegistry() );
 

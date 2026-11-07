@@ -20,4 +20,20 @@ class {
 		return arguments.agent
 	}
 
+	/**
+	 * The ConnectionService an agent was given by attach(), found on its middleware.
+	 *
+	 * @agent An AiAgent
+	 *
+	 * @return The ConnectionService, or null when the agent has no server that asks people to sign in
+	 */
+	any function serviceOf( required any agent ) {
+		for ( var middleware in ( arguments.agent.getMiddleware() ?: [] ) ) {
+			if ( isObject( middleware ) && structKeyExists( middleware, "connectionService" ) ) {
+				return middleware.connectionService()
+			}
+		}
+		return nullValue()
+	}
+
 }

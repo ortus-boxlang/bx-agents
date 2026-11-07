@@ -1,0 +1,72 @@
+/**
+ * The connections of a person who reaches the agent through the server: the web chat's /connect and the chat
+ * platforms. The server receives the provider's redirect at its own public address, so a sign in started here has
+ * nobody waiting on it: the person is given the address, signs in, and asks again.
+ *
+ * The person is always the one the server knows from the request, never one a message names.
+ */
+class {
+
+	/**
+	 * @service The ConnectionService of the agent
+	 * @userId The person
+	 */
+	function init( required any service, required string userId ) {
+		variables.service = arguments.service
+		variables.userId = arguments.userId
+		return this
+	}
+
+	/** @return True when the agent has a server that asks people to sign in */
+	boolean function available() {
+		return variables.service.hasServers()
+	}
+
+	/** @return Why there is nothing to connect to */
+	string function why() {
+		return "No MCP server of this agent asks people to sign in."
+	}
+
+	/** @return [ { name, url, connected, scope } ] for this person */
+	array function list() {
+		return variables.service.list( variables.userId )
+	}
+
+	/**
+	 * Starts a sign in for this person.
+	 *
+	 * @name The server's name
+	 *
+	 * @return { ok, authorizationUrl, waits : false } or { ok : false, reason }
+	 */
+	struct function start( required string name ) {
+		try {
+			var started = variables.service.start( arguments.name, variables.userId )
+			return { ok : true, authorizationUrl : started.authorizationUrl, waits : false }
+		} catch ( "BxAgents.UnknownConnection" e ) {
+			return { ok : false, reason : e.message }
+		} catch ( "MCPOAuthMissingRedirectUri" e ) {
+			return { ok : false, reason : "This server has no public address for the sign in to come back to. Set BXAGENTS_PUBLIC_URL to the address people reach it at." }
+		} catch ( any e ) {
+			if ( left( e.type, 8 ) == "MCPOAuth" || e.type == "BxAgents.MissingVaultSecret" ) {
+				return { ok : false, reason : e.message }
+			}
+			rethrow
+		}
+	}
+
+	/**
+	 * @name The server's name
+	 *
+	 * @return { ok } or { ok : false, reason }
+	 */
+	struct function remove( required string name ) {
+		try {
+			variables.service.disconnect( arguments.name, variables.userId )
+			return { ok : true }
+		} catch ( "BxAgents.UnknownConnection" e ) {
+			return { ok : false, reason : e.message }
+		}
+	}
+
+}

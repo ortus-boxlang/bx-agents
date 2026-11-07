@@ -5,11 +5,6 @@ class extends="models.chat.commands.BaseCommand@bxagents" {
 		return "connect"
 	}
 
-	/** @return Where it runs: the terminal and the web chat. A gateway signs people in with a one time link, not a command */
-	array function transports() {
-		return [ "tui", "web" ]
-	}
-
 	/** @return What the slash menu says the command does */
 	string function hint() {
 		return "sign in to the MCP servers that ask each person to: /connect, /connect NAME, /connect NAME remove"
@@ -54,7 +49,11 @@ class extends="models.chat.commands.BaseCommand@bxagents" {
 			}
 			reply.text( "Open this address and sign in to #words[ 1 ]#:" )
 			reply.text( started.authorizationUrl )
-			reply.text( started.waits ? "This terminal is waiting for the browser to come back. Type /connect to see that it worked." : "The server finishes the sign in when you come back. Type /connect to see that it worked." )
+			if ( arguments.context.transport() == "gateway" ) {
+				reply.text( "This link is for you alone and works once, for ten minutes: do not share it. When you have signed in, send /connect to see that it worked." )
+			} else {
+				reply.text( started.waits ? "This terminal is waiting for the browser to come back. Type /connect to see that it worked." : "The server finishes the sign in when you come back. Type /connect to see that it worked." )
+			}
 		} catch ( any e ) {
 			reply.warn( "Connect: " & e.message )
 		}
