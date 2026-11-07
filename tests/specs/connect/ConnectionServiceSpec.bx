@@ -1,0 +1,245 @@
+/**
+ * The OAuth servers of an agent and who has signed in to which, against a client that stands in for bx-ai's.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	/**
+	 * Listing, starting, completing and disconnecting, one person at a time.
+	 */
+	function run() {
+		describe( "ConnectionService", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-connect-" );
+				variables.wiring = new bxagents.models.vault.VaultWiring().pin( dir & "/chat.db" );
+				variables.made = {};
+				variables.entries = [
+					{ name : "mail", url : "https://mail.example.com/mcp", oauth : { scopes : [ "mail.read" ] } },
+					{ name : "calendar", url : "https://calendar.example.com/mcp", oauth : true },
+					{ name : "plain", url : "https://plain.example.com/mcp" }
+				];
+				variables.connections = new bxagents.models.connect.ConnectionService( entries, {
+					wiring        : wiring,
+					apiPath       : "/__bxagents",
+					clientFactory : function( resolved ) {
+						var stand = new tests.support.FakeOAuthClient( resolved );
+						made[ resolved.name ] = stand;
+						return stand;
+					}
+				} );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "knows only the servers that ask people to sign in", function() {
+				expect( connections.names() ).toBe( [ "mail", "calendar" ] );
+				expect( connections.hasServers() ).toBeTrue();
+				expect( new bxagents.models.connect.ConnectionService( [ { name : "plain", url : "https://a.test/mcp" } ] ).hasServers() ).toBeFalse();
+			} );
+
+			it( "says for each server whether a person is connected", function() {
+				connections.start( "mail", "alice" );
+				connections.complete( "code-1", made.mail.lastState() );
+
+				var alice = connections.list( "alice" );
+				expect( alice[ 1 ].name ).toBe( "mail" );
+				expect( alice[ 1 ].connected ).toBeTrue();
+				expect( alice[ 1 ].scope ).toBe( "mail.read" );
+				expect( alice[ 2 ].connected ).toBeFalse();
+				expect( connections.list( "bob" )[ 1 ].connected ).toBeFalse();
+				expect( connections.missing( "alice" ) ).toBe( [ "calendar" ] );
+			} );
+
+			it( "starts a sign in for the person and gives the address", function() {
+				var started = connections.start( "mail", "alice" );
+
+				expect( started.name ).toBe( "mail" );
+				expect( started.authorizationUrl ).toInclude( "https://auth.example.com/authorize" );
+				expect( made.mail.startedFor() ).toBe( "alice" );
+			} );
+
+			it( "finds the person from the state and the server that made it", function() {
+				connections.start( "calendar", "bob" );
+
+				var done = connections.complete( "code-9", made.calendar.lastState() );
+
+				expect( done.name ).toBe( "calendar" );
+				expect( done.subject ).toBe( "bob" );
+				expect( connections.list( "bob" )[ 2 ].connected ).toBeTrue();
+			} );
+
+			it( "refuses a state nobody made", function() {
+				connections.start( "mail", "alice" );
+
+				expect( function() {
+					connections.complete( "code", "forged-state" );
+				} ).toThrow( "MCPOAuthInvalidState" );
+			} );
+
+			it( "refuses a state a second time", function() {
+				connections.start( "mail", "alice" );
+				var state = made.mail.lastState();
+				connections.complete( "code", state );
+
+				expect( function() {
+					connections.complete( "code", state );
+				} ).toThrow( "MCPOAuthInvalidState" );
+			} );
+
+			it( "disconnects one person and leaves the others", function() {
+				connections.start( "mail", "alice" );
+				connections.complete( "c", made.mail.lastState() );
+				connections.start( "mail", "bob" );
+				connections.complete( "c", made.mail.lastState() );
+
+				connections.disconnect( "mail", "alice" );
+
+				expect( connections.list( "alice" )[ 1 ].connected ).toBeFalse();
+				expect( connections.list( "bob" )[ 1 ].connected ).toBeTrue();
+			} );
+
+			it( "says which names there are when one is unknown", function() {
+				expect( function() {
+					connections.start( "nope", "alice" );
+				} ).toThrow( "BxAgents.UnknownConnection" );
+			} );
+
+			describe( "tools of a server the agent could not list at start", function() {
+
+				beforeEach( function() {
+					variables.agent = new tests.support.FakeAgent();
+					variables.withAgent = new bxagents.models.connect.ConnectionService(
+						[ { name : "mail", url : "https://mail.example.com/mcp", oauth : { scopes : [ "mail.read" ] } } ],
+						{
+							wiring        : wiring,
+							agent         : agent,
+							clientFactory : function( resolved ) {
+								if ( !made.keyExists( resolved.name ) ) {
+									made[ resolved.name ] = new tests.support.FakeOAuthClient( resolved );
+								}
+								return made[ resolved.name ];
+							}
+						}
+					);
+				} );
+
+				it( "adds the server to the agent once somebody has signed in, with that person as the one who lists its tools", function() {
+					expect( withAgent.refresh() ).toBe( 0 );
+
+					withAgent.start( "mail", "alice" );
+					withAgent.complete( "code", made.mail.lastState() );
+
+					expect( agent.added() ).toHaveLength( 1 );
+					expect( agent.added()[ 1 ].url ).toBe( "https://mail.example.com/mcp" );
+					// a call with nobody behind it (listing the tools) is made as the person who signed in last
+					expect( agent.added()[ 1 ].oauth.discoverySubject() ).toBe( "alice" );
+				} );
+
+				it( "does not add a server the agent already has", function() {
+					variables.agent = new tests.support.FakeAgent( [ "https://mail.example.com/mcp" ] );
+					variables.withAgent = new bxagents.models.connect.ConnectionService(
+						[ { name : "mail", url : "https://mail.example.com/mcp", oauth : { scopes : [ "mail.read" ] } } ],
+						{ wiring : wiring, agent : agent, clientFactory : function( resolved ) { made[ resolved.name ] = new tests.support.FakeOAuthClient( resolved ); return made[ resolved.name ]; } }
+					);
+
+					withAgent.start( "mail", "alice" );
+					withAgent.complete( "code", made.mail.lastState() );
+
+					expect( agent.added() ).toBeEmpty();
+				} );
+
+				it( "makes every call for a person with that person's tokens", function() {
+					withAgent.start( "mail", "alice" );
+					withAgent.complete( "code", made.mail.lastState() );
+					var subject = agent.added()[ 1 ].oauth.subject;
+
+					expect( subject( { chatRequest : new tests.support.FakeChatRequest( "bob" ) } ) ).toBe( "bob" );
+					expect( subject( { chatRequest : new tests.support.FakeChatRequest( "" ) } ) ).toBe( "default" );
+				} );
+
+			} );
+
+			describe( "the agent is told what the person has not signed in to", function() {
+
+				beforeEach( function() {
+					variables.middleware = new bxagents.models.connect.ConnectionMiddleware( connections );
+				} );
+
+				it( "adds a block naming the services and how to connect, to the system message", function() {
+					var run = { userId : "alice", messages : [ { role : "system", content : "You help." }, { role : "user", content : "read my mail" } ] };
+
+					middleware.beforeAgentRun( run );
+
+					expect( run.messages[ 1 ].content ).toInclude( "You help." );
+					expect( run.messages[ 1 ].content ).toInclude( "has not signed in to: mail, calendar" );
+					expect( run.messages[ 1 ].content ).toInclude( "/connect mail" );
+					expect( run.messages[ 1 ].content ).toInclude( "bxAgents connect mail" );
+					expect( run.messages ).toHaveLength( 2 );
+				} );
+
+				it( "adds nothing once the person is signed in to everything", function() {
+					for ( var name in [ "mail", "calendar" ] ) {
+						connections.start( name, "alice" );
+						connections.complete( "c", made[ name ].lastState() );
+					}
+
+					expect( middleware.blockFor( "alice" ) ).toBe( "" );
+					expect( middleware.blockFor( "bob" ) ).toInclude( "mail, calendar" );
+				} );
+
+				it( "starts a system message when there is none, and names only what is missing", function() {
+					connections.start( "mail", "alice" );
+					connections.complete( "c", made.mail.lastState() );
+					var run = { userId : "alice", messages : [ { role : "user", content : "hi" } ] };
+
+					middleware.beforeAgentRun( run );
+
+					expect( run.messages[ 1 ].role ).toBe( "system" );
+					expect( run.messages[ 1 ].content ).toInclude( "has not signed in to: calendar." );
+					expect( run.messages[ 1 ].content ).notToInclude( "mail," );
+				} );
+
+				it( "never carries an address or a token", function() {
+					expect( middleware.blockFor( "alice" ) ).notToInclude( "http" );
+					expect( middleware.blockFor( "alice" ) ).notToInclude( "token" );
+				} );
+
+				it( "gives a run with no user the default person", function() {
+					var run = { messages : [ { role : "system", content : "x" } ] };
+
+					middleware.beforeAgentRun( run );
+
+					expect( run.messages[ 1 ].content ).toInclude( "mail" );
+				} );
+
+			} );
+
+			it( "gives each client the vault token store, the callback and a client id from the vault", function() {
+				wiring.service().add( "MAIL_CLIENT_ID", "cid-7" );
+				var withVault = new bxagents.models.connect.ConnectionService(
+					[ { name : "mail", url : "https://mail.example.com/mcp", oauth : { clientId : "${vault.MAIL_CLIENT_ID}" } } ],
+					{
+						wiring        : wiring,
+						redirectUri   : "http://127.0.0.1:5555/callback",
+						clientFactory : function( resolved ) {
+							made[ "seen" ] = resolved;
+							return new tests.support.FakeOAuthClient( resolved );
+						}
+					}
+				);
+
+				withVault.list( "alice" );
+
+				expect( made.seen.oauth.clientId ).toBe( "cid-7" );
+				expect( made.seen.oauth.redirectUri ).toBe( "http://127.0.0.1:5555/callback" );
+				expect( getMetadata( made.seen.oauth.store ).name ).toInclude( "VaultTokenStore" );
+			} );
+
+		} );
+	}
+
+}

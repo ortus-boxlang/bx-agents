@@ -1,0 +1,112 @@
+/**
+ * Keeps the OAuth state of MCP servers (access and refresh tokens, the client registration, the sign-ins waiting for
+ * their callback) in the chat database, each record sealed with the vault key.
+ *
+ * It is a bx-ai token store (`IMCPTokenStore`), so an agent's MCP client uses it through `oauth.store`. bx-ai's own
+ * stores keep tokens as plain text; this one never does. The record's key is hashed before it is saved, so neither a
+ * person's name nor a server address sits in the clear, and the hash is also what seals the value: a record copied onto
+ * another row fails to open, the same guard the secrets have.
+ *
+ * ```
+ * store = new VaultTokenStore( chatStore, vaultService )
+ * store.set( "token:https://mail.example.com/mcp:alice", { accessToken : "..." }, 3600 )
+ * store.get( "token:https://mail.example.com/mcp:alice" )
+ * ```
+ */
+class implements="bxModules.bxai.models.mcp.oauth.IMCPTokenStore" {
+
+	/**
+	 * @store A ChatStore, already migrated
+	 * @vault The VaultService that holds the key
+	 */
+	function init( required any store, required any vault ) {
+		variables.store = arguments.store
+		variables.vault = arguments.vault
+		return this
+	}
+
+	/**
+	 * Reads one record.
+	 *
+	 * @key The key it was saved under
+	 *
+	 * @return The saved struct, or an empty struct when there is none or it has expired
+	 */
+	struct function get( required string key ) {
+		var hashed = hashOf( arguments.key )
+		var found = variables.store.rows( "SELECT sealed, keyId, expiresAt FROM oauth_records WHERE recordKey = :k", { k : hashed } )
+		if ( !found.len() ) {
+			return {}
+		}
+		var row = found[ 1 ]
+		if ( isDate( row.expiresAt ?: "" ) && row.expiresAt < now() ) {
+			remove( arguments.key )
+			return {}
+		}
+		return jsonDeserialize( variables.vault.openFor( row.sealed, row.keyId, contextOf( hashed ) ) )
+	}
+
+	/**
+	 * Saves one record, replacing what is there.
+	 *
+	 * @key        The key to save it under
+	 * @value      The record
+	 * @ttlSeconds Seconds after which the record is forgotten, 0 for never
+	 */
+	void function set( required string key, required struct value, numeric ttlSeconds = 0 ) {
+		var hashed = hashOf( arguments.key )
+		var sealed = variables.vault.sealFor( jsonSerialize( arguments.value ), contextOf( hashed ) )
+		var expires = arguments.ttlSeconds > 0 ? dateAdd( "s", arguments.ttlSeconds, now() ) : nullValue()
+		variables.store.exec( "DELETE FROM oauth_records WHERE recordKey = :k", { k : hashed } )
+		variables.store.exec(
+			"INSERT INTO oauth_records ( recordKey, sealed, keyId, expiresAt, updatedAt ) VALUES ( :k, :sealed, :keyId, :expiresAt, :updatedAt )",
+			{
+				k         : hashed,
+				sealed    : sealed.sealed,
+				keyId     : sealed.keyId,
+				expiresAt : { value : isNull( expires ) ? "" : expires, cfsqltype : "timestamp", null : isNull( expires ) },
+				updatedAt : { value : now(), cfsqltype : "timestamp" }
+			}
+		)
+	}
+
+	/**
+	 * Deletes one record. Nothing happens when there is none.
+	 *
+	 * @key The key to delete
+	 */
+	void function remove( required string key ) {
+		variables.store.exec( "DELETE FROM oauth_records WHERE recordKey = :k", { k : hashOf( arguments.key ) } )
+	}
+
+	/**
+	 * Forgets every record whose time is up. Called by whoever keeps the app, never needed for correctness: get() ignores
+	 * an expired record.
+	 *
+	 * @return How many records were removed
+	 */
+	numeric function purgeExpired() {
+		var due = variables.store.rows( "SELECT COUNT(*) AS n FROM oauth_records WHERE expiresAt IS NOT NULL AND expiresAt < :now", { now : { value : now(), cfsqltype : "timestamp" } } )[ 1 ].n
+		variables.store.exec( "DELETE FROM oauth_records WHERE expiresAt IS NOT NULL AND expiresAt < :now", { now : { value : now(), cfsqltype : "timestamp" } } )
+		return due
+	}
+
+	/**
+	 * @key bx-ai's key
+	 *
+	 * @return A fixed length name for the row: the SHA-256 of the key, first 64 hex characters
+	 */
+	private string function hashOf( required string key ) {
+		return lCase( hash( arguments.key, "SHA-256" ) )
+	}
+
+	/**
+	 * @hashed The hashed key
+	 *
+	 * @return What a sealed value is bound to
+	 */
+	private string function contextOf( required string hashed ) {
+		return "oauth|" & arguments.hashed
+	}
+
+}

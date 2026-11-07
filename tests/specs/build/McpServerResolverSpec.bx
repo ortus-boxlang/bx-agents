@@ -70,6 +70,73 @@ class extends="testbox.system.BaseSpec" {
 				expect( stdio.allowedCommands ).toBe( [ "npx" ] );
 			} );
 
+			describe( "oauth", function() {
+
+				beforeEach( function() {
+					variables.dir = createTempDirectory( prefix = "bxagents-oauthres-" );
+					variables.wiring = new bxagents.models.vault.VaultWiring().pin( dir & "/chat.db" );
+				} );
+
+				afterEach( function() {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				} );
+
+				it( "adds the vault token store, a subject and the callback of the agent API", function() {
+					var out = resolver.resolve(
+						[ { url : "https://mail.example.com/mcp", name : "mail", oauth : { scopes : [ "mail.read" ] } } ],
+						"mcpServers of root",
+						{ apiPath : "/__bxagents", wiring : wiring }
+					);
+
+					var oauth = out[ 1 ].oauth;
+					expect( oauth.scopes ).toBe( [ "mail.read" ] );
+					expect( getMetadata( oauth.store ).name ).toInclude( "VaultTokenStore" );
+					expect( isClosure( oauth.subject ) || isCustomFunction( oauth.subject ) ).toBeTrue();
+				} );
+
+				it( "builds the callback from BXAGENTS_PUBLIC_URL and the API path, and keeps an address the entry names", function() {
+					var named = resolver.resolve(
+						[ { url : "https://a.test/mcp", oauth : { redirectUri : "https://app.example.com/cb" } } ],
+						"x",
+						{ wiring : wiring }
+					);
+					expect( named[ 1 ].oauth.redirectUri ).toBe( "https://app.example.com/cb" );
+
+					var none = resolver.resolve( [ { url : "https://a.test/mcp", oauth : true } ], "x", { apiPath : "/agent-api", wiring : wiring } );
+					expect( none[ 1 ].oauth.keyExists( "redirectUri" ) ).toBeTrue();
+				} );
+
+				it( "names the person a run belongs to as the subject, default when it has none", function() {
+					var out = resolver.resolve( [ { url : "https://a.test/mcp", oauth : true } ], "x", { wiring : wiring } );
+					var subject = out[ 1 ].oauth.subject;
+
+					expect( subject( { chatRequest : new tests.support.FakeChatRequest( "alice" ) } ) ).toBe( "alice" );
+					expect( subject( {} ) ).toBe( "default" );
+					// a call with nobody behind it uses whoever signed in last; nobody has yet
+					expect( out[ 1 ].oauth.discoverySubject() ).toBe( "default" );
+					expect( subject( { chatRequest : new tests.support.FakeChatRequest( "" ) } ) ).toBe( "default" );
+				} );
+
+				it( "puts a vault secret into the client id and secret", function() {
+					var vault = wiring.service();
+					vault.add( "MAIL_CLIENT_ID", "cid-1" );
+					vault.add( "MAIL_CLIENT_SECRET", "csecret-1" );
+					var selector = new bxagents.models.build.ToolSelector( {}, vault );
+
+					var out = new bxagents.models.build.McpServerResolver( selector ).resolve(
+						[ { url : "https://a.test/mcp", oauth : { clientId : "${vault.MAIL_CLIENT_ID}", clientSecret : "${vault.MAIL_CLIENT_SECRET}" } } ],
+						"x",
+						{ wiring : wiring }
+					);
+
+					expect( out[ 1 ].oauth.clientId ).toBe( "cid-1" );
+					expect( out[ 1 ].oauth.clientSecret ).toBe( "csecret-1" );
+				} );
+
+			} );
+
 			it( "touches nothing when there are only web servers", function() {
 				resolver.resolve( [ "https://x.example.com/mcp" ] );
 

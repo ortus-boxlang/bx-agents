@@ -23,6 +23,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n __bxagents_needs_verb -a 'build' -d 'Build a project into a generated app'
     complete -c $cmd -n __bxagents_needs_verb -a 'chat' -d 'Interactive REPL chat with a built agent'
     complete -c $cmd -n __bxagents_needs_verb -a 'clean' -d 'Remove a project\'s .build/ and dist/ output'
+    complete -c $cmd -n __bxagents_needs_verb -a 'connect' -d 'Sign in to the MCP servers of a project that ask each person to sign in: connect [name]'
     complete -c $cmd -n __bxagents_needs_verb -a 'deploy' -d 'Deploy to a target'
     complete -c $cmd -n __bxagents_needs_verb -a 'doctor' -d 'Diagnose the environment and project - runtime, modules, env vars'
     complete -c $cmd -n __bxagents_needs_verb -a 'extensions' -d 'The extensions the chat loads, and installing more: extensions...'
@@ -114,6 +115,11 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb clean' -l force
     complete -c $cmd -n '__bxagents_using_verb clean' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb clean' -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb connect' -l port -x
+    complete -c $cmd -n '__bxagents_using_verb connect' -l projectRoot -x -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb connect' -l timeout -x
+    complete -c $cmd -n '__bxagents_using_verb connect' -l user -x
+    complete -c $cmd -n '__bxagents_using_verb connect' -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb deploy' -l destination -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb deploy' -l name -x
     complete -c $cmd -n '__bxagents_using_verb deploy' -l projectRoot -x -a '(__fish_complete_directories)'
@@ -231,5 +237,5 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb vault' -l scope -x
     complete -c $cmd -n '__bxagents_using_verb vault' -l user -x
     complete -c $cmd -n '__bxagents_using_verb vault' -a '(__fish_complete_directories)'
-    complete -c $cmd -n '__bxagents_using_verb help' -a 'add build chat clean deploy doctor extensions hash-password inspect invoke models new notes package serve sessions skills stats test token vault help'
+    complete -c $cmd -n '__bxagents_using_verb help' -a 'add build chat clean connect deploy doctor extensions hash-password inspect invoke models new notes package serve sessions skills stats test token vault help'
 end

@@ -11,7 +11,8 @@
 class {
 
 	static {
-		cache = {}
+		cache  = {}
+		stores = {}
 	}
 
 	/**
@@ -40,9 +41,24 @@ class {
 			// (SQLite in WAL mode lets both connections work), and it needs no datasource to be registered here.
 			var store = new "models.store.ChatStore@bxagents"( { driver : "sqlite", database : file } )
 			store.migrate()
+			static.stores[ file ] = store
 			static.cache[ file ] = new "models.vault.VaultService@bxagents"( store, new "models.vault.VaultKey@bxagents"( getDirectoryFromPath( file ) ) )
 		}
 		return static.cache[ file ]
+	}
+
+	/**
+	 * The OAuth token store of the same database: sign-ins of MCP servers, sealed with the vault key.
+	 *
+	 * @databaseFile The SQLite file. Leave blank inside the built app
+	 *
+	 * @return A VaultTokenStore, the same one for the same file
+	 */
+	any function tokenStore( string databaseFile = "" ) {
+		var explicit = len( arguments.databaseFile ) ? arguments.databaseFile : ( variables.pinned ?: "" )
+		var file = ( len( explicit ) ? explicit : appDatabaseFile() ).replace( "\", "/", "all" )
+		var vault = service( file )
+		return new "models.vault.VaultTokenStore@bxagents"( static.stores[ file ], vault )
 	}
 
 	/**

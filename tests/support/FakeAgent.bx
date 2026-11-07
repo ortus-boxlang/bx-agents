@@ -1,0 +1,58 @@
+/**
+ * Stands in for a bx-ai agent in the specs that only care about the MCP servers it has.
+ */
+class {
+
+	/**
+	 * @has Addresses of the servers the agent already has the tools of
+	 */
+	function init( array has = [] ) {
+		variables.servers = []
+		variables.added = []
+		variables.middlewares = []
+		for ( var address in arguments.has ) {
+			variables.servers.append( { "url" : address, "toolNames" : [ "inbox" ] } )
+		}
+		return this
+	}
+
+	/** @return [ { url, toolNames } ] the servers the agent has the tools of */
+	array function listMCPServers() {
+		return variables.servers
+	}
+
+	/**
+	 * @address The address given to withMCPServer()
+	 * @options The options given with it
+	 *
+	 * @return This agent
+	 */
+	function withMCPServer( required string address, struct options = {} ) {
+		var given = duplicate( arguments.options )
+		given[ "url" ] = arguments.address
+		variables.added.append( given )
+		variables.servers.append( { "url" : arguments.address, "toolNames" : [ "inbox" ] } )
+		return this
+	}
+
+	/**
+	 * @middleware What to add
+	 *
+	 * @return This agent
+	 */
+	function withMiddleware( required any middleware ) {
+		variables.middlewares.append( arguments.middleware )
+		return this
+	}
+
+	/** @return The middleware the agent was given */
+	array function getMiddleware() {
+		return variables.middlewares
+	}
+
+	/** @return The servers given to withMCPServer() */
+	array function added() {
+		return variables.added
+	}
+
+}

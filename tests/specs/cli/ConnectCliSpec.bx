@@ -1,0 +1,169 @@
+/**
+ * `bxAgents connect`: list, sign in and disconnect, against a project whose Agent.yaml has oauth servers.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	/**
+	 * Runs the verb the way the CLI does, with the browser replaced by a function.
+	 *
+	 * @options More options of the verb
+	 *
+	 * @return The verb's { exitCode, message }
+	 */
+	private struct function connectVerb( struct options = {} ) {
+		var all = { projectRoot : project, _clientFactory : factory };
+		all.append( arguments.options );
+		return new bxagents.models.cli.Connect().run( all );
+	}
+
+	/**
+	 * The listing, signing in with the browser stood in for, and disconnecting.
+	 */
+	function run() {
+		describe( "cli.Connect", function() {
+
+			beforeEach( function() {
+				variables.project = createTempDirectory( prefix = "bxagents-connectcli-" );
+				directoryCopy( expandPath( "/fixtures/with-mcp-oauth" ), project, true );
+				// the fixture's mail server takes its client id and secret from the vault
+				var file = new bxagents.models.store.ChatStorePath().forProject( project );
+				directoryCreate( getDirectoryFromPath( file ), true, true );
+				var vault = new bxagents.models.vault.VaultWiring().service( file );
+				vault.add( "MAIL_CLIENT_ID", "cid-1" );
+				vault.add( "MAIL_CLIENT_SECRET", "csecret-1" );
+				variables.made = {};
+				// one stand-in per server for the whole spec, as the token store makes one sign in outlive each run of the verb
+				variables.factory = function( resolved ) {
+					if ( !made.keyExists( resolved.name ) ) {
+						made[ resolved.name ] = new tests.support.FakeOAuthClient( resolved );
+					}
+					return made[ resolved.name ];
+				};
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( project ) ) {
+					directoryDelete( project, true );
+				}
+			} );
+
+			it( "lists the servers and says nobody is connected yet", function() {
+				var out = connectVerb();
+
+				expect( out.exitCode ).toBe( 0 );
+				expect( out.message ).toInclude( "mail" );
+				expect( out.message ).toInclude( "not connected" );
+				expect( out.message ).toInclude( "bxAgents connect mail" );
+			} );
+
+			it( "lists as JSON for a script", function() {
+				var out = connectVerb( { json : true } );
+				var parsed = jsonDeserialize( out.message );
+
+				expect( parsed.user ).toBe( "local" );
+				expect( parsed.servers ).toHaveLength( 2 );
+				expect( parsed.servers[ 1 ].connected ).toBeFalse();
+			} );
+
+			it( "signs in: the redirect comes back with the state and the person is connected", function() {
+				var out = connectVerb( {
+					_positional : "mail",
+					_receive    : function( redirectUri, authorizationUrl ) {
+						expect( redirectUri ).toMatch( "^http://127\.0\.0\.1:\d+/callback$" );
+						return { code : "code-1", state : listLast( authorizationUrl, "=" ) };
+					}
+				} );
+
+				expect( out.exitCode ).toBe( 0 );
+				expect( out.message ).toBe( "Connected local to mail." );
+				expect( connectVerb().message ).toMatch( "mail\s+connected" );
+			} );
+
+			it( "signs in a named person", function() {
+				var out = connectVerb( {
+					_positional : "calendar",
+					user        : "alice",
+					_receive    : function( redirectUri, authorizationUrl ) {
+						return { code : "c", state : listLast( authorizationUrl, "=" ) };
+					}
+				} );
+
+				expect( out.message ).toBe( "Connected alice to calendar." );
+			} );
+
+			it( "says why when the provider sends an error", function() {
+				var out = connectVerb( {
+					_positional : "mail",
+					_receive    : function( redirectUri, authorizationUrl ) {
+						return { error : "access_denied", error_description : "The person said no" };
+					}
+				} );
+
+				expect( out.exitCode ).toBe( 1 );
+				expect( out.message ).toInclude( "The person said no" );
+			} );
+
+			it( "refuses a state that is not the one that was started", function() {
+				var out = connectVerb( {
+					_positional : "mail",
+					_receive    : function( redirectUri, authorizationUrl ) {
+						return { code : "c", state : "forged" };
+					}
+				} );
+
+				expect( out.exitCode ).toBe( 1 );
+				expect( out.message ).toInclude( "Unknown state" );
+			} );
+
+			it( "disconnects with --remove", function() {
+				connectVerb( {
+					_positional : "mail",
+					_receive    : function( redirectUri, authorizationUrl ) {
+						return { code : "c", state : listLast( authorizationUrl, "=" ) };
+					}
+				} );
+
+				var out = connectVerb( { _positional : "mail", remove : true } );
+
+				expect( out.message ).toBe( "Disconnected local from mail." );
+				expect( connectVerb().message ).toMatch( "mail\s+not connected" );
+			} );
+
+			it( "names the servers there are when the name is wrong", function() {
+				var out = connectVerb( { _positional : "nope" } );
+
+				expect( out.exitCode ).toBe( 1 );
+				expect( out.message ).toInclude( "mail, calendar" );
+			} );
+
+			it( "says which vault secret is missing instead of failing", function() {
+				var bare = createTempDirectory( prefix = "bxagents-connectbare-" );
+				directoryCopy( expandPath( "/fixtures/with-mcp-oauth" ), bare, true );
+
+				var out = new bxagents.models.cli.Connect().run( {
+					projectRoot    : bare,
+					_positional    : "mail",
+					_clientFactory : factory,
+					_receive       : function( redirectUri, authorizationUrl ) { return {}; }
+				} );
+
+				expect( out.exitCode ).toBe( 1 );
+				expect( out.message ).toInclude( "MAIL_CLIENT_ID" );
+				directoryDelete( bare, true );
+			} );
+
+			it( "says there is nothing to connect to in a project with no oauth server", function() {
+				var plain = createTempDirectory( prefix = "bxagents-connectplain-" );
+				directoryCopy( expandPath( "/fixtures/with-mcp-credentials" ), plain, true );
+
+				var out = new bxagents.models.cli.Connect().run( { projectRoot : plain } );
+
+				expect( out.exitCode ).toBe( 1 );
+				expect( out.message ).toInclude( "nothing to connect to" );
+				directoryDelete( plain, true );
+			} );
+
+		} );
+	}
+
+}

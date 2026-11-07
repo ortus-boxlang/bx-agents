@@ -1,0 +1,210 @@
+/**
+ * `connect` CLI verb - sign in to the MCP servers of a project that ask each person to sign in (an `mcpServers`
+ * entry with an `oauth` key in Agent.yaml).
+ *
+ *   bxAgents connect                      lists the servers and whether you are connected
+ *   bxAgents connect mail                 signs in to the server named mail
+ *   bxAgents connect mail --remove        forgets your sign in to it
+ *   bxAgents connect mail --port=8765     uses that port for the return address (register http://127.0.0.1:8765/callback)
+ *   bxAgents connect mail --no-open       prints the address and does not open a browser
+ *   [--user=NAME] [--timeout=SECONDS] [--json]
+ *
+ * The sign in happens in your browser. This command opens a short-lived listener on 127.0.0.1 to catch the redirect,
+ * so the provider sends you back to this terminal, then closes it. Your tokens are sealed in the project's chat
+ * database with the vault key and are used when the agent runs as the same person (`local` unless --user says another).
+ * To sign in to a served agent instead, use the Connections panel of its web page or `chat --connect`'s /connect.
+ */
+import bxModules.bxagents.models.api.Caller;
+import bxModules.bxagents.models.connect.OAuthServers;
+
+class {
+
+	/**
+	 * @options { projectRoot (required), _positional (the server's name), remove, port, user, timeout, json, noOpen;
+	 *            _receive ( redirectUri, authorizationUrl ) => { code, state, iss } and _clientFactory replace the browser and bx-ai for tests }
+	 *
+	 * @return { exitCode, message }
+	 */
+	struct function run( struct options = {} ) {
+		var projectRoot = trim( arguments.options.projectRoot ?: "" )
+		if ( !len( projectRoot ) ) {
+			throw( type = "BxAgents.MissingProjectRoot", message = "`connect` requires a project root" )
+		}
+		var name = trim( arguments.options._positional ?: "" )
+		var subject = len( trim( arguments.options.user ?: "" ) ) ? trim( arguments.options.user ) : Caller::localId()
+
+		var config = new "models.build.AgentConfigResolver@bxagents"().resolve( projectRoot = projectRoot )
+		var entries = OAuthServers::of( config )
+		if ( !entries.len() ) {
+			return { exitCode : 1, message : "No mcpServers entry in this project has an `oauth` key, so there is nothing to connect to. Add one to Agent.yaml, for example `oauth: true`." }
+		}
+
+		var file = new "models.store.ChatStorePath@bxagents"().forProject( projectRoot )
+		directoryCreate( getDirectoryFromPath( file ), true, true )
+		var wiring = new "models.vault.VaultWiring@bxagents"().pin( file )
+		var settings = { wiring : wiring }
+		if ( isClosure( arguments.options._clientFactory ?: "" ) ) {
+			settings[ "clientFactory" ] = arguments.options._clientFactory
+		}
+
+		if ( !len( name ) ) {
+			return list( new "models.connect.ConnectionService@bxagents"( entries, settings ), subject, arguments.options )
+		}
+		if ( arguments.options.remove ?: false ) {
+			return remove( new "models.connect.ConnectionService@bxagents"( entries, settings ), name, subject )
+		}
+		return connect( entries, settings, name, subject, arguments.options )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Shows the servers and whether the person is connected.
+	 *
+	 * @service A ConnectionService
+	 * @subject The person
+	 * @options The parsed options: json
+	 *
+	 * @return { exitCode, message }
+	 */
+	private struct function list( required any service, required string subject, required struct options ) {
+		var rows = arguments.service.list( arguments.subject )
+		if ( arguments.options.json ?: false ) {
+			return { exitCode : 0, message : jsonSerialize( { "user" : arguments.subject, "servers" : rows } ) }
+		}
+		var lines = [ "Sign ins of #arguments.subject#:" ]
+		for ( var row in rows ) {
+			lines.append( "  " & pad( row.name, 18 ) & pad( row.connected ? "connected" : "not connected", 16 ) & row.url )
+		}
+		var missing = rows.filter( row => !row.connected )
+		if ( missing.len() ) {
+			lines.append( "" )
+			lines.append( "Connect with `bxAgents connect #missing[ 1 ].name#`." )
+		}
+		return { exitCode : 0, message : lines.toList( char( 10 ) ) }
+	}
+
+	/**
+	 * Forgets the person's sign in to one server.
+	 *
+	 * @service A ConnectionService
+	 * @name The server's name
+	 * @subject The person
+	 *
+	 * @return { exitCode, message }
+	 */
+	private struct function remove( required any service, required string name, required string subject ) {
+		try {
+			arguments.service.disconnect( arguments.name, arguments.subject )
+		} catch ( "BxAgents.UnknownConnection" e ) {
+			return { exitCode : 1, message : e.message }
+		}
+		return { exitCode : 0, message : "Disconnected #arguments.subject# from #arguments.name#." }
+	}
+
+	/**
+	 * Signs in: starts, waits for the browser to come back, finishes.
+	 *
+	 * @entries The oauth entries
+	 * @settings The ConnectionService options
+	 * @name The server's name
+	 * @subject The person
+	 * @options The parsed options: port, timeout, noOpen, _receive
+	 *
+	 * @return { exitCode, message }
+	 */
+	private struct function connect( required array entries, required struct settings, required string name, required string subject, required struct options ) {
+		var seconds = isNumeric( arguments.options.timeout ?: "" ) ? int( arguments.options.timeout ) : 300
+		var receive = arguments.options._receive ?: ""
+		var listener = ""
+		var redirectUri = "http://127.0.0.1:" & ( isNumeric( arguments.options.port ?: "" ) ? int( arguments.options.port ) : 0 ) & "/callback"
+		try {
+			if ( !isClosure( receive ) ) {
+				var page = new "models.connect.CallbackPage@bxagents"()
+				listener = createObject( "java", "ortus.boxlang.bxagents.util.LoopbackCallback" ).start(
+					isNumeric( arguments.options.port ?: "" ) ? int( arguments.options.port ) : 0,
+					"/callback",
+					page.connected( arguments.name ),
+					page.refused( "The provider did not send you back with a code." )
+				)
+				redirectUri = listener.redirectUri()
+			}
+			var settings = duplicate( arguments.settings )
+			settings[ "redirectUri" ] = redirectUri
+			var service = new "models.connect.ConnectionService@bxagents"( arguments.entries, settings )
+
+			var started = service.start( arguments.name, arguments.subject )
+			var query = {}
+			if ( isClosure( receive ) ) {
+				query = receive( redirectUri, started.authorizationUrl )
+			} else {
+				println( "Open this address and sign in to #arguments.name#:" )
+				println( started.authorizationUrl )
+				if ( !( arguments.options.noOpen ?: false ) ) {
+					openBrowser( started.authorizationUrl )
+				}
+				println( "Waiting up to #seconds# seconds for the browser to come back to #redirectUri# ..." )
+				query = toStruct( listener.await( seconds ) )
+			}
+			if ( len( query.error ?: "" ) ) {
+				return { exitCode : 1, message : "Not connected: #query.error_description ?: query.error#" }
+			}
+			var done = service.complete( query.code ?: "", query.state ?: "", query.iss ?: "" )
+			return { exitCode : 0, message : "Connected #done.subject# to #done.name#." }
+		} catch ( "BxAgents.UnknownConnection" e ) {
+			return { exitCode : 1, message : e.message }
+		} catch ( "BxAgents.MissingVaultSecret" e ) {
+			return { exitCode : 1, message : e.message }
+		} catch ( "java.util.concurrent.TimeoutException" e ) {
+			return { exitCode : 1, message : "Nobody came back within #seconds# seconds. Run `bxAgents connect #arguments.name#` again." }
+		} catch ( any e ) {
+			if ( left( e.type, 8 ) == "MCPOAuth" ) {
+				return { exitCode : 1, message : e.message }
+			}
+			rethrow
+		} finally {
+			if ( isObject( listener ) ) {
+				listener.close()
+			}
+		}
+	}
+
+	/**
+	 * Opens the address in the person's browser when the system knows how; the address is printed either way.
+	 *
+	 * @address The address
+	 */
+	private void function openBrowser( required string address ) {
+		try {
+			var os = lCase( createObject( "java", "java.lang.System" ).getProperty( "os.name" ) )
+			var command = os contains "mac" ? [ "open", arguments.address ] : ( os contains "win" ? [ "cmd", "/c", "start", "", arguments.address ] : [ "xdg-open", arguments.address ] )
+			createObject( "java", "java.lang.ProcessBuilder" ).init( command ).start()
+		} catch ( any e ) {
+			// no browser to open: the address was printed
+		}
+	}
+
+	/**
+	 * @map A Java map of strings
+	 *
+	 * @return The same pairs as a struct
+	 */
+	private struct function toStruct( required any map ) {
+		var out = {}
+		for ( var key in arguments.map.keySet() ) {
+			out[ key ] = arguments.map.get( key )
+		}
+		return out
+	}
+
+	/**
+	 * @text The text
+	 * @width The column width
+	 *
+	 * @return The text padded to the width, with one space after it when it is longer
+	 */
+	private string function pad( required string text, required numeric width ) {
+		return len( arguments.text ) >= arguments.width ? arguments.text & " " : arguments.text & repeatString( " ", arguments.width - len( arguments.text ) )
+	}
+
+}

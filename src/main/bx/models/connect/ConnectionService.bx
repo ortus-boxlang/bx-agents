@@ -1,0 +1,261 @@
+/**
+ * The MCP servers whose people sign in with OAuth, and who has signed in to which.
+ *
+ * It is what the connect routes, `bxAgents connect`, the terminal's `/connect` and the web page's Connections panel all
+ * ask, so they cannot disagree. The servers are the `mcpServers` entries of Agent.yaml that have an `oauth` key. The sign
+ * in itself is bx-ai's (`withOAuth`): discovery, registration, PKCE, the code exchange and refreshing. What this adds is
+ * the project's side of it: the entries resolved the way the agent resolves them (so a client id from the vault is the
+ * same one), tokens in the vault token store sealed per person, and a callback that finds the person from the `state`.
+ *
+ * A person is never named in an address. `start()` is called for a person, bx-ai keeps who with the single use `state`,
+ * and `complete()` hands the person back from it.
+ *
+ * ```
+ * connections = new ConnectionService( entries, { apiPath : "/__bxagents" } )
+ * connections.list( "alice" )                          // [ { name, url, connected, scope } ]
+ * link = connections.start( "mail", "alice" )          // { authorizationUrl, state }
+ * done = connections.complete( code, state, iss )     // { name, subject }
+ * ```
+ */
+class {
+
+	/**
+	 * @entries The `mcpServers` entries that have an `oauth` key, as written in Agent.yaml (placeholders not yet replaced)
+	 * @options { apiPath : where the agent API is served, wiring : a VaultWiring, agent : the agent that gets the tools of a server once somebody has signed in, clientFactory : ( entry ) => client, redirectUri : replaces the callback of every entry }
+	 */
+	function init( required array entries, struct options = {} ) {
+		variables.entries = []
+		for ( var listed in arguments.entries ) {
+			if ( isStruct( listed ) && listed.keyExists( "oauth" ) && len( listed.name ?: "" ) ) {
+				variables.entries.append( listed )
+			}
+		}
+		variables.options = arguments.options
+		variables.clients = {}
+		return this
+	}
+
+	/**
+	 * @return The names of the servers people can connect to
+	 */
+	array function names() {
+		var found = []
+		for ( var entry in variables.entries ) {
+			found.append( entry.name )
+		}
+		return found
+	}
+
+	/**
+	 * @return True when at least one server asks people to sign in
+	 */
+	boolean function hasServers() {
+		return variables.entries.len() > 0
+	}
+
+	/**
+	 * @subject The person, as the agent knows them ("default" when it has no users)
+	 *
+	 * @return One struct per server: { name, url, connected : true when the person has tokens that work or can be refreshed, scope : what was asked for }
+	 */
+	array function list( required string subject ) {
+		var rows = []
+		for ( var entry in variables.entries ) {
+			var connected = false
+			var problem = ""
+			try {
+				connected = clientFor( entry.name ).isAuthorized( arguments.subject )
+			} catch ( any e ) {
+				problem = e.message
+			}
+			var row = {
+				"name"      : entry.name,
+				"url"       : entry.url,
+				"connected" : connected,
+				"scope"     : isArray( entry.oauth.scopes ?: "" ) ? entry.oauth.scopes.toList( " " ) : ""
+			}
+			if ( len( problem ) ) {
+				row[ "problem" ] = problem
+			}
+			rows.append( row )
+		}
+		return rows
+	}
+
+	/**
+	 * @subject The person, as the agent knows them
+	 *
+	 * @return The names of the servers the person has not connected to yet
+	 */
+	array function missing( required string subject ) {
+		var names = []
+		for ( var row in list( arguments.subject ) ) {
+			if ( !row.connected ) {
+				names.append( row.name )
+			}
+		}
+		return names
+	}
+
+	/**
+	 * Begins a sign in.
+	 *
+	 * @name    The server's name
+	 * @subject The person who is signing in
+	 *
+	 * @return { name, authorizationUrl, state }
+	 *
+	 * @throws BxAgents.UnknownConnection when no server has that name
+	 * @throws MCPOAuthMissingRedirectUri when the app has no public address for the callback
+	 */
+	struct function start( required string name, required string subject ) {
+		var started = clientFor( arguments.name ).startAuthorization( arguments.subject )
+		return { "name" : arguments.name, "authorizationUrl" : started.authorizationUrl, "state" : started.state }
+	}
+
+	/**
+	 * Finishes a sign in from what the provider sent to the callback. The person comes back from the state, so nothing
+	 * in the address says who it is.
+	 *
+	 * @code   The "code" the provider sent
+	 * @state  The "state" it sent
+	 * @issuer The "iss" it sent, when it did
+	 *
+	 * @return { name, subject, scope }
+	 *
+	 * @throws MCPOAuthInvalidState when no server knows the state, or it was used, or it is older than ten minutes
+	 */
+	struct function complete( required string code, required string state, string issuer = "" ) {
+		var lastError = ""
+		for ( var entry in variables.entries ) {
+			try {
+				var done = clientFor( entry.name ).completeAuthorization( arguments.code, arguments.state, arguments.issuer )
+				rememberForDiscovery( entry, done.subject )
+				refresh()
+				return { "name" : entry.name, "subject" : done.subject, "scope" : done.scope ?: "" }
+			} catch ( any e ) {
+				if ( e.type != "MCPOAuthInvalidState" ) {
+					rethrow
+				}
+				lastError = e.message
+			}
+		}
+		throw( type = "MCPOAuthInvalidState", message = len( lastError ) ? lastError : "This sign in is not known here. It may have been used or it may have expired. Start it again." )
+	}
+
+	/**
+	 * Gives the agent the tools of every server it could not list yet, now that somebody has signed in. A server the agent
+	 * already has is left alone, so calling this again does nothing.
+	 *
+	 * @return How many servers were added
+	 */
+	numeric function refresh() {
+		if ( !isObject( variables.options.agent ?: "" ) ) {
+			return 0
+		}
+		var agent = variables.options.agent
+		var added = 0
+		var have = []
+		for ( var listed in agent.listMCPServers() ) {
+			have.append( listed.url )
+		}
+		for ( var entry in variables.entries ) {
+			var resolved = resolve( entry )
+			if ( have.contains( resolved.url ) ) {
+				continue
+			}
+			try {
+				if ( !clientFor( entry.name ).isAuthorized( discoverySubject( resolved ) ) ) {
+					continue
+				}
+				// the address first and the rest as the options, which is how bx-ai takes an HTTP server given to it later
+				var options = duplicate( resolved )
+				options.delete( "name" )
+				options.delete( "url" )
+				agent.withMCPServer( resolved.url, options )
+				added += 1
+			} catch ( any e ) {
+				// the agent carries on without the tools, and the next sign in tries again
+				writeLog( text = "Could not add the tools of [#entry.name#] to the agent after a sign in: #e.message#", type = "error", log = "ai" )
+			}
+		}
+		return added
+	}
+
+	/**
+	 * Forgets a person's tokens for one server.
+	 *
+	 * @name    The server's name
+	 * @subject The person
+	 */
+	void function disconnect( required string name, required string subject ) {
+		clientFor( arguments.name ).revokeAuthorization( arguments.subject )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @entry One entry
+	 * @subject The person who signed in
+	 */
+	private void function rememberForDiscovery( required struct entry, required string subject ) {
+		var resolved = resolve( arguments.entry )
+		resolved.oauth.store.set( "discover:" & resolved.url, { "subject" : arguments.subject } )
+	}
+
+	/**
+	 * @resolved A resolved entry
+	 *
+	 * @return The person whose tokens list a server's tools
+	 */
+	private string function discoverySubject( required struct resolved ) {
+		return arguments.resolved.oauth.discoverySubject()
+	}
+
+	/**
+	 * @name The server's name
+	 *
+	 * @return The bx-ai client for it, built once: the entry resolved the way the agent resolves it
+	 */
+	private any function clientFor( required string name ) {
+		if ( !variables.clients.keyExists( arguments.name ) ) {
+			var wanted = {}
+			for ( var entry in variables.entries ) {
+				if ( entry.name == arguments.name ) {
+					wanted = entry
+				}
+			}
+			if ( wanted.isEmpty() ) {
+				throw( type = "BxAgents.UnknownConnection", message = "No server named [#arguments.name#] asks people to sign in. They are: #names().toList( ', ' )#." )
+			}
+			var resolved = resolve( wanted )
+			variables.clients[ arguments.name ] = isClosure( variables.options.clientFactory ?: "" )
+				? variables.options.clientFactory( resolved )
+				: MCP( resolved.url ).withOAuth( resolved.oauth )
+		}
+		return variables.clients[ arguments.name ]
+	}
+
+	/**
+	 * @entry One entry
+	 *
+	 * @return The entry with its placeholders replaced and the oauth options filled in, like the agent gets it
+	 */
+	private struct function resolve( required struct entry ) {
+		var context = { "apiPath" : variables.options.apiPath ?: "/__bxagents" }
+		if ( variables.options.keyExists( "wiring" ) ) {
+			context[ "wiring" ] = variables.options.wiring
+		}
+		var resolver = new "models.build.McpServerResolver@bxagents"()
+		if ( variables.options.keyExists( "wiring" ) ) {
+			// the same vault the token store uses, so a client id from the vault is the one this app keeps
+			resolver = new "models.build.McpServerResolver@bxagents"( new "models.build.ToolSelector@bxagents"( {}, variables.options.wiring.service() ) )
+		}
+		var resolved = resolver.resolve( [ duplicate( arguments.entry ) ], "mcpServers [#arguments.entry.name#]", context )[ 1 ]
+		if ( len( variables.options.redirectUri ?: "" ) ) {
+			resolved.oauth[ "redirectUri" ] = variables.options.redirectUri
+		}
+		return resolved
+	}
+
+}

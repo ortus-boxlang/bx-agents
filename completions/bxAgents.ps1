@@ -11,6 +11,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 		'build' = 'Build a project into a generated app'
 		'chat' = 'Interactive REPL chat with a built agent'
 		'clean' = 'Remove a project''s .build/ and dist/ output'
+		'connect' = 'Sign in to the MCP servers of a project that ask each person to sign in: connect [name]'
 		'deploy' = 'Deploy to a target'
 		'doctor' = 'Diagnose the environment and project - runtime, modules, env vars'
 		'extensions' = 'The extensions the chat loads, and installing more: extensions...'
@@ -110,6 +111,13 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
 		)
 		'clean:positional' = 'dir'
+		'connect' = @(
+			@{ Name = 'port'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
+			@{ Name = 'timeout'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'user'; Value = $true; Choices = @(); Dir = $false }
+		)
+		'connect:positional' = 'dir'
 		'deploy' = @(
 			@{ Name = 'destination'; Value = $true; Choices = @(); Dir = $true }
 			@{ Name = 'name'; Value = $true; Choices = @(); Dir = $false }

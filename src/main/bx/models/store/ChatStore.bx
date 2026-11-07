@@ -158,6 +158,16 @@ class {
 					"CREATE TABLE IF NOT EXISTS vault_audit ( id INTEGER PRIMARY KEY AUTOINCREMENT, at DATETIME NOT NULL, action VARCHAR(16) NOT NULL, scope VARCHAR(16) NOT NULL, owner VARCHAR(255) NOT NULL DEFAULT '', name VARCHAR(64) NOT NULL, actor VARCHAR(255) NOT NULL DEFAULT '', via VARCHAR(64) NOT NULL DEFAULT '', host VARCHAR(255) NOT NULL DEFAULT '', ok INTEGER NOT NULL DEFAULT 1 )",
 					"CREATE INDEX IF NOT EXISTS idx_vault_audit_at ON vault_audit ( at )"
 				]
+			},
+			{
+				// the OAuth state of MCP servers that ask each person to sign in (see models/vault/VaultTokenStore): tokens, the
+				// client registration and the sign-ins waiting for their callback. Every value is sealed with the vault key.
+				// recordKey is bx-ai's own key, hashed, so a long key or a person's name never sits in the clear.
+				version    : 8,
+				statements : [
+					"CREATE TABLE IF NOT EXISTS oauth_records ( recordKey VARCHAR(64) NOT NULL PRIMARY KEY, sealed TEXT NOT NULL, keyId VARCHAR(16) NOT NULL, expiresAt DATETIME, updatedAt DATETIME )",
+					"CREATE INDEX IF NOT EXISTS idx_oauth_records_expires ON oauth_records ( expiresAt )"
+				]
 			}
 		]
 	}

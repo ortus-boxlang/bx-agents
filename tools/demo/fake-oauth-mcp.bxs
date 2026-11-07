@@ -1,0 +1,28 @@
+/**
+ * Runs the fake OAuth MCP server (see FakeOAuthMcp.bx) on its own, for a demo or for trying `bxAgents connect` by hand.
+ *
+ *   boxlang tools/demo/fake-oauth-mcp.bxs [--port=9300]
+ *
+ * An agent that uses it:
+ *
+ *   mcpServers:
+ *     - name: mail
+ *       url: http://127.0.0.1:9300/mcp
+ *       oauth:
+ *         scopes: [ mail.read ]
+ *
+ * `bxAgents connect mail` then prints an address; opening it shows a page with Allow and Deny. Stop it with Ctrl+C.
+ */
+import tools.demo.FakeOAuthMcp;
+
+opts = server.cli.parsed.options
+mail = new FakeOAuthMcp( val( opts.port ?: 9300 ) ).start()
+
+println( "Fake OAuth MCP server on " & mail.origin() )
+println( "  MCP server:  " & mail.mcpUrl() )
+println( "  Metadata:    " & mail.origin() & "/.well-known/oauth-protected-resource" )
+println( "Press Ctrl+C to stop." )
+
+while ( true ) {
+	sleep( 1000 )
+}

@@ -1,0 +1,39 @@
+/**
+ * Gives an agent what it needs to work with services that ask each person to sign in: today, the middleware that tells
+ * it which ones the person has not connected yet. The generated agent factory calls it for an agent whose `mcpServers`
+ * have an `oauth` key.
+ */
+class {
+
+	/**
+	 * @agent The AiAgent
+	 * @entries The `mcpServers` entries that have an `oauth` key, as written in Agent.yaml
+	 * @apiPath Where the agent API is served, which the callback address is built from
+	 *
+	 * @return The agent
+	 */
+	any function attach( required any agent, required array entries, string apiPath = "/__bxagents" ) {
+		var service = new "models.connect.ConnectionService@bxagents"( arguments.entries, { apiPath : arguments.apiPath, agent : arguments.agent } )
+		if ( service.hasServers() ) {
+			arguments.agent.withMiddleware( new "models.connect.ConnectionMiddleware@bxagents"( service ) )
+		}
+		return arguments.agent
+	}
+
+	/**
+	 * The ConnectionService an agent was given by attach(), found on its middleware.
+	 *
+	 * @agent An AiAgent
+	 *
+	 * @return The ConnectionService, or null when the agent has no server that asks people to sign in
+	 */
+	any function serviceOf( required any agent ) {
+		for ( var middleware in ( arguments.agent.getMiddleware() ?: [] ) ) {
+			if ( isObject( middleware ) && structKeyExists( middleware, "connectionService" ) ) {
+				return middleware.connectionService()
+			}
+		}
+		return nullValue()
+	}
+
+}

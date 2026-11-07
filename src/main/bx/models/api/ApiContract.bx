@@ -106,6 +106,14 @@ class {
 				post : {
 					summary : "Stores a secret. The value goes in once and cannot be read back. One of the agent's takes an admin",
 					body : { scope : "string", name : "string", value : "string", description : "string?", hosts : "array?" }, returns : "json" } } ),
+			ApiContract::route( "/connect/callback", "connectCallback", "Connections", { get : {
+				summary : "Where a provider sends the person back after they sign in. Finishes the sign in from the single use state and shows a page. Public",
+				query : { code : "string?", state : "string?", iss : "string?", error : "string?" }, returns : "html" } }, true ),
+			ApiContract::route( "/connect/remove", "removeConnection", "Connections", { post : {
+				summary : "Forgets the caller's sign in to one server", body : { name : "string" }, returns : "json" } } ),
+			ApiContract::route( "/connect", "connections", "Connections", {
+				get : { summary : "The servers that ask people to sign in, and which the caller has connected. Never a token", returns : "json" },
+				post : { summary : "Starts a sign in for the caller and answers with the address to send them to", body : { name : "string" }, returns : "json" } } ),
 			ApiContract::route( "/notes/update", "updateNote", "Notes", { post : {
 				summary : "Changes a note", body : { scope : "string", id : "string", text : "string" }, returns : "json" } } ),
 			ApiContract::route( "/notes/remove", "removeNote", "Notes", { post : {

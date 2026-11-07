@@ -12,7 +12,7 @@ _bxagents_complete() {
 	fi
 	local count=${#words[@]}
 	local cur="${words[count-1]}"
-	local verbs="add build chat clean deploy doctor extensions hash-password inspect invoke models new notes package serve sessions skills stats test token vault help"
+	local verbs="add build chat clean connect deploy doctor extensions hash-password inspect invoke models new notes package serve sessions skills stats test token vault help"
 	local globals="--help -h --version -v"
 	COMPREPLY=()
 
@@ -36,6 +36,7 @@ _bxagents_complete() {
 			"build --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"chat --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"clean --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
+			"connect --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"deploy --destination") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"deploy --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"deploy --target") COMPREPLY=($(compgen -W "digitalocean docker ftp local sftp ssh" -- "$part")) ;;
@@ -79,6 +80,7 @@ _bxagents_complete() {
 			build) flags="--environment= --generatorVersion= --projectRoot= --verbose" ;;
 			chat) flags="--api-path= --connect= --continue --no-tui --port= --projectRoot= --record --server --session= --token= --user=" ;;
 			clean) flags="--force --projectRoot=" ;;
+			connect) flags="--port= --projectRoot= --timeout= --user=" ;;
 			deploy) flags="--destination= --name= --projectRoot= --target=" ;;
 			doctor) flags="--json --projectRoot=" ;;
 			extensions) flags="--force --installed --json --name= --projectRoot= --system --yes" ;;
@@ -108,6 +110,7 @@ _bxagents_complete() {
 		build) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		chat) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		clean) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
+		connect) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		deploy) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		doctor) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		inspect) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;

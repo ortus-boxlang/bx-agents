@@ -33,6 +33,17 @@ class extends="models.chat.AgentConversation@bxagents" {
 		return "server"
 	}
 
+	/**
+	 * @return The MCP servers that ask people to sign in, for this person: ServedConnections, or NoConnections when the agent has none
+	 */
+	any function connections() {
+		var service = new "models.connect.ConnectionWiring@bxagents"().serviceOf( variables.agent )
+		if ( isNull( service ) ) {
+			return new "models.cli.chat.NoConnections@bxagents"()
+		}
+		return new "models.cli.chat.ServedConnections@bxagents"( service, variables.userId )
+	}
+
 	boolean function exposesDatabase() {
 		return false
 	}
