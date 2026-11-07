@@ -86,7 +86,7 @@ DM the bot, or mention it in a channel it's in. Replies stream back token-by-tok
 ## What people can do in the chat
 
 - **Everyone has their own conversation.** The agent is told who is writing (`slack:U123`) and which conversation it is: the channel, plus the thread when there is one. Two people in the same channel do not share a memory, and each Slack thread keeps its own. Conversations are stored in `data/chat.db`, marked with `source` Slack.
-- **Commands.** By default the bot answers `/help`, `/tools`, `/model`, `/info`, `/ping`, `/remember` and `/notes` itself, without calling the model. Slack keeps typed `/word` messages for its own commands, so a bot never receives them. Either create a slash command in the Slack app (an umbrella `/agent`, so `/agent model fast` runs `/model fast`, or one per command) and the answer is shown only to the person who typed it, or set another prefix in `Agent.yaml`:
+- **Commands.** By default the bot answers `/help`, `/tools`, `/model`, `/info`, `/ping`, `/remember`, `/notes` and `/connect` itself, without calling the model. Slack keeps typed `/word` messages for its own commands, so a bot never receives them. Either create a slash command in the Slack app (an umbrella `/agent`, so `/agent model fast` runs `/model fast`, or one per command) and the answer is shown only to the person who typed it, or set another prefix in `Agent.yaml`:
 
 ```yaml
 gatewaySession:
