@@ -114,7 +114,7 @@ CI rules (schema and safety only):
 
 ## Tasks
 
-1. **Verify and fix the data.** Re-check the 7 entries against provider docs (URL, auth, scopes, risk, env var). Decide which can offer OAuth now that Connect exists (Notion and Atlassian are the likely ones). Fix the schema.
+1. **Verify and fix the data.** Re-check the 7 entries against provider docs (URL, auth, scopes, risk, env var). Decide which can offer OAuth now that Connect exists (Notion and Atlassian are the likely ones). Atlassian must be fully verified so it ships without a badge. Fix the schema.
 2. **Move the data.** `catalog/connectors/*.yaml`, a loader, a validator and `bxAgents connectors check`; CI job; the wizard and `add` read from it. `--mcp` keeps working.
 3. **bx-ai spike.** Per-call token. Pull request there if needed.
 4. **Build support.** `connectors:` key: only, exclude, override, none; errors; expansion into `mcpServers`; dormant until a credential exists; specs and a fixture.
@@ -126,5 +126,6 @@ CI rules (schema and safety only):
 ## Open questions
 
 1. Does the person's own token replace the shared one for that person only, or also for people they share a thread with? Proposed: that person only.
-2. Atlassian is unverified today. Ship it with a visible "unverified" badge, or leave it out of the first release?
-3. Name of the key: `connectors` (proposed).
+2. Name of the key: `connectors` (proposed).
+
+Decided: Atlassian ships in the first release, with no "unverified" badge. Task 1 verifies it properly (the header an API token goes in, and whether it can use OAuth through Connect). If something cannot be confirmed, we say so here before release; we do not label it verified.
