@@ -8,7 +8,8 @@ Status: API shape for review. No code yet.
 - `restore` restores into the data home by default, with an optional `--home`.
 - The data home holds the skills the agent creates. Skills written by hand and seeded at build stay in the project.
 - Memory defaults to bx-ai's `jdbc` memory on the data home's `chat.db`, with a limit of 500 messages per conversation, configurable.
-- Compacting a conversation can summarise it.
+- At the limit, older messages are summarised by default, not dropped. `/compact` does the same on request.
+- Volumes are fixed when the server starts. Nothing adds one at run time: not the agent, not the API.
 - Budgets are skipped, and the web app is parked.
 - Order after this phase: routines and heartbeat, then recall and the proposed-notes review, then the web app plan.
 - Principle: consistency. One id names a conversation everywhere, and one class changes it everywhere.
@@ -134,20 +135,30 @@ both the `conversations` row and its memory row:
 # Agent.yaml
 memory:
   type: jdbc            # the default; window, session, file and cache still work
-  maxMessages: 500      # per conversation
-  onLimit: trim         # trim or summarize
+  maxMessages: 500      # per conversation: the trigger
+  onLimit: summarize    # summarize (default) or trim
+  keepRecent: 100       # messages kept word for word after a summary
+  summaryModel: ""      # a profile name; empty uses the agent's own model
 ```
 
 - `maxMessages` is per conversation, a whole number from 20 to 100000. `0` is refused: an unbounded conversation is how a
   context window blows up.
-- `onLimit: trim` drops the oldest messages once the limit is reached (bx-ai's own trim). `summarize` replaces the oldest
-  with a summary instead, using the summary model. `trim` is the default because summarising spends tokens.
+- `onLimit: summarize` replaces the oldest messages with a summary once the limit is reached, so context is kept in short
+  form. It is the default. `trim` drops the oldest messages instead (bx-ai's own trim) and costs no tokens. `keepRecent` must
+  be smaller than `maxMessages`, as bx-ai's summary memory requires.
+- The settings are bx-ai's own (`maxMessages`, summary threshold, summary model and provider), exposed under our names.
 - `/compact` and the compact route summarise on request, whatever `onLimit` says. Today they do nothing when the agent has no
   summary model; with this change the agent's own model is the fallback, and the answer says which model was used.
 - `/context` shows the count against the limit.
 - Existing projects that set `memory` keep what they set. Only projects with no `memory` key move to the new default.
 
-## 5. Commands
+## 5. Volumes stay fixed
+
+A volume is read from `Agent.yaml` when the server starts. The agent cannot add one, and there is no API route to add one:
+a model that can widen its own file access has no sandbox. To change volumes, edit `Agent.yaml` and restart (or `/reload`
+once the reload covers it). A later phase may let the agent ask for a volume, with the user approving it in a dialog.
+
+## 6. Commands
 
 | Command | What it does |
 |---|---|
@@ -156,7 +167,7 @@ memory:
 | `bxAgents restore FILE [--home=DIR]` | Replaces `chat.db`, `files/` and `skills/` in the data home (or in `DIR`) from a backup. Refuses while a server is using that home, and keeps the old ones as `*.before-restore` |
 | `/volumes` | In chat: lists the volumes |
 
-## 6. API
+## 7. API
 
 Read-only routes, added to `ApiContract` so the OpenAPI document and the BoxLang client follow:
 
@@ -168,7 +179,7 @@ Read-only routes, added to `ApiContract` so the OpenAPI document and the BoxLang
 
 The compact route's answer gains `model` and `summarized`. Both appear under `capabilities` in `/agent`.
 
-## 7. Tasks
+## 8. Tasks
 
 1. `DataHome` class: resolve, create, README, writable check; specs.
 2. `data` setting: loader, validator, generated app wiring, startup refusal for a built app; specs.
@@ -180,10 +191,11 @@ The compact route's answer gains `model` and `summarized`. Both appear under `ca
 8. `Conversations` as the one place that changes both tables; `messageCount` from the memory row; the cross-transport spec.
 9. `/compact` falls back to the agent's model; `/context` shows the limit.
 10. `data`, `backup`, `restore` verbs and `/volumes`; completions; specs.
-11. `GET /data` and `GET /volumes` in `ApiContract`, handler, client; specs.
+11. `GET /data`, `GET /volumes` and `GET /skills` in `ApiContract`, handler, client; specs.
+11b. Web page: a Data section in Settings (Server group) with the volumes (name, mode, description), the skills with their origin, the memory limit and, for admins, the data home size. Read-only.
 12. Docs (English, mirror, Spanish), changelog, wizard questions for volumes and memory, full suite. One draft pull request per slice: data home and volumes, then skills, then memory.
 
 ## Open questions
 
-1. Is `trim` the right default for `onLimit`, with `summarize` opt-in?
-2. Should a conversation that reaches the limit tell the user once, in every transport, or stay silent?
+1. When a summary happens on its own, should the user see one line ("Summarised 400 older messages") in every transport, or nothing?
+2. Should the web page show the data home size to everyone, or only to admins?
