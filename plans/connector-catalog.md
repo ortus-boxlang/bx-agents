@@ -18,6 +18,9 @@ It replaces the private list the wizard keeps today (`src/main/bx/models/wizard/
 - Available is not connected. A connector with no credential does nothing: no tools, no network call.
 - Token connectors support **both** a shared token set by an admin and a token each person connects for themselves. The person's wins.
 - Risk is shown before connecting. It is a warning with a confirm, not an admin gate.
+- Ortus validates every catalog pull request by hand. There is no extra supply-chain machinery.
+- Git is available like every other connector, served or not. Running a program on the server is the developer's design choice, and the docs say plainly what that means.
+- Not in the first release: recording the catalog version at build, and an admin view of who is connected with audit rows.
 
 ## Catalog files
 
@@ -100,6 +103,44 @@ Shown the same way in:
 
 This needs no bx-ai change for the credential itself, because every client is built with its own fixed token. The open part is routing: the agent builds its tool list once from one client, so bx-agents wraps each connector tool and looks up the caller's client at call time. Task 3 confirms that wrapping works with bx-ai's tool objects.
 
+## Connector options
+
+Every connector can declare options the person (or the admin, in `override`) fills in when connecting. Examples to check in task 1: Supabase `project_ref` and `read_only`, Atlassian `cloudId`, GitHub toolsets.
+
+```yaml
+options:
+  - key: project_ref
+    label: Project
+    help: Limit the connector to one project.
+    required: false
+```
+
+The connect step in every surface asks for them. A value becomes part of the client's address or headers, so it is per person like the credential.
+
+## Tools
+
+Connecting a connector can add many tools, so the person using it decides which ones the agent may use.
+
+- The web Connections panel lists a connector's tools with an on or off switch for each, and "all" or "none" per connector.
+- The terminal gets the same: `/connect <id> tools` lists them and toggles them.
+- An admin can fix the list in `Agent.yaml` with `override: { github: { tools: [ ... ] } }`; a person can then only turn off what the admin allows.
+- The choice is kept per person and connector.
+- A warning shows in the panel, in `/connect` and in `bxAgents connectors` when the tools an agent holds pass 100. The number is a setting.
+
+## Schedules
+
+A schedule has no person. It can say who to run as:
+
+```yaml
+runAs: ada                 # a person who has already connected
+```
+
+A scheduled run then uses that person's connected credentials and clients. If they have not connected a connector, the run gets none of its tools and records why. Without `runAs`, a schedule uses only shared tokens.
+
+## Wizard
+
+The wizard shows every connector as available and asks which to leave out, or lets the developer pick only some. It writes `connectors.exclude` or `connectors.only` accordingly. `--mcp` keeps working.
+
 ## Contributing
 
 A page under conventions explains how to add a connector: copy the template, fill in the fields, run `bxAgents connectors check`, open a pull request. CI runs the same check.
@@ -121,19 +162,22 @@ CI rules (schema and safety only):
 
 ## Tasks
 
-1. **Verify and fix the data.** Re-check the 7 entries against provider docs (URL, auth, scopes, risk, env var). Decide which can offer OAuth now that Connect exists (Notion and Atlassian are the likely ones). Atlassian must be fully verified so it ships without a badge. Fix the schema.
+1. **Verify and fix the data.** Re-check the 7 entries against provider docs (URL, auth, options, scopes, risk, env var). Atlassian is OAuth first and ships verified. Decide which others can offer OAuth now that Connect exists. Fix the schema.
 2. **Move the data.** `catalog/connectors/*.yaml`, a loader, a validator and `bxAgents connectors check`; CI job; the wizard and `add` read from it. `--mcp` keeps working.
 3. **Spike: per-person clients.** Build `ConnectorClients`, wrap a connector's tools so a call goes to the caller's client, and prove with the fake server that two people never see each other's token or session. A bx-ai pull request only if the wrapping cannot be done from bx-agents.
 4. **Build support.** `connectors:` key: only, exclude, override, none; errors; expansion into `mcpServers`; dormant until a credential exists; specs and a fixture.
-5. **Connection service.** Rows for every connector with state, risk and auth. Token connect through the vault, shared versus personal, confirm step. Web panel, `/connect`, CLI, `GET /connect`, gateways.
-6. **Docs.** Catalog page generated from the data, connectors reference, contributor guide, updates to connect, mcp, vault, agent-yaml, new-wizard, cli-reference and web-ui. Each with its `docs/versions/1.0.x` copy.
-7. **Home page and tour.** Catalog section, a connectors tile, a Connections tab update, screenshots and the narrated video re-recorded with `af_heart`.
-8. **Changelog,** including the connect and MCP OAuth entries that are missing today, and a note on `discoverySubject` in the connect page.
+5. **Connection service.** Rows for every connector with state, risk, auth and options. Token connect through the vault, shared versus personal, confirm step, tool switches and the 100 tool warning. Web panel, `/connect`, CLI, `GET /connect`, gateways.
+6. **Schedules.** `runAs` on a schedule, discovery, validation and specs.
+7. **Wizard.** Show all connectors, exclude or pick, write the `connectors` block.
+8. **Docs.** Catalog page generated from the data, connectors reference, contributor guide, Git note, updates to connect, mcp, vault, agent-yaml, schedules, new-wizard, cli-reference and web-ui. Each with its `docs/versions/1.0.x` copy.
+9. **Home page and tour.** Catalog section, a connectors tile, a Connections tab update, screenshots and the narrated video re-recorded with `af_heart`.
+10. **Changelog,** including the connect and MCP OAuth entries that are missing today, and a note on `discoverySubject` in the connect page.
 
 ## Open questions
 
-1. Does the person's own token replace the shared one for that person only, or also for people they share a thread with? Proposed: that person only.
+1. Does a personal token apply to that person only? Proposed: yes.
 2. Name of the key: `connectors` (proposed).
+3. Who may set `runAs`? Proposed: the schedule's author, and it must name a person who exists.
 
 ## Atlassian, checked on 2026-11-07
 
