@@ -313,6 +313,16 @@ class {
 		return variables.crypto.open( arguments.sealed, arguments.context )
 	}
 
+	/**
+	 * Check a name and the scope options and say which row they point at.
+	 *
+	 * @name    The secret's name
+	 * @options { scope, owner }
+	 *
+	 * @return { scope, owner, name }, with the owner blank for the agent's scope
+	 *
+	 * @throws BxAgents.InvalidVaultName, BxAgents.InvalidVaultScope or BxAgents.VaultNeedsUser when they are wrong
+	 */
 	private struct function target( required string name, struct options = {} ) {
 		var name = trim( arguments.name )
 		if ( !reFind( "^[A-Za-z][A-Za-z0-9_]{0,63}$", name ) ) {
@@ -329,6 +339,13 @@ class {
 		return { scope : scope, owner : owner, name : name }
 	}
 
+	/**
+	 * Find one row by its scope, owner and name.
+	 *
+	 * @target { scope, owner, name }
+	 *
+	 * @return The row, or null when there is none
+	 */
 	private any function lookup( required struct target ) {
 		var found = variables.store.rows(
 			"SELECT * FROM vault_secrets WHERE scope = :scope AND owner = :owner AND name = :name",
@@ -350,15 +367,39 @@ class {
 		return lookup( { scope : "agent", owner : "", name : arguments.name } )
 	}
 
+	/**
+	 * The text a sealed value is bound to, so it only opens on its own row.
+	 *
+	 * @target { scope, owner, name }
+	 *
+	 * @return scope|owner|name
+	 */
 	private string function context( required struct target ) {
 		return arguments.target.scope & "|" & arguments.target.owner & "|" & arguments.target.name
 	}
 
+	/**
+	 * Seal a value for a row with the vault key, making the key on first use.
+	 *
+	 * @value  The secret
+	 * @target The row it is for
+	 *
+	 * @return The sealed text
+	 */
 	private string function seal( required string value, required struct target ) {
 		loadKey( true )
 		return variables.crypto.seal( arguments.value, context( arguments.target ) )
 	}
 
+	/**
+	 * Open the sealed value of a row.
+	 *
+	 * @row A row of vault_secrets
+	 *
+	 * @return The secret
+	 *
+	 * @throws BxAgents.VaultWrongKey when the row was sealed with another key
+	 */
 	private string function openRow( required struct row ) {
 		var key = loadKey( false )
 		if ( arguments.row.keyId != key.keyId ) {
@@ -370,6 +411,9 @@ class {
 		return variables.crypto.open( arguments.row.sealed, context( arguments.row ) )
 	}
 
+	/**
+	 * @return The id of the key that seals new values
+	 */
 	private string function currentKeyId() {
 		return loadKey( true ).keyId
 	}
@@ -390,6 +434,13 @@ class {
 		return { keyId : variables.keyId, source : variables.keySource }
 	}
 
+	/**
+	 * Write one line to the audit table. It holds names, never values.
+	 *
+	 * @action add, edit, remove, use or request
+	 * @target The row it is about: { scope, owner, name }
+	 * @extra  { actor, via, host, ok }
+	 */
 	private void function record( required string action, required struct target, struct extra = {} ) {
 		variables.store.exec(
 			"INSERT INTO vault_audit ( at, action, scope, owner, name, actor, via, host, ok ) VALUES ( :at, :action, :scope, :owner, :name, :actor, :via, :host, :ok )",
@@ -407,6 +458,13 @@ class {
 		)
 	}
 
+	/**
+	 * Turn a row into what may be shown: everything but the sealed value.
+	 *
+	 * @row A row of vault_secrets
+	 *
+	 * @return { name, scope, owner, description, hosts, createdBy, createdAt, updatedAt, lastUsedAt }
+	 */
 	private struct function describe( required struct row ) {
 		return {
 			name        : arguments.row.name,
@@ -421,11 +479,26 @@ class {
 		}
 	}
 
+	/**
+	 * The message for a secret that is not there, saying where it looked and what to do.
+	 *
+	 * @target The row that was asked for
+	 * @user   Who asked, when there was a person
+	 *
+	 * @return The message
+	 */
 	private string function missingMessage( required struct target, string user = "" ) {
 		var where = len( arguments.user ) ? "for #arguments.user# or for the agent" : "for the agent"
 		return "No secret named [#arguments.target.name#] #where#. Ask the user to add it."
 	}
 
+	/**
+	 * Make a list of hosts tidy: lower case, trimmed, no empty entries.
+	 *
+	 * @hosts An array, or a comma separated string
+	 *
+	 * @return An array of host patterns
+	 */
 	private array function cleanHosts( required any hosts ) {
 		var list = isArray( arguments.hosts ) ? arguments.hosts : listToArray( arguments.hosts, "," )
 		return list.map( h => lCase( trim( toString( h ) ) ) ).filter( h => len( h ) )
