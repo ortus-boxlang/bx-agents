@@ -1,0 +1,82 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "the users verb", function() {
+
+			beforeEach( function() {
+				variables.savedEnvironment = {}
+				for ( var name in [ "BXAGENTS_DB", "BXAGENTS_HOME" ] ) {
+					variables.savedEnvironment[ name ] = createObject( "java", "java.lang.System" ).getProperty( name ) ?: ""
+					createObject( "java", "java.lang.System" ).clearProperty( name )
+				}
+				variables.root = getTempDirectory() & "bxa-userscli-" & createUUID()
+				directoryCreate( variables.root, true )
+				fileWrite( variables.root & "/Agent.yaml", "name: demo" & char( 10 ) & "model: mock/mock-model" & char( 10 ) & "data:" & char( 10 ) & "  home: ./state" & char( 10 ) )
+				var store = new bxagents.models.store.ChatStore( { driver : "sqlite", database : variables.root & "/state/chat.db" } )
+				directoryCreate( variables.root & "/state", true, true )
+				store.migrate()
+				for ( var row in [ [ "ada", 1 ], [ "grace", 0 ] ] ) {
+					store.exec( "INSERT INTO users ( id, username, passwordHash, displayName, isActive, isAdmin ) VALUES ( :id, :name, 'x', :shown, 1, :admin )", { id : createUUID(), name : row[ 1 ], shown : ucFirst( row[ 1 ] ), admin : row[ 2 ] } )
+				}
+			} );
+
+			afterEach( function() {
+				for ( var name in variables.savedEnvironment ) {
+					if ( len( variables.savedEnvironment[ name ] ) ) {
+						createObject( "java", "java.lang.System" ).setProperty( name, variables.savedEnvironment[ name ] )
+					}
+				}
+				if ( directoryExists( variables.root ) ) {
+					directoryDelete( variables.root, true )
+				}
+			} );
+
+			function verb( required string action, struct more = {} ) {
+				var options = { projectRoot : variables.root, _positional : arguments.action }
+				options.append( arguments.more )
+				return new bxagents.models.cli.Users().run( options )
+			}
+
+			it( "lists the accounts with their role and never a password", function() {
+				var done = verb( "list" )
+
+				expect( done.exitCode ).toBe( 0 )
+				expect( done.message ).toInclude( "ada" )
+				expect( done.message ).toInclude( "admin" )
+				expect( done.message ).toInclude( "grace" )
+				expect( done.message ).toInclude( "member" )
+				expect( done.message ).notToInclude( "passwordHash" )
+			} );
+
+			it( "lists as JSON", function() {
+				var parsed = jsonDeserialize( verb( "list", { json : true } ).message )
+
+				expect( parsed.map( a => a.username ) ).toBe( [ "ada", "grace" ] )
+				expect( parsed[ 1 ].admin ).toBeTrue()
+			} );
+
+			it( "makes an account an admin and a member again", function() {
+				expect( verb( "admin", { name : "grace" } ).message ).toInclude( "an admin" )
+				expect( verb( "list", { json : true } ).message ).toInclude( """grace""" )
+				expect( verb( "member", { name : "grace" } ).exitCode ).toBe( 0 )
+			} );
+
+			it( "will not demote the last admin or name a stranger", function() {
+				var last = verb( "member", { name : "ada" } )
+				expect( last.exitCode ).toBe( 1 )
+				expect( last.message ).toInclude( "last admin" )
+
+				var stranger = verb( "admin", { name : "nobody" } )
+				expect( stranger.exitCode ).toBe( 1 )
+				expect( stranger.message ).toInclude( "no active account" )
+			} );
+
+			it( "asks for an action and for a name", function() {
+				expect( () => verb( "" ) ).toThrow( "BxAgents.UnknownUsersAction" )
+				expect( () => verb( "admin" ) ).toThrow( "BxAgents.MissingAccountName" )
+			} );
+
+		} );
+	}
+
+}

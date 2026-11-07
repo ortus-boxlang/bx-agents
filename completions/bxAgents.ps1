@@ -30,6 +30,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 		'stats' = 'What the model calls used: tokens by model, provider, day or user, once Agent.yaml says...'
 		'test' = 'Run a project''s own tests/specs via TestBox'
 		'token' = 'Issue, list and revoke access tokens for a deployed agent'
+		'users' = 'The sign-in accounts of the web page and who is an admin'
 		'vault' = 'The secrets an agent uses at run time, sealed in the chat database'
 		'help' = 'Show the usage and the list of verbs'
 	}
@@ -268,6 +269,11 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
 			@{ Name = 'scope'; Value = $true; Choices = @('chat', 'admin'); Dir = $false }
 		)
+		'users' = @(
+			@{ Name = 'name'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
+		)
+		'users:positional' = 'dir'
 		'vault' = @(
 			@{ Name = 'description'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'hosts'; Value = $true; Choices = @(); Dir = $false }

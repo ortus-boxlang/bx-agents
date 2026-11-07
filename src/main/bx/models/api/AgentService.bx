@@ -10,6 +10,7 @@
  *   service.whoami( caller )              who the server takes the caller to be
  *   service.volumes( caller )             the folders the agent may use, by name
  *   service.data( caller )                where the agent keeps everything (admin only)
+ *   service.accounts()                    the sign-in accounts and who is an admin (admin only), or null with no database
  *
  * A call answers an Outcome and never picks an HTTP status; ApiEdge does that, in one place.
  */
@@ -54,6 +55,13 @@ class {
 	 */
 	any function tokens() {
 		return keepsTokens() ? new Tokens( new "models.store.TokenService@bxagents"( variables.store ) ) : nullValue()
+	}
+
+	/**
+	 * @return Account management for an admin caller, or null when the app keeps no shared database
+	 */
+	any function accounts() {
+		return isNull( variables.store ) ? nullValue() : new Accounts( new "models.store.AccountService@bxagents"( variables.store ) )
 	}
 
 	any function agent() {

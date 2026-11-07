@@ -15,9 +15,9 @@ class {
 	/**
 	 * @options { manageTokens : true } adds the token routes
 	 *
-	 * @return An array of { path, action, tag, open, methods : { get|post : { summary, body, query, returns } } }.
+	 * @return An array of { path, action, tag, open, admin, methods : { get|post : { summary, body, query, returns } } }.
 	 *         `returns` is json, sse (the frames of frames()) or file; `open` is true for a route that needs no token
-	 *         even on a closed API.
+	 *         even on a closed API; `admin` is true for a route only an admin may call.
 	 */
 	static array function operations( struct options = {} ) {
 		var turn = { input : "string", conversationId : "string?", threadId : "string?", options : "object?", attachments : "array?" }
@@ -72,7 +72,12 @@ class {
 			ApiContract::route( "/volumes", "volumes", "About the agent", { get : {
 				summary : "The folders the agent may use, by name and mode. Never a folder on the machine", returns : "json" } } ),
 			ApiContract::route( "/data", "data", "About the agent", { get : {
-				summary : "Where the agent keeps everything, how big each part is, and where each volume is. Admin only", returns : "json" } } ),
+				summary : "Where the agent keeps everything, how big each part is, and where each volume is. Admin only", returns : "json" } }, false, true ),
+			ApiContract::route( "/users/admin", "setUserAdmin", "Accounts", { post : {
+				summary : "Makes an account an admin, or takes that away. The last admin cannot be demoted. Admin only",
+				body : { username : "string", admin : "boolean" }, returns : "json" } }, false, true ),
+			ApiContract::route( "/users", "users", "Accounts", { get : {
+				summary : "The sign-in accounts and whether each is an admin. Admin only", returns : "json" } }, false, true ),
 			ApiContract::route( "/preferences/set", "setPreference", "Preferences", { post : {
 				summary : "Keeps one setting of the caller", body : { key : "string", value : "string" }, returns : "json" } } ),
 			ApiContract::route( "/preferences/delete", "deletePreference", "Preferences", { post : {
@@ -120,12 +125,12 @@ class {
 		]
 		if ( arguments.options.manageTokens ?: false ) {
 			list.append( ApiContract::route( "/tokens/revoke", "revokeToken", "Tokens", { post : {
-				summary : "Stops a token working. Admin only", body : { name : "string" }, returns : "json" } } ) )
+				summary : "Stops a token working. Admin only", body : { name : "string" }, returns : "json" } }, false, true ) )
 			list.append( ApiContract::route( "/tokens", "tokens", "Tokens", {
 				get : { summary : "The access tokens, never a secret. Admin only", returns : "json" },
 				post : {
 					summary : "Makes an access token. The secret is in this answer and nowhere else. Admin only",
-					body : { name : "string", scope : "string?", expires : "string?" }, returns : "json" } } ) )
+					body : { name : "string", scope : "string?", expires : "string?" }, returns : "json" } }, false, true ) )
 		}
 		list.append( ApiContract::route( "/openapi", "openapi", "About the agent", { get : {
 			summary : "This description of the API, as an OpenAPI 3 document", returns : "json" } } ) )
@@ -158,8 +163,19 @@ class {
 	}
 
 	/** One entry of operations() */
-	static struct function route( required string path, required string action, required string tag, required struct methods, boolean open = false ) {
-		return { "path" : arguments.path, "action" : arguments.action, "tag" : arguments.tag, "methods" : arguments.methods, "open" : arguments.open }
+	static struct function route( required string path, required string action, required string tag, required struct methods, boolean open = false, boolean admin = false ) {
+		return { "path" : arguments.path, "action" : arguments.action, "tag" : arguments.tag, "methods" : arguments.methods, "open" : arguments.open, "admin" : arguments.admin }
+	}
+
+	/**
+	 * Whether a route is for admins whatever the caller asks. A route that is mixed (a person's own note, the agent's
+	 * note) is not marked: its service decides, by what is asked for.
+	 *
+	 * @action The handler action
+	 */
+	static boolean function needsAdmin( required string action ) {
+		var wanted = arguments.action
+		return ApiContract::operations( { manageTokens : true } ).some( ( op ) => op.action == wanted && op.admin )
 	}
 
 }

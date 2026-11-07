@@ -12,7 +12,7 @@ _bxagents_complete() {
 	fi
 	local count=${#words[@]}
 	local cur="${words[count-1]}"
-	local verbs="add backup build chat clean data deploy doctor extensions hash-password inspect invoke models new notes package restore serve sessions skills stats test token vault help"
+	local verbs="add backup build chat clean data deploy doctor extensions hash-password inspect invoke models new notes package restore serve sessions skills stats test token users vault help"
 	local globals="--help -h --version -v"
 	COMPREPLY=()
 
@@ -70,6 +70,7 @@ _bxagents_complete() {
 			"test --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"token --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"token --scope") COMPREPLY=($(compgen -W "chat admin" -- "$part")) ;;
+			"users --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"vault --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 		esac
 		return 0
@@ -101,6 +102,7 @@ _bxagents_complete() {
 			stats) flags="--by= --days= --projectRoot= --user=" ;;
 			test) flags="--projectRoot=" ;;
 			token) flags="--expires= --json --name= --projectRoot= --scope=" ;;
+			users) flags="--name= --projectRoot=" ;;
 			vault) flags="--description= --hosts= --limit= --name= --projectRoot= --scope= --user=" ;;
 		esac
 		COMPREPLY=($(compgen -W "$flags $globals" -- "$cur"))
@@ -126,6 +128,7 @@ _bxagents_complete() {
 		serve) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		stats) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		test) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
+		users) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		vault) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		help) COMPREPLY=($(compgen -W "$verbs" -- "$cur")) ;;
 	esac

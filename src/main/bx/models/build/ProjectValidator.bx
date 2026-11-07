@@ -622,6 +622,9 @@ class {
 			if ( hasEnvVar && hasHash ) {
 				arguments.errors.append( "Gateway [#arguments.gatewayName#] user [#username#] sets both 'passwordEnvVar' and 'passwordHash' - pick one, so which wins is never ambiguous" )
 			}
+			if ( user.keyExists( "admin" ) && !( isSimpleValue( user.admin ) && reFindNoCase( "^(true|false)$", toString( user.admin ) ) ) ) {
+				arguments.errors.append( "Gateway [#arguments.gatewayName#] user [#username#] has an 'admin' that is not true or false" )
+			}
 			if ( hasHash && !( user.passwordHash ).startsWith( "pbkdf2$" ) ) {
 				arguments.errors.append( "Gateway [#arguments.gatewayName#] user [#username#] has a 'passwordHash' that is not in this project's format - it must look like pbkdf2$<iterations>$<salt>$<hash>" )
 			}

@@ -221,9 +221,27 @@ Accounts are reconciled from config on every boot, in this order: `ChatDb` migra
 - **Removing** them from config **deactivates** the account rather than deleting it. Their conversations reference their id, so deleting the row would orphan that history instead of revoking access. They can no longer sign in; their data stays intact and returns if the account is restored.
 - A `passwordEnvVar` whose variable is **unset** skips that account entirely and logs a warning to `webui-auth`. This fails closed on purpose - creating the account with an empty password would be far worse than it not existing.
 
+### Admins and members
+
+Every account is either an **admin** or a **member**. A member talks to the agent and sees only their own conversations, notes and preferences. An admin can also do what the operator of the app does: manage access tokens, see everyone's conversations, change the agent's own notes and secrets, see where the agent keeps its data (`GET /data`), and choose who else is an admin.
+
+The flag is a boolean on the account:
+
+```javascript
+users : [
+    { username: "ada",   passwordEnvVar: "ACME_ADA_PASSWORD", admin: true },
+    { username: "grace", passwordEnvVar: "ACME_GRACE_PASSWORD" }
+]
+```
+
+- **Config seeds it, the database keeps it.** `admin: true` sets the flag when the account is created, or when no account is an admin yet (how an account that existed before the flag gets its first admin). After that the database value wins, so a change made later survives a restart. Take `admin: true` out of config and the account stays an admin.
+- **No admin set means no admin.** A server with accounts and none of them an admin has no one who can manage the others; the terminal and the server secret are still admins.
+- **Changing it.** An admin can call `POST /users/admin` with `{ "username": "grace", "admin": true }`, list accounts with `GET /users`, or run [`bxAgents users`](../cli-reference.md#users). The last admin cannot be demoted. The change applies on the account's next request.
+- The server secret (`agentApi.tokenEnvVar`), an issued token with `admin` scope and the terminal are admins as before; an open server with no accounts is one shared admin.
+
 ### What this is not
 
-This is a fixed roster of operator-provisioned accounts, not a user-management system. There is no self-registration, no password reset, no roles or permissions, and no per-user rate limiting or spend cap. If you need federated identity instead, edit `resolveUserId()` in the generated handler to return your own authenticated principal - the rest of the web UI neither knows nor cares where the id came from.
+This is a fixed roster of operator-provisioned accounts, not a user-management system. There is no self-registration, no password reset, no roles beyond admin and member, and no per-user rate limiting or spend cap. If you need federated identity instead, edit `resolveUserId()` in the generated handler to return your own authenticated principal - the rest of the web UI neither knows nor cares where the id came from.
 
 ## Human-in-the-loop
 
@@ -308,7 +326,7 @@ An absolute `database.path` **fails the build**: it's resolved with `expandPath(
 
 **One file for the web chat and the terminal chat.** On a developer's machine, `bxAgents serve` starts the app with the environment variable `BXAGENTS_DB` set to `data/chat.db` in the project folder, and `bxAgents chat` opens the same file. The generated app uses `BXAGENTS_DB` when it is set and `database.path` otherwise, so a deployed app keeps its file inside the app unless you set `BXAGENTS_DB` there too (for example to a mounted volume). New projects git-ignore `data/chat.db*`. The file is in WAL mode, so the terminal chat and a running server can use it at the same time.
 
-**Schema is versioned and forward-only.** `ChatStore.migrate()` (called by `ChatDb.migrate()`) records what it has applied in a `bxagents_schema_version` table and applies only what's newer, so booting against an existing store is a no-op. v1 creates `conversations` and `preferences`; v2 adds `users`, v3 `tokens`, v4 `notes` and v5 `usage`. Evolve it by adding a step to the store's migration list - never by editing a migration that has shipped, because **SQLite cannot modify or drop a column**. A database made by an earlier version of the generated app is recognised and left as it is.
+**Schema is versioned and forward-only.** `ChatStore.migrate()` (called by `ChatDb.migrate()`) records what it has applied in a `bxagents_schema_version` table and applies only what's newer, so booting against an existing store is a no-op. v1 creates `conversations` and `preferences`; v2 adds `users`, v3 `tokens`, v4 `notes` and v5 `usage`; v6 adds where a conversation started, v7 the vault and v8 the admin flag of an account. Evolve it by adding a step to the store's migration list - never by editing a migration that has shipped, because **SQLite cannot modify or drop a column**. A database made by an earlier version of the generated app is recognised and left as it is.
 
 !!! warning
     **Two things here are counter-intuitive, and both were established the hard way against a real ColdBox boot rather than read off a docs page.**

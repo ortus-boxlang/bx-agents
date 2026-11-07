@@ -106,6 +106,9 @@ Hash a plaintext password for a webui users entry.
 ::: card title="token" icon="phosphor-duotone:identification-card" href="#token"
 Issue, list and revoke access tokens for a deployed agent.
 :::
+::: card title="users" icon="phosphor-duotone:users" href="#users"
+List the web page's accounts and choose who is an admin.
+:::
 ::: card title="notes" icon="phosphor-duotone:note-pencil" href="#notes"
 Read and manage the notes an agent keeps.
 :::
@@ -795,6 +798,21 @@ bxAgents token revoke --name=laptop
 - `list` shows each token's name, scope, status (`active`, `expired` or `revoked`), when it was made, last used and expires. Never the token itself.
 - `revoke` stops a token working at once. The name stays taken, so it cannot be reused by accident.
 - Run it where the database is: on the server, or in the project before you pack it. On a deployed server, point `BXAGENTS_DB` at the file the app uses.
+
+### `users`
+
+The sign-in accounts of the web page, as the project's [shared chat database](conventions/web-ui.md#the-sqlite-store) keeps them, and who among them is an admin.
+
+```bash
+bxAgents users list [--json]
+bxAgents users admin --name=ada
+bxAgents users member --name=ada
+```
+
+- `list` shows each account's username, role (`admin` or `member`), whether it is active, and its display name. Never a password.
+- `admin` makes an account an admin; `member` makes an admin a regular account again. The last admin cannot be demoted.
+- The roster itself comes from the `users` of the web gateway at every boot. This verb only changes the admin flag, which the database keeps from then on. See [Admins and members](conventions/web-ui.md#admins-and-members).
+- Run it where the database is, like [`token`](#token).
 
 ### `notes`
 

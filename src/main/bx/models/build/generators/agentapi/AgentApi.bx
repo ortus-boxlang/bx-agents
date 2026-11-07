@@ -26,11 +26,17 @@ class {
 	 * so this is the second lock on the same door.
 	 */
 	private boolean function refused( required any event ) {
-		if ( !isNull( callerOf( arguments.event ) ) ) {
-			return false
+		var caller = callerOf( arguments.event )
+		if ( isNull( caller ) ) {
+			answer( arguments.event, new "models.api.Authenticator@bxagents"().refusal() )
+			return true
 		}
-		answer( arguments.event, new "models.api.Authenticator@bxagents"().refusal() )
-		return true
+		// a route the contract marks admin only is refused here, before its action does anything
+		if ( !caller.isAdmin() && new "models.api.ApiContract@bxagents"().needsAdmin( arguments.event.getCurrentAction() ) ) {
+			answer( arguments.event, failed( "forbidden", "This route is for admins" ) )
+			return true
+		}
+		return false
 	}
 
 	/**
@@ -645,6 +651,40 @@ class {
 			return
 		}
 		answer( event, service().volumes( callerOf( event ) ) )
+	}
+
+	/**
+	 * The sign-in accounts and whether each is an admin, as { users : [ { username, displayName, admin, active } ] }. Admin only.
+	 */
+	function users( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var accounts = service().accounts()
+		answer( event, isNull( accounts ) ? failed( "not_found", "This server keeps no accounts" ) : accounts.list( callerOf( event ) ) )
+	}
+
+	/**
+	 * Makes an account an admin or takes that away. Admin only.
+	 *
+	 * Body: { username, admin }
+	 */
+	function setUserAdmin( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var accounts = service().accounts()
+		if ( isNull( accounts ) ) {
+			answer( event, failed( "not_found", "This server keeps no accounts" ) )
+			return
+		}
+		var body = event.getHTTPContent( json : true )
+		var admin = isStruct( body ) ? ( body.admin ?: "" ) : ""
+		if ( !isBoolean( admin ) ) {
+			answer( event, failed( "bad_request", "admin must be true or false" ) )
+			return
+		}
+		answer( event, accounts.setAdmin( callerOf( event ), isStruct( body ) ? toString( body.username ?: "" ) : "", admin ) )
 	}
 
 	/**

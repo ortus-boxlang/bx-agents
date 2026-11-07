@@ -28,6 +28,7 @@ or package as a portable `.bxa`.
 - **Volumes**: `volumes:` in `Agent.yaml` names host folders, read only or read and write. The file
   tools take `volume:path`, refuse full paths, `..` and symbolic links that leave a volume, and
   name volumes in results and errors.
+- **Admins and members.** Every web account has an `admin` flag: `admin: true` on a `users` entry seeds it, the database keeps it from then on, and an admin changes it with `POST /users/admin`, `GET /users` and `bxAgents users list|admin|member`. The last admin cannot be demoted. The signed-in caller now has the admin scope when the account is one, and the API contract marks each route `anyone` or `admin`; the admin routes (`/tokens`, `/data`, `/users`) are refused for a member before their action runs.
 - `/volumes` in chat (terminal, web page, chat apps), `GET /volumes` and an admin-only `GET /data` on the agent API, `volumes()` and `data()` on `AgentApiClient`, and a data home check in `doctor`.
 - `bxAgents data`, `bxAgents backup` and `bxAgents restore`. A backup is one zip; the database is
   copied with `VACUUM INTO`; a restore keeps what was there as `.before-restore`.

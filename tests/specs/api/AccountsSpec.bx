@@ -1,0 +1,77 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "api.Accounts and the admin lock", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-accounts-api-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				for ( var row in [ [ "ada", 1 ], [ "grace", 0 ] ] ) {
+					store.exec( "INSERT INTO users ( id, username, passwordHash, isActive, isAdmin ) VALUES ( :id, :name, 'x', 1, :admin )", { id : createUUID(), name : row[ 1 ], admin : row[ 2 ] } );
+				}
+				variables.service = new bxagents.models.api.AgentService( new FakeAgent(), store );
+				variables.admin = new bxagents.models.api.Caller( id = "ada", scope = "admin", source = "web" );
+				variables.user = new bxagents.models.api.Caller( id = "grace", source = "web" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "lists the accounts for an admin", function() {
+				var listed = service.accounts().list( admin ).data().users;
+
+				expect( listed.map( a => a.username ) ).toBe( [ "ada", "grace" ] );
+				expect( listed[ 1 ].admin ).toBeTrue();
+			} );
+
+			it( "refuses anyone who is not an admin, both to list and to change", function() {
+				expect( service.accounts().list( user ).code() ).toBe( "forbidden" );
+				expect( service.accounts().setAdmin( user, "grace", true ).code() ).toBe( "forbidden" );
+			} );
+
+			it( "lets an admin make another account an admin", function() {
+				var done = service.accounts().setAdmin( admin, "grace", true );
+
+				expect( done.succeeded() ).toBeTrue();
+				expect( done.data() ).toBe( { username : "grace", admin : true } );
+			} );
+
+			it( "answers conflict for the last admin, not_found for a stranger, bad_request for no name", function() {
+				expect( service.accounts().setAdmin( admin, "ada", false ).code() ).toBe( "conflict" );
+				expect( service.accounts().setAdmin( admin, "nobody", true ).code() ).toBe( "not_found" );
+				expect( service.accounts().setAdmin( admin, " ", true ).code() ).toBe( "bad_request" );
+			} );
+
+			it( "has no accounts to manage when the app keeps no database", function() {
+				expect( isNull( new bxagents.models.api.AgentService( new FakeAgent() ).accounts() ) ).toBeTrue();
+			} );
+
+			describe( "the lock on the routes", function() {
+
+				it( "marks the admin routes in the contract", function() {
+					var needs = ( action ) => bxagents.models.api.ApiContract::needsAdmin( action );
+
+					for ( var action in [ "tokens", "revokeToken", "data", "users", "setUserAdmin" ] ) {
+						expect( needs( action ) ).toBeTrue( action & " should be admin only" );
+					}
+					for ( var action in [ "stream", "sessions", "volumes", "notes", "whoami", "commands" ] ) {
+						expect( needs( action ) ).toBeFalse( action & " is for any caller" );
+					}
+				} );
+
+				it( "gives every route of the contract an answer, so a new route is never left unmarked", function() {
+					for ( var op in bxagents.models.api.ApiContract::operations( { manageTokens : true } ) ) {
+						expect( op ).toHaveKey( "admin" );
+						expect( op.admin ).toBeBoolean();
+					}
+				} );
+
+			} );
+
+		} );
+	}
+
+}

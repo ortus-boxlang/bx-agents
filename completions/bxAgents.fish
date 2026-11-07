@@ -42,6 +42,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n __bxagents_needs_verb -a 'stats' -d 'What the model calls used: tokens by model, provider, day or user, once Agent.yaml says...'
     complete -c $cmd -n __bxagents_needs_verb -a 'test' -d 'Run a project\'s own tests/specs via TestBox'
     complete -c $cmd -n __bxagents_needs_verb -a 'token' -d 'Issue, list and revoke access tokens for a deployed agent'
+    complete -c $cmd -n __bxagents_needs_verb -a 'users' -d 'The sign-in accounts of the web page and who is an admin'
     complete -c $cmd -n __bxagents_needs_verb -a 'vault' -d 'The secrets an agent uses at run time, sealed in the chat database'
     complete -c $cmd -n __bxagents_needs_verb -a 'help' -d 'Show the usage and the list of verbs'
 
@@ -234,6 +235,9 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb token' -l name -x
     complete -c $cmd -n '__bxagents_using_verb token' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb token' -l scope -x -a 'chat admin'
+    complete -c $cmd -n '__bxagents_using_verb users' -l name -x
+    complete -c $cmd -n '__bxagents_using_verb users' -l projectRoot -x -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb users' -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb vault' -l description -x
     complete -c $cmd -n '__bxagents_using_verb vault' -l hosts -x
     complete -c $cmd -n '__bxagents_using_verb vault' -l limit -x
@@ -242,5 +246,5 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb vault' -l scope -x
     complete -c $cmd -n '__bxagents_using_verb vault' -l user -x
     complete -c $cmd -n '__bxagents_using_verb vault' -a '(__fish_complete_directories)'
-    complete -c $cmd -n '__bxagents_using_verb help' -a 'add backup build chat clean data deploy doctor extensions hash-password inspect invoke models new notes package restore serve sessions skills stats test token vault help'
+    complete -c $cmd -n '__bxagents_using_verb help' -a 'add backup build chat clean data deploy doctor extensions hash-password inspect invoke models new notes package restore serve sessions skills stats test token users vault help'
 end

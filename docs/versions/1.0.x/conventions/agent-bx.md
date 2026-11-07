@@ -272,6 +272,8 @@ GET  /__bxagents/export    # ?conversationId=&format=md|html the conversation as
 GET  /__bxagents/whoami    # who the server takes the caller to be: { id, name, scope, source, agent }
 GET  /__bxagents/volumes   # the folders the agent may use: { volumes: [ { name, mode, description } ] }, never a path on the machine
 GET  /__bxagents/data      # where the agent keeps everything and where each volume is (admin only)
+GET  /__bxagents/users     # the sign-in accounts and whether each is an admin (admin only)
+POST /__bxagents/users/admin  # { username, admin }: make an account an admin or take that away (admin only)
 GET  /__bxagents/preferences          # what the caller has set: { preferences : { key : value } }
 POST /__bxagents/preferences/set      # { key, value }
 POST /__bxagents/preferences/delete   # { key }

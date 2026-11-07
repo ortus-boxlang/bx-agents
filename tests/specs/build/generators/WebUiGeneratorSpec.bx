@@ -790,6 +790,26 @@ class extends="testbox.system.BaseSpec" {
 				expect( seeder ).toInclude( "deactivateUsersNotIn( configured )" );
 			} );
 
+			it( "seeds the admin flag from config only for a new account or when nobody is an admin yet", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui-users" );
+				var appDir = newAppDir();
+				generator.generate( discovery, appDir );
+
+				var seeder = fileRead( appDir & "/models/UserSeeder.bx" );
+				// ada is declared admin, grace is not
+				expect( seeder ).toInclude( "admin        : true" );
+				expect( seeder ).toInclude( "admin        : false" );
+				expect( seeder ).toInclude( 'db.bootstrapAdmin( "ada" )' );
+				expect( seeder ).notToInclude( 'db.bootstrapAdmin( "grace" )' );
+
+				// the store only uses the flag on insert, and hands it to the signed-in user
+				var store = fileRead( appDir & "/models/ChatDb.bx" );
+				expect( store ).toInclude( '"isAdmin"      : arguments.admin ? 1 : 0' );
+				expect( store ).toInclude( "boolean function hasActiveAdmin()" );
+				expect( fileRead( appDir & "/models/User.bx" ) ).toInclude( "boolean function isAdmin()" );
+				expect( fileRead( appDir & "/models/UserService.bx" ) ).toInclude( "admin       : ( arguments.record.isAdmin ?: 0 ) == 1" );
+			} );
+
 			it( "hashes with a per-user salt and compares in constant time", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-webui-users" );
 				var appDir = newAppDir();
