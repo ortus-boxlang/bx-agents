@@ -449,6 +449,10 @@ When the agent has a [`notes`](agent-yaml.md#notes) block, the Settings menu has
 - *About the agent* is shared by everyone who uses the agent, so anyone using the page may add or edit one, but the page has no Remove button for it and `/notes/remove` answers `403`. Removing a note of the agent takes an admin [token](agent-bx.md#access-tokens-for-a-deployed-agent) on the agent's own `/__bxagents/notes/remove` route, or `bxAgents notes remove --scope=agent` where the agent runs.
 - Without a `notes` block the button is not shown and the routes answer `404`: `/info`'s `capabilities.notes` says which.
 
+## Connections
+
+When an `mcpServers` entry has [`oauth`](connect.md), the Settings menu has a **Connections** item (`/info`'s `capabilities.connections` says whether). It opens a panel with a row for each service: its name, its address, *Connected* or *Not connected*, and a *Connect* or *Disconnect* button. *Connect* opens the provider's sign in in a new tab (a link is also shown, in case the browser blocks the tab) and the panel checks again every two seconds until it works. The page never sees a token.
+
 ## What is not here yet
 
 The page is complete against its own API - every route it needs exists and is exercised. These are the gaps:

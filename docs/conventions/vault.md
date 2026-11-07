@@ -30,6 +30,8 @@ A value is **never a flag and never typed in a chat message**: it would sit in a
 - **Command line:** `bxAgents vault add --name=GMAIL_TOKEN` asks for the value hidden, or reads it from a pipe with `--stdin`. See [`vault`](../cli-reference.md#vault).
 - **The agent asks:** with a `vault:` block, the agent has a `vault_request` tool. Calling it opens the vault screen or the web panel on that name, with the reason, and the person types the value there. See [what the agent can do](#what-the-agent-can-do).
 
+Sign ins to services such as mail are kept in the same sealed way: see [connect](connect.md).
+
 A secret has a **name** (letters, digits and underscores), an optional **description** and an optional list of **hosts** it may be sent to (`api.example.com`, or `*.example.com` for any subdomain). A secret with hosts is refused anywhere else.
 
 ## Using a secret
