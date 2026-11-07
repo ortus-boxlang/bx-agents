@@ -4,9 +4,22 @@
  */
 class extends="testbox.system.BaseSpec" {
 
+	/**
+	 * The vault screen of the terminal chat, driven by a scripted screen.
+	 */
 	function run() {
 		describe( "VaultMode", function() {
 
+			/**
+			 * A screen that answers each list and each question from the lists it was given.
+			 *
+			 * @picks   What the list returns, in turn (null for Esc)
+			 * @answers What the text boxes return, in turn
+			 * @secrets What the hidden box returns, in turn
+			 * @choices What the pick lists return, in turn
+			 *
+			 * @return The scripted screen
+			 */
 			function scripted( required array picks, array answers = [], array secrets = [], array choices = [] ) {
 				var s = { picks : picks.duplicate(), answers : answers.duplicate(), secrets : secrets.duplicate(), choices : choices.duplicate(), shown : [], printed : [], asked : [], askedSecret : [] }
 				s.chooseKeys = ( title, lines, shownChoices, keys, footer ) => {
@@ -61,6 +74,11 @@ class extends="testbox.system.BaseSpec" {
 				}
 			} );
 
+			/**
+			 * Run the vault screen on a scripted screen.
+			 *
+			 * @screen The scripted screen
+			 */
 			function open( required any screen ) {
 				new bxagents.models.cli.chat.VaultMode( screen, vault, "alice", "helper" ).run();
 			}

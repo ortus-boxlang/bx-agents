@@ -3,16 +3,30 @@
  */
 class extends="testbox.system.BaseSpec" {
 
+	/**
+	 * Run one action of the vault verb in this spec's project folder.
+	 *
+	 * @action The action: list, add, edit, remove, status, audit or key
+	 * @extra  More options
+	 *
+	 * @return The verb's { exitCode, message }
+	 */
 	private struct function runVerb( required string action, struct extra = {} ) {
 		var options = { projectRoot : variables.vaultDir, _positional : arguments.action };
 		options.append( arguments.extra );
 		return new bxagents.models.cli.Vault().run( options );
 	}
 
+	/**
+	 * @return The VaultService of this spec's project folder, to check what the verb saved
+	 */
 	private any function openVault() {
 		return new bxagents.models.vault.VaultWiring().service( variables.vaultDir & "/data/chat.db" );
 	}
 
+	/**
+	 * The vault verb: add, list, edit, remove, status, audit and key, with no value ever on a flag or in the output.
+	 */
 	function run() {
 		describe( "the vault verb", function() {
 

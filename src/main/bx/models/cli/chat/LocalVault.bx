@@ -14,10 +14,16 @@ class {
 		return this
 	}
 
+	/**
+	 * @return True: the vault of this process can be used
+	 */
 	boolean function available() {
 		return true
 	}
 
+	/**
+	 * @return Why the vault cannot be used. Blank here, because it can
+	 */
 	string function why() {
 		return ""
 	}
@@ -27,6 +33,9 @@ class {
 		return variables.service.list( variables.userId )
 	}
 
+	/**
+	 * @return { keySource, keyId, secrets, wrongKey } of the vault
+	 */
 	struct function status() {
 		return variables.service.status()
 	}
@@ -47,6 +56,14 @@ class {
 		} )
 	}
 
+	/**
+	 * Remove a secret.
+	 *
+	 * @scope user or agent
+	 * @name  The secret's name
+	 *
+	 * @return { ok } or { ok : false, reason }
+	 */
 	struct function remove( required string scope, required string name ) {
 		return guard( () => {
 			return variables.service.remove( name, optionsOf( scope, {} ) )
@@ -57,12 +74,27 @@ class {
 
 	// ----------------------------------------------------------------------------------
 
+	/**
+	 * The options the VaultService wants for a change made from the terminal.
+	 *
+	 * @scope  user or agent
+	 * @fields { description, hosts }, any of them
+	 *
+	 * @return The options: the scope, the owner, the actor and where it came from
+	 */
 	private struct function optionsOf( required string scope, required struct fields ) {
 		var options = { scope : arguments.scope, owner : arguments.scope == "user" ? variables.userId : "", actor : variables.userId, via : "terminal" }
 		options.append( arguments.fields.filter( ( key ) => listFindNoCase( "description,hosts", key ) ) )
 		return options
 	}
 
+	/**
+	 * Run a change and turn a vault error into { ok : false, reason } so a screen can show it.
+	 *
+	 * @action The change, as a function
+	 *
+	 * @return What the change returned, or { ok : false, reason }
+	 */
 	private struct function guard( required any action ) {
 		try {
 			return arguments.action()

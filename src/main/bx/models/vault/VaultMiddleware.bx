@@ -23,6 +23,14 @@ class extends="bxModules.bxai.models.middleware.BaseAiMiddleware" {
 		return this
 	}
 
+	/**
+	 * Run the tool, then scrub vault values from what it returned before the model sees it.
+	 *
+	 * @context The tool call: { tool, toolName, toolArgs, toolCallId }
+	 * @handler Runs the tool and returns its result
+	 *
+	 * @return The result with every vault value replaced by [secret]
+	 */
 	any function wrapToolCall( required struct context, required function handler ) {
 		return scrub( arguments.handler() )
 	}

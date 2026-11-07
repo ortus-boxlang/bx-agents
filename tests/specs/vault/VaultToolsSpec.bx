@@ -3,6 +3,9 @@
  */
 class extends="testbox.system.BaseSpec" {
 
+	/**
+	 * vault_list and vault_request, called the way bx-ai calls them.
+	 */
 	function run() {
 		describe( "VaultTools", function() {
 
@@ -21,10 +24,26 @@ class extends="testbox.system.BaseSpec" {
 				}
 			} );
 
+			/**
+			 * A chat request for a person, the way bx-ai hands it to a tool.
+			 *
+			 * @userId The person's name
+			 *
+			 * @return An AiChatRequest
+			 */
 			private function requestFor( userId ) {
 				return new bxModules.bxai.models.requests.AiChatRequest( new bxModules.bxai.models.runnables.AiMessage(), {}, { userId : userId, threadId : "t-1" } );
 			}
 
+			/**
+			 * Run a tool as a person and read its JSON answer.
+			 *
+			 * @tool   The tool
+			 * @args   Its arguments
+			 * @userId The person's name
+			 *
+			 * @return The answer, parsed
+			 */
 			private function call( tool, args, userId = "alice" ) {
 				return jsonDeserialize( tool.invoke( args, requestFor( userId ) ) );
 			}

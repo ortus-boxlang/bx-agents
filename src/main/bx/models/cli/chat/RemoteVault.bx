@@ -6,11 +6,11 @@ class {
 
 	/**
 	 * @baseUrl The server root
-	 * @client An AgentClient
+	 * @agentClient An AgentClient
 	 */
-	function init( required string baseUrl, required any client ) {
+	function init( required string baseUrl, required any agentClient ) {
 		variables.baseUrl = arguments.baseUrl
-		variables.client = arguments.client
+		variables.agentClient = arguments.agentClient
 		return this
 	}
 
@@ -23,38 +23,79 @@ class {
 		}
 	}
 
+	/**
+	 * @return Why the vault cannot be used
+	 */
 	string function why() {
 		return "This server has no vault for the agent (or does not support it)."
 	}
 
+	/**
+	 * @return The secrets the caller can use, never a value
+	 */
 	array function list() {
 		return snapshot().secrets ?: []
 	}
 
+	/**
+	 * @return { keySource, secrets, wrongKey } of the server's vault
+	 */
 	struct function status() {
 		return snapshot().status ?: {}
 	}
 
+	/**
+	 * Save a secret on the server. The value is sent once and never comes back.
+	 *
+	 * @scope  user or agent
+	 * @name   The secret's name
+	 * @value  The secret
+	 * @fields { description, hosts }, any of them
+	 *
+	 * @return { ok } or { ok : false, reason }
+	 */
 	struct function add( required string scope, required string name, required string value, struct fields = {} ) {
 		var body = { scope : arguments.scope, name : arguments.name, value : arguments.value }
 		body.append( arguments.fields )
-		return outcome( variables.client.postJson( variables.baseUrl, "vault", body ) )
+		return outcome( variables.agentClient.postJson( variables.baseUrl, "vault", body ) )
 	}
 
+	/**
+	 * Change a secret on the server.
+	 *
+	 * @scope   user or agent
+	 * @name    The secret's name
+	 * @changes { value, description, hosts }, any of them
+	 *
+	 * @return { ok } or { ok : false, reason }
+	 */
 	struct function update( required string scope, required string name, required struct changes ) {
 		var body = { scope : arguments.scope, name : arguments.name }
 		body.append( arguments.changes )
-		return outcome( variables.client.postJson( variables.baseUrl, "vault/update", body ) )
+		return outcome( variables.agentClient.postJson( variables.baseUrl, "vault/update", body ) )
 	}
 
+	/**
+	 * Remove a secret on the server.
+	 *
+	 * @scope user or agent
+	 * @name  The secret's name
+	 *
+	 * @return { ok } or { ok : false, reason }
+	 */
 	struct function remove( required string scope, required string name ) {
-		return outcome( variables.client.postJson( variables.baseUrl, "vault/remove", { scope : arguments.scope, name : arguments.name } ) )
+		return outcome( variables.agentClient.postJson( variables.baseUrl, "vault/remove", { scope : arguments.scope, name : arguments.name } ) )
 	}
 
 	// ----------------------------------------------------------------------------------
 
+	/**
+	 * Ask the server for the vault: the secrets, its status and who the caller is.
+	 *
+	 * @return The server's answer
+	 */
 	private struct function snapshot() {
-		return variables.client.getJson( variables.baseUrl, "vault" )
+		return variables.agentClient.getJson( variables.baseUrl, "vault" )
 	}
 
 	/** The server answers { success } or { success : false, error, code }; the screen reads { ok, reason }. */
