@@ -86,12 +86,19 @@ Shown the same way in:
 
 **Connect** is one verb. An OAuth connector starts the sign in that exists today. A token connector opens the vault's secure form (web), a masked prompt (terminal) or a one-time link (chat platform). A high or medium risk connector shows its `riskNote` first and asks the person to confirm.
 
-## Token scope: both
+## Token scope: both, one client per person
 
-- **Shared:** the admin sets `${env.X}` or `${vault.X}` (agent scope). Everyone's calls use it. Shown as Connected for all.
+- **Shared:** the admin sets `${env.X}` or `${vault.X}` (agent scope). Everyone's calls use it.
 - **Personal:** a person connects their own token. It is stored in the vault in user scope, sealed, and used for that person's calls instead of the shared one.
 
-**Dependency on bx-ai.** Today the bearer token and headers of an MCP client are fixed when the client is made. Only the OAuth path picks credentials per person (`subject`, resolved at call time). Personal tokens need bx-ai to accept a per-call token (`withBearerToken` taking a function of the call context, falling back to the static value). Task 3 confirms this and opens a bx-ai pull request. If bx-ai cannot take it, personal tokens wait and the shared token ships alone.
+**One MCP client per person per connector.** A `ConnectorClients` registry, a singleton for the application, creates a client the first time a person needs a connector and keeps it. The client holds that person's credential and that person's MCP session, so nobody shares state with anyone else. Clients are cheap. The registry:
+
+- is keyed by connector and person, with the shared token as its own key;
+- drops a person's client when they disconnect or their credential is rejected;
+- evicts clients idle for a while, so the table cannot grow without bound;
+- routes each tool call to the caller's client, falling back to the shared one.
+
+This needs no bx-ai change for the credential itself, because every client is built with its own fixed token. The open part is routing: the agent builds its tool list once from one client, so bx-agents wraps each connector tool and looks up the caller's client at call time. Task 3 confirms that wrapping works with bx-ai's tool objects.
 
 ## Contributing
 
@@ -116,7 +123,7 @@ CI rules (schema and safety only):
 
 1. **Verify and fix the data.** Re-check the 7 entries against provider docs (URL, auth, scopes, risk, env var). Decide which can offer OAuth now that Connect exists (Notion and Atlassian are the likely ones). Atlassian must be fully verified so it ships without a badge. Fix the schema.
 2. **Move the data.** `catalog/connectors/*.yaml`, a loader, a validator and `bxAgents connectors check`; CI job; the wizard and `add` read from it. `--mcp` keeps working.
-3. **bx-ai spike.** Per-call token. Pull request there if needed.
+3. **Spike: per-person clients.** Build `ConnectorClients`, wrap a connector's tools so a call goes to the caller's client, and prove with the fake server that two people never see each other's token or session. A bx-ai pull request only if the wrapping cannot be done from bx-agents.
 4. **Build support.** `connectors:` key: only, exclude, override, none; errors; expansion into `mcpServers`; dormant until a credential exists; specs and a fixture.
 5. **Connection service.** Rows for every connector with state, risk and auth. Token connect through the vault, shared versus personal, confirm step. Web panel, `/connect`, CLI, `GET /connect`, gateways.
 6. **Docs.** Catalog page generated from the data, connectors reference, contributor guide, updates to connect, mcp, vault, agent-yaml, new-wizard, cli-reference and web-ui. Each with its `docs/versions/1.0.x` copy.
@@ -127,5 +134,11 @@ CI rules (schema and safety only):
 
 1. Does the person's own token replace the shared one for that person only, or also for people they share a thread with? Proposed: that person only.
 2. Name of the key: `connectors` (proposed).
+
+## Atlassian, checked on 2026-11-07
+
+- OAuth is the main route. `POST https://mcp.atlassian.com/v2/mcp` without a token answers `401` with `WWW-Authenticate: Bearer resource_metadata=...`. The protected resource metadata names an authorization server at `auth.atlassian.com`, whose metadata offers PKCE `S256`, a dynamic registration endpoint and client ID metadata documents. That is the flow Connect already runs. Scopes it lists include the `*:jira:agent-interface` family, `read:confluence:agent-interface` and `offline_access`. The sign in itself was not run, because it needs an Atlassian account.
+- API tokens are an optional route an admin must enable. A personal token goes in `Authorization: Basic base64(email:token)`, a service account key in `Authorization: Bearer <key>`. Tokens are not tied to a site, so `cloudId` must be passed, and some tools are missing.
+- The wizard's current Atlassian entry sends the token as a Bearer, which is wrong for a personal token. The catalog entry is OAuth first, with the service account key as the only token option.
 
 Decided: Atlassian ships in the first release, with no "unverified" badge. Task 1 verifies it properly (the header an API token goes in, and whether it can use OAuth through Connect). If something cannot be confirmed, we say so here before release; we do not label it verified.
