@@ -89,7 +89,8 @@ class {
 		if ( len( variables.configured ) ) {
 			return absolute( variables.configured )
 		}
-		return variables.root & "/" & static.DEFAULT_FOLDER
+		var beside = homeOfDatabase()
+		return len( beside ) ? beside : variables.root & "/" & static.DEFAULT_FOLDER
 	}
 
 	/**
@@ -102,13 +103,16 @@ class {
 	}
 
 	/**
-	 * @return environment, setting or default: which of the three places gave the path
+	 * @return environment, setting, database or default: which place gave the path. `database` is a home worked out from BXAGENTS_DB naming a chat.db
 	 */
 	string function source() {
 		if ( len( setting( static.ENVIRONMENT_VARIABLE ) ) ) {
 			return "environment"
 		}
-		return len( variables.configured ) ? "setting" : "default"
+		if ( len( variables.configured ) ) {
+			return "setting"
+		}
+		return len( homeOfDatabase() ) ? "database" : "default"
 	}
 
 	/**
@@ -208,6 +212,20 @@ class {
 	}
 
 	// ---------------------------------------------------------------------------
+
+	/**
+	 * `serve` and `chat` name the database with BXAGENTS_DB. When it names a file called chat.db and nothing chose a home,
+	 * the folder it is in is the home, so the files and skills sit beside the database that is in use.
+	 *
+	 * @return That folder, or blank when BXAGENTS_DB is not set or names some other file
+	 */
+	private string function homeOfDatabase() {
+		var named = clean( setting( static.DATABASE_VARIABLE ) )
+		if ( !len( named ) || listLast( named, "/" ) != static.DATABASE_FILE ) {
+			return ""
+		}
+		return named.reReplace( "/[^/]+$", "" )
+	}
 
 	/**
 	 * @return The value of a setting from the real environment, or from the stand-in, blank when it is not set

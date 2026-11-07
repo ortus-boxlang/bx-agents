@@ -8,6 +8,12 @@ class extends="testbox.system.BaseSpec" {
 		describe( "VolumeFileTools", function() {
 
 			beforeEach( function() {
+				// another spec can leave these set (loading a built agent names the database); this spec must see none
+				variables.savedEnvironment = {}
+				for ( var name in [ "BXAGENTS_DB", "BXAGENTS_HOME" ] ) {
+					variables.savedEnvironment[ name ] = createObject( "java", "java.lang.System" ).getProperty( name ) ?: ""
+					createObject( "java", "java.lang.System" ).clearProperty( name )
+				}
 				variables.root = getTempDirectory() & "bxa-voltools-" & createUUID()
 				variables.notes = variables.root & "/notes"
 				variables.pictures = variables.root & "/pictures"
@@ -26,6 +32,11 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			afterEach( function() {
+				for ( var name in variables.savedEnvironment ) {
+					if ( len( variables.savedEnvironment[ name ] ) ) {
+						createObject( "java", "java.lang.System" ).setProperty( name, variables.savedEnvironment[ name ] )
+					}
+				}
 				if ( directoryExists( variables.root ) ) {
 					directoryDelete( variables.root, true )
 				}

@@ -4,6 +4,12 @@ class extends="testbox.system.BaseSpec" {
 		describe( "the data, backup and restore verbs", function() {
 
 			beforeEach( function() {
+				// another spec can leave these set (loading a built agent names the database); this spec must see none
+				variables.savedEnvironment = {}
+				for ( var name in [ "BXAGENTS_DB", "BXAGENTS_HOME" ] ) {
+					variables.savedEnvironment[ name ] = createObject( "java", "java.lang.System" ).getProperty( name ) ?: ""
+					createObject( "java", "java.lang.System" ).clearProperty( name )
+				}
 				variables.root = getTempDirectory() & "bxa-datacli-" & createUUID()
 				directoryCreate( variables.root & "/Notes", true )
 				fileWrite( variables.root & "/Agent.yaml", "name: demo" & char( 10 ) & "model: mock/mock-model" & char( 10 ) & "data:" & char( 10 ) & "  home: ./state" & char( 10 ) & "volumes:" & char( 10 ) & "  notes:" & char( 10 ) & "    path: ./Notes" & char( 10 ) & "    mode: rw" & char( 10 ) & "    description: My notes" & char( 10 ) )
@@ -11,6 +17,11 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			afterEach( function() {
+				for ( var name in variables.savedEnvironment ) {
+					if ( len( variables.savedEnvironment[ name ] ) ) {
+						createObject( "java", "java.lang.System" ).setProperty( name, variables.savedEnvironment[ name ] )
+					}
+				}
 				if ( directoryExists( variables.root ) ) {
 					directoryDelete( variables.root, true )
 				}
