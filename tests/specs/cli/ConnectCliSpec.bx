@@ -25,9 +25,18 @@ class extends="testbox.system.BaseSpec" {
 			beforeEach( function() {
 				variables.project = createTempDirectory( prefix = "bxagents-connectcli-" );
 				directoryCopy( expandPath( "/fixtures/with-mcp-oauth" ), project, true );
+				// the fixture's mail server takes its client id and secret from the vault
+				var file = new bxagents.models.store.ChatStorePath().forProject( project );
+				directoryCreate( getDirectoryFromPath( file ), true, true );
+				var vault = new bxagents.models.vault.VaultWiring().service( file );
+				vault.add( "MAIL_CLIENT_ID", "cid-1" );
+				vault.add( "MAIL_CLIENT_SECRET", "csecret-1" );
 				variables.made = {};
+				// one stand-in per server for the whole spec, as the token store makes one sign in outlive each run of the verb
 				variables.factory = function( resolved ) {
-					made[ resolved.name ] = new tests.support.FakeOAuthClient( resolved );
+					if ( !made.keyExists( resolved.name ) ) {
+						made[ resolved.name ] = new tests.support.FakeOAuthClient( resolved );
+					}
 					return made[ resolved.name ];
 				};
 			} );
@@ -125,6 +134,22 @@ class extends="testbox.system.BaseSpec" {
 
 				expect( out.exitCode ).toBe( 1 );
 				expect( out.message ).toInclude( "mail, calendar" );
+			} );
+
+			it( "says which vault secret is missing instead of failing", function() {
+				var bare = createTempDirectory( prefix = "bxagents-connectbare-" );
+				directoryCopy( expandPath( "/fixtures/with-mcp-oauth" ), bare, true );
+
+				var out = new bxagents.models.cli.Connect().run( {
+					projectRoot    : bare,
+					_positional    : "mail",
+					_clientFactory : factory,
+					_receive       : function( redirectUri, authorizationUrl ) { return {}; }
+				} );
+
+				expect( out.exitCode ).toBe( 1 );
+				expect( out.message ).toInclude( "MAIL_CLIENT_ID" );
+				directoryDelete( bare, true );
 			} );
 
 			it( "says there is nothing to connect to in a project with no oauth server", function() {

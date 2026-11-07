@@ -81,7 +81,7 @@ class {
 			lines.append( "" )
 			lines.append( "Connect with `bxAgents connect #missing[ 1 ].name#`." )
 		}
-		return { exitCode : 0, message : lines.toList( chr( 10 ) ) }
+		return { exitCode : 0, message : lines.toList( char( 10 ) ) }
 	}
 
 	/**
@@ -152,6 +152,8 @@ class {
 			var done = service.complete( query.code ?: "", query.state ?: "", query.iss ?: "" )
 			return { exitCode : 0, message : "Connected #done.subject# to #done.name#." }
 		} catch ( "BxAgents.UnknownConnection" e ) {
+			return { exitCode : 1, message : e.message }
+		} catch ( "BxAgents.MissingVaultSecret" e ) {
 			return { exitCode : 1, message : e.message }
 		} catch ( "java.util.concurrent.TimeoutException" e ) {
 			return { exitCode : 1, message : "Nobody came back within #seconds# seconds. Run `bxAgents connect #arguments.name#` again." }
