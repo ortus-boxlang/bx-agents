@@ -1,0 +1,150 @@
+/**
+ * The connections of the agent in this process, for the chat commands: the MCP servers of the project that ask people
+ * to sign in and whether this person has signed in to them.
+ *
+ * A sign in needs the provider to send the browser somewhere. At a terminal that is a short-lived listener on
+ * 127.0.0.1: `start()` opens it, answers at once with the address to open, and a background task finishes the sign in
+ * when the browser comes back, so the chat is not frozen while the person is at the provider's page. Ask `list()` again
+ * to see that it worked.
+ */
+class {
+
+	/**
+	 * @entries The `mcpServers` entries that have an `oauth` key
+	 * @wiring A VaultWiring pinned to the project's database
+	 * @userId The person
+	 * @options { clientFactory, receive : ( listener ) => query, replaces the waiting for a browser in tests; seconds }
+	 */
+	function init( required array entries, required any wiring, required string userId, struct options = {} ) {
+		variables.entries = arguments.entries
+		variables.wiring = arguments.wiring
+		variables.userId = arguments.userId
+		variables.options = arguments.options
+		variables.base = newService( {} )
+		variables.outcomes = {}
+		return this
+	}
+
+	/** @return True when the project has a server that asks people to sign in */
+	boolean function available() {
+		return variables.base.hasServers()
+	}
+
+	/** @return Why there is nothing to connect to */
+	string function why() {
+		return "No MCP server of this project asks people to sign in. Add `oauth: true` to an mcpServers entry in Agent.yaml."
+	}
+
+	/**
+	 * @return [ { name, url, connected, scope } ], with the result of a sign in that ended since the last look as `result`
+	 */
+	array function list() {
+		var rows = variables.base.list( variables.userId )
+		for ( var row in rows ) {
+			if ( variables.outcomes.keyExists( row.name ) ) {
+				row[ "result" ] = variables.outcomes[ row.name ]
+				variables.outcomes.delete( row.name )
+			}
+		}
+		return rows
+	}
+
+	/**
+	 * Starts a sign in and finishes it in the background.
+	 *
+	 * @name The server's name
+	 *
+	 * @return { ok, authorizationUrl, waits : true } or { ok : false, reason }
+	 */
+	struct function start( required string name ) {
+		try {
+			var listener = createObject( "java", "ortus.boxlang.bxagents.util.LoopbackCallback" ).start(
+				0,
+				"/callback",
+				new "models.connect.CallbackPage@bxagents"().connected( arguments.name ),
+				new "models.connect.CallbackPage@bxagents"().refused( "The provider did not send you back with a code." )
+			)
+			var service = newService( { redirectUri : listener.redirectUri() } )
+			var started = service.start( arguments.name, variables.userId )
+			finishLater( service, listener, arguments.name )
+			return { ok : true, authorizationUrl : started.authorizationUrl, waits : true }
+		} catch ( "BxAgents.UnknownConnection" e ) {
+			return { ok : false, reason : e.message }
+		} catch ( any e ) {
+			if ( isObject( listener ) ) {
+				listener.close()
+			}
+			if ( left( e.type, 8 ) == "MCPOAuth" || e.type == "BxAgents.MissingVaultSecret" ) {
+				return { ok : false, reason : e.message }
+			}
+			rethrow
+		}
+	}
+
+	/**
+	 * @name The server's name
+	 *
+	 * @return { ok } or { ok : false, reason }
+	 */
+	struct function remove( required string name ) {
+		try {
+			variables.base.disconnect( arguments.name, variables.userId )
+			return { ok : true }
+		} catch ( "BxAgents.UnknownConnection" e ) {
+			return { ok : false, reason : e.message }
+		}
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @extra ConnectionService options to add to the wiring (a redirectUri for a sign in)
+	 *
+	 * @return A ConnectionService
+	 */
+	private any function newService( required struct extra ) {
+		var settings = { wiring : variables.wiring }
+		if ( isClosure( variables.options.clientFactory ?: "" ) ) {
+			settings[ "clientFactory" ] = variables.options.clientFactory
+		}
+		settings.append( arguments.extra )
+		return new "models.connect.ConnectionService@bxagents"( variables.entries, settings )
+	}
+
+	/**
+	 * Waits for the browser on a background task, finishes the sign in and keeps what happened for the next list().
+	 *
+	 * @service The ConnectionService that started it
+	 * @listener The running LoopbackCallback
+	 * @name The server's name
+	 */
+	private void function finishLater( required any service, required any listener, required string name ) {
+		var seconds = variables.options.seconds ?: 300
+		var outcomes = variables.outcomes
+		var receive = variables.options.receive ?: ""
+		asyncRun( () => {
+			try {
+				var query = {}
+				if ( isClosure( receive ) ) {
+					query = receive( listener )
+				} else {
+					var seen = listener.await( seconds )
+					for ( var key in seen.keySet() ) {
+						query[ key ] = seen.get( key )
+					}
+				}
+				if ( len( query.error ?: "" ) ) {
+					outcomes[ name ] = "Not connected: #query.error_description ?: query.error#"
+				} else {
+					var done = service.complete( query.code ?: "", query.state ?: "", query.iss ?: "" )
+					outcomes[ name ] = "Connected to #done.name#."
+				}
+			} catch ( any e ) {
+				outcomes[ name ] = "Not connected: " & ( e.type == "java.util.concurrent.TimeoutException" ? "nobody came back in time" : e.message )
+			} finally {
+				listener.close()
+			}
+		} )
+	}
+
+}

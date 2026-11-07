@@ -1,0 +1,64 @@
+class extends="models.chat.commands.BaseCommand@bxagents" {
+
+	/** @return The name of the command: connect */
+	string function name() {
+		return "connect"
+	}
+
+	/** @return Where it runs: the terminal and the web chat. A gateway signs people in with a one time link, not a command */
+	array function transports() {
+		return [ "tui", "web" ]
+	}
+
+	/** @return What the slash menu says the command does */
+	string function hint() {
+		return "sign in to the MCP servers that ask each person to: /connect, /connect NAME, /connect NAME remove"
+	}
+
+	/**
+	 * `/connect` lists the servers and whether the person is connected. `/connect NAME` starts a sign in and shows the
+	 * address to open. `/connect NAME remove` forgets it. No token is ever shown.
+	 *
+	 * @context The CommandContext
+	 * @args What was typed after the name
+	 */
+	any function run( required any context, required string args ) {
+		var reply = arguments.context.reply()
+		var kept = arguments.context.chat().connections()
+		if ( !kept.available() ) {
+			return reply.warn( kept.why() )
+		}
+		var words = listToArray( trim( arguments.args ), " " )
+		try {
+			if ( !words.len() ) {
+				var rows = kept.list()
+				for ( var row in rows ) {
+					reply.text( "#row.name#  #row.connected ? 'connected' : 'not connected'#  #row.url#" )
+					if ( len( row.result ?: "" ) ) {
+						reply.text( "  " & row.result )
+					}
+				}
+				var missing = rows.filter( row => !row.connected )
+				if ( missing.len() ) {
+					reply.text( "Type /connect #missing[ 1 ].name# to sign in." )
+				}
+				return reply
+			}
+			if ( words.len() > 1 && lCase( words[ 2 ] ) == "remove" ) {
+				var removed = kept.remove( words[ 1 ] )
+				return removed.ok ? reply.text( "Disconnected from #words[ 1 ]#." ) : reply.warn( removed.reason )
+			}
+			var started = kept.start( words[ 1 ] )
+			if ( !started.ok ) {
+				return reply.warn( started.reason )
+			}
+			reply.text( "Open this address and sign in to #words[ 1 ]#:" )
+			reply.text( started.authorizationUrl )
+			reply.text( started.waits ? "This terminal is waiting for the browser to come back. Type /connect to see that it worked." : "The server finishes the sign in when you come back. Type /connect to see that it worked." )
+		} catch ( any e ) {
+			reply.warn( "Connect: " & e.message )
+		}
+		return reply
+	}
+
+}

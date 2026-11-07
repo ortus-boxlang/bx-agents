@@ -1,0 +1,69 @@
+/**
+ * The connections of the agent on a server, for the chat commands, through the server's /connect routes. The server
+ * decides who the person is (their token), keeps their tokens, and receives the provider's redirect at its own public
+ * address, so the chat only shows the address to open and then asks again whether it worked.
+ */
+class {
+
+	/**
+	 * @baseUrl The server root
+	 * @agentClient An AgentClient
+	 */
+	function init( required string baseUrl, required any agentClient ) {
+		variables.baseUrl = arguments.baseUrl
+		variables.agentClient = arguments.agentClient
+		return this
+	}
+
+	/**
+	 * @return True when the server has at least one MCP server that asks people to sign in
+	 */
+	boolean function available() {
+		try {
+			var answer = snapshot()
+			return ( answer.success ?: false ) && ( answer.servers ?: [] ).len() > 0
+		} catch ( any e ) {
+			return false
+		}
+	}
+
+	/** @return Why there is nothing to connect to */
+	string function why() {
+		return "This server has no MCP server that asks people to sign in (or does not support it)."
+	}
+
+	/** @return [ { name, url, connected, scope } ] for the person the token names */
+	array function list() {
+		return snapshot().servers ?: []
+	}
+
+	/**
+	 * Starts a sign in. The provider sends the person to the server's own address, so nothing waits here.
+	 *
+	 * @name The server's name
+	 *
+	 * @return { ok, authorizationUrl } or { ok : false, reason }
+	 */
+	struct function start( required string name ) {
+		var answer = variables.agentClient.postJson( variables.baseUrl, "connect", { name : arguments.name } )
+		return ( answer.success ?: false )
+			? { ok : true, authorizationUrl : answer.authorizationUrl, waits : false }
+			: { ok : false, reason : answer.error ?: "That did not work." }
+	}
+
+	/**
+	 * @name The server's name
+	 *
+	 * @return { ok } or { ok : false, reason }
+	 */
+	struct function remove( required string name ) {
+		var answer = variables.agentClient.postJson( variables.baseUrl, "connect/remove", { name : arguments.name } )
+		return ( answer.success ?: false ) ? { ok : true } : { ok : false, reason : answer.error ?: "That did not work." }
+	}
+
+	/** @return The server's answer to GET /connect */
+	private struct function snapshot() {
+		return variables.agentClient.getJson( variables.baseUrl, "connect" )
+	}
+
+}

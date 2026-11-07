@@ -33,6 +33,7 @@
  * handling for that here.
  */
 import bxModules.bxagents.models.api.Caller;
+import bxModules.bxagents.models.connect.OAuthServers;
 
 import bxModules.bxagents.models.util.Terminal;
 
@@ -183,7 +184,7 @@ class {
 		var agent = new "models.cli.support.BuiltAgent@bxagents"().load( arguments.root )
 
 		if ( wantsScreen( arguments.options ) ) {
-			return chatWithScreen( new "models.cli.chat.InProcessSession@bxagents"( agent, user, openSessions( arguments.root ) ), arguments.options )
+			return chatWithScreen( new "models.cli.chat.InProcessSession@bxagents"( agent, user, openSessions( arguments.root ), openConnections( arguments.root, user ) ), arguments.options )
 		}
 
 		// MiniConsole shells out to `stty` to set up raw terminal mode, so it
@@ -221,6 +222,29 @@ class {
 		return {
 			exitCode : 0,
 			message  : "Chat session ended"
+		}
+	}
+
+	/**
+	 * The project's MCP servers that ask people to sign in, for the chat's /connect.
+	 *
+	 * @root The project root
+	 * @user Who is talking; the local user when blank
+	 *
+	 * @return A LocalConnections, or null when no server asks people to sign in or the project cannot be read
+	 */
+	private any function openConnections( required string root, string user = "" ) {
+		try {
+			var config = new "models.build.AgentConfigResolver@bxagents"().resolve( projectRoot = arguments.root )
+			var entries = OAuthServers::of( config )
+			if ( !entries.len() ) {
+				return nullValue()
+			}
+			var file = new "models.store.ChatStorePath@bxagents"().forProject( arguments.root )
+			directoryCreate( getDirectoryFromPath( file ), true, true )
+			return new "models.cli.chat.LocalConnections@bxagents"( entries, new "models.vault.VaultWiring@bxagents"().pin( file ), len( arguments.user ) ? arguments.user : Caller::localId() )
+		} catch ( any e ) {
+			return nullValue()
 		}
 	}
 
