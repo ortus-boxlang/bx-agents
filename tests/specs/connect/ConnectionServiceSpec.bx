@@ -163,6 +163,61 @@ class extends="testbox.system.BaseSpec" {
 
 			} );
 
+			describe( "the agent is told what the person has not signed in to", function() {
+
+				beforeEach( function() {
+					variables.middleware = new bxagents.models.connect.ConnectionMiddleware( connections );
+				} );
+
+				it( "adds a block naming the services and how to connect, to the system message", function() {
+					var run = { userId : "alice", messages : [ { role : "system", content : "You help." }, { role : "user", content : "read my mail" } ] };
+
+					middleware.beforeAgentRun( run );
+
+					expect( run.messages[ 1 ].content ).toInclude( "You help." );
+					expect( run.messages[ 1 ].content ).toInclude( "has not signed in to: mail, calendar" );
+					expect( run.messages[ 1 ].content ).toInclude( "/connect mail" );
+					expect( run.messages[ 1 ].content ).toInclude( "bxAgents connect mail" );
+					expect( run.messages ).toHaveLength( 2 );
+				} );
+
+				it( "adds nothing once the person is signed in to everything", function() {
+					for ( var name in [ "mail", "calendar" ] ) {
+						connections.start( name, "alice" );
+						connections.complete( "c", made[ name ].lastState() );
+					}
+
+					expect( middleware.blockFor( "alice" ) ).toBe( "" );
+					expect( middleware.blockFor( "bob" ) ).toInclude( "mail, calendar" );
+				} );
+
+				it( "starts a system message when there is none, and names only what is missing", function() {
+					connections.start( "mail", "alice" );
+					connections.complete( "c", made.mail.lastState() );
+					var run = { userId : "alice", messages : [ { role : "user", content : "hi" } ] };
+
+					middleware.beforeAgentRun( run );
+
+					expect( run.messages[ 1 ].role ).toBe( "system" );
+					expect( run.messages[ 1 ].content ).toInclude( "has not signed in to: calendar." );
+					expect( run.messages[ 1 ].content ).notToInclude( "mail," );
+				} );
+
+				it( "never carries an address or a token", function() {
+					expect( middleware.blockFor( "alice" ) ).notToInclude( "http" );
+					expect( middleware.blockFor( "alice" ) ).notToInclude( "token" );
+				} );
+
+				it( "gives a run with no user the default person", function() {
+					var run = { messages : [ { role : "system", content : "x" } ] };
+
+					middleware.beforeAgentRun( run );
+
+					expect( run.messages[ 1 ].content ).toInclude( "mail" );
+				} );
+
+			} );
+
 			it( "gives each client the vault token store, the callback and a client id from the vault", function() {
 				wiring.service().add( "MAIL_CLIENT_ID", "cid-7" );
 				var withVault = new bxagents.models.connect.ConnectionService(

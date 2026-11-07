@@ -1,0 +1,68 @@
+import bxModules.bxai.models.middleware.AiMiddlewareResult;
+
+/**
+ * Tells the agent which services the person it is talking to has not signed in to.
+ *
+ * A server that asks each person to sign in has no tools for a person until they have, so without this the agent
+ * would answer "I cannot read your mail" without knowing that one step fixes it. At the start of each run, for the
+ * servers this person has not connected, it adds one short block to the system message: what is missing and how the
+ * person connects. Nothing is added once they are all connected, and the block never carries an address or a token.
+ */
+class extends="bxModules.bxai.models.middleware.BaseAiMiddleware" {
+
+	static {
+		NO_USER = "default"
+	}
+
+	/**
+	 * @service A ConnectionService
+	 */
+	function init( required any service ) {
+		super.init()
+		variables.connections = arguments.service
+		variables.name = "Connections"
+		variables.description = "Tells the agent which services the person has not signed in to"
+		return this
+	}
+
+	/**
+	 * Adds the block to the system message of the run.
+	 *
+	 * @context The run: messages, userId, threadId
+	 */
+	AiMiddlewareResult function beforeAgentRun( required struct context ) {
+		var who = len( arguments.context.userId ?: "" ) ? arguments.context.userId : static.NO_USER
+		var block = blockFor( who )
+		if ( len( block ) ) {
+			var messages = arguments.context.messages
+			if ( messages.len() && ( messages[ 1 ].role ?: "" ) == "system" ) {
+				messages[ 1 ].content = messages[ 1 ].content & char( 10 ) & char( 10 ) & block
+			} else {
+				messages.prepend( { role : "system", content : block } )
+			}
+		}
+		return AiMiddlewareResult.continue()
+	}
+
+	/**
+	 * @userId The person
+	 *
+	 * @return The block for them, or blank when they are signed in everywhere
+	 */
+	string function blockFor( required string userId ) {
+		var missing = []
+		try {
+			missing = variables.connections.missing( arguments.userId )
+		} catch ( any e ) {
+			return ""
+		}
+		if ( !missing.len() ) {
+			return ""
+		}
+		var names = missing.toList( ", " )
+		return "Some services ask each person to sign in before you can use them for that person. This person has not signed in to: " & names & ". "
+			& "You have no tools for those services yet. If they ask for something that needs one, do not say you cannot: tell them to connect first, by opening Connections in the page, "
+			& "typing /connect " & missing[ 1 ] & " in the terminal, or running `bxAgents connect " & missing[ 1 ] & "`, and that you will carry on once they have."
+	}
+
+}
