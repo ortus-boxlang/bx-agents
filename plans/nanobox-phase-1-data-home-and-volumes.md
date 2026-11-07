@@ -195,7 +195,84 @@ The compact route's answer gains `model` and `summarized`. Both appear under `ca
 11b. Web page: a Data section in Settings (Server group) with the volumes (name, mode, description), the skills with their origin, the memory limit and, for admins, the data home size. Read-only.
 12. Docs (English, mirror, Spanish), changelog, wizard questions for volumes and memory, full suite. One draft pull request per slice: data home and volumes, then skills, then memory.
 
+## 9. The web app
+
+The mockup is approved in shape. The rule is that **whatever can be done in the terminal chat can be done on the web page**, and **nothing on today's page is removed**: the header, the settings gear and its menu, the sidebar, the composer and every dialog stay. The left menu adds full pages next to them.
+
+### Left menu
+
+Chat, Agent, Registry, Memory and notes, Vault, Data and backups, Access tokens, Settings.
+
+- It folds to icons with a button, and the choice is remembered in the browser.
+- Each icon keeps its accessible name, with a tooltip on hover and keyboard focus. The current page is marked with `aria-current`, not only colour.
+- Targets are at least 44 by 44 pixels, the focus ring is always visible, contrast is at least 4.5 to 1, a "Skip to content" link comes first, and animation is off for reduced motion.
+- On a phone the menu is a drawer opened from a menu button. Focus moves into it, Esc or a tap outside closes it, focus returns to the button, and the page behind is inert. The header gear stays.
+
+### Screens
+
+| Screen | Shows |
+|---|---|
+| Agent, Composition | How the agent is put together: what comes in, the agent's parts, the team, what it reaches out to. Each part opens its screen |
+| Agent, Files | The project tree and the data home tree, with a read-only view of `Agent.yaml` |
+| Agent, Usage | A snapshot of the last 7 days (tokens per day, by model) when `usage: true`. When it is off, a note and a "Turn on usage" button (admins). A card says longer history comes with the cloud version |
+| Registry | Tools, Skills and Volumes tabs, read only |
+| Memory and notes | Both note scopes with their limits, and each conversation against the message limit |
+| Vault | The secrets list with Add, Edit, Remove, Yours and The agent's tabs, the agent's request banner, and "Key and activity" |
+| Vault, Key and activity | What `vault status` and `vault audit` print: key source, secret count, the key-file warning, and the activity table with refused rows |
+| Data and backups | Folder sizes, the memory settings, Back up now, the backups list, Restore (staged for the next start) |
+| Access tokens | Today's tokens dialog as a page |
+| Settings | Appearance, model and ping, channels, extensions with Reload, server details, Password |
+
+The run order view was cut: it needs per-turn data the server does not keep.
+
+## 10. Terminal parity check
+
+Every built-in chat command and where it lives on the web:
+
+| Terminal | Web | State |
+|---|---|---|
+| `/new`, `/sessions`, `/resume`, `/name`, `/fork`, `/export`, `/clear`, `/compact` | Sidebar and the gear menu | Exists |
+| `/notes`, `/remember` | Notes dialog and Memory and notes page | Exists |
+| `/vault` | Vault dialog and the Vault page | Exists, page is new |
+| `vault status`, `vault audit` | Vault, Key and activity | New |
+| `/context` | Context ring and breakdown | Exists |
+| `/model`, `/profile`, `/default` | Model picker in the header | Exists. Check it has a "default" choice |
+| `/ping` | Settings, Ping the model | Exists as a command, button is new |
+| `/tools` | Registry, Tools | New page |
+| `/keys` | Help dialog | Exists |
+| `/info`, `/help` | Agent page and the command menu | Exists |
+| `/stats` | Agent, Usage | New |
+| `/copy` | A Copy button under each answer | New |
+| `/extensions`, reload | Settings, Extensions, Reload extensions | New |
+| `/volumes`, `/skills` | Registry, and the command menu | New with this phase |
+| Approval dialog | Approve and Reject in the tool chip | Exists |
+| Image paste, attachments | Attach button, paste and drop | Exists |
+| `@file` menu | Not on the web | **Open**: could list volume files as `@notes:todo.md` |
+| `/exit`, `/prompt`, `/record` | None | Terminal only: they are about the screen itself |
+| `!cmd`, `!!cmd`, `#bif()`, `##bif()` | None | **Terminal only on purpose**: they run a shell command or BoxLang code, and a browser should not be able to |
+
+## 11. Added routes
+
+Read-only unless noted. All go in `ApiContract`, so the OpenAPI document and the client follow.
+
+| Route | Does |
+|---|---|
+| `GET /data` | Data home, folder sizes |
+| `GET /volumes`, `GET /skills` | The registry lists. No host paths |
+| `POST /backup`, `GET /backups`, `POST /restore` | Backups. A restore is staged and applied at the next start. Restore is admin only |
+| `GET /usage`, `POST /usage/enable` | The 7 day snapshot, and the switch that writes `usage: true` (admin) |
+| `GET /vault/status`, `GET /vault/audit` | Key state and activity (admin). The vault list, add, edit and remove routes already exist for the dialog |
+| `POST /extensions/reload` | Reload extensions (admin) |
+
+## 12. Web tasks
+
+13. Left menu: component, collapse button, remembered choice, tooltips, skip link, phone drawer with focus handling; checked in a real browser and with a screen reader.
+14. Pages: Agent (Composition, Files, Usage), Registry, Memory and notes, Vault with Key and activity, Data and backups, Access tokens, Settings.
+15. The routes in section 11, with specs.
+16. Copy button, Reload extensions, model picker "default" choice.
+17. Docs (English, mirror, Spanish) and screenshots.
+
 ## Open questions
 
-1. When a summary happens on its own, should the user see one line ("Summarised 400 older messages") in every transport, or nothing?
-2. Should the web page show the data home size to everyone, or only to admins?
+1. Should the web composer's `@` menu list volume files (`@notes:todo.md`), to match the terminal?
+2. When a conversation is summarised on its own, one line in every transport, or nothing? (Planned: one line.)
