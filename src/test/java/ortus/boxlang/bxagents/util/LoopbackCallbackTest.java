@@ -41,6 +41,9 @@ class LoopbackCallbackTest {
 		return this.http.send( HttpRequest.newBuilder( URI.create( address ) ).build(), HttpResponse.BodyHandlers.ofString() );
 	}
 
+	/**
+	 * listens on the loopback address and hands over the query, decoded
+	 */
 	@Test
 	@DisplayName( "listens on the loopback address and hands over the query, decoded" )
 	void handsOverTheQuery() throws Exception {
@@ -59,6 +62,9 @@ class LoopbackCallbackTest {
 		}
 	}
 
+	/**
+	 * shows the failure page for an error and still hands the query over
+	 */
 	@Test
 	@DisplayName( "shows the failure page for an error and still hands the query over" )
 	void errorPage() throws Exception {
@@ -71,6 +77,9 @@ class LoopbackCallbackTest {
 		}
 	}
 
+	/**
+	 * answers 404 for another path and keeps waiting
+	 */
 	@Test
 	@DisplayName( "answers 404 for another path and keeps waiting" )
 	void otherPath() throws Exception {
@@ -82,6 +91,9 @@ class LoopbackCallbackTest {
 		}
 	}
 
+	/**
+	 * stops listening when closed
+	 */
 	@Test
 	@DisplayName( "stops listening when closed" )
 	void stops() throws Exception {
@@ -92,6 +104,9 @@ class LoopbackCallbackTest {
 		assertThrows( java.io.IOException.class, () -> call( "http://127.0.0.1:" + port + "/callback" ) );
 	}
 
+	/**
+	 * takes the port it is asked for
+	 */
 	@Test
 	@DisplayName( "takes the port it is asked for" )
 	void askedPort() throws Exception {

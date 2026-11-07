@@ -165,8 +165,8 @@ class extends="testbox.system.BaseSpec" {
 				mail.revokeAccessTokens();
 				expect( call( "POST", mail.mcpUrl(), '{"jsonrpc":"2.0","id":1,"method":"tools/list"}', json ).status ).toBe( 401 );
 
-				var form = { "Content-Type" : "application/x-www-form-urlencoded" };
-				var renewed = call( "POST", mail.origin() & "/token", "grant_type=refresh_token&refresh_token=" & tokens.refresh_token, form );
+				var formHeaders = { "Content-Type" : "application/x-www-form-urlencoded" };
+				var renewed = call( "POST", mail.origin() & "/token", "grant_type=refresh_token&refresh_token=" & tokens.refresh_token, formHeaders );
 				expect( renewed.status ).toBe( 200 );
 				expect( jsonDeserialize( renewed.body ).access_token ).toMatch( "^at_" );
 				expect( mail.activeAccessTokens() ).toBe( 1 );
