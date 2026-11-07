@@ -19,6 +19,17 @@ or package as a portable `.bxa`.
 
 ### Added
 
+#### Data home and volumes
+
+- One **data home** holds everything an agent keeps (`chat.db`, `files/`, `skills/`, `backups/`).
+  It is `BXAGENTS_HOME`, else `data.home` in `Agent.yaml`, else `data/`. A built app with no home
+  chosen says so when it starts.
+- **Volumes**: `volumes:` in `Agent.yaml` names host folders, read only or read and write. The file
+  tools take `volume:path`, refuse full paths, `..` and symbolic links that leave a volume, and
+  name volumes in results and errors.
+- `bxAgents data`, `bxAgents backup` and `bxAgents restore`. A backup is one zip; the database is
+  copied with `VACUUM INTO`; a restore keeps what was there as `.before-restore`.
+
 #### Markdown and syntax highlighting
 
 - The web UI renders answers as full Markdown (tables, quotes, strikethrough) with

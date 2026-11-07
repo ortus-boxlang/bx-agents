@@ -835,6 +835,20 @@ bxAgents vault key
 - `status` says where the key comes from and warns when it is the key file beside the database. `audit` lists who added, used, was refused and removed what, without values.
 - `key` prints a new random key to put in `BXAGENTS_VAULT_KEY`. It does not touch the database.
 
+### `data`, `backup` and `restore`
+
+Where the agent keeps everything, and backups of it. See [data and volumes](conventions/data.md).
+
+```bash
+bxAgents data [--json]
+bxAgents backup [--to=FILE]
+bxAgents restore FILE [--home=DIR] [--force]
+```
+
+- `data` prints the data home and where it came from, the size of the database and each folder, and the volumes with their modes. It makes nothing.
+- `backup` zips the chat database (copied whole, so it is safe while a server runs), `files/` and `skills/`. Without `--to` the zip goes in the home's `backups/` folder. Volumes are not included.
+- `restore` puts a backup back and keeps what was there as `<name>.before-restore`. It stops when the database looks to be in use unless `--force` is given. `--home` restores into another data home.
+
 ### `models`
 
 The models of a built project, and whether they answer.
